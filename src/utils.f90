@@ -7,8 +7,10 @@ module utils
 	implicit none
 
 	character, parameter :: &
+			null_char       = char( 0), &
 			tab             = char( 9), &
 			line_feed       = char(10), &
+			vert_tab        = char(11), &
 			carriage_return = char(13)
 
 !===============================================================================
@@ -76,6 +78,26 @@ function read_line(iu, iostat) result(str)
 	if (present(iostat)) iostat = io
 
 end function read_line
+
+!===============================================================================
+
+logical function is_digit(c)
+
+	character, intent(in) :: c
+
+	is_digit = '0' <= c .and. c <= '9'
+
+end function is_digit
+
+!===============================================================================
+
+logical function is_whitespace(c)
+
+	character, intent(in) :: c
+
+	is_whitespace = any(c == [tab, line_feed, vert_tab, carriage_return, ' '])
+
+end function is_whitespace
 
 !===============================================================================
 
