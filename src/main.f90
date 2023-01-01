@@ -1,14 +1,17 @@
 
 !===============================================================================
 
-module mfint
+module core_m
 
 	use iso_fortran_env
 	use utils
 
 	implicit none
 
-	character(len = *), parameter :: lang_name = 'fint'
+	! Syntax translator (think FORmula TRANslator)
+	!
+	! I mean what could she have?  Fungus?
+	character(len = *), parameter :: lang_name = 'syntran'
 
 	! Token kind enum
 	integer, parameter :: &
@@ -19,23 +22,23 @@ module mfint
 			number_token     = 2, &
 			eof_token        = 1
 
-	type tsyntax_token
+	type syntax_token_t
 
 		! TODO: how to handle values of different types?
 		integer :: val
 
 		integer :: kind, pos
 		character(len = :), allocatable :: text
-	end type tsyntax_token
+	end type syntax_token_t
 
-	type tsyntax_tree
+	type syntax_tree_t
 
 		! TODO: just so I can set something w/o uninitialize warnings
 		integer :: dummy
 
-	end type tsyntax_tree
+	end type syntax_tree_t
 
-	type tlexer
+	type lexer_t
 
 		character(len = :), allocatable :: text
 		integer :: pos
@@ -43,14 +46,14 @@ module mfint
 		contains
 			procedure next_token, current
 
-	end type tlexer
+	end type lexer_t
 
-	type tsyntax_token_vector
-		type(tsyntax_token), allocatable :: v(:)
+	type syntax_token_vector_t
+		type(syntax_token_t), allocatable :: v(:)
 		integer :: len, cap
 		contains
 			procedure :: push => push_token
-	end type tsyntax_token_vector
+	end type syntax_token_vector_t
 
 !===============================================================================
 
@@ -60,7 +63,7 @@ contains
 
 function new_syntax_token_vector() result(vector)
 
-	type(tsyntax_token_vector) :: vector
+	type(syntax_token_vector_t) :: vector
 
 	vector%len = 0
 	vector%cap = 2  ! I think a small default makes sense here
@@ -76,12 +79,12 @@ subroutine push_token(vector, val)
 	! Is there a way to have a generic unlimited polymorphic vector?  I couldn't
 	! figure it out
 
-	class(tsyntax_token_vector) :: vector
-	type(tsyntax_token) :: val
+	class(syntax_token_vector_t) :: vector
+	type(syntax_token_t) :: val
 
 	!********
 
-	type(tsyntax_token), allocatable :: tmp(:)
+	type(syntax_token_t), allocatable :: tmp(:)
 
 	integer :: tmp_cap
 
@@ -140,7 +143,7 @@ function new_token(kind, pos, text, val) result(tok)
 
 	character(len = *) :: text
 
-	type(tsyntax_token) :: tok
+	type(syntax_token_t) :: tok
 
 	tok%kind  = kind
 	tok%pos  = pos
@@ -153,7 +156,7 @@ end function new_token
 
 character function current(lexer)
 
-	class(tlexer) :: lexer
+	class(lexer_t) :: lexer
 
 	if (lexer%pos > len(lexer%text)) then
 		current = null_char
@@ -168,9 +171,9 @@ end function current
 
 function next_token(lexer) result(tok)
 
-	class(tlexer) :: lexer
+	class(lexer_t) :: lexer
 
-	type(tsyntax_token) :: tok
+	type(syntax_token_t) :: tok
 
 	!********
 
@@ -239,7 +242,7 @@ function new_lexer(text) result(lexer)
 
 	character(len = *) :: text
 
-	type(tlexer) :: lexer
+	type(lexer_t) :: lexer
 
 	lexer%text = text
 	lexer%pos = 1
@@ -252,16 +255,16 @@ function syntax_tree_parse(str) result(tree)
 
 	character(len = *) :: str
 
-	type(tsyntax_tree) :: tree
+	type(syntax_tree_t) :: tree
 
 	!********
 
 	integer :: i, j
 
-	type(tsyntax_token) :: tok
-	type(tsyntax_token_vector) :: toks
+	type(syntax_token_t) :: tok
+	type(syntax_token_vector_t) :: toks
 
-	type(tlexer) :: lexer
+	type(lexer_t) :: lexer
 
 	! TODO: remove
 	tree%dummy = 0
@@ -302,9 +305,9 @@ end function syntax_tree_parse
 
 !===============================================================================
 
-subroutine fint
+subroutine interpret()
 
-	! This is the interpreter shell
+	! This is the interpret shell
 	!
 	! TODO: arg for iu as stdin vs another file
 
@@ -314,7 +317,7 @@ subroutine fint
 	character(len = :), allocatable :: input
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
-	type(tsyntax_tree) :: tree
+	type(syntax_tree_t) :: tree
 
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
@@ -336,22 +339,22 @@ subroutine fint
 
 	end do
 
-end subroutine fint
+end subroutine interpret
 
 !===============================================================================
 
-end module mfint
+end module core_m
 
 !===============================================================================
 
 program main
 
-	use mfint
+	use core_m
 
 	write(*,*) lang_name//' v0.0.1'
 	write(*,*)
 
-	call fint()
+	call interpret()
 
 end program main
 
