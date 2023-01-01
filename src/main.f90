@@ -45,15 +45,12 @@ module mfint
 
 	end type tlexer
 
-	type tvector
-
-		class(*), allocatable :: val(:)
+	type tsyntax_token_vector
+		type(tsyntax_token), allocatable :: v(:)
 		integer :: len, cap
-
 		contains
-			procedure push
-
-	end type tvector
+			procedure :: push => push_token
+	end type tsyntax_token_vector
 
 !===============================================================================
 
@@ -61,59 +58,50 @@ contains
 
 !===============================================================================
 
-function new_vector(val_type) result(vector)
+function new_syntax_token_vector() result(vector)
 
-	! When constructing a polymorphic vector, a dummy arg val_type has to be
-	! provided to allocate the vector with a specific source type
-	!
-	! Loosely based on:  https://www.pgroup.com/blogs/posts/f03-oop-part2.htm
-	!
-	! TODO: move vector stuff to utils
-
-	class(*) :: val_type
-	type(tvector) :: vector
+	type(tsyntax_token_vector) :: vector
 
 	vector%len = 0
-	vector%cap = 2 ! TODO bigger default
+	vector%cap = 2  ! I think a small default makes sense here
 
-	allocate(vector%val( vector%cap ), source = val_type)
+	allocate(vector%v( vector%cap ))
 
-end function new_vector
+end function new_syntax_token_vector
 
 !===============================================================================
 
-subroutine push(vector, val)
+subroutine push_token(vector, val)
 
-	class(tvector) :: vector
-	class(*) :: val
+	! Is there a way to have a generic unlimited polymorphic vector?  I couldn't
+	! figure it out
+
+	class(tsyntax_token_vector) :: vector
+	type(tsyntax_token) :: val
 
 	!********
 
-	!class(tvector) :: tmp
-	type(tvector), allocatable :: tmp
+	type(tsyntax_token), allocatable :: tmp(:)
 
 	integer :: tmp_cap
 
 	vector%len = vector%len + 1
 
 	if (vector%len > vector%cap) then
-		print *, 'growing vector'
+		!print *, 'growing vector'
 
-		tmp_cap = ceiling(1.1 * vector%len + 1)
-		allocate(tmp%val( tmp_cap ), source = val)
+		tmp_cap = 2 * vector%len
+		allocate(tmp( tmp_cap ))
+		tmp(1: vector%cap) = vector%v
 
-		! TODO
-		!!tmp%val(1: vector%cap) = vector%val
-		!tmp%val(1) = vector%val(1)
-
-		call move_alloc(tmp%val, vector%val)
+		call move_alloc(tmp, vector%v)
 		vector%cap = tmp_cap
 
 	end if
 
-	vector%val( vector%len ) = val
+	vector%v( vector%len ) = val
 
-end subroutine push
+end subroutine push_token
 
 !===============================================================================
 
@@ -268,17 +256,17 @@ function syntax_tree_parse(str) result(tree)
 
 	!********
 
-	integer :: i
+	integer :: i, j
 
 	type(tsyntax_token) :: tok
-	type(tvector) :: toks
+	type(tsyntax_token_vector) :: toks
 
 	type(tlexer) :: lexer
 
 	! TODO: remove
 	tree%dummy = 0
 
-	toks = new_vector(tok)
+	toks = new_syntax_token_vector()
 
 	lexer = new_lexer(str)
 
@@ -291,13 +279,23 @@ function syntax_tree_parse(str) result(tree)
 		if (tok%kind /= whitespace_token .and. &
 		    tok%kind /= bad_token) then
 
-			print *, 'tok = <', tok%text, '> ', &
-					'<'//kind_name(tok%kind)//'>'
+			!print *, 'tok = <', tok%text, '> ', &
+			!		'<'//kind_name(tok%kind)//'>'
+
+			call toks%push(tok)
 
 		end if
 
 		!if (i == 10) exit
 
+	end do
+
+	! TODO: make toks to str fn
+
+	!print *, 'len = ', toks%len
+	do j = 1, toks%len
+		print *, 'tok = <', toks%v(j)%text, '> ', &
+				'<'//kind_name(toks%v(j)%kind)//'>'
 	end do
 
 end function syntax_tree_parse
