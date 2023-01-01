@@ -26,29 +26,50 @@ function read_line(iu) result(str)
 	!********
 
 	character :: c, buffer*4
-	integer :: io, str_len
+	character(len = :), allocatable :: tmp
+
+	integer :: i, io, str_cap, tmp_cap
 
 	!read (iu, '(a)') buffer
 	!str = trim(buffer)
 
-	str = ''
+	! Buffer string with some initial length
+	!str = ''
+	str_cap = 4
+	allocate(character(len = str_cap) :: str)
 
 	! Read 1 character at a time until end
+	i = 0
 	do
 		read(iu, '(a)', advance = 'no', iostat = io) c
 		if (io == iostat_end) exit
 		if (io == iostat_eor) exit
-		str = str//c
+		i = i + 1
+
+		!str = str//c
+
+		if (i > str_cap) then
+			!print *, 'grow'
+
+			! Grow the buffer capacity
+			tmp_cap = ceiling(1.1 * str_cap + 1)
+			!tmp_cap = 2 * str_cap
+			allocate(character(len = tmp_cap) :: tmp)
+			tmp(1: str_cap) = str
+
+			call move_alloc(tmp, str)
+			str_cap = tmp_cap
+
+			!print *, 'str_cap  = ', str_cap
+			!print *, 'len(str) = ', len(str)
+
+		end if
+		str(i:i) = c
+
 	end do
 
-	!nchars = len_trim(buffer)
-
-	!allocate(character(len = nchars) :: str)
-	!!allocate(character(len = ns) :: s)
-
-	!! Can't backspace on stdin: "illegal seek"
-	!backspace(iu)
-	!read(iu, '(a)') str
+	! Trim unused chars from buffer
+	str = str(1:i)
 
 end function read_line
 
