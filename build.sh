@@ -15,9 +15,7 @@ $fc --version
 
 exe=fint
 srcdir=src
-src=$srcdir/main.f90
-
-#$fc -o main ../../utils.f90 ../*.f90 main.f90 $flags
+src="$srcdir/utils.f90 $srcdir/main.f90"
 
 $fc -o $exe $src $flags
 
