@@ -45,9 +45,75 @@ module mfint
 
 	end type tlexer
 
+	type tvector
+
+		class(*), allocatable :: val(:)
+		integer :: len, cap
+
+		contains
+			procedure push
+
+	end type tvector
+
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+function new_vector(val_type) result(vector)
+
+	! When constructing a polymorphic vector, a dummy arg val_type has to be
+	! provided to allocate the vector with a specific source type
+	!
+	! Loosely based on:  https://www.pgroup.com/blogs/posts/f03-oop-part2.htm
+	!
+	! TODO: move vector stuff to utils
+
+	class(*) :: val_type
+	type(tvector) :: vector
+
+	vector%len = 0
+	vector%cap = 2 ! TODO bigger default
+
+	allocate(vector%val( vector%cap ), source = val_type)
+
+end function new_vector
+
+!===============================================================================
+
+subroutine push(vector, val)
+
+	class(tvector) :: vector
+	class(*) :: val
+
+	!********
+
+	!class(tvector) :: tmp
+	type(tvector), allocatable :: tmp
+
+	integer :: tmp_cap
+
+	vector%len = vector%len + 1
+
+	if (vector%len > vector%cap) then
+		print *, 'growing vector'
+
+		tmp_cap = ceiling(1.1 * vector%len + 1)
+		allocate(tmp%val( tmp_cap ), source = val)
+
+		! TODO
+		!!tmp%val(1: vector%cap) = vector%val
+		!tmp%val(1) = vector%val(1)
+
+		call move_alloc(tmp%val, vector%val)
+		vector%cap = tmp_cap
+
+	end if
+
+	vector%val( vector%len ) = val
+
+end subroutine push
 
 !===============================================================================
 
@@ -204,26 +270,29 @@ function syntax_tree_parse(str) result(tree)
 
 	integer :: i
 
-	type(tsyntax_token) :: token
+	type(tsyntax_token) :: tok
+	type(tvector) :: toks
 
 	type(tlexer) :: lexer
 
 	! TODO: remove
 	tree%dummy = 0
 
+	toks = new_vector(tok)
+
 	lexer = new_lexer(str)
 
 	i = 0
 	do
 		i = i + 1
-		token = lexer%next_token()
-		if (token%kind == eof_token) exit
+		tok = lexer%next_token()
+		if (tok%kind == eof_token) exit
 
-		if (token%kind /= whitespace_token .and. &
-		    token%kind /= bad_token) then
+		if (tok%kind /= whitespace_token .and. &
+		    tok%kind /= bad_token) then
 
-			print *, 'token = <', token%text, '> ', &
-					'<'//kind_name(token%kind)//'>'
+			print *, 'tok = <', tok%text, '> ', &
+					'<'//kind_name(tok%kind)//'>'
 
 		end if
 
