@@ -30,12 +30,8 @@ function read_line(iu) result(str)
 
 	integer :: i, io, str_cap, tmp_cap
 
-	!read (iu, '(a)') buffer
-	!str = trim(buffer)
-
 	! Buffer string with some initial length
-	!str = ''
-	str_cap = 4
+	str_cap = 64
 	allocate(character(len = str_cap) :: str)
 
 	! Read 1 character at a time until end
@@ -46,14 +42,11 @@ function read_line(iu) result(str)
 		if (io == iostat_eor) exit
 		i = i + 1
 
-		!str = str//c
-
 		if (i > str_cap) then
-			!print *, 'grow'
+			!print *, 'growing str'
 
-			! Grow the buffer capacity
-			tmp_cap = ceiling(1.1 * str_cap + 1)
-			!tmp_cap = 2 * str_cap
+			! Grow the buffer capacity.  What is the optimal growth factor?
+			tmp_cap = 2 * str_cap
 			allocate(character(len = tmp_cap) :: tmp)
 			tmp(1: str_cap) = str
 
