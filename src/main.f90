@@ -18,6 +18,8 @@ function read_line(iu) result(str)
 	! c.f. aoc-2022/utils.f90
 	!
 	! This version reads WITHOUT backspacing, so it works on stdin too
+	!
+	! TODO: move to utils
 
 	integer, intent(in) :: iu
 
@@ -25,7 +27,7 @@ function read_line(iu) result(str)
 
 	!********
 
-	character :: c, buffer*4
+	character :: c
 	character(len = :), allocatable :: tmp
 
 	integer :: i, io, str_cap, tmp_cap
@@ -70,17 +72,21 @@ end function read_line
 
 subroutine fint
 
+	! This is the interpreter shell
+	!
+	! TODO: arg for iu as stdin vs another file
+
 	integer, parameter :: iu = input_unit, ou = output_unit
 
 	character(len = :), allocatable :: input
 	character(len = *), parameter :: prompt = 'fint$ '
 
-	! Read-print-loop
+	! Read-print-loop (eval TBD)
 	do
 		write(ou, '(a)', advance = 'no') prompt
 		input = read_line(iu)
 
-		if (len_trim(input) > 0) write(ou, '(a)') trim(input)
+		if (len(input) > 0) write(ou, '(a)') input
 
 	end do
 
