@@ -222,8 +222,8 @@ function syntax_tree_parse(str) result(tree)
 		if (token%kind /= whitespace_token .and. &
 		    token%kind /= bad_token) then
 
-			print *, 'token%text = <', token%text, &
-					'> <'//kind_name(token%kind)//'>'
+			print *, 'token = <', token%text, '> ', &
+					'<'//kind_name(token%kind)//'>'
 
 		end if
 
