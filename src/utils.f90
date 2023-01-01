@@ -6,13 +6,18 @@ module utils
 	use iso_fortran_env
 	implicit none
 
+	character, parameter :: &
+			tab             = char( 9), &
+			line_feed       = char(10), &
+			carriage_return = char(13)
+
 !===============================================================================
 
 contains
 
 !===============================================================================
 
-function read_line(iu) result(str)
+function read_line(iu, iostat) result(str)
 
 	! c.f. aoc-2022/utils.f90
 	!
@@ -21,6 +26,7 @@ function read_line(iu) result(str)
 	! TODO: move to utils
 
 	integer, intent(in) :: iu
+	integer, optional, intent(out) :: iostat
 
 	character(len = :), allocatable :: str
 
@@ -41,6 +47,8 @@ function read_line(iu) result(str)
 		read(iu, '(a)', advance = 'no', iostat = io) c
 		if (io == iostat_end) exit
 		if (io == iostat_eor) exit
+		!if (c == carriage_return) exit
+		!if (c == line_feed) exit
 		i = i + 1
 
 		if (i > str_cap) then
@@ -64,6 +72,8 @@ function read_line(iu) result(str)
 
 	! Trim unused chars from buffer
 	str = str(1:i)
+
+	if (present(iostat)) iostat = io
 
 end function read_line
 
