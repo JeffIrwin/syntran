@@ -44,11 +44,17 @@ module core_m
 	!********
 
 	type syntax_node_t
+
 		integer :: kind = bad_token
 		type(syntax_node_t), allocatable :: left, right
 		type(syntax_token_t) :: op, num
+
 		contains
 			procedure :: str => syntax_node_str
+
+			procedure, pass(dst) :: copy => syntax_node_copy
+			generic, public :: assignment(=) => copy
+
 	end type syntax_node_t
 
 	!********
@@ -218,17 +224,18 @@ end function syntax_node_str
 
 !===============================================================================
 
-recursive subroutine copy(src, dst)
+recursive subroutine syntax_node_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
 	! correctly for my node type, leaving dangling refs to src when it is
 	! deallocated.
 	!
-	! TODO: overload = op as this fn
+	! Args have to be in the confusing dst, src order for overloading
 
-	type(syntax_node_t) :: src, dst
+	class(syntax_node_t), intent(inout) :: dst
+	class(syntax_node_t), intent(in)    :: src
 
-	if (debug > 3) print *, 'starting copy()'
+	if (debug > 3) print *, 'starting syntax_node_copy()'
 
 	dst%kind = src%kind
 	dst%op   = src%op
@@ -237,16 +244,16 @@ recursive subroutine copy(src, dst)
 	if (allocated(src%left)) then
 		!if (debug > 1) print *, 'copy() left'
 		if (.not. allocated(dst%left)) allocate(dst%left)
-		call copy(src%left, dst%left)
+		dst%left = src%left
 	end if
 
 	if (allocated(src%right)) then
 		!if (debug > 1) print *, 'copy() right'
 		if (.not. allocated(dst%right)) allocate(dst%right)
-		call copy(src%right, dst%right)
+		dst%right = src%right
 	end if
 
-end subroutine copy
+end subroutine syntax_node_copy
 
 !===============================================================================
 
@@ -488,8 +495,7 @@ function parse_term(parser) result(left)
 
 		if (debug > 1) print *, 'tmp = ', tmp%str()
 		if (debug > 1) print *, 'copying parse_term'
-		!left = tmp
-		call copy(tmp, left)
+		left = tmp
 		!deallocate(tmp)
 		!deallocate(tmp%left, tmp%right)
 		if (debug > 1) print *, 'done'
@@ -535,7 +541,7 @@ recursive function parse_factor(parser) result(left)
 
 		if (debug > 1) print *, 'copying parse_factor'
 		!left = tmp
-		call copy(tmp, left)
+		left = tmp
 		!deallocate(tmp)
 
 		current = parser%current()
@@ -613,14 +619,14 @@ subroutine new_binary_expr(left, op, right, expr)
 
 	if (debug > 1) print *, 'left'
 	!expr%left  = left
-	call copy(left, expr%left)
+	expr%left  = left
 
 	if (debug > 1) print *, 'op'
 	expr%op    =  op
 
 	if (debug > 1) print *, 'right'
 	!expr%right = right
-	call copy(right, expr%right)
+	expr%right = right
 
 	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
 
