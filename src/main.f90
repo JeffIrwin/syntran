@@ -13,7 +13,7 @@ module core_m
 	! I mean what could she have?  Fungus?
 	character(len = *), parameter :: lang_name = 'syntran'
 
-	integer, parameter :: debug = 0
+	integer, parameter :: debug = 2
 
 	! Token and syntax node kinds enum
 	integer, parameter ::          &
@@ -172,19 +172,47 @@ end function
 
 !===============================================================================
 
-function syntax_node_str(node) result(str)
+recursive function syntax_node_str(node, indent) result(str)
+
+	! Convert tree to string in JSON-ish format
 
 	class(syntax_node_t) :: node
 
+	character(len = *), optional :: indent
+
 	character(len = :), allocatable :: str
 
+	!********
+
+	character(len = :), allocatable :: indentl, kind, num, left, op, right
+
+	indentl = ''
+	if (present(indent)) indentl = indent
+
+	kind = indentl//'    kind = '//kind_name(node%kind)//line_feed
+
+	num = ''
+
+	left = ''
+	right = ''
+	op = ''
+
+	if      (node%kind == binary_expr) then
+		left  = indentl//'    left  = '//node%left %str(indentl//'    ')//line_feed
+		right = indentl//'    right = '//node%right%str(indentl//'    ')//line_feed
+		op    = indentl//'    op    = '//node%op%text//line_feed
+	else if (node%kind == num_expr) then
+		num   = indentl//'    num   = '//node%num%text   //line_feed
+	end if
+
 	str =    line_feed// &
-		'{'//line_feed// &
-			tab//'kind = '//kind_name(node%kind)//line_feed// &
-			!tab//'left = '//node%left//line_feed// &
-			tab//'op   = '//node%op%text//line_feed// &
-			tab//'num  = '//node%num%text//line_feed// &
-		'}'//line_feed
+		indentl//'{'//line_feed// &
+			kind // &
+			left // &
+			op   // &
+			right// &
+			num  // &
+		indentl//'}'
 
 end function syntax_node_str
 
@@ -255,7 +283,7 @@ function next_token(lexer) result(token)
 		read(text, *, iostat = io) val
 		if (io /= 0) then
 			! TODO: diagnostics
-			print *, 'diag: invalid int32'
+			write(*,*) 'diag: invalid int32'
 		end if
 
 		token = new_token(num_token, start, text, val)
@@ -289,7 +317,7 @@ function next_token(lexer) result(token)
 		case default
 			! TODO: diagnostics
 			token = new_token(bad_token, lexer%pos, lexer%current(), 0)
-			print *, 'diag: bad token ', lexer%current()
+			write(*,*) 'diag: bad token ', lexer%current()
 	end select
 
 	lexer%pos = lexer%pos + 1
@@ -349,7 +377,7 @@ function new_parser(str) result(parser)
 	parser%pos = 1
 
 	if (debug > 1) then
-		! Make tokens to str fn?
+		! TODO: make tokens to str fn?
 		do i = 1, size(parser%tokens)
 			print *, 'token = <',  parser%tokens(i)%text , '> ', &
 			     '<'//kind_name( parser%tokens(i)%kind )//'>'
@@ -379,18 +407,21 @@ function syntax_parse(str) result(tree)
 	! Parse the tokens. Should this accept empty strings?  It says unexpected
 	! token trying to match number in parse_primary_expr(), so currently the
 	! interpreter driver skips empty lines
-	print *, 'parsing'
+	!print *, 'parsing'
 	tree = parser%parse_term()
-	print *, 'done parsing in syntax_parse'
+
+	print *, 'tree = ', tree%str()
+
+	!print *, 'done parsing in syntax_parse'
 	!print *, 'copying'
 	!res = tree
 
 	!print *, 'associated(tree%left)  = ', associated(tree%left)
-	print *, 'tree %kind  = ', kind_name(tree%kind)
-	print *, 'tree %left%kind  = ', kind_name(tree%left%kind)
+	!print *, 'tree %kind  = ', kind_name(tree%kind)
+	!print *, 'tree %left%kind  = ', kind_name(tree%left%kind)
 	!print *, 'res  %left%kind  = ', kind_name(res %left%kind)
 	!print *, 'tree%left  = ', tree%left %str()
-	print *, ''
+	!print *, ''
 
 	!if (debug > 1) print *, 'tree%kind  = ', kind_name(tree%kind)
 	!if (debug > 1) print *, 'tree%left  = ', tree%left %str()
@@ -412,50 +443,30 @@ function parse_term(parser) result(left)
 
 	!********
 
-	type(syntax_node_t) :: right, tmp
-	!type(syntax_node_t) :: left, right, tmp, term
+	type(syntax_node_t) :: right
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_term'
 
 	left = parser%parse_factor()
 
-	if (debug > 1) print *, 'left term = ', left %str()
+	!if (debug > 1) print *, 'left term = ', left %str()
 
 	current = parser%current()
 	do while (current%kind == plus_token .or. &
 	          current%kind == minus_token)
 
 		op = parser%next()
-		if (debug > 1) print *, 'op = ', op%text
+		if (debug > -1) print *, 'op = ', op%text
 
 		right = parser%parse_factor()
 		left = new_binary_expr(left, op, right)
 		!left = tmp
 
-	!if (debug > 1) print *, 'tmp%left  = ', tmp%left %str()
-	!if (debug > 1) print *, 'tmp%op    = ', tmp%op   %text
-	!if (debug > 1) print *, 'tmp%right = ', tmp%right%str()
-
-		!left = tmp
-
-	!if (debug > 1) print *, 'left%left  = ', left%left %str()
-	!if (debug > 1) print *, 'left%op    = ', left%op   %text
-	!if (debug > 1) print *, 'left%right = ', left%right%str()
-
 		current = parser%current()
 	end do
 
-	!term = left
-
-	!term2 = term
-
-	if (debug > 1) print *, 'left%left  = ', left%left %str()
-	if (debug > 1) print *, 'left%op    = ', left%op   %text
-	if (debug > 1) print *, 'left%right = ', left%right%str()
-
-	print *, 'left %left%kind  = ', kind_name(left %left%kind)
-	!print *, 'associated(term%left)  = ', associated(term%left)
+	print *, 'parse_term = ', left%str()
 
 	if (debug > 1) print *, 'done parse_term'
 
@@ -463,15 +474,15 @@ end function parse_term
 
 !===============================================================================
 
-recursive function parse_factor(parser) result(factor)
+recursive function parse_factor(parser) result(left)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: factor
+	type(syntax_node_t) :: left
 
 	!********
 
-	type(syntax_node_t) :: left, right, tmp
+	type(syntax_node_t) :: right
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_factor'
@@ -484,13 +495,13 @@ recursive function parse_factor(parser) result(factor)
 
 		op = parser%next()
 		right = parser%parse_primary_expr()
-		tmp = new_binary_expr(left, op, right)
-		left = tmp
+		left = new_binary_expr(left, op, right)
+		!left = tmp
 
 		current = parser%current()
 	end do
 
-	factor = left
+	!factor = left
 
 	if (debug > 1) print *, 'done parse_factor'
 
@@ -547,26 +558,21 @@ function new_binary_expr(left, op, right) result(expr)
 	!********
 
 	if (debug > 1) print *, 'new_binary_expr'
-	if (debug > 1) print *, 'left  = ', left %str()
-	if (debug > 1) print *, 'right = ', right%str()
+	!if (debug > 1) print *, 'left  = ', left %str()
+	!if (debug > 1) print *, 'right = ', right%str()
 
 	!allocate(expr)
-
 	expr%kind = binary_expr
 
 	! Note targets (=>) vs regular vars (=).  Attempting regular
 	! assignment for left or right crashes (infinite copy recursion?) TODO?
-	allocate(expr%left)
-	allocate(expr%right)
+	!allocate(expr%left)
+	!allocate(expr%right)
 	expr%left  = left
 	expr%op    =  op
 	expr%right = right
 
-	if (debug > 1) print *, 'expr%left  = ', expr%left %str()
-	if (debug > 1) print *, 'expr%op    = ', expr%op   %text
-	if (debug > 1) print *, 'expr%right = ', expr%right%str()
-
-	!print *, 'associated(expr%left)  = ', associated(expr%left)
+	print *, 'new_binary_expr = ', expr%str()
 
 	if (debug > 1) print *, 'done new_binary_expr'
 
@@ -594,7 +600,7 @@ function match(parser, kind) result(token)
 	end if
 
 	! TODO: diags
-	print *, 'Error: unexpected token'
+	write(*,*) 'Error: unexpected token'
 	token = new_token(kind, current%pos, null_char, 0)
 
 end function match
@@ -650,8 +656,8 @@ recursive function syntax_eval(node) result(res)
 		left  = syntax_eval(node%left )
 		right = syntax_eval(node%right)
 
-		print *, 'left  = ', left
-		print *, 'right = ', right
+		!print *, 'left  = ', left
+		!print *, 'right = ', right
 
 		if      (node%op%kind == plus_token) then
 			res = left + right
@@ -716,9 +722,9 @@ subroutine interpret()
 		tree = syntax_parse(line)
 
 		!print *, 'inter%left%kind  = ', kind_name(tree%left%kind)
-		print *, 'in interpret():'
-		print *, 'tree %kind  = ', kind_name(tree%kind)
-		print *, 'tree %left%kind  = ', kind_name(tree%left%kind)
+		!print *, 'in interpret():'
+		!print *, 'tree %kind  = ', kind_name(tree%kind)
+		!print *, 'tree %left%kind  = ', kind_name(tree%left%kind)
 
 		! TODO: catch diags
 		res  = syntax_eval (tree)
