@@ -13,7 +13,7 @@ module core_m
 	! I mean what could she have?  Fungus?
 	character(len = *), parameter :: lang_name = 'syntran'
 
-	integer, parameter :: debug = 2
+	integer, parameter :: debug = 0
 
 	! Token and syntax node kinds enum
 	integer, parameter ::          &
@@ -218,6 +218,35 @@ end function syntax_node_str
 
 !===============================================================================
 
+recursive subroutine copy(src, dst)
+
+	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
+	! correctly for my node type.  TODO: overload = op as this fn
+
+	type(syntax_node_t) :: src, dst
+
+	if (debug > 3) print *, 'starting copy()'
+
+	dst%kind = src%kind
+	dst%op   = src%op
+	dst%num  = src%num
+
+	if (allocated(src%left)) then
+		!if (debug > 1) print *, 'copy() left'
+		if (.not. allocated(dst%left)) allocate(dst%left)
+		call copy(src%left, dst%left)
+	end if
+
+	if (allocated(src%right)) then
+		!if (debug > 1) print *, 'copy() right'
+		if (.not. allocated(dst%right)) allocate(dst%right)
+		call copy(src%right, dst%right)
+	end if
+
+end subroutine copy
+
+!===============================================================================
+
 function new_token(kind, pos, text, val) result(token)
 
 	integer :: val
@@ -410,7 +439,7 @@ function syntax_parse(str) result(tree)
 	!print *, 'parsing'
 	tree = parser%parse_term()
 
-	print *, 'tree = ', tree%str()
+	if (debug > 1) print *, 'tree = ', tree%str()
 
 	!print *, 'done parsing in syntax_parse'
 	!print *, 'copying'
@@ -439,11 +468,12 @@ function parse_term(parser) result(left)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: left
+	type(syntax_node_t), allocatable :: left
 
 	!********
 
-	type(syntax_node_t) :: right
+	type(syntax_node_t), allocatable :: right
+	type(syntax_node_t) :: tmp
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_term'
@@ -457,17 +487,26 @@ function parse_term(parser) result(left)
 	          current%kind == minus_token)
 
 		op = parser%next()
-		if (debug > -1) print *, 'op = ', op%text
+		if (debug > 1) print *, 'op = ', op%text
 
 		right = parser%parse_factor()
-		left = new_binary_expr(left, op, right)
+
+		!tmp = new_binary_expr(left, op, right)
+		call new_binary_expr(left, op, right, tmp)
+
+		if (debug > 1) print *, 'tmp = ', tmp%str()
+		if (debug > 1) print *, 'copying parse_term'
 		!left = tmp
+		call copy(tmp, left)
+		!deallocate(tmp)
+		!deallocate(tmp%left, tmp%right)
+		if (debug > 1) print *, 'done'
+		if (debug > 1) print *, 'copied left = ', left%str()
 
 		current = parser%current()
 	end do
 
-	print *, 'parse_term = ', left%str()
-
+	if (debug > 1) print *, 'parse_term = ', left%str()
 	if (debug > 1) print *, 'done parse_term'
 
 end function parse_term
@@ -478,11 +517,12 @@ recursive function parse_factor(parser) result(left)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: left
+	type(syntax_node_t), allocatable :: left
 
 	!********
 
-	type(syntax_node_t) :: right
+	type(syntax_node_t), allocatable :: right
+	type(syntax_node_t) :: tmp
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_factor'
@@ -495,8 +535,14 @@ recursive function parse_factor(parser) result(left)
 
 		op = parser%next()
 		right = parser%parse_primary_expr()
-		left = new_binary_expr(left, op, right)
+
+		!left = new_binary_expr(left, op, right)
+		call new_binary_expr(left, op, right, tmp)
+
+		if (debug > 1) print *, 'copying parse_factor'
 		!left = tmp
+		call copy(tmp, left)
+		!deallocate(tmp)
 
 		current = parser%current()
 	end do
@@ -548,35 +594,45 @@ end function new_num_expr
 
 !===============================================================================
 
-function new_binary_expr(left, op, right) result(expr)
+!function new_binary_expr(left, op, right) result(expr)
+subroutine new_binary_expr(left, op, right, expr)
 
-	type(syntax_node_t) :: left, right
-	type(syntax_token_t) :: op
+	type(syntax_node_t) , intent(in) :: left, right
+	type(syntax_token_t), intent(in) :: op
 
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), intent(out) :: expr
 
 	!********
 
 	if (debug > 1) print *, 'new_binary_expr'
-	!if (debug > 1) print *, 'left  = ', left %str()
-	!if (debug > 1) print *, 'right = ', right%str()
+	if (debug > 1) print *, 'left  = ', left %str()
+	if (debug > 1) print *, 'right = ', right%str()
 
+	!if (allocated(expr)) deallocate(expr)
 	!allocate(expr)
 	expr%kind = binary_expr
 
 	! Note targets (=>) vs regular vars (=).  Attempting regular
 	! assignment for left or right crashes (infinite copy recursion?) TODO?
-	!allocate(expr%left)
-	!allocate(expr%right)
-	expr%left  = left
-	expr%op    =  op
-	expr%right = right
+	allocate(expr%left)
+	allocate(expr%right)
+	if (debug > 1) print *, 'left'
+	!expr%left  = left
+	call copy(left, expr%left)
 
-	print *, 'new_binary_expr = ', expr%str()
+	if (debug > 1) print *, 'op'
+	expr%op    =  op
+
+	if (debug > 1) print *, 'right'
+	!expr%right = right
+	call copy(right, expr%right)
+
+	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
 
 	if (debug > 1) print *, 'done new_binary_expr'
 
-end function new_binary_expr
+!end function new_binary_expr
+end subroutine new_binary_expr
 
 !===============================================================================
 

@@ -6,6 +6,7 @@
 fc=gfortran
 #flags="-cpp -O3 -fopenmp"
 #flags="-cpp -Wall -Wextra -Wno-tabs"
+#flags="-cpp -Wall -Wextra -Wno-tabs -fbounds-check"
 flags="-cpp -Wall -Wextra -Wno-tabs -fbounds-check -Wno-maybe-uninitialized"
 
 #fc=ifort
