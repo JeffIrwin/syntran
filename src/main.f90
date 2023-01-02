@@ -16,7 +16,7 @@ module core_m
 	integer, parameter :: debug = 0
 
 	! Token and syntax node kinds enum
-	integer, parameter :: &
+	integer, parameter ::          &
 			num_expr         = 10, &
 			binary_expr      =  9, &
 			star_token       =  8, &
@@ -35,7 +35,8 @@ module core_m
 		! TODO: how to handle values of different types?
 		integer :: val
 
-		integer :: kind, pos
+		! TODO: initiazing bad_token here shouldn't be required
+		integer :: kind = bad_token, pos
 		character(len = :), allocatable :: text
 
 	end type syntax_token_t
@@ -43,9 +44,8 @@ module core_m
 	!********
 
 	type syntax_node_t
-		integer :: kind
-		!type(syntax_node_t), pointer :: left => null(), right => null()
-		type(syntax_node_t), pointer :: left, right
+		integer :: kind = bad_token
+		type(syntax_node_t), allocatable :: left, right
 		type(syntax_token_t) :: op, num
 		contains
 			procedure :: str => syntax_node_str
@@ -364,7 +364,7 @@ function syntax_parse(str) result(tree)
 
 	character(len = *) :: str
 
-	type(syntax_node_t) :: tree
+	type(syntax_node_t), allocatable :: tree
 
 	!********
 
@@ -379,7 +379,23 @@ function syntax_parse(str) result(tree)
 	! Parse the tokens. Should this accept empty strings?  It says unexpected
 	! token trying to match number in parse_primary_expr(), so currently the
 	! interpreter driver skips empty lines
+	print *, 'parsing'
 	tree = parser%parse_term()
+	print *, 'done parsing in syntax_parse'
+	!print *, 'copying'
+	!res = tree
+
+	!print *, 'associated(tree%left)  = ', associated(tree%left)
+	print *, 'tree %kind  = ', kind_name(tree%kind)
+	print *, 'tree %left%kind  = ', kind_name(tree%left%kind)
+	!print *, 'res  %left%kind  = ', kind_name(res %left%kind)
+	!print *, 'tree%left  = ', tree%left %str()
+	print *, ''
+
+	!if (debug > 1) print *, 'tree%kind  = ', kind_name(tree%kind)
+	!if (debug > 1) print *, 'tree%left  = ', tree%left %str()
+	!if (debug > 1) print *, 'tree%op    = ', tree%op   %text
+	!if (debug > 1) print *, 'tree%right = ', tree%right%str()
 
 	if (debug > 1) print *, 'matching eof'
 	token  = parser%match(eof_token)
@@ -392,11 +408,12 @@ function parse_term(parser) result(term)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: term
+	type(syntax_node_t), allocatable :: term
 
 	!********
 
-	type(syntax_node_t) :: left, right, tmp
+	type(syntax_node_t), allocatable :: left, right
+	!type(syntax_node_t) :: left, right, tmp, term
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_term'
@@ -413,22 +430,31 @@ function parse_term(parser) result(term)
 		if (debug > 1) print *, 'op = ', op%text
 
 		right = parser%parse_factor()
-		tmp = new_binary_expr(left, op, right)
+		left = new_binary_expr(left, op, right)
 
-		if (debug > 1) print *, 'tmp%left = ', tmp%left%str()
+	!if (debug > 1) print *, 'tmp%left  = ', tmp%left %str()
+	!if (debug > 1) print *, 'tmp%op    = ', tmp%op   %text
+	!if (debug > 1) print *, 'tmp%right = ', tmp%right%str()
 
-		left = tmp
+		!left = tmp
+
+	!if (debug > 1) print *, 'left%left  = ', left%left %str()
+	!if (debug > 1) print *, 'left%op    = ', left%op   %text
+	!if (debug > 1) print *, 'left%right = ', left%right%str()
 
 		current = parser%current()
 	end do
 
 	term = left
 
-	if (debug > 1) print *, 'term = ', term%str()
-	if (debug > 1) print *, 'term%left = ', term%left%str()
+	!term2 = term
 
-	if (debug > 1) print *, 'left = ', left%str()
-	if (debug > 1) print *, 'left%left = ', left%left%str()
+	if (debug > 1) print *, 'term%left  = ', term%left %str()
+	if (debug > 1) print *, 'term%op    = ', term%op   %text
+	if (debug > 1) print *, 'term%right = ', term%right%str()
+
+	print *, 'term %left%kind  = ', kind_name(term %left%kind)
+	!print *, 'associated(term%left)  = ', associated(term%left)
 
 	if (debug > 1) print *, 'done parse_term'
 
@@ -440,11 +466,12 @@ recursive function parse_factor(parser) result(factor)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: factor
+	! TODO: allocatable?
+	type(syntax_node_t), allocatable :: factor
 
 	!********
 
-	type(syntax_node_t) :: left, right
+	type(syntax_node_t), allocatable :: left, right
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_factor'
@@ -474,7 +501,7 @@ function parse_primary_expr(parser) result(expr)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), allocatable :: expr
 
 	!********
 
@@ -497,10 +524,11 @@ function new_num_expr(num) result(expr)
 
 	type(syntax_token_t) :: num
 
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), allocatable :: expr
 
 	!********
 
+	allocate(expr)
 	expr%kind = num_expr
 	expr%num  = num
 
@@ -510,10 +538,10 @@ end function new_num_expr
 
 function new_binary_expr(left, op, right) result(expr)
 
-	type(syntax_node_t), target :: left, right
+	type(syntax_node_t) :: left, right
 	type(syntax_token_t) :: op
 
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), allocatable :: expr
 
 	!********
 
@@ -521,15 +549,21 @@ function new_binary_expr(left, op, right) result(expr)
 	if (debug > 1) print *, 'left  = ', left %str()
 	if (debug > 1) print *, 'right = ', right%str()
 
+	allocate(expr)
+
 	expr%kind = binary_expr
 
-	! Note pointer targets (=>) vs regular vars (=).  Attempting regular
-	! assignment for left or right crashes (infinite copy recursion?)
-	expr%left  => left
+	! Note targets (=>) vs regular vars (=).  Attempting regular
+	! assignment for left or right crashes (infinite copy recursion?) TODO?
+	expr%left  = left
 	expr%op    =  op
-	expr%right => right
+	expr%right = right
 
 	if (debug > 1) print *, 'expr%left  = ', expr%left %str()
+	if (debug > 1) print *, 'expr%op    = ', expr%op   %text
+	if (debug > 1) print *, 'expr%right = ', expr%right%str()
+
+	!print *, 'associated(expr%left)  = ', associated(expr%left)
 
 	if (debug > 1) print *, 'done new_binary_expr'
 
@@ -654,7 +688,7 @@ subroutine interpret()
 	character(len = :), allocatable :: line
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
-	type(syntax_node_t) :: tree
+	type(syntax_node_t), allocatable :: tree
 
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
@@ -677,6 +711,11 @@ subroutine interpret()
 		if (len(line) == 0) cycle
 
 		tree = syntax_parse(line)
+
+		!print *, 'inter%left%kind  = ', kind_name(tree%left%kind)
+		print *, 'in interpret():'
+		print *, 'tree %kind  = ', kind_name(tree%kind)
+		print *, 'tree %left%kind  = ', kind_name(tree%left%kind)
 
 		! TODO: catch diags
 		res  = syntax_eval (tree)
