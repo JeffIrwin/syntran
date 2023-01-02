@@ -221,7 +221,10 @@ end function syntax_node_str
 recursive subroutine copy(src, dst)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
-	! correctly for my node type.  TODO: overload = op as this fn
+	! correctly for my node type, leaving dangling refs to src when it is
+	! deallocated.
+	!
+	! TODO: overload = op as this fn
 
 	type(syntax_node_t) :: src, dst
 
@@ -349,6 +352,9 @@ function next_token(lexer) result(token)
 			write(*,*) 'diag: bad token ', lexer%current()
 	end select
 
+	! TODO: arrow keys create bad tokens.  Fix that (better yet, override up
+	! arrow to do what it does in bash.  c.f. rubik-js)
+
 	lexer%pos = lexer%pos + 1
 
 end function next_token
@@ -441,22 +447,6 @@ function syntax_parse(str) result(tree)
 
 	if (debug > 1) print *, 'tree = ', tree%str()
 
-	!print *, 'done parsing in syntax_parse'
-	!print *, 'copying'
-	!res = tree
-
-	!print *, 'associated(tree%left)  = ', associated(tree%left)
-	!print *, 'tree %kind  = ', kind_name(tree%kind)
-	!print *, 'tree %left%kind  = ', kind_name(tree%left%kind)
-	!print *, 'res  %left%kind  = ', kind_name(res %left%kind)
-	!print *, 'tree%left  = ', tree%left %str()
-	!print *, ''
-
-	!if (debug > 1) print *, 'tree%kind  = ', kind_name(tree%kind)
-	!if (debug > 1) print *, 'tree%left  = ', tree%left %str()
-	!if (debug > 1) print *, 'tree%op    = ', tree%op   %text
-	!if (debug > 1) print *, 'tree%right = ', tree%right%str()
-
 	if (debug > 1) print *, 'matching eof'
 	token  = parser%match(eof_token)
 
@@ -468,11 +458,11 @@ function parse_term(parser) result(left)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t), allocatable :: left
+	type(syntax_node_t) :: left
 
 	!********
 
-	type(syntax_node_t), allocatable :: right
+	type(syntax_node_t) :: right
 	type(syntax_node_t) :: tmp
 	type(syntax_token_t) :: current, op
 
@@ -490,6 +480,8 @@ function parse_term(parser) result(left)
 		if (debug > 1) print *, 'op = ', op%text
 
 		right = parser%parse_factor()
+
+		! TODO: try removing tmp
 
 		!tmp = new_binary_expr(left, op, right)
 		call new_binary_expr(left, op, right, tmp)
@@ -517,11 +509,11 @@ recursive function parse_factor(parser) result(left)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t), allocatable :: left
+	type(syntax_node_t) :: left
 
 	!********
 
-	type(syntax_node_t), allocatable :: right
+	type(syntax_node_t) :: right
 	type(syntax_node_t) :: tmp
 	type(syntax_token_t) :: current, op
 
@@ -535,6 +527,8 @@ recursive function parse_factor(parser) result(left)
 
 		op = parser%next()
 		right = parser%parse_primary_expr()
+
+		! TODO: remove tmp
 
 		!left = new_binary_expr(left, op, right)
 		call new_binary_expr(left, op, right, tmp)
@@ -567,7 +561,7 @@ function parse_primary_expr(parser) result(expr)
 
 	if (debug > 1) print *, 'parse_primary_expr'
 
-	! TODO: parens
+	! TODO: parens, unary operators
 
 	num = parser%match(num_token)
 	expr = new_num_expr(num)
@@ -594,6 +588,8 @@ end function new_num_expr
 
 !===============================================================================
 
+! TODO: can this be a fn?
+
 !function new_binary_expr(left, op, right) result(expr)
 subroutine new_binary_expr(left, op, right, expr)
 
@@ -612,10 +608,9 @@ subroutine new_binary_expr(left, op, right, expr)
 	!allocate(expr)
 	expr%kind = binary_expr
 
-	! Note targets (=>) vs regular vars (=).  Attempting regular
-	! assignment for left or right crashes (infinite copy recursion?) TODO?
 	allocate(expr%left)
 	allocate(expr%right)
+
 	if (debug > 1) print *, 'left'
 	!expr%left  = left
 	call copy(left, expr%left)
@@ -650,7 +645,6 @@ function match(parser, kind) result(token)
 
 	current = parser%current()
 	if (current%kind == kind) then
-	!if (parser%current()%kind == kind) then
 		token = parser%next()
 		return
 	end if
@@ -758,7 +752,7 @@ subroutine interpret()
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
 
-	! Read-print-loop (eval TBD)
+	! Read-eval-print-loop
 	do
 		write(ou, '(a)', advance = 'no') prompt
 		line = read_line(iu, iostat = io)
@@ -766,8 +760,7 @@ subroutine interpret()
 		!print *, 'line = <', line, '>'
 		!print *, 'io = ', io
 
-		!! TODO: don't just echo.  Evaluate!
-		!if (len(line) > 0) write(ou, '(a)') line
+		! Echo input
 		write(ou, '(a)') line
 
 		if (io == iostat_end) exit
@@ -777,10 +770,7 @@ subroutine interpret()
 
 		tree = syntax_parse(line)
 
-		!print *, 'inter%left%kind  = ', kind_name(tree%left%kind)
-		!print *, 'in interpret():'
-		!print *, 'tree %kind  = ', kind_name(tree%kind)
-		!print *, 'tree %left%kind  = ', kind_name(tree%left%kind)
+		if (debug > 0) print *, 'tree = ', tree%str()
 
 		! TODO: catch diags
 		res  = syntax_eval (tree)
