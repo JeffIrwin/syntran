@@ -13,7 +13,7 @@ module core_m
 	! I mean what could she have?  Fungus?
 	character(len = *), parameter :: lang_name = 'syntran'
 
-	integer, parameter :: debug = 2
+	integer, parameter :: debug = 0
 
 	! Token and syntax node kinds enum
 	integer, parameter :: &
@@ -46,6 +46,8 @@ module core_m
 		integer :: kind
 		type(syntax_node_t), pointer :: left => null(), right => null()
 		type(syntax_token_t) :: op, num
+		contains
+			procedure :: str => syntax_node_str
 	end type syntax_node_t
 
 	!********
@@ -364,7 +366,7 @@ function syntax_tree_parse(str) result(tree)
 
 	parser = new_parser(str)
 
-	! Parse the tokens
+	! Parse the tokens. TODO: handle totally empty lines? Here or higher level?
 	tree = parser%parse_term()
 
 	if (debug > 1) print *, 'matching eof'
@@ -397,8 +399,6 @@ function parse_term(parser) result(term)
 		if (debug > 1) print *, 'op = ', op%text
 
 		right = parser%parse_factor()
-
-		print *, 'left term kind = ', kind_name(left%kind)
 		tmp = new_binary_expr(left, op, right)
 		left = tmp
 
@@ -410,6 +410,24 @@ function parse_term(parser) result(term)
 	if (debug > 1) print *, 'done parse_term'
 
 end function parse_term
+
+!===============================================================================
+
+function syntax_node_str(node) result(str)
+
+	class(syntax_node_t) :: node
+
+	character(len = :), allocatable :: str
+
+	str =    line_feed// &
+		'{'//line_feed// &
+			tab//'kind = '//kind_name(node%kind)//line_feed// &
+			!tab//'left = '//node%left//line_feed// &
+			tab//'op   = '//node%op%text//line_feed// &
+			tab//'num  = '//node%num%text//line_feed// &
+		'}'//line_feed
+
+end function syntax_node_str
 
 !===============================================================================
 
@@ -433,10 +451,7 @@ recursive function parse_factor(parser) result(factor)
 	          current%kind == slash_token)
 
 		op = parser%next()
-		!right = parser%parse_factor()
 		right = parser%parse_primary_expr()
-
-		print *, 'left factor kind = ', kind_name(left%kind)
 		tmp = new_binary_expr(left, op, right)
 		left = tmp
 
@@ -491,7 +506,7 @@ end function new_num_expr
 
 function new_binary_expr(left, op, right) result(expr)
 
-	type(syntax_node_t) :: left, right
+	type(syntax_node_t), target :: left, right
 	type(syntax_token_t) :: op
 
 	type(syntax_node_t) :: expr
@@ -499,19 +514,14 @@ function new_binary_expr(left, op, right) result(expr)
 	!********
 
 	if (debug > 1) print *, 'new_binary_expr'
+	if (debug > 1) print *, 'left = ', left%str()
 
-	print *, 'expr'
 	expr%kind = binary_expr
 
-	print *, 'left'
-	expr%left  = left
-	print *, 'done'
-
-	print *, 'op'
-	expr%op    = op
-
-	print *, 'right'
-	expr%right = right
+	! Note pointer targets (=>) vs regular vars (=)
+	expr%left  => left
+	expr%op    =  op
+	expr%right => right
 
 	if (debug > 1) print *, 'done new_binary_expr'
 
