@@ -179,6 +179,24 @@ end function
 
 !===============================================================================
 
+function syntax_node_str(node) result(str)
+
+	class(syntax_node_t) :: node
+
+	character(len = :), allocatable :: str
+
+	str =    line_feed// &
+		'{'//line_feed// &
+			tab//'kind = '//kind_name(node%kind)//line_feed// &
+			!tab//'left = '//node%left//line_feed// &
+			tab//'op   = '//node%op%text//line_feed// &
+			tab//'num  = '//node%num%text//line_feed// &
+		'}'//line_feed
+
+end function syntax_node_str
+
+!===============================================================================
+
 function new_token(kind, pos, text, val) result(token)
 
 	integer :: val
@@ -384,7 +402,7 @@ function parse_term(parser) result(term)
 
 	!********
 
-	type(syntax_node_t) :: left, right, tmp
+	type(syntax_node_t) :: left, right
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_term'
@@ -399,8 +417,7 @@ function parse_term(parser) result(term)
 		if (debug > 1) print *, 'op = ', op%text
 
 		right = parser%parse_factor()
-		tmp = new_binary_expr(left, op, right)
-		left = tmp
+		left = new_binary_expr(left, op, right)
 
 		current = parser%current()
 	end do
@@ -413,24 +430,6 @@ end function parse_term
 
 !===============================================================================
 
-function syntax_node_str(node) result(str)
-
-	class(syntax_node_t) :: node
-
-	character(len = :), allocatable :: str
-
-	str =    line_feed// &
-		'{'//line_feed// &
-			tab//'kind = '//kind_name(node%kind)//line_feed// &
-			!tab//'left = '//node%left//line_feed// &
-			tab//'op   = '//node%op%text//line_feed// &
-			tab//'num  = '//node%num%text//line_feed// &
-		'}'//line_feed
-
-end function syntax_node_str
-
-!===============================================================================
-
 recursive function parse_factor(parser) result(factor)
 
 	class(parser_t) :: parser
@@ -439,7 +438,7 @@ recursive function parse_factor(parser) result(factor)
 
 	!********
 
-	type(syntax_node_t) :: left, right, tmp
+	type(syntax_node_t) :: left, right
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_factor'
@@ -452,8 +451,7 @@ recursive function parse_factor(parser) result(factor)
 
 		op = parser%next()
 		right = parser%parse_primary_expr()
-		tmp = new_binary_expr(left, op, right)
-		left = tmp
+		left = new_binary_expr(left, op, right)
 
 		current = parser%current()
 	end do
@@ -518,7 +516,8 @@ function new_binary_expr(left, op, right) result(expr)
 
 	expr%kind = binary_expr
 
-	! Note pointer targets (=>) vs regular vars (=)
+	! Note pointer targets (=>) vs regular vars (=).  Attempting regular
+	! assignment for left or right crashes (infinite copy recursion?)
 	expr%left  => left
 	expr%op    =  op
 	expr%right => right
@@ -610,6 +609,7 @@ subroutine interpret()
 		!print *, 'input = <', input, '>'
 		!print *, 'io = ', io
 
+		!! TODO: don't just echo.  Evaluate!
 		!if (len(input) > 0) write(ou, '(a)') input
 		write(ou, '(a)') input
 
