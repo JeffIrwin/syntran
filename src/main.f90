@@ -563,7 +563,6 @@ function new_num_expr(num) result(expr)
 
 	!********
 
-	!allocate(expr)
 	expr%kind = num_expr
 	expr%num  = num
 
@@ -590,7 +589,7 @@ function new_binary_expr(left, op, right) result(expr)
 	allocate(expr%right)
 
 	expr%left  = left
-	expr%op    =  op
+	expr%op    = op
 	expr%right = right
 
 	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
