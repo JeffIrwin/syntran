@@ -44,19 +44,12 @@ module core_m
 
 	type syntax_node_t
 		integer :: kind
-		type(syntax_node_t), pointer :: left => null(), right => null()
+		!type(syntax_node_t), pointer :: left => null(), right => null()
+		type(syntax_node_t), pointer :: left, right
 		type(syntax_token_t) :: op, num
 		contains
 			procedure :: str => syntax_node_str
 	end type syntax_node_t
-
-	!********
-
-	!! Do we need a separate type for the tree, or can a node represent the whole
-	!! tree?
-	!type syntax_tree_t
-	!	!integer :: dummy
-	!end type syntax_tree_t
 
 	!********
 
@@ -367,11 +360,10 @@ end function new_parser
 
 !===============================================================================
 
-function syntax_tree_parse(str) result(tree)
+function syntax_parse(str) result(tree)
 
 	character(len = *) :: str
 
-	!type(syntax_tree_t) :: tree
 	type(syntax_node_t) :: tree
 
 	!********
@@ -380,7 +372,7 @@ function syntax_tree_parse(str) result(tree)
 
 	type(syntax_token_t) :: token
 
-	if (debug > 1) print *, 'syntax_tree_parse'
+	if (debug > 1) print *, 'syntax_parse'
 
 	parser = new_parser(str)
 
@@ -392,7 +384,7 @@ function syntax_tree_parse(str) result(tree)
 	if (debug > 1) print *, 'matching eof'
 	token  = parser%match(eof_token)
 
-end function syntax_tree_parse
+end function syntax_parse
 
 !===============================================================================
 
@@ -404,12 +396,14 @@ function parse_term(parser) result(term)
 
 	!********
 
-	type(syntax_node_t) :: left, right
+	type(syntax_node_t) :: left, right, tmp
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_term'
 
 	left = parser%parse_factor()
+
+	if (debug > 1) print *, 'left term = ', left %str()
 
 	current = parser%current()
 	do while (current%kind == plus_token .or. &
@@ -419,12 +413,22 @@ function parse_term(parser) result(term)
 		if (debug > 1) print *, 'op = ', op%text
 
 		right = parser%parse_factor()
-		left = new_binary_expr(left, op, right)
+		tmp = new_binary_expr(left, op, right)
+
+		if (debug > 1) print *, 'tmp%left = ', tmp%left%str()
+
+		left = tmp
 
 		current = parser%current()
 	end do
 
 	term = left
+
+	if (debug > 1) print *, 'term = ', term%str()
+	if (debug > 1) print *, 'term%left = ', term%left%str()
+
+	if (debug > 1) print *, 'left = ', left%str()
+	if (debug > 1) print *, 'left%left = ', left%left%str()
 
 	if (debug > 1) print *, 'done parse_term'
 
@@ -514,7 +518,8 @@ function new_binary_expr(left, op, right) result(expr)
 	!********
 
 	if (debug > 1) print *, 'new_binary_expr'
-	if (debug > 1) print *, 'left = ', left%str()
+	if (debug > 1) print *, 'left  = ', left %str()
+	if (debug > 1) print *, 'right = ', right%str()
 
 	expr%kind = binary_expr
 
@@ -523,6 +528,8 @@ function new_binary_expr(left, op, right) result(expr)
 	expr%left  => left
 	expr%op    =  op
 	expr%right => right
+
+	if (debug > 1) print *, 'expr%left  = ', expr%left %str()
 
 	if (debug > 1) print *, 'done new_binary_expr'
 
@@ -585,6 +592,56 @@ end function next
 
 !===============================================================================
 
+recursive function syntax_eval(node) result(res)
+
+	type(syntax_node_t) :: node
+
+	integer :: res
+
+	!********
+
+	! TODO: polymorphic types
+	integer :: left, right
+
+	if (node%kind == num_expr) then
+		res = node%num%val
+		return
+	end if
+
+	if (node%kind == binary_expr) then
+
+		left  = syntax_eval(node%left )
+		right = syntax_eval(node%right)
+
+		print *, 'left  = ', left
+		print *, 'right = ', right
+
+		if      (node%op%kind == plus_token) then
+			res = left + right
+		else if (node%op%kind == minus_token) then
+			res = left - right
+		else if (node%op%kind == star_token) then
+			res = left * right
+		else if (node%op%kind == slash_token) then
+			res = left / right
+		else
+			! Anything here should have been caught by a parser diag
+			write(*,*) 'Error: unexpected binary operator "', node%op%text, '"'
+			stop
+		end if
+
+		return
+
+	end if
+
+	! TODO
+	write(*,*) 'Error: unexpected node "', kind_name(node%kind), '"'
+	res = 0
+
+end function syntax_eval
+
+!===============================================================================
+
 subroutine interpret()
 
 	! This is the interpret shell
@@ -592,12 +649,11 @@ subroutine interpret()
 	! TODO: arg for iu as stdin vs another file
 
 	integer, parameter :: iu = input_unit, ou = output_unit
-	integer :: io
+	integer :: io, res
 
 	character(len = :), allocatable :: line
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
-	!type(syntax_tree_t) :: tree
 	type(syntax_node_t) :: tree
 
 	!print *, 'len(" ") = ', len(' ')
@@ -620,7 +676,13 @@ subroutine interpret()
 		! Skip empty lines
 		if (len(line) == 0) cycle
 
-		tree = syntax_tree_parse(line)
+		tree = syntax_parse(line)
+
+		! TODO: catch diags
+		res  = syntax_eval (tree)
+
+		! Consider MATLAB-style "ans = " log?
+		write(*, '(i0)') res
 
 	end do
 
@@ -636,6 +698,7 @@ program main
 
 	use core_m
 
+	! TODO: print basic help/exiting message
 	write(*,*)
 	write(*,*) lang_name//' v0.0.1'
 	write(*,*)
