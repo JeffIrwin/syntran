@@ -470,7 +470,6 @@ function parse_term(parser) result(left)
 	!********
 
 	type(syntax_node_t) :: right
-	type(syntax_node_t) :: tmp
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_term'
@@ -487,18 +486,8 @@ function parse_term(parser) result(left)
 		if (debug > 1) print *, 'op = ', op%text
 
 		right = parser%parse_factor()
+		left  = new_binary_expr(left, op, right)
 
-		! TODO: try removing tmp
-
-		!tmp = new_binary_expr(left, op, right)
-		call new_binary_expr(left, op, right, tmp)
-
-		if (debug > 1) print *, 'tmp = ', tmp%str()
-		if (debug > 1) print *, 'copying parse_term'
-		left = tmp
-		!deallocate(tmp)
-		!deallocate(tmp%left, tmp%right)
-		if (debug > 1) print *, 'done'
 		if (debug > 1) print *, 'copied left = ', left%str()
 
 		current = parser%current()
@@ -520,7 +509,6 @@ recursive function parse_factor(parser) result(left)
 	!********
 
 	type(syntax_node_t) :: right
-	type(syntax_node_t) :: tmp
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_factor'
@@ -533,21 +521,10 @@ recursive function parse_factor(parser) result(left)
 
 		op = parser%next()
 		right = parser%parse_primary_expr()
-
-		! TODO: remove tmp
-
-		!left = new_binary_expr(left, op, right)
-		call new_binary_expr(left, op, right, tmp)
-
-		if (debug > 1) print *, 'copying parse_factor'
-		!left = tmp
-		left = tmp
-		!deallocate(tmp)
+		left  = new_binary_expr(left, op, right)
 
 		current = parser%current()
 	end do
-
-	!factor = left
 
 	if (debug > 1) print *, 'done parse_factor'
 
@@ -594,15 +571,12 @@ end function new_num_expr
 
 !===============================================================================
 
-! TODO: can this be a fn?
-
-!function new_binary_expr(left, op, right) result(expr)
-subroutine new_binary_expr(left, op, right, expr)
+function new_binary_expr(left, op, right) result(expr)
 
 	type(syntax_node_t) , intent(in) :: left, right
 	type(syntax_token_t), intent(in) :: op
 
-	type(syntax_node_t), intent(out) :: expr
+	type(syntax_node_t) :: expr
 
 	!********
 
@@ -610,30 +584,19 @@ subroutine new_binary_expr(left, op, right, expr)
 	if (debug > 1) print *, 'left  = ', left %str()
 	if (debug > 1) print *, 'right = ', right%str()
 
-	!if (allocated(expr)) deallocate(expr)
-	!allocate(expr)
 	expr%kind = binary_expr
 
 	allocate(expr%left)
 	allocate(expr%right)
 
-	if (debug > 1) print *, 'left'
-	!expr%left  = left
 	expr%left  = left
-
-	if (debug > 1) print *, 'op'
 	expr%op    =  op
-
-	if (debug > 1) print *, 'right'
-	!expr%right = right
 	expr%right = right
 
 	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
-
 	if (debug > 1) print *, 'done new_binary_expr'
 
-!end function new_binary_expr
-end subroutine new_binary_expr
+end function new_binary_expr
 
 !===============================================================================
 
