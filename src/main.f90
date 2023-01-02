@@ -364,7 +364,7 @@ function syntax_parse(str) result(tree)
 
 	character(len = *) :: str
 
-	type(syntax_node_t), allocatable :: tree
+	type(syntax_node_t) :: tree
 
 	!********
 
@@ -404,15 +404,15 @@ end function syntax_parse
 
 !===============================================================================
 
-function parse_term(parser) result(term)
+function parse_term(parser) result(left)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t), allocatable :: term
+	type(syntax_node_t) :: left
 
 	!********
 
-	type(syntax_node_t), allocatable :: left, right
+	type(syntax_node_t) :: right, tmp
 	!type(syntax_node_t) :: left, right, tmp, term
 	type(syntax_token_t) :: current, op
 
@@ -431,6 +431,7 @@ function parse_term(parser) result(term)
 
 		right = parser%parse_factor()
 		left = new_binary_expr(left, op, right)
+		!left = tmp
 
 	!if (debug > 1) print *, 'tmp%left  = ', tmp%left %str()
 	!if (debug > 1) print *, 'tmp%op    = ', tmp%op   %text
@@ -445,15 +446,15 @@ function parse_term(parser) result(term)
 		current = parser%current()
 	end do
 
-	term = left
+	!term = left
 
 	!term2 = term
 
-	if (debug > 1) print *, 'term%left  = ', term%left %str()
-	if (debug > 1) print *, 'term%op    = ', term%op   %text
-	if (debug > 1) print *, 'term%right = ', term%right%str()
+	if (debug > 1) print *, 'left%left  = ', left%left %str()
+	if (debug > 1) print *, 'left%op    = ', left%op   %text
+	if (debug > 1) print *, 'left%right = ', left%right%str()
 
-	print *, 'term %left%kind  = ', kind_name(term %left%kind)
+	print *, 'left %left%kind  = ', kind_name(left %left%kind)
 	!print *, 'associated(term%left)  = ', associated(term%left)
 
 	if (debug > 1) print *, 'done parse_term'
@@ -466,12 +467,11 @@ recursive function parse_factor(parser) result(factor)
 
 	class(parser_t) :: parser
 
-	! TODO: allocatable?
-	type(syntax_node_t), allocatable :: factor
+	type(syntax_node_t) :: factor
 
 	!********
 
-	type(syntax_node_t), allocatable :: left, right
+	type(syntax_node_t) :: left, right, tmp
 	type(syntax_token_t) :: current, op
 
 	if (debug > 1) print *, 'parse_factor'
@@ -484,7 +484,8 @@ recursive function parse_factor(parser) result(factor)
 
 		op = parser%next()
 		right = parser%parse_primary_expr()
-		left = new_binary_expr(left, op, right)
+		tmp = new_binary_expr(left, op, right)
+		left = tmp
 
 		current = parser%current()
 	end do
@@ -501,7 +502,7 @@ function parse_primary_expr(parser) result(expr)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t), allocatable :: expr
+	type(syntax_node_t) :: expr
 
 	!********
 
@@ -524,11 +525,11 @@ function new_num_expr(num) result(expr)
 
 	type(syntax_token_t) :: num
 
-	type(syntax_node_t), allocatable :: expr
+	type(syntax_node_t) :: expr
 
 	!********
 
-	allocate(expr)
+	!allocate(expr)
 	expr%kind = num_expr
 	expr%num  = num
 
@@ -541,7 +542,7 @@ function new_binary_expr(left, op, right) result(expr)
 	type(syntax_node_t) :: left, right
 	type(syntax_token_t) :: op
 
-	type(syntax_node_t), allocatable :: expr
+	type(syntax_node_t) :: expr
 
 	!********
 
@@ -549,12 +550,14 @@ function new_binary_expr(left, op, right) result(expr)
 	if (debug > 1) print *, 'left  = ', left %str()
 	if (debug > 1) print *, 'right = ', right%str()
 
-	allocate(expr)
+	!allocate(expr)
 
 	expr%kind = binary_expr
 
 	! Note targets (=>) vs regular vars (=).  Attempting regular
 	! assignment for left or right crashes (infinite copy recursion?) TODO?
+	allocate(expr%left)
+	allocate(expr%right)
 	expr%left  = left
 	expr%op    =  op
 	expr%right = right
@@ -688,7 +691,7 @@ subroutine interpret()
 	character(len = :), allocatable :: line
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
-	type(syntax_node_t), allocatable :: tree
+	type(syntax_node_t) :: tree
 
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
