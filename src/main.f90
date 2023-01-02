@@ -35,6 +35,7 @@ module core_m
 
 		integer :: kind, pos
 		character(len = :), allocatable :: text
+
 	end type syntax_token_t
 
 	!********
@@ -68,13 +69,15 @@ module core_m
 
 	type parser_t
 
-		!! TODO: add tokens member
+		type(syntax_token_t), allocatable :: tokens(:)
 
 		!character(len = :), allocatable :: text
 		integer :: pos
 
-		!contains
-		!	procedure next_token, current
+		! TODO: consider renaming next_token/current vs current_token/next
+		! (members of different types)
+		contains
+			procedure :: parse_term, match, current => current_token, next
 
 	end type parser_t
 
@@ -190,6 +193,8 @@ end function new_token
 
 character function current(lexer)
 
+	! Current character
+
 	class(lexer_t) :: lexer
 
 	if (lexer%pos > len(lexer%text)) then
@@ -289,25 +294,21 @@ end function new_lexer
 
 !===============================================================================
 
-function syntax_tree_parse(str) result(tree)
+function new_parser(str) result(parser)
 
 	character(len = *) :: str
 
-	!type(syntax_tree_t) :: tree
-	type(syntax_node_t) :: tree
+	type(parser_t) :: parser
 
 	!********
 
 	integer :: i
 
+	! TODO: replace tok/toks w/ token/tokens for consistency
 	type(syntax_token_t) :: tok
 	type(syntax_token_vector_t) :: toks
 
 	type(lexer_t) :: lexer
-
-	!!! TODO: remove
-	!tree%kind = bad_token
-	!!tree%dummy = 0
 
 	! Get an array of tokens
 	toks = new_syntax_token_vector()
@@ -328,33 +329,97 @@ function syntax_tree_parse(str) result(tree)
 		if (tok%kind == eof_token) exit
 	end do
 
-	! TODO: make toks to str fn
+	parser%tokens = toks%v( 1: toks%len )
+	parser%pos = 1
 
-	!print *, 'len = ', toks%len
-	do i = 1, toks%len
-		print *, 'tok = <', toks%v(i)%text, '> ', &
-				'<'//kind_name(toks%v(i)%kind)//'>'
-	end do
+	!! Make toks to str fn?
+	!do i = 1, size(parser%tokens)
+	!	print *, 'tok = <',  parser%tokens(i)%text , '> ', &
+	!	     '<'//kind_name( parser%tokens(i)%kind )//'>'
+	!end do
 
-	! TODO: construct parser_t object for next steps
+end function new_parser
+
+!===============================================================================
+
+function syntax_tree_parse(str) result(tree)
+
+	character(len = *) :: str
+
+	!type(syntax_tree_t) :: tree
+	type(syntax_node_t) :: tree
+
+	!********
+
+	type(parser_t) :: parser
+
+	type(syntax_token_t) :: tok
+
+	parser = new_parser(str)
 
 	! Parse the tokens
-	tree = parse_term()
-	!tok = match(eof_token)  ! TODO
+	tree = parser%parse_term()
+	tok  = parser%match(eof_token)
 
 end function syntax_tree_parse
 
 !===============================================================================
 
-! TODO: args?  Type-bound?
-function parse_term() result(term)
+function parse_term(parser) result(term)
+
+	class(parser_t) :: parser
 
 	type(syntax_node_t) :: term
+
+	!********
 
 	!! TODO: remove
 	term%kind = bad_token
 
 end function parse_term
+
+!===============================================================================
+
+function match(parser, kind) result(tok)
+
+	class(parser_t) :: parser
+
+	integer :: kind
+
+	type(syntax_token_t) :: tok, current
+
+	!********
+
+	current = parser%current()
+	if (current%kind == kind) then
+	!if (parser%current()%kind == kind) then
+		tok = parser%next()
+		return
+	end if
+
+	! TODO: diags
+	print *, 'Error: unexpected token'
+	tok = new_token(kind, current%pos, null_char, 0)
+
+end function match
+
+!===============================================================================
+
+function current_token(parser)
+	! Refactor in terms of peek(0) ?
+	class(parser_t) :: parser
+	type(syntax_token_t) :: current_token
+	current_token = parser%tokens( parser%pos )
+end function current_token
+
+!===============================================================================
+
+function next(parser)
+	class(parser_t) :: parser
+	type(syntax_token_t) :: next
+	next = parser%current()
+	parser%pos = parser%pos + 1
+end function next
 
 !===============================================================================
 
@@ -405,6 +470,7 @@ program main
 
 	use core_m
 
+	write(*,*)
 	write(*,*) lang_name//' v0.0.1'
 	write(*,*)
 
