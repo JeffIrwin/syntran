@@ -13,9 +13,11 @@ module core_m
 	! I mean what could she have?  Fungus?
 	character(len = *), parameter :: lang_name = 'syntran'
 
+	integer, parameter :: debug = 2
+
 	! Token and syntax node kinds enum
 	integer, parameter :: &
-			number_expr      = 10, &
+			num_expr         = 10, &
 			binary_expr      =  9, &
 			star_token       =  8, &
 			slash_token      =  7, &
@@ -23,7 +25,7 @@ module core_m
 			plus_token       =  5, &
 			minus_token      =  4, &
 			whitespace_token =  3, &
-			number_token     =  2, &
+			num_token        =  2, &
 			eof_token        =  1
 
 	!********
@@ -42,7 +44,8 @@ module core_m
 
 	type syntax_node_t
 		integer :: kind
-		type(syntax_node_t), pointer :: left, op, right
+		type(syntax_node_t), pointer :: left => null(), right => null()
+		type(syntax_token_t) :: op, num
 	end type syntax_node_t
 
 	!********
@@ -77,7 +80,8 @@ module core_m
 		! TODO: consider renaming next_token/current vs current_token/next
 		! (members of different types)
 		contains
-			procedure :: parse_term, match, current => current_token, next
+			procedure :: parse_term, match, current => current_token, next, &
+				parse_factor, parse_primary_expr
 
 	end type parser_t
 
@@ -151,7 +155,7 @@ function kind_name(kind)
 
 	character(len = *), parameter :: names(*) = [ &
 			"eof_token       ", & !  1
-			"number_token    ", & !  2
+			"num_token       ", & !  2
 			"whitespace_token", & !  3
 			"minus_token     ", & !  4
 			"plus_token      ", & !  5
@@ -159,7 +163,7 @@ function kind_name(kind)
 			"slash_token     ", & !  7
 			"star_token      ", & !  8
 			"binary_expr     ", & !  9
-			"number_expr     "  & ! 10
+			"num_expr        "  & ! 10
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -241,7 +245,7 @@ function next_token(lexer) result(token)
 			print *, 'diag: invalid int32'
 		end if
 
-		token = new_token(number_token, start, text, val)
+		token = new_token(num_token, start, text, val)
 		return
 
 	end if
@@ -331,11 +335,13 @@ function new_parser(str) result(parser)
 	parser%tokens = tokens%v( 1: tokens%len )
 	parser%pos = 1
 
-	!! Make tokens to str fn?
-	!do i = 1, size(parser%tokens)
-	!	print *, 'token = <',  parser%tokens(i)%text , '> ', &
-	!	     '<'//kind_name( parser%tokens(i)%kind )//'>'
-	!end do
+	if (debug > 1) then
+		! Make tokens to str fn?
+		do i = 1, size(parser%tokens)
+			print *, 'token = <',  parser%tokens(i)%text , '> ', &
+			     '<'//kind_name( parser%tokens(i)%kind )//'>'
+		end do
+	end if
 
 end function new_parser
 
@@ -354,10 +360,14 @@ function syntax_tree_parse(str) result(tree)
 
 	type(syntax_token_t) :: token
 
+	if (debug > 1) print *, 'syntax_tree_parse'
+
 	parser = new_parser(str)
 
 	! Parse the tokens
 	tree = parser%parse_term()
+
+	if (debug > 1) print *, 'matching eof'
 	token  = parser%match(eof_token)
 
 end function syntax_tree_parse
@@ -372,10 +382,140 @@ function parse_term(parser) result(term)
 
 	!********
 
-	!! TODO: remove
-	term%kind = bad_token
+	type(syntax_node_t) :: left, right, tmp
+	type(syntax_token_t) :: current, op
+
+	if (debug > 1) print *, 'parse_term'
+
+	left = parser%parse_factor()
+
+	current = parser%current()
+	do while (current%kind == plus_token .or. &
+	          current%kind == minus_token)
+
+		op = parser%next()
+		if (debug > 1) print *, 'op = ', op%text
+
+		right = parser%parse_factor()
+
+		print *, 'left term kind = ', kind_name(left%kind)
+		tmp = new_binary_expr(left, op, right)
+		left = tmp
+
+		current = parser%current()
+	end do
+
+	term = left
+
+	if (debug > 1) print *, 'done parse_term'
 
 end function parse_term
+
+!===============================================================================
+
+recursive function parse_factor(parser) result(factor)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: factor
+
+	!********
+
+	type(syntax_node_t) :: left, right, tmp
+	type(syntax_token_t) :: current, op
+
+	if (debug > 1) print *, 'parse_factor'
+
+	left = parser%parse_primary_expr()
+
+	current = parser%current()
+	do while (current%kind == star_token .or. &
+	          current%kind == slash_token)
+
+		op = parser%next()
+		!right = parser%parse_factor()
+		right = parser%parse_primary_expr()
+
+		print *, 'left factor kind = ', kind_name(left%kind)
+		tmp = new_binary_expr(left, op, right)
+		left = tmp
+
+		current = parser%current()
+	end do
+
+	factor = left
+
+	if (debug > 1) print *, 'done parse_factor'
+
+end function parse_factor
+
+!===============================================================================
+
+function parse_primary_expr(parser) result(expr)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	type(syntax_token_t) :: num
+
+	if (debug > 1) print *, 'parse_primary_expr'
+
+	! TODO: parens
+
+	num = parser%match(num_token)
+	expr = new_num_expr(num)
+
+	if (debug > 1) print *, 'num = ', expr%num%val
+
+end function parse_primary_expr
+
+!===============================================================================
+
+function new_num_expr(num) result(expr)
+
+	type(syntax_token_t) :: num
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	expr%kind = num_expr
+	expr%num  = num
+
+end function new_num_expr
+
+!===============================================================================
+
+function new_binary_expr(left, op, right) result(expr)
+
+	type(syntax_node_t) :: left, right
+	type(syntax_token_t) :: op
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	if (debug > 1) print *, 'new_binary_expr'
+
+	print *, 'expr'
+	expr%kind = binary_expr
+
+	print *, 'left'
+	expr%left  = left
+	print *, 'done'
+
+	print *, 'op'
+	expr%op    = op
+
+	print *, 'right'
+	expr%right = right
+
+	if (debug > 1) print *, 'done new_binary_expr'
+
+end function new_binary_expr
 
 !===============================================================================
 
@@ -385,9 +525,11 @@ function match(parser, kind) result(token)
 
 	integer :: kind
 
-	type(syntax_token_t) :: token, current
+	type(syntax_token_t) :: token
 
 	!********
+
+	type(syntax_token_t) :: current
 
 	current = parser%current()
 	if (current%kind == kind) then
@@ -405,10 +547,20 @@ end function match
 !===============================================================================
 
 function current_token(parser)
+
 	! Refactor in terms of peek(0) ?
 	class(parser_t) :: parser
 	type(syntax_token_t) :: current_token
+
+	if (debug > 1) print *, 'current_token pos ', parser%pos
+
+	if (parser%pos > size(parser%tokens)) then
+		current_token = parser%tokens( size(parser%tokens) )
+		return
+	end if
+
 	current_token = parser%tokens( parser%pos )
+
 end function current_token
 
 !===============================================================================
