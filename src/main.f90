@@ -13,14 +13,20 @@ module core_m
 	! I mean what could she have?  Fungus?
 	character(len = *), parameter :: lang_name = 'syntran'
 
-	! Token kind enum
+	! Token and syntax node kinds enum
 	integer, parameter :: &
-			bad_token        = 6, &
-			plus_token       = 5, &
-			minus_token      = 4, &
-			whitespace_token = 3, &
-			number_token     = 2, &
-			eof_token        = 1
+			number_expr      = 10, &
+			binary_expr      =  9, &
+			star_token       =  8, &
+			slash_token      =  7, &
+			bad_token        =  6, &
+			plus_token       =  5, &
+			minus_token      =  4, &
+			whitespace_token =  3, &
+			number_token     =  2, &
+			eof_token        =  1
+
+	!********
 
 	type syntax_token_t
 
@@ -31,12 +37,22 @@ module core_m
 		character(len = :), allocatable :: text
 	end type syntax_token_t
 
-	type syntax_tree_t
+	!********
 
-		! TODO: just so I can set something w/o uninitialize warnings
-		integer :: dummy
+	type syntax_node_t
+		integer :: kind
+		type(syntax_node_t), pointer :: left, op, right
+	end type syntax_node_t
 
-	end type syntax_tree_t
+	!********
+
+	!! Do we need a separate type for the tree, or can a node represent the whole
+	!! tree?
+	!type syntax_tree_t
+	!	!integer :: dummy
+	!end type syntax_tree_t
+
+	!********
 
 	type lexer_t
 
@@ -47,6 +63,22 @@ module core_m
 			procedure next_token, current
 
 	end type lexer_t
+
+	!********
+
+	type parser_t
+
+		!! TODO: add tokens member
+
+		!character(len = :), allocatable :: text
+		integer :: pos
+
+		!contains
+		!	procedure next_token, current
+
+	end type parser_t
+
+	!********
 
 	type syntax_token_vector_t
 		type(syntax_token_t), allocatable :: v(:)
@@ -114,23 +146,25 @@ function kind_name(kind)
 
 	character(len = :), allocatable :: kind_name
 
-	! TODO: do this with a fixed-length char array
-	select case (kind)
-		case (bad_token)
-			kind_name = "bad_token"
-		case (plus_token)
-			kind_name = "plus_token"
-		case (minus_token)
-			kind_name = "minus_token"
-		case (whitespace_token)
-			kind_name = "whitespace_token"
-		case (number_token)
-			kind_name = "number_token"
-		case (eof_token)
-			kind_name = "eof_token"
-		case default
-			kind_name = "unknown"
-	end select
+	character(len = *), parameter :: names(*) = [ &
+			"eof_token       ", & !  1
+			"number_token    ", & !  2
+			"whitespace_token", & !  3
+			"minus_token     ", & !  4
+			"plus_token      ", & !  5
+			"bad_token       ", & !  6
+			"slash_token     ", & !  7
+			"star_token      ", & !  8
+			"binary_expr     ", & !  9
+			"number_expr     "  & ! 10
+		]
+
+	if (.not. (1 <= kind .and. kind <= size(names))) then
+		kind_name = "unknown"
+		return
+	end if
+
+	kind_name = trim(names(kind))
 
 end function
 
@@ -226,6 +260,10 @@ function next_token(lexer) result(tok)
 			tok = new_token(plus_token , lexer%pos, lexer%current(), 0)
 		case ("-")
 			tok = new_token(minus_token, lexer%pos, lexer%current(), 0)
+		case ("*")
+			tok = new_token(star_token , lexer%pos, lexer%current(), 0)
+		case ("/")
+			tok = new_token(slash_token, lexer%pos, lexer%current(), 0)
 		case default
 			! TODO: diagnostics
 			tok = new_token(bad_token, lexer%pos, lexer%current(), 0)
@@ -255,7 +293,8 @@ function syntax_tree_parse(str) result(tree)
 
 	character(len = *) :: str
 
-	type(syntax_tree_t) :: tree
+	!type(syntax_tree_t) :: tree
+	type(syntax_node_t) :: tree
 
 	!********
 
@@ -266,13 +305,13 @@ function syntax_tree_parse(str) result(tree)
 
 	type(lexer_t) :: lexer
 
-	! TODO: remove
-	tree%dummy = 0
+	!!! TODO: remove
+	!tree%kind = bad_token
+	!!tree%dummy = 0
 
+	! Get an array of tokens
 	toks = new_syntax_token_vector()
-
 	lexer = new_lexer(str)
-
 	do
 		tok = lexer%next_token()
 
@@ -297,7 +336,25 @@ function syntax_tree_parse(str) result(tree)
 				'<'//kind_name(toks%v(i)%kind)//'>'
 	end do
 
+	! TODO: construct parser_t object for next steps
+
+	! Parse the tokens
+	tree = parse_term()
+	!tok = match(eof_token)  ! TODO
+
 end function syntax_tree_parse
+
+!===============================================================================
+
+! TODO: args?  Type-bound?
+function parse_term() result(term)
+
+	type(syntax_node_t) :: term
+
+	!! TODO: remove
+	term%kind = bad_token
+
+end function parse_term
 
 !===============================================================================
 
@@ -313,7 +370,8 @@ subroutine interpret()
 	character(len = :), allocatable :: input
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
-	type(syntax_tree_t) :: tree
+	!type(syntax_tree_t) :: tree
+	type(syntax_node_t) :: tree
 
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
