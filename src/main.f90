@@ -384,7 +384,9 @@ function syntax_tree_parse(str) result(tree)
 
 	parser = new_parser(str)
 
-	! Parse the tokens. TODO: handle totally empty lines? Here or higher level?
+	! Parse the tokens. Should this accept empty strings?  It says unexpected
+	! token trying to match number in parse_primary_expr(), so currently the
+	! interpreter driver skips empty lines
 	tree = parser%parse_term()
 
 	if (debug > 1) print *, 'matching eof'
@@ -561,7 +563,7 @@ function current_token(parser)
 	class(parser_t) :: parser
 	type(syntax_token_t) :: current_token
 
-	if (debug > 1) print *, 'current_token pos ', parser%pos
+	if (debug > 2) print *, 'current_token pos ', parser%pos
 
 	if (parser%pos > size(parser%tokens)) then
 		current_token = parser%tokens( size(parser%tokens) )
@@ -592,7 +594,7 @@ subroutine interpret()
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io
 
-	character(len = :), allocatable :: input
+	character(len = :), allocatable :: line
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
 	!type(syntax_tree_t) :: tree
@@ -604,18 +606,21 @@ subroutine interpret()
 	! Read-print-loop (eval TBD)
 	do
 		write(ou, '(a)', advance = 'no') prompt
-		input = read_line(iu, iostat = io)
+		line = read_line(iu, iostat = io)
 
-		!print *, 'input = <', input, '>'
+		!print *, 'line = <', line, '>'
 		!print *, 'io = ', io
 
 		!! TODO: don't just echo.  Evaluate!
-		!if (len(input) > 0) write(ou, '(a)') input
-		write(ou, '(a)') input
-
-		tree = syntax_tree_parse(input)
+		!if (len(line) > 0) write(ou, '(a)') line
+		write(ou, '(a)') line
 
 		if (io == iostat_end) exit
+
+		! Skip empty lines
+		if (len(line) == 0) cycle
+
+		tree = syntax_tree_parse(line)
 
 	end do
 
