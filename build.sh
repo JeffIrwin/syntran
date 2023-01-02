@@ -13,7 +13,7 @@ flags="-cpp -Wall -Wextra -Wno-tabs -fbounds-check -Wno-maybe-uninitialized"
 
 $fc --version
 
-exe=fint
+exe=syntran
 srcdir=src
 src="$srcdir/utils.f90 $srcdir/main.f90"
 

@@ -145,7 +145,7 @@ function new_token(kind, pos, text, val) result(tok)
 
 	type(syntax_token_t) :: tok
 
-	tok%kind  = kind
+	tok%kind = kind
 	tok%pos  = pos
 	tok%text = text
 	tok%val  = val
@@ -259,7 +259,7 @@ function syntax_tree_parse(str) result(tree)
 
 	!********
 
-	integer :: i, j
+	integer :: i
 
 	type(syntax_token_t) :: tok
 	type(syntax_token_vector_t) :: toks
@@ -273,11 +273,8 @@ function syntax_tree_parse(str) result(tree)
 
 	lexer = new_lexer(str)
 
-	i = 0
 	do
-		i = i + 1
 		tok = lexer%next_token()
-		if (tok%kind == eof_token) exit
 
 		if (tok%kind /= whitespace_token .and. &
 		    tok%kind /= bad_token) then
@@ -289,16 +286,15 @@ function syntax_tree_parse(str) result(tree)
 
 		end if
 
-		!if (i == 10) exit
-
+		if (tok%kind == eof_token) exit
 	end do
 
 	! TODO: make toks to str fn
 
 	!print *, 'len = ', toks%len
-	do j = 1, toks%len
-		print *, 'tok = <', toks%v(j)%text, '> ', &
-				'<'//kind_name(toks%v(j)%kind)//'>'
+	do i = 1, toks%len
+		print *, 'tok = <', toks%v(i)%text, '> ', &
+				'<'//kind_name(toks%v(i)%kind)//'>'
 	end do
 
 end function syntax_tree_parse
