@@ -173,19 +173,19 @@ end function
 
 !===============================================================================
 
-function new_token(kind, pos, text, val) result(tok)
+function new_token(kind, pos, text, val) result(token)
 
 	integer :: val
 	integer :: kind, pos
 
 	character(len = *) :: text
 
-	type(syntax_token_t) :: tok
+	type(syntax_token_t) :: token
 
-	tok%kind = kind
-	tok%pos  = pos
-	tok%text = text
-	tok%val  = val
+	token%kind = kind
+	token%pos  = pos
+	token%text = text
+	token%val  = val
 
 end function new_token
 
@@ -208,11 +208,11 @@ end function current
 
 !===============================================================================
 
-function next_token(lexer) result(tok)
+function next_token(lexer) result(token)
 
 	class(lexer_t) :: lexer
 
-	type(syntax_token_t) :: tok
+	type(syntax_token_t) :: token
 
 	!********
 
@@ -222,7 +222,7 @@ function next_token(lexer) result(tok)
 	character(len = :), allocatable :: text
 
 	if (lexer%pos > len(lexer%text)) then
-		tok = new_token(eof_token, lexer%pos, null_char, 0)
+		token = new_token(eof_token, lexer%pos, null_char, 0)
 		return
 	end if
 
@@ -241,7 +241,7 @@ function next_token(lexer) result(tok)
 			print *, 'diag: invalid int32'
 		end if
 
-		tok = new_token(number_token, start, text, val)
+		token = new_token(number_token, start, text, val)
 		return
 
 	end if
@@ -255,23 +255,23 @@ function next_token(lexer) result(tok)
 		end do
 		text = lexer%text(start: lexer%pos-1)
 
-		tok = new_token(whitespace_token, start, text, 0)
+		token = new_token(whitespace_token, start, text, 0)
 		return
 
 	end if
 
 	select case (lexer%current())
 		case ("+")
-			tok = new_token(plus_token , lexer%pos, lexer%current(), 0)
+			token = new_token(plus_token , lexer%pos, lexer%current(), 0)
 		case ("-")
-			tok = new_token(minus_token, lexer%pos, lexer%current(), 0)
+			token = new_token(minus_token, lexer%pos, lexer%current(), 0)
 		case ("*")
-			tok = new_token(star_token , lexer%pos, lexer%current(), 0)
+			token = new_token(star_token , lexer%pos, lexer%current(), 0)
 		case ("/")
-			tok = new_token(slash_token, lexer%pos, lexer%current(), 0)
+			token = new_token(slash_token, lexer%pos, lexer%current(), 0)
 		case default
 			! TODO: diagnostics
-			tok = new_token(bad_token, lexer%pos, lexer%current(), 0)
+			token = new_token(bad_token, lexer%pos, lexer%current(), 0)
 			print *, 'diag: bad token ', lexer%current()
 	end select
 
@@ -304,37 +304,36 @@ function new_parser(str) result(parser)
 
 	integer :: i
 
-	! TODO: replace tok/toks w/ token/tokens for consistency
-	type(syntax_token_t) :: tok
-	type(syntax_token_vector_t) :: toks
+	type(syntax_token_t)        :: token
+	type(syntax_token_vector_t) :: tokens
 
 	type(lexer_t) :: lexer
 
 	! Get an array of tokens
-	toks = new_syntax_token_vector()
+	tokens = new_syntax_token_vector()
 	lexer = new_lexer(str)
 	do
-		tok = lexer%next_token()
+		token = lexer%next_token()
 
-		if (tok%kind /= whitespace_token .and. &
-		    tok%kind /= bad_token) then
+		if (token%kind /= whitespace_token .and. &
+		    token%kind /= bad_token) then
 
-			!print *, 'tok = <', tok%text, '> ', &
-			!		'<'//kind_name(tok%kind)//'>'
+			!print *, 'token = <', token%text, '> ', &
+			!		'<'//kind_name(token%kind)//'>'
 
-			call toks%push(tok)
+			call tokens%push(token)
 
 		end if
 
-		if (tok%kind == eof_token) exit
+		if (token%kind == eof_token) exit
 	end do
 
-	parser%tokens = toks%v( 1: toks%len )
+	parser%tokens = tokens%v( 1: tokens%len )
 	parser%pos = 1
 
-	!! Make toks to str fn?
+	!! Make tokens to str fn?
 	!do i = 1, size(parser%tokens)
-	!	print *, 'tok = <',  parser%tokens(i)%text , '> ', &
+	!	print *, 'token = <',  parser%tokens(i)%text , '> ', &
 	!	     '<'//kind_name( parser%tokens(i)%kind )//'>'
 	!end do
 
@@ -353,13 +352,13 @@ function syntax_tree_parse(str) result(tree)
 
 	type(parser_t) :: parser
 
-	type(syntax_token_t) :: tok
+	type(syntax_token_t) :: token
 
 	parser = new_parser(str)
 
 	! Parse the tokens
 	tree = parser%parse_term()
-	tok  = parser%match(eof_token)
+	token  = parser%match(eof_token)
 
 end function syntax_tree_parse
 
@@ -380,26 +379,26 @@ end function parse_term
 
 !===============================================================================
 
-function match(parser, kind) result(tok)
+function match(parser, kind) result(token)
 
 	class(parser_t) :: parser
 
 	integer :: kind
 
-	type(syntax_token_t) :: tok, current
+	type(syntax_token_t) :: token, current
 
 	!********
 
 	current = parser%current()
 	if (current%kind == kind) then
 	!if (parser%current()%kind == kind) then
-		tok = parser%next()
+		token = parser%next()
 		return
 	end if
 
 	! TODO: diags
 	print *, 'Error: unexpected token'
-	tok = new_token(kind, current%pos, null_char, 0)
+	token = new_token(kind, current%pos, null_char, 0)
 
 end function match
 
