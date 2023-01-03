@@ -101,6 +101,37 @@ end function is_whitespace
 
 !===============================================================================
 
+function findlocl1(arr, val) result(loc)
+
+	! findloc() is standard in Fortran 2008, but gfortran 8.1.0 doesn't have it
+	! yet :(.  Here I implement it for logical rank-1 arrays only without
+	! optional args
+
+	logical, intent(in) :: arr(:), val
+
+	integer :: loc(1)
+
+	if (size(arr) == 0) then
+		loc = 0
+		return
+	end if
+
+	loc = 1
+	do while (arr(loc(1)) .neqv. val)
+		loc(1) = loc(1) + 1
+
+		if (loc(1) > size(arr, 1)) then
+			! not found
+			loc = 0
+			return
+		end if
+
+	end do
+
+end function findlocl1
+
+!===============================================================================
+
 end module utils
 
 !===============================================================================

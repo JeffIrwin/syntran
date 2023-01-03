@@ -769,6 +769,7 @@ end module core_m
 subroutine unit_test_bin_arith(npass, nfail)
 
 	use core_m
+	implicit none
 
 	integer, intent(inout) :: npass, nfail
 
@@ -806,7 +807,7 @@ subroutine unit_test_bin_arith(npass, nfail)
 		write(*, '(a,i0,a)') '     Error: ', count(.not. tests), &
 				' '//label//' test(s) failed'
 
-		id = findloc(tests, .false.)
+		id = findlocl1(tests, .false.)
 		write(*, '(a,i0,a)') '     Test ID ', id(1), ' was the first failure'
 
 	end if
@@ -819,6 +820,8 @@ end subroutine unit_test_bin_arith
 !===============================================================================
 
 subroutine unit_tests()
+
+	implicit none
 
 	integer :: npass, nfail
 
@@ -841,13 +844,14 @@ subroutine unit_tests()
 	write(*,*)
 	write(*,*) repeat('=', 72)
 
-end subroutine
+end subroutine unit_tests
 
 !===============================================================================
 
 program main
 
 	use core_m
+	implicit none
 
 	! TODO: print basic help/exiting message
 	write(*,*)
