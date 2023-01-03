@@ -40,8 +40,6 @@ jobs:
         #export OMP_NUM_THREADS=1
         #bash ./test.sh
         bash ./build.sh
-        ls -ltrh
-    - if: matrix.os == 'windows-latest'
-      run: |
-        ./syntran.exe < samples/arithmetic.syntran
+        ls -ltrh syntran*
+        ./syntran < samples/arithmetic.syntran
 
