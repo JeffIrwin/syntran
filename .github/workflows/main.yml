@@ -3,9 +3,9 @@ name: CI
 
 on: [push]
 
-defaults:
-  run:
-    shell: bash
+#defaults:
+#  run:
+#    shell: bash
 
 jobs:
   test:
