@@ -388,8 +388,6 @@ function new_parser(str) result(parser)
 
 	!********
 
-	integer :: i
-
 	type(syntax_token_t)        :: token
 	type(syntax_token_vector_t) :: tokens
 
@@ -414,7 +412,9 @@ function new_parser(str) result(parser)
 		if (token%kind == eof_token) exit
 	end do
 
+	! Convert to standard array (and class member)
 	parser%tokens = tokens%v( 1: tokens%len )
+
 	parser%pos = 1
 
 	if (debug > 1) print *, parser%tokens_str()
@@ -873,7 +873,7 @@ program main
 
 	! TODO: print basic help/exiting message
 	write(*,*)
-	write(*,*) lang_name//' v0.0.1'
+	write(*,*) lang_name//' 0.0.2'
 	write(*,*)
 
 	call unit_tests()
