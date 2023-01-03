@@ -3,9 +3,9 @@ name: CI
 
 on: [push]
 
-#defaults:
-#  run:
-#    shell: bash
+defaults:
+  run:
+    shell: bash
 
 jobs:
   test:
@@ -40,5 +40,6 @@ jobs:
         #export OMP_NUM_THREADS=1
         #bash ./test.sh
         bash ./build.sh
+        ls -ltrh
         echo "1 + 2 * 3" | ./syntran
 
