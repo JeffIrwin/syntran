@@ -35,8 +35,7 @@ module core_m
 		! TODO: how to handle values of different types?
 		integer :: val
 
-		! TODO: initiazing bad_token here shouldn't be required
-		integer :: kind = bad_token, pos
+		integer :: kind, pos
 		character(len = :), allocatable :: text
 
 	end type syntax_token_t
@@ -45,7 +44,7 @@ module core_m
 
 	type syntax_node_t
 
-		integer :: kind = bad_token
+		integer :: kind
 		type(syntax_node_t), allocatable :: left, right
 		type(syntax_token_t) :: op, num
 
@@ -82,7 +81,7 @@ module core_m
 		! (members of different types)
 		contains
 			procedure :: parse_term, match, current => current_token, next, &
-				parse_factor, parse_primary_expr
+				parse_factor, parse_primary_expr, tokens_str
 
 	end type parser_t
 
@@ -418,15 +417,35 @@ function new_parser(str) result(parser)
 	parser%tokens = tokens%v( 1: tokens%len )
 	parser%pos = 1
 
-	if (debug > 1) then
-		! TODO: make tokens to str fn?
-		do i = 1, size(parser%tokens)
-			print *, 'token = <',  parser%tokens(i)%text , '> ', &
-			     '<'//kind_name( parser%tokens(i)%kind )//'>'
-		end do
-	end if
+	if (debug > 1) print *, parser%tokens_str()
 
 end function new_parser
+
+!===============================================================================
+
+function tokens_str(parser) result(str)
+
+	class(parser_t) :: parser
+
+	character(len = :), allocatable :: str
+
+	!********
+
+	integer :: i
+
+	! This will crash for very long token lists, but it should suffice for basic
+	! debugging
+
+	str = 'tokens = '//line_feed//'['//line_feed
+	do i = 1, size(parser%tokens)
+		str = str//tab &
+				//'<'//           parser%tokens(i)%text  //'> ' &
+				//'<'//kind_name( parser%tokens(i)%kind )//'>'  &
+				//line_feed
+	end do
+	str = str//']'//line_feed
+
+end function tokens_str
 
 !===============================================================================
 
@@ -783,13 +802,12 @@ subroutine unit_test_bin_arith(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: subtraction, division, more in general
-
 	tests = &
 		[   &
 			eval('1') == 1, &
 			eval('69') == 69, &
 			eval('420') == 420, &
+			eval('1337') == 1337, &
 			eval('1 + 2') == 1 + 2, &
 			eval('1 + 2 + 34') == 1 + 2 + 34, &
 			eval('1 + 2 * 3') == 1 + 2 * 3, &
