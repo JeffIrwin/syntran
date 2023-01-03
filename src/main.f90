@@ -210,7 +210,7 @@ recursive function syntax_node_str(node, indent) result(str)
 		num   = indentl//'    num   = '//node%num%text   //line_feed
 	end if
 
-	str =    line_feed// &
+	str = line_feed// &
 		indentl//'{'//line_feed// &
 			kind // &
 			left // &

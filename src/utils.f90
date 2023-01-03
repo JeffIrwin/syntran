@@ -24,8 +24,6 @@ function read_line(iu, iostat) result(str)
 	! c.f. aoc-2022/utils.f90
 	!
 	! This version reads WITHOUT backspacing, so it works on stdin too
-	!
-	! TODO: move to utils
 
 	integer, intent(in) :: iu
 	integer, optional, intent(out) :: iostat
