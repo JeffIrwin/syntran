@@ -43,5 +43,5 @@ jobs:
         ls -ltrh
     - if: matrix.os == 'windows-latest'
       run: |
-        echo "1 + 2 * 3" | ./syntran.exe
+        ./syntran.exe < samples/arithmetic.syntran
 
