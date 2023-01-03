@@ -41,5 +41,11 @@ jobs:
         #bash ./test.sh
         bash ./build.sh
         ls -ltrh syntran*
-        ./syntran < samples/arithmetic.syntran
+
+    #- if: matrix.os == 'macOS-latest'
+    #  run: |
+    #    ./syntran < samples/arithmetic.syntran
+
+    - if: matrix.os == 'windows-latest"
+        Get-Content samples/arithmetic.syntran | ./syntran
 
