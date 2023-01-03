@@ -1,4 +1,6 @@
 
+![](https://github.com/JeffIrwin/syntran/workflows/CI/badge.svg)
+
 # Syntran
 
 [Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
