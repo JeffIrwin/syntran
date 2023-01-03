@@ -41,5 +41,5 @@ jobs:
         #bash ./test.sh
         bash ./build.sh
         ls -ltrh
-        echo "1 + 2 * 3" | ./syntran
+        echo "1 + 2 * 3" | ./syntran.exe
 
