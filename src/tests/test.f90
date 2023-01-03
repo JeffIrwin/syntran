@@ -35,7 +35,7 @@ subroutine unit_test_bin_arith(npass, nfail)
 			eval('1 + 2 * 3') == 1 + 2 * 3, &
 			eval('1 * 2 * 3 * 4') == 1 * 2 * 3 * 4, &
 			eval('73 - 48') == 73 - 48, &
-			eval('73 - 48 - 21') == 73 - 48 - 21, &
+			eval('73 - 48 - 20') == 73 - 48 - 21, &
 			eval('24 / 6') == 24 / 6, &
 			eval('24 / 6 / 2') == 24 / 6 / 2, &
 			eval('343 - 87654345 / 27 + 76 * 234 - 65432 / 63') &
@@ -59,9 +59,13 @@ end subroutine unit_test_bin_arith
 
 !===============================================================================
 
-subroutine unit_tests()
+subroutine unit_tests(iostat)
 
 	implicit none
+
+	integer, intent(out) :: iostat
+
+	!********
 
 	integer :: npass, nfail
 
@@ -84,6 +88,8 @@ subroutine unit_tests()
 	write(*,*)
 	write(*,*) repeat('=', 72)
 
+	iostat = nfail
+
 end subroutine unit_tests
 
 !===============================================================================
@@ -98,7 +104,10 @@ program test
 	use test_m
 	implicit none
 
-	call unit_tests()
+	integer :: io
+
+	call unit_tests(io)
+	call exit(io)
 
 end program test
 

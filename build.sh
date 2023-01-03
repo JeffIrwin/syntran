@@ -18,6 +18,8 @@ exe=syntran
 srcdir=src
 src="$srcdir/utils.f90 $srcdir/core.f90"
 
+# TODO: build lib instead of linking both exe's from scratch
+
 # Build interpreter
 $fc -o $exe $src $srcdir/main.f90 $flags
 
