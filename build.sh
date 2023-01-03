@@ -16,7 +16,11 @@ $fc --version
 
 exe=syntran
 srcdir=src
-src="$srcdir/utils.f90 $srcdir/main.f90"
+src="$srcdir/utils.f90 $srcdir/core.f90"
 
-$fc -o $exe $src $flags
+# Build interpreter
+$fc -o $exe $src $srcdir/main.f90 $flags
+
+# Build unit tests
+$fc -o test $src $srcdir/tests/test.f90 $flags
 

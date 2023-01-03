@@ -1,7 +1,11 @@
 
 *.mod
+
 syntran
 syntran.exe
+
+test
+test.exe
 
 /scratch
 

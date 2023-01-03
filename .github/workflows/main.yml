@@ -42,6 +42,7 @@ jobs:
         bash ./build.sh
         #ls -ltrh syntran*
         ./syntran < samples/arithmetic.syntran
+        ./test
 
     - if: matrix.os == 'windows-latest'
       run: |
