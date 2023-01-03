@@ -46,6 +46,7 @@ jobs:
     #  run: |
     #    ./syntran < samples/arithmetic.syntran
 
-    - if: matrix.os == 'windows-latest"
+    - if: matrix.os == 'windows-latest'
+      run: |
         Get-Content samples/arithmetic.syntran | ./syntran
 
