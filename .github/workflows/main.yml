@@ -14,8 +14,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
-        #os: [ubuntu-latest, macOS-latest]
+        #os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
         #os: [ubuntu-latest, windows-latest]
         #os: [ubuntu-latest]
 
@@ -41,10 +41,7 @@ jobs:
         #bash ./test.sh
         bash ./build.sh
         #ls -ltrh syntran*
-
-    #- if: matrix.os == 'macOS-latest'
-    #  run: |
-    #    ./syntran < samples/arithmetic.syntran
+        ./syntran < samples/arithmetic.syntran
 
     - if: matrix.os == 'windows-latest'
       run: |
