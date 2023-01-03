@@ -724,7 +724,7 @@ end function syntax_eval
 
 subroutine interpret()
 
-	! This is the interpret shell
+	! This is the interpreter shell
 	!
 	! TODO: arg for iu as stdin vs another file
 
