@@ -1,0 +1,44 @@
+
+name: CI
+
+on: [push]
+
+#defaults:
+#  run:
+#    shell: bash
+
+jobs:
+  test:
+
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        #os: [ubuntu-latest, macOS-latest]
+        #os: [ubuntu-latest, windows-latest]
+        #os: [ubuntu-latest]
+
+    steps:
+
+    - uses: actions/checkout@v1
+
+    - if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get install gfortran
+    - if: matrix.os == 'macOS-latest'
+      run: |
+        brew install gcc
+        brew reinstall gcc
+
+    #- name: Checkout submodules
+    #  shell: bash
+    #  run: |
+    #    git submodule update --init --recursive || echo "ignoring submodule error"
+    - name: Build and test
+      run: |
+        #export OMP_NUM_THREADS=1
+        #bash ./test.sh
+        bash ./build.sh
+        echo "1 + 2 * 3" | ./syntran
+
