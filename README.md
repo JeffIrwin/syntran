@@ -10,3 +10,19 @@ An interpreter written in Fortran, I guess
 > Elaine: I don’t know.
 >
 > Kramer: Fungus.
+
+## Build
+
+    ./build.sh
+
+## Run
+
+Start the interpreter:
+
+    ./syntran
+
+Then enter arithmetic expressions like `1 + 2 * 3` in the interpreter:
+
+    syntran$ 1 + 2 * 3
+    1 + 2 * 3
+    7
