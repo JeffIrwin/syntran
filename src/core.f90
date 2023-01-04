@@ -448,8 +448,6 @@ function new_parser(str) result(parser)
 
 	parser%pos = 1
 
-	!parser%diagnostics = new_string_vector()
-	!call parser%diagnostics%push_all(lexer%diagnostics)
 	parser%diagnostics = lexer%diagnostics
 
 	if (debug > 1) print *, parser%tokens_str()
@@ -819,6 +817,7 @@ subroutine interpret()
 
 		do i = 1, tree%diagnostics%len
 			! TODO: write file name and line number for file iu
+			write(ou,*)
 			write(ou, '(a)') line
 			write(ou, '(a)') tree%diagnostics%v(i)%s
 			write(ou,*)

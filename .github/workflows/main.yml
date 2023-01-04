@@ -41,6 +41,7 @@ jobs:
         bash ./build.sh
         #ls -ltrh build/
         ./build/syntran < samples/arithmetic.syntran
+        ./build/syntran < samples/bad-syntax.syntran
         ./build/test
 
     - if: matrix.os == 'windows-latest'
