@@ -23,10 +23,12 @@ This is a sandbox for me to play in as I follow along with [Immo Landwerth's _bu
 
 Start the interpreter:
 
-    ./syntran
+    ./build/syntran
 
 Then enter arithmetic expressions like `1 + 2 * 3` in the interpreter:
 
     syntran$ 1 + 2 * 3
-    1 + 2 * 3
     7
+    syntran$ (1 + 2) * 3
+    9
+
