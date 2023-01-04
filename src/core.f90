@@ -17,7 +17,7 @@ module core_m
 
 	! Token and syntax node kinds enum
 	integer, parameter ::          &
-			paren_expr       = 13, &
+			!paren_expr       = $$, &  ! not required
 			lparen_token     = 12, &
 			rparen_token     = 11, &
 			num_expr         = 10, &
@@ -176,8 +176,8 @@ function kind_name(kind)
 			"binary_expr     ", & !  9
 			"num_expr        ", & ! 10
 			"rparen_token    ", & ! 11
-			"lparen_token    ", & ! 12
-			"paren_expr      "  & ! 13
+			"lparen_token    "  & ! 12
+			!"paren_expr      "  & ! $$ not required
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -618,7 +618,10 @@ function parse_primary_expr(parser) result(expr)
 		left  = parser%next()
 		expr  = parser%parse_term()
 		right = parser%match(rparen_token)
-		expr = new_paren_expr(left, expr, right)
+
+		!! expr is already the middle term, which is what we will need anyway
+		!expr = new_paren_expr(left, expr, right)
+
 		return
 	end if
 
@@ -675,36 +678,36 @@ end function new_binary_expr
 
 !===============================================================================
 
-function new_paren_expr(left, mid, right) result(expr)
-
-	! TODO: left and right tokens are unused, right? Always parens?
-	! Is this fn required at all, or can parse_primary_expr just return the mid
-	! expr?
-
-	type(syntax_token_t) , intent(in) :: left, right
-	type(syntax_node_t)  , intent(in) :: mid
-
-	type(syntax_node_t) :: expr
-
-	!********
-
-	if (debug > 1) print *, 'new_paren_expr'
-	if (debug > 1) print *, 'mid  = ', mid %str()
-	!if (debug > 1) print *, 'right = ', right%str()
-
-	expr%kind = paren_expr
-
-	allocate(expr%left)
-	!allocate(expr%right)
-
-	expr%left  = mid
-	!expr%op    = op
-	!expr%right = right
-
-	if (debug > 1) print *, 'new_paren_expr = ', expr%str()
-	if (debug > 1) print *, 'done new_paren_expr'
-
-end function new_paren_expr
+!function new_paren_expr(left, mid, right) result(expr)
+!
+!	! TODO: left and right tokens are unused, right? Always parens?
+!	! Is this fn required at all, or can parse_primary_expr just return the mid
+!	! expr?
+!
+!	type(syntax_token_t) , intent(in) :: left, right
+!	type(syntax_node_t)  , intent(in) :: mid
+!
+!	type(syntax_node_t) :: expr
+!
+!	!********
+!
+!	if (debug > 1) print *, 'new_paren_expr'
+!	if (debug > 1) print *, 'mid  = ', mid %str()
+!	!if (debug > 1) print *, 'right = ', right%str()
+!
+!	expr%kind = paren_expr
+!
+!	allocate(expr%left)
+!	!allocate(expr%right)
+!
+!	expr%left  = mid
+!	!expr%op    = op
+!	!expr%right = right
+!
+!	if (debug > 1) print *, 'new_paren_expr = ', expr%str()
+!	if (debug > 1) print *, 'done new_paren_expr'
+!
+!end function new_paren_expr
 
 !===============================================================================
 
@@ -824,10 +827,10 @@ recursive function syntax_eval(node) result(res)
 
 	end if
 
-	if (node%kind == paren_expr) then
-		res = syntax_eval(node%left)
-		return
-	end if
+	!if (node%kind == paren_expr) then
+	!	res = syntax_eval(node%left)
+	!	return
+	!end if
 
 	res = 0
 	write(*,*) fg_bold_bright_red//'Error'//color_reset &
