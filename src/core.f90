@@ -86,8 +86,8 @@ module core_m
 		! TODO: consider renaming next_token/current vs current_token/next
 		! (members of different types)
 		contains
-			procedure :: parse_term, match, current => current_token, next, &
-				parse_factor, parse_primary_expr, tokens_str
+			procedure :: match, current => current_token, next, &
+				parse_term, parse_factor, parse_primary_expr, tokens_str
 
 	end type parser_t
 
@@ -209,9 +209,15 @@ recursive function syntax_node_str(node, indent) result(str)
 	op = ''
 
 	if      (node%kind == binary_expr) then
-		left  = indentl//'    left  = '//node%left %str(indentl//'    ')//line_feed
-		right = indentl//'    right = '//node%right%str(indentl//'    ')//line_feed
+
+		left  = indentl//'    left  = '//node%left %str(indentl//'    ') &
+				//line_feed
+
+		right = indentl//'    right = '//node%right%str(indentl//'    ') &
+				//line_feed
+
 		op    = indentl//'    op    = '//node%op%text//line_feed
+
 	else if (node%kind == num_expr) then
 		num   = indentl//'    num   = '//node%num%text   //line_feed
 	end if
@@ -493,11 +499,11 @@ end function syntax_parse
 
 !===============================================================================
 
-function parse_term(parser) result(left)
+function parse_term(parser) result(term)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: left
+	type(syntax_node_t) :: term
 
 	!********
 
@@ -506,9 +512,9 @@ function parse_term(parser) result(left)
 
 	if (debug > 1) print *, 'parse_term'
 
-	left = parser%parse_factor()
+	term = parser%parse_factor()
 
-	!if (debug > 1) print *, 'left term = ', left %str()
+	!if (debug > 1) print *, 'term = ', term %str()
 
 	current = parser%current()
 	do while (current%kind == plus_token .or. &
@@ -518,25 +524,25 @@ function parse_term(parser) result(left)
 		if (debug > 1) print *, 'op = ', op%text
 
 		right = parser%parse_factor()
-		left  = new_binary_expr(left, op, right)
+		term  = new_binary_expr(term, op, right)
 
-		if (debug > 1) print *, 'copied left = ', left%str()
+		if (debug > 1) print *, 'copied term = ', term%str()
 
 		current = parser%current()
 	end do
 
-	if (debug > 1) print *, 'parse_term = ', left%str()
+	if (debug > 1) print *, 'parse_term = ', term%str()
 	if (debug > 1) print *, 'done parse_term'
 
 end function parse_term
 
 !===============================================================================
 
-recursive function parse_factor(parser) result(left)
+recursive function parse_factor(parser) result(factor)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: left
+	type(syntax_node_t) :: factor
 
 	!********
 
@@ -545,7 +551,7 @@ recursive function parse_factor(parser) result(left)
 
 	if (debug > 1) print *, 'parse_factor'
 
-	left = parser%parse_primary_expr()
+	factor = parser%parse_primary_expr()
 
 	current = parser%current()
 	do while (current%kind == star_token .or. &
@@ -553,7 +559,7 @@ recursive function parse_factor(parser) result(left)
 
 		op = parser%next()
 		right = parser%parse_primary_expr()
-		left  = new_binary_expr(left, op, right)
+		factor  = new_binary_expr(factor, op, right)
 
 		current = parser%current()
 	end do
@@ -778,6 +784,7 @@ subroutine interpret()
 
 		if (debug > 0) print *, 'tree = ', tree%str()
 
+		! TODO: add option to disable color
 		call console_color(fg_bright_red)
 		do i = 1, tree%diagnostics%len
 			! TODO: write file name and line number for file iu
