@@ -98,6 +98,11 @@ end subroutine push_string
 
 subroutine push_all_string(vector, add)
 
+	! Push all elements of add into vector
+	!
+	! This currently isn't used, since it's easier to just copy the whole vector
+	! type to an initially empty type
+
 	class(string_vector_t) :: vector
 
 	type(string_vector_t), intent(in) :: add

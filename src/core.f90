@@ -374,14 +374,23 @@ function next_token(lexer) result(token)
 		case ("/")
 			token = new_token(slash_token, lexer%pos, lexer%current(), 0)
 		case default
-			! TODO: diagnostics
+
 			token = new_token(bad_token, lexer%pos, lexer%current(), 0)
-			write(*,*) 'diag: bad token ', lexer%current()
+
+			call lexer%diagnostics%push( &
+					repeat(' ', lexer%pos-1)//fg_bright_red &
+					//repeat('^', 1)//color_reset//line_feed &
+					//fg_bold_bright_red//'Error'//color_reset &
+					//fg_bold//": unexpected character '"//lexer%current() &
+					//"'" &
+					//color_reset &
+					)
+
 	end select
 	lexer%pos = lexer%pos + 1
 
-	! TODO: arrow keys create bad tokens.  Fix that (better yet, override up
-	! arrow to do what it does in bash.  c.f. rubik-js)
+	! TODO: arrow keys create bad tokens in bash on Windows.  Fix that (better
+	! yet, override up arrow to do what it does in bash.  c.f. rubik-js)
 
 end function next_token
 
@@ -439,8 +448,9 @@ function new_parser(str) result(parser)
 
 	parser%pos = 1
 
-	parser%diagnostics = new_string_vector()
-	call parser%diagnostics%push_all(lexer%diagnostics)
+	!parser%diagnostics = new_string_vector()
+	!call parser%diagnostics%push_all(lexer%diagnostics)
+	parser%diagnostics = lexer%diagnostics
 
 	if (debug > 1) print *, parser%tokens_str()
 
@@ -500,8 +510,6 @@ function syntax_parse(str) result(tree)
 
 	if (debug > 1) print *, 'matching eof'
 	token  = parser%match(eof_token)
-
-	! TODO: Also push diags from lexer and parser to syntax_node_t tree
 
 	tree%diagnostics = parser%diagnostics
 
@@ -746,18 +754,27 @@ recursive function syntax_eval(node) result(res)
 		else if (node%op%kind == slash_token) then
 			res = left / right
 		else
-			! Anything here should have been caught by a parser diag
-			write(*,*) 'Error: unexpected binary operator "', node%op%text, '"'
-			stop
+
+			! Anything here should have been caught by a parser diagnostic
+			write(*,*) fg_bold_bright_red//'Error'//color_reset &
+					//fg_bold//': unexpected binary operator "' &
+					//node%op%text//'"'//color_reset
+
+			!! This is catastrophic, but it kills the unit tests
+			!stop
+
 		end if
 
 		return
 
 	end if
 
-	! TODO
-	write(*,*) 'Error: unexpected node "', kind_name(node%kind), '"'
 	res = 0
+	write(*,*) fg_bold_bright_red//'Error'//color_reset &
+			//fg_bold//': unexpected node "'//kind_name(node%kind) &
+			//'"'//color_reset
+
+	!stop
 
 end function syntax_eval
 
