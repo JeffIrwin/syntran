@@ -20,9 +20,12 @@ module utils
 	!
 	! TODO: more colors
 	character(len = *), parameter :: &
-			fg_bright_red   = '[91m', &
-			fg_bright_green = '[92m', &
-			fg_bright_white = '[97m'
+			fg_bold            = esc//'[;1m', &
+			fg_bright_red      = esc//'[91m', &
+			fg_bold_bright_red = esc//'[91;1m', &
+			fg_bright_green    = esc//'[92m', &
+			fg_bright_white    = esc//'[97m', &
+			color_reset        = esc//'[0m'
 
 	!********
 
@@ -36,7 +39,8 @@ module utils
 		type(string_t), allocatable :: v(:)
 		integer :: len, cap
 		contains
-			procedure :: push => push_string
+			procedure :: push     => push_string
+			procedure :: push_all => push_all_string
 	end type string_vector_t
 
 !===============================================================================
@@ -89,6 +93,24 @@ subroutine push_string(vector, val)
 	vector%v( vector%len ) = val_str
 
 end subroutine push_string
+
+!===============================================================================
+
+subroutine push_all_string(vector, add)
+
+	class(string_vector_t) :: vector
+
+	type(string_vector_t), intent(in) :: add
+
+	!********
+
+	integer :: i
+
+	do i = 1, add%len
+		call vector%push( add%v(i)%s )
+	end do
+
+end subroutine push_all_string
 
 !===============================================================================
 
@@ -217,11 +239,11 @@ end function findlocl1
 
 subroutine console_color(color)
 	character(len = *), intent(in) :: color
-	write(*, '(a)', advance = 'no') esc//color
+	write(*, '(a)', advance = 'no') color
 end subroutine console_color
 
 subroutine console_color_reset()
-	write(*, '(a)', advance = 'no') esc//'[0m'
+	write(*, '(a)', advance = 'no') color_reset
 end subroutine console_color_reset
 
 !===============================================================================

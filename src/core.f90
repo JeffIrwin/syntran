@@ -67,6 +67,8 @@ module core_m
 		character(len = :), allocatable :: text
 		integer :: pos
 
+		type(string_vector_t) :: diagnostics
+
 		contains
 			procedure next_token, current
 
@@ -334,8 +336,13 @@ function next_token(lexer) result(token)
 
 		read(text, *, iostat = io) val
 		if (io /= 0) then
-			! TODO: diagnostics
-			write(*,*) 'diag: invalid int32'
+			call lexer%diagnostics%push( &
+					repeat(' ', start-1)//fg_bright_red &
+					//repeat('^', len(text))//color_reset//line_feed &
+					//fg_bold_bright_red//'Error'//color_reset &
+					//fg_bold//': invalid int32 '//text &
+					//color_reset &
+					)
 		end if
 
 		token = new_token(num_token, start, text, val)
@@ -389,6 +396,8 @@ function new_lexer(text) result(lexer)
 	lexer%text = text
 	lexer%pos = 1
 
+	lexer%diagnostics = new_string_vector()
+
 end function new_lexer
 
 !===============================================================================
@@ -431,6 +440,7 @@ function new_parser(str) result(parser)
 	parser%pos = 1
 
 	parser%diagnostics = new_string_vector()
+	call parser%diagnostics%push_all(lexer%diagnostics)
 
 	if (debug > 1) print *, parser%tokens_str()
 
@@ -647,6 +657,8 @@ function match(parser, kind) result(token)
 
 	!********
 
+	integer :: len_text
+
 	type(syntax_token_t) :: current
 
 	current = parser%current()
@@ -655,12 +667,16 @@ function match(parser, kind) result(token)
 		return
 	end if
 
-	!print *, 'pos = ', current%pos
+	len_text = max(len(current%text), 1)
+
 	call parser%diagnostics%push( &
-			repeat(' ', current%pos - 1)//'^'//line_feed// &
-			'Error: unexpected token "'//current%text//'"' &
+			repeat(' ', current%pos-1)//fg_bright_red &
+			//repeat('^', len_text)//color_reset//line_feed &
+			//fg_bold_bright_red//'Error'//color_reset &
+			//fg_bold//': unexpected token "'//current%text//'"' &
 			//' kind <'//kind_name(current%kind)//'>' &
 			//', expected <'//kind_name(kind)//'>' &
+			//color_reset &
 			)
 
 	token = new_token(kind, current%pos, null_char, 0)
@@ -784,15 +800,12 @@ subroutine interpret()
 
 		if (debug > 0) print *, 'tree = ', tree%str()
 
-		! TODO: add option to disable color
-		call console_color(fg_bright_red)
 		do i = 1, tree%diagnostics%len
 			! TODO: write file name and line number for file iu
 			write(ou, '(a)') line
 			write(ou, '(a)') tree%diagnostics%v(i)%s
 			write(ou,*)
 		end do
-		call console_color_reset()
 
 		! Don't try to evaluate with errors
 		if (tree%diagnostics%len > 0) cycle
