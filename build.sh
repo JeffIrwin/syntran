@@ -13,7 +13,23 @@ fi
 ## Uncomment to tell cmake to use ifort instead of gfortran (untested)
 #export SYNTRAN_INTEL=true
 
+unameOut="$(uname -s)"
+case "${unameOut}" in
+    Linux*)     machine=Linux;;
+    Darwin*)    machine=Mac;;
+    CYGWIN*)    machine=Cygwin;;
+    MINGW*)     machine=MinGw;;
+    *)          machine="UNKNOWN:${unameOut}"
+esac
+echo "machine = ${machine}"
+
+if [[ "$machine" == "MinGw" ]]; then
+	generator=(-G 'MSYS Makefiles')
+else
+	generator=""
+fi
+
 build=build
-cmake -S . -B "$build" -G "MSYS Makefiles" -DCMAKE_BUILD_TYPE=$config
+cmake -S . -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=$config
 cmake --build "$build" --config $config
 
