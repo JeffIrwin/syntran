@@ -38,13 +38,12 @@ jobs:
     - name: Build and test
       run: |
         #export OMP_NUM_THREADS=1
-        #bash ./test.sh
         bash ./build.sh
-        #ls -ltrh syntran*
-        ./syntran < samples/arithmetic.syntran
-        ./test
+        #ls -ltrh build/
+        ./build/syntran < samples/arithmetic.syntran
+        ./build/test
 
     - if: matrix.os == 'windows-latest'
       run: |
-        Get-Content samples/arithmetic.syntran | ./syntran
+        Get-Content samples/arithmetic.syntran | ./build/syntran
 

@@ -23,10 +23,9 @@ case "${unameOut}" in
 esac
 echo "machine = ${machine}"
 
+generator=""
 if [[ "$machine" == "MinGw" ]]; then
 	generator=(-G 'MSYS Makefiles')
-else
-	generator=""
 fi
 
 build=build
