@@ -14,8 +14,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        #os: [ubuntu-latest, windows-latest, macOS-latest]
-        os: [ubuntu-latest, macOS-latest]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        #os: [ubuntu-latest, macOS-latest]
         #os: [ubuntu-latest, windows-latest]
         #os: [ubuntu-latest]
 
@@ -40,11 +40,14 @@ jobs:
         #export OMP_NUM_THREADS=1
         bash ./build.sh
         #ls -ltrh build/
+    - if: matrix.os != 'windows-latest'
+      run: |
         ./build/syntran < samples/arithmetic.syntran
         ./build/syntran < samples/bad-syntax.syntran
         ./build/test
 
     - if: matrix.os == 'windows-latest'
       run: |
-        Get-Content samples/arithmetic.syntran | ./build/syntran
+        where gfortran
+    #    Get-Content samples/arithmetic.syntran | ./build/syntran
 

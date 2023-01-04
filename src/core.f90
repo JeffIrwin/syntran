@@ -17,6 +17,9 @@ module core_m
 
 	! Token and syntax node kinds enum
 	integer, parameter ::          &
+			paren_expr       = 13, &
+			lparen_token     = 12, &
+			rparen_token     = 11, &
 			num_expr         = 10, &
 			binary_expr      =  9, &
 			star_token       =  8, &
@@ -171,7 +174,10 @@ function kind_name(kind)
 			"slash_token     ", & !  7
 			"star_token      ", & !  8
 			"binary_expr     ", & !  9
-			"num_expr        "  & ! 10
+			"num_expr        ", & ! 10
+			"rparen_token    ", & ! 11
+			"lparen_token    ", & ! 12
+			"paren_expr      "  & ! 13
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -274,7 +280,7 @@ end subroutine syntax_node_copy
 
 function new_token(kind, pos, text, val) result(token)
 
-	integer :: val
+	integer, optional :: val
 	integer :: kind, pos
 
 	character(len = *) :: text
@@ -284,7 +290,8 @@ function new_token(kind, pos, text, val) result(token)
 	token%kind = kind
 	token%pos  = pos
 	token%text = text
-	token%val  = val
+
+	if (present(val)) token%val  = val
 
 end function new_token
 
@@ -321,7 +328,7 @@ function next_token(lexer) result(token)
 	character(len = :), allocatable :: text
 
 	if (lexer%pos > len(lexer%text)) then
-		token = new_token(eof_token, lexer%pos, null_char, 0)
+		token = new_token(eof_token, lexer%pos, null_char)
 		return
 	end if
 
@@ -359,23 +366,29 @@ function next_token(lexer) result(token)
 		end do
 		text = lexer%text(start: lexer%pos-1)
 
-		token = new_token(whitespace_token, start, text, 0)
+		token = new_token(whitespace_token, start, text)
 		return
 
 	end if
 
 	select case (lexer%current())
+
 		case ("+")
-			token = new_token(plus_token , lexer%pos, lexer%current(), 0)
+			token = new_token(plus_token  , lexer%pos, lexer%current())
 		case ("-")
-			token = new_token(minus_token, lexer%pos, lexer%current(), 0)
+			token = new_token(minus_token , lexer%pos, lexer%current())
 		case ("*")
-			token = new_token(star_token , lexer%pos, lexer%current(), 0)
+			token = new_token(star_token  , lexer%pos, lexer%current())
 		case ("/")
-			token = new_token(slash_token, lexer%pos, lexer%current(), 0)
+			token = new_token(slash_token , lexer%pos, lexer%current())
+		case ("(")
+			token = new_token(lparen_token, lexer%pos, lexer%current())
+		case (")")
+			token = new_token(rparen_token, lexer%pos, lexer%current())
+
 		case default
 
-			token = new_token(bad_token, lexer%pos, lexer%current(), 0)
+			token = new_token(bad_token, lexer%pos, lexer%current())
 
 			call lexer%diagnostics%push( &
 					repeat(' ', lexer%pos-1)//fg_bright_red &
@@ -594,11 +607,20 @@ function parse_primary_expr(parser) result(expr)
 
 	!********
 
-	type(syntax_token_t) :: num
+	type(syntax_token_t) :: num, current, left, right
 
 	if (debug > 1) print *, 'parse_primary_expr'
 
-	! TODO: parens, unary operators
+	! TODO: unary operators
+
+	current = parser%current()
+	if (current%kind == lparen_token) then
+		left  = parser%next()
+		expr  = parser%parse_term()
+		right = parser%match(rparen_token)
+		expr = new_paren_expr(left, expr, right)
+		return
+	end if
 
 	num = parser%match(num_token)
 	expr = new_num_expr(num)
@@ -653,6 +675,39 @@ end function new_binary_expr
 
 !===============================================================================
 
+function new_paren_expr(left, mid, right) result(expr)
+
+	! TODO: left and right tokens are unused, right? Always parens?
+	! Is this fn required at all, or can parse_primary_expr just return the mid
+	! expr?
+
+	type(syntax_token_t) , intent(in) :: left, right
+	type(syntax_node_t)  , intent(in) :: mid
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	if (debug > 1) print *, 'new_paren_expr'
+	if (debug > 1) print *, 'mid  = ', mid %str()
+	!if (debug > 1) print *, 'right = ', right%str()
+
+	expr%kind = paren_expr
+
+	allocate(expr%left)
+	!allocate(expr%right)
+
+	expr%left  = mid
+	!expr%op    = op
+	!expr%right = right
+
+	if (debug > 1) print *, 'new_paren_expr = ', expr%str()
+	if (debug > 1) print *, 'done new_paren_expr'
+
+end function new_paren_expr
+
+!===============================================================================
+
 function match(parser, kind) result(token)
 
 	class(parser_t) :: parser
@@ -680,12 +735,12 @@ function match(parser, kind) result(token)
 			//repeat('^', len_text)//color_reset//line_feed &
 			//fg_bold_bright_red//'Error'//color_reset &
 			//fg_bold//': unexpected token "'//current%text//'"' &
-			//' kind <'//kind_name(current%kind)//'>' &
+			//' (kind <'//kind_name(current%kind)//'>)' &
 			//', expected <'//kind_name(kind)//'>' &
 			//color_reset &
 			)
 
-	token = new_token(kind, current%pos, null_char, 0)
+	token = new_token(kind, current%pos, null_char)
 
 end function match
 
@@ -761,10 +816,17 @@ recursive function syntax_eval(node) result(res)
 			!! This is catastrophic, but it kills the unit tests
 			!stop
 
+			res = 0
+
 		end if
 
 		return
 
+	end if
+
+	if (node%kind == paren_expr) then
+		res = syntax_eval(node%left)
+		return
 	end if
 
 	res = 0
