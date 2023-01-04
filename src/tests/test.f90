@@ -1,6 +1,9 @@
 
 module test_m
 
+	use core_m
+	use utils
+
 	implicit none
 
 contains
@@ -9,7 +12,6 @@ contains
 
 subroutine unit_test_bin_arith(npass, nfail)
 
-	use core_m
 	implicit none
 
 	integer, intent(inout) :: npass, nfail
@@ -44,11 +46,13 @@ subroutine unit_test_bin_arith(npass, nfail)
 
 	if (.not. all(tests)) then
 
+		call console_color(fg_bright_red)
 		write(*, '(a,i0,a)') '     Error: ', count(.not. tests), &
 				' '//label//' test(s) failed'
 
 		id = findlocl1(tests, .false.)
 		write(*, '(a,i0,a)') '     Test ID ', id(1), ' was the first failure'
+		call console_color_reset()
 
 	end if
 
@@ -82,8 +86,19 @@ subroutine unit_tests(iostat)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)
-	write(*,*) '+', npass, ' total tests passed        +'
-	write(*,*) '+', nfail, ' total tests failed        +'
+
+	write(*, '(a)', advance = 'no') ' +'
+	if (npass > 0) call console_color(fg_bright_green)
+	write(*, '(i12,a)', advance = 'no') npass, ' total tests passed'
+	call console_color_reset()
+	write(*,*) '        +'
+
+	write(*, '(a)', advance = 'no') ' +'
+	if (nfail > 0) call console_color(fg_bright_red)
+	write(*, '(i12,a)', advance = 'no') nfail, ' total tests failed'
+	call console_color_reset()
+	write(*,*) '        +'
+
 	write(*,*) repeat('+', 42)
 	write(*,*)
 	write(*,*) repeat('=', 72)
@@ -100,7 +115,6 @@ end module test_m
 
 program test
 
-	use core_m
 	use test_m
 	implicit none
 

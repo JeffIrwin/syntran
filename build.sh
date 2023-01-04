@@ -1,28 +1,19 @@
 #!/bin/bash
 
-# TODO: cmake
+config=Debug
+if [[ "${1,,}" == "release" ]]; then
+	config=Release
+elif [[ "${1,,}" == "debug" ]]; then
+	config=Debug
+elif [[ $# -gt 0 ]]; then
+	echo "Error: unrecognized cmd arg \"$1\""
+	exit -1
+fi
 
-# Fortran compiler
-fc=gfortran
-#flags="-cpp -O3 -fopenmp"
-#flags="-cpp -Wall -Wextra -Wno-tabs"
-#flags="-cpp -Wall -Wextra -Wno-tabs -fbounds-check"
-flags="-cpp -Wall -Wextra -Wno-tabs -fbounds-check -Wno-maybe-uninitialized"
+## Uncomment to tell cmake to use ifort instead of gfortran (untested)
+#export SYNTRAN_INTEL=true
 
-#fc=ifort
-#flags="-fpp -check all -check bounds -traceback -check uninit"
-
-$fc --version
-
-exe=syntran
-srcdir=src
-src="$srcdir/utils.f90 $srcdir/core.f90"
-
-# TODO: build lib instead of linking both exe's from scratch
-
-# Build interpreter
-$fc -o $exe $src $srcdir/main.f90 $flags
-
-# Build unit tests
-$fc -o test $src $srcdir/tests/test.f90 $flags
+build=build
+cmake -S . -B "$build" -G "MSYS Makefiles" -DCMAKE_BUILD_TYPE=$config
+cmake --build "$build" --config $config
 

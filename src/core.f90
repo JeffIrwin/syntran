@@ -32,10 +32,12 @@ module core_m
 
 	type syntax_token_t
 
+		integer :: kind
+
 		! TODO: how to handle values of different types?
 		integer :: val
 
-		integer :: kind, pos
+		integer :: pos
 		character(len = :), allocatable :: text
 
 	end type syntax_token_t
@@ -47,6 +49,8 @@ module core_m
 		integer :: kind
 		type(syntax_node_t), allocatable :: left, right
 		type(syntax_token_t) :: op, num
+
+		type(string_vector_t) :: diagnostics
 
 		contains
 			procedure :: str => syntax_node_str
@@ -73,6 +77,8 @@ module core_m
 	type parser_t
 
 		type(syntax_token_t), allocatable :: tokens(:)
+
+		type(string_vector_t) :: diagnostics
 
 		!character(len = :), allocatable :: text
 		integer :: pos
@@ -240,6 +246,8 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%op   = src%op
 	dst%num  = src%num
 
+	dst%diagnostics = src%diagnostics
+
 	if (allocated(src%left)) then
 		!if (debug > 1) print *, 'copy() left'
 		if (.not. allocated(dst%left)) allocate(dst%left)
@@ -357,11 +365,10 @@ function next_token(lexer) result(token)
 			token = new_token(bad_token, lexer%pos, lexer%current(), 0)
 			write(*,*) 'diag: bad token ', lexer%current()
 	end select
+	lexer%pos = lexer%pos + 1
 
 	! TODO: arrow keys create bad tokens.  Fix that (better yet, override up
 	! arrow to do what it does in bash.  c.f. rubik-js)
-
-	lexer%pos = lexer%pos + 1
 
 end function next_token
 
@@ -416,6 +423,8 @@ function new_parser(str) result(parser)
 	parser%tokens = tokens%v( 1: tokens%len )
 
 	parser%pos = 1
+
+	parser%diagnostics = new_string_vector()
 
 	if (debug > 1) print *, parser%tokens_str()
 
@@ -475,6 +484,10 @@ function syntax_parse(str) result(tree)
 
 	if (debug > 1) print *, 'matching eof'
 	token  = parser%match(eof_token)
+
+	! TODO: Also push diags from lexer and parser to syntax_node_t tree
+
+	tree%diagnostics = parser%diagnostics
 
 end function syntax_parse
 
@@ -636,8 +649,14 @@ function match(parser, kind) result(token)
 		return
 	end if
 
-	! TODO: diags
-	write(*,*) 'Error: unexpected token'
+	!print *, 'pos = ', current%pos
+	call parser%diagnostics%push( &
+			repeat(' ', current%pos - 1)//'^'//line_feed// &
+			'Error: unexpected token "'//current%text//'"' &
+			//' kind <'//kind_name(current%kind)//'>' &
+			//', expected <'//kind_name(kind)//'>' &
+			)
+
 	token = new_token(kind, current%pos, null_char, 0)
 
 end function match
@@ -680,7 +699,7 @@ recursive function syntax_eval(node) result(res)
 
 	!********
 
-	! TODO: polymorphic types
+	! TODO: polymorphic types?
 	integer :: left, right
 
 	if (node%kind == num_expr) then
@@ -728,11 +747,11 @@ subroutine interpret()
 	!
 	! TODO: arg for iu as stdin vs another file
 
-	integer, parameter :: iu = input_unit, ou = output_unit
-	integer :: io, res
-
 	character(len = :), allocatable :: line
 	character(len = *), parameter :: prompt = lang_name//'$ '
+
+	integer, parameter :: iu = input_unit, ou = output_unit
+	integer :: i, io, res
 
 	type(syntax_node_t) :: tree
 
@@ -747,8 +766,8 @@ subroutine interpret()
 		!print *, 'line = <', line, '>'
 		!print *, 'io = ', io
 
-		! Echo input
-		write(ou, '(a)') line
+		!! Echo input?  TODO: enable echo if iu is not stdin
+		!write(ou, '(a)') line
 
 		if (io == iostat_end) exit
 
@@ -759,11 +778,22 @@ subroutine interpret()
 
 		if (debug > 0) print *, 'tree = ', tree%str()
 
-		! TODO: catch diags
-		res  = syntax_eval (tree)
+		call console_color(fg_bright_red)
+		do i = 1, tree%diagnostics%len
+			! TODO: write file name and line number for file iu
+			write(ou, '(a)') line
+			write(ou, '(a)') tree%diagnostics%v(i)%s
+			write(ou,*)
+		end do
+		call console_color_reset()
+
+		! Don't try to evaluate with errors
+		if (tree%diagnostics%len > 0) cycle
+
+		res  = syntax_eval(tree)
 
 		! Consider MATLAB-style "ans = " log?
-		write(*, '(i0)') res
+		write(ou, '(i0)') res
 
 	end do
 

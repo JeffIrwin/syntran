@@ -11,11 +11,84 @@ module utils
 			tab             = char( 9), &
 			line_feed       = char(10), &
 			vert_tab        = char(11), &
-			carriage_return = char(13)
+			carriage_return = char(13), &
+			esc             = char(27)
+
+	! ANSI escape color codes
+	!
+	!     https://stackoverflow.com/a/54062826/4347028
+	!
+	! TODO: more colors
+	character(len = *), parameter :: &
+			fg_bright_red   = '[91m', &
+			fg_bright_green = '[92m', &
+			fg_bright_white = '[97m'
+
+	!********
+
+	type string_t
+		character(len = :), allocatable :: s
+	end type string_t
+
+	!********
+
+	type string_vector_t
+		type(string_t), allocatable :: v(:)
+		integer :: len, cap
+		contains
+			procedure :: push => push_string
+	end type string_vector_t
 
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+function new_string_vector() result(vector)
+
+	type(string_vector_t) :: vector
+
+	vector%len = 0
+	vector%cap = 2
+
+	allocate(vector%v( vector%cap ))
+
+end function new_string_vector
+
+!===============================================================================
+
+subroutine push_string(vector, val)
+
+	class(string_vector_t) :: vector
+
+	character(len = *), intent(in) :: val
+
+	!********
+
+	type(string_t) :: val_str
+	type(string_t), allocatable :: tmp(:)
+
+	integer :: tmp_cap
+
+	vector%len = vector%len + 1
+
+	if (vector%len > vector%cap) then
+		!print *, 'growing vector'
+
+		tmp_cap = 2 * vector%len
+		allocate(tmp( tmp_cap ))
+		tmp(1: vector%cap) = vector%v
+
+		call move_alloc(tmp, vector%v)
+		vector%cap = tmp_cap
+
+	end if
+
+	val_str%s = val
+	vector%v( vector%len ) = val_str
+
+end subroutine push_string
 
 !===============================================================================
 
@@ -127,6 +200,29 @@ function findlocl1(arr, val) result(loc)
 	end do
 
 end function findlocl1
+
+!===============================================================================
+
+! Colors work by default in bash and Windows terminal
+!
+! For color use in cmd or powershell, set:
+!
+!    [HKEY_CURRENT_USER\Console]
+!    "VirtualTerminalLevel"=dword:00000001
+!
+! Ref:
+!
+!     https://superuser.com/a/1300251
+!
+
+subroutine console_color(color)
+	character(len = *), intent(in) :: color
+	write(*, '(a)', advance = 'no') esc//color
+end subroutine console_color
+
+subroutine console_color_reset()
+	write(*, '(a)', advance = 'no') esc//'[0m'
+end subroutine console_color_reset
 
 !===============================================================================
 
