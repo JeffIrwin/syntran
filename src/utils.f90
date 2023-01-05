@@ -189,6 +189,26 @@ end function is_digit
 
 !===============================================================================
 
+logical function is_letter(c)
+
+	character, intent(in) :: c
+
+	is_letter = ('a' <= c .and. c <= 'z') .or. ('A' <= c .and. c <= 'Z')
+
+end function is_letter
+
+!===============================================================================
+
+logical function is_alphanum(c)
+
+	character, intent(in) :: c
+
+	is_alphanum = is_letter(c) .or. is_digit(c)
+
+end function is_alphanum
+
+!===============================================================================
+
 logical function is_whitespace(c)
 
 	character, intent(in) :: c

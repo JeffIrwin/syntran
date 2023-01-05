@@ -13,11 +13,12 @@ module core_m
 	! I mean what could she have?  Fungus?
 	character(len = *), parameter :: lang_name = 'syntran'
 
-	integer, parameter :: debug = 0
+	integer, parameter :: debug = 3
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			bool_expr        = 18, &
 			literal_expr     = 17, &
 			true_keyword     = 16, &
 			false_keyword    = 15, &
@@ -52,13 +53,22 @@ module core_m
 
 	!********
 
+	type value_t
+		!integer :: kind  ! TODO: is this redundant?  parent node should always have its kind
+		logical :: bval
+		integer :: ival
+	end type value_t
+
+	!********
+
 	type syntax_node_t
 
 		integer :: kind
 		type(syntax_node_t), allocatable :: left, right
 		type(syntax_token_t) :: op, num
+		type(value_t) :: val
 
-		! TODO: replace int num with a custom value (literal) struct
+		! TODO: remove num and use val instead
 
 		type(string_vector_t) :: diagnostics
 
@@ -191,7 +201,12 @@ function kind_name(kind)
 			"num_expr        ", & ! 10
 			"rparen_token    ", & ! 11
 			"lparen_token    ", & ! 12
-			"unary_expr      "  & ! 13
+			"unary_expr      ", & ! 13
+			"identifier_token", & ! 14
+			"false_keyword   ", & ! 15
+			"true_keyword    ", & ! 16
+			"literal_expr    ", & ! 17
+			"bool_expr       "  & ! 18
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -247,6 +262,9 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	else if (node%kind == num_expr) then
 		num   = indentl//'    num   = '//node%num%text   //line_feed
+
+		! TODO: literal or at least specific bool
+
 	end if
 
 	str = line_feed// &
@@ -339,7 +357,7 @@ function lex(lexer) result(token)
 
 	!********
 
-	integer :: val
+	integer :: val, kind
 	integer :: start, io
 
 	character(len = :), allocatable :: text
@@ -389,6 +407,21 @@ function lex(lexer) result(token)
 
 	end if
 
+	if (is_letter(lexer%current()) .or. lexer%current() == '_') then
+
+		start = lexer%pos
+
+		do while (is_alphanum(lexer%current()) .or. lexer%current() == '_')
+			lexer%pos = lexer%pos + 1
+		end do
+		text = lexer%text(start: lexer%pos-1)
+
+		kind = get_keyword_kind(text)
+		token = new_token(kind, start, text)
+		return
+
+	end if
+
 	select case (lexer%current())
 
 		case ("+")
@@ -425,6 +458,26 @@ function lex(lexer) result(token)
 	! yet, override up arrow to do what it does in bash.  c.f. rubik-js)
 
 end function lex
+
+!===============================================================================
+
+integer function get_keyword_kind(text) result(kind)
+
+	character(len = *), intent(in) :: text
+
+	! Here we start to depart from Fortran syntax (true, not .true.)
+	select case (text)
+		case ("true")
+			kind = true_keyword
+		case ("false")
+			kind = false_keyword
+		case default
+			kind = identifier_token
+	end select
+
+	print *, 'get_keyword_kind = ', kind
+
+end function get_keyword_kind
 
 !===============================================================================
 
@@ -659,32 +712,66 @@ function parse_primary_expr(parser) result(expr)
 
 	!********
 
-	type(syntax_token_t) :: num, left, right
+	logical :: bool
+
+	type(syntax_token_t) :: num, left, right, keyword
 
 	if (debug > 1) print *, 'parse_primary_expr'
 
-	if (parser%current_kind() == lparen_token) then
+	select case (parser%current_kind())
 
-		left  = parser%next()
-		expr  = parser%parse_expr()
-		right = parser%match(rparen_token)
+		case (lparen_token)
 
-		return
+			left  = parser%next()
+			expr  = parser%parse_expr()
+			right = parser%match(rparen_token)
 
-	end if
+			return
 
-	num = parser%match(num_token)
-	expr = new_num_expr(num)
+		case (true_keyword, false_keyword)
 
-	if (debug > 1) print *, 'num = ', expr%num%val
+			keyword = parser%next()
+			bool = keyword%kind == true_keyword
+			expr = new_bool_expr(bool)
+
+		case default
+
+			num = parser%match(num_token)
+			expr = new_num_expr(num)
+
+			if (debug > 1) print *, 'num = ', expr%num%val
+
+	end select
 
 end function parse_primary_expr
 
 !===============================================================================
 
-function new_num_expr(num) result(expr)
+function new_bool_expr(bool) result(expr)
 
-	! TODO: general literal expression
+	logical :: bool
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	type(value_t) :: val
+
+	print *, 'new_bool_expr'
+
+	!val%kind = bool_expr
+	val%bval = bool
+
+	expr%kind = bool_expr
+	expr%val  = val
+	!expr%num  = num
+
+end function new_bool_expr
+
+! TODO: combine new_bool_expr() and new_num_expr() into a general
+! new_literal_exp() fn
+
+function new_num_expr(num) result(expr)
 
 	type(syntax_token_t) :: num
 
@@ -943,6 +1030,10 @@ subroutine interpret()
 		if (len(line) == 0) cycle
 
 		tree = syntax_parse(line)
+
+		! I'm skipping the the binder that Immo implemented at this point in
+		! episode 2.  I guess I'll find out later if that's a stupid decision on
+		! my end.  I think I can just do type checking in the parser
 
 		if (debug > 0) print *, 'tree = ', tree%str()
 
