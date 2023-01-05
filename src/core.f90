@@ -13,7 +13,7 @@ module core_m
 	! I mean what could she have?  Fungus?
 	character(len = *), parameter :: lang_name = 'syntran'
 
-	integer, parameter :: debug = 3
+	integer, parameter :: debug = 0
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
@@ -43,7 +43,7 @@ module core_m
 
 		integer :: kind
 
-		! TODO: how to handle values of different types?
+		! TODO: remove value here in favor of value_t in parser
 		integer :: val
 
 		integer :: pos
@@ -54,9 +54,13 @@ module core_m
 	!********
 
 	type value_t
-		!integer :: kind  ! TODO: is this redundant?  parent node should always have its kind
+		integer :: kind
 		logical :: bval
 		integer :: ival
+		contains
+			procedure :: str => value_str
+			!procedure, pass(dst) :: copy => value_copy
+			!generic, public :: assignment(=) => copy
 	end type value_t
 
 	!********
@@ -232,7 +236,8 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	!********
 
-	character(len = :), allocatable :: indentl, kind, num, left, op, right
+	character(len = 32) :: buffer
+	character(len = :), allocatable :: indentl, kind, num, left, op, right, val
 
 	indentl = ''
 	if (present(indent)) indentl = indent
@@ -243,6 +248,7 @@ recursive function syntax_node_str(node, indent) result(str)
 	op    = ''
 	right = ''
 	num   = ''
+	val   = ''
 
 	if      (node%kind == binary_expr) then
 
@@ -263,7 +269,11 @@ recursive function syntax_node_str(node, indent) result(str)
 	else if (node%kind == num_expr) then
 		num   = indentl//'    num   = '//node%num%text   //line_feed
 
-		! TODO: literal or at least specific bool
+	! TODO: general literal. remove specific num/bool cases.  leverage val%str()
+
+	else if (node%kind == bool_expr) then
+		write(buffer, *) node%val%bval
+		val   = indentl//'    val   = '//buffer          //line_feed
 
 	end if
 
@@ -274,6 +284,7 @@ recursive function syntax_node_str(node, indent) result(str)
 			op   // &
 			right// &
 			num  // &
+			val  // &
 		indentl//'}'
 
 end function syntax_node_str
@@ -296,6 +307,7 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%kind = src%kind
 	dst%op   = src%op
 	dst%num  = src%num
+	dst%val  = src%val
 
 	dst%diagnostics = src%diagnostics
 
@@ -312,6 +324,26 @@ recursive subroutine syntax_node_copy(dst, src)
 	end if
 
 end subroutine syntax_node_copy
+
+!===============================================================================
+
+!recursive subroutine value_copy(dst, src)
+!
+! TODO remove.  My issue was I forgot to copy val within syntax_node_copy().
+! Default assignment is fine for value_t itself.
+!
+!	! Deep copy
+!
+!	class(value_t), intent(inout) :: dst
+!	class(value_t), intent(in)    :: src
+!
+!	if (debug > 3) print *, 'starting value_copy()'
+!
+!	dst%kind = src%kind
+!	dst%ival = src%ival
+!	dst%bval = src%bval
+!
+!end subroutine value_copy
 
 !===============================================================================
 
@@ -475,7 +507,7 @@ integer function get_keyword_kind(text) result(kind)
 			kind = identifier_token
 	end select
 
-	print *, 'get_keyword_kind = ', kind
+	!print *, 'get_keyword_kind = ', kind
 
 end function get_keyword_kind
 
@@ -733,6 +765,9 @@ function parse_primary_expr(parser) result(expr)
 			keyword = parser%next()
 			bool = keyword%kind == true_keyword
 			expr = new_bool_expr(bool)
+			!call value_copy(expr, new_bool_expr(bool))
+
+			!print *, 'expr%val%bval = ', expr%val%bval
 
 		case default
 
@@ -749,7 +784,7 @@ end function parse_primary_expr
 
 function new_bool_expr(bool) result(expr)
 
-	logical :: bool
+	logical, intent(in) :: bool
 
 	type(syntax_node_t) :: expr
 
@@ -757,14 +792,20 @@ function new_bool_expr(bool) result(expr)
 
 	type(value_t) :: val
 
-	print *, 'new_bool_expr'
+	!print *, 'new_bool_expr'
+	!print *, 'bool = ', bool
 
-	!val%kind = bool_expr
+	val%kind = bool_expr
 	val%bval = bool
 
 	expr%kind = bool_expr
+	! TODO: cleanup
+	!expr%val%kind = bool_expr
+	!expr%val%bval = bool
 	expr%val  = val
 	!expr%num  = num
+
+	!print *, 'expr%val%bval = ', expr%val%bval
 
 end function new_bool_expr
 
@@ -794,6 +835,8 @@ function new_binary_expr(left, op, right) result(expr)
 	type(syntax_node_t) :: expr
 
 	!********
+
+	! TODO: do type checking here and in new_unary_expr()
 
 	if (debug > 1) print *, 'new_binary_expr'
 	if (debug > 1) print *, 'left  = ', left %str()
@@ -913,27 +956,40 @@ recursive function syntax_eval(node) result(res)
 
 	type(syntax_node_t) :: node
 
-	integer :: res
+	!integer :: res
+	type(value_t) :: res
 
 	!********
 
-	! TODO: polymorphic value types for general num/bool/etc.
-	integer :: left, right
+	!integer :: left, right
+	type(value_t) :: left, right
 
 	if (node%kind == num_expr) then
-		res = node%num%val
+		res%kind = num_expr
+		res%ival = node%num%val
+		return
+	end if
+
+	if (node%kind == bool_expr) then
+		res%kind = bool_expr
+		res%bval = node%val%bval
+		!print *, 'bval = ', res%bval
 		return
 	end if
 
 	if (node%kind == unary_expr) then
 
+		! TODO: bool unary operators
+
 		right = syntax_eval(node%right)
 		!print *, 'right = ', right
 
+		res%kind = right%kind
+
 		if      (node%op%kind == plus_token) then
-			res =  right
+			res      =  right
 		else if (node%op%kind == minus_token) then
-			res = -right
+			res%ival = -right%ival
 		else
 
 			! Anything here should have been caught by a parser diagnostic
@@ -941,7 +997,7 @@ recursive function syntax_eval(node) result(res)
 					//fg_bold//': unexpected unary operator "' &
 					//node%op%text//'"'//color_reset
 
-			res = 0
+			res%kind = 0
 
 		end if
 
@@ -951,20 +1007,27 @@ recursive function syntax_eval(node) result(res)
 
 	if (node%kind == binary_expr) then
 
+		! TODO: bool binary operators
+
 		left  = syntax_eval(node%left )
 		right = syntax_eval(node%right)
 
 		!print *, 'left  = ', left
 		!print *, 'right = ', right
 
+		! TODO: check right kind type matche in parser, and also here as
+		! a fallback (e.g. I'll add floats and forget this needs fixing)
+
+		res%kind = left%kind
+
 		if      (node%op%kind == plus_token) then
-			res = left + right
+			res%ival = left%ival + right%ival
 		else if (node%op%kind == minus_token) then
-			res = left - right
+			res%ival = left%ival - right%ival
 		else if (node%op%kind == star_token) then
-			res = left * right
+			res%ival = left%ival * right%ival
 		else if (node%op%kind == slash_token) then
-			res = left / right
+			res%ival = left%ival / right%ival
 		else
 
 			! Anything here should have been caught by a parser diagnostic
@@ -975,7 +1038,7 @@ recursive function syntax_eval(node) result(res)
 			!! This is catastrophic, but it kills the unit tests
 			!stop
 
-			res = 0
+			res%kind = 0
 
 		end if
 
@@ -983,7 +1046,7 @@ recursive function syntax_eval(node) result(res)
 
 	end if
 
-	res = 0
+	res%kind = 0
 	write(*,*) fg_bold_bright_red//'Error'//color_reset &
 			//fg_bold//': unexpected node "'//kind_name(node%kind) &
 			//'"'//color_reset
@@ -1006,9 +1069,10 @@ subroutine interpret()
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
 	integer, parameter :: iu = input_unit, ou = output_unit
-	integer :: io, res
+	integer :: io
 
 	type(syntax_node_t) :: tree
+	type(value_t) :: res
 
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
@@ -1045,7 +1109,7 @@ subroutine interpret()
 		res  = syntax_eval(tree)
 
 		! Consider MATLAB-style "ans = " log?
-		write(ou, '(i0)') res
+		write(ou, '(a)') res%str()
 
 	end do
 
@@ -1078,15 +1142,48 @@ end subroutine log_diagnostics
 
 !===============================================================================
 
+function value_str(val) result(str)
+
+	class(value_t) :: val
+
+	character(len = :), allocatable :: str
+
+	!********
+
+	character(len = 32) :: buffer
+
+	select case (val%kind)
+
+		case (num_expr)
+			write(buffer, '(i0)') val%ival
+			str = trim(buffer)
+
+		case (bool_expr)
+			! It might be helpful to have util fns for primitive str conversion
+			if (val%bval) then
+				str = "true"
+			else
+				str = "false"
+			end if
+
+		case default
+			! TODO: log error
+			str = "<invalid_value>"
+
+	end select
+
+end function
+
+!===============================================================================
+
 integer function eval(str)
+
+	! TODO: polymorphism.  testing will need updates
 
 	character(len = *), intent(in) :: str
 
 	type(syntax_node_t) :: tree
-
-	!! One-liner, but no error handling.  This can crash unit tests without
-	!! reporting failures
-	!eval = syntax_eval(syntax_parse(str))
+	type(value_t) :: val
 
 	tree = syntax_parse(str)
 	call tree%log_diagnostics(str)
@@ -1096,9 +1193,44 @@ integer function eval(str)
 		return
 	end if
 
-	eval = syntax_eval(tree)
+	val = syntax_eval(tree)
+	eval = val%ival
 
 end function eval
+
+!===============================================================================
+
+function eval_str(str) result(res)
+
+	! TODO: rename this one to just eval.  Make other ones that are result type
+	! specific
+
+	character(len = *), intent(in)  :: str
+	character(len = :), allocatable :: res
+
+	!********
+
+	type(syntax_node_t) :: tree
+	type(value_t) :: val
+
+	!! One-liner, but no error handling.  This can crash unit tests without
+	!! reporting failures
+	!eval = syntax_eval(syntax_parse(str))
+
+	! TODO: make a helper fn here that all the eval_* fns use
+
+	tree = syntax_parse(str)
+	call tree%log_diagnostics(str)
+
+	if (tree%diagnostics%len > 0) then
+		res = ''
+		return
+	end if
+
+	val = syntax_eval(tree)
+	res = val%str()
+
+end function eval_str
 
 !===============================================================================
 

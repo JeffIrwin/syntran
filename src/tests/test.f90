@@ -133,6 +133,33 @@ end subroutine unit_test_unary_arith
 
 !===============================================================================
 
+subroutine unit_test_bool(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'Boolean logic'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: test boolean operators after I implement them
+	tests = &
+		[   &
+			eval_str('true')  == 'true' , &
+			eval_str('false') == 'false'  &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_bool
+
+!===============================================================================
+
 subroutine unit_test_coda(tests, label, npass, nfail)
 
 	logical, intent(in) :: tests(:)
@@ -182,6 +209,7 @@ subroutine unit_tests(iostat)
 	call unit_test_bin_arith  (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)
+	call unit_test_bool       (npass, nfail)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)
