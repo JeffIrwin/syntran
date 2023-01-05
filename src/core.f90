@@ -39,20 +39,6 @@ module core_m
 
 	!********
 
-	type syntax_token_t
-
-		integer :: kind
-
-		! TODO: remove value here in favor of value_t in parser
-		integer :: val
-
-		integer :: pos
-		character(len = :), allocatable :: text
-
-	end type syntax_token_t
-
-	!********
-
 	type value_t
 		integer :: kind
 		logical :: bval
@@ -65,14 +51,23 @@ module core_m
 
 	!********
 
+	type syntax_token_t
+
+		integer :: kind
+		type(value_t) :: val
+		integer :: pos
+		character(len = :), allocatable :: text
+
+	end type syntax_token_t
+
+	!********
+
 	type syntax_node_t
 
 		integer :: kind
 		type(syntax_node_t), allocatable :: left, right
-		type(syntax_token_t) :: op, num
+		type(syntax_token_t) :: op
 		type(value_t) :: val
-
-		! TODO: remove num and use val instead
 
 		type(string_vector_t) :: diagnostics
 
@@ -237,7 +232,7 @@ recursive function syntax_node_str(node, indent) result(str)
 	!********
 
 	character(len = 32) :: buffer
-	character(len = :), allocatable :: indentl, kind, num, left, op, right, val
+	character(len = :), allocatable :: indentl, kind, left, op, right, val
 
 	indentl = ''
 	if (present(indent)) indentl = indent
@@ -247,7 +242,6 @@ recursive function syntax_node_str(node, indent) result(str)
 	left  = ''
 	op    = ''
 	right = ''
-	num   = ''
 	val   = ''
 
 	if      (node%kind == binary_expr) then
@@ -266,15 +260,8 @@ recursive function syntax_node_str(node, indent) result(str)
 		right = indentl//'    right = '//node%right%str(indentl//'    ') &
 				//line_feed
 
-	else if (node%kind == num_expr) then
-		num   = indentl//'    num   = '//node%num%text   //line_feed
-
-	! TODO: general literal. remove specific num/bool cases.  leverage val%str()
-
-	else if (node%kind == bool_expr) then
-		write(buffer, *) node%val%bval
-		val   = indentl//'    val   = '//buffer          //line_feed
-
+	else if (node%kind == literal_expr) then
+		val   = indentl//'    val   = '//node%val%str()//line_feed
 	end if
 
 	str = line_feed// &
@@ -283,7 +270,6 @@ recursive function syntax_node_str(node, indent) result(str)
 			left // &
 			op   // &
 			right// &
-			num  // &
 			val  // &
 		indentl//'}'
 
@@ -306,7 +292,6 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	dst%kind = src%kind
 	dst%op   = src%op
-	dst%num  = src%num
 	dst%val  = src%val
 
 	dst%diagnostics = src%diagnostics
@@ -349,10 +334,11 @@ end subroutine syntax_node_copy
 
 function new_token(kind, pos, text, val) result(token)
 
-	integer, optional :: val
 	integer :: kind, pos
 
 	character(len = *) :: text
+
+	type(value_t), optional :: val
 
 	type(syntax_token_t) :: token
 
@@ -361,6 +347,7 @@ function new_token(kind, pos, text, val) result(token)
 	token%text = text
 
 	if (present(val)) token%val  = val
+	!if (present(ival)) token%val  = new_value(kind, ival = ival)
 
 end function new_token
 
@@ -389,10 +376,12 @@ function lex(lexer) result(token)
 
 	!********
 
-	integer :: val, kind
-	integer :: start, io
+	integer :: kind
+	integer :: start, io, ival
 
 	character(len = :), allocatable :: text
+
+	type(value_t) :: val
 
 	if (lexer%pos > len(lexer%text)) then
 		token = new_token(eof_token, lexer%pos, null_char)
@@ -408,7 +397,7 @@ function lex(lexer) result(token)
 		end do
 		text = lexer%text(start: lexer%pos-1)
 
-		read(text, *, iostat = io) val
+		read(text, *, iostat = io) ival
 		if (io /= 0) then
 			! TODO: Refactor w/ underline fn, centralized style
 			call lexer%diagnostics%push( &
@@ -419,6 +408,9 @@ function lex(lexer) result(token)
 					//color_reset &
 					)
 		end if
+
+		!val = new_value(num_token, ival = ival)
+		val = new_value(num_expr, ival = ival)
 
 		token = new_token(num_token, start, text, val)
 		return
@@ -490,6 +482,22 @@ function lex(lexer) result(token)
 	! yet, override up arrow to do what it does in bash.  c.f. rubik-js)
 
 end function lex
+
+!===============================================================================
+
+function new_value(kind, bval, ival) result(val)
+
+	integer, intent(in) :: kind
+	integer, intent(in), optional :: ival
+	logical, intent(in), optional :: bval
+
+	type(value_t) :: val
+
+	val%kind = kind
+	if (present(bval)) val%bval = bval
+	if (present(ival)) val%ival = ival
+
+end function new_value
 
 !===============================================================================
 
@@ -774,7 +782,7 @@ function parse_primary_expr(parser) result(expr)
 			num = parser%match(num_token)
 			expr = new_num_expr(num)
 
-			if (debug > 1) print *, 'num = ', expr%num%val
+			if (debug > 1) print *, 'num = ', expr%val%str()
 
 	end select
 
@@ -798,7 +806,12 @@ function new_bool_expr(bool) result(expr)
 	val%kind = bool_expr
 	val%bval = bool
 
-	expr%kind = bool_expr
+	! The expression node is a generic literal expression, while its child val
+	! member indicates the specific type (e.g. bool_expr or num_expr)
+
+	!expr%kind = bool_expr
+	expr%kind = literal_expr
+
 	! TODO: cleanup
 	!expr%val%kind = bool_expr
 	!expr%val%bval = bool
@@ -814,14 +827,20 @@ end function new_bool_expr
 
 function new_num_expr(num) result(expr)
 
-	type(syntax_token_t) :: num
+	type(syntax_token_t), intent(in) :: num
 
 	type(syntax_node_t) :: expr
 
 	!********
 
-	expr%kind = num_expr
-	expr%num  = num
+	type(value_t) :: val
+
+	val = num%val
+	!val%kind = num_expr
+	!val%ival = num
+
+	expr%kind = literal_expr
+	expr%val  = val
 
 end function new_num_expr
 
@@ -964,18 +983,24 @@ recursive function syntax_eval(node) result(res)
 	!integer :: left, right
 	type(value_t) :: left, right
 
-	if (node%kind == num_expr) then
-		res%kind = num_expr
-		res%ival = node%num%val
+	if (node%kind == literal_expr) then
+		res = node%val
 		return
 	end if
 
-	if (node%kind == bool_expr) then
-		res%kind = bool_expr
-		res%bval = node%val%bval
-		!print *, 'bval = ', res%bval
-		return
-	end if
+	! TODO remove
+	!if (node%kind == num_expr) then
+	!	res%kind = num_expr
+	!	res%ival = node%val%ival
+	!	return
+	!end if
+
+	!if (node%kind == bool_expr) then
+	!	res%kind = bool_expr
+	!	res%bval = node%val%bval
+	!	!print *, 'bval = ', res%bval
+	!	return
+	!end if
 
 	if (node%kind == unary_expr) then
 

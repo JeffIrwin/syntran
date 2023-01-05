@@ -160,6 +160,11 @@ end subroutine unit_test_bool
 
 !===============================================================================
 
+! TODO:  add unit testing for bad syntax.  Confirm that they at least evaluate
+! to empty strings instead of erroneously returing an int
+
+!===============================================================================
+
 subroutine unit_test_coda(tests, label, npass, nfail)
 
 	logical, intent(in) :: tests(:)
