@@ -667,6 +667,8 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		right = parser%parse_expr(prec)
 		expr  = new_unary_expr(op, right)
 
+		! TODO: do some case analysis and check op is allowed with right type
+
 	else
 		expr = parser%parse_primary_expr()
 	end if
@@ -678,6 +680,12 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		op    = parser%next()
 		right = parser%parse_expr(prec)
 		expr  = new_binary_expr(expr, op, right)
+
+		! TODO: this will need exceptions for int + float, etc.
+		if (expr%left%val%kind /= expr%right%val%kind) then
+			! TODO: wording, styling
+			call parser%diagnostics%push('Error: bin op not defined for types')
+		end if
 
 	end do
 
@@ -812,7 +820,7 @@ function new_bool_expr(bool) result(expr)
 	!expr%kind = bool_expr
 	expr%kind = literal_expr
 
-	! TODO: cleanup
+	! TODO: cleanup, also use new_value()
 	!expr%val%kind = bool_expr
 	!expr%val%bval = bool
 	expr%val  = val
@@ -870,6 +878,9 @@ function new_binary_expr(left, op, right) result(expr)
 	expr%op    = op
 	expr%right = right
 
+	! Pass the value type up the tree for type checking in parent
+	expr%val%kind = left%val%kind
+
 	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_binary_expr'
 
@@ -894,6 +905,8 @@ function new_unary_expr(op, right) result(expr)
 
 	expr%op    = op
 	expr%right = right
+
+	expr%val%kind = right%val%kind
 
 	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_unary_expr'
@@ -1096,6 +1109,8 @@ subroutine interpret()
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io
 
+	logical :: show_tree = .false.
+
 	type(syntax_node_t) :: tree
 	type(value_t) :: res
 
@@ -1118,13 +1133,18 @@ subroutine interpret()
 		! Skip empty lines
 		if (len(line) == 0) cycle
 
+		if (line == '#tree') then
+			show_tree = .not. show_tree
+			cycle
+		end if
+
 		tree = syntax_parse(line)
 
 		! I'm skipping the the binder that Immo implemented at this point in
 		! episode 2.  I guess I'll find out later if that's a stupid decision on
 		! my end.  I think I can just do type checking in the parser
 
-		if (debug > 0) print *, 'tree = ', tree%str()
+		if (debug > 0 .or. show_tree) print *, 'tree = ', tree%str()
 
 		call tree%log_diagnostics(line, ou)
 
