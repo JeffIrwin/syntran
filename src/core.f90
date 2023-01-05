@@ -18,8 +18,11 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			literal_expr     = 17, &
+			true_keyword     = 16, &
+			false_keyword    = 15, &
+			identifier_token = 14, &
 			unary_expr       = 13, &
-			!paren_expr       = $$, &  ! not required
 			lparen_token     = 12, &
 			rparen_token     = 11, &
 			num_expr         = 10, &
@@ -188,7 +191,6 @@ function kind_name(kind)
 			"num_expr        ", & ! 10
 			"rparen_token    ", & ! 11
 			"lparen_token    ", & ! 12
-			!"paren_expr      ", & ! $$ not required
 			"unary_expr      "  & ! 13
 		]
 
@@ -667,9 +669,6 @@ function parse_primary_expr(parser) result(expr)
 		expr  = parser%parse_expr()
 		right = parser%match(rparen_token)
 
-		!! expr is already the middle term, which is what we will need anyway
-		!expr = new_paren_expr(left, expr, right)
-
 		return
 
 	end if
@@ -742,10 +741,8 @@ function new_unary_expr(op, right) result(expr)
 
 	expr%kind = unary_expr
 
-	!allocate(expr%left)
 	allocate(expr%right)
 
-	!expr%left  = left
 	expr%op    = op
 	expr%right = right
 
@@ -753,39 +750,6 @@ function new_unary_expr(op, right) result(expr)
 	if (debug > 1) print *, 'done new_unary_expr'
 
 end function new_unary_expr
-
-!===============================================================================
-
-!function new_paren_expr(left, mid, right) result(expr)
-!
-!	! TODO: left and right tokens are unused, right? Always parens?
-!	! Is this fn required at all, or can parse_primary_expr just return the mid
-!	! expr?
-!
-!	type(syntax_token_t) , intent(in) :: left, right
-!	type(syntax_node_t)  , intent(in) :: mid
-!
-!	type(syntax_node_t) :: expr
-!
-!	!********
-!
-!	if (debug > 1) print *, 'new_paren_expr'
-!	if (debug > 1) print *, 'mid  = ', mid %str()
-!	!if (debug > 1) print *, 'right = ', right%str()
-!
-!	expr%kind = paren_expr
-!
-!	allocate(expr%left)
-!	!allocate(expr%right)
-!
-!	expr%left  = mid
-!	!expr%op    = op
-!	!expr%right = right
-!
-!	if (debug > 1) print *, 'new_paren_expr = ', expr%str()
-!	if (debug > 1) print *, 'done new_paren_expr'
-!
-!end function new_paren_expr
 
 !===============================================================================
 
@@ -876,7 +840,6 @@ recursive function syntax_eval(node) result(res)
 
 	if (node%kind == unary_expr) then
 
-		!left  = syntax_eval(node%left )
 		right = syntax_eval(node%right)
 		!print *, 'right = ', right
 
@@ -932,11 +895,6 @@ recursive function syntax_eval(node) result(res)
 		return
 
 	end if
-
-	!if (node%kind == paren_expr) then
-	!	res = syntax_eval(node%left)
-	!	return
-	!end if
 
 	res = 0
 	write(*,*) fg_bold_bright_red//'Error'//color_reset &
@@ -1054,4 +1012,6 @@ end function eval
 !===============================================================================
 
 end module core_m
+
+!===============================================================================
 
