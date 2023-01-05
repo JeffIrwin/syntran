@@ -26,19 +26,19 @@ subroutine unit_test_bin_arith(npass, nfail)
 
 	tests = &
 		[   &
-			eval('1') == 1, &
-			eval('69') == 69, &
-			eval('420') == 420, &
-			eval('1337') == 1337, &
-			eval('1 + 2') == 1 + 2, &
-			eval('1 + 2 + 34') == 1 + 2 + 34, &
-			eval('1 + 2 * 3') == 1 + 2 * 3, &
-			eval('1 * 2 * 3 * 4') == 1 * 2 * 3 * 4, &
-			eval('73 - 48') == 73 - 48, &
-			eval('73 - 48 - 21') == 73 - 48 - 21, &
-			eval('24 / 6') == 24 / 6, &
-			eval('24 / 6 / 2') == 24 / 6 / 2, &
-			eval('343 - 87654345 / 27 + 76 * 234 - 65432 / 63') &
+			eval_int('1') == 1, &
+			eval_int('69') == 69, &
+			eval_int('420') == 420, &
+			eval_int('1337') == 1337, &
+			eval_int('1 + 2') == 1 + 2, &
+			eval_int('1 + 2 + 34') == 1 + 2 + 34, &
+			eval_int('1 + 2 * 3') == 1 + 2 * 3, &
+			eval_int('1 * 2 * 3 * 4') == 1 * 2 * 3 * 4, &
+			eval_int('73 - 48') == 73 - 48, &
+			eval_int('73 - 48 - 21') == 73 - 48 - 21, &
+			eval_int('24 / 6') == 24 / 6, &
+			eval_int('24 / 6 / 2') == 24 / 6 / 2, &
+			eval_int('343 - 87654345 / 27 + 76 * 234 - 65432 / 63') &
 			   == 343 - 87654345 / 27 + 76 * 234 - 65432 / 63 &
 		]
 
@@ -66,17 +66,17 @@ subroutine unit_test_paren_arith(npass, nfail)
 	! at least be parsed
 	tests = &
 		[   &
-			eval('(69)') == (69), &
-			eval('(1) + 2') == (1) + 2, &
-			eval('1 + (2 + 34)') == 1 + (2 + 34), &
-			eval('(1 + 2) * 3') == (1 + 2) * 3, &
-			eval('1 * (2 * 3 * 4)') == 1 * (2 * 3 * 4), &
-			eval('73 - (48)') == 73 - (48), &
-			eval('73 - (48 - 21)') == 73 - (48 - 21), &
-			eval('24 / (6 / 2)') == 24 / (6 / 2), &
-			eval('343 - (87654345 / 27 + 76 * (234 - 65432)) / 63') &
+			eval_int('(69)') == (69), &
+			eval_int('(1) + 2') == (1) + 2, &
+			eval_int('1 + (2 + 34)') == 1 + (2 + 34), &
+			eval_int('(1 + 2) * 3') == (1 + 2) * 3, &
+			eval_int('1 * (2 * 3 * 4)') == 1 * (2 * 3 * 4), &
+			eval_int('73 - (48)') == 73 - (48), &
+			eval_int('73 - (48 - 21)') == 73 - (48 - 21), &
+			eval_int('24 / (6 / 2)') == 24 / (6 / 2), &
+			eval_int('343 - (87654345 / 27 + 76 * (234 - 65432)) / 63') &
 			   == 343 - (87654345 / 27 + 76 * (234 - 65432)) / 63,  &
-			eval(  &
+			eval_int(  &
 				'(1 + (2 - (3 * (456789 / (5 + (6 - 7) * 8) + (9 ' &
 				//' - (0 + 1) - 2) * 3) / (4 + (5 - (6 * 7) + 8) ' &
 				//' - 9) * 8) + 1 - (2 * (3 + (4 - (5 * 6) / 2)  ' &
@@ -113,17 +113,17 @@ subroutine unit_test_unary_arith(npass, nfail)
 	! I'm planning.  Use parentheses if you want to write that bullshit.
 	tests = &
 		[   &
-			eval('-(69)') == -(69), &
-			eval('(-69)') == (-69), &
-			eval('+(69)') == +(69), &
-			eval('(+69)') == (+69), &
-			eval('(-1) + 2') == (-1) + 2, &
-			eval('1 + (+2 + 34)') == 1 + (+2 + 34), &
-			eval('(1 + 2) * -3') == (1 + 2) * -3, &
-			eval('-1 * (2 * -3 * -4)') == -1 * (2 * -3 * -4), &
-			eval('-73 - (+48)') == -73 - (+48), &
-			eval('24 / (-6 / 2)') == 24 / (-6 / 2), &
-			eval('343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63') &
+			eval_int('-(69)') == -(69), &
+			eval_int('(-69)') == (-69), &
+			eval_int('+(69)') == +(69), &
+			eval_int('(+69)') == (+69), &
+			eval_int('(-1) + 2') == (-1) + 2, &
+			eval_int('1 + (+2 + 34)') == 1 + (+2 + 34), &
+			eval_int('(1 + 2) * -3') == (1 + 2) * -3, &
+			eval_int('-1 * (2 * -3 * -4)') == -1 * (2 * -3 * -4), &
+			eval_int('-73 - (+48)') == -73 - (+48), &
+			eval_int('24 / (-6 / 2)') == 24 / (-6 / 2), &
+			eval_int('343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63') &
 			   == 343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63   &
 		]
 
@@ -150,13 +150,45 @@ subroutine unit_test_bool(npass, nfail)
 	! TODO: test boolean operators after I implement them
 	tests = &
 		[   &
-			eval_str('true')  == 'true' , &
-			eval_str('false') == 'false'  &
+			eval('true')  == 'true' , &
+			eval('false') == 'false'  &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_bool
+
+!===============================================================================
+
+subroutine unit_test_bad_syntax(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'bad syntax'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: add a quiet option to eval so this doesn't pollute logs
+	tests = &
+		[   &
+			eval('1 +* 2') == '', &
+			eval('3 - 4 + ') == '', &
+			eval('1 + 123456789123456789') == '', &
+			eval('1 + $') == '', &
+			eval('4) + 5') == '', &
+			eval('true + 4') == '', &
+			eval('7 * false') == '' &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_bad_syntax
 
 !===============================================================================
 
@@ -210,6 +242,8 @@ subroutine unit_tests(iostat)
 
 	npass = 0
 	nfail = 0
+
+	call unit_test_bad_syntax (npass, nfail)
 
 	call unit_test_bin_arith  (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)

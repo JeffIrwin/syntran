@@ -1221,7 +1221,7 @@ end function
 
 !===============================================================================
 
-integer function eval(str)
+integer function eval_int(str)
 
 	! TODO: polymorphism.  testing will need updates
 
@@ -1234,21 +1234,18 @@ integer function eval(str)
 	call tree%log_diagnostics(str)
 
 	if (tree%diagnostics%len > 0) then
-		eval = 0
+		eval_int = 0
 		return
 	end if
 
 	val = syntax_eval(tree)
-	eval = val%ival
+	eval_int = val%ival
 
-end function eval
+end function eval_int
 
 !===============================================================================
 
-function eval_str(str) result(res)
-
-	! TODO: rename this one to just eval.  Make other ones that are result type
-	! specific
+function eval(str) result(res)
 
 	character(len = *), intent(in)  :: str
 	character(len = :), allocatable :: res
@@ -1275,7 +1272,7 @@ function eval_str(str) result(res)
 	val = syntax_eval(tree)
 	res = val%str()
 
-end function eval_str
+end function eval
 
 !===============================================================================
 
