@@ -231,7 +231,6 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	!********
 
-	character(len = 32) :: buffer
 	character(len = :), allocatable :: indentl, kind, left, op, right, val
 
 	indentl = ''
@@ -1245,15 +1244,22 @@ end function eval_int
 
 !===============================================================================
 
-function eval(str) result(res)
+function eval(str, quiet) result(res)
 
 	character(len = *), intent(in)  :: str
 	character(len = :), allocatable :: res
 
+	logical, optional, intent(in) :: quiet
+
 	!********
+
+	logical :: quietl
 
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
+
+	quietl = .false.
+	if (present(quiet)) quietl = quiet
 
 	!! One-liner, but no error handling.  This can crash unit tests without
 	!! reporting failures
@@ -1262,7 +1268,7 @@ function eval(str) result(res)
 	! TODO: make a helper fn here that all the eval_* fns use
 
 	tree = syntax_parse(str)
-	call tree%log_diagnostics(str)
+	if (.not. quietl) call tree%log_diagnostics(str)
 
 	if (tree%diagnostics%len > 0) then
 		res = ''

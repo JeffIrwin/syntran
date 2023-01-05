@@ -174,16 +174,16 @@ subroutine unit_test_bad_syntax(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: add a quiet option to eval so this doesn't pollute logs
+	! Don't pollute the logs with error messages that I intend to trigger
 	tests = &
 		[   &
-			eval('1 +* 2') == '', &
-			eval('3 - 4 + ') == '', &
-			eval('1 + 123456789123456789') == '', &
-			eval('1 + $') == '', &
-			eval('4) + 5') == '', &
-			eval('true + 4') == '', &
-			eval('7 * false') == '' &
+			eval('1 +* 2', quiet = .true.) == '', &
+			eval('3 - 4 + ', quiet = .true.) == '', &
+			eval('1 + 123456789123456789', quiet = .true.) == '', &
+			eval('1 + $', quiet = .true.) == '', &
+			eval('4) + 5', quiet = .true.) == '', &
+			eval('true + 4', quiet = .true.) == '', &
+			eval('7 * false', quiet = .true.) == '' &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
