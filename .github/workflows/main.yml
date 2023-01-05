@@ -35,12 +35,13 @@ jobs:
     #  shell: bash
     #  run: |
     #    git submodule update --init --recursive || echo "ignoring submodule error"
-    - name: Build and test
+    - name: Build
       run: |
         #export OMP_NUM_THREADS=1
         bash ./build.sh
         #ls -ltrh build/
     - if: matrix.os != 'windows-latest'
+      name: Test
       run: |
         ./build/syntran < samples/arithmetic.syntran
         ./build/syntran < samples/bad-syntax.syntran
