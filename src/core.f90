@@ -15,8 +15,10 @@ module core_m
 
 	integer, parameter :: debug = 0
 
-	! Token and syntax node kinds enum
+	! Token and syntax node kinds enum.  Is there a better way to do this that
+	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			unary_expr       = 13, &
 			!paren_expr       = $$, &  ! not required
 			lparen_token     = 12, &
 			rparen_token     = 11, &
@@ -53,10 +55,12 @@ module core_m
 		type(syntax_node_t), allocatable :: left, right
 		type(syntax_token_t) :: op, num
 
+		! TODO: replace int num with a custom value (literal) struct
+
 		type(string_vector_t) :: diagnostics
 
 		contains
-			procedure :: str => syntax_node_str
+			procedure :: str => syntax_node_str, log_diagnostics
 
 			procedure, pass(dst) :: copy => syntax_node_copy
 			generic, public :: assignment(=) => copy
@@ -67,13 +71,19 @@ module core_m
 
 	type lexer_t
 
+		! The lexer takes a string of characters and divides it into into tokens
+		! or words
+
 		character(len = :), allocatable :: text
 		integer :: pos
 
 		type(string_vector_t) :: diagnostics
 
+		! Both the lexer and the parser have current() and lex()/next() member
+		! fns.  current_char() returns a char, while the others return syntax
+		! tokens
 		contains
-			procedure next_token, current
+			procedure :: lex, current => current_char
 
 	end type lexer_t
 
@@ -81,18 +91,19 @@ module core_m
 
 	type parser_t
 
+		! The parser takes a string of tokens (technically an array) and
+		! constructs higher-level structures such as terms and expressions, like
+		! constructing a phrase or sentence from words
+
 		type(syntax_token_t), allocatable :: tokens(:)
+		integer :: pos
 
 		type(string_vector_t) :: diagnostics
 
-		!character(len = :), allocatable :: text
-		integer :: pos
-
-		! TODO: consider renaming next_token/current vs current_token/next
-		! (members of different types)
 		contains
-			procedure :: match, current => current_token, next, &
-				parse_term, parse_factor, parse_primary_expr, tokens_str
+			procedure :: match, tokens_str, current_kind, &
+				current => current_token, next => next_parser_token, &
+				parse_expr, parse_primary_expr
 
 	end type parser_t
 
@@ -176,8 +187,9 @@ function kind_name(kind)
 			"binary_expr     ", & !  9
 			"num_expr        ", & ! 10
 			"rparen_token    ", & ! 11
-			"lparen_token    "  & ! 12
-			!"paren_expr      "  & ! $$ not required
+			"lparen_token    ", & ! 12
+			!"paren_expr      ", & ! $$ not required
+			"unary_expr      "  & ! 13
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -208,23 +220,28 @@ recursive function syntax_node_str(node, indent) result(str)
 	indentl = ''
 	if (present(indent)) indentl = indent
 
-	kind = indentl//'    kind = '//kind_name(node%kind)//line_feed
+	kind = indentl//'    kind  = '//kind_name(node%kind)//line_feed
 
-	num = ''
-
-	left = ''
+	left  = ''
+	op    = ''
 	right = ''
-	op = ''
+	num   = ''
 
 	if      (node%kind == binary_expr) then
 
 		left  = indentl//'    left  = '//node%left %str(indentl//'    ') &
 				//line_feed
 
+		op    = indentl//'    op    = '//node%op%text//line_feed
+
 		right = indentl//'    right = '//node%right%str(indentl//'    ') &
 				//line_feed
 
+	else if (node%kind == unary_expr) then
+
 		op    = indentl//'    op    = '//node%op%text//line_feed
+		right = indentl//'    right = '//node%right%str(indentl//'    ') &
+				//line_feed
 
 	else if (node%kind == num_expr) then
 		num   = indentl//'    num   = '//node%num%text   //line_feed
@@ -297,24 +314,22 @@ end function new_token
 
 !===============================================================================
 
-character function current(lexer)
-
-	! Current character
+character function current_char(lexer)
 
 	class(lexer_t) :: lexer
 
 	if (lexer%pos > len(lexer%text)) then
-		current = null_char
+		current_char = null_char
 		return
 	end if
 
-	current = lexer%text( lexer%pos: lexer%pos )
+	current_char = lexer%text( lexer%pos: lexer%pos )
 
-end function current
+end function current_char
 
 !===============================================================================
 
-function next_token(lexer) result(token)
+function lex(lexer) result(token)
 
 	class(lexer_t) :: lexer
 
@@ -343,6 +358,7 @@ function next_token(lexer) result(token)
 
 		read(text, *, iostat = io) val
 		if (io /= 0) then
+			! TODO: Refactor w/ underline fn, centralized style
 			call lexer%diagnostics%push( &
 					repeat(' ', start-1)//fg_bright_red &
 					//repeat('^', len(text))//color_reset//line_feed &
@@ -375,6 +391,7 @@ function next_token(lexer) result(token)
 
 		case ("+")
 			token = new_token(plus_token  , lexer%pos, lexer%current())
+			! TODO: prefix/postfix inc/dec operators (++, --)
 		case ("-")
 			token = new_token(minus_token , lexer%pos, lexer%current())
 		case ("*")
@@ -405,7 +422,7 @@ function next_token(lexer) result(token)
 	! TODO: arrow keys create bad tokens in bash on Windows.  Fix that (better
 	! yet, override up arrow to do what it does in bash.  c.f. rubik-js)
 
-end function next_token
+end function lex
 
 !===============================================================================
 
@@ -441,7 +458,7 @@ function new_parser(str) result(parser)
 	tokens = new_syntax_token_vector()
 	lexer = new_lexer(str)
 	do
-		token = lexer%next_token()
+		token = lexer%lex()
 
 		if (token%kind /= whitespace_token .and. &
 		    token%kind /= bad_token) then
@@ -507,15 +524,15 @@ function syntax_parse(str) result(tree)
 
 	type(syntax_token_t) :: token
 
-	if (debug > 1) print *, 'syntax_parse'
+	if (debug > 0) print *, 'syntax_parse'
+	if (debug > 0) print *, 'str = ', str
 
 	parser = new_parser(str)
 
 	! Parse the tokens. Should this accept empty strings?  It says unexpected
 	! token trying to match number in parse_primary_expr(), so currently the
 	! interpreter driver skips empty lines
-	!print *, 'parsing'
-	tree = parser%parse_term()
+	tree = parser%parse_expr()
 
 	if (debug > 1) print *, 'tree = ', tree%str()
 
@@ -528,74 +545,107 @@ end function syntax_parse
 
 !===============================================================================
 
-function parse_term(parser) result(term)
+recursive function parse_expr(parser, parent_prec) result(expr)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: term
+	integer, optional, intent(in) :: parent_prec
+
+	type(syntax_node_t) :: expr
 
 	!********
 
+	integer :: parent_precl, prec
+
 	type(syntax_node_t) :: right
-	type(syntax_token_t) :: current, op
+	type(syntax_token_t) :: op
 
-	if (debug > 1) print *, 'parse_term'
+	if (debug > 1) print *, 'parse_expr'
 
-	term = parser%parse_factor()
+	parent_precl = 0
+	if (present(parent_prec)) parent_precl = parent_prec
 
-	!if (debug > 1) print *, 'term = ', term %str()
+	prec = get_unary_op_prec(parser%current_kind())
+	if (prec /= 0 .and. prec >= parent_precl) then
 
-	current = parser%current()
-	do while (current%kind == plus_token .or. &
-	          current%kind == minus_token)
+		op    = parser%next()
+		right = parser%parse_expr(prec)
+		expr  = new_unary_expr(op, right)
 
-		op = parser%next()
-		if (debug > 1) print *, 'op = ', op%text
+	else
+		expr = parser%parse_primary_expr()
+	end if
 
-		right = parser%parse_factor()
-		term  = new_binary_expr(term, op, right)
+	do
+		prec = get_binary_op_prec(parser%current_kind())
+		if (prec == 0 .or. prec <= parent_precl) exit
 
-		if (debug > 1) print *, 'copied term = ', term%str()
+		op    = parser%next()
+		right = parser%parse_expr(prec)
+		expr  = new_binary_expr(expr, op, right)
 
-		current = parser%current()
 	end do
 
-	if (debug > 1) print *, 'parse_term = ', term%str()
-	if (debug > 1) print *, 'done parse_term'
-
-end function parse_term
+end function parse_expr
 
 !===============================================================================
 
-recursive function parse_factor(parser) result(factor)
+! You can't chain together member fn calls and their children like
+! parser%current()%kind in Fortran, so use this helper fn instead
 
+integer function current_kind(parser)
 	class(parser_t) :: parser
+	type(syntax_token_t) :: current
+	current = parser%current()
+	current_kind = current%kind
+end function current_kind
 
-	type(syntax_node_t) :: factor
+!===============================================================================
+
+integer function get_binary_op_prec(kind) result(prec)
+
+	! Get binary operator precedence
+
+	integer, intent(in) :: kind
 
 	!********
 
-	type(syntax_node_t) :: right
-	type(syntax_token_t) :: current, op
+	select case (kind)
 
-	if (debug > 1) print *, 'parse_factor'
+		case (star_token, slash_token)
+			prec = 2
 
-	factor = parser%parse_primary_expr()
+		case (plus_token, minus_token)
+			prec = 1
 
-	current = parser%current()
-	do while (current%kind == star_token .or. &
-	          current%kind == slash_token)
+		case default
+			prec = 0
 
-		op = parser%next()
-		right = parser%parse_primary_expr()
-		factor  = new_binary_expr(factor, op, right)
+	end select
 
-		current = parser%current()
-	end do
+end function get_binary_op_prec
 
-	if (debug > 1) print *, 'done parse_factor'
+!===============================================================================
 
-end function parse_factor
+integer function get_unary_op_prec(kind) result(prec)
+
+	! Get unary operator precedence
+
+	integer, intent(in) :: kind
+
+	!********
+
+	select case (kind)
+
+		case (plus_token, minus_token)
+			prec = 3
+
+		case default
+			prec = 0
+
+	end select
+
+end function get_unary_op_prec
 
 !===============================================================================
 
@@ -607,22 +657,21 @@ function parse_primary_expr(parser) result(expr)
 
 	!********
 
-	type(syntax_token_t) :: num, current, left, right
+	type(syntax_token_t) :: num, left, right
 
 	if (debug > 1) print *, 'parse_primary_expr'
 
-	! TODO: unary operators
+	if (parser%current_kind() == lparen_token) then
 
-	current = parser%current()
-	if (current%kind == lparen_token) then
 		left  = parser%next()
-		expr  = parser%parse_term()
+		expr  = parser%parse_expr()
 		right = parser%match(rparen_token)
 
 		!! expr is already the middle term, which is what we will need anyway
 		!expr = new_paren_expr(left, expr, right)
 
 		return
+
 	end if
 
 	num = parser%match(num_token)
@@ -635,6 +684,8 @@ end function parse_primary_expr
 !===============================================================================
 
 function new_num_expr(num) result(expr)
+
+	! TODO: general literal expression
 
 	type(syntax_token_t) :: num
 
@@ -675,6 +726,33 @@ function new_binary_expr(left, op, right) result(expr)
 	if (debug > 1) print *, 'done new_binary_expr'
 
 end function new_binary_expr
+
+!===============================================================================
+
+function new_unary_expr(op, right) result(expr)
+
+	type(syntax_node_t) , intent(in) :: right
+	type(syntax_token_t), intent(in) :: op
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	if (debug > 1) print *, 'new_unary_expr'
+
+	expr%kind = unary_expr
+
+	!allocate(expr%left)
+	allocate(expr%right)
+
+	!expr%left  = left
+	expr%op    = op
+	expr%right = right
+
+	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
+	if (debug > 1) print *, 'done new_unary_expr'
+
+end function new_unary_expr
 
 !===============================================================================
 
@@ -725,8 +803,11 @@ function match(parser, kind) result(token)
 
 	type(syntax_token_t) :: current
 
+	! If current_text() and current_pos() helper fns are added, this local var
+	! current can be eliminated
 	current = parser%current()
-	if (current%kind == kind) then
+
+	if (parser%current_kind() == kind) then
 		token = parser%next()
 		return
 	end if
@@ -738,7 +819,7 @@ function match(parser, kind) result(token)
 			//repeat('^', len_text)//color_reset//line_feed &
 			//fg_bold_bright_red//'Error'//color_reset &
 			//fg_bold//': unexpected token "'//current%text//'"' &
-			//' (kind <'//kind_name(current%kind)//'>)' &
+			//' (kind <'//kind_name(parser%current_kind())//'>)' &
 			//', expected <'//kind_name(kind)//'>' &
 			//color_reset &
 			)
@@ -768,12 +849,12 @@ end function current_token
 
 !===============================================================================
 
-function next(parser)
+function next_parser_token(parser) result(next)
 	class(parser_t) :: parser
 	type(syntax_token_t) :: next
 	next = parser%current()
 	parser%pos = parser%pos + 1
-end function next
+end function next_parser_token
 
 !===============================================================================
 
@@ -785,12 +866,37 @@ recursive function syntax_eval(node) result(res)
 
 	!********
 
-	! TODO: polymorphic types?
+	! TODO: polymorphic value types for general num/bool/etc.
 	integer :: left, right
 
 	if (node%kind == num_expr) then
 		res = node%num%val
 		return
+	end if
+
+	if (node%kind == unary_expr) then
+
+		!left  = syntax_eval(node%left )
+		right = syntax_eval(node%right)
+		!print *, 'right = ', right
+
+		if      (node%op%kind == plus_token) then
+			res =  right
+		else if (node%op%kind == minus_token) then
+			res = -right
+		else
+
+			! Anything here should have been caught by a parser diagnostic
+			write(*,*) fg_bold_bright_red//'Error'//color_reset &
+					//fg_bold//': unexpected unary operator "' &
+					//node%op%text//'"'//color_reset
+
+			res = 0
+
+		end if
+
+		return
+
 	end if
 
 	if (node%kind == binary_expr) then
@@ -847,13 +953,15 @@ subroutine interpret()
 
 	! This is the interpreter shell
 	!
-	! TODO: arg for iu as stdin vs another file
+	! TODO: arg for iu as stdin vs another file:
+	!   - enable input echo for file input (not for stdin)
+	!   - write file name and line num for diagnostics
 
 	character(len = :), allocatable :: line
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
 	integer, parameter :: iu = input_unit, ou = output_unit
-	integer :: i, io, res
+	integer :: io, res
 
 	type(syntax_node_t) :: tree
 
@@ -868,7 +976,7 @@ subroutine interpret()
 		!print *, 'line = <', line, '>'
 		!print *, 'io = ', io
 
-		!! Echo input?  TODO: enable echo if iu is not stdin
+		!! Echo input?
 		!write(ou, '(a)') line
 
 		if (io == iostat_end) exit
@@ -880,13 +988,7 @@ subroutine interpret()
 
 		if (debug > 0) print *, 'tree = ', tree%str()
 
-		do i = 1, tree%diagnostics%len
-			! TODO: write file name and line number for file iu
-			write(ou,*)
-			write(ou, '(a)') line
-			write(ou, '(a)') tree%diagnostics%v(i)%s
-			write(ou,*)
-		end do
+		call tree%log_diagnostics(line, ou)
 
 		! Don't try to evaluate with errors
 		if (tree%diagnostics%len > 0) cycle
@@ -902,11 +1004,50 @@ end subroutine interpret
 
 !===============================================================================
 
+subroutine log_diagnostics(node, line, ou)
+
+	class(syntax_node_t), intent(in) :: node
+	character(len = *)  , intent(in) :: line
+	integer, optional   , intent(in) :: ou
+
+	!********
+
+	integer :: i, oul
+
+	oul = output_unit
+	if (present(ou)) oul = ou
+
+	do i = 1, node%diagnostics%len
+		! Check rustc conventions for style of line numbers in diagnostics
+		write(oul,*)
+		write(oul, '(a)') line
+		write(oul, '(a)') node%diagnostics%v(i)%s
+		write(oul,*)
+	end do
+
+end subroutine log_diagnostics
+
+!===============================================================================
+
 integer function eval(str)
 
 	character(len = *), intent(in) :: str
 
-	eval = syntax_eval(syntax_parse(str))
+	type(syntax_node_t) :: tree
+
+	!! One-liner, but no error handling.  This can crash unit tests without
+	!! reporting failures
+	!eval = syntax_eval(syntax_parse(str))
+
+	tree = syntax_parse(str)
+	call tree%log_diagnostics(str)
+
+	if (tree%diagnostics%len > 0) then
+		eval = 0
+		return
+	end if
+
+	eval = syntax_eval(tree)
 
 end function eval
 

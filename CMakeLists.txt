@@ -105,6 +105,9 @@ add_executable(${TEST_EXE}
 	)
 target_link_libraries(${TEST_EXE} ${LINK_LIBS})
 
+# Thanks gfort, I'm aware of integer division
+target_compile_options(${TEST_EXE} PRIVATE "-Wno-integer-division")
+
 #===============================================================================
 
 # This tells cmake to use the fortran compiler as the linker.  See:
