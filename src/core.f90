@@ -15,27 +15,41 @@ module core_m
 
 	integer, parameter :: debug = 0
 
+	! TODO:
+	!
+	! Add:
+	!  - xor
+	!  - <, >, <=, >=, !=
+	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
+	!  - ++, --
+	!  - bitwise operators
+	!  - assignment and +=, -=, etc.
+
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
-			bool_expr        = 18, &
-			literal_expr     = 17, &
-			true_keyword     = 16, &
-			false_keyword    = 15, &
-			identifier_token = 14, &
-			unary_expr       = 13, &
-			lparen_token     = 12, &
-			rparen_token     = 11, &
-			num_expr         = 10, &
-			binary_expr      =  9, &
-			star_token       =  8, &
-			slash_token      =  7, &
-			bad_token        =  6, &
-			plus_token       =  5, &
-			minus_token      =  4, &
-			whitespace_token =  3, &
-			num_token        =  2, &
-			eof_token        =  1
+			equals_equals_token = 22, &
+			and_keyword         = 21, &
+			or_keyword          = 20, &
+			not_keyword         = 19, &
+			bool_expr           = 18, &
+			literal_expr        = 17, &
+			true_keyword        = 16, &
+			false_keyword       = 15, &
+			identifier_token    = 14, &
+			unary_expr          = 13, &
+			lparen_token        = 12, &
+			rparen_token        = 11, &
+			num_expr            = 10, &
+			binary_expr         =  9, &
+			star_token          =  8, &
+			slash_token         =  7, &
+			bad_token           =  6, &
+			plus_token          =  5, &
+			minus_token         =  4, &
+			whitespace_token    =  3, &
+			num_token           =  2, &
+			eof_token           =  1
 
 	!********
 
@@ -45,8 +59,6 @@ module core_m
 		integer :: ival
 		contains
 			procedure :: str => value_str
-			!procedure, pass(dst) :: copy => value_copy
-			!generic, public :: assignment(=) => copy
 	end type value_t
 
 	!********
@@ -95,7 +107,8 @@ module core_m
 		! fns.  current_char() returns a char, while the others return syntax
 		! tokens
 		contains
-			procedure :: lex, current => current_char
+			procedure :: lex, peek => peek_char, current => current_char, &
+				lookahead => lookahead_char
 
 	end type lexer_t
 
@@ -188,24 +201,28 @@ function kind_name(kind)
 	character(len = :), allocatable :: kind_name
 
 	character(len = *), parameter :: names(*) = [ &
-			"eof_token       ", & !  1
-			"num_token       ", & !  2
-			"whitespace_token", & !  3
-			"minus_token     ", & !  4
-			"plus_token      ", & !  5
-			"bad_token       ", & !  6
-			"slash_token     ", & !  7
-			"star_token      ", & !  8
-			"binary_expr     ", & !  9
-			"num_expr        ", & ! 10
-			"rparen_token    ", & ! 11
-			"lparen_token    ", & ! 12
-			"unary_expr      ", & ! 13
-			"identifier_token", & ! 14
-			"false_keyword   ", & ! 15
-			"true_keyword    ", & ! 16
-			"literal_expr    ", & ! 17
-			"bool_expr       "  & ! 18
+			"eof_token          ", & !  1
+			"num_token          ", & !  2
+			"whitespace_token   ", & !  3
+			"minus_token        ", & !  4
+			"plus_token         ", & !  5
+			"bad_token          ", & !  6
+			"slash_token        ", & !  7
+			"star_token         ", & !  8
+			"binary_expr        ", & !  9
+			"num_expr           ", & ! 10
+			"rparen_token       ", & ! 11
+			"lparen_token       ", & ! 12
+			"unary_expr         ", & ! 13
+			"identifier_token   ", & ! 14
+			"false_keyword      ", & ! 15
+			"true_keyword       ", & ! 16
+			"literal_expr       ", & ! 17
+			"bool_expr          ", & ! 18
+			"not_keyword        ", & ! 19
+			"or_keyword         ", & ! 20
+			"and_keyword        ", & ! 21
+			"equals_equals_token"  & ! 22
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -231,7 +248,8 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	!********
 
-	character(len = :), allocatable :: indentl, kind, left, op, right, val
+	character(len = :), allocatable :: indentl, kind, left, op, right, val, &
+		type
 
 	indentl = ''
 	if (present(indent)) indentl = indent
@@ -242,6 +260,8 @@ recursive function syntax_node_str(node, indent) result(str)
 	op    = ''
 	right = ''
 	val   = ''
+
+	type  = indentl//'    type  = '//kind_name(node%val%kind)//line_feed
 
 	if      (node%kind == binary_expr) then
 
@@ -266,6 +286,7 @@ recursive function syntax_node_str(node, indent) result(str)
 	str = line_feed// &
 		indentl//'{'//line_feed// &
 			kind // &
+			type // &
 			left // &
 			op   // &
 			right// &
@@ -311,26 +332,6 @@ end subroutine syntax_node_copy
 
 !===============================================================================
 
-!recursive subroutine value_copy(dst, src)
-!
-! TODO remove.  My issue was I forgot to copy val within syntax_node_copy().
-! Default assignment is fine for value_t itself.
-!
-!	! Deep copy
-!
-!	class(value_t), intent(inout) :: dst
-!	class(value_t), intent(in)    :: src
-!
-!	if (debug > 3) print *, 'starting value_copy()'
-!
-!	dst%kind = src%kind
-!	dst%ival = src%ival
-!	dst%bval = src%bval
-!
-!end subroutine value_copy
-
-!===============================================================================
-
 function new_token(kind, pos, text, val) result(token)
 
 	integer :: kind, pos
@@ -346,24 +347,43 @@ function new_token(kind, pos, text, val) result(token)
 	token%text = text
 
 	if (present(val)) token%val  = val
-	!if (present(ival)) token%val  = new_value(kind, ival = ival)
 
 end function new_token
 
 !===============================================================================
 
-character function current_char(lexer)
+character function peek_char(lexer, offset)
 
 	class(lexer_t) :: lexer
 
-	if (lexer%pos > len(lexer%text)) then
-		current_char = null_char
+	integer, intent(in) :: offset
+
+	!********
+
+	integer :: pos
+
+	pos = lexer%pos + offset
+
+	if (pos > len(lexer%text)) then
+		peek_char = null_char
 		return
 	end if
 
-	current_char = lexer%text( lexer%pos: lexer%pos )
+	peek_char = lexer%text(pos: pos)
 
+end function peek_char
+
+!===============================================================================
+
+character function current_char(lexer)
+	class(lexer_t) :: lexer
+	current_char = lexer%peek(0)
 end function current_char
+
+character function lookahead_char(lexer)
+	class(lexer_t) :: lexer
+	lookahead_char = lexer%peek(1)
+end function lookahead_char
 
 !===============================================================================
 
@@ -408,9 +428,7 @@ function lex(lexer) result(token)
 					)
 		end if
 
-		!val = new_value(num_token, ival = ival)
 		val = new_value(num_expr, ival = ival)
-
 		token = new_token(num_token, start, text, val)
 		return
 
@@ -439,6 +457,10 @@ function lex(lexer) result(token)
 		end do
 		text = lexer%text(start: lexer%pos-1)
 
+		! This block handles booleans as well as identifiers, but note that it
+		! does not set the value here like the is_digit() case for numbers
+		! above.  The boolean value is not set until parse_primary_expr().
+
 		kind = get_keyword_kind(text)
 		token = new_token(kind, start, text)
 		return
@@ -449,17 +471,44 @@ function lex(lexer) result(token)
 
 		case ("+")
 			token = new_token(plus_token  , lexer%pos, lexer%current())
+
 			! TODO: prefix/postfix inc/dec operators (++, --)
+
 		case ("-")
 			token = new_token(minus_token , lexer%pos, lexer%current())
+
 		case ("*")
 			token = new_token(star_token  , lexer%pos, lexer%current())
+
 		case ("/")
 			token = new_token(slash_token , lexer%pos, lexer%current())
+
 		case ("(")
 			token = new_token(lparen_token, lexer%pos, lexer%current())
+
 		case (")")
 			token = new_token(rparen_token, lexer%pos, lexer%current())
+
+		case ("=")
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(equals_equals_token, lexer%pos, "==")
+			else
+
+				! TODO: refactor w/ default case below since Fortran is weird
+				! about breaking in select case
+				token = new_token(bad_token, lexer%pos, lexer%current())
+
+				call lexer%diagnostics%push( &
+					repeat(' ', lexer%pos-1)//fg_bright_red &
+					//repeat('^', 1)//color_reset//line_feed &
+					//fg_bold_bright_red//'Error'//color_reset &
+					//fg_bold//": unexpected character '"//lexer%current() &
+					//"'" &
+					//color_reset &
+					)
+
+			end if
 
 		case default
 
@@ -506,12 +555,25 @@ integer function get_keyword_kind(text) result(kind)
 
 	! Here we start to depart from Fortran syntax (true, not .true.)
 	select case (text)
+
 		case ("true")
 			kind = true_keyword
+
 		case ("false")
 			kind = false_keyword
+
+		case ("not")
+			kind = not_keyword
+
+		case ("and")
+			kind = and_keyword
+
+		case ("or")
+			kind = or_keyword
+
 		case default
 			kind = identifier_token
+
 	end select
 
 	!print *, 'get_keyword_kind = ', kind
@@ -556,12 +618,7 @@ function new_parser(str) result(parser)
 
 		if (token%kind /= whitespace_token .and. &
 		    token%kind /= bad_token) then
-
-			!print *, 'token = <', token%text, '> ', &
-			!		'<'//kind_name(token%kind)//'>'
-
 			call tokens%push(token)
-
 		end if
 
 		if (token%kind == eof_token) exit
@@ -666,7 +723,10 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		right = parser%parse_expr(prec)
 		expr  = new_unary_expr(op, right)
 
-		! TODO: do some case analysis and check op is allowed with right type
+		if (.not. is_unary_op_allowed(op%kind, right%val%kind)) then
+			! TODO: wording, styling
+			call parser%diagnostics%push('Error: unary op not defined for type')
+		end if
 
 	else
 		expr = parser%parse_primary_expr()
@@ -680,8 +740,9 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		right = parser%parse_expr(prec)
 		expr  = new_binary_expr(expr, op, right)
 
-		! TODO: this will need exceptions for int + float, etc.
-		if (expr%left%val%kind /= expr%right%val%kind) then
+		!if (expr%left%val%kind /= expr%right%val%kind) then
+		if (.not. is_binary_op_allowed( &
+			expr%left%val%kind, op%kind, expr%right%val%kind)) then
 			! TODO: wording, styling
 			call parser%diagnostics%push('Error: bin op not defined for types')
 		end if
@@ -689,6 +750,61 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 	end do
 
 end function parse_expr
+
+!===============================================================================
+
+logical function is_binary_op_allowed(left, op, right)
+
+	! Is an operation allowed with the types of operator op and left/right
+	! operands?
+
+	integer, intent(in) :: left, op, right
+
+	!is_binary_op_allowed = .true.
+	!return
+
+	is_binary_op_allowed = .false.
+
+	select case (op)
+
+		case (plus_token, minus_token, star_token, slash_token)
+			! TODO: floats
+			is_binary_op_allowed = left == num_expr  .and. right == num_expr
+
+		case (and_keyword, or_keyword)
+			is_binary_op_allowed = left == bool_expr .and. right == bool_expr
+
+		case (equals_equals_token)
+			is_binary_op_allowed = &
+				(left == bool_expr .and. right == bool_expr) .or. &
+				(left == num_expr  .and. right == num_expr)
+
+	end select
+
+end function is_binary_op_allowed
+
+!===============================================================================
+
+logical function is_unary_op_allowed(op, operand)
+
+	! Is a unary operation allowed with kinds operator op and operand?
+
+	integer, intent(in) :: op, operand
+
+	is_unary_op_allowed = .false.
+
+	select case (op)
+
+		case (plus_token, minus_token)
+			! TODO: floats
+			is_unary_op_allowed = operand == num_expr
+
+		case (not_keyword)
+			is_unary_op_allowed = operand == bool_expr
+
+	end select
+
+end function is_unary_op_allowed
 
 !===============================================================================
 
@@ -704,6 +820,28 @@ end function current_kind
 
 !===============================================================================
 
+integer function get_unary_op_prec(kind) result(prec)
+
+	! Get unary operator precedence
+
+	integer, intent(in) :: kind
+
+	!********
+
+	select case (kind)
+
+		case (plus_token, minus_token, not_keyword)
+			prec = 6
+
+		case default
+			prec = 0
+
+	end select
+
+end function get_unary_op_prec
+
+!===============================================================================
+
 integer function get_binary_op_prec(kind) result(prec)
 
 	! Get binary operator precedence
@@ -715,9 +853,18 @@ integer function get_binary_op_prec(kind) result(prec)
 	select case (kind)
 
 		case (star_token, slash_token)
-			prec = 2
+			prec = 5
 
 		case (plus_token, minus_token)
+			prec = 4
+
+		case (equals_equals_token)  ! TODO: bang_equals too
+			prec = 3
+
+		case (and_keyword)
+			prec = 2
+
+		case (or_keyword)
 			prec = 1
 
 		case default
@@ -726,28 +873,6 @@ integer function get_binary_op_prec(kind) result(prec)
 	end select
 
 end function get_binary_op_prec
-
-!===============================================================================
-
-integer function get_unary_op_prec(kind) result(prec)
-
-	! Get unary operator precedence
-
-	integer, intent(in) :: kind
-
-	!********
-
-	select case (kind)
-
-		case (plus_token, minus_token)
-			prec = 3
-
-		case default
-			prec = 0
-
-	end select
-
-end function get_unary_op_prec
 
 !===============================================================================
 
@@ -780,7 +905,6 @@ function parse_primary_expr(parser) result(expr)
 			keyword = parser%next()
 			bool = keyword%kind == true_keyword
 			expr = new_bool_expr(bool)
-			!call value_copy(expr, new_bool_expr(bool))
 
 			!print *, 'expr%val%bval = ', expr%val%bval
 
@@ -803,27 +927,14 @@ function new_bool_expr(bool) result(expr)
 
 	type(syntax_node_t) :: expr
 
-	!********
-
-	type(value_t) :: val
-
 	!print *, 'new_bool_expr'
 	!print *, 'bool = ', bool
 
-	val%kind = bool_expr
-	val%bval = bool
-
 	! The expression node is a generic literal expression, while its child val
 	! member indicates the specific type (e.g. bool_expr or num_expr)
-
-	!expr%kind = bool_expr
 	expr%kind = literal_expr
 
-	! TODO: cleanup, also use new_value()
-	!expr%val%kind = bool_expr
-	!expr%val%bval = bool
-	expr%val  = val
-	!expr%num  = num
+	expr%val = new_value(bool_expr, bval = bool)
 
 	!print *, 'expr%val%bval = ', expr%val%bval
 
@@ -862,8 +973,6 @@ function new_binary_expr(left, op, right) result(expr)
 
 	!********
 
-	! TODO: do type checking here and in new_unary_expr()
-
 	if (debug > 1) print *, 'new_binary_expr'
 	if (debug > 1) print *, 'left  = ', left %str()
 	if (debug > 1) print *, 'right = ', right%str()
@@ -877,13 +986,39 @@ function new_binary_expr(left, op, right) result(expr)
 	expr%op    = op
 	expr%right = right
 
-	! Pass the value type up the tree for type checking in parent
-	expr%val%kind = left%val%kind
+	! Pass the result value type up the tree for type checking in parent
+	expr%val%kind = get_binary_op_kind(left%val%kind, op%kind, right%val%kind)
+	!expr%val%kind = left%val%kind
 
 	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_binary_expr'
 
 end function new_binary_expr
+
+!===============================================================================
+
+integer function get_binary_op_kind(left, op, right)
+
+	! Is an operation allowed with kinds operator op and operand?
+
+	integer, intent(in) :: left, op, right
+
+	! Comparison operations can take 2 numbers, but always return a bool
+	if (op == equals_equals_token) then
+		!print *, 'bool_expr'
+		get_binary_op_kind = bool_expr
+		return
+	end if
+	!print *, 'default'
+
+	! Other operations return the same type as their operands
+	!
+	! TODO: floats, int casting.  1 + 0.5 and 0.5 + 1 should both cast to float,
+	! not int
+
+	get_binary_op_kind = left
+
+end function get_binary_op_kind
 
 !===============================================================================
 
@@ -905,6 +1040,9 @@ function new_unary_expr(op, right) result(expr)
 	expr%op    = op
 	expr%right = right
 
+	! Pass the result value type up the tree for type checking in parent.  IIRC
+	! all unary operators result in the same type as their operand, hence there
+	! is a get_binary_op_kind() fn but no get_unary_op_kind() fn
 	expr%val%kind = right%val%kind
 
 	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
@@ -957,7 +1095,7 @@ end function match
 
 function current_token(parser)
 
-	! Refactor in terms of peek(0) ?
+	! Refactor in terms of peek_token(0) ?
 	class(parser_t) :: parser
 	type(syntax_token_t) :: current_token
 
@@ -987,46 +1125,36 @@ recursive function syntax_eval(node) result(res)
 
 	type(syntax_node_t) :: node
 
-	!integer :: res
 	type(value_t) :: res
 
 	!********
 
-	!integer :: left, right
 	type(value_t) :: left, right
 
 	if (node%kind == literal_expr) then
+		! This handles both ints, bools, etc.
 		res = node%val
 		return
 	end if
 
-	! TODO remove
-	!if (node%kind == num_expr) then
-	!	res%kind = num_expr
-	!	res%ival = node%val%ival
-	!	return
-	!end if
-
-	!if (node%kind == bool_expr) then
-	!	res%kind = bool_expr
-	!	res%bval = node%val%bval
-	!	!print *, 'bval = ', res%bval
-	!	return
-	!end if
-
 	if (node%kind == unary_expr) then
-
-		! TODO: bool unary operators
 
 		right = syntax_eval(node%right)
 		!print *, 'right = ', right
 
 		res%kind = right%kind
 
+		! TODO: add fallback type checking here?
+
 		if      (node%op%kind == plus_token) then
 			res      =  right
+
 		else if (node%op%kind == minus_token) then
 			res%ival = -right%ival
+
+		else if (node%op%kind == not_keyword) then
+			res%bval = .not. right%bval
+
 		else
 
 			! Anything here should have been caught by a parser diagnostic
@@ -1044,27 +1172,55 @@ recursive function syntax_eval(node) result(res)
 
 	if (node%kind == binary_expr) then
 
-		! TODO: bool binary operators
-
 		left  = syntax_eval(node%left )
 		right = syntax_eval(node%right)
 
 		!print *, 'left  = ', left
 		!print *, 'right = ', right
 
-		! TODO: check right kind type matche in parser, and also here as
-		! a fallback (e.g. I'll add floats and forget this needs fixing)
+		! The parser should catch this, but do it here as a fallback (e.g. I'll
+		! add floats later and forget this needs fixing)
+		if (left%kind /= right%kind) then
+			write(*,*) fg_bold_bright_red//'Error'//color_reset &
+				//fg_bold//': unexpected types for binary operator "' &
+				//node%op%text//'"'//color_reset
+		end if
 
-		res%kind = left%kind
+		!res%kind = left%kind
+		res%kind = get_binary_op_kind(left%kind, node%op%kind, right%kind)
 
 		if      (node%op%kind == plus_token) then
 			res%ival = left%ival + right%ival
+
+			! TODO: floats
+
 		else if (node%op%kind == minus_token) then
 			res%ival = left%ival - right%ival
+
 		else if (node%op%kind == star_token) then
 			res%ival = left%ival * right%ival
+
 		else if (node%op%kind == slash_token) then
 			res%ival = left%ival / right%ival
+
+		else if (node%op%kind == and_keyword) then
+			res%bval = left%bval .and. right%bval
+
+		else if (node%op%kind == or_keyword) then
+			res%bval = left%bval .or.  right%bval
+
+		else if (node%op%kind == equals_equals_token) then
+
+			if (left%kind == bool_expr) then
+				res%bval = left%bval .eqv. right%bval
+			else if (left%kind == num_expr) then
+				res%bval = left%ival  ==   right%ival
+			else
+				write(*,*) fg_bold_bright_red//'Error'//color_reset &
+					//fg_bold//': unexpected types for comparison "' &
+					//node%op%text//'"'//color_reset
+			end if
+
 		else
 
 			! Anything here should have been caught by a parser diagnostic
@@ -1221,8 +1377,6 @@ end function
 !===============================================================================
 
 integer function eval_int(str)
-
-	! TODO: polymorphism.  testing will need updates
 
 	character(len = *), intent(in) :: str
 

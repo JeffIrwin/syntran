@@ -39,7 +39,7 @@ subroutine unit_test_bin_arith(npass, nfail)
 			eval_int('24 / 6') == 24 / 6, &
 			eval_int('24 / 6 / 2') == 24 / 6 / 2, &
 			eval_int('343 - 87654345 / 27 + 76 * 234 - 65432 / 63') &
-			   == 343 - 87654345 / 27 + 76 * 234 - 65432 / 63 &
+			       == 343 - 87654345 / 27 + 76 * 234 - 65432 / 63 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -124,7 +124,7 @@ subroutine unit_test_unary_arith(npass, nfail)
 			eval_int('-73 - (+48)') == -73 - (+48), &
 			eval_int('24 / (-6 / 2)') == 24 / (-6 / 2), &
 			eval_int('343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63') &
-			   == 343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63   &
+			       == 343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63   &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -147,16 +147,64 @@ subroutine unit_test_bool(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: test boolean operators after I implement them
 	tests = &
 		[   &
 			eval('true')  == 'true' , &
-			eval('false') == 'false'  &
+			eval('false') == 'false', &
+			eval('not true')  == 'false', &
+			eval('not false')  == 'true',  &
+			eval('not not true')  == 'true',  &
+			eval('not not false')  == 'false',  &
+
+			eval('false and false')  == 'false',  &
+			eval('true  and false')  == 'false',  &
+			eval('false and true ')  == 'false',  &
+			eval('true  and true ')  == 'true' ,  &
+
+			eval('false or  false')  == 'false',  &
+			eval('true  or  false')  == 'true' ,  &
+			eval('false or  true ')  == 'true' ,  &
+			eval('true  or  true ')  == 'true' ,  &
+
+			eval('not true or true  ')  == 'true' ,  &
+			eval('not (true or true)')  == 'false'   &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_bool
+
+!===============================================================================
+
+subroutine unit_test_comparisons(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'comparisons'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval('true  == true ')  == 'true' ,  &
+			eval('false == false')  == 'true' ,  &
+			eval('42    == 1337 ')  == 'false',  &
+			eval('31415 == 31415')  == 'true' ,  &
+			eval('36+7  == 43   ')  == 'true' ,  &
+			eval('12    == 36/3 ')  == 'true' ,  &
+			eval('12    == 36*3 ')  == 'false',  &
+			eval('true  == false')  == 'false'   &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_comparisons
 
 !===============================================================================
 
@@ -174,7 +222,10 @@ subroutine unit_test_bad_syntax(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! Don't pollute the logs with error messages that I intend to trigger
+	! Anything with a syntax error should evaluate to an empty string.  Set
+	! quiet arg to not pollute the logs with error messages that I intend
+	! to trigger
+
 	tests = &
 		[   &
 			eval('1 +* 2', quiet = .true.) == '', &
@@ -183,17 +234,17 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('1 + $', quiet = .true.) == '', &
 			eval('4) + 5', quiet = .true.) == '', &
 			eval('true + 4', quiet = .true.) == '', &
+			eval('+true', quiet = .true.) == '', &
+			eval('not 1', quiet = .true.) == '', &
+			eval('true == 1', quiet = .true.) == '', &
+			eval('0 == false', quiet = .true.) == '', &
+			eval('1 + (2 == 3)', quiet = .true.) == '', &
 			eval('7 * false', quiet = .true.) == '' &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_bad_syntax
-
-!===============================================================================
-
-! TODO:  add unit testing for bad syntax.  Confirm that they at least evaluate
-! to empty strings instead of erroneously returing an int
 
 !===============================================================================
 
@@ -243,12 +294,12 @@ subroutine unit_tests(iostat)
 	npass = 0
 	nfail = 0
 
-	call unit_test_bad_syntax (npass, nfail)
-
 	call unit_test_bin_arith  (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)
 	call unit_test_bool       (npass, nfail)
+	call unit_test_comparisons(npass, nfail)
+	call unit_test_bad_syntax (npass, nfail)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)
