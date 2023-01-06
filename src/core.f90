@@ -22,12 +22,13 @@ module core_m
 	!  - <, >, <=, >=, !=
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - ++, --
-	!  - bitwise operators
 	!  - assignment and +=, -=, etc.
+	!  - bitwise operators
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			bang_equals_token   = 23, &
 			equals_equals_token = 22, &
 			and_keyword         = 21, &
 			or_keyword          = 20, &
@@ -222,7 +223,8 @@ function kind_name(kind)
 			"not_keyword        ", & ! 19
 			"or_keyword         ", & ! 20
 			"and_keyword        ", & ! 21
-			"equals_equals_token"  & ! 22
+			"equals_equals_token", & ! 22
+			"bang_equals_token  "  & ! 23
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -510,6 +512,27 @@ function lex(lexer) result(token)
 
 			end if
 
+		case ("!")
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(bang_equals_token, lexer%pos, "!=")
+			else
+
+				! TODO: refactor w/ default case below since Fortran is weird
+				! about breaking in select case
+				token = new_token(bad_token, lexer%pos, lexer%current())
+
+				call lexer%diagnostics%push( &
+					repeat(' ', lexer%pos-1)//fg_bright_red &
+					//repeat('^', 1)//color_reset//line_feed &
+					//fg_bold_bright_red//'Error'//color_reset &
+					//fg_bold//": unexpected character '"//lexer%current() &
+					//"'" &
+					//color_reset &
+					)
+
+			end if
+
 		case default
 
 			token = new_token(bad_token, lexer%pos, lexer%current())
@@ -774,7 +797,7 @@ logical function is_binary_op_allowed(left, op, right)
 		case (and_keyword, or_keyword)
 			is_binary_op_allowed = left == bool_expr .and. right == bool_expr
 
-		case (equals_equals_token)
+		case (equals_equals_token, bang_equals_token)
 			is_binary_op_allowed = &
 				(left == bool_expr .and. right == bool_expr) .or. &
 				(left == num_expr  .and. right == num_expr)
@@ -858,7 +881,7 @@ integer function get_binary_op_prec(kind) result(prec)
 		case (plus_token, minus_token)
 			prec = 4
 
-		case (equals_equals_token)  ! TODO: bang_equals too
+		case (equals_equals_token, bang_equals_token)
 			prec = 3
 
 		case (and_keyword)
@@ -1004,7 +1027,7 @@ integer function get_binary_op_kind(left, op, right)
 	integer, intent(in) :: left, op, right
 
 	! Comparison operations can take 2 numbers, but always return a bool
-	if (op == equals_equals_token) then
+	if (op == equals_equals_token .or. op == bang_equals_token) then
 		!print *, 'bool_expr'
 		get_binary_op_kind = bool_expr
 		return
@@ -1221,6 +1244,20 @@ recursive function syntax_eval(node) result(res)
 					//node%op%text//'"'//color_reset
 			end if
 
+		else if (node%op%kind == bang_equals_token) then
+
+			if (left%kind == bool_expr) then
+				res%bval = left%bval .neqv. right%bval
+			else if (left%kind == num_expr) then
+				res%bval = left%ival  /=   right%ival
+			else
+				! TODO: refactor w/ above case.  Add a routine to exit(-1) for
+				! internal syntran error
+				write(*,*) fg_bold_bright_red//'Error'//color_reset &
+					//fg_bold//': unexpected types for comparison "' &
+					//node%op%text//'"'//color_reset
+			end if
+
 		else
 
 			! Anything here should have been caught by a parser diagnostic
@@ -1228,7 +1265,8 @@ recursive function syntax_eval(node) result(res)
 					//fg_bold//': unexpected binary operator "' &
 					//node%op%text//'"'//color_reset
 
-			!! This is catastrophic, but it kills the unit tests
+			!! This is catastrophic, but it kills the unit tests.  TODO:
+			!internal syntran error
 			!stop
 
 			res%kind = 0

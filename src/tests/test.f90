@@ -199,6 +199,10 @@ subroutine unit_test_comparisons(npass, nfail)
 			eval('36+7  == 43   ')  == 'true' ,  &
 			eval('12    == 36/3 ')  == 'true' ,  &
 			eval('12    == 36*3 ')  == 'false',  &
+			eval('12    != 36*3 ')  == 'true' ,  &
+			eval('12    != 36/3 ')  == 'false',  &
+			eval('true  != true ')  == 'false',  &
+			eval('false != true ')  == 'true' ,  &
 			eval('true  == false')  == 'false'   &
 		]
 
@@ -238,6 +242,7 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('not 1', quiet = .true.) == '', &
 			eval('true == 1', quiet = .true.) == '', &
 			eval('0 == false', quiet = .true.) == '', &
+			eval('0 != false', quiet = .true.) == '', &
 			eval('1 + (2 == 3)', quiet = .true.) == '', &
 			eval('7 * false', quiet = .true.) == '' &
 		]
