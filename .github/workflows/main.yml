@@ -50,6 +50,7 @@ jobs:
     - if: matrix.os == 'windows-latest'
       run: |
         set PATH
+        echo %PATH%
         where gfortran
         which gfortran
     #    Get-Content samples/arithmetic.syntran | ./build/syntran

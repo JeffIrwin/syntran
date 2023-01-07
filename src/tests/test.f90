@@ -236,6 +236,8 @@ subroutine unit_test_assignment(npass, nfail)
 	tests = &
 		[   &
 			eval('x = 1 ') == '1' ,  &
+			eval('let a =  let b = 42 ') == '42' ,  &
+			eval('let a = (let b = 42)') == '42' ,  &
 			interpret( &
 				'a = 2'//line_feed// &
 				'b = a') == '2',     &
