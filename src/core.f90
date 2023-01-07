@@ -18,18 +18,21 @@ module core_m
 	! TODO:
 	!
 	! Add:
-	!  - xor
-	!  - <, >, <=, >=, !=
-	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
+	!  - assignment and +=, -=, *=, etc.
 	!  - ++, --
-	!  - assignment and +=, -=, etc.
+	!  - <, >, <=, >=
+	!  - floats, characters, strings
+	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
+	!  - xor
 	!  - bitwise operators
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			equals_token        = 25, & ! '='
+			assignment_expr     = 24, &
 			bang_equals_token   = 23, &
-			equals_equals_token = 22, &
+			eequals_token       = 22, & ! '=='
 			and_keyword         = 21, &
 			or_keyword          = 20, &
 			not_keyword         = 19, &
@@ -55,12 +58,35 @@ module core_m
 	!********
 
 	type value_t
+		! TODO: rename this kind to type?  Careful w/ search/replace
 		integer :: kind
 		logical :: bval
 		integer :: ival
 		contains
 			procedure :: str => value_str
 	end type value_t
+
+	!********
+
+	type ternary_tree_node_t
+		character :: split_char = ''
+		type(ternary_tree_node_t), allocatable :: left, mid, right
+
+		!integer, allocatable :: val
+		type(value_t), allocatable :: val
+
+		!contains
+		!	procedure :: print => ternary_node_print
+	end type ternary_tree_node_t
+
+	type variable_dictionary_t
+		type(ternary_tree_node_t), allocatable :: root
+		contains
+			! TODO
+			!procedure :: &
+			!	insert => variable_insert, &
+			!	search => variable_search
+	end type variable_dictionary_t
 
 	!********
 
@@ -79,10 +105,13 @@ module core_m
 
 		integer :: kind
 		type(syntax_node_t), allocatable :: left, right
-		type(syntax_token_t) :: op
+		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
 
 		type(string_vector_t) :: diagnostics
+
+		! FIXME: when adding new members here, make sure to explicitly copy them
+		! in syntax_node_copy, or else assignment will yield bugs
 
 		contains
 			procedure :: str => syntax_node_str, log_diagnostics
@@ -126,10 +155,13 @@ module core_m
 
 		type(string_vector_t) :: diagnostics
 
+		type(variable_dictionary_t) :: variables
+
 		contains
 			procedure :: match, tokens_str, current_kind, &
 				current => current_token, next => next_parser_token, &
-				parse_expr, parse_primary_expr
+				peek => parser_peek_token, peek_kind, &
+				parse_expr, parse_primary_expr, parse_assignment_expr
 
 	end type parser_t
 
@@ -202,29 +234,31 @@ function kind_name(kind)
 	character(len = :), allocatable :: kind_name
 
 	character(len = *), parameter :: names(*) = [ &
-			"eof_token          ", & !  1
-			"num_token          ", & !  2
-			"whitespace_token   ", & !  3
-			"minus_token        ", & !  4
-			"plus_token         ", & !  5
-			"bad_token          ", & !  6
-			"slash_token        ", & !  7
-			"star_token         ", & !  8
-			"binary_expr        ", & !  9
-			"num_expr           ", & ! 10
-			"rparen_token       ", & ! 11
-			"lparen_token       ", & ! 12
-			"unary_expr         ", & ! 13
-			"identifier_token   ", & ! 14
-			"false_keyword      ", & ! 15
-			"true_keyword       ", & ! 16
-			"literal_expr       ", & ! 17
-			"bool_expr          ", & ! 18
-			"not_keyword        ", & ! 19
-			"or_keyword         ", & ! 20
-			"and_keyword        ", & ! 21
-			"equals_equals_token", & ! 22
-			"bang_equals_token  "  & ! 23
+			"eof_token        ", & !  1
+			"num_token        ", & !  2
+			"whitespace_token ", & !  3
+			"minus_token      ", & !  4
+			"plus_token       ", & !  5
+			"bad_token        ", & !  6
+			"slash_token      ", & !  7
+			"star_token       ", & !  8
+			"binary_expr      ", & !  9
+			"num_expr         ", & ! 10
+			"rparen_token     ", & ! 11
+			"lparen_token     ", & ! 12
+			"unary_expr       ", & ! 13
+			"identifier_token ", & ! 14
+			"false_keyword    ", & ! 15
+			"true_keyword     ", & ! 16
+			"literal_expr     ", & ! 17
+			"bool_expr        ", & ! 18
+			"not_keyword      ", & ! 19
+			"or_keyword       ", & ! 20
+			"and_keyword      ", & ! 21
+			"eequals_token    ", & ! 22
+			"bang_equals_token", & ! 23
+			"assignment_expr  ", & ! 24
+			"equals_token     "  & ! 25
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -251,7 +285,7 @@ recursive function syntax_node_str(node, indent) result(str)
 	!********
 
 	character(len = :), allocatable :: indentl, kind, left, op, right, val, &
-		type
+		type, identifier
 
 	indentl = ''
 	if (present(indent)) indentl = indent
@@ -263,11 +297,23 @@ recursive function syntax_node_str(node, indent) result(str)
 	right = ''
 	val   = ''
 
+	identifier = ''
+
 	type  = indentl//'    type  = '//kind_name(node%val%kind)//line_feed
 
 	if      (node%kind == binary_expr) then
 
 		left  = indentl//'    left  = '//node%left %str(indentl//'    ') &
+				//line_feed
+
+		op    = indentl//'    op    = '//node%op%text//line_feed
+
+		right = indentl//'    right = '//node%right%str(indentl//'    ') &
+				//line_feed
+
+	else if (node%kind == assignment_expr) then
+
+		identifier  = indentl//'    identifier = '//node%identifier%text &
 				//line_feed
 
 		op    = indentl//'    op    = '//node%op%text//line_feed
@@ -287,12 +333,13 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	str = line_feed// &
 		indentl//'{'//line_feed// &
-			kind // &
-			type // &
-			left // &
-			op   // &
-			right// &
-			val  // &
+			kind       // &
+			type       // &
+			identifier // &
+			left       // &
+			op         // &
+			right      // &
+			val        // &
 		indentl//'}'
 
 end function syntax_node_str
@@ -315,6 +362,8 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%kind = src%kind
 	dst%op   = src%op
 	dst%val  = src%val
+
+	dst%identifier = src%identifier
 
 	dst%diagnostics = src%diagnostics
 
@@ -494,22 +543,9 @@ function lex(lexer) result(token)
 		case ("=")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(equals_equals_token, lexer%pos, "==")
+				token = new_token(eequals_token, lexer%pos, "==")
 			else
-
-				! TODO: refactor w/ default case below since Fortran is weird
-				! about breaking in select case
-				token = new_token(bad_token, lexer%pos, lexer%current())
-
-				call lexer%diagnostics%push( &
-					repeat(' ', lexer%pos-1)//fg_bright_red &
-					//repeat('^', 1)//color_reset//line_feed &
-					//fg_bold_bright_red//'Error'//color_reset &
-					//fg_bold//": unexpected character '"//lexer%current() &
-					//"'" &
-					//color_reset &
-					)
-
+				token = new_token(equals_token , lexer%pos, lexer%current())
 			end if
 
 		case ("!")
@@ -686,7 +722,7 @@ end function tokens_str
 
 !===============================================================================
 
-function syntax_parse(str) result(tree)
+function syntax_parse(str, variables) result(tree)
 
 	character(len = *) :: str
 
@@ -698,15 +734,26 @@ function syntax_parse(str) result(tree)
 
 	type(syntax_token_t) :: token
 
+	type(variable_dictionary_t) :: variables
+
 	if (debug > 0) print *, 'syntax_parse'
 	if (debug > 0) print *, 'str = ', str
 
 	parser = new_parser(str)
 
+	! Point parser member to variables dictionary.  This could be done in the
+	! constructor new_parser(), but it seems reasonable to do it here since it
+	! has to be moved back later
+	if (allocated(variables%root)) then
+		print *, 'moving'
+		call move_alloc(variables%root, parser%variables%root)
+		print *, 'done'
+	end if
+
 	! Parse the tokens. Should this accept empty strings?  It says unexpected
 	! token trying to match number in parse_primary_expr(), so currently the
 	! interpreter driver skips empty lines
-	tree = parser%parse_expr()
+	tree = parser%parse_assignment_expr()
 
 	if (debug > 1) print *, 'tree = ', tree%str()
 
@@ -715,11 +762,61 @@ function syntax_parse(str) result(tree)
 
 	tree%diagnostics = parser%diagnostics
 
+	! Move back.  It's possible that it was empty before this call but not
+	! anymore
+
+	!print *, 'checking alloc'
+	if (allocated(parser%variables%root)) then
+		print *, 'moving back'
+		call move_alloc(parser%variables%root, variables%root)
+		print *, 'done'
+	end if
+
+	if (debug > 0) print *, 'done syntax_parse'
+
 end function syntax_parse
 
 !===============================================================================
 
+recursive function parse_assignment_expr(parser) result(expr)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	type(syntax_node_t) :: right
+	type(syntax_token_t) :: identifier, op
+
+	if (parser%peek_kind(0) == identifier_token .and. &
+	    parser%peek_kind(1) == equals_token) then
+
+		! TODO: "let" keyword
+
+		identifier = parser%next()
+		op         = parser%next()
+		right      = parser%parse_assignment_expr()
+
+		expr = new_assignment_expr(identifier, op, right)
+
+		!print *, 'expr ident text = ', expr%identifier%text
+
+		return
+
+	end if
+
+	expr = parser%parse_expr()
+
+end function parse_assignment_expr
+
+!===============================================================================
+
 recursive function parse_expr(parser, parent_prec) result(expr)
+
+	! In episode 3, Immo renamed this fn to "ParseBinaryExpression()", but
+	! I consider that confusing because the result could be either unary or
+	! binary
 
 	class(parser_t) :: parser
 
@@ -797,10 +894,17 @@ logical function is_binary_op_allowed(left, op, right)
 		case (and_keyword, or_keyword)
 			is_binary_op_allowed = left == bool_expr .and. right == bool_expr
 
-		case (equals_equals_token, bang_equals_token)
-			is_binary_op_allowed = &
-				(left == bool_expr .and. right == bool_expr) .or. &
-				(left == num_expr  .and. right == num_expr)
+		case (equals_token, eequals_token, bang_equals_token)
+
+			! TODO: I don't think this will need updated for equals_token, but
+			! I'm commenting just in case.  Further work in
+			! new_assignment_expr() should take care of it
+
+			is_binary_op_allowed = left == right
+
+			!is_binary_op_allowed = &
+			!	(left == bool_expr .and. right == bool_expr) .or. &
+			!	(left == num_expr  .and. right == num_expr)
 
 	end select
 
@@ -835,11 +939,24 @@ end function is_unary_op_allowed
 ! parser%current()%kind in Fortran, so use this helper fn instead
 
 integer function current_kind(parser)
+
 	class(parser_t) :: parser
-	type(syntax_token_t) :: current
-	current = parser%current()
-	current_kind = current%kind
+
+	!type(syntax_token_t) :: current
+	!current = parser%current()
+	!current_kind = current%kind
+
+	current_kind = parser%peek_kind(0)
+
 end function current_kind
+
+integer function peek_kind(parser, offset)
+	class(parser_t) :: parser
+	type(syntax_token_t) :: peek
+	integer, intent(in) :: offset
+	peek = parser%peek(offset)
+	peek_kind = peek%kind
+end function peek_kind
 
 !===============================================================================
 
@@ -881,7 +998,7 @@ integer function get_binary_op_prec(kind) result(prec)
 		case (plus_token, minus_token)
 			prec = 4
 
-		case (equals_equals_token, bang_equals_token)
+		case (eequals_token, bang_equals_token)
 			prec = 3
 
 		case (and_keyword)
@@ -987,6 +1104,61 @@ end function new_num_expr
 
 !===============================================================================
 
+function new_assignment_expr(identifier, op, right) result(expr)
+
+	type(syntax_token_t), intent(in) :: identifier, op
+	type(syntax_node_t) , intent(in) :: right
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	!character(len = :), allocatable :: text
+
+	if (debug > 1) print *, 'new_binary_expr'
+	if (debug > 1) print *, 'identifier  = ', identifier%text
+	if (debug > 1) print *, 'right = ', right%str()
+
+	expr%kind = assignment_expr
+
+	!allocate(expr%left)
+	allocate(expr%right)
+
+	!expr%left  = identifier
+	expr%identifier = identifier
+
+	expr%identifier%text = identifier%text(:)
+
+	!! Yet again burned debugging stuff here due to node updating
+	!! syntax_node_copy()
+
+	!text = identifier%text
+	!!expr%identifier%text = text
+	!allocate(expr%identifier
+	!expr%identifier%text = text
+
+	!print *, 'expr ident text = ', expr%identifier%text
+
+	expr%op    = op
+	expr%right = right
+
+	! Pass the result value type up the tree for type checking in parent
+
+	! TODO: if identifier has already been declared, do not overwrite its type
+	! here
+
+	expr%val%kind = right%val%kind
+
+	!expr%val%kind = get_binary_op_kind(left%val%kind, op%kind, right%val%kind)
+	!!expr%val%kind = left%val%kind
+
+	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
+	if (debug > 1) print *, 'done new_binary_expr'
+
+end function new_assignment_expr
+
+!===============================================================================
+
 function new_binary_expr(left, op, right) result(expr)
 
 	type(syntax_node_t) , intent(in) :: left, right
@@ -1027,7 +1199,7 @@ integer function get_binary_op_kind(left, op, right)
 	integer, intent(in) :: left, op, right
 
 	! Comparison operations can take 2 numbers, but always return a bool
-	if (op == equals_equals_token .or. op == bang_equals_token) then
+	if (op == eequals_token .or. op == bang_equals_token) then
 		!print *, 'bool_expr'
 		get_binary_op_kind = bool_expr
 		return
@@ -1037,7 +1209,7 @@ integer function get_binary_op_kind(left, op, right)
 	! Other operations return the same type as their operands
 	!
 	! TODO: floats, int casting.  1 + 0.5 and 0.5 + 1 should both cast to float,
-	! not int
+	! not int.  That's why I'm passing right as an arg (but not using it yet)
 
 	get_binary_op_kind = left
 
@@ -1117,21 +1289,35 @@ end function match
 !===============================================================================
 
 function current_token(parser)
-
-	! Refactor in terms of peek_token(0) ?
 	class(parser_t) :: parser
 	type(syntax_token_t) :: current_token
+	current_token = parser%peek(0)
+end function current_token
 
-	if (debug > 2) print *, 'current_token pos ', parser%pos
+function parser_peek_token(parser, offset) result(token)
 
-	if (parser%pos > size(parser%tokens)) then
-		current_token = parser%tokens( size(parser%tokens) )
+	class(parser_t) :: parser
+
+	type(syntax_token_t) :: token
+
+	integer, intent(in) :: offset
+
+	!********
+
+	integer :: pos
+
+	pos = parser%pos + offset
+
+	if (debug > 2) print *, 'token pos ', pos
+
+	if (pos > size(parser%tokens)) then
+		token = parser%tokens( size(parser%tokens) )
 		return
 	end if
 
-	current_token = parser%tokens( parser%pos )
+	token = parser%tokens(pos)
 
-end function current_token
+end function parser_peek_token
 
 !===============================================================================
 
@@ -1144,9 +1330,14 @@ end function next_parser_token
 
 !===============================================================================
 
-recursive function syntax_eval(node) result(res)
+recursive function syntax_eval(node, variables) result(res)
 
 	type(syntax_node_t) :: node
+
+	! I don't want to make this arg optional, because then it would require
+	! copying a potentially large struct to a local var without fancy use of
+	! move_alloc()
+	type(variable_dictionary_t) :: variables
 
 	type(value_t) :: res
 
@@ -1160,9 +1351,18 @@ recursive function syntax_eval(node) result(res)
 		return
 	end if
 
+	if (node%kind == assignment_expr) then
+
+		res = syntax_eval(node%right, variables)
+
+		! TODO: assign res to identifier variable as well
+
+		return
+	end if
+
 	if (node%kind == unary_expr) then
 
-		right = syntax_eval(node%right)
+		right = syntax_eval(node%right, variables)
 		!print *, 'right = ', right
 
 		res%kind = right%kind
@@ -1195,8 +1395,8 @@ recursive function syntax_eval(node) result(res)
 
 	if (node%kind == binary_expr) then
 
-		left  = syntax_eval(node%left )
-		right = syntax_eval(node%right)
+		left  = syntax_eval(node%left , variables)
+		right = syntax_eval(node%right, variables)
 
 		!print *, 'left  = ', left
 		!print *, 'right = ', right
@@ -1232,7 +1432,7 @@ recursive function syntax_eval(node) result(res)
 		else if (node%op%kind == or_keyword) then
 			res%bval = left%bval .or.  right%bval
 
-		else if (node%op%kind == equals_equals_token) then
+		else if (node%op%kind == eequals_token) then
 
 			if (left%kind == bool_expr) then
 				res%bval = left%bval .eqv. right%bval
@@ -1306,6 +1506,7 @@ subroutine interpret()
 
 	type(syntax_node_t) :: tree
 	type(value_t) :: res
+	type(variable_dictionary_t) :: variables
 
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
@@ -1331,7 +1532,7 @@ subroutine interpret()
 			cycle
 		end if
 
-		tree = syntax_parse(line)
+		tree = syntax_parse(line, variables)
 
 		! I'm skipping the the binder that Immo implemented at this point in
 		! episode 2.  I guess I'll find out later if that's a stupid decision on
@@ -1344,7 +1545,7 @@ subroutine interpret()
 		! Don't try to evaluate with errors
 		if (tree%diagnostics%len > 0) cycle
 
-		res  = syntax_eval(tree)
+		res  = syntax_eval(tree, variables)
 
 		! Consider MATLAB-style "ans = " log?
 		write(ou, '(a)') res%str()
@@ -1420,8 +1621,9 @@ integer function eval_int(str)
 
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
+	type(variable_dictionary_t) :: variables
 
-	tree = syntax_parse(str)
+	tree = syntax_parse(str, variables)
 	call tree%log_diagnostics(str)
 
 	if (tree%diagnostics%len > 0) then
@@ -1429,7 +1631,7 @@ integer function eval_int(str)
 		return
 	end if
 
-	val = syntax_eval(tree)
+	val = syntax_eval(tree, variables)
 	eval_int = val%ival
 
 end function eval_int
@@ -1449,17 +1651,18 @@ function eval(str, quiet) result(res)
 
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
+	type(variable_dictionary_t) :: variables
 
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
 
 	!! One-liner, but no error handling.  This can crash unit tests without
 	!! reporting failures
-	!eval = syntax_eval(syntax_parse(str))
+	!eval = syntax_eval(syntax_parse(str, variables), variables)
 
 	! TODO: make a helper fn here that all the eval_* fns use
 
-	tree = syntax_parse(str)
+	tree = syntax_parse(str, variables)
 	if (.not. quietl) call tree%log_diagnostics(str)
 
 	if (tree%diagnostics%len > 0) then
@@ -1467,7 +1670,7 @@ function eval(str, quiet) result(res)
 		return
 	end if
 
-	val = syntax_eval(tree)
+	val = syntax_eval(tree, variables)
 	res = val%str()
 
 end function eval

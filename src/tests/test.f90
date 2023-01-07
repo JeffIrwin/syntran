@@ -212,6 +212,42 @@ end subroutine unit_test_comparisons
 
 !===============================================================================
 
+subroutine unit_test_assignment(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'assignment'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! There are a couple problems here.  First, I don't have a variable
+	! dictionary needed for multi-statement evaluations.  Second, eval only
+	! interprets 1 statement anyway, so I guess I need to overload interpret()
+	! to take a string as an arg and return a (stringly-typed) value
+	!
+	! Alternatively, own a variable_dictionary in this test routine shared among
+	! test array elements
+
+	tests = &
+		[   &
+			eval('x = 1 ') == '1' ,  &
+			!eval('a = 2'//line_feed// &
+			!     'b = a') == '2',     &
+			eval('myVariable = 1337')  == '1337'   &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_assignment
+
+!===============================================================================
+
 subroutine unit_test_bad_syntax(npass, nfail)
 
 	implicit none
@@ -305,6 +341,7 @@ subroutine unit_tests(iostat)
 	call unit_test_bool       (npass, nfail)
 	call unit_test_comparisons(npass, nfail)
 	call unit_test_bad_syntax (npass, nfail)
+	call unit_test_assignment (npass, nfail)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)
