@@ -226,10 +226,13 @@ subroutine unit_test_assignment(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! There are a couple problems here.  First, I don't have a variable
-	! dictionary needed for multi-statement evaluations.  Second, eval only
-	! interprets 1 statement anyway, so I guess I need to overload interpret()
-	! to take a string as an arg and return a (stringly-typed) value
+	! TODO: I need a way to test multiple statements
+	!
+	! Eval only interprets 1 statement, so I guess I need to overload
+	! interpret() to take a string as an arg and return a (stringly-typed) value
+	!
+	! Maybe it's easier at the beginning of eval() to split the string by lines
+	! or whatever the statement delimiter is (preferrably ";" ?)
 	!
 	! Alternatively, own a variable_dictionary in this test routine shared among
 	! test array elements

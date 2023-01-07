@@ -29,6 +29,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			name_expr           = 26, & ! '='
 			equals_token        = 25, & ! '='
 			assignment_expr     = 24, &
 			bang_equals_token   = 23, &
@@ -83,9 +84,9 @@ module core_m
 		type(ternary_tree_node_t), allocatable :: root
 		contains
 			! TODO
-			!procedure :: &
-			!	insert => variable_insert, &
-			!	search => variable_search
+			procedure :: &
+				insert => variable_insert, &
+				search => variable_search
 	end type variable_dictionary_t
 
 	!********
@@ -180,6 +181,180 @@ contains
 
 !===============================================================================
 
+function variable_search(dictionary, key) result(val)
+
+	class(variable_dictionary_t), intent(in) :: dictionary
+	character(len = *), intent(in) :: key
+	type(value_t) :: val
+
+	val = ternary_search(dictionary%root, key)
+
+end function variable_search
+
+!===============================================================================
+
+recursive function ternary_search(node, key) result(val)
+
+	type(ternary_tree_node_t), intent(in), allocatable :: node
+	character(len = *), intent(in) :: key
+	type(value_t) :: val
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	if (len(key) == 0) return
+
+	!print *, 'searching key "', key, '"'
+
+	! :)
+	k  = key(1:1)
+	ey = key(2:)
+
+	if (.not. allocated(node)) then
+		! Search key not found
+
+		! TODO: return status code
+		print *, "Error: variable doesn't exist"
+		call exit(-1)
+
+	end if
+
+	if (k < node%split_char) then
+		!print *, 'left'
+		val = ternary_search(node%left , key)
+		return
+	else if (k > node%split_char) then
+		!print *, 'right'
+		val = ternary_search(node%right, key)
+		return
+	else
+		!print *, 'mid'
+
+		if (len(ey) == 0) then
+			val = node%val
+			return
+		end if
+
+		val = ternary_search(node%mid  , ey)
+
+		return
+	end if
+
+	!print *, 'done ternary_search'
+	!print *, ''
+
+end function ternary_search
+
+!===============================================================================
+
+subroutine variable_insert(dictionary, key, val)
+
+	! There are a couple reasons for having this wrapper:
+	!
+	!   - dictionary is not allocatable, while dictionary%root is.  type-bound
+	!     methods are not allowed for allocatable types
+	!   - it's an abstraction away from the dictionary implementation.
+	!     currently I'm using a ternary tree, but the dictionary could
+	!     alternatively be implemented using another data structure like a trie
+	!     or a radix tree
+	!   - having an allocatable root is helpful both for the ternary
+	!     insert/delete implementation and for moving the dictionary without
+	!     copying in syntax_parse()
+
+	class(variable_dictionary_t) :: dictionary
+	character(len = *), intent(in) :: key
+	type(value_t), intent(in) :: val
+
+	call ternary_insert(dictionary%root, key, val)
+
+end subroutine variable_insert
+
+!===============================================================================
+
+recursive subroutine ternary_insert(node, key, val)
+
+	! TODO: can this be type bound? maybe make a wrapper dict type that
+	! basically just contains a ternary_tree_node_t
+
+	!class(ternary_tree_t), intent(inout) :: tree
+	type(ternary_tree_node_t), intent(inout), allocatable :: node
+
+	character(len = *), intent(in) :: key
+
+	!integer, intent(in) :: val
+	type(value_t), intent(in) :: val
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	if (len(key) == 0) return
+
+	!print *, 'inserting key "', key, '"'
+
+	! :)
+	k  = key(1:1)
+	ey = key(2:)
+
+	if (.not. allocated(node)) then
+		!print *, 'allocate'
+
+		allocate(node)
+		node%split_char = k
+
+		! Store val.  Node was not allocated, so no need to check val like below
+		if (len(ey) == 0) node%val = val
+
+		! Insert remainder of key
+		call ternary_insert(node%mid, ey, val)
+		return
+
+	end if
+
+	if (k < node%split_char) then
+		!print *, 'left'
+		call ternary_insert(node%left , key, val)
+		return
+	else if (k > node%split_char) then
+		!print *, 'right'
+		call ternary_insert(node%right, key, val)
+		return
+	end if
+
+	!print *, 'mid'
+
+	if (len(ey) == 0) then
+
+		! node%val doesn't really need to be declared as allocatable (it's
+		! a scalar anyway), but it's just a convenient way to check if
+		! a duplicate key has already been inserted or not.  We could add
+		! a separate logical member to node for this instead if needed
+
+		if (allocated(node%val)) then
+
+			! TODO: return status code instead of stopping
+			write(*,*) 'Error: key already inserted'
+			call exit(-1)
+
+		end if
+
+		node%val = val
+	end if
+
+	call ternary_insert(node%mid  , ey, val)
+
+	!return
+
+	!print *, 'done inserting'
+	!print *, ''
+
+end subroutine ternary_insert
+
+!===============================================================================
+
 function new_syntax_token_vector() result(vector)
 
 	type(syntax_token_vector_t) :: vector
@@ -258,7 +433,8 @@ function kind_name(kind)
 			"eequals_token    ", & ! 22
 			"bang_equals_token", & ! 23
 			"assignment_expr  ", & ! 24
-			"equals_token     "  & ! 25
+			"equals_token     ", & ! 25
+			"name_expr        "  & ! 26
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -745,10 +921,13 @@ function syntax_parse(str, variables) result(tree)
 	! constructor new_parser(), but it seems reasonable to do it here since it
 	! has to be moved back later
 	if (allocated(variables%root)) then
-		print *, 'moving'
+		!print *, 'moving'
 		call move_alloc(variables%root, parser%variables%root)
-		print *, 'done'
+		!print *, 'done'
 	end if
+
+	! TODO: variables have been inserted in parser.  Does the type checker work
+	! on variables?
 
 	! Parse the tokens. Should this accept empty strings?  It says unexpected
 	! token trying to match number in parse_primary_expr(), so currently the
@@ -767,9 +946,9 @@ function syntax_parse(str, variables) result(tree)
 
 	!print *, 'checking alloc'
 	if (allocated(parser%variables%root)) then
-		print *, 'moving back'
+		!print *, 'moving back'
 		call move_alloc(parser%variables%root, variables%root)
-		print *, 'done'
+		!print *, 'done'
 	end if
 
 	if (debug > 0) print *, 'done syntax_parse'
@@ -880,10 +1059,19 @@ logical function is_binary_op_allowed(left, op, right)
 
 	integer, intent(in) :: left, op, right
 
+	!print *, 'left, right = ', left, right
+
+	!! This dynamic variable typing can be useful for testing
 	!is_binary_op_allowed = .true.
 	!return
 
 	is_binary_op_allowed = .false.
+
+	!! TODO: dynamic variable typing, probably testing only
+	!if (left == 0 .or. right == 0) then
+	!	is_binary_op_allowed = .true.
+	!	return
+	!end if
 
 	select case (op)
 
@@ -1026,7 +1214,7 @@ function parse_primary_expr(parser) result(expr)
 
 	logical :: bool
 
-	type(syntax_token_t) :: num, left, right, keyword
+	type(syntax_token_t) :: num, left, right, keyword, identifier
 
 	if (debug > 1) print *, 'parse_primary_expr'
 
@@ -1035,7 +1223,13 @@ function parse_primary_expr(parser) result(expr)
 		case (lparen_token)
 
 			left  = parser%next()
-			expr  = parser%parse_expr()
+
+			! These two lines are the difference between allowing statement
+			! "a = (b = 1)" or not.  Note that "a = b = 1" is allowed either way
+
+			!expr  = parser%parse_expr()
+			expr  = parser%parse_assignment_expr()
+
 			right = parser%match(rparen_token)
 
 			return
@@ -1048,6 +1242,15 @@ function parse_primary_expr(parser) result(expr)
 
 			!print *, 'expr%val%bval = ', expr%val%bval
 
+		case (identifier_token)
+
+			identifier = parser%next()
+			!print *, 'identifier = ', identifier%text
+
+			!expr = new_name_expr(identifier)
+			expr = new_name_expr(identifier, &
+				parser%variables%search(identifier%text))
+
 		case default
 
 			num = parser%match(num_token)
@@ -1058,6 +1261,29 @@ function parse_primary_expr(parser) result(expr)
 	end select
 
 end function parse_primary_expr
+
+!===============================================================================
+
+function new_name_expr(identifier, val) result(expr)
+
+	type(syntax_token_t), intent(in) :: identifier
+	type(syntax_node_t) :: expr
+	type(value_t) :: val
+
+	! TODO: search variables to get val? in caller? or just wait til eval?
+	!
+	! Statements like these all work:
+	!
+	!   a = b = 1
+	!   c = (d = 1)
+	!
+	! Include those in tests?
+
+	expr%kind = name_expr
+	expr%identifier = identifier
+	expr%val = val
+
+end function new_name_expr
 
 !===============================================================================
 
@@ -1353,10 +1579,19 @@ recursive function syntax_eval(node, variables) result(res)
 
 	if (node%kind == assignment_expr) then
 
+		! Assign return value
 		res = syntax_eval(node%right, variables)
 
-		! TODO: assign res to identifier variable as well
+		! Assign res to identifier variable as well
+		!print *, 'assigning identifier "', node%identifier%text, '"'
+		call variables%insert(node%identifier%text, res)
 
+		return
+	end if
+
+	if (node%kind == name_expr) then
+		!print *, 'searching identifier ', node%identifier%text
+		res = variables%search(node%identifier%text)
 		return
 	end if
 
