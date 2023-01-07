@@ -32,6 +32,13 @@ Then enter arithmetic expressions like `1 + 2 * 3` in the interpreter:
     syntran$ (1 + 2) * 3
     9
 
+Use two asterisks for exponent powers, like Fortran and Scilab:
+
+    syntran$ 5 ** 2
+    25
+
+There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/math/pow) and call the `pow()` function!
+
 ### Variables, booleans, and type checking
 
 A variable declaration expression uses the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also somewhat similar to JavaScript, except there is no `var` keyword.
