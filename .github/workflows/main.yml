@@ -51,6 +51,7 @@ jobs:
       run: |
         set PATH
         echo %PATH%
+        echo $PATH
         where gfortran
         which gfortran
     #    Get-Content samples/arithmetic.syntran | ./build/syntran
