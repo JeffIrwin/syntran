@@ -75,10 +75,7 @@ module core_m
 	type ternary_tree_node_t
 		character :: split_char = ''
 		type(ternary_tree_node_t), allocatable :: left, mid, right
-
-		!integer, allocatable :: val
 		type(value_t), allocatable :: val
-
 		!contains
 		!	procedure :: print => ternary_node_print
 	end type ternary_tree_node_t
@@ -86,7 +83,6 @@ module core_m
 	type variable_dictionary_t
 		type(ternary_tree_node_t), allocatable :: root
 		contains
-			! TODO
 			procedure :: &
 				insert => variable_insert, &
 				search => variable_search
@@ -220,17 +216,10 @@ recursive function ternary_search(node, key, iostat) result(val)
 
 	iostat = 0
 
-	! TODO: len check should be unnecessary
-	if (len(key) == 0 .or. .not. allocated(node)) then
+	if (.not. allocated(node)) then
 		! Search key not found
-
 		iostat = -1
 		return
-
-		! TODO: dead code
-		print *, "Error: variable doesn't exist"
-		call exit(-1)
-
 	end if
 
 	! :)
@@ -300,17 +289,9 @@ end subroutine variable_insert
 
 recursive subroutine ternary_insert(node, key, val, iostat)
 
-	! TODO: can this be type bound? maybe make a wrapper dict type that
-	! basically just contains a ternary_tree_node_t
-
-	!class(ternary_tree_t), intent(inout) :: tree
 	type(ternary_tree_node_t), intent(inout), allocatable :: node
-
 	character(len = *), intent(in) :: key
-
-	!integer, intent(in) :: val
 	type(value_t), intent(in) :: val
-
 	integer, intent(out) :: iostat
 
 	!********
@@ -1043,9 +1024,6 @@ recursive function parse_assignment_expr(parser) result(expr)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
-		!expr = new_name_expr(identifier, &
-		!	parser%variables%search(identifier%text))
-
 		expr%val = parser%variables%search(identifier%text, io)
 
 		if (io /= 0) then
@@ -1144,12 +1122,6 @@ logical function is_binary_op_allowed(left, op, right)
 	!return
 
 	is_binary_op_allowed = .false.
-
-	!! TODO: dynamic variable typing, probably testing only
-	!if (left == 0 .or. right == 0) then
-	!	is_binary_op_allowed = .true.
-	!	return
-	!end if
 
 	select case (op)
 
@@ -1351,14 +1323,10 @@ function new_name_expr(identifier, val) result(expr)
 	type(syntax_node_t) :: expr
 	type(value_t) :: val
 
-	! TODO: search variables to get val? in caller? or just wait til eval?
-	!
 	! Statements like these all work:
 	!
 	!   a = b = 1
 	!   c = (d = 1)
-	!
-	! Include those in tests?
 
 	expr%kind = name_expr
 	expr%identifier = identifier
@@ -1663,8 +1631,8 @@ recursive function syntax_eval(node, variables) result(res)
 		! Assign return value
 		res = syntax_eval(node%right, variables)
 
-		! Assign res to LHS identifier variable as well.  TODO: this inserts the
-		! value, but call insert in the parser as well to declare the type
+		! Assign res to LHS identifier variable as well.  This inserts the
+		! value, while the insert call in the parser inserts the type
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
 		call variables%insert(node%identifier%text, res)
