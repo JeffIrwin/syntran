@@ -9,7 +9,7 @@ An interpreter written in Fortran, I guess
 
 > Jerry: Fungicide. I mean what could she have?
 >
-> Elaine: I don’t know.
+> Elaine: I don't know.
 >
 > Kramer: Fungus.
 
@@ -31,4 +31,33 @@ Then enter arithmetic expressions like `1 + 2 * 3` in the interpreter:
     7
     syntran$ (1 + 2) * 3
     9
+
+### Variables, booleans, and type checking
+
+Integer and boolean types are supported:
+
+    syntran$ foo = 1
+    1
+    syntran$ bar = 2
+    2
+    syntran$ baz = 3
+    3
+    syntran$ foo + bar * baz
+    7
+    syntran$ p = true
+    true
+    syntran$ q = false
+    false
+    syntran$ p or q
+    true
+    syntran$ not q and foo + bar == baz
+    true
+    syntran$ foo and p
+    
+    foo and p
+    Error: binary operator not defined for given types
+
+Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g. `.true.`) but without the dots.  Note that they are lower case-sensitive, unlike Python (`True`).
+
+Variable declaration syntax is unstable.  I'm planning on implementing a [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust or JavaScript.
 
