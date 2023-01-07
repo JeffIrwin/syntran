@@ -10,7 +10,7 @@ program main
 
 	! TODO: move to a new fn
 	write(*,*)
-	write(*,*) lang_name//' 0.0.2'
+	write(*,*) lang_name//' 0.0.3'
 	write(*,*) 'https://github.com/JeffIrwin/syntran'
 	write(*,*)
 	write(*,*) 'Usage:'
