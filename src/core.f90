@@ -254,7 +254,7 @@ end function ternary_search
 
 !===============================================================================
 
-subroutine variable_insert(dictionary, key, val, iostat)
+subroutine variable_insert(dictionary, key, val, iostat, overwrite)
 
 	! There are a couple reasons for having this wrapper:
 	!
@@ -273,26 +273,32 @@ subroutine variable_insert(dictionary, key, val, iostat)
 	type(value_t), intent(in) :: val
 
 	integer, intent(out), optional :: iostat
+	logical, intent(in), optional :: overwrite
 
 	!********
 
 	integer :: io
+	logical :: overwritel
 
 	!print *, 'inserting "', key, '"'
 
-	call ternary_insert(dictionary%root, key, val, io)
+	overwritel = .true.
+	if (present(overwrite)) overwritel = overwrite
+
+	call ternary_insert(dictionary%root, key, val, io, overwritel)
 	if (present(iostat)) iostat = io
 
 end subroutine variable_insert
 
 !===============================================================================
 
-recursive subroutine ternary_insert(node, key, val, iostat)
+recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 
 	type(ternary_tree_node_t), intent(inout), allocatable :: node
 	character(len = *), intent(in) :: key
 	type(value_t), intent(in) :: val
 	integer, intent(out) :: iostat
+	logical, intent(in) :: overwrite
 
 	!********
 
@@ -313,18 +319,18 @@ recursive subroutine ternary_insert(node, key, val, iostat)
 		node%split_char = k
 	else if (k < node%split_char) then
 		!print *, 'left'
-		call ternary_insert(node%left , key, val, iostat)
+		call ternary_insert(node%left , key, val, iostat, overwrite)
 		return
 	else if (k > node%split_char) then
 		!print *, 'right'
-		call ternary_insert(node%right, key, val, iostat)
+		call ternary_insert(node%right, key, val, iostat, overwrite)
 		return
 	end if
 
 	!print *, 'mid'
 
 	if (len(ey) /= 0) then
-		call ternary_insert(node%mid  , ey, val, iostat)
+		call ternary_insert(node%mid  , ey, val, iostat, overwrite)
 		return
 	end if
 
@@ -340,6 +346,8 @@ recursive subroutine ternary_insert(node, key, val, iostat)
 		!call exit(-1)
 		iostat = -1
 	end if
+
+	if (.not. overwrite) return
 
 	node%val = val
 
@@ -983,18 +991,13 @@ recursive function parse_assignment_expr(parser) result(expr)
 		op         = parser%next()
 		right      = parser%parse_assignment_expr()
 
-		expr = new_assignment_expr(identifier, op, right)
+		expr = new_declaration_expr(identifier, op, right)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
 		! Insert the identifier's type into the dictionary
-		!
-		! TODO: pass arg to not overwrite in insert().  This can corrupt the
-		! interpreter (as opposed to the evaluator, where we intend to
-		! overwrite)
-
-		call parser%variables%insert(identifier%text, expr%val, io)
-		!call variables%insert(node%identifier%text, res)
+		call parser%variables%insert(identifier%text, expr%val, &
+			io, overwrite = .false.)
 
 		!print *, 'io = ', io
 		if (io /= 0) then
@@ -1029,6 +1032,21 @@ recursive function parse_assignment_expr(parser) result(expr)
 		if (io /= 0) then
 			call parser%diagnostics%push('Error: variable "' &
 				//identifier%text//'" has not been declared')
+		end if
+
+		! TODO: move this check inside of is_binary_op_allowed?  Need to pass
+		! parser to it to push diagnostics
+		if (.not. is_binary_op_allowed( &
+			expr%val%kind, op%kind, expr%right%val%kind)) then
+
+			! TODO: implement text span for diagnostics
+			call parser%diagnostics%push('Error: binary operator "' &
+				//op%text//'" not defined for types ' &
+				//kind_name(expr%val%kind) &
+				//' and ' &
+				//kind_name(expr%right%val%kind) &
+				)
+
 		end if
 
 		return
@@ -1115,7 +1133,7 @@ logical function is_binary_op_allowed(left, op, right)
 
 	integer, intent(in) :: left, op, right
 
-	!print *, 'left, right = ', left, right
+	print *, 'left, right = ', left, right
 
 	!! This dynamic variable typing can be useful for testing
 	!is_binary_op_allowed = .true.
@@ -1381,7 +1399,7 @@ end function new_num_expr
 
 !===============================================================================
 
-function new_assignment_expr(identifier, op, right) result(expr)
+function new_declaration_expr(identifier, op, right) result(expr)
 
 	type(syntax_token_t), intent(in) :: identifier, op
 	type(syntax_node_t) , intent(in) :: right
@@ -1425,6 +1443,61 @@ function new_assignment_expr(identifier, op, right) result(expr)
 	! here
 
 	expr%val%kind = right%val%kind
+
+	!expr%val%kind = get_binary_op_kind(left%val%kind, op%kind, right%val%kind)
+	!!expr%val%kind = left%val%kind
+
+	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
+	if (debug > 1) print *, 'done new_binary_expr'
+
+end function new_declaration_expr
+
+!===============================================================================
+
+function new_assignment_expr(identifier, op, right) result(expr)
+
+	type(syntax_token_t), intent(in) :: identifier, op
+	type(syntax_node_t) , intent(in) :: right
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	!character(len = :), allocatable :: text
+
+	if (debug > 1) print *, 'new_binary_expr'
+	if (debug > 1) print *, 'identifier  = ', identifier%text
+	if (debug > 1) print *, 'right = ', right%str()
+
+	expr%kind = assignment_expr
+
+	!allocate(expr%left)
+	allocate(expr%right)
+
+	!expr%left  = identifier
+	expr%identifier = identifier
+
+	expr%identifier%text = identifier%text(:)
+
+	!! Yet again burned debugging stuff here due to node updating
+	!! syntax_node_copy()
+
+	!text = identifier%text
+	!!expr%identifier%text = text
+	!allocate(expr%identifier
+	!expr%identifier%text = text
+
+	!print *, 'expr ident text = ', expr%identifier%text
+
+	expr%op    = op
+	expr%right = right
+
+	! Pass the result value type up the tree for type checking in parent
+
+	! TODO: if identifier has already been declared, do not overwrite its type
+	! here
+
+	!expr%val%kind = right%val%kind
 
 	!expr%val%kind = get_binary_op_kind(left%val%kind, op%kind, right%val%kind)
 	!!expr%val%kind = left%val%kind

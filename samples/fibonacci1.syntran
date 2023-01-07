@@ -1,8 +1,8 @@
 
-a = 1
-b = 1
+let a = 1
+let b = 1
 
-c = a + b
+let c = a + b
 a = b
 b = c
 

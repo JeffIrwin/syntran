@@ -1,12 +1,12 @@
 
-foo = 1
-bar = 2
-baz = 3
+let foo = 1
+let bar = 2
+let baz = 3
 
 foo + bar + baz
 
-p = true
-q = false
+let p = true
+let q = false
 
 p or q
 not q and foo + bar == baz
