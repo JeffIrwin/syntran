@@ -59,4 +59,5 @@ jobs:
         echo "GITHUB_PATH = "
         echo $GITHUB_PATH
         #Get-Content samples/arithmetic.syntran | ./build/syntran
+        ./build/test
 

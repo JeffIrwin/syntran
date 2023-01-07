@@ -36,17 +36,17 @@ Then enter arithmetic expressions like `1 + 2 * 3` in the interpreter:
 
 Integer and boolean types are supported:
 
-    syntran$ foo = 1
+    syntran$ let foo = 1
     1
-    syntran$ bar = 2
+    syntran$ let bar = 2
     2
-    syntran$ baz = 3
+    syntran$ let baz = 3
     3
     syntran$ foo + bar * baz
     7
-    syntran$ p = true
+    syntran$ let p = true
     true
-    syntran$ q = false
+    syntran$ let q = false
     false
     syntran$ p or q
     true
@@ -55,7 +55,9 @@ Integer and boolean types are supported:
     syntran$ foo and p
     
     foo and p
-    Error: binary operator not defined for given types
+    Error: binary operator "and" not defined for types num_expr and bool_expr
+    
+    syntran$
 
 Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g. `.true.`) but without the dots.  Note that they are lower case-sensitive, unlike Python (e.g. `True`).
 

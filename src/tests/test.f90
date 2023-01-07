@@ -235,57 +235,57 @@ subroutine unit_test_assignment(npass, nfail)
 
 	tests = &
 		[   &
-			eval('x = 1 ') == '1' ,  &
+			eval('let x = 1 ') == '1' ,  &
 			eval('let a =  let b = 42 ') == '42' ,  &
 			eval('let a = (let b = 42)') == '42' ,  &
 			interpret( &
-				'a = 2'//line_feed// &
-				'b = a') == '2',     &
+				'let a = 2'//line_feed// &
+				'let b = a') == '2',     &
 			interpret( &
-				'a = 2'//line_feed// &
-				'b = a + 1') == '3', &
+				'let a = 2'//line_feed// &
+				'let b = a + 1') == '3', &
 			interpret( &
-				'a = 1'//line_feed// &
-				'b = a'//line_feed// &
+				'let a = 1'//line_feed// &
+				'let b = a'//line_feed// &
 				'a = a + 1'//line_feed// &
 				'a == 2 and b == 1') == 'true', &
 			interpret( &
-				'a = 1'//line_feed// &
-				'aa = 2'//line_feed// &
-				'aaa = 3'//line_feed// &
-				'aaaa = 4'//line_feed// &
+				'let a = 1'//line_feed// &
+				'let aa = 2'//line_feed// &
+				'let aaa = 3'//line_feed// &
+				'let aaaa = 4'//line_feed// &
 				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4') == 'true', &
 			interpret( &
-				'aaaa = 4'//line_feed// &
-				'aaa = 3'//line_feed// &
-				'aa = 2'//line_feed// &
-				'a = 1'//line_feed// &
+				'let aaaa = 4'//line_feed// &
+				'let aaa = 3'//line_feed// &
+				'let aa = 2'//line_feed// &
+				'let a = 1'//line_feed// &
 				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4') == 'true', &
 			interpret( &
-				'aaa = 3'//line_feed// &
-				'aaaa = 4'//line_feed// &
-				'a = 1'//line_feed// &
-				'aa = 2'//line_feed// &
+				'let aaa = 3'//line_feed// &
+				'let aaaa = 4'//line_feed// &
+				'let a = 1'//line_feed// &
+				'let aa = 2'//line_feed// &
 				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4') == 'true', &
 			interpret( &
-				'a = 1'//line_feed// &
-				'b = 2'//line_feed// &
-				'c = 3'//line_feed// &
-				'd = 4'//line_feed// &
+				'let a = 1'//line_feed// &
+				'let b = 2'//line_feed// &
+				'let c = 3'//line_feed// &
+				'let d = 4'//line_feed// &
 				'a == 1 and b == 2 and c == 3 and d == 4') == 'true', &
 			interpret( &
-				'd = 4'//line_feed// &
-				'c = 3'//line_feed// &
-				'b = 2'//line_feed// &
-				'a = 1'//line_feed// &
+				'let d = 4'//line_feed// &
+				'let c = 3'//line_feed// &
+				'let b = 2'//line_feed// &
+				'let a = 1'//line_feed// &
 				'a == 1 and b == 2 and c == 3 and d == 4') == 'true', &
 			interpret( &
-				'c = 3'//line_feed// &
-				'd = 4'//line_feed// &
-				'a = 1'//line_feed// &
-				'b = 2'//line_feed// &
+				'let c = 3'//line_feed// &
+				'let d = 4'//line_feed// &
+				'let a = 1'//line_feed// &
+				'let b = 2'//line_feed// &
 				'a == 1 and b == 2 and c == 3 and d == 4') == 'true', &
-			eval('myVariable = 1337')  == '1337'   &
+			eval('let myVariable = 1337')  == '1337'   &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

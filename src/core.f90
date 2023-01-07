@@ -1007,6 +1007,11 @@ recursive function parse_assignment_expr(parser) result(expr)
 		!print *, 'expr ident text = ', expr%identifier%text
 
 		! Insert the identifier's type into the dictionary
+		!
+		! TODO: pass arg to not overwrite in insert().  This can corrupt the
+		! interpreter (as opposed to the evaluator, where we intend to
+		! overwrite)
+
 		call parser%variables%insert(identifier%text, expr%val, io)
 		!call variables%insert(node%identifier%text, res)
 
@@ -1037,6 +1042,16 @@ recursive function parse_assignment_expr(parser) result(expr)
 		expr = new_assignment_expr(identifier, op, right)
 
 		!print *, 'expr ident text = ', expr%identifier%text
+
+		!expr = new_name_expr(identifier, &
+		!	parser%variables%search(identifier%text))
+
+		expr%val = parser%variables%search(identifier%text, io)
+
+		if (io /= 0) then
+			call parser%diagnostics%push('Error: variable "' &
+				//identifier%text//'" has not been declared')
+		end if
 
 		return
 
@@ -1096,11 +1111,17 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		right = parser%parse_expr(prec)
 		expr  = new_binary_expr(expr, op, right)
 
-		!if (expr%left%val%kind /= expr%right%val%kind) then
 		if (.not. is_binary_op_allowed( &
 			expr%left%val%kind, op%kind, expr%right%val%kind)) then
-			! TODO: wording, styling
-			call parser%diagnostics%push('Error: bin op not defined for types')
+
+			! TODO: implement text span for diagnostics
+			call parser%diagnostics%push('Error: binary operator "' &
+				//op%text//'" not defined for types ' &
+				//kind_name(expr%left%val%kind) &
+				//' and ' &
+				//kind_name(expr%right%val%kind) &
+				)
+
 		end if
 
 	end do
@@ -1307,6 +1328,9 @@ function parse_primary_expr(parser) result(expr)
 			!expr = new_name_expr(identifier)
 			expr = new_name_expr(identifier, &
 				parser%variables%search(identifier%text))
+
+			! TODO: search dict to check if declared.  Then searching in
+			! evaluator may not be needed?
 
 		case default
 
