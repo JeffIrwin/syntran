@@ -348,8 +348,7 @@ recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 	! This is not necessarily a failure.  In the evaluator, we will insert
 	! values for variables which have already been declared
 	if (allocated(node%val)) then
-		!write(*,*) 'Error: key already inserted'
-		!call exit(-1)
+		!print *, 'key already inserted'
 		iostat = exit_failure
 	end if
 
@@ -739,14 +738,9 @@ function lex(lexer) result(token)
 				! about breaking in select case
 				token = new_token(bad_token, lexer%pos, lexer%current())
 
+				span = new_text_span(lexer%pos, len(lexer%current()))
 				call lexer%diagnostics%push( &
-					repeat(' ', lexer%pos-1)//fg_bright_red &
-					//repeat('^', 1)//color_reset//line_feed &
-					//fg_bold_bright_red//'Error'//color_reset &
-					//fg_bold//": unexpected character '"//lexer%current() &
-					//"'" &
-					//color_reset &
-					)
+					err_unexpected_char(span, lexer%current()))
 
 			end if
 
@@ -754,14 +748,9 @@ function lex(lexer) result(token)
 
 			token = new_token(bad_token, lexer%pos, lexer%current())
 
+			span = new_text_span(lexer%pos, len(lexer%current()))
 			call lexer%diagnostics%push( &
-					repeat(' ', lexer%pos-1)//fg_bright_red &
-					//repeat('^', 1)//color_reset//line_feed &
-					//fg_bold_bright_red//'Error'//color_reset &
-					//fg_bold//": unexpected character '"//lexer%current() &
-					//"'" &
-					//color_reset &
-					)
+				err_unexpected_char(span, lexer%current()))
 
 	end select
 	lexer%pos = lexer%pos + 1
@@ -974,6 +963,7 @@ recursive function parse_assignment_expr(parser) result(expr)
 
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: let, identifier, op
+	type(text_span_t) :: span
 
 	if (parser%peek_kind(0) == let_keyword      .and. &
 	    parser%peek_kind(1) == identifier_token .and. &
@@ -1002,8 +992,9 @@ recursive function parse_assignment_expr(parser) result(expr)
 
 		!print *, 'io = ', io
 		if (io /= exit_success) then
-			call parser%diagnostics%push('Error: variable "' &
-				//identifier%text//'" has already been declared')
+			span = new_text_span(identifier%pos, len(identifier%text))
+			call parser%diagnostics%push( &
+				err_redeclare_var(span, identifier%text))
 		end if
 
 		return
@@ -1025,8 +1016,9 @@ recursive function parse_assignment_expr(parser) result(expr)
 
 		expr%val = parser%variables%search(identifier%text, io)
 		if (io /= exit_success) then
-			call parser%diagnostics%push('Error: variable "' &
-				//identifier%text//'" has not been declared')
+			span = new_text_span(identifier%pos, len(identifier%text))
+			call parser%diagnostics%push( &
+				err_undeclare_var(span, identifier%text))
 		end if
 
 		! TODO: move this check inside of is_binary_op_allowed?  Need to pass
@@ -1034,13 +1026,11 @@ recursive function parse_assignment_expr(parser) result(expr)
 		if (.not. is_binary_op_allowed( &
 			expr%val%kind, op%kind, expr%right%val%kind)) then
 
-			! TODO: implement text span for diagnostics
-			call parser%diagnostics%push('Error: binary operator "' &
-				//op%text//'" not defined for types ' &
-				//kind_name(expr%val%kind) &
-				//' and ' &
-				//kind_name(expr%right%val%kind) &
-				)
+			span = new_text_span(op%pos, len(op%text))
+			call parser%diagnostics%push( &
+				err_binary_types(span, op%text, &
+				kind_name(expr%val%kind), &
+				kind_name(expr%right%val%kind)))
 
 		end if
 
@@ -1072,6 +1062,7 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: op
+	type(text_span_t) :: span
 
 	if (debug > 1) print *, 'parse_expr'
 
@@ -1086,8 +1077,12 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		expr  = new_unary_expr(op, right)
 
 		if (.not. is_unary_op_allowed(op%kind, right%val%kind)) then
-			! TODO: wording, styling. Move this inside is_unary_op_allowed()
-			call parser%diagnostics%push('Error: unary op not defined for type')
+
+			span = new_text_span(op%pos, len(op%text))
+			call parser%diagnostics%push( &
+				err_unary_types(span, op%text, &
+				kind_name(expr%right%val%kind)))
+
 		end if
 
 	else
@@ -1105,13 +1100,11 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		if (.not. is_binary_op_allowed( &
 			expr%left%val%kind, op%kind, expr%right%val%kind)) then
 
-			! TODO: implement text span for diagnostics
-			call parser%diagnostics%push('Error: binary operator "' &
-				//op%text//'" not defined for types ' &
-				//kind_name(expr%left%val%kind) &
-				//' and ' &
-				//kind_name(expr%right%val%kind) &
-				)
+			span = new_text_span(op%pos, len(op%text))
+			call parser%diagnostics%push( &
+				err_binary_types(span, op%text, &
+				kind_name(expr%left %val%kind), &
+				kind_name(expr%right%val%kind)))
 
 		end if
 
@@ -1262,6 +1255,7 @@ function parse_primary_expr(parser) result(expr)
 	integer :: io
 	logical :: bool
 	type(syntax_token_t) :: num, left, right, keyword, identifier
+	type(text_span_t) :: span
 
 	if (debug > 1) print *, 'parse_primary_expr'
 
@@ -1299,8 +1293,9 @@ function parse_primary_expr(parser) result(expr)
 				parser%variables%search(identifier%text, io))
 
 			if (io /= exit_success) then
-				call parser%diagnostics%push('Error: variable "' &
-					//identifier%text//'" has not been declared')
+				span = new_text_span(identifier%pos, len(identifier%text))
+				call parser%diagnostics%push( &
+					err_undeclare_var(span, identifier%text))
 			end if
 
 		case default
@@ -1524,6 +1519,7 @@ function match(parser, kind) result(token)
 	integer :: len_text
 
 	type(syntax_token_t) :: current
+	type(text_span_t) :: span
 
 	! If current_text() and current_pos() helper fns are added, this local var
 	! current can be eliminated
@@ -1535,16 +1531,10 @@ function match(parser, kind) result(token)
 	end if
 
 	len_text = max(len(current%text), 1)
-
+	span = new_text_span(current%pos, len_text)
 	call parser%diagnostics%push( &
-			repeat(' ', current%pos-1)//fg_bright_red &
-			//repeat('^', len_text)//color_reset//line_feed &
-			//fg_bold_bright_red//'Error'//color_reset &
-			//fg_bold//': unexpected token "'//current%text//'"' &
-			//' (kind <'//kind_name(parser%current_kind())//'>)' &
-			//', expected <'//kind_name(kind)//'>' &
-			//color_reset &
-			)
+		err_unexpected_token(span, current%text, &
+		kind_name(parser%current_kind()), kind_name(kind)))
 
 	token = new_token(kind, current%pos, null_char)
 
@@ -1915,8 +1905,7 @@ function value_str(val) result(str)
 			end if
 
 		case default
-			! TODO: log error
-			str = "<invalid_value>"
+			str = err_prefix//"<invalid_value>"
 
 	end select
 
