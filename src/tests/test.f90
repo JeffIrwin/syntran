@@ -38,6 +38,8 @@ subroutine unit_test_bin_arith(npass, nfail)
 			eval_int('73 - 48 - 21') == 73 - 48 - 21, &
 			eval_int('24 / 6') == 24 / 6, &
 			eval_int('24 / 6 / 2') == 24 / 6 / 2, &
+			eval_int('2 ** 5') == 2 ** 5, &
+			eval_int('3 ** 4') == 3 ** 4, &
 			eval_int('343 - 87654345 / 27 + 76 * 234 - 65432 / 63') &
 			       == 343 - 87654345 / 27 + 76 * 234 - 65432 / 63 &
 		]
@@ -305,6 +307,7 @@ subroutine unit_test_bad_syntax(npass, nfail)
 
 	character(len = *), parameter :: label = 'bad syntax'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
@@ -313,32 +316,34 @@ subroutine unit_test_bad_syntax(npass, nfail)
 	! quiet arg to not pollute the logs with error messages that I intend
 	! to trigger
 
+	! TODO: check edge cases of power operator with negative int args
+
 	tests = &
 		[   &
-			eval('1 +* 2', quiet = .true.) == '', &
-			eval('3 - 4 + ', quiet = .true.) == '', &
-			eval('1 + 123456789123456789', quiet = .true.) == '', &
-			eval('1 + $', quiet = .true.) == '', &
-			eval('4) + 5', quiet = .true.) == '', &
-			eval('true + 4', quiet = .true.) == '', &
-			eval('+true', quiet = .true.) == '', &
-			eval('not 1', quiet = .true.) == '', &
-			eval('true == 1', quiet = .true.) == '', &
-			eval('0 == false', quiet = .true.) == '', &
-			eval('0 != false', quiet = .true.) == '', &
-			eval('1 + (2 == 3)', quiet = .true.) == '', &
+			eval('1 +* 2', quiet) == '', &
+			eval('3 - 4 + ', quiet) == '', &
+			eval('1 + 123456789123456789', quiet) == '', &
+			eval('1 + $', quiet) == '', &
+			eval('4) + 5', quiet) == '', &
+			eval('true + 4', quiet) == '', &
+			eval('+true', quiet) == '', &
+			eval('not 1', quiet) == '', &
+			eval('true == 1', quiet) == '', &
+			eval('0 == false', quiet) == '', &
+			eval('0 != false', quiet) == '', &
+			eval('1 + (2 == 3)', quiet) == '', &
 			interpret( &
 				'let a = 2'//line_feed// &
-				'let a = 3') == '',     &
+				'let a = 3', quiet) == '',     &
 			interpret( &
 				'let aaa = 3'//line_feed// &
 				'let aa = aaa - 1'//line_feed// &
-				'let b = a - 1') == '',     &
+				'let b = a - 1', quiet) == '',     &
 			interpret( &
-				'let a = b') == '',     &
+				'let a = b', quiet) == '',     &
 			interpret( &
 				'let a = 1'//line_feed// &
-				'a = true') == '',     &
+				'a = true', quiet) == '',     &
 			interpret( &
 				'let cute = 1'//line_feed// &
 				'let cup = 2'//line_feed// &
@@ -347,8 +352,8 @@ subroutine unit_test_bad_syntax(npass, nfail)
 				'let he = 5'//line_feed// &
 				'let us = 6'//line_feed// &
 				'let i = 7'//line_feed// &
-				'a') == '', &
-			eval('7 * false', quiet = .true.) == '' &
+				'a', quiet) == '', &
+			eval('7 * false', quiet) == '' &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

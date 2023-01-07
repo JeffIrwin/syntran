@@ -17,7 +17,7 @@ module core_m
 	! Debug logging verbosity (0 == silent)
 	integer, parameter :: debug = 0
 
-	integer, parameter ::  &
+	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
 		syntran_patch =  4
@@ -26,7 +26,6 @@ module core_m
 	!
 	! Add:
 	!  - comments (Immo did this very late?)
-	!  - **
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
@@ -45,6 +44,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			sstar_token         = 28, &
 			let_keyword         = 27, &
 			name_expr           = 26, &
 			equals_token        = 25, & ! '='
@@ -450,7 +450,8 @@ function kind_name(kind)
 			"assignment_expr  ", & ! 24
 			"equals_token     ", & ! 25
 			"name_expr        ", & ! 26
-			"let_keyword      "  & ! 27
+			"let_keyword      ", & ! 27
+			"sstar_token      "  & ! 28
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -716,7 +717,12 @@ function lex(lexer) result(token)
 			token = new_token(minus_token , lexer%pos, lexer%current())
 
 		case ("*")
-			token = new_token(star_token  , lexer%pos, lexer%current())
+			if (lexer%lookahead() == "*") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(sstar_token  , lexer%pos, "**")
+			else
+				token = new_token(star_token  , lexer%pos, lexer%current())
+			end if
 
 		case ("/")
 			token = new_token(slash_token , lexer%pos, lexer%current())
@@ -1138,7 +1144,7 @@ logical function is_binary_op_allowed(left, op, right)
 
 	select case (op)
 
-		case (plus_token, minus_token, star_token, slash_token)
+		case (plus_token, minus_token, sstar_token, star_token, slash_token)
 			! TODO: floats
 			is_binary_op_allowed = left == num_expr  .and. right == num_expr
 
@@ -1206,7 +1212,7 @@ integer function get_unary_op_prec(kind) result(prec)
 	select case (kind)
 
 		case (plus_token, minus_token, not_keyword)
-			prec = 6
+			prec = 7
 
 		case default
 			prec = 0
@@ -1226,6 +1232,12 @@ integer function get_binary_op_prec(kind) result(prec)
 	!********
 
 	select case (kind)
+
+		! FIXME: increment the unary operator precedence above after increasing
+		! the max binary precedence
+
+		case (sstar_token)
+			prec = 6
 
 		case (star_token, slash_token)
 			prec = 5
@@ -1695,6 +1707,9 @@ recursive function syntax_eval(node, variables) result(res)
 		else if (node%op%kind == star_token) then
 			res%ival = left%ival * right%ival
 
+		else if (node%op%kind == sstar_token) then
+			res%ival = left%ival ** right%ival
+
 		else if (node%op%kind == slash_token) then
 			res%ival = left%ival / right%ival
 
@@ -1787,7 +1802,7 @@ end subroutine syntran_banner
 
 !===============================================================================
 
-function interpret(str) result(res_str)
+function interpret(str, quiet) result(res_str)
 
 	! This is the interpreter shell
 	!
@@ -1802,7 +1817,9 @@ function interpret(str) result(res_str)
 	!   - enable input echo for file input (not for stdin)
 	!   - write file name and line num for diagnostics
 
-	character(len = *), optional :: str
+	character(len = *), intent(in), optional :: str
+	logical, intent(in), optional :: quiet
+
 	character(len = :), allocatable :: res_str
 
 	!********
@@ -1813,7 +1830,7 @@ function interpret(str) result(res_str)
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io
 
-	logical :: show_tree = .false.
+	logical :: quietl, show_tree = .false.
 
 	type(string_view_t) :: sv
 
@@ -1828,6 +1845,9 @@ function interpret(str) result(res_str)
 		! Append a trailing line feed in case it does not exist
 		sv = new_string_view(str//line_feed)
 	end if
+
+	quietl = .false.
+	if (present(quiet)) quietl = quiet
 
 	! Read-eval-print-loop
 	do
@@ -1872,7 +1892,7 @@ function interpret(str) result(res_str)
 
 		if (debug > 0 .or. show_tree) print *, 'tree = ', tree%str()
 
-		call tree%log_diagnostics(line, ou)
+		if (.not. quietl) call tree%log_diagnostics(line, ou)
 
 		! Don't try to evaluate with errors
 		if (tree%diagnostics%len > 0) cycle
