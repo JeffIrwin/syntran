@@ -14,6 +14,7 @@ module core_m
 	character(len = *), parameter :: lang_name = 'syntran'
 
 	integer, parameter :: debug = 0
+	integer, parameter :: exit_success = 0, exit_failure = -1
 
 	! TODO:
 	!
@@ -214,11 +215,11 @@ recursive function ternary_search(node, key, iostat) result(val)
 
 	!print *, 'searching key "', key, '"'
 
-	iostat = 0
+	iostat = exit_success
 
 	if (.not. allocated(node)) then
 		! Search key not found
-		iostat = -1
+		iostat = exit_failure
 		return
 	end if
 
@@ -240,7 +241,7 @@ recursive function ternary_search(node, key, iostat) result(val)
 	!print *, 'setting val'
 
 	if (.not. allocated(node%val)) then
-		iostat = -1
+		iostat = exit_failure
 		return
 	end if
 
@@ -304,7 +305,7 @@ recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 	character :: k
 	character(len = :), allocatable :: ey
 
-	iostat = 0
+	iostat = exit_success
 
 	!print *, 'inserting key "', key, '"'
 
@@ -343,7 +344,7 @@ recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 	if (allocated(node%val)) then
 		!write(*,*) 'Error: key already inserted'
 		!call exit(-1)
-		iostat = -1
+		iostat = exit_failure
 	end if
 
 	if (.not. overwrite) return
@@ -647,7 +648,7 @@ function lex(lexer) result(token)
 		text = lexer%text(start: lexer%pos-1)
 
 		read(text, *, iostat = io) ival
-		if (io /= 0) then
+		if (io /= exit_success) then
 			! TODO: Refactor w/ underline fn, centralized style
 			call lexer%diagnostics%push( &
 					repeat(' ', start-1)//fg_bright_red &
@@ -999,7 +1000,7 @@ recursive function parse_assignment_expr(parser) result(expr)
 			io, overwrite = .false.)
 
 		!print *, 'io = ', io
-		if (io /= 0) then
+		if (io /= exit_success) then
 			call parser%diagnostics%push('Error: variable "' &
 				//identifier%text//'" has already been declared')
 		end if
@@ -1022,7 +1023,7 @@ recursive function parse_assignment_expr(parser) result(expr)
 		!print *, 'expr ident text = ', expr%identifier%text
 
 		expr%val = parser%variables%search(identifier%text, io)
-		if (io /= 0) then
+		if (io /= exit_success) then
 			call parser%diagnostics%push('Error: variable "' &
 				//identifier%text//'" has not been declared')
 		end if
@@ -1084,7 +1085,7 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		expr  = new_unary_expr(op, right)
 
 		if (.not. is_unary_op_allowed(op%kind, right%val%kind)) then
-			! TODO: wording, styling
+			! TODO: wording, styling. Move this inside is_unary_op_allowed()
 			call parser%diagnostics%push('Error: unary op not defined for type')
 		end if
 
@@ -1179,15 +1180,8 @@ end function is_unary_op_allowed
 ! parser%current()%kind in Fortran, so use this helper fn instead
 
 integer function current_kind(parser)
-
 	class(parser_t) :: parser
-
-	!type(syntax_token_t) :: current
-	!current = parser%current()
-	!current_kind = current%kind
-
 	current_kind = parser%peek_kind(0)
-
 end function current_kind
 
 integer function peek_kind(parser, offset)
@@ -1297,14 +1291,13 @@ function parse_primary_expr(parser) result(expr)
 		case (identifier_token)
 
 			identifier = parser%next()
-			print *, 'identifier = ', identifier%text
+			!print *, 'identifier = ', identifier%text
 
-			!expr = new_name_expr(identifier)
-			print *, 'searching'
+			!print *, 'searching'
 			expr = new_name_expr(identifier, &
 				parser%variables%search(identifier%text, io))
 
-			if (io /= 0) then
+			if (io /= exit_success) then
 				call parser%diagnostics%push('Error: variable "' &
 					//identifier%text//'" has not been declared')
 			end if
@@ -1327,11 +1320,6 @@ function new_name_expr(identifier, val) result(expr)
 	type(syntax_token_t), intent(in) :: identifier
 	type(syntax_node_t) :: expr
 	type(value_t) :: val
-
-	! Statements like these all work:
-	!
-	!   a = b = 1
-	!   c = (d = 1)
 
 	expr%kind = name_expr
 	expr%identifier = identifier
@@ -1398,7 +1386,6 @@ function new_declaration_expr(identifier, op, right) result(expr)
 	allocate(expr%right)
 
 	expr%identifier = identifier
-	!expr%identifier%text = identifier%text(:)
 
 	expr%op    = op
 	expr%right = right
@@ -1424,8 +1411,6 @@ function new_assignment_expr(identifier, op, right) result(expr)
 	allocate(expr%right)
 
 	expr%identifier = identifier
-
-	expr%identifier%text = identifier%text(:)
 
 	expr%op    = op
 	expr%right = right
@@ -1777,7 +1762,6 @@ end function syntax_eval
 
 !===============================================================================
 
-!subroutine interpret(str)
 function interpret(str) result(res_str)
 
 	! This is the interpreter shell
