@@ -48,11 +48,13 @@ jobs:
         ./build/test
 
     - if: matrix.os == 'windows-latest'
+      shell: bash
       run: |
-        where gfortran
         which gfortran
-        set PATH
-        echo %PATH%
+        #where gfortran
+        #set PATH
+        #echo %PATH%
+        echo "PATH = "
         echo $PATH
         echo "GITHUB_PATH = "
         echo $GITHUB_PATH

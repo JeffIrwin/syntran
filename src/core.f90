@@ -184,22 +184,31 @@ contains
 
 !===============================================================================
 
-function variable_search(dictionary, key) result(val)
+function variable_search(dictionary, key, iostat) result(val)
 
 	class(variable_dictionary_t), intent(in) :: dictionary
 	character(len = *), intent(in) :: key
 	type(value_t) :: val
 
-	val = ternary_search(dictionary%root, key)
+	integer, intent(out), optional :: iostat
+
+	!********
+
+	integer :: io
+
+	val = ternary_search(dictionary%root, key, io)
+	if (present(iostat)) iostat = io
 
 end function variable_search
 
 !===============================================================================
 
-recursive function ternary_search(node, key) result(val)
+recursive function ternary_search(node, key, iostat) result(val)
 
 	type(ternary_tree_node_t), intent(in), allocatable :: node
 	character(len = *), intent(in) :: key
+
+	integer, intent(out) :: iostat
 	type(value_t) :: val
 
 	!********
@@ -209,11 +218,16 @@ recursive function ternary_search(node, key) result(val)
 
 	!print *, 'searching key "', key, '"'
 
+	iostat = 0
+
 	! TODO: len check should be unnecessary
 	if (len(key) == 0 .or. .not. allocated(node)) then
 		! Search key not found
 
-		! TODO: return status code
+		iostat = -1
+		return
+
+		! TODO: dead code
 		print *, "Error: variable doesn't exist"
 		call exit(-1)
 
@@ -225,11 +239,11 @@ recursive function ternary_search(node, key) result(val)
 
 	if (k < node%split_char) then
 		!print *, 'left'
-		val = ternary_search(node%left , key)
+		val = ternary_search(node%left , key, iostat)
 		return
 	else if (k > node%split_char) then
 		!print *, 'right'
-		val = ternary_search(node%right, key)
+		val = ternary_search(node%right, key, iostat)
 		return
 	else
 		!print *, 'mid'
@@ -239,7 +253,7 @@ recursive function ternary_search(node, key) result(val)
 			return
 		end if
 
-		val = ternary_search(node%mid  , ey)
+		val = ternary_search(node%mid  , ey, iostat)
 
 		return
 	end if
@@ -276,8 +290,8 @@ subroutine variable_insert(dictionary, key, val, iostat)
 	integer :: io
 
 	!print *, 'inserting "', key, '"'
-	call ternary_insert(dictionary%root, key, val, io)
 
+	call ternary_insert(dictionary%root, key, val, io)
 	if (present(iostat)) iostat = io
 
 end subroutine variable_insert
