@@ -1743,7 +1743,12 @@ function interpret(str) result(res_str)
 
 	! This is the interpreter shell
 	!
-	! TODO: arg for iu as stdin vs another file:
+	! Interpret stdin by default, or interpret the multi-line string str if it
+	! is given.  The return value res_str is the result of the final expression
+	! (like how Rust doesn't have a return statement, but fns just return the
+	! final expression in their body)
+	!
+	! TODO: another optional arg for iu as stdin vs another file:
 	!   - enable input echo for file input (not for stdin)
 	!   - write file name and line num for diagnostics
 
@@ -1776,8 +1781,17 @@ function interpret(str) result(res_str)
 
 	! Read-eval-print-loop
 	do
+
 		if (present(str)) then
+
+			! TODO: I don't have an end-of-statement token yet (;), so interpret
+			! multi-line strings one line at a time for now.  Whatever I end up
+			! doing has to work with both strings and stdin, so I may need
+			! a continue iostat for syntax_parse to continue parsing the same
+			! tree through multiple input lines
+
 			line = sv%get_line(iostat = io)
+
 		else
 			write(ou, '(a)', advance = 'no') prompt
 			line = read_line(iu, iostat = io)

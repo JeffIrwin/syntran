@@ -1,0 +1,13 @@
+
+foo = 1
+bar = 2
+baz = 3
+
+foo + bar + baz
+
+p = true
+q = false
+
+p or q
+not q and foo + bar == baz
+

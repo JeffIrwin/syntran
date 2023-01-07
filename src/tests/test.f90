@@ -226,16 +226,9 @@ subroutine unit_test_assignment(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: I need a way to test multiple statements
-	!
-	! Eval only interprets 1 statement, so I guess I need to overload
-	! interpret() to take a string as an arg and return a (stringly-typed) value
-	!
-	! Maybe it's easier at the beginning of eval() to split the string by lines
-	! or whatever the statement delimiter is (preferrably ";" ?)
-	!
-	! Alternatively, own a variable_dictionary in this test routine shared among
-	! test array elements
+	! We're getting into dangerous Fortran territory here.  I think there's
+	! a limit on how many chars and lines can be in a statement, and this may be
+	! pushing it
 
 	tests = &
 		[   &
@@ -251,6 +244,42 @@ subroutine unit_test_assignment(npass, nfail)
 				'b = a'//line_feed// &
 				'a = a + 1'//line_feed// &
 				'a == 2 and b == 1') == 'true', &
+			interpret( &
+				'a = 1'//line_feed// &
+				'aa = 2'//line_feed// &
+				'aaa = 3'//line_feed// &
+				'aaaa = 4'//line_feed// &
+				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4') == 'true', &
+			interpret( &
+				'aaaa = 4'//line_feed// &
+				'aaa = 3'//line_feed// &
+				'aa = 2'//line_feed// &
+				'a = 1'//line_feed// &
+				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4') == 'true', &
+			interpret( &
+				'aaa = 3'//line_feed// &
+				'aaaa = 4'//line_feed// &
+				'a = 1'//line_feed// &
+				'aa = 2'//line_feed// &
+				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4') == 'true', &
+			interpret( &
+				'a = 1'//line_feed// &
+				'b = 2'//line_feed// &
+				'c = 3'//line_feed// &
+				'd = 4'//line_feed// &
+				'a == 1 and b == 2 and c == 3 and d == 4') == 'true', &
+			interpret( &
+				'd = 4'//line_feed// &
+				'c = 3'//line_feed// &
+				'b = 2'//line_feed// &
+				'a = 1'//line_feed// &
+				'a == 1 and b == 2 and c == 3 and d == 4') == 'true', &
+			interpret( &
+				'c = 3'//line_feed// &
+				'd = 4'//line_feed// &
+				'a = 1'//line_feed// &
+				'b = 2'//line_feed// &
+				'a == 1 and b == 2 and c == 3 and d == 4') == 'true', &
 			eval('myVariable = 1337')  == '1337'   &
 		]
 
