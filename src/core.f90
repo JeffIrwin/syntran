@@ -227,25 +227,24 @@ recursive function ternary_search(node, key, iostat) result(val)
 	ey = key(2:)
 
 	if (k < node%split_char) then
-		!print *, 'left'
 		val = ternary_search(node%left , key, iostat)
 		return
 	else if (k > node%split_char) then
-		!print *, 'right'
 		val = ternary_search(node%right, key, iostat)
 		return
-	else
-		!print *, 'mid'
-
-		if (len(ey) == 0) then
-			val = node%val
-			return
-		end if
-
+	else if (len(ey) > 0) then
 		val = ternary_search(node%mid  , ey, iostat)
-
 		return
 	end if
+
+	!print *, 'setting val'
+
+	if (.not. allocated(node%val)) then
+		iostat = -1
+		return
+	end if
+
+	val = node%val
 
 	!print *, 'done ternary_search'
 	!print *, ''
@@ -1018,17 +1017,11 @@ recursive function parse_assignment_expr(parser) result(expr)
 		op         = parser%next()
 		right      = parser%parse_assignment_expr()
 
-		! TODO: pass on optional logical "let" arg to new_assignment_expr() so
-		! it doesn't overwrite identifier's type, which should have already been
-		! declared by an earlier let statement.  Also make a search call to
-		! confirm it's been declared
-
 		expr = new_assignment_expr(identifier, op, right)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
 		expr%val = parser%variables%search(identifier%text, io)
-
 		if (io /= 0) then
 			call parser%diagnostics%push('Error: variable "' &
 				//identifier%text//'" has not been declared')
@@ -1151,16 +1144,7 @@ logical function is_binary_op_allowed(left, op, right)
 			is_binary_op_allowed = left == bool_expr .and. right == bool_expr
 
 		case (equals_token, eequals_token, bang_equals_token)
-
-			! TODO: I don't think this will need updated for equals_token, but
-			! I'm commenting just in case.  Further work in
-			! new_assignment_expr() should take care of it
-
 			is_binary_op_allowed = left == right
-
-			!is_binary_op_allowed = &
-			!	(left == bool_expr .and. right == bool_expr) .or. &
-			!	(left == num_expr  .and. right == num_expr)
 
 	end select
 
@@ -1313,9 +1297,10 @@ function parse_primary_expr(parser) result(expr)
 		case (identifier_token)
 
 			identifier = parser%next()
-			!print *, 'identifier = ', identifier%text
+			print *, 'identifier = ', identifier%text
 
 			!expr = new_name_expr(identifier)
+			print *, 'searching'
 			expr = new_name_expr(identifier, &
 				parser%variables%search(identifier%text, io))
 

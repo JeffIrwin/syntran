@@ -338,6 +338,15 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			interpret( &
 				'let a = 1'//line_feed// &
 				'a = true') == '',     &
+			interpret( &
+				'let cute = 1'//line_feed// &
+				'let cup = 2'//line_feed// &
+				'let at = 3'//line_feed// &
+				'let as = 4'//line_feed// &
+				'let he = 5'//line_feed// &
+				'let us = 6'//line_feed// &
+				'let i = 7'//line_feed// &
+				'a') == '', &
 			eval('7 * false', quiet = .true.) == '' &
 		]
 

@@ -34,7 +34,9 @@ Then enter arithmetic expressions like `1 + 2 * 3` in the interpreter:
 
 ### Variables, booleans, and type checking
 
-Integer and boolean types are supported:
+A variable declaration expression uses the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also somewhat similar to JavaScript, except there is no `var` keyword.
+
+Integer and boolean types are supported.
 
     syntran$ let foo = 1
     1
@@ -60,6 +62,4 @@ Integer and boolean types are supported:
     syntran$
 
 Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g. `.true.`) but without the dots.  Note that they are lower case-sensitive, unlike Python (e.g. `True`).
-
-Variable declaration syntax uses the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also somewhat similar to JavaScript, except there is no `var` keyword.
 
