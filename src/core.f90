@@ -306,34 +306,17 @@ recursive subroutine ternary_insert(node, key, val, iostat)
 
 	iostat = 0
 
-	if (len(key) == 0) then
-		! TODO: refactor mid recursion so that this is unreachable
-		return
-		call exit(-1)
-	end if
-
 	!print *, 'inserting key "', key, '"'
 
-	! :)
-	k  = key(1:1)
-	ey = key(2:)
+	! key == k//ey :)
+	k   = key(1:1)
+	 ey = key(2:)
 
 	if (.not. allocated(node)) then
 		!print *, 'allocate'
-
 		allocate(node)
 		node%split_char = k
-
-		! Store val.  Node was not allocated, so no need to check val like below
-		if (len(ey) == 0) node%val = val
-
-		! Insert remainder of key
-		call ternary_insert(node%mid, ey, val, iostat)
-		return
-
-	end if
-
-	if (k < node%split_char) then
+	else if (k < node%split_char) then
 		!print *, 'left'
 		call ternary_insert(node%left , key, val, iostat)
 		return
@@ -354,18 +337,6 @@ recursive subroutine ternary_insert(node, key, val, iostat)
 	! a scalar anyway), but it's just a convenient way to check if
 	! a duplicate key has already been inserted or not.  We could add
 	! a separate logical member to node for this instead if needed
-
-	!! TODO: add an input arg to overwrite based on the presence of the
-	!! "let" keyword.  Allow this:
-	!!
-	!!     let a = 1
-	!!     a = 2
-	!!
-	!! But not this:
-	!!
-	!!     let a = 1
-	!!     let a = 2
-	!!
 
 	! This is not necessarily a failure.  In the evaluator, we will insert
 	! values for variables which have already been declared
