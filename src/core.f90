@@ -18,7 +18,9 @@ module core_m
 	! TODO:
 	!
 	! Add:
+	!  - **
 	!  - assignment and +=, -=, *=, etc.
+	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - <, >, <=, >=
 	!  - floats, characters, strings
@@ -204,15 +206,10 @@ recursive function ternary_search(node, key) result(val)
 	character :: k
 	character(len = :), allocatable :: ey
 
-	if (len(key) == 0) return
-
 	!print *, 'searching key "', key, '"'
 
-	! :)
-	k  = key(1:1)
-	ey = key(2:)
-
-	if (.not. allocated(node)) then
+	! TODO: len check should be unnecessary
+	if (len(key) == 0 .or. .not. allocated(node)) then
 		! Search key not found
 
 		! TODO: return status code
@@ -220,6 +217,10 @@ recursive function ternary_search(node, key) result(val)
 		call exit(-1)
 
 	end if
+
+	! :)
+	k  = key(1:1)
+	ey = key(2:)
 
 	if (k < node%split_char) then
 		!print *, 'left'
@@ -291,7 +292,11 @@ recursive subroutine ternary_insert(node, key, val)
 	character :: k
 	character(len = :), allocatable :: ey
 
-	if (len(key) == 0) return
+	if (len(key) == 0) then
+		! TODO: refactor mid recursion so that this is unreachable
+		return
+		call exit(-1)
+	end if
 
 	!print *, 'inserting key "', key, '"'
 
@@ -333,13 +338,23 @@ recursive subroutine ternary_insert(node, key, val)
 		! a duplicate key has already been inserted or not.  We could add
 		! a separate logical member to node for this instead if needed
 
-		if (allocated(node%val)) then
+		!! TODO: add an input arg to overwrite based on the presence of the
+		!! "let" keyword.  Allow this:
+		!!
+		!!     let a = 1
+		!!     a = 2
+		!!
+		!! But not this:
+		!!
+		!!     let a = 1
+		!!     let a = 2
+		!!
 
-			! TODO: return status code instead of stopping
-			write(*,*) 'Error: key already inserted'
-			call exit(-1)
-
-		end if
+		!if (allocated(node%val)) then
+		!	! TODO: return status code instead of stopping
+		!	write(*,*) 'Error: key already inserted'
+		!	call exit(-1)
+		!end if
 
 		node%val = val
 	end if
@@ -1723,13 +1738,19 @@ end function syntax_eval
 
 !===============================================================================
 
-subroutine interpret()
+!subroutine interpret(str)
+function interpret(str) result(res_str)
 
 	! This is the interpreter shell
 	!
 	! TODO: arg for iu as stdin vs another file:
 	!   - enable input echo for file input (not for stdin)
 	!   - write file name and line num for diagnostics
+
+	character(len = *), optional :: str
+	character(len = :), allocatable :: res_str
+
+	!********
 
 	character(len = :), allocatable :: line
 	character(len = *), parameter :: prompt = lang_name//'$ '
@@ -1739,6 +1760,8 @@ subroutine interpret()
 
 	logical :: show_tree = .false.
 
+	type(string_view_t) :: sv
+
 	type(syntax_node_t) :: tree
 	type(value_t) :: res
 	type(variable_dictionary_t) :: variables
@@ -1746,10 +1769,19 @@ subroutine interpret()
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
 
+	if (present(str)) then
+		! Append a trailing line feed in case it does not exist
+		sv = new_string_view(str//line_feed)
+	end if
+
 	! Read-eval-print-loop
 	do
-		write(ou, '(a)', advance = 'no') prompt
-		line = read_line(iu, iostat = io)
+		if (present(str)) then
+			line = sv%get_line(iostat = io)
+		else
+			write(ou, '(a)', advance = 'no') prompt
+			line = read_line(iu, iostat = io)
+		end if
 
 		!print *, 'line = <', line, '>'
 		!print *, 'io = ', io
@@ -1783,11 +1815,12 @@ subroutine interpret()
 		res  = syntax_eval(tree, variables)
 
 		! Consider MATLAB-style "ans = " log?
-		write(ou, '(a)') res%str()
+		res_str = res%str()
+		if (.not. present(str)) write(ou, '(a)') res_str
 
 	end do
 
-end subroutine interpret
+end function interpret
 
 !===============================================================================
 

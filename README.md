@@ -57,7 +57,7 @@ Integer and boolean types are supported:
     foo and p
     Error: binary operator not defined for given types
 
-Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g. `.true.`) but without the dots.  Note that they are lower case-sensitive, unlike Python (`True`).
+Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g. `.true.`) but without the dots.  Note that they are lower case-sensitive, unlike Python (e.g. `True`).
 
 Variable declaration syntax is unstable.  I'm planning on implementing a [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust or JavaScript.
 

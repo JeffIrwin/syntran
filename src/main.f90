@@ -6,6 +6,8 @@ program main
 	use core_m
 	implicit none
 
+	character(len = :), allocatable :: res
+
 	! TODO: move version to core
 
 	! TODO: move to a new fn
@@ -18,7 +20,7 @@ program main
 	write(*,*) tab//'Ctrl+C to exit'
 	write(*,*)
 
-	call interpret()
+	res = interpret()
 
 end program main
 

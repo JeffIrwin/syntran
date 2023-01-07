@@ -35,6 +35,15 @@ module utils
 
 	!********
 
+	type string_view_t
+		character(len = :), allocatable :: s
+		integer :: pos
+		contains
+			procedure :: get_line => string_view_get_line
+	end type string_view_t
+
+	!********
+
 	type string_vector_t
 		type(string_t), allocatable :: v(:)
 		integer :: len, cap
@@ -116,6 +125,46 @@ subroutine push_all_string(vector, add)
 	end do
 
 end subroutine push_all_string
+
+!===============================================================================
+
+function new_string_view(str) result(view)
+
+	character(len = *), intent(in) :: str
+	type(string_view_t) :: view
+
+	view%s = str
+	view%pos = 1
+
+end function new_string_view
+
+!===============================================================================
+
+function string_view_get_line(sv, iostat) result(line)
+
+	class(string_view_t), intent(inout) :: sv
+	character(len = :), allocatable :: line
+	integer, optional, intent(out) :: iostat
+
+	!********
+
+	integer :: length, io
+
+	io = 0
+	length = scan(sv%s( sv%pos: ), line_feed//carriage_return)
+	if (length <= 0) then
+		io = iostat_end
+	end if
+
+	!print *, 'string_view_get_line'
+	!print *, 'pos, len = ', sv%pos, length
+
+	line = sv%s( sv%pos: sv%pos + length  - 1 )
+	sv%pos = sv%pos + length
+
+	if (present(iostat)) iostat = io
+
+end function string_view_get_line
 
 !===============================================================================
 

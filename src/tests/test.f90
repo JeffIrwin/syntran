@@ -240,8 +240,17 @@ subroutine unit_test_assignment(npass, nfail)
 	tests = &
 		[   &
 			eval('x = 1 ') == '1' ,  &
-			!eval('a = 2'//line_feed// &
-			!     'b = a') == '2',     &
+			interpret( &
+				'a = 2'//line_feed// &
+				'b = a') == '2',     &
+			interpret( &
+				'a = 2'//line_feed// &
+				'b = a + 1') == '3', &
+			interpret( &
+				'a = 1'//line_feed// &
+				'b = a'//line_feed// &
+				'a = a + 1'//line_feed// &
+				'a == 2 and b == 1') == 'true', &
 			eval('myVariable = 1337')  == '1337'   &
 		]
 
