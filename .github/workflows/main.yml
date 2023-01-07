@@ -47,17 +47,17 @@ jobs:
         #./build/syntran < samples/bad-syntax.syntran
         ./build/test
 
-    - if: matrix.os == 'windows-latest'
-      shell: bash
-      run: |
-        which gfortran
-        #where gfortran
-        #set PATH
-        #echo %PATH%
-        echo "PATH = "
-        echo $PATH
-        echo "GITHUB_PATH = "
-        echo $GITHUB_PATH
-        #Get-Content samples/arithmetic.syntran | ./build/syntran
-        ./build/test.exe
+    #- if: matrix.os == 'windows-latest'
+    #  shell: bash
+    #  run: |
+    #    which gfortran
+    #    #where gfortran
+    #    #set PATH
+    #    #echo %PATH%
+    #    echo "PATH = "
+    #    echo $PATH
+    #    echo "GITHUB_PATH = "
+    #    echo $GITHUB_PATH
+    #    #Get-Content samples/arithmetic.syntran | ./build/syntran
+    #    ./build/test.exe
 

@@ -326,10 +326,11 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('0 == false', quiet = .true.) == '', &
 			eval('0 != false', quiet = .true.) == '', &
 			eval('1 + (2 == 3)', quiet = .true.) == '', &
-			!TODO eval('a = b', quiet = .true.) == '', &
 			interpret( &
 				'let a = 2'//line_feed// &
 				'let a = 3') == '',     &
+			interpret( &
+				'let a = b') == '',     &
 			eval('7 * false', quiet = .true.) == '' &
 		]
 

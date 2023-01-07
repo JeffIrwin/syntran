@@ -1262,8 +1262,8 @@ function parse_primary_expr(parser) result(expr)
 
 	!********
 
+	integer :: io
 	logical :: bool
-
 	type(syntax_token_t) :: num, left, right, keyword, identifier
 
 	if (debug > 1) print *, 'parse_primary_expr'
@@ -1299,10 +1299,12 @@ function parse_primary_expr(parser) result(expr)
 
 			!expr = new_name_expr(identifier)
 			expr = new_name_expr(identifier, &
-				parser%variables%search(identifier%text))
+				parser%variables%search(identifier%text, io))
 
-			! TODO: search dict to check if declared.  Then searching in
-			! evaluator may not be needed?
+			if (io /= 0) then
+				call parser%diagnostics%push('Error: variable "' &
+					//identifier%text//'" has not been declared')
+			end if
 
 		case default
 
