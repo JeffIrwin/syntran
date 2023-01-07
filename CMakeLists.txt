@@ -64,6 +64,7 @@ set(SRC_DIR "src")
 set(LIB "${PROJECT}")
 set(LIB_SRC
 	${SRC_DIR}/utils.f90
+	${SRC_DIR}/syntran_errors.f90
 	${SRC_DIR}/core.f90
 	)
 

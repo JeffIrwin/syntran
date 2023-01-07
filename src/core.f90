@@ -4,6 +4,7 @@
 module core_m
 
 	use iso_fortran_env
+	use syntran_errors_m
 	use utils
 
 	implicit none
@@ -19,12 +20,17 @@ module core_m
 	! TODO:
 	!
 	! Add:
+	!  - comments (Immo did this very late?)
 	!  - **
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - <, >, <=, >=
+	!  - funcions
+	!  - arrays
 	!  - floats, characters, strings
+	!  - structs
+	!  - enums
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - xor
 	!  - bitwise operators
@@ -631,6 +637,7 @@ function lex(lexer) result(token)
 
 	character(len = :), allocatable :: text
 
+	type(text_span_t) :: span
 	type(value_t) :: val
 
 	if (lexer%pos > len(lexer%text)) then
@@ -649,14 +656,8 @@ function lex(lexer) result(token)
 
 		read(text, *, iostat = io) ival
 		if (io /= exit_success) then
-			! TODO: Refactor w/ underline fn, centralized style
-			call lexer%diagnostics%push( &
-					repeat(' ', start-1)//fg_bright_red &
-					//repeat('^', len(text))//color_reset//line_feed &
-					//fg_bold_bright_red//'Error'//color_reset &
-					//fg_bold//': invalid int32 '//text &
-					//color_reset &
-					)
+			span = new_text_span(start, len(text))
+			call lexer%diagnostics%push(err_bad_int(span, text))
 		end if
 
 		val = new_value(num_expr, ival = ival)
