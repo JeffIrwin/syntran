@@ -49,8 +49,6 @@ jobs:
 
     - if: matrix.os == 'windows-latest'
       run: |
-    #    Get-Content samples/arithmetic.syntran | ./build/syntran
-    #
         where gfortran
         which gfortran
         set PATH
@@ -58,4 +56,5 @@ jobs:
         echo $PATH
         echo "GITHUB_PATH = "
         echo $GITHUB_PATH
+        #Get-Content samples/arithmetic.syntran | ./build/syntran
 
