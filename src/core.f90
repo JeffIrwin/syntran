@@ -1807,7 +1807,7 @@ function interpret(str) result(res_str)
 	! (like how Rust doesn't have a return statement, but fns just return the
 	! final expression in their body)
 	!
-	! TODO: add quite arg for bad syntax testing
+	! TODO: add quiet arg for bad syntax testing
 	!
 	! TODO: another optional arg for iu as stdin vs another file:
 	!   - enable input echo for file input (not for stdin)
