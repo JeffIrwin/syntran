@@ -19,7 +19,7 @@ module core_m
 	!
 	! Add:
 	!  - **
-	!  - assignment and +=, -=, *=, etc.
+	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - <, >, <=, >=
@@ -31,7 +31,8 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
-			name_expr           = 26, & ! '='
+			let_keyword         = 27, &
+			name_expr           = 26, &
 			equals_token        = 25, & ! '='
 			assignment_expr     = 24, &
 			bang_equals_token   = 23, &
@@ -250,7 +251,7 @@ end function ternary_search
 
 !===============================================================================
 
-subroutine variable_insert(dictionary, key, val)
+subroutine variable_insert(dictionary, key, val, iostat)
 
 	! There are a couple reasons for having this wrapper:
 	!
@@ -268,13 +269,22 @@ subroutine variable_insert(dictionary, key, val)
 	character(len = *), intent(in) :: key
 	type(value_t), intent(in) :: val
 
-	call ternary_insert(dictionary%root, key, val)
+	integer, intent(out), optional :: iostat
+
+	!********
+
+	integer :: io
+
+	!print *, 'inserting "', key, '"'
+	call ternary_insert(dictionary%root, key, val, io)
+
+	if (present(iostat)) iostat = io
 
 end subroutine variable_insert
 
 !===============================================================================
 
-recursive subroutine ternary_insert(node, key, val)
+recursive subroutine ternary_insert(node, key, val, iostat)
 
 	! TODO: can this be type bound? maybe make a wrapper dict type that
 	! basically just contains a ternary_tree_node_t
@@ -287,10 +297,14 @@ recursive subroutine ternary_insert(node, key, val)
 	!integer, intent(in) :: val
 	type(value_t), intent(in) :: val
 
+	integer, intent(out) :: iostat
+
 	!********
 
 	character :: k
 	character(len = :), allocatable :: ey
+
+	iostat = 0
 
 	if (len(key) == 0) then
 		! TODO: refactor mid recursion so that this is unreachable
@@ -314,54 +328,54 @@ recursive subroutine ternary_insert(node, key, val)
 		if (len(ey) == 0) node%val = val
 
 		! Insert remainder of key
-		call ternary_insert(node%mid, ey, val)
+		call ternary_insert(node%mid, ey, val, iostat)
 		return
 
 	end if
 
 	if (k < node%split_char) then
 		!print *, 'left'
-		call ternary_insert(node%left , key, val)
+		call ternary_insert(node%left , key, val, iostat)
 		return
 	else if (k > node%split_char) then
 		!print *, 'right'
-		call ternary_insert(node%right, key, val)
+		call ternary_insert(node%right, key, val, iostat)
 		return
 	end if
 
 	!print *, 'mid'
 
-	if (len(ey) == 0) then
-
-		! node%val doesn't really need to be declared as allocatable (it's
-		! a scalar anyway), but it's just a convenient way to check if
-		! a duplicate key has already been inserted or not.  We could add
-		! a separate logical member to node for this instead if needed
-
-		!! TODO: add an input arg to overwrite based on the presence of the
-		!! "let" keyword.  Allow this:
-		!!
-		!!     let a = 1
-		!!     a = 2
-		!!
-		!! But not this:
-		!!
-		!!     let a = 1
-		!!     let a = 2
-		!!
-
-		!if (allocated(node%val)) then
-		!	! TODO: return status code instead of stopping
-		!	write(*,*) 'Error: key already inserted'
-		!	call exit(-1)
-		!end if
-
-		node%val = val
+	if (len(ey) /= 0) then
+		call ternary_insert(node%mid  , ey, val, iostat)
+		return
 	end if
 
-	call ternary_insert(node%mid  , ey, val)
+	! node%val doesn't really need to be declared as allocatable (it's
+	! a scalar anyway), but it's just a convenient way to check if
+	! a duplicate key has already been inserted or not.  We could add
+	! a separate logical member to node for this instead if needed
 
-	!return
+	!! TODO: add an input arg to overwrite based on the presence of the
+	!! "let" keyword.  Allow this:
+	!!
+	!!     let a = 1
+	!!     a = 2
+	!!
+	!! But not this:
+	!!
+	!!     let a = 1
+	!!     let a = 2
+	!!
+
+	! This is not necessarily a failure.  In the evaluator, we will insert
+	! values for variables which have already been declared
+	if (allocated(node%val)) then
+		!write(*,*) 'Error: key already inserted'
+		!call exit(-1)
+		iostat = -1
+	end if
+
+	node%val = val
 
 	!print *, 'done inserting'
 	!print *, ''
@@ -449,7 +463,8 @@ function kind_name(kind)
 			"bang_equals_token", & ! 23
 			"assignment_expr  ", & ! 24
 			"equals_token     ", & ! 25
-			"name_expr        "  & ! 26
+			"name_expr        ", & ! 26
+			"let_keyword      "  & ! 27
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -821,6 +836,9 @@ integer function get_keyword_kind(text) result(kind)
 		case ("or")
 			kind = or_keyword
 
+		case ("let")
+			kind = let_keyword
+
 		case default
 			kind = identifier_token
 
@@ -941,9 +959,6 @@ function syntax_parse(str, variables) result(tree)
 		!print *, 'done'
 	end if
 
-	! TODO: variables have been inserted in parser.  Does the type checker work
-	! on variables?
-
 	! Parse the tokens. Should this accept empty strings?  It says unexpected
 	! token trying to match number in parse_primary_expr(), so currently the
 	! interpreter driver skips empty lines
@@ -980,17 +995,59 @@ recursive function parse_assignment_expr(parser) result(expr)
 
 	!********
 
+	integer :: io
+
 	type(syntax_node_t) :: right
-	type(syntax_token_t) :: identifier, op
+	type(syntax_token_t) :: let, identifier, op
+
+	if (parser%peek_kind(0) == let_keyword      .and. &
+	    parser%peek_kind(1) == identifier_token .and. &
+	    parser%peek_kind(2) == equals_token) then
+
+		! TODO: I'm skipping ahead a bit here to what Immo does in episode 6.
+		! He uses separate variable_declaration, expr_statement, and
+		! assignment_expr kinds, all of which I'm handling here as
+		! assignment_expr.  My code my need some refactoring to more closely
+		! mirror Immo's.
+
+		!print *, 'let expr'
+
+		let        = parser%next()
+		identifier = parser%next()
+		op         = parser%next()
+		right      = parser%parse_assignment_expr()
+
+		expr = new_assignment_expr(identifier, op, right)
+
+		!print *, 'expr ident text = ', expr%identifier%text
+
+		! Insert the identifier's type into the dictionary
+		call parser%variables%insert(identifier%text, expr%val, io)
+		!call variables%insert(node%identifier%text, res)
+
+		!print *, 'io = ', io
+		if (io /= 0) then
+			call parser%diagnostics%push('Error: variable "' &
+				//identifier%text//'" has already been declared')
+		end if
+
+		return
+
+	end if
 
 	if (parser%peek_kind(0) == identifier_token .and. &
 	    parser%peek_kind(1) == equals_token) then
 
-		! TODO: "let" keyword
+		!print *, 'assign expr'
 
 		identifier = parser%next()
 		op         = parser%next()
 		right      = parser%parse_assignment_expr()
+
+		! TODO: pass on optional logical "let" arg to new_assignment_expr() so
+		! it doesn't overwrite identifier's type, which should have already been
+		! declared by an earlier let statement.  Also make a search call to
+		! confirm it's been declared
 
 		expr = new_assignment_expr(identifier, op, right)
 
@@ -1597,7 +1654,9 @@ recursive function syntax_eval(node, variables) result(res)
 		! Assign return value
 		res = syntax_eval(node%right, variables)
 
-		! Assign res to identifier variable as well
+		! Assign res to LHS identifier variable as well.  TODO: this inserts the
+		! value, but call insert in the parser as well to declare the type
+
 		!print *, 'assigning identifier "', node%identifier%text, '"'
 		call variables%insert(node%identifier%text, res)
 
@@ -1748,6 +1807,8 @@ function interpret(str) result(res_str)
 	! (like how Rust doesn't have a return statement, but fns just return the
 	! final expression in their body)
 	!
+	! TODO: add quite arg for bad syntax testing
+	!
 	! TODO: another optional arg for iu as stdin vs another file:
 	!   - enable input echo for file input (not for stdin)
 	!   - write file name and line num for diagnostics
@@ -1813,6 +1874,7 @@ function interpret(str) result(res_str)
 			cycle
 		end if
 
+		res_str = ''
 		tree = syntax_parse(line, variables)
 
 		! I'm skipping the the binder that Immo implemented at this point in

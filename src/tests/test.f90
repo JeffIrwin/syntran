@@ -230,6 +230,9 @@ subroutine unit_test_assignment(npass, nfail)
 	! a limit on how many chars and lines can be in a statement, and this may be
 	! pushing it
 
+	! TODO: add let keyword where needed for these tests and bad syntax tests
+	! without
+
 	tests = &
 		[   &
 			eval('x = 1 ') == '1' ,  &
@@ -321,6 +324,10 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('0 == false', quiet = .true.) == '', &
 			eval('0 != false', quiet = .true.) == '', &
 			eval('1 + (2 == 3)', quiet = .true.) == '', &
+			!TODO eval('a = b', quiet = .true.) == '', &
+			interpret( &
+				'let a = 2'//line_feed// &
+				'let a = 3') == '',     &
 			eval('7 * false', quiet = .true.) == '' &
 		]
 
