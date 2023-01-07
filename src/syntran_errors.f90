@@ -24,31 +24,6 @@ contains
 
 !===============================================================================
 
-function new_text_span(start, length) result(span)
-
-	integer :: start, length
-	type(text_span_t) :: span
-
-	span%start  = start
-	span%length = length
-
-end function new_text_span
-
-!===============================================================================
-
-function underline(span)
-
-	type(text_span_t), intent(in) :: span
-	character(len = :), allocatable :: underline
-
-	underline = repeat(' ', span%start - 1) &
-		//fg_bright_red//repeat('^', span%length) &
-		//color_reset//line_feed
-
-end function underline
-
-!===============================================================================
-
 function err_bad_int(span, text) result(err)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
@@ -133,6 +108,31 @@ function err_unary_types(span, op, right) result(err)
 		//right//color_reset
 
 end function err_unary_types
+
+!===============================================================================
+
+function new_text_span(start, length) result(span)
+
+	integer :: start, length
+	type(text_span_t) :: span
+
+	span%start  = start
+	span%length = length
+
+end function new_text_span
+
+!===============================================================================
+
+function underline(span)
+
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: underline
+
+	underline = repeat(' ', span%start - 1) &
+		//fg_bright_red//repeat('^', span%length) &
+		//color_reset//line_feed
+
+end function underline
 
 !===============================================================================
 

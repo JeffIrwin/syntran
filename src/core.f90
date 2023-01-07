@@ -14,8 +14,13 @@ module core_m
 	! I mean what could she have?  Fungus?
 	character(len = *), parameter :: lang_name = 'syntran'
 
+	! Debug logging verbosity (0 == silent)
 	integer, parameter :: debug = 0
-	integer, parameter :: exit_success = 0, exit_failure = -1
+
+	integer, parameter ::  &
+		syntran_major = 0, &
+		syntran_minor = 0, &
+		syntran_patch = 3
 
 	! TODO:
 	!
@@ -34,6 +39,8 @@ module core_m
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - xor
 	!  - bitwise operators
+
+	integer, parameter :: exit_success = 0, exit_failure = -1
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
@@ -972,7 +979,7 @@ recursive function parse_assignment_expr(parser) result(expr)
 		! TODO: I'm skipping ahead a bit here to what Immo does in episode 6.
 		! He uses separate variable_declaration, expr_statement, and
 		! assignment_expr kinds, all of which I'm handling here as
-		! assignment_expr.  My code my need some refactoring to more closely
+		! assignment_expr.  My code may need some refactoring to more closely
 		! mirror Immo's.
 
 		!print *, 'let expr'
@@ -1750,6 +1757,30 @@ recursive function syntax_eval(node, variables) result(res)
 	!stop
 
 end function syntax_eval
+
+!===============================================================================
+
+subroutine syntran_banner()
+
+	character(len = :), allocatable :: version
+	character(len = 16) :: major, minor, patch
+
+	write(major, '(i0)') syntran_major
+	write(minor, '(i0)') syntran_minor
+	write(patch, '(i0)') syntran_patch
+
+	version = trim(major)//'.'//trim(minor)//'.'//trim(patch)
+
+	write(*,*)
+	write(*,*) lang_name//' '//version
+	write(*,*) 'https://github.com/JeffIrwin/syntran'
+	write(*,*)
+	write(*,*) 'Usage:'
+	write(*,*) tab//'#tree to toggle tree display'
+	write(*,*) tab//'Ctrl+C to exit'
+	write(*,*)
+
+end subroutine syntran_banner
 
 !===============================================================================
 
