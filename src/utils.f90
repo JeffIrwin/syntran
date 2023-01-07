@@ -52,6 +52,10 @@ module utils
 			procedure :: push_all => push_all_string
 	end type string_vector_t
 
+	interface str
+		module procedure int_str
+	end interface str
+
 !===============================================================================
 
 contains
@@ -319,6 +323,22 @@ end subroutine console_color
 subroutine console_color_reset()
 	write(*, '(a)', advance = 'no') color_reset
 end subroutine console_color_reset
+
+!===============================================================================
+
+function int_str(i) result(str)
+
+	integer, intent(in) :: i
+
+	character(len = :), allocatable :: str
+
+	! Fine for default 4-byte ints.  May need more chars for bigger ints
+	character(len = 16) :: buffer
+
+	write(buffer, '(i0)') i
+	str = trim(buffer)
+
+end function int_str
 
 !===============================================================================
 

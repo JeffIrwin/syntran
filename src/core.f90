@@ -18,9 +18,9 @@ module core_m
 	integer, parameter :: debug = 0
 
 	integer, parameter ::  &
-		syntran_major = 0, &
-		syntran_minor = 0, &
-		syntran_patch = 4
+		syntran_major =  0, &
+		syntran_minor =  0, &
+		syntran_patch =  4
 
 	! TODO:
 	!
@@ -1769,7 +1769,10 @@ subroutine syntran_banner()
 	write(minor, '(i0)') syntran_minor
 	write(patch, '(i0)') syntran_patch
 
-	version = trim(major)//'.'//trim(minor)//'.'//trim(patch)
+	version = &
+		str(syntran_major)//'.'// &
+		str(syntran_minor)//'.'// &
+		str(syntran_patch)
 
 	write(*,*)
 	write(*,*) lang_name//' '//version
