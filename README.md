@@ -64,7 +64,8 @@ Integer and boolean types are supported.
     syntran$ foo and p
     
     foo and p
-    Error: binary operator "and" not defined for types num_expr and bool_expr
+        ^^^
+    Error: binary operator "and" is not defined for types num_expr and bool_expr    
     
     syntran$
 
