@@ -1133,7 +1133,7 @@ logical function is_binary_op_allowed(left, op, right)
 
 	integer, intent(in) :: left, op, right
 
-	print *, 'left, right = ', left, right
+	!print *, 'left, right = ', left, right
 
 	!! This dynamic variable typing can be useful for testing
 	!is_binary_op_allowed = .true.
@@ -1408,47 +1408,18 @@ function new_declaration_expr(identifier, op, right) result(expr)
 
 	!********
 
-	!character(len = :), allocatable :: text
-
-	if (debug > 1) print *, 'new_binary_expr'
-	if (debug > 1) print *, 'identifier  = ', identifier%text
-	if (debug > 1) print *, 'right = ', right%str()
-
 	expr%kind = assignment_expr
 
-	!allocate(expr%left)
 	allocate(expr%right)
 
-	!expr%left  = identifier
 	expr%identifier = identifier
-
-	expr%identifier%text = identifier%text(:)
-
-	!! Yet again burned debugging stuff here due to node updating
-	!! syntax_node_copy()
-
-	!text = identifier%text
-	!!expr%identifier%text = text
-	!allocate(expr%identifier
-	!expr%identifier%text = text
-
-	!print *, 'expr ident text = ', expr%identifier%text
+	!expr%identifier%text = identifier%text(:)
 
 	expr%op    = op
 	expr%right = right
 
 	! Pass the result value type up the tree for type checking in parent
-
-	! TODO: if identifier has already been declared, do not overwrite its type
-	! here
-
 	expr%val%kind = right%val%kind
-
-	!expr%val%kind = get_binary_op_kind(left%val%kind, op%kind, right%val%kind)
-	!!expr%val%kind = left%val%kind
-
-	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
-	if (debug > 1) print *, 'done new_binary_expr'
 
 end function new_declaration_expr
 
@@ -1463,47 +1434,19 @@ function new_assignment_expr(identifier, op, right) result(expr)
 
 	!********
 
-	!character(len = :), allocatable :: text
-
-	if (debug > 1) print *, 'new_binary_expr'
-	if (debug > 1) print *, 'identifier  = ', identifier%text
-	if (debug > 1) print *, 'right = ', right%str()
-
 	expr%kind = assignment_expr
 
-	!allocate(expr%left)
 	allocate(expr%right)
 
-	!expr%left  = identifier
 	expr%identifier = identifier
 
 	expr%identifier%text = identifier%text(:)
 
-	!! Yet again burned debugging stuff here due to node updating
-	!! syntax_node_copy()
-
-	!text = identifier%text
-	!!expr%identifier%text = text
-	!allocate(expr%identifier
-	!expr%identifier%text = text
-
-	!print *, 'expr ident text = ', expr%identifier%text
-
 	expr%op    = op
 	expr%right = right
 
-	! Pass the result value type up the tree for type checking in parent
-
-	! TODO: if identifier has already been declared, do not overwrite its type
+	! The identifier has already been declared, so do not overwrite its type
 	! here
-
-	!expr%val%kind = right%val%kind
-
-	!expr%val%kind = get_binary_op_kind(left%val%kind, op%kind, right%val%kind)
-	!!expr%val%kind = left%val%kind
-
-	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
-	if (debug > 1) print *, 'done new_binary_expr'
 
 end function new_assignment_expr
 
