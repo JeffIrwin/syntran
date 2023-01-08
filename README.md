@@ -29,15 +29,23 @@ Start the interpreter:
 
 Then enter arithmetic expressions like `1 + 2 * 3` in the interpreter:
 
+<!-- cpp is the closest match I can find for markdown syntax highlighting -->
+
+```cpp
     syntran$ 1 + 2 * 3
     7
     syntran$ (1 + 2) * 3
     9
+```
+
+Expressions are evaluated immediately and the result is printed to the console.  In the rest of this documentation, we will hide the `syntran$` prompt and show the result as a `// comment`.
 
 Use two asterisks for exponent powers, like Fortran and Scilab:
 
-    syntran$ 5 ** 2
-    25
+```cpp
+    5 ** 2
+    // 25
+```
 
 There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/math/pow) and call the `pow()` function!
 
@@ -47,7 +55,7 @@ A variable declaration expression uses the [`let` keyword](https://doc.rust-lang
 
 Integer and boolean types are supported.
 
-```C++
+```cpp
 let foo = 1
 let bar = 2
 let baz = 3
@@ -77,7 +85,4 @@ Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g
 
 ### Comments
 
-    syntran$ // This is a single-line comment
-    syntran$
-    syntran$ // Multi-line comments don't exist
-
+Only single-line comments are supported.  There are no multi-line `/*comments*/`.
