@@ -511,7 +511,9 @@ recursive function syntax_node_str(node, indent) result(str)
 	!********
 
 	character(len = :), allocatable :: indentl, kind, left, op, right, val, &
-		type, identifier
+		type, identifier, block
+
+	integer :: i
 
 	indentl = ''
 	if (present(indent)) indentl = indent
@@ -522,6 +524,7 @@ recursive function syntax_node_str(node, indent) result(str)
 	op    = ''
 	right = ''
 	val   = ''
+	block = ''
 
 	identifier = ''
 
@@ -536,6 +539,13 @@ recursive function syntax_node_str(node, indent) result(str)
 
 		right = indentl//'    right = '//node%right%str(indentl//'    ') &
 				//line_feed
+
+	else if (node%kind == block_statement) then
+
+		! TODO: get len from vector type
+		do i = 1, size(node%statements)
+			block = block // node%statements(i)%str(indentl//'    ')
+		end do
 
 	else if (node%kind == assignment_expr) then
 
@@ -566,6 +576,7 @@ recursive function syntax_node_str(node, indent) result(str)
 			op         // &
 			right      // &
 			val        // &
+			block      // &
 		indentl//'}'
 
 end function syntax_node_str
@@ -1071,22 +1082,66 @@ function parse_statement(parser) result(statement)
 
 	!********
 
-	! TODO: switch
-	statement = parser%parse_expr_statement()
+	select case (parser%current_kind())! == let_keyword      .and. &
+
+		case (lbrace_token)
+			statement = parser%parse_block_statement()
+
+		case default
+			statement = parser%parse_expr_statement()
+
+	end select
 
 end function parse_statement
 
 !===============================================================================
 
-function parse_block_statement(parser) result(statement)
+function parse_block_statement(parser) result(block)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: statement
+	type(syntax_node_t) :: block
 
 	!********
 
-	! TODO: fill in this stub
+	type(syntax_node_t) :: statement
+	type(syntax_node_t), allocatable :: statements(:)
+	type(syntax_token_t) :: left, right
+
+	! TODO: delete after vector is implemented
+	integer, parameter :: nmax = 4
+	integer :: i
+
+	! TODO: make a syntax_node_vector_t type like the syntax_token_vector_t
+	! type, add push() fn for statements
+	allocate(statements(nmax))
+	i = 0
+
+	left  = parser%match(lbrace_token)
+
+	do while ( &
+		parser%current_kind() /= eof_token .and. &
+		parser%current_kind() /= rbrace_token)
+
+		if (i == nmax) call exit(-1)  ! TODO
+
+		i = i + 1
+		statement = parser%parse_statement()
+		statements(i) = statement ! TODO: push() vector
+
+	end do
+
+	right = parser%match(rbrace_token)
+
+	block%kind = block_statement
+
+	!allocate(expr%right)
+	!expr%identifier = identifier
+	!expr%op    = op
+	!expr%right = right
+
+	if (allocated(block%statements)) deallocate(block%statements)
+	call move_alloc(statements, block%statements)
 
 end function parse_block_statement
 

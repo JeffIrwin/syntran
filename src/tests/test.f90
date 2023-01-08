@@ -347,6 +347,38 @@ end subroutine unit_test_comments
 
 !===============================================================================
 
+subroutine unit_test_blocks(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'block statements'
+
+	logical, allocatable :: tests(:)
+
+	! TODO
+	return
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! We're getting into dangerous Fortran territory here.  I think there's
+	! a limit on how many chars and lines can be in a statement, and this may be
+	! pushing it
+
+	tests = &
+		[   &
+			interpret('{ let a = 0 (a = 10) * a }') == '100' &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_blocks
+
+!===============================================================================
+
 subroutine unit_test_bad_syntax(npass, nfail)
 
 	implicit none
@@ -474,6 +506,7 @@ subroutine unit_tests(iostat)
 	call unit_test_bad_syntax (npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
+	call unit_test_blocks     (npass, nfail)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)
