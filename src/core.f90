@@ -62,6 +62,8 @@ module core_m
 	!  - xor
 	!  - bitwise operators
 
+
+
 	! TODO: optional braces for global compilation_unit statements? is
 	! translation_unit unused?
 
@@ -142,8 +144,8 @@ module core_m
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
 
-		! TODO: remove after vector implemented
-		integer :: statements_len = 0
+		!! TODO: remove after vector implemented
+		!integer :: statements_len = 0
 
 		! TODO: add text_span_t member here?  Immo did this, may be needed for
 		! line numbers in diagnostics
@@ -237,6 +239,15 @@ module core_m
 		contains
 			procedure :: push => push_token
 	end type syntax_token_vector_t
+
+	!********
+
+	type syntax_node_vector_t
+		type(syntax_node_t), allocatable :: v(:)
+		integer :: len, cap
+		contains
+			procedure :: push => push_node
+	end type syntax_node_vector_t
 
 !===============================================================================
 
@@ -467,6 +478,69 @@ end subroutine push_token
 
 !===============================================================================
 
+function new_syntax_node_vector() result(vector)
+
+	type(syntax_node_vector_t) :: vector
+
+	vector%len = 0
+	vector%cap = 2  ! I think a small default makes sense here
+
+	allocate(vector%v( vector%cap ))
+
+end function new_syntax_node_vector
+
+!===============================================================================
+
+subroutine push_node(vector, val)
+
+	class(syntax_node_vector_t) :: vector
+	type(syntax_node_t) :: val
+
+	!********
+
+	type(syntax_node_t), allocatable :: tmp(:)
+
+	integer :: tmp_cap, i
+
+	vector%len = vector%len + 1
+
+	if (vector%len > vector%cap) then
+		print *, 'growing vector ====================================='
+
+		tmp_cap = 2 * vector%len
+		allocate(tmp( tmp_cap ))
+
+		print *, 'copy 1'
+		!tmp(1: vector%cap) = vector%v
+		do i = 1, vector%cap
+			tmp(i) = vector%v(i)
+		end do
+
+		print *, 'move'
+
+		!call move_alloc(tmp, vector%v)
+
+		deallocate(vector%v)
+		allocate(vector%v( tmp_cap ))
+
+		print *, 'copy 2'
+		!vector%v(1: vector%cap) = tmp(1: vector%cap)
+		do i = 1, vector%cap
+			vector%v(i) = tmp(i)
+		end do
+
+		vector%cap = tmp_cap
+
+	end if
+
+	print *, 'set val'
+	vector%v( vector%len ) = val
+	print *, 'done push_node'
+
+end subroutine push_node
+
+!===============================================================================
+
 function kind_name(kind)
 
 	integer, intent(in) :: kind
@@ -564,8 +638,7 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	else if (node%kind == block_statement) then
 
-		! TODO: get len from vector type
-		do i = 1, node%statements_len
+		do i = 1, size(node%statements)
 			block = block // node%statements(i)%str(indentl//'    ')
 		end do
 
@@ -644,21 +717,37 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%right = src%right
 	end if
 
-	dst%statements_len = src%statements_len
+	!dst%statements_len = src%statements_len
 
 	if (allocated(src%statements)) then
+		print *, 'copying statements'
 
 		n = size(src%statements)
+		print *, 'n = ', n
 
+		!if (allocated(dst%statements)) deallocate(dst%statements)
+		!print *, 'alloc'
+		!allocate(dst%statements( n ))
+		!print *, 'copy'
+		!dst%statements = src%statements
+		!print *, 'done 1'
+
+		print *, 'dealloc'
 		if (allocated(dst%statements)) deallocate(dst%statements)
+		print *, 'alloc'
 		allocate(dst%statements(n))
 
 		! TODO: is explicit loop required?
+		print *, 'loop'
 		do i = 1, n
+			print *, i
 			dst%statements(i) = src%statements(i)
 		end do
+		print *, 'done loop'
 
 	end if
+
+	if (debug > 3) print *, 'done syntax_node_copy()'
 
 end subroutine syntax_node_copy
 
@@ -1109,7 +1198,10 @@ function parse_statement(parser) result(statement)
 	select case (parser%current_kind())! == let_keyword      .and. &
 
 		case (lbrace_token)
+			print *, 'calling parse_block_statement'
 			statement = parser%parse_block_statement()
+			print *, 'returned'
+			print *, '==========================='
 
 		case default
 			statement = parser%parse_expr_statement()
@@ -1128,17 +1220,15 @@ function parse_block_statement(parser) result(block)
 
 	!********
 
-	type(syntax_node_t) :: statement
-	type(syntax_node_t), allocatable :: statements(:)
+	type(syntax_node_t)        :: statement
+	type(syntax_node_vector_t) :: statements
 	type(syntax_token_t) :: left, right
 
 	! TODO: delete after vector is implemented
 	integer, parameter :: nmax = 64
 	integer :: i
 
-	! TODO: make a syntax_node_vector_t type like the syntax_token_vector_t
-	! type, add push() fn for statements
-	allocate(statements(nmax))
+	statements = new_syntax_node_vector()
 	i = 0
 
 	left  = parser%match(lbrace_token)
@@ -1147,17 +1237,23 @@ function parse_block_statement(parser) result(block)
 		parser%current_kind() /= eof_token .and. &
 		parser%current_kind() /= rbrace_token)
 
-		if (i == nmax) then
-			write(*,*) 'Error: statement overflow'
-			call exit(-1)  ! TODO
-		end if
+		print *, '    statement ', i
+
+		!if (i == nmax) then
+		!	write(*,*) 'Error: statement overflow'
+		!	call exit(-1)  ! TODO
+		!end if
 
 		i = i + 1
 		statement = parser%parse_statement()
-		statements(i) = statement ! TODO: push() vector
+		call statements%push(statement)
+		!call statements%push(parser%parse_statement())
 
 	end do
-	block%statements_len = i
+	!block%statements_len = i
+
+	print *, 'i              = ', i
+	print *, 'statements%len = ', statements%len
 
 	right = parser%match(rbrace_token)
 
@@ -1168,8 +1264,25 @@ function parse_block_statement(parser) result(block)
 	!expr%op    = op
 	!expr%right = right
 
+	! Convert to standard array.  TODO: make a subroutine for this explicit loop
+	! copy, since apparently its required for memory correctness
+
+	print *, 'dealloc'
 	if (allocated(block%statements)) deallocate(block%statements)
-	call move_alloc(statements, block%statements)
+	print *, 'alloc'
+	allocate(block%statements( statements%len ))
+	print *, 'copy'
+	!block%statements = statements%v( 1: statements%len )
+	do i = 1, statements%len
+		block%statements(i) = statements%v(i)
+	end do
+	print *, 'done'
+
+	!! Convert to standard array (and class member)
+	!parser%tokens = tokens%v( 1: tokens%len )
+
+	!if (allocated(block%statements)) deallocate(block%statements)
+	!call move_alloc(statements, block%statements)
 
 end function parse_block_statement
 
@@ -1870,7 +1983,7 @@ recursive function syntax_eval(node, variables) result(res)
 		!print *, 'statements_len = ', node%statements_len
 
 		! The final statement of a block returns the result
-		do i = 1, node%statements_len
+		do i = 1, size(node%statements)
 			res = syntax_eval(node%statements(i), variables)
 			!print *, i, ' res = ', res%str()
 		end do
@@ -2076,7 +2189,7 @@ function value_str(val) result(str)
 			end if
 
 		case default
-			str = err_prefix//"<invalid_value>"
+			str = err_prefix//"<invalid_value>"//color_reset
 
 	end select
 
