@@ -47,29 +47,31 @@ A variable declaration expression uses the [`let` keyword](https://doc.rust-lang
 
 Integer and boolean types are supported.
 
-    syntran$ let foo = 1
-    1
-    syntran$ let bar = 2
-    2
-    syntran$ let baz = 3
-    3
-    syntran$ foo + bar * baz
-    7
-    syntran$ let p = true
-    true
-    syntran$ let q = false
-    false
-    syntran$ p or q
-    true
-    syntran$ not q and foo + bar == baz
-    true
-    syntran$ foo and p
-    
-    foo and p
-        ^^^
-    Error: binary operator "and" is not defined for types num_expr and bool_expr    
-    
-    syntran$
+```
+syntran$ let foo = 1
+1
+syntran$ let bar = 2
+2
+syntran$ let baz = 3
+3
+syntran$ foo + bar * baz
+7
+syntran$ let p = true
+true
+syntran$ let q = false
+false
+syntran$ p or q
+true
+syntran$ not q and foo + bar == baz
+true
+syntran$ foo and p
+
+foo and p
+    ^^^
+Error: binary operator "and" is not defined for types num_expr and bool_expr
+
+syntran$
+```
 
 Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g. `.true.`) but without the dots.  Note that they are lower case-sensitive, unlike Python (e.g. `True`).
 
