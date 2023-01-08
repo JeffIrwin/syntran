@@ -505,26 +505,25 @@ subroutine push_node(vector, val)
 	vector%len = vector%len + 1
 
 	if (vector%len > vector%cap) then
-		print *, 'growing vector ====================================='
+		!print *, 'growing vector ====================================='
 
 		tmp_cap = 2 * vector%len
 		allocate(tmp( tmp_cap ))
 
-		print *, 'copy 1'
-		!tmp(1: vector%cap) = vector%v
+		!print *, 'copy 1'
+		!!tmp(1: vector%cap) = vector%v
 		do i = 1, vector%cap
 			tmp(i) = vector%v(i)
 		end do
 
-		print *, 'move'
-
-		!call move_alloc(tmp, vector%v)
+		!print *, 'move'
+		!!call move_alloc(tmp, vector%v)
 
 		deallocate(vector%v)
 		allocate(vector%v( tmp_cap ))
 
-		print *, 'copy 2'
-		!vector%v(1: vector%cap) = tmp(1: vector%cap)
+		!print *, 'copy 2'
+		!!vector%v(1: vector%cap) = tmp(1: vector%cap)
 		do i = 1, vector%cap
 			vector%v(i) = tmp(i)
 		end do
@@ -533,9 +532,9 @@ subroutine push_node(vector, val)
 
 	end if
 
-	print *, 'set val'
+	!print *, 'set val'
 	vector%v( vector%len ) = val
-	print *, 'done push_node'
+	!print *, 'done push_node'
 
 end subroutine push_node
 
@@ -720,30 +719,30 @@ recursive subroutine syntax_node_copy(dst, src)
 	!dst%statements_len = src%statements_len
 
 	if (allocated(src%statements)) then
-		print *, 'copying statements'
+		!print *, 'copying statements'
 
 		n = size(src%statements)
-		print *, 'n = ', n
+		!print *, 'n = ', n
 
-		!if (allocated(dst%statements)) deallocate(dst%statements)
-		!print *, 'alloc'
-		!allocate(dst%statements( n ))
-		!print *, 'copy'
-		!dst%statements = src%statements
-		!print *, 'done 1'
+		!!if (allocated(dst%statements)) deallocate(dst%statements)
+		!!print *, 'alloc'
+		!!allocate(dst%statements( n ))
+		!!print *, 'copy'
+		!!dst%statements = src%statements
+		!!print *, 'done 1'
 
-		print *, 'dealloc'
+		!print *, 'dealloc'
 		if (allocated(dst%statements)) deallocate(dst%statements)
-		print *, 'alloc'
+		!print *, 'alloc'
 		allocate(dst%statements(n))
 
-		! TODO: is explicit loop required?
-		print *, 'loop'
+		!! This explicit loop is apparently required
+		!print *, 'loop'
 		do i = 1, n
-			print *, i
+			!print *, i
 			dst%statements(i) = src%statements(i)
 		end do
-		print *, 'done loop'
+		!print *, 'done loop'
 
 	end if
 
@@ -1198,10 +1197,10 @@ function parse_statement(parser) result(statement)
 	select case (parser%current_kind())! == let_keyword      .and. &
 
 		case (lbrace_token)
-			print *, 'calling parse_block_statement'
+			!print *, 'calling parse_block_statement'
 			statement = parser%parse_block_statement()
-			print *, 'returned'
-			print *, '==========================='
+			!print *, 'returned'
+			!print *, '==========================='
 
 		case default
 			statement = parser%parse_expr_statement()
@@ -1237,7 +1236,7 @@ function parse_block_statement(parser) result(block)
 		parser%current_kind() /= eof_token .and. &
 		parser%current_kind() /= rbrace_token)
 
-		print *, '    statement ', i
+		!print *, '    statement ', i
 
 		!if (i == nmax) then
 		!	write(*,*) 'Error: statement overflow'
@@ -1252,8 +1251,8 @@ function parse_block_statement(parser) result(block)
 	end do
 	!block%statements_len = i
 
-	print *, 'i              = ', i
-	print *, 'statements%len = ', statements%len
+	!print *, 'i              = ', i
+	!print *, 'statements%len = ', statements%len
 
 	right = parser%match(rbrace_token)
 
@@ -1267,16 +1266,16 @@ function parse_block_statement(parser) result(block)
 	! Convert to standard array.  TODO: make a subroutine for this explicit loop
 	! copy, since apparently its required for memory correctness
 
-	print *, 'dealloc'
+	!print *, 'dealloc'
 	if (allocated(block%statements)) deallocate(block%statements)
-	print *, 'alloc'
+	!print *, 'alloc'
 	allocate(block%statements( statements%len ))
-	print *, 'copy'
-	!block%statements = statements%v( 1: statements%len )
+	!print *, 'copy'
+	!!block%statements = statements%v( 1: statements%len )
 	do i = 1, statements%len
 		block%statements(i) = statements%v(i)
 	end do
-	print *, 'done'
+	!print *, 'done'
 
 	!! Convert to standard array (and class member)
 	!parser%tokens = tokens%v( 1: tokens%len )
