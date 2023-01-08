@@ -43,12 +43,15 @@ module core_m
 
 	integer, parameter :: exit_success = 0, exit_failure = -1
 
-	! TODO: compilation_unit kind?  optional braces for global compilation_unit
-	! statements?
+	! TODO: optional braces for global compilation_unit statements? is
+	! translation_unit unused?
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			translation_unit    = 33, &
+			block_statement     = 32, &
+			expr_statement      = 31, &
 			lbrace_token        = 30, &
 			rbrace_token        = 29, &
 			sstar_token         = 28, &
@@ -97,27 +100,6 @@ module core_m
 
 	!********
 
-	! Dependencies between types could make this module difficult to split into
-	! separate files.  I think I like the monolithic design anyway
-
-	type ternary_tree_node_t
-		character :: split_char = ''
-		type(ternary_tree_node_t), allocatable :: left, mid, right
-		type(value_t), allocatable :: val
-		!contains
-		!	procedure :: print => ternary_node_print
-	end type ternary_tree_node_t
-
-	type variable_dictionary_t
-		type(ternary_tree_node_t), allocatable :: root
-		contains
-			procedure :: &
-				insert => variable_insert, &
-				search => variable_search
-	end type variable_dictionary_t
-
-	!********
-
 	type syntax_token_t
 
 		integer :: kind
@@ -137,7 +119,7 @@ module core_m
 		! expressions don't use left, name expressions don't use left or right,
 		! binary expressions don't use an identifier, etc.
 
-		type(syntax_node_t), allocatable :: left, right
+		type(syntax_node_t), allocatable :: left, right, statements(:)
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
 
@@ -182,6 +164,27 @@ module core_m
 
 	!********
 
+	! Dependencies between types could make this module difficult to split into
+	! separate files.  I think I like the monolithic design anyway
+
+	type ternary_tree_node_t
+		character :: split_char = ''
+		type(ternary_tree_node_t), allocatable :: left, mid, right
+		type(value_t), allocatable :: val
+		!contains
+		!	procedure :: print => ternary_node_print
+	end type ternary_tree_node_t
+
+	type variable_dictionary_t
+		type(ternary_tree_node_t), allocatable :: root
+		contains
+			procedure :: &
+				insert => variable_insert, &
+				search => variable_search
+	end type variable_dictionary_t
+
+	!********
+
 	type parser_t
 
 		! The parser takes a string of tokens (technically an array) and
@@ -199,7 +202,8 @@ module core_m
 			procedure :: match, tokens_str, current_kind, &
 				current => current_token, next => next_parser_token, &
 				peek => parser_peek_token, peek_kind, &
-				parse_expr, parse_primary_expr, parse_expr_statement
+				parse_expr, parse_primary_expr, parse_expr_statement, &
+				parse_statement, parse_block_statement
 
 	end type parser_t
 
@@ -477,7 +481,10 @@ function kind_name(kind)
 			"let_keyword      ", & ! 27
 			"sstar_token      ", & ! 28
 			"rbrace_token     ", & ! 29
-			"lbrace_token     "  & ! 30
+			"lbrace_token     ", & ! 30
+			"expr_statement   ", & ! 31
+			"block_statement  ", & ! 32
+			"translation_unit "  & ! 33
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -576,6 +583,10 @@ recursive subroutine syntax_node_copy(dst, src)
 	class(syntax_node_t), intent(inout) :: dst
 	class(syntax_node_t), intent(in)    :: src
 
+	!********
+
+	integer :: i, n
+
 	if (debug > 3) print *, 'starting syntax_node_copy()'
 
 	dst%kind = src%kind
@@ -598,6 +609,20 @@ recursive subroutine syntax_node_copy(dst, src)
 		!if (debug > 1) print *, 'copy() right'
 		if (.not. allocated(dst%right)) allocate(dst%right)
 		dst%right = src%right
+	end if
+
+	if (allocated(src%statements)) then
+
+		n = size(src%statements)
+
+		if (allocated(dst%statements)) deallocate(dst%statements)
+		allocate(dst%statements(n))
+
+		! TODO: is explicit loop required?
+		do i = 1, n
+			dst%statements(i) = src%statements(i)
+		end do
+
 	end if
 
 end subroutine syntax_node_copy
@@ -1013,9 +1038,7 @@ function syntax_parse(str, variables) result(tree)
 	! Parse the tokens. Should this accept empty strings?  It says unexpected
 	! token trying to match number in parse_primary_expr(), so currently the
 	! interpreter driver skips empty lines
-
-	tree = parser%parse_expr_statement()
-	!tree = parser%parse_statement()
+	tree = parser%parse_statement()
 
 	if (debug > 1) print *, 'tree = ', tree%str()
 
@@ -1037,6 +1060,35 @@ function syntax_parse(str, variables) result(tree)
 	if (debug > 0) print *, 'done syntax_parse'
 
 end function syntax_parse
+
+!===============================================================================
+
+function parse_statement(parser) result(statement)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: statement
+
+	!********
+
+	! TODO: switch
+	statement = parser%parse_expr_statement()
+
+end function parse_statement
+
+!===============================================================================
+
+function parse_block_statement(parser) result(statement)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: statement
+
+	!********
+
+	! TODO: fill in this stub
+
+end function parse_block_statement
 
 !===============================================================================
 
