@@ -85,4 +85,4 @@ Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g
 
 ### Comments
 
-Only single-line comments are supported.  There are no multi-line `/*comments*/`.
+Only single-line comments are supported.  There are _no_ multi-line `/*comments*/`.
