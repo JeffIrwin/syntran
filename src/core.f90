@@ -144,9 +144,6 @@ module core_m
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
 
-		!! TODO: remove after vector implemented
-		!integer :: statements_len = 0
-
 		! TODO: add text_span_t member here?  Immo did this, may be needed for
 		! line numbers in diagnostics
 		type(string_vector_t) :: diagnostics
@@ -522,6 +519,10 @@ subroutine push_node(vector, val)
 		deallocate(vector%v)
 		allocate(vector%v( tmp_cap ))
 
+		! Unfortunately we have to copy TO tmp AND back FROM tmp.  I guess the
+		! fact that each node itself has allocatable members creates invalid
+		! references otherwise.
+
 		!print *, 'copy 2'
 		!!vector%v(1: vector%cap) = tmp(1: vector%cap)
 		do i = 1, vector%cap
@@ -715,8 +716,6 @@ recursive subroutine syntax_node_copy(dst, src)
 		if (.not. allocated(dst%right)) allocate(dst%right)
 		dst%right = src%right
 	end if
-
-	!dst%statements_len = src%statements_len
 
 	if (allocated(src%statements)) then
 		!print *, 'copying statements'
@@ -1223,8 +1222,6 @@ function parse_block_statement(parser) result(block)
 	type(syntax_node_vector_t) :: statements
 	type(syntax_token_t) :: left, right
 
-	! TODO: delete after vector is implemented
-	integer, parameter :: nmax = 64
 	integer :: i
 
 	statements = new_syntax_node_vector()
@@ -1236,32 +1233,18 @@ function parse_block_statement(parser) result(block)
 		parser%current_kind() /= eof_token .and. &
 		parser%current_kind() /= rbrace_token)
 
+		i = i + 1
 		!print *, '    statement ', i
 
-		!if (i == nmax) then
-		!	write(*,*) 'Error: statement overflow'
-		!	call exit(-1)  ! TODO
-		!end if
-
-		i = i + 1
-		statement = parser%parse_statement()
-		call statements%push(statement)
-		!call statements%push(parser%parse_statement())
+		!statement = parser%parse_statement()
+		!call statements%push(statement)
+		call statements%push(parser%parse_statement())
 
 	end do
-	!block%statements_len = i
-
-	!print *, 'i              = ', i
-	!print *, 'statements%len = ', statements%len
 
 	right = parser%match(rbrace_token)
 
 	block%kind = block_statement
-
-	!allocate(expr%right)
-	!expr%identifier = identifier
-	!expr%op    = op
-	!expr%right = right
 
 	! Convert to standard array.  TODO: make a subroutine for this explicit loop
 	! copy, since apparently its required for memory correctness
@@ -1271,17 +1254,14 @@ function parse_block_statement(parser) result(block)
 	!print *, 'alloc'
 	allocate(block%statements( statements%len ))
 	!print *, 'copy'
-	!!block%statements = statements%v( 1: statements%len )
+	!block%statements = statements%v( 1: statements%len )
 	do i = 1, statements%len
 		block%statements(i) = statements%v(i)
 	end do
 	!print *, 'done'
 
-	!! Convert to standard array (and class member)
-	!parser%tokens = tokens%v( 1: tokens%len )
-
-	!if (allocated(block%statements)) deallocate(block%statements)
-	!call move_alloc(statements, block%statements)
+	!!if (allocated(block%statements)) deallocate(block%statements)
+	!call move_alloc(statements%v, block%statements)
 
 end function parse_block_statement
 
@@ -1967,26 +1947,20 @@ recursive function syntax_eval(node, variables) result(res)
 
 	! I'm being a bit loose with consistency on select case indentation but
 	! I don't want a gigantic diff
-	!
-	! TODO: refactor and remove early returns from within selection?  Still
-	! needed in is_empty case above
 
 	select case (node%kind)
 	case (literal_expr)
 		! This handles both ints, bools, etc.
 		res = node%val
-		return
 
 	case (block_statement)
 
-		!print *, 'statements_len = ', node%statements_len
-
-		! The final statement of a block returns the result
+		! The final statement of a block returns the actual result.  Non-final
+		! statements only change the state.
 		do i = 1, size(node%statements)
 			res = syntax_eval(node%statements(i), variables)
 			!print *, i, ' res = ', res%str()
 		end do
-		return
 
 	case (assignment_expr)
 
@@ -1999,12 +1973,9 @@ recursive function syntax_eval(node, variables) result(res)
 		!print *, 'assigning identifier "', node%identifier%text, '"'
 		call variables%insert(node%identifier%text, res)
 
-		return
-
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
 		res = variables%search(node%identifier%text)
-		return
 
 	case (unary_expr)
 
@@ -2035,8 +2006,6 @@ recursive function syntax_eval(node, variables) result(res)
 			res%kind = 0
 
 		end select
-
-		return
 
 	case (binary_expr)
 
@@ -2121,16 +2090,16 @@ recursive function syntax_eval(node, variables) result(res)
 
 		end select
 
-		return
+	case default
+
+		res%kind = 0
+		write(*,*) fg_bold_bright_red//'Error'//color_reset &
+				//fg_bold//': unexpected node "'//kind_name(node%kind) &
+				//'"'//color_reset
+
+		!stop
 
 	end select
-
-	res%kind = 0
-	write(*,*) fg_bold_bright_red//'Error'//color_reset &
-			//fg_bold//': unexpected node "'//kind_name(node%kind) &
-			//'"'//color_reset
-
-	!stop
 
 end function syntax_eval
 
