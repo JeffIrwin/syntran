@@ -1695,13 +1695,18 @@ recursive function syntax_eval(node, variables) result(res)
 		return
 	end if
 
-	if (node%kind == literal_expr) then
+	!********
+
+	! I'm being a bit loose with consistency on select case indentation but
+	! I don't want a gigantic diff
+
+	select case (node%kind)
+	case (literal_expr)
 		! This handles both ints, bools, etc.
 		res = node%val
 		return
-	end if
 
-	if (node%kind == assignment_expr) then
+	case (assignment_expr)
 
 		! Assign return value
 		res = syntax_eval(node%right, variables)
@@ -1713,15 +1718,13 @@ recursive function syntax_eval(node, variables) result(res)
 		call variables%insert(node%identifier%text, res)
 
 		return
-	end if
 
-	if (node%kind == name_expr) then
+	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
 		res = variables%search(node%identifier%text)
 		return
-	end if
 
-	if (node%kind == unary_expr) then
+	case (unary_expr)
 
 		right = syntax_eval(node%right, variables)
 		!print *, 'right = ', right
@@ -1730,16 +1733,17 @@ recursive function syntax_eval(node, variables) result(res)
 
 		! TODO: add fallback type checking here?
 
-		if      (node%op%kind == plus_token) then
+		select case (node%op%kind)
+		case (plus_token)
 			res      =  right
 
-		else if (node%op%kind == minus_token) then
+		case (minus_token)
 			res%ival = -right%ival
 
-		else if (node%op%kind == not_keyword) then
+		case (not_keyword)
 			res%bval = .not. right%bval
 
-		else
+		case default
 
 			! Anything here should have been caught by a parser diagnostic
 			write(*,*) fg_bold_bright_red//'Error'//color_reset &
@@ -1748,13 +1752,11 @@ recursive function syntax_eval(node, variables) result(res)
 
 			res%kind = 0
 
-		end if
+		end select
 
 		return
 
-	end if
-
-	if (node%kind == binary_expr) then
+	case (binary_expr)
 
 		left  = syntax_eval(node%left , variables)
 		right = syntax_eval(node%right, variables)
@@ -1770,33 +1772,33 @@ recursive function syntax_eval(node, variables) result(res)
 				//node%op%text//'"'//color_reset
 		end if
 
-		!res%kind = left%kind
 		res%kind = get_binary_op_kind(left%kind, node%op%kind, right%kind)
 
-		if      (node%op%kind == plus_token) then
+		select case (node%op%kind)
+		case (plus_token)
 			res%ival = left%ival + right%ival
 
 			! FIXME: floats
 
-		else if (node%op%kind == minus_token) then
+		case (minus_token)
 			res%ival = left%ival - right%ival
 
-		else if (node%op%kind == star_token) then
+		case (star_token)
 			res%ival = left%ival * right%ival
 
-		else if (node%op%kind == sstar_token) then
+		case (sstar_token)
 			res%ival = left%ival ** right%ival
 
-		else if (node%op%kind == slash_token) then
+		case (slash_token)
 			res%ival = left%ival / right%ival
 
-		else if (node%op%kind == and_keyword) then
+		case (and_keyword)
 			res%bval = left%bval .and. right%bval
 
-		else if (node%op%kind == or_keyword) then
+		case (or_keyword)
 			res%bval = left%bval .or.  right%bval
 
-		else if (node%op%kind == eequals_token) then
+		case (eequals_token)
 
 			if (left%kind == bool_expr) then
 				res%bval = left%bval .eqv. right%bval
@@ -1808,7 +1810,7 @@ recursive function syntax_eval(node, variables) result(res)
 					//node%op%text//'"'//color_reset
 			end if
 
-		else if (node%op%kind == bang_equals_token) then
+		case (bang_equals_token)
 
 			if (left%kind == bool_expr) then
 				res%bval = left%bval .neqv. right%bval
@@ -1822,7 +1824,7 @@ recursive function syntax_eval(node, variables) result(res)
 					//node%op%text//'"'//color_reset
 			end if
 
-		else
+		case default
 
 			! Anything here should have been caught by a parser diagnostic
 			write(*,*) fg_bold_bright_red//'Error'//color_reset &
@@ -1835,11 +1837,11 @@ recursive function syntax_eval(node, variables) result(res)
 
 			res%kind = 0
 
-		end if
+		end select
 
 		return
 
-	end if
+	end select
 
 	res%kind = 0
 	write(*,*) fg_bold_bright_red//'Error'//color_reset &
