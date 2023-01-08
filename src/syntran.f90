@@ -89,9 +89,6 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		if (io == iostat_end) exit
 
-		! Skip empty lines
-		if (len(line) == 0) cycle
-
 		if (line == '#tree') then
 			show_tree = .not. show_tree
 			cycle
@@ -99,6 +96,8 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		res_str = ''
 		tree = syntax_parse(line, variables)
+
+		if (tree%is_empty) cycle
 
 		! I'm skipping the the binder that Immo implemented at this point in
 		! episode 2.  I guess I'll find out later if that's a stupid decision on

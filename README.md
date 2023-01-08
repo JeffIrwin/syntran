@@ -19,6 +19,8 @@ This is a sandbox for me to play in as I follow along with [Immo Landwerth's _bu
 
     ./build.sh
 
+A [Fortran compiler](https://fortran-lang.org/en/compilers/) and [CMake](https://cmake.org/download/) are required
+
 ## Run
 
 Start the interpreter:
@@ -70,4 +72,10 @@ Integer and boolean types are supported.
     syntran$
 
 Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g. `.true.`) but without the dots.  Note that they are lower case-sensitive, unlike Python (e.g. `True`).
+
+### Comments
+
+    syntran$ // This is a single-line comment
+    syntran$
+    syntran$ // Multi-line comments don't exist
 

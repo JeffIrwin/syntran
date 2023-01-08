@@ -303,6 +303,43 @@ end subroutine unit_test_assignment
 
 !===============================================================================
 
+subroutine unit_test_comments(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'comments'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! We're getting into dangerous Fortran territory here.  I think there's
+	! a limit on how many chars and lines can be in a statement, and this may be
+	! pushing it
+
+	tests = &
+		[   &
+			interpret('//') == '', &
+			interpret(' ')  == '', &
+			interpret( &
+				'let a = 2'//line_feed// &
+				'a     = 3'//line_feed// &
+				'//a   = 4'//line_feed// &
+				' // a = 5'//line_feed// &
+				'a') == '3',     &
+			eval('let x = 1337 // set x to thirteen thirty seven')  == '1337' &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_comments
+
+!===============================================================================
+
 subroutine unit_test_bad_syntax(npass, nfail)
 
 	implicit none
@@ -362,6 +399,9 @@ subroutine unit_test_bad_syntax(npass, nfail)
 				'let us = 6'//line_feed// &
 				'let i = 7'//line_feed// &
 				'a', quiet) == '', &
+			interpret( &
+				'//let a = 1'//line_feed// &
+				'a', quiet) == '',     &
 			eval('7 * false', quiet) == '' &
 		]
 
@@ -424,6 +464,7 @@ subroutine unit_tests(iostat)
 	call unit_test_comparisons(npass, nfail)
 	call unit_test_bad_syntax (npass, nfail)
 	call unit_test_assignment (npass, nfail)
+	call unit_test_comments   (npass, nfail)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)

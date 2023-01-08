@@ -130,6 +130,9 @@ module core_m
 
 		type(string_vector_t) :: diagnostics
 
+		! Only used to handle comment/whitespace lines
+		logical :: is_empty = .false.
+
 		! FIXME: when adding new members here, make sure to explicitly copy them
 		! in syntax_node_copy, or else assignment will yield bugs
 
@@ -158,7 +161,7 @@ module core_m
 		! tokens
 		contains
 			procedure :: lex, peek => peek_char, current => current_char, &
-				lookahead => lookahead_char
+				lookahead => lookahead_char, read_single_line_comment
 
 	end type lexer_t
 
@@ -566,6 +569,8 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	dst%diagnostics = src%diagnostics
 
+	dst%is_empty = src%is_empty
+
 	if (allocated(src%left)) then
 		!if (debug > 1) print *, 'copy() left'
 		if (.not. allocated(dst%left)) allocate(dst%left)
@@ -658,9 +663,9 @@ function lex(lexer) result(token)
 		return
 	end if
 
-	if (is_digit(lexer%current())) then
+	start = lexer%pos
 
-		start = lexer%pos
+	if (is_digit(lexer%current())) then
 
 		do while (is_digit(lexer%current()))
 			lexer%pos = lexer%pos + 1
@@ -681,8 +686,6 @@ function lex(lexer) result(token)
 
 	if (is_whitespace(lexer%current())) then
 
-		start = lexer%pos
-
 		do while (is_whitespace(lexer%current()))
 			lexer%pos = lexer%pos + 1
 		end do
@@ -694,8 +697,6 @@ function lex(lexer) result(token)
 	end if
 
 	if (is_letter(lexer%current()) .or. lexer%current() == '_') then
-
-		start = lexer%pos
 
 		do while (is_alphanum(lexer%current()) .or. lexer%current() == '_')
 			lexer%pos = lexer%pos + 1
@@ -731,7 +732,17 @@ function lex(lexer) result(token)
 			end if
 
 		case ("/")
-			token = new_token(slash_token , lexer%pos, lexer%current())
+			if (lexer%lookahead() == "/") then
+
+				call lexer%read_single_line_comment()
+
+				! TODO: make trivia token types instead of overloading
+				! whitespace_token for comments
+				token = new_token(whitespace_token, start, line_feed)
+
+			else
+				token = new_token(slash_token , lexer%pos, lexer%current())
+			end if
 
 		case ("(")
 			token = new_token(lparen_token, lexer%pos, lexer%current())
@@ -778,6 +789,31 @@ function lex(lexer) result(token)
 	! yet, override up arrow to do what it does in bash.  c.f. rubik-js)
 
 end function lex
+
+!===============================================================================
+
+! I am NOT planning on implementing multi-line comments.  Use block-insertion in
+! your editor to comment-out multiple lines with "//"
+
+subroutine read_single_line_comment(lexer)
+
+	class(lexer_t) :: lexer
+
+	lexer%pos = lexer%pos + 2
+
+	loop: do
+
+		!print *, 'char = ', lexer%current()
+		select case (lexer%current())
+			case (null_char, carriage_return, line_feed)
+				exit loop
+		end select
+
+		lexer%pos = lexer%pos + 1
+	end do loop
+	!print *, 'done'
+
+end subroutine read_single_line_comment
 
 !===============================================================================
 
@@ -882,6 +918,7 @@ function new_parser(str) result(parser)
 
 	parser%diagnostics = lexer%diagnostics
 
+	!print *, 'tokens%len = ', tokens%len
 	if (debug > 1) print *, parser%tokens_str()
 
 end function new_parser
@@ -932,6 +969,13 @@ function syntax_parse(str, variables) result(tree)
 	if (debug > 0) print *, 'str = ', str
 
 	parser = new_parser(str)
+
+	! Do nothing for blank lines (or comments)
+	if (parser%current_kind() == eof_token) then
+		tree%is_empty = .true.
+		tree%diagnostics = parser%diagnostics
+		return
+	end if
 
 	! Point parser member to variables dictionary.  This could be done in the
 	! constructor new_parser(), but it seems reasonable to do it here since it
@@ -1624,6 +1668,11 @@ recursive function syntax_eval(node, variables) result(res)
 	!********
 
 	type(value_t) :: left, right
+
+	if (node%is_empty) then
+		!print *, 'returning'
+		return
+	end if
 
 	if (node%kind == literal_expr) then
 		! This handles both ints, bools, etc.
