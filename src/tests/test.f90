@@ -367,9 +367,22 @@ subroutine unit_test_blocks(npass, nfail)
 
 	tests = &
 		[   &
-			interpret('{ let a = 0   (a = 10) * a }') == '100' &
+			interpret('{ let a = 0   (a = 10) * a }') == '100', &
 			!                     ^^^
-			!         no statement delimiter needed
+			!         no statement delimiter is needed
+			!
+			eval('{ let a = 0   (a = 10) * a }') == '100', &
+			!  eval works the same as interpret for blocks
+			!
+			eval( &
+				'{'//line_feed// &
+				'	let a = 0'//line_feed// &
+				'	(a = 10) * a'//line_feed// &
+				'}') == '100', &
+			!  since we don't need statement delimiters in blocks, we can
+			!  now eval multi-line strings
+			!
+			interpret('{ let a = 1   (a =  9) * a }') == '81'  &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

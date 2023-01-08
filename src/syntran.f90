@@ -50,7 +50,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 	type(string_view_t) :: sv
 
-	type(syntax_node_t) :: tree
+	type(syntax_node_t) :: compilation
 	type(value_t) :: res
 	type(variable_dictionary_t) :: variables
 
@@ -78,7 +78,8 @@ function syntran_interpret(str, quiet) result(res_str)
 			!
 			! Better yet, wrap entire str in a global {block} and just do
 			! a single syntax_parse() call.  Continue logic is still needed for
-			! stdin interpreter.
+			! stdin interpreter.  Stop using interpret() for multiline strings
+			! and move them back to eval() in testing.
 
 			line = sv%get_line(iostat = io)
 
@@ -107,22 +108,22 @@ function syntran_interpret(str, quiet) result(res_str)
 		end if
 
 		res_str = ''
-		tree = syntax_parse(line, variables)
+		compilation = syntax_parse(line, variables)
 
-		if (tree%is_empty) cycle
+		if (compilation%is_empty) cycle
 
 		! I'm skipping the the binder that Immo implemented at this point in
 		! episode 2.  I guess I'll find out later if that's a stupid decision on
 		! my end.  I think I can just do type checking in the parser
 
-		if (debug > 0 .or. show_tree) print *, 'tree = ', tree%str()
+		if (debug > 0 .or. show_tree) print *, 'tree = ', compilation%str()
 
-		if (.not. quietl) call tree%log_diagnostics(line, ou)
+		if (.not. quietl) call compilation%log_diagnostics(line, ou)
 
 		! Don't try to evaluate with errors
-		if (tree%diagnostics%len > 0) cycle
+		if (compilation%diagnostics%len > 0) cycle
 
-		res  = syntax_eval(tree, variables)
+		res  = syntax_eval(compilation, variables)
 
 		! Consider MATLAB-style "ans = " log?
 		res_str = res%str()
@@ -231,6 +232,34 @@ function syntran_eval(str, quiet) result(res)
 	res = val%str()
 
 end function syntran_eval
+
+!===============================================================================
+
+function syntran_interpret_file(file, quiet) result(res)
+
+	use core_m
+
+	character(len = *), intent(in)  :: file
+	character(len = :), allocatable :: res
+
+	logical, optional, intent(in) :: quiet
+
+	!********
+
+	character(len = :), allocatable :: source_text
+	logical :: quietl
+
+	type(syntax_node_t) :: tree
+	type(value_t) :: val
+	type(variable_dictionary_t) :: variables
+
+	quietl = .false.
+	if (present(quiet)) quietl = quiet
+
+	source_text = read_file(file)
+	res = syntran_eval(source_text, quiet)
+
+end function syntran_interpret_file
 
 !===============================================================================
 

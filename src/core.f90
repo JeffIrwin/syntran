@@ -28,6 +28,27 @@ module core_m
 	! TODO:
 	!
 	! Add:
+	!  - for loop syntax:
+	!
+	!    for i = 1: 5
+	!    {
+	!       i
+	!    }
+	!    // 1, 2, 3, 4, 5
+	!
+	!    for i = 1: 2: 5
+	!    {
+	!       i
+	!    }
+	!    // 1,    3,    5
+	!
+	!    // And finally, after doing some array handling work, something like:
+	!    for i = 1, 2, 4, 5
+	!    {
+	!       i
+	!    }
+	!    // 1, 2,   4, 5
+	!
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
@@ -40,8 +61,6 @@ module core_m
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - xor
 	!  - bitwise operators
-
-	integer, parameter :: exit_success = 0, exit_failure = -1
 
 	! TODO: optional braces for global compilation_unit statements? is
 	! translation_unit unused?
@@ -1114,7 +1133,7 @@ function parse_block_statement(parser) result(block)
 	type(syntax_token_t) :: left, right
 
 	! TODO: delete after vector is implemented
-	integer, parameter :: nmax = 4
+	integer, parameter :: nmax = 64
 	integer :: i
 
 	! TODO: make a syntax_node_vector_t type like the syntax_token_vector_t
@@ -1128,7 +1147,10 @@ function parse_block_statement(parser) result(block)
 		parser%current_kind() /= eof_token .and. &
 		parser%current_kind() /= rbrace_token)
 
-		if (i == nmax) call exit(-1)  ! TODO
+		if (i == nmax) then
+			write(*,*) 'Error: statement overflow'
+			call exit(-1)  ! TODO
+		end if
 
 		i = i + 1
 		statement = parser%parse_statement()

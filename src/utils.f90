@@ -6,6 +6,8 @@ module utils
 	use iso_fortran_env
 	implicit none
 
+	integer, parameter :: exit_success = 0, exit_failure = -1
+
 	character, parameter :: &
 			null_char       = char( 0), &
 			tab             = char( 9), &
@@ -229,6 +231,73 @@ function read_line(iu, iostat) result(str)
 	if (present(iostat)) iostat = io
 
 end function read_line
+
+!===============================================================================
+
+function read_file(file, iostat) result(str)
+
+	! Read all lines of a file into str
+
+	character(len = *), intent(in) :: file
+
+	integer, optional, intent(out) :: iostat
+
+	character(len = :), allocatable :: str
+
+	!********
+
+	character :: c
+	character(len = :), allocatable :: tmp
+
+	integer :: i, io, str_cap, tmp_cap, iu
+
+	open(file = file, newunit = iu, status = 'old', iostat = io)
+	if (io /= exit_success) return
+
+	! Buffer string with some initial length
+	str_cap = 64
+	allocate(character(len = str_cap) :: str)
+
+	! Read 1 character at a time until end
+	i = 0
+	do
+		read(iu, '(a)', advance = 'no', iostat = io) c
+		if (io == iostat_end) exit
+
+		!if (io == iostat_eor) exit
+		if (io == iostat_eor) c = line_feed
+
+		i = i + 1
+
+		if (i > str_cap) then
+			!print *, 'growing str'
+
+			! Grow the buffer capacity.  What is the optimal growth factor?
+			tmp_cap = 2 * str_cap
+			allocate(character(len = tmp_cap) :: tmp)
+			tmp(1: str_cap) = str
+
+			call move_alloc(tmp, str)
+			str_cap = tmp_cap
+
+			!print *, 'str_cap  = ', str_cap
+			!print *, 'len(str) = ', len(str)
+
+		end if
+		str(i:i) = c
+
+	end do
+	close(iu)
+
+	! Trim unused chars from buffer
+	str = str(1:i)
+
+	print *, 'str = '
+	print *, str
+
+	if (present(iostat)) iostat = io
+
+end function read_file
 
 !===============================================================================
 
