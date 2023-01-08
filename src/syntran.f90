@@ -27,6 +27,8 @@ function syntran_interpret(str, quiet) result(res_str)
 	! TODO: another optional arg for iu as stdin vs another file:
 	!   - enable input echo for file input (not for stdin)
 	!   - write file name and line num for diagnostics
+	!   - echo inputs w/o "syntran$" prompt and print outputs after a comment,
+	!     for ease of updating documentation with consistent styling
 
 	use core_m
 	use utils
@@ -89,6 +91,12 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		if (io == iostat_end) exit
 
+		! TODO:
+		!
+		! More directives:
+		!   - #help
+		!   - #reset or #clear to clear variables
+
 		if (line == '#tree') then
 			show_tree = .not. show_tree
 			cycle
@@ -147,7 +155,7 @@ subroutine syntran_banner()
 	write(*,*) tab//'Ctrl+C to exit'
 	write(*,*)
 
-	! TODO: add #help directive for more in depth info
+	! TODO: add #help directive and arg for more in depth info
 
 end subroutine syntran_banner
 

@@ -30,7 +30,7 @@ function err_bad_int(span, text) result(err)
 
 	character(len = *), intent(in) :: text
 	err = underline(span)//err_prefix &
-		//'invalid int32 '//text//color_reset
+		//'invalid i32 integer '//text//color_reset
 
 end function err_bad_int
 

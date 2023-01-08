@@ -43,9 +43,14 @@ module core_m
 
 	integer, parameter :: exit_success = 0, exit_failure = -1
 
+	! TODO: compilation_unit kind?  optional braces for global compilation_unit
+	! statements?
+
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			lbrace_token        = 30, &
+			rbrace_token        = 29, &
 			sstar_token         = 28, &
 			let_keyword         = 27, &
 			name_expr           = 26, &
@@ -136,6 +141,8 @@ module core_m
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
 
+		! TODO: add text_span_t member here?  Immo did this, may be needed for
+		! line numbers in diagnostics
 		type(string_vector_t) :: diagnostics
 
 		! Only used to handle comment/whitespace lines
@@ -192,7 +199,7 @@ module core_m
 			procedure :: match, tokens_str, current_kind, &
 				current => current_token, next => next_parser_token, &
 				peek => parser_peek_token, peek_kind, &
-				parse_expr, parse_primary_expr, parse_assignment_expr
+				parse_expr, parse_primary_expr, parse_expr_statement
 
 	end type parser_t
 
@@ -468,7 +475,9 @@ function kind_name(kind)
 			"equals_token     ", & ! 25
 			"name_expr        ", & ! 26
 			"let_keyword      ", & ! 27
-			"sstar_token      "  & ! 28
+			"sstar_token      ", & ! 28
+			"rbrace_token     ", & ! 29
+			"lbrace_token     "  & ! 30
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -759,6 +768,12 @@ function lex(lexer) result(token)
 		case (")")
 			token = new_token(rparen_token, lexer%pos, lexer%current())
 
+		case ("{")
+			token = new_token(lbrace_token, lexer%pos, lexer%current())
+
+		case ("}")
+			token = new_token(rbrace_token, lexer%pos, lexer%current())
+
 		case ("=")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
@@ -998,7 +1013,9 @@ function syntax_parse(str, variables) result(tree)
 	! Parse the tokens. Should this accept empty strings?  It says unexpected
 	! token trying to match number in parse_primary_expr(), so currently the
 	! interpreter driver skips empty lines
-	tree = parser%parse_assignment_expr()
+
+	tree = parser%parse_expr_statement()
+	!tree = parser%parse_statement()
 
 	if (debug > 1) print *, 'tree = ', tree%str()
 
@@ -1023,7 +1040,7 @@ end function syntax_parse
 
 !===============================================================================
 
-recursive function parse_assignment_expr(parser) result(expr)
+recursive function parse_expr_statement(parser) result(expr)
 
 	class(parser_t) :: parser
 
@@ -1064,7 +1081,7 @@ recursive function parse_assignment_expr(parser) result(expr)
 		let        = parser%next()
 		identifier = parser%next()
 		op         = parser%next()
-		right      = parser%parse_assignment_expr()
+		right      = parser%parse_expr_statement()
 
 		expr = new_declaration_expr(identifier, op, right)
 
@@ -1092,7 +1109,7 @@ recursive function parse_assignment_expr(parser) result(expr)
 
 		identifier = parser%next()
 		op         = parser%next()
-		right      = parser%parse_assignment_expr()
+		right      = parser%parse_expr_statement()
 
 		expr = new_assignment_expr(identifier, op, right)
 
@@ -1124,7 +1141,7 @@ recursive function parse_assignment_expr(parser) result(expr)
 
 	expr = parser%parse_expr()
 
-end function parse_assignment_expr
+end function parse_expr_statement
 
 !===============================================================================
 
@@ -1353,13 +1370,16 @@ function parse_primary_expr(parser) result(expr)
 
 		case (lparen_token)
 
+			! Left and right parens are not explicitly included as nodes in the
+			! parse tree, they just change the connectivity of the tree
+
 			left  = parser%next()
 
 			! These two lines are the difference between allowing statement
 			! "a = (b = 1)" or not.  Note that "a = b = 1" is allowed either way
 
 			!expr  = parser%parse_expr()
-			expr  = parser%parse_assignment_expr()
+			expr  = parser%parse_expr_statement()
 
 			right = parser%match(rparen_token)
 
@@ -1855,6 +1875,8 @@ end function syntax_eval
 !===============================================================================
 
 subroutine log_diagnostics(node, line, ou)
+
+	! TODO: line numbers
 
 	class(syntax_node_t), intent(in) :: node
 	character(len = *)  , intent(in) :: line

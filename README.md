@@ -51,14 +51,16 @@ There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/mat
 
 ### Variables, booleans, and type checking
 
-Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.
+Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.  Variables are mutable.
 
 Integer and boolean types are supported.
 
 ```cpp
 let foo = 1
 let bar = 2
-let baz = 3
+let baz = 4
+
+baz = 3
 
 foo + bar * baz
 // 7
