@@ -93,8 +93,7 @@ function err_binary_types(text, lines, span, op, left, right) result(err)
 	character(len = *), intent(in) :: op, left, right
 	integer, allocatable :: lines(:)
 
-	print *, 'starting err_binary_types'
-	print *, 
+	!print *, 'starting err_binary_types'
 
 	err = underline(span, text, lines)//err_prefix &
 		//'binary operator "'//op//'" is not defined for types ' &
