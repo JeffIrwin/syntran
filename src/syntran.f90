@@ -75,6 +75,10 @@ function syntran_interpret(str, quiet) result(res_str)
 			! doing has to work with both strings and stdin, so I may need
 			! a continue iostat for syntax_parse to continue parsing the same
 			! tree through multiple input lines
+			!
+			! Better yet, wrap entire str in a global {block} and just do
+			! a single syntax_parse() call.  Continue logic is still needed for
+			! stdin interpreter.
 
 			line = sv%get_line(iostat = io)
 

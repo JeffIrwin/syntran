@@ -123,6 +123,9 @@ module core_m
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
 
+		! TODO: remove after vector implemented
+		integer :: statements_len = 0
+
 		! TODO: add text_span_t member here?  Immo did this, may be needed for
 		! line numbers in diagnostics
 		type(string_vector_t) :: diagnostics
@@ -543,7 +546,7 @@ recursive function syntax_node_str(node, indent) result(str)
 	else if (node%kind == block_statement) then
 
 		! TODO: get len from vector type
-		do i = 1, size(node%statements)
+		do i = 1, node%statements_len
 			block = block // node%statements(i)%str(indentl//'    ')
 		end do
 
@@ -621,6 +624,8 @@ recursive subroutine syntax_node_copy(dst, src)
 		if (.not. allocated(dst%right)) allocate(dst%right)
 		dst%right = src%right
 	end if
+
+	dst%statements_len = src%statements_len
 
 	if (allocated(src%statements)) then
 
@@ -1130,6 +1135,7 @@ function parse_block_statement(parser) result(block)
 		statements(i) = statement ! TODO: push() vector
 
 	end do
+	block%statements_len = i
 
 	right = parser%match(rbrace_token)
 
@@ -1815,6 +1821,7 @@ recursive function syntax_eval(node, variables) result(res)
 
 	!********
 
+	integer :: i
 	type(value_t) :: left, right
 
 	if (node%is_empty) then
@@ -1826,11 +1833,24 @@ recursive function syntax_eval(node, variables) result(res)
 
 	! I'm being a bit loose with consistency on select case indentation but
 	! I don't want a gigantic diff
+	!
+	! TODO: refactor and remove early returns from within selection?  Still
+	! needed in is_empty case above
 
 	select case (node%kind)
 	case (literal_expr)
 		! This handles both ints, bools, etc.
 		res = node%val
+		return
+
+	case (block_statement)
+
+		print *, 'statements_len = ', node%statements_len
+
+		do i = 1, node%statements_len
+			res = syntax_eval(node%statements(i), variables)
+			print *, i, ' res = ', res%str()
+		end do
 		return
 
 	case (assignment_expr)

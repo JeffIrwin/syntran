@@ -359,9 +359,6 @@ subroutine unit_test_blocks(npass, nfail)
 
 	logical, allocatable :: tests(:)
 
-	! TODO
-	return
-
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! We're getting into dangerous Fortran territory here.  I think there's
@@ -370,7 +367,9 @@ subroutine unit_test_blocks(npass, nfail)
 
 	tests = &
 		[   &
-			interpret('{ let a = 0 (a = 10) * a }') == '100' &
+			interpret('{ let a = 0   (a = 10) * a }') == '100' &
+			!                     ^^^
+			!         no statement delimiter needed
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
