@@ -366,9 +366,8 @@ recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 	if (allocated(node%val)) then
 		!print *, 'key already inserted'
 		iostat = exit_failure
+		if (.not. overwrite) return
 	end if
-
-	if (.not. overwrite) return
 
 	node%val = val
 

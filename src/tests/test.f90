@@ -294,6 +294,7 @@ subroutine unit_test_assignment(npass, nfail)
 				'let p = true'//line_feed// &
 				'let q = false'//line_feed// &
 				'p and not q') == 'true', &
+			eval('(let a = 10) * a') == '100' ,  &
 			eval('let myVariable = 1337')  == '1337'   &
 		]
 
@@ -451,7 +452,7 @@ subroutine unit_tests(iostat)
 	integer :: npass, nfail
 
 	write(*,*) repeat('=', 72)
-	write(*,*) 'Running unit tests ...'
+	write(*,*) 'Running syntran unit tests ...'
 	write(*,*)
 
 	npass = 0
