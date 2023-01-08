@@ -3,7 +3,8 @@ module test_m
 
 	! Use short names for convenience
 	use syntran, &
-		interpret => syntran_interpret, &
+		interpret      => syntran_interpret, &
+		interpret_file => syntran_interpret_file, &
 		eval      => syntran_eval     , &
 		eval_int  => syntran_eval_int
 
@@ -391,6 +392,38 @@ end subroutine unit_test_blocks
 
 !===============================================================================
 
+subroutine unit_test_files(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'file compilation'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! We're getting into dangerous Fortran territory here.  I think there's
+	! a limit on how many chars and lines can be in a statement, and this may be
+	! pushing it
+
+	tests = &
+		[   &
+			interpret_file(path//'test-1.syntran') == 'true'  &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_files
+
+!===============================================================================
+
 subroutine unit_test_bad_syntax(npass, nfail)
 
 	implicit none
@@ -519,6 +552,7 @@ subroutine unit_tests(iostat)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)
+	call unit_test_files      (npass, nfail)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)
