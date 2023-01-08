@@ -3,8 +3,11 @@
 
 module core_m
 
+	! This module contains private members.  For the public API, see syntran.f90
+
 	use iso_fortran_env
-	use syntran_errors_m
+
+	use errors_m
 	use utils
 
 	implicit none
@@ -85,6 +88,9 @@ module core_m
 	end type value_t
 
 	!********
+
+	! Dependencies between types could make this module difficult to split into
+	! separate files.  I think I like the monolithic design anyway
 
 	type ternary_tree_node_t
 		character :: split_char = ''
@@ -1145,7 +1151,7 @@ logical function is_binary_op_allowed(left, op, right)
 	select case (op)
 
 		case (plus_token, minus_token, sstar_token, star_token, slash_token)
-			! TODO: floats
+			! FIXME: floats
 			is_binary_op_allowed = left == num_expr  .and. right == num_expr
 
 		case (and_keyword, or_keyword)
@@ -1171,7 +1177,7 @@ logical function is_unary_op_allowed(op, operand)
 	select case (op)
 
 		case (plus_token, minus_token)
-			! TODO: floats
+			! FIXME: floats
 			is_unary_op_allowed = operand == num_expr
 
 		case (not_keyword)
@@ -1486,8 +1492,9 @@ integer function get_binary_op_kind(left, op, right)
 
 	! Other operations return the same type as their operands
 	!
-	! TODO: floats, int casting.  1 + 0.5 and 0.5 + 1 should both cast to float,
-	! not int.  That's why I'm passing right as an arg (but not using it yet)
+	! FIXME: floats, int casting.  1 + 0.5 and 0.5 + 1 should both cast to
+	! float, not int.  That's why I'm passing right as an arg (but not using it
+	! yet)
 
 	get_binary_op_kind = left
 
@@ -1699,7 +1706,7 @@ recursive function syntax_eval(node, variables) result(res)
 		if      (node%op%kind == plus_token) then
 			res%ival = left%ival + right%ival
 
-			! TODO: floats
+			! FIXME: floats
 
 		else if (node%op%kind == minus_token) then
 			res%ival = left%ival - right%ival
@@ -1775,140 +1782,6 @@ end function syntax_eval
 
 !===============================================================================
 
-subroutine syntran_banner()
-
-	character(len = :), allocatable :: version
-	character(len = 16) :: major, minor, patch
-
-	write(major, '(i0)') syntran_major
-	write(minor, '(i0)') syntran_minor
-	write(patch, '(i0)') syntran_patch
-
-	version = &
-		str(syntran_major)//'.'// &
-		str(syntran_minor)//'.'// &
-		str(syntran_patch)
-
-	write(*,*)
-	write(*,*) lang_name//' '//version
-	write(*,*) 'https://github.com/JeffIrwin/syntran'
-	write(*,*)
-	write(*,*) 'Usage:'
-	write(*,*) tab//'#tree to toggle tree display'
-	write(*,*) tab//'Ctrl+C to exit'
-	write(*,*)
-
-end subroutine syntran_banner
-
-!===============================================================================
-
-function interpret(str, quiet) result(res_str)
-
-	! This is the interpreter shell
-	!
-	! Interpret stdin by default, or interpret the multi-line string str if it
-	! is given.  The return value res_str is the result of the final expression
-	! (like how Rust doesn't have a return statement, but fns just return the
-	! final expression in their body)
-	!
-	! TODO: add quiet arg for bad syntax testing
-	!
-	! TODO: another optional arg for iu as stdin vs another file:
-	!   - enable input echo for file input (not for stdin)
-	!   - write file name and line num for diagnostics
-
-	character(len = *), intent(in), optional :: str
-	logical, intent(in), optional :: quiet
-
-	character(len = :), allocatable :: res_str
-
-	!********
-
-	character(len = :), allocatable :: line
-	character(len = *), parameter :: prompt = lang_name//'$ '
-
-	integer, parameter :: iu = input_unit, ou = output_unit
-	integer :: io
-
-	logical :: quietl, show_tree = .false.
-
-	type(string_view_t) :: sv
-
-	type(syntax_node_t) :: tree
-	type(value_t) :: res
-	type(variable_dictionary_t) :: variables
-
-	!print *, 'len(" ") = ', len(' ')
-	!print *, 'len(line_feed) = ', len(line_feed)
-
-	if (present(str)) then
-		! Append a trailing line feed in case it does not exist
-		sv = new_string_view(str//line_feed)
-	end if
-
-	quietl = .false.
-	if (present(quiet)) quietl = quiet
-
-	! Read-eval-print-loop
-	do
-
-		if (present(str)) then
-
-			! TODO: I don't have an end-of-statement token yet (;), so interpret
-			! multi-line strings one line at a time for now.  Whatever I end up
-			! doing has to work with both strings and stdin, so I may need
-			! a continue iostat for syntax_parse to continue parsing the same
-			! tree through multiple input lines
-
-			line = sv%get_line(iostat = io)
-
-		else
-			write(ou, '(a)', advance = 'no') prompt
-			line = read_line(iu, iostat = io)
-		end if
-
-		!print *, 'line = <', line, '>'
-		!print *, 'io = ', io
-
-		!! Echo input?
-		!write(ou, '(a)') line
-
-		if (io == iostat_end) exit
-
-		! Skip empty lines
-		if (len(line) == 0) cycle
-
-		if (line == '#tree') then
-			show_tree = .not. show_tree
-			cycle
-		end if
-
-		res_str = ''
-		tree = syntax_parse(line, variables)
-
-		! I'm skipping the the binder that Immo implemented at this point in
-		! episode 2.  I guess I'll find out later if that's a stupid decision on
-		! my end.  I think I can just do type checking in the parser
-
-		if (debug > 0 .or. show_tree) print *, 'tree = ', tree%str()
-
-		if (.not. quietl) call tree%log_diagnostics(line, ou)
-
-		! Don't try to evaluate with errors
-		if (tree%diagnostics%len > 0) cycle
-
-		res  = syntax_eval(tree, variables)
-
-		! Consider MATLAB-style "ans = " log?
-		res_str = res%str()
-		if (.not. present(str)) write(ou, '(a)') res_str
-
-	end do
-
-end function interpret
-
-!===============================================================================
-
 subroutine log_diagnostics(node, line, ou)
 
 	class(syntax_node_t), intent(in) :: node
@@ -1964,68 +1837,6 @@ function value_str(val) result(str)
 	end select
 
 end function
-
-!===============================================================================
-
-integer function eval_int(str)
-
-	character(len = *), intent(in) :: str
-
-	type(syntax_node_t) :: tree
-	type(value_t) :: val
-	type(variable_dictionary_t) :: variables
-
-	tree = syntax_parse(str, variables)
-	call tree%log_diagnostics(str)
-
-	if (tree%diagnostics%len > 0) then
-		eval_int = 0
-		return
-	end if
-
-	val = syntax_eval(tree, variables)
-	eval_int = val%ival
-
-end function eval_int
-
-!===============================================================================
-
-function eval(str, quiet) result(res)
-
-	character(len = *), intent(in)  :: str
-	character(len = :), allocatable :: res
-
-	logical, optional, intent(in) :: quiet
-
-	!********
-
-	logical :: quietl
-
-	type(syntax_node_t) :: tree
-	type(value_t) :: val
-	type(variable_dictionary_t) :: variables
-
-	quietl = .false.
-	if (present(quiet)) quietl = quiet
-
-	!! One-liner, but no error handling.  This can crash unit tests without
-	!! reporting failures
-	!eval = syntax_eval(syntax_parse(str, variables), variables)
-
-	! TODO: make a helper fn here that all the eval_* fns use
-
-	tree = syntax_parse(str, variables)
-	if (.not. quietl) call tree%log_diagnostics(str)
-
-	if (tree%diagnostics%len > 0) then
-		res = ''
-		return
-	end if
-
-	val = syntax_eval(tree, variables)
-	res = val%str()
-
-end function eval
 
 !===============================================================================
 

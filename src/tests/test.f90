@@ -1,8 +1,14 @@
 
 module test_m
 
-	use core_m
-	use utils
+	! Use short names for convenience
+	use syntran, &
+		interpret => syntran_interpret, &
+		eval      => syntran_eval     , &
+		eval_int  => syntran_eval_int
+
+	use utils, only: fg_bright_red, fg_bright_green, line_feed, &
+		findlocl1, console_color, console_color_reset
 
 	implicit none
 
@@ -316,7 +322,10 @@ subroutine unit_test_bad_syntax(npass, nfail)
 	! quiet arg to not pollute the logs with error messages that I intend
 	! to trigger
 
-	! TODO: check edge cases of power operator with negative int args
+	! TODO: check edge cases of power operator with negative int args:
+	!  + 0 **  0 ?
+	!  + 2 ** -2 ? (real but not int)
+	!  + etc.
 
 	tests = &
 		[   &

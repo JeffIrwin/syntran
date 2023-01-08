@@ -3,13 +3,13 @@
 
 program main
 
-	use core_m
+	use syntran
 	implicit none
 
 	character(len = :), allocatable :: res
 
-	call syntran_banner()
-	res = interpret()
+	call  syntran_banner()
+	res = syntran_interpret()
 
 end program main
 
