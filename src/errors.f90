@@ -85,12 +85,18 @@ end function err_undeclare_var
 
 !===============================================================================
 
-function err_binary_types(span, op, left, right) result(err)
+function err_binary_types(text, lines, span, op, left, right) result(err)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
+	character(len = *), intent(in) :: text
 
 	character(len = *), intent(in) :: op, left, right
-	err = underline(span)//err_prefix &
+	integer, allocatable :: lines(:)
+
+	print *, 'starting err_binary_types'
+	print *, 
+
+	err = underline(span, text, lines)//err_prefix &
 		//'binary operator "'//op//'" is not defined for types ' &
 		//left//' and '//right//color_reset
 
@@ -123,10 +129,43 @@ end function new_text_span
 
 !===============================================================================
 
-function underline(span)
+function underline(span, text, lines)
 
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: underline
+
+	! TODO: make not optional after modifying all err_*() fns, put in order
+	! (text, span)
+	character(len = *), intent(in), optional :: text
+	integer, allocatable, optional :: lines(:)
+
+	integer :: i1(1), i
+
+	underline = ''
+
+	if (present(text)) then
+
+	! Get line number.  Ideally use a binary search, but it's so nice to do
+	! something with a Fortran intrinsic for a change
+	i1 = maxloc(lines, lines < span%start)
+	i = i1(1)
+
+	print *, 'line # = ', i
+
+	! TODO: this doesn't work if the line is indented with tabs, because it
+	! depends on how wide the console displays a tab!
+
+	underline = text(lines(i): lines(i+1) - 1) &
+		//repeat(' ', span%start - lines(i)) &
+		//fg_bright_red//repeat('^', span%length) &
+		//color_reset//line_feed
+
+	!underline = text(lines(i): lines(i+1) - 2)//line_feed
+
+	end if
+
+	return
+	! TODO
 
 	underline = repeat(' ', span%start - 1) &
 		//fg_bright_red//repeat('^', span%length) &

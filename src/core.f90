@@ -169,10 +169,11 @@ module core_m
 		! The lexer takes a string of characters and divides it into into tokens
 		! or words
 
-		character(len = :), allocatable :: text
 		integer :: pos
 
+		character(len = :), allocatable :: text
 		type(string_vector_t) :: diagnostics
+		integer, allocatable :: lines(:)
 
 		! Both the lexer and the parser have current() and lex()/next() member
 		! fns.  current_char() returns a char, while the others return syntax
@@ -215,7 +216,9 @@ module core_m
 		type(syntax_token_t), allocatable :: tokens(:)
 		integer :: pos
 
+		character(len = :), allocatable :: text
 		type(string_vector_t) :: diagnostics
+		integer, allocatable :: lines(:)
 
 		type(variable_dictionary_t) :: variables
 
@@ -1046,10 +1049,77 @@ function new_lexer(text) result(lexer)
 
 	type(lexer_t) :: lexer
 
+	!********
+
+	integer :: i, i0, nlines
+
+	! TODO: copy to lexer AND parser members
+	integer, allocatable :: lines(:)
+
 	lexer%text = text
 	lexer%pos = 1
 
 	lexer%diagnostics = new_string_vector()
+
+	! Count lines
+	nlines = 0
+	i = 0
+	!outer: do
+	do
+		i = i + 1
+		if (i > len(text)) exit !outer
+
+		if (i == len(text) .or. &
+			text(i:i) == line_feed .or. &
+			text(i:i) == carriage_return) then
+
+			nlines = nlines + 1
+
+			!do
+			!	i = i + 1
+			!	if (i > len(text)) exit outer
+			!	if (text(i:i) /= line_feed .and. &
+			!	    text(i:i) /= carriage_return) exit
+			!end do
+
+		end if
+
+	end do !outer
+
+	!print *, 'nlines = ', nlines
+
+	allocate(lines(nlines + 1))
+
+	! Get character indices for the start of each line and save them in lines(:)
+	nlines = 0
+	i = 0
+	i0 = 0
+	do
+		i = i + 1
+		if (i > len(text)) exit
+
+		if (i == len(text) .or. &
+			text(i:i) == line_feed .or. &
+			text(i:i) == carriage_return) then
+
+			nlines = nlines + 1
+
+			lines(nlines) = i0 + 1
+			i0 = i
+
+		end if
+
+	end do
+	lines(nlines + 1) = len(text) + 1
+
+	!print *, 'lines = ', lines
+
+	print *, 'lines = '
+	do i = 1, nlines
+		print *, i, text(lines(i): lines(i+1) - 2)
+	end do
+
+	lexer%lines = lines
 
 end function new_lexer
 
@@ -1088,6 +1158,10 @@ function new_parser(str) result(parser)
 	parser%pos = 1
 
 	parser%diagnostics = lexer%diagnostics
+	parser%lines       = lexer%lines
+	parser%text        = lexer%text
+
+	!print *, 'parser%lines = ', parser%lines
 
 	!print *, 'tokens%len = ', tokens%len
 	if (debug > 1) print *, parser%tokens_str()
@@ -1140,6 +1214,8 @@ function syntax_parse(str, variables) result(tree)
 	if (debug > 0) print *, 'str = ', str
 
 	parser = new_parser(str)
+
+	print *, 'parser%lines = ', parser%lines
 
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
@@ -1218,7 +1294,6 @@ function parse_block_statement(parser) result(block)
 
 	!********
 
-	type(syntax_node_t)        :: statement
 	type(syntax_node_vector_t) :: statements
 	type(syntax_token_t) :: left, right
 
@@ -1356,7 +1431,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 			span = new_text_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_binary_types(span, op%text, &
+				err_binary_types(parser%text, parser%lines, &
+				span, op%text, &
 				kind_name(expr%val%kind), &
 				kind_name(expr%right%val%kind)))
 
@@ -1430,7 +1506,8 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 			span = new_text_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_binary_types(span, op%text, &
+				err_binary_types(parser%text, parser%lines, &
+				span, op%text, &
 				kind_name(expr%left %val%kind), &
 				kind_name(expr%right%val%kind)))
 
@@ -2105,12 +2182,12 @@ end function syntax_eval
 
 !===============================================================================
 
-subroutine log_diagnostics(node, line, ou)
+subroutine log_diagnostics(node, src, ou)
 
 	! TODO: line numbers
 
 	class(syntax_node_t), intent(in) :: node
-	character(len = *)  , intent(in) :: line
+	character(len = *)  , intent(in) :: src
 	integer, optional   , intent(in) :: ou
 
 	!********
@@ -2121,11 +2198,13 @@ subroutine log_diagnostics(node, line, ou)
 	if (present(ou)) oul = ou
 
 	do i = 1, node%diagnostics%len
+
 		! Check rustc conventions for style of line numbers in diagnostics
 		write(oul,*)
-		write(oul, '(a)') line
+		!write(oul, '(a)') src
 		write(oul, '(a)') node%diagnostics%v(i)%s
 		write(oul,*)
+
 	end do
 
 end subroutine log_diagnostics
