@@ -2,10 +2,8 @@
 // Do not alter the final result of this file without updating the
 // expected test result in src/tests/test.f90
 
-// Anonymous global block
 {
 
-	// There's no scoping yet.  Everything is global
 	{
 		let foo = 1
 		let bar = 2

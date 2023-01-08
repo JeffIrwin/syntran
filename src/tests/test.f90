@@ -325,10 +325,6 @@ subroutine unit_test_comments(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! We're getting into dangerous Fortran territory here.  I think there's
-	! a limit on how many chars and lines can be in a statement, and this may be
-	! pushing it
-
 	tests = &
 		[   &
 			interpret('//') == '', &
@@ -361,10 +357,6 @@ subroutine unit_test_blocks(npass, nfail)
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
-
-	! We're getting into dangerous Fortran territory here.  I think there's
-	! a limit on how many chars and lines can be in a statement, and this may be
-	! pushing it
 
 	tests = &
 		[   &
@@ -409,9 +401,9 @@ subroutine unit_test_files(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! We're getting into dangerous Fortran territory here.  I think there's
-	! a limit on how many chars and lines can be in a statement, and this may be
-	! pushing it
+	! TODO: more tests, and some bad syntax tests for interpret_file()
+	!
+	! Eventually, do something like Immo's AssertDiagnostic() for bad syntax
 
 	tests = &
 		[   &
