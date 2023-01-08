@@ -1867,11 +1867,12 @@ recursive function syntax_eval(node, variables) result(res)
 
 	case (block_statement)
 
-		print *, 'statements_len = ', node%statements_len
+		!print *, 'statements_len = ', node%statements_len
 
+		! The final statement of a block returns the result
 		do i = 1, node%statements_len
 			res = syntax_eval(node%statements(i), variables)
-			print *, i, ' res = ', res%str()
+			!print *, i, ' res = ', res%str()
 		end do
 		return
 

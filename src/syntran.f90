@@ -249,12 +249,10 @@ function syntran_interpret_file(file, quiet) result(res)
 	character(len = :), allocatable :: source_text
 	logical :: quietl
 
-	type(syntax_node_t) :: tree
-	type(value_t) :: val
-	type(variable_dictionary_t) :: variables
-
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
+
+	if (.not. quietl) write(*,*) 'Interpretting file "'//file//'" ...'
 
 	source_text = read_file(file)
 	res = syntran_eval(source_text, quiet)

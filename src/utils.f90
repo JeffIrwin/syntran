@@ -292,8 +292,8 @@ function read_file(file, iostat) result(str)
 	! Trim unused chars from buffer
 	str = str(1:i)
 
-	print *, 'str = '
-	print *, str
+	!print *, 'str = '
+	!print *, str
 
 	if (present(iostat)) iostat = io
 
