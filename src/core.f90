@@ -28,7 +28,6 @@ module core_m
 	! TODO:
 	!
 	! Add:
-	!  - comments (Immo did this very late?)
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
@@ -75,6 +74,10 @@ module core_m
 			whitespace_token    =  3, &
 			num_token           =  2, &
 			eof_token           =  1
+
+	! A note on naming: Immo calls '==' equals_equals_token, but I think that
+	! invites tab-completion mistakes so I went with eequals_token.  Same for
+	! sstar_token (and upcoming pplus_token, mminus_token, ...)
 
 	!********
 
@@ -124,6 +127,11 @@ module core_m
 	type syntax_node_t
 
 		integer :: kind
+
+		! This structure could be more efficient.  For example, unary
+		! expressions don't use left, name expressions don't use left or right,
+		! binary expressions don't use an identifier, etc.
+
 		type(syntax_node_t), allocatable :: left, right
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
@@ -246,8 +254,8 @@ recursive function ternary_search(node, key, iostat) result(val)
 	end if
 
 	! :)
-	k  = key(1:1)
-	ey = key(2:)
+	k   = key(1:1)
+	 ey = key(2:)
 
 	if (k < node%split_char) then
 		val = ternary_search(node%left , key, iostat)
@@ -331,7 +339,7 @@ recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 
 	!print *, 'inserting key "', key, '"'
 
-	! key == k//ey :)
+	! key == k//ey.  Get it? :)
 	k   = key(1:1)
 	 ey = key(2:)
 
@@ -361,12 +369,13 @@ recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 	! a duplicate key has already been inserted or not.  We could add
 	! a separate logical member to node for this instead if needed
 
-	! This is not necessarily a failure.  In the evaluator, we will insert
-	! values for variables which have already been declared
-	if (allocated(node%val)) then
+	! This is not necessarily a failure unless we don't want to overwrite.  In
+	! the evaluator, we will insert values for variables which have already been
+	! declared
+	if (allocated(node%val) .and. .not. overwrite) then
 		!print *, 'key already inserted'
 		iostat = exit_failure
-		if (.not. overwrite) return
+		return
 	end if
 
 	node%val = val
@@ -735,9 +744,10 @@ function lex(lexer) result(token)
 
 				call lexer%read_single_line_comment()
 
-				! TODO: make trivia token types instead of overloading
+				! TODO: make "trivia" token types instead of overloading
 				! whitespace_token for comments
-				token = new_token(whitespace_token, start, line_feed)
+				text = lexer%text(start: lexer%pos-1)
+				token = new_token(whitespace_token, start, text)
 
 			else
 				token = new_token(slash_token , lexer%pos, lexer%current())
@@ -1026,6 +1036,18 @@ recursive function parse_assignment_expr(parser) result(expr)
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: let, identifier, op
 	type(text_span_t) :: span
+
+	! TODO: provide a way to declare variable types without initializing them?
+	! Rust discourages this, instead preferring patterns like this:
+	!
+	!      let x = if condition
+	!      {
+	!          y
+	!      }
+	!      else
+	!      {
+	!          z
+	!      };
 
 	if (parser%peek_kind(0) == let_keyword      .and. &
 	    parser%peek_kind(1) == identifier_token .and. &

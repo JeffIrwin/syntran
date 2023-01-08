@@ -295,6 +295,12 @@ subroutine unit_test_assignment(npass, nfail)
 				'let q = false'//line_feed// &
 				'p and not q') == 'true', &
 			eval('(let a = 10) * a') == '100' ,  &
+			interpret( &
+				'let b = (let a = 5) * a'//line_feed// &
+				'let c = b - a') == '20', &
+			interpret( &
+				'let b = (let a = 5) * a'//line_feed// &
+				'let d = (let c = b - a) + c') == '40', &
 			eval('let myVariable = 1337')  == '1337'   &
 		]
 
@@ -403,6 +409,8 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			interpret( &
 				'//let a = 1'//line_feed// &
 				'a', quiet) == '',     &
+			eval('let a + 1 = 2', quiet) == '', &
+			eval('let = 2', quiet) == '', &
 			eval('7 * false', quiet) == '' &
 		]
 
