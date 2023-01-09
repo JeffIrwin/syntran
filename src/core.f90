@@ -842,7 +842,8 @@ function lex(lexer) result(token)
 		read(text, *, iostat = io) ival
 		if (io /= exit_success) then
 			span = new_text_span(start, len(text))
-			call lexer%diagnostics%push(err_bad_int(span, text))
+			call lexer%diagnostics%push(err_bad_int( &
+				lexer%text, lexer%lines, span, text))
 		end if
 
 		val = new_value(num_expr, ival = ival)
@@ -944,7 +945,8 @@ function lex(lexer) result(token)
 
 				span = new_text_span(lexer%pos, len(lexer%current()))
 				call lexer%diagnostics%push( &
-					err_unexpected_char(span, lexer%current()))
+					err_unexpected_char(lexer%text, lexer%lines, &
+					span, lexer%current()))
 
 			end if
 
@@ -954,7 +956,8 @@ function lex(lexer) result(token)
 
 			span = new_text_span(lexer%pos, len(lexer%current()))
 			call lexer%diagnostics%push( &
-				err_unexpected_char(span, lexer%current()))
+				err_unexpected_char(lexer%text, lexer%lines, &
+				span, lexer%current()))
 
 	end select
 	lexer%pos = lexer%pos + 1
@@ -1114,10 +1117,10 @@ function new_lexer(text) result(lexer)
 
 	!print *, 'lines = ', lines
 
-	print *, 'lines = '
-	do i = 1, nlines
-		print *, i, text(lines(i): lines(i+1) - 2)
-	end do
+	!print *, 'lines = '
+	!do i = 1, nlines
+	!	print *, i, text(lines(i): lines(i+1) - 2)
+	!end do
 
 	lexer%lines = lines
 
@@ -1215,7 +1218,7 @@ function syntax_parse(str, variables) result(tree)
 
 	parser = new_parser(str)
 
-	print *, 'parser%lines = ', parser%lines
+	!print *, 'parser%lines = ', parser%lines
 
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
@@ -1397,7 +1400,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		if (io /= exit_success) then
 			span = new_text_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_redeclare_var(span, identifier%text))
+				err_redeclare_var(parser%text, parser%lines, &
+				span, identifier%text))
 		end if
 
 		return
@@ -1421,7 +1425,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		if (io /= exit_success) then
 			span = new_text_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(span, identifier%text))
+				err_redeclare_var(parser%text, parser%lines, &
+				span, identifier%text))
 		end if
 
 		! TODO: move this check inside of is_binary_op_allowed?  Need to pass
@@ -1484,7 +1489,7 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 			span = new_text_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_unary_types(span, op%text, &
+				err_unary_types(parser%text, parser%lines, span, op%text, &
 				kind_name(expr%right%val%kind)))
 
 		end if
@@ -1709,7 +1714,8 @@ function parse_primary_expr(parser) result(expr)
 			if (io /= exit_success) then
 				span = new_text_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(span, identifier%text))
+					err_undeclare_var(parser%text, parser%lines, &
+					span, identifier%text))
 			end if
 
 		case default
@@ -1948,7 +1954,7 @@ function match(parser, kind) result(token)
 	len_text = max(len(current%text), 1)
 	span = new_text_span(current%pos, len_text)
 	call parser%diagnostics%push( &
-		err_unexpected_token(span, current%text, &
+		err_unexpected_token(parser%text, parser%lines, span, current%text, &
 		kind_name(parser%current_kind()), kind_name(kind)))
 
 	token = new_token(kind, current%pos, null_char)

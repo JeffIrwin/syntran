@@ -14,8 +14,18 @@
 
     foo + bar * baz
 
+    //foo bar = baz
+    ////
+    //// ^ the above is interpretted like this:
+    ////
+    ////     foo
+    ////
+    ////     bar = baz
+    ////
+    //// So I'm totally going to start requiring semicolons
+
     {
-        lt p = true
+        let p = true
     }
 
     let q = false
@@ -28,4 +38,3 @@
     //foo + bar * baz
 
 }
-
