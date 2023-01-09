@@ -5,26 +5,26 @@
 {
 
 	{
-		let foo = 1
-		let bar = 2
+		let foo = 1;
+		let bar = 2;
 	}
 
-	let baz = 4
+	let baz = 4;
 
-	baz = 3
+	baz = 3;
 
-	foo + bar * baz
+	foo + bar * baz;
 
 	{
-		let p = true
+		let p = true;
 	}
 
-	let q = false
+	let q = false;
 
-	p or q
+	p or q;
 
 	// Final result
-	not q and foo + bar == baz
+	not q and foo + bar == baz;
 
 }
 

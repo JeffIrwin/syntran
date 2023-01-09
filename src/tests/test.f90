@@ -33,21 +33,21 @@ subroutine unit_test_bin_arith(npass, nfail)
 
 	tests = &
 		[   &
-			eval_int('1') == 1, &
-			eval_int('69') == 69, &
-			eval_int('420') == 420, &
-			eval_int('1337') == 1337, &
-			eval_int('1 + 2') == 1 + 2, &
-			eval_int('1 + 2 + 34') == 1 + 2 + 34, &
-			eval_int('1 + 2 * 3') == 1 + 2 * 3, &
-			eval_int('1 * 2 * 3 * 4') == 1 * 2 * 3 * 4, &
-			eval_int('73 - 48') == 73 - 48, &
-			eval_int('73 - 48 - 21') == 73 - 48 - 21, &
-			eval_int('24 / 6') == 24 / 6, &
-			eval_int('24 / 6 / 2') == 24 / 6 / 2, &
-			eval_int('2 ** 5') == 2 ** 5, &
-			eval_int('3 ** 4') == 3 ** 4, &
-			eval_int('343 - 87654345 / 27 + 76 * 234 - 65432 / 63') &
+			eval_int('1;') == 1, &
+			eval_int('69;') == 69, &
+			eval_int('420;') == 420, &
+			eval_int('1337;') == 1337, &
+			eval_int('1 + 2;') == 1 + 2, &
+			eval_int('1 + 2 + 34;') == 1 + 2 + 34, &
+			eval_int('1 + 2 * 3;') == 1 + 2 * 3, &
+			eval_int('1 * 2 * 3 * 4;') == 1 * 2 * 3 * 4, &
+			eval_int('73 - 48;') == 73 - 48, &
+			eval_int('73 - 48 - 21;') == 73 - 48 - 21, &
+			eval_int('24 / 6;') == 24 / 6, &
+			eval_int('24 / 6 / 2;') == 24 / 6 / 2, &
+			eval_int('2 ** 5;') == 2 ** 5, &
+			eval_int('3 ** 4;') == 3 ** 4, &
+			eval_int('343 - 87654345 / 27 + 76 * 234 - 65432 / 63;') &
 			       == 343 - 87654345 / 27 + 76 * 234 - 65432 / 63 &
 		]
 
@@ -75,21 +75,21 @@ subroutine unit_test_paren_arith(npass, nfail)
 	! at least be parsed
 	tests = &
 		[   &
-			eval_int('(69)') == (69), &
-			eval_int('(1) + 2') == (1) + 2, &
-			eval_int('1 + (2 + 34)') == 1 + (2 + 34), &
-			eval_int('(1 + 2) * 3') == (1 + 2) * 3, &
-			eval_int('1 * (2 * 3 * 4)') == 1 * (2 * 3 * 4), &
-			eval_int('73 - (48)') == 73 - (48), &
-			eval_int('73 - (48 - 21)') == 73 - (48 - 21), &
-			eval_int('24 / (6 / 2)') == 24 / (6 / 2), &
-			eval_int('343 - (87654345 / 27 + 76 * (234 - 65432)) / 63') &
+			eval_int('(69);') == (69), &
+			eval_int('(1) + 2;') == (1) + 2, &
+			eval_int('1 + (2 + 34);') == 1 + (2 + 34), &
+			eval_int('(1 + 2) * 3;') == (1 + 2) * 3, &
+			eval_int('1 * (2 * 3 * 4);') == 1 * (2 * 3 * 4), &
+			eval_int('73 - (48);') == 73 - (48), &
+			eval_int('73 - (48 - 21);') == 73 - (48 - 21), &
+			eval_int('24 / (6 / 2);') == 24 / (6 / 2), &
+			eval_int('343 - (87654345 / 27 + 76 * (234 - 65432)) / 63;') &
 			   == 343 - (87654345 / 27 + 76 * (234 - 65432)) / 63,  &
 			eval_int(  &
 				'(1 + (2 - (3 * (456789 / (5 + (6 - 7) * 8) + (9 ' &
 				//' - (0 + 1) - 2) * 3) / (4 + (5 - (6 * 7) + 8) ' &
 				//' - 9) * 8) + 1 - (2 * (3 + (4 - (5 * 6) / 2)  ' &
-				//' + 7) - 8) * 9) + 1) * 42')   &
+				//' + 7) - 8) * 9) + 1) * 42;')   &
 				== &
 				 (1 + (2 - (3 * (456789 / (5 + (6 - 7) * 8) + (9   &
 				    - (0 + 1) - 2) * 3) / (4 + (5 - (6 * 7) + 8)   &
@@ -122,17 +122,17 @@ subroutine unit_test_unary_arith(npass, nfail)
 	! I'm planning.  Use parentheses if you want to write that bullshit.
 	tests = &
 		[   &
-			eval_int('-(69)') == -(69), &
-			eval_int('(-69)') == (-69), &
-			eval_int('+(69)') == +(69), &
-			eval_int('(+69)') == (+69), &
-			eval_int('(-1) + 2') == (-1) + 2, &
-			eval_int('1 + (+2 + 34)') == 1 + (+2 + 34), &
-			eval_int('(1 + 2) * -3') == (1 + 2) * -3, &
-			eval_int('-1 * (2 * -3 * -4)') == -1 * (2 * -3 * -4), &
-			eval_int('-73 - (+48)') == -73 - (+48), &
-			eval_int('24 / (-6 / 2)') == 24 / (-6 / 2), &
-			eval_int('343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63') &
+			eval_int('-(69);') == -(69), &
+			eval_int('(-69);') == (-69), &
+			eval_int('+(69);') == +(69), &
+			eval_int('(+69);') == (+69), &
+			eval_int('(-1) + 2;') == (-1) + 2, &
+			eval_int('1 + (+2 + 34);') == 1 + (+2 + 34), &
+			eval_int('(1 + 2) * -3;') == (1 + 2) * -3, &
+			eval_int('-1 * (2 * -3 * -4);') == -1 * (2 * -3 * -4), &
+			eval_int('-73 - (+48);') == -73 - (+48), &
+			eval_int('24 / (-6 / 2);') == 24 / (-6 / 2), &
+			eval_int('343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63;') &
 			       == 343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63   &
 		]
 
@@ -158,25 +158,22 @@ subroutine unit_test_bool(npass, nfail)
 
 	tests = &
 		[   &
-			eval('true')  == 'true' , &
-			eval('false') == 'false', &
-			eval('not true')  == 'false', &
-			eval('not false')  == 'true',  &
-			eval('not not true')  == 'true',  &
-			eval('not not false')  == 'false',  &
-
-			eval('false and false')  == 'false',  &
-			eval('true  and false')  == 'false',  &
-			eval('false and true ')  == 'false',  &
-			eval('true  and true ')  == 'true' ,  &
-
-			eval('false or  false')  == 'false',  &
-			eval('true  or  false')  == 'true' ,  &
-			eval('false or  true ')  == 'true' ,  &
-			eval('true  or  true ')  == 'true' ,  &
-
-			eval('not true or true  ')  == 'true' ,  &
-			eval('not (true or true)')  == 'false'   &
+			eval('true;')  == 'true' , &
+			eval('false;') == 'false', &
+			eval('not true;')  == 'false', &
+			eval('not false;')  == 'true',  &
+			eval('not not true;')  == 'true',  &
+			eval('not not false;')  == 'false',  &
+			eval('false and false;')  == 'false',  &
+			eval('true  and false;')  == 'false',  &
+			eval('false and true ;')  == 'false',  &
+			eval('true  and true ;')  == 'true' ,  &
+			eval('false or  false;')  == 'false',  &
+			eval('true  or  false;')  == 'true' ,  &
+			eval('false or  true ;')  == 'true' ,  &
+			eval('true  or  true ;')  == 'true' ,  &
+			eval('not true or true  ;')  == 'true' ,  &
+			eval('not (true or true);')  == 'false'   &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -201,18 +198,18 @@ subroutine unit_test_comparisons(npass, nfail)
 
 	tests = &
 		[   &
-			eval('true  == true ')  == 'true' ,  &
-			eval('false == false')  == 'true' ,  &
-			eval('42    == 1337 ')  == 'false',  &
-			eval('31415 == 31415')  == 'true' ,  &
-			eval('36+7  == 43   ')  == 'true' ,  &
-			eval('12    == 36/3 ')  == 'true' ,  &
-			eval('12    == 36*3 ')  == 'false',  &
-			eval('12    != 36*3 ')  == 'true' ,  &
-			eval('12    != 36/3 ')  == 'false',  &
-			eval('true  != true ')  == 'false',  &
-			eval('false != true ')  == 'true' ,  &
-			eval('true  == false')  == 'false'   &
+			eval('true  == true ;')  == 'true' ,  &
+			eval('false == false;')  == 'true' ,  &
+			eval('42    == 1337 ;')  == 'false',  &
+			eval('31415 == 31415;')  == 'true' ,  &
+			eval('36+7  == 43   ;')  == 'true' ,  &
+			eval('12    == 36/3 ;')  == 'true' ,  &
+			eval('12    == 36*3 ;')  == 'false',  &
+			eval('12    != 36*3 ;')  == 'true' ,  &
+			eval('12    != 36/3 ;')  == 'false',  &
+			eval('true  != true ;')  == 'false',  &
+			eval('false != true ;')  == 'true' ,  &
+			eval('true  == false;')  == 'false'   &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -239,70 +236,72 @@ subroutine unit_test_assignment(npass, nfail)
 	! a limit on how many chars and lines can be in a statement, and this may be
 	! pushing it
 
+	! TODO
+
 	tests = &
 		[   &
-			eval('let x = 1 ') == '1' ,  &
-			eval('let a =  let b = 42 ') == '42' ,  &
-			eval('let a = (let b = 42)') == '42' ,  &
-			interpret( &
-				'let a = 2'//line_feed// &
-				'let b = a') == '2',     &
-			interpret( &
-				'let a = 2'//line_feed// &
-				'let b = a + 1') == '3', &
-			interpret( &
-				'let a = 1'//line_feed// &
-				'let b = a'//line_feed// &
-				'a = a + 1'//line_feed// &
-				'a == 2 and b == 1') == 'true', &
-			interpret( &
-				'let a = 1'//line_feed// &
-				'let aa = 2'//line_feed// &
-				'let aaa = 3'//line_feed// &
-				'let aaaa = 4'//line_feed// &
-				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4') == 'true', &
-			interpret( &
-				'let aaaa = 4'//line_feed// &
-				'let aaa = 3'//line_feed// &
-				'let aa = 2'//line_feed// &
-				'let a = 1'//line_feed// &
-				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4') == 'true', &
-			interpret( &
-				'let aaa = 3'//line_feed// &
-				'let aaaa = 4'//line_feed// &
-				'let a = 1'//line_feed// &
-				'let aa = 2'//line_feed// &
-				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4') == 'true', &
-			interpret( &
-				'let a = 1'//line_feed// &
-				'let b = 2'//line_feed// &
-				'let c = 3'//line_feed// &
-				'let d = 4'//line_feed// &
-				'a == 1 and b == 2 and c == 3 and d == 4') == 'true', &
-			interpret( &
-				'let d = 4'//line_feed// &
-				'let c = 3'//line_feed// &
-				'let b = 2'//line_feed// &
-				'let a = 1'//line_feed// &
-				'a == 1 and b == 2 and c == 3 and d == 4') == 'true', &
-			interpret( &
-				'let c = 3'//line_feed// &
-				'let d = 4'//line_feed// &
-				'let a = 1'//line_feed// &
-				'let b = 2'//line_feed// &
-				'a == 1 and b == 2 and c == 3 and d == 4') == 'true', &
-			interpret( &
-				'let p = true'//line_feed// &
-				'let q = false'//line_feed// &
-				'p and not q') == 'true', &
-			eval('(let a = 10) * a') == '100' ,  &
-			interpret( &
-				'let b = (let a = 5) * a'//line_feed// &
-				'let c = b - a') == '20', &
-			interpret( &
-				'let b = (let a = 5) * a'//line_feed// &
-				'let d = (let c = b - a) + c') == '40', &
-			eval('let myVariable = 1337')  == '1337'   &
+			eval('let x = 1 ;') == '1' ,  &
+			eval('let a =  let b = 42 ;') == '42' ,  &
+			eval('let a = (let b = 42);') == '42' ,  &
+			interpret('{ '// &
+				'let a = 2;'// &
+				'let b = a;}') == '2',     &
+			interpret('{'// &
+				'let a = 2;'// &
+				'let b = a + 1;}') == '3', &
+			interpret('{'// &
+				'let a = 1;'// &
+				'let b = a;'// &
+				'a = a + 1;'// &
+				'a == 2 and b == 1;}') == 'true', &
+			interpret('{'// &
+				'let a = 1;'// &
+				'let aa = 2;'// &
+				'let aaa = 3;'// &
+				'let aaaa = 4;'// &
+				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4;}') == 'true', &
+			interpret('{'// &
+				'let aaaa = 4;'// &
+				'let aaa = 3;'// &
+				'let aa = 2;'// &
+				'let a = 1;'// &
+				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4;}') == 'true', &
+			interpret('{'// &
+				'let aaa = 3;'// &
+				'let aaaa = 4;'// &
+				'let a = 1;'// &
+				'let aa = 2;'// &
+				'a == 1 and aa == 2 and aaa == 3 and aaaa == 4;}') == 'true', &
+			interpret('{'// &
+				'let a = 1;'// &
+				'let b = 2;'// &
+				'let c = 3;'// &
+				'let d = 4;'// &
+				'a == 1 and b == 2 and c == 3 and d == 4;}') == 'true', &
+			interpret('{'// &
+				'let d = 4;'// &
+				'let c = 3;'// &
+				'let b = 2;'// &
+				'let a = 1;'// &
+				'a == 1 and b == 2 and c == 3 and d == 4;}') == 'true', &
+			interpret('{'// &
+				'let c = 3;'// &
+				'let d = 4;'// &
+				'let a = 1;'// &
+				'let b = 2;'// &
+				'a == 1 and b == 2 and c == 3 and d == 4;}') == 'true', &
+			interpret('{'// &
+				'let p = true;'// &
+				'let q = false;'// &
+				'p and not q;}') == 'true', &
+			eval('(let a = 10) * a;') == '100' ,  &
+			interpret('{'// &
+				'let b = (let a = 5) * a;'// &
+				'let c = b - a;}') == '20', &
+			interpret('{'// &
+				'let b = (let a = 5) * a;'// &
+				'let d = (let c = b - a) + c;}') == '40', &
+			eval('let myVariable = 1337;')  == '1337'   &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -327,15 +326,16 @@ subroutine unit_test_comments(npass, nfail)
 
 	tests = &
 		[   &
-			interpret('//') == '', &
-			interpret(' ')  == '', &
-			interpret( &
-				'let a = 2'//line_feed// &
-				'a     = 3'//line_feed// &
-				'//a   = 4'//line_feed// &
-				' // a = 5'//line_feed// &
-				'a') == '3',     &
-			eval('let x = 1337 // set x to thirteen thirty seven')  == '1337' &
+			interpret('//;') == '', &
+			interpret('// ;')  == '', &
+			interpret(' //   ;')  == '', &
+			eval('{'//line_feed// &
+				'let a = 2;'//line_feed// &
+				'a     = 3;'//line_feed// &
+				'//a   = 4;'//line_feed// &
+				' // a = 5;'//line_feed// &
+				'a;}') == '3',     &
+			eval('let x = 1337; // set x to thirteen thirty seven')  == '1337' &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -360,22 +360,20 @@ subroutine unit_test_blocks(npass, nfail)
 
 	tests = &
 		[   &
-			interpret('{ let a = 0   (a = 10) * a }') == '100', &
-			!                     ^^^
-			!         no statement delimiter is needed
+			interpret('{ let a = 0 ; (a = 10) * a ;}') == '100', &
 			!
-			eval('{ let a = 0   (a = 10) * a }') == '100', &
+			eval('{ let a = 0 ; (a = 10) * a; }') == '100', &
 			!  eval works the same as interpret for blocks
 			!
 			eval( &
-				'{'//line_feed// &
-				'	let a = 0'//line_feed// &
-				'	(a = 10) * a'//line_feed// &
+				'{'// &
+				'	let a = 0;'// &
+				'	(a = 10) * a;'// &
 				'}') == '100', &
 			!  since we don't need statement delimiters in blocks, we can
 			!  now eval multi-line strings
 			!
-			interpret('{ let a = 1   (a =  9) * a }') == '81'  &
+			interpret('{ let a = 1 ; (a =  9) * a;}') == '81'  &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -455,32 +453,32 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('0 != false', quiet) == '', &
 			eval('1 + (2 == 3)', quiet) == '', &
 			interpret( &
-				'let a = 2'//line_feed// &
+				'let a = 2;'// &
 				'let a = 3', quiet) == '',     &
 			interpret( &
-				'let aaa = 3'//line_feed// &
-				'let aa = aaa - 1'//line_feed// &
+				'let aaa = 3;'// &
+				'let aa = aaa - 1;'// &
 				'let b = a - 1', quiet) == '',     &
 			interpret( &
 				'let a = b', quiet) == '',     &
 			interpret( &
-				'let a = 1'//line_feed// &
+				'let a = 1;'// &
 				'a = true', quiet) == '',     &
 			interpret( &
-				'let cute = 1'//line_feed// &
-				'let cup = 2'//line_feed// &
-				'let at = 3'//line_feed// &
-				'let as = 4'//line_feed// &
-				'let he = 5'//line_feed// &
-				'let us = 6'//line_feed// &
-				'let i = 7'//line_feed// &
-				'a', quiet) == '', &
+				'let cute = 1;'// &
+				'let cup = 2;'// &
+				'let at = 3;'// &
+				'let as = 4;'// &
+				'let he = 5;'// &
+				'let us = 6;'// &
+				'let i = 7;'// &
+				'a;', quiet) == '', &
 			interpret( &
-				'//let a = 1'//line_feed// &
-				'a', quiet) == '',     &
-			eval('let a + 1 = 2', quiet) == '', &
-			eval('let = 2', quiet) == '', &
-			eval('7 * false', quiet) == '' &
+				'//let a = 1;'//line_feed// &
+				'a;', quiet) == '',     &
+			eval('let a + 1 = 2;', quiet) == '', &
+			eval('let = 2;', quiet) == '', &
+			eval('7 * false;', quiet) == '' &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

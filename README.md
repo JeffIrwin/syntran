@@ -32,9 +32,9 @@ Then enter arithmetic expressions like `1 + 2 * 3` in the interpreter:
 <!-- cpp is the closest match I can find for markdown syntax highlighting -->
 
 ```cpp
-    syntran$ 1 + 2 * 3
+    syntran$ 1 + 2 * 3;
     7
-    syntran$ (1 + 2) * 3
+    syntran$ (1 + 2) * 3;
     9
 ```
 
@@ -43,7 +43,7 @@ Expressions are evaluated immediately and the result is printed to the console. 
 Use two asterisks for exponent powers, like Fortran and Scilab:
 
 ```cpp
-    5 ** 2
+    5 ** 2;
     // 25
 ```
 
@@ -56,25 +56,25 @@ Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyw
 Integer and boolean types are supported.
 
 ```cpp
-let foo = 1
-let bar = 2
-let baz = 4
+let foo = 1;
+let bar = 2;
+let baz = 4;
 
-baz = 3
+baz = 3;
 
-foo + bar * baz
+foo + bar * baz;
 // 7
 
-let p = true
-let q = false
+let p = true;
+let q = false;
 
-p or q
+p or q;
 // true
 
-not q and foo + bar == baz
+not q and foo + bar == baz;
 // true
 
-foo and p
+foo and p;
 //
 // foo and p
 //     ^^^

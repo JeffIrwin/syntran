@@ -155,7 +155,7 @@ function underline(text, lines, span)
 	! Get line number.  Ideally use a binary search, but it's so nice to do
 	! something with a Fortran intrinsic for a change
 	i1 = maxloc(lines, lines < span%start)
-	i = max(1, i1(1))
+	i = min(size(lines)-1, max(1, i1(1)))
 
 	!print *, 'line # = ', i
 

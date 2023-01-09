@@ -53,7 +53,7 @@ module core_m
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - <, >, <=, >=
-	!  - funcions
+	!  - functions
 	!  - arrays
 	!  - floats, characters, strings
 	!  - structs
@@ -64,13 +64,14 @@ module core_m
 
 
 
-	! TODO: optional braces for global compilation_unit statements? is
-	! translation_unit unused?
+	! TODO: optional braces for global compilation_unit statements?  could
+	! automatically wrap each translation unit in a top-level {block}, like
+	! adding a final line_feed in syntran_interpret()
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
-			translation_unit    = 33, &
+			semicolon_token     = 33, &
 			block_statement     = 32, &
 			expr_statement      = 31, &
 			lbrace_token        = 30, &
@@ -583,7 +584,7 @@ function kind_name(kind)
 			"lbrace_token     ", & ! 30
 			"expr_statement   ", & ! 31
 			"block_statement  ", & ! 32
-			"translation_unit "  & ! 33
+			"semicolon_token  "  & ! 33
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
@@ -925,6 +926,9 @@ function lex(lexer) result(token)
 		case ("}")
 			token = new_token(rbrace_token, lexer%pos, lexer%current())
 
+		case (";")
+			token = new_token(semicolon_token, lexer%pos, lexer%current())
+
 		case ("=")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
@@ -1117,10 +1121,12 @@ function new_lexer(text) result(lexer)
 
 	!print *, 'lines = ', lines
 
-	!print *, 'lines = '
-	!do i = 1, nlines
-	!	print *, i, text(lines(i): lines(i+1) - 2)
-	!end do
+	if (debug > 1) then
+		write(*,*) 'lines = '
+		do i = 1, nlines
+			write(*, '(i5,a)') i, ' | '//text(lines(i): lines(i+1) - 2)
+		end do
+	end if
 
 	lexer%lines = lines
 
@@ -1236,9 +1242,7 @@ function syntax_parse(str, variables) result(tree)
 		!print *, 'done'
 	end if
 
-	! Parse the tokens. Should this accept empty strings?  It says unexpected
-	! token trying to match number in parse_primary_expr(), so currently the
-	! interpreter driver skips empty lines
+	! Parse the tokens
 	tree = parser%parse_statement()
 
 	if (debug > 1) print *, 'tree = ', tree%str()
@@ -1269,6 +1273,7 @@ function parse_statement(parser) result(statement)
 	class(parser_t) :: parser
 
 	type(syntax_node_t) :: statement
+	type(syntax_token_t) :: semi
 
 	!********
 
@@ -1282,6 +1287,7 @@ function parse_statement(parser) result(statement)
 
 		case default
 			statement = parser%parse_expr_statement()
+			semi      = parser%match(semicolon_token)
 
 	end select
 

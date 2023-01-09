@@ -4,37 +4,40 @@
 
     // There's no scoping yet in 0.0.5.  Everything is global
     {
-        let foo = 1
-        let bar = 2
+        let foo = 1;
+        let bar = 2;
     }
 
-    let baz = 4
+    let baz = 4;
 
-    baz = 3
+    baz = 3;
 
-    foo + bar * baz
+    foo + bar * baz;
+
+    //foo; bar = baz;
 
     //foo bar = baz
     ////
-    //// ^ the above is interpretted like this:
+    //// ^ 
+    //// Before I required semicolons, the above was interpretted like this:
     ////
-    ////     foo
+    ////     foo;
     ////
-    ////     bar = baz
+    ////     bar = baz;
     ////
     //// So I'm totally going to start requiring semicolons
 
     {
-        let p = true
+        let p = true;
     }
 
-    let q = false
+    let q = false;
 
-    p or q
-    not q and foo + bar == baz
+    p or q;
+    not q and foo + bar == baz;
 
     //// The final (uncommented) statement of the main block is the printed
     //// result
-    //foo + bar * baz
+    //foo + bar * baz;
 
 }
