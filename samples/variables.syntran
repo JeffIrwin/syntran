@@ -1,15 +1,19 @@
 
-let foo = 1
-let bar = 2
-let baz = 4
+{
 
-baz = 3
+let foo = 1;
+let bar = 2;
+let baz = 4;
 
-foo + bar * baz
+baz = 3;
 
-let p = true
-let q = false
+foo + bar * baz;
 
-p or q
-not q and foo + bar == baz
+let p = true;
+let q = false;
+
+p or q;
+not q and foo + bar == baz;
+
+}
 

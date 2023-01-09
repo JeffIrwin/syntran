@@ -1,85 +1,86 @@
+{
 
-let a = 1
-let b = 1
+let a = 1;
+let b = 1;
 
-let c = a + b
-a = b
-b = c
+let c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
+c = a + b;
+a = b;
+b = c;
 
-c = a + b
-a = b
-b = c
-
+}
