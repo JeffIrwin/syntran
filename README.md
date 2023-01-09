@@ -27,7 +27,7 @@ Start the interpreter:
 
     ./build/syntran
 
-Then enter arithmetic expressions like `1 + 2 * 3` in the interpreter:
+Then enter arithmetic expressions like `1 + 2 * 3;` in the interpreter.  Semicolons are required at the end of statements!
 
 <!-- cpp is the closest match I can find for markdown syntax highlighting -->
 
