@@ -30,6 +30,9 @@ function err_bad_int(text, lines, span, num) result(err)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
+	! TODO: re-order error message *first* end the LOC with underline (and more
+	! after the underline?)
+
 	character(len = *), intent(in) :: num
 	err = underline(text, lines, span)//err_prefix &
 		//'invalid i32 integer '//num//color_reset
@@ -143,19 +146,20 @@ end function new_text_span
 function underline(text, lines, span)
 
 	type(text_span_t), intent(in) :: span
+	character(len = *), intent(in) :: text
+	integer, allocatable, intent(in) :: lines(:)
 	character(len = :), allocatable :: underline
 
-	! TODO: make not optional after modifying all err_*() fns, put in order
-	! (text, span)
-	character(len = *), intent(in) :: text
-	integer, allocatable :: lines(:)
-
-	integer :: i1(1), i
+	character(len = :), allocatable :: str_i, spaces, src_file, fg1, rst
+	integer :: i1(1), i, str_i_len, start, last
 
 	! Get line number.  Ideally use a binary search, but it's so nice to do
 	! something with a Fortran intrinsic for a change
 	i1 = maxloc(lines, lines < span%start)
 	i = min(size(lines)-1, max(1, i1(1)))
+
+	str_i = str(i)
+	str_i_len = len(str_i)
 
 	!print *, 'line # = ', i
 
@@ -165,10 +169,47 @@ function underline(text, lines, span)
 	! To work around this, trim whitespace from beginning of line, count number
 	! of trimmed characters, and then adjust the leading underline spaces
 
-	underline = text(lines(i): lines(i+1) - 2)//line_feed &
+	! Pad spaces the same length as the line number string
+	spaces = repeat(' ', str_i_len + 2)
+
+	! First and last character indices of line
+	start = lines(i)
+	last  = lines(i+1) - 1
+
+	! Trim whitespace from end of line.  Make sure interpretter looks ok when
+	! forgetting semicolons
+	do while (text(last:last) == line_feed .or. &
+	          text(last:last) == carriage_return)
+		last = last - 1
+	end do
+
+	! TODO: add filename, line number, and (start?) column too like rust:
+	!
+	!error[E0425]: cannot find value `string_number` in this scope
+	!  --> src/main.rs:3:20
+	!   |
+	! 3 |    println!("{}", string_number);
+	!   |                   ^^^^^^^^^^^^^ not found in this scope
+	!
+
+	! TODO: arg for src_file?  There's getting to be a lot of args.  Encapsulate
+	! text, lines, and src_file name in a new "context" type (or
+	! diagnostic_context if you're feeling verbose).  Set src_file to <stdin>
+	! for interpretter
+
+	src_file = "*.syntran"
+
+	fg1 = fg_bright_cyan
+	rst = color_reset
+
+	underline = &
+		  fg1//"  --> "//rst//src_file//":"//str_i//":"//str(span%start) &
+		//line_feed &
+		//fg1//     spaces//"| "//line_feed &
+		//fg1//" "//str_i//" | "//rst//text(start: last)//line_feed &
+		//fg1//     spaces//"| " &! //line_feed &
 		//repeat(' ', span%start - lines(i)) &
-		//fg_bright_red//repeat('^', span%length)//color_reset//line_feed &
-		//" Line #"//str(i)//line_feed
+		//fg_bright_red//repeat('^', span%length)//color_reset//line_feed
 
 end function underline
 

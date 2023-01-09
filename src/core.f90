@@ -49,6 +49,7 @@ module core_m
 	!    }
 	!    // 1, 2,   4, 5
 	!
+	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
@@ -2196,8 +2197,6 @@ end function syntax_eval
 
 subroutine log_diagnostics(node, src, ou)
 
-	! TODO: line numbers
-
 	class(syntax_node_t), intent(in) :: node
 	character(len = *)  , intent(in) :: src
 	integer, optional   , intent(in) :: ou
@@ -2211,8 +2210,7 @@ subroutine log_diagnostics(node, src, ou)
 
 	do i = 1, node%diagnostics%len
 
-		! Check rustc conventions for style of line numbers in diagnostics
-		write(oul,*)
+		!write(oul,*)
 		!write(oul, '(a)') src
 		write(oul, '(a)') node%diagnostics%v(i)%s
 		write(oul,*)
