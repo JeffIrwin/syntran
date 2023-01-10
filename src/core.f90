@@ -67,7 +67,8 @@ module core_m
 
 	! TODO: optional braces for global compilation_unit statements?  could
 	! automatically wrap each translation unit in a top-level {block}, like
-	! adding a final line_feed in syntran_interpret()
+	! adding a final line_feed in syntran_interpret().  Although, that would
+	! probably interfere with scoping later.
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
@@ -150,8 +151,12 @@ module core_m
 		! line numbers in diagnostics
 		type(string_vector_t) :: diagnostics
 
-		! Only used to handle comment/whitespace lines
+		! Only used to handle comment/whitespace lines for now
 		logical :: is_empty = .false.
+
+		! Is the parser expecting more input, e.g. from a continued line in the
+		! interactive interpretter to match a semicolon, brace, etc.?
+		logical :: expecting = .false.
 
 		! FIXME: when adding new members here, make sure to explicitly copy them
 		! in syntax_node_copy, or else assignment will yield bugs
@@ -173,9 +178,11 @@ module core_m
 
 		integer :: pos
 
-		character(len = :), allocatable :: text
 		type(string_vector_t) :: diagnostics
-		integer, allocatable :: lines(:)
+
+		type(text_context_t) :: context
+
+		character(len = :), allocatable :: text
 
 		! Both the lexer and the parser have current() and lex()/next() member
 		! fns.  current_char() returns a char, while the others return syntax
@@ -192,11 +199,16 @@ module core_m
 	! separate files.  I think I like the monolithic design anyway
 
 	type ternary_tree_node_t
+
 		character :: split_char = ''
 		type(ternary_tree_node_t), allocatable :: left, mid, right
 		type(value_t), allocatable :: val
-		!contains
-		!	procedure :: print => ternary_node_print
+
+		contains
+			!procedure :: print => ternary_node_print
+			procedure, pass(dst) :: copy => ternary_tree_copy
+			generic, public :: assignment(=) => copy
+
 	end type ternary_tree_node_t
 
 	type variable_dictionary_t
@@ -204,7 +216,8 @@ module core_m
 		contains
 			procedure :: &
 				insert => variable_insert, &
-				search => variable_search
+				search => variable_search !, &
+				!copy   => variable_
 	end type variable_dictionary_t
 
 	!********
@@ -218,9 +231,11 @@ module core_m
 		type(syntax_token_t), allocatable :: tokens(:)
 		integer :: pos
 
-		character(len = :), allocatable :: text
+		logical :: expecting = .false.
+
 		type(string_vector_t) :: diagnostics
-		integer, allocatable :: lines(:)
+
+		type(text_context_t) :: context
 
 		type(variable_dictionary_t) :: variables
 
@@ -430,6 +445,47 @@ recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 	!print *, ''
 
 end subroutine ternary_insert
+
+!===============================================================================
+
+recursive subroutine ternary_tree_copy(dst, src)
+
+	! Deep copy
+	!
+	! This should be avoided for efficient compilation, but the interactive
+	! interpretter uses it to backup and restore the variable dictionary for
+	! partially-evaluated continuation lines
+
+	class(ternary_tree_node_t), intent(inout) :: dst
+	class(ternary_tree_node_t), intent(in)    :: src
+
+	!********
+
+	!if (.not. allocated(dst)) allocate(dst)
+
+	dst%split_char = src%split_char
+
+	if (allocated(src%val)) then
+		if (.not. allocated(dst%val)) allocate(dst%val)
+		dst%val = src%val
+	end if
+
+	if (allocated(src%left)) then
+		if (.not. allocated(dst%left)) allocate(dst%left)
+		dst%left = src%left
+	end if
+
+	if (allocated(src%mid)) then
+		if (.not. allocated(dst%mid)) allocate(dst%mid)
+		dst%mid = src%mid
+	end if
+
+	if (allocated(src%right)) then
+		if (.not. allocated(dst%right)) allocate(dst%right)
+		dst%right = src%right
+	end if
+
+end subroutine ternary_tree_copy
 
 !===============================================================================
 
@@ -704,11 +760,12 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%op   = src%op
 	dst%val  = src%val
 
-	dst%identifier = src%identifier
+	dst%identifier  = src%identifier
 
+	dst%expecting   = src%expecting
 	dst%diagnostics = src%diagnostics
 
-	dst%is_empty = src%is_empty
+	dst%is_empty    = src%is_empty
 
 	if (allocated(src%left)) then
 		!if (debug > 1) print *, 'copy() left'
@@ -843,9 +900,9 @@ function lex(lexer) result(token)
 
 		read(text, *, iostat = io) ival
 		if (io /= exit_success) then
-			span = new_text_span(start, len(text))
+			span = new_span(start, len(text))
 			call lexer%diagnostics%push(err_bad_int( &
-				lexer%text, lexer%lines, span, text))
+				lexer%context, span, text))
 		end if
 
 		val = new_value(num_expr, ival = ival)
@@ -948,9 +1005,10 @@ function lex(lexer) result(token)
 				! about breaking in select case
 				token = new_token(bad_token, lexer%pos, lexer%current())
 
-				span = new_text_span(lexer%pos, len(lexer%current()))
+				span = new_span(lexer%pos, len(lexer%current()))
+
 				call lexer%diagnostics%push( &
-					err_unexpected_char(lexer%text, lexer%lines, &
+					err_unexpected_char(lexer%context, &
 					span, lexer%current()))
 
 			end if
@@ -959,9 +1017,10 @@ function lex(lexer) result(token)
 
 			token = new_token(bad_token, lexer%pos, lexer%current())
 
-			span = new_text_span(lexer%pos, len(lexer%current()))
+			span = new_span(lexer%pos, len(lexer%current()))
+
 			call lexer%diagnostics%push( &
-				err_unexpected_char(lexer%text, lexer%lines, &
+				err_unexpected_char(lexer%context, &
 				span, lexer%current()))
 
 	end select
@@ -1051,9 +1110,9 @@ end function get_keyword_kind
 
 !===============================================================================
 
-function new_lexer(text) result(lexer)
+function new_lexer(text, src_file) result(lexer)
 
-	character(len = *) :: text
+	character(len = *) :: text, src_file
 
 	type(lexer_t) :: lexer
 
@@ -1061,11 +1120,10 @@ function new_lexer(text) result(lexer)
 
 	integer :: i, i0, nlines
 
-	! TODO: copy to lexer AND parser members
 	integer, allocatable :: lines(:)
 
-	lexer%text = text
-	lexer%pos = 1
+	lexer%text     = text
+	lexer%pos      = 1
 
 	lexer%diagnostics = new_string_vector()
 
@@ -1129,15 +1187,17 @@ function new_lexer(text) result(lexer)
 		end do
 	end if
 
-	lexer%lines = lines
+	! TODO: delete lexer%text in favor of lexer%context%text.  It appears in
+	! a lot of places
+	lexer%context = new_context(text, src_file, lines)
 
 end function new_lexer
 
 !===============================================================================
 
-function new_parser(str) result(parser)
+function new_parser(str, src_file) result(parser)
 
-	character(len = *) :: str
+	character(len = *) :: str, src_file
 
 	type(parser_t) :: parser
 
@@ -1150,7 +1210,7 @@ function new_parser(str) result(parser)
 
 	! Get an array of tokens
 	tokens = new_syntax_token_vector()
-	lexer = new_lexer(str)
+	lexer = new_lexer(str, src_file)
 	do
 		token = lexer%lex()
 
@@ -1168,10 +1228,8 @@ function new_parser(str) result(parser)
 	parser%pos = 1
 
 	parser%diagnostics = lexer%diagnostics
-	parser%lines       = lexer%lines
-	parser%text        = lexer%text
 
-	!print *, 'parser%lines = ', parser%lines
+	parser%context = lexer%context
 
 	!print *, 'tokens%len = ', tokens%len
 	if (debug > 1) print *, parser%tokens_str()
@@ -1206,26 +1264,40 @@ end function tokens_str
 
 !===============================================================================
 
-function syntax_parse(str, variables) result(tree)
+function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 	character(len = *) :: str
 
 	type(syntax_node_t) :: tree
 
+	character(len = *), optional, intent(in)  :: src_file
+
+	logical, intent(in), optional :: allow_continue
+
 	!********
+
+	character(len = :), allocatable :: src_filel
+
+	logical :: allow_continuel, variables_empty = .false.
 
 	type(parser_t) :: parser
 
 	type(syntax_token_t) :: token
 
-	type(variable_dictionary_t) :: variables
+	type(variable_dictionary_t) :: variables, variables0
 
 	if (debug > 0) print *, 'syntax_parse'
-	if (debug > 0) print *, 'str = ', str
+	if (debug > -1) print *, 'str = ', str
 
-	parser = new_parser(str)
+	src_filel = '<stdin>'
+	if (present(src_file)) src_filel = src_file
 
-	!print *, 'parser%lines = ', parser%lines
+	allow_continuel = .false.
+	if (present(allow_continue)) allow_continuel = allow_continue
+
+	!print *, 'allow_continuel = ', allow_continuel
+
+	parser = new_parser(str, src_filel)
 
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
@@ -1238,20 +1310,78 @@ function syntax_parse(str, variables) result(tree)
 	! constructor new_parser(), but it seems reasonable to do it here since it
 	! has to be moved back later
 	if (allocated(variables%root)) then
+
+		if (allow_continuel) then
+			! Only copy for interactive interpretter
+
+			! The root type has an overloaded assignment op, but the variables
+			! type itself does not (and I don't want to expose or encourage
+			! copying)
+
+			!print *, 'copying'
+			!variables0 = variables
+
+			allocate(variables0%root)
+			variables0%root = variables%root
+			!call ternary_tree_copy(variables0%root, variables%root)
+
+		end if
+
 		!print *, 'moving'
 		call move_alloc(variables%root, parser%variables%root)
+		!parser%variables%root = variables%root
+		!call ternary_tree_copy(parser%variables%root, variables%root)
 		!print *, 'done'
+
+	else if (allow_continuel) then
+
+		! TODO: refactor
+		variables_empty = .true.
+
 	end if
 
+	!*******************************
 	! Parse the tokens
 	tree = parser%parse_statement()
+	!*******************************
+
+	tree%expecting = parser%expecting
 
 	if (debug > 1) print *, 'tree = ', tree%str()
 
-	if (debug > 1) print *, 'matching eof'
-	token  = parser%match(eof_token)
+	if (tree%expecting .and. allow_continuel) then
 
-	tree%diagnostics = parser%diagnostics
+		! If expecting more input, don't push diagnostics yet.  Also don't undo
+		! any variable declarations, since they will be re-declared when we
+		! continue parsing the current stdin line from its start again.
+
+		! TODO: can this one just be a move_alloc and early return?
+
+		if (variables_empty) return
+
+		!print *, 'checking alloc'
+		if (allocated(variables0%root)) then
+
+			call move_alloc(variables0%root, variables%root)
+			return
+
+			!print *, 'checking alloc 2'
+			if (.not. allocated(parser%variables%root)) allocate(parser%variables%root)
+			!print *, 'copying'
+			parser%variables%root = variables0%root
+			!parser%variables = variables0
+			!print *, 'done'
+
+		end if
+
+	else
+
+		if (debug > 1) print *, 'matching eof'
+		token  = parser%match(eof_token)
+
+		tree%diagnostics = parser%diagnostics
+
+	end if
 
 	! Move back.  It's possible that it was empty before this call but not
 	! anymore
@@ -1260,6 +1390,7 @@ function syntax_parse(str, variables) result(tree)
 	if (allocated(parser%variables%root)) then
 		!print *, 'moving back'
 		call move_alloc(parser%variables%root, variables%root)
+		!variables%root = parser%variables%root
 		!print *, 'done'
 	end if
 
@@ -1405,9 +1536,9 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'io = ', io
 		if (io /= exit_success) then
-			span = new_text_span(identifier%pos, len(identifier%text))
+			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_redeclare_var(parser%text, parser%lines, &
+				err_redeclare_var(parser%context, &
 				span, identifier%text))
 		end if
 
@@ -1430,9 +1561,9 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		expr%val = parser%variables%search(identifier%text, io)
 		if (io /= exit_success) then
-			span = new_text_span(identifier%pos, len(identifier%text))
+			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_redeclare_var(parser%text, parser%lines, &
+				err_undeclare_var(parser%context, &
 				span, identifier%text))
 		end if
 
@@ -1441,9 +1572,9 @@ recursive function parse_expr_statement(parser) result(expr)
 		if (.not. is_binary_op_allowed( &
 			expr%val%kind, op%kind, expr%right%val%kind)) then
 
-			span = new_text_span(op%pos, len(op%text))
+			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_binary_types(parser%text, parser%lines, &
+				err_binary_types(parser%context, &
 				span, op%text, &
 				kind_name(expr%val%kind), &
 				kind_name(expr%right%val%kind)))
@@ -1494,9 +1625,9 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 		if (.not. is_unary_op_allowed(op%kind, right%val%kind)) then
 
-			span = new_text_span(op%pos, len(op%text))
+			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_unary_types(parser%text, parser%lines, span, op%text, &
+				err_unary_types(parser%context, span, op%text, &
 				kind_name(expr%right%val%kind)))
 
 		end if
@@ -1516,9 +1647,9 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		if (.not. is_binary_op_allowed( &
 			expr%left%val%kind, op%kind, expr%right%val%kind)) then
 
-			span = new_text_span(op%pos, len(op%text))
+			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_binary_types(parser%text, parser%lines, &
+				err_binary_types(parser%context, &
 				span, op%text, &
 				kind_name(expr%left %val%kind), &
 				kind_name(expr%right%val%kind)))
@@ -1719,9 +1850,9 @@ function parse_primary_expr(parser) result(expr)
 				parser%variables%search(identifier%text, io))
 
 			if (io /= exit_success) then
-				span = new_text_span(identifier%pos, len(identifier%text))
+				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%text, parser%lines, &
+					err_undeclare_var(parser%context, &
 					span, identifier%text))
 			end if
 
@@ -1949,20 +2080,31 @@ function match(parser, kind) result(token)
 	type(syntax_token_t) :: current
 	type(text_span_t) :: span
 
+	parser%expecting = .true.
+	!print *, 'init expecting true'
+
 	! If current_text() and current_pos() helper fns are added, this local var
 	! current can be eliminated
 	current = parser%current()
 
 	if (parser%current_kind() == kind) then
 		token = parser%next()
+		parser%expecting = .false.
+		!print *, 'returning parser expecting false'
 		return
 	end if
 
 	len_text = max(len(current%text), 1)
-	span = new_text_span(current%pos, len_text)
+	span = new_span(current%pos, len_text)
 	call parser%diagnostics%push( &
-		err_unexpected_token(parser%text, parser%lines, span, current%text, &
+		err_unexpected_token(parser%context, span, current%text, &
 		kind_name(parser%current_kind()), kind_name(kind)))
+
+	! Consume next token to avoid infinite loops on input like this:
+	!
+	!     4) + 5;
+	!
+	token = parser%next()
 
 	token = new_token(kind, current%pos, null_char)
 

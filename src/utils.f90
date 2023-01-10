@@ -26,6 +26,7 @@ module utils
 			fg_bright_red      = esc//'[91m', &
 			fg_bold_bright_red = esc//'[91;1m', &
 			fg_bright_green    = esc//'[92m', &
+			fg_bright_blue     = esc//'[94m', &
 			fg_bright_cyan     = esc//'[96m', &
 			fg_bright_white    = esc//'[97m', &
 			color_reset        = esc//'[0m'

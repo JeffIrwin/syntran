@@ -236,8 +236,6 @@ subroutine unit_test_assignment(npass, nfail)
 	! a limit on how many chars and lines can be in a statement, and this may be
 	! pushing it
 
-	! TODO
-
 	tests = &
 		[   &
 			eval('let x = 1 ;') == '1' ,  &

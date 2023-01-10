@@ -18,14 +18,30 @@ module errors_m
 		integer :: start, length
 	end type text_span_t
 
+	type text_context_t
+
+		! Text is the full text of the source code with filename src_file.  The
+		! array lines(:) contains the character indices of the start of each
+		! line
+		character(len = :), allocatable :: text, src_file
+		integer, allocatable :: lines(:)
+
+	end type text_context_t
+
+	! TODO: span is different for each error.  Other things, like the src_file
+	! name, text, and lines, stay the same (at least per parser invocation for
+	! now).  Move those constants to another struct, which is constructed within
+	! new_parser() and new_lexer(), so we can encapsulate a few things that are
+	! getting repeatedly passed as args every time.  Name type "src_context"
+
 !===============================================================================
 
 contains
 
 !===============================================================================
 
-function err_bad_int(text, lines, span, num) result(err)
-	character(len = *), intent(in) :: text
+function err_bad_int(context, span, num) result(err)
+	type(text_context_t) :: context
 	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
@@ -34,72 +50,78 @@ function err_bad_int(text, lines, span, num) result(err)
 	! after the underline?)
 
 	character(len = *), intent(in) :: num
-	err = underline(text, lines, span)//err_prefix &
-		//'invalid i32 integer '//num//color_reset
+	err = err_prefix//'invalid i32 integer `'//num &
+		//'` does not fit in 32 bits' &
+		//underline(context, span) &
+		//' invalid integer'//color_reset
 
 end function err_bad_int
 
 !===============================================================================
 
-function err_unexpected_char(text, lines, span, c) result(err)
-	character(len = *), intent(in) :: text
+function err_unexpected_char(context, span, c) result(err)
+	type(text_context_t) :: context
 	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: c
-	err = underline(text, lines, span)//err_prefix &
-		//"unexpected character '"//c//"'"//color_reset
+	err = err_prefix &
+		//"unexpected character `"//c//"`"//underline(context, span) &
+		//" unexpected character"//color_reset
 
 end function err_unexpected_char
 
 !===============================================================================
 
-function err_unexpected_token(text, lines, span, got, kind, expect) result(err)
-	character(len = *), intent(in) :: text
+function err_unexpected_token(context, span, got, kind, expect) result(err)
+	type(text_context_t) :: context
 	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: got, kind ,expect
-	err = underline(text, lines, span)//err_prefix &
-		//'unexpected token "'//got//'" of kind <'//kind &
-		//'>, expected <'//expect//'>'//color_reset
+	err = err_prefix &
+		//'unexpected token `'//got//'` of kind `'//kind &
+		//'`, expected `'//expect//'`'//underline(context, span) &
+		//" unexpected token"//color_reset
 
 end function err_unexpected_token
 
 !===============================================================================
 
-function err_redeclare_var(text, lines, span, var) result(err)
-	character(len = *), intent(in) :: text
+function err_redeclare_var(context, span, var) result(err)
+	type(text_context_t) :: context
 	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: var
-	err = underline(text, lines, span)//err_prefix &
-		//'variable "'//var//'" has already been declared'//color_reset
+	err = err_prefix &
+		//'variable `'//var//'` has already been declared' &
+		//underline(context, span)//" variable already declared"//color_reset
 
 end function err_redeclare_var
 
 !===============================================================================
 
-function err_undeclare_var(text, lines, span, var) result(err)
-	character(len = *), intent(in) :: text
+function err_undeclare_var(context, span, var) result(err)
+	type(text_context_t) :: context
 	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: var
-	err = underline(text, lines, span)//err_prefix &
-		//'variable "'//var//'" has not been declared'//color_reset
+	err = err_prefix &
+		//'variable `'//var//'` has not been declared' &
+		//underline(context, span)//" variable undeclared"//color_reset
 
 end function err_undeclare_var
 
 !===============================================================================
 
-function err_binary_types(text, lines, span, op, left, right) result(err)
-	character(len = *), intent(in) :: text
+function err_binary_types(context, span, op, left, right) result(err)
+	type(text_context_t) :: context
 	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
@@ -108,55 +130,68 @@ function err_binary_types(text, lines, span, op, left, right) result(err)
 
 	!print *, 'starting err_binary_types'
 
-	err = underline(text, lines, span)//err_prefix &
-		//'binary operator "'//op//'" is not defined for types ' &
-		//left//' and '//right//color_reset
+	err = err_prefix &
+		//'binary operator `'//op//'` is not defined for types ' &
+		//left//' and '//right//underline(context, span) &
+		//" bad types for binary operator"//color_reset
 
 end function err_binary_types
 
 !===============================================================================
 
-function err_unary_types(text, lines, span, op, right) result(err)
-	character(len = *), intent(in) :: text
+function err_unary_types(context, span, op, right) result(err)
+	type(text_context_t) :: context
 	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: op, right
-	err = underline(text, lines, span)//err_prefix &
-		//'unary operator "'//op//'" is not defined for type ' &
-		//right//color_reset
+	err = err_prefix &
+		//'unary operator `'//op//'` is not defined for type ' &
+		//right//underline(context, span) &
+		//" bad types for unary operator"//color_reset
 
 end function err_unary_types
 
 !===============================================================================
 
-function new_text_span(start, length) result(span)
+function new_span(start, length) result(span)
 
-	integer :: start, length
+	integer, intent(in) :: start, length
+
 	type(text_span_t) :: span
 
-	span%start  = start
-	span%length = length
+	span%start    = start
+	span%length   = length
 
-end function new_text_span
+end function new_span
 
 !===============================================================================
 
-function underline(text, lines, span)
+function new_context(text, src_file, lines) result(context)
+	character(len = *), intent(in) :: text, src_file
+	integer, intent(in) :: lines(:)
+	type(text_context_t) :: context
+	context%text = text
+	context%src_file = src_file
+	context%lines = lines
+end function new_context
 
+!===============================================================================
+
+function underline(context, span)
+
+	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
-	character(len = *), intent(in) :: text
-	integer, allocatable, intent(in) :: lines(:)
 	character(len = :), allocatable :: underline
 
-	character(len = :), allocatable :: str_i, spaces, src_file, fg1, rst
+	character(len = :), allocatable :: str_i, spaces, fg1, rst, col
 	integer :: i1(1), i, str_i_len, start, last
 
 	! Get line number.  Ideally use a binary search, but it's so nice to do
 	! something with a Fortran intrinsic for a change
-	i1 = maxloc(lines, lines < span%start)
-	i = min(size(lines)-1, max(1, i1(1)))
+	i1 = maxloc(context%lines, context%lines <= span%start)
+	i = min(size(context%lines)-1, max(1, i1(1)))
 
 	str_i = str(i)
 	str_i_len = len(str_i)
@@ -173,43 +208,44 @@ function underline(text, lines, span)
 	spaces = repeat(' ', str_i_len + 2)
 
 	! First and last character indices of line
-	start = lines(i)
-	last  = lines(i+1) - 1
+	start = context%lines(i)
+	last  = context%lines(i+1) - 1
 
 	! Trim whitespace from end of line.  Make sure interpretter looks ok when
 	! forgetting semicolons
-	do while (text(last:last) == line_feed .or. &
-	          text(last:last) == carriage_return)
+	do while (context%text(last:last) == line_feed .or. &
+	          context%text(last:last) == carriage_return)
 		last = last - 1
 	end do
 
-	! TODO: add filename, line number, and (start?) column too like rust:
+	! Here's an example of a rust error message, from which I'm stealing UX:
 	!
-	!error[E0425]: cannot find value `string_number` in this scope
-	!  --> src/main.rs:3:20
-	!   |
-	! 3 |    println!("{}", string_number);
-	!   |                   ^^^^^^^^^^^^^ not found in this scope
-	!
+	!        Compiling skillet v0.4.0 (C:\git\skillet)
+	!     error[E0433]: failed to resolve: use of undeclared crate or module `st`
+	!      --> src\main.rs:6:5
+	!       |
+	!     6 | use st::path::PathBuf;
+	!       |     ^^ use of undeclared crate or module `st`
+	!       |
+	!     help: there is a crate or module with a similar name
+	!       |
+	!     6 | use std::path::PathBuf;
+	!       |     ~~~
 
-	! TODO: arg for src_file?  There's getting to be a lot of args.  Encapsulate
-	! text, lines, and src_file name in a new "context" type (or
-	! diagnostic_context if you're feeling verbose).  Set src_file to <stdin>
-	! for interpretter
-
-	src_file = "*.syntran"
+	col = str(span%start - context%lines(i) + 1)
 
 	fg1 = fg_bright_cyan
+	!fg1 = fg_bright_blue
+
 	rst = color_reset
 
-	underline = &
-		  fg1//"  --> "//rst//src_file//":"//str_i//":"//str(span%start) &
-		//line_feed &
+	underline = line_feed//fg1//spaces(2:)//"--> "//rst//context%src_file &
+		//":"//str_i//":"//col//line_feed &
 		//fg1//     spaces//"| "//line_feed &
-		//fg1//" "//str_i//" | "//rst//text(start: last)//line_feed &
-		//fg1//     spaces//"| " &! //line_feed &
-		//repeat(' ', span%start - lines(i)) &
-		//fg_bright_red//repeat('^', span%length)//color_reset//line_feed
+		//fg1//" "//str_i//" | "//rst//context%text(start: last)//line_feed &
+		//fg1//     spaces//"| " &
+		//repeat(' ', span%start - context%lines(i)) &
+		//fg_bright_red//repeat('^', span%length)
 
 end function underline
 

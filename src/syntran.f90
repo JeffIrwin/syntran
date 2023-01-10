@@ -15,20 +15,18 @@ contains
 
 function syntran_interpret(str, quiet) result(res_str)
 
-	! This is the interpreter shell
+	! This is the interactive interpreter shell
+	!
+	! To interpret a whole file all at once, use syntran_interpret_file()
+	! instead
 	!
 	! Interpret stdin by default, or interpret the multi-line string str if it
 	! is given.  The return value res_str is the result of the final expression
 	! (like how Rust doesn't have a return statement, but fns just return the
 	! final expression in their body)
 	!
-	! TODO: add quiet arg for bad syntax testing
-	!
-	! TODO: another optional arg for iu as stdin vs another file:
-	!   - enable input echo for file input (not for stdin)
-	!   - write file name and line num for diagnostics
-	!   - echo inputs w/o "syntran$" prompt and print outputs after a comment,
-	!     for ease of updating documentation with consistent styling
+	! TODO: deprecate str arg here.  Prefer eval() or interpret_file().  Some
+	! tests will need updated
 
 	use core_m
 	use utils
@@ -40,13 +38,14 @@ function syntran_interpret(str, quiet) result(res_str)
 
 	!********
 
-	character(len = :), allocatable :: line
+	character(len = :), allocatable :: line, src_file
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io
 
-	logical :: quietl, show_tree = .false.
+	logical :: quietl, cont = .false., show_tree = .false.
+	logical, parameter :: allow_cont = .true.
 
 	type(string_view_t) :: sv
 
@@ -54,12 +53,19 @@ function syntran_interpret(str, quiet) result(res_str)
 	type(value_t) :: res
 	type(variable_dictionary_t) :: variables
 
+	!print *, 'starting syntran_interpret()'
+
+	res_str = ' '
+
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
+
+	src_file = '<stdin>'
 
 	if (present(str)) then
 		! Append a trailing line feed in case it does not exist
 		sv = new_string_view(str//line_feed)
+		src_file = '<string>'
 	end if
 
 	quietl = .false.
@@ -84,8 +90,23 @@ function syntran_interpret(str, quiet) result(res_str)
 			line = sv%get_line(iostat = io)
 
 		else
-			write(ou, '(a)', advance = 'no') prompt
-			line = read_line(iu, iostat = io)
+
+			if (cont) then
+
+				! If expecting more characters, re-parse the whole line from the
+				! beginning.  An alternative implementation would not append but
+				! only pass the new characters, but also pass the previous
+				! compilation tree to append to the tree instead of appending
+				! characters.  This way seemed easier :shrug:
+
+				write(ou, '(a)', advance = 'no') '> '
+				line = line//line_feed//read_line(iu, iostat = io)
+
+			else
+				write(ou, '(a)', advance = 'no') prompt
+				line = read_line(iu, iostat = io)
+			end if
+
 		end if
 
 		!print *, 'line = <', line, '>'
@@ -107,8 +128,19 @@ function syntran_interpret(str, quiet) result(res_str)
 			cycle
 		end if
 
-		res_str = ''
-		compilation = syntax_parse(line, variables)
+		res_str = ' '
+		compilation = syntax_parse(line, variables, src_file, allow_cont)
+		!print *, 'in interpreter'
+
+		!print *, 'compilation%expecting = ', compilation%expecting
+
+		print *, 'allocated(variables%root) = ', allocated(variables%root)
+
+		! Continue current parse with next line since more chars are expected
+		cont = compilation%expecting
+
+		if (cont .and. present(str)) exit
+		if (cont) cycle
 
 		if (compilation%is_empty) cycle
 
@@ -130,6 +162,8 @@ function syntran_interpret(str, quiet) result(res_str)
 		if (.not. present(str)) write(ou, '(a)') res_str
 
 	end do
+
+	!print *, 'done syntran_interpret()'
 
 end function syntran_interpret
 
@@ -194,7 +228,7 @@ end function syntran_eval_int
 
 !===============================================================================
 
-function syntran_eval(str, quiet) result(res)
+function syntran_eval(str, quiet, src_file) result(res)
 
 	use core_m
 
@@ -202,8 +236,11 @@ function syntran_eval(str, quiet) result(res)
 	character(len = :), allocatable :: res
 
 	logical, optional, intent(in) :: quiet
+	character(len = *), optional, intent(in)  :: src_file
 
 	!********
+
+	character(len = :), allocatable :: src_filel
 
 	logical :: quietl
 
@@ -214,13 +251,16 @@ function syntran_eval(str, quiet) result(res)
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
 
+	src_filel = '<stdin>'
+	if (present(src_file)) src_filel = src_file
+
 	!! One-liner, but no error handling.  This can crash unit tests without
 	!! reporting failures
 	!eval = syntax_eval(syntax_parse(str, variables), variables)
 
 	! TODO: make a helper fn here that all the eval_* fns use
 
-	tree = syntax_parse(str, variables)
+	tree = syntax_parse(str, variables, src_filel)
 	if (.not. quietl) call tree%log_diagnostics(str)
 
 	if (tree%diagnostics%len > 0) then
@@ -236,6 +276,11 @@ end function syntran_eval
 !===============================================================================
 
 function syntran_interpret_file(file, quiet) result(res)
+
+	! TODO:
+	!   - enable input echo for file input (not for stdin)
+	!   - echo inputs w/o "syntran$" prompt and print outputs after a comment,
+	!     for ease of updating documentation with consistent styling
 
 	use core_m
 
@@ -255,7 +300,7 @@ function syntran_interpret_file(file, quiet) result(res)
 	if (.not. quietl) write(*,*) 'Interpretting file "'//file//'" ...'
 
 	source_text = read_file(file)
-	res = syntran_eval(source_text, quiet)
+	res = syntran_eval(source_text, quiet, file)
 
 end function syntran_interpret_file
 

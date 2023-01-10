@@ -6,4 +6,8 @@
 //4) + 5;
 true + 4;
 7 * false;
+let a = 1;
+let a = 2;
+b = 3;
+-true;
 }
