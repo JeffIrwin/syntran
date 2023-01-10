@@ -134,7 +134,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		!print *, 'compilation%expecting = ', compilation%expecting
 
-		print *, 'allocated(variables%root) = ', allocated(variables%root)
+		!print *, 'allocated(variables%root) = ', allocated(variables%root)
 
 		! Continue current parse with next line since more chars are expected
 		cont = compilation%expecting

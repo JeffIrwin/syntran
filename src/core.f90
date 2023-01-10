@@ -1278,7 +1278,7 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 	character(len = :), allocatable :: src_filel
 
-	logical :: allow_continuel, variables_empty = .false.
+	logical :: allow_continuel, variables_empty
 
 	type(parser_t) :: parser
 
@@ -1287,13 +1287,15 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 	type(variable_dictionary_t) :: variables, variables0
 
 	if (debug > 0) print *, 'syntax_parse'
-	if (debug > -1) print *, 'str = ', str
+	if (debug > 1) print *, 'str = ', str
 
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
 
 	allow_continuel = .false.
 	if (present(allow_continue)) allow_continuel = allow_continue
+
+	variables_empty = .false.
 
 	!print *, 'allow_continuel = ', allow_continuel
 
@@ -1305,6 +1307,8 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 		tree%diagnostics = parser%diagnostics
 		return
 	end if
+
+	!print *, 'inside allocated(variables%root) = ', allocated(variables%root)
 
 	! Point parser member to variables dictionary.  This could be done in the
 	! constructor new_parser(), but it seems reasonable to do it here since it
@@ -1318,7 +1322,7 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 			! type itself does not (and I don't want to expose or encourage
 			! copying)
 
-			!print *, 'copying'
+			!print *, 'copying a'
 			!variables0 = variables
 
 			allocate(variables0%root)
@@ -1327,7 +1331,7 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 		end if
 
-		!print *, 'moving'
+		!print *, 'moving a'
 		call move_alloc(variables%root, parser%variables%root)
 		!parser%variables%root = variables%root
 		!call ternary_tree_copy(parser%variables%root, variables%root)
@@ -1336,6 +1340,7 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 	else if (allow_continuel) then
 
 		! TODO: refactor
+		!print *, 'setting variables_empty true'
 		variables_empty = .true.
 
 	end if
@@ -1357,9 +1362,12 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 		! TODO: can this one just be a move_alloc and early return?
 
-		if (variables_empty) return
+		if (variables_empty) then
+			!print *, 'returing aaa'
+			return
+		end if
 
-		!print *, 'checking alloc'
+		!print *, 'checking alloc b'
 		if (allocated(variables0%root)) then
 
 			call move_alloc(variables0%root, variables%root)
@@ -1386,9 +1394,9 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 	! Move back.  It's possible that it was empty before this call but not
 	! anymore
 
-	!print *, 'checking alloc'
+	!print *, 'checking alloc d'
 	if (allocated(parser%variables%root)) then
-		!print *, 'moving back'
+		!print *, 'moving back e'
 		call move_alloc(parser%variables%root, variables%root)
 		!variables%root = parser%variables%root
 		!print *, 'done'
