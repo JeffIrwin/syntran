@@ -38,7 +38,7 @@ Then enter arithmetic expressions like `1 + 2 * 3;` in the interpreter.  Semicol
     9
 ```
 
-Expressions are evaluated immediately and the result is printed to the console.  In the rest of this documentation, we will hide the `syntran$` prompt and show the result as a `// comment`, so you can copy and paste code blocks straight into the interpretter.
+Expressions are evaluated immediately and the result is printed to the console.  In the rest of this documentation, we will hide the `syntran$` prompt and show the result as a `// comment`, so you can copy and paste code blocks straight into the interpreter.
 
 Use two asterisks for exponent powers, like Fortran and Scilab:
 
@@ -88,3 +88,4 @@ Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g
 ### Comments
 
 Only single-line comments are supported.  There are _no_ multi-line `/*comments*/`.
+

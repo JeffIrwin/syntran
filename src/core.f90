@@ -155,7 +155,7 @@ module core_m
 		logical :: is_empty = .false.
 
 		! Is the parser expecting more input, e.g. from a continued line in the
-		! interactive interpretter to match a semicolon, brace, etc.?
+		! interactive interpreter to match a semicolon, brace, etc.?
 		logical :: expecting = .false.
 
 		! FIXME: when adding new members here, make sure to explicitly copy them
@@ -453,7 +453,7 @@ recursive subroutine ternary_tree_copy(dst, src)
 	! Deep copy
 	!
 	! This should be avoided for efficient compilation, but the interactive
-	! interpretter uses it to backup and restore the variable dictionary for
+	! interpreter uses it to backup and restore the variable dictionary for
 	! partially-evaluated continuation lines
 
 	class(ternary_tree_node_t), intent(inout) :: dst
@@ -1278,7 +1278,7 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 	character(len = :), allocatable :: src_filel
 
-	logical :: allow_continuel, variables_empty
+	logical :: allow_continuel
 
 	type(parser_t) :: parser
 
@@ -1295,10 +1295,6 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 	allow_continuel = .false.
 	if (present(allow_continue)) allow_continuel = allow_continue
 
-	variables_empty = .false.
-
-	!print *, 'allow_continuel = ', allow_continuel
-
 	parser = new_parser(str, src_filel)
 
 	! Do nothing for blank lines (or comments)
@@ -1308,40 +1304,28 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 		return
 	end if
 
-	!print *, 'inside allocated(variables%root) = ', allocated(variables%root)
-
 	! Point parser member to variables dictionary.  This could be done in the
 	! constructor new_parser(), but it seems reasonable to do it here since it
 	! has to be moved back later
 	if (allocated(variables%root)) then
 
 		if (allow_continuel) then
-			! Only copy for interactive interpretter
+			! Backup existing variables.  Only copy for interactive interpreter.
+			! This logic is slightly redundant as allow_continuel should _only_
+			! be set true for the interactive interpreter with stdin, which is
+			! also the only case where variables%root will be allocated.
+			! Calling syntran_interpret() on a multi-line string is deprecated,
+			! since syntran_eval() can parse it all in one syntax_parse() call.
 
 			! The root type has an overloaded assignment op, but the variables
 			! type itself does not (and I don't want to expose or encourage
 			! copying)
-
-			!print *, 'copying a'
-			!variables0 = variables
-
 			allocate(variables0%root)
 			variables0%root = variables%root
-			!call ternary_tree_copy(variables0%root, variables%root)
 
 		end if
 
-		!print *, 'moving a'
 		call move_alloc(variables%root, parser%variables%root)
-		!parser%variables%root = variables%root
-		!call ternary_tree_copy(parser%variables%root, variables%root)
-		!print *, 'done'
-
-	else if (allow_continuel) then
-
-		! TODO: refactor
-		!print *, 'setting variables_empty true'
-		variables_empty = .true.
 
 	end if
 
@@ -1356,50 +1340,27 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 	if (tree%expecting .and. allow_continuel) then
 
-		! If expecting more input, don't push diagnostics yet.  Also don't undo
-		! any variable declarations, since they will be re-declared when we
-		! continue parsing the current stdin line from its start again.
+		! If expecting more input, don't push diagnostics yet.  Also undo any
+		! variable declarations, since they will be re-declared when we continue
+		! parsing the current stdin line from its start again.
 
-		! TODO: can this one just be a move_alloc and early return?
-
-		if (variables_empty) then
-			!print *, 'returing aaa'
-			return
-		end if
-
-		!print *, 'checking alloc b'
 		if (allocated(variables0%root)) then
-
 			call move_alloc(variables0%root, variables%root)
-			return
-
-			!print *, 'checking alloc 2'
-			if (.not. allocated(parser%variables%root)) allocate(parser%variables%root)
-			!print *, 'copying'
-			parser%variables%root = variables0%root
-			!parser%variables = variables0
-			!print *, 'done'
-
 		end if
 
-	else
-
-		if (debug > 1) print *, 'matching eof'
-		token  = parser%match(eof_token)
-
-		tree%diagnostics = parser%diagnostics
+		return
 
 	end if
 
-	! Move back.  It's possible that it was empty before this call but not
-	! anymore
+	if (debug > 1) print *, 'matching eof'
+	token  = parser%match(eof_token)
 
-	!print *, 'checking alloc d'
+	tree%diagnostics = parser%diagnostics
+
+	! Move back.  It's possible that vars were empty before this call but not
+	! anymore
 	if (allocated(parser%variables%root)) then
-		!print *, 'moving back e'
 		call move_alloc(parser%variables%root, variables%root)
-		!variables%root = parser%variables%root
-		!print *, 'done'
 	end if
 
 	if (debug > 0) print *, 'done syntax_parse'

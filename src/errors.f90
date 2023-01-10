@@ -42,7 +42,6 @@ contains
 
 function err_bad_int(context, span, num) result(err)
 	type(text_context_t) :: context
-	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
@@ -61,7 +60,6 @@ end function err_bad_int
 
 function err_unexpected_char(context, span, c) result(err)
 	type(text_context_t) :: context
-	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
@@ -76,7 +74,6 @@ end function err_unexpected_char
 
 function err_unexpected_token(context, span, got, kind, expect) result(err)
 	type(text_context_t) :: context
-	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
@@ -92,7 +89,6 @@ end function err_unexpected_token
 
 function err_redeclare_var(context, span, var) result(err)
 	type(text_context_t) :: context
-	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
@@ -107,7 +103,6 @@ end function err_redeclare_var
 
 function err_undeclare_var(context, span, var) result(err)
 	type(text_context_t) :: context
-	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
@@ -122,7 +117,6 @@ end function err_undeclare_var
 
 function err_binary_types(context, span, op, left, right) result(err)
 	type(text_context_t) :: context
-	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
@@ -141,7 +135,6 @@ end function err_binary_types
 
 function err_unary_types(context, span, op, right) result(err)
 	type(text_context_t) :: context
-	integer, allocatable :: lines(:)
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
@@ -211,8 +204,8 @@ function underline(context, span)
 	start = context%lines(i)
 	last  = context%lines(i+1) - 1
 
-	! Trim whitespace from end of line.  Make sure interpretter looks ok when
-	! forgetting semicolons
+	! Trim whitespace from end of line.  Make sure interpreter looks ok with
+	! errors at final character of line
 	do while (context%text(last:last) == line_feed .or. &
 	          context%text(last:last) == carriage_return)
 		last = last - 1

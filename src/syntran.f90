@@ -25,8 +25,9 @@ function syntran_interpret(str, quiet) result(res_str)
 	! (like how Rust doesn't have a return statement, but fns just return the
 	! final expression in their body)
 	!
-	! TODO: deprecate str arg here.  Prefer eval() or interpret_file().  Some
-	! tests will need updated
+	! TODO TODO TODO: deprecate str arg here.  Prefer eval() or
+	! interpret_file().  Some tests will need updated but this will simplify
+	! syntax_parse() logic.
 
 	use core_m
 	use utils
