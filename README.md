@@ -91,7 +91,7 @@ Only single-line comments are supported.  There are _no_ multi-line `/*comments*
 
 ### If statements and for loops
 
-If, else if, and else statements work like you would expect for languages similar to C.  Like rust, parentheses around the if condition are optional:
+If, else if, and else statements work like you would expect for languages similar to C.  Like Rust, parentheses around the if condition are optional:
 
 ```cpp
 let condition = false;
@@ -121,7 +121,7 @@ foo + bar;
 
 When the clause of the if statement is only a single line, braces `{}` are optional.
 
-For loops, like ranges in Rust and Python, are inclusive of the lower bound and exclusive of the upper bound:
+The bounds of for loops, like ranges in Rust and Python, are inclusive of the lower bound and exclusive of the upper bound:
 
 ```cpp
 let i = 0;
