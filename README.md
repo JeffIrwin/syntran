@@ -74,12 +74,11 @@ not q and foo + bar == baz;
 // true
 
 foo and p;
-//
-// foo and p
-//     ^^^
-// Error: binary operator "and" is not defined for types num_expr and bool_expr
-// 
-
+// Error: binary operator `and` is not defined for types num_expr and bool_expr
+//   --> <stdin>:1:5
+//    | 
+//  1 | foo and p;
+//    |     ^^^ bad types for this binary operator
 ```
 
 Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g. `.true.`) but without the dots.  Note that they are lower case-sensitive, unlike Python (e.g. `True`).
