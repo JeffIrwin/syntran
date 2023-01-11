@@ -91,7 +91,7 @@ Only single-line comments are supported.  There are _no_ multi-line `/*comments*
 
 ### If statements and for loops
 
-If, else if, and else statements work like you would expect for languages similar to C.  Like Rust, parentheses around the if condition are optional:
+If, else if, and else statements work like you might expect for languages similar to C.  Like Rust, parentheses around the if condition are optional:
 
 ```cpp
 let condition = false;
@@ -99,18 +99,13 @@ let other_condition = true;
 
 let foo = 0;
 let bar = 0;
-if condition
-{
+if condition {
     foo = 1;
     bar = 2;
-}
-else if other_condition
-{
+} else if other_condition {
     foo = 3;
     bar = 4;
-}
-else
-{
+} else {
     foo = 5;
     bar = 6;
 }
