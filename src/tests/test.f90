@@ -424,7 +424,6 @@ subroutine unit_test_if_else(npass, nfail)
 	tests = tests(1: size(tests) - 1)
 
 	call unit_test_coda(tests, label, npass, nfail)
-	write(*,*)
 
 end subroutine unit_test_if_else
 
@@ -457,6 +456,7 @@ subroutine unit_test_for(npass, nfail)
 			interpret_file(path//'test-01-for.syntran') == '0', &
 			interpret_file(path//'test-02-for.syntran') == '5050', &
 			interpret_file(path//'test-03-for.syntran') == '1836311903', &
+			interpret_file(path//'test-04-for.syntran') == '97', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -464,7 +464,6 @@ subroutine unit_test_for(npass, nfail)
 	tests = tests(1: size(tests) - 1)
 
 	call unit_test_coda(tests, label, npass, nfail)
-	write(*,*)
 
 end subroutine unit_test_for
 
