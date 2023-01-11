@@ -89,3 +89,32 @@ Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g
 
 Only single-line comments are supported.  There are _no_ multi-line `/*comments*/`.
 
+### If statements and for loops
+
+If, else if, and else statements work like you would expect for languages similar to C.  Like rust, parentheses around the if condition are optional:
+
+```cpp
+let condition = false;
+let other_condition = true;
+
+let foo = 0;
+let bar = 0;
+if condition
+{
+    foo = 1;
+    bar = 2;
+}
+else if other_condition
+{
+    foo = 3;
+    bar = 4;
+}
+else
+{
+    foo = 5;
+    bar = 6;
+}
+
+foo + bar;
+// 7
+```
