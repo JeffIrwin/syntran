@@ -28,33 +28,6 @@ module core_m
 	! TODO:
 	!
 	! Add:
-	!  - for loop syntax:
-	!
-	!    for i in 1: 5
-	!    {
-	!       i
-	!    }
-	!    // 1, 2, 3, 4, 5
-	!
-	!  or require brackets?
-	!
-	!    for i in [1: 5]
-	!
-	!  steps:
-	!
-	!    for i in 1: 2: 5
-	!    {
-	!       i
-	!    }
-	!    // 1,    3,    5
-	!
-	!    // And finally, after doing some array handling work, something like:
-	!    for i in 1, 2, 4, 5
-	!    {
-	!       i
-	!    }
-	!    // 1, 2,   4, 5
-	!
 	!    * or use `=` instead of `in`?
 	!    * or use `..` instead of `:` like rust?
 	!    * For steps, rust has `for x in (1..10).step_by(2) {}`, which I hate
@@ -88,6 +61,10 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			colon_token         = 43, &
+			for_statement       = 42, &
+			lbracket_token      = 41, &
+			rbracket_token      = 40, &
 			if_statement        = 39, &
 			while_keyword       = 38, &
 			in_keyword          = 37, &
@@ -165,10 +142,14 @@ module core_m
 
 		! This structure could be more efficient.  For example, unary
 		! expressions don't use left, name expressions don't use left or right,
-		! binary expressions don't use an identifier, etc.
+		! binary expressions don't use an identifier, etc.  On the other hand,
+		! they're all allocatable, so they shouldn't take up much space if not
+		! allocated
 
 		type(syntax_node_t), allocatable :: left, right, statements(:), &
-			condition, if_clause, else_clause
+			condition, if_clause, else_clause, for_clause
+
+		type(syntax_node_t), allocatable :: lbound, ubound
 
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
@@ -269,7 +250,7 @@ module core_m
 				peek => parser_peek_token, peek_kind, &
 				parse_expr, parse_primary_expr, parse_expr_statement, &
 				parse_statement, parse_block_statement, parse_if_statement, &
-				current_pos, peek_pos
+				current_pos, peek_pos, parse_for_statement
 
 	end type parser_t
 
@@ -673,7 +654,11 @@ function kind_name(kind)
 			"for_keyword      ", & ! 36
 			"in_keyword       ", & ! 37
 			"while_keyword    ", & ! 38
-			"if_statement     "  & ! 39
+			"if_statement     ", & ! 39
+			"rbracket_token   ", & ! 40
+			"lbracket_token   ", & ! 41
+			"for_statement    ", & ! 42
+			"colon_token      "  & ! 43
 		]
 			! FIXME: update kind_tokens array too
 
@@ -733,7 +718,11 @@ function kind_token(kind)
 			"for                  ", & ! 36
 			"in                   ", & ! 37
 			"while                ", & ! 38
-			"if statement         "  & ! 39
+			"if statement         ", & ! 39
+			"[                    ", & ! 40
+			"]                    ", & ! 41
+			"for                  ", & ! 42
+			":                    "  & ! 43
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -881,6 +870,21 @@ recursive subroutine syntax_node_copy(dst, src)
 	if (allocated(src%condition)) then
 		if (.not. allocated(dst%condition)) allocate(dst%condition)
 		dst%condition = src%condition
+	end if
+
+	if (allocated(src%for_clause)) then
+		if (.not. allocated(dst%for_clause)) allocate(dst%for_clause)
+		dst%for_clause = src%for_clause
+	end if
+
+	if (allocated(src%lbound)) then
+		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
+		dst%lbound = src%lbound
+	end if
+
+	if (allocated(src%ubound)) then
+		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
+		dst%ubound = src%ubound
 	end if
 
 	if (allocated(src%if_clause)) then
@@ -1086,6 +1090,15 @@ function lex(lexer) result(token)
 
 		case ("}")
 			token = new_token(rbrace_token, lexer%pos, lexer%current())
+
+		case ("[")
+			token = new_token(lbracket_token, lexer%pos, lexer%current())
+
+		case ("]")
+			token = new_token(rbracket_token, lexer%pos, lexer%current())
+
+		case (":")
+			token = new_token(colon_token, lexer%pos, lexer%current())
 
 		case (";")
 			token = new_token(semicolon_token, lexer%pos, lexer%current())
@@ -1516,6 +1529,9 @@ function parse_statement(parser) result(statement)
 		case (if_keyword)
 			statement = parser%parse_if_statement()
 
+		case (for_keyword)
+			statement = parser%parse_for_statement()
+
 		case default
 			statement = parser%parse_expr_statement()
 			semi      = parser%match(semicolon_token)
@@ -1523,6 +1539,77 @@ function parse_statement(parser) result(statement)
 	end select
 
 end function parse_statement
+
+!===============================================================================
+
+function parse_for_statement(parser) result(statement)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: statement
+
+	!********
+
+	type(syntax_node_t)  :: condition, for_clause, lbound, ubound
+	type(syntax_token_t) :: for_token, in_token, lbracket, rbracket, colon, &
+		identifier
+	type(text_span_t) :: span
+
+	!  // for loop syntax:
+	!
+	!    for i in [1: 5]
+	!       { i; }
+	!    // 1, 2, 3, 4, 5
+	!
+	!  steps:
+	!
+	!    for i in [1: 2: 5]
+	!    // 1,    3,    5
+	!
+	!   / And finally, after doing some array handling work, something like:
+	!    for i in [1, 2, 4, 5]
+	!    // 1, 2,   4, 5
+	!
+
+	for_token  = parser%match(for_keyword)
+
+	! TODO: allow declaring loop iterator in for statement (HolyC doesn't let
+	! you do that!):
+	!
+	!     for let i in [lower, upper]
+	!        {}
+
+	identifier = parser%match(identifier_token)
+
+	in_token   = parser%match(in_keyword)
+
+	! TODO: refactor this into a general parse_array() method returning an array
+	! type, optionally matching this style, or lbound step and ubound, or an
+	! explicit list of comma-separated array elements.  Rank-1 for now, but
+	! eventually target higher rank arrays
+
+	lbracket = parser%match(lbracket_token)
+	lbound   = parser%parse_expr()
+	colon    = parser%match(colon_token)
+	ubound   = parser%parse_expr()
+	rbracket = parser%match(rbracket_token)
+
+	! TODO: check lbound an ubound are num_expr types.  For an explicit
+	! comma-separated array, we could iterate over bool values, but implicit
+	! bound-based arrays require nums
+
+	for_clause = parser%parse_statement()  ! Immo calls this "body"
+
+	allocate(statement%lbound, statement%ubound, statement%for_clause)
+
+	statement%kind = for_statement
+
+	statement%identifier = identifier
+	statement%lbound     = lbound
+	statement%ubound     = ubound
+	statement%for_clause = for_clause
+
+end function parse_for_statement
 
 !===============================================================================
 
@@ -1679,6 +1766,9 @@ recursive function parse_expr_statement(parser) result(expr)
 		! mirror Immo's.
 
 		!print *, 'let expr'
+
+		! The if-statement above already verifies tokens, so we can use next()
+		! instead of match() here
 
 		let        = parser%next()
 		identifier = parser%next()
@@ -2361,7 +2451,7 @@ recursive function syntax_eval(node, variables) result(res)
 	!********
 
 	integer :: i
-	type(value_t) :: left, right, condition
+	type(value_t) :: left, right, condition, lbound, ubound, ival
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -2378,6 +2468,18 @@ recursive function syntax_eval(node, variables) result(res)
 	case (literal_expr)
 		! This handles both ints, bools, etc.
 		res = node%val
+
+	case (for_statement)
+
+		lbound = syntax_eval(node%lbound, variables)
+		ubound = syntax_eval(node%ubound, variables)
+
+		ival%kind = num_expr
+		do i = lbound%ival, ubound%ival
+			ival%ival = i
+			call variables%insert(node%identifier%text, ival)
+			res = syntax_eval(node%for_clause, variables)
+		end do
 
 	case (if_statement)
 
