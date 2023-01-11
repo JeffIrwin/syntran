@@ -1559,17 +1559,21 @@ function parse_for_statement(parser) result(statement)
 	!
 	!    for i in [1: 5]
 	!       { i; }
-	!    // 1, 2, 3, 4, 5
+	!    // 1, 2, 3, 4 // ubound not inclusive
 	!
 	!  steps:
 	!
-	!    for i in [1: 2: 5]
+	!    for i in [1: 2: 7]
 	!    // 1,    3,    5
 	!
-	!   / And finally, after doing some array handling work, something like:
+	!   // And finally, after doing some array handling work, something like:
 	!    for i in [1, 2, 4, 5]
-	!    // 1, 2,   4, 5
+	!    // 1, 2,   4, 5  // last elem *is* included
 	!
+	! TODO: should I make the upper bound non-inclusive?  Probably, since I'm
+	! planning for this to be a 0-indexed language and Dijkstra's argument
+	! holds.  This would also be consistent with Rust's and Python's range()
+	! fns
 
 	for_token  = parser%match(for_keyword)
 
@@ -2475,7 +2479,7 @@ recursive function syntax_eval(node, variables) result(res)
 		ubound = syntax_eval(node%ubound, variables)
 
 		ival%kind = num_expr
-		do i = lbound%ival, ubound%ival
+		do i = lbound%ival, ubound%ival - 1
 			ival%ival = i
 			call variables%insert(node%identifier%text, ival)
 			res = syntax_eval(node%for_clause, variables)

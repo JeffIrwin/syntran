@@ -1,0 +1,18 @@
+
+{
+
+	let a = 1;
+	let b = 1;
+	let c = a + b;
+
+	let i = 0;
+	for i in [0: 43]
+	{
+		a = b;
+		b = c;
+		c = a + b;
+	}
+
+	c;
+}
+
