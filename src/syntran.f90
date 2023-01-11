@@ -300,7 +300,7 @@ function syntran_interpret_file(file, quiet) result(res)
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
 
-	if (.not. quietl) write(*,*) 'Interpretting file "'//file//'" ...'
+	if (.not. quietl) write(*,*) 'Interpreting file "'//file//'"'
 
 	source_text = read_file(file)
 	res = syntran_eval(source_text, quiet, file)

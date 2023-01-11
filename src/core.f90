@@ -80,14 +80,10 @@ module core_m
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - xor
 	!  - bitwise operators
+	!
+	!****************************************
 
 
-
-	! TODO: optional braces for global compilation_unit statements?  could
-	! automatically wrap each translation unit in a top-level {block}, like
-	! adding a final line_feed in syntran_interpret().  Although, that would
-	! probably interfere with scoping later.  Also, the interpreter would be
-	! constantly expecting `}`, so I'm liking this idea less
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
@@ -134,7 +130,7 @@ module core_m
 
 	! A note on naming: Immo calls '==' equals_equals_token, but I think that
 	! invites tab-completion mistakes so I went with eequals_token.  Same for
-	! sstar_token (and upcoming pplus_token, mminus_token, ...)
+	! sstar_token (and upcoming pplus_token, mminus_token, etc.)
 
 	!********
 
@@ -1470,7 +1466,12 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 		! variable declarations, since they will be re-declared when we continue
 		! parsing the current stdin line from its start again.
 
-		! TODO: also reset vars if not expecting but diagnostics exist?
+		! TODO: also reset vars if not expecting but diagnostics exist?  This
+		! should fix the following interpreter edge case:
+		!
+		!     let a = ;
+		!     a = 5;
+		!   //  ^ bad types
 
 		if (allocated(variables0%root)) then
 			call move_alloc(variables0%root, variables%root)
@@ -1547,10 +1548,8 @@ function parse_if_statement(parser) result(statement)
 	condition = parser%parse_expr()
 	cond_end  = parser%peek_pos(-1)
 
-	! Check that condition type is bool.  TODO: pass span text arg to
-	! err_non_bool_condition
+	! Check that condition type is bool
 	if (condition%val%kind /= bool_expr) then
-		!print *, 'cond_beg, cond_end = ', cond_beg, cond_end
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
 			parser%context, span, parser%context%text(cond_beg: cond_end)))
@@ -1616,7 +1615,10 @@ function parse_block_statement(parser) result(block)
 		!call statements%push(statement)
 		call statements%push(parser%parse_statement())
 
-		! Avoid infinite loops on malformed blocks
+		! Avoid infinite loops on malformed blocks like this:
+		!   {
+		!     4) + 5;
+		!   }
 		if (parser%pos == pos0) dummy = parser%next()
 
 	end do
@@ -1627,20 +1629,11 @@ function parse_block_statement(parser) result(block)
 
 	! Convert to standard array.  TODO: make a subroutine for this explicit loop
 	! copy, since apparently its required for memory correctness
-
-	!print *, 'dealloc'
 	if (allocated(block%statements)) deallocate(block%statements)
-	!print *, 'alloc'
 	allocate(block%statements( statements%len ))
-	!print *, 'copy'
-	!block%statements = statements%v( 1: statements%len )
 	do i = 1, statements%len
 		block%statements(i) = statements%v(i)
 	end do
-	!print *, 'done'
-
-	!!if (allocated(block%statements)) deallocate(block%statements)
-	!call move_alloc(statements%v, block%statements)
 
 end function parse_block_statement
 
@@ -2269,11 +2262,6 @@ function match(parser, kind) result(token)
 	type(syntax_token_t) :: current
 	type(text_span_t) :: span
 
-	! TODO: this is initialized in type def, so it should be unnecessary here
-	parser%expecting = .false.
-
-	!print *, 'init expecting true'
-
 	! If current_text() and current_pos() helper fns are added, this local var
 	! current can be eliminated
 	current = parser%current()
@@ -2300,12 +2288,6 @@ function match(parser, kind) result(token)
 	call parser%diagnostics%push( &
 		err_unexpected_token(parser%context, span, current%text, &
 		kind_name(parser%current_kind()), kind_name(kind)))
-
-	!! Consume next token to avoid infinite loops on input like this:
-	!!
-	!!     4) + 5;
-	!!
-	!token = parser%next() ! TODO this has been moved to parse_block_statement()
 
 	! An unmatched char in the middle of the input is an error and should log
 	! a diagnostic.  An unmatched char at the end means the interactive

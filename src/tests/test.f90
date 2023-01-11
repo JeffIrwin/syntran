@@ -398,7 +398,8 @@ subroutine unit_test_if_else(npass, nfail)
 	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: more tests, and some bad syntax tests for interpret_file()
+	! TODO: more tests, and some bad syntax tests for interpret_file().
+	! Organize syntran test src files into another level of folders
 	!
 	! Eventually, do something like Immo's AssertDiagnostic() for bad syntax
 
