@@ -30,7 +30,6 @@ Start the interpreter:
 Then enter arithmetic expressions like `1 + 2 * 3;` in the interpreter.  Semicolons are required at the end of statements!
 
 <!-- cpp is the closest match I can find for markdown syntax highlighting -->
-
 ```cpp
     syntran$ 1 + 2 * 3;
     7
@@ -88,6 +87,14 @@ Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g
 ### Comments
 
 Only single-line comments are supported.  There are _no_ multi-line `/*comments*/`.
+
+### Saving scripts in a file
+
+As programs get longer and more complicated, it becomes difficult to enter them into the interactive interpreter.  To interpret a whole file, provide it as a command line argument:
+
+    ./build/syntran samples/primes1.syntran
+
+Make sure to wrap the entire script in a main block with braces `{}`.
 
 ### If statements and for loops
 
