@@ -118,3 +118,57 @@ else
 foo + bar;
 // 7
 ```
+
+When the clause of the if statement is only a single line, braces `{}` are optional.
+
+For loops, like ranges in Rust and Python, are inclusive of the lower bound and exclusive of the upper bound:
+
+```cpp
+let i = 0;
+for i in [0: 5]
+    i;
+// 0, 1, 2, 3, 4
+```
+
+## Calculating prime numbers inefficiently 
+
+With only these language features, we can make a short program to find prime numbers:
+
+```cpp
+{
+	// Get the largest prime number less than n
+	let n = 100;
+
+	// Initialize the largest prime found so far
+	let prime = 0;
+
+	// This check is O(n**2) time, which might be the best we can do without
+	// having arrays in the language yet
+
+	// If we had while loops, we could loop from n downards and stop as soon as
+	// we find the first prime
+	let i = 0;
+	for i in [0: n]
+	{
+		let j = 0;
+
+		// Check if i is composite, i.e. not prime
+		let is_composite = false;
+
+		// Largest possible divisor of i is i/2.  Actually it's sqrt(i) but
+		// I don't have a sqrt fn yet
+		for j in [2: i/2 + 1]
+		{
+			// Is i divisible by j?
+			let divisible = j * (i / j) == i;  // poor man's modulo == 0
+			is_composite = is_composite or divisible;
+		}
+
+		if not is_composite
+			prime = i;
+	}
+
+	// Final result
+	prime;
+}
+```
