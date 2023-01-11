@@ -380,7 +380,7 @@ end subroutine unit_test_blocks
 
 !===============================================================================
 
-subroutine unit_test_files(npass, nfail)
+subroutine unit_test_if_else(npass, nfail)
 
 	implicit none
 
@@ -388,13 +388,14 @@ subroutine unit_test_files(npass, nfail)
 
 	!********
 
-	character(len = *), parameter :: label = 'file compilation'
+	character(len = *), parameter :: label = 'if/else statements'
 
 	! Path to syntran test files from root of repo
 	character(len = *), parameter :: path = 'src/tests/test-src/'
 
 	logical, allocatable :: tests(:)
 
+	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests, and some bad syntax tests for interpret_file()
@@ -403,12 +404,28 @@ subroutine unit_test_files(npass, nfail)
 
 	tests = &
 		[   &
-			interpret_file(path//'test-1.syntran') == 'true'  &
+			interpret_file(path//'test-01-blocks.syntran')  == 'true', &
+			interpret_file(path//'test-02-if.syntran')      == '2' , &
+			interpret_file(path//'test-03-if.syntran')      == '14', &
+			interpret_file(path//'test-04-if.syntran')      == '12', &
+			interpret_file(path//'test-05-else.syntran')    == '14', &
+			interpret_file(path//'test-06-else.syntran')    == '16', &
+			interpret_file(path//'test-07-else.syntran')    == '16', &
+			interpret_file(path//'test-08-else.syntran')    == '15', &
+			interpret_file(path//'test-09-else-if.syntran') == '20', &
+			interpret_file(path//'test-10-else-if.syntran') == '18', &
+			interpret_file(path//'test-11-else-if.syntran') == '16', &
+			interpret_file(path//'test-12-else-if.syntran') == '14', &
+			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
-	call unit_test_coda(tests, label, npass, nfail)
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
 
-end subroutine unit_test_files
+	call unit_test_coda(tests, label, npass, nfail)
+	write(*,*)
+
+end subroutine unit_test_if_else
 
 !===============================================================================
 
@@ -476,6 +493,7 @@ subroutine unit_test_bad_syntax(npass, nfail)
 				'a;', quiet) == '',     &
 			eval('let a + 1 = 2;', quiet) == '', &
 			eval('let = 2;', quiet) == '', &
+			eval('let a = 2 3;', quiet) == '', &
 			eval('7 * false;', quiet) == '' &
 		]
 
@@ -540,7 +558,7 @@ subroutine unit_tests(iostat)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)
-	call unit_test_files      (npass, nfail)
+	call unit_test_if_else    (npass, nfail)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)

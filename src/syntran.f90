@@ -25,9 +25,10 @@ function syntran_interpret(str, quiet) result(res_str)
 	! (like how Rust doesn't have a return statement, but fns just return the
 	! final expression in their body)
 	!
-	! TODO TODO TODO: deprecate str arg here.  Prefer eval() or
-	! interpret_file().  Some tests will need updated but this will simplify
-	! syntax_parse() logic.
+	! Using the str arg is deprecated here.  Prefer eval() or interpret_file().
+	! However, it's still useful for testing to have something that evals 1 line
+	! at a time, so that we can have automatic test coverage of weird
+	! interactive interpreter edge cases
 
 	use core_m
 	use utils
@@ -45,7 +46,7 @@ function syntran_interpret(str, quiet) result(res_str)
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io
 
-	logical :: quietl, cont = .false., show_tree = .false.
+	logical :: quietl, cont, show_tree
 	logical, parameter :: allow_cont = .true.
 
 	type(string_view_t) :: sv
@@ -56,12 +57,12 @@ function syntran_interpret(str, quiet) result(res_str)
 
 	!print *, 'starting syntran_interpret()'
 
-	res_str = ' '
-
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
 
 	src_file = '<stdin>'
+	cont = .false.
+	show_tree = .false.
 
 	if (present(str)) then
 		! Append a trailing line feed in case it does not exist
@@ -77,17 +78,9 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		if (present(str)) then
 
-			! TODO: I don't have an end-of-statement token yet (;), so interpret
-			! multi-line strings one line at a time for now.  Whatever I end up
-			! doing has to work with both strings and stdin, so I may need
-			! a continue iostat for syntax_parse to continue parsing the same
-			! tree through multiple input lines
-			!
-			! Better yet, wrap entire str in a global {block} and just do
-			! a single syntax_parse() call.  Continue logic is still needed for
-			! stdin interpreter.  Stop using interpret() for multiline strings
-			! and move them back to eval() in testing.
-
+			! Interpret multi-line strings one line at a time to mock the
+			! interpreter getting continued stdin lines.  If you know your whole
+			! string ahead of time, just use syntran_eval() instead
 			line = sv%get_line(iostat = io)
 
 		else
@@ -100,7 +93,15 @@ function syntran_interpret(str, quiet) result(res_str)
 				! compilation tree to append to the tree instead of appending
 				! characters.  This way seemed easier :shrug:
 
-				write(ou, '(a)', advance = 'no') '> '
+				! TODO: add an option to hide expected char hint
+
+				! Bash uses `$` for the inital prompt and `>` for continued
+				! prompts.  So do we
+				write(ou, '(a)', advance = 'no') &
+					'[Hint `'//compilation%first_expected//'`]> '
+
+				!write(ou, '(a)', advance = 'no') '> '
+
 				line = line//line_feed//read_line(iu, iostat = io)
 
 			else
@@ -123,6 +124,7 @@ function syntran_interpret(str, quiet) result(res_str)
 		! More directives:
 		!   - #help
 		!   - #reset or #clear to clear variables
+		!   - #hint to toggle hint
 
 		if (line == '#tree') then
 			show_tree = .not. show_tree
@@ -140,7 +142,7 @@ function syntran_interpret(str, quiet) result(res_str)
 		! Continue current parse with next line since more chars are expected
 		cont = compilation%expecting
 
-		if (cont .and. present(str)) exit
+		!if (cont .and. present(str)) exit
 		if (cont) cycle
 
 		if (compilation%is_empty) cycle

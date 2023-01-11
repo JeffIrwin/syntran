@@ -1,3 +1,4 @@
+
 {
 
 let a = 1;
@@ -83,4 +84,103 @@ c = a + b;
 a = b;
 b = c;
 
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+c = a + b;
+a = b;
+b = c;
+
+// ^ and that's the largest possible i32 fibonacci number
+
 }
+

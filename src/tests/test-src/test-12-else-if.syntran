@@ -1,0 +1,41 @@
+
+// Do not alter the final result of this file without updating the
+// expected test result in src/tests/test.f90
+
+{
+
+	let p = true;
+	let q = true;
+
+	//p = false;
+	//q = false;
+
+	let a = 1;
+	let b = 11;
+
+	if p and q
+	{
+		a = 2;
+		b = 12;
+	}
+	else if (q)
+	{
+		a = 3;
+		b = 13;
+	}
+	else if p
+	{
+		a = 4;
+		b = 14;
+	}
+	else
+	{
+		a = 5;
+		b = 15;
+	}
+
+	// Final result
+	a + b;
+
+}
+

@@ -1,0 +1,32 @@
+
+// Anonymous global block
+{
+
+	let p = true;
+	let q = true;
+
+	// Change the values of p and q to see the effect on the final
+	// result
+
+	p = false;
+	//q = false;
+
+	let a = 1;
+	if (p)
+	{
+		a = 2;
+	}
+	else if (q)
+	{
+		a = 3;
+	}
+	else
+	{
+		a = 4;
+	}
+
+	// Final return value
+	a;
+
+}
+

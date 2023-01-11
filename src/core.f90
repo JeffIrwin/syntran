@@ -23,32 +23,50 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  5
+		syntran_patch =  6
 
 	! TODO:
 	!
 	! Add:
 	!  - for loop syntax:
 	!
-	!    for i = 1: 5
+	!    for i in 1: 5
 	!    {
 	!       i
 	!    }
 	!    // 1, 2, 3, 4, 5
 	!
-	!    for i = 1: 2: 5
+	!  or require brackets?
+	!
+	!    for i in [1: 5]
+	!
+	!  steps:
+	!
+	!    for i in 1: 2: 5
 	!    {
 	!       i
 	!    }
 	!    // 1,    3,    5
 	!
 	!    // And finally, after doing some array handling work, something like:
-	!    for i = 1, 2, 4, 5
+	!    for i in 1, 2, 4, 5
 	!    {
 	!       i
 	!    }
 	!    // 1, 2,   4, 5
 	!
+	!    * or use `=` instead of `in`?
+	!    * or use `..` instead of `:` like rust?
+	!    * For steps, rust has `for x in (1..10).step_by(2) {}`, which I hate
+	!
+	!  - block scoping
+	!    * maintain a list (array? linked?) of variable dictionaries. when
+	!      pushing a new scope `{`, push a new dict to the last and copy all
+	!      vars from previous dict.  when popping out of a scope `}`, pop the
+	!      local dict to delete local vars, but traverse it first and copy all
+	!      (updated) values into the previous dict. could add a logical member
+	!      to dict val to flag if it has been updated locally, but that may be
+	!      a premature optimization
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
@@ -68,11 +86,18 @@ module core_m
 	! TODO: optional braces for global compilation_unit statements?  could
 	! automatically wrap each translation unit in a top-level {block}, like
 	! adding a final line_feed in syntran_interpret().  Although, that would
-	! probably interfere with scoping later.
+	! probably interfere with scoping later.  Also, the interpreter would be
+	! constantly expecting `}`, so I'm liking this idea less
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			if_statement        = 39, &
+			while_keyword       = 38, &
+			in_keyword          = 37, &
+			for_keyword         = 36, &
+			else_keyword        = 35, &
+			if_keyword          = 34, &
 			semicolon_token     = 33, &
 			block_statement     = 32, &
 			expr_statement      = 31, &
@@ -137,18 +162,21 @@ module core_m
 
 	type syntax_node_t
 
+		! FIXME: when adding new members here, make sure to explicitly copy them
+		! in syntax_node_copy, or else assignment will yield bugs
+
 		integer :: kind
 
 		! This structure could be more efficient.  For example, unary
 		! expressions don't use left, name expressions don't use left or right,
 		! binary expressions don't use an identifier, etc.
 
-		type(syntax_node_t), allocatable :: left, right, statements(:)
+		type(syntax_node_t), allocatable :: left, right, statements(:), &
+			condition, if_clause, else_clause
+
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
 
-		! TODO: add text_span_t member here?  Immo did this, may be needed for
-		! line numbers in diagnostics
 		type(string_vector_t) :: diagnostics
 
 		! Only used to handle comment/whitespace lines for now
@@ -156,10 +184,9 @@ module core_m
 
 		! Is the parser expecting more input, e.g. from a continued line in the
 		! interactive interpreter to match a semicolon, brace, etc.?
-		logical :: expecting = .false.
-
-		! FIXME: when adding new members here, make sure to explicitly copy them
-		! in syntax_node_copy, or else assignment will yield bugs
+		logical :: expecting = .false., first_expecting = .false.
+		character(len = :), allocatable :: first_expected, expected_token
+		! TODO: remove expected_token?  It's less useful than first_expected
 
 		contains
 			procedure :: str => syntax_node_str, log_diagnostics
@@ -231,7 +258,8 @@ module core_m
 		type(syntax_token_t), allocatable :: tokens(:)
 		integer :: pos
 
-		logical :: expecting = .false.
+		logical :: expecting = .false., first_expecting = .false.
+		character(len = :), allocatable :: first_expected, expected_token
 
 		type(string_vector_t) :: diagnostics
 
@@ -244,7 +272,8 @@ module core_m
 				current => current_token, next => next_parser_token, &
 				peek => parser_peek_token, peek_kind, &
 				parse_expr, parse_primary_expr, parse_expr_statement, &
-				parse_statement, parse_block_statement
+				parse_statement, parse_block_statement, parse_if_statement, &
+				current_pos, peek_pos
 
 	end type parser_t
 
@@ -450,7 +479,8 @@ end subroutine ternary_insert
 
 recursive subroutine ternary_tree_copy(dst, src)
 
-	! Deep copy
+	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
+	! source, they will be gone!
 	!
 	! This should be avoided for efficient compilation, but the interactive
 	! interpreter uses it to backup and restore the variable dictionary for
@@ -641,8 +671,15 @@ function kind_name(kind)
 			"lbrace_token     ", & ! 30
 			"expr_statement   ", & ! 31
 			"block_statement  ", & ! 32
-			"semicolon_token  "  & ! 33
+			"semicolon_token  ", & ! 33
+			"if_keyword       ", & ! 34
+			"else_keyword     ", & ! 35
+			"for_keyword      ", & ! 36
+			"in_keyword       ", & ! 37
+			"while_keyword    ", & ! 38
+			"if_statement     "  & ! 39
 		]
+			! FIXME: update kind_tokens array too
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
 		kind_name = "unknown"
@@ -651,7 +688,66 @@ function kind_name(kind)
 
 	kind_name = trim(names(kind))
 
-end function
+end function kind_name
+
+!===============================================================================
+
+function kind_token(kind)
+
+	integer, intent(in) :: kind
+
+	character(len = :), allocatable :: kind_token
+
+	character(len = *), parameter :: tokens(*) = [ &
+			"End of file          ", & !  1
+			"[0-9]                ", & !  2
+			"[\s]                 ", & !  3
+			"-                    ", & !  4
+			"+                    ", & !  5
+			"Bad token            ", & !  6
+			"/                    ", & !  7
+			"*                    ", & !  8
+			"Binary expression    ", & !  9
+			"Numeric expression   ", & ! 10
+			")                    ", & ! 11
+			"(                    ", & ! 12
+			"Unary expression     ", & ! 13
+			"Identifier           ", & ! 14
+			"false                ", & ! 15
+			"true                 ", & ! 16
+			"Literal expression   ", & ! 17
+			"bool expression      ", & ! 18
+			"not                  ", & ! 19
+			"or                   ", & ! 20
+			"and                  ", & ! 21
+			"==                   ", & ! 22
+			"!=                   ", & ! 23
+			"Assignment expression", & ! 24
+			"=                    ", & ! 25
+			"Name expression      ", & ! 26
+			"let                  ", & ! 27
+			"**                   ", & ! 28
+			"}                    ", & ! 29
+			"{                    ", & ! 30
+			"Expression statement ", & ! 31
+			"Block statement      ", & ! 32
+			";                    ", & ! 33
+			"if                   ", & ! 34
+			"else                 ", & ! 35
+			"for                  ", & ! 36
+			"in                   ", & ! 37
+			"while                ", & ! 38
+			"if statement         "  & ! 39
+		]
+
+	if (.not. (1 <= kind .and. kind <= size(tokens))) then
+		kind_token = "unknown"
+		return
+	end if
+
+	kind_token = trim(tokens(kind))
+
+end function kind_token
 
 !===============================================================================
 
@@ -686,6 +782,9 @@ recursive function syntax_node_str(node, indent) result(str)
 	identifier = ''
 
 	type  = indentl//'    type  = '//kind_name(node%val%kind)//line_feed
+
+	! TODO: add str conversions for more recent kinds: condition, if_clause,
+	! etc.
 
 	if      (node%kind == binary_expr) then
 
@@ -762,8 +861,12 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	dst%identifier  = src%identifier
 
-	dst%expecting   = src%expecting
-	dst%diagnostics = src%diagnostics
+	dst%expecting       = src%expecting
+	dst%first_expecting = src%first_expecting
+
+	dst%first_expected = src%first_expected
+	dst%expected_token = src%expected_token
+	dst%diagnostics    = src%diagnostics
 
 	dst%is_empty    = src%is_empty
 
@@ -779,28 +882,32 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%right = src%right
 	end if
 
+	if (allocated(src%condition)) then
+		if (.not. allocated(dst%condition)) allocate(dst%condition)
+		dst%condition = src%condition
+	end if
+
+	if (allocated(src%if_clause)) then
+		if (.not. allocated(dst%if_clause)) allocate(dst%if_clause)
+		dst%if_clause = src%if_clause
+	end if
+
+	if (allocated(src%else_clause)) then
+		if (.not. allocated(dst%else_clause)) allocate(dst%else_clause)
+		dst%else_clause = src%else_clause
+	end if
+
 	if (allocated(src%statements)) then
 		!print *, 'copying statements'
 
 		n = size(src%statements)
 		!print *, 'n = ', n
 
-		!!if (allocated(dst%statements)) deallocate(dst%statements)
-		!!print *, 'alloc'
-		!!allocate(dst%statements( n ))
-		!!print *, 'copy'
-		!!dst%statements = src%statements
-		!!print *, 'done 1'
-
-		!print *, 'dealloc'
 		if (allocated(dst%statements)) deallocate(dst%statements)
-		!print *, 'alloc'
 		allocate(dst%statements(n))
 
-		!! This explicit loop is apparently required
-		!print *, 'loop'
+		! This explicit loop is apparently required
 		do i = 1, n
-			!print *, i
 			dst%statements(i) = src%statements(i)
 		end do
 		!print *, 'done loop'
@@ -1099,6 +1206,21 @@ integer function get_keyword_kind(text) result(kind)
 		case ("let")
 			kind = let_keyword
 
+		case ("if")
+			kind = if_keyword
+
+		case ("else")
+			kind = else_keyword
+
+		case ("for")
+			kind = for_keyword
+
+		case ("in")
+			kind = in_keyword
+
+		case ("while")
+			kind = while_keyword
+
 		case default
 			kind = identifier_token
 
@@ -1334,7 +1456,11 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 	tree = parser%parse_statement()
 	!*******************************
 
-	tree%expecting = parser%expecting
+	tree%expecting       = parser%expecting
+	tree%first_expecting = parser%first_expecting
+
+	tree%first_expected = parser%first_expected
+	tree%expected_token = parser%expected_token
 
 	if (debug > 1) print *, 'tree = ', tree%str()
 
@@ -1343,6 +1469,8 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 		! If expecting more input, don't push diagnostics yet.  Also undo any
 		! variable declarations, since they will be re-declared when we continue
 		! parsing the current stdin line from its start again.
+
+		! TODO: also reset vars if not expecting but diagnostics exist?
 
 		if (allocated(variables0%root)) then
 			call move_alloc(variables0%root, variables%root)
@@ -1374,17 +1502,18 @@ function parse_statement(parser) result(statement)
 	class(parser_t) :: parser
 
 	type(syntax_node_t) :: statement
-	type(syntax_token_t) :: semi
 
 	!********
 
-	select case (parser%current_kind())! == let_keyword      .and. &
+	type(syntax_token_t) :: semi
+
+	select case (parser%current_kind())
 
 		case (lbrace_token)
-			!print *, 'calling parse_block_statement'
 			statement = parser%parse_block_statement()
-			!print *, 'returned'
-			!print *, '==========================='
+
+		case (if_keyword)
+			statement = parser%parse_if_statement()
 
 		case default
 			statement = parser%parse_expr_statement()
@@ -1393,6 +1522,67 @@ function parse_statement(parser) result(statement)
 	end select
 
 end function parse_statement
+
+!===============================================================================
+
+function parse_if_statement(parser) result(statement)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: statement
+
+	!********
+
+	integer :: cond_beg, cond_end
+
+	type(syntax_node_t)  :: condition, if_clause, else_clause
+	type(syntax_token_t) :: if_token, else_token
+	type(text_span_t) :: span
+
+	!print *, 'parse_if_statement'
+
+	if_token  = parser%match(if_keyword)
+
+	cond_beg  = parser%peek_pos( 0)
+	condition = parser%parse_expr()
+	cond_end  = parser%peek_pos(-1)
+
+	! Check that condition type is bool.  TODO: pass span text arg to
+	! err_non_bool_condition
+	if (condition%val%kind /= bool_expr) then
+		!print *, 'cond_beg, cond_end = ', cond_beg, cond_end
+		span = new_span(cond_beg, cond_end - cond_beg + 1)
+		call parser%diagnostics%push(err_non_bool_condition( &
+			parser%context, span, parser%context%text(cond_beg: cond_end)))
+	end if
+
+	if_clause = parser%parse_statement()  ! Immo calls this "then statement"
+
+	allocate(statement%condition, statement%if_clause)
+
+	statement%kind = if_statement
+	statement%condition = condition
+	statement%if_clause = if_clause
+
+	if (parser%current_kind() == else_keyword) then
+		!print *, 'parsing else clause'
+
+		else_token = parser%match(else_keyword)
+		else_clause = parser%parse_statement()
+
+		allocate(statement%else_clause)
+		statement%else_clause = else_clause
+
+	!else
+	!	print *, 'no else clause'
+	end if
+
+	! No additional parsing work is required to handle "else if".  That's just
+	! an else clause which contains another if statement
+
+	!print *, 'done parse_if_statement'
+
+end function parse_if_statement
 
 !===============================================================================
 
@@ -1405,9 +1595,9 @@ function parse_block_statement(parser) result(block)
 	!********
 
 	type(syntax_node_vector_t) :: statements
-	type(syntax_token_t) :: left, right
+	type(syntax_token_t) :: left, right, dummy
 
-	integer :: i
+	integer :: i, pos0
 
 	statements = new_syntax_node_vector()
 	i = 0
@@ -1418,12 +1608,16 @@ function parse_block_statement(parser) result(block)
 		parser%current_kind() /= eof_token .and. &
 		parser%current_kind() /= rbrace_token)
 
+		pos0 = parser%pos
 		i = i + 1
 		!print *, '    statement ', i
 
 		!statement = parser%parse_statement()
 		!call statements%push(statement)
 		call statements%push(parser%parse_statement())
+
+		! Avoid infinite loops on malformed blocks
+		if (parser%pos == pos0) dummy = parser%next()
 
 	end do
 
@@ -1463,7 +1657,7 @@ recursive function parse_expr_statement(parser) result(expr)
 	integer :: io
 
 	type(syntax_node_t) :: right
-	type(syntax_token_t) :: let, identifier, op
+	type(syntax_token_t) :: let, identifier, op, semi
 	type(text_span_t) :: span
 
 	! TODO: provide a way to declare variable types without initializing them?
@@ -1477,6 +1671,9 @@ recursive function parse_expr_statement(parser) result(expr)
 	!      {
 	!          z
 	!      };
+	!
+	! The above might be hard to do, as it would require checking that the types
+	! of both condition branches match the LHS type
 
 	if (parser%peek_kind(0) == let_keyword      .and. &
 	    parser%peek_kind(1) == identifier_token .and. &
@@ -1493,7 +1690,14 @@ recursive function parse_expr_statement(parser) result(expr)
 		let        = parser%next()
 		identifier = parser%next()
 		op         = parser%next()
+
 		right      = parser%parse_expr_statement()
+
+		!! I think the way to get conditional initialization like rust is
+		!! something like this.  May need to peek current and check if it's
+		!! if_keyword or not
+		!right      = parser%parse_statement()
+		!!semi       = parser%match(semicolon_token)
 
 		expr = new_declaration_expr(identifier, op, right)
 
@@ -1555,6 +1759,7 @@ recursive function parse_expr_statement(parser) result(expr)
 	end if
 
 	expr = parser%parse_expr()
+	!semi       = parser%match(semicolon_token)
 
 end function parse_expr_statement
 
@@ -1702,6 +1907,21 @@ integer function peek_kind(parser, offset)
 	peek = parser%peek(offset)
 	peek_kind = peek%kind
 end function peek_kind
+
+!********
+
+integer function current_pos(parser)
+	class(parser_t) :: parser
+	current_pos = parser%peek_pos(0)
+end function current_pos
+
+integer function peek_pos(parser, offset)
+	class(parser_t) :: parser
+	type(syntax_token_t) :: peek
+	integer, intent(in) :: offset
+	peek = parser%peek(offset)
+	peek_pos = peek%pos
+end function peek_pos
 
 !===============================================================================
 
@@ -2049,7 +2269,9 @@ function match(parser, kind) result(token)
 	type(syntax_token_t) :: current
 	type(text_span_t) :: span
 
-	parser%expecting = .true.
+	! TODO: this is initialized in type def, so it should be unnecessary here
+	parser%expecting = .false.
+
 	!print *, 'init expecting true'
 
 	! If current_text() and current_pos() helper fns are added, this local var
@@ -2058,9 +2280,19 @@ function match(parser, kind) result(token)
 
 	if (parser%current_kind() == kind) then
 		token = parser%next()
-		parser%expecting = .false.
 		!print *, 'returning parser expecting false'
 		return
+	end if
+
+	!! A continued expression can commonly have several unmatched tokens.  The
+	!! last one is usually a semicolon, or it could be a right brace.  The first
+	!! one is more helpful for the user to know
+	!print *, 'unmatched '//kind_name(kind)
+	!print *, 'unmatched '//kind_token(kind)
+
+	if (.not. parser%first_expecting) then
+		parser%first_expected  = kind_token(kind)
+		parser%first_expecting = .true.
 	end if
 
 	len_text = max(len(current%text), 1)
@@ -2069,11 +2301,21 @@ function match(parser, kind) result(token)
 		err_unexpected_token(parser%context, span, current%text, &
 		kind_name(parser%current_kind()), kind_name(kind)))
 
-	! Consume next token to avoid infinite loops on input like this:
-	!
-	!     4) + 5;
-	!
-	token = parser%next()
+	!! Consume next token to avoid infinite loops on input like this:
+	!!
+	!!     4) + 5;
+	!!
+	!token = parser%next() ! TODO this has been moved to parse_block_statement()
+
+	! An unmatched char in the middle of the input is an error and should log
+	! a diagnostic.  An unmatched char at the end means the interactive
+	! interpreter should expect more lines
+	if (parser%pos >= size(parser%tokens)) then
+
+		parser%expected_token = kind_token(kind)
+		parser%expecting = .true.
+
+	end if
 
 	token = new_token(kind, current%pos, null_char)
 
@@ -2137,7 +2379,7 @@ recursive function syntax_eval(node, variables) result(res)
 	!********
 
 	integer :: i
-	type(value_t) :: left, right
+	type(value_t) :: left, right, condition
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -2150,9 +2392,23 @@ recursive function syntax_eval(node, variables) result(res)
 	! I don't want a gigantic diff
 
 	select case (node%kind)
+
 	case (literal_expr)
 		! This handles both ints, bools, etc.
 		res = node%val
+
+	case (if_statement)
+
+		condition = syntax_eval(node%condition, variables)
+		!print *, 'condition = ', condition%str()
+
+		if (condition%bval) then
+			res = syntax_eval(node%if_clause, variables)
+
+		else if (allocated(node%else_clause)) then
+			res = syntax_eval(node%else_clause, variables)
+
+		end if
 
 	case (block_statement)
 

@@ -18,6 +18,10 @@ module errors_m
 		integer :: start, length
 	end type text_span_t
 
+	! Span is different for each error.  Other things, like the src_file name,
+	! text, and lines, stay the same (at least per parser invocation for now).
+	! Those constants are in text_context_t, which is constructed within
+	! new_parser() and new_lexer()
 	type text_context_t
 
 		! Text is the full text of the source code with filename src_file.  The
@@ -27,12 +31,6 @@ module errors_m
 		integer, allocatable :: lines(:)
 
 	end type text_context_t
-
-	! TODO: span is different for each error.  Other things, like the src_file
-	! name, text, and lines, stay the same (at least per parser invocation for
-	! now).  Move those constants to another struct, which is constructed within
-	! new_parser() and new_lexer(), so we can encapsulate a few things that are
-	! getting repeatedly passed as args every time.  Name type "src_context"
 
 !===============================================================================
 
@@ -44,9 +42,6 @@ function err_bad_int(context, span, num) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
-
-	! TODO: re-order error message *first* end the LOC with underline (and more
-	! after the underline?)
 
 	character(len = *), intent(in) :: num
 	err = err_prefix//'invalid i32 integer `'//num &
@@ -127,7 +122,7 @@ function err_binary_types(context, span, op, left, right) result(err)
 	err = err_prefix &
 		//'binary operator `'//op//'` is not defined for types ' &
 		//left//' and '//right//underline(context, span) &
-		//" bad types for binary operator"//color_reset
+		//" bad types for this binary operator"//color_reset
 
 end function err_binary_types
 
@@ -142,9 +137,24 @@ function err_unary_types(context, span, op, right) result(err)
 	err = err_prefix &
 		//'unary operator `'//op//'` is not defined for type ' &
 		//right//underline(context, span) &
-		//" bad types for unary operator"//color_reset
+		//" bad type for this unary operator"//color_reset
 
 end function err_unary_types
+
+!===============================================================================
+
+function err_non_bool_condition(context, span, condition) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: condition
+	err = err_prefix &
+		//'Condition `'//condition//'` of if-statement is not bool' &
+		//underline(context, span) &
+		//" non-bool condition"//color_reset
+
+end function err_non_bool_condition
 
 !===============================================================================
 
@@ -195,7 +205,9 @@ function underline(context, span)
 	! depends on how wide the console displays a tab!
 	!
 	! To work around this, trim whitespace from beginning of line, count number
-	! of trimmed characters, and then adjust the leading underline spaces
+	! of trimmed characters, and then adjust the leading underline spaces.
+	! Actually, need to replace all tabs with (a single?) space, as they may not
+	! just be at beginning of line
 
 	! Pad spaces the same length as the line number string
 	spaces = repeat(' ', str_i_len + 2)
@@ -213,17 +225,21 @@ function underline(context, span)
 
 	! Here's an example of a rust error message, from which I'm stealing UX:
 	!
-	!        Compiling skillet v0.4.0 (C:\git\skillet)
-	!     error[E0433]: failed to resolve: use of undeclared crate or module `st`
-	!      --> src\main.rs:6:5
-	!       |
-	!     6 | use st::path::PathBuf;
-	!       |     ^^ use of undeclared crate or module `st`
-	!       |
-	!     help: there is a crate or module with a similar name
-	!       |
-	!     6 | use std::path::PathBuf;
-	!       |     ~~~
+	! """
+	!
+	!    Compiling skillet v0.4.0 (C:\git\skillet)
+	! error[E0433]: failed to resolve: use of undeclared crate or module `st`
+	!  --> src\main.rs:6:5
+	!   |
+	! 6 | use st::path::PathBuf;
+	!   |     ^^ use of undeclared crate or module `st`
+	!   |
+	! help: there is a crate or module with a similar name
+	!   |
+	! 6 | use std::path::PathBuf;
+	!   |     ~~~
+	!
+	! """
 
 	col = str(span%start - context%lines(i) + 1)
 
