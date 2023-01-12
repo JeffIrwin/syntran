@@ -1,25 +1,23 @@
 
 {
-	// Get the largest prime number less than n
+	// Count the number of primes less than n
 	let n = 100;
-
-	// Initialize the largest prime found so far
-	let prime = 0;
+	let num_primes = 0;
 
 	// This check is O(n**2) time, which might be the best we can do
 	// without having arrays in the language yet
 
-	// If we had while loops, we could loop from n downards and stop as
-	// soon as we find the first prime
+	// Start loop at 2 because 0 and 1 are not prime
 	let i = 0;
-	for i in [0: n]
+	for i in [2: n]
 	{
+		let j = 0;
+
 		// Check if i is composite, i.e. not prime
 		let is_composite = false;
 
 		// Largest possible divisor of i is i/2.  Actually it's sqrt(i)
 		// but I don't have a sqrt fn yet
-		let j = 0;
 		for j in [2: i/2 + 1]
 		{
 			// Is i divisible by j?
@@ -28,10 +26,10 @@
 		}
 
 		if not is_composite
-			prime = i;
+			num_primes = num_primes + 1;
 	}
 
 	// Final result
-	prime;
+	num_primes;
 }
 

@@ -1,13 +1,36 @@
+
 {
-1 +* 2;
-3 - 4 + ;
-1 + 123456789123456789;
-1 + $;
-//4) + 5;
-true + 4;
-7 * false;
-let a = 1;
-let a = 2;
-b = 3;
--true;
+
+	1 +* 2;
+	3 - 4 + ;
+	1 + 123456789123456789;
+	1 + $;
+	//4) + 5;
+	true + 4;
+	7 * false;
+	let a = 1;
+	let a = 2;
+	b = 3;
+	-true;
+
+	let foo = 1;
+
+	if foo
+	{
+		let bar = 2;
+	}
+
+	let p = false;
+	let q = true;
+	let cond1 = p;
+	let cond2 = q;
+	let c = 3;
+	let i = 0;
+
+	for i in [cond1: not cond2]
+	{
+		i;
+	}
+
 }
+

@@ -28,10 +28,6 @@ module core_m
 	! TODO:
 	!
 	! Add:
-	!    * or use `=` instead of `in`?
-	!    * or use `..` instead of `:` like rust?
-	!    * For steps, rust has `for x in (1..10).step_by(2) {}`, which I hate
-	!
 	!  - block scoping
 	!    * maintain a list (array? linked?) of variable dictionaries. when
 	!      pushing a new scope `{`, push a new dict to the last and copy all
@@ -40,6 +36,8 @@ module core_m
 	!      (updated) values into the previous dict. could add a logical member
 	!      to dict val to flag if it has been updated locally, but that may be
 	!      a premature optimization
+	!    * for loop iterators should also be local to their block unless
+	!      previously declared
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
@@ -47,6 +45,7 @@ module core_m
 	!  - <, >, <=, >=
 	!  - functions
 	!  - arrays
+	!    * start with the way implicit arrays are handled as for loop iterators
 	!  - floats, characters, strings
 	!  - structs
 	!  - enums
@@ -162,8 +161,7 @@ module core_m
 		! Is the parser expecting more input, e.g. from a continued line in the
 		! interactive interpreter to match a semicolon, brace, etc.?
 		logical :: expecting = .false., first_expecting = .false.
-		character(len = :), allocatable :: first_expected, expected_token
-		! TODO: remove expected_token?  It's less useful than first_expected
+		character(len = :), allocatable :: first_expected
 
 		contains
 			procedure :: str => syntax_node_str, log_diagnostics
@@ -236,7 +234,7 @@ module core_m
 		integer :: pos
 
 		logical :: expecting = .false., first_expecting = .false.
-		character(len = :), allocatable :: first_expected, expected_token
+		character(len = :), allocatable :: first_expected
 
 		type(string_vector_t) :: diagnostics
 
@@ -850,7 +848,6 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%first_expecting = src%first_expecting
 
 	dst%first_expected = src%first_expected
-	dst%expected_token = src%expected_token
 	dst%diagnostics    = src%diagnostics
 
 	dst%is_empty    = src%is_empty
@@ -1120,9 +1117,7 @@ function lex(lexer) result(token)
 				! TODO: refactor w/ default case below since Fortran is weird
 				! about breaking in select case
 				token = new_token(bad_token, lexer%pos, lexer%current())
-
 				span = new_span(lexer%pos, len(lexer%current()))
-
 				call lexer%diagnostics%push( &
 					err_unexpected_char(lexer%context, &
 					span, lexer%current()))
@@ -1132,9 +1127,7 @@ function lex(lexer) result(token)
 		case default
 
 			token = new_token(bad_token, lexer%pos, lexer%current())
-
 			span = new_span(lexer%pos, len(lexer%current()))
-
 			call lexer%diagnostics%push( &
 				err_unexpected_char(lexer%context, &
 				span, lexer%current()))
@@ -1469,7 +1462,6 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 	tree%first_expecting = parser%first_expecting
 
 	tree%first_expected = parser%first_expected
-	tree%expected_token = parser%expected_token
 
 	if (debug > 1) print *, 'tree = ', tree%str()
 
@@ -1550,12 +1542,13 @@ function parse_for_statement(parser) result(statement)
 
 	!********
 
-	type(syntax_node_t)  :: condition, for_clause, lbound, ubound
+	integer :: bound_beg, bound_end
+	type(syntax_node_t)  :: for_clause, lbound, ubound
 	type(syntax_token_t) :: for_token, in_token, lbracket, rbracket, colon, &
 		identifier
 	type(text_span_t) :: span
 
-	!  // for loop syntax:
+	!  For loop syntax:
 	!
 	!    for i in [1: 5]
 	!       { i; }
@@ -1570,17 +1563,16 @@ function parse_for_statement(parser) result(statement)
 	!    for i in [1, 2, 4, 5]
 	!    // 1, 2,   4, 5  // last elem *is* included
 	!
-	! TODO: should I make the upper bound non-inclusive?  Probably, since I'm
-	! planning for this to be a 0-indexed language and Dijkstra's argument
-	! holds.  This would also be consistent with Rust's and Python's range()
-	! fns
+	!  * or use `=` instead of `in`?
+	!  * or use `..` instead of `:` like rust?
+	!  * For steps, rust has `for x in (1..10).step_by(2) {}`, which I hate
 
 	for_token  = parser%match(for_keyword)
 
-	! TODO: allow declaring loop iterator in for statement (HolyC doesn't let
-	! you do that!):
+	! TODO: auto declare loop iterator in for statement (HolyC doesn't let
+	! you do that!).  Do not require 'let' keyword:
 	!
-	!     for let i in [lower, upper]
+	!     for i in [lower, upper]
 	!        {}
 
 	identifier = parser%match(identifier_token)
@@ -1593,14 +1585,32 @@ function parse_for_statement(parser) result(statement)
 	! eventually target higher rank arrays
 
 	lbracket = parser%match(lbracket_token)
-	lbound   = parser%parse_expr()
-	colon    = parser%match(colon_token)
-	ubound   = parser%parse_expr()
-	rbracket = parser%match(rbracket_token)
 
-	! TODO: check lbound an ubound are num_expr types.  For an explicit
-	! comma-separated array, we could iterate over bool values, but implicit
-	! bound-based arrays require nums
+	! Check that bounds are num_expr types.  For an explicit comma-separated
+	! array, we could iterate over bool values, but implicit range/bound-based
+	! arrays require nums
+
+	bound_beg = parser%peek_pos(0)
+	lbound    = parser%parse_expr()
+	bound_end = parser%peek_pos(0) - 1
+	if (lbound%val%kind /= num_expr) then
+		span = new_span(bound_beg, bound_end - bound_beg + 1)
+		call parser%diagnostics%push(err_non_num_bound( &
+			parser%context, span, parser%context%text(bound_beg: bound_end)))
+	end if
+
+	colon    = parser%match(colon_token)
+
+	bound_beg = parser%peek_pos(0)
+	ubound    = parser%parse_expr()
+	bound_end = parser%peek_pos(0) - 1
+	if (ubound%val%kind /= num_expr) then
+		span = new_span(bound_beg, bound_end - bound_beg + 1)
+		call parser%diagnostics%push(err_non_num_bound( &
+			parser%context, span, parser%context%text(bound_beg: bound_end)))
+	end if
+
+	rbracket = parser%match(rbracket_token)
 
 	for_clause = parser%parse_statement()  ! Immo calls this "body"
 
@@ -1635,9 +1645,13 @@ function parse_if_statement(parser) result(statement)
 
 	if_token  = parser%match(if_keyword)
 
-	cond_beg  = parser%peek_pos( 0)
+	cond_beg  = parser%peek_pos(0)
 	condition = parser%parse_expr()
-	cond_end  = parser%peek_pos(-1)
+
+	!cond_end  = parser%peek_pos(-1)
+	cond_end  = parser%peek_pos(0) - 1
+
+	!print *, 'cond_beg, cond_end = ', cond_beg, cond_end
 
 	! Check that condition type is bool
 	if (condition%val%kind /= bool_expr) then
@@ -1702,8 +1716,6 @@ function parse_block_statement(parser) result(block)
 		i = i + 1
 		!print *, '    statement ', i
 
-		!statement = parser%parse_statement()
-		!call statements%push(statement)
 		call statements%push(parser%parse_statement())
 
 		! Avoid infinite loops on malformed blocks like this:
@@ -1745,7 +1757,7 @@ recursive function parse_expr_statement(parser) result(expr)
 	type(text_span_t) :: span
 
 	! TODO: provide a way to declare variable types without initializing them?
-	! Rust discourages this, instead preferring patterns like this:
+	! Rust discourages mutability, instead preferring patterns like this:
 	!
 	!      let x = if condition
 	!      {
@@ -1790,7 +1802,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
-		! Insert the identifier's type into the dictionary
+		! Insert the identifier's type into the dictionary and check that it
+		! hasn't already been declared
 		call parser%variables%insert(identifier%text, expr%val, &
 			io, overwrite = .false.)
 
@@ -1819,6 +1832,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
+		! Get the identifier's type from the dictionary and check that it has
+		! been declared
 		expr%val = parser%variables%search(identifier%text, io)
 		if (io /= exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))
@@ -2387,10 +2402,7 @@ function match(parser, kind) result(token)
 	! a diagnostic.  An unmatched char at the end means the interactive
 	! interpreter should expect more lines
 	if (parser%pos >= size(parser%tokens)) then
-
-		parser%expected_token = kind_token(kind)
 		parser%expecting = .true.
-
 	end if
 
 	token = new_token(kind, current%pos, null_char)
@@ -2464,6 +2476,22 @@ recursive function syntax_eval(node, variables) result(res)
 
 	!********
 
+	! TODO: as an optimization, convert the variables dictionary into an array
+	! by traversing the dictionary ternary tree and setting
+	! a node%identifier%index for each node%identifier%text.  Save the value_t
+	! for each index in an array and then quickly look it up in the array
+	! instead of calling dictionary methods %search() and %insert().
+	!
+	! Do this here?  Could add a node%is_root bool, as we should only do it once
+	! per tree.  Or it could be done at the end of syntax_parse() or in between
+	! syntax_parse() and syntax_eval(), but that could require some WET work for
+	! interpreter, eval, etc. in syntran.f90.
+	!
+	! Careful with scoping.  Maybe convert to array at the end of each
+	! parse_block_statement()
+
+	!********
+
 	! I'm being a bit loose with consistency on select case indentation but
 	! I don't want a gigantic diff
 
@@ -2501,7 +2529,7 @@ recursive function syntax_eval(node, variables) result(res)
 	case (block_statement)
 
 		! The final statement of a block returns the actual result.  Non-final
-		! statements only change the state.
+		! statements only change the (variables) state.
 		do i = 1, size(node%statements)
 			res = syntax_eval(node%statements(i), variables)
 			!print *, i, ' res = ', res%str()
@@ -2529,7 +2557,7 @@ recursive function syntax_eval(node, variables) result(res)
 
 		res%kind = right%kind
 
-		! TODO: add fallback type checking here?
+		! TODO: add fallback type checking here? for float future-proofing
 
 		select case (node%op%kind)
 		case (plus_token)
@@ -2542,14 +2570,8 @@ recursive function syntax_eval(node, variables) result(res)
 			res%bval = .not. right%bval
 
 		case default
-
-			! Anything here should have been caught by a parser diagnostic
-			write(*,*) fg_bold_bright_red//'Error'//color_reset &
-					//fg_bold//': unexpected unary operator "' &
-					//node%op%text//'"'//color_reset
-
-			res%kind = 0
-
+			write(*,*) err_eval_unary_op(node%op%text)
+			call internal_error()
 		end select
 
 	case (binary_expr)
@@ -2563,9 +2585,12 @@ recursive function syntax_eval(node, variables) result(res)
 		! The parser should catch this, but do it here as a fallback (e.g. I'll
 		! add floats later and forget this needs fixing)
 		if (left%kind /= right%kind) then
-			write(*,*) fg_bold_bright_red//'Error'//color_reset &
-				//fg_bold//': unexpected types for binary operator "' &
-				//node%op%text//'"'//color_reset
+
+			! Internal compiler errors shouldn't ever happen, but if they do,
+			! the evaluation will be garbage.
+			write(*,*) err_eval_binary_types(node%op%text)
+			call internal_error()
+
 		end if
 
 		res%kind = get_binary_op_kind(left%kind, node%op%kind, right%kind)
@@ -2601,9 +2626,8 @@ recursive function syntax_eval(node, variables) result(res)
 			else if (left%kind == num_expr) then
 				res%bval = left%ival  ==   right%ival
 			else
-				write(*,*) fg_bold_bright_red//'Error'//color_reset &
-					//fg_bold//': unexpected types for comparison "' &
-					//node%op%text//'"'//color_reset
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
 			end if
 
 		case (bang_equals_token)
@@ -2613,36 +2637,19 @@ recursive function syntax_eval(node, variables) result(res)
 			else if (left%kind == num_expr) then
 				res%bval = left%ival  /=   right%ival
 			else
-				! TODO: refactor w/ above case.  Add a routine to exit(-1) for
-				! internal syntran error
-				write(*,*) fg_bold_bright_red//'Error'//color_reset &
-					//fg_bold//': unexpected types for comparison "' &
-					//node%op%text//'"'//color_reset
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
 			end if
 
 		case default
-
-			! Anything here should have been caught by a parser diagnostic
-			write(*,*) fg_bold_bright_red//'Error'//color_reset &
-					//fg_bold//': unexpected binary operator "' &
-					//node%op%text//'"'//color_reset
-
-			!! This is catastrophic, but it kills the unit tests.  TODO:
-			!internal syntran error
-			!stop
-
-			res%kind = 0
+			write(*,*) err_eval_binary_op(node%op%text)
+			call internal_error()
 
 		end select
 
 	case default
-
-		res%kind = 0
-		write(*,*) fg_bold_bright_red//'Error'//color_reset &
-				//fg_bold//': unexpected node "'//kind_name(node%kind) &
-				//'"'//color_reset
-
-		!stop
+		write(*,*) err_eval_node(kind_name(node%kind))
+		call internal_error()
 
 	end select
 
@@ -2650,10 +2657,18 @@ end function syntax_eval
 
 !===============================================================================
 
-subroutine log_diagnostics(node, src, ou)
+subroutine internal_error()
+
+	write(*,*) fg_bold_bright_red//'Fatal error'//color_reset
+	call exit(exit_failure)
+
+end subroutine internal_error
+
+!===============================================================================
+
+subroutine log_diagnostics(node, ou)
 
 	class(syntax_node_t), intent(in) :: node
-	character(len = *)  , intent(in) :: src
 	integer, optional   , intent(in) :: ou
 
 	!********
@@ -2664,12 +2679,8 @@ subroutine log_diagnostics(node, src, ou)
 	if (present(ou)) oul = ou
 
 	do i = 1, node%diagnostics%len
-
-		!write(oul,*)
-		!write(oul, '(a)') src
 		write(oul, '(a)') node%diagnostics%v(i)%s
 		write(oul,*)
-
 	end do
 
 end subroutine log_diagnostics

@@ -158,7 +158,7 @@ function string_view_get_line(sv, iostat) result(line)
 
 	integer :: length, io
 
-	io = 0
+	io = exit_success
 	length = scan(sv%s( sv%pos: ), line_feed//carriage_return)
 	if (length <= 0) then
 		io = iostat_end
@@ -254,7 +254,10 @@ function read_file(file, iostat) result(str)
 	integer :: i, io, str_cap, tmp_cap, iu
 
 	open(file = file, newunit = iu, status = 'old', iostat = io)
-	if (io /= exit_success) return
+	if (io /= exit_success) then
+		if (present(iostat)) iostat = io
+		return
+	end if
 
 	! Buffer string with some initial length
 	str_cap = 64
@@ -264,7 +267,10 @@ function read_file(file, iostat) result(str)
 	i = 0
 	do
 		read(iu, '(a)', advance = 'no', iostat = io) c
-		if (io == iostat_end) exit
+		if (io == iostat_end) then
+			io = exit_success
+			exit
+		end if
 
 		!if (io == iostat_eor) exit
 		if (io == iostat_eor) c = line_feed
@@ -340,6 +346,29 @@ logical function is_whitespace(c)
 	is_whitespace = any(c == [tab, line_feed, vert_tab, carriage_return, ' '])
 
 end function is_whitespace
+
+!===============================================================================
+
+function tabs2spaces(str) result(str_out)
+
+	! Replace each tab with a *single* space.  This is useful for alignment and
+	! it makes allocation easy
+
+	character(len = *), intent(in)  :: str
+	character(len = :), allocatable :: str_out
+
+	integer :: i
+
+	allocate(character(len = len(str)) :: str_out)
+	do i = 1, len(str)
+		if (str(i:i) == tab) then
+			str_out(i:i) = ' '
+		else
+			str_out(i:i) = str(i:i)
+		end if
+	end do
+
+end function tabs2spaces
 
 !===============================================================================
 

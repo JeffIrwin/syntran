@@ -457,6 +457,7 @@ subroutine unit_test_for(npass, nfail)
 			interpret_file(path//'test-02-for.syntran') == '5050', &
 			interpret_file(path//'test-03-for.syntran') == '1836311903', &
 			interpret_file(path//'test-04-for.syntran') == '97', &
+			interpret_file(path//'test-05-for.syntran') == '25', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

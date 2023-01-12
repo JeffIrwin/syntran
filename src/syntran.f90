@@ -153,7 +153,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		if (debug > 0 .or. show_tree) print *, 'tree = ', compilation%str()
 
-		if (.not. quietl) call compilation%log_diagnostics(line, ou)
+		if (.not. quietl) call compilation%log_diagnostics(ou)
 
 		! Don't try to evaluate with errors
 		if (compilation%diagnostics%len > 0) cycle
@@ -214,7 +214,7 @@ integer function syntran_eval_int(str) result(eval_int)
 	type(variable_dictionary_t) :: variables
 
 	tree = syntax_parse(str, variables)
-	call tree%log_diagnostics(str)
+	call tree%log_diagnostics()
 
 	if (tree%diagnostics%len > 0) then
 		! TODO: iostat
@@ -264,7 +264,7 @@ function syntran_eval(str, quiet, src_file) result(res)
 	! TODO: make a helper fn here that all the eval_* fns use
 
 	tree = syntax_parse(str, variables, src_filel)
-	if (.not. quietl) call tree%log_diagnostics(str)
+	if (.not. quietl) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len > 0) then
 		res = ''
@@ -295,6 +295,7 @@ function syntran_interpret_file(file, quiet) result(res)
 	!********
 
 	character(len = :), allocatable :: source_text
+	integer :: iostat
 	logical :: quietl
 
 	quietl = .false.
@@ -302,7 +303,12 @@ function syntran_interpret_file(file, quiet) result(res)
 
 	if (.not. quietl) write(*,*) 'Interpreting file "'//file//'"'
 
-	source_text = read_file(file)
+	source_text = read_file(file, iostat)
+	if (iostat /= exit_success) then
+		if (.not. quietl) write(*,*) err_404(file)
+		return
+	end if
+
 	res = syntran_eval(source_text, quiet, file)
 
 end function syntran_interpret_file
