@@ -26,8 +26,9 @@
 
 	let p = true;
 	{
-		// Another shadow
-		let p = false;
+		// More shadows.  They can even vary in type
+		let p = 1;
+		let foo = true;
 	}
 
 	let q = false;
