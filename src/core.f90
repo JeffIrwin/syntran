@@ -245,7 +245,8 @@ module core_m
 			procedure :: &
 				insert => variable_insert, &
 				search => variable_search, &
-				search_insert => variable_search_insert
+				search_insert => variable_search_insert, &
+				push_scope, pop_scope
 
 	end type variable_dictionaries_t
 
@@ -481,6 +482,50 @@ subroutine variable_search_insert(dictionary, key, val, iostat)
 	if (present(iostat)) iostat = io
 
 end subroutine variable_search_insert
+
+!===============================================================================
+
+subroutine push_scope(dictionary)
+
+	class(variable_dictionaries_t) :: dictionary
+
+	dictionary%scope = dictionary%scope + 1
+
+	! TODO
+	if (dictionary%scope > scope_max) then
+		write(*,*) 'Error: too many nested blocks > '//str(scope_max)
+		call internal_error()
+	end if
+
+end subroutine push_scope
+
+!===============================================================================
+
+subroutine pop_scope(dictionary)
+
+	class(variable_dictionaries_t) :: dictionary
+
+	integer :: i
+
+	i = dictionary%scope
+
+	! It's possible that a scope may not have any local vars, so its dictionary
+	! is not allocated
+	if (allocated(dictionary%dicts(i)%root)) then
+		! Does this automatically deallocate children? (mid, left, right)  May
+		! need recursive deep destructor
+		deallocate(dictionary%dicts(i)%root)
+	end if
+
+	dictionary%scope = dictionary%scope - 1
+
+	! The parser should catch an unexpected `}`
+	if (dictionary%scope < 1) then
+		write(*,*) 'Error: scope stack is empty'
+		call internal_error()
+	end if
+
+end subroutine pop_scope
 
 !===============================================================================
 
@@ -1677,6 +1722,8 @@ function parse_for_statement(parser) result(statement)
 
 	for_token  = parser%match(for_keyword)
 
+	call parser%variables%push_scope()
+
 	! TODO: auto declare loop iterator in for statement (HolyC doesn't let
 	! you do that!).  Do not require 'let' keyword:
 	!
@@ -1721,6 +1768,8 @@ function parse_for_statement(parser) result(statement)
 	rbracket = parser%match(rbracket_token)
 
 	body = parser%parse_statement()
+
+	call parser%variables%pop_scope()
 
 	allocate(statement%lbound, statement%ubound, statement%body)
 
@@ -1858,6 +1907,8 @@ function parse_block_statement(parser) result(block)
 
 	left  = parser%match(lbrace_token)
 
+	call parser%variables%push_scope()
+
 	do while ( &
 		parser%current_kind() /= eof_token .and. &
 		parser%current_kind() /= rbrace_token)
@@ -1875,6 +1926,8 @@ function parse_block_statement(parser) result(block)
 		if (parser%pos == pos0) dummy = parser%next()
 
 	end do
+
+	call parser%variables%pop_scope()
 
 	right = parser%match(rbrace_token)
 
@@ -1978,6 +2031,9 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		! Get the identifier's type from the dictionary and check that it has
 		! been declared
+		!
+		! TODO: with scoping now, add "in this scope" to undeclare/redeclare err
+		! messages
 		expr%val = parser%variables%search(identifier%text, io)
 		if (io /= exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))
@@ -2650,7 +2706,8 @@ recursive function syntax_eval(node, variables) result(res)
 		lbound = syntax_eval(node%lbound, variables)
 		ubound = syntax_eval(node%ubound, variables)
 
-		! TODO: push/pop scope here
+		! push scope in case the loop iterator is local to the loop
+		call variables%push_scope()
 
 		ival%kind = num_expr
 		do i = lbound%ival, ubound%ival - 1
@@ -2658,6 +2715,8 @@ recursive function syntax_eval(node, variables) result(res)
 			call variables%insert(node%identifier%text, ival)
 			res = syntax_eval(node%body, variables)
 		end do
+
+		call variables%pop_scope()
 
 	case (while_statement)
 
@@ -2682,12 +2741,16 @@ recursive function syntax_eval(node, variables) result(res)
 
 	case (block_statement)
 
+		call variables%push_scope()
+
 		! The final statement of a block returns the actual result.  Non-final
 		! statements only change the (variables) state.
 		do i = 1, size(node%statements)
 			res = syntax_eval(node%statements(i), variables)
 			!print *, i, ' res = ', res%str()
 		end do
+
+		call variables%pop_scope()
 
 	case (assignment_expr)
 
