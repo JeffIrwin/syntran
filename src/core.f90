@@ -60,6 +60,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			let_expr            = 45, &
 			while_statement     = 44, &
 			colon_token         = 43, &
 			for_statement       = 42, &
@@ -243,7 +244,8 @@ module core_m
 		contains
 			procedure :: &
 				insert => variable_insert, &
-				search => variable_search
+				search => variable_search, &
+				search_insert => variable_search_insert
 
 	end type variable_dictionaries_t
 
@@ -326,6 +328,11 @@ function variable_search(dictionary, key, iostat) result(val)
 	! iterator, regardless of whether they are single-statement loops or block
 	! loops.  Check scope_max overflow or use lined list or growable array
 	! before merging
+
+	do while (io /= exit_success .and. i > 1)
+		i = i - 1
+		val = ternary_search(dictionary%dicts(i)%root, key, io)
+	end do
 
 	if (present(iostat)) iostat = io
 
@@ -418,12 +425,62 @@ subroutine variable_insert(dictionary, key, val, iostat, overwrite)
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
-	i = dictionary%scope
+	!if (.not. overwrite) then
+		i = dictionary%scope
+		call ternary_insert(dictionary%dicts(i)%root, key, val, io, overwritel)
+	!end if
 
-	call ternary_insert(dictionary%dicts(i)%root, key, val, io, overwritel)
+	! TODO: do we need more modes than just overwrite or not overwrite?  With
+	! scopes, this should be the logic:
+	!
+	!   - let statements insert in the current scope with overwrite = false
+	!   - assignment statements search parent scopes until the identifier key is
+	!     found, then insert it into that scope (overwrite true)
+	!   - parser needs to check io for assignments in case the identifier has
+	!     not been declared in any scope
+	!   - maybe split into two functions for let vs assign? or not, I think just
+	!     the two existing modes should do it
+
 	if (present(iostat)) iostat = io
 
 end subroutine variable_insert
+
+!===============================================================================
+
+subroutine variable_search_insert(dictionary, key, val, iostat)
+
+	! First search for the scope that contains key and then insert its val into
+	! that scope.  Always overwrite with this method (unless the key hasn't been
+	! declared in any scope)
+
+	class(variable_dictionaries_t) :: dictionary
+	character(len = *), intent(in) :: key
+	type(value_t), intent(in) :: val
+
+	integer, intent(out), optional :: iostat
+
+	!********
+
+	integer :: i, io
+	logical, parameter :: overwrite = .true.
+	type(value_t) :: dummy
+
+	i = dictionary%scope
+
+	dummy = ternary_search(dictionary%dicts(i)%root, key, io)
+
+	do while (io /= exit_success .and. i > 1)
+		i = i - 1
+		dummy = ternary_search(dictionary%dicts(i)%root, key, io)
+	end do
+
+	if (io == exit_success) then
+		call ternary_insert(dictionary%dicts(i)%root, key, val, io, overwrite)
+	end if
+
+	if (present(iostat)) iostat = io
+
+end subroutine variable_search_insert
 
 !===============================================================================
 
@@ -697,7 +754,8 @@ function kind_name(kind)
 			"lbracket_token   ", & ! 41
 			"for_statement    ", & ! 42
 			"colon_token      ", & ! 43
-			"while_statement  "  & ! 44
+			"while_statement  ", & ! 44
+			"let_expr         "  & ! 45
 		]
 			! FIXME: update kind_tokens array too
 
@@ -762,7 +820,8 @@ function kind_token(kind)
 			"]                    ", & ! 41
 			"for                  ", & ! 42
 			":                    ", & ! 43
-			"while                "  & ! 44
+			"while                ", & ! 44
+			"let expression       "  & ! 45
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -1866,12 +1925,6 @@ recursive function parse_expr_statement(parser) result(expr)
 	    parser%peek_kind(1) == identifier_token .and. &
 	    parser%peek_kind(2) == equals_token) then
 
-		! TODO: I'm skipping ahead a bit here to what Immo does in episode 6.
-		! He uses separate variable_declaration, expr_statement, and
-		! assignment_expr kinds, all of which I'm handling here as
-		! assignment_expr.  My code may need some refactoring to more closely
-		! mirror Immo's.
-
 		!print *, 'let expr'
 
 		! The if-statement above already verifies tokens, so we can use next()
@@ -2317,7 +2370,7 @@ function new_declaration_expr(identifier, op, right) result(expr)
 
 	!********
 
-	expr%kind = assignment_expr
+	expr%kind = let_expr
 
 	allocate(expr%right)
 
@@ -2597,6 +2650,8 @@ recursive function syntax_eval(node, variables) result(res)
 		lbound = syntax_eval(node%lbound, variables)
 		ubound = syntax_eval(node%ubound, variables)
 
+		! TODO: push/pop scope here
+
 		ival%kind = num_expr
 		do i = lbound%ival, ubound%ival - 1
 			ival%ival = i
@@ -2641,6 +2696,17 @@ recursive function syntax_eval(node, variables) result(res)
 
 		! Assign res to LHS identifier variable as well.  This inserts the
 		! value, while the insert call in the parser inserts the type
+
+		!print *, 'assigning identifier "', node%identifier%text, '"'
+		call variables%search_insert(node%identifier%text, res)
+
+		! The difference between let and assign is inserting into the current
+		! scope (let) vs possibly searching parent scopes (assign)
+
+	case (let_expr)
+
+		! Assign return value
+		res = syntax_eval(node%right, variables)
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
 		call variables%insert(node%identifier%text, res)
