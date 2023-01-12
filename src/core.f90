@@ -42,6 +42,7 @@ module core_m
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
+	!  - tetration operator ***? ints only? just for fun
 	!  - <, >, <=, >=
 	!  - functions
 	!  - arrays
@@ -54,8 +55,6 @@ module core_m
 	!  - bitwise operators
 	!
 	!****************************************
-
-
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()

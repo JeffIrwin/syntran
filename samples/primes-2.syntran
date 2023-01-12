@@ -1,0 +1,41 @@
+
+{
+	// Get the largest prime number less than n
+	let n = 10000;
+
+	// Initialize
+	let prime = 0;
+
+	// This is a small optimization over the for-loop version.  Loop
+	// from n downards and stop as soon as we find the first prime
+	let i = n;
+	while prime == 0
+	{
+		i = i - 1;
+		let j = 1;
+
+		// Check if i is composite, i.e. not prime
+		let is_composite = false;
+
+		// Largest possible divisor of i is i/2.  Actually it's sqrt(i) but
+		// I don't have a sqrt fn yet
+
+		// This is another optimization.  We can break the inner loop
+		// after we find the first divisor
+		while j != i/2 + 1 and not is_composite
+		{
+			j = j + 1;
+
+			// Is i divisible by j?
+			let divisible = j * (i / j) == i;  // poor man's modulo == 0
+			is_composite = is_composite or divisible;
+		}
+
+		if not is_composite
+			prime = i;
+	}
+
+	// Final result
+	prime;
+}
+
