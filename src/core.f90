@@ -60,6 +60,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			while_statement     = 44, &
 			colon_token         = 43, &
 			for_statement       = 42, &
 			lbracket_token      = 41, &
@@ -146,7 +147,7 @@ module core_m
 		! allocated
 
 		type(syntax_node_t), allocatable :: left, right, statements(:), &
-			condition, if_clause, else_clause, for_clause
+			condition, if_clause, else_clause, body
 
 		type(syntax_node_t), allocatable :: lbound, ubound
 
@@ -248,7 +249,8 @@ module core_m
 				peek => parser_peek_token, peek_kind, &
 				parse_expr, parse_primary_expr, parse_expr_statement, &
 				parse_statement, parse_block_statement, parse_if_statement, &
-				current_pos, peek_pos, parse_for_statement
+				current_pos, peek_pos, parse_for_statement, &
+				parse_while_statement
 
 	end type parser_t
 
@@ -656,7 +658,8 @@ function kind_name(kind)
 			"rbracket_token   ", & ! 40
 			"lbracket_token   ", & ! 41
 			"for_statement    ", & ! 42
-			"colon_token      "  & ! 43
+			"colon_token      ", & ! 43
+			"while_statement  "  & ! 44
 		]
 			! FIXME: update kind_tokens array too
 
@@ -720,7 +723,8 @@ function kind_token(kind)
 			"[                    ", & ! 40
 			"]                    ", & ! 41
 			"for                  ", & ! 42
-			":                    "  & ! 43
+			":                    ", & ! 43
+			"while                "  & ! 44
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -869,9 +873,9 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%condition = src%condition
 	end if
 
-	if (allocated(src%for_clause)) then
-		if (.not. allocated(dst%for_clause)) allocate(dst%for_clause)
-		dst%for_clause = src%for_clause
+	if (allocated(src%body)) then
+		if (.not. allocated(dst%body)) allocate(dst%body)
+		dst%body = src%body
 	end if
 
 	if (allocated(src%lbound)) then
@@ -1430,7 +1434,8 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 	! Point parser member to variables dictionary.  This could be done in the
 	! constructor new_parser(), but it seems reasonable to do it here since it
-	! has to be moved back later
+	! has to be moved back later.  The dictionary variables0 comes from the
+	! interactive interpreter's history, it has nothing to do with scoping
 	if (allocated(variables%root)) then
 
 		if (allow_continuel) then
@@ -1524,6 +1529,9 @@ function parse_statement(parser) result(statement)
 		case (for_keyword)
 			statement = parser%parse_for_statement()
 
+		case (while_keyword)
+			statement = parser%parse_while_statement()
+
 		case default
 			statement = parser%parse_expr_statement()
 			semi      = parser%match(semicolon_token)
@@ -1543,7 +1551,8 @@ function parse_for_statement(parser) result(statement)
 	!********
 
 	integer :: bound_beg, bound_end
-	type(syntax_node_t)  :: for_clause, lbound, ubound
+
+	type(syntax_node_t)  :: body, lbound, ubound
 	type(syntax_token_t) :: for_token, in_token, lbracket, rbracket, colon, &
 		identifier
 	type(text_span_t) :: span
@@ -1612,18 +1621,59 @@ function parse_for_statement(parser) result(statement)
 
 	rbracket = parser%match(rbracket_token)
 
-	for_clause = parser%parse_statement()  ! Immo calls this "body"
+	body = parser%parse_statement()
 
-	allocate(statement%lbound, statement%ubound, statement%for_clause)
+	allocate(statement%lbound, statement%ubound, statement%body)
 
 	statement%kind = for_statement
 
 	statement%identifier = identifier
 	statement%lbound     = lbound
 	statement%ubound     = ubound
-	statement%for_clause = for_clause
+	statement%body       = body
 
 end function parse_for_statement
+
+!===============================================================================
+
+function parse_while_statement(parser) result(statement)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: statement
+
+	!********
+
+	integer :: cond_beg, cond_end
+
+	type(syntax_node_t)  :: body, condition
+	type(syntax_token_t) :: while_token
+	type(text_span_t) :: span
+
+	while_token  = parser%match(while_keyword)
+
+	cond_beg  = parser%peek_pos(0)
+	condition = parser%parse_expr()
+	cond_end  = parser%peek_pos(0) - 1
+
+	! Check that condition type is bool.  TODO: sub var in message for "while"
+	! or "if"
+	if (condition%val%kind /= bool_expr) then
+		span = new_span(cond_beg, cond_end - cond_beg + 1)
+		call parser%diagnostics%push(err_non_bool_condition( &
+			parser%context, span, parser%context%text(cond_beg: cond_end)))
+	end if
+
+	body = parser%parse_statement()
+
+	allocate(statement%condition, statement%body)
+
+	statement%kind = while_statement
+
+	statement%condition = condition
+	statement%body      = body
+
+end function parse_while_statement
 
 !===============================================================================
 
@@ -1753,7 +1803,7 @@ recursive function parse_expr_statement(parser) result(expr)
 	integer :: io
 
 	type(syntax_node_t) :: right
-	type(syntax_token_t) :: let, identifier, op, semi
+	type(syntax_token_t) :: let, identifier, op!, semi
 	type(text_span_t) :: span
 
 	! TODO: provide a way to declare variable types without initializing them?
@@ -2510,7 +2560,15 @@ recursive function syntax_eval(node, variables) result(res)
 		do i = lbound%ival, ubound%ival - 1
 			ival%ival = i
 			call variables%insert(node%identifier%text, ival)
-			res = syntax_eval(node%for_clause, variables)
+			res = syntax_eval(node%body, variables)
+		end do
+
+	case (while_statement)
+
+		condition = syntax_eval(node%condition, variables)
+		do while (condition%bval)
+			res = syntax_eval(node%body, variables)
+			condition = syntax_eval(node%condition, variables)
 		end do
 
 	case (if_statement)
