@@ -1,0 +1,13 @@
+
+{
+	let p = true;
+	let sum = 0;
+	while p
+	{
+		sum = sum + 1;
+		p = not p;
+	}
+
+	sum;
+}
+

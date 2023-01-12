@@ -145,14 +145,14 @@ end function err_unary_types
 
 !===============================================================================
 
-function err_non_bool_condition(context, span, condition) result(err)
+function err_non_bool_condition(context, span, condition, statement) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
-	character(len = *), intent(in) :: condition
+	character(len = *), intent(in) :: condition, statement
 	err = err_prefix &
-		//'Condition `'//condition//'` of if-statement is not bool' &
+		//'Condition `'//trimw(condition)//'` of '//statement//' is not bool' &
 		//underline(context, span) &
 		//" non-bool condition"//color_reset
 

@@ -1,0 +1,10 @@
+
+{
+	let p = false;
+	let sum = 0;
+	while p
+		sum = sum + 1;
+
+	sum;
+}
+

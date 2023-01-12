@@ -372,6 +372,36 @@ end function tabs2spaces
 
 !===============================================================================
 
+function trimw(str)
+
+	! Trim whitespace, because the intrinsic trim() fn apparently doesn't trim
+	! line breaks!?
+
+	character(len = *), intent(in)  :: str
+	character(len = :), allocatable :: trimw
+
+	integer :: first, last
+
+	first = 1
+	do
+		if (first > len(str)) exit
+		if (.not. is_whitespace(str(first: first))) exit
+		first = first + 1
+	end do
+
+	last = len(str)
+	do
+		if (last < first) exit
+		if (.not. is_whitespace(str(last: last))) exit
+		last = last - 1
+	end do
+
+	trimw = str(first: last)
+
+end function trimw
+
+!===============================================================================
+
 function findlocl1(arr, val) result(loc)
 
 	! findloc() is standard in Fortran 2008, but gfortran 8.1.0 doesn't have it

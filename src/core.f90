@@ -23,7 +23,7 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  6
+		syntran_patch =  7
 
 	! TODO:
 	!
@@ -1656,12 +1656,12 @@ function parse_while_statement(parser) result(statement)
 	condition = parser%parse_expr()
 	cond_end  = parser%peek_pos(0) - 1
 
-	! Check that condition type is bool.  TODO: sub var in message for "while"
-	! or "if"
+	! Check that condition type is bool
 	if (condition%val%kind /= bool_expr) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
-			parser%context, span, parser%context%text(cond_beg: cond_end)))
+			parser%context, span, parser%context%text(cond_beg: cond_end), &
+			"while-loop"))
 	end if
 
 	body = parser%parse_statement()
@@ -1707,7 +1707,8 @@ function parse_if_statement(parser) result(statement)
 	if (condition%val%kind /= bool_expr) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
-			parser%context, span, parser%context%text(cond_beg: cond_end)))
+			parser%context, span, parser%context%text(cond_beg: cond_end), &
+			"if-statement"))
 	end if
 
 	if_clause = parser%parse_statement()  ! Immo calls this "then statement"

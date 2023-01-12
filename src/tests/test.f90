@@ -470,6 +470,46 @@ end subroutine unit_test_for
 
 !===============================================================================
 
+subroutine unit_test_while(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'for loops'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*)
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: more tests
+	!
+	! Organize syntran test src files into another level of folders
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01-while.syntran') == '0', &
+			interpret_file(path//'test-02-while.syntran') == '1', &
+			interpret_file(path//'test-03-while.syntran') == '5050', &
+			interpret_file(path//'test-04-while.syntran') == '9973', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_while
+
+!===============================================================================
+
 subroutine unit_test_bad_syntax(npass, nfail)
 
 	implicit none
@@ -601,6 +641,7 @@ subroutine unit_tests(iostat)
 	call unit_test_blocks     (npass, nfail)
 	call unit_test_if_else    (npass, nfail)
 	call unit_test_for        (npass, nfail)
+	call unit_test_while      (npass, nfail)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)
