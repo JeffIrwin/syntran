@@ -36,6 +36,7 @@ module core_m
 	!      (updated) values into the previous dict. could add a logical member
 	!      to dict val to flag if it has been updated locally, but that may be
 	!      a premature optimization
+	!    * copying may not be required if I implement shadowing
 	!    * for loop iterators should also be local to their block unless
 	!      previously declared
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
@@ -213,14 +214,38 @@ module core_m
 
 	end type ternary_tree_node_t
 
+	!********
+
 	type variable_dictionary_t
 		type(ternary_tree_node_t), allocatable :: root
+		!contains
+		!	procedure :: &
+		!		insert => variable_insert, &
+		!		search => variable_search !, &
+		!		!copy   => variable_
+	end type variable_dictionary_t
+
+	!********
+
+	! Fixed-size limit to the scope level for now, while I work on scoping
+	integer, parameter :: scope_max = 64
+
+	type variable_dictionaries_t
+		! This type is a list of variable dictionaries for each scope level
+
+		type(variable_dictionary_t) :: dicts(scope_max)
+
+		! This is the scope level.  Each nested block statement that is entered
+		! pushes 1 to scope.  Popping out of a block decrements the scope.
+		! Each scope level has its own variable dictionary in dicts(:)
+		integer :: scope = 1
+
 		contains
 			procedure :: &
 				insert => variable_insert, &
-				search => variable_search !, &
-				!copy   => variable_
-	end type variable_dictionary_t
+				search => variable_search
+
+	end type variable_dictionaries_t
 
 	!********
 
@@ -240,7 +265,8 @@ module core_m
 
 		type(text_context_t) :: context
 
-		type(variable_dictionary_t) :: variables
+		!type(variable_dictionary_t) :: variables
+		type(variable_dictionaries_t) :: variables
 
 		contains
 			procedure :: match, tokens_str, current_kind, &
@@ -279,7 +305,7 @@ contains
 
 function variable_search(dictionary, key, iostat) result(val)
 
-	class(variable_dictionary_t), intent(in) :: dictionary
+	class(variable_dictionaries_t), intent(in) :: dictionary
 	character(len = *), intent(in) :: key
 	type(value_t) :: val
 
@@ -287,9 +313,20 @@ function variable_search(dictionary, key, iostat) result(val)
 
 	!********
 
-	integer :: io
+	integer :: i, io
 
-	val = ternary_search(dictionary%root, key, io)
+	i = dictionary%scope
+
+	val = ternary_search(dictionary%dicts(i)%root, key, io)
+
+	! TODO: if not found in current scope, search parent scopes too!  Does
+	! insert need new logic?  Make sure to increment/decrement scope when
+	! pushing/popping blocks, both in the parser and the evaluator.  For loops
+	! should get an extra level of scope too for their auto declared loop
+	! iterator, regardless of whether they are single-statement loops or block
+	! loops.  Check scope_max overflow or use lined list or growable array
+	! before merging
+
 	if (present(iostat)) iostat = io
 
 end function variable_search
@@ -364,7 +401,7 @@ subroutine variable_insert(dictionary, key, val, iostat, overwrite)
 	!     insert/delete implementation and for moving the dictionary without
 	!     copying in syntax_parse()
 
-	class(variable_dictionary_t) :: dictionary
+	class(variable_dictionaries_t) :: dictionary
 	character(len = *), intent(in) :: key
 	type(value_t), intent(in) :: val
 
@@ -373,7 +410,7 @@ subroutine variable_insert(dictionary, key, val, iostat, overwrite)
 
 	!********
 
-	integer :: io
+	integer :: i, io
 	logical :: overwritel
 
 	!print *, 'inserting "', key, '"'
@@ -381,7 +418,9 @@ subroutine variable_insert(dictionary, key, val, iostat, overwrite)
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
-	call ternary_insert(dictionary%root, key, val, io, overwritel)
+	i = dictionary%scope
+
+	call ternary_insert(dictionary%dicts(i)%root, key, val, io, overwritel)
 	if (present(iostat)) iostat = io
 
 end subroutine variable_insert
@@ -1411,7 +1450,7 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 	type(syntax_token_t) :: token
 
-	type(variable_dictionary_t) :: variables, variables0
+	type(variable_dictionaries_t) :: variables, variables0
 
 	if (debug > 0) print *, 'syntax_parse'
 	if (debug > 1) print *, 'str = ', str
@@ -1435,7 +1474,7 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 	! constructor new_parser(), but it seems reasonable to do it here since it
 	! has to be moved back later.  The dictionary variables0 comes from the
 	! interactive interpreter's history, it has nothing to do with scoping
-	if (allocated(variables%root)) then
+	if (allocated(variables%dicts(1)%root)) then
 
 		if (allow_continuel) then
 			! Backup existing variables.  Only copy for interactive interpreter.
@@ -1448,12 +1487,14 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 			! The root type has an overloaded assignment op, but the variables
 			! type itself does not (and I don't want to expose or encourage
 			! copying)
-			allocate(variables0%root)
-			variables0%root = variables%root
+			allocate(variables0%dicts(1)%root)
+			variables0%dicts(1)%root = variables%dicts(1)%root
 
 		end if
 
-		call move_alloc(variables%root, parser%variables%root)
+		!! TODO: other scopes?  Only 1st one should matter from interpreter
+		!call move_alloc(variables%root, parser%variables%root)
+		call move_alloc(variables%dicts(1)%root, parser%variables%dicts(1)%root)
 
 	end if
 
@@ -1482,8 +1523,8 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 		!     a = 5;
 		!   //  ^ bad types
 
-		if (allocated(variables0%root)) then
-			call move_alloc(variables0%root, variables%root)
+		if (allocated(variables0%dicts(1)%root)) then
+			call move_alloc(variables0%dicts(1)%root, variables%dicts(1)%root)
 		end if
 
 		return
@@ -1497,8 +1538,8 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 	! Move back.  It's possible that vars were empty before this call but not
 	! anymore
-	if (allocated(parser%variables%root)) then
-		call move_alloc(parser%variables%root, variables%root)
+	if (allocated(parser%variables%dicts(1)%root)) then
+		call move_alloc(parser%variables%dicts(1)%root, variables%dicts(1)%root)
 	end if
 
 	if (debug > 0) print *, 'done syntax_parse'
@@ -2510,7 +2551,7 @@ recursive function syntax_eval(node, variables) result(res)
 	! I don't want to make this arg optional, because then it would require
 	! copying a potentially large struct to a local var without fancy use of
 	! move_alloc()
-	type(variable_dictionary_t) :: variables
+	type(variable_dictionaries_t) :: variables
 
 	type(value_t) :: res
 
@@ -2528,7 +2569,7 @@ recursive function syntax_eval(node, variables) result(res)
 
 	! TODO: as an optimization, convert the variables dictionary into an array
 	! by traversing the dictionary ternary tree and setting
-	! a node%identifier%index for each node%identifier%text.  Save the value_t
+	! a node%ident_index for each node%identifier%text.  Save the value_t
 	! for each index in an array and then quickly look it up in the array
 	! instead of calling dictionary methods %search() and %insert().
 	!
