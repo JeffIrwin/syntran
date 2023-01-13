@@ -38,7 +38,7 @@ jobs:
     - name: Build
       run: |
         #export OMP_NUM_THREADS=1
-        bash debug ./build.sh
+        bash ./build.sh debug
         #ls -ltrh build/
 
     - if: matrix.os != 'windows-latest'
@@ -51,7 +51,7 @@ jobs:
     - if: matrix.os != 'windows-latest'
       name: Test release
       run: |
-        bash release ./build.sh
+        bash ./build.sh release
         time ./build/test
 
     #- if: matrix.os == 'windows-latest'
