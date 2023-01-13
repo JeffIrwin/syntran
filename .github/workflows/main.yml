@@ -38,13 +38,20 @@ jobs:
     - name: Build
       run: |
         #export OMP_NUM_THREADS=1
-        bash ./build.sh
+        bash debug ./build.sh
         #ls -ltrh build/
+
     - if: matrix.os != 'windows-latest'
-      name: Test
+      name: Test debug
       run: |
         ./build/syntran < samples/arithmetic.syntran
         #./build/syntran < samples/bad-syntax.syntran
+        time ./build/test
+
+    - if: matrix.os != 'windows-latest'
+      name: Test release
+      run: |
+        bash release ./build.sh
         time ./build/test
 
     #- if: matrix.os == 'windows-latest'
