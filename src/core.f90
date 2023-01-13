@@ -29,16 +29,8 @@ module core_m
 	!
 	! Add:
 	!  - block scoping
-	!    * maintain a list (array? linked?) of variable dictionaries. when
-	!      pushing a new scope `{`, push a new dict to the last and copy all
-	!      vars from previous dict.  when popping out of a scope `}`, pop the
-	!      local dict to delete local vars, but traverse it first and copy all
-	!      (updated) values into the previous dict. could add a logical member
-	!      to dict val to flag if it has been updated locally, but that may be
-	!      a premature optimization
-	!    * copying may not be required if I implement shadowing
-	!    * for loop iterators should also be local to their block unless
-	!      previously declared
+	!    * auto-declare for loop iterators in their own scope.  This is
+	!      consistent with rust
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
@@ -217,33 +209,34 @@ module core_m
 
 	!********
 
-	type variable_dictionary_t
+	type var_dict_t
+		! This is the variable dictionary of a single scope
 		type(ternary_tree_node_t), allocatable :: root
-	end type variable_dictionary_t
+	end type var_dict_t
 
 	!********
 
 	! Fixed-size limit to the scope level for now, while I work on scoping
 	integer, parameter :: scope_max = 64
 
-	type variable_dictionaries_t
+	type var_dicts_t
 		! This type is a list of variable dictionaries for each scope level
 
-		type(variable_dictionary_t) :: dicts(scope_max)
+		type(var_dict_t) :: dicts(scope_max)
 
 		! This is the scope level.  Each nested block statement that is entered
 		! pushes 1 to scope.  Popping out of a block decrements the scope.
-		! Each scope level has its own variable dictionary in dicts(:)
+		! Each scope level has its own variable dict in dicts(:)
 		integer :: scope = 1
 
 		contains
 			procedure :: &
-				insert => variable_insert, &
-				search => variable_search, &
-				search_insert => variable_search_insert, &
+				insert => var_insert, &
+				search => var_search, &
+				search_insert => var_search_insert, &
 				push_scope, pop_scope
 
-	end type variable_dictionaries_t
+	end type var_dicts_t
 
 	!********
 
@@ -263,8 +256,7 @@ module core_m
 
 		type(text_context_t) :: context
 
-		!type(variable_dictionary_t) :: variables
-		type(variable_dictionaries_t) :: variables
+		type(var_dicts_t) :: vars
 
 		contains
 			procedure :: match, tokens_str, current_kind, &
@@ -301,9 +293,9 @@ contains
 
 !===============================================================================
 
-function variable_search(dictionary, key, iostat) result(val)
+function var_search(dict, key, iostat) result(val)
 
-	class(variable_dictionaries_t), intent(in) :: dictionary
+	class(var_dicts_t), intent(in) :: dict
 	character(len = *), intent(in) :: key
 	type(value_t) :: val
 
@@ -313,26 +305,19 @@ function variable_search(dictionary, key, iostat) result(val)
 
 	integer :: i, io
 
-	i = dictionary%scope
+	i = dict%scope
 
-	val = ternary_search(dictionary%dicts(i)%root, key, io)
+	val = ternary_search(dict%dicts(i)%root, key, io)
 
-	! TODO: if not found in current scope, search parent scopes too!  Does
-	! insert need new logic?  Make sure to increment/decrement scope when
-	! pushing/popping blocks, both in the parser and the evaluator.  For loops
-	! should get an extra level of scope too for their auto declared loop
-	! iterator, regardless of whether they are single-statement loops or block
-	! loops.  Check scope_max overflow or use lined list or growable array
-	! before merging
-
+	! If not found in current scope, search parent scopes too
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		val = ternary_search(dictionary%dicts(i)%root, key, io)
+		val = ternary_search(dict%dicts(i)%root, key, io)
 	end do
 
 	if (present(iostat)) iostat = io
 
-end function variable_search
+end function var_search
 
 !===============================================================================
 
@@ -390,21 +375,21 @@ end function ternary_search
 
 !===============================================================================
 
-subroutine variable_insert(dictionary, key, val, iostat, overwrite)
+subroutine var_insert(dict, key, val, iostat, overwrite)
 
 	! There are a couple reasons for having this wrapper:
 	!
-	!   - dictionary is not allocatable, while dictionary%root is.  type-bound
+	!   - dict is not allocatable, while dict%root is.  type-bound
 	!     methods are not allowed for allocatable types
-	!   - it's an abstraction away from the dictionary implementation.
-	!     currently I'm using a ternary tree, but the dictionary could
+	!   - it's an abstraction away from the dict implementation.
+	!     currently I'm using a ternary tree, but the dict could
 	!     alternatively be implemented using another data structure like a trie
 	!     or a radix tree
 	!   - having an allocatable root is helpful both for the ternary
-	!     insert/delete implementation and for moving the dictionary without
+	!     insert/delete implementation and for moving the dict without
 	!     copying in syntax_parse()
 
-	class(variable_dictionaries_t) :: dictionary
+	class(var_dicts_t) :: dict
 	character(len = *), intent(in) :: key
 	type(value_t), intent(in) :: val
 
@@ -421,35 +406,22 @@ subroutine variable_insert(dictionary, key, val, iostat, overwrite)
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
-	!if (.not. overwrite) then
-		i = dictionary%scope
-		call ternary_insert(dictionary%dicts(i)%root, key, val, io, overwritel)
-	!end if
-
-	! TODO: do we need more modes than just overwrite or not overwrite?  With
-	! scopes, this should be the logic:
-	!
-	!   - let statements insert in the current scope with overwrite = false
-	!   - assignment statements search parent scopes until the identifier key is
-	!     found, then insert it into that scope (overwrite true)
-	!   - parser needs to check io for assignments in case the identifier has
-	!     not been declared in any scope
-	!   - maybe split into two functions for let vs assign? or not, I think just
-	!     the two existing modes should do it
+	i = dict%scope
+	call ternary_insert(dict%dicts(i)%root, key, val, io, overwritel)
 
 	if (present(iostat)) iostat = io
 
-end subroutine variable_insert
+end subroutine var_insert
 
 !===============================================================================
 
-subroutine variable_search_insert(dictionary, key, val, iostat)
+subroutine var_search_insert(dict, key, val, iostat)
 
 	! First search for the scope that contains key and then insert its val into
 	! that scope.  Always overwrite with this method (unless the key hasn't been
 	! declared in any scope)
 
-	class(variable_dictionaries_t) :: dictionary
+	class(var_dicts_t) :: dict
 	character(len = *), intent(in) :: key
 	type(value_t), intent(in) :: val
 
@@ -461,33 +433,36 @@ subroutine variable_search_insert(dictionary, key, val, iostat)
 	logical, parameter :: overwrite = .true.
 	type(value_t) :: dummy
 
-	i = dictionary%scope
+	i = dict%scope
 
-	dummy = ternary_search(dictionary%dicts(i)%root, key, io)
+	dummy = ternary_search(dict%dicts(i)%root, key, io)
 
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		dummy = ternary_search(dictionary%dicts(i)%root, key, io)
+		dummy = ternary_search(dict%dicts(i)%root, key, io)
 	end do
 
 	if (io == exit_success) then
-		call ternary_insert(dictionary%dicts(i)%root, key, val, io, overwrite)
+		! This could be optimized by inserting on the same tree walk that
+		! searches.  However, switching to arrays during evaluation is a bigger
+		! optimization
+		call ternary_insert(dict%dicts(i)%root, key, val, io, overwrite)
 	end if
 
 	if (present(iostat)) iostat = io
 
-end subroutine variable_search_insert
+end subroutine var_search_insert
 
 !===============================================================================
 
-subroutine push_scope(dictionary)
+subroutine push_scope(dict)
 
-	class(variable_dictionaries_t) :: dictionary
+	class(var_dicts_t) :: dict
 
-	dictionary%scope = dictionary%scope + 1
+	dict%scope = dict%scope + 1
 
 	! TODO
-	if (dictionary%scope > scope_max) then
+	if (dict%scope > scope_max) then
 		write(*,*) 'Error: too many nested blocks > '//str(scope_max)
 		call internal_error()
 	end if
@@ -496,26 +471,26 @@ end subroutine push_scope
 
 !===============================================================================
 
-subroutine pop_scope(dictionary)
+subroutine pop_scope(dict)
 
-	class(variable_dictionaries_t) :: dictionary
+	class(var_dicts_t) :: dict
 
 	integer :: i
 
-	i = dictionary%scope
+	i = dict%scope
 
-	! It's possible that a scope may not have any local vars, so its dictionary
+	! It's possible that a scope may not have any local vars, so its dict
 	! is not allocated
-	if (allocated(dictionary%dicts(i)%root)) then
+	if (allocated(dict%dicts(i)%root)) then
 		! Does this automatically deallocate children? (mid, left, right)  May
 		! need recursive deep destructor
-		deallocate(dictionary%dicts(i)%root)
+		deallocate(dict%dicts(i)%root)
 	end if
 
-	dictionary%scope = dictionary%scope - 1
+	dict%scope = dict%scope - 1
 
 	! The parser should catch an unexpected `}`
-	if (dictionary%scope < 1) then
+	if (dict%scope < 1) then
 		write(*,*) 'Error: scope stack is empty'
 		call internal_error()
 	end if
@@ -572,7 +547,7 @@ recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 	! a separate logical member to node for this instead if needed
 
 	! This is not necessarily a failure unless we don't want to overwrite.  In
-	! the evaluator, we will insert values for variables which have already been
+	! the evaluator, we will insert values for vars which have already been
 	! declared
 	if (allocated(node%val) .and. .not. overwrite) then
 		!print *, 'key already inserted'
@@ -595,7 +570,7 @@ recursive subroutine ternary_tree_copy(dst, src)
 	! source, they will be gone!
 	!
 	! This should be avoided for efficient compilation, but the interactive
-	! interpreter uses it to backup and restore the variable dictionary for
+	! interpreter uses it to backup and restore the variable dict for
 	! partially-evaluated continuation lines
 
 	class(ternary_tree_node_t), intent(inout) :: dst
@@ -1529,7 +1504,7 @@ end function tokens_str
 
 !===============================================================================
 
-function syntax_parse(str, variables, src_file, allow_continue) result(tree)
+function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 
 	character(len = *) :: str
 
@@ -1549,7 +1524,7 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 	type(syntax_token_t) :: token
 
-	type(variable_dictionaries_t) :: variables, variables0
+	type(var_dicts_t) :: vars, vars0
 
 	if (debug > 0) print *, 'syntax_parse'
 	if (debug > 1) print *, 'str = ', str
@@ -1569,31 +1544,31 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 		return
 	end if
 
-	! Point parser member to variables dictionary.  This could be done in the
+	! Point parser member to vars dict.  This could be done in the
 	! constructor new_parser(), but it seems reasonable to do it here since it
-	! has to be moved back later.  The dictionary variables0 comes from the
+	! has to be moved back later.  The dict vars0 comes from the
 	! interactive interpreter's history, it has nothing to do with scoping
-	if (allocated(variables%dicts(1)%root)) then
+	if (allocated(vars%dicts(1)%root)) then
 
 		if (allow_continuel) then
-			! Backup existing variables.  Only copy for interactive interpreter.
+			! Backup existing vars.  Only copy for interactive interpreter.
 			! This logic is slightly redundant as allow_continuel should _only_
 			! be set true for the interactive interpreter with stdin, which is
-			! also the only case where variables%root will be allocated.
+			! also the only case where vars%root will be allocated.
 			! Calling syntran_interpret() on a multi-line string is deprecated,
 			! since syntran_eval() can parse it all in one syntax_parse() call.
 
-			! The root type has an overloaded assignment op, but the variables
+			! The root type has an overloaded assignment op, but the vars
 			! type itself does not (and I don't want to expose or encourage
 			! copying)
-			allocate(variables0%dicts(1)%root)
-			variables0%dicts(1)%root = variables%dicts(1)%root
+			allocate(vars0%dicts(1)%root)
+			vars0%dicts(1)%root = vars%dicts(1)%root
 
 		end if
 
-		!! TODO: other scopes?  Only 1st one should matter from interpreter
-		!call move_alloc(variables%root, parser%variables%root)
-		call move_alloc(variables%dicts(1)%root, parser%variables%dicts(1)%root)
+		! TODO: other scopes?  Only 1st one should matter from interpreter.  It
+		! doesn't evaluate until the block is finished
+		call move_alloc(vars%dicts(1)%root, parser%vars%dicts(1)%root)
 
 	end if
 
@@ -1622,8 +1597,8 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 		!     a = 5;
 		!   //  ^ bad types
 
-		if (allocated(variables0%dicts(1)%root)) then
-			call move_alloc(variables0%dicts(1)%root, variables%dicts(1)%root)
+		if (allocated(vars0%dicts(1)%root)) then
+			call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
 		end if
 
 		return
@@ -1637,8 +1612,8 @@ function syntax_parse(str, variables, src_file, allow_continue) result(tree)
 
 	! Move back.  It's possible that vars were empty before this call but not
 	! anymore
-	if (allocated(parser%variables%dicts(1)%root)) then
-		call move_alloc(parser%variables%dicts(1)%root, variables%dicts(1)%root)
+	if (allocated(parser%vars%dicts(1)%root)) then
+		call move_alloc(parser%vars%dicts(1)%root, vars%dicts(1)%root)
 	end if
 
 	if (debug > 0) print *, 'done syntax_parse'
@@ -1717,7 +1692,7 @@ function parse_for_statement(parser) result(statement)
 
 	for_token  = parser%match(for_keyword)
 
-	call parser%variables%push_scope()
+	call parser%vars%push_scope()
 
 	! TODO: auto declare loop iterator in for statement (HolyC doesn't let
 	! you do that!).  Do not require 'let' keyword:
@@ -1764,7 +1739,7 @@ function parse_for_statement(parser) result(statement)
 
 	body = parser%parse_statement()
 
-	call parser%variables%pop_scope()
+	call parser%vars%pop_scope()
 
 	allocate(statement%lbound, statement%ubound, statement%body)
 
@@ -1902,7 +1877,7 @@ function parse_block_statement(parser) result(block)
 
 	left  = parser%match(lbrace_token)
 
-	call parser%variables%push_scope()
+	call parser%vars%push_scope()
 
 	do while ( &
 		parser%current_kind() /= eof_token .and. &
@@ -1922,7 +1897,7 @@ function parse_block_statement(parser) result(block)
 
 	end do
 
-	call parser%variables%pop_scope()
+	call parser%vars%pop_scope()
 
 	right = parser%match(rbrace_token)
 
@@ -1994,9 +1969,9 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
-		! Insert the identifier's type into the dictionary and check that it
+		! Insert the identifier's type into the dict and check that it
 		! hasn't already been declared
-		call parser%variables%insert(identifier%text, expr%val, &
+		call parser%vars%insert(identifier%text, expr%val, &
 			io, overwrite = .false.)
 
 		!print *, 'io = ', io
@@ -2024,12 +1999,12 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
-		! Get the identifier's type from the dictionary and check that it has
+		! Get the identifier's type from the dict and check that it has
 		! been declared
 		!
 		! TODO: with scoping now, add "in this scope" to undeclare/redeclare err
 		! messages
-		expr%val = parser%variables%search(identifier%text, io)
+		expr%val = parser%vars%search(identifier%text, io)
 		if (io /= exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
@@ -2333,7 +2308,7 @@ function parse_primary_expr(parser) result(expr)
 
 			!print *, 'searching'
 			expr = new_name_expr(identifier, &
-				parser%variables%search(identifier%text, io))
+				parser%vars%search(identifier%text, io))
 
 			if (io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
@@ -2648,14 +2623,14 @@ end function next_parser_token
 
 !===============================================================================
 
-recursive function syntax_eval(node, variables) result(res)
+recursive function syntax_eval(node, vars) result(res)
 
 	type(syntax_node_t) :: node
 
 	! I don't want to make this arg optional, because then it would require
 	! copying a potentially large struct to a local var without fancy use of
 	! move_alloc()
-	type(variable_dictionaries_t) :: variables
+	type(var_dicts_t) :: vars
 
 	type(value_t) :: res
 
@@ -2671,11 +2646,11 @@ recursive function syntax_eval(node, variables) result(res)
 
 	!********
 
-	! TODO: as an optimization, convert the variables dictionary into an array
-	! by traversing the dictionary ternary tree and setting
+	! TODO: as an optimization, convert the vars dict into an array
+	! by traversing the dict ternary tree and setting
 	! a node%ident_index for each node%identifier%text.  Save the value_t
 	! for each index in an array and then quickly look it up in the array
-	! instead of calling dictionary methods %search() and %insert().
+	! instead of calling dict methods %search() and %insert().
 	!
 	! Do this here?  Could add a node%is_root bool, as we should only do it once
 	! per tree.  Or it could be done at the end of syntax_parse() or in between
@@ -2698,65 +2673,65 @@ recursive function syntax_eval(node, variables) result(res)
 
 	case (for_statement)
 
-		lbound = syntax_eval(node%lbound, variables)
-		ubound = syntax_eval(node%ubound, variables)
+		lbound = syntax_eval(node%lbound, vars)
+		ubound = syntax_eval(node%ubound, vars)
 
-		! push scope in case the loop iterator is local to the loop
-		call variables%push_scope()
+		! push scope to make the loop iterator local
+		call vars%push_scope()
 
 		ival%kind = num_expr
 		do i = lbound%ival, ubound%ival - 1
 			ival%ival = i
-			call variables%insert(node%identifier%text, ival)
-			res = syntax_eval(node%body, variables)
+			call vars%insert(node%identifier%text, ival)
+			res = syntax_eval(node%body, vars)
 		end do
 
-		call variables%pop_scope()
+		call vars%pop_scope()
 
 	case (while_statement)
 
-		condition = syntax_eval(node%condition, variables)
+		condition = syntax_eval(node%condition, vars)
 		do while (condition%bval)
-			res = syntax_eval(node%body, variables)
-			condition = syntax_eval(node%condition, variables)
+			res = syntax_eval(node%body, vars)
+			condition = syntax_eval(node%condition, vars)
 		end do
 
 	case (if_statement)
 
-		condition = syntax_eval(node%condition, variables)
+		condition = syntax_eval(node%condition, vars)
 		!print *, 'condition = ', condition%str()
 
 		if (condition%bval) then
-			res = syntax_eval(node%if_clause, variables)
+			res = syntax_eval(node%if_clause, vars)
 
 		else if (allocated(node%else_clause)) then
-			res = syntax_eval(node%else_clause, variables)
+			res = syntax_eval(node%else_clause, vars)
 
 		end if
 
 	case (block_statement)
 
-		call variables%push_scope()
+		call vars%push_scope()
 
 		! The final statement of a block returns the actual result.  Non-final
-		! statements only change the (variables) state.
+		! statements only change the (vars) state.
 		do i = 1, size(node%statements)
-			res = syntax_eval(node%statements(i), variables)
+			res = syntax_eval(node%statements(i), vars)
 			!print *, i, ' res = ', res%str()
 		end do
 
-		call variables%pop_scope()
+		call vars%pop_scope()
 
 	case (assignment_expr)
 
 		! Assign return value
-		res = syntax_eval(node%right, variables)
+		res = syntax_eval(node%right, vars)
 
 		! Assign res to LHS identifier variable as well.  This inserts the
 		! value, while the insert call in the parser inserts the type
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
-		call variables%search_insert(node%identifier%text, res)
+		call vars%search_insert(node%identifier%text, res)
 
 		! The difference between let and assign is inserting into the current
 		! scope (let) vs possibly searching parent scopes (assign)
@@ -2764,18 +2739,18 @@ recursive function syntax_eval(node, variables) result(res)
 	case (let_expr)
 
 		! Assign return value
-		res = syntax_eval(node%right, variables)
+		res = syntax_eval(node%right, vars)
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
-		call variables%insert(node%identifier%text, res)
+		call vars%insert(node%identifier%text, res)
 
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
-		res = variables%search(node%identifier%text)
+		res = vars%search(node%identifier%text)
 
 	case (unary_expr)
 
-		right = syntax_eval(node%right, variables)
+		right = syntax_eval(node%right, vars)
 		!print *, 'right = ', right
 
 		res%kind = right%kind
@@ -2799,8 +2774,8 @@ recursive function syntax_eval(node, variables) result(res)
 
 	case (binary_expr)
 
-		left  = syntax_eval(node%left , variables)
-		right = syntax_eval(node%right, variables)
+		left  = syntax_eval(node%left , vars)
+		right = syntax_eval(node%right, vars)
 
 		!print *, 'left  = ', left
 		!print *, 'right = ', right

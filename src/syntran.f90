@@ -53,7 +53,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 	type(syntax_node_t) :: compilation
 	type(value_t) :: res
-	type(variable_dictionaries_t) :: variables
+	type(var_dicts_t) :: vars
 
 	!print *, 'starting syntran_interpret()'
 
@@ -123,7 +123,7 @@ function syntran_interpret(str, quiet) result(res_str)
 		!
 		! More directives:
 		!   - #help
-		!   - #reset or #clear to clear variables
+		!   - #reset or #clear to clear vars
 		!   - #hint to toggle hint
 
 		if (line == '#tree') then
@@ -132,13 +132,13 @@ function syntran_interpret(str, quiet) result(res_str)
 		end if
 
 		res_str = ' '
-		compilation = syntax_parse(line, variables, src_file, allow_cont)
+		compilation = syntax_parse(line, vars, src_file, allow_cont)
 		!print *, 'in interpreter'
 
 		!print *, 'compilation%expecting = ', compilation%expecting
 
-		!print *, 'allocated(variables%dicts(1)%root) = ', &
-		!	allocated(variables%dicts(1)%root)
+		!print *, 'allocated(vars%dicts(1)%root) = ', &
+		!	allocated(vars%dicts(1)%root)
 
 		! Continue current parse with next line since more chars are expected
 		cont = compilation%expecting
@@ -159,7 +159,7 @@ function syntran_interpret(str, quiet) result(res_str)
 		! Don't try to evaluate with errors
 		if (compilation%diagnostics%len > 0) cycle
 
-		res  = syntax_eval(compilation, variables)
+		res  = syntax_eval(compilation, vars)
 
 		! Consider MATLAB-style "ans = " log?
 		res_str = res%str()
@@ -212,9 +212,9 @@ integer function syntran_eval_int(str) result(eval_int)
 
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
-	type(variable_dictionaries_t) :: variables
+	type(var_dicts_t) :: vars
 
-	tree = syntax_parse(str, variables)
+	tree = syntax_parse(str, vars)
 	call tree%log_diagnostics()
 
 	if (tree%diagnostics%len > 0) then
@@ -223,7 +223,7 @@ integer function syntran_eval_int(str) result(eval_int)
 		return
 	end if
 
-	val = syntax_eval(tree, variables)
+	val = syntax_eval(tree, vars)
 
 	! TODO: check kind, add optional iostat arg
 	eval_int = val%ival
@@ -250,7 +250,7 @@ function syntran_eval(str, quiet, src_file) result(res)
 
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
-	type(variable_dictionaries_t) :: variables
+	type(var_dicts_t) :: vars
 
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
@@ -260,11 +260,11 @@ function syntran_eval(str, quiet, src_file) result(res)
 
 	!! One-liner, but no error handling.  This can crash unit tests without
 	!! reporting failures
-	!eval = syntax_eval(syntax_parse(str, variables), variables)
+	!eval = syntax_eval(syntax_parse(str, vars), vars)
 
 	! TODO: make a helper fn here that all the eval_* fns use
 
-	tree = syntax_parse(str, variables, src_filel)
+	tree = syntax_parse(str, vars, src_filel)
 	if (.not. quietl) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len > 0) then
@@ -272,7 +272,7 @@ function syntran_eval(str, quiet, src_file) result(res)
 		return
 	end if
 
-	val = syntax_eval(tree, variables)
+	val = syntax_eval(tree, vars)
 	res = val%str()
 
 end function syntran_eval
