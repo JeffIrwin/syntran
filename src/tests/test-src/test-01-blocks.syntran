@@ -44,6 +44,7 @@
 
 	// Final result
 	p and not q and foo + bar == baz;
+	// true
 
 }
 

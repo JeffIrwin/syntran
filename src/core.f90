@@ -219,11 +219,6 @@ module core_m
 
 	type variable_dictionary_t
 		type(ternary_tree_node_t), allocatable :: root
-		!contains
-		!	procedure :: &
-		!		insert => variable_insert, &
-		!		search => variable_search !, &
-		!		!copy   => variable_
 	end type variable_dictionary_t
 
 	!********
