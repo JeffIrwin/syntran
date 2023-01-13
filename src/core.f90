@@ -144,6 +144,14 @@ module core_m
 
 		type(syntax_node_t), allocatable :: lbound, ubound
 
+		! TODO: for var dict/array optimization, add a member "id_index" to
+		! parser.  Each time a "let" statement is parsed (or a foor loop),
+		! increment the id_index and store the index node (in the node type or
+		! in the dict?).  At the end of parsing, allocate an array of vals and
+		! copy from dict into array.  Will a single rank-1 array work with
+		! scoping or does there need to be a separate array for each scope
+		! level?
+
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
 

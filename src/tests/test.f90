@@ -479,7 +479,7 @@ subroutine unit_test_while(npass, nfail)
 	character(len = *), parameter :: label = 'while loops'
 
 	! Path to syntran test files from root of repo
-	character(len = *), parameter :: path = 'src/tests/test-src/'
+	character(len = *), parameter :: path = 'src/tests/test-src/while-loops/'
 
 	logical, allocatable :: tests(:)
 
@@ -487,15 +487,13 @@ subroutine unit_test_while(npass, nfail)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests
-	!
-	! Organize syntran test src files into another level of folders
 
 	tests = &
 		[   &
-			interpret_file(path//'test-01-while.syntran') == '0', &
-			interpret_file(path//'test-02-while.syntran') == '1', &
-			interpret_file(path//'test-03-while.syntran') == '5050', &
-			interpret_file(path//'test-04-while.syntran') == '9973', &
+			interpret_file(path//'test-01.syntran') == '0', &
+			interpret_file(path//'test-02.syntran') == '1', &
+			interpret_file(path//'test-03.syntran') == '5050', &
+			interpret_file(path//'test-04.syntran') == '9973', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -508,7 +506,7 @@ end subroutine unit_test_while
 
 !===============================================================================
 
-subroutine unit_test_scopes(npass, nfail)
+subroutine unit_test_var_scopes(npass, nfail)
 
 	implicit none
 
@@ -519,7 +517,7 @@ subroutine unit_test_scopes(npass, nfail)
 	character(len = *), parameter :: label = 'variable scoping'
 
 	! Path to syntran test files from root of repo
-	character(len = *), parameter :: path = 'src/tests/test-src/'
+	character(len = *), parameter :: path = 'src/tests/test-src/var-scopes/'
 
 	logical, allocatable :: tests(:)
 
@@ -527,12 +525,10 @@ subroutine unit_test_scopes(npass, nfail)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests
-	!
-	! Organize syntran test src files into another level of folders
 
 	tests = &
 		[   &
-			interpret_file(path//'test-01-scopes.syntran') == 'true', &
+			interpret_file(path//'test-01.syntran') == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -541,7 +537,7 @@ subroutine unit_test_scopes(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_scopes
+end subroutine unit_test_var_scopes
 
 !===============================================================================
 
@@ -677,7 +673,7 @@ subroutine unit_tests(iostat)
 	call unit_test_if_else    (npass, nfail)
 	call unit_test_for        (npass, nfail)
 	call unit_test_while      (npass, nfail)
-	call unit_test_scopes     (npass, nfail)
+	call unit_test_var_scopes (npass, nfail)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)
