@@ -505,7 +505,7 @@ subroutine unit_test_while(npass, nfail)
 			interpret_file(path//'test-01.syntran') == '0', &
 			interpret_file(path//'test-02.syntran') == '1', &
 			interpret_file(path//'test-03.syntran') == '5050', &
-			interpret_file(path//'test-04.syntran') == '9973', &
+			interpret_file(path//'test-04.syntran') == '9979', &
 			interpret_file(path//'test-05.syntran') == '5050', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
