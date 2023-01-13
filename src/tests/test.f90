@@ -209,6 +209,18 @@ subroutine unit_test_comparisons(npass, nfail)
 			eval('12    != 36/3 ;')  == 'false',  &
 			eval('true  != true ;')  == 'false',  &
 			eval('false != true ;')  == 'true' ,  &
+			eval('1337  < 1338  ;')  == 'true' ,  &
+			eval('1337  < 1337  ;')  == 'false',  &
+			eval('1337  < 1336  ;')  == 'false',  &
+			eval('1337 <= 1338  ;')  == 'true' ,  &
+			eval('1337 <= 1337  ;')  == 'true' ,  &
+			eval('1337 <= 1336  ;')  == 'false',  &
+			eval('1337  > 1338  ;')  == 'false',  &
+			eval('1337  > 1337  ;')  == 'false',  &
+			eval('1337  > 1336  ;')  == 'true' ,  &
+			eval('1337 >= 1338  ;')  == 'false',  &
+			eval('1337 >= 1337  ;')  == 'true' ,  &
+			eval('1337 >= 1336  ;')  == 'true' ,  &
 			eval('true  == false;')  == 'false'   &
 		]
 
@@ -578,6 +590,11 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('true == 1', quiet) == '', &
 			eval('0 == false', quiet) == '', &
 			eval('0 != false', quiet) == '', &
+			eval('0  < false', quiet) == '', &
+			eval('0  > false', quiet) == '', &
+			eval('0 <= false', quiet) == '', &
+			eval('0 >= false', quiet) == '', &
+			eval('true >= false', quiet) == '', &
 			eval('1 + (2 == 3)', quiet) == '', &
 			interpret( &
 				'let a = 2;'// &

@@ -36,7 +36,6 @@ module core_m
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
-	!  - <, >, <=, >=
 	!  - functions
 	!  - arrays
 	!    * start with the way implicit arrays are handled as for loop iterators
@@ -52,51 +51,55 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
-			let_expr            = 45, &
-			while_statement     = 44, &
-			colon_token         = 43, &
-			for_statement       = 42, &
-			lbracket_token      = 41, &
-			rbracket_token      = 40, &
-			if_statement        = 39, &
-			while_keyword       = 38, &
-			in_keyword          = 37, &
-			for_keyword         = 36, &
-			else_keyword        = 35, &
-			if_keyword          = 34, &
-			semicolon_token     = 33, &
-			block_statement     = 32, &
-			expr_statement      = 31, &
-			lbrace_token        = 30, &
-			rbrace_token        = 29, &
-			sstar_token         = 28, &
-			let_keyword         = 27, &
-			name_expr           = 26, &
-			equals_token        = 25, & ! '='
-			assignment_expr     = 24, &
-			bang_equals_token   = 23, &
-			eequals_token       = 22, & ! '=='
-			and_keyword         = 21, &
-			or_keyword          = 20, &
-			not_keyword         = 19, &
-			bool_expr           = 18, &
-			literal_expr        = 17, &
-			true_keyword        = 16, &
-			false_keyword       = 15, &
-			identifier_token    = 14, &
-			unary_expr          = 13, &
-			lparen_token        = 12, &
-			rparen_token        = 11, &
-			num_expr            = 10, &
-			binary_expr         =  9, &
-			star_token          =  8, &
-			slash_token         =  7, &
-			bad_token           =  6, &
-			plus_token          =  5, &
-			minus_token         =  4, &
-			whitespace_token    =  3, &
-			num_token           =  2, &
-			eof_token           =  1
+			greater_equals_token = 49, &
+			greater_token        = 48, &
+			less_equals_token    = 47, &
+			less_token           = 46, &
+			let_expr             = 45, &
+			while_statement      = 44, &
+			colon_token          = 43, &
+			for_statement        = 42, &
+			lbracket_token       = 41, &
+			rbracket_token       = 40, &
+			if_statement         = 39, &
+			while_keyword        = 38, &
+			in_keyword           = 37, &
+			for_keyword          = 36, &
+			else_keyword         = 35, &
+			if_keyword           = 34, &
+			semicolon_token      = 33, &
+			block_statement      = 32, &
+			expr_statement       = 31, &
+			lbrace_token         = 30, &
+			rbrace_token         = 29, &
+			sstar_token          = 28, &
+			let_keyword          = 27, &
+			name_expr            = 26, &
+			equals_token         = 25, & ! '='
+			assignment_expr      = 24, &
+			bang_equals_token    = 23, &
+			eequals_token        = 22, & ! '=='
+			and_keyword          = 21, &
+			or_keyword           = 20, &
+			not_keyword          = 19, &
+			bool_expr            = 18, &
+			literal_expr         = 17, &
+			true_keyword         = 16, &
+			false_keyword        = 15, &
+			identifier_token     = 14, &
+			unary_expr           = 13, &
+			lparen_token         = 12, &
+			rparen_token         = 11, &
+			num_expr             = 10, &
+			binary_expr          =  9, &
+			star_token           =  8, &
+			slash_token          =  7, &
+			bad_token            =  6, &
+			plus_token           =  5, &
+			minus_token          =  4, &
+			whitespace_token     =  3, &
+			num_token            =  2, &
+			eof_token            =  1
 
 	! A note on naming: Immo calls '==' equals_equals_token, but I think that
 	! invites tab-completion mistakes so I went with eequals_token.  Same for
@@ -734,51 +737,55 @@ function kind_name(kind)
 	character(len = :), allocatable :: kind_name
 
 	character(len = *), parameter :: names(*) = [ &
-			"eof_token        ", & !  1
-			"num_token        ", & !  2
-			"whitespace_token ", & !  3
-			"minus_token      ", & !  4
-			"plus_token       ", & !  5
-			"bad_token        ", & !  6
-			"slash_token      ", & !  7
-			"star_token       ", & !  8
-			"binary_expr      ", & !  9
-			"num_expr         ", & ! 10
-			"rparen_token     ", & ! 11
-			"lparen_token     ", & ! 12
-			"unary_expr       ", & ! 13
-			"identifier_token ", & ! 14
-			"false_keyword    ", & ! 15
-			"true_keyword     ", & ! 16
-			"literal_expr     ", & ! 17
-			"bool_expr        ", & ! 18
-			"not_keyword      ", & ! 19
-			"or_keyword       ", & ! 20
-			"and_keyword      ", & ! 21
-			"eequals_token    ", & ! 22
-			"bang_equals_token", & ! 23
-			"assignment_expr  ", & ! 24
-			"equals_token     ", & ! 25
-			"name_expr        ", & ! 26
-			"let_keyword      ", & ! 27
-			"sstar_token      ", & ! 28
-			"rbrace_token     ", & ! 29
-			"lbrace_token     ", & ! 30
-			"expr_statement   ", & ! 31
-			"block_statement  ", & ! 32
-			"semicolon_token  ", & ! 33
-			"if_keyword       ", & ! 34
-			"else_keyword     ", & ! 35
-			"for_keyword      ", & ! 36
-			"in_keyword       ", & ! 37
-			"while_keyword    ", & ! 38
-			"if_statement     ", & ! 39
-			"rbracket_token   ", & ! 40
-			"lbracket_token   ", & ! 41
-			"for_statement    ", & ! 42
-			"colon_token      ", & ! 43
-			"while_statement  ", & ! 44
-			"let_expr         "  & ! 45
+			"eof_token           ", & !  1
+			"num_token           ", & !  2
+			"whitespace_token    ", & !  3
+			"minus_token         ", & !  4
+			"plus_token          ", & !  5
+			"bad_token           ", & !  6
+			"slash_token         ", & !  7
+			"star_token          ", & !  8
+			"binary_expr         ", & !  9
+			"num_expr            ", & ! 10
+			"rparen_token        ", & ! 11
+			"lparen_token        ", & ! 12
+			"unary_expr          ", & ! 13
+			"identifier_token    ", & ! 14
+			"false_keyword       ", & ! 15
+			"true_keyword        ", & ! 16
+			"literal_expr        ", & ! 17
+			"bool_expr           ", & ! 18
+			"not_keyword         ", & ! 19
+			"or_keyword          ", & ! 20
+			"and_keyword         ", & ! 21
+			"eequals_token       ", & ! 22
+			"bang_equals_token   ", & ! 23
+			"assignment_expr     ", & ! 24
+			"equals_token        ", & ! 25
+			"name_expr           ", & ! 26
+			"let_keyword         ", & ! 27
+			"sstar_token         ", & ! 28
+			"rbrace_token        ", & ! 29
+			"lbrace_token        ", & ! 30
+			"expr_statement      ", & ! 31
+			"block_statement     ", & ! 32
+			"semicolon_token     ", & ! 33
+			"if_keyword          ", & ! 34
+			"else_keyword        ", & ! 35
+			"for_keyword         ", & ! 36
+			"in_keyword          ", & ! 37
+			"while_keyword       ", & ! 38
+			"if_statement        ", & ! 39
+			"rbracket_token      ", & ! 40
+			"lbracket_token      ", & ! 41
+			"for_statement       ", & ! 42
+			"colon_token         ", & ! 43
+			"while_statement     ", & ! 44
+			"let_expr            ", & ! 45
+			"less_token          ", & ! 46
+			"less_equals_token   ", & ! 47
+			"greater_token       ", & ! 48
+			"greater_equals_token"  & ! 49
 		]
 			! FIXME: update kind_tokens array too
 
@@ -844,7 +851,11 @@ function kind_token(kind)
 			"for                  ", & ! 42
 			":                    ", & ! 43
 			"while                ", & ! 44
-			"let expression       "  & ! 45
+			"let expression       ", & ! 45
+			"<                    ", & ! 46
+			"<=                   ", & ! 47
+			">                    ", & ! 48
+			">=                   "  & ! 49
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -1246,6 +1257,22 @@ function lex(lexer) result(token)
 					err_unexpected_char(lexer%context, &
 					span, lexer%current()))
 
+			end if
+
+		case ("<")
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(less_equals_token, lexer%pos, "<=")
+			else
+				token = new_token(less_token, lexer%pos, lexer%current())
+			end if
+
+		case (">")
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(greater_equals_token, lexer%pos, ">=")
+			else
+				token = new_token(greater_token, lexer%pos, lexer%current())
 			end if
 
 		case default
@@ -2133,7 +2160,9 @@ logical function is_binary_op_allowed(left, op, right)
 
 	select case (op)
 
-		case (plus_token, minus_token, sstar_token, star_token, slash_token)
+		case (plus_token, minus_token, sstar_token, star_token, slash_token, &
+				less_token   , less_equals_token, &
+				greater_token, greater_equals_token)
 			! FIXME: floats
 			is_binary_op_allowed = left == num_expr  .and. right == num_expr
 
@@ -2216,7 +2245,7 @@ integer function get_unary_op_prec(kind) result(prec)
 	select case (kind)
 
 		case (plus_token, minus_token, not_keyword)
-			prec = 7
+			prec = 8
 
 		case default
 			prec = 0
@@ -2240,13 +2269,19 @@ integer function get_binary_op_prec(kind) result(prec)
 		! FIXME: increment the unary operator precedence above after increasing
 		! the max binary precedence
 
+		! Follow C operator precedence here, except possible for bitwise and/or
+
 		case (sstar_token)
-			prec = 6
+			prec = 7
 
 		case (star_token, slash_token)
-			prec = 5
+			prec = 6
 
 		case (plus_token, minus_token)
+			prec = 5
+
+		case (less_token, less_equals_token, &
+				greater_token, greater_equals_token)
 			prec = 4
 
 		case (eequals_token, bang_equals_token)
@@ -2485,7 +2520,11 @@ integer function get_binary_op_kind(left, op, right)
 	integer, intent(in) :: left, op, right
 
 	! Comparison operations can take 2 numbers, but always return a bool
-	if (op == eequals_token .or. op == bang_equals_token) then
+	!
+	! TODO: select case
+	if (op == eequals_token .or. op == bang_equals_token .or. &
+		op == less_token    .or. op == less_equals_token .or. &
+		op == greater_token .or. op == greater_equals_token) then
 		!print *, 'bool_expr'
 		get_binary_op_kind = bool_expr
 		return
@@ -2842,6 +2881,38 @@ recursive function syntax_eval(node, vars) result(res)
 				res%bval = left%bval .neqv. right%bval
 			else if (left%kind == num_expr) then
 				res%bval = left%ival  /=   right%ival
+			else
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
+			end if
+
+		case (less_token)
+			if (left%kind == num_expr) then
+				res%bval = left%ival < right%ival
+			else
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
+			end if
+
+		case (less_equals_token)
+			if (left%kind == num_expr) then
+				res%bval = left%ival <= right%ival
+			else
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
+			end if
+
+		case (greater_token)
+			if (left%kind == num_expr) then
+				res%bval = left%ival > right%ival
+			else
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
+			end if
+
+		case (greater_equals_token)
+			if (left%kind == num_expr) then
+				res%bval = left%ival >= right%ival
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
