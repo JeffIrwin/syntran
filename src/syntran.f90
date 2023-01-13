@@ -53,7 +53,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 	type(syntax_node_t) :: compilation
 	type(value_t) :: res
-	type(variable_dictionary_t) :: variables
+	type(variable_dictionaries_t) :: variables
 
 	!print *, 'starting syntran_interpret()'
 
@@ -137,7 +137,8 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		!print *, 'compilation%expecting = ', compilation%expecting
 
-		!print *, 'allocated(variables%root) = ', allocated(variables%root)
+		!print *, 'allocated(variables%dicts(1)%root) = ', &
+		!	allocated(variables%dicts(1)%root)
 
 		! Continue current parse with next line since more chars are expected
 		cont = compilation%expecting
@@ -211,7 +212,7 @@ integer function syntran_eval_int(str) result(eval_int)
 
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
-	type(variable_dictionary_t) :: variables
+	type(variable_dictionaries_t) :: variables
 
 	tree = syntax_parse(str, variables)
 	call tree%log_diagnostics()
@@ -249,7 +250,7 @@ function syntran_eval(str, quiet, src_file) result(res)
 
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
-	type(variable_dictionary_t) :: variables
+	type(variable_dictionaries_t) :: variables
 
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
