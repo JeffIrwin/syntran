@@ -45,7 +45,7 @@ jobs:
       run: |
         ./build/syntran < samples/arithmetic.syntran
         #./build/syntran < samples/bad-syntax.syntran
-        ./build/test
+        time ./build/test
 
     #- if: matrix.os == 'windows-latest'
     #  shell: bash
