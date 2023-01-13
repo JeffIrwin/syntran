@@ -391,7 +391,8 @@ subroutine unit_test_if_else(npass, nfail)
 	character(len = *), parameter :: label = 'if/else statements'
 
 	! Path to syntran test files from root of repo
-	character(len = *), parameter :: path = 'src/tests/test-src/'
+	character(len = *), parameter :: &
+		path = 'src/tests/test-src/if-else-statements/'
 
 	logical, allocatable :: tests(:)
 
@@ -399,24 +400,23 @@ subroutine unit_test_if_else(npass, nfail)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests, and some bad syntax tests for interpret_file().
-	! Organize syntran test src files into another level of folders
 	!
 	! Eventually, do something like Immo's AssertDiagnostic() for bad syntax
 
 	tests = &
 		[   &
-			interpret_file(path//'test-01-blocks.syntran')  == 'true', &
-			interpret_file(path//'test-02-if.syntran')      == '2' , &
-			interpret_file(path//'test-03-if.syntran')      == '14', &
-			interpret_file(path//'test-04-if.syntran')      == '12', &
-			interpret_file(path//'test-05-else.syntran')    == '14', &
-			interpret_file(path//'test-06-else.syntran')    == '16', &
-			interpret_file(path//'test-07-else.syntran')    == '16', &
-			interpret_file(path//'test-08-else.syntran')    == '15', &
-			interpret_file(path//'test-09-else-if.syntran') == '20', &
-			interpret_file(path//'test-10-else-if.syntran') == '18', &
-			interpret_file(path//'test-11-else-if.syntran') == '16', &
-			interpret_file(path//'test-12-else-if.syntran') == '14', &
+			interpret_file(path//'test-01.syntran') == 'true', &
+			interpret_file(path//'test-02.syntran') == '2' , &
+			interpret_file(path//'test-03.syntran') == '14', &
+			interpret_file(path//'test-04.syntran') == '12', &
+			interpret_file(path//'test-05.syntran') == '14', &
+			interpret_file(path//'test-06.syntran') == '16', &
+			interpret_file(path//'test-07.syntran') == '16', &
+			interpret_file(path//'test-08.syntran') == '15', &
+			interpret_file(path//'test-09.syntran') == '20', &
+			interpret_file(path//'test-10.syntran') == '18', &
+			interpret_file(path//'test-11.syntran') == '16', &
+			interpret_file(path//'test-12.syntran') == '14', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -440,7 +440,7 @@ subroutine unit_test_for(npass, nfail)
 	character(len = *), parameter :: label = 'for loops'
 
 	! Path to syntran test files from root of repo
-	character(len = *), parameter :: path = 'src/tests/test-src/'
+	character(len = *), parameter :: path = 'src/tests/test-src/for-loops/'
 
 	logical, allocatable :: tests(:)
 
@@ -448,16 +448,14 @@ subroutine unit_test_for(npass, nfail)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests
-	!
-	! Organize syntran test src files into another level of folders
 
 	tests = &
 		[   &
-			interpret_file(path//'test-01-for.syntran') == '0', &
-			interpret_file(path//'test-02-for.syntran') == '5050', &
-			interpret_file(path//'test-03-for.syntran') == '1836311903', &
-			interpret_file(path//'test-04-for.syntran') == '97', &
-			interpret_file(path//'test-05-for.syntran') == '25', &
+			interpret_file(path//'test-01.syntran') == '0', &
+			interpret_file(path//'test-02.syntran') == '5050', &
+			interpret_file(path//'test-03.syntran') == '1836311903', &
+			interpret_file(path//'test-04.syntran') == '97', &
+			interpret_file(path//'test-05.syntran') == '25', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

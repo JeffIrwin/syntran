@@ -93,7 +93,7 @@ function syntran_interpret(str, quiet) result(res_str)
 				! compilation tree to append to the tree instead of appending
 				! characters.  This way seemed easier :shrug:
 
-				! TODO: add an option to hide expected char hint
+				! TODO: add a directive option to hide expected char hint
 
 				! Bash uses `$` for the inital prompt and `>` for continued
 				! prompts.  So do we
