@@ -478,7 +478,7 @@ subroutine unit_test_while(npass, nfail)
 
 	!********
 
-	character(len = *), parameter :: label = 'for loops'
+	character(len = *), parameter :: label = 'while loops'
 
 	! Path to syntran test files from root of repo
 	character(len = *), parameter :: path = 'src/tests/test-src/'
@@ -507,6 +507,43 @@ subroutine unit_test_while(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_while
+
+!===============================================================================
+
+subroutine unit_test_scopes(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'variable scoping'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*)
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: more tests
+	!
+	! Organize syntran test src files into another level of folders
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01-scopes.syntran') == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_scopes
 
 !===============================================================================
 
@@ -642,6 +679,7 @@ subroutine unit_tests(iostat)
 	call unit_test_if_else    (npass, nfail)
 	call unit_test_for        (npass, nfail)
 	call unit_test_while      (npass, nfail)
+	call unit_test_scopes     (npass, nfail)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)
