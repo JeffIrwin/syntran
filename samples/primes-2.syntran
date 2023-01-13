@@ -22,7 +22,7 @@
 
 		// This is another optimization.  We can break the inner loop
 		// after we find the first divisor
-		while j != i/2 + 1 and not is_composite
+		while j < i/2 + 1 and not is_composite
 		{
 			j = j + 1;
 

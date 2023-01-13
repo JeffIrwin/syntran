@@ -2515,29 +2515,32 @@ end function new_binary_expr
 
 integer function get_binary_op_kind(left, op, right)
 
-	! Is an operation allowed with kinds operator op and operand?
+	! Return the resulting type yielded by operator op on operands left and
+	! right
 
 	integer, intent(in) :: left, op, right
 
-	! Comparison operations can take 2 numbers, but always return a bool
-	!
-	! TODO: select case
-	if (op == eequals_token .or. op == bang_equals_token .or. &
-		op == less_token    .or. op == less_equals_token .or. &
-		op == greater_token .or. op == greater_equals_token) then
+	select case (op)
+	case ( &
+			eequals_token, bang_equals_token, less_token, less_equals_token, &
+			greater_token, greater_equals_token)
 		!print *, 'bool_expr'
+
+		! Comparison operations can take 2 numbers, but always return a bool
 		get_binary_op_kind = bool_expr
-		return
-	end if
-	!print *, 'default'
 
-	! Other operations return the same type as their operands
-	!
-	! FIXME: floats, int casting.  1 + 0.5 and 0.5 + 1 should both cast to
-	! float, not int.  That's why I'm passing right as an arg (but not using it
-	! yet)
+	case default
+		!print *, 'default'
 
-	get_binary_op_kind = left
+		! Other operations return the same type as their operands
+		!
+		! FIXME: floats, int casting.  1 + 0.5 and 0.5 + 1 should both cast to
+		! float, not int.  That's why I'm passing right as an arg (but not using
+		! it yet)
+
+		get_binary_op_kind = left
+
+	end select
 
 end function get_binary_op_kind
 
