@@ -79,7 +79,7 @@ module core_m
 			and_keyword          = 21, &
 			or_keyword           = 20, &
 			not_keyword          = 19, &
-			bool_expr            = 18, &
+			bool_type            = 18, &
 			literal_expr         = 17, &
 			true_keyword         = 16, &
 			false_keyword        = 15, &
@@ -87,7 +87,7 @@ module core_m
 			unary_expr           = 13, &
 			lparen_token         = 12, &
 			rparen_token         = 11, &
-			num_expr             = 10, &
+			i32_type             = 10, &
 			binary_expr          =  9, &
 			star_token           =  8, &
 			slash_token          =  7, &
@@ -95,7 +95,7 @@ module core_m
 			plus_token           =  5, &
 			minus_token          =  4, &
 			whitespace_token     =  3, &
-			num_token            =  2, &
+			i32_token            =  2, &
 			eof_token            =  1
 
 	! A note on naming: Immo calls '==' equals_equals_token, but I think that
@@ -106,9 +106,10 @@ module core_m
 
 	type value_t
 		! TODO: rename this kind to type?  Careful w/ search/replace
-		integer :: kind
-		logical :: bval
-		integer :: ival
+		!integer :: kind
+		integer :: type
+		logical :: bool
+		integer(kind = 4) :: i32
 		contains
 			procedure :: str => value_str
 	end type value_t
@@ -708,7 +709,7 @@ function kind_name(kind)
 
 	character(len = *), parameter :: names(*) = [ &
 			"eof_token           ", & !  1
-			"num_token           ", & !  2
+			"i32_token           ", & !  2
 			"whitespace_token    ", & !  3
 			"minus_token         ", & !  4
 			"plus_token          ", & !  5
@@ -716,7 +717,7 @@ function kind_name(kind)
 			"slash_token         ", & !  7
 			"star_token          ", & !  8
 			"binary_expr         ", & !  9
-			"num_expr            ", & ! 10
+			"i32_type            ", & ! 10
 			"rparen_token        ", & ! 11
 			"lparen_token        ", & ! 12
 			"unary_expr          ", & ! 13
@@ -724,7 +725,7 @@ function kind_name(kind)
 			"false_keyword       ", & ! 15
 			"true_keyword        ", & ! 16
 			"literal_expr        ", & ! 17
-			"bool_expr           ", & ! 18
+			"bool_type           ", & ! 18
 			"not_keyword         ", & ! 19
 			"or_keyword          ", & ! 20
 			"and_keyword         ", & ! 21
@@ -869,7 +870,7 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	identifier = ''
 
-	type  = indentl//'    type  = '//kind_name(node%val%kind)//line_feed
+	type  = indentl//'    type  = '//kind_name(node%val%type)//line_feed
 
 	! TODO: add str conversions for more recent kinds: condition, if_clause,
 	! etc.
@@ -1087,7 +1088,7 @@ function lex(lexer) result(token)
 	!********
 
 	integer :: kind
-	integer :: start, io, ival
+	integer :: start, io, i32
 
 	character(len = :), allocatable :: text
 
@@ -1103,20 +1104,22 @@ function lex(lexer) result(token)
 
 	if (is_digit(lexer%current())) then
 
+		! TODO: or [.e+-]?  If . is present, parse f32 instead of i32
+
 		do while (is_digit(lexer%current()))
 			lexer%pos = lexer%pos + 1
 		end do
 		text = lexer%text(start: lexer%pos-1)
 
-		read(text, *, iostat = io) ival
+		read(text, *, iostat = io) i32
 		if (io /= exit_success) then
 			span = new_span(start, len(text))
 			call lexer%diagnostics%push(err_bad_int( &
 				lexer%context, span, text))
 		end if
 
-		val = new_value(num_expr, ival = ival)
-		token = new_token(num_token, start, text, val)
+		val   = new_literal_value(i32_type, i32 = i32)
+		token = new_token(i32_token, start, text, val)
 		return
 
 	end if
@@ -1289,19 +1292,19 @@ end subroutine read_single_line_comment
 
 !===============================================================================
 
-function new_value(kind, bval, ival) result(val)
+function new_literal_value(type, bool, i32) result(val)
 
-	integer, intent(in) :: kind
-	integer, intent(in), optional :: ival
-	logical, intent(in), optional :: bval
+	integer, intent(in) :: type
+	integer, intent(in), optional :: i32
+	logical, intent(in), optional :: bool
 
 	type(value_t) :: val
 
-	val%kind = kind
-	if (present(bval)) val%bval = bval
-	if (present(ival)) val%ival = ival
+	val%type = type
+	if (present(bool)) val%bool = bool
+	if (present(i32 )) val%i32  = i32
 
-end function new_value
+end function new_literal_value
 
 !===============================================================================
 
@@ -1734,16 +1737,18 @@ function parse_for_statement(parser) result(statement)
 
 	lbracket = parser%match(lbracket_token)
 
-	! Check that bounds are num_expr types.  For an explicit comma-separated
+	! Check that bounds are i32_type types.  For an explicit comma-separated
 	! array, we could iterate over bool values, but implicit range/bound-based
-	! arrays require nums
+	! arrays require ints
+
+	! Allow floats as loop bounds?
 
 	bound_beg = parser%peek_pos(0)
 	lbound    = parser%parse_expr()
 	bound_end = parser%peek_pos(0) - 1
-	if (lbound%val%kind /= num_expr) then
+	if (lbound%val%type /= i32_type) then
 		span = new_span(bound_beg, bound_end - bound_beg + 1)
-		call parser%diagnostics%push(err_non_num_bound( &
+		call parser%diagnostics%push(err_non_int_bound( &
 			parser%context, span, parser%context%text(bound_beg: bound_end)))
 	end if
 
@@ -1752,9 +1757,9 @@ function parse_for_statement(parser) result(statement)
 	bound_beg = parser%peek_pos(0)
 	ubound    = parser%parse_expr()
 	bound_end = parser%peek_pos(0) - 1
-	if (ubound%val%kind /= num_expr) then
+	if (ubound%val%type /= i32_type) then
 		span = new_span(bound_beg, bound_end - bound_beg + 1)
-		call parser%diagnostics%push(err_non_num_bound( &
+		call parser%diagnostics%push(err_non_int_bound( &
 			parser%context, span, parser%context%text(bound_beg: bound_end)))
 	end if
 
@@ -1814,7 +1819,7 @@ function parse_while_statement(parser) result(statement)
 	cond_end  = parser%peek_pos(0) - 1
 
 	! Check that condition type is bool
-	if (condition%val%kind /= bool_expr) then
+	if (condition%val%type /= bool_type) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
 			parser%context, span, parser%context%text(cond_beg: cond_end), &
@@ -1861,7 +1866,7 @@ function parse_if_statement(parser) result(statement)
 	!print *, 'cond_beg, cond_end = ', cond_beg, cond_end
 
 	! Check that condition type is bool
-	if (condition%val%kind /= bool_expr) then
+	if (condition%val%type /= bool_type) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
 			parser%context, span, parser%context%text(cond_beg: cond_end), &
@@ -2056,14 +2061,14 @@ recursive function parse_expr_statement(parser) result(expr)
 		! TODO: move this check inside of is_binary_op_allowed?  Need to pass
 		! parser to it to push diagnostics
 		if (.not. is_binary_op_allowed( &
-			expr%val%kind, op%kind, expr%right%val%kind)) then
+			expr%val%type, op%kind, expr%right%val%type)) then
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context, &
 				span, op%text, &
-				kind_name(expr%val%kind), &
-				kind_name(expr%right%val%kind)))
+				kind_name(expr%val%type), &
+				kind_name(expr%right%val%type)))
 
 		end if
 
@@ -2110,12 +2115,12 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		right = parser%parse_expr(prec)
 		expr  = new_unary_expr(op, right)
 
-		if (.not. is_unary_op_allowed(op%kind, right%val%kind)) then
+		if (.not. is_unary_op_allowed(op%kind, right%val%type)) then
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_unary_types(parser%context, span, op%text, &
-				kind_name(expr%right%val%kind)))
+				kind_name(expr%right%val%type)))
 
 		end if
 
@@ -2132,14 +2137,14 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		expr  = new_binary_expr(expr, op, right)
 
 		if (.not. is_binary_op_allowed( &
-			expr%left%val%kind, op%kind, expr%right%val%kind)) then
+			expr%left%val%type, op%kind, expr%right%val%type)) then
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context, &
 				span, op%text, &
-				kind_name(expr%left %val%kind), &
-				kind_name(expr%right%val%kind)))
+				kind_name(expr%left %val%type), &
+				kind_name(expr%right%val%type)))
 
 		end if
 
@@ -2170,10 +2175,10 @@ logical function is_binary_op_allowed(left, op, right)
 				less_token   , less_equals_token, &
 				greater_token, greater_equals_token)
 			! FIXME: floats
-			is_binary_op_allowed = left == num_expr  .and. right == num_expr
+			is_binary_op_allowed = left == i32_type  .and. right == i32_type
 
 		case (and_keyword, or_keyword)
-			is_binary_op_allowed = left == bool_expr .and. right == bool_expr
+			is_binary_op_allowed = left == bool_type .and. right == bool_type
 
 		case (equals_token, eequals_token, bang_equals_token)
 			is_binary_op_allowed = left == right
@@ -2196,10 +2201,10 @@ logical function is_unary_op_allowed(op, operand)
 
 		case (plus_token, minus_token)
 			! FIXME: floats
-			is_unary_op_allowed = operand == num_expr
+			is_unary_op_allowed = operand == i32_type
 
 		case (not_keyword)
-			is_unary_op_allowed = operand == bool_expr
+			is_unary_op_allowed = operand == bool_type
 
 	end select
 
@@ -2346,9 +2351,9 @@ function parse_primary_expr(parser) result(expr)
 
 			keyword = parser%next()
 			bool = keyword%kind == true_keyword
-			expr = new_bool_expr(bool)
+			expr = new_bool_type(bool)
 
-			!print *, 'expr%val%bval = ', expr%val%bval
+			!print *, 'expr%val%bool = ', expr%val%bool
 
 		case (identifier_token)
 
@@ -2369,8 +2374,8 @@ function parse_primary_expr(parser) result(expr)
 
 		case default
 
-			num = parser%match(num_token)
-			expr = new_num_expr(num)
+			num = parser%match(i32_token)
+			expr = new_i32_type(num)
 
 			if (debug > 1) print *, 'num = ', expr%val%str()
 
@@ -2394,29 +2399,29 @@ end function new_name_expr
 
 !===============================================================================
 
-function new_bool_expr(bool) result(expr)
+function new_bool_type(bool) result(expr)
 
 	logical, intent(in) :: bool
 
 	type(syntax_node_t) :: expr
 
-	!print *, 'new_bool_expr'
+	!print *, 'new_bool_type'
 	!print *, 'bool = ', bool
 
 	! The expression node is a generic literal expression, while its child val
-	! member indicates the specific type (e.g. bool_expr or num_expr)
+	! member indicates the specific type (e.g. bool_type or i32_type)
 	expr%kind = literal_expr
 
-	expr%val = new_value(bool_expr, bval = bool)
+	expr%val = new_literal_value(bool_type, bool = bool)
 
-	!print *, 'expr%val%bval = ', expr%val%bval
+	!print *, 'expr%val%bool = ', expr%val%bool
 
-end function new_bool_expr
+end function new_bool_type
 
-! TODO: combine new_bool_expr() and new_num_expr() into a general
+! TODO: combine new_bool_type() and new_i32_type() into a general
 ! new_literal_exp() fn
 
-function new_num_expr(num) result(expr)
+function new_i32_type(num) result(expr)
 
 	type(syntax_token_t), intent(in) :: num
 
@@ -2427,13 +2432,11 @@ function new_num_expr(num) result(expr)
 	type(value_t) :: val
 
 	val = num%val
-	!val%kind = num_expr
-	!val%ival = num
 
 	expr%kind = literal_expr
 	expr%val  = val
 
-end function new_num_expr
+end function new_i32_type
 
 !===============================================================================
 
@@ -2460,7 +2463,7 @@ function new_declaration_expr(identifier, op, right) result(expr)
 	expr%right = right
 
 	! Pass the result value type up the tree for type checking in parent
-	expr%val%kind = right%val%kind
+	expr%val%type = right%val%type
 
 end function new_declaration_expr
 
@@ -2514,8 +2517,7 @@ function new_binary_expr(left, op, right) result(expr)
 	expr%right = right
 
 	! Pass the result value type up the tree for type checking in parent
-	expr%val%kind = get_binary_op_kind(left%val%kind, op%kind, right%val%kind)
-	!expr%val%kind = left%val%kind
+	expr%val%type = get_binary_op_kind(left%val%type, op%kind, right%val%type)
 
 	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_binary_expr'
@@ -2535,10 +2537,10 @@ integer function get_binary_op_kind(left, op, right)
 	case ( &
 			eequals_token, bang_equals_token, less_token, less_equals_token, &
 			greater_token, greater_equals_token)
-		!print *, 'bool_expr'
+		!print *, 'bool_type'
 
 		! Comparison operations can take 2 numbers, but always return a bool
-		get_binary_op_kind = bool_expr
+		get_binary_op_kind = bool_type
 
 	case default
 		!print *, 'default'
@@ -2578,7 +2580,7 @@ function new_unary_expr(op, right) result(expr)
 	! Pass the result value type up the tree for type checking in parent.  IIRC
 	! all unary operators result in the same type as their operand, hence there
 	! is a get_binary_op_kind() fn but no get_unary_op_kind() fn
-	expr%val%kind = right%val%kind
+	expr%val%type = right%val%type
 
 	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_unary_expr'
@@ -2698,7 +2700,7 @@ recursive function syntax_eval(node, vars) result(res)
 	!********
 
 	integer :: i
-	type(value_t) :: left, right, condition, lbound, ubound, ival
+	type(value_t) :: left, right, condition, lbound, ubound, i32
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -2724,17 +2726,20 @@ recursive function syntax_eval(node, vars) result(res)
 		! push scope to make the loop iterator local
 		call vars%push_scope()
 
-		ival%kind = num_expr
-		do i = lbound%ival, ubound%ival - 1
-			ival%ival = i
+		! TODO: can we automatically get the type from the loop iterator
+		! identifier?  For future i64 compatibility
+		i32%type = i32_type
+
+		do i = lbound%i32, ubound%i32 - 1
+			i32%i32 = i
 
 			! During evaluation, insert variables by array id_index instead of
 			! dict lookup.  This is much faster and can be done during
 			! evaluation now that we know all of the variable identifiers.
 			! Parsing still needs to rely on dictionary lookups because it does
 			! not know the entire list of variable identifiers ahead of time
-			vars%vals(node%id_index) = ival
-			!call vars%insert(node%identifier%text, ival, node%id_index)
+			vars%vals(node%id_index) = i32
+			!call vars%insert(node%identifier%text, i32, node%id_index)
 
 			res = syntax_eval(node%body, vars)
 		end do
@@ -2744,7 +2749,7 @@ recursive function syntax_eval(node, vars) result(res)
 	case (while_statement)
 
 		condition = syntax_eval(node%condition, vars)
-		do while (condition%bval)
+		do while (condition%bool)
 			res = syntax_eval(node%body, vars)
 			condition = syntax_eval(node%condition, vars)
 		end do
@@ -2754,7 +2759,7 @@ recursive function syntax_eval(node, vars) result(res)
 		condition = syntax_eval(node%condition, vars)
 		!print *, 'condition = ', condition%str()
 
-		if (condition%bval) then
+		if (condition%bool) then
 			res = syntax_eval(node%if_clause, vars)
 
 		else if (allocated(node%else_clause)) then
@@ -2810,7 +2815,7 @@ recursive function syntax_eval(node, vars) result(res)
 		right = syntax_eval(node%right, vars)
 		!print *, 'right = ', right
 
-		res%kind = right%kind
+		res%type = right%type
 
 		! TODO: add fallback type checking here? for float future-proofing
 
@@ -2819,10 +2824,10 @@ recursive function syntax_eval(node, vars) result(res)
 			res      =  right
 
 		case (minus_token)
-			res%ival = -right%ival
+			res%i32 = -right%i32
 
 		case (not_keyword)
-			res%bval = .not. right%bval
+			res%bool = .not. right%bool
 
 		case default
 			write(*,*) err_eval_unary_op(node%op%text)
@@ -2839,7 +2844,7 @@ recursive function syntax_eval(node, vars) result(res)
 
 		! The parser should catch this, but do it here as a fallback (e.g. I'll
 		! add floats later and forget this needs fixing)
-		if (left%kind /= right%kind) then
+		if (left%type /= right%type) then
 
 			! Internal compiler errors shouldn't ever happen, but if they do,
 			! the evaluation will be garbage.
@@ -2848,38 +2853,38 @@ recursive function syntax_eval(node, vars) result(res)
 
 		end if
 
-		res%kind = get_binary_op_kind(left%kind, node%op%kind, right%kind)
+		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
 
 		select case (node%op%kind)
 		case (plus_token)
-			res%ival = left%ival + right%ival
+			res%i32 = left%i32 + right%i32
 
 			! FIXME: floats
 
 		case (minus_token)
-			res%ival = left%ival - right%ival
+			res%i32 = left%i32 - right%i32
 
 		case (star_token)
-			res%ival = left%ival * right%ival
+			res%i32 = left%i32 * right%i32
 
 		case (sstar_token)
-			res%ival = left%ival ** right%ival
+			res%i32 = left%i32 ** right%i32
 
 		case (slash_token)
-			res%ival = left%ival / right%ival
+			res%i32 = left%i32 / right%i32
 
 		case (and_keyword)
-			res%bval = left%bval .and. right%bval
+			res%bool = left%bool .and. right%bool
 
 		case (or_keyword)
-			res%bval = left%bval .or.  right%bval
+			res%bool = left%bool .or.  right%bool
 
 		case (eequals_token)
 
-			if (left%kind == bool_expr) then
-				res%bval = left%bval .eqv. right%bval
-			else if (left%kind == num_expr) then
-				res%bval = left%ival  ==   right%ival
+			if      (left%type == bool_type) then
+				res%bool = left%bool .eqv. right%bool
+			else if (left%type == i32_type) then
+				res%bool = left%i32  ==   right%i32
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
@@ -2887,42 +2892,42 @@ recursive function syntax_eval(node, vars) result(res)
 
 		case (bang_equals_token)
 
-			if (left%kind == bool_expr) then
-				res%bval = left%bval .neqv. right%bval
-			else if (left%kind == num_expr) then
-				res%bval = left%ival  /=   right%ival
+			if (left%type == bool_type) then
+				res%bool = left%bool .neqv. right%bool
+			else if (left%type == i32_type) then
+				res%bool = left%i32  /=   right%i32
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
 			end if
 
 		case (less_token)
-			if (left%kind == num_expr) then
-				res%bval = left%ival < right%ival
+			if (left%type == i32_type) then
+				res%bool = left%i32 < right%i32
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
 			end if
 
 		case (less_equals_token)
-			if (left%kind == num_expr) then
-				res%bval = left%ival <= right%ival
+			if (left%type == i32_type) then
+				res%bool = left%i32 <= right%i32
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
 			end if
 
 		case (greater_token)
-			if (left%kind == num_expr) then
-				res%bval = left%ival > right%ival
+			if (left%type == i32_type) then
+				res%bool = left%i32 > right%i32
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
 			end if
 
 		case (greater_equals_token)
-			if (left%kind == num_expr) then
-				res%bval = left%ival >= right%ival
+			if (left%type == i32_type) then
+				res%bool = left%i32 >= right%i32
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
@@ -2984,15 +2989,15 @@ function value_str(val) result(str)
 
 	character(len = 32) :: buffer
 
-	select case (val%kind)
+	select case (val%type)
 
-		case (num_expr)
-			write(buffer, '(i0)') val%ival
+		case (i32_type)
+			write(buffer, '(i0)') val%i32
 			str = trim(buffer)
 
-		case (bool_expr)
+		case (bool_type)
 			! It might be helpful to have util fns for primitive str conversion
-			if (val%bval) then
+			if (val%bool) then
 				str = "true"
 			else
 				str = "false"

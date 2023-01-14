@@ -160,18 +160,18 @@ end function err_non_bool_condition
 
 !===============================================================================
 
-function err_non_num_bound(context, span, bound) result(err)
+function err_non_int_bound(context, span, bound) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: bound
 	err = err_prefix &
-		//'Bound `'//bound//'` of for-loop is not numeric' &
+		//'Bound `'//bound//'` of for-loop is not an i32 integer' &
 		//underline(context, span) &
-		//" non-numeric bound"//color_reset
+		//" non-i32 bound"//color_reset
 
-end function err_non_num_bound
+end function err_non_int_bound
 
 !===============================================================================
 
