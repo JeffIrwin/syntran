@@ -468,6 +468,8 @@ subroutine unit_test_for(npass, nfail)
 			interpret_file(path//'test-03.syntran') == '1836311903', &
 			interpret_file(path//'test-04.syntran') == '97', &
 			interpret_file(path//'test-05.syntran') == '25', &
+			interpret_file(path//'test-06.syntran') == '25', &
+			interpret_file(path//'test-07.syntran') == '1836311903', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -507,6 +509,7 @@ subroutine unit_test_while(npass, nfail)
 			interpret_file(path//'test-03.syntran') == '5050', &
 			interpret_file(path//'test-04.syntran') == '9973', &
 			interpret_file(path//'test-05.syntran') == '5050', &
+			interpret_file(path//'test-06.syntran') == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -542,6 +545,7 @@ subroutine unit_test_var_scopes(npass, nfail)
 	tests = &
 		[   &
 			interpret_file(path//'test-01.syntran') == 'true', &
+			interpret_file(path//'test-02.syntran') == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

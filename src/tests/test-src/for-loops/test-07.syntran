@@ -1,0 +1,14 @@
+
+{
+	let c = (let a = 1) + (let b = a);
+
+	for i in [0: 43]
+	{
+		a = b;
+		b = c;
+		c = a + b;
+	}
+
+	c;
+}
+

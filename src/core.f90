@@ -28,9 +28,6 @@ module core_m
 	! TODO:
 	!
 	! Add:
-	!  - block scoping
-	!    * auto-declare for loop iterators in their own scope.  This is
-	!      consistent with rust
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
@@ -148,15 +145,20 @@ module core_m
 		type(syntax_node_t), allocatable :: lbound, ubound
 
 		! TODO: for var dict/array optimization, add a member "id_index" to
-		! parser.  Each time a "let" statement is parsed (or a foor loop),
+		! parser.  Each time a "let" statement is parsed (or a for loop),
 		! increment the id_index and store the index node (in the node type or
 		! in the dict?).  At the end of parsing, allocate an array of vals and
 		! copy from dict into array.  Will a single rank-1 array work with
 		! scoping or does there need to be a separate array for each scope
 		! level?
+		!
+		! I think at the end of parsing, we can simply allocate an array.  We
+		! shouldn't need to copy anything, because type-checking is done in the
+		! parser, but values aren't used until evaluation
 
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
+		integer :: id_index
 
 		type(string_vector_t) :: diagnostics
 
@@ -209,7 +211,9 @@ module core_m
 
 		character :: split_char = ''
 		type(ternary_tree_node_t), allocatable :: left, mid, right
+
 		type(value_t), allocatable :: val
+		integer :: id_index
 
 		contains
 			!procedure :: print => ternary_node_print
@@ -230,10 +234,15 @@ module core_m
 	! Fixed-size limit to the scope level for now, while I work on scoping
 	integer, parameter :: scope_max = 64
 
-	type var_dicts_t
-		! This type is a list of variable dictionaries for each scope level
+	type vars_t
 
+		! A list of variable dictionaries for each scope level used during
+		! parsing
 		type(var_dict_t) :: dicts(scope_max)
+
+		! Flat array of variables from all scopes, used for efficient
+		! interpreted evaluation
+		type(value_t), allocatable :: vals(:)
 
 		! This is the scope level.  Each nested block statement that is entered
 		! pushes 1 to scope.  Popping out of a block decrements the scope.
@@ -247,7 +256,7 @@ module core_m
 				search_insert => var_search_insert, &
 				push_scope, pop_scope
 
-	end type var_dicts_t
+	end type vars_t
 
 	!********
 
@@ -267,7 +276,8 @@ module core_m
 
 		type(text_context_t) :: context
 
-		type(var_dicts_t) :: vars
+		type(vars_t) :: vars
+		integer :: num_vars = 0
 
 		contains
 			procedure :: match, tokens_str, current_kind, &
@@ -304,10 +314,15 @@ contains
 
 !===============================================================================
 
-function var_search(dict, key, iostat) result(val)
+function var_search(dict, key, id_index, iostat) result(val)
 
-	class(var_dicts_t), intent(in) :: dict
+	! An id_index is not normally part of dictionary searching, but we use it
+	! here for converting the dictionary into an array after parsing and before
+	! evaluation for better performance
+
+	class(vars_t), intent(in) :: dict
 	character(len = *), intent(in) :: key
+	integer, intent(out) :: id_index
 	type(value_t) :: val
 
 	integer, intent(out), optional :: iostat
@@ -318,12 +333,12 @@ function var_search(dict, key, iostat) result(val)
 
 	i = dict%scope
 
-	val = ternary_search(dict%dicts(i)%root, key, io)
+	val = ternary_search(dict%dicts(i)%root, key, id_index, io)
 
 	! If not found in current scope, search parent scopes too
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		val = ternary_search(dict%dicts(i)%root, key, io)
+		val = ternary_search(dict%dicts(i)%root, key, id_index, io)
 	end do
 
 	if (present(iostat)) iostat = io
@@ -332,11 +347,12 @@ end function var_search
 
 !===============================================================================
 
-recursive function ternary_search(node, key, iostat) result(val)
+recursive function ternary_search(node, key, id_index, iostat) result(val)
 
 	type(ternary_tree_node_t), intent(in), allocatable :: node
 	character(len = *), intent(in) :: key
 
+	integer, intent(out) :: id_index
 	integer, intent(out) :: iostat
 	type(value_t) :: val
 
@@ -360,13 +376,13 @@ recursive function ternary_search(node, key, iostat) result(val)
 	 ey = key(2:)
 
 	if (k < node%split_char) then
-		val = ternary_search(node%left , key, iostat)
+		val = ternary_search(node%left , key, id_index, iostat)
 		return
 	else if (k > node%split_char) then
-		val = ternary_search(node%right, key, iostat)
+		val = ternary_search(node%right, key, id_index, iostat)
 		return
 	else if (len(ey) > 0) then
-		val = ternary_search(node%mid  , ey, iostat)
+		val = ternary_search(node%mid  , ey, id_index, iostat)
 		return
 	end if
 
@@ -377,7 +393,8 @@ recursive function ternary_search(node, key, iostat) result(val)
 		return
 	end if
 
-	val = node%val
+	val      = node%val
+	id_index = node%id_index
 
 	!print *, 'done ternary_search'
 	!print *, ''
@@ -386,7 +403,7 @@ end function ternary_search
 
 !===============================================================================
 
-subroutine var_insert(dict, key, val, iostat, overwrite)
+subroutine var_insert(dict, key, val, id_index, iostat, overwrite)
 
 	! There are a couple reasons for having this wrapper:
 	!
@@ -400,9 +417,10 @@ subroutine var_insert(dict, key, val, iostat, overwrite)
 	!     insert/delete implementation and for moving the dict without
 	!     copying in syntax_parse()
 
-	class(var_dicts_t) :: dict
+	class(vars_t) :: dict
 	character(len = *), intent(in) :: key
 	type(value_t), intent(in) :: val
+	integer, intent(in) :: id_index
 
 	integer, intent(out), optional :: iostat
 	logical, intent(in), optional :: overwrite
@@ -418,7 +436,7 @@ subroutine var_insert(dict, key, val, iostat, overwrite)
 	if (present(overwrite)) overwritel = overwrite
 
 	i = dict%scope
-	call ternary_insert(dict%dicts(i)%root, key, val, io, overwritel)
+	call ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwritel)
 
 	if (present(iostat)) iostat = io
 
@@ -426,38 +444,41 @@ end subroutine var_insert
 
 !===============================================================================
 
-subroutine var_search_insert(dict, key, val, iostat)
+subroutine var_search_insert(dict, key, val, id_index, iostat)
+
+	! TODO: delete
 
 	! First search for the scope that contains key and then insert its val into
 	! that scope.  Always overwrite with this method (unless the key hasn't been
 	! declared in any scope)
 
-	class(var_dicts_t) :: dict
+	class(vars_t) :: dict
 	character(len = *), intent(in) :: key
 	type(value_t), intent(in) :: val
+	integer, intent(in) :: id_index
 
 	integer, intent(out), optional :: iostat
 
 	!********
 
-	integer :: i, io
+	integer :: i, io, idummy
 	logical, parameter :: overwrite = .true.
 	type(value_t) :: dummy
 
 	i = dict%scope
 
-	dummy = ternary_search(dict%dicts(i)%root, key, io)
+	dummy = ternary_search(dict%dicts(i)%root, key, idummy, io)
 
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		dummy = ternary_search(dict%dicts(i)%root, key, io)
+		dummy = ternary_search(dict%dicts(i)%root, key, idummy, io)
 	end do
 
 	if (io == exit_success) then
 		! This could be optimized by inserting on the same tree walk that
 		! searches.  However, switching to arrays during evaluation is a bigger
 		! optimization
-		call ternary_insert(dict%dicts(i)%root, key, val, io, overwrite)
+		call ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwrite)
 	end if
 
 	if (present(iostat)) iostat = io
@@ -468,7 +489,7 @@ end subroutine var_search_insert
 
 subroutine push_scope(dict)
 
-	class(var_dicts_t) :: dict
+	class(vars_t) :: dict
 
 	dict%scope = dict%scope + 1
 
@@ -484,7 +505,7 @@ end subroutine push_scope
 
 subroutine pop_scope(dict)
 
-	class(var_dicts_t) :: dict
+	class(vars_t) :: dict
 
 	integer :: i
 
@@ -510,11 +531,13 @@ end subroutine pop_scope
 
 !===============================================================================
 
-recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
+recursive subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
 
 	type(ternary_tree_node_t), intent(inout), allocatable :: node
 	character(len = *), intent(in) :: key
 	type(value_t), intent(in) :: val
+	integer, intent(in) :: id_index
+
 	integer, intent(out) :: iostat
 	logical, intent(in) :: overwrite
 
@@ -537,18 +560,18 @@ recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 		node%split_char = k
 	else if (k < node%split_char) then
 		!print *, 'left'
-		call ternary_insert(node%left , key, val, iostat, overwrite)
+		call ternary_insert(node%left , key, val, id_index, iostat, overwrite)
 		return
 	else if (k > node%split_char) then
 		!print *, 'right'
-		call ternary_insert(node%right, key, val, iostat, overwrite)
+		call ternary_insert(node%right, key, val, id_index, iostat, overwrite)
 		return
 	end if
 
 	!print *, 'mid'
 
 	if (len(ey) /= 0) then
-		call ternary_insert(node%mid  , ey, val, iostat, overwrite)
+		call ternary_insert(node%mid  , ey, val, id_index, iostat, overwrite)
 		return
 	end if
 
@@ -566,7 +589,8 @@ recursive subroutine ternary_insert(node, key, val, iostat, overwrite)
 		return
 	end if
 
-	node%val = val
+	node%val      = val
+	node%id_index = id_index
 
 	!print *, 'done inserting'
 	!print *, ''
@@ -592,6 +616,8 @@ recursive subroutine ternary_tree_copy(dst, src)
 	!if (.not. allocated(dst)) allocate(dst)
 
 	dst%split_char = src%split_char
+
+	dst%id_index = src%id_index
 
 	if (allocated(src%val)) then
 		if (.not. allocated(dst%val)) allocate(dst%val)
@@ -978,6 +1004,7 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%val  = src%val
 
 	dst%identifier  = src%identifier
+	dst%id_index    = src%id_index
 
 	dst%expecting       = src%expecting
 	dst%first_expecting = src%first_expecting
@@ -1552,14 +1579,14 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 	!********
 
 	character(len = :), allocatable :: src_filel
-
+	integer :: i
 	logical :: allow_continuel
 
 	type(parser_t) :: parser
 
 	type(syntax_token_t) :: token
 
-	type(var_dicts_t) :: vars, vars0
+	type(vars_t) :: vars, vars0
 
 	if (debug > 0) print *, 'syntax_parse'
 	if (debug > 1) print *, 'str = ', str
@@ -1599,11 +1626,21 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 			allocate(vars0%dicts(1)%root)
 			vars0%dicts(1)%root = vars%dicts(1)%root
 
+			print *, 'vars%vals = '
+			do i = 1, size(vars%vals)
+				print *, vars%vals(i)%str()
+			end do
+
+			! Backup vals array and set num_vars in parser object
+			vars0%vals = vars%vals
+			parser%num_vars = size(vars%vals)
+
 		end if
 
 		! TODO: other scopes?  Only 1st one should matter from interpreter.  It
 		! doesn't evaluate until the block is finished
 		call move_alloc(vars%dicts(1)%root, parser%vars%dicts(1)%root)
+		call move_alloc(vars%vals         , parser%vars%vals)
 
 	end if
 
@@ -1634,6 +1671,7 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 
 		if (allocated(vars0%dicts(1)%root)) then
 			call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
+			call move_alloc(vars0%vals         , vars%vals)
 		end if
 
 		return
@@ -1649,6 +1687,13 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 	! anymore
 	if (allocated(parser%vars%dicts(1)%root)) then
 		call move_alloc(parser%vars%dicts(1)%root, vars%dicts(1)%root)
+	end if
+
+	print *, 'parser%num_vars = ', parser%num_vars
+	allocate(vars%vals( parser%num_vars ))
+
+	if (allocated(vars0%vals)) then
+		vars%vals( 1: size(vars0%vals) ) = vars0%vals
 	end if
 
 	if (debug > 0) print *, 'done syntax_parse'
@@ -1729,12 +1774,6 @@ function parse_for_statement(parser) result(statement)
 
 	call parser%vars%push_scope()
 
-	! TODO: auto declare loop iterator in for statement (HolyC doesn't let
-	! you do that!).  Do not require 'let' keyword:
-	!
-	!     for i in [lower, upper]
-	!        {}
-
 	identifier = parser%match(identifier_token)
 
 	in_token   = parser%match(in_keyword)
@@ -1772,9 +1811,22 @@ function parse_for_statement(parser) result(statement)
 
 	rbracket = parser%match(rbracket_token)
 
-	body = parser%parse_statement()
+	parser%num_vars = parser%num_vars + 1
+	statement%id_index = parser%num_vars
 
-	call parser%vars%pop_scope()
+	! Auto declare loop iterator in for statement (HolyC doesn't let you do
+	! that!).  The 'let' keyword is not used:
+	!
+	!     for i in [lower, upper]
+	!        {}
+
+	! Insert the identifier's type into the dict. This is a local scope, so
+	! there's no need to check io
+	print *, 'identifier%text = ', identifier%text
+	call parser%vars%insert(identifier%text, lbound%val, &
+		statement%id_index)!, io, overwrite = .false.)
+
+	body = parser%parse_statement()
 
 	allocate(statement%lbound, statement%ubound, statement%body)
 
@@ -1784,6 +1836,28 @@ function parse_for_statement(parser) result(statement)
 	statement%lbound     = lbound
 	statement%ubound     = ubound
 	statement%body       = body
+
+	! TODO: cleanup
+
+	!parser%num_vars = parser%num_vars + 1
+	!expr%id_index = parser%num_vars
+
+	!! Insert the identifier's type into the dict and check that it
+	!! hasn't already been declared
+	!call parser%vars%insert(identifier%text, expr%val, &
+	!	expr%id_index, io, overwrite = .false.)
+
+	!********
+
+	!expr%val = parser%vars%search(identifier%text, expr%id_index, io)
+	!if (io /= exit_success) then
+	!	span = new_span(identifier%pos, len(identifier%text))
+	!	call parser%diagnostics%push( &
+	!		err_undeclare_var(parser%context, &
+	!		span, identifier%text))
+	!end if
+
+	call parser%vars%pop_scope()
 
 end function parse_for_statement
 
@@ -2004,10 +2078,15 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
+		! Increment the variable array index and save it in the expr node.
+		! TODO: make this a push_var fn?  parse_for_statement uses it too
+		parser%num_vars = parser%num_vars + 1
+		expr%id_index = parser%num_vars
+
 		! Insert the identifier's type into the dict and check that it
 		! hasn't already been declared
 		call parser%vars%insert(identifier%text, expr%val, &
-			io, overwrite = .false.)
+			expr%id_index, io, overwrite = .false.)
 
 		!print *, 'io = ', io
 		if (io /= exit_success) then
@@ -2034,12 +2113,14 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
+		! TODO: lookup id_index from dict and save it in the expr node
+
 		! Get the identifier's type from the dict and check that it has
 		! been declared
 		!
 		! TODO: with scoping now, add "in this scope" to undeclare/redeclare err
 		! messages
-		expr%val = parser%vars%search(identifier%text, io)
+		expr%val = parser%vars%search(identifier%text, expr%id_index, io)
 		if (io /= exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
@@ -2310,7 +2391,7 @@ function parse_primary_expr(parser) result(expr)
 
 	!********
 
-	integer :: io
+	integer :: io, id_index
 	logical :: bool
 	type(syntax_token_t) :: num, left, right, keyword, identifier
 	type(text_span_t) :: span
@@ -2349,9 +2430,12 @@ function parse_primary_expr(parser) result(expr)
 			identifier = parser%next()
 			!print *, 'identifier = ', identifier%text
 
+			! TODO: lookup id_index
+
 			!print *, 'searching'
 			expr = new_name_expr(identifier, &
-				parser%vars%search(identifier%text, io))
+				parser%vars%search(identifier%text, id_index, io))
+			expr%id_index = id_index
 
 			if (io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
@@ -2431,6 +2515,10 @@ end function new_num_expr
 !===============================================================================
 
 function new_declaration_expr(identifier, op, right) result(expr)
+
+	! TODO: IMO this fn is overly abstracted.  It's only used once, so
+	! just paste it their and delete the fn.  That will make it easier to
+	! refactor and consolidate declaration_expr and assignment_expr parsing
 
 	type(syntax_token_t), intent(in) :: identifier, op
 	type(syntax_node_t) , intent(in) :: right
@@ -2680,7 +2768,7 @@ recursive function syntax_eval(node, vars) result(res)
 	! I don't want to make this arg optional, because then it would require
 	! copying a potentially large struct to a local var without fancy use of
 	! move_alloc()
-	type(var_dicts_t) :: vars
+	type(vars_t) :: vars
 
 	type(value_t) :: res
 
@@ -2732,7 +2820,13 @@ recursive function syntax_eval(node, vars) result(res)
 		ival%kind = num_expr
 		do i = lbound%ival, ubound%ival - 1
 			ival%ival = i
-			call vars%insert(node%identifier%text, ival)
+
+			! TODO: insert by array id_index instead of dict lookup, here and in
+			! other cases of identifier eval
+
+			!call vars%insert(node%identifier%text, ival, node%id_index)
+			vars%vals(node%id_index) = ival
+
 			res = syntax_eval(node%body, vars)
 		end do
 
@@ -2781,7 +2875,8 @@ recursive function syntax_eval(node, vars) result(res)
 		! value, while the insert call in the parser inserts the type
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
-		call vars%search_insert(node%identifier%text, res)
+		!call vars%search_insert(node%identifier%text, res, node%id_index)
+		vars%vals(node%id_index) = res
 
 		! The difference between let and assign is inserting into the current
 		! scope (let) vs possibly searching parent scopes (assign)
@@ -2792,11 +2887,13 @@ recursive function syntax_eval(node, vars) result(res)
 		res = syntax_eval(node%right, vars)
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
-		call vars%insert(node%identifier%text, res)
+		!call vars%insert(node%identifier%text, res, node%id_index)
+		vars%vals(node%id_index) = res
 
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
-		res = vars%search(node%identifier%text)
+		!res = vars%search(node%identifier%text, node%id_index)
+		res = vars%vals(node%id_index)
 
 	case (unary_expr)
 

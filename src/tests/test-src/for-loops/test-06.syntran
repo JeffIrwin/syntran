@@ -1,0 +1,32 @@
+
+{
+	// Count the number of primes less than n
+	let n = 100;
+	let num_primes = 0;
+
+	// This check is O(n**2) time, which might be the best we can do
+	// without having arrays in the language yet
+
+	// Start loop at 2 because 0 and 1 are not prime
+	for i in [2: n]
+	{
+		// Check if i is composite, i.e. not prime
+		let is_composite = false;
+
+		// Largest possible divisor of i is i/2.  Actually it's sqrt(i)
+		// but I don't have a sqrt fn yet
+		for j in [2: i/2 + 1]
+		{
+			// Is i divisible by j?
+			let divisible = j * (i / j) == i;  // poor man's modulo == 0
+			is_composite = is_composite or divisible;
+		}
+
+		if not is_composite
+			num_primes = num_primes + 1;
+	}
+
+	// Final result
+	num_primes;
+}
+

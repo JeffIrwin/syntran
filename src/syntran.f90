@@ -53,7 +53,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 	type(syntax_node_t) :: compilation
 	type(value_t) :: res
-	type(var_dicts_t) :: vars
+	type(vars_t) :: vars
 
 	!print *, 'starting syntran_interpret()'
 
@@ -212,7 +212,7 @@ integer function syntran_eval_int(str) result(eval_int)
 
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
-	type(var_dicts_t) :: vars
+	type(vars_t) :: vars
 
 	tree = syntax_parse(str, vars)
 	call tree%log_diagnostics()
@@ -250,7 +250,7 @@ function syntran_eval(str, quiet, src_file) result(res)
 
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
-	type(var_dicts_t) :: vars
+	type(vars_t) :: vars
 
 	quietl = .false.
 	if (present(quiet)) quietl = quiet

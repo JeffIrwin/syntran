@@ -1,0 +1,22 @@
+
+{
+	let i = -1;
+
+	let i1 = 0;
+	let i2 = 0;
+
+	// The for statement itself is its own scope
+	for i in [0: 5]
+	{
+		i1 = i;
+
+		// The block body of the for loop is yet another scope nested
+		// inside the for statement's scope.  Rust is the same way
+		let i = -2;
+		i2 = i;
+	}
+
+	i == -1 and i1 == 4 and i2 == -2;
+	// true
+}
+
