@@ -11,7 +11,7 @@ echo "=============================================================="
 echo "    SYNTRAN:"
 
 for ((i=1; i<=$n; i++)) ; do
-	time ./build/syntran.exe src/benchmarks/primes-1.syntran
+	time ./build/syntran src/benchmarks/primes-1.syntran
 done
 
 echo "=============================================================="
