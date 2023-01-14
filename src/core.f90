@@ -1132,7 +1132,7 @@ function lex(lexer) result(token)
 
 		if (float) then
 
-			! TODO: after f64 is supported, consider parsing that is the default
+			! TODO: after f64 is supported, consider parsing that as the default
 			! float type and requiring something like 1.0f for f32
 
 			read(text, *, iostat = io) f32
@@ -2196,6 +2196,17 @@ end function parse_expr
 
 !===============================================================================
 
+logical function is_num_type(type)
+
+	integer, intent(in) :: type
+
+	! FIXME: other numeric types (i64, f64, etc.)
+	is_num_type = type == i32_type .or. type == f32_type
+
+end function is_num_type
+
+!===============================================================================
+
 logical function is_binary_op_allowed(left, op, right)
 
 	! Is an operation allowed with the types of operator op and left/right
@@ -2217,12 +2228,7 @@ logical function is_binary_op_allowed(left, op, right)
 				less_token   , less_equals_token, &
 				greater_token, greater_equals_token)
 
-			! FIXME: other numeric types (i64, f64, etc.)
-
-			! TODO: make a fn is_num_type, returning true for i32, f32, ...
-			is_binary_op_allowed = &
-				(left  == i32_type .or. left  == f32_type) .and. &
-				(right == i32_type .or. right == f32_type)
+			is_binary_op_allowed = is_num_type(left) .and. is_num_type(right)
 
 		case (and_keyword, or_keyword)
 			is_binary_op_allowed = left == bool_type .and. right == bool_type
@@ -2250,8 +2256,7 @@ logical function is_unary_op_allowed(op, operand)
 	select case (op)
 
 		case (plus_token, minus_token)
-			! FIXME: other numeric types (i64, f64, etc.)
-			is_unary_op_allowed = operand == i32_type .or. operand == f32_type
+			is_unary_op_allowed = is_num_type(operand)
 
 		case (not_keyword)
 			is_unary_op_allowed = operand == bool_type

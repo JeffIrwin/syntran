@@ -26,7 +26,8 @@
 	// 3.141593E+00
 
 	//// Infinity!  Fortran also does this w/o warning, the issue is
-	//// that 16 ** 8 overflows and evaluates to 0
+	//// that 16 ** 8 overflows and evaluates to 0.  Use a float for
+	//// better safety
 	//1.0 / 16 ** 8;
 }
 

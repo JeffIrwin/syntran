@@ -691,6 +691,7 @@ subroutine unit_test_f32(npass, nfail)
 	tests = &
 		[   &
 			interpret_file(path//'test-01.syntran') == 'true', &
+			interpret_file(path//'test-02.syntran') == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -873,12 +874,12 @@ subroutine unit_tests(iostat)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)
+	call unit_test_f32_1      (npass, nfail)
 	call unit_test_if_else    (npass, nfail)
 	call unit_test_for        (npass, nfail)
 	call unit_test_while      (npass, nfail)
 	call unit_test_var_scopes (npass, nfail)
-	call unit_test_f32     (npass, nfail)
-	call unit_test_f32_1   (npass, nfail)
+	call unit_test_f32        (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
