@@ -1132,6 +1132,9 @@ function lex(lexer) result(token)
 
 		if (float) then
 
+			! TODO: after f64 is supported, consider parsing that is the default
+			! float type and requiring something like 1.0f for f32
+
 			read(text, *, iostat = io) f32
 			if (io /= exit_success) then
 				span = new_span(start, len(text))

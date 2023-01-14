@@ -1,7 +1,7 @@
 
 {
 
-	// Use the Madhava–Leibniz series to calculate pi
+	// Use the Madhava-Leibniz series to calculate pi
 	let pi = 0.0;
 
 	let sign = 1.0;

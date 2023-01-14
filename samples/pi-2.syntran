@@ -1,0 +1,38 @@
+
+{
+
+	// Use a BBP-type formula to calculate pi.  Ref:
+	//
+	//     https://mathworld.wolfram.com/PiFormulas.html
+	//
+	// This converges much faster than the Madhava-Leibniz series,
+	// getting down to f32 precision in just 10 terms instead of 100000
+	// terms
+
+	let pi = 0.0;
+
+	for k in [0: 10]
+	{
+		pi = pi + 1.0 / (16.0 ** k) *
+			(
+				4.0 / (8*k + 1) -
+				2.0 / (8*k + 4) -
+				1.0 / (8*k + 5) -
+				1.0 / (8*k + 6)
+			);
+	}
+
+	let expect = 3.14159265;
+	let tol = 1.e-5;
+
+	let ratio = pi / expect;
+
+	//// Float comparisons TBD
+	//1 - tol < ratio and ratio < 1 + tol;
+
+	//// Infinity!  Fix, or does Fortran do this w/o warning?
+	//1.0 / 16 ** 8;
+
+	pi;
+}
+
