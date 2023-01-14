@@ -228,6 +228,17 @@ end function err_eval_binary_op
 
 !===============================================================================
 
+function err_eval_i32_itr(op) result(err)
+	character(len = *), intent(in) :: op
+	character(len = :), allocatable :: err
+
+	err = err_int_prefix &
+		//'Loop iterator `'//op//'` must be of type i32'//color_reset
+
+end function err_eval_i32_itr
+
+!===============================================================================
+
 function new_span(start, length) result(span)
 
 	integer, intent(in) :: start, length

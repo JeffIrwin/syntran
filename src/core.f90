@@ -2351,7 +2351,7 @@ function parse_primary_expr(parser) result(expr)
 
 			keyword = parser%next()
 			bool = keyword%kind == true_keyword
-			expr = new_bool_type(bool)
+			expr = new_bool(bool)
 
 			!print *, 'expr%val%bool = ', expr%val%bool
 
@@ -2375,7 +2375,7 @@ function parse_primary_expr(parser) result(expr)
 		case default
 
 			num = parser%match(i32_token)
-			expr = new_i32_type(num)
+			expr = new_i32(num%val%i32)
 
 			if (debug > 1) print *, 'num = ', expr%val%str()
 
@@ -2399,44 +2399,29 @@ end function new_name_expr
 
 !===============================================================================
 
-function new_bool_type(bool) result(expr)
+function new_bool(bool) result(expr)
 
 	logical, intent(in) :: bool
-
 	type(syntax_node_t) :: expr
-
-	!print *, 'new_bool_type'
-	!print *, 'bool = ', bool
 
 	! The expression node is a generic literal expression, while its child val
 	! member indicates the specific type (e.g. bool_type or i32_type)
 	expr%kind = literal_expr
-
 	expr%val = new_literal_value(bool_type, bool = bool)
 
-	!print *, 'expr%val%bool = ', expr%val%bool
+end function new_bool
 
-end function new_bool_type
+!********
 
-! TODO: combine new_bool_type() and new_i32_type() into a general
-! new_literal_exp() fn
+function new_i32(i32) result(expr)
 
-function new_i32_type(num) result(expr)
-
-	type(syntax_token_t), intent(in) :: num
-
+	integer(kind = 4), intent(in) :: i32
 	type(syntax_node_t) :: expr
 
-	!********
-
-	type(value_t) :: val
-
-	val = num%val
-
 	expr%kind = literal_expr
-	expr%val  = val
+	expr%val  = new_literal_value(i32_type, i32 = i32)
 
-end function new_i32_type
+end function new_i32
 
 !===============================================================================
 
@@ -2700,7 +2685,7 @@ recursive function syntax_eval(node, vars) result(res)
 	!********
 
 	integer :: i
-	type(value_t) :: left, right, condition, lbound, ubound, i32
+	type(value_t) :: left, right, condition, lbound, ubound, itr
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -2726,20 +2711,26 @@ recursive function syntax_eval(node, vars) result(res)
 		! push scope to make the loop iterator local
 		call vars%push_scope()
 
-		! TODO: can we automatically get the type from the loop iterator
-		! identifier?  For future i64 compatibility
-		i32%type = i32_type
+		! Get the type of the loop iterator for future i64 compatibility but
+		! throw an error since it's not supported yet
+		itr%type = lbound%type
+		!itr%type = vars%vals(node%id_index)%type  ! unset
+
+		if (itr%type /= i32_type) then
+			write(*,*) err_eval_i32_itr(node%identifier%text)
+			call internal_error()
+		end if
 
 		do i = lbound%i32, ubound%i32 - 1
-			i32%i32 = i
+			itr%i32 = i
 
 			! During evaluation, insert variables by array id_index instead of
 			! dict lookup.  This is much faster and can be done during
 			! evaluation now that we know all of the variable identifiers.
 			! Parsing still needs to rely on dictionary lookups because it does
 			! not know the entire list of variable identifiers ahead of time
-			vars%vals(node%id_index) = i32
-			!call vars%insert(node%identifier%text, i32, node%id_index)
+			vars%vals(node%id_index) = itr
+			!call vars%insert(node%identifier%text, itr, node%id_index)
 
 			res = syntax_eval(node%body, vars)
 		end do
