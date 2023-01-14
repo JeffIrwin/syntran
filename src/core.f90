@@ -241,7 +241,6 @@ module core_m
 			procedure :: &
 				insert => var_insert, &
 				search => var_search, &
-				search_insert => var_search_insert, &
 				push_scope, pop_scope
 
 	end type vars_t
@@ -429,49 +428,6 @@ subroutine var_insert(dict, key, val, id_index, iostat, overwrite)
 	if (present(iostat)) iostat = io
 
 end subroutine var_insert
-
-!===============================================================================
-
-subroutine var_search_insert(dict, key, val, id_index, iostat)
-
-	! TODO: delete
-
-	! First search for the scope that contains key and then insert its val into
-	! that scope.  Always overwrite with this method (unless the key hasn't been
-	! declared in any scope)
-
-	class(vars_t) :: dict
-	character(len = *), intent(in) :: key
-	type(value_t), intent(in) :: val
-	integer, intent(in) :: id_index
-
-	integer, intent(out), optional :: iostat
-
-	!********
-
-	integer :: i, io, idummy
-	logical, parameter :: overwrite = .true.
-	type(value_t) :: dummy
-
-	i = dict%scope
-
-	dummy = ternary_search(dict%dicts(i)%root, key, idummy, io)
-
-	do while (io /= exit_success .and. i > 1)
-		i = i - 1
-		dummy = ternary_search(dict%dicts(i)%root, key, idummy, io)
-	end do
-
-	if (io == exit_success) then
-		! This could be optimized by inserting on the same tree walk that
-		! searches.  However, switching to arrays during evaluation is a bigger
-		! optimization
-		call ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwrite)
-	end if
-
-	if (present(iostat)) iostat = io
-
-end subroutine var_search_insert
 
 !===============================================================================
 
@@ -2089,9 +2045,6 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		! Get the identifier's type and index from the dict and check that it
 		! has been declared
-		!
-		! TODO: with scoping now, add "in this scope" to undeclare/redeclare err
-		! messages
 		expr%val = parser%vars%search(identifier%text, expr%id_index, io)
 		if (io /= exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))

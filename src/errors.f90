@@ -91,7 +91,7 @@ function err_redeclare_var(context, span, var) result(err)
 
 	character(len = *), intent(in) :: var
 	err = err_prefix &
-		//'variable `'//var//'` has already been declared' &
+		//'variable `'//var//'` has already been declared in this scope' &
 		//underline(context, span)//" variable already declared"//color_reset
 
 end function err_redeclare_var
@@ -105,7 +105,7 @@ function err_undeclare_var(context, span, var) result(err)
 
 	character(len = *), intent(in) :: var
 	err = err_prefix &
-		//'variable `'//var//'` has not been declared' &
+		//'variable `'//var//'` has not been declared in this scope' &
 		//underline(context, span)//" variable undeclared"//color_reset
 
 end function err_undeclare_var
