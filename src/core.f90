@@ -1626,10 +1626,10 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 			allocate(vars0%dicts(1)%root)
 			vars0%dicts(1)%root = vars%dicts(1)%root
 
-			print *, 'vars%vals = '
-			do i = 1, size(vars%vals)
-				print *, vars%vals(i)%str()
-			end do
+			!print *, 'vars%vals = '
+			!do i = 1, size(vars%vals)
+			!	print *, vars%vals(i)%str()
+			!end do
 
 			! Backup vals array and set num_vars in parser object
 			vars0%vals = vars%vals
@@ -1689,7 +1689,7 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 		call move_alloc(parser%vars%dicts(1)%root, vars%dicts(1)%root)
 	end if
 
-	print *, 'parser%num_vars = ', parser%num_vars
+	!print *, 'parser%num_vars = ', parser%num_vars
 	allocate(vars%vals( parser%num_vars ))
 
 	if (allocated(vars0%vals)) then
@@ -1822,7 +1822,8 @@ function parse_for_statement(parser) result(statement)
 
 	! Insert the identifier's type into the dict. This is a local scope, so
 	! there's no need to check io
-	print *, 'identifier%text = ', identifier%text
+
+	!print *, 'identifier%text = ', identifier%text
 	call parser%vars%insert(identifier%text, lbound%val, &
 		statement%id_index)!, io, overwrite = .false.)
 
