@@ -204,7 +204,7 @@ end subroutine syntran_banner
 
 !===============================================================================
 
-integer function syntran_eval_int(str) result(eval_int)
+integer function syntran_eval_i32(str) result(eval_i32)
 
 	use core_m
 
@@ -219,16 +219,45 @@ integer function syntran_eval_int(str) result(eval_int)
 
 	if (tree%diagnostics%len > 0) then
 		! TODO: iostat
-		eval_int = 0
+		eval_i32 = 0
 		return
 	end if
 
 	val = syntax_eval(tree, vars)
 
 	! TODO: check kind, add optional iostat arg
-	eval_int = val%i32
+	eval_i32 = val%i32
 
-end function syntran_eval_int
+end function syntran_eval_i32
+
+!===============================================================================
+
+real(kind = 4) function syntran_eval_f32(str) result(eval_f32)
+
+	use core_m
+
+	character(len = *), intent(in) :: str
+
+	type(syntax_node_t) :: tree
+	type(value_t) :: val
+	type(vars_t) :: vars
+
+	tree = syntax_parse(str, vars)
+	call tree%log_diagnostics()
+
+	if (tree%diagnostics%len > 0) then
+		! TODO: iostat
+		eval_f32 = 0
+		return
+	end if
+
+	val = syntax_eval(tree, vars)
+
+	! TODO: check kind, add optional iostat arg
+	eval_f32 = val%f32
+	!print *, 'eval_f32 = ', eval_f32
+
+end function syntran_eval_f32
 
 !===============================================================================
 

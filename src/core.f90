@@ -36,11 +36,11 @@ module core_m
 	!  - functions
 	!  - arrays
 	!    * start with the way implicit arrays are handled as for loop iterators
-	!  - floats, characters, strings
+	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
+	!  - strings.  are characters useful or can we just use strings of length 1?
 	!  - structs
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - enums
-	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - xor
 	!  - bitwise operators
 	!
@@ -2228,6 +2228,9 @@ logical function is_binary_op_allowed(left, op, right)
 			is_binary_op_allowed = left == bool_type .and. right == bool_type
 
 		case (equals_token, eequals_token, bang_equals_token)
+
+			! Fortran allows comparing ints and floats for strict equality, e.g.
+			! 1 == 1.0 is indeed true.  I'm not sure if I like that
 			is_binary_op_allowed = left == right
 
 	end select
@@ -2779,6 +2782,7 @@ recursive function syntax_eval(node, vars) result(res)
 	case (literal_expr)
 		! This handles both ints, bools, etc.
 		res = node%val
+		!print *, 'res = ', res%str()
 
 	case (for_statement)
 

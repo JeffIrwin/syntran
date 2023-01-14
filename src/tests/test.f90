@@ -6,7 +6,8 @@ module test_m
 		interpret      => syntran_interpret, &
 		interpret_file => syntran_interpret_file, &
 		eval      => syntran_eval     , &
-		eval_int  => syntran_eval_int
+		eval_i32  => syntran_eval_i32, &
+		eval_f32  => syntran_eval_f32
 
 	use utils, only: fg_bright_red, fg_bright_green, line_feed, &
 		findlocl1, console_color, console_color_reset
@@ -33,21 +34,21 @@ subroutine unit_test_bin_arith(npass, nfail)
 
 	tests = &
 		[   &
-			eval_int('1;') == 1, &
-			eval_int('69;') == 69, &
-			eval_int('420;') == 420, &
-			eval_int('1337;') == 1337, &
-			eval_int('1 + 2;') == 1 + 2, &
-			eval_int('1 + 2 + 34;') == 1 + 2 + 34, &
-			eval_int('1 + 2 * 3;') == 1 + 2 * 3, &
-			eval_int('1 * 2 * 3 * 4;') == 1 * 2 * 3 * 4, &
-			eval_int('73 - 48;') == 73 - 48, &
-			eval_int('73 - 48 - 21;') == 73 - 48 - 21, &
-			eval_int('24 / 6;') == 24 / 6, &
-			eval_int('24 / 6 / 2;') == 24 / 6 / 2, &
-			eval_int('2 ** 5;') == 2 ** 5, &
-			eval_int('3 ** 4;') == 3 ** 4, &
-			eval_int('343 - 87654345 / 27 + 76 * 234 - 65432 / 63;') &
+			eval_i32('1;') == 1, &
+			eval_i32('69;') == 69, &
+			eval_i32('420;') == 420, &
+			eval_i32('1337;') == 1337, &
+			eval_i32('1 + 2;') == 1 + 2, &
+			eval_i32('1 + 2 + 34;') == 1 + 2 + 34, &
+			eval_i32('1 + 2 * 3;') == 1 + 2 * 3, &
+			eval_i32('1 * 2 * 3 * 4;') == 1 * 2 * 3 * 4, &
+			eval_i32('73 - 48;') == 73 - 48, &
+			eval_i32('73 - 48 - 21;') == 73 - 48 - 21, &
+			eval_i32('24 / 6;') == 24 / 6, &
+			eval_i32('24 / 6 / 2;') == 24 / 6 / 2, &
+			eval_i32('2 ** 5;') == 2 ** 5, &
+			eval_i32('3 ** 4;') == 3 ** 4, &
+			eval_i32('343 - 87654345 / 27 + 76 * 234 - 65432 / 63;') &
 			       == 343 - 87654345 / 27 + 76 * 234 - 65432 / 63 &
 		]
 
@@ -75,17 +76,17 @@ subroutine unit_test_paren_arith(npass, nfail)
 	! at least be parsed
 	tests = &
 		[   &
-			eval_int('(69);') == (69), &
-			eval_int('(1) + 2;') == (1) + 2, &
-			eval_int('1 + (2 + 34);') == 1 + (2 + 34), &
-			eval_int('(1 + 2) * 3;') == (1 + 2) * 3, &
-			eval_int('1 * (2 * 3 * 4);') == 1 * (2 * 3 * 4), &
-			eval_int('73 - (48);') == 73 - (48), &
-			eval_int('73 - (48 - 21);') == 73 - (48 - 21), &
-			eval_int('24 / (6 / 2);') == 24 / (6 / 2), &
-			eval_int('343 - (87654345 / 27 + 76 * (234 - 65432)) / 63;') &
+			eval_i32('(69);') == (69), &
+			eval_i32('(1) + 2;') == (1) + 2, &
+			eval_i32('1 + (2 + 34);') == 1 + (2 + 34), &
+			eval_i32('(1 + 2) * 3;') == (1 + 2) * 3, &
+			eval_i32('1 * (2 * 3 * 4);') == 1 * (2 * 3 * 4), &
+			eval_i32('73 - (48);') == 73 - (48), &
+			eval_i32('73 - (48 - 21);') == 73 - (48 - 21), &
+			eval_i32('24 / (6 / 2);') == 24 / (6 / 2), &
+			eval_i32('343 - (87654345 / 27 + 76 * (234 - 65432)) / 63;') &
 			   == 343 - (87654345 / 27 + 76 * (234 - 65432)) / 63,  &
-			eval_int(  &
+			eval_i32(  &
 				'(1 + (2 - (3 * (456789 / (5 + (6 - 7) * 8) + (9 ' &
 				//' - (0 + 1) - 2) * 3) / (4 + (5 - (6 * 7) + 8) ' &
 				//' - 9) * 8) + 1 - (2 * (3 + (4 - (5 * 6) / 2)  ' &
@@ -122,17 +123,17 @@ subroutine unit_test_unary_arith(npass, nfail)
 	! I'm planning.  Use parentheses if you want to write that bullshit.
 	tests = &
 		[   &
-			eval_int('-(69);') == -(69), &
-			eval_int('(-69);') == (-69), &
-			eval_int('+(69);') == +(69), &
-			eval_int('(+69);') == (+69), &
-			eval_int('(-1) + 2;') == (-1) + 2, &
-			eval_int('1 + (+2 + 34);') == 1 + (+2 + 34), &
-			eval_int('(1 + 2) * -3;') == (1 + 2) * -3, &
-			eval_int('-1 * (2 * -3 * -4);') == -1 * (2 * -3 * -4), &
-			eval_int('-73 - (+48);') == -73 - (+48), &
-			eval_int('24 / (-6 / 2);') == 24 / (-6 / 2), &
-			eval_int('343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63;') &
+			eval_i32('-(69);') == -(69), &
+			eval_i32('(-69);') == (-69), &
+			eval_i32('+(69);') == +(69), &
+			eval_i32('(+69);') == (+69), &
+			eval_i32('(-1) + 2;') == (-1) + 2, &
+			eval_i32('1 + (+2 + 34);') == 1 + (+2 + 34), &
+			eval_i32('(1 + 2) * -3;') == (1 + 2) * -3, &
+			eval_i32('-1 * (2 * -3 * -4);') == -1 * (2 * -3 * -4), &
+			eval_i32('-73 - (+48);') == -73 - (+48), &
+			eval_i32('24 / (-6 / 2);') == 24 / (-6 / 2), &
+			eval_i32('343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63;') &
 			       == 343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63   &
 		]
 
@@ -227,6 +228,48 @@ subroutine unit_test_comparisons(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_comparisons
+
+!===============================================================================
+
+subroutine unit_test_comp_f32(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f32 comparisons'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval('13.37 >  13.36 ;')  == 'true',  &
+			eval('13.37 >  13.37 ;')  == 'false',  &
+			eval('13.37 >  13.38 ;')  == 'false',  &
+			eval('13.37 <  13.36 ;')  == 'false',  &
+			eval('13.37 <  13.37 ;')  == 'false',  &
+			eval('13.37 <  13.38 ;')  == 'true',  &
+			eval('13.37 >= 13.36 ;')  == 'true',  &
+			eval('13.37 >= 13.37 ;')  == 'true',  &
+			eval('13.37 >= 13.38 ;')  == 'false',  &
+			eval('13.37 <= 13.36 ;')  == 'false',  &
+			eval('13.37 <= 13.37 ;')  == 'true',  &
+			eval('13.37 <= 13.38 ;')  == 'true',  &
+			eval('13.37 != 13.36 ;')  == 'true',  &
+			eval('13.37 != 13.37 ;')  == 'false',  &
+			eval('13.37 != 13.38 ;')  == 'true',  &
+			eval('13.37 == 4.2   ;')  == 'false',  &
+			eval('4.2   == 13.37 ;')  == 'false',  &
+			eval('1.0   == 1.0   ;')  == 'true'    &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_comp_f32
 
 !===============================================================================
 
@@ -562,7 +605,10 @@ end subroutine unit_test_var_scopes
 
 !===============================================================================
 
-subroutine unit_test_floats(npass, nfail)
+subroutine unit_test_f32_1(npass, nfail)
+
+	! Simple f32 float tests of arithmetic and comparisons with single-line
+	! evaluations
 
 	implicit none
 
@@ -570,10 +616,70 @@ subroutine unit_test_floats(npass, nfail)
 
 	!********
 
-	character(len = *), parameter :: label = 'floating point types'
+	character(len = *), parameter :: label = 'f32 arithmetic'
+
+	logical, allocatable :: tests(:)
+
+	real, parameter :: tol = 1.e-5
+
+	write(*,*)
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			abs(eval_f32('1.0;') - 1) < tol, &
+			abs(eval_f32('6.9e1;') - 6.9e1) < tol, &
+			abs(eval_f32('+6.9e1;') - +6.9e1) < tol, &
+			abs(eval_f32('-6.9e1;') - -6.9e1) < tol, &
+			abs(eval_f32('0.333333333;') - 0.333333333) < tol, &
+			abs(eval_f32('1.1 +  2  ;') - (1.1 +  2  )) < tol, &
+			abs(eval_f32('1   +  2.1;') - (1   +  2.1)) < tol, &
+			abs(eval_f32('1.1 +  2.1;') - (1.1 +  2.1)) < tol, &
+			abs(eval_f32('1.1 -  2  ;') - (1.1 -  2  )) < tol, &
+			abs(eval_f32('1   -  2.1;') - (1   -  2.1)) < tol, &
+			abs(eval_f32('1.1 -  2.1;') - (1.1 -  2.1)) < tol, &
+			abs(eval_f32('1.1 *  2  ;') - (1.1 *  2  )) < tol, &
+			abs(eval_f32('1   *  2.1;') - (1   *  2.1)) < tol, &
+			abs(eval_f32('1.1 *  2.1;') - (1.1 *  2.1)) < tol, &
+			abs(eval_f32('1.1 /  2  ;') - (1.1 /  2  )) < tol, &
+			abs(eval_f32('1   /  2.1;') - (1   /  2.1)) < tol, &
+			abs(eval_f32('1.1 /  2.1;') - (1.1 /  2.1)) < tol, &
+			abs(eval_f32('1.1 ** 2  ;') - (1.1 ** 2  )) < tol, &
+			abs(eval_f32('1   ** 2.1;') - (1   ** 2.1)) < tol, &
+			abs(eval_f32('1.1 ** 2.1;') - (1.1 ** 2.1)) < tol, &
+			abs(eval_f32('1.1 + 2.2 + 34;') - (1.1 + 2.2 + 34)) < tol, &
+			abs(eval_f32('1 + 2 * 3.3;') - (1 + 2 * 3.3)) < tol, &
+			abs(eval_f32('1 * 2 * 3.6 * 4;') - (1 * 2 * 3.6 * 4)) < tol, &
+			abs(eval_f32('73 - 48.0;') - (73 - 48.0)) < tol, &
+			abs(eval_f32('73.1 - 48 - 21;') - (73.1 - 48 - 21)) < tol, &
+			abs(eval_f32('24 / 6.3;') - (24 / 6.3)) < tol, &
+			abs(eval_f32('24 / 6 / 2.1;') - (24 / 6 / 2.1)) < tol, &
+			abs(eval_f32('2.0 ** 5;') - (2.0 ** 5)) < tol, &
+			abs(eval_f32('3 ** 4.1;') - (3 ** 4.1)) < tol, &
+			abs(eval_f32('3.43 - 87654345 / 27 + 76 * 234 - 65432 / 63;') &
+			       - (3.43 - 87654345 / 27 + 76 * 234 - 65432 / 63)) < tol &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_f32_1
+
+!===============================================================================
+
+subroutine unit_test_f32(npass, nfail)
+
+	! More advanced f32 tests on longer syntran scripts
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f32 scripts'
 
 	! Path to syntran test files from root of repo
-	character(len = *), parameter :: path = 'src/tests/test-src/floats/'
+	character(len = *), parameter :: path = 'src/tests/test-src/f32/'
 
 	logical, allocatable :: tests(:)
 
@@ -593,7 +699,7 @@ subroutine unit_test_floats(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_floats
+end subroutine unit_test_f32
 
 !===============================================================================
 
@@ -640,6 +746,12 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('0 >= false', quiet) == '', &
 			eval('true >= false', quiet) == '', &
 			eval('1 + (2 == 3)', quiet) == '', &
+			eval('1.3 >= false', quiet) == '', &
+			eval('1.0 == 1', quiet) == '', &  ! I'm open to debate
+			eval('1 == 1.0', quiet) == '', &
+			eval('1.0 + true', quiet) == '', &
+			eval('true - 1.0', quiet) == '', &
+			eval('true and 1.0', quiet) == '', &
 			interpret( &
 				'let a = 2;'// &
 				'let a = 3', quiet) == '',     &
@@ -705,6 +817,35 @@ end subroutine unit_test_coda
 
 !===============================================================================
 
+subroutine log_test_summary(npass, nfail)
+
+	implicit none
+
+	integer, intent(in) :: npass, nfail
+
+	write(*,*)
+	write(*,*) repeat('+', 42)
+
+	write(*, '(a)', advance = 'no') ' +'
+	if (npass > 0) call console_color(fg_bright_green)
+	write(*, '(i12,a)', advance = 'no') npass, ' total tests passed'
+	call console_color_reset()
+	write(*,*) '        +'
+
+	write(*, '(a)', advance = 'no') ' +'
+	if (nfail > 0) call console_color(fg_bright_red)
+	write(*, '(i12,a)', advance = 'no') nfail, ' total tests failed'
+	call console_color_reset()
+	write(*,*) '        +'
+
+	write(*,*) repeat('+', 42)
+	write(*,*)
+	write(*,*) repeat('=', 72)
+
+end subroutine log_test_summary
+
+!===============================================================================
+
 subroutine unit_tests(iostat)
 
 	implicit none
@@ -727,6 +868,7 @@ subroutine unit_tests(iostat)
 	call unit_test_unary_arith(npass, nfail)
 	call unit_test_bools      (npass, nfail)
 	call unit_test_comparisons(npass, nfail)
+	call unit_test_comp_f32   (npass, nfail)
 	call unit_test_bad_syntax (npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
@@ -735,30 +877,13 @@ subroutine unit_tests(iostat)
 	call unit_test_for        (npass, nfail)
 	call unit_test_while      (npass, nfail)
 	call unit_test_var_scopes (npass, nfail)
-	call unit_test_floats     (npass, nfail)
+	call unit_test_f32     (npass, nfail)
+	call unit_test_f32_1   (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
 
-	write(*,*)
-	write(*,*) repeat('+', 42)
-
-	write(*, '(a)', advance = 'no') ' +'
-	if (npass > 0) call console_color(fg_bright_green)
-	write(*, '(i12,a)', advance = 'no') npass, ' total tests passed'
-	call console_color_reset()
-	write(*,*) '        +'
-
-	write(*, '(a)', advance = 'no') ' +'
-	if (nfail > 0) call console_color(fg_bright_red)
-	write(*, '(i12,a)', advance = 'no') nfail, ' total tests failed'
-	call console_color_reset()
-	write(*,*) '        +'
-
-	write(*,*) repeat('+', 42)
-	write(*,*)
-	write(*,*) repeat('=', 72)
-
+	call log_test_summary(npass, nfail)
 	iostat = nfail
 
 end subroutine unit_tests
