@@ -28,7 +28,6 @@ module core_m
 	! TODO:
 	!
 	! Add:
-	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
@@ -38,6 +37,7 @@ module core_m
 	!    * start with the way implicit arrays are handled as for loop iterators
 	!  - floats, characters, strings
 	!  - structs
+	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - enums
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - xor
@@ -143,18 +143,6 @@ module core_m
 			condition, if_clause, else_clause, body
 
 		type(syntax_node_t), allocatable :: lbound, ubound
-
-		! TODO: for var dict/array optimization, add a member "id_index" to
-		! parser.  Each time a "let" statement is parsed (or a for loop),
-		! increment the id_index and store the index node (in the node type or
-		! in the dict?).  At the end of parsing, allocate an array of vals and
-		! copy from dict into array.  Will a single rank-1 array work with
-		! scoping or does there need to be a separate array for each scope
-		! level?
-		!
-		! I think at the end of parsing, we can simply allocate an array.  We
-		! shouldn't need to copy anything, because type-checking is done in the
-		! parser, but values aren't used until evaluation
 
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
@@ -1637,8 +1625,8 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 
 		end if
 
-		! TODO: other scopes?  Only 1st one should matter from interpreter.  It
-		! doesn't evaluate until the block is finished
+		! Only the 1st scope level matters from interpreter.  It doesn't
+		! evaluate until the block is finished
 		call move_alloc(vars%dicts(1)%root, parser%vars%dicts(1)%root)
 		call move_alloc(vars%vals         , parser%vars%vals)
 
@@ -1688,6 +1676,11 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 	if (allocated(parser%vars%dicts(1)%root)) then
 		call move_alloc(parser%vars%dicts(1)%root, vars%dicts(1)%root)
 	end if
+
+	! When parsing is finished, we are done with the variable dictionary
+	! parser%vars%dicts.  Allocate an array for efficient evaluation without
+	! dictionary lookups.  Indices in the array are already saved in each node's
+	! id_index member
 
 	!print *, 'parser%num_vars = ', parser%num_vars
 	allocate(vars%vals( parser%num_vars ))
@@ -1837,26 +1830,6 @@ function parse_for_statement(parser) result(statement)
 	statement%lbound     = lbound
 	statement%ubound     = ubound
 	statement%body       = body
-
-	! TODO: cleanup
-
-	!parser%num_vars = parser%num_vars + 1
-	!expr%id_index = parser%num_vars
-
-	!! Insert the identifier's type into the dict and check that it
-	!! hasn't already been declared
-	!call parser%vars%insert(identifier%text, expr%val, &
-	!	expr%id_index, io, overwrite = .false.)
-
-	!********
-
-	!expr%val = parser%vars%search(identifier%text, expr%id_index, io)
-	!if (io /= exit_success) then
-	!	span = new_span(identifier%pos, len(identifier%text))
-	!	call parser%diagnostics%push( &
-	!		err_undeclare_var(parser%context, &
-	!		span, identifier%text))
-	!end if
 
 	call parser%vars%pop_scope()
 
@@ -2114,10 +2087,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
-		! TODO: lookup id_index from dict and save it in the expr node
-
-		! Get the identifier's type from the dict and check that it has
-		! been declared
+		! Get the identifier's type and index from the dict and check that it
+		! has been declared
 		!
 		! TODO: with scoping now, add "in this scope" to undeclare/redeclare err
 		! messages
@@ -2430,8 +2401,6 @@ function parse_primary_expr(parser) result(expr)
 
 			identifier = parser%next()
 			!print *, 'identifier = ', identifier%text
-
-			! TODO: lookup id_index
 
 			!print *, 'searching'
 			expr = new_name_expr(identifier, &
@@ -2785,22 +2754,6 @@ recursive function syntax_eval(node, vars) result(res)
 
 	!********
 
-	! TODO: as an optimization, convert the vars dict into an array
-	! by traversing the dict ternary tree and setting
-	! a node%ident_index for each node%identifier%text.  Save the value_t
-	! for each index in an array and then quickly look it up in the array
-	! instead of calling dict methods %search() and %insert().
-	!
-	! Do this here?  Could add a node%is_root bool, as we should only do it once
-	! per tree.  Or it could be done at the end of syntax_parse() or in between
-	! syntax_parse() and syntax_eval(), but that could require some WET work for
-	! interpreter, eval, etc. in syntran.f90.
-	!
-	! Careful with scoping.  Maybe convert to array at the end of each
-	! parse_block_statement()
-
-	!********
-
 	! I'm being a bit loose with consistency on select case indentation but
 	! I don't want a gigantic diff
 
@@ -2822,11 +2775,13 @@ recursive function syntax_eval(node, vars) result(res)
 		do i = lbound%ival, ubound%ival - 1
 			ival%ival = i
 
-			! TODO: insert by array id_index instead of dict lookup, here and in
-			! other cases of identifier eval
-
-			!call vars%insert(node%identifier%text, ival, node%id_index)
+			! During evaluation, insert variables by array id_index instead of
+			! dict lookup.  This is much faster and can be done during
+			! evaluation now that we know all of the variable identifiers.
+			! Parsing still needs to rely on dictionary lookups because it does
+			! not know the entire list of variable identifiers ahead of time
 			vars%vals(node%id_index) = ival
+			!call vars%insert(node%identifier%text, ival, node%id_index)
 
 			res = syntax_eval(node%body, vars)
 		end do
@@ -2874,13 +2829,14 @@ recursive function syntax_eval(node, vars) result(res)
 
 		! Assign res to LHS identifier variable as well.  This inserts the
 		! value, while the insert call in the parser inserts the type
-
-		!print *, 'assigning identifier "', node%identifier%text, '"'
-		!call vars%search_insert(node%identifier%text, res, node%id_index)
 		vars%vals(node%id_index) = res
+		!call vars%search_insert(node%identifier%text, res, node%id_index)
 
 		! The difference between let and assign is inserting into the current
-		! scope (let) vs possibly searching parent scopes (assign)
+		! scope (let) vs possibly searching parent scopes (assign).  During
+		! evaluation we don't need any extra logic for scoping.  The parser has
+		! already assigned a separate id_index for each identifier at each scope
+		! level
 
 	case (let_expr)
 

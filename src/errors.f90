@@ -292,7 +292,9 @@ function underline(context, span)
 	! Length of error token(s) within the line
 	length = span%length
 
-	! Same idea as 'last' adjustment: trim whitespace from error tokens
+	! Same idea as 'last' adjustment: trim whitespace from error tokens.  It
+	! would make more sense to clamp length directly instead of clamping
+	! j :shrug:
 	j = min(len(context%text), span%start + length - 1)
 	!print *, 'char = "', context%text(j:j), '"'
 	do while (is_whitespace(context%text(j:j)))

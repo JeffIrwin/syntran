@@ -413,7 +413,11 @@ subroutine unit_test_if_else(npass, nfail)
 
 	! TODO: more tests, and some bad syntax tests for interpret_file().
 	!
-	! Eventually, do something like Immo's AssertDiagnostic() for bad syntax
+	! Eventually, do something like Immo's AssertDiagnostic() for bad syntax.
+	! However, I don't like the idea of having to update tests whenever I decide
+	! to edit an error's wording, especially if there are multiple tests that
+	! cover each error message.  It could be manageable if there is only 1 test
+	! per message, but that limits how thorough the tests can be
 
 	tests = &
 		[   &
@@ -696,6 +700,9 @@ subroutine unit_tests(iostat)
 	call unit_test_for        (npass, nfail)
 	call unit_test_while      (npass, nfail)
 	call unit_test_var_scopes (npass, nfail)
+
+	! TODO: add tests that mock interpreting one line at a time (as opposed to
+	! whole files)
 
 	write(*,*)
 	write(*,*) repeat('+', 42)
