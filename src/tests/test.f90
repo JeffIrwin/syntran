@@ -142,7 +142,7 @@ end subroutine unit_test_unary_arith
 
 !===============================================================================
 
-subroutine unit_test_bool(npass, nfail)
+subroutine unit_test_bools(npass, nfail)
 
 	implicit none
 
@@ -178,7 +178,7 @@ subroutine unit_test_bool(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_bool
+end subroutine unit_test_bools
 
 !===============================================================================
 
@@ -562,6 +562,41 @@ end subroutine unit_test_var_scopes
 
 !===============================================================================
 
+subroutine unit_test_floats(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'floating point types'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/floats/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*)
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: more tests
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran') == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_floats
+
+!===============================================================================
+
 subroutine unit_test_bad_syntax(npass, nfail)
 
 	implicit none
@@ -690,7 +725,7 @@ subroutine unit_tests(iostat)
 	call unit_test_bin_arith  (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)
-	call unit_test_bool       (npass, nfail)
+	call unit_test_bools      (npass, nfail)
 	call unit_test_comparisons(npass, nfail)
 	call unit_test_bad_syntax (npass, nfail)
 	call unit_test_assignment (npass, nfail)
@@ -700,6 +735,7 @@ subroutine unit_tests(iostat)
 	call unit_test_for        (npass, nfail)
 	call unit_test_while      (npass, nfail)
 	call unit_test_var_scopes (npass, nfail)
+	call unit_test_floats     (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

@@ -3035,63 +3035,114 @@ recursive function syntax_eval(node, vars) result(res)
 
 		case (eequals_token)
 
-			if      (left%type == bool_type) then
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
+				res%bool = left%i32 == right%i32
+			case        (magic * f32_type + f32_type)
+				res%bool = left%f32 == right%f32
+			case        (magic * f32_type + i32_type)
+				res%bool = left%f32 == right%i32
+				! TODO: is this even possible or should I ban comparing ints and
+				! floats?  Similarly for other comparisons
+				!
+				! GNU says Warning: Equality comparison for REAL(4) at (1)
+				! [-Wcompare-reals]
+			case        (magic * i32_type + f32_type)
+				res%bool = left%i32 == right%f32
+			case        (magic * bool_type + bool_type)
 				res%bool = left%bool .eqv. right%bool
-			else if (left%type == i32_type) then
-				res%bool = left%i32  ==   right%i32
-				! TODO
-			else
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
-			end if
+			end select
 
 		case (bang_equals_token)
 
-			if (left%type == bool_type) then
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
+				res%bool = left%i32 /= right%i32
+			case        (magic * f32_type + f32_type)
+				res%bool = left%f32 /= right%f32
+			case        (magic * f32_type + i32_type)
+				res%bool = left%f32 /= right%i32
+			case        (magic * i32_type + f32_type)
+				res%bool = left%i32 /= right%f32
+			case        (magic * bool_type + bool_type)
 				res%bool = left%bool .neqv. right%bool
-			else if (left%type == i32_type) then
-				res%bool = left%i32  /=   right%i32
-				! TODO
-			else
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
-			end if
+			end select
 
 		case (less_token)
-			if (left%type == i32_type) then
+
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 < right%i32
-				! TODO
-			else
+			case        (magic * f32_type + f32_type)
+				res%bool = left%f32 < right%f32
+			case        (magic * f32_type + i32_type)
+				res%bool = left%f32 < right%i32
+			case        (magic * i32_type + f32_type)
+				res%bool = left%i32 < right%f32
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
-			end if
+			end select
 
 		case (less_equals_token)
-			if (left%type == i32_type) then
+
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 <= right%i32
-				! TODO
-			else
+			case        (magic * f32_type + f32_type)
+				res%bool = left%f32 <= right%f32
+			case        (magic * f32_type + i32_type)
+				res%bool = left%f32 <= right%i32
+			case        (magic * i32_type + f32_type)
+				res%bool = left%i32 <= right%f32
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
-			end if
+			end select
 
 		case (greater_token)
-			if (left%type == i32_type) then
+
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 > right%i32
-				! TODO
-			else
+			case        (magic * f32_type + f32_type)
+				res%bool = left%f32 > right%f32
+			case        (magic * f32_type + i32_type)
+				res%bool = left%f32 > right%i32
+			case        (magic * i32_type + f32_type)
+				res%bool = left%i32 > right%f32
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
-			end if
+			end select
 
 		case (greater_equals_token)
-			if (left%type == i32_type) then
+
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 >= right%i32
-				! TODO
-			else
+			case        (magic * f32_type + f32_type)
+				res%bool = left%f32 >= right%f32
+			case        (magic * f32_type + i32_type)
+				res%bool = left%f32 >= right%i32
+			case        (magic * i32_type + f32_type)
+				res%bool = left%i32 >= right%f32
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
-			end if
+			end select
 
 		case default
 			write(*,*) err_eval_binary_op(node%op%text)
