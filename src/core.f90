@@ -2850,6 +2850,9 @@ recursive function syntax_eval(node, vars) result(res)
 		! Assign return value
 		res = syntax_eval(node%right, vars)
 
+		! TODO: test int/float casting.  It should probably be an error during
+		! parsing
+
 		! Assign res to LHS identifier variable as well.  This inserts the
 		! value, while the insert call in the parser inserts the type
 		vars%vals(node%id_index) = res
@@ -2882,14 +2885,19 @@ recursive function syntax_eval(node, vars) result(res)
 
 		res%type = right%type
 
-		! TODO: add fallback type checking here? for float future-proofing
+		! TODO: add fallback type checking here
 
 		select case (node%op%kind)
 		case (plus_token)
 			res      =  right
 
 		case (minus_token)
-			res%i32 = -right%i32
+			select case (right%type)
+				case (i32_type)
+					res%i32 = -right%i32
+				case (f32_type)
+					res%f32 = -right%f32
+			end select
 
 		case (not_keyword)
 			res%bool = .not. right%bool
@@ -2921,7 +2929,7 @@ recursive function syntax_eval(node, vars) result(res)
 		select case (node%op%kind)
 		case (plus_token)
 
-			!! TODO: select case
+			!! No magic numbers, but ugh
 			!if      (left%type == i32_type .and. right%type == i32_type) then
 			!	res%i32 = left%i32 + right%i32
 			!else if (left%type == f32_type .and. right%type == f32_type) then
@@ -2931,8 +2939,7 @@ recursive function syntax_eval(node, vars) result(res)
 			!else if (left%type == i32_type .and. right%type == f32_type) then
 			!	res%f32 = left%i32 + right%f32
 			!else
-			!	! FIXME: other numeric types (i64, f64, etc.)
-			!	! TODO: internal_error()
+			!	call internal_error()
 			!end if
 
 			! Case selector must be a scalar expression, so use this nasty hack.
@@ -2949,23 +2956,73 @@ recursive function syntax_eval(node, vars) result(res)
 				res%f32 = left%i32 + right%f32
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
-
-				! TODO: internal_error()
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
 			end select
 
 		case (minus_token)
-			res%i32 = left%i32 - right%i32
-
-			! FIXME: floats
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
+				res%i32 = left%i32 - right%i32
+			case        (magic * f32_type + f32_type)
+				res%f32 = left%f32 - right%f32
+			case        (magic * f32_type + i32_type)
+				res%f32 = left%f32 - right%i32
+			case        (magic * i32_type + f32_type)
+				res%f32 = left%i32 - right%f32
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
+			end select
 
 		case (star_token)
-			res%i32 = left%i32 * right%i32
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
+				res%i32 = left%i32 * right%i32
+			case        (magic * f32_type + f32_type)
+				res%f32 = left%f32 * right%f32
+			case        (magic * f32_type + i32_type)
+				res%f32 = left%f32 * right%i32
+			case        (magic * i32_type + f32_type)
+				res%f32 = left%i32 * right%f32
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
+			end select
 
 		case (sstar_token)
-			res%i32 = left%i32 ** right%i32
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
+				res%i32 = left%i32 ** right%i32
+			case        (magic * f32_type + f32_type)
+				res%f32 = left%f32 ** right%f32
+			case        (magic * f32_type + i32_type)
+				res%f32 = left%f32 ** right%i32
+			case        (magic * i32_type + f32_type)
+				res%f32 = left%i32 ** right%f32
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
+			end select
 
 		case (slash_token)
-			res%i32 = left%i32 / right%i32
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
+				res%i32 = left%i32 / right%i32
+			case        (magic * f32_type + f32_type)
+				res%f32 = left%f32 / right%f32
+			case        (magic * f32_type + i32_type)
+				res%f32 = left%f32 / right%i32
+			case        (magic * i32_type + f32_type)
+				res%f32 = left%i32 / right%f32
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
+			end select
 
 		case (and_keyword)
 			res%bool = left%bool .and. right%bool
@@ -2979,6 +3036,7 @@ recursive function syntax_eval(node, vars) result(res)
 				res%bool = left%bool .eqv. right%bool
 			else if (left%type == i32_type) then
 				res%bool = left%i32  ==   right%i32
+				! TODO
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
@@ -2990,6 +3048,7 @@ recursive function syntax_eval(node, vars) result(res)
 				res%bool = left%bool .neqv. right%bool
 			else if (left%type == i32_type) then
 				res%bool = left%i32  /=   right%i32
+				! TODO
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
@@ -2998,6 +3057,7 @@ recursive function syntax_eval(node, vars) result(res)
 		case (less_token)
 			if (left%type == i32_type) then
 				res%bool = left%i32 < right%i32
+				! TODO
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
@@ -3006,6 +3066,7 @@ recursive function syntax_eval(node, vars) result(res)
 		case (less_equals_token)
 			if (left%type == i32_type) then
 				res%bool = left%i32 <= right%i32
+				! TODO
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
@@ -3014,6 +3075,7 @@ recursive function syntax_eval(node, vars) result(res)
 		case (greater_token)
 			if (left%type == i32_type) then
 				res%bool = left%i32 > right%i32
+				! TODO
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
@@ -3022,6 +3084,7 @@ recursive function syntax_eval(node, vars) result(res)
 		case (greater_equals_token)
 			if (left%type == i32_type) then
 				res%bool = left%i32 >= right%i32
+				! TODO
 			else
 				write(*,*) err_eval_binary_types(node%op%text)
 				call internal_error()
