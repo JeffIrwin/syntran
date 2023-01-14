@@ -48,6 +48,8 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			f32_type             = 51, &
+			f32_token            = 50, &
 			greater_equals_token = 49, &
 			greater_token        = 48, &
 			less_equals_token    = 47, &
@@ -105,11 +107,12 @@ module core_m
 	!********
 
 	type value_t
-		! TODO: rename this kind to type?  Careful w/ search/replace
-		!integer :: kind
 		integer :: type
-		logical :: bool
+
+		logical           :: bool
 		integer(kind = 4) :: i32
+		real   (kind = 4) :: f32
+
 		contains
 			procedure :: str => value_str
 	end type value_t
@@ -756,7 +759,9 @@ function kind_name(kind)
 			"less_token          ", & ! 46
 			"less_equals_token   ", & ! 47
 			"greater_token       ", & ! 48
-			"greater_equals_token"  & ! 49
+			"greater_equals_token", & ! 49
+			"f32_token           ", & ! 50
+			"f32_type            "  & ! 51
 		]
 			! FIXME: update kind_tokens array too
 
@@ -787,7 +792,7 @@ function kind_token(kind)
 			"/                    ", & !  7
 			"*                    ", & !  8
 			"Binary expression    ", & !  9
-			"Numeric expression   ", & ! 10
+			"i32 expression       ", & ! 10
 			")                    ", & ! 11
 			"(                    ", & ! 12
 			"Unary expression     ", & ! 13
@@ -826,7 +831,9 @@ function kind_token(kind)
 			"<                    ", & ! 46
 			"<=                   ", & ! 47
 			">                    ", & ! 48
-			">=                   "  & ! 49
+			">=                   ", & ! 49
+			"[0-9.+-e]            ", & ! 50
+			"f32 expression       "  & ! 51
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -1056,7 +1063,7 @@ character function peek_char(lexer, offset)
 
 	pos = lexer%pos + offset
 
-	if (pos > len(lexer%text)) then
+	if (pos < 1 .or. pos > len(lexer%text)) then
 		peek_char = null_char
 		return
 	end if
@@ -1087,10 +1094,14 @@ function lex(lexer) result(token)
 
 	!********
 
+	character(len = :), allocatable :: text
+
 	integer :: kind
 	integer :: start, io, i32
 
-	character(len = :), allocatable :: text
+	logical :: float
+
+	real(kind = 4) :: f32
 
 	type(text_span_t) :: span
 	type(value_t) :: val
@@ -1104,22 +1115,46 @@ function lex(lexer) result(token)
 
 	if (is_digit(lexer%current())) then
 
-		! TODO: or [.e+-]?  If . is present, parse f32 instead of i32
+		float = .false.
 
-		do while (is_digit(lexer%current()))
+		!do while (is_digit(lexer%current()))
+		do while (is_float(lexer%current()))
+
+			if (is_sign(lexer%current()) .and. .not. &
+				is_expo(lexer%peek(-1))) exit
+
+			float = float .or. .not. is_digit(lexer%current())
+
 			lexer%pos = lexer%pos + 1
 		end do
 		text = lexer%text(start: lexer%pos-1)
 
-		read(text, *, iostat = io) i32
-		if (io /= exit_success) then
-			span = new_span(start, len(text))
-			call lexer%diagnostics%push(err_bad_int( &
-				lexer%context, span, text))
+		if (float) then
+
+			read(text, *, iostat = io) f32
+			if (io /= exit_success) then
+				span = new_span(start, len(text))
+				call lexer%diagnostics%push(err_bad_int( &
+					lexer%context, span, text))
+			end if
+
+			val   = new_literal_value(f32_type, f32 = f32)
+			token = new_token(f32_token, start, text, val)
+
+		else
+
+			read(text, *, iostat = io) i32
+			if (io /= exit_success) then
+				span = new_span(start, len(text))
+				call lexer%diagnostics%push(err_bad_int( &
+					lexer%context, span, text))
+			end if
+
+			val   = new_literal_value(i32_type, i32 = i32)
+			token = new_token(i32_token, start, text, val)
+
 		end if
 
-		val   = new_literal_value(i32_type, i32 = i32)
-		token = new_token(i32_token, start, text, val)
 		return
 
 	end if
@@ -1292,16 +1327,19 @@ end subroutine read_single_line_comment
 
 !===============================================================================
 
-function new_literal_value(type, bool, i32) result(val)
+function new_literal_value(type, bool, i32, f32) result(val)
 
 	integer, intent(in) :: type
-	integer, intent(in), optional :: i32
-	logical, intent(in), optional :: bool
+
+	integer(kind = 4), intent(in), optional :: i32
+	real   (kind = 4), intent(in), optional :: f32
+	logical          , intent(in), optional :: bool
 
 	type(value_t) :: val
 
 	val%type = type
 	if (present(bool)) val%bool = bool
+	if (present(f32 )) val%f32  = f32
 	if (present(i32 )) val%i32  = i32
 
 end function new_literal_value
@@ -2372,6 +2410,11 @@ function parse_primary_expr(parser) result(expr)
 					span, identifier%text))
 			end if
 
+		case (f32_token)
+
+			num = parser%match(f32_token)
+			expr = new_f32(num%val%f32)
+
 		case default
 
 			num = parser%match(i32_token)
@@ -2410,6 +2453,18 @@ function new_bool(bool) result(expr)
 	expr%val = new_literal_value(bool_type, bool = bool)
 
 end function new_bool
+
+!********
+
+function new_f32(f32) result(expr)
+
+	real(kind = 4), intent(in) :: f32
+	type(syntax_node_t) :: expr
+
+	expr%kind = literal_expr
+	expr%val  = new_literal_value(f32_type, f32 = f32)
+
+end function new_f32
 
 !********
 
@@ -2978,9 +3033,15 @@ function value_str(val) result(str)
 
 	!********
 
+	character(len = 16) :: buf16
 	character(len = 32) :: buffer
 
 	select case (val%type)
+
+		case (f32_type)
+			write(buf16, '(es16.6)') val%f32
+			!str = trim(buf16)
+			str = buf16  ! no trim for alignment
 
 		case (i32_type)
 			write(buffer, '(i0)') val%i32

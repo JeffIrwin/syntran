@@ -319,6 +319,53 @@ end function is_digit
 
 !===============================================================================
 
+logical function is_sign(c)
+
+	character, intent(in) :: c
+
+	is_sign = c == '+' .or. c == '-'
+
+end function is_sign
+
+!===============================================================================
+
+logical function is_expo(c)
+
+	character, intent(in) :: c
+
+	is_expo = c == 'd' .or. c == 'e'
+
+end function is_expo
+
+!===============================================================================
+
+logical function is_float(c)
+
+	character, intent(in) :: c
+
+	! TODO: this is actually tricky.  Parse this as a float:
+	!
+	!     1.234e+1
+	!
+	! But parse this as a binary expression adding two ints:
+	!
+	!     1+234
+	!
+	! The + or - can only appear immediately after d or e
+
+	!is_float = is_digit(c) .or. &
+	!	c == '.'! .or. &
+	!	!c == '+' .or. &
+	!	!c == '-' .or. &
+	!	!c == 'd' .or. &
+	!	!c == 'e'
+
+	is_float = is_digit(c) .or. is_sign(c) .or. is_expo(c) .or. c == '.'
+
+end function is_float
+
+!===============================================================================
+
 logical function is_letter(c)
 
 	character, intent(in) :: c
