@@ -2,8 +2,9 @@
 {
 	// Gauss the kindergartner would be unimpressed
 
-	let i = 0;
 	let sum = 0;
+
+	// Loop iterators do not use the `let` keyword
 	for i in [1: 101]
 		sum = sum + i;
 

@@ -1,43 +1,43 @@
 
-// Anonymous global block
 {
+	let foo = 1;
+	let bar = 3;
 
-    // There's no scoping yet in 0.0.5.  Everything is global
-    {
-        let foo = 1;
-        let bar = 2;
-    }
+	{
+		// Local block vars shadow those from the parent scope
+		let foo = 10;
+		let bar = 20;
+	}
 
-    let baz = 4;
+	let baz = 4;
+	baz = 3;
 
-    baz = 3;
+	{
+		// Absence of 'let' keyword means this bar is from parent scope
+		bar = 2;
+	}
 
-    foo + bar * baz;
+	foo + bar * baz;
 
-    //foo; bar = baz;
+	let p = true;
+	{
+		// More shadows.  They can even vary in type
+		let p = 1;
+		let foo = true;
+	}
 
-    //foo bar = baz
-    ////
-    //// ^ 
-    //// Before I required semicolons, the above was interpretted like this:
-    ////
-    ////     foo;
-    ////
-    ////     bar = baz;
-    ////
-    //// So I'm totally going to start requiring semicolons
+	let q = false;
 
-    {
-        let p = true;
-    }
+	//let q = true;
+	////Error: variable `q` has already been declared
+	////   --> src/tests/test-src/test-01-blocks.syntran:31:6
+	////    |
+	//// 31 |  let q = true;
+	////    |      ^ variable already declared
 
-    let q = false;
+	p or q;
 
-    p or q;
-    not q and foo + bar == baz;
-
-    //// The final (uncommented) statement of the main block is the printed
-    //// result
-    //foo + bar * baz;
-
+	p and not q and foo + bar == baz;
+	// true
 }
+

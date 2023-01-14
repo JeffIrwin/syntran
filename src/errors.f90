@@ -297,7 +297,7 @@ function underline(context, span)
 	!print *, 'char = "', context%text(j:j), '"'
 	do while (is_whitespace(context%text(j:j)))
 		length = length - 1
-		j = span%start + length - 1
+		j = min(len(context%text), span%start + length - 1)
 	end do
 	length = max(length, 1)
 
