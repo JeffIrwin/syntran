@@ -28,6 +28,7 @@ module core_m
 	! TODO:
 	!
 	! Add:
+	!  - error_type (or unknown_type) like Immo to prevent cascading errors
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
@@ -2212,8 +2213,13 @@ logical function is_binary_op_allowed(left, op, right)
 		case (plus_token, minus_token, sstar_token, star_token, slash_token, &
 				less_token   , less_equals_token, &
 				greater_token, greater_equals_token)
-			! FIXME: floats
-			is_binary_op_allowed = left == i32_type  .and. right == i32_type
+
+			! FIXME: other numeric types (i64, f64, etc.)
+
+			! TODO: make a fn is_num_type, returning true for i32, f32, ...
+			is_binary_op_allowed = &
+				(left  == i32_type .or. left  == f32_type) .and. &
+				(right == i32_type .or. right == f32_type)
 
 		case (and_keyword, or_keyword)
 			is_binary_op_allowed = left == bool_type .and. right == bool_type
@@ -2238,8 +2244,8 @@ logical function is_unary_op_allowed(op, operand)
 	select case (op)
 
 		case (plus_token, minus_token)
-			! FIXME: floats
-			is_unary_op_allowed = operand == i32_type
+			! FIXME: other numeric types (i64, f64, etc.)
+			is_unary_op_allowed = operand == i32_type .or. operand == f32_type
 
 		case (not_keyword)
 			is_unary_op_allowed = operand == bool_type
@@ -2591,7 +2597,19 @@ integer function get_binary_op_kind(left, op, right)
 		! float, not int.  That's why I'm passing right as an arg (but not using
 		! it yet)
 
-		get_binary_op_kind = left
+		if (left == right) then
+			get_binary_op_kind = left
+			return
+		end if
+
+		if (left == f32_type .or. right == f32_type) then
+			get_binary_op_kind = f32_type
+			return
+		end if
+
+		! TODO: messaging.  stop w/o breaking bad syntax tests
+		print *, 'Error: unreachable'
+		!call internal_error()
 
 	end select
 
@@ -2740,6 +2758,7 @@ recursive function syntax_eval(node, vars) result(res)
 	!********
 
 	integer :: i
+	integer, parameter :: magic = 128
 	type(value_t) :: left, right, condition, lbound, ubound, itr
 
 	if (node%is_empty) then
@@ -2888,27 +2907,56 @@ recursive function syntax_eval(node, vars) result(res)
 		!print *, 'left  = ', left
 		!print *, 'right = ', right
 
-		! The parser should catch this, but do it here as a fallback (e.g. I'll
-		! add floats later and forget this needs fixing)
-		if (left%type /= right%type) then
-
-			! Internal compiler errors shouldn't ever happen, but if they do,
-			! the evaluation will be garbage.
-			write(*,*) err_eval_binary_types(node%op%text)
-			call internal_error()
-
-		end if
+		!! The parser should catch this, but do it here as a fallback (e.g. I'll
+		!! add floats later and forget this needs fixing)
+		!if (left%type /= right%type) then
+		!	! Internal compiler errors shouldn't ever happen, but if they do,
+		!	! the evaluation will be garbage.
+		!	write(*,*) err_eval_binary_types(node%op%text)
+		!	call internal_error()
+		!end if
 
 		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
 
 		select case (node%op%kind)
 		case (plus_token)
-			res%i32 = left%i32 + right%i32
 
-			! FIXME: floats
+			!! TODO: select case
+			!if      (left%type == i32_type .and. right%type == i32_type) then
+			!	res%i32 = left%i32 + right%i32
+			!else if (left%type == f32_type .and. right%type == f32_type) then
+			!	res%f32 = left%f32 + right%f32
+			!else if (left%type == f32_type .and. right%type == i32_type) then
+			!	res%f32 = left%f32 + right%i32
+			!else if (left%type == i32_type .and. right%type == f32_type) then
+			!	res%f32 = left%i32 + right%f32
+			!else
+			!	! FIXME: other numeric types (i64, f64, etc.)
+			!	! TODO: internal_error()
+			!end if
+
+			! Case selector must be a scalar expression, so use this nasty hack.
+			! This will break if magic is smaller than the largest type enum
+			! parameter
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
+				res%i32 = left%i32 + right%i32
+			case        (magic * f32_type + f32_type)
+				res%f32 = left%f32 + right%f32
+			case        (magic * f32_type + i32_type)
+				res%f32 = left%f32 + right%i32
+			case        (magic * i32_type + f32_type)
+				res%f32 = left%i32 + right%f32
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
+
+				! TODO: internal_error()
+			end select
 
 		case (minus_token)
 			res%i32 = left%i32 - right%i32
+
+			! FIXME: floats
 
 		case (star_token)
 			res%i32 = left%i32 * right%i32
