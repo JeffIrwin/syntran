@@ -142,6 +142,18 @@ module core_m
 		!integer(kind = 4) :: lbound_i32, step_i32, ubound_i32
 		!real   (kind = 4) :: lbound_f32, step_f32, ubound_f32
 
+		! Note that these are arrays of primitive Fortran types, instead of
+		! arrays of generic value_t.  This performs better since we can put
+		! a type select/case outside of loops for processing arrays, as opposed
+		! to inside of a loop for type selection of every element
+		logical(kind = 1), allocatable :: bool(:)
+		integer(kind = 4), allocatable ::  i32(:)
+		real   (kind = 4), allocatable ::  f32(:)
+
+		integer :: len, cap
+		contains
+			procedure :: push => push_array
+
 	end type array_t
 
 	!********
@@ -663,6 +675,78 @@ subroutine push_token(vector, val)
 	vector%v( vector%len ) = val
 
 end subroutine push_token
+
+!===============================================================================
+
+function new_array(type) result(vector)
+
+	integer, intent(in) :: type
+	type(array_t) :: vector
+
+	vector%len = 0
+	vector%cap = 2  ! I think a small default makes sense here
+
+	if      (type == i32_type) then
+		allocate(vector%i32( vector%cap ))
+	else if (type == f32_type) then
+		allocate(vector%f32( vector%cap ))
+	else if (type == bool_type) then
+		allocate(vector%bool( vector%cap ))
+	else
+		print *, 'Error: array type not implemented'
+		call internal_error()
+	end if
+
+	vector%type = type
+
+end function new_array
+
+!===============================================================================
+
+subroutine push_array(vector, val)
+
+	! Is there a way to have a generic unlimited polymorphic vector?  I couldn't
+	! figure it out
+
+	class(array_t) :: vector
+	type(value_t)  :: val
+
+	!********
+
+	integer(kind = 4), allocatable :: tmp_i32(:)
+	real   (kind = 4), allocatable :: tmp_f32(:)
+	logical(kind = 1), allocatable :: tmp_bool(:)
+
+	integer :: tmp_cap
+
+	vector%len = vector%len + 1
+
+	if (vector%len > vector%cap) then
+		!print *, 'growing vector'
+
+		tmp_cap = 2 * vector%len
+
+		if (vector%type == i32_type) then
+
+			allocate(tmp_i32( tmp_cap ))
+			tmp_i32(1: vector%cap) = vector%i32
+			call move_alloc(tmp_i32, vector%i32)
+
+		else
+			print *, 'TODO: push_array type not implemented'
+		end if
+
+		vector%cap = tmp_cap
+
+	end if
+
+	if (vector%type == i32_type) then
+		vector%i32( vector%len ) = val%i32
+	else
+		! TODO
+	end if
+
+end subroutine push_array
 
 !===============================================================================
 
@@ -2559,6 +2643,11 @@ function parse_array_expr(parser) result(expr)
 
 	call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len ))
 
+	! TODO: allow arbitrarily combinations catting expl and impl arrays, e.g.
+	!
+	!        [0: 3   ,   5, 6,   10: 13    ]
+	!     // [0, 1, 2,   5, 6,   10, 11, 12]
+
 end function parse_array_expr
 
 !===============================================================================
@@ -2968,6 +3057,7 @@ recursive function syntax_eval(node, vars) result(res)
 
 	integer :: i
 	integer, parameter :: magic = 128
+	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem
 
 	if (node%is_empty) then
@@ -3013,7 +3103,7 @@ recursive function syntax_eval(node, vars) result(res)
 
 			print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
 
-			! TODO: res should be the whole array?
+			! TODO: res should be the whole expanded array?
 			res = node%val
 
 			res%array%lbound = lbound
@@ -3022,13 +3112,23 @@ recursive function syntax_eval(node, vars) result(res)
 		else if (node%val%array%kind == expl_array) then
 			print *, 'expl_array'
 
+			! TODO: allow empty arrays?
+			array = new_array(node%val%array%type)
+
 			do i = 1, size(node%elems)
 				print *, 'i = ', i
 				elem = syntax_eval(node%elems(i), vars)
 
 				print *, 'elem = ', elem%str()
 				print *, ''
+
+				call array%push(elem)
+
 			end do
+
+			print *, 'copying array'
+			res%array = array
+			print *, 'done'
 
 		else
 			!TODO
@@ -3037,6 +3137,9 @@ recursive function syntax_eval(node, vars) result(res)
 		end if
 
 	case (for_statement)
+
+		! TODO: migrate to general array_t type.  If possible, don't expand
+		! implicit arrays for for loops
 
 		lbound = syntax_eval(node%lbound, vars)
 		ubound = syntax_eval(node%ubound, vars)
@@ -3434,6 +3537,8 @@ function value_str(val) result(str)
 	character(len = 16) :: buf16
 	character(len = 32) :: buffer
 
+	integer :: i
+
 	select case (val%type)
 
 		case (f32_type)
@@ -3454,8 +3559,22 @@ function value_str(val) result(str)
 			end if
 
 		case (array_type)
-			str = '['//val%array%lbound%str()//': ' &
-			         //val%array%ubound%str()//']'
+
+			if (val%array%kind == impl_array) then
+				str = '['//val%array%lbound%str()//': ' &
+				         //val%array%ubound%str()//']'
+				return
+			end if
+
+			! This will probably break for large arrays as we can't arbitrarily
+			! cat huge strings
+			str = '['
+			do i = 1, val%array%len
+				! TODO: other types
+				str = str//int_str(val%array%i32(i))
+				if (i < val%array%len) str = str//', '
+			end do
+			str = str//']'
 
 		case default
 			str = err_prefix//"<invalid_value>"//color_reset
