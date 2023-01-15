@@ -23,7 +23,7 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  8
+		syntran_patch =  9
 
 	! TODO:
 	!
