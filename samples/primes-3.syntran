@@ -1,0 +1,49 @@
+
+{
+	// Search for all primes less than n
+	//let n = 5;
+	let n = 10000;
+
+	// Pre-allocate a list of primes.  This is much bigger than it needs to be
+	//let primes = [-n: 0];
+	let primes = [-n/5: 0];
+	//let primes = [0: n];
+
+	// Number of primes found so far
+	let num_primes = 0;
+
+	// TODO: nasty hack
+	let divisor = 0;
+
+	for i in [2: n]
+	{
+		let is_composite = false;
+
+		let j = 0;
+		while j < num_primes and not is_composite
+		{
+			//let divisor = primes[j]; // divisor really should be local
+			divisor = primes[j];
+
+			// Is i divisible by divisor?
+			let divisible = divisor * (i / divisor) == i; // mod == 0
+			is_composite = is_composite or divisible;
+
+			j = j + 1;
+		}
+
+		if not is_composite
+		{
+			primes[num_primes] = i;
+			num_primes = num_primes + 1;
+		}
+	}
+
+	// This is the final list of primes.  Ignore negative values at the
+	// end of the array
+	primes;
+
+	//// This largest prime is our final result
+	//primes[num_primes];
+}
+

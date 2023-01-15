@@ -2278,7 +2278,7 @@ recursive function parse_expr_statement(parser) result(expr)
 	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket
 	type(text_span_t) :: span
 
-	print *, 'starting parse_expr_statement()'
+	!print *, 'starting parse_expr_statement()'
 
 	! TODO: provide a way to declare variable types without initializing them?
 	! Rust discourages mutability, instead preferring patterns like this:
@@ -2369,18 +2369,18 @@ recursive function parse_expr_statement(parser) result(expr)
 		subscript_present = .false.
 		if (parser%current_kind() == lbracket_token) then
 			subscript_present = .true.
-			print *, 'parsing subscript'
+			!print *, 'parsing subscript'
 
 			lbracket  = parser%match(lbracket_token)
 			subscript = parser%parse_expr()
 
-			print *, 'subscript = ', subscript%str()
+			!print *, 'subscript = ', subscript%str()
 
 			! TODO: check subscript type is int
 
-			print *, 'parsing rbracket'
+			!print *, 'parsing rbracket'
 			rbracket  = parser%match(rbracket_token)
-			print *, 'done'
+			!print *, 'done'
 
 		end if
 
@@ -2411,7 +2411,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		expr%op    = op
 		expr%right = right
 
-		print *, 'expr ident text = ', expr%identifier%text
+		!print *, 'expr ident text = ', expr%identifier%text
 
 		! Get the identifier's type and index from the dict and check that it
 		! has been declared
@@ -2424,9 +2424,9 @@ recursive function parse_expr_statement(parser) result(expr)
 				span, identifier%text))
 		end if
 
-		print *, 'type = ', kind_name(expr%val%type)
+		!print *, 'type = ', kind_name(expr%val%type)
 
-		print *, 'associated(expr%val%array) = ', associated(expr%val%array)
+		!print *, 'associated(expr%val%array) = ', associated(expr%val%array)
 
 		ltype = expr%val%type
 		rtype = expr%right%val%type
@@ -2732,7 +2732,7 @@ function parse_array_expr(parser) result(expr)
 	type(syntax_token_t) :: lbracket, rbracket, colon, comma
 	type(text_span_t) :: span
 
-	print *, 'starting parse_array_expr()'
+	!print *, 'starting parse_array_expr()'
 
 	! TODO: optionally match this lbound:ubound style, or lbound step and
 	! ubound, or an explicit list of comma-separated array elements.  Rank-1 for
@@ -2780,8 +2780,8 @@ function parse_array_expr(parser) result(expr)
 
 		rbracket = parser%match(rbracket_token)
 
-		print *, 'lbound = ', lbound%str()
-		print *, 'ubound = ', ubound%str()
+		!print *, 'lbound = ', lbound%str()
+		!print *, 'ubound = ', ubound%str()
 
 		allocate(expr%val%array)
 
@@ -2807,7 +2807,7 @@ function parse_array_expr(parser) result(expr)
 
 	end if
 
-	print *, 'elem ', lbound%val%str()
+	!print *, 'elem ', lbound%val%str()
 
 	elems = new_syntax_node_vector()
 	call elems%push(lbound)
@@ -2821,7 +2821,7 @@ function parse_array_expr(parser) result(expr)
 		elem     = parser%parse_expr()
 		elem_end = parser%peek_pos(0) - 1
 
-		print *, 'elem ', elem%val%str()
+		!print *, 'elem ', elem%val%str()
 
 		! TODO: compare to first type, not hard-coded i32
 		if (elem%val%type /= i32_type) then
@@ -2868,7 +2868,7 @@ function parse_primary_expr(parser) result(expr)
 		rbracket
 	type(text_span_t) :: span
 
-	if (debug > -1) print *, 'parse_primary_expr'
+	if (debug > 1) print *, 'parse_primary_expr'
 
 	select case (parser%current_kind())
 
@@ -2903,8 +2903,8 @@ function parse_primary_expr(parser) result(expr)
 		case (identifier_token)
 
 			identifier = parser%next()
-			print *, 'RHS identifier = ', identifier%text
-			print *, 'parser%current_kind() = ', kind_name(parser%current_kind())
+			!print *, 'RHS identifier = ', identifier%text
+			!print *, 'parser%current_kind() = ', kind_name(parser%current_kind())
 
 			! TODO: parse array subscript if present.  Can this be consolidated
 			! with subscript parsing in parse_expr_statement?
@@ -2921,12 +2921,12 @@ function parse_primary_expr(parser) result(expr)
 					span, identifier%text))
 			end if
 
-			print *, 'parser%current_kind() = ', kind_name(parser%current_kind())
+			!print *, 'parser%current_kind() = ', kind_name(parser%current_kind())
 			!subscript_present = .false.
 			if (parser%current_kind() == lbracket_token) then
 				!subscript_present = .true.
 
-				print *, 'parsing RHS subscript'
+				!print *, 'parsing RHS subscript'
 
 				lbracket  = parser%match(lbracket_token)
 				subscript = parser%parse_expr()
@@ -3286,7 +3286,7 @@ recursive function syntax_eval(node, vars) result(res)
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
 		subscript
 
-	print *, 'starting syntax_eval()'
+	!print *, 'starting syntax_eval()'
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -3307,12 +3307,12 @@ recursive function syntax_eval(node, vars) result(res)
 
 	case (array_expr)
 
-		print *, 'evaluating array_expr'
+		!print *, 'evaluating array_expr'
 
 		! TODO: switch on impl_array vs expl_array cases
 
 		if (node%val%array%kind == impl_array) then
-			print *, 'impl_array'
+			!print *, 'impl_array'
 
 			! TODO: expand impl_array to expl_array here on evaluation.  Consider
 			! something like this:
@@ -3337,7 +3337,7 @@ recursive function syntax_eval(node, vars) result(res)
 			!res%array%lbound = lbound
 			!res%array%ubound = ubound
 
-			print *, 'node%val%array%type = ', node%val%array%type
+			!print *, 'node%val%array%type = ', node%val%array%type
 
 			! This could be allocated in one shot without pushing to growable
 			! array.  TODO: types
@@ -3353,27 +3353,27 @@ recursive function syntax_eval(node, vars) result(res)
 			res%array = array
 
 		else if (node%val%array%kind == expl_array) then
-			print *, 'expl_array'
+			!print *, 'expl_array'
 
 			! TODO: allow empty arrays?
 			array = new_array(node%val%array%type)
 
 			do i = 1, size(node%elems)
-				print *, 'i = ', i
+				!print *, 'i = ', i
 				elem = syntax_eval(node%elems(i), vars)
 
-				print *, 'elem = ', elem%str()
-				print *, ''
+				!print *, 'elem = ', elem%str()
+				!print *, ''
 
 				call array%push(elem)
 
 			end do
 
-			print *, 'copying array'
+			!print *, 'copying array'
 			allocate(res%array)
 			res%type  = array_type
 			res%array = array
-			print *, 'done'
+			!print *, 'done'
 
 		else
 			!TODO
@@ -3482,20 +3482,19 @@ recursive function syntax_eval(node, vars) result(res)
 			! identifier at each scope level
 
 		else
-			print *, 'array subscript assignment'
+			!print *, 'array subscript assignment'
 
 			! Assign return value from RHS
 			res = syntax_eval(node%right, vars)
 
-			print *, 'RHS = ', res%str()
+			!print *, 'RHS = ', res%str()
 
 			subscript = syntax_eval(node%subscript, vars)
 
-			print *, 'subscript = ', subscript%str()
+			!print *, 'subscript = ', subscript%str()
 
-			!print *, 'LHS array type = ', node%val%array%type
-			print *, 'LHS array type = ', vars%vals(node%id_index)%array%type
-			print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
+			!print *, 'LHS array type = ', vars%vals(node%id_index)%array%type
+			!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
 
 			! TODO: check types, at least in parser if not here as a fallback
 			! too
@@ -3522,7 +3521,7 @@ recursive function syntax_eval(node, vars) result(res)
 
 		if (allocated(node%subscript)) then
 
-			print *, 'subscript name expr'
+			!print *, 'subscript name expr'
 
 			! TODO: other types
 
@@ -3532,7 +3531,7 @@ recursive function syntax_eval(node, vars) result(res)
 			res%i32 = vars%vals(node%id_index)%array%i32( subscript%i32 + 1 )
 
 		else
-			print *, 'scalar name expr'
+			!print *, 'scalar name expr'
 			res = vars%vals(node%id_index)
 		end if
 
