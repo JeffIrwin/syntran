@@ -40,6 +40,8 @@ subroutine unit_test_bin_arith(npass, nfail)
 			eval_i32('1337;') == 1337, &
 			eval_i32('1 + 2;') == 1 + 2, &
 			eval_i32('1 + 2 + 34;') == 1 + 2 + 34, &
+			eval_i32('1+2+34;') == 1+2+34, &
+			eval_i32('1-2-34;') == 1-2-34, &
 			eval_i32('1 + 2 * 3;') == 1 + 2 * 3, &
 			eval_i32('1 * 2 * 3 * 4;') == 1 * 2 * 3 * 4, &
 			eval_i32('73 - 48;') == 73 - 48, &
@@ -620,7 +622,7 @@ subroutine unit_test_f32_1(npass, nfail)
 
 	logical, allocatable :: tests(:)
 
-	real, parameter :: tol = 1.e-5
+	real, parameter :: tol = 1.e-9
 
 	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
@@ -647,6 +649,10 @@ subroutine unit_test_f32_1(npass, nfail)
 			abs(eval_f32('1.1 ** 2  ;') - (1.1 ** 2  )) < tol, &
 			abs(eval_f32('1   ** 2.1;') - (1   ** 2.1)) < tol, &
 			abs(eval_f32('1.1 ** 2.1;') - (1.1 ** 2.1)) < tol, &
+			abs(eval_f32('1.2e-3 + 4.5e-3;') - (1.2e-3 + 4.5e-3)) < tol, &
+			abs(eval_f32('1.2e-3+4.5e-3;') - (1.2e-3+4.5e-3)) < tol, &
+			abs(eval_f32('1.2e-3-4.5e-3;') - (1.2e-3-4.5e-3)) < tol, &
+			abs(eval_f32('1.2e+3-4.5e+3;') - (1.2e+3-4.5e+3)) < tol, &
 			abs(eval_f32('1.1 + 2.2 + 34;') - (1.1 + 2.2 + 34)) < tol, &
 			abs(eval_f32('1 + 2 * 3.3;') - (1 + 2 * 3.3)) < tol, &
 			abs(eval_f32('1 * 2 * 3.6 * 4;') - (1 * 2 * 3.6 * 4)) < tol, &
@@ -753,6 +759,7 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('1.0 + true', quiet) == '', &
 			eval('true - 1.0', quiet) == '', &
 			eval('true and 1.0', quiet) == '', &
+			eval('1.234e+1e+2', quiet) == '', &
 			interpret( &
 				'let a = 2;'// &
 				'let a = 3', quiet) == '',     &

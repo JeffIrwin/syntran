@@ -1135,10 +1135,12 @@ function lex(lexer) result(token)
 			! TODO: after f64 is supported, consider parsing that as the default
 			! float type and requiring something like 1.0f for f32
 
+			! This io check can catch problems like `1.234e+1e+2` which look
+			! like a float but aren't correctly formatted
 			read(text, *, iostat = io) f32
 			if (io /= exit_success) then
 				span = new_span(start, len(text))
-				call lexer%diagnostics%push(err_bad_int( &
+				call lexer%diagnostics%push(err_bad_float( &
 					lexer%context, span, text))
 			end if
 

@@ -343,22 +343,24 @@ logical function is_float(c)
 
 	character, intent(in) :: c
 
-	! TODO: this is actually tricky.  Parse this as a float:
+	! Correctly tokenizing a float is actually tricky.  We can't just greedily
+	! gobble up all the characters that match is_float().  We need to tokenize
+	! this as a float:
 	!
 	!     1.234e+1
 	!
-	! But parse this as a binary expression adding two ints:
+	! But tokenize this as a binary expression adding two ints:
 	!
 	!     1+234
 	!
-	! The + or - can only appear immediately after d or e
-
-	!is_float = is_digit(c) .or. &
-	!	c == '.'! .or. &
-	!	!c == '+' .or. &
-	!	!c == '-' .or. &
-	!	!c == 'd' .or. &
-	!	!c == 'e'
+	! The + or - can only appear immediately after d or e.  To complicate
+	! matters, there could also be a variable identifier named "e".
+	!
+	! To correctly tokenize floats, the lexer uses is_float(), in conjunction
+	! with is_sign() and is_expo() to ensure that sign characters within a float
+	! token ONLY occur immediately after an exponent character. Note that sign
+	! characters before a number are tokenized as a separate unary operator, not
+	! as part of the number token.
 
 	is_float = is_digit(c) .or. is_sign(c) .or. is_expo(c) .or. c == '.'
 

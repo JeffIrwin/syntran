@@ -19,7 +19,7 @@
 	// x is 30 degrees (in radians)
 	let x = pi / 6;
 
-	// Calculate sinx(x) using Taylor series
+	// Calculate sin(x) using Taylor series
 
 	// Initialize Taylor series terms
 	let xpow = x;
