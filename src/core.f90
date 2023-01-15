@@ -49,6 +49,10 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			array_type           = 55, &
+			array_expr           = 54, &
+			expl_array           = 53, &
+			impl_array           = 52, &
 			f32_type             = 51, &
 			f32_token            = 50, &
 			greater_equals_token = 49, &
@@ -114,9 +118,30 @@ module core_m
 		integer(kind = 4) :: i32
 		real   (kind = 4) :: f32
 
+		! TODO: may need to manually define value_t copy assignment since array
+		! is pointer/allocatable
+		type(array_t), pointer :: array
+
 		contains
 			procedure :: str => value_str
 	end type value_t
+
+	!********
+
+	type array_t
+
+		! The array type is i32_type, f32_type, etc. while the kind is
+		! impl_array (bound-based) or expl_array (CSV list)
+		integer :: type, kind
+
+		!type(syntax_node_t), allocatable :: lbound, ubound
+		!type(syntax_node_t), pointer :: lbound, ubound
+		type(value_t), allocatable :: lbound, ubound
+
+		!integer(kind = 4) :: lbound_i32, step_i32, ubound_i32
+		!real   (kind = 4) :: lbound_f32, step_f32, ubound_f32
+
+	end type array_t
 
 	!********
 
@@ -278,7 +303,7 @@ module core_m
 				parse_expr, parse_primary_expr, parse_expr_statement, &
 				parse_statement, parse_block_statement, parse_if_statement, &
 				current_pos, peek_pos, parse_for_statement, &
-				parse_while_statement
+				parse_while_statement, parse_array_expr
 
 	end type parser_t
 
@@ -762,7 +787,11 @@ function kind_name(kind)
 			"greater_token       ", & ! 48
 			"greater_equals_token", & ! 49
 			"f32_token           ", & ! 50
-			"f32_type            "  & ! 51
+			"f32_type            ", & ! 51
+			"impl_array          ", & ! 52
+			"expl_array          ", & ! 53
+			"array_expr          ", & ! 54
+			"array_type          "  & ! 55
 		]
 			! FIXME: update kind_tokens array too
 
@@ -834,7 +863,11 @@ function kind_token(kind)
 			">                    ", & ! 48
 			">=                   ", & ! 49
 			"[0-9.+-e]            ", & ! 50
-			"f32 expression       "  & ! 51
+			"f32 expression       ", & ! 51
+			"Implicit array       ", & ! 52
+			"Explicit array       ", & ! 53
+			"Array expression     ", & ! 54
+			"Array type           "  & ! 55
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -880,7 +913,7 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	type  = indentl//'    type  = '//kind_name(node%val%type)//line_feed
 
-	! TODO: add str conversions for more recent kinds: condition, if_clause,
+	! FIXME: add str conversions for more recent kinds: condition, if_clause,
 	! etc.
 
 	if      (node%kind == binary_expr) then
@@ -1199,7 +1232,7 @@ function lex(lexer) result(token)
 		case ("+")
 			token = new_token(plus_token  , lexer%pos, lexer%current())
 
-			! TODO: prefix/postfix inc/dec operators (++, --)
+			! FIXME: prefix/postfix inc/dec operators (++, --)
 
 		case ("-")
 			token = new_token(minus_token , lexer%pos, lexer%current())
@@ -1217,8 +1250,8 @@ function lex(lexer) result(token)
 
 				call lexer%read_single_line_comment()
 
-				! TODO: make "trivia" token types instead of overloading
-				! whitespace_token for comments
+				! FIXME: make "trivia" token types instead of overloading
+				! whitespace_token for comments.  This is what Immo did
 				text = lexer%text(start: lexer%pos-1)
 				token = new_token(whitespace_token, start, text)
 
@@ -1264,7 +1297,7 @@ function lex(lexer) result(token)
 				token = new_token(bang_equals_token, lexer%pos, "!=")
 			else
 
-				! TODO: refactor w/ default case below since Fortran is weird
+				! FIXME: refactor w/ default case below since Fortran is weird
 				! about breaking in select case
 				token = new_token(bad_token, lexer%pos, lexer%current())
 				span = new_span(lexer%pos, len(lexer%current()))
@@ -1301,7 +1334,7 @@ function lex(lexer) result(token)
 	end select
 	lexer%pos = lexer%pos + 1
 
-	! TODO: arrow keys create bad tokens in bash on Windows.  Fix that (better
+	! FIXME: arrow keys create bad tokens in bash on Windows.  Fix that (better
 	! yet, override up arrow to do what it does in bash.  c.f. rubik-js)
 
 end function lex
@@ -1774,10 +1807,8 @@ function parse_for_statement(parser) result(statement)
 
 	in_token   = parser%match(in_keyword)
 
-	! TODO: refactor this into a general parse_array() method returning an array
-	! type, optionally matching this style, or lbound step and ubound, or an
-	! explicit list of comma-separated array elements.  Rank-1 for now, but
-	! eventually target higher rank arrays
+	! TODO: just call the general parse_array_expr() method.  Do int
+	! type-checking somehow, since parse_array_expr will parse floats too
 
 	lbracket = parser%match(lbracket_token)
 
@@ -2370,6 +2401,91 @@ end function get_binary_op_prec
 
 !===============================================================================
 
+function parse_array_expr(parser) result(expr)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	integer :: bound_beg, bound_end
+
+	type(syntax_node_t)  :: lbound, ubound
+	type(syntax_token_t) :: lbracket, rbracket, colon
+	type(text_span_t) :: span
+
+	print *, 'starting parse_array_expr()'
+
+	! TODO: optionally match this lbound:ubound style, or lbound step and
+	! ubound, or an explicit list of comma-separated array elements.  Rank-1 for
+	! now, but eventually target higher rank arrays
+
+	lbracket = parser%match(lbracket_token)
+
+	bound_beg = parser%peek_pos(0)
+	lbound    = parser%parse_expr()
+	bound_end = parser%peek_pos(0) - 1
+
+	! Should type checking be done by caller, or should we pass an expected type
+	! arg for the RHS of this check?
+	if (lbound%val%type /= i32_type) then
+		span = new_span(bound_beg, bound_end - bound_beg + 1)
+		call parser%diagnostics%push(err_non_int_bound( &
+			parser%context, span, parser%context%text(bound_beg: bound_end)))
+	end if
+
+	colon    = parser%match(colon_token)
+
+	bound_beg = parser%peek_pos(0)
+	ubound    = parser%parse_expr()
+	bound_end = parser%peek_pos(0) - 1
+	if (ubound%val%type /= i32_type) then
+		span = new_span(bound_beg, bound_end - bound_beg + 1)
+		call parser%diagnostics%push(err_non_int_bound( &
+			parser%context, span, parser%context%text(bound_beg: bound_end)))
+	end if
+
+	rbracket = parser%match(rbracket_token)
+
+	print *, 'lbound = ', lbound%str()
+	print *, 'ubound = ', ubound%str()
+
+	allocate(expr%val%array)
+
+	!allocate(expr%val%array%lbound)
+	!allocate(expr%val%array%ubound)
+	allocate(expr%lbound)
+	allocate(expr%ubound)
+
+	expr%kind                 = array_expr
+	expr%val%type             = array_type
+	expr%val%array%type       = i32_type
+	expr%val%array%kind       = impl_array
+
+	!expr%val%array%lbound_i32 = lbound%val%i32
+	!expr%val%array%ubound_i32 = ubound%val%i32
+
+	!expr%val%array%lbound = lbound
+	!expr%val%array%ubound = ubound
+	expr%lbound = lbound
+	expr%ubound = ubound
+
+		!case default
+		!	num = parser%match(i32_token)
+		!	expr = new_i32(num%val%i32)
+		! --------->
+		!function new_i32(i32) result(expr)
+		!	integer(kind = 4), intent(in) :: i32
+		!	type(syntax_node_t) :: expr
+		!	expr%kind = literal_expr
+		!	expr%val  = new_literal_value(i32_type, i32 = i32)
+		!end function new_i32
+
+end function parse_array_expr
+
+!===============================================================================
+
 function parse_primary_expr(parser) result(expr)
 
 	class(parser_t) :: parser
@@ -2402,7 +2518,10 @@ function parse_primary_expr(parser) result(expr)
 
 			right = parser%match(rparen_token)
 
-			return
+		case (lbracket_token)
+
+			! Brackets are matched within parse_array_expr
+			expr = parser%parse_array_expr()
 
 		case (true_keyword, false_keyword)
 
@@ -2604,11 +2723,10 @@ integer function get_binary_op_kind(left, op, right)
 	case default
 		!print *, 'default'
 
-		! Other operations return the same type as their operands
+		! Other operations return the same type as their operands if they match
+		! or cast up
 		!
-		! FIXME: floats, int casting.  1 + 0.5 and 0.5 + 1 should both cast to
-		! float, not int.  That's why I'm passing right as an arg (but not using
-		! it yet)
+		! FIXME: i64, f64, etc.
 
 		if (left == right) then
 			get_binary_op_kind = left
@@ -2616,6 +2734,7 @@ integer function get_binary_op_kind(left, op, right)
 		end if
 
 		if (left == f32_type .or. right == f32_type) then
+			! int + int casts to float
 			get_binary_op_kind = f32_type
 			return
 		end if
@@ -2791,6 +2910,33 @@ recursive function syntax_eval(node, vars) result(res)
 		res = node%val
 		!print *, 'res = ', res%str()
 
+	case (array_expr)
+
+		print *, 'evaluating array_expr'
+
+		! TODO: switch on impl_array vs expl_array cases
+
+		! TODO: expand impl_array to expl_array here on evaluation.  Consider
+		! something like this:
+		!
+		!     let a = [0: 5];
+		!     a[2] = -3;
+		!
+		! Even though a is initialized to an implicit array, the second
+		! statement requires it to be explicit, so we might as well expand at
+		! initialization
+
+		!lbound = syntax_eval(node%val%array%lbound, vars)
+		!ubound = syntax_eval(node%val%array%ubound, vars)
+		lbound = syntax_eval(node%lbound, vars)
+		ubound = syntax_eval(node%ubound, vars)
+
+		print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
+
+		res = node%val
+		res%array%lbound = lbound
+		res%array%ubound = ubound
+
 	case (for_statement)
 
 		lbound = syntax_eval(node%lbound, vars)
@@ -2864,8 +3010,7 @@ recursive function syntax_eval(node, vars) result(res)
 		! Assign return value
 		res = syntax_eval(node%right, vars)
 
-		! TODO: test int/float casting.  It should probably be an error during
-		! parsing
+		! TODO: test int/float casting.  It should be an error during parsing
 
 		! Assign res to LHS identifier variable as well.  This inserts the
 		! value, while the insert call in the parser inserts the type
@@ -2929,32 +3074,10 @@ recursive function syntax_eval(node, vars) result(res)
 		!print *, 'left  = ', left
 		!print *, 'right = ', right
 
-		!! The parser should catch this, but do it here as a fallback (e.g. I'll
-		!! add floats later and forget this needs fixing)
-		!if (left%type /= right%type) then
-		!	! Internal compiler errors shouldn't ever happen, but if they do,
-		!	! the evaluation will be garbage.
-		!	write(*,*) err_eval_binary_types(node%op%text)
-		!	call internal_error()
-		!end if
-
 		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
 
 		select case (node%op%kind)
 		case (plus_token)
-
-			!! No magic numbers, but ugh
-			!if      (left%type == i32_type .and. right%type == i32_type) then
-			!	res%i32 = left%i32 + right%i32
-			!else if (left%type == f32_type .and. right%type == f32_type) then
-			!	res%f32 = left%f32 + right%f32
-			!else if (left%type == f32_type .and. right%type == i32_type) then
-			!	res%f32 = left%f32 + right%i32
-			!else if (left%type == i32_type .and. right%type == f32_type) then
-			!	res%f32 = left%i32 + right%f32
-			!else
-			!	call internal_error()
-			!end if
 
 			! Case selector must be a scalar expression, so use this nasty hack.
 			! This will break if magic is smaller than the largest type enum
@@ -3230,6 +3353,10 @@ function value_str(val) result(str)
 			else
 				str = "false"
 			end if
+
+		case (array_type)
+			str = '['//val%array%lbound%str()//': ' &
+			         //val%array%ubound%str()//']'
 
 		case default
 			str = err_prefix//"<invalid_value>"//color_reset
