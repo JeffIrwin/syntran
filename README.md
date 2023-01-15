@@ -245,3 +245,62 @@ With the addition of while loops to the language, we can make some optimizations
 With this method we can search for primes near 1 million in less than a second.  How long does the for loop version take to find primes up to a million?
 
 ## Example:  calculating π and a sine function inefficiently
+
+With the addition of a 32-bit floating point type to the language, we can start to do some more interesting numerical work.
+
+We can calculate the mathematical constant π [exteremely inneficiently](https://github.com/JeffIrwin/syntran/blob/main/samples/pi-1.syntran) using the slowly converging [Madhava-Leibniz series](https://en.wikipedia.org/wiki/Leibniz_formula_for_%CF%80), or we can use a much faster [BBP-type formula](https://mathworld.wolfram.com/PiFormulas.html).  Just don't try to use π as a variable identifier name, because syntran source code is ASCII.
+
+Then we can calculate a sine function using its [Taylor series expansion](https://en.wikipedia.org/wiki/Taylor_series):
+
+```cpp
+{
+	// Calculate π
+	let pi = 0.0;
+
+	for k in [0: 10]
+	{
+		pi = pi + 1.0 / (16.0 ** k) *
+			(
+				4.0 / (8*k + 1) -
+				2.0 / (8*k + 4) -
+				1.0 / (8*k + 5) -
+				1.0 / (8*k + 6)
+			);
+	}
+
+	pi;
+	// 3.141593E+00
+
+	// x is 30 degrees (in radians)
+	let x = pi / 6;
+
+	// Calculate sin(x) using Taylor series
+
+	// Initialize Taylor series terms
+	let xpow = x;
+	let factorial = 1;
+	let sign = 1;
+
+	// Sum odd terms only
+	let sinx = 0.0;
+	for k in [1: 10]
+	{
+		sinx = sinx + sign * xpow / factorial;
+		xpow = xpow * x ** 2;
+		factorial = factorial * (2*k) * (2*k + 1);
+		sign = -sign;
+	}
+
+	sinx;
+	// 4.999999E-01
+
+	let ans = sinx;
+
+	let expect = 0.5;
+	let tol = 1.e-5;
+	let ratio = ans / expect;
+	1 - tol < ratio and ratio < 1 + tol;
+}
+```
+
+At the end of all those transcendental functions and numbers, we get the suprisingly rational result `sin(pi / 6) == 0.5`, or `4.999999E-01` with 32 bit floats.
