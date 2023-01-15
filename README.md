@@ -259,7 +259,7 @@ Then we can calculate a sine function using its [Taylor series expansion](https:
 
 	for k in [0: 10]
 	{
-		pi = pi + 1.0 / (16.0 ** k) *
+		pi = pi + 1 / (16.0 ** k) *
 			(
 				4.0 / (8*k + 1) -
 				2.0 / (8*k + 4) -
@@ -297,3 +297,13 @@ Then we can calculate a sine function using its [Taylor series expansion](https:
 ```
 
 At the end of all those transcendental functions and numbers, we get the suprisingly rational result `sin(pi / 6) == 0.5`, or `4.999999E-01` with 32 bit floats.
+
+### Notes on casting in arithmetic expressions
+
+There are several operations you have to be careful with in the sine example above.
+
+In the pi series, there is a float term `16.0 ** k`.  The loop iterator `k` is an integer, so if we used a literal integer `16` instead of the float `16.0`, that would quickly overflow even for the relatively small upper loop bound `k < 10`.  Hence, we raise a float base to an int power, which yields a float result that is safe from overflow for these values.
+
+Similarly, the pi term `4.0 / (8*k + 1)` has a float numerator and int denominator.  Again we must use a float to avoid integer division.
+
+Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/15379/26435), but it allows you to do numeric work without constantly manually casting things `as f32` like in rust.
