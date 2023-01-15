@@ -218,7 +218,7 @@ function err_eval_binary_types(op) result(err)
 	character(len = :), allocatable :: err
 
 	err = err_int_prefix &
-		//'binary operator `'//op//'` is not defined for operand types ' &
+		//'binary operator `'//op//'` cannot be evaluated for operand types ' &
 		//color_reset
 
 end function err_eval_binary_types

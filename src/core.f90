@@ -18,7 +18,7 @@ module core_m
 	character(len = *), parameter :: lang_name = 'syntran'
 
 	! Debug logging verbosity (0 == silent)
-	integer, parameter :: debug = 2
+	integer, parameter :: debug = 0
 
 	integer, parameter ::   &
 		syntran_major =  0, &
@@ -2270,7 +2270,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	integer :: io, type
+	integer :: io, ltype, rtype
 
 	logical :: subscript_present
 
@@ -2308,7 +2308,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		identifier = parser%next()
 		op         = parser%next()
 
-		right      = parser%parse_expr_statement()
+		!right      = parser%parse_expr_statement()
+		right      = parser%parse_expr()
 
 		!! I think the way to get conditional initialization like rust is
 		!! something like this.  May need to peek current and check if it's
@@ -2386,7 +2387,18 @@ recursive function parse_expr_statement(parser) result(expr)
 		!op         = parser%next()
 		op         = parser%match(equals_token)
 
-		right      = parser%parse_expr_statement()
+		!! I think parsing multiple array assignment would require some tricky
+		!! looking ahead, e.g.
+		!!
+		!!     a[0] = b[1] = scalar;
+		!!
+		!! Maybe I won't support it
+
+		!if (subscript_present) then
+			right      = parser%parse_expr()
+		!else
+		!	right      = parser%parse_expr_statement()
+		!end if
 
 		!expr = new_assignment_expr(identifier, op, right)
 
@@ -2416,7 +2428,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		print *, 'associated(expr%val%array) = ', associated(expr%val%array)
 
-		type = expr%val%type
+		ltype = expr%val%type
+		rtype = expr%right%val%type
 
 		if (subscript_present) then
 			allocate(expr%subscript)
@@ -2434,8 +2447,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		! TODO: move this check inside of is_binary_op_allowed?  Need to pass
 		! parser to it to push diagnostics
-		if (type /= array_type .and. .not. is_binary_op_allowed( &
-			type, op%kind, expr%right%val%type)) then
+		if (ltype /= array_type .and. rtype /= array_type .and. &
+			.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -2471,7 +2484,7 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 	!********
 
-	integer :: parent_precl, prec
+	integer :: parent_precl, prec, ltype, rtype
 
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: op
@@ -2510,8 +2523,12 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		right = parser%parse_expr(prec)
 		expr  = new_binary_expr(expr, op, right)
 
-		if (.not. is_binary_op_allowed( &
-			expr%left%val%type, op%kind, expr%right%val%type)) then
+		! TODO: actually check the array subtype
+		ltype = expr%left %val%type
+		rtype = expr%right%val%type
+
+		if (ltype /= array_type .and. rtype /= array_type .and. &
+			.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -2845,11 +2862,13 @@ function parse_primary_expr(parser) result(expr)
 	!********
 
 	integer :: io, id_index
-	logical :: bool
-	type(syntax_token_t) :: num, left, right, keyword, identifier
+	logical :: bool, subscript_present
+	type(syntax_node_t) :: subscript
+	type(syntax_token_t) :: num, left, right, keyword, identifier, lbracket, &
+		rbracket
 	type(text_span_t) :: span
 
-	if (debug > 1) print *, 'parse_primary_expr'
+	if (debug > -1) print *, 'parse_primary_expr'
 
 	select case (parser%current_kind())
 
@@ -2884,7 +2903,8 @@ function parse_primary_expr(parser) result(expr)
 		case (identifier_token)
 
 			identifier = parser%next()
-			!print *, 'identifier = ', identifier%text
+			print *, 'RHS identifier = ', identifier%text
+			print *, 'parser%current_kind() = ', kind_name(parser%current_kind())
 
 			! TODO: parse array subscript if present.  Can this be consolidated
 			! with subscript parsing in parse_expr_statement?
@@ -2899,6 +2919,24 @@ function parse_primary_expr(parser) result(expr)
 				call parser%diagnostics%push( &
 					err_undeclare_var(parser%context, &
 					span, identifier%text))
+			end if
+
+			print *, 'parser%current_kind() = ', kind_name(parser%current_kind())
+			!subscript_present = .false.
+			if (parser%current_kind() == lbracket_token) then
+				!subscript_present = .true.
+
+				print *, 'parsing RHS subscript'
+
+				lbracket  = parser%match(lbracket_token)
+				subscript = parser%parse_expr()
+				rbracket  = parser%match(rbracket_token)
+
+				!if (subscript_present) then
+				allocate(expr%subscript)
+				expr%subscript = subscript
+				!end if
+
 			end if
 
 		case (f32_token)
@@ -3248,7 +3286,7 @@ recursive function syntax_eval(node, vars) result(res)
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
 		subscript
 
-	!print *, 'starting syntax_eval()'
+	print *, 'starting syntax_eval()'
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -3286,18 +3324,33 @@ recursive function syntax_eval(node, vars) result(res)
 			! statement requires it to be explicit, so we might as well expand at
 			! initialization
 
-			!lbound = syntax_eval(node%val%array%lbound, vars)
-			!ubound = syntax_eval(node%val%array%ubound, vars)
+			!!lbound = syntax_eval(node%val%array%lbound, vars)
+			!!ubound = syntax_eval(node%val%array%ubound, vars)
 			lbound = syntax_eval(node%lbound, vars)
 			ubound = syntax_eval(node%ubound, vars)
 
-			print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
+			!print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
 
-			! TODO: res should be the whole expanded array?
-			res = node%val
+			!! TODO: res should be the whole expanded array?
+			!res = node%val
 
-			res%array%lbound = lbound
-			res%array%ubound = ubound
+			!res%array%lbound = lbound
+			!res%array%ubound = ubound
+
+			print *, 'node%val%array%type = ', node%val%array%type
+
+			! This could be allocated in one shot without pushing to growable
+			! array.  TODO: types
+			array = new_array(node%val%array%type)
+			elem = lbound
+			do i = lbound%i32, ubound%i32 - 1
+				elem%i32 = i
+				call array%push(elem)
+			end do
+
+			allocate(res%array)
+			res%type  = array_type
+			res%array = array
 
 		else if (node%val%array%kind == expl_array) then
 			print *, 'expl_array'
@@ -3401,6 +3454,12 @@ recursive function syntax_eval(node, vars) result(res)
 
 	case (assignment_expr)
 
+		!if (allocated(node%right%subscript)) then
+		!	print *, 'subscript RHS'
+		!else
+		!	print *, 'scalar RHS'
+		!end if
+
 		!if (node%left%val%type /= array_type) then
 		!if (.not. allocated(node%left%subscript)) then
 		if (.not. allocated(node%subscript)) then
@@ -3440,7 +3499,11 @@ recursive function syntax_eval(node, vars) result(res)
 
 			! TODO: check types, at least in parser if not here as a fallback
 			! too
-			vars%vals(node%id_index)%array%i32(subscript%i32) = res%i32
+
+			! TODO: bound checking? by default or enabled with cmd line flag?
+
+			! Syntran uses 0-indexed arrays while Fortran uses 1-indexed arrays
+			vars%vals(node%id_index)%array%i32( subscript%i32 + 1 ) = res%i32
 
 		end if
 
@@ -3456,7 +3519,22 @@ recursive function syntax_eval(node, vars) result(res)
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
 		!res = vars%search(node%identifier%text, node%id_index)
-		res = vars%vals(node%id_index)
+
+		if (allocated(node%subscript)) then
+
+			print *, 'subscript name expr'
+
+			! TODO: other types
+
+			res%type = vars%vals(node%id_index)%array%type
+
+			subscript = syntax_eval(node%subscript, vars)
+			res%i32 = vars%vals(node%id_index)%array%i32( subscript%i32 + 1 )
+
+		else
+			print *, 'scalar name expr'
+			res = vars%vals(node%id_index)
+		end if
 
 	case (unary_expr)
 
