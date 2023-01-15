@@ -1,7 +1,7 @@
 
 {
 	// Get the largest prime number less than n
-	let n = 10000;
+	let n = 1000000;
 
 	// Initialize
 	let prime = 0;
@@ -37,5 +37,6 @@
 
 	// Final result
 	prime;
+	// 999983
 }
 
