@@ -49,6 +49,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			comma_token          = 56, &
 			array_type           = 55, &
 			array_expr           = 54, &
 			expl_array           = 53, &
@@ -172,7 +173,8 @@ module core_m
 		type(syntax_node_t), allocatable :: left, right, statements(:), &
 			condition, if_clause, else_clause, body
 
-		type(syntax_node_t), allocatable :: lbound, ubound
+		! Array expression syntax nodes
+		type(syntax_node_t), allocatable :: lbound, ubound, elems(:)
 
 		type(syntax_token_t) :: op, identifier
 		type(value_t) :: val
@@ -791,7 +793,8 @@ function kind_name(kind)
 			"impl_array          ", & ! 52
 			"expl_array          ", & ! 53
 			"array_expr          ", & ! 54
-			"array_type          "  & ! 55
+			"array_type          ", & ! 55
+			"comma_token         "  & ! 56
 		]
 			! FIXME: update kind_tokens array too
 
@@ -867,7 +870,8 @@ function kind_token(kind)
 			"Implicit array       ", & ! 52
 			"Explicit array       ", & ! 53
 			"Array expression     ", & ! 54
-			"Array type           "  & ! 55
+			"Array type           ", & ! 55
+			",                    "  & ! 56
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -1027,6 +1031,10 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%lbound = src%lbound
 	end if
 
+	if (allocated(src%elems)) then
+		call syntax_nodes_copy(dst%elems, src%elems)
+	end if
+
 	if (allocated(src%ubound)) then
 		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
 		dst%ubound = src%ubound
@@ -1045,17 +1053,19 @@ recursive subroutine syntax_node_copy(dst, src)
 	if (allocated(src%statements)) then
 		!print *, 'copying statements'
 
-		n = size(src%statements)
+		call syntax_nodes_copy(dst%statements, src%statements)
+
+		!n = size(src%statements)
 		!print *, 'n = ', n
 
-		if (allocated(dst%statements)) deallocate(dst%statements)
-		allocate(dst%statements(n))
+		!if (allocated(dst%statements)) deallocate(dst%statements)
+		!allocate(dst%statements(n))
 
-		! This explicit loop is apparently required
-		do i = 1, n
-			dst%statements(i) = src%statements(i)
-		end do
-		!print *, 'done loop'
+		!! This explicit loop is apparently required
+		!do i = 1, n
+		!	dst%statements(i) = src%statements(i)
+		!end do
+		!!print *, 'done loop'
 
 	end if
 
@@ -1282,6 +1292,9 @@ function lex(lexer) result(token)
 
 		case (";")
 			token = new_token(semicolon_token, lexer%pos, lexer%current())
+
+		case (",")
+			token = new_token(comma_token, lexer%pos, lexer%current())
 
 		case ("=")
 			if (lexer%lookahead() == "=") then
@@ -2024,13 +2037,35 @@ function parse_block_statement(parser) result(block)
 
 	! Convert to standard array.  TODO: make a subroutine for this explicit loop
 	! copy, since apparently its required for memory correctness
-	if (allocated(block%statements)) deallocate(block%statements)
-	allocate(block%statements( statements%len ))
-	do i = 1, statements%len
-		block%statements(i) = statements%v(i)
-	end do
+
+	call syntax_nodes_copy(block%statements, statements%v( 1: statements%len ))
+
+	!if (allocated(block%statements)) deallocate(block%statements)
+	!allocate(block%statements( statements%len ))
+	!do i = 1, statements%len
+	!	block%statements(i) = statements%v(i)
+	!end do
 
 end function parse_block_statement
+
+!===============================================================================
+
+subroutine syntax_nodes_copy(dst, src)
+
+	type(syntax_node_t), allocatable :: dst(:)
+	type(syntax_node_t), intent(in)  :: src(:)
+
+	!********
+
+	integer :: i
+
+	if (allocated(dst)) deallocate(dst)
+	allocate(dst( size(src) ))
+	do i = 1, size(src)
+		dst(i) = src(i)
+	end do
+
+end subroutine syntax_nodes_copy
 
 !===============================================================================
 
@@ -2116,6 +2151,9 @@ recursive function parse_expr_statement(parser) result(expr)
 		!print *, 'assign expr'
 
 		identifier = parser%next()
+
+		! TODO: parse array index if present
+
 		op         = parser%next()
 		right      = parser%parse_expr_statement()
 
@@ -2409,10 +2447,11 @@ function parse_array_expr(parser) result(expr)
 
 	!********
 
-	integer :: bound_beg, bound_end
+	integer :: bound_beg, bound_end, elem_beg, elem_end
 
-	type(syntax_node_t)  :: lbound, ubound
-	type(syntax_token_t) :: lbracket, rbracket, colon
+	type(syntax_node_t)  :: lbound, ubound, elem
+	type(syntax_node_vector_t) :: elems
+	type(syntax_token_t) :: lbracket, rbracket, colon, comma
 	type(text_span_t) :: span
 
 	print *, 'starting parse_array_expr()'
@@ -2427,60 +2466,98 @@ function parse_array_expr(parser) result(expr)
 	lbound    = parser%parse_expr()
 	bound_end = parser%peek_pos(0) - 1
 
-	! Should type checking be done by caller, or should we pass an expected type
-	! arg for the RHS of this check?
+	! TODO: should type checking be done by caller, or should we pass an
+	! expected type arg for the RHS of this check?
+
 	if (lbound%val%type /= i32_type) then
 		span = new_span(bound_beg, bound_end - bound_beg + 1)
 		call parser%diagnostics%push(err_non_int_bound( &
 			parser%context, span, parser%context%text(bound_beg: bound_end)))
 	end if
 
-	colon    = parser%match(colon_token)
+	!if (parser%peek_kind(1) == colon_token) then
+	if (parser%current_kind() == colon_token) then
 
-	bound_beg = parser%peek_pos(0)
-	ubound    = parser%parse_expr()
-	bound_end = parser%peek_pos(0) - 1
-	if (ubound%val%type /= i32_type) then
-		span = new_span(bound_beg, bound_end - bound_beg + 1)
-		call parser%diagnostics%push(err_non_int_bound( &
-			parser%context, span, parser%context%text(bound_beg: bound_end)))
+		! Implicit array form [lbound: ubound]
+
+		colon    = parser%match(colon_token)
+
+		bound_beg = parser%peek_pos(0)
+		ubound    = parser%parse_expr()
+		bound_end = parser%peek_pos(0) - 1
+
+		! TODO: other types
+		if (ubound%val%type /= i32_type) then
+			span = new_span(bound_beg, bound_end - bound_beg + 1)
+			call parser%diagnostics%push(err_non_int_bound( &
+				parser%context, span, parser%context%text(bound_beg: bound_end)))
+		end if
+
+		rbracket = parser%match(rbracket_token)
+
+		print *, 'lbound = ', lbound%str()
+		print *, 'ubound = ', ubound%str()
+
+		allocate(expr%val%array)
+
+		!allocate(expr%val%array%lbound)
+		!allocate(expr%val%array%ubound)
+		allocate(expr%lbound)
+		allocate(expr%ubound)
+
+		expr%kind                 = array_expr
+		expr%val%type             = array_type
+		expr%val%array%type       = i32_type  ! TODO
+		expr%val%array%kind       = impl_array
+
+		!expr%val%array%lbound_i32 = lbound%val%i32
+		!expr%val%array%ubound_i32 = ubound%val%i32
+
+		!expr%val%array%lbound = lbound
+		!expr%val%array%ubound = ubound
+		expr%lbound = lbound
+		expr%ubound = ubound
+
+		return
+
 	end if
+
+	print *, 'elem ', lbound%val%str()
+
+	elems = new_syntax_node_vector()
+	call elems%push(lbound)
+
+	! Explicit array form [elem0, elem1, elem2, ... ].  elem0 has already been
+	! parsed as lbound above
+	do while (parser%current_kind() /= rbracket_token)
+		comma    = parser%match(comma_token)
+
+		elem_beg = parser%peek_pos(0)
+		elem     = parser%parse_expr()
+		elem_end = parser%peek_pos(0) - 1
+
+		print *, 'elem ', elem%val%str()
+
+		! TODO: compare to first type, not hard-coded i32
+		if (elem%val%type /= i32_type) then
+			span = new_span(elem_beg, elem_end - elem_beg + 1)
+			call parser%diagnostics%push(err_het_array( &
+				parser%context, span, parser%context%text(elem_beg: elem_end)))
+		end if
+
+		call elems%push(elem)
+
+	end do
 
 	rbracket = parser%match(rbracket_token)
 
-	print *, 'lbound = ', lbound%str()
-	print *, 'ubound = ', ubound%str()
-
 	allocate(expr%val%array)
+	expr%kind           = array_expr
+	expr%val%type       = array_type
+	expr%val%array%type = i32_type ! TODO
+	expr%val%array%kind = expl_array
 
-	!allocate(expr%val%array%lbound)
-	!allocate(expr%val%array%ubound)
-	allocate(expr%lbound)
-	allocate(expr%ubound)
-
-	expr%kind                 = array_expr
-	expr%val%type             = array_type
-	expr%val%array%type       = i32_type
-	expr%val%array%kind       = impl_array
-
-	!expr%val%array%lbound_i32 = lbound%val%i32
-	!expr%val%array%ubound_i32 = ubound%val%i32
-
-	!expr%val%array%lbound = lbound
-	!expr%val%array%ubound = ubound
-	expr%lbound = lbound
-	expr%ubound = ubound
-
-		!case default
-		!	num = parser%match(i32_token)
-		!	expr = new_i32(num%val%i32)
-		! --------->
-		!function new_i32(i32) result(expr)
-		!	integer(kind = 4), intent(in) :: i32
-		!	type(syntax_node_t) :: expr
-		!	expr%kind = literal_expr
-		!	expr%val  = new_literal_value(i32_type, i32 = i32)
-		!end function new_i32
+	call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len ))
 
 end function parse_array_expr
 
@@ -2891,7 +2968,7 @@ recursive function syntax_eval(node, vars) result(res)
 
 	integer :: i
 	integer, parameter :: magic = 128
-	type(value_t) :: left, right, condition, lbound, ubound, itr
+	type(value_t) :: left, right, condition, lbound, ubound, itr, elem
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -2916,26 +2993,48 @@ recursive function syntax_eval(node, vars) result(res)
 
 		! TODO: switch on impl_array vs expl_array cases
 
-		! TODO: expand impl_array to expl_array here on evaluation.  Consider
-		! something like this:
-		!
-		!     let a = [0: 5];
-		!     a[2] = -3;
-		!
-		! Even though a is initialized to an implicit array, the second
-		! statement requires it to be explicit, so we might as well expand at
-		! initialization
+		if (node%val%array%kind == impl_array) then
+			print *, 'impl_array'
 
-		!lbound = syntax_eval(node%val%array%lbound, vars)
-		!ubound = syntax_eval(node%val%array%ubound, vars)
-		lbound = syntax_eval(node%lbound, vars)
-		ubound = syntax_eval(node%ubound, vars)
+			! TODO: expand impl_array to expl_array here on evaluation.  Consider
+			! something like this:
+			!
+			!     let a = [0: 5];
+			!     a[2] = -3;
+			!
+			! Even though a is initialized to an implicit array, the second
+			! statement requires it to be explicit, so we might as well expand at
+			! initialization
 
-		print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
+			!lbound = syntax_eval(node%val%array%lbound, vars)
+			!ubound = syntax_eval(node%val%array%ubound, vars)
+			lbound = syntax_eval(node%lbound, vars)
+			ubound = syntax_eval(node%ubound, vars)
 
-		res = node%val
-		res%array%lbound = lbound
-		res%array%ubound = ubound
+			print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
+
+			! TODO: res should be the whole array?
+			res = node%val
+
+			res%array%lbound = lbound
+			res%array%ubound = ubound
+
+		else if (node%val%array%kind == expl_array) then
+			print *, 'expl_array'
+
+			do i = 1, size(node%elems)
+				print *, 'i = ', i
+				elem = syntax_eval(node%elems(i), vars)
+
+				print *, 'elem = ', elem%str()
+				print *, ''
+			end do
+
+		else
+			!TODO
+			print *, 'Error: unexpected array kind'
+			call internal_error()
+		end if
 
 	case (for_statement)
 
