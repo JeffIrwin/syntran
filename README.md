@@ -15,7 +15,7 @@ An interpreter written in Fortran, I guess
 
 This is a sandbox for me to play in as I follow along with [Immo Landwerth's _building a compiler_ series](https://www.youtube.com/playlist?list=PLRAdsfhKI4OWNOSfS7EUu5GRAVmze1t2y)
 
-## Build
+## Build the interpreter
 
     ./build.sh
 
@@ -52,7 +52,7 @@ There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/mat
 
 Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.  Variables are mutable.
 
-Integer and boolean types are supported.
+Integer, float, and boolean types are supported.  Attempting operations on the wrong types yield an error, e.g. trying to add a bool or use logical `and` on an int or float.
 
 ```cpp
 let foo = 1;
@@ -74,9 +74,9 @@ not q and foo + bar == baz;
 // true
 
 foo and p;
-// Error: binary operator `and` is not defined for types num_expr and bool_expr
+// Error: binary operator `and` is not defined for types i32_type and bool_type
 //   --> <stdin>:1:5
-//    | 
+//    |
 //  1 | foo and p;
 //    |     ^^^ bad types for this binary operator
 ```
@@ -91,13 +91,13 @@ Only single-line comments are supported.  There are _no_ multi-line `/*comments*
 
 As programs get longer and more complicated, it becomes difficult to enter them into the interactive interpreter.  To interpret a whole file, provide it as a command line argument:
 
-    ./build/syntran samples/primes1.syntran
+    ./build/syntran samples/primes-1.syntran
 
-Make sure to wrap the entire script in a main block with braces `{}`.
+Make sure to wrap the entire script in a main block with braces `{}`.  The global block `{}` is not required when interactively using the interpreter because it parses and evaluates one statement at a time.  However, if you forget the global block `{}` in a script file, only the first statement will be parsed and any trailing junk statements will be unexpected.
 
 ### If statements and for loops
 
-If, else if, and else statements work like you might expect for languages similar to C.  Like Rust, parentheses around the if condition are optional:
+If, else if, and else statements work like you might expect for languages similar to C.  Like Rust, parentheses around the condition are optional:
 
 ```cpp
 let condition = false;
@@ -131,7 +131,7 @@ for i in [0: 5]
 // 0, 1, 2, 3, 4
 ```
 
-## Calculating prime numbers inefficiently 
+## Example:  calculating prime numbers inefficiently 
 
 With only these language features, we can make a short program to find prime numbers:
 
@@ -148,11 +148,8 @@ With only these language features, we can make a short program to find prime num
 
 	// If we had while loops, we could loop from n downards and stop as soon as
 	// we find the first prime
-	let i = 0;
 	for i in [0: n]
 	{
-		let j = 0;
-
 		// Check if i is composite, i.e. not prime
 		let is_composite = false;
 
@@ -174,3 +171,77 @@ With only these language features, we can make a short program to find prime num
 	// 97
 }
 ```
+
+## Variable scoping
+
+Each block statement has its own scope for variables.  [Inner blocks can shadow](https://en.wikipedia.org/wiki/Variable_shadowing) outer blocks:
+
+```cpp
+        let expect_2a = 0;
+        let expect_4a = 0;
+        let expect_2b = 0;
+        let expect_1a = 0;
+
+        let v = 1;
+        {
+		// The LHS variable shadows and is initialized to the RHS value from the outer block
+                let v = v + 1;
+                expect_2a = v;
+
+                {
+                        let v = v * 2;
+                        expect_4a = v;
+                }
+
+                expect_2b = v;
+        }
+
+        expect_1a = v;
+
+        expect_2a == 2 and
+        expect_4a == 4 and
+        expect_2b == 2 and
+        expect_1a == 1;
+        // true
+```
+
+## While loops
+
+With the addition of while loops to the language, we can make some optimizations to the simple prime number sieve from above.  We can break the outer loop as soon as the first prime number is found, and we can break the inner loop as soon as we find out a number is _not_ prime:
+
+```cpp
+{
+	// Get the largest prime number less than n
+	let n = 1000000;
+
+	// Initialize
+	let prime = 0;
+	let i = n;
+	
+	while prime == 0
+	{
+		i = i - 1;  // loop from n downwards
+
+		let is_composite = false;
+
+		let j = 1;
+		while j < i/2 + 1 and not is_composite
+		{
+			j = j + 1;
+
+			let divisible = j * (i / j) == i;  // poor man's modulo == 0
+			is_composite = is_composite or divisible;
+		}
+
+		if not is_composite
+			prime = i;
+	}
+
+	prime;
+	// 999983
+}
+```
+
+With this method we can search for primes near 1 million in less than a second.  How long does the for loop version take to find primes up to a million?
+
+## Example:  calculating π and a sine function inefficiently
