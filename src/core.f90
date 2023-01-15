@@ -18,7 +18,7 @@ module core_m
 	character(len = *), parameter :: lang_name = 'syntran'
 
 	! Debug logging verbosity (0 == silent)
-	integer, parameter :: debug = 0
+	integer, parameter :: debug = 2
 
 	integer, parameter ::   &
 		syntran_major =  0, &
@@ -121,10 +121,14 @@ module core_m
 
 		! TODO: may need to manually define value_t copy assignment since array
 		! is pointer/allocatable
-		type(array_t), pointer :: array
+		type(array_t), pointer :: array => null()
 
 		contains
 			procedure :: str => value_str
+
+			!procedure, pass(dst) :: copy => value_copy
+			!generic, public :: assignment(=) => copy
+
 	end type value_t
 
 	!********
@@ -153,6 +157,9 @@ module core_m
 		integer :: len, cap
 		contains
 			procedure :: push => push_array
+
+			!procedure, pass(dst) :: copy => array_copy
+			!generic, public :: assignment(=) => copy
 
 	end type array_t
 
@@ -188,9 +195,18 @@ module core_m
 		! Array expression syntax nodes
 		type(syntax_node_t), allocatable :: lbound, ubound, elems(:)
 
+		! TODO: add an array subscript member.  Type syntax_node_t?  It could be
+		! an int literal or an int expression (or later a CSV list of
+		! subscripts)
+
+		! TODO: make this an array for rank-2+ arrays
+		type(syntax_node_t), allocatable :: subscript
+
 		type(syntax_token_t) :: op, identifier
-		type(value_t) :: val
 		integer :: id_index
+
+		type(value_t) :: val
+		!type(value_t), allocatable :: val
 
 		type(string_vector_t) :: diagnostics
 
@@ -1056,6 +1072,88 @@ end function syntax_node_str
 
 !===============================================================================
 
+subroutine value_copy(dst, src)
+
+	! TODO: is this required or does default assignment work?
+
+	class(value_t), intent(inout) :: dst
+	class(value_t), intent(in)    :: src
+
+	!********
+
+	print *, 'starting value_copy'
+
+	dst%type = src%type
+	print *, 'bool'
+	dst%bool = src%bool
+	print *, 'i32'
+	dst%i32  = src%i32
+	print *, 'f32'
+	dst%f32  = src%f32
+
+	print *, 'checking array'
+	!if (allocated(src%array)) then
+	if (associated(src%array)) then
+		print *, 'copying array'
+		if (.not. associated(dst%array)) allocate(dst%array)
+		dst%array = src%array
+	end if
+	print *, 'done'
+
+end subroutine value_copy
+
+!===============================================================================
+
+!recursive subroutine array_copy(dst, src)
+subroutine array_copy(dst, src)
+
+	! TODO: is this required or does default assignment work?
+
+	! Deep copy
+
+	class(array_t), intent(inout) :: dst
+	class(array_t), intent(in)    :: src
+
+	!********
+
+	!integer :: i, n
+
+	if (debug > 3) print *, 'starting array_copy()'
+
+	dst%kind = src%kind
+	dst%type = src%type
+	dst%len  = src%len
+	dst%cap  = src%cap
+
+	if (allocated(src%lbound)) then
+		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
+		dst%lbound = src%lbound
+	end if
+
+	if (allocated(src%ubound)) then
+		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
+		dst%ubound = src%ubound
+	end if
+
+	if (allocated(src%bool)) then
+		!if (.not. allocated(dst%bool)) allocate(dst%bool)
+		dst%bool = src%bool
+	end if
+
+	if (allocated(src%i32)) then
+		!if (.not. allocated(dst%i32)) allocate(dst%i32)
+		dst%i32 = src%i32
+	end if
+
+	if (allocated(src%f32)) then
+		!if (.not. allocated(dst%f32)) allocate(dst%f32)
+		dst%f32 = src%f32
+	end if
+
+end subroutine array_copy
+
+!===============================================================================
+
 recursive subroutine syntax_node_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
@@ -1075,6 +1173,7 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	dst%kind = src%kind
 	dst%op   = src%op
+
 	dst%val  = src%val
 
 	dst%identifier  = src%identifier
@@ -1087,6 +1186,11 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%diagnostics    = src%diagnostics
 
 	dst%is_empty    = src%is_empty
+
+	!if (allocated(src%val)) then
+	!	if (.not. allocated(dst%val)) allocate(dst%val)
+	!	dst%val = src%val
+	!end if
 
 	if (allocated(src%left)) then
 		!if (debug > 1) print *, 'copy() left'
@@ -1115,13 +1219,18 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%lbound = src%lbound
 	end if
 
+	if (allocated(src%ubound)) then
+		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
+		dst%ubound = src%ubound
+	end if
+
 	if (allocated(src%elems)) then
 		call syntax_nodes_copy(dst%elems, src%elems)
 	end if
 
-	if (allocated(src%ubound)) then
-		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
-		dst%ubound = src%ubound
+	if (allocated(src%subscript)) then
+		if (.not. allocated(dst%subscript)) allocate(dst%subscript)
+		dst%subscript = src%subscript
 	end if
 
 	if (allocated(src%if_clause)) then
@@ -2161,11 +2270,15 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	integer :: io
+	integer :: io, type
 
-	type(syntax_node_t) :: right
-	type(syntax_token_t) :: let, identifier, op!, semi
+	logical :: subscript_present
+
+	type(syntax_node_t) :: right, subscript
+	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket
 	type(text_span_t) :: span
+
+	print *, 'starting parse_expr_statement()'
 
 	! TODO: provide a way to declare variable types without initializing them?
 	! Rust discourages mutability, instead preferring patterns like this:
@@ -2229,25 +2342,69 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	end if
 
-	if (parser%peek_kind(0) == identifier_token .and. &
-	    parser%peek_kind(1) == equals_token) then
+	! This is a bit of a hack for subscripts.  It assumes that `[` will
+	! eventually be followed by `=`.  How many tokens later it is, is
+	! indeterminate, because the subscript itself could be a single int token or
+	! a multi-token expression
+	!
+	! Currently this prevents printing a single element at the end of a program:
+	!
+	!     let a = [0: 2];
+	!     a[0];
+
+	if  (parser%peek_kind(0) == identifier_token .and. &
+	    (parser%peek_kind(1) == equals_token .or. &
+	     parser%peek_kind(1) == lbracket_token)) then
 
 		!print *, 'assign expr'
 
 		identifier = parser%next()
 
-		! TODO: parse array index if present
+		! Parse array subscript index if present
 
-		op         = parser%next()
+		! Subscript can appear in assignment expr but not let expr, because let
+		! must initialize the whole array
+
+		subscript_present = .false.
+		if (parser%current_kind() == lbracket_token) then
+			subscript_present = .true.
+			print *, 'parsing subscript'
+
+			lbracket  = parser%match(lbracket_token)
+			subscript = parser%parse_expr()
+
+			print *, 'subscript = ', subscript%str()
+
+			! TODO: check subscript type is int
+
+			print *, 'parsing rbracket'
+			rbracket  = parser%match(rbracket_token)
+			print *, 'done'
+
+		end if
+
+		!op         = parser%next()
+		op         = parser%match(equals_token)
+
 		right      = parser%parse_expr_statement()
 
-		expr = new_assignment_expr(identifier, op, right)
+		!expr = new_assignment_expr(identifier, op, right)
 
-		!print *, 'expr ident text = ', expr%identifier%text
+		expr%kind = assignment_expr
+
+		allocate(expr%right)
+
+		expr%identifier = identifier
+
+		expr%op    = op
+		expr%right = right
+
+		print *, 'expr ident text = ', expr%identifier%text
 
 		! Get the identifier's type and index from the dict and check that it
 		! has been declared
 		expr%val = parser%vars%search(identifier%text, expr%id_index, io)
+
 		if (io /= exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
@@ -2255,10 +2412,30 @@ recursive function parse_expr_statement(parser) result(expr)
 				span, identifier%text))
 		end if
 
+		print *, 'type = ', kind_name(expr%val%type)
+
+		print *, 'associated(expr%val%array) = ', associated(expr%val%array)
+
+		type = expr%val%type
+
+		if (subscript_present) then
+			allocate(expr%subscript)
+			expr%subscript = subscript
+		end if
+
+		!! TODO: only do this if the subscript is present.  Whole array
+		!! assignment should be different
+		!if (type == array_type) then
+		!	print *, 'reassigning'
+		!	print *, 'expr%val%array%type = ', expr%val%array%type
+		!	type = expr%val%array%type
+		!	print *, 'done'
+		!end if
+
 		! TODO: move this check inside of is_binary_op_allowed?  Need to pass
 		! parser to it to push diagnostics
-		if (.not. is_binary_op_allowed( &
-			expr%val%type, op%kind, expr%right%val%type)) then
+		if (type /= array_type .and. .not. is_binary_op_allowed( &
+			type, op%kind, expr%right%val%type)) then
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -2553,6 +2730,13 @@ function parse_array_expr(parser) result(expr)
 	! TODO: should type checking be done by caller, or should we pass an
 	! expected type arg for the RHS of this check?
 
+	! TODO: check if lbound%val is allocated, e.g. for assigning one array to
+	! a cat of another:
+	!
+	!     let a = [0: 3];
+	!     let b = [a, 5, 6];
+	!              ^ segfault
+
 	if (lbound%val%type /= i32_type) then
 		span = new_span(bound_beg, bound_end - bound_beg + 1)
 		call parser%diagnostics%push(err_non_int_bound( &
@@ -2702,6 +2886,9 @@ function parse_primary_expr(parser) result(expr)
 			identifier = parser%next()
 			!print *, 'identifier = ', identifier%text
 
+			! TODO: parse array subscript if present.  Can this be consolidated
+			! with subscript parsing in parse_expr_statement?
+
 			!print *, 'searching'
 			expr = new_name_expr(identifier, &
 				parser%vars%search(identifier%text, id_index, io))
@@ -2813,28 +3000,28 @@ end function new_declaration_expr
 
 !===============================================================================
 
-function new_assignment_expr(identifier, op, right) result(expr)
-
-	type(syntax_token_t), intent(in) :: identifier, op
-	type(syntax_node_t) , intent(in) :: right
-
-	type(syntax_node_t) :: expr
-
-	!********
-
-	expr%kind = assignment_expr
-
-	allocate(expr%right)
-
-	expr%identifier = identifier
-
-	expr%op    = op
-	expr%right = right
-
-	! The identifier has already been declared, so do not overwrite its type
-	! here
-
-end function new_assignment_expr
+!function new_assignment_expr(identifier, op, right) result(expr)
+!
+!	type(syntax_token_t), intent(in) :: identifier, op
+!	type(syntax_node_t) , intent(in) :: right
+!
+!	type(syntax_node_t) :: expr
+!
+!	!********
+!
+!	expr%kind = assignment_expr
+!
+!	allocate(expr%right)
+!
+!	expr%identifier = identifier
+!
+!	expr%op    = op
+!	expr%right = right
+!
+!	! The identifier has already been declared, so do not overwrite its type
+!	! here
+!
+!end function new_assignment_expr
 
 !===============================================================================
 
@@ -3058,7 +3245,10 @@ recursive function syntax_eval(node, vars) result(res)
 	integer :: i
 	integer, parameter :: magic = 128
 	type(array_t) :: array
-	type(value_t) :: left, right, condition, lbound, ubound, itr, elem
+	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
+		subscript
+
+	!print *, 'starting syntax_eval()'
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -3127,6 +3317,8 @@ recursive function syntax_eval(node, vars) result(res)
 			end do
 
 			print *, 'copying array'
+			allocate(res%array)
+			res%type  = array_type
 			res%array = array
 			print *, 'done'
 
@@ -3209,21 +3401,48 @@ recursive function syntax_eval(node, vars) result(res)
 
 	case (assignment_expr)
 
-		! Assign return value
-		res = syntax_eval(node%right, vars)
+		!if (node%left%val%type /= array_type) then
+		!if (.not. allocated(node%left%subscript)) then
+		if (.not. allocated(node%subscript)) then
 
-		! TODO: test int/float casting.  It should be an error during parsing
+			! Assign return value
+			res = syntax_eval(node%right, vars)
 
-		! Assign res to LHS identifier variable as well.  This inserts the
-		! value, while the insert call in the parser inserts the type
-		vars%vals(node%id_index) = res
-		!call vars%search_insert(node%identifier%text, res, node%id_index)
+			! TODO: test int/float casting.  It should be an error during
+			! parsing
 
-		! The difference between let and assign is inserting into the current
-		! scope (let) vs possibly searching parent scopes (assign).  During
-		! evaluation we don't need any extra logic for scoping.  The parser has
-		! already assigned a separate id_index for each identifier at each scope
-		! level
+			! Assign res to LHS identifier variable as well.  This inserts the
+			! value, while the insert call in the parser inserts the type
+			vars%vals(node%id_index) = res
+			!call vars%search_insert(node%identifier%text, res, node%id_index)
+
+			! The difference between let and assign is inserting into the
+			! current scope (let) vs possibly searching parent scopes (assign).
+			! During evaluation we don't need any extra logic for scoping.  The
+			! parser has already assigned a separate id_index for each
+			! identifier at each scope level
+
+		else
+			print *, 'array subscript assignment'
+
+			! Assign return value from RHS
+			res = syntax_eval(node%right, vars)
+
+			print *, 'RHS = ', res%str()
+
+			subscript = syntax_eval(node%subscript, vars)
+
+			print *, 'subscript = ', subscript%str()
+
+			!print *, 'LHS array type = ', node%val%array%type
+			print *, 'LHS array type = ', vars%vals(node%id_index)%array%type
+			print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
+
+			! TODO: check types, at least in parser if not here as a fallback
+			! too
+			vars%vals(node%id_index)%array%i32(subscript%i32) = res%i32
+
+		end if
 
 	case (let_expr)
 
