@@ -248,7 +248,7 @@ With this method we can search for primes near 1 million in less than a second. 
 
 With the addition of a 32-bit floating point type to the language, we can start to do some more interesting numerical work.
 
-We can calculate the mathematical constant π [exteremely inneficiently](https://github.com/JeffIrwin/syntran/blob/main/samples/pi-1.syntran) using the slowly converging [Madhava-Leibniz series](https://en.wikipedia.org/wiki/Leibniz_formula_for_%CF%80), or we can use a much faster [BBP-type formula](https://mathworld.wolfram.com/PiFormulas.html).  Just don't try to use π as a variable identifier name, because syntran source code is ASCII.
+We can calculate the mathematical constant π [exteremely inefficiently](https://github.com/JeffIrwin/syntran/blob/main/samples/pi-1.syntran) using the slowly converging [Madhava-Leibniz series](https://en.wikipedia.org/wiki/Leibniz_formula_for_%CF%80), or we can use a slightly less inefficient [BBP-type formula](https://mathworld.wolfram.com/PiFormulas.html).  Just don't try to use π as a variable identifier name, because syntran source code is ASCII.
 
 Then we can calculate a sine function using its [Taylor series expansion](https://en.wikipedia.org/wiki/Taylor_series):
 
@@ -293,13 +293,6 @@ Then we can calculate a sine function using its [Taylor series expansion](https:
 
 	sinx;
 	// 4.999999E-01
-
-	let ans = sinx;
-
-	let expect = 0.5;
-	let tol = 1.e-5;
-	let ratio = ans / expect;
-	1 - tol < ratio and ratio < 1 + tol;
 }
 ```
 
