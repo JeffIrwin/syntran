@@ -29,7 +29,9 @@ module core_m
 	!
 	! Add:
 	!  - arrays
-	!    * MVP i32 arrays done
+	!    * MVP i32, f32 arrays done
+	!    * TODO f32 array tests
+	!    * bool arrays
 	!    * whole array assignment to a scalar
 	!    * fix array sub-type checking
 	!    * add slice subscripts:

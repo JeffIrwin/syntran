@@ -7,12 +7,15 @@
 //
 //     d^2/dt^2 u = c^2 * d^2/dx^2 u
 //
-// where u is displacement, t is time, x is position, c is the wave
-// speed, and d^2/dy^2 is the second derivative wrt y.  Displacement
-// u is a function of t and x.
+// where u is displacement amplitude, t is time, x is position, c is the
+// wave speed, and d^2/dy^2 is the second derivative wrt y.
+// Displacement u is a function of t and x.
 //
 // The PDE is solved numerically using an explicit finite difference
 // method
+//
+// For post-processing, use Scilab and ffmpeg.  See the run.sh script in
+// this folder
 
 {
 	let e = 2.718281828;
@@ -34,7 +37,7 @@
 	// Grid spacing
 	let dx = (xmax - xmin) / (nx - 1);
 
-	// Make spatial grid
+	// Make spatial grid.  c.f. linspace() fn from MATLAB or Scilab
 	let x = [xmin: dx: nx];
 
 	// Time step size just under stability criterion
@@ -43,7 +46,7 @@
 	// Courant number squared
 	let c2 = (c * dt / dx) ** 2;
 
-	// Allocate solution vector
+	// Allocate displacement solution vector
 	let u = [0.0: 0.0: nx];
 
 	// Initial condition: Gaussian pulse
@@ -51,8 +54,6 @@
 	let pwidth = 0.1 * (xmax - xmin);
 	for ix in [0: nx]
 		u[ix] = e ** (-0.5 * ((x[ix] - xpulse) / pwidth) ** 2);
-
-	//u;
 
 	// Dirichlet boundary conditions on left and right ends.  Could be
 	// time-dependent, but I'm just using constants
@@ -68,8 +69,6 @@
 	for ix in [1: nx-1]
 		u[ix] = u0[ix] - 0.5 * c2 * (u0[ix+1] - 2 * u0[ix] + u0[ix-1]);
 	u[nx-1] = ur;
-
-	//u;
 
 	// Time loop for steps 2+.  Subtract 1 for perfect loop
 	let t = tmin;
