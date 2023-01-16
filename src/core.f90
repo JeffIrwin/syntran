@@ -1082,85 +1082,85 @@ end function syntax_node_str
 
 !===============================================================================
 
-subroutine value_copy(dst, src)
-
-	! TODO: is this required or does default assignment work?
-
-	class(value_t), intent(inout) :: dst
-	class(value_t), intent(in)    :: src
-
-	!********
-
-	print *, 'starting value_copy'
-
-	dst%type = src%type
-	print *, 'bool'
-	dst%bool = src%bool
-	print *, 'i32'
-	dst%i32  = src%i32
-	print *, 'f32'
-	dst%f32  = src%f32
-
-	print *, 'checking array'
-	!if (allocated(src%array)) then
-	if (associated(src%array)) then
-		print *, 'copying array'
-		if (.not. associated(dst%array)) allocate(dst%array)
-		dst%array = src%array
-	end if
-	print *, 'done'
-
-end subroutine value_copy
+!subroutine value_copy(dst, src)
+!
+!	! TODO: delet
+!
+!	class(value_t), intent(inout) :: dst
+!	class(value_t), intent(in)    :: src
+!
+!	!********
+!
+!	print *, 'starting value_copy'
+!
+!	dst%type = src%type
+!	print *, 'bool'
+!	dst%bool = src%bool
+!	print *, 'i32'
+!	dst%i32  = src%i32
+!	print *, 'f32'
+!	dst%f32  = src%f32
+!
+!	print *, 'checking array'
+!	!if (allocated(src%array)) then
+!	if (associated(src%array)) then
+!		print *, 'copying array'
+!		if (.not. associated(dst%array)) allocate(dst%array)
+!		dst%array = src%array
+!	end if
+!	print *, 'done'
+!
+!end subroutine value_copy
 
 !===============================================================================
 
-!recursive subroutine array_copy(dst, src)
-subroutine array_copy(dst, src)
-
-	! TODO: is this required or does default assignment work?
-
-	! Deep copy
-
-	class(array_t), intent(inout) :: dst
-	class(array_t), intent(in)    :: src
-
-	!********
-
-	!integer :: i, n
-
-	if (debug > 3) print *, 'starting array_copy()'
-
-	dst%kind = src%kind
-	dst%type = src%type
-	dst%len  = src%len
-	dst%cap  = src%cap
-
-	if (allocated(src%lbound)) then
-		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
-		dst%lbound = src%lbound
-	end if
-
-	if (allocated(src%ubound)) then
-		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
-		dst%ubound = src%ubound
-	end if
-
-	if (allocated(src%bool)) then
-		!if (.not. allocated(dst%bool)) allocate(dst%bool)
-		dst%bool = src%bool
-	end if
-
-	if (allocated(src%i32)) then
-		!if (.not. allocated(dst%i32)) allocate(dst%i32)
-		dst%i32 = src%i32
-	end if
-
-	if (allocated(src%f32)) then
-		!if (.not. allocated(dst%f32)) allocate(dst%f32)
-		dst%f32 = src%f32
-	end if
-
-end subroutine array_copy
+!!recursive subroutine array_copy(dst, src)
+!subroutine array_copy(dst, src)
+!
+!	! TODO: delete
+!
+!	! Deep copy
+!
+!	class(array_t), intent(inout) :: dst
+!	class(array_t), intent(in)    :: src
+!
+!	!********
+!
+!	!integer :: i, n
+!
+!	if (debug > 3) print *, 'starting array_copy()'
+!
+!	dst%kind = src%kind
+!	dst%type = src%type
+!	dst%len  = src%len
+!	dst%cap  = src%cap
+!
+!	if (allocated(src%lbound)) then
+!		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
+!		dst%lbound = src%lbound
+!	end if
+!
+!	if (allocated(src%ubound)) then
+!		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
+!		dst%ubound = src%ubound
+!	end if
+!
+!	if (allocated(src%bool)) then
+!		!if (.not. allocated(dst%bool)) allocate(dst%bool)
+!		dst%bool = src%bool
+!	end if
+!
+!	if (allocated(src%i32)) then
+!		!if (.not. allocated(dst%i32)) allocate(dst%i32)
+!		dst%i32 = src%i32
+!	end if
+!
+!	if (allocated(src%f32)) then
+!		!if (.not. allocated(dst%f32)) allocate(dst%f32)
+!		dst%f32 = src%f32
+!	end if
+!
+!end subroutine array_copy
 
 !===============================================================================
 
@@ -2404,11 +2404,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		!!
 		!! Maybe I won't support it
 
-		!if (subscript_present) then
-			right      = parser%parse_expr()
-		!else
-		!	right      = parser%parse_expr_statement()
-		!end if
+		right      = parser%parse_expr()
+		!right      = parser%parse_expr_statement()
 
 		!expr = new_assignment_expr(identifier, op, right)
 
@@ -3048,6 +3045,7 @@ end function new_declaration_expr
 
 !===============================================================================
 
+!! TODO: delete
 !function new_assignment_expr(identifier, op, right) result(expr)
 !
 !	type(syntax_token_t), intent(in) :: identifier, op
