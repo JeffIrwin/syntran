@@ -28,14 +28,24 @@ module core_m
 	! TODO:
 	!
 	! Add:
+	!  - arrays
+	!    * MVP i32 arrays done
+	!    * cleanup hacky implementation
+	!    * fix array sub-type checking
+	!    * fix broken unit test, or disable multiple assignment
+	!    * should be able to print final result element without dummy arg like:
+	!          let largest = primes[num_primes-1];
+	!    * add slice subscripts
+	!    * refactor the way implicit arrays are handled as for loop iterators
+	!    * operations: vector addition, dot product, scalar-vector mult, ...
+	!    * f32 arrays
+	!    * rank-2+ arrays (matrices et al.)
 	!  - error_type (or unknown_type) like Immo to prevent cascading errors
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
-	!  - arrays
-	!    * start with the way implicit arrays are handled as for loop iterators
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - strings.  are characters useful or can we just use strings of length 1?
 	!  - structs

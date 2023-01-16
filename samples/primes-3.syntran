@@ -1,21 +1,23 @@
 
 {
-	// Search for all primes less than n
+	// Search for the first n primes
 	//let n = 5;
-	let n = 10000;
+	let n = 200;
 
-	// Pre-allocate a list of primes.  This is much bigger than it needs to be
-	//let primes = [-n: 0];
-	let primes = [-n/5: 0];
-	//let primes = [0: n];
+	// Pre-allocate a list of n primes
+	let primes = [0: n];
+	//let primes = [-n/2: 0];
+	//let primes = [-n/5: 0];
 
 	// Number of primes found so far
 	let num_primes = 0;
 
-	// TODO: nasty hack
+	// TODO: ugly hack
 	let divisor = 0;
 
-	for i in [2: n]
+	// Start at 2 because 1 is not prime by definition
+	let i = 2;
+	while num_primes < n
 	{
 		let is_composite = false;
 
@@ -37,13 +39,13 @@
 			primes[num_primes] = i;
 			num_primes = num_primes + 1;
 		}
+		i = i + 1;
 	}
 
-	// This is the final list of primes.  Ignore negative values at the
-	// end of the array
+	// This is the final list of primes
 	primes;
 
-	//// This largest prime is our final result
-	//primes[num_primes];
+	//// Final result. TODO: dummy var shouldn't be required
+	//let largest = primes[num_primes-1];
 }
 
