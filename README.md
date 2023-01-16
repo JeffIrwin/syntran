@@ -307,3 +307,7 @@ In the pi series, there is a float term `16.0 ** k`.  The loop iterator `k` is a
 Similarly, the pi term `4.0 / (8*k + 1)` has a float numerator and int denominator.  Again we must use a float to avoid integer division.
 
 Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/15379/26435), but it allows you to do numeric work without constantly manually casting things [`as f32` like in Rust](https://doc.rust-lang.org/rust-by-example/types/cast.html).
+
+## Arrays
+
+Coming soon ...
