@@ -2280,7 +2280,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	integer :: io, ltype, rtype
+	integer :: io, ltype, rtype, pos0
 
 	logical :: subscript_present
 
@@ -2318,8 +2318,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		identifier = parser%next()
 		op         = parser%next()
 
-		!right      = parser%parse_expr_statement()
-		right      = parser%parse_expr()
+		right      = parser%parse_expr_statement()
+		!right      = parser%parse_expr()
 
 		!! I think the way to get conditional initialization like rust is
 		!! something like this.  May need to peek current and check if it's
@@ -2353,23 +2353,22 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	end if
 
-	! This is a bit of a hack for subscripts.  It assumes that `[` will
-	! eventually be followed by `=`.  How many tokens later it is, is
-	! indeterminate, because the subscript itself could be a single int token or
-	! a multi-token expression
-	!
-	! Currently this prevents printing a single element at the end of a program:
-	!
-	!     let a = [0: 2];
-	!     a[0];
+	if  (parser%peek_kind(0) == identifier_token) then ! .and. &
+		!(parser%peek_kind(1) == equals_token .or. &
+	    ! parser%peek_kind(1) == lbracket_token)) then
 
-	if  (parser%peek_kind(0) == identifier_token .and. &
-	    (parser%peek_kind(1) == equals_token .or. &
-	     parser%peek_kind(1) == lbracket_token)) then
+		! There may or may not bea subscript expression after an identifier, so
+		! we can't know how many spaces ahead an equals_token might be without
+		! looking ahead
+
+		!! %pos is the lexer token index, %current_pos() is the character index!
+		pos0 = parser%pos
+		!pos0 = parser%current_pos()
 
 		!print *, 'assign expr'
 
-		identifier = parser%next()
+		!identifier = parser%next()
+		identifier = parser%match(identifier_token)
 
 		! Parse array subscript index if present
 
@@ -2394,6 +2393,16 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		end if
 
+		if (parser%current_kind() /= equals_token) then
+			! Rewind and do the default case (same as outside the assignment if
+			! block).  Could use goto or probably refactor somehow
+			parser%pos = pos0
+			!print *, 'pos0 = ', pos0
+			expr = parser%parse_expr()
+			return
+		end if
+		!print *, 'parsing assignment'
+
 		!op         = parser%next()
 		op         = parser%match(equals_token)
 
@@ -2404,8 +2413,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		!!
 		!! Maybe I won't support it
 
-		right      = parser%parse_expr()
-		!right      = parser%parse_expr_statement()
+		!right      = parser%parse_expr()
+		right      = parser%parse_expr_statement()
 
 		!expr = new_assignment_expr(identifier, op, right)
 
@@ -2498,6 +2507,7 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 	type(text_span_t) :: span
 
 	if (debug > 1) print *, 'parse_expr'
+	if (debug > 1) print *, 'pos = ', parser%pos
 
 	parent_precl = 0
 	if (present(parent_prec)) parent_precl = parent_prec
@@ -2642,8 +2652,14 @@ end function peek_kind
 !********
 
 integer function current_pos(parser)
+
+	! Get the current character index.  If you want the token index, use
+	! parser%pos instead
+
 	class(parser_t) :: parser
+
 	current_pos = parser%peek_pos(0)
+
 end function current_pos
 
 integer function peek_pos(parser, offset)

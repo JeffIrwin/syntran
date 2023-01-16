@@ -45,7 +45,7 @@
 	// This is the final list of primes
 	primes;
 
-	//// Final result. TODO: dummy var shouldn't be required
-	//let largest = primes[num_primes-1];
+	//// Final result if you only want the last prime
+	//primes[num_primes-1];
 }
 
