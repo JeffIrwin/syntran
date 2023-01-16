@@ -36,6 +36,20 @@ module core_m
 	!    * add slice subscripts
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
+	!    * provide a better way to initialize an array e.g. to all 0's
+	!      > for i32 you can multiply vec by scalar 0 and add, e.g. all 0's:
+	!            let (i32) a = 0 * [0: n];
+	!      > or all 1's:
+	!            let (i32) a = 1 + 0 * [0: n];
+	!      > for f32 this should be covered by steps, e.g. all 0's:
+	!            let a = [0.0: 0.0: 5];
+	!      > or all 1's:
+	!            let a = [1.0: 0.0: 5];
+	!      > note '5' is an int in this example. infer options based on types,
+	!        e.g. [fmin: fstep: fmax] vs [fmin: fstep: inum] or [fmin: fmax:
+	!        inum]?  last 2 cases are ambiguous so need to pick one.  the case
+	!        [fmin: fstep: inum] is easy to roll with the equivalent fmin + step
+	!        * [0: inum], so maybe only provide sugar for the 3rd case
 	!    * f32 arrays
 	!    * rank-2+ arrays (matrices et al.)
 	!  - error_type (or unknown_type) like Immo to prevent cascading errors
@@ -3399,7 +3413,7 @@ recursive function syntax_eval(node, vars) result(res)
 		else if (node%val%array%kind == expl_array) then
 			!print *, 'expl_array'
 
-			! TODO: allow empty arrays?
+			! TODO: allow empty arrays?  Sub type of empty array?
 			array = new_array(node%val%array%type)
 
 			do i = 1, size(node%elems)

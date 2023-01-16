@@ -681,7 +681,87 @@ end subroutine unit_test_f32_1
 
 !===============================================================================
 
-subroutine unit_test_f32(npass, nfail)
+subroutine unit_test_array_i32_1(npass, nfail)
+
+	! Simple i32 array tests
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'i32 arrays'
+
+	logical, allocatable :: tests(:)
+
+	real, parameter :: tol = 1.e-9
+
+	write(*,*)
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! Because test evaluation results are tested by comparing strings, output
+	! white space is significant!  Ints are formatted in min width, and array
+	! elements are separated by a comma and a single space
+
+	tests = &
+		[   &
+			eval('[42];') == '[42]', &
+			eval('[-42,1337];') == '[-42, 1337]', &
+			eval('[3, 2, 1];') == '[3, 2, 1]', &
+			eval('[1: 4];') == '[1, 2, 3]', &
+			eval('[2-3: 6/3 + 3];') == '[-1, 0, 1, 2, 3, 4]', &
+			eval('let myArray = [2-3: 6/3 + 3];') == '[-1, 0, 1, 2, 3, 4]', &
+			eval('[48-6, 13*100 + 37];') == '[42, 1337]'  &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_array_i32_1
+
+!===============================================================================
+
+subroutine unit_test_array_i32_2(npass, nfail)
+
+	! More advanced tests on longer scripts
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'i32 array scripts'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/array-i32/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*)
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: more tests
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran') == '0', &
+			interpret_file(path//'test-02.syntran') == '0', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_array_i32_2
+
+!===============================================================================
+
+!===============================================================================
+
+subroutine unit_test_f32_2(npass, nfail)
 
 	! More advanced f32 tests on longer syntran scripts
 
@@ -715,7 +795,7 @@ subroutine unit_test_f32(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_f32
+end subroutine unit_test_f32_2
 
 !===============================================================================
 
@@ -895,7 +975,9 @@ subroutine unit_tests(iostat)
 	call unit_test_for        (npass, nfail)
 	call unit_test_while      (npass, nfail)
 	call unit_test_var_scopes (npass, nfail)
-	call unit_test_f32        (npass, nfail)
+	call unit_test_f32_2      (npass, nfail)
+	call unit_test_array_i32_1(npass, nfail)
+	call unit_test_array_i32_2(npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
