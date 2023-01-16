@@ -3,14 +3,12 @@
 	// Search for the first n primes
 	let n = 200;
 
-	// Pre-allocate a list of n primes
+	// Pre-allocate an array of n primes
 	let primes = [0: n];
-
-	// Number of primes found so far
-	let num_primes = 0;
 
 	// Start at 2 because 1 is not prime by definition
 	let i = 2;
+	let num_primes = 0;
 	while num_primes < n
 	{
 		let is_composite = false;
@@ -18,10 +16,10 @@
 		let j = 0;
 		while j < num_primes and not is_composite
 		{
-			let divisor = primes[j];
+			let p = primes[j];
 
-			// Is i divisible by divisor?
-			let divisible = divisor * (i / divisor) == i; // mod == 0
+			// Is i divisible by p?
+			let divisible = p * (i / p) == i;  // mod == 0
 			is_composite = is_composite or divisible;
 
 			j = j + 1;
@@ -35,10 +33,8 @@
 		i = i + 1;
 	}
 
-	// This is the final list of primes
+	// Final list of primes
 	primes;
-
-	//// Final result if you only want the last prime
-	//primes[num_primes-1];
+	// [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, ... ]
 }
 
