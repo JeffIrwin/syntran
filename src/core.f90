@@ -29,11 +29,13 @@ module core_m
 	!
 	! Add:
 	!  - arrays
-	!    * TODO TESTS!
 	!    * MVP i32 arrays done
-	!    * cleanup hacky implementation
+	!    * whole array assignment to a scalar
 	!    * fix array sub-type checking
-	!    * add slice subscripts
+	!    * add slice subscripts:
+	!      > a[:]     -> a[0], a[1], a[2], ...
+	!      > a[1:4]   -> a[1], a[2], a[3]
+	!      > a[1:2:6] -> a[1], a[3], a[5]
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
 	!    * provide a better way to initialize an array e.g. to all 0's
@@ -140,9 +142,6 @@ module core_m
 		logical           :: bool
 		integer(kind = 4) :: i32
 		real   (kind = 4) :: f32
-
-		! TODO: may need to manually define value_t copy assignment since array
-		! is pointer/allocatable
 		type(array_t), pointer :: array => null()
 
 		contains
@@ -160,13 +159,7 @@ module core_m
 		! The array type is i32_type, f32_type, etc. while the kind is
 		! impl_array (bound-based) or expl_array (CSV list)
 		integer :: type, kind
-
-		!type(syntax_node_t), allocatable :: lbound, ubound
-		!type(syntax_node_t), pointer :: lbound, ubound
 		type(value_t), allocatable :: lbound, ubound
-
-		!integer(kind = 4) :: lbound_i32, step_i32, ubound_i32
-		!real   (kind = 4) :: lbound_f32, step_f32, ubound_f32
 
 		! Note that these are arrays of primitive Fortran types, instead of
 		! arrays of generic value_t.  This performs better since we can put
@@ -177,6 +170,7 @@ module core_m
 		real   (kind = 4), allocatable ::  f32(:)
 
 		integer :: len, cap
+
 		contains
 			procedure :: push => push_array
 
@@ -217,10 +211,6 @@ module core_m
 		! Array expression syntax nodes
 		type(syntax_node_t), allocatable :: lbound, ubound, elems(:)
 
-		! TODO: add an array subscript member.  Type syntax_node_t?  It could be
-		! an int literal or an int expression (or later a CSV list of
-		! subscripts)
-
 		! TODO: make this an array for rank-2+ arrays
 		type(syntax_node_t), allocatable :: subscript
 
@@ -228,7 +218,6 @@ module core_m
 		integer :: id_index
 
 		type(value_t) :: val
-		!type(value_t), allocatable :: val
 
 		type(string_vector_t) :: diagnostics
 
@@ -1094,88 +1083,6 @@ end function syntax_node_str
 
 !===============================================================================
 
-!subroutine value_copy(dst, src)
-!
-!	! TODO: delet
-!
-!	class(value_t), intent(inout) :: dst
-!	class(value_t), intent(in)    :: src
-!
-!	!********
-!
-!	print *, 'starting value_copy'
-!
-!	dst%type = src%type
-!	print *, 'bool'
-!	dst%bool = src%bool
-!	print *, 'i32'
-!	dst%i32  = src%i32
-!	print *, 'f32'
-!	dst%f32  = src%f32
-!
-!	print *, 'checking array'
-!	!if (allocated(src%array)) then
-!	if (associated(src%array)) then
-!		print *, 'copying array'
-!		if (.not. associated(dst%array)) allocate(dst%array)
-!		dst%array = src%array
-!	end if
-!	print *, 'done'
-!
-!end subroutine value_copy
-
-!===============================================================================
-
-!!recursive subroutine array_copy(dst, src)
-!subroutine array_copy(dst, src)
-!
-!	! TODO: delete
-!
-!	! Deep copy
-!
-!	class(array_t), intent(inout) :: dst
-!	class(array_t), intent(in)    :: src
-!
-!	!********
-!
-!	!integer :: i, n
-!
-!	if (debug > 3) print *, 'starting array_copy()'
-!
-!	dst%kind = src%kind
-!	dst%type = src%type
-!	dst%len  = src%len
-!	dst%cap  = src%cap
-!
-!	if (allocated(src%lbound)) then
-!		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
-!		dst%lbound = src%lbound
-!	end if
-!
-!	if (allocated(src%ubound)) then
-!		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
-!		dst%ubound = src%ubound
-!	end if
-!
-!	if (allocated(src%bool)) then
-!		!if (.not. allocated(dst%bool)) allocate(dst%bool)
-!		dst%bool = src%bool
-!	end if
-!
-!	if (allocated(src%i32)) then
-!		!if (.not. allocated(dst%i32)) allocate(dst%i32)
-!		dst%i32 = src%i32
-!	end if
-!
-!	if (allocated(src%f32)) then
-!		!if (.not. allocated(dst%f32)) allocate(dst%f32)
-!		dst%f32 = src%f32
-!	end if
-!
-!end subroutine array_copy
-
-!===============================================================================
-
 recursive subroutine syntax_node_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
@@ -1267,21 +1174,7 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	if (allocated(src%statements)) then
 		!print *, 'copying statements'
-
 		call syntax_nodes_copy(dst%statements, src%statements)
-
-		!n = size(src%statements)
-		!print *, 'n = ', n
-
-		!if (allocated(dst%statements)) deallocate(dst%statements)
-		!allocate(dst%statements(n))
-
-		!! This explicit loop is apparently required
-		!do i = 1, n
-		!	dst%statements(i) = src%statements(i)
-		!end do
-		!!print *, 'done loop'
-
 	end if
 
 	if (debug > 3) print *, 'done syntax_node_copy()'
@@ -2250,22 +2143,16 @@ function parse_block_statement(parser) result(block)
 
 	block%kind = block_statement
 
-	! Convert to standard array.  TODO: make a subroutine for this explicit loop
-	! copy, since apparently its required for memory correctness
-
+	! Convert to standard array
 	call syntax_nodes_copy(block%statements, statements%v( 1: statements%len ))
-
-	!if (allocated(block%statements)) deallocate(block%statements)
-	!allocate(block%statements( statements%len ))
-	!do i = 1, statements%len
-	!	block%statements(i) = statements%v(i)
-	!end do
 
 end function parse_block_statement
 
 !===============================================================================
 
 subroutine syntax_nodes_copy(dst, src)
+
+	! Array copy
 
 	type(syntax_node_t), allocatable :: dst(:)
 	type(syntax_node_t), intent(in)  :: src(:)
@@ -2365,9 +2252,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	end if
 
-	if  (parser%peek_kind(0) == identifier_token) then ! .and. &
-		!(parser%peek_kind(1) == equals_token .or. &
-	    ! parser%peek_kind(1) == lbracket_token)) then
+	if  (parser%peek_kind(0) == identifier_token) then
 
 		! There may or may not bea subscript expression after an identifier, so
 		! we can't know how many spaces ahead an equals_token might be without
@@ -2379,7 +2264,6 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'assign expr'
 
-		!identifier = parser%next()
 		identifier = parser%match(identifier_token)
 
 		! Parse array subscript index if present
@@ -2415,20 +2299,10 @@ recursive function parse_expr_statement(parser) result(expr)
 		end if
 		!print *, 'parsing assignment'
 
-		!op         = parser%next()
 		op         = parser%match(equals_token)
-
-		!! I think parsing multiple array assignment would require some tricky
-		!! looking ahead, e.g.
-		!!
-		!!     a[0] = b[1] = scalar;
-		!!
-		!! Maybe I won't support it
 
 		!right      = parser%parse_expr()
 		right      = parser%parse_expr_statement()
-
-		!expr = new_assignment_expr(identifier, op, right)
 
 		expr%kind = assignment_expr
 
@@ -2557,12 +2431,12 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		right = parser%parse_expr(prec)
 		expr  = new_binary_expr(expr, op, right)
 
-		! TODO: actually check the array subtype
 		ltype = expr%left %val%type
 		rtype = expr%right%val%type
 
-		!if (ltype /= array_type .and. rtype /= array_type .and. &
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
+
+			!print *, 'bin not allowed in parse_expr'
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -2775,8 +2649,7 @@ function parse_array_expr(parser) result(expr)
 	!print *, 'starting parse_array_expr()'
 
 	! TODO: optionally match this lbound:ubound style, or lbound step and
-	! ubound, or an explicit list of comma-separated array elements.  Rank-1 for
-	! now, but eventually target higher rank arrays
+	! ubound.  Rank-1 for now, but eventually target higher rank arrays
 
 	lbracket = parser%match(lbracket_token)
 
@@ -2800,7 +2673,6 @@ function parse_array_expr(parser) result(expr)
 			parser%context, span, parser%context%text(bound_beg: bound_end)))
 	end if
 
-	!if (parser%peek_kind(1) == colon_token) then
 	if (parser%current_kind() == colon_token) then
 
 		! Implicit array form [lbound: ubound]
@@ -2824,13 +2696,12 @@ function parse_array_expr(parser) result(expr)
 		!print *, 'ubound = ', ubound%str()
 
 		allocate(expr%val%array)
-
-		!allocate(expr%val%array%lbound)
-		!allocate(expr%val%array%ubound)
 		allocate(expr%lbound)
 		allocate(expr%ubound)
 
 		expr%kind                 = array_expr
+
+		! TODO: cleanup
 
 		!! Whatever is decided here, do it consistently for expl_array below
 		!expr%val%type             = array_type
@@ -2840,11 +2711,6 @@ function parse_array_expr(parser) result(expr)
 		expr%val%array%type       = lbound%val%type
 		expr%val%array%kind       = impl_array
 
-		!expr%val%array%lbound_i32 = lbound%val%i32
-		!expr%val%array%ubound_i32 = ubound%val%i32
-
-		!expr%val%array%lbound = lbound
-		!expr%val%array%ubound = ubound
 		expr%lbound = lbound
 		expr%ubound = ubound
 
@@ -2948,10 +2814,7 @@ function parse_primary_expr(parser) result(expr)
 
 			identifier = parser%next()
 			!print *, 'RHS identifier = ', identifier%text
-			!print *, 'parser%current_kind() = ', kind_name(parser%current_kind())
-
-			! TODO: parse array subscript if present.  Can this be consolidated
-			! with subscript parsing in parse_expr_statement?
+			!print *, '%current_kind() = ', kind_name(parser%current_kind())
 
 			!print *, 'searching'
 			expr = new_name_expr(identifier, &
@@ -2965,12 +2828,17 @@ function parse_primary_expr(parser) result(expr)
 					span, identifier%text))
 			end if
 
-			!print *, 'parser%current_kind() = ', kind_name(parser%current_kind())
+			! Parse array subscript if present
+
+			! TODO: Can this be consolidated with subscript parsing in
+			! parse_expr_statement?
+
+			!print *, '%current_kind() = ', kind_name(parser%current_kind())
 			!subscript_present = .false.
 			if (parser%current_kind() == lbracket_token) then
 				!subscript_present = .true.
 
-				print *, 'parsing RHS subscript'
+				!print *, 'parsing RHS subscript'
 
 				lbracket  = parser%match(lbracket_token)
 				subscript = parser%parse_expr()
@@ -2981,7 +2849,7 @@ function parse_primary_expr(parser) result(expr)
 				expr%subscript = subscript
 				!end if
 
-				print *, 'expr%val%type = ', kind_name(expr%val%type)
+				!print *, 'expr%val%type = ', kind_name(expr%val%type)
 
 			end if
 
@@ -3081,32 +2949,6 @@ function new_declaration_expr(identifier, op, right) result(expr)
 	expr%val%type = right%val%type
 
 end function new_declaration_expr
-
-!===============================================================================
-
-!! TODO: delete
-!function new_assignment_expr(identifier, op, right) result(expr)
-!
-!	type(syntax_token_t), intent(in) :: identifier, op
-!	type(syntax_node_t) , intent(in) :: right
-!
-!	type(syntax_node_t) :: expr
-!
-!	!********
-!
-!	expr%kind = assignment_expr
-!
-!	allocate(expr%right)
-!
-!	expr%identifier = identifier
-!
-!	expr%op    = op
-!	expr%right = right
-!
-!	! The identifier has already been declared, so do not overwrite its type
-!	! here
-!
-!end function new_assignment_expr
 
 !===============================================================================
 
@@ -3356,8 +3198,6 @@ recursive function syntax_eval(node, vars) result(res)
 
 		!print *, 'evaluating array_expr'
 
-		! TODO: switch on impl_array vs expl_array cases
-
 		if (node%val%array%kind == impl_array) then
 			!print *, 'impl_array'
 
@@ -3573,6 +3413,11 @@ recursive function syntax_eval(node, vars) result(res)
 		!call vars%insert(node%identifier%text, res, node%id_index)
 		vars%vals(node%id_index) = res
 
+		! TODO: this does not deep copy arrays, but aliases pointers instead.
+		! See src/tests/test-src/array-i32/test-07.syntran.  Either fix it in
+		! name_expr or here.  Probably fix in name_expr so that I don't have to
+		! change assignment_expr too
+
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
 		!res = vars%search(node%identifier%text, node%id_index)
@@ -3591,6 +3436,9 @@ recursive function syntax_eval(node, vars) result(res)
 		else
 			!print *, 'scalar name expr'
 			res = vars%vals(node%id_index)
+
+			! TODO: deep copy if whole array
+
 		end if
 
 	case (unary_expr)
@@ -3924,7 +3772,7 @@ function value_str(val) result(str)
 			! cat huge strings
 			str = '['
 			do i = 1, val%array%len
-				! TODO: other types
+				! TODO: other array sub types
 				str = str//int_str(val%array%i32(i))
 				if (i < val%array%len) str = str//', '
 			end do
