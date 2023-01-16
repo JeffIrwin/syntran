@@ -752,6 +752,7 @@ subroutine unit_test_array_i32_2(npass, nfail)
 			interpret_file(path//'test-05.syntran') == '16', &
 			interpret_file(path//'test-06.syntran') == '16', &
 			interpret_file(path//'test-07.syntran') == '13', &
+			interpret_file(path//'test-08.syntran') == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
