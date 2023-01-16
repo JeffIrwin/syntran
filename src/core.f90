@@ -32,9 +32,6 @@ module core_m
 	!    * MVP i32 arrays done
 	!    * cleanup hacky implementation
 	!    * fix array sub-type checking
-	!    * fix broken unit test, or disable multiple assignment
-	!    * should be able to print final result element without dummy arg like:
-	!          let largest = primes[num_primes-1];
 	!    * add slice subscripts
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...

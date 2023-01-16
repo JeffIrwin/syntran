@@ -298,6 +298,15 @@ subroutine unit_test_assignment(npass, nfail)
 			eval('let x = 1 ;') == '1' ,  &
 			eval('let a =  let b = 42 ;') == '42' ,  &
 			eval('let a = (let b = 42);') == '42' ,  &
+			eval('{'// &
+				'let a = 42;'// &
+				'let b = a = 1337;'// &
+				'}') == '1337' ,  &
+			eval('{'// &
+				'let a = 42;'// &
+				'let b = 69;'// &
+				'b = a = 1337;'// &
+				'}') == '1337' ,  &
 			interpret('{ '// &
 				'let a = 2;'// &
 				'let b = a;}') == '2',     &
