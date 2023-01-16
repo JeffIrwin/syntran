@@ -3462,7 +3462,18 @@ recursive function syntax_eval(node, vars) result(res)
 		! statements only change the (vars) state.
 		do i = 1, size(node%statements)
 			res = syntax_eval(node%statements(i), vars)
+
+			!print *, 'kind = ', node%statements(i)%kind
 			!print *, i, ' res = ', res%str()
+			!print *, ''
+
+			! HolyC feature: implicitly print name expression statements.  I may
+			! remove this after I implement an intrinsic print() fn.  May also
+			! need to suppress this for void fn calls later
+			if (node%statements(i)%kind == name_expr) then
+				write(*,*) res%str()
+			end if
+
 		end do
 
 		call vars%pop_scope()

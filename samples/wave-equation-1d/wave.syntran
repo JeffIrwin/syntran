@@ -1,0 +1,98 @@
+
+// 1D wave equation finite difference solver.  Ref:
+//
+//     http://hplgit.github.io/num-methods-for-PDEs/doc/pub/wave/pdf/wave-4print-A4-2up.pdf
+//
+// Solve this partial-differential equation:
+//
+//     d^2/dt^2 u = c^2 * d^2/dx^2 u
+//
+// where u is displacement, t is time, x is position, c is the wave
+// speed, and d^2/dy^2 is the second derivative wrt y.  Displacement
+// u is a function of t and x.
+//
+// The PDE is solved numerically using an explicit finite difference
+// method
+
+{
+	let e = 2.718281828;
+
+	// Spatial domain bounds
+	let xmin = 1.0;
+	let xmax = 3.0;
+
+	// Wave speed
+	let c = 10.0;
+
+	// Time bounds for wave to travel domain twice (i.e. forth and back)
+	let tmin = 0.0;
+	let tmax = tmin + 2 * (xmax - xmin) / c;
+
+	// Number of points in spatial grid
+	let nx = 201;
+
+	// Grid spacing
+	let dx = (xmax - xmin) / (nx - 1);
+
+	// Make spatial grid
+	let x = [xmin: dx: nx];
+
+	// Time step size just under stability criterion
+	let dt = 0.9 * dx / c;
+
+	// Courant number squared
+	let c2 = (c * dt / dx) ** 2;
+
+	// Allocate solution vector
+	let u = [0.0: 0.0: nx];
+
+	// Initial condition: Gaussian pulse
+	let xpulse = xmin + 0.3333 * (xmax - xmin);
+	let pwidth = 0.1 * (xmax - xmin);
+	for ix in [0: nx]
+		u[ix] = e ** (-0.5 * ((x[ix] - xpulse) / pwidth) ** 2);
+
+	//u;
+
+	// Dirichlet boundary conditions on left and right ends.  Could be
+	// time-dependent, but I'm just using constants
+	let ul = 0.0;
+	let ur = 0.0;
+
+	let u0 = u;
+
+	// First step only: first-order finite difference time derivative
+
+	// Space loop
+	u[0] = ul;
+	for ix in [1: nx-1]
+		u[ix] = u0[ix] - 0.5 * c2 * (u0[ix+1] - 2 * u0[ix] + u0[ix-1]);
+	u[nx-1] = ur;
+
+	//u;
+
+	// Time loop for steps 2+.  Subtract 1 for perfect loop
+	let t = tmin;
+	while t < tmax - dt
+	{
+
+		// u00 is u from 2 steps ago, u0 is u from 1 step ago
+		let u00 = u0;
+		u0 = u;
+
+		// Space loop
+		u[0] = ul;
+		for ix in [1: nx-1]
+		{
+			u[ix] = -u00[ix] + 2 * u0[ix] 
+				+ c2 * (u0[ix+1] - 2 * u0[ix] + u0[ix-1]);
+		}
+		u[nx-1] = ur;
+
+		t = t + dt;
+
+		// Print
+		u;
+	}
+}
+
