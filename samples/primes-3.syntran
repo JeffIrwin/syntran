@@ -1,19 +1,13 @@
 
 {
 	// Search for the first n primes
-	//let n = 5;
 	let n = 200;
 
 	// Pre-allocate a list of n primes
 	let primes = [0: n];
-	//let primes = [-n/2: 0];
-	//let primes = [-n/5: 0];
 
 	// Number of primes found so far
 	let num_primes = 0;
-
-	// TODO: ugly hack
-	let divisor = 0;
 
 	// Start at 2 because 1 is not prime by definition
 	let i = 2;
@@ -24,8 +18,7 @@
 		let j = 0;
 		while j < num_primes and not is_composite
 		{
-			//let divisor = primes[j]; // divisor really should be local
-			divisor = primes[j];
+			let divisor = primes[j];
 
 			// Is i divisible by divisor?
 			let divisible = divisor * (i / divisor) == i; // mod == 0

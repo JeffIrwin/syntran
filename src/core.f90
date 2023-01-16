@@ -29,6 +29,7 @@ module core_m
 	!
 	! Add:
 	!  - arrays
+	!    * TODO TESTS!
 	!    * MVP i32 arrays done
 	!    * cleanup hacky implementation
 	!    * fix array sub-type checking
@@ -2460,8 +2461,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		! TODO: move this check inside of is_binary_op_allowed?  Need to pass
 		! parser to it to push diagnostics
-		if (ltype /= array_type .and. rtype /= array_type .and. &
-			.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
+		!if (ltype /= array_type .and. rtype /= array_type .and. &
+		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -2516,7 +2517,12 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		right = parser%parse_expr(prec)
 		expr  = new_unary_expr(op, right)
 
-		if (.not. is_unary_op_allowed(op%kind, right%val%type)) then
+		rtype = right%val%type
+
+		!! segfault
+		!if (rtype == array_type) rtype = right%val%array%type
+
+		if (.not. is_unary_op_allowed(op%kind, rtype)) then
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -2541,8 +2547,8 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		ltype = expr%left %val%type
 		rtype = expr%right%val%type
 
-		if (ltype /= array_type .and. rtype /= array_type .and. &
-			.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
+		!if (ltype /= array_type .and. rtype /= array_type .and. &
+		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -2811,8 +2817,13 @@ function parse_array_expr(parser) result(expr)
 		allocate(expr%ubound)
 
 		expr%kind                 = array_expr
-		expr%val%type             = array_type
-		expr%val%array%type       = i32_type  ! TODO
+
+		!! Whatever is decided here, do it consistently for expl_array below
+		!expr%val%type             = array_type
+		!expr%val%type             = i32_type
+		expr%val%type             = lbound%val%type
+
+		expr%val%array%type       = lbound%val%type
 		expr%val%array%kind       = impl_array
 
 		!expr%val%array%lbound_i32 = lbound%val%i32
@@ -2843,8 +2854,7 @@ function parse_array_expr(parser) result(expr)
 
 		!print *, 'elem ', elem%val%str()
 
-		! TODO: compare to first type, not hard-coded i32
-		if (elem%val%type /= i32_type) then
+		if (elem%val%type /= lbound%val%type) then
 			span = new_span(elem_beg, elem_end - elem_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
 				parser%context, span, parser%context%text(elem_beg: elem_end)))
@@ -2858,8 +2868,8 @@ function parse_array_expr(parser) result(expr)
 
 	allocate(expr%val%array)
 	expr%kind           = array_expr
-	expr%val%type       = array_type
-	expr%val%array%type = i32_type ! TODO
+	expr%val%type       = lbound%val%type
+	expr%val%array%type = lbound%val%type
 	expr%val%array%kind = expl_array
 
 	call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len ))
@@ -2946,7 +2956,7 @@ function parse_primary_expr(parser) result(expr)
 			if (parser%current_kind() == lbracket_token) then
 				!subscript_present = .true.
 
-				!print *, 'parsing RHS subscript'
+				print *, 'parsing RHS subscript'
 
 				lbracket  = parser%match(lbracket_token)
 				subscript = parser%parse_expr()
@@ -2956,6 +2966,8 @@ function parse_primary_expr(parser) result(expr)
 				allocate(expr%subscript)
 				expr%subscript = subscript
 				!end if
+
+				print *, 'expr%val%type = ', kind_name(expr%val%type)
 
 			end if
 
@@ -3370,6 +3382,17 @@ recursive function syntax_eval(node, vars) result(res)
 			end do
 
 			allocate(res%array)
+
+			! In parser, we set val%type to the scalar type, e.g. i32, when val
+			! is an array.  Here we set val%type (i.e. res%type) to array_type
+			! so value_str() knows to format it as an array.  The scalar
+			! sub-type is still available in val%array%type.  This may need to
+			! change when I implement arithmetic operations on arrays
+			!
+			! Parser segfaults when I try to access val%array%type, apparently
+			! it is not set by dict insertion.  Maybe I need to manually
+			! allocate array and set its type after insertion
+
 			res%type  = array_type
 			res%array = array
 
