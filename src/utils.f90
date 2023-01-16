@@ -57,7 +57,8 @@ module utils
 	end type string_vector_t
 
 	interface str
-		module procedure int_str
+		module procedure i32_str
+		module procedure f32_str
 	end interface str
 
 !===============================================================================
@@ -505,19 +506,35 @@ end subroutine console_color_reset
 
 !===============================================================================
 
-function int_str(i) result(str)
+function i32_str(x) result(str)
 
-	integer, intent(in) :: i
+	integer, intent(in) :: x
 
 	character(len = :), allocatable :: str
 
 	! Fine for default 4-byte ints.  May need more chars for bigger ints
 	character(len = 16) :: buffer
 
-	write(buffer, '(i0)') i
+	write(buffer, '(i0)') x
 	str = trim(buffer)
 
-end function int_str
+end function i32_str
+
+!===============================================================================
+
+function f32_str(x) result(str)
+
+	real, intent(in) :: x
+
+	character(len = :), allocatable :: str
+
+	! Fine for default 4-byte type
+	character(len = 16) :: buffer
+
+	write(buffer, '(es16.6)') x
+	str = trim(adjustl(buffer))
+
+end function f32_str
 
 !===============================================================================
 

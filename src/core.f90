@@ -159,7 +159,7 @@ module core_m
 		! The array type is i32_type, f32_type, etc. while the kind is
 		! impl_array (bound-based) or expl_array (CSV list)
 		integer :: type, kind
-		type(value_t), allocatable :: lbound, ubound
+		type(value_t), allocatable :: lbound, ubound, step
 
 		! Note that these are arrays of primitive Fortran types, instead of
 		! arrays of generic value_t.  This performs better since we can put
@@ -209,7 +209,7 @@ module core_m
 			condition, if_clause, else_clause, body
 
 		! Array expression syntax nodes
-		type(syntax_node_t), allocatable :: lbound, ubound, elems(:)
+		type(syntax_node_t), allocatable :: lbound, ubound, step, len, elems(:)
 
 		! TODO: make this an array for rank-2+ arrays
 		type(syntax_node_t), allocatable :: subscript
@@ -759,18 +759,30 @@ subroutine push_array(vector, val)
 			tmp_i32(1: vector%cap) = vector%i32
 			call move_alloc(tmp_i32, vector%i32)
 
+		else if (vector%type == f32_type) then
+
+			allocate(tmp_f32( tmp_cap ))
+			tmp_f32(1: vector%cap) = vector%f32
+			call move_alloc(tmp_f32, vector%f32)
+
 		else
-			print *, 'TODO: push_array type not implemented'
+			! FIXME: when adding new types, implement it below too to set the
+			! last val
+			write(*,*) 'Error: push_array type not implemented'
+			call internal_error()
 		end if
 
 		vector%cap = tmp_cap
 
 	end if
 
-	if (vector%type == i32_type) then
+	if      (vector%type == i32_type) then
 		vector%i32( vector%len ) = val%i32
+	else if (vector%type == f32_type) then
+		vector%f32( vector%len ) = val%f32
 	else
-		! TODO
+		write(*,*) 'Error: push_array type not implemented'
+		call internal_error()
 	end if
 
 end subroutine push_array
@@ -1151,6 +1163,16 @@ recursive subroutine syntax_node_copy(dst, src)
 	if (allocated(src%ubound)) then
 		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
 		dst%ubound = src%ubound
+	end if
+
+	if (allocated(src%step)) then
+		if (.not. allocated(dst%step)) allocate(dst%step)
+		dst%step = src%step
+	end if
+
+	if (allocated(src%len)) then
+		if (.not. allocated(dst%len)) allocate(dst%len)
+		dst%len = src%len
 	end if
 
 	if (allocated(src%elems)) then
@@ -2641,7 +2663,7 @@ function parse_array_expr(parser) result(expr)
 
 	integer :: bound_beg, bound_end, elem_beg, elem_end
 
-	type(syntax_node_t)  :: lbound, ubound, elem
+	type(syntax_node_t)  :: lbound, ubound, step, len, elem
 	type(syntax_node_vector_t) :: elems
 	type(syntax_token_t) :: lbracket, rbracket, colon, comma
 	type(text_span_t) :: span
@@ -2667,11 +2689,29 @@ function parse_array_expr(parser) result(expr)
 	!     let b = [a, 5, 6];
 	!              ^ segfault
 
-	if (lbound%val%type /= i32_type) then
-		span = new_span(bound_beg, bound_end - bound_beg + 1)
-		call parser%diagnostics%push(err_non_int_bound( &
-			parser%context, span, parser%context%text(bound_beg: bound_end)))
-	end if
+	!! TODO: there should still be *some* type checking.  At least, implicit
+	!! ranges cannot use bool
+	!if (lbound%val%type /= i32_type) then
+	!	span = new_span(bound_beg, bound_end - bound_beg + 1)
+	!	call parser%diagnostics%push(err_non_int_range( &
+	!		parser%context, span, parser%context%text(bound_beg: bound_end)))
+	!end if
+
+
+	!    * provide a better way to initialize an array e.g. to all 0's
+	!      > for i32 you can multiply vec by scalar 0 and add, e.g. all 0's:
+	!            let (i32) a = 0 * [0: n];
+	!      > or all 1's:
+	!            let (i32) a = 1 + 0 * [0: n];
+	!      > for f32 this should be covered by steps, e.g. all 0's:
+	!            let a = [0.0: 0.0: 5];
+	!      > or all 1's:
+	!            let a = [1.0: 0.0: 5];
+	!      > note '5' is an int in this example. infer options based on types,
+	!        e.g. [fmin: fstep: fmax] vs [fmin: fstep: inum] or [fmin: fmax:
+	!        inum]?  last 2 cases are ambiguous so need to pick one.  the case
+	!        [fmin: fstep: inum] is easy to roll with the equivalent fmin + step
+	!        * [0: inum], so maybe only provide sugar for the 3rd case
 
 	if (parser%current_kind() == colon_token) then
 
@@ -2684,10 +2724,52 @@ function parse_array_expr(parser) result(expr)
 		bound_end = parser%peek_pos(0) - 1
 
 		! TODO: other types
-		if (ubound%val%type /= i32_type) then
+		if (ubound%val%type /= lbound%val%type) then
 			span = new_span(bound_beg, bound_end - bound_beg + 1)
-			call parser%diagnostics%push(err_non_int_bound( &
+			call parser%diagnostics%push(err_non_int_range( &
 				parser%context, span, parser%context%text(bound_beg: bound_end)))
+		end if
+
+		if (parser%current_kind() == colon_token) then
+
+			! Implicit form [lbound: step: len]
+
+			! Step has just been parsed as ubound above
+			step = ubound
+
+			colon    = parser%match(colon_token)
+
+			bound_beg = parser%peek_pos(0)
+			len       = parser%parse_expr()
+			bound_end = parser%peek_pos(0) - 1
+
+			if (len%val%type /= i32_type) then
+				span = new_span(bound_beg, bound_end - bound_beg + 1)
+				call parser%diagnostics%push(err_non_int_range( &
+					parser%context, span, &
+					parser%context%text(bound_beg: bound_end)))
+			end if
+
+			rbracket = parser%match(rbracket_token)
+
+			allocate(expr%val%array)
+			allocate(expr%lbound)
+			allocate(expr%step)
+			allocate(expr%len)
+
+			expr%kind           = array_expr
+
+			expr%val%type       = lbound%val%type
+
+			expr%val%array%type = lbound%val%type
+			expr%val%array%kind = impl_array
+
+			expr%lbound = lbound
+			expr%step   = step
+			expr%len    = len
+
+			return
+
 		end if
 
 		rbracket = parser%match(rbracket_token)
@@ -3173,7 +3255,7 @@ recursive function syntax_eval(node, vars) result(res)
 	integer, parameter :: magic = 128
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
-		subscript, tmp
+		subscript, tmp, step, len
 
 	!print *, 'starting syntax_eval()'
 
@@ -3198,7 +3280,54 @@ recursive function syntax_eval(node, vars) result(res)
 
 		!print *, 'evaluating array_expr'
 
-		if (node%val%array%kind == impl_array) then
+		if (node%val%array%kind == impl_array .and. allocated(node%step)) then
+
+			lbound = syntax_eval(node%lbound, vars)
+			step   = syntax_eval(node%step  , vars)
+			len    = syntax_eval(node%len   , vars)
+
+			! TODO: This could be allocated in one shot without pushing to
+			! growable array.
+
+			array = new_array(node%val%array%type)
+			elem = lbound
+
+			if (array%type == i32_type) then
+
+				! TODO: test i32 step array
+				do i = 0, len%i32 - 1
+					elem%i32 = lbound%i32 + i * step%i32
+					call array%push(elem)
+				end do
+
+			else if (array%type == f32_type) then
+
+				do i = 0, len%i32 - 1
+					elem%f32 = lbound%f32 + i * step%f32
+					call array%push(elem)
+				end do
+
+			else
+				write(*,*) 'Error: array type eval not implemented'
+				call internal_error()
+			end if
+
+			allocate(res%array)
+
+			! In parser, we set val%type to the scalar type, e.g. i32, when val
+			! is an array.  Here we set val%type (i.e. res%type) to array_type
+			! so value_str() knows to format it as an array.  The scalar
+			! sub-type is still available in val%array%type.  This may need to
+			! change when I implement arithmetic operations on arrays
+			!
+			! Parser segfaults when I try to access val%array%type, apparently
+			! it is not set by dict insertion.  Maybe I need to manually
+			! allocate array and set its type after insertion
+
+			res%type  = array_type
+			res%array = array
+
+		else if (node%val%array%kind == impl_array) then
 			!print *, 'impl_array'
 
 			! Expand impl_array to expl_array here on evaluation.  Consider
@@ -3382,13 +3511,23 @@ recursive function syntax_eval(node, vars) result(res)
 			!print *, 'LHS array type = ', vars%vals(node%id_index)%array%type
 			!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
 
-			! TODO: check types, at least in parser if not here as a fallback
-			! too
-
 			! TODO: bound checking? by default or enabled with cmd line flag?
 
-			! Syntran uses 0-indexed arrays while Fortran uses 1-indexed arrays
-			vars%vals(node%id_index)%array%i32( subscript%i32 + 1 ) = res%i32
+			!! Syntran uses 0-indexed arrays while Fortran uses 1-indexed arrays
+			!vars%vals(node%id_index)%array%i32( subscript%i32 + 1 ) = res%i32
+
+			! TODO: check res type matches array sub type
+			select case (res%type)
+			case (i32_type)
+				vars%vals(node%id_index)%array%i32( subscript%i32 + 1 ) &
+					= res%i32
+			case (f32_type)
+				vars%vals(node%id_index)%array%f32( subscript%i32 + 1 ) &
+					= res%f32
+			case (bool_type)
+				vars%vals(node%id_index)%array%bool( subscript%i32 + 1 ) &
+					= res%bool
+			end select
 
 		end if
 
@@ -3401,14 +3540,6 @@ recursive function syntax_eval(node, vars) result(res)
 		!call vars%insert(node%identifier%text, res, node%id_index)
 		vars%vals(node%id_index) = res
 
-		! TODO: this does not deep copy arrays, but aliases pointers instead.
-		! See src/tests/test-src/array-i32/test-07.syntran.  Either fix it in
-		! name_expr or here.  Probably fix in name_expr so that I don't have to
-		! change assignment_expr too.  On the other hand, fixing it separately
-		! in both places would allow optimizing allocations, e.g. let always
-		! allocates a new array, but assign only has to re-allocate if the LHS
-		! capacity is not already as big as RHS length
-
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
 		!res = vars%search(node%identifier%text, node%id_index)
@@ -3417,12 +3548,21 @@ recursive function syntax_eval(node, vars) result(res)
 
 			!print *, 'subscript name expr'
 
-			! TODO: other types
-
 			res%type = vars%vals(node%id_index)%array%type
 
 			subscript = syntax_eval(node%subscript, vars)
-			res%i32 = vars%vals(node%id_index)%array%i32( subscript%i32 + 1 )
+
+			select case (res%type)
+			case (i32_type)
+				res%i32 = vars%vals(node%id_index)%array &
+					%i32( subscript%i32 + 1 )
+			case (f32_type)
+				res%f32 = vars%vals(node%id_index)%array &
+					%f32( subscript%i32 + 1 )
+			case (bool_type)
+				res%bool = vars%vals(node%id_index)%array &
+					%bool( subscript%i32 + 1 )
+			end select
 
 		else
 			!print *, 'scalar name expr'
@@ -3432,11 +3572,8 @@ recursive function syntax_eval(node, vars) result(res)
 			if (res%type == array_type) then
 				!print *, 'array  name_expr'
 
-				!tmp = vars%vals(node%id_index)
-
 				allocate(res%array)
 				res%type = array_type
-				!res%array = tmp%array
 				res%array = vars%vals(node%id_index)%array
 
 			!else
@@ -3772,14 +3909,28 @@ function value_str(val) result(str)
 				return
 			end if
 
+			!print *, 'array type = ', val%array%type
+
 			! This will probably break for large arrays as we can't arbitrarily
 			! cat huge strings
 			str = '['
-			do i = 1, val%array%len
-				! TODO: other array sub types
-				str = str//int_str(val%array%i32(i))
-				if (i < val%array%len) str = str//', '
-			end do
+
+			if (val%array%type == i32_type) then
+				do i = 1, val%array%len
+					str = str//i32_str(val%array%i32(i))
+					if (i < val%array%len) str = str//', '
+				end do
+			else if (val%array%type == f32_type) then
+				do i = 1, val%array%len
+					str = str//f32_str(val%array%f32(i))
+					if (i < val%array%len) str = str//', '
+				end do
+			else
+				write(*,*) 'Error: array str conversion not implemented' &
+					//' for this type'
+				call internal_error()
+			end if
+
 			str = str//']'
 
 		case default

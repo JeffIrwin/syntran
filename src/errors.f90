@@ -189,6 +189,21 @@ end function err_non_int_bound
 
 !===============================================================================
 
+function err_non_int_range(context, span, range) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: range
+	err = err_prefix &
+		//'Bound `'//range//'` of array range is not an i32 integer' &
+		//underline(context, span) &
+		//" non-i32 range"//color_reset
+
+end function err_non_int_range
+
+!===============================================================================
+
 function err_het_array(context, span, elem) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
