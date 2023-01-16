@@ -3173,7 +3173,7 @@ recursive function syntax_eval(node, vars) result(res)
 	integer, parameter :: magic = 128
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
-		subscript
+		subscript, tmp
 
 	!print *, 'starting syntax_eval()'
 
@@ -3201,33 +3201,26 @@ recursive function syntax_eval(node, vars) result(res)
 		if (node%val%array%kind == impl_array) then
 			!print *, 'impl_array'
 
-			! TODO: expand impl_array to expl_array here on evaluation.  Consider
+			! Expand impl_array to expl_array here on evaluation.  Consider
 			! something like this:
 			!
 			!     let a = [0: 5];
 			!     a[2] = -3;
 			!
 			! Even though a is initialized to an implicit array, the second
-			! statement requires it to be explicit, so we might as well expand at
-			! initialization
+			! statement requires it to be explicit, so we might as well expand
+			! at initialization
 
-			!!lbound = syntax_eval(node%val%array%lbound, vars)
-			!!ubound = syntax_eval(node%val%array%ubound, vars)
 			lbound = syntax_eval(node%lbound, vars)
 			ubound = syntax_eval(node%ubound, vars)
 
 			!print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
-
-			!! TODO: res should be the whole expanded array?
-			!res = node%val
-
-			!res%array%lbound = lbound
-			!res%array%ubound = ubound
-
 			!print *, 'node%val%array%type = ', node%val%array%type
 
-			! This could be allocated in one shot without pushing to growable
-			! array.  TODO: types
+			! TODO: This could be allocated in one shot without pushing to
+			! growable array.
+
+			! TODO: types
 			array = new_array(node%val%array%type)
 			elem = lbound
 			do i = lbound%i32, ubound%i32 - 1
@@ -3257,14 +3250,9 @@ recursive function syntax_eval(node, vars) result(res)
 			array = new_array(node%val%array%type)
 
 			do i = 1, size(node%elems)
-				!print *, 'i = ', i
 				elem = syntax_eval(node%elems(i), vars)
-
-				!print *, 'elem = ', elem%str()
-				!print *, ''
-
+				!print *, 'elem['//str(i)//'] = ', elem%str()
 				call array%push(elem)
-
 			end do
 
 			!print *, 'copying array'
@@ -3416,7 +3404,10 @@ recursive function syntax_eval(node, vars) result(res)
 		! TODO: this does not deep copy arrays, but aliases pointers instead.
 		! See src/tests/test-src/array-i32/test-07.syntran.  Either fix it in
 		! name_expr or here.  Probably fix in name_expr so that I don't have to
-		! change assignment_expr too
+		! change assignment_expr too.  On the other hand, fixing it separately
+		! in both places would allow optimizing allocations, e.g. let always
+		! allocates a new array, but assign only has to re-allocate if the LHS
+		! capacity is not already as big as RHS length
 
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
@@ -3437,7 +3428,20 @@ recursive function syntax_eval(node, vars) result(res)
 			!print *, 'scalar name expr'
 			res = vars%vals(node%id_index)
 
-			! TODO: deep copy if whole array
+			! Deep copy if whole array instead of aliasing pointers
+			if (res%type == array_type) then
+				!print *, 'array  name_expr'
+
+				!tmp = vars%vals(node%id_index)
+
+				allocate(res%array)
+				res%type = array_type
+				!res%array = tmp%array
+				res%array = vars%vals(node%id_index)%array
+
+			!else
+			!	print *, 'scalar name_expr'
+			end if
 
 		end if
 
