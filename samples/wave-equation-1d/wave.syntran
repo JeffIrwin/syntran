@@ -38,6 +38,8 @@
 	let dx = (xmax - xmin) / (nx - 1);
 
 	// Make spatial grid.  c.f. linspace() fn from MATLAB or Scilab
+	//
+	// TODO: update to new f32 array initializer
 	let x = [xmin: dx: nx];
 
 	// Time step size just under stability criterion

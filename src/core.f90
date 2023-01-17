@@ -30,6 +30,36 @@ module core_m
 	! Add:
 	!  - arrays
 	!    * MVP i32, f32 arrays done
+	!    * provide intrinsic fns zeros() (and ones()?) to allocate and
+	!      initialize arrays of any rank.  this will extend to rank-2+ better
+	!      than the other ideas below
+	!      > Rust-ish style:
+	!
+	!          // i32
+	!          let a = [imin:        imax];
+	!          let a = [imin: istep: imax];
+	!          let a = [iconst           ; len]; // this one is rust
+	!
+	!          // f32
+	!          let a = [fmin: fstep: fmax];
+	!          let a = [fmin:        fmax; len];
+	!          let a = [fconst           ; len];
+	!
+	!          // rank-2, rank-3, etc.  No range variations, only all elements
+	!          // the same value
+	!          let a = [fconst           ; rows, cols];
+	!          let a = [fconst           ; rows, cols, sheets];
+	!
+	!      > zeros() would also need an arg for type: zeros(i32, [3]),
+	!        zeros(f32, [3, 4])
+	!      > C++ style?  let a = new i32[3]; let x = new f32[3, 4];
+	!      > Fortran allocate() would similarly need type arg
+	!      > Put the size as a LHS subscript?  let a[3] = 0; let x[3,4] = 0.0.
+	!        I don't like having size on LHS, but this is a nice way to
+	!        initialize to a literal or a scalar var
+	!      > Provide type as arg to something that looks like a fn?  let
+	!        a = new(i32, [3]; let x = new(f32, [3,4])
+	!    * make vector range syntax more consistent for i32 vs f32
 	!    * TODO f32 array tests
 	!    * bool arrays
 	!    * whole array assignment to a scalar
@@ -41,6 +71,7 @@ module core_m
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
 	!    * provide a better way to initialize an array e.g. to all 0's
+	!      > ideas below won't extend well to rank-2+ arrays
 	!      > for i32 you can multiply vec by scalar 0 and add, e.g. all 0's:
 	!            let (i32) a = 0 * [0: n];
 	!      > or all 1's:
@@ -1109,8 +1140,6 @@ recursive subroutine syntax_node_copy(dst, src)
 	class(syntax_node_t), intent(in)    :: src
 
 	!********
-
-	integer :: i, n
 
 	if (debug > 3) print *, 'starting syntax_node_copy()'
 
@@ -2856,7 +2885,7 @@ function parse_primary_expr(parser) result(expr)
 	!********
 
 	integer :: io, id_index
-	logical :: bool, subscript_present
+	logical :: bool
 	type(syntax_node_t) :: subscript
 	type(syntax_token_t) :: num, left, right, keyword, identifier, lbracket, &
 		rbracket
@@ -2918,9 +2947,7 @@ function parse_primary_expr(parser) result(expr)
 			! parse_expr_statement?
 
 			!print *, '%current_kind() = ', kind_name(parser%current_kind())
-			!subscript_present = .false.
 			if (parser%current_kind() == lbracket_token) then
-				!subscript_present = .true.
 
 				!print *, 'parsing RHS subscript'
 
@@ -2928,10 +2955,8 @@ function parse_primary_expr(parser) result(expr)
 				subscript = parser%parse_expr()
 				rbracket  = parser%match(rbracket_token)
 
-				!if (subscript_present) then
 				allocate(expr%subscript)
 				expr%subscript = subscript
-				!end if
 
 				!print *, 'expr%val%type = ', kind_name(expr%val%type)
 
@@ -3257,7 +3282,7 @@ recursive function syntax_eval(node, vars) result(res)
 	integer, parameter :: magic = 128
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
-		subscript, tmp, step, len
+		subscript, step, len
 
 	!print *, 'starting syntax_eval()'
 
@@ -3472,6 +3497,9 @@ recursive function syntax_eval(node, vars) result(res)
 			! HolyC feature: implicitly print name expression statements.  I may
 			! remove this after I implement an intrinsic print() fn.  May also
 			! need to suppress this for void fn calls later
+			!
+			! TODO: pass quiet arg from interpreter through new node member to
+			! not pollute unit test logs
 			if (node%statements(i)%kind == name_expr) then
 				write(*,*) res%str()
 			end if
