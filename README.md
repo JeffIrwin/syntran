@@ -311,3 +311,5 @@ Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/153
 ## Arrays
 
 Coming soon ...
+
+Actually rank-1 arrays are already in, but I'm planning some breaking changes for rank-2 and higher arrays.
