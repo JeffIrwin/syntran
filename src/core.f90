@@ -30,26 +30,6 @@ module core_m
 	! Add:
 	!  - arrays
 	!    * MVP i32, f32 arrays done
-	!    * provide intrinsic fns zeros() (and ones()?) to allocate and
-	!      initialize arrays of any rank.  this will extend to rank-2+ better
-	!      than the other ideas below
-	!      > Rust-ish style:
-	!
-	!          // i32
-	!          let a = [imin:        imax];
-	!          let a = [imin: istep: imax];
-	!          let a = [iconst           ; len]; // this one is rust
-	!
-	!          // f32
-	!          let a = [fmin: fstep: fmax];
-	!          let a = [fmin:        fmax; len];
-	!          let a = [fconst           ; len];
-	!
-	!          // rank-2, rank-3, etc.  No range variations, only all elements
-	!          // the same value
-	!          let a = [fconst           ; rows, cols];
-	!          let a = [fconst           ; rows, cols, sheets];
-	!
 	!      > zeros() would also need an arg for type: zeros(i32, [3]),
 	!        zeros(f32, [3, 4])
 	!      > C++ style?  let a = new i32[3]; let x = new f32[3, 4];
@@ -192,7 +172,7 @@ module core_m
 		! The array type is i32_type, f32_type, etc. while the kind is
 		! impl_array (bound-based) or expl_array (CSV list)
 		integer :: type, kind
-		type(value_t), allocatable :: lbound, ubound, step
+		type(value_t), allocatable :: lbound, step, ubound
 
 		! Note that these are arrays of primitive Fortran types, instead of
 		! arrays of generic value_t.  This performs better since we can put
@@ -242,7 +222,7 @@ module core_m
 			condition, if_clause, else_clause, body
 
 		! Array expression syntax nodes
-		type(syntax_node_t), allocatable :: lbound, ubound, step, len, elems(:)
+		type(syntax_node_t), allocatable :: lbound, step, ubound, len, elems(:)
 
 		! TODO: make this an array for rank-2+ arrays
 		type(syntax_node_t), allocatable :: subscript
@@ -753,7 +733,7 @@ function new_array(type) result(vector)
 	else if (type == bool_type) then
 		allocate(vector%bool( vector%cap ))
 	else
-		print *, 'Error: array type not implemented'
+		write(*,*) 'Error: array type not implemented'
 		call internal_error()
 	end if
 
@@ -1893,6 +1873,7 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 	! id_index member
 
 	!print *, 'parser%num_vars = ', parser%num_vars
+	if (allocated(vars%vals)) deallocate(vars%vals)
 	allocate(vars%vals( parser%num_vars ))
 
 	if (allocated(vars0%vals)) then
@@ -2692,29 +2673,49 @@ function parse_array_expr(parser) result(expr)
 
 	!********
 
-	integer :: bound_beg, bound_end, elem_beg, elem_end
+	integer :: span_beg, span_end, pos0
 
-	type(syntax_node_t)  :: lbound, ubound, step, len, elem
+	type(syntax_node_t)  :: lbound, step, ubound, len, elem
 	type(syntax_node_vector_t) :: elems
-	type(syntax_token_t) :: lbracket, rbracket, colon, comma
+	type(syntax_token_t) :: lbracket, rbracket, colon, semicolon, comma, dummy
 	type(text_span_t) :: span
 
 	!print *, 'starting parse_array_expr()'
 
-	! TODO: optionally match this lbound:ubound style, or lbound step and
-	! ubound.  Rank-1 for now, but eventually target higher rank arrays
+	! Rank-1 for now, but eventually target higher rank arrays
+
+	! This function parses arrays of the following forms:
+	!
+	!     // i32
+	!     let a = [imin:        imax];      // current loop syntax
+	!     let a = [imin: istep: imax];
+	!     let a = [iconst           ; len]; // this one is like Rust
+	!
+	!     // f32
+	!     let a = [fmin: fstep: fmax];      // consistent with i32
+	!     let a = [fmin:        fmax; len]; // no default unit step like i32
+	!     let a = [fconst           ; len];
+	!
+	!     // Rank-2, rank-3, etc.  No range variations, only all elements
+	!     // the same value TODO
+	!     let a = [fconst           ; rows, cols];  // row-major like Fortran
+	!     let a = [fconst           ; rows, cols, sheets];
+	!
+	!     // Explicit list for any type
+	!     [elem_0, elem_1, elem_2, ... ]
+	!
 
 	lbracket = parser%match(lbracket_token)
 
-	bound_beg = parser%peek_pos(0)
-	lbound    = parser%parse_expr()
-	bound_end = parser%peek_pos(0) - 1
+	span_beg = parser%peek_pos(0)
+	lbound   = parser%parse_expr()
+	span_end = parser%peek_pos(0) - 1
 
 	! TODO: should type checking be done by caller, or should we pass an
 	! expected type arg for the RHS of this check?
 
 	! TODO: check if lbound%val is allocated, e.g. for assigning one array to
-	! a cat of another:
+	! a cat of another?  How would this work for rank-2+?
 	!
 	!     let a = [0: 3];
 	!     let b = [a, 5, 6];
@@ -2723,70 +2724,100 @@ function parse_array_expr(parser) result(expr)
 	!! TODO: there should still be *some* type checking.  At least, implicit
 	!! ranges cannot use bool
 	!if (lbound%val%type /= i32_type) then
-	!	span = new_span(bound_beg, bound_end - bound_beg + 1)
+	!	span = new_span(span_beg, span_end - span_beg + 1)
 	!	call parser%diagnostics%push(err_non_int_range( &
-	!		parser%context, span, parser%context%text(bound_beg: bound_end)))
+	!		parser%context, span, parser%context%text(span_beg: span_end)))
 	!end if
 
+	if (parser%current_kind() == semicolon_token) then
 
-	!    * provide a better way to initialize an array e.g. to all 0's
-	!      > for i32 you can multiply vec by scalar 0 and add, e.g. all 0's:
-	!            let (i32) a = 0 * [0: n];
-	!      > or all 1's:
-	!            let (i32) a = 1 + 0 * [0: n];
-	!      > for f32 this should be covered by steps, e.g. all 0's:
-	!            let a = [0.0: 0.0: 5];
-	!      > or all 1's:
-	!            let a = [1.0: 0.0: 5];
-	!      > note '5' is an int in this example. infer options based on types,
-	!        e.g. [fmin: fstep: fmax] vs [fmin: fstep: inum] or [fmin: fmax:
-	!        inum]?  last 2 cases are ambiguous so need to pick one.  the case
-	!        [fmin: fstep: inum] is easy to roll with the equivalent fmin + step
-	!        * [0: inum], so maybe only provide sugar for the 3rd case
+		! Implicit constant-value array form [lbound; len]
+
+		semicolon    = parser%match(semicolon_token)
+
+		span_beg = parser%peek_pos(0)
+		len      = parser%parse_expr()
+		span_end = parser%peek_pos(0) - 1
+
+		!print *, 'len = ', parser%context%text(span_beg: span_end)
+
+		if (len%val%type /= i32_type) then
+			span = new_span(span_beg, span_end - span_beg + 1)
+			! TODO: different diag for each (or at least some) case
+			call parser%diagnostics%push(err_non_int_range( &
+				parser%context, span, &
+				parser%context%text(span_beg: span_end)))
+		end if
+
+		! TODO: rank-2+ arrays:
+		!
+		! [lbound; rows, cols]
+		! [lbound; rows, cols, sheets, ...]
+
+		rbracket = parser%match(rbracket_token)
+
+		allocate(expr%val%array)
+		allocate(expr%lbound)
+		allocate(expr%len)
+
+		expr%kind           = array_expr
+
+		expr%val%type       = lbound%val%type
+
+		expr%val%array%type = lbound%val%type
+		expr%val%array%kind = impl_array
+
+		expr%lbound = lbound
+		expr%len    = len
+
+		return
+
+	end if
 
 	if (parser%current_kind() == colon_token) then
 
-		! Implicit array form [lbound: ubound]
-
+		! Implicit array form [lbound: ubound] or [lbound: step: ubound]
 		colon    = parser%match(colon_token)
 
-		bound_beg = parser%peek_pos(0)
-		ubound    = parser%parse_expr()
-		bound_end = parser%peek_pos(0) - 1
+		span_beg = parser%peek_pos(0)
+		ubound   = parser%parse_expr()
+		span_end = parser%peek_pos(0) - 1
 
-		! TODO: other types
 		if (ubound%val%type /= lbound%val%type) then
-			span = new_span(bound_beg, bound_end - bound_beg + 1)
+			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_non_int_range( &
-				parser%context, span, parser%context%text(bound_beg: bound_end)))
+				parser%context, span, parser%context%text(span_beg: span_end)))
 		end if
 
 		if (parser%current_kind() == colon_token) then
 
-			! Implicit form [lbound: step: len]
+			! Implicit form [lbound: step: ubound]
 
 			! Step has just been parsed as ubound above
 			step = ubound
 
 			colon    = parser%match(colon_token)
 
-			bound_beg = parser%peek_pos(0)
-			len       = parser%parse_expr()
-			bound_end = parser%peek_pos(0) - 1
+			span_beg = parser%peek_pos(0)
+			ubound   = parser%parse_expr()
+			span_end = parser%peek_pos(0) - 1
 
-			if (len%val%type /= i32_type) then
-				span = new_span(bound_beg, bound_end - bound_beg + 1)
+			if (ubound%val%type /= lbound%val%type) then
+				span = new_span(span_beg, span_end - span_beg + 1)
 				call parser%diagnostics%push(err_non_int_range( &
 					parser%context, span, &
-					parser%context%text(bound_beg: bound_end)))
+					parser%context%text(span_beg: span_end)))
 			end if
+
+			! If [lbound: step: ubound] are all specified, then specifying the
+			! len would be overconstrained!  Next token must be rbracket
 
 			rbracket = parser%match(rbracket_token)
 
 			allocate(expr%val%array)
 			allocate(expr%lbound)
 			allocate(expr%step)
-			allocate(expr%len)
+			allocate(expr%ubound)
 
 			expr%kind           = array_expr
 
@@ -2797,11 +2828,55 @@ function parse_array_expr(parser) result(expr)
 
 			expr%lbound = lbound
 			expr%step   = step
+			expr%ubound = ubound
+
+			return
+
+		end if
+
+		if (parser%current_kind() == semicolon_token) then
+
+			! Implicit form [lbound: ubound; len]
+
+			semicolon    = parser%match(semicolon_token)
+
+			span_beg = parser%peek_pos(0)
+			len      = parser%parse_expr()
+			span_end = parser%peek_pos(0) - 1
+
+			!print *, 'len = ', parser%context%text(span_beg: span_end)
+
+			if (len%val%type /= i32_type) then
+				span = new_span(span_beg, span_end - span_beg + 1)
+				! TODO: different diag for each (or at least some) case
+				call parser%diagnostics%push(err_non_int_range( &
+					parser%context, span, &
+					parser%context%text(span_beg: span_end)))
+			end if
+
+			rbracket = parser%match(rbracket_token)
+
+			allocate(expr%val%array)
+			allocate(expr%lbound)
+			allocate(expr%ubound)
+			allocate(expr%len)
+
+			expr%kind           = array_expr
+
+			expr%val%type       = lbound%val%type
+
+			expr%val%array%type = lbound%val%type
+			expr%val%array%kind = impl_array
+
+			expr%lbound = lbound
+			expr%ubound = ubound
 			expr%len    = len
 
 			return
 
 		end if
+
+		! Implicit array form [lbound: ubound]
 
 		rbracket = parser%match(rbracket_token)
 
@@ -2831,29 +2906,33 @@ function parse_array_expr(parser) result(expr)
 
 	end if
 
+	! Explicit array form [elem_0, elem_1, elem_2, ... ].  elem_0 has already been
+	! parsed as lbound above
+
 	!print *, 'elem ', lbound%val%str()
 
 	elems = new_syntax_node_vector()
 	call elems%push(lbound)
-
-	! Explicit array form [elem0, elem1, elem2, ... ].  elem0 has already been
-	! parsed as lbound above
 	do while (parser%current_kind() /= rbracket_token)
+		pos0 = parser%pos
 		comma    = parser%match(comma_token)
 
-		elem_beg = parser%peek_pos(0)
+		span_beg = parser%peek_pos(0)
 		elem     = parser%parse_expr()
-		elem_end = parser%peek_pos(0) - 1
+		span_end = parser%peek_pos(0) - 1
 
 		!print *, 'elem ', elem%val%str()
 
 		if (elem%val%type /= lbound%val%type) then
-			span = new_span(elem_beg, elem_end - elem_beg + 1)
+			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
-				parser%context, span, parser%context%text(elem_beg: elem_end)))
+				parser%context, span, parser%context%text(span_beg: span_end)))
 		end if
 
 		call elems%push(elem)
+
+		! break infinite loop
+		if (parser%pos == pos0) dummy = parser%next()
 
 	end do
 
@@ -3129,7 +3208,7 @@ integer function get_binary_op_kind(left, op, right)
 		end if
 
 		! TODO: messaging.  stop w/o breaking bad syntax tests
-		print *, 'Error: unreachable'
+		write(*,*) 'Error: unreachable'
 		!call internal_error()
 
 	end select
@@ -3265,7 +3344,7 @@ end function next_parser_token
 
 !===============================================================================
 
-recursive function syntax_eval(node, vars) result(res)
+recursive function syntax_eval(node, vars, quiet) result(res)
 
 	type(syntax_node_t) :: node
 
@@ -3274,17 +3353,27 @@ recursive function syntax_eval(node, vars) result(res)
 	! move_alloc()
 	type(vars_t) :: vars
 
+	logical, optional, intent(in) :: quiet
+
 	type(value_t) :: res
 
 	!********
 
-	integer :: i
+	integer :: i, j
 	integer, parameter :: magic = 128
+
+	logical :: quietl
+
+	real(kind = 4) :: f, fstep
+
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
 		subscript, step, len
 
 	!print *, 'starting syntax_eval()'
+
+	quietl = .false.
+	if (present(quiet)) quietl = quiet
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -3309,30 +3398,44 @@ recursive function syntax_eval(node, vars) result(res)
 
 		if (node%val%array%kind == impl_array .and. allocated(node%step)) then
 
+			! step-based impl array
+
 			lbound = syntax_eval(node%lbound, vars)
 			step   = syntax_eval(node%step  , vars)
-			len    = syntax_eval(node%len   , vars)
+			ubound = syntax_eval(node%ubound, vars)
 
-			! TODO: This could be allocated in one shot without pushing to
-			! growable array.
-
-			array = new_array(node%val%array%type)
-			elem = lbound
+			array%type = node%val%array%type
 
 			if (array%type == i32_type) then
 
-				! TODO: test i32 step array
-				do i = 0, len%i32 - 1
-					elem%i32 = lbound%i32 + i * step%i32
-					call array%push(elem)
+				array%cap = (ubound%i32 - lbound%i32 + 1) / step%i32
+				allocate(array%i32( array%cap ))
+
+				i = lbound%i32
+				j = 1
+				do while (i < ubound%i32)
+					array%i32(j) = i
+					i = i + step%i32
+					j = j + 1
 				end do
+				array%len = j - 1
 
 			else if (array%type == f32_type) then
 
-				do i = 0, len%i32 - 1
-					elem%f32 = lbound%f32 + i * step%f32
-					call array%push(elem)
+				!print *, 'lbound, ubound = ', lbound%f32, ubound%f32
+				!print *, 'step = ', step%f32
+
+				array%cap = ceiling((ubound%f32 - lbound%f32) / step%f32) + 1
+				allocate(array%f32( array%cap ))
+
+				f = lbound%f32
+				j = 1
+				do while (f < ubound%f32)
+					array%f32(j) = f
+					f = f + step%f32
+					j = j + 1
 				end do
+				array%len = j - 1
 
 			else
 				write(*,*) 'Error: array type eval not implemented'
@@ -3354,8 +3457,84 @@ recursive function syntax_eval(node, vars) result(res)
 			res%type  = array_type
 			res%array = array
 
+		else if (node%val%array%kind == impl_array &
+			.and. allocated(node%ubound) .and. allocated(node%len)) then
+
+			! len-based impl arrays
+
+			!print *, 'len array'
+			lbound = syntax_eval(node%lbound, vars)
+			ubound = syntax_eval(node%ubound, vars)
+			len    = syntax_eval(node%len   , vars)
+
+			! TODO: This could be allocated in one shot without pushing to
+			! growable array.
+
+			array = new_array(node%val%array%type)
+			elem = lbound
+
+			if (array%type == f32_type) then
+
+				!print *, 'lbound, ubound = ', lbound%f32, ubound%f32
+				!print *, 'len = ', len%i32
+
+				fstep = (ubound%f32 - lbound%f32) / (len%i32 - 1)
+
+				do i = 0, len%i32 - 1
+					elem%f32 = lbound%f32 + i * fstep
+					call array%push(elem)
+				end do
+
+			else
+				write(*,*) 'Error: array type eval not implemented'
+				call internal_error()
+			end if
+
+			allocate(res%array)
+
+			res%type  = array_type
+			res%array = array
+
+		else if (node%val%array%kind == impl_array .and. allocated(node%len)) then
+
+			! Constant-value impl arrays (i.e. every element has the same value
+			! at initialization, but they are of course mutable)
+
+			!print *, 'len array'
+			lbound = syntax_eval(node%lbound, vars)
+			len    = syntax_eval(node%len   , vars)
+
+			! Allocate in one shot without growing.  TODO: do this for other
+			! implicit cases
+
+			array%type = node%val%array%type
+			array%len  = len%i32
+			array%cap  = len%i32
+
+			if      (array%type == i32_type) then
+
+				allocate(array%i32( len%i32 ))
+				array%i32 = lbound%i32
+
+			else if (array%type == f32_type) then
+
+				allocate(array%f32( len%i32 ))
+				array%f32 = lbound%f32
+
+			else
+				write(*,*) 'Error: array type eval not implemented'
+				call internal_error()
+			end if
+
+			allocate(res%array)
+
+			res%type  = array_type
+			res%array = array
+
 		else if (node%val%array%kind == impl_array) then
 			!print *, 'impl_array'
+
+			! Unit step impl i32 array
 
 			! Expand impl_array to expl_array here on evaluation.  Consider
 			! something like this:
@@ -3370,6 +3549,13 @@ recursive function syntax_eval(node, vars) result(res)
 			lbound = syntax_eval(node%lbound, vars)
 			ubound = syntax_eval(node%ubound, vars)
 
+			array = new_array(node%val%array%type)
+
+			if (array%type /= i32_type) then
+				write(*,*) 'Error: array type eval not implemented'
+				call internal_error()
+			end if
+
 			!print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
 			!print *, 'node%val%array%type = ', node%val%array%type
 
@@ -3377,7 +3563,6 @@ recursive function syntax_eval(node, vars) result(res)
 			! growable array.
 
 			! TODO: types
-			array = new_array(node%val%array%type)
 			elem = lbound
 			do i = lbound%i32, ubound%i32 - 1
 				elem%i32 = i
@@ -3419,7 +3604,7 @@ recursive function syntax_eval(node, vars) result(res)
 
 		else
 			!TODO
-			print *, 'Error: unexpected array kind'
+			write(*,*) 'Error: unexpected array kind'
 			call internal_error()
 		end if
 
@@ -3500,7 +3685,7 @@ recursive function syntax_eval(node, vars) result(res)
 			!
 			! TODO: pass quiet arg from interpreter through new node member to
 			! not pollute unit test logs
-			if (node%statements(i)%kind == name_expr) then
+			if (node%statements(i)%kind == name_expr .and. .not. quietl) then
 				write(*,*) res%str()
 			end if
 
@@ -3661,6 +3846,8 @@ recursive function syntax_eval(node, vars) result(res)
 		!print *, 'right = ', right
 
 		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
+
+		! TODO: catch error type here
 
 		select case (node%op%kind)
 		case (plus_token)

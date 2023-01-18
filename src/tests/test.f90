@@ -398,7 +398,7 @@ subroutine unit_test_comments(npass, nfail)
 				'a     = 3;'//line_feed// &
 				'//a   = 4;'//line_feed// &
 				' // a = 5;'//line_feed// &
-				'a;}') == '3',     &
+				'let b = a;}') == '3',     &
 			eval('let x = 1337; // set x to thirteen thirty seven')  == '1337' &
 		]
 
@@ -460,9 +460,9 @@ subroutine unit_test_if_else(npass, nfail)
 	character(len = *), parameter :: &
 		path = 'src/tests/test-src/if-else-statements/'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
-	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests, and some bad syntax tests for interpret_file().
@@ -475,18 +475,18 @@ subroutine unit_test_if_else(npass, nfail)
 
 	tests = &
 		[   &
-			interpret_file(path//'test-01.syntran') == 'true', &
-			interpret_file(path//'test-02.syntran') == '2' , &
-			interpret_file(path//'test-03.syntran') == '14', &
-			interpret_file(path//'test-04.syntran') == '12', &
-			interpret_file(path//'test-05.syntran') == '14', &
-			interpret_file(path//'test-06.syntran') == '16', &
-			interpret_file(path//'test-07.syntran') == '16', &
-			interpret_file(path//'test-08.syntran') == '15', &
-			interpret_file(path//'test-09.syntran') == '20', &
-			interpret_file(path//'test-10.syntran') == '18', &
-			interpret_file(path//'test-11.syntran') == '16', &
-			interpret_file(path//'test-12.syntran') == '14', &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == '2' , &
+			interpret_file(path//'test-03.syntran', quiet) == '14', &
+			interpret_file(path//'test-04.syntran', quiet) == '12', &
+			interpret_file(path//'test-05.syntran', quiet) == '14', &
+			interpret_file(path//'test-06.syntran', quiet) == '16', &
+			interpret_file(path//'test-07.syntran', quiet) == '16', &
+			interpret_file(path//'test-08.syntran', quiet) == '15', &
+			interpret_file(path//'test-09.syntran', quiet) == '20', &
+			interpret_file(path//'test-10.syntran', quiet) == '18', &
+			interpret_file(path//'test-11.syntran', quiet) == '16', &
+			interpret_file(path//'test-12.syntran', quiet) == '14', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -512,22 +512,22 @@ subroutine unit_test_for(npass, nfail)
 	! Path to syntran test files from root of repo
 	character(len = *), parameter :: path = 'src/tests/test-src/for-loops/'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
-	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests
 
 	tests = &
 		[   &
-			interpret_file(path//'test-01.syntran') == '0', &
-			interpret_file(path//'test-02.syntran') == '5050', &
-			interpret_file(path//'test-03.syntran') == '1836311903', &
-			interpret_file(path//'test-04.syntran') == '97', &
-			interpret_file(path//'test-05.syntran') == '25', &
-			interpret_file(path//'test-06.syntran') == '25', &
-			interpret_file(path//'test-07.syntran') == '1836311903', &
+			interpret_file(path//'test-01.syntran', quiet) == '0', &
+			interpret_file(path//'test-02.syntran', quiet) == '5050', &
+			interpret_file(path//'test-03.syntran', quiet) == '1836311903', &
+			interpret_file(path//'test-04.syntran', quiet) == '97', &
+			interpret_file(path//'test-05.syntran', quiet) == '25', &
+			interpret_file(path//'test-06.syntran', quiet) == '25', &
+			interpret_file(path//'test-07.syntran', quiet) == '1836311903', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -553,21 +553,21 @@ subroutine unit_test_while(npass, nfail)
 	! Path to syntran test files from root of repo
 	character(len = *), parameter :: path = 'src/tests/test-src/while-loops/'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
-	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests
 
 	tests = &
 		[   &
-			interpret_file(path//'test-01.syntran') == '0', &
-			interpret_file(path//'test-02.syntran') == '1', &
-			interpret_file(path//'test-03.syntran') == '5050', &
-			interpret_file(path//'test-04.syntran') == '9973', &
-			interpret_file(path//'test-05.syntran') == '5050', &
-			interpret_file(path//'test-06.syntran') == '0', &
+			interpret_file(path//'test-01.syntran', quiet) == '0', &
+			interpret_file(path//'test-02.syntran', quiet) == '1', &
+			interpret_file(path//'test-03.syntran', quiet) == '5050', &
+			interpret_file(path//'test-04.syntran', quiet) == '9973', &
+			interpret_file(path//'test-05.syntran', quiet) == '5050', &
+			interpret_file(path//'test-06.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -593,17 +593,17 @@ subroutine unit_test_var_scopes(npass, nfail)
 	! Path to syntran test files from root of repo
 	character(len = *), parameter :: path = 'src/tests/test-src/var-scopes/'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
-	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests
 
 	tests = &
 		[   &
-			interpret_file(path//'test-01.syntran') == 'true', &
-			interpret_file(path//'test-02.syntran') == 'true', &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -633,7 +633,6 @@ subroutine unit_test_f32_1(npass, nfail)
 
 	real, parameter :: tol = 1.e-9
 
-	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	tests = &
@@ -697,7 +696,6 @@ subroutine unit_test_array_i32_1(npass, nfail)
 
 	real, parameter :: tol = 1.e-9
 
-	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! Because test evaluation results are tested by comparing strings, output
@@ -710,14 +708,76 @@ subroutine unit_test_array_i32_1(npass, nfail)
 			eval('[-42,1337];') == '[-42, 1337]', &
 			eval('[3, 2, 1];') == '[3, 2, 1]', &
 			eval('[1: 4];') == '[1, 2, 3]', &
+			eval('[1: 2: 5];') == '[1, 3]', &
+			eval('[1: 2: 6];') == '[1, 3, 5]', &
+			eval('[1: 2: 7];') == '[1, 3, 5]', &
+			eval('[1: 2: 8];') == '[1, 3, 5, 7]', &
+			eval('[4: 2: 8];') == '[4, 6]', &
+			eval('[4: 2: 9];') == '[4, 6, 8]', &
+			eval('[4: 2: 10];') == '[4, 6, 8]', &
+			eval('[4: 2: 11];') == '[4, 6, 8, 10]', &
 			eval('[2-3: 6/3 + 3];') == '[-1, 0, 1, 2, 3, 4]', &
 			eval('let myArray = [2-3: 6/3 + 3];') == '[-1, 0, 1, 2, 3, 4]', &
+			eval('[42; 3];') == '[42, 42, 42]', &
+			eval('[1337; 4];') == '[1337, 1337, 1337, 1337]', &
 			eval('[48-6, 13*100 + 37];') == '[42, 1337]'  &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_array_i32_1
+
+!===============================================================================
+
+subroutine unit_test_array_f32_1(npass, nfail)
+
+	! Simple f32 array tests
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f32 arrays'
+
+	logical, allocatable :: tests(:)
+
+	real, parameter :: tol = 1.e-9
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! Because test evaluation results are tested by comparing strings, output
+	! white space is significant!  Ints are formatted in min width, and array
+	! elements are separated by a comma and a single space
+
+	! TODO: how portable is this string comparison with f32 rounding?  It will
+	! at least be a pain to update if I change number of sig figs or something
+
+	tests = &
+		[   &
+			eval('[42.0];') == '[4.200000E+01]',  &
+			eval('[-42.,1337.];') == '[-4.200000E+01, 1.337000E+03]', &
+			eval('[3., 2., 1.];') == '[3.000000E+00, 2.000000E+00, 1.000000E+00]', &
+			eval('[3.: 1.; 3];') == '[3.000000E+00, 2.000000E+00, 1.000000E+00]', &
+			eval('[3.: 1.; 5];') == '[3.000000E+00, 2.500000E+00, 2.000000E+00, 1.500000E+00, 1.000000E+00]', &
+			eval('[1.: 3.; 3];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('[1.: 3.; 5];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
+			eval('[1.: 0.5: 2.9];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00]', &
+			eval('[1.: 0.5: 3.4];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
+			eval('[1.: 0.5: 3.9];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00, 3.500000E+00]', &
+			eval('[4.: 0.5: 5.4];') == '[4.000000E+00, 4.500000E+00, 5.000000E+00]', &
+			eval('[2.-3.: 1.1: 6./3. + 3.];') == '[-1.000000E+00, 1.000000E-01, 1.200000E+00, 2.300000E+00, 3.400000E+00, 4.500000E+00]', &
+			eval('[42.0; 3];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
+			eval('[42.0; 4];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
+			eval('let myArray = [2.-3.: 1.1: 6./3. + 3.];') &
+				== '[-1.000000E+00, 1.000000E-01, 1.200000E+00, 2.300000E+00, 3.400000E+00, 4.500000E+00]', &
+			eval('[48.-6., 13.*100. + 37.];') == '[4.200000E+01, 1.337000E+03]'  &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_array_f32_1
 
 !===============================================================================
 
@@ -736,23 +796,23 @@ subroutine unit_test_array_i32_2(npass, nfail)
 	! Path to syntran test files from root of repo
 	character(len = *), parameter :: path = 'src/tests/test-src/array-i32/'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
-	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests
 
 	tests = &
 		[   &
-			interpret_file(path//'test-01.syntran') == '0', &
-			interpret_file(path//'test-02.syntran') == '0', &
-			interpret_file(path//'test-03.syntran') == '13', &
-			interpret_file(path//'test-04.syntran') == '-3', &
-			interpret_file(path//'test-05.syntran') == '16', &
-			interpret_file(path//'test-06.syntran') == '16', &
-			interpret_file(path//'test-07.syntran') == '13', &
-			interpret_file(path//'test-08.syntran') == 'true', &
+			interpret_file(path//'test-01.syntran', quiet) == '0', &
+			interpret_file(path//'test-02.syntran', quiet) == '0', &
+			interpret_file(path//'test-03.syntran', quiet) == '13', &
+			interpret_file(path//'test-04.syntran', quiet) == '-3', &
+			interpret_file(path//'test-05.syntran', quiet) == '16', &
+			interpret_file(path//'test-06.syntran', quiet) == '16', &
+			interpret_file(path//'test-07.syntran', quiet) == '13', &
+			interpret_file(path//'test-08.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -762,8 +822,6 @@ subroutine unit_test_array_i32_2(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_array_i32_2
-
-!===============================================================================
 
 !===============================================================================
 
@@ -782,17 +840,17 @@ subroutine unit_test_f32_2(npass, nfail)
 	! Path to syntran test files from root of repo
 	character(len = *), parameter :: path = 'src/tests/test-src/f32/'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
-	write(*,*)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: more tests
 
 	tests = &
 		[   &
-			interpret_file(path//'test-01.syntran') == 'true', &
-			interpret_file(path//'test-02.syntran') == 'true', &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -984,6 +1042,7 @@ subroutine unit_tests(iostat)
 	call unit_test_f32_2      (npass, nfail)
 	call unit_test_array_i32_1(npass, nfail)
 	call unit_test_array_i32_2(npass, nfail)
+	call unit_test_array_f32_1(npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

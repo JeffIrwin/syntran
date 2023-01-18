@@ -301,7 +301,7 @@ function syntran_eval(str, quiet, src_file) result(res)
 		return
 	end if
 
-	val = syntax_eval(tree, vars)
+	val = syntax_eval(tree, vars, quietl)
 	res = val%str()
 
 end function syntran_eval

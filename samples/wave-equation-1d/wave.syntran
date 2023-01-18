@@ -34,22 +34,23 @@
 	// Number of points in spatial grid
 	let nx = 201;
 
-	// Grid spacing
-	let dx = (xmax - xmin) / (nx - 1);
+	// Allocate displacement solution vector and initialize to 0.0.
+	// Compare initializing all elements of an array to the same value
+	// in Rust
+	let u = [0.0; nx];
 
-	// Make spatial grid.  c.f. linspace() fn from MATLAB or Scilab
-	//
-	// TODO: update to new f32 array initializer
-	let x = [xmin: dx: nx];
+	// Make spatial grid.  Compare linspace() fn from MATLAB or Scilab
+	// and the Rusty syntax for u above
+	let x = [xmin: xmax; nx];
+
+	// Grid spacing
+	let dx = x[1] - x[0];
 
 	// Time step size just under stability criterion
 	let dt = 0.9 * dx / c;
 
 	// Courant number squared
 	let c2 = (c * dt / dx) ** 2;
-
-	// Allocate displacement solution vector
-	let u = [0.0: 0.0: nx];
 
 	// Initial condition: Gaussian pulse
 	let xpulse = xmin + 0.3333 * (xmax - xmin);
