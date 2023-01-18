@@ -30,17 +30,6 @@ module core_m
 	! Add:
 	!  - arrays
 	!    * MVP i32, f32 arrays done
-	!      > zeros() would also need an arg for type: zeros(i32, [3]),
-	!        zeros(f32, [3, 4])
-	!      > C++ style?  let a = new i32[3]; let x = new f32[3, 4];
-	!      > Fortran allocate() would similarly need type arg
-	!      > Put the size as a LHS subscript?  let a[3] = 0; let x[3,4] = 0.0.
-	!        I don't like having size on LHS, but this is a nice way to
-	!        initialize to a literal or a scalar var
-	!      > Provide type as arg to something that looks like a fn?  let
-	!        a = new(i32, [3]; let x = new(f32, [3,4])
-	!    * make vector range syntax more consistent for i32 vs f32
-	!    * TODO f32 array tests
 	!    * bool arrays
 	!    * whole array assignment to a scalar
 	!    * fix array sub-type checking
@@ -65,9 +54,7 @@ module core_m
 	!        inum]?  last 2 cases are ambiguous so need to pick one.  the case
 	!        [fmin: fstep: inum] is easy to roll with the equivalent fmin + step
 	!        * [0: inum], so maybe only provide sugar for the 3rd case
-	!    * f32 arrays
 	!    * rank-2+ arrays (matrices et al.)
-	!  - error_type (or unknown_type) like Immo to prevent cascading errors
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
@@ -86,6 +73,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			unknown_type         = 57, &
 			comma_token          = 56, &
 			array_type           = 55, &
 			array_expr           = 54, &
@@ -930,7 +918,8 @@ function kind_name(kind)
 			"expl_array          ", & ! 53
 			"array_expr          ", & ! 54
 			"array_type          ", & ! 55
-			"comma_token         "  & ! 56
+			"comma_token         ", & ! 56
+			"unknown_type        "  & ! 57
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1007,7 +996,8 @@ function kind_token(kind)
 			"Explicit array       ", & ! 53
 			"Array expression     ", & ! 54
 			"Array type           ", & ! 55
-			",                    "  & ! 56
+			",                    ", & ! 56
+			"Unknown type         "  & ! 57
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2513,6 +2503,12 @@ logical function is_binary_op_allowed(left, op, right)
 
 	is_binary_op_allowed = .false.
 
+	if (left == unknown_type .or. right == unknown_type) then
+		! Stop cascading errors
+		is_binary_op_allowed = .true.
+		return
+	end if
+
 	select case (op)
 
 		case (plus_token, minus_token, sstar_token, star_token, slash_token, &
@@ -2543,6 +2539,12 @@ logical function is_unary_op_allowed(op, operand)
 	integer, intent(in) :: op, operand
 
 	is_unary_op_allowed = .false.
+
+	if (operand == unknown_type) then
+		! Stop cascading errors
+		is_unary_op_allowed = .true.
+		return
+	end if
 
 	select case (op)
 
@@ -3207,9 +3209,7 @@ integer function get_binary_op_kind(left, op, right)
 			return
 		end if
 
-		! TODO: messaging.  stop w/o breaking bad syntax tests
-		write(*,*) 'Error: unreachable'
-		!call internal_error()
+		get_binary_op_kind = unknown_type
 
 	end select
 
@@ -3846,8 +3846,10 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 		!print *, 'right = ', right
 
 		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
-
-		! TODO: catch error type here
+		if (res%type == unknown_type) then
+			write(*,*) err_eval_binary_types(node%op%text)
+			call internal_error()
+		end if
 
 		select case (node%op%kind)
 		case (plus_token)
