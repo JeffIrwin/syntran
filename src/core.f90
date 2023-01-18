@@ -207,7 +207,7 @@ module core_m
 		! allocated
 
 		type(syntax_node_t), allocatable :: left, right, statements(:), &
-			condition, if_clause, else_clause, body
+			condition, if_clause, else_clause, body, array
 
 		! Array expression syntax nodes
 		type(syntax_node_t), allocatable :: lbound, step, ubound, len, elems(:)
@@ -1156,6 +1156,11 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%body = src%body
 	end if
 
+	if (allocated(src%array)) then
+		if (.not. allocated(dst%array)) allocate(dst%array)
+		dst%array = src%array
+	end if
+
 	if (allocated(src%lbound)) then
 		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
 		dst%lbound = src%lbound
@@ -1920,7 +1925,7 @@ function parse_for_statement(parser) result(statement)
 
 	integer :: bound_beg, bound_end
 
-	type(syntax_node_t)  :: body, lbound, ubound
+	type(syntax_node_t)  :: array, body, lbound, ubound
 	type(syntax_token_t) :: for_token, in_token, lbracket, rbracket, colon, &
 		identifier
 	type(text_span_t) :: span
@@ -1952,38 +1957,33 @@ function parse_for_statement(parser) result(statement)
 
 	in_token   = parser%match(in_keyword)
 
-	! TODO: just call the general parse_array_expr() method.  Do int
-	! type-checking somehow, since parse_array_expr will parse floats too
+	array      = parser%parse_array_expr()
 
-	lbracket = parser%match(lbracket_token)
-
-	! Check that bounds are i32_type types.  For an explicit comma-separated
-	! array, we could iterate over bool values, but implicit range/bound-based
-	! arrays require ints
-
-	! Allow floats as loop bounds?
-
-	bound_beg = parser%peek_pos(0)
-	lbound    = parser%parse_expr()
-	bound_end = parser%peek_pos(0) - 1
-	if (lbound%val%type /= i32_type) then
-		span = new_span(bound_beg, bound_end - bound_beg + 1)
-		call parser%diagnostics%push(err_non_int_bound( &
-			parser%context, span, parser%context%text(bound_beg: bound_end)))
-	end if
-
-	colon    = parser%match(colon_token)
-
-	bound_beg = parser%peek_pos(0)
-	ubound    = parser%parse_expr()
-	bound_end = parser%peek_pos(0) - 1
-	if (ubound%val%type /= i32_type) then
-		span = new_span(bound_beg, bound_end - bound_beg + 1)
-		call parser%diagnostics%push(err_non_int_bound( &
-			parser%context, span, parser%context%text(bound_beg: bound_end)))
-	end if
-
-	rbracket = parser%match(rbracket_token)
+	!! TODO: just call the general parse_array_expr() method.  Do int
+	!! type-checking somehow, since parse_array_expr will parse floats too
+	!lbracket = parser%match(lbracket_token)
+	!! Check that bounds are i32_type types.  For an explicit comma-separated
+	!! array, we could iterate over bool values, but implicit range/bound-based
+	!! arrays require ints
+	!! Allow floats as loop bounds?
+	!bound_beg = parser%peek_pos(0)
+	!lbound    = parser%parse_expr()
+	!bound_end = parser%peek_pos(0) - 1
+	!if (lbound%val%type /= i32_type) then
+	!	span = new_span(bound_beg, bound_end - bound_beg + 1)
+	!	call parser%diagnostics%push(err_non_int_bound( &
+	!		parser%context, span, parser%context%text(bound_beg: bound_end)))
+	!end if
+	!colon    = parser%match(colon_token)
+	!bound_beg = parser%peek_pos(0)
+	!ubound    = parser%parse_expr()
+	!bound_end = parser%peek_pos(0) - 1
+	!if (ubound%val%type /= i32_type) then
+	!	span = new_span(bound_beg, bound_end - bound_beg + 1)
+	!	call parser%diagnostics%push(err_non_int_bound( &
+	!		parser%context, span, parser%context%text(bound_beg: bound_end)))
+	!end if
+	!rbracket = parser%match(rbracket_token)
 
 	parser%num_vars = parser%num_vars + 1
 	statement%id_index = parser%num_vars
@@ -1998,18 +1998,21 @@ function parse_for_statement(parser) result(statement)
 	! there's no need to check io
 
 	!print *, 'identifier%text = ', identifier%text
-	call parser%vars%insert(identifier%text, lbound%val, &
-		statement%id_index)!, io, overwrite = .false.)
+	call parser%vars%insert(identifier%text, array%lbound%val, &
+		statement%id_index)
 
 	body = parser%parse_statement()
 
-	allocate(statement%lbound, statement%ubound, statement%body)
+	!allocate(statement%lbound, statement%ubound, statement%body)
+	allocate(statement%array)
+	allocate(statement%body)
 
 	statement%kind = for_statement
 
 	statement%identifier = identifier
-	statement%lbound     = lbound
-	statement%ubound     = ubound
+	!statement%lbound     = lbound
+	!statement%ubound     = ubound
+	statement%array      = array
 	statement%body       = body
 
 	call parser%vars%pop_scope()
@@ -2712,6 +2715,8 @@ function parse_array_expr(parser) result(expr)
 	span_beg = parser%peek_pos(0)
 	lbound   = parser%parse_expr()
 	span_end = parser%peek_pos(0) - 1
+
+	!print *, 'lbound = ', parser%context%text(span_beg: span_end)
 
 	! TODO: should type checking be done by caller, or should we pass an
 	! expected type arg for the RHS of this check?
@@ -3610,11 +3615,13 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 
 	case (for_statement)
 
-		! TODO: migrate to general array_t type.  If possible, don't expand
-		! implicit arrays for for loops
+		! TODO: this assumes for statement array range is i32 of the form [imin:
+		! imax].  Generalize for other forms, maybe make an array%at() method
+		! for shared use here for for_statement eval and above for array_expr
+		! eval.  If possible, don't expand implicit arrays for for loops
 
-		lbound = syntax_eval(node%lbound, vars)
-		ubound = syntax_eval(node%ubound, vars)
+		lbound = syntax_eval(node%array%lbound, vars)
+		ubound = syntax_eval(node%array%ubound, vars)
 
 		! push scope to make the loop iterator local
 		call vars%push_scope()
@@ -3638,7 +3645,6 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 			! Parsing still needs to rely on dictionary lookups because it does
 			! not know the entire list of variable identifiers ahead of time
 			vars%vals(node%id_index) = itr
-			!call vars%insert(node%identifier%text, itr, node%id_index)
 
 			res = syntax_eval(node%body, vars)
 		end do
@@ -3714,7 +3720,6 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 			! Assign res to LHS identifier variable as well.  This inserts the
 			! value, while the insert call in the parser inserts the type
 			vars%vals(node%id_index) = res
-			!call vars%search_insert(node%identifier%text, res, node%id_index)
 
 			! The difference between let and assign is inserting into the
 			! current scope (let) vs possibly searching parent scopes (assign).
@@ -3763,12 +3768,10 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 		res = syntax_eval(node%right, vars)
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
-		!call vars%insert(node%identifier%text, res, node%id_index)
 		vars%vals(node%id_index) = res
 
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
-		!res = vars%search(node%identifier%text, node%id_index)
 
 		if (allocated(node%subscript)) then
 
