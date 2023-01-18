@@ -2206,7 +2206,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	integer :: io, ltype, rtype, pos0
+	integer :: io, ltype, rtype, pos0, span0
 
 	logical :: subscript_present
 
@@ -2304,11 +2304,17 @@ recursive function parse_expr_statement(parser) result(expr)
 			!print *, 'parsing subscript'
 
 			lbracket  = parser%match(lbracket_token)
+			span0 = parser%current_pos()
 			subscript = parser%parse_expr()
 
 			!print *, 'subscript = ', subscript%str()
 
-			! TODO: check subscript type is int
+			if (subscript%val%type /= i32_type) then
+				span = new_span(span0, parser%current_pos() - span0)
+				call parser%diagnostics%push( &
+					err_non_int_subscript(parser%context, span, &
+					parser%context%text(span0: parser%current_pos()-1)))
+			end if
 
 			!print *, 'parsing rbracket'
 			rbracket  = parser%match(rbracket_token)

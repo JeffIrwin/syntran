@@ -55,6 +55,21 @@ end function err_bad_int
 
 !===============================================================================
 
+function err_non_int_subscript(context, span, subscript) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: subscript
+	err = err_prefix//'array subscript `'//subscript &
+		//'` is not an integer' &
+		//underline(context, span) &
+		//' non-integer subscript'//color_reset
+
+end function err_non_int_subscript
+
+!===============================================================================
+
 function err_bad_float(context, span, num) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
