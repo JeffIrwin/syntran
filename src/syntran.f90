@@ -339,7 +339,7 @@ function syntran_interpret_file(file, quiet) result(res)
 		return
 	end if
 
-	res = syntran_eval(source_text, quiet, file)
+	res = trim(adjustl(syntran_eval(source_text, quiet, file)))
 
 end function syntran_interpret_file
 

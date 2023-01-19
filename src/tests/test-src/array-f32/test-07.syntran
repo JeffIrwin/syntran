@@ -1,0 +1,12 @@
+
+{
+	// Array assignment should deep copy, not alias pointers
+
+	let x = [10.0, 10.5, 11.0, 11.5, 12.0];
+	let y = x;
+	y;
+	x[3] = -x[2] + 2 * x[4];
+	let a = y[3];
+	a;
+}
+

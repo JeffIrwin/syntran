@@ -18,7 +18,19 @@ project(${PROJECT} Fortran)
 if(DEFINED ENV{SYNTRAN_INTEL})
 	set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC")
 else()
-	set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp -Wno-tabs -Wno-maybe-uninitialized")
+
+	set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp")
+
+	# Why would you warn about tabs in free-form Fortran?
+	add_compile_options("-Wno-tabs")
+
+	# More false alarms than anything
+	add_compile_options("-Wno-maybe-uninitialized")
+
+	# I need to compare reals because syntran uses need to be able to compare
+	# reals if they want to
+	add_compile_options("-Wno-compare-reals")
+
 endif()
 
 set(CMAKE_Fortran_FLAGS_DEBUG "-pedantic -fbounds-check -fbacktrace")

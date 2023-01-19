@@ -31,7 +31,6 @@ module core_m
 	!  - arrays
 	!    * MVP i32, f32 arrays done
 	!    * bool arrays
-	!    * whole array assignment to a scalar
 	!    * fix array sub-type checking
 	!    * add slice subscripts:
 	!      > a[:]     -> a[0], a[1], a[2], ...
@@ -170,7 +169,8 @@ module core_m
 		integer(kind = 4), allocatable ::  i32(:)
 		real   (kind = 4), allocatable ::  f32(:)
 
-		integer :: len, cap
+		integer :: len, cap, rank
+		integer, allocatable :: size(:)
 
 		contains
 			procedure :: push => push_array
@@ -210,10 +210,11 @@ module core_m
 			condition, if_clause, else_clause, body, array
 
 		! Array expression syntax nodes
-		type(syntax_node_t), allocatable :: lbound, step, ubound, len, elems(:)
+		type(syntax_node_t), allocatable :: lbound, step, ubound, len, &
+			elems(:), rank
 
-		! TODO: make this an array for rank-2+ arrays
-		type(syntax_node_t), allocatable :: subscript
+		type(syntax_node_t), allocatable :: subscripts(:), size(:)
+		type(syntax_node_t), allocatable :: subscript  ! TODO: delete
 
 		type(syntax_token_t) :: op, identifier
 		integer :: id_index
@@ -509,7 +510,7 @@ subroutine push_scope(dict)
 
 	dict%scope = dict%scope + 1
 
-	! TODO
+	! TODO: make a growable array of dicts for unlimited scope levels
 	if (dict%scope > scope_max) then
 		write(*,*) 'Error: too many nested blocks > '//str(scope_max)
 		call internal_error()
@@ -766,6 +767,12 @@ subroutine push_array(vector, val)
 			tmp_f32(1: vector%cap) = vector%f32
 			call move_alloc(tmp_f32, vector%f32)
 
+		else if (vector%type == bool_type) then
+
+			allocate(tmp_bool( tmp_cap ))
+			tmp_bool(1: vector%cap) = vector%bool
+			call move_alloc(tmp_bool, vector%bool)
+
 		else
 			! FIXME: when adding new types, implement it below too to set the
 			! last val
@@ -781,6 +788,8 @@ subroutine push_array(vector, val)
 		vector%i32( vector%len ) = val%i32
 	else if (vector%type == f32_type) then
 		vector%f32( vector%len ) = val%f32
+	else if (vector%type == bool_type) then
+		vector%bool( vector%len ) = val%bool
 	else
 		write(*,*) 'Error: push_array type not implemented'
 		call internal_error()
@@ -1181,13 +1190,27 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%len = src%len
 	end if
 
+	if (allocated(src%rank)) then
+		if (.not. allocated(dst%rank)) allocate(dst%rank)
+		dst%rank = src%rank
+	end if
+
 	if (allocated(src%elems)) then
 		call syntax_nodes_copy(dst%elems, src%elems)
 	end if
 
+	if (allocated(src%subscripts)) then
+		call syntax_nodes_copy(dst%subscripts, src%subscripts)
+	end if
+
+	! TODO: delete
 	if (allocated(src%subscript)) then
 		if (.not. allocated(dst%subscript)) allocate(dst%subscript)
 		dst%subscript = src%subscript
+	end if
+
+	if (allocated(src%size)) then
+		call syntax_nodes_copy(dst%size, src%size)
 	end if
 
 	if (allocated(src%if_clause)) then
@@ -1752,7 +1775,7 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 	!********
 
 	character(len = :), allocatable :: src_filel
-	integer :: i
+
 	logical :: allow_continuel
 
 	type(parser_t) :: parser
@@ -1923,12 +1946,10 @@ function parse_for_statement(parser) result(statement)
 
 	!********
 
-	integer :: bound_beg, bound_end
+	!integer :: bound_beg, bound_end
 
-	type(syntax_node_t)  :: array, body, lbound, ubound
-	type(syntax_token_t) :: for_token, in_token, lbracket, rbracket, colon, &
-		identifier
-	type(text_span_t) :: span
+	type(syntax_node_t)  :: array, body
+	type(syntax_token_t) :: for_token, in_token, identifier
 
 	!  For loop syntax:
 	!
@@ -1945,8 +1966,6 @@ function parse_for_statement(parser) result(statement)
 	!    for i in [1, 2, 4, 5]
 	!    // 1, 2,   4, 5  // last elem *is* included
 	!
-	!  * or use `=` instead of `in`?
-	!  * or use `..` instead of `:` like rust?
 	!  * For steps, rust has `for x in (1..10).step_by(2) {}`, which I hate
 
 	for_token  = parser%match(for_keyword)
@@ -1958,32 +1977,6 @@ function parse_for_statement(parser) result(statement)
 	in_token   = parser%match(in_keyword)
 
 	array      = parser%parse_array_expr()
-
-	!! TODO: just call the general parse_array_expr() method.  Do int
-	!! type-checking somehow, since parse_array_expr will parse floats too
-	!lbracket = parser%match(lbracket_token)
-	!! Check that bounds are i32_type types.  For an explicit comma-separated
-	!! array, we could iterate over bool values, but implicit range/bound-based
-	!! arrays require ints
-	!! Allow floats as loop bounds?
-	!bound_beg = parser%peek_pos(0)
-	!lbound    = parser%parse_expr()
-	!bound_end = parser%peek_pos(0) - 1
-	!if (lbound%val%type /= i32_type) then
-	!	span = new_span(bound_beg, bound_end - bound_beg + 1)
-	!	call parser%diagnostics%push(err_non_int_bound( &
-	!		parser%context, span, parser%context%text(bound_beg: bound_end)))
-	!end if
-	!colon    = parser%match(colon_token)
-	!bound_beg = parser%peek_pos(0)
-	!ubound    = parser%parse_expr()
-	!bound_end = parser%peek_pos(0) - 1
-	!if (ubound%val%type /= i32_type) then
-	!	span = new_span(bound_beg, bound_end - bound_beg + 1)
-	!	call parser%diagnostics%push(err_non_int_bound( &
-	!		parser%context, span, parser%context%text(bound_beg: bound_end)))
-	!end if
-	!rbracket = parser%match(rbracket_token)
 
 	parser%num_vars = parser%num_vars + 1
 	statement%id_index = parser%num_vars
@@ -2003,15 +1996,12 @@ function parse_for_statement(parser) result(statement)
 
 	body = parser%parse_statement()
 
-	!allocate(statement%lbound, statement%ubound, statement%body)
 	allocate(statement%array)
 	allocate(statement%body)
 
 	statement%kind = for_statement
 
 	statement%identifier = identifier
-	!statement%lbound     = lbound
-	!statement%ubound     = ubound
 	statement%array      = array
 	statement%body       = body
 
@@ -2206,12 +2196,13 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	integer :: io, ltype, rtype, pos0, span0
+	integer :: io, ltype, rtype, pos0, pos1, span0
 
-	logical :: subscript_present
+	logical :: subscripts_present
 
 	type(syntax_node_t) :: right, subscript
-	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket
+	type(syntax_node_vector_t) :: subscripts
+	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket, comma
 	type(text_span_t) :: span
 
 	!print *, 'starting parse_expr_statement()'
@@ -2281,7 +2272,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	if  (parser%peek_kind(0) == identifier_token) then
 
-		! There may or may not bea subscript expression after an identifier, so
+		! There may or may not be a subscript expression after an identifier, so
 		! we can't know how many spaces ahead an equals_token might be without
 		! looking ahead
 
@@ -2293,28 +2284,45 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		identifier = parser%match(identifier_token)
 
-		! Parse array subscript index if present
+		! Parse array subscript indices if present
 
 		! Subscript can appear in assignment expr but not let expr, because let
 		! must initialize the whole array
 
-		subscript_present = .false.
+		subscripts_present = .false.
 		if (parser%current_kind() == lbracket_token) then
-			subscript_present = .true.
-			!print *, 'parsing subscript'
+			subscripts_present = .true.
+			print *, 'parsing subscripts'
+
+			subscripts = new_syntax_node_vector()
 
 			lbracket  = parser%match(lbracket_token)
-			span0 = parser%current_pos()
-			subscript = parser%parse_expr()
 
-			!print *, 'subscript = ', subscript%str()
+			do while (parser%current_kind() /= rbracket_token)
 
-			if (subscript%val%type /= i32_type) then
-				span = new_span(span0, parser%current_pos() - span0)
-				call parser%diagnostics%push( &
-					err_non_int_subscript(parser%context, span, &
-					parser%context%text(span0: parser%current_pos()-1)))
-			end if
+				span0 = parser%current_pos()
+				subscript = parser%parse_expr()
+
+				!print *, 'subscript = ', subscript%str()
+				print *, 'subscript = ', parser%context%text(span0: parser%current_pos()-1)
+
+				if (subscript%val%type /= i32_type) then
+					span = new_span(span0, parser%current_pos() - span0)
+					call parser%diagnostics%push( &
+						err_non_int_subscript(parser%context, span, &
+						parser%context%text(span0: parser%current_pos()-1)))
+				end if
+
+				call subscripts%push(subscript)
+
+				!! TODO? Break infinite loop
+				!if (parser%pos == pos1) dummy = parser%next()
+
+				if (parser%current_kind() /= rbracket_token) then
+					comma = parser%match(comma_token)
+				end if
+
+			end do
 
 			!print *, 'parsing rbracket'
 			rbracket  = parser%match(rbracket_token)
@@ -2366,9 +2374,11 @@ recursive function parse_expr_statement(parser) result(expr)
 		ltype = expr%val%type
 		rtype = expr%right%val%type
 
-		if (subscript_present) then
-			allocate(expr%subscript)
-			expr%subscript = subscript
+		if (subscripts_present) then
+			!allocate(expr%subscripts)
+			!expr%subscripts = subscripts
+			call syntax_nodes_copy(expr%subscripts, &
+				subscripts%v( 1: subscripts%len ))
 		end if
 
 		!! TODO: only do this if the subscript is present.  Whole array
@@ -2687,7 +2697,7 @@ function parse_array_expr(parser) result(expr)
 	integer :: span_beg, span_end, pos0
 
 	type(syntax_node_t)  :: lbound, step, ubound, len, elem
-	type(syntax_node_vector_t) :: elems
+	type(syntax_node_vector_t) :: elems, size
 	type(syntax_token_t) :: lbracket, rbracket, colon, semicolon, comma, dummy
 	type(text_span_t) :: span
 
@@ -2748,30 +2758,47 @@ function parse_array_expr(parser) result(expr)
 
 		semicolon    = parser%match(semicolon_token)
 
-		span_beg = parser%peek_pos(0)
-		len      = parser%parse_expr()
-		span_end = parser%peek_pos(0) - 1
-
-		!print *, 'len = ', parser%context%text(span_beg: span_end)
-
-		if (len%val%type /= i32_type) then
-			span = new_span(span_beg, span_end - span_beg + 1)
-			! TODO: different diag for each (or at least some) case
-			call parser%diagnostics%push(err_non_int_range( &
-				parser%context, span, &
-				parser%context%text(span_beg: span_end)))
-		end if
-
-		! TODO: rank-2+ arrays:
+		! rank-2+ arrays:
 		!
 		! [lbound; rows, cols]
 		! [lbound; rows, cols, sheets, ...]
+
+		size = new_syntax_node_vector()
+		do while (parser%current_kind() /= rbracket_token)
+
+			span_beg = parser%peek_pos(0)
+			len      = parser%parse_expr()
+			span_end = parser%peek_pos(0) - 1
+
+			!print *, 'len = ', parser%context%text(span_beg: span_end)
+
+			if (len%val%type /= i32_type) then
+				span = new_span(span_beg, span_end - span_beg + 1)
+				! TODO: different diag for each (or at least some) case
+				call parser%diagnostics%push(err_non_int_range( &
+					parser%context, span, &
+					parser%context%text(span_beg: span_end)))
+			end if
+
+			call size%push(len)
+
+			! TODO: break infinite loop?
+
+			if (parser%current_kind() /= rbracket_token) then
+				comma = parser%match(comma_token)
+			end if
+
+		end do
 
 		rbracket = parser%match(rbracket_token)
 
 		allocate(expr%val%array)
 		allocate(expr%lbound)
+
+		! TODO: delete len?
 		allocate(expr%len)
+
+		call syntax_nodes_copy(expr%size, size%v( 1: size%len ))
 
 		expr%kind           = array_expr
 
@@ -2779,6 +2806,11 @@ function parse_array_expr(parser) result(expr)
 
 		expr%val%array%type = lbound%val%type
 		expr%val%array%kind = impl_array
+
+		! TODO: does this syntax node need to own these members, or can we just
+		! save them in the array_t?  I think they do need to be duplicated, as
+		! they may be an expression and not just a literal.  So, sizes have to
+		! be allocated dynamically during evaluation, not during parsing
 
 		expr%lbound = lbound
 		expr%len    = len
@@ -2909,6 +2941,7 @@ function parse_array_expr(parser) result(expr)
 		!expr%val%type             = i32_type
 		expr%val%type             = lbound%val%type
 
+		! TODO: I think array pointer should be allocated first here
 		expr%val%array%type       = lbound%val%type
 		expr%val%array%kind       = impl_array
 
@@ -2963,6 +2996,9 @@ function parse_array_expr(parser) result(expr)
 	!
 	!        [0: 3   ,   5, 6,   10: 13    ]
 	!     // [0, 1, 2,   5, 6,   10, 11, 12]
+	!
+	! But how useful would that really be?
+
 
 end function parse_array_expr
 
@@ -3034,9 +3070,11 @@ function parse_primary_expr(parser) result(expr)
 			end if
 
 			! Parse array subscript if present
+			!
+			! TODO: rank-2+ for RHS
 
 			! TODO: Can this be consolidated with subscript parsing in
-			! parse_expr_statement?
+			! parse_expr_statement?  At least add type checking
 
 			!print *, '%current_kind() = ', kind_name(parser%current_kind())
 			if (parser%current_kind() == lbracket_token) then
@@ -3508,28 +3546,44 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 
 		else if (node%val%array%kind == impl_array .and. allocated(node%len)) then
 
+			! TODO: initialize rank-2+ arrays
+			if (allocated(node%size)) then
+
+				array%rank = size( node%size )
+				allocate(array%size( array%rank ))
+
+				do i = 1, array%rank
+					len = syntax_eval(node%size(i), vars)
+					array%size(i) = len%i32
+					print *, 'size['//str(i)//'] = ', array%size(i)
+				end do
+
+			end if
+
 			! Constant-value impl arrays (i.e. every element has the same value
 			! at initialization, but they are of course mutable)
 
 			!print *, 'len array'
 			lbound = syntax_eval(node%lbound, vars)
-			len    = syntax_eval(node%len   , vars)
+			!len    = syntax_eval(node%len   , vars)
 
 			! Allocate in one shot without growing.  TODO: do this for other
 			! implicit cases
 
 			array%type = node%val%array%type
-			array%len  = len%i32
-			array%cap  = len%i32
+			array%len  = product(array%size)
+			array%cap  = array%len
+
+			print *, 'array%len = ', array%len
 
 			if      (array%type == i32_type) then
 
-				allocate(array%i32( len%i32 ))
+				allocate(array%i32( array%cap ))
 				array%i32 = lbound%i32
 
 			else if (array%type == f32_type) then
 
-				allocate(array%f32( len%i32 ))
+				allocate(array%f32( array%cap ))
 				array%f32 = lbound%f32
 
 			else
@@ -3694,9 +3748,6 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 			! HolyC feature: implicitly print name expression statements.  I may
 			! remove this after I implement an intrinsic print() fn.  May also
 			! need to suppress this for void fn calls later
-			!
-			! TODO: pass quiet arg from interpreter through new node member to
-			! not pollute unit test logs
 			if (node%statements(i)%kind == name_expr .and. .not. quietl) then
 				write(*,*) res%str()
 			end if
@@ -3708,14 +3759,14 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 	case (assignment_expr)
 
 		!if (allocated(node%right%subscript)) then
-		!	print *, 'subscript RHS'
+		!	print *, 'subscript LHS'
 		!else
-		!	print *, 'scalar RHS'
+		!	print *, 'scalar LHS'
 		!end if
 
 		!if (node%left%val%type /= array_type) then
 		!if (.not. allocated(node%left%subscript)) then
-		if (.not. allocated(node%subscript)) then
+		if (.not. allocated(node%subscripts)) then
 
 			! Assign return value
 			res = syntax_eval(node%right, vars)
@@ -3734,14 +3785,15 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 			! identifier at each scope level
 
 		else
-			!print *, 'array subscript assignment'
+			print *, 'LHS array subscript assignment'
 
 			! Assign return value from RHS
 			res = syntax_eval(node%right, vars)
 
 			!print *, 'RHS = ', res%str()
 
-			subscript = syntax_eval(node%subscript, vars)
+			! TODO
+			subscript = syntax_eval(node%subscripts(1), vars)
 
 			!print *, 'subscript = ', subscript%str()
 
@@ -3781,7 +3833,7 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 
 		if (allocated(node%subscript)) then
 
-			!print *, 'subscript name expr'
+			print *, 'subscript RHS name expr'
 
 			res%type = vars%vals(node%id_index)%array%type
 
@@ -4108,7 +4160,7 @@ end subroutine log_diagnostics
 
 !===============================================================================
 
-function value_str(val) result(str)
+recursive function value_str(val) result(str)
 
 	class(value_t) :: val
 

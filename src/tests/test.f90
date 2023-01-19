@@ -517,8 +517,6 @@ subroutine unit_test_for(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: more tests
-
 	tests = &
 		[   &
 			interpret_file(path//'test-01.syntran', quiet) == '0', &
@@ -557,8 +555,6 @@ subroutine unit_test_while(npass, nfail)
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
-
-	! TODO: more tests
 
 	tests = &
 		[   &
@@ -694,8 +690,6 @@ subroutine unit_test_array_i32_1(npass, nfail)
 
 	logical, allocatable :: tests(:)
 
-	real, parameter :: tol = 1.e-9
-
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! Because test evaluation results are tested by comparing strings, output
@@ -742,8 +736,6 @@ subroutine unit_test_array_f32_1(npass, nfail)
 	character(len = *), parameter :: label = 'f32 arrays'
 
 	logical, allocatable :: tests(:)
-
-	real, parameter :: tol = 1.e-9
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -801,8 +793,6 @@ subroutine unit_test_array_i32_2(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: more tests
-
 	tests = &
 		[   &
 			interpret_file(path//'test-01.syntran', quiet) == '0', &
@@ -822,6 +812,48 @@ subroutine unit_test_array_i32_2(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_array_i32_2
+
+!===============================================================================
+
+subroutine unit_test_array_f32_2(npass, nfail)
+
+	! More advanced tests on longer scripts
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f32 array scripts'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/array-f32/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == '1.666667E+00', &
+			interpret_file(path//'test-02.syntran', quiet) == '1.000000E+00', &
+			interpret_file(path//'test-03.syntran', quiet) == '1.300000E+01', &
+			interpret_file(path//'test-04.syntran', quiet) == '-3.000000E+00', &
+			interpret_file(path//'test-05.syntran', quiet) == '1.600000E+01', &
+			interpret_file(path//'test-06.syntran', quiet) == '1.600000E+01', &
+			interpret_file(path//'test-07.syntran', quiet) == '1.150000E+01', &
+			interpret_file(path//'test-08.syntran', quiet) == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_array_f32_2
 
 !===============================================================================
 
@@ -1043,6 +1075,7 @@ subroutine unit_tests(iostat)
 	call unit_test_array_i32_1(npass, nfail)
 	call unit_test_array_i32_2(npass, nfail)
 	call unit_test_array_f32_1(npass, nfail)
+	call unit_test_array_f32_2(npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
