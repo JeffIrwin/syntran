@@ -48,7 +48,10 @@ while 1==1
 //    gca().rotation_angles = [3.75  -116.];
     gca().data_bounds = [1 1 -1; nx ny 1]
 //    colorbar(-1, 1)
-    xs2png(gcf(), sprintf("frames/wave_%d.png", i))
+
+    //xs2png(gcf(), sprintf("frames/wave_%d.png", i))
+    xs2svg(gcf(), sprintf("frames/wave_%d.svg", i))
+//    xs2eps(gcf(), sprintf("frames/wave_%d.eps", i))
     
 end
 
