@@ -3408,7 +3408,7 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 
 	!********
 
-	integer :: i, j
+	integer :: i, j, k, prod
 	integer, parameter :: magic = 128
 
 	logical :: quietl
@@ -3793,28 +3793,38 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 			!print *, 'RHS = ', res%str()
 
 			! TODO
-			subscript = syntax_eval(node%subscripts(1), vars)
-
+			!subscript = syntax_eval(node%subscripts(1), vars)
 			!print *, 'subscript = ', subscript%str()
+
+			! Convert a multi-rank subscript to a rank-1 subscript j
+			prod = 1
+			j    = 0
+			do k = 1, vars%vals(node%id_index)%array%rank
+				print *, 'k = ', k
+
+				subscript = syntax_eval(node%subscripts(k), vars)
+
+				j = j + prod * subscript%i32
+				prod  = prod * vars%vals(node%id_index)%array%size(k)
+			end do
 
 			!print *, 'LHS array type = ', vars%vals(node%id_index)%array%type
 			!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
 
 			! TODO: bound checking? by default or enabled with cmd line flag?
 
-			!! Syntran uses 0-indexed arrays while Fortran uses 1-indexed arrays
-			!vars%vals(node%id_index)%array%i32( subscript%i32 + 1 ) = res%i32
+			! Syntran uses 0-indexed arrays while Fortran uses 1-indexed arrays
 
 			! TODO: check res type matches array sub type
 			select case (res%type)
 			case (i32_type)
-				vars%vals(node%id_index)%array%i32( subscript%i32 + 1 ) &
+				vars%vals(node%id_index)%array%i32( j + 1 ) &
 					= res%i32
 			case (f32_type)
-				vars%vals(node%id_index)%array%f32( subscript%i32 + 1 ) &
+				vars%vals(node%id_index)%array%f32( j + 1 ) &
 					= res%f32
 			case (bool_type)
-				vars%vals(node%id_index)%array%bool( subscript%i32 + 1 ) &
+				vars%vals(node%id_index)%array%bool( j + 1 ) &
 					= res%bool
 			end select
 
