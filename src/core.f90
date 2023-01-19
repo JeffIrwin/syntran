@@ -3015,8 +3015,9 @@ function parse_primary_expr(parser) result(expr)
 	integer :: io, id_index
 	logical :: bool
 	type(syntax_node_t) :: subscript
+	type(syntax_node_vector_t) :: subscripts
 	type(syntax_token_t) :: num, left, right, keyword, identifier, lbracket, &
-		rbracket
+		rbracket, comma
 	type(text_span_t) :: span
 
 	if (debug > 1) print *, 'parse_primary_expr'
@@ -3081,12 +3082,26 @@ function parse_primary_expr(parser) result(expr)
 
 				!print *, 'parsing RHS subscript'
 
+				subscripts = new_syntax_node_vector()
 				lbracket  = parser%match(lbracket_token)
-				subscript = parser%parse_expr()
+
+				!subscript = parser%parse_expr()
+				do while (parser%current_kind() /= rbracket_token)
+
+					subscript = parser%parse_expr()
+					call subscripts%push(subscript)
+
+					if (parser%current_kind() /= rbracket_token) then
+						comma = parser%match(comma_token)
+					end if
+				end do
+
 				rbracket  = parser%match(rbracket_token)
 
-				allocate(expr%subscript)
-				expr%subscript = subscript
+				!allocate(expr%subscript)
+				!expr%subscript = subscript
+				call syntax_nodes_copy(expr%subscripts, &
+					subscripts%v( 1: subscripts%len ))
 
 				!print *, 'expr%val%type = ', kind_name(expr%val%type)
 
@@ -3491,6 +3506,10 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 				call internal_error()
 			end if
 
+			array%rank = 1
+			allocate(array%size( array%rank ))
+			array%size = array%cap  ! TODO: set to cap or len?
+
 			allocate(res%array)
 
 			! In parser, we set val%type to the scalar type, e.g. i32, when val
@@ -3539,6 +3558,10 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 				call internal_error()
 			end if
 
+			array%rank = 1
+			allocate(array%size( array%rank ))
+			array%size = array%cap
+
 			allocate(res%array)
 
 			res%type  = array_type
@@ -3546,7 +3569,7 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 
 		else if (node%val%array%kind == impl_array .and. allocated(node%len)) then
 
-			! TODO: initialize rank-2+ arrays
+			! Initialize rank-2+ arrays
 			if (allocated(node%size)) then
 
 				array%rank = size( node%size )
@@ -3634,6 +3657,10 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 				call array%push(elem)
 			end do
 
+			array%rank = 1
+			allocate(array%size( array%rank ))
+			array%size = array%cap
+
 			allocate(res%array)
 
 			! In parser, we set val%type to the scalar type, e.g. i32, when val
@@ -3652,6 +3679,8 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 		else if (node%val%array%kind == expl_array) then
 			!print *, 'expl_array'
 
+			! TODO: explicit multi-rank arrays
+
 			! TODO: allow empty arrays?  Sub type of empty array?
 			array = new_array(node%val%array%type)
 
@@ -3660,6 +3689,10 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 				!print *, 'elem['//str(i)//'] = ', elem%str()
 				call array%push(elem)
 			end do
+
+			array%rank = 1
+			allocate(array%size( array%rank ))
+			array%size = array%cap
 
 			!print *, 'copying array'
 			allocate(res%array)
@@ -3841,24 +3874,37 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
 
-		if (allocated(node%subscript)) then
+		!if (allocated(node%subscript)) then
+		if (allocated(node%subscripts)) then
 
 			print *, 'subscript RHS name expr'
 
 			res%type = vars%vals(node%id_index)%array%type
 
-			subscript = syntax_eval(node%subscript, vars)
+			!subscript = syntax_eval(node%subscript, vars)
+
+			! Convert a multi-rank subscript to a rank-1 subscript j
+			prod = 1
+			j    = 0
+			do k = 1, vars%vals(node%id_index)%array%rank
+				print *, 'k = ', k
+
+				subscript = syntax_eval(node%subscripts(k), vars)
+
+				j = j + prod * subscript%i32
+				prod  = prod * vars%vals(node%id_index)%array%size(k)
+			end do
 
 			select case (res%type)
 			case (i32_type)
 				res%i32 = vars%vals(node%id_index)%array &
-					%i32( subscript%i32 + 1 )
+					%i32( j + 1 )
 			case (f32_type)
 				res%f32 = vars%vals(node%id_index)%array &
-					%f32( subscript%i32 + 1 )
+					%f32( j + 1 )
 			case (bool_type)
 				res%bool = vars%vals(node%id_index)%array &
-					%bool( subscript%i32 + 1 )
+					%bool( j+ 1 )
 			end select
 
 		else
