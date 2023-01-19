@@ -2292,7 +2292,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		subscripts_present = .false.
 		if (parser%current_kind() == lbracket_token) then
 			subscripts_present = .true.
-			print *, 'parsing subscripts'
+			!print *, 'parsing subscripts'
 
 			subscripts = new_syntax_node_vector()
 
@@ -2304,7 +2304,7 @@ recursive function parse_expr_statement(parser) result(expr)
 				subscript = parser%parse_expr()
 
 				!print *, 'subscript = ', subscript%str()
-				print *, 'subscript = ', parser%context%text(span0: parser%current_pos()-1)
+				!print *, 'subscript = ', parser%context%text(span0: parser%current_pos()-1)
 
 				if (subscript%val%type /= i32_type) then
 					span = new_span(span0, parser%current_pos() - span0)
@@ -3578,7 +3578,7 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 				do i = 1, array%rank
 					len = syntax_eval(node%size(i), vars)
 					array%size(i) = len%i32
-					print *, 'size['//str(i)//'] = ', array%size(i)
+					!print *, 'size['//str(i)//'] = ', array%size(i)
 				end do
 
 			end if
@@ -3597,7 +3597,7 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 			array%len  = product(array%size)
 			array%cap  = array%len
 
-			print *, 'array%len = ', array%len
+			!print *, 'array%len = ', array%len
 
 			if      (array%type == i32_type) then
 
@@ -3818,7 +3818,7 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 			! identifier at each scope level
 
 		else
-			print *, 'LHS array subscript assignment'
+			!print *, 'LHS array subscript assignment'
 
 			! Assign return value from RHS
 			res = syntax_eval(node%right, vars)
@@ -3833,7 +3833,7 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 			prod = 1
 			j    = 0
 			do k = 1, vars%vals(node%id_index)%array%rank
-				print *, 'k = ', k
+				!print *, 'k = ', k
 
 				subscript = syntax_eval(node%subscripts(k), vars)
 
@@ -3877,7 +3877,7 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 		!if (allocated(node%subscript)) then
 		if (allocated(node%subscripts)) then
 
-			print *, 'subscript RHS name expr'
+			!print *, 'subscript RHS name expr'
 
 			res%type = vars%vals(node%id_index)%array%type
 
@@ -3887,7 +3887,7 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 			prod = 1
 			j    = 0
 			do k = 1, vars%vals(node%id_index)%array%rank
-				print *, 'k = ', k
+				!print *, 'k = ', k
 
 				subscript = syntax_eval(node%subscripts(k), vars)
 
