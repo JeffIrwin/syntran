@@ -4285,7 +4285,7 @@ recursive function value_str(val) result(str)
 
 	end select
 
-end function
+end function value_str
 
 !===============================================================================
 

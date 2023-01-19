@@ -1,0 +1,139 @@
+
+// 2D wave equation finite difference solver
+//
+// Ref:  http://hplgit.github.io/num-methods-for-PDEs/doc/pub/wave/pdf/wave-4print-A4-2up.pdf
+//
+//     (page 72)
+//
+// Solve this partial-differential equation:
+//
+//     d^2/dt^2 u = c^2 * D(u)
+//
+// where u is displacement, t is time, c  is the wave speed, d^2/dt^2 is
+// the second derivative wrt t, and D(.) is the Laplacian operator.
+// Displacement u is a function of time t and position x and y.
+//
+// The PDE is solved numerically using an explicit finite difference
+// method
+
+{
+	let e = 2.718281828;
+
+	// Spatial domain bounds
+	let xmin = 1.0;
+	let xmax = 3.0;
+
+	let ymin = 2.0;
+	let ymax = 4.0;
+
+	// Wave speed
+	let c = 10.0;
+
+	// Time bounds for wave to travel domain twice (i.e. forth and back)
+	let tmin = 0.0;
+	let tmax = tmin + 12 * (xmax - xmin) / c;
+
+	// Number of points in spatial grid
+	let nx = 201;
+
+	// Enforce square grid so we can assume size is sqrt() in
+	// post-processor
+	let ny = nx;
+
+	// Allocate displacement solution vector and initialize to 0.0.
+	let u = [0.0; nx, ny];
+
+	// Make spatial grid.  Compare linspace() fn from MATLAB or Scilab
+	// and the Rusty syntax for u above
+	let x = [xmin: xmax; nx];
+	let y = [ymin: ymax; ny];
+
+	// Grid spacing
+	let dx = x[1] - x[0];
+	let dy = y[1] - y[0];
+
+	// Time step size just under stability criterion
+	let dt = 0.9 * dx / c;
+
+	// Courant number squared
+	let cx2 = (c * dt / dx) ** 2;
+	let cy2 = (c * dt / dy) ** 2;
+
+	// Initial condition: Gaussian pulse
+	let xpulse = xmin + 0.3333 * (xmax - xmin);
+	let ypulse = ymin + 0.2500 * (ymax - ymin);
+	let pwidth = 0.05 * (xmax - xmin);
+	for iy in [0: ny]
+		for ix in [0: nx]
+		{
+			let dist = (
+				(x[ix] - xpulse) ** 2 +
+				(y[iy] - ypulse) ** 2) ** 0.5;
+
+			u[ix,iy] = e ** (-0.5 * (dist / pwidth) ** 2);
+		}
+
+	//u;
+
+	// Dirichlet boundary conditions on west, east, south, and north
+	// bounds
+	let uw = 0.0;
+	let ue = 0.0;
+	let us = 0.0;
+	let un = 0.0;
+
+	let u0 = u;
+
+	// First step only: first-order finite difference time derivative
+
+	// Space loop
+
+	for iy in [0: ny] u[0,iy] = uw;
+	for ix in [0: nx] u[ix,0] = us;
+
+	for iy in [1: ny-1]
+		for ix in [1: nx-1]
+		{
+			let u_xx = u0[ix-1, iy] - 2 * u0[ix, iy] + u0[ix+1, iy];
+			let u_yy = u0[ix, iy-1] - 2 * u0[ix, iy] + u0[ix, iy+1];
+
+			u[ix,iy] = u0[ix,iy] + 0.5 * cx2 * u_xx + 0.5 * cy2 * u_yy;
+		}
+
+	for iy in [0: ny] u[nx-1,iy] = ue;
+	for ix in [0: nx] u[ix,ny-1] = un;
+
+	// Time loop for steps 2+
+	let t = tmin;
+	while t < tmax - dt
+	{
+
+		// u00 is u from 2 steps ago, u0 is u from 1 step ago
+		let u00 = u0;
+		u0 = u;
+
+		// Space loop
+
+		for iy in [0: ny] u[0,iy] = uw;
+		for ix in [0: nx] u[ix,0] = us;
+
+		for iy in [1: ny-1]
+			for ix in [1: nx-1]
+			{
+				let u_xx = u0[ix-1, iy] - 2 * u0[ix, iy] + u0[ix+1, iy];
+				let u_yy = u0[ix, iy-1] - 2 * u0[ix, iy] + u0[ix, iy+1];
+
+				u[ix,iy] = 2 * u0[ix,iy] - u00[ix,iy]
+					+ 0.5 * cx2 * u_xx + 0.5 * cy2 * u_yy;
+			}
+
+		for iy in [0: ny] u[nx-1,iy] = ue;
+		for ix in [0: nx] u[ix,ny-1] = un;
+
+		t = t + dt;
+
+		// Print.  Believe it or not, this is the perf bottleneck
+		u;
+	}
+}
+
