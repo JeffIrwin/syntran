@@ -177,6 +177,88 @@ module core_m
 
 	!********
 
+	type param_t
+		! Function parameter (argument)
+		integer :: type
+		character(len = :), allocatable :: name
+
+		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
+		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
+		! Maybe add an array of types(:) for each allowable type of a param?
+
+	end type param_t
+
+	!********
+
+	type fn_t
+		! Function
+
+		! Return type
+		integer :: type
+
+		! Arguments
+		type(param_t), allocatable :: params(:)
+
+		!contains
+		!	procedure :: str => fn_str
+
+	end type fn_t
+
+	!********
+
+	type fn_ternary_tree_node_t
+
+		character :: split_char = ''
+		type(fn_ternary_tree_node_t), allocatable :: left, mid, right
+
+		type(fn_t), allocatable :: val
+		integer :: id_index
+
+		!! TODO
+		!contains
+		!	procedure, pass(dst) :: copy => fn_ternary_tree_copy
+		!	generic, public :: assignment(=) => copy
+
+	end type fn_ternary_tree_node_t
+
+	!********
+
+	type fn_dict_t
+		! This is the fn dictionary of a single scope
+		type(fn_ternary_tree_node_t), allocatable :: root
+	end type fn_dict_t
+
+	!********
+
+	! Fixed-size limit to the scope level for now
+	integer, parameter :: scope_max = 64
+
+	type fns_t
+
+		! A list of function dictionaries for each scope level used during
+		! parsing
+		type(fn_dict_t) :: dicts(scope_max)
+
+		! Flat array of fns from all scopes, used for efficient interpreted
+		! evaluation
+		type(fn_t), allocatable :: fns(:)
+
+		! This is the scope level.  Each nested block statement that is entered
+		! pushes 1 to scope.  Popping out of a block decrements the scope.
+		! Each scope level has its own fn dict in dicts(:)
+		integer :: scope = 1
+
+		! TODO
+		contains
+			procedure :: &
+				insert => fn_insert, &
+				search => fn_search
+		!		push_scope, pop_scope
+
+	end type fns_t
+
+	!********
+
 	type syntax_token_t
 
 		integer :: kind
@@ -208,12 +290,13 @@ module core_m
 		type(syntax_node_t), allocatable :: lbound, step, ubound, len, &
 			elems(:), rank
 
-		type(syntax_node_t), allocatable :: subscripts(:), size(:)
+		type(syntax_node_t), allocatable :: subscripts(:), size(:), args(:)
 
 		type(syntax_token_t) :: op, identifier
 		integer :: id_index
 
 		type(value_t) :: val
+		type(fn_t), allocatable :: fn
 
 		type(string_vector_t) :: diagnostics
 
@@ -286,9 +369,6 @@ module core_m
 
 	!********
 
-	! Fixed-size limit to the scope level for now
-	integer, parameter :: scope_max = 64
-
 	type vars_t
 
 		! A list of variable dictionaries for each scope level used during
@@ -314,85 +394,6 @@ module core_m
 
 	!********
 
-	type param_t
-		! Function parameter (argument)
-		integer :: type
-		character(len = :), allocatable :: name
-
-		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
-		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
-		! Maybe add an array of types(:) for each allowable type of a param?
-
-	end type param_t
-
-	!********
-
-	type fn_t
-		! Function
-
-		! Return type
-		integer :: type
-
-		! Arguments
-		type(param_t), allocatable :: params(:)
-
-		!contains
-		!	procedure :: str => fn_str
-
-	end type fn_t
-
-	!********
-
-	type fn_ternary_tree_node_t
-
-		character :: split_char = ''
-		type(fn_ternary_tree_node_t), allocatable :: left, mid, right
-
-		type(fn_t), allocatable :: val
-		integer :: id_index
-
-		!! TODO
-		!contains
-		!	procedure, pass(dst) :: copy => fn_ternary_tree_copy
-		!	generic, public :: assignment(=) => copy
-
-	end type fn_ternary_tree_node_t
-
-	!********
-
-	type fn_dict_t
-		! This is the fn dictionary of a single scope
-		type(fn_ternary_tree_node_t), allocatable :: root
-	end type fn_dict_t
-
-	!********
-
-	type fns_t
-
-		! A list of function dictionaries for each scope level used during
-		! parsing
-		type(fn_dict_t) :: dicts(scope_max)
-
-		! Flat array of fns from all scopes, used for efficient interpreted
-		! evaluation
-		type(fn_t), allocatable :: fns(:)
-
-		! This is the scope level.  Each nested block statement that is entered
-		! pushes 1 to scope.  Popping out of a block decrements the scope.
-		! Each scope level has its own fn dict in dicts(:)
-		integer :: scope = 1
-
-		! TODO
-		contains
-			procedure :: &
-				insert => fn_insert
-		!		search => fn_search, &
-		!		push_scope, pop_scope
-
-	end type fns_t
-
-	!********
-
 	type parser_t
 
 		! The parser takes a string of tokens (technically an array) and
@@ -409,10 +410,11 @@ module core_m
 
 		type(text_context_t) :: context
 
-		! TODO: parser should also have a copy of fns_t (and num_fns?)
-
 		type(vars_t) :: vars
 		integer :: num_vars = 0
+
+		type(fns_t) :: fns
+		integer :: num_fns
 
 		contains
 			procedure :: match, tokens_str, current_kind, &
@@ -599,6 +601,95 @@ recursive function ternary_search(node, key, id_index, iostat) result(val)
 	!print *, ''
 
 end function ternary_search
+
+!===============================================================================
+
+recursive function fn_ternary_search(node, key, id_index, iostat) result(val)
+
+	type(fn_ternary_tree_node_t), intent(in), allocatable :: node
+	character(len = *), intent(in) :: key
+
+	integer, intent(out) :: id_index
+	integer, intent(out) :: iostat
+	type(fn_t) :: val
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	!print *, 'searching key "', key, '"'
+
+	iostat = exit_success
+
+	if (.not. allocated(node)) then
+		! Search key not found
+		iostat = exit_failure
+		return
+	end if
+
+	! :)
+	k   = key(1:1)
+	 ey = key(2:)
+
+	if (k < node%split_char) then
+		val = fn_ternary_search(node%left , key, id_index, iostat)
+		return
+	else if (k > node%split_char) then
+		val = fn_ternary_search(node%right, key, id_index, iostat)
+		return
+	else if (len(ey) > 0) then
+		val = fn_ternary_search(node%mid  , ey, id_index, iostat)
+		return
+	end if
+
+	!print *, 'setting val'
+
+	if (.not. allocated(node%val)) then
+		iostat = exit_failure
+		return
+	end if
+
+	val      = node%val
+	id_index = node%id_index
+
+	!print *, 'done fn_ternary_search'
+	!print *, ''
+
+end function fn_ternary_search
+
+!===============================================================================
+
+function fn_search(dict, key, id_index, iostat) result(val)
+
+	! An id_index is not normally part of dictionary searching, but we use it
+	! here for converting the dictionary into an array after parsing and before
+	! evaluation for better performance
+
+	class(fns_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+	integer, intent(out) :: id_index
+	type(fn_t) :: val
+
+	integer, intent(out), optional :: iostat
+
+	!********
+
+	integer :: i, io
+
+	i = dict%scope
+
+	val = fn_ternary_search(dict%dicts(i)%root, key, id_index, io)
+
+	! If not found in current scope, search parent scopes too
+	do while (io /= exit_success .and. i > 1)
+		i = i - 1
+		val = fn_ternary_search(dict%dicts(i)%root, key, id_index, io)
+	end do
+
+	if (present(iostat)) iostat = io
+
+end function fn_search
 
 !===============================================================================
 
@@ -1441,6 +1532,15 @@ recursive subroutine syntax_node_copy(dst, src)
 		call syntax_nodes_copy(dst%subscripts, src%subscripts)
 	end if
 
+	if (allocated(src%fn)) then
+		if (.not. allocated(dst%fn)) allocate(dst%fn)
+		dst%fn = src%fn
+	end if
+
+	if (allocated(src%args)) then
+		call syntax_nodes_copy(dst%args, src%args)
+	end if
+
 	if (allocated(src%size)) then
 		call syntax_nodes_copy(dst%size, src%size)
 	end if
@@ -2071,6 +2171,8 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 		call move_alloc(vars%vals         , parser%vars%vals)
 
 	end if
+
+	! TODO: get fns, num_fns from args
 
 	!*******************************
 	! Parse the tokens
@@ -3244,10 +3346,12 @@ function parse_primary_expr(parser) result(expr)
 
 	integer :: io, id_index
 	logical :: bool
-	type(syntax_node_t) :: subscript
-	type(syntax_node_vector_t) :: subscripts
+
+	type(fn_t) :: fn
+	type(syntax_node_t) :: subscript, arg
+	type(syntax_node_vector_t) :: subscripts, args
 	type(syntax_token_t) :: num, left, right, keyword, identifier, lbracket, &
-		rbracket, comma
+		rbracket, comma, lparen, rparen
 	type(text_span_t) :: span
 
 	if (debug > 1) print *, 'parse_primary_expr'
@@ -3284,54 +3388,104 @@ function parse_primary_expr(parser) result(expr)
 
 		case (identifier_token)
 
-			identifier = parser%next()
-			!print *, 'RHS identifier = ', identifier%text
-			!print *, '%current_kind() = ', kind_name(parser%current_kind())
+			if (parser%peek_kind(1) /= lparen_token) then
 
-			!print *, 'searching'
-			expr = new_name_expr(identifier, &
-				parser%vars%search(identifier%text, id_index, io))
-			expr%id_index = id_index
+				! Variable name expression
 
-			if (io /= exit_success) then
-				span = new_span(identifier%pos, len(identifier%text))
-				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context, &
-					span, identifier%text))
-			end if
+				!identifier = parser%next()
+				identifier = parser%match(identifier_token)
 
-			! Parse array subscript if present
-			!
-			! TODO: rank-2+ for RHS
+				!print *, 'RHS identifier = ', identifier%text
+				!print *, '%current_kind() = ', kind_name(parser%current_kind())
 
-			! TODO: Can this be consolidated with subscript parsing in
-			! parse_expr_statement?  Make fn parse_subscipts().  At least add
-			! type checking like the other instance
+				!print *, 'searching'
+				expr = new_name_expr(identifier, &
+					parser%vars%search(identifier%text, id_index, io))
+				expr%id_index = id_index
 
-			!print *, '%current_kind() = ', kind_name(parser%current_kind())
-			if (parser%current_kind() == lbracket_token) then
+				if (io /= exit_success) then
+					span = new_span(identifier%pos, len(identifier%text))
+					call parser%diagnostics%push( &
+						err_undeclare_var(parser%context, &
+						span, identifier%text))
+				end if
 
-				!print *, 'parsing RHS subscript'
+				! Parse array subscript if present
+				!
+				! TODO: rank-2+ for RHS
 
-				subscripts = new_syntax_node_vector()
-				lbracket  = parser%match(lbracket_token)
+				! TODO: Can this be consolidated with subscript parsing in
+				! parse_expr_statement?  Make fn parse_subscipts().  At least
+				! add type checking like the other instance
 
-				do while (parser%current_kind() /= rbracket_token)
+				!print *, '%current_kind() = ', kind_name(parser%current_kind())
+				if (parser%current_kind() == lbracket_token) then
 
-					subscript = parser%parse_expr()
-					call subscripts%push(subscript)
+					!print *, 'parsing RHS subscript'
 
-					if (parser%current_kind() /= rbracket_token) then
+					subscripts = new_syntax_node_vector()
+					lbracket  = parser%match(lbracket_token)
+
+					do while (parser%current_kind() /= rbracket_token)
+
+						subscript = parser%parse_expr()
+						call subscripts%push(subscript)
+
+						if (parser%current_kind() /= rbracket_token) then
+							comma = parser%match(comma_token)
+						end if
+					end do
+
+					rbracket  = parser%match(rbracket_token)
+
+					call syntax_nodes_copy(expr%subscripts, &
+						subscripts%v( 1: subscripts%len ))
+
+					!print *, 'expr%val%type = ', kind_name(expr%val%type)
+
+				end if
+
+			else
+
+				! Function call expression
+				print *, 'parsing fn_call_expr'
+
+				identifier = parser%match(identifier_token)
+
+				args = new_syntax_node_vector()
+				lparen  = parser%match(lparen_token)
+
+				do while (parser%current_kind() /= rparen_token)
+
+					arg = parser%parse_expr()
+					call args%push(arg)
+
+					if (parser%current_kind() /= rparen_token) then
 						comma = parser%match(comma_token)
 					end if
 				end do
 
-				rbracket  = parser%match(rbracket_token)
+				rparen  = parser%match(rparen_token)
 
-				call syntax_nodes_copy(expr%subscripts, &
-					subscripts%v( 1: subscripts%len ))
+				!expr = new_name_expr(identifier, &
+				!	parser%vars%search(identifier%text, id_index, io))
 
-				!print *, 'expr%val%type = ', kind_name(expr%val%type)
+				! TODO: check io
+				fn = parser%fns%search(identifier%text, id_index, io)
+				print *, 'io = ', io
+
+				!expr%kind = name_expr
+				expr%kind = fn_call_expr
+
+				expr%identifier = identifier
+
+				!expr%val = val
+				expr%fn = fn
+
+				expr%id_index = id_index
+
+				call syntax_nodes_copy(expr%args, &
+					args%v( 1: args%len ))
 
 			end if
 
