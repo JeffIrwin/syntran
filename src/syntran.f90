@@ -51,6 +51,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 	type(string_view_t) :: sv
 
+	type(fns_t) :: fns
 	type(syntax_node_t) :: compilation
 	type(value_t) :: res
 	type(vars_t) :: vars
@@ -72,6 +73,8 @@ function syntran_interpret(str, quiet) result(res_str)
 
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
+
+	fns = declare_intrinsic_fns()
 
 	! Read-eval-print-loop
 	do
@@ -132,7 +135,7 @@ function syntran_interpret(str, quiet) result(res_str)
 		end if
 
 		res_str = ' '
-		compilation = syntax_parse(line, vars, src_file, allow_cont)
+		compilation = syntax_parse(line, vars, fns, src_file, allow_cont)
 		!print *, 'in interpreter'
 
 		!print *, 'compilation%expecting = ', compilation%expecting
@@ -210,11 +213,13 @@ integer function syntran_eval_i32(str) result(eval_i32)
 
 	character(len = *), intent(in) :: str
 
+	type(fns_t) :: fns
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 	type(vars_t) :: vars
 
-	tree = syntax_parse(str, vars)
+	fns = declare_intrinsic_fns()
+	tree = syntax_parse(str, vars, fns)
 	call tree%log_diagnostics()
 
 	if (tree%diagnostics%len > 0) then
@@ -238,11 +243,13 @@ real(kind = 4) function syntran_eval_f32(str) result(eval_f32)
 
 	character(len = *), intent(in) :: str
 
+	type(fns_t) :: fns
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 	type(vars_t) :: vars
 
-	tree = syntax_parse(str, vars)
+	fns = declare_intrinsic_fns()
+	tree = syntax_parse(str, vars, fns)
 	call tree%log_diagnostics()
 
 	if (tree%diagnostics%len > 0) then
@@ -288,16 +295,10 @@ function syntran_eval(str, quiet, src_file) result(res)
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
 
-	!! One-liner, but no error handling.  This can crash unit tests without
-	!! reporting failures
-	!eval = syntax_eval(syntax_parse(str, vars), vars)
-
 	! TODO: make a helper fn here that all the eval_* fns use
 
-	! TODO: get intrinsics in other evaluators.  Pass to syntax_parse()
 	fns = declare_intrinsic_fns()
-
-	tree = syntax_parse(str, vars, src_filel)
+	tree = syntax_parse(str, vars, fns, src_filel)
 	if (.not. quietl) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len > 0) then

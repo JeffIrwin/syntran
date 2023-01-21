@@ -199,6 +199,9 @@ module core_m
 		! Arguments
 		type(param_t), allocatable :: params(:)
 
+		! TODO: I think explicitly defined fn_copy is required because of
+		! allocatable params, used by fn_ternary_tree_copy()
+
 		!contains
 		!	procedure :: str => fn_str
 
@@ -214,10 +217,9 @@ module core_m
 		type(fn_t), allocatable :: val
 		integer :: id_index
 
-		!! TODO
-		!contains
-		!	procedure, pass(dst) :: copy => fn_ternary_tree_copy
-		!	generic, public :: assignment(=) => copy
+		contains
+			procedure, pass(dst) :: copy => fn_ternary_tree_copy
+			generic, public :: assignment(=) => copy
 
 	end type fn_ternary_tree_node_t
 
@@ -984,6 +986,50 @@ recursive subroutine ternary_tree_copy(dst, src)
 	end if
 
 end subroutine ternary_tree_copy
+
+!===============================================================================
+
+recursive subroutine fn_ternary_tree_copy(dst, src)
+
+	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
+	! source, they will be gone!
+	!
+	! This should be avoided for efficient compilation, but the interactive
+	! interpreter uses it to backup and restore the variable dict for
+	! partially-evaluated continuation lines
+
+	class(fn_ternary_tree_node_t), intent(inout) :: dst
+	class(fn_ternary_tree_node_t), intent(in)    :: src
+
+	!********
+
+	!if (.not. allocated(dst)) allocate(dst)
+
+	dst%split_char = src%split_char
+
+	dst%id_index = src%id_index
+
+	if (allocated(src%val)) then
+		if (.not. allocated(dst%val)) allocate(dst%val)
+		dst%val = src%val
+	end if
+
+	if (allocated(src%left)) then
+		if (.not. allocated(dst%left)) allocate(dst%left)
+		dst%left = src%left
+	end if
+
+	if (allocated(src%mid)) then
+		if (.not. allocated(dst%mid)) allocate(dst%mid)
+		dst%mid = src%mid
+	end if
+
+	if (allocated(src%right)) then
+		if (.not. allocated(dst%right)) allocate(dst%right)
+		dst%right = src%right
+	end if
+
+end subroutine fn_ternary_tree_copy
 
 !===============================================================================
 
@@ -2094,9 +2140,13 @@ end function tokens_str
 
 !===============================================================================
 
-function syntax_parse(str, vars, src_file, allow_continue) result(tree)
+function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	character(len = *) :: str
+
+	type(vars_t), intent(inout) :: vars
+
+	type(fns_t), intent(inout) :: fns
 
 	type(syntax_node_t) :: tree
 
@@ -2110,14 +2160,22 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 
 	logical :: allow_continuel
 
+	type(fns_t) :: fns0
+
 	type(parser_t) :: parser
 
 	type(syntax_token_t) :: token
 
-	type(vars_t) :: vars, vars0
+	type(vars_t) :: vars0
 
 	if (debug > 0) print *, 'syntax_parse'
 	if (debug > 1) print *, 'str = ', str
+
+	! "exp"
+	print *, 'key = ', &
+		fns%dicts(1)%root%split_char, &
+		fns%dicts(1)%root%mid%split_char, &
+		fns%dicts(1)%root%mid%mid%split_char
 
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
@@ -2172,7 +2230,29 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 
 	end if
 
-	! TODO: get fns, num_fns from args
+	if (allocated(fns%dicts(1)%root)) then
+
+		if (allow_continuel) then
+
+			allocate(fns0%dicts(1)%root)
+			fns0%dicts(1)%root = fns%dicts(1)%root
+
+			!print *, 'fns%fns = '
+			!do i = 1, size(fns%fns)
+			!	print *, fns%fns(i)%str()
+			!end do
+
+			fns0%fns = fns%fns
+			parser%num_fns = size(fns%fns)
+
+		end if
+
+		! Only the 1st scope level matters from interpreter.  It doesn't
+		! evaluate until the block is finished
+		call move_alloc(fns%dicts(1)%root, parser%fns%dicts(1)%root)
+		call move_alloc(fns%fns          , parser%fns%fns)
+
+	end if
 
 	!*******************************
 	! Parse the tokens
@@ -2204,6 +2284,11 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 			call move_alloc(vars0%vals         , vars%vals)
 		end if
 
+		if (allocated(fns0%dicts(1)%root)) then
+			call move_alloc(fns0%dicts(1)%root, fns%dicts(1)%root)
+			call move_alloc(fns0%fns          , fns%fns)
+		end if
+
 		return
 
 	end if
@@ -2230,6 +2315,14 @@ function syntax_parse(str, vars, src_file, allow_continue) result(tree)
 
 	if (allocated(vars0%vals)) then
 		vars%vals( 1: size(vars0%vals) ) = vars0%vals
+	end if
+
+	!print *, 'parser%num_fns = ', parser%num_fns
+	if (allocated(fns%fns)) deallocate(fns%fns)
+	allocate(fns%fns( parser%num_fns ))
+
+	if (allocated(fns0%fns)) then
+		fns%fns( 1: size(fns0%fns) ) = fns0%fns
 	end if
 
 	if (debug > 0) print *, 'done syntax_parse'
@@ -3473,13 +3566,19 @@ function parse_primary_expr(parser) result(expr)
 				! TODO: check io
 				fn = parser%fns%search(identifier%text, id_index, io)
 				print *, 'io = ', io
+				print *, 'id_index = ', id_index
 
 				!expr%kind = name_expr
 				expr%kind = fn_call_expr
 
 				expr%identifier = identifier
 
+				!! TODO: set val type to fn return type
 				!expr%val = val
+
+				! TODO: does fn need to be a syntax node member?  I think we can
+				! just look it up later by identifier/id_index like we do for
+				! variable value
 				expr%fn = fn
 
 				expr%id_index = id_index
