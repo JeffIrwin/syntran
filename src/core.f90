@@ -522,6 +522,13 @@ function declare_intrinsic_fns() result(fns)
 	!	fns%dicts(1)%root%right%mid%split_char, &
 	!	fns%dicts(1)%root%right%mid%mid%split_char
 
+	! TODO: is it necessary to insert intrinsic fns in array?  For now, they are
+	! always case-selected by name (not index).  I'm not sure if the array is
+	! needed here until after I do user-defined fns.
+	!
+	! Actually, yes.  The return type is looked up by id_index.  Although we
+	! could move the return type assignment inside the case-selection.
+
 	num_fns = id_index
 	allocate(fns%fns(num_fns))
 
@@ -1020,7 +1027,7 @@ subroutine param_t_copy(dst, src)
 
 	integer :: i
 
-	print *, 'starting param_t_copy()'
+	!print *, 'starting param_t_copy()'
 
 	!if (.not. allocated(dst)) allocate(dst)
 
@@ -1056,19 +1063,19 @@ subroutine fn_t_copy(dst, src)
 
 	integer :: i
 
-	print *, 'starting fn_t_copy()'
+	!print *, 'starting fn_t_copy()'
 
 	!if (.not. allocated(dst)) allocate(dst)
 
-	print *, 'type'
+	!print *, 'type'
 	dst%type = src%type
 
-	print *, 'check'
+	!print *, 'check'
 	if (allocated(src%params)) then
-		print *, 'alloc'
+		!print *, 'alloc'
 		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
 		!dst%params = src%params
-		print *, 'loop'
+		!print *, 'loop'
 		do i = 1, size(src%params)
 			dst%params(i) = src%params(i)
 		end do
@@ -2289,7 +2296,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	! constructor new_parser(), but it seems reasonable to do it here since it
 	! has to be moved back later.  The dict vars0 comes from the
 	! interactive interpreter's history, it has nothing to do with scoping
-	print *, 'moving vars'
+	!print *, 'moving vars'
 	if (allocated(vars%dicts(1)%root)) then
 
 		if (allow_continuel) then
@@ -2324,15 +2331,12 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	end if
 
-	print *, 'moving fns'
+	!print *, 'moving fns'
 	if (allocated(fns%dicts(1)%root)) then
-
-		print *, '1'
 
 		!! There are always intrinsic fns, so no need to check allow_continuel
 		!if (allow_continuel) then
 
-			print *, 'allow_continuel'
 			allocate(fns0%dicts(1)%root)
 			fns0%dicts(1)%root = fns%dicts(1)%root
 
@@ -2343,7 +2347,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 			! TODO: allocated check shouldn't be required after I implement
 			! dict to array copying
-			print *, 'copy fns'
+			!print *, 'copy fns'
 			if (allocated(fns%fns)) then
 				fns0%fns = fns%fns
 				parser%num_fns = size(fns%fns)
@@ -2351,29 +2355,21 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 				parser%num_fns = 0
 			end if
 
-			print *, 'parser%num_fns = ', parser%num_fns
-			print *, 'done'
+			!print *, 'parser%num_fns = ', parser%num_fns
 
 		!end if
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished
-		print *, 'move 1'
 		call move_alloc(fns%dicts(1)%root, parser%fns%dicts(1)%root)
-		print *, 'move 2'
 		if (allocated(fns%fns)) call move_alloc(fns%fns          , parser%fns%fns)
-		print *, 'done'
 
 	end if
-
-	print *, 'parsing'
 
 	!*******************************
 	! Parse the tokens
 	tree = parser%parse_statement()
 	!*******************************
-
-	print *, 'done parsing'
 
 	tree%expecting       = parser%expecting
 	tree%first_expecting = parser%first_expecting
@@ -2387,13 +2383,6 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		! If expecting more input, don't push diagnostics yet.  Also undo any
 		! variable declarations, since they will be re-declared when we continue
 		! parsing the current stdin line from its start again.
-
-		! TODO: also reset vars if not expecting but diagnostics exist?  This
-		! should fix the following interpreter edge case:
-		!
-		!     let a = ;
-		!     a = 5;
-		!   //  ^ bad types
 
 		if (allocated(vars0%dicts(1)%root)) then
 			call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
@@ -2437,7 +2426,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		vars%vals( 1: size(vars0%vals) ) = vars0%vals
 	end if
 
-	print *, 'parser%num_fns = ', parser%num_fns
+	!print *, 'parser%num_fns = ', parser%num_fns
 	if (allocated(fns%fns)) deallocate(fns%fns)
 	allocate(fns%fns( parser%num_fns ))
 
@@ -3661,8 +3650,8 @@ function parse_primary_expr(parser) result(expr)
 			else
 
 				! Function call expression
-				print *, 'parsing fn_call_expr'
 
+				!print *, 'parsing fn_call_expr'
 				identifier = parser%match(identifier_token)
 
 				args = new_syntax_node_vector()
@@ -3685,8 +3674,8 @@ function parse_primary_expr(parser) result(expr)
 
 				! TODO: check io
 				fn = parser%fns%search(identifier%text, id_index, io)
-				print *, 'io = ', io
-				print *, 'id_index = ', id_index
+				!print *, 'io = ', io
+				!print *, 'id_index = ', id_index
 
 				!expr%kind = name_expr
 				expr%kind = fn_call_expr
@@ -3700,6 +3689,8 @@ function parse_primary_expr(parser) result(expr)
 				! just look it up later by identifier/id_index like we do for
 				! variable value
 				!expr%fn = fn
+
+				! TODO: check number and type of args
 
 				expr%id_index = id_index
 
@@ -4463,24 +4454,22 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	case (fn_call_expr)
 
-		! TODO
-		print *, 'eval fn_call_expr'
-		print *, 'fn identifier = ', node%identifier%text
-		print *, 'fn id_index   = ', node%id_index
+		!print *, 'eval fn_call_expr'
+		!print *, 'fn identifier = ', node%identifier%text
+		!print *, 'fn id_index   = ', node%id_index
 
 		res%type = fns%fns(node%id_index)%type
 
-		print *, 'res type = ', res%type
+		!print *, 'res type = ', res%type
 
+		! Intrinsic fns
 		select case (node%identifier%text)
 		case ("exp")
-			print *, 'exp'
 
 			arg1 = syntax_eval(node%args(1), vars, fns)
 			res%f32 = exp(arg1%f32)
 
 		case ("min")
-			print *, 'min'
 
 			arg1 = syntax_eval(node%args(1), vars, fns)
 			arg2 = syntax_eval(node%args(2), vars, fns)

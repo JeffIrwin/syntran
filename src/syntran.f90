@@ -56,8 +56,7 @@ function syntran_interpret(str, quiet) result(res_str)
 	type(value_t) :: res
 	type(vars_t) :: vars
 
-	print *, 'starting syntran_interpret()'
-
+	!print *, 'starting syntran_interpret()'
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
 
@@ -114,7 +113,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		end if
 
-		print *, 'line = <', line, '>'
+		!print *, 'line = <', line, '>'
 		!print *, 'io = ', io
 
 		!! Echo input?
