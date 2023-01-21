@@ -1,0 +1,61 @@
+
+{
+	// Nagarjuniya magic square
+	let v =
+		[
+			30, 16, 18, 36,
+			10, 44, 22, 24,
+			32, 14, 20, 34,
+			28, 26, 40,  6
+		];
+
+	// Reshape vector to 4x4 matrix
+
+	let n = 4;
+
+	let a = [0; n, n];
+	let k = 0;
+	for i in [0: n]
+		for j in [0: n]
+		{
+			a[j,i] = v[k];
+			k = k + 1;
+		}
+
+	a;
+
+	// Sum rows, columns, and (broken) diagonals
+
+	let rsums = [0; n];
+	let csums = [0; n];
+	let dsums = [0; n];
+
+	for i in [0: n]
+		for j in [0: n]
+		{
+			rsums[j] = rsums[j] + a[j,i];
+			csums[i] = csums[i] + a[j,i];
+
+			let ij = i + j;
+			if (ij >= n) ij = ij - n;
+			//a[i, ij];
+
+			dsums[j] = dsums[j] + a[i, ij];
+		}
+
+	rsums;
+	csums;
+	dsums;
+
+	// Verify all sums are the same
+	let all = true;
+	for i in [0: n]
+	{
+		all = all and rsums[i] == rsums[0];
+		all = all and csums[i] == rsums[0];
+		all = all and dsums[i] == rsums[0];
+	}
+
+	all;
+}
+

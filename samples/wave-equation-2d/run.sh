@@ -22,7 +22,9 @@ mkdir frames
 scilab="/c/Program Files/scilab-6.0.0/bin/WScilex.exe"
 "$scilab" -nw -f plot-syntran-wave-eq.sce
 
-ffmpeg -r 60 -i frames/wave_%d.png -vcodec libx264 -crf 15 -pix_fmt yuv420p wave.mp4 -y
+./convert.sh
+
+ffmpeg -r 60 -i frames/wave_%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p wave.mp4 -y
 
 popd
 

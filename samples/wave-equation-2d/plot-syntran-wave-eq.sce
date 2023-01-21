@@ -22,6 +22,10 @@ while 1==1
         break
     end
     
+//    if (i ~= 900)
+//        continue
+//    end
+    
     // Extract substring by trimming brackets []
     sub = part(txt, 3: length(txt) - 1)
     
@@ -52,6 +56,8 @@ while 1==1
     //xs2png(gcf(), sprintf("frames/wave_%d.png", i))
     xs2svg(gcf(), sprintf("frames/wave_%d.svg", i))
 //    xs2eps(gcf(), sprintf("frames/wave_%d.eps", i))
+    
+    break
     
 end
 
