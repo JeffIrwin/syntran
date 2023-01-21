@@ -392,10 +392,11 @@ subroutine unit_test_intr_fns(npass, nfail)
 	! a limit on how many chars and lines can be in a statement, and this may be
 	! pushing it
 
+	! TODO: use eval_f32 for exp tests
 	tests = &
 		[   &
-			eval('exp(0.0);')  == '1.000000E+00',  &
-			eval('exp(1.0);')  == '2.718282E+00',  &
+			trim(adjustl(eval('exp(0.0);')))  == '1.000000E+00',  &
+			trim(adjustl(eval('exp(1.0);')))  == '2.718282E+00',  &
 			eval('min(3, 2);')  == '2',  &
 			eval('min(2, 2);')  == '2',  &
 			eval('min(1, 2);')  == '1'   &
