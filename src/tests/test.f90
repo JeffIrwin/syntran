@@ -374,6 +374,39 @@ end subroutine unit_test_assignment
 
 !===============================================================================
 
+subroutine unit_test_intr_fns(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'intrinsic functions'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! We're getting into dangerous Fortran territory here.  I think there's
+	! a limit on how many chars and lines can be in a statement, and this may be
+	! pushing it
+
+	tests = &
+		[   &
+			eval('exp(0.0);')  == '1.000000E+00',  &
+			eval('exp(1.0);')  == '2.718282E+00',  &
+			eval('min(3, 2);')  == '2',  &
+			eval('min(2, 2);')  == '2',  &
+			eval('min(1, 2);')  == '1'   &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_intr_fns
+
+!===============================================================================
+
 subroutine unit_test_comments(npass, nfail)
 
 	implicit none
@@ -1113,6 +1146,7 @@ subroutine unit_tests(iostat)
 	call unit_test_array_f32_1(npass, nfail)
 	call unit_test_array_f32_2(npass, nfail)
 	call unit_test_nd_i32     (npass, nfail)
+	call unit_test_intr_fns   (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
