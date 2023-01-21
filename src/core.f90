@@ -3672,10 +3672,6 @@ function parse_primary_expr(parser) result(expr)
 
 				rparen  = parser%match(rparen_token)
 
-				!expr = new_name_expr(identifier, &
-				!	parser%vars%search(identifier%text, id_index, io))
-
-				! TODO: check io
 				fn = parser%fns%search(identifier%text, id_index, io)
 				if (io /= exit_success) then
 					span = new_span(identifier%pos, len(identifier%text))
@@ -3688,8 +3684,7 @@ function parse_primary_expr(parser) result(expr)
 
 				expr%identifier = identifier
 
-				!! TODO: set val type to fn return type
-				!expr%val = val
+				expr%val%type = fn%type
 
 				! TODO: does fn need to be a syntax node member?  I think we can
 				! just look it up later by identifier/id_index like we do for
