@@ -2420,6 +2420,10 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		call move_alloc(parser%vars%dicts(1)%root, vars%dicts(1)%root)
 	end if
 
+	if (allocated(parser%fns%dicts(1)%root)) then
+		call move_alloc(parser%fns%dicts(1)%root, fns%dicts(1)%root)
+	end if
+
 	! When parsing is finished, we are done with the variable dictionary
 	! parser%vars%dicts.  Allocate an array for efficient evaluation without
 	! dictionary lookups.  Indices in the array are already saved in each node's
