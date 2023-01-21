@@ -2864,6 +2864,9 @@ recursive function parse_expr_statement(parser) result(expr)
 			rbracket  = parser%match(rbracket_token)
 			!print *, 'done'
 
+			! TODO: check that # of subscripts matches array rank, both LHS and
+			! RHS parsing
+
 		end if
 
 		if (parser%current_kind() /= equals_token) then

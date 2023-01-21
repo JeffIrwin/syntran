@@ -36,17 +36,17 @@
 
 	// Sum rows, columns, and pillars
 
-	let rsums = [0; n];
-	let csums = [0; n];
-	let psums = [0; n];
+	let rsums = [0; n, n];
+	let csums = [0; n, n];
+	let psums = [0; n, n];
 
 	for i in [0: n]
 		for j in [0: n]
 			for k in [0: n]
 			{
-				psums[k] = psums[k] + a[k,j,i];
-				rsums[j] = rsums[j] + a[k,j,i];
-				csums[i] = csums[i] + a[k,j,i];
+				psums[k,j] = psums[k,j] + a[k,j,i];
+				rsums[j,i] = rsums[j,i] + a[k,j,i];
+				csums[i,k] = csums[i,k] + a[k,j,i];
 			}
 
 	rsums;
@@ -56,11 +56,12 @@
 	// Verify all sums are the same
 	let all = true;
 	for i in [0: n]
-	{
-		all = all and rsums[i] == rsums[0];
-		all = all and csums[i] == rsums[0];
-		all = all and psums[i] == rsums[0];
-	}
+		for j in [0: n]
+		{
+			all = all and rsums[i,j] == rsums[0,0];
+			all = all and csums[i,j] == rsums[0,0];
+			all = all and psums[i,j] == rsums[0,0];
+		}
 
 	all;
 }
