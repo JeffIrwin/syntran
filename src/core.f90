@@ -3549,7 +3549,7 @@ function parse_primary_expr(parser) result(expr)
 
 	!********
 
-	integer :: io, id_index
+	integer :: i, io, id_index
 	logical :: bool
 
 	type(fn_t) :: fn
@@ -3693,14 +3693,29 @@ function parse_primary_expr(parser) result(expr)
 
 				!print *, 'fn params size = ', size(fn%params)
 				if (size(fn%params) /= args%len) then
-					!span = new_span(identifier%pos, len(identifier%text))
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 					call parser%diagnostics%push( &
 						err_bad_arg_count(parser%context, &
 						span, identifier%text, size(fn%params), args%len))
 				end if
 
-				! TODO: type of args
+				do i = 1, min(args%len, size(fn%params))
+					!print *, kind_name(args%v(i)%val%type)
+					!print *, kind_name(fn%params(i)%type)
+
+					if (fn%params(i)%type /= args%v(i)%val%type) then
+
+						! TODO: get span of individual arg, not whole arg list
+						span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+						call parser%diagnostics%push( &
+							err_bad_arg_type(parser%context, &
+							span, identifier%text, i, fn%params(i)%name, &
+							kind_name(fn%params(i)%type), &
+							kind_name(args%v(i)%val%type)))
+
+					end if
+
+				end do
 
 				expr%id_index = id_index
 

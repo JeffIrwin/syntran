@@ -178,6 +178,26 @@ end function err_bad_arg_count
 
 !===============================================================================
 
+function err_bad_arg_type(context, span, fn, iarg, param, expect, actual) &
+		result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	integer, intent(in):: iarg
+
+	character(len = *), intent(in) :: fn, param, expect, actual
+
+	err = err_prefix &
+		//'Function `'//fn//'` parameter '//str(iarg)//' `'//param &
+		//'` requires value of '//expect//' but was given a value of ' &
+		//actual &
+		//underline(context, span)//" wrong argument type"//color_reset
+
+end function err_bad_arg_type
+
+!===============================================================================
+
 function err_binary_types(context, span, op, left, right) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
