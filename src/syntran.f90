@@ -56,7 +56,7 @@ function syntran_interpret(str, quiet) result(res_str)
 	type(value_t) :: res
 	type(vars_t) :: vars
 
-	!print *, 'starting syntran_interpret()'
+	print *, 'starting syntran_interpret()'
 
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
@@ -114,7 +114,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		end if
 
-		!print *, 'line = <', line, '>'
+		print *, 'line = <', line, '>'
 		!print *, 'io = ', io
 
 		!! Echo input?
@@ -162,7 +162,7 @@ function syntran_interpret(str, quiet) result(res_str)
 		! Don't try to evaluate with errors
 		if (compilation%diagnostics%len > 0) cycle
 
-		res  = syntax_eval(compilation, vars)
+		res  = syntax_eval(compilation, vars, fns)
 
 		! Consider MATLAB-style "ans = " log?
 		res_str = res%str()
@@ -228,7 +228,7 @@ integer function syntran_eval_i32(str) result(eval_i32)
 		return
 	end if
 
-	val = syntax_eval(tree, vars)
+	val = syntax_eval(tree, vars, fns)
 
 	! TODO: check kind, add optional iostat arg
 	eval_i32 = val%i32
@@ -258,7 +258,7 @@ real(kind = 4) function syntran_eval_f32(str) result(eval_f32)
 		return
 	end if
 
-	val = syntax_eval(tree, vars)
+	val = syntax_eval(tree, vars, fns)
 
 	! TODO: check kind, add optional iostat arg
 	eval_f32 = val%f32
@@ -306,7 +306,7 @@ function syntran_eval(str, quiet, src_file) result(res)
 		return
 	end if
 
-	val = syntax_eval(tree, vars, quietl)
+	val = syntax_eval(tree, vars, fns, quietl)
 	res = val%str()
 
 end function syntran_eval
