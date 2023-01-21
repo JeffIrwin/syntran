@@ -204,7 +204,6 @@ module core_m
 			elems(:), rank
 
 		type(syntax_node_t), allocatable :: subscripts(:), size(:)
-		type(syntax_node_t), allocatable :: subscript  ! TODO: delete
 
 		type(syntax_token_t) :: op, identifier
 		integer :: id_index
@@ -1191,12 +1190,6 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	if (allocated(src%subscripts)) then
 		call syntax_nodes_copy(dst%subscripts, src%subscripts)
-	end if
-
-	! TODO: delete
-	if (allocated(src%subscript)) then
-		if (.not. allocated(dst%subscript)) allocate(dst%subscript)
-		dst%subscript = src%subscript
 	end if
 
 	if (allocated(src%size)) then
@@ -2365,8 +2358,6 @@ recursive function parse_expr_statement(parser) result(expr)
 		rtype = expr%right%val%type
 
 		if (subscripts_present) then
-			!allocate(expr%subscripts)
-			!expr%subscripts = subscripts
 			call syntax_nodes_copy(expr%subscripts, &
 				subscripts%v( 1: subscripts%len ))
 		end if
@@ -3065,7 +3056,8 @@ function parse_primary_expr(parser) result(expr)
 			! TODO: rank-2+ for RHS
 
 			! TODO: Can this be consolidated with subscript parsing in
-			! parse_expr_statement?  At least add type checking
+			! parse_expr_statement?  Make fn parse_subscipts().  At least add
+			! type checking like the other instance
 
 			!print *, '%current_kind() = ', kind_name(parser%current_kind())
 			if (parser%current_kind() == lbracket_token) then
@@ -3075,7 +3067,6 @@ function parse_primary_expr(parser) result(expr)
 				subscripts = new_syntax_node_vector()
 				lbracket  = parser%match(lbracket_token)
 
-				!subscript = parser%parse_expr()
 				do while (parser%current_kind() /= rbracket_token)
 
 					subscript = parser%parse_expr()
@@ -3088,8 +3079,6 @@ function parse_primary_expr(parser) result(expr)
 
 				rbracket  = parser%match(rbracket_token)
 
-				!allocate(expr%subscript)
-				!expr%subscript = subscript
 				call syntax_nodes_copy(expr%subscripts, &
 					subscripts%v( 1: subscripts%len ))
 
@@ -3781,14 +3770,6 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 
 	case (assignment_expr)
 
-		!if (allocated(node%right%subscript)) then
-		!	print *, 'subscript LHS'
-		!else
-		!	print *, 'scalar LHS'
-		!end if
-
-		!if (node%left%val%type /= array_type) then
-		!if (.not. allocated(node%left%subscript)) then
 		if (.not. allocated(node%subscripts)) then
 
 			! Assign return value
@@ -3814,10 +3795,6 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 			res = syntax_eval(node%right, vars)
 
 			!print *, 'RHS = ', res%str()
-
-			! TODO
-			!subscript = syntax_eval(node%subscripts(1), vars)
-			!print *, 'subscript = ', subscript%str()
 
 			! Convert a multi-rank subscript to a rank-1 subscript j
 			prod = 1
@@ -3864,16 +3841,13 @@ recursive function syntax_eval(node, vars, quiet) result(res)
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
 
-		!if (allocated(node%subscript)) then
 		if (allocated(node%subscripts)) then
 
 			!print *, 'subscript RHS name expr'
 
 			res%type = vars%vals(node%id_index)%array%type
 
-			!subscript = syntax_eval(node%subscript, vars)
-
-			! Convert a multi-rank subscript to a rank-1 subscript j
+			! Convert a multi-rank subscript to a rank-1 subscript j. TODO: fn
 			prod = 1
 			j    = 0
 			do k = 1, vars%vals(node%id_index)%array%rank
