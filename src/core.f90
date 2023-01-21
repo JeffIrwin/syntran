@@ -3691,7 +3691,16 @@ function parse_primary_expr(parser) result(expr)
 				! variable value
 				!expr%fn = fn
 
-				! TODO: check number and type of args
+				!print *, 'fn params size = ', size(fn%params)
+				if (size(fn%params) /= args%len) then
+					!span = new_span(identifier%pos, len(identifier%text))
+					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+					call parser%diagnostics%push( &
+						err_bad_arg_count(parser%context, &
+						span, identifier%text, size(fn%params), args%len))
+				end if
+
+				! TODO: type of args
 
 				expr%id_index = id_index
 

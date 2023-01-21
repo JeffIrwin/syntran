@@ -155,6 +155,29 @@ end function err_undeclare_fn
 
 !===============================================================================
 
+function err_bad_arg_count(context, span, fn, expect, actual) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err, argument_s
+	integer, intent(in):: expect, actual
+
+	character(len = *), intent(in) :: fn
+
+	if (expect == 1) then
+		argument_s = 'argument'
+	else
+		argument_s = 'arguments'
+	end if
+
+	err = err_prefix &
+		//'Function `'//fn//'` requires '//str(expect) &
+		//' '//argument_s//' but was given '//str(actual) &
+		//underline(context, span)//" wrong argument count"//color_reset
+
+end function err_bad_arg_count
+
+!===============================================================================
+
 function err_binary_types(context, span, op, left, right) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
