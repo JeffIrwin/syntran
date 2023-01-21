@@ -386,20 +386,17 @@ subroutine unit_test_intr_fns(npass, nfail)
 
 	logical, allocatable :: tests(:)
 
+	real, parameter :: tol = 1.e-9
+
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! We're getting into dangerous Fortran territory here.  I think there's
-	! a limit on how many chars and lines can be in a statement, and this may be
-	! pushing it
-
-	! TODO: use eval_f32 for exp tests
 	tests = &
 		[   &
-			trim(adjustl(eval('exp(0.0);')))  == '1.000000E+00',  &
-			trim(adjustl(eval('exp(1.0);')))  == '2.718282E+00',  &
-			eval('min(3, 2);')  == '2',  &
-			eval('min(2, 2);')  == '2',  &
-			eval('min(1, 2);')  == '1'   &
+			abs(eval_f32('exp(0.0);') - 1.0) < tol,  &
+			abs(eval_f32('exp(1.0);') - exp(1.0)) < tol,  &
+			eval_i32('min(3, 2);')  == 2,  &
+			eval_i32('min(2, 2);')  == 2,  &
+			eval_i32('min(1, 2);')  == 1   &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
