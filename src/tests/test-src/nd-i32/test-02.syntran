@@ -1,0 +1,67 @@
+
+{
+	// 3x3x3 magic cube (from wikipedia)
+	let v =
+		[
+			 8, 24, 10,
+			12,  7, 23,
+			22, 11,  9,
+
+			15,  1, 26,
+			25, 14,  3,
+			 2, 27, 13,
+
+			19, 17,  6,
+			 5, 21, 16,
+			18,  4, 20
+		];
+
+	//v;
+
+	// Reshape vector to 3x3x3 rank-3 array
+
+	let n = 3;
+
+	let a = [0; n, n, n];
+	let iv = 0;
+	for i in [0: n]
+		for j in [0: n]
+			for k in [0: n]
+			{
+				a[k,j,i] = v[iv];
+				iv = iv + 1;
+			}
+
+	a;
+
+	// Sum rows, columns, and pillars
+
+	let rsums = [0; n];
+	let csums = [0; n];
+	let psums = [0; n];
+
+	for i in [0: n]
+		for j in [0: n]
+			for k in [0: n]
+			{
+				psums[k] = psums[k] + a[k,j,i];
+				rsums[j] = rsums[j] + a[k,j,i];
+				csums[i] = csums[i] + a[k,j,i];
+			}
+
+	rsums;
+	csums;
+	psums;
+
+	// Verify all sums are the same
+	let all = true;
+	for i in [0: n]
+	{
+		all = all and rsums[i] == rsums[0];
+		all = all and csums[i] == rsums[0];
+		all = all and psums[i] == rsums[0];
+	}
+
+	all;
+}
+
