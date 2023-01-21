@@ -3677,10 +3677,13 @@ function parse_primary_expr(parser) result(expr)
 
 				! TODO: check io
 				fn = parser%fns%search(identifier%text, id_index, io)
-				!print *, 'io = ', io
-				!print *, 'id_index = ', id_index
+				if (io /= exit_success) then
+					span = new_span(identifier%pos, len(identifier%text))
+					call parser%diagnostics%push( &
+						err_undeclare_fn(parser%context, &
+						span, identifier%text))
+				end if
 
-				!expr%kind = name_expr
 				expr%kind = fn_call_expr
 
 				expr%identifier = identifier

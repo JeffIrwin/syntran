@@ -141,6 +141,20 @@ end function err_undeclare_var
 
 !===============================================================================
 
+function err_undeclare_fn(context, span, fn) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn
+	err = err_prefix &
+		//'Function `'//fn//'` has not been defined' &
+		//underline(context, span)//" undefined function"//color_reset
+
+end function err_undeclare_fn
+
+!===============================================================================
+
 function err_binary_types(context, span, op, left, right) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
