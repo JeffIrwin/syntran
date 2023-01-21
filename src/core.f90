@@ -23,13 +23,12 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  11
+		syntran_patch =  12
 
 	! TODO:
 	!
 	! Add:
 	!  - arrays
-	!    * MVP i32, f32 arrays done
 	!    * bool arrays
 	!    * fix array sub-type checking
 	!    * add slice subscripts:
@@ -38,27 +37,18 @@ module core_m
 	!      > a[1:2:6] -> a[1], a[3], a[5]
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
-	!    * provide a better way to initialize an array e.g. to all 0's
-	!      > ideas below won't extend well to rank-2+ arrays
-	!      > for i32 you can multiply vec by scalar 0 and add, e.g. all 0's:
-	!            let (i32) a = 0 * [0: n];
-	!      > or all 1's:
-	!            let (i32) a = 1 + 0 * [0: n];
-	!      > for f32 this should be covered by steps, e.g. all 0's:
-	!            let a = [0.0: 0.0: 5];
-	!      > or all 1's:
-	!            let a = [1.0: 0.0: 5];
-	!      > note '5' is an int in this example. infer options based on types,
-	!        e.g. [fmin: fstep: fmax] vs [fmin: fstep: inum] or [fmin: fmax:
-	!        inum]?  last 2 cases are ambiguous so need to pick one.  the case
-	!        [fmin: fstep: inum] is easy to roll with the equivalent fmin + step
-	!        * [0: inum], so maybe only provide sugar for the 3rd case
-	!    * rank-2+ arrays (matrices et al.)
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
+	!    * intrinsic
+	!      > abs, min, max
+	!      > exp, log
+	!      > trig: sin, cos, tan, asin, ...
+	!      > read/write
+	!      > norm
+	!    * user defined
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - strings.  are characters useful or can we just use strings of length 1?
 	!  - structs
