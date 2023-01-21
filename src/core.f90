@@ -31,6 +31,10 @@ module core_m
 	!  - arrays
 	!    * bool arrays
 	!    * fix array sub-type checking
+	!    * multi-rank array initialization:
+	!        let a = [ 1, 2,   3, 4  ; 2, 2];
+	!      or
+	!        let a = [[1, 2], [3, 4]];
 	!    * add slice subscripts:
 	!      > a[:]     -> a[0], a[1], a[2], ...
 	!      > a[1:4]   -> a[1], a[2], a[3]
@@ -62,6 +66,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			fn_call_expr         = 58, &
 			unknown_type         = 57, &
 			comma_token          = 56, &
 			array_type           = 55, &
@@ -281,7 +286,7 @@ module core_m
 
 	!********
 
-	! Fixed-size limit to the scope level for now, while I work on scoping
+	! Fixed-size limit to the scope level for now
 	integer, parameter :: scope_max = 64
 
 	type vars_t
@@ -309,6 +314,85 @@ module core_m
 
 	!********
 
+	type param_t
+		! Function parameter (argument)
+		integer :: type
+		character(len = :), allocatable :: name
+
+		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
+		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
+		! Maybe add an array of types(:) for each allowable type of a param?
+
+	end type param_t
+
+	!********
+
+	type fn_t
+		! Function
+
+		! Return type
+		integer :: type
+
+		! Arguments
+		type(param_t), allocatable :: params(:)
+
+		!contains
+		!	procedure :: str => fn_str
+
+	end type fn_t
+
+	!********
+
+	type fn_ternary_tree_node_t
+
+		character :: split_char = ''
+		type(fn_ternary_tree_node_t), allocatable :: left, mid, right
+
+		type(fn_t), allocatable :: val
+		integer :: id_index
+
+		!! TODO
+		!contains
+		!	procedure, pass(dst) :: copy => fn_ternary_tree_copy
+		!	generic, public :: assignment(=) => copy
+
+	end type fn_ternary_tree_node_t
+
+	!********
+
+	type fn_dict_t
+		! This is the fn dictionary of a single scope
+		type(fn_ternary_tree_node_t), allocatable :: root
+	end type fn_dict_t
+
+	!********
+
+	type fns_t
+
+		! A list of function dictionaries for each scope level used during
+		! parsing
+		type(fn_dict_t) :: dicts(scope_max)
+
+		! Flat array of fns from all scopes, used for efficient interpreted
+		! evaluation
+		type(fn_t), allocatable :: fns(:)
+
+		! This is the scope level.  Each nested block statement that is entered
+		! pushes 1 to scope.  Popping out of a block decrements the scope.
+		! Each scope level has its own fn dict in dicts(:)
+		integer :: scope = 1
+
+		! TODO
+		contains
+			procedure :: &
+				insert => fn_insert
+		!		search => fn_search, &
+		!		push_scope, pop_scope
+
+	end type fns_t
+
+	!********
+
 	type parser_t
 
 		! The parser takes a string of tokens (technically an array) and
@@ -324,6 +408,8 @@ module core_m
 		type(string_vector_t) :: diagnostics
 
 		type(text_context_t) :: context
+
+		! TODO: parser should also have a copy of fns_t (and num_fns?)
 
 		type(vars_t) :: vars
 		integer :: num_vars = 0
@@ -360,6 +446,70 @@ module core_m
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+function declare_intrinsic_fns() result(fns)
+
+	type(fns_t) :: fns
+
+	!********
+
+	integer :: id_index
+
+	type(fn_t) :: exp_fn, min_fn
+
+	! TODO: pass this to num_fns in parser member
+	id_index = 0
+
+	! TODO: polymorphic in f32, f64, etc.
+	exp_fn%type = f32_type
+	allocate(exp_fn%params(1))
+	exp_fn%params(1)%type = f32_type
+	exp_fn%params(1)%name = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	!print *, 'identifier%text = ', identifier%text
+	!call parser%vars%insert(identifier%text, array%lbound%val, &
+	!	statement%id_index)
+
+	! TODO: push_fn() fn, or just increment id_index inside insert()?
+	id_index = id_index + 1
+	call fns%insert("exp", exp_fn, id_index)
+
+	! TODO: polymorphic in any numeric type i32, f32, i64, f64, etc.  Also
+	! variadic min(a, b), min(a, b, c), etc. and an array version min(array) as
+	! opposed to Fortran's minval()
+
+	min_fn%type = i32_type
+	allocate(min_fn%params(2))
+
+	min_fn%params(1)%type = i32_type
+	min_fn%params(1)%name = "a1"
+
+	min_fn%params(2)%type = i32_type
+	min_fn%params(2)%name = "a2"
+
+	id_index = id_index + 1
+	call fns%insert("min", min_fn, id_index)
+
+	!print *, 'id_index = ', id_index
+
+	!! "exp"
+	!print *, 'key = ', &
+	!	fns%dicts(1)%root%split_char, &
+	!	fns%dicts(1)%root%mid%split_char, &
+	!	fns%dicts(1)%root%mid%mid%split_char
+
+	!! "min"
+	!print *, 'key = ', &
+	!	fns%dicts(1)%root%right%split_char, &
+	!	fns%dicts(1)%root%right%mid%split_char, &
+	!	fns%dicts(1)%root%right%mid%mid%split_char
+
+end function declare_intrinsic_fns
 
 !===============================================================================
 
@@ -452,6 +602,35 @@ end function ternary_search
 
 !===============================================================================
 
+subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
+
+	class(fns_t) :: dict
+	character(len = *), intent(in) :: key
+	type(fn_t), intent(in) :: val
+	integer, intent(in) :: id_index
+
+	integer, intent(out), optional :: iostat
+	logical, intent(in), optional :: overwrite
+
+	!********
+
+	integer :: i, io
+	logical :: overwritel
+
+	!print *, 'inserting "', key, '"'
+
+	overwritel = .true.
+	if (present(overwrite)) overwritel = overwrite
+
+	i = dict%scope
+	call fn_ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwritel)
+
+	if (present(iostat)) iostat = io
+
+end subroutine fn_insert
+
+!===============================================================================
+
 subroutine var_insert(dict, key, val, id_index, iostat, overwrite)
 
 	! There are a couple reasons for having this wrapper:
@@ -534,6 +713,74 @@ subroutine pop_scope(dict)
 	end if
 
 end subroutine pop_scope
+
+!===============================================================================
+
+recursive subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwrite)
+
+	type(fn_ternary_tree_node_t), intent(inout), allocatable :: node
+	character(len = *), intent(in) :: key
+	type(fn_t), intent(in) :: val
+	integer, intent(in) :: id_index
+
+	integer, intent(out) :: iostat
+	logical, intent(in) :: overwrite
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	iostat = exit_success
+
+	!print *, 'inserting key "', key, '"'
+
+	! key == k//ey.  Get it? :)
+	k   = key(1:1)
+	 ey = key(2:)
+
+	if (.not. allocated(node)) then
+		!print *, 'allocate'
+		allocate(node)
+		node%split_char = k
+	else if (k < node%split_char) then
+		!print *, 'left'
+		call fn_ternary_insert(node%left , key, val, id_index, iostat, overwrite)
+		return
+	else if (k > node%split_char) then
+		!print *, 'right'
+		call fn_ternary_insert(node%right, key, val, id_index, iostat, overwrite)
+		return
+	end if
+
+	!print *, 'mid'
+
+	if (len(ey) /= 0) then
+		call fn_ternary_insert(node%mid  , ey, val, id_index, iostat, overwrite)
+		return
+	end if
+
+	! node%val doesn't really need to be declared as allocatable (it's
+	! a scalar anyway), but it's just a convenient way to check if
+	! a duplicate key has already been inserted or not.  We could add
+	! a separate logical member to node for this instead if needed
+
+	! This is not necessarily a failure unless we don't want to overwrite.  In
+	! the evaluator, we will insert values for vars which have already been
+	! declared
+	if (allocated(node%val) .and. .not. overwrite) then
+		!print *, 'key already inserted'
+		iostat = exit_failure
+		return
+	end if
+
+	node%val      = val
+	node%id_index = id_index
+
+	!print *, 'done inserting'
+	!print *, ''
+
+end subroutine fn_ternary_insert
 
 !===============================================================================
 
@@ -917,7 +1164,8 @@ function kind_name(kind)
 			"array_expr          ", & ! 54
 			"array_type          ", & ! 55
 			"comma_token         ", & ! 56
-			"unknown_type        "  & ! 57
+			"unknown_type        ", & ! 57
+			"fn_call_expr        "  & ! 58
 		]
 			! FIXME: update kind_tokens array too
 
@@ -995,7 +1243,8 @@ function kind_token(kind)
 			"Array expression     ", & ! 54
 			"Array type           ", & ! 55
 			",                    ", & ! 56
-			"Unknown type         "  & ! 57
+			"Unknown type         ", & ! 57
+			"fn call expression   "  & ! 58
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then

@@ -277,6 +277,7 @@ function syntran_eval(str, quiet, src_file) result(res)
 
 	logical :: quietl
 
+	type(fns_t) :: fns
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 	type(vars_t) :: vars
@@ -292,6 +293,9 @@ function syntran_eval(str, quiet, src_file) result(res)
 	!eval = syntax_eval(syntax_parse(str, vars), vars)
 
 	! TODO: make a helper fn here that all the eval_* fns use
+
+	! TODO: get intrinsics in other evaluators.  Pass to syntax_parse()
+	fns = declare_intrinsic_fns()
 
 	tree = syntax_parse(str, vars, src_filel)
 	if (.not. quietl) call tree%log_diagnostics()
