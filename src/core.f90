@@ -2607,6 +2607,13 @@ function parse_fn_declaration(parser) result(decl)
 
 	end do
 
+	! Rust uses "->" as a delimiter between the fn and its return type.  Here
+	! I choose ":" instead as it seems more consistent, at least for normal
+	! non-assignable fns.  There is some discussion on the Rust reasoning here:
+	!
+	!     https://stackoverflow.com/questions/35018919/whats-the-origin-of-in-rust-function-definition-return-types
+	!
+
 	fn%type = void_type
 	if (parser%current_kind() == colon_token) then
 
