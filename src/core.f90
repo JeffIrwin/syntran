@@ -4740,7 +4740,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			print *, 'fn idx  = ', node%id_index
 			print *, 'node type = ', node%val%type
 
-			! TODO: params/args
+			! TODO: params/args.  Shared param scope is ok at first, but
+			! eventually target recursive fns with scoped stack frames
 
 			res = syntax_eval(node%body, vars, fns, quietl)
 
