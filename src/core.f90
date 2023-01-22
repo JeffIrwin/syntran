@@ -207,6 +207,8 @@ module core_m
 		! Arguments
 		type(param_t), allocatable :: params(:)
 
+		type(syntax_node_t), pointer :: body => null()
+
 		!contains
 		!	procedure, pass(dst) :: copy => fn_t_copy
 		!	generic, public :: assignment(=) => copy
@@ -482,10 +484,6 @@ function declare_intrinsic_fns() result(fns)
 
 	! Insert the fn into the dict. These are global intrinsic fns, so there's no
 	! need to check iostat
-
-	!print *, 'identifier%text = ', identifier%text
-	!call parser%vars%insert(identifier%text, array%lbound%val, &
-	!	statement%id_index)
 
 	! TODO: push_fn() fn, or just increment id_index inside insert()?
 	id_index = id_index + 1
@@ -2577,6 +2575,9 @@ function parse_fn_declaration(parser) result(decl)
 	allocate(fn%params( params%len ))
 	!call syntax_nodes_copy(fn%params, params%v( 1: params%len ))
 
+	allocate(fn%body)
+	fn%body = body
+
 	parser%num_fns = parser%num_fns + 1
 	decl%id_index  = parser%num_fns
 
@@ -3866,6 +3867,22 @@ function parse_primary_expr(parser) result(expr)
 
 				expr%val%type = fn%type
 
+				! Intrinsic fns don't have a body
+				!if (allocated(fn%body)) then
+				!if (fn%body /= null()) then
+				if (associated(fn%body)) then
+					print *, 'assigning body'
+
+					! If I understand my own code, this is inlining:  every fn
+					! call gets its own copy of the fn body.  This expansion
+					! happens at parse time, not eval time, so fn calls in
+					! a loop will all share one body
+
+					allocate(expr%body)
+					expr%body = fn%body
+
+				end if
+
 				! TODO: does fn need to be a syntax node member?  I think we can
 				! just look it up later by identifier/id_index like we do for
 				! variable value
@@ -4577,7 +4594,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		do i = 1, size(node%members)
 
 			! Only eval statements, not fns declarations.  TODO: cycle structs
-			! too
+			! too.
+			!
+			! TODO: is this where we should copy fn dict to array?
 			if (node%members(i)%kind == fn_declaration) cycle
 
 			res = syntax_eval(node%members(i), vars, fns, quietl)
@@ -4721,8 +4740,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			print *, 'fn idx  = ', node%id_index
 			print *, 'node type = ', node%val%type
 
-			write(*,*) 'Error: unexpected fn'
-			call internal_error()
+			! TODO: params/args
+
+			res = syntax_eval(node%body, vars, fns, quietl)
+
+			!write(*,*) 'Error: unexpected fn'
+			!call internal_error()
 
 		end select
 
