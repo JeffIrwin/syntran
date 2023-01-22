@@ -66,6 +66,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			void_type            = 62, &
 			fn_keyword           = 61, &
 			fn_declaration       = 60, &
 			translation_unit     = 59, &
@@ -205,9 +206,6 @@ module core_m
 
 		! Arguments
 		type(param_t), allocatable :: params(:)
-
-		! TODO: I think explicitly defined fn_copy is required because of
-		! allocatable params, used by fn_ternary_tree_copy()
 
 		!contains
 		!	procedure, pass(dst) :: copy => fn_t_copy
@@ -1409,7 +1407,8 @@ function kind_name(kind)
 			"fn_call_expr        ", & ! 58
 			"translation_unit    ", & ! 59
 			"fn_declaration      ", & ! 60
-			"fn_keyword          "  & ! 61
+			"fn_keyword          ", & ! 61
+			"void_type           "  & ! 62
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1491,7 +1490,8 @@ function kind_token(kind)
 			"fn call expression   ", & ! 58
 			"Translation unit     ", & ! 59
 			"fn declaration       ", & ! 60
-			"fn keyword           "  & ! 61
+			"fn keyword           ", & ! 61
+			"void type            "  & ! 62
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2506,17 +2506,19 @@ end function parse_unit
 
 !===============================================================================
 
-function parse_fn_declaration(parser) result(fn)
+function parse_fn_declaration(parser) result(decl)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: fn
+	type(syntax_node_t) :: decl
 
 	!********
 
+	type(fn_t) :: fn
+
 	type(syntax_node_t) :: body
 	type(syntax_node_vector_t) :: params
-	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon
+	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, type
 
 	integer :: i, pos0
 
@@ -2537,26 +2539,58 @@ function parse_fn_declaration(parser) result(fn)
 
 	! TODO: params
 
-	! TODO: type
-
 	rparen = parser%match(rparen_token)
+
+	fn%type = void_type
+	if (parser%current_kind() == colon_token) then
+
+		colon = parser%match(colon_token)
+		type  = parser%match(identifier_token)
+
+		fn%type = lookup_type(type%text)
+
+		! TODO: catch unknown_type
+
+	end if
+	print *, 'fn%type = ', fn%type
 
 	body = parser%parse_statement()
 
 	! TODO: insert fn into parser%fns
 
-	!allocate(fn%array)
-	allocate(fn%body)
+	allocate(decl%body)
 
-	fn%kind = fn_declaration
+	decl%kind = fn_declaration
 
-	fn%identifier = identifier
-	!fn%array      = array
-	fn%body       = body
+	decl%identifier = identifier
+	decl%body       = body
 
 	call parser%vars%pop_scope()
 
 end function parse_fn_declaration
+
+!===============================================================================
+
+function lookup_type(name) result(type)
+
+	character(len = *), intent(in) :: name
+
+	integer :: type
+
+	! Immo also has an "any" type.  Should I allow that?
+
+	select case (name)
+		case ("f32")
+			type = f32_type
+		case ("i32")
+			type = i32_type
+		case ("bool")
+			type = bool_type
+		case default
+			type = unknown_type
+	end select
+
+end function lookup_type
 
 !===============================================================================
 
