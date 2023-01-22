@@ -432,7 +432,7 @@ module core_m
 				parse_expr, parse_primary_expr, parse_expr_statement, &
 				parse_statement, parse_block_statement, parse_if_statement, &
 				current_pos, peek_pos, parse_for_statement, &
-				parse_while_statement, parse_array_expr, parse_members
+				parse_while_statement, parse_array_expr, parse_unit
 
 	end type parser_t
 
@@ -2371,7 +2371,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	!*******************************
 	! Parse the tokens
-	tree = parser%parse_members()
+	tree = parser%parse_unit()
 	!*******************************
 
 	tree%expecting       = parser%expecting
@@ -2443,15 +2443,57 @@ end function syntax_parse
 
 !===============================================================================
 
-function parse_members(parser) result(members)
+function parse_unit(parser) result(unit)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: members
+	type(syntax_node_t) :: unit
 
-	members = parser%parse_statement()
+	!********
 
-end function parse_members
+	type(syntax_node_vector_t) :: members
+	type(syntax_token_t) :: dummy
+
+	integer :: i, pos0
+
+	!unit = parser%parse_statement()
+
+	members = new_syntax_node_vector()
+	i = 0
+
+	!left  = parser%match(lbrace_token)
+
+	call parser%vars%push_scope()
+
+	do while ( &
+		parser%current_kind() /= eof_token .and. &
+		parser%current_kind() /= rbrace_token)
+
+		pos0 = parser%pos
+		i = i + 1
+		!print *, '    statement ', i
+
+		! TODO: match fns vs statements
+		call members%push(parser%parse_statement())
+
+		! Break infinite loops
+		if (parser%pos == pos0) dummy = parser%next()
+
+	end do
+
+	call parser%vars%pop_scope()
+
+	!right = parser%match(rbrace_token)
+
+	unit%kind = translation_unit
+
+	! Convert to standard array
+	call syntax_nodes_copy(unit%members, members%v( 1: members%len ))
+
+	! Eof is matched in the caller syntax_parse() to deal with broken stdin
+	! lines with interactive interpretation
+
+end function parse_unit
 
 !===============================================================================
 
@@ -4099,9 +4141,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			! step-based impl array
 
-			lbound = syntax_eval(node%lbound, vars, fns)
-			step   = syntax_eval(node%step  , vars, fns)
-			ubound = syntax_eval(node%ubound, vars, fns)
+			lbound = syntax_eval(node%lbound, vars, fns, quietl)
+			step   = syntax_eval(node%step  , vars, fns, quietl)
+			ubound = syntax_eval(node%ubound, vars, fns, quietl)
 
 			array%type = node%val%array%type
 
@@ -4166,9 +4208,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! len-based impl arrays
 
 			!print *, 'len array'
-			lbound = syntax_eval(node%lbound, vars, fns)
-			ubound = syntax_eval(node%ubound, vars, fns)
-			len    = syntax_eval(node%len   , vars, fns)
+			lbound = syntax_eval(node%lbound, vars, fns, quietl)
+			ubound = syntax_eval(node%ubound, vars, fns, quietl)
+			len    = syntax_eval(node%len   , vars, fns, quietl)
 
 			! TODO: This could be allocated in one shot without pushing to
 			! growable array.
@@ -4211,7 +4253,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				allocate(array%size( array%rank ))
 
 				do i = 1, array%rank
-					len = syntax_eval(node%size(i), vars, fns)
+					len = syntax_eval(node%size(i), vars, fns, quietl)
 					array%size(i) = len%i32
 					!print *, 'size['//str(i)//'] = ', array%size(i)
 				end do
@@ -4222,7 +4264,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! at initialization, but they are of course mutable)
 
 			!print *, 'len array'
-			lbound = syntax_eval(node%lbound, vars, fns)
+			lbound = syntax_eval(node%lbound, vars, fns, quietl)
 
 			! Allocate in one shot without growing.  TODO: do this for other
 			! implicit cases
@@ -4268,8 +4310,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! statement requires it to be explicit, so we might as well expand
 			! at initialization
 
-			lbound = syntax_eval(node%lbound, vars, fns)
-			ubound = syntax_eval(node%ubound, vars, fns)
+			lbound = syntax_eval(node%lbound, vars, fns, quietl)
+			ubound = syntax_eval(node%ubound, vars, fns, quietl)
 
 			array = new_array(node%val%array%type)
 
@@ -4319,7 +4361,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			array = new_array(node%val%array%type)
 
 			do i = 1, size(node%elems)
-				elem = syntax_eval(node%elems(i), vars, fns)
+				elem = syntax_eval(node%elems(i), vars, fns, quietl)
 				!print *, 'elem['//str(i)//'] = ', elem%str()
 				call array%push(elem)
 			end do
@@ -4347,8 +4389,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! for shared use here for for_statement eval and above for array_expr
 		! eval.  If possible, don't expand implicit arrays for for loops
 
-		lbound = syntax_eval(node%array%lbound, vars, fns)
-		ubound = syntax_eval(node%array%ubound, vars, fns)
+		lbound = syntax_eval(node%array%lbound, vars, fns, quietl)
+		ubound = syntax_eval(node%array%ubound, vars, fns, quietl)
 
 		! push scope to make the loop iterator local
 		call vars%push_scope()
@@ -4373,31 +4415,61 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! not know the entire list of variable identifiers ahead of time
 			vars%vals(node%id_index) = itr
 
-			res = syntax_eval(node%body, vars, fns)
+			res = syntax_eval(node%body, vars, fns, quietl)
 		end do
 
 		call vars%pop_scope()
 
 	case (while_statement)
 
-		condition = syntax_eval(node%condition, vars, fns)
+		condition = syntax_eval(node%condition, vars, fns, quietl)
 		do while (condition%bool)
-			res = syntax_eval(node%body, vars, fns)
-			condition = syntax_eval(node%condition, vars, fns)
+			res = syntax_eval(node%body, vars, fns, quietl)
+			condition = syntax_eval(node%condition, vars, fns, quietl)
 		end do
 
 	case (if_statement)
 
-		condition = syntax_eval(node%condition, vars, fns)
+		condition = syntax_eval(node%condition, vars, fns, quietl)
 		!print *, 'condition = ', condition%str()
 
 		if (condition%bool) then
-			res = syntax_eval(node%if_clause, vars, fns)
+			res = syntax_eval(node%if_clause, vars, fns, quietl)
 
 		else if (allocated(node%else_clause)) then
-			res = syntax_eval(node%else_clause, vars, fns)
+			res = syntax_eval(node%else_clause, vars, fns, quietl)
 
 		end if
+
+	case (translation_unit)
+
+		! TODO: do we want to globally push/pop scope for whole
+		! translation_unit?  Will this have impacts on interpretting multiple
+		! files, or allowing the user to override intrinsic fns?
+		call vars%push_scope()
+
+		! The final statement of a unit returns the actual result.  Non-final
+		! members only change the (vars) state or define fns
+		do i = 1, size(node%members)
+
+			! TODO: only eval statements, not fns
+
+			res = syntax_eval(node%members(i), vars, fns, quietl)
+
+			!print *, 'kind = ', node%members(i)%kind
+			!print *, i, ' res = ', res%str()
+			!print *, ''
+
+			! HolyC feature: implicitly print name expression members.  I may
+			! remove this after I implement an intrinsic print() fn.  May also
+			! need to suppress this for void fn calls later
+			if (node%members(i)%kind == name_expr .and. .not. quietl) then
+				write(*,*) res%str()
+			end if
+
+		end do
+
+		call vars%pop_scope()
 
 	case (block_statement)
 
@@ -4406,7 +4478,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! The final statement of a block returns the actual result.  Non-final
 		! members only change the (vars) state.
 		do i = 1, size(node%members)
-			res = syntax_eval(node%members(i), vars, fns)
+			res = syntax_eval(node%members(i), vars, fns, quietl)
 
 			!print *, 'kind = ', node%members(i)%kind
 			!print *, i, ' res = ', res%str()
@@ -4428,7 +4500,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		if (.not. allocated(node%subscripts)) then
 
 			! Assign return value
-			res = syntax_eval(node%right, vars, fns)
+			res = syntax_eval(node%right, vars, fns, quietl)
 
 			! TODO: test int/float casting.  It should be an error during
 			! parsing
@@ -4447,7 +4519,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'LHS array subscript assignment'
 
 			! Assign return value from RHS
-			res = syntax_eval(node%right, vars, fns)
+			res = syntax_eval(node%right, vars, fns, quietl)
 
 			!print *, 'RHS = ', res%str()
 
@@ -4457,7 +4529,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			do k = 1, vars%vals(node%id_index)%array%rank
 				!print *, 'k = ', k
 
-				subscript = syntax_eval(node%subscripts(k), vars, fns)
+				subscript = syntax_eval(node%subscripts(k), vars, fns, quietl)
 
 				j = j + prod * subscript%i32
 				prod  = prod * vars%vals(node%id_index)%array%size(k)
@@ -4488,7 +4560,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (let_expr)
 
 		! Assign return value
-		res = syntax_eval(node%right, vars, fns)
+		res = syntax_eval(node%right, vars, fns, quietl)
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
 		vars%vals(node%id_index) = res
@@ -4507,13 +4579,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		select case (node%identifier%text)
 		case ("exp")
 
-			arg1 = syntax_eval(node%args(1), vars, fns)
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			res%f32 = exp(arg1%f32)
 
 		case ("min")
 
-			arg1 = syntax_eval(node%args(1), vars, fns)
-			arg2 = syntax_eval(node%args(2), vars, fns)
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+			arg2 = syntax_eval(node%args(2), vars, fns, quietl)
 			res%i32 = min(arg1%i32, arg2%i32)
 
 		case default
@@ -4537,7 +4609,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			do k = 1, vars%vals(node%id_index)%array%rank
 				!print *, 'k = ', k
 
-				subscript = syntax_eval(node%subscripts(k), vars, fns)
+				subscript = syntax_eval(node%subscripts(k), vars, fns, quietl)
 
 				j = j + prod * subscript%i32
 				prod  = prod * vars%vals(node%id_index)%array%size(k)
@@ -4575,7 +4647,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	case (unary_expr)
 
-		right = syntax_eval(node%right, vars, fns)
+		right = syntax_eval(node%right, vars, fns, quietl)
 		!print *, 'right = ', right
 
 		res%type = right%type
@@ -4604,8 +4676,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	case (binary_expr)
 
-		left  = syntax_eval(node%left , vars, fns)
-		right = syntax_eval(node%right, vars, fns)
+		left  = syntax_eval(node%left , vars, fns, quietl)
+		right = syntax_eval(node%right, vars, fns, quietl)
 
 		!print *, 'left  = ', left
 		!print *, 'right = ', right
