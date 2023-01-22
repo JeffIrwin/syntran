@@ -431,7 +431,7 @@ module core_m
 				parse_expr, parse_primary_expr, parse_expr_statement, &
 				parse_statement, parse_block_statement, parse_if_statement, &
 				current_pos, peek_pos, parse_for_statement, &
-				parse_while_statement, parse_array_expr
+				parse_while_statement, parse_array_expr, parse_members
 
 	end type parser_t
 
@@ -2368,7 +2368,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	!*******************************
 	! Parse the tokens
-	tree = parser%parse_statement()
+	tree = parser%parse_members()
 	!*******************************
 
 	tree%expecting       = parser%expecting
@@ -2437,6 +2437,18 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	if (debug > 0) print *, 'done syntax_parse'
 
 end function syntax_parse
+
+!===============================================================================
+
+function parse_members(parser) result(members)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: members
+
+	members = parser%parse_statement()
+
+end function parse_members
 
 !===============================================================================
 
