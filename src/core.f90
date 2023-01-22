@@ -66,6 +66,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			fn_declaration       = 60, &
 			translation_unit     = 59, &
 			fn_call_expr         = 58, &
 			unknown_type         = 57, &
@@ -1404,7 +1405,8 @@ function kind_name(kind)
 			"comma_token         ", & ! 56
 			"unknown_type        ", & ! 57
 			"fn_call_expr        ", & ! 58
-			"translation_unit    "  & ! 59
+			"translation_unit    ", & ! 59
+			"fn_declaration      "  & ! 60
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1484,7 +1486,8 @@ function kind_token(kind)
 			",                    ", & ! 56
 			"Unknown type         ", & ! 57
 			"fn call expression   ", & ! 58
-			"Translation unit     "  & ! 59
+			"Translation unit     ", & ! 59
+			"fn declaration       "  & ! 60
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2455,8 +2458,6 @@ function parse_unit(parser) result(unit)
 	type(syntax_token_t) :: dummy
 
 	integer :: i, pos0
-
-	!unit = parser%parse_statement()
 
 	members = new_syntax_node_vector()
 	i = 0
@@ -4452,7 +4453,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! members only change the (vars) state or define fns
 		do i = 1, size(node%members)
 
-			! TODO: only eval statements, not fns
+			! Only eval statements, not fns declarations
+			if (node%members(i)%kind == fn_declaration) cycle
 
 			res = syntax_eval(node%members(i), vars, fns, quietl)
 
