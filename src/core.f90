@@ -1011,77 +1011,77 @@ end subroutine ternary_tree_copy
 
 !===============================================================================
 
-subroutine param_t_copy(dst, src)
-
-	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-	! source, they will be gone!
-	!
-	! This should be avoided for efficient compilation, but the interactive
-	! interpreter uses it to backup and restore the variable dict for
-	! partially-evaluated continuation lines
-
-	class(param_t), intent(inout) :: dst
-	class(param_t), intent(in)    :: src
-
-	!********
-
-	integer :: i
-
-	!print *, 'starting param_t_copy()'
-
-	!if (.not. allocated(dst)) allocate(dst)
-
-	dst%type = src%type
-	dst%name = src%name
-
-	!if (allocated(src%params)) then
-	!	if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
-	!	!dst%params = src%params
-	!	do i = 1, size(src%params)
-	!		dst%params(i) = src%params(i)
-	!	end do
-	!end if
-
-end subroutine param_t_copy
-
-! TODO: delete these 2 copy fns
-
-!recursive subroutine fn_t_copy(dst, src)
-subroutine fn_t_copy(dst, src)
-
-	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-	! source, they will be gone!
-	!
-	! This should be avoided for efficient compilation, but the interactive
-	! interpreter uses it to backup and restore the variable dict for
-	! partially-evaluated continuation lines
-
-	class(fn_t), intent(inout) :: dst
-	class(fn_t), intent(in)    :: src
-
-	!********
-
-	integer :: i
-
-	!print *, 'starting fn_t_copy()'
-
-	!if (.not. allocated(dst)) allocate(dst)
-
-	!print *, 'type'
-	dst%type = src%type
-
-	!print *, 'check'
-	if (allocated(src%params)) then
-		!print *, 'alloc'
-		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
-		!dst%params = src%params
-		!print *, 'loop'
-		do i = 1, size(src%params)
-			dst%params(i) = src%params(i)
-		end do
-	end if
-
-end subroutine fn_t_copy
+!subroutine param_t_copy(dst, src)
+!
+!	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
+!	! source, they will be gone!
+!	!
+!	! This should be avoided for efficient compilation, but the interactive
+!	! interpreter uses it to backup and restore the variable dict for
+!	! partially-evaluated continuation lines
+!
+!	class(param_t), intent(inout) :: dst
+!	class(param_t), intent(in)    :: src
+!
+!	!********
+!
+!	integer :: i
+!
+!	!print *, 'starting param_t_copy()'
+!
+!	!if (.not. allocated(dst)) allocate(dst)
+!
+!	dst%type = src%type
+!	dst%name = src%name
+!
+!	!if (allocated(src%params)) then
+!	!	if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+!	!	!dst%params = src%params
+!	!	do i = 1, size(src%params)
+!	!		dst%params(i) = src%params(i)
+!	!	end do
+!	!end if
+!
+!end subroutine param_t_copy
+!
+!! TODO: delete these 2 copy fns
+!
+!!recursive subroutine fn_t_copy(dst, src)
+!subroutine fn_t_copy(dst, src)
+!
+!	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
+!	! source, they will be gone!
+!	!
+!	! This should be avoided for efficient compilation, but the interactive
+!	! interpreter uses it to backup and restore the variable dict for
+!	! partially-evaluated continuation lines
+!
+!	class(fn_t), intent(inout) :: dst
+!	class(fn_t), intent(in)    :: src
+!
+!	!********
+!
+!	integer :: i
+!
+!	!print *, 'starting fn_t_copy()'
+!
+!	!if (.not. allocated(dst)) allocate(dst)
+!
+!	!print *, 'type'
+!	dst%type = src%type
+!
+!	!print *, 'check'
+!	if (allocated(src%params)) then
+!		!print *, 'alloc'
+!		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+!		!dst%params = src%params
+!		!print *, 'loop'
+!		do i = 1, size(src%params)
+!			dst%params(i) = src%params(i)
+!		end do
+!	end if
+!
+!end subroutine fn_t_copy
 
 !===============================================================================
 
@@ -2750,7 +2750,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	type(syntax_node_t) :: right, subscript
 	type(syntax_node_vector_t) :: subscripts
-	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket, comma
+	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket, comma, &
+		dummy
 	type(text_span_t) :: span
 
 	!print *, 'starting parse_expr_statement()'
@@ -2824,9 +2825,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		! we can't know how many spaces ahead an equals_token might be without
 		! looking ahead
 
-		!! %pos is the lexer token index, %current_pos() is the character index!
+		! %pos is the lexer token index, %current_pos() is the character index!
 		pos0 = parser%pos
-		!pos0 = parser%current_pos()
 
 		!print *, 'assign expr'
 
@@ -2848,6 +2848,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 			do while (parser%current_kind() /= rbracket_token)
 
+				pos1  = parser%pos
 				span0 = parser%current_pos()
 				subscript = parser%parse_expr()
 
@@ -2863,8 +2864,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 				call subscripts%push(subscript)
 
-				!! TODO? Break infinite loop
-				!if (parser%pos == pos1) dummy = parser%next()
+				! Break infinite loop
+				if (parser%pos == pos1) dummy = parser%next()
 
 				if (parser%current_kind() /= rbracket_token) then
 					comma = parser%match(comma_token)
