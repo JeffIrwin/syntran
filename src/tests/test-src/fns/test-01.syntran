@@ -1,0 +1,14 @@
+
+let global = 0;
+
+fn increment()
+{
+	global = global + 1;
+}
+
+let dummy = increment();
+dummy = increment();
+dummy = increment();
+
+global;
+
