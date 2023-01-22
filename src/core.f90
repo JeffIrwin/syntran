@@ -207,7 +207,8 @@ module core_m
 		! Arguments
 		type(param_t), allocatable :: params(:)
 
-		type(syntax_node_t), pointer :: body => null()
+		!type(syntax_node_t), pointer :: body => null()
+		type(syntax_node_t), pointer :: node => null()
 
 		!contains
 		!	procedure, pass(dst) :: copy => fn_t_copy
@@ -305,6 +306,8 @@ module core_m
 
 		type(syntax_token_t) :: op, identifier
 		integer :: id_index
+
+		integer, allocatable :: params(:)
 
 		type(value_t) :: val
 		!type(fn_t), allocatable :: fn
@@ -1603,6 +1606,8 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	!********
 
+	integer :: i
+
 	if (debug > 3) print *, 'starting syntax_node_copy()'
 
 	dst%kind = src%kind
@@ -1636,6 +1641,15 @@ recursive subroutine syntax_node_copy(dst, src)
 		!if (debug > 1) print *, 'copy() right'
 		if (.not. allocated(dst%right)) allocate(dst%right)
 		dst%right = src%right
+	end if
+
+	if (allocated(src%params)) then
+		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+		!dst%params = src%params
+		print *, 'copy params size ', size(src%params)
+		do i = 1, size(src%params)
+			dst%params(i) = src%params(i)
+		end do
 	end if
 
 	if (allocated(src%condition)) then
@@ -2514,13 +2528,16 @@ function parse_fn_declaration(parser) result(decl)
 
 	type(fn_t) :: fn
 
+	type(string_vector_t) :: names, types
+
 	type(syntax_node_t) :: body
-	type(syntax_node_vector_t) :: params
-	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, type
+	!type(syntax_node_vector_t) :: params
+	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, type, &
+		name, comma
+
+	type(value_t) :: val
 
 	integer :: i, pos0
-
-	i = 0
 
 	! Like a for statement, a fn declaration has its own scope (for its
 	! parameters).  Its block body will have yet another scope
@@ -2535,15 +2552,83 @@ function parse_fn_declaration(parser) result(decl)
 
 	lparen = parser%match(lparen_token)
 
-	! TODO: params
-	params = new_syntax_node_vector()
+	!params = new_syntax_node_vector()
+
+	! Parse parameter names and types.  Save in temp string vectors
+
+	names = new_string_vector()
+	types = new_string_vector()
+
+	! TODO: I think there should be an eof check an this and other while loops
+	! to break infinite loops on missing rparens/rbrackets etc.
+	do while (parser%current_kind() /= rparen_token)
+
+		name = parser%match(identifier_token)
+		colon = parser%match(colon_token)
+		type  = parser%match(identifier_token)
+
+		call names%push( name%text )
+		call types%push( type%text )
+
+		if (parser%current_kind() /= rparen_token) then
+			comma = parser%match(comma_token)
+		end if
+	end do
 
 	rparen = parser%match(rparen_token)
+
+	! Now that we have the number of params, save them
+
+	allocate(fn  %params( names%len ))
+	allocate(decl%params( names%len ))
+
+	do i = 1, names%len
+		print *, 'name, type = ', names%v(i)%s, ', ', types%v(i)%s
+
+		! TODO: array types.  Catch unknown types
+		fn%params(i)%type = lookup_type( types%v(i)%s )
+		fn%params(i)%name = names%v(i)%s
+
+		! Declare the parameter variable
+		parser%num_vars = parser%num_vars + 1
+
+		! Save parameters by id_index.  TODO: stack frames
+		decl%params(i) = parser%num_vars
+		!statement%id_index = parser%num_vars
+
+		! Create a value_t object to store the type
+		val%type = fn%params(i)%type
+
+		!print *, 'identifier%text = ', identifier%text
+		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
+
+	end do
 
 	fn%type = void_type
 	if (parser%current_kind() == colon_token) then
 
 		colon = parser%match(colon_token)
+
+		! TODO: decide a syntax for array types.  Maybe this?
+		!
+		!     fn get_vector(): [i32; :]
+		!     {
+		!         [1, 2, 3];
+		!     }
+		!
+		!     fn get_matrix(): [i32; :, :]
+		!     {
+		!         [0; 3, 3];
+		!     }
+		!
+		! Or fixed size?
+		!
+		!     fn get_vector(): [i32; 3]
+		!     {
+		!         [1, 2, 3];
+		!     }
+		!
+
 		type  = parser%match(identifier_token)
 
 		fn%type = lookup_type(type%text)
@@ -2555,7 +2640,7 @@ function parse_fn_declaration(parser) result(decl)
 
 	body = parser%parse_statement()
 
-	print *, 'size(params) = ', params%len
+	!print *, 'size(params) = ', params%len
 
 	!! Insert fn into parser%fns
 
@@ -2572,17 +2657,14 @@ function parse_fn_declaration(parser) result(decl)
 	!fn%params(2)%name = "a2"
 
 	! TODO: copy params
-	allocate(fn%params( params%len ))
+	!allocate(fn%params( params%len ))
 	!call syntax_nodes_copy(fn%params, params%v( 1: params%len ))
 
-	allocate(fn%body)
-	fn%body = body
+	!allocate(fn%body)
+	!fn%body = body
 
 	parser%num_fns = parser%num_fns + 1
 	decl%id_index  = parser%num_fns
-
-	!call fns%insert(identifier%text, fn, decl%id_index)
-	call parser%fns%insert(identifier%text, fn, decl%id_index)
 
 	allocate(decl%body)
 
@@ -2592,6 +2674,16 @@ function parse_fn_declaration(parser) result(decl)
 	decl%body       = body
 
 	call parser%vars%pop_scope()
+
+	!allocate(fn%body)
+	!fn%body = body
+	allocate(fn%node)
+	fn%node = decl
+
+	call parser%fns%insert(identifier%text, fn, decl%id_index)
+
+	print *, 'size(decl%params) = ', size(decl%params)
+	print *, 'decl%params = ', decl%params
 
 end function parse_fn_declaration
 
@@ -3870,8 +3962,10 @@ function parse_primary_expr(parser) result(expr)
 				! Intrinsic fns don't have a body
 				!if (allocated(fn%body)) then
 				!if (fn%body /= null()) then
-				if (associated(fn%body)) then
-					print *, 'assigning body'
+				!if (associated(fn%body)) then
+				if (associated(fn%node)) then
+				!if (allocated(fn%node)) then
+					print *, 'assigning fn node'
 
 					! If I understand my own code, this is inlining:  every fn
 					! call gets its own copy of the fn body.  This expansion
@@ -3879,7 +3973,15 @@ function parse_primary_expr(parser) result(expr)
 					! a loop will all share one body
 
 					allocate(expr%body)
-					expr%body = fn%body
+					!expr%body = fn%body
+					expr%body = fn%node%body
+					expr%params = fn%node%params
+
+					!print *, 'allocating expr%params size ', size(fn%node%params)
+					!allocate(expr%params( size(fn%node%params )))
+					!expr%params = fn%node%params
+
+					! TODO: param ids
 
 				end if
 
@@ -4739,9 +4841,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			print *, 'fn name = ', node%identifier%text
 			print *, 'fn idx  = ', node%id_index
 			print *, 'node type = ', node%val%type
+			print *, 'size params = ', size(node%params)
+			print *, 'param ids = ', node%params
 
-			! TODO: params/args.  Shared param scope is ok at first, but
-			! eventually target recursive fns with scoped stack frames
+			! TODO: Shared param scope is ok at first, but eventually target
+			! recursive fns with scoped stack frames
+
+			do i = 1, size(node%params)
+				print *, 'copying param ', i
+				vars%vals( node%params(i) ) = &
+					syntax_eval(node%args(i), vars, fns, quietl)
+			end do
 
 			res = syntax_eval(node%body, vars, fns, quietl)
 
