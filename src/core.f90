@@ -66,6 +66,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			translation_unit     = 59, &
 			fn_call_expr         = 58, &
 			unknown_type         = 57, &
 			comma_token          = 56, &
@@ -291,7 +292,7 @@ module core_m
 		! they're all allocatable, so they shouldn't take up much space if not
 		! allocated
 
-		type(syntax_node_t), allocatable :: left, right, statements(:), &
+		type(syntax_node_t), allocatable :: left, right, members(:), &
 			condition, if_clause, else_clause, body, array
 
 		! Array expression syntax nodes
@@ -1402,7 +1403,8 @@ function kind_name(kind)
 			"array_type          ", & ! 55
 			"comma_token         ", & ! 56
 			"unknown_type        ", & ! 57
-			"fn_call_expr        "  & ! 58
+			"fn_call_expr        ", & ! 58
+			"translation_unit    "  & ! 59
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1481,7 +1483,8 @@ function kind_token(kind)
 			"Array type           ", & ! 55
 			",                    ", & ! 56
 			"Unknown type         ", & ! 57
-			"fn call expression   "  & ! 58
+			"fn call expression   ", & ! 58
+			"Translation unit     "  & ! 59
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -1542,8 +1545,8 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	else if (node%kind == block_statement) then
 
-		do i = 1, size(node%statements)
-			block = block // node%statements(i)%str(indentl//'    ')
+		do i = 1, size(node%members)
+			block = block // node%members(i)%str(indentl//'    ')
 		end do
 
 	else if (node%kind == assignment_expr) then
@@ -1701,9 +1704,9 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%else_clause = src%else_clause
 	end if
 
-	if (allocated(src%statements)) then
-		!print *, 'copying statements'
-		call syntax_nodes_copy(dst%statements, src%statements)
+	if (allocated(src%members)) then
+		!print *, 'copying members'
+		call syntax_nodes_copy(dst%members, src%members)
 	end if
 
 	if (debug > 3) print *, 'done syntax_node_copy()'
@@ -2672,12 +2675,12 @@ function parse_block_statement(parser) result(block)
 
 	!********
 
-	type(syntax_node_vector_t) :: statements
+	type(syntax_node_vector_t) :: members
 	type(syntax_token_t) :: left, right, dummy
 
 	integer :: i, pos0
 
-	statements = new_syntax_node_vector()
+	members = new_syntax_node_vector()
 	i = 0
 
 	left  = parser%match(lbrace_token)
@@ -2692,7 +2695,7 @@ function parse_block_statement(parser) result(block)
 		i = i + 1
 		!print *, '    statement ', i
 
-		call statements%push(parser%parse_statement())
+		call members%push(parser%parse_statement())
 
 		! Avoid infinite loops on malformed blocks like this:
 		!   {
@@ -2709,7 +2712,7 @@ function parse_block_statement(parser) result(block)
 	block%kind = block_statement
 
 	! Convert to standard array
-	call syntax_nodes_copy(block%statements, statements%v( 1: statements%len ))
+	call syntax_nodes_copy(block%members, members%v( 1: members%len ))
 
 end function parse_block_statement
 
@@ -4401,18 +4404,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		call vars%push_scope()
 
 		! The final statement of a block returns the actual result.  Non-final
-		! statements only change the (vars) state.
-		do i = 1, size(node%statements)
-			res = syntax_eval(node%statements(i), vars, fns)
+		! members only change the (vars) state.
+		do i = 1, size(node%members)
+			res = syntax_eval(node%members(i), vars, fns)
 
-			!print *, 'kind = ', node%statements(i)%kind
+			!print *, 'kind = ', node%members(i)%kind
 			!print *, i, ' res = ', res%str()
 			!print *, ''
 
-			! HolyC feature: implicitly print name expression statements.  I may
+			! HolyC feature: implicitly print name expression members.  I may
 			! remove this after I implement an intrinsic print() fn.  May also
 			! need to suppress this for void fn calls later
-			if (node%statements(i)%kind == name_expr .and. .not. quietl) then
+			if (node%members(i)%kind == name_expr .and. .not. quietl) then
 				write(*,*) res%str()
 			end if
 
