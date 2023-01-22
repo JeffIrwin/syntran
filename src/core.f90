@@ -434,7 +434,8 @@ module core_m
 				parse_expr, parse_primary_expr, parse_expr_statement, &
 				parse_statement, parse_block_statement, parse_if_statement, &
 				current_pos, peek_pos, parse_for_statement, &
-				parse_while_statement, parse_array_expr, parse_unit
+				parse_while_statement, parse_array_expr, parse_unit, &
+				parse_fn_declaration
 
 	end type parser_t
 
@@ -2479,7 +2480,7 @@ function parse_unit(parser) result(unit)
 		!print *, '    statement ', i
 
 		if (parser%current_kind() == fn_keyword) then
-			! TODO
+			call members%push(parser%parse_fn_declaration())
 		else
 			call members%push(parser%parse_statement())
 		end if
@@ -2502,6 +2503,60 @@ function parse_unit(parser) result(unit)
 	! lines with interactive interpretation
 
 end function parse_unit
+
+!===============================================================================
+
+function parse_fn_declaration(parser) result(fn)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: fn
+
+	!********
+
+	type(syntax_node_t) :: body
+	type(syntax_node_vector_t) :: params
+	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon
+
+	integer :: i, pos0
+
+	i = 0
+
+	! Like a for statement, a fn declaration has its own scope (for its
+	! parameters).  Its block body will have yet another scope
+	call parser%vars%push_scope()
+
+	!left  = parser%match(lbrace_token)
+	fn_kw = parser%match(fn_keyword)
+
+	identifier = parser%match(identifier_token)
+
+	print *, 'parsing fn ', identifier%text
+
+	lparen = parser%match(lparen_token)
+
+	! TODO: params
+
+	! TODO: type
+
+	rparen = parser%match(rparen_token)
+
+	body = parser%parse_statement()
+
+	! TODO: insert fn into parser%fns
+
+	!allocate(fn%array)
+	allocate(fn%body)
+
+	fn%kind = fn_declaration
+
+	fn%identifier = identifier
+	!fn%array      = array
+	fn%body       = body
+
+	call parser%vars%pop_scope()
+
+end function parse_fn_declaration
 
 !===============================================================================
 
@@ -3756,6 +3811,8 @@ function parse_primary_expr(parser) result(expr)
 				! just look it up later by identifier/id_index like we do for
 				! variable value
 				!expr%fn = fn
+
+				! TODO: break cascading errors if fn is not defined
 
 				!print *, 'fn params size = ', size(fn%params)
 				if (size(fn%params) /= args%len) then
