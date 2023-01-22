@@ -2538,6 +2538,7 @@ function parse_fn_declaration(parser) result(decl)
 	lparen = parser%match(lparen_token)
 
 	! TODO: params
+	params = new_syntax_node_vector()
 
 	rparen = parser%match(rparen_token)
 
@@ -2556,7 +2557,31 @@ function parse_fn_declaration(parser) result(decl)
 
 	body = parser%parse_statement()
 
-	! TODO: insert fn into parser%fns
+	print *, 'size(params) = ', params%len
+
+	!! Insert fn into parser%fns
+
+	!id_index = id_index + 1
+	!call fns%insert("min", min_fn, id_index)
+
+	!min_fn%type = i32_type
+	!allocate(fn%params(2))
+
+	!fn%params(1)%type = i32_type
+	!fn%params(1)%name = "a1"
+
+	!fn%params(2)%type = i32_type
+	!fn%params(2)%name = "a2"
+
+	! TODO: copy params
+	allocate(fn%params( params%len ))
+	!call syntax_nodes_copy(fn%params, params%v( 1: params%len ))
+
+	parser%num_fns = parser%num_fns + 1
+	decl%id_index  = parser%num_fns
+
+	!call fns%insert(identifier%text, fn, decl%id_index)
+	call parser%fns%insert(identifier%text, fn, decl%id_index)
 
 	allocate(decl%body)
 
@@ -4672,9 +4697,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'fn identifier = ', node%identifier%text
 		!print *, 'fn id_index   = ', node%id_index
 
-		res%type = fns%fns(node%id_index)%type
+		!res%type = fns%fns(node%id_index)%type
+		res%type = node%val%type
 
-		!print *, 'res type = ', res%type
+		print *, 'res type = ', res%type
 
 		! Intrinsic fns
 		select case (node%identifier%text)
@@ -4690,6 +4716,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res%i32 = min(arg1%i32, arg2%i32)
 
 		case default
+
+			print *, 'fn name = ', node%identifier%text
+			print *, 'fn idx  = ', node%id_index
+			print *, 'node type = ', node%val%type
+
 			write(*,*) 'Error: unexpected fn'
 			call internal_error()
 
