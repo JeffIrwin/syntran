@@ -66,6 +66,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			fn_keyword           = 61, &
 			fn_declaration       = 60, &
 			translation_unit     = 59, &
 			fn_call_expr         = 58, &
@@ -1406,7 +1407,8 @@ function kind_name(kind)
 			"unknown_type        ", & ! 57
 			"fn_call_expr        ", & ! 58
 			"translation_unit    ", & ! 59
-			"fn_declaration      "  & ! 60
+			"fn_declaration      ", & ! 60
+			"fn_keyword          "  & ! 61
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1487,7 +1489,8 @@ function kind_token(kind)
 			"Unknown type         ", & ! 57
 			"fn call expression   ", & ! 58
 			"Translation unit     ", & ! 59
-			"fn declaration       "  & ! 60
+			"fn declaration       ", & ! 60
+			"fn keyword           "  & ! 61
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2081,6 +2084,9 @@ integer function get_keyword_kind(text) result(kind)
 		case ("while")
 			kind = while_keyword
 
+		case ("fn")
+			kind = fn_keyword
+
 		case default
 			kind = identifier_token
 
@@ -2466,16 +2472,17 @@ function parse_unit(parser) result(unit)
 
 	call parser%vars%push_scope()
 
-	do while ( &
-		parser%current_kind() /= eof_token .and. &
-		parser%current_kind() /= rbrace_token)
+	do while (parser%current_kind() /= eof_token)
 
 		pos0 = parser%pos
 		i = i + 1
 		!print *, '    statement ', i
 
-		! TODO: match fns vs statements
-		call members%push(parser%parse_statement())
+		if (parser%current_kind() == fn_keyword) then
+			! TODO
+		else
+			call members%push(parser%parse_statement())
+		end if
 
 		! Break infinite loops
 		if (parser%pos == pos0) dummy = parser%next()
@@ -4453,7 +4460,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! members only change the (vars) state or define fns
 		do i = 1, size(node%members)
 
-			! Only eval statements, not fns declarations
+			! Only eval statements, not fns declarations.  TODO: cycle structs
+			! too
 			if (node%members(i)%kind == fn_declaration) cycle
 
 			res = syntax_eval(node%members(i), vars, fns, quietl)
