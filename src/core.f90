@@ -1644,12 +1644,15 @@ recursive subroutine syntax_node_copy(dst, src)
 	end if
 
 	if (allocated(src%params)) then
-		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
-		!dst%params = src%params
-		print *, 'copy params size ', size(src%params)
-		do i = 1, size(src%params)
-			dst%params(i) = src%params(i)
-		end do
+		! Primitive int array.  No need to explicitly allocate
+
+		!if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+		dst%params = src%params
+		!print *, 'copy params size ', size(src%params)
+		!do i = 1, size(src%params)
+		!	dst%params(i) = src%params(i)
+		!end do
+
 	end if
 
 	if (allocated(src%condition)) then
@@ -2548,7 +2551,7 @@ function parse_fn_declaration(parser) result(decl)
 
 	identifier = parser%match(identifier_token)
 
-	print *, 'parsing fn ', identifier%text
+	!print *, 'parsing fn ', identifier%text
 
 	lparen = parser%match(lparen_token)
 
@@ -2583,7 +2586,7 @@ function parse_fn_declaration(parser) result(decl)
 	allocate(decl%params( names%len ))
 
 	do i = 1, names%len
-		print *, 'name, type = ', names%v(i)%s, ', ', types%v(i)%s
+		!print *, 'name, type = ', names%v(i)%s, ', ', types%v(i)%s
 
 		! TODO: array types.  Catch unknown types
 		fn%params(i)%type = lookup_type( types%v(i)%s )
@@ -2636,7 +2639,7 @@ function parse_fn_declaration(parser) result(decl)
 		! TODO: catch unknown_type
 
 	end if
-	print *, 'fn%type = ', fn%type
+	!print *, 'fn%type = ', fn%type
 
 	body = parser%parse_statement()
 
@@ -2682,8 +2685,8 @@ function parse_fn_declaration(parser) result(decl)
 
 	call parser%fns%insert(identifier%text, fn, decl%id_index)
 
-	print *, 'size(decl%params) = ', size(decl%params)
-	print *, 'decl%params = ', decl%params
+	!print *, 'size(decl%params) = ', size(decl%params)
+	!print *, 'decl%params = ', decl%params
 
 end function parse_fn_declaration
 
@@ -3965,7 +3968,7 @@ function parse_primary_expr(parser) result(expr)
 				!if (associated(fn%body)) then
 				if (associated(fn%node)) then
 				!if (allocated(fn%node)) then
-					print *, 'assigning fn node'
+					!print *, 'assigning fn node'
 
 					! If I understand my own code, this is inlining:  every fn
 					! call gets its own copy of the fn body.  This expansion
@@ -4821,7 +4824,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!res%type = fns%fns(node%id_index)%type
 		res%type = node%val%type
 
-		print *, 'res type = ', res%type
+		!print *, 'res type = ', res%type
 
 		! Intrinsic fns
 		select case (node%identifier%text)
@@ -4838,17 +4841,20 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		case default
 
-			print *, 'fn name = ', node%identifier%text
-			print *, 'fn idx  = ', node%id_index
-			print *, 'node type = ', node%val%type
-			print *, 'size params = ', size(node%params)
-			print *, 'param ids = ', node%params
+			!print *, 'fn name = ', node%identifier%text
+			!print *, 'fn idx  = ', node%id_index
+			!print *, 'node type = ', node%val%type
+			!print *, 'size params = ', size(node%params)
+			!print *, 'param ids = ', node%params
 
 			! TODO: Shared param scope is ok at first, but eventually target
 			! recursive fns with scoped stack frames
 
+			! Pass by value (for now, at least).  Arguments are evaluated and
+			! their values are copied to the fn parameters
+
 			do i = 1, size(node%params)
-				print *, 'copying param ', i
+				!print *, 'copying param ', i
 				vars%vals( node%params(i) ) = &
 					syntax_eval(node%args(i), vars, fns, quietl)
 			end do
