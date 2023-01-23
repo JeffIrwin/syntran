@@ -310,9 +310,74 @@ Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/153
 
 ## Arrays
 
-Coming soon ...
+Recall the syntax for a for-loop:
+```cpp
+let i = 0;
+for i in [0: 5]
+    i;
+// 0, 1, 2, 3, 4
+```
 
-Actually rank-1 arrays are already in, but I'm planning some breaking changes for rank-2 and higher arrays.
+The expression `[0: 5]` is one of several array forms, which can also be assigned to variables:
+```cpp
+let v0 = [0: 5];
+// [0, 1, 2, 3, 4]
+```
+
+Array sizes do not need to be literals or constants.  Arrays are allocated dynamically at runtime.
+
+Besides ranges of consecutive integers, which is the only form that can be used in a for-loop for now, there are other array forms.
+
+To initialize an array to a range with a step:
+```cpp
+let v1 = [10: -2: 0];
+[10, 8, 6, 4, 2]
+```
+
+To refer to an element of an array, place the index in square brackets:
+```cpp
+v1[0];
+// 10
+
+v1[2];
+// 6
+```
+
+To initialize an array to all zeros, or any other uniform scalar:
+```cpp
+let scalar = 0;
+let v2 = [scalar; 5];
+// [0, 0, 0, 0, 0]
+```
+
+To initialize an array with an explicit list of comma-separated values:
+```cpp
+let v3 = [-5, 3+1, 1, 10, 7/2];
+// [-5, 4, 1, 10, 3]
+```
+
+### Rank-2 and higher arrays
+
+To initialize a rank-2 array with size 3 by 4 to all zeros:
+```cpp
+let matrix = [0; 3, 4];
+// [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+```
+
+To initialize a rank-3 array with size rows by columns by sheets:
+```cpp
+let rows = 4;
+let cols = 5;
+let shts = 3;
+let array = [0; rows, cols, shts];
+// [0, 0, 0, ...]
+```
+
+Indices for higher rank arrays are separated by commas:
+```cpp
+array[3,2,1];
+// 0
+```
 
 ## Functions
 
