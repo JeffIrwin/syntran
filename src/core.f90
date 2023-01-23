@@ -2371,7 +2371,9 @@ function parse_unit(parser) result(unit)
 
 	!left  = parser%match(lbrace_token)
 
-	call parser%vars%push_scope()
+	!! This breaks interactive interpretation, but we may want it later for
+	!! interpetting multiple files
+	!call parser%vars%push_scope()
 
 	do while (parser%current_kind() /= eof_token)
 
@@ -2390,7 +2392,7 @@ function parse_unit(parser) result(unit)
 
 	end do
 
-	call parser%vars%pop_scope()
+	!call parser%vars%pop_scope()
 
 	!right = parser%match(rbrace_token)
 
