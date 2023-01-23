@@ -343,7 +343,7 @@ v1[2];
 // 6
 ```
 
-To initialize an array to all zeros, or any other uniform scalar:
+To initialize an array to all zeros, or any other uniform scalar, use [Rust syntax](https://doc.rust-lang.org/std/primitive.array.html):
 ```cpp
 let scalar = 0;
 let v2 = [scalar; 5];
