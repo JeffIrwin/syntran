@@ -343,7 +343,7 @@ v1[2];
 // 6
 ```
 
-To initialize an array to all zeros, or any other uniform scalar, use [Rust syntax](https://doc.rust-lang.org/std/primitive.array.html):
+To initialize an array to all zeros, or any other uniform scalar, use [Rust syntax](https://doc.rust-lang.org/std/primitive.array.html).  The size goes after the semicolon `;`:
 ```cpp
 let scalar = 0;
 let v2 = [scalar; 5];
@@ -358,7 +358,7 @@ let v3 = [-5, 3+1, 1, 10, 7/2];
 
 ### Rank-2 and higher arrays
 
-To initialize a rank-2 array with size 3 by 4 to all zeros:
+Syntran has a more compact syntax for higher rank arrays than Rust, which requires nested rank-1 arrays of rank-1 arrays.  As above, the sizes go after the semicolon `;`.  To initialize a rank-2 array with size 3 by 4 to all zeros:
 ```cpp
 let matrix = [0; 3, 4];
 // [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
