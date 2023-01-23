@@ -31,10 +31,10 @@ Then enter arithmetic expressions like `1 + 2 * 3;` in the interpreter.  Semicol
 
 <!-- cpp is the closest match I can find for markdown syntax highlighting -->
 ```cpp
-    syntran$ 1 + 2 * 3;
-    7
-    syntran$ (1 + 2) * 3;
-    9
+syntran$ 1 + 2 * 3;
+7
+syntran$ (1 + 2) * 3;
+9
 ```
 
 Expressions are evaluated immediately and the result is printed to the console.  In the rest of this documentation, we will hide the `syntran$` prompt and show the result as a `// comment`, so you can copy and paste code blocks straight into the interpreter.
@@ -42,8 +42,8 @@ Expressions are evaluated immediately and the result is printed to the console. 
 Use two asterisks for exponent powers, like Fortran and Scilab:
 
 ```cpp
-    5 ** 2;
-    // 25
+5 ** 2;
+// 25
 ```
 
 There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/math/pow) and call the `pow()` function!
@@ -93,7 +93,11 @@ As programs get longer and more complicated, it becomes difficult to enter them 
 
     ./build/syntran samples/primes-1.syntran
 
+<!--
+Note: global block statement is not required as of 0.0.13.  Multiple statements (and functions) are parsed at the global scope.
+
 Make sure to wrap the entire script in a main block with braces `{}`.  The global block `{}` is not required when interactively using the interpreter because it parses and evaluates one statement at a time.  However, if you forget the global block `{}` in a script file, only the first statement will be parsed and any trailing junk statements will be unexpected.
+-->
 
 ### If statements and for loops
 
@@ -137,38 +141,38 @@ With only these language features, we can make a short program to find prime num
 
 ```cpp
 {
-	// Get the largest prime number less than n
-	let n = 100;
+// Get the largest prime number less than n
+let n = 100;
 
-	// Initialize the largest prime found so far
-	let prime = 0;
+// Initialize the largest prime found so far
+let prime = 0;
 
-	// This check is O(n**2) time, which might be the best we can do without
-	// having arrays in the language yet
+// This check is O(n**2) time, which might be the best we can do without
+// having arrays in the language yet
 
-	// If we had while loops, we could loop from n downards and stop as soon as
-	// we find the first prime
-	for i in [0: n]
+// If we had while loops, we could loop from n downards and stop as soon as
+// we find the first prime
+for i in [0: n]
+{
+	// Check if i is composite, i.e. not prime
+	let is_composite = false;
+
+	// Largest possible divisor of i is i/2.  Actually it's sqrt(i) but
+	// I don't have a sqrt fn yet
+	for j in [2: i/2 + 1]
 	{
-		// Check if i is composite, i.e. not prime
-		let is_composite = false;
-
-		// Largest possible divisor of i is i/2.  Actually it's sqrt(i) but
-		// I don't have a sqrt fn yet
-		for j in [2: i/2 + 1]
-		{
-			// Is i divisible by j?
-			let divisible = j * (i / j) == i;  // poor man's modulo == 0
-			is_composite = is_composite or divisible;
-		}
-
-		if not is_composite
-			prime = i;
+		// Is i divisible by j?
+		let divisible = j * (i / j) == i;  // poor man's modulo == 0
+		is_composite = is_composite or divisible;
 	}
 
-	// Final result
-	prime;
-	// 97
+	if not is_composite
+		prime = i;
+}
+
+// Final result
+prime;
+// 97
 }
 ```
 
@@ -177,32 +181,32 @@ With only these language features, we can make a short program to find prime num
 Each block statement has its own scope for variables.  [Inner blocks can shadow](https://en.wikipedia.org/wiki/Variable_shadowing) outer blocks:
 
 ```cpp
-        let expect_2a = 0;
-        let expect_4a = 0;
-        let expect_2b = 0;
-        let expect_1a = 0;
+let expect_2a = 0;
+let expect_4a = 0;
+let expect_2b = 0;
+let expect_1a = 0;
 
-        let v = 1;
-        {
-		// The LHS variable shadows and is initialized to the RHS value from the outer block
-                let v = v + 1;
-                expect_2a = v;
+let v = 1;
+{
+	// The LHS variable shadows and is initialized to the RHS value from the outer block
+	let v = v + 1;
+	expect_2a = v;
 
-                {
-                        let v = v * 2;
-                        expect_4a = v;
-                }
+	{
+		let v = v * 2;
+		expect_4a = v;
+	}
 
-                expect_2b = v;
-        }
+	expect_2b = v;
+}
 
-        expect_1a = v;
+expect_1a = v;
 
-        expect_2a == 2 and
-        expect_4a == 4 and
-        expect_2b == 2 and
-        expect_1a == 1;
-        // true
+expect_2a == 2 and
+expect_4a == 4 and
+expect_2b == 2 and
+expect_1a == 1;
+// true
 ```
 
 ## While loops
@@ -210,36 +214,34 @@ Each block statement has its own scope for variables.  [Inner blocks can shadow]
 With the addition of while loops to the language, we can make some optimizations to the simple prime number sieve from above.  We can break the outer loop as soon as the first prime number is found, and we can break the inner loop as soon as we find out a number is _not_ prime:
 
 ```cpp
+// Get the largest prime number less than n
+let n = 1000000;
+
+// Initialize
+let prime = 0;
+let i = n;
+
+while prime == 0
 {
-	// Get the largest prime number less than n
-	let n = 1000000;
+	i = i - 1;  // loop from n downwards
 
-	// Initialize
-	let prime = 0;
-	let i = n;
-	
-	while prime == 0
+	let is_composite = false;
+
+	let j = 1;
+	while j < i/2 + 1 and not is_composite
 	{
-		i = i - 1;  // loop from n downwards
+		j = j + 1;
 
-		let is_composite = false;
-
-		let j = 1;
-		while j < i/2 + 1 and not is_composite
-		{
-			j = j + 1;
-
-			let divisible = j * (i / j) == i;  // poor man's modulo == 0
-			is_composite = is_composite or divisible;
-		}
-
-		if not is_composite
-			prime = i;
+		let divisible = j * (i / j) == i;  // poor man's modulo == 0
+		is_composite = is_composite or divisible;
 	}
 
-	prime;
-	// 999983
+	if not is_composite
+		prime = i;
 }
+
+prime;
+// 999983
 ```
 
 With this method we can search for primes near 1 million in less than a second.  How long does the for loop version take to find primes up to a million?
@@ -253,47 +255,45 @@ We can calculate the mathematical constant π [exteremely inefficiently](https:/
 Then we can calculate a sine function using its [Taylor series expansion](https://en.wikipedia.org/wiki/Taylor_series):
 
 ```cpp
+// Calculate π
+let pi = 0.0;
+
+for k in [0: 10]
 {
-	// Calculate π
-	let pi = 0.0;
-
-	for k in [0: 10]
-	{
-		pi = pi + 1 / (16.0 ** k) *
-			(
-				4.0 / (8*k + 1) -
-				2.0 / (8*k + 4) -
-				1.0 / (8*k + 5) -
-				1.0 / (8*k + 6)
-			);
-	}
-
-	pi;
-	// 3.141593E+00
-
-	// x is 30 degrees (in radians)
-	let x = pi / 6;
-
-	// Calculate sin(x) using Taylor series
-
-	// Initialize Taylor series terms
-	let xpow = x;
-	let factorial = 1;
-	let sign = 1;
-
-	// Sum odd terms only
-	let sinx = 0.0;
-	for k in [1: 10]
-	{
-		sinx = sinx + sign * xpow / factorial;
-		xpow = xpow * x ** 2;
-		factorial = factorial * (2*k) * (2*k + 1);
-		sign = -sign;
-	}
-
-	sinx;
-	// 4.999999E-01
+	pi = pi + 1 / (16.0 ** k) *
+		(
+			4.0 / (8*k + 1) -
+			2.0 / (8*k + 4) -
+			1.0 / (8*k + 5) -
+			1.0 / (8*k + 6)
+		);
 }
+
+pi;
+// 3.141593E+00
+
+// x is 30 degrees (in radians)
+let x = pi / 6;
+
+// Calculate sin(x) using Taylor series
+
+// Initialize Taylor series terms
+let xpow = x;
+let factorial = 1;
+let sign = 1;
+
+// Sum odd terms only
+let sinx = 0.0;
+for k in [1: 10]
+{
+	sinx = sinx + sign * xpow / factorial;
+	xpow = xpow * x ** 2;
+	factorial = factorial * (2*k) * (2*k + 1);
+	sign = -sign;
+}
+
+sinx;
+// 4.999999E-01
 ```
 
 At the end of all those transcendental functions and numbers, we get the suprisingly rational result `sin(pi / 6) == 0.5`, or `4.999999E-01` with 32 bit floats.
