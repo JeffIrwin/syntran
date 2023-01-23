@@ -52,7 +52,10 @@ module core_m
 	!      > trig: sin, cos, tan, asin, ...
 	!      > read/write
 	!      > norm
-	!    * user defined
+	!    * done:
+	!      > exp, min (non-variadic)
+	!      > non-recursive user-defined fns
+	!    * recursive user-defined fns
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - strings.  are characters useful or can we just use strings of length 1?
 	!  - structs
@@ -146,9 +149,6 @@ module core_m
 		contains
 			procedure :: str => value_str
 
-			!procedure, pass(dst) :: copy => value_copy
-			!generic, public :: assignment(=) => copy
-
 	end type value_t
 
 	!********
@@ -174,9 +174,6 @@ module core_m
 		contains
 			procedure :: push => push_array
 
-			!procedure, pass(dst) :: copy => array_copy
-			!generic, public :: assignment(=) => copy
-
 	end type array_t
 
 	!********
@@ -190,16 +187,12 @@ module core_m
 		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
 		! Maybe add an array of types(:) for each allowable type of a param?
 
-		!contains
-		!	procedure, pass(dst) :: copy => param_t_copy
-		!	generic, public :: assignment(=) => copy
-
 	end type param_t
 
 	!********
 
 	type fn_t
-		! Function
+		! Function signature: input and output types
 
 		! Return type
 		integer :: type
@@ -207,13 +200,9 @@ module core_m
 		! Arguments
 		type(param_t), allocatable :: params(:)
 
-		!type(syntax_node_t), pointer :: body => null()
+		! Reference to the function definition, i.e. the syntax node containing
+		! the function parameters and body
 		type(syntax_node_t), pointer :: node => null()
-
-		!contains
-		!	procedure, pass(dst) :: copy => fn_t_copy
-		!	generic, public :: assignment(=) => copy
-		!!	procedure :: str => fn_str
 
 	end type fn_t
 
@@ -260,7 +249,7 @@ module core_m
 		! Each scope level has its own fn dict in dicts(:)
 		integer :: scope = 1
 
-		! TODO
+		! TODO: nested fns?
 		contains
 			procedure :: &
 				insert => fn_insert, &
@@ -310,7 +299,6 @@ module core_m
 		integer, allocatable :: params(:)
 
 		type(value_t) :: val
-		!type(fn_t), allocatable :: fn
 
 		type(string_vector_t) :: diagnostics
 
@@ -476,7 +464,7 @@ function declare_intrinsic_fns() result(fns)
 
 	type(fn_t) :: exp_fn, min_fn
 
-	! TODO: pass this to num_fns in parser member
+	! Increment index for each fn and then set num_fns
 	id_index = 0
 
 	! TODO: polymorphic in f32, f64, etc.
@@ -510,27 +498,6 @@ function declare_intrinsic_fns() result(fns)
 
 	! FIXME: when adding new functions, remember to copy them into the
 	! fns%fns(:) array below
-
-	!print *, 'id_index = ', id_index
-
-	!! "exp"
-	!print *, 'key = ', &
-	!	fns%dicts(1)%root%split_char, &
-	!	fns%dicts(1)%root%mid%split_char, &
-	!	fns%dicts(1)%root%mid%mid%split_char
-
-	!! "min"
-	!print *, 'key = ', &
-	!	fns%dicts(1)%root%right%split_char, &
-	!	fns%dicts(1)%root%right%mid%split_char, &
-	!	fns%dicts(1)%root%right%mid%mid%split_char
-
-	! TODO: is it necessary to insert intrinsic fns in array?  For now, they are
-	! always case-selected by name (not index).  I'm not sure if the array is
-	! needed here until after I do user-defined fns.
-	!
-	! Actually, yes.  The return type is looked up by id_index.  Although we
-	! could move the return type assignment inside the case-selection.
 
 	num_fns = id_index
 	allocate(fns%fns(num_fns))
@@ -1014,80 +981,6 @@ end subroutine ternary_tree_copy
 
 !===============================================================================
 
-!subroutine param_t_copy(dst, src)
-!
-!	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-!	! source, they will be gone!
-!	!
-!	! This should be avoided for efficient compilation, but the interactive
-!	! interpreter uses it to backup and restore the variable dict for
-!	! partially-evaluated continuation lines
-!
-!	class(param_t), intent(inout) :: dst
-!	class(param_t), intent(in)    :: src
-!
-!	!********
-!
-!	integer :: i
-!
-!	!print *, 'starting param_t_copy()'
-!
-!	!if (.not. allocated(dst)) allocate(dst)
-!
-!	dst%type = src%type
-!	dst%name = src%name
-!
-!	!if (allocated(src%params)) then
-!	!	if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
-!	!	!dst%params = src%params
-!	!	do i = 1, size(src%params)
-!	!		dst%params(i) = src%params(i)
-!	!	end do
-!	!end if
-!
-!end subroutine param_t_copy
-!
-!! TODO: delete these 2 copy fns
-!
-!!recursive subroutine fn_t_copy(dst, src)
-!subroutine fn_t_copy(dst, src)
-!
-!	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-!	! source, they will be gone!
-!	!
-!	! This should be avoided for efficient compilation, but the interactive
-!	! interpreter uses it to backup and restore the variable dict for
-!	! partially-evaluated continuation lines
-!
-!	class(fn_t), intent(inout) :: dst
-!	class(fn_t), intent(in)    :: src
-!
-!	!********
-!
-!	integer :: i
-!
-!	!print *, 'starting fn_t_copy()'
-!
-!	!if (.not. allocated(dst)) allocate(dst)
-!
-!	!print *, 'type'
-!	dst%type = src%type
-!
-!	!print *, 'check'
-!	if (allocated(src%params)) then
-!		!print *, 'alloc'
-!		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
-!		!dst%params = src%params
-!		!print *, 'loop'
-!		do i = 1, size(src%params)
-!			dst%params(i) = src%params(i)
-!		end do
-!	end if
-!
-!end subroutine fn_t_copy
-
-!===============================================================================
-
 recursive subroutine fn_ternary_tree_copy(dst, src)
 
 	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
@@ -1103,8 +996,6 @@ recursive subroutine fn_ternary_tree_copy(dst, src)
 	!********
 
 	!print *, 'starting fn_ternary_tree_node_t()'
-
-	!if (.not. allocated(dst)) allocate(dst)
 
 	dst%split_char = src%split_char
 
@@ -2362,30 +2253,24 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	!print *, 'moving fns'
 	if (allocated(fns%dicts(1)%root)) then
 
-		!! There are always intrinsic fns, so no need to check allow_continuel
-		!if (allow_continuel) then
+		allocate(fns0%dicts(1)%root)
+		fns0%dicts(1)%root = fns%dicts(1)%root
 
-			allocate(fns0%dicts(1)%root)
-			fns0%dicts(1)%root = fns%dicts(1)%root
+		!print *, 'fns%fns = '
+		!do i = 1, size(fns%fns)
+		!	print *, fns%fns(i)%str()
+		!end do
 
-			!print *, 'fns%fns = '
-			!do i = 1, size(fns%fns)
-			!	print *, fns%fns(i)%str()
-			!end do
-
-			! TODO: allocated check shouldn't be required after I implement
-			! dict to array copying
+		!! With intrinsic fns, this is always allocated
+		!if (allocated(fns%fns)) then
 			!print *, 'copy fns'
-			if (allocated(fns%fns)) then
-				fns0%fns = fns%fns
-				parser%num_fns = size(fns%fns)
-			else
-				parser%num_fns = 0
-			end if
-
-			!print *, 'parser%num_fns = ', parser%num_fns
-
+			fns0%fns = fns%fns
+			parser%num_fns = size(fns%fns)
+		!else
+		!	parser%num_fns = 0
 		!end if
+
+		!print *, 'parser%num_fns = ', parser%num_fns
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished
@@ -2534,7 +2419,6 @@ function parse_fn_declaration(parser) result(decl)
 	type(string_vector_t) :: names, types
 
 	type(syntax_node_t) :: body
-	!type(syntax_node_vector_t) :: params
 	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, type, &
 		name, comma
 
@@ -2546,7 +2430,6 @@ function parse_fn_declaration(parser) result(decl)
 	! parameters).  Its block body will have yet another scope
 	call parser%vars%push_scope()
 
-	!left  = parser%match(lbrace_token)
 	fn_kw = parser%match(fn_keyword)
 
 	identifier = parser%match(identifier_token)
@@ -2555,10 +2438,7 @@ function parse_fn_declaration(parser) result(decl)
 
 	lparen = parser%match(lparen_token)
 
-	!params = new_syntax_node_vector()
-
-	! Parse parameter names and types.  Save in temp string vectors
-
+	! Parse parameter names and types.  Save in temp string vectors initially
 	names = new_string_vector()
 	types = new_string_vector()
 
@@ -2597,12 +2477,10 @@ function parse_fn_declaration(parser) result(decl)
 
 		! Save parameters by id_index.  TODO: stack frames
 		decl%params(i) = parser%num_vars
-		!statement%id_index = parser%num_vars
 
 		! Create a value_t object to store the type
 		val%type = fn%params(i)%type
 
-		!print *, 'identifier%text = ', identifier%text
 		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
 
 	end do
@@ -2650,28 +2528,7 @@ function parse_fn_declaration(parser) result(decl)
 
 	body = parser%parse_statement()
 
-	!print *, 'size(params) = ', params%len
-
-	!! Insert fn into parser%fns
-
-	!id_index = id_index + 1
-	!call fns%insert("min", min_fn, id_index)
-
-	!min_fn%type = i32_type
-	!allocate(fn%params(2))
-
-	!fn%params(1)%type = i32_type
-	!fn%params(1)%name = "a1"
-
-	!fn%params(2)%type = i32_type
-	!fn%params(2)%name = "a2"
-
-	! TODO: copy params
-	!allocate(fn%params( params%len ))
-	!call syntax_nodes_copy(fn%params, params%v( 1: params%len ))
-
-	!allocate(fn%body)
-	!fn%body = body
+	! Insert fn into parser%fns
 
 	parser%num_fns = parser%num_fns + 1
 	decl%id_index  = parser%num_fns
@@ -2685,8 +2542,6 @@ function parse_fn_declaration(parser) result(decl)
 
 	call parser%vars%pop_scope()
 
-	!allocate(fn%body)
-	!fn%body = body
 	allocate(fn%node)
 	fn%node = decl
 
@@ -3212,7 +3067,6 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		! TODO: move this check inside of is_binary_op_allowed?  Need to pass
 		! parser to it to push diagnostics
-		!if (ltype /= array_type .and. rtype /= array_type .and. &
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
 			span = new_span(op%pos, len(op%text))
@@ -3538,11 +3392,11 @@ function parse_array_expr(parser) result(expr)
 	!     let a = [fconst           ; len];
 	!
 	!     // Rank-2, rank-3, etc.  No range variations, only all elements
-	!     // the same value TODO
+	!     // the same value
 	!     let a = [fconst           ; rows, cols];  // row-major like Fortran
 	!     let a = [fconst           ; rows, cols, sheets];
 	!
-	!     // Explicit list for any type
+	!     // Explicit list for any rank-1 type
 	!     [elem_0, elem_1, elem_2, ... ]
 	!
 
@@ -3614,8 +3468,6 @@ function parse_array_expr(parser) result(expr)
 
 		allocate(expr%val%array)
 		allocate(expr%lbound)
-
-		! TODO: delete len?
 		allocate(expr%len)
 
 		call syntax_nodes_copy(expr%size, size%v( 1: size%len ))
@@ -3754,11 +3606,6 @@ function parse_array_expr(parser) result(expr)
 
 		expr%kind                 = array_expr
 
-		! TODO: cleanup
-
-		!! Whatever is decided here, do it consistently for expl_array below
-		!expr%val%type             = array_type
-		!expr%val%type             = i32_type
 		expr%val%type             = lbound%val%type
 
 		! TODO: I think array pointer should be allocated first here
@@ -3818,7 +3665,6 @@ function parse_array_expr(parser) result(expr)
 	!     // [0, 1, 2,   5, 6,   10, 11, 12]
 	!
 	! But how useful would that really be?
-
 
 end function parse_array_expr
 
@@ -3899,8 +3745,6 @@ function parse_primary_expr(parser) result(expr)
 				end if
 
 				! Parse array subscript if present
-				!
-				! TODO: rank-2+ for RHS
 
 				! TODO: Can this be consolidated with subscript parsing in
 				! parse_expr_statement?  Make fn parse_subscipts().  At least
@@ -3969,12 +3813,9 @@ function parse_primary_expr(parser) result(expr)
 
 				expr%val%type = fn%type
 
-				! Intrinsic fns don't have a body
-				!if (allocated(fn%body)) then
-				!if (fn%body /= null()) then
-				!if (associated(fn%body)) then
+				! Intrinsic fns don't have a syntax node: they are implemented
+				! in Fortran, not syntran
 				if (associated(fn%node)) then
-				!if (allocated(fn%node)) then
 					!print *, 'assigning fn node'
 
 					! If I understand my own code, this is inlining:  every fn
@@ -3982,16 +3823,13 @@ function parse_primary_expr(parser) result(expr)
 					! happens at parse time, not eval time, so fn calls in
 					! a loop will all share one body
 
+					! TODO: could we do this with a pointer instead? I think
+					! copying is a waste of memory.  Also try to encapsulate
+					! both body and params into a wrapped type (fn_t?)
+
 					allocate(expr%body)
-					!expr%body = fn%body
 					expr%body = fn%node%body
 					expr%params = fn%node%params
-
-					!print *, 'allocating expr%params size ', size(fn%node%params)
-					!allocate(expr%params( size(fn%node%params )))
-					!expr%params = fn%node%params
-
-					! TODO: param ids
 
 				end if
 

@@ -3,7 +3,7 @@
 let n = 200;
 
 // Pre-allocate an array of n primes
-let primes = [0: n];
+let primes = [0; n];
 let num_primes = 0;
 
 //======================================================================
