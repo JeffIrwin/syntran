@@ -66,6 +66,10 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			void_type            = 62, &
+			fn_keyword           = 61, &
+			fn_declaration       = 60, &
+			translation_unit     = 59, &
 			fn_call_expr         = 58, &
 			unknown_type         = 57, &
 			comma_token          = 56, &
@@ -203,8 +207,8 @@ module core_m
 		! Arguments
 		type(param_t), allocatable :: params(:)
 
-		! TODO: I think explicitly defined fn_copy is required because of
-		! allocatable params, used by fn_ternary_tree_copy()
+		!type(syntax_node_t), pointer :: body => null()
+		type(syntax_node_t), pointer :: node => null()
 
 		!contains
 		!	procedure, pass(dst) :: copy => fn_t_copy
@@ -291,7 +295,7 @@ module core_m
 		! they're all allocatable, so they shouldn't take up much space if not
 		! allocated
 
-		type(syntax_node_t), allocatable :: left, right, statements(:), &
+		type(syntax_node_t), allocatable :: left, right, members(:), &
 			condition, if_clause, else_clause, body, array
 
 		! Array expression syntax nodes
@@ -302,6 +306,8 @@ module core_m
 
 		type(syntax_token_t) :: op, identifier
 		integer :: id_index
+
+		integer, allocatable :: params(:)
 
 		type(value_t) :: val
 		!type(fn_t), allocatable :: fn
@@ -431,7 +437,8 @@ module core_m
 				parse_expr, parse_primary_expr, parse_expr_statement, &
 				parse_statement, parse_block_statement, parse_if_statement, &
 				current_pos, peek_pos, parse_for_statement, &
-				parse_while_statement, parse_array_expr
+				parse_while_statement, parse_array_expr, parse_unit, &
+				parse_fn_declaration
 
 	end type parser_t
 
@@ -480,10 +487,6 @@ function declare_intrinsic_fns() result(fns)
 
 	! Insert the fn into the dict. These are global intrinsic fns, so there's no
 	! need to check iostat
-
-	!print *, 'identifier%text = ', identifier%text
-	!call parser%vars%insert(identifier%text, array%lbound%val, &
-	!	statement%id_index)
 
 	! TODO: push_fn() fn, or just increment id_index inside insert()?
 	id_index = id_index + 1
@@ -1011,77 +1014,77 @@ end subroutine ternary_tree_copy
 
 !===============================================================================
 
-subroutine param_t_copy(dst, src)
-
-	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-	! source, they will be gone!
-	!
-	! This should be avoided for efficient compilation, but the interactive
-	! interpreter uses it to backup and restore the variable dict for
-	! partially-evaluated continuation lines
-
-	class(param_t), intent(inout) :: dst
-	class(param_t), intent(in)    :: src
-
-	!********
-
-	integer :: i
-
-	!print *, 'starting param_t_copy()'
-
-	!if (.not. allocated(dst)) allocate(dst)
-
-	dst%type = src%type
-	dst%name = src%name
-
-	!if (allocated(src%params)) then
-	!	if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
-	!	!dst%params = src%params
-	!	do i = 1, size(src%params)
-	!		dst%params(i) = src%params(i)
-	!	end do
-	!end if
-
-end subroutine param_t_copy
-
-! TODO: delete these 2 copy fns
-
-!recursive subroutine fn_t_copy(dst, src)
-subroutine fn_t_copy(dst, src)
-
-	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-	! source, they will be gone!
-	!
-	! This should be avoided for efficient compilation, but the interactive
-	! interpreter uses it to backup and restore the variable dict for
-	! partially-evaluated continuation lines
-
-	class(fn_t), intent(inout) :: dst
-	class(fn_t), intent(in)    :: src
-
-	!********
-
-	integer :: i
-
-	!print *, 'starting fn_t_copy()'
-
-	!if (.not. allocated(dst)) allocate(dst)
-
-	!print *, 'type'
-	dst%type = src%type
-
-	!print *, 'check'
-	if (allocated(src%params)) then
-		!print *, 'alloc'
-		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
-		!dst%params = src%params
-		!print *, 'loop'
-		do i = 1, size(src%params)
-			dst%params(i) = src%params(i)
-		end do
-	end if
-
-end subroutine fn_t_copy
+!subroutine param_t_copy(dst, src)
+!
+!	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
+!	! source, they will be gone!
+!	!
+!	! This should be avoided for efficient compilation, but the interactive
+!	! interpreter uses it to backup and restore the variable dict for
+!	! partially-evaluated continuation lines
+!
+!	class(param_t), intent(inout) :: dst
+!	class(param_t), intent(in)    :: src
+!
+!	!********
+!
+!	integer :: i
+!
+!	!print *, 'starting param_t_copy()'
+!
+!	!if (.not. allocated(dst)) allocate(dst)
+!
+!	dst%type = src%type
+!	dst%name = src%name
+!
+!	!if (allocated(src%params)) then
+!	!	if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+!	!	!dst%params = src%params
+!	!	do i = 1, size(src%params)
+!	!		dst%params(i) = src%params(i)
+!	!	end do
+!	!end if
+!
+!end subroutine param_t_copy
+!
+!! TODO: delete these 2 copy fns
+!
+!!recursive subroutine fn_t_copy(dst, src)
+!subroutine fn_t_copy(dst, src)
+!
+!	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
+!	! source, they will be gone!
+!	!
+!	! This should be avoided for efficient compilation, but the interactive
+!	! interpreter uses it to backup and restore the variable dict for
+!	! partially-evaluated continuation lines
+!
+!	class(fn_t), intent(inout) :: dst
+!	class(fn_t), intent(in)    :: src
+!
+!	!********
+!
+!	integer :: i
+!
+!	!print *, 'starting fn_t_copy()'
+!
+!	!if (.not. allocated(dst)) allocate(dst)
+!
+!	!print *, 'type'
+!	dst%type = src%type
+!
+!	!print *, 'check'
+!	if (allocated(src%params)) then
+!		!print *, 'alloc'
+!		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+!		!dst%params = src%params
+!		!print *, 'loop'
+!		do i = 1, size(src%params)
+!			dst%params(i) = src%params(i)
+!		end do
+!	end if
+!
+!end subroutine fn_t_copy
 
 !===============================================================================
 
@@ -1402,7 +1405,11 @@ function kind_name(kind)
 			"array_type          ", & ! 55
 			"comma_token         ", & ! 56
 			"unknown_type        ", & ! 57
-			"fn_call_expr        "  & ! 58
+			"fn_call_expr        ", & ! 58
+			"translation_unit    ", & ! 59
+			"fn_declaration      ", & ! 60
+			"fn_keyword          ", & ! 61
+			"void_type           "  & ! 62
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1481,7 +1488,11 @@ function kind_token(kind)
 			"Array type           ", & ! 55
 			",                    ", & ! 56
 			"Unknown type         ", & ! 57
-			"fn call expression   "  & ! 58
+			"fn call expression   ", & ! 58
+			"Translation unit     ", & ! 59
+			"fn declaration       ", & ! 60
+			"fn keyword           ", & ! 61
+			"void type            "  & ! 62
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -1542,8 +1553,8 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	else if (node%kind == block_statement) then
 
-		do i = 1, size(node%statements)
-			block = block // node%statements(i)%str(indentl//'    ')
+		do i = 1, size(node%members)
+			block = block // node%members(i)%str(indentl//'    ')
 		end do
 
 	else if (node%kind == assignment_expr) then
@@ -1595,6 +1606,8 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	!********
 
+	integer :: i
+
 	if (debug > 3) print *, 'starting syntax_node_copy()'
 
 	dst%kind = src%kind
@@ -1628,6 +1641,18 @@ recursive subroutine syntax_node_copy(dst, src)
 		!if (debug > 1) print *, 'copy() right'
 		if (.not. allocated(dst%right)) allocate(dst%right)
 		dst%right = src%right
+	end if
+
+	if (allocated(src%params)) then
+		! Primitive int array.  No need to explicitly allocate
+
+		!if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+		dst%params = src%params
+		!print *, 'copy params size ', size(src%params)
+		!do i = 1, size(src%params)
+		!	dst%params(i) = src%params(i)
+		!end do
+
 	end if
 
 	if (allocated(src%condition)) then
@@ -1701,9 +1726,9 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%else_clause = src%else_clause
 	end if
 
-	if (allocated(src%statements)) then
-		!print *, 'copying statements'
-		call syntax_nodes_copy(dst%statements, src%statements)
+	if (allocated(src%members)) then
+		!print *, 'copying members'
+		call syntax_nodes_copy(dst%members, src%members)
 	end if
 
 	if (debug > 3) print *, 'done syntax_node_copy()'
@@ -2075,6 +2100,9 @@ integer function get_keyword_kind(text) result(kind)
 		case ("while")
 			kind = while_keyword
 
+		case ("fn")
+			kind = fn_keyword
+
 		case default
 			kind = identifier_token
 
@@ -2368,7 +2396,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	!*******************************
 	! Parse the tokens
-	tree = parser%parse_statement()
+	tree = parser%parse_unit()
 	!*******************************
 
 	tree%expecting       = parser%expecting
@@ -2437,6 +2465,260 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	if (debug > 0) print *, 'done syntax_parse'
 
 end function syntax_parse
+
+!===============================================================================
+
+function parse_unit(parser) result(unit)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: unit
+
+	!********
+
+	type(syntax_node_vector_t) :: members
+	type(syntax_token_t) :: dummy
+
+	integer :: i, pos0
+
+	members = new_syntax_node_vector()
+	i = 0
+
+	!left  = parser%match(lbrace_token)
+
+	call parser%vars%push_scope()
+
+	do while (parser%current_kind() /= eof_token)
+
+		pos0 = parser%pos
+		i = i + 1
+		!print *, '    statement ', i
+
+		if (parser%current_kind() == fn_keyword) then
+			call members%push(parser%parse_fn_declaration())
+		else
+			call members%push(parser%parse_statement())
+		end if
+
+		! Break infinite loops
+		if (parser%pos == pos0) dummy = parser%next()
+
+	end do
+
+	call parser%vars%pop_scope()
+
+	!right = parser%match(rbrace_token)
+
+	unit%kind = translation_unit
+
+	! Convert to standard array
+	call syntax_nodes_copy(unit%members, members%v( 1: members%len ))
+
+	! Eof is matched in the caller syntax_parse() to deal with broken stdin
+	! lines with interactive interpretation
+
+end function parse_unit
+
+!===============================================================================
+
+function parse_fn_declaration(parser) result(decl)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: decl
+
+	!********
+
+	type(fn_t) :: fn
+
+	type(string_vector_t) :: names, types
+
+	type(syntax_node_t) :: body
+	!type(syntax_node_vector_t) :: params
+	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, type, &
+		name, comma
+
+	type(value_t) :: val
+
+	integer :: i, pos0
+
+	! Like a for statement, a fn declaration has its own scope (for its
+	! parameters).  Its block body will have yet another scope
+	call parser%vars%push_scope()
+
+	!left  = parser%match(lbrace_token)
+	fn_kw = parser%match(fn_keyword)
+
+	identifier = parser%match(identifier_token)
+
+	!print *, 'parsing fn ', identifier%text
+
+	lparen = parser%match(lparen_token)
+
+	!params = new_syntax_node_vector()
+
+	! Parse parameter names and types.  Save in temp string vectors
+
+	names = new_string_vector()
+	types = new_string_vector()
+
+	! TODO: I think there should be an eof check an this and other while loops
+	! to break infinite loops on missing rparens/rbrackets etc.
+	do while (parser%current_kind() /= rparen_token)
+
+		name = parser%match(identifier_token)
+		colon = parser%match(colon_token)
+		type  = parser%match(identifier_token)
+
+		call names%push( name%text )
+		call types%push( type%text )
+
+		if (parser%current_kind() /= rparen_token) then
+			comma = parser%match(comma_token)
+		end if
+	end do
+
+	rparen = parser%match(rparen_token)
+
+	! Now that we have the number of params, save them
+
+	allocate(fn  %params( names%len ))
+	allocate(decl%params( names%len ))
+
+	do i = 1, names%len
+		!print *, 'name, type = ', names%v(i)%s, ', ', types%v(i)%s
+
+		! TODO: array types.  Catch unknown types
+		fn%params(i)%type = lookup_type( types%v(i)%s )
+		fn%params(i)%name = names%v(i)%s
+
+		! Declare the parameter variable
+		parser%num_vars = parser%num_vars + 1
+
+		! Save parameters by id_index.  TODO: stack frames
+		decl%params(i) = parser%num_vars
+		!statement%id_index = parser%num_vars
+
+		! Create a value_t object to store the type
+		val%type = fn%params(i)%type
+
+		!print *, 'identifier%text = ', identifier%text
+		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
+
+	end do
+
+	! Rust uses "->" as a delimiter between the fn and its return type.  Here
+	! I choose ":" instead as it seems more consistent, at least for normal
+	! non-assignable fns.  There is some discussion on the Rust reasoning here:
+	!
+	!     https://stackoverflow.com/questions/35018919/whats-the-origin-of-in-rust-function-definition-return-types
+	!
+
+	fn%type = void_type
+	if (parser%current_kind() == colon_token) then
+
+		colon = parser%match(colon_token)
+
+		! TODO: decide a syntax for array types.  Maybe this?
+		!
+		!     fn get_vector(): [i32; :]
+		!     {
+		!         [1, 2, 3];
+		!     }
+		!
+		!     fn get_matrix(): [i32; :, :]
+		!     {
+		!         [0; 3, 3];
+		!     }
+		!
+		! Or fixed size?
+		!
+		!     fn get_vector(): [i32; 3]
+		!     {
+		!         [1, 2, 3];
+		!     }
+		!
+
+		type  = parser%match(identifier_token)
+
+		fn%type = lookup_type(type%text)
+
+		! TODO: catch unknown_type
+
+	end if
+	!print *, 'fn%type = ', fn%type
+
+	body = parser%parse_statement()
+
+	!print *, 'size(params) = ', params%len
+
+	!! Insert fn into parser%fns
+
+	!id_index = id_index + 1
+	!call fns%insert("min", min_fn, id_index)
+
+	!min_fn%type = i32_type
+	!allocate(fn%params(2))
+
+	!fn%params(1)%type = i32_type
+	!fn%params(1)%name = "a1"
+
+	!fn%params(2)%type = i32_type
+	!fn%params(2)%name = "a2"
+
+	! TODO: copy params
+	!allocate(fn%params( params%len ))
+	!call syntax_nodes_copy(fn%params, params%v( 1: params%len ))
+
+	!allocate(fn%body)
+	!fn%body = body
+
+	parser%num_fns = parser%num_fns + 1
+	decl%id_index  = parser%num_fns
+
+	allocate(decl%body)
+
+	decl%kind = fn_declaration
+
+	decl%identifier = identifier
+	decl%body       = body
+
+	call parser%vars%pop_scope()
+
+	!allocate(fn%body)
+	!fn%body = body
+	allocate(fn%node)
+	fn%node = decl
+
+	call parser%fns%insert(identifier%text, fn, decl%id_index)
+
+	!print *, 'size(decl%params) = ', size(decl%params)
+	!print *, 'decl%params = ', decl%params
+
+end function parse_fn_declaration
+
+!===============================================================================
+
+function lookup_type(name) result(type)
+
+	character(len = *), intent(in) :: name
+
+	integer :: type
+
+	! Immo also has an "any" type.  Should I allow that?
+
+	select case (name)
+		case ("f32")
+			type = f32_type
+		case ("i32")
+			type = i32_type
+		case ("bool")
+			type = bool_type
+		case default
+			type = unknown_type
+	end select
+
+end function lookup_type
 
 !===============================================================================
 
@@ -2660,12 +2942,12 @@ function parse_block_statement(parser) result(block)
 
 	!********
 
-	type(syntax_node_vector_t) :: statements
+	type(syntax_node_vector_t) :: members
 	type(syntax_token_t) :: left, right, dummy
 
 	integer :: i, pos0
 
-	statements = new_syntax_node_vector()
+	members = new_syntax_node_vector()
 	i = 0
 
 	left  = parser%match(lbrace_token)
@@ -2680,7 +2962,7 @@ function parse_block_statement(parser) result(block)
 		i = i + 1
 		!print *, '    statement ', i
 
-		call statements%push(parser%parse_statement())
+		call members%push(parser%parse_statement())
 
 		! Avoid infinite loops on malformed blocks like this:
 		!   {
@@ -2697,7 +2979,7 @@ function parse_block_statement(parser) result(block)
 	block%kind = block_statement
 
 	! Convert to standard array
-	call syntax_nodes_copy(block%statements, statements%v( 1: statements%len ))
+	call syntax_nodes_copy(block%members, members%v( 1: members%len ))
 
 end function parse_block_statement
 
@@ -2738,7 +3020,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	type(syntax_node_t) :: right, subscript
 	type(syntax_node_vector_t) :: subscripts
-	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket, comma
+	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket, comma, &
+		dummy
 	type(text_span_t) :: span
 
 	!print *, 'starting parse_expr_statement()'
@@ -2812,9 +3095,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		! we can't know how many spaces ahead an equals_token might be without
 		! looking ahead
 
-		!! %pos is the lexer token index, %current_pos() is the character index!
+		! %pos is the lexer token index, %current_pos() is the character index!
 		pos0 = parser%pos
-		!pos0 = parser%current_pos()
 
 		!print *, 'assign expr'
 
@@ -2836,6 +3118,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 			do while (parser%current_kind() /= rbracket_token)
 
+				pos1  = parser%pos
 				span0 = parser%current_pos()
 				subscript = parser%parse_expr()
 
@@ -2851,8 +3134,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 				call subscripts%push(subscript)
 
-				!! TODO? Break infinite loop
-				!if (parser%pos == pos1) dummy = parser%next()
+				! Break infinite loop
+				if (parser%pos == pos1) dummy = parser%next()
 
 				if (parser%current_kind() /= rbracket_token) then
 					comma = parser%match(comma_token)
@@ -3686,10 +3969,38 @@ function parse_primary_expr(parser) result(expr)
 
 				expr%val%type = fn%type
 
+				! Intrinsic fns don't have a body
+				!if (allocated(fn%body)) then
+				!if (fn%body /= null()) then
+				!if (associated(fn%body)) then
+				if (associated(fn%node)) then
+				!if (allocated(fn%node)) then
+					!print *, 'assigning fn node'
+
+					! If I understand my own code, this is inlining:  every fn
+					! call gets its own copy of the fn body.  This expansion
+					! happens at parse time, not eval time, so fn calls in
+					! a loop will all share one body
+
+					allocate(expr%body)
+					!expr%body = fn%body
+					expr%body = fn%node%body
+					expr%params = fn%node%params
+
+					!print *, 'allocating expr%params size ', size(fn%node%params)
+					!allocate(expr%params( size(fn%node%params )))
+					!expr%params = fn%node%params
+
+					! TODO: param ids
+
+				end if
+
 				! TODO: does fn need to be a syntax node member?  I think we can
 				! just look it up later by identifier/id_index like we do for
 				! variable value
 				!expr%fn = fn
+
+				! TODO: break cascading errors if fn is not defined
 
 				!print *, 'fn params size = ', size(fn%params)
 				if (size(fn%params) /= args%len) then
@@ -4083,9 +4394,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			! step-based impl array
 
-			lbound = syntax_eval(node%lbound, vars, fns)
-			step   = syntax_eval(node%step  , vars, fns)
-			ubound = syntax_eval(node%ubound, vars, fns)
+			lbound = syntax_eval(node%lbound, vars, fns, quietl)
+			step   = syntax_eval(node%step  , vars, fns, quietl)
+			ubound = syntax_eval(node%ubound, vars, fns, quietl)
 
 			array%type = node%val%array%type
 
@@ -4150,9 +4461,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! len-based impl arrays
 
 			!print *, 'len array'
-			lbound = syntax_eval(node%lbound, vars, fns)
-			ubound = syntax_eval(node%ubound, vars, fns)
-			len    = syntax_eval(node%len   , vars, fns)
+			lbound = syntax_eval(node%lbound, vars, fns, quietl)
+			ubound = syntax_eval(node%ubound, vars, fns, quietl)
+			len    = syntax_eval(node%len   , vars, fns, quietl)
 
 			! TODO: This could be allocated in one shot without pushing to
 			! growable array.
@@ -4195,7 +4506,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				allocate(array%size( array%rank ))
 
 				do i = 1, array%rank
-					len = syntax_eval(node%size(i), vars, fns)
+					len = syntax_eval(node%size(i), vars, fns, quietl)
 					array%size(i) = len%i32
 					!print *, 'size['//str(i)//'] = ', array%size(i)
 				end do
@@ -4206,7 +4517,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! at initialization, but they are of course mutable)
 
 			!print *, 'len array'
-			lbound = syntax_eval(node%lbound, vars, fns)
+			lbound = syntax_eval(node%lbound, vars, fns, quietl)
 
 			! Allocate in one shot without growing.  TODO: do this for other
 			! implicit cases
@@ -4252,8 +4563,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! statement requires it to be explicit, so we might as well expand
 			! at initialization
 
-			lbound = syntax_eval(node%lbound, vars, fns)
-			ubound = syntax_eval(node%ubound, vars, fns)
+			lbound = syntax_eval(node%lbound, vars, fns, quietl)
+			ubound = syntax_eval(node%ubound, vars, fns, quietl)
 
 			array = new_array(node%val%array%type)
 
@@ -4303,7 +4614,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			array = new_array(node%val%array%type)
 
 			do i = 1, size(node%elems)
-				elem = syntax_eval(node%elems(i), vars, fns)
+				elem = syntax_eval(node%elems(i), vars, fns, quietl)
 				!print *, 'elem['//str(i)//'] = ', elem%str()
 				call array%push(elem)
 			end do
@@ -4331,8 +4642,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! for shared use here for for_statement eval and above for array_expr
 		! eval.  If possible, don't expand implicit arrays for for loops
 
-		lbound = syntax_eval(node%array%lbound, vars, fns)
-		ubound = syntax_eval(node%array%ubound, vars, fns)
+		lbound = syntax_eval(node%array%lbound, vars, fns, quietl)
+		ubound = syntax_eval(node%array%ubound, vars, fns, quietl)
 
 		! push scope to make the loop iterator local
 		call vars%push_scope()
@@ -4357,49 +4668,83 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! not know the entire list of variable identifiers ahead of time
 			vars%vals(node%id_index) = itr
 
-			res = syntax_eval(node%body, vars, fns)
+			res = syntax_eval(node%body, vars, fns, quietl)
 		end do
 
 		call vars%pop_scope()
 
 	case (while_statement)
 
-		condition = syntax_eval(node%condition, vars, fns)
+		condition = syntax_eval(node%condition, vars, fns, quietl)
 		do while (condition%bool)
-			res = syntax_eval(node%body, vars, fns)
-			condition = syntax_eval(node%condition, vars, fns)
+			res = syntax_eval(node%body, vars, fns, quietl)
+			condition = syntax_eval(node%condition, vars, fns, quietl)
 		end do
 
 	case (if_statement)
 
-		condition = syntax_eval(node%condition, vars, fns)
+		condition = syntax_eval(node%condition, vars, fns, quietl)
 		!print *, 'condition = ', condition%str()
 
 		if (condition%bool) then
-			res = syntax_eval(node%if_clause, vars, fns)
+			res = syntax_eval(node%if_clause, vars, fns, quietl)
 
 		else if (allocated(node%else_clause)) then
-			res = syntax_eval(node%else_clause, vars, fns)
+			res = syntax_eval(node%else_clause, vars, fns, quietl)
 
 		end if
+
+	case (translation_unit)
+
+		! TODO: do we want to globally push/pop scope for whole
+		! translation_unit?  Will this have impacts on interpretting multiple
+		! files, or allowing the user to override intrinsic fns?
+		call vars%push_scope()
+
+		! The final statement of a unit returns the actual result.  Non-final
+		! members only change the (vars) state or define fns
+		do i = 1, size(node%members)
+
+			! Only eval statements, not fns declarations.  TODO: cycle structs
+			! too.
+			!
+			! TODO: is this where we should copy fn dict to array?
+			if (node%members(i)%kind == fn_declaration) cycle
+
+			res = syntax_eval(node%members(i), vars, fns, quietl)
+
+			!print *, 'kind = ', node%members(i)%kind
+			!print *, i, ' res = ', res%str()
+			!print *, ''
+
+			! HolyC feature: implicitly print name expression members.  I may
+			! remove this after I implement an intrinsic print() fn.  May also
+			! need to suppress this for void fn calls later
+			if (node%members(i)%kind == name_expr .and. .not. quietl) then
+				write(*,*) res%str()
+			end if
+
+		end do
+
+		call vars%pop_scope()
 
 	case (block_statement)
 
 		call vars%push_scope()
 
 		! The final statement of a block returns the actual result.  Non-final
-		! statements only change the (vars) state.
-		do i = 1, size(node%statements)
-			res = syntax_eval(node%statements(i), vars, fns)
+		! members only change the (vars) state.
+		do i = 1, size(node%members)
+			res = syntax_eval(node%members(i), vars, fns, quietl)
 
-			!print *, 'kind = ', node%statements(i)%kind
+			!print *, 'kind = ', node%members(i)%kind
 			!print *, i, ' res = ', res%str()
 			!print *, ''
 
-			! HolyC feature: implicitly print name expression statements.  I may
+			! HolyC feature: implicitly print name expression members.  I may
 			! remove this after I implement an intrinsic print() fn.  May also
 			! need to suppress this for void fn calls later
-			if (node%statements(i)%kind == name_expr .and. .not. quietl) then
+			if (node%members(i)%kind == name_expr .and. .not. quietl) then
 				write(*,*) res%str()
 			end if
 
@@ -4412,7 +4757,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		if (.not. allocated(node%subscripts)) then
 
 			! Assign return value
-			res = syntax_eval(node%right, vars, fns)
+			res = syntax_eval(node%right, vars, fns, quietl)
 
 			! TODO: test int/float casting.  It should be an error during
 			! parsing
@@ -4431,7 +4776,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'LHS array subscript assignment'
 
 			! Assign return value from RHS
-			res = syntax_eval(node%right, vars, fns)
+			res = syntax_eval(node%right, vars, fns, quietl)
 
 			!print *, 'RHS = ', res%str()
 
@@ -4441,7 +4786,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			do k = 1, vars%vals(node%id_index)%array%rank
 				!print *, 'k = ', k
 
-				subscript = syntax_eval(node%subscripts(k), vars, fns)
+				subscript = syntax_eval(node%subscripts(k), vars, fns, quietl)
 
 				j = j + prod * subscript%i32
 				prod  = prod * vars%vals(node%id_index)%array%size(k)
@@ -4472,7 +4817,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (let_expr)
 
 		! Assign return value
-		res = syntax_eval(node%right, vars, fns)
+		res = syntax_eval(node%right, vars, fns, quietl)
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
 		vars%vals(node%id_index) = res
@@ -4483,7 +4828,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'fn identifier = ', node%identifier%text
 		!print *, 'fn id_index   = ', node%id_index
 
-		res%type = fns%fns(node%id_index)%type
+		!res%type = fns%fns(node%id_index)%type
+		res%type = node%val%type
 
 		!print *, 'res type = ', res%type
 
@@ -4491,18 +4837,39 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		select case (node%identifier%text)
 		case ("exp")
 
-			arg1 = syntax_eval(node%args(1), vars, fns)
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			res%f32 = exp(arg1%f32)
 
 		case ("min")
 
-			arg1 = syntax_eval(node%args(1), vars, fns)
-			arg2 = syntax_eval(node%args(2), vars, fns)
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+			arg2 = syntax_eval(node%args(2), vars, fns, quietl)
 			res%i32 = min(arg1%i32, arg2%i32)
 
 		case default
-			write(*,*) 'Error: unexpected fn'
-			call internal_error()
+
+			!print *, 'fn name = ', node%identifier%text
+			!print *, 'fn idx  = ', node%id_index
+			!print *, 'node type = ', node%val%type
+			!print *, 'size params = ', size(node%params)
+			!print *, 'param ids = ', node%params
+
+			! TODO: Shared param scope is ok at first, but eventually target
+			! recursive fns with scoped stack frames
+
+			! Pass by value (for now, at least).  Arguments are evaluated and
+			! their values are copied to the fn parameters
+
+			do i = 1, size(node%params)
+				!print *, 'copying param ', i
+				vars%vals( node%params(i) ) = &
+					syntax_eval(node%args(i), vars, fns, quietl)
+			end do
+
+			res = syntax_eval(node%body, vars, fns, quietl)
+
+			!write(*,*) 'Error: unexpected fn'
+			!call internal_error()
 
 		end select
 
@@ -4521,7 +4888,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			do k = 1, vars%vals(node%id_index)%array%rank
 				!print *, 'k = ', k
 
-				subscript = syntax_eval(node%subscripts(k), vars, fns)
+				subscript = syntax_eval(node%subscripts(k), vars, fns, quietl)
 
 				j = j + prod * subscript%i32
 				prod  = prod * vars%vals(node%id_index)%array%size(k)
@@ -4559,7 +4926,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	case (unary_expr)
 
-		right = syntax_eval(node%right, vars, fns)
+		right = syntax_eval(node%right, vars, fns, quietl)
 		!print *, 'right = ', right
 
 		res%type = right%type
@@ -4588,8 +4955,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	case (binary_expr)
 
-		left  = syntax_eval(node%left , vars, fns)
-		right = syntax_eval(node%right, vars, fns)
+		left  = syntax_eval(node%left , vars, fns, quietl)
+		right = syntax_eval(node%right, vars, fns, quietl)
 
 		!print *, 'left  = ', left
 		!print *, 'right = ', right

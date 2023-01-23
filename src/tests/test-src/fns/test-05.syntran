@@ -1,0 +1,15 @@
+
+let dummy1 = 0;
+let dummy2 = 0;
+
+fn add(a1: i32, a2: i32): i32
+{
+	a1 + a2;
+}
+
+let a = 3;
+let b = 4;
+let c = add(a + 1, b + 2);
+
+c;
+
