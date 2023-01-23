@@ -2371,8 +2371,10 @@ function parse_unit(parser) result(unit)
 
 	!left  = parser%match(lbrace_token)
 
-	!! This breaks interactive interpretation, but we may want it later for
-	!! interpetting multiple files
+	!! Pushing scope breaks interactive interpretation, but we may want it later
+	!! for interpetting multiple files.  Another alternative would be chaining
+	!! interpreted statements like Immo does
+
 	!call parser%vars%push_scope()
 
 	do while (parser%current_kind() /= eof_token)
@@ -4242,12 +4244,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			if (array%type == i32_type) then
 
-				array%cap = (ubound%i32 - lbound%i32 + 1) / step%i32
+				array%cap = (ubound%i32 - lbound%i32) / step%i32 + 1
 				allocate(array%i32( array%cap ))
 
 				i = lbound%i32
 				j = 1
-				do while (i < ubound%i32)
+
+				! TODO: add tests for arrays with negative steps
+				do while ((i < ubound%i32 .eqv. lbound%i32 < ubound%i32) &
+					.and. i /= ubound%i32)
+
 					array%i32(j) = i
 					i = i + step%i32
 					j = j + 1
