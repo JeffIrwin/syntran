@@ -331,7 +331,7 @@ Besides ranges of consecutive integers, which is the only form that can be used 
 To initialize an array to a range with a step:
 ```cpp
 let v1 = [10: -2: 0];
-[10, 8, 6, 4, 2]
+// [10, 8, 6, 4, 2]
 ```
 
 To refer to an element of an array, place the index in square brackets:
