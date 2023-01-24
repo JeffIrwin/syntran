@@ -2872,7 +2872,9 @@ recursive function parse_expr_statement(parser) result(expr)
 	type(syntax_node_vector_t) :: subscripts
 	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket, comma, &
 		dummy
+
 	type(text_span_t) :: span
+	type(value_t) :: tmp
 
 	!print *, 'starting parse_expr_statement()'
 
@@ -2920,7 +2922,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		! Increment the variable array index and save it in the expr node.
 		! TODO: make this a push_var fn?  parse_for_statement uses it too
 		parser%num_vars = parser%num_vars + 1
-		expr%id_index = parser%num_vars
+		expr%id_index   = parser%num_vars
 
 		! Insert the identifier's type into the dict and check that it
 		! hasn't already been declared
@@ -3028,7 +3030,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		expr%op    = op
 		expr%right = right
 
-		!print *, 'expr ident text = ', expr%identifier%text
+		print *, 'expr ident text = ', expr%identifier%text
 
 		! Get the identifier's type and index from the dict and check that it
 		! has been declared
@@ -3045,35 +3047,51 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'associated(expr%val%array) = ', associated(expr%val%array)
 
-		ltype = expr%val%type
-		rtype = expr%right%val%type
-
 		if (subscripts_present) then
 			call syntax_nodes_copy(expr%subscripts, &
 				subscripts%v( 1: subscripts%len ))
+			print *, 'reassigning'
+
+			!tmp = expr%val%array%lbound
+			!print *, 'tmp'
+			!expr%val = tmp
+
+			expr%val%type = expr%val%array%type
+
+			print *, 'done'
 		end if
 
+		ltype = expr%val%type
+		rtype = expr%right%val%type
+
 		!! TODO: only do this if the subscript is present.  Whole array
-		!! assignment should be different
-		!if (type == array_type) then
+		!! assignment and other operations should be different
+		!if (ltype == array_type) then
 		!	print *, 'reassigning'
 		!	print *, 'expr%val%array%type = ', expr%val%array%type
-		!	type = expr%val%array%type
+		!	ltype = expr%val%array%type
 		!	print *, 'done'
 		!end if
+
+		print *, 'rtype'
+		!if (rtype == array_type) rtype = expr%right%val%array%type
+		!if (rtype == array_type) rtype = right%val%array%type
+		print *, 'done'
 
 		! TODO: move this check inside of is_binary_op_allowed?  Need to pass
 		! parser to it to push diagnostics
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
+			print *, '.not. is_binary_op_allowed 1'
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context, &
 				span, op%text, &
-				kind_name(expr%val%type), &
-				kind_name(expr%right%val%type)))
+				kind_name(ltype), &
+				kind_name(rtype)))
 
 		end if
+		print *, '.yes. is_binary_op_allowed 1'
 
 		return
 
@@ -3148,6 +3166,9 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		ltype = expr%left %val%type
 		rtype = expr%right%val%type
 
+		if (ltype == array_type) ltype = expr%left %val%array%type
+		if (rtype == array_type) rtype = expr%right%val%array%type
+
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
 			!print *, 'bin not allowed in parse_expr'
@@ -3156,8 +3177,8 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context, &
 				span, op%text, &
-				kind_name(expr%left %val%type), &
-				kind_name(expr%right%val%type)))
+				kind_name(ltype), &
+				kind_name(rtype)))
 
 		end if
 
@@ -3473,10 +3494,15 @@ function parse_array_expr(parser) result(expr)
 
 		expr%kind           = array_expr
 
-		expr%val%type       = lbound%val%type
+		!! TODO: change type for other forms
+		!expr%val%type       = lbound%val%type
+		expr%val%type       = array_type
 
 		expr%val%array%type = lbound%val%type
 		expr%val%array%kind = impl_array
+
+		print *, 'expr%val%type       = ', expr%val%type
+		print *, 'expr%val%array%type = ', expr%val%array%type
 
 		! TODO: does this syntax node need to own these members, or can we just
 		! save them in the array_t?  I think they do need to be duplicated, as
@@ -3492,7 +3518,7 @@ function parse_array_expr(parser) result(expr)
 
 	if (parser%current_kind() == colon_token) then
 
-		! Implicit array form [lbound: ubound] or [lbound: step: ubound]
+		! Implicit array form unit step [lbound: ubound] or [lbound: step: ubound]
 		colon    = parser%match(colon_token)
 
 		span_beg = parser%peek_pos(0)
@@ -3537,7 +3563,8 @@ function parse_array_expr(parser) result(expr)
 
 			expr%kind           = array_expr
 
-			expr%val%type       = lbound%val%type
+			!expr%val%type       = lbound%val%type
+			expr%val%type       = array_type
 
 			expr%val%array%type = lbound%val%type
 			expr%val%array%kind = impl_array
@@ -3579,7 +3606,8 @@ function parse_array_expr(parser) result(expr)
 
 			expr%kind           = array_expr
 
-			expr%val%type       = lbound%val%type
+			!expr%val%type       = lbound%val%type
+			expr%val%type       = array_type
 
 			expr%val%array%type = lbound%val%type
 			expr%val%array%kind = impl_array
@@ -3592,11 +3620,11 @@ function parse_array_expr(parser) result(expr)
 
 		end if
 
-		! Implicit array form [lbound: ubound]
+		! Implicit array form unit step [lbound: ubound]
 
 		rbracket = parser%match(rbracket_token)
 
-		!print *, 'lbound = ', lbound%str()
+		print *, 'lbound = ', lbound%str()
 		!print *, 'ubound = ', ubound%str()
 
 		allocate(expr%val%array)
@@ -3605,7 +3633,8 @@ function parse_array_expr(parser) result(expr)
 
 		expr%kind                 = array_expr
 
-		expr%val%type             = lbound%val%type
+		!expr%val%type             = lbound%val%type
+		expr%val%type       = array_type
 
 		! TODO: I think array pointer should be allocated first here
 		expr%val%array%type       = lbound%val%type
@@ -3655,7 +3684,10 @@ function parse_array_expr(parser) result(expr)
 
 	allocate(expr%val%array)
 	expr%kind           = array_expr
-	expr%val%type       = lbound%val%type
+
+	!expr%val%type       = lbound%val%type
+	expr%val%type       = array_type
+
 	expr%val%array%type = lbound%val%type
 	expr%val%array%kind = expl_array
 
@@ -3713,6 +3745,9 @@ function parse_primary_expr(parser) result(expr)
 
 			! Brackets are matched within parse_array_expr
 			expr = parser%parse_array_expr()
+
+			print *, '2 expr%val%type = ', expr%val%type
+			print *, '2 expr%val%array%type = ', expr%val%array%type
 
 		case (true_keyword, false_keyword)
 
@@ -3777,7 +3812,8 @@ function parse_primary_expr(parser) result(expr)
 					call syntax_nodes_copy(expr%subscripts, &
 						subscripts%v( 1: subscripts%len ))
 
-					!print *, 'expr%val%type = ', kind_name(expr%val%type)
+					print *, 'expr%val%type = ', kind_name(expr%val%type)
+					expr%val%type = expr%val%array%type
 
 				end if
 
@@ -3907,6 +3943,13 @@ function new_name_expr(identifier, val) result(expr)
 	expr%identifier = identifier
 	expr%val = val
 
+	if (expr%val%type == array_type) then
+		!if (.not. associated(expr%val%array)) allocate(expr%val%array)
+		allocate(expr%val%array)
+		!expr%val%array = right%val%array
+		expr%val%array = val%array
+	end if
+
 end function new_name_expr
 
 !===============================================================================
@@ -3973,6 +4016,13 @@ function new_declaration_expr(identifier, op, right) result(expr)
 
 	! Pass the result value type up the tree for type checking in parent
 	expr%val%type = right%val%type
+	if (expr%val%type == array_type) then
+		print *, 'new_declaration_expr array_type'
+		!if (.not. associated(expr%val%array)) allocate(expr%val%array)
+		allocate(expr%val%array)
+		!expr%val%array = right%val%array
+		expr%val%array = right%val%array
+	end if
 
 end function new_declaration_expr
 
@@ -4002,6 +4052,7 @@ function new_binary_expr(left, op, right) result(expr)
 
 	! Pass the result value type up the tree for type checking in parent
 	expr%val%type = get_binary_op_kind(left%val%type, op%kind, right%val%type)
+	! TODO: array subtype if subscripted
 
 	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_binary_expr'
