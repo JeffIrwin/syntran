@@ -47,11 +47,12 @@ module core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
+	!      > size (of array)
 	!      > abs, min, max
 	!      > exp, log
 	!      > trig: sin, cos, tan, asin, ...
 	!      > read/write
-	!      > norm
+	!      > norm, sum, product
 	!    * done:
 	!      > exp, min (non-variadic)
 	!      > non-recursive user-defined fns
@@ -249,7 +250,7 @@ module core_m
 		! Each scope level has its own fn dict in dicts(:)
 		integer :: scope = 1
 
-		! TODO: nested fns?
+		! TODO: scoping for nested fns?
 		contains
 			procedure :: &
 				insert => fn_insert, &
@@ -1714,7 +1715,6 @@ function lex(lexer) result(token)
 
 		float = .false.
 
-		!do while (is_digit(lexer%current()))
 		do while (is_float(lexer%current()))
 
 			if (is_sign(lexer%current()) .and. .not. &
@@ -2446,9 +2446,9 @@ function parse_fn_declaration(parser) result(decl)
 	names = new_string_vector()
 	types = new_string_vector()
 
-	! TODO: I think there should be an eof check an this and other while loops
-	! to break infinite loops on missing rparens/rbrackets etc.
-	do while (parser%current_kind() /= rparen_token)
+	do while ( &
+		parser%current_kind() /= rparen_token .and. &
+		parser%current_kind() /= eof_token)
 
 		name = parser%match(identifier_token)
 		colon = parser%match(colon_token)
@@ -2975,7 +2975,9 @@ recursive function parse_expr_statement(parser) result(expr)
 
 			lbracket  = parser%match(lbracket_token)
 
-			do while (parser%current_kind() /= rbracket_token)
+			do while ( &
+				parser%current_kind() /= rbracket_token .and. &
+				parser%current_kind() /= eof_token)
 
 				pos1  = parser%pos
 				span0 = parser%current_pos()
@@ -3442,7 +3444,9 @@ function parse_array_expr(parser) result(expr)
 		! [lbound; rows, cols, sheets, ...]
 
 		size = new_syntax_node_vector()
-		do while (parser%current_kind() /= rbracket_token)
+		do while ( &
+			parser%current_kind() /= rbracket_token .and. &
+			parser%current_kind() /= eof_token)
 
 			span_beg = parser%peek_pos(0)
 			len      = parser%parse_expr()
@@ -3630,7 +3634,10 @@ function parse_array_expr(parser) result(expr)
 
 	elems = new_syntax_node_vector()
 	call elems%push(lbound)
-	do while (parser%current_kind() /= rbracket_token)
+	do while (&
+		parser%current_kind() /= rbracket_token .and. &
+		parser%current_kind() /= eof_token)
+
 		pos0 = parser%pos
 		comma    = parser%match(comma_token)
 
@@ -3762,7 +3769,9 @@ function parse_primary_expr(parser) result(expr)
 					subscripts = new_syntax_node_vector()
 					lbracket  = parser%match(lbracket_token)
 
-					do while (parser%current_kind() /= rbracket_token)
+					do while ( &
+						parser%current_kind() /= rbracket_token .and. &
+						parser%current_kind() /= eof_token)
 
 						subscript = parser%parse_expr()
 						call subscripts%push(subscript)
@@ -3791,7 +3800,9 @@ function parse_primary_expr(parser) result(expr)
 				args = new_syntax_node_vector()
 				lparen  = parser%match(lparen_token)
 
-				do while (parser%current_kind() /= rparen_token)
+				do while ( &
+					parser%current_kind() /= rparen_token .and. &
+					parser%current_kind() /= eof_token)
 
 					arg = parser%parse_expr()
 					call args%push(arg)
@@ -4250,7 +4261,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				i = lbound%i32
 				j = 1
 
-				! TODO: add tests for arrays with negative steps
+				! TODO: add tests for arrays with negative steps.  f32 too
 				do while ((i < ubound%i32 .eqv. lbound%i32 < ubound%i32) &
 					.and. i /= ubound%i32)
 

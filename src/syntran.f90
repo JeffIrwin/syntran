@@ -180,11 +180,6 @@ subroutine syntran_banner()
 	use core_m
 
 	character(len = :), allocatable :: version
-	character(len = 16) :: major, minor, patch
-
-	write(major, '(i0)') syntran_major
-	write(minor, '(i0)') syntran_minor
-	write(patch, '(i0)') syntran_patch
 
 	version = &
 		str(syntran_major)//'.'// &
