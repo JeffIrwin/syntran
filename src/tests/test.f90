@@ -727,6 +727,12 @@ subroutine unit_test_array_i32_1(npass, nfail)
 	! white space is significant!  Ints are formatted in min width, and array
 	! elements are separated by a comma and a single space
 
+	! TODO: test empty arrays.  As of 0.0.13, empty literal arrays cannot be
+	! assigned, but this can be worked around with ubound < lbound, e.g.:
+	!
+	!     let v = [0: -1];
+	!     // []
+
 	tests = &
 		[   &
 			eval('[42];') == '[42]', &
@@ -741,6 +747,9 @@ subroutine unit_test_array_i32_1(npass, nfail)
 			eval('[4: 2: 9];') == '[4, 6, 8]', &
 			eval('[4: 2: 10];') == '[4, 6, 8]', &
 			eval('[4: 2: 11];') == '[4, 6, 8, 10]', &
+			eval('[11: -2: 4];') == '[11, 9, 7, 5]', &
+			eval('[10: -2: 4];') == '[10, 8, 6]', &
+			eval('[ 9: -2: 4];') == '[9, 7, 5]', &
 			eval('[2-3: 6/3 + 3];') == '[-1, 0, 1, 2, 3, 4]', &
 			eval('let myArray = [2-3: 6/3 + 3];') == '[-1, 0, 1, 2, 3, 4]', &
 			eval('[42; 3];') == '[42, 42, 42]', &
@@ -790,6 +799,7 @@ subroutine unit_test_array_f32_1(npass, nfail)
 			eval('[1.: 0.5: 3.4];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
 			eval('[1.: 0.5: 3.9];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00, 3.500000E+00]', &
 			eval('[4.: 0.5: 5.4];') == '[4.000000E+00, 4.500000E+00, 5.000000E+00]', &
+			eval('[5.4: -0.5: 4.0];') == '[5.400000E+00, 4.900000E+00, 4.400000E+00]', &
 			eval('[2.-3.: 1.1: 6./3. + 3.];') == '[-1.000000E+00, 1.000000E-01, 1.200000E+00, 2.300000E+00, 3.400000E+00, 4.500000E+00]', &
 			eval('[42.0; 3];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
 			eval('[42.0; 4];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01, 4.200000E+01]',  &

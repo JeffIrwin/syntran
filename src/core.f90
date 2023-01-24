@@ -1498,8 +1498,6 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	!********
 
-	integer :: i
-
 	if (debug > 3) print *, 'starting syntax_node_copy()'
 
 	dst%kind = src%kind
@@ -1537,14 +1535,7 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	if (allocated(src%params)) then
 		! Primitive int array.  No need to explicitly allocate
-
-		!if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
 		dst%params = src%params
-		!print *, 'copy params size ', size(src%params)
-		!do i = 1, size(src%params)
-		!	dst%params(i) = src%params(i)
-		!end do
-
 	end if
 
 	if (allocated(src%condition)) then
@@ -2428,7 +2419,7 @@ function parse_fn_declaration(parser) result(decl)
 
 	type(value_t) :: val
 
-	integer :: i, pos0
+	integer :: i
 
 	! Like a for statement, a fn declaration has its own scope (for its
 	! parameters).  Its block body will have yet another scope
@@ -4258,13 +4249,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				array%cap = (ubound%i32 - lbound%i32) / step%i32 + 1
 				allocate(array%i32( array%cap ))
 
-				i = lbound%i32
 				j = 1
+				i = lbound%i32
+				if (lbound%i32 < ubound%i32 .neqv. 0 < step%i32) i = ubound%i32
 
-				! TODO: add tests for arrays with negative steps.  f32 too
-				do while ((i < ubound%i32 .eqv. lbound%i32 < ubound%i32) &
-					.and. i /= ubound%i32)
-
+				! Step may be negative
+				do while ((i  < ubound%i32 .eqv. lbound%i32 < ubound%i32) &
+				     .and. i /= ubound%i32)
 					array%i32(j) = i
 					i = i + step%i32
 					j = j + 1
@@ -4279,9 +4270,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				array%cap = ceiling((ubound%f32 - lbound%f32) / step%f32) + 1
 				allocate(array%f32( array%cap ))
 
-				f = lbound%f32
 				j = 1
-				do while (f < ubound%f32)
+				f = lbound%f32
+				if (lbound%f32 < ubound%f32 .neqv. 0 < step%f32) f = ubound%f32
+
+				do while ((f  < ubound%f32 .eqv. lbound%f32 < ubound%f32) &
+				     .and. f /= ubound%f32)
 					array%f32(j) = f
 					f = f + step%f32
 					j = j + 1
