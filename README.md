@@ -129,7 +129,6 @@ When the clause of the if statement is only a single line, braces `{}` are optio
 The bounds of for loops, like ranges in Rust and Python, are inclusive of the lower bound and exclusive of the upper bound:
 
 ```cpp
-let i = 0;
 for i in [0: 5]
     i;
 // 0, 1, 2, 3, 4
@@ -140,7 +139,6 @@ for i in [0: 5]
 With only these language features, we can make a short program to find prime numbers:
 
 ```cpp
-{
 // Get the largest prime number less than n
 let n = 100;
 
@@ -173,7 +171,6 @@ for i in [0: n]
 // Final result
 prime;
 // 97
-}
 ```
 
 ## Variable scoping
@@ -312,7 +309,6 @@ Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/153
 
 Recall the syntax for a for-loop:
 ```cpp
-let i = 0;
 for i in [0: 5]
     i;
 // 0, 1, 2, 3, 4
