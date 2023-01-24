@@ -4289,7 +4289,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%rank = 1
 			allocate(array%size( array%rank ))
-			array%size = array%cap  ! TODO: set to cap or len?
+			array%size = array%len
 
 			allocate(res%array)
 
@@ -4341,7 +4341,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%rank = 1
 			allocate(array%size( array%rank ))
-			array%size = array%cap
+			array%size = array%len
 
 			allocate(res%array)
 
@@ -4439,7 +4439,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%rank = 1
 			allocate(array%size( array%rank ))
-			array%size = array%cap
+			array%size = array%len
 
 			allocate(res%array)
 
@@ -4461,7 +4461,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			! TODO: explicit multi-rank arrays
 
-			! TODO: allow empty arrays?  Sub type of empty array?
+			! TODO: allow empty arrays?  Sub type of empty array?  Empty arrays
+			! can currently be created like [0: -1];
 			array = new_array(node%val%array%type)
 
 			do i = 1, size(node%elems)
@@ -4472,7 +4473,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%rank = 1
 			allocate(array%size( array%rank ))
-			array%size = array%cap
+			array%size = array%len
 
 			!print *, 'copying array'
 			allocate(res%array)
@@ -4550,7 +4551,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! TODO: do we want to globally push/pop scope for whole
 		! translation_unit?  Will this have impacts on interpretting multiple
 		! files, or allowing the user to override intrinsic fns?
-		call vars%push_scope()
+		!call vars%push_scope()
 
 		! The final statement of a unit returns the actual result.  Non-final
 		! members only change the (vars) state or define fns
@@ -4577,7 +4578,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		end do
 
-		call vars%pop_scope()
+		!call vars%pop_scope()
 
 	case (block_statement)
 
