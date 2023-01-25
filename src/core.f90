@@ -428,7 +428,7 @@ module core_m
 				parse_statement, parse_block_statement, parse_if_statement, &
 				current_pos, peek_pos, parse_for_statement, &
 				parse_while_statement, parse_array_expr, parse_unit, &
-				parse_fn_declaration
+				parse_fn_declaration, try_parse_subscripts
 
 	end type parser_t
 
@@ -2958,53 +2958,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		! Subscript can appear in assignment expr but not let expr, because let
 		! must initialize the whole array
-
-		subscripts_present = .false.
-		if (parser%current_kind() == lbracket_token) then
-			subscripts_present = .true.
-			!print *, 'parsing subscripts'
-
-			subscripts = new_syntax_node_vector()
-
-			lbracket  = parser%match(lbracket_token)
-
-			do while ( &
-				parser%current_kind() /= rbracket_token .and. &
-				parser%current_kind() /= eof_token)
-
-				pos1  = parser%pos
-				span0 = parser%current_pos()
-				subscript = parser%parse_expr()
-
-				!print *, 'subscript = ', subscript%str()
-				!print *, 'subscript = ', parser%context%text(span0: parser%current_pos()-1)
-
-				if (subscript%val%type /= i32_type) then
-					span = new_span(span0, parser%current_pos() - span0)
-					call parser%diagnostics%push( &
-						err_non_int_subscript(parser%context, span, &
-						parser%context%text(span0: parser%current_pos()-1)))
-				end if
-
-				call subscripts%push(subscript)
-
-				! Break infinite loop
-				if (parser%pos == pos1) dummy = parser%next()
-
-				if (parser%current_kind() /= rbracket_token) then
-					comma = parser%match(comma_token)
-				end if
-
-			end do
-
-			!print *, 'parsing rbracket'
-			rbracket  = parser%match(rbracket_token)
-			!print *, 'done'
-
-			! TODO: check that # of subscripts matches array rank, both LHS and
-			! RHS parsing
-
-		end if
+		subscripts = parser%try_parse_subscripts(expr)
 
 		if (parser%current_kind() /= equals_token) then
 			! Rewind and do the default case (same as outside the assignment if
@@ -3016,10 +2970,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		end if
 		!print *, 'parsing assignment'
 
-		op         = parser%match(equals_token)
-
-		!right      = parser%parse_expr()
-		right      = parser%parse_expr_statement()
+		op    = parser%match(equals_token)
+		right = parser%parse_expr_statement()
 
 		expr%kind = assignment_expr
 
@@ -3047,7 +2999,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'associated(expr%val%array) = ', associated(expr%val%array)
 
-		if (subscripts_present) then
+		!if (subscripts_present) then
+		if (subscripts%len > 0) then
 			call syntax_nodes_copy(expr%subscripts, &
 				subscripts%v( 1: subscripts%len ))
 			!print *, 'reassigning'
@@ -3082,6 +3035,73 @@ recursive function parse_expr_statement(parser) result(expr)
 	!semi       = parser%match(semicolon_token)
 
 end function parse_expr_statement
+
+!===============================================================================
+
+function try_parse_subscripts(parser, expr) result(subscripts)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t), intent(inout) :: expr
+
+	!********
+
+	integer :: io, ltype, rtype, pos0, pos1, span0
+
+	type(syntax_node_t) :: right, subscript
+	type(syntax_node_vector_t) :: subscripts
+	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket, comma, &
+		dummy
+
+	type(text_span_t) :: span
+
+	!subscripts_present = .false.
+	subscripts = new_syntax_node_vector()
+
+	if (parser%current_kind() /= lbracket_token) return
+
+	!subscripts_present = .true.
+	!print *, 'parsing subscripts'
+
+	lbracket  = parser%match(lbracket_token)
+
+	do while ( &
+		parser%current_kind() /= rbracket_token .and. &
+		parser%current_kind() /= eof_token)
+
+		pos1  = parser%pos
+		span0 = parser%current_pos()
+		subscript = parser%parse_expr()
+
+		!print *, 'subscript = ', subscript%str()
+		!print *, 'subscript = ', parser%context%text(span0: parser%current_pos()-1)
+
+		if (subscript%val%type /= i32_type) then
+			span = new_span(span0, parser%current_pos() - span0)
+			call parser%diagnostics%push( &
+				err_non_int_subscript(parser%context, span, &
+				parser%context%text(span0: parser%current_pos()-1)))
+		end if
+
+		call subscripts%push(subscript)
+
+		! Break infinite loop
+		if (parser%pos == pos1) dummy = parser%next()
+
+		if (parser%current_kind() /= rbracket_token) then
+			comma = parser%match(comma_token)
+		end if
+
+	end do
+
+	!print *, 'parsing rbracket'
+	rbracket  = parser%match(rbracket_token)
+	!print *, 'done'
+
+	! TODO: check that # of subscripts matches array rank, both LHS and
+	! RHS parsing
+
+end function try_parse_subscripts
 
 !===============================================================================
 
