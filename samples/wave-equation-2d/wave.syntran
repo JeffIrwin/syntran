@@ -61,8 +61,12 @@
 	let cy2 = (c * dt / dy) ** 2;
 
 	// Initial condition: Gaussian pulse
+
 	let xpulse = xmin + 0.3333 * (xmax - xmin);
 	let ypulse = ymin + 0.2500 * (ymax - ymin);
+	//let xpulse = xmin + 0.5 * (xmax - xmin);
+	//let ypulse = ymin + 0.5 * (ymax - ymin);
+
 	let pwidth = 0.05 * (xmax - xmin);
 	for iy in [0: ny]
 		for ix in [0: nx]

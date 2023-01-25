@@ -24,7 +24,8 @@ scilab="/c/Program Files/scilab-6.0.0/bin/WScilex.exe"
 
 ./convert.sh
 
-ffmpeg -r 60 -i frames/wave_%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p wave.mp4 -y
+#ffmpeg -r 60 -i frames/wave_%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p wave.mp4 -y
+ffmpeg -r 10 -i frames/wave_%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p wave.mp4 -y
 
 popd
 

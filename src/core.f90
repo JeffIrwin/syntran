@@ -28,6 +28,7 @@ module core_m
 	! TODO:
 	!
 	! Add:
+	!  - strings.  are characters useful or can we just use strings of length 1?
 	!  - arrays
 	!    * bool arrays
 	!    * fix array sub-type checking
@@ -39,6 +40,7 @@ module core_m
 	!      > a[:]     -> a[0], a[1], a[2], ...
 	!      > a[1:4]   -> a[1], a[2], a[3]
 	!      > a[1:2:6] -> a[1], a[3], a[5]
+	!      > higher rank:  a[:,1], a[2,:], a[2:4, 1], ...
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
 	!  - compound assignment: +=, -=, *=, etc.
@@ -47,18 +49,17 @@ module core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
+	!      > read/write
 	!      > size (of array)
 	!      > abs, min, max
 	!      > exp, log
 	!      > trig: sin, cos, tan, asin, ...
-	!      > read/write
 	!      > norm, sum, product
 	!    * done:
 	!      > exp, min (non-variadic)
 	!      > non-recursive user-defined fns
 	!    * recursive user-defined fns
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
-	!  - strings.  are characters useful or can we just use strings of length 1?
 	!  - structs
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - enums
@@ -2874,7 +2875,6 @@ recursive function parse_expr_statement(parser) result(expr)
 		dummy
 
 	type(text_span_t) :: span
-	type(value_t) :: tmp
 
 	!print *, 'starting parse_expr_statement()'
 
@@ -3030,7 +3030,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		expr%op    = op
 		expr%right = right
 
-		print *, 'expr ident text = ', expr%identifier%text
+		!print *, 'expr ident text = ', expr%identifier%text
 
 		! Get the identifier's type and index from the dict and check that it
 		! has been declared
@@ -3050,39 +3050,21 @@ recursive function parse_expr_statement(parser) result(expr)
 		if (subscripts_present) then
 			call syntax_nodes_copy(expr%subscripts, &
 				subscripts%v( 1: subscripts%len ))
-			print *, 'reassigning'
-
-			!tmp = expr%val%array%lbound
-			!print *, 'tmp'
-			!expr%val = tmp
-
+			!print *, 'reassigning'
 			expr%val%type = expr%val%array%type
-
-			print *, 'done'
+			!print *, 'done'
 		end if
 
 		ltype = expr%val%type
 		rtype = expr%right%val%type
 
-		!! TODO: only do this if the subscript is present.  Whole array
-		!! assignment and other operations should be different
-		!if (ltype == array_type) then
-		!	print *, 'reassigning'
-		!	print *, 'expr%val%array%type = ', expr%val%array%type
-		!	ltype = expr%val%array%type
-		!	print *, 'done'
-		!end if
-
-		print *, 'rtype'
 		!if (rtype == array_type) rtype = expr%right%val%array%type
 		!if (rtype == array_type) rtype = right%val%array%type
-		print *, 'done'
 
-		! TODO: move this check inside of is_binary_op_allowed?  Need to pass
-		! parser to it to push diagnostics
+		! This check could be moved inside of is_binary_op_allowed, but we would
+		! need to pass parser to it to push diagnostics
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
-			print *, '.not. is_binary_op_allowed 1'
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context, &
@@ -3091,7 +3073,6 @@ recursive function parse_expr_statement(parser) result(expr)
 				kind_name(rtype)))
 
 		end if
-		print *, '.yes. is_binary_op_allowed 1'
 
 		return
 
@@ -3166,8 +3147,8 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		ltype = expr%left %val%type
 		rtype = expr%right%val%type
 
-		if (ltype == array_type) ltype = expr%left %val%array%type
-		if (rtype == array_type) rtype = expr%right%val%array%type
+		!if (ltype == array_type) ltype = expr%left %val%array%type
+		!if (rtype == array_type) rtype = expr%right%val%array%type
 
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
@@ -3494,15 +3475,13 @@ function parse_array_expr(parser) result(expr)
 
 		expr%kind           = array_expr
 
-		!! TODO: change type for other forms
-		!expr%val%type       = lbound%val%type
 		expr%val%type       = array_type
 
 		expr%val%array%type = lbound%val%type
 		expr%val%array%kind = impl_array
 
-		print *, 'expr%val%type       = ', expr%val%type
-		print *, 'expr%val%array%type = ', expr%val%array%type
+		!print *, 'expr%val%type       = ', expr%val%type
+		!print *, 'expr%val%array%type = ', expr%val%array%type
 
 		! TODO: does this syntax node need to own these members, or can we just
 		! save them in the array_t?  I think they do need to be duplicated, as
@@ -3624,7 +3603,7 @@ function parse_array_expr(parser) result(expr)
 
 		rbracket = parser%match(rbracket_token)
 
-		print *, 'lbound = ', lbound%str()
+		!print *, 'lbound = ', lbound%str()
 		!print *, 'ubound = ', ubound%str()
 
 		allocate(expr%val%array)
@@ -3636,7 +3615,6 @@ function parse_array_expr(parser) result(expr)
 		!expr%val%type             = lbound%val%type
 		expr%val%type       = array_type
 
-		! TODO: I think array pointer should be allocated first here
 		expr%val%array%type       = lbound%val%type
 		expr%val%array%kind       = impl_array
 
@@ -3746,8 +3724,8 @@ function parse_primary_expr(parser) result(expr)
 			! Brackets are matched within parse_array_expr
 			expr = parser%parse_array_expr()
 
-			print *, '2 expr%val%type = ', expr%val%type
-			print *, '2 expr%val%array%type = ', expr%val%array%type
+			!print *, '2 expr%val%type = ', expr%val%type
+			!print *, '2 expr%val%array%type = ', expr%val%array%type
 
 		case (true_keyword, false_keyword)
 
@@ -3812,7 +3790,7 @@ function parse_primary_expr(parser) result(expr)
 					call syntax_nodes_copy(expr%subscripts, &
 						subscripts%v( 1: subscripts%len ))
 
-					print *, 'expr%val%type = ', kind_name(expr%val%type)
+					!print *, 'expr%val%type = ', kind_name(expr%val%type)
 					expr%val%type = expr%val%array%type
 
 				end if
@@ -3943,12 +3921,12 @@ function new_name_expr(identifier, val) result(expr)
 	expr%identifier = identifier
 	expr%val = val
 
-	if (expr%val%type == array_type) then
-		!if (.not. associated(expr%val%array)) allocate(expr%val%array)
-		allocate(expr%val%array)
-		!expr%val%array = right%val%array
-		expr%val%array = val%array
-	end if
+	!if (expr%val%type == array_type) then
+	!	!if (.not. associated(expr%val%array)) allocate(expr%val%array)
+	!	allocate(expr%val%array)
+	!	!expr%val%array = right%val%array
+	!	expr%val%array = val%array
+	!end if
 
 end function new_name_expr
 
@@ -4015,14 +3993,14 @@ function new_declaration_expr(identifier, op, right) result(expr)
 	expr%right = right
 
 	! Pass the result value type up the tree for type checking in parent
-	expr%val%type = right%val%type
-	if (expr%val%type == array_type) then
-		print *, 'new_declaration_expr array_type'
-		!if (.not. associated(expr%val%array)) allocate(expr%val%array)
-		allocate(expr%val%array)
-		!expr%val%array = right%val%array
-		expr%val%array = right%val%array
-	end if
+	expr%val = right%val
+
+	!expr%val%type = right%val%type
+	!if (expr%val%type == array_type) then
+	!	!print *, 'new_declaration_expr array_type'
+	!	allocate(expr%val%array)
+	!	expr%val%array = right%val%array
+	!end if
 
 end function new_declaration_expr
 
@@ -4125,7 +4103,9 @@ function new_unary_expr(op, right) result(expr)
 	! Pass the result value type up the tree for type checking in parent.  IIRC
 	! all unary operators result in the same type as their operand, hence there
 	! is a get_binary_op_kind() fn but no get_unary_op_kind() fn
-	expr%val%type = right%val%type
+
+	expr%val = right%val
+	!expr%val%type = right%val%type
 
 	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_unary_expr'
@@ -4343,17 +4323,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			array%size = array%len
 
 			allocate(res%array)
-
-			! In parser, we set val%type to the scalar type, e.g. i32, when val
-			! is an array.  Here we set val%type (i.e. res%type) to array_type
-			! so value_str() knows to format it as an array.  The scalar
-			! sub-type is still available in val%array%type.  This may need to
-			! change when I implement arithmetic operations on arrays
-			!
-			! Parser segfaults when I try to access val%array%type, apparently
-			! it is not set by dict insertion.  Maybe I need to manually
-			! allocate array and set its type after insertion
-
 			res%type  = array_type
 			res%array = array
 
@@ -4493,16 +4462,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			array%size = array%len
 
 			allocate(res%array)
-
-			! In parser, we set val%type to the scalar type, e.g. i32, when val
-			! is an array.  Here we set val%type (i.e. res%type) to array_type
-			! so value_str() knows to format it as an array.  The scalar
-			! sub-type is still available in val%array%type.  This may need to
-			! change when I implement arithmetic operations on arrays
-			!
-			! Parser segfaults when I try to access val%array%type, apparently
-			! it is not set by dict insertion.  Maybe I need to manually
-			! allocate array and set its type after insertion
 
 			res%type  = array_type
 			res%array = array
@@ -5163,6 +5122,9 @@ recursive function value_str(val) result(str)
 			! This will probably break for large arrays as we can't arbitrarily
 			! cat huge strings
 			str = '['
+
+			! TODO: this causes slow perf.  Allocate str ahead of time and
+			! assign substrings in loop
 
 			if (val%array%type == i32_type) then
 				do i = 1, val%array%len

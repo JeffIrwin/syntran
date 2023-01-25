@@ -17,6 +17,8 @@ i = 0
 while 1==1
     i = i + 1
     
+    mprintf('%d\n', i)
+    
     txt = mgetl(fd, 1)
     if meof(fd) then
         break
@@ -57,7 +59,7 @@ while 1==1
     xs2svg(gcf(), sprintf("frames/wave_%d.svg", i))
 //    xs2eps(gcf(), sprintf("frames/wave_%d.eps", i))
     
-    break
+//    break
     
 end
 
