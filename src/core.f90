@@ -2999,7 +2999,6 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'associated(expr%val%array) = ', associated(expr%val%array)
 
-		!if (subscripts_present) then
 		if (subscripts%len > 0) then
 			call syntax_nodes_copy(expr%subscripts, &
 				subscripts%v( 1: subscripts%len ))
@@ -3039,6 +3038,8 @@ end function parse_expr_statement
 !===============================================================================
 
 function try_parse_subscripts(parser, expr) result(subscripts)
+
+	! Parse array subscript if present
 
 	class(parser_t) :: parser
 
@@ -3099,7 +3100,13 @@ function try_parse_subscripts(parser, expr) result(subscripts)
 	!print *, 'done'
 
 	! TODO: check that # of subscripts matches array rank, both LHS and
-	! RHS parsing
+	! RHS parsing.  May need to pass identifier to this function.  LHS and RHS
+	! cases are different in tricky ways.  RHS has already lookup up identifier
+	! in vars dictionary when it calls try_parse_subscripts(), but LHS has not.
+	! When LHS calls this, it does not yet know whether the identifier is an
+	! array or a scalar or a function call in an expression statement.
+	!
+	! So, only check rank match here if subscripts%len > 0
 
 end function try_parse_subscripts
 
@@ -3779,40 +3786,12 @@ function parse_primary_expr(parser) result(expr)
 						span, identifier%text))
 				end if
 
-				! Parse array subscript if present
-
-				! TODO: Can this be consolidated with subscript parsing in
-				! parse_expr_statement?  Make fn parse_subscipts().  At least
-				! add type checking like the other instance
-
 				!print *, '%current_kind() = ', kind_name(parser%current_kind())
-				if (parser%current_kind() == lbracket_token) then
-
-					!print *, 'parsing RHS subscript'
-
-					subscripts = new_syntax_node_vector()
-					lbracket  = parser%match(lbracket_token)
-
-					do while ( &
-						parser%current_kind() /= rbracket_token .and. &
-						parser%current_kind() /= eof_token)
-
-						subscript = parser%parse_expr()
-						call subscripts%push(subscript)
-
-						if (parser%current_kind() /= rbracket_token) then
-							comma = parser%match(comma_token)
-						end if
-					end do
-
-					rbracket  = parser%match(rbracket_token)
-
+				subscripts = parser%try_parse_subscripts(expr)
+				if (subscripts%len > 0) then
 					call syntax_nodes_copy(expr%subscripts, &
 						subscripts%v( 1: subscripts%len ))
-
-					!print *, 'expr%val%type = ', kind_name(expr%val%type)
 					expr%val%type = expr%val%array%type
-
 				end if
 
 			else
