@@ -34,7 +34,7 @@ module core_m
 	!    * fix array sub-type checking
 	!    * multi-rank array initialization:
 	!        let a = [ 1, 2,   3, 4  ; 2, 2];
-	!      or
+	!      or?
 	!        let a = [[1, 2], [3, 4]];
 	!    * add slice subscripts:
 	!      > a[:]     -> a[0], a[1], a[2], ...
@@ -428,7 +428,7 @@ module core_m
 				parse_statement, parse_block_statement, parse_if_statement, &
 				current_pos, peek_pos, parse_for_statement, &
 				parse_while_statement, parse_array_expr, parse_unit, &
-				parse_fn_declaration, try_parse_subscripts
+				parse_fn_declaration, parse_subscripts
 
 	end type parser_t
 
@@ -1076,18 +1076,24 @@ end subroutine push_token
 
 !===============================================================================
 
-function new_array(type) result(vector)
+function new_array(type, cap) result(vector)
 
 	integer, intent(in) :: type
+	integer, intent(in), optional :: cap
 	type(array_t) :: vector
 
 	vector%len = 0
-	vector%cap = 2  ! I think a small default makes sense here
+
+	if (present(cap)) then
+		vector%cap = cap
+	else
+		vector%cap = 2  ! I think a small default makes sense here
+	end if
 
 	if      (type == i32_type) then
-		allocate(vector%i32( vector%cap ))
+		allocate(vector%i32 ( vector%cap ))
 	else if (type == f32_type) then
-		allocate(vector%f32( vector%cap ))
+		allocate(vector%f32 ( vector%cap ))
 	else if (type == bool_type) then
 		allocate(vector%bool( vector%cap ))
 	else
@@ -2865,14 +2871,10 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	integer :: io, ltype, rtype, pos0, pos1, span0
+	integer :: io, ltype, rtype, pos0
 
-	logical :: subscripts_present
-
-	type(syntax_node_t) :: right, subscript
-	type(syntax_node_vector_t) :: subscripts
-	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket, comma, &
-		dummy
+	type(syntax_node_t) :: right
+	type(syntax_token_t) :: let, identifier, op
 
 	type(text_span_t) :: span
 
@@ -2958,7 +2960,9 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		! Subscript can appear in assignment expr but not let expr, because let
 		! must initialize the whole array
-		subscripts = parser%try_parse_subscripts(expr)
+		!subscripts = parser%parse_subscripts()
+		expr%subscripts = parser%parse_subscripts()
+		if (size(expr%subscripts) <= 0) deallocate(expr%subscripts)
 
 		if (parser%current_kind() /= equals_token) then
 			! Rewind and do the default case (same as outside the assignment if
@@ -2999,9 +3003,10 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'associated(expr%val%array) = ', associated(expr%val%array)
 
-		if (subscripts%len > 0) then
-			call syntax_nodes_copy(expr%subscripts, &
-				subscripts%v( 1: subscripts%len ))
+		!if (subscripts%len > 0) then
+		if (size(expr%subscripts) > 0) then
+			!call syntax_nodes_copy(expr%subscripts, &
+			!	subscripts%v( 1: subscripts%len ))
 			!print *, 'reassigning'
 			expr%val%type = expr%val%array%type
 			!print *, 'done'
@@ -3037,32 +3042,36 @@ end function parse_expr_statement
 
 !===============================================================================
 
-function try_parse_subscripts(parser, expr) result(subscripts)
+function parse_subscripts(parser) result(subscripts)!_vec)
 
 	! Parse array subscript if present
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t), intent(inout) :: expr
+	type(syntax_node_t), allocatable :: subscripts(:)
 
 	!********
 
-	integer :: io, ltype, rtype, pos0, pos1, span0
+	integer :: pos0, span0
 
-	type(syntax_node_t) :: right, subscript
-	type(syntax_node_vector_t) :: subscripts
-	type(syntax_token_t) :: let, identifier, op, lbracket, rbracket, comma, &
+	type(syntax_node_t) :: subscript
+	type(syntax_node_vector_t) :: subscripts_vec
+	type(syntax_token_t) :: lbracket, rbracket, comma, &
 		dummy
 
 	type(text_span_t) :: span
 
-	!subscripts_present = .false.
-	subscripts = new_syntax_node_vector()
+	if (parser%current_kind() /= lbracket_token) then
 
-	if (parser%current_kind() /= lbracket_token) return
+		!! The function has to return something.  Caller deallocates
+		!subscripts = []
+		allocate(subscripts(0))
+		return
 
-	!subscripts_present = .true.
+	end if
+
 	!print *, 'parsing subscripts'
+
+	subscripts_vec = new_syntax_node_vector()
 
 	lbracket  = parser%match(lbracket_token)
 
@@ -3070,7 +3079,7 @@ function try_parse_subscripts(parser, expr) result(subscripts)
 		parser%current_kind() /= rbracket_token .and. &
 		parser%current_kind() /= eof_token)
 
-		pos1  = parser%pos
+		pos0  = parser%pos
 		span0 = parser%current_pos()
 		subscript = parser%parse_expr()
 
@@ -3084,10 +3093,10 @@ function try_parse_subscripts(parser, expr) result(subscripts)
 				parser%context%text(span0: parser%current_pos()-1)))
 		end if
 
-		call subscripts%push(subscript)
+		call subscripts_vec%push(subscript)
 
 		! Break infinite loop
-		if (parser%pos == pos1) dummy = parser%next()
+		if (parser%pos == pos0) dummy = parser%next()
 
 		if (parser%current_kind() /= rbracket_token) then
 			comma = parser%match(comma_token)
@@ -3102,13 +3111,16 @@ function try_parse_subscripts(parser, expr) result(subscripts)
 	! TODO: check that # of subscripts matches array rank, both LHS and
 	! RHS parsing.  May need to pass identifier to this function.  LHS and RHS
 	! cases are different in tricky ways.  RHS has already lookup up identifier
-	! in vars dictionary when it calls try_parse_subscripts(), but LHS has not.
+	! in vars dictionary when it calls parse_subscripts(), but LHS has not.
 	! When LHS calls this, it does not yet know whether the identifier is an
 	! array or a scalar or a function call in an expression statement.
 	!
 	! So, only check rank match here if subscripts%len > 0
 
-end function try_parse_subscripts
+	call syntax_nodes_copy(subscripts, &
+		subscripts_vec%v( 1: subscripts_vec%len ))
+
+end function parse_subscripts
 
 !===============================================================================
 
@@ -3510,10 +3522,10 @@ function parse_array_expr(parser) result(expr)
 		!print *, 'expr%val%type       = ', expr%val%type
 		!print *, 'expr%val%array%type = ', expr%val%array%type
 
-		! TODO: does this syntax node need to own these members, or can we just
-		! save them in the array_t?  I think they do need to be duplicated, as
-		! they may be an expression and not just a literal.  So, sizes have to
-		! be allocated dynamically during evaluation, not during parsing
+		! Does this syntax node need to own these members, or can we just save
+		! them in the array_t?  I think they do need to be duplicated, as they
+		! may be an expression and not just a literal.  So, sizes have to be
+		! allocated dynamically during evaluation, not during parsing
 
 		expr%lbound = lbound
 		expr%len    = len
@@ -3721,10 +3733,10 @@ function parse_primary_expr(parser) result(expr)
 	logical :: bool
 
 	type(fn_t) :: fn
-	type(syntax_node_t) :: subscript, arg
-	type(syntax_node_vector_t) :: subscripts, args
-	type(syntax_token_t) :: num, left, right, keyword, identifier, lbracket, &
-		rbracket, comma, lparen, rparen
+	type(syntax_node_t) :: arg
+	type(syntax_node_vector_t) :: args
+	type(syntax_token_t) :: num, left, right, keyword, identifier, &
+		comma, lparen, rparen
 	type(text_span_t) :: span
 
 	if (debug > 1) print *, 'parse_primary_expr'
@@ -3787,10 +3799,14 @@ function parse_primary_expr(parser) result(expr)
 				end if
 
 				!print *, '%current_kind() = ', kind_name(parser%current_kind())
-				subscripts = parser%try_parse_subscripts(expr)
-				if (subscripts%len > 0) then
-					call syntax_nodes_copy(expr%subscripts, &
-						subscripts%v( 1: subscripts%len ))
+				!subscripts = parser%parse_subscripts()
+				expr%subscripts = parser%parse_subscripts()
+				!if (subscripts%len > 0) then
+				if (size(expr%subscripts) <= 0) then
+					deallocate(expr%subscripts)
+				else
+					!call syntax_nodes_copy(expr%subscripts, &
+					!	subscripts%v( 1: subscripts%len ))
 					expr%val%type = expr%val%array%type
 				end if
 
@@ -4210,7 +4226,42 @@ end function next_parser_token
 
 !===============================================================================
 
+integer function subscript_eval(node, vars, fns, quietl) result(index)
+
+	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
+	! subscript index
+
+	type(syntax_node_t) :: node
+	type(vars_t) :: vars
+	type(fns_t) :: fns
+	logical, intent(in) :: quietl
+
+	!******
+
+	integer :: i, prod
+	type(value_t) :: subscript
+
+	prod  = 1
+	index = 0
+	do i = 1, vars%vals(node%id_index)%array%rank
+		!print *, 'i = ', i
+
+		subscript = syntax_eval(node%subscripts(i), vars, fns, quietl)
+
+		! TODO: bound checking? by default or enabled with cmd line flag?
+
+		index = index + prod * subscript%i32
+		prod  = prod * vars%vals(node%id_index)%array%size(i)
+
+	end do
+
+end function subscript_eval
+
+!===============================================================================
+
 recursive function syntax_eval(node, vars, fns, quiet) result(res)
+
+	! TODO: encapsulate vars, fns, and quiet into a state struct
 
 	type(syntax_node_t) :: node
 
@@ -4227,7 +4278,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	!********
 
-	integer :: i, j, k, prod
+	integer :: i, j
 	integer, parameter :: magic = 128
 
 	logical :: quietl
@@ -4236,7 +4287,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
-		subscript, step, len, arg1, arg2
+		step, len, arg1, arg2
 
 	!print *, 'starting syntax_eval()'
 
@@ -4267,6 +4318,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		if (node%val%array%kind == impl_array .and. allocated(node%step)) then
 
 			! step-based impl array
+			!
+			! TODO: make several more impl_*_array enum variations for each impl
+			! array form instead of checking whether various syntax nodes are
+			! allocated
 
 			lbound = syntax_eval(node%lbound, vars, fns, quietl)
 			step   = syntax_eval(node%step  , vars, fns, quietl)
@@ -4335,22 +4390,22 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			ubound = syntax_eval(node%ubound, vars, fns, quietl)
 			len    = syntax_eval(node%len   , vars, fns, quietl)
 
-			! TODO: This could be allocated in one shot without pushing to
-			! growable array.
+			!array = new_array(node%val%array%type)
+			!elem = lbound
 
-			array = new_array(node%val%array%type)
-			elem = lbound
+			array%type = node%val%array%type
+			array%len  = len%i32
+			array%cap  = array%len
 
 			if (array%type == f32_type) then
 
-				!print *, 'lbound, ubound = ', lbound%f32, ubound%f32
-				!print *, 'len = ', len%i32
-
+				allocate(array%f32( array%cap ))
 				fstep = (ubound%f32 - lbound%f32) / (len%i32 - 1)
 
 				do i = 0, len%i32 - 1
-					elem%f32 = lbound%f32 + i * fstep
-					call array%push(elem)
+					array%f32(i+1) = lbound%f32 + i * fstep
+					!elem%f32 = lbound%f32 + i * fstep
+					!call array%push(elem)
 				end do
 
 			else
@@ -4389,8 +4444,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'len array'
 			lbound = syntax_eval(node%lbound, vars, fns, quietl)
 
-			! Allocate in one shot without growing.  TODO: do this for other
-			! implicit cases
+			! Allocate in one shot without growing
 
 			array%type = node%val%array%type
 			array%len  = product(array%size)
@@ -4436,24 +4490,30 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			lbound = syntax_eval(node%lbound, vars, fns, quietl)
 			ubound = syntax_eval(node%ubound, vars, fns, quietl)
 
-			array = new_array(node%val%array%type)
+			!array = new_array(node%val%array%type)
+
+			array%type = node%val%array%type
 
 			if (array%type /= i32_type) then
 				write(*,*) 'Error: array type eval not implemented'
 				call internal_error()
 			end if
 
+			array%len = ubound%i32 - lbound%i32
+			array%cap = array%len
+
+			allocate(array%i32( array%cap ))
+
 			!print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
 			!print *, 'node%val%array%type = ', node%val%array%type
 
-			! TODO: This could be allocated in one shot without pushing to
-			! growable array.
+			! TODO: i64 types
 
-			! TODO: types
-			elem = lbound
+			!elem = lbound
 			do i = lbound%i32, ubound%i32 - 1
-				elem%i32 = i
-				call array%push(elem)
+				array%i32(i - lbound%i32 + 1) = i
+				!elem%i32 = i
+				!call array%push(elem)
 			end do
 
 			array%rank = 1
@@ -4472,7 +4532,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			! TODO: allow empty arrays?  Sub type of empty array?  Empty arrays
 			! can currently be created like [0: -1];
-			array = new_array(node%val%array%type)
+			array = new_array(node%val%array%type, size(node%elems))
 
 			do i = 1, size(node%elems)
 				elem = syntax_eval(node%elems(i), vars, fns, quietl)
@@ -4641,36 +4701,21 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			!print *, 'RHS = ', res%str()
 
-			! Convert a multi-rank subscript to a rank-1 subscript j
-			prod = 1
-			j    = 0
-			do k = 1, vars%vals(node%id_index)%array%rank
-				!print *, 'k = ', k
-
-				subscript = syntax_eval(node%subscripts(k), vars, fns, quietl)
-
-				j = j + prod * subscript%i32
-				prod  = prod * vars%vals(node%id_index)%array%size(k)
-			end do
+			i = subscript_eval(node, vars, fns, quietl)
 
 			!print *, 'LHS array type = ', vars%vals(node%id_index)%array%type
 			!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
-
-			! TODO: bound checking? by default or enabled with cmd line flag?
 
 			! Syntran uses 0-indexed arrays while Fortran uses 1-indexed arrays
 
 			! TODO: check res type matches array sub type
 			select case (res%type)
 			case (i32_type)
-				vars%vals(node%id_index)%array%i32( j + 1 ) &
-					= res%i32
+				vars%vals(node%id_index)%array%i32 ( i + 1 ) = res%i32
 			case (f32_type)
-				vars%vals(node%id_index)%array%f32( j + 1 ) &
-					= res%f32
+				vars%vals(node%id_index)%array%f32 ( i + 1 ) = res%f32
 			case (bool_type)
-				vars%vals(node%id_index)%array%bool( j + 1 ) &
-					= res%bool
+				vars%vals(node%id_index)%array%bool( i + 1 ) = res%bool
 			end select
 
 		end if
@@ -4743,28 +4788,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			res%type = vars%vals(node%id_index)%array%type
 
-			! Convert a multi-rank subscript to a rank-1 subscript j. TODO: fn
-			prod = 1
-			j    = 0
-			do k = 1, vars%vals(node%id_index)%array%rank
-				!print *, 'k = ', k
-
-				subscript = syntax_eval(node%subscripts(k), vars, fns, quietl)
-
-				j = j + prod * subscript%i32
-				prod  = prod * vars%vals(node%id_index)%array%size(k)
-			end do
+			i = subscript_eval(node, vars, fns, quietl)
 
 			select case (res%type)
 			case (i32_type)
 				res%i32 = vars%vals(node%id_index)%array &
-					%i32( j + 1 )
+					%i32 ( i + 1 )
 			case (f32_type)
 				res%f32 = vars%vals(node%id_index)%array &
-					%f32( j + 1 )
+					%f32 ( i + 1 )
 			case (bool_type)
 				res%bool = vars%vals(node%id_index)%array &
-					%bool( j+ 1 )
+					%bool( i + 1 )
 			end select
 
 		else
