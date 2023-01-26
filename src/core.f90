@@ -464,10 +464,12 @@ function declare_intrinsic_fns() result(fns)
 
 	integer :: id_index, num_fns
 
-	type(fn_t) :: exp_fn, min_fn
+	type(fn_t) :: exp_fn, min_fn, size_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
+
+	!********
 
 	! TODO: polymorphic in f32, f64, etc.
 	exp_fn%type = f32_type
@@ -481,6 +483,8 @@ function declare_intrinsic_fns() result(fns)
 	! TODO: push_fn() fn, or just increment id_index inside insert()?
 	id_index = id_index + 1
 	call fns%insert("exp", exp_fn, id_index)
+
+	!********
 
 	! TODO: polymorphic in any numeric type i32, f32, i64, f64, etc.  Also
 	! variadic min(a, b), min(a, b, c), etc. and an array version min(array) as
@@ -498,6 +502,22 @@ function declare_intrinsic_fns() result(fns)
 	id_index = id_index + 1
 	call fns%insert("min", min_fn, id_index)
 
+	!********
+
+	size_fn%type = i32_type
+	allocate(size_fn%params(2))
+
+	size_fn%params(1)%type = array_type
+	size_fn%params(1)%name = "array"
+
+	size_fn%params(2)%type = i32_type
+	size_fn%params(2)%name = "dim"
+
+	id_index = id_index + 1
+	call fns%insert("size", size_fn, id_index)
+
+	!********
+
 	! FIXME: when adding new functions, remember to copy them into the
 	! fns%fns(:) array below
 
@@ -506,6 +526,7 @@ function declare_intrinsic_fns() result(fns)
 
 	fns%fns(1) = exp_fn
 	fns%fns(2) = min_fn
+	fns%fns(3) = size_fn
 
 end function declare_intrinsic_fns
 
@@ -3415,8 +3436,6 @@ function parse_array_expr(parser) result(expr)
 
 	!print *, 'starting parse_array_expr()'
 
-	! Rank-1 for now, but eventually target higher rank arrays
-
 	! This function parses arrays of the following forms:
 	!
 	!     // i32
@@ -3437,6 +3456,14 @@ function parse_array_expr(parser) result(expr)
 	!     // Explicit list for any rank-1 type
 	!     [elem_0, elem_1, elem_2, ... ]
 	!
+	! A note on the term "rank-1":  I think there's a good argument to be made
+	! that for a language with 0-based arrays, we should call vectors "rank-0"
+	! and matrices "rank-1".  However, I'm calling them "rank-1" and "rank-2"
+	! respectively, as that's what Fortran calls them and I hadn't thought that
+	! far ahead :)
+	!
+	! NumPy uses the same convention for "rank-1" as us.  In fact, NumPy has
+	! something below a vector called a "rank-0" array
 
 	lbracket = parser%match(lbracket_token)
 
@@ -3836,10 +3863,16 @@ function parse_primary_expr(parser) result(expr)
 
 				fn = parser%fns%search(identifier%text, id_index, io)
 				if (io /= exit_success) then
+
 					span = new_span(identifier%pos, len(identifier%text))
 					call parser%diagnostics%push( &
 						err_undeclare_fn(parser%context, &
 						span, identifier%text))
+
+					! No more tokens are consumed below, so we can just return
+					! to skip cascading fn arg count/type errors
+					return
+
 				end if
 
 				expr%kind = fn_call_expr
@@ -3881,6 +3914,7 @@ function parse_primary_expr(parser) result(expr)
 					call parser%diagnostics%push( &
 						err_bad_arg_count(parser%context, &
 						span, identifier%text, size(fn%params), args%len))
+					return
 				end if
 
 				do i = 1, min(args%len, size(fn%params))
@@ -3896,6 +3930,7 @@ function parse_primary_expr(parser) result(expr)
 							span, identifier%text, i, fn%params(i)%name, &
 							kind_name(fn%params(i)%type), &
 							kind_name(args%v(i)%val%type)))
+						return
 
 					end if
 
@@ -4261,7 +4296,9 @@ end function subscript_eval
 
 recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
-	! TODO: encapsulate vars, fns, and quiet into a state struct
+	! TODO: encapsulate vars, fns, and quiet into a state struct.  Add
+	! diagnostics to state for runtime errors (bounds overflow, rank mismatch,
+	! etc.)
 
 	type(syntax_node_t) :: node
 
@@ -4752,7 +4789,27 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg2 = syntax_eval(node%args(2), vars, fns, quietl)
 			res%i32 = min(arg1%i32, arg2%i32)
 
+		case ("size")
+
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+			arg2 = syntax_eval(node%args(2), vars, fns, quietl)
+
+			if (arg2%i32 < 0 .or. arg2%i32 >= arg1%array%rank) then
+				! TODO: this should be a runtime error (like bounds-checking),
+				! not an internal_error.  I just don't have infrastructure for
+				! runtime error handling yet
+				write(*,*) 'Error: rank mismatch in size() call'
+				call internal_error()
+			end if
+
+			res%i32 = arg1%array%size( arg2%i32 + 1 )
+
 		case default
+
+			if (.not. allocated(node%params)) then
+				write(*,*) 'Error: unexpected fn'
+				call internal_error()
+			end if
 
 			!print *, 'fn name = ', node%identifier%text
 			!print *, 'fn idx  = ', node%id_index
@@ -4773,9 +4830,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end do
 
 			res = syntax_eval(node%body, vars, fns, quietl)
-
-			!write(*,*) 'Error: unexpected fn'
-			!call internal_error()
 
 		end select
 
