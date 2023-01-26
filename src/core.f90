@@ -516,6 +516,9 @@ function declare_intrinsic_fns() result(fns)
 	id_index = id_index + 1
 	call fns%insert("size", size_fn, id_index)
 
+	! It might also be useful to make size() variadic and have size(array)
+	! return the product of each dimension's size
+
 	!********
 
 	! FIXME: when adding new functions, remember to copy them into the
