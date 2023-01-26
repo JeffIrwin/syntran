@@ -400,6 +400,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('size([0; 6, 7], 0);')  == 6,  &
 			eval_i32('size([0; 6, 7], 1);')  == 7,  &
 			eval_i32('size([0; 6, 7, 8], 2);')  == 8,  &
+			eval_i32('size([0.0; 5], 0);')  == 5,  &
+			eval_i32('size([0.0; 6, 7], 0);')  == 6,  &
+			eval_i32('size([0.0; 6, 7], 1);')  == 7,  &
+			eval_i32('size([0.0; 6, 7, 8], 2);')  == 8,  &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 

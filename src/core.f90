@@ -50,13 +50,13 @@ module core_m
 	!  - functions
 	!    * intrinsic
 	!      > read/write
-	!      > size (of array)
 	!      > abs, min, max
 	!      > exp, log
 	!      > trig: sin, cos, tan, asin, ...
 	!      > norm, sum, product
 	!    * done:
 	!      > exp, min (non-variadic)
+	!      > size (non-variadic)
 	!      > non-recursive user-defined fns
 	!    * recursive user-defined fns
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
