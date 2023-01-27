@@ -34,7 +34,7 @@
 	let tmax = tmin + 12 * (xmax - xmin) / c;
 
 	// Number of points in spatial grid
-	let nx = 51;//201;
+	let nx = 101;//201;
 
 	// Enforce square grid so we can assume size is sqrt() in
 	// post-processor
@@ -53,8 +53,8 @@
 	let dy = y[1] - y[0];
 
 	// Time step size just under stability criterion
-	let dt = 0.225 * dx / c;
-	//let dt = 0.9 * dx / c;
+	//let dt = 0.225 * dx / c;
+	let dt = 0.9 * dx / c;
 
 	// Courant number squared
 	let cx2 = (c * dt / dx) ** 2;

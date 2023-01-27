@@ -56,6 +56,17 @@ module utils
 			procedure :: push_all => push_all_string
 	end type string_vector_t
 
+	!********
+
+	type char_vector_t
+		character(len = :), allocatable :: v
+		integer :: len, cap
+		contains
+			procedure :: push => push_char
+	end type char_vector_t
+
+	!********
+
 	interface str
 		module procedure i32_str
 		module procedure f32_str
@@ -111,6 +122,59 @@ subroutine push_string(vector, val)
 	vector%v( vector%len ) = val_str
 
 end subroutine push_string
+
+!===============================================================================
+
+function new_char_vector() result(vector)
+
+	type(char_vector_t) :: vector
+
+	vector%len = 0
+	vector%cap = 2
+
+	!allocate(vector%v( vector%cap ))
+	allocate(character(len = vector%cap) :: vector%v)
+
+end function new_char_vector
+
+!===============================================================================
+
+subroutine push_char(vector, val)
+
+	class(char_vector_t) :: vector
+
+	character(len = *), intent(in) :: val
+
+	!********
+
+	!type(string_t) :: val_str
+	character(len = :), allocatable :: tmp
+
+	integer :: tmp_cap
+
+	!vector%len = vector%len + 1
+	vector%len = vector%len + len(val)
+
+	if (vector%len > vector%cap) then
+		!print *, 'growing vector'
+
+		tmp_cap = 2 * vector%len
+
+		!allocate(tmp( tmp_cap ))
+		allocate(character(len = tmp_cap) :: tmp)
+
+		tmp(1: vector%cap) = vector%v
+
+		call move_alloc(tmp, vector%v)
+		vector%cap = tmp_cap
+
+	end if
+
+	!val_str%s = val
+	!vector%v( vector%len ) = val_str
+	vector%v( vector%len - len(val) + 1: vector%len ) = val
+
+end subroutine push_char
 
 !===============================================================================
 

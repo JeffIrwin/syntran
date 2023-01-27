@@ -5181,6 +5181,9 @@ recursive function value_str(val) result(str)
 
 	integer :: i
 
+	!type(string_vector_t) :: str_vec
+	type(char_vector_t) :: str_vec
+
 	select case (val%type)
 
 		case (f32_type)
@@ -5210,22 +5213,18 @@ recursive function value_str(val) result(str)
 
 			!print *, 'array type = ', val%array%type
 
-			! This will probably break for large arrays as we can't arbitrarily
-			! cat huge strings
-			str = '['
-
-			! TODO: this causes slow perf.  Allocate str ahead of time and
-			! assign substrings in loop
+			str_vec = new_char_vector()
+			call str_vec%push('[')
 
 			if (val%array%type == i32_type) then
 				do i = 1, val%array%len
-					str = str//i32_str(val%array%i32(i))
-					if (i < val%array%len) str = str//', '
+					call str_vec%push(i32_str(val%array%i32(i)))
+					if (i < val%array%len) call str_vec%push(', ')
 				end do
 			else if (val%array%type == f32_type) then
 				do i = 1, val%array%len
-					str = str//f32_str(val%array%f32(i))
-					if (i < val%array%len) str = str//', '
+					call str_vec%push(f32_str(val%array%f32(i)))
+					if (i < val%array%len) call str_vec%push(', ')
 				end do
 			else
 				write(*,*) 'Error: array str conversion not implemented' &
@@ -5233,7 +5232,8 @@ recursive function value_str(val) result(str)
 				call internal_error()
 			end if
 
-			str = str//']'
+			call str_vec%push(']')
+			str = str_vec%v( 1: str_vec%len )
 
 		case default
 			str = err_prefix//"<invalid_value>"//color_reset
