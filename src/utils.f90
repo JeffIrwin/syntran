@@ -125,12 +125,18 @@ end subroutine push_string
 
 !===============================================================================
 
-function new_char_vector() result(vector)
+function new_char_vector(cap) result(vector)
+
+	integer, intent(in), optional :: cap
 
 	type(char_vector_t) :: vector
 
 	vector%len = 0
-	vector%cap = 2
+	if (present(cap)) then
+		vector%cap = cap
+	else
+		vector%cap = 2
+	end if
 
 	!allocate(vector%v( vector%cap ))
 	allocate(character(len = vector%cap) :: vector%v)
@@ -147,22 +153,17 @@ subroutine push_char(vector, val)
 
 	!********
 
-	!type(string_t) :: val_str
 	character(len = :), allocatable :: tmp
 
 	integer :: tmp_cap
 
-	!vector%len = vector%len + 1
 	vector%len = vector%len + len(val)
 
 	if (vector%len > vector%cap) then
 		!print *, 'growing vector'
 
 		tmp_cap = 2 * vector%len
-
-		!allocate(tmp( tmp_cap ))
 		allocate(character(len = tmp_cap) :: tmp)
-
 		tmp(1: vector%cap) = vector%v
 
 		call move_alloc(tmp, vector%v)
@@ -170,8 +171,6 @@ subroutine push_char(vector, val)
 
 	end if
 
-	!val_str%s = val
-	!vector%v( vector%len ) = val_str
 	vector%v( vector%len - len(val) + 1: vector%len ) = val
 
 end subroutine push_char

@@ -5213,7 +5213,14 @@ recursive function value_str(val) result(str)
 
 			!print *, 'array type = ', val%array%type
 
+			!! You would think that this would help
+			!if (val%array%type == i32_type) then
+			!	str_vec = new_char_vector( 12 * val%array%len )
+			!else if (val%array%type == f32_type) then
+			!	str_vec = new_char_vector( 16 * val%array%len )
+			!end if
 			str_vec = new_char_vector()
+
 			call str_vec%push('[')
 
 			if (val%array%type == i32_type) then

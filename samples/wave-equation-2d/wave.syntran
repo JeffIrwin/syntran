@@ -31,10 +31,10 @@
 
 	// Time bounds for wave to travel domain twice (i.e. forth and back)
 	let tmin = 0.0;
-	let tmax = tmin + 12 * (xmax - xmin) / c;
+	let tmax = tmin + 8 * (xmax - xmin) / c;
 
 	// Number of points in spatial grid
-	let nx = 101;//201;
+	let nx = 51;//201;
 
 	// Enforce square grid so we can assume size is sqrt() in
 	// post-processor
@@ -54,7 +54,8 @@
 
 	// Time step size just under stability criterion
 	//let dt = 0.225 * dx / c;
-	let dt = 0.9 * dx / c;
+	let dt = 0.450 * dx / c;
+	//let dt = 0.9 * dx / c;
 
 	// Courant number squared
 	let cx2 = (c * dt / dx) ** 2;
@@ -62,10 +63,10 @@
 
 	// Initial condition: Gaussian pulse
 
-	let xpulse = xmin + 0.3333 * (xmax - xmin);
-	let ypulse = ymin + 0.2500 * (ymax - ymin);
-	//let xpulse = xmin + 0.5 * (xmax - xmin);
-	//let ypulse = ymin + 0.5 * (ymax - ymin);
+	//let xpulse = xmin + 0.3333 * (xmax - xmin);
+	//let ypulse = ymin + 0.2500 * (ymax - ymin);
+	let xpulse = xmin + 0.5 * (xmax - xmin);
+	let ypulse = ymin + 0.5 * (ymax - ymin);
 
 	let pwidth = 0.05 * (xmax - xmin);
 	for iy in [0: ny]
@@ -137,7 +138,7 @@
 
 		t = t + dt;
 
-		// Print.  Believe it or not, this is the perf bottleneck
+		// Print
 		u;
 	}
 }
