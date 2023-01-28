@@ -49,14 +49,14 @@ module core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      > read/write
-	!      > abs, min, max
+	!      > read/write/print
+	!      > abs, max, norm, dot
 	!      > exp, log
 	!      > trig: sin, cos, tan, asin, ...
 	!      > norm, sum, product
 	!    * done:
-	!      > exp, min (non-variadic)
-	!      > size (non-variadic)
+	!      > exp, min (non-variadic, non-polymorphic)
+	!      > size (non-variadic but polymorphic)
 	!      > non-recursive user-defined fns
 	!    * recursive user-defined fns
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
@@ -71,6 +71,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			any_type             = 63, &
 			void_type            = 62, &
 			fn_keyword           = 61, &
 			fn_declaration       = 60, &
@@ -182,8 +183,11 @@ module core_m
 
 	type param_t
 		! Function parameter (argument)
+
 		integer :: type
 		character(len = :), allocatable :: name
+
+		integer :: array_type, rank
 
 		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
 		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
@@ -508,6 +512,10 @@ function declare_intrinsic_fns() result(fns)
 	allocate(size_fn%params(2))
 
 	size_fn%params(1)%type = array_type
+
+	!size_fn%params(1)%array_type = i32_type
+	size_fn%params(1)%array_type = any_type
+
 	size_fn%params(1)%name = "array"
 
 	size_fn%params(2)%type = i32_type
@@ -1332,7 +1340,8 @@ function kind_name(kind)
 			"translation_unit    ", & ! 59
 			"fn_declaration      ", & ! 60
 			"fn_keyword          ", & ! 61
-			"void_type           "  & ! 62
+			"void_type           ", & ! 62
+			"any_type            "  & ! 63
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1415,7 +1424,8 @@ function kind_token(kind)
 			"Translation unit     ", & ! 59
 			"fn declaration       ", & ! 60
 			"fn keyword           ", & ! 61
-			"void type            "  & ! 62
+			"void type            ", & ! 62
+			"any type             "  & ! 63
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2443,14 +2453,15 @@ function parse_fn_declaration(parser) result(decl)
 	type(fn_t) :: fn
 
 	type(string_vector_t) :: names, types
+	type(logical_vector_t) :: is_array
 
 	type(syntax_node_t) :: body
 	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, type, &
-		name, comma
+		name, comma, dummy, lbracket, rbracket
 
 	type(value_t) :: val
 
-	integer :: i
+	integer :: i, pos0
 
 	! Like a for statement, a fn declaration has its own scope (for its
 	! parameters).  Its block body will have yet another scope
@@ -2465,16 +2476,50 @@ function parse_fn_declaration(parser) result(decl)
 	lparen = parser%match(lparen_token)
 
 	! Parse parameter names and types.  Save in temp string vectors initially
-	names = new_string_vector()
-	types = new_string_vector()
+	names    = new_string_vector()
+	types    = new_string_vector()
+	is_array = new_logical_vector()
+
+	! Array params use this syntax:
+	!
+	!     fn sum_fn(v: [i32; :]): i32
+	!     {
+	!         let s = 0;
+	!         for i in [0: size(v, 0)]
+	!             s = s + v[i];
+	!         s;
+	!     }
+	!
+	!     fn mat_fn(a: [i32; :,:]): i32
+	!     {
+	!         // do something with a[i,j]
+	!     }
 
 	do while ( &
 		parser%current_kind() /= rparen_token .and. &
 		parser%current_kind() /= eof_token)
 
-		name = parser%match(identifier_token)
+		pos0 = parser%pos
+
+		name  = parser%match(identifier_token)
 		colon = parser%match(colon_token)
-		type  = parser%match(identifier_token)
+
+		if (parser%current_kind() == lbracket_token) then
+
+			! Array param
+			lbracket = parser%match(lbracket_token)
+			type     = parser%match(identifier_token)
+			rbracket = parser%match(rbracket_token)
+
+			! TODO: parse rank instead of assuming 1
+
+			call is_array%push(.true.)
+
+		else
+			! Scalar param
+			type = parser%match(identifier_token)
+			call is_array%push(.false.)
+		end if
 
 		call names%push( name%text )
 		call types%push( type%text )
@@ -2482,6 +2527,10 @@ function parse_fn_declaration(parser) result(decl)
 		if (parser%current_kind() /= rparen_token) then
 			comma = parser%match(comma_token)
 		end if
+
+		! Break infinite loop
+		if (parser%pos == pos0) dummy = parser%next()
+
 	end do
 
 	rparen = parser%match(rparen_token)
@@ -2494,9 +2543,15 @@ function parse_fn_declaration(parser) result(decl)
 	do i = 1, names%len
 		!print *, 'name, type = ', names%v(i)%s, ', ', types%v(i)%s
 
-		! TODO: array types.  Catch unknown types
-		fn%params(i)%type = lookup_type( types%v(i)%s )
 		fn%params(i)%name = names%v(i)%s
+
+		! TODO: catch unknown types
+		if (is_array%v(i)) then
+			fn%params(i)%type = array_type
+			fn%params(i)%array_type = lookup_type( types%v(i)%s )
+		else
+			fn%params(i)%type = lookup_type( types%v(i)%s )
+		end if
 
 		! Declare the parameter variable
 		parser%num_vars = parser%num_vars + 1
@@ -2506,6 +2561,10 @@ function parse_fn_declaration(parser) result(decl)
 
 		! Create a value_t object to store the type
 		val%type = fn%params(i)%type
+		if (is_array%v(i)) then
+			allocate(val%array)
+			val%array%type = fn%params(i)%array_type
+		end if
 
 		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
 
@@ -2523,28 +2582,9 @@ function parse_fn_declaration(parser) result(decl)
 
 		colon = parser%match(colon_token)
 
-		! TODO: decide a syntax for array types.  Maybe this?
-		!
-		!     fn get_vector(): [i32; :]
-		!     {
-		!         [1, 2, 3];
-		!     }
-		!
-		!     fn get_matrix(): [i32; :, :]
-		!     {
-		!         [0; 3, 3];
-		!     }
-		!
-		! Or fixed size?
-		!
-		!     fn get_vector(): [i32; 3]
-		!     {
-		!         [1, 2, 3];
-		!     }
-		!
+		! TODO: array return vals.  fn for parsing types (both scalar and array)
 
 		type  = parser%match(identifier_token)
-
 		fn%type = lookup_type(type%text)
 
 		! TODO: catch unknown_type
@@ -3759,8 +3799,9 @@ function parse_primary_expr(parser) result(expr)
 
 	!********
 
+	character(len = :), allocatable :: param_type, arg_type
 	integer :: i, io, id_index
-	logical :: bool
+	logical :: bool, types_match
 
 	type(fn_t) :: fn
 	type(syntax_node_t) :: arg
@@ -3805,6 +3846,8 @@ function parse_primary_expr(parser) result(expr)
 			!print *, 'expr%val%bool = ', expr%val%bool
 
 		case (identifier_token)
+
+			! TODO: make fns for these long, deeply-nested cases
 
 			if (parser%peek_kind(1) /= lparen_token) then
 
@@ -3924,7 +3967,11 @@ function parse_primary_expr(parser) result(expr)
 					!print *, kind_name(args%v(i)%val%type)
 					!print *, kind_name(fn%params(i)%type)
 
-					if (fn%params(i)%type /= args%v(i)%val%type) then
+					types_match = &
+						fn%params(i)%type == any_type .or. &
+						fn%params(i)%type == args%v(i)%val%type
+
+					if (.not. types_match) then
 
 						! TODO: get span of individual arg, not whole arg list
 						span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
@@ -3936,6 +3983,30 @@ function parse_primary_expr(parser) result(expr)
 						return
 
 					end if
+
+					if (types_match .and. fn%params(i)%type == array_type) then
+						types_match = &
+							fn%params(i)%array_type == any_type .or. &
+							fn%params(i)%array_type == args%v(i)%val%array%type
+					end if
+
+					if (.not. types_match) then
+
+						span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+						param_type = kind_name( fn%params(i)%array_type)
+						arg_type   = kind_name(args%v(i)%val%array%type)
+
+						call parser%diagnostics%push( &
+							err_bad_array_arg_type(parser%context, &
+							span, identifier%text, i, fn%params(i)%name, &
+							param_type, &
+							arg_type))
+						return
+
+					end if
+
+					! TODO: check rank match for arrays.  Allow any_rank for
+					! size() intrinsic
 
 				end do
 

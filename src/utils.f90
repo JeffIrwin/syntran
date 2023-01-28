@@ -58,6 +58,15 @@ module utils
 
 	!********
 
+	type logical_vector_t
+		logical(kind = 1), allocatable :: v(:)
+		integer :: len, cap
+		contains
+			procedure :: push     => push_logical
+	end type logical_vector_t
+
+	!********
+
 	type char_vector_t
 		character(len = :), allocatable :: v
 		integer :: len, cap
@@ -75,6 +84,51 @@ module utils
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+function new_logical_vector() result(vector)
+
+	type(logical_vector_t) :: vector
+
+	vector%len = 0
+	vector%cap = 2
+
+	allocate(vector%v( vector%cap ))
+
+end function new_logical_vector
+
+!===============================================================================
+
+subroutine push_logical(vector, val)
+
+	class(logical_vector_t) :: vector
+
+	logical, intent(in) :: val
+
+	!********
+
+	logical(kind = 1), allocatable :: tmp(:)
+
+	integer :: tmp_cap
+
+	vector%len = vector%len + 1
+
+	if (vector%len > vector%cap) then
+		!print *, 'growing vector'
+
+		tmp_cap = 2 * vector%len
+		allocate(tmp( tmp_cap ))
+		tmp(1: vector%cap) = vector%v
+
+		call move_alloc(tmp, vector%v)
+		vector%cap = tmp_cap
+
+	end if
+
+	vector%v( vector%len ) = val
+
+end subroutine push_logical
 
 !===============================================================================
 
@@ -259,6 +313,8 @@ function read_line(iu, iostat) result(str)
 	integer :: i, io, str_cap, tmp_cap
 
 	! Buffer string with some initial length
+	!
+	! TODO: use char_vector_t
 	str_cap = 64
 	allocate(character(len = str_cap) :: str)
 
@@ -324,6 +380,8 @@ function read_file(file, iostat) result(str)
 	end if
 
 	! Buffer string with some initial length
+	!
+	! TODO: char_vector_t
 	str_cap = 64
 	allocate(character(len = str_cap) :: str)
 

@@ -178,6 +178,26 @@ end function err_bad_arg_count
 
 !===============================================================================
 
+function err_bad_array_arg_type(context, span, fn, iarg, param, expect, actual) &
+		result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	integer, intent(in):: iarg
+
+	character(len = *), intent(in) :: fn, param, expect, actual
+
+	err = err_prefix &
+		//'Function `'//fn//'` parameter '//str(iarg)//' `'//param &
+		//'` requires an array value of ['//expect &
+		//'] but was given an array value of ['//actual//']' &
+		//underline(context, span)//" wrong array argument type"//color_reset
+
+end function err_bad_array_arg_type
+
+!===============================================================================
+
 function err_bad_arg_type(context, span, fn, iarg, param, expect, actual) &
 		result(err)
 
