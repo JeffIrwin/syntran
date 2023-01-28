@@ -432,7 +432,7 @@ module core_m
 				parse_statement, parse_block_statement, parse_if_statement, &
 				current_pos, peek_pos, parse_for_statement, &
 				parse_while_statement, parse_array_expr, parse_unit, &
-				parse_fn_declaration, parse_subscripts
+				parse_fn_declaration, parse_subscripts, parse_type
 
 	end type parser_t
 
@@ -2443,6 +2443,55 @@ end function parse_unit
 
 !===============================================================================
 
+subroutine parse_type(parser, type_text, rank)
+
+	! TODO: encapsulate out-args in struct if adding any more
+
+	class(parser_t) :: parser
+
+	character(len = :), intent(out), allocatable :: type_text
+
+	integer, intent(out) :: rank
+
+	!********
+
+	type(syntax_token_t) :: colon, type, comma, lbracket, rbracket, semi
+
+	if (parser%current_kind() == lbracket_token) then
+
+		! Array param
+		lbracket = parser%match(lbracket_token)
+		type     = parser%match(identifier_token)
+		semi     = parser%match(semicolon_token)
+
+		rank  = 0
+		do while ( &
+			parser%current_kind() /= rbracket_token .and. &
+			parser%current_kind() /= eof_token)
+
+			rank = rank + 1
+			colon = parser%match(colon_token)
+			if (parser%current_kind() /= rbracket_token) then
+				comma = parser%match(comma_token)
+			end if
+
+		end do
+		!print *, 'rank = ', rank
+
+		rbracket = parser%match(rbracket_token)
+
+	else
+		! Scalar param
+		type = parser%match(identifier_token)
+		rank = -1
+	end if
+
+	type_text = type%text
+
+end subroutine parse_type
+
+!===============================================================================
+
 function parse_fn_declaration(parser) result(decl)
 
 	class(parser_t) :: parser
@@ -2450,6 +2499,8 @@ function parse_fn_declaration(parser) result(decl)
 	type(syntax_node_t) :: decl
 
 	!********
+
+	character(len = :), allocatable :: type_text
 
 	integer :: i, pos0, rank
 
@@ -2461,7 +2512,7 @@ function parse_fn_declaration(parser) result(decl)
 
 	type(syntax_node_t) :: body
 	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, type, &
-		name, comma, dummy, lbracket, rbracket, semi
+		name, comma, dummy
 
 	type(value_t) :: val
 
@@ -2506,40 +2557,13 @@ function parse_fn_declaration(parser) result(decl)
 
 		name  = parser%match(identifier_token)
 		colon = parser%match(colon_token)
-		rank  = 0
 
-		if (parser%current_kind() == lbracket_token) then
-
-			! Array param
-			lbracket = parser%match(lbracket_token)
-			type     = parser%match(identifier_token)
-			semi     = parser%match(semicolon_token)
-
-			do while ( &
-				parser%current_kind() /= rbracket_token .and. &
-				parser%current_kind() /= eof_token)
-
-				rank = rank + 1
-				colon = parser%match(colon_token)
-				if (parser%current_kind() /= rbracket_token) then
-					comma = parser%match(comma_token)
-				end if
-
-			end do
-			!print *, 'rank = ', rank
-
-			rbracket = parser%match(rbracket_token)
-			call is_array%push(.true.)
-
-		else
-			! Scalar param
-			type = parser%match(identifier_token)
-			call is_array%push(.false.)
-		end if
+		call parser%parse_type(type_text, rank)
 
 		call names%push( name%text )
-		call types%push( type%text )
+		call types%push( type_text )
 		call ranks%push( rank      )
+		call is_array%push( rank >= 0 )
 
 		if (parser%current_kind() /= rparen_token) then
 			comma = parser%match(comma_token)
