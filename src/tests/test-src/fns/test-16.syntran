@@ -1,0 +1,66 @@
+
+fn add_fn(u: [f32; :], v: [f32; :]): [f32; :]
+{
+	// Return w = u + v
+	//
+	// Don't use this in production
+
+	let w = [0.0; size(u,0)];
+
+	for i in [0: size(u,0)]
+		w[i] = u[i] + v[i];
+	w;
+}
+
+fn sub_fn(u: [f32; :], v: [f32; :]): [f32; :]
+{
+	// Return w = u - v
+	//
+	// Don't use this in production
+
+	let w = [0.0; size(u,0)];
+
+	for i in [0: size(u,0)]
+		w[i] = u[i] - v[i];
+	w;
+}
+
+fn norm_fn(u: [f32; :]): f32
+{
+	let norm = 0.0;
+	for i in [0: size(u,0)]
+		norm = norm + u[i] ** 2;
+	norm ** 0.5;
+}
+
+fn norm_diff(u: [f32; :], v: [f32; :]): f32
+{
+	// Return the norm of the difference between u and v
+	norm_fn(sub_fn(u, v));
+}
+
+let n = 3;
+
+let a = [0.0: 1.0 * (n - 1); n];
+let b = [1.0 * (n+1): -1.0: 1.5];
+
+a;
+b;
+
+let ans = add_fn(a, b);
+//let ans = sub_fn(a, b);
+ans;
+
+let expect = [1.0 * (n+1); n];
+expect;
+
+let diff = sub_fn(ans, expect);
+diff;
+
+let norm = norm_fn(diff);
+norm;
+
+//norm_fn(a);
+
+norm_diff(ans, expect);
+

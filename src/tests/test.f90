@@ -936,6 +936,7 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-12.syntran', quiet) == '[4, 4, 4]', &
 			interpret_file(path//'test-13.syntran', quiet) == '[2, 3, 4]', &
 			interpret_file(path//'test-14.syntran', quiet) == '[4.000000E+00, 4.000000E+00, 4.000000E+00]', &
+			interpret_file(path//'test-15.syntran', quiet) == '1.300000E+01', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

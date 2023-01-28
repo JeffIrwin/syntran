@@ -2624,6 +2624,7 @@ function parse_fn_declaration(parser) result(decl)
 		if (is_array%v(i)) then
 			allocate(val%array)
 			val%array%type = fn%params(i)%array_type
+			val%array%rank = fn%params(i)%rank
 		end if
 
 		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
@@ -4013,6 +4014,11 @@ function parse_primary_expr(parser) result(expr)
 				expr%identifier = identifier
 
 				expr%val%type = fn%type
+				if (fn%type == array_type) then
+					allocate(expr%val%array)
+					expr%val%array%type = fn%array_type
+					expr%val%array%rank = fn%rank
+				end if
 
 				! Intrinsic fns don't have a syntax node: they are implemented
 				! in Fortran, not syntran

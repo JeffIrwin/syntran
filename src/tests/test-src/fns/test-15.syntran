@@ -1,0 +1,41 @@
+
+// This test covers user-defined norm() and norm_diff() fns, which we
+// will use for more advanced array fn testing in later tests
+
+fn sub_fn(u: [f32; :], v: [f32; :]): [f32; :]
+{
+	// Return w = u - v
+	//
+	// Don't use this in production
+
+	let w = [0.0; size(u,0)];
+
+	for i in [0: size(u,0)]
+		w[i] = u[i] - v[i];
+	w;
+}
+
+fn norm_fn(u: [f32; :]): f32
+{
+	let norm = 0.0;
+	for i in [0: size(u,0)]
+		norm = norm + u[i] ** 2;
+	norm ** 0.5;
+}
+
+fn norm_diff(u: [f32; :], v: [f32; :]): f32
+{
+	// Return the norm of the difference between u and v
+	norm_fn(sub_fn(u, v));
+}
+
+let a = [62.0, 84.0, 68.0];
+
+// 3, 4, 12[, 13] is a Pythagorean quadruplet
+let b = [a[0] + 3, a[1] + 4, a[2] + 12];  
+
+a;
+b;
+
+norm_diff(a, b);
+
