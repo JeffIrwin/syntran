@@ -32,10 +32,6 @@ module core_m
 	!  - arrays
 	!    * bool arrays
 	!    * fix array sub-type checking
-	!    * multi-rank array initialization:
-	!        let a = [ 1, 2,   3, 4  ; 2, 2];
-	!      or?
-	!        let a = [[1, 2], [3, 4]];
 	!    * add slice subscripts:
 	!      > a[:]     -> a[0], a[1], a[2], ...
 	!      > a[1:4]   -> a[1], a[2], a[3]
@@ -3845,7 +3841,8 @@ function parse_array_expr(parser) result(expr)
 	elems = new_syntax_node_vector()
 	call elems%push(lbound)
 	do while (&
-		parser%current_kind() /= rbracket_token .and. &
+		parser%current_kind() /= rbracket_token  .and. &
+		parser%current_kind() /= semicolon_token .and. &
 		parser%current_kind() /= eof_token)
 
 		pos0 = parser%pos
@@ -3869,6 +3866,35 @@ function parse_array_expr(parser) result(expr)
 		if (parser%pos == pos0) dummy = parser%next()
 
 	end do
+
+	if (parser%current_kind() == semicolon_token) then
+
+		! Rank-2+ array: [elem_0, elem_1, elem_2, ... ; size_0, size_1, ... ];
+		semicolon = parser%match(semicolon_token)
+
+		size = parser%parse_size()
+
+		rbracket = parser%match(rbracket_token)
+
+		allocate(expr%val%array)
+
+		call syntax_nodes_copy(expr%size, size%v( 1: size%len ))
+
+		expr%kind           = array_expr
+
+		expr%val%type       = array_type
+
+		expr%val%array%type = lbound%val%type
+		expr%val%array%kind = expl_array
+		expr%val%array%rank = size%len
+
+		call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len ))
+
+		return
+
+	end if
+
+	! Rank-1 array (size is implicitly defined by number of elements)
 
 	rbracket = parser%match(rbracket_token)
 
@@ -4761,10 +4787,35 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res%type  = array_type
 			res%array = array
 
+		else if (node%val%array%kind == expl_array .and. allocated(node%size)) then
+			! Explicit rank-2+ arrays
+
+			array = new_array(node%val%array%type, size(node%elems))
+
+			do i = 1, size(node%elems)
+				elem = syntax_eval(node%elems(i), vars, fns, quietl)
+				!print *, 'elem['//str(i)//'] = ', elem%str()
+				call array%push(elem)
+			end do
+
+			array%rank = size( node%size )
+			allocate(array%size( array%rank ))
+			!array%size = array%len
+			do i = 1, array%rank
+				len = syntax_eval(node%size(i), vars, fns, quietl)
+				array%size(i) = len%i32
+			end do
+
+			!print *, 'copying array'
+			allocate(res%array)
+			res%type  = array_type
+			res%array = array
+			!print *, 'done'
+
 		else if (node%val%array%kind == expl_array) then
 			!print *, 'expl_array'
 
-			! TODO: explicit multi-rank arrays
+			! Explicit rank-1 arrays
 
 			! TODO: allow empty arrays?  Sub type of empty array?  Empty arrays
 			! can currently be created like [0: -1];
