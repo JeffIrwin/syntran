@@ -509,7 +509,7 @@ logical function is_expo(c)
 
 	character, intent(in) :: c
 
-	is_expo = c == 'd' .or. c == 'e'
+	is_expo = c == 'd' .or. c == 'e' .or. c == 'D' .or. c == 'E'
 
 end function is_expo
 
