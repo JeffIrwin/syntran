@@ -432,7 +432,8 @@ module core_m
 				parse_statement, parse_block_statement, parse_if_statement, &
 				current_pos, peek_pos, parse_for_statement, &
 				parse_while_statement, parse_array_expr, parse_unit, &
-				parse_fn_declaration, parse_subscripts, parse_type
+				parse_fn_declaration, parse_subscripts, parse_type, &
+				parse_size
 
 	end type parser_t
 
@@ -2511,7 +2512,7 @@ function parse_fn_declaration(parser) result(decl)
 	type(integer_vector_t) :: ranks
 
 	type(syntax_node_t) :: body
-	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, type, &
+	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, &
 		name, comma, dummy
 
 	type(text_span_t) :: span
@@ -2642,9 +2643,6 @@ function parse_fn_declaration(parser) result(decl)
 	if (parser%current_kind() == colon_token) then
 
 		colon = parser%match(colon_token)
-
-		!type  = parser%match(identifier_token)
-		!fn%type = lookup_type(type%text)
 
 		pos1 = parser%pos
 		call parser%parse_type(type_text, rank)
@@ -3543,6 +3541,53 @@ end function get_binary_op_prec
 
 !===============================================================================
 
+function parse_size(parser) result(size)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_vector_t) :: size
+
+	!********
+
+	integer :: span_beg, span_end
+
+	type(syntax_node_t)  :: len
+	type(syntax_token_t) :: comma
+	type(text_span_t) :: span
+
+	size = new_syntax_node_vector()
+	do while ( &
+		parser%current_kind() /= rbracket_token .and. &
+		parser%current_kind() /= eof_token)
+
+		span_beg = parser%peek_pos(0)
+		len      = parser%parse_expr()
+		span_end = parser%peek_pos(0) - 1
+
+		!print *, 'len = ', parser%context%text(span_beg: span_end)
+
+		if (len%val%type /= i32_type) then
+			span = new_span(span_beg, span_end - span_beg + 1)
+			! TODO: different diag for each (or at least some) case
+			call parser%diagnostics%push(err_non_int_range( &
+				parser%context, span, &
+				parser%context%text(span_beg: span_end)))
+		end if
+
+		call size%push(len)
+
+		! TODO: break infinite loop?
+
+		if (parser%current_kind() /= rbracket_token) then
+			comma = parser%match(comma_token)
+		end if
+
+	end do
+
+end function parse_size
+
+!===============================================================================
+
 function parse_array_expr(parser) result(expr)
 
 	class(parser_t) :: parser
@@ -3626,34 +3671,7 @@ function parse_array_expr(parser) result(expr)
 		! [lbound; rows, cols]
 		! [lbound; rows, cols, sheets, ...]
 
-		size = new_syntax_node_vector()
-		do while ( &
-			parser%current_kind() /= rbracket_token .and. &
-			parser%current_kind() /= eof_token)
-
-			span_beg = parser%peek_pos(0)
-			len      = parser%parse_expr()
-			span_end = parser%peek_pos(0) - 1
-
-			!print *, 'len = ', parser%context%text(span_beg: span_end)
-
-			if (len%val%type /= i32_type) then
-				span = new_span(span_beg, span_end - span_beg + 1)
-				! TODO: different diag for each (or at least some) case
-				call parser%diagnostics%push(err_non_int_range( &
-					parser%context, span, &
-					parser%context%text(span_beg: span_end)))
-			end if
-
-			call size%push(len)
-
-			! TODO: break infinite loop?
-
-			if (parser%current_kind() /= rbracket_token) then
-				comma = parser%match(comma_token)
-			end if
-
-		end do
+		size = parser%parse_size()
 
 		rbracket = parser%match(rbracket_token)
 
