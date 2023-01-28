@@ -1,0 +1,17 @@
+
+fn sum_fn(v: [i32; :]): i32
+{
+	// Don't use this in production.  There will be a sum() intrinsic soon
+	// enough
+	let s = 0;
+	for i in [0: size(v, 0)]
+		s = s + v[i];
+	s;
+}
+
+// TODO: add tests for float array args and multi-rank args
+
+let vec = [0: 6];
+let ans = sum_fn(vec);
+ans;
+
