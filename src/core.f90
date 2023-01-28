@@ -201,7 +201,7 @@ module core_m
 		! Function signature: input and output types
 
 		! Return type
-		integer :: type
+		integer :: type, array_type, rank
 
 		! Arguments
 		type(param_t), allocatable :: params(:)
@@ -2502,7 +2502,7 @@ function parse_fn_declaration(parser) result(decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: i, pos0, rank
+	integer :: i, pos0, pos1, pos2, rank, itype
 
 	type(fn_t) :: fn
 
@@ -2513,6 +2513,8 @@ function parse_fn_declaration(parser) result(decl)
 	type(syntax_node_t) :: body
 	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, type, &
 		name, comma, dummy
+
+	type(text_span_t) :: span
 
 	type(value_t) :: val
 
@@ -2525,6 +2527,8 @@ function parse_fn_declaration(parser) result(decl)
 	identifier = parser%match(identifier_token)
 
 	!print *, 'parsing fn ', identifier%text
+
+	pos1 = parser%pos
 
 	lparen = parser%match(lparen_token)
 
@@ -2563,6 +2567,8 @@ function parse_fn_declaration(parser) result(decl)
 		call names%push( name%text )
 		call types%push( type_text )
 		call ranks%push( rank      )
+
+		! This array is technically redundant but helps readability?
 		call is_array%push( rank >= 0 )
 
 		if (parser%current_kind() /= rparen_token) then
@@ -2575,6 +2581,7 @@ function parse_fn_declaration(parser) result(decl)
 	end do
 
 	rparen = parser%match(rparen_token)
+	pos2 = parser%pos
 
 	! Now that we have the number of params, save them
 
@@ -2586,13 +2593,24 @@ function parse_fn_declaration(parser) result(decl)
 
 		fn%params(i)%name = names%v(i)%s
 
-		! TODO: catch unknown types
+		itype = lookup_type( types%v(i)%s )
+		if (itype == unknown_type) then
+
+			! TODO: make an array of pos's for each param to underline
+			! individual param, not whole param list
+
+			span = new_span(pos1, pos2 - pos1 + 1)
+			call parser%diagnostics%push(err_bad_type( &
+				parser%context, span, types%v(i)%s))
+
+		end if
+
 		if (is_array%v(i)) then
 			fn%params(i)%type = array_type
-			fn%params(i)%array_type = lookup_type( types%v(i)%s )
+			fn%params(i)%array_type = itype
 			fn%params(i)%rank = ranks%v(i)
 		else
-			fn%params(i)%type = lookup_type( types%v(i)%s )
+			fn%params(i)%type = itype
 		end if
 
 		! Declare the parameter variable
@@ -2624,12 +2642,33 @@ function parse_fn_declaration(parser) result(decl)
 
 		colon = parser%match(colon_token)
 
-		! TODO: array return vals.  fn for parsing types (both scalar and array)
+		!type  = parser%match(identifier_token)
+		!fn%type = lookup_type(type%text)
 
-		type  = parser%match(identifier_token)
-		fn%type = lookup_type(type%text)
+		pos1 = parser%pos
+		call parser%parse_type(type_text, rank)
+		pos2 = parser%pos
 
-		! TODO: catch unknown_type
+		itype = lookup_type(type_text)
+
+		if (itype == unknown_type) then
+			span = new_span(pos1, pos2 - pos1 + 1)
+			call parser%diagnostics%push(err_bad_type( &
+				parser%context, span, type_text))
+		end if
+
+		if (rank >= 0) then
+			fn%type = array_type
+			fn%rank = rank
+
+			! TODO: does this require changes in other places?  Probably for
+			! type checking at least, e.g. assigning an f32 array fn result to
+			! an i32 array LHS
+			fn%array_type = itype
+
+		else
+			fn%type = itype
+		end if
 
 	end if
 	!print *, 'fn%type = ', fn%type
@@ -2655,18 +2694,16 @@ function parse_fn_declaration(parser) result(decl)
 
 	call parser%fns%insert(identifier%text, fn, decl%id_index)
 
-	!print *, 'size(decl%params) = ', size(decl%params)
+	print *, 'size(decl%params) = ', size(decl%params)
 	!print *, 'decl%params = ', decl%params
 
 end function parse_fn_declaration
 
 !===============================================================================
 
-function lookup_type(name) result(type)
+integer function lookup_type(name) result(type)
 
 	character(len = *), intent(in) :: name
-
-	integer :: type
 
 	! Immo also has an "any" type.  Should I allow that?
 
@@ -2680,6 +2717,7 @@ function lookup_type(name) result(type)
 		case default
 			type = unknown_type
 	end select
+	print *, 'lookup_type = ', type
 
 end function lookup_type
 
@@ -3934,8 +3972,10 @@ function parse_primary_expr(parser) result(expr)
 
 				! Function call expression
 
-				!print *, 'parsing fn_call_expr'
+				print *, 'parsing fn_call_expr'
 				identifier = parser%match(identifier_token)
+
+				print *, 'identifier = ', identifier%text
 
 				args = new_syntax_node_vector()
 				lparen  = parser%match(lparen_token)
@@ -4074,6 +4114,8 @@ function parse_primary_expr(parser) result(expr)
 
 				call syntax_nodes_copy(expr%args, &
 					args%v( 1: args%len ))
+
+				print *, 'done parsing fn_call_expr'
 
 			end if
 

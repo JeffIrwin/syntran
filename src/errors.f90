@@ -84,6 +84,20 @@ end function err_bad_float
 
 !===============================================================================
 
+function err_bad_type(context, span, type) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: type
+	err = err_prefix//'invalid type annotation `'//type//'`' &
+		//underline(context, span) &
+		//' bad type'//color_reset
+
+end function err_bad_type
+
+!===============================================================================
+
 function err_unexpected_char(context, span, c) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

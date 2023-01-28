@@ -1,0 +1,24 @@
+
+fn add_fn(u: [i32; :], v: [i32; :]): [i32; :]
+{
+	// Return w = u + v
+	//
+	// Don't use this in production
+
+	let w = [0; size(u,0)];
+
+	for i in [0: size(u,0)]
+	{
+		w[i] = u[i] + v[i];
+	}
+	w;
+}
+
+let n = 3;
+
+let a = [0: n];
+let b = [2; n];
+
+let ans = add_fn(a, b);
+ans;
+
