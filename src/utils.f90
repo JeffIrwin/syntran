@@ -58,21 +58,30 @@ module utils
 
 	!********
 
-	type logical_vector_t
-		logical(kind = 1), allocatable :: v(:)
-		integer :: len, cap
-		contains
-			procedure :: push     => push_logical
-	end type logical_vector_t
-
-	!********
-
 	type char_vector_t
 		character(len = :), allocatable :: v
 		integer :: len, cap
 		contains
 			procedure :: push => push_char
 	end type char_vector_t
+
+	!********
+
+	type integer_vector_t
+		integer, allocatable :: v(:)
+		integer :: len, cap
+		contains
+			procedure :: push     => push_integer
+	end type integer_vector_t
+
+	!********
+
+	type logical_vector_t
+		logical(kind = 1), allocatable :: v(:)
+		integer :: len, cap
+		contains
+			procedure :: push     => push_logical
+	end type logical_vector_t
 
 	!********
 
@@ -84,6 +93,51 @@ module utils
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+function new_integer_vector() result(vector)
+
+	type(integer_vector_t) :: vector
+
+	vector%len = 0
+	vector%cap = 2
+
+	allocate(vector%v( vector%cap ))
+
+end function new_integer_vector
+
+!===============================================================================
+
+subroutine push_integer(vector, val)
+
+	class(integer_vector_t) :: vector
+
+	integer, intent(in) :: val
+
+	!********
+
+	integer, allocatable :: tmp(:)
+
+	integer :: tmp_cap
+
+	vector%len = vector%len + 1
+
+	if (vector%len > vector%cap) then
+		!print *, 'growing vector'
+
+		tmp_cap = 2 * vector%len
+		allocate(tmp( tmp_cap ))
+		tmp(1: vector%cap) = vector%v
+
+		call move_alloc(tmp, vector%v)
+		vector%cap = tmp_cap
+
+	end if
+
+	vector%v( vector%len ) = val
+
+end subroutine push_integer
 
 !===============================================================================
 

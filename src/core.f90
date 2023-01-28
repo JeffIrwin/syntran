@@ -515,6 +515,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!size_fn%params(1)%array_type = i32_type
 	size_fn%params(1)%array_type = any_type
+	size_fn%params(1)%rank = -1  ! negative means any rank
 
 	size_fn%params(1)%name = "array"
 
@@ -2450,18 +2451,19 @@ function parse_fn_declaration(parser) result(decl)
 
 	!********
 
+	integer :: i, pos0, rank
+
 	type(fn_t) :: fn
 
-	type(string_vector_t) :: names, types
+	type( string_vector_t) :: names, types
 	type(logical_vector_t) :: is_array
+	type(integer_vector_t) :: ranks
 
 	type(syntax_node_t) :: body
 	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, type, &
-		name, comma, dummy, lbracket, rbracket
+		name, comma, dummy, lbracket, rbracket, semi
 
 	type(value_t) :: val
-
-	integer :: i, pos0
 
 	! Like a for statement, a fn declaration has its own scope (for its
 	! parameters).  Its block body will have yet another scope
@@ -2479,6 +2481,7 @@ function parse_fn_declaration(parser) result(decl)
 	names    = new_string_vector()
 	types    = new_string_vector()
 	is_array = new_logical_vector()
+	ranks    = new_integer_vector()
 
 	! Array params use this syntax:
 	!
@@ -2503,16 +2506,29 @@ function parse_fn_declaration(parser) result(decl)
 
 		name  = parser%match(identifier_token)
 		colon = parser%match(colon_token)
+		rank  = 0
 
 		if (parser%current_kind() == lbracket_token) then
 
 			! Array param
 			lbracket = parser%match(lbracket_token)
 			type     = parser%match(identifier_token)
+			semi     = parser%match(semicolon_token)
+
+			do while ( &
+				parser%current_kind() /= rbracket_token .and. &
+				parser%current_kind() /= eof_token)
+
+				rank = rank + 1
+				colon = parser%match(colon_token)
+				if (parser%current_kind() /= rbracket_token) then
+					comma = parser%match(comma_token)
+				end if
+
+			end do
+			!print *, 'rank = ', rank
+
 			rbracket = parser%match(rbracket_token)
-
-			! TODO: parse rank instead of assuming 1
-
 			call is_array%push(.true.)
 
 		else
@@ -2523,6 +2539,7 @@ function parse_fn_declaration(parser) result(decl)
 
 		call names%push( name%text )
 		call types%push( type%text )
+		call ranks%push( rank      )
 
 		if (parser%current_kind() /= rparen_token) then
 			comma = parser%match(comma_token)
@@ -2549,6 +2566,7 @@ function parse_fn_declaration(parser) result(decl)
 		if (is_array%v(i)) then
 			fn%params(i)%type = array_type
 			fn%params(i)%array_type = lookup_type( types%v(i)%s )
+			fn%params(i)%rank = ranks%v(i)
 		else
 			fn%params(i)%type = lookup_type( types%v(i)%s )
 		end if
@@ -3588,6 +3606,7 @@ function parse_array_expr(parser) result(expr)
 
 		expr%val%array%type = lbound%val%type
 		expr%val%array%kind = impl_array
+		expr%val%array%rank = size%len
 
 		!print *, 'expr%val%type       = ', expr%val%type
 		!print *, 'expr%val%array%type = ', expr%val%array%type
@@ -3656,6 +3675,7 @@ function parse_array_expr(parser) result(expr)
 
 			expr%val%array%type = lbound%val%type
 			expr%val%array%kind = impl_array
+			expr%val%array%rank = 1
 
 			expr%lbound = lbound
 			expr%step   = step
@@ -3699,6 +3719,7 @@ function parse_array_expr(parser) result(expr)
 
 			expr%val%array%type = lbound%val%type
 			expr%val%array%kind = impl_array
+			expr%val%array%rank = 1
 
 			expr%lbound = lbound
 			expr%ubound = ubound
@@ -3726,6 +3747,7 @@ function parse_array_expr(parser) result(expr)
 
 		expr%val%array%type       = lbound%val%type
 		expr%val%array%kind       = impl_array
+		expr%val%array%rank = 1
 
 		expr%lbound = lbound
 		expr%ubound = ubound
@@ -3777,6 +3799,7 @@ function parse_array_expr(parser) result(expr)
 
 	expr%val%array%type = lbound%val%type
 	expr%val%array%kind = expl_array
+	expr%val%array%rank = 1
 
 	call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len ))
 
@@ -3800,7 +3823,7 @@ function parse_primary_expr(parser) result(expr)
 	!********
 
 	character(len = :), allocatable :: param_type, arg_type
-	integer :: i, io, id_index
+	integer :: i, io, id_index, param_rank, arg_rank
 	logical :: bool, types_match
 
 	type(fn_t) :: fn
@@ -3952,8 +3975,6 @@ function parse_primary_expr(parser) result(expr)
 				! variable value
 				!expr%fn = fn
 
-				! TODO: break cascading errors if fn is not defined
-
 				!print *, 'fn params size = ', size(fn%params)
 				if (size(fn%params) /= args%len) then
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
@@ -3984,7 +4005,7 @@ function parse_primary_expr(parser) result(expr)
 
 					end if
 
-					if (types_match .and. fn%params(i)%type == array_type) then
+					if (fn%params(i)%type == array_type) then
 						types_match = &
 							fn%params(i)%array_type == any_type .or. &
 							fn%params(i)%array_type == args%v(i)%val%array%type
@@ -3999,14 +4020,29 @@ function parse_primary_expr(parser) result(expr)
 						call parser%diagnostics%push( &
 							err_bad_array_arg_type(parser%context, &
 							span, identifier%text, i, fn%params(i)%name, &
-							param_type, &
-							arg_type))
+							param_type, arg_type))
 						return
 
 					end if
 
-					! TODO: check rank match for arrays.  Allow any_rank for
-					! size() intrinsic
+					if (fn%params(i)%type == array_type) then
+						param_rank = fn%params(i)%rank
+						arg_rank = args%v(i)%val%array%rank
+
+						if (param_rank >= 0 .and. param_rank /= arg_rank) then
+
+							span = new_span(lparen%pos, &
+								rparen%pos - lparen%pos + 1)
+
+							call parser%diagnostics%push( &
+								err_bad_arg_rank(parser%context, &
+								span, identifier%text, i, fn%params(i)%name, &
+								param_rank, arg_rank))
+							return
+
+						end if
+
+					end if
 
 				end do
 

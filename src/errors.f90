@@ -218,6 +218,26 @@ end function err_bad_arg_type
 
 !===============================================================================
 
+function err_bad_arg_rank(context, span, fn, iarg, param, expect, actual) &
+		result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	integer, intent(in):: iarg, expect, actual
+
+	character(len = *), intent(in) :: fn, param
+
+	err = err_prefix &
+		//'Function `'//fn//'` parameter '//str(iarg)//' `'//param &
+		//'` requires rank-'//str(expect)//' array but was given a rank-' &
+		//str(actual)//' array' &
+		//underline(context, span)//" wrong argument rank"//color_reset
+
+end function err_bad_arg_rank
+
+!===============================================================================
+
 function err_binary_types(context, span, op, left, right) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
