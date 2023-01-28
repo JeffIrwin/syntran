@@ -1,0 +1,25 @@
+
+fn add_fn(u: [f32; :], v: [f32; :]): [f32; :]
+{
+	// Return w = u + v
+	//
+	// Don't use this in production
+
+	let w = [0.0; size(u,0)];
+
+	for i in [0: size(u,0)]
+		w[i] = u[i] + v[i];
+	w;
+}
+
+let n = 3;
+
+let a = [0.0: 1.0 * (n - 1); n];
+let b = [1.0 * (n+1): -1.0: 1.5];
+
+a;
+b;
+
+let ans = add_fn(a, b);
+ans;
+
