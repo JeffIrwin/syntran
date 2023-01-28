@@ -975,6 +975,9 @@ subroutine unit_test_linalg_fns(npass, nfail)
 			interpret_file(path//'test-01.syntran', quiet) == '0.000000E+00', &
 			interpret_file(path//'test-02.syntran', quiet) == '[-3.844404E+01, 2.821099E+01, -9.842391E+01]', &
 			interpret_file(path//'test-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-04.syntran', quiet) == 'true', &
+			interpret_file(path//'test-05.syntran', quiet) == '[1.000000E+00, -3.000000E+00, 2.000000E+00]', &
+			interpret_file(path//'test-06.syntran', quiet) == '[-1.000000E+00, -2.000000E+00, 3.000000E+00]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

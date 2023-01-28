@@ -1,0 +1,72 @@
+
+fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
+{
+	// Matrix-vector multiplication.  Return mat * vec
+	let ans =  [0.0; size(mat,0)];
+	for     j in [0: size(mat,1)]
+		for i in [0: size(mat,0)]
+			ans[i] = ans[i] + mat[i,j] * vec[j];
+	ans;
+}
+
+fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
+{
+	// Matrix-matrix multiplication.  Return a * b
+	let c = [0.0; size(a,0), size(b,1)];
+	for         j in [0: size(b,1)]
+		for     k in [0: size(a,1)]
+			for i in [0: size(a,0)]
+				c[i,j] = c[i,j] + a[i,k] * b[k,j];
+	c;
+}
+
+// 3D vector with x = 1.0, y = 2.0, z = 3.0
+let vec = [1.0, 2.0, 3.0];
+
+// 3x3 identity matrix.  Sizes go after the semicolon
+let eye3 =
+	[
+		1.0, 0.0, 0.0,
+		0.0, 1.0, 0.0,
+		0.0, 0.0, 1.0 ;
+		3, 3
+	];
+
+eye3;
+
+// 90 degree x rotation.  Note that arrays are stored in row-major order, so
+// this appears transposed
+let rotx =
+	[
+		1.0,  0.0,  0.0,
+		0.0,  0.0,  1.0,
+		0.0, -1.0,  0.0 ;
+		3, 3
+	];
+
+// 90 degree y rotation
+let roty =
+	[
+		0.0,  0.0, -1.0,
+		0.0,  1.0,  0.0,
+		1.0,  0.0,  0.0 ;
+		3, 3
+	];
+
+// Apply identity transformation
+mul_mat_vec(eye3, vec);
+// [1.0, 2.0, 3.0]
+
+// Apply 90 degree x rotation
+mul_mat_vec(rotx, vec);
+// [1.0, -3.0, 2.0]
+
+// Apply 180 degree x rotation
+mul_mat_vec(mul_mat(rotx, rotx), vec);
+// [1.0, -2.0, -3.0]
+
+// Apply 180 degree x rotation then 180 degree y rotation, which is equivalent
+// to applying a 180 degree z rotation
+mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty), vec);
+// [-1.0, -2.0, 3.0]
+
