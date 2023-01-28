@@ -937,6 +937,7 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-13.syntran', quiet) == '[2, 3, 4]', &
 			interpret_file(path//'test-14.syntran', quiet) == '[4.000000E+00, 4.000000E+00, 4.000000E+00]', &
 			interpret_file(path//'test-15.syntran', quiet) == '1.300000E+01', &
+			interpret_file(path//'test-16.syntran', quiet) == '0.000000E+00', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -946,6 +947,41 @@ subroutine unit_test_fns(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_fns
+
+!===============================================================================
+
+subroutine unit_test_linalg_fns(npass, nfail)
+
+	! More advanced tests on longer scripts
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'user-defined linear algebra functions'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/linear-algebra/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == '0.000000E+00', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_linalg_fns
 
 !===============================================================================
 
@@ -1213,6 +1249,7 @@ subroutine unit_tests(iostat)
 	call unit_test_nd_i32     (npass, nfail)
 	call unit_test_intr_fns   (npass, nfail)
 	call unit_test_fns        (npass, nfail)
+	call unit_test_linalg_fns (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

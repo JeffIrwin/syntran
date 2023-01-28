@@ -57,9 +57,8 @@ expect;
 let diff = sub_fn(ans, expect);
 diff;
 
-let norm = norm_fn(diff);
-norm;
-
+//let norm = norm_fn(diff);
+//norm;
 //norm_fn(a);
 
 norm_diff(ans, expect);

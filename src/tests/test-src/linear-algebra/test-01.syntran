@@ -1,0 +1,59 @@
+
+fn sub_fn(u: [f32; :], v: [f32; :]): [f32; :]
+{
+	// Return w = u - v
+	//
+	// Don't use this in production
+
+	let w = [0.0; size(u,0)];
+
+	for i in [0: size(u,0)]
+		w[i] = u[i] - v[i];
+	w;
+}
+
+fn norm_fn(u: [f32; :]): f32
+{
+	let norm = 0.0;
+	for i in [0: size(u,0)]
+		norm = norm + u[i] ** 2;
+	norm ** 0.5;
+}
+
+fn norm_diff(u: [f32; :], v: [f32; :]): f32
+{
+	// Return the norm of the difference between u and v
+	norm_fn(sub_fn(u, v));
+}
+
+fn eye(n: i32): [f32; :,:]
+{
+	// Return n by n identity matrix
+	let mat = [0.0; n, n];
+	for i in [0: n]
+		mat[i,i] = 1.0;
+	mat;
+}
+
+fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
+{
+	// Matrix-vector multiplication.  Return mat * vec.
+	//
+	// Don't use this in production.  No size checking!
+	let ans = [0.0; size(mat,0)];
+	for i in [0: size(mat,0)]
+		for j in [0: size(mat,1)]
+			ans[i] = ans[i] + mat[i,j] * vec[j];
+	ans;
+}
+
+let n3 = 3;
+
+let a = [62.0, 84.0, 68.0];
+
+let eye3 = eye(n3);
+
+let amul = mul_mat_vec(eye3, a);
+
+norm_diff(a, amul);
+
