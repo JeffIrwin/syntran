@@ -31,7 +31,7 @@ fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 	// Matrix-vector multiplication.  Return mat * vec.
 	//
 	// Don't use this in production.  No size checking!
-	let ans = [0.0; size(mat,0)];
+	let ans =  [0.0; size(mat,0)];
 	for     j in [0: size(mat,1)]
 		for i in [0: size(mat,0)]
 			ans[i] = ans[i] + mat[i,j] * vec[j];

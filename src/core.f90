@@ -2695,7 +2695,7 @@ function parse_fn_declaration(parser) result(decl)
 
 	call parser%fns%insert(identifier%text, fn, decl%id_index)
 
-	print *, 'size(decl%params) = ', size(decl%params)
+	!print *, 'size(decl%params) = ', size(decl%params)
 	!print *, 'decl%params = ', decl%params
 
 end function parse_fn_declaration
@@ -2718,7 +2718,7 @@ integer function lookup_type(name) result(type)
 		case default
 			type = unknown_type
 	end select
-	print *, 'lookup_type = ', type
+	!print *, 'lookup_type = ', type
 
 end function lookup_type
 
@@ -3972,11 +3972,10 @@ function parse_primary_expr(parser) result(expr)
 			else
 
 				! Function call expression
-
-				print *, 'parsing fn_call_expr'
 				identifier = parser%match(identifier_token)
 
-				print *, 'identifier = ', identifier%text
+				!print *, 'parsing fn_call_expr'
+				!print *, 'identifier = ', identifier%text
 
 				args = new_syntax_node_vector()
 				lparen  = parser%match(lparen_token)
@@ -4121,7 +4120,7 @@ function parse_primary_expr(parser) result(expr)
 				call syntax_nodes_copy(expr%args, &
 					args%v( 1: args%len ))
 
-				print *, 'done parsing fn_call_expr'
+				!print *, 'done parsing fn_call_expr'
 
 			end if
 
