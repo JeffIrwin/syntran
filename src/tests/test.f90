@@ -931,6 +931,8 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-07.syntran', quiet) == '0', &
 			interpret_file(path//'test-08.syntran', quiet) == 'true', &
 			interpret_file(path//'test-09.syntran', quiet) == '15', &
+			interpret_file(path//'test-10.syntran', quiet) == '1.500000E+01', &
+			interpret_file(path//'test-11.syntran', quiet) == '300', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

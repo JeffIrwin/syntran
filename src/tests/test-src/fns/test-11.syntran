@@ -1,0 +1,39 @@
+
+fn sum_fn(v: [i32; :,:]): i32
+{
+	// Don't use this in production.  There will be a sum() intrinsic soon
+	// enough
+	let s = 0;
+	for j in [0: size(v, 1)]
+		for i in [0: size(v, 0)]
+			s = s + v[i,j];
+	s;
+}
+
+// Nagarjuniya magic square
+let v =
+	[
+		30, 16, 18, 36,
+		10, 44, 22, 24,
+		32, 14, 20, 34,
+		28, 26, 40,  6
+	];
+
+// Reshape vector to 4x4 matrix
+
+let n = 4;
+
+let a = [0; n, n];
+let k = 0;
+for i in [0: n]
+	for j in [0: n]
+	{
+		a[j,i] = v[k];
+		k = k + 1;
+	}
+
+a;
+
+let ans = sum_fn(a) * 3 / 4;
+ans;
+
