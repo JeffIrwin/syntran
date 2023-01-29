@@ -1800,6 +1800,7 @@ function lex(lexer) result(token)
 
 	real(kind = 4) :: f32
 
+	type(char_vector_t) :: char_vec
 	type(text_span_t) :: span
 	type(value_t) :: val
 
@@ -1855,6 +1856,36 @@ function lex(lexer) result(token)
 			token = new_token(i32_token, start, text, val)
 
 		end if
+
+		return
+
+	end if
+
+	if (lexer%current() == '"') then
+
+		! Skip the current quote
+		lexer%pos = lexer%pos + 1
+
+		char_vec = new_char_vector()
+		do
+			if (lexer%current() == '"') then
+				! TODO: refactor pos increment?
+				if (lexer%lookahead() == '"') then
+					lexer%pos = lexer%pos + 1
+				else
+					lexer%pos = lexer%pos + 1
+					exit
+				end if
+			end if
+
+			call char_vec%push(lexer%current())
+			lexer%pos = lexer%pos + 1
+
+		end do
+
+		val   = new_literal_value(str_type, str = char_vec%v( 1: char_vec%len ))
+		text  = lexer%text(start: lexer%pos-1)
+		token = new_token(str_token, start, text, val)
 
 		return
 
@@ -2769,12 +2800,14 @@ integer function lookup_type(name) result(type)
 	! Immo also has an "any" type.  Should I allow that?
 
 	select case (name)
+		case ("bool")
+			type = bool_type
 		case ("f32")
 			type = f32_type
 		case ("i32")
 			type = i32_type
-		case ("bool")
-			type = bool_type
+		case ("str")
+			type = str_type
 		case default
 			type = unknown_type
 	end select
@@ -4010,8 +4043,8 @@ function parse_primary_expr(parser) result(expr)
 	type(fn_t) :: fn
 	type(syntax_node_t) :: arg
 	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: num, left, right, keyword, identifier, &
-		comma, lparen, rparen
+	type(syntax_token_t) :: left, right, keyword, identifier, &
+		comma, lparen, rparen, token
 	type(text_span_t) :: span
 
 	if (debug > 1) print *, 'parse_primary_expr'
@@ -4270,15 +4303,20 @@ function parse_primary_expr(parser) result(expr)
 
 		case (f32_token)
 
-			num = parser%match(f32_token)
-			expr = new_f32(num%val%f32)
+			token = parser%match(f32_token)
+			expr  = new_f32(token%val%f32)
+
+		case (str_token)
+
+			token = parser%match(str_token)
+			expr  = new_str(token%val%str%s)
 
 		case default
 
-			num = parser%match(i32_token)
-			expr = new_i32(num%val%i32)
+			token = parser%match(i32_token)
+			expr  = new_i32(token%val%i32)
 
-			if (debug > 1) print *, 'num = ', expr%val%to_str()
+			if (debug > 1) print *, 'token = ', expr%val%to_str()
 
 	end select
 
@@ -4342,6 +4380,18 @@ function new_i32(i32) result(expr)
 	expr%val  = new_literal_value(i32_type, i32 = i32)
 
 end function new_i32
+
+!********
+
+function new_str(str) result(expr)
+
+	character(len = *), intent(in) :: str
+	type(syntax_node_t) :: expr
+
+	expr%kind = literal_expr
+	expr%val  = new_literal_value(str_type, str = str)
+
+end function new_str
 
 !===============================================================================
 
@@ -5099,12 +5149,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! handled by parser
 
 			select case (res%type)
+			case (bool_type)
+				vars%vals(node%id_index)%array%bool( i + 1 ) = res%bool
 			case (i32_type)
 				vars%vals(node%id_index)%array%i32 ( i + 1 ) = res%i32
 			case (f32_type)
 				vars%vals(node%id_index)%array%f32 ( i + 1 ) = res%f32
-			case (bool_type)
-				vars%vals(node%id_index)%array%bool( i + 1 ) = res%bool
+			!case (str_type)
+			!	vars%vals(node%id_index)%array%str ( i + 1 ) = res%str
 			end select
 
 		end if
@@ -5225,15 +5277,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			i = subscript_eval(node, vars, fns, quietl)
 
 			select case (res%type)
-			case (i32_type)
-				res%i32 = vars%vals(node%id_index)%array &
-					%i32 ( i + 1 )
-			case (f32_type)
-				res%f32 = vars%vals(node%id_index)%array &
-					%f32 ( i + 1 )
 			case (bool_type)
-				res%bool = vars%vals(node%id_index)%array &
-					%bool( i + 1 )
+				res%bool = vars%vals(node%id_index)%array%bool( i + 1 )
+			case (i32_type)
+				res%i32  = vars%vals(node%id_index)%array%i32 ( i + 1 )
+			case (f32_type)
+				res%f32  = vars%vals(node%id_index)%array%f32 ( i + 1 )
+			!case (str_type)
+			!	res%str  = vars%vals(node%id_index)%array%str ( i + 1 )
 			end select
 
 		else
@@ -5566,6 +5617,14 @@ recursive function value_to_str(val) result(str)
 		case (void_type)
 			str = ''
 
+		case (bool_type)
+			! It might be helpful to have util fns for primitive str conversion
+			if (val%bool) then
+				str = "true"
+			else
+				str = "false"
+			end if
+
 		case (f32_type)
 			write(buf16, '(es16.6)') val%f32
 			!str = trim(buf16)
@@ -5575,13 +5634,8 @@ recursive function value_to_str(val) result(str)
 			write(buffer, '(i0)') val%i32
 			str = trim(buffer)
 
-		case (bool_type)
-			! It might be helpful to have util fns for primitive str conversion
-			if (val%bool) then
-				str = "true"
-			else
-				str = "false"
-			end if
+		case (str_type)
+			str = val%str%s
 
 		case (array_type)
 
