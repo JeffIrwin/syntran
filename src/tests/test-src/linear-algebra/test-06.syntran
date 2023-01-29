@@ -13,10 +13,10 @@ fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
 {
 	// Matrix-matrix multiplication.  Return a * b
 	let c = [0.0; size(a,0), size(b,1)];
-	for         j in [0: size(b,1)]
-		for     k in [0: size(a,1)]
+	for         k in [0: size(b,1)]
+		for     j in [0: size(a,1)]
 			for i in [0: size(a,0)]
-				c[i,j] = c[i,j] + a[i,k] * b[k,j];
+				c[i,k] = c[i,k] + a[i,j] * b[j,k];
 	c;
 }
 

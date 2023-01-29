@@ -70,3 +70,10 @@ mul_mat_vec(mul_mat(rotx, rotx), vec);
 mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty), vec);
 // [-1.0, -2.0, 3.0]
 
+mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty);
+// [
+//      -1.000000E+00,  0.000000E+00, 0.000000E+00,
+//       0.000000E+00, -1.000000E+00, 0.000000E+00,
+//       0.000000E+00,  0.000000E+00, 1.000000E+00
+// ]
+
