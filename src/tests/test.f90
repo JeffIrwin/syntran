@@ -756,6 +756,14 @@ subroutine unit_test_str(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
+	! Fortran allows either ' or " for strings.  Syntran requires ".  Both have
+	! the same rule that doubling a quote produces a single quote literal
+
+	!print *, 'apostrophe: '''
+	!print *, "apostrophe: '"
+	!print *, 'quote: "'
+	!print *, "quote: """
+
 	tests = &
 		[   &
 			eval('"hello";') == 'hello', &
@@ -764,6 +772,7 @@ subroutine unit_test_str(npass, nfail)
 			eval('"hello ""firstname"" ""lastname""";') == 'hello "firstname" "lastname"', &
 			eval('"hello ""firstname"" lastname";') == 'hello "firstname" lastname', &
 			eval('"two """"quotes""""";') == 'two ""quotes""', &
+			eval('"apostrophe: ''";') == 'apostrophe: ''', &
 			eval('"hello world";') == 'hello world'  &
 		]
 
