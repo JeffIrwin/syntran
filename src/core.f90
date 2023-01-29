@@ -5541,7 +5541,7 @@ recursive function value_str(val) result(str)
 	character(len = 16) :: buf16
 	character(len = 32) :: buffer
 
-	integer :: i
+	integer :: i, j, prod
 
 	!type(string_vector_t) :: str_vec
 	type(char_vector_t) :: str_vec
@@ -5587,19 +5587,32 @@ recursive function value_str(val) result(str)
 			str_vec = new_char_vector()
 
 			call str_vec%push('[')
+			if (val%array%rank > 1) call str_vec%push(line_feed)
 
 			if (val%array%type == i32_type) then
 
-				! TODO: add line breaks at the end of each rank for readability.
-				! May need to update some tests?
+				!! Recursive IO stalls execution
+				!print *, 'size = ', val%array%size
 
 				do i = 1, val%array%len
+
 					call str_vec%push(i32_str(val%array%i32(i)))
-					if (i < val%array%len) call str_vec%push(', ')
+					if (i >= val%array%len) cycle
+
+					call str_vec%push(', ')
+
+					! Products could be saved ahead of time outside of loop
+					prod = val%array%size(1)
+					do j = 2, val%array%rank
+						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						prod = prod * val%array%size(j)
+					end do
+
 				end do
 
 			else if (val%array%type == f32_type) then
 
+				! TODO: add line breaks for floats too
 				do i = 1, val%array%len
 					call str_vec%push(f32_str(val%array%f32(i)))
 					if (i < val%array%len) call str_vec%push(', ')
@@ -5611,7 +5624,9 @@ recursive function value_str(val) result(str)
 				call internal_error()
 			end if
 
+			if (val%array%rank > 1) call str_vec%push(line_feed)
 			call str_vec%push(']')
+
 			str = str_vec%v( 1: str_vec%len )
 
 		case default
