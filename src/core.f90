@@ -46,14 +46,15 @@ module core_m
 	!  - functions
 	!    * intrinsic
 	!      > read/write/print
-	!      > abs, max, norm, dot
+	!      > abs, norm, dot
 	!      > exp, log
 	!      > trig: sin, cos, tan, asin, ...
 	!      > norm, sum, product
 	!      > reshape
 	!    * recursive user-defined fns
 	!    * done:
-	!      > exp, min (non-variadic, non-polymorphic)
+	!      > exp  (non-variadic, non-polymorphic)
+	!      > min, max (variadic but non-polymorphic)
 	!      > size (non-variadic but polymorphic)
 	!      > non-recursive user-defined fns
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
@@ -498,9 +499,8 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	! TODO: polymorphic in any numeric type i32, f32, i64, f64, etc.  Also
-	! variadic min(a, b), min(a, b, c), etc. and an array version min(array) as
-	! opposed to Fortran's minval()
+	! TODO: polymorphic in any numeric type i32, f32, i64, f64, etc.  Also an
+	! array version min(array) as opposed to Fortran's minval()
 	!
 	! In Fortran, min() is polymorphic and variadic, but all args must be the
 	! same type.  For example, min(1, 2) and min(1.1, 2.1) are allowed, but
@@ -561,7 +561,8 @@ function declare_intrinsic_fns() result(fns)
 	call fns%insert("size", size_fn, id_index)
 
 	! It might also be useful to make size() variadic and have size(array)
-	! return the product of each dimension's size
+	! return the product of each dimension's size.  It should just have a single
+	! optional param though, not unlimited arity like min/max.
 
 	!********
 
@@ -4154,7 +4155,6 @@ function parse_primary_expr(parser) result(expr)
 					return
 				end if
 
-				!do i = 1, size(fn%params)
 				do i = 1, args%len
 					!print *, kind_name(args%v(i)%val%type)
 					!print *, kind_name(fn%params(i)%type)
@@ -4164,12 +4164,6 @@ function parse_primary_expr(parser) result(expr)
 					! e.g. writeln(file) should write a blank line to a file,
 					! but writeln(file, string1, string2), where string* is not
 					! the same type as file?
-
-					!if (fn%variadic_min < 0) then
-					!	ptype = fn%params(i)%type
-					!else
-					!	ptype = fn%params( fn%variadic_min )%type
-					!end if
 
 					! TODO: if variadic_min == 0 cycle.  We may want println()
 					! to just print an empty line
@@ -5116,6 +5110,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			res%i32 = arg%i32
+
+			! Note that min/max are variadic, so we loop to size(node%args)
+			! instead of size(node%params)
 			do i = 2, size(node%args)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
 				res%i32 = min(res%i32, arg%i32)

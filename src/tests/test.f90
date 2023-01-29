@@ -409,7 +409,6 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('min(5, 1, 3, 4);')  == 1,  &
 			eval_i32('min(5, 0, 3, 4);')  == 0,  &
 			eval_i32('max(3, 2);')  == 3,  &
-			!eval_i32('max(2);')  == 2,  & ! TODO: bad syntax test?
 			eval_i32('max(2, 2);')  == 2,  &
 			eval_i32('max(2, 3, 4);')  == 4,  &
 			eval_i32('max(2, 4, 3);')  == 4,  &
@@ -1172,6 +1171,8 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('let a + 1 = 2;', quiet) == '', &
 			eval('let = 2;', quiet) == '', &
 			eval('let a = 2 3;', quiet) == '', &
+			eval('max(2);', quiet)  == '',  & ! arguable.  see comments in core.f90
+			eval('size([0; 6, 7, 8], 2, 3);', quiet)  == '',  &
 			eval('7 * false;', quiet) == '' &
 		]
 
