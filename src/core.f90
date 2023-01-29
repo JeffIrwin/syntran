@@ -23,15 +23,13 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  14
+		syntran_patch =  15
 
 	! TODO:
 	!
 	! Add:
-	!  - strings.  are characters useful or can we just use strings of length 1?
 	!  - arrays
-	!    * bool arrays
-	!    * fix array sub-type checking
+	!    * bool, str arrays
 	!    * add slice subscripts:
 	!      > a[:]     -> a[0], a[1], a[2], ...
 	!      > a[1:4]   -> a[1], a[2], a[3]
@@ -46,6 +44,7 @@ module core_m
 	!  - functions
 	!    * intrinsic
 	!      > read/write/print
+	!      > len (of str)
 	!      > abs, norm, dot
 	!      > exp, log
 	!      > trig: sin, cos, tan, asin, ...
