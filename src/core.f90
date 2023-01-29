@@ -200,8 +200,11 @@ module core_m
 		! Return type
 		integer :: type, array_type, rank
 
-		! Arguments
+		! Arguments/parameters.  Technically, "arguments" in most languages are
+		! what Fortran calls "actual arguments" and "parameters" are Fortran
+		! "dummy arguments"
 		type(param_t), allocatable :: params(:)
+		integer :: variadic_min  ! min number of variadic params
 
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
@@ -466,7 +469,7 @@ function declare_intrinsic_fns() result(fns)
 
 	integer :: id_index, num_fns
 
-	type(fn_t) :: exp_fn, min_fn, size_fn
+	type(fn_t) :: exp_fn, min_fn, max_fn, size_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -506,6 +509,20 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	max_fn%type = i32_type
+	allocate(max_fn%params(2))
+
+	max_fn%params(1)%type = i32_type
+	max_fn%params(1)%name = "a1"
+
+	max_fn%params(2)%type = i32_type
+	max_fn%params(2)%name = "a2"
+
+	id_index = id_index + 1
+	call fns%insert("max", max_fn, id_index)
+
+	!********
+
 	size_fn%type = i32_type
 	allocate(size_fn%params(2))
 
@@ -534,9 +551,12 @@ function declare_intrinsic_fns() result(fns)
 	num_fns = id_index
 	allocate(fns%fns(num_fns))
 
-	fns%fns(1) = exp_fn
-	fns%fns(2) = min_fn
-	fns%fns(3) = size_fn
+	fns%fns = &
+		[ &
+			min_fn , &
+			max_fn , &
+			size_fn &
+		]
 
 end function declare_intrinsic_fns
 
@@ -5050,6 +5070,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			arg2 = syntax_eval(node%args(2), vars, fns, quietl)
 			res%i32 = min(arg1%i32, arg2%i32)
+
+		case ("max")
+
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+			arg2 = syntax_eval(node%args(2), vars, fns, quietl)
+			res%i32 = max(arg1%i32, arg2%i32)
 
 		case ("size")
 

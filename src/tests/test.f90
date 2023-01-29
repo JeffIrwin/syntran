@@ -396,6 +396,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f32('exp(1.0);') - exp(1.0)) < tol,  &
 			eval_i32('min(3, 2);')  == 2,  &
 			eval_i32('min(2, 2);')  == 2,  &
+			eval_i32('max(3, 2);')  == 3,  &
+			eval_i32('max(2, 2);')  == 2,  &
 			eval_i32('size([0; 5], 0);')  == 5,  &
 			eval_i32('size([0; 6, 7], 0);')  == 6,  &
 			eval_i32('size([0; 6, 7], 1);')  == 7,  &
