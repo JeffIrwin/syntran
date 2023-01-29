@@ -773,6 +773,8 @@ subroutine unit_test_str(npass, nfail)
 			eval('"hello ""firstname"" lastname";') == 'hello "firstname" lastname', &
 			eval('"two """"quotes""""";') == 'two ""quotes""', &
 			eval('"apostrophe: ''";') == 'apostrophe: ''', &
+			eval('"hello " + "world";') == 'hello world', &
+			eval('"hello " + ("planet " + "earth");') == 'hello planet earth', &
 			eval('"hello world";') == 'hello world'  &
 		]
 

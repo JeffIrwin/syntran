@@ -43,18 +43,20 @@ module core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      > read/write/print
+	!      > read
 	!      > len (of str)
 	!      > abs, norm, dot
 	!      > exp, log
 	!      > trig: sin, cos, tan, asin, ...
 	!      > norm, sum, product
 	!      > reshape
+	!      > system
 	!    * recursive user-defined fns
 	!    * done:
 	!      > exp  (non-variadic, non-polymorphic)
 	!      > min, max (variadic but non-polymorphic)
 	!      > size (non-variadic but polymorphic)
+	!      > writeln, println, open, close
 	!      > non-recursive user-defined fns
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - structs
@@ -3540,7 +3542,13 @@ logical function is_binary_op_allowed(left, op, right)
 
 	select case (op)
 
-		case (plus_token, minus_token, sstar_token, star_token, slash_token, &
+		case (plus_token)
+
+			is_binary_op_allowed = &
+				(is_num_type(left) .and. is_num_type(right)) .or. &
+				(left == str_type  .and. right == str_type)
+
+		case (minus_token, sstar_token, star_token, slash_token, &
 				less_token   , less_equals_token, &
 				greater_token, greater_equals_token)
 
@@ -4089,7 +4097,7 @@ function parse_primary_expr(parser) result(expr)
 	!********
 
 	character(len = :), allocatable :: param_type, arg_type
-	integer :: i, j, io, id_index, param_rank, arg_rank, span0, span1, &
+	integer :: i, io, id_index, param_rank, arg_rank, span0, span1, &
 		ptype, atype
 	logical :: bool, types_match
 
@@ -5450,6 +5458,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%f32 = left%f32 + right%i32
 			case        (magic * i32_type + f32_type)
 				res%f32 = left%i32 + right%f32
+			case        (magic * str_type + str_type)
+				res%str%s = left%str%s // right%str%s
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
