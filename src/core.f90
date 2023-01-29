@@ -218,7 +218,7 @@ module core_m
 		! unlimited upper bound of parameters.  For functions with a fixed
 		! number of optional parameters, there should be a different mechanism
 
-		integer :: variadic_min = -1
+		integer :: variadic_min = -1, variadic_type
 
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
@@ -485,7 +485,8 @@ function declare_intrinsic_fns() result(fns)
 
 	integer :: id_index, num_fns
 
-	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn
+	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
+		close_fn, writeln_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -523,7 +524,8 @@ function declare_intrinsic_fns() result(fns)
 	min_fn%params(2)%type = i32_type
 	min_fn%params(2)%name = "a2"
 
-	min_fn%variadic_min = 2
+	min_fn%variadic_min  = 0
+	min_fn%variadic_type = i32_type
 
 	id_index = id_index + 1
 	call fns%insert("min", min_fn, id_index)
@@ -544,7 +546,8 @@ function declare_intrinsic_fns() result(fns)
 	max_fn%params(2)%type = i32_type
 	max_fn%params(2)%name = "a2"
 
-	max_fn%variadic_min = 2
+	max_fn%variadic_min = 0
+	max_fn%variadic_type = i32_type
 
 	id_index = id_index + 1
 	call fns%insert("max", max_fn, id_index)
@@ -553,14 +556,51 @@ function declare_intrinsic_fns() result(fns)
 
 	println_fn%type = void_type ! TODO?
 
-	!allocate(println_fn%params(1))
+	allocate(println_fn%params(0))
 	!println_fn%params(1)%type = i32_type
 	!println_fn%params(1)%name = "a1"
 
-	println_fn%variadic_min = 0
+	println_fn%variadic_min  = 0
+	println_fn%variadic_type = any_type
 
 	id_index = id_index + 1
 	call fns%insert("println", println_fn, id_index)
+
+	!********
+
+	! TODO: return a file type instead of raw i32.  Modify writeln_fn and
+	! close_fn accordingly
+	open_fn%type = i32_type
+	allocate(open_fn%params(1))
+	open_fn%params(1)%type = str_type
+	open_fn%params(1)%name = "filename"
+
+	id_index = id_index + 1
+	call fns%insert("open", open_fn, id_index)
+
+	!********
+
+	writeln_fn%type = void_type
+	allocate(writeln_fn%params(1))
+	writeln_fn%params(1)%type = i32_type
+	writeln_fn%params(1)%name = "file_handle"
+
+	writeln_fn%variadic_min  = 0
+	!writeln_fn%variadic_min = 1
+	writeln_fn%variadic_type = any_type
+
+	id_index = id_index + 1
+	call fns%insert("writeln", writeln_fn, id_index)
+
+	!********
+
+	close_fn%type = void_type
+	allocate(close_fn%params(1))
+	close_fn%params(1)%type = i32_type
+	close_fn%params(1)%name = "file_handle"
+
+	id_index = id_index + 1
+	call fns%insert("close", close_fn, id_index)
 
 	!********
 
@@ -598,6 +638,9 @@ function declare_intrinsic_fns() result(fns)
 			min_fn    , &
 			max_fn    , &
 			println_fn, &
+			open_fn   , &
+			writeln_fn, &
+			close_fn  , &
 			size_fn     &
 		]
 
@@ -4214,17 +4257,22 @@ function parse_primary_expr(parser) result(expr)
 
 				!print *, 'fn params size = ', size(fn%params)
 				if (fn%variadic_min < 0 .and. size(fn%params) /= args%len) then
+
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 					call parser%diagnostics%push( &
 						err_bad_arg_count(parser%context, &
 						span, identifier%text, size(fn%params), args%len))
 					return
-				else if (args%len < fn%variadic_min) then
+
+				else if (args%len < size(fn%params) + fn%variadic_min) then
+
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 					call parser%diagnostics%push( &
 						err_too_few_args(parser%context, &
-						span, identifier%text, fn%variadic_min, args%len))
+						span, identifier%text, &
+						size(fn%params) + fn%variadic_min, args%len))
 					return
+
 				end if
 
 				do i = 1, args%len
@@ -4237,12 +4285,20 @@ function parse_primary_expr(parser) result(expr)
 					! but writeln(file, string1, string2), where string* is not
 					! the same type as file?
 
-					! We want println() to just print an empty line
-					if (fn%variadic_min == 0) exit
+					! TODO: re-test min/max arg count/type checking
 
-					j = i
-					if (fn%variadic_min > 0) j = fn%variadic_min
-					ptype = fn%params(j)%type
+					!! We want println() to just print an empty line
+					!if (fn%variadic_min == 0) exit
+
+					if (i <= size(fn%params)) then
+						ptype = fn%params(i)%type
+					else
+						ptype = fn%variadic_type
+					end if
+
+					!j = i
+					!if (fn%variadic_min > 0) j = fn%variadic_min
+					!ptype = fn%params(j)%type
 
 					types_match = &
 						ptype == any_type .or. ptype == args%v(i)%val%type
@@ -4253,15 +4309,18 @@ function parse_primary_expr(parser) result(expr)
 						span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 						call parser%diagnostics%push( &
 							err_bad_arg_type(parser%context, &
-							span, identifier%text, i, fn%params(j)%name, &
+							span, identifier%text, i, fn%params(i)%name, &
 							kind_name(ptype), &
 							kind_name(args%v(i)%val%type)))
 						return
 
 					end if
 
+					! TODO: fns w/ variadic array params are not implemented
+					if (fn%variadic_min >= 0 .and. i > size(fn%params)) cycle
+
 					if (ptype == array_type) then
-						atype = fn%params(j)%array_type
+						atype = fn%params(i)%array_type
 						types_match = &
 							atype == any_type .or. &
 							atype == args%v(i)%val%array%type
@@ -4275,14 +4334,14 @@ function parse_primary_expr(parser) result(expr)
 
 						call parser%diagnostics%push( &
 							err_bad_array_arg_type(parser%context, &
-							span, identifier%text, i, fn%params(j)%name, &
+							span, identifier%text, i, fn%params(i)%name, &
 							param_type, arg_type))
 						return
 
 					end if
 
 					if (ptype == array_type) then
-						param_rank = fn%params(j)%rank
+						param_rank = fn%params(i)%rank
 						arg_rank = args%v(i)%val%array%rank
 
 						if (param_rank >= 0 .and. param_rank /= arg_rank) then
@@ -4292,7 +4351,7 @@ function parse_primary_expr(parser) result(expr)
 
 							call parser%diagnostics%push( &
 								err_bad_arg_rank(parser%context, &
-								span, identifier%text, i, fn%params(j)%name, &
+								span, identifier%text, i, fn%params(i)%name, &
 								param_rank, arg_rank))
 							return
 
@@ -5230,6 +5289,24 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			!! TODO: what, if anything, should println return?
 			!res%i32 = 0
+
+		case ("open")
+			! TODO: file type instead of raw i32 in open, close, writeln
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			open(newunit = res%i32, file = arg%str%s)
+
+		case ("writeln")
+
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+			do i = 2, size(node%args)
+				arg = syntax_eval(node%args(i), vars, fns, quietl)
+				write(arg1%i32, '(a)', advance = 'no') arg%to_str()
+			end do
+			write(arg1%i32, *)
+
+		case ("close")
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			close(arg%i32)
 
 		case ("size")
 
