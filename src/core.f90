@@ -1881,10 +1881,22 @@ function lex(lexer) result(token)
 			call char_vec%push(lexer%current())
 			lexer%pos = lexer%pos + 1
 
+			if (lexer%pos > len(lexer%text)) exit
+
 		end do
 
-		val   = new_literal_value(str_type, str = char_vec%v( 1: char_vec%len ))
 		text  = lexer%text(start: lexer%pos-1)
+
+		if (lexer%pos > len(lexer%text)) then
+			token = new_token(bad_token, lexer%pos, text)
+			span = new_span(start, len(text))
+			call lexer%diagnostics%push( &
+				err_unterminated_str(lexer%context, &
+				span, text))
+			return
+		end if
+
+		val   = new_literal_value(str_type, str = char_vec%v( 1: char_vec%len ))
 		token = new_token(str_token, start, text, val)
 
 		return

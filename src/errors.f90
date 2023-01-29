@@ -55,6 +55,21 @@ end function err_bad_int
 
 !===============================================================================
 
+function err_unterminated_str(context, span, str) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: str
+	err = err_prefix//'unterminated str literal `'//str &
+		//'`' &
+		//underline(context, span) &
+		//' unterminated str'//color_reset
+
+end function err_unterminated_str
+
+!===============================================================================
+
 function err_non_int_subscript(context, span, subscript) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

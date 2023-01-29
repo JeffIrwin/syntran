@@ -145,7 +145,7 @@ end subroutine unit_test_unary_arith
 
 !===============================================================================
 
-subroutine unit_test_bools(npass, nfail)
+subroutine unit_test_bool(npass, nfail)
 
 	implicit none
 
@@ -181,7 +181,7 @@ subroutine unit_test_bools(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_bools
+end subroutine unit_test_bool
 
 !===============================================================================
 
@@ -739,6 +739,36 @@ end subroutine unit_test_f32_1
 
 !===============================================================================
 
+subroutine unit_test_str(npass, nfail)
+
+	! Simple f32 float tests of arithmetic and comparisons with single-line
+	! evaluations
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'strings'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval('"hello";') == 'hello', &
+			eval('"hello ""name""";') == 'hello "name"', &
+			eval('"hello world";') == 'hello world'  &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_str
+
+!===============================================================================
+
 subroutine unit_test_array_i32_1(npass, nfail)
 
 	! Simple i32 array tests
@@ -1260,7 +1290,7 @@ subroutine unit_tests(iostat)
 	call unit_test_bin_arith  (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)
-	call unit_test_bools      (npass, nfail)
+	call unit_test_bool       (npass, nfail)
 	call unit_test_comparisons(npass, nfail)
 	call unit_test_comp_f32   (npass, nfail)
 	call unit_test_bad_syntax (npass, nfail)
@@ -1268,6 +1298,7 @@ subroutine unit_tests(iostat)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)
 	call unit_test_f32_1      (npass, nfail)
+	call unit_test_str        (npass, nfail)
 	call unit_test_if_else    (npass, nfail)
 	call unit_test_for        (npass, nfail)
 	call unit_test_while      (npass, nfail)
