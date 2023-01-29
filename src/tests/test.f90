@@ -764,6 +764,11 @@ subroutine unit_test_str(npass, nfail)
 	!print *, 'quote: "'
 	!print *, "quote: """
 
+	! TODO: test array to str conversion, after deciding whether to include brackets or not
+	!
+	! Note that printing strings does not include quotes, so that's inconsistent
+	! with the way that printed arrays currently have brackets
+
 	tests = &
 		[   &
 			eval('"hello";') == 'hello', &
@@ -775,6 +780,12 @@ subroutine unit_test_str(npass, nfail)
 			eval('"apostrophe: ''";') == 'apostrophe: ''', &
 			eval('"hello " + "world";') == 'hello world', &
 			eval('"hello " + ("planet " + "earth");') == 'hello planet earth', &
+			eval('"testing " + str(1);') == 'testing 1', &
+			eval('"testing " + str(true) ;') == 'testing true', &
+			eval('"testing " + str(false);') == 'testing false', &
+			eval('"testing " + str(1.0);') == 'testing     1.000000E+00', &
+			eval('"testing testing " + str(1) + " " + str(2);') == 'testing testing 1 2', &
+			eval('"testing " + str(1, " ", 2, " ", 1, " ", 2);') == 'testing 1 2 1 2', &
 			eval('"hello world";') == 'hello world'  &
 		]
 

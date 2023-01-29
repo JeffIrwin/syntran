@@ -488,7 +488,7 @@ function declare_intrinsic_fns() result(fns)
 	integer :: id_index, num_fns
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
-		close_fn, writeln_fn
+		close_fn, writeln_fn, str_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -570,6 +570,18 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	str_fn%type = str_type
+
+	allocate(str_fn%params(0))
+
+	str_fn%variadic_min  = 0
+	str_fn%variadic_type = any_type
+
+	id_index = id_index + 1
+	call fns%insert("str", str_fn, id_index)
+
+	!********
+
 	! TODO: return a file type instead of raw i32.  Modify writeln_fn and
 	! close_fn accordingly
 	open_fn%type = i32_type
@@ -640,6 +652,7 @@ function declare_intrinsic_fns() result(fns)
 			min_fn    , &
 			max_fn    , &
 			println_fn, &
+			str_fn    , &
 			open_fn   , &
 			writeln_fn, &
 			close_fn  , &
@@ -5297,6 +5310,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			!! TODO: what, if anything, should println return?
 			!res%i32 = 0
+
+		case ("str")
+
+			res%str%s = ''
+			do i = 1, size(node%args)
+				arg = syntax_eval(node%args(i), vars, fns, quietl)
+				res%str%s = res%str%s // arg%to_str()  ! TODO: use char_vector_t
+			end do
 
 		case ("open")
 			! TODO: file type instead of raw i32 in open, close, writeln
