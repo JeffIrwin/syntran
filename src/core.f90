@@ -515,6 +515,8 @@ function declare_intrinsic_fns() result(fns)
 	min_fn%params(2)%type = i32_type
 	min_fn%params(2)%name = "a2"
 
+	min_fn%variadic_min = 2
+
 	id_index = id_index + 1
 	call fns%insert("min", min_fn, id_index)
 
@@ -526,6 +528,11 @@ function declare_intrinsic_fns() result(fns)
 	max_fn%params(1)%type = i32_type
 	max_fn%params(1)%name = "a1"
 
+	! We could make max() and min() work with just 1 argument too.  I'm not sure
+	! why you would want to be able to take the max of 1 number, but it seems
+	! like an arbitrary limitation.  Anyway we follow the Fortran convention
+	! here
+
 	max_fn%params(2)%type = i32_type
 	max_fn%params(2)%name = "a2"
 
@@ -533,8 +540,6 @@ function declare_intrinsic_fns() result(fns)
 
 	id_index = id_index + 1
 	call fns%insert("max", max_fn, id_index)
-
-	!print *, 'variadic = ', min_fn%variadic_min, max_fn%variadic_min
 
 	!********
 
@@ -5109,9 +5114,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		case ("min")
 
-			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
-			arg2 = syntax_eval(node%args(2), vars, fns, quietl)
-			res%i32 = min(arg1%i32, arg2%i32)
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%i32 = arg%i32
+			do i = 2, size(node%args)
+				arg = syntax_eval(node%args(i), vars, fns, quietl)
+				res%i32 = min(res%i32, arg%i32)
+			end do
 
 		case ("max")
 
