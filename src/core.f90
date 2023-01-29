@@ -50,11 +50,12 @@ module core_m
 	!      > exp, log
 	!      > trig: sin, cos, tan, asin, ...
 	!      > norm, sum, product
+	!      > reshape
+	!    * recursive user-defined fns
 	!    * done:
 	!      > exp, min (non-variadic, non-polymorphic)
 	!      > size (non-variadic but polymorphic)
 	!      > non-recursive user-defined fns
-	!    * recursive user-defined fns
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - structs
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
@@ -1400,8 +1401,8 @@ function kind_token(kind)
 			"in                   ", & ! 37
 			"while                ", & ! 38
 			"if statement         ", & ! 39
-			"[                    ", & ! 40
-			"]                    ", & ! 41
+			"]                    ", & ! 40
+			"[                    ", & ! 41
 			"for                  ", & ! 42
 			":                    ", & ! 43
 			"while                ", & ! 44
@@ -2655,12 +2656,7 @@ function parse_fn_declaration(parser) result(decl)
 		if (rank >= 0) then
 			fn%type = array_type
 			fn%rank = rank
-
-			! TODO: does this require changes in other places?  Probably for
-			! type checking at least, e.g. assigning an f32 array fn result to
-			! an i32 array LHS
 			fn%array_type = itype
-
 		else
 			fn%type = itype
 		end if
@@ -3010,7 +3006,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	integer :: io, ltype, rtype, pos0
+	integer :: io, ltype, rtype, pos0, span0, span1
 
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: let, identifier, op
@@ -3099,9 +3095,10 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		! Subscript can appear in assignment expr but not let expr, because let
 		! must initialize the whole array
-		!subscripts = parser%parse_subscripts()
+		span0 = parser%current_pos()
 		expr%subscripts = parser%parse_subscripts()
 		if (size(expr%subscripts) <= 0) deallocate(expr%subscripts)
+		span1 = parser%current_pos() - 1
 
 		if (parser%current_kind() /= equals_token) then
 			! Rewind and do the default case (same as outside the assignment if
@@ -3142,13 +3139,19 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'associated(expr%val%array) = ', associated(expr%val%array)
 
-		!if (subscripts%len > 0) then
 		if (size(expr%subscripts) > 0) then
-			!call syntax_nodes_copy(expr%subscripts, &
-			!	subscripts%v( 1: subscripts%len ))
-			!print *, 'reassigning'
 			expr%val%type = expr%val%array%type
-			!print *, 'done'
+
+			!print *, 'rank = ', expr%val%array%rank
+			!print *, 'subs = ', size(expr%subscripts)
+
+			if (expr%val%array%rank /= size(expr%subscripts)) then
+				span = new_span(span0, span1 - span0 + 1)
+				call parser%diagnostics%push( &
+					err_bad_sub_count(parser%context, span, identifier%text, &
+					expr%val%array%rank, size(expr%subscripts)))
+			end if
+
 		end if
 
 		ltype = expr%val%type
@@ -3930,7 +3933,7 @@ function parse_primary_expr(parser) result(expr)
 	!********
 
 	character(len = :), allocatable :: param_type, arg_type
-	integer :: i, io, id_index, param_rank, arg_rank
+	integer :: i, io, id_index, param_rank, arg_rank, span0, span1
 	logical :: bool, types_match
 
 	type(fn_t) :: fn
@@ -3983,7 +3986,6 @@ function parse_primary_expr(parser) result(expr)
 
 				! Variable name expression
 
-				!identifier = parser%next()
 				identifier = parser%match(identifier_token)
 
 				!print *, 'RHS identifier = ', identifier%text
@@ -4002,15 +4004,23 @@ function parse_primary_expr(parser) result(expr)
 				end if
 
 				!print *, '%current_kind() = ', kind_name(parser%current_kind())
-				!subscripts = parser%parse_subscripts()
+				span0 = parser%current_pos()
 				expr%subscripts = parser%parse_subscripts()
-				!if (subscripts%len > 0) then
+				span1 = parser%current_pos() - 1
 				if (size(expr%subscripts) <= 0) then
 					deallocate(expr%subscripts)
 				else
-					!call syntax_nodes_copy(expr%subscripts, &
-					!	subscripts%v( 1: subscripts%len ))
+
 					expr%val%type = expr%val%array%type
+
+					if (expr%val%array%rank /= size(expr%subscripts)) then
+						span = new_span(span0, span1 - span0 + 1)
+						call parser%diagnostics%push( &
+							err_bad_sub_count(parser%context, span, &
+							identifier%text, &
+							expr%val%array%rank, size(expr%subscripts)))
+					end if
+
 				end if
 
 			else
@@ -4995,7 +5005,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			! Syntran uses 0-indexed arrays while Fortran uses 1-indexed arrays
 
-			! TODO: check res type matches array sub type
+			! TODO: check res type matches array sub type? May already be
+			! handled by parser
+
 			select case (res%type)
 			case (i32_type)
 				vars%vals(node%id_index)%array%i32 ( i + 1 ) = res%i32

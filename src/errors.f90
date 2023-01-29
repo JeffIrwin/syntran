@@ -192,6 +192,29 @@ end function err_bad_arg_count
 
 !===============================================================================
 
+function err_bad_sub_count(context, span, array, expect, actual) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err, subscript_s
+	integer, intent(in):: expect, actual
+
+	character(len = *), intent(in) :: array
+
+	if (expect == 1) then
+		subscript_s = 'subscript'
+	else
+		subscript_s = 'subscripts'
+	end if
+
+	err = err_prefix &
+		//'Array `'//array//'` requires '//str(expect) &
+		//' '//subscript_s//' but was given '//str(actual) &
+		//underline(context, span)//" wrong subscript count"//color_reset
+
+end function err_bad_sub_count
+
+!===============================================================================
+
 function err_bad_array_arg_type(context, span, fn, iarg, param, expect, actual) &
 		result(err)
 

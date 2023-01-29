@@ -34,8 +34,8 @@ let eye3 =
 
 eye3;
 
-// 90 degree x rotation.  Note that arrays are stored in row-major order, so
-// this appears transposed
+// 90 degree x rotation.  Note that arrays are stored
+// in row-major order, so this appears transposed
 let rotx =
 	[
 		1.0,  0.0,  0.0,
@@ -76,4 +76,9 @@ mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty);
 //       0.000000E+00, -1.000000E+00, 0.000000E+00,
 //       0.000000E+00,  0.000000E+00, 1.000000E+00
 // ]
+
+let ivec = [1, 2, 3];
+
+//mul_mat_vec(rotx, ivec);
+//mul_mat_vec(rotx, roty);
 
