@@ -477,7 +477,7 @@ function declare_intrinsic_fns() result(fns)
 
 	integer :: id_index, num_fns
 
-	type(fn_t) :: exp_fn, min_fn, max_fn, size_fn
+	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -543,6 +543,19 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	println_fn%type = void_type ! TODO?
+
+	!allocate(println_fn%params(1))
+	!println_fn%params(1)%type = i32_type
+	!println_fn%params(1)%name = "a1"
+
+	println_fn%variadic_min = 0
+
+	id_index = id_index + 1
+	call fns%insert("println", println_fn, id_index)
+
+	!********
+
 	size_fn%type = i32_type
 	allocate(size_fn%params(2))
 
@@ -574,9 +587,10 @@ function declare_intrinsic_fns() result(fns)
 
 	fns%fns = &
 		[ &
-			min_fn , &
-			max_fn , &
-			size_fn &
+			min_fn    , &
+			max_fn    , &
+			println_fn, &
+			size_fn     &
 		]
 
 end function declare_intrinsic_fns
@@ -4165,8 +4179,8 @@ function parse_primary_expr(parser) result(expr)
 					! but writeln(file, string1, string2), where string* is not
 					! the same type as file?
 
-					! TODO: if variadic_min == 0 cycle.  We may want println()
-					! to just print an empty line
+					! We want println() to just print an empty line
+					if (fn%variadic_min == 0) exit
 
 					j = i
 					if (fn%variadic_min > 0) j = fn%variadic_min
@@ -5111,8 +5125,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			res%i32 = arg%i32
 
-			! Note that min/max are variadic, so we loop to size(node%args)
-			! instead of size(node%params)
+			! Note that min/max/println etc. are variadic, so we loop to
+			! size(node%args) instead of size(node%params)
+
 			do i = 2, size(node%args)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
 				res%i32 = min(res%i32, arg%i32)
@@ -5127,6 +5142,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
 				res%i32 = max(res%i32, arg%i32)
 			end do
+
+		case ("println")
+
+			do i = 1, size(node%args)
+				arg = syntax_eval(node%args(i), vars, fns, quietl)
+				write(output_unit, '(a)', advance = 'no') arg%str()
+			end do
+			write(output_unit, *)
+
+			!! TODO: what, if anything, should println return?
+			!res%i32 = 0
 
 		case ("size")
 
@@ -5560,15 +5586,21 @@ recursive function value_str(val) result(str)
 			call str_vec%push('[')
 
 			if (val%array%type == i32_type) then
+
+				! TODO: add line breaks at the end of each rank for readability
+
 				do i = 1, val%array%len
 					call str_vec%push(i32_str(val%array%i32(i)))
 					if (i < val%array%len) call str_vec%push(', ')
 				end do
+
 			else if (val%array%type == f32_type) then
+
 				do i = 1, val%array%len
 					call str_vec%push(f32_str(val%array%f32(i)))
 					if (i < val%array%len) call str_vec%push(', ')
 				end do
+
 			else
 				write(*,*) 'Error: array str conversion not implemented' &
 					//' for this type'
