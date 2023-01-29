@@ -69,6 +69,8 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			str_token            = 65, &
+			str_type             = 64, &
 			any_type             = 63, &
 			void_type            = 62, &
 			fn_keyword           = 61, &
@@ -142,13 +144,16 @@ module core_m
 	type value_t
 		integer :: type
 
+		!character(len = :), allocatable :: str
+		type(string_t)    :: str
+
 		logical           :: bool
 		integer(kind = 4) :: i32
 		real   (kind = 4) :: f32
 		type(array_t), pointer :: array => null()
 
 		contains
-			procedure :: str => value_str
+			procedure :: to_str => value_to_str
 
 	end type value_t
 
@@ -168,6 +173,8 @@ module core_m
 		logical(kind = 1), allocatable :: bool(:)
 		integer(kind = 4), allocatable ::  i32(:)
 		real   (kind = 4), allocatable ::  f32(:)
+
+		! TODO: str arrays
 
 		integer :: len, cap, rank
 		integer, allocatable :: size(:)
@@ -325,6 +332,8 @@ module core_m
 		character(len = :), allocatable :: first_expected
 
 		contains
+
+			! TODO: rename to to_str() for consistency with value_t
 			procedure :: str => syntax_node_str, log_diagnostics
 
 			procedure, pass(dst) :: copy => syntax_node_copy
@@ -1395,7 +1404,9 @@ function kind_name(kind)
 			"fn_declaration      ", & ! 60
 			"fn_keyword          ", & ! 61
 			"void_type           ", & ! 62
-			"any_type            "  & ! 63
+			"any_type            ", & ! 63
+			"str_type            ", & ! 64
+			"str_token           "  & ! 65
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1479,7 +1490,9 @@ function kind_token(kind)
 			"fn declaration       ", & ! 60
 			"fn keyword           ", & ! 61
 			"void type            ", & ! 62
-			"any type             "  & ! 63
+			"any type             ", & ! 63
+			"str type             ", & ! 64
+			"str token            "  & ! 65
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -1561,7 +1574,7 @@ recursive function syntax_node_str(node, indent) result(str)
 				//line_feed
 
 	else if (node%kind == literal_expr) then
-		val   = indentl//'    val   = '//node%val%str()//line_feed
+		val   = indentl//'    val   = '//node%val%to_str()//line_feed
 	end if
 
 	str = line_feed// &
@@ -2018,20 +2031,22 @@ end subroutine read_single_line_comment
 
 !===============================================================================
 
-function new_literal_value(type, bool, i32, f32) result(val)
+function new_literal_value(type, bool, i32, f32, str) result(val)
 
 	integer, intent(in) :: type
 
 	integer(kind = 4), intent(in), optional :: i32
 	real   (kind = 4), intent(in), optional :: f32
 	logical          , intent(in), optional :: bool
+	character(len=*) , intent(in), optional :: str
 
 	type(value_t) :: val
 
 	val%type = type
-	if (present(bool)) val%bool = bool
-	if (present(f32 )) val%f32  = f32
-	if (present(i32 )) val%i32  = i32
+	if (present(bool)) val%bool  = bool
+	if (present(f32 )) val%f32   = f32
+	if (present(i32 )) val%i32   = i32
+	if (present(str )) val%str%s = str
 
 end function new_literal_value
 
@@ -2320,7 +2335,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 			!print *, 'vars%vals = '
 			!do i = 1, size(vars%vals)
-			!	print *, vars%vals(i)%str()
+			!	print *, vars%vals(i)%to_str()
 			!end do
 
 			! Backup vals array and set num_vars in parser object
@@ -2344,7 +2359,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 		!print *, 'fns%fns = '
 		!do i = 1, size(fns%fns)
-		!	print *, fns%fns(i)%str()
+		!	print *, fns%fns(i)%to_str()
 		!end do
 
 		!! With intrinsic fns, this is always allocated
@@ -4263,7 +4278,7 @@ function parse_primary_expr(parser) result(expr)
 			num = parser%match(i32_token)
 			expr = new_i32(num%val%i32)
 
-			if (debug > 1) print *, 'num = ', expr%val%str()
+			if (debug > 1) print *, 'num = ', expr%val%to_str()
 
 	end select
 
@@ -5014,7 +5029,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! remove this after I implement an intrinsic print() fn.  May also
 			! need to suppress this for void fn calls later
 			if (node%members(i)%kind == name_expr .and. .not. quietl) then
-				write(*,*) res%str()
+				write(*,*) res%to_str()
 			end if
 
 		end do
@@ -5038,7 +5053,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! remove this after I implement an intrinsic print() fn.  May also
 			! need to suppress this for void fn calls later
 			if (node%members(i)%kind == name_expr .and. .not. quietl) then
-				write(*,*) res%str()
+				write(*,*) res%to_str()
 			end if
 
 		end do
@@ -5071,7 +5086,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! Assign return value from RHS
 			res = syntax_eval(node%right, vars, fns, quietl)
 
-			!print *, 'RHS = ', res%str()
+			!print *, 'RHS = ', res%to_str()
 
 			i = subscript_eval(node, vars, fns, quietl)
 
@@ -5147,7 +5162,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			do i = 1, size(node%args)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
-				write(output_unit, '(a)', advance = 'no') arg%str()
+				write(output_unit, '(a)', advance = 'no') arg%to_str()
 			end do
 			write(output_unit, *)
 
@@ -5530,7 +5545,7 @@ end subroutine log_diagnostics
 
 !===============================================================================
 
-recursive function value_str(val) result(str)
+recursive function value_to_str(val) result(str)
 
 	class(value_t) :: val
 
@@ -5571,8 +5586,8 @@ recursive function value_str(val) result(str)
 		case (array_type)
 
 			if (val%array%kind == impl_array) then
-				str = '['//val%array%lbound%str()//': ' &
-				         //val%array%ubound%str()//']'
+				str = '['//val%array%lbound%to_str()//': ' &
+				         //val%array%ubound%to_str()//']'
 				return
 			end if
 
@@ -5634,7 +5649,7 @@ recursive function value_str(val) result(str)
 
 	end select
 
-end function value_str
+end function value_to_str
 
 !===============================================================================
 

@@ -164,7 +164,7 @@ function syntran_interpret(str, quiet) result(res_str)
 		res  = syntax_eval(compilation, vars, fns)
 
 		! Consider MATLAB-style "ans = " log?
-		res_str = res%str()
+		res_str = res%to_str()
 		if (.not. present(str)) write(ou, '(a)') res_str
 
 	end do
@@ -301,7 +301,7 @@ function syntran_eval(str, quiet, src_file) result(res)
 	end if
 
 	val = syntax_eval(tree, vars, fns, quietl)
-	res = val%str()
+	res = val%to_str()
 
 end function syntran_eval
 
