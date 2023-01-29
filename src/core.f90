@@ -5548,6 +5548,9 @@ recursive function value_str(val) result(str)
 
 	select case (val%type)
 
+		case (void_type)
+			str = ''
+
 		case (f32_type)
 			write(buf16, '(es16.6)') val%f32
 			!str = trim(buf16)
@@ -5587,7 +5590,8 @@ recursive function value_str(val) result(str)
 
 			if (val%array%type == i32_type) then
 
-				! TODO: add line breaks at the end of each rank for readability
+				! TODO: add line breaks at the end of each rank for readability.
+				! May need to update some tests?
 
 				do i = 1, val%array%len
 					call str_vec%push(i32_str(val%array%i32(i)))
