@@ -204,7 +204,14 @@ module core_m
 		! what Fortran calls "actual arguments" and "parameters" are Fortran
 		! "dummy arguments"
 		type(param_t), allocatable :: params(:)
-		integer :: variadic_min  ! min number of variadic params
+
+		! Min number of variadic params.  Default < 0 means fn is not variadic
+		!
+		! This works for fns like max() or print() which have a min limit but an
+		! unlimited upper bound of parameters.  For functions with a fixed
+		! number of optional parameters, there should be a different mechanism
+
+		integer :: variadic_min = -1
 
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
@@ -494,6 +501,10 @@ function declare_intrinsic_fns() result(fns)
 	! TODO: polymorphic in any numeric type i32, f32, i64, f64, etc.  Also
 	! variadic min(a, b), min(a, b, c), etc. and an array version min(array) as
 	! opposed to Fortran's minval()
+	!
+	! In Fortran, min() is polymorphic and variadic, but all args must be the
+	! same type.  For example, min(1, 2) and min(1.1, 2.1) are allowed, but
+	! min(1, 2.1) does not compile.  I think that's a reasonable restriction
 
 	min_fn%type = i32_type
 	allocate(min_fn%params(2))
@@ -518,8 +529,12 @@ function declare_intrinsic_fns() result(fns)
 	max_fn%params(2)%type = i32_type
 	max_fn%params(2)%name = "a2"
 
+	max_fn%variadic_min = 2
+
 	id_index = id_index + 1
 	call fns%insert("max", max_fn, id_index)
+
+	!print *, 'variadic = ', min_fn%variadic_min, max_fn%variadic_min
 
 	!********
 
@@ -3953,7 +3968,8 @@ function parse_primary_expr(parser) result(expr)
 	!********
 
 	character(len = :), allocatable :: param_type, arg_type
-	integer :: i, io, id_index, param_rank, arg_rank, span0, span1
+	integer :: i, j, io, id_index, param_rank, arg_rank, span0, span1, &
+		ptype, atype
 	logical :: bool, types_match
 
 	type(fn_t) :: fn
@@ -4119,21 +4135,46 @@ function parse_primary_expr(parser) result(expr)
 				!expr%fn = fn
 
 				!print *, 'fn params size = ', size(fn%params)
-				if (size(fn%params) /= args%len) then
+				if (fn%variadic_min < 0 .and. size(fn%params) /= args%len) then
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 					call parser%diagnostics%push( &
 						err_bad_arg_count(parser%context, &
 						span, identifier%text, size(fn%params), args%len))
 					return
+				else if (args%len < fn%variadic_min) then
+					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+					call parser%diagnostics%push( &
+						err_too_few_args(parser%context, &
+						span, identifier%text, fn%variadic_min, args%len))
+					return
 				end if
 
-				do i = 1, min(args%len, size(fn%params))
+				!do i = 1, size(fn%params)
+				do i = 1, args%len
 					!print *, kind_name(args%v(i)%val%type)
 					!print *, kind_name(fn%params(i)%type)
 
+					! For variadic fns, check the argument type against the type
+					! of the last required parameter.  This may need to change,
+					! e.g. writeln(file) should write a blank line to a file,
+					! but writeln(file, string1, string2), where string* is not
+					! the same type as file?
+
+					!if (fn%variadic_min < 0) then
+					!	ptype = fn%params(i)%type
+					!else
+					!	ptype = fn%params( fn%variadic_min )%type
+					!end if
+
+					! TODO: if variadic_min == 0 cycle.  We may want println()
+					! to just print an empty line
+
+					j = i
+					if (fn%variadic_min > 0) j = fn%variadic_min
+					ptype = fn%params(j)%type
+
 					types_match = &
-						fn%params(i)%type == any_type .or. &
-						fn%params(i)%type == args%v(i)%val%type
+						ptype == any_type .or. ptype == args%v(i)%val%type
 
 					if (.not. types_match) then
 
@@ -4141,35 +4182,36 @@ function parse_primary_expr(parser) result(expr)
 						span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 						call parser%diagnostics%push( &
 							err_bad_arg_type(parser%context, &
-							span, identifier%text, i, fn%params(i)%name, &
-							kind_name(fn%params(i)%type), &
+							span, identifier%text, i, fn%params(j)%name, &
+							kind_name(ptype), &
 							kind_name(args%v(i)%val%type)))
 						return
 
 					end if
 
-					if (fn%params(i)%type == array_type) then
+					if (ptype == array_type) then
+						atype = fn%params(j)%array_type
 						types_match = &
-							fn%params(i)%array_type == any_type .or. &
-							fn%params(i)%array_type == args%v(i)%val%array%type
+							atype == any_type .or. &
+							atype == args%v(i)%val%array%type
 					end if
 
 					if (.not. types_match) then
 
 						span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-						param_type = kind_name( fn%params(i)%array_type)
+						param_type = kind_name( atype)
 						arg_type   = kind_name(args%v(i)%val%array%type)
 
 						call parser%diagnostics%push( &
 							err_bad_array_arg_type(parser%context, &
-							span, identifier%text, i, fn%params(i)%name, &
+							span, identifier%text, i, fn%params(j)%name, &
 							param_type, arg_type))
 						return
 
 					end if
 
-					if (fn%params(i)%type == array_type) then
-						param_rank = fn%params(i)%rank
+					if (ptype == array_type) then
+						param_rank = fn%params(j)%rank
 						arg_rank = args%v(i)%val%array%rank
 
 						if (param_rank >= 0 .and. param_rank /= arg_rank) then
@@ -4179,7 +4221,7 @@ function parse_primary_expr(parser) result(expr)
 
 							call parser%diagnostics%push( &
 								err_bad_arg_rank(parser%context, &
-								span, identifier%text, i, fn%params(i)%name, &
+								span, identifier%text, i, fn%params(j)%name, &
 								param_rank, arg_rank))
 							return
 
@@ -4579,7 +4621,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
-		step, len, arg1, arg2
+		step, len, arg, arg1, arg2
 
 	!print *, 'starting syntax_eval()'
 
@@ -5073,9 +5115,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		case ("max")
 
-			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
-			arg2 = syntax_eval(node%args(2), vars, fns, quietl)
-			res%i32 = max(arg1%i32, arg2%i32)
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%i32 = arg%i32
+			do i = 2, size(node%args)
+				!print *, 'arg ', i
+				arg = syntax_eval(node%args(i), vars, fns, quietl)
+				res%i32 = max(res%i32, arg%i32)
+			end do
 
 		case ("size")
 

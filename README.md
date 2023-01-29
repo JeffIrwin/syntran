@@ -52,7 +52,7 @@ There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/mat
 
 Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.  Variables are mutable.
 
-Integer, float, and boolean types are supported.  Attempting operations on the wrong types yield an error, e.g. trying to add a bool or use logical `and` on an int or float.
+Integer, float, and boolean types are supported.  Attempting operations on the wrong types yields an error, e.g. trying to add a bool or use logical `and` on an int or float.
 
 ```cpp
 let foo = 1;

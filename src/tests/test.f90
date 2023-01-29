@@ -397,7 +397,18 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('min(3, 2);')  == 2,  &
 			eval_i32('min(2, 2);')  == 2,  &
 			eval_i32('max(3, 2);')  == 3,  &
+			!eval_i32('max(2);')  == 2,  & ! TODO: bad syntax test?
 			eval_i32('max(2, 2);')  == 2,  &
+			eval_i32('max(2, 3, 4);')  == 4,  &
+			eval_i32('max(2, 4, 3);')  == 4,  &
+			eval_i32('max(3, 2, 4);')  == 4,  &
+			eval_i32('max(3, 4, 2);')  == 4,  &
+			eval_i32('max(4, 2, 3);')  == 4,  &
+			eval_i32('max(4, 3, 2);')  == 4,  &
+			eval_i32('max(3, 2, 2);')  == 3,  &
+			eval_i32('max(2, 2, 2);')  == 2,  &
+			eval_i32('max(2, 4, 3, 5);')  == 5,  &
+			eval_i32('max(5, 2, 3, 4);')  == 5,  &
 			eval_i32('size([0; 5], 0);')  == 5,  &
 			eval_i32('size([0; 6, 7], 0);')  == 6,  &
 			eval_i32('size([0; 6, 7], 1);')  == 7,  &

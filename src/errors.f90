@@ -192,6 +192,29 @@ end function err_bad_arg_count
 
 !===============================================================================
 
+function err_too_few_args(context, span, fn, expect, actual) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err, argument_s
+	integer, intent(in):: expect, actual
+
+	character(len = *), intent(in) :: fn
+
+	if (expect == 1) then
+		argument_s = 'argument'
+	else
+		argument_s = 'arguments'
+	end if
+
+	err = err_prefix &
+		//'Variadic function `'//fn//'` requires at least '//str(expect) &
+		//' '//argument_s//' but was given '//str(actual) &
+		//underline(context, span)//" not enough arguments"//color_reset
+
+end function err_too_few_args
+
+!===============================================================================
+
 function err_bad_sub_count(context, span, array, expect, actual) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
@@ -287,7 +310,7 @@ function err_binary_types(context, span, op, left, right) result(err)
 	err = err_prefix &
 		//'binary operator `'//op//'` is not defined for types ' &
 		//left//' and '//right//underline(context, span) &
-		//" bad types for this binary operator"//color_reset
+		//" wrong types for this binary operator"//color_reset
 
 end function err_binary_types
 
@@ -302,7 +325,7 @@ function err_unary_types(context, span, op, right) result(err)
 	err = err_prefix &
 		//'unary operator `'//op//'` is not defined for type ' &
 		//right//underline(context, span) &
-		//" bad type for this unary operator"//color_reset
+		//" wrong type for this unary operator"//color_reset
 
 end function err_unary_types
 
