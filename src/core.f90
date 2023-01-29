@@ -1867,12 +1867,11 @@ function lex(lexer) result(token)
 
 		char_vec = new_char_vector()
 		do
+
+			! Make a quote literal by doubling it
 			if (lexer%current() == '"') then
-				! TODO: refactor pos increment?
-				if (lexer%lookahead() == '"') then
-					lexer%pos = lexer%pos + 1
-				else
-					lexer%pos = lexer%pos + 1
+				lexer%pos = lexer%pos + 1
+				if (lexer%current() /= '"') then
 					exit
 				end if
 			end if

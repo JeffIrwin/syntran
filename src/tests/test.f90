@@ -760,6 +760,10 @@ subroutine unit_test_str(npass, nfail)
 		[   &
 			eval('"hello";') == 'hello', &
 			eval('"hello ""name""";') == 'hello "name"', &
+			eval('"""name"", hello";') == '"name", hello', &
+			eval('"hello ""firstname"" ""lastname""";') == 'hello "firstname" "lastname"', &
+			eval('"hello ""firstname"" lastname";') == 'hello "firstname" lastname', &
+			eval('"two """"quotes""""";') == 'two ""quotes""', &
 			eval('"hello world";') == 'hello world'  &
 		]
 
