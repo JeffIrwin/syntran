@@ -28,6 +28,12 @@ module core_m
 	! TODO:
 	!
 	! Add:
+	!  - file reading
+	!    * readln() to read 1 line?
+	!    * how to handle eof? 404? open with r/w modes?
+	!    * add roundtrip writeln/readln testing.  I/O is hard to test
+	!      independently, and I won't test println, but we can at least test
+	!      writeln/readln in combination
 	!  - arrays
 	!    * bool, str arrays
 	!    * add slice subscripts:
@@ -56,7 +62,7 @@ module core_m
 	!      > exp  (non-variadic, non-polymorphic)
 	!      > min, max (variadic but non-polymorphic)
 	!      > size (non-variadic but polymorphic)
-	!      > writeln, println, open, close
+	!      > writeln, println, open, close, str casting
 	!      > non-recursive user-defined fns
 	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - structs
