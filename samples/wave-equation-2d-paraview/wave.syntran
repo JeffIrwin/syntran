@@ -18,6 +18,8 @@
 
 fn write_vtk(filename: str, u: [f32; :,:])
 {
+	// Ref:  http://www.princeton.edu/~efeibush/viscourse/vtk.pdf
+
 	let file = open(filename);
 
 	writeln(file, "# vtk DataFile Version 2.0");
@@ -32,12 +34,6 @@ fn write_vtk(filename: str, u: [f32; :,:])
 	writeln(file, "ASPECT_RATIO 1 1 1");
 	writeln(file, "ORIGIN 0 0 0");
 	writeln(file, "POINT_DATA ", str(size(u,0) * size(u,1)));
-
-	//writeln(file, "SCALARS Amplitude float 1");
-	//writeln(file, "LOOKUP_TABLE default");
-	//for iy in [0: size(u,1)]
-	//	for ix in [0: size(u,0)]
-	//		writeln(file, u[ix,iy]);
 
 	writeln(file, "VECTORS Amplitude float");
 
