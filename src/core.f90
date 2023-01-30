@@ -28,6 +28,7 @@ module core_m
 	! TODO:
 	!
 	! Add:
+	!  - fix memory leaks.  noticeable in paraview wave
 	!  - file reading
 	!    * readln() to read 1 line?
 	!    * how to handle eof? 404? open with r/w modes?

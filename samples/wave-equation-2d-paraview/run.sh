@@ -24,11 +24,13 @@ mkdir frames
 #
 #./convert.sh
 
-# TODO: add paraview batch script to save PNGs
+# bash: Argument list too long.  Break into chunks
+/c/Program\ Files/ParaView\ 5.8.0-Windows-Python3.7-msvc2015-64bit/bin/pvpython.exe batch.py -f frames/wave-*[0-4].vtk
+/c/Program\ Files/ParaView\ 5.8.0-Windows-Python3.7-msvc2015-64bit/bin/pvpython.exe batch.py -f frames/wave-*[5-9].vtk
 
-#ffmpeg -r 60 -i frames/wave_%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p wave.mp4 -y
-ffmpeg -r 24 -i frames/wave_%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p wave.mp4 -y
-#ffmpeg -r 10 -i frames/wave_%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p wave.mp4 -y
+#ffmpeg -r 60 -i frames/wave-%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p wave.mp4 -y
+ffmpeg -r 24 -i frames/wave-%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p wave.mp4 -y
+#ffmpeg -r 10 -i frames/wave-%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p wave.mp4 -y
 
 popd
 

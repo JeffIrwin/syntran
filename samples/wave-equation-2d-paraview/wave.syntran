@@ -23,7 +23,8 @@ fn write_vtk(filename: str, u: [f32; :,:])
 	let file = open(filename);
 
 	writeln(file, "# vtk DataFile Version 2.0");
-	writeln(file, "wave.syntran output");
+	writeln(file, "wave.syntran output from " +
+		"https://github.com/JeffIrwin/syntran");
 	writeln(file, "ASCII");
 	writeln(file, "DATASET STRUCTURED_POINTS");
 
