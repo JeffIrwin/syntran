@@ -529,7 +529,8 @@ function declare_intrinsic_fns() result(fns)
 	min_fn%type = i32_type
 	allocate(min_fn%params(2))
 
-	! TODO: rename args with 0-based indexing a0, a1, ... 
+	! TODO: rename args with 0-based indexing a0, a1, ... .  Docs already use
+	! 0-based indexed names
 	min_fn%params(1)%type = i32_type
 	min_fn%params(1)%name = "a1"
 

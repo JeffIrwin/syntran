@@ -437,6 +437,22 @@ let c = add(a + 1, b + 2);
 
 Functions must be defined before they are called.  That means that recursive functions are not possible currently, neither with a function directly calling itself, nor with two functions which both call each other.
 
+Here's a functions that performs matrix-vector multiplication:
+
+```rust
+fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
+{
+    // Matrix-vector multiplication.  Return mat * vec
+    let ans =  [0.0; size(mat,0)];
+    for     j in [0: size(mat,1)]
+        for i in [0: size(mat,0)]
+            ans[i] = ans[i] + mat[i,j] * vec[j];
+    ans;
+}
+```
+
+Note that array rank is specified in function signatures with comma-separated colons.  For example, `vec` is a rank-1 `[f32; :]` and `mat` is a rank-2 array `[f32; :,:]`.  Arrays of any size can be passed to functions, but ranks and types must match.
+
 Here's a function that performs [matrix multiplication](https://en.wikipedia.org/wiki/Matrix_multiplication) on two matrices `a` and `b`, without checking that the inner dimensions agree:
 
 ```rust
