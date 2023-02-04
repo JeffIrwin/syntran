@@ -453,7 +453,7 @@ fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 }
 ```
 
-Note that array rank is specified in function signatures with comma-separated colons.  For example, `vec` is a rank-1 `[f32; :]` and `mat` is a rank-2 array `[f32; :,:]`.  Arrays of any size can be passed to functions, but ranks and types must match.
+Note that array rank is specified in function signatures with comma-separated colons.  For example, `vec` is a rank-1 array `[f32; :]` and `mat` is a rank-2 array `[f32; :,:]`.  Arrays of any size can be passed to functions, but ranks and types must match.  The use of a colon as a wildcard like this is [borrowed from Fortran](https://www.intel.com/content/www/us/en/develop/documentation/fortran-compiler-oneapi-dev-guide-and-reference/top/language-reference/specification-statements/type-declarations/declarations-for-arrays/assumed-shape-specifications.html).
 
 Here's a function that performs [matrix multiplication](https://en.wikipedia.org/wiki/Matrix_multiplication) on two matrices `a` and `b`, without checking that the inner dimensions agree:
 
