@@ -354,7 +354,7 @@ let v3 = [-5, 3+1, 1, 10, 7/2];
 
 ### Rank-2 and higher arrays
 
-Syntran has a more compact syntax for higher rank arrays than Rust, which requires nested rank-1 arrays of rank-1 arrays.  As above, the sizes go after the semicolon `;`.  To initialize a rank-2 array with size 3 by 4 to all zeros:
+Syntran has a more compact syntax for higher-rank arrays than Rust, which requires nested rank-1 arrays of rank-1 arrays.  As above, the sizes go after the semicolon `;`.  To initialize a rank-2 array with size 3 by 4 to all zeros:
 ```rust
 let matrix = [0; 3, 4];
 // [
@@ -394,7 +394,7 @@ let array = [0; rows, cols, shts];
 // ]
 ```
 
-Indices for higher rank arrays are separated by commas:
+Indices for higher-rank arrays are separated by commas:
 ```rust
 array[3,2,1];
 // 0
@@ -403,11 +403,14 @@ array[3,2,1];
 To initialize a higher-rank array with an explicit list of values, separate the values with commas and then provide the size after a semicolon:
 ```rust
 let a = [1, 2, 3, 4, 5, 6;  2, 3];
-[
-1, 2,
-3, 4,
-5, 6
-]
+// [
+// 1, 2,
+// 3, 4,
+// 5, 6
+// ]
+
+a[1,2];
+// 6
 ```
 
 ## Functions
@@ -437,12 +440,12 @@ Here's a function that performs [matrix multiplication](https://en.wikipedia.org
 ```rust
 fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
 {
-	let c = [0.0; size(a,0), size(b,1)];
-	for         k in [0: size(b,1)]
-		for     j in [0: size(a,1)]
-			for i in [0: size(a,0)]
-				c[i,k] = c[i,k] + a[i,j] * b[j,k];
-	c;
+    let c = [0.0; size(a,0), size(b,1)];
+    for         k in [0: size(b,1)]
+        for     j in [0: size(a,1)]
+            for i in [0: size(a,0)]
+                c[i,k] = c[i,k] + a[i,j] * b[j,k];
+    c;
 }
 ```
 
