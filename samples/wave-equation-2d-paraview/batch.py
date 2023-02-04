@@ -11,14 +11,22 @@ def exportPng(f, png):
     print("Reading \"" + f + "\" ...")
     sys.stdout.flush()
 
+    # Colorbar min/max ranges
+    cmin = -0.2
+    cmax =  0.2
+
+    warpFactor = 50.0
+
     displayRoot = LegacyVTKReader(FileNames=[f])
 
     renderView = GetActiveViewOrCreate("RenderView")
     renderView.InteractionMode = '3D'
 
+    vectorName = 'Amplitude'
+
     warp = WarpByVector(Input=displayRoot)
-    warp.Vectors = ['POINTS', 'Amplitude']
-    warp.ScaleFactor = 10.0
+    warp.Vectors = ['POINTS', vectorName]
+    warp.ScaleFactor = warpFactor
 
     #display = Show(displayRoot, renderView)
     display = Show(warp, renderView)
@@ -29,62 +37,88 @@ def exportPng(f, png):
     #display.Opacity = 0.666
     #display.LineWidth = 4.0
 
-    LUT = GetColorTransferFunction('Amplitude')
-    PWF = GetOpacityTransferFunction('Amplitude')
+    LUT = GetColorTransferFunction(vectorName)
+    PWF = GetOpacityTransferFunction(vectorName)
 
     display.Representation = 'Surface'
-    display.ColorArrayName = ['POINTS', 'Amplitude']
+    display.ColorArrayName = ['POINTS', vectorName]
     display.LookupTable = LUT
-    display.OSPRayScaleArray = 'Amplitude'
-    display.OSPRayScaleFunction = 'PiecewiseFunction'
-    display.SelectOrientationVectors = 'Amplitude'
-    display.ScaleFactor = 10.0
-    display.SelectScaleArray = 'Amplitude'
-    display.GlyphType = 'Arrow'
-    display.GlyphTableIndexArray = 'Amplitude'
-    display.GaussianRadius = 0.5
-    display.SetScaleArray = ['POINTS', 'Amplitude']
+    #display.OSPRayScaleArray = vectorName
+    #display.OSPRayScaleFunction = 'PiecewiseFunction'
+    display.SelectOrientationVectors = vectorName
+    display.ScaleFactor = warpFactor
+    display.SelectScaleArray = vectorName
+    #display.GlyphType = 'Arrow'
+    #display.GlyphTableIndexArray = vectorName
+    #display.GaussianRadius = 0.5
+    display.SetScaleArray = ['POINTS', vectorName]
     display.ScaleTransferFunction = 'PiecewiseFunction'
-    display.OpacityArray = ['POINTS', 'Amplitude']
-    display.OpacityTransferFunction = 'PiecewiseFunction'
+    #display.OpacityArray = ['POINTS', vectorName]
+    #display.OpacityTransferFunction = 'PiecewiseFunction'
     display.DataAxesGrid = 'GridAxesRepresentation'
     display.PolarAxes = 'PolarAxesRepresentation'
-    display.ScalarOpacityFunction = PWF
-    display.ScalarOpacityUnitDistance = 6.570443907947594
+    #display.ScalarOpacityFunction = PWF
+    #display.ScalarOpacityUnitDistance = 6.570443907947594
 
-    ColorBy(display, ('POINTS', 'Amplitude', 'Z'))
-    LUT.RescaleTransferFunction(-1.0, 1.0)
-    PWF.RescaleTransferFunction(-1.0, 1.0)
-    LUT.ApplyPreset('Blue to Red Rainbow', True)
+    ColorBy(display, ('POINTS', vectorName, 'Z'))
+    LUT.RescaleTransferFunction(cmin, cmax)
+    PWF.RescaleTransferFunction(cmin, cmax)
 
-    renderView.ResetCamera()
+    #LUT.ApplyPreset('Blue to Red Rainbow', True)
+    LUT.ApplyPreset('Plasma (matplotlib)', True)
+
+    display.SetScalarBarVisibility(renderView, True)
+    LUTColorBar = GetScalarBar(LUT, renderView)
+    LUTColorBar.TitleFontSize = 4
+    LUTColorBar.LabelFontSize = 4
+
+    #renderView.ResetCamera()
 
     (min0,max0,min1,max1,min2,max2) = displayRoot.GetDataInformation().GetBounds()
     cen0 = 0.5 * (min0 + max0)
     cen1 = 0.5 * (min1 + max1)
+
     cen2 = 0.5 * (min2 + max2)
+    #cent2 = 0.0
 
     #print(f"cen0 = {cen0}")
     #print(f"cen1 = {cen1}")
     #print(f"cen2 = {cen2}")
 
+    cameraScale = 36
+    cameraVec = [-1, -3, 6]
+    cameraOffset = [
+            cameraScale * cameraVec[0], 
+            cameraScale * cameraVec[1],
+            cameraScale * cameraVec[2]]
+
     renderView.CameraViewUp = [0, 0, 1]
-    renderView.CameraPosition = [cen0 - 1, cen1 - 2, cen2 + 3]
+    renderView.CameraPosition = [
+            cen0 - cameraOffset[0], 
+            cen1 - cameraOffset[1], 
+            cen2 + cameraOffset[2] ]
+
+    # Correct for perspective to center view
+    renderView.CameraFocalPoint = [
+            cen0 - 1.5 * cameraVec[0], 
+            cen1 - 1.5 * cameraVec[1], 
+            cen2 - 1.5 * cameraVec[2]]
     #renderView.CameraPosition = [49, 48, 3]
-    renderView.CameraFocalPoint = [cen0, cen1, cen2]
 
     ## This is slow, but the edges look better (even better than just increasing
     ## the line width)
     #renderView.EnableRayTracing = 1
 
-    renderView.ResetCamera()
+    #renderView.ResetCamera()
     renderView.Update()
 
     #SaveScreenshot(png, renderView, ImageResolution=[540,540])
     #SaveScreenshot(png, renderView, ImageResolution=[1080,1080])
-    SaveScreenshot(png, renderView, ImageResolution=[1920, 1080])
+    #SaveScreenshot(png, renderView, ImageResolution=[1920, 1080])
+    #SaveScreenshot(png, renderView, ImageResolution=[1920, 1080])
     #SaveScreenshot(png, renderView, ImageResolution=[2160,2160])
     #SaveScreenshot(png, renderView, ImageResolution=[3840,3840])
+    SaveScreenshot(png, renderView, ImageResolution=[3840,2160])
 
     Delete(renderView)
     del renderView

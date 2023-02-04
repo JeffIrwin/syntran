@@ -50,7 +50,7 @@ let e = 2.718281828;
 
 // Spatial domain bounds
 let xmin = 1.0;
-let xmax = 3.0;
+let xmax = 3.8;
 
 let ymin = 2.0;
 let ymax = 4.0;
@@ -63,11 +63,12 @@ let tmin = 0.0;
 let tmax = tmin + 8 * (xmax - xmin) / c;
 
 // Number of points in spatial grid
-let nx = 101;//51;//201;
+let nx = 141;//51;//201;
 
 // With VTK output, size is saved in results.  y size doesn't necesssarily have
 // to be the same as x
-let ny = nx;
+//let ny = nx;
+let ny = 101;
 //let ny = 31;
 
 // Allocate displacement solution vector and initialize to 0.0.
@@ -96,10 +97,10 @@ let it = 0;
 
 // Initial condition: Gaussian pulse
 
-//let xpulse = xmin + 0.3333 * (xmax - xmin);
-//let ypulse = ymin + 0.2500 * (ymax - ymin);
-let xpulse = xmin + 0.5 * (xmax - xmin);
-let ypulse = ymin + 0.5 * (ymax - ymin);
+let xpulse = xmin + 0.6666 * (xmax - xmin);
+let ypulse = ymin + 0.7500 * (ymax - ymin);
+//let xpulse = xmin + 0.5 * (xmax - xmin);
+//let ypulse = ymin + 0.5 * (ymax - ymin);
 
 let pwidth = 0.05 * (xmax - xmin);
 for iy in [0: ny]
