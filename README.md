@@ -415,6 +415,8 @@ a[1,2];
 
 ## Functions
 
+[See this page](doc/) for a list of intrinsic syntran functions.
+
 Use the `fn` keyword to declare a function, as in Rust.  Unlike Rust, use a colon `:` before the return type instead of `->`:
 
 ```rust
