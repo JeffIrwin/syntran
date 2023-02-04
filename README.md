@@ -308,14 +308,14 @@ Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/153
 ## Arrays
 
 Recall the syntax for a for-loop:
-```cpp
+```rust
 for i in [0: 5]
     i;
 // 0, 1, 2, 3, 4
 ```
 
 The expression `[0: 5]` is one of several array forms, which can also be assigned to variables:
-```cpp
+```rust
 let v0 = [0: 5];
 // [0, 1, 2, 3, 4]
 ```
@@ -325,13 +325,13 @@ Array sizes do not need to be literals or constants.  Arrays are allocated dynam
 Besides ranges of consecutive integers, which is the only form that can be used in a for-loop for now, there are other array forms.
 
 To initialize an array to a range with a step:
-```cpp
+```rust
 let v1 = [10: -2: 0];
 // [10, 8, 6, 4, 2]
 ```
 
 To refer to an element of an array, place the index in square brackets:
-```cpp
+```rust
 v1[0];
 // 10
 
@@ -340,14 +340,14 @@ v1[2];
 ```
 
 To initialize an array to all zeros, or any other uniform scalar, use [Rust syntax](https://doc.rust-lang.org/std/primitive.array.html).  The size goes after the semicolon `;` inside the brackets:
-```cpp
+```rust
 let scalar = 0;
 let v2 = [scalar; 5];
 // [0, 0, 0, 0, 0]
 ```
 
 To initialize an array with an explicit list of comma-separated values:
-```cpp
+```rust
 let v3 = [-5, 3+1, 1, 10, 7/2];
 // [-5, 4, 1, 10, 3]
 ```
@@ -355,24 +355,59 @@ let v3 = [-5, 3+1, 1, 10, 7/2];
 ### Rank-2 and higher arrays
 
 Syntran has a more compact syntax for higher rank arrays than Rust, which requires nested rank-1 arrays of rank-1 arrays.  As above, the sizes go after the semicolon `;`.  To initialize a rank-2 array with size 3 by 4 to all zeros:
-```cpp
+```rust
 let matrix = [0; 3, 4];
-// [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+// [
+// 0, 0, 0,
+// 0, 0, 0,
+// 0, 0, 0,
+// 0, 0, 0
+// ]
 ```
 
+Note that arrays are stored in [column-major order](https://en.wikipedia.org/wiki/Row-_and_column-major_order) as in Fortran, so they appear transposed when printing in the default format.
+
 To initialize a rank-3 array with size rows by columns by sheets:
-```cpp
+```rust
 let rows = 4;
 let cols = 5;
 let shts = 3;
 let array = [0; rows, cols, shts];
-// [0, 0, 0, ...]
+// [
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 0, 0, 0, 0,
+// 0, 0, 0, 0
+// ]
 ```
 
 Indices for higher rank arrays are separated by commas:
-```cpp
+```rust
 array[3,2,1];
 // 0
+```
+
+To initialize a higher-rank array to an explicit list of values, separate the values with commas and then provide the size after a semicolon:
+```rust
+let a = [1, 2, 3, 4, 5, 6;  2, 3];
+[
+1, 2,
+3, 4,
+5, 6
+]
 ```
 
 ## Functions
