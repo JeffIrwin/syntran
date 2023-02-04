@@ -5806,10 +5806,23 @@ recursive function value_to_str(val) result(str)
 
 			else if (val%array%type == f32_type) then
 
-				! TODO: add line breaks for floats too
 				do i = 1, val%array%len
+
+					!write(buf16, '(es16.6)') val%array%f32(i)
+					!call str_vec%push(buf16)
 					call str_vec%push(f32_str(val%array%f32(i)))
-					if (i < val%array%len) call str_vec%push(', ')
+
+					if (i >= val%array%len) cycle
+
+					call str_vec%push(', ')
+
+					! Products could be saved ahead of time outside of loop
+					prod = val%array%size(1)
+					do j = 2, val%array%rank
+						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						prod = prod * val%array%size(j)
+					end do
+
 				end do
 
 			else

@@ -400,7 +400,7 @@ array[3,2,1];
 // 0
 ```
 
-To initialize a higher-rank array to an explicit list of values, separate the values with commas and then provide the size after a semicolon:
+To initialize a higher-rank array with an explicit list of values, separate the values with commas and then provide the size after a semicolon:
 ```rust
 let a = [1, 2, 3, 4, 5, 6;  2, 3];
 [
@@ -412,4 +412,70 @@ let a = [1, 2, 3, 4, 5, 6;  2, 3];
 
 ## Functions
 
-Non-recursive functions are coming soon ...
+Use the `fn` keyword to declare a function, as in Rust.  Unlike Rust, use a colon `:` before the return type instead of `->`:
+
+```rust
+fn add(a1: i32, a2: i32): i32
+{
+	a1 + a2;
+}
+```
+
+The final statement of a function implicitly defines the return value.  The function defined above could be used like this:
+
+```rust
+let a = 3;
+let b = 4;
+let c = add(a + 1, b + 2);
+// 10
+```
+
+Functions must be defined before they are called.  That means that recursive functions are not possible currently, neither with a function directly calling itself, nor with two functions which both call each other.
+
+Here's a function that performs [matrix multiplication](https://en.wikipedia.org/wiki/Matrix_multiplication) on two matrices `a` and `b`, without checking that the inner dimensions agree:
+
+```rust
+fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
+{
+	let c = [0.0; size(a,0), size(b,1)];
+	for         k in [0: size(b,1)]
+		for     j in [0: size(a,1)]
+			for i in [0: size(a,0)]
+				c[i,k] = c[i,k] + a[i,j] * b[j,k];
+	c;
+}
+```
+
+Then we can define [rotation matrices](https://en.wikipedia.org/wiki/Rotation_matrix) for 90 degree rotations about the _x_ and _y_ axes:
+
+```rust
+let rotx =
+	[
+		1.0,  0.0,  0.0,
+		0.0,  0.0,  1.0,
+		0.0, -1.0,  0.0 ;
+		3, 3
+	];
+
+let roty =
+	[
+		0.0,  0.0, -1.0,
+		0.0,  1.0,  0.0,
+		1.0,  0.0,  0.0 ;
+		3, 3
+	];
+```
+
+Rotations can be composed by multiplying matrices, so we can apply a 180 degree _x_ rotation followed by a 180 degree _y_ rotation like this:
+
+```rust
+mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty);
+// [
+// -1.000000E+00, 0.000000E+00, 0.000000E+00,
+// 0.000000E+00, -1.000000E+00, 0.000000E+00,
+// 0.000000E+00, 0.000000E+00, 1.000000E+00
+// ]
+```
+
+As expected, this is the same as a 180 degree _z_ rotation, i.e. the _x_ and _y_ components are negated while the _z_ components is unchanged.
+
