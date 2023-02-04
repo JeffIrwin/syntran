@@ -435,6 +435,8 @@ let c = add(a + 1, b + 2);
 // 10
 ```
 
+⚠ I highly suggest saving functions in a `.syntran` file.  In addition to usability, the REPL is buggy with functions.
+
 Functions must be defined before they are called.  That means that recursive functions are not possible currently, neither with a function directly calling itself, nor with two functions which both call each other.
 
 Here's a functions that performs matrix-vector multiplication:
