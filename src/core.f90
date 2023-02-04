@@ -29,6 +29,8 @@ module core_m
 	!
 	! Add:
 	!  - fix memory leaks.  noticeable in paraview wave
+	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
+	!    include quick-start and links in top-level README
 	!  - file reading
 	!    * readln() to read 1 line?
 	!    * how to handle eof? 404? open with r/w modes?
@@ -527,6 +529,7 @@ function declare_intrinsic_fns() result(fns)
 	min_fn%type = i32_type
 	allocate(min_fn%params(2))
 
+	! TODO: rename args with 0-based indexing a0, a1, ... 
 	min_fn%params(1)%type = i32_type
 	min_fn%params(1)%name = "a1"
 
