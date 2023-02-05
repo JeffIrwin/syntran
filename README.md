@@ -525,7 +525,7 @@ let string2 = "hello " + ("planet " + "earth");
 // hello planet earth
 ```
 
-The intrinsic function [`str()`](/doc#str) converts other types to `str` and concatenates them:
+The intrinsic function [`str()`](doc#str) converts other types to `str` and concatenates them:
 
 ```rust
 let string3 = "testing " + str(1, " ", 2, " ", 1.0, " ", 2.0);
