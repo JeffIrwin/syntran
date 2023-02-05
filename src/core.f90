@@ -530,13 +530,11 @@ function declare_intrinsic_fns() result(fns)
 	min_fn%type = i32_type
 	allocate(min_fn%params(2))
 
-	! TODO: rename args with 0-based indexing a0, a1, ... .  Docs already use
-	! 0-based indexed names
 	min_fn%params(1)%type = i32_type
-	min_fn%params(1)%name = "a1"
+	min_fn%params(1)%name = "a0"
 
 	min_fn%params(2)%type = i32_type
-	min_fn%params(2)%name = "a2"
+	min_fn%params(2)%name = "a1"
 
 	min_fn%variadic_min  = 0
 	min_fn%variadic_type = i32_type
@@ -550,7 +548,7 @@ function declare_intrinsic_fns() result(fns)
 	allocate(max_fn%params(2))
 
 	max_fn%params(1)%type = i32_type
-	max_fn%params(1)%name = "a1"
+	max_fn%params(1)%name = "a0"
 
 	! We could make max() and min() work with just 1 argument too.  I'm not sure
 	! why you would want to be able to take the max of 1 number, but it seems
@@ -558,7 +556,7 @@ function declare_intrinsic_fns() result(fns)
 	! here
 
 	max_fn%params(2)%type = i32_type
-	max_fn%params(2)%name = "a2"
+	max_fn%params(2)%name = "a1"
 
 	max_fn%variadic_min = 0
 	max_fn%variadic_type = i32_type
@@ -571,8 +569,6 @@ function declare_intrinsic_fns() result(fns)
 	println_fn%type = void_type ! TODO?
 
 	allocate(println_fn%params(0))
-	!println_fn%params(1)%type = i32_type
-	!println_fn%params(1)%name = "a1"
 
 	println_fn%variadic_min  = 0
 	println_fn%variadic_type = any_type

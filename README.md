@@ -52,7 +52,7 @@ There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/mat
 
 Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.  Variables are mutable.
 
-Integer, float, and boolean types are supported.  Attempting operations on the wrong types yields an error, e.g. trying to add a bool or use logical `and` on an int or float.
+Integer, float, string, and boolean types are supported.  Attempting operations on the wrong types yields an error, e.g. trying to add a bool or use logical `and` on an int or float.
 
 ```cpp
 let foo = 1;
@@ -501,4 +501,36 @@ mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty);
 ```
 
 As expected, this is the same as a 180 degree _z_ rotation, i.e. the _x_ and _y_ components are negated while the _z_ component is unchanged.
+
+## Strings, printing, and file output
+
+The string type `str` uses `"`quotes`"` to assign literals:
+
+```rust
+let string0 = "hello world";
+// hello world
+```
+
+To include an escaped quote literal, double it:
+
+```rust
+let string1 = "syntran is a ""programming language""";
+syntran is a "programming language"
+```
+
+Strings are concatenated with the `+` operator:
+
+```rust
+let string2 = "hello " + ("planet " + "earth");
+// hello planet earth
+```
+
+The intrinsic function [`str()`](/doc#str) converts other types to `str` and concatenates them:
+
+```rust
+let string3 = "testing " + str(1, " ", 2, " ", 1.0, " ", 2.0);
+// testing 1 2     1.000000E+00     2.000000E+00
+```
+
+Integers are stringified without padding, so separate them with `" "` if that's what you want.
 

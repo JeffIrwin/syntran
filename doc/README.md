@@ -7,7 +7,7 @@
 
 These are special cases for intrinsic functions.  For now at least, user-defined functions cannot be variadic or polymorphic.
 
-# Intrinsic functions
+# List of intrinsic functions
 
 ## `close`
 ```rust
