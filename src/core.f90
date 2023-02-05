@@ -5731,11 +5731,11 @@ end subroutine log_diagnostics
 
 !===============================================================================
 
-recursive function value_to_str(val) result(str)
+recursive function value_to_str(val) result(ans)
 
 	class(value_t) :: val
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: ans
 
 	!********
 
@@ -5750,32 +5750,32 @@ recursive function value_to_str(val) result(str)
 	select case (val%type)
 
 		case (void_type)
-			str = ''
+			ans = ''
 
 		case (bool_type)
-			! It might be helpful to have util fns for primitive str conversion
+			! TODO: use bool1_str() and other primitive converters
 			if (val%bool) then
-				str = "true"
+				ans = "true"
 			else
-				str = "false"
+				ans = "false"
 			end if
 
 		case (f32_type)
 			write(buf16, '(es16.6)') val%f32
-			!str = trim(buf16)
-			str = buf16  ! no trim for alignment
+			!ans = trim(buf16)
+			ans = buf16  ! no trim for alignment
 
 		case (i32_type)
 			write(buffer, '(i0)') val%i32
-			str = trim(buffer)
+			ans = trim(buffer)
 
 		case (str_type)
-			str = val%str%s
+			ans = val%str%s
 
 		case (array_type)
 
 			if (val%array%kind == impl_array) then
-				str = '['//val%array%lbound%to_str()//': ' &
+				ans = '['//val%array%lbound%to_str()//': ' &
 				         //val%array%ubound%to_str()//']'
 				return
 			end if
@@ -5800,7 +5800,7 @@ recursive function value_to_str(val) result(str)
 
 				do i = 1, val%array%len
 
-					call str_vec%push(i32_str(val%array%i32(i)))
+					call str_vec%push(str(val%array%i32(i)))
 					if (i >= val%array%len) cycle
 
 					call str_vec%push(', ')
@@ -5823,7 +5823,7 @@ recursive function value_to_str(val) result(str)
 					!call str_vec%push(buf16)
 
 					! Trimmed string (not aligned)
-					call str_vec%push(f32_str(val%array%f32(i)))
+					call str_vec%push(str(val%array%f32(i)))
 
 					if (i >= val%array%len) cycle
 
@@ -5842,7 +5842,7 @@ recursive function value_to_str(val) result(str)
 
 				do i = 1, val%array%len
 
-					call str_vec%push(bool1_str(val%array%bool(i)))
+					call str_vec%push(str(val%array%bool(i)))
 
 					if (i >= val%array%len) cycle
 
@@ -5877,7 +5877,7 @@ recursive function value_to_str(val) result(str)
 				end do
 
 			else
-				write(*,*) 'Error: array str conversion not implemented' &
+				write(*,*) 'Error: array ans conversion not implemented' &
 					//' for this type'
 				call internal_error()
 			end if
@@ -5885,10 +5885,10 @@ recursive function value_to_str(val) result(str)
 			if (val%array%rank > 1) call str_vec%push(line_feed)
 			call str_vec%push(']')
 
-			str = str_vec%v( 1: str_vec%len )
+			ans = str_vec%v( 1: str_vec%len )
 
 		case default
-			str = err_prefix//"<invalid_value>"//color_reset
+			ans = err_prefix//"<invalid_value>"//color_reset
 
 	end select
 
