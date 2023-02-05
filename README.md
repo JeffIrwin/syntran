@@ -48,11 +48,11 @@ Use two asterisks for exponent powers, like Fortran and Scilab:
 
 There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/math/pow) and call the `pow()` function!
 
-### Variables, booleans, and type checking
+### Variables, Booleans, and type checking
 
 Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.  Variables are mutable.
 
-Integer, float, string, and boolean types are supported.  Attempting operations on the wrong types yields an error, e.g. trying to add a bool or use logical `and` on an int or float.
+Integer, float, string, and Boolean types are supported.  Attempting operations on the wrong types yields an error, e.g. trying to add a bool or use logical `and` on an int or float.
 
 ```cpp
 let foo = 1;
@@ -515,7 +515,7 @@ To include an escaped quote literal, double it:
 
 ```rust
 let string1 = "syntran is a ""programming language""";
-syntran is a "programming language"
+// syntran is a "programming language"
 ```
 
 Strings are concatenated with the `+` operator:
@@ -528,9 +528,32 @@ let string2 = "hello " + ("planet " + "earth");
 The intrinsic function [`str()`](doc/README.md#str) converts other types to `str` and concatenates them:
 
 ```rust
-let string3 = "testing " + str(1, " ", 2, " ", 1.0, " ", 2.0);
-// testing 1 2     1.000000E+00     2.000000E+00
+let string3 = "testing " + str(1, " ", 2, " ", 1.0, " ", false);
+// testing 1 2     1.000000E+00 false
 ```
 
-Integers are stringified without padding, so separate them with `" "` if that's what you want.
+Integers and bools are stringified without padding, so separate them with `" "` if that's what you want.
+
+Use [`println()`](doc/README.md#println) to print to stdout:
+
+```rust
+println("hello world");
+// hello world
+```
+
+Use [`open()`](doc/README.md#open), [`writeln()`](doc/README.md#writeln), and [`close()`](doc/README.md#close) to write to a file:
+
+```rust
+//// syntran prompt
+let file = open("test.txt");
+writeln(file, "hello world");
+writeln(file, "here's a second line of text with a number ", 42);
+close(file);
+//// Ctrl+C to exit syntran prompt
+
+//// shell prompt
+cat test.txt
+// hello world
+// here's a second line of text with a number 42
+```
 
