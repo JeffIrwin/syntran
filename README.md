@@ -435,11 +435,11 @@ let c = add(a + 1, b + 2);
 // 10
 ```
 
-⚠ I highly suggest saving functions in a `.syntran` file.  In addition to usability, the REPL is buggy with functions.
+⚠ I highly suggest saving functions in a `.syntran` file.  In addition to matters of usability, the REPL is buggy with functions.
 
 Functions must be defined before they are called.  That means that recursive functions are not possible currently, neither with a function directly calling itself, nor with two functions which both call each other.
 
-Here's a functions that performs matrix-vector multiplication:
+Here's a function that performs matrix-vector multiplication:
 
 ```rust
 fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
@@ -500,5 +500,5 @@ mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty);
 // ]
 ```
 
-As expected, this is the same as a 180 degree _z_ rotation, i.e. the _x_ and _y_ components are negated while the _z_ components is unchanged.
+As expected, this is the same as a 180 degree _z_ rotation, i.e. the _x_ and _y_ components are negated while the _z_ component is unchanged.
 

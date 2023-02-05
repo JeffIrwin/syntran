@@ -1,6 +1,12 @@
 
 # Variadic and polymorphic functions
 
+[Variadic](https://en.wikipedia.org/wiki/Variadic_function) intrinsic functions are indicated with `...`.
+
+[Polymorphic](https://en.wikipedia.org/wiki/Polymorphism_(computer_science)) function parameters are indicated with `any` type.  Rank-polymorphic array function parameters are indicated with `any_rank`.
+
+These are special cases for intrinsic functions.  For now at least, user-defined functions cannot be variadic or polymorphic.
+
 # Intrinsic functions
 
 ## `close`
@@ -8,7 +14,7 @@
 fn close(file_handle: file)
 ```
 
-Close a `file` created by [`open`](#open)
+Close a `file_handle` created by [`open`](#open)
 
 Related functions: [`open`](#open), [`writeln`](#writeln)
 
@@ -42,7 +48,7 @@ Related functions: [`max`](#max)
 fn open(filename: str): file
 ```
 
-Open a `file` named `filename`
+Open a `file` handle named `filename`
 
 Related functions: [`close`](#close), [`writeln`](#writeln)
 
@@ -77,7 +83,7 @@ Related functions: [`println`](#println), [`writeln`](#writeln)
 fn writeln(file_handle: file, s0: any, s1: any, s2: any, ...)
 ```
 
-Write to `file`, with a newline
+Write to `file_handle`, with a newline
 
 Related functions: [`close`](#close), [`println`](#println), [`open`](#open)
 
