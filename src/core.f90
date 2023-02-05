@@ -38,7 +38,6 @@ module core_m
 	!      independently, and I won't test println, but we can at least test
 	!      writeln/readln in combination
 	!  - arrays
-	!    * bool, str arrays
 	!    * add slice subscripts:
 	!      > a[:]     -> a[0], a[1], a[2], ...
 	!      > a[1:4]   -> a[1], a[2], a[3]
@@ -184,8 +183,7 @@ module core_m
 		logical(kind = 1), allocatable :: bool(:)
 		integer(kind = 4), allocatable ::  i32(:)
 		real   (kind = 4), allocatable ::  f32(:)
-
-		! TODO: str arrays
+		type(string_t   ), allocatable :: str(:)
 
 		integer :: len, cap, rank
 		integer, allocatable :: size(:)
@@ -1256,6 +1254,8 @@ function new_array(type, cap) result(vector)
 		allocate(vector%f32 ( vector%cap ))
 	else if (type == bool_type) then
 		allocate(vector%bool( vector%cap ))
+	else if (type == str_type) then
+		allocate(vector%str ( vector%cap ))
 	else
 		write(*,*) 'Error: array type not implemented'
 		call internal_error()
@@ -1277,9 +1277,10 @@ subroutine push_array(vector, val)
 
 	!********
 
-	integer(kind = 4), allocatable :: tmp_i32(:)
-	real   (kind = 4), allocatable :: tmp_f32(:)
+	integer(kind = 4), allocatable :: tmp_i32 (:)
+	real   (kind = 4), allocatable :: tmp_f32 (:)
 	logical(kind = 1), allocatable :: tmp_bool(:)
+	type(string_t   ), allocatable :: tmp_str (:)
 
 	integer :: tmp_cap
 
@@ -1292,13 +1293,13 @@ subroutine push_array(vector, val)
 
 		if (vector%type == i32_type) then
 
-			allocate(tmp_i32( tmp_cap ))
+			allocate(tmp_i32 ( tmp_cap ))
 			tmp_i32(1: vector%cap) = vector%i32
 			call move_alloc(tmp_i32, vector%i32)
 
 		else if (vector%type == f32_type) then
 
-			allocate(tmp_f32( tmp_cap ))
+			allocate(tmp_f32 ( tmp_cap ))
 			tmp_f32(1: vector%cap) = vector%f32
 			call move_alloc(tmp_f32, vector%f32)
 
@@ -1307,6 +1308,12 @@ subroutine push_array(vector, val)
 			allocate(tmp_bool( tmp_cap ))
 			tmp_bool(1: vector%cap) = vector%bool
 			call move_alloc(tmp_bool, vector%bool)
+
+		else if (vector%type == str_type) then
+
+			allocate(tmp_str ( tmp_cap ))
+			tmp_str (1: vector%cap) = vector%str
+			call move_alloc(tmp_str, vector%str)
 
 		else
 			! FIXME: when adding new types, implement it below too to set the
@@ -1320,11 +1327,13 @@ subroutine push_array(vector, val)
 	end if
 
 	if      (vector%type == i32_type) then
-		vector%i32( vector%len ) = val%i32
+		vector%i32 ( vector%len ) = val%i32
 	else if (vector%type == f32_type) then
-		vector%f32( vector%len ) = val%f32
+		vector%f32 ( vector%len ) = val%f32
 	else if (vector%type == bool_type) then
 		vector%bool( vector%len ) = val%bool
+	else if (vector%type == str_type) then
+		vector%str ( vector%len ) = val%str
 	else
 		write(*,*) 'Error: push_array type not implemented'
 		call internal_error()
@@ -5253,8 +5262,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				vars%vals(node%id_index)%array%i32 ( i + 1 ) = res%i32
 			case (f32_type)
 				vars%vals(node%id_index)%array%f32 ( i + 1 ) = res%f32
-			!case (str_type)
-			!	vars%vals(node%id_index)%array%str ( i + 1 ) = res%str
+			case (str_type)
+				vars%vals(node%id_index)%array%str ( i + 1 ) = res%str
 			end select
 
 		end if
@@ -5407,8 +5416,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%i32  = vars%vals(node%id_index)%array%i32 ( i + 1 )
 			case (f32_type)
 				res%f32  = vars%vals(node%id_index)%array%f32 ( i + 1 )
-			!case (str_type)
-			!	res%str  = vars%vals(node%id_index)%array%str ( i + 1 )
+			case (str_type)
+				res%str  = vars%vals(node%id_index)%array%str ( i + 1 )
 			end select
 
 		else
@@ -5809,9 +5818,50 @@ recursive function value_to_str(val) result(str)
 
 				do i = 1, val%array%len
 
+					!! Nice alignment, but breaks tests
 					!write(buf16, '(es16.6)') val%array%f32(i)
 					!call str_vec%push(buf16)
+
+					! Trimmed string (not aligned)
 					call str_vec%push(f32_str(val%array%f32(i)))
+
+					if (i >= val%array%len) cycle
+
+					call str_vec%push(', ')
+
+					! Products could be saved ahead of time outside of loop
+					prod = val%array%size(1)
+					do j = 2, val%array%rank
+						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						prod = prod * val%array%size(j)
+					end do
+
+				end do
+
+			else if (val%array%type == bool_type) then
+
+				do i = 1, val%array%len
+
+					call str_vec%push(bool1_str(val%array%bool(i)))
+
+					if (i >= val%array%len) cycle
+
+					call str_vec%push(', ')
+
+					! Products could be saved ahead of time outside of loop
+					prod = val%array%size(1)
+					do j = 2, val%array%rank
+						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						prod = prod * val%array%size(j)
+					end do
+
+				end do
+
+			else if (val%array%type == str_type) then
+
+				do i = 1, val%array%len
+
+					call str_vec%push(val%array%str(i)%s)
 
 					if (i >= val%array%len) cycle
 

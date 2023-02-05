@@ -177,7 +177,7 @@ function err_undeclare_fn(context, span, fn) result(err)
 
 	character(len = *), intent(in) :: fn
 	err = err_prefix &
-		//'Function `'//fn//'` has not been defined' &
+		//'function `'//fn//'` has not been defined' &
 		//underline(context, span)//" undefined function"//color_reset
 
 end function err_undeclare_fn
@@ -199,7 +199,7 @@ function err_bad_arg_count(context, span, fn, expect, actual) result(err)
 	end if
 
 	err = err_prefix &
-		//'Function `'//fn//'` requires '//str(expect) &
+		//'function `'//fn//'` requires '//str(expect) &
 		//' '//argument_s//' but was given '//str(actual) &
 		//underline(context, span)//" wrong argument count"//color_reset
 
@@ -222,7 +222,7 @@ function err_too_few_args(context, span, fn, expect, actual) result(err)
 	end if
 
 	err = err_prefix &
-		//'Variadic function `'//fn//'` requires at least '//str(expect) &
+		//'variadic function `'//fn//'` requires at least '//str(expect) &
 		//' '//argument_s//' but was given '//str(actual) &
 		//underline(context, span)//" not enough arguments"//color_reset
 
@@ -245,7 +245,7 @@ function err_bad_sub_count(context, span, array, expect, actual) result(err)
 	end if
 
 	err = err_prefix &
-		//'Array `'//array//'` requires '//str(expect) &
+		//'array `'//array//'` requires '//str(expect) &
 		//' '//subscript_s//' but was given '//str(actual) &
 		//underline(context, span)//" wrong subscript count"//color_reset
 
@@ -264,7 +264,7 @@ function err_bad_array_arg_type(context, span, fn, iarg, param, expect, actual) 
 	character(len = *), intent(in) :: fn, param, expect, actual
 
 	err = err_prefix &
-		//'Function `'//fn//'` parameter '//str(iarg)//' `'//param &
+		//'function `'//fn//'` parameter '//str(iarg)//' `'//param &
 		//'` requires an array value of ['//expect &
 		//'] but was given an array value of ['//actual//']' &
 		//underline(context, span)//" wrong array argument type"//color_reset
@@ -284,7 +284,7 @@ function err_bad_arg_type(context, span, fn, iarg, param, expect, actual) &
 	character(len = *), intent(in) :: fn, param, expect, actual
 
 	err = err_prefix &
-		//'Function `'//fn//'` parameter '//str(iarg)//' `'//param &
+		//'function `'//fn//'` parameter '//str(iarg)//' `'//param &
 		//'` requires value of '//expect//' but was given a value of ' &
 		//actual &
 		//underline(context, span)//" wrong argument type"//color_reset
@@ -304,7 +304,7 @@ function err_bad_arg_rank(context, span, fn, iarg, param, expect, actual) &
 	character(len = *), intent(in) :: fn, param
 
 	err = err_prefix &
-		//'Function `'//fn//'` parameter '//str(iarg)//' `'//param &
+		//'function `'//fn//'` parameter '//str(iarg)//' `'//param &
 		//'` requires rank-'//str(expect)//' array but was given a rank-' &
 		//str(actual)//' array' &
 		//underline(context, span)//" wrong argument rank"//color_reset
@@ -353,7 +353,7 @@ function err_non_bool_condition(context, span, condition, statement) result(err)
 
 	character(len = *), intent(in) :: condition, statement
 	err = err_prefix &
-		//'Condition `'//trimw(condition)//'` of '//statement//' is not bool' &
+		//'condition `'//trimw(condition)//'` of '//statement//' is not bool' &
 		//underline(context, span) &
 		//" non-bool condition"//color_reset
 
@@ -368,7 +368,7 @@ function err_non_int_bound(context, span, bound) result(err)
 
 	character(len = *), intent(in) :: bound
 	err = err_prefix &
-		//'Bound `'//bound//'` of for-loop is not an i32 integer' &
+		//'bound `'//bound//'` of for-loop is not an i32 integer' &
 		//underline(context, span) &
 		//" non-i32 bound"//color_reset
 
@@ -383,7 +383,7 @@ function err_non_int_range(context, span, range) result(err)
 
 	character(len = *), intent(in) :: range
 	err = err_prefix &
-		//'Bound `'//range//'` of array range is not an i32 integer' &
+		//'bound `'//range//'` of array range is not an i32 integer' &
 		//underline(context, span) &
 		//" non-i32 range"//color_reset
 
@@ -398,7 +398,7 @@ function err_het_array(context, span, elem) result(err)
 
 	character(len = *), intent(in) :: elem
 	err = err_prefix &
-		//'Array is heterogeneous.  Element `'//elem  &
+		//'array is heterogeneous.  Element `'//elem  &
 		//"` does not match the first element's type" &
 		//underline(context, span) &
 		//" heterogeneous array element"//color_reset
@@ -465,7 +465,7 @@ function err_eval_i32_itr(op) result(err)
 	character(len = :), allocatable :: err
 
 	err = err_int_prefix &
-		//'Loop iterator `'//op//'` must be of type i32'//color_reset
+		//'loop iterator `'//op//'` must be of type i32'//color_reset
 
 end function err_eval_i32_itr
 

@@ -86,8 +86,9 @@ module utils
 	!********
 
 	interface str
-		module procedure i32_str
-		module procedure f32_str
+		module procedure  i32_str
+		module procedure  f32_str
+		module procedure bool1_str
 	end interface str
 
 !===============================================================================
@@ -710,6 +711,22 @@ function f32_str(x) result(str)
 	str = trim(adjustl(buffer))
 
 end function f32_str
+
+!===============================================================================
+
+function bool1_str(x) result(str)
+
+	logical(kind = 1), intent(in) :: x
+
+	character(len = :), allocatable :: str
+
+	if (x) then
+		str = 'true'
+	else
+		str = 'false'
+	end if
+
+end function bool1_str
 
 !===============================================================================
 
