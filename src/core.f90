@@ -51,6 +51,7 @@ module core_m
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
+	!    * check return value is correct type
 	!    * intrinsic
 	!      > read
 	!      > len (of str)
