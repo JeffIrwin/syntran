@@ -26,8 +26,15 @@ module core_m
 		syntran_patch =  16
 
 	! TODO:
-	!
-	! Add:
+	!  - substring indexing and slicing:
+	!    * str len intrinsic?  name it len() or size()?
+	!    * first, single-character indexing
+	!    * then, range-based slicing
+	!    * string arrays get an optional extra rank.  omitting the extra rank
+	!      refers to the whole string at that position in the array:
+	!      > str_vec[0] == str_vec[:,0]
+	!      > str_mat[0,0] == str_mat[:,0,0]
+	!      > etc.
 	!  - fix memory leaks.  noticeable in paraview wave
 	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
 	!    include quick-start and links in top-level README

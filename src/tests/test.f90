@@ -1112,6 +1112,41 @@ end subroutine unit_test_array_f32_2
 
 !===============================================================================
 
+subroutine unit_test_array_str(npass, nfail)
+
+	! More advanced tests on longer scripts
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'str array scripts'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/array-str/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == 'hello world', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_array_str
+
+!===============================================================================
+
 subroutine unit_test_f32_2(npass, nfail)
 
 	! More advanced f32 tests on longer syntran scripts
@@ -1334,6 +1369,7 @@ subroutine unit_tests(iostat)
 	call unit_test_array_i32_2(npass, nfail)
 	call unit_test_array_f32_1(npass, nfail)
 	call unit_test_array_f32_2(npass, nfail)
+	call unit_test_array_str  (npass, nfail)
 	call unit_test_nd_i32     (npass, nfail)
 	call unit_test_intr_fns   (npass, nfail)
 	call unit_test_fns        (npass, nfail)

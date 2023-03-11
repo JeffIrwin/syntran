@@ -1,0 +1,10 @@
+
+fn main(): str
+{
+	let str_array = ["hello ", "to ", "this ", "world ", "today "];
+
+	str_array[0] + str_array[3];
+}
+
+main();
+
