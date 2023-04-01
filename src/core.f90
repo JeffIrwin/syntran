@@ -74,7 +74,6 @@ module core_m
 	!      > size (non-variadic but polymorphic)
 	!      > writeln, println, open, close, str casting
 	!      > non-recursive user-defined fns
-	!  - % (mod/modulo (which? Fortran handles negatives differently in one))
 	!  - structs
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - enums
@@ -86,6 +85,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			percent_token        = 66, &
 			str_token            = 65, &
 			str_type             = 64, &
 			any_type             = 63, &
@@ -1487,7 +1487,8 @@ function kind_name(kind)
 			"void_type           ", & ! 62
 			"any_type            ", & ! 63
 			"str_type            ", & ! 64
-			"str_token           "  & ! 65
+			"str_token           ", & ! 65
+			"percent_token       "  & ! 66
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1573,7 +1574,8 @@ function kind_token(kind)
 			"void type            ", & ! 62
 			"any type             ", & ! 63
 			"str type             ", & ! 64
-			"str token            "  & ! 65
+			"str token            ", & ! 65
+			"%                    "  & ! 66
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2043,6 +2045,9 @@ function lex(lexer) result(token)
 			else
 				token = new_token(slash_token , lexer%pos, lexer%current())
 			end if
+
+		case ("%")
+			token = new_token(percent_token, lexer%pos, lexer%current())
 
 		case ("(")
 			token = new_token(lparen_token, lexer%pos, lexer%current())
@@ -3587,7 +3592,8 @@ logical function is_binary_op_allowed(left, op, right)
 
 		case (minus_token, sstar_token, star_token, slash_token, &
 				less_token   , less_equals_token, &
-				greater_token, greater_equals_token)
+				greater_token, greater_equals_token, &
+				percent_token)
 
 			is_binary_op_allowed = is_num_type(left) .and. is_num_type(right)
 
@@ -3713,7 +3719,7 @@ integer function get_binary_op_prec(kind) result(prec)
 		case (sstar_token)
 			prec = 7
 
-		case (star_token, slash_token)
+		case (star_token, slash_token, percent_token)
 			prec = 6
 
 		case (plus_token, minus_token)
@@ -5569,6 +5575,27 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%f32 = left%f32 / right%i32
 			case        (magic * i32_type + f32_type)
 				res%f32 = left%i32 / right%f32
+			case default
+				! FIXME: other numeric types (i64, f64, etc.)
+				write(*,*) err_eval_binary_types(node%op%text)
+				call internal_error()
+			end select
+
+		case (percent_token)
+
+			! The Fortran mod() fn is consistent with the C operator `%`, while
+			! modulo() works differently for negative args (it's actually a
+			! remainder function, not a true modulo)
+
+			select case (magic * left%type + right%type)
+			case        (magic * i32_type + i32_type)
+				res%i32 = mod(left%i32, right%i32)
+			case        (magic * f32_type + f32_type)
+				res%f32 = mod(left%f32, right%f32)
+			case        (magic * f32_type + i32_type)
+				res%f32 = mod(left%f32, real(right%i32))
+			case        (magic * i32_type + f32_type)
+				res%f32 = mod(real(left%i32), right%f32)
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
