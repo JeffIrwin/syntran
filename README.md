@@ -160,7 +160,7 @@ for i in [0: n]
 	for j in [2: i/2 + 1]
 	{
 		// Is i divisible by j?
-		let divisible = j * (i / j) == i;  // poor man's modulo == 0
+		let divisible = i % j == 0;
 		is_composite = is_composite or divisible;
 	}
 
@@ -229,7 +229,7 @@ while prime == 0
 	{
 		j = j + 1;
 
-		let divisible = j * (i / j) == i;  // poor man's modulo == 0
+		let divisible = i % j == 0;
 		is_composite = is_composite or divisible;
 	}
 
