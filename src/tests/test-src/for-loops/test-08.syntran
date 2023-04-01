@@ -1,0 +1,24 @@
+
+fn main()
+{
+	let sum = 0;
+	//println("3 % 4 = ", 3 % 4);
+	for j in [-10: 11]
+		for i in [-10: 11]
+			if j != 0
+			{
+				//println(i, " % ", j, " = ", i%j);
+				sum = sum + i % j;
+			}
+
+	//println("sum = ", sum);
+
+	//println(" 5 % -3 = ",  5 % -3);
+	//println("-5 %  3 = ", -5 %  3);
+	//println("-5 % -3 = ", -5 % -3);
+
+	sum;
+}
+
+main();
+
