@@ -23,13 +23,14 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  16
+		syntran_patch =  17
 
 	! TODO:
 	!  - substring indexing and slicing:
 	!    * str len intrinsic?  name it len() or size()?
 	!    * first, single-character indexing
-	!      > MVP done
+	!      > MVP RHS indexing done
+	!      > need LHS indexing (e.g. s[0] = "a";)
 	!    * then, range-based slicing
 	!    * string arrays get an optional extra rank.  omitting the extra rank
 	!      refers to the whole string at that position in the array:
