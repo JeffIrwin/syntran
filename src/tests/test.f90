@@ -762,9 +762,6 @@ end subroutine unit_test_f32_1
 
 subroutine unit_test_str(npass, nfail)
 
-	! Simple f32 float tests of arithmetic and comparisons with single-line
-	! evaluations
-
 	implicit none
 
 	integer, intent(inout) :: npass, nfail
@@ -817,9 +814,6 @@ end subroutine unit_test_str
 !===============================================================================
 
 subroutine unit_test_substr(npass, nfail)
-
-	! Simple f32 float tests of arithmetic and comparisons with single-line
-	! evaluations
 
 	implicit none
 
