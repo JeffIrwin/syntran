@@ -816,6 +816,38 @@ end subroutine unit_test_str
 
 !===============================================================================
 
+subroutine unit_test_substr(npass, nfail)
+
+	! Simple f32 float tests of arithmetic and comparisons with single-line
+	! evaluations
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'substrings'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval('let s = "hello world"; s[0];', quiet) == 'h', &
+			eval('let s = "hello world"; s[1];', quiet) == 'e', &
+			eval('let s = "hello world"; s[2];', quiet) == 'l', &
+			eval('let s = "hello world"; s[3];', quiet) == 'l'  &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_substr
+
+!===============================================================================
+
 subroutine unit_test_array_i32_1(npass, nfail)
 
 	! Simple i32 array tests
@@ -1417,6 +1449,7 @@ subroutine unit_tests(iostat)
 	call unit_test_blocks     (npass, nfail)
 	call unit_test_f32_1      (npass, nfail)
 	call unit_test_str        (npass, nfail)
+	call unit_test_substr     (npass, nfail)
 	call unit_test_if_else    (npass, nfail)
 	call unit_test_for        (npass, nfail)
 	call unit_test_while      (npass, nfail)
