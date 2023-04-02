@@ -3284,7 +3284,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		! %pos is the lexer token index, %current_pos() is the character index!
 		pos0 = parser%pos
 
-		!print *, 'assign expr'
+		print *, 'assign expr'
 
 		identifier = parser%match(identifier_token)
 
@@ -3338,7 +3338,19 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		if (size(expr%subscripts) > 0) then
 
+			if (expr%val%type == str_type) then
+				print *, 'str type'
+				! TODO: check rank == 1
+			else if (expr%val%type /= array_type) then
+				span = new_span(span0, span1 - span0 + 1)
+				call parser%diagnostics%push( &
+					err_scalar_subscript(parser%context, &
+					span, identifier%text))
+				return
+			end if
+
 			! TODO: throw err if expr%val%type /= array_type
+			print *, 'type = ', expr%val%type
 
 			! TODO: this is not necessarily true for strings.  Implement the
 			! same fix as for RHS str subscripts
@@ -5286,7 +5298,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! identifier at each scope level
 
 		else
-			!print *, 'LHS array subscript assignment'
+			print *, 'LHS array subscript assignment'
+			print *, 'LHS type = ', vars%vals(node%id_index)%type
 
 			! Assign return value from RHS
 			res = syntax_eval(node%right, vars, fns, quietl)

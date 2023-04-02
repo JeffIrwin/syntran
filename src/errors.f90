@@ -253,6 +253,21 @@ end function err_bad_sub_count
 
 !===============================================================================
 
+function err_scalar_subscript(context, span, scalar) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err, subscript_s
+
+	character(len = *), intent(in) :: scalar
+
+	err = err_prefix &
+		//'scalar `'//scalar//'` cannot have subscripts' &
+		//underline(context, span)//" unexpected subscripts"//color_reset
+
+end function err_scalar_subscript
+
+!===============================================================================
+
 function err_bad_array_arg_type(context, span, fn, iarg, param, expect, actual) &
 		result(err)
 
