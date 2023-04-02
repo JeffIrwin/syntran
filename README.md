@@ -502,7 +502,7 @@ As expected, this is the same as a 180 degree _z_ rotation, i.e. the _x_ and _y_
 
 ## Strings, printing, and file output
 
-The string type `str` uses `"`quotes`"` to assign literals:
+The ASCII string type `str` uses `"`quotes`"` to assign literals:
 
 ```rust
 let string0 = "hello world";
@@ -565,5 +565,18 @@ close(file);
 cat test.txt
 // hello world
 // here's a second line of text with a number 42
+```
+
+Only ASCII strings are supported because syntran is interpretted in Fortran.  Unicode strings cannot be indexed properly:
+
+```rust
+let string5 = "🔥🥵💀";
+
+string5;
+// 🔥🥵💀
+
+string5[0];
+string5[1];
+string5[2];
 ```
 
