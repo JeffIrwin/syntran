@@ -573,10 +573,13 @@ Only ASCII strings are supported because syntran is interpretted in Fortran.  Un
 let string5 = "🔥🥵💀";
 
 string5;
-// 🔥🥵💀
+// 🔥🥵💀 // YMMV
 
 string5[0];
+// mojibake
 string5[1];
+// mojibake
 string5[2];
+// mojibake
 ```
 
