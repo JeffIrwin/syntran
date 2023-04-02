@@ -29,6 +29,7 @@ module core_m
 	!  - substring indexing and slicing:
 	!    * str len intrinsic?  name it len() or size()?
 	!    * first, single-character indexing
+	!      > MVP done
 	!    * then, range-based slicing
 	!    * string arrays get an optional extra rank.  omitting the extra rank
 	!      refers to the whole string at that position in the array:
@@ -3340,6 +3341,9 @@ recursive function parse_expr_statement(parser) result(expr)
 		!print *, 'associated(expr%val%array) = ', associated(expr%val%array)
 
 		if (size(expr%subscripts) > 0) then
+
+			! TODO: this is not necessarily true for strings.  Implement the
+			! same fix as for RHS str subscripts
 			expr%val%type = expr%val%array%type
 
 			!print *, 'rank = ', expr%val%array%rank
@@ -4211,16 +4215,22 @@ function parse_primary_expr(parser) result(expr)
 						span, identifier%text))
 				end if
 
+				!print *, 'type = ', kind_name(expr%val%type)
+				!print *, 'associated(expr%val%array) = ', &
+				!	associated(expr%val%array)
+
 				!print *, '%current_kind() = ', kind_name(parser%current_kind())
 				span0 = parser%current_pos()
 				expr%subscripts = parser%parse_subscripts()
 				span1 = parser%current_pos() - 1
 				if (size(expr%subscripts) <= 0) then
 					deallocate(expr%subscripts)
-				else
+				else if (expr%val%type == array_type) then
 
+					! this is not necessarily true for strings
 					expr%val%type = expr%val%array%type
 
+					! TODO: allow rank+1 for str arrays
 					if (expr%val%array%rank /= size(expr%subscripts)) then
 						span = new_span(span0, span1 - span0 + 1)
 						call parser%diagnostics%push( &
@@ -4229,6 +4239,9 @@ function parse_primary_expr(parser) result(expr)
 							expr%val%array%rank, size(expr%subscripts)))
 					end if
 
+				else if (expr%val%type == str_type) then
+					!print *, 'STRING TYPE'
+					! TODO: check subscripts rank == 1 for scalar strings
 				end if
 
 			else
@@ -4770,6 +4783,19 @@ integer function subscript_eval(node, vars, fns, quietl) result(index)
 
 	integer :: i, prod
 	type(value_t) :: subscript
+
+	!print *, 'starting subscript_eval()'
+
+	! str scalar with single char subscript
+	if (vars%vals(node%id_index)%type == str_type) then
+		subscript = syntax_eval(node%subscripts(1), vars, fns, quietl)
+		index = subscript%i32
+		return
+	end if
+
+	!if (vars%vals(node%id_index)%type /= array_type) then
+	!	! internal_error?
+	!end if
 
 	prod  = 1
 	index = 0
@@ -5417,6 +5443,29 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		if (allocated(node%subscripts)) then
 
 			!print *, 'subscript RHS name expr'
+
+			if (vars%vals(node%id_index)%type == str_type) then
+				!print *, 'str type'
+
+				res%type = vars%vals(node%id_index)%type
+				i = subscript_eval(node, vars, fns, quietl)
+
+				!print *, 'i = ', i
+
+				!res%str = vars%vals(node%id_index)%str(i: i)
+				res%str%s = vars%vals(node%id_index)%str%s(i+1: i+1)
+
+				! TODO: can we avoid return?  I don't use it anywhere else in
+				! syntax_eval().  May need another indentation level 😢
+				return
+
+			end if
+
+			if (vars%vals(node%id_index)%type /= array_type) then
+				! TODO: error reporting routine
+				write(*,*) 'Error: bad type, expected array'
+				call internal_error()
+			end if
 
 			res%type = vars%vals(node%id_index)%array%type
 
