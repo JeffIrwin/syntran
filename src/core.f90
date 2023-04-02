@@ -1779,11 +1779,6 @@ recursive subroutine syntax_node_copy(dst, src)
 		call syntax_nodes_copy(dst%subscripts, src%subscripts)
 	end if
 
-	!if (allocated(src%fn)) then
-	!	if (.not. allocated(dst%fn)) allocate(dst%fn)
-	!	dst%fn = src%fn
-	!end if
-
 	if (allocated(src%args)) then
 		call syntax_nodes_copy(dst%args, src%args)
 	end if
@@ -3343,6 +3338,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		if (size(expr%subscripts) > 0) then
 
+			! TODO: throw err if expr%val%type /= array_type
+
 			! TODO: this is not necessarily true for strings.  Implement the
 			! same fix as for RHS str subscripts
 			expr%val%type = expr%val%array%type
@@ -4149,7 +4146,7 @@ function parse_primary_expr(parser) result(expr)
 
 	character(len = :), allocatable :: param_type, arg_type
 	integer :: i, io, id_index, param_rank, arg_rank, span0, span1, &
-		ptype, atype
+		ptype, atype, exp_rank
 	logical :: bool, types_match
 
 	type(fn_t) :: fn
@@ -4244,8 +4241,16 @@ function parse_primary_expr(parser) result(expr)
 					end if
 
 				else if (expr%val%type == str_type) then
-					!print *, 'STRING TYPE'
-					! TODO: check subscripts rank == 1 for scalar strings
+					!print *, 'string type'
+
+					exp_rank = 1
+					if (size(expr%subscripts) /= exp_rank) then
+						span = new_span(span0, span1 - span0 + 1)
+						call parser%diagnostics%push( &
+							err_bad_sub_count(parser%context, span, &
+							identifier%text, &
+							exp_rank, size(expr%subscripts)))
+					end if
 				end if
 
 			else
