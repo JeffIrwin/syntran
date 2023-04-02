@@ -3462,6 +3462,9 @@ function parse_subscripts(parser) result(subscripts)!_vec)
 	! When LHS calls this, it does not yet know whether the identifier is an
 	! array or a scalar or a function call in an expression statement.
 	!
+	! Check that the expr is actually an array (not a scalar), or do that next
+	! to err_bad_sub_count() elsewhere
+	!
 	! So, only check rank match here if subscripts%len > 0
 
 	call syntax_nodes_copy(subscripts, &

@@ -134,7 +134,7 @@ for i in [0: 5]
 // 0, 1, 2, 3, 4
 ```
 
-## Example:  calculating prime numbers inefficiently 
+## Example:  calculating prime numbers inefficiently
 
 With only these language features, we can make a short program to find prime numbers:
 
@@ -369,28 +369,26 @@ Note that arrays are stored in [column-major order](https://en.wikipedia.org/wik
 
 To initialize a rank-3 array with size rows by columns by sheets:
 ```rust
-let rows = 4;
-let cols = 5;
-let shts = 3;
+let rows = 5;
+let cols = 3;
+let shts = 4;
 let array = [0; rows, cols, shts];
 // [
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 0, 0, 0, 0,
-// 0, 0, 0, 0
+// 0, 0, 0, 0, 0,
+// 0, 0, 0, 0, 0,
+// 0, 0, 0, 0, 0,
+//
+// 0, 0, 0, 0, 0,
+// 0, 0, 0, 0, 0,
+// 0, 0, 0, 0, 0,
+//
+// 0, 0, 0, 0, 0,
+// 0, 0, 0, 0, 0,
+// 0, 0, 0, 0, 0,
+//
+// 0, 0, 0, 0, 0,
+// 0, 0, 0, 0, 0,
+// 0, 0, 0, 0, 0
 // ]
 ```
 
@@ -525,10 +523,22 @@ let string2 = "hello " + ("planet " + "earth");
 // hello planet earth
 ```
 
+There is no separate character type, only strings of length 1.  Characters of a string are indexed in the same way as arrays:
+
+```rust
+let string3 = "hello";
+string3[0];
+// h
+string3[1];
+// e
+string3[2];
+// l
+```
+
 The intrinsic function [`str()`](doc/README.md#str) converts other types to `str` and concatenates them:
 
 ```rust
-let string3 = "testing " + str(1, " ", 2, " ", 1.0, " ", false);
+let string4 = "testing " + str(1, " ", 2, " ", 1.0, " ", false);
 // testing 1 2     1.000000E+00 false
 ```
 
