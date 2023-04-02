@@ -5444,35 +5444,26 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
 
-		if (allocated(node%subscripts)) then
+		if (allocated(node%subscripts) .and. &
+			vars%vals(node%id_index)%type == str_type) then
+			!print *, 'string subscript RHS name expr'
 
-			!print *, 'subscript RHS name expr'
+			!print *, 'str type'
 
-			if (vars%vals(node%id_index)%type == str_type) then
-				!print *, 'str type'
+			res%type = vars%vals(node%id_index)%type
+			i = subscript_eval(node, vars, fns, quietl)
 
-				res%type = vars%vals(node%id_index)%type
-				i = subscript_eval(node, vars, fns, quietl)
+			res%str%s = vars%vals(node%id_index)%str%s(i+1: i+1)
 
-				!print *, 'i = ', i
-
-				!res%str = vars%vals(node%id_index)%str(i: i)
-				res%str%s = vars%vals(node%id_index)%str%s(i+1: i+1)
-
-				! TODO: can we avoid return?  I don't use it anywhere else in
-				! syntax_eval().  May need another indentation level 😢
-				return
-
-			end if
+		else if (allocated(node%subscripts)) then
+			!print *, 'string subscript RHS name expr'
 
 			if (vars%vals(node%id_index)%type /= array_type) then
-				! TODO: error reporting routine
 				write(*,*) 'Error: bad type, expected array'
 				call internal_error()
 			end if
 
 			res%type = vars%vals(node%id_index)%array%type
-
 			i = subscript_eval(node, vars, fns, quietl)
 
 			select case (res%type)
