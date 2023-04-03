@@ -535,6 +535,8 @@ string3[2];
 // l
 ```
 
+Slice indexing for substrings of length > 1 is TBD.
+
 The intrinsic function [`str()`](doc/README.md#str) converts other types to `str` and concatenates them:
 
 ```rust
