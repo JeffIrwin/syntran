@@ -3284,7 +3284,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		! %pos is the lexer token index, %current_pos() is the character index!
 		pos0 = parser%pos
 
-		print *, 'assign expr'
+		!print *, 'assign expr'
 
 		identifier = parser%match(identifier_token)
 
@@ -3339,7 +3339,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		if (size(expr%subscripts) > 0) then
 
 			if (expr%val%type == str_type) then
-				print *, 'str type'
+				!print *, 'str type'
 				! TODO: check rank == 1
 			else if (expr%val%type /= array_type) then
 				span = new_span(span0, span1 - span0 + 1)
@@ -3349,21 +3349,20 @@ recursive function parse_expr_statement(parser) result(expr)
 				return
 			end if
 
-			! TODO: throw err if expr%val%type /= array_type
-			print *, 'type = ', expr%val%type
+			!print *, 'type = ', expr%val%type
 
-			! TODO: this is not necessarily true for strings.  Implement the
-			! same fix as for RHS str subscripts
-			expr%val%type = expr%val%array%type
+			if (expr%val%type /= str_type) then
+				expr%val%type = expr%val%array%type
 
-			!print *, 'rank = ', expr%val%array%rank
-			!print *, 'subs = ', size(expr%subscripts)
+				!print *, 'rank = ', expr%val%array%rank
+				!print *, 'subs = ', size(expr%subscripts)
 
-			if (expr%val%array%rank /= size(expr%subscripts)) then
-				span = new_span(span0, span1 - span0 + 1)
-				call parser%diagnostics%push( &
-					err_bad_sub_count(parser%context, span, identifier%text, &
-					expr%val%array%rank, size(expr%subscripts)))
+				if (expr%val%array%rank /= size(expr%subscripts)) then
+					span = new_span(span0, span1 - span0 + 1)
+					call parser%diagnostics%push( &
+						err_bad_sub_count(parser%context, span, identifier%text, &
+						expr%val%array%rank, size(expr%subscripts)))
+				end if
 			end if
 
 		end if
@@ -5298,8 +5297,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! identifier at each scope level
 
 		else
-			print *, 'LHS array subscript assignment'
-			print *, 'LHS type = ', vars%vals(node%id_index)%type
+			!print *, 'LHS array subscript assignment'
+			!print *, 'LHS type = ', vars%vals(node%id_index)%type
 
 			! Assign return value from RHS
 			res = syntax_eval(node%right, vars, fns, quietl)
@@ -5308,24 +5307,32 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			i = subscript_eval(node, vars, fns, quietl)
 
-			!print *, 'LHS array type = ', vars%vals(node%id_index)%array%type
-			!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
+			if (vars%vals(node%id_index)%type == str_type) then
+				! TODO
+				vars%vals(node%id_index)%str%s(i+1: i+1) = res%str%s
+			else
 
-			! Syntran uses 0-indexed arrays while Fortran uses 1-indexed arrays
+				!print *, 'LHS array type = ', &
+				!	vars%vals(node%id_index)%array%type
+				!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
 
-			! TODO: check res type matches array sub type? May already be
-			! handled by parser
+				! Syntran uses 0-indexed arrays while Fortran uses 1-indexed
+				! arrays
 
-			select case (res%type)
-			case (bool_type)
-				vars%vals(node%id_index)%array%bool( i + 1 ) = res%bool
-			case (i32_type)
-				vars%vals(node%id_index)%array%i32 ( i + 1 ) = res%i32
-			case (f32_type)
-				vars%vals(node%id_index)%array%f32 ( i + 1 ) = res%f32
-			case (str_type)
-				vars%vals(node%id_index)%array%str ( i + 1 ) = res%str
-			end select
+				! TODO: check res type matches array sub type? May already be
+				! handled by parser
+
+				select case (res%type)
+				case (bool_type)
+					vars%vals(node%id_index)%array%bool( i + 1 ) = res%bool
+				case (i32_type)
+					vars%vals(node%id_index)%array%i32 ( i + 1 ) = res%i32
+				case (f32_type)
+					vars%vals(node%id_index)%array%f32 ( i + 1 ) = res%f32
+				case (str_type)
+					vars%vals(node%id_index)%array%str ( i + 1 ) = res%str
+				end select
+			end if
 
 		end if
 
