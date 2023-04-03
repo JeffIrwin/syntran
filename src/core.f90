@@ -29,8 +29,7 @@ module core_m
 	!  - substring indexing and slicing:
 	!    * str len intrinsic?  name it len() or size()?
 	!    * first, single-character indexing
-	!      > MVP RHS indexing done
-	!      > need LHS indexing (e.g. s[0] = "a";)
+	!      > done
 	!    * then, range-based slicing
 	!    * string arrays get an optional extra rank.  omitting the extra rank
 	!      refers to the whole string at that position in the array:
@@ -4262,6 +4261,11 @@ function parse_primary_expr(parser) result(expr)
 							identifier%text, &
 							exp_rank, size(expr%subscripts)))
 					end if
+				else
+					span = new_span(span0, span1 - span0 + 1)
+					call parser%diagnostics%push( &
+						err_scalar_subscript(parser%context, &
+						span, identifier%text))
 				end if
 
 			else
