@@ -42,6 +42,9 @@ module core_m
 	!  - file reading
 	!    * readln() to read 1 line?
 	!    * how to handle eof? 404? open with r/w modes?
+	!      > add a file_stat() fn which checks IO of previous file operation.
+	!        this way I don't need to add structs, multiple return vals, or out
+	!        args yet
 	!    * add roundtrip writeln/readln testing.  I/O is hard to test
 	!      independently, and I won't test println, but we can at least test
 	!      writeln/readln in combination
@@ -54,6 +57,7 @@ module core_m
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
 	!  - compound assignment: +=, -=, *=, etc.
+	!    * += done
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
@@ -2026,20 +2030,20 @@ function lex(lexer) result(token)
 				lexer%pos = lexer%pos + 1
 				token = new_token(plus_equals_token, lexer%pos, "+=")
 			else
-				token = new_token(plus_token  , lexer%pos, lexer%current())
+				token = new_token(plus_token, lexer%pos, lexer%current())
 			end if
 
 			! FIXME: prefix/postfix inc/dec operators (++, --)
 
 		case ("-")
-			token = new_token(minus_token , lexer%pos, lexer%current())
+			token = new_token(minus_token, lexer%pos, lexer%current())
 
 		case ("*")
 			if (lexer%lookahead() == "*") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(sstar_token  , lexer%pos, "**")
+				token = new_token(sstar_token, lexer%pos, "**")
 			else
-				token = new_token(star_token  , lexer%pos, lexer%current())
+				token = new_token(star_token, lexer%pos, lexer%current())
 			end if
 
 		case ("/")
@@ -2053,7 +2057,7 @@ function lex(lexer) result(token)
 				token = new_token(whitespace_token, start, text)
 
 			else
-				token = new_token(slash_token , lexer%pos, lexer%current())
+				token = new_token(slash_token, lexer%pos, lexer%current())
 			end if
 
 		case ("%")
@@ -2091,7 +2095,7 @@ function lex(lexer) result(token)
 				lexer%pos = lexer%pos + 1
 				token = new_token(eequals_token, lexer%pos, "==")
 			else
-				token = new_token(equals_token , lexer%pos, lexer%current())
+				token = new_token(equals_token, lexer%pos, lexer%current())
 			end if
 
 		case ("!")
@@ -3415,19 +3419,19 @@ end function parse_expr_statement
 logical function is_assignment_op(op)
 
 	! Is the operator some type of assignment operator, either regular or
-	! compound (augmented)
+	! compound (augmented)?
 
 	integer, intent(in) :: op
 
-	select case (op)
+	!select case (op)
+	!	case (equals_token, plus_equals_token)
+	!		is_assignment_op = .true.
+	!	case default
+	!		is_assignment_op = .false.
+	!end select
 
-		case (equals_token, plus_equals_token)
-			is_assignment_op = .true.
-
-		case default
-			is_assignment_op = .false.
-
-	end select
+	! it's not that deep bro
+	is_assignment_op = any(op == [equals_token, plus_equals_token])
 
 end function is_assignment_op
 
@@ -5326,11 +5330,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! TODO: test int/float casting.  It should be an error during
 			! parsing
 
-			!print *, 'assignment_expr scalar'
-			! TODO: array compound assignment
-
-			!print *, 'op = ', node%op%text
-
 			! Assign res to LHS identifier variable as well.  This inserts the
 			! value, while the insert call in the parser inserts the type
 			select case (node%op%kind)
@@ -5369,7 +5368,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			i = subscript_eval(node, vars, fns, quietl)
 
 			if (vars%vals(node%id_index)%type == str_type) then
-				! TODO
+				! TODO: ban compound character substring assignment
 				vars%vals(node%id_index)%str%s(i+1: i+1) = res%str%s
 			else
 
@@ -5382,16 +5381,41 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				! TODO: check res type matches array sub type? May already be
 				! handled by parser
+				select case (node%op%kind)
+				case (equals_token)
 
-				select case (res%type)
-				case (bool_type)
-					vars%vals(node%id_index)%array%bool( i + 1 ) = res%bool
-				case (i32_type)
-					vars%vals(node%id_index)%array%i32 ( i + 1 ) = res%i32
-				case (f32_type)
-					vars%vals(node%id_index)%array%f32 ( i + 1 ) = res%f32
-				case (str_type)
-					vars%vals(node%id_index)%array%str ( i + 1 ) = res%str
+					select case (res%type)
+					case (bool_type)
+						vars%vals(node%id_index)%array%bool( i + 1 ) = res%bool
+					case (i32_type)
+						vars%vals(node%id_index)%array%i32 ( i + 1 ) = res%i32
+					case (f32_type)
+						vars%vals(node%id_index)%array%f32 ( i + 1 ) = res%f32
+					case (str_type)
+						vars%vals(node%id_index)%array%str ( i + 1 ) = res%str
+					end select
+
+				case (plus_equals_token)
+					select case (res%type)
+
+					case (i32_type)
+						vars%vals(node%id_index)%array%i32 ( i + 1 ) = &
+						vars%vals(node%id_index)%array%i32 ( i + 1 ) + res%i32
+
+					case (f32_type)
+						vars%vals(node%id_index)%array%f32 ( i + 1 ) = &
+						vars%vals(node%id_index)%array%f32 ( i + 1 ) + res%f32
+
+					case (str_type)
+						vars%vals(node%id_index)%array%str( i + 1 )%s = &
+						vars%vals(node%id_index)%array%str( i + 1 )%s // res%str%s
+
+					end select
+
+				case default
+					write(*,*) 'Error: unexpected assignment operator "', &
+						node%op%text, '"'
+					call internal_error()
 				end select
 			end if
 
