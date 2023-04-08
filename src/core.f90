@@ -5417,8 +5417,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 						node%op%text, '"'
 					call internal_error()
 				end select
-			end if
 
+				!! TODO: return LHS for compound assignment.  Need another
+				!! select case?  Better yet, just set res within the existing
+				!! select/case above
+				!res = vars%vals(node%id_index)
+
+			end if
 		end if
 
 	case (let_expr)
