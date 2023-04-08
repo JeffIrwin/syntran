@@ -86,6 +86,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			plus_equals_token    = 67, &
 			percent_token        = 66, &
 			str_token            = 65, &
 			str_type             = 64, &
@@ -162,7 +163,6 @@ module core_m
 	type value_t
 		integer :: type
 
-		!character(len = :), allocatable :: str
 		type(string_t)    :: str
 
 		logical           :: bool
@@ -1489,7 +1489,8 @@ function kind_name(kind)
 			"any_type            ", & ! 63
 			"str_type            ", & ! 64
 			"str_token           ", & ! 65
-			"percent_token       "  & ! 66
+			"percent_token       ", & ! 66
+			"plus_equals_token   "  & ! 67
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1576,7 +1577,8 @@ function kind_token(kind)
 			"any type             ", & ! 63
 			"str type             ", & ! 64
 			"str token            ", & ! 65
-			"%                    "  & ! 66
+			"%                    ", & ! 66
+			"+=                   "  & ! 67
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2013,7 +2015,12 @@ function lex(lexer) result(token)
 	select case (lexer%current())
 
 		case ("+")
-			token = new_token(plus_token  , lexer%pos, lexer%current())
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(plus_equals_token, lexer%pos, "+=")
+			else
+				token = new_token(plus_token  , lexer%pos, lexer%current())
+			end if
 
 			! FIXME: prefix/postfix inc/dec operators (++, --)
 
@@ -3296,7 +3303,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		if (size(expr%subscripts) <= 0) deallocate(expr%subscripts)
 		span1 = parser%current_pos() - 1
 
-		if (parser%current_kind() /= equals_token) then
+		if (.not. is_assignment_op(parser%current_kind())) then
 			! Rewind and do the default case (same as outside the assignment if
 			! block).  Could use goto or probably refactor somehow
 			parser%pos = pos0
@@ -3306,9 +3313,11 @@ recursive function parse_expr_statement(parser) result(expr)
 		end if
 		!print *, 'parsing assignment'
 
-		op    = parser%match(equals_token)
+		op    = parser%next()
 		right = parser%parse_expr_statement()
 
+		! regular vs compound assignment exprs are denoted by the op.  all of
+		! them are the same kind
 		expr%kind = assignment_expr
 
 		allocate(expr%right)
@@ -3393,6 +3402,27 @@ recursive function parse_expr_statement(parser) result(expr)
 	!semi       = parser%match(semicolon_token)
 
 end function parse_expr_statement
+
+!===============================================================================
+
+logical function is_assignment_op(op)
+
+	! Is the operator some type of assignment operator, either regular or
+	! compound (augmented)
+
+	integer, intent(in) :: op
+
+	select case (op)
+
+		case (equals_token, plus_equals_token)
+			is_assignment_op = .true.
+
+		case default
+			is_assignment_op = .false.
+
+	end select
+
+end function is_assignment_op
 
 !===============================================================================
 
@@ -3599,7 +3629,7 @@ logical function is_binary_op_allowed(left, op, right)
 
 	select case (op)
 
-		case (plus_token)
+		case (plus_token, plus_equals_token)
 
 			is_binary_op_allowed = &
 				(is_num_type(left) .and. is_num_type(right)) .or. &
@@ -5290,9 +5320,51 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! TODO: test int/float casting.  It should be an error during
 			! parsing
 
+			!print *, 'assignment_expr scalar'
+			! TODO: array compound assignment
+
+			!print *, 'op = ', node%op%text
+
 			! Assign res to LHS identifier variable as well.  This inserts the
 			! value, while the insert call in the parser inserts the type
-			vars%vals(node%id_index) = res
+			select case(node%op%kind)
+			case (equals_token)
+				vars%vals(node%id_index) = res
+			case (plus_equals_token)
+
+				!vars%vals(node%id_index) = vars%vals(node%id_index) + res
+
+				! TODO: refactor with binary_expr evaluator
+
+				! Integers only
+				vars%vals(node%id_index)%i32 = &
+					vars%vals(node%id_index)%i32 + res%i32
+
+				! Case selector must be a scalar expression, so use this nasty hack.
+				! This will break if magic is smaller than the largest type enum
+				! parameter
+				!select case (magic * left%type + right%type)
+				!case        (magic * i32_type + i32_type)
+				!	res%i32 = left%i32 + right%i32
+				!case        (magic * f32_type + f32_type)
+				!	res%f32 = left%f32 + right%f32
+				!case        (magic * f32_type + i32_type)
+				!	res%f32 = left%f32 + right%i32
+				!case        (magic * i32_type + f32_type)
+				!	res%f32 = left%i32 + right%f32
+				!case        (magic * str_type + str_type)
+				!	res%str%s = left%str%s // right%str%s
+				!case default
+				!	! FIXME: other numeric types (i64, f64, etc.)
+				!	write(*,*) err_eval_binary_types(node%op%text)
+				!	call internal_error()
+				!end select
+
+			case default
+				write(*,*) 'Error: unexpected assignment operator "', &
+					node%op%text, '"'
+				call internal_error()
+			end select
 
 			! The difference between let and assign is inserting into the
 			! current scope (let) vs possibly searching parent scopes (assign).
