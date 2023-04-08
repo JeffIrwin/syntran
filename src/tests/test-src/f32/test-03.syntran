@@ -1,0 +1,48 @@
+
+// Calculate pi
+let pi = 0.0;
+
+for k in [0: 10]
+{
+	pi += 1 / (16.0 ** k) *
+		(
+			4.0 / (8*k + 1) -
+			2.0 / (8*k + 4) -
+			1.0 / (8*k + 5) -
+			1.0 / (8*k + 6)
+		);
+}
+
+pi;
+// 3.141593E+00
+
+// x is 30 degrees (in radians)
+let x = pi / 6;
+
+// Calculate sin(x) using Taylor series
+
+// Initialize Taylor series terms
+let xpow = x;
+let factorial = 1;
+let sign = 1;
+
+// Sum odd terms only
+let sinx = 0.0;
+for k in [1: 10]
+{
+	sinx += sign * xpow / factorial;
+	xpow = xpow * x ** 2;
+	factorial = factorial * (2*k) * (2*k + 1);
+	sign = -sign;
+}
+
+sinx;
+// 4.999999E-01
+
+let ans = sinx;
+
+let expect = 0.5;
+let tol = 1.e-5;
+let ratio = ans / expect;
+1 - tol < ratio and ratio < 1 + tol;
+
