@@ -83,6 +83,9 @@ module core_m
 	!
 	!****************************************
 
+	! Must be larger than largest token enum below
+	integer, parameter :: magic = 128
+
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
@@ -172,6 +175,7 @@ module core_m
 
 		contains
 			procedure :: to_str => value_to_str
+			!procedure :: add    => add_value_t
 
 	end type value_t
 
@@ -4891,7 +4895,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	!********
 
 	integer :: i, j
-	integer, parameter :: magic = 128
 
 	logical :: quietl
 
@@ -5332,33 +5335,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				vars%vals(node%id_index) = res
 			case (plus_equals_token)
 
-				!vars%vals(node%id_index) = vars%vals(node%id_index) + res
-
-				! TODO: refactor with binary_expr evaluator
-
-				! Integers only
-				vars%vals(node%id_index)%i32 = &
-					vars%vals(node%id_index)%i32 + res%i32
-
-				! Case selector must be a scalar expression, so use this nasty hack.
-				! This will break if magic is smaller than the largest type enum
-				! parameter
-				!select case (magic * left%type + right%type)
-				!case        (magic * i32_type + i32_type)
-				!	res%i32 = left%i32 + right%i32
-				!case        (magic * f32_type + f32_type)
-				!	res%f32 = left%f32 + right%f32
-				!case        (magic * f32_type + i32_type)
-				!	res%f32 = left%f32 + right%i32
-				!case        (magic * i32_type + f32_type)
-				!	res%f32 = left%i32 + right%f32
-				!case        (magic * str_type + str_type)
-				!	res%str%s = left%str%s // right%str%s
-				!case default
-				!	! FIXME: other numeric types (i64, f64, etc.)
-				!	write(*,*) err_eval_binary_types(node%op%text)
-				!	call internal_error()
-				!end select
+				call add_value_t(vars%vals(node%id_index), res, &
+					vars%vals(node%id_index))
 
 			case default
 				write(*,*) 'Error: unexpected assignment operator "', &
@@ -5639,30 +5617,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call internal_error()
 		end if
 
+
 		select case (node%op%kind)
 		case (plus_token)
 
-			! Case selector must be a scalar expression, so use this nasty hack.
-			! This will break if magic is smaller than the largest type enum
-			! parameter
-			select case (magic * left%type + right%type)
-			case        (magic * i32_type + i32_type)
-				res%i32 = left%i32 + right%i32
-			case        (magic * f32_type + f32_type)
-				res%f32 = left%f32 + right%f32
-			case        (magic * f32_type + i32_type)
-				res%f32 = left%f32 + right%i32
-			case        (magic * i32_type + f32_type)
-				res%f32 = left%i32 + right%f32
-			case        (magic * str_type + str_type)
-				res%str%s = left%str%s // right%str%s
-			case default
-				! FIXME: other numeric types (i64, f64, etc.)
-				write(*,*) err_eval_binary_types(node%op%text)
-				call internal_error()
-			end select
+			call add_value_t(left, right, res)
 
 		case (minus_token)
+
+			! TODO: make minus_value_t() fn like add_value_t(), etc.
+
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%i32 = left%i32 - right%i32
@@ -5877,6 +5841,38 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	end select
 
 end function syntax_eval
+
+!===============================================================================
+
+subroutine add_value_t(left, right, res)
+
+	type(value_t), intent(in)  :: left, right
+	type(value_t), intent(inout) :: res
+
+	!********
+
+	! Case selector must be a scalar expression, so use this nasty hack.
+	! This will break if magic is smaller than the largest type enum
+	! parameter
+	select case (magic * left%type + right%type)
+	case        (magic * i32_type + i32_type)
+		res%i32 = left%i32 + right%i32
+	case        (magic * f32_type + f32_type)
+		res%f32 = left%f32 + right%f32
+	case        (magic * f32_type + i32_type)
+		res%f32 = left%f32 + right%i32
+	case        (magic * i32_type + f32_type)
+		res%f32 = left%i32 + right%f32
+	case        (magic * str_type + str_type)
+		res%str%s = left%str%s // right%str%s
+	case default
+		! FIXME: other numeric types (i64, f64, etc.)
+		!write(*,*) err_eval_binary_types(node%op%text)
+		write(*,*) err_eval_binary_types("+")
+		call internal_error()
+	end select
+
+end subroutine add_value_t
 
 !===============================================================================
 
