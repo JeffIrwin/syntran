@@ -305,9 +305,10 @@ subroutine unit_test_assignment(npass, nfail)
 
 	character(len = *), parameter :: label = 'assignment'
 
-	real, parameter :: tol = 1.e-9
-
 	logical, allocatable :: tests(:)
+	logical, parameter :: quiet = .true.
+
+	real, parameter :: tol = 1.e-9
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -387,9 +388,12 @@ subroutine unit_test_assignment(npass, nfail)
 			interpret('{'// &
 				'let b = (let a = 5) * a;'// &
 				'let d = (let c = b - a) + c;}') == '40', &
-			eval('let j = 10; j += 3; j;') == '13', &
-			abs(eval_f32('let f = 0.5; f += 0.25; f;') - 0.75) < tol, &
-			eval('let s = "hello "; s += "world"; s;') == 'hello world', &
+			eval('let j = 10; j += 3; j;', quiet) == '13', &
+			abs(eval_f32('let f = 0.5; f += 0.25; f;', quiet) - 0.75) < tol, &
+			eval('let s = "hello "; s += "world"; s;', quiet) == 'hello world', &
+			eval('let j = 10; j += 3;', quiet) == '13', &
+			abs(eval_f32('let f = 0.5; f += 0.25;', quiet) - 0.75) < tol, &
+			eval('let s = "hello "; s += "world";', quiet) == 'hello world', &
 			eval('let myVariable = 1337;')  == '1337'   &
 		]
 

@@ -175,9 +175,12 @@ module core_m
 
 		contains
 			procedure :: to_str => value_to_str
-			!procedure :: add    => add_value_t
 
 	end type value_t
+
+	interface add
+		module procedure add_value_t
+	end interface add
 
 	!********
 
@@ -5330,19 +5333,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			! Assign res to LHS identifier variable as well.  This inserts the
 			! value, while the insert call in the parser inserts the type
-			select case(node%op%kind)
+			select case (node%op%kind)
 			case (equals_token)
 				vars%vals(node%id_index) = res
 			case (plus_equals_token)
 
-				call add_value_t(vars%vals(node%id_index), res, &
-					vars%vals(node%id_index))
+				call add(vars%vals(node%id_index), res, &
+				         vars%vals(node%id_index))
 
 			case default
 				write(*,*) 'Error: unexpected assignment operator "', &
 					node%op%text, '"'
 				call internal_error()
 			end select
+
+			! For compound assignment, ensure that the LHS is returned.  For
+			! regular assignment this is already set
+			res = vars%vals(node%id_index)
 
 			! The difference between let and assign is inserting into the
 			! current scope (let) vs possibly searching parent scopes (assign).
@@ -5621,7 +5628,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		select case (node%op%kind)
 		case (plus_token)
 
-			call add_value_t(left, right, res)
+			call add(left, right, res)
 
 		case (minus_token)
 
@@ -5847,6 +5854,9 @@ end function syntax_eval
 subroutine add_value_t(left, right, res)
 
 	type(value_t), intent(in)  :: left, right
+
+	! For binary_expr, the type is set before calling this routine, so res is
+	! inout
 	type(value_t), intent(inout) :: res
 
 	!********
@@ -5867,7 +5877,6 @@ subroutine add_value_t(left, right, res)
 		res%str%s = left%str%s // right%str%s
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
-		!write(*,*) err_eval_binary_types(node%op%text)
 		write(*,*) err_eval_binary_types("+")
 		call internal_error()
 	end select

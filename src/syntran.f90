@@ -231,20 +231,29 @@ end function syntran_eval_i32
 
 !===============================================================================
 
-real(kind = 4) function syntran_eval_f32(str) result(eval_f32)
+real(kind = 4) function syntran_eval_f32(str, quiet) result(eval_f32)
 
 	use core_m
 
 	character(len = *), intent(in) :: str
+
+	logical, optional, intent(in) :: quiet
+
+	!*******
+
+	logical :: quietl
 
 	type(fns_t) :: fns
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 	type(vars_t) :: vars
 
+	quietl = .false.
+	if (present(quiet)) quietl = quiet
+
 	fns = declare_intrinsic_fns()
 	tree = syntax_parse(str, vars, fns)
-	call tree%log_diagnostics()
+	if (.not. quietl) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len > 0) then
 		! TODO: iostat
@@ -252,7 +261,7 @@ real(kind = 4) function syntran_eval_f32(str) result(eval_f32)
 		return
 	end if
 
-	val = syntax_eval(tree, vars, fns)
+	val = syntax_eval(tree, vars, fns, quietl)
 
 	! TODO: check kind, add optional iostat arg
 	eval_f32 = val%f32
