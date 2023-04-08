@@ -23,7 +23,7 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  18
+		syntran_patch =  19
 
 	! TODO:
 	!  - substring indexing and slicing:
@@ -3292,7 +3292,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	end if
 
-	if  (parser%peek_kind(0) == identifier_token) then
+	if (parser%peek_kind(0) == identifier_token) then
 
 		! There may or may not be a subscript expression after an identifier, so
 		! we can't know how many spaces ahead an equals_token might be without
