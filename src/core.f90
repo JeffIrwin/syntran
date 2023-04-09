@@ -4906,7 +4906,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	!********
 
-	integer :: i, j
+	integer :: i, j, ltype, rtype
 
 	logical :: quietl
 
@@ -5388,13 +5388,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				! Syntran uses 0-indexed arrays while Fortran uses 1-indexed
 				! arrays
 
-				! TODO: check res type matches array sub type? May already be
-				! handled by parser
 				select case (node%op%kind)
 				case (equals_token)
 
 					! Only select by RHS type.  Assigning mismatched types
-					! parser syntax error
+					! is a syntax error caught by the parser
 
 					select case (res%type)
 					case (bool_type)
@@ -5408,22 +5406,40 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					end select
 
 				case (plus_equals_token)
-					select case (res%type)
 
-					! TODO: select by both LHS and RHS type.  This crashes e.g.
-					! when compound assigning a float vec += int
+					ltype = vars%vals(node%id_index)%array%type
+					rtype = res%type
 
-					case (i32_type)
+					!print *, 'ltype = ', ltype
+					!print *, 'rtype = ', rtype
+
+					select case (magic * ltype + rtype)
+
+					case        (magic * i32_type + i32_type)
 						vars%vals(node%id_index)%array%i32 ( i + 1 ) = &
 						vars%vals(node%id_index)%array%i32 ( i + 1 ) + res%i32
 						res%i32 = vars%vals(node%id_index)%array%i32 ( i + 1 )
 
-					case (f32_type)
+					case        (magic * i32_type + f32_type)
+						vars%vals(node%id_index)%array%i32 ( i + 1 ) = &
+						vars%vals(node%id_index)%array%i32 ( i + 1 ) + res%f32
+
+						res%type = i32_type
+						res%i32  = vars%vals(node%id_index)%array%i32 ( i + 1 )
+
+					case        (magic * f32_type + i32_type)
+						vars%vals(node%id_index)%array%f32 ( i + 1 ) = &
+						vars%vals(node%id_index)%array%f32 ( i + 1 ) + res%i32
+
+						res%type = f32_type
+						res%f32 = vars%vals(node%id_index)%array%f32 ( i + 1 )
+
+					case        (magic * f32_type + f32_type)
 						vars%vals(node%id_index)%array%f32 ( i + 1 ) = &
 						vars%vals(node%id_index)%array%f32 ( i + 1 ) + res%f32
 						res%f32 = vars%vals(node%id_index)%array%f32 ( i + 1 )
 
-					case (str_type)
+					case (magic * str_type + str_type)
 						vars%vals(node%id_index)%array%str( i + 1 )%s = &
 						vars%vals(node%id_index)%array%str( i + 1 )%s // res%str%s
 						res%str = vars%vals(node%id_index)%array%str ( i + 1 )
@@ -5435,11 +5451,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 						node%op%text, '"'
 					call internal_error()
 				end select
-
-				!! TODO: return LHS for compound assignment.  Need another
-				!! select case?  Better yet, just set res within the existing
-				!! select/case above
-				!res = vars%vals(node%id_index)
 
 			end if
 		end if
