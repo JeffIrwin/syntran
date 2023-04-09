@@ -404,6 +404,8 @@ subroutine unit_test_assignment(npass, nfail)
 			eval('let v = [10.0; 3]; v[1] += 5; v;', quiet) == '[1.000000E+01, 1.500000E+01, 1.000000E+01]', &
 			eval('let j = 10; j -= 3; j;', quiet) == '7', &
 			abs(eval_f32('let f = 0.75; f -= 0.25; f;', quiet) - 0.5) < tol, &
+			eval('let j = 10; j -= 3;', quiet) == '7', &
+			abs(eval_f32('let f = 0.75; f -= 0.25;', quiet) - 0.5) < tol, &
 			eval('let myVariable = 1337;')  == '1337'   &
 		]
 

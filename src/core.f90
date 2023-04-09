@@ -58,6 +58,7 @@ module core_m
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
 	!  - compound assignment: +=, -=, *=, etc.
 	!    * += done
+	!    * -= WIP
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
@@ -5343,11 +5344,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			case (plus_equals_token)
 				call add(vars%vals(node%id_index), res, &
-				         vars%vals(node%id_index))
+				         vars%vals(node%id_index), node%op%text)
 
 			case (minus_equals_token)
 				call subtract(vars%vals(node%id_index), res, &
-				              vars%vals(node%id_index))
+				              vars%vals(node%id_index), node%op%text)
 
 			case default
 				write(*,*) 'Error: unexpected assignment operator "', &
@@ -5685,10 +5686,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		select case (node%op%kind)
 		case (plus_token)
-			call add(left, right, res)
+			call add(left, right, res, node%op%text)
 
 		case (minus_token)
-			call subtract(left, right, res)
+			call subtract(left, right, res, node%op%text)
 
 		case (star_token)
 			! TODO: make mul_value_t() fn like add_value_t(), etc.
@@ -5893,13 +5894,15 @@ end function syntax_eval
 
 !===============================================================================
 
-subroutine add_value_t(left, right, res)
+subroutine add_value_t(left, right, res, op_text)
 
 	type(value_t), intent(in)  :: left, right
 
 	! For binary_expr, the type is set before calling this routine, so res is
 	! inout
 	type(value_t), intent(inout) :: res
+
+	character(len = *), intent(in) :: op_text
 
 	!********
 
@@ -5919,11 +5922,7 @@ subroutine add_value_t(left, right, res)
 		res%str%s = left%str%s // right%str%s
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
-
-		! TODO: add another fn arg for + or += operator to make the err msg
-		! correct
-
-		write(*,*) err_eval_binary_types("+")
+		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
 	end select
 
@@ -5931,13 +5930,15 @@ end subroutine add_value_t
 
 !===============================================================================
 
-subroutine subtract_value_t(left, right, res)
+subroutine subtract_value_t(left, right, res, op_text)
 
 	type(value_t), intent(in)  :: left, right
 
 	! For binary_expr, the type is set before calling this routine, so res is
 	! inout
 	type(value_t), intent(inout) :: res
+
+	character(len = *), intent(in) :: op_text
 
 	select case (magic * left%type + right%type)
 	case        (magic * i32_type + i32_type)
@@ -5950,11 +5951,7 @@ subroutine subtract_value_t(left, right, res)
 		res%f32 = left%i32 - right%f32
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
-
-		! TODO: add another fn arg for + or += operator to make the err msg
-		! correct
-
-		write(*,*) err_eval_binary_types("-")
+		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
 	end select
 
