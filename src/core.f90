@@ -5447,6 +5447,39 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					end select
 
+				case (minus_equals_token)
+
+					ltype = vars%vals(node%id_index)%array%type
+					rtype = res%type
+
+					select case (magic * ltype + rtype)
+
+					case        (magic * i32_type + i32_type)
+						vars%vals(node%id_index)%array%i32 ( i + 1 ) = &
+						vars%vals(node%id_index)%array%i32 ( i + 1 ) - res%i32
+						res%i32 = vars%vals(node%id_index)%array%i32 ( i + 1 )
+
+					case        (magic * i32_type + f32_type)
+						vars%vals(node%id_index)%array%i32 ( i + 1 ) = &
+						vars%vals(node%id_index)%array%i32 ( i + 1 ) - res%f32
+
+						res%type = i32_type
+						res%i32  = vars%vals(node%id_index)%array%i32 ( i + 1 )
+
+					case        (magic * f32_type + i32_type)
+						vars%vals(node%id_index)%array%f32 ( i + 1 ) = &
+						vars%vals(node%id_index)%array%f32 ( i + 1 ) - res%i32
+
+						res%type = f32_type
+						res%f32 = vars%vals(node%id_index)%array%f32 ( i + 1 )
+
+					case        (magic * f32_type + f32_type)
+						vars%vals(node%id_index)%array%f32 ( i + 1 ) = &
+						vars%vals(node%id_index)%array%f32 ( i + 1 ) - res%f32
+						res%f32 = vars%vals(node%id_index)%array%f32 ( i + 1 )
+
+					end select
+
 				case default
 					write(*,*) 'Error: unexpected assignment operator "', &
 						node%op%text, '"'
