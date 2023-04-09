@@ -23,7 +23,7 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  18
+		syntran_patch =  19
 
 	! TODO:
 	!  - substring indexing and slicing:
@@ -3304,7 +3304,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	end if
 
-	if  (parser%peek_kind(0) == identifier_token) then
+	if (parser%peek_kind(0) == identifier_token) then
 
 		! There may or may not be a subscript expression after an identifier, so
 		! we can't know how many spaces ahead an equals_token might be without
@@ -5435,8 +5435,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 						node%op%text, '"'
 					call internal_error()
 				end select
-			end if
 
+				!! TODO: return LHS for compound assignment.  Need another
+				!! select case?  Better yet, just set res within the existing
+				!! select/case above
+				!res = vars%vals(node%id_index)
+
+			end if
 		end if
 
 	case (let_expr)
