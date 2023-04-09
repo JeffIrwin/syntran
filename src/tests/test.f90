@@ -1213,6 +1213,7 @@ subroutine unit_test_array_str(npass, nfail)
 
 	tests = &
 		[   &
+			eval('let sv = ["hello"; 3];', quiet) == '[hello, hello, hello]', &
 			interpret_file(path//'test-01.syntran', quiet) == 'hello world', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]

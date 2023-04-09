@@ -57,8 +57,7 @@ module core_m
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
 	!  - compound assignment: +=, -=, *=, etc.
-	!    * += done
-	!    * -= WIP
+	!    * +=, -= done
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
@@ -4996,7 +4995,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				array%len = j - 1
 
 			else
-				write(*,*) 'Error: array type eval not implemented'
+				write(*,*) 'Error: step array type eval not implemented'
 				call internal_error()
 			end if
 
@@ -5037,7 +5036,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end do
 
 			else
-				write(*,*) 'Error: array type eval not implemented'
+				write(*,*) 'Error: bound/len array type eval not implemented'
 				call internal_error()
 			end if
 
@@ -5081,17 +5080,19 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'array%len = ', array%len
 
 			if      (array%type == i32_type) then
-
 				allocate(array%i32( array%cap ))
 				array%i32 = lbound%i32
 
 			else if (array%type == f32_type) then
-
 				allocate(array%f32( array%cap ))
 				array%f32 = lbound%f32
 
+			else if (array%type == str_type) then
+				allocate(array%str( array%cap ))
+				array%str = lbound%str
+
 			else
-				write(*,*) 'Error: array type eval not implemented'
+				write(*,*) 'Error: len array type eval not implemented'
 				call internal_error()
 			end if
 
@@ -5123,7 +5124,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			array%type = node%val%array%type
 
 			if (array%type /= i32_type) then
-				write(*,*) 'Error: array type eval not implemented'
+				write(*,*) 'Error: unit step array type eval not implemented'
 				call internal_error()
 			end if
 
@@ -6061,6 +6062,8 @@ recursive function value_to_str(val) result(ans)
 			ans = trim(buffer)
 
 		case (str_type)
+			! TODO: wrap str in quotes for clarity, both scalars and str array
+			! elements.  Update tests.
 			ans = val%str%s
 
 		case (array_type)
