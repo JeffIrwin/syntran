@@ -394,6 +394,14 @@ subroutine unit_test_assignment(npass, nfail)
 			eval('let j = 10; j += 3;', quiet) == '13', &
 			abs(eval_f32('let f = 0.5; f += 0.25;', quiet) - 0.75) < tol, &
 			eval('let s = "hello "; s += "world";', quiet) == 'hello world', &
+			eval('let iv = [10; 3]; iv[0] += 5;', quiet) == '15', &
+			eval('let iv = [10; 3]; iv[0] += 5; iv;', quiet) == '[15, 10, 10]', &
+			eval('let iv = [10; 3]; iv[1] += 5; iv;', quiet) == '[10, 15, 10]', &
+			abs(eval_f32('let v = [10.0; 3]; v[0] += 5.0;', quiet) - 15) < tol, &
+			eval('let v = [10.0; 3]; v[0] += 5.0; v;', quiet) == '[1.500000E+01, 1.000000E+01, 1.000000E+01]', &
+			eval('let v = [10.0; 3]; v[1] += 5.0; v;', quiet) == '[1.000000E+01, 1.500000E+01, 1.000000E+01]', &
+			eval('let j = 10; j -= 3; j;', quiet) == '7', &
+			abs(eval_f32('let f = 0.75; f -= 0.25; f;', quiet) - 0.5) < tol, &
 			eval('let myVariable = 1337;')  == '1337'   &
 		]
 

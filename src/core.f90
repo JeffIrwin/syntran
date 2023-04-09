@@ -93,6 +93,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			minus_equals_token   = 68, &
 			plus_equals_token    = 67, &
 			percent_token        = 66, &
 			str_token            = 65, &
@@ -185,6 +186,10 @@ module core_m
 	interface add
 		module procedure add_value_t
 	end interface add
+
+	interface subtract
+		module procedure subtract_value_t
+	end interface subtract
 
 	!********
 
@@ -1501,7 +1506,8 @@ function kind_name(kind)
 			"str_type            ", & ! 64
 			"str_token           ", & ! 65
 			"percent_token       ", & ! 66
-			"plus_equals_token   "  & ! 67
+			"plus_equals_token   ", & ! 67
+			"minus_equals_token  "  & ! 68
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1589,7 +1595,8 @@ function kind_token(kind)
 			"str type             ", & ! 64
 			"str token            ", & ! 65
 			"%                    ", & ! 66
-			"+=                   "  & ! 67
+			"+=                   ", & ! 67
+			"-=                   "  & ! 68
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2036,7 +2043,12 @@ function lex(lexer) result(token)
 			! FIXME: prefix/postfix inc/dec operators (++, --)
 
 		case ("-")
-			token = new_token(minus_token, lexer%pos, lexer%current())
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(minus_equals_token, lexer%pos, "-=");
+			else
+				token = new_token(minus_token, lexer%pos, lexer%current())
+			end if
 
 		case ("*")
 			if (lexer%lookahead() == "*") then
@@ -3423,15 +3435,8 @@ logical function is_assignment_op(op)
 
 	integer, intent(in) :: op
 
-	!select case (op)
-	!	case (equals_token, plus_equals_token)
-	!		is_assignment_op = .true.
-	!	case default
-	!		is_assignment_op = .false.
-	!end select
-
-	! it's not that deep bro
-	is_assignment_op = any(op == [equals_token, plus_equals_token])
+	is_assignment_op = any(op == [equals_token, plus_equals_token, &
+		minus_equals_token])
 
 end function is_assignment_op
 
@@ -3649,7 +3654,7 @@ logical function is_binary_op_allowed(left, op, right)
 		case (minus_token, sstar_token, star_token, slash_token, &
 				less_token   , less_equals_token, &
 				greater_token, greater_equals_token, &
-				percent_token)
+				percent_token, minus_equals_token)
 
 			is_binary_op_allowed = is_num_type(left) .and. is_num_type(right)
 
@@ -5335,10 +5340,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (node%op%kind)
 			case (equals_token)
 				vars%vals(node%id_index) = res
-			case (plus_equals_token)
 
+			case (plus_equals_token)
 				call add(vars%vals(node%id_index), res, &
 				         vars%vals(node%id_index))
+
+			case (minus_equals_token)
+				call subtract(vars%vals(node%id_index), res, &
+				              vars%vals(node%id_index))
 
 			case default
 				write(*,*) 'Error: unexpected assignment operator "', &
@@ -5384,6 +5393,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				select case (node%op%kind)
 				case (equals_token)
 
+					! Only select by RHS type.  Assigning mismatched types
+					! parser syntax error
+
 					select case (res%type)
 					case (bool_type)
 						vars%vals(node%id_index)%array%bool( i + 1 ) = res%bool
@@ -5398,17 +5410,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				case (plus_equals_token)
 					select case (res%type)
 
+					! TODO: select by both LHS and RHS type.  This crashes e.g.
+					! when compound assigning a float vec += int
+
 					case (i32_type)
 						vars%vals(node%id_index)%array%i32 ( i + 1 ) = &
 						vars%vals(node%id_index)%array%i32 ( i + 1 ) + res%i32
+						res%i32 = vars%vals(node%id_index)%array%i32 ( i + 1 )
 
 					case (f32_type)
 						vars%vals(node%id_index)%array%f32 ( i + 1 ) = &
 						vars%vals(node%id_index)%array%f32 ( i + 1 ) + res%f32
+						res%f32 = vars%vals(node%id_index)%array%f32 ( i + 1 )
 
 					case (str_type)
 						vars%vals(node%id_index)%array%str( i + 1 )%s = &
 						vars%vals(node%id_index)%array%str( i + 1 )%s // res%str%s
+						res%str = vars%vals(node%id_index)%array%str ( i + 1 )
 
 					end select
 
@@ -5651,29 +5669,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		select case (node%op%kind)
 		case (plus_token)
-
 			call add(left, right, res)
 
 		case (minus_token)
-
-			! TODO: make minus_value_t() fn like add_value_t(), etc.
-
-			select case (magic * left%type + right%type)
-			case        (magic * i32_type + i32_type)
-				res%i32 = left%i32 - right%i32
-			case        (magic * f32_type + f32_type)
-				res%f32 = left%f32 - right%f32
-			case        (magic * f32_type + i32_type)
-				res%f32 = left%f32 - right%i32
-			case        (magic * i32_type + f32_type)
-				res%f32 = left%i32 - right%f32
-			case default
-				! FIXME: other numeric types (i64, f64, etc.)
-				write(*,*) err_eval_binary_types(node%op%text)
-				call internal_error()
-			end select
+			call subtract(left, right, res)
 
 		case (star_token)
+			! TODO: make mul_value_t() fn like add_value_t(), etc.
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%i32 = left%i32 * right%i32
@@ -5901,11 +5903,46 @@ subroutine add_value_t(left, right, res)
 		res%str%s = left%str%s // right%str%s
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
+
+		! TODO: add another fn arg for + or += operator to make the err msg
+		! correct
+
 		write(*,*) err_eval_binary_types("+")
 		call internal_error()
 	end select
 
 end subroutine add_value_t
+
+!===============================================================================
+
+subroutine subtract_value_t(left, right, res)
+
+	type(value_t), intent(in)  :: left, right
+
+	! For binary_expr, the type is set before calling this routine, so res is
+	! inout
+	type(value_t), intent(inout) :: res
+
+	select case (magic * left%type + right%type)
+	case        (magic * i32_type + i32_type)
+		res%i32 = left%i32 - right%i32
+	case        (magic * f32_type + f32_type)
+		res%f32 = left%f32 - right%f32
+	case        (magic * f32_type + i32_type)
+		res%f32 = left%f32 - right%i32
+	case        (magic * i32_type + f32_type)
+		res%f32 = left%i32 - right%f32
+	case default
+		! FIXME: other numeric types (i64, f64, etc.)
+
+		! TODO: add another fn arg for + or += operator to make the err msg
+		! correct
+
+		write(*,*) err_eval_binary_types("-")
+		call internal_error()
+	end select
+
+end subroutine subtract_value_t
 
 !===============================================================================
 
