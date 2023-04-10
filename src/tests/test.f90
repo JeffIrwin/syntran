@@ -306,9 +306,6 @@ subroutine unit_test_assignment(npass, nfail)
 	character(len = *), parameter :: label = 'assignment'
 
 	logical, allocatable :: tests(:)
-	logical, parameter :: quiet = .true.
-
-	real, parameter :: tol = 1.e-9
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -388,10 +385,41 @@ subroutine unit_test_assignment(npass, nfail)
 			interpret('{'// &
 				'let b = (let a = 5) * a;'// &
 				'let d = (let c = b - a) + c;}') == '40', &
+			eval('let myVariable = 1337;')  == '1337'   &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_assignment
+
+!===============================================================================
+
+subroutine unit_test_comp_ass(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'compound assignment'
+
+	logical, allocatable :: tests(:)
+	logical, parameter :: quiet = .true.
+
+	real, parameter :: tol = 1.e-9
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! We're getting into dangerous Fortran territory here.  I think there's
+	! a limit on how many chars and lines can be in a statement, and this may be
+	! pushing it
+
+	tests = &
+		[   &
 			eval('let j = 10; j += 3; j;', quiet) == '13', &
 			abs(eval_f32('let f = 0.5; f += 0.25; f;', quiet) - 0.75) < tol, &
 			eval('let s = "hello "; s += "world"; s;', quiet) == 'hello world', &
-			eval('let j = 10; j += 3;', quiet) == '13', &
 			abs(eval_f32('let f = 0.5; f += 0.25;', quiet) - 0.75) < tol, &
 			eval('let s = "hello "; s += "world";', quiet) == 'hello world', &
 			eval('let iv = [10; 3]; iv[0] += 5;', quiet) == '15', &
@@ -414,12 +442,12 @@ subroutine unit_test_assignment(npass, nfail)
 			eval('let v = [10.0; 3]; v[0] -= 4.0; v;', quiet) == '[6.000000E+00, 1.000000E+01, 1.000000E+01]', &
 			eval('let v = [20.0; 3]; v[1] -= 4.0; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
 			eval('let v = [20.0; 3]; v[1] -= 4; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
-			eval('let myVariable = 1337;')  == '1337'   &
+			eval('let j = 10; j += 3;', quiet) == '13'  &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_assignment
+end subroutine unit_test_comp_ass
 
 !===============================================================================
 
@@ -1492,6 +1520,7 @@ subroutine unit_tests(iostat)
 	call unit_test_intr_fns   (npass, nfail)
 	call unit_test_fns        (npass, nfail)
 	call unit_test_linalg_fns (npass, nfail)
+	call unit_test_comp_ass   (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
