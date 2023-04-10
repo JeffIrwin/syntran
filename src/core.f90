@@ -1660,6 +1660,15 @@ recursive function syntax_node_str(node, indent) result(str)
 		do i = 1, size(node%members)
 			block = block // node%members(i)%str(indentl//'    ')
 		end do
+		block = block // line_feed
+
+	else if (node%kind == translation_unit) then
+
+		type = ''
+		do i = 1, size(node%members)
+			block = block // node%members(i)%str(indentl//'    ')
+		end do
+		block = block // line_feed
 
 	else if (node%kind == assignment_expr) then
 
@@ -2620,6 +2629,8 @@ function parse_unit(parser) result(unit)
 	type(syntax_token_t) :: dummy
 
 	integer :: i, pos0
+
+	!print *, 'starting parse_unit()'
 
 	members = new_syntax_node_vector()
 	i = 0
@@ -4658,7 +4669,9 @@ function new_binary_expr(left, op, right) result(expr)
 
 	! Pass the result value type up the tree for type checking in parent
 	expr%val%type = get_binary_op_kind(left%val%type, op%kind, right%val%type)
-	! TODO: array subtype if subscripted
+
+	! TODO: array subtype if subscripted?  I think parse_primary_expr should
+	! already set the subtype when subscripts are present
 
 	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_binary_expr'
