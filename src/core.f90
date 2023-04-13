@@ -4927,7 +4927,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
-		step, len, arg, arg1, arg2
+		step, len, arg, arg1, arg2, array_val
 
 	!print *, 'starting syntax_eval()'
 
@@ -5422,44 +5422,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (plus_equals_token)
 
-					ltype = vars%vals(node%id_index)%array%type
-					rtype = res%type
+					! array_val += res;
 
-					!print *, 'ltype = ', ltype
-					!print *, 'rtype = ', rtype
-
-					select case (magic * ltype + rtype)
-
-					case        (magic * i32_type + i32_type)
-						vars%vals(node%id_index)%array%i32 ( i + 1 ) = &
-						vars%vals(node%id_index)%array%i32 ( i + 1 ) + res%i32
-						res%i32 = vars%vals(node%id_index)%array%i32 ( i + 1 )
-
-					case        (magic * i32_type + f32_type)
-						vars%vals(node%id_index)%array%i32 ( i + 1 ) = &
-						vars%vals(node%id_index)%array%i32 ( i + 1 ) + res%f32
-
-						res%type = i32_type
-						res%i32  = vars%vals(node%id_index)%array%i32 ( i + 1 )
-
-					case        (magic * f32_type + i32_type)
-						vars%vals(node%id_index)%array%f32 ( i + 1 ) = &
-						vars%vals(node%id_index)%array%f32 ( i + 1 ) + res%i32
-
-						res%type = f32_type
-						res%f32 = vars%vals(node%id_index)%array%f32 ( i + 1 )
-
-					case        (magic * f32_type + f32_type)
-						vars%vals(node%id_index)%array%f32 ( i + 1 ) = &
-						vars%vals(node%id_index)%array%f32 ( i + 1 ) + res%f32
-						res%f32 = vars%vals(node%id_index)%array%f32 ( i + 1 )
-
-					case (magic * str_type + str_type)
-						vars%vals(node%id_index)%array%str( i + 1 )%s = &
-						vars%vals(node%id_index)%array%str( i + 1 )%s // res%str%s
-						res%str = vars%vals(node%id_index)%array%str ( i + 1 )
-
-					end select
+					array_val = get_array_value_t( &
+						vars%vals(node%id_index)%array, i)
+					call add(array_val, res, array_val, node%op%text)
+					!call add(res, array_val, array_val, node%op%text)
+					call set_array_value_t( &
+						vars%vals(node%id_index)%array, i, array_val)
+					res = array_val
 
 				case (minus_equals_token)
 
@@ -5730,7 +5701,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call internal_error()
 		end if
 
-
 		select case (node%op%kind)
 		case (plus_token)
 			call add(left, right, res, node%op%text)
@@ -5941,6 +5911,69 @@ end function syntax_eval
 
 !===============================================================================
 
+!array_val = get_array_value_t( &
+!	vars%vals(node%id_index)%array, i)
+
+function get_array_value_t(array, i) result(val)
+
+	type(array_t), intent(in) :: array
+
+	integer, intent(in) :: i
+
+	type(value_t) :: val
+
+	print *, 'starting get_array_value_t()'
+	print *, 'array%type = ', kind_name(array%type)
+
+	val%type = array%type
+	select case (array%type)
+		case (bool_type)
+			val%bool = array%bool(i + 1)
+		case (i32_type)
+			val%i32 = array%i32(i + 1)
+		case (f32_type)
+			val%f32 = array%f32(i + 1)
+		case (str_type)
+			val%str = array%str(i + 1)
+	end select
+
+end function get_array_value_t
+
+!===============================================================================
+
+!call set_array_value_t( &
+!	vars%vals(node%id_index)%array, i, array_val)
+
+subroutine set_array_value_t(array, i, val)
+
+	type(array_t), intent(inout) :: array
+
+	integer, intent(in) :: i
+
+	type(value_t), intent(in) :: val
+
+	print *, 'starting set_array_value_t()'
+	print *, 'array%type = ', kind_name(array%type)
+	print *, 'val%type   = ', kind_name(val%type)
+
+	!! Array type is already set
+	!array%type = val%type
+
+	select case (array%type)
+		case (bool_type)
+			array%bool(i + 1) = val%bool
+		case (i32_type)
+			array%i32(i + 1) = val%i32
+		case (f32_type)
+			array%f32(i + 1) = val%f32
+		case (str_type)
+			array%str(i + 1) = val%str
+	end select
+
+end subroutine set_array_value_t
+
+!===============================================================================
+
 subroutine add_value_t(left, right, res, op_text)
 
 	type(value_t), intent(in)  :: left, right
@@ -5956,17 +5989,37 @@ subroutine add_value_t(left, right, res, op_text)
 	! Case selector must be a scalar expression, so use this nasty hack.
 	! This will break if magic is smaller than the largest type enum
 	! parameter
-	select case (magic * left%type + right%type)
-	case        (magic * i32_type + i32_type)
+	select case (magic**2 * res%type + magic * left%type + right%type)
+
+	!****
+	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 + right%i32
-	case        (magic * f32_type + f32_type)
+
+	!!case        (magic**2 * i32_type + magic * f32_type + f32_type)
+	!!	res%i32 = left%f32 + right%f32
+
+	case        (magic**2 * i32_type + magic * f32_type + i32_type)
+		res%i32 = left%f32 + right%i32
+
+	case        (magic**2 * i32_type + magic * i32_type + f32_type)
+		res%i32 = left%i32 + right%f32
+
+	!****
+	!!case        (magic**2 * f32_type + magic * i32_type + i32_type)
+	!!	res%f32 = left%i32 + right%i32
+
+	case        (magic**2 * f32_type + magic * f32_type + f32_type)
 		res%f32 = left%f32 + right%f32
-	case        (magic * f32_type + i32_type)
+
+	case        (magic**2 * f32_type + magic * f32_type + i32_type)
 		res%f32 = left%f32 + right%i32
-	case        (magic * i32_type + f32_type)
+
+	case        (magic**2 * f32_type + magic * i32_type + f32_type)
 		res%f32 = left%i32 + right%f32
-	case        (magic * str_type + str_type)
+
+	case        (magic**2 * str_type + magic * str_type + str_type)
 		res%str%s = left%str%s // right%str%s
+
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
 		write(*,*) err_eval_binary_types(op_text)
