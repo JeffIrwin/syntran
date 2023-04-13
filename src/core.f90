@@ -5409,16 +5409,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					! Only select by RHS type.  Assigning mismatched types
 					! is a syntax error caught by the parser
 
-					select case (res%type)
-					case (bool_type)
-						vars%vals(node%id_index)%array%bool( i + 1 ) = res%bool
-					case (i32_type)
-						vars%vals(node%id_index)%array%i32 ( i + 1 ) = res%i32
-					case (f32_type)
-						vars%vals(node%id_index)%array%f32 ( i + 1 ) = res%f32
-					case (str_type)
-						vars%vals(node%id_index)%array%str ( i + 1 ) = res%str
-					end select
+					call set_array_value_t( &
+						vars%vals(node%id_index)%array, i, res)
 
 				case (plus_equals_token)
 
@@ -5917,9 +5909,6 @@ end function get_array_value_t
 
 !===============================================================================
 
-!call set_array_value_t( &
-!	vars%vals(node%id_index)%array, i, array_val)
-
 subroutine set_array_value_t(array, i, val)
 
 	type(array_t), intent(inout) :: array
@@ -5969,9 +5958,6 @@ subroutine add_value_t(left, right, res, op_text)
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 + right%i32
 
-	!!case        (magic**2 * i32_type + magic * f32_type + f32_type)
-	!!	res%i32 = left%f32 + right%f32
-
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = left%f32 + right%i32
 
@@ -5979,9 +5965,6 @@ subroutine add_value_t(left, right, res, op_text)
 		res%i32 = left%i32 + right%f32
 
 	!****
-	!!case        (magic**2 * f32_type + magic * i32_type + i32_type)
-	!!	res%f32 = left%i32 + right%i32
-
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
 		res%f32 = left%f32 + right%f32
 
