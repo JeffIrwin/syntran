@@ -5426,44 +5426,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					array_val = get_array_value_t( &
 						vars%vals(node%id_index)%array, i)
+
+					!! commutative order doesn't matter
 					call add(array_val, res, array_val, node%op%text)
 					!call add(res, array_val, array_val, node%op%text)
+
 					call set_array_value_t( &
 						vars%vals(node%id_index)%array, i, array_val)
 					res = array_val
 
 				case (minus_equals_token)
 
-					ltype = vars%vals(node%id_index)%array%type
-					rtype = res%type
-
-					select case (magic * ltype + rtype)
-
-					case        (magic * i32_type + i32_type)
-						vars%vals(node%id_index)%array%i32 ( i + 1 ) = &
-						vars%vals(node%id_index)%array%i32 ( i + 1 ) - res%i32
-						res%i32 = vars%vals(node%id_index)%array%i32 ( i + 1 )
-
-					case        (magic * i32_type + f32_type)
-						vars%vals(node%id_index)%array%i32 ( i + 1 ) = &
-						vars%vals(node%id_index)%array%i32 ( i + 1 ) - res%f32
-
-						res%type = i32_type
-						res%i32  = vars%vals(node%id_index)%array%i32 ( i + 1 )
-
-					case        (magic * f32_type + i32_type)
-						vars%vals(node%id_index)%array%f32 ( i + 1 ) = &
-						vars%vals(node%id_index)%array%f32 ( i + 1 ) - res%i32
-
-						res%type = f32_type
-						res%f32 = vars%vals(node%id_index)%array%f32 ( i + 1 )
-
-					case        (magic * f32_type + f32_type)
-						vars%vals(node%id_index)%array%f32 ( i + 1 ) = &
-						vars%vals(node%id_index)%array%f32 ( i + 1 ) - res%f32
-						res%f32 = vars%vals(node%id_index)%array%f32 ( i + 1 )
-
-					end select
+					array_val = get_array_value_t( &
+						vars%vals(node%id_index)%array, i)
+					call subtract(array_val, res, array_val, node%op%text)
+					call set_array_value_t( &
+						vars%vals(node%id_index)%array, i, array_val)
+					res = array_val
 
 				case default
 					write(*,*) 'Error: unexpected assignment operator "', &
@@ -5911,9 +5890,6 @@ end function syntax_eval
 
 !===============================================================================
 
-!array_val = get_array_value_t( &
-!	vars%vals(node%id_index)%array, i)
-
 function get_array_value_t(array, i) result(val)
 
 	type(array_t), intent(in) :: array
@@ -5922,8 +5898,8 @@ function get_array_value_t(array, i) result(val)
 
 	type(value_t) :: val
 
-	print *, 'starting get_array_value_t()'
-	print *, 'array%type = ', kind_name(array%type)
+	!print *, 'starting get_array_value_t()'
+	!print *, 'array%type = ', kind_name(array%type)
 
 	val%type = array%type
 	select case (array%type)
@@ -5952,13 +5928,11 @@ subroutine set_array_value_t(array, i, val)
 
 	type(value_t), intent(in) :: val
 
-	print *, 'starting set_array_value_t()'
-	print *, 'array%type = ', kind_name(array%type)
-	print *, 'val%type   = ', kind_name(val%type)
+	!print *, 'starting set_array_value_t()'
+	!print *, 'array%type = ', kind_name(array%type)
+	!print *, 'val%type   = ', kind_name(val%type)
 
-	!! Array type is already set
-	!array%type = val%type
-
+	! array%type is already set
 	select case (array%type)
 		case (bool_type)
 			array%bool(i + 1) = val%bool
@@ -6040,15 +6014,28 @@ subroutine subtract_value_t(left, right, res, op_text)
 
 	character(len = *), intent(in) :: op_text
 
-	select case (magic * left%type + right%type)
-	case        (magic * i32_type + i32_type)
+	select case (magic**2 * res%type + magic * left%type + right%type)
+
+	!****
+	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 - right%i32
-	case        (magic * f32_type + f32_type)
+
+	case        (magic**2 * i32_type + magic * f32_type + i32_type)
+		res%i32 = left%f32 - right%i32
+
+	case        (magic**2 * i32_type + magic * i32_type + f32_type)
+		res%i32 = left%i32 - right%f32
+
+	!****
+	case        (magic**2 * f32_type + magic * f32_type + f32_type)
 		res%f32 = left%f32 - right%f32
-	case        (magic * f32_type + i32_type)
+
+	case        (magic**2 * f32_type + magic * f32_type + i32_type)
 		res%f32 = left%f32 - right%i32
-	case        (magic * i32_type + f32_type)
+
+	case        (magic**2 * f32_type + magic * i32_type + f32_type)
 		res%f32 = left%i32 - right%f32
+
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
 		write(*,*) err_eval_binary_types(op_text)
