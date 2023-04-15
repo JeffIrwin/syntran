@@ -5465,6 +5465,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				! Syntran uses 0-indexed arrays while Fortran uses 1-indexed
 				! arrays
 
+				! TODO: refactor get/set outside of select case.  Get is not
+				! required for equals_token but worth it
+
 				select case (node%op%kind)
 				case (equals_token)
 
@@ -5618,6 +5621,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res%i32 = arg1%array%size( arg2%i32 + 1 )
 
 		case default
+			! User-defined function
 
 			if (.not. allocated(node%params)) then
 				write(*,*) 'Error: unexpected fn'
@@ -5656,10 +5660,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'str type'
 			res%type = vars%vals(node%id_index)%type
 
+			! TODO: select case
 			if (node%subscripts(1)%sub_kind == scalar_sub) then
 				i = subscript_eval(node, vars, fns, quietl)
 				res%str%s = vars%vals(node%id_index)%str%s(i+1: i+1)
-			else
+			else if (node%subscripts(1)%sub_kind == range_sub) then
 
 				il = subscript_eval(node, vars, fns, quietl)
 				!print *, 'il = ', il
@@ -5672,6 +5677,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				! Not inclusive of upper bound
 				res%str%s = vars%vals(node%id_index)%str%s(il+1: iu)
 
+			else
+				write(*,*) 'Error: unexpected subscript kind'
+				call internal_error()
 			end if
 
 		else if (allocated(node%subscripts)) then
@@ -5682,19 +5690,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call internal_error()
 			end if
 
-			res%type = vars%vals(node%id_index)%array%type
 			i = subscript_eval(node, vars, fns, quietl)
-
-			select case (res%type)
-			case (bool_type)
-				res%bool = vars%vals(node%id_index)%array%bool( i + 1 )
-			case (i32_type)
-				res%i32  = vars%vals(node%id_index)%array%i32 ( i + 1 )
-			case (f32_type)
-				res%f32  = vars%vals(node%id_index)%array%f32 ( i + 1 )
-			case (str_type)
-				res%str  = vars%vals(node%id_index)%array%str ( i + 1 )
-			end select
+			res = get_array_value_t(vars%vals(node%id_index)%array, i)
 
 		else
 			!print *, 'scalar name expr'
