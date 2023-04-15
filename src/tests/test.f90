@@ -897,6 +897,9 @@ subroutine unit_test_substr(npass, nfail)
 			eval('let s = "hello world"; s[2];', quiet) == 'l', &
 			eval('let s = "hall*"; s[4] = "o"; s;', quiet) == 'hallo', &
 			eval('let s = "h*lp"; s[1] = "e"; s;', quiet) == 'help', &
+			eval('let s = "hello world"; s[0:2];', quiet) == 'he', &
+			eval('let s = "hello world"; s[1:3];', quiet) == 'el', &
+			eval('let s = "hello world"; s[6:11];', quiet) == 'world', &
 			eval('let s = "hello world"; s[3];', quiet) == 'l'  &
 		]
 

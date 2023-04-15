@@ -57,8 +57,8 @@ module core_m
 	!      > higher rank:  a[:,1], a[2,:], a[2:4, 1], ...
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
-	!  - compound assignment: +=, -=, *=, etc.
-	!    * +=, -= done
+	!  - compound assignment: /=, %=, logical &=, |=, etc.
+	!    * +=, -=, *= done
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
@@ -94,6 +94,9 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			step_sub             = 72, &
+			range_sub            = 71, &
+			scalar_sub           = 70, &
 			star_equals_token    = 69, &
 			minus_equals_token   = 68, &
 			plus_equals_token    = 67, &
@@ -351,7 +354,11 @@ module core_m
 		type(syntax_node_t), allocatable :: lbound, step, ubound, len, &
 			elems(:), rank
 
-		type(syntax_node_t), allocatable :: subscripts(:), size(:), args(:)
+		type(syntax_node_t), allocatable :: subscripts(:), size(:), args(:), &
+			usubscripts(:)!, ssubscripts(:) !TODO: subscript step
+
+		! Either scalar_sub, range_sub (unit step), or step_sub
+		integer :: sub_kind
 
 		type(syntax_token_t) :: op, identifier
 		integer :: id_index
@@ -1514,7 +1521,10 @@ function kind_name(kind)
 			"percent_token       ", & ! 66
 			"plus_equals_token   ", & ! 67
 			"minus_equals_token  ", & ! 68
-			"star_equals_token   "  & ! 69
+			"star_equals_token   ", & ! 69
+			"scalar_sub          ", & ! 70
+			"range_sub           ", & ! 71
+			"step_sub            "  & ! 72
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1604,7 +1614,10 @@ function kind_token(kind)
 			"%                    ", & ! 66
 			"+=                   ", & ! 67
 			"-=                   ", & ! 68
-			"*=                   "  & ! 69
+			"*=                   ", & ! 69
+			"scalar subript       ", & ! 70
+			"range subript        ", & ! 71
+			"step subcript        "  & ! 72
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -1745,6 +1758,8 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	dst%is_empty    = src%is_empty
 
+	dst%sub_kind = src%sub_kind
+
 	!if (allocated(src%val)) then
 	!	if (.not. allocated(dst%val)) allocate(dst%val)
 	!	dst%val = src%val
@@ -1813,6 +1828,10 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	if (allocated(src%subscripts)) then
 		call syntax_nodes_copy(dst%subscripts, src%subscripts)
+	end if
+
+	if (allocated(src%usubscripts)) then
+		call syntax_nodes_copy(dst%usubscripts, src%usubscripts)
 	end if
 
 	if (allocated(src%args)) then
@@ -3344,7 +3363,10 @@ recursive function parse_expr_statement(parser) result(expr)
 		! Subscript can appear in assignment expr but not let expr, because let
 		! must initialize the whole array
 		span0 = parser%current_pos()
-		expr%subscripts = parser%parse_subscripts()
+
+		!expr%subscripts = parser%parse_subscripts()
+		call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
+
 		if (size(expr%subscripts) <= 0) deallocate(expr%subscripts)
 		span1 = parser%current_pos() - 1
 
@@ -3464,21 +3486,24 @@ end function is_assignment_op
 
 !===============================================================================
 
-function parse_subscripts(parser) result(subscripts)!_vec)
+!function parse_subscripts(parser) result(subscripts)!_vec)
+subroutine parse_subscripts(parser, subscripts, usubscripts)
+	! TODO: just take whole expr as arg, instead of subscripts AND usubscripts
 
 	! Parse array subscript if present
 
 	class(parser_t) :: parser
-	type(syntax_node_t), allocatable :: subscripts(:)
+	type(syntax_node_t), intent(out), allocatable :: subscripts(:), &
+		usubscripts(:)
 
 	!********
 
 	integer :: pos0, span0
 
-	type(syntax_node_t) :: subscript
-	type(syntax_node_vector_t) :: subscripts_vec
+	type(syntax_node_t) :: subscript, usubscript
+	type(syntax_node_vector_t) :: subscripts_vec, usubscripts_vec
 	type(syntax_token_t) :: lbracket, rbracket, comma, &
-		dummy
+		dummy, colon
 
 	type(text_span_t) :: span
 
@@ -3486,14 +3511,16 @@ function parse_subscripts(parser) result(subscripts)!_vec)
 
 		!! The function has to return something.  Caller deallocates
 		!subscripts = []
-		allocate(subscripts(0))
+		allocate( subscripts(0))
+		!allocate(usubscripts(0))
 		return
 
 	end if
 
 	!print *, 'parsing subscripts'
 
-	subscripts_vec = new_syntax_node_vector()
+	 subscripts_vec = new_syntax_node_vector()
+	usubscripts_vec = new_syntax_node_vector()
 
 	lbracket  = parser%match(lbracket_token)
 
@@ -3515,7 +3542,24 @@ function parse_subscripts(parser) result(subscripts)!_vec)
 				parser%context%text(span0: parser%current_pos()-1)))
 		end if
 
-		call subscripts_vec%push(subscript)
+		! TODO: set range_sub or step_sub cases
+		if (parser%current_kind() == colon_token) then
+			colon = parser%match(colon_token)
+			subscript%sub_kind = range_sub
+
+			usubscript = parser%parse_expr()
+			! TODO: type check i32
+
+		else
+			subscript%sub_kind = scalar_sub
+
+			! TODO: set empty usubscript struct so subscript and usubscript
+			! arrays are the same size
+
+		end if
+
+		call  subscripts_vec%push( subscript)
+		call usubscripts_vec%push(usubscript)
 
 		! Break infinite loop
 		if (parser%pos == pos0) dummy = parser%next()
@@ -3545,7 +3589,11 @@ function parse_subscripts(parser) result(subscripts)!_vec)
 	call syntax_nodes_copy(subscripts, &
 		subscripts_vec%v( 1: subscripts_vec%len ))
 
-end function parse_subscripts
+	call syntax_nodes_copy(usubscripts, &
+		usubscripts_vec%v( 1: usubscripts_vec%len ))
+
+!end function parse_subscripts
+end subroutine parse_subscripts
 
 !===============================================================================
 
@@ -4300,7 +4348,11 @@ function parse_primary_expr(parser) result(expr)
 
 				!print *, '%current_kind() = ', kind_name(parser%current_kind())
 				span0 = parser%current_pos()
-				expr%subscripts = parser%parse_subscripts()
+
+				!expr%subscripts = parser%parse_subscripts()
+				!call parser%parse_subscripts(expr%subscripts)
+				call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
+
 				span1 = parser%current_pos() - 1
 				if (size(expr%subscripts) <= 0) then
 					deallocate(expr%subscripts)
@@ -4930,7 +4982,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	!********
 
-	integer :: i, j, ltype, rtype
+	integer :: i, j, ltype, rtype, il, iu
 
 	logical :: quietl
 
@@ -5598,11 +5650,25 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'string subscript RHS name expr'
 
 			!print *, 'str type'
-
 			res%type = vars%vals(node%id_index)%type
-			i = subscript_eval(node, vars, fns, quietl)
 
-			res%str%s = vars%vals(node%id_index)%str%s(i+1: i+1)
+			if (node%subscripts(1)%sub_kind == scalar_sub) then
+				i = subscript_eval(node, vars, fns, quietl)
+				res%str%s = vars%vals(node%id_index)%str%s(i+1: i+1)
+			else
+
+				il = subscript_eval(node, vars, fns, quietl)
+				!print *, 'il = ', il
+
+				! This feels inconsistent and not easy to extend to higher ranks
+				right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
+				iu = right%i32
+				!print *, 'iu = ', iu
+
+				! Not inclusive of upper bound
+				res%str%s = vars%vals(node%id_index)%str%s(il+1: iu)
+
+			end if
 
 		else if (allocated(node%subscripts)) then
 			!print *, 'string subscript RHS name expr'
