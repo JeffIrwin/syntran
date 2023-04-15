@@ -5462,59 +5462,30 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!	vars%vals(node%id_index)%array%type
 				!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
 
-				! Syntran uses 0-indexed arrays while Fortran uses 1-indexed
-				! arrays
-
-				! TODO: refactor get/set outside of select case.  Get is not
-				! required for equals_token but worth it
+				array_val = get_array_value_t(vars%vals(node%id_index)%array, i)
 
 				select case (node%op%kind)
 				case (equals_token)
-
-					! Only select by RHS type.  Assigning mismatched types
-					! is a syntax error caught by the parser
-
-					call set_array_value_t( &
-						vars%vals(node%id_index)%array, i, res)
+					array_val = res  ! simply overwrite
 
 				case (plus_equals_token)
-
-					! array_val += res;
-
-					array_val = get_array_value_t( &
-						vars%vals(node%id_index)%array, i)
-
-					!! commutative order doesn't matter
 					call add(array_val, res, array_val, node%op%text)
-					!call add(res, array_val, array_val, node%op%text)
-
-					call set_array_value_t( &
-						vars%vals(node%id_index)%array, i, array_val)
-					res = array_val
 
 				case (minus_equals_token)
-
-					array_val = get_array_value_t( &
-						vars%vals(node%id_index)%array, i)
 					call subtract(array_val, res, array_val, node%op%text)
-					call set_array_value_t( &
-						vars%vals(node%id_index)%array, i, array_val)
-					res = array_val
 
 				case (star_equals_token)
-
-					array_val = get_array_value_t( &
-						vars%vals(node%id_index)%array, i)
 					call mul(array_val, res, array_val, node%op%text)
-					call set_array_value_t( &
-						vars%vals(node%id_index)%array, i, array_val)
-					res = array_val
 
 				case default
 					write(*,*) 'Error: unexpected assignment operator "', &
 						node%op%text, '"'
 					call internal_error()
 				end select
+
+				call set_array_value_t( &
+					vars%vals(node%id_index)%array, i, array_val)
+				res = array_val
 
 			end if
 		end if
