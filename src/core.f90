@@ -5631,11 +5631,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'str type'
 			res%type = vars%vals(node%id_index)%type
 
-			! TODO: select case
-			if (node%subscripts(1)%sub_kind == scalar_sub) then
+			select case (node%subscripts(1)%sub_kind)
+			case (scalar_sub)
 				i = subscript_eval(node, vars, fns, quietl)
 				res%str%s = vars%vals(node%id_index)%str%s(i+1: i+1)
-			else if (node%subscripts(1)%sub_kind == range_sub) then
+
+			case (range_sub)
 
 				il = subscript_eval(node, vars, fns, quietl)
 				!print *, 'il = ', il
@@ -5648,10 +5649,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				! Not inclusive of upper bound
 				res%str%s = vars%vals(node%id_index)%str%s(il+1: iu)
 
-			else
+			case default
 				write(*,*) 'Error: unexpected subscript kind'
 				call internal_error()
-			end if
+			end select
 
 		else if (allocated(node%subscripts)) then
 			!print *, 'string subscript RHS name expr'
