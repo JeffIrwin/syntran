@@ -156,7 +156,7 @@ subroutine unit_test_unary_arith(npass, nfail)
 			eval_i32('-73 - (+48);') == -73 - (+48), &
 			eval_i32('24 / (-6 / 2);') == 24 / (-6 / 2), &
 			eval_i32('343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63;') &
-			       == 343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63   &
+			       == 343 - (-87654345 / 27 + -76 * (+234 - 65432)) / (-63)  &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -430,6 +430,8 @@ subroutine unit_test_comp_ass(npass, nfail)
 			eval('let v = [10.0; 3]; v[0] += 5.0; v;', quiet) == '[1.500000E+01, 1.000000E+01, 1.000000E+01]', &
 			eval('let v = [10.0; 3]; v[1] += 5.0; v;', quiet) == '[1.000000E+01, 1.500000E+01, 1.000000E+01]', &
 			eval('let v = [10.0; 3]; v[1] += 5; v;', quiet) == '[1.000000E+01, 1.500000E+01, 1.000000E+01]', &
+			eval('let i = 20; i += 5.1;', quiet) == '25', &
+			abs(eval_f32('let i = 20.1; i += 5;', quiet) - 25.1) < tol, &
 			eval('let j = 10; j -= 3; j;', quiet) == '7', &
 			abs(eval_f32('let f = 0.75; f -= 0.25; f;', quiet) - 0.5) < tol, &
 			eval('let j = 10; j -= 3;', quiet) == '7', &
@@ -442,8 +444,8 @@ subroutine unit_test_comp_ass(npass, nfail)
 			eval('let v = [10.0; 3]; v[0] -= 4.0; v;', quiet) == '[6.000000E+00, 1.000000E+01, 1.000000E+01]', &
 			eval('let v = [20.0; 3]; v[1] -= 4.0; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
 			eval('let v = [20.0; 3]; v[1] -= 4; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
-			eval('let i = 20; i += 5.1;', quiet) == '25', &
-			abs(eval_f32('let i = 20.1; i += 5;', quiet) - 25.1) < tol, &
+			eval('let i = 20; i -= 5.1;', quiet) == '14', &
+			abs(eval_f32('let i = 20.1; i -= 5;', quiet) - 15.1) < tol, &
 			eval('let i = 20; i -= 3.1;', quiet) == '16', &
 			abs(eval_f32('let i = 20.1; i -= 3;', quiet) - 17.1) < tol, &
 			eval('let j =  7; j *= 6; j;', quiet) == '42', &
@@ -898,7 +900,11 @@ subroutine unit_test_substr(npass, nfail)
 			eval('let s = "hall*"; s[4] = "o"; s;', quiet) == 'hallo', &
 			eval('let s = "h*lp"; s[1] = "e"; s;', quiet) == 'help', &
 			eval('let s = "hello world"; s[0:2];', quiet) == 'he', &
+			eval('let s = "hello world"; s[0:3];', quiet) == 'hel', &
 			eval('let s = "hello world"; s[1:3];', quiet) == 'el', &
+			eval('let s = "hello world"; s[1:4];', quiet) == 'ell', &
+			eval('let s = "hello world"; s[1:5];', quiet) == 'ello', &
+			eval('let s = "hello world"; s[1:6];', quiet) == 'ello ', &
 			eval('let s = "hello world"; s[6:11];', quiet) == 'world', &
 			eval('let s = "hello world"; s[3];', quiet) == 'l'  &
 		]

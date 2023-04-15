@@ -256,7 +256,7 @@ end function err_bad_sub_count
 function err_scalar_subscript(context, span, scalar) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
-	character(len = :), allocatable :: err, subscript_s
+	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: scalar
 

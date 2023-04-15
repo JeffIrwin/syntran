@@ -26,6 +26,7 @@ module core_m
 		syntran_patch =  20
 
 	! TODO:
+	!  - more tests for *= comp ass, substrings
 	!  - fuzz testing
 	!  - substring indexing and slicing:
 	!    * str len intrinsic?  name it len() or size()?
@@ -3363,8 +3364,6 @@ recursive function parse_expr_statement(parser) result(expr)
 		! Subscript can appear in assignment expr but not let expr, because let
 		! must initialize the whole array
 		span0 = parser%current_pos()
-
-		!expr%subscripts = parser%parse_subscripts()
 		call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
 
 		if (size(expr%subscripts) <= 0) deallocate(expr%subscripts)
@@ -3486,7 +3485,6 @@ end function is_assignment_op
 
 !===============================================================================
 
-!function parse_subscripts(parser) result(subscripts)!_vec)
 subroutine parse_subscripts(parser, subscripts, usubscripts)
 	! TODO: just take whole expr as arg, instead of subscripts AND usubscripts
 
@@ -3542,7 +3540,7 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 				parser%context%text(span0: parser%current_pos()-1)))
 		end if
 
-		! TODO: set range_sub or step_sub cases
+		! TODO: set step_sub case for non-unit range step
 		if (parser%current_kind() == colon_token) then
 			colon = parser%match(colon_token)
 			subscript%sub_kind = range_sub
@@ -3553,11 +3551,12 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 		else
 			subscript%sub_kind = scalar_sub
 
-			! TODO: set empty usubscript struct so subscript and usubscript
-			! arrays are the same size
+			! TODO: initialize empty usubscript struct
 
 		end if
 
+		! Parallel arrays subscripts and usubscripts should be same size? Not
+		! sure how much will need to change for multi-rank ranges
 		call  subscripts_vec%push( subscript)
 		call usubscripts_vec%push(usubscript)
 
@@ -3592,7 +3591,6 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 	call syntax_nodes_copy(usubscripts, &
 		usubscripts_vec%v( 1: usubscripts_vec%len ))
 
-!end function parse_subscripts
 end subroutine parse_subscripts
 
 !===============================================================================
@@ -4348,9 +4346,6 @@ function parse_primary_expr(parser) result(expr)
 
 				!print *, '%current_kind() = ', kind_name(parser%current_kind())
 				span0 = parser%current_pos()
-
-				!expr%subscripts = parser%parse_subscripts()
-				!call parser%parse_subscripts(expr%subscripts)
 				call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
 
 				span1 = parser%current_pos() - 1
@@ -4982,7 +4977,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	!********
 
-	integer :: i, j, ltype, rtype, il, iu
+	integer :: i, j, il, iu
 
 	logical :: quietl
 
@@ -6029,10 +6024,10 @@ subroutine add_value_t(left, right, res, op_text)
 	! assignment we may want to make it an i32, e.g. i += 3.1;
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%i32 = left%f32 + right%i32
+		res%i32 = int(left%f32 + right%i32)
 
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%i32 = left%i32 + right%f32
+		res%i32 = int(left%i32 + right%f32)
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
@@ -6074,10 +6069,10 @@ subroutine mul_value_t(left, right, res, op_text)
 		res%i32 = left%i32 * right%i32
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%i32 = left%f32 * right%i32
+		res%i32 = int(left%f32 * right%i32)
 
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%i32 = left%i32 * right%f32
+		res%i32 = int(left%i32 * right%f32)
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
@@ -6116,10 +6111,10 @@ subroutine subtract_value_t(left, right, res, op_text)
 		res%i32 = left%i32 - right%i32
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%i32 = left%f32 - right%i32
+		res%i32 = int(left%f32 - right%i32)
 
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%i32 = left%i32 - right%f32
+		res%i32 = int(left%i32 - right%f32)
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
