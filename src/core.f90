@@ -5958,6 +5958,9 @@ subroutine add_value_t(left, right, res, op_text)
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 + right%i32
 
+	! Usually, adding f32 to i32 casts to an i32 result.  But for compound
+	! assignment we may want to make it an i32, e.g. i += 3.1;
+
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = left%f32 + right%i32
 
