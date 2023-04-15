@@ -446,6 +446,7 @@ subroutine unit_test_comp_ass(npass, nfail)
 			abs(eval_f32('let i = 20.1; i += 5;', quiet) - 25.1) < tol, &
 			eval('let i = 20; i -= 3.1;', quiet) == '16', &
 			abs(eval_f32('let i = 20.1; i -= 3;', quiet) - 17.1) < tol, &
+			eval('let j =  7; j *= 6; j;', quiet) == '42', &
 			eval('let j = 10; j += 3;', quiet) == '13'  &
 		]
 
