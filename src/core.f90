@@ -26,13 +26,13 @@ module core_m
 		syntran_patch =  20
 
 	! TODO:
-	!  - more tests for *= comp ass, substrings
 	!  - fuzz testing
 	!  - substring indexing and slicing:
 	!    * str len intrinsic?  name it len() or size()?
 	!    * first, single-character indexing
 	!      > done
 	!    * then, range-based slicing
+	!      > done
 	!    * string arrays get an optional extra rank.  omitting the extra rank
 	!      refers to the whole string at that position in the array:
 	!      > str_vec[0] == str_vec[:,0]
@@ -84,7 +84,7 @@ module core_m
 	!  - structs
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - enums
-	!  - xor
+	!  - xor, xnor
 	!  - bitwise operators
 	!
 	!****************************************
@@ -5494,6 +5494,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					array_val = get_array_value_t( &
 						vars%vals(node%id_index)%array, i)
 					call subtract(array_val, res, array_val, node%op%text)
+					call set_array_value_t( &
+						vars%vals(node%id_index)%array, i, array_val)
+					res = array_val
+
+				case (star_equals_token)
+
+					array_val = get_array_value_t( &
+						vars%vals(node%id_index)%array, i)
+					call mul(array_val, res, array_val, node%op%text)
 					call set_array_value_t( &
 						vars%vals(node%id_index)%array, i, array_val)
 					res = array_val

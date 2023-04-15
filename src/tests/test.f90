@@ -449,6 +449,19 @@ subroutine unit_test_comp_ass(npass, nfail)
 			eval('let i = 20; i -= 3.1;', quiet) == '16', &
 			abs(eval_f32('let i = 20.1; i -= 3;', quiet) - 17.1) < tol, &
 			eval('let j =  7; j *= 6; j;', quiet) == '42', &
+			eval('let j = 10; j *= 3; j;', quiet) == '30', &
+			abs(eval_f32('let f = 0.5; f *= 0.25; f;', quiet) - 0.125) < tol, &
+			abs(eval_f32('let f = 0.5; f *= 0.25;', quiet) - 0.125) < tol, &
+			eval('let iv = [10; 3]; iv[0] *= 5;', quiet) == '50', &
+			eval('let iv = [10; 3]; iv[0] *= 5; iv;', quiet) == '[50, 10, 10]', &
+			eval('let iv = [10; 3]; iv[1] *= 5; iv;', quiet) == '[10, 50, 10]', &
+			eval('let iv = [10; 3]; iv[1] *= 5.101; iv;', quiet) == '[10, 51, 10]', &
+			abs(eval_f32('let v = [10.0; 3]; v[0] *= 5.0;', quiet) - 50) < tol, &
+			eval('let v = [10.0; 3]; v[0] *= 5.0; v;', quiet) == '[5.000000E+01, 1.000000E+01, 1.000000E+01]', &
+			eval('let v = [10.0; 3]; v[1] *= 5.0; v;', quiet) == '[1.000000E+01, 5.000000E+01, 1.000000E+01]', &
+			eval('let v = [10.0; 3]; v[1] *= 5; v;', quiet) == '[1.000000E+01, 5.000000E+01, 1.000000E+01]', &
+			eval('let i = 20; i *= 5.101;', quiet) == '102', &
+			abs(eval_f32('let i = 20.1; i *= 5;', quiet) - 100.5) < tol, &
 			eval('let j = 10; j += 3;', quiet) == '13'  &
 		]
 
