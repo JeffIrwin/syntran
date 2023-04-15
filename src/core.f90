@@ -26,6 +26,7 @@ module core_m
 		syntran_patch =  20
 
 	! TODO:
+	!  - fuzz testing
 	!  - substring indexing and slicing:
 	!    * str len intrinsic?  name it len() or size()?
 	!    * first, single-character indexing
@@ -5694,23 +5695,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call subtract(left, right, res, node%op%text)
 
 		case (star_token)
-
-			! TODO: make mul_value_t() fn like add_value_t(), etc.
-
-			select case (magic * left%type + right%type)
-			case        (magic * i32_type + i32_type)
-				res%i32 = left%i32 * right%i32
-			case        (magic * f32_type + f32_type)
-				res%f32 = left%f32 * right%f32
-			case        (magic * f32_type + i32_type)
-				res%f32 = left%f32 * right%i32
-			case        (magic * i32_type + f32_type)
-				res%f32 = left%i32 * right%f32
-			case default
-				! FIXME: other numeric types (i64, f64, etc.)
-				write(*,*) err_eval_binary_types(node%op%text)
-				call internal_error()
-			end select
+			call mul(left, right, res, node%op%text)
 
 		case (sstar_token)
 			select case (magic * left%type + right%type)
