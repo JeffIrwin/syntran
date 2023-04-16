@@ -25,20 +25,18 @@ fn my_sin(x: f32): f32
 
 	let s = 0.0;
 	let x2 = x ** 2;
-	let xpow = x;
 	let sign = 1;
-	let fact = 1.0;
+	let frac = x;
 
 	for k in [1: 20]
 	{
-		s += sign * xpow / fact;
+		s += sign * frac;
 		sign *= -1;
-		xpow *= x2;
-		fact *= 2 * k * (2 * k + 1);
+		frac *= x2 / (2 * k * (2 * k + 1));
 	}
 
 	// Hack return w/o printing
-	s = s;
+	+s;
 }
 
 let pi = get_pi();
@@ -52,7 +50,7 @@ for i in [0: n]
 {
 	let x = i * pi / 6;
 	let sx = my_sin(x);
-	//println("sin(", x, ") = ", sx);
+	println("sin(", x, ") = ", sx);
 	sin_array[i] = sx;
 }
 
