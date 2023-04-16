@@ -1,0 +1,74 @@
+
+fn get_pi(): f32
+{
+	let pi = 0.0;
+	for k in [0: 10]
+	{
+		pi += (1 / 16.0 ** k) *
+		(
+			4 / (8.0 * k + 1) -
+			2 / (8.0 * k + 4) -
+			1 / (8.0 * k + 5) -
+			1 / (8.0 * k + 6)
+		);
+	}
+	pi;
+}
+
+fn my_sin(x: f32): f32
+{
+	// Calculate sine(x) using Taylor series expansion
+	// around x = 0.0
+	//
+	// Don't use this in production.  Wait until it's
+	// implimented intrinsically in syntran
+
+	let s = 0.0;
+	let x2 = x ** 2;
+	let xpow = x;
+	let sign = 1;
+	let fact = 1.0;
+
+	for k in [1: 20]
+	{
+		s += sign * xpow / fact;
+		sign *= -1;
+		xpow *= x2;
+		fact *= 2 * k * (2 * k + 1);
+	}
+
+	// Hack return w/o printing
+	s = s;
+}
+
+let pi = get_pi();
+//println("pi = ", pi);
+
+// Number of values to test
+let n = 13;
+
+let sin_array = [0.0; n];
+for i in [0: n]
+{
+	let x = i * pi / 6;
+	let sx = my_sin(x);
+	//println("sin(", x, ") = ", sx);
+	sin_array[i] = sx;
+}
+
+//println("sin_array = ", sin_array);
+
+let expected = [0.000000E+00, 4.999999E-01,
+8.660253E-01, 9.999999E-01, 8.660255E-01, 5.000002E-01,
+-1.887498E-07, -4.999993E-01, -8.660258E-01,
+-1.000000E+00, -8.660244E-01, -5.000003E-01,
+-2.691158E-06];
+
+let norm = 0.0;
+let tol = 1.e-9;
+
+for i in [0: size(expected, 0)]
+	norm += (sin_array[i] - expected[i]) ** 2;
+
+-tol < norm and norm < tol;
+
