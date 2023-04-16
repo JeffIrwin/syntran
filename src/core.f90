@@ -58,8 +58,8 @@ module core_m
 	!      > higher rank:  a[:,1], a[2,:], a[2:4, 1], ...
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
-	!  - compound assignment: /=, %=, logical &=, |=, etc.
-	!    * +=, -=, *= done
+	!  - compound assignment: %=, logical &=, |=, etc.
+	!    * +=, -=, *=, /= done
 	!    * Does any language have "**="? This will
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
@@ -5420,36 +5420,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! TODO: test int/float casting.  It should be an error during
 			! parsing
 
-			! Assign res to LHS identifier variable as well.  This inserts the
-			! value, while the insert call in the parser inserts the type
-			select case (node%op%kind)
-			case (equals_token)
-				vars%vals(node%id_index) = res
+			call compound_assign(vars%vals(node%id_index), res, node%op)
 
-			case (plus_equals_token)
-				call add(vars%vals(node%id_index), res, &
-				         vars%vals(node%id_index), node%op%text)
-
-			case (minus_equals_token)
-				call subtract(vars%vals(node%id_index), res, &
-				              vars%vals(node%id_index), node%op%text)
-
-			case (star_equals_token)
-				call mul(vars%vals(node%id_index), res, &
-				         vars%vals(node%id_index), node%op%text)
-
-			case (slash_equals_token)
-				call div(vars%vals(node%id_index), res, &
-				         vars%vals(node%id_index), node%op%text)
-
-			case default
-				write(*,*) 'Error: unexpected assignment operator "', &
-					node%op%text, '"'
-				call internal_error()
-			end select
-
-			! For compound assignment, ensure that the LHS is returned.  For
-			! regular assignment this is already set
+			! For compound assignment, ensure that the LHS is returned
 			res = vars%vals(node%id_index)
 
 			! The difference between let and assign is inserting into the
@@ -5479,31 +5452,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
 
 				array_val = get_array_value_t(vars%vals(node%id_index)%array, i)
-
-				! TODO: refactor with the same case selection in scalar compound
-				! assignment evaluation
-				select case (node%op%kind)
-				case (equals_token)
-					array_val = res  ! simply overwrite
-
-				case (plus_equals_token)
-					call add(array_val, res, array_val, node%op%text)
-
-				case (minus_equals_token)
-					call subtract(array_val, res, array_val, node%op%text)
-
-				case (star_equals_token)
-					call mul(array_val, res, array_val, node%op%text)
-
-				case (slash_equals_token)
-					call div(array_val, res, array_val, node%op%text)
-
-				case default
-					write(*,*) 'Error: unexpected assignment operator "', &
-						node%op%text, '"'
-					call internal_error()
-				end select
-
+				call compound_assign(array_val, res, node%op)
 				call set_array_value_t( &
 					vars%vals(node%id_index)%array, i, array_val)
 				res = array_val
@@ -5927,6 +5876,44 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	end select
 
 end function syntax_eval
+
+!===============================================================================
+
+subroutine compound_assign(lhs, rhs, op)
+	! TODO: rename?  This also handles regular assignment
+
+	! lhs += rhs;
+	!   or
+	! lhs *= rhs;
+	!   etc.
+
+	type(value_t), intent(inout) :: lhs
+	type(value_t), intent(in) :: rhs
+
+	type(syntax_token_t), intent(in) :: op
+
+	select case (op%kind)
+	case (equals_token)
+		lhs = rhs  ! simply overwrite
+
+	case (plus_equals_token)
+		call add(lhs, rhs, lhs, op%text)
+
+	case (minus_equals_token)
+		call subtract(lhs, rhs, lhs, op%text)
+
+	case (star_equals_token)
+		call mul(lhs, rhs, lhs, op%text)
+
+	case (slash_equals_token)
+		call div(lhs, rhs, lhs, op%text)
+
+	case default
+		write(*,*) 'Error: unexpected assignment operator "', op%text, '"'
+		call internal_error()
+	end select
+
+end subroutine compound_assign
 
 !===============================================================================
 
