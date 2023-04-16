@@ -50,9 +50,7 @@ let sin_array = [0.0; n];
 for i in [0: n]
 {
 	let x = i * pi / 6;
-	let sx = my_sin(x);
-	//println("sin(", x, ") = ", sx);
-	sin_array[i] = sx;
+	sin_array[i] = my_sin(x);
 }
 
 //println("sin_array = ", sin_array);
