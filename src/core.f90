@@ -44,9 +44,12 @@ module core_m
 	!  - file reading
 	!    * readln() to read 1 line?
 	!    * how to handle eof? 404? open with r/w modes?
-	!      > add a file_stat() fn which checks IO of previous file operation.
-	!        this way I don't need to add structs, multiple return vals, or out
-	!        args yet
+	!      > add an eof() intrinsic fn which takes a file type.  eof state needs
+	!        to be stored inside file type.  initialize to eof false when
+	!        opening, update after every readln
+	!      > also add a file_stat() fn which checks IO of previous file
+	!        operation. this way I don't need to add structs, multiple return
+	!        vals, or out args yet
 	!    * add roundtrip writeln/readln testing.  I/O is hard to test
 	!      independently, and I won't test println, but we can at least test
 	!      writeln/readln in combination
@@ -95,6 +98,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			file_type            = 74, &
 			slash_equals_token   = 73, &
 			step_sub             = 72, &
 			range_sub            = 71, &
@@ -175,9 +179,17 @@ module core_m
 
 	!********
 
+	type file_t
+		character(len = :), allocatable :: name_
+		integer :: unit_
+		logical :: eof = .false.
+		! Do we need a separate iostat beyond eof?
+	end type file_t
+
 	type value_t
 		integer :: type
 
+		type(file_t)      :: file_
 		type(string_t)    :: str
 
 		logical           :: bool
@@ -222,7 +234,9 @@ module core_m
 		logical(kind = 1), allocatable :: bool(:)
 		integer(kind = 4), allocatable ::  i32(:)
 		real   (kind = 4), allocatable ::  f32(:)
-		type(string_t   ), allocatable :: str(:)
+		type(string_t   ), allocatable ::  str(:)
+
+		! TODO: file arrays
 
 		integer :: len, cap, rank
 		integer, allocatable :: size(:)
@@ -539,7 +553,7 @@ function declare_intrinsic_fns() result(fns)
 	integer :: id_index, num_fns
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
-		close_fn, writeln_fn, str_fn
+		close_fn, readln_fn, writeln_fn, str_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -631,9 +645,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	! TODO: return a file type instead of raw i32.  Modify writeln_fn and
-	! close_fn accordingly
-	open_fn%type = i32_type
+	open_fn%type = file_type
 	allocate(open_fn%params(1))
 	open_fn%params(1)%type = str_type
 	open_fn%params(1)%name = "filename"
@@ -643,9 +655,21 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	! TODO: document readln()
+
+	readln_fn%type = str_type
+	allocate(readln_fn%params(1))
+	readln_fn%params(1)%type = file_type
+	readln_fn%params(1)%name = "filename"
+
+	id_index = id_index + 1
+	call fns%insert("readln", readln_fn, id_index)
+
+	!********
+
 	writeln_fn%type = void_type
 	allocate(writeln_fn%params(1))
-	writeln_fn%params(1)%type = i32_type
+	writeln_fn%params(1)%type = file_type
 	writeln_fn%params(1)%name = "file_handle"
 
 	writeln_fn%variadic_min  = 0
@@ -659,7 +683,7 @@ function declare_intrinsic_fns() result(fns)
 
 	close_fn%type = void_type
 	allocate(close_fn%params(1))
-	close_fn%params(1)%type = i32_type
+	close_fn%params(1)%type = file_type
 	close_fn%params(1)%name = "file_handle"
 
 	id_index = id_index + 1
@@ -703,6 +727,7 @@ function declare_intrinsic_fns() result(fns)
 			println_fn, &
 			str_fn    , &
 			open_fn   , &
+			readln_fn , &
 			writeln_fn, &
 			close_fn  , &
 			size_fn     &
@@ -1531,7 +1556,8 @@ function kind_name(kind)
 			"scalar_sub          ", & ! 70
 			"range_sub           ", & ! 71
 			"step_sub            ", & ! 72
-			"slash_equals_token  "  & ! 73
+			"slash_equals_token  ", & ! 73
+			"file_type           "  & ! 74
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1625,7 +1651,8 @@ function kind_token(kind)
 			"scalar subript       ", & ! 70
 			"range subript        ", & ! 71
 			"step subcript        ", & ! 72
-			"/=                   "  & ! 73
+			"/=                   ", & ! 73
+			"file type            "  & ! 74
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -4989,7 +5016,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	!********
 
-	integer :: i, j, il, iu
+	integer :: i, j, il, iu, io
 
 	logical :: quietl
 
@@ -5531,20 +5558,43 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		case ("open")
 			! TODO: file type instead of raw i32 in open, close, writeln
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			open(newunit = res%i32, file = arg%str%s)
+
+			!open(newunit = res%i32, file = arg%str%s)
+			!print *, 'opened unit ', res%i32
+
+			open(newunit = res%file_%unit_, file = arg%str%s)
+			print *, 'opened unit ', res%file_%unit_
+			res%file_%name_ = arg%str%s
+
+		case ("readln")
+
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+
+			print *, "reading from unit", arg1%file_%unit_
+			!function read_line(iu, iostat) result(str)
+			res%str%s = read_line(arg1%file_%unit_, io)
+
+			! TODO: set eof flag or crash for other non-zero io
+			if (io == iostat_end) then
+				arg1%file_%eof = .true.
+			end if
+			print *, 'eof = ', arg1%file_%eof
 
 		case ("writeln")
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+
+			print *, 'writing to unit ', arg1%file_%unit_
 			do i = 2, size(node%args)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
-				write(arg1%i32, '(a)', advance = 'no') arg%to_str()
+				write(arg1%file_%unit_, '(a)', advance = 'no') arg%to_str()
 			end do
-			write(arg1%i32, *)
+			write(arg1%file_%unit_, *)
 
 		case ("close")
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			close(arg%i32)
+			print *, 'closing unit ', arg%file_%unit_
+			close(arg%file_%unit_)
 
 		case ("size")
 
@@ -6223,6 +6273,10 @@ recursive function value_to_str(val) result(ans)
 			! TODO: wrap str in quotes for clarity, both scalars and str array
 			! elements.  Update tests.
 			ans = val%str%s
+
+		case (file_type)
+			ans = "{file_unit: "//str(val%file_%unit_)//", filename: """// &
+				val%file_%name_//"""}"
 
 		case (array_type)
 
