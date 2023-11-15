@@ -28,6 +28,12 @@ if [[ "$machine" == "MinGw" ]]; then
 	generator=(-G 'MSYS Makefiles')
 fi
 
+if [[ "$machine" == "Mac" ]]; then
+	mkdir ~/bin/
+	cp $(which gfortran@12) ~/bin/
+	export PATH=$PATH:~/bin/
+fi
+
 build=build
 cmake -S . -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=$config
 cmake --build "$build" --config $config
