@@ -34,13 +34,15 @@ if [[ "$machine" == "Mac" ]]; then
 
 	#which gcc
 	#which gfortran
-	which gfortran-11
+	which gfortran-12
 
 	#mkdir ~/bin/
-	cp $(which gfortran-11) /usr/local/bin/gfortran
+	#cp $(which gfortran-12) /usr/local/bin/gfortran
 	#export PATH=$PATH:~/bin/
+	#which gfortran
 
-	which gfortran
+	export FC=$(which gfortran-12)
+	echo "FC = $FC"
 
 fi
 
