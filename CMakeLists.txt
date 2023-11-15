@@ -5,7 +5,7 @@ if(DEFINED ENV{SYNTRAN_INTEL})
 
 	set(CMAKE_Fortran_COMPILER "ifort")
 
-else()
+elseif(NOT APPLE)
 
 	set(CMAKE_Fortran_COMPILER "gfortran")
 
