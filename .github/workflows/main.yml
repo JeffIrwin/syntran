@@ -28,8 +28,8 @@ jobs:
         sudo apt-get install gfortran
     - if: matrix.os == 'macOS-latest'
       run: |
-        brew install gcc
-        brew reinstall gcc
+        brew install gcc@12
+        #brew reinstall gcc
 
     #- name: Checkout submodules
     #  shell: bash
