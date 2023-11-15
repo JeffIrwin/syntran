@@ -1,6 +1,8 @@
 
 cmake_minimum_required(VERSION 3.7)
 
+# TODO: use FC env var or -D cmake arg to define this consistently on all
+# platforms
 if(DEFINED ENV{SYNTRAN_INTEL})
 
 	set(CMAKE_Fortran_COMPILER "ifort")
