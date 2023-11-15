@@ -23,7 +23,7 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  21
+		syntran_patch =  22
 
 	! TODO:
 	!  - fuzz testing
