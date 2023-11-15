@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 config=Debug
 if [[ "${1,,}" == "release" ]]; then
 	config=Release
@@ -29,6 +31,13 @@ if [[ "$machine" == "MinGw" ]]; then
 fi
 
 if [[ "$machine" == "Mac" ]]; then
+
+	which gcc
+	which gfortran
+	which gcc@12
+	which gcc12
+	which gcc-12
+
 	mkdir ~/bin/
 	cp $(which gfortran@12) ~/bin/
 	export PATH=$PATH:~/bin/
