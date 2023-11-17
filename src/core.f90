@@ -26,6 +26,11 @@ module core_m
 		syntran_patch =  22
 
 	! TODO:
+	!  - str comparison operations:
+	!    * !=
+	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
+	!      matching leading chars but diff lens
+	!    * ==:  done
 	!  - fuzz testing
 	!  - substring indexing and slicing:
 	!    * str len intrinsic?  name it len() or size()?
@@ -50,7 +55,7 @@ module core_m
 	!      > also add a file_stat() fn which checks IO of previous file
 	!        operation. this way I don't need to add structs, multiple return
 	!        vals, or out args yet
-	!    * add roundtrip writeln/readln testing.  I/O is hard to test
+	!    *  add roundtrip writeln/readln testing.  I/O is hard to test 
 	!      independently, and I won't test println, but we can at least test
 	!      writeln/readln in combination
 	!  - arrays
@@ -5556,14 +5561,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end do
 
 		case ("open")
-			! TODO: file type instead of raw i32 in open, close, writeln
+
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 
-			!open(newunit = res%i32, file = arg%str%s)
-			!print *, 'opened unit ', res%i32
-
 			open(newunit = res%file_%unit_, file = arg%str%s)
-			print *, 'opened unit ', res%file_%unit_
+			!print *, 'opened unit ', res%file_%unit_
 			res%file_%name_ = arg%str%s
 
 		case ("readln")
@@ -5571,10 +5573,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 
 			print *, "reading from unit", arg1%file_%unit_
-			!function read_line(iu, iostat) result(str)
 			res%str%s = read_line(arg1%file_%unit_, io)
 
-			! TODO: set eof flag or crash for other non-zero io
+			! TODO:  set eof flag or crash for other non-zero io 
 			if (io == iostat_end) then
 				arg1%file_%eof = .true.
 			end if
@@ -5584,7 +5585,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 
-			print *, 'writing to unit ', arg1%file_%unit_
+			!print *, 'writing to unit ', arg1%file_%unit_
 			do i = 2, size(node%args)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
 				write(arg1%file_%unit_, '(a)', advance = 'no') arg%to_str()
@@ -5820,6 +5821,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%bool = left%i32 == right%f32
 			case        (magic * bool_type + bool_type)
 				res%bool = left%bool .eqv. right%bool
+			case        (magic * str_type + str_type)
+				res%bool = left%str%s == right%str%s
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)

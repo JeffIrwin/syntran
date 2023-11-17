@@ -244,6 +244,22 @@ subroutine unit_test_comparisons(npass, nfail)
 			eval('1337 >= 1338  ;')  == 'false',  &
 			eval('1337 >= 1337  ;')  == 'true' ,  &
 			eval('1337 >= 1336  ;')  == 'true' ,  &
+			eval('"a"   == "a"  ;')  == 'true' ,  &
+			eval('"a"   == "b"  ;')  == 'false',  &
+			eval('"c"   == "a"  ;')  == 'false',  &
+			eval('"aoe" == "aoe";')  == 'true' ,  &
+			eval('"hoe" == "aoe";')  == 'false',  &
+			eval('"ahe" == "aoe";')  == 'false',  &
+			eval('"aoh" == "aoe";')  == 'false',  &
+			eval('"aoe" == "hoe";')  == 'false',  &
+			eval('"aoe" == "ahe";')  == 'false',  &
+			eval('"aoe" == "aoh";')  == 'false',  &
+			eval('" oe" == "aoe";')  == 'false',  &
+			eval('"a e" == "aoe";')  == 'false',  &
+			eval('"ao " == "aoe";')  == 'false',  &
+			eval('"aoe" == " oe";')  == 'false',  &
+			eval('"aoe" == "a e";')  == 'false',  &
+			eval('"aoe" == "ao ";')  == 'false',  &
 			eval('true  == false;')  == 'false'   &
 		]
 
