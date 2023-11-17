@@ -55,9 +55,6 @@ module core_m
 	!      > also add a file_stat() fn which checks IO of previous file
 	!        operation. this way I don't need to add structs, multiple return
 	!        vals, or out args yet
-	!    *  add roundtrip writeln/readln testing.  I/O is hard to test 
-	!      independently, and I won't test println, but we can at least test
-	!      writeln/readln in combination
 	!  - arrays
 	!    * add slice subscripts:
 	!      > a[:]     -> a[0], a[1], a[2], ...

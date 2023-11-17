@@ -1,0 +1,57 @@
+
+fn main(): bool
+{
+	// TODO: add to test suite
+
+	//println("starting main");
+
+	// round trip write/read test
+
+	// TODO: make a similar test with str arrays
+
+	let stro0 = "line 0";
+	let stro1 = "line 1";
+	let stro2 = "line aoeu htns gcrl qjkx";
+	let stro3 = "line final";
+
+	// write
+	let fo = open("scratch/test4.txt");
+	writeln(fo, stro0);
+	writeln(fo, stro1);
+	writeln(fo, stro2);
+	writeln(fo, stro3);
+	close(fo);
+
+	// read
+	let fi = open("scratch/test4.txt");
+	//println("fi = " + str(fi));
+
+	// TODO: just read to eof() after i add the intrinsic
+	let stri0 = readln(fi);
+	let stri1 = readln(fi);
+	let stri2 = readln(fi);
+	let stri3 = readln(fi);
+
+	let eof_ = readln(fi);
+
+	//println("stri0 = """ + stri0 + """");
+	//println("stri1 = """ + stri1 + """");
+	//println("stri2 = """ + stri2 + """");
+	//println("stri3 = """ + stri3 + """");
+
+	let ans =
+		stri0 == stro0 and
+		stri1 == stro1 and
+		stri2 == stro2 and
+		stri3 == stro3;
+
+	println("strings equal = " + str(ans));
+	close(fi);
+
+	//println("ending main");
+
+	ans;
+}
+
+main();
+

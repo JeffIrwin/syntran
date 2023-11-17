@@ -1,0 +1,32 @@
+
+fn main(): str
+{
+	// round trip write/read test
+
+	let stro0 = "line test";
+
+	// write
+	let fo = open("scratch/test4.txt");
+	writeln(fo, stro0);
+	close(fo);
+
+	// read
+	let fi = open("scratch/test4.txt");
+	//println("fi = " + str(fi));
+
+	let stri0 = readln(fi);
+
+	//println("stri0 = """ + stri0 + """");
+
+	let ans = stri0;
+
+	//println("strings equal = " + str(ans));
+	close(fi);
+
+	//println("ending main");
+
+	ans;
+}
+
+main();
+
