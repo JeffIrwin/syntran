@@ -1,0 +1,92 @@
+
+fn countlines(filename: str): i32
+{
+	let fi = open(filename);
+	//println("fi = " + str(fi));
+
+	let nlines = 0;
+	while not eof(fi)
+	{
+		//println(i);
+		let str = readln(fi);
+		//println("eof syntran = " + str(eof(fi)));
+		nlines += 1;
+		//println();
+	}
+	nlines -= 1;
+
+	nlines;
+}
+
+fn main(): bool
+{
+	// Similar to last test, but this uses a countlines() fn to allocate the
+	// read string
+
+	//println("starting main");
+
+	// round trip write/read test with str arrays and eof read check
+
+	let stro =
+	[
+		"line 0",
+		"line aoeu htns gcrl qjkx",
+		"line 2",
+		"line htns gcrl qjkx",
+		"line aoeu gcrl qjkx",
+		"line aoeu htns qjkx",
+		"line htns xbmw",
+		"line final"
+	];
+
+	let filename = "build/test-05.txt";
+
+	// write
+	let fo = open(filename);
+	for i in [0: size(stro, 0)]
+		writeln(fo, stro[i]);
+	close(fo);
+
+	let n = countlines(filename);
+	//println("n = ", n);
+
+	// read
+	let fi = open(filename);
+	//println("fi = " + str(fi));
+
+	let stri = [""; n];
+
+	let i = 0;
+	while not eof(fi)
+	{
+		//println(i);
+		let str = readln(fi);
+		if (i < n) stri[i] = str;
+		//println("eof syntran = " + str(eof(fi)));
+		i += 1;
+		//println();
+	}
+	//println("stri = ", stri);
+
+	//stri[n-1] = "a";
+	//println("stri = ", stri);
+
+	let all_match = true;
+	for i in [0: n]
+	{
+		all_match = all_match and stri[i] == stro[i];
+		//println("all_match = ", all_match);
+	}
+
+	//println("strings equal = " + str(ans));
+	close(fi);
+
+	let ans = all_match;
+
+	//println("ending main");
+
+	ans;
+}
+
+main();
+

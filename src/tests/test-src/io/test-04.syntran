@@ -1,0 +1,64 @@
+
+fn main(): str
+{
+	// return the string contents of the final line of a file
+
+	//println("starting main");
+
+	let stro =
+	[
+		"line 0",
+		"line aoeu htns gcrl qjkx",
+		"line 1",
+		"line htns xbmw",
+		"line final"
+	];
+
+	let filename = "build/test-04.txt";
+
+	// write
+	let fo = open(filename);
+	for i in [0: size(stro, 0)]
+		writeln(fo, stro[i]);
+	close(fo);
+
+	// read
+	let fi = open(filename);
+	//println("fi = " + str(fi));
+
+	let stri = [""; size(stro, 0)];
+
+	let i = 0;
+	while not eof(fi)
+	{
+		//println(i);
+		let str = readln(fi);
+		if (i < size(stri, 0)) stri[i] = str;
+		//println("eof syntran = " + str(eof(fi)));
+		i += 1;
+		//println();
+	}
+
+	//println("stri = ", stri);
+
+	let eof_ = readln(fi);
+	//println("");
+	//println("eof syntran = " + str(eof(fi)));
+	//println("");
+
+	//println("stri0 = """ + stri0 + """");
+	//println("stri1 = """ + stri1 + """");
+	//println("stri2 = """ + stri2 + """");
+	//println("stri3 = """ + stri3 + """");
+
+	// TODO: loop
+	let ans = stri[ size(stri,0) - 1 ];
+	close(fi);
+
+	//println("ending main");
+
+	ans;
+}
+
+main();
+

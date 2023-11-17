@@ -1,9 +1,8 @@
 
 fn main(): bool
 {
-	//println("starting main");
-
-	// round trip write/read test with str arrays and eof read check
+	// Read a file of known size for exactly its number of lines and verify
+	// eof() is false, then read one more line and verify eof() is true
 
 	let stro =
 	[
@@ -26,50 +25,28 @@ fn main(): bool
 	let fi = open(filename);
 	//println("fi = " + str(fi));
 
-	let stri = [""; size(stro, 0)];
+	let str = "";
 
-	//for i in [0: size(stri, 0)]
-	//{
-	//	stri[i] = readln(fi);
-	//	println("eof syntran = " + str(eof(fi)));
-	//}
-
-	let i = 0;
-	while not eof(fi)
-	//for i in [0: size(stri, 0) + 2]
+	for i in [0: size(stro, 0)]
 	{
-		//println(i);
-		let str = readln(fi);
-		if (i < size(stri, 0)) stri[i] = str;
-		//println("eof syntran = " + str(eof(fi)));
-		i += 1;
-		//println();
+		str = readln(fi);
+		//println(str);
 	}
 
-	//println("stri = ", stri);
+	let eof1 = eof(fi);
+	//println("eof1 = ", eof1);
 
-	let eof_ = readln(fi);
-	//println("");
-	//println("eof syntran = " + str(eof(fi)));
-	//println("");
+	str = readln(fi);
+	//println(str);
 
-	//println("stri0 = """ + stri0 + """");
-	//println("stri1 = """ + stri1 + """");
-	//println("stri2 = """ + stri2 + """");
-	//println("stri3 = """ + stri3 + """");
+	let eof2 = eof(fi);
+	//println("eof2 = ", eof2);
 
-	// TODO: loop
-	let ans =
-		stri[0] == stro[0] and
-		stri[1] == stro[1] and
-		stri[2] == stro[2] and
-		stri[3] == stro[3];
-
-	//println("strings equal = " + str(ans));
 	close(fi);
-
 	//println("ending main");
 
+	let ans = not eof1 and eof2;
+	//println("ans = ", ans);
 	ans;
 }
 
