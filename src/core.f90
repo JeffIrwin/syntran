@@ -184,7 +184,7 @@ module core_m
 	type file_t
 		character(len = :), allocatable :: name_
 		integer :: unit_
-		logical :: eof = .false.
+		logical :: eof__ = .false.
 		! Do we need a separate iostat beyond eof?
 	end type file_t
 
@@ -555,7 +555,7 @@ function declare_intrinsic_fns() result(fns)
 	integer :: id_index, num_fns
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
-		close_fn, readln_fn, writeln_fn, str_fn
+		close_fn, readln_fn, writeln_fn, str_fn, eof_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -657,7 +657,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	! TODO: document readln()
+	! TODO: document readln(), eof(), etc.
 
 	readln_fn%type = str_type
 	allocate(readln_fn%params(1))
@@ -680,6 +680,16 @@ function declare_intrinsic_fns() result(fns)
 
 	id_index = id_index + 1
 	call fns%insert("writeln", writeln_fn, id_index)
+
+	!********
+
+	eof_fn%type = bool_type
+	allocate(eof_fn%params(1))
+	eof_fn%params(1)%type = file_type
+	eof_fn%params(1)%name = "filename"
+
+	id_index = id_index + 1
+	call fns%insert("eof", eof_fn, id_index)
 
 	!********
 
@@ -731,6 +741,7 @@ function declare_intrinsic_fns() result(fns)
 			open_fn   , &
 			readln_fn , &
 			writeln_fn, &
+			eof_fn    , &
 			close_fn  , &
 			size_fn     &
 		]
@@ -1783,6 +1794,8 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%op   = src%op
 
 	dst%val  = src%val
+	!dst%val%file_ = src%val%file_
+	!dst%val%file_%eof__ = src%val%file_%eof__
 
 	dst%identifier  = src%identifier
 	dst%id_index    = src%id_index
@@ -5564,19 +5577,31 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			open(newunit = res%file_%unit_, file = arg%str%s)
 			!print *, 'opened unit ', res%file_%unit_
 			res%file_%name_ = arg%str%s
+			res%file_%eof__ = .false.
 
 		case ("readln")
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 
-			!print *, "reading from unit", arg1%file_%unit_
+			print *, "reading from unit", arg1%file_%unit_
 			res%str%s = read_line(arg1%file_%unit_, io)
+			print *, 'done reading'
+
+			! This could be a very dangerous side effect!  The file argument of
+			! readln() acts as an out-arg:  it's eof flag can be toggled on.  I
+			! don't have out-args anywhere else so I may want to rethink this
+			! :exploding-head:
+
+			!!print *, 'ident = ', node%args(1)%identifier%text
+			!!vars%vals(node%id_index) = res
 
 			! TODO:  set eof flag or crash for other non-zero io 
 			if (io == iostat_end) then
-				arg1%file_%eof = .true.
+			!if (io /= 0) then
+				!arg1%file_%eof__ = .true.
+				vars%vals(node%args(1)%id_index)%file_%eof__ = .true.
 			end if
-			print *, 'eof = ', arg1%file_%eof
+			print *, 'eof   = ', arg1%file_%eof__
 
 		case ("writeln")
 
@@ -5588,6 +5613,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				write(arg1%file_%unit_, '(a)', advance = 'no') arg%to_str()
 			end do
 			write(arg1%file_%unit_, *)
+
+		case ("eof")
+
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+
+			print *, "checking eof for unit", arg1%file_%unit_
+			res%bool = arg1%file_%eof__
+
+			print *, 'eof fn = ', arg1%file_%eof__
 
 		case ("close")
 			arg = syntax_eval(node%args(1), vars, fns, quietl)

@@ -367,6 +367,8 @@ function read_line(iu, iostat) result(str)
 
 	integer :: i, io, str_cap, tmp_cap
 
+	print *, 'starting read_line()'
+
 	! Buffer string with some initial length
 	!
 	! TODO: use char_vector_t
@@ -377,8 +379,14 @@ function read_line(iu, iostat) result(str)
 	i = 0
 	do
 		read(iu, '(a)', advance = 'no', iostat = io) c
+
 		if (io == iostat_end) exit
 		if (io == iostat_eor) exit
+
+		!! this seemed to help when I had a buggy eof() syntran implementation
+		!! but it shouldn't be needed
+		!if (io /= 0) exit
+
 		!if (c == carriage_return) exit
 		!if (c == line_feed) exit
 		i = i + 1
