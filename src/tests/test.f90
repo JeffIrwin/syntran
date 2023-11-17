@@ -1335,6 +1335,7 @@ subroutine unit_test_io(npass, nfail)
 		[   &
 			interpret_file(path//'test-01.syntran', quiet) == 'line test', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-03.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

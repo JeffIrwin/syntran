@@ -12,7 +12,7 @@ fn main(): bool
 	let stro2 = "line aoeu htns gcrl qjkx";
 	let stro3 = "line final";
 
-	let filename = "build/test-01.txt";
+	let filename = "build/test-02.txt";
 
 	// write
 	let fo = open(filename);
@@ -45,7 +45,7 @@ fn main(): bool
 		stri2 == stro2 and
 		stri3 == stro3;
 
-	println("strings equal = " + str(ans));
+	//println("strings equal = " + str(ans));
 	close(fi);
 
 	//println("ending main");

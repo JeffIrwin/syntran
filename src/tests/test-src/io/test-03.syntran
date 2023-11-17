@@ -1,0 +1,77 @@
+
+fn main(): bool
+{
+	//println("starting main");
+
+	// round trip write/read test with str arrays and eof read check
+
+	let stro =
+	[
+		"line 0",
+		"line aoeu htns gcrl qjkx",
+		"line 1",
+		"line htns xbmw",
+		"line final"
+	];
+
+	let filename = "build/test-03.txt";
+
+	// write
+	let fo = open(filename);
+	for i in [0: size(stro, 0)]
+		writeln(fo, stro[i]);
+	close(fo);
+
+	// read
+	let fi = open(filename);
+	//println("fi = " + str(fi));
+
+	let stri = [""; size(stro, 0)];
+
+	//for i in [0: size(stri, 0)]
+	//{
+	//	stri[i] = readln(fi);
+	//	println("eof syntran = " + str(eof(fi)));
+	//}
+
+	let i = 0;
+	while not eof(fi)
+	//for i in [0: size(stri, 0) + 2]
+	{
+		//println(i);
+		let str = readln(fi);
+		if (i < size(stri, 0)) stri[i] = str;
+		//println("eof syntran = " + str(eof(fi)));
+		i += 1;
+		//println();
+	}
+
+	//println("stri = ", stri);
+
+	let eof_ = readln(fi);
+	//println("");
+	//println("eof syntran = " + str(eof(fi)));
+	//println("");
+
+	//println("stri0 = """ + stri0 + """");
+	//println("stri1 = """ + stri1 + """");
+	//println("stri2 = """ + stri2 + """");
+	//println("stri3 = """ + stri3 + """");
+
+	// TODO: loop
+	let ans =
+		stri[0] == stro[0] and
+		stri[1] == stro[1] and
+		stri[2] == stro[2] and
+		stri[3] == stro[3];
+
+	//println("strings equal = " + str(ans));
+	close(fi);
+
+	//println("ending main");
+
+	ans;
+}
+
+main();
+

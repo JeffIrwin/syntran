@@ -5583,14 +5583,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 
-			print *, "reading from unit", arg1%file_%unit_
+			!print *, "reading from unit", arg1%file_%unit_
 			res%str%s = read_line(arg1%file_%unit_, io)
-			print *, 'done reading'
+			!print *, 'done reading'
 
 			! This could be a very dangerous side effect!  The file argument of
 			! readln() acts as an out-arg:  it's eof flag can be toggled on.  I
 			! don't have out-args anywhere else so I may want to rethink this
 			! :exploding-head:
+			!
+			! writeln() does not need to mess with the vars struct like this
+			! because the file is the actual return value for that fn
 
 			!!print *, 'ident = ', node%args(1)%identifier%text
 			!!vars%vals(node%id_index) = res
@@ -5601,7 +5604,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!arg1%file_%eof__ = .true.
 				vars%vals(node%args(1)%id_index)%file_%eof__ = .true.
 			end if
-			print *, 'eof   = ', arg1%file_%eof__
+			!print *, 'eof   = ', arg1%file_%eof__
 
 		case ("writeln")
 
@@ -5618,10 +5621,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 
-			print *, "checking eof for unit", arg1%file_%unit_
+			!print *, "checking eof for unit", arg1%file_%unit_
 			res%bool = arg1%file_%eof__
 
-			print *, 'eof fn = ', arg1%file_%eof__
+			!print *, 'eof fn = ', arg1%file_%eof__
 
 		case ("close")
 			arg = syntax_eval(node%args(1), vars, fns, quietl)

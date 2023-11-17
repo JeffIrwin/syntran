@@ -367,7 +367,7 @@ function read_line(iu, iostat) result(str)
 
 	integer :: i, io, str_cap, tmp_cap
 
-	print *, 'starting read_line()'
+	!print *, 'starting read_line()'
 
 	! Buffer string with some initial length
 	!
@@ -383,9 +383,9 @@ function read_line(iu, iostat) result(str)
 		if (io == iostat_end) exit
 		if (io == iostat_eor) exit
 
-		!! this seemed to help when I had a buggy eof() syntran implementation
-		!! but it shouldn't be needed
-		!if (io /= 0) exit
+		! In syntran, calling readln() one more time after the initial EOF
+		! causes an infinite loop for some reason without this
+		if (io /= 0) exit
 
 		!if (c == carriage_return) exit
 		!if (c == line_feed) exit
