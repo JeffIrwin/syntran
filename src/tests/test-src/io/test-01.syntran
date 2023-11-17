@@ -5,13 +5,15 @@ fn main(): str
 
 	let stro0 = "line test";
 
+	let filename = "build/test-01.txt";
+
 	// write
-	let fo = open("scratch/test4.txt");
+	let fo = open(filename);
 	writeln(fo, stro0);
 	close(fo);
 
 	// read
-	let fi = open("scratch/test4.txt");
+	let fi = open(filename);
 	//println("fi = " + str(fi));
 
 	let stri0 = readln(fi);

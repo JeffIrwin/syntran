@@ -1,8 +1,6 @@
 
 fn main(): bool
 {
-	// TODO: add to test suite
-
 	//println("starting main");
 
 	// round trip write/read test
@@ -14,8 +12,10 @@ fn main(): bool
 	let stro2 = "line aoeu htns gcrl qjkx";
 	let stro3 = "line final";
 
+	let filename = "build/test-01.txt";
+
 	// write
-	let fo = open("scratch/test4.txt");
+	let fo = open(filename);
 	writeln(fo, stro0);
 	writeln(fo, stro1);
 	writeln(fo, stro2);
@@ -23,7 +23,7 @@ fn main(): bool
 	close(fo);
 
 	// read
-	let fi = open("scratch/test4.txt");
+	let fi = open(filename);
 	//println("fi = " + str(fi));
 
 	// TODO: just read to eof() after i add the intrinsic

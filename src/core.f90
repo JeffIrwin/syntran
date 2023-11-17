@@ -5569,7 +5569,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 
-			print *, "reading from unit", arg1%file_%unit_
+			!print *, "reading from unit", arg1%file_%unit_
 			res%str%s = read_line(arg1%file_%unit_, io)
 
 			! TODO:  set eof flag or crash for other non-zero io 
@@ -5591,7 +5591,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		case ("close")
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			print *, 'closing unit ', arg%file_%unit_
+			!print *, 'closing unit ', arg%file_%unit_
 			close(arg%file_%unit_)
 
 		case ("size")
