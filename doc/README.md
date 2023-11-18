@@ -34,13 +34,6 @@ fn exp(x: f32): f32
 
 Compute the base _e_ exponential of `x`
 
-## `len`
-```rust
-fn len(s: str): i32
-```
-
-Get the length of a string `s`
-
 ## `i32`
 ```rust
 fn i32(s: str): i32
@@ -52,6 +45,13 @@ error.
 Note that other numeric types (`f32`) can be implicitly cast to `i32`.
 
 Related functions: [`str`](#str)
+
+## `len`
+```rust
+fn len(s: str): i32
+```
+
+Get the length of a string `s`
 
 ## `max`
 ```rust
