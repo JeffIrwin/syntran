@@ -41,6 +41,18 @@ fn len(s: str): i32
 
 Get the length of a string `s`
 
+## `i32`
+```rust
+fn i32(s: str): i32
+```
+
+Convert from a string to an integer `i32`.  Any invalid numbers will cause a runtime
+error.
+
+Note that other numeric types (`f32`) can be implicitly cast to `i32`.
+
+Related functions: [`str`](#str)
+
 ## `max`
 ```rust
 fn max(a0: i32, a1: i32, a2: i32, ...): i32
@@ -101,7 +113,7 @@ fn str(s0: any, s1: any, s2: any, ...): str
 
 Convert arguments to `str` and concatenate
 
-Related functions: [`println`](#println), [`writeln`](#writeln)
+Related functions: [`println`](#println), [`writeln`](#writeln), [`i32`](#i32)
 
 ## `writeln`
 ```rust

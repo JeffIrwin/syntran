@@ -624,6 +624,8 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	! TODO: update docs to use println() instead of old holyc implicit prints
+
 	println_fn%type = void_type ! TODO?
 
 	allocate(println_fn%params(0))
@@ -664,8 +666,6 @@ function declare_intrinsic_fns() result(fns)
 
 	! TODO: add fns for parsing str to other types (f32, bool, etc.)
 
-	! TODO: document
-
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
 
@@ -688,8 +688,6 @@ function declare_intrinsic_fns() result(fns)
 	call fns%insert("open", open_fn, id_index)
 
 	!********
-
-	! TODO: document readln(), eof(), etc.
 
 	readln_fn%type = str_type
 	allocate(readln_fn%params(1))
