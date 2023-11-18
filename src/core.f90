@@ -5767,11 +5767,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
 				iu = right%i32
 
-				print *, ''
-				print *, 'identifier ', node%identifier%text
-				print *, 'il = ', il
-				print *, 'iu = ', iu
-				print *, 'str HERE = ', vars%vals(node%id_index)%str%s
+				!print *, ''
+				!print *, 'identifier ', node%identifier%text
+				!print *, 'il = ', il
+				!print *, 'iu = ', iu
+				!print *, 'str HERE = ', vars%vals(node%id_index)%str%s
 
 				! Not inclusive of upper bound
 				res%str%s = vars%vals(node%id_index)%str%s(il+1: iu)

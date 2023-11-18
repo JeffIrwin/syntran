@@ -8,8 +8,8 @@ fn scan(str_: str, set: str): i32
 {
 	// c.f. Fortran intrinsic scan()
 
-	println("str_ = ", str_);
-	println("set = ", set);
+	//println("str_ = ", str_);
+	//println("set = ", set);
 
 	let found = false;
 	let i = 0;
@@ -38,8 +38,8 @@ fn scanback(str_: str, set: str): i32
 {
 	// c.f. Fortran intrinsic scan() with back = true
 
-	println("str_ = ", str_);
-	println("set = ", set);
+	//println("str_ = ", str_);
+	//println("set = ", set);
 
 	let found = false;
 	let i = len(str_) - 1;
@@ -68,14 +68,14 @@ fn verify(str_: str, set: str): i32
 {
 	// c.f. Fortran intrinsic verify()
 
-	println("str_ = ", str_);
-	println("set = ", set);
+	//println("str_ = ", str_);
+	//println("set = ", set);
 
 	let found = true;
 	let i = 0;
 	while found and i < len(str_)
 	{
-		println(i);
+		//println(i);
 
 		let j = 0;
 		found = false;
@@ -109,11 +109,11 @@ fn tok_i32(str_: str): [i32; :]
 	//let iend = scanback(str_, nums);
 
 	let n = len(str_);
-	println("n = ", n);
+	//println("n = ", n);
 
-	println("printing ...");
-	println("str_[ibeg:n] = ", str_[ibeg:n]);
-	println("done");
+	//println("printing ...");
+	//println("str_[ibeg:n] = ", str_[ibeg:n]);
+	//println("done");
 
 	let strchop = str_[ibeg:n];
 
@@ -129,16 +129,16 @@ fn tok_i32(str_: str): [i32; :]
 
 	//ilen = 0;
 	
-	println("ilen = ", ilen);
+	//println("ilen = ", ilen);
 
 	let iend = ibeg + ilen - 1;
 
-	println("ibeg = ", ibeg);
-	println("iend = ", iend);
+	//println("ibeg = ", ibeg);
+	//println("iend = ", iend);
 
-	println("num beg = ", str_[ibeg]);
-	println("num end = ", str_[iend]);
-	println("num str = ", str_[ibeg: iend+1]);
+	//println("num beg = ", str_[ibeg]);
+	//println("num end = ", str_[iend]);
+	//println("num str = ", str_[ibeg: iend+1]);
 
 	//let ilen = iend - ibeg + 1;
 
@@ -157,7 +157,7 @@ fn parse_i32(str_: str)
 	let end_ = toks[1];
 	//let len_ = toks[2];
 
-	println("parse_i32 substr = ", str_[beg_: end_+1]);
+	//println("parse_i32 substr = ", str_[beg_: end_+1]);
 
 	// return
 	i32(str_[beg_: end_+1]);
@@ -169,7 +169,7 @@ fn main(): i32
 {
 	//let ans = tok_i32("haystack1337haystack");
 	let ans = parse_i32("haystack1337haystack");
-	println("ans = ", ans);
+	//println("ans = ", ans);
 	ans;
 }
 
