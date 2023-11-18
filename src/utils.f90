@@ -50,7 +50,7 @@ module utils
 
 	type string_vector_t
 		type(string_t), allocatable :: v(:)
-		integer :: len, cap
+		integer :: len_, cap
 		contains
 			procedure :: push     => push_string
 			procedure :: push_all => push_all_string
@@ -60,7 +60,7 @@ module utils
 
 	type char_vector_t
 		character(len = :), allocatable :: v
-		integer :: len, cap
+		integer :: len_, cap
 		contains
 			procedure :: push => push_char
 	end type char_vector_t
@@ -69,7 +69,7 @@ module utils
 
 	type integer_vector_t
 		integer, allocatable :: v(:)
-		integer :: len, cap
+		integer :: len_, cap
 		contains
 			procedure :: push     => push_integer
 	end type integer_vector_t
@@ -78,7 +78,7 @@ module utils
 
 	type logical_vector_t
 		logical(kind = 1), allocatable :: v(:)
-		integer :: len, cap
+		integer :: len_, cap
 		contains
 			procedure :: push     => push_logical
 	end type logical_vector_t
@@ -101,7 +101,7 @@ function new_integer_vector() result(vector)
 
 	type(integer_vector_t) :: vector
 
-	vector%len = 0
+	vector%len_ = 0
 	vector%cap = 2
 
 	allocate(vector%v( vector%cap ))
@@ -122,12 +122,12 @@ subroutine push_integer(vector, val)
 
 	integer :: tmp_cap
 
-	vector%len = vector%len + 1
+	vector%len_ = vector%len_ + 1
 
-	if (vector%len > vector%cap) then
+	if (vector%len_ > vector%cap) then
 		!print *, 'growing vector'
 
-		tmp_cap = 2 * vector%len
+		tmp_cap = 2 * vector%len_
 		allocate(tmp( tmp_cap ))
 		tmp(1: vector%cap) = vector%v
 
@@ -136,7 +136,7 @@ subroutine push_integer(vector, val)
 
 	end if
 
-	vector%v( vector%len ) = val
+	vector%v( vector%len_ ) = val
 
 end subroutine push_integer
 
@@ -146,7 +146,7 @@ function new_logical_vector() result(vector)
 
 	type(logical_vector_t) :: vector
 
-	vector%len = 0
+	vector%len_ = 0
 	vector%cap = 2
 
 	allocate(vector%v( vector%cap ))
@@ -167,12 +167,12 @@ subroutine push_logical(vector, val)
 
 	integer :: tmp_cap
 
-	vector%len = vector%len + 1
+	vector%len_ = vector%len_ + 1
 
-	if (vector%len > vector%cap) then
+	if (vector%len_ > vector%cap) then
 		!print *, 'growing vector'
 
-		tmp_cap = 2 * vector%len
+		tmp_cap = 2 * vector%len_
 		allocate(tmp( tmp_cap ))
 		tmp(1: vector%cap) = vector%v
 
@@ -181,7 +181,7 @@ subroutine push_logical(vector, val)
 
 	end if
 
-	vector%v( vector%len ) = val
+	vector%v( vector%len_ ) = val
 
 end subroutine push_logical
 
@@ -191,7 +191,7 @@ function new_string_vector() result(vector)
 
 	type(string_vector_t) :: vector
 
-	vector%len = 0
+	vector%len_ = 0
 	vector%cap = 2
 
 	allocate(vector%v( vector%cap ))
@@ -213,12 +213,12 @@ subroutine push_string(vector, val)
 
 	integer :: tmp_cap
 
-	vector%len = vector%len + 1
+	vector%len_ = vector%len_ + 1
 
-	if (vector%len > vector%cap) then
+	if (vector%len_ > vector%cap) then
 		!print *, 'growing vector'
 
-		tmp_cap = 2 * vector%len
+		tmp_cap = 2 * vector%len_
 		allocate(tmp( tmp_cap ))
 		tmp(1: vector%cap) = vector%v
 
@@ -228,7 +228,7 @@ subroutine push_string(vector, val)
 	end if
 
 	val_str%s = val
-	vector%v( vector%len ) = val_str
+	vector%v( vector%len_ ) = val_str
 
 end subroutine push_string
 
@@ -240,7 +240,7 @@ function new_char_vector(cap) result(vector)
 
 	type(char_vector_t) :: vector
 
-	vector%len = 0
+	vector%len_ = 0
 	if (present(cap)) then
 		vector%cap = cap
 	else
@@ -266,12 +266,12 @@ subroutine push_char(vector, val)
 
 	integer :: tmp_cap
 
-	vector%len = vector%len + len(val)
+	vector%len_ = vector%len_ + len(val)
 
-	if (vector%len > vector%cap) then
+	if (vector%len_ > vector%cap) then
 		!print *, 'growing vector'
 
-		tmp_cap = 2 * vector%len
+		tmp_cap = 2 * vector%len_
 		allocate(character(len = tmp_cap) :: tmp)
 		tmp(1: vector%cap) = vector%v
 
@@ -280,7 +280,7 @@ subroutine push_char(vector, val)
 
 	end if
 
-	vector%v( vector%len - len(val) + 1: vector%len ) = val
+	vector%v( vector%len_ - len(val) + 1: vector%len_ ) = val
 
 end subroutine push_char
 
@@ -301,7 +301,7 @@ subroutine push_all_string(vector, add)
 
 	integer :: i
 
-	do i = 1, add%len
+	do i = 1, add%len_
 		call vector%push( add%v(i)%s )
 	end do
 

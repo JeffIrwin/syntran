@@ -159,7 +159,7 @@ function syntran_interpret(str, quiet) result(res_str)
 		if (.not. quietl) call compilation%log_diagnostics(ou)
 
 		! Don't try to evaluate with errors
-		if (compilation%diagnostics%len > 0) cycle
+		if (compilation%diagnostics%len_ > 0) cycle
 
 		res  = syntax_eval(compilation, vars, fns)
 
@@ -216,7 +216,7 @@ integer function syntran_eval_i32(str) result(eval_i32)
 	tree = syntax_parse(str, vars, fns)
 	call tree%log_diagnostics()
 
-	if (tree%diagnostics%len > 0) then
+	if (tree%diagnostics%len_ > 0) then
 		! TODO: iostat
 		eval_i32 = 0
 		return
@@ -255,7 +255,7 @@ real(kind = 4) function syntran_eval_f32(str, quiet) result(eval_f32)
 	tree = syntax_parse(str, vars, fns)
 	if (.not. quietl) call tree%log_diagnostics()
 
-	if (tree%diagnostics%len > 0) then
+	if (tree%diagnostics%len_ > 0) then
 		! TODO: iostat
 		eval_f32 = 0
 		return
@@ -304,7 +304,7 @@ function syntran_eval(str, quiet, src_file) result(res)
 	tree = syntax_parse(str, vars, fns, src_filel)
 	if (.not. quietl) call tree%log_diagnostics()
 
-	if (tree%diagnostics%len > 0) then
+	if (tree%diagnostics%len_ > 0) then
 		res = ''
 		return
 	end if

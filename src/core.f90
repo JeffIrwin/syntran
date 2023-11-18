@@ -240,7 +240,7 @@ module core_m
 
 		! TODO: file arrays
 
-		integer :: len, cap, rank
+		integer :: len_, cap, rank
 		integer, allocatable :: size(:)
 
 		contains
@@ -372,8 +372,9 @@ module core_m
 		type(syntax_node_t), allocatable :: left, right, members(:), &
 			condition, if_clause, else_clause, body, array
 
-		! Array expression syntax nodes
-		type(syntax_node_t), allocatable :: lbound, step, ubound, len, &
+		! Array expression syntax nodes.  TODO: rename lbound, ubound to avoid
+		! conflicts w/ Fortran keywords
+		type(syntax_node_t), allocatable :: lbound, step, ubound, len_, &
 			elems(:), rank
 
 		type(syntax_node_t), allocatable :: subscripts(:), size(:), args(:), &
@@ -526,7 +527,7 @@ module core_m
 
 	type syntax_token_vector_t
 		type(syntax_token_t), allocatable :: v(:)
-		integer :: len, cap
+		integer :: len_, cap
 		contains
 			procedure :: push => push_token
 	end type syntax_token_vector_t
@@ -535,7 +536,7 @@ module core_m
 
 	type syntax_node_vector_t
 		type(syntax_node_t), allocatable :: v(:)
-		integer :: len, cap
+		integer :: len_, cap
 		contains
 			procedure :: push => push_node
 	end type syntax_node_vector_t
@@ -555,7 +556,7 @@ function declare_intrinsic_fns() result(fns)
 	integer :: id_index, num_fns
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
-		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, i32_fn
+		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, i32_fn, len_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -644,6 +645,20 @@ function declare_intrinsic_fns() result(fns)
 
 	id_index = id_index + 1
 	call fns%insert("str", str_fn, id_index)
+
+	!********
+
+	! TODO: document
+
+	! TODO: return i64?
+
+	len_fn%type = i32_type
+	allocate(len_fn%params(1))
+	len_fn%params(1)%type = str_type
+	len_fn%params(1)%name = "str"
+
+	id_index = id_index + 1
+	call fns%insert("len", len_fn, id_index)
 
 	!********
 
@@ -755,6 +770,7 @@ function declare_intrinsic_fns() result(fns)
 			max_fn    , &
 			println_fn, &
 			str_fn    , &
+			len_fn    , &
 			i32_fn    , &
 			open_fn   , &
 			readln_fn , &
@@ -1290,7 +1306,7 @@ function new_syntax_token_vector() result(vector)
 
 	type(syntax_token_vector_t) :: vector
 
-	vector%len = 0
+	vector%len_ = 0
 	vector%cap = 2  ! I think a small default makes sense here
 
 	allocate(vector%v( vector%cap ))
@@ -1313,12 +1329,12 @@ subroutine push_token(vector, val)
 
 	integer :: tmp_cap
 
-	vector%len = vector%len + 1
+	vector%len_ = vector%len_ + 1
 
-	if (vector%len > vector%cap) then
+	if (vector%len_ > vector%cap) then
 		!print *, 'growing vector'
 
-		tmp_cap = 2 * vector%len
+		tmp_cap = 2 * vector%len_
 		allocate(tmp( tmp_cap ))
 		tmp(1: vector%cap) = vector%v
 
@@ -1327,7 +1343,7 @@ subroutine push_token(vector, val)
 
 	end if
 
-	vector%v( vector%len ) = val
+	vector%v( vector%len_ ) = val
 
 end subroutine push_token
 
@@ -1339,7 +1355,7 @@ function new_array(type, cap) result(vector)
 	integer, intent(in), optional :: cap
 	type(array_t) :: vector
 
-	vector%len = 0
+	vector%len_ = 0
 
 	if (present(cap)) then
 		vector%cap = cap
@@ -1383,12 +1399,12 @@ subroutine push_array(vector, val)
 
 	integer :: tmp_cap
 
-	vector%len = vector%len + 1
+	vector%len_ = vector%len_ + 1
 
-	if (vector%len > vector%cap) then
+	if (vector%len_ > vector%cap) then
 		!print *, 'growing vector'
 
-		tmp_cap = 2 * vector%len
+		tmp_cap = 2 * vector%len_
 
 		if (vector%type == i32_type) then
 
@@ -1426,13 +1442,13 @@ subroutine push_array(vector, val)
 	end if
 
 	if      (vector%type == i32_type) then
-		vector%i32 ( vector%len ) = val%i32
+		vector%i32 ( vector%len_ ) = val%i32
 	else if (vector%type == f32_type) then
-		vector%f32 ( vector%len ) = val%f32
+		vector%f32 ( vector%len_ ) = val%f32
 	else if (vector%type == bool_type) then
-		vector%bool( vector%len ) = val%bool
+		vector%bool( vector%len_ ) = val%bool
 	else if (vector%type == str_type) then
-		vector%str ( vector%len ) = val%str
+		vector%str ( vector%len_ ) = val%str
 	else
 		write(*,*) 'Error: push_array type not implemented'
 		call internal_error()
@@ -1446,7 +1462,7 @@ function new_syntax_node_vector() result(vector)
 
 	type(syntax_node_vector_t) :: vector
 
-	vector%len = 0
+	vector%len_ = 0
 	vector%cap = 2  ! I think a small default makes sense here
 
 	allocate(vector%v( vector%cap ))
@@ -1466,12 +1482,12 @@ subroutine push_node(vector, val)
 
 	integer :: tmp_cap, i
 
-	vector%len = vector%len + 1
+	vector%len_ = vector%len_ + 1
 
-	if (vector%len > vector%cap) then
+	if (vector%len_ > vector%cap) then
 		!print *, 'growing vector ====================================='
 
-		tmp_cap = 2 * vector%len
+		tmp_cap = 2 * vector%len_
 		allocate(tmp( tmp_cap ))
 
 		!print *, 'copy 1'
@@ -1501,7 +1517,7 @@ subroutine push_node(vector, val)
 	end if
 
 	!print *, 'set val'
-	vector%v( vector%len ) = val
+	vector%v( vector%len_ ) = val
 	!print *, 'done push_node'
 
 end subroutine push_node
@@ -1880,9 +1896,9 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%step = src%step
 	end if
 
-	if (allocated(src%len)) then
-		if (.not. allocated(dst%len)) allocate(dst%len)
-		dst%len = src%len
+	if (allocated(src%len_)) then
+		if (.not. allocated(dst%len_)) allocate(dst%len_)
+		dst%len_ = src%len_
 	end if
 
 	if (allocated(src%rank)) then
@@ -2098,7 +2114,7 @@ function lex(lexer) result(token)
 			return
 		end if
 
-		val   = new_literal_value(str_type, str = char_vec%v( 1: char_vec%len ))
+		val   = new_literal_value(str_type, str = char_vec%v( 1: char_vec%len_ ))
 		token = new_token(str_token, start, text, val)
 
 		return
@@ -2484,7 +2500,7 @@ function new_parser(str, src_file) result(parser)
 	end do
 
 	! Convert to standard array (and class member)
-	parser%tokens = tokens%v( 1: tokens%len )
+	parser%tokens = tokens%v( 1: tokens%len_ )
 
 	parser%pos = 1
 
@@ -2492,7 +2508,7 @@ function new_parser(str, src_file) result(parser)
 
 	parser%context = lexer%context
 
-	!print *, 'tokens%len = ', tokens%len
+	!print *, 'tokens%len_ = ', tokens%len_
 	if (debug > 1) print *, parser%tokens_str()
 
 end function new_parser
@@ -2769,7 +2785,7 @@ function parse_unit(parser) result(unit)
 	unit%kind = translation_unit
 
 	! Convert to standard array
-	call syntax_nodes_copy(unit%members, members%v( 1: members%len ))
+	call syntax_nodes_copy(unit%members, members%v( 1: members%len_ ))
 
 	! Eof is matched in the caller syntax_parse() to deal with broken stdin
 	! lines with interactive interpretation
@@ -2920,10 +2936,10 @@ function parse_fn_declaration(parser) result(decl)
 
 	! Now that we have the number of params, save them
 
-	allocate(fn  %params( names%len ))
-	allocate(decl%params( names%len ))
+	allocate(fn  %params( names%len_ ))
+	allocate(decl%params( names%len_ ))
 
-	do i = 1, names%len
+	do i = 1, names%len_
 		!print *, 'name, type = ', names%v(i)%s, ', ', types%v(i)%s
 
 		fn%params(i)%name = names%v(i)%s
@@ -3310,7 +3326,7 @@ function parse_block_statement(parser) result(block)
 	block%kind = block_statement
 
 	! Convert to standard array
-	call syntax_nodes_copy(block%members, members%v( 1: members%len ))
+	call syntax_nodes_copy(block%members, members%v( 1: members%len_ ))
 
 end function parse_block_statement
 
@@ -3654,13 +3670,13 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 	! Check that the expr is actually an array (not a scalar), or do that next
 	! to err_bad_sub_count() elsewhere
 	!
-	! So, only check rank match here if subscripts%len > 0
+	! So, only check rank match here if subscripts%len_ > 0
 
 	call syntax_nodes_copy(subscripts, &
-		subscripts_vec%v( 1: subscripts_vec%len ))
+		subscripts_vec%v( 1: subscripts_vec%len_ ))
 
 	call syntax_nodes_copy(usubscripts, &
-		usubscripts_vec%v( 1: usubscripts_vec%len ))
+		usubscripts_vec%v( 1: usubscripts_vec%len_ ))
 
 end subroutine parse_subscripts
 
@@ -4084,9 +4100,9 @@ function parse_array_expr(parser) result(expr)
 
 		allocate(expr%val%array)
 		allocate(expr%lbound)
-		allocate(expr%len)
+		allocate(expr%len_)
 
-		call syntax_nodes_copy(expr%size, size%v( 1: size%len ))
+		call syntax_nodes_copy(expr%size, size%v( 1: size%len_ ))
 
 		expr%kind           = array_expr
 
@@ -4094,7 +4110,7 @@ function parse_array_expr(parser) result(expr)
 
 		expr%val%array%type = lbound%val%type
 		expr%val%array%kind = impl_array
-		expr%val%array%rank = size%len
+		expr%val%array%rank = size%len_
 
 		!print *, 'expr%val%type       = ', expr%val%type
 		!print *, 'expr%val%array%type = ', expr%val%array%type
@@ -4105,7 +4121,7 @@ function parse_array_expr(parser) result(expr)
 		! allocated dynamically during evaluation, not during parsing
 
 		expr%lbound = lbound
-		expr%len    = len
+		expr%len_    = len
 
 		return
 
@@ -4198,7 +4214,7 @@ function parse_array_expr(parser) result(expr)
 			allocate(expr%val%array)
 			allocate(expr%lbound)
 			allocate(expr%ubound)
-			allocate(expr%len)
+			allocate(expr%len_)
 
 			expr%kind           = array_expr
 
@@ -4211,7 +4227,7 @@ function parse_array_expr(parser) result(expr)
 
 			expr%lbound = lbound
 			expr%ubound = ubound
-			expr%len    = len
+			expr%len_    = len
 
 			return
 
@@ -4289,7 +4305,7 @@ function parse_array_expr(parser) result(expr)
 
 		allocate(expr%val%array)
 
-		call syntax_nodes_copy(expr%size, size%v( 1: size%len ))
+		call syntax_nodes_copy(expr%size, size%v( 1: size%len_ ))
 
 		expr%kind           = array_expr
 
@@ -4297,9 +4313,9 @@ function parse_array_expr(parser) result(expr)
 
 		expr%val%array%type = lbound%val%type
 		expr%val%array%kind = expl_array
-		expr%val%array%rank = size%len
+		expr%val%array%rank = size%len_
 
-		call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len ))
+		call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len_ ))
 
 		return
 
@@ -4319,7 +4335,7 @@ function parse_array_expr(parser) result(expr)
 	expr%val%array%kind = expl_array
 	expr%val%array%rank = 1
 
-	call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len ))
+	call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len_ ))
 
 	! TODO: allow arbitrarily combinations catting expl and impl arrays, e.g.
 	!
@@ -4531,26 +4547,26 @@ function parse_primary_expr(parser) result(expr)
 				!expr%fn = fn
 
 				!print *, 'fn params size = ', size(fn%params)
-				if (fn%variadic_min < 0 .and. size(fn%params) /= args%len) then
+				if (fn%variadic_min < 0 .and. size(fn%params) /= args%len_) then
 
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 					call parser%diagnostics%push( &
 						err_bad_arg_count(parser%context, &
-						span, identifier%text, size(fn%params), args%len))
+						span, identifier%text, size(fn%params), args%len_))
 					return
 
-				else if (args%len < size(fn%params) + fn%variadic_min) then
+				else if (args%len_ < size(fn%params) + fn%variadic_min) then
 
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 					call parser%diagnostics%push( &
 						err_too_few_args(parser%context, &
 						span, identifier%text, &
-						size(fn%params) + fn%variadic_min, args%len))
+						size(fn%params) + fn%variadic_min, args%len_))
 					return
 
 				end if
 
-				do i = 1, args%len
+				do i = 1, args%len_
 					!print *, kind_name(args%v(i)%val%type)
 					!print *, kind_name(fn%params(i)%type)
 
@@ -4639,7 +4655,7 @@ function parse_primary_expr(parser) result(expr)
 				expr%id_index = id_index
 
 				call syntax_nodes_copy(expr%args, &
-					args%v( 1: args%len ))
+					args%v( 1: args%len_ ))
 
 				!print *, 'done parsing fn_call_expr'
 
@@ -5055,9 +5071,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	real(kind = 4) :: f, fstep
 
+	! TODO: rename lbound/ubound to avoid intrinsic clash
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
-		step, len, arg, arg1, arg2, array_val
+		step, len_, arg, arg1, arg2, array_val
 
 	!print *, 'starting syntax_eval()'
 
@@ -5115,7 +5132,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					i = i + step%i32
 					j = j + 1
 				end do
-				array%len = j - 1
+				array%len_ = j - 1
 
 			else if (array%type == f32_type) then
 
@@ -5135,7 +5152,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					f = f + step%f32
 					j = j + 1
 				end do
-				array%len = j - 1
+				array%len_ = j - 1
 
 			else
 				write(*,*) 'Error: step array type eval not implemented'
@@ -5144,35 +5161,35 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%rank = 1
 			allocate(array%size( array%rank ))
-			array%size = array%len
+			array%size = array%len_
 
 			allocate(res%array)
 			res%type  = array_type
 			res%array = array
 
 		else if (node%val%array%kind == impl_array &
-			.and. allocated(node%ubound) .and. allocated(node%len)) then
+			.and. allocated(node%ubound) .and. allocated(node%len_)) then
 
 			! len-based impl arrays
 
 			!print *, 'len array'
 			lbound = syntax_eval(node%lbound, vars, fns, quietl)
 			ubound = syntax_eval(node%ubound, vars, fns, quietl)
-			len    = syntax_eval(node%len   , vars, fns, quietl)
+			len_   = syntax_eval(node%len_   , vars, fns, quietl)
 
 			!array = new_array(node%val%array%type)
 			!elem = lbound
 
 			array%type = node%val%array%type
-			array%len  = len%i32
-			array%cap  = array%len
+			array%len_  = len_%i32
+			array%cap  = array%len_
 
 			if (array%type == f32_type) then
 
 				allocate(array%f32( array%cap ))
-				fstep = (ubound%f32 - lbound%f32) / (len%i32 - 1)
+				fstep = (ubound%f32 - lbound%f32) / (len_%i32 - 1)
 
-				do i = 0, len%i32 - 1
+				do i = 0, len_%i32 - 1
 					array%f32(i+1) = lbound%f32 + i * fstep
 					!elem%f32 = lbound%f32 + i * fstep
 					!call array%push(elem)
@@ -5185,14 +5202,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%rank = 1
 			allocate(array%size( array%rank ))
-			array%size = array%len
+			array%size = array%len_
 
 			allocate(res%array)
 
 			res%type  = array_type
 			res%array = array
 
-		else if (node%val%array%kind == impl_array .and. allocated(node%len)) then
+		else if (node%val%array%kind == impl_array .and. allocated(node%len_)) then
 
 			! Initialize rank-2+ arrays
 			if (allocated(node%size)) then
@@ -5201,8 +5218,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				allocate(array%size( array%rank ))
 
 				do i = 1, array%rank
-					len = syntax_eval(node%size(i), vars, fns, quietl)
-					array%size(i) = len%i32
+					len_ = syntax_eval(node%size(i), vars, fns, quietl)
+					array%size(i) = len_%i32
 					!print *, 'size['//str(i)//'] = ', array%size(i)
 				end do
 
@@ -5217,10 +5234,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! Allocate in one shot without growing
 
 			array%type = node%val%array%type
-			array%len  = product(array%size)
-			array%cap  = array%len
+			array%len_  = product(array%size)
+			array%cap  = array%len_
 
-			!print *, 'array%len = ', array%len
+			!print *, 'array%len_ = ', array%len_
 
 			if      (array%type == i32_type) then
 				allocate(array%i32( array%cap ))
@@ -5271,8 +5288,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call internal_error()
 			end if
 
-			array%len = ubound%i32 - lbound%i32
-			array%cap = array%len
+			array%len_ = ubound%i32 - lbound%i32
+			array%cap = array%len_
 
 			allocate(array%i32( array%cap ))
 
@@ -5290,7 +5307,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%rank = 1
 			allocate(array%size( array%rank ))
-			array%size = array%len
+			array%size = array%len_
 
 			allocate(res%array)
 
@@ -5310,10 +5327,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%rank = size( node%size )
 			allocate(array%size( array%rank ))
-			!array%size = array%len
+			!array%size = array%len_
 			do i = 1, array%rank
-				len = syntax_eval(node%size(i), vars, fns, quietl)
-				array%size(i) = len%i32
+				len_ = syntax_eval(node%size(i), vars, fns, quietl)
+				array%size(i) = len_%i32
 			end do
 
 			!print *, 'copying array'
@@ -5339,7 +5356,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%rank = 1
 			allocate(array%size( array%rank ))
-			array%size = array%len
+			array%size = array%len_
 
 			!print *, 'copying array'
 			allocate(res%array)
@@ -5587,6 +5604,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
 				res%str%s = res%str%s // arg%to_str()  ! TODO: use char_vector_t
 			end do
+
+		case ("len")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%i32 = len(arg%str%s, 4)
+			!res%i32 = mylen( arg%str%s )
 
 		case ("i32")
 
@@ -6282,7 +6305,7 @@ subroutine log_diagnostics(node, ou)
 	oul = output_unit
 	if (present(ou)) oul = ou
 
-	do i = 1, node%diagnostics%len
+	do i = 1, node%diagnostics%len_
 		write(oul, '(a)') node%diagnostics%v(i)%s
 		write(oul,*)
 	end do
@@ -6350,9 +6373,9 @@ recursive function value_to_str(val) result(ans)
 
 			!! You would think that this would help
 			!if (val%array%type == i32_type) then
-			!	str_vec = new_char_vector( 12 * val%array%len )
+			!	str_vec = new_char_vector( 12 * val%array%len_ )
 			!else if (val%array%type == f32_type) then
-			!	str_vec = new_char_vector( 16 * val%array%len )
+			!	str_vec = new_char_vector( 16 * val%array%len_ )
 			!end if
 			str_vec = new_char_vector()
 
@@ -6364,10 +6387,10 @@ recursive function value_to_str(val) result(ans)
 				!! Recursive IO stalls execution
 				!print *, 'size = ', val%array%size
 
-				do i = 1, val%array%len
+				do i = 1, val%array%len_
 
 					call str_vec%push(str(val%array%i32(i)))
-					if (i >= val%array%len) cycle
+					if (i >= val%array%len_) cycle
 
 					call str_vec%push(', ')
 
@@ -6382,7 +6405,7 @@ recursive function value_to_str(val) result(ans)
 
 			else if (val%array%type == f32_type) then
 
-				do i = 1, val%array%len
+				do i = 1, val%array%len_
 
 					!! Nice alignment, but breaks tests
 					!write(buf16, '(es16.6)') val%array%f32(i)
@@ -6391,7 +6414,7 @@ recursive function value_to_str(val) result(ans)
 					! Trimmed string (not aligned)
 					call str_vec%push(str(val%array%f32(i)))
 
-					if (i >= val%array%len) cycle
+					if (i >= val%array%len_) cycle
 
 					call str_vec%push(', ')
 
@@ -6406,11 +6429,11 @@ recursive function value_to_str(val) result(ans)
 
 			else if (val%array%type == bool_type) then
 
-				do i = 1, val%array%len
+				do i = 1, val%array%len_
 
 					call str_vec%push(str(val%array%bool(i)))
 
-					if (i >= val%array%len) cycle
+					if (i >= val%array%len_) cycle
 
 					call str_vec%push(', ')
 
@@ -6425,11 +6448,11 @@ recursive function value_to_str(val) result(ans)
 
 			else if (val%array%type == str_type) then
 
-				do i = 1, val%array%len
+				do i = 1, val%array%len_
 
 					call str_vec%push(val%array%str(i)%s)
 
-					if (i >= val%array%len) cycle
+					if (i >= val%array%len_) cycle
 
 					call str_vec%push(', ')
 
@@ -6451,7 +6474,7 @@ recursive function value_to_str(val) result(ans)
 			if (val%array%rank > 1) call str_vec%push(line_feed)
 			call str_vec%push(']')
 
-			ans = str_vec%v( 1: str_vec%len )
+			ans = str_vec%v( 1: str_vec%len_ )
 
 		case default
 			ans = err_prefix//"<invalid_value>"//color_reset
