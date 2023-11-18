@@ -1362,6 +1362,7 @@ subroutine unit_test_io(npass, nfail)
 			interpret_file(path//'test-07.syntran', quiet) == '1337', &
 			interpret_file(path//'test-08.syntran', quiet) == 'true', &
 			interpret_file(path//'test-09.syntran', quiet) == '[1337, 42, 16384]', &
+			interpret_file(path//'test-10.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

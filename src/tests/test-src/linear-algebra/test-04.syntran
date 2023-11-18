@@ -5,9 +5,11 @@ fn sub_fn(u: [f32; :], v: [f32; :]): [f32; :]
 	//
 	// Don't use this in production
 
-	let w = [0.0; size(u,0)];
+	// This should crash if there is a size mismatch
+	let n = max(size(u,0), size(v,0));
+	let w = [0.0; n];
 
-	for i in [0: size(u,0)]
+	for i in [0: n]
 		w[i] = u[i] - v[i];
 	w;
 }
