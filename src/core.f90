@@ -555,7 +555,7 @@ function declare_intrinsic_fns() result(fns)
 	integer :: id_index, num_fns
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
-		close_fn, readln_fn, writeln_fn, str_fn, eof_fn
+		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, i32_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -644,6 +644,21 @@ function declare_intrinsic_fns() result(fns)
 
 	id_index = id_index + 1
 	call fns%insert("str", str_fn, id_index)
+
+	!********
+
+	! TODO: add fns for parsing str to other types (f32, bool, etc.)
+
+	! Should this accept any type?  f32 can be converted implicitly so there
+	! shouldn't be a need for other types
+
+	i32_fn%type = i32_type
+	allocate(i32_fn%params(1))
+	i32_fn%params(1)%type = str_type
+	i32_fn%params(1)%name = "str"
+
+	id_index = id_index + 1
+	call fns%insert("i32", i32_fn, id_index)
 
 	!********
 
@@ -738,6 +753,7 @@ function declare_intrinsic_fns() result(fns)
 			max_fn    , &
 			println_fn, &
 			str_fn    , &
+			i32_fn    , &
 			open_fn   , &
 			readln_fn , &
 			writeln_fn, &
@@ -5569,6 +5585,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
 				res%str%s = res%str%s // arg%to_str()  ! TODO: use char_vector_t
 			end do
+
+		case ("i32")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			read(arg%str%s, *) res%i32  ! TODO: catch iostat
 
 		case ("open")
 
