@@ -187,7 +187,7 @@ module core_m
 	type file_t
 		character(len = :), allocatable :: name_
 		integer :: unit_
-		logical :: eof__ = .false.
+		logical :: eof = .false.
 		! Do we need a separate iostat beyond eof?
 	end type file_t
 
@@ -1831,7 +1831,7 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	dst%val  = src%val
 	!dst%val%file_ = src%val%file_
-	!dst%val%file_%eof__ = src%val%file_%eof__
+	!dst%val%file_%eof = src%val%file_%eof
 
 	dst%identifier  = src%identifier
 	dst%id_index    = src%id_index
@@ -5645,7 +5645,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			!print *, 'opened unit ', res%file_%unit_
 			res%file_%name_ = arg%str%s
-			res%file_%eof__ = .false.
+			res%file_%eof = .false.
 
 		case ("readln")
 
@@ -5669,10 +5669,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! TODO:  set eof flag or crash for other non-zero io 
 			if (io == iostat_end) then
 			!if (io /= 0) then
-				!arg1%file_%eof__ = .true.
-				vars%vals(node%args(1)%id_index)%file_%eof__ = .true.
+				!arg1%file_%eof = .true.
+				vars%vals(node%args(1)%id_index)%file_%eof = .true.
 			end if
-			!print *, 'eof   = ', arg1%file_%eof__
+			!print *, 'eof   = ', arg1%file_%eof
 
 		case ("writeln")
 
@@ -5690,9 +5690,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 
 			!print *, "checking eof for unit", arg1%file_%unit_
-			res%bool = arg1%file_%eof__
+			res%bool = arg1%file_%eof
 
-			!print *, 'eof fn = ', arg1%file_%eof__
+			!print *, 'eof fn = ', arg1%file_%eof
 
 		case ("close")
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
