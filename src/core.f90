@@ -26,6 +26,9 @@ module core_m
 		syntran_patch =  22
 
 	! TODO:
+	!  - improve cascading error experience, e.g. with an unmatched
+	!    paren/bracket etc. and a bunch of stuff afterwards.  one simple
+	!    solution might be logging ~5 errors by default and then going silent
 	!  - include directive?  not super efficient, but it might not be too hard
 	!    to hack together support for multiple translation unit syntran projects
 	!    by effectively catting all the includes together
@@ -3977,16 +3980,18 @@ function parse_size(parser) result(size)
 
 	!********
 
-	integer :: span_beg, span_end
+	integer :: span_beg, span_end, pos0
 
 	type(syntax_node_t)  :: len
-	type(syntax_token_t) :: comma
+	type(syntax_token_t) :: comma, dummy
 	type(text_span_t) :: span
 
 	size = new_syntax_node_vector()
 	do while ( &
 		parser%current_kind() /= rbracket_token .and. &
 		parser%current_kind() /= eof_token)
+
+		pos0 = parser%pos
 
 		span_beg = parser%peek_pos(0)
 		len      = parser%parse_expr()
@@ -4004,7 +4009,8 @@ function parse_size(parser) result(size)
 
 		call size%push(len)
 
-		! TODO: break infinite loop?
+		! break infinite loop?
+		if (parser%pos == pos0) dummy = parser%next()
 
 		if (parser%current_kind() /= rbracket_token) then
 			comma = parser%match(comma_token)
@@ -4363,14 +4369,14 @@ function parse_primary_expr(parser) result(expr)
 
 	character(len = :), allocatable :: param_type, arg_type
 	integer :: i, io, id_index, param_rank, arg_rank, span0, span1, &
-		ptype, atype, exp_rank
+		ptype, atype, exp_rank, pos0
 	logical :: bool, types_match
 
 	type(fn_t) :: fn
 	type(syntax_node_t) :: arg
 	type(syntax_node_vector_t) :: args
 	type(syntax_token_t) :: left, right, keyword, identifier, &
-		comma, lparen, rparen, token
+		comma, lparen, rparen, token, dummy
 	type(text_span_t) :: span
 
 	if (debug > 1) print *, 'parse_primary_expr'
@@ -4491,6 +4497,7 @@ function parse_primary_expr(parser) result(expr)
 					parser%current_kind() /= rparen_token .and. &
 					parser%current_kind() /= eof_token)
 
+					pos0 = parser%pos
 					arg = parser%parse_expr()
 					call args%push(arg)
 
@@ -4513,6 +4520,10 @@ function parse_primary_expr(parser) result(expr)
 					if (parser%current_kind() /= rparen_token) then
 						comma = parser%match(comma_token)
 					end if
+
+					! break infinite loop
+					if (parser%pos == pos0) dummy = parser%next()
+
 				end do
 
 				rparen  = parser%match(rparen_token)
