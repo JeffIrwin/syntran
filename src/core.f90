@@ -5620,7 +5620,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 
+			! TODO: catch iostat, e.g. same file opened twice, folder doesn't
+			! exist, etc.
 			open(newunit = res%file_%unit_, file = arg%str%s)
+
 			!print *, 'opened unit ', res%file_%unit_
 			res%file_%name_ = arg%str%s
 			res%file_%eof__ = .false.

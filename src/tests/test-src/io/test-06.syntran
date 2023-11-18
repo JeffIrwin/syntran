@@ -14,6 +14,7 @@ fn countlines(filename: str): i32
 		//println();
 	}
 	nlines -= 1;
+	close(fi);
 
 	nlines;
 }
