@@ -26,6 +26,9 @@ module core_m
 		syntran_patch =  22
 
 	! TODO:
+	!  - include directive?  not super efficient, but it might not be too hard
+	!    to hack together support for multiple translation unit syntran projects
+	!    by effectively catting all the includes together
 	!  - fn return statement. i like the cleanliness of rust but i still need a
 	!    way to return early.  rust does have an explicit "return" statement, i
 	!    guess it's just not the rust style to use it when it's not needed

@@ -104,32 +104,38 @@ fn tok_i32(str_: str): [i32; :]
 	//println("starting tok_i32()");
 	//println("str_ = ", str_);
 
+	// TODO: `-` (negatives).  Maybe separate u32 and i32 fns
 	let nums = "1234567890";
 	let beg_ = scan    (str_, nums);
 
-	let n = len(str_);
-	//println("n = ", n);
-
-	// nasty bug which was just fixed
-	let len_ = verify(str_[beg_:n], nums);
-	//println("len_ = ", len_);
-
 	let end_ = -1;
-	if (len_ < 0)
+	let len_ = -1;
+
+	if (beg_ >= 0)
 	{
-		// This is consistent with the way that verify() works in Fortran
-		end_ = n - 1;
-		len_ = end_ - beg_ + 1;
+
+		let n = len(str_);
+		//println("n = ", n);
+	
+		len_ = verify(str_[beg_:n], nums);
+		//println("len_ = ", len_);
+	
+		if (len_ < 0)
+		{
+			// This is consistent with the way that verify() works in Fortran
+			end_ = n - 1;
+			len_ = end_ - beg_ + 1;
+		}
+		else
+			end_ = beg_ + len_ - 1;
+	
+		//println("beg_ = ", beg_);
+		//println("end_ = ", end_);
+	
+		//println("num beg = ", str_[beg_]);
+		//println("num end = ", str_[end_]);
+		//println("num str = ", str_[beg_: end_+1]);
 	}
-	else
-		end_ = beg_ + len_ - 1;
-
-	//println("beg_ = ", beg_);
-	//println("end_ = ", end_);
-
-	//println("num beg = ", str_[beg_]);
-	//println("num end = ", str_[end_]);
-	//println("num str = ", str_[beg_: end_+1]);
 
 	// return
 	[beg_, end_, len_];
@@ -157,39 +163,103 @@ fn parse_i32(str_: str): i32
 
 //==========================================================
 
-fn main(): bool
+fn parse_i32s1(str_: str): [i32; :]
 {
+	let i = 0;
+	let n = len(str_);
+	//println("str_ = ", str_);
+	//println("n = ", n);
 
-	let correct = true;
+	let toks = tok_i32(str_[i:n]);
 
-	correct = correct and 1337 == parse_i32("1337");
-	correct = correct and 1337 == parse_i32("haystack1337haystack");
-	correct = correct and 1337 == parse_i32("haystack 1337haystack");
-	correct = correct and 1337 == parse_i32("haystack1337 haystack");
-	correct = correct and 1337 == parse_i32("1337haystack");
-	correct = correct and 1337 == parse_i32("haystack1337");
-	correct = correct and 1337 == parse_i32("hay1337haystack");
-	correct = correct and 1337 == parse_i32("haystack1337hay");
-	correct = correct and 1337 == parse_i32("hays1337haystack");
-	correct = correct and 1337 == parse_i32("haystack1337hays");
+	//println("parse_i32s substr = ", str_[toks[0]: toks[1]+1]);
+
+	let ans = i32(str_[toks[0]: toks[1]+1]);
+	//println("parse_i32 = ", ans);
+	let i0 = ans;
+
+	i += toks[1] + 1;
+	toks = tok_i32(str_[i:n]);
+	ans = i32(str_[i + toks[0]: i + toks[1]+1]);
+	let i1 = ans;
+
+	i += toks[1] + 1;
+	toks = tok_i32(str_[i:n]);
+	ans = i32(str_[i + toks[0]: i + toks[1]+1]);
+	let i2 = ans;
+
+	i += toks[1] + 1;
+	//println("i = ", i);
+	toks = tok_i32(str_[i:n]);
+	//println("toks = ", toks);
+	//ans = i32(str_[i + toks[0]: i + toks[1]+1]);
+	//let i3 = ans;
+
+	// return
+	[i0, i1, i2];
+}
+
+//==========================================================
+
+fn parse_i32s(str_: str): [i32; :]
+{
+	let i = 0;
+	let n = len(str_);
+
+	//println("str_ = ", str_);
+	//println("n = ", n);
+
+	let toks = [0, 0, 0];
+	let num_nums = 0;  // the number of numbers
+
+	while toks[0] >= 0
+	{
+		//println("i = ", i);
+		toks = tok_i32(str_[i:n]);
+		//println("toks = ", toks);
+		let num = i32(str_[i + toks[0]: i + toks[1]+1]);
+		//println("num = ", num);
+		num_nums += 1;
+		i += toks[1] + 1;
+	}
+	num_nums -= 1;
+
+	let nums = [0; num_nums];
+	i = 0;
+	for j in [0: num_nums]
+	{
+		//println("i = ", i);
+		toks = tok_i32(str_[i:n]);
+		//println("toks = ", toks);
+		let num = i32(str_[i + toks[0]: i + toks[1]+1]);
+		//println("num = ", num);
+		nums[j] = num;
+		//num_nums += 1;
+		i += toks[1] + 1;
+	}
+
+	// return
+	nums;
+	//[num_nums];
+	//[i0, i1, i2];
+}
+
+//==========================================================
+
+fn main(): [i32; :]
+{
+	//parse_i32s("hay1337haystack");
+	//parse_i32s("1337haystack");
+	//parse_i32s("hay1337");
 
 	//println();
+	//parse_i32s("hay1337hays42haystack");
+	//parse_i32s("1337hays42");
 
-	correct = correct and 137 == parse_i32("137");
-	correct = correct and 137 == parse_i32("haystack137haystack");
-	correct = correct and 137 == parse_i32("haystack 137haystack");
-	correct = correct and 137 == parse_i32("haystack137 haystack");
-	correct = correct and 137 == parse_i32("137haystack");
-	correct = correct and 137 == parse_i32("haystack137");
-	correct = correct and 137 == parse_i32("hay137haystack");
-	correct = correct and 137 == parse_i32("haystack137hay");
-	correct = correct and 137 == parse_i32("hays137haystack");
-	correct = correct and 137 == parse_i32("haystack137hays");
+	//println();
+	//parse_i32s("1337hays42hayst16384");
 
-	//println("correct = ", correct);
-
-	// return 
-	correct;
+	parse_i32s("hay1337hays42hayst16384ack");
 
 }
 
