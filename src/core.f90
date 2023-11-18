@@ -5771,7 +5771,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!print *, 'identifier ', node%identifier%text
 				!print *, 'il = ', il
 				!print *, 'iu = ', iu
-				!print *, 'str HERE = ', vars%vals(node%id_index)%str%s
+				!print *, 'str = ', vars%vals(node%id_index)%str%s
 
 				! Not inclusive of upper bound
 				res%str%s = vars%vals(node%id_index)%str%s(il+1: iu)
