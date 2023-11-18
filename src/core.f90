@@ -649,6 +649,8 @@ function declare_intrinsic_fns() result(fns)
 
 	! TODO: add fns for parsing str to other types (f32, bool, etc.)
 
+	! TODO: document
+
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
 
