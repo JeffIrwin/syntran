@@ -26,6 +26,9 @@ module core_m
 		syntran_patch =  22
 
 	! TODO:
+	!  - fn return statement. i like the cleanliness of rust but i still need a
+	!    way to return early.  rust does have an explicit "return" statement, i
+	!    guess it's just not the rust style to use it when it's not needed
 	!  - str comparison operations:
 	!    * !=
 	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
@@ -377,6 +380,7 @@ module core_m
 		type(syntax_node_t), allocatable :: lbound, step, ubound, len_, &
 			elems(:), rank
 
+		! TODO: rename `size`
 		type(syntax_node_t), allocatable :: subscripts(:), size(:), args(:), &
 			usubscripts(:)!, ssubscripts(:) !TODO: subscript step
 
@@ -4487,6 +4491,22 @@ function parse_primary_expr(parser) result(expr)
 					arg = parser%parse_expr()
 					call args%push(arg)
 
+					!! TODO: we need a delete method for syntax_node_t (i.e.
+					!! arg).  There was a bug here where the fact that the
+					!! subscripts for the 1st fn arg were allocated, leaked into
+					!! the 2nd arg because of this loop.  For example:
+					!!
+					!!     let result = my_fn_call(str1[beg:end], str2);
+					!!
+					!! We should delete the whole thing just to be safe, to
+					!! prevent anything else from leaking.
+
+					!if (allocated(arg)) then
+						if (allocated(arg%subscripts)) then
+							deallocate(arg%subscripts)
+						end if
+					!end if
+
 					if (parser%current_kind() /= rparen_token) then
 						comma = parser%match(comma_token)
 					end if
@@ -4997,6 +5017,7 @@ end function next_parser_token
 !===============================================================================
 
 integer function subscript_eval(node, vars, fns, quietl) result(index)
+	! TODO: rename index
 
 	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
 	! subscript index
@@ -5741,12 +5762,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			case (range_sub)
 
 				il = subscript_eval(node, vars, fns, quietl)
-				!print *, 'il = ', il
 
 				! This feels inconsistent and not easy to extend to higher ranks
 				right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
 				iu = right%i32
-				!print *, 'iu = ', iu
+
+				print *, ''
+				print *, 'identifier ', node%identifier%text
+				print *, 'il = ', il
+				print *, 'iu = ', iu
+				print *, 'str HERE = ', vars%vals(node%id_index)%str%s
 
 				! Not inclusive of upper bound
 				res%str%s = vars%vals(node%id_index)%str%s(il+1: iu)
@@ -5757,7 +5782,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end select
 
 		else if (allocated(node%subscripts)) then
-			!print *, 'string subscript RHS name expr'
 
 			if (vars%vals(node%id_index)%type /= array_type) then
 				write(*,*) 'Error: bad type, expected array'

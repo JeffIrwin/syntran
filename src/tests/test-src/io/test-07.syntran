@@ -1,0 +1,181 @@
+
+// Test a syntran function that tokenizes an i32 within a str and then converts
+// using the i32() intrinsic fn
+
+//==========================================================
+
+fn scan(str_: str, set: str): i32
+{
+	// c.f. Fortran intrinsic scan()
+
+	println("str_ = ", str_);
+	println("set = ", set);
+
+	let found = false;
+	let i = 0;
+	while not found and i < len(str_)
+	{
+
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	if (found)
+		i -= 1;
+	else
+		i = -1;
+}
+
+//==========================================================
+
+fn scanback(str_: str, set: str): i32
+{
+	// c.f. Fortran intrinsic scan() with back = true
+
+	println("str_ = ", str_);
+	println("set = ", set);
+
+	let found = false;
+	let i = len(str_) - 1;
+	while not found and i > 0
+	{
+
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i -= 1;
+	}
+
+	// return
+	if (found)
+		i += 1;
+	else
+		i = -1;
+}
+
+//==========================================================
+
+fn verify(str_: str, set: str): i32
+{
+	// c.f. Fortran intrinsic verify()
+
+	println("str_ = ", str_);
+	println("set = ", set);
+
+	let found = true;
+	let i = 0;
+	while found and i < len(str_)
+	{
+		println(i);
+
+		let j = 0;
+		found = false;
+		while not found and j < len(set)
+		{
+			//found = str_[i] != set[j];
+			//found = not (str_[i] == set[j]);
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	if (not found)
+		i -= 1;
+	else
+		i = -1;
+}
+
+//==========================================================
+
+fn tok_i32(str_: str): [i32; :]
+{
+	// tokenize a string into the first int contained within it, then return the
+	// substring start index, end index, and length
+
+	let nums = "1234567890";
+	let ibeg = scan    (str_, nums);
+
+	//let iend = scanback(str_, nums);
+
+	let n = len(str_);
+	println("n = ", n);
+
+	println("printing ...");
+	println("str_[ibeg:n] = ", str_[ibeg:n]);
+	println("done");
+
+	let strchop = str_[ibeg:n];
+
+	//let ilen = verify(str_, nums);
+
+	// nasty bug which was just fixed
+	let ilen = verify(str_[ibeg:n], nums);
+
+	//let ilen = verify(str_[ibeg:n], "1234567890");
+	//let ilen = verify(str_[ibeg:n-ibeg-2], nums);
+
+	//let ilen = verify(strchop, nums);
+
+	//ilen = 0;
+	
+	println("ilen = ", ilen);
+
+	let iend = ibeg + ilen - 1;
+
+	println("ibeg = ", ibeg);
+	println("iend = ", iend);
+
+	println("num beg = ", str_[ibeg]);
+	println("num end = ", str_[iend]);
+	println("num str = ", str_[ibeg: iend+1]);
+
+	//let ilen = iend - ibeg + 1;
+
+	// return
+	[ibeg, iend, ilen];
+}
+
+//==========================================================
+
+fn parse_i32(str_: str)
+{
+	let toks = tok_i32(str_);
+
+	// multiple return vals are packed into a vect bc i don't have structs :(
+	let beg_ = toks[0];
+	let end_ = toks[1];
+	//let len_ = toks[2];
+
+	println("parse_i32 substr = ", str_[beg_: end_+1]);
+
+	// return
+	i32(str_[beg_: end_+1]);
+}
+
+//==========================================================
+
+fn main(): i32
+{
+	//let ans = tok_i32("haystack1337haystack");
+	let ans = parse_i32("haystack1337haystack");
+	println("ans = ", ans);
+	ans;
+}
+
+//==========================================================
+
+main();
+
+//==========================================================
+
