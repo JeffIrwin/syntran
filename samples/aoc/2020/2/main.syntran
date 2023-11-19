@@ -34,7 +34,7 @@ fn countlines(filename: str): i32
 	let ans = nlines;
 }
 
-//==========================================================
+//==============================================================================
 
 fn scan(str_: str, set: str): i32
 {
@@ -64,7 +64,7 @@ fn scan(str_: str, set: str): i32
 		i = -1;
 }
 
-//==========================================================
+//==============================================================================
 
 fn scanback(str_: str, set: str): i32
 {
@@ -94,7 +94,7 @@ fn scanback(str_: str, set: str): i32
 		i = -1;
 }
 
-//==========================================================
+//==============================================================================
 
 fn verify(str_: str, set: str): i32
 {
@@ -126,7 +126,7 @@ fn verify(str_: str, set: str): i32
 		i = -1;
 }
 
-//==========================================================
+//==============================================================================
 
 fn tok_i32(str_: str): [i32; :]
 {
@@ -180,60 +180,13 @@ fn tok_i32(str_: str): [i32; :]
 	[beg_, end_, len_];
 }
 
-//==========================================================
+//==============================================================================
 
 fn xor_(p: bool, q: bool): bool
 {
-	(p and not q) or (q and not p);
-}
-
-//==========================================================
-
-fn parse_i32s(str_: str): [i32; :]
-{
-	// Parse a vector of i32 integers from a string.  Any non-int characters are
-	// treated as delimiters
-	//
-	// TODO: delete, not used here
-
-	let i = 0;
-	let n = len(str_);
-
-	//println("str_ = ", str_);
-	//println("n = ", n);
-
-	let toks = [0, 0, 0];
-	let num_nums = 0;  // the number of numbers
-
-	while toks[0] >= 0
-	{
-		//println("i = ", i);
-		toks = tok_i32(str_[i:n]);
-		//println("toks = ", toks);
-		//let num = i32(str_[i + toks[0]: i + toks[1]+1]);
-		//println("num = ", num);
-		num_nums += 1;
-		i += toks[1] + 1;
-	}
-	num_nums -= 1;
-
-	let nums = [0; num_nums];
-	i = 0;
-	for j in [0: num_nums]
-	{
-		//println("i = ", i);
-		toks = tok_i32(str_[i:n]);
-		//println("toks = ", toks);
-		let num = i32(str_[i + toks[0]: i + toks[1]+1]);
-		//println("num = ", num);
-		nums[j] = num;
-		//num_nums += 1;
-		i += toks[1] + 1;
-	}
-	//println("nums = ", nums);
-
-	// return
-	nums;
+	//// not sure why i overthought this.  syntran is nicer than fortran
+	//(p and not q) or (q and not p);
+	p != q;
 }
 
 //==============================================================================
