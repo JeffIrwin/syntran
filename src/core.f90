@@ -23,7 +23,7 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  23
+		syntran_patch =  24
 
 	! TODO:
 	!  - include directive?  not super efficient, but it might not be too hard
