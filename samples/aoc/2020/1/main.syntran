@@ -1,0 +1,118 @@
+
+//==============================================================================
+
+// It might be cleaner to use an array of filenames to toggle these
+
+let input_file = "";
+let test_input = not true;
+if test_input
+	input_file = "test-input.txt";
+else
+	input_file = "input.txt";
+
+//==============================================================================
+
+// Utility fns
+
+fn countlines(filename: str): i32
+{
+	let fi = open(filename);
+	//println("fi = " + str(fi));
+
+	let nlines = 0;
+	while not eof(fi)
+	{
+		//println(i);
+		let str = readln(fi);
+		//println("eof syntran = " + str(eof(fi)));
+		nlines += 1;
+		//println();
+	}
+	nlines -= 1;
+	close(fi);
+
+	let ans = nlines;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let n = countlines(input_file);
+	//println("n = ", n);
+	let sum_ = 0;
+
+	let vec_ = [0; n];
+
+	let f = open(input_file);
+	for i in [0: n]
+	{
+		let s = readln(f);
+		//println("s = ", s);
+
+		vec_[i] = i32(s);
+	}
+	close(f);
+
+	//println("vec_ = ", vec_);
+
+	for i in [1: n]
+	for j in [0: i]
+	{
+		if vec_[i] + vec_[j] == 2020
+			sum_ = vec_[i] * vec_[j];
+	}
+
+	println("part1 = ", sum_);
+	let ans = sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let n = countlines(input_file);
+	//println("n = ", n);
+	let sum_ = 0;
+
+	let vec_ = [0; n];
+
+	let f = open(input_file);
+	for i in [0: n]
+	{
+		let s = readln(f);
+		//println("s = ", s);
+
+		vec_[i] = i32(s);
+	}
+	close(f);
+
+	//println("vec_ = ", vec_);
+
+	for i in [2: n]
+	for j in [1: i]
+	for k in [0: j]
+	{
+		if vec_[i] + vec_[j] + vec_[k] == 2020
+			sum_ = vec_[i] * vec_[j] * vec_[k];
+	}
+
+	println("part2 = ", sum_);
+	let ans = sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println("Reading input file """, input_file, """");
+	part1();
+	part2();
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+
