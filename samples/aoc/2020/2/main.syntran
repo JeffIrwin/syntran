@@ -1,0 +1,370 @@
+
+//==============================================================================
+
+// It might be cleaner to use an array of filenames to toggle these
+
+let input_file = "";
+let test_input = not true;
+if test_input
+	input_file = "test-input.txt";
+else
+	input_file = "input.txt";
+
+//==============================================================================
+
+// Utility fns
+
+fn countlines(filename: str): i32
+{
+	let fi = open(filename);
+	//println("fi = " + str(fi));
+
+	let nlines = 0;
+	while not eof(fi)
+	{
+		//println(i);
+		let str = readln(fi);
+		//println("eof syntran = " + str(eof(fi)));
+		nlines += 1;
+		//println();
+	}
+	nlines -= 1;
+	close(fi);
+
+	let ans = nlines;
+}
+
+//==========================================================
+
+fn scan(str_: str, set: str): i32
+{
+	// c.f. Fortran intrinsic scan()
+
+	//println("str_ = ", str_);
+	//println("set = ", set);
+
+	let found = false;
+	let i = 0;
+	while not found and i < len(str_)
+	{
+
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	if (found)
+		i -= 1;
+	else
+		i = -1;
+}
+
+//==========================================================
+
+fn scanback(str_: str, set: str): i32
+{
+	// c.f. Fortran intrinsic scan() with back = true
+
+	//println("str_ = ", str_);
+	//println("set = ", set);
+
+	let found = false;
+	let i = len(str_) - 1;
+	while not found and i > 0
+	{
+
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i -= 1;
+	}
+
+	// return
+	if (found)
+		i += 1;
+	else
+		i = -1;
+}
+
+//==========================================================
+
+fn verify(str_: str, set: str): i32
+{
+	// c.f. Fortran intrinsic verify()
+
+	//println("str_ = ", str_);
+	//println("set = ", set);
+
+	let found = true;
+	let i = 0;
+	while found and i < len(str_)
+	{
+		//println(i);
+
+		let j = 0;
+		found = false;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	if (not found)
+		i -= 1;
+	else
+		i = -1;
+}
+
+//==========================================================
+
+fn tok_i32(str_: str): [i32; :]
+{
+	// tokenize a string into the first int contained within it, then return the
+	// substring start index, end index, and length
+	//
+	// Double hyphens (--) will break this
+
+	//println("starting tok_i32()");
+	//println("str_ = ", str_);
+
+	// first character can be a minus sign
+	let snums = "-1234567890";
+	let beg_ = scan    (str_, snums);
+
+	let end_ = -1;
+	let len_ = -1;
+
+	if (beg_ >= 0)
+	{
+
+		let n = len(str_);
+		//println("n = ", n);
+	
+		// subsequent characters cannot be minus signs
+		let unums = "1234567890";
+
+		// we've already found 1 starting char
+		len_ = verify(str_[beg_+1: n], unums);
+		//println("len_ = ", len_);
+	
+		if (len_ < 0)
+		{
+			// This is consistent with the way that verify() works in Fortran
+			end_ = n - 1;
+			len_ = end_ - beg_ + 1;
+		}
+		else
+			//end_ = beg_ + len_ - 1;
+			end_ = beg_ + len_;
+	
+		//println("beg_ = ", beg_);
+		//println("end_ = ", end_);
+	
+		//println("num beg = ", str_[beg_]);
+		//println("num end = ", str_[end_]);
+		//println("num str = ", str_[beg_: end_+1]);
+	}
+
+	// return
+	[beg_, end_, len_];
+}
+
+//==========================================================
+
+fn xor_(p: bool, q: bool): bool
+{
+	(p and not q) or (q and not p);
+}
+
+//==========================================================
+
+fn parse_i32s(str_: str): [i32; :]
+{
+	// Parse a vector of i32 integers from a string.  Any non-int characters are
+	// treated as delimiters
+	//
+	// TODO: delete, not used here
+
+	let i = 0;
+	let n = len(str_);
+
+	//println("str_ = ", str_);
+	//println("n = ", n);
+
+	let toks = [0, 0, 0];
+	let num_nums = 0;  // the number of numbers
+
+	while toks[0] >= 0
+	{
+		//println("i = ", i);
+		toks = tok_i32(str_[i:n]);
+		//println("toks = ", toks);
+		//let num = i32(str_[i + toks[0]: i + toks[1]+1]);
+		//println("num = ", num);
+		num_nums += 1;
+		i += toks[1] + 1;
+	}
+	num_nums -= 1;
+
+	let nums = [0; num_nums];
+	i = 0;
+	for j in [0: num_nums]
+	{
+		//println("i = ", i);
+		toks = tok_i32(str_[i:n]);
+		//println("toks = ", toks);
+		let num = i32(str_[i + toks[0]: i + toks[1]+1]);
+		//println("num = ", num);
+		nums[j] = num;
+		//num_nums += 1;
+		i += toks[1] + 1;
+	}
+	//println("nums = ", nums);
+
+	// return
+	nums;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = 0;
+
+	let f = open(input_file);
+	let s = readln(f);
+	while not eof(f)
+	{
+		//println("s = ", s);
+
+		let is = 0;
+		let ns = len(s);
+
+		let toks = tok_i32(s[is:ns]);
+		//println("toks = ", toks);
+
+		let num0 = i32(s[is + toks[0]: is + toks[1]+1]);
+		is += toks[1] + 1;
+
+		// skip `-` delimiter
+		is += 1;
+
+		toks = tok_i32(s[is:ns]);
+		//println("toks = ", toks);
+		let num1 = i32(s[is + toks[0]: is + toks[1]+1]);
+		is += toks[1] + 1;
+
+		//println("nums = ", num0, ", ", num1);
+
+		// skip ` ` delimiter
+		is += 1;
+		let char_ = s[is];
+
+		//println("char_ = ", char_);
+
+		// skip char_ and `: ` delimiters
+		is += 3;
+		let password = s[is:ns];
+
+		//println("password = """, password, """");
+
+		let count_ = 0;
+		for i in [0: len(password)]
+			if password[i] == char_
+				count_ += 1;
+
+		//println("count_ = ", count_);
+
+		if num0 <= count_ and count_ <= num1
+			sum_ += 1;
+
+		//println();
+		s = readln(f);
+	}
+	close(f);
+
+	println("part1 = ", sum_);
+	let ans = sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let sum_ = 0;
+
+	let f = open(input_file);
+	let s = readln(f);
+	while not eof(f)
+	{
+		//println("s = ", s);
+
+		let is = 0;
+		let ns = len(s);
+
+		let toks = tok_i32(s[is:ns]);
+		//println("toks = ", toks);
+
+		let num0 = i32(s[is + toks[0]: is + toks[1]+1]);
+		is += toks[1] + 1;
+
+		// skip `-` delimiter
+		is += 1;
+
+		toks = tok_i32(s[is:ns]);
+		//println("toks = ", toks);
+		let num1 = i32(s[is + toks[0]: is + toks[1]+1]);
+		is += toks[1] + 1;
+
+		//println("nums = ", num0, ", ", num1);
+
+		// skip ` ` delimiter
+		is += 1;
+		let char_ = s[is];
+
+		//println("char_ = ", char_);
+
+		// skip char_ and `: ` delimiters
+		is += 3;
+		let password = s[is:ns];
+
+		//println("password = """, password, """");
+
+		if (xor_(password[num0-1] == char_, password[num1-1] == char_))
+			sum_ += 1;
+
+		//println();
+		s = readln(f);
+	}
+	close(f);
+
+	println("part2 = ", sum_);
+	let ans = sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println("Reading input file """, input_file, """");
+	part1();
+	part2();
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+
