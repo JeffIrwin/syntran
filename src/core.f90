@@ -26,9 +26,6 @@ module core_m
 		syntran_patch =  23
 
 	! TODO:
-	!  - improve cascading error experience, e.g. with an unmatched
-	!    paren/bracket etc. and a bunch of stuff afterwards.  one simple
-	!    solution might be logging ~5 errors by default and then going silent
 	!  - include directive?  not super efficient, but it might not be too hard
 	!    to hack together support for multiple translation unit syntran projects
 	!    by effectively catting all the includes together
@@ -659,8 +656,6 @@ function declare_intrinsic_fns() result(fns)
 	call fns%insert("str", str_fn, id_index)
 
 	!********
-
-	! TODO: document
 
 	! TODO: return i64?
 
@@ -1723,7 +1718,8 @@ end function kind_token
 
 recursive function syntax_node_str(node, indent) result(str)
 
-	! Convert tree to string in JSON-ish format
+	! Convert tree to string in JSON-ish format.  Incomplete since I've added so
+	! many new members
 
 	class(syntax_node_t) :: node
 
@@ -1920,6 +1916,9 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	if (allocated(src%subscripts)) then
 		call syntax_nodes_copy(dst%subscripts, src%subscripts)
+	else if (allocated(dst%subscripts)) then
+		! TODO: every other allocatable member should have a similar else-if clause
+		deallocate(dst%subscripts)
 	end if
 
 	if (allocated(src%usubscripts)) then
@@ -4059,14 +4058,15 @@ function parse_array_expr(parser) result(expr)
 	!     // Explicit list for any rank-1 type
 	!     [elem_0, elem_1, elem_2, ... ]
 	!
-	! A note on the term "rank-1":  I think there's a good argument to be made
-	! that for a language with 0-based arrays, we should call vectors "rank-0"
-	! and matrices "rank-1".  However, I'm calling them "rank-1" and "rank-2"
+	! A note on the term "rank-1":  Maybe there's an argument to be made that
+	! for a language with 0-based arrays, we should call vectors "rank-0" and
+	! matrices "rank-1".  However, I'm calling them "rank-1" and "rank-2"
 	! respectively, as that's what Fortran calls them and I hadn't thought that
-	! far ahead :)
+	! far ahead :).  Anyway, a "3D" vector is always like [x, y, z] -- C doesn't
+	! call that a 4D vector despite being 0-based.
 	!
 	! NumPy uses the same convention for "rank-1" as us.  In fact, NumPy has
-	! something below a vector called a "rank-0" array
+	! something below a vector called a "rank-0" array :exploding-head:
 
 	lbracket = parser%match(lbracket_token)
 
@@ -4511,10 +4511,8 @@ function parse_primary_expr(parser) result(expr)
 					!! We should delete the whole thing just to be safe, to
 					!! prevent anything else from leaking.
 
-					!if (allocated(arg)) then
-						if (allocated(arg%subscripts)) then
-							deallocate(arg%subscripts)
-						end if
+					!if (allocated(arg%subscripts)) then
+					!	deallocate(arg%subscripts)
 					!end if
 
 					if (parser%current_kind() /= rparen_token) then
