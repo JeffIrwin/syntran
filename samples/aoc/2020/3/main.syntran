@@ -205,57 +205,51 @@ fn part1(): i32
 {
 	let sum_ = 0;
 
+	let ny = countlines(input_file);
+
 	let f = open(input_file);
 	let s = readln(f);
+
+	let nx = len(s);
+
+	println("nx, ny = ", nx, ", ", ny);
+
+	// New in syntran 0.0.24
+	let grid = [false; nx, ny];
+	//let grid = [0; nx, ny];
+
+	let iy = 0;
 	while not eof(f)
 	{
 		//println("s = ", s);
 
-		let is = 0;
-		let ns = len(s);
-
-		let toks = tok_i32(s[is:ns]);
-		//println("toks = ", toks);
-
-		let num0 = i32(s[is + toks[0]: is + toks[1]+1]);
-		is += toks[1] + 1;
-
-		// skip `-` delimiter
-		is += 1;
-
-		toks = tok_i32(s[is:ns]);
-		//println("toks = ", toks);
-		let num1 = i32(s[is + toks[0]: is + toks[1]+1]);
-		is += toks[1] + 1;
-
-		//println("nums = ", num0, ", ", num1);
-
-		// skip ` ` delimiter
-		is += 1;
-		let char_ = s[is];
-
-		//println("char_ = ", char_);
-
-		// skip char_ and `: ` delimiters
-		is += 3;
-		let password = s[is:ns];
-
-		//println("password = """, password, """");
-
-		let count_ = 0;
-		for i in [0: len(password)]
-			if password[i] == char_
-				count_ += 1;
-
-		//println("count_ = ", count_);
-
-		if num0 <= count_ and count_ <= num1
-			sum_ += 1;
+		for ix in [0: nx]
+			grid[ix,iy] = s[ix] == "#";
 
 		//println();
 		s = readln(f);
+		iy += 1;
 	}
 	close(f);
+
+	//println("grid = ", grid);
+
+	let slope = [3, 1];
+
+	let dx = slope[0];
+	let dy = slope[1];
+
+	let ix = 0;
+	iy = 0;
+	while iy < ny
+	{
+		// Don't need to check starting spot.  It's always empty anyway
+		ix += dx;
+		iy += dy;
+
+		if grid[ix%nx, iy]
+			sum_ += 1;
+	}
 
 	println("part1 = ", sum_);
 	let ans = sum_;
@@ -265,55 +259,86 @@ fn part1(): i32
 
 fn part2(): i32
 {
-	let sum_ = 0;
+
+	let ny = countlines(input_file);
 
 	let f = open(input_file);
 	let s = readln(f);
+
+	let nx = len(s);
+
+	println("nx, ny = ", nx, ", ", ny);
+
+	// New in syntran 0.0.24
+	let grid = [false; nx, ny];
+	//let grid = [0; nx, ny];
+
+	let iy = 0;
 	while not eof(f)
 	{
 		//println("s = ", s);
 
-		let is = 0;
-		let ns = len(s);
-
-		let toks = tok_i32(s[is:ns]);
-		//println("toks = ", toks);
-
-		let num0 = i32(s[is + toks[0]: is + toks[1]+1]);
-		is += toks[1] + 1;
-
-		// skip `-` delimiter
-		is += 1;
-
-		toks = tok_i32(s[is:ns]);
-		//println("toks = ", toks);
-		let num1 = i32(s[is + toks[0]: is + toks[1]+1]);
-		is += toks[1] + 1;
-
-		//println("nums = ", num0, ", ", num1);
-
-		// skip ` ` delimiter
-		is += 1;
-		let char_ = s[is];
-
-		//println("char_ = ", char_);
-
-		// skip char_ and `: ` delimiters
-		is += 3;
-		let password = s[is:ns];
-
-		//println("password = """, password, """");
-
-		if (xor_(password[num0-1] == char_, password[num1-1] == char_))
-			sum_ += 1;
+		for ix in [0: nx]
+			grid[ix,iy] = s[ix] == "#";
 
 		//println();
 		s = readln(f);
+		iy += 1;
 	}
 	close(f);
 
-	println("part2 = ", sum_);
-	let ans = sum_;
+	//println("grid = ", grid);
+
+
+	let nslopes = 5;
+	let slopes =
+		[
+			1, 1,
+			3, 1,
+			5, 1,
+			7, 1,
+			1, 2
+			;
+			2, nslopes
+		];
+
+	println("slopes = ", slopes);
+
+	let prod_ = 1;
+	let prod_str = "";
+	for islope in [0: nslopes]
+	{
+		let dx = slopes[0, islope];
+		let dy = slopes[1, islope];
+
+		println("slope = ", dx, ", ", dy);
+
+		let sum_ = 0;
+
+		let ix = 0;
+		iy = 0;
+		while iy < ny
+		{
+			// Don't need to check starting spot.  It's always empty anyway
+			ix += dx;
+			iy += dy;
+
+			if iy < ny and grid[ix%nx, iy]
+				sum_ += 1;
+		}
+
+		// The product overflows i32 for the real input but I can cheat by
+		// printing a string to eval in python
+		prod_ *= sum_;
+		prod_str = prod_str + str(sum_);
+		if islope < nslopes - 1
+			prod_str = prod_str + " * ";
+
+	}
+
+	//println("part2 = ", prod_);
+	println("part2 = ", prod_str);
+	let ans = prod_;
 }
 
 //==============================================================================

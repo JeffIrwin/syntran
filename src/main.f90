@@ -8,13 +8,13 @@ program main
 
 	character(len = :), allocatable :: res
 
-
 	integer :: argc
 	character(len = 256) :: argv
 	character(len = :), allocatable :: file
 
 	! TODO: add syntran_parse_args() (return arg struct) for interpreter source
-	! file, help, version info, max error logging, etc.
+	! file, help, version info, max error logging, etc.  Cali has a good arg
+	! parser that could be copied
 
 	! TODO: printing the #help directive is ok for syntran_interpret, but it
 	! doesn't help for syntran_interpret_file.  Refactor banner

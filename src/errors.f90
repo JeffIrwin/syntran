@@ -442,6 +442,18 @@ end function err_eval_binary_types
 
 !===============================================================================
 
+function err_eval_len_array(type_name) result(err)
+	character(len = *), intent(in) :: type_name
+	character(len = :), allocatable :: err
+
+	err = err_int_prefix &
+		//'array cannot be evaluated for type `' &
+		//type_name//'`'//color_reset
+
+end function err_eval_len_array
+
+!===============================================================================
+
 function err_eval_unary_op(op) result(err)
 	character(len = *), intent(in) :: op
 	character(len = :), allocatable :: err

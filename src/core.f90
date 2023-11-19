@@ -5313,12 +5313,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				allocate(array%f32( array%cap ))
 				array%f32 = lbound%f32
 
+			else if (array%type == bool_type) then
+				allocate(array%bool( array%cap ))
+				array%bool = lbound%bool
+
 			else if (array%type == str_type) then
 				allocate(array%str( array%cap ))
 				array%str = lbound%str
 
 			else
-				write(*,*) 'Error: len array type eval not implemented'
+				write(*,*) err_eval_len_array(kind_name(array%type))
 				call internal_error()
 			end if
 
