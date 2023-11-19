@@ -289,12 +289,6 @@ fn main(): i32
 	actual = parse_i32s("hay1373hays43816hayst24ack");
 	sum += norm_diff(expect, actual);
 
-	//// There is an extremely cursed bug here but we can work around it like
-	//// above.  Try calling it twice if once doesn't crash.  Actually it's just
-	//an unmatched paren :)
-	//sum += norm_diff([ 1373,   43816,    24],
-	//	parse_i32s("hay1373hays43816hayst24ack");
-
 	//println("sum = ", sum);
 	sum;
 }

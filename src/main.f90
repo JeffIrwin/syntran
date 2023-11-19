@@ -14,7 +14,7 @@ program main
 	character(len = :), allocatable :: file
 
 	! TODO: add syntran_parse_args() (return arg struct) for interpreter source
-	! file, help, version info, etc.
+	! file, help, version info, max error logging, etc.
 
 	! TODO: printing the #help directive is ok for syntran_interpret, but it
 	! doesn't help for syntran_interpret_file.  Refactor banner

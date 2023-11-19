@@ -6339,15 +6339,33 @@ subroutine log_diagnostics(node, ou)
 
 	!********
 
-	integer :: i, oul
+	character(len = :), allocatable :: s
+	integer :: i, oul, maxerr, nlog, nomit
 
 	oul = output_unit
 	if (present(ou)) oul = ou
 
-	do i = 1, node%diagnostics%len_
+	! TODO: set to default and add cmd arg `-fmax-errors` to change.  This is
+	! nice for unclosed parens instead of having a huge number of cascading
+	! errors.  4 seems like a good default bc 4 errors fit on my laptop screen
+	maxerr = 4
+
+	nlog = min(node%diagnostics%len_, maxerr)
+	do i = 1, min(node%diagnostics%len_, maxerr)
 		write(oul, '(a)') node%diagnostics%v(i)%s
 		write(oul,*)
 	end do
+
+	nomit = node%diagnostics%len_ - nlog
+	if (nomit > 0) then
+		if (nomit > 1) then
+			s = "s"
+		else
+			s = ""
+		end if
+		write(oul, *) fg_bold//'[[ '//str(nomit) &
+			//' more error'//s//' omitted ]]'//color_reset
+	end if
 
 end subroutine log_diagnostics
 
