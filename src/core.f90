@@ -1857,95 +1857,130 @@ recursive subroutine syntax_node_copy(dst, src)
 		!if (debug > 1) print *, 'copy() left'
 		if (.not. allocated(dst%left)) allocate(dst%left)
 		dst%left = src%left
+	else if (allocated(dst%left)) then
+		deallocate(dst%left)
 	end if
 
 	if (allocated(src%right)) then
 		!if (debug > 1) print *, 'copy() right'
 		if (.not. allocated(dst%right)) allocate(dst%right)
 		dst%right = src%right
+	else if (allocated(dst%right)) then
+		deallocate(dst%right)
 	end if
 
 	if (allocated(src%params)) then
 		! Primitive int array.  No need to explicitly allocate
 		dst%params = src%params
+	else if (allocated(dst%params)) then
+		deallocate(dst%params)
 	end if
 
 	if (allocated(src%condition)) then
 		if (.not. allocated(dst%condition)) allocate(dst%condition)
 		dst%condition = src%condition
+	else if (allocated(dst%condition)) then
+		deallocate(dst%condition)
 	end if
 
 	if (allocated(src%body)) then
 		if (.not. allocated(dst%body)) allocate(dst%body)
 		dst%body = src%body
+	else if (allocated(dst%body)) then
+		deallocate(dst%body)
 	end if
 
 	if (allocated(src%array)) then
 		if (.not. allocated(dst%array)) allocate(dst%array)
 		dst%array = src%array
+	else if (allocated(dst%array)) then
+		deallocate(dst%array)
 	end if
 
 	if (allocated(src%lbound)) then
 		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
 		dst%lbound = src%lbound
+	else if (allocated(dst%lbound)) then
+		deallocate(dst%lbound)
 	end if
 
 	if (allocated(src%ubound)) then
 		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
 		dst%ubound = src%ubound
+	else if (allocated(dst%ubound)) then
+		deallocate(dst%ubound)
 	end if
 
 	if (allocated(src%step)) then
 		if (.not. allocated(dst%step)) allocate(dst%step)
 		dst%step = src%step
+	else if (allocated(dst%step)) then
+		deallocate(dst%step)
 	end if
 
 	if (allocated(src%len_)) then
 		if (.not. allocated(dst%len_)) allocate(dst%len_)
 		dst%len_ = src%len_
+	else if (allocated(dst%len_)) then
+		deallocate(dst%len_)
 	end if
 
 	if (allocated(src%rank)) then
 		if (.not. allocated(dst%rank)) allocate(dst%rank)
 		dst%rank = src%rank
+	else if (allocated(dst%rank)) then
+		deallocate(dst%rank)
 	end if
 
 	if (allocated(src%elems)) then
 		call syntax_nodes_copy(dst%elems, src%elems)
+	else if (allocated(dst%elems)) then
+		deallocate(dst%elems)
 	end if
 
 	if (allocated(src%subscripts)) then
 		call syntax_nodes_copy(dst%subscripts, src%subscripts)
 	else if (allocated(dst%subscripts)) then
-		! TODO: every other allocatable member should have a similar else-if clause
 		deallocate(dst%subscripts)
 	end if
 
 	if (allocated(src%usubscripts)) then
 		call syntax_nodes_copy(dst%usubscripts, src%usubscripts)
+	else if (allocated(dst%usubscripts)) then
+		deallocate(dst%usubscripts)
 	end if
 
 	if (allocated(src%args)) then
 		call syntax_nodes_copy(dst%args, src%args)
+	else if (allocated(dst%args)) then
+		deallocate(dst%args)
 	end if
 
 	if (allocated(src%size)) then
 		call syntax_nodes_copy(dst%size, src%size)
+	else if (allocated(dst%size)) then
+		deallocate(dst%size)
 	end if
 
 	if (allocated(src%if_clause)) then
 		if (.not. allocated(dst%if_clause)) allocate(dst%if_clause)
 		dst%if_clause = src%if_clause
+	else if (allocated(dst%if_clause)) then
+		deallocate(dst%if_clause)
 	end if
 
 	if (allocated(src%else_clause)) then
 		if (.not. allocated(dst%else_clause)) allocate(dst%else_clause)
 		dst%else_clause = src%else_clause
+	else if (allocated(dst%else_clause)) then
+		deallocate(dst%else_clause)
 	end if
 
 	if (allocated(src%members)) then
 		!print *, 'copying members'
 		call syntax_nodes_copy(dst%members, src%members)
+	else if (allocated(dst%members)) then
+		deallocate(dst%members)
 	end if
 
 	if (debug > 3) print *, 'done syntax_node_copy()'
