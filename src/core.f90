@@ -23,7 +23,7 @@ module core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  24
+		syntran_patch =  25
 
 	integer :: maxerr  ! TODO: move this (not default) into a settings struct that gets passed around
 	integer, parameter :: maxerr_def = 4
