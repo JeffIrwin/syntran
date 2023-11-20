@@ -25,6 +25,9 @@ module core_m
 		syntran_minor =  0, &
 		syntran_patch =  24
 
+	integer :: maxerr  ! TODO: move this (not default) into a settings struct that gets passed around
+	integer, parameter :: maxerr_def = 4
+
 	! TODO:
 	!  - include directive?  not super efficient, but it might not be too hard
 	!    to hack together support for multiple translation unit syntran projects
@@ -6377,18 +6380,22 @@ subroutine log_diagnostics(node, ou)
 	!********
 
 	character(len = :), allocatable :: s
-	integer :: i, oul, maxerr, nlog, nomit
+	integer :: i, oul, nlog, nomit
 
 	oul = output_unit
 	if (present(ou)) oul = ou
 
-	! TODO: set to default and add cmd arg `-fmax-errors` to change.  This is
-	! nice for unclosed parens instead of having a huge number of cascading
-	! errors.  4 seems like a good default bc 4 errors fit on my laptop screen
-	maxerr = 4
+	! This is nice for unclosed parens instead of having a huge number of
+	! cascading errors.  4 seems like a good default bc 4 errors fit on my
+	! laptop screen
 
-	nlog = min(node%diagnostics%len_, maxerr)
-	do i = 1, min(node%diagnostics%len_, maxerr)
+	if (maxerr > 0) then
+		nlog = min(node%diagnostics%len_, maxerr)
+	else
+		nlog = node%diagnostics%len_
+	end if
+
+	do i = 1, nlog
 		write(oul, '(a)') node%diagnostics%v(i)%s
 		write(oul,*)
 	end do

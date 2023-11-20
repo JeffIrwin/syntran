@@ -41,6 +41,10 @@ program main
 		call exit(EXIT_SUCCESS)
 	end if
 
+	!! TODO: move into settings constructor?
+	maxerr = args%maxerr
+	!maxerr = maxerrs_def
+
 	argc = command_argument_count()
 	if (.not. args%syntran_file_arg) then
 

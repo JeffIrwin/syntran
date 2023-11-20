@@ -3,7 +3,7 @@
 
 module app_m
 
-	!use syntran_m
+	use core_m
 	use errors_m
 	use utils_m
 
@@ -13,12 +13,12 @@ module app_m
 
 		character(len = :), allocatable :: syntran_file
 
+		integer :: maxerr
+
 		logical :: &
 			any_arg          = .false., &
 			syntran_file_arg = .false., &
-			!waterfall        = .false., &
 			version          = .false., &
-			!lout_file        = .false., &
 			help             = .false.
 
 	end type args_t
@@ -79,14 +79,15 @@ function parse_args() result(args)
 
 	!********
 
-	character(len = :), allocatable :: argv
+	character(len = :), allocatable :: argv, str_
 
-	integer :: i, argc, ipos
+	integer :: i, io, argc, ipos
 
 	logical :: lerror = .false.
 
-	!! Defaults TODO: -fmax-error(s)
+	! Defaults
 	!args%language = "en"
+	args%maxerr = maxerr_def
 
 	argc = command_argument_count()
 	!print *, "argc = ", argc
@@ -101,6 +102,17 @@ function parse_args() result(args)
 			args%any_arg = .true.
 			args%help    = .true.
 
+		case ("--fmax-errors")
+			args%any_arg = .true.
+			call get_next_arg(i, str_)
+
+			read(str_, *, iostat = io) args%maxerr
+			if (io /= exit_success) then
+				write(*,*) err_prefix//"--fmax-errors "//str_ &
+					//" is not a valid integer"
+				lerror = .true.
+			end if
+
 		!case ("-l", "--language")
 		!	args%any_arg = .true.
 		!	call get_next_arg(i, args%language)
@@ -113,9 +125,6 @@ function parse_args() result(args)
 		case ("--version")
 			args%any_arg = .true.
 			args%version = .true.
-
-		!case ("-w", "--waterfall")
-		!	args%waterfall = .true.
 
 		case default
 			args%any_arg = .true.
@@ -149,15 +158,15 @@ function parse_args() result(args)
 	if (lerror .or. args%help) then
 
 		write(*,*) fg_bold//"Usage:"//color_reset
-		write(*,*) "	syntran <font.ttf> [<image.ppm>] [-l <lang>] [-w]"
+		write(*,*) "	syntran <file.syntran> [--fmax-errors <n>]"
 		write(*,*) "	syntran -h | --help"
 		write(*,*) "	syntran --version"
 		write(*,*)
 		write(*,*) fg_bold//"Options:"//color_reset
-		write(*,*) "	-h --help             Show this help"
-		!write(*,*) "	-l --language <lang>  Language code ISO 639-1"
-		write(*,*) "	--version             Show version"
-		write(*,*) "	-w --waterfall        Waterfall specimen"
+		write(*,*) "	-h --help          Show this help"
+		write(*,*) "	--version          Show version"
+		write(*,*) "	--fmax-errors <n>  Limit max " &
+			//"error messages to <n> [default: "//str(maxerr_def)//"]"
 		write(*,*)
 
 		if (.not. args%help) call exit(EXIT_FAILURE)
@@ -176,46 +185,6 @@ end function parse_args
 !===============================================================================
 
 end module app_m
-
-!===============================================================================
-
-!program main
-!
-!	use app_m
-!	use syntran_m
-!
-!	implicit none
-!
-!	integer(kind = 4), allocatable :: canvas(:,:)
-!	type(args_t) :: args
-!
-!	write(*,*) "syntran "// &
-!		to_str(CALI_MAJOR)//"."// &
-!		to_str(CALI_MINOR)//"."// &
-!		to_str(CALI_PATCH)
-!
-!	args = parse_args()
-!	if (args%version .or. args%help) then
-!		write(*,*) "Homepage: github.com/JeffIrwin/syntran"
-!		write(*,*)
-!		call exit(EXIT_SUCCESS)
-!	end if
-!	write(*,*)
-!
-!	if (args%waterfall) then
-!		canvas = waterfall(args%ttf_file, 12.d0, 64.d0, 8, args%language)
-!	else
-!		! TODO: lang arg
-!		canvas = specimen(args%ttf_file)
-!	end if
-!
-!	call write_img(canvas, args%out_file)
-!
-!	write(*,*) FG_BRIGHT_GREEN//"Finished syntran"//COLOR_RESET
-!	write(*,*)
-!	call exit(EXIT_SUCCESS)
-!
-!end program main
 
 !===============================================================================
 
