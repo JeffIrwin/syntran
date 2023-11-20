@@ -16,7 +16,7 @@ module app_m
 		integer :: maxerr
 
 		logical :: &
-			any_arg          = .false., &
+			!any_arg          = .false., &
 			syntran_file_arg = .false., &
 			version          = .false., &
 			help             = .false.
@@ -74,6 +74,8 @@ end subroutine get_next_arg
 function parse_args() result(args)
 
 	! This argument parser is based on http://docopt.org/
+	!
+	! c.f. github.com/jeffirwin/cali
 
 	type(args_t) :: args
 
@@ -86,7 +88,6 @@ function parse_args() result(args)
 	logical :: lerror = .false.
 
 	! Defaults
-	!args%language = "en"
 	args%maxerr = maxerr_def
 
 	argc = command_argument_count()
@@ -99,11 +100,11 @@ function parse_args() result(args)
 
 		select case (argv)
 		case ("-h", "--help", "-help")
-			args%any_arg = .true.
+			!args%any_arg = .true.
 			args%help    = .true.
 
 		case ("--fmax-errors")
-			args%any_arg = .true.
+			!args%any_arg = .true.
 			call get_next_arg(i, str_)
 
 			read(str_, *, iostat = io) args%maxerr
@@ -123,11 +124,11 @@ function parse_args() result(args)
 		!	!end if
 
 		case ("--version")
-			args%any_arg = .true.
+			!args%any_arg = .true.
 			args%version = .true.
 
 		case default
-			args%any_arg = .true.
+			!args%any_arg = .true.
 
 			! Positional arg
 			ipos = ipos + 1
