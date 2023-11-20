@@ -94,6 +94,7 @@ set(LINK_LIBS "${LIB}")
 set(EXE "${PROJECT}")
 set(EXE_BIN "${EXE}-bin")
 set(EXE_SRC
+	${SRC_DIR}/app.f90
 	${SRC_DIR}/main.f90
 	)
 

@@ -1,7 +1,7 @@
 
 !===============================================================================
 
-module utils
+module utils_m
 
 	use iso_fortran_env
 	implicit none
@@ -27,6 +27,7 @@ module utils
 			fg_bold_bright_red = esc//'[91;1m', &
 			fg_bright_green    = esc//'[92m', &
 			fg_bright_blue     = esc//'[94m', &
+			fg_bright_magenta  = esc//'[95m', &
 			fg_bright_cyan     = esc//'[96m', &
 			fg_bright_white    = esc//'[97m', &
 			color_reset        = esc//'[0m'
@@ -738,7 +739,7 @@ end function bool1_str
 
 !===============================================================================
 
-end module utils
+end module utils_m
 
 !===============================================================================
 

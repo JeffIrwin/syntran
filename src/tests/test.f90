@@ -9,7 +9,7 @@ module test_m
 		eval_i32  => syntran_eval_i32, &
 		eval_f32  => syntran_eval_f32
 
-	use utils, only: fg_bright_red, fg_bright_green, line_feed, &
+	use utils_m, only: fg_bright_red, fg_bright_green, line_feed, &
 		findlocl1, console_color, console_color_reset
 
 	implicit none

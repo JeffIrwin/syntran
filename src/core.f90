@@ -8,7 +8,7 @@ module core_m
 	use iso_fortran_env
 
 	use errors_m
-	use utils
+	use utils_m
 
 	implicit none
 

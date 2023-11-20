@@ -3,7 +3,7 @@
 
 module errors_m
 
-	use utils
+	use utils_m
 
 	implicit none
 

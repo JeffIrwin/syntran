@@ -31,7 +31,7 @@ function syntran_interpret(str, quiet) result(res_str)
 	! interactive interpreter edge cases
 
 	use core_m
-	use utils
+	use utils_m
 
 	character(len = *), intent(in), optional :: str
 	logical, intent(in), optional :: quiet
@@ -179,17 +179,16 @@ subroutine syntran_banner()
 
 	use core_m
 
-	character(len = :), allocatable :: version
+	!! Already done in main
+	!character(len = :), allocatable :: version
+	!version = &
+	!	str(syntran_major)//'.'// &
+	!	str(syntran_minor)//'.'// &
+	!	str(syntran_patch)
+	!write(*,*)
+	!write(*,*) lang_name//' '//version
+	!write(*,*) 'https://github.com/JeffIrwin/syntran'
 
-	version = &
-		str(syntran_major)//'.'// &
-		str(syntran_minor)//'.'// &
-		str(syntran_patch)
-
-	write(*,*)
-	write(*,*) lang_name//' '//version
-	write(*,*) 'https://github.com/JeffIrwin/syntran'
-	write(*,*)
 	write(*,*) 'Usage:'
 	write(*,*) tab//'#tree to toggle tree display'
 	write(*,*) tab//'Ctrl+C to exit'
