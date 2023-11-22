@@ -6071,6 +6071,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call mul(left, right, res, node%op%text)
 
 		case (sstar_token)
+
+			! TODO: refactor as fn like add() and subtract() for easier compound
+			! assignment operations
+
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%i32 = left%i32 ** right%i32
@@ -6455,7 +6459,13 @@ subroutine mul_value_t(left, right, res, op_text)
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = left%i64 * right%i64
 
-		! TODO: cases for mixing i64 w/ i32/f32 etc. for all operations
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = left%i64 * right%i32
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = left%i32 * right%i64
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 * right%i32)
@@ -6501,6 +6511,14 @@ subroutine div_value_t(left, right, res, op_text)
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = left%i64 / right%i64
+
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = left%i64 / right%i32
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = left%i32 / right%i64
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 / right%i32)
