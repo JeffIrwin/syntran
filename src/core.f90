@@ -3671,6 +3671,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		! need to pass parser to it to push diagnostics
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
+			!print *, 'bin not allowed in parse_expr_statement'
+
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context, &
@@ -6406,10 +6408,8 @@ subroutine add_value_t(left, right, res, op_text)
 
 	! Usually, adding f32 to i32 casts to an i32 result.  But for compound
 	! assignment we may want to make it an i32, e.g. i += 3.1;
-
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 + right%i32)
-
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
 		res%i32 = int(left%i32 + right%f32)
 
@@ -6546,6 +6546,14 @@ subroutine subtract_value_t(left, right, res, op_text)
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = left%i64 - right%i64
+
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = left%i64 - right%i32
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = left%i32 - right%i64
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 - right%i32)
