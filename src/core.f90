@@ -109,6 +109,8 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			i64_token            = 76, &
+			i64_type             = 75, &
 			file_type            = 74, &
 			slash_equals_token   = 73, &
 			step_sub             = 72, &
@@ -205,6 +207,7 @@ module core_m
 
 		logical           :: bool
 		integer(kind = 4) :: i32
+		integer(kind = 8) :: i64
 		real   (kind = 4) :: f32
 		type(array_t), pointer :: array => null()
 
@@ -243,8 +246,12 @@ module core_m
 		! a type select/case outside of loops for processing arrays, as opposed
 		! to inside of a loop for type selection of every element
 		logical(kind = 1), allocatable :: bool(:)
+
 		integer(kind = 4), allocatable ::  i32(:)
+		integer(kind = 8), allocatable ::  i64(:)
+
 		real   (kind = 4), allocatable ::  f32(:)
+
 		type(string_t   ), allocatable ::  str(:)
 
 		! TODO: file arrays
@@ -595,6 +602,8 @@ function declare_intrinsic_fns() result(fns)
 	! same type.  For example, min(1, 2) and min(1.1, 2.1) are allowed, but
 	! min(1, 2.1) does not compile.  I think that's a reasonable restriction
 
+	! TODO: overload (?) i64 intrinsics or make that the default
+
 	min_fn%type = i32_type
 	allocate(min_fn%params(2))
 
@@ -676,6 +685,8 @@ function declare_intrinsic_fns() result(fns)
 
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
+
+	! TODO: i64_fn
 
 	i32_fn%type = i32_type
 	allocate(i32_fn%params(1))
@@ -1371,6 +1382,8 @@ function new_array(type, cap) result(vector)
 
 	if      (type == i32_type) then
 		allocate(vector%i32 ( vector%cap ))
+	else if (type == i64_type) then
+		allocate(vector%i64 ( vector%cap ))
 	else if (type == f32_type) then
 		allocate(vector%f32 ( vector%cap ))
 	else if (type == bool_type) then
@@ -1399,8 +1412,12 @@ subroutine push_array(vector, val)
 	!********
 
 	integer(kind = 4), allocatable :: tmp_i32 (:)
+	integer(kind = 8), allocatable :: tmp_i64 (:)
+
 	real   (kind = 4), allocatable :: tmp_f32 (:)
+
 	logical(kind = 1), allocatable :: tmp_bool(:)
+
 	type(string_t   ), allocatable :: tmp_str (:)
 
 	integer :: tmp_cap
@@ -1417,6 +1434,12 @@ subroutine push_array(vector, val)
 			allocate(tmp_i32 ( tmp_cap ))
 			tmp_i32(1: vector%cap) = vector%i32
 			call move_alloc(tmp_i32, vector%i32)
+
+		else if (vector%type == i64_type) then
+
+			allocate(tmp_i64 ( tmp_cap ))
+			tmp_i64(1: vector%cap) = vector%i64
+			call move_alloc(tmp_i64, vector%i64)
 
 		else if (vector%type == f32_type) then
 
@@ -1449,6 +1472,8 @@ subroutine push_array(vector, val)
 
 	if      (vector%type == i32_type) then
 		vector%i32 ( vector%len_ ) = val%i32
+	else if (vector%type == i64_type) then
+		vector%i64 ( vector%len_ ) = val%i64
 	else if (vector%type == f32_type) then
 		vector%f32 ( vector%len_ ) = val%f32
 	else if (vector%type == bool_type) then
@@ -1610,7 +1635,9 @@ function kind_name(kind)
 			"range_sub           ", & ! 71
 			"step_sub            ", & ! 72
 			"slash_equals_token  ", & ! 73
-			"file_type           "  & ! 74
+			"file_type           ", & ! 74
+			"i64_type            ", & ! 75
+			"i64_token           "  & ! 76
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1705,7 +1732,9 @@ function kind_token(kind)
 			"range subript        ", & ! 71
 			"step subcript        ", & ! 72
 			"/=                   ", & ! 73
-			"file type            "  & ! 74
+			"file type            ", & ! 74
+			"i64 type             ", & ! 75
+			"i64 token            "  & ! 76
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2058,7 +2087,9 @@ function lex(lexer) result(token)
 	character(len = :), allocatable :: text
 
 	integer :: kind
-	integer :: start, io, i32
+	integer :: start, io
+	integer(kind = 4) :: i32
+	integer(kind = 8) :: i64
 
 	logical :: float
 
@@ -2110,15 +2141,28 @@ function lex(lexer) result(token)
 		else
 
 			read(text, *, iostat = io) i32
-			if (io /= exit_success) then
-				span = new_span(start, len(text))
-				call lexer%diagnostics%push(err_bad_int( &
-					lexer%context, span, text))
+
+			if (io == exit_success) then
+
+				val   = new_literal_value(i32_type, i32 = i32)
+				token = new_token(i32_token, start, text, val)
+
+			else
+
+				read(text, *, iostat = io) i64
+
+				if (io == exit_success) then
+
+					val   = new_literal_value(i64_type, i64 = i64)
+					token = new_token(i64_token, start, text, val)
+
+				else
+					span = new_span(start, len(text))
+					call lexer%diagnostics%push(err_bad_int( &
+						lexer%context, span, text))
+				end if
+
 			end if
-
-			val   = new_literal_value(i32_type, i32 = i32)
-			token = new_token(i32_token, start, text, val)
-
 		end if
 
 		return
@@ -2378,11 +2422,12 @@ end subroutine read_single_line_comment
 
 !===============================================================================
 
-function new_literal_value(type, bool, i32, f32, str) result(val)
+function new_literal_value(type, bool, i32, i64, f32, str) result(val)
 
 	integer, intent(in) :: type
 
 	integer(kind = 4), intent(in), optional :: i32
+	integer(kind = 8), intent(in), optional :: i64
 	real   (kind = 4), intent(in), optional :: f32
 	logical          , intent(in), optional :: bool
 	character(len=*) , intent(in), optional :: str
@@ -2393,6 +2438,7 @@ function new_literal_value(type, bool, i32, f32, str) result(val)
 	if (present(bool)) val%bool  = bool
 	if (present(f32 )) val%f32   = f32
 	if (present(i32 )) val%i32   = i32
+	if (present(i64 )) val%i64   = i64
 	if (present(str )) val%str%s = str
 
 end function new_literal_value
@@ -3135,12 +3181,18 @@ integer function lookup_type(name) result(type)
 	select case (name)
 		case ("bool")
 			type = bool_type
+
 		case ("f32")
 			type = f32_type
+
 		case ("i32")
 			type = i32_type
+		case ("i64")
+			type = i64_type
+
 		case ("str")
 			type = str_type
+
 		case default
 			type = unknown_type
 	end select
@@ -3701,7 +3753,7 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 		!print *, 'subscript = ', subscript%str()
 		!print *, 'subscript = ', parser%context%text(span0: parser%current_pos()-1)
 
-		if (subscript%val%type /= i32_type) then
+		if (.not. any(subscript%val%type == [i32_type, i64_type])) then
 			span = new_span(span0, parser%current_pos() - span0)
 			call parser%diagnostics%push( &
 				err_non_int_subscript(parser%context, span, &
@@ -3852,7 +3904,7 @@ logical function is_num_type(type)
 	integer, intent(in) :: type
 
 	! FIXME: other numeric types (i64, f64, etc.)
-	is_num_type = type == i32_type .or. type == f32_type
+	is_num_type = any(type == [i32_type, i64_type, f32_type])
 
 end function is_num_type
 
@@ -4072,7 +4124,7 @@ function parse_size(parser) result(size)
 
 		!print *, 'len = ', parser%context%text(span_beg: span_end)
 
-		if (len%val%type /= i32_type) then
+		if (.not. any(len%val%type == [i32_type, i64_type])) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			! TODO: different diag for each (or at least some) case
 			call parser%diagnostics%push(err_non_int_range( &
@@ -4286,7 +4338,7 @@ function parse_array_expr(parser) result(expr)
 
 			!print *, 'len = ', parser%context%text(span_beg: span_end)
 
-			if (len%val%type /= i32_type) then
+			if (.not. any(len%val%type == [i32_type, i64_type])) then
 				span = new_span(span_beg, span_end - span_beg + 1)
 				! TODO: different diag for each (or at least some) case
 				call parser%diagnostics%push(err_non_int_range( &
@@ -4775,6 +4827,11 @@ function parse_primary_expr(parser) result(expr)
 			token = parser%match(str_token)
 			expr  = new_str(token%val%str%s)
 
+		case (i64_token)
+
+			token = parser%match(i64_token)
+			expr  = new_i64(token%val%i64)
+
 		case default
 
 			token = parser%match(i32_token)
@@ -4844,6 +4901,18 @@ function new_i32(i32) result(expr)
 	expr%val  = new_literal_value(i32_type, i32 = i32)
 
 end function new_i32
+
+!********
+
+function new_i64(i64) result(expr)
+
+	integer(kind = 8), intent(in) :: i64
+	type(syntax_node_t) :: expr
+
+	expr%kind = literal_expr
+	expr%val  = new_literal_value(i64_type, i64 = i64)
+
+end function new_i64
 
 !********
 
@@ -5239,6 +5308,24 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end do
 				array%len_ = j - 1
 
+			else if (array%type == i64_type) then
+
+				array%cap = (ubound%i64 - lbound%i64) / step%i64 + 1
+				allocate(array%i64( array%cap ))
+
+				j = 1
+				i = lbound%i64
+				if (lbound%i64 < ubound%i64 .neqv. 0 < step%i64) i = ubound%i64
+
+				! Step may be negative
+				do while ((i  < ubound%i64 .eqv. lbound%i64 < ubound%i64) &
+				     .and. i /= ubound%i64)
+					array%i64(j) = i
+					i = i + step%i64
+					j = j + 1
+				end do
+				array%len_ = j - 1
+
 			else if (array%type == f32_type) then
 
 				!print *, 'lbound, ubound = ', lbound%f32, ubound%f32
@@ -5348,6 +5435,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				allocate(array%i32( array%cap ))
 				array%i32 = lbound%i32
 
+			else if      (array%type == i64_type) then
+				allocate(array%i64( array%cap ))
+				array%i64 = lbound%i64
+
 			else if (array%type == f32_type) then
 				allocate(array%f32( array%cap ))
 				array%f32 = lbound%f32
@@ -5392,6 +5483,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%type = node%val%array%type
 
+			! TODO: i64
 			if (array%type /= i32_type) then
 				write(*,*) 'Error: unit step array type eval not implemented'
 				call internal_error()
@@ -5497,6 +5589,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		itr%type = lbound%type
 		!itr%type = vars%vals(node%id_index)%type  ! unset
 
+		! TODO: i64
 		if (itr%type /= i32_type) then
 			write(*,*) err_eval_i32_itr(node%identifier%text)
 			call internal_error()
@@ -5916,6 +6009,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (right%type)
 				case (i32_type)
 					res%i32 = -right%i32
+				case (i64_type)
+					res%i64 = -right%i64
 				case (f32_type)
 					res%f32 = -right%f32
 			end select
@@ -5956,8 +6051,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%i32 = left%i32 ** right%i32
+			case        (magic * i64_type + i64_type)
+				res%i64 = left%i64 ** right%i64
 			case        (magic * f32_type + f32_type)
 				res%f32 = left%f32 ** right%f32
+
+			! TODO: cases for i64/f32 mixing, i32/i64 mixing, etc. for all
+			! operations
+
 			case        (magic * f32_type + i32_type)
 				res%f32 = left%f32 ** right%i32
 			case        (magic * i32_type + f32_type)
@@ -5980,6 +6081,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%i32 = mod(left%i32, right%i32)
+			case        (magic * i64_type + i64_type)
+				res%i64 = mod(left%i64, right%i64)
 			case        (magic * f32_type + f32_type)
 				res%f32 = mod(left%f32, right%f32)
 			case        (magic * f32_type + i32_type)
@@ -6003,6 +6106,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 == right%i32
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 == right%i64
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 == right%f32
 			case        (magic * f32_type + i32_type)
@@ -6029,6 +6134,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 /= right%i32
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 /= right%i64
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 /= right%f32
 			case        (magic * f32_type + i32_type)
@@ -6048,6 +6155,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 < right%i32
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 < right%i64
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 < right%f32
 			case        (magic * f32_type + i32_type)
@@ -6065,6 +6174,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 <= right%i32
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 <= right%i64
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 <= right%f32
 			case        (magic * f32_type + i32_type)
@@ -6082,6 +6193,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 > right%i32
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 > right%i64
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 > right%f32
 			case        (magic * f32_type + i32_type)
@@ -6099,6 +6212,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 >= right%i32
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 >= right%i64
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 >= right%f32
 			case        (magic * f32_type + i32_type)
@@ -6180,12 +6295,18 @@ function get_array_value_t(array, i) result(val)
 	select case (array%type)
 		case (bool_type)
 			val%bool = array%bool(i + 1)
+
 		case (i32_type)
 			val%i32 = array%i32(i + 1)
+		case (i64_type)
+			val%i64 = array%i64(i + 1)
+
 		case (f32_type)
 			val%f32 = array%f32(i + 1)
+
 		case (str_type)
 			val%str = array%str(i + 1)
+
 	end select
 
 end function get_array_value_t
@@ -6208,12 +6329,19 @@ subroutine set_array_value_t(array, i, val)
 	select case (array%type)
 		case (bool_type)
 			array%bool(i + 1) = val%bool
+
 		case (i32_type)
 			array%i32(i + 1) = val%i32
+
+		case (i64_type)
+			array%i64(i + 1) = val%i64
+
 		case (f32_type)
 			array%f32(i + 1) = val%f32
+
 		case (str_type)
 			array%str(i + 1) = val%str
+
 	end select
 
 end subroutine set_array_value_t
@@ -6240,6 +6368,11 @@ subroutine add_value_t(left, right, res, op_text)
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 + right%i32
+
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = left%i64 + right%i64
+		! TODO: cases for mixing i64 w/ i32/f32 etc. for all operations
+
 
 	! Usually, adding f32 to i32 casts to an i32 result.  But for compound
 	! assignment we may want to make it an i32, e.g. i += 3.1;
@@ -6289,6 +6422,9 @@ subroutine mul_value_t(left, right, res, op_text)
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 * right%i32
 
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = left%i64 * right%i64
+
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 * right%i32)
 
@@ -6331,6 +6467,9 @@ subroutine div_value_t(left, right, res, op_text)
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 / right%i32
 
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = left%i64 / right%i64
+
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 / right%i32)
 
@@ -6372,6 +6511,9 @@ subroutine subtract_value_t(left, right, res, op_text)
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 - right%i32
+
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = left%i64 - right%i64
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 - right%i32)
@@ -6489,6 +6631,10 @@ recursive function value_to_str(val) result(ans)
 			write(buffer, '(i0)') val%i32
 			ans = trim(buffer)
 
+		case (i64_type)
+			write(buffer, '(i0)') val%i64
+			ans = trim(buffer)
+
 		case (str_type)
 			! TODO: wrap str in quotes for clarity, both scalars and str array
 			! elements.  Update tests.
@@ -6527,6 +6673,27 @@ recursive function value_to_str(val) result(ans)
 				do i = 1, val%array%len_
 
 					call str_vec%push(str(val%array%i32(i)))
+					if (i >= val%array%len_) cycle
+
+					call str_vec%push(', ')
+
+					! Products could be saved ahead of time outside of loop
+					prod = val%array%size(1)
+					do j = 2, val%array%rank
+						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						prod = prod * val%array%size(j)
+					end do
+
+				end do
+
+			else if (val%array%type == i64_type) then
+
+				!! Recursive IO stalls execution
+				!print *, 'size = ', val%array%size
+
+				do i = 1, val%array%len_
+
+					call str_vec%push(str(val%array%i64(i)))
 					if (i >= val%array%len_) cycle
 
 					call str_vec%push(', ')

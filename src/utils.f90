@@ -88,6 +88,7 @@ module utils_m
 
 	interface str
 		module procedure  i32_str
+		module procedure  i64_str
 		module procedure  f32_str
 		module procedure bool1_str
 	end interface str
@@ -693,7 +694,7 @@ end subroutine console_color_reset
 
 function i32_str(x) result(str)
 
-	integer, intent(in) :: x
+	integer(kind = 4), intent(in) :: x
 
 	character(len = :), allocatable :: str
 
@@ -704,6 +705,23 @@ function i32_str(x) result(str)
 	str = trim(buffer)
 
 end function i32_str
+
+!===============================================================================
+
+function i64_str(x) result(str)
+
+	integer(kind = 8), intent(in) :: x
+
+	character(len = :), allocatable :: str
+
+	! I think ~20 chars is the max actually, but let's round up to the next
+	! multiple of 8
+	character(len = 24) :: buffer
+
+	write(buffer, '(i0)') x
+	str = trim(buffer)
+
+end function i64_str
 
 !===============================================================================
 
