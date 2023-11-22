@@ -300,6 +300,11 @@ function syntran_eval(str, quiet, src_file) result(res)
 	! TODO: make a helper fn here that all the eval_* fns use
 
 	fns = declare_intrinsic_fns()
+
+	! TODO: perform pre-processing here, e.g. to process #include directives.
+	! Do this by taking str as input, expanding the includes, and returning
+	! another string
+
 	tree = syntax_parse(str, vars, fns, src_filel)
 	if (.not. quietl) call tree%log_diagnostics()
 

@@ -47,3 +47,5 @@ echo
 echo -e "${green}Succesfully installed syntran ${reset}"
 echo
 
+syntran --version
+

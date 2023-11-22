@@ -212,7 +212,7 @@ fn part1(): i32
 
 	let nx = len(s);
 
-	println("nx, ny = ", nx, ", ", ny);
+	//println("nx, ny = ", nx, ", ", ny);
 
 	// New in syntran 0.0.24
 	let grid = [false; nx, ny];
@@ -267,7 +267,7 @@ fn part2(): i32
 
 	let nx = len(s);
 
-	println("nx, ny = ", nx, ", ", ny);
+	//println("nx, ny = ", nx, ", ", ny);
 
 	// New in syntran 0.0.24
 	let grid = [false; nx, ny];
@@ -302,7 +302,7 @@ fn part2(): i32
 			2, nslopes
 		];
 
-	println("slopes = ", slopes);
+	//println("slopes = ", slopes);
 
 	let prod_ = 1;
 	let prod_str = "";
@@ -311,7 +311,7 @@ fn part2(): i32
 		let dx = slopes[0, islope];
 		let dy = slopes[1, islope];
 
-		println("slope = ", dx, ", ", dy);
+		//println("slope = ", dx, ", ", dy);
 
 		let sum_ = 0;
 

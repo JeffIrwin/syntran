@@ -2327,6 +2327,27 @@ function lex(lexer) result(token)
 
 	! FIXME: arrow keys create bad tokens in bash on Windows.  Fix that (better
 	! yet, override up arrow to do what it does in bash.  c.f. rubik-js)
+	!
+	! Actually this is somewhat difficult bc I think it requires event
+	! listening.  Currently syntran does not get any stdin until the user hits
+	! <enter>.  So if they type <up-arrow>, syntran doesn't know anything about
+	! that until they subsequently hit <enter>.  I guess we could use some 3p
+	! C(++) lib to do keypress event listening, but there's an easier solution.
+	!
+	! Just use rlwrap:
+	!
+	!     sudo apt install rlwrap
+	!     rlwrap syntran
+	!
+	! Then rlwrap does the listening, handles all arrow keys as expected, and
+	! passes stdin along to syntran.  See run.sh which checks if you have rlwrap
+	! installed.
+	!
+	! You can make a shell alias for that.
+	!
+	! Idris lang also makes the same recommendation:
+	!
+	!     https://github.com/idris-lang/Idris2/issues/54
 
 end function lex
 
@@ -2535,6 +2556,21 @@ function new_parser(str, src_file) result(parser)
 	lexer = new_lexer(str, src_file)
 	do
 		token = lexer%lex()
+
+		! TODO: Should #include directives be processed here instead?  How can
+		! we keep line number context for error diagnostics correct and tied to
+		! a source file?
+		!
+		! Something like this at first:
+		!
+		!if (token%kind == inc_directive_token) then
+		!	inc_parser = new_parser(readfile(inc_file), inc_file)
+		!	do i = 1, size(inc_parser%tokens)
+		!		call tokens%push( inc_parser%tokens(i) )
+		!		! TODO: diagnostics and context?
+		!	end do
+		!
+		!else if (...) then
 
 		if (token%kind /= whitespace_token .and. &
 		    token%kind /= bad_token) then
