@@ -886,6 +886,56 @@ end subroutine unit_test_f32_1
 
 !===============================================================================
 
+subroutine unit_test_i64(npass, nfail)
+
+	! Simple i64 integer tests of arithmetic with single-line
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'i64 arithmetic'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval('8123123123;') == '8123123123', &
+			eval('8123123123 + 7123123123;') == '15246246246', &
+			eval('7123123123 + 8123123123;') == '15246246246', &
+			eval('8123123123 + 1;')          ==  '8123123124', &
+			eval('1 + 8123123123;')          ==  '8123123124', &
+			eval('8123123123 == 8123123123;') == 'true', &
+			eval('8123123123 == 8123123124;') == 'false', &
+			eval('8123123124 == 8123123123;') == 'false', &
+			eval('8123123123 <  8123123124;') == 'true', &
+			eval('8123123124 <  8123123123;') == 'false', &
+			eval('8123123123 <  8123123123;') == 'false', &
+			eval('8123123123 >  8123123124;') == 'false', &
+			eval('8123123124 >  8123123123;') == 'true', &
+			eval('8123123123 >  8123123123;') == 'false', &
+			eval('8123123123 <= 8123123124;') == 'true', &
+			eval('8123123124 <= 8123123123;') == 'false', &
+			eval('8123123123 <= 8123123123;') == 'true', &
+			eval('8123123123 >= 8123123124;') == 'false', &
+			eval('8123123124 >= 8123123123;') == 'true', &
+			eval('8123123123 >= 8123123123;') == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_i64
+
+!===============================================================================
+
 subroutine unit_test_str(npass, nfail)
 
 	implicit none
@@ -1643,6 +1693,7 @@ subroutine unit_tests(iostat)
 	call unit_test_linalg_fns (npass, nfail)
 	call unit_test_comp_ass   (npass, nfail)
 	call unit_test_io         (npass, nfail)
+	call unit_test_i64        (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
