@@ -89,13 +89,13 @@ Only single-line `// comments` are supported.  There are _no_ multi-line `/*comm
 
 ### Arrow keys and command history
 
-In many shells such as `bash`, the up and down arrow keys can be used to scroll through the command history.  For example, hit the up arrow key and then enter to repeate the previous command, or hit the up arrow key twice to go two commands back.
+In many shells such as `bash`, the up and down arrow keys can be used to scroll through the command history.  For example, hit the up arrow key and then ENTER to repeat the previous command, or hit the up arrow key twice to go two commands back.
 
 Arrow keys do _not_ work by default in syntran running within bash, but there is a simple and powerful workaround with `rlwrap`.  If you run `syntran` by itself, it processes text in cooked mode:
 
     ./build/syntran
 
-Cooked mode means that `syntran` does not read or process any text until you press the ENTER key.  Further, when you use an arrow key, you will see escape sequences like this:
+Cooked mode means that `syntran` does not read or process any text until after you press the ENTER key.  Further, when you use an arrow key, you will see escape sequences like this:
 
     ^[[A
 
