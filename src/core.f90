@@ -3903,10 +3903,21 @@ logical function is_num_type(type)
 
 	integer, intent(in) :: type
 
-	! FIXME: other numeric types (i64, f64, etc.)
+	! FIXME: other numeric types (f64, etc.)
 	is_num_type = any(type == [i32_type, i64_type, f32_type])
 
 end function is_num_type
+
+!===============================================================================
+
+logical function is_int_type(type)
+
+	integer, intent(in) :: type
+
+	! FIXME: other numeric types (i64, f64, etc.)
+	is_int_type = any(type == [i32_type, i64_type])
+
+end function is_int_type
 
 !===============================================================================
 
@@ -5029,9 +5040,19 @@ integer function get_binary_op_kind(left, op, right)
 		end if
 
 		if (left == f32_type .or. right == f32_type) then
-			! int + int casts to float
+			! int + float casts to float
 			get_binary_op_kind = f32_type
 			return
+		end if
+
+		if ( &
+			(left  == i64_type .and. is_int_type(right)) .or. &
+			(right == i64_type .and. is_int_type(left ))) then
+
+			! i32+i64 and i64+i32 cast to i64
+			get_binary_op_kind = i64_type
+			return
+
 		end if
 
 		get_binary_op_kind = unknown_type
@@ -6028,8 +6049,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		left  = syntax_eval(node%left , vars, fns, quietl)
 		right = syntax_eval(node%right, vars, fns, quietl)
 
-		!print *, 'left  = ', left
-		!print *, 'right = ', right
+		!print *, 'left  type = ', kind_name(left%type)
+		!print *, 'right type = ', kind_name(right%type)
 
 		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
 		if (res%type == unknown_type) then
@@ -6360,6 +6381,9 @@ subroutine add_value_t(left, right, res, op_text)
 
 	!********
 
+	!print *, 'starting add_value_t()'
+	!print *, 'res%type = ', kind_name(res%type)
+
 	! Case selector must be a scalar expression, so use this nasty hack.
 	! This will break if magic is smaller than the largest type enum
 	! parameter
@@ -6371,8 +6395,14 @@ subroutine add_value_t(left, right, res, op_text)
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = left%i64 + right%i64
-		! TODO: cases for mixing i64 w/ i32/f32 etc. for all operations
 
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = left%i64 + right%i32
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = left%i32 + right%i64
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	! Usually, adding f32 to i32 casts to an i32 result.  But for compound
 	! assignment we may want to make it an i32, e.g. i += 3.1;
@@ -6397,7 +6427,7 @@ subroutine add_value_t(left, right, res, op_text)
 		res%str%s = left%str%s // right%str%s
 
 	case default
-		! FIXME: other numeric types (i64, f64, etc.)
+		! FIXME: other numeric types (f64, etc.)
 		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
 	end select
@@ -6424,6 +6454,8 @@ subroutine mul_value_t(left, right, res, op_text)
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = left%i64 * right%i64
+
+		! TODO: cases for mixing i64 w/ i32/f32 etc. for all operations
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 * right%i32)
