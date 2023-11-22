@@ -2341,7 +2341,7 @@ function lex(lexer) result(token)
 	!
 	! Then rlwrap does the listening, handles all arrow keys as expected, and
 	! passes stdin along to syntran.  See run.sh which checks if you have rlwrap
-	! installed.
+	! installed.  Windows cmd works good enough without rlwrap.
 	!
 	! You can make a shell alias for that.
 	!
