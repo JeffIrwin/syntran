@@ -85,7 +85,34 @@ Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g
 
 ### Comments
 
-Only single-line comments are supported.  There are _no_ multi-line `/*comments*/`.
+Only single-line `// comments` are supported.  There are _no_ multi-line `/*comments*/`.
+
+### Arrow keys and command history
+
+In many shells such as `bash`, the up and down arrow keys can be used to scroll through the command history.  For example, hit the up arrow key and then enter to repeate the previous command, or hit the up arrow key twice to go two commands back.
+
+Arrow keys do _not_ work by default in syntran running within bash, but there is a simple and powerful workaround with `rlwrap`.  If you run `syntran` by itself, it processes text in cooked mode:
+
+    ./build/syntran
+
+Cooked mode means that `syntran` does not read or process any text until you press the ENTER key.  Further, when you use an arrow key, you will see escape sequences like this:
+
+    ^[[A
+
+These keypresses may appear like the ANSI escape sequence above or other garbled text.
+
+To overcome this, install and run `rlwrap` with `syntran`:
+
+    sudo apt install rlwrap
+    rlwrap ./build/syntran
+
+With `rlwrap`, the arrow keys work as expected within the `syntran` interpretter.  Plus, you get `rlwrap`'s other powerful features, like Ctrl+R for history search and saved history across separate invocations of `syntran`.
+
+Also see [`run.sh`](run.sh), which checks if you have `rlwrap` installed and then starts `syntran` appropriately.  You can make a bash function or alias in your `~/.bashrc` file to help with this:
+
+    alias syntran="rlwrap /path/to/bin/syntran"
+
+The basic arrow key history should work in Windows terminal and Windows cmd out of the box, but running `rlwrap` in a Linux environment within Windows can still be advantageous.
 
 ### Saving scripts in a file
 
