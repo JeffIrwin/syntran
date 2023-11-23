@@ -257,6 +257,7 @@ module core_m
 
 		! TODO: file arrays
 
+		! TODO: should len/cap be i64?
 		integer :: len_, cap, rank
 		integer, allocatable :: size(:)
 
@@ -5289,6 +5290,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	!********
 
 	integer :: i, j, il, iu, io
+	integer(kind = 8) :: i8
 
 	logical :: quietl
 
@@ -5359,18 +5361,22 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			else if (array%type == i64_type) then
 
-				array%cap = (ubound%i64 - lbound%i64) / step%i64 + 1
+				! TODO: test
+
+				array%cap = int((ubound%i64 - lbound%i64) / step%i64 + 1)
 				allocate(array%i64( array%cap ))
 
 				j = 1
-				i = lbound%i64
-				if (lbound%i64 < ubound%i64 .neqv. 0 < step%i64) i = ubound%i64
+				i8 = lbound%i64
+				if (lbound%i64 < ubound%i64 .neqv. 0 < step%i64) then
+					i8 = ubound%i64
+				end if
 
 				! Step may be negative
-				do while ((i  < ubound%i64 .eqv. lbound%i64 < ubound%i64) &
-				     .and. i /= ubound%i64)
-					array%i64(j) = i
-					i = i + step%i64
+				do while ((i8  < ubound%i64 .eqv. lbound%i64 < ubound%i64) &
+				     .and. i8 /= ubound%i64)
+					array%i64(j) = i8
+					i8 = i8 + step%i64
 					j = j + 1
 				end do
 				array%len_ = j - 1
@@ -6691,7 +6697,7 @@ function value_to_i64(val) result(ans)
 	select case (val%type)
 
 		case (f32_type)
-			ans = val%f32
+			ans = int(val%f32, 8)
 
 		case (i32_type)
 			ans = val%i32
