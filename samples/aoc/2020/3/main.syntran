@@ -241,7 +241,7 @@ fn part1(): i32
 
 	let ix = 0;
 	iy = 0;
-	while iy < ny
+	while iy < ny - 1
 	{
 		// Don't need to check starting spot.  It's always empty anyway
 		ix += dx;
@@ -304,10 +304,9 @@ fn part2(): i32
 
 	//println("slopes = ", slopes);
 
-	// TODO: this is a terrible type coersion hack until i have an actual i64()
-	// fn
-	let prod_ = 5000000000;
-	prod_ = (prod_ + 1) - prod_;  // prod_ = 1; // but i64
+	//let prod_ = 5000000000;
+	//prod_ = (prod_ + 1) - prod_;  // prod_ = 1; // but i64
+	let prod_ = i64(1);
 
 	let prod_str = "";
 	for islope in [0: nslopes]
@@ -332,8 +331,9 @@ fn part2(): i32
 			//println();
 
 			// beware short circuit logic and out-of-bounds index
-			if iy < ny and grid[ix%nx, iy]
-				sum_ += 1;
+			if iy < ny
+				if grid[ix%nx, iy]
+					sum_ += 1;
 		}
 
 		prod_ *= sum_;

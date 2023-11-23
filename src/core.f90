@@ -213,6 +213,7 @@ module core_m
 
 		contains
 			procedure :: to_str => value_to_str
+			procedure :: to_i64 => value_to_i64
 
 	end type value_t
 
@@ -573,7 +574,8 @@ function declare_intrinsic_fns() result(fns)
 	integer :: id_index, num_fns
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
-		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, i32_fn, len_fn
+		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, i32_fn, len_fn, &
+		i64_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -686,7 +688,9 @@ function declare_intrinsic_fns() result(fns)
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
 
-	! TODO: i64_fn
+	! TODO: use a different name for string-to-int conversion vs num-to-int
+	! casting.  Be consistent with fns for converting to i64 too.  Maybe
+	! parse_i32()?
 
 	i32_fn%type = i32_type
 	allocate(i32_fn%params(1))
@@ -695,6 +699,27 @@ function declare_intrinsic_fns() result(fns)
 
 	id_index = id_index + 1
 	call fns%insert("i32", i32_fn, id_index)
+
+	!********
+
+	! TODO: document
+
+	i64_fn%type = i64_type
+	allocate(i64_fn%params(1))
+
+	! TODO: add a way to have a limited polymorphic parameter.  Numeric type to
+	! i64 casting should be allowed, but bool to i64 is not allowed and str to
+	! i64 should have a different fn name
+	!
+	! Currently anything funky will be caught during evaluation but it should
+	! really be caught earlier by the type checker during parsing
+
+	i64_fn%params(1)%type = any_type
+
+	i64_fn%params(1)%name = "a"
+
+	id_index = id_index + 1
+	call fns%insert("i64", i64_fn, id_index)
 
 	!********
 
@@ -711,7 +736,7 @@ function declare_intrinsic_fns() result(fns)
 	readln_fn%type = str_type
 	allocate(readln_fn%params(1))
 	readln_fn%params(1)%type = file_type
-	readln_fn%params(1)%name = "filename"
+	readln_fn%params(1)%name = "file_handle"
 
 	id_index = id_index + 1
 	call fns%insert("readln", readln_fn, id_index)
@@ -735,7 +760,7 @@ function declare_intrinsic_fns() result(fns)
 	eof_fn%type = bool_type
 	allocate(eof_fn%params(1))
 	eof_fn%params(1)%type = file_type
-	eof_fn%params(1)%name = "filename"
+	eof_fn%params(1)%name = "file_handle"
 
 	id_index = id_index + 1
 	call fns%insert("eof", eof_fn, id_index)
@@ -789,6 +814,7 @@ function declare_intrinsic_fns() result(fns)
 			str_fn    , &
 			len_fn    , &
 			i32_fn    , &
+			i64_fn    , &
 			open_fn   , &
 			readln_fn , &
 			writeln_fn, &
@@ -5841,6 +5867,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			read(arg%str%s, *) res%i32  ! TODO: catch iostat
 
+		case ("i64")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%i64 = arg%to_i64()
+
 		case ("open")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
@@ -6648,6 +6679,36 @@ subroutine log_diagnostics(node, ou)
 	end if
 
 end subroutine log_diagnostics
+
+!===============================================================================
+
+function value_to_i64(val) result(ans)
+
+	class(value_t) :: val
+
+	integer(kind = 8) :: ans
+
+	select case (val%type)
+
+		case (f32_type)
+			ans = val%f32
+
+		case (i32_type)
+			ans = val%i32
+
+		case (i64_type)
+			!write(buffer, '(i0)') val%i64
+			!ans = trim(buffer)
+			ans = val%i64
+
+		case default
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to i64 '//color_reset
+			call internal_error()
+
+	end select
+
+end function value_to_i64
 
 !===============================================================================
 
