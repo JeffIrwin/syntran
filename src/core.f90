@@ -4402,11 +4402,31 @@ function parse_array_expr(parser) result(expr)
 			allocate(expr%ubound)
 
 			expr%kind           = array_expr
-
-			!expr%val%type       = lbound%val%type
 			expr%val%type       = array_type
 
-			expr%val%array%type = lbound%val%type
+			if (all(i32_type == &
+				[lbound%val%type, step%val%type, ubound%val%type]) .or. &
+				all(f32_type == &
+				[lbound%val%type, step%val%type, ubound%val%type])) then
+
+				expr%val%array%type = lbound%val%type
+
+			! TODO: make is_int_type() elemental, then we can sugar up this syntax
+			else if (all([ &
+				is_int_type(lbound%val%type), &
+				is_int_type(step  %val%type), &
+				is_int_type(ubound%val%type)])) then
+
+				expr%val%array%type = i64_type
+
+			else
+				! TODO: different message
+				span = new_span(span_beg, span_end - span_beg + 1)
+				call parser%diagnostics%push(err_non_int_range( &
+					parser%context, span, &
+					parser%context%text(span_beg: span_end)))
+			end if
+
 			expr%val%array%kind = impl_array
 			expr%val%array%rank = 1
 
@@ -5393,27 +5413,20 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%type = node%val%array%type
 
-			! If any bound or step is i64, cast the others up to match.  TODO:
-			! copy this for [lbound: ubound] unit step arrays too
-			any_i64 = any(i64_type == [lbound%type, step%type, ubound%type])
-
 			! TODO: i64 array and promotion tests
 
-			! TODO: fn
-			if (any_i64 .and. lbound%type == i32_type) then
-				lbound%type = i64_type
-				lbound%i64 = lbound%i32
-			end if
-			if (any_i64 .and. ubound%type == i32_type) then
-				ubound%type = i64_type
-				ubound%i64 = ubound%i32
-			end if
+			! If any bound or step is i64, cast the others up to match.
+			!
+			! TODO: copy this for [lbound: ubound] unit step arrays too
+			if (any(i64_type == [lbound%type, step%type, ubound%type])) then
 
-			!if (any_i64 .and. step%type == i32_type) then
-			!	step%type = i64_type
-			!	step%i64 = step%i32
-			!end if
-			if (any_i64) call promote_i32_i64(step)
+				!! this happens during parsing
+				!array%type = i64_type
+
+				call promote_i32_i64(lbound)
+				call promote_i32_i64(step)
+				call promote_i32_i64(ubound)
+			end if
 
 			!print *, 'lbound = ', lbound%i64
 			!print *, 'step32 = ', step  %i32
