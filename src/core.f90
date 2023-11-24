@@ -5448,8 +5448,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%type = node%val%array%type
 
-			! TODO: i64 array and promotion tests
-
 			! If any bound or step is i64, cast the others up to match
 			if (any(i64_type == [lbound%type, step%type, ubound%type])) then
 
