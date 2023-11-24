@@ -495,6 +495,12 @@ subroutine unit_test_comp_ass(npass, nfail)
 			eval('let j = 4; j **= 2; j;', quiet) == '16', &
 			eval('let j = 2; j **= 3; j;', quiet) == '8', &
 			eval('let j = 3; j **= 4; j;', quiet) == '81', &
+			eval('let j = 5; j %= 3; j;', quiet) == '2', &
+			eval('let j = 4; j %= 3; j;', quiet) == '1', &
+			eval('let j = 3; j %= 3; j;', quiet) == '0', &
+			eval('let j = 5; j %= 4; j;', quiet) == '1', &
+			eval('let j = 4; j %= 4; j;', quiet) == '0', &
+			eval('let j = 3; j %= 4; j;', quiet) == '3', &
 			eval('let j = 10; j += 3;', quiet) == '13'  &
 		]
 
