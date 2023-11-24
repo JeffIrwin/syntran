@@ -238,6 +238,10 @@ module core_m
 		module procedure pow_value_t
 	end interface pow
 
+	interface mod_
+		module procedure modulo_value_t
+	end interface mod_
+
 	!********
 
 	type array_t
@@ -6142,27 +6146,28 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call div(left, right, res, node%op%text)
 
 		case (percent_token)
+			call mod_(left, right, res, node%op%text)
 
 			! The Fortran mod() fn is consistent with the C operator `%`, while
 			! modulo() works differently for negative args (it's actually a
 			! remainder function, not a true modulo)
 
-			select case (magic * left%type + right%type)
-			case        (magic * i32_type + i32_type)
-				res%i32 = mod(left%i32, right%i32)
-			case        (magic * i64_type + i64_type)
-				res%i64 = mod(left%i64, right%i64)
-			case        (magic * f32_type + f32_type)
-				res%f32 = mod(left%f32, right%f32)
-			case        (magic * f32_type + i32_type)
-				res%f32 = mod(left%f32, real(right%i32))
-			case        (magic * i32_type + f32_type)
-				res%f32 = mod(real(left%i32), right%f32)
-			case default
-				! FIXME: other numeric types (i64, f64, etc.)
-				write(*,*) err_eval_binary_types(node%op%text)
-				call internal_error()
-			end select
+			!select case (magic * left%type + right%type)
+			!case        (magic * i32_type + i32_type)
+			!	res%i32 = mod(left%i32, right%i32)
+			!case        (magic * i64_type + i64_type)
+			!	res%i64 = mod(left%i64, right%i64)
+			!case        (magic * f32_type + f32_type)
+			!	res%f32 = mod(left%f32, right%f32)
+			!case        (magic * f32_type + i32_type)
+			!	res%f32 = mod(left%f32, real(right%i32))
+			!case        (magic * i32_type + f32_type)
+			!	res%f32 = mod(real(left%i32), right%f32)
+			!case default
+			!	! FIXME: other numeric types (i64, f64, etc.)
+			!	write(*,*) err_eval_binary_types(node%op%text)
+			!	call internal_error()
+			!end select
 
 		case (and_keyword)
 			res%bool = left%bool .and. right%bool
@@ -6641,6 +6646,59 @@ subroutine subtract_value_t(left, right, res, op_text)
 	end select
 
 end subroutine subtract_value_t
+
+!===============================================================================
+
+subroutine modulo_value_t(left, right, res, op_text)
+
+	type(value_t), intent(in)  :: left, right
+
+	! For binary_expr, the type is set before calling this routine, so res is
+	! inout
+	type(value_t), intent(inout) :: res
+
+	character(len = *), intent(in) :: op_text
+
+	select case (magic**2 * res%type + magic * left%type + right%type)
+
+	!****
+	case        (magic**2 * i32_type + magic * i32_type + i32_type)
+		res%i32 = mod(left%i32, right%i32)
+
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = mod(left%i64, right%i64)
+
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = mod(left%i64, right%i32)
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = mod(left%i32, right%i64)
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+
+	case        (magic**2 * i32_type + magic * f32_type + i32_type)
+		res%i32 = mod(int(left%f32), right%i32)
+
+	case        (magic**2 * i32_type + magic * i32_type + f32_type)
+		res%i32 = mod(left%i32, int(right%f32))
+
+	!****
+	case        (magic**2 * f32_type + magic * f32_type + f32_type)
+		res%f32 = mod(left%f32, right%f32)
+
+	case        (magic**2 * f32_type + magic * f32_type + i32_type)
+		res%f32 = mod(left%f32, real(right%i32))
+
+	case        (magic**2 * f32_type + magic * i32_type + f32_type)
+		res%f32 = mod(real(left%i32), right%f32)
+
+	case default
+		! FIXME: other numeric types (i64, f64, etc.)
+		write(*,*) err_eval_binary_types(op_text)
+		call internal_error()
+	end select
+
+end subroutine modulo_value_t
 
 !===============================================================================
 
