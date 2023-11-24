@@ -34,13 +34,14 @@ fn exp(x: f32): f32
 
 Compute the base _e_ exponential of `x`
 
-## `i32`
+## `parse_i32`
 ```rust
-fn i32(s: str): i32
+fn parse_i32(s: str): i32
 ```
 
 Convert from a string to an integer `i32`.  Any invalid numbers will cause a runtime
-error.
+error.  Other languages variously refer to similar functions as `atoi()`,
+`stoi()`, `read()`, `parse()`, `strtol()`, `str2int()`, etc.
 
 Note that other numeric types (`f32`) can be implicitly cast to `i32`.
 

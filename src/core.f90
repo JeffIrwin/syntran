@@ -575,7 +575,7 @@ function declare_intrinsic_fns() result(fns)
 	integer :: id_index, num_fns
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
-		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, i32_fn, len_fn, &
+		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
 		i64_fn
 
 	! Increment index for each fn and then set num_fns
@@ -689,17 +689,13 @@ function declare_intrinsic_fns() result(fns)
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
 
-	! TODO: use a different name for string-to-int conversion vs num-to-int
-	! casting.  Be consistent with fns for converting to i64 too.  Maybe
-	! parse_i32()?
-
-	i32_fn%type = i32_type
-	allocate(i32_fn%params(1))
-	i32_fn%params(1)%type = str_type
-	i32_fn%params(1)%name = "str"
+	parse_i32_fn%type = i32_type
+	allocate(parse_i32_fn%params(1))
+	parse_i32_fn%params(1)%type = str_type
+	parse_i32_fn%params(1)%name = "str"
 
 	id_index = id_index + 1
-	call fns%insert("i32", i32_fn, id_index)
+	call fns%insert("parse_i32", parse_i32_fn, id_index)
 
 	!********
 
@@ -809,19 +805,19 @@ function declare_intrinsic_fns() result(fns)
 
 	fns%fns = &
 		[ &
-			min_fn    , &
-			max_fn    , &
-			println_fn, &
-			str_fn    , &
-			len_fn    , &
-			i32_fn    , &
-			i64_fn    , &
-			open_fn   , &
-			readln_fn , &
-			writeln_fn, &
-			eof_fn    , &
-			close_fn  , &
-			size_fn     &
+			min_fn      , &
+			max_fn      , &
+			println_fn  , &
+			str_fn      , &
+			len_fn      , &
+			parse_i32_fn, &
+			i64_fn      , &
+			open_fn     , &
+			readln_fn   , &
+			writeln_fn  , &
+			eof_fn      , &
+			close_fn    , &
+			size_fn       &
 		]
 
 end function declare_intrinsic_fns
@@ -2634,7 +2630,18 @@ function new_parser(str, src_file) result(parser)
 		! we keep line number context for error diagnostics correct and tied to
 		! a source file?
 		!
-		! Something like this at first:
+		! Use like this:
+		!
+		! #include("path/file.syntran");
+		!
+		! It looks a bit like a fn, but it's not since it's "evaluated" during
+		! lexing/parsing, unlike actual fns, so I think the `#` is a good
+		! signifier of that.  `#tree` should be handled in a similar way for
+		! file interpretation and not just stdin, maybe it should be `#tree();`
+		! for consistency.  It's also not really a directive either since it
+		! happens during  lexing/parsing instead of a pre-processing step.
+		! 
+		! Implement something like this at first:
 		!
 		!if (token%kind == inc_directive_token) then
 		!	inc_parser = new_parser(readfile(inc_file), inc_file)
@@ -5868,7 +5875,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res%i32 = len(arg%str%s, 4)
 			!res%i32 = mylen( arg%str%s )
 
-		case ("i32")
+		case ("parse_i32")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			read(arg%str%s, *) res%i32  ! TODO: catch iostat
