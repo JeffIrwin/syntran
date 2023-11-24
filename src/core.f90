@@ -109,6 +109,7 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			sstar_equals_token   = 77, &
 			i64_token            = 76, &
 			i64_type             = 75, &
 			file_type            = 74, &
@@ -1664,7 +1665,8 @@ function kind_name(kind)
 			"slash_equals_token  ", & ! 73
 			"file_type           ", & ! 74
 			"i64_type            ", & ! 75
-			"i64_token           "  & ! 76
+			"i64_token           ", & ! 76
+			"sstar_equals_token  "  & ! 77
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1761,7 +1763,8 @@ function kind_token(kind)
 			"/=                   ", & ! 73
 			"file type            ", & ! 74
 			"i64 type             ", & ! 75
-			"i64 token            "  & ! 76
+			"i64 token            ", & ! 76
+			"**= token            "  & ! 77
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2287,14 +2290,27 @@ function lex(lexer) result(token)
 			end if
 
 		case ("*")
+
 			if (lexer%lookahead() == "*") then
-				lexer%pos = lexer%pos + 1
-				token = new_token(sstar_token, lexer%pos, "**")
+
+				if (lexer%peek(2) == "=") then
+					!print *, '**='
+					lexer%pos = lexer%pos + 2
+					token = new_token(sstar_equals_token, lexer%pos, "**=")
+
+				else
+					lexer%pos = lexer%pos + 1
+					token = new_token(sstar_token, lexer%pos, "**")
+
+				end if
+
 			else if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
 				token = new_token(star_equals_token, lexer%pos, "*=")
+
 			else
 				token = new_token(star_token, lexer%pos, lexer%current())
+
 			end if
 
 		case ("/")
@@ -3739,7 +3755,8 @@ logical function is_assignment_op(op)
 	integer, intent(in) :: op
 
 	is_assignment_op = any(op == [equals_token, plus_equals_token, &
-		minus_equals_token, star_equals_token, slash_equals_token])
+		minus_equals_token, star_equals_token, slash_equals_token, &
+		sstar_equals_token])
 
 end function is_assignment_op
 
@@ -3994,7 +4011,7 @@ logical function is_binary_op_allowed(left, op, right)
 				less_token   , less_equals_token, &
 				greater_token, greater_equals_token, &
 				percent_token, minus_equals_token, star_equals_token, &
-				slash_equals_token)
+				slash_equals_token, sstar_equals_token)
 
 			is_binary_op_allowed = is_num_type(left) .and. is_num_type(right)
 
@@ -6322,6 +6339,9 @@ subroutine compound_assign(lhs, rhs, op)
 
 	case (slash_equals_token)
 		call div(lhs, rhs, lhs, op%text)
+
+	case (sstar_equals_token)
+		call pow(lhs, rhs, lhs, op%text)
 
 	case default
 		write(*,*) 'Error: unexpected assignment operator "', op%text, '"'
