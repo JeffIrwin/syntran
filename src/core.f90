@@ -269,7 +269,7 @@ module core_m
 
 		integer :: rank
 		integer(kind = 8) :: len_, cap
-		integer, allocatable :: size(:)
+		integer(kind = 8), allocatable :: size(:)
 
 		contains
 			procedure :: push => push_array
@@ -1451,7 +1451,7 @@ subroutine push_array(vector, val)
 
 	type(string_t   ), allocatable :: tmp_str (:)
 
-	integer :: tmp_cap
+	integer(kind = 8) :: tmp_cap
 
 	vector%len_ = vector%len_ + 1
 
@@ -5326,20 +5326,22 @@ end function next_parser_token
 
 !===============================================================================
 
-integer function subscript_eval(node, vars, fns, quietl) result(index)
-	! TODO: rename index
+function subscript_eval(node, vars, fns, quietl) result(index_)
 
 	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
-	! subscript index
+	! subscript index_
 
 	type(syntax_node_t) :: node
 	type(vars_t) :: vars
 	type(fns_t) :: fns
 	logical, intent(in) :: quietl
 
+	integer(kind = 8) :: index_
+
 	!******
 
-	integer :: i, prod
+	integer :: i
+	integer(kind = 8) :: prod
 	type(value_t) :: subscript
 
 	!print *, 'starting subscript_eval()'
@@ -5347,7 +5349,7 @@ integer function subscript_eval(node, vars, fns, quietl) result(index)
 	! str scalar with single char subscript
 	if (vars%vals(node%id_index)%type == str_type) then
 		subscript = syntax_eval(node%subscripts(1), vars, fns, quietl)
-		index = subscript%i32
+		index_ = subscript%i32
 		return
 	end if
 
@@ -5356,7 +5358,7 @@ integer function subscript_eval(node, vars, fns, quietl) result(index)
 	!end if
 
 	prod  = 1
-	index = 0
+	index_ = 0
 	do i = 1, vars%vals(node%id_index)%array%rank
 		!print *, 'i = ', i
 
@@ -5364,7 +5366,7 @@ integer function subscript_eval(node, vars, fns, quietl) result(index)
 
 		! TODO: bound checking? by default or enabled with cmd line flag?
 
-		index = index + prod * subscript%i32
+		index_ = index_ + prod * subscript%i32
 		prod  = prod * vars%vals(node%id_index)%array%size(i)
 
 	end do
@@ -5394,8 +5396,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	!********
 
-	integer :: i, j, il, iu, io
-	integer(kind = 8) :: i8
+	integer :: i, j, io
+	integer(kind = 8) :: il, iu, i8
 
 	logical :: quietl
 
@@ -5907,21 +5909,21 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			!print *, 'RHS = ', res%to_str()
 
-			i = subscript_eval(node, vars, fns, quietl)
+			i8 = subscript_eval(node, vars, fns, quietl)
 
 			if (vars%vals(node%id_index)%type == str_type) then
 				! TODO: ban compound character substring assignment
-				vars%vals(node%id_index)%str%s(i+1: i+1) = res%str%s
+				vars%vals(node%id_index)%str%s(i8+1: i8+1) = res%str%s
 			else
 
 				!print *, 'LHS array type = ', &
 				!	vars%vals(node%id_index)%array%type
 				!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
 
-				array_val = get_array_value_t(vars%vals(node%id_index)%array, i)
+				array_val = get_array_value_t(vars%vals(node%id_index)%array, i8)
 				call compound_assign(array_val, res, node%op)
 				call set_array_value_t( &
-					vars%vals(node%id_index)%array, i, array_val)
+					vars%vals(node%id_index)%array, i8, array_val)
 				res = array_val
 
 			end if
@@ -6088,7 +6090,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call internal_error()
 			end if
 
-			res%i32 = arg1%array%size( arg2%i32 + 1 )
+			! TODO: return type?  Make separate size64() fn?
+			res%i32 = int(arg1%array%size( arg2%i32 + 1 ))
 
 		case default
 			! User-defined function
@@ -6132,8 +6135,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			select case (node%subscripts(1)%sub_kind)
 			case (scalar_sub)
-				i = subscript_eval(node, vars, fns, quietl)
-				res%str%s = vars%vals(node%id_index)%str%s(i+1: i+1)
+				i8 = subscript_eval(node, vars, fns, quietl)
+				res%str%s = vars%vals(node%id_index)%str%s(i8+1: i8+1)
 
 			case (range_sub)
 
@@ -6164,8 +6167,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call internal_error()
 			end if
 
-			i = subscript_eval(node, vars, fns, quietl)
-			res = get_array_value_t(vars%vals(node%id_index)%array, i)
+			i8 = subscript_eval(node, vars, fns, quietl)
+			res = get_array_value_t(vars%vals(node%id_index)%array, i8)
 
 		else
 			!print *, 'scalar name expr'
@@ -6511,7 +6514,7 @@ function get_array_value_t(array, i) result(val)
 
 	type(array_t), intent(in) :: array
 
-	integer, intent(in) :: i
+	integer(kind = 8), intent(in) :: i
 
 	type(value_t) :: val
 
@@ -6544,7 +6547,7 @@ subroutine set_array_value_t(array, i, val)
 
 	type(array_t), intent(inout) :: array
 
-	integer, intent(in) :: i
+	integer(kind = 8), intent(in) :: i
 
 	type(value_t), intent(in) :: val
 
@@ -7002,7 +7005,8 @@ recursive function value_to_str(val) result(ans)
 	character(len = 16) :: buf16
 	character(len = 32) :: buffer
 
-	integer :: i, j, prod
+	integer :: j
+	integer(kind = 8) :: i8, prod
 
 	!type(string_vector_t) :: str_vec
 	type(char_vector_t) :: str_vec
@@ -7068,17 +7072,17 @@ recursive function value_to_str(val) result(ans)
 				!! Recursive IO stalls execution
 				!print *, 'size = ', val%array%size
 
-				do i = 1, val%array%len_
+				do i8 = 1, int(val%array%len_)
 
-					call str_vec%push(str(val%array%i32(i)))
-					if (i >= val%array%len_) cycle
+					call str_vec%push(str(val%array%i32(i8)))
+					if (i8 >= val%array%len_) cycle
 
 					call str_vec%push(', ')
 
 					! Products could be saved ahead of time outside of loop
 					prod = val%array%size(1)
 					do j = 2, val%array%rank
-						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						if (mod(i8, prod) == 0) call str_vec%push(line_feed)
 						prod = prod * val%array%size(j)
 					end do
 
@@ -7089,17 +7093,17 @@ recursive function value_to_str(val) result(ans)
 				!! Recursive IO stalls execution
 				!print *, 'size = ', val%array%size
 
-				do i = 1, val%array%len_
+				do i8 = 1, val%array%len_
 
-					call str_vec%push(str(val%array%i64(i)))
-					if (i >= val%array%len_) cycle
+					call str_vec%push(str(val%array%i64(i8)))
+					if (i8 >= val%array%len_) cycle
 
 					call str_vec%push(', ')
 
 					! Products could be saved ahead of time outside of loop
 					prod = val%array%size(1)
 					do j = 2, val%array%rank
-						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						if (mod(i8, prod) == 0) call str_vec%push(line_feed)
 						prod = prod * val%array%size(j)
 					end do
 
@@ -7107,23 +7111,23 @@ recursive function value_to_str(val) result(ans)
 
 			else if (val%array%type == f32_type) then
 
-				do i = 1, val%array%len_
+				do i8 = 1, val%array%len_
 
 					!! Nice alignment, but breaks tests
-					!write(buf16, '(es16.6)') val%array%f32(i)
+					!write(buf16, '(es16.6)') val%array%f32(i8)
 					!call str_vec%push(buf16)
 
 					! Trimmed string (not aligned)
-					call str_vec%push(str(val%array%f32(i)))
+					call str_vec%push(str(val%array%f32(i8)))
 
-					if (i >= val%array%len_) cycle
+					if (i8 >= val%array%len_) cycle
 
 					call str_vec%push(', ')
 
 					! Products could be saved ahead of time outside of loop
 					prod = val%array%size(1)
 					do j = 2, val%array%rank
-						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						if (mod(i8, prod) == 0) call str_vec%push(line_feed)
 						prod = prod * val%array%size(j)
 					end do
 
@@ -7131,18 +7135,18 @@ recursive function value_to_str(val) result(ans)
 
 			else if (val%array%type == bool_type) then
 
-				do i = 1, val%array%len_
+				do i8 = 1, val%array%len_
 
-					call str_vec%push(str(val%array%bool(i)))
+					call str_vec%push(str(val%array%bool(i8)))
 
-					if (i >= val%array%len_) cycle
+					if (i8 >= val%array%len_) cycle
 
 					call str_vec%push(', ')
 
 					! Products could be saved ahead of time outside of loop
 					prod = val%array%size(1)
 					do j = 2, val%array%rank
-						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						if (mod(i8, prod) == 0) call str_vec%push(line_feed)
 						prod = prod * val%array%size(j)
 					end do
 
@@ -7150,18 +7154,18 @@ recursive function value_to_str(val) result(ans)
 
 			else if (val%array%type == str_type) then
 
-				do i = 1, val%array%len_
+				do i8 = 1, val%array%len_
 
-					call str_vec%push(val%array%str(i)%s)
+					call str_vec%push(val%array%str(i8)%s)
 
-					if (i >= val%array%len_) cycle
+					if (i8 >= val%array%len_) cycle
 
 					call str_vec%push(', ')
 
 					! Products could be saved ahead of time outside of loop
 					prod = val%array%size(1)
 					do j = 2, val%array%rank
-						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						if (mod(i8, prod) == 0) call str_vec%push(line_feed)
 						prod = prod * val%array%size(j)
 					end do
 
