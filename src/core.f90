@@ -4034,7 +4034,9 @@ logical function is_binary_op_allowed(left, op, right)
 
 			! Fortran allows comparing ints and floats for strict equality, e.g.
 			! 1 == 1.0 is indeed true.  I'm not sure if I like that
-			is_binary_op_allowed = left == right
+			is_binary_op_allowed = &
+				(is_int_type(left) .and. is_int_type(right)) .or. &
+				(left == right)
 
 	end select
 
@@ -6164,11 +6166,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		case (eequals_token)
 
+			! Is there a reason to make this a fn like add, mul, etc?  Those
+			! save duplicated code for compound assignment, but I don't see a
+			! use for === compound assignment (different from javascript ===)
+
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 == right%i32
+
 			case        (magic * i64_type + i64_type)
 				res%bool = left%i64 == right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 == right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 == right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 == right%f32
 			case        (magic * f32_type + i32_type)
@@ -6663,10 +6677,10 @@ subroutine modulo_value_t(left, right, res, op_text)
 		res%i64 = mod(left%i64, right%i64)
 
 	case        (magic**2 * i64_type + magic * i64_type + i32_type)
-		res%i64 = mod(left%i64, right%i32)
+		res%i64 = mod(left%i64, int(right%i32, 8))
 
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
-		res%i64 = mod(left%i32, right%i64)
+		res%i64 = mod(int(left%i32, 8), right%i64)
 
 	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
