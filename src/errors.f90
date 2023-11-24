@@ -515,12 +515,19 @@ end function new_span
 !===============================================================================
 
 function new_context(text, src_file, lines) result(context)
+
 	character(len = *), intent(in) :: text, src_file
 	integer, intent(in) :: lines(:)
 	type(text_context_t) :: context
+
 	context%text = text
 	context%src_file = src_file
+
+	! gfortran warns if i just let this auto-allocate in the next line?
+	allocate(context%lines( 1: size(lines) ))  
+
 	context%lines = lines
+
 end function new_context
 
 !===============================================================================
