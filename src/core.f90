@@ -4451,8 +4451,22 @@ function parse_array_expr(parser) result(expr)
 			!print *, 'len = ', parser%context%text(span_beg: span_end)
 
 			if (.not. any(len%val%type == [i32_type, i64_type])) then
+				! Length is not an integer type
 				span = new_span(span_beg, span_end - span_beg + 1)
 				! TODO: different diag for each (or at least some) case
+				call parser%diagnostics%push(err_non_int_range( &
+					parser%context, span, &
+					parser%context%text(span_beg: span_end)))
+			end if
+
+			! This used to be checked further up before i64 arrays
+			if (ubound%val%type /= lbound%val%type) then
+				! lbound type and ubound type do not match for length-based array
+				span = new_span(span_beg, span_end - span_beg + 1)
+				! TODO: different diag for each (or at least some) case.  Need
+				! to save spans of different parts of the array text, because we
+				! can't know if the lbound type needs to match the ubound type
+				! until after we check for the semicolon_token in this block
 				call parser%diagnostics%push(err_non_int_range( &
 					parser%context, span, &
 					parser%context%text(span_beg: span_end)))
@@ -4493,17 +4507,38 @@ function parse_array_expr(parser) result(expr)
 		allocate(expr%lbound)
 		allocate(expr%ubound)
 
-		expr%kind                 = array_expr
+		expr%kind = array_expr
 
-		!expr%val%type             = lbound%val%type
-		expr%val%type       = array_type
+		expr%val%type = array_type
 
-		expr%val%array%type       = lbound%val%type
-		expr%val%array%kind       = impl_array
+		expr%val%array%kind = impl_array
 		expr%val%array%rank = 1
 
 		expr%lbound = lbound
 		expr%ubound = ubound
+
+		if (all(i32_type == &
+			[lbound%val%type, ubound%val%type]) &! .or. &
+			!all(f32_type == &  ! is f32 even allowed here?
+			![lbound%val%type, ubound%val%type])) then
+			) then
+
+			expr%val%array%type = lbound%val%type
+
+		! TODO: make is_int_type() elemental, then we can sugar up this syntax
+		else if (all([ &
+			is_int_type(lbound%val%type), &
+			is_int_type(ubound%val%type)])) then
+
+			expr%val%array%type = i64_type
+
+		else
+			! TODO: different message
+			span = new_span(span_beg, span_end - span_beg + 1)
+			call parser%diagnostics%push(err_non_int_range( &
+				parser%context, span, &
+				parser%context%text(span_beg: span_end)))
+		end if
 
 		return
 
@@ -5364,7 +5399,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	integer :: i, j, il, iu, io
 	integer(kind = 8) :: i8
 
-	logical :: quietl, any_i64
+	logical :: quietl
 
 	real(kind = 4) :: f, fstep
 
@@ -5415,9 +5450,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			! TODO: i64 array and promotion tests
 
-			! If any bound or step is i64, cast the others up to match.
-			!
-			! TODO: copy this for [lbound: ubound] unit step arrays too
+			! If any bound or step is i64, cast the others up to match
 			if (any(i64_type == [lbound%type, step%type, ubound%type])) then
 
 				!! this happens during parsing
@@ -5629,6 +5662,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!array = new_array(node%val%array%type)
 
 			array%type = node%val%array%type
+
+			if (any(i64_type == [lbound%type, ubound%type])) then
+				call promote_i32_i64(lbound)
+				call promote_i32_i64(ubound)
+			end if
 
 			if (.not. any(array%type == [i32_type, i64_type])) then
 				write(*,*) 'Error: unit step array type eval not implemented'
