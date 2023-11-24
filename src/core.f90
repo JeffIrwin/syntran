@@ -267,8 +267,8 @@ module core_m
 
 		! TODO: file arrays
 
-		! TODO: should len/cap be i64?
-		integer :: len_, cap, rank
+		integer :: rank
+		integer(kind = 8) :: len_, cap
 		integer, allocatable :: size(:)
 
 		contains
@@ -4355,10 +4355,19 @@ function parse_array_expr(parser) result(expr)
 		ubound   = parser%parse_expr()
 		span_end = parser%peek_pos(0) - 1
 
-		if (ubound%val%type /= lbound%val%type) then
+		!print *, 'lbound type = ', kind_name(lbound%val%type)
+		!print *, 'ubound type = ', kind_name(ubound%val%type)
+
+		!if (ubound%val%type /= lbound%val%type) then
+		if (.not. all([ &
+			is_num_type(lbound%val%type), &
+			is_num_type(ubound%val%type)])) then
+
+			!print *, 'HERE'
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_non_int_range( &
 				parser%context, span, parser%context%text(span_beg: span_end)))
+
 		end if
 
 		if (parser%current_kind() == colon_token) then
@@ -4374,7 +4383,8 @@ function parse_array_expr(parser) result(expr)
 			ubound   = parser%parse_expr()
 			span_end = parser%peek_pos(0) - 1
 
-			if (ubound%val%type /= lbound%val%type) then
+			!if (ubound%val%type /= lbound%val%type) then
+			if (.not. is_num_type(ubound%val%type)) then
 				span = new_span(span_beg, span_end - span_beg + 1)
 				call parser%diagnostics%push(err_non_int_range( &
 					parser%context, span, &
@@ -5334,7 +5344,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	integer :: i, j, il, iu, io
 	integer(kind = 8) :: i8
 
-	logical :: quietl
+	logical :: quietl, any_i64
 
 	real(kind = 4) :: f, fstep
 
@@ -5382,6 +5392,33 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			ubound = syntax_eval(node%ubound, vars, fns, quietl)
 
 			array%type = node%val%array%type
+
+			! If any bound or step is i64, cast the others up to match.  TODO:
+			! copy this for [lbound: ubound] unit step arrays too
+			any_i64 = any(i64_type == [lbound%type, step%type, ubound%type])
+
+			! TODO: i64 array and promotion tests
+
+			! TODO: fn
+			if (any_i64 .and. lbound%type == i32_type) then
+				lbound%type = i64_type
+				lbound%i64 = lbound%i32
+			end if
+			if (any_i64 .and. ubound%type == i32_type) then
+				ubound%type = i64_type
+				ubound%i64 = ubound%i32
+			end if
+
+			!if (any_i64 .and. step%type == i32_type) then
+			!	step%type = i64_type
+			!	step%i64 = step%i32
+			!end if
+			if (any_i64) call promote_i32_i64(step)
+
+			!print *, 'lbound = ', lbound%i64
+			!print *, 'step32 = ', step  %i32
+			!print *, 'step64 = ', step  %i64
+			!print *, 'ubound = ', ubound%i64
 
 			if (array%type == i32_type) then
 
@@ -5561,7 +5598,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		else if (node%val%array%kind == impl_array) then
 			!print *, 'impl_array'
 
-			! Unit step impl i32 array
+			! Unit step impl integer array
 
 			! Expand impl_array to expl_array here on evaluation.  Consider
 			! something like this:
@@ -5580,28 +5617,37 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%type = node%val%array%type
 
-			! TODO: i64
-			if (array%type /= i32_type) then
+			if (.not. any(array%type == [i32_type, i64_type])) then
 				write(*,*) 'Error: unit step array type eval not implemented'
 				call internal_error()
 			end if
 
-			array%len_ = ubound%i32 - lbound%i32
+			if (array%type == i32_type) then
+				array%len_ = ubound%i32 - lbound%i32
+			else !if (array%type == i64_type) then
+				array%len_ = ubound%i64 - lbound%i64
+			end if
+
 			array%cap = array%len_
 
-			allocate(array%i32( array%cap ))
+			if (array%type == i32_type) then
+				allocate(array%i32( array%cap ))
+			else !if (array%type == i64_type) then
+				allocate(array%i64( array%cap ))
+			end if
 
 			!print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
 			!print *, 'node%val%array%type = ', node%val%array%type
 
-			! TODO: i64 types
-
-			!elem = lbound
-			do i = lbound%i32, ubound%i32 - 1
-				array%i32(i - lbound%i32 + 1) = i
-				!elem%i32 = i
-				!call array%push(elem)
-			end do
+			if (array%type == i32_type) then
+				do i = lbound%i32, ubound%i32 - 1
+					array%i32(i - lbound%i32 + 1) = i
+				end do
+			else !if (array%type == i64_type) then
+				do i8 = lbound%i64, ubound%i64 - 1
+					array%i64(i8 - lbound%i64 + 1) = i8
+				end do
+			end if
 
 			array%rank = 1
 			allocate(array%size( array%rank ))
@@ -6354,6 +6400,21 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	end select
 
 end function syntax_eval
+
+!===============================================================================
+
+subroutine promote_i32_i64(val)
+
+	! If val is i32 type, change it to i64 and copy the values
+
+	type(value_t), intent(inout) :: val
+
+	if (val%type == i32_type) then
+		val%type = i64_type
+		val%i64 = val%i32
+	end if
+
+end subroutine promote_i32_i64
 
 !===============================================================================
 
