@@ -382,6 +382,9 @@ function err_non_int_bound(context, span, bound) result(err)
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: bound
+
+	! TODO: several error messages need updated for i64/i32
+
 	err = err_prefix &
 		//'bound `'//bound//'` of for-loop is not an i32 integer' &
 		//underline(context, span) &

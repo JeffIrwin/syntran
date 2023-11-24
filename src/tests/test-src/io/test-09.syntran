@@ -143,7 +143,7 @@ fn tok_i32(str_: str): [i32; :]
 
 //==========================================================
 
-fn parse_i32s(str_: str): [i32; :]
+fn read_i32s(str_: str): [i32; :]
 {
 	// Parse a vector of i32 integers from a string.  Any non-int characters are
 	// treated as delimiters
@@ -162,7 +162,6 @@ fn parse_i32s(str_: str): [i32; :]
 		//println("i = ", i);
 		toks = tok_i32(str_[i:n]);
 		//println("toks = ", toks);
-		//let num = i32(str_[i + toks[0]: i + toks[1]+1]);
 		//println("num = ", num);
 		num_nums += 1;
 		i += toks[1] + 1;
@@ -176,7 +175,7 @@ fn parse_i32s(str_: str): [i32; :]
 		//println("i = ", i);
 		toks = tok_i32(str_[i:n]);
 		//println("toks = ", toks);
-		let num = i32(str_[i + toks[0]: i + toks[1]+1]);
+		let num = parse_i32(str_[i + toks[0]: i + toks[1]+1]);
 		//println("num = ", num);
 		nums[j] = num;
 		//num_nums += 1;
@@ -191,7 +190,7 @@ fn parse_i32s(str_: str): [i32; :]
 
 fn main(): [i32; :]
 {
-	parse_i32s("hay1337hays42hayst16384ack");
+	read_i32s("hay1337hays42hayst16384ack");
 }
 
 //==========================================================

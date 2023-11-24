@@ -139,7 +139,7 @@ fn tok_i32(str_: str): [i32; :]
 
 //==========================================================
 
-fn parse_i32(str_: str): i32
+fn read_i32(str_: str): i32
 {
 	let toks = tok_i32(str_);
 
@@ -148,10 +148,10 @@ fn parse_i32(str_: str): i32
 	let end_ = toks[1];
 	//let len_ = toks[2]; // not needed
 
-	//println("parse_i32 substr = ", str_[beg_: end_+1]);
+	//println("read_i32 substr = ", str_[beg_: end_+1]);
 
-	let ans = i32(str_[beg_: end_+1]);
-	//println("parse_i32 = ", ans);
+	let ans = parse_i32(str_[beg_: end_+1]);
+	//println("read_i32 = ", ans);
 
 	// return
 	ans;
@@ -162,7 +162,7 @@ fn parse_i32(str_: str): i32
 fn main(): i32
 {
 	//let ans = tok_i32("haystack1337haystack");
-	let ans = parse_i32("haystack1337haystack");
+	let ans = read_i32("haystack1337haystack");
 	//println("ans = ", ans);
 	ans;
 }

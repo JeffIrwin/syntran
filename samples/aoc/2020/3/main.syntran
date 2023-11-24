@@ -241,7 +241,7 @@ fn part1(): i32
 
 	let ix = 0;
 	iy = 0;
-	while iy < ny
+	while iy < ny - 1
 	{
 		// Don't need to check starting spot.  It's always empty anyway
 		ix += dx;
@@ -304,7 +304,10 @@ fn part2(): i32
 
 	//println("slopes = ", slopes);
 
-	let prod_ = 1;
+	//let prod_ = 5000000000;
+	//prod_ = (prod_ + 1) - prod_;  // prod_ = 1; // but i64
+	let prod_ = i64(1);
+
 	let prod_str = "";
 	for islope in [0: nslopes]
 	{
@@ -323,21 +326,28 @@ fn part2(): i32
 			ix += dx;
 			iy += dy;
 
-			if iy < ny and grid[ix%nx, iy]
-				sum_ += 1;
+			//println("ix%nx = ", ix%nx);
+			//println("iy    = ", iy);
+			//println();
+
+			// beware short circuit logic and out-of-bounds index
+			if iy < ny
+				if grid[ix%nx, iy]
+					sum_ += 1;
 		}
+
+		prod_ *= sum_;
 
 		// The product overflows i32 for the real input but I can cheat by
 		// printing a string to eval in python
-		prod_ *= sum_;
 		prod_str = prod_str + str(sum_);
 		if islope < nslopes - 1
 			prod_str = prod_str + " * ";
 
 	}
 
-	//println("part2 = ", prod_);
-	println("part2 = ", prod_str);
+	println("part2 = ", prod_);
+	//println("part2 = ", prod_str);
 	let ans = prod_;
 }
 

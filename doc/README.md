@@ -34,17 +34,14 @@ fn exp(x: f32): f32
 
 Compute the base _e_ exponential of `x`
 
-## `i32`
+## `i64`
 ```rust
-fn i32(s: str): i32
+fn i64(a: any): i64
 ```
 
-Convert from a string to an integer `i32`.  Any invalid numbers will cause a runtime
-error.
-
-Note that other numeric types (`f32`) can be implicitly cast to `i32`.
-
-Related functions: [`str`](#str)
+Explicitly cast any numeric type (e.g. `i32`, `f32`, etc.) to 64-bit integer `i64`.
+<!-- TODO For the non-numeric type `str`, use [`parse_i32`](#parse_i64) instead.  -->
+Other non-numeric types (`bool`, `file`) cannot be cast to `i64`.
 
 ## `len`
 ```rust
@@ -80,6 +77,19 @@ Open a `file` handle named `filename`
 
 Related functions: [`close`](#close), [`writeln`](#writeln)
 
+## `parse_i32`
+```rust
+fn parse_i32(s: str): i32
+```
+
+Convert from a string to an integer `i32`.  Any invalid numbers will cause a runtime
+error.  Other languages variously refer to similar functions as `atoi()`,
+`stoi()`, `read()`, `parse()`, `strtol()`, `str2int()`, etc.
+
+Note that other numeric types (`f32`) can be implicitly cast to `i32`.
+
+Related functions: [`str`](#str)
+
 ## `println`
 ```rust
 fn println(s0: any, s1: any, s2: any, ...)
@@ -113,7 +123,7 @@ fn str(s0: any, s1: any, s2: any, ...): str
 
 Convert arguments to `str` and concatenate
 
-Related functions: [`println`](#println), [`writeln`](#writeln), [`i32`](#i32)
+Related functions: [`println`](#println), [`writeln`](#writeln), [`parse_i32`](#parse_i32)
 
 ## `writeln`
 ```rust

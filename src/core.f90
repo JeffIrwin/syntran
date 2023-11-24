@@ -109,6 +109,10 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			percent_equals_token = 78, &
+			sstar_equals_token   = 77, &
+			i64_token            = 76, &
+			i64_type             = 75, &
 			file_type            = 74, &
 			slash_equals_token   = 73, &
 			step_sub             = 72, &
@@ -205,11 +209,13 @@ module core_m
 
 		logical           :: bool
 		integer(kind = 4) :: i32
+		integer(kind = 8) :: i64
 		real   (kind = 4) :: f32
 		type(array_t), pointer :: array => null()
 
 		contains
 			procedure :: to_str => value_to_str
+			procedure :: to_i64 => value_to_i64
 
 	end type value_t
 
@@ -229,6 +235,14 @@ module core_m
 		module procedure div_value_t
 	end interface div
 
+	interface pow
+		module procedure pow_value_t
+	end interface pow
+
+	interface mod_
+		module procedure modulo_value_t
+	end interface mod_
+
 	!********
 
 	type array_t
@@ -243,13 +257,18 @@ module core_m
 		! a type select/case outside of loops for processing arrays, as opposed
 		! to inside of a loop for type selection of every element
 		logical(kind = 1), allocatable :: bool(:)
+
 		integer(kind = 4), allocatable ::  i32(:)
+		integer(kind = 8), allocatable ::  i64(:)
+
 		real   (kind = 4), allocatable ::  f32(:)
+
 		type(string_t   ), allocatable ::  str(:)
 
 		! TODO: file arrays
 
-		integer :: len_, cap, rank
+		integer :: rank
+		integer(kind = 8) :: len_, cap
 		integer, allocatable :: size(:)
 
 		contains
@@ -566,7 +585,8 @@ function declare_intrinsic_fns() result(fns)
 	integer :: id_index, num_fns
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
-		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, i32_fn, len_fn
+		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
+		i64_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -594,6 +614,8 @@ function declare_intrinsic_fns() result(fns)
 	! In Fortran, min() is polymorphic and variadic, but all args must be the
 	! same type.  For example, min(1, 2) and min(1.1, 2.1) are allowed, but
 	! min(1, 2.1) does not compile.  I think that's a reasonable restriction
+
+	! TODO: overload (?) i64 intrinsics or make that the default
 
 	min_fn%type = i32_type
 	allocate(min_fn%params(2))
@@ -677,13 +699,32 @@ function declare_intrinsic_fns() result(fns)
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
 
-	i32_fn%type = i32_type
-	allocate(i32_fn%params(1))
-	i32_fn%params(1)%type = str_type
-	i32_fn%params(1)%name = "str"
+	parse_i32_fn%type = i32_type
+	allocate(parse_i32_fn%params(1))
+	parse_i32_fn%params(1)%type = str_type
+	parse_i32_fn%params(1)%name = "str"
 
 	id_index = id_index + 1
-	call fns%insert("i32", i32_fn, id_index)
+	call fns%insert("parse_i32", parse_i32_fn, id_index)
+
+	!********
+
+	i64_fn%type = i64_type
+	allocate(i64_fn%params(1))
+
+	! TODO: add a way to have a limited polymorphic parameter.  Numeric type to
+	! i64 casting should be allowed, but bool to i64 is not allowed and str to
+	! i64 should have a different fn name
+	!
+	! Currently anything funky will be caught during evaluation but it should
+	! really be caught earlier by the type checker during parsing
+
+	i64_fn%params(1)%type = any_type
+
+	i64_fn%params(1)%name = "a"
+
+	id_index = id_index + 1
+	call fns%insert("i64", i64_fn, id_index)
 
 	!********
 
@@ -700,7 +741,7 @@ function declare_intrinsic_fns() result(fns)
 	readln_fn%type = str_type
 	allocate(readln_fn%params(1))
 	readln_fn%params(1)%type = file_type
-	readln_fn%params(1)%name = "filename"
+	readln_fn%params(1)%name = "file_handle"
 
 	id_index = id_index + 1
 	call fns%insert("readln", readln_fn, id_index)
@@ -724,7 +765,7 @@ function declare_intrinsic_fns() result(fns)
 	eof_fn%type = bool_type
 	allocate(eof_fn%params(1))
 	eof_fn%params(1)%type = file_type
-	eof_fn%params(1)%name = "filename"
+	eof_fn%params(1)%name = "file_handle"
 
 	id_index = id_index + 1
 	call fns%insert("eof", eof_fn, id_index)
@@ -772,18 +813,19 @@ function declare_intrinsic_fns() result(fns)
 
 	fns%fns = &
 		[ &
-			min_fn    , &
-			max_fn    , &
-			println_fn, &
-			str_fn    , &
-			len_fn    , &
-			i32_fn    , &
-			open_fn   , &
-			readln_fn , &
-			writeln_fn, &
-			eof_fn    , &
-			close_fn  , &
-			size_fn     &
+			min_fn      , &
+			max_fn      , &
+			println_fn  , &
+			str_fn      , &
+			len_fn      , &
+			parse_i32_fn, &
+			i64_fn      , &
+			open_fn     , &
+			readln_fn   , &
+			writeln_fn  , &
+			eof_fn      , &
+			close_fn    , &
+			size_fn       &
 		]
 
 end function declare_intrinsic_fns
@@ -1371,6 +1413,8 @@ function new_array(type, cap) result(vector)
 
 	if      (type == i32_type) then
 		allocate(vector%i32 ( vector%cap ))
+	else if (type == i64_type) then
+		allocate(vector%i64 ( vector%cap ))
 	else if (type == f32_type) then
 		allocate(vector%f32 ( vector%cap ))
 	else if (type == bool_type) then
@@ -1399,8 +1443,12 @@ subroutine push_array(vector, val)
 	!********
 
 	integer(kind = 4), allocatable :: tmp_i32 (:)
+	integer(kind = 8), allocatable :: tmp_i64 (:)
+
 	real   (kind = 4), allocatable :: tmp_f32 (:)
+
 	logical(kind = 1), allocatable :: tmp_bool(:)
+
 	type(string_t   ), allocatable :: tmp_str (:)
 
 	integer :: tmp_cap
@@ -1417,6 +1465,12 @@ subroutine push_array(vector, val)
 			allocate(tmp_i32 ( tmp_cap ))
 			tmp_i32(1: vector%cap) = vector%i32
 			call move_alloc(tmp_i32, vector%i32)
+
+		else if (vector%type == i64_type) then
+
+			allocate(tmp_i64 ( tmp_cap ))
+			tmp_i64(1: vector%cap) = vector%i64
+			call move_alloc(tmp_i64, vector%i64)
 
 		else if (vector%type == f32_type) then
 
@@ -1449,6 +1503,8 @@ subroutine push_array(vector, val)
 
 	if      (vector%type == i32_type) then
 		vector%i32 ( vector%len_ ) = val%i32
+	else if (vector%type == i64_type) then
+		vector%i64 ( vector%len_ ) = val%i64
 	else if (vector%type == f32_type) then
 		vector%f32 ( vector%len_ ) = val%f32
 	else if (vector%type == bool_type) then
@@ -1610,7 +1666,11 @@ function kind_name(kind)
 			"range_sub           ", & ! 71
 			"step_sub            ", & ! 72
 			"slash_equals_token  ", & ! 73
-			"file_type           "  & ! 74
+			"file_type           ", & ! 74
+			"i64_type            ", & ! 75
+			"i64_token           ", & ! 76
+			"sstar_equals_token  ", & ! 77
+			"percent_equals_token"  & ! 78
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1705,7 +1765,11 @@ function kind_token(kind)
 			"range subript        ", & ! 71
 			"step subcript        ", & ! 72
 			"/=                   ", & ! 73
-			"file type            "  & ! 74
+			"file type            ", & ! 74
+			"i64 type             ", & ! 75
+			"i64 token            ", & ! 76
+			"**= token            ", & ! 77
+			"%= token             "  & ! 78
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2058,7 +2122,9 @@ function lex(lexer) result(token)
 	character(len = :), allocatable :: text
 
 	integer :: kind
-	integer :: start, io, i32
+	integer :: start, io
+	integer(kind = 4) :: i32
+	integer(kind = 8) :: i64
 
 	logical :: float
 
@@ -2110,15 +2176,28 @@ function lex(lexer) result(token)
 		else
 
 			read(text, *, iostat = io) i32
-			if (io /= exit_success) then
-				span = new_span(start, len(text))
-				call lexer%diagnostics%push(err_bad_int( &
-					lexer%context, span, text))
+
+			if (io == exit_success) then
+
+				val   = new_literal_value(i32_type, i32 = i32)
+				token = new_token(i32_token, start, text, val)
+
+			else
+
+				read(text, *, iostat = io) i64
+
+				if (io == exit_success) then
+
+					val   = new_literal_value(i64_type, i64 = i64)
+					token = new_token(i64_token, start, text, val)
+
+				else
+					span = new_span(start, len(text))
+					call lexer%diagnostics%push(err_bad_int( &
+						lexer%context, span, text))
+				end if
+
 			end if
-
-			val   = new_literal_value(i32_type, i32 = i32)
-			token = new_token(i32_token, start, text, val)
-
 		end if
 
 		return
@@ -2216,14 +2295,27 @@ function lex(lexer) result(token)
 			end if
 
 		case ("*")
+
 			if (lexer%lookahead() == "*") then
-				lexer%pos = lexer%pos + 1
-				token = new_token(sstar_token, lexer%pos, "**")
+
+				if (lexer%peek(2) == "=") then
+					!print *, '**='
+					lexer%pos = lexer%pos + 2
+					token = new_token(sstar_equals_token, lexer%pos, "**=")
+
+				else
+					lexer%pos = lexer%pos + 1
+					token = new_token(sstar_token, lexer%pos, "**")
+
+				end if
+
 			else if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
 				token = new_token(star_equals_token, lexer%pos, "*=")
+
 			else
 				token = new_token(star_token, lexer%pos, lexer%current())
+
 			end if
 
 		case ("/")
@@ -2245,7 +2337,12 @@ function lex(lexer) result(token)
 			end if
 
 		case ("%")
-			token = new_token(percent_token, lexer%pos, lexer%current())
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(percent_equals_token, lexer%pos, "%=");
+			else
+				token = new_token(percent_token, lexer%pos, lexer%current())
+			end if
 
 		case ("(")
 			token = new_token(lparen_token, lexer%pos, lexer%current())
@@ -2378,11 +2475,12 @@ end subroutine read_single_line_comment
 
 !===============================================================================
 
-function new_literal_value(type, bool, i32, f32, str) result(val)
+function new_literal_value(type, bool, i32, i64, f32, str) result(val)
 
 	integer, intent(in) :: type
 
 	integer(kind = 4), intent(in), optional :: i32
+	integer(kind = 8), intent(in), optional :: i64
 	real   (kind = 4), intent(in), optional :: f32
 	logical          , intent(in), optional :: bool
 	character(len=*) , intent(in), optional :: str
@@ -2393,6 +2491,7 @@ function new_literal_value(type, bool, i32, f32, str) result(val)
 	if (present(bool)) val%bool  = bool
 	if (present(f32 )) val%f32   = f32
 	if (present(i32 )) val%i32   = i32
+	if (present(i64 )) val%i64   = i64
 	if (present(str )) val%str%s = str
 
 end function new_literal_value
@@ -2561,7 +2660,18 @@ function new_parser(str, src_file) result(parser)
 		! we keep line number context for error diagnostics correct and tied to
 		! a source file?
 		!
-		! Something like this at first:
+		! Use like this:
+		!
+		! #include("path/file.syntran");
+		!
+		! It looks a bit like a fn, but it's not since it's "evaluated" during
+		! lexing/parsing, unlike actual fns, so I think the `#` is a good
+		! signifier of that.  `#tree` should be handled in a similar way for
+		! file interpretation and not just stdin, maybe it should be `#tree();`
+		! for consistency.  It's also not really a directive either since it
+		! happens during  lexing/parsing instead of a pre-processing step.
+		! 
+		! Implement something like this at first:
 		!
 		!if (token%kind == inc_directive_token) then
 		!	inc_parser = new_parser(readfile(inc_file), inc_file)
@@ -3135,12 +3245,18 @@ integer function lookup_type(name) result(type)
 	select case (name)
 		case ("bool")
 			type = bool_type
+
 		case ("f32")
 			type = f32_type
+
 		case ("i32")
 			type = i32_type
+		case ("i64")
+			type = i64_type
+
 		case ("str")
 			type = str_type
+
 		case default
 			type = unknown_type
 	end select
@@ -3619,6 +3735,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		! need to pass parser to it to push diagnostics
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
+			!print *, 'bin not allowed in parse_expr_statement'
+
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context, &
@@ -3647,7 +3765,8 @@ logical function is_assignment_op(op)
 	integer, intent(in) :: op
 
 	is_assignment_op = any(op == [equals_token, plus_equals_token, &
-		minus_equals_token, star_equals_token, slash_equals_token])
+		minus_equals_token, star_equals_token, slash_equals_token, &
+		sstar_equals_token, percent_equals_token])
 
 end function is_assignment_op
 
@@ -3701,7 +3820,7 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 		!print *, 'subscript = ', subscript%str()
 		!print *, 'subscript = ', parser%context%text(span0: parser%current_pos()-1)
 
-		if (subscript%val%type /= i32_type) then
+		if (.not. any(subscript%val%type == [i32_type, i64_type])) then
 			span = new_span(span0, parser%current_pos() - span0)
 			call parser%diagnostics%push( &
 				err_non_int_subscript(parser%context, span, &
@@ -3851,10 +3970,21 @@ logical function is_num_type(type)
 
 	integer, intent(in) :: type
 
-	! FIXME: other numeric types (i64, f64, etc.)
-	is_num_type = type == i32_type .or. type == f32_type
+	! FIXME: other numeric types (f64, etc.)
+	is_num_type = any(type == [i32_type, i64_type, f32_type])
 
 end function is_num_type
+
+!===============================================================================
+
+logical function is_int_type(type)
+
+	integer, intent(in) :: type
+
+	! FIXME: other numeric types (i64, f64, etc.)
+	is_int_type = any(type == [i32_type, i64_type])
+
+end function is_int_type
 
 !===============================================================================
 
@@ -3891,7 +4021,7 @@ logical function is_binary_op_allowed(left, op, right)
 				less_token   , less_equals_token, &
 				greater_token, greater_equals_token, &
 				percent_token, minus_equals_token, star_equals_token, &
-				slash_equals_token)
+				slash_equals_token, sstar_equals_token, percent_equals_token)
 
 			is_binary_op_allowed = is_num_type(left) .and. is_num_type(right)
 
@@ -3902,7 +4032,9 @@ logical function is_binary_op_allowed(left, op, right)
 
 			! Fortran allows comparing ints and floats for strict equality, e.g.
 			! 1 == 1.0 is indeed true.  I'm not sure if I like that
-			is_binary_op_allowed = left == right
+			is_binary_op_allowed = &
+				(is_int_type(left) .and. is_int_type(right)) .or. &
+				(left == right)
 
 	end select
 
@@ -4072,7 +4204,7 @@ function parse_size(parser) result(size)
 
 		!print *, 'len = ', parser%context%text(span_beg: span_end)
 
-		if (len%val%type /= i32_type) then
+		if (.not. any(len%val%type == [i32_type, i64_type])) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			! TODO: different diag for each (or at least some) case
 			call parser%diagnostics%push(err_non_int_range( &
@@ -4221,10 +4353,19 @@ function parse_array_expr(parser) result(expr)
 		ubound   = parser%parse_expr()
 		span_end = parser%peek_pos(0) - 1
 
-		if (ubound%val%type /= lbound%val%type) then
+		!print *, 'lbound type = ', kind_name(lbound%val%type)
+		!print *, 'ubound type = ', kind_name(ubound%val%type)
+
+		!if (ubound%val%type /= lbound%val%type) then
+		if (.not. all([ &
+			is_num_type(lbound%val%type), &
+			is_num_type(ubound%val%type)])) then
+
+			!print *, 'HERE'
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_non_int_range( &
 				parser%context, span, parser%context%text(span_beg: span_end)))
+
 		end if
 
 		if (parser%current_kind() == colon_token) then
@@ -4240,7 +4381,8 @@ function parse_array_expr(parser) result(expr)
 			ubound   = parser%parse_expr()
 			span_end = parser%peek_pos(0) - 1
 
-			if (ubound%val%type /= lbound%val%type) then
+			!if (ubound%val%type /= lbound%val%type) then
+			if (.not. is_num_type(ubound%val%type)) then
 				span = new_span(span_beg, span_end - span_beg + 1)
 				call parser%diagnostics%push(err_non_int_range( &
 					parser%context, span, &
@@ -4258,11 +4400,31 @@ function parse_array_expr(parser) result(expr)
 			allocate(expr%ubound)
 
 			expr%kind           = array_expr
-
-			!expr%val%type       = lbound%val%type
 			expr%val%type       = array_type
 
-			expr%val%array%type = lbound%val%type
+			if (all(i32_type == &
+				[lbound%val%type, step%val%type, ubound%val%type]) .or. &
+				all(f32_type == &
+				[lbound%val%type, step%val%type, ubound%val%type])) then
+
+				expr%val%array%type = lbound%val%type
+
+			! TODO: make is_int_type() elemental, then we can sugar up this syntax
+			else if (all([ &
+				is_int_type(lbound%val%type), &
+				is_int_type(step  %val%type), &
+				is_int_type(ubound%val%type)])) then
+
+				expr%val%array%type = i64_type
+
+			else
+				! TODO: different message
+				span = new_span(span_beg, span_end - span_beg + 1)
+				call parser%diagnostics%push(err_non_int_range( &
+					parser%context, span, &
+					parser%context%text(span_beg: span_end)))
+			end if
+
 			expr%val%array%kind = impl_array
 			expr%val%array%rank = 1
 
@@ -4286,9 +4448,23 @@ function parse_array_expr(parser) result(expr)
 
 			!print *, 'len = ', parser%context%text(span_beg: span_end)
 
-			if (len%val%type /= i32_type) then
+			if (.not. any(len%val%type == [i32_type, i64_type])) then
+				! Length is not an integer type
 				span = new_span(span_beg, span_end - span_beg + 1)
 				! TODO: different diag for each (or at least some) case
+				call parser%diagnostics%push(err_non_int_range( &
+					parser%context, span, &
+					parser%context%text(span_beg: span_end)))
+			end if
+
+			! This used to be checked further up before i64 arrays
+			if (ubound%val%type /= lbound%val%type) then
+				! lbound type and ubound type do not match for length-based array
+				span = new_span(span_beg, span_end - span_beg + 1)
+				! TODO: different diag for each (or at least some) case.  Need
+				! to save spans of different parts of the array text, because we
+				! can't know if the lbound type needs to match the ubound type
+				! until after we check for the semicolon_token in this block
 				call parser%diagnostics%push(err_non_int_range( &
 					parser%context, span, &
 					parser%context%text(span_beg: span_end)))
@@ -4329,17 +4505,38 @@ function parse_array_expr(parser) result(expr)
 		allocate(expr%lbound)
 		allocate(expr%ubound)
 
-		expr%kind                 = array_expr
+		expr%kind = array_expr
 
-		!expr%val%type             = lbound%val%type
-		expr%val%type       = array_type
+		expr%val%type = array_type
 
-		expr%val%array%type       = lbound%val%type
-		expr%val%array%kind       = impl_array
+		expr%val%array%kind = impl_array
 		expr%val%array%rank = 1
 
 		expr%lbound = lbound
 		expr%ubound = ubound
+
+		if (all(i32_type == &
+			[lbound%val%type, ubound%val%type]) &! .or. &
+			!all(f32_type == &  ! is f32 even allowed here?
+			![lbound%val%type, ubound%val%type])) then
+			) then
+
+			expr%val%array%type = lbound%val%type
+
+		! TODO: make is_int_type() elemental, then we can sugar up this syntax
+		else if (all([ &
+			is_int_type(lbound%val%type), &
+			is_int_type(ubound%val%type)])) then
+
+			expr%val%array%type = i64_type
+
+		else
+			! TODO: different message
+			span = new_span(span_beg, span_end - span_beg + 1)
+			call parser%diagnostics%push(err_non_int_range( &
+				parser%context, span, &
+				parser%context%text(span_beg: span_end)))
+		end if
 
 		return
 
@@ -4775,6 +4972,11 @@ function parse_primary_expr(parser) result(expr)
 			token = parser%match(str_token)
 			expr  = new_str(token%val%str%s)
 
+		case (i64_token)
+
+			token = parser%match(i64_token)
+			expr  = new_i64(token%val%i64)
+
 		case default
 
 			token = parser%match(i32_token)
@@ -4844,6 +5046,18 @@ function new_i32(i32) result(expr)
 	expr%val  = new_literal_value(i32_type, i32 = i32)
 
 end function new_i32
+
+!********
+
+function new_i64(i64) result(expr)
+
+	integer(kind = 8), intent(in) :: i64
+	type(syntax_node_t) :: expr
+
+	expr%kind = literal_expr
+	expr%val  = new_literal_value(i64_type, i64 = i64)
+
+end function new_i64
 
 !********
 
@@ -4960,9 +5174,19 @@ integer function get_binary_op_kind(left, op, right)
 		end if
 
 		if (left == f32_type .or. right == f32_type) then
-			! int + int casts to float
+			! int + float casts to float
 			get_binary_op_kind = f32_type
 			return
+		end if
+
+		if ( &
+			(left  == i64_type .and. is_int_type(right)) .or. &
+			(right == i64_type .and. is_int_type(left ))) then
+
+			! i32+i64 and i64+i32 cast to i64
+			get_binary_op_kind = i64_type
+			return
+
 		end if
 
 		get_binary_op_kind = unknown_type
@@ -5171,6 +5395,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	!********
 
 	integer :: i, j, il, iu, io
+	integer(kind = 8) :: i8
 
 	logical :: quietl
 
@@ -5221,6 +5446,22 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%type = node%val%array%type
 
+			! If any bound or step is i64, cast the others up to match
+			if (any(i64_type == [lbound%type, step%type, ubound%type])) then
+
+				!! this happens during parsing
+				!array%type = i64_type
+
+				call promote_i32_i64(lbound)
+				call promote_i32_i64(step)
+				call promote_i32_i64(ubound)
+			end if
+
+			!print *, 'lbound = ', lbound%i64
+			!print *, 'step32 = ', step  %i32
+			!print *, 'step64 = ', step  %i64
+			!print *, 'ubound = ', ubound%i64
+
 			if (array%type == i32_type) then
 
 				array%cap = (ubound%i32 - lbound%i32) / step%i32 + 1
@@ -5235,6 +5476,26 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				     .and. i /= ubound%i32)
 					array%i32(j) = i
 					i = i + step%i32
+					j = j + 1
+				end do
+				array%len_ = j - 1
+
+			else if (array%type == i64_type) then
+
+				array%cap = int((ubound%i64 - lbound%i64) / step%i64 + 1)
+				allocate(array%i64( array%cap ))
+
+				j = 1
+				i8 = lbound%i64
+				if (lbound%i64 < ubound%i64 .neqv. 0 < step%i64) then
+					i8 = ubound%i64
+				end if
+
+				! Step may be negative
+				do while ((i8  < ubound%i64 .eqv. lbound%i64 < ubound%i64) &
+				     .and. i8 /= ubound%i64)
+					array%i64(j) = i8
+					i8 = i8 + step%i64
 					j = j + 1
 				end do
 				array%len_ = j - 1
@@ -5348,6 +5609,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				allocate(array%i32( array%cap ))
 				array%i32 = lbound%i32
 
+			else if      (array%type == i64_type) then
+				allocate(array%i64( array%cap ))
+				array%i64 = lbound%i64
+
 			else if (array%type == f32_type) then
 				allocate(array%f32( array%cap ))
 				array%f32 = lbound%f32
@@ -5373,7 +5638,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		else if (node%val%array%kind == impl_array) then
 			!print *, 'impl_array'
 
-			! Unit step impl i32 array
+			! Unit step impl integer array
 
 			! Expand impl_array to expl_array here on evaluation.  Consider
 			! something like this:
@@ -5392,27 +5657,42 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%type = node%val%array%type
 
-			if (array%type /= i32_type) then
+			if (any(i64_type == [lbound%type, ubound%type])) then
+				call promote_i32_i64(lbound)
+				call promote_i32_i64(ubound)
+			end if
+
+			if (.not. any(array%type == [i32_type, i64_type])) then
 				write(*,*) 'Error: unit step array type eval not implemented'
 				call internal_error()
 			end if
 
-			array%len_ = ubound%i32 - lbound%i32
+			if (array%type == i32_type) then
+				array%len_ = ubound%i32 - lbound%i32
+			else !if (array%type == i64_type) then
+				array%len_ = ubound%i64 - lbound%i64
+			end if
+
 			array%cap = array%len_
 
-			allocate(array%i32( array%cap ))
+			if (array%type == i32_type) then
+				allocate(array%i32( array%cap ))
+			else !if (array%type == i64_type) then
+				allocate(array%i64( array%cap ))
+			end if
 
 			!print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
 			!print *, 'node%val%array%type = ', node%val%array%type
 
-			! TODO: i64 types
-
-			!elem = lbound
-			do i = lbound%i32, ubound%i32 - 1
-				array%i32(i - lbound%i32 + 1) = i
-				!elem%i32 = i
-				!call array%push(elem)
-			end do
+			if (array%type == i32_type) then
+				do i = lbound%i32, ubound%i32 - 1
+					array%i32(i - lbound%i32 + 1) = i
+				end do
+			else !if (array%type == i64_type) then
+				do i8 = lbound%i64, ubound%i64 - 1
+					array%i64(i8 - lbound%i64 + 1) = i8
+				end do
+			end if
 
 			array%rank = 1
 			allocate(array%size( array%rank ))
@@ -5497,6 +5777,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		itr%type = lbound%type
 		!itr%type = vars%vals(node%id_index)%type  ! unset
 
+		! TODO: i64 for loop iterators
 		if (itr%type /= i32_type) then
 			write(*,*) err_eval_i32_itr(node%identifier%text)
 			call internal_error()
@@ -5720,10 +6001,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res%i32 = len(arg%str%s, 4)
 			!res%i32 = mylen( arg%str%s )
 
-		case ("i32")
+		case ("parse_i32")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			read(arg%str%s, *) res%i32  ! TODO: catch iostat
+
+		case ("i64")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%i64 = arg%to_i64()
 
 		case ("open")
 
@@ -5916,6 +6202,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (right%type)
 				case (i32_type)
 					res%i32 = -right%i32
+				case (i64_type)
+					res%i64 = -right%i64
 				case (f32_type)
 					res%f32 = -right%f32
 			end select
@@ -5933,8 +6221,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		left  = syntax_eval(node%left , vars, fns, quietl)
 		right = syntax_eval(node%right, vars, fns, quietl)
 
-		!print *, 'left  = ', left
-		!print *, 'right = ', right
+		!print *, 'left  type = ', kind_name(left%type)
+		!print *, 'right type = ', kind_name(right%type)
 
 		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
 		if (res%type == unknown_type) then
@@ -5953,44 +6241,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call mul(left, right, res, node%op%text)
 
 		case (sstar_token)
-			select case (magic * left%type + right%type)
-			case        (magic * i32_type + i32_type)
-				res%i32 = left%i32 ** right%i32
-			case        (magic * f32_type + f32_type)
-				res%f32 = left%f32 ** right%f32
-			case        (magic * f32_type + i32_type)
-				res%f32 = left%f32 ** right%i32
-			case        (magic * i32_type + f32_type)
-				res%f32 = left%i32 ** right%f32
-			case default
-				! FIXME: other numeric types (i64, f64, etc.)
-				write(*,*) err_eval_binary_types(node%op%text)
-				call internal_error()
-			end select
+			call pow(left, right, res, node%op%text)
 
 		case (slash_token)
 			call div(left, right, res, node%op%text)
 
 		case (percent_token)
-
-			! The Fortran mod() fn is consistent with the C operator `%`, while
-			! modulo() works differently for negative args (it's actually a
-			! remainder function, not a true modulo)
-
-			select case (magic * left%type + right%type)
-			case        (magic * i32_type + i32_type)
-				res%i32 = mod(left%i32, right%i32)
-			case        (magic * f32_type + f32_type)
-				res%f32 = mod(left%f32, right%f32)
-			case        (magic * f32_type + i32_type)
-				res%f32 = mod(left%f32, real(right%i32))
-			case        (magic * i32_type + f32_type)
-				res%f32 = mod(real(left%i32), right%f32)
-			case default
-				! FIXME: other numeric types (i64, f64, etc.)
-				write(*,*) err_eval_binary_types(node%op%text)
-				call internal_error()
-			end select
+			call mod_(left, right, res, node%op%text)
 
 		case (and_keyword)
 			res%bool = left%bool .and. right%bool
@@ -6000,9 +6257,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		case (eequals_token)
 
+			! Is there a reason to make this a fn like add, mul, etc?  Those
+			! save duplicated code for compound assignment, but I don't see a
+			! use for === compound assignment (different from javascript ===)
+
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 == right%i32
+
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 == right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 == right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 == right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 == right%f32
 			case        (magic * f32_type + i32_type)
@@ -6029,6 +6300,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 /= right%i32
+
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 /= right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 /= right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 /= right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 /= right%f32
 			case        (magic * f32_type + i32_type)
@@ -6048,6 +6329,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 < right%i32
+
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 < right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 < right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 < right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 < right%f32
 			case        (magic * f32_type + i32_type)
@@ -6065,6 +6356,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 <= right%i32
+
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 <= right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 <= right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 <= right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 <= right%f32
 			case        (magic * f32_type + i32_type)
@@ -6082,6 +6383,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 > right%i32
+
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 > right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 > right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 > right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 > right%f32
 			case        (magic * f32_type + i32_type)
@@ -6099,6 +6410,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 >= right%i32
+
+			case        (magic * i64_type + i64_type)
+				res%bool = left%i64 >= right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 >= right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 >= right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 >= right%f32
 			case        (magic * f32_type + i32_type)
@@ -6124,6 +6445,21 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	end select
 
 end function syntax_eval
+
+!===============================================================================
+
+subroutine promote_i32_i64(val)
+
+	! If val is i32 type, change it to i64 and copy the values
+
+	type(value_t), intent(inout) :: val
+
+	if (val%type == i32_type) then
+		val%type = i64_type
+		val%i64 = val%i32
+	end if
+
+end subroutine promote_i32_i64
 
 !===============================================================================
 
@@ -6156,6 +6492,12 @@ subroutine compound_assign(lhs, rhs, op)
 	case (slash_equals_token)
 		call div(lhs, rhs, lhs, op%text)
 
+	case (sstar_equals_token)
+		call pow(lhs, rhs, lhs, op%text)
+
+	case (percent_equals_token)
+		call mod_(lhs, rhs, lhs, op%text)
+
 	case default
 		write(*,*) 'Error: unexpected assignment operator "', op%text, '"'
 		call internal_error()
@@ -6180,12 +6522,18 @@ function get_array_value_t(array, i) result(val)
 	select case (array%type)
 		case (bool_type)
 			val%bool = array%bool(i + 1)
+
 		case (i32_type)
 			val%i32 = array%i32(i + 1)
+		case (i64_type)
+			val%i64 = array%i64(i + 1)
+
 		case (f32_type)
 			val%f32 = array%f32(i + 1)
+
 		case (str_type)
 			val%str = array%str(i + 1)
+
 	end select
 
 end function get_array_value_t
@@ -6208,12 +6556,19 @@ subroutine set_array_value_t(array, i, val)
 	select case (array%type)
 		case (bool_type)
 			array%bool(i + 1) = val%bool
+
 		case (i32_type)
 			array%i32(i + 1) = val%i32
+
+		case (i64_type)
+			array%i64(i + 1) = val%i64
+
 		case (f32_type)
 			array%f32(i + 1) = val%f32
+
 		case (str_type)
 			array%str(i + 1) = val%str
+
 	end select
 
 end subroutine set_array_value_t
@@ -6232,6 +6587,9 @@ subroutine add_value_t(left, right, res, op_text)
 
 	!********
 
+	!print *, 'starting add_value_t()'
+	!print *, 'res%type = ', kind_name(res%type)
+
 	! Case selector must be a scalar expression, so use this nasty hack.
 	! This will break if magic is smaller than the largest type enum
 	! parameter
@@ -6241,12 +6599,21 @@ subroutine add_value_t(left, right, res, op_text)
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 + right%i32
 
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = left%i64 + right%i64
+
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = left%i64 + right%i32
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = left%i32 + right%i64
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+
 	! Usually, adding f32 to i32 casts to an i32 result.  But for compound
 	! assignment we may want to make it an i32, e.g. i += 3.1;
-
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 + right%i32)
-
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
 		res%i32 = int(left%i32 + right%f32)
 
@@ -6264,7 +6631,7 @@ subroutine add_value_t(left, right, res, op_text)
 		res%str%s = left%str%s // right%str%s
 
 	case default
-		! FIXME: other numeric types (i64, f64, etc.)
+		! FIXME: other numeric types (f64, etc.)
 		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
 	end select
@@ -6288,6 +6655,17 @@ subroutine mul_value_t(left, right, res, op_text)
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 * right%i32
+
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = left%i64 * right%i64
+
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = left%i64 * right%i32
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = left%i32 * right%i64
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 * right%i32)
@@ -6331,6 +6709,17 @@ subroutine div_value_t(left, right, res, op_text)
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 / right%i32
 
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = left%i64 / right%i64
+
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = left%i64 / right%i32
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = left%i32 / right%i64
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 / right%i32)
 
@@ -6373,6 +6762,17 @@ subroutine subtract_value_t(left, right, res, op_text)
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
 		res%i32 = left%i32 - right%i32
 
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = left%i64 - right%i64
+
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = left%i64 - right%i32
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = left%i32 - right%i64
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%i32 = int(left%f32 - right%i32)
 
@@ -6396,6 +6796,116 @@ subroutine subtract_value_t(left, right, res, op_text)
 	end select
 
 end subroutine subtract_value_t
+
+!===============================================================================
+
+subroutine modulo_value_t(left, right, res, op_text)
+
+	type(value_t), intent(in)  :: left, right
+
+	! For binary_expr, the type is set before calling this routine, so res is
+	! inout
+	type(value_t), intent(inout) :: res
+
+	character(len = *), intent(in) :: op_text
+
+	select case (magic**2 * res%type + magic * left%type + right%type)
+
+	! The Fortran mod() fn is consistent with the C operator `%`, while modulo()
+	! works differently for negative args (it's actually a remainder function,
+	! not a true modulo)
+
+	!****
+	case        (magic**2 * i32_type + magic * i32_type + i32_type)
+		res%i32 = mod(left%i32, right%i32)
+
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = mod(left%i64, right%i64)
+
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = mod(left%i64, int(right%i32, 8))
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = mod(int(left%i32, 8), right%i64)
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+
+	case        (magic**2 * i32_type + magic * f32_type + i32_type)
+		res%i32 = mod(int(left%f32), right%i32)
+
+	case        (magic**2 * i32_type + magic * i32_type + f32_type)
+		res%i32 = mod(left%i32, int(right%f32))
+
+	!****
+	case        (magic**2 * f32_type + magic * f32_type + f32_type)
+		res%f32 = mod(left%f32, right%f32)
+
+	case        (magic**2 * f32_type + magic * f32_type + i32_type)
+		res%f32 = mod(left%f32, real(right%i32))
+
+	case        (magic**2 * f32_type + magic * i32_type + f32_type)
+		res%f32 = mod(real(left%i32), right%f32)
+
+	case default
+		! FIXME: other numeric types (i64, f64, etc.)
+		write(*,*) err_eval_binary_types(op_text)
+		call internal_error()
+	end select
+
+end subroutine modulo_value_t
+
+!===============================================================================
+
+subroutine pow_value_t(left, right, res, op_text)
+
+	type(value_t), intent(in)  :: left, right
+
+	! For binary_expr, the type is set before calling this routine, so res is
+	! inout
+	type(value_t), intent(inout) :: res
+
+	character(len = *), intent(in) :: op_text
+
+	select case (magic**2 * res%type + magic * left%type + right%type)
+
+	!****
+	case        (magic**2 * i32_type + magic * i32_type + i32_type)
+		res%i32 = left%i32 ** right%i32
+
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = left%i64 ** right%i64
+
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = left%i64 ** right%i32
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = left%i32 ** right%i64
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+
+	case        (magic**2 * i32_type + magic * f32_type + i32_type)
+		res%i32 = int(left%f32 ** right%i32)
+
+	case        (magic**2 * i32_type + magic * i32_type + f32_type)
+		res%i32 = int(left%i32 ** right%f32)
+
+	!****
+	case        (magic**2 * f32_type + magic * f32_type + f32_type)
+		res%f32 = left%f32 ** right%f32
+
+	case        (magic**2 * f32_type + magic * f32_type + i32_type)
+		res%f32 = left%f32 ** right%i32
+
+	case        (magic**2 * f32_type + magic * i32_type + f32_type)
+		res%f32 = left%i32 ** right%f32
+
+	case default
+		! FIXME: other numeric types (i64, f64, etc.)
+		write(*,*) err_eval_binary_types(op_text)
+		call internal_error()
+	end select
+
+end subroutine pow_value_t
 
 !===============================================================================
 
@@ -6451,6 +6961,36 @@ end subroutine log_diagnostics
 
 !===============================================================================
 
+function value_to_i64(val) result(ans)
+
+	class(value_t) :: val
+
+	integer(kind = 8) :: ans
+
+	select case (val%type)
+
+		case (f32_type)
+			ans = int(val%f32, 8)
+
+		case (i32_type)
+			ans = val%i32
+
+		case (i64_type)
+			!write(buffer, '(i0)') val%i64
+			!ans = trim(buffer)
+			ans = val%i64
+
+		case default
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to i64 '//color_reset
+			call internal_error()
+
+	end select
+
+end function value_to_i64
+
+!===============================================================================
+
 recursive function value_to_str(val) result(ans)
 
 	class(value_t) :: val
@@ -6487,6 +7027,10 @@ recursive function value_to_str(val) result(ans)
 
 		case (i32_type)
 			write(buffer, '(i0)') val%i32
+			ans = trim(buffer)
+
+		case (i64_type)
+			write(buffer, '(i0)') val%i64
 			ans = trim(buffer)
 
 		case (str_type)
@@ -6527,6 +7071,27 @@ recursive function value_to_str(val) result(ans)
 				do i = 1, val%array%len_
 
 					call str_vec%push(str(val%array%i32(i)))
+					if (i >= val%array%len_) cycle
+
+					call str_vec%push(', ')
+
+					! Products could be saved ahead of time outside of loop
+					prod = val%array%size(1)
+					do j = 2, val%array%rank
+						if (mod(i, prod) == 0) call str_vec%push(line_feed)
+						prod = prod * val%array%size(j)
+					end do
+
+				end do
+
+			else if (val%array%type == i64_type) then
+
+				!! Recursive IO stalls execution
+				!print *, 'size = ', val%array%size
+
+				do i = 1, val%array%len_
+
+					call str_vec%push(str(val%array%i64(i)))
 					if (i >= val%array%len_) cycle
 
 					call str_vec%push(', ')

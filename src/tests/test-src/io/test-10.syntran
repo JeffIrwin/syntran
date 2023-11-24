@@ -188,7 +188,7 @@ fn tok_i32(str_: str): [i32; :]
 
 //==========================================================
 
-fn parse_i32s(str_: str): [i32; :]
+fn read_i32s(str_: str): [i32; :]
 {
 	// Parse a vector of i32 integers from a string.  Any non-int characters are
 	// treated as delimiters
@@ -207,7 +207,6 @@ fn parse_i32s(str_: str): [i32; :]
 		//println("i = ", i);
 		toks = tok_i32(str_[i:n]);
 		//println("toks = ", toks);
-		//let num = i32(str_[i + toks[0]: i + toks[1]+1]);
 		//println("num = ", num);
 		num_nums += 1;
 		i += toks[1] + 1;
@@ -221,7 +220,7 @@ fn parse_i32s(str_: str): [i32; :]
 		//println("i = ", i);
 		toks = tok_i32(str_[i:n]);
 		//println("toks = ", toks);
-		let num = i32(str_[i + toks[0]: i + toks[1]+1]);
+		let num = parse_i32(str_[i + toks[0]: i + toks[1]+1]);
 		//println("num = ", num);
 		nums[j] = num;
 		//num_nums += 1;
@@ -235,22 +234,6 @@ fn parse_i32s(str_: str): [i32; :]
 
 //==========================================================
 
-fn all_eq(u: [i32; :], v: [i32; :]): bool
-{
-	let correct = size(u,0) == size(v,0);
-	let i = 0;
-	while correct and i < size(u,0)
-	{
-		correct = correct and u[i] == v[i];
-		i += 1;
-	}
-
-	// return
-	correct;
-}
-
-//==========================================================
-
 fn main(): i32
 {
 	let sum = 0;
@@ -258,35 +241,35 @@ fn main(): i32
 	let actual = [0; 0];
 
 	expect =              [ 1337 ];
-	actual = parse_i32s("hay1337haystack");
+	actual = read_i32s("hay1337haystack");
 	sum += norm_diff(expect, actual);
 
 	expect =           [ 1337 ];
-	actual = parse_i32s("1337haystack");
+	actual = read_i32s("1337haystack");
 	sum += norm_diff(expect, actual);
 
 	expect =              [ 1337 ];
-	actual = parse_i32s("hay1337");
+	actual = read_i32s("hay1337");
 	sum += norm_diff(expect, actual);
 
 	expect =              [ 1337,   42];
-	actual = parse_i32s("hay1337hays42haystack");
+	actual = read_i32s("hay1337hays42haystack");
 	sum += norm_diff(expect, actual);
 
 	expect =           [ 1337,   42];
-	actual = parse_i32s("1337hays42");
+	actual = read_i32s("1337hays42");
 	sum += norm_diff(expect, actual);
 
 	expect =           [ 1337,   42,    16384];
-	actual = parse_i32s("1337hays42hayst16384");
+	actual = read_i32s("1337hays42hayst16384");
 	sum += norm_diff(expect, actual);
 
 	expect =              [ 1337,   42,    16384];
-	actual = parse_i32s("hay1337hays42hayst16384ack");
+	actual = read_i32s("hay1337hays42hayst16384ack");
 	sum += norm_diff(expect, actual);
 
 	expect =              [ 1373,   43816,    24];
-	actual = parse_i32s("hay1373hays43816hayst24ack");
+	actual = read_i32s("hay1373hays43816hayst24ack");
 	sum += norm_diff(expect, actual);
 
 	//println("sum = ", sum);
