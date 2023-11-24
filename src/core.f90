@@ -233,6 +233,10 @@ module core_m
 		module procedure div_value_t
 	end interface div
 
+	interface pow
+		module procedure pow_value_t
+	end interface pow
+
 	!********
 
 	type array_t
@@ -6115,30 +6119,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call mul(left, right, res, node%op%text)
 
 		case (sstar_token)
-
-			! TODO: refactor as fn like add() and subtract() for easier compound
-			! assignment operations
-
-			select case (magic * left%type + right%type)
-			case        (magic * i32_type + i32_type)
-				res%i32 = left%i32 ** right%i32
-			case        (magic * i64_type + i64_type)
-				res%i64 = left%i64 ** right%i64
-			case        (magic * f32_type + f32_type)
-				res%f32 = left%f32 ** right%f32
-
-			! TODO: cases for i64/f32 mixing, i32/i64 mixing, etc. for all
-			! operations
-
-			case        (magic * f32_type + i32_type)
-				res%f32 = left%f32 ** right%i32
-			case        (magic * i32_type + f32_type)
-				res%f32 = left%i32 ** right%f32
-			case default
-				! FIXME: other numeric types (i64, f64, etc.)
-				write(*,*) err_eval_binary_types(node%op%text)
-				call internal_error()
-			end select
+			call pow(left, right, res, node%op%text)
 
 		case (slash_token)
 			call div(left, right, res, node%op%text)
@@ -6640,6 +6621,59 @@ subroutine subtract_value_t(left, right, res, op_text)
 	end select
 
 end subroutine subtract_value_t
+
+!===============================================================================
+
+subroutine pow_value_t(left, right, res, op_text)
+
+	type(value_t), intent(in)  :: left, right
+
+	! For binary_expr, the type is set before calling this routine, so res is
+	! inout
+	type(value_t), intent(inout) :: res
+
+	character(len = *), intent(in) :: op_text
+
+	select case (magic**2 * res%type + magic * left%type + right%type)
+
+	!****
+	case        (magic**2 * i32_type + magic * i32_type + i32_type)
+		res%i32 = left%i32 ** right%i32
+
+	case        (magic**2 * i64_type + magic * i64_type + i64_type)
+		res%i64 = left%i64 ** right%i64
+
+	case        (magic**2 * i64_type + magic * i64_type + i32_type)
+		res%i64 = left%i64 ** right%i32
+
+	case        (magic**2 * i64_type + magic * i32_type + i64_type)
+		res%i64 = left%i32 ** right%i64
+
+	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+
+	case        (magic**2 * i32_type + magic * f32_type + i32_type)
+		res%i32 = int(left%f32 ** right%i32)
+
+	case        (magic**2 * i32_type + magic * i32_type + f32_type)
+		res%i32 = int(left%i32 ** right%f32)
+
+	!****
+	case        (magic**2 * f32_type + magic * f32_type + f32_type)
+		res%f32 = left%f32 ** right%f32
+
+	case        (magic**2 * f32_type + magic * f32_type + i32_type)
+		res%f32 = left%f32 ** right%i32
+
+	case        (magic**2 * f32_type + magic * i32_type + f32_type)
+		res%f32 = left%i32 ** right%f32
+
+	case default
+		! FIXME: other numeric types (i64, f64, etc.)
+		write(*,*) err_eval_binary_types(op_text)
+		call internal_error()
+	end select
+
+end subroutine pow_value_t
 
 !===============================================================================
 
