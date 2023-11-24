@@ -491,6 +491,10 @@ subroutine unit_test_comp_ass(npass, nfail)
 			eval('let v = [10.0; 3]; v[1] /= 5; v;', quiet) == '[1.000000E+01, 2.000000E+00, 1.000000E+01]', &
 			eval('let i = 20; i /= 4.9;', quiet) == '4', &
 			abs(eval_f32('let i = 20.5; i /= 5;', quiet) - 4.1) < tol, &
+			eval('let j = 3; j **= 2; j;', quiet) == '9', &
+			eval('let j = 4; j **= 2; j;', quiet) == '16', &
+			eval('let j = 2; j **= 3; j;', quiet) == '8', &
+			eval('let j = 3; j **= 4; j;', quiet) == '81', &
 			eval('let j = 10; j += 3;', quiet) == '13'  &
 		]
 
