@@ -709,8 +709,6 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	! TODO: document
-
 	i64_fn%type = i64_type
 	allocate(i64_fn%params(1))
 
@@ -5484,8 +5482,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			else if (array%type == i64_type) then
 
-				! TODO: test
-
 				array%cap = int((ubound%i64 - lbound%i64) / step%i64 + 1)
 				allocate(array%i64( array%cap ))
 
@@ -5781,7 +5777,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		itr%type = lbound%type
 		!itr%type = vars%vals(node%id_index)%type  ! unset
 
-		! TODO: i64
+		! TODO: i64 for loop iterators
 		if (itr%type /= i32_type) then
 			write(*,*) err_eval_i32_itr(node%identifier%text)
 			call internal_error()
