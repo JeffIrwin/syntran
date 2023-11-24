@@ -6156,27 +6156,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		case (percent_token)
 			call mod_(left, right, res, node%op%text)
 
-			! The Fortran mod() fn is consistent with the C operator `%`, while
-			! modulo() works differently for negative args (it's actually a
-			! remainder function, not a true modulo)
-
-			!select case (magic * left%type + right%type)
-			!case        (magic * i32_type + i32_type)
-			!	res%i32 = mod(left%i32, right%i32)
-			!case        (magic * i64_type + i64_type)
-			!	res%i64 = mod(left%i64, right%i64)
-			!case        (magic * f32_type + f32_type)
-			!	res%f32 = mod(left%f32, right%f32)
-			!case        (magic * f32_type + i32_type)
-			!	res%f32 = mod(left%f32, real(right%i32))
-			!case        (magic * i32_type + f32_type)
-			!	res%f32 = mod(real(left%i32), right%f32)
-			!case default
-			!	! FIXME: other numeric types (i64, f64, etc.)
-			!	write(*,*) err_eval_binary_types(node%op%text)
-			!	call internal_error()
-			!end select
-
 		case (and_keyword)
 			res%bool = left%bool .and. right%bool
 
@@ -6671,6 +6650,10 @@ subroutine modulo_value_t(left, right, res, op_text)
 	character(len = *), intent(in) :: op_text
 
 	select case (magic**2 * res%type + magic * left%type + right%type)
+
+	! The Fortran mod() fn is consistent with the C operator `%`, while modulo()
+	! works differently for negative args (it's actually a remainder function,
+	! not a true modulo)
 
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
