@@ -34,6 +34,15 @@ fn exp(x: f32): f32
 
 Compute the base _e_ exponential of `x`
 
+## `i64`
+```rust
+fn i64(a: any): i64
+```
+
+Explicitly cast any numeric type (e.g. `i32`, `f32`, etc.) to 64-bit integer `i64`.
+<!-- TODO For the non-numeric type `str`, use [`parse_i32`](#parse_i64) instead.  -->
+Other non-numeric types (`bool`, `file`) cannot be cast to `i64`.
+
 ## `len`
 ```rust
 fn len(s: str): i32
