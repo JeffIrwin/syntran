@@ -6209,8 +6209,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 /= right%i32
+
 			case        (magic * i64_type + i64_type)
 				res%bool = left%i64 /= right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 /= right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 /= right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 /= right%f32
 			case        (magic * f32_type + i32_type)
@@ -6230,8 +6238,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 < right%i32
+
 			case        (magic * i64_type + i64_type)
 				res%bool = left%i64 < right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 < right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 < right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 < right%f32
 			case        (magic * f32_type + i32_type)
@@ -6249,8 +6265,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 <= right%i32
+
 			case        (magic * i64_type + i64_type)
 				res%bool = left%i64 <= right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 <= right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 <= right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 <= right%f32
 			case        (magic * f32_type + i32_type)
@@ -6268,8 +6292,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 > right%i32
+
 			case        (magic * i64_type + i64_type)
 				res%bool = left%i64 > right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 > right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 > right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 > right%f32
 			case        (magic * f32_type + i32_type)
@@ -6287,8 +6319,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
 				res%bool = left%i32 >= right%i32
+
 			case        (magic * i64_type + i64_type)
 				res%bool = left%i64 >= right%i64
+
+			case        (magic * i32_type + i64_type)
+				res%bool = left%i32 >= right%i64
+
+			case        (magic * i64_type + i32_type)
+				res%bool = left%i64 >= right%i32
+
 			case        (magic * f32_type + f32_type)
 				res%bool = left%f32 >= right%f32
 			case        (magic * f32_type + i32_type)
