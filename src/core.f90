@@ -109,6 +109,8 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			include_keyword      = 80, &
+			hash_token           = 79, &
 			percent_equals_token = 78, &
 			sstar_equals_token   = 77, &
 			i64_token            = 76, &
@@ -1670,7 +1672,10 @@ function kind_name(kind)
 			"i64_type            ", & ! 75
 			"i64_token           ", & ! 76
 			"sstar_equals_token  ", & ! 77
-			"percent_equals_token"  & ! 78
+			"percent_equals_token", & ! 78
+			"hash_token          ", & ! 79
+			"include_keyword     ", & ! 80
+			"unknown             "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1769,7 +1774,10 @@ function kind_token(kind)
 			"i64 type             ", & ! 75
 			"i64 token            ", & ! 76
 			"**= token            ", & ! 77
-			"%= token             "  & ! 78
+			"%=                   ", & ! 78
+			"#                    ", & ! 79
+			"include              ", & ! 80
+			"unknown              "  & ! inf
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2371,6 +2379,9 @@ function lex(lexer) result(token)
 		case (",")
 			token = new_token(comma_token, lexer%pos, lexer%current())
 
+		case ("#")
+			token = new_token(hash_token, lexer%pos, lexer%current())
+
 		case ("=")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
@@ -2541,6 +2552,9 @@ integer function get_keyword_kind(text) result(kind)
 		case ("fn")
 			kind = fn_keyword
 
+		case ("include")
+			kind = include_keyword
+
 		case default
 			kind = identifier_token
 
@@ -2637,7 +2651,7 @@ end function new_lexer
 
 !===============================================================================
 
-function new_parser(str, src_file) result(parser)
+recursive function new_parser(str, src_file) result(parser)
 
 	character(len = *) :: str, src_file
 
@@ -2645,10 +2659,17 @@ function new_parser(str, src_file) result(parser)
 
 	!********
 
-	type(syntax_token_t)        :: token
-	type(syntax_token_vector_t) :: tokens
+	character(len = :), allocatable :: inc_text, filename
+
+	integer :: i, j, iostat
 
 	type(lexer_t) :: lexer
+
+	type(parser_t) :: inc_parser
+
+	type(syntax_token_t) :: token, token_peek, inc_file_token
+	type(syntax_token_t), allocatable :: tokens_tmp(:)
+	type(syntax_token_vector_t) :: tokens
 
 	! Get an array of tokens
 	tokens = new_syntax_token_vector()
@@ -2674,7 +2695,7 @@ function new_parser(str, src_file) result(parser)
 		! Implement something like this at first:
 		!
 		!if (token%kind == inc_directive_token) then
-		!	inc_parser = new_parser(readfile(inc_file), inc_file)
+		!	inc_parser = new_parser(readfile(inc_filename), inc_filename)
 		!	do i = 1, size(inc_parser%tokens)
 		!		call tokens%push( inc_parser%tokens(i) )
 		!		! TODO: diagnostics and context?
@@ -2689,6 +2710,82 @@ function new_parser(str, src_file) result(parser)
 
 		if (token%kind == eof_token) exit
 	end do
+
+	!************************
+	! start pre-process
+
+	! Copy to temp array and pre-process hash "directives"
+	tokens_tmp = tokens%v( 1: tokens%len_ )
+	tokens = new_syntax_token_vector()
+	i = 0
+	!do i = 1, size(tokens_tmp)
+	do while (i < size(tokens_tmp))
+		i = i + 1
+		token = tokens_tmp(i)
+
+		! Whitespace has already been skipped in previous loop
+		if (token%kind == hash_token) then
+
+			i = i + 1
+			token_peek = tokens_tmp(i)
+
+			select case (token_peek%kind)
+			case (include_keyword)
+
+				print *, '#include'
+
+				! TODO: parens?  It's kind of a pain to match() since the parser
+				! isn't constructed yet
+
+				i = i + 1
+				inc_file_token = tokens_tmp(i)
+
+				! TODO: prepend with path to src_file. Maybe later add `-I` arg
+				! for include dirs or an env var?
+				filename = inc_file_token%val%str%s
+
+				print *, 'include filename = ', filename
+
+				inc_text = read_file(filename, iostat)
+				if (iostat /= exit_success) then
+					write(*,*) err_404(filename)
+					call internal_error() ! TODO: new fn? this is user error, not internal
+				end if
+				print *, 'inc_text = '
+				print *, inc_text
+
+				! Any nested includes are handled in this new_parser() call
+				inc_parser = new_parser(inc_text, filename)
+
+				! Minus 1 because included eof_token
+				do j = 1, size(inc_parser%tokens) - 1
+				!do j = 1, size(inc_parser%tokens)
+
+					token = inc_parser%tokens(j)
+					call tokens%push(token)
+				end do
+
+				! TODO: included diagnostics and context?
+
+				! TODO: semicolon?  It's kind of a pain like parens
+
+			case default
+
+				! This will defer any diagnostic logging to the parser.  Should
+				! there be a special-case diagnostic here?
+				call tokens%push(token)
+				call tokens%push(token_peek)
+
+			end select
+
+		else
+			call tokens%push(token)
+		end if
+
+	end do
+
+	! end pre-process
+	!************************
 
 	! Convert to standard array (and class member)
 	parser%tokens = tokens%v( 1: tokens%len_ )
@@ -3860,7 +3957,7 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 	rbracket  = parser%match(rbracket_token)
 	!print *, 'done'
 
-	! TODO: check that # of subscripts matches array rank, both LHS and
+	! TODO: check that num of subscripts matches array rank, both LHS and
 	! RHS parsing.  May need to pass identifier to this function.  LHS and RHS
 	! cases are different in tricky ways.  RHS has already lookup up identifier
 	! in vars dictionary when it calls parse_subscripts(), but LHS has not.
