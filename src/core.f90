@@ -2733,70 +2733,70 @@ function preprocess(tokens_in) result(tokens_out)
 		! happens during  lexing/parsing instead of a pre-processing step.
 
 		! Whitespace has already been skipped in previous loop
-		if (token%kind == hash_token) then
-
-			i = i + 1
-			token_peek = tokens_in(i)
-
-			select case (token_peek%kind)
-			case (include_keyword)
-
-				! TODO: document
-
-				print *, '#include'
-
-				! TODO: parens?  It's kind of a pain to match() since the parser
-				! isn't constructed yet.  I can see why C works the way it does
-
-				! TODO: prepend with path to src_file, fix tests. Maybe later
-				! add `-I` arg for include dirs or an env var?
-				i = i + 1
-				filename = tokens_in(i)%val%str%s
-
-				print *, 'include filename = ', filename
-
-				inc_text = read_file(filename, iostat)
-				if (iostat /= exit_success) then
-					write(*,*) err_404(filename)
-					call internal_error() ! TODO: new fn? this is user error, not internal
-				end if
-				print *, 'inc_text = '
-				print *, inc_text
-
-				! Any nested includes are handled in this new_parser() call
-				inc_parser = new_parser(inc_text, filename)
-
-				! Minus 1 because included eof_token
-				do j = 1, size(inc_parser%tokens) - 1
-					call tokens_out%push( inc_parser%tokens(j) )
-				end do
-
-				! TODO: included diagnostics and context? At the very least,
-				! sys exit.  Also it shouldn't be too hard to just report them
-				! here and sys exit (without worrying about later diags from
-				! current main syntran file)
-
-				! TODO: semicolon after #include?  It's kind of a pain like parens
-
-			!case (tree_keyword)
-			!! TODO: maybe do #tree work at eval time
-
-			! TODO: #pragma once or at least #ifndef/#def-style include guards
-
-			case default
-
-				! This will defer any diagnostic logging to the parser.  Should
-				! there be a special-case diagnostic here?
-				call tokens_out%push(token)
-				call tokens_out%push(token_peek)
-
-			end select
-
-		else
+		if (token%kind /= hash_token) then
 			call tokens_out%push(token)
+			cycle
 		end if
 
-	end do
+		i = i + 1
+		token_peek = tokens_in(i)
+
+		select case (token_peek%kind)
+		case (include_keyword)
+
+			! TODO: document once it's stable
+
+			!print *, '#include'
+
+			! TODO: parens?  It's kind of a pain to match() since the parser
+			! isn't constructed yet.  I can see why C works the way it does
+
+			! TODO: prepend with path to src_file, fix tests. Maybe later
+			! add `-I` arg for include dirs or an env var?
+			i = i + 1
+			filename = tokens_in(i)%val%str%s
+
+			print *, 'include filename = ', filename
+
+			inc_text = read_file(filename, iostat)
+			if (iostat /= exit_success) then
+				write(*,*) err_404(filename)
+				call internal_error() ! TODO: new fn? this is user error, not internal
+			end if
+
+			print *, 'len(inc_text) = ', len(inc_text)
+			!print *, 'inc_text = '
+			!print *, inc_text
+
+			! Any nested includes are handled in this new_parser() call
+			inc_parser = new_parser(inc_text, filename)
+
+			! Minus 1 because included eof_token
+			do j = 1, size(inc_parser%tokens) - 1
+				call tokens_out%push( inc_parser%tokens(j) )
+			end do
+
+			! TODO: included diagnostics and context?  Lexer diags could be
+			! logged here, but parser diags won't get thrown until parse time,
+			! so we need to retain context for multiple src files
+
+			! TODO: semicolon after #include?  It's kind of a pain like parens
+
+		!case (tree_keyword)
+		!! TODO: maybe do #tree work at eval time
+
+		! TODO: #pragma once or at least #ifndef/#def-style include guards
+
+		case default
+
+			! This will defer any diagnostic logging to the parser.  Should
+			! there be a special-case diagnostic here for bad directives?
+			call tokens_out%push(token)
+			call tokens_out%push(token_peek)
+
+		end select  ! case (token_peek%kind)
+
+	end do  ! while (i < size(tokens_in))
 
 end function preprocess
 
