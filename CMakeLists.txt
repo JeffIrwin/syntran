@@ -17,6 +17,13 @@ set(PROJECT syntran)
 
 project(${PROJECT} Fortran)
 
+if(WINDOWS)
+	message("defining _WIN32 in cmake")
+	add_compile_definitions(_WIN32)
+else()
+	message("NOT defining _WIN32 in cmake")
+endif()
+
 if(DEFINED ENV{SYNTRAN_INTEL})
 	set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC -fpp")
 else()
