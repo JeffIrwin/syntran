@@ -1534,6 +1534,7 @@ subroutine unit_test_include(npass, nfail)
 		[   &
 			interpret_file(path//'test-01.syntran', quiet) == '3', &
 			interpret_file(path//'test-02.syntran', quiet) == '0', &
+			interpret_file(path//'test-03.syntran', quiet) == '7', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
