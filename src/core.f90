@@ -2718,7 +2718,9 @@ recursive function new_parser(str, src_file) result(parser)
 			select case (token_peek%kind)
 			case (include_keyword)
 
-				print *, '#include'
+				! TODO: document
+
+				!print *, '#include'
 
 				! TODO: parens?  It's kind of a pain to match() since the parser
 				! isn't constructed yet.  I can see why C works the way it does
@@ -2729,15 +2731,15 @@ recursive function new_parser(str, src_file) result(parser)
 				! for include dirs or an env var?
 				filename = tokens_tmp(i)%val%str%s
 
-				print *, 'include filename = ', filename
+				!print *, 'include filename = ', filename
 
 				inc_text = read_file(filename, iostat)
 				if (iostat /= exit_success) then
 					write(*,*) err_404(filename)
 					call internal_error() ! TODO: new fn? this is user error, not internal
 				end if
-				print *, 'inc_text = '
-				print *, inc_text
+				!print *, 'inc_text = '
+				!print *, inc_text
 
 				! Any nested includes are handled in this new_parser() call
 				inc_parser = new_parser(inc_text, filename)
