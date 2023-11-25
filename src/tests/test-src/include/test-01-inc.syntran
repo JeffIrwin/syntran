@@ -1,0 +1,7 @@
+
+fn fn_inc(): i32
+{
+	//println("starting fn_inc()");
+	2;
+}
+

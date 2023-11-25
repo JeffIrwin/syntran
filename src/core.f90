@@ -29,9 +29,6 @@ module core_m
 	integer, parameter :: maxerr_def = 4
 
 	! TODO:
-	!  - include directive?  not super efficient, but it might not be too hard
-	!    to hack together support for multiple translation unit syntran projects
-	!    by effectively catting all the includes together
 	!  - fn return statement. i like the cleanliness of rust but i still need a
 	!    way to return early.  rust does have an explicit "return" statement, i
 	!    guess it's just not the rust style to use it when it's not needed
@@ -2667,7 +2664,7 @@ recursive function new_parser(str, src_file) result(parser)
 
 	type(parser_t) :: inc_parser
 
-	type(syntax_token_t) :: token, token_peek, inc_file_token
+	type(syntax_token_t) :: token, token_peek
 	type(syntax_token_t), allocatable :: tokens_tmp(:)
 	type(syntax_token_vector_t) :: tokens
 
@@ -2676,32 +2673,6 @@ recursive function new_parser(str, src_file) result(parser)
 	lexer = new_lexer(str, src_file)
 	do
 		token = lexer%lex()
-
-		! TODO: Should #include directives be processed here instead?  How can
-		! we keep line number context for error diagnostics correct and tied to
-		! a source file?
-		!
-		! Use like this:
-		!
-		! #include("path/file.syntran");
-		!
-		! It looks a bit like a fn, but it's not since it's "evaluated" during
-		! lexing/parsing, unlike actual fns, so I think the `#` is a good
-		! signifier of that.  `#tree` should be handled in a similar way for
-		! file interpretation and not just stdin, maybe it should be `#tree();`
-		! for consistency.  It's also not really a directive either since it
-		! happens during  lexing/parsing instead of a pre-processing step.
-		! 
-		! Implement something like this at first:
-		!
-		!if (token%kind == inc_directive_token) then
-		!	inc_parser = new_parser(readfile(inc_filename), inc_filename)
-		!	do i = 1, size(inc_parser%tokens)
-		!		call tokens%push( inc_parser%tokens(i) )
-		!		! TODO: diagnostics and context?
-		!	end do
-		!
-		!else if (...) then
 
 		if (token%kind /= whitespace_token .and. &
 		    token%kind /= bad_token) then
@@ -2713,15 +2684,30 @@ recursive function new_parser(str, src_file) result(parser)
 
 	!************************
 	! start pre-process
+	! TODO: make this a fn
 
 	! Copy to temp array and pre-process hash "directives"
 	tokens_tmp = tokens%v( 1: tokens%len_ )
 	tokens = new_syntax_token_vector()
 	i = 0
-	!do i = 1, size(tokens_tmp)
 	do while (i < size(tokens_tmp))
 		i = i + 1
 		token = tokens_tmp(i)
+
+		! Should #include directives be processed here instead?  How can we keep
+		! line number context for error diagnostics correct and tied to a source
+		! file?
+		!
+		! Use like this:
+		!
+		! #include("path/file.syntran");
+		!
+		! It looks a bit like a fn, but it's not since it's "evaluated" during
+		! lexing/parsing, unlike actual fns, so I think the `#` is a good
+		! signifier of that.  `#tree` should be handled in a similar way for
+		! file interpretation and not just stdin, maybe it should be `#tree();`
+		! for consistency.  It's also not really a directive either since it
+		! happens during  lexing/parsing instead of a pre-processing step.
 
 		! Whitespace has already been skipped in previous loop
 		if (token%kind == hash_token) then
@@ -2735,14 +2721,13 @@ recursive function new_parser(str, src_file) result(parser)
 				print *, '#include'
 
 				! TODO: parens?  It's kind of a pain to match() since the parser
-				! isn't constructed yet
+				! isn't constructed yet.  I can see why C works the way it does
 
 				i = i + 1
-				inc_file_token = tokens_tmp(i)
 
 				! TODO: prepend with path to src_file. Maybe later add `-I` arg
 				! for include dirs or an env var?
-				filename = inc_file_token%val%str%s
+				filename = tokens_tmp(i)%val%str%s
 
 				print *, 'include filename = ', filename
 
@@ -2759,15 +2744,15 @@ recursive function new_parser(str, src_file) result(parser)
 
 				! Minus 1 because included eof_token
 				do j = 1, size(inc_parser%tokens) - 1
-				!do j = 1, size(inc_parser%tokens)
-
-					token = inc_parser%tokens(j)
-					call tokens%push(token)
+					call tokens%push( inc_parser%tokens(j) )
 				end do
 
 				! TODO: included diagnostics and context?
 
 				! TODO: semicolon?  It's kind of a pain like parens
+
+			!case (tree_keyword)
+			!! TODO: maybe do #tree work at eval time
 
 			case default
 
@@ -2789,6 +2774,8 @@ recursive function new_parser(str, src_file) result(parser)
 
 	! Convert to standard array (and class member)
 	parser%tokens = tokens%v( 1: tokens%len_ )
+
+	! Set other parser members
 
 	parser%pos = 1
 

@@ -1,0 +1,191 @@
+
+// This include file has helper fns for reading ints inside strings mixed with
+// other non-integer characters
+
+//==========================================================
+
+fn scan(str_: str, set: str): i32
+{
+	// c.f. Fortran intrinsic scan()
+
+	//println("str_ = ", str_);
+	//println("set = ", set);
+
+	let found = false;
+	let i = 0;
+	while not found and i < len(str_)
+	{
+
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	if (found)
+		i -= 1;
+	else
+		i = -1;
+}
+
+//==========================================================
+
+fn scanback(str_: str, set: str): i32
+{
+	// c.f. Fortran intrinsic scan() with back = true
+
+	//println("str_ = ", str_);
+	//println("set = ", set);
+
+	let found = false;
+	let i = len(str_) - 1;
+	while not found and i > 0
+	{
+
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i -= 1;
+	}
+
+	// return
+	if (found)
+		i += 1;
+	else
+		i = -1;
+}
+
+//==========================================================
+
+fn verify(str_: str, set: str): i32
+{
+	// c.f. Fortran intrinsic verify()
+
+	//println("str_ = ", str_);
+	//println("set = ", set);
+
+	let found = true;
+	let i = 0;
+	while found and i < len(str_)
+	{
+		//println(i);
+
+		let j = 0;
+		found = false;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	if (not found)
+		i -= 1;
+	else
+		i = -1;
+}
+
+//==========================================================
+
+fn tok_i32(str_: str): [i32; :]
+{
+	// tokenize a string into the first int contained within it, then return the
+	// substring start index, end index, and length
+
+	//println("starting tok_i32()");
+	//println("str_ = ", str_);
+
+	// TODO: `-` (negatives).  Maybe separate u32 and i32 fns
+	let nums = "1234567890";
+	let beg_ = scan    (str_, nums);
+
+	let end_ = -1;
+	let len_ = -1;
+
+	if (beg_ >= 0)
+	{
+
+		let n = len(str_);
+		//println("n = ", n);
+	
+		len_ = verify(str_[beg_:n], nums);
+		//println("len_ = ", len_);
+	
+		if (len_ < 0)
+		{
+			// This is consistent with the way that verify() works in Fortran
+			end_ = n - 1;
+			len_ = end_ - beg_ + 1;
+		}
+		else
+			end_ = beg_ + len_ - 1;
+	
+		//println("beg_ = ", beg_);
+		//println("end_ = ", end_);
+	
+		//println("num beg = ", str_[beg_]);
+		//println("num end = ", str_[end_]);
+		//println("num str = ", str_[beg_: end_+1]);
+	}
+
+	// return
+	[beg_, end_, len_];
+}
+
+//==========================================================
+
+fn read_i32s(str_: str): [i32; :]
+{
+	// Parse a vector of i32 integers from a string.  Any non-int characters are
+	// treated as delimiters
+
+	let i = 0;
+	let n = len(str_);
+
+	//println("str_ = ", str_);
+	//println("n = ", n);
+
+	let toks = [0, 0, 0];
+	let num_nums = 0;  // the number of numbers
+
+	while toks[0] >= 0
+	{
+		//println("i = ", i);
+		toks = tok_i32(str_[i:n]);
+		//println("toks = ", toks);
+		//println("num = ", num);
+		num_nums += 1;
+		i += toks[1] + 1;
+	}
+	num_nums -= 1;
+
+	let nums = [0; num_nums];
+	i = 0;
+	for j in [0: num_nums]
+	{
+		//println("i = ", i);
+		toks = tok_i32(str_[i:n]);
+		//println("toks = ", toks);
+		let num = parse_i32(str_[i + toks[0]: i + toks[1]+1]);
+		//println("num = ", num);
+		nums[j] = num;
+		//num_nums += 1;
+		i += toks[1] + 1;
+	}
+	//println("nums = ", nums);
+
+	// return
+	nums;
+}
+
+//==========================================================
+
