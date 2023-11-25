@@ -2696,10 +2696,10 @@ end function new_parser
 !===============================================================================
 
 !function preprocess(tokens_in) result(tokens_out)
-function preprocess(tokens_tmp) result(tokens)
+function preprocess(tokens_in) result(tokens_out)
 
-	type(syntax_token_t), intent(in) :: tokens_tmp(:)
-	type(syntax_token_vector_t) :: tokens
+	type(syntax_token_t), intent(in) :: tokens_in(:)
+	type(syntax_token_vector_t) :: tokens_out
 
 	!********
 
@@ -2711,14 +2711,11 @@ function preprocess(tokens_tmp) result(tokens)
 
 	type(syntax_token_t) :: token, token_peek
 
-	!! Copy to temp array and pre-process hash "directives"
-	!tokens_tmp = tokens%v( 1: tokens%len_ )
-
-	tokens = new_syntax_token_vector()
+	tokens_out = new_syntax_token_vector()
 	i = 0
-	do while (i < size(tokens_tmp))
+	do while (i < size(tokens_in))
 		i = i + 1
-		token = tokens_tmp(i)
+		token = tokens_in(i)
 
 		! Should #include directives be processed here instead?  How can we keep
 		! line number context for error diagnostics correct and tied to a source
@@ -2739,7 +2736,7 @@ function preprocess(tokens_tmp) result(tokens)
 		if (token%kind == hash_token) then
 
 			i = i + 1
-			token_peek = tokens_tmp(i)
+			token_peek = tokens_in(i)
 
 			select case (token_peek%kind)
 			case (include_keyword)
@@ -2754,7 +2751,7 @@ function preprocess(tokens_tmp) result(tokens)
 				! TODO: prepend with path to src_file, fix tests. Maybe later
 				! add `-I` arg for include dirs or an env var?
 				i = i + 1
-				filename = tokens_tmp(i)%val%str%s
+				filename = tokens_in(i)%val%str%s
 
 				print *, 'include filename = ', filename
 
@@ -2771,7 +2768,7 @@ function preprocess(tokens_tmp) result(tokens)
 
 				! Minus 1 because included eof_token
 				do j = 1, size(inc_parser%tokens) - 1
-					call tokens%push( inc_parser%tokens(j) )
+					call tokens_out%push( inc_parser%tokens(j) )
 				end do
 
 				! TODO: included diagnostics and context? At the very least,
@@ -2790,13 +2787,13 @@ function preprocess(tokens_tmp) result(tokens)
 
 				! This will defer any diagnostic logging to the parser.  Should
 				! there be a special-case diagnostic here?
-				call tokens%push(token)
-				call tokens%push(token_peek)
+				call tokens_out%push(token)
+				call tokens_out%push(token_peek)
 
 			end select
 
 		else
-			call tokens%push(token)
+			call tokens_out%push(token)
 		end if
 
 	end do
