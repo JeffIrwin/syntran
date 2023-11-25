@@ -18,10 +18,10 @@ set(PROJECT syntran)
 project(${PROJECT} Fortran)
 
 if(DEFINED ENV{SYNTRAN_INTEL})
-	set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC")
+	set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC -fpp")
 else()
 
-	set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp")
+	set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp -cpp")
 
 	# Why would you warn about tabs in free-form Fortran?
 	add_compile_options("-Wno-tabs")

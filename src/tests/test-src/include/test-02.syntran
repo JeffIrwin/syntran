@@ -4,8 +4,8 @@
 
 //==========================================================
 
-#include "src/tests/test-src/include/str.syntran"
-#include "src/tests/test-src/include/linalg.syntran"
+#include "str.syntran"
+#include "linalg.syntran"
 
 //==========================================================
 

@@ -2650,7 +2650,7 @@ end function new_lexer
 
 recursive function new_parser(str, src_file) result(parser)
 
-	character(len = *) :: str, src_file
+	character(len = *), intent(in) :: str, src_file
 
 	type(parser_t) :: parser
 
@@ -2675,7 +2675,7 @@ recursive function new_parser(str, src_file) result(parser)
 		if (token%kind == eof_token) exit
 	end do
 
-	tokens = preprocess( tokens%v( 1: tokens%len_ ) )
+	tokens = preprocess( tokens%v(1: tokens%len_), src_file )
 
 	! Convert to standard array (and class member)
 	parser%tokens = tokens%v( 1: tokens%len_ )
@@ -2696,9 +2696,14 @@ end function new_parser
 !===============================================================================
 
 !function preprocess(tokens_in) result(tokens_out)
-function preprocess(tokens_in) result(tokens_out)
+function preprocess(tokens_in, src_file) result(tokens_out)
+
+	! src_file is the filename of the current file being processed, i.e. the
+	! *includer*, not the includee
 
 	type(syntax_token_t), intent(in) :: tokens_in(:)
+	character(len = *), intent(in) :: src_file
+
 	type(syntax_token_vector_t) :: tokens_out
 
 	!********
@@ -2751,10 +2756,13 @@ function preprocess(tokens_in) result(tokens_out)
 			! TODO: parens?  It's kind of a pain to match() since the parser
 			! isn't constructed yet.  I can see why C works the way it does
 
-			! TODO: prepend with path to src_file, fix tests. Maybe later
-			! add `-I` arg for include dirs or an env var?
+			! Prepend with path to src_file, fix tests.
+			!
+			! TODO: maybe later add `-I` arg for include dirs, or an env var, or
+			! a global installed syntran "std" lib dir?
 			i = i + 1
-			filename = tokens_in(i)%val%str%s
+			filename = getdir(src_file)//tokens_in(i)%val%str%s
+			!filename = tokens_in(i)%val%str%s
 
 			print *, 'include filename = ', filename
 
