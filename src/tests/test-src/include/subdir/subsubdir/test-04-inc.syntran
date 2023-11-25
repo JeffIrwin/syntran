@@ -1,0 +1,11 @@
+
+// include paths are relative to *this* file, not the top-level syntran file or
+// the pwd where the interpretter is run
+
+#include "../test-04-nest.syntran"
+
+fn fn_inc(): i32
+{
+	2;
+}
+

@@ -102,7 +102,7 @@ module utils_m
 !	! be useful if/when we want to have system standard include files loaded
 !	! relative to the syntran exe
 !
-!	interface 
+!	interface
 !		! Ref: https://fortran-lang.discourse.group/t/getting-a-full-path-name/4137/12
 !#if defined _WIN32
 !        function fullpath_c(resolved_path, path, maxLength) result(ptr) bind(C, name="_fullpath")
@@ -111,7 +111,7 @@ module utils_m
 !           character(kind=c_char, len=1), intent(in) :: path(*)
 !           integer(c_int), value, intent(in) :: maxLength
 !           type(c_ptr) :: ptr
-!        end function       
+!        end function
 !#else
 !        function realpath_c(path, resolved_path) result(ptr) bind(C, name="realpath")
 !           import :: c_ptr, c_char
@@ -529,18 +529,18 @@ end function read_file
 !	! Ref: https://fortran-lang.discourse.group/t/getting-a-full-path-name/4137/12
 !        character(*), intent(in) :: path
 !        character(:), allocatable :: resolved_path
-!        !private 
+!        !private
 !        type(c_ptr) :: ptr
 !        character(1) :: tmp(1024)
 !        integer :: idx
-!        
+!
 !        allocate(character(1024) :: resolved_path)
 !!#ifndef _WIN32
 !#if defined _WIN32
 !        ptr = fullpath_c(tmp, path // null_char, 1024)
 !#else
 !        ptr = realpath_c(path // null_char, tmp)
-!#endif        
+!#endif
 !        resolved_path = transfer(tmp, resolved_path)
 !        idx = index(resolved_path, null_char)
 !        resolved_path = resolved_path(:idx - 1)

@@ -2762,6 +2762,8 @@ function preprocess(tokens_in, src_file) result(tokens_out)
 			! a global installed syntran "std" lib dir?  See also the
 			! fullpath/realpath fn interfaces in utils.f90
 
+			! TODO: if filename is already absolute, do not prepend with path
+
 			i = i + 1
 			filename = get_dir(src_file)//tokens_in(i)%val%str%s  ! relative to src file
 			!filename = tokens_in(i)%val%str%s                    ! relative to runtime pwd
@@ -2770,8 +2772,10 @@ function preprocess(tokens_in, src_file) result(tokens_out)
 
 			inc_text = read_file(filename, iostat)
 			if (iostat /= exit_success) then
+				! TODO: new fn? this is user error, not internal.  Also, error
+				! message should state filename without extra path (or both)
 				write(*,*) err_404(filename)
-				call internal_error() ! TODO: new fn? this is user error, not internal
+				call internal_error()
 			end if
 
 			print *, 'len(inc_text) = ', len(inc_text)
