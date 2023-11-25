@@ -2727,8 +2727,8 @@ recursive function new_parser(str, src_file) result(parser)
 
 				i = i + 1
 
-				! TODO: prepend with path to src_file. Maybe later add `-I` arg
-				! for include dirs or an env var?
+				! TODO: prepend with path to src_file, fix tests. Maybe later
+				! add `-I` arg for include dirs or an env var?
 				filename = tokens_tmp(i)%val%str%s
 
 				!print *, 'include filename = ', filename
@@ -2749,12 +2749,17 @@ recursive function new_parser(str, src_file) result(parser)
 					call tokens%push( inc_parser%tokens(j) )
 				end do
 
-				! TODO: included diagnostics and context?
+				! TODO: included diagnostics and context? At the very least,
+				! sys exit.  Also it shouldn't be too hard to just report them
+				! here and sys exit (without worrying about later diags from
+				! current main syntran file)
 
-				! TODO: semicolon?  It's kind of a pain like parens
+				! TODO: semicolon after #include?  It's kind of a pain like parens
 
 			!case (tree_keyword)
 			!! TODO: maybe do #tree work at eval time
+
+			! TODO: #pragma once or at least #ifndef/#def-style include guards
 
 			case default
 
