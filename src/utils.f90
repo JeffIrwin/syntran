@@ -99,14 +99,7 @@ module utils_m
 
 	interface 
 		! Ref: https://fortran-lang.discourse.group/t/getting-a-full-path-name/4137/12
-#ifndef _WIN32
-        function realpath_c(path, resolved_path) result(ptr) bind(C, name="realpath")
-           import :: c_ptr, c_char
-           character(kind=c_char, len=1), intent(in) :: path(*)
-           character(kind=c_char, len=1), intent(out) :: resolved_path(*)
-           type(c_ptr) :: ptr
-        end function
-#else       
+#if defined _WIN32
         function fullpath_c(resolved_path, path, maxLength) result(ptr) bind(C, name="_fullpath")
            import :: c_ptr, c_char, c_int
            character(kind=c_char, len=1), intent(out) :: resolved_path(*)
@@ -114,7 +107,14 @@ module utils_m
            integer(c_int), value, intent(in) :: maxLength
            type(c_ptr) :: ptr
         end function       
-#endif  
+#else
+        function realpath_c(path, resolved_path) result(ptr) bind(C, name="realpath")
+           import :: c_ptr, c_char
+           character(kind=c_char, len=1), intent(in) :: path(*)
+           character(kind=c_char, len=1), intent(out) :: resolved_path(*)
+           type(c_ptr) :: ptr
+        end function
+#endif
 	end interface
 
 !===============================================================================
@@ -530,10 +530,11 @@ function fullpath(path) result(resolved_path)
         integer :: idx
         
         allocate(character(1024) :: resolved_path)
-#ifndef _WIN32
-        ptr = realpath_c(path // null_char, tmp)
-#else
+!#ifndef _WIN32
+#if defined _WIN32
         ptr = fullpath_c(tmp, path // null_char, 1024)
+#else
+        ptr = realpath_c(path // null_char, tmp)
 #endif        
         resolved_path = transfer(tmp, resolved_path)
         idx = index(resolved_path, null_char)
