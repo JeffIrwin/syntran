@@ -97,25 +97,30 @@ module utils_m
 
 	!********
 
-	interface 
-		! Ref: https://fortran-lang.discourse.group/t/getting-a-full-path-name/4137/12
-#if defined _WIN32
-        function fullpath_c(resolved_path, path, maxLength) result(ptr) bind(C, name="_fullpath")
-           import :: c_ptr, c_char, c_int
-           character(kind=c_char, len=1), intent(out) :: resolved_path(*)
-           character(kind=c_char, len=1), intent(in) :: path(*)
-           integer(c_int), value, intent(in) :: maxLength
-           type(c_ptr) :: ptr
-        end function       
-#else
-        function realpath_c(path, resolved_path) result(ptr) bind(C, name="realpath")
-           import :: c_ptr, c_char
-           character(kind=c_char, len=1), intent(in) :: path(*)
-           character(kind=c_char, len=1), intent(out) :: resolved_path(*)
-           type(c_ptr) :: ptr
-        end function
-#endif
-	end interface
+!	! I don't understand the magic of how these work, or if they work at all
+!	! for executables in the PATH env var or for shell aliases.  If so, it may
+!	! be useful if/when we want to have system standard include files loaded
+!	! relative to the syntran exe
+!
+!	interface 
+!		! Ref: https://fortran-lang.discourse.group/t/getting-a-full-path-name/4137/12
+!#if defined _WIN32
+!        function fullpath_c(resolved_path, path, maxLength) result(ptr) bind(C, name="_fullpath")
+!           import :: c_ptr, c_char, c_int
+!           character(kind=c_char, len=1), intent(out) :: resolved_path(*)
+!           character(kind=c_char, len=1), intent(in) :: path(*)
+!           integer(c_int), value, intent(in) :: maxLength
+!           type(c_ptr) :: ptr
+!        end function       
+!#else
+!        function realpath_c(path, resolved_path) result(ptr) bind(C, name="realpath")
+!           import :: c_ptr, c_char
+!           character(kind=c_char, len=1), intent(in) :: path(*)
+!           character(kind=c_char, len=1), intent(out) :: resolved_path(*)
+!           type(c_ptr) :: ptr
+!        end function
+!#endif
+!	end interface
 
 !===============================================================================
 
@@ -520,69 +525,73 @@ end function read_file
 
 !===============================================================================
 
-function fullpath(path) result(resolved_path)
-	! Ref: https://fortran-lang.discourse.group/t/getting-a-full-path-name/4137/12
-        character(*), intent(in) :: path
-        character(:), allocatable :: resolved_path
-        !private 
-        type(c_ptr) :: ptr
-        character(1) :: tmp(1024)
-        integer :: idx
-        
-        allocate(character(1024) :: resolved_path)
-!#ifndef _WIN32
-#if defined _WIN32
-        ptr = fullpath_c(tmp, path // null_char, 1024)
-#else
-        ptr = realpath_c(path // null_char, tmp)
-#endif        
-        resolved_path = transfer(tmp, resolved_path)
-        idx = index(resolved_path, null_char)
-        resolved_path = resolved_path(:idx - 1)
-
-end function fullpath
-
-!===============================================================================
-
-function basename(filename)
-	! c.f. github.com/jeffirwin/cali/src/cali.f90
-	character(len = *), intent(in)  :: filename
-	character(len = :), allocatable :: basename
-	!********
-	integer :: beg_, end_, i
-
-	beg_ = 1
-	end_ = len(filename)
-
-	!print *, 'len = ', end_
-
-	i = scan(filename, '/\', .true.)
-	if (i /= 0) beg_ = i + 1
-
-	i = scan(filename(beg_:), '.')
-	if (i /= 0) end_ = beg_ + i - 2
-
-	basename = filename(beg_: end_)
-	!print *, 'beg_, end_ = ', beg_, end_
-
-end function basename
+!function fullpath(path) result(resolved_path)
+!	! Ref: https://fortran-lang.discourse.group/t/getting-a-full-path-name/4137/12
+!        character(*), intent(in) :: path
+!        character(:), allocatable :: resolved_path
+!        !private 
+!        type(c_ptr) :: ptr
+!        character(1) :: tmp(1024)
+!        integer :: idx
+!        
+!        allocate(character(1024) :: resolved_path)
+!!#ifndef _WIN32
+!#if defined _WIN32
+!        ptr = fullpath_c(tmp, path // null_char, 1024)
+!#else
+!        ptr = realpath_c(path // null_char, tmp)
+!#endif        
+!        resolved_path = transfer(tmp, resolved_path)
+!        idx = index(resolved_path, null_char)
+!        resolved_path = resolved_path(:idx - 1)
+!
+!end function fullpath
 
 !===============================================================================
 
-function getdir(filename) result(dir)
+!function get_basename(filename)
+!	! c.f. github.com/jeffirwin/cali/src/cali.f90
+!	!
+!	! not used (yet) in syntran
+!	character(len = *), intent(in)  :: filename
+!	character(len = :), allocatable :: basename
+!	!********
+!	integer :: beg_, end_, i
+!
+!	beg_ = 1
+!	end_ = len(filename)
+!
+!	!print *, 'len = ', end_
+!
+!	i = scan(filename, '/\', .true.)
+!	if (i /= 0) beg_ = i + 1
+!
+!	i = scan(filename(beg_:), '.')
+!	if (i /= 0) end_ = beg_ + i - 2
+!
+!	basename = filename(beg_: end_)
+!	!print *, 'beg_, end_ = ', beg_, end_
+!
+!end function get_basename
+
+!===============================================================================
+
+function get_dir(filename) result(dir)
 	character(len = *), intent(in)  :: filename
 	character(len = :), allocatable :: dir
 	!********
 	character(len = :), allocatable :: path
 	integer :: beg_, end_, i
 
-	! Return the absolute path dir.  The same logic should work for relative
-	! paths.
-	path = fullpath(filename)
-	!path = filename
+	!! Return the absolute path dir
+	!path = fullpath(filename)
+
+	! Return relative path or absolute, whichever way input filename is given
+	path = filename
 
 	beg_ = 1
-	end_ = len(path)
+	!end_ = len(path)
+	end_ = 0
 
 	!print *, 'len = ', end_
 
@@ -592,7 +601,7 @@ function getdir(filename) result(dir)
 	dir = path(beg_: end_)
 	!print *, 'beg_, end_ = ', beg_, end_
 
-end function getdir
+end function get_dir
 
 !===============================================================================
 

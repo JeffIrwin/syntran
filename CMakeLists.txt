@@ -18,6 +18,11 @@ set(PROJECT syntran)
 project(${PROJECT} Fortran)
 
 if(WINDOWS)
+
+	# TODO: test on actual Windows or remove if not needed for realpath/
+	# fullpath.  Either way, get github actions building.  This branch seems not
+	# to be triggered in msys, need bare metal to test
+
 	message("defining _WIN32 in cmake")
 	add_compile_definitions(_WIN32)
 else()

@@ -344,8 +344,7 @@ function syntran_interpret_file(file, quiet) result(res)
 	if (present(quiet)) quietl = quiet
 
 	if (.not. quietl) write(*,*) 'Interpreting file "'//file//'"'
-
-	print *, 'fullpath = ', fullpath(file)
+	!print *, 'fullpath = ', fullpath(file)
 
 	source_text = read_file(file, iostat)
 	if (iostat /= exit_success) then

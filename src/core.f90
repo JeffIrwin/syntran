@@ -2756,15 +2756,17 @@ function preprocess(tokens_in, src_file) result(tokens_out)
 			! TODO: parens?  It's kind of a pain to match() since the parser
 			! isn't constructed yet.  I can see why C works the way it does
 
-			! Prepend with path to src_file, fix tests.
+			! Prepend with path to src_file
 			!
 			! TODO: maybe later add `-I` arg for include dirs, or an env var, or
-			! a global installed syntran "std" lib dir?
-			i = i + 1
-			filename = getdir(src_file)//tokens_in(i)%val%str%s
-			!filename = tokens_in(i)%val%str%s
+			! a global installed syntran "std" lib dir?  See also the
+			! fullpath/realpath fn interfaces in utils.f90
 
-			print *, 'include filename = ', filename
+			i = i + 1
+			filename = get_dir(src_file)//tokens_in(i)%val%str%s  ! relative to src file
+			!filename = tokens_in(i)%val%str%s                    ! relative to runtime pwd
+
+			print *, 'include filename = "', filename, '"'
 
 			inc_text = read_file(filename, iostat)
 			if (iostat /= exit_success) then
