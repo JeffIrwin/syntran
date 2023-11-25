@@ -2656,19 +2656,12 @@ recursive function new_parser(str, src_file) result(parser)
 
 	!********
 
-	character(len = :), allocatable :: inc_text, filename
-
-	integer :: i, j, iostat
-
 	type(lexer_t) :: lexer
 
-	type(parser_t) :: inc_parser
-
-	type(syntax_token_t) :: token, token_peek
-	type(syntax_token_t), allocatable :: tokens_tmp(:)
+	type(syntax_token_t) :: token
 	type(syntax_token_vector_t) :: tokens
 
-	! Get an array of tokens
+	! Lex and get an array of tokens
 	tokens = new_syntax_token_vector()
 	lexer = new_lexer(str, src_file)
 	do
@@ -2682,12 +2675,45 @@ recursive function new_parser(str, src_file) result(parser)
 		if (token%kind == eof_token) exit
 	end do
 
-	!************************
-	! start pre-process
-	! TODO: make this a fn
+	tokens = preprocess( tokens%v( 1: tokens%len_ ) )
 
-	! Copy to temp array and pre-process hash "directives"
-	tokens_tmp = tokens%v( 1: tokens%len_ )
+	! Convert to standard array (and class member)
+	parser%tokens = tokens%v( 1: tokens%len_ )
+
+	! Set other parser members
+
+	parser%pos = 1
+
+	parser%diagnostics = lexer%diagnostics
+
+	parser%context = lexer%context
+
+	!print *, 'tokens%len_ = ', tokens%len_
+	if (debug > 1) print *, parser%tokens_str()
+
+end function new_parser
+
+!===============================================================================
+
+!function preprocess(tokens_in) result(tokens_out)
+function preprocess(tokens_tmp) result(tokens)
+
+	type(syntax_token_t), intent(in) :: tokens_tmp(:)
+	type(syntax_token_vector_t) :: tokens
+
+	!********
+
+	character(len = :), allocatable :: inc_text, filename
+
+	integer :: i, j, iostat
+
+	type(parser_t) :: inc_parser
+
+	type(syntax_token_t) :: token, token_peek
+
+	!! Copy to temp array and pre-process hash "directives"
+	!tokens_tmp = tokens%v( 1: tokens%len_ )
+
 	tokens = new_syntax_token_vector()
 	i = 0
 	do while (i < size(tokens_tmp))
@@ -2720,26 +2746,25 @@ recursive function new_parser(str, src_file) result(parser)
 
 				! TODO: document
 
-				!print *, '#include'
+				print *, '#include'
 
 				! TODO: parens?  It's kind of a pain to match() since the parser
 				! isn't constructed yet.  I can see why C works the way it does
 
-				i = i + 1
-
 				! TODO: prepend with path to src_file, fix tests. Maybe later
 				! add `-I` arg for include dirs or an env var?
+				i = i + 1
 				filename = tokens_tmp(i)%val%str%s
 
-				!print *, 'include filename = ', filename
+				print *, 'include filename = ', filename
 
 				inc_text = read_file(filename, iostat)
 				if (iostat /= exit_success) then
 					write(*,*) err_404(filename)
 					call internal_error() ! TODO: new fn? this is user error, not internal
 				end if
-				!print *, 'inc_text = '
-				!print *, inc_text
+				print *, 'inc_text = '
+				print *, inc_text
 
 				! Any nested includes are handled in this new_parser() call
 				inc_parser = new_parser(inc_text, filename)
@@ -2776,24 +2801,7 @@ recursive function new_parser(str, src_file) result(parser)
 
 	end do
 
-	! end pre-process
-	!************************
-
-	! Convert to standard array (and class member)
-	parser%tokens = tokens%v( 1: tokens%len_ )
-
-	! Set other parser members
-
-	parser%pos = 1
-
-	parser%diagnostics = lexer%diagnostics
-
-	parser%context = lexer%context
-
-	!print *, 'tokens%len_ = ', tokens%len_
-	if (debug > 1) print *, parser%tokens_str()
-
-end function new_parser
+end function preprocess
 
 !===============================================================================
 
