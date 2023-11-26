@@ -195,7 +195,7 @@ module core_m
 
 	type file_t
 		character(len = :), allocatable :: name_
-		integer :: unit_
+		integer :: unit_  ! fortran file unit
 		logical :: eof = .false.
 		! Do we need a separate iostat beyond eof?
 	end type file_t
@@ -377,6 +377,7 @@ module core_m
 		integer :: kind
 		type(value_t) :: val
 		integer :: pos
+		integer :: unit_ = 1  ! translation unit (src file) index for error diagnostic context
 		character(len = :), allocatable :: text
 
 	end type syntax_token_t
@@ -449,7 +450,10 @@ module core_m
 
 		type(string_vector_t) :: diagnostics
 
+		! Lexer only lexes 1 (include) file at a time, so it only has 1 context
 		type(text_context_t) :: context
+
+		integer :: unit_  ! translation unit (src file) index for error diagnostic context
 
 		character(len = :), allocatable :: text
 
@@ -530,7 +534,11 @@ module core_m
 
 		type(string_vector_t) :: diagnostics
 
+		! Context for current src file.  TODO: delete after migrating to contexts
 		type(text_context_t) :: context
+
+		! Context for all src files (including include files)
+		type(text_context_vector_t) :: contexts
 
 		type(vars_t) :: vars
 		integer :: num_vars = 0
@@ -2140,8 +2148,14 @@ function lex(lexer) result(token)
 	type(value_t) :: val
 
 	if (lexer%pos > len(lexer%text)) then
+
 		token = new_token(eof_token, lexer%pos, null_char)
+
+		! TODO: it's kind of annoying to have to set unit_ before every return.
+		! It might be better to modify all the new_*_token() fns
+		token%unit_ = lexer%unit_
 		return
+
 	end if
 
 	start = lexer%pos
@@ -2205,6 +2219,7 @@ function lex(lexer) result(token)
 			end if
 		end if
 
+		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -2240,12 +2255,14 @@ function lex(lexer) result(token)
 			call lexer%diagnostics%push( &
 				err_unterminated_str(lexer%context, &
 				span, text))
+			token%unit_ = lexer%unit_
 			return
 		end if
 
 		val   = new_literal_value(str_type, str = char_vec%v( 1: char_vec%len_ ))
 		token = new_token(str_token, start, text, val)
 
+		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -2258,6 +2275,7 @@ function lex(lexer) result(token)
 		text = lexer%text(start: lexer%pos-1)
 
 		token = new_token(whitespace_token, start, text)
+		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -2275,6 +2293,7 @@ function lex(lexer) result(token)
 
 		kind = get_keyword_kind(text)
 		token = new_token(kind, start, text)
+		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -2563,17 +2582,28 @@ end function get_keyword_kind
 
 !===============================================================================
 
-function new_lexer(text, src_file) result(lexer)
+function new_lexer(text, src_file, unit_) result(lexer)
+!function new_lexer(text, src_file) result(lexer)
 
 	character(len = *) :: text, src_file
 
 	type(lexer_t) :: lexer
 
+	integer, intent(inout) :: unit_
+
 	!********
 
 	integer :: i, i0, nlines
+	!integer, save :: unit_ = 0
 
 	integer, allocatable :: lines(:)
+
+	! Every token keeps track of which file it came from for error diagnostic
+	! context
+	unit_ = unit_ + 1
+	lexer%unit_ = unit_
+
+	print *, 'lexer%unit_ = ', lexer%unit_
 
 	lexer%text     = text
 	lexer%pos      = 1
@@ -2631,7 +2661,7 @@ function new_lexer(text, src_file) result(lexer)
 	end do
 	lines(nlines + 1) = len(text) + 1
 
-	!print *, 'lines = ', lines
+	print *, 'lines = ', lines
 
 	if (debug > 1) then
 		write(*,*) 'lines = '
@@ -2648,13 +2678,17 @@ end function new_lexer
 
 !===============================================================================
 
-recursive function new_parser(str, src_file) result(parser)
+recursive function new_parser(str, src_file, contexts, unit_) result(parser)
 
 	character(len = *), intent(in) :: str, src_file
 
 	type(parser_t) :: parser
 
+	integer, intent(inout) :: unit_
+
 	!********
+
+	type(text_context_vector_t) :: contexts
 
 	type(lexer_t) :: lexer
 
@@ -2663,7 +2697,7 @@ recursive function new_parser(str, src_file) result(parser)
 
 	! Lex and get an array of tokens
 	tokens = new_syntax_token_vector()
-	lexer = new_lexer(str, src_file)
+	lexer = new_lexer(str, src_file, unit_)
 	do
 		token = lexer%lex()
 
@@ -2675,9 +2709,19 @@ recursive function new_parser(str, src_file) result(parser)
 		if (token%kind == eof_token) exit
 	end do
 
-	tokens = preprocess( tokens%v(1: tokens%len_), src_file )
+	! Preprocess then convert to standard array (and parser class member)
+	!
+	! TODO: pass parser to preprocess() fn.  When include files are parsed, push
+	! their context onto the parent's contexts.  For correct ordering wrt
+	! token%unit_, the current parser context should probably be pushed first,
+	! before preprocessing.
 
-	! Convert to standard array (and class member)
+	!print *, 'pushing context'
+	call contexts%push( lexer%context )
+	!print *, 'contexts%len_ = ', contexts%len_
+	!print *, ''
+
+	tokens = preprocess(tokens%v(1:tokens%len_), src_file, contexts, unit_)
 	parser%tokens = tokens%v( 1: tokens%len_ )
 
 	! Set other parser members
@@ -2687,6 +2731,10 @@ recursive function new_parser(str, src_file) result(parser)
 	parser%diagnostics = lexer%diagnostics
 
 	parser%context = lexer%context
+	parser%contexts = contexts  ! copy.  could convert to standard array if needed
+
+	!print *, 'parser%contexts%len_ = ', parser%contexts%len_
+	!print *, size(parser%contexts%v)
 
 	!print *, 'tokens%len_ = ', tokens%len_
 	if (debug > 1) print *, parser%tokens_str()
@@ -2696,7 +2744,7 @@ end function new_parser
 !===============================================================================
 
 !function preprocess(tokens_in) result(tokens_out)
-function preprocess(tokens_in, src_file) result(tokens_out)
+function preprocess(tokens_in, src_file, contexts, unit_) result(tokens_out)
 
 	! src_file is the filename of the current file being processed, i.e. the
 	! *includer*, not the includee
@@ -2705,6 +2753,9 @@ function preprocess(tokens_in, src_file) result(tokens_out)
 	character(len = *), intent(in) :: src_file
 
 	type(syntax_token_vector_t) :: tokens_out
+	type(text_context_vector_t), intent(inout) :: contexts
+
+	integer, intent(inout) :: unit_
 
 	!********
 
@@ -2783,7 +2834,7 @@ function preprocess(tokens_in, src_file) result(tokens_out)
 			!print *, inc_text
 
 			! Any nested includes are handled in this new_parser() call
-			inc_parser = new_parser(inc_text, filename)
+			inc_parser = new_parser(inc_text, filename, contexts, unit_)
 
 			! Minus 1 because included eof_token
 			do j = 1, size(inc_parser%tokens) - 1
@@ -2860,7 +2911,11 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	character(len = :), allocatable :: src_filel
 
+	integer :: unit_
+
 	logical :: allow_continuel
+
+	type(text_context_vector_t) :: contexts
 
 	type(fns_t) :: fns0
 
@@ -2885,7 +2940,12 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	allow_continuel = .false.
 	if (present(allow_continue)) allow_continuel = allow_continue
 
-	parser = new_parser(str, src_filel)
+	! TODO: unit_ is just synonymous with contexts%len_ in many places, so it
+	! can be removed (but not in all places)
+	contexts = new_context_vector()
+	unit_ = 0
+
+	parser = new_parser(str, src_filel, contexts, unit_)
 
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
@@ -3180,9 +3240,14 @@ function parse_fn_declaration(parser) result(decl)
 
 	!print *, 'parsing fn ', identifier%text
 
-	pos1 = parser%pos
+	! TODO: be careful with parser%pos (token index) vs parser%current_pos()
+	! (character index) when constructing a span.  I probably have similar bugs
+	! throughout to the one that I just fixed here
+	pos1 = parser%current_pos()
 
+	print *, 'matching lparen'
 	lparen = parser%match(lparen_token)
+	print *, 'done'
 
 	! Parse parameter names and types.  Save in temp string vectors initially
 	names    = new_string_vector()
@@ -3209,7 +3274,7 @@ function parse_fn_declaration(parser) result(decl)
 		parser%current_kind() /= rparen_token .and. &
 		parser%current_kind() /= eof_token)
 
-		pos0 = parser%pos
+		pos0 = parser%current_pos()
 
 		name  = parser%match(identifier_token)
 		colon = parser%match(colon_token)
@@ -3228,12 +3293,12 @@ function parse_fn_declaration(parser) result(decl)
 		end if
 
 		! Break infinite loop
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%current_pos() == pos0) dummy = parser%next()
 
 	end do
 
 	rparen = parser%match(rparen_token)
-	pos2 = parser%pos
+	pos2 = parser%current_pos()
 
 	! Now that we have the number of params, save them
 
@@ -3295,9 +3360,9 @@ function parse_fn_declaration(parser) result(decl)
 
 		colon = parser%match(colon_token)
 
-		pos1 = parser%pos
+		pos1 = parser%current_pos()
 		call parser%parse_type(type_text, rank)
-		pos2 = parser%pos
+		pos2 = parser%current_pos()
 
 		itype = lookup_type(type_text)
 
@@ -5375,10 +5440,18 @@ function match(parser, kind) result(token)
 		parser%first_expecting = .true.
 	end if
 
+	print *, 'pushing match diag'
 	len_text = max(len(current%text), 1)
 	span = new_span(current%pos, len_text)
+
+	!call parser%diagnostics%push( &
+	!	err_unexpected_token(parser%context, span, current%text, &
+	!	kind_name(parser%current_kind()), kind_name(kind)))
+
+	!print *, 'current%unit_ = ', current%unit_
+
 	call parser%diagnostics%push( &
-		err_unexpected_token(parser%context, span, current%text, &
+		err_unexpected_token(parser%contexts%v(current%unit_), span, current%text, &
 		kind_name(parser%current_kind()), kind_name(kind)))
 
 	! An unmatched char in the middle of the input is an error and should log
@@ -5389,6 +5462,8 @@ function match(parser, kind) result(token)
 	end if
 
 	token = new_token(kind, current%pos, null_char)
+	token%unit_ = current%unit_
+	!print *, 'setting token%unit_ = ', token%unit_
 
 end function match
 
