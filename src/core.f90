@@ -377,7 +377,8 @@ module core_m
 		integer :: kind
 		type(value_t) :: val
 		integer :: pos
-		integer :: unit_ = 1  ! translation unit (src file) index for error diagnostic context
+		!integer :: unit_ = 0  ! translation unit (src file) index for error diagnostic context
+		integer :: unit_   ! translation unit (src file) index for error diagnostic context
 		character(len = :), allocatable :: text
 
 	end type syntax_token_t
@@ -534,10 +535,11 @@ module core_m
 
 		type(string_vector_t) :: diagnostics
 
-		! Context for current src file.  TODO: delete after migrating to contexts
-		type(text_context_t) :: context
+		!! Context for current src file.  TODO: delete after migrating to contexts
+		!type(text_context_t) :: context
 
-		! Context for all src files (including include files)
+		! Context for all src files (including include files). TODO: make
+		! standard array instead after size is known
 		type(text_context_vector_t) :: contexts
 
 		type(vars_t) :: vars
@@ -555,7 +557,9 @@ module core_m
 				current_pos, peek_pos, parse_for_statement, &
 				parse_while_statement, parse_array_expr, parse_unit, &
 				parse_fn_declaration, parse_subscripts, parse_type, &
-				parse_size
+				parse_size, peek_unit, current_unit, &
+				context => parser_current_context, &
+				text => parser_text
 
 	end type parser_t
 
@@ -2147,6 +2151,8 @@ function lex(lexer) result(token)
 	type(text_span_t) :: span
 	type(value_t) :: val
 
+	!print *, 'lexer%unit_ = ', lexer%unit_
+
 	if (lexer%pos > len(lexer%text)) then
 
 		token = new_token(eof_token, lexer%pos, null_char)
@@ -2447,6 +2453,8 @@ function lex(lexer) result(token)
 				span, lexer%current()))
 
 	end select
+	token%unit_ = lexer%unit_
+
 	lexer%pos = lexer%pos + 1
 
 	! FIXME: arrow keys create bad tokens in bash on Windows.  Fix that (better
@@ -2700,6 +2708,7 @@ recursive function new_parser(str, src_file, contexts, unit_) result(parser)
 	lexer = new_lexer(str, src_file, unit_)
 	do
 		token = lexer%lex()
+		!print *, 'token%unit_ = ', token%unit_
 
 		if (token%kind /= whitespace_token .and. &
 		    token%kind /= bad_token) then
@@ -2730,7 +2739,7 @@ recursive function new_parser(str, src_file, contexts, unit_) result(parser)
 
 	parser%diagnostics = lexer%diagnostics
 
-	parser%context = lexer%context
+	!parser%context = lexer%context
 	parser%contexts = contexts  ! copy.  could convert to standard array if needed
 
 	!print *, 'parser%contexts%len_ = ', parser%contexts%len_
@@ -2841,9 +2850,7 @@ function preprocess(tokens_in, src_file, contexts, unit_) result(tokens_out)
 				call tokens_out%push( inc_parser%tokens(j) )
 			end do
 
-			! TODO: included diagnostics and context?  Lexer diags could be
-			! logged here, but parser diags won't get thrown until parse time,
-			! so we need to retain context for multiple src files
+			! TODO: push or handle included lexer diagnostics here
 
 			! TODO: semicolon after #include?  It's kind of a pain like parens
 
@@ -2946,6 +2953,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	unit_ = 0
 
 	parser = new_parser(str, src_filel, contexts, unit_)
+	!print *, 'units = ', parser%tokens(:)%unit_
 
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
@@ -3276,7 +3284,9 @@ function parse_fn_declaration(parser) result(decl)
 
 		pos0 = parser%current_pos()
 
+		print *, 'matching name'
 		name  = parser%match(identifier_token)
+		print *, 'matching colon'
 		colon = parser%match(colon_token)
 
 		call parser%parse_type(type_text, rank)
@@ -3289,6 +3299,7 @@ function parse_fn_declaration(parser) result(decl)
 		call is_array%push( rank >= 0 )
 
 		if (parser%current_kind() /= rparen_token) then
+			print *, 'matching comma'
 			comma = parser%match(comma_token)
 		end if
 
@@ -3297,6 +3308,7 @@ function parse_fn_declaration(parser) result(decl)
 
 	end do
 
+	print *, 'matching rparen'
 	rparen = parser%match(rparen_token)
 	pos2 = parser%current_pos()
 
@@ -3318,7 +3330,8 @@ function parse_fn_declaration(parser) result(decl)
 
 			span = new_span(pos1, pos2 - pos1 + 1)
 			call parser%diagnostics%push(err_bad_type( &
-				parser%context, span, types%v(i)%s))
+				parser%context(), span, types%v(i)%s))
+				!parser%contexts%v(name%unit_), span, types%v(i)%s))
 
 		end if
 
@@ -3369,7 +3382,8 @@ function parse_fn_declaration(parser) result(decl)
 		if (itype == unknown_type) then
 			span = new_span(pos1, pos2 - pos1 + 1)
 			call parser%diagnostics%push(err_bad_type( &
-				parser%context, span, type_text))
+				parser%context(), span, type_text))
+				!parser%contexts%v(parser%current_unit()), span, type_text))
 		end if
 
 		if (rank >= 0) then
@@ -3572,7 +3586,7 @@ function parse_while_statement(parser) result(statement)
 	if (condition%val%type /= bool_type) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
-			parser%context, span, parser%context%text(cond_beg: cond_end), &
+			parser%context(), span, parser%text(cond_beg, cond_end), &
 			"while-loop"))
 	end if
 
@@ -3619,7 +3633,7 @@ function parse_if_statement(parser) result(statement)
 	if (condition%val%type /= bool_type) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
-			parser%context, span, parser%context%text(cond_beg: cond_end), &
+			parser%context(), span, parser%text(cond_beg, cond_end), &
 			"if-statement"))
 	end if
 
@@ -3797,7 +3811,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		if (io /= exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_redeclare_var(parser%context, &
+				err_redeclare_var(parser%context(), &
 				span, identifier%text))
 		end if
 
@@ -3861,7 +3875,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		if (io /= exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context, &
+				err_undeclare_var(parser%context(), &
 				span, identifier%text))
 		end if
 
@@ -3877,7 +3891,7 @@ recursive function parse_expr_statement(parser) result(expr)
 			else if (expr%val%type /= array_type) then
 				span = new_span(span0, span1 - span0 + 1)
 				call parser%diagnostics%push( &
-					err_scalar_subscript(parser%context, &
+					err_scalar_subscript(parser%context(), &
 					span, identifier%text))
 				return
 			end if
@@ -3893,7 +3907,7 @@ recursive function parse_expr_statement(parser) result(expr)
 				if (expr%val%array%rank /= size(expr%subscripts)) then
 					span = new_span(span0, span1 - span0 + 1)
 					call parser%diagnostics%push( &
-						err_bad_sub_count(parser%context, span, identifier%text, &
+						err_bad_sub_count(parser%context(), span, identifier%text, &
 						expr%val%array%rank, size(expr%subscripts)))
 				end if
 			end if
@@ -3914,7 +3928,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_binary_types(parser%context, &
+				err_binary_types(parser%context(), &
 				span, op%text, &
 				kind_name(ltype), &
 				kind_name(rtype)))
@@ -3993,13 +4007,13 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 		subscript = parser%parse_expr()
 
 		!print *, 'subscript = ', subscript%str()
-		!print *, 'subscript = ', parser%context%text(span0: parser%current_pos()-1)
+		!print *, 'subscript = ', parser%text(span0, parser%current_pos()-1)
 
 		if (.not. any(subscript%val%type == [i32_type, i64_type])) then
 			span = new_span(span0, parser%current_pos() - span0)
 			call parser%diagnostics%push( &
-				err_non_int_subscript(parser%context, span, &
-				parser%context%text(span0: parser%current_pos()-1)))
+				err_non_int_subscript(parser%context(), span, &
+				parser%text(span0, parser%current_pos()-1)))
 		end if
 
 		! TODO: set step_sub case for non-unit range step
@@ -4099,7 +4113,7 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_unary_types(parser%context, span, op%text, &
+				err_unary_types(parser%context(), span, op%text, &
 				kind_name(expr%right%val%type)))
 
 		end if
@@ -4128,7 +4142,7 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_binary_types(parser%context, &
+				err_binary_types(parser%context(), &
 				span, op%text, &
 				kind_name(ltype), &
 				kind_name(rtype)))
@@ -4263,6 +4277,46 @@ end function peek_kind
 
 !********
 
+integer function current_unit(parser)
+	class(parser_t) :: parser
+	current_unit = parser%peek_unit(0)
+end function current_unit
+
+integer function peek_unit(parser, offset)
+	class(parser_t) :: parser
+	type(syntax_token_t) :: peek
+	integer, intent(in) :: offset
+	peek = parser%peek(offset)
+	peek_unit = peek%unit_
+end function peek_unit
+
+!********
+
+function parser_current_context(parser) result(context)
+	class(parser_t) :: parser
+	type(text_context_t) :: context
+
+	!parser%contexts%v(parser%current_unit()), span, type_text))
+	context = parser%contexts%v( parser%current_unit() )
+
+end function parser_current_context
+
+!********
+
+function parser_text(parser, beg_, end_) result(text)
+	class(parser_t) :: parser
+	integer, intent(in) :: beg_, end_
+	type(text_context_t) :: context
+	character(len = :), allocatable :: text
+
+	!parser%context(), span, parser%context%text(cond_beg: cond_end), &
+	context = parser%context()
+	text = context%text(beg_: end_)
+
+end function parser_text
+
+!********
+
 integer function current_pos(parser)
 
 	! Get the current character index.  If you want the token index, use
@@ -4377,14 +4431,14 @@ function parse_size(parser) result(size)
 		len      = parser%parse_expr()
 		span_end = parser%peek_pos(0) - 1
 
-		!print *, 'len = ', parser%context%text(span_beg: span_end)
+		!print *, 'len = ', parser%text(span_beg, span_end)
 
 		if (.not. any(len%val%type == [i32_type, i64_type])) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			! TODO: different diag for each (or at least some) case
 			call parser%diagnostics%push(err_non_int_range( &
-				parser%context, span, &
-				parser%context%text(span_beg: span_end)))
+				parser%context(), span, &
+				parser%text(span_beg, span_end)))
 		end if
 
 		call size%push(len)
@@ -4455,7 +4509,7 @@ function parse_array_expr(parser) result(expr)
 	lbound   = parser%parse_expr()
 	span_end = parser%peek_pos(0) - 1
 
-	!print *, 'lbound = ', parser%context%text(span_beg: span_end)
+	!print *, 'lbound = ', parser%text(span_beg, span_end)
 
 	! TODO: should type checking be done by caller, or should we pass an
 	! expected type arg for the RHS of this check?
@@ -4472,7 +4526,7 @@ function parse_array_expr(parser) result(expr)
 	!if (lbound%val%type /= i32_type) then
 	!	span = new_span(span_beg, span_end - span_beg + 1)
 	!	call parser%diagnostics%push(err_non_int_range( &
-	!		parser%context, span, parser%context%text(span_beg: span_end)))
+	!		parser%context, span, parser%text(span_beg, span_end)))
 	!end if
 
 	if (parser%current_kind() == semicolon_token) then
@@ -4539,7 +4593,7 @@ function parse_array_expr(parser) result(expr)
 			!print *, 'HERE'
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_non_int_range( &
-				parser%context, span, parser%context%text(span_beg: span_end)))
+				parser%context(), span, parser%text(span_beg, span_end)))
 
 		end if
 
@@ -4560,8 +4614,8 @@ function parse_array_expr(parser) result(expr)
 			if (.not. is_num_type(ubound%val%type)) then
 				span = new_span(span_beg, span_end - span_beg + 1)
 				call parser%diagnostics%push(err_non_int_range( &
-					parser%context, span, &
-					parser%context%text(span_beg: span_end)))
+					parser%context(), span, &
+					parser%text(span_beg, span_end)))
 			end if
 
 			! If [lbound: step: ubound] are all specified, then specifying the
@@ -4596,8 +4650,8 @@ function parse_array_expr(parser) result(expr)
 				! TODO: different message
 				span = new_span(span_beg, span_end - span_beg + 1)
 				call parser%diagnostics%push(err_non_int_range( &
-					parser%context, span, &
-					parser%context%text(span_beg: span_end)))
+					parser%context(), span, &
+					parser%text(span_beg, span_end)))
 			end if
 
 			expr%val%array%kind = impl_array
@@ -4621,15 +4675,15 @@ function parse_array_expr(parser) result(expr)
 			len      = parser%parse_expr()
 			span_end = parser%peek_pos(0) - 1
 
-			!print *, 'len = ', parser%context%text(span_beg: span_end)
+			!print *, 'len = ', parser%text(span_beg, span_end)
 
 			if (.not. any(len%val%type == [i32_type, i64_type])) then
 				! Length is not an integer type
 				span = new_span(span_beg, span_end - span_beg + 1)
 				! TODO: different diag for each (or at least some) case
 				call parser%diagnostics%push(err_non_int_range( &
-					parser%context, span, &
-					parser%context%text(span_beg: span_end)))
+					parser%context(), span, &
+					parser%text(span_beg, span_end)))
 			end if
 
 			! This used to be checked further up before i64 arrays
@@ -4641,8 +4695,8 @@ function parse_array_expr(parser) result(expr)
 				! can't know if the lbound type needs to match the ubound type
 				! until after we check for the semicolon_token in this block
 				call parser%diagnostics%push(err_non_int_range( &
-					parser%context, span, &
-					parser%context%text(span_beg: span_end)))
+					parser%context(), span, &
+					parser%text(span_beg, span_end)))
 			end if
 
 			rbracket = parser%match(rbracket_token)
@@ -4709,8 +4763,8 @@ function parse_array_expr(parser) result(expr)
 			! TODO: different message
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_non_int_range( &
-				parser%context, span, &
-				parser%context%text(span_beg: span_end)))
+				parser%context(), span, &
+				parser%text(span_beg, span_end)))
 		end if
 
 		return
@@ -4741,7 +4795,7 @@ function parse_array_expr(parser) result(expr)
 		if (elem%val%type /= lbound%val%type) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
-				parser%context, span, parser%context%text(span_beg: span_end)))
+				parser%context(), span, parser%text(span_beg, span_end)))
 		end if
 
 		call elems%push(elem)
@@ -4881,7 +4935,7 @@ function parse_primary_expr(parser) result(expr)
 				if (io /= exit_success) then
 					span = new_span(identifier%pos, len(identifier%text))
 					call parser%diagnostics%push( &
-						err_undeclare_var(parser%context, &
+						err_undeclare_var(parser%context(), &
 						span, identifier%text))
 				end if
 
@@ -4905,7 +4959,7 @@ function parse_primary_expr(parser) result(expr)
 					if (expr%val%array%rank /= size(expr%subscripts)) then
 						span = new_span(span0, span1 - span0 + 1)
 						call parser%diagnostics%push( &
-							err_bad_sub_count(parser%context, span, &
+							err_bad_sub_count(parser%context(), span, &
 							identifier%text, &
 							expr%val%array%rank, size(expr%subscripts)))
 					end if
@@ -4917,14 +4971,14 @@ function parse_primary_expr(parser) result(expr)
 					if (size(expr%subscripts) /= exp_rank) then
 						span = new_span(span0, span1 - span0 + 1)
 						call parser%diagnostics%push( &
-							err_bad_sub_count(parser%context, span, &
+							err_bad_sub_count(parser%context(), span, &
 							identifier%text, &
 							exp_rank, size(expr%subscripts)))
 					end if
 				else
 					span = new_span(span0, span1 - span0 + 1)
 					call parser%diagnostics%push( &
-						err_scalar_subscript(parser%context, &
+						err_scalar_subscript(parser%context(), &
 						span, identifier%text))
 				end if
 
@@ -4977,7 +5031,7 @@ function parse_primary_expr(parser) result(expr)
 
 					span = new_span(identifier%pos, len(identifier%text))
 					call parser%diagnostics%push( &
-						err_undeclare_fn(parser%context, &
+						err_undeclare_fn(parser%context(), &
 						span, identifier%text))
 
 					! No more tokens are consumed below, so we can just return
@@ -5027,7 +5081,7 @@ function parse_primary_expr(parser) result(expr)
 
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 					call parser%diagnostics%push( &
-						err_bad_arg_count(parser%context, &
+						err_bad_arg_count(parser%context(), &
 						span, identifier%text, size(fn%params), args%len_))
 					return
 
@@ -5035,7 +5089,7 @@ function parse_primary_expr(parser) result(expr)
 
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 					call parser%diagnostics%push( &
-						err_too_few_args(parser%context, &
+						err_too_few_args(parser%context(), &
 						span, identifier%text, &
 						size(fn%params) + fn%variadic_min, args%len_))
 					return
@@ -5075,7 +5129,7 @@ function parse_primary_expr(parser) result(expr)
 						! TODO: get span of individual arg, not whole arg list
 						span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 						call parser%diagnostics%push( &
-							err_bad_arg_type(parser%context, &
+							err_bad_arg_type(parser%context(), &
 							span, identifier%text, i, fn%params(i)%name, &
 							kind_name(ptype), &
 							kind_name(args%v(i)%val%type)))
@@ -5100,7 +5154,7 @@ function parse_primary_expr(parser) result(expr)
 						arg_type   = kind_name(args%v(i)%val%array%type)
 
 						call parser%diagnostics%push( &
-							err_bad_array_arg_type(parser%context, &
+							err_bad_array_arg_type(parser%context(), &
 							span, identifier%text, i, fn%params(i)%name, &
 							param_type, arg_type))
 						return
@@ -5117,7 +5171,7 @@ function parse_primary_expr(parser) result(expr)
 								rparen%pos - lparen%pos + 1)
 
 							call parser%diagnostics%push( &
-								err_bad_arg_rank(parser%context, &
+								err_bad_arg_rank(parser%context(), &
 								span, identifier%text, i, fn%params(i)%name, &
 								param_rank, arg_rank))
 							return
@@ -5442,16 +5496,20 @@ function match(parser, kind) result(token)
 
 	print *, 'pushing match diag'
 	len_text = max(len(current%text), 1)
-	span = new_span(current%pos, len_text)
+
+	span = new_span(parser%current_pos(), len_text)
+	!span = new_span(current%pos, len_text)
 
 	!call parser%diagnostics%push( &
-	!	err_unexpected_token(parser%context, span, current%text, &
+	!	err_unexpected_token(parser%context(), span, current%text, &
 	!	kind_name(parser%current_kind()), kind_name(kind)))
 
-	!print *, 'current%unit_ = ', current%unit_
+	print *, 'current%unit_ = ', current%unit_
+	print *, 'current%text  = "', current%text, '"'
 
 	call parser%diagnostics%push( &
-		err_unexpected_token(parser%contexts%v(current%unit_), span, current%text, &
+		err_unexpected_token(parser%context(), span, current%text, &
+		!err_unexpected_token(parser%contexts%v(current%unit_), span, current%text, &
 		kind_name(parser%current_kind()), kind_name(kind)))
 
 	! An unmatched char in the middle of the input is an error and should log
