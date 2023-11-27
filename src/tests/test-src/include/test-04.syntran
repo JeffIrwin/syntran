@@ -1,6 +1,5 @@
 
-// syntax is subject to change
-#include "subdir/subsubdir/test-04-inc.syntran"
+#include("subdir/subsubdir/test-04-inc.syntran");
 
 fn fn1(): i32
 {

@@ -528,7 +528,7 @@ module core_m
 		! constructing a phrase or sentence from words
 
 		type(syntax_token_t), allocatable :: tokens(:)
-		integer :: pos
+		integer :: pos  ! token index position
 
 		logical :: expecting = .false., first_expecting = .false.
 		character(len = :), allocatable :: first_expected
@@ -559,7 +559,7 @@ module core_m
 				parse_fn_declaration, parse_subscripts, parse_type, &
 				parse_size, peek_unit, current_unit, &
 				context => parser_current_context, &
-				text => parser_text
+				text => parser_text, preprocess, match_pre
 
 	end type parser_t
 
@@ -2732,8 +2732,9 @@ recursive function new_parser(str, src_file, contexts, unit_) result(parser)
 
 	parser%diagnostics = new_string_vector()
 
-	tokens = preprocess(parser, tokens%v(1:tokens%len_), src_file, contexts, unit_)
-	parser%tokens = tokens%v( 1: tokens%len_ )
+	call parser%preprocess(tokens%v(1:tokens%len_), src_file, contexts, unit_)
+	!tokens = preprocess(parser, tokens%v(1:tokens%len_), src_file, contexts, unit_)
+	!parser%tokens = tokens%v( 1: tokens%len_ )
 
 	! Set other parser members
 
@@ -2757,13 +2758,13 @@ end function new_parser
 
 ! TODO: this should probably be a subroutine instead of fn with so many out args
 
-!function preprocess(tokens_in) result(tokens_out)
-function preprocess(parser, tokens_in, src_file, contexts, unit_) result(tokens_out)
+!function preprocess(parser, tokens_in, src_file, contexts, unit_) result(tokens_out)
+subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 
 	! src_file is the filename of the current file being processed, i.e. the
 	! *includer*, not the includee
 
-	type(parser_t), intent(inout) :: parser
+	class(parser_t) :: parser
 	type(syntax_token_t), intent(in) :: tokens_in(:)
 	character(len = *), intent(in) :: src_file
 
@@ -2776,15 +2777,19 @@ function preprocess(parser, tokens_in, src_file, contexts, unit_) result(tokens_
 
 	character(len = :), allocatable :: inc_text, filename
 
-	integer :: i, j, iostat
+	integer :: i, j, iostat, unit_0
 
 	type(parser_t) :: inc_parser
 
-	type(syntax_token_t) :: token, token_peek
+	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon
+
+	unit_0 = unit_
 
 	tokens_out = new_syntax_token_vector()
 	i = 0
 	do while (i < size(tokens_in))
+
+		! TODO: use parser%next() instead of manually increment i/pos
 		i = i + 1
 		token = tokens_in(i)
 
@@ -2821,6 +2826,7 @@ function preprocess(parser, tokens_in, src_file, contexts, unit_) result(tokens_
 
 			! TODO: parens?  It's kind of a pain to match() since the parser
 			! isn't constructed yet.  I can see why C works the way it does
+			lparen = parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0))
 
 			! Prepend with path to src_file
 			!
@@ -2862,7 +2868,26 @@ function preprocess(parser, tokens_in, src_file, contexts, unit_) result(tokens_
 			! here (show includer line number and context)
 			call parser%diagnostics%push_all( inc_parser%diagnostics )
 
-			! TODO: semicolon after #include?  It's kind of a pain like parens
+			!! TODO: semicolon after #include?  It's kind of a pain like parens
+			!! Can't call match() bc it needs parser's tokens to be constructed,
+			!! which we can't do yet bc we're pushing them into a temp growable
+			!! vector
+
+			!parser%pos = i
+			!semicolon = parser%match(semicolon_token)
+
+			rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
+			semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
+
+			!i = i + 1
+			!semicolon = tokens_in(i)
+
+			!! TODO: make a new kind of `match` fn which doesn't take parser class
+			!if (semicolon%kind == semicolon_token) then
+			!	print *, 'semicolon matched :)'
+			!else
+			!	print *, 'ERROR: expected semicolon'
+			!end if
 
 		!case (tree_keyword)
 		!! TODO: maybe do #tree work at eval time
@@ -2880,7 +2905,91 @@ function preprocess(parser, tokens_in, src_file, contexts, unit_) result(tokens_
 
 	end do  ! while (i < size(tokens_in))
 
-end function preprocess
+	! Convert to standard member array
+	parser%tokens = tokens_out%v( 1: tokens_out%len_ )
+
+end subroutine preprocess
+
+!===============================================================================
+
+function match_pre(parser, kind, tokens, token_index, context) result(token)
+
+	class(parser_t) :: parser
+
+	integer :: kind
+
+	type(syntax_token_t) :: token
+	type(syntax_token_t), intent(in) :: tokens(:)
+
+	integer, intent(inout) :: token_index
+
+	type(text_context_t) :: context
+
+	!********
+
+	integer :: len_text
+
+	type(syntax_token_t) :: current
+	type(text_span_t) :: span
+
+	token_index = token_index + 1
+	!current = parser%current()
+	current = tokens(token_index)
+
+	!if (parser%current_kind() == kind) then
+	if (current%kind == kind) then
+		!token = parser%next()
+		token = current
+		print *, 'returning parser pre expecting false'
+		print *, ''
+		return
+	end if
+	token_index = token_index - 1
+
+	print *, 'ERROR: unmatched token'
+	print *, ''
+
+	!! A continued expression can commonly have several unmatched tokens.  The
+	!! last one is usually a semicolon, or it could be a right brace.  The first
+	!! one is more helpful for the user to know
+	!print *, 'unmatched '//kind_name(kind)
+	!print *, 'unmatched '//kind_token(kind)
+
+	if (.not. parser%first_expecting) then
+		parser%first_expected  = kind_token(kind)
+		parser%first_expecting = .true.
+	end if
+
+	!print *, 'pushing match diag'
+	len_text = max(len(current%text), 1)
+
+	!span = new_span(parser%current_pos(), len_text)
+	span = new_span(current%pos, len_text)
+
+	!print *, 'current%unit_ = ', current%unit_
+	!print *, 'current%text  = "', current%text, '"'
+
+	print *, 'pushing diag'
+	call parser%diagnostics%push( &
+		!err_unexpected_token(parser%context(), span, current%text, &
+		!err_unexpected_token(parser%contexts%v(1), span, current%text, &
+		err_unexpected_token(context, span, current%text, &
+		kind_name(current%kind), kind_name(kind)))
+	print *, 'done'
+
+	! An unmatched char in the middle of the input is an error and should log
+	! a diagnostic.  An unmatched char at the end means the interactive
+	! interpreter should expect more lines
+	!if (parser%pos >= size(parser%tokens)) then
+	if (token_index >= size(tokens)) then
+		parser%expecting = .true.
+	end if
+
+	token = new_token(kind, current%pos, null_char)
+	token%unit_ = current%unit_
+	!print *, 'setting token%unit_ = ', token%unit_
+
+end function match_pre
 
 !===============================================================================
 

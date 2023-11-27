@@ -1,6 +1,5 @@
 
-// syntax is subject to change
-#include "test-01-inc.syntran"
+#include ( "test-01-inc.syntran" ) ; 
 
 //// TODO: this (next line uncommented) is syntactically valid!! why??
 //("test8-inc.syntran");

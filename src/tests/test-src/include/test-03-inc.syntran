@@ -1,5 +1,5 @@
 
-#include "test-03-nest.syntran"
+#include("test-03-nest.syntran");
 
 fn fn_inc(): i32
 {
