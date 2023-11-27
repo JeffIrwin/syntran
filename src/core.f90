@@ -29,6 +29,12 @@ module core_m
 	integer, parameter :: maxerr_def = 4
 
 	! TODO:
+	!  - #(pragma)once  directive. #let var=val directive?
+	!    * for #once include guards, insert filename path as key into a ternary
+	!      tree w/ bool value true.  then when something is included, check if
+	!      it's in the ternary dict first.
+	!    * any use cases for #let? i probbaly don't want to get into general
+	!      expression parsing like `#let x = 1 + 2;` during preprocessing
 	!  - fn return statement. i like the cleanliness of rust but i still need a
 	!    way to return early.  rust does have an explicit "return" statement, i
 	!    guess it's just not the rust style to use it when it's not needed
@@ -535,11 +541,9 @@ module core_m
 
 		type(string_vector_t) :: diagnostics
 
-		!! Context for current src file.  TODO: delete after migrating to contexts
-		!type(text_context_t) :: context
-
-		! Context for all src files (including include files). TODO: make
-		! standard array instead after size is known
+		! Context for all src files (including include files).  Could convert to
+		! standard array instead after size is known but I don't expect a
+		! performance diff
 		type(text_context_vector_t) :: contexts
 
 		type(vars_t) :: vars
@@ -2719,35 +2723,22 @@ recursive function new_parser(str, src_file, contexts, unit_) result(parser)
 	end do
 
 	! Preprocess then convert to standard array (and parser class member)
-	!
-	! TODO: pass parser to preprocess() fn.  When include files are parsed, push
-	! their context onto the parent's contexts.  For correct ordering wrt
-	! token%unit_, the current parser context should probably be pushed first,
-	! before preprocessing.
 
-	!print *, 'pushing context'
+	! For correct ordering wrt token%unit_, the current parser context is pushed
+	! first, before preprocessing.
 	call contexts%push( lexer%context )
-	!print *, 'contexts%len_ = ', contexts%len_
-	!print *, ''
 
 	parser%diagnostics = new_string_vector()
 
 	call parser%preprocess(tokens%v(1:tokens%len_), src_file, contexts, unit_)
-	!tokens = preprocess(parser, tokens%v(1:tokens%len_), src_file, contexts, unit_)
-	!parser%tokens = tokens%v( 1: tokens%len_ )
 
 	! Set other parser members
 
 	parser%pos = 1
 
-	!parser%diagnostics = lexer%diagnostics
 	call parser%diagnostics%push_all( lexer%diagnostics )
 
-	!parser%context = lexer%context
 	parser%contexts = contexts  ! copy.  could convert to standard array if needed
-
-	!print *, 'parser%contexts%len_ = ', parser%contexts%len_
-	!print *, size(parser%contexts%v)
 
 	!print *, 'tokens%len_ = ', tokens%len_
 	if (debug > 1) print *, parser%tokens_str()
@@ -2756,9 +2747,6 @@ end function new_parser
 
 !===============================================================================
 
-! TODO: this should probably be a subroutine instead of fn with so many out args
-
-!function preprocess(parser, tokens_in, src_file, contexts, unit_) result(tokens_out)
 subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 
 	! src_file is the filename of the current file being processed, i.e. the
@@ -2789,7 +2777,7 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 	i = 0
 	do while (i < size(tokens_in))
 
-		! TODO: use parser%next() instead of manually increment i/pos
+		! TODO: make a variation of parser%next() instead of manually increment i/pos?
 		i = i + 1
 		token = tokens_in(i)
 
@@ -2827,10 +2815,12 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 
 			! TODO: document once it's stable
 
-			!print *, '#include'
-
-			! parens are kind of a pain to match() since the parser isn't
+			! Parens are kind of a pain to match() since the parser isn't
 			! constructed yet.  I can see why C works the way it does
+			!
+			! Note that matched tokens are not pushed to tokens_out here.  They
+			! are consumed by the preprocessor, so the later actual parser does
+			! not see them.
 			lparen = parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0))
 
 			! Prepend with path to src_file
