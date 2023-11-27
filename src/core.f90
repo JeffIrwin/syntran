@@ -3128,7 +3128,9 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	!else if (parser%num_vars > 0) then
 	!else if (size(vars%vals) > 0) then
-	else if (size(vars%vals) > 0 .and. allow_continuel) then
+	!else if (size(vars%vals) > 0 .and. allow_continuel) then
+	else if (allocated(vars%vals) .and. allow_continuel) then
+		if (size(vars%vals) > 0) then
 
 		! This could probably be refactored but it breaks my brain to think this
 		! through and test enough permutations in interactive interpreter
@@ -3140,6 +3142,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		call move_alloc(vars%vals         , parser%vars%vals)
 		!print *, '2'
 
+		end if
 	end if
 
 	!print *, 'moving fns'
