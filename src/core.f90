@@ -3021,6 +3021,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	character(len = :), allocatable :: src_filel
 
+	integer :: i
 	integer :: unit_
 
 	logical :: allow_continuel
@@ -3065,12 +3066,35 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		return
 	end if
 
+	! TODO: something funny is happening with vars backup/restore.  Run these
+	! commands in interactive interpreter:
+	!
+	!     let x = 1;
+	!     #include("src/tests/test-src/include/str.syntran");
+	!     scan("1234", "3");
+	!     // works as expected
+	!
+	! Then in a new syntran session, run these:
+	!
+	!     #include("src/tests/test-src/include/str.syntran");
+	!     scan("1234", "3");
+	!     // crashes
+
 	! Point parser member to vars dict.  This could be done in the
 	! constructor new_parser(), but it seems reasonable to do it here since it
 	! has to be moved back later.  The dict vars0 comes from the
 	! interactive interpreter's history, it has nothing to do with scoping
 	!print *, 'moving vars'
+
+	print *, ''
+	print *, 'size(vars%vals) = ', size(vars%vals)
+
+	print *, 'allocated 1 = ', allocated(vars%dicts(1)%root)
+	print *, 'allocated 2 = ', allocated(vars%dicts(2)%root)
+	print *, 'allocated 3 = ', allocated(vars%dicts(3)%root)
+
 	if (allocated(vars%dicts(1)%root)) then
+	!if (any(allocated(vars%dicts(:)%root))) then
 
 		if (allow_continuel) then
 			! Backup existing vars.  Only copy for interactive interpreter.
@@ -3101,6 +3125,20 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		! evaluate until the block is finished
 		call move_alloc(vars%dicts(1)%root, parser%vars%dicts(1)%root)
 		call move_alloc(vars%vals         , parser%vars%vals)
+
+	!else if (parser%num_vars > 0) then
+	!else if (size(vars%vals) > 0) then
+	else if (size(vars%vals) > 0 .and. allow_continuel) then
+
+		! This could probably be refactored but it breaks my brain to think this
+		! through and test enough permutations in interactive interpreter
+
+		print *, 'backing up vars%vals'
+		vars0%vals = vars%vals
+		parser%num_vars = size(vars%vals)
+		print *, '1'
+		call move_alloc(vars%vals         , parser%vars%vals)
+		print *, '2'
 
 	end if
 
@@ -3170,12 +3208,16 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	tree%diagnostics = parser%diagnostics
 
+	print *, 'size(parser%vars%vals) = ', size(parser%vars%vals)
+
 	! Move back.  It's possible that vars were empty before this call but not
 	! anymore
 	if (allocated(parser%vars%dicts(1)%root)) then
+	!if (parser%num_vars > 0) then
 		call move_alloc(parser%vars%dicts(1)%root, vars%dicts(1)%root)
 	end if
 
+	! TODO: if num_fns instead?
 	if (allocated(parser%fns%dicts(1)%root)) then
 		call move_alloc(parser%fns%dicts(1)%root, fns%dicts(1)%root)
 	end if
@@ -3185,15 +3227,18 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	! dictionary lookups.  Indices in the array are already saved in each node's
 	! id_index member
 
-	!print *, 'parser%num_vars = ', parser%num_vars
+	print *, 'parser%num_vars = ', parser%num_vars
 	if (allocated(vars%vals)) deallocate(vars%vals)
 	allocate(vars%vals( parser%num_vars ))
 
 	if (allocated(vars0%vals)) then
+		print *, 'restoring vars%vals'
 		vars%vals( 1: size(vars0%vals) ) = vars0%vals
+		!vars%vals = vars0%vals
+		!vars = vars0
 	end if
 
-	!print *, 'parser%num_fns = ', parser%num_fns
+	print *, 'parser%num_fns = ', parser%num_fns
 	if (allocated(fns%fns)) deallocate(fns%fns)
 	allocate(fns%fns( parser%num_fns ))
 
