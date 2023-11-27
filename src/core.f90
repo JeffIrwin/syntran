@@ -2611,7 +2611,7 @@ function new_lexer(text, src_file, unit_) result(lexer)
 	unit_ = unit_ + 1
 	lexer%unit_ = unit_
 
-	print *, 'lexer%unit_ = ', lexer%unit_
+	!print *, 'lexer%unit_ = ', lexer%unit_
 
 	lexer%text     = text
 	lexer%pos      = 1
@@ -2669,7 +2669,7 @@ function new_lexer(text, src_file, unit_) result(lexer)
 	end do
 	lines(nlines + 1) = len(text) + 1
 
-	print *, 'lines = ', lines
+	!print *, 'lines = ', lines
 
 	if (debug > 1) then
 		write(*,*) 'lines = '
@@ -2730,14 +2730,17 @@ recursive function new_parser(str, src_file, contexts, unit_) result(parser)
 	!print *, 'contexts%len_ = ', contexts%len_
 	!print *, ''
 
-	tokens = preprocess(tokens%v(1:tokens%len_), src_file, contexts, unit_)
+	parser%diagnostics = new_string_vector()
+
+	tokens = preprocess(parser, tokens%v(1:tokens%len_), src_file, contexts, unit_)
 	parser%tokens = tokens%v( 1: tokens%len_ )
 
 	! Set other parser members
 
 	parser%pos = 1
 
-	parser%diagnostics = lexer%diagnostics
+	!parser%diagnostics = lexer%diagnostics
+	call parser%diagnostics%push_all( lexer%diagnostics )
 
 	!parser%context = lexer%context
 	parser%contexts = contexts  ! copy.  could convert to standard array if needed
@@ -2752,12 +2755,15 @@ end function new_parser
 
 !===============================================================================
 
+! TODO: this should probably be a subroutine instead of fn with so many out args
+
 !function preprocess(tokens_in) result(tokens_out)
-function preprocess(tokens_in, src_file, contexts, unit_) result(tokens_out)
+function preprocess(parser, tokens_in, src_file, contexts, unit_) result(tokens_out)
 
 	! src_file is the filename of the current file being processed, i.e. the
 	! *includer*, not the includee
 
+	type(parser_t), intent(inout) :: parser
 	type(syntax_token_t), intent(in) :: tokens_in(:)
 	character(len = *), intent(in) :: src_file
 
@@ -2828,7 +2834,7 @@ function preprocess(tokens_in, src_file, contexts, unit_) result(tokens_out)
 			filename = get_dir(src_file)//tokens_in(i)%val%str%s  ! relative to src file
 			!filename = tokens_in(i)%val%str%s                    ! relative to runtime pwd
 
-			print *, 'include filename = "', filename, '"'
+			!print *, 'include filename = "', filename, '"'
 
 			inc_text = read_file(filename, iostat)
 			if (iostat /= exit_success) then
@@ -2838,19 +2844,23 @@ function preprocess(tokens_in, src_file, contexts, unit_) result(tokens_out)
 				call internal_error()
 			end if
 
-			print *, 'len(inc_text) = ', len(inc_text)
+			!print *, 'len(inc_text) = ', len(inc_text)
 			!print *, 'inc_text = '
 			!print *, inc_text
 
 			! Any nested includes are handled in this new_parser() call
 			inc_parser = new_parser(inc_text, filename, contexts, unit_)
 
-			! Minus 1 because included eof_token
+			! Add includee tokens to includer.  Minus 1 because included eof_token
 			do j = 1, size(inc_parser%tokens) - 1
 				call tokens_out%push( inc_parser%tokens(j) )
 			end do
 
-			! TODO: push or handle included lexer diagnostics here
+			! Push included diagnostics (from lexing) into parent parser
+			!
+			! TODO: append errors with extra context, like "in file included
+			! here (show includer line number and context)
+			call parser%diagnostics%push_all( inc_parser%diagnostics )
 
 			! TODO: semicolon after #include?  It's kind of a pain like parens
 
@@ -3253,9 +3263,8 @@ function parse_fn_declaration(parser) result(decl)
 	! throughout to the one that I just fixed here
 	pos1 = parser%current_pos()
 
-	print *, 'matching lparen'
+	!print *, 'matching lparen'
 	lparen = parser%match(lparen_token)
-	print *, 'done'
 
 	! Parse parameter names and types.  Save in temp string vectors initially
 	names    = new_string_vector()
@@ -3284,9 +3293,9 @@ function parse_fn_declaration(parser) result(decl)
 
 		pos0 = parser%current_pos()
 
-		print *, 'matching name'
+		!print *, 'matching name'
 		name  = parser%match(identifier_token)
-		print *, 'matching colon'
+		!print *, 'matching colon'
 		colon = parser%match(colon_token)
 
 		call parser%parse_type(type_text, rank)
@@ -3299,7 +3308,7 @@ function parse_fn_declaration(parser) result(decl)
 		call is_array%push( rank >= 0 )
 
 		if (parser%current_kind() /= rparen_token) then
-			print *, 'matching comma'
+			!print *, 'matching comma'
 			comma = parser%match(comma_token)
 		end if
 
@@ -3308,7 +3317,7 @@ function parse_fn_declaration(parser) result(decl)
 
 	end do
 
-	print *, 'matching rparen'
+	!print *, 'matching rparen'
 	rparen = parser%match(rparen_token)
 	pos2 = parser%current_pos()
 
@@ -5494,7 +5503,7 @@ function match(parser, kind) result(token)
 		parser%first_expecting = .true.
 	end if
 
-	print *, 'pushing match diag'
+	!print *, 'pushing match diag'
 	len_text = max(len(current%text), 1)
 
 	span = new_span(parser%current_pos(), len_text)
@@ -5504,8 +5513,8 @@ function match(parser, kind) result(token)
 	!	err_unexpected_token(parser%context(), span, current%text, &
 	!	kind_name(parser%current_kind()), kind_name(kind)))
 
-	print *, 'current%unit_ = ', current%unit_
-	print *, 'current%text  = "', current%text, '"'
+	!print *, 'current%unit_ = ', current%unit_
+	!print *, 'current%text  = "', current%text, '"'
 
 	call parser%diagnostics%push( &
 		err_unexpected_token(parser%context(), span, current%text, &
