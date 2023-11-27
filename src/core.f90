@@ -3567,6 +3567,8 @@ function parse_fn_declaration(parser) result(decl)
 	fn%node = decl
 
 	call parser%fns%insert(identifier%text, fn, decl%id_index)
+	! TODO: error if fn already declared. be careful in future if fn prototypes
+	! are added
 
 	!print *, 'size(decl%params) = ', size(decl%params)
 	!print *, 'decl%params = ', decl%params
