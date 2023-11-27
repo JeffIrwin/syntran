@@ -2820,12 +2820,17 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 		select case (token_peek%kind)
 		case (include_keyword)
 
+			! This block could possibly be refactored as a general
+			! "parse_directive_fn_call" for re-use as we add more directives,
+			! but it may be difficult since parser is not fully constructed yet.
+			! See comments on match_pre() vs match().
+
 			! TODO: document once it's stable
 
 			!print *, '#include'
 
-			! TODO: parens?  It's kind of a pain to match() since the parser
-			! isn't constructed yet.  I can see why C works the way it does
+			! parens are kind of a pain to match() since the parser isn't
+			! constructed yet.  I can see why C works the way it does
 			lparen = parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0))
 
 			! Prepend with path to src_file
@@ -2868,26 +2873,8 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 			! here (show includer line number and context)
 			call parser%diagnostics%push_all( inc_parser%diagnostics )
 
-			!! TODO: semicolon after #include?  It's kind of a pain like parens
-			!! Can't call match() bc it needs parser's tokens to be constructed,
-			!! which we can't do yet bc we're pushing them into a temp growable
-			!! vector
-
-			!parser%pos = i
-			!semicolon = parser%match(semicolon_token)
-
 			rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
 			semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
-
-			!i = i + 1
-			!semicolon = tokens_in(i)
-
-			!! TODO: make a new kind of `match` fn which doesn't take parser class
-			!if (semicolon%kind == semicolon_token) then
-			!	print *, 'semicolon matched :)'
-			!else
-			!	print *, 'ERROR: expected semicolon'
-			!end if
 
 		!case (tree_keyword)
 		!! TODO: maybe do #tree work at eval time
@@ -2913,6 +2900,13 @@ end subroutine preprocess
 !===============================================================================
 
 function match_pre(parser, kind, tokens, token_index, context) result(token)
+
+	! This is like match(), but it can run during preprocessing before the
+	! parser is fully constructed, at the cost of having a bunch of arguments.
+	!
+	! Things could probably be refactored by adding the temp syntax vector into
+	! a new parser member and deleting it after preprocessing is done.  Then
+	! this fn could work with parser members instead of taking so many args
 
 	class(parser_t) :: parser
 
@@ -2940,14 +2934,14 @@ function match_pre(parser, kind, tokens, token_index, context) result(token)
 	if (current%kind == kind) then
 		!token = parser%next()
 		token = current
-		print *, 'returning parser pre expecting false'
-		print *, ''
+		!print *, 'returning parser pre expecting false'
+		!print *, ''
 		return
 	end if
 	token_index = token_index - 1
 
-	print *, 'ERROR: unmatched token'
-	print *, ''
+	!print *, 'ERROR: unmatched token'
+	!print *, ''
 
 	!! A continued expression can commonly have several unmatched tokens.  The
 	!! last one is usually a semicolon, or it could be a right brace.  The first
@@ -2969,13 +2963,13 @@ function match_pre(parser, kind, tokens, token_index, context) result(token)
 	!print *, 'current%unit_ = ', current%unit_
 	!print *, 'current%text  = "', current%text, '"'
 
-	print *, 'pushing diag'
+	!print *, 'pushing diag'
 	call parser%diagnostics%push( &
 		!err_unexpected_token(parser%context(), span, current%text, &
 		!err_unexpected_token(parser%contexts%v(1), span, current%text, &
 		err_unexpected_token(context, span, current%text, &
 		kind_name(current%kind), kind_name(kind)))
-	print *, 'done'
+	!print *, 'done'
 
 	! An unmatched char in the middle of the input is an error and should log
 	! a diagnostic.  An unmatched char at the end means the interactive
@@ -6405,7 +6399,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!!print *, 'ident = ', node%args(1)%identifier%text
 			!!vars%vals(node%id_index) = res
 
-			! TODO:  set eof flag or crash for other non-zero io 
+			! TODO:  set eof flag or crash for other non-zero io
 			if (io == iostat_end) then
 			!if (io /= 0) then
 				!arg1%file_%eof = .true.
