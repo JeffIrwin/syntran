@@ -3021,7 +3021,6 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	character(len = :), allocatable :: src_filel
 
-	integer :: i
 	integer :: unit_
 
 	logical :: allow_continuel
@@ -3084,14 +3083,15 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	! constructor new_parser(), but it seems reasonable to do it here since it
 	! has to be moved back later.  The dict vars0 comes from the
 	! interactive interpreter's history, it has nothing to do with scoping
+
 	!print *, 'moving vars'
 
-	print *, ''
-	print *, 'size(vars%vals) = ', size(vars%vals)
+	!print *, ''
+	!print *, 'size(vars%vals) = ', size(vars%vals)
 
-	print *, 'allocated 1 = ', allocated(vars%dicts(1)%root)
-	print *, 'allocated 2 = ', allocated(vars%dicts(2)%root)
-	print *, 'allocated 3 = ', allocated(vars%dicts(3)%root)
+	!print *, 'allocated 1 = ', allocated(vars%dicts(1)%root)
+	!print *, 'allocated 2 = ', allocated(vars%dicts(2)%root)
+	!print *, 'allocated 3 = ', allocated(vars%dicts(3)%root)
 
 	if (allocated(vars%dicts(1)%root)) then
 	!if (any(allocated(vars%dicts(:)%root))) then
@@ -3133,12 +3133,12 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		! This could probably be refactored but it breaks my brain to think this
 		! through and test enough permutations in interactive interpreter
 
-		print *, 'backing up vars%vals'
+		!print *, 'backing up vars%vals'
 		vars0%vals = vars%vals
 		parser%num_vars = size(vars%vals)
-		print *, '1'
+		!print *, '1'
 		call move_alloc(vars%vals         , parser%vars%vals)
-		print *, '2'
+		!print *, '2'
 
 	end if
 
@@ -3208,7 +3208,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	tree%diagnostics = parser%diagnostics
 
-	print *, 'size(parser%vars%vals) = ', size(parser%vars%vals)
+	!print *, 'size(parser%vars%vals) = ', size(parser%vars%vals)
 
 	! Move back.  It's possible that vars were empty before this call but not
 	! anymore
@@ -3227,18 +3227,18 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	! dictionary lookups.  Indices in the array are already saved in each node's
 	! id_index member
 
-	print *, 'parser%num_vars = ', parser%num_vars
+	!print *, 'parser%num_vars = ', parser%num_vars
 	if (allocated(vars%vals)) deallocate(vars%vals)
 	allocate(vars%vals( parser%num_vars ))
 
 	if (allocated(vars0%vals)) then
-		print *, 'restoring vars%vals'
+		!print *, 'restoring vars%vals'
 		vars%vals( 1: size(vars0%vals) ) = vars0%vals
 		!vars%vals = vars0%vals
 		!vars = vars0
 	end if
 
-	print *, 'parser%num_fns = ', parser%num_fns
+	!print *, 'parser%num_fns = ', parser%num_fns
 	if (allocated(fns%fns)) deallocate(fns%fns)
 	allocate(fns%fns( parser%num_fns ))
 
