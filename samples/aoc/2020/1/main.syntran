@@ -50,7 +50,7 @@ fn part1(): i32
 		let s = readln(f);
 		//println("s = ", s);
 
-		vec_[i] = i32(s);
+		vec_[i] = parse_i32(s);
 	}
 	close(f);
 
@@ -83,7 +83,7 @@ fn part2(): i32
 		let s = readln(f);
 		//println("s = ", s);
 
-		vec_[i] = i32(s);
+		vec_[i] = parse_i32(s);
 	}
 	close(f);
 

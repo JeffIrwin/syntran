@@ -217,7 +217,7 @@ fn part1(): i32
 		let toks = tok_i32(s[is:ns]);
 		//println("toks = ", toks);
 
-		let num0 = i32(s[is + toks[0]: is + toks[1]+1]);
+		let num0 = parse_i32(s[is + toks[0]: is + toks[1]+1]);
 		is += toks[1] + 1;
 
 		// skip `-` delimiter
@@ -225,7 +225,7 @@ fn part1(): i32
 
 		toks = tok_i32(s[is:ns]);
 		//println("toks = ", toks);
-		let num1 = i32(s[is + toks[0]: is + toks[1]+1]);
+		let num1 = parse_i32(s[is + toks[0]: is + toks[1]+1]);
 		is += toks[1] + 1;
 
 		//println("nums = ", num0, ", ", num1);
@@ -279,7 +279,7 @@ fn part2(): i32
 		let toks = tok_i32(s[is:ns]);
 		//println("toks = ", toks);
 
-		let num0 = i32(s[is + toks[0]: is + toks[1]+1]);
+		let num0 = parse_i32(s[is + toks[0]: is + toks[1]+1]);
 		is += toks[1] + 1;
 
 		// skip `-` delimiter
@@ -287,7 +287,7 @@ fn part2(): i32
 
 		toks = tok_i32(s[is:ns]);
 		//println("toks = ", toks);
-		let num1 = i32(s[is + toks[0]: is + toks[1]+1]);
+		let num1 = parse_i32(s[is + toks[0]: is + toks[1]+1]);
 		is += toks[1] + 1;
 
 		//println("nums = ", num0, ", ", num1);
