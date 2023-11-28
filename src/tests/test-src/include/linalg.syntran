@@ -1,0 +1,50 @@
+
+// This include file has helper fns for linear algebra
+
+//==========================================================
+
+// These linear algebra fns are helpful for verifying vectors of expected
+// results
+
+fn sub_fn(u: [i32; :], v: [i32; :]): [i32; :]
+{
+	// Return w = u - v
+	//
+	// Don't use this in production
+	//println("starting sub_fn");
+
+	// This should crash if there is a size mismatch
+	let n = max(size(u,0), size(v,0));
+	let w = [0; n];
+
+	for i in [0: n]
+		w[i] = u[i] - v[i];
+	w;
+}
+
+fn norm_fn(u: [i32; :]): i32
+{
+	//println("starting norm_fn()");
+	let norm = 0;
+	for i in [0: size(u,0)]
+		norm = norm + u[i] ** 2;
+	//norm ** 0.5;  // not an int
+	norm;
+}
+
+fn norm_diff(u: [i32; :], v: [i32; :]): i32
+{
+	// Return the norm of the difference between u and v
+	//println();
+	//println("starting norm_diff()");
+
+	//let ans = norm_fn(sub_fn(u, v));
+
+	let sub_ = sub_fn(u, v);
+	let ans = norm_fn(sub_);
+
+	ans;
+}
+
+//==========================================================
+

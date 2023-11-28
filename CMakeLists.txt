@@ -17,11 +17,23 @@ set(PROJECT syntran)
 
 project(${PROJECT} Fortran)
 
+if(WINDOWS)
+
+	# TODO: test on actual Windows or remove if not needed for realpath/
+	# fullpath.  Either way, get github actions building.  This branch seems not
+	# to be triggered in msys, need bare metal to test
+
+	message("defining _WIN32 in cmake")
+	add_compile_definitions(_WIN32)
+else()
+	message("NOT defining _WIN32 in cmake")
+endif()
+
 if(DEFINED ENV{SYNTRAN_INTEL})
-	set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC")
+	set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC -fpp")
 else()
 
-	set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp")
+	set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp -cpp")
 
 	# Why would you warn about tabs in free-form Fortran?
 	add_compile_options("-Wno-tabs")

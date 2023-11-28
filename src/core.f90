@@ -29,9 +29,12 @@ module core_m
 	integer, parameter :: maxerr_def = 4
 
 	! TODO:
-	!  - include directive?  not super efficient, but it might not be too hard
-	!    to hack together support for multiple translation unit syntran projects
-	!    by effectively catting all the includes together
+	!  - #(pragma)once  directive. #let var=val directive?
+	!    * for #once include guards, insert filename path as key into a ternary
+	!      tree w/ bool value true.  then when something is included, check if
+	!      it's in the ternary dict first.
+	!    * any use cases for #let? i probbaly don't want to get into general
+	!      expression parsing like `#let x = 1 + 2;` during preprocessing
 	!  - fn return statement. i like the cleanliness of rust but i still need a
 	!    way to return early.  rust does have an explicit "return" statement, i
 	!    guess it's just not the rust style to use it when it's not needed
@@ -109,6 +112,8 @@ module core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			include_keyword      = 80, &
+			hash_token           = 79, &
 			percent_equals_token = 78, &
 			sstar_equals_token   = 77, &
 			i64_token            = 76, &
@@ -196,7 +201,7 @@ module core_m
 
 	type file_t
 		character(len = :), allocatable :: name_
-		integer :: unit_
+		integer :: unit_  ! fortran file unit
 		logical :: eof = .false.
 		! Do we need a separate iostat beyond eof?
 	end type file_t
@@ -378,6 +383,8 @@ module core_m
 		integer :: kind
 		type(value_t) :: val
 		integer :: pos
+		!integer :: unit_ = 0  ! translation unit (src file) index for error diagnostic context
+		integer :: unit_   ! translation unit (src file) index for error diagnostic context
 		character(len = :), allocatable :: text
 
 	end type syntax_token_t
@@ -450,7 +457,10 @@ module core_m
 
 		type(string_vector_t) :: diagnostics
 
+		! Lexer only lexes 1 (include) file at a time, so it only has 1 context
 		type(text_context_t) :: context
+
+		integer :: unit_  ! translation unit (src file) index for error diagnostic context
 
 		character(len = :), allocatable :: text
 
@@ -524,14 +534,17 @@ module core_m
 		! constructing a phrase or sentence from words
 
 		type(syntax_token_t), allocatable :: tokens(:)
-		integer :: pos
+		integer :: pos  ! token index position
 
 		logical :: expecting = .false., first_expecting = .false.
 		character(len = :), allocatable :: first_expected
 
 		type(string_vector_t) :: diagnostics
 
-		type(text_context_t) :: context
+		! Context for all src files (including include files).  Could convert to
+		! standard array instead after size is known but I don't expect a
+		! performance diff
+		type(text_context_vector_t) :: contexts
 
 		type(vars_t) :: vars
 		integer :: num_vars = 0
@@ -548,7 +561,9 @@ module core_m
 				current_pos, peek_pos, parse_for_statement, &
 				parse_while_statement, parse_array_expr, parse_unit, &
 				parse_fn_declaration, parse_subscripts, parse_type, &
-				parse_size
+				parse_size, peek_unit, current_unit, &
+				context => parser_current_context, &
+				text => parser_text, preprocess, match_pre
 
 	end type parser_t
 
@@ -1670,7 +1685,10 @@ function kind_name(kind)
 			"i64_type            ", & ! 75
 			"i64_token           ", & ! 76
 			"sstar_equals_token  ", & ! 77
-			"percent_equals_token"  & ! 78
+			"percent_equals_token", & ! 78
+			"hash_token          ", & ! 79
+			"include_keyword     ", & ! 80
+			"unknown             "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too
 
@@ -1769,7 +1787,10 @@ function kind_token(kind)
 			"i64 type             ", & ! 75
 			"i64 token            ", & ! 76
 			"**= token            ", & ! 77
-			"%= token             "  & ! 78
+			"%=                   ", & ! 78
+			"#                    ", & ! 79
+			"include              ", & ! 80
+			"unknown              "  & ! inf
 		]
 
 	if (.not. (1 <= kind .and. kind <= size(tokens))) then
@@ -2134,9 +2155,17 @@ function lex(lexer) result(token)
 	type(text_span_t) :: span
 	type(value_t) :: val
 
+	!print *, 'lexer%unit_ = ', lexer%unit_
+
 	if (lexer%pos > len(lexer%text)) then
+
 		token = new_token(eof_token, lexer%pos, null_char)
+
+		! TODO: it's kind of annoying to have to set unit_ before every return.
+		! It might be better to modify all the new_*_token() fns
+		token%unit_ = lexer%unit_
 		return
+
 	end if
 
 	start = lexer%pos
@@ -2200,6 +2229,7 @@ function lex(lexer) result(token)
 			end if
 		end if
 
+		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -2235,12 +2265,14 @@ function lex(lexer) result(token)
 			call lexer%diagnostics%push( &
 				err_unterminated_str(lexer%context, &
 				span, text))
+			token%unit_ = lexer%unit_
 			return
 		end if
 
 		val   = new_literal_value(str_type, str = char_vec%v( 1: char_vec%len_ ))
 		token = new_token(str_token, start, text, val)
 
+		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -2253,6 +2285,7 @@ function lex(lexer) result(token)
 		text = lexer%text(start: lexer%pos-1)
 
 		token = new_token(whitespace_token, start, text)
+		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -2270,6 +2303,7 @@ function lex(lexer) result(token)
 
 		kind = get_keyword_kind(text)
 		token = new_token(kind, start, text)
+		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -2371,6 +2405,9 @@ function lex(lexer) result(token)
 		case (",")
 			token = new_token(comma_token, lexer%pos, lexer%current())
 
+		case ("#")
+			token = new_token(hash_token, lexer%pos, lexer%current())
+
 		case ("=")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
@@ -2420,6 +2457,8 @@ function lex(lexer) result(token)
 				span, lexer%current()))
 
 	end select
+	token%unit_ = lexer%unit_
+
 	lexer%pos = lexer%pos + 1
 
 	! FIXME: arrow keys create bad tokens in bash on Windows.  Fix that (better
@@ -2541,6 +2580,9 @@ integer function get_keyword_kind(text) result(kind)
 		case ("fn")
 			kind = fn_keyword
 
+		case ("include")
+			kind = include_keyword
+
 		case default
 			kind = identifier_token
 
@@ -2552,17 +2594,28 @@ end function get_keyword_kind
 
 !===============================================================================
 
-function new_lexer(text, src_file) result(lexer)
+function new_lexer(text, src_file, unit_) result(lexer)
+!function new_lexer(text, src_file) result(lexer)
 
 	character(len = *) :: text, src_file
 
 	type(lexer_t) :: lexer
 
+	integer, intent(inout) :: unit_
+
 	!********
 
 	integer :: i, i0, nlines
+	!integer, save :: unit_ = 0
 
 	integer, allocatable :: lines(:)
+
+	! Every token keeps track of which file it came from for error diagnostic
+	! context
+	unit_ = unit_ + 1
+	lexer%unit_ = unit_
+
+	!print *, 'lexer%unit_ = ', lexer%unit_
 
 	lexer%text     = text
 	lexer%pos      = 1
@@ -2637,28 +2690,100 @@ end function new_lexer
 
 !===============================================================================
 
-function new_parser(str, src_file) result(parser)
+recursive function new_parser(str, src_file, contexts, unit_) result(parser)
 
-	character(len = *) :: str, src_file
+	character(len = *), intent(in) :: str, src_file
 
 	type(parser_t) :: parser
 
+	integer, intent(inout) :: unit_
+
 	!********
 
-	type(syntax_token_t)        :: token
-	type(syntax_token_vector_t) :: tokens
+	type(text_context_vector_t) :: contexts
 
 	type(lexer_t) :: lexer
 
-	! Get an array of tokens
+	type(syntax_token_t) :: token
+	type(syntax_token_vector_t) :: tokens
+
+	! Lex and get an array of tokens
 	tokens = new_syntax_token_vector()
-	lexer = new_lexer(str, src_file)
+	lexer = new_lexer(str, src_file, unit_)
 	do
 		token = lexer%lex()
+		!print *, 'token%unit_ = ', token%unit_
 
-		! TODO: Should #include directives be processed here instead?  How can
-		! we keep line number context for error diagnostics correct and tied to
-		! a source file?
+		if (token%kind /= whitespace_token .and. &
+		    token%kind /= bad_token) then
+			call tokens%push(token)
+		end if
+
+		if (token%kind == eof_token) exit
+	end do
+
+	! Preprocess then convert to standard array (and parser class member)
+
+	! For correct ordering wrt token%unit_, the current parser context is pushed
+	! first, before preprocessing.
+	call contexts%push( lexer%context )
+
+	parser%diagnostics = new_string_vector()
+
+	call parser%preprocess(tokens%v(1:tokens%len_), src_file, contexts, unit_)
+
+	! Set other parser members
+
+	parser%pos = 1
+
+	call parser%diagnostics%push_all( lexer%diagnostics )
+
+	parser%contexts = contexts  ! copy.  could convert to standard array if needed
+
+	!print *, 'tokens%len_ = ', tokens%len_
+	if (debug > 1) print *, parser%tokens_str()
+
+end function new_parser
+
+!===============================================================================
+
+subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
+
+	! src_file is the filename of the current file being processed, i.e. the
+	! *includer*, not the includee
+
+	class(parser_t) :: parser
+	type(syntax_token_t), intent(in) :: tokens_in(:)
+	character(len = *), intent(in) :: src_file
+
+	type(syntax_token_vector_t) :: tokens_out
+	type(text_context_vector_t), intent(inout) :: contexts
+
+	integer, intent(inout) :: unit_
+
+	!********
+
+	character(len = :), allocatable :: inc_text, filename
+
+	integer :: i, j, iostat, unit_0
+
+	type(parser_t) :: inc_parser
+
+	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon
+
+	unit_0 = unit_
+
+	tokens_out = new_syntax_token_vector()
+	i = 0
+	do while (i < size(tokens_in))
+
+		! TODO: make a variation of parser%next() instead of manually increment i/pos?
+		i = i + 1
+		token = tokens_in(i)
+
+		! Should #include directives be processed here instead?  How can we keep
+		! line number context for error diagnostics correct and tied to a source
+		! file?
 		!
 		! Use like this:
 		!
@@ -2670,39 +2795,185 @@ function new_parser(str, src_file) result(parser)
 		! file interpretation and not just stdin, maybe it should be `#tree();`
 		! for consistency.  It's also not really a directive either since it
 		! happens during  lexing/parsing instead of a pre-processing step.
-		! 
-		! Implement something like this at first:
-		!
-		!if (token%kind == inc_directive_token) then
-		!	inc_parser = new_parser(readfile(inc_file), inc_file)
-		!	do i = 1, size(inc_parser%tokens)
-		!		call tokens%push( inc_parser%tokens(i) )
-		!		! TODO: diagnostics and context?
-		!	end do
-		!
-		!else if (...) then
 
-		if (token%kind /= whitespace_token .and. &
-		    token%kind /= bad_token) then
-			call tokens%push(token)
+		! Whitespace has already been skipped in previous loop
+		if (token%kind /= hash_token) then
+			call tokens_out%push(token)
+			cycle
 		end if
 
-		if (token%kind == eof_token) exit
-	end do
+		i = i + 1
+		token_peek = tokens_in(i)
 
-	! Convert to standard array (and class member)
-	parser%tokens = tokens%v( 1: tokens%len_ )
+		select case (token_peek%kind)
+		case (include_keyword)
 
-	parser%pos = 1
+			! This block could possibly be refactored as a general
+			! "parse_directive_fn_call" for re-use as we add more directives,
+			! but it may be difficult since parser is not fully constructed yet.
+			! See comments on match_pre() vs match().
 
-	parser%diagnostics = lexer%diagnostics
+			! TODO: document once it's stable
 
-	parser%context = lexer%context
+			! Parens are kind of a pain to match() since the parser isn't
+			! constructed yet.  I can see why C works the way it does
+			!
+			! Note that matched tokens are not pushed to tokens_out here.  They
+			! are consumed by the preprocessor, so the later actual parser does
+			! not see them.
+			lparen = parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0))
 
-	!print *, 'tokens%len_ = ', tokens%len_
-	if (debug > 1) print *, parser%tokens_str()
+			! Prepend with path to src_file
+			!
+			! TODO: maybe later add `-I` arg for include dirs, or an env var, or
+			! a global installed syntran "std" lib dir?  See also the
+			! fullpath/realpath fn interfaces in utils.f90
 
-end function new_parser
+			! TODO: if filename is already absolute, do not prepend with path
+
+			i = i + 1
+			filename = get_dir(src_file)//tokens_in(i)%val%str%s  ! relative to src file
+			!filename = tokens_in(i)%val%str%s                    ! relative to runtime pwd
+
+			!print *, 'include filename = "', filename, '"'
+
+			inc_text = read_file(filename, iostat)
+			if (iostat /= exit_success) then
+				! TODO: new fn? this is user error, not internal.  Also, error
+				! message should state filename without extra path (or both)
+				write(*,*) err_404(filename)
+				call internal_error()
+			end if
+
+			!print *, 'len(inc_text) = ', len(inc_text)
+			!print *, 'inc_text = '
+			!print *, inc_text
+
+			! Any nested includes are handled in this new_parser() call
+			inc_parser = new_parser(inc_text, filename, contexts, unit_)
+
+			! Add includee tokens to includer.  Minus 1 because included eof_token
+			do j = 1, size(inc_parser%tokens) - 1
+				call tokens_out%push( inc_parser%tokens(j) )
+			end do
+
+			! Push included diagnostics (from lexing) into parent parser
+			!
+			! TODO: append errors with extra context, like "in file included
+			! here (show includer line number and context)
+			call parser%diagnostics%push_all( inc_parser%diagnostics )
+
+			rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
+			semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
+
+		!case (tree_keyword)
+		!! TODO: maybe do #tree work at eval time
+
+		! TODO: #pragma once or at least #ifndef/#def-style include guards
+
+		case default
+
+			! This will defer any diagnostic logging to the parser.  Should
+			! there be a special-case diagnostic here for bad directives?
+			call tokens_out%push(token)
+			call tokens_out%push(token_peek)
+
+		end select  ! case (token_peek%kind)
+
+	end do  ! while (i < size(tokens_in))
+
+	! Convert to standard member array
+	parser%tokens = tokens_out%v( 1: tokens_out%len_ )
+
+end subroutine preprocess
+
+!===============================================================================
+
+function match_pre(parser, kind, tokens, token_index, context) result(token)
+
+	! This is like match(), but it can run during preprocessing before the
+	! parser is fully constructed, at the cost of having a bunch of arguments.
+	!
+	! Things could probably be refactored by adding the temp syntax vector into
+	! a new parser member and deleting it after preprocessing is done.  Then
+	! this fn could work with parser members instead of taking so many args
+
+	class(parser_t) :: parser
+
+	integer :: kind
+
+	type(syntax_token_t) :: token
+	type(syntax_token_t), intent(in) :: tokens(:)
+
+	integer, intent(inout) :: token_index
+
+	type(text_context_t) :: context
+
+	!********
+
+	integer :: len_text
+
+	type(syntax_token_t) :: current
+	type(text_span_t) :: span
+
+	token_index = token_index + 1
+	!current = parser%current()
+	current = tokens(token_index)
+
+	!if (parser%current_kind() == kind) then
+	if (current%kind == kind) then
+		!token = parser%next()
+		token = current
+		!print *, 'returning parser pre expecting false'
+		!print *, ''
+		return
+	end if
+	token_index = token_index - 1
+
+	!print *, 'ERROR: unmatched token'
+	!print *, ''
+
+	!! A continued expression can commonly have several unmatched tokens.  The
+	!! last one is usually a semicolon, or it could be a right brace.  The first
+	!! one is more helpful for the user to know
+	!print *, 'unmatched '//kind_name(kind)
+	!print *, 'unmatched '//kind_token(kind)
+
+	if (.not. parser%first_expecting) then
+		parser%first_expected  = kind_token(kind)
+		parser%first_expecting = .true.
+	end if
+
+	!print *, 'pushing match diag'
+	len_text = max(len(current%text), 1)
+
+	!span = new_span(parser%current_pos(), len_text)
+	span = new_span(current%pos, len_text)
+
+	!print *, 'current%unit_ = ', current%unit_
+	!print *, 'current%text  = "', current%text, '"'
+
+	!print *, 'pushing diag'
+	call parser%diagnostics%push( &
+		!err_unexpected_token(parser%context(), span, current%text, &
+		!err_unexpected_token(parser%contexts%v(1), span, current%text, &
+		err_unexpected_token(context, span, current%text, &
+		kind_name(current%kind), kind_name(kind)))
+	!print *, 'done'
+
+	! An unmatched char in the middle of the input is an error and should log
+	! a diagnostic.  An unmatched char at the end means the interactive
+	! interpreter should expect more lines
+	!if (parser%pos >= size(parser%tokens)) then
+	if (token_index >= size(tokens)) then
+		parser%expecting = .true.
+	end if
+
+	token = new_token(kind, current%pos, null_char)
+	token%unit_ = current%unit_
+	!print *, 'setting token%unit_ = ', token%unit_
+
+end function match_pre
 
 !===============================================================================
 
@@ -2750,7 +3021,11 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	character(len = :), allocatable :: src_filel
 
+	integer :: unit_
+
 	logical :: allow_continuel
+
+	type(text_context_vector_t) :: contexts
 
 	type(fns_t) :: fns0
 
@@ -2775,7 +3050,13 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	allow_continuel = .false.
 	if (present(allow_continue)) allow_continuel = allow_continue
 
-	parser = new_parser(str, src_filel)
+	! TODO: unit_ is just synonymous with contexts%len_ in many places, so it
+	! can be removed (but not in all places)
+	contexts = new_context_vector()
+	unit_ = 0
+
+	parser = new_parser(str, src_filel, contexts, unit_)
+	!print *, 'units = ', parser%tokens(:)%unit_
 
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
@@ -2784,12 +3065,36 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		return
 	end if
 
+	! TODO: something funny is happening with vars backup/restore.  Run these
+	! commands in interactive interpreter:
+	!
+	!     let x = 1;
+	!     #include("src/tests/test-src/include/str.syntran");
+	!     scan("1234", "3");
+	!     // works as expected
+	!
+	! Then in a new syntran session, run these:
+	!
+	!     #include("src/tests/test-src/include/str.syntran");
+	!     scan("1234", "3");
+	!     // crashes
+
 	! Point parser member to vars dict.  This could be done in the
 	! constructor new_parser(), but it seems reasonable to do it here since it
 	! has to be moved back later.  The dict vars0 comes from the
 	! interactive interpreter's history, it has nothing to do with scoping
+
 	!print *, 'moving vars'
+
+	!print *, ''
+	!print *, 'size(vars%vals) = ', size(vars%vals)
+
+	!print *, 'allocated 1 = ', allocated(vars%dicts(1)%root)
+	!print *, 'allocated 2 = ', allocated(vars%dicts(2)%root)
+	!print *, 'allocated 3 = ', allocated(vars%dicts(3)%root)
+
 	if (allocated(vars%dicts(1)%root)) then
+	!if (any(allocated(vars%dicts(:)%root))) then
 
 		if (allow_continuel) then
 			! Backup existing vars.  Only copy for interactive interpreter.
@@ -2821,6 +3126,23 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		call move_alloc(vars%dicts(1)%root, parser%vars%dicts(1)%root)
 		call move_alloc(vars%vals         , parser%vars%vals)
 
+	!else if (parser%num_vars > 0) then
+	!else if (size(vars%vals) > 0) then
+	!else if (size(vars%vals) > 0 .and. allow_continuel) then
+	else if (allocated(vars%vals) .and. allow_continuel) then
+		if (size(vars%vals) > 0) then
+
+		! This could probably be refactored but it breaks my brain to think this
+		! through and test enough permutations in interactive interpreter
+
+		!print *, 'backing up vars%vals to vars0%vals'
+		vars0%vals = vars%vals
+		parser%num_vars = size(vars%vals)
+		!print *, '1'
+		call move_alloc(vars%vals         , parser%vars%vals)
+		!print *, '2'
+
+		end if
 	end if
 
 	!print *, 'moving fns'
@@ -2872,6 +3194,10 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 		if (allocated(vars0%dicts(1)%root)) then
 			call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
+		end if
+
+		if (allocated(vars0%vals)) then
+			!print *, 'restoring vars%vals from vars0%vals'
 			call move_alloc(vars0%vals         , vars%vals)
 		end if
 
@@ -2889,12 +3215,16 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	tree%diagnostics = parser%diagnostics
 
+	!print *, 'size(parser%vars%vals) = ', size(parser%vars%vals)
+
 	! Move back.  It's possible that vars were empty before this call but not
 	! anymore
 	if (allocated(parser%vars%dicts(1)%root)) then
+	!if (parser%num_vars > 0) then
 		call move_alloc(parser%vars%dicts(1)%root, vars%dicts(1)%root)
 	end if
 
+	! TODO: if num_fns instead?
 	if (allocated(parser%fns%dicts(1)%root)) then
 		call move_alloc(parser%fns%dicts(1)%root, fns%dicts(1)%root)
 	end if
@@ -2909,7 +3239,10 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	allocate(vars%vals( parser%num_vars ))
 
 	if (allocated(vars0%vals)) then
+		!print *, 'restoring vars%vals'
 		vars%vals( 1: size(vars0%vals) ) = vars0%vals
+		!vars%vals = vars0%vals
+		!vars = vars0
 	end if
 
 	!print *, 'parser%num_fns = ', parser%num_fns
@@ -3070,8 +3403,12 @@ function parse_fn_declaration(parser) result(decl)
 
 	!print *, 'parsing fn ', identifier%text
 
-	pos1 = parser%pos
+	! TODO: be careful with parser%pos (token index) vs parser%current_pos()
+	! (character index) when constructing a span.  I probably have similar bugs
+	! throughout to the one that I just fixed here
+	pos1 = parser%current_pos()
 
+	!print *, 'matching lparen'
 	lparen = parser%match(lparen_token)
 
 	! Parse parameter names and types.  Save in temp string vectors initially
@@ -3099,9 +3436,11 @@ function parse_fn_declaration(parser) result(decl)
 		parser%current_kind() /= rparen_token .and. &
 		parser%current_kind() /= eof_token)
 
-		pos0 = parser%pos
+		pos0 = parser%current_pos()
 
+		!print *, 'matching name'
 		name  = parser%match(identifier_token)
+		!print *, 'matching colon'
 		colon = parser%match(colon_token)
 
 		call parser%parse_type(type_text, rank)
@@ -3114,16 +3453,18 @@ function parse_fn_declaration(parser) result(decl)
 		call is_array%push( rank >= 0 )
 
 		if (parser%current_kind() /= rparen_token) then
+			!print *, 'matching comma'
 			comma = parser%match(comma_token)
 		end if
 
 		! Break infinite loop
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%current_pos() == pos0) dummy = parser%next()
 
 	end do
 
+	!print *, 'matching rparen'
 	rparen = parser%match(rparen_token)
-	pos2 = parser%pos
+	pos2 = parser%current_pos()
 
 	! Now that we have the number of params, save them
 
@@ -3143,7 +3484,8 @@ function parse_fn_declaration(parser) result(decl)
 
 			span = new_span(pos1, pos2 - pos1 + 1)
 			call parser%diagnostics%push(err_bad_type( &
-				parser%context, span, types%v(i)%s))
+				parser%context(), span, types%v(i)%s))
+				!parser%contexts%v(name%unit_), span, types%v(i)%s))
 
 		end if
 
@@ -3185,16 +3527,17 @@ function parse_fn_declaration(parser) result(decl)
 
 		colon = parser%match(colon_token)
 
-		pos1 = parser%pos
+		pos1 = parser%current_pos()
 		call parser%parse_type(type_text, rank)
-		pos2 = parser%pos
+		pos2 = parser%current_pos()
 
 		itype = lookup_type(type_text)
 
 		if (itype == unknown_type) then
 			span = new_span(pos1, pos2 - pos1 + 1)
 			call parser%diagnostics%push(err_bad_type( &
-				parser%context, span, type_text))
+				parser%context(), span, type_text))
+				!parser%contexts%v(parser%current_unit()), span, type_text))
 		end if
 
 		if (rank >= 0) then
@@ -3228,6 +3571,8 @@ function parse_fn_declaration(parser) result(decl)
 	fn%node = decl
 
 	call parser%fns%insert(identifier%text, fn, decl%id_index)
+	! TODO: error if fn already declared. be careful in future if fn prototypes
+	! are added
 
 	!print *, 'size(decl%params) = ', size(decl%params)
 	!print *, 'decl%params = ', decl%params
@@ -3397,7 +3742,7 @@ function parse_while_statement(parser) result(statement)
 	if (condition%val%type /= bool_type) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
-			parser%context, span, parser%context%text(cond_beg: cond_end), &
+			parser%context(), span, parser%text(cond_beg, cond_end), &
 			"while-loop"))
 	end if
 
@@ -3444,7 +3789,7 @@ function parse_if_statement(parser) result(statement)
 	if (condition%val%type /= bool_type) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
-			parser%context, span, parser%context%text(cond_beg: cond_end), &
+			parser%context(), span, parser%text(cond_beg, cond_end), &
 			"if-statement"))
 	end if
 
@@ -3622,7 +3967,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		if (io /= exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_redeclare_var(parser%context, &
+				err_redeclare_var(parser%context(), &
 				span, identifier%text))
 		end if
 
@@ -3686,7 +4031,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		if (io /= exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context, &
+				err_undeclare_var(parser%context(), &
 				span, identifier%text))
 		end if
 
@@ -3702,7 +4047,7 @@ recursive function parse_expr_statement(parser) result(expr)
 			else if (expr%val%type /= array_type) then
 				span = new_span(span0, span1 - span0 + 1)
 				call parser%diagnostics%push( &
-					err_scalar_subscript(parser%context, &
+					err_scalar_subscript(parser%context(), &
 					span, identifier%text))
 				return
 			end if
@@ -3718,7 +4063,7 @@ recursive function parse_expr_statement(parser) result(expr)
 				if (expr%val%array%rank /= size(expr%subscripts)) then
 					span = new_span(span0, span1 - span0 + 1)
 					call parser%diagnostics%push( &
-						err_bad_sub_count(parser%context, span, identifier%text, &
+						err_bad_sub_count(parser%context(), span, identifier%text, &
 						expr%val%array%rank, size(expr%subscripts)))
 				end if
 			end if
@@ -3739,7 +4084,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_binary_types(parser%context, &
+				err_binary_types(parser%context(), &
 				span, op%text, &
 				kind_name(ltype), &
 				kind_name(rtype)))
@@ -3818,13 +4163,13 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 		subscript = parser%parse_expr()
 
 		!print *, 'subscript = ', subscript%str()
-		!print *, 'subscript = ', parser%context%text(span0: parser%current_pos()-1)
+		!print *, 'subscript = ', parser%text(span0, parser%current_pos()-1)
 
 		if (.not. any(subscript%val%type == [i32_type, i64_type])) then
 			span = new_span(span0, parser%current_pos() - span0)
 			call parser%diagnostics%push( &
-				err_non_int_subscript(parser%context, span, &
-				parser%context%text(span0: parser%current_pos()-1)))
+				err_non_int_subscript(parser%context(), span, &
+				parser%text(span0, parser%current_pos()-1)))
 		end if
 
 		! TODO: set step_sub case for non-unit range step
@@ -3860,7 +4205,7 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 	rbracket  = parser%match(rbracket_token)
 	!print *, 'done'
 
-	! TODO: check that # of subscripts matches array rank, both LHS and
+	! TODO: check that num of subscripts matches array rank, both LHS and
 	! RHS parsing.  May need to pass identifier to this function.  LHS and RHS
 	! cases are different in tricky ways.  RHS has already lookup up identifier
 	! in vars dictionary when it calls parse_subscripts(), but LHS has not.
@@ -3924,7 +4269,7 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_unary_types(parser%context, span, op%text, &
+				err_unary_types(parser%context(), span, op%text, &
 				kind_name(expr%right%val%type)))
 
 		end if
@@ -3953,7 +4298,7 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
-				err_binary_types(parser%context, &
+				err_binary_types(parser%context(), &
 				span, op%text, &
 				kind_name(ltype), &
 				kind_name(rtype)))
@@ -4088,6 +4433,46 @@ end function peek_kind
 
 !********
 
+integer function current_unit(parser)
+	class(parser_t) :: parser
+	current_unit = parser%peek_unit(0)
+end function current_unit
+
+integer function peek_unit(parser, offset)
+	class(parser_t) :: parser
+	type(syntax_token_t) :: peek
+	integer, intent(in) :: offset
+	peek = parser%peek(offset)
+	peek_unit = peek%unit_
+end function peek_unit
+
+!********
+
+function parser_current_context(parser) result(context)
+	class(parser_t) :: parser
+	type(text_context_t) :: context
+
+	!parser%contexts%v(parser%current_unit()), span, type_text))
+	context = parser%contexts%v( parser%current_unit() )
+
+end function parser_current_context
+
+!********
+
+function parser_text(parser, beg_, end_) result(text)
+	class(parser_t) :: parser
+	integer, intent(in) :: beg_, end_
+	type(text_context_t) :: context
+	character(len = :), allocatable :: text
+
+	!parser%context(), span, parser%context%text(cond_beg: cond_end), &
+	context = parser%context()
+	text = context%text(beg_: end_)
+
+end function parser_text
+
+!********
+
 integer function current_pos(parser)
 
 	! Get the current character index.  If you want the token index, use
@@ -4202,14 +4587,14 @@ function parse_size(parser) result(size)
 		len      = parser%parse_expr()
 		span_end = parser%peek_pos(0) - 1
 
-		!print *, 'len = ', parser%context%text(span_beg: span_end)
+		!print *, 'len = ', parser%text(span_beg, span_end)
 
 		if (.not. any(len%val%type == [i32_type, i64_type])) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			! TODO: different diag for each (or at least some) case
 			call parser%diagnostics%push(err_non_int_range( &
-				parser%context, span, &
-				parser%context%text(span_beg: span_end)))
+				parser%context(), span, &
+				parser%text(span_beg, span_end)))
 		end if
 
 		call size%push(len)
@@ -4280,7 +4665,7 @@ function parse_array_expr(parser) result(expr)
 	lbound   = parser%parse_expr()
 	span_end = parser%peek_pos(0) - 1
 
-	!print *, 'lbound = ', parser%context%text(span_beg: span_end)
+	!print *, 'lbound = ', parser%text(span_beg, span_end)
 
 	! TODO: should type checking be done by caller, or should we pass an
 	! expected type arg for the RHS of this check?
@@ -4297,7 +4682,7 @@ function parse_array_expr(parser) result(expr)
 	!if (lbound%val%type /= i32_type) then
 	!	span = new_span(span_beg, span_end - span_beg + 1)
 	!	call parser%diagnostics%push(err_non_int_range( &
-	!		parser%context, span, parser%context%text(span_beg: span_end)))
+	!		parser%context, span, parser%text(span_beg, span_end)))
 	!end if
 
 	if (parser%current_kind() == semicolon_token) then
@@ -4364,7 +4749,7 @@ function parse_array_expr(parser) result(expr)
 			!print *, 'HERE'
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_non_int_range( &
-				parser%context, span, parser%context%text(span_beg: span_end)))
+				parser%context(), span, parser%text(span_beg, span_end)))
 
 		end if
 
@@ -4385,8 +4770,8 @@ function parse_array_expr(parser) result(expr)
 			if (.not. is_num_type(ubound%val%type)) then
 				span = new_span(span_beg, span_end - span_beg + 1)
 				call parser%diagnostics%push(err_non_int_range( &
-					parser%context, span, &
-					parser%context%text(span_beg: span_end)))
+					parser%context(), span, &
+					parser%text(span_beg, span_end)))
 			end if
 
 			! If [lbound: step: ubound] are all specified, then specifying the
@@ -4421,8 +4806,8 @@ function parse_array_expr(parser) result(expr)
 				! TODO: different message
 				span = new_span(span_beg, span_end - span_beg + 1)
 				call parser%diagnostics%push(err_non_int_range( &
-					parser%context, span, &
-					parser%context%text(span_beg: span_end)))
+					parser%context(), span, &
+					parser%text(span_beg, span_end)))
 			end if
 
 			expr%val%array%kind = impl_array
@@ -4446,15 +4831,15 @@ function parse_array_expr(parser) result(expr)
 			len      = parser%parse_expr()
 			span_end = parser%peek_pos(0) - 1
 
-			!print *, 'len = ', parser%context%text(span_beg: span_end)
+			!print *, 'len = ', parser%text(span_beg, span_end)
 
 			if (.not. any(len%val%type == [i32_type, i64_type])) then
 				! Length is not an integer type
 				span = new_span(span_beg, span_end - span_beg + 1)
 				! TODO: different diag for each (or at least some) case
 				call parser%diagnostics%push(err_non_int_range( &
-					parser%context, span, &
-					parser%context%text(span_beg: span_end)))
+					parser%context(), span, &
+					parser%text(span_beg, span_end)))
 			end if
 
 			! This used to be checked further up before i64 arrays
@@ -4466,8 +4851,8 @@ function parse_array_expr(parser) result(expr)
 				! can't know if the lbound type needs to match the ubound type
 				! until after we check for the semicolon_token in this block
 				call parser%diagnostics%push(err_non_int_range( &
-					parser%context, span, &
-					parser%context%text(span_beg: span_end)))
+					parser%context(), span, &
+					parser%text(span_beg, span_end)))
 			end if
 
 			rbracket = parser%match(rbracket_token)
@@ -4534,8 +4919,8 @@ function parse_array_expr(parser) result(expr)
 			! TODO: different message
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_non_int_range( &
-				parser%context, span, &
-				parser%context%text(span_beg: span_end)))
+				parser%context(), span, &
+				parser%text(span_beg, span_end)))
 		end if
 
 		return
@@ -4566,7 +4951,7 @@ function parse_array_expr(parser) result(expr)
 		if (elem%val%type /= lbound%val%type) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
-				parser%context, span, parser%context%text(span_beg: span_end)))
+				parser%context(), span, parser%text(span_beg, span_end)))
 		end if
 
 		call elems%push(elem)
@@ -4706,7 +5091,7 @@ function parse_primary_expr(parser) result(expr)
 				if (io /= exit_success) then
 					span = new_span(identifier%pos, len(identifier%text))
 					call parser%diagnostics%push( &
-						err_undeclare_var(parser%context, &
+						err_undeclare_var(parser%context(), &
 						span, identifier%text))
 				end if
 
@@ -4730,7 +5115,7 @@ function parse_primary_expr(parser) result(expr)
 					if (expr%val%array%rank /= size(expr%subscripts)) then
 						span = new_span(span0, span1 - span0 + 1)
 						call parser%diagnostics%push( &
-							err_bad_sub_count(parser%context, span, &
+							err_bad_sub_count(parser%context(), span, &
 							identifier%text, &
 							expr%val%array%rank, size(expr%subscripts)))
 					end if
@@ -4742,14 +5127,14 @@ function parse_primary_expr(parser) result(expr)
 					if (size(expr%subscripts) /= exp_rank) then
 						span = new_span(span0, span1 - span0 + 1)
 						call parser%diagnostics%push( &
-							err_bad_sub_count(parser%context, span, &
+							err_bad_sub_count(parser%context(), span, &
 							identifier%text, &
 							exp_rank, size(expr%subscripts)))
 					end if
 				else
 					span = new_span(span0, span1 - span0 + 1)
 					call parser%diagnostics%push( &
-						err_scalar_subscript(parser%context, &
+						err_scalar_subscript(parser%context(), &
 						span, identifier%text))
 				end if
 
@@ -4802,7 +5187,7 @@ function parse_primary_expr(parser) result(expr)
 
 					span = new_span(identifier%pos, len(identifier%text))
 					call parser%diagnostics%push( &
-						err_undeclare_fn(parser%context, &
+						err_undeclare_fn(parser%context(), &
 						span, identifier%text))
 
 					! No more tokens are consumed below, so we can just return
@@ -4852,7 +5237,7 @@ function parse_primary_expr(parser) result(expr)
 
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 					call parser%diagnostics%push( &
-						err_bad_arg_count(parser%context, &
+						err_bad_arg_count(parser%context(), &
 						span, identifier%text, size(fn%params), args%len_))
 					return
 
@@ -4860,7 +5245,7 @@ function parse_primary_expr(parser) result(expr)
 
 					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 					call parser%diagnostics%push( &
-						err_too_few_args(parser%context, &
+						err_too_few_args(parser%context(), &
 						span, identifier%text, &
 						size(fn%params) + fn%variadic_min, args%len_))
 					return
@@ -4900,7 +5285,7 @@ function parse_primary_expr(parser) result(expr)
 						! TODO: get span of individual arg, not whole arg list
 						span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 						call parser%diagnostics%push( &
-							err_bad_arg_type(parser%context, &
+							err_bad_arg_type(parser%context(), &
 							span, identifier%text, i, fn%params(i)%name, &
 							kind_name(ptype), &
 							kind_name(args%v(i)%val%type)))
@@ -4925,7 +5310,7 @@ function parse_primary_expr(parser) result(expr)
 						arg_type   = kind_name(args%v(i)%val%array%type)
 
 						call parser%diagnostics%push( &
-							err_bad_array_arg_type(parser%context, &
+							err_bad_array_arg_type(parser%context(), &
 							span, identifier%text, i, fn%params(i)%name, &
 							param_type, arg_type))
 						return
@@ -4942,7 +5327,7 @@ function parse_primary_expr(parser) result(expr)
 								rparen%pos - lparen%pos + 1)
 
 							call parser%diagnostics%push( &
-								err_bad_arg_rank(parser%context, &
+								err_bad_arg_rank(parser%context(), &
 								span, identifier%text, i, fn%params(i)%name, &
 								param_rank, arg_rank))
 							return
@@ -5265,10 +5650,22 @@ function match(parser, kind) result(token)
 		parser%first_expecting = .true.
 	end if
 
+	!print *, 'pushing match diag'
 	len_text = max(len(current%text), 1)
-	span = new_span(current%pos, len_text)
+
+	span = new_span(parser%current_pos(), len_text)
+	!span = new_span(current%pos, len_text)
+
+	!call parser%diagnostics%push( &
+	!	err_unexpected_token(parser%context(), span, current%text, &
+	!	kind_name(parser%current_kind()), kind_name(kind)))
+
+	!print *, 'current%unit_ = ', current%unit_
+	!print *, 'current%text  = "', current%text, '"'
+
 	call parser%diagnostics%push( &
-		err_unexpected_token(parser%context, span, current%text, &
+		err_unexpected_token(parser%context(), span, current%text, &
+		!err_unexpected_token(parser%contexts%v(current%unit_), span, current%text, &
 		kind_name(parser%current_kind()), kind_name(kind)))
 
 	! An unmatched char in the middle of the input is an error and should log
@@ -5279,6 +5676,8 @@ function match(parser, kind) result(token)
 	end if
 
 	token = new_token(kind, current%pos, null_char)
+	token%unit_ = current%unit_
+	!print *, 'setting token%unit_ = ', token%unit_
 
 end function match
 
@@ -6044,7 +6443,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!!print *, 'ident = ', node%args(1)%identifier%text
 			!!vars%vals(node%id_index) = res
 
-			! TODO:  set eof flag or crash for other non-zero io 
+			! TODO:  set eof flag or crash for other non-zero io
 			if (io == iostat_end) then
 			!if (io /= 0) then
 				!arg1%file_%eof = .true.

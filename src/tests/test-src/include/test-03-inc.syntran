@@ -1,0 +1,8 @@
+
+#include("test-03-nest.syntran");
+
+fn fn_inc(): i32
+{
+	2;
+}
+

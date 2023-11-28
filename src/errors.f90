@@ -34,6 +34,17 @@ module errors_m
 
 	end type text_context_t
 
+	!********
+
+	! With include files, the context needs to be a vector with one element per
+	! file
+	type text_context_vector_t
+		type(text_context_t), allocatable :: v(:)
+		integer :: len_, cap
+		contains
+			procedure :: push => push_context
+	end type text_context_vector_t
+
 !===============================================================================
 
 contains
@@ -529,6 +540,50 @@ function new_context(text, src_file, lines) result(context)
 	context%lines = lines
 
 end function new_context
+
+!===============================================================================
+
+function new_context_vector() result(vector)
+
+	type(text_context_vector_t) :: vector
+
+	vector%len_ = 0
+	vector%cap = 2  ! I think a small default makes sense here
+
+	allocate(vector%v( vector%cap ))
+
+end function new_context_vector
+
+!===============================================================================
+
+subroutine push_context(vector, val)
+
+	class(text_context_vector_t) :: vector
+	type(text_context_t) :: val
+
+	!********
+
+	type(text_context_t), allocatable :: tmp(:)
+
+	integer :: tmp_cap
+
+	vector%len_ = vector%len_ + 1
+
+	if (vector%len_ > vector%cap) then
+		!print *, 'growing vector'
+
+		tmp_cap = 2 * vector%len_
+		allocate(tmp( tmp_cap ))
+		tmp(1: vector%cap) = vector%v
+
+		call move_alloc(tmp, vector%v)
+		vector%cap = tmp_cap
+
+	end if
+
+	vector%v( vector%len_ ) = val
+
+end subroutine push_context
 
 !===============================================================================
 

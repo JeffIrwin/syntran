@@ -1,0 +1,59 @@
+
+// Test a syntran function that tokenizes an i32 within a str and then converts
+// using the i32() intrinsic fn
+
+//==========================================================
+
+#include("str.syntran");
+#include("linalg.syntran");
+
+//==========================================================
+
+fn main(): i32
+{
+	let sum = 0;
+	let expect = [0; 0];
+	let actual = [0; 0];
+
+	expect =              [ 1337 ];
+	actual = read_i32s("hay1337haystack");
+	sum += norm_diff(expect, actual);
+
+	expect =           [ 1337 ];
+	actual = read_i32s("1337haystack");
+	sum += norm_diff(expect, actual);
+
+	expect =              [ 1337 ];
+	actual = read_i32s("hay1337");
+	sum += norm_diff(expect, actual);
+
+	expect =              [ 1337,   42];
+	actual = read_i32s("hay1337hays42haystack");
+	sum += norm_diff(expect, actual);
+
+	expect =           [ 1337,   42];
+	actual = read_i32s("1337hays42");
+	sum += norm_diff(expect, actual);
+
+	expect =           [ 1337,   42,    16384];
+	actual = read_i32s("1337hays42hayst16384");
+	sum += norm_diff(expect, actual);
+
+	expect =              [ 1337,   42,    16384];
+	actual = read_i32s("hay1337hays42hayst16384ack");
+	sum += norm_diff(expect, actual);
+
+	expect =              [ 1373,   43816,    24];
+	actual = read_i32s("hay1373hays43816hayst24ack");
+	sum += norm_diff(expect, actual);
+
+	//println("sum = ", sum);
+	sum;
+}
+
+//==========================================================
+
+main();
+
+//==========================================================
+
