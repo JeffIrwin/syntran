@@ -662,10 +662,13 @@ This can be included in a main program, assuming `main.syntran` and `header.synt
 
 fn main()
 {
-	scan("012345", "2");
+	my_global;
+	// 42
+
+	my_scan("012345", "2");
 	// 2
 
-	scan("012345", "3");
+	my_scan("012345", "3");
 	// 3
 }
 
@@ -673,4 +676,15 @@ main();
 ```
 
 If included files are in a separate folder, the included filename is a path relative to the parent *including* file.
+
+Note that the syntax of the `#include` directive looks like a function call, i.e. it has parentheses around the filename argument and a semicolon at the end.  This gives syntran a consistent feel throughout its features, unlike C.  However, be careful noting that `#include` is *not* a real function!  It is a preprocessing directive, indicated by the hash `#`, so the full evaluation facilities of syntran are not available at the time that the directive is processed.
+
+For example, it is *not* possible to concatenate strings together into the include filename:
+
+```rust
+#include("header" + ".syntran");
+//
+```
+
+The argument must be a single static lex-time constant string.
 
