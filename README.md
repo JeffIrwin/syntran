@@ -675,7 +675,9 @@ fn main()
 main();
 ```
 
-If included files are in a separate folder, the included filename is a path relative to the parent *including* file.
+As in C, the effect of `#include` is as if the contents of the header are pasted into the *including* file.  The difference is that any error messages will still reference the correct line number and filename where they occur.
+
+If included files are in a separate folder, the included filename is a path relative to the parent including file.
 
 Note that the syntax of the `#include` directive looks like a function call, i.e. it has parentheses around the filename argument and a semicolon at the end.  This gives syntran a consistent feel throughout its features, unlike C.  However, be careful noting that `#include` is *not* a real function!  It is a preprocessing directive, indicated by the hash `#`, so the full evaluation facilities of syntran are not available at the time that the directive is processed.
 
