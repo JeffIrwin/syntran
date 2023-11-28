@@ -3135,7 +3135,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		! This could probably be refactored but it breaks my brain to think this
 		! through and test enough permutations in interactive interpreter
 
-		!print *, 'backing up vars%vals'
+		!print *, 'backing up vars%vals to vars0%vals'
 		vars0%vals = vars%vals
 		parser%num_vars = size(vars%vals)
 		!print *, '1'
@@ -3194,6 +3194,10 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 		if (allocated(vars0%dicts(1)%root)) then
 			call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
+		end if
+
+		if (allocated(vars0%vals)) then
+			!print *, 'restoring vars%vals from vars0%vals'
 			call move_alloc(vars0%vals         , vars%vals)
 		end if
 
