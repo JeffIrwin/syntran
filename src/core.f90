@@ -2842,7 +2842,11 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 				! TODO: new fn? this is user error, not internal.  Also, error
 				! message should state filename without extra path (or both)
 				write(*,*) err_404(filename)
+
+				! TODO: don't abort, just push an err.  This is inconveniont for
+				! interactive interpretation.
 				call internal_error()
+
 			end if
 
 			!print *, 'len(inc_text) = ', len(inc_text)

@@ -683,7 +683,7 @@ For example, it is *not* possible to concatenate strings together into the inclu
 
 ```rust
 #include("header" + ".syntran");
-//
+//  Error: file `header` not found
 ```
 
 The argument must be a single static lex-time constant string.
