@@ -114,6 +114,10 @@ function parse_args() result(args)
 				lerror = .true.
 			end if
 
+		! TODO: add "-i" arg to start interactive interpretter with a given
+		! #include file.  The difference compared to args%syntran_file is that
+		! it should not exit, but instead start taking live stdin
+
 		!case ("-l", "--language")
 		!	args%any_arg = .true.
 		!	call get_next_arg(i, args%language)

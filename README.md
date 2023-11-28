@@ -440,7 +440,7 @@ a[1,2];
 
 ## Functions
 
-[See this page](doc/) for a list of intrinsic syntran functions.
+This section is about user-defined functions.  [See this page](doc/) for a list of intrinsic syntran functions.
 
 Use the `fn` keyword to declare a function, as in Rust.  Unlike Rust, use a colon `:` before the return type instead of `->`:
 
@@ -529,6 +529,8 @@ As expected, this is the same as a 180 degree _z_ rotation, i.e. the _x_ and _y_
 
 ## Strings, printing, and file output
 
+<!-- TODO: file input -->
+
 The ASCII string type `str` uses `"`quotes`"` to assign literals:
 
 ```rust
@@ -611,4 +613,64 @@ string5[1];
 string5[2];
 // mojibake
 ```
+
+## Include files
+
+Like the C language, the contents of one source file can be included in a higher-level source using the `#include` preprocessing directive.
+
+Let's say you have a file named `header.syntran` which defines a global variable and a string helper function:
+
+```rust
+// header.syntran
+
+let my_global = 42;
+
+fn my_scan(str_: str, set: str): i32
+{
+	// Return the first substring index i of `str_` which matches any character
+	// from the string `set`.
+	//
+	// c.f. Fortran intrinsic scan()
+
+	let found = false;
+	let i = 0;
+	while not found and i < len(str_)
+	{
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	if (found)
+		i -= 1;
+	else
+		i = -1;
+}
+```
+
+This can be included in a main program, assuming `main.syntran` and `header.syntran` are in the same folder:
+
+```rust
+// main.syntran
+
+#include("header.syntran");
+
+fn main()
+{
+	scan("012345", "2");
+	// 2
+
+	scan("012345", "3");
+	// 3
+}
+
+main();
+```
+
+If included files are in a separate folder, the included filename is a path relative to the parent *including* file.
 
