@@ -52,7 +52,7 @@ Use two asterisks for exponent powers, like Fortran and Scilab:
 
 There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/math/pow) and call the `pow()` function!
 
-### Variables, Booleans, and type checking
+## Variables, Booleans, and type checking
 
 Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.  Variables are mutable.
 
@@ -87,11 +87,11 @@ foo and p;
 
 Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g. `.true.`) but without the dots.  Note that they are lower case-sensitive, unlike Python (e.g. `True`).
 
-### Comments
+## Comments
 
 Only single-line `// comments` are supported.  There are _no_ multi-line `/*comments*/`.
 
-### Arrow keys and command history
+## Arrow keys and command history
 
 In many shells such as `bash`, the up and down arrow keys can be used to scroll through the command history.  For example, hit the up arrow key and then ENTER to repeat the previous command, or hit the up arrow key twice to go two commands back.
 
@@ -126,7 +126,7 @@ alias syntran="rlwrap /path/to/bin/syntran"
 
 The basic arrow key history should work in Windows terminal and Windows cmd out of the box, but running `rlwrap` in a Linux environment within Windows can still be advantageous.
 
-#### rlwrap workaround
+### rlwrap workaround
 
 As of rlwrap 0.43, there is a bug where it hides the `syntran$ ` prompt.  To workaround it, add this to your `~/.inputrc`:
 
@@ -134,7 +134,7 @@ As of rlwrap 0.43, there is a bug where it hides the `syntran$ ` prompt.  To wor
 set enable-bracketed-paste off
 ```
 
-### Saving scripts in a file
+## Saving scripts in a file
 
 As programs get longer and more complicated, it becomes difficult to enter them into the interactive interpreter.  To interpret a whole file, provide it as a command line argument:
 
@@ -148,7 +148,7 @@ Note: global block statement is not required as of 0.0.13.  Multiple statements 
 Make sure to wrap the entire script in a main block with braces `{}`.  The global block `{}` is not required when interactively using the interpreter because it parses and evaluates one statement at a time.  However, if you forget the global block `{}` in a script file, only the first statement will be parsed and any trailing junk statements will be unexpected.
 -->
 
-### If statements and for loops
+## If statements and for loops
 
 If, else if, and else statements work like you might expect for languages similar to C.  Like Rust, parentheses around the condition are optional:
 
