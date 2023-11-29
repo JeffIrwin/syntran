@@ -17,7 +17,9 @@ This is a sandbox for me to play in as I follow along with [Immo Landwerth's _bu
 
 ## Build the interpreter
 
-    ./build.sh
+```
+./build.sh
+```
 
 A [Fortran compiler](https://fortran-lang.org/en/compilers/) and [CMake](https://cmake.org/download/) are required
 
@@ -25,7 +27,9 @@ A [Fortran compiler](https://fortran-lang.org/en/compilers/) and [CMake](https:/
 
 Start the interpreter:
 
-    ./build/syntran
+```
+./build/syntran
+```
 
 Then enter arithmetic expressions like `1 + 2 * 3;` in the interpreter.  Semicolons are required at the end of statements!
 
@@ -52,7 +56,7 @@ There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/mat
 
 Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.  Variables are mutable.
 
-Integer, float, string, and Boolean types are supported.  Attempting operations on the wrong types yields an error, e.g. trying to add a bool or use logical `and` on an int or float.
+Integer `i32` and `i64`, float `f32`, string `str`, and Boolean `bool` types are supported.  Attempting operations on the wrong types yields an error, e.g. trying to add a bool or use logical `and` on an int or float.
 
 ```cpp
 let foo = 1;
@@ -93,32 +97,50 @@ In many shells such as `bash`, the up and down arrow keys can be used to scroll 
 
 Arrow keys do _not_ work by default in syntran running within bash, but there is a simple and powerful workaround with `rlwrap`.  If you run `syntran` by itself, it processes text in cooked mode:
 
-    ./build/syntran
+```
+./build/syntran
+```
 
 Cooked mode means that `syntran` does not read or process any text until after you press the ENTER key.  Further, when you use an arrow key, you will see escape sequences like this:
 
-    ^[[A
+```
+^[[A
+```
 
 These keypresses may appear like the ANSI escape sequence above or other garbled text.
 
 To overcome this, install and run `rlwrap` with `syntran`:
 
-    sudo apt install rlwrap
-    rlwrap ./build/syntran
+```
+sudo apt install rlwrap
+rlwrap ./build/syntran
+```
 
 With `rlwrap`, the arrow keys work as expected within the `syntran` interpretter.  Plus, you get `rlwrap`'s other powerful features, like Ctrl+R for history search and saved history across separate invocations of `syntran`.
 
 Also see [`run.sh`](run.sh), which checks if you have `rlwrap` installed and then starts `syntran` appropriately.  You can make a bash function or alias in your `~/.bashrc` file to help with this:
 
-    alias syntran="rlwrap /path/to/bin/syntran"
+```
+alias syntran="rlwrap /path/to/bin/syntran"
+```
 
 The basic arrow key history should work in Windows terminal and Windows cmd out of the box, but running `rlwrap` in a Linux environment within Windows can still be advantageous.
+
+#### rlwrap workaround
+
+As of rlwrap 0.43, there is a bug where it hides the `syntran$ ` prompt.  To workaround it, add this to your `~/.inputrc`:
+
+```
+set enable-bracketed-paste off
+```
 
 ### Saving scripts in a file
 
 As programs get longer and more complicated, it becomes difficult to enter them into the interactive interpreter.  To interpret a whole file, provide it as a command line argument:
 
-    ./build/syntran samples/primes-1.syntran
+```
+./build/syntran samples/primes-1.syntran
+```
 
 <!--
 Note: global block statement is not required as of 0.0.13.  Multiple statements (and functions) are parsed at the global scope.
@@ -137,14 +159,14 @@ let other_condition = true;
 let foo = 0;
 let bar = 0;
 if condition {
-    foo = 1;
-    bar = 2;
+	foo = 1;
+	bar = 2;
 } else if other_condition {
-    foo = 3;
-    bar = 4;
+	foo = 3;
+	bar = 4;
 } else {
-    foo = 5;
-    bar = 6;
+	foo = 5;
+	bar = 6;
 }
 
 foo + bar;
@@ -157,7 +179,7 @@ The bounds of for loops, like ranges in Rust and Python, are inclusive of the lo
 
 ```cpp
 for i in [0: 5]
-    i;
+	i;
 // 0, 1, 2, 3, 4
 ```
 
@@ -337,7 +359,7 @@ Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/153
 Recall the syntax for a for-loop:
 ```rust
 for i in [0: 5]
-    i;
+	i;
 // 0, 1, 2, 3, 4
 ```
 
@@ -469,12 +491,12 @@ Here's a function that performs matrix-vector multiplication:
 ```rust
 fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 {
-    // Matrix-vector multiplication.  Return mat * vec
-    let ans =  [0.0; size(mat,0)];
-    for     j in [0: size(mat,1)]
-        for i in [0: size(mat,0)]
-            ans[i] = ans[i] + mat[i,j] * vec[j];
-    ans;
+	// Matrix-vector multiplication.  Return mat * vec
+	let ans =  [0.0; size(mat,0)];
+	for     j in [0: size(mat,1)]
+		for i in [0: size(mat,0)]
+			ans[i] = ans[i] + mat[i,j] * vec[j];
+	ans;
 }
 ```
 
@@ -485,12 +507,12 @@ Here's a function that performs [matrix multiplication](https://en.wikipedia.org
 ```rust
 fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
 {
-    let c = [0.0; size(a,0), size(b,1)];
-    for         k in [0: size(b,1)]
-        for     j in [0: size(a,1)]
-            for i in [0: size(a,0)]
-                c[i,k] = c[i,k] + a[i,j] * b[j,k];
-    c;
+	let c = [0.0; size(a,0), size(b,1)];
+	for         k in [0: size(b,1)]
+		for     j in [0: size(a,1)]
+			for i in [0: size(a,0)]
+				c[i,k] = c[i,k] + a[i,j] * b[j,k];
+	c;
 }
 ```
 
@@ -565,11 +587,19 @@ string3[2];
 ```
 
 Slice indexing for substrings of length > 1 is TBD.
+To slice a substring, use a range:
+```rust
+let string4 = "01234567";
+string4[2:5];
+// 234
+string4[3:6];
+// 345
+```
 
 The intrinsic function [`str()`](doc/README.md#str) converts other types to `str` and concatenates them:
 
 ```rust
-let string4 = "testing " + str(1, " ", 2, " ", 1.0, " ", false);
+let string5 = "testing " + str(1, " ", 2, " ", 1.0, " ", false);
 // testing 1 2     1.000000E+00 false
 ```
 
@@ -601,16 +631,16 @@ cat test.txt
 Only ASCII strings are supported because syntran is interpretted in Fortran.  Unicode strings cannot be indexed properly:
 
 ```rust
-let string5 = "🔥🥵💀";
+let string6 = "🔥🥵💀";
 
-string5;
+string6;
 // 🔥🥵💀 // YMMV
 
-string5[0];
+string6[0];
 // mojibake
-string5[1];
+string6[1];
 // mojibake
-string5[2];
+string6[2];
 // mojibake
 ```
 

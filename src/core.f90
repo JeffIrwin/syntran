@@ -59,49 +59,47 @@ module core_m
 	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
 	!    include quick-start and links in top-level README
 	!  - file reading
-	!    * readln() to read 1 line?
-	!    * how to handle eof? 404? open with r/w modes?
-	!      > add an eof() intrinsic fn which takes a file type.  eof state needs
-	!        to be stored inside file type.  initialize to eof false when
-	!        opening, update after every readln
-	!      > also add a file_stat() fn which checks IO of previous file
-	!        operation. this way I don't need to add structs, multiple return
-	!        vals, or out args yet
+	!    * readln(), eof() done
+	!    * also add a file_stat() fn which checks IO of previous file operation.
+	!      this way I don't need to add structs, multiple return vals, or out
+	!      args yet
 	!  - arrays
 	!    * add slice subscripts:
 	!      > a[:]     -> a[0], a[1], a[2], ...
-	!      > a[1:4]   -> a[1], a[2], a[3]
+	!      > a[1:4]   -> a[1], a[2], a[3]  // already parsed bc of str feature, just can't eval yet
 	!      > a[1:2:6] -> a[1], a[3], a[5]
 	!      > higher rank:  a[:,1], a[2,:], a[2:4, 1], ...
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
-	!  - compound assignment: %=, logical &=, |=, etc.
-	!    * +=, -=, *=, /= done
-	!    * Does any language have "**="? This will
+	!  - compound assignment: logical &=, |=, etc.
+	!    * +=, -=, *=, /=, %=, **= done
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * check return value is correct type
 	!    * intrinsic
-	!      > read
-	!      > len (of str)
 	!      > abs, norm, dot
-	!      > exp, log
+	!      > log
 	!      > trig: sin, cos, tan, asin, ...
 	!      > norm, sum, product
 	!      > reshape
-	!      > system
+	!      > system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
 	!    * done:
 	!      > exp  (non-variadic, non-polymorphic)
 	!      > min, max (variadic but non-polymorphic)
 	!      > size (non-variadic but polymorphic)
-	!      > writeln, println, open, close, str casting
+	!      > readln, writeln, println, open, close, str casting
+	!      > len (of str)
 	!      > non-recursive user-defined fns
 	!  - structs
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - enums
 	!  - xor, xnor
+	!    * xor (bool1, bool2) is just (bool1 != bool2)
+	!    * xnor(bool1, bool2) is just (bool1 == bool2)
+	!    * is there any value to having plain language versions of these
+	!      operators, like `and` or `not` in syntran?
 	!  - bitwise operators
 	!
 	!****************************************
