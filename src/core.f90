@@ -7544,8 +7544,9 @@ recursive function value_to_str(val) result(ans)
 			call str_vec%push('[')
 			if (val%array%rank > 1) call str_vec%push(line_feed)
 
-			call str_vec%push( kind_name(val%array%type) )
-			call str_vec%push(str(int(val%array%len_)))
+			!! Debug w/o recursive io
+			!call str_vec%push( kind_name(val%array%type) )
+			!call str_vec%push(str(int(val%array%len_)))
 
 			if (val%array%type == i32_type) then
 
