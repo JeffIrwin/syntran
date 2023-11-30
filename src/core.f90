@@ -2834,7 +2834,9 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 
 			inc_text = read_file(filename, iostat)
 			if (iostat /= exit_success) then
-				! For example, `#include(".");` exists but cannot be read
+				! For example, `#include(".");` exists but cannot be read.
+				! AFAIK there is no portable way to differentiate files from
+				! dirs in fortran
 				span = new_span(tokens_in(i)%pos, len(tokens_in(i)%text))
 				call parser%diagnostics%push( &
 					err_inc_read(contexts%v(unit_0), span, tokens_in(i)%text))
@@ -3991,7 +3993,8 @@ recursive function parse_expr_statement(parser) result(expr)
 		! Subscript can appear in assignment expr but not let expr, because let
 		! must initialize the whole array
 		span0 = parser%current_pos()
-		call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
+		!call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
+		call parser%parse_subscripts(expr)
 
 		if (size(expr%subscripts) <= 0) deallocate(expr%subscripts)
 		span1 = parser%current_pos() - 1
@@ -4115,14 +4118,16 @@ end function is_assignment_op
 
 !===============================================================================
 
-subroutine parse_subscripts(parser, subscripts, usubscripts)
-	! TODO: just take whole expr as arg, instead of subscripts AND usubscripts
+!subroutine parse_subscripts(parser, subscripts, usubscripts)
+subroutine parse_subscripts(parser, expr)
 
 	! Parse array subscript if present
 
 	class(parser_t) :: parser
-	type(syntax_node_t), intent(out), allocatable :: subscripts(:), &
-		usubscripts(:)
+	type(syntax_node_t), intent(inout) :: expr
+
+	!type(syntax_node_t), intent(out), allocatable :: subscripts(:), &
+	!	usubscripts(:)
 
 	!********
 
@@ -4139,7 +4144,7 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 
 		!! The function has to return something.  Caller deallocates
 		!subscripts = []
-		allocate( subscripts(0))
+		allocate( expr%subscripts(0))
 		!allocate(usubscripts(0))
 		return
 
@@ -4184,6 +4189,7 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 			! TODO: initialize empty usubscript struct
 
 		end if
+		!print *, kind_name(subscript%sub_kind)
 
 		! Parallel arrays subscripts and usubscripts should be same size? Not
 		! sure how much will need to change for multi-rank ranges
@@ -4215,10 +4221,10 @@ subroutine parse_subscripts(parser, subscripts, usubscripts)
 	!
 	! So, only check rank match here if subscripts%len_ > 0
 
-	call syntax_nodes_copy(subscripts, &
+	call syntax_nodes_copy(expr%subscripts, &
 		subscripts_vec%v( 1: subscripts_vec%len_ ))
 
-	call syntax_nodes_copy(usubscripts, &
+	call syntax_nodes_copy(expr%usubscripts, &
 		usubscripts_vec%v( 1: usubscripts_vec%len_ ))
 
 end subroutine parse_subscripts
@@ -5099,7 +5105,8 @@ function parse_primary_expr(parser) result(expr)
 
 				!print *, '%current_kind() = ', kind_name(parser%current_kind())
 				span0 = parser%current_pos()
-				call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
+				!call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
+				call parser%parse_subscripts(expr)
 
 				span1 = parser%current_pos() - 1
 				if (size(expr%subscripts) <= 0) then
@@ -6564,7 +6571,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call internal_error()
 			end if
 
+			!select case (node%subscripts(1)%sub_kind)
+			!print *, 'sub kind = ', kind_name(node%subscripts(1)%sub_kind)
+
 			i8 = subscript_eval(node, vars, fns, quietl)
+			!print *, 'i8 = ', i8
 			res = get_array_value_t(vars%vals(node%id_index)%array, i8)
 
 		else

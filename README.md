@@ -726,6 +726,7 @@ For example, it is *not* possible to concatenate strings together into the inclu
 //    | 
 //  3 | #include("header." + "syntran");
 //    |                    ^ unexpected token
+// ...
 ```
 
 The argument must be a single static lex-time constant string.
