@@ -4051,6 +4051,11 @@ recursive function parse_expr_statement(parser) result(expr)
 					err_scalar_subscript(parser%context(), &
 					span, identifier%text))
 				return
+			else if (any(expr%subscripts%sub_kind == range_sub)) then
+				span = new_span(span0, span1 - span0 + 1)
+				call parser%diagnostics%push( &
+					err_bad_sub_rank(parser%context(), span, &
+					identifier%text, expr%val%array%rank))
 			end if
 
 			!print *, 'type = ', expr%val%type
@@ -5112,6 +5117,15 @@ function parse_primary_expr(parser) result(expr)
 				if (size(expr%subscripts) <= 0) then
 					deallocate(expr%subscripts)
 				else if (expr%val%type == array_type) then
+
+					!print *, 'sub kind = ', kind_name(expr%subscripts(1)%sub_kind)
+
+					if (any(expr%subscripts%sub_kind == range_sub)) then
+						span = new_span(span0, span1 - span0 + 1)
+						call parser%diagnostics%push( &
+							err_bad_sub_rank(parser%context(), span, &
+							identifier%text, expr%val%array%rank))
+					end if
 
 					! this is not necessarily true for strings
 					expr%val%type = expr%val%array%type
@@ -6571,11 +6585,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call internal_error()
 			end if
 
-			!select case (node%subscripts(1)%sub_kind)
 			!print *, 'sub kind = ', kind_name(node%subscripts(1)%sub_kind)
 
 			i8 = subscript_eval(node, vars, fns, quietl)
-			!print *, 'i8 = ', i8
 			res = get_array_value_t(vars%vals(node%id_index)%array, i8)
 
 		else
