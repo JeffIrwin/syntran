@@ -57,7 +57,9 @@ module core_m
 	!      > etc.
 	!  - fix memory leaks.  noticeable in paraview wave
 	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
-	!    include quick-start and links in top-level README
+	!    include quick-start and links in top-level README?
+	!    * github automatically includes a Table of Contents in a menu, so maybe
+	!      it's better as-is
 	!  - file reading
 	!    * readln(), eof() done
 	!    * also add a file_stat() fn which checks IO of previous file operation.
@@ -2727,14 +2729,13 @@ recursive function new_parser(str, src_file, contexts, unit_) result(parser)
 	call contexts%push( lexer%context )
 
 	parser%diagnostics = new_string_vector()
+	call parser%diagnostics%push_all( lexer%diagnostics )
 
 	call parser%preprocess(tokens%v(1:tokens%len_), src_file, contexts, unit_)
 
 	! Set other parser members
 
 	parser%pos = 1
-
-	call parser%diagnostics%push_all( lexer%diagnostics )
 
 	parser%contexts = contexts  ! copy.  could convert to standard array if needed
 
@@ -2767,6 +2768,8 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 
 	type(parser_t) :: inc_parser
 
+	type(text_span_t) :: span
+
 	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon
 
 	unit_0 = unit_
@@ -2778,21 +2781,6 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 		! TODO: make a variation of parser%next() instead of manually increment i/pos?
 		i = i + 1
 		token = tokens_in(i)
-
-		! Should #include directives be processed here instead?  How can we keep
-		! line number context for error diagnostics correct and tied to a source
-		! file?
-		!
-		! Use like this:
-		!
-		! #include("path/file.syntran");
-		!
-		! It looks a bit like a fn, but it's not since it's "evaluated" during
-		! lexing/parsing, unlike actual fns, so I think the `#` is a good
-		! signifier of that.  `#tree` should be handled in a similar way for
-		! file interpretation and not just stdin, maybe it should be `#tree();`
-		! for consistency.  It's also not really a directive either since it
-		! happens during  lexing/parsing instead of a pre-processing step.
 
 		! Whitespace has already been skipped in previous loop
 		if (token%kind /= hash_token) then
@@ -2810,8 +2798,6 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 			! "parse_directive_fn_call" for re-use as we add more directives,
 			! but it may be difficult since parser is not fully constructed yet.
 			! See comments on match_pre() vs match().
-
-			! TODO: document once it's stable
 
 			! Parens are kind of a pain to match() since the parser isn't
 			! constructed yet.  I can see why C works the way it does
@@ -2835,16 +2821,26 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 
 			!print *, 'include filename = "', filename, '"'
 
+			if (.not. exists(filename)) then
+				span = new_span(tokens_in(i)%pos, len(tokens_in(i)%text))
+				call parser%diagnostics%push( &
+					err_inc_404(contexts%v(unit_0), span, tokens_in(i)%text))
+
+				! Could probably be refactored
+				rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
+				semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
+				cycle
+			end if
+
 			inc_text = read_file(filename, iostat)
 			if (iostat /= exit_success) then
-				! TODO: new fn? this is user error, not internal.  Also, error
-				! message should state filename without extra path (or both)
-				write(*,*) err_404(filename)
-
-				! TODO: don't abort, just push an err.  This is inconveniont for
-				! interactive interpretation.
-				call internal_error()
-
+				! For example, `#include(".");` exists but cannot be read
+				span = new_span(tokens_in(i)%pos, len(tokens_in(i)%text))
+				call parser%diagnostics%push( &
+					err_inc_read(contexts%v(unit_0), span, tokens_in(i)%text))
+				rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
+				semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
+				cycle
 			end if
 
 			!print *, 'len(inc_text) = ', len(inc_text)

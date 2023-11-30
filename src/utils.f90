@@ -450,6 +450,13 @@ end function read_line
 
 !===============================================================================
 
+logical function exists(filename)
+	character(len = *), intent(in) :: filename
+	inquire(file = filename, exist = exists)
+end function exists
+
+!===============================================================================
+
 function read_file(file, iostat) result(str)
 
 	! Read all lines of a file into str

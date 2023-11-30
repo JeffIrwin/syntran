@@ -436,10 +436,40 @@ end function err_het_array
 
 !===============================================================================
 
-function err_404(file) result(err)
-	character(len = *), intent(in) :: file
+function err_inc_404(context, span, filename) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
-	err = err_prefix//'file `'//file//'` not found'//color_reset
+
+	character(len = *), intent(in) :: filename
+	err = err_prefix &
+		//'#include file `'//filename//'` not found' &
+		//underline(context, span) &
+		//" file not found"//color_reset
+
+end function err_inc_404
+
+!===============================================================================
+
+function err_inc_read(context, span, filename) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: filename
+	err = err_prefix &
+		//'#include file `'//filename//'` cannot be read' &
+		//underline(context, span) &
+		//" cannot read file"//color_reset
+
+end function err_inc_read
+
+!===============================================================================
+
+function err_404(filename) result(err)
+	character(len = *), intent(in) :: filename
+	character(len = :), allocatable :: err
+	err = err_prefix//'file `'//filename//'` not found'//color_reset
 end function err_404
 
 !===============================================================================

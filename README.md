@@ -714,8 +714,18 @@ Note that the syntax of the `#include` directive looks like a function call, i.e
 For example, it is *not* possible to concatenate strings together into the include filename:
 
 ```rust
-#include("header" + ".syntran");
-//  Error: file `header` not found
+#include("header." + "syntran");
+// Error: #include file `"header."` not found
+//   --> main.syntran:3:10
+//    | 
+//  3 | #include("header." + "syntran");
+//    |          ^^^^^^^^^ file not found
+// 
+// Error: unexpected token `+` of kind `plus_token`, expected `rparen_token`
+//   --> main.syntran:3:20
+//    | 
+//  3 | #include("header." + "syntran");
+//    |                    ^ unexpected token
 ```
 
 The argument must be a single static lex-time constant string.
