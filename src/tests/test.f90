@@ -1126,6 +1126,7 @@ subroutine unit_test_array_i32_1(npass, nfail)
 
 	character(len = *), parameter :: label = 'i32 arrays'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
@@ -1161,6 +1162,10 @@ subroutine unit_test_array_i32_1(npass, nfail)
 			eval('let myArray = [2-3: 6/3 + 3];') == '[-1, 0, 1, 2, 3, 4]', &
 			eval('[42; 3];') == '[42, 42, 42]', &
 			eval('[1337; 4];') == '[1337, 1337, 1337, 1337]', &
+			eval('let v = [0: 10]; v[0: 4];', quiet) == '[0, 1, 2, 3]', &
+			eval('let v = [0: 10]; v[2: 5];', quiet) == '[2, 3, 4]', &
+			eval('let v = [0: 10]; let u = v[2: 5]; u[0];', quiet) == '2', &
+			eval('let v = [0: 10]; let u = v[2: 5]; u;', quiet) == '[2, 3, 4]', &
 			eval('[48-6, 13*100 + 37];') == '[42, 1337]'  &
 		]
 

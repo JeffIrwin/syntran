@@ -4054,7 +4054,7 @@ recursive function parse_expr_statement(parser) result(expr)
 					err_scalar_subscript(parser%context(), &
 					span, identifier%text))
 				return
-			else if (any(expr%subscripts%sub_kind == range_sub) .and. &
+			else if (any(expr%subscripts%sub_kind /= scalar_sub) .and. &
 				expr%val%array%rank > 1) then ! TODO: allow slices for any rank
 				span = new_span(span0, span1 - span0 + 1)
 				call parser%diagnostics%push( &
@@ -4065,6 +4065,9 @@ recursive function parse_expr_statement(parser) result(expr)
 			!print *, 'type = ', expr%val%type
 
 			if (expr%val%type /= str_type) then
+			!if (expr%val%type /= str_type .and. &
+			!	all(expr%subscripts%sub_kind == scalar_sub)) then
+
 				expr%val%type = expr%val%array%type
 
 				!print *, 'rank = ', expr%val%array%rank
@@ -5132,8 +5135,10 @@ function parse_primary_expr(parser) result(expr)
 							identifier%text, expr%val%array%rank))
 					end if
 
-					! this is not necessarily true for strings
-					expr%val%type = expr%val%array%type
+					if (all(expr%subscripts%sub_kind == scalar_sub)) then
+						! this is not necessarily true for strings
+						expr%val%type = expr%val%array%type
+					end if
 
 					! TODO: allow rank+1 for str arrays
 					if (expr%val%array%rank /= size(expr%subscripts)) then
@@ -6590,8 +6595,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call internal_error()
 			end if
 
-			print *, 'sub kind 1 = ', kind_name(node%subscripts(1)%sub_kind)
-			print *, 'rank = ', node%val%array%rank
+			!print *, 'sub kind 1 = ', kind_name(node%subscripts(1)%sub_kind)
+			!print *, 'rank = ', node%val%array%rank
 
 			if (node%val%array%rank == 1) then
 
@@ -6602,24 +6607,24 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					res = get_array_value_t(vars%vals(node%id_index)%array, i8)
 				case (range_sub)
 
-					il = subscript_eval(node, vars, fns, quietl)
+					il = subscript_eval(node, vars, fns, quietl) + 1
 
 					! This feels inconsistent and not easy to extend to higher ranks
 					right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
-					iu = right%i32
+					iu = right%i32 + 1
 
-					print *, 'il, iu = ', il, iu
-					print *, 'type = ', kind_name( node%val%array%type )
+					!print *, 'il, iu = ', il, iu
+					!print *, 'type = ', kind_name( node%val%array%type )
 
-					print *, 'type  = ', node%val%array%type
-					print *, 'rank  = ', node%val%array%rank
-					print *, 'size  = ', node%val%array%size
-					print *, 'len_  = ', node%val%array%len_
-					print *, 'cap   = ', node%val%array%cap
+					!print *, 'type  = ', node%val%array%type
+					!print *, 'rank  = ', node%val%array%rank
+					!print *, 'size  = ', node%val%array%size
+					!print *, 'len_  = ', node%val%array%len_
+					!print *, 'cap   = ', node%val%array%cap
 
 					allocate(res%array)
 					res%type = array_type
-					res%array%kind = expl_array
+					res%array%kind  = expl_array
 					res%array%type  = node%val%array%type
 					res%array%rank  = node%val%array%rank
 					!res%array%size  = node%val%array%size
@@ -6635,7 +6640,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					select case (node%val%array%type)
 					case (i32_type)
 						res%array%i32 = vars%vals(node%id_index)%array%i32(il: iu - 1)
-						print *, 'array i32 = ', res%array%i32
+						!print *, 'array i32 = ', res%array%i32
 					case default
 						! TODO
 					end select
