@@ -56,21 +56,16 @@ module core_m
 	!      > str_mat[0,0] == str_mat[:,0,0]
 	!      > etc.
 	!  - fix memory leaks.  noticeable in paraview wave
-	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
-	!    include quick-start and links in top-level README?
-	!    * github automatically includes a Table of Contents in a menu, so maybe
-	!      it's better as-is
-	!  - file reading
-	!    * readln(), eof() done
-	!    * also add a file_stat() fn which checks IO of previous file operation.
-	!      this way I don't need to add structs, multiple return vals, or out
-	!      args yet
 	!  - arrays
 	!    * add slice subscripts:
 	!      > a[:]     -> a[0], a[1], a[2], ...
 	!      > a[1:4]   -> a[1], a[2], a[3]  // already parsed bc of str feature, just can't eval yet
 	!      > a[1:2:6] -> a[1], a[3], a[5]
 	!      > higher rank:  a[:,1], a[2,:], a[2:4, 1], ...
+	!      > in general, count the number of scalar subscripts.  that is the
+	!        difference between the input rank and the output rank of the
+	!        subscripting operation.  e.g. if every subscript is a slice, then
+	!        the rank is unchanged, 1 scalar subscript decreases rank by 1, etc.
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
 	!  - compound assignment: logical &=, |=, etc.
@@ -97,12 +92,20 @@ module core_m
 	!  - structs
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!  - enums
+	!  - file reading
+	!    * file_stat() fn: checks IO of previous file operation. this way I
+	!      don't need to add structs, multiple return vals, or out args yet
+	!    * readln(), eof() done
 	!  - xor, xnor
 	!    * xor (bool1, bool2) is just (bool1 != bool2)
 	!    * xnor(bool1, bool2) is just (bool1 == bool2)
 	!    * is there any value to having plain language versions of these
 	!      operators, like `and` or `not` in syntran?
 	!  - bitwise operators
+	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
+	!    include quick-start and links in top-level README?
+	!    * github automatically includes a Table of Contents in a menu, so maybe
+	!      it's better as-is
 	!
 	!****************************************
 
@@ -4051,7 +4054,8 @@ recursive function parse_expr_statement(parser) result(expr)
 					err_scalar_subscript(parser%context(), &
 					span, identifier%text))
 				return
-			else if (any(expr%subscripts%sub_kind == range_sub)) then
+			else if (any(expr%subscripts%sub_kind == range_sub) .and. &
+				expr%val%array%rank > 1) then ! TODO: allow slices for any rank
 				span = new_span(span0, span1 - span0 + 1)
 				call parser%diagnostics%push( &
 					err_bad_sub_rank(parser%context(), span, &
@@ -5120,7 +5124,8 @@ function parse_primary_expr(parser) result(expr)
 
 					!print *, 'sub kind = ', kind_name(expr%subscripts(1)%sub_kind)
 
-					if (any(expr%subscripts%sub_kind == range_sub)) then
+					if (any(expr%subscripts%sub_kind == range_sub) .and. &
+						expr%val%array%rank > 1) then ! TODO: allow slices for any rank
 						span = new_span(span0, span1 - span0 + 1)
 						call parser%diagnostics%push( &
 							err_bad_sub_rank(parser%context(), span, &
@@ -6585,10 +6590,62 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call internal_error()
 			end if
 
-			!print *, 'sub kind = ', kind_name(node%subscripts(1)%sub_kind)
+			print *, 'sub kind 1 = ', kind_name(node%subscripts(1)%sub_kind)
+			print *, 'rank = ', node%val%array%rank
 
-			i8 = subscript_eval(node, vars, fns, quietl)
-			res = get_array_value_t(vars%vals(node%id_index)%array, i8)
+			if (node%val%array%rank == 1) then
+
+				! TODO: generalize slices for multi-rank arrays
+				select case (node%subscripts(1)%sub_kind)
+				case (scalar_sub)
+					i8 = subscript_eval(node, vars, fns, quietl)
+					res = get_array_value_t(vars%vals(node%id_index)%array, i8)
+				case (range_sub)
+
+					il = subscript_eval(node, vars, fns, quietl)
+
+					! This feels inconsistent and not easy to extend to higher ranks
+					right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
+					iu = right%i32
+
+					print *, 'il, iu = ', il, iu
+					print *, 'type = ', kind_name( node%val%array%type )
+
+					print *, 'type  = ', node%val%array%type
+					print *, 'rank  = ', node%val%array%rank
+					print *, 'size  = ', node%val%array%size
+					print *, 'len_  = ', node%val%array%len_
+					print *, 'cap   = ', node%val%array%cap
+
+					allocate(res%array)
+					res%type = array_type
+					res%array%kind = expl_array
+					res%array%type  = node%val%array%type
+					res%array%rank  = node%val%array%rank
+					!res%array%size  = node%val%array%size
+					!res%array%len_  = node%val%array%len_
+					!res%array%cap   = node%val%array%cap
+
+					res%array%size = [iu - il]
+					res%array%len_ = iu - il
+					res%array%cap = res%array%len_
+
+					!res%array = vars%vals(node%id_index)%array
+					!res%array = vars%vals(node%id_index)%array(il: iu - 1)
+					select case (node%val%array%type)
+					case (i32_type)
+						res%array%i32 = vars%vals(node%id_index)%array%i32(il: iu - 1)
+						print *, 'array i32 = ', res%array%i32
+					case default
+						! TODO
+					end select
+
+				end select
+
+			else
+				i8 = subscript_eval(node, vars, fns, quietl)
+				res = get_array_value_t(vars%vals(node%id_index)%array, i8)
+			end if
 
 		else
 			!print *, 'scalar name expr'
@@ -7486,6 +7543,9 @@ recursive function value_to_str(val) result(ans)
 
 			call str_vec%push('[')
 			if (val%array%rank > 1) call str_vec%push(line_feed)
+
+			call str_vec%push( kind_name(val%array%type) )
+			call str_vec%push(str(int(val%array%len_)))
 
 			if (val%array%type == i32_type) then
 
