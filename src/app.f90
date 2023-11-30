@@ -164,6 +164,7 @@ function parse_args() result(args)
 
 		write(*,*) fg_bold//"Usage:"//color_reset
 		write(*,*) "	syntran <file.syntran> [--fmax-errors <n>]"
+		write(*,*) "	syntran"
 		write(*,*) "	syntran -h | --help"
 		write(*,*) "	syntran --version"
 		write(*,*)
