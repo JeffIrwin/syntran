@@ -6601,7 +6601,52 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			if (node%val%array%rank == 1) then
 
 				! TODO: generalize slices for multi-rank arrays
+				!
+				! Get the total len_ by taking the product of the difference of
+				! every range
+				!
+				! Iterating through LHS is easy bc it's a rank-1 array under the
+				! hood.  RHS is tricky because it is non-contiguous.  Do we need
+				! an inverse of subscript_eval()?  i.e. go from rank-1 1 scalar
+				! index to a multi-rank set of subscripts?
+				!
+				! For example:
+				!
+				!     let m =
+				!     [
+				!     	 0,  1,  2,  3,  4,
+				!     	 5,  6,  7,  8,  9,
+				!     	10, 11, 12, 13, 14,
+				!     	15, 16, 17, 18, 19,
+				!     	20, 21, 22, 23, 24
+				!     	;
+				!     	5, 5
+				!     ];
+				!
+				!     let m2 = m[1:4, 1:4];
+				!
+				! Such an assignemnt requires iterating from m[1,1] (6) up to
+				! m[3,3] (18) inclusively.  Either make an inverse of
+				! subscript_eval(), or something that iterates through a vector
+				! subscript, e.g. iterating like this:
+				!
+				!     m[1,1]
+				!     m[2,1]
+				!     m[3,1]
+				!
+				!     m[1,2]
+				!     m[2,2]
+				!     m[3,2]
+				!
+				!     m[1,3]
+				!     m[2,3]
+				!     m[3,3]
+				!
+				! And packing those elements into the LHS.
+
+				! TODO: any subscript, not just subscripts(1)
 				select case (node%subscripts(1)%sub_kind)
+
 				case (scalar_sub)
 					i8 = subscript_eval(node, vars, fns, quietl)
 					res = get_array_value_t(vars%vals(node%id_index)%array, i8)
