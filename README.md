@@ -17,11 +17,21 @@ This is a sandbox for me to play in as I follow along with [Immo Landwerth's _bu
 
 ## Build the interpreter
 
+Using cmake:
+
 ```
 ./build.sh
 ```
 
-A [Fortran compiler](https://fortran-lang.org/en/compilers/) and [CMake](https://cmake.org/download/) are required
+A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required
+
+Two independent build systems are provided for syntran.  You can either use cmake, which is run by `build.sh` as shown above.  Alternatively, you can use the Fortran Package Manager `fpm`:
+
+```
+fpm build
+```
+
+Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm install`, etc.  Most of the example commands in this documentation will assume that cmake was used, but there is usually an fpm alternative.
 
 ## Run
 

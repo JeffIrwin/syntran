@@ -1,14 +1,26 @@
 
+# Tested with fpm 0.9.0
+#
 # Drive fpm with commands like this:
 #
 #     fpm clean --all
 #     fpm build
-#     fpm run # TODO: it doesn't use rlwrap
+#     fpm run # TODO: it doesn't use rlwrap. probably some way to configure
 #     fpm test
 #     fpm install --prefix ~
 #
 # fpm is smart.  If you run `fpm install` or `fpm test` without building first,
 # it will automatically build
+#
+# Binary installers for fpm are available, but I built it from source:
+#
+#     git clone https://github.com/fortran-lang/fpm
+#     cd fpm/
+#     ./install.sh -h
+#     ./install.sh --prefix='$HOME'
+#     which fpm
+#     ls ~/bin/
+#     fpm --version
 
 name = "syntran"
 #version = "0.0.27"
