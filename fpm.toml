@@ -1,0 +1,37 @@
+
+# Drive fpm with commands like this:
+#
+#     fpm clean --all
+#     fpm build
+#     fpm run # TODO: it doesn't use rlwrap
+#     fpm test
+#     fpm install --prefix ~
+#
+# fpm is smart.  If you run `fpm install` or `fpm test` without building first,
+# it will automatically build
+
+name = "syntran"
+#version = "0.0.27"
+license = "LICENSE"
+author = "Jeff Irwin"
+#maintainer = "jane.doe@example.com"
+#copyright = "Copyright 2021, Jane Doe"
+
+[build]
+auto-executables = true
+auto-tests = true
+auto-examples = true
+
+[install]
+library = false
+
+[[executable]]
+name = "syntran"
+source-dir = "src"
+main = "main.f90"
+
+[[test]]
+name = "test"
+source-dir = "src/tests/"
+main = "test.f90"
+
