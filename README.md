@@ -741,3 +741,12 @@ For example, it is *not* possible to concatenate strings together into the inclu
 
 The argument must be a single static lex-time constant string.
 
+## Samples
+
+Many syntran samples are provided in this repository and elsewhere:
+
+1.  [Inline tests](src/tests/test.f90):  these are short one-to-few line syntran snippets, embedded in Fortran as a string and `eval`'d.  They are covered by the tests
+2.  [Script tests](src/tests/test-src):  these are longer syntran scripts, organized into categories by directory.  They are covered by the tests
+3.  [Samples](samples):  these are longer syntran scripts which can also take a while to run, e.g. the wave equation solvers.  They are *not* covered by the tests because of the time they take to run
+4.  [Advent of Code](https://github.com/JeffIrwin/aoc-syntran):  these are syntran scripts which solve problems from the [Advent of Code](https://adventofcode.com/about).  They are not covered by tests and in a separate repository
+
