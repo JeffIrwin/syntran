@@ -25,13 +25,13 @@ Using cmake:
 
 A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required
 
-Two independent build systems are provided for syntran.  You can either use cmake, which is run by `build.sh` as shown above.  Alternatively, you can use the Fortran Package Manager `fpm`:
+Two independent build systems are provided for syntran.  You can either use cmake, which is run by `build.sh` as shown above, or you can use the Fortran Package Manager `fpm`:
 
 ```
 fpm build
 ```
 
-Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm install`, etc.  Most of the example commands in this documentation will assume that cmake was used, but there is usually an fpm alternative.
+Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm install`, etc.  Most of the example commands in this documentation will assume that cmake was used, but there is usually (always?) an fpm alternative.
 
 ## Run
 

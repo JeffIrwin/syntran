@@ -28,6 +28,9 @@ license = "LICENSE"
 author = "Jeff Irwin"
 #maintainer = "jane.doe@example.com"
 #copyright = "Copyright 2021, Jane Doe"
+description = "syntran is an array-oriented language with an interpreter written in Fortran"
+categories = ["interpreter"]
+homepage = "https://github.com/JeffIrwin/syntran"
 
 [build]
 auto-executables = true
