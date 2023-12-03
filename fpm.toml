@@ -4,9 +4,20 @@
 # Drive fpm with commands like this:
 #
 #     fpm clean --all
+#
+#     # debug is the default
 #     fpm build
-#     fpm run # TODO: it doesn't use rlwrap. probably some way to configure
+#     fpm build --profile release
+#
+#     # `runner` is a prefix to the syntran cmd.  anything after `-- ` is a cmd
+#     # arg passed after `syntran`, e.g. the syntran filename
+#     fpm run
+#     fpm run --runner rlwrap
+#     fpm run -- samples/primes-3.syntran
+#
 #     fpm test
+#
+#     # install to ~/bin/
 #     fpm install --prefix ~
 #
 # fpm is smart.  If you run `fpm install` or `fpm test` without building first,
@@ -24,13 +35,20 @@
 
 name = "syntran"
 #version = "0.0.27"
-license = "LICENSE"
+license = "BSD 3-Clause"
 author = "Jeff Irwin"
+
+## Am I prepared to dox myself?
 #maintainer = "jane.doe@example.com"
 #copyright = "Copyright 2021, Jane Doe"
+
 description = "syntran is an array-oriented language with an interpreter written in Fortran"
 categories = ["interpreter"]
 homepage = "https://github.com/JeffIrwin/syntran"
+
+# TODO: set compiler flags, like -Wno-tab, etc.  Probably best done in a build
+# script which sets --flag (or FPM_FFLAGS env var, but that should probably be
+# left to other users to override my --flag args)
 
 [build]
 auto-executables = true
