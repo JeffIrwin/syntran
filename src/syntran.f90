@@ -3,7 +3,9 @@
 
 module syntran
 
-	! This module contains the public API of syntran
+	! This module contains the "public" API of syntran.  I don't actually use
+	! any private statements, so you just have to be careful if you use the
+	! syntran library as an API (as opposed to using the syntran CLI)
 
 	implicit none
 
@@ -30,8 +32,8 @@ function syntran_interpret(str, quiet) result(res_str)
 	! at a time, so that we can have automatic test coverage of weird
 	! interactive interpreter edge cases
 
-	use core_m
-	use utils_m
+	use syntran__core_m
+	use syntran__utils_m
 
 	character(len = *), intent(in), optional :: str
 	logical, intent(in), optional :: quiet
@@ -177,7 +179,7 @@ end function syntran_interpret
 
 subroutine syntran_banner()
 
-	use core_m
+	use syntran__core_m
 
 	!! Already done in main
 	!character(len = :), allocatable :: version
@@ -202,7 +204,7 @@ end subroutine syntran_banner
 
 integer function syntran_eval_i32(str) result(eval_i32)
 
-	use core_m
+	use syntran__core_m
 
 	character(len = *), intent(in) :: str
 
@@ -232,7 +234,7 @@ end function syntran_eval_i32
 
 real(kind = 4) function syntran_eval_f32(str, quiet) result(eval_f32)
 
-	use core_m
+	use syntran__core_m
 
 	character(len = *), intent(in) :: str
 
@@ -272,7 +274,7 @@ end function syntran_eval_f32
 
 function syntran_eval(str, quiet, src_file) result(res)
 
-	use core_m
+	use syntran__core_m
 
 	character(len = *), intent(in)  :: str
 	character(len = :), allocatable :: res
@@ -327,7 +329,7 @@ function syntran_interpret_file(file, quiet) result(res)
 	!   - echo inputs w/o "syntran$" prompt and print outputs after a comment,
 	!     for ease of updating documentation with consistent styling
 
-	use core_m
+	use syntran__core_m
 
 	character(len = *), intent(in)  :: file
 	character(len = :), allocatable :: res

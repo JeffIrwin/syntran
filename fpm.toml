@@ -29,7 +29,7 @@
 #     git clone https://github.com/fortran-lang/fpm
 #     cd fpm/
 #     ./install.sh -h
-#     ./install.sh --prefix='$HOME'
+#     ./install.sh --prefix='$HOME'  # '~' doesn't work
 #     which fpm
 #     ls ~/bin/
 #     fpm --version
@@ -57,6 +57,7 @@ homepage = "https://github.com/JeffIrwin/syntran"
 auto-executables = true
 auto-tests = true
 auto-examples = true
+module-naming = true
 
 [install]
 library = false

@@ -1,9 +1,9 @@
 
 !===============================================================================
 
-module errors_m
+module syntran__errors_m
 
-	use utils_m
+	use syntran__utils_m
 
 	implicit none
 
@@ -728,7 +728,7 @@ end function underline
 
 !===============================================================================
 
-end module errors_m
+end module syntran__errors_m
 
 !===============================================================================
 

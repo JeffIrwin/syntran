@@ -1,14 +1,14 @@
 
 !===============================================================================
 
-module core_m
+module syntran__core_m
 
 	! This module contains private members.  For the public API, see syntran.f90
 
 	use iso_fortran_env
 
-	use errors_m
-	use utils_m
+	use syntran__errors_m
+	use syntran__utils_m
 
 	implicit none
 
@@ -7611,7 +7611,7 @@ end function value_to_str
 
 !===============================================================================
 
-end module core_m
+end module syntran__core_m
 
 !===============================================================================
 

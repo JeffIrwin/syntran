@@ -1,11 +1,11 @@
 
 !===============================================================================
 
-module app_m
+module syntran__app_m
 
-	use core_m
-	use errors_m
-	use utils_m
+	use syntran__core_m
+	use syntran__errors_m
+	use syntran__utils_m
 
 	implicit none
 
@@ -190,7 +190,7 @@ end function parse_args
 
 !===============================================================================
 
-end module app_m
+end module syntran__app_m
 
 !===============================================================================
 
