@@ -601,7 +601,7 @@ function declare_intrinsic_fns() result(fns)
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
-		i64_fn
+		i64_fn, parse_i64_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -724,6 +724,16 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	parse_i64_fn%type = i64_type
+	allocate(parse_i64_fn%params(1))
+	parse_i64_fn%params(1)%type = str_type
+	parse_i64_fn%params(1)%name = "str"
+
+	id_index = id_index + 1
+	call fns%insert("parse_i64", parse_i64_fn, id_index)
+
+	!********
+
 	i64_fn%type = i64_type
 	allocate(i64_fn%params(1))
 
@@ -834,6 +844,7 @@ function declare_intrinsic_fns() result(fns)
 			str_fn      , &
 			len_fn      , &
 			parse_i32_fn, &
+			parse_i64_fn, &
 			i64_fn      , &
 			open_fn     , &
 			readln_fn   , &
@@ -6425,6 +6436,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			read(arg%str%s, *) res%i32  ! TODO: catch iostat
+
+		case ("parse_i64")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			read(arg%str%s, *) res%i64  ! TODO: catch iostat
 
 		case ("i64")
 

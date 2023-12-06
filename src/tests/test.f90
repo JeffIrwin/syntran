@@ -573,6 +573,17 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('parse_i32(   "-2");')  ==    -2,  &
 			eval_i32('parse_i32(  "-34");')  ==   -34,  &
 			eval_i32('parse_i32("-1337");')  == -1337,  &
+			eval('parse_i64(    "0");')  ==     "0",  &
+			eval('parse_i64(    "1");')  ==     "1",  &
+			eval('parse_i64(    "2");')  ==     "2",  &
+			eval('parse_i64(   "34");')  ==    "34",  &
+			eval('parse_i64( "1337");')  ==  "1337",  &
+			eval('parse_i64(   "-1");')  ==    "-1",  &
+			eval('parse_i64(   "-2");')  ==    "-2",  &
+			eval('parse_i64(  "-34");')  ==   "-34",  &
+			eval('parse_i64("-1337");')  == "-1337",  &
+			eval('parse_i64("-9123123123");')  == "-9123123123",  &
+			eval('parse_i64( "9123123123");')  ==  "9123123123",  &
 			eval_i32('len(     "");')  == 0,  &
 			eval_i32('len(    " ");')  == 1,  &
 			eval_i32('len(   "  ");')  == 2,  &
