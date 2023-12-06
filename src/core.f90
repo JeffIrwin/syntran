@@ -220,6 +220,7 @@ module syntran__core_m
 
 		contains
 			procedure :: to_str => value_to_str
+			procedure :: to_i32 => value_to_i32
 			procedure :: to_i64 => value_to_i64
 
 	end type value_t
@@ -601,7 +602,7 @@ function declare_intrinsic_fns() result(fns)
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
-		i64_fn, parse_i64_fn
+		i64_fn, parse_i64_fn, i32_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -734,6 +735,18 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	i32_fn%type = i32_type
+	allocate(i32_fn%params(1))
+
+	i32_fn%params(1)%type = any_type
+
+	i32_fn%params(1)%name = "a"
+
+	id_index = id_index + 1
+	call fns%insert("i32", i32_fn, id_index)
+
+	!********
+
 	i64_fn%type = i64_type
 	allocate(i64_fn%params(1))
 
@@ -845,6 +858,7 @@ function declare_intrinsic_fns() result(fns)
 			len_fn      , &
 			parse_i32_fn, &
 			parse_i64_fn, &
+			i32_fn      , &
 			i64_fn      , &
 			open_fn     , &
 			readln_fn   , &
@@ -6442,6 +6456,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			read(arg%str%s, *) res%i64  ! TODO: catch iostat
 
+		case ("i32")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%i32 = arg%to_i32()
+
 		case ("i64")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
@@ -7397,6 +7416,34 @@ subroutine log_diagnostics(node, ou)
 	end if
 
 end subroutine log_diagnostics
+
+!===============================================================================
+
+function value_to_i32(val) result(ans)
+
+	class(value_t) :: val
+
+	integer(kind = 4) :: ans
+
+	select case (val%type)
+
+		case (f32_type)
+			ans = int(val%f32, 4)
+
+		case (i32_type)
+			ans = val%i32
+
+		case (i64_type)
+			ans = val%i64
+
+		case default
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to i32 '//color_reset
+			call internal_error()
+
+	end select
+
+end function value_to_i32
 
 !===============================================================================
 

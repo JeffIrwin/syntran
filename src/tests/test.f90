@@ -595,6 +595,11 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('len(  "htn");')  == 3,  &
 			eval_i32('len( "htns");')  == 4,  &
 			eval_i32('len("htns-");')  == 5,  &
+			eval('i32(  0);') ==   "0", &
+			eval('i32(  1);') ==   "1", &
+			eval('i32( -1);') ==  "-1", &
+			eval('i32(123);') == "123", &
+			eval('i32(432);') == "432", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 
@@ -922,6 +927,9 @@ subroutine unit_test_i64(npass, nfail)
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: add tests covering conversion of floats to ints using i32() and
+	! i64()
 
 	tests = &
 		[   &
