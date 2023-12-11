@@ -3,9 +3,9 @@
 
 # Syntran
 
-Syntran is pre-alpha and I don't recommend using it for anything serious.  You will discover bugs, missing features, many pain points in general; and later updates will be incompatible.
+⚠️ Syntran is pre-alpha and I don't recommend using it for anything serious.  You will discover bugs, missing features, many pain points in general; and later updates will be incompatible.
 
-##[Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
+## [Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
 
 An interpreter written in Fortran, I guess
 
