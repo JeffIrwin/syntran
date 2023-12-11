@@ -146,6 +146,18 @@ As of rlwrap 0.43, there is a bug where it hides the `syntran$ ` prompt.  To wor
 set enable-bracketed-paste off
 ```
 
+## Syntax highlighting
+
+I do not plan on writing any syntax highlighting plugins.
+
+The easiest way to get highlighting is to have your editor treat syntran as a similar language.  Rust is a pretty good match with keywords like `let`, `fn`, and type names `i32`, `f32`, etc.  C++ is also an ok match (it has `and` and `or` keywords).
+
+For neovim, add this line to your `~/.config/nvim/ftdetect/syntran.lua` file:
+
+```lua
+vim.cmd.autocmd("BufRead,BufNewFile *.syntran set filetype=rust")
+```
+
 ## Saving scripts in a file
 
 As programs get longer and more complicated, it becomes difficult to enter them into the interactive interpreter.  To interpret a whole file, provide it as a command line argument:
