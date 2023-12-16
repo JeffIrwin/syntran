@@ -246,7 +246,7 @@ for i in [0: n]
 }
 
 // Final result
-prime;
+println(prime);
 // 97
 ```
 
@@ -314,7 +314,7 @@ while prime == 0
 		prime = i;
 }
 
-prime;
+println(prime);
 // 999983
 ```
 
@@ -343,7 +343,7 @@ for k in [0: 10]
 		);
 }
 
-pi;
+println(pi);
 // 3.141593E+00
 
 // x is 30 degrees (in radians)
@@ -366,7 +366,7 @@ for k in [1: 10]
 	sign = -sign;
 }
 
-sinx;
+println(sinx);
 // 4.999999E-01
 ```
 
@@ -387,8 +387,7 @@ Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/153
 Recall the syntax for a for-loop:
 ```rust
 for i in [0: 5]
-	i;
-// 0, 1, 2, 3, 4
+	println(i);
 ```
 
 The expression `[0: 5]` is one of several array forms, which can also be assigned to variables:
@@ -720,13 +719,13 @@ This can be included in a main program, assuming `main.syntran` and `header.synt
 
 fn main()
 {
-	my_global;
+	println(my_global);
 	// 42
 
-	my_scan("012345", "2");
+	println(my_scan("012345", "2"));
 	// 2
 
-	my_scan("012345", "3");
+	println(my_scan("012345", "3"));
 	// 3
 }
 
