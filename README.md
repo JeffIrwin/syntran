@@ -203,8 +203,12 @@ The bounds of for loops, like ranges in Rust and Python, are inclusive of the lo
 
 ```cpp
 for i in [0: 5]
-	i;
-// 0, 1, 2, 3, 4
+	println(i);
+// 0
+// 1
+// 2
+// 3
+// 4
 ```
 
 ## Example:  calculating prime numbers inefficiently
