@@ -7436,6 +7436,16 @@ function value_to_i32(val) result(ans)
 		case (i64_type)
 			ans = val%i64
 
+		case (str_type)
+
+			if (len(val%str%s) == 1) then
+				ans = iachar(val%str%s)
+			else
+				write(*,*) err_int_prefix//'cannot convert from type `' &
+					//kind_name(val%type)//'` to i32 '//color_reset
+				call internal_error()
+			end if
+
 		case default
 			write(*,*) err_int_prefix//'cannot convert from type `' &
 				//kind_name(val%type)//'` to i32 '//color_reset
