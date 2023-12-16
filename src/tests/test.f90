@@ -608,6 +608,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('i32("2");') ==  "50", &
 			eval('i32("(");') ==  "40", &
 			eval('i32(")");') ==  "41", &
+			eval('i32(" ");') ==  "32", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 
