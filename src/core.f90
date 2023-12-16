@@ -6546,6 +6546,30 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! TODO: return type?  Make separate size64() fn?
 			res%i32 = int(arg1%array%size( arg2%i32 + 1 ))
 
+			!!print *, 'deallocating arg1%array%...'
+			!print *, 'allocated( i32) = ', allocated(arg1%array%i32)
+			!print *, 'allocated(size) = ', allocated(arg1%array%size)
+			!deallocate(arg1%array%i32)
+			!deallocate(arg1%array%size)
+			!print *, 'allocated( i32) = ', allocated(arg1%array%i32)
+			!print *, 'allocated(size) = ', allocated(arg1%array%size)
+			!print *, ''
+
+			! TODO: if the array pointer is not deallocated here, this causes a
+			! memory leak which is especially bad when `size()` is called in a
+			! loop.  For something that was affected by the mem leak, see this
+			! Advent of Code solution:
+			!
+			!     https://github.com/JeffIrwin/aoc-syntran/blob/609ff26a1e4d4b7cc00fd4836f26b47d237aea71/2023/08/main-v3.syntran#L306
+			!
+			! TODO: this also needs to be done for user-defined fns (see AOC
+			! 2023 day 07), and it should probably be done in a general way for
+			! intrinsic fns too (for now, size is the only intrinsic fn which
+			! takes an array arg)
+
+			deallocate(arg1%array)
+			!nullify(arg1%array)
+
 		case default
 			! User-defined function
 
