@@ -28,9 +28,6 @@ module syntran__core_m
 	integer :: maxerr  ! TODO: move this (not default) into a settings struct that gets passed around
 	integer, parameter :: maxerr_def = 4
 
-	! TODO: do this without a global var
-	logical :: evaluating = .false.
-
 	! TODO:
 	!  - #(pragma)once  directive. #let var=val directive?
 	!    * for #once include guards, insert filename path as key into a ternary
@@ -212,6 +209,8 @@ module syntran__core_m
 	type value_t
 		integer :: type
 
+		! TODO: value_t should contain scalar_t instead of duplicating all these
+		! members (composition over inheritance)
 		type(file_t)      :: file_
 		type(string_t)    :: str
 
@@ -225,7 +224,7 @@ module syntran__core_m
 		! pointer.  But pointers lead to nasty memory leaks (e.g. aoc 2023 day
 		! 07)
 		!
-		! Now arrays can contain a value_prim_t instead of a value_t, so there
+		! Now arrays can contain a scalar_t instead of a value_t, so there
 		! are no longer any circular type dependencies
 		!
 		! Note that a type containing itself is fine (e.g. ternary_tree_node_t),
@@ -266,7 +265,7 @@ module syntran__core_m
 
 	!********
 
-	type value_prim_t
+	type scalar_t
 
 		! Primitive value type.  Cannot be an array!  Maybe it should be named
 		! scalar_t?  Not sure what I'll do with structs
@@ -285,11 +284,11 @@ module syntran__core_m
 		!type(array_t), allocatable :: array
 
 		contains
-			procedure :: to_str => value_prim_to_str
-			!procedure :: to_i32 => value_prim_to_i32
-			!procedure :: to_i64 => value_prim_to_i64
+			procedure :: to_str => scalar_to_str
+			!procedure :: to_i32 => scalar_to_i32
+			!procedure :: to_i64 => scalar_to_i64
 
-	end type value_prim_t
+	end type scalar_t
 
 	!********
 
@@ -299,7 +298,7 @@ module syntran__core_m
 		! impl_array (bound-based) or expl_array (CSV list)
 		integer :: type, kind
 		!type(value_t), allocatable :: lbound, step, ubound
-		type(value_prim_t), allocatable :: lbound, step, ubound
+		type(scalar_t), allocatable :: lbound, step, ubound
 
 		! Note that these are arrays of primitive Fortran types, instead of
 		! arrays of generic value_t.  This performs better since we can put
@@ -364,6 +363,11 @@ module syntran__core_m
 
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
+		!
+		! TODO: my experience has taught me that Fortran pointers are extremely
+		! dangerous (see memory leaks due to now removed value_t -> array_t
+		! pointer).  Can we avoid having a pointer here and make it allocatable
+		! instead?
 		type(syntax_node_t), pointer :: node => null()
 
 	end type fn_t
@@ -1179,36 +1183,6 @@ end subroutine push_scope
 
 !===============================================================================
 
-!recursive subroutine ternary_tree_deallocate(t)
-!	! TODO: class?
-!
-!	type(ternary_tree_node_t), allocatable :: t
-!
-!	if (.not. allocated(t)) return
-!
-!	call ternary_tree_deallocate(t%left)
-!	call ternary_tree_deallocate(t%mid)
-!	call ternary_tree_deallocate(t%right)
-!
-!	! TODO: this is probably unnecessary
-!	if (evaluating .and. allocated(t%val)) then
-!	!if (evaluating) then
-!		if (associated(t%val%array)) then
-!		!if (allocated(t%val%array)) then
-!			!print *, 'deallocating t%val%array'
-!			deallocate(t%val%array)
-!			!nullify(t%val%array)
-!		end if
-!		!print *, 'deallocating t%val'
-!		deallocate(t%val)
-!	end if
-!
-!	deallocate(t)
-!
-!end subroutine ternary_tree_deallocate
-
-!===============================================================================
-
 subroutine pop_scope(dict)
 
 	class(vars_t) :: dict
@@ -1216,7 +1190,6 @@ subroutine pop_scope(dict)
 	integer :: i
 
 	!print *, 'starting pop_scope()'
-	!print *, 'evaluating = ', evaluating
 
 	i = dict%scope
 
@@ -1226,21 +1199,7 @@ subroutine pop_scope(dict)
 
 		! Does this automatically deallocate children? (mid, left, right)  May
 		! need recursive deep destructor
-
-		!call ternary_tree_deallocate(dict%dicts(i)%root)
 		deallocate(dict%dicts(i)%root)
-
-		! TODO: the dict is only used while parsing.  While evaluating, a single
-		! flat array is used instead of a different dict for each scope.  The
-		! flat array vars should save a member indicating which scope it belongs
-		! to, and then all vars from that scope should be freed when popping
-		! scope.  Either that, or push id_index for each referenced var into a
-		! vector per scope which is freed when popping
-		!
-		! TODO: better yet, there might be an easier way.  The leak only happens
-		! when *re* allocating a new pointer for a local array which had already
-		! been allocated.  Instead of doing a bunch of book-keeping, just check
-		! and deallocate the pointer before *setting* it each time
 
 	end if
 
@@ -3152,8 +3111,6 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	type(vars_t) :: vars0
 
-	evaluating = .false.
-
 	if (debug > 0) print *, 'syntax_parse'
 	if (debug > 1) print *, 'str = ', str
 
@@ -4158,7 +4115,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'type = ', kind_name(expr%val%type)
 
-		!print *, 'associated(expr%val%array) = ', associated(expr%val%array)
+		!print *, 'allocated(expr%val%array) = ', allocated(expr%val%array)
 
 		if (size(expr%subscripts) > 0) then
 
@@ -5225,8 +5182,8 @@ function parse_primary_expr(parser) result(expr)
 				end if
 
 				!print *, 'type = ', kind_name(expr%val%type)
-				!print *, 'associated(expr%val%array) = ', &
-				!	associated(expr%val%array)
+				!print *, 'allocated(expr%val%array) = ', &
+				!	allocated(expr%val%array)
 
 				!print *, '%current_kind() = ', kind_name(parser%current_kind())
 				span0 = parser%current_pos()
@@ -5525,7 +5482,7 @@ function new_name_expr(identifier, val) result(expr)
 	expr%val = val
 
 	!if (expr%val%type == array_type) then
-	!	!if (.not. associated(expr%val%array)) allocate(expr%val%array)
+	!	!if (.not. allocated(expr%val%array)) allocate(expr%val%array)
 	!	allocate(expr%val%array)
 	!	!expr%val%array = right%val%array
 	!	expr%val%array = val%array
@@ -5946,9 +5903,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
 		step, len_, arg, arg1, arg2, array_val
 
-	evaluating = .true.
 	!print *, 'starting syntax_eval()'
-	!print *, 'evaluating = ', evaluating
 
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
@@ -6425,6 +6380,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			if (allocated(vars%vals)) then
 			if (allocated(vars%vals(node%id_index)%array)) then
+				!! TODO: necessary now that array is allocatable instead of pointable?
 				!print *, "deallocating lhs array"
 				deallocate(vars%vals(node%id_index)%array)
 			end if
@@ -6484,14 +6440,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		! Assign return value
 		res = syntax_eval(node%right, vars, fns, quietl)
-
-		if (allocated(vars%vals)) then
-		if (allocated(vars%vals(node%id_index)%array)) then
-			!print *, "deallocating lhs let array"
-			!deallocate(vars%vals(node%id_index)%array)
-			!nullify(vars%vals(node%id_index)%array)
-		end if
-		end if
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
 		vars%vals(node%id_index) = res
@@ -6662,29 +6610,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! TODO: return type?  Make separate size64() fn?
 			res%i32 = int(arg1%array%size( arg2%i32 + 1 ))
 
-			!!print *, 'deallocating arg1%array%...'
-			!print *, 'allocated( i32) = ', allocated(arg1%array%i32)
-			!print *, 'allocated(size) = ', allocated(arg1%array%size)
-			!deallocate(arg1%array%i32)
-			!deallocate(arg1%array%size)
-			!print *, 'allocated( i32) = ', allocated(arg1%array%i32)
-			!print *, 'allocated(size) = ', allocated(arg1%array%size)
-			!print *, ''
-
-			! TODO: if the array pointer is not deallocated here, this causes a
-			! memory leak which is especially bad when `size()` is called in a
-			! loop.  For something that was affected by the mem leak, see this
-			! Advent of Code solution:
+			! TODO: if the array pointer is not deallocated here, this was
+			! causing a memory leak which is especially bad when `size()` is
+			! called in a loop.  For something that was affected by the mem
+			! leak, see this Advent of Code solution:
 			!
 			!     https://github.com/JeffIrwin/aoc-syntran/blob/609ff26a1e4d4b7cc00fd4836f26b47d237aea71/2023/08/main-v3.syntran#L306
 			!
-			! TODO: this also needs to be done for user-defined fns (see AOC
-			! 2023 day 07), and it should probably be done in a general way for
-			! intrinsic fns too (for now, size is the only intrinsic fn which
-			! takes an array arg)
-
+			!
+			! Might not be strictly necessary now that %array is allocatable
+			! instead of pointable
 			deallocate(arg1%array)
-			!nullify(arg1%array)
 
 		case default
 			! User-defined function
@@ -6717,13 +6653,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			do i = 1, size(node%params)
 				if (allocated(vars%vals( node%params(i) )%array)) then
 					!print *, 'deallocating node%params ... array'
-
-					!! TODO?
-					!deallocate(vars%vals( node%params(i) )%array%i32)
-					!deallocate(vars%vals( node%params(i) )%array%size)
-
 					deallocate(vars%vals( node%params(i) )%array)
-					!nullify(vars%vals( node%params(i) )%array)
 				end if
 			end do
 
@@ -6779,7 +6709,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res = get_array_value_t(vars%vals(node%id_index)%array, i8)
 
 		else
-			!print *, 'scalar name expr'
+			!print *, 'name expr'
 			res = vars%vals(node%id_index)
 
 			! Deep copy of whole array instead of aliasing pointers
@@ -7839,12 +7769,12 @@ end function value_to_str
 
 !===============================================================================
 
-recursive function value_prim_to_str(val) result(ans)
+recursive function scalar_to_str(val) result(ans)
 
 	! TODO: dry up with value_to_str().  Composition?  Probably.  Inheritance?
 	! Probably not
 
-	class(value_prim_t) :: val
+	class(scalar_t) :: val
 
 	character(len = :), allocatable :: ans
 
@@ -7899,7 +7829,7 @@ recursive function value_prim_to_str(val) result(ans)
 
 	end select
 
-end function value_prim_to_str
+end function scalar_to_str
 
 !===============================================================================
 
