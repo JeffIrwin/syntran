@@ -1,4 +1,4 @@
-
+!
 !===============================================================================
 
 module syntran__core_m
@@ -27,6 +27,9 @@ module syntran__core_m
 
 	integer :: maxerr  ! TODO: move this (not default) into a settings struct that gets passed around
 	integer, parameter :: maxerr_def = 4
+
+	! TODO: do this without a global var
+	logical :: evaluating = .false.
 
 	! TODO:
 	!  - #(pragma)once  directive. #let var=val directive?
@@ -216,7 +219,19 @@ module syntran__core_m
 		integer(kind = 4) :: i32
 		integer(kind = 8) :: i64
 		real   (kind = 4) :: f32
-		type(array_t), pointer :: array => null()
+
+		! Back when array_t could contain value_t's, gfortran would use up infinite
+		! RAM trying to parse the circular type dependencies unless this was a
+		! pointer.  But pointers lead to nasty memory leaks (e.g. aoc 2023 day
+		! 07)
+		!
+		! Now arrays can contain a value_prim_t instead of a value_t, so there
+		! are no longer any circular type dependencies
+		!
+		! Note that a type containing itself is fine (e.g. ternary_tree_node_t),
+		! but two types containing each other is bad
+		type(array_t), allocatable :: array
+		!type(array_t), pointer :: array => null()
 
 		contains
 			procedure :: to_str => value_to_str
@@ -251,12 +266,40 @@ module syntran__core_m
 
 	!********
 
+	type value_prim_t
+
+		! Primitive value type.  Cannot be an array!  Maybe it should be named
+		! scalar_t?  Not sure what I'll do with structs
+
+		integer :: type
+
+		type(file_t)      :: file_
+		type(string_t)    :: str
+
+		logical           :: bool
+		integer(kind = 4) :: i32
+		integer(kind = 8) :: i64
+		real   (kind = 4) :: f32
+
+		!!type(array_t), pointer :: array => null()
+		!type(array_t), allocatable :: array
+
+		contains
+			procedure :: to_str => value_prim_to_str
+			!procedure :: to_i32 => value_prim_to_i32
+			!procedure :: to_i64 => value_prim_to_i64
+
+	end type value_prim_t
+
+	!********
+
 	type array_t
 
 		! The array type is i32_type, f32_type, etc. while the kind is
 		! impl_array (bound-based) or expl_array (CSV list)
 		integer :: type, kind
-		type(value_t), allocatable :: lbound, step, ubound
+		!type(value_t), allocatable :: lbound, step, ubound
+		type(value_prim_t), allocatable :: lbound, step, ubound
 
 		! Note that these are arrays of primitive Fortran types, instead of
 		! arrays of generic value_t.  This performs better since we can put
@@ -1136,20 +1179,69 @@ end subroutine push_scope
 
 !===============================================================================
 
+!recursive subroutine ternary_tree_deallocate(t)
+!	! TODO: class?
+!
+!	type(ternary_tree_node_t), allocatable :: t
+!
+!	if (.not. allocated(t)) return
+!
+!	call ternary_tree_deallocate(t%left)
+!	call ternary_tree_deallocate(t%mid)
+!	call ternary_tree_deallocate(t%right)
+!
+!	! TODO: this is probably unnecessary
+!	if (evaluating .and. allocated(t%val)) then
+!	!if (evaluating) then
+!		if (associated(t%val%array)) then
+!		!if (allocated(t%val%array)) then
+!			!print *, 'deallocating t%val%array'
+!			deallocate(t%val%array)
+!			!nullify(t%val%array)
+!		end if
+!		!print *, 'deallocating t%val'
+!		deallocate(t%val)
+!	end if
+!
+!	deallocate(t)
+!
+!end subroutine ternary_tree_deallocate
+
+!===============================================================================
+
 subroutine pop_scope(dict)
 
 	class(vars_t) :: dict
 
 	integer :: i
 
+	!print *, 'starting pop_scope()'
+	!print *, 'evaluating = ', evaluating
+
 	i = dict%scope
 
 	! It's possible that a scope may not have any local vars, so its dict
 	! is not allocated
 	if (allocated(dict%dicts(i)%root)) then
+
 		! Does this automatically deallocate children? (mid, left, right)  May
 		! need recursive deep destructor
+
+		!call ternary_tree_deallocate(dict%dicts(i)%root)
 		deallocate(dict%dicts(i)%root)
+
+		! TODO: the dict is only used while parsing.  While evaluating, a single
+		! flat array is used instead of a different dict for each scope.  The
+		! flat array vars should save a member indicating which scope it belongs
+		! to, and then all vars from that scope should be freed when popping
+		! scope.  Either that, or push id_index for each referenced var into a
+		! vector per scope which is freed when popping
+		!
+		! TODO: better yet, there might be an easier way.  The leak only happens
+		! when *re* allocating a new pointer for a local array which had already
+		! been allocated.  Instead of doing a bunch of book-keeping, just check
+		! and deallocate the pointer before *setting* it each time
+
 	end if
 
 	dict%scope = dict%scope - 1
@@ -3060,6 +3152,8 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	type(vars_t) :: vars0
 
+	evaluating = .false.
+
 	if (debug > 0) print *, 'syntax_parse'
 	if (debug > 1) print *, 'str = ', str
 
@@ -3255,7 +3349,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	end if
 
 	! When parsing is finished, we are done with the variable dictionary
-	! parser%vars%dicts.  Allocate an array for efficient evaluation without
+	! parser%vars%dicts.  Allocate a flat array for efficient evaluation without
 	! dictionary lookups.  Indices in the array are already saved in each node's
 	! id_index member
 
@@ -3531,6 +3625,7 @@ function parse_fn_declaration(parser) result(decl)
 		! Create a value_t object to store the type
 		val%type = fn%params(i)%type
 		if (is_array%v(i)) then
+			if (allocated(val%array)) deallocate(val%array)
 			allocate(val%array)
 			val%array%type = fn%params(i)%array_type
 			val%array%rank = fn%params(i)%rank
@@ -5851,7 +5946,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
 		step, len_, arg, arg1, arg2, array_val
 
+	evaluating = .true.
 	!print *, 'starting syntax_eval()'
+	!print *, 'evaluating = ', evaluating
 
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
@@ -6326,16 +6423,27 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		if (.not. allocated(node%subscripts)) then
 
+			if (allocated(vars%vals)) then
+			if (allocated(vars%vals(node%id_index)%array)) then
+				!print *, "deallocating lhs array"
+				deallocate(vars%vals(node%id_index)%array)
+			end if
+			end if
+
 			! Assign return value
+			!print *, 'eval and set res'
 			res = syntax_eval(node%right, vars, fns, quietl)
 
 			! TODO: test int/float casting.  It should be an error during
 			! parsing
 
+			!print *, 'compound assign'
 			call compound_assign(vars%vals(node%id_index), res, node%op)
 
 			! For compound assignment, ensure that the LHS is returned
+			!print *, 'setting res again'
 			res = vars%vals(node%id_index)
+			!print *, 'done'
 
 			! The difference between let and assign is inserting into the
 			! current scope (let) vs possibly searching parent scopes (assign).
@@ -6376,6 +6484,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		! Assign return value
 		res = syntax_eval(node%right, vars, fns, quietl)
+
+		if (allocated(vars%vals)) then
+		if (allocated(vars%vals(node%id_index)%array)) then
+			!print *, "deallocating lhs let array"
+			!deallocate(vars%vals(node%id_index)%array)
+			!nullify(vars%vals(node%id_index)%array)
+		end if
+		end if
 
 		!print *, 'assigning identifier "', node%identifier%text, '"'
 		vars%vals(node%id_index) = res
@@ -6598,6 +6714,19 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			res = syntax_eval(node%body, vars, fns, quietl)
 
+			do i = 1, size(node%params)
+				if (allocated(vars%vals( node%params(i) )%array)) then
+					!print *, 'deallocating node%params ... array'
+
+					!! TODO?
+					!deallocate(vars%vals( node%params(i) )%array%i32)
+					!deallocate(vars%vals( node%params(i) )%array%size)
+
+					deallocate(vars%vals( node%params(i) )%array)
+					!nullify(vars%vals( node%params(i) )%array)
+				end if
+			end do
+
 		end select
 
 	case (name_expr)
@@ -6653,9 +6782,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'scalar name expr'
 			res = vars%vals(node%id_index)
 
-			! Deep copy if whole array instead of aliasing pointers
+			! Deep copy of whole array instead of aliasing pointers
 			if (res%type == array_type) then
 				!print *, 'array  name_expr'
+
+				if (allocated(res%array)) deallocate(res%array)
 
 				allocate(res%array)
 				res%type = array_type
@@ -7705,6 +7836,70 @@ recursive function value_to_str(val) result(ans)
 	end select
 
 end function value_to_str
+
+!===============================================================================
+
+recursive function value_prim_to_str(val) result(ans)
+
+	! TODO: dry up with value_to_str().  Composition?  Probably.  Inheritance?
+	! Probably not
+
+	class(value_prim_t) :: val
+
+	character(len = :), allocatable :: ans
+
+	!********
+
+	character(len = 16) :: buf16
+	character(len = 32) :: buffer
+
+	integer :: j
+	integer(kind = 8) :: i8, prod
+
+	!type(string_vector_t) :: str_vec
+	type(char_vector_t) :: str_vec
+
+	select case (val%type)
+
+		case (void_type)
+			ans = ''
+
+		case (bool_type)
+			! TODO: use bool1_str() and other primitive converters
+			if (val%bool) then
+				ans = "true"
+			else
+				ans = "false"
+			end if
+
+		case (f32_type)
+			write(buf16, '(es16.6)') val%f32
+			!ans = trim(buf16)
+			ans = buf16  ! no trim for alignment
+
+		case (i32_type)
+			write(buffer, '(i0)') val%i32
+			ans = trim(buffer)
+
+		case (i64_type)
+			write(buffer, '(i0)') val%i64
+			ans = trim(buffer)
+
+		case (str_type)
+			! TODO: wrap str in quotes for clarity, both scalars and str array
+			! elements.  Update tests.
+			ans = val%str%s
+
+		case (file_type)
+			ans = "{file_unit: "//str(val%file_%unit_)//", filename: """// &
+				val%file_%name_//"""}"
+
+		case default
+			ans = err_prefix//"<invalid_value>"//color_reset
+
+	end select
+
+end function value_prim_to_str
 
 !===============================================================================
 
