@@ -7575,39 +7575,6 @@ recursive function value_to_str(val) result(ans)
 
 	select case (val%type)
 
-		case (void_type)
-			ans = ''
-
-		case (bool_type)
-			! TODO: use bool1_str() and other primitive converters
-			if (val%sca%bool) then
-				ans = "true"
-			else
-				ans = "false"
-			end if
-
-		case (f32_type)
-			write(buf16, '(es16.6)') val%sca%f32
-			!ans = trim(buf16)
-			ans = buf16  ! no trim for alignment
-
-		case (i32_type)
-			write(buffer, '(i0)') val%sca%i32
-			ans = trim(buffer)
-
-		case (i64_type)
-			write(buffer, '(i0)') val%sca%i64
-			ans = trim(buffer)
-
-		case (str_type)
-			! TODO: wrap str in quotes for clarity, both scalars and str array
-			! elements.  Update tests.
-			ans = val%sca%str%s
-
-		case (file_type)
-			ans = "{file_unit: "//str(val%sca%file_%unit_)//", filename: """// &
-				val%sca%file_%name_//"""}"
-
 		case (array_type)
 
 			if (val%array%kind == impl_array) then
@@ -7745,7 +7712,9 @@ recursive function value_to_str(val) result(ans)
 			ans = str_vec%v( 1: str_vec%len_ )
 
 		case default
-			ans = err_prefix//"<invalid_value>"//color_reset
+			!ans = '['//val%array%lbound%to_str(val%array%type)//': ' &
+			ans = val%sca%to_str(val%type)
+			!ans = err_prefix//"<invalid_value>"//color_reset
 
 	end select
 
@@ -7754,9 +7723,6 @@ end function value_to_str
 !===============================================================================
 
 recursive function scalar_to_str(val, type) result(ans)
-
-	! TODO: dry up with value_to_str().  Composition?  Probably.  Inheritance?
-	! Probably not
 
 	class(scalar_t) :: val
 
