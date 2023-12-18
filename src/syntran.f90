@@ -265,7 +265,7 @@ real(kind = 4) function syntran_eval_f32(str, quiet) result(eval_f32)
 	val = syntax_eval(tree, vars, fns, quietl)
 
 	! TODO: check kind, add optional iostat arg
-	eval_f32 = val%f32
+	eval_f32 = val%sca%f32
 	!print *, 'eval_f32 = ', eval_f32
 
 end function syntran_eval_f32
