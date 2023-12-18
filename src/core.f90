@@ -35,14 +35,19 @@ module syntran__core_m
 	!      it's in the ternary dict first.
 	!    * any use cases for #let? i probbaly don't want to get into general
 	!      expression parsing like `#let x = 1 + 2;` during preprocessing
-	!  - fn return statement. i like the cleanliness of rust but i still need a
-	!    way to return early.  rust does have an explicit "return" statement, i
-	!    guess it's just not the rust style to use it when it's not needed
+	!  - jumping control flow:
+	!    * (sys) exit.  at least this basic form of error handling is needed
+	!    * fn return statement. i like the cleanliness of rust but i still need
+	!      a way to return early.  rust does have an explicit "return"
+	!      statement, i guess it's just not the rust style to use it when it's
+	!      not needed
+	!    * cycle (continue), break ((loop) exit)
 	!  - str comparison operations:
 	!    * !=
 	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
 	!      matching leading chars but diff lens
 	!    * ==:  done
+	!  - negative for loop steps.  at least throw parser error
 	!  - fuzz testing
 	!  - substring indexing and slicing:
 	!    * str len intrinsic?  name it len() or size()?
@@ -65,6 +70,7 @@ module syntran__core_m
 	!      this way I don't need to add structs, multiple return vals, or out
 	!      args yet
 	!  - arrays
+	!    * PR from vec-slice branch has been started.  needs more work
 	!    * add slice subscripts:
 	!      > a[:]     -> a[0], a[1], a[2], ...
 	!      > a[1:4]   -> a[1], a[2], a[3]  // already parsed bc of str feature, just can't eval yet
@@ -95,6 +101,7 @@ module syntran__core_m
 	!      > non-recursive user-defined fns
 	!  - structs
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
+	!    * using rust syntrax highlighting in neovim is not bad (except for "\" string)
 	!  - enums
 	!  - xor, xnor
 	!    * xor (bool1, bool2) is just (bool1 != bool2)
@@ -7577,6 +7584,8 @@ recursive function value_to_str(val) result(ans)
 
 		case (array_type)
 
+			! This whole case could be an array_to_str() fn
+
 			if (val%array%kind == impl_array) then
 				ans = '['//val%array%lbound%to_str(val%array%type)//': ' &
 				         //val%array%ubound%to_str(val%array%type)//']'
@@ -7712,9 +7721,7 @@ recursive function value_to_str(val) result(ans)
 			ans = str_vec%v( 1: str_vec%len_ )
 
 		case default
-			!ans = '['//val%array%lbound%to_str(val%array%type)//': ' &
 			ans = val%sca%to_str(val%type)
-			!ans = err_prefix//"<invalid_value>"//color_reset
 
 	end select
 
