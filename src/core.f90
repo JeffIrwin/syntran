@@ -55,7 +55,6 @@ module syntran__core_m
 	!      > str_vec[0] == str_vec[:,0]
 	!      > str_mat[0,0] == str_mat[:,0,0]
 	!      > etc.
-	!  - fix memory leaks.  noticeable in paraview wave
 	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
 	!    include quick-start and links in top-level README?
 	!    * github automatically includes a Table of Contents in a menu, so maybe
@@ -206,16 +205,42 @@ module syntran__core_m
 		! Do we need a separate iostat beyond eof?
 	end type file_t
 
-	type value_t
+	!********
+
+	type scalar_t
+
+		! Primitive value type.  Cannot be an array!  Maybe it should be named
+		! scalar_t?  Not sure what I'll do with structs
+
+		! TODO: do both scalar_t and value_t need type member?
 		integer :: type
 
-		! TODO: value_t should contain scalar_t instead of duplicating all these
-		! members (composition over inheritance)
 		type(file_t)      :: file_
 		type(string_t)    :: str
 
 		logical           :: bool
 		integer(kind = 4) :: i32
+		integer(kind = 8) :: i64
+		real   (kind = 4) :: f32
+
+		contains
+			procedure :: to_str => scalar_to_str
+
+	end type scalar_t
+
+	!********
+
+	type value_t
+		integer :: type
+
+		type(scalar_t) :: sca
+
+		! TODO: value_t should contain scalar_t instead of duplicating all these
+		! members (composition over inheritance)
+		!type(file_t)      :: file_
+		!type(string_t)    :: str
+		!logical           :: bool
+		!integer(kind = 4) :: i32
 		integer(kind = 8) :: i64
 		real   (kind = 4) :: f32
 
@@ -262,33 +287,6 @@ module syntran__core_m
 	interface mod_
 		module procedure modulo_value_t
 	end interface mod_
-
-	!********
-
-	type scalar_t
-
-		! Primitive value type.  Cannot be an array!  Maybe it should be named
-		! scalar_t?  Not sure what I'll do with structs
-
-		integer :: type
-
-		type(file_t)      :: file_
-		type(string_t)    :: str
-
-		logical           :: bool
-		integer(kind = 4) :: i32
-		integer(kind = 8) :: i64
-		real   (kind = 4) :: f32
-
-		!!type(array_t), pointer :: array => null()
-		!type(array_t), allocatable :: array
-
-		contains
-			procedure :: to_str => scalar_to_str
-			!procedure :: to_i32 => scalar_to_i32
-			!procedure :: to_i64 => scalar_to_i64
-
-	end type scalar_t
 
 	!********
 
@@ -1593,15 +1591,15 @@ subroutine push_array(vector, val)
 	end if
 
 	if      (vector%type == i32_type) then
-		vector%i32 ( vector%len_ ) = val%i32
+		vector%i32 ( vector%len_ ) = val%sca%i32
 	else if (vector%type == i64_type) then
 		vector%i64 ( vector%len_ ) = val%i64
 	else if (vector%type == f32_type) then
 		vector%f32 ( vector%len_ ) = val%f32
 	else if (vector%type == bool_type) then
-		vector%bool( vector%len_ ) = val%bool
+		vector%bool( vector%len_ ) = val%sca%bool
 	else if (vector%type == str_type) then
-		vector%str ( vector%len_ ) = val%str
+		vector%str ( vector%len_ ) = val%sca%str
 	else
 		write(*,*) 'Error: push_array type not implemented'
 		call internal_error()
@@ -1996,8 +1994,8 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%op   = src%op
 
 	dst%val  = src%val
-	!dst%val%file_ = src%val%file_
-	!dst%val%file_%eof = src%val%file_%eof
+	!dst%val%sca%file_     = src%val%sca%file_
+	!dst%val%sca%file_%eof = src%val%sca%file_%eof
 
 	dst%identifier  = src%identifier
 	dst%id_index    = src%id_index
@@ -2603,11 +2601,11 @@ function new_literal_value(type, bool, i32, i64, f32, str) result(val)
 	type(value_t) :: val
 
 	val%type = type
-	if (present(bool)) val%bool  = bool
+	if (present(bool)) val%sca%bool  = bool
 	if (present(f32 )) val%f32   = f32
-	if (present(i32 )) val%i32   = i32
+	if (present(i32 )) val%sca%i32   = i32
 	if (present(i64 )) val%i64   = i64
-	if (present(str )) val%str%s = str
+	if (present(str )) val%sca%str%s = str
 
 end function new_literal_value
 
@@ -2892,8 +2890,8 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 			! TODO: if filename is already absolute, do not prepend with path
 
 			i = i + 1
-			filename = get_dir(src_file)//tokens_in(i)%val%str%s  ! relative to src file
-			!filename = tokens_in(i)%val%str%s                    ! relative to runtime pwd
+			filename = get_dir(src_file)//tokens_in(i)%val%sca%str%s  ! relative to src file
+			!filename = tokens_in(i)%val%sca%str%s                    ! relative to runtime pwd
 
 			!print *, 'include filename = "', filename, '"'
 
@@ -5154,7 +5152,7 @@ function parse_primary_expr(parser) result(expr)
 			bool = keyword%kind == true_keyword
 			expr = new_bool(bool)
 
-			!print *, 'expr%val%bool = ', expr%val%bool
+			!print *, 'expr%val%sca%bool = ', expr%val%sca%bool
 
 		case (identifier_token)
 
@@ -5451,7 +5449,7 @@ function parse_primary_expr(parser) result(expr)
 		case (str_token)
 
 			token = parser%match(str_token)
-			expr  = new_str(token%val%str%s)
+			expr  = new_str(token%val%sca%str%s)
 
 		case (i64_token)
 
@@ -5461,7 +5459,7 @@ function parse_primary_expr(parser) result(expr)
 		case default
 
 			token = parser%match(i32_token)
-			expr  = new_i32(token%val%i32)
+			expr  = new_i32(token%val%sca%i32)
 
 			if (debug > 1) print *, 'token = ', expr%val%to_str()
 
@@ -5844,7 +5842,7 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 	! str scalar with single char subscript
 	if (vars%vals(node%id_index)%type == str_type) then
 		subscript = syntax_eval(node%subscripts(1), vars, fns, quietl)
-		index_ = subscript%i32
+		index_ = subscript%sca%i32
 		return
 	end if
 
@@ -5861,7 +5859,7 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 
 		! TODO: bound checking? by default or enabled with cmd line flag?
 
-		index_ = index_ + prod * subscript%i32
+		index_ = index_ + prod * subscript%sca%i32
 		prod  = prod * vars%vals(node%id_index)%array%size(i)
 
 	end do
@@ -5955,24 +5953,24 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end if
 
 			!print *, 'lbound = ', lbound%i64
-			!print *, 'step32 = ', step  %i32
+			!print *, 'step32 = ', step  %sca%i32
 			!print *, 'step64 = ', step  %i64
 			!print *, 'ubound = ', ubound%i64
 
 			if (array%type == i32_type) then
 
-				array%cap = (ubound%i32 - lbound%i32) / step%i32 + 1
+				array%cap = (ubound%sca%i32 - lbound%sca%i32) / step%sca%i32 + 1
 				allocate(array%i32( array%cap ))
 
 				j = 1
-				i = lbound%i32
-				if (lbound%i32 < ubound%i32 .neqv. 0 < step%i32) i = ubound%i32
+				i = lbound%sca%i32
+				if (lbound%sca%i32 < ubound%sca%i32 .neqv. 0 < step%sca%i32) i = ubound%sca%i32
 
 				! Step may be negative
-				do while ((i  < ubound%i32 .eqv. lbound%i32 < ubound%i32) &
-				     .and. i /= ubound%i32)
+				do while ((i  < ubound%sca%i32 .eqv. lbound%sca%i32 < ubound%sca%i32) &
+				     .and. i /= ubound%sca%i32)
 					array%i32(j) = i
-					i = i + step%i32
+					i = i + step%sca%i32
 					j = j + 1
 				end do
 				array%len_ = j - 1
@@ -6044,15 +6042,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!elem = lbound
 
 			array%type = node%val%array%type
-			array%len_  = len_%i32
+			array%len_  = len_%sca%i32
 			array%cap  = array%len_
 
 			if (array%type == f32_type) then
 
 				allocate(array%f32( array%cap ))
-				fstep = (ubound%f32 - lbound%f32) / (len_%i32 - 1)
+				fstep = (ubound%f32 - lbound%f32) / (len_%sca%i32 - 1)
 
-				do i = 0, len_%i32 - 1
+				do i = 0, len_%sca%i32 - 1
 					array%f32(i+1) = lbound%f32 + i * fstep
 					!elem%f32 = lbound%f32 + i * fstep
 					!call array%push(elem)
@@ -6082,7 +6080,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				do i = 1, array%rank
 					len_ = syntax_eval(node%size(i), vars, fns, quietl)
-					array%size(i) = len_%i32
+					array%size(i) = len_%sca%i32
 					!print *, 'size['//str(i)//'] = ', array%size(i)
 				end do
 
@@ -6104,7 +6102,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			if      (array%type == i32_type) then
 				allocate(array%i32( array%cap ))
-				array%i32 = lbound%i32
+				array%i32 = lbound%sca%i32
 
 			else if      (array%type == i64_type) then
 				allocate(array%i64( array%cap ))
@@ -6116,11 +6114,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			else if (array%type == bool_type) then
 				allocate(array%bool( array%cap ))
-				array%bool = lbound%bool
+				array%bool = lbound%sca%bool
 
 			else if (array%type == str_type) then
 				allocate(array%str( array%cap ))
-				array%str = lbound%str
+				array%str = lbound%sca%str
 
 			else
 				write(*,*) err_eval_len_array(kind_name(array%type))
@@ -6165,7 +6163,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end if
 
 			if (array%type == i32_type) then
-				array%len_ = ubound%i32 - lbound%i32
+				array%len_ = ubound%sca%i32 - lbound%sca%i32
 			else !if (array%type == i64_type) then
 				array%len_ = ubound%i64 - lbound%i64
 			end if
@@ -6182,8 +6180,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'node%val%array%type = ', node%val%array%type
 
 			if (array%type == i32_type) then
-				do i = lbound%i32, ubound%i32 - 1
-					array%i32(i - lbound%i32 + 1) = i
+				do i = lbound%sca%i32, ubound%sca%i32 - 1
+					array%i32(i - lbound%sca%i32 + 1) = i
 				end do
 			else !if (array%type == i64_type) then
 				do i8 = lbound%i64, ubound%i64 - 1
@@ -6216,7 +6214,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!array%size = array%len_
 			do i = 1, array%rank
 				len_ = syntax_eval(node%size(i), vars, fns, quietl)
-				array%size(i) = len_%i32
+				array%size(i) = len_%sca%i32
 			end do
 
 			!print *, 'copying array'
@@ -6280,8 +6278,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call internal_error()
 		end if
 
-		do i = lbound%i32, ubound%i32 - 1
-			itr%i32 = i
+		do i = lbound%sca%i32, ubound%sca%i32 - 1
+			itr%sca%i32 = i
 
 			! During evaluation, insert variables by array id_index instead of
 			! dict lookup.  This is much faster and can be done during
@@ -6298,7 +6296,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (while_statement)
 
 		condition = syntax_eval(node%condition, vars, fns, quietl)
-		do while (condition%bool)
+		do while (condition%sca%bool)
 			res = syntax_eval(node%body, vars, fns, quietl)
 			condition = syntax_eval(node%condition, vars, fns, quietl)
 		end do
@@ -6308,7 +6306,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		condition = syntax_eval(node%condition, vars, fns, quietl)
 		!print *, 'condition = ', condition%str()
 
-		if (condition%bool) then
+		if (condition%sca%bool) then
 			res = syntax_eval(node%if_clause, vars, fns, quietl)
 
 		else if (allocated(node%else_clause)) then
@@ -6420,7 +6418,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			if (vars%vals(node%id_index)%type == str_type) then
 				! TODO: ban compound character substring assignment
-				vars%vals(node%id_index)%str%s(i8+1: i8+1) = res%str%s
+				vars%vals(node%id_index)%sca%str%s(i8+1: i8+1) = res%sca%str%s
 			else
 
 				!print *, 'LHS array type = ', &
@@ -6465,24 +6463,24 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		case ("min")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			res%i32 = arg%i32
+			res%sca%i32 = arg%sca%i32
 
 			! Note that min/max/println etc. are variadic, so we loop to
 			! size(node%args) instead of size(node%params)
 
 			do i = 2, size(node%args)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
-				res%i32 = min(res%i32, arg%i32)
+				res%sca%i32 = min(res%sca%i32, arg%sca%i32)
 			end do
 
 		case ("max")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			res%i32 = arg%i32
+			res%sca%i32 = arg%sca%i32
 			do i = 2, size(node%args)
 				!print *, 'arg ', i
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
-				res%i32 = max(res%i32, arg%i32)
+				res%sca%i32 = max(res%sca%i32, arg%sca%i32)
 			end do
 
 		case ("println")
@@ -6494,36 +6492,36 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			write(output_unit, *)
 
 			!! TODO: what, if anything, should println return?
-			!res%i32 = 0
+			!res%sca%i32 = 0
 
 		case ("str")
 
-			res%str%s = ''
+			res%sca%str%s = ''
 			do i = 1, size(node%args)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
-				res%str%s = res%str%s // arg%to_str()  ! TODO: use char_vector_t
+				res%sca%str%s = res%sca%str%s // arg%to_str()  ! TODO: use char_vector_t
 			end do
 
 		case ("len")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			res%i32 = len(arg%str%s, 4)
-			!res%i32 = mylen( arg%str%s )
+			res%sca%i32 = len(arg%sca%str%s, 4)
+			!res%sca%i32 = mylen( arg%sca%str%s )
 
 		case ("parse_i32")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			read(arg%str%s, *) res%i32  ! TODO: catch iostat
+			read(arg%sca%str%s, *) res%sca%i32  ! TODO: catch iostat
 
 		case ("parse_i64")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			read(arg%str%s, *) res%i64  ! TODO: catch iostat
+			read(arg%sca%str%s, *) res%i64  ! TODO: catch iostat
 
 		case ("i32")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			res%i32 = arg%to_i32()
+			res%sca%i32 = arg%to_i32()
 
 		case ("i64")
 
@@ -6536,18 +6534,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			! TODO: catch iostat, e.g. same file opened twice, folder doesn't
 			! exist, etc.
-			open(newunit = res%file_%unit_, file = arg%str%s)
+			open(newunit = res%sca%file_%unit_, file = arg%sca%str%s)
 
-			!print *, 'opened unit ', res%file_%unit_
-			res%file_%name_ = arg%str%s
-			res%file_%eof = .false.
+			!print *, 'opened unit ', res%sca%file_%unit_
+			res%sca%file_%name_ = arg%sca%str%s
+			res%sca%file_%eof = .false.
 
 		case ("readln")
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 
-			!print *, "reading from unit", arg1%file_%unit_
-			res%str%s = read_line(arg1%file_%unit_, io)
+			!print *, "reading from unit", arg1%sca%file_%unit_
+			res%sca%str%s = read_line(arg1%sca%file_%unit_, io)
 			!print *, 'done reading'
 
 			! This could be a very dangerous side effect!  The file argument of
@@ -6564,42 +6562,42 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! TODO:  set eof flag or crash for other non-zero io
 			if (io == iostat_end) then
 			!if (io /= 0) then
-				!arg1%file_%eof = .true.
-				vars%vals(node%args(1)%id_index)%file_%eof = .true.
+				!arg1%sca%file_%eof = .true.
+				vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
 			end if
-			!print *, 'eof   = ', arg1%file_%eof
+			!print *, 'eof   = ', arg1%sca%file_%eof
 
 		case ("writeln")
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 
-			!print *, 'writing to unit ', arg1%file_%unit_
+			!print *, 'writing to unit ', arg1%sca%file_%unit_
 			do i = 2, size(node%args)
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
-				write(arg1%file_%unit_, '(a)', advance = 'no') arg%to_str()
+				write(arg1%sca%file_%unit_, '(a)', advance = 'no') arg%to_str()
 			end do
-			write(arg1%file_%unit_, *)
+			write(arg1%sca%file_%unit_, *)
 
 		case ("eof")
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 
-			!print *, "checking eof for unit", arg1%file_%unit_
-			res%bool = arg1%file_%eof
+			!print *, "checking eof for unit", arg1%sca%file_%unit_
+			res%sca%bool = arg1%sca%file_%eof
 
-			!print *, 'eof fn = ', arg1%file_%eof
+			!print *, 'eof fn = ', arg1%sca%file_%eof
 
 		case ("close")
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			!print *, 'closing unit ', arg%file_%unit_
-			close(arg%file_%unit_)
+			!print *, 'closing unit ', arg%sca%file_%unit_
+			close(arg%sca%file_%unit_)
 
 		case ("size")
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			arg2 = syntax_eval(node%args(2), vars, fns, quietl)
 
-			if (arg2%i32 < 0 .or. arg2%i32 >= arg1%array%rank) then
+			if (arg2%sca%i32 < 0 .or. arg2%sca%i32 >= arg1%array%rank) then
 				! TODO: this should be a runtime error (like bounds-checking),
 				! not an internal_error.  I just don't have infrastructure for
 				! runtime error handling yet
@@ -6608,7 +6606,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end if
 
 			! TODO: return type?  Make separate size64() fn?
-			res%i32 = int(arg1%array%size( arg2%i32 + 1 ))
+			res%sca%i32 = int(arg1%array%size( arg2%sca%i32 + 1 ))
 
 			! TODO: if the array pointer is not deallocated here, this was
 			! causing a memory leak which is especially bad when `size()` is
@@ -6672,7 +6670,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (node%subscripts(1)%sub_kind)
 			case (scalar_sub)
 				i8 = subscript_eval(node, vars, fns, quietl)
-				res%str%s = vars%vals(node%id_index)%str%s(i8+1: i8+1)
+				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
 
 			case (range_sub)
 
@@ -6680,16 +6678,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				! This feels inconsistent and not easy to extend to higher ranks
 				right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
-				iu = right%i32
+				iu = right%sca%i32
 
 				!print *, ''
 				!print *, 'identifier ', node%identifier%text
 				!print *, 'il = ', il
 				!print *, 'iu = ', iu
-				!print *, 'str = ', vars%vals(node%id_index)%str%s
+				!print *, 'str = ', vars%vals(node%id_index)%sca%str%s
 
 				! Not inclusive of upper bound
-				res%str%s = vars%vals(node%id_index)%str%s(il+1: iu)
+				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(il+1: iu)
 
 			case default
 				write(*,*) 'Error: unexpected subscript kind'
@@ -6744,7 +6742,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		case (minus_token)
 			select case (right%type)
 				case (i32_type)
-					res%i32 = -right%i32
+					res%sca%i32 = -right%sca%i32
 				case (i64_type)
 					res%i64 = -right%i64
 				case (f32_type)
@@ -6752,7 +6750,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end select
 
 		case (not_keyword)
-			res%bool = .not. right%bool
+			res%sca%bool = .not. right%sca%bool
 
 		case default
 			write(*,*) err_eval_unary_op(node%op%text)
@@ -6793,10 +6791,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call mod_(left, right, res, node%op%text)
 
 		case (and_keyword)
-			res%bool = left%bool .and. right%bool
+			res%sca%bool = left%sca%bool .and. right%sca%bool
 
 		case (or_keyword)
-			res%bool = left%bool .or.  right%bool
+			res%sca%bool = left%sca%bool .or.  right%sca%bool
 
 		case (eequals_token)
 
@@ -6806,32 +6804,32 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
-				res%bool = left%i32 == right%i32
+				res%sca%bool = left%sca%i32 == right%sca%i32
 
 			case        (magic * i64_type + i64_type)
-				res%bool = left%i64 == right%i64
+				res%sca%bool = left%i64 == right%i64
 
 			case        (magic * i32_type + i64_type)
-				res%bool = left%i32 == right%i64
+				res%sca%bool = left%sca%i32 == right%i64
 
 			case        (magic * i64_type + i32_type)
-				res%bool = left%i64 == right%i32
+				res%sca%bool = left%i64 == right%sca%i32
 
 			case        (magic * f32_type + f32_type)
-				res%bool = left%f32 == right%f32
+				res%sca%bool = left%f32 == right%f32
 			case        (magic * f32_type + i32_type)
-				res%bool = left%f32 == right%i32
+				res%sca%bool = left%f32 == right%sca%i32
 				! TODO: is this even possible or should I ban comparing ints and
 				! floats?  Similarly for other comparisons
 				!
 				! GNU says Warning: Equality comparison for REAL(4) at (1)
 				! [-Wcompare-reals]
 			case        (magic * i32_type + f32_type)
-				res%bool = left%i32 == right%f32
+				res%sca%bool = left%sca%i32 == right%f32
 			case        (magic * bool_type + bool_type)
-				res%bool = left%bool .eqv. right%bool
+				res%sca%bool = left%sca%bool .eqv. right%sca%bool
 			case        (magic * str_type + str_type)
-				res%bool = left%str%s == right%str%s
+				res%sca%bool = left%sca%str%s == right%sca%str%s
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
@@ -6842,25 +6840,25 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
-				res%bool = left%i32 /= right%i32
+				res%sca%bool = left%sca%i32 /= right%sca%i32
 
 			case        (magic * i64_type + i64_type)
-				res%bool = left%i64 /= right%i64
+				res%sca%bool = left%i64 /= right%i64
 
 			case        (magic * i32_type + i64_type)
-				res%bool = left%i32 /= right%i64
+				res%sca%bool = left%sca%i32 /= right%i64
 
 			case        (magic * i64_type + i32_type)
-				res%bool = left%i64 /= right%i32
+				res%sca%bool = left%i64 /= right%sca%i32
 
 			case        (magic * f32_type + f32_type)
-				res%bool = left%f32 /= right%f32
+				res%sca%bool = left%f32 /= right%f32
 			case        (magic * f32_type + i32_type)
-				res%bool = left%f32 /= right%i32
+				res%sca%bool = left%f32 /= right%sca%i32
 			case        (magic * i32_type + f32_type)
-				res%bool = left%i32 /= right%f32
+				res%sca%bool = left%sca%i32 /= right%f32
 			case        (magic * bool_type + bool_type)
-				res%bool = left%bool .neqv. right%bool
+				res%sca%bool = left%sca%bool .neqv. right%sca%bool
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
@@ -6871,23 +6869,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
-				res%bool = left%i32 < right%i32
+				res%sca%bool = left%sca%i32 < right%sca%i32
 
 			case        (magic * i64_type + i64_type)
-				res%bool = left%i64 < right%i64
+				res%sca%bool = left%i64 < right%i64
 
 			case        (magic * i32_type + i64_type)
-				res%bool = left%i32 < right%i64
+				res%sca%bool = left%sca%i32 < right%i64
 
 			case        (magic * i64_type + i32_type)
-				res%bool = left%i64 < right%i32
+				res%sca%bool = left%i64 < right%sca%i32
 
 			case        (magic * f32_type + f32_type)
-				res%bool = left%f32 < right%f32
+				res%sca%bool = left%f32 < right%f32
 			case        (magic * f32_type + i32_type)
-				res%bool = left%f32 < right%i32
+				res%sca%bool = left%f32 < right%sca%i32
 			case        (magic * i32_type + f32_type)
-				res%bool = left%i32 < right%f32
+				res%sca%bool = left%sca%i32 < right%f32
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
@@ -6898,23 +6896,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
-				res%bool = left%i32 <= right%i32
+				res%sca%bool = left%sca%i32 <= right%sca%i32
 
 			case        (magic * i64_type + i64_type)
-				res%bool = left%i64 <= right%i64
+				res%sca%bool = left%i64 <= right%i64
 
 			case        (magic * i32_type + i64_type)
-				res%bool = left%i32 <= right%i64
+				res%sca%bool = left%sca%i32 <= right%i64
 
 			case        (magic * i64_type + i32_type)
-				res%bool = left%i64 <= right%i32
+				res%sca%bool = left%i64 <= right%sca%i32
 
 			case        (magic * f32_type + f32_type)
-				res%bool = left%f32 <= right%f32
+				res%sca%bool = left%f32 <= right%f32
 			case        (magic * f32_type + i32_type)
-				res%bool = left%f32 <= right%i32
+				res%sca%bool = left%f32 <= right%sca%i32
 			case        (magic * i32_type + f32_type)
-				res%bool = left%i32 <= right%f32
+				res%sca%bool = left%sca%i32 <= right%f32
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
@@ -6925,23 +6923,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
-				res%bool = left%i32 > right%i32
+				res%sca%bool = left%sca%i32 > right%sca%i32
 
 			case        (magic * i64_type + i64_type)
-				res%bool = left%i64 > right%i64
+				res%sca%bool = left%i64 > right%i64
 
 			case        (magic * i32_type + i64_type)
-				res%bool = left%i32 > right%i64
+				res%sca%bool = left%sca%i32 > right%i64
 
 			case        (magic * i64_type + i32_type)
-				res%bool = left%i64 > right%i32
+				res%sca%bool = left%i64 > right%sca%i32
 
 			case        (magic * f32_type + f32_type)
-				res%bool = left%f32 > right%f32
+				res%sca%bool = left%f32 > right%f32
 			case        (magic * f32_type + i32_type)
-				res%bool = left%f32 > right%i32
+				res%sca%bool = left%f32 > right%sca%i32
 			case        (magic * i32_type + f32_type)
-				res%bool = left%i32 > right%f32
+				res%sca%bool = left%sca%i32 > right%f32
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
@@ -6952,23 +6950,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
-				res%bool = left%i32 >= right%i32
+				res%sca%bool = left%sca%i32 >= right%sca%i32
 
 			case        (magic * i64_type + i64_type)
-				res%bool = left%i64 >= right%i64
+				res%sca%bool = left%i64 >= right%i64
 
 			case        (magic * i32_type + i64_type)
-				res%bool = left%i32 >= right%i64
+				res%sca%bool = left%sca%i32 >= right%i64
 
 			case        (magic * i64_type + i32_type)
-				res%bool = left%i64 >= right%i32
+				res%sca%bool = left%i64 >= right%sca%i32
 
 			case        (magic * f32_type + f32_type)
-				res%bool = left%f32 >= right%f32
+				res%sca%bool = left%f32 >= right%f32
 			case        (magic * f32_type + i32_type)
-				res%bool = left%f32 >= right%i32
+				res%sca%bool = left%f32 >= right%sca%i32
 			case        (magic * i32_type + f32_type)
-				res%bool = left%i32 >= right%f32
+				res%sca%bool = left%sca%i32 >= right%f32
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
@@ -6999,7 +6997,7 @@ subroutine promote_i32_i64(val)
 
 	if (val%type == i32_type) then
 		val%type = i64_type
-		val%i64 = val%i32
+		val%i64 = val%sca%i32
 	end if
 
 end subroutine promote_i32_i64
@@ -7064,10 +7062,10 @@ function get_array_value_t(array, i) result(val)
 	val%type = array%type
 	select case (array%type)
 		case (bool_type)
-			val%bool = array%bool(i + 1)
+			val%sca%bool = array%bool(i + 1)
 
 		case (i32_type)
-			val%i32 = array%i32(i + 1)
+			val%sca%i32 = array%i32(i + 1)
 		case (i64_type)
 			val%i64 = array%i64(i + 1)
 
@@ -7075,7 +7073,7 @@ function get_array_value_t(array, i) result(val)
 			val%f32 = array%f32(i + 1)
 
 		case (str_type)
-			val%str = array%str(i + 1)
+			val%sca%str = array%str(i + 1)
 
 	end select
 
@@ -7098,10 +7096,10 @@ subroutine set_array_value_t(array, i, val)
 	! array%type is already set
 	select case (array%type)
 		case (bool_type)
-			array%bool(i + 1) = val%bool
+			array%bool(i + 1) = val%sca%bool
 
 		case (i32_type)
-			array%i32(i + 1) = val%i32
+			array%i32(i + 1) = val%sca%i32
 
 		case (i64_type)
 			array%i64(i + 1) = val%i64
@@ -7110,7 +7108,7 @@ subroutine set_array_value_t(array, i, val)
 			array%f32(i + 1) = val%f32
 
 		case (str_type)
-			array%str(i + 1) = val%str
+			array%str(i + 1) = val%sca%str
 
 	end select
 
@@ -7140,38 +7138,38 @@ subroutine add_value_t(left, right, res, op_text)
 
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
-		res%i32 = left%i32 + right%i32
+		res%sca%i32 = left%sca%i32 + right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = left%i64 + right%i64
 
 	case        (magic**2 * i64_type + magic * i64_type + i32_type)
-		res%i64 = left%i64 + right%i32
+		res%i64 = left%i64 + right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
-		res%i64 = left%i32 + right%i64
+		res%i64 = left%sca%i32 + right%i64
 
 	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	! Usually, adding f32 to i32 casts to an i32 result.  But for compound
 	! assignment we may want to make it an i32, e.g. i += 3.1;
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%i32 = int(left%f32 + right%i32)
+		res%sca%i32 = int(left%f32 + right%sca%i32)
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%i32 = int(left%i32 + right%f32)
+		res%sca%i32 = int(left%sca%i32 + right%f32)
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
 		res%f32 = left%f32 + right%f32
 
 	case        (magic**2 * f32_type + magic * f32_type + i32_type)
-		res%f32 = left%f32 + right%i32
+		res%f32 = left%f32 + right%sca%i32
 
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
-		res%f32 = left%i32 + right%f32
+		res%f32 = left%sca%i32 + right%f32
 
 	case        (magic**2 * str_type + magic * str_type + str_type)
-		res%str%s = left%str%s // right%str%s
+		res%sca%str%s = left%sca%str%s // right%sca%str%s
 
 	case default
 		! FIXME: other numeric types (f64, etc.)
@@ -7197,34 +7195,34 @@ subroutine mul_value_t(left, right, res, op_text)
 
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
-		res%i32 = left%i32 * right%i32
+		res%sca%i32 = left%sca%i32 * right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = left%i64 * right%i64
 
 	case        (magic**2 * i64_type + magic * i64_type + i32_type)
-		res%i64 = left%i64 * right%i32
+		res%i64 = left%i64 * right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
-		res%i64 = left%i32 * right%i64
+		res%i64 = left%sca%i32 * right%i64
 
 	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%i32 = int(left%f32 * right%i32)
+		res%sca%i32 = int(left%f32 * right%sca%i32)
 
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%i32 = int(left%i32 * right%f32)
+		res%sca%i32 = int(left%sca%i32 * right%f32)
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
 		res%f32 = left%f32 * right%f32
 
 	case        (magic**2 * f32_type + magic * f32_type + i32_type)
-		res%f32 = left%f32 * right%i32
+		res%f32 = left%f32 * right%sca%i32
 
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
-		res%f32 = left%i32 * right%f32
+		res%f32 = left%sca%i32 * right%f32
 
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
@@ -7250,34 +7248,34 @@ subroutine div_value_t(left, right, res, op_text)
 
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
-		res%i32 = left%i32 / right%i32
+		res%sca%i32 = left%sca%i32 / right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = left%i64 / right%i64
 
 	case        (magic**2 * i64_type + magic * i64_type + i32_type)
-		res%i64 = left%i64 / right%i32
+		res%i64 = left%i64 / right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
-		res%i64 = left%i32 / right%i64
+		res%i64 = left%sca%i32 / right%i64
 
 	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%i32 = int(left%f32 / right%i32)
+		res%sca%i32 = int(left%f32 / right%sca%i32)
 
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%i32 = int(left%i32 / right%f32)
+		res%sca%i32 = int(left%sca%i32 / right%f32)
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
 		res%f32 = left%f32 / right%f32
 
 	case        (magic**2 * f32_type + magic * f32_type + i32_type)
-		res%f32 = left%f32 / right%i32
+		res%f32 = left%f32 / right%sca%i32
 
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
-		res%f32 = left%i32 / right%f32
+		res%f32 = left%sca%i32 / right%f32
 
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
@@ -7303,34 +7301,34 @@ subroutine subtract_value_t(left, right, res, op_text)
 
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
-		res%i32 = left%i32 - right%i32
+		res%sca%i32 = left%sca%i32 - right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = left%i64 - right%i64
 
 	case        (magic**2 * i64_type + magic * i64_type + i32_type)
-		res%i64 = left%i64 - right%i32
+		res%i64 = left%i64 - right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
-		res%i64 = left%i32 - right%i64
+		res%i64 = left%sca%i32 - right%i64
 
 	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%i32 = int(left%f32 - right%i32)
+		res%sca%i32 = int(left%f32 - right%sca%i32)
 
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%i32 = int(left%i32 - right%f32)
+		res%sca%i32 = int(left%sca%i32 - right%f32)
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
 		res%f32 = left%f32 - right%f32
 
 	case        (magic**2 * f32_type + magic * f32_type + i32_type)
-		res%f32 = left%f32 - right%i32
+		res%f32 = left%f32 - right%sca%i32
 
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
-		res%f32 = left%i32 - right%f32
+		res%f32 = left%sca%i32 - right%f32
 
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
@@ -7360,34 +7358,34 @@ subroutine modulo_value_t(left, right, res, op_text)
 
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
-		res%i32 = mod(left%i32, right%i32)
+		res%sca%i32 = mod(left%sca%i32, right%sca%i32)
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = mod(left%i64, right%i64)
 
 	case        (magic**2 * i64_type + magic * i64_type + i32_type)
-		res%i64 = mod(left%i64, int(right%i32, 8))
+		res%i64 = mod(left%i64, int(right%sca%i32, 8))
 
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
-		res%i64 = mod(int(left%i32, 8), right%i64)
+		res%i64 = mod(int(left%sca%i32, 8), right%i64)
 
 	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%i32 = mod(int(left%f32), right%i32)
+		res%sca%i32 = mod(int(left%f32), right%sca%i32)
 
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%i32 = mod(left%i32, int(right%f32))
+		res%sca%i32 = mod(left%sca%i32, int(right%f32))
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
 		res%f32 = mod(left%f32, right%f32)
 
 	case        (magic**2 * f32_type + magic * f32_type + i32_type)
-		res%f32 = mod(left%f32, real(right%i32))
+		res%f32 = mod(left%f32, real(right%sca%i32))
 
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
-		res%f32 = mod(real(left%i32), right%f32)
+		res%f32 = mod(real(left%sca%i32), right%f32)
 
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
@@ -7413,34 +7411,34 @@ subroutine pow_value_t(left, right, res, op_text)
 
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
-		res%i32 = left%i32 ** right%i32
+		res%sca%i32 = left%sca%i32 ** right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%i64 = left%i64 ** right%i64
 
 	case        (magic**2 * i64_type + magic * i64_type + i32_type)
-		res%i64 = left%i64 ** right%i32
+		res%i64 = left%i64 ** right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
-		res%i64 = left%i32 ** right%i64
+		res%i64 = left%sca%i32 ** right%i64
 
 	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%i32 = int(left%f32 ** right%i32)
+		res%sca%i32 = int(left%f32 ** right%sca%i32)
 
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%i32 = int(left%i32 ** right%f32)
+		res%sca%i32 = int(left%sca%i32 ** right%f32)
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
 		res%f32 = left%f32 ** right%f32
 
 	case        (magic**2 * f32_type + magic * f32_type + i32_type)
-		res%f32 = left%f32 ** right%i32
+		res%f32 = left%f32 ** right%sca%i32
 
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
-		res%f32 = left%i32 ** right%f32
+		res%f32 = left%sca%i32 ** right%f32
 
 	case default
 		! FIXME: other numeric types (i64, f64, etc.)
@@ -7516,15 +7514,15 @@ function value_to_i32(val) result(ans)
 			ans = int(val%f32, 4)
 
 		case (i32_type)
-			ans = val%i32
+			ans = val%sca%i32
 
 		case (i64_type)
 			ans = val%i64
 
 		case (str_type)
 
-			if (len(val%str%s) == 1) then
-				ans = iachar(val%str%s)
+			if (len(val%sca%str%s) == 1) then
+				ans = iachar(val%sca%str%s)
 			else
 				write(*,*) err_int_prefix//'cannot convert from type `' &
 					//kind_name(val%type)//'` to i32 '//color_reset
@@ -7554,7 +7552,7 @@ function value_to_i64(val) result(ans)
 			ans = int(val%f32, 8)
 
 		case (i32_type)
-			ans = val%i32
+			ans = val%sca%i32
 
 		case (i64_type)
 			!write(buffer, '(i0)') val%i64
@@ -7596,7 +7594,7 @@ recursive function value_to_str(val) result(ans)
 
 		case (bool_type)
 			! TODO: use bool1_str() and other primitive converters
-			if (val%bool) then
+			if (val%sca%bool) then
 				ans = "true"
 			else
 				ans = "false"
@@ -7608,7 +7606,7 @@ recursive function value_to_str(val) result(ans)
 			ans = buf16  ! no trim for alignment
 
 		case (i32_type)
-			write(buffer, '(i0)') val%i32
+			write(buffer, '(i0)') val%sca%i32
 			ans = trim(buffer)
 
 		case (i64_type)
@@ -7618,11 +7616,11 @@ recursive function value_to_str(val) result(ans)
 		case (str_type)
 			! TODO: wrap str in quotes for clarity, both scalars and str array
 			! elements.  Update tests.
-			ans = val%str%s
+			ans = val%sca%str%s
 
 		case (file_type)
-			ans = "{file_unit: "//str(val%file_%unit_)//", filename: """// &
-				val%file_%name_//"""}"
+			ans = "{file_unit: "//str(val%sca%file_%unit_)//", filename: """// &
+				val%sca%file_%name_//"""}"
 
 		case (array_type)
 

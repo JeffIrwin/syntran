@@ -226,7 +226,7 @@ integer function syntran_eval_i32(str) result(eval_i32)
 	val = syntax_eval(tree, vars, fns)
 
 	! TODO: check kind, add optional iostat arg
-	eval_i32 = val%i32
+	eval_i32 = val%sca%i32
 
 end function syntran_eval_i32
 
