@@ -7510,7 +7510,7 @@ function value_to_i32(val) result(ans)
 			ans = val%sca%i32
 
 		case (i64_type)
-			ans = val%sca%i64
+			ans = int(val%sca%i64, 4)
 
 		case (str_type)
 
@@ -7571,8 +7571,7 @@ recursive function value_to_str(val) result(ans)
 
 	!********
 
-	character(len = 16) :: buf16
-	character(len = 32) :: buffer
+	!character(len = 16) :: buf16
 
 	integer :: j
 	integer(kind = 8) :: i8, prod
@@ -7741,12 +7740,6 @@ recursive function scalar_to_str(val, type) result(ans)
 
 	character(len = 16) :: buf16
 	character(len = 32) :: buffer
-
-	integer :: j
-	integer(kind = 8) :: i8, prod
-
-	!type(string_vector_t) :: str_vec
-	type(char_vector_t) :: str_vec
 
 	select case (type)
 
