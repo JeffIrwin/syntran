@@ -233,6 +233,40 @@ module syntran__core_m
 
 	!********
 
+	type array_t
+
+		! The array type is i32_type, f32_type, etc. while the kind is
+		! impl_array (bound-based) or expl_array (CSV list)
+		integer :: type, kind
+		!type(value_t), allocatable :: lbound, step, ubound
+		type(scalar_t), allocatable :: lbound, step, ubound
+
+		! Note that these are arrays of primitive Fortran types, instead of
+		! arrays of generic value_t.  This performs better since we can put
+		! a type select/case outside of loops for processing arrays, as opposed
+		! to inside of a loop for type selection of every element
+		logical(kind = 1), allocatable :: bool(:)
+
+		integer(kind = 4), allocatable ::  i32(:)
+		integer(kind = 8), allocatable ::  i64(:)
+
+		real   (kind = 4), allocatable ::  f32(:)
+
+		type(string_t   ), allocatable ::  str(:)
+
+		! TODO: file arrays
+
+		integer :: rank
+		integer(kind = 8) :: len_, cap
+		integer(kind = 8), allocatable :: size(:)
+
+		contains
+			procedure :: push => push_array
+
+	end type array_t
+
+	!********
+
 	type value_t
 		integer :: type
 
@@ -280,40 +314,6 @@ module syntran__core_m
 	interface mod_
 		module procedure modulo_value_t
 	end interface mod_
-
-	!********
-
-	type array_t
-
-		! The array type is i32_type, f32_type, etc. while the kind is
-		! impl_array (bound-based) or expl_array (CSV list)
-		integer :: type, kind
-		!type(value_t), allocatable :: lbound, step, ubound
-		type(scalar_t), allocatable :: lbound, step, ubound
-
-		! Note that these are arrays of primitive Fortran types, instead of
-		! arrays of generic value_t.  This performs better since we can put
-		! a type select/case outside of loops for processing arrays, as opposed
-		! to inside of a loop for type selection of every element
-		logical(kind = 1), allocatable :: bool(:)
-
-		integer(kind = 4), allocatable ::  i32(:)
-		integer(kind = 8), allocatable ::  i64(:)
-
-		real   (kind = 4), allocatable ::  f32(:)
-
-		type(string_t   ), allocatable ::  str(:)
-
-		! TODO: file arrays
-
-		integer :: rank
-		integer(kind = 8) :: len_, cap
-		integer(kind = 8), allocatable :: size(:)
-
-		contains
-			procedure :: push => push_array
-
-	end type array_t
 
 	!********
 
