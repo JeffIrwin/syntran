@@ -1,5 +1,11 @@
 
 // Quick sort algorithm
+//
+// See `src/tests/test-src/fns/test-18.syntran` for a version that actually
+// returns a value
+//
+// This version can be good by adapting for global vars with a perf boost for
+// not passing args by value (c.f. AOC 2023 day 17)
 
 fn qsort(arr: [i32; :])
 {
