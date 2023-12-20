@@ -260,6 +260,19 @@ subroutine unit_test_comparisons(npass, nfail)
 			eval('"aoe" == " oe";')  == 'false',  &
 			eval('"aoe" == "a e";')  == 'false',  &
 			eval('"aoe" == "ao ";')  == 'false',  &
+			eval('"aoe" != "aoe";')  == 'false',  &
+			eval('"hoe" != "aoe";')  == 'true',  &
+			eval('"ahe" != "aoe";')  == 'true',  &
+			eval('"aoh" != "aoe";')  == 'true',  &
+			eval('"aoe" != "hoe";')  == 'true',  &
+			eval('"aoe" != "ahe";')  == 'true',  &
+			eval('"aoe" != "aoh";')  == 'true',  &
+			eval('" oe" != "aoe";')  == 'true',  &
+			eval('"a e" != "aoe";')  == 'true',  &
+			eval('"ao " != "aoe";')  == 'true',  &
+			eval('"aoe" != " oe";')  == 'true',  &
+			eval('"aoe" != "a e";')  == 'true',  &
+			eval('"aoe" != "ao ";')  == 'true',  &
 			eval('true  == false;')  == 'false'   &
 		]
 

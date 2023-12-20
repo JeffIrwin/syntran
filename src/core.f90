@@ -29,6 +29,9 @@ module syntran__core_m
 	integer, parameter :: maxerr_def = 4
 
 	! TODO:
+	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
+	!    versions don't allow a user-defined type that references another type
+	!    which is defined below it
 	!  - #(pragma)once  directive. #let var=val directive?
 	!    * for #once include guards, insert filename path as key into a ternary
 	!      tree w/ bool value true.  then when something is included, check if
@@ -43,10 +46,9 @@ module syntran__core_m
 	!      not needed
 	!    * cycle (continue), break ((loop) exit)
 	!  - str comparison operations:
-	!    * !=
 	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
 	!      matching leading chars but diff lens
-	!    * ==:  done
+	!    * ==, !=:  done
 	!  - negative for loop steps.  at least throw parser error
 	!  - fuzz testing
 	!  - substring indexing and slicing:
@@ -6852,6 +6854,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%sca%bool = left%sca%i32 /= right%sca%f32
 			case        (magic * bool_type + bool_type)
 				res%sca%bool = left%sca%bool .neqv. right%sca%bool
+			case        (magic * str_type + str_type)
+				res%sca%bool = left%sca%str%s /= right%sca%str%s
+
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)
