@@ -647,7 +647,7 @@ function declare_intrinsic_fns() result(fns)
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
-		i64_fn, parse_i64_fn, i32_fn
+		i64_fn, parse_i64_fn, i32_fn, exit_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -865,6 +865,16 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	exit_fn%type = void_type
+	allocate(exit_fn%params(1))
+	exit_fn%params(1)%type = i32_type
+	exit_fn%params(1)%name = "exit_status"
+
+	id_index = id_index + 1
+	call fns%insert("exit", exit_fn, id_index)
+
+	!********
+
 	size_fn%type = i32_type
 	allocate(size_fn%params(2))
 
@@ -910,6 +920,7 @@ function declare_intrinsic_fns() result(fns)
 			writeln_fn  , &
 			eof_fn      , &
 			close_fn    , &
+			exit_fn     , &
 			size_fn       &
 		]
 
@@ -6591,6 +6602,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			!print *, 'closing unit ', arg%sca%file_%unit_
 			close(arg%sca%file_%unit_)
+
+		case ("exit")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+
+			! TODO: check exit_status and modify color/language
+			write(*,*) fg_bold_bright_red//'Exiting syntran with status '// &
+				str(arg%sca%i32)//color_reset
+
+			call exit(arg%sca%i32)
 
 		case ("size")
 
