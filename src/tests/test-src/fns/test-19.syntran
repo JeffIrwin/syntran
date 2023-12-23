@@ -15,11 +15,8 @@ fn qsort(arr: [i32; :]): [i32; :]
 
 		let top = -1;
 
-		top += 1;
-		stack[top] = l;
-
-		top += 1;
-		stack[top] = h;
+		stack[(top += 1)] = l;
+		stack[(top += 1)] = h;
 
 		while top >= 0
 		{
@@ -48,20 +45,14 @@ fn qsort(arr: [i32; :]): [i32; :]
 
 			if p - 1 > l
 			{
-				top += 1;
-				stack[top] = l;
-			
-				top += 1;
-				stack[top] = p - 1;
+				stack[(top += 1)] = l;
+				stack[(top += 1)] = p - 1;
 			}
 
 			if p + 1 < h
 			{
-				top += 1;
-				stack[top] = p + 1;
-			
-				top += 1;
-				stack[top] = h;
+				stack[(top += 1)] = p + 1;
+				stack[(top += 1)] = h;
 			}
 		}
 	}
@@ -90,6 +81,9 @@ let sorted = qsort(arr);
 let ans = sorted;
 
 // Actually from primes example (test-17)
+//
+// TODO: add another test with this array totally reversed (use a reverse helper
+// fn)
 let expect =      [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
 	43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107,
 	109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179,
