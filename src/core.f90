@@ -7192,6 +7192,12 @@ subroutine add_value_t(left, right, res, op_text)
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
 		res%sca%f32 = left%sca%i32 + right%sca%f32
 
+	case        (magic**2 * f32_type + magic * f32_type + i64_type)
+		res%sca%f32 = left%sca%f32 + right%sca%i64
+
+	case        (magic**2 * f32_type + magic * i64_type + f32_type)
+		res%sca%f32 = left%sca%i64 + right%sca%f32
+
 	case        (magic**2 * str_type + magic * str_type + str_type)
 		res%sca%str%s = left%sca%str%s // right%sca%str%s
 
@@ -7244,6 +7250,12 @@ subroutine mul_value_t(left, right, res, op_text)
 
 	case        (magic**2 * f32_type + magic * f32_type + i32_type)
 		res%sca%f32 = left%sca%f32 * right%sca%i32
+
+	case        (magic**2 * f32_type + magic * f32_type + i64_type)
+		res%sca%f32 = left%sca%f32 * right%sca%i64
+
+	case        (magic**2 * f32_type + magic * i64_type + f32_type)
+		res%sca%f32 = left%sca%i64 * right%sca%f32
 
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
 		res%sca%f32 = left%sca%i32 * right%sca%f32

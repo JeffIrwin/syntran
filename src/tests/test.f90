@@ -946,7 +946,10 @@ subroutine unit_test_i64(npass, nfail)
 
 	character(len = *), parameter :: label = 'i64 arithmetic'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
+
+	real, parameter :: tol = 1.e-9
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -1042,6 +1045,10 @@ subroutine unit_test_i64(npass, nfail)
 			eval('1337 >=  i64(1338  );')  == 'false',  &
 			eval('1337 >=  i64(1337  );')  == 'true' ,  &
 			eval('1337 >=  i64(1336  );')  == 'true' ,  &
+			abs(eval_f32('i64(2) * 3.0;', quiet) - 6.0) < tol, &
+			abs(eval_f32('3.0 * i64(2);', quiet) - 6.0) < tol, &
+			abs(eval_f32('i64(2) + 3.0;', quiet) - 5.0) < tol, &
+			abs(eval_f32('3.0 + i64(2);', quiet) - 5.0) < tol, &
 			eval('[8000000000; 3];') == '[8000000000, 8000000000, 8000000000]', &
 			eval('[8000000000: 8000000003];') == '[8000000000, 8000000001, 8000000002]', &
 			eval('[8000000000: 2: 8000000006];') == '[8000000000, 8000000002, 8000000004]', &
