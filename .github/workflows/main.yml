@@ -35,7 +35,7 @@ jobs:
     - if: matrix.os == 'ubuntu-latest'
       name: Test ubuntu gfortran-11
       env:
-        FPM_FC=gfortran-11
+        FPM_FC: gfortran-11
       run: |
         fpm test
 
