@@ -977,7 +977,7 @@ recursive function ternary_search(node, key, id_index, iostat) result(val)
 	character :: k
 	character(len = :), allocatable :: ey
 
-	!print *, 'searching key "', key, '"'
+	!print *, 'searching key ', quote(key)
 
 	iostat = exit_success
 
@@ -1033,7 +1033,7 @@ recursive function fn_ternary_search(node, key, id_index, iostat) result(val)
 	character :: k
 	character(len = :), allocatable :: ey
 
-	!print *, 'searching key "', key, '"'
+	!print *, 'searching key ', quote(key)
 
 	iostat = exit_success
 
@@ -1123,7 +1123,7 @@ subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 	integer :: i, io
 	logical :: overwritel
 
-	!print *, 'inserting "', key, '"'
+	!print *, 'inserting ', quote(key)
 
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
@@ -1164,7 +1164,8 @@ subroutine var_insert(dict, key, val, id_index, iostat, overwrite)
 	integer :: i, io
 	logical :: overwritel
 
-	!print *, 'inserting "', key, '"'
+	!print *, 'inserting ', quote(key)
+	!print *, 'val = ', val%to_str()
 
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
@@ -1243,7 +1244,7 @@ recursive subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwri
 
 	iostat = exit_success
 
-	!print *, 'inserting key "', key, '"'
+	!print *, 'inserting key ', quote(key)
 
 	! key == k//ey.  Get it? :)
 	k   = key(1:1)
@@ -1311,7 +1312,15 @@ recursive subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
 
 	iostat = exit_success
 
-	!print *, 'inserting key "', key, '"'
+	!print *, 'inserting key ', quote(key)
+	!print *, 'len(key) = ', len(key)
+	!print *, 'iachar = ', iachar(key(1:1))
+
+	! This should be unreachable
+	if (len(key) <= 0) then
+		!print *, 'len <= 0, return early'
+		return
+	end if
 
 	! key == k//ey.  Get it? :)
 	k   = key(1:1)
@@ -2272,6 +2281,8 @@ function lex(lexer) result(token)
 		end do
 		text = lexer%text(start: lexer%pos-1)
 
+		!print *, 'float text = ', quote(text)
+
 		if (float) then
 
 			! TODO: after f64 is supported, consider parsing that as the default
@@ -2536,6 +2547,8 @@ function lex(lexer) result(token)
 			end if
 
 		case default
+
+			!print *, 'bad token text = ', quote(lexer%current())
 
 			token = new_token(bad_token, lexer%pos, lexer%current())
 			span = new_span(lexer%pos, len(lexer%current()))
@@ -2906,7 +2919,7 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 			filename = get_dir(src_file)//tokens_in(i)%val%sca%str%s  ! relative to src file
 			!filename = tokens_in(i)%val%sca%str%s                    ! relative to runtime pwd
 
-			!print *, 'include filename = "', filename, '"'
+			!print *, 'include filename = ', quote(filename)
 
 			if (.not. exists(filename)) then
 				span = new_span(tokens_in(i)%pos, len(tokens_in(i)%text))
@@ -3038,7 +3051,7 @@ function match_pre(parser, kind, tokens, token_index, context) result(token)
 	span = new_span(current%pos, len_text)
 
 	!print *, 'current%unit_ = ', current%unit_
-	!print *, 'current%text  = "', current%text, '"'
+	!print *, 'current%text  = ', quote(current%text)
 
 	!print *, 'pushing diag'
 	call parser%diagnostics%push( &
@@ -3786,8 +3799,13 @@ function parse_for_statement(parser) result(statement)
 	! there's no need to check io
 
 	!print *, 'identifier%text = ', identifier%text
-	call parser%vars%insert(identifier%text, array%lbound%val, &
-		statement%id_index)
+	!print *, 'allocated(array%lbound) = ', allocated(array%lbound)
+
+	if (allocated(array%lbound)) then
+		! Pathological code like `for <EOF>` can crash the parser :(
+		call parser%vars%insert(identifier%text, array%lbound%val, &
+			statement%id_index)
+	end if
 
 	body = parser%parse_statement()
 
@@ -5768,7 +5786,7 @@ function match(parser, kind) result(token)
 	!	kind_name(parser%current_kind()), kind_name(kind)))
 
 	!print *, 'current%unit_ = ', current%unit_
-	!print *, 'current%text  = "', current%text, '"'
+	!print *, 'current%text  = ', quote(current%text)
 
 	call parser%diagnostics%push( &
 		err_unexpected_token(parser%context(), span, current%text, &
@@ -5783,6 +5801,9 @@ function match(parser, kind) result(token)
 	end if
 
 	token = new_token(kind, current%pos, null_char)
+	!token = new_token(bad_token, current%pos, null_char)
+	!token = new_token(kind, current%pos, "")
+
 	token%unit_ = current%unit_
 	!print *, 'setting token%unit_ = ', token%unit_
 
@@ -6454,7 +6475,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! Assign return value
 		res = syntax_eval(node%right, vars, fns, quietl)
 
-		!print *, 'assigning identifier "', node%identifier%text, '"'
+		!print *, 'assigning identifier ', quote(node%identifier%text)
 		vars%vals(node%id_index) = res
 
 	case (fn_call_expr)
@@ -7074,7 +7095,7 @@ subroutine compound_assign(lhs, rhs, op)
 		call mod_(lhs, rhs, lhs, op%text)
 
 	case default
-		write(*,*) 'Error: unexpected assignment operator "', op%text, '"'
+		write(*,*) 'Error: unexpected assignment operator ', quote(op%text)
 		call internal_error()
 	end select
 

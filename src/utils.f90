@@ -754,6 +754,20 @@ end function trimw
 
 !===============================================================================
 
+function quote(str) result(wrapped)
+
+	! Wrap a str in "double quotes".  Any quotes already contained are not
+	! escaped
+
+	character(len = *), intent(in)  :: str
+	character(len = :), allocatable :: wrapped
+
+	wrapped = '"'//str//'"'
+
+end function quote
+
+!===============================================================================
+
 function findlocl1(arr, val) result(loc)
 
 	! findloc() is standard in Fortran 2008, but gfortran 8.1.0 doesn't have it
