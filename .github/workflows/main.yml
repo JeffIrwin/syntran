@@ -31,8 +31,8 @@ jobs:
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
-    #- if: matrix.os != 'macOS-latest'
-    - name: Test fpm default
+    - if: matrix.os == 'ubuntu-latest'
+      name: Test fpm default
       env:
         #FPM_FC: gfortran-${{ matrix.gfortran }}
         FPM_FC: gfortran-12
@@ -96,7 +96,7 @@ jobs:
         #os: [ubuntu-latest, windows-latest]
         os: [ubuntu-latest]
         #gfortran: [10, 11, 12, 13]  # TODO: gfort 13 has an issue
-        gfortran: [7, 8, 9, 10, 11, 12]
+        gfortran: [9, 10, 11, 12]  # gfort <= 8 not available by default on github ci workers
 
     steps:
 
