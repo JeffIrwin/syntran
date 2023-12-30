@@ -18,6 +18,8 @@ jobs:
         #os: [ubuntu-latest, macOS-latest]
         #os: [ubuntu-latest, windows-latest]
         #os: [ubuntu-latest]
+      matrix:
+        gfortran: [11, 12]
 
     steps:
 
@@ -33,9 +35,9 @@ jobs:
         fpm test
 
     - if: matrix.os == 'ubuntu-latest'
-      name: Test ubuntu gfortran-11
+      name: Test ubuntu gfortran-${{ matrix.gfortran }}
       env:
-        FPM_FC: gfortran-11
+        FPM_FC: gfortran-${{ matrix.gfortran }}
       run: |
         fpm test
 
