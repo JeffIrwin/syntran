@@ -14,23 +14,24 @@ jobs:
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+
+      # Having multiple matrices (e.g. os *and* gfortran) will test every
+      # possible combination of those two matrices!
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
         #os: [ubuntu-latest, macOS-latest]
         #os: [ubuntu-latest, windows-latest]
         #os: [ubuntu-latest]
-        gfortran: [11, 12]
+        #gfortran: [11, 12]
 
     steps:
 
     - uses: actions/checkout@v1
-
     - uses: fortran-lang/setup-fpm@v5
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - if: matrix.os == 'ubuntu-latest'
-      name: Test ubuntu fpm default
+    - name: Test fpm default
       run: |
         fpm test
 
@@ -82,7 +83,7 @@ jobs:
 
   test-gfortran:
 
-    name: Test on ${{ matrix.gfortran }}
+    name: Test with gfortran-${{ matrix.gfortran }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -90,12 +91,11 @@ jobs:
         #os: [ubuntu-latest, macOS-latest]
         #os: [ubuntu-latest, windows-latest]
         os: [ubuntu-latest]
-        gfortran: [11, 12]
+        gfortran: [10, 11, 12, 13]
 
     steps:
 
     - uses: actions/checkout@v1
-
     - uses: fortran-lang/setup-fpm@v5
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
