@@ -28,8 +28,14 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - if: matrix.os == 'ubuntu-latest'
-      name: Test ubuntu fpm
-      #name: Test ubuntu gcc matrix
+      name: Test ubuntu fpm default
+      run: |
+        fpm test
+
+    - if: matrix.os == 'ubuntu-latest'
+      name: Test ubuntu gfortran-11
+      env:
+        FPM_FC=gfortran-11
       run: |
         fpm test
 
