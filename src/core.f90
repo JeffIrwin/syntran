@@ -32,6 +32,8 @@ module syntran__core_m
 	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
 	!    versions don't allow a user-defined type that references another type
 	!    which is defined below it
+	!    * added a matrix for gfortran 9 through 12
+	!    * 8 isn't installed.  maybe i can install it in workflow?
 	!  - pass by reference?  big boost to perf for array fns.  should be
 	!    possible by swapping around some id_index values in vars%vals array.
 	!    harder part is ensuring that only lvalues are passed by ref (not
