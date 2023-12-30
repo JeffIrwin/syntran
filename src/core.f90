@@ -221,25 +221,6 @@ module syntran__core_m
 
 	!********
 
-	type scalar_t
-
-		! Scalar value type.  Cannot be an array!
-
-		type(file_t)      :: file_
-		type(string_t)    :: str
-
-		logical           :: bool
-		integer(kind = 4) :: i32
-		integer(kind = 8) :: i64
-		real   (kind = 4) :: f32
-
-		contains
-			procedure :: to_str => scalar_to_str
-
-	end type scalar_t
-
-	!********
-
 	type array_t
 
 		! The array type is i32_type, f32_type, etc. while the kind is
@@ -297,6 +278,25 @@ module syntran__core_m
 			procedure :: to_i64 => value_to_i64
 
 	end type value_t
+
+	!********
+
+	type scalar_t
+
+		! Scalar value type.  Cannot be an array!
+
+		type(file_t)      :: file_
+		type(string_t)    :: str
+
+		logical           :: bool
+		integer(kind = 4) :: i32
+		integer(kind = 8) :: i64
+		real   (kind = 4) :: f32
+
+		contains
+			procedure :: to_str => scalar_to_str
+
+	end type scalar_t
 
 	interface add
 		module procedure add_value_t
