@@ -28,6 +28,12 @@ fn qsort(arr: [i32; :]): [i32; :]
 
 			//// inlined
 			//let p = partition(arr, l, h);
+
+			// TODO: median-of-3 pivot.  c.f. aoc
+			//
+			// Also add a sort fn which returns an index array instead of
+			// modifying the input
+
 			let x = arr[h];
 			let i = (l - 1);
 			for j in [l: h]

@@ -37,7 +37,10 @@ fn qsort(arr: [i32; :])
 
 			//// inlined
 			//let p = partition(arr, l, h);
+
+			// TODO: median-of-3 pivot.  c.f. aoc
 			let x = arr[h];
+
 			let i = (l - 1);
 			for j in [l: h]
 				if arr[j] <= x

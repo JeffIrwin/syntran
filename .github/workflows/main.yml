@@ -54,6 +54,12 @@ jobs:
         bash ./build.sh release
         time ./build/test
 
+    - if: matrix.os == 'ubuntu-latest'
+      name: Test ubuntu fpm
+      #name: Test ubuntu gcc matrix
+      run: |
+        fpm test
+
     #- if: matrix.os == 'windows-latest'
     #  shell: bash
     #  run: |
