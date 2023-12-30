@@ -5902,6 +5902,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	!********
 
+	character(len = :), allocatable :: color
+
 	integer :: i, j, io
 	integer(kind = 8) :: il, iu, i8
 
@@ -6609,11 +6611,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 
-			! TODO: check exit_status and modify color/language
-			write(*,*) fg_bold_bright_red//'Exiting syntran with status '// &
-				str(arg%sca%i32)//color_reset
+			io = arg%sca%i32
+			if (io == 0) then
+				color = fg_bright_green
+			else
+				color = fg_bold_bright_red
+			end if
 
-			call exit(arg%sca%i32)
+			write(*,*) color//'Exiting syntran with status '// &
+				str(io)//color_reset
+
+			call exit(io)
 
 		case ("size")
 
