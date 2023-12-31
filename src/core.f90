@@ -5948,7 +5948,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	integer :: i, j, io, rank, rank_res, idim_, idim_res
 	integer(kind = 8) :: il, iu, i8, index_, prod
-	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:), size_slice(:)
+	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
 	logical :: quietl
 
@@ -6775,57 +6775,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call internal_error()
 			end if
 
-			print *, 'sub kind 1 = ', kind_name(node%lsubscripts(1)%sub_kind)
+			!print *, 'sub kind 1 = ', kind_name(node%lsubscripts(1)%sub_kind)
+			!print *, 'rank = ', node%val%array%rank
 
-			print *, 'rank = ', node%val%array%rank
-
-			! TODO: generalize slices for multi-rank arrays
-			!
-			! Get the total len_ by taking the product of the difference of
-			! every range
-			!
-			! Iterating through LHS is easy bc it's a rank-1 array under the
-			! hood.  RHS is tricky because it is non-contiguous.  Do we need
-			! an inverse of subscript_eval()?  i.e. go from rank-1 1 scalar
-			! index to a multi-rank set of subscripts?
-			!
-			! For example:
-			!
-			!     let m =
-			!     [
-			!     	 0,  1,  2,  3,  4,
-			!     	 5,  6,  7,  8,  9,
-			!     	10, 11, 12, 13, 14,
-			!     	15, 16, 17, 18, 19,
-			!     	20, 21, 22, 23, 24
-			!     	;
-			!     	5, 5
-			!     ];
-			!
-			!     let m2 = m[1:4, 1:4];
-			!
-			! Such an assignemnt requires iterating from m[1,1] (6) up to
-			! m[3,3] (18) inclusively.  Either make an inverse of
-			! subscript_eval(), or something that iterates through a vector
-			! subscript, e.g. iterating like this:
-			!
-			!     m[1,1]
-			!     m[2,1]
-			!     m[3,1]
-			!
-			!     m[1,2]
-			!     m[2,2]
-			!     m[3,2]
-			!
-			!     m[1,3]
-			!     m[2,3]
-			!     m[3,3]
-			!
-			! And packing those elements into the LHS.
-
-
-			!select case (node%lsubscripts(1)%sub_kind)
-			!case (scalar_sub)
 			if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 
 				! This could probably be lumped in with the range_sub case after
@@ -6834,29 +6786,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res = get_array_value_t(vars%vals(node%id_index)%array, i8)
 
 			else
-			!case (range_sub)
-
-				!! subscript_eval() inlined:
-				!prod  = 1
-				!index_ = 0
-				!do i = 1, vars%vals(node%id_index)%array%rank
-				!	!print *, 'i = ', i
-				!	subscript = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
-				!	index_ = index_ + prod * subscript%sca%i32
-				!	prod  = prod * vars%vals(node%id_index)%array%size(i)
-				!end do
-
-				!! TODO: delete il, iu from old rank-1 specific ungeneralized code
-				!il = subscript_eval(node, vars, fns, quietl) + 1
-				!! This feels inconsistent and not easy to extend to higher ranks
-				!right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
-				!iu = right%sca%i32 + 1
-
-				print *, ''
-				print *, 'il, iu = ', il, iu
 
 				rank = vars%vals(node%id_index)%array%rank
-				allocate(lsubs(rank), usubs(rank), size_slice(rank))
+				allocate(lsubs(rank), usubs(rank))
 				rank_res = 0
 				do i = 1, rank
 					lsubval = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
@@ -6880,13 +6812,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					end select
 
-					! TODO: is this needed?
-					size_slice(i) = usubs(i) - lsubs(i)
-
 				end do
-				print *, 'lsubs = ', lsubs
-				print *, 'usubs = ', usubs
-				print *, 'rank_res = ', rank_res
+				!print *, 'lsubs = ', lsubs
+				!print *, 'usubs = ', usubs
+				!print *, 'rank_res = ', rank_res
 
 				!print *, 'type = ', kind_name( node%val%array%type )
 
@@ -6898,12 +6827,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				allocate(res%array)
 				res%type = array_type
-				res%array%kind  = expl_array
-				res%array%type  = node%val%array%type
-				!res%array%rank  = node%val%array%rank
-				res%array%rank  = rank_res
+				res%array%kind = expl_array
+				res%array%type = node%val%array%type
+				res%array%rank = rank_res
 
-				!res%array%size = [iu - il]
 				allocate(res%array%size( rank_res ))
 				idim_res = 1
 				do idim_ = 1, rank
@@ -6915,11 +6842,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 						idim_res = idim_res + 1
 					end select
 				end do
-				print *, 'res size = ', res%array%size
+				!print *, 'res size = ', res%array%size
 
-				!res%array%len_ = iu - il
 				res%array%len_ = product(res%array%size)
-				print *, 'res len = ', res%array%len_
+				!print *, 'res len = ', res%array%len_
 
 				res%array%cap = res%array%len_
 
@@ -6932,24 +6858,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end select
 
 				subs = lsubs
-				!do while (.not. all(subs == usubs))
 				do i = 1, res%array%len_
-					print *, 'subs = ', subs
+					!print *, 'subs = ', subs
 
 					! subscript_eval() inlined:
 					prod  = 1
 					index_ = 0
-					!do j = 1, vars%vals(node%id_index)%array%rank
 					do j = 1, rank
 						!print *, 'j = ', j
-						!subscript = syntax_eval(node%lsubscripts(j), vars, fns, quietl)
-						!index_ = index_ + prod * subscript%sca%i32
 						index_ = index_ + prod * subs(j)
 						prod  = prod * vars%vals(node%id_index)%array%size(j)
-						!prod  = prod * size_slice(j)
 					end do
-					print *, 'index_ = ', index_
-					print *, ''
+					!print *, 'index_ = ', index_
 
 					! TODO: pretty sure i already have helper fns for this
 					select case (node%val%array%type)
@@ -6960,25 +6880,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					end select
 
 					!! get next subscript
-					!subs = usubs
 					j = 1
-					!do while (j < rank .and. subs(j) < usubs(j) - 1)
 					do while (j < rank .and. subs(j) == usubs(j) - 1)
 						subs(j) = lsubs(j)
 						j = j + 1
 					end do
 					subs(j) = subs(j) + 1
+
 				end do
-
-				!select case (node%val%array%type)
-				!case (i32_type)
-				!	res%array%i32 = vars%vals(node%id_index)%array%i32(il: iu - 1)
-				!	!print *, 'array i32 = ', res%array%i32
-				!case default
-				!	! TODO
-				!end select
-
-			!end select
 			end if
 
 		else
