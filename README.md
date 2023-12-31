@@ -158,7 +158,9 @@ For neovim, add this line to your `~/.config/nvim/ftdetect/syntran.lua` file:
 vim.cmd.autocmd("BufRead,BufNewFile *.syntran set filetype=rust")
 ```
 
-## Saving scripts in a file
+## Command-line usage
+
+### Saving scripts in a file
 
 As programs get longer and more complicated, it becomes difficult to enter them into the interactive interpreter.  To interpret a whole file, provide it as a command line argument:
 
@@ -171,6 +173,26 @@ Note: global block statement is not required as of 0.0.13.  Multiple statements 
 
 Make sure to wrap the entire script in a main block with braces `{}`.  The global block `{}` is not required when interactively using the interpreter because it parses and evaluates one statement at a time.  However, if you forget the global block `{}` in a script file, only the first statement will be parsed and any trailing junk statements will be unexpected.
 -->
+
+### Other command-line arguments
+
+Run `syntran -h` to see a comprehensive listing of syntran command-line arguments:
+
+```
+ syntran 0.0.34
+ https://github.com/JeffIrwin/syntran
+
+ Usage:
+        syntran <file.syntran> [--fmax-errors <n>]
+        syntran
+        syntran -h | --help
+        syntran --version
+
+ Options:
+        -h --help          Show this help
+        --version          Show version
+        --fmax-errors <n>  Limit max error messages to <n> [default: 4]
+```
 
 ## If statements and for loops
 
