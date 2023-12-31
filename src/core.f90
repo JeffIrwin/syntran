@@ -4111,7 +4111,6 @@ recursive function parse_expr_statement(parser) result(expr)
 		! Subscript can appear in assignment expr but not let expr, because let
 		! must initialize the whole array
 		span0 = parser%current_pos()
-		!call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
 		call parser%parse_subscripts(expr)
 
 		if (size(expr%subscripts) <= 0) deallocate(expr%subscripts)
@@ -4245,16 +4244,12 @@ end function is_assignment_op
 
 !===============================================================================
 
-!subroutine parse_subscripts(parser, subscripts, usubscripts)
 subroutine parse_subscripts(parser, expr)
 
-	! Parse array subscript if present
+	! Parse array subscripts, if present
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(inout) :: expr
-
-	!type(syntax_node_t), intent(out), allocatable :: subscripts(:), &
-	!	usubscripts(:)
 
 	!********
 
@@ -4270,17 +4265,15 @@ subroutine parse_subscripts(parser, expr)
 	if (parser%current_kind() /= lbracket_token) then
 
 		!! The function has to return something.  Caller deallocates
-		!subscripts = []
 		allocate( expr%subscripts(0))
-		!allocate(usubscripts(0))
 		return
 
 	end if
 
 	!print *, 'parsing subscripts'
 
-	 subscripts_vec = new_syntax_node_vector()
-	usubscripts_vec = new_syntax_node_vector()
+	 subscripts_vec = new_syntax_node_vector()  ! lower-bounds
+	usubscripts_vec = new_syntax_node_vector()  ! upper-bounds
 
 	lbracket  = parser%match(lbracket_token)
 
@@ -5232,7 +5225,6 @@ function parse_primary_expr(parser) result(expr)
 
 				!print *, '%current_kind() = ', kind_name(parser%current_kind())
 				span0 = parser%current_pos()
-				!call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
 				call parser%parse_subscripts(expr)
 
 				span1 = parser%current_pos() - 1
@@ -5911,6 +5903,10 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 		subscript = syntax_eval(node%subscripts(i), vars, fns, quietl)
 
 		! TODO: bound checking? by default or enabled with cmd line flag?
+		!
+		! I think the only way to do it without killing perf is by having bound
+		! checking turned off in release, and setting a compiler macro
+		! definition to enable it only in debug
 
 		index_ = index_ + prod * subscript%sca%i32
 		prod  = prod * vars%vals(node%id_index)%array%size(i)
@@ -6745,11 +6741,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			case (range_sub)
 
-				il = subscript_eval(node, vars, fns, quietl)
+				il = subscript_eval(node, vars, fns, quietl) + 1
 
 				! This feels inconsistent and not easy to extend to higher ranks
 				right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
-				iu = right%sca%i32
+				iu = right%sca%i32 + 1
 
 				!print *, ''
 				!print *, 'identifier ', node%identifier%text
@@ -6758,7 +6754,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!print *, 'str = ', vars%vals(node%id_index)%sca%str%s
 
 				! Not inclusive of upper bound
-				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(il+1: iu)
+				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(il: iu-1)
 
 			case default
 				write(*,*) 'Error: unexpected subscript kind'
@@ -6827,6 +6823,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				case (scalar_sub)
 					i8 = subscript_eval(node, vars, fns, quietl)
 					res = get_array_value_t(vars%vals(node%id_index)%array, i8)
+
 				case (range_sub)
 
 					il = subscript_eval(node, vars, fns, quietl) + 1
