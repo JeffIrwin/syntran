@@ -5940,8 +5940,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	character(len = :), allocatable :: color
 
-	integer :: i, j, io
-	integer(kind = 8) :: il, iu, i8
+	integer :: i, j, io, rank, rank_res, idim_, idim_res
+	integer(kind = 8) :: il, iu, i8, index_, prod
+	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:), size_slice(:)
 
 	logical :: quietl
 
@@ -5950,7 +5951,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	! TODO: rename lbound/ubound to avoid intrinsic clash
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
-		step, len_, arg, arg1, arg2, array_val
+		step, len_, arg, arg1, arg2, array_val, lsubval, usubval
 
 	!print *, 'starting syntax_eval()'
 
@@ -6768,8 +6769,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call internal_error()
 			end if
 
-			!print *, 'sub kind 1 = ', kind_name(node%lsubscripts(1)%sub_kind)
-			!print *, 'rank = ', node%val%array%rank
+			print *, 'sub kind 1 = ', kind_name(node%lsubscripts(1)%sub_kind)
+
+			print *, 'rank = ', node%val%array%rank
 
 			! TODO: generalize slices for multi-rank arrays
 			!
@@ -6838,13 +6840,48 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!	prod  = prod * vars%vals(node%id_index)%array%size(i)
 				!end do
 
-				il = subscript_eval(node, vars, fns, quietl) + 1
+				!! TODO: delete il, iu from old rank-1 specific ungeneralized code
+				!il = subscript_eval(node, vars, fns, quietl) + 1
+				!! This feels inconsistent and not easy to extend to higher ranks
+				!right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
+				!iu = right%sca%i32 + 1
 
-				! This feels inconsistent and not easy to extend to higher ranks
-				right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
-				iu = right%sca%i32 + 1
-
+				print *, ''
 				print *, 'il, iu = ', il, iu
+
+				rank = vars%vals(node%id_index)%array%rank
+				allocate(lsubs(rank), usubs(rank), size_slice(rank))
+				rank_res = 0
+				do i = 1, rank
+					lsubval = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
+					lsubs(i) = lsubval%sca%i32
+
+					select case (node%lsubscripts(i)%sub_kind)
+					case (range_sub)
+						usubval = syntax_eval(node%usubscripts(i), vars, fns, quietl)
+						usubs(i) = usubval%sca%i32
+
+						rank_res = rank_res + 1
+
+					case (scalar_sub)
+						! Scalar subs are converted to a range-1 sub so we can
+						! iterate later without further case logic
+						usubs(i) = lsubs(i) + 1
+
+					case default
+						write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
+						call internal_error()
+
+					end select
+
+					! TODO: is this needed?
+					size_slice(i) = usubs(i) - lsubs(i)
+
+				end do
+				print *, 'lsubs = ', lsubs
+				print *, 'usubs = ', usubs
+				print *, 'rank_res = ', rank_res
+
 				!print *, 'type = ', kind_name( node%val%array%type )
 
 				!print *, 'type  = ', node%val%array%type
@@ -6857,19 +6894,83 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%type = array_type
 				res%array%kind  = expl_array
 				res%array%type  = node%val%array%type
-				res%array%rank  = node%val%array%rank
+				!res%array%rank  = node%val%array%rank
+				res%array%rank  = rank_res
 
-				res%array%size = [iu - il]
-				res%array%len_ = iu - il
+				!res%array%size = [iu - il]
+				allocate(res%array%size( rank_res ))
+				idim_res = 1
+				do idim_ = 1, rank
+					select case (node%lsubscripts(idim_)%sub_kind)
+					case (range_sub)
+
+						res%array%size(idim_res) = usubs(idim_) - lsubs(idim_)
+
+						idim_res = idim_res + 1
+					end select
+				end do
+				print *, 'res size = ', res%array%size
+
+				!res%array%len_ = iu - il
+				res%array%len_ = product(res%array%size)
+				print *, 'res len = ', res%array%len_
+
 				res%array%cap = res%array%len_
 
+				! TODO: is there a helper fn for this?
 				select case (node%val%array%type)
 				case (i32_type)
-					res%array%i32 = vars%vals(node%id_index)%array%i32(il: iu - 1)
-					!print *, 'array i32 = ', res%array%i32
+					allocate(res%array%i32( res%array%cap ))
 				case default
 					! TODO
 				end select
+
+				subs = lsubs
+				!do while (.not. all(subs == usubs))
+				do i = 1, res%array%len_
+					print *, 'subs = ', subs
+
+					! subscript_eval() inlined:
+					prod  = 1
+					index_ = 0
+					!do j = 1, vars%vals(node%id_index)%array%rank
+					do j = 1, rank
+						!print *, 'j = ', j
+						!subscript = syntax_eval(node%lsubscripts(j), vars, fns, quietl)
+						!index_ = index_ + prod * subscript%sca%i32
+						index_ = index_ + prod * subs(j)
+						prod  = prod * vars%vals(node%id_index)%array%size(j)
+						!prod  = prod * size_slice(j)
+					end do
+					print *, 'index_ = ', index_
+					print *, ''
+
+					! TODO: pretty sure i already have helper fns for this
+					select case (node%val%array%type)
+					case (i32_type)
+						res%array%i32(i) = vars%vals(node%id_index)%array%i32(index_ + 1)
+					case default
+						! TODO
+					end select
+
+					!! get next subscript
+					!subs = usubs
+					j = 1
+					!do while (j < rank .and. subs(j) < usubs(j) - 1)
+					do while (j < rank .and. subs(j) == usubs(j) - 1)
+						subs(j) = lsubs(j)
+						j = j + 1
+					end do
+					subs(j) = subs(j) + 1
+				end do
+
+				!select case (node%val%array%type)
+				!case (i32_type)
+				!	res%array%i32 = vars%vals(node%id_index)%array%i32(il: iu - 1)
+				!	!print *, 'array i32 = ', res%array%i32
+				!case default
+				!	! TODO
+				!end select
 
 			!end select
 			end if
