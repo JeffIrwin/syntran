@@ -4168,12 +4168,18 @@ recursive function parse_expr_statement(parser) result(expr)
 					err_scalar_subscript(parser%context(), &
 					span, identifier%text))
 				return
-			else if (any(expr%lsubscripts%sub_kind /= scalar_sub) .and. &
-				expr%val%array%rank > 1) then ! TODO: allow slices for any rank
+
+			!else if (any(expr%lsubscripts%sub_kind /= scalar_sub) .and. &
+			!	expr%val%array%rank > 1) then
+			else if (any(expr%lsubscripts%sub_kind /= scalar_sub)) then
+
+				! TODO: allow LHS slices
+
 				span = new_span(span0, span1 - span0 + 1)
 				call parser%diagnostics%push( &
 					err_bad_sub_rank(parser%context(), span, &
 					identifier%text, expr%val%array%rank))
+
 			end if
 
 			!print *, 'type = ', expr%val%type
