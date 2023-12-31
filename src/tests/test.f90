@@ -1210,6 +1210,44 @@ subroutine unit_test_array_i32_1(npass, nfail)
 			eval('let myArray = [2-3: 6/3 + 3];') == '[-1, 0, 1, 2, 3, 4]', &
 			eval('[42; 3];') == '[42, 42, 42]', &
 			eval('[1337; 4];') == '[1337, 1337, 1337, 1337]', &
+			eval('[48-6, 13*100 + 37];') == '[42, 1337]'  &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_array_i32_1
+
+!===============================================================================
+
+subroutine unit_test_slice_1(npass, nfail)
+
+	! Simple array slicing tests
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'array slicing'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! Because test evaluation results are tested by comparing strings, output
+	! white space is significant!  Ints are formatted in min width, and array
+	! elements are separated by a comma and a single space
+
+	! TODO: test empty arrays.  As of 0.0.13, empty literal arrays cannot be
+	! assigned, but this can be worked around with ubound < lbound, e.g.:
+	!
+	!     let v = [0: -1];
+	!     // []
+
+	tests = &
+		[   &
 			eval('let v = [0: 10]; v[0: 4];', quiet) == '[0, 1, 2, 3]', &
 			eval('let v = [0: 10]; v[2: 5];', quiet) == '[2, 3, 4]', &
 			eval('let v = [0: 10]; let u = v[2: 5]; u[0];', quiet) == '2', &
@@ -1229,12 +1267,15 @@ subroutine unit_test_array_i32_1(npass, nfail)
 			eval('let v = ["a", "b", "c", "d", "e", "f"]; v[1: 5];', quiet) == '[b, c, d, e]', &
 			! TODO: test other more types besides i32 and str.  also test
 			! matrices and rank-3+ arrays for all types
-			eval('[48-6, 13*100 + 37];') == '[42, 1337]'  &
+			.false.  & ! so I don't have to bother w/ trailing commas
 		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_array_i32_1
+end subroutine unit_test_slice_1
 
 !===============================================================================
 
@@ -1888,6 +1929,7 @@ subroutine unit_tests(iostat)
 	call unit_test_io         (npass, nfail)
 	call unit_test_i64        (npass, nfail)
 	call unit_test_include    (npass, nfail)
+	call unit_test_slice_1    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
