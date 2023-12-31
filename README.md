@@ -3,7 +3,9 @@
 
 # Syntran
 
-[Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
+⚠️ Syntran is pre-alpha and I don't recommend using it for anything serious.  You will discover bugs, missing features, many pain points in general; and later updates will be incompatible.
+
+## [Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
 
 An interpreter written in Fortran, I guess
 
@@ -17,11 +19,21 @@ This is a sandbox for me to play in as I follow along with [Immo Landwerth's _bu
 
 ## Build the interpreter
 
+Using cmake:
+
 ```
 ./build.sh
 ```
 
-A [Fortran compiler](https://fortran-lang.org/en/compilers/) and [CMake](https://cmake.org/download/) are required
+A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required
+
+Two independent build systems are provided for syntran.  You can either use cmake, which is run by `build.sh` as shown above, or you can use the Fortran Package Manager `fpm`:
+
+```
+fpm build
+```
+
+Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm install`, etc.  Most of the example commands in this documentation will assume that cmake was used, but there is usually (always?) an fpm alternative.
 
 ## Run
 
@@ -134,7 +146,21 @@ As of rlwrap 0.43, there is a bug where it hides the `syntran$ ` prompt.  To wor
 set enable-bracketed-paste off
 ```
 
-## Saving scripts in a file
+## Syntax highlighting
+
+I do not plan on writing any syntax highlighting plugins.
+
+The easiest way to get highlighting is to have your editor treat syntran as a similar language.  Rust is a pretty good match with keywords like `let`, `fn`, and type names `i32`, `f32`, etc.  C++ is also an ok match (it has `and` and `or` keywords).
+
+For neovim, add this line to your `~/.config/nvim/ftdetect/syntran.lua` file:
+
+```lua
+vim.cmd.autocmd("BufRead,BufNewFile *.syntran set filetype=rust")
+```
+
+## Command-line usage
+
+### Saving scripts in a file
 
 As programs get longer and more complicated, it becomes difficult to enter them into the interactive interpreter.  To interpret a whole file, provide it as a command line argument:
 
@@ -147,6 +173,26 @@ Note: global block statement is not required as of 0.0.13.  Multiple statements 
 
 Make sure to wrap the entire script in a main block with braces `{}`.  The global block `{}` is not required when interactively using the interpreter because it parses and evaluates one statement at a time.  However, if you forget the global block `{}` in a script file, only the first statement will be parsed and any trailing junk statements will be unexpected.
 -->
+
+### Other command-line arguments
+
+Run `syntran -h` to see a comprehensive listing of syntran command-line arguments:
+
+```
+ syntran 0.0.34
+ https://github.com/JeffIrwin/syntran
+
+ Usage:
+        syntran <file.syntran> [--fmax-errors <n>]
+        syntran
+        syntran -h | --help
+        syntran --version
+
+ Options:
+        -h --help          Show this help
+        --version          Show version
+        --fmax-errors <n>  Limit max error messages to <n> [default: 4]
+```
 
 ## If statements and for loops
 
@@ -179,8 +225,12 @@ The bounds of for loops, like ranges in Rust and Python, are inclusive of the lo
 
 ```cpp
 for i in [0: 5]
-	i;
-// 0, 1, 2, 3, 4
+	println(i);
+// 0
+// 1
+// 2
+// 3
+// 4
 ```
 
 ## Example:  calculating prime numbers inefficiently
@@ -218,7 +268,7 @@ for i in [0: n]
 }
 
 // Final result
-prime;
+println(prime);
 // 97
 ```
 
@@ -286,7 +336,7 @@ while prime == 0
 		prime = i;
 }
 
-prime;
+println(prime);
 // 999983
 ```
 
@@ -315,7 +365,7 @@ for k in [0: 10]
 		);
 }
 
-pi;
+println(pi);
 // 3.141593E+00
 
 // x is 30 degrees (in radians)
@@ -338,7 +388,7 @@ for k in [1: 10]
 	sign = -sign;
 }
 
-sinx;
+println(sinx);
 // 4.999999E-01
 ```
 
@@ -359,8 +409,7 @@ Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/153
 Recall the syntax for a for-loop:
 ```rust
 for i in [0: 5]
-	i;
-// 0, 1, 2, 3, 4
+	println(i);
 ```
 
 The expression `[0: 5]` is one of several array forms, which can also be assigned to variables:
@@ -692,13 +741,13 @@ This can be included in a main program, assuming `main.syntran` and `header.synt
 
 fn main()
 {
-	my_global;
+	println(my_global);
 	// 42
 
-	my_scan("012345", "2");
+	println(my_scan("012345", "2"));
 	// 2
 
-	my_scan("012345", "3");
+	println(my_scan("012345", "3"));
 	// 3
 }
 
@@ -730,4 +779,13 @@ For example, it is *not* possible to concatenate strings together into the inclu
 ```
 
 The argument must be a single static lex-time constant string.
+
+## Samples
+
+Many syntran samples are provided in this repository and elsewhere:
+
+1.  [Inline tests](src/tests/test.f90):  these are short one-to-few line syntran snippets, embedded in Fortran as a string and `eval`'d.  They are covered by the tests
+2.  [Script tests](src/tests/test-src):  these are longer syntran scripts, organized into categories by directory.  They are covered by the tests
+3.  [Samples](samples):  these are longer syntran scripts which can also take a while to run, e.g. the wave equation solvers.  They are *not* covered by the tests because of the time they take to run
+4.  [Advent of Code](https://github.com/JeffIrwin/aoc-syntran):  these are syntran scripts which solve problems from the [Advent of Code](https://adventofcode.com/about).  They are *not* covered by tests and in a separate repository
 

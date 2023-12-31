@@ -9,7 +9,7 @@ module test_m
 		eval_i32  => syntran_eval_i32, &
 		eval_f32  => syntran_eval_f32
 
-	use utils_m, only: fg_bright_red, fg_bright_green, line_feed, &
+	use syntran__utils_m, only: fg_bright_red, fg_bright_green, line_feed, &
 		findlocl1, console_color, console_color_reset
 
 	implicit none
@@ -260,6 +260,19 @@ subroutine unit_test_comparisons(npass, nfail)
 			eval('"aoe" == " oe";')  == 'false',  &
 			eval('"aoe" == "a e";')  == 'false',  &
 			eval('"aoe" == "ao ";')  == 'false',  &
+			eval('"aoe" != "aoe";')  == 'false',  &
+			eval('"hoe" != "aoe";')  == 'true',  &
+			eval('"ahe" != "aoe";')  == 'true',  &
+			eval('"aoh" != "aoe";')  == 'true',  &
+			eval('"aoe" != "hoe";')  == 'true',  &
+			eval('"aoe" != "ahe";')  == 'true',  &
+			eval('"aoe" != "aoh";')  == 'true',  &
+			eval('" oe" != "aoe";')  == 'true',  &
+			eval('"a e" != "aoe";')  == 'true',  &
+			eval('"ao " != "aoe";')  == 'true',  &
+			eval('"aoe" != " oe";')  == 'true',  &
+			eval('"aoe" != "a e";')  == 'true',  &
+			eval('"aoe" != "ao ";')  == 'true',  &
 			eval('true  == false;')  == 'false'   &
 		]
 
@@ -573,6 +586,17 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('parse_i32(   "-2");')  ==    -2,  &
 			eval_i32('parse_i32(  "-34");')  ==   -34,  &
 			eval_i32('parse_i32("-1337");')  == -1337,  &
+			eval('parse_i64(    "0");')  ==     "0",  &
+			eval('parse_i64(    "1");')  ==     "1",  &
+			eval('parse_i64(    "2");')  ==     "2",  &
+			eval('parse_i64(   "34");')  ==    "34",  &
+			eval('parse_i64( "1337");')  ==  "1337",  &
+			eval('parse_i64(   "-1");')  ==    "-1",  &
+			eval('parse_i64(   "-2");')  ==    "-2",  &
+			eval('parse_i64(  "-34");')  ==   "-34",  &
+			eval('parse_i64("-1337");')  == "-1337",  &
+			eval('parse_i64("-9123123123");')  == "-9123123123",  &
+			eval('parse_i64( "9123123123");')  ==  "9123123123",  &
 			eval_i32('len(     "");')  == 0,  &
 			eval_i32('len(    " ");')  == 1,  &
 			eval_i32('len(   "  ");')  == 2,  &
@@ -584,6 +608,20 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('len(  "htn");')  == 3,  &
 			eval_i32('len( "htns");')  == 4,  &
 			eval_i32('len("htns-");')  == 5,  &
+			eval('i32(  0);') ==   "0", &
+			eval('i32(  1);') ==   "1", &
+			eval('i32( -1);') ==  "-1", &
+			eval('i32(123);') == "123", &
+			eval('i32(432);') == "432", &
+			eval('i32("c");') ==  "99", &
+			eval('i32("d");') == "100", &
+			eval('i32("C");') ==  "67", &
+			eval('i32("D");') ==  "68", &
+			eval('i32("1");') ==  "49", &
+			eval('i32("2");') ==  "50", &
+			eval('i32("(");') ==  "40", &
+			eval('i32(")");') ==  "41", &
+			eval('i32(" ");') ==  "32", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 
@@ -908,9 +946,15 @@ subroutine unit_test_i64(npass, nfail)
 
 	character(len = *), parameter :: label = 'i64 arithmetic'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
+	real, parameter :: tol = 1.e-9
+
 	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: add tests covering conversion of floats to ints using i32() and
+	! i64()
 
 	tests = &
 		[   &
@@ -1001,6 +1045,10 @@ subroutine unit_test_i64(npass, nfail)
 			eval('1337 >=  i64(1338  );')  == 'false',  &
 			eval('1337 >=  i64(1337  );')  == 'true' ,  &
 			eval('1337 >=  i64(1336  );')  == 'true' ,  &
+			abs(eval_f32('i64(2) * 3.0;', quiet) - 6.0) < tol, &
+			abs(eval_f32('3.0 * i64(2);', quiet) - 6.0) < tol, &
+			abs(eval_f32('i64(2) + 3.0;', quiet) - 5.0) < tol, &
+			abs(eval_f32('3.0 + i64(2);', quiet) - 5.0) < tol, &
 			eval('[8000000000; 3];') == '[8000000000, 8000000000, 8000000000]', &
 			eval('[8000000000: 8000000003];') == '[8000000000, 8000000001, 8000000002]', &
 			eval('[8000000000: 2: 8000000006];') == '[8000000000, 8000000002, 8000000004]', &
@@ -1343,6 +1391,8 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-15.syntran', quiet) == '1.300000E+01', &
 			interpret_file(path//'test-16.syntran', quiet) == '0.000000E+00', &
 			interpret_file(path//'test-17.syntran', quiet) == '0', &
+			interpret_file(path//'test-18.syntran', quiet) == '0', &
+			interpret_file(path//'test-19.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

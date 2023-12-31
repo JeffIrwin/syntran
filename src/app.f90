@@ -1,11 +1,11 @@
 
 !===============================================================================
 
-module app_m
+module syntran__app_m
 
-	use core_m
-	use errors_m
-	use utils_m
+	use syntran__core_m
+	use syntran__errors_m
+	use syntran__utils_m
 
 	implicit none
 
@@ -164,6 +164,7 @@ function parse_args() result(args)
 
 		write(*,*) fg_bold//"Usage:"//color_reset
 		write(*,*) "	syntran <file.syntran> [--fmax-errors <n>]"
+		write(*,*) "	syntran"
 		write(*,*) "	syntran -h | --help"
 		write(*,*) "	syntran --version"
 		write(*,*)
@@ -189,7 +190,7 @@ end function parse_args
 
 !===============================================================================
 
-end module app_m
+end module syntran__app_m
 
 !===============================================================================
 

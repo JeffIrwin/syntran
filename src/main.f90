@@ -3,8 +3,8 @@
 
 program main
 
-	use app_m
-	use core_m
+	use syntran__app_m
+	use syntran__core_m
 	use syntran
 
 	implicit none

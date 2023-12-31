@@ -8,24 +8,41 @@ on: [push]
 #    shell: bash
 
 jobs:
-  test:
+
+  test-os:
 
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+
+      # Having multiple matrices (e.g. os *and* gfortran) will test every
+      # possible combination of those two matrices!
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
         #os: [ubuntu-latest, macOS-latest]
         #os: [ubuntu-latest, windows-latest]
         #os: [ubuntu-latest]
+        #gfortran: [11, 12]
 
     steps:
 
     - uses: actions/checkout@v1
+    - uses: fortran-lang/setup-fpm@v5
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - if: matrix.os == 'ubuntu-latest'
+      name: Test fpm default
+      env:
+        #FPM_FC: gfortran-${{ matrix.gfortran }}
+        FPM_FC: gfortran-12
+      run: |
+        fpm test
 
     - if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get install gfortran
+
     - if: matrix.os == 'macOS-latest'
       run: |
         brew install gcc@12
@@ -67,4 +84,31 @@ jobs:
     #    echo $GITHUB_PATH
     #    #Get-Content samples/arithmetic.syntran | ./build/syntran
     #    ./build/test.exe
+
+  test-gfortran:
+
+    name: Test with gfortran-${{ matrix.gfortran }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        #os: [ubuntu-latest, windows-latest, macOS-latest]
+        #os: [ubuntu-latest, macOS-latest]
+        #os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
+        #gfortran: [10, 11, 12, 13]  # TODO: gfort 13 has an issue
+        gfortran: [9, 10, 11, 12]  # gfort <= 8 not available by default on github ci workers
+
+    steps:
+
+    - uses: actions/checkout@v1
+    - uses: fortran-lang/setup-fpm@v5
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - if: matrix.os == 'ubuntu-latest'
+      name: Test ubuntu gfortran-${{ matrix.gfortran }}
+      env:
+        FPM_FC: gfortran-${{ matrix.gfortran }}
+      run: |
+        fpm test --verbose --flag -Wno-tabs
 
