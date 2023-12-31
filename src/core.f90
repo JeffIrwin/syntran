@@ -79,12 +79,16 @@ module syntran__core_m
 	!      this way I don't need to add structs, multiple return vals, or out
 	!      args yet
 	!  - arrays
-	!    * PR from vec-slice branch has been started.  needs more work
-	!    * add slice subscripts:
+	!    * add slice subscripts for LHS:
+	!      > RHS slicing done
 	!      > a[:]     -> a[0], a[1], a[2], ...
 	!      > a[1:4]   -> a[1], a[2], a[3]  // already parsed bc of str feature, just can't eval yet
 	!      > a[1:2:6] -> a[1], a[3], a[5]
 	!      > higher rank:  a[:,1], a[2,:], a[2:4, 1], ...
+	!      > in general, count the number of scalar subscripts.  that is the
+	!        difference between the input rank and the output rank of the
+	!        subscripting operation.  e.g. if every subscript is a slice, then
+	!        the rank is unchanged, 1 scalar subscript decreases rank by 1, etc.
 	!    * refactor the way implicit arrays are handled as for loop iterators
 	!    * operations: vector addition, dot product, scalar-vector mult, ...
 	!  - compound assignment: logical &=, |=, etc.
@@ -112,12 +116,20 @@ module syntran__core_m
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!    * using rust syntrax highlighting in neovim is not bad (except for "\" string)
 	!  - enums
+	!  - file reading
+	!    * file_stat() fn: checks IO of previous file operation. this way I
+	!      don't need to add structs, multiple return vals, or out args yet
+	!    * readln(), eof() done
 	!  - xor, xnor
 	!    * xor (bool1, bool2) is just (bool1 != bool2)
 	!    * xnor(bool1, bool2) is just (bool1 == bool2)
 	!    * is there any value to having plain language versions of these
 	!      operators, like `and` or `not` in syntran?
 	!  - bitwise operators
+	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
+	!    include quick-start and links in top-level README?
+	!    * github automatically includes a Table of Contents in a menu, so maybe
+	!      it's better as-is
 	!
 	!****************************************
 
@@ -127,6 +139,7 @@ module syntran__core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			all_sub              = 81, &
 			include_keyword      = 80, &
 			hash_token           = 79, &
 			percent_equals_token = 78, &
@@ -461,10 +474,11 @@ module syntran__core_m
 			elems(:), rank
 
 		! TODO: rename `size`
-		type(syntax_node_t), allocatable :: subscripts(:), size(:), args(:), &
+		type(syntax_node_t), allocatable :: lsubscripts(:), size(:), args(:), &
 			usubscripts(:)!, ssubscripts(:) !TODO: subscript step
 
-		! Either scalar_sub, range_sub (unit step), or step_sub
+		! Either scalar_sub, range_sub (unit step [0:2]), all_sub ([:]), or
+		! step_sub ([0: 2: 8])
 		integer :: sub_kind
 
 		type(syntax_token_t) :: op, identifier
@@ -1784,6 +1798,7 @@ function kind_name(kind)
 			"percent_equals_token", & ! 78
 			"hash_token          ", & ! 79
 			"include_keyword     ", & ! 80
+			"all_sub             ", & ! 81
 			"unknown             "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too
@@ -1886,6 +1901,7 @@ function kind_token(kind)
 			"%=                   ", & ! 78
 			"#                    ", & ! 79
 			"include              ", & ! 80
+			"all_sub              ", & ! 81
 			"unknown              "  & ! inf
 		]
 
@@ -2122,10 +2138,10 @@ recursive subroutine syntax_node_copy(dst, src)
 		deallocate(dst%elems)
 	end if
 
-	if (allocated(src%subscripts)) then
-		call syntax_nodes_copy(dst%subscripts, src%subscripts)
-	else if (allocated(dst%subscripts)) then
-		deallocate(dst%subscripts)
+	if (allocated(src%lsubscripts)) then
+		call syntax_nodes_copy(dst%lsubscripts, src%lsubscripts)
+	else if (allocated(dst%lsubscripts)) then
+		deallocate(dst%lsubscripts)
 	end if
 
 	if (allocated(src%usubscripts)) then
@@ -4099,10 +4115,9 @@ recursive function parse_expr_statement(parser) result(expr)
 		! Subscript can appear in assignment expr but not let expr, because let
 		! must initialize the whole array
 		span0 = parser%current_pos()
-		!call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
 		call parser%parse_subscripts(expr)
 
-		if (size(expr%subscripts) <= 0) deallocate(expr%subscripts)
+		if (size(expr%lsubscripts) <= 0) deallocate(expr%lsubscripts)
 		span1 = parser%current_pos() - 1
 
 		if (.not. is_assignment_op(parser%current_kind())) then
@@ -4146,7 +4161,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		!print *, 'allocated(expr%val%array) = ', allocated(expr%val%array)
 
-		if (size(expr%subscripts) > 0) then
+		if (size(expr%lsubscripts) > 0) then
 
 			if (expr%val%type == str_type) then
 				!print *, 'str type'
@@ -4157,26 +4172,34 @@ recursive function parse_expr_statement(parser) result(expr)
 					err_scalar_subscript(parser%context(), &
 					span, identifier%text))
 				return
-			else if (any(expr%subscripts%sub_kind == range_sub)) then
+
+			!else if (any(expr%lsubscripts%sub_kind /= scalar_sub) .and. &
+			!	expr%val%array%rank > 1) then
+			else if (any(expr%lsubscripts%sub_kind /= scalar_sub)) then
+
+				! TODO: allow LHS slices
+
 				span = new_span(span0, span1 - span0 + 1)
 				call parser%diagnostics%push( &
 					err_bad_sub_rank(parser%context(), span, &
 					identifier%text, expr%val%array%rank))
+
 			end if
 
 			!print *, 'type = ', expr%val%type
 
 			if (expr%val%type /= str_type) then
+
 				expr%val%type = expr%val%array%type
 
 				!print *, 'rank = ', expr%val%array%rank
-				!print *, 'subs = ', size(expr%subscripts)
+				!print *, 'subs = ', size(expr%lsubscripts)
 
-				if (expr%val%array%rank /= size(expr%subscripts)) then
+				if (expr%val%array%rank /= size(expr%lsubscripts)) then
 					span = new_span(span0, span1 - span0 + 1)
 					call parser%diagnostics%push( &
 						err_bad_sub_count(parser%context(), span, identifier%text, &
-						expr%val%array%rank, size(expr%subscripts)))
+						expr%val%array%rank, size(expr%lsubscripts)))
 				end if
 			end if
 
@@ -4229,23 +4252,19 @@ end function is_assignment_op
 
 !===============================================================================
 
-!subroutine parse_subscripts(parser, subscripts, usubscripts)
 subroutine parse_subscripts(parser, expr)
 
-	! Parse array subscript if present
+	! Parse array subscripts, if present
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(inout) :: expr
-
-	!type(syntax_node_t), intent(out), allocatable :: subscripts(:), &
-	!	usubscripts(:)
 
 	!********
 
 	integer :: pos0, span0
 
-	type(syntax_node_t) :: subscript, usubscript
-	type(syntax_node_vector_t) :: subscripts_vec, usubscripts_vec
+	type(syntax_node_t) :: lsubscript, usubscript
+	type(syntax_node_vector_t) :: lsubscripts_vec, usubscripts_vec
 	type(syntax_token_t) :: lbracket, rbracket, comma, &
 		dummy, colon
 
@@ -4254,17 +4273,15 @@ subroutine parse_subscripts(parser, expr)
 	if (parser%current_kind() /= lbracket_token) then
 
 		!! The function has to return something.  Caller deallocates
-		!subscripts = []
-		allocate( expr%subscripts(0))
-		!allocate(usubscripts(0))
+		allocate( expr%lsubscripts(0))
 		return
 
 	end if
 
 	!print *, 'parsing subscripts'
 
-	 subscripts_vec = new_syntax_node_vector()
-	usubscripts_vec = new_syntax_node_vector()
+	lsubscripts_vec = new_syntax_node_vector()  ! lower-bounds
+	usubscripts_vec = new_syntax_node_vector()  ! upper-bounds
 
 	lbracket  = parser%match(lbracket_token)
 
@@ -4274,37 +4291,42 @@ subroutine parse_subscripts(parser, expr)
 
 		pos0  = parser%pos
 		span0 = parser%current_pos()
-		subscript = parser%parse_expr()
 
-		!print *, 'subscript = ', subscript%str()
-		!print *, 'subscript = ', parser%text(span0, parser%current_pos()-1)
-
-		if (.not. any(subscript%val%type == [i32_type, i64_type])) then
-			span = new_span(span0, parser%current_pos() - span0)
-			call parser%diagnostics%push( &
-				err_non_int_subscript(parser%context(), span, &
-				parser%text(span0, parser%current_pos()-1)))
-		end if
-
-		! TODO: set step_sub case for non-unit range step
 		if (parser%current_kind() == colon_token) then
-			colon = parser%match(colon_token)
-			subscript%sub_kind = range_sub
-
-			usubscript = parser%parse_expr()
-			! TODO: type check i32
-
+			lsubscript%sub_kind = all_sub
 		else
-			subscript%sub_kind = scalar_sub
 
-			! TODO: initialize empty usubscript struct
+			lsubscript = parser%parse_expr()
+
+			!print *, 'lsubscript = ', lsubscript%str()
+			!print *, 'lsubscript = ', parser%text(span0, parser%current_pos()-1)
+
+			if (.not. any(lsubscript%val%type == [i32_type, i64_type])) then
+				span = new_span(span0, parser%current_pos() - span0)
+				call parser%diagnostics%push( &
+					err_non_int_subscript(parser%context(), span, &
+					parser%text(span0, parser%current_pos()-1)))
+			end if
+
+			! TODO: set step_sub case for non-unit range step
+			if (parser%current_kind() == colon_token) then
+				colon = parser%match(colon_token)
+				lsubscript%sub_kind = range_sub
+
+				usubscript = parser%parse_expr()
+				! TODO: type check i32
+
+			else
+				lsubscript%sub_kind = scalar_sub
+
+			end if
+			!print *, kind_name(subscript%sub_kind)
 
 		end if
-		!print *, kind_name(subscript%sub_kind)
 
 		! Parallel arrays subscripts and usubscripts should be same size? Not
-		! sure how much will need to change for multi-rank ranges
-		call  subscripts_vec%push( subscript)
+		! sure if this is ideal for multi-rank ranges
+		call lsubscripts_vec%push(lsubscript)
 		call usubscripts_vec%push(usubscript)
 
 		! Break infinite loop
@@ -4330,10 +4352,10 @@ subroutine parse_subscripts(parser, expr)
 	! Check that the expr is actually an array (not a scalar), or do that next
 	! to err_bad_sub_count() elsewhere
 	!
-	! So, only check rank match here if subscripts%len_ > 0
+	! So, only check rank match here if lsubscripts%len_ > 0
 
-	call syntax_nodes_copy(expr%subscripts, &
-		subscripts_vec%v( 1: subscripts_vec%len_ ))
+	call syntax_nodes_copy(expr%lsubscripts, &
+		lsubscripts_vec%v( 1: lsubscripts_vec%len_ ))
 
 	call syntax_nodes_copy(expr%usubscripts, &
 		usubscripts_vec%v( 1: usubscripts_vec%len_ ))
@@ -5216,45 +5238,39 @@ function parse_primary_expr(parser) result(expr)
 
 				!print *, '%current_kind() = ', kind_name(parser%current_kind())
 				span0 = parser%current_pos()
-				!call parser%parse_subscripts(expr%subscripts, expr%usubscripts)
 				call parser%parse_subscripts(expr)
 
 				span1 = parser%current_pos() - 1
-				if (size(expr%subscripts) <= 0) then
-					deallocate(expr%subscripts)
+				if (size(expr%lsubscripts) <= 0) then
+					deallocate(expr%lsubscripts)
 				else if (expr%val%type == array_type) then
 
-					!print *, 'sub kind = ', kind_name(expr%subscripts(1)%sub_kind)
+					!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
 
-					if (any(expr%subscripts%sub_kind == range_sub)) then
-						span = new_span(span0, span1 - span0 + 1)
-						call parser%diagnostics%push( &
-							err_bad_sub_rank(parser%context(), span, &
-							identifier%text, expr%val%array%rank))
+					if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
+						! this is not necessarily true for strings
+						expr%val%type = expr%val%array%type
 					end if
 
-					! this is not necessarily true for strings
-					expr%val%type = expr%val%array%type
-
 					! TODO: allow rank+1 for str arrays
-					if (expr%val%array%rank /= size(expr%subscripts)) then
+					if (expr%val%array%rank /= size(expr%lsubscripts)) then
 						span = new_span(span0, span1 - span0 + 1)
 						call parser%diagnostics%push( &
 							err_bad_sub_count(parser%context(), span, &
 							identifier%text, &
-							expr%val%array%rank, size(expr%subscripts)))
+							expr%val%array%rank, size(expr%lsubscripts)))
 					end if
 
 				else if (expr%val%type == str_type) then
 					!print *, 'string type'
 
 					exp_rank = 1
-					if (size(expr%subscripts) /= exp_rank) then
+					if (size(expr%lsubscripts) /= exp_rank) then
 						span = new_span(span0, span1 - span0 + 1)
 						call parser%diagnostics%push( &
 							err_bad_sub_count(parser%context(), span, &
 							identifier%text, &
-							exp_rank, size(expr%subscripts)))
+							exp_rank, size(expr%lsubscripts)))
 					end if
 				else
 					span = new_span(span0, span1 - span0 + 1)
@@ -5292,8 +5308,8 @@ function parse_primary_expr(parser) result(expr)
 					!! We should delete the whole thing just to be safe, to
 					!! prevent anything else from leaking.
 
-					!if (allocated(arg%subscripts)) then
-					!	deallocate(arg%subscripts)
+					!if (allocated(arg%lsubscripts)) then
+					!	deallocate(arg%lsubscripts)
 					!end if
 
 					if (parser%current_kind() /= rparen_token) then
@@ -5875,7 +5891,7 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 
 	! str scalar with single char subscript
 	if (vars%vals(node%id_index)%type == str_type) then
-		subscript = syntax_eval(node%subscripts(1), vars, fns, quietl)
+		subscript = syntax_eval(node%lsubscripts(1), vars, fns, quietl)
 		index_ = subscript%sca%i32
 		return
 	end if
@@ -5889,9 +5905,13 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 	do i = 1, vars%vals(node%id_index)%array%rank
 		!print *, 'i = ', i
 
-		subscript = syntax_eval(node%subscripts(i), vars, fns, quietl)
+		subscript = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
 
 		! TODO: bound checking? by default or enabled with cmd line flag?
+		!
+		! I think the only way to do it without killing perf is by having bound
+		! checking turned off in release, and setting a compiler macro
+		! definition to enable it only in debug
 
 		index_ = index_ + prod * subscript%sca%i32
 		prod  = prod * vars%vals(node%id_index)%array%size(i)
@@ -5925,8 +5945,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	character(len = :), allocatable :: color
 
-	integer :: i, j, io
-	integer(kind = 8) :: il, iu, i8
+	integer :: i, j, io, rank, rank_res, idim_, idim_res
+	integer(kind = 8) :: il, iu, i8, index_, prod
+	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
 	logical :: quietl
 
@@ -5935,7 +5956,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	! TODO: rename lbound/ubound to avoid intrinsic clash
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
-		step, len_, arg, arg1, arg2, array_val
+		step, len_, arg, arg1, arg2, array_val, lsubval, usubval
 
 	!print *, 'starting syntax_eval()'
 
@@ -6132,37 +6153,26 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%type = node%val%array%type
 			array%len_  = product(array%size)
-			array%cap  = array%len_
-
 			!print *, 'array%len_ = ', array%len_
 
-			if      (array%type == i32_type) then
-				allocate(array%i32( array%cap ))
+			call allocate_array(array, array%len_)
+			select case (array%type)
+			case (i32_type)
 				array%i32 = lbound%sca%i32
-
-			else if      (array%type == i64_type) then
-				allocate(array%i64( array%cap ))
+			case (i64_type)
 				array%i64 = lbound%sca%i64
-
-			else if (array%type == f32_type) then
-				allocate(array%f32( array%cap ))
+			case (f32_type)
 				array%f32 = lbound%sca%f32
-
-			else if (array%type == bool_type) then
-				allocate(array%bool( array%cap ))
+			case (bool_type)
 				array%bool = lbound%sca%bool
-
-			else if (array%type == str_type) then
-				allocate(array%str( array%cap ))
+			case (str_type)
 				array%str = lbound%sca%str
-
-			else
+			case default
 				write(*,*) err_eval_len_array(kind_name(array%type))
 				call internal_error()
-			end if
+			end select
 
 			allocate(res%array)
-
 			res%type  = array_type
 			res%array = array
 
@@ -6204,13 +6214,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				array%len_ = ubound%sca%i64 - lbound%sca%i64
 			end if
 
-			array%cap = array%len_
-
-			if (array%type == i32_type) then
-				allocate(array%i32( array%cap ))
-			else !if (array%type == i64_type) then
-				allocate(array%i64( array%cap ))
-			end if
+			call allocate_array(array, array%len_)
 
 			!print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
 			!print *, 'node%val%array%type = ', node%val%array%type
@@ -6410,7 +6414,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	case (assignment_expr)
 
-		if (.not. allocated(node%subscripts)) then
+		if (.not. allocated(node%lsubscripts)) then
 
 			if (allocated(vars%vals)) then
 			if (allocated(vars%vals(node%id_index)%array)) then
@@ -6712,25 +6716,27 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
 
-		if (allocated(node%subscripts) .and. &
+		if (allocated(node%lsubscripts) .and. &
 			vars%vals(node%id_index)%type == str_type) then
 			!print *, 'string subscript RHS name expr'
 
 			!print *, 'str type'
 			res%type = vars%vals(node%id_index)%type
 
-			select case (node%subscripts(1)%sub_kind)
+			select case (node%lsubscripts(1)%sub_kind)
 			case (scalar_sub)
 				i8 = subscript_eval(node, vars, fns, quietl)
 				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
 
 			case (range_sub)
 
-				il = subscript_eval(node, vars, fns, quietl)
+				! TODO: str all_sub
+
+				il = subscript_eval(node, vars, fns, quietl) + 1
 
 				! This feels inconsistent and not easy to extend to higher ranks
 				right = syntax_eval(node%usubscripts(1), vars, fns, quietl)
-				iu = right%sca%i32
+				iu = right%sca%i32 + 1
 
 				!print *, ''
 				!print *, 'identifier ', node%identifier%text
@@ -6739,24 +6745,140 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!print *, 'str = ', vars%vals(node%id_index)%sca%str%s
 
 				! Not inclusive of upper bound
-				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(il+1: iu)
+				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(il: iu-1)
 
 			case default
 				write(*,*) 'Error: unexpected subscript kind'
 				call internal_error()
 			end select
 
-		else if (allocated(node%subscripts)) then
+		else if (allocated(node%lsubscripts)) then
 
 			if (vars%vals(node%id_index)%type /= array_type) then
 				write(*,*) 'Error: bad type, expected array'
 				call internal_error()
 			end if
 
-			!print *, 'sub kind = ', kind_name(node%subscripts(1)%sub_kind)
+			!print *, 'sub kind 1 = ', kind_name(node%lsubscripts(1)%sub_kind)
+			!print *, 'rank = ', node%val%array%rank
 
-			i8 = subscript_eval(node, vars, fns, quietl)
-			res = get_array_value_t(vars%vals(node%id_index)%array, i8)
+			if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+
+				! This could probably be lumped in with the range_sub case now
+				! that I have it fully generalized
+				i8 = subscript_eval(node, vars, fns, quietl)
+				res = get_array_value_t(vars%vals(node%id_index)%array, i8)
+
+			else
+
+				rank = vars%vals(node%id_index)%array%rank
+				allocate(lsubs(rank), usubs(rank))
+				rank_res = 0
+				do i = 1, rank
+
+					if (node%lsubscripts(i)%sub_kind == all_sub) then
+						lsubs(i) = 0
+						!print *, 'lsubs(i) = ', lsubs(i)
+					else
+						lsubval = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
+						lsubs(i) = lsubval%sca%i32
+					end if
+
+					select case (node%lsubscripts(i)%sub_kind)
+					case (all_sub)
+						usubs(i) = vars%vals(node%id_index)%array%size(i)
+						!print *, 'usubs(i) = ', usubs(i)
+
+						rank_res = rank_res + 1
+
+					case (range_sub)
+						usubval = syntax_eval(node%usubscripts(i), vars, fns, quietl)
+						usubs(i) = usubval%sca%i32
+
+						rank_res = rank_res + 1
+
+					case (scalar_sub)
+						! Scalar subs are converted to a range-1 sub so we can
+						! iterate later without further case logic
+						usubs(i) = lsubs(i) + 1
+
+					case default
+						write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
+						call internal_error()
+
+					end select
+
+				end do
+				!print *, 'lsubs = ', lsubs
+				!print *, 'usubs = ', usubs
+				!print *, 'rank_res = ', rank_res
+
+				!print *, 'type = ', kind_name( node%val%array%type )
+
+				!print *, 'type  = ', node%val%array%type
+				!print *, 'rank  = ', node%val%array%rank
+				!print *, 'size  = ', node%val%array%size
+				!print *, 'len_  = ', node%val%array%len_
+				!print *, 'cap   = ', node%val%array%cap
+
+				allocate(res%array)
+				res%type = array_type
+				res%array%kind = expl_array
+				res%array%type = node%val%array%type
+				res%array%rank = rank_res
+
+				allocate(res%array%size( rank_res ))
+				idim_res = 1
+				do idim_ = 1, rank
+					select case (node%lsubscripts(idim_)%sub_kind)
+					case (range_sub, all_sub)
+
+						res%array%size(idim_res) = usubs(idim_) - lsubs(idim_)
+
+						idim_res = idim_res + 1
+					end select
+				end do
+				!print *, 'res size = ', res%array%size
+
+				res%array%len_ = product(res%array%size)
+				!print *, 'res len = ', res%array%len_
+
+				call allocate_array(res%array, res%array%len_)
+
+				! Iterate through all subscripts in range and copy to result
+				! array
+				subs = lsubs
+				do i8 = 0, res%array%len_ - 1
+					!print *, 'subs = ', int(subs, 4)
+
+					! subscript_eval() inlined.  is there a way to copy a slice
+					! without doing so much math?
+					!
+					! TODO: bound checking if enabled.  unlike subscript_eval(),
+					! we can do it here outside the i8 loop
+					prod  = 1
+					index_ = 0
+					do j = 1, rank
+						!print *, 'j = ', j
+						index_ = index_ + prod * subs(j)
+						prod  = prod * vars%vals(node%id_index)%array%size(j)
+					end do
+					!print *, 'index_ = ', index_
+
+					call set_array_value_t(res%array, i8, &
+					     get_array_value_t(vars%vals(node%id_index)%array, index_))
+
+					! get next subscript.  this is the bignum += 1 algorithm but
+					! in an arbitrary mixed radix
+					j = 1
+					do while (j < rank .and. subs(j) == usubs(j) - 1)
+						subs(j) = lsubs(j)
+						j = j + 1
+					end do
+					subs(j) = subs(j) + 1
+
+				end do
+			end if
 
 		else
 			!print *, 'name expr'
@@ -7044,6 +7166,34 @@ end function syntax_eval
 
 !===============================================================================
 
+subroutine allocate_array(array, cap)
+
+	type(array_t), intent(inout) :: array
+	integer(kind = 8), intent(in) :: cap
+
+	array%cap = cap
+
+	select case (array%type)
+	case (i32_type)
+		allocate(array%i32( cap ))
+	case (i64_type)
+		allocate(array%i64( cap ))
+	case (f32_type)
+		allocate(array%f32( cap ))
+	case (bool_type)
+		allocate(array%bool( cap ))
+	case (str_type)
+		allocate(array%str( cap ))
+	case default
+		write(*,*) err_int_prefix//'cannot allocate array of type `' &
+			//kind_name(array%type)//'`'//color_reset
+		call internal_error()
+	end select
+
+end subroutine allocate_array
+
+!===============================================================================
+
 subroutine promote_i32_i64(val)
 
 	! If val is i32 type, change it to i64 and copy the values
@@ -7224,10 +7374,10 @@ subroutine add_value_t(left, right, res, op_text)
 		res%sca%f32 = left%sca%i32 + right%sca%f32
 
 	case        (magic**2 * f32_type + magic * f32_type + i64_type)
-		res%sca%f32 = left%sca%f32 + right%sca%i64
+		res%sca%f32 = left%sca%f32 + real(right%sca%i64)
 
 	case        (magic**2 * f32_type + magic * i64_type + f32_type)
-		res%sca%f32 = left%sca%i64 + right%sca%f32
+		res%sca%f32 = real(left%sca%i64) + right%sca%f32
 
 	case        (magic**2 * str_type + magic * str_type + str_type)
 		res%sca%str%s = left%sca%str%s // right%sca%str%s
@@ -7283,10 +7433,10 @@ subroutine mul_value_t(left, right, res, op_text)
 		res%sca%f32 = left%sca%f32 * right%sca%i32
 
 	case        (magic**2 * f32_type + magic * f32_type + i64_type)
-		res%sca%f32 = left%sca%f32 * right%sca%i64
+		res%sca%f32 = left%sca%f32 * real(right%sca%i64)
 
 	case        (magic**2 * f32_type + magic * i64_type + f32_type)
-		res%sca%f32 = left%sca%i64 * right%sca%f32
+		res%sca%f32 = real(left%sca%i64) * right%sca%f32
 
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
 		res%sca%f32 = left%sca%i32 * right%sca%f32
@@ -7677,6 +7827,10 @@ recursive function value_to_str(val) result(ans)
 
 			call str_vec%push('[')
 			if (val%array%rank > 1) call str_vec%push(line_feed)
+
+			!! Debug w/o recursive io
+			!call str_vec%push( kind_name(val%array%type) )
+			!call str_vec%push(str(int(val%array%len_)))
 
 			if (val%array%type == i32_type) then
 

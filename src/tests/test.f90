@@ -1174,6 +1174,7 @@ subroutine unit_test_array_i32_1(npass, nfail)
 
 	character(len = *), parameter :: label = 'i32 arrays'
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
@@ -1215,6 +1216,71 @@ subroutine unit_test_array_i32_1(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_array_i32_1
+
+!===============================================================================
+
+subroutine unit_test_slice_1(npass, nfail)
+
+	! Simple array slicing tests
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'array slicing'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval('let v = [0: 10]; v[0: 4];', quiet) == '[0, 1, 2, 3]', &
+			eval('let v = [0: 10]; v[2: 5];', quiet) == '[2, 3, 4]', &
+			eval('let v = [0: 10]; let u = v[2: 5]; u[0];', quiet) == '2', &
+			eval('let v = [0: 10]; let u = v[2: 5]; u;', quiet) == '[2, 3, 4]', &
+			eval('let m = [0, 1, 2, 3; 2, 2]; m[0, 0:2];', quiet) == '[0, 2]', &
+			eval('let m = [0, 1, 2, 3; 2, 2]; m[1, 0:2];', quiet) == '[1, 3]', &
+			eval('let m = [0, 1, 2, 3; 2, 2]; m[0:2, 0];', quiet) == '[0, 1]', &
+			eval('let m = [0, 1, 2, 3; 2, 2]; m[0:2, 1];', quiet) == '[2, 3]', &
+			eval('let m = [0, 1, 2, 3, 4, 5; 2, 3]; m[0, 0:3];', quiet) == '[0, 2, 4]', &
+			eval('let m = [0, 1, 2, 3, 4, 5; 2, 3]; m[1, 0:3];', quiet) == '[1, 3, 5]', &
+			eval('let m = [0, 1, 2, 3, 4, 5; 2, 3]; m[0:2, 1];', quiet) == '[2, 3]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0, 0:3];', quiet) == '[0, 3, 6]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[2, 0:3];', quiet) == '[2, 5, 8]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0:3, 0];', quiet) == '[0, 1, 2]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0:3, 2];', quiet) == '[6, 7, 8]', &
+			eval('let v = ["a", "b", "c", "d", "e", "f"]; v[0: 4];', quiet) == '[a, b, c, d]', &
+			eval('let v = ["a", "b", "c", "d", "e", "f"]; v[1: 5];', quiet) == '[b, c, d, e]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[0:2, 0, 0];', quiet) == '[0, 1]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[0, 0:2, 0];', quiet) == '[0, 2]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[0, 0, 0:2];', quiet) == '[0, 4]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[0:2, 1, 1];', quiet) == '[6, 7]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[1, 0:2, 1];', quiet) == '[5, 7]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[1, 1, 0:2];', quiet) == '[3, 7]', &
+			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[0:3, 0];', quiet) == '[a, b, c]', &
+			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[0:3, 1];', quiet) == '[d, e, f]', &
+			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[0, 0:2];', quiet) == '[a, d]', &
+			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[2, 0:2];', quiet) == '[c, f]', &
+			eval('let m = [true; 2, 2]; m[0, 0:2];', quiet) == '[true, true]', &
+			eval('let m = [i64(42); 2, 2]; m[0:2, 1];', quiet) == '[42, 42]', &
+			eval('let m = [1.0; 2, 2]; m[0:2, 1];', quiet) == '[1.000000E+00, 1.000000E+00]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0, :];', quiet) == '[0, 3, 6]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[2, :];', quiet) == '[2, 5, 8]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[:, 0];', quiet) == '[0, 1, 2]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[:, 2];', quiet) == '[6, 7, 8]', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_slice_1
 
 !===============================================================================
 
@@ -1868,6 +1934,7 @@ subroutine unit_tests(iostat)
 	call unit_test_io         (npass, nfail)
 	call unit_test_i64        (npass, nfail)
 	call unit_test_include    (npass, nfail)
+	call unit_test_slice_1    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
