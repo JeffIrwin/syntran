@@ -1271,8 +1271,10 @@ subroutine unit_test_slice_1(npass, nfail)
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[0:2, 1, 1];', quiet) == '[6, 7]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[1, 0:2, 1];', quiet) == '[5, 7]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[1, 1, 0:2];', quiet) == '[3, 7]', &
-			! TODO: test other more types besides i32 and str.  also test
-			! matrices and rank-3+ arrays for all types
+			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[0:3, 0];', quiet) == '[a, b, c]', &
+			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[0:3, 1];', quiet) == '[d, e, f]', &
+			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[0, 0:2];', quiet) == '[a, d]', &
+			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[2, 0:2];', quiet) == '[c, f]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
