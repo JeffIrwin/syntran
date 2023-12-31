@@ -1225,6 +1225,10 @@ subroutine unit_test_array_i32_1(npass, nfail)
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[2, 0:3];', quiet) == '[2, 5, 8]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0:3, 0];', quiet) == '[0, 1, 2]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0:3, 2];', quiet) == '[6, 7, 8]', &
+			eval('let v = ["a", "b", "c", "d", "e", "f"]; v[0: 4];', quiet) == '[a, b, c, d]', &
+			eval('let v = ["a", "b", "c", "d", "e", "f"]; v[1: 5];', quiet) == '[b, c, d, e]', &
+			! TODO: test other more types besides i32 and str.  also test
+			! matrices and rank-3+ arrays for all types
 			eval('[48-6, 13*100 + 37];') == '[42, 1337]'  &
 		]
 
