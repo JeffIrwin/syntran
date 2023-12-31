@@ -6154,37 +6154,27 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%type = node%val%array%type
 			array%len_  = product(array%size)
-			array%cap  = array%len_
-
 			!print *, 'array%len_ = ', array%len_
 
-			if      (array%type == i32_type) then
-				allocate(array%i32( array%cap ))
+			array%cap  = array%len_
+			call allocate_array(array)
+			select case (array%type)
+			case (i32_type)
 				array%i32 = lbound%sca%i32
-
-			else if      (array%type == i64_type) then
-				allocate(array%i64( array%cap ))
+			case (i64_type)
 				array%i64 = lbound%sca%i64
-
-			else if (array%type == f32_type) then
-				allocate(array%f32( array%cap ))
+			case (f32_type)
 				array%f32 = lbound%sca%f32
-
-			else if (array%type == bool_type) then
-				allocate(array%bool( array%cap ))
+			case (bool_type)
 				array%bool = lbound%sca%bool
-
-			else if (array%type == str_type) then
-				allocate(array%str( array%cap ))
+			case (str_type)
 				array%str = lbound%sca%str
-
-			else
+			case default
 				write(*,*) err_eval_len_array(kind_name(array%type))
 				call internal_error()
-			end if
+			end select
 
 			allocate(res%array)
-
 			res%type  = array_type
 			res%array = array
 
@@ -6227,12 +6217,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end if
 
 			array%cap = array%len_
-
-			if (array%type == i32_type) then
-				allocate(array%i32( array%cap ))
-			else !if (array%type == i64_type) then
-				allocate(array%i64( array%cap ))
-			end if
+			call allocate_array(array)
 
 			!print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
 			!print *, 'node%val%array%type = ', node%val%array%type
@@ -6848,14 +6833,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!print *, 'res len = ', res%array%len_
 
 				res%array%cap = res%array%len_
-
-				! TODO: is there a helper fn for this?
-				select case (node%val%array%type)
-				case (i32_type)
-					allocate(res%array%i32( res%array%cap ))
-				case default
-					! TODO
-				end select
+				call allocate_array(res%array)
 
 				subs = lsubs
 				do i = 1, res%array%len_
@@ -7173,6 +7151,34 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	end select
 
 end function syntax_eval
+
+!===============================================================================
+
+subroutine allocate_array(array)
+
+	! TODO: every caller sets array%cap just before this.  Maybe it should be
+	! refactored into the fn
+
+	type(array_t), intent(inout) :: array
+
+	select case (array%type)
+	case (i32_type)
+		allocate(array%i32( array%cap ))
+	case (i64_type)
+		allocate(array%i64( array%cap ))
+	case (f32_type)
+		allocate(array%f32( array%cap ))
+	case (bool_type)
+		allocate(array%bool( array%cap ))
+	case (str_type)
+		allocate(array%str( array%cap ))
+	case default
+		write(*,*) err_int_prefix//'cannot allocate array of type `' &
+			//kind_name(array%type)//'`'//color_reset
+		call internal_error()
+	end select
+
+end subroutine allocate_array
 
 !===============================================================================
 
