@@ -279,7 +279,7 @@ function err_bad_sub_rank(context, span, array, expect) result(err)
 	end if
 
 	err = err_prefix &
-		//'array `'//array//'` requires scalar ' &
+		//'LHS array `'//array//'` requires scalar ' &
 		//subscript_s//' but was given a range' &
 		//underline(context, span)//" non-scalar subscript"//color_reset
 

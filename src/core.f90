@@ -4189,8 +4189,6 @@ recursive function parse_expr_statement(parser) result(expr)
 			!print *, 'type = ', expr%val%type
 
 			if (expr%val%type /= str_type) then
-			!if (expr%val%type /= str_type .and. &
-			!	all(expr%lsubscripts%sub_kind == scalar_sub)) then
 
 				expr%val%type = expr%val%array%type
 
@@ -5248,14 +5246,6 @@ function parse_primary_expr(parser) result(expr)
 				else if (expr%val%type == array_type) then
 
 					!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
-
-					!if (any(expr%lsubscripts%sub_kind == range_sub) .and. &
-					!	expr%val%array%rank > 1) then
-					!	span = new_span(span0, span1 - span0 + 1)
-					!	call parser%diagnostics%push( &
-					!		err_bad_sub_rank(parser%context(), span, &
-					!		identifier%text, expr%val%array%rank))
-					!end if
 
 					if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
 						! this is not necessarily true for strings
@@ -6774,8 +6764,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 
-				! This could probably be lumped in with the range_sub case after
-				! I have it fully generalized
+				! This could probably be lumped in with the range_sub case now
+				! that I have it fully generalized
 				i8 = subscript_eval(node, vars, fns, quietl)
 				res = get_array_value_t(vars%vals(node%id_index)%array, i8)
 
@@ -6863,6 +6853,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					! subscript_eval() inlined.  is there a way to copy a slice
 					! without doing so much math?
+					!
+					! TODO: bound checking if enabled.  unlike subscript_eval(),
+					! we can do it here outside the i8 loop
 					prod  = 1
 					index_ = 0
 					do j = 1, rank
@@ -7381,10 +7374,10 @@ subroutine add_value_t(left, right, res, op_text)
 		res%sca%f32 = left%sca%i32 + right%sca%f32
 
 	case        (magic**2 * f32_type + magic * f32_type + i64_type)
-		res%sca%f32 = left%sca%f32 + right%sca%i64
+		res%sca%f32 = left%sca%f32 + real(right%sca%i64)
 
 	case        (magic**2 * f32_type + magic * i64_type + f32_type)
-		res%sca%f32 = left%sca%i64 + right%sca%f32
+		res%sca%f32 = real(left%sca%i64) + right%sca%f32
 
 	case        (magic**2 * str_type + magic * str_type + str_type)
 		res%sca%str%s = left%sca%str%s // right%sca%str%s
@@ -7440,10 +7433,10 @@ subroutine mul_value_t(left, right, res, op_text)
 		res%sca%f32 = left%sca%f32 * right%sca%i32
 
 	case        (magic**2 * f32_type + magic * f32_type + i64_type)
-		res%sca%f32 = left%sca%f32 * right%sca%i64
+		res%sca%f32 = left%sca%f32 * real(right%sca%i64)
 
 	case        (magic**2 * f32_type + magic * i64_type + f32_type)
-		res%sca%f32 = left%sca%i64 * right%sca%f32
+		res%sca%f32 = real(left%sca%i64) * right%sca%f32
 
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
 		res%sca%f32 = left%sca%i32 * right%sca%f32
