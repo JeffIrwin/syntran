@@ -1236,16 +1236,6 @@ subroutine unit_test_slice_1(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! Because test evaluation results are tested by comparing strings, output
-	! white space is significant!  Ints are formatted in min width, and array
-	! elements are separated by a comma and a single space
-
-	! TODO: test empty arrays.  As of 0.0.13, empty literal arrays cannot be
-	! assigned, but this can be worked around with ubound < lbound, e.g.:
-	!
-	!     let v = [0: -1];
-	!     // []
-
 	tests = &
 		[   &
 			eval('let v = [0: 10]; v[0: 4];', quiet) == '[0, 1, 2, 3]', &

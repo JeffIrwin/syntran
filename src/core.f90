@@ -79,8 +79,8 @@ module syntran__core_m
 	!      this way I don't need to add structs, multiple return vals, or out
 	!      args yet
 	!  - arrays
-	!    * PR from vec-slice branch has been started.  needs more work
-	!    * add slice subscripts:
+	!    * add slice subscripts for LHS:
+	!      > RHS slicing done
 	!      > a[:]     -> a[0], a[1], a[2], ...
 	!      > a[1:4]   -> a[1], a[2], a[3]  // already parsed bc of str feature, just can't eval yet
 	!      > a[1:2:6] -> a[1], a[3], a[5]
@@ -4321,8 +4321,6 @@ subroutine parse_subscripts(parser, expr)
 			else
 				lsubscript%sub_kind = scalar_sub
 
-				! TODO: initialize empty usubscript struct
-
 			end if
 			!print *, kind_name(subscript%sub_kind)
 
@@ -6167,8 +6165,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			array%len_  = product(array%size)
 			!print *, 'array%len_ = ', array%len_
 
-			array%cap  = array%len_
-			call allocate_array(array)
+			call allocate_array(array, array%len_)
 			select case (array%type)
 			case (i32_type)
 				array%i32 = lbound%sca%i32
@@ -6227,8 +6224,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				array%len_ = ubound%sca%i64 - lbound%sca%i64
 			end if
 
-			array%cap = array%len_
-			call allocate_array(array)
+			call allocate_array(array, array%len_)
 
 			!print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
 			!print *, 'node%val%array%type = ', node%val%array%type
@@ -6857,14 +6853,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%array%len_ = product(res%array%size)
 				!print *, 'res len = ', res%array%len_
 
-				res%array%cap = res%array%len_
-				call allocate_array(res%array)
+				call allocate_array(res%array, res%array%len_)
 
+				! Iterate through all subscripts in range and copy to result
+				! array
 				subs = lsubs
 				do i8 = 0, res%array%len_ - 1
-					!print *, 'subs = ', subs
+					!print *, 'subs = ', int(subs, 4)
 
-					! subscript_eval() inlined:
+					! subscript_eval() inlined.  is there a way to copy a slice
+					! without doing so much math?
 					prod  = 1
 					index_ = 0
 					do j = 1, rank
@@ -6874,17 +6872,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					end do
 					!print *, 'index_ = ', index_
 
-					!! TODO: pretty sure i already have helper fns for this
-					!select case (node%val%array%type)
-					!case (i32_type)
-					!	res%array%i32(i) = vars%vals(node%id_index)%array%i32(index_ + 1)
-					!case default
-					!	! TODO
-					!end select
 					call set_array_value_t(res%array, i8, &
 					     get_array_value_t(vars%vals(node%id_index)%array, index_))
 
-					!! get next subscript
+					! get next subscript.  this is the bignum += 1 algorithm but
+					! in an arbitrary mixed radix
 					j = 1
 					do while (j < rank .and. subs(j) == usubs(j) - 1)
 						subs(j) = lsubs(j)
@@ -7181,24 +7173,24 @@ end function syntax_eval
 
 !===============================================================================
 
-subroutine allocate_array(array)
-
-	! TODO: every caller sets array%cap just before this.  Maybe it should be
-	! refactored into the fn
+subroutine allocate_array(array, cap)
 
 	type(array_t), intent(inout) :: array
+	integer(kind = 8), intent(in) :: cap
+
+	array%cap = cap
 
 	select case (array%type)
 	case (i32_type)
-		allocate(array%i32( array%cap ))
+		allocate(array%i32( cap ))
 	case (i64_type)
-		allocate(array%i64( array%cap ))
+		allocate(array%i64( cap ))
 	case (f32_type)
-		allocate(array%f32( array%cap ))
+		allocate(array%f32( cap ))
 	case (bool_type)
-		allocate(array%bool( array%cap ))
+		allocate(array%bool( cap ))
 	case (str_type)
-		allocate(array%str( array%cap ))
+		allocate(array%str( cap ))
 	case default
 		write(*,*) err_int_prefix//'cannot allocate array of type `' &
 			//kind_name(array%type)//'`'//color_reset
