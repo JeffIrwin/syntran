@@ -6836,7 +6836,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call allocate_array(res%array)
 
 				subs = lsubs
-				do i = 1, res%array%len_
+				do i8 = 0, res%array%len_ - 1
 					!print *, 'subs = ', subs
 
 					! subscript_eval() inlined:
@@ -6849,13 +6849,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					end do
 					!print *, 'index_ = ', index_
 
-					! TODO: pretty sure i already have helper fns for this
-					select case (node%val%array%type)
-					case (i32_type)
-						res%array%i32(i) = vars%vals(node%id_index)%array%i32(index_ + 1)
-					case default
-						! TODO
-					end select
+					!! TODO: pretty sure i already have helper fns for this
+					!select case (node%val%array%type)
+					!case (i32_type)
+					!	res%array%i32(i) = vars%vals(node%id_index)%array%i32(index_ + 1)
+					!case default
+					!	! TODO
+					!end select
+					call set_array_value_t(res%array, i8, &
+					     get_array_value_t(vars%vals(node%id_index)%array, index_))
 
 					!! get next subscript
 					j = 1
