@@ -193,7 +193,7 @@ subroutine syntran_banner()
 
 	write(*,*) 'Usage:'
 	write(*,*) tab//'#tree to toggle tree display'
-	write(*,*) tab//'Ctrl+C to exit'
+	write(*,*) tab//'`exit(0);` or Ctrl+C to exit'
 	write(*,*)
 
 	! TODO: add #help directive and arg for more in depth info
