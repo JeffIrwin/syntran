@@ -1275,6 +1275,13 @@ subroutine unit_test_slice_1(npass, nfail)
 			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[0:3, 1];', quiet) == '[d, e, f]', &
 			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[0, 0:2];', quiet) == '[a, d]', &
 			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[2, 0:2];', quiet) == '[c, f]', &
+			eval('let m = [true; 2, 2]; m[0, 0:2];', quiet) == '[true, true]', &
+			eval('let m = [i64(42); 2, 2]; m[0:2, 1];', quiet) == '[42, 42]', &
+			eval('let m = [1.0; 2, 2]; m[0:2, 1];', quiet) == '[1.000000E+00, 1.000000E+00]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0, :];', quiet) == '[0, 3, 6]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[2, :];', quiet) == '[2, 5, 8]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[:, 0];', quiet) == '[0, 1, 2]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[:, 2];', quiet) == '[6, 7, 8]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

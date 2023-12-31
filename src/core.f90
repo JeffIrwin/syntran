@@ -139,6 +139,7 @@ module syntran__core_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			all_sub              = 81, &
 			include_keyword      = 80, &
 			hash_token           = 79, &
 			percent_equals_token = 78, &
@@ -476,7 +477,8 @@ module syntran__core_m
 		type(syntax_node_t), allocatable :: lsubscripts(:), size(:), args(:), &
 			usubscripts(:)!, ssubscripts(:) !TODO: subscript step
 
-		! Either scalar_sub, range_sub (unit step), or step_sub
+		! Either scalar_sub, range_sub (unit step [0:2]), all_sub ([:]), or
+		! step_sub ([0: 2: 8])
 		integer :: sub_kind
 
 		type(syntax_token_t) :: op, identifier
@@ -1796,6 +1798,7 @@ function kind_name(kind)
 			"percent_equals_token", & ! 78
 			"hash_token          ", & ! 79
 			"include_keyword     ", & ! 80
+			"all_sub             ", & ! 81
 			"unknown             "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too
@@ -1898,6 +1901,7 @@ function kind_token(kind)
 			"%=                   ", & ! 78
 			"#                    ", & ! 79
 			"include              ", & ! 80
+			"all_sub              ", & ! 81
 			"unknown              "  & ! inf
 		]
 
@@ -4261,7 +4265,7 @@ subroutine parse_subscripts(parser, expr)
 
 	integer :: pos0, span0
 
-	type(syntax_node_t) :: subscript, usubscript
+	type(syntax_node_t) :: lsubscript, usubscript
 	type(syntax_node_vector_t) :: lsubscripts_vec, usubscripts_vec
 	type(syntax_token_t) :: lbracket, rbracket, comma, &
 		dummy, colon
@@ -4289,37 +4293,44 @@ subroutine parse_subscripts(parser, expr)
 
 		pos0  = parser%pos
 		span0 = parser%current_pos()
-		subscript = parser%parse_expr()
 
-		!print *, 'subscript = ', subscript%str()
-		!print *, 'subscript = ', parser%text(span0, parser%current_pos()-1)
-
-		if (.not. any(subscript%val%type == [i32_type, i64_type])) then
-			span = new_span(span0, parser%current_pos() - span0)
-			call parser%diagnostics%push( &
-				err_non_int_subscript(parser%context(), span, &
-				parser%text(span0, parser%current_pos()-1)))
-		end if
-
-		! TODO: set step_sub case for non-unit range step
 		if (parser%current_kind() == colon_token) then
-			colon = parser%match(colon_token)
-			subscript%sub_kind = range_sub
-
-			usubscript = parser%parse_expr()
-			! TODO: type check i32
-
+			lsubscript%sub_kind = all_sub
 		else
-			subscript%sub_kind = scalar_sub
 
-			! TODO: initialize empty usubscript struct
+			lsubscript = parser%parse_expr()
+
+			!print *, 'lsubscript = ', lsubscript%str()
+			!print *, 'lsubscript = ', parser%text(span0, parser%current_pos()-1)
+
+			if (.not. any(lsubscript%val%type == [i32_type, i64_type])) then
+				span = new_span(span0, parser%current_pos() - span0)
+				call parser%diagnostics%push( &
+					err_non_int_subscript(parser%context(), span, &
+					parser%text(span0, parser%current_pos()-1)))
+			end if
+
+			! TODO: set step_sub case for non-unit range step
+			if (parser%current_kind() == colon_token) then
+				colon = parser%match(colon_token)
+				lsubscript%sub_kind = range_sub
+
+				usubscript = parser%parse_expr()
+				! TODO: type check i32
+
+			else
+				lsubscript%sub_kind = scalar_sub
+
+				! TODO: initialize empty usubscript struct
+
+			end if
+			!print *, kind_name(subscript%sub_kind)
 
 		end if
-		!print *, kind_name(subscript%sub_kind)
 
 		! Parallel arrays subscripts and usubscripts should be same size? Not
-		! sure how much will need to change for multi-rank ranges
-		call lsubscripts_vec%push( subscript)
+		! sure if this is ideal for multi-rank ranges
+		call lsubscripts_vec%push(lsubscript)
 		call usubscripts_vec%push(usubscript)
 
 		! Break infinite loop
@@ -6733,6 +6744,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			case (range_sub)
 
+				! TODO: str all_sub
+
 				il = subscript_eval(node, vars, fns, quietl) + 1
 
 				! This feels inconsistent and not easy to extend to higher ranks
@@ -6776,10 +6789,22 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				allocate(lsubs(rank), usubs(rank))
 				rank_res = 0
 				do i = 1, rank
-					lsubval = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
-					lsubs(i) = lsubval%sca%i32
+
+					if (node%lsubscripts(i)%sub_kind == all_sub) then
+						lsubs(i) = 0
+						!print *, 'lsubs(i) = ', lsubs(i)
+					else
+						lsubval = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
+						lsubs(i) = lsubval%sca%i32
+					end if
 
 					select case (node%lsubscripts(i)%sub_kind)
+					case (all_sub)
+						usubs(i) = vars%vals(node%id_index)%array%size(i)
+						!print *, 'usubs(i) = ', usubs(i)
+
+						rank_res = rank_res + 1
+
 					case (range_sub)
 						usubval = syntax_eval(node%usubscripts(i), vars, fns, quietl)
 						usubs(i) = usubval%sca%i32
@@ -6820,7 +6845,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				idim_res = 1
 				do idim_ = 1, rank
 					select case (node%lsubscripts(idim_)%sub_kind)
-					case (range_sub)
+					case (range_sub, all_sub)
 
 						res%array%size(idim_res) = usubs(idim_) - lsubs(idim_)
 
