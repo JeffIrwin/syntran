@@ -1214,6 +1214,10 @@ subroutine unit_test_array_i32_1(npass, nfail)
 			eval('let v = [0: 10]; v[2: 5];', quiet) == '[2, 3, 4]', &
 			eval('let v = [0: 10]; let u = v[2: 5]; u[0];', quiet) == '2', &
 			eval('let v = [0: 10]; let u = v[2: 5]; u;', quiet) == '[2, 3, 4]', &
+			eval('let m = [0, 1, 2, 3; 2, 2]; m[0, 0:2];', quiet) == '[0, 2]', &
+			eval('let m = [0, 1, 2, 3; 2, 2]; m[1, 0:2];', quiet) == '[1, 3]', &
+			eval('let m = [0, 1, 2, 3; 2, 2]; m[0:2, 0];', quiet) == '[0, 1]', &
+			eval('let m = [0, 1, 2, 3; 2, 2]; m[0:2, 1];', quiet) == '[2, 3]', &
 			eval('[48-6, 13*100 + 37];') == '[42, 1337]'  &
 		]
 
