@@ -33,17 +33,26 @@ subroutine unit_test_aoc_2023(npass, nfail)
 		!path = 'src/tests/long-src/aoc/2023/'
 		path = 'src/tests/long/aoc/2023/'
 
+	character(len = 1024) :: cwd
+
 	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
+	! TODO: pushd/popd framework?
+	call getcwd(cwd)
+	print *, "cwd = ", trim(cwd)
+
 	! TODO: add on option to interpret_file() to chdir within.  That's the
 	! only way I can interpret more than one AOC solution in a single `tests`
 	! array
 	call chdir(path//'01')
-	!call system("pwd")
+	call system("pwd")
 	!call system("ls")
+
+	! TODO: verify return values.  Just sum parts 1 and 2?  Optimize if
+	! necessary, or just exclude anything that takes more than ~30 s to run
 
 	tests = &
 		[   &
@@ -53,6 +62,17 @@ subroutine unit_test_aoc_2023(npass, nfail)
 			!interpret_file(path//'test-02.syntran', quiet) == '2' , &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
+	call chdir(trim(cwd))
+
+	! TODO
+	call chdir(path//'02')
+	call system("pwd")
+	tests = &
+		[   &
+			interpret_file("main.syntran") == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+	call chdir(trim(cwd))
 
 	! Trim dummy false element
 	tests = tests(1: size(tests) - 1)

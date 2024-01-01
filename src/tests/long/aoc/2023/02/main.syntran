@@ -1,0 +1,226 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn parse_subgame(str_: str): [i32; :]
+{
+	//println("starting parse_subgame");
+	//println("str_ = """, str_, """");
+
+	let ncolors = [0; 3];
+
+	let end_ = false;
+	let ibeg = -1;
+
+	let n = len(str_);
+
+	while not end_
+	{
+		let iend = scan(str_[ibeg+1:n], ",") + ibeg + 1;
+
+		//println("ibeg = ", ibeg);
+		//println("iend = ", iend);
+
+		if iend < ibeg + 1
+		{
+			end_ = true;
+			iend = len(str_);
+		}
+
+		let pair = str_[ibeg+1: iend];
+		//println("pair = ", pair);
+		//println("pair = ", str_[ibeg+1: iend]);
+	
+		let i = -1;
+		let icolor = -1;
+	
+		let ired = index_(pair, "red");
+		if ired >= 0
+		{
+			i = 0;
+			icolor = ired;
+		}
+	
+		let igreen = index_(pair, "green");
+		if igreen >= 0
+		{
+			i = 1;
+			icolor = igreen;
+		}
+	
+		let iblue = index_(pair, "blue");
+		if iblue >= 0
+		{
+			i = 2;
+			icolor = iblue;
+		}
+	
+		ncolors[i] = parse_i32(pair[0: icolor]);
+
+		ibeg = iend;
+	}
+
+	//println();
+
+	// return
+	let ans = ncolors;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = 0;
+
+	let nrmax = 12;
+	let ngmax = 13;
+	let nbmax = 14;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let icol = scan(str_, ":");
+		//println("icol = ", icol);
+
+		let igame = parse_i32(str_[4: icol]);
+		//println("igame = ", igame);
+
+		let ibeg = icol;
+		let end_ = false;
+
+		let n = len(str_);
+
+		let possible = true;
+
+		while not end_
+		{
+			//let iend = scan(str_, ";");
+			let iend = scan(str_[ibeg+1:n], ";") + ibeg + 1;
+
+			if iend < ibeg + 1
+			{
+				end_ = true;
+				iend = len(str_);
+			}
+
+			//println("subgame = ", str_[ibeg+1: iend]);
+
+			let ncolors = parse_subgame(str_[ibeg+1: iend]);
+			//println("ncolors = ", ncolors);
+
+			possible = possible and
+				ncolors[0] <= nrmax and
+				ncolors[1] <= ngmax and
+				ncolors[2] <= nbmax;
+				
+			ibeg = iend;
+		}
+		//println("possible = ", possible);
+
+		if possible sum_ += igame;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let sum_ = 0;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let nrmax = 0;
+		let ngmax = 0;
+		let nbmax = 0;
+
+		let icol = scan(str_, ":");
+		//println("icol = ", icol);
+
+		let igame = parse_i32(str_[4: icol]);
+		//println("igame = ", igame);
+
+		let ibeg = icol;
+		let end_ = false;
+
+		let n = len(str_);
+
+		while not end_
+		{
+			let iend = scan(str_[ibeg+1:n], ";") + ibeg + 1;
+
+			if iend < ibeg + 1
+			{
+				end_ = true;
+				iend = len(str_);
+			}
+
+			//println("subgame = ", str_[ibeg+1: iend]);
+
+			let ncolors = parse_subgame(str_[ibeg+1: iend]);
+			//println("ncolors = ", ncolors);
+
+			nrmax = max(nrmax, ncolors[0]);
+			ngmax = max(ngmax, ncolors[1]);
+			nbmax = max(nbmax, ncolors[2]);
+
+			ibeg = iend;
+		}
+
+		//println("max = ", nrmax, ngmax, nbmax);
+
+		sum_ += nrmax * ngmax * nbmax;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main()
+{
+	println();
+	println("Starting AOC syntran main");
+
+	part1();
+	part2();
+
+	println("Ending AOC syntran main");
+	println();
+	//0;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+
