@@ -1941,6 +1941,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				select case (right%array%type)
 				case (i32_type)
+
+					! TODO: check rank match at parse-time
+
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%array%i32 == right%array%i32
 
@@ -2112,27 +2115,32 @@ end function syntax_eval
 
 !===============================================================================
 
-function mold(array, type_)
+function mold(mold_, type_) result(array)
 
-	type(array_t), intent(in) :: array
-	!type(value_t), intent(in) :: array
+	! Construct array meta-data, such as type, rank, and size, based on a given
+	! mold
+	!
+	! The actual allocation of array%i32 or array%bool (appropriately depending
+	! on the type) and setting of its values is done outside of here in the
+	! calling fn
+
+	type(array_t), intent(in) :: mold_
+	!type(value_t), intent(in) :: mold_
 
 	integer, intent(in) :: type_
 
-	type(array_t), allocatable :: mold ! TODO: name are confusingly backwards
+	type(array_t), allocatable :: array
 
-	allocate(mold)
-	!res%type  = array_type
+	allocate(array)
 
-	!mold%type = bool_type
-	mold%type = type_
+	array%type = type_
 
-	!mold%kind = expl_array
-	mold%rank = array%rank
+	!array%kind = expl_array
+	array%rank = mold_%rank
 
-	mold%len_ = array%len_
-	mold%cap  = array%cap
-	mold%size = array%size
+	array%len_ = mold_%len_
+	array%cap  = mold_%cap
+	array%size = mold_%size
 
 end function mold
 
