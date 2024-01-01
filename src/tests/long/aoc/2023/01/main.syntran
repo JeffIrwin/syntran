@@ -1,0 +1,142 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt",
+	"test-input2.txt"  // WARNING: this test input crashes part1
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = 0;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let i = scan(str_, digit_chars);
+		//println("first = ", str_[i]);
+
+		let j = scanback(str_, digit_chars);
+		//println("last  = ", str_[j]);
+
+		let digits = str_[i] + str_[j];
+		//println("digits = ", digits);
+
+		sum_ += parse_i32(digits);
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let sum_ = 0;
+
+	let nums =
+	[
+		"zero",
+		"one",
+		"two",
+		"three",
+		"four",
+		"five",
+		"six",
+		"seven",
+		"eight",
+		"nine"
+	];
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let imin = len(str_) + 1;
+		let val_first = -1;
+		for j in [0: size(nums,0)]
+		{
+			let i = index_(str_, nums[j]);
+			if i >= 0 and i < imin
+			{
+				imin = i;
+				val_first = j;
+			}
+		}
+		let i = scan(str_, digit_chars);
+		if i >= 0 and i < imin
+		{
+			imin = i;
+			val_first = parse_i32(str_[i]);
+		}
+		//println("val_first = ", val_first);
+
+		let imax = -1;
+		let val_last = -1;
+		for j in [0: size(nums,0)]
+		{
+			let i = indexback(str_, nums[j]);
+			if i >= 0 and i > imax
+			{
+				imax = i;
+				val_last = j;
+			}
+		}
+		i = scanback(str_, digit_chars);
+		if i >= 0 and i > imax
+		{
+			imax = i;
+			val_last = parse_i32(str_[i]);
+		}
+		//println("val_last = ", val_last);
+
+		let digits = str(val_first, val_last);
+		sum_ += parse_i32(digits);
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main()
+{
+	println();
+	println("Starting AOC syntran main");
+
+	part1();
+	part2();
+
+	println("Ending AOC syntran main");
+	println();
+	0;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

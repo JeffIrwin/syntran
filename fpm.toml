@@ -16,7 +16,9 @@
 #     fpm run --runner rlwrap
 #     fpm run -- samples/primes-3.syntran
 #
-#     fpm test
+#     fpm test       # all tests
+#     fpm test test  # "short" tests only
+#     fpm test long  # long tests only
 #
 #     # install to ~/bin/
 #     fpm install --prefix ~
@@ -55,9 +57,9 @@ homepage = "https://github.com/JeffIrwin/syntran"
 
 [build]
 auto-executables = true
-auto-tests = true
-auto-examples = true
-module-naming = true
+auto-tests       = true
+auto-examples    = true
+module-naming    = true
 
 [install]
 library = false
@@ -71,4 +73,10 @@ main = "main.f90"
 name = "test"
 source-dir = "src/tests/"
 main = "test.f90"
+
+[[test]]
+#[[example]]  # example would exclude this when running `fpm test`
+name = "long"
+source-dir = "src/tests/long/"
+main = "long.f90"
 

@@ -37,7 +37,7 @@ jobs:
         #FPM_FC: gfortran-${{ matrix.gfortran }}
         FPM_FC: gfortran-12
       run: |
-        fpm test
+        fpm test test
 
     - if: matrix.os == 'ubuntu-latest'
       run: |
@@ -110,5 +110,5 @@ jobs:
       env:
         FPM_FC: gfortran-${{ matrix.gfortran }}
       run: |
-        fpm test --verbose --flag -Wno-tabs
+        fpm test test --verbose --flag -Wno-tabs
 

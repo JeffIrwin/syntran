@@ -11,8 +11,6 @@ module syntran__lexer_m
 
 	type lexer_t
 
-		! ~ 420 lines for lexer_t and its procedures
-
 		! The lexer takes a string of characters and divides it into into tokens
 		! or words
 

@@ -1,0 +1,615 @@
+
+//==============================================================================
+
+let digit_chars = "0123456789";
+let hex_chars = digit_chars + "abcdef";
+
+//==============================================================================
+
+fn countln_(filename: str): i32
+{
+	let nlines = 0;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+		nlines += 1;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	// return
+	let ans = nlines;
+}
+
+//==============================================================================
+
+fn verify(str_: str, set: str): i32
+{
+	//println("");
+	//println("starting verify");
+	//println("str_ = ", str_);
+	//println("set  = ", set);
+
+	let i = 0;
+	let found = true;
+	while found and i < len(str_)
+	{
+		let j = 0;
+		//found = true;
+		found = false;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	//
+	// TODO: it might make more sense to return `ans = len(str_)` instead of ans
+	// = -1 in the `not found` case.  This is not consistent with the way that
+	// Fortran's `verify()` fn works, but it could simplify the logic for many
+	// use cases.  Similarly for scanback (but not verifyback or scan)
+	let ans = -1;
+	if not found
+	{
+		//println("ans = ", i - 1);
+		ans = i - 1;
+	}
+}
+
+//==============================================================================
+
+fn verifyback(str_: str, set: str): i32
+{
+	//println("");
+	//println("starting verifyback");
+	//println("str_ = ", str_);
+	//println("set  = ", set);
+
+	let i = len(str_) - 1;
+	let found = true;
+	while found and i >= 0
+	{
+		let j = 0;
+		found = false;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i -= 1;
+	}
+
+	// return
+	let ans = -1;
+	if not found
+	{
+		//println("ans = ", i + 1);
+		ans = i + 1;
+	}
+}
+
+//==============================================================================
+
+fn scan(str_: str, set: str): i32
+{
+	let i = 0;
+	let found = false;
+	while not found and i < len(str_)
+	{
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	let ans = -1;
+	if found
+		ans = i - 1;
+}
+
+//==============================================================================
+
+fn is_digit(char_: str): bool
+{
+	// TODO: optimize with i32() char casting, like is_alpha()
+	let ans = scan(char_, digit_chars) >= 0;
+}
+
+fn is_alpha(char_: str): bool
+{
+	(i32("a") <= i32(char_) and i32(char_) <= i32("z")) or
+	(i32("A") <= i32(char_) and i32(char_) <= i32("Z"));
+}
+
+//==============================================================================
+
+// TODO: rename to any_char_eq_str or any_char_eq_set
+fn any_str_eq_set(str_: str, set: str): bool
+{
+	let ans = scan(str_, set) >= 0;
+}
+
+//==============================================================================
+
+fn any_mat(v: [bool; :, :]): bool
+{
+	let found = false;
+	let i = 0;
+	while i < size(v, 1) and not found
+	{
+		let j = 0;
+		while j < size(v, 0) and not found
+		{
+			found = v[j,i];
+			j += 1;
+		}
+		i += 1;
+	}
+	let ans = found;
+}
+
+//==============================================================================
+
+fn any_r3(v: [bool; :, :, :]): bool
+{
+	let found = false;
+	let i = 0;
+	while i < size(v, 2) and not found
+	{
+		let j = 0;
+		while j < size(v, 1) and not found
+		{
+			let k = 0;
+			while k < size(v, 0) and not found
+			{
+				found = v[k,j,i];
+				k += 1;
+			}
+			j += 1;
+		}
+		i += 1;
+	}
+	let ans = found;
+}
+
+//==============================================================================
+
+fn minloc_mat(dist: [i32; :, :], q: [bool; :, :]): [i32; :]
+{
+	let found = false;
+	let min_ = -1;
+	let minloc_ = [-1, -1];
+	for y in [0: size(dist,1)]
+	for x in [0: size(dist,0)]
+	{
+		if q[x,y]
+		{
+			if found
+			{
+				//min_ = min(min_, dist[x,y]);
+				if (dist[x,y] < min_)
+				{
+					min_ = dist[x,y];
+					minloc_ = [x, y];
+				}
+			}
+			else
+			{
+				found = true;
+				min_ = dist[x,y];
+				minloc_ = [x, y];
+			}
+		}
+	}
+	//let ans = min_;
+	let ans = minloc_;
+}
+
+//==============================================================================
+
+fn minloc_r3(dist: [i32; :, :, :], q: [bool; :, :, :]): [i32; :]
+{
+	let found = false;
+	let min_ = -1;
+	let minloc_ = [-1, -1];
+	for z in [0: size(dist,2)]
+	for y in [0: size(dist,1)]
+	for x in [0: size(dist,0)]
+	{
+		if q[x,y,z]
+		{
+			if found
+			{
+				if (dist[x,y,z] < min_)
+				{
+					min_ = dist[x,y,z];
+					minloc_ = [x, y, z];
+				}
+			}
+			else
+			{
+				found = true;
+				min_ = dist[x,y,z];
+				minloc_ = [x, y, z];
+			}
+		}
+	}
+	//let ans = min_;
+	let ans = minloc_;
+}
+
+//==============================================================================
+
+// TODO: rename to any_str_eq_vec
+fn any_str_eq(str_: str, v: [str; :]): bool
+{
+	//if (any_str_eq(my_num, wn_nums_str)) nwin = 1;
+
+	let found = false;
+	let i = 0;
+	while i < size(v, 0) and not found
+	{
+		found = str_ == v[i];
+		i += 1;
+	}
+	let ans = found;
+}
+
+//==============================================================================
+
+fn scanback(str_: str, set: str): i32
+{
+	let i = len(str_) - 1;
+	let found = false;
+	while not found and i >= 0
+	{
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i -= 1;
+	}
+
+	// return
+	let ans = -1;
+	if found
+		ans = i + 1;
+}
+
+//==============================================================================
+
+fn index_(str_: str, substr: str): i32
+{
+	//println("str_   = ", str_);
+	//println("substr = ", substr);
+
+	let nsub = len(substr);
+
+	let i = 0;
+	let found = false;
+	while not found and i < len(str_) - len(substr) + 1
+	{
+
+		found = str_[i: i+nsub] == substr;
+
+		////println("i = ", i);
+		//let j = 0;
+		//found = true;
+		//while found and j < len(substr)
+		//{
+		//	//println("j = ", j);
+		//	found = str_[i+j] == substr[j];
+		//	j += 1;
+		//}
+
+		i += 1;
+		//i = i + 1;
+	}
+
+	// return
+	if found
+	{
+		i -= 1;
+		//println("str_ = ", str_);
+		//println("str_[] = ", str_[i: i + len(substr)]);
+		//println("substr = ", substr);
+		//println();
+		let ans = i;
+	}
+	else
+	{
+		//println("not found");
+		let ans = -1;
+	}
+
+}
+
+//==============================================================================
+
+fn indexback(str_: str, substr: str): i32
+{
+	//println("str_   = ", str_);
+	//println("substr = ", substr);
+
+	let nsub = len(substr);
+
+	let i = len(str_) - len(substr);
+	let found = false;
+	while not found and i >= 0
+	{
+
+		found = str_[i: i+nsub] == substr;
+
+		////println("i = ", i);
+		//let j = 0;
+		//found = true;
+		//while found and j < len(substr)
+		//{
+		//	//println("j = ", j);
+		//	found = str_[i+j] == substr[j];
+		//	j += 1;
+		//}
+		i -= 1;
+	}
+
+	// return
+	if found
+	{
+		i += 1;
+		//println("str_ = ", str_);
+		//println("str_[] = ", str_[i: i + len(substr)]);
+		//println("substr = ", substr);
+		//println();
+		let ans = i;
+	}
+	else
+	{
+		//println("not found");
+		let ans = -1;
+	}
+
+}
+
+//==============================================================================
+
+fn split_(str_: str, delims: str): [str; :]
+{
+	// Split an input str_ into a vector of strs based on a set of delimiters
+
+	//println("starting split_()");
+	//println("str_ = """, str_, """");
+
+	let n = len(str_);
+	//println("n = ", n);
+
+	let nout = 0;
+	if (any_str_eq_set(str_[0], delims)) nout -= 1;
+
+	// First pass: count delimited strings
+	let i = 0;
+	while i < n
+	{
+		//println("i = ", i);
+		let i0 = i;
+
+		i = scan  (str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+
+		i0 = i;
+		i = verify(str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+		//i += 1;
+
+		nout += 1;
+	}
+	//println("nout = ", nout);
+
+	let out = [""; nout];
+
+	nout = 0;
+	if (any_str_eq_set(str_[0], delims)) nout -= 1;
+
+	// Second pass: save split strings
+	i = 0;
+	while i < n
+	{
+		//println("i = ", i);
+		let i0 = i;
+
+		i = scan  (str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+
+		if (nout >= 0) out[nout] = str_[i0: i];
+
+		i0 = i;
+		i = verify(str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+		//i += 1;
+
+		nout += 1;
+	}
+
+	// return
+	//out;
+	let ans = out;
+}
+
+//==============================================================================
+
+fn parse_i32_hex(str_: str): i32
+{
+	// Read a hexadecimal number *without* any leading `0x` or `#` or anything
+	// besides literal hex characters
+
+	let num = 0;
+	for ii in [0: len(str_)]
+	{
+		let i = len(str_) - ii - 1;
+		let c = str_[i];
+		let val = scan(hex_chars, c);
+		num += val * 16 ** ii;
+	}
+	let ans = num;
+}
+
+//==============================================================================
+
+fn parse_i32_delim(str_: str, delims: str): [i32; :]
+{
+	let str_vec = split_(str_, delims);
+	//println("str_vec = ", str_vec);
+	let vec = [i32(0); size(str_vec, 0)];
+	for i in [0: size(str_vec, 0)]
+		vec[i] = parse_i32(str_vec[i]);
+	let ans = vec;
+}
+
+//==============================================================================
+
+fn parse_i64_delim(str_: str, delims: str): [i64; :]
+{
+	let str_vec = split_(str_, delims);
+	//println("str_vec = ", str_vec);
+	let vec = [i64(0); size(str_vec, 0)];
+	for i in [0: size(str_vec, 0)]
+		vec[i] = parse_i64(str_vec[i]);
+	let ans = vec;
+}
+
+//==============================================================================
+
+fn rm_char(str_: str, char_: str): str
+{
+	// Remove all occurences of a char from a str
+
+	// allocate to max possible length
+	let out = str_;
+
+	let j = 0;
+	for i in [0: len(str_)]
+	{
+		if not (str_[i] == char_)
+		{
+			out[j] = str_[i];
+			j += 1;
+		}
+	}
+
+	// trim and return
+	out = out[0: j];
+}
+
+fn reverse_str(str_: str): str
+{
+	// Reverse a str
+	let rev = str_;
+	let n = len(str_);
+	for i in [0: n]
+		rev[i] = str_[n-i-1];
+	let ans = rev;
+}
+
+//==============================================================================
+
+fn ends_with_(str_: str, char_: str): bool
+{
+	str_[ len(str_) - 1 ] == char_;
+}
+
+fn all_ends_with_(strs: [str; :], j: [i32; :], char_: str): bool
+{
+	// TODO: memory leaks
+	let i = 0;
+	let all_end = true;
+	//while all_end and i < size(strs, 0)
+	while all_end and i < size(j, 0)
+	{
+		all_end = ends_with_(strs[j[i]], char_);
+		i += 1;
+	}
+	let ans = all_end;
+}
+
+//==============================================================================
+
+fn gcd64(a: i64, b: i64): i64
+{
+	// Euclidean algorithm for GCD
+	while b != 0
+	{
+		let t = b;
+		b = a % b;
+		a = t;
+	}
+	let ans = a;
+}
+
+fn lcm64(a: i64, b: i64): i64
+{
+	let abs_ = a * b;
+	if (abs_ < 0) abs_ = -abs_;
+	abs_ / gcd64(a, b);
+}
+
+fn abs_i32(a: i32): i32
+{
+	let abs_ = a;
+	if (abs_ < 0) abs_ = -abs_;
+	let ans = abs_;
+}
+
+//==============================================================================
+
+fn sign_(x: i32): i32
+{
+	let s = 0;
+	if x > 0
+		s = +1;
+	else if x < 0
+		s = -1;
+	let ans = s;
+}
+
+fn sign_64(x: i64): i64
+{
+	let s = i64(0);
+	if x > 0
+		s = +i64(1);
+	else if x < 0
+		s = -i64(1);
+	let ans = s;
+}
+
+//==============================================================================
+
+fn sum_i32(v: [i32; :]): i32
+{
+	let sum_ = 0;
+	for i in [0: size(v,0)]
+		sum_ += v[i];
+	let ans = sum_;
+}
+
+//==============================================================================
+
+fn pmod(i: i32, n: i32): i32
+{
+	// Modulo/remainder but always positive
+	(i % n + n) % n;
+}
+
+//==============================================================================
+
