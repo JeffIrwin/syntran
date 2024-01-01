@@ -8,6 +8,7 @@ module syntran__core_m
 	use iso_fortran_env
 
 	use syntran__errors_m
+	use syntran__parser_m
 	use syntran__types_m
 	use syntran__utils_m
 

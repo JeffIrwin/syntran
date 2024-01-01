@@ -92,6 +92,7 @@ set(LIB_SRC
 	${SRC_DIR}/utils.f90
 	${SRC_DIR}/errors.f90
 	${SRC_DIR}/types.f90
+	${SRC_DIR}/parser.f90
 	${SRC_DIR}/core.f90
 	${SRC_DIR}/syntran.f90
 	)
