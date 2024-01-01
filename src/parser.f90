@@ -680,7 +680,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		! need to pass parser to it to push diagnostics
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
 
-			!print *, 'bin not allowed in parse_expr_statement'
+			print *, 'bin not allowed in parse_expr_statement'
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -716,7 +716,7 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 	!********
 
-	integer :: parent_precl, prec, ltype, rtype
+	integer :: parent_precl, prec, ltype, rtype, larrtype, rarrtype
 
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: op
@@ -767,9 +767,17 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		!if (ltype == array_type) ltype = expr%left %val%array%type
 		!if (rtype == array_type) rtype = expr%right%val%array%type
 
-		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
+		larrtype = 0
+		rarrtype = 0
+		if (ltype == array_type) larrtype = expr%left %val%array%type
+		if (rtype == array_type) rarrtype = expr%right%val%array%type
 
-			!print *, 'bin not allowed in parse_expr'
+		print *, 'larrtype = ', kind_name(larrtype)
+		print *, 'rarrtype = ', kind_name(rarrtype)
+
+		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
+
+			print *, 'bin not allowed in parse_expr'
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &

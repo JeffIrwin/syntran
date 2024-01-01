@@ -7,10 +7,12 @@ module syntran__core_m
 
 	use iso_fortran_env
 
+	use syntran__consts_m
 	use syntran__errors_m
 	use syntran__parser_m
 	use syntran__types_m
 	use syntran__utils_m
+	use syntran__value_m
 
 	implicit none
 
@@ -25,6 +27,10 @@ module syntran__core_m
 		syntran_patch =  36
 
 	! TODO:
+	!  - document recent features:
+	!    * array slicing
+	!    * casting?
+	!    * array comparison (wip)
 	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
 	!    versions don't allow a user-defined type that references another type
 	!    which is defined below it
@@ -1822,6 +1828,21 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'right type = ', kind_name(right%type)
 
 		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
+
+		! TODO: DRY up with helper fn?
+		select case (res%type)
+		case (bool_array_type)
+			!allocate(expr%val%array)
+			!expr%val%array%type = bool_type
+			res%type = array_type
+
+		! TODO: other array sub types
+
+		!case default
+		!	expr%val%type = type_
+
+		end select
+
 		if (res%type == unknown_type) then
 			write(*,*) err_eval_binary_types(node%op%text)
 			call internal_error()
@@ -1857,6 +1878,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! Is there a reason to make this a fn like add, mul, etc?  Those
 			! save duplicated code for compound assignment, but I don't see a
 			! use for === compound assignment (different from javascript ===)
+			!
+			! TODO: move to value.f90 anyway for consistency now that I've split
+			! the source
 
 			select case (magic * left%type + right%type)
 			case        (magic * i32_type + i32_type)
@@ -1886,6 +1910,40 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%sca%bool = left%sca%bool .eqv. right%sca%bool
 			case        (magic * str_type + str_type)
 				res%sca%bool = left%sca%str%s == right%sca%str%s
+
+			case        (magic * array_type + i32_type)
+
+				print *, 'left%type       = ', kind_name(left%type)
+				print *, 'left array type = ', kind_name(left%array%type)
+
+				!res%sca%bool = .false.
+				!res%sca%bool = left%sca%str%s == right%sca%str%s
+
+				select case (left%array%type)
+				case (i32_type)
+
+					allocate(res%array)
+					res%type  = array_type
+					res%array%bool = left%array%i32 == right%sca%i32
+					res%array%type = bool_type
+					print *, 'res = ', res%array%bool
+
+					! TODO: helper fn to construct array meta-data
+					res%array%kind = expl_array
+					!res%array%type = node%val%array%type
+					res%array%rank = left%array%rank
+
+					! TODO: len_, cap, size
+					res%array%len_ = left%array%len_
+					res%array%cap  = left%array%cap
+					res%array%size = left%array%size
+
+				case default
+					! TODO: refactor with below default?
+					write(*,*) err_eval_binary_types(node%op%text)
+					call internal_error()
+				end select
+
 			case default
 				! FIXME: other numeric types (i64, f64, etc.)
 				write(*,*) err_eval_binary_types(node%op%text)

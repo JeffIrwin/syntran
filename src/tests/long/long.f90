@@ -33,7 +33,8 @@ subroutine unit_test_aoc_2023(npass, nfail)
 		!path = 'src/tests/long-src/aoc/2023/'
 		path = 'src/tests/long/aoc/2023/'
 
-	character(len = 1024) :: cwd
+	character(len = 1024) :: buffer
+	character(len = :), allocatable :: cwd
 
 	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
@@ -41,8 +42,9 @@ subroutine unit_test_aoc_2023(npass, nfail)
 	write(*,*) 'Unit testing '//label//' ...'
 
 	! TODO: pushd/popd framework?
-	call getcwd(cwd)
-	print *, "cwd = ", trim(cwd)
+	call getcwd(buffer)
+	cwd = trim(buffer)
+	print *, "cwd = ", cwd
 
 	! TODO: add on option to interpret_file() to chdir within.  That's the
 	! only way I can interpret more than one AOC solution in a single `tests`
@@ -62,7 +64,7 @@ subroutine unit_test_aoc_2023(npass, nfail)
 			!interpret_file(path//'test-02.syntran', quiet) == '2' , &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
-	call chdir(trim(cwd))
+	call chdir(cwd)
 
 	! TODO
 	call chdir(path//'02')
@@ -72,7 +74,7 @@ subroutine unit_test_aoc_2023(npass, nfail)
 			interpret_file("main.syntran") == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
-	call chdir(trim(cwd))
+	call chdir(cwd)
 
 	! Trim dummy false element
 	tests = tests(1: size(tests) - 1)

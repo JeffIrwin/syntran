@@ -1222,12 +1222,13 @@ end function ternary_search
 
 !===============================================================================
 
-logical function is_binary_op_allowed(left, op, right)
+logical function is_binary_op_allowed(left, op, right, left_arr, right_arr)
 
 	! Is an operation allowed with the types of operator op and left/right
 	! operands?
 
 	integer, intent(in) :: left, op, right
+	integer, intent(in), optional :: left_arr, right_arr
 
 	!print *, 'left, right = ', left, right
 
@@ -1262,13 +1263,33 @@ logical function is_binary_op_allowed(left, op, right)
 		case (and_keyword, or_keyword)
 			is_binary_op_allowed = left == bool_type .and. right == bool_type
 
-		case (equals_token, eequals_token, bang_equals_token)
-
-			! Fortran allows comparing ints and floats for strict equality, e.g.
-			! 1 == 1.0 is indeed true.  I'm not sure if I like that
+		case (equals_token)
 			is_binary_op_allowed = &
 				(is_int_type(left) .and. is_int_type(right)) .or. &
 				(left == right)
+
+		case (eequals_token, bang_equals_token)
+
+			if (left == array_type .and. right == array_type) then
+				! TODO: array == array comparison
+				is_binary_op_allowed = .false.
+
+			else if (left  == array_type) then
+				is_binary_op_allowed = &
+					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
+					(left_arr == right)
+
+			else if (right == array_type) then
+				is_binary_op_allowed = .false. ! TODO
+			else
+
+				! Fortran allows comparing ints and floats for strict equality, e.g.
+				! 1 == 1.0 is indeed true.  I'm not sure if I like that
+				is_binary_op_allowed = &
+					(is_int_type(left) .and. is_int_type(right)) .or. &
+					(left == right)
+
+			end if
 
 	end select
 
@@ -1424,6 +1445,8 @@ function new_binary_expr(left, op, right) result(expr)
 
 	!********
 
+	integer :: larrtype, rarrtype, type_
+
 	if (debug > 1) print *, 'new_binary_expr'
 	if (debug > 1) print *, 'left  = ', left %str()
 	if (debug > 1) print *, 'right = ', right%str()
@@ -1437,8 +1460,31 @@ function new_binary_expr(left, op, right) result(expr)
 	expr%op    = op
 	expr%right = right
 
+	print *, 'left type  = ', kind_name(left%val%type)
+
+	larrtype = 0
+	rarrtype = 0
+	if (left %val%type == array_type) larrtype = left %val%array%type
+	if (right%val%type == array_type) rarrtype = right%val%array%type
+
+	print *, 'larrtype = ', kind_name(larrtype)
+
 	! Pass the result value type up the tree for type checking in parent
-	expr%val%type = get_binary_op_kind(left%val%type, op%kind, right%val%type)
+	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type, &
+		larrtype, rarrtype)
+
+	select case (type_)
+	case (bool_array_type)
+		allocate(expr%val%array)
+		expr%val%array%type = bool_type
+		expr%val%type = array_type
+
+	! TODO: other array sub types
+
+	case default
+		expr%val%type = type_
+
+	end select
 
 	! TODO: array subtype if subscripted?  I think parse_primary_expr should
 	! already set the subtype when subscripts are present
@@ -1482,12 +1528,14 @@ end function new_unary_expr
 
 !===============================================================================
 
-integer function get_binary_op_kind(left, op, right)
+integer function get_binary_op_kind(left, op, right, left_array, right_array) &
+		result(kind_)
 
 	! Return the resulting type yielded by operator op on operands left and
 	! right
 
 	integer, intent(in) :: left, op, right
+	integer, intent(in), optional :: left_array, right_array
 
 	select case (op)
 	case ( &
@@ -1495,8 +1543,32 @@ integer function get_binary_op_kind(left, op, right)
 			greater_token, greater_equals_token)
 		!print *, 'bool_type'
 
-		! Comparison operations can take 2 numbers, but always return a bool
-		get_binary_op_kind = bool_type
+		!! Comparison operations can take 2 numbers, but always return a bool
+		!kind_ = bool_type
+
+		if (left == array_type .and. right == array_type) then
+			! TODO: array == array comparison
+			kind_ = unknown_type
+
+		else if (left  == array_type) then
+
+			! TODO: what is the best way to encode array type and sub type in
+			! single return value?  Using bool_array_type is a convenient hack
+			! because it is still an int. It might be better if we have a "type"
+			! type struct which can contain more than just an int
+
+			!kind_ = array_type 
+			kind_ = bool_array_type
+
+			print *, 'kind_ = ', kind_name(kind_)
+
+		else if (right == array_type) then
+			kind_ = bool_array_type
+
+		else
+			kind_ = bool_type
+
+		end if
 
 	case default
 		!print *, 'default'
@@ -1507,13 +1579,13 @@ integer function get_binary_op_kind(left, op, right)
 		! FIXME: i64, f64, etc.
 
 		if (left == right) then
-			get_binary_op_kind = left
+			kind_ = left
 			return
 		end if
 
 		if (left == f32_type .or. right == f32_type) then
 			! int + float casts to float
-			get_binary_op_kind = f32_type
+			kind_ = f32_type
 			return
 		end if
 
@@ -1522,12 +1594,12 @@ integer function get_binary_op_kind(left, op, right)
 			(right == i64_type .and. is_int_type(left ))) then
 
 			! i32+i64 and i64+i32 cast to i64
-			get_binary_op_kind = i64_type
+			kind_ = i64_type
 			return
 
 		end if
 
-		get_binary_op_kind = unknown_type
+		kind_ = unknown_type
 
 	end select
 
