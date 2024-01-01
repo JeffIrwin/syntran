@@ -545,6 +545,11 @@ recursive function parse_expr_statement(parser) result(expr)
 		parser%num_vars = parser%num_vars + 1
 		expr%id_index   = parser%num_vars
 
+		!if (expr%val%type == array_type) then
+		!	print *, 'array_type'
+		!	print *, 'rank = ', expr%val%array%rank
+		!end if
+
 		! Insert the identifier's type into the dict and check that it
 		! hasn't already been declared
 		call parser%vars%insert(identifier%text, expr%val, &
@@ -1468,6 +1473,12 @@ function parse_primary_expr(parser) result(expr)
 							expr%val%array%rank, size(expr%lsubscripts)))
 					end if
 
+					! A slice operation can change the result rank
+
+					!print *, 'rank in  = ', expr%val%array%rank
+					expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
+					!print *, 'rank out = ', expr%val%array%rank
+
 				else if (expr%val%type == str_type) then
 					!print *, 'string type'
 
@@ -1721,7 +1732,7 @@ function parse_primary_expr(parser) result(expr)
 
 end function parse_primary_expr
 
-!********
+!===============================================================================
 
 integer function current_pos(parser)
 
@@ -1733,6 +1744,8 @@ integer function current_pos(parser)
 	current_pos = parser%peek_pos(0)
 
 end function current_pos
+
+!********
 
 integer function peek_pos(parser, offset)
 	class(parser_t) :: parser
