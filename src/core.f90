@@ -1828,19 +1828,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'right type = ', kind_name(right%type)
 
 		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
-
-		! TODO: DRY up with helper fn?
 		select case (res%type)
 		case (bool_array_type)
-			!allocate(expr%val%array)
-			!expr%val%array%type = bool_type
 			res%type = array_type
-
-		! TODO: other array sub types
-
-		!case default
-		!	expr%val%type = type_
-
+			! TODO: other array sub types
 		end select
 
 		if (res%type == unknown_type) then
@@ -1916,27 +1907,87 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!print *, 'left%type       = ', kind_name(left%type)
 				!print *, 'left array type = ', kind_name(left%array%type)
 
-				!res%sca%bool = .false.
-				!res%sca%bool = left%sca%str%s == right%sca%str%s
-
 				select case (left%array%type)
 				case (i32_type)
 
 					allocate(res%array)
 					res%type  = array_type
 					res%array%bool = left%array%i32 == right%sca%i32
+
 					res%array%type = bool_type
 					!print *, 'res = ', res%array%bool
 
-					! TODO: helper fn to construct array meta-data
-					res%array%kind = expl_array
-					!res%array%type = node%val%array%type
+					! TODO: helper fn to construct array meta-data.  Pass
+					! left%array as a mold for the size/rank etc. of new array
+
+					!res%array%kind = expl_array
 					res%array%rank = left%array%rank
 
-					! TODO: len_, cap, size
 					res%array%len_ = left%array%len_
 					res%array%cap  = left%array%cap
 					res%array%size = left%array%size
+
+				case default
+					! TODO: refactor with below default?
+					write(*,*) err_eval_binary_types(node%op%text)
+					call internal_error()
+				end select
+
+			case        (magic * i32_type + array_type)
+
+				select case (right%array%type)
+				case (i32_type)
+
+					allocate(res%array)
+					res%type  = array_type
+					res%array%bool = left%sca%i32 == right%array%i32
+
+					res%array%type = bool_type
+					!print *, 'res = ', res%array%bool
+
+					! TODO: helper fn to construct array meta-data.  Pass
+					! right%array as a mold for the size/rank etc. of new array
+
+					!res%array%kind = expl_array
+					res%array%rank = right%array%rank
+
+					res%array%len_ = right%array%len_
+					res%array%cap  = right%array%cap
+					res%array%size = right%array%size
+
+				case default
+					! TODO: refactor with below default?
+					write(*,*) err_eval_binary_types(node%op%text)
+					call internal_error()
+				end select
+
+			case        (magic * array_type + array_type)
+
+				!print *, 'array == array'
+
+				! TODO: this (and above array == sca cases) should select for
+				! combination of left and right array types, e.g. for i32 to i64
+				! comparison, etc.
+
+				select case (right%array%type)
+				case (i32_type)
+
+					allocate(res%array)
+					res%type  = array_type
+					res%array%bool = left%array%i32 == right%array%i32
+
+					res%array%type = bool_type
+					!print *, 'res = ', res%array%bool
+
+					! TODO: helper fn to construct array meta-data.  Pass
+					! right%array as a mold for the size/rank etc. of new array
+
+					!res%array%kind = expl_array
+					res%array%rank = right%array%rank
+
+					res%array%len_ = right%array%len_
+					res%array%cap  = right%array%cap
+					res%array%size = right%array%size
 
 				case default
 					! TODO: refactor with below default?

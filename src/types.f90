@@ -1271,8 +1271,9 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr)
 		case (eequals_token, bang_equals_token)
 
 			if (left == array_type .and. right == array_type) then
-				! TODO: array == array comparison
-				is_binary_op_allowed = .false.
+				is_binary_op_allowed = &
+					(is_int_type(left_arr) .and. is_int_type(right_arr)) .or. &
+					(left_arr == right_arr)
 
 			else if (left  == array_type) then
 				is_binary_op_allowed = &
@@ -1280,7 +1281,10 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr)
 					(left_arr == right)
 
 			else if (right == array_type) then
-				is_binary_op_allowed = .false. ! TODO
+				is_binary_op_allowed = &
+					(is_int_type(left) .and. is_int_type(right_arr)) .or. &
+					(left == right_arr)
+
 			else
 
 				! Fortran allows comparing ints and floats for strict equality, e.g.
@@ -1551,12 +1555,11 @@ integer function get_binary_op_kind(left, op, right, left_array, right_array) &
 			greater_token, greater_equals_token)
 		!print *, 'bool_type'
 
-		!! Comparison operations can take 2 numbers, but always return a bool
-		!kind_ = bool_type
+		! Comparison operations can take 2 numbers, but always return a bool of
+		! some rank
 
 		if (left == array_type .and. right == array_type) then
-			! TODO: array == array comparison
-			kind_ = unknown_type
+			kind_ = bool_array_type
 
 		else if (left  == array_type) then
 
