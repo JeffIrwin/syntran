@@ -728,6 +728,17 @@ end function underline
 
 !===============================================================================
 
+subroutine internal_error()
+
+	! The goal is for this to be unreachable
+
+	write(*,*) fg_bold_bright_red//'Fatal error'//color_reset
+	call exit(exit_failure)
+
+end subroutine internal_error
+
+!===============================================================================
+
 end module syntran__errors_m
 
 !===============================================================================

@@ -89,8 +89,10 @@ set(SRC_DIR "src")
 # Core library, used by main interpreter and unit tests
 set(LIB "${PROJECT}")
 set(LIB_SRC
+	${SRC_DIR}/consts.f90
 	${SRC_DIR}/utils.f90
 	${SRC_DIR}/errors.f90
+	${SRC_DIR}/value.f90
 	${SRC_DIR}/types.f90
 	${SRC_DIR}/lexer.f90
 	${SRC_DIR}/parser.f90
