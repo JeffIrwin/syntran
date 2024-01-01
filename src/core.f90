@@ -1913,8 +1913,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			case        (magic * array_type + i32_type)
 
-				print *, 'left%type       = ', kind_name(left%type)
-				print *, 'left array type = ', kind_name(left%array%type)
+				!print *, 'left%type       = ', kind_name(left%type)
+				!print *, 'left array type = ', kind_name(left%array%type)
 
 				!res%sca%bool = .false.
 				!res%sca%bool = left%sca%str%s == right%sca%str%s
@@ -1926,7 +1926,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					res%type  = array_type
 					res%array%bool = left%array%i32 == right%sca%i32
 					res%array%type = bool_type
-					print *, 'res = ', res%array%bool
+					!print *, 'res = ', res%array%bool
 
 					! TODO: helper fn to construct array meta-data
 					res%array%kind = expl_array

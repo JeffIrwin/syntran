@@ -1460,14 +1460,14 @@ function new_binary_expr(left, op, right) result(expr)
 	expr%op    = op
 	expr%right = right
 
-	print *, 'left type  = ', kind_name(left%val%type)
+	!print *, 'left type  = ', kind_name(left%val%type)
 
 	larrtype = 0
 	rarrtype = 0
 	if (left %val%type == array_type) larrtype = left %val%array%type
 	if (right%val%type == array_type) rarrtype = right%val%array%type
 
-	print *, 'larrtype = ', kind_name(larrtype)
+	!print *, 'larrtype = ', kind_name(larrtype)
 
 	! Pass the result value type up the tree for type checking in parent
 	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type, &
@@ -1568,7 +1568,7 @@ integer function get_binary_op_kind(left, op, right, left_array, right_array) &
 			!kind_ = array_type 
 			kind_ = bool_array_type
 
-			print *, 'kind_ = ', kind_name(kind_)
+			!print *, 'kind_ = ', kind_name(kind_)
 
 		else if (right == array_type) then
 			kind_ = bool_array_type
