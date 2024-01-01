@@ -1909,23 +1909,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				select case (left%array%type)
 				case (i32_type)
-
-					allocate(res%array)
-					res%type  = array_type
+					res%array = mold(left%array, bool_type)
 					res%array%bool = left%array%i32 == right%sca%i32
-
-					res%array%type = bool_type
-					!print *, 'res = ', res%array%bool
-
-					! TODO: helper fn to construct array meta-data.  Pass
-					! left%array as a mold for the size/rank etc. of new array
-
-					!res%array%kind = expl_array
-					res%array%rank = left%array%rank
-
-					res%array%len_ = left%array%len_
-					res%array%cap  = left%array%cap
-					res%array%size = left%array%size
 
 				case default
 					! TODO: refactor with below default?
@@ -1937,23 +1922,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				select case (right%array%type)
 				case (i32_type)
-
-					allocate(res%array)
-					res%type  = array_type
+					res%array = mold(right%array, bool_type)
 					res%array%bool = left%sca%i32 == right%array%i32
-
-					res%array%type = bool_type
-					!print *, 'res = ', res%array%bool
-
-					! TODO: helper fn to construct array meta-data.  Pass
-					! right%array as a mold for the size/rank etc. of new array
-
-					!res%array%kind = expl_array
-					res%array%rank = right%array%rank
-
-					res%array%len_ = right%array%len_
-					res%array%cap  = right%array%cap
-					res%array%size = right%array%size
 
 				case default
 					! TODO: refactor with below default?
@@ -1971,23 +1941,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				select case (right%array%type)
 				case (i32_type)
-
-					allocate(res%array)
-					res%type  = array_type
+					res%array = mold(right%array, bool_type)
 					res%array%bool = left%array%i32 == right%array%i32
-
-					res%array%type = bool_type
-					!print *, 'res = ', res%array%bool
-
-					! TODO: helper fn to construct array meta-data.  Pass
-					! right%array as a mold for the size/rank etc. of new array
-
-					!res%array%kind = expl_array
-					res%array%rank = right%array%rank
-
-					res%array%len_ = right%array%len_
-					res%array%cap  = right%array%cap
-					res%array%size = right%array%size
 
 				case default
 					! TODO: refactor with below default?
@@ -2154,6 +2109,32 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	end select
 
 end function syntax_eval
+
+!===============================================================================
+
+function mold(array, type_)
+
+	type(array_t), intent(in) :: array
+	!type(value_t), intent(in) :: array
+
+	integer, intent(in) :: type_
+
+	type(array_t), allocatable :: mold ! TODO: name are confusingly backwards
+
+	allocate(mold)
+	!res%type  = array_type
+
+	!mold%type = bool_type
+	mold%type = type_
+
+	!mold%kind = expl_array
+	mold%rank = array%rank
+
+	mold%len_ = array%len_
+	mold%cap  = array%cap
+	mold%size = array%size
+
+end function mold
 
 !===============================================================================
 
