@@ -1174,7 +1174,6 @@ subroutine unit_test_array_i32_1(npass, nfail)
 
 	character(len = *), parameter :: label = 'i32 arrays'
 
-	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
