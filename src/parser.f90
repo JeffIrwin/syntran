@@ -538,17 +538,17 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		expr = new_declaration_expr(identifier, op, right)
 
-		print *, 'expr ident text = ', expr%identifier%text
+		!print *, 'expr ident text = ', expr%identifier%text
 
 		! Increment the variable array index and save it in the expr node.
 		! TODO: make this a push_var fn?  parse_for_statement uses it too
 		parser%num_vars = parser%num_vars + 1
 		expr%id_index   = parser%num_vars
 
-		if (expr%val%type == array_type) then
-			print *, 'array_type'
-			print *, 'rank = ', expr%val%array%rank
-		end if
+		!if (expr%val%type == array_type) then
+		!	print *, 'array_type'
+		!	print *, 'rank = ', expr%val%array%rank
+		!end if
 
 		! Insert the identifier's type into the dict and check that it
 		! hasn't already been declared
@@ -1466,9 +1466,10 @@ function parse_primary_expr(parser) result(expr)
 					end if
 
 					! A slice operation can change the result rank
-					print *, 'rank in  = ', expr%val%array%rank
+
+					!print *, 'rank in  = ', expr%val%array%rank
 					expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
-					print *, 'rank out = ', expr%val%array%rank
+					!print *, 'rank out = ', expr%val%array%rank
 
 				else if (expr%val%type == str_type) then
 					!print *, 'string type'
