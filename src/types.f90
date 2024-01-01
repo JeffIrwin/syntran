@@ -1475,8 +1475,16 @@ function new_binary_expr(left, op, right) result(expr)
 
 	select case (type_)
 	case (bool_array_type)
+
 		allocate(expr%val%array)
+
 		expr%val%array%type = bool_type
+		if (left%val%type == array_type) then
+			expr%val%array%rank = left %val%array%rank
+		else
+			expr%val%array%rank = right%val%array%rank
+		end if
+
 		expr%val%type = array_type
 
 	! TODO: other array sub types
