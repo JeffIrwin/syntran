@@ -1256,6 +1256,9 @@ subroutine unit_test_array_ops_1(npass, nfail)
 			eval('true == [false, false];') == '[false, false]', &
 			eval('true == [false, true] ;') == '[false, true]', &
 			eval('[false, false] == [false, true];') == '[true, false]', &
+			eval('i64(2) == [i64(0), i64(2), i64(3)];') == '[false, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] == i64(3);') == '[false, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] == [i64(4), i64(2), i64(3)];') == '[false, true, true]', &
 			.false. &
 		]
 

@@ -1925,6 +1925,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					call internal_error()
 				end select
 
+			case        (magic * array_type + i64_type)
+
+				select case (left%array%type)
+				case (i64_type)
+					res%array = mold(left%array, bool_type)
+					res%array%bool = left%array%i64 == right%sca%i64
+
+				case default
+					write(*,*) err_eval_binary_types(node%op%text)
+					call internal_error()
+				end select
+
 			case        (magic * array_type + bool_type)
 
 				select case (left%array%type)
@@ -1961,6 +1973,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				case (i32_type)
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%sca%i32 == right%array%i32
+
+				case default
+					write(*,*) err_eval_binary_types(node%op%text)
+					call internal_error()
+				end select
+
+			case        (magic * i64_type + array_type)
+
+				select case (right%array%type)
+				case (i64_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%sca%i64 == right%array%i64
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2004,6 +2028,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				case (magic * i32_type + i32_type)
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%array%i32 == right%array%i32
+
+				case (magic * i64_type + i64_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%array%i64 == right%array%i64
 
 				case (magic * bool_type + bool_type)
 					res%array = mold(right%array, bool_type)
