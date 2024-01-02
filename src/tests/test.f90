@@ -626,6 +626,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('any([false]);') == "false", &
 			eval('any([false, true]);') == "true", &
 			eval('any([false, false]);') == "false", &
+			eval('all([true]);') == "true", &
+			eval('all([false]);') == "false", &
+			eval('all([false, true]);') == "false", &
+			eval('all([true, true]);') == "true", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 
@@ -1311,6 +1315,14 @@ subroutine unit_test_array_ops_1(npass, nfail)
 			eval('any([0: 5] ==  4);') == 'true', &
 			eval('any([0: 5] == -1);') == 'false', &
 			eval('any([0: 5] ==  5);') == 'false', &
+			eval('all([0: 5] ==  0);') == 'false', &
+			eval('all([0: 5] ==  4);') == 'false', &
+			eval('all([0; 5] ==  0);') == 'true', &
+			eval('all([42;5] == 42);') == 'true', &
+			eval('all([7, 7, 7] ==  7);') == 'true', &
+			eval('all([8, 7, 7] ==  7);') == 'false', &
+			eval('all([7, 8, 7] ==  7);') == 'false', &
+			eval('all([7, 7, 8] ==  7);') == 'false', &
 			.false. &
 		]
 

@@ -28,18 +28,18 @@ module syntran__core_m
 
 	! TODO:
 	!  - array operations:
-	!    * any()
-	!    * all()
 	!    * comparisons
 	!      > >, <, >=, <=
 	!      > == done for i32, i64, f32, bool, str, and mixed numeric types
 	!      > != done
 	!    * count()
 	!    * vector addition, dot product, scalar-vector mult, ...
+	!    * any() and all() with optional `dim` argument
 	!  - document recent features:
 	!    * array slicing
 	!    * casting?
-	!    * array comparison (wip)
+	!    * any(), all() intrinsics
+	!    * array comparison (== and != done)
 	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
 	!    versions don't allow a user-defined type that references another type
 	!    which is defined below it
@@ -163,7 +163,7 @@ function declare_intrinsic_fns() result(fns)
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
-		i64_fn, parse_i64_fn, i32_fn, exit_fn, any_fn
+		i64_fn, parse_i64_fn, i32_fn, exit_fn, any_fn, all_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -414,6 +414,25 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	all_fn%type = bool_type
+	allocate(all_fn%params(1))
+
+	all_fn%params(1)%type = array_type
+
+	all_fn%params(1)%array_type = bool_type
+	all_fn%params(1)%rank = -1  ! negative means any rank
+
+	all_fn%params(1)%name = "mask"
+
+	!! TODO: add dim arg to all() like Fortran
+	!all_fn%params(2)%type = i32_type
+	!all_fn%params(2)%name = "dim"
+
+	id_index = id_index + 1
+	call fns%insert("all", all_fn, id_index)
+
+	!********
+
 	any_fn%type = bool_type
 	allocate(any_fn%params(1))
 
@@ -457,6 +476,7 @@ function declare_intrinsic_fns() result(fns)
 			close_fn    , &
 			exit_fn     , &
 			size_fn     , &
+			all_fn      , &
 			any_fn        &
 		]
 
@@ -1592,15 +1612,19 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! instead of pointable
 			deallocate(arg1%array)
 
-		case ("any")
+		case ("all")
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
-
-			!res%sca%i32 = int(arg1%array%size( arg2%sca%i32 + 1 ))
-			res%sca%bool = any(arg1%array%bool)
+			res%sca%bool = all(arg1%array%bool)
 
 			! Might not be strictly necessary now that %array is allocatable
 			! instead of pointable
+			deallocate(arg1%array)
+
+		case ("any")
+
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+			res%sca%bool = any(arg1%array%bool)
 			deallocate(arg1%array)
 
 		case default
