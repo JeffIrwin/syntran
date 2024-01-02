@@ -29,10 +29,12 @@ module syntran__core_m
 	! TODO:
 	!  - array operations:
 	!    * comparisons
-	!      > == done for i32 and str.  TODO bool, f32, i64
+	!      > == done for i32, bool, and str.  TODO f32, i64, (mixed i32/i64? do
+	!      it the same way that scalar mixing is handled)
 	!      > !=, >, <, >=, <=
 	!    * any()
 	!    * all()
+	!    * count()
 	!    * vector addition, dot product, scalar-vector mult, ...
 	!  - document recent features:
 	!    * array slicing
@@ -1923,6 +1925,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					call internal_error()
 				end select
 
+			case        (magic * array_type + bool_type)
+
+				select case (left%array%type)
+				case (bool_type)
+					res%array = mold(left%array, bool_type)
+					res%array%bool = left%array%bool .eqv. right%sca%bool
+
+				case default
+					write(*,*) err_eval_binary_types(node%op%text)
+					call internal_error()
+				end select
+
 			case        (magic * array_type + str_type)
 
 				select case (left%array%type)
@@ -1947,6 +1961,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				case (i32_type)
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%sca%i32 == right%array%i32
+
+				case default
+					write(*,*) err_eval_binary_types(node%op%text)
+					call internal_error()
+				end select
+
+			case        (magic * bool_type + array_type)
+
+				select case (right%array%type)
+				case (bool_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%sca%bool .eqv. right%array%bool
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1979,6 +2005,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%array%i32 == right%array%i32
 
+				case (magic * bool_type + bool_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%array%bool .eqv. right%array%bool
+
 				case (magic * str_type + str_type)
 					res%array = mold(right%array, bool_type)
 
@@ -1987,6 +2017,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					do i = 1, res%array%len_
 						res%array%bool(i) = left%array%str(i)%s == right%array%str(i)%s
 					end do
+
+				! TODO: other array sub type comparisons: i64, f32, mixed i32/i64
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)

@@ -1560,27 +1560,10 @@ integer function get_binary_op_kind(left, op, right, left_array, right_array) &
 		! Comparison operations can take 2 numbers, but always return a bool of
 		! some rank
 
-		if (left == array_type .and. right == array_type) then
+		if (left == array_type .or. right == array_type) then
 			kind_ = bool_array_type
-
-		else if (left  == array_type) then
-
-			! TODO: what is the best way to encode array type and sub type in
-			! single return value?  Using bool_array_type is a convenient hack
-			! because it is still an int. It might be better if we have a "type"
-			! type struct which can contain more than just an int
-
-			!kind_ = array_type 
-			kind_ = bool_array_type
-
-			!print *, 'kind_ = ', kind_name(kind_)
-
-		else if (right == array_type) then
-			kind_ = bool_array_type
-
 		else
 			kind_ = bool_type
-
 		end if
 
 	case default
