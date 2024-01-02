@@ -490,7 +490,7 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	integer :: io, ltype, rtype, pos0, span0, span1
+	integer :: io, ltype, rtype, pos0, span0, span1, lrank, rrank
 
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: let, identifier, op
@@ -696,6 +696,21 @@ recursive function parse_expr_statement(parser) result(expr)
 
 		end if
 
+		if (ltype == array_type .and. rtype == array_type) then
+
+			lrank = expr%val%array%rank
+			rrank = expr%right%val%array%rank
+
+			if (lrank /= rrank) then
+				span = new_span(op%pos, len(op%text))
+				call parser%diagnostics%push( &
+					err_binary_ranks(parser%context(), &
+					span, op%text, &
+					lrank, &
+					rrank))
+			end if
+		end if
+
 		return
 
 	end if
@@ -721,7 +736,8 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 
 	!********
 
-	integer :: parent_precl, prec, ltype, rtype, larrtype, rarrtype
+	integer :: parent_precl, prec, ltype, rtype, larrtype, rarrtype, &
+		lrank, rrank
 
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: op
@@ -791,6 +807,25 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 				kind_name(ltype), &
 				kind_name(rtype)))
 
+		end if
+
+		if (ltype == array_type .and. rtype == array_type) then
+			!print *, 'double array operation'
+
+			lrank = expr%left %val%array%rank
+			rrank = expr%right%val%array%rank
+
+			!print *, 'left  rank = ', lrank
+			!print *, 'right rank = ', rrank
+
+			if (lrank /= rrank) then
+				span = new_span(op%pos, len(op%text))
+				call parser%diagnostics%push( &
+					err_binary_ranks(parser%context(), &
+					span, op%text, &
+					lrank, &
+					rrank))
+			end if
 		end if
 
 	end do

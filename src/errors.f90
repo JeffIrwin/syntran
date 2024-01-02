@@ -380,6 +380,25 @@ end function err_binary_types
 
 !===============================================================================
 
+function err_binary_ranks(context, span, op, left, right) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: op
+	integer, intent(in) :: left, right
+
+	!print *, 'starting err_binary_ranks'
+
+	err = err_prefix &
+		//'rank mismatch for binary operator `'//op//'` with ranks ' &
+		//str(left)//' and '//str(right)//underline(context, span) &
+		//" array rank mismatch"//color_reset
+
+end function err_binary_ranks
+
+!===============================================================================
+
 function err_unary_types(context, span, op, right) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

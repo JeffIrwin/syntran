@@ -1222,7 +1222,8 @@ end function ternary_search
 
 !===============================================================================
 
-logical function is_binary_op_allowed(left, op, right, left_arr, right_arr)
+logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
+		result(allowed)
 
 	! Is an operation allowed with the types of operator op and left/right
 	! operands?
@@ -1233,14 +1234,14 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr)
 	!print *, 'left, right = ', left, right
 
 	!! This dynamic variable typing can be useful for testing
-	!is_binary_op_allowed = .true.
+	!allowed = .true.
 	!return
 
-	is_binary_op_allowed = .false.
+	allowed = .false.
 
 	if (left == unknown_type .or. right == unknown_type) then
 		! Stop cascading errors
-		is_binary_op_allowed = .true.
+		allowed = .true.
 		return
 	end if
 
@@ -1248,7 +1249,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr)
 
 		case (plus_token, plus_equals_token)
 
-			is_binary_op_allowed = &
+			allowed = &
 				(is_num_type(left) .and. is_num_type(right)) .or. &
 				(left == str_type  .and. right == str_type)
 
@@ -1258,30 +1259,30 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr)
 				percent_token, minus_equals_token, star_equals_token, &
 				slash_equals_token, sstar_equals_token, percent_equals_token)
 
-			is_binary_op_allowed = is_num_type(left) .and. is_num_type(right)
+			allowed = is_num_type(left) .and. is_num_type(right)
 
 		case (and_keyword, or_keyword)
-			is_binary_op_allowed = left == bool_type .and. right == bool_type
+			allowed = left == bool_type .and. right == bool_type
 
 		case (equals_token)
-			is_binary_op_allowed = &
+			allowed = &
 				(is_int_type(left) .and. is_int_type(right)) .or. &
 				(left == right)
 
 		case (eequals_token, bang_equals_token)
 
 			if (left == array_type .and. right == array_type) then
-				is_binary_op_allowed = &
+				allowed = &
 					(is_int_type(left_arr) .and. is_int_type(right_arr)) .or. &
 					(left_arr == right_arr)
 
 			else if (left  == array_type) then
-				is_binary_op_allowed = &
+				allowed = &
 					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
 					(left_arr == right)
 
 			else if (right == array_type) then
-				is_binary_op_allowed = &
+				allowed = &
 					(is_int_type(left) .and. is_int_type(right_arr)) .or. &
 					(left == right_arr)
 
@@ -1289,7 +1290,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr)
 
 				! Fortran allows comparing ints and floats for strict equality, e.g.
 				! 1 == 1.0 is indeed true.  I'm not sure if I like that
-				is_binary_op_allowed = &
+				allowed = &
 					(is_int_type(left) .and. is_int_type(right)) .or. &
 					(left == right)
 
