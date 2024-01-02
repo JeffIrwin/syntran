@@ -28,11 +28,12 @@ module syntran__core_m
 
 	! TODO:
 	!  - array operations:
-	!    * comparisons
-	!      > !=, >, <, >=, <=
-	!      > == done for i32, i64, f32, bool, str, and mixed numeric types
 	!    * any()
 	!    * all()
+	!    * comparisons
+	!      > >, <, >=, <=
+	!      > == done for i32, i64, f32, bool, str, and mixed numeric types
+	!      > != done
 	!    * count()
 	!    * vector addition, dot product, scalar-vector mult, ...
 	!  - document recent features:
@@ -162,7 +163,7 @@ function declare_intrinsic_fns() result(fns)
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
-		i64_fn, parse_i64_fn, i32_fn, exit_fn
+		i64_fn, parse_i64_fn, i32_fn, exit_fn, any_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -413,6 +414,25 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	any_fn%type = bool_type
+	allocate(any_fn%params(1))
+
+	any_fn%params(1)%type = array_type
+
+	any_fn%params(1)%array_type = bool_type
+	any_fn%params(1)%rank = -1  ! negative means any rank
+
+	any_fn%params(1)%name = "mask"
+
+	!! TODO: add dim arg to any() like Fortran
+	!any_fn%params(2)%type = i32_type
+	!any_fn%params(2)%name = "dim"
+
+	id_index = id_index + 1
+	call fns%insert("any", any_fn, id_index)
+
+	!********
+
 	! FIXME: when adding new functions, remember to copy them into the
 	! fns%fns(:) array below
 
@@ -436,7 +456,8 @@ function declare_intrinsic_fns() result(fns)
 			eof_fn      , &
 			close_fn    , &
 			exit_fn     , &
-			size_fn       &
+			size_fn     , &
+			any_fn        &
 		]
 
 end function declare_intrinsic_fns
@@ -1567,6 +1588,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!     https://github.com/JeffIrwin/aoc-syntran/blob/609ff26a1e4d4b7cc00fd4836f26b47d237aea71/2023/08/main-v3.syntran#L306
 			!
 			!
+			! Might not be strictly necessary now that %array is allocatable
+			! instead of pointable
+			deallocate(arg1%array)
+
+		case ("any")
+
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+
+			!res%sca%i32 = int(arg1%array%size( arg2%sca%i32 + 1 ))
+			res%sca%bool = any(arg1%array%bool)
+
 			! Might not be strictly necessary now that %array is allocatable
 			! instead of pointable
 			deallocate(arg1%array)

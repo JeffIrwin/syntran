@@ -622,6 +622,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('i32("(");') ==  "40", &
 			eval('i32(")");') ==  "41", &
 			eval('i32(" ");') ==  "32", &
+			eval('any([true]);') == "true", &
+			eval('any([false]);') == "false", &
+			eval('any([false, true]);') == "true", &
+			eval('any([false, false]);') == "false", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 
@@ -1302,6 +1306,11 @@ subroutine unit_test_array_ops_1(npass, nfail)
 			eval('i64(2) != [0, 2, 3];') == '[true, false, true]', &
 			eval('[i64(0), i64(2), i64(3)] != 3;') == '[true, true, false]', &
 			eval('[i64(0), i64(2), i64(3)] != [4, 2, 3];') == '[true, false, false]', &
+			eval('any([0: 5] ==  0);') == 'true', &
+			eval('any([0: 5] == -0);') == 'true', &
+			eval('any([0: 5] ==  4);') == 'true', &
+			eval('any([0: 5] == -1);') == 'false', &
+			eval('any([0: 5] ==  5);') == 'false', &
 			.false. &
 		]
 
