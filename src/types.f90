@@ -1254,14 +1254,12 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				(left == str_type  .and. right == str_type)
 
 		case (minus_token, sstar_token, star_token, slash_token, &
-				less_token, &
-				greater_equals_token, &
 				percent_token, minus_equals_token, star_equals_token, &
 				slash_equals_token, sstar_equals_token, percent_equals_token)
 
 			allowed = is_num_type(left) .and. is_num_type(right)
 
-		case (greater_token, less_equals_token)
+		case (greater_token, less_token, greater_equals_token, less_equals_token)
 			! TODO: consolidate with above case after implementing remaining
 			! array ops
 

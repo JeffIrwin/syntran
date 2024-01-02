@@ -1362,6 +1362,78 @@ subroutine unit_test_array_ops_1(npass, nfail)
 			eval('2.0 > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
 			eval('[0.0, 2.0, 3.0] > i64(2);') == '[false, false, true]', &
 			eval('[4.0, 2.0, 3.0] > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('[0, 0] < 1;') == '[true, true]', &
+			eval('[0, 1] < 1;') == '[true, false]', &
+			eval('[1, 0] < 1;') == '[false, true]', &
+			eval('[1, 1] < 1;') == '[false, false]', &
+			eval('0 < [0, 0];') == '[false, false]', &
+			eval('0 < [0, 1];') == '[false, true]', &
+			eval('0 < [1, 0];') == '[true, false]', &
+			eval('0 < [1, 1];') == '[true, true]', &
+			eval('[7, 8] < [8, 7];') == '[true, false]', &
+			eval('[3, 2] < [4, 2];') == '[true, false]', &
+			eval('[4, 2] < [1, 3];') == '[false, true]', &
+			eval('[5, 6] < [1, 1];') == '[false, false]', &
+			eval('i64(2) < [i64(0), i64(2), i64(3)];') == '[false, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] < i64(2);') == '[true, false, false]', &
+			eval('[i64(4), i64(1), i64(3)] < [i64(0), i64(2), i64(3)];') == '[false, true, false]', &
+			eval('2.0 < [0.0, 2.0, 3.0];') == '[false, false, true]', &
+			eval('[0.0, 2.0, 3.0] < 2.0;') == '[true, false, false]', &
+			eval('[0.0, 2.0, 3.0] < [0.0, 2.1, 3.1];') == '[false, true, true]', &
+			eval('2 < [i64(0), i64(2), i64(3)];') == '[false, false, true]', &
+			eval('[0, 2, 3] < i64(2);') == '[true, false, false]', &
+			eval('[0, 2, 3] < [i64(4), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('i64(2) < [0, 2, 3];') == '[false, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] < 2;') == '[true, false, false]', &
+			eval('[i64(0), i64(2), i64(3)] < [4, 2, 3];') == '[true, false, false]', &
+			eval('2 < [0.0, 2.0, 3.0];') == '[false, false, true]', &
+			eval('[0, 2, 3] < 2.0;') == '[true, false, false]', &
+			eval('[0, 2, 3] < [4.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2.0 < [0, 2, 3];') == '[false, false, true]', &
+			eval('[0.0, 2.0, 3.0] < 2;') == '[true, false, false]', &
+			eval('[0.0, 2.0, 3.0] < [4, 2, 3];') == '[true, false, false]', &
+			eval('i64(2) < [0.0, 2.0, 3.0];') == '[false, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] < 2.0;') == '[true, false, false]', &
+			eval('[i64(0), i64(2), i64(3)] < [4.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2.0 < [i64(0), i64(2), i64(3)];') == '[false, false, true]', &
+			eval('[0.0, 2.0, 3.0] < i64(2);') == '[true, false, false]', &
+			eval('[0.0, 2.0, 3.0] < [i64(4), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('[0, 0] >= 1;') == '[false, false]', &
+			eval('[0, 1] >= 1;') == '[false, true]', &
+			eval('[1, 0] >= 1;') == '[true, false]', &
+			eval('[1, 1] >= 1;') == '[true, true]', &
+			eval('0 >= [0, 0];') == '[true, true]', &
+			eval('0 >= [0, 1];') == '[true, false]', &
+			eval('0 >= [1, 0];') == '[false, true]', &
+			eval('0 >= [1, 1];') == '[false, false]', &
+			eval('[7, 8] >= [8, 7];') == '[false, true]', &
+			eval('[3, 2] >= [4, 2];') == '[false, true]', &
+			eval('[4, 2] >= [1, 3];') == '[true, false]', &
+			eval('[5, 6] >= [1, 1];') == '[true, true]', &
+			eval('i64(2) >= [i64(0), i64(2), i64(3)];') == '[true, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] >= i64(2);') == '[false, true, true]', &
+			eval('[i64(4), i64(1), i64(3)] >= [i64(0), i64(2), i64(3)];') == '[true, false, true]', &
+			eval('2.0 >= [0.0, 2.0, 3.0];') == '[true, true, false]', &
+			eval('[0.0, 2.0, 3.0] >= 2.0;') == '[false, true, true]', &
+			eval('[0.0, 2.0, 3.0] >= [0.0, 2.1, 3.1];') == '[true, false, false]', &
+			eval('2 >= [i64(0), i64(2), i64(3)];') == '[true, true, false]', &
+			eval('[0, 2, 3] >= i64(2);') == '[false, true, true]', &
+			eval('[0, 2, 3] >= [i64(4), i64(2), i64(3)];') == '[false, true, true]', &
+			eval('i64(2) >= [0, 2, 3];') == '[true, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] >= 2;') == '[false, true, true]', &
+			eval('[i64(0), i64(2), i64(3)] >= [4, 2, 3];') == '[false, true, true]', &
+			eval('2 >= [0.0, 2.0, 3.0];') == '[true, true, false]', &
+			eval('[0, 2, 3] >= 2.0;') == '[false, true, true]', &
+			eval('[0, 2, 3] >= [4.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('2.0 >= [0, 2, 3];') == '[true, true, false]', &
+			eval('[0.0, 2.0, 3.0] >= 2;') == '[false, true, true]', &
+			eval('[0.0, 2.0, 3.0] >= [4, 2, 3];') == '[false, true, true]', &
+			eval('i64(2) >= [0.0, 2.0, 3.0];') == '[true, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] >= 2.0;') == '[false, true, true]', &
+			eval('[i64(0), i64(2), i64(3)] >= [4.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('2.0 >= [i64(0), i64(2), i64(3)];') == '[true, true, false]', &
+			eval('[0.0, 2.0, 3.0] >= i64(2);') == '[false, true, true]', &
+			eval('[0.0, 2.0, 3.0] >= [i64(4), i64(2), i64(3)];') == '[false, true, true]', &
 			eval('[0, 0] <= 0;') == '[true, true]', &
 			eval('[0, 1] <= 0;') == '[true, false]', &
 			eval('[1, 0] <= 0;') == '[false, true]', &
