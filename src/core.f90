@@ -1917,6 +1917,24 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					call internal_error()
 				end select
 
+			case        (magic * array_type + str_type)
+
+				select case (left%array%type)
+				case (str_type)
+					res%array = mold(left%array, bool_type)
+
+					!! Fortran is wierd about string arrays
+					!res%array%bool = left%array%str%s == right%sca%str%s
+					allocate(res%array%bool( res%array%len_ ))
+					do i = 1, res%array%len_
+						res%array%bool(i) = left%array%str(i)%s == right%sca%str%s
+					end do
+
+				case default
+					write(*,*) err_eval_binary_types(node%op%text)
+					call internal_error()
+				end select
+
 			case        (magic * i32_type + array_type)
 
 				select case (right%array%type)
@@ -1929,18 +1947,40 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					call internal_error()
 				end select
 
+			case        (magic * str_type + array_type)
+
+				select case (right%array%type)
+				case (str_type)
+					res%array = mold(right%array, bool_type)
+
+					! Fortran is wierd about string arrays
+					allocate(res%array%bool( res%array%len_ ))
+					do i = 1, res%array%len_
+						res%array%bool(i) = left%sca%str%s == right%array%str(i)%s
+					end do
+
+				case default
+					write(*,*) err_eval_binary_types(node%op%text)
+					call internal_error()
+				end select
+
 			case        (magic * array_type + array_type)
 
 				!print *, 'array == array'
 
-				! TODO: this (and above array == sca cases) should select for
-				! combination of left and right array types, e.g. for i32 to i64
-				! comparison, etc.
-
-				select case (right%array%type)
-				case (i32_type)
+				select case (magic * left%array%type + right%array%type)
+				case (magic * i32_type + i32_type)
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%array%i32 == right%array%i32
+
+				case (magic * str_type + str_type)
+					res%array = mold(right%array, bool_type)
+
+					! Fortran is wierd about string arrays
+					allocate(res%array%bool( res%array%len_ ))
+					do i = 1, res%array%len_
+						res%array%bool(i) = left%array%str(i)%s == right%array%str(i)%s
+					end do
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)

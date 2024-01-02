@@ -1248,6 +1248,9 @@ subroutine unit_test_array_ops_1(npass, nfail)
 			eval('[3, 2] == [3, 1];') == '[true, false]', &
 			eval('[4, 3] == [1, 3];') == '[false, true]', &
 			eval('[5, 6] == [1, 1];') == '[false, false]', &
+			eval('"b" == ["a", "b", "c"];') == '[false, true, false]', &
+			eval('["a", "b", "c"] == "c";') == '[false, false, true]', &
+			eval('["a", "b", "c"] == ["d", "b", "c"];') == '[false, true, true]', &
 			.false. &
 		]
 
