@@ -1268,6 +1268,40 @@ subroutine unit_test_array_ops_1(npass, nfail)
 			eval('i64(2) == [0, 2, 3];') == '[false, true, false]', &
 			eval('[i64(0), i64(2), i64(3)] == 3;') == '[false, false, true]', &
 			eval('[i64(0), i64(2), i64(3)] == [4, 2, 3];') == '[false, true, true]', &
+			eval('[0, 0] != 0;') == '[false, false]', &
+			eval('[0, 1] != 0;') == '[false, true]', &
+			eval('[1, 0] != 0;') == '[true, false]', &
+			eval('[1, 1] != 0;') == '[true, true]', &
+			eval('0 != [0, 0];') == '[false, false]', &
+			eval('0 != [0, 1];') == '[false, true]', &
+			eval('0 != [1, 0];') == '[true, false]', &
+			eval('0 != [1, 1];') == '[true, true]', &
+			eval('[3, 3] != [3, 3];') == '[false, false]', &
+			eval('[7, 8] != [7, 8];') == '[false, false]', &
+			eval('[7, 8] != [8, 7];') == '[true, true]', &
+			eval('[3, 2] != [3, 1];') == '[false, true]', &
+			eval('[4, 3] != [1, 3];') == '[true, false]', &
+			eval('[5, 6] != [1, 1];') == '[true, true]', &
+			eval('"b" != ["a", "b", "c"];') == '[true, false, true]', &
+			eval('["a", "b", "c"] != "c";') == '[true, true, false]', &
+			eval('["a", "b", "c"] != ["d", "b", "c"];') == '[true, false, false]', &
+			eval('[false, false] != false;') == '[false, false]', &
+			eval('[false, true]  != false;') == '[false, true]', &
+			eval('true != [false, false];') == '[true, true]', &
+			eval('true != [false, true] ;') == '[true, false]', &
+			eval('[false, false] != [false, true];') == '[false, true]', &
+			eval('i64(2) != [i64(0), i64(2), i64(3)];') == '[true, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] != i64(3);') == '[true, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] != [i64(4), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('2.0 != [0.0, 2.0, 3.0];') == '[true, false, true]', &
+			eval('[0.0, 2.0, 3.0] != 3.0;') == '[true, true, false]', &
+			eval('[0.0, 2.0, 3.0] != [4.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2 != [i64(0), i64(2), i64(3)];') == '[true, false, true]', &
+			eval('[0, 2, 3] != i64(3);') == '[true, true, false]', &
+			eval('[0, 2, 3] != [i64(4), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('i64(2) != [0, 2, 3];') == '[true, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] != 3;') == '[true, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] != [4, 2, 3];') == '[true, false, false]', &
 			.false. &
 		]
 
