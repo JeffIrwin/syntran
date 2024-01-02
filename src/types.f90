@@ -1254,12 +1254,31 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				(left == str_type  .and. right == str_type)
 
 		case (minus_token, sstar_token, star_token, slash_token, &
-				less_token   , less_equals_token, &
-				greater_token, greater_equals_token, &
 				percent_token, minus_equals_token, star_equals_token, &
 				slash_equals_token, sstar_equals_token, percent_equals_token)
 
 			allowed = is_num_type(left) .and. is_num_type(right)
+
+		case (greater_token, less_token, greater_equals_token, less_equals_token)
+			! TODO: consolidate with above case after implementing remaining
+			! array ops
+
+			if (left == array_type .and. right == array_type) then
+				allowed = &
+					(is_num_type(left_arr) .and. is_num_type(right_arr))
+
+			else if (left  == array_type) then
+				allowed = &
+					(is_num_type(left_arr) .and. is_num_type(right))
+
+			else if (right == array_type) then
+				allowed = &
+					(is_num_type(left) .and. is_num_type(right_arr))
+
+			else
+				allowed = is_num_type(left) .and. is_num_type(right)
+
+			end if
 
 		case (and_keyword, or_keyword)
 			allowed = left == bool_type .and. right == bool_type
@@ -1560,27 +1579,10 @@ integer function get_binary_op_kind(left, op, right, left_array, right_array) &
 		! Comparison operations can take 2 numbers, but always return a bool of
 		! some rank
 
-		if (left == array_type .and. right == array_type) then
+		if (left == array_type .or. right == array_type) then
 			kind_ = bool_array_type
-
-		else if (left  == array_type) then
-
-			! TODO: what is the best way to encode array type and sub type in
-			! single return value?  Using bool_array_type is a convenient hack
-			! because it is still an int. It might be better if we have a "type"
-			! type struct which can contain more than just an int
-
-			!kind_ = array_type 
-			kind_ = bool_array_type
-
-			!print *, 'kind_ = ', kind_name(kind_)
-
-		else if (right == array_type) then
-			kind_ = bool_array_type
-
 		else
 			kind_ = bool_type
-
 		end if
 
 	case default

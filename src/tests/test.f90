@@ -622,6 +622,14 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('i32("(");') ==  "40", &
 			eval('i32(")");') ==  "41", &
 			eval('i32(" ");') ==  "32", &
+			eval('any([true]);') == "true", &
+			eval('any([false]);') == "false", &
+			eval('any([false, true]);') == "true", &
+			eval('any([false, false]);') == "false", &
+			eval('all([true]);') == "true", &
+			eval('all([false]);') == "false", &
+			eval('all([false, true]);') == "false", &
+			eval('all([true, true]);') == "true", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 
@@ -1218,7 +1226,10 @@ end subroutine unit_test_array_i32_1
 
 !===============================================================================
 
-subroutine unit_test_array_ops_1(npass, nfail)
+subroutine unit_test_comp_arr(npass, nfail)
+
+	! Maybe rename this to unit_test_array_cmp?  It's long enough without +, *,
+	! etc.
 
 	implicit none
 
@@ -1251,6 +1262,214 @@ subroutine unit_test_array_ops_1(npass, nfail)
 			eval('"b" == ["a", "b", "c"];') == '[false, true, false]', &
 			eval('["a", "b", "c"] == "c";') == '[false, false, true]', &
 			eval('["a", "b", "c"] == ["d", "b", "c"];') == '[false, true, true]', &
+			eval('[false, false] == false;') == '[true, true]', &
+			eval('[false, true]  == false;') == '[true, false]', &
+			eval('true == [false, false];') == '[false, false]', &
+			eval('true == [false, true] ;') == '[false, true]', &
+			eval('[false, false] == [false, true];') == '[true, false]', &
+			eval('i64(2) == [i64(0), i64(2), i64(3)];') == '[false, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] == i64(3);') == '[false, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] == [i64(4), i64(2), i64(3)];') == '[false, true, true]', &
+			eval('2.0 == [0.0, 2.0, 3.0];') == '[false, true, false]', &
+			eval('[0.0, 2.0, 3.0] == 3.0;') == '[false, false, true]', &
+			eval('[0.0, 2.0, 3.0] == [4.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('2 == [i64(0), i64(2), i64(3)];') == '[false, true, false]', &
+			eval('[0, 2, 3] == i64(3);') == '[false, false, true]', &
+			eval('[0, 2, 3] == [i64(4), i64(2), i64(3)];') == '[false, true, true]', &
+			eval('i64(2) == [0, 2, 3];') == '[false, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] == 3;') == '[false, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] == [4, 2, 3];') == '[false, true, true]', &
+			eval('[0, 0] != 0;') == '[false, false]', &
+			eval('[0, 1] != 0;') == '[false, true]', &
+			eval('[1, 0] != 0;') == '[true, false]', &
+			eval('[1, 1] != 0;') == '[true, true]', &
+			eval('0 != [0, 0];') == '[false, false]', &
+			eval('0 != [0, 1];') == '[false, true]', &
+			eval('0 != [1, 0];') == '[true, false]', &
+			eval('0 != [1, 1];') == '[true, true]', &
+			eval('[3, 3] != [3, 3];') == '[false, false]', &
+			eval('[7, 8] != [7, 8];') == '[false, false]', &
+			eval('[7, 8] != [8, 7];') == '[true, true]', &
+			eval('[3, 2] != [3, 1];') == '[false, true]', &
+			eval('[4, 3] != [1, 3];') == '[true, false]', &
+			eval('[5, 6] != [1, 1];') == '[true, true]', &
+			eval('"b" != ["a", "b", "c"];') == '[true, false, true]', &
+			eval('["a", "b", "c"] != "c";') == '[true, true, false]', &
+			eval('["a", "b", "c"] != ["d", "b", "c"];') == '[true, false, false]', &
+			eval('[false, false] != false;') == '[false, false]', &
+			eval('[false, true]  != false;') == '[false, true]', &
+			eval('true != [false, false];') == '[true, true]', &
+			eval('true != [false, true] ;') == '[true, false]', &
+			eval('[false, false] != [false, true];') == '[false, true]', &
+			eval('i64(2) != [i64(0), i64(2), i64(3)];') == '[true, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] != i64(3);') == '[true, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] != [i64(4), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('2.0 != [0.0, 2.0, 3.0];') == '[true, false, true]', &
+			eval('[0.0, 2.0, 3.0] != 3.0;') == '[true, true, false]', &
+			eval('[0.0, 2.0, 3.0] != [4.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2 != [i64(0), i64(2), i64(3)];') == '[true, false, true]', &
+			eval('[0, 2, 3] != i64(3);') == '[true, true, false]', &
+			eval('[0, 2, 3] != [i64(4), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('i64(2) != [0, 2, 3];') == '[true, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] != 3;') == '[true, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] != [4, 2, 3];') == '[true, false, false]', &
+			eval('any([0: 5] ==  0);') == 'true', &
+			eval('any([0: 5] == -0);') == 'true', &
+			eval('any([0: 5] ==  4);') == 'true', &
+			eval('any([0: 5] == -1);') == 'false', &
+			eval('any([0: 5] ==  5);') == 'false', &
+			eval('all([0: 5] ==  0);') == 'false', &
+			eval('all([0: 5] ==  4);') == 'false', &
+			eval('all([0; 5] ==  0);') == 'true', &
+			eval('all([42;5] == 42);') == 'true', &
+			eval('all([7, 7, 7] ==  7);') == 'true', &
+			eval('all([8, 7, 7] ==  7);') == 'false', &
+			eval('all([7, 8, 7] ==  7);') == 'false', &
+			eval('all([7, 7, 8] ==  7);') == 'false', &
+			eval('[0, 0] > 0;') == '[false, false]', &
+			eval('[0, 1] > 0;') == '[false, true]', &
+			eval('[1, 0] > 0;') == '[true, false]', &
+			eval('[1, 1] > 0;') == '[true, true]', &
+			eval('0 > [0, 0];') == '[false, false]', &
+			eval('0 > [0, 1];') == '[false, false]', &
+			eval('1 > [1, 0];') == '[false, true]', &
+			eval('1 > [0, 0];') == '[true, true]', &
+			eval('[7, 8] > [8, 7];') == '[false, true]', &
+			eval('[3, 2] > [3, 1];') == '[false, true]', &
+			eval('[4, 3] > [1, 3];') == '[true, false]', &
+			eval('[5, 6] > [1, 1];') == '[true, true]', &
+			eval('i64(2) > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('[i64(0), i64(2), i64(3)] > i64(0);') == '[false, true, true]', &
+			eval('[i64(4), i64(2), i64(3)] > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('2.0 > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('[0.0, 2.0, 3.0] > 2.0;') == '[false, false, true]', &
+			eval('[4.0, 2.0, 3.0] > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2 > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('[0, 2, 3] > i64(2);') == '[false, false, true]', &
+			eval('[4, 2, 3] > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('i64(2) > [0, 2, 3];') == '[true, false, false]', &
+			eval('[i64(0), i64(2), i64(3)] > 2;') == '[false, false, true]', &
+			eval('[i64(4), i64(2), i64(3)] > [0, 2, 3];') == '[true, false, false]', &
+			eval('2 > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('[0, 2, 3] > 2.0;') == '[false, false, true]', &
+			eval('[4, 2, 3] > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2.0 > [0, 2, 3];') == '[true, false, false]', &
+			eval('[0.0, 2.0, 3.0] > 2;') == '[false, false, true]', &
+			eval('[4.0, 2.0, 3.0] > [0, 2, 3];') == '[true, false, false]', &
+			eval('i64(2) > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('[i64(0), i64(2), i64(3)] > 2.0;') == '[false, false, true]', &
+			eval('[i64(4), i64(2), i64(3)] > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2.0 > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('[0.0, 2.0, 3.0] > i64(2);') == '[false, false, true]', &
+			eval('[4.0, 2.0, 3.0] > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('[0, 0] < 1;') == '[true, true]', &
+			eval('[0, 1] < 1;') == '[true, false]', &
+			eval('[1, 0] < 1;') == '[false, true]', &
+			eval('[1, 1] < 1;') == '[false, false]', &
+			eval('0 < [0, 0];') == '[false, false]', &
+			eval('0 < [0, 1];') == '[false, true]', &
+			eval('0 < [1, 0];') == '[true, false]', &
+			eval('0 < [1, 1];') == '[true, true]', &
+			eval('[7, 8] < [8, 7];') == '[true, false]', &
+			eval('[3, 2] < [4, 2];') == '[true, false]', &
+			eval('[4, 2] < [1, 3];') == '[false, true]', &
+			eval('[5, 6] < [1, 1];') == '[false, false]', &
+			eval('i64(2) < [i64(0), i64(2), i64(3)];') == '[false, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] < i64(2);') == '[true, false, false]', &
+			eval('[i64(4), i64(1), i64(3)] < [i64(0), i64(2), i64(3)];') == '[false, true, false]', &
+			eval('2.0 < [0.0, 2.0, 3.0];') == '[false, false, true]', &
+			eval('[0.0, 2.0, 3.0] < 2.0;') == '[true, false, false]', &
+			eval('[0.0, 2.0, 3.0] < [0.0, 2.1, 3.1];') == '[false, true, true]', &
+			eval('2 < [i64(0), i64(2), i64(3)];') == '[false, false, true]', &
+			eval('[0, 2, 3] < i64(2);') == '[true, false, false]', &
+			eval('[0, 2, 3] < [i64(4), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('i64(2) < [0, 2, 3];') == '[false, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] < 2;') == '[true, false, false]', &
+			eval('[i64(0), i64(2), i64(3)] < [4, 2, 3];') == '[true, false, false]', &
+			eval('2 < [0.0, 2.0, 3.0];') == '[false, false, true]', &
+			eval('[0, 2, 3] < 2.0;') == '[true, false, false]', &
+			eval('[0, 2, 3] < [4.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2.0 < [0, 2, 3];') == '[false, false, true]', &
+			eval('[0.0, 2.0, 3.0] < 2;') == '[true, false, false]', &
+			eval('[0.0, 2.0, 3.0] < [4, 2, 3];') == '[true, false, false]', &
+			eval('i64(2) < [0.0, 2.0, 3.0];') == '[false, false, true]', &
+			eval('[i64(0), i64(2), i64(3)] < 2.0;') == '[true, false, false]', &
+			eval('[i64(0), i64(2), i64(3)] < [4.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2.0 < [i64(0), i64(2), i64(3)];') == '[false, false, true]', &
+			eval('[0.0, 2.0, 3.0] < i64(2);') == '[true, false, false]', &
+			eval('[0.0, 2.0, 3.0] < [i64(4), i64(2), i64(3)];') == '[true, false, false]', &
+			eval('[0, 0] >= 1;') == '[false, false]', &
+			eval('[0, 1] >= 1;') == '[false, true]', &
+			eval('[1, 0] >= 1;') == '[true, false]', &
+			eval('[1, 1] >= 1;') == '[true, true]', &
+			eval('0 >= [0, 0];') == '[true, true]', &
+			eval('0 >= [0, 1];') == '[true, false]', &
+			eval('0 >= [1, 0];') == '[false, true]', &
+			eval('0 >= [1, 1];') == '[false, false]', &
+			eval('[7, 8] >= [8, 7];') == '[false, true]', &
+			eval('[3, 2] >= [4, 2];') == '[false, true]', &
+			eval('[4, 2] >= [1, 3];') == '[true, false]', &
+			eval('[5, 6] >= [1, 1];') == '[true, true]', &
+			eval('i64(2) >= [i64(0), i64(2), i64(3)];') == '[true, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] >= i64(2);') == '[false, true, true]', &
+			eval('[i64(4), i64(1), i64(3)] >= [i64(0), i64(2), i64(3)];') == '[true, false, true]', &
+			eval('2.0 >= [0.0, 2.0, 3.0];') == '[true, true, false]', &
+			eval('[0.0, 2.0, 3.0] >= 2.0;') == '[false, true, true]', &
+			eval('[0.0, 2.0, 3.0] >= [0.0, 2.1, 3.1];') == '[true, false, false]', &
+			eval('2 >= [i64(0), i64(2), i64(3)];') == '[true, true, false]', &
+			eval('[0, 2, 3] >= i64(2);') == '[false, true, true]', &
+			eval('[0, 2, 3] >= [i64(4), i64(2), i64(3)];') == '[false, true, true]', &
+			eval('i64(2) >= [0, 2, 3];') == '[true, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] >= 2;') == '[false, true, true]', &
+			eval('[i64(0), i64(2), i64(3)] >= [4, 2, 3];') == '[false, true, true]', &
+			eval('2 >= [0.0, 2.0, 3.0];') == '[true, true, false]', &
+			eval('[0, 2, 3] >= 2.0;') == '[false, true, true]', &
+			eval('[0, 2, 3] >= [4.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('2.0 >= [0, 2, 3];') == '[true, true, false]', &
+			eval('[0.0, 2.0, 3.0] >= 2;') == '[false, true, true]', &
+			eval('[0.0, 2.0, 3.0] >= [4, 2, 3];') == '[false, true, true]', &
+			eval('i64(2) >= [0.0, 2.0, 3.0];') == '[true, true, false]', &
+			eval('[i64(0), i64(2), i64(3)] >= 2.0;') == '[false, true, true]', &
+			eval('[i64(0), i64(2), i64(3)] >= [4.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('2.0 >= [i64(0), i64(2), i64(3)];') == '[true, true, false]', &
+			eval('[0.0, 2.0, 3.0] >= i64(2);') == '[false, true, true]', &
+			eval('[0.0, 2.0, 3.0] >= [i64(4), i64(2), i64(3)];') == '[false, true, true]', &
+			eval('[0, 0] <= 0;') == '[true, true]', &
+			eval('[0, 1] <= 0;') == '[true, false]', &
+			eval('[1, 0] <= 0;') == '[false, true]', &
+			eval('[1, 1] <= 0;') == '[false, false]', &
+			eval('0 <= [0, 0];') == '[true, true]', &
+			eval('0 <= [0, 1];') == '[true, true]', &
+			eval('1 <= [1, 0];') == '[true, false]', &
+			eval('1 <= [0, 0];') == '[false, false]', &
+			eval('[7, 8] <= [8, 7];') == '[true, false]', &
+			eval('[3, 2] <= [3, 1];') == '[true, false]', &
+			eval('[4, 3] <= [1, 3];') == '[false, true]', &
+			eval('[5, 6] <= [1, 1];') == '[false, false]', &
+			eval('i64(2) <= [i64(0), i64(2), i64(3)];') == '[false, true, true]', &
+			eval('[i64(0), i64(2), i64(3)] <= i64(0);') == '[true, false, false]', &
+			eval('[i64(4), i64(2), i64(3)] <= [i64(0), i64(2), i64(3)];') == '[false, true, true]', &
+			eval('2.0 <= [0.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('[0.0, 2.0, 3.0] <= 2.0;') == '[true, true, false]', &
+			eval('[4.0, 2.0, 3.0] <= [0.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('2 <= [i64(0), i64(2), i64(3)];') == '[false, true, true]', &
+			eval('[0, 2, 3] <= i64(2);') == '[true, true, false]', &
+			eval('[4, 2, 3] <= [i64(0), i64(2), i64(3)];') == '[false, true, true]', &
+			eval('i64(2) <= [0, 2, 3];') == '[false, true, true]', &
+			eval('[i64(0), i64(2), i64(3)] <= 2;') == '[true, true, false]', &
+			eval('[i64(4), i64(2), i64(3)] <= [0, 2, 3];') == '[false, true, true]', &
+			eval('2 <= [0.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('[0, 2, 3] <= 2.0;') == '[true, true, false]', &
+			eval('[4, 2, 3] <= [0.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('2.0 <= [0, 2, 3];') == '[false, true, true]', &
+			eval('[0.0, 2.0, 3.0] <= 2;') == '[true, true, false]', &
+			eval('[4.0, 2.0, 3.0] <= [0, 2, 3];') == '[false, true, true]', &
+			eval('i64(2) <= [0.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('[i64(0), i64(2), i64(3)] <= 2.0;') == '[true, true, false]', &
+			eval('[i64(4), i64(2), i64(3)] <= [0.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('2.0 <= [i64(0), i64(2), i64(3)];') == '[false, true, true]', &
+			eval('[0.0, 2.0, 3.0] <= i64(2);') == '[true, true, false]', &
+			eval('[4.0, 2.0, 3.0] <= [i64(0), i64(2), i64(3)];') == '[false, true, true]', &
 			.false. &
 		]
 
@@ -1259,7 +1478,7 @@ subroutine unit_test_array_ops_1(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_array_ops_1
+end subroutine unit_test_comp_arr
 
 !===============================================================================
 
@@ -1979,7 +2198,7 @@ subroutine unit_tests(iostat)
 	call unit_test_i64        (npass, nfail)
 	call unit_test_include    (npass, nfail)
 	call unit_test_slice_1    (npass, nfail)
-	call unit_test_array_ops_1(npass, nfail)
+	call unit_test_comp_arr   (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
