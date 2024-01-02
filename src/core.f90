@@ -29,9 +29,8 @@ module syntran__core_m
 	! TODO:
 	!  - array operations:
 	!    * comparisons
-	!      > == done for i32, i64, f32, bool, and str.  TODO (mixed i32/i64? do
-	!      it the same way that scalar mixing is handled)
 	!      > !=, >, <, >=, <=
+	!      > == done for i32, i64, f32, bool, str, and mixed numeric types
 	!    * any()
 	!    * all()
 	!    * count()
@@ -1904,8 +1903,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!
 				! GNU says Warning: Equality comparison for REAL(4) at (1)
 				! [-Wcompare-reals]
+
+			case        (magic * f32_type + i64_type)
+				res%sca%bool = left%sca%f32 == right%sca%i64
+
 			case        (magic * i32_type + f32_type)
 				res%sca%bool = left%sca%i32 == right%sca%f32
+
+			case        (magic * i64_type + f32_type)
+				res%sca%bool = left%sca%i64 == right%sca%f32
 
 			case        (magic * bool_type + bool_type)
 				res%sca%bool = left%sca%bool .eqv. right%sca%bool
@@ -1926,6 +1932,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					res%array = mold(left%array, bool_type)
 					res%array%bool = left%array%i64 == right%sca%i32
 
+				case (f32_type)
+					res%array = mold(left%array, bool_type)
+					res%array%bool = left%array%f32 == right%sca%i32
+
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
 					call internal_error()
@@ -1942,6 +1952,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					res%array = mold(left%array, bool_type)
 					res%array%bool = left%array%i32 == right%sca%i64
 
+				case (f32_type)
+					res%array = mold(left%array, bool_type)
+					res%array%bool = left%array%f32 == right%sca%i64
+
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
 					call internal_error()
@@ -1953,6 +1967,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				case (f32_type)
 					res%array = mold(left%array, bool_type)
 					res%array%bool = left%array%f32 == right%sca%f32
+
+				case (i32_type)
+					res%array = mold(left%array, bool_type)
+					res%array%bool = left%array%i32 == right%sca%f32
+
+				case (i64_type)
+					res%array = mold(left%array, bool_type)
+					res%array%bool = left%array%i64 == right%sca%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2000,6 +2022,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%sca%i32 == right%array%i64
 
+				case (f32_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%sca%i32 == right%array%f32
+
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
 					call internal_error()
@@ -2016,6 +2042,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%sca%i64 == right%array%i32
 
+				case (f32_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%sca%i64 == right%array%f32
+
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
 					call internal_error()
@@ -2027,6 +2057,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				case (f32_type)
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%sca%f32 == right%array%f32
+
+				case (i32_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%sca%f32 == right%array%i32
+
+				case (i64_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%sca%f32 == right%array%i64
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2087,6 +2125,22 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%array%f32 == right%array%f32
 
+				case (magic * i32_type + f32_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%array%i32 == right%array%f32
+
+				case (magic * f32_type + i32_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%array%f32 == right%array%i32
+
+				case (magic * i64_type + f32_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%array%i64 == right%array%f32
+
+				case (magic * f32_type + i64_type)
+					res%array = mold(right%array, bool_type)
+					res%array%bool = left%array%f32 == right%array%i64
+
 				case (magic * bool_type + bool_type)
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%array%bool .eqv. right%array%bool
@@ -2099,8 +2153,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					do i = 1, res%array%len_
 						res%array%bool(i) = left%array%str(i)%s == right%array%str(i)%s
 					end do
-
-				! TODO: other array sub type comparisons: mixed i32/i64
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
