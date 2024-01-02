@@ -1913,7 +1913,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					res%array%bool = left%array%i32 == right%sca%i32
 
 				case default
-					! TODO: refactor with below default?
 					write(*,*) err_eval_binary_types(node%op%text)
 					call internal_error()
 				end select
@@ -1926,7 +1925,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					res%array%bool = left%sca%i32 == right%array%i32
 
 				case default
-					! TODO: refactor with below default?
 					write(*,*) err_eval_binary_types(node%op%text)
 					call internal_error()
 				end select
@@ -1941,14 +1939,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				select case (right%array%type)
 				case (i32_type)
-
-					! TODO: check rank match at parse-time
-
 					res%array = mold(right%array, bool_type)
 					res%array%bool = left%array%i32 == right%array%i32
 
 				case default
-					! TODO: refactor with below default?
 					write(*,*) err_eval_binary_types(node%op%text)
 					call internal_error()
 				end select

@@ -1218,6 +1218,48 @@ end subroutine unit_test_array_i32_1
 
 !===============================================================================
 
+subroutine unit_test_array_ops_1(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'array operations'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval('[0, 0] == 0;') == '[true, true]', &
+			eval('[0, 1] == 0;') == '[true, false]', &
+			eval('[1, 0] == 0;') == '[false, true]', &
+			eval('[1, 1] == 0;') == '[false, false]', &
+			eval('0 == [0, 0];') == '[true, true]', &
+			eval('0 == [0, 1];') == '[true, false]', &
+			eval('0 == [1, 0];') == '[false, true]', &
+			eval('0 == [1, 1];') == '[false, false]', &
+			eval('[3, 3] == [3, 3];') == '[true, true]', &
+			eval('[7, 8] == [7, 8];') == '[true, true]', &
+			eval('[7, 8] == [8, 7];') == '[false, false]', &
+			eval('[3, 2] == [3, 1];') == '[true, false]', &
+			eval('[4, 3] == [1, 3];') == '[false, true]', &
+			eval('[5, 6] == [1, 1];') == '[false, false]', &
+			.false. &
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_array_ops_1
+
+!===============================================================================
+
 subroutine unit_test_slice_1(npass, nfail)
 
 	! Simple array slicing tests
@@ -1934,6 +1976,7 @@ subroutine unit_tests(iostat)
 	call unit_test_i64        (npass, nfail)
 	call unit_test_include    (npass, nfail)
 	call unit_test_slice_1    (npass, nfail)
+	call unit_test_array_ops_1(npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
