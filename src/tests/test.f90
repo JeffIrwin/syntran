@@ -1228,6 +1228,9 @@ end subroutine unit_test_array_i32_1
 
 subroutine unit_test_array_ops_1(npass, nfail)
 
+	! Maybe rename this to unit_test_array_cmp?  It's long enough without +, *,
+	! etc.
+
 	implicit none
 
 	integer, intent(inout) :: npass, nfail
@@ -1323,6 +1326,32 @@ subroutine unit_test_array_ops_1(npass, nfail)
 			eval('all([8, 7, 7] ==  7);') == 'false', &
 			eval('all([7, 8, 7] ==  7);') == 'false', &
 			eval('all([7, 7, 8] ==  7);') == 'false', &
+			eval('[0, 0] > 0;') == '[false, false]', &
+			eval('[0, 1] > 0;') == '[false, true]', &
+			eval('[1, 0] > 0;') == '[true, false]', &
+			eval('[1, 1] > 0;') == '[true, true]', &
+			eval('0 > [0, 0];') == '[false, false]', &
+			eval('0 > [0, 1];') == '[false, false]', &
+			eval('1 > [1, 0];') == '[false, true]', &
+			eval('1 > [0, 0];') == '[true, true]', &
+			eval('[7, 8] > [8, 7];') == '[false, true]', &
+			!! TODO: edit and uncomment remaining tests
+			!eval('[3, 2] > [3, 1];') == '[false, true]', &
+			!eval('[4, 3] > [1, 3];') == '[true, false]', &
+			!eval('[5, 6] > [1, 1];') == '[true, true]', &
+			!eval('i64(2) > [i64(0), i64(2), i64(3)];') == '[true, false, true]', &
+			!eval('[i64(0), i64(2), i64(3)] > i64(3);') == '[true, true, false]', &
+			!eval('[i64(0), i64(2), i64(3)] > [i64(4), i64(2), i64(3)];') == '[true, false, false]', &
+			!eval('2.0 > [0.0, 2.0, 3.0];') == '[true, false, true]', &
+			!eval('[0.0, 2.0, 3.0] > 3.0;') == '[true, true, false]', &
+			!eval('[0.0, 2.0, 3.0] > [4.0, 2.0, 3.0];') == '[true, false, false]', &
+			!eval('2 > [i64(0), i64(2), i64(3)];') == '[true, false, true]', &
+			!eval('[0, 2, 3] > i64(3);') == '[true, true, false]', &
+			!eval('[0, 2, 3] > [i64(4), i64(2), i64(3)];') == '[true, false, false]', &
+			!eval('i64(2) > [0, 2, 3];') == '[true, false, true]', &
+			!eval('[i64(0), i64(2), i64(3)] > 3;') == '[true, true, false]', &
+			!eval('[i64(0), i64(2), i64(3)] > [4, 2, 3];') == '[true, false, false]', &
+			!! TODO: tests for f32 > i32, etc.
 			.false. &
 		]
 

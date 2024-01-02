@@ -1255,11 +1255,32 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 		case (minus_token, sstar_token, star_token, slash_token, &
 				less_token   , less_equals_token, &
-				greater_token, greater_equals_token, &
+				greater_equals_token, &
 				percent_token, minus_equals_token, star_equals_token, &
 				slash_equals_token, sstar_equals_token, percent_equals_token)
 
 			allowed = is_num_type(left) .and. is_num_type(right)
+
+		case (greater_token)
+			! TODO: consolidate with above case after implementing remaining
+			! array ops
+
+			if (left == array_type .and. right == array_type) then
+				allowed = &
+					(is_num_type(left_arr) .and. is_num_type(right_arr))
+
+			else if (left  == array_type) then
+				allowed = &
+					(is_num_type(left_arr) .and. is_num_type(right))
+
+			else if (right == array_type) then
+				allowed = &
+					(is_num_type(left) .and. is_num_type(right_arr))
+
+			else
+				allowed = is_num_type(left) .and. is_num_type(right)
+
+			end if
 
 		case (and_keyword, or_keyword)
 			allowed = left == bool_type .and. right == bool_type
