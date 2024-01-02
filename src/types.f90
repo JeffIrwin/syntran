@@ -1492,7 +1492,8 @@ function new_binary_expr(left, op, right) result(expr)
 
 		expr%val%type = array_type
 
-	! TODO: other array sub types
+	! TODO: other array sub types.  Maybe make a mold_val() helper fn similar to
+	! mold() (for arrays)
 
 	case default
 		expr%val%type = type_

@@ -27,6 +27,13 @@ module syntran__core_m
 		syntran_patch =  36
 
 	! TODO:
+	!  - array operations:
+	!    * comparisons
+	!      > == done for i32 and str.  TODO bool, f32, i64
+	!      > !=, >, <, >=, <=
+	!    * any()
+	!    * all()
+	!    * vector addition, dot product, scalar-vector mult, ...
 	!  - document recent features:
 	!    * array slicing
 	!    * casting?
@@ -92,7 +99,6 @@ module syntran__core_m
 	!        subscripting operation.  e.g. if every subscript is a slice, then
 	!        the rank is unchanged, 1 scalar subscript decreases rank by 1, etc.
 	!    * refactor the way implicit arrays are handled as for loop iterators
-	!    * operations: vector comparisons, any(), all(), vector addition, dot product, scalar-vector mult, ...
 	!  - compound assignment: logical &=, |=, etc.
 	!    * +=, -=, *=, /=, %=, **= done
 	!  - ++, --
