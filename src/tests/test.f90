@@ -1226,7 +1226,7 @@ end subroutine unit_test_array_i32_1
 
 !===============================================================================
 
-subroutine unit_test_array_ops_1(npass, nfail)
+subroutine unit_test_comp_arr(npass, nfail)
 
 	! Maybe rename this to unit_test_array_cmp?  It's long enough without +, *,
 	! etc.
@@ -1478,7 +1478,7 @@ subroutine unit_test_array_ops_1(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_array_ops_1
+end subroutine unit_test_comp_arr
 
 !===============================================================================
 
@@ -2198,7 +2198,7 @@ subroutine unit_tests(iostat)
 	call unit_test_i64        (npass, nfail)
 	call unit_test_include    (npass, nfail)
 	call unit_test_slice_1    (npass, nfail)
-	call unit_test_array_ops_1(npass, nfail)
+	call unit_test_comp_arr   (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

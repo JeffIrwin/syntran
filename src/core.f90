@@ -28,17 +28,15 @@ module syntran__core_m
 
 	! TODO:
 	!  - array operations:
-	!    * comparisons
-	!      > <, >=
-	!      > ==, !=, >, <= done
 	!    * count()
 	!    * vector addition, dot product, scalar-vector mult, ...
-	!    * any() and all() with optional `dim` argument
+	!    * optional `dim` argument for any() and all(). 1 arg versions done
+	!    * comparisons done
 	!  - document recent features:
 	!    * array slicing
 	!    * casting?
 	!    * any(), all() intrinsics
-	!    * array comparison (== and != done)
+	!    * array comparison
 	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
 	!    versions don't allow a user-defined type that references another type
 	!    which is defined below it
