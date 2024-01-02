@@ -24,7 +24,7 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  36
+		syntran_patch =  37
 
 	! TODO:
 	!  - array operations:
