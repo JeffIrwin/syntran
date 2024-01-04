@@ -11,12 +11,13 @@ module syntran__app_m
 
 	type args_t
 
-		character(len = :), allocatable :: syntran_file
+		character(len = :), allocatable :: syntran_file, command
 
 		integer :: maxerr
 
 		logical :: &
 			!any_arg          = .false., &
+			command_arg      = .false., &
 			syntran_file_arg = .false., &
 			version          = .false., &
 			help             = .false.
@@ -126,6 +127,11 @@ function parse_args() result(args)
 		!	!		//""" not supported or invalid ISO 639-1 language code"
 		!	!	lerror = .true.
 		!	!end if
+
+		case ("-c", "--command")
+			args%command_arg = .true.
+			call get_next_arg(i, args%command)
+			!print *, 'command = ', args%command
 
 		case ("--version")
 			!args%any_arg = .true.
