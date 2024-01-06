@@ -1,0 +1,302 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = 0;
+
+	let ny = countln_(filename);
+	//println("ny = ", ny);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx = len(str_);
+	//println("nx = ", nx);
+
+	let grid = [false; nx, ny];
+
+	let non_sym_chars = digit_chars + ".";
+	//println("non_sym_chars = ", non_sym_chars);
+
+	// Mark symbol locations as `true` in grid
+	for iy in [0: ny]
+	{
+		//println("str_ = ", str_);
+
+		for ix in [0: nx]
+			grid[ix,iy] = scan(str_[ix], non_sym_chars) < 0;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("grid = ");
+	//println(grid);
+
+	// Read numbers
+	f = open(filename);
+	str_ = readln(f);
+	for iy in [0: ny]
+	{
+		//println("str_ = ", str_);
+
+		let ix = 0;
+		while ix < nx
+		{
+			let ix0 = ix;
+
+			let num = 0;
+			let len_ = 0;
+			if scan(str_[ix], digit_chars) >= 0
+			{
+				len_ = verify(str_[ix: nx], digit_chars);
+				if (len_ < 0) len_ = nx - ix;
+
+				num = parse_i32(str_[ix: ix+len_]);
+				//println("num = ", num);
+				ix += len_;
+			}
+
+			// Is the number adjacent to any symbol?
+			let any_sym = false;
+			//println("iy = ", iy);
+			for jy in [max(iy  - 1, 0): min(iy + 2        , ny)]
+			for jx in [max(ix0 - 1, 0): min(ix0 + len_ + 1, nx)]
+			{
+				//println("grid[jx,jy] = ", grid[jx,jy]);
+				any_sym = any_sym or grid[jx,jy];
+				//any_sym |= grid[jx,jy];
+			}
+
+			if any_sym
+			{
+				//println("adding num ", num);
+				sum_ += num;
+			}
+			//println();
+
+			ix += 1;
+		}
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let sum_ = 0;
+
+	let ny = countln_(filename);
+	//println("ny = ", ny);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx = len(str_);
+	//println("nx = ", nx);
+
+	// Save strings in a vector
+	let strs = [""; ny];
+	for iy in [0: ny]
+	{
+		//println("str_ = ", str_);
+		strs[iy] = str_;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("strs = ");
+	//println(strs);
+
+	// Search for asterisks `*`
+	for iy in [0: ny]
+	for ix in [0: nx]
+	{
+		str_ = strs[iy];
+		if str_[ix] == "*"
+		{
+			//println("asterisk ", ix, " ", iy);
+
+			// Search for numbers adjacent to the asterisk
+
+			// Number of numbers found so far
+			let nnums = 0;
+
+			let nums = [0; 6];
+
+			if (iy > 0)
+			{
+				// Search row above
+				let strl = strs[iy-1];
+				if is_digit(strl[ix])
+				{
+					// There is 1 number above
+					let ibeg = verifyback(strl[0: ix+1], digit_chars);
+					let iend = verify    (strl[ix: nx ], digit_chars) + ix;
+					if (iend < ix) iend = nx;
+
+					nums[nnums] = parse_i32(strl[ibeg+1: iend]);
+					//println("num = ", nums[nnums]);
+					nnums += 1;
+				}
+				else
+				{
+					// There could be 2 numbers above
+
+					if is_digit(strl[ix-1])
+					{
+						// Number to the top left
+						let ibeg = verifyback(strl[0: ix], digit_chars);
+						let iend = verify    (strl[ix-1: nx ], digit_chars) + ix-1;
+						if (iend < ix-1) iend = nx;
+
+						nums[nnums] = parse_i32(strl[ibeg+1: iend]);
+						//println("num = ", nums[nnums]);
+						nnums += 1;
+					}
+
+					if is_digit(strl[ix+1])
+					{
+						// Number to the top right
+						let ibeg = verifyback(strl[0: ix+2], digit_chars);
+						let iend = verify    (strl[ix+1: nx ], digit_chars) + ix+1;
+						if (iend < ix+1) iend = nx;
+
+						nums[nnums] = parse_i32(strl[ibeg+1: iend]);
+						//println("num = ", nums[nnums]);
+						nnums += 1;
+					}
+				}
+			}
+
+			// Search current row
+			let strl = strs[iy];
+
+			// There could be 2 numbers in the current row
+
+			if is_digit(strl[ix-1])
+			{
+				// Number to the left
+				let ibeg = verifyback(strl[0: ix], digit_chars);
+				let iend = verify    (strl[ix-1: nx ], digit_chars) + ix-1;
+				if (iend < ix-1) iend = nx;
+
+				nums[nnums] = parse_i32(strl[ibeg+1: iend]);
+				//println("num = ", nums[nnums]);
+				nnums += 1;
+			}
+
+			if is_digit(strl[ix+1])
+			{
+				// Number to the right
+				let ibeg = verifyback(strl[0: ix+2], digit_chars);
+				let iend = verify    (strl[ix+1: nx ], digit_chars) + ix+1;
+				if (iend < ix+1) iend = nx;
+
+				nums[nnums] = parse_i32(strl[ibeg+1: iend]);
+				//println("num = ", nums[nnums]);
+				nnums += 1;
+			}
+
+			if (iy < ny - 1)
+			{
+				// Search row below
+				let strl = strs[iy+1];
+				if is_digit(strl[ix])
+				{
+					// There is 1 number below
+					let ibeg = verifyback(strl[0: ix+1], digit_chars);
+					let iend = verify    (strl[ix: nx ], digit_chars) + ix;
+					if (iend < ix) iend = nx;
+
+					nums[nnums] = parse_i32(strl[ibeg+1: iend]);
+					//println("num = ", nums[nnums]);
+					nnums += 1;
+				}
+				else
+				{
+					// There could be 2 numbers below
+
+					if is_digit(strl[ix-1])
+					{
+						// Number to the bottom left
+						let ibeg = verifyback(strl[0: ix], digit_chars);
+						let iend = verify    (strl[ix-1: nx ], digit_chars) + ix-1;
+						if (iend < ix-1) iend = nx;
+
+						nums[nnums] = parse_i32(strl[ibeg+1: iend]);
+						//println("num = ", nums[nnums]);
+						nnums += 1;
+					}
+
+					if is_digit(strl[ix+1])
+					{
+						// Number to the bottom right
+						let ibeg = verifyback(strl[0: ix+2], digit_chars);
+						let iend = verify    (strl[ix+1: nx ], digit_chars) + ix+1;
+						if (iend < ix+1) iend = nx;
+
+						nums[nnums] = parse_i32(strl[ibeg+1: iend]);
+						//println("num = ", nums[nnums]);
+						nnums += 1;
+					}
+				}
+			}
+
+			if nnums == 2
+			{
+				//println("adding ", nums[0] , " ", nums[1], " = ", nums[0] * nums[1]);
+				sum_ += nums[0] * nums[1];
+			}
+		}
+	}
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = 0;
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

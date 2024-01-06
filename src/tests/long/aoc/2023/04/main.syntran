@@ -1,0 +1,135 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = 0;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, ":|");
+
+		let wn_nums_str = split_(strs[1], " ");
+		let my_nums_str = split_(strs[2], " ");
+
+		//println("wn_nums_str = ", wn_nums_str);
+		//println("my_nums_str = ", my_nums_str);
+
+		let nwin = 0;
+		for i in [0: size(my_nums_str,0)]
+		{
+			let my_num = my_nums_str[i];
+			//println("my_num = ", my_num);
+
+			if (any_str_eq(my_num, wn_nums_str))
+				nwin += 1;
+		}
+		//println("nwin = ", nwin);
+		//println();
+
+		if (nwin >= 0) sum_ += 2 ** (nwin - 1);
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	//let strs = [""];
+	//strs = split_(" 1 21 53 59 44 ", " ");
+	//strs = split_("1 21 53 59 44", " ");
+	//strs = split_(" 1 21 53 59 44", " ");
+	//strs = split_("1 21 53 59 44 ", " ");
+	//strs = split_("   1   21     53    59    44     ", " ");
+	//strs = split_(" 69 82 63 72 16 21 14  1", " ");
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let n = countln_(filename);
+	//println("n = ", n);
+
+	let ncopies = [1; n];
+	//println("ncopies = ", ncopies);
+
+	let f = open(filename);
+	for icard in [0: n]
+	{
+		let strs = split_(readln(f), ":|");
+
+		let wn_nums_str = split_(strs[1], " ");
+		let my_nums_str = split_(strs[2], " ");
+
+		//println("wn_nums_str = ", wn_nums_str);
+		//println("my_nums_str = ", my_nums_str);
+
+		let nwin = 0;
+		for i in [0: size(my_nums_str,0)]
+		{
+			let my_num = my_nums_str[i];
+			//println("my_num = ", my_num);
+
+			if (any_str_eq(my_num, wn_nums_str))
+				nwin += 1;
+		}
+		//println("nwin = ", nwin);
+		//println();
+
+		for j in [icard + 1: icard + nwin + 1]
+			ncopies[j] += ncopies[icard];
+	}
+	close(f);
+
+	//println("ncopies = ", ncopies);
+
+	let sum_ = 0;
+	for i in [0: n]
+		sum_ += ncopies[i];
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = 0;
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+
