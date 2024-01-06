@@ -32,37 +32,30 @@ subroutine unit_test_aoc_2023(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: pushd/popd framework?
-	call getcwd(buffer)
-	cwd = trim(buffer)
-	print *, "cwd = ", cwd
+	!call chdir(path//'01')
+	!call system("pwd")
+	!!call system("ls")
 
-	! TODO: add on option to interpret_file() to chdir within.  That's the
-	! only way I can interpret more than one AOC solution in a single `tests`
-	! array
-	call chdir(path//'01')
-	call system("pwd")
-	!call system("ls")
-
-	! TODO: verify return values.  Just sum parts 1 and 2?  Optimize if
-	! necessary, or just exclude anything that takes more than ~30 s to run
+	! TODO: Add other aoc solutions.  Optimize if necessary, or just exclude
+	! anything that takes more than ~30 s to run
 
 	tests = &
 		[   &
 			!interpret_file(path//'01/main.syntran', quiet) == 'true', &
 			!interpret_file(path//'01/main.syntran') == 'true', &
-			interpret_file("main.syntran") == '207443', &
+			!interpret_file("main.syntran", chdir = .true.) == '107443', &
+			interpret_file(path//"01/main.syntran", chdir_ = .true.) == '107443', &
+			interpret_file(path//"02/main.syntran", chdir_ = .true.) == '76485', &
 			!interpret_file(path//'test-02.syntran', quiet) == '2' , &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
-	call chdir(cwd)
+	!call chdir(cwd)
 
-	!! TODO
 	!call chdir(path//'02')
 	!call system("pwd")
 	!tests = &
 	!	[   &
-	!		interpret_file("main.syntran") == 'true', &
+	!		interpret_file("main.syntran") == '76485', &
 	!		.false.  & ! so I don't have to bother w/ trailing commas
 	!	]
 	!call chdir(cwd)

@@ -27,6 +27,7 @@ module syntran__core_m
 		syntran_patch =  37
 
 	! TODO:
+	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
 	!    * count()
 	!    * vector addition, dot product, scalar-vector mult, ...

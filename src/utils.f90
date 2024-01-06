@@ -556,7 +556,7 @@ end function read_file
 
 !===============================================================================
 
-!function get_basename(filename)
+!function get_basename(filename) result(basename)
 !	! c.f. github.com/jeffirwin/cali/src/cali.f90
 !	!
 !	! not used (yet) in syntran
@@ -580,6 +580,28 @@ end function read_file
 !	!print *, 'beg_, end_ = ', beg_, end_
 !
 !end function get_basename
+
+!===============================================================================
+
+function get_base_with_ext(filename) result(basename)
+	! Get basename plus extension
+	character(len = *), intent(in)  :: filename
+	character(len = :), allocatable :: basename
+	!********
+	integer :: beg_, end_, i
+
+	beg_ = 1
+	end_ = len(filename)
+
+	!print *, 'len = ', end_
+
+	i = scan(filename, '/\', .true.)
+	if (i /= 0) beg_ = i + 1
+
+	basename = filename(beg_: end_)
+	!print *, 'beg_, end_ = ', beg_, end_
+
+end function get_base_with_ext
 
 !===============================================================================
 

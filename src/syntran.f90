@@ -247,7 +247,10 @@ end function syntran_eval_f32
 
 !===============================================================================
 
-function syntran_eval(str, quiet, src_file) result(res)
+function syntran_eval(str, quiet, src_file, chdir_) result(res)
+
+	! Note that this chdir_ optional arg is a str, while the chdir_ optional arg
+	! for syntran_interpret_file() is boolean
 
 	use syntran__core_m
 
@@ -255,13 +258,15 @@ function syntran_eval(str, quiet, src_file) result(res)
 	character(len = :), allocatable :: res
 
 	logical, optional, intent(in) :: quiet
-	character(len = *), optional, intent(in)  :: src_file
+	character(len = *), optional, intent(in) :: src_file
+	character(len = *), optional, intent(in) :: chdir_
 
 	!********
 
-	character(len = :), allocatable :: src_filel
+	character(len = 1024) :: buffer
+	character(len = :), allocatable :: src_filel, dir, cwd
 
-	logical :: quietl
+	logical :: quietl, chdirl
 
 	type(fns_t) :: fns
 	type(syntax_node_t) :: tree
@@ -273,6 +278,12 @@ function syntran_eval(str, quiet, src_file) result(res)
 
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
+
+	chdirl = .false.
+	if (present(chdir_)) then
+		chdirl = .true.
+		dir = chdir_
+	end if
 
 	! TODO: make a helper fn here that all the eval_* fns use
 
@@ -290,14 +301,34 @@ function syntran_eval(str, quiet, src_file) result(res)
 		return
 	end if
 
+	if (chdirl) then
+
+		! chdir *after* syntax_parse() so that #include paths are correct, but
+		! *before* syntax_eval() so that runtime open() paths are correct
+		!
+		! I've only implemented this chdir option so that I can copy/paste my
+		! AOC solutions to unit tests in subdirs with minimal changes
+
+		call getcwd(buffer)
+		cwd = trim(buffer)
+
+		print *, "cwd = ", cwd
+		print *, 'chanding to dir ', dir
+
+		call chdir(dir)
+
+	end if
+
 	val = syntax_eval(tree, vars, fns, quietl)
 	res = val%to_str()
+
+	if (chdirl) call chdir(cwd)
 
 end function syntran_eval
 
 !===============================================================================
 
-function syntran_interpret_file(file, quiet) result(res)
+function syntran_interpret_file(file, quiet, chdir_) result(res)
 
 	! TODO:
 	!   - enable input echo for file input (not for stdin)
@@ -310,26 +341,70 @@ function syntran_interpret_file(file, quiet) result(res)
 	character(len = :), allocatable :: res
 
 	logical, optional, intent(in) :: quiet
+	logical, optional, intent(in) :: chdir_
 
 	!********
 
-	character(len = :), allocatable :: source_text
+	character(len = 1024) :: buffer
+	character(len = :), allocatable :: cwd, source_text
+
 	integer :: iostat
-	logical :: quietl
+
+	logical :: quietl, chdirl
 
 	quietl = .false.
-	if (present(quiet)) quietl = quiet
+	if (present(quiet )) quietl = quiet
+
+	chdirl = .false.
+	if (present(chdir_)) chdirl = chdir_
 
 	if (.not. quietl) write(*,*) 'Interpreting file "'//file//'"'
 	!print *, 'fullpath = ', fullpath(file)
 
-	source_text = read_file(file, iostat)
+	!if (chdirl) then
+
+	!	call getcwd(buffer)
+	!	cwd = trim(buffer)
+	!	print *, "cwd = ", cwd
+
+	!	print *, 'file = ', file
+	!	print *, 'dir  = ', get_dir(file)
+	!	print *, 'base = ', get_base_with_ext(file)
+
+	!	call chdir(get_dir(file))
+	!	source_text = read_file(get_base_with_ext(file), iostat)
+
+	!else
+		source_text = read_file(file, iostat)
+	!end if
+	print *, 'iostat = ', iostat
+
 	if (iostat /= exit_success) then
 		if (.not. quietl) write(*,*) err_404(file)
 		return
 	end if
 
-	res = trim(adjustl(syntran_eval(source_text, quiet, file)))
+	!if (chdirl) then
+
+	!	call getcwd(buffer)
+	!	cwd = trim(buffer)
+	!	print *, "cwd = ", cwd
+
+	!	print *, 'file = ', file
+	!	print *, 'dir  = ', get_dir(file)
+	!	print *, 'base = ', get_base_with_ext(file)
+
+	!	!call chdir(get_dir(file))
+
+	!end if
+
+	if (chdirl) then
+		res = trim(adjustl(syntran_eval(source_text, quiet, file, chdir_ = get_dir(file))))
+	else
+		res = trim(adjustl(syntran_eval(source_text, quiet, file)))
+	end if
+
+	!if (chdirl) call chdir(cwd)
 
 end function syntran_interpret_file
 
