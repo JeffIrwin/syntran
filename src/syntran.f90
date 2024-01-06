@@ -177,26 +177,40 @@ end function syntran_interpret
 
 !===============================================================================
 
-subroutine syntran_banner()
+subroutine syntran_banner(command_arg, interactive)
 
 	use syntran__core_m
 
-	!! Already done in main
-	!character(len = :), allocatable :: version
-	!version = &
-	!	str(syntran_major)//'.'// &
-	!	str(syntran_minor)//'.'// &
-	!	str(syntran_patch)
-	!write(*,*)
-	!write(*,*) lang_name//' '//version
-	!write(*,*) 'https://github.com/JeffIrwin/syntran'
+	character(len = :), allocatable :: url, version
 
-	write(*,*) 'Usage:'
-	write(*,*) tab//'#tree to toggle tree display'
-	write(*,*) tab//'`exit(0);` or Ctrl+C to exit'
-	write(*,*)
+	logical, intent(in) :: command_arg, interactive
 
-	! TODO: add #help directive and arg for more in depth info
+	url = 'https://github.com/JeffIrwin/syntran'
+
+	version = &
+		str(syntran_major)//'.'// &
+		str(syntran_minor)//'.'// &
+		str(syntran_patch)
+
+	! TODO: add a "--no-banner" cmd arg to turn off this (and the banner() fn
+	! call)?
+
+	if (.not. command_arg) then
+		write(*,*)
+		write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
+		write(*,*) fg_bright_magenta//url//color_reset
+		write(*,*)
+	end if
+
+	if (interactive) then
+		write(*,*) 'Usage:'
+		write(*,*) tab//'#tree to toggle tree display'
+		write(*,*) tab//'`exit(0);` or Ctrl+C to exit'
+		write(*,*)
+	end if
+
+	! TODO: add an interactive #help directive for more in depth info.  -h help
+	! cmd arg already exists
 
 end subroutine syntran_banner
 
