@@ -112,7 +112,7 @@ fn part1(): i32
 
 //==============================================================================
 
-fn part2(): i32
+fn part2(): i64
 {
 	let prod_ = i64(1);
 
@@ -144,20 +144,76 @@ fn part2(): i32
 
 	//println("calculating distances ...");
 
-	// TODO: use a bisection search instead of brute force
-	let nwin = i64(0);
-	for j in [1: race_time]
-	{
-		// Acceleration is 1 mm/ms/ms
-		let speed = j * 1;
+	//// Brute force :(
+	//let nwin = i64(0);
+	//let first = false;
+	//let jlast = 0;
+	//for j in [1: race_time]
+	//{
+	//	// Acceleration is 1 mm/ms/ms
+	//	let speed = j * 1;
 
+	//	let duration = race_time - j;
+	//	let dist = i64(speed) * duration;
+	//	//println("dist = ", dist);
+
+	//	if dist > rec_dist
+	//	{
+	//		if (not first) println("j first = ", j);
+	//		first = true;
+	//		jlast = j;
+	//		nwin += 1;
+	//	}
+	//
+	//}
+	////println();
+	//println("j last  = ", jlast);
+
+	// Bisection search for minimum button press duration.  From calculus (or
+	// just thinking about a parabolic trajectory), optimal amount of distance
+	// can be covered by holding button for half of race_time
+	let jlo = 0;
+	let jhi = race_time / 2;
+	while jlo < jhi - 1
+	{
+		//println("jlo, jhi = ", [jlo, jhi]);
+		let j = (jlo + jhi) / 2;
+
+		let speed = j * 1;
 		let duration = race_time - j;
 		let dist = i64(speed) * duration;
 		//println("dist = ", dist);
 
-		if (dist > rec_dist) nwin += i64(1);
+		if dist > rec_dist
+			jhi = j;
+		else
+			jlo = j;
 	}
-	//println();
+	let jmin = jhi;
+	//println("jmin = ", jmin);
+
+	// Bisection search for maximum button press duration
+	jlo = race_time / 2;
+	jhi = race_time;
+	while jlo < jhi - 1
+	{
+		//println("jlo, jhi = ", [jlo, jhi]);
+		let j = (jlo + jhi) / 2;
+
+		let speed = j * 1;
+		let duration = race_time - j;
+		let dist = i64(speed) * duration;
+		//println("dist = ", dist);
+
+		if dist > rec_dist
+			jlo = j;
+		else
+			jhi = j;
+	}
+	let jmax = jlo;
+	//println("jmax = ", jmax);
+
+	let nwin = jmax - jmin + 1;
 
 	//println("nwin = ", nwin);
 
@@ -176,10 +232,10 @@ fn main(): i32
 	println();
 	println("Starting AOC syntran main");
 
-	let sum_ = 0;
+	let sum_ = i64(0);
 
 	sum_ += part1();
-	//sum_ += part2(); // works but needs perf optimization for unit testing
+	sum_ += part2(); // works but needs perf optimization for unit testing
 
 	println("Ending AOC syntran main");
 	println();
