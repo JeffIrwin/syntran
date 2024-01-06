@@ -77,6 +77,6 @@ main = "test.f90"
 [[test]]
 #[[example]]  # example would exclude this when running `fpm test`
 name = "long"
-source-dir = "src/tests/long/"
+source-dir = "src/tests/"
 main = "long.f90"
 

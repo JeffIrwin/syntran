@@ -1,16 +1,7 @@
 
 module long_m
 
-	! Use short names for convenience
-	use syntran, &
-		interpret      => syntran_interpret, &
-		interpret_file => syntran_interpret_file, &
-		eval      => syntran_eval     , &
-		eval_i32  => syntran_eval_i32, &
-		eval_f32  => syntran_eval_f32
-
-	use syntran__utils_m, only: fg_bright_red, fg_bright_green, line_feed, &
-		findlocl1, console_color, console_color_reset
+	use syntran__test_core_m
 
 	implicit none
 
@@ -60,27 +51,27 @@ subroutine unit_test_aoc_2023(npass, nfail)
 		[   &
 			!interpret_file(path//'01/main.syntran', quiet) == 'true', &
 			!interpret_file(path//'01/main.syntran') == 'true', &
-			interpret_file("main.syntran") == 'true', &
+			interpret_file("main.syntran") == '207443', &
 			!interpret_file(path//'test-02.syntran', quiet) == '2' , &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 	call chdir(cwd)
 
-	! TODO
-	call chdir(path//'02')
-	call system("pwd")
-	tests = &
-		[   &
-			interpret_file("main.syntran") == 'true', &
-			.false.  & ! so I don't have to bother w/ trailing commas
-		]
-	call chdir(cwd)
+	!! TODO
+	!call chdir(path//'02')
+	!call system("pwd")
+	!tests = &
+	!	[   &
+	!		interpret_file("main.syntran") == 'true', &
+	!		.false.  & ! so I don't have to bother w/ trailing commas
+	!	]
+	!call chdir(cwd)
 
 	! Trim dummy false element
 	tests = tests(1: size(tests) - 1)
+	print *, 'tests = ', tests
 
-	!! TODO
-	!call unit_test_coda(tests, label, npass, nfail)
+	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_aoc_2023
 
@@ -105,8 +96,7 @@ subroutine unit_tests_long(iostat)
 
 	call unit_test_aoc_2023(npass, nfail)
 
-	!! TODO
-	!call log_test_summary(npass, nfail)
+	call log_test_summary(npass, nfail)
 
 	iostat = nfail
 
