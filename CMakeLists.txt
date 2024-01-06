@@ -131,6 +131,7 @@ set_target_properties("${EXE_BIN}" PROPERTIES OUTPUT_NAME "${EXE}")
 # Unit tests exe
 set(TEST_EXE "test")
 set(TEST_SRC
+	${SRC_DIR}/tests/core.f90
 	${SRC_DIR}/tests/test.f90
 	)
 
