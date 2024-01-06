@@ -1901,7 +1901,7 @@ subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 
 			! TODO: if filename is already absolute, do not prepend with path
 
-			print *, 'get_dir(src_file) = ', get_dir(src_file)
+			!print *, 'get_dir(src_file) = ', get_dir(src_file)
 
 			i = i + 1
 			filename = get_dir(src_file)//tokens_in(i)%val%sca%str%s  ! relative to src file

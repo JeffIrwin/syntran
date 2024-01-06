@@ -289,10 +289,6 @@ function syntran_eval(str, quiet, src_file, chdir_) result(res)
 
 	fns = declare_intrinsic_fns()
 
-	! TODO: perform pre-processing here, e.g. to process #include directives.
-	! Do this by taking str as input, expanding the includes, and returning
-	! another string
-
 	tree = syntax_parse(str, vars, fns, src_filel)
 	if (.not. quietl) call tree%log_diagnostics()
 
@@ -309,12 +305,9 @@ function syntran_eval(str, quiet, src_file, chdir_) result(res)
 		! I've only implemented this chdir option so that I can copy/paste my
 		! AOC solutions to unit tests in subdirs with minimal changes
 
+		! pushd
 		call getcwd(buffer)
 		cwd = trim(buffer)
-
-		print *, "cwd = ", cwd
-		print *, 'chanding to dir ', dir
-
 		call chdir(dir)
 
 	end if
@@ -322,6 +315,7 @@ function syntran_eval(str, quiet, src_file, chdir_) result(res)
 	val = syntax_eval(tree, vars, fns, quietl)
 	res = val%to_str()
 
+	! popd
 	if (chdirl) call chdir(cwd)
 
 end function syntran_eval
@@ -359,52 +353,19 @@ function syntran_interpret_file(file, quiet, chdir_) result(res)
 	if (present(chdir_)) chdirl = chdir_
 
 	if (.not. quietl) write(*,*) 'Interpreting file "'//file//'"'
-	!print *, 'fullpath = ', fullpath(file)
 
-	!if (chdirl) then
-
-	!	call getcwd(buffer)
-	!	cwd = trim(buffer)
-	!	print *, "cwd = ", cwd
-
-	!	print *, 'file = ', file
-	!	print *, 'dir  = ', get_dir(file)
-	!	print *, 'base = ', get_base_with_ext(file)
-
-	!	call chdir(get_dir(file))
-	!	source_text = read_file(get_base_with_ext(file), iostat)
-
-	!else
-		source_text = read_file(file, iostat)
-	!end if
-	print *, 'iostat = ', iostat
+	source_text = read_file(file, iostat)
 
 	if (iostat /= exit_success) then
 		if (.not. quietl) write(*,*) err_404(file)
 		return
 	end if
 
-	!if (chdirl) then
-
-	!	call getcwd(buffer)
-	!	cwd = trim(buffer)
-	!	print *, "cwd = ", cwd
-
-	!	print *, 'file = ', file
-	!	print *, 'dir  = ', get_dir(file)
-	!	print *, 'base = ', get_base_with_ext(file)
-
-	!	!call chdir(get_dir(file))
-
-	!end if
-
 	if (chdirl) then
 		res = trim(adjustl(syntran_eval(source_text, quiet, file, chdir_ = get_dir(file))))
 	else
 		res = trim(adjustl(syntran_eval(source_text, quiet, file)))
 	end if
-
-	!if (chdirl) call chdir(cwd)
 
 end function syntran_interpret_file
 
