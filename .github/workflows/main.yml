@@ -32,12 +32,18 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - if: matrix.os == 'ubuntu-latest'
+      name: Set ubuntu PATH
+      run: |
+        echo "$HOME/bin" >> $GITHUB_PATH
+
+    - if: matrix.os == 'ubuntu-latest'
       name: Test fpm default
       env:
         #FPM_FC: gfortran-${{ matrix.gfortran }}
         FPM_FC: gfortran-12
       run: |
         fpm install --prefix='$HOME'
+        which syntran
         chmod +x ./samples/shebang.syntran
         ./samples/shebang.syntran
         fpm test test
