@@ -106,10 +106,33 @@ jobs:
         #os: [ubuntu-latest, windows-latest]
         os: [ubuntu-latest]
         #gfortran: [10, 11, 12, 13]  # TODO: gfort 13 has an issue
-        gfortran: [8, 9, 10, 11, 12]  # gfort <= 8 not available by default on github ci workers
+        gfortran: [9, 10, 11, 12]  # gfort <= 8 not available by default on github ci workers
+
+    steps:
+
+    - uses: actions/checkout@v1
+    - uses: fortran-lang/setup-fpm@v5
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - if: matrix.os == 'ubuntu-latest'
+      name: Test ubuntu gfortran-${{ matrix.gfortran }}
+      env:
+        FPM_FC: gfortran-${{ matrix.gfortran }}
+      run: |
+        fpm test test --verbose --flag -Wno-tabs
+        fpm test long
+
+  test-compilers:
+
+    name: Test with other compilers
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
         toolchain:
-          - {compiler: gcc, version: 8}
-          #- {compiler: intel, version: '2023.2'}
+          #- {compiler: gcc, version: 8}
+          - {compiler: intel, version: '2023.2'}
           #- {compiler: intel-classic, version: '2021.10'}
           #- {compiler: nvidia-hpc, version: '23.11'}
 
@@ -127,9 +150,9 @@ jobs:
         version: ${{ matrix.toolchain.version }}
 
     - if: matrix.os == 'ubuntu-latest'
-      name: Test ubuntu gfortran-${{ matrix.gfortran }}
-      env:
-        FPM_FC: gfortran-${{ matrix.gfortran }}
+      name: Test ${{ matrix.toolchain.compiler }} ${{ matrix.toolchain.version }}
+        #env:
+        #  FPM_FC: gfortran-${{ matrix.gfortran }}
       run: |
         fpm test test --verbose --flag -Wno-tabs
         fpm test long
