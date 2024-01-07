@@ -51,7 +51,7 @@ jobs:
         # Maybe that will change after I copy the other half of AOC tests
         fpm test test
         fpm test long
-		#fpm test test --profile release
+        #fpm test test --profile release
         #fpm test long --profile release
 
     - if: matrix.os == 'ubuntu-latest'
@@ -127,7 +127,7 @@ jobs:
       run: |
         fpm test test --verbose --flag -Wno-tabs
         fpm test long
-		#fpm test test --profile release --verbose --flag -Wno-tabs
+        #fpm test test --profile release --verbose --flag -Wno-tabs
         #fpm test long --profile release
 
 ## TODO: try debugging ifx (and ifort?).  They both segfault almost immediately
