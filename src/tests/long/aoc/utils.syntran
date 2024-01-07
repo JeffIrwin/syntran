@@ -531,10 +531,8 @@ fn ends_with_(str_: str, char_: str): bool
 
 fn all_ends_with_(strs: [str; :], j: [i32; :], char_: str): bool
 {
-	// TODO: memory leaks
 	let i = 0;
 	let all_end = true;
-	//while all_end and i < size(strs, 0)
 	while all_end and i < size(j, 0)
 	{
 		all_end = ends_with_(strs[j[i]], char_);

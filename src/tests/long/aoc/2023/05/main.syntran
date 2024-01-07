@@ -136,11 +136,7 @@ fn part1(): i32
 
 		//println("calling map_fn() ...");
 
-		// TODO: `seeds` crashes when on LHS and RHS
-		//seeds = map_fn(seeds, dst_range, src_range, len_range);
-
-		let tmp = seeds;
-		seeds = map_fn(tmp, dst_range, src_range, len_range);
+		seeds = map_fn(seeds, dst_range, src_range, len_range);
 
 		//println("seeds = ", seeds);
 
