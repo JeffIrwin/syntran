@@ -201,7 +201,7 @@ fn part2(): i32
 	let step = 0;
 	while step < nstep_min + buffer and not done_cycling
 	{
-		println("step = ", step);
+		//println("step = ", step);
 		//let idir = NORTH;
 		let idir = step % 4;
 
