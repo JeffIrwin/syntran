@@ -37,6 +37,7 @@ jobs:
         #FPM_FC: gfortran-${{ matrix.gfortran }}
         FPM_FC: gfortran-12
       run: |
+        fpm install --prefix='$HOME'
         chmod +x ./samples/shebang.syntran
         ./samples/shebang.syntran
         fpm test test
