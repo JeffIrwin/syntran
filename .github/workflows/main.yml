@@ -153,7 +153,7 @@ jobs:
       name: Test ${{ matrix.toolchain.compiler }} ${{ matrix.toolchain.version }}
       env:
         # TODO: generalize
-        FPM_FC: ifx
+        FPM_FC: ifort
       run: |
         fpm test test --verbose --flag -Wno-tabs
         fpm test long
