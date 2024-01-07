@@ -1,0 +1,386 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+// Cardinal directions
+let DIRS =
+	[
+		 1,  0, // east
+		-1,  0, // west
+		 0,  1, // south
+		 0, -1  // north
+		 ;
+		 2,  4
+	];
+//println("DIRS = ", DIRS);
+
+// Note consistent ordering with DIRS array
+let EAST  = 0;
+let WEST  = 1;
+let SOUTH = 2;
+let NORTH = 3;
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = 0;
+
+	// Get grid size
+	let n = [0, 0];
+	n[1] = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	n[0] = len(str_);
+
+	//println("n[0], n[1] = ", n[0], n[1]);
+
+	let grid  = [""; n[0], n[1]];
+
+	// Load the grid and find position of start S
+	let xs = [-1, -1];
+	for y in [0: n[1]]
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: n[0]]  // `x` is scalar iterator not to be confused with later vector
+		{
+			grid[x,y] = str_[x];
+			if (grid[x,y] == "S")
+				xs = [x, y];
+		}
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("grid =");
+	//println(grid);
+	//println("xs[0], xs[1] = ", xs[0], ", ", xs[1]);
+
+	// Start the search at S
+	let x0  = xs;
+	let x   = [-1, -1]; // vector
+	let x00 = [-1, -1];
+
+	let k = 0;
+	while not (x[0] == xs[0] and x[1] == xs[1])
+	{
+		//println("x0[0], x0[1] = ", x0[0], ", ", x0[1]);
+		let connects = false;
+		let idir = 0;
+		while not connects
+		{
+			x[0] = x0[0] + DIRS[0, idir];
+			x[1] = x0[1] + DIRS[1, idir];
+
+			//println("x[0], x[1] = ", x[0], ", ", x[1]);
+
+			if (idir == EAST or idir == WEST)
+			{
+				// east-west pair.  see refactoring in part 2
+				let ce = grid[x0[0], x0[1]];
+				let cw = grid[x[0] , x[1] ];
+				if (idir == EAST)
+				{
+					let tmp = ce;
+					ce = cw;
+					cw = tmp;
+				}
+				let cwe = cw + ce;
+				//println("cw ce = ", cwe);
+
+				// | - L J 7 F . S
+				connects = any_str_eq(cwe,
+					[
+						"-7", "--", "-J", "-S",
+						"L7", "L-", "LJ", "LS",
+						"F7", "F-", "FJ", "FS",
+						"S7", "S-", "SJ", "SS"
+					]);
+			}
+			else
+			{
+				// north-south pair
+				let cn = grid[x0[0], x0[1]];
+				let cs = grid[x[0] , x[1] ];
+				if (idir == NORTH)
+				{
+					let tmp = cn;
+					cn = cs;
+					cs = tmp;
+				}
+				//println("cn, cs = ");
+				//println(cn);
+				//println(cs);
+
+				let cns = cn + cs;
+
+				// | - L J 7 F . S
+				connects = any_str_eq(cns,
+					[
+						"||", "|L", "|J", "|S",
+						"7|", "7L", "7J", "7S",
+						"F|", "FL", "FJ", "FS",
+						"S|", "SL", "SJ", "SS"
+					]);
+			}
+
+			// Don't get stuck in a two point loop
+			if (x[0] == x00[0] and x[1] == x00[1]) connects = false;
+
+			idir += 1;
+		}
+
+		x00 = x0;
+		x0  = x ;
+
+		k += 1;
+		//println();
+	}
+	//println("max dist = ", k);
+	sum_ = k / 2;
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let sum_ = 0;
+
+	// Get grid size
+	let n = [0, 0];
+	n[1] = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	n[0] = len(str_);
+
+	//println("n[0], n[1] = ", n[0], n[1]);
+
+	let grid  = [""; n[0], n[1]];
+
+	// Load the grid and find position of start S
+	let xs = [-1, -1];
+	for y in [0: n[1]]
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: n[0]]
+		{
+			grid[x,y] = str_[x];
+			if (grid[x,y] == "S")
+				xs = [x, y];
+		}
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("grid =");
+	//println(grid);
+	//println("xs[0], xs[1] = ", xs[0], ", ", xs[1]);
+
+	// Start the search at S
+	let x0  = xs;
+	let x   = [-1, -1];
+	let x00 = [-1, -1];
+
+	// c.f. cali.f90
+	let wind  = [0; n[0], n[1]];
+	let first = true;
+	let defer = false;
+	let wind_inc0 = 0;
+	let xd = [-1, -1];
+	let wind_incd = 0;
+
+	// bool array for points that are on/in contour.  shouldn't be necessary if
+	// i can count edges correctly
+	let on       = [false; n[0], n[1]];
+	let on_or_in = [false; n[0], n[1]];
+
+	//println("reverse_str(aoeu) = ", reverse_str("aoeu"));
+
+	let k = 0;
+	while not (x[0] == xs[0] and x[1] == xs[1]) // TODO: all() intrinsic
+	{
+		//println("x0[0], x0[1] = ", x0[0], ", ", x0[1]);
+		let connects = false;
+		let idir = 0;
+		while not connects
+		{
+			x[0] = x0[0] + DIRS[0, idir]; // TODO: vec addition `+` operator
+			x[1] = x0[1] + DIRS[1, idir];
+
+			//println("x[0], x[1] = ", x[0], ", ", x[1]);
+
+			if (idir == EAST or idir == WEST)
+			{
+				// east-west pair
+				let cwe = grid[x0[0], x0[1]] + grid[x[0], x[1]];
+				if (idir == WEST)
+					cwe = reverse_str(cwe);
+				//println("cw ce = ", cwe);
+
+				// | - L J 7 F . S
+				connects = any_str_eq(cwe,
+					[
+						"-7", "--", "-J", "-S",
+						"L7", "L-", "LJ", "LS",
+						"F7", "F-", "FJ", "FS",
+						"S7", "S-", "SJ", "SS"
+					]);
+			}
+			else
+			{
+				// north-south pair
+				let cns = grid[x0[0], x0[1]] + grid[x[0] , x[1]];
+				if (idir == NORTH)
+					cns = reverse_str(cns);
+
+				// | - L J 7 F . S
+				connects = any_str_eq(cns,
+					[
+						"||", "|L", "|J", "|S",
+						"7|", "7L", "7J", "7S",
+						"F|", "FL", "FJ", "FS",
+						"S|", "SL", "SJ", "SS"
+					]);
+			}
+
+			// Don't get stuck in a two point loop
+			if (x[0] == x00[0] and x[1] == x00[1]) connects = false;
+
+			idir += 1;
+		}
+
+		// Set winding values for filling.  Reference:
+		//
+		//     https://github.com/JeffIrwin/cali/blob/e7971fa48a79be46e1475f6c5e6f60757faf7b08/src/cali.f90#L1179-L1199
+		//
+		let wind_inc = sign_(x[1] - x0[1]);
+		if (not first and wind_inc != 0)
+		{
+			if (wind_inc0 == 0 and not defer)
+			{
+				defer = true;
+				xd = x0;
+				wind_incd = wind_inc;
+			}
+
+			if (wind_inc0 + wind_inc == 0)
+				wind[x0[0], x0[1]] += wind_inc;
+
+			wind[x[0], x[1]] += wind_inc;
+			wind_inc0   = wind_inc;
+		}
+		first = false;
+
+		on_or_in[x[0], x[1]] = true;
+		on      [x[0], x[1]] = true;
+
+		x00 = x0;
+		x0  = x ;
+
+		k += 1;
+		//println();
+	}
+
+	// Mark the deferred point after wrapping around the entire contour
+	if (defer and wind_incd != wind_inc0)
+		wind[xd[0], xd[1]] += wind_incd;
+
+	//println("wind = ");
+	//println(wind);
+
+	//// Unit tests
+	//println("sign_(0) = ", sign_(0));
+	//println("sign_( 1) = ", sign_( 1));
+	//println("sign_(-1) = ", sign_(-1));
+	//println("sign_( 2) = ", sign_( 2));
+	//println("sign_(-2) = ", sign_(-2));
+
+	// Count all points/pixels that are in *or on* the pipe contour
+	//let np = 0;
+	for y in [0: n[1]]
+	{
+		let wind_num  = 0;
+		//let wind_num0 = 0;
+		for x in [0: n[0]]
+		{
+			wind_num += wind[x, y];
+			//if (wind_num != 0 or wind[x, y] != 0) np += 1;
+
+			if (wind_num != 0)// or wind_num0 != 0)
+			{
+				//np += 1; // count of `np` isn't right bc it doesn't count east edges
+				on_or_in[x, y] = on_or_in[x, y] or true;
+			}
+			//wind_num0 = wind_num;
+		}
+	}
+	//println("num on or in = ", np);
+	//println("num on       = ", k);
+
+	//// This should be right if i count east edges
+	//sum_ = np - k;
+	//println("sum_   = ", sum_);
+
+	//let non_or_in = 0;
+	//let non       = 0;
+	sum_ = 0;
+	for y in [0: n[1]]
+	for x in [0: n[0]]
+	{
+		//if (on_or_in[x,y]) non_or_in += 1;
+		//if (on      [x,y]) non       += 1;
+
+		if (on_or_in[x,y] and not on[x,y]) sum_ += 1;
+	}
+
+	//println("non_or_in = ", non_or_in);
+	//println("non       = ", non      );
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = 0;
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+
