@@ -46,7 +46,7 @@ jobs:
         which syntran
         chmod +x ./samples/shebang.syntran
         ./samples/shebang.syntran
-
+        #
         # No significant difference between release and (default) debug profile.
         # Maybe that will change after I copy the other half of AOC tests
         fpm test test
