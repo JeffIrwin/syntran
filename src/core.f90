@@ -29,7 +29,6 @@ module syntran__core_m
 	! TODO:
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
-	!    * count()
 	!    * vector addition, dot product, scalar-vector mult, ...
 	!    * optional `dim` argument for any() and all(). 1 arg versions done
 	!    * comparisons done
@@ -55,12 +54,15 @@ module syntran__core_m
 	!    * any use cases for #let? i probbaly don't want to get into general
 	!      expression parsing like `#let x = 1 + 2;` during preprocessing
 	!  - jumping control flow:
-	!    * (sys) exit.  at least this basic form of error handling is needed
 	!    * fn return statement. i like the cleanliness of rust but i still need
 	!      a way to return early.  rust does have an explicit "return"
 	!      statement, i guess it's just not the rust style to use it when it's
 	!      not needed
 	!    * cycle (continue), break ((loop) exit)
+	!    * (sys) exit done
+	!      > should final return value be used as an implicit sys exit value?
+	!        currently, default exit stat is 0, regardless of what syntran "main"
+	!        returns
 	!  - str comparison operations:
 	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
 	!      matching leading chars but diff lens
@@ -161,7 +163,7 @@ function declare_intrinsic_fns() result(fns)
 
 	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
-		i64_fn, parse_i64_fn, i32_fn, exit_fn, any_fn, all_fn
+		i64_fn, parse_i64_fn, i32_fn, exit_fn, any_fn, all_fn, count_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -389,6 +391,8 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	! TODO: return i64?
+
 	size_fn%type = i32_type
 	allocate(size_fn%params(2))
 
@@ -409,6 +413,27 @@ function declare_intrinsic_fns() result(fns)
 	! It might also be useful to make size() variadic and have size(array)
 	! return the product of each dimension's size.  It should just have a single
 	! optional param though, not unlimited arity like min/max.
+
+	!********
+
+	! TODO: return i64?
+
+	count_fn%type = i32_type
+	allocate(count_fn%params(1))
+
+	count_fn%params(1)%type = array_type
+
+	count_fn%params(1)%array_type = bool_type
+	count_fn%params(1)%rank = -1  ! negative means any rank
+
+	count_fn%params(1)%name = "mask"
+
+	!! TODO: add dim arg to count() like Fortran
+	!count_fn%params(2)%type = i32_type
+	!count_fn%params(2)%name = "dim"
+
+	id_index = id_index + 1
+	call fns%insert("count", count_fn, id_index)
 
 	!********
 
@@ -474,6 +499,7 @@ function declare_intrinsic_fns() result(fns)
 			close_fn    , &
 			exit_fn     , &
 			size_fn     , &
+			count_fn    , &
 			all_fn      , &
 			any_fn        &
 		]
@@ -1608,6 +1634,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!
 			! Might not be strictly necessary now that %array is allocatable
 			! instead of pointable
+			deallocate(arg1%array)
+
+		case ("count")
+
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+			res%sca%i32 = count(arg1%array%bool)
 			deallocate(arg1%array)
 
 		case ("all")

@@ -14,5 +14,4 @@
 
 println("hello world from shebang syntran script");
 0;
-exit(-1);
 

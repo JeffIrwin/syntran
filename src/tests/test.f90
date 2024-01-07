@@ -621,6 +621,11 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('all([false]);') == "false", &
 			eval('all([false, true]);') == "false", &
 			eval('all([true, true]);') == "true", &
+			eval('count([true]);') == "1", &
+			eval('count([true, true]);') == "2", &
+			eval('count([0: 10] <  4);') == "4", &
+			eval('count([0: 10] <  7);') == "7", &
+			eval('count([0: 10] < 15);') == "10", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 
