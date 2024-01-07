@@ -51,6 +51,8 @@ subroutine unit_test_aoc_2023(npass, nfail)
 			!interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '1234', &  ! too slow
 			interpret_file(path//"13/main.syntran", quiet = .true., chdir_ = .true.) == '57259', &
 			interpret_file(path//"14/main.syntran", quiet = .true., chdir_ = .true.) == '191157', &
+			interpret_file(path//"15/main.syntran", quiet = .true., chdir_ = .true.) == '768500', &
+			interpret_file(path//"16/main.syntran", quiet = .true., chdir_ = .true.) == '14553', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
