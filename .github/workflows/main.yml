@@ -132,8 +132,8 @@ jobs:
         os: [ubuntu-latest]
         toolchain:
           #- {compiler: gcc, version: 8}
-          - {compiler: intel, version: '2023.2'}
-          #- {compiler: intel-classic, version: '2021.10'}
+          #- {compiler: intel, version: '2023.2'}  # compiles but segfaults immediately
+          - {compiler: intel-classic, version: '2021.10'}
           #- {compiler: nvidia-hpc, version: '23.11'}
 
     steps:
