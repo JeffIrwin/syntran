@@ -15,19 +15,19 @@ contains
 
 !===============================================================================
 
-function syntran_interpret(str, quiet) result(res_str)
+function syntran_interpret(str_, quiet) result(res_str)
 
 	! This is the interactive interpreter shell
 	!
 	! To interpret a whole file all at once, use syntran_interpret_file()
 	! instead
 	!
-	! Interpret stdin by default, or interpret the multi-line string str if it
+	! Interpret stdin by default, or interpret the multi-line string str_ if it
 	! is given.  The return value res_str is the result of the final expression
 	! (like how Rust doesn't have a return statement, but fns just return the
 	! final expression in their body)
 	!
-	! Using the str arg is deprecated here.  Prefer eval() or interpret_file().
+	! Using the str_ arg is deprecated here.  Prefer eval() or interpret_file().
 	! However, it's still useful for testing to have something that evals 1 line
 	! at a time, so that we can have automatic test coverage of weird
 	! interactive interpreter edge cases
@@ -35,7 +35,7 @@ function syntran_interpret(str, quiet) result(res_str)
 	use syntran__core_m
 	use syntran__utils_m
 
-	character(len = *), intent(in), optional :: str
+	character(len = *), intent(in), optional :: str_
 	logical, intent(in), optional :: quiet
 
 	character(len = :), allocatable :: res_str
@@ -66,9 +66,9 @@ function syntran_interpret(str, quiet) result(res_str)
 	cont = .false.
 	show_tree = .false.
 
-	if (present(str)) then
+	if (present(str_)) then
 		! Append a trailing line feed in case it does not exist
-		sv = new_string_view(str//line_feed)
+		sv = new_string_view(str_//line_feed)
 		src_file = '<string>'
 	end if
 
@@ -80,7 +80,7 @@ function syntran_interpret(str, quiet) result(res_str)
 	! Read-eval-print-loop
 	do
 
-		if (present(str)) then
+		if (present(str_)) then
 
 			! Interpret multi-line strings one line at a time to mock the
 			! interpreter getting continued stdin lines.  If you know your whole
@@ -147,7 +147,7 @@ function syntran_interpret(str, quiet) result(res_str)
 		! Continue current parse with next line since more chars are expected
 		cont = compilation%expecting
 
-		!if (cont .and. present(str)) exit
+		!if (cont .and. present(str_)) exit
 		if (cont) cycle
 
 		if (compilation%is_empty) cycle
@@ -167,7 +167,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		! Consider MATLAB-style "ans = " log?
 		res_str = res%to_str()
-		if (.not. present(str)) write(ou, '(a)') res_str
+		if (.not. present(str_)) write(ou, '(a)') res_str
 
 	end do
 
@@ -177,11 +177,11 @@ end function syntran_interpret
 
 !===============================================================================
 
-integer function syntran_eval_i32(str) result(eval_i32)
+integer function syntran_eval_i32(str_) result(eval_i32)
 
 	use syntran__core_m
 
-	character(len = *), intent(in) :: str
+	character(len = *), intent(in) :: str_
 
 	type(fns_t) :: fns
 	type(syntax_node_t) :: tree
@@ -189,7 +189,7 @@ integer function syntran_eval_i32(str) result(eval_i32)
 	type(vars_t) :: vars
 
 	fns = declare_intrinsic_fns()
-	tree = syntax_parse(str, vars, fns)
+	tree = syntax_parse(str_, vars, fns)
 	call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -207,11 +207,11 @@ end function syntran_eval_i32
 
 !===============================================================================
 
-real(kind = 4) function syntran_eval_f32(str, quiet) result(eval_f32)
+real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 
 	use syntran__core_m
 
-	character(len = *), intent(in) :: str
+	character(len = *), intent(in) :: str_
 
 	logical, optional, intent(in) :: quiet
 
@@ -228,7 +228,7 @@ real(kind = 4) function syntran_eval_f32(str, quiet) result(eval_f32)
 	if (present(quiet)) quietl = quiet
 
 	fns = declare_intrinsic_fns()
-	tree = syntax_parse(str, vars, fns)
+	tree = syntax_parse(str_, vars, fns)
 	if (.not. quietl) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -247,14 +247,14 @@ end function syntran_eval_f32
 
 !===============================================================================
 
-function syntran_eval(str, quiet, src_file, chdir_) result(res)
+function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
-	! Note that this chdir_ optional arg is a str, while the chdir_ optional arg
+	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
 	! for syntran_interpret_file() is boolean
 
 	use syntran__core_m
 
-	character(len = *), intent(in)  :: str
+	character(len = *), intent(in)  :: str_
 	character(len = :), allocatable :: res
 
 	logical, optional, intent(in) :: quiet
@@ -289,7 +289,7 @@ function syntran_eval(str, quiet, src_file, chdir_) result(res)
 
 	fns = declare_intrinsic_fns()
 
-	tree = syntax_parse(str, vars, fns, src_filel)
+	tree = syntax_parse(str_, vars, fns, src_filel)
 	if (.not. quietl) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
