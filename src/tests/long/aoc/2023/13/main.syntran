@@ -1,0 +1,301 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+// Grid capacity limit(s)
+let NYCAP = 32;
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = 0;
+
+	let f = open(filename);
+
+	let pattern = [""; NYCAP];
+
+	// Iterate through patterns
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		let nx = len(str_);
+
+		// Iterate through lines of the pattern
+		let ny = 0;
+		while not (str_ == "") //or not eof(f)
+		{
+			//println("str_ = ", str_);
+
+			if (ny > NYCAP)
+			{
+				// TODO: syntran needs sys exit or alternative
+				println();
+				println("Error: NYCAP overflow!");
+				println();
+			}
+
+			pattern[ny] = str_;
+
+			ny += 1;
+			str_ = readln(f);
+		}
+		//println("nx = ", nx);
+		//println("ny = ", ny);
+
+		// Check for symmetry about horizontal lines
+		let iysym = 1;  // don't count trivial symmetry plane above first line
+		let found = false;
+		while not found and iysym < ny
+		{
+			// Compare pairs of lines (rows) where the difference between the
+			// line numbers is half_diff * 2 + 1
+			let is_sym = true;
+			let half_diff = 0;
+			while is_sym and iysym - half_diff - 1 >= 0 and iysym + half_diff < ny
+			{
+				is_sym = pattern[iysym - half_diff - 1]
+				      == pattern[iysym + half_diff];
+				half_diff += 1;
+			}
+			if (is_sym)
+			{
+				found = true;
+				//println("horizontal line at y = ", iysym);
+				sum_ += 100 * iysym;
+			}
+
+			iysym += 1;
+		}
+
+		//// The goal is for syntran to allow character matrix comparison with
+		//// `:` slices like this:
+		//char_mat = [" "; 5, 5];
+		//all(char_mat[2,:] == char_mat[3,:]); // compare row 2 to 3
+		//all(char_mat[:,3] == char_mat[:,4]); // compare col 3 to 4
+
+		// Check for symmetry about vertical lines
+		let ixsym = 1;
+		found = false;
+		while not found and ixsym < nx
+		{
+			//println();
+			//println("ixsym = ", ixsym);
+
+			// Compare columns
+			let is_sym = true;
+			let half_diff = 0;
+			while is_sym and ixsym - half_diff - 1 >= 0 and ixsym + half_diff < nx
+			{
+				let iy = 0;
+				while is_sym and iy < ny
+				{
+					let s = pattern[iy];
+
+					//println("s = ", s);
+					//println("index 1 = ", ixsym - half_diff - 1);
+					//println("index 2 = ", ixsym + half_diff);
+					//let char1 = s[ixsym - half_diff - 1];
+					//let char2 = s[ixsym + half_diff];
+					//println("char12 = ", char1, char2);
+
+					is_sym = s[ixsym - half_diff - 1]
+					      == s[ixsym + half_diff];
+
+					iy += 1;
+				}
+				//println("iy, is_sym = ", iy, ", ", is_sym);
+				half_diff += 1;
+			}
+			if (is_sym)
+			{
+				found = true;
+				//println("vertical line at x = ", ixsym);
+				sum_ += ixsym;
+			}
+
+			ixsym += 1;
+		}
+
+		//println("pattern = ", pattern);
+		//println();
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let sum_ = 0;
+
+	let f = open(filename);
+
+	let pattern = [""; NYCAP];
+
+	// Iterate through patterns
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		let nx = len(str_);
+
+		// Iterate through lines of the pattern
+		let ny = 0;
+		while not (str_ == "") //or not eof(f)
+		{
+			//println("str_ = ", str_);
+
+			if (ny > NYCAP)
+			{
+				// TODO: syntran needs sys exit or alternative
+				println();
+				println("Error: NYCAP overflow!");
+				println();
+			}
+
+			pattern[ny] = str_;
+
+			ny += 1;
+			str_ = readln(f);
+		}
+		//println("nx = ", nx);
+		//println("ny = ", ny);
+
+		// Check for symmetry about horizontal lines
+		let iysym = 1;  // don't count trivial symmetry plane above first line
+		let found = false;
+		while not found and iysym < ny
+		{
+			// Compare pairs of lines (rows) where the difference between the
+			// line numbers is half_diff * 2 + 1
+			let diff = 0;
+			let half_diff = 0;
+			while diff <= 1 and iysym - half_diff - 1 >= 0 and iysym + half_diff < ny
+			{
+				//if (not (pattern[iysym - half_diff - 1]
+				//      == pattern[iysym + half_diff]))
+				//	diff += 1;
+
+				let s1 = pattern[iysym - half_diff - 1];
+				let s2 = pattern[iysym + half_diff];
+
+				let ix = 0;
+				while diff <= 1 and ix < nx
+				{
+					if not (s1[ix] == s2[ix])
+						diff += 1;
+					ix += 1;
+				}
+
+				//let iy = 0;
+				//while diff <= 1 and iy < ny
+				//{
+				//	let s = pattern[iy];
+				//	if (not (s[ixsym - half_diff - 1]
+				//	      == s[ixsym + half_diff]))
+				//		diff += 1;
+				//	iy += 1;
+				//}
+
+				half_diff += 1;
+			}
+			if diff == 1
+			{
+				found = true;
+				//println("near horizontal line at y = ", iysym);
+				sum_ += 100 * iysym;
+			}
+
+			iysym += 1;
+		}
+
+		// Check for symmetry about vertical lines
+		let ixsym = 1;
+		found = false;
+		while not found and ixsym < nx
+		{
+			//println();
+			//println("ixsym = ", ixsym);
+
+			// Compare columns
+			let diff = 0;
+			let half_diff = 0;
+			while diff <= 1 and ixsym - half_diff - 1 >= 0 and ixsym + half_diff < nx
+			{
+				let iy = 0;
+				while diff <= 1 and iy < ny
+				{
+					let s = pattern[iy];
+
+					//println("s = ", s);
+					//println("index 1 = ", ixsym - half_diff - 1);
+					//println("index 2 = ", ixsym + half_diff);
+					//let char1 = s[ixsym - half_diff - 1];
+					//let char2 = s[ixsym + half_diff];
+					//println("char12 = ", char1, char2);
+
+					if (not (s[ixsym - half_diff - 1]
+					      == s[ixsym + half_diff]))
+						diff += 1;
+
+					iy += 1;
+				}
+				half_diff += 1;
+			}
+			if diff == 1
+			{
+				found = true;
+				//println("near vertical line at x = ", ixsym);
+				sum_ += ixsym;
+			}
+
+			ixsym += 1;
+		}
+
+		//println("pattern = ", pattern);
+		//println();
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = 0;
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+
