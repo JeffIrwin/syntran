@@ -31,12 +31,6 @@ jobs:
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - uses: fortran-lang/setup-fortran@v1
-      id: setup-fortran
-      with:
-        compiler: ${{ matrix.toolchain.compiler }}
-        version: ${{ matrix.toolchain.version }}
-
     - if: matrix.os == 'ubuntu-latest'
       name: Set ubuntu PATH
       run: |
@@ -125,6 +119,12 @@ jobs:
     - uses: fortran-lang/setup-fpm@v5
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: fortran-lang/setup-fortran@v1
+      id: setup-fortran
+      with:
+        compiler: ${{ matrix.toolchain.compiler }}
+        version: ${{ matrix.toolchain.version }}
 
     - if: matrix.os == 'ubuntu-latest'
       name: Test ubuntu gfortran-${{ matrix.gfortran }}
