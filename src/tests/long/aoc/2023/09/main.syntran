@@ -1,0 +1,210 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn diff_(v: [i32; :], n: i32): [i32; :]
+{
+	// Take the `n`-th finite difference derivative of vector `v`
+	//
+	// For convenience of integrating later, the initial values of the first n
+	// derivatives are packed into the beginning of the output vector `dv`
+
+	let dv = v;
+
+	for i in [n: size(v,0)]
+		dv[i] = v[i] - v[i - 1];
+
+	let ans = dv;
+}
+
+fn integrate_(dv: [i32; :], n: i32): [i32; :]
+{
+	// Integrate the `n`-th derivative `dv` and return a cumulative sum `v`
+	let v = dv;
+
+	let sum_ = dv[n - 1];
+	for i in [n: size(dv,0)]
+	{
+		sum_ += dv[i];
+		v[i] = sum_;
+	}
+	let ans = v;
+}
+
+//==============================================================================
+
+// TODO: move to utils?
+fn any_trail_ne(vec: [i32; :], num_skip: i32, val: i32): bool
+{
+	// Check if any trailing elements of vector `vec` after `num_skip` are not
+	// equal to `val`
+	
+	let i = num_skip;
+	let found = false;
+	while i < size(vec, 0) and not found
+	{
+		found = vec[i] != val;
+		i += 1;
+	}
+	let ans = found;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = i64(0); // 32 bit might work :shrug:
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let v = parse_i32_delim(str_, " ");
+		//println("v = ", v);
+
+		// Take derivatives dv until we get all zeroes
+		let dv = v;
+		let i = 0;
+		while any_trail_ne(dv, i, 0)
+		{
+			i += 1;
+			let tmp = dv;
+			dv = diff_(tmp, i);
+			//println("dv = ", dv);
+		}
+		let n = i;
+
+		// Append an extra value for extrapolation
+		v = [0; size(dv,0) + 1];
+		for i in [0: n]
+			v[i] = dv[i]; // copy all but last value
+
+		//// Integrate to undo the derivatives and extrapolate back up
+		//println("integrating ...");
+		for i in [0: n]
+		//for i in [i: -1: 0] // TODO: array steps don't work for syntran loop iterators
+		{
+			//println("i = ", i);
+			//println("n - i = ", n - i);
+
+			let tmp = v;
+			v = integrate_(tmp, n - i);
+			//println("v = ", v);
+			//println();
+		}
+
+		//println();
+		//println("adding ", v[ size(v,0) - 1 ]);
+
+		sum_ += i64(v[ size(v,0) - 1 ]);
+
+		//println("sum_ = ", sum_);
+		//println();
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let sum_ = i64(0);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		// Save input in temp array
+		let tmp = parse_i32_delim(str_, " ");
+		//println("tmp = ", tmp);
+
+		// Reverse the input
+		let v = tmp;
+		for i in [0: size(tmp,0)]
+			v[i] = tmp[ size(tmp,0) - i - 1];
+		//println("v = ", v);
+
+		// Take derivatives dv until we get all zeroes
+		let dv = v;
+		let i = 0;
+		while any_trail_ne(dv, i, 0)
+		{
+			i += 1;
+			let tmp = dv;
+			dv = diff_(tmp, i);
+			//println("dv = ", dv);
+		}
+		let n = i;
+
+		// Append an extra value for extrapolation
+		v = [0; size(dv,0) + 1];
+		for i in [0: n]
+			v[i] = dv[i]; // copy all but last value
+
+		//// Integrate to undo the derivatives and extrapolate back up
+		//println("integrating ...");
+		for i in [0: n]
+		{
+			//println("i = ", i);
+			//println("n - i = ", n - i);
+
+			let tmp = v;
+			v = integrate_(tmp, n - i);
+			//println("v = ", v);
+			//println();
+		}
+		//println("adding ", v[ size(v,0) - 1 ]);
+
+		sum_ += i64(v[ size(v,0) - 1 ]);
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

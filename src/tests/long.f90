@@ -44,6 +44,8 @@ subroutine unit_test_aoc_2023(npass, nfail)
 			interpret_file(path//"05/main.syntran", quiet = .true., chdir_ = .true.) == '261668924', &
 			interpret_file(path//"06/main.syntran", quiet = .true., chdir_ = .true.) == '34675170', &
 			interpret_file(path//"07/main.syntran", quiet = .true., chdir_ = .true.) == '499106636', &
+			interpret_file(path//"08/main.syntran", quiet = .true., chdir_ = .true.) == '13289612829906', &
+			interpret_file(path//"09/main.syntran", quiet = .true., chdir_ = .true.) == '1819127106', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
