@@ -151,8 +151,9 @@ jobs:
 
     - if: matrix.os == 'ubuntu-latest'
       name: Test ${{ matrix.toolchain.compiler }} ${{ matrix.toolchain.version }}
-        #env:
-        #  FPM_FC: gfortran-${{ matrix.gfortran }}
+      env:
+        # TODO: generalize
+        FPM_FC: ifx
       run: |
         fpm test test --verbose --flag -Wno-tabs
         fpm test long
