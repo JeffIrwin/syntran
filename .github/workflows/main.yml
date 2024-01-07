@@ -46,8 +46,13 @@ jobs:
         which syntran
         chmod +x ./samples/shebang.syntran
         ./samples/shebang.syntran
-        fpm test test --profile release
-        fpm test long --profile release
+
+        # No significant difference between release and (default) debug profile.
+        # Maybe that will change after I copy the other half of AOC tests
+        fpm test test
+        fpm test long
+		#fpm test test --profile release
+        #fpm test long --profile release
 
     - if: matrix.os == 'ubuntu-latest'
       run: |
@@ -120,8 +125,10 @@ jobs:
       env:
         FPM_FC: gfortran-${{ matrix.gfortran }}
       run: |
-        fpm test test --profile release --verbose --flag -Wno-tabs
-        fpm test long --profile release
+        fpm test test --verbose --flag -Wno-tabs
+        fpm test long
+		#fpm test test --profile release --verbose --flag -Wno-tabs
+        #fpm test long --profile release
 
 ## TODO: try debugging ifx (and ifort?).  They both segfault almost immediately
 # while testing binary arithmetic (first unit test suite)
