@@ -35,8 +35,9 @@ module syntran__core_m
 	!  - document recent features:
 	!    * array slicing
 	!    * casting?
-	!    * any(), all() intrinsics
 	!    * array comparison
+	!    * any(), all(), count() intrinsics
+	!    * -c arg, shebang
 	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
 	!    versions don't allow a user-defined type that references another type
 	!    which is defined below it
