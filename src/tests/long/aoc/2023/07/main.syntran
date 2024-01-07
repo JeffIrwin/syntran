@@ -1,0 +1,389 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+// WARNING: syntran has memory leaks where it does not deallocate local fn
+// arrays after they go out of scope.  Running this code on the real input with
+// 1000 hands to be sorted will leak over 16 GB memory
+
+fn count_eq(v: [i32; :], x: i32): i32
+{
+	// How many elements of a vector `v` are equal to a scalar `x`?
+	let n = 0;
+	for i in [0: size(v,0)]
+		if (v[i] == x) n += 1;
+	let ans = n;
+}
+
+fn get_counts(a: str): [i32; :]
+{
+	let n = 5;
+	let marked  = [false; n];
+	let counts_ = [1; n];
+
+	for i in [0: n]
+	{
+		//for j in [i: n]
+		for j in [i+1: n]
+		{
+			if a[i] == a[j] and not marked[j]
+			{
+				counts_[i] += 1;
+				marked [j] = true;
+			}
+		}
+		if marked[i]
+			counts_[i] = 0;
+	}
+	//println("counts_ = ", counts_);
+	//println();
+
+	// return
+	let ans = counts_;
+}
+
+// Types of hands enum
+let HIGH_CARD = 0;
+let ONE_PAIR  = 1;
+let TWO_PAIR  = 2;
+let TRIPLET   = 3;
+let FULL_HAUS = 4;
+let QUAD      = 5;
+let PENT      = 6;
+
+// Strength of card enum (for breaking near-ties)
+let STR_A = 12;
+let STR_K = 11;
+let STR_Q = 10;
+let STR_J =  9;
+let STR_T =  8;
+let STR_9 =  7;
+let STR_8 =  6;
+let STR_7 =  5;
+let STR_6 =  4;
+let STR_5 =  3;
+let STR_4 =  2;
+let STR_3 =  1;
+let STR_2 =  0;
+
+fn get_strength(c: str): i32
+{
+	let strength = -1;
+	if (c == "A") strength = STR_A;
+	if (c == "K") strength = STR_K;
+	if (c == "Q") strength = STR_Q;
+	if (c == "J") strength = STR_J;
+	if (c == "T") strength = STR_T;
+	if (c == "9") strength = STR_9;
+	if (c == "8") strength = STR_8;
+	if (c == "7") strength = STR_7;
+	if (c == "6") strength = STR_6;
+	if (c == "5") strength = STR_5;
+	if (c == "4") strength = STR_4;
+	if (c == "3") strength = STR_3;
+	if (c == "2") strength = STR_2;
+
+	let ans = strength;
+}
+
+fn type_to_str(t: i32): str
+{
+	let str_ = "";
+	if (t == HIGH_CARD) str_ = "HIGH_CARD" ;
+	if (t == ONE_PAIR ) str_ = "ONE_PAIR"  ;
+	if (t == TWO_PAIR ) str_ = "TWO_PAIR"  ;
+	if (t == TRIPLET  ) str_ = "TRIPLET"   ;
+	if (t == FULL_HAUS) str_ = "FULL_HAUS" ;
+	if (t == QUAD     ) str_ = "QUAD"      ;
+	if (t == PENT     ) str_ = "PENT"      ;
+
+	let ans = str_;
+}
+
+fn get_type(a: str): i32
+{
+	let counts_ = get_counts(a);
+
+	//let type_ = -1;
+	let type_ = HIGH_CARD;
+
+	if (count_eq(counts_, 2) == 1) type_ = ONE_PAIR;
+	if (count_eq(counts_, 5) == 1) type_ = PENT;
+	if (count_eq(counts_, 4) == 1) type_ = QUAD;
+	if (count_eq(counts_, 3) == 1) type_ = TRIPLET;
+	if (count_eq(counts_, 3) == 1 and count_eq(counts_, 2) == 1) type_ = FULL_HAUS;
+	if (count_eq(counts_, 2) == 2) type_ = TWO_PAIR;
+
+	let ans = type_;
+}
+
+fn is_hand_gt(a: str, b: str): bool
+{
+	// Is hand `a` greater than hand `b`?
+
+	//println("starting is_hand_gt()");
+	//println("a = """, a, """");
+	//println("b = """, b, """");
+
+	//let n = 5;
+	//let ca = get_counts(a);
+	//let cb = get_counts(b);
+
+	//println("count_eq(ca, 3) = ", count_eq(ca, 3));
+	//println("count_eq(ca, 2) = ", count_eq(ca, 2));
+	//println("count_eq(ca, 1) = ", count_eq(ca, 1));
+
+	let ta = get_type(a);
+	let tb = get_type(b);
+
+	//println("ta, tb = ", ta, ", ", tb);
+
+	let gt = true;
+	if tb > ta
+	{
+		gt = false;
+	}
+	else if tb == ta
+	{
+		let i = 0;
+		while a[i] == b[i]
+			i += 1;
+
+		gt = get_strength(a[i]) > get_strength(b[i]);
+
+		//println("tie break: ", a[i], " >? ", b[i], " == ", gt);
+	}
+
+	//println("gt = ", gt);
+	//println();
+
+	let ans = gt;
+}
+
+//==============================================================================
+
+fn bubble_sort_hands(hands: [str; :]): [i32; :]
+{
+	//println("starting bubble_sort_hands()");
+
+	let n = size(hands, 0);
+	let idx = [0: n];
+	//let idx = bubble_sort_hands(hands);
+
+	let swapped = true;
+	while swapped
+	{
+		swapped = false;
+		for i in [1: n]
+		{
+			if is_hand_gt(hands[idx[i-1]], hands[idx[i]])
+			{
+				// swap idx[i-1] and idx[i]
+				let tmp = idx[i-1];
+				idx[i-1] = idx[i];
+				idx[i] = tmp;
+
+				swapped = true;
+				//println("swapped = ", swapped);
+			}
+		}
+		//println("end swapped = ", swapped);
+	}
+
+	//println("ending bubble_sort_hands()");
+	//println();
+
+	let ans = idx;
+	//idx;
+}
+
+//==============================================================================
+
+//fn bubble_sort_hands(hands: [str; :]): [i32; :]
+//fn qsort(v: [i32; :]): [i32; :]
+fn quick_sort_hands(v: [str; :]): [i32; :]
+{
+	// Quick sort algorithm.  Return index array instead of modifying the input
+	// array in-place
+
+	//println("starting quick_sort_hands()");
+	//println("v = ", v);
+
+	let l = 0;
+	let h = size(v,0) - 1;
+
+	let ix = [l: h + 1];
+
+	if l < h
+	{
+		let stack = [0; h - l + 1];
+
+		let top = -1;
+
+		top += 1;
+		stack[top] = l;
+
+		top += 1;
+		stack[top] = h;
+
+		while top >= 0
+		{
+			//println("h = ", h);
+			h = stack[top];
+			top -= 1;
+
+			l = stack[top];
+			top -= 1;
+
+			// Median-of-three pivot.  40x faster for AOC day 21!
+			let m = (l + h) / 2;
+			//if v[ix[m]] < v[ix[l]]
+			if is_hand_gt(v[ix[l]], v[ix[m]])
+			{
+				let tmp = ix[m];
+				ix[m]   = ix[l];
+				ix[l]   = tmp;
+			}
+			//if v[ix[h]] < v[ix[l]]
+			if is_hand_gt(v[ix[l]], v[ix[h]])
+			{
+				let tmp = ix[h];
+				ix[h]   = ix[l];
+				ix[l]   = tmp;
+			}
+			//if v[ix[m]] < v[ix[h]]
+			if is_hand_gt(v[ix[h]], v[ix[m]])
+			{
+				let tmp = ix[m];
+				ix[m]   = ix[h];
+				ix[h]   = tmp;
+			}
+			let x = v[ix[h]];
+
+			let i = (l - 1);
+			for j in [l: h]
+				//if v[ix[j]] <= x
+				if is_hand_gt(x, v[ix[j]])
+				{
+					i += 1;
+					let tmp = ix[i];
+					ix[i]   = ix[j];
+					ix[j]   = tmp;
+				}
+			let tmp = ix[i+1];
+			ix[i+1] = ix[h];
+			ix[h]   = tmp;
+			let p = i + 1;
+
+			if p - 1 > l
+			{
+				top += 1;
+				stack[top] = l;
+
+				top += 1;
+				stack[top] = p - 1;
+			}
+
+			if p + 1 < h
+			{
+				top += 1;
+				stack[top] = p + 1;
+
+				top += 1;
+				stack[top] = h;
+			}
+		}
+	}
+	//println("v = ", v);
+	//let ans = v;
+	let ans = ix;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = 0;
+
+	let n = countln_(filename);
+	//println("n = ", n);
+
+	let hands = [""; n];
+	let bids  = [0 ; n];
+
+	let f = open(filename);
+	for i in [0: n]
+	{
+		let str_ = readln(f);
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, " ");
+		hands[i] = strs[0];
+		bids [i] = parse_i32(strs[1]);
+
+		//println("hand, type = ", hands[i], ", ", type_to_str(get_type(hands[i])));
+
+	}
+	close(f);
+
+	//println("hands = ", hands);
+	//println("bids  = ", bids);
+
+	//// Unit test for hand comparison
+	//let h1 = "KK677"; //and 
+	//let h2 = "KTJJT";
+	//let gt = is_hand_gt(h1, h2);
+	//println(h1, " > ", h2, " = ", gt);
+
+	//let idx = bubble_sort_hands(hands);
+	let idx = quick_sort_hands(hands);
+
+	//println("sorted hands = ");
+	for i in [0: n]
+	{
+		//println(hands[idx[i]]);
+		//println("adding ", (i + 1), " * ", bids[idx[i]]);
+		//println();
+
+		sum_ += (i + 1) * bids[idx[i]];
+	}
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = 0;
+
+	sum_ += part1();
+	//sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+
