@@ -1377,13 +1377,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		if (.not. allocated(node%lsubscripts)) then
 
-			if (allocated(vars%vals)) then
-			if (allocated(vars%vals(node%id_index)%array)) then
-				!! TODO: necessary now that array is allocatable instead of pointable?
-				!print *, "deallocating lhs array"
-				deallocate(vars%vals(node%id_index)%array)
-			end if
-			end if
+			!! This deallocation will cause a crash when an array appears on both
+			!! the LHS and RHS of fn_call assignment, e.g. `dv = diff_(dv, i)` in
+			!! AOC 2023/09
+			!if (allocated(vars%vals)) then
+			!if (allocated(vars%vals(node%id_index)%array)) then
+			!	!print *, "deallocating lhs array"
+			!	deallocate(vars%vals(node%id_index)%array)
+			!end if
+			!end if
 
 			! Assign return value
 			!print *, 'eval and set res'
@@ -1635,13 +1637,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!
 			! Might not be strictly necessary now that %array is allocatable
 			! instead of pointable
-			deallocate(arg1%array)
+			!deallocate(arg1%array)
 
 		case ("count")
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%i32 = count(arg1%array%bool)
-			deallocate(arg1%array)
+			!deallocate(arg1%array)
 
 		case ("all")
 
@@ -1650,13 +1652,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			! Might not be strictly necessary now that %array is allocatable
 			! instead of pointable
-			deallocate(arg1%array)
+			!deallocate(arg1%array)
 
 		case ("any")
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%bool = any(arg1%array%bool)
-			deallocate(arg1%array)
+			!deallocate(arg1%array)
 
 		case default
 			! User-defined function
@@ -1680,18 +1682,28 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			do i = 1, size(node%params)
 				!print *, 'copying param ', i
+
 				vars%vals( node%params(i) ) = &
 					syntax_eval(node%args(i), vars, fns, quietl)
+
+				!!print *, 'set tmp'
+				!tmp = syntax_eval(node%args(i), vars, fns, quietl)
+				!!print *, 'set param var'
+				!vars%vals( node%params(i) ) = tmp
+
+				!print *, 'done'
+				!print *, ''
 			end do
 
 			res = syntax_eval(node%body, vars, fns, quietl)
+			!print *, 'res = ', res%to_str()
 
-			do i = 1, size(node%params)
-				if (allocated(vars%vals( node%params(i) )%array)) then
-					!print *, 'deallocating node%params ... array'
-					deallocate(vars%vals( node%params(i) )%array)
-				end if
-			end do
+			!do i = 1, size(node%params)
+			!	if (allocated(vars%vals( node%params(i) )%array)) then
+			!		!print *, 'deallocating node%params ... array'
+			!		deallocate(vars%vals( node%params(i) )%array)
+			!	end if
+			!end do
 
 		end select
 
