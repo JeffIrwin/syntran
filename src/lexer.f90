@@ -218,6 +218,20 @@ function lex(lexer) result(token)
 
 	end if
 
+	if (lexer%pos == 1           .and. &
+		lexer%current()   == "#" .and. &
+		lexer%lookahead() == "!") then
+
+		! Handle a special shebang `#!` case at very beginning of file and
+		! ignore the rest of the first line
+		call lexer%read_single_line_comment()
+
+		text = lexer%text(start: lexer%pos-1)
+		token = new_token(whitespace_token, start, text)
+		return
+
+	end if
+
 	select case (lexer%current())
 
 		case ("+")
