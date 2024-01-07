@@ -48,11 +48,14 @@ subroutine unit_test_aoc_2023(npass, nfail)
 			interpret_file(path//"09/main.syntran", quiet = .true., chdir_ = .true.) == '1819127106', &
 			interpret_file(path//"10/main.syntran", quiet = .true., chdir_ = .true.) == '7220', &
 			interpret_file(path//"11/main.syntran", quiet = .true., chdir_ = .true.) == '827019473638', &
-			!interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '1234', &  ! too slow
+			interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '21', &
 			interpret_file(path//"13/main.syntran", quiet = .true., chdir_ = .true.) == '57259', &
 			interpret_file(path//"14/main.syntran", quiet = .true., chdir_ = .true.) == '191157', &
 			interpret_file(path//"15/main.syntran", quiet = .true., chdir_ = .true.) == '768500', &
 			interpret_file(path//"16/main.syntran", quiet = .true., chdir_ = .true.) == '14553', &
+			interpret_file(path//"17/main.syntran", quiet = .true., chdir_ = .true.) == '196', &
+			interpret_file(path//"18/main.syntran", quiet = .true., chdir_ = .true.) == '111131797001390', &
+			interpret_file(path//"19/main.syntran", quiet = .true., chdir_ = .true.) == '125317462035060', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

@@ -1,0 +1,496 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+let NXMAS = 4;
+let NCLAUSES_CAP = 8;  // 4 works for my input
+
+let ACCEPT = -1;
+let REJECT = -2;
+
+//==============================================================================
+
+fn part1(): i32
+{
+	// First pass: count fn and data lines
+	let nfn = 0;
+	let nda = 0;
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		if str_ != ""
+		{
+			if is_alpha(str_[0])
+				nfn += 1;
+			else
+				nda += 1;
+		}
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("nfn = ", nfn);
+	//println("nda = ", nda);
+
+	//let fns       = [""; nfn];
+	let fn_labels = [""; nfn];
+	let bodies    = [""; nfn];
+
+	let data = [-1; NXMAS, nda];
+
+	// Second pass: save fns and data
+	nfn = 0;
+	nda = 0;
+	f = open(filename);
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		if str_ != ""
+		{
+			if is_alpha(str_[0])
+			{
+				//fns[nfn] = str_;
+
+				let strs = split_(str_, "{}");
+				fn_labels[nfn] = strs[0];
+
+				bodies[nfn] = strs[1];
+
+				nfn += 1;
+			}
+			else
+			{
+				let d = parse_i32_delim(str_, "{}xmas=,");
+
+				data[0, nda] = d[0];
+				data[1, nda] = d[1];
+				data[2, nda] = d[2];
+				data[3, nda] = d[3];
+
+				nda += 1;
+			}
+		}
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("data = ", data);
+	//println("fns  = ", fns);
+	//println("fn_labels = ", fn_labels);
+	//println("bodies = ", bodies);
+	//println();
+
+	//let nclauses_max = 0;
+
+	let xmas_idx = [-3; NCLAUSES_CAP, nfn]; // 0, 1, 2, or 3 for x, m, a, or s respectively
+	let ops      = [""; NCLAUSES_CAP, nfn]; // `<` or `>`
+	let comp_num = [-3; NCLAUSES_CAP, nfn]; // literal number being compared against
+	let fn_call  = [-3; NCLAUSES_CAP, nfn]; // fn called if condition is true
+	let nclauses = [-3; nfn];               // number of conditional clauses in fn body
+
+	// Compile fn bodies
+	for i in [0: nfn]
+	{
+		let fn_label = fn_labels[i];
+		let body = bodies[i];
+
+		//println("fn_label = ", fn_label);
+		//println("body = ", body);
+
+		// If / else-if / else clauses
+		let clauses = split_(body, ",");
+		nclauses[i] = size(clauses, 0);
+
+		//println("clauses = ", clauses);
+		//nclauses_max = max(nclauses_max, size(clauses, 0));
+
+		for j in [0: nclauses[i] - 1]
+		{
+			let clause = clauses[j];
+			let strs = split_(clause, "<>:");
+
+			// Unpack from strs vector
+			let xmas_str = strs[0];
+			let op       = clause[1];  // removed by split_()
+			let comp_str = strs[1];
+			let call     = strs[2];
+
+			//println("xmas_str = ", xmas_str);
+			//println("op       = ", op      );
+			//println("comp_str = ", comp_str);
+			//println("call     = ", call    );
+			//println();
+
+			xmas_idx[j, i] = scan("xmas", xmas_str);
+			ops     [j, i] = op;
+			comp_num[j, i] = parse_i32(comp_str);
+
+			if call == "A"
+				fn_call[j, i] = ACCEPT;
+			else if call == "R"
+				fn_call[j, i] = REJECT;
+			else
+			{
+				// Scan for fn call label
+				fn_call [j, i] = 0;
+				while fn_labels[ fn_call[j, i] ] != call
+					fn_call[j, i] += 1;
+			}
+		}
+
+		// Handle else clause, which has a call but not xmas, op, or comparison number
+		let j = nclauses[i] - 1;
+		let call = clauses[j];
+		if call == "A"
+			fn_call[j, i] = ACCEPT;
+		else if call == "R"
+			fn_call[j, i] = REJECT;
+		else
+		{
+			// Scan for fn call label
+			fn_call [j, i] = 0;
+			while fn_labels[ fn_call[j, i] ] != call
+				fn_call[j, i] += 1;
+		}
+		//println();
+	}
+	//println("nclauses_max = ", nclauses_max);
+	//println("nclauses = ", nclauses);
+	//println("fn_call = ", fn_call);
+	//println("xmas_idx = ", xmas_idx);
+	//println("ops      = ", ops     );
+	//println("comp_num = ", comp_num);
+
+	let in_call = 0;
+	while fn_labels[ in_call ] != "in"
+		in_call += 1;
+	//println("in_call = ", in_call);
+
+	// Evaluate the fn calls on each line of data
+	let sum_ = 0;
+	for id in [0: nda]
+	{
+		let d =
+			[
+				data[0, id],
+				data[1, id],
+				data[2, id],
+				data[3, id]
+			];
+		//println("d = ", d);
+
+		let i = in_call;
+		let returned = false;
+		while not returned
+		{
+			//println("fn index = ", i);
+			if i == ACCEPT
+			{
+				sum_ += d[0];
+				sum_ += d[1];
+				sum_ += d[2];
+				sum_ += d[3];
+				returned = true;
+			}
+			else if i == REJECT
+				returned = true;
+			else
+			{
+				let condition = false;
+				let j = 0;
+				while not condition and j < nclauses[i] - 1
+				{
+					//println("clause index = ", j);
+					let op   = ops     [j, i];
+					let num  = comp_num[j, i];
+					let xmas = xmas_idx[j, i];
+					if op == "<"
+						condition = d[xmas] < num;
+					else // op == ">"
+						condition = d[xmas] > num;
+					j += 1;
+				}
+				if condition
+					j -= 1;
+
+				i = fn_call[j, i];
+			}
+		}
+	}
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	// Consider xmas ratings in [1: 4001] (not inclusive of upper bound)
+	let min0 = 1;
+	let max0 = 4001;
+
+	// First pass: count fn lines.  Data can be ignored for part 2 because we're
+	// instead determining *all possible* data that could be accepted, not
+	// individual data scalars
+	let nfn = 0;
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		if str_ != ""
+			if is_alpha(str_[0])
+				nfn += 1;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("nfn = ", nfn);
+
+	//let fns       = [""; nfn];
+	let fn_labels = [""; nfn];
+	let bodies    = [""; nfn];
+
+	// Second pass: save fns
+	nfn = 0;
+	f = open(filename);
+	str_ = readln(f);
+	while not eof(f)
+	{
+		if str_ != ""
+			if is_alpha(str_[0])
+			{
+				//fns[nfn] = str_;
+
+				let strs = split_(str_, "{}");
+				fn_labels[nfn] = strs[0];
+
+				bodies[nfn] = strs[1];
+
+				nfn += 1;
+			}
+		str_ = readln(f);
+	}
+	close(f);
+
+	let xmas_idx = [-3; NCLAUSES_CAP, nfn];
+	let ops      = [""; NCLAUSES_CAP, nfn];
+	let comp_num = [-3; NCLAUSES_CAP, nfn];
+	let fn_call  = [-3; NCLAUSES_CAP, nfn];
+	let nclauses = [-3; nfn];
+
+	// Compile fn bodies by parsing strs to ints and looking up fn labels
+	for i in [0: nfn]
+	{
+		let fn_label = fn_labels[i];
+		let body = bodies[i];
+
+		// If / else-if / else clauses
+		let clauses = split_(body, ",");
+		nclauses[i] = size(clauses, 0);
+
+		for j in [0: nclauses[i] - 1]
+		{
+			let clause = clauses[j];
+			let strs = split_(clause, "<>:");
+
+			// Unpack from strs vector
+			let xmas_str = strs[0];
+			let op       = clause[1];  // removed by split_()
+			let comp_str = strs[1];
+			let call     = strs[2];
+
+			xmas_idx[j, i] = scan("xmas", xmas_str);
+			ops     [j, i] = op;
+			comp_num[j, i] = parse_i32(comp_str);
+
+			if call == "A"
+				fn_call[j, i] = ACCEPT;
+			else if call == "R"
+				fn_call[j, i] = REJECT;
+			else
+			{
+				// Scan for fn call label
+				fn_call [j, i] = 0;
+				while fn_labels[ fn_call[j, i] ] != call
+					fn_call[j, i] += 1;
+			}
+		}
+
+		// Handle else clause
+		let j = nclauses[i] - 1;
+		let call = clauses[j];
+		if call == "A"
+			fn_call[j, i] = ACCEPT;
+		else if call == "R"
+			fn_call[j, i] = REJECT;
+		else
+		{
+			// Scan for fn call label
+			fn_call [j, i] = 0;
+			while fn_labels[ fn_call[j, i] ] != call
+				fn_call[j, i] += 1;
+		}
+		//println();
+	}
+	//println("nclauses_max = ", nclauses_max);
+	//println("nclauses = ", nclauses);
+
+	let in_call = 0;
+	while fn_labels[ in_call ] != "in"
+		in_call += 1;
+
+	// Invert the fn call table: find the line where each fn is called
+	//
+	// Assume each fn is only called from 1 place.  This seems to be true for
+	// about a dozen fns that I checked manually
+	let fn_inv  = [-3; 2, nfn];
+	for i in [0: nfn]
+		for j in [0: nclauses[i]]
+		{
+			let call = fn_call[j, i];
+			if call != ACCEPT and call != REJECT
+			{
+				fn_inv[0, call] = i;
+				fn_inv[1, call] = j;
+			}
+		}
+	//println("fn_inv = ", fn_inv);
+
+	let sum_ = i64(0);
+
+	// For part 2, work backwards.  For each acceptance endpoint "A", work
+	// backwards through the fn to determine which xmas intersection of ranges
+	// can reach that endpoint.  Then find the fn that calls that fn which
+	// contains that endpoint, and continue working backwards and taking
+	// intersections of the allowed ranges, until we reach the "in" fn.
+	//
+	// That gives us a set of xmas ranges that can reach one "A" endpoint
+	//
+	// Repeat that process for every "A" endpoint and then add up (or take
+	// union) of each sub allowed range
+	//
+	// An xmas scalar cannot split into multiple endpoints, so I think summing
+	// should be sufficient and we don't have to worry about overlapping unions
+
+	// Iterate through fn calls ii
+	for ii in [0: nfn]
+	{
+		//println("fn index = ", ii);
+
+		// Iterate through clauses
+		for jj in [0: nclauses[ii]]
+		{
+			let i = ii;
+			//println("clause index = ", jj);
+
+			// We only care about acceptance "A" endpoints
+			if fn_call[jj, i] == ACCEPT
+			{
+				//println("ACCEPT");
+
+				// Initialize accepted range to all possible values
+				let min_ = [min0; NXMAS];
+				let max_ = [max0; NXMAS];
+
+				// Iterate through calling fns until we get to "in" (which is not
+				// called anywhere so has a negative value in the fn_inv table)
+				let j = jj;
+				while i >= 0
+				{
+					//println("fn index = ", i);
+
+					// Work backwards from endpoint.  Condition jj must be true,
+					// unless jj is the else clause, which is unconditional
+					if j < nclauses[i] - 1
+					{
+						let op   = ops     [j, i];
+						let num  = comp_num[j, i];
+						let xmas = xmas_idx[j, i];
+						if op == ">"
+							min_[xmas] = max(min_[xmas], num + 1);
+						else
+							max_[xmas] = min(max_[xmas], num);
+						//println("min_ = ", min_);
+						//println("max_ = ", max_);
+					}
+
+					// All conditions left of jj must be false
+					while j > 0
+					{
+						j -= 1;
+						let op   = ops     [j, i];
+						let num  = comp_num[j, i];
+						let xmas = xmas_idx[j, i];
+						if op == ">"
+							max_[xmas] = min(max_[xmas], num + 1);  // tricky +1. just random walk it
+						else
+							min_[xmas] = max(min_[xmas], num);
+						//println("min_ = ", min_);
+						//println("max_ = ", max_);
+					}
+
+					// Go to the fn that calls the current fn and keep working
+					// backwards
+					let caller = fn_inv[0, i];
+					j = fn_inv[1, i];
+					i = caller;
+					//println("caller = ", caller);
+				}
+				let prod_ =
+					i64(max_[0] - min_[0]) *
+					i64(max_[1] - min_[1]) *
+					i64(max_[2] - min_[2]) *
+					i64(max_[3] - min_[3]);
+
+				sum_ += prod_;
+			}
+			//println();
+		}
+	}
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

@@ -1,0 +1,169 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let x = 0;
+	let y = 0;
+
+	let area      = i64(0);
+	let perimeter = i64(0);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let x0 = x;
+		let y0 = y;
+
+		let strs = split_(str_, " ");
+		let dir_char = strs[0];
+		let dist = parse_i32(strs[1]);
+
+		//println("dir_char = ", dir_char);
+		//println("dist     = ", dist);
+
+		if      dir_char == "R"
+			x += dist;
+		else if dir_char == "L"
+			x -= dist;
+		else if dir_char == "D"
+			y += dist;
+		else if dir_char == "U"
+			y -= dist;
+
+		//println("x, y = ", [x, y]);
+
+		// Trapezoid area:  https://en.wikipedia.org/wiki/Shoelace_formula
+		let trap_area = (i64(y0) + y) * (x0 - x) / 2;
+
+		area += trap_area;
+		perimeter += dist;
+
+		//println();
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("area = ", area);
+	//println("peri = ", perimeter);
+
+	// The perimeter is not zero-width, so it also covers a finite area.  `area`
+	// actually covers half of the perimeter's area -- the inside half of the
+	// perimeter is accounted for by `area`, and the other half is out, so we
+	// add `perimeter / 2` here
+	//
+	// This still leaves out 4 literal corner cases from completing 1 full
+	// circle.  Each of the 4 real outer corners has a quarter unit area not yet
+	// accounted for.  There is negative area for inside corners too, but they
+	// cancel out with other (unreal) outer corners.  Because of 4 uncancelled
+	// quarter unit corner areas, we add another `1` here
+	let sum_ = 1 + area + perimeter / 2;
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i64
+{
+	let x = 0;
+	let y = 0;
+
+	let area      = i64(0);
+	let perimeter = i64(0);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let x0 = x;
+		let y0 = y;
+
+		let strs = split_(str_, " ");
+
+		let hexes = split_(strs[2], "()#");
+		let hex = hexes[0];
+		//println("hex = ", hex);
+
+		//let dir_char = strs[0];
+		let dir_char = hex[5];
+
+		//let dist = parse_i32(strs[1]);
+		let dist = parse_i32_hex(hex[0:5]);
+
+		//println("dir_char = ", dir_char);
+		//println("dist     = ", dist);
+
+		if      dir_char == "0"
+			x += dist;
+		else if dir_char == "2"
+			x -= dist;
+		else if dir_char == "1"
+			y += dist;
+		else if dir_char == "3"
+			y -= dist;
+
+		//println("x, y = ", [x, y]);
+
+		// Trapezoid area:  https://en.wikipedia.org/wiki/Shoelace_formula
+		let trap_area = (i64(y0) + y) * (x0 - x) / 2;
+
+		area += trap_area;
+		perimeter += dist;
+
+		//println();
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("area = ", area);
+	//println("peri = ", perimeter);
+
+	let sum_ = 1 + area + perimeter / 2;
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

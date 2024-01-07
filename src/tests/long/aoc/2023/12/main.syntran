@@ -3,7 +3,9 @@
 
 //==============================================================================
 
-let ifile = 1;
+// Real input works but it takes too long.  Use test input just for syntran unit
+// testing
+let ifile = 0;
 
 let filenames =
 [
@@ -31,8 +33,8 @@ fn part1(): i32
 	let iline = 0;
 	while not eof(f)
 	{
-		println("str_ = ", str_);
-		println("iline = ", iline);
+		//println("str_ = ", str_);
+		//println("iline = ", iline);
 
 		let ns = len(str_);
 
