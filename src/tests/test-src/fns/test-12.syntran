@@ -6,14 +6,21 @@ fn add_fn(u: [i32; :], v: [i32; :]): [i32; :]
 	//
 	// Don't use this in production
 
+	println("starting add_fn()");
+	println("u = ", u);
+	println("v = ", v);
+
 	let w = [0; size(u,0)];
+	println("w = ", w);
 	//let w = 0;
 
 	for i in [0: size(u,0)]
 	{
+		println("i = ", i);
 		//w = u[i] + v[i];
 		w[i] = u[i] + v[i];
 	}
+	println("w = ", w);
 	w;
 }
 

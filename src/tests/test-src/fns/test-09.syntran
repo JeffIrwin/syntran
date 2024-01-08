@@ -5,11 +5,16 @@ fn sum_fn(v: [i32; :]): i32
 	// enough
 	let s = 0;
 	for i in [0: size(v, 0)]
+	{
+		//println("v[", i, "] = ", v[i]);
 		s = s + v[i];
+	}
 	s;
 }
 
 let vec = [0: 6];
+println("vec = ", vec);
 let ans = sum_fn(vec);
+println("ans = ", ans);
 ans;
 

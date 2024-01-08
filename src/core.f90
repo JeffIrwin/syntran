@@ -27,6 +27,8 @@ module syntran__core_m
 		syntran_patch =  38
 
 	! TODO:
+	!  - size(), len(), count(), etc. should return i64
+	!  - negative for loop steps.  at least throw parser error
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
 	!    * vector addition, dot product, scalar-vector mult, ...
@@ -43,6 +45,8 @@ module syntran__core_m
 	!    which is defined below it
 	!    * added a matrix for gfortran 9 through 12
 	!    * 8 isn't installed.  maybe i can install it in workflow?
+	!    * tried "setup-fortran" marketplace action but it can't install 8
+	!      either
 	!  - pass by reference?  big boost to perf for array fns.  should be
 	!    possible by swapping around some id_index values in vars%vals array.
 	!    harder part is ensuring that only lvalues are passed by ref (not
@@ -68,23 +72,18 @@ module syntran__core_m
 	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
 	!      matching leading chars but diff lens
 	!    * ==, !=:  done
-	!  - negative for loop steps.  at least throw parser error
 	!  - fuzz testing
 	!  - substring indexing and slicing:
-	!    * str len intrinsic?  name it len() or size()?
-	!    * first, single-character indexing
-	!      > done
-	!    * then, range-based slicing
-	!      > done
 	!    * string arrays get an optional extra rank.  omitting the extra rank
 	!      refers to the whole string at that position in the array:
 	!      > str_vec[0] == str_vec[:,0]
 	!      > str_mat[0,0] == str_mat[:,0,0]
 	!      > etc.
-	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
-	!    include quick-start and links in top-level README?
-	!    * github automatically includes a Table of Contents in a menu, so maybe
-	!      it's better as-is
+	!    * str len intrinsic?  name it len() or size()?
+	!    * first, single-character indexing
+	!      > done
+	!    * then, range-based slicing
+	!      > done
 	!  - file reading
 	!    * readln(), eof() done
 	!    * also add a file_stat() fn which checks IO of previous file operation.
@@ -394,7 +393,7 @@ function declare_intrinsic_fns() result(fns)
 
 	! TODO: return i64?
 
-	size_fn%type = i32_type
+	size_fn%type = i64_type
 	allocate(size_fn%params(2))
 
 	size_fn%params(1)%type = array_type
@@ -853,7 +852,8 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 	! str scalar with single char subscript
 	if (vars%vals(node%id_index)%type == str_type) then
 		subscript = syntax_eval(node%lsubscripts(1), vars, fns, quietl)
-		index_ = subscript%sca%i32
+		!index_ = subscript%sca%i32
+		index_ = subscript%to_i64()
 		return
 	end if
 
@@ -874,7 +874,8 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 		! checking turned off in release, and setting a compiler macro
 		! definition to enable it only in debug
 
-		index_ = index_ + prod * subscript%sca%i32
+		!index_ = index_ + prod * subscript%sca%i32
+		index_ = index_ + prod * subscript%to_i64()
 		prod  = prod * vars%vals(node%id_index)%array%size(i)
 
 	end do
@@ -944,6 +945,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (array_expr)
 
 		!print *, 'evaluating array_expr'
+		!print *, 'identifier = ', node%identifier%text
 
 		if (node%val%array%kind == impl_array .and. allocated(node%step)) then
 
@@ -1060,15 +1062,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!elem = lbound
 
 			array%type = node%val%array%type
-			array%len_  = len_%sca%i32
+			!array%len_  = len_%sca%i32
+			array%len_  = len_%to_i64()
 			array%cap  = array%len_
 
 			if (array%type == f32_type) then
 
 				allocate(array%f32( array%cap ))
-				fstep = (ubound%sca%f32 - lbound%sca%f32) / (len_%sca%i32 - 1)
+				fstep = (ubound%sca%f32 - lbound%sca%f32) / (len_%to_i64() - 1)
 
-				do i = 0, len_%sca%i32 - 1
+				do i = 0, len_%to_i32() - 1
 					array%f32(i+1) = lbound%sca%f32 + i * fstep
 					!elem%sca%f32 = lbound%sca%f32 + i * fstep
 					!call array%push(elem)
@@ -1098,7 +1101,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				do i = 1, array%rank
 					len_ = syntax_eval(node%size(i), vars, fns, quietl)
-					array%size(i) = len_%sca%i32
+					!array%size(i) = len_%sca%i32
+					array%size(i) = len_%to_i64()
 					!print *, 'size['//str(i)//'] = ', array%size(i)
 				end do
 
@@ -1215,7 +1219,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!array%size = array%len_
 			do i = 1, array%rank
 				len_ = syntax_eval(node%size(i), vars, fns, quietl)
-				array%size(i) = len_%sca%i32
+				!array%size(i) = len_%sca%i32
+				array%size(i) = len_%to_i64()
 			end do
 
 			!print *, 'copying array'
@@ -1257,10 +1262,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	case (for_statement)
 
-		! TODO: this assumes for statement array range is i32 of the form [imin:
-		! imax].  Generalize for other forms, maybe make an array%at() method
-		! for shared use here for for_statement eval and above for array_expr
-		! eval.  If possible, don't expand implicit arrays for for loops
+		! TODO: this assumes for statement array range is i32/64 of the form
+		! [imin: imax].  Generalize for other forms, maybe make an array%at()
+		! method for shared use here for for_statement eval and above for
+		! array_expr eval.  If possible, don't expand implicit arrays for for
+		! loops
 
 		lbound = syntax_eval(node%array%lbound, vars, fns, quietl)
 		ubound = syntax_eval(node%array%ubound, vars, fns, quietl)
@@ -1270,17 +1276,40 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		! Get the type of the loop iterator for future i64 compatibility but
 		! throw an error since it's not supported yet
-		itr%type = lbound%type
-		!itr%type = vars%vals(node%id_index)%type  ! unset
+		!itr%type = lbound%type
+		if (any([lbound%type, ubound%type] == i64_type)) then
+			itr%type = i64_type
+		else
+			itr%type = i32_type
+		end if
+		!print *, 'itr%type = ', kind_name(itr%type)
 
-		! TODO: i64 for loop iterators
-		if (itr%type /= i32_type) then
+		! TODO: f32 for loop iterators.  Also check parse_for_statement(), which
+		! sets the type of the iterator
+		if (.not. any (lbound%type == [i32_type, i64_type])) then
 			write(*,*) err_eval_i32_itr(node%identifier%text)
 			call internal_error()
 		end if
 
-		do i = lbound%sca%i32, ubound%sca%i32 - 1
-			itr%sca%i32 = i
+		!if (ubound%type /= i32_type) then
+		if (.not. any (ubound%type == [i32_type, i64_type])) then
+			write(*,*) err_eval_i32_itr(node%identifier%text)
+			call internal_error()
+		end if
+
+		!print *, 'lbound = ', lbound%to_i64()
+		!print *, 'ubound = ', ubound%to_i64()
+
+		!do i = lbound%sca%i32, ubound%sca%i32 - 1
+		do i8 = lbound%to_i64(), ubound%to_i64() - 1
+
+			if (any([lbound%type, ubound%type] == i64_type)) then
+				itr%sca%i64 = i8
+			else
+				itr%sca%i32 = i8
+			end if
+
+			!print *, 'itr = ', itr%to_str()
 
 			! During evaluation, insert variables by array id_index instead of
 			! dict lookup.  This is much faster and can be done during
@@ -1625,19 +1654,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end if
 
 			! TODO: return type?  Make separate size64() fn?
-			res%sca%i32 = int(arg1%array%size( arg2%sca%i32 + 1 ))
-
-			! TODO: if the array pointer is not deallocated here, this was
-			! causing a memory leak which is especially bad when `size()` is
-			! called in a loop.  For something that was affected by the mem
-			! leak, see this Advent of Code solution:
-			!
-			!     https://github.com/JeffIrwin/aoc-syntran/blob/609ff26a1e4d4b7cc00fd4836f26b47d237aea71/2023/08/main-v3.syntran#L306
-			!
-			!
-			! Might not be strictly necessary now that %array is allocatable
-			! instead of pointable
-			!deallocate(arg1%array)
+			res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
 
 		case ("count")
 
@@ -1720,6 +1737,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (node%lsubscripts(1)%sub_kind)
 			case (scalar_sub)
 				i8 = subscript_eval(node, vars, fns, quietl)
+				!print *, 'i8 = ', i8
 				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
 
 			case (range_sub)
@@ -1761,6 +1779,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				! This could probably be lumped in with the range_sub case now
 				! that I have it fully generalized
 				i8 = subscript_eval(node, vars, fns, quietl)
+				!print *, 'i8 = ', i8
 				res = get_array_value_t(vars%vals(node%id_index)%array, i8)
 
 			else

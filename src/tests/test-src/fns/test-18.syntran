@@ -7,7 +7,7 @@ fn qsort(arr: [i32; :]): [i32; :]
 	//println("arr = ", arr);
 
 	let l = 0;
-	let h = size(arr,0) - 1;
+	let h = i32(size(arr,0) - 1);
 
 	if l < h
 	{
@@ -76,8 +76,8 @@ let ans = sorted;
 
 let expect = [1, 2, 2, 3, 3, 3, 4, 5];
 
-//println("sorted = ", sorted);
-//println("expect = ", expect);
+println("sorted = ", sorted);
+println("expect = ", expect);
 
 let norm = 0;
 for i in [0: size(expect, 0)]

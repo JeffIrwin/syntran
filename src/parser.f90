@@ -261,6 +261,8 @@ function parse_for_statement(parser) result(statement)
 	type(syntax_node_t)  :: array, body
 	type(syntax_token_t) :: for_token, in_token, identifier
 
+	type(value_t) :: dummy
+
 	!  For loop syntax:
 	!
 	!    for i in [1: 5]
@@ -305,8 +307,18 @@ function parse_for_statement(parser) result(statement)
 
 	if (allocated(array%lbound)) then
 		! Pathological code like `for <EOF>` can crash the parser :(
-		call parser%vars%insert(identifier%text, array%lbound%val, &
+
+		!print *, 'array%type = ', kind_name(array%val%type) ! "array_type" :(
+		!print *, 'array%type = ', kind_name(array%val%array%type)
+
+		! Array iterator type could be i32 or i64, and lbound type might not
+		! match ubound type!
+		dummy%type = array%val%array%type
+
+		!call parser%vars%insert(identifier%text, array%lbound%val, &
+		call parser%vars%insert(identifier%text, dummy, &
 			statement%id_index)
+
 	end if
 
 	body = parser%parse_statement()
