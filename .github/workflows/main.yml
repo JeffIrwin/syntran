@@ -128,7 +128,7 @@ jobs:
         #fpm test test --verbose --flag -Wno-tabs
         #fpm test long
         fpm test test --profile release --verbose --flag -Wno-tabs
-        fpm test long --profile release -Wno-tabs
+        fpm test long --profile release --flag -Wno-tabs
 
 ## TODO: try debugging ifx (and ifort?).  They both segfault almost immediately
 # while testing binary arithmetic (first unit test suite)
