@@ -1591,16 +1591,12 @@ function parse_primary_expr(parser) result(expr)
 				expr%kind = fn_call_expr
 				expr%identifier = identifier
 
-				print *, 'identifier%text = ', identifier%text
 				select case (identifier%text)
 				case ("min")
 
 					! TODO: check that there's at least 1 arg
 
-					!ptype = fn%params(1)%type
-					!ptype == any_type .or. ptype == args%v(i)%val%type
 					type_ = args%v(1)%val%type
-					print *, 'type_ = ', kind_name(type_)
 					select case (type_)
 					case (i32_type)
 						expr%identifier%text = "0min_i32"
@@ -1616,10 +1612,7 @@ function parse_primary_expr(parser) result(expr)
 
 					! TODO: check that there's at least 1 arg
 
-					!ptype = fn%params(1)%type
-					!ptype == any_type .or. ptype == args%v(i)%val%type
 					type_ = args%v(1)%val%type
-					print *, 'type_ = ', kind_name(type_)
 					select case (type_)
 					case (i32_type)
 						expr%identifier%text = "0max_i32"
@@ -1630,9 +1623,6 @@ function parse_primary_expr(parser) result(expr)
 						write(*,*) 'bad args for max()'
 						call internal_error()
 					end select
-
-				!case default
-				!	expr%identifier%text = identifier%text
 
 				end select
 
