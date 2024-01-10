@@ -161,9 +161,10 @@ function declare_intrinsic_fns() result(fns)
 
 	integer :: id_index, num_fns
 
-	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
+	type(fn_t) :: exp_fn, min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
-		i64_fn, parse_i64_fn, i32_fn, exit_fn, any_fn, all_fn, count_fn
+		i64_fn, parse_i64_fn, i32_fn, exit_fn, any_fn, all_fn, count_fn, &
+		min_i64_fn, max_i64_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -185,6 +186,11 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	! We could make max() and min() work with just 1 argument too.  I'm not sure
+	! why you would want to be able to take the max of 1 number, but it seems
+	! like an arbitrary limitation.  Anyway we follow the Fortran convention
+	! here
+
 	! TODO: polymorphic in any numeric type i32, f32, i64, f64, etc.  Also an
 	! array version min(array) as opposed to Fortran's minval()
 	!
@@ -192,44 +198,77 @@ function declare_intrinsic_fns() result(fns)
 	! same type.  For example, min(1, 2) and min(1.1, 2.1) are allowed, but
 	! min(1, 2.1) does not compile.  I think that's a reasonable restriction
 
-	! TODO: overload (?) i64 intrinsics or make that the default
+	! TODO: min_f32_fn, max_f32_fn, more as e.g. f64 is added, ...
 
-	min_fn%type = i32_type
-	allocate(min_fn%params(2))
+	min_i32_fn%type = i32_type
+	allocate(min_i32_fn%params(2))
 
-	min_fn%params(1)%type = i32_type
-	min_fn%params(1)%name = "a0"
+	min_i32_fn%params(1)%type = i32_type
+	min_i32_fn%params(1)%name = "a0"
 
-	min_fn%params(2)%type = i32_type
-	min_fn%params(2)%name = "a1"
+	min_i32_fn%params(2)%type = i32_type
+	min_i32_fn%params(2)%name = "a1"
 
-	min_fn%variadic_min  = 0
-	min_fn%variadic_type = i32_type
+	min_i32_fn%variadic_min  = 0
+	min_i32_fn%variadic_type = i32_type
 
+	! Internal overloaded name starts with a "0" because this would be illegal
+	! for user-defined fn's, so there can never be a clash
 	id_index = id_index + 1
-	call fns%insert("min", min_fn, id_index)
+	call fns%insert("0min_i32", min_i32_fn, id_index)
 
 	!********
 
-	max_fn%type = i32_type
-	allocate(max_fn%params(2))
+	min_i64_fn%type = i64_type
+	allocate(min_i64_fn%params(2))
 
-	max_fn%params(1)%type = i32_type
-	max_fn%params(1)%name = "a0"
+	min_i64_fn%params(1)%type = i64_type
+	min_i64_fn%params(1)%name = "a0"
 
-	! We could make max() and min() work with just 1 argument too.  I'm not sure
-	! why you would want to be able to take the max of 1 number, but it seems
-	! like an arbitrary limitation.  Anyway we follow the Fortran convention
-	! here
+	min_i64_fn%params(2)%type = i64_type
+	min_i64_fn%params(2)%name = "a1"
 
-	max_fn%params(2)%type = i32_type
-	max_fn%params(2)%name = "a1"
-
-	max_fn%variadic_min = 0
-	max_fn%variadic_type = i32_type
+	min_i64_fn%variadic_min  = 0
+	min_i64_fn%variadic_type = i64_type
 
 	id_index = id_index + 1
-	call fns%insert("max", max_fn, id_index)
+	call fns%insert("0min_i64", min_i64_fn, id_index)
+
+	!********
+
+	max_i32_fn%type = i32_type
+	allocate(max_i32_fn%params(2))
+
+	max_i32_fn%params(1)%type = i32_type
+	max_i32_fn%params(1)%name = "a0"
+
+	max_i32_fn%params(2)%type = i32_type
+	max_i32_fn%params(2)%name = "a1"
+
+	max_i32_fn%variadic_min  = 0
+	max_i32_fn%variadic_type = i32_type
+
+	! Internal overloaded name starts with a "0" because this would be illegal
+	! for user-defined fn's, so there can never be a clash
+	id_index = id_index + 1
+	call fns%insert("0max_i32", max_i32_fn, id_index)
+
+	!********
+
+	max_i64_fn%type = i64_type
+	allocate(max_i64_fn%params(2))
+
+	max_i64_fn%params(1)%type = i64_type
+	max_i64_fn%params(1)%name = "a0"
+
+	max_i64_fn%params(2)%type = i64_type
+	max_i64_fn%params(2)%name = "a1"
+
+	max_i64_fn%variadic_min  = 0
+	max_i64_fn%variadic_type = i64_type
+
+	id_index = id_index + 1
+	call fns%insert("0max_i64", max_i64_fn, id_index)
 
 	!********
 
@@ -483,8 +522,10 @@ function declare_intrinsic_fns() result(fns)
 
 	fns%fns = &
 		[ &
-			min_fn      , &
-			max_fn      , &
+			min_i32_fn  , &
+			min_i64_fn  , &
+			max_i32_fn  , &
+			max_i64_fn  , &
 			println_fn  , &
 			str_fn      , &
 			len_fn      , &
@@ -1492,7 +1533,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%f32 = exp(arg1%sca%f32)
 
-		case ("min")
+		case ("0min_i32")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%i32 = arg%sca%i32
@@ -1505,14 +1546,34 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%sca%i32 = min(res%sca%i32, arg%sca%i32)
 			end do
 
-		case ("max")
+		case ("0min_i64")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%sca%i64 = arg%sca%i64
+
+			do i = 2, size(node%args)
+				arg = syntax_eval(node%args(i), vars, fns, quietl)
+				res%sca%i64 = min(res%sca%i64, arg%sca%i64)
+			end do
+
+		case ("0max_i32")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%i32 = arg%sca%i32
+
 			do i = 2, size(node%args)
-				!print *, 'arg ', i
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
 				res%sca%i32 = max(res%sca%i32, arg%sca%i32)
+			end do
+
+		case ("0max_i64")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%sca%i64 = arg%sca%i64
+
+			do i = 2, size(node%args)
+				arg = syntax_eval(node%args(i), vars, fns, quietl)
+				res%sca%i64 = max(res%sca%i64, arg%sca%i64)
 			end do
 
 		case ("println")

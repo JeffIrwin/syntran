@@ -1421,7 +1421,7 @@ function parse_primary_expr(parser) result(expr)
 
 	character(len = :), allocatable :: param_type, arg_type
 	integer :: i, io, id_index, param_rank, arg_rank, span0, span1, &
-		ptype, atype, exp_rank, pos0
+		ptype, atype, exp_rank, pos0, type_
 	logical :: bool, types_match
 
 	type(fn_t) :: fn
@@ -1588,7 +1588,60 @@ function parse_primary_expr(parser) result(expr)
 
 				rparen  = parser%match(rparen_token)
 
-				fn = parser%fns%search(identifier%text, id_index, io)
+				expr%kind = fn_call_expr
+				expr%identifier = identifier
+
+				print *, 'identifier%text = ', identifier%text
+				select case (identifier%text)
+				case ("min")
+
+					! TODO: check that there's at least 1 arg
+
+					!ptype = fn%params(1)%type
+					!ptype == any_type .or. ptype == args%v(i)%val%type
+					type_ = args%v(1)%val%type
+					print *, 'type_ = ', kind_name(type_)
+					select case (type_)
+					case (i32_type)
+						expr%identifier%text = "0min_i32"
+					case (i64_type)
+						expr%identifier%text = "0min_i64"
+					case default
+						! TODO
+						write(*,*) 'bad args for min()'
+						call internal_error()
+					end select
+
+				case ("max")
+
+					! TODO: check that there's at least 1 arg
+
+					!ptype = fn%params(1)%type
+					!ptype == any_type .or. ptype == args%v(i)%val%type
+					type_ = args%v(1)%val%type
+					print *, 'type_ = ', kind_name(type_)
+					select case (type_)
+					case (i32_type)
+						expr%identifier%text = "0max_i32"
+					case (i64_type)
+						expr%identifier%text = "0max_i64"
+					case default
+						! TODO
+						write(*,*) 'bad args for max()'
+						call internal_error()
+					end select
+
+				!case default
+				!	expr%identifier%text = identifier%text
+
+				end select
+
+				! Lookup by expr%identifier%text (e.g. "0min_i32"), but log
+				! diagnostics based on identifier%text (e.g. "min")
+				!
+				! Might need to add separate internal/external fn names for
+				! overloaded cases
+				fn = parser%fns%search(expr%identifier%text, id_index, io)
 				if (io /= exit_success) then
 
 					span = new_span(identifier%pos, len(identifier%text))
@@ -1601,10 +1654,6 @@ function parse_primary_expr(parser) result(expr)
 					return
 
 				end if
-
-				expr%kind = fn_call_expr
-
-				expr%identifier = identifier
 
 				expr%val%type = fn%type
 				if (fn%type == array_type) then
@@ -1685,6 +1734,17 @@ function parse_primary_expr(parser) result(expr)
 
 					types_match = &
 						ptype == any_type .or. ptype == args%v(i)%val%type
+
+					!! make a fn for use here and for array `atype` below? this
+					!! could be more easily extended if i add fn's with something
+					!! like `int_type` or `num_type`
+					!types_match = .false.
+					!select case (ptype)
+					!case (any_type)
+					!	types_match = .true.
+					!case default
+					!	types_match = ptype == args%v(i)%val%type
+					!end select
 
 					if (.not. types_match) then
 
