@@ -7,9 +7,7 @@ fn qsort(arr: [i32; :]): [i32; :]
 	//println("arr = ", arr);
 
 	let l = 0;
-
-	// TODO: i32 cast should not be required
-	let h = i32(size(arr,0) - 1);
+	let h = size(arr,0) - 1;
 
 	if l < h
 	{

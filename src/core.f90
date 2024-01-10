@@ -1480,7 +1480,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		else
 			!print *, 'LHS array subscript assignment'
-			!print *, 'LHS type = ', vars%vals(node%id_index)%type
+			!print *, 'LHS type = ', kind_name(vars%vals(node%id_index)%array%type)  ! not alloc for str
 
 			! Assign return value from RHS
 			res = syntax_eval(node%right, vars, fns, quietl)
@@ -3579,13 +3579,13 @@ subroutine set_array_value_t(array, i, val)
 			array%bool(i + 1) = val%sca%bool
 
 		case (i32_type)
-			array%i32(i + 1) = val%sca%i32
+			array%i32(i + 1) = val%to_i32()
 
 		case (i64_type)
-			array%i64(i + 1) = val%sca%i64
+			array%i64(i + 1) = val%to_i64()
 
 		case (f32_type)
-			array%f32(i + 1) = val%sca%f32
+			array%f32(i + 1) = val%to_f32()
 
 		case (str_type)
 			array%str(i + 1) = val%sca%str
