@@ -76,6 +76,9 @@ let ans = sorted;
 
 let expect = [1, 2, 2, 3, 3, 3, 4, 5];
 
+//println("sorted = ", sorted);
+//println("expect = ", expect);
+
 let norm = 0;
 for i in [0: size(expect, 0)]
 {

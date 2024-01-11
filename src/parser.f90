@@ -1594,34 +1594,26 @@ function parse_primary_expr(parser) result(expr)
 				select case (identifier%text)
 				case ("min")
 
-					! TODO: check that there's at least 1 arg
+					type_ = i32_type
+					if (args%len_ >= 1) type_ = args%v(1)%val%type
 
-					type_ = args%v(1)%val%type
 					select case (type_)
-					case (i32_type)
-						expr%identifier%text = "0min_i32"
 					case (i64_type)
 						expr%identifier%text = "0min_i64"
 					case default
-						! TODO
-						write(*,*) 'bad args for min()'
-						call internal_error()
+						expr%identifier%text = "0min_i32"
 					end select
 
 				case ("max")
 
-					! TODO: check that there's at least 1 arg
+					type_ = i32_type
+					if (args%len_ >= 1) type_ = args%v(1)%val%type
 
-					type_ = args%v(1)%val%type
 					select case (type_)
-					case (i32_type)
-						expr%identifier%text = "0max_i32"
 					case (i64_type)
 						expr%identifier%text = "0max_i64"
 					case default
-						! TODO
-						write(*,*) 'bad args for max()'
-						call internal_error()
+						expr%identifier%text = "0max_i32"
 					end select
 
 				end select
