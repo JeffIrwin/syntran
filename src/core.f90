@@ -27,6 +27,8 @@ module syntran__core_m
 		syntran_patch =  38
 
 	! TODO:
+	!  - size(), len(), count(), etc. should return i64
+	!  - negative for loop steps.  at least throw parser error
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
 	!    * vector addition, dot product, scalar-vector mult, ...
@@ -43,6 +45,8 @@ module syntran__core_m
 	!    which is defined below it
 	!    * added a matrix for gfortran 9 through 12
 	!    * 8 isn't installed.  maybe i can install it in workflow?
+	!    * tried "setup-fortran" marketplace action but it can't install 8
+	!      either
 	!  - pass by reference?  big boost to perf for array fns.  should be
 	!    possible by swapping around some id_index values in vars%vals array.
 	!    harder part is ensuring that only lvalues are passed by ref (not
@@ -68,23 +72,18 @@ module syntran__core_m
 	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
 	!      matching leading chars but diff lens
 	!    * ==, !=:  done
-	!  - negative for loop steps.  at least throw parser error
 	!  - fuzz testing
 	!  - substring indexing and slicing:
-	!    * str len intrinsic?  name it len() or size()?
-	!    * first, single-character indexing
-	!      > done
-	!    * then, range-based slicing
-	!      > done
 	!    * string arrays get an optional extra rank.  omitting the extra rank
 	!      refers to the whole string at that position in the array:
 	!      > str_vec[0] == str_vec[:,0]
 	!      > str_mat[0,0] == str_mat[:,0,0]
 	!      > etc.
-	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
-	!    include quick-start and links in top-level README?
-	!    * github automatically includes a Table of Contents in a menu, so maybe
-	!      it's better as-is
+	!    * str len intrinsic?  name it len() or size()?
+	!    * first, single-character indexing
+	!      > done
+	!    * then, range-based slicing
+	!      > done
 	!  - file reading
 	!    * readln(), eof() done
 	!    * also add a file_stat() fn which checks IO of previous file operation.
@@ -162,9 +161,10 @@ function declare_intrinsic_fns() result(fns)
 
 	integer :: id_index, num_fns
 
-	type(fn_t) :: exp_fn, min_fn, max_fn, println_fn, size_fn, open_fn, &
+	type(fn_t) :: exp_fn, min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
-		i64_fn, parse_i64_fn, i32_fn, exit_fn, any_fn, all_fn, count_fn
+		i64_fn, parse_i64_fn, i32_fn, exit_fn, any_fn, all_fn, count_fn, &
+		min_i64_fn, max_i64_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -186,6 +186,11 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	! We could make max() and min() work with just 1 argument too.  I'm not sure
+	! why you would want to be able to take the max of 1 number, but it seems
+	! like an arbitrary limitation.  Anyway we follow the Fortran convention
+	! here
+
 	! TODO: polymorphic in any numeric type i32, f32, i64, f64, etc.  Also an
 	! array version min(array) as opposed to Fortran's minval()
 	!
@@ -193,44 +198,77 @@ function declare_intrinsic_fns() result(fns)
 	! same type.  For example, min(1, 2) and min(1.1, 2.1) are allowed, but
 	! min(1, 2.1) does not compile.  I think that's a reasonable restriction
 
-	! TODO: overload (?) i64 intrinsics or make that the default
+	! TODO: min_f32_fn, max_f32_fn, more as e.g. f64 is added, ...
 
-	min_fn%type = i32_type
-	allocate(min_fn%params(2))
+	min_i32_fn%type = i32_type
+	allocate(min_i32_fn%params(2))
 
-	min_fn%params(1)%type = i32_type
-	min_fn%params(1)%name = "a0"
+	min_i32_fn%params(1)%type = i32_type
+	min_i32_fn%params(1)%name = "a0"
 
-	min_fn%params(2)%type = i32_type
-	min_fn%params(2)%name = "a1"
+	min_i32_fn%params(2)%type = i32_type
+	min_i32_fn%params(2)%name = "a1"
 
-	min_fn%variadic_min  = 0
-	min_fn%variadic_type = i32_type
+	min_i32_fn%variadic_min  = 0
+	min_i32_fn%variadic_type = i32_type
 
+	! Internal overloaded name starts with a "0" because this would be illegal
+	! for user-defined fn's, so there can never be a clash
 	id_index = id_index + 1
-	call fns%insert("min", min_fn, id_index)
+	call fns%insert("0min_i32", min_i32_fn, id_index)
 
 	!********
 
-	max_fn%type = i32_type
-	allocate(max_fn%params(2))
+	min_i64_fn%type = i64_type
+	allocate(min_i64_fn%params(2))
 
-	max_fn%params(1)%type = i32_type
-	max_fn%params(1)%name = "a0"
+	min_i64_fn%params(1)%type = i64_type
+	min_i64_fn%params(1)%name = "a0"
 
-	! We could make max() and min() work with just 1 argument too.  I'm not sure
-	! why you would want to be able to take the max of 1 number, but it seems
-	! like an arbitrary limitation.  Anyway we follow the Fortran convention
-	! here
+	min_i64_fn%params(2)%type = i64_type
+	min_i64_fn%params(2)%name = "a1"
 
-	max_fn%params(2)%type = i32_type
-	max_fn%params(2)%name = "a1"
-
-	max_fn%variadic_min = 0
-	max_fn%variadic_type = i32_type
+	min_i64_fn%variadic_min  = 0
+	min_i64_fn%variadic_type = i64_type
 
 	id_index = id_index + 1
-	call fns%insert("max", max_fn, id_index)
+	call fns%insert("0min_i64", min_i64_fn, id_index)
+
+	!********
+
+	max_i32_fn%type = i32_type
+	allocate(max_i32_fn%params(2))
+
+	max_i32_fn%params(1)%type = i32_type
+	max_i32_fn%params(1)%name = "a0"
+
+	max_i32_fn%params(2)%type = i32_type
+	max_i32_fn%params(2)%name = "a1"
+
+	max_i32_fn%variadic_min  = 0
+	max_i32_fn%variadic_type = i32_type
+
+	! Internal overloaded name starts with a "0" because this would be illegal
+	! for user-defined fn's, so there can never be a clash
+	id_index = id_index + 1
+	call fns%insert("0max_i32", max_i32_fn, id_index)
+
+	!********
+
+	max_i64_fn%type = i64_type
+	allocate(max_i64_fn%params(2))
+
+	max_i64_fn%params(1)%type = i64_type
+	max_i64_fn%params(1)%name = "a0"
+
+	max_i64_fn%params(2)%type = i64_type
+	max_i64_fn%params(2)%name = "a1"
+
+	max_i64_fn%variadic_min  = 0
+	max_i64_fn%variadic_type = i64_type
+
+	id_index = id_index + 1
+	call fns%insert("0max_i64", max_i64_fn, id_index)
 
 	!********
 
@@ -392,14 +430,11 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	! TODO: return i64?
-
-	size_fn%type = i32_type
+	size_fn%type = i64_type
 	allocate(size_fn%params(2))
 
 	size_fn%params(1)%type = array_type
 
-	!size_fn%params(1)%array_type = i32_type
 	size_fn%params(1)%array_type = any_type
 	size_fn%params(1)%rank = -1  ! negative means any rank
 
@@ -484,8 +519,10 @@ function declare_intrinsic_fns() result(fns)
 
 	fns%fns = &
 		[ &
-			min_fn      , &
-			max_fn      , &
+			min_i32_fn  , &
+			min_i64_fn  , &
+			max_i32_fn  , &
+			max_i64_fn  , &
 			println_fn  , &
 			str_fn      , &
 			len_fn      , &
@@ -853,7 +890,7 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 	! str scalar with single char subscript
 	if (vars%vals(node%id_index)%type == str_type) then
 		subscript = syntax_eval(node%lsubscripts(1), vars, fns, quietl)
-		index_ = subscript%sca%i32
+		index_ = subscript%to_i64()
 		return
 	end if
 
@@ -874,7 +911,7 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 		! checking turned off in release, and setting a compiler macro
 		! definition to enable it only in debug
 
-		index_ = index_ + prod * subscript%sca%i32
+		index_ = index_ + prod * subscript%to_i64()
 		prod  = prod * vars%vals(node%id_index)%array%size(i)
 
 	end do
@@ -944,6 +981,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (array_expr)
 
 		!print *, 'evaluating array_expr'
+		!print *, 'identifier = ', node%identifier%text
 
 		if (node%val%array%kind == impl_array .and. allocated(node%step)) then
 
@@ -1060,18 +1098,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!elem = lbound
 
 			array%type = node%val%array%type
-			array%len_  = len_%sca%i32
+			array%len_  = len_%to_i64()
 			array%cap  = array%len_
 
 			if (array%type == f32_type) then
 
 				allocate(array%f32( array%cap ))
-				fstep = (ubound%sca%f32 - lbound%sca%f32) / (len_%sca%i32 - 1)
+				fstep = (ubound%sca%f32 - lbound%sca%f32) / (len_%to_i64() - 1)
 
-				do i = 0, len_%sca%i32 - 1
+				do i = 0, len_%to_i32() - 1
 					array%f32(i+1) = lbound%sca%f32 + i * fstep
-					!elem%sca%f32 = lbound%sca%f32 + i * fstep
-					!call array%push(elem)
 				end do
 
 			else
@@ -1098,7 +1134,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				do i = 1, array%rank
 					len_ = syntax_eval(node%size(i), vars, fns, quietl)
-					array%size(i) = len_%sca%i32
+					array%size(i) = len_%to_i64()
 					!print *, 'size['//str(i)//'] = ', array%size(i)
 				end do
 
@@ -1215,7 +1251,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!array%size = array%len_
 			do i = 1, array%rank
 				len_ = syntax_eval(node%size(i), vars, fns, quietl)
-				array%size(i) = len_%sca%i32
+				array%size(i) = len_%to_i64()
 			end do
 
 			!print *, 'copying array'
@@ -1257,10 +1293,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	case (for_statement)
 
-		! TODO: this assumes for statement array range is i32 of the form [imin:
-		! imax].  Generalize for other forms, maybe make an array%at() method
-		! for shared use here for for_statement eval and above for array_expr
-		! eval.  If possible, don't expand implicit arrays for for loops
+		! TODO: this assumes for statement array range is i32/64 of the form
+		! [imin: imax].  Generalize for other forms, maybe make an array%at()
+		! method for shared use here for for_statement eval and above for
+		! array_expr eval.  If possible, don't expand implicit arrays for for
+		! loops
 
 		lbound = syntax_eval(node%array%lbound, vars, fns, quietl)
 		ubound = syntax_eval(node%array%ubound, vars, fns, quietl)
@@ -1268,19 +1305,37 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! push scope to make the loop iterator local
 		call vars%push_scope()
 
-		! Get the type of the loop iterator for future i64 compatibility but
-		! throw an error since it's not supported yet
-		itr%type = lbound%type
-		!itr%type = vars%vals(node%id_index)%type  ! unset
+		if (any([lbound%type, ubound%type] == i64_type)) then
+			itr%type = i64_type
+		else
+			itr%type = i32_type
+		end if
+		!print *, 'itr%type = ', kind_name(itr%type)
 
-		! TODO: i64 for loop iterators
-		if (itr%type /= i32_type) then
+		! TODO: f32 for loop iterators.  Also check parse_for_statement(), which
+		! sets the type of the iterator
+		if (.not. any (lbound%type == [i32_type, i64_type])) then
 			write(*,*) err_eval_i32_itr(node%identifier%text)
 			call internal_error()
 		end if
 
-		do i = lbound%sca%i32, ubound%sca%i32 - 1
-			itr%sca%i32 = i
+		if (.not. any (ubound%type == [i32_type, i64_type])) then
+			write(*,*) err_eval_i32_itr(node%identifier%text)
+			call internal_error()
+		end if
+
+		!print *, 'lbound = ', lbound%to_i64()
+		!print *, 'ubound = ', ubound%to_i64()
+
+		do i8 = lbound%to_i64(), ubound%to_i64() - 1
+
+			if (any([lbound%type, ubound%type] == i64_type)) then
+				itr%sca%i64 = i8
+			else
+				itr%sca%i32 = i8
+			end if
+
+			!print *, 'itr = ', itr%to_str()
 
 			! During evaluation, insert variables by array id_index instead of
 			! dict lookup.  This is much faster and can be done during
@@ -1410,7 +1465,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		else
 			!print *, 'LHS array subscript assignment'
-			!print *, 'LHS type = ', vars%vals(node%id_index)%type
+			!print *, 'LHS type = ', kind_name(vars%vals(node%id_index)%array%type)  ! not alloc for str
 
 			! Assign return value from RHS
 			res = syntax_eval(node%right, vars, fns, quietl)
@@ -1463,7 +1518,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%f32 = exp(arg1%sca%f32)
 
-		case ("min")
+		case ("0min_i32")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%i32 = arg%sca%i32
@@ -1476,14 +1531,34 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%sca%i32 = min(res%sca%i32, arg%sca%i32)
 			end do
 
-		case ("max")
+		case ("0min_i64")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%sca%i64 = arg%sca%i64
+
+			do i = 2, size(node%args)
+				arg = syntax_eval(node%args(i), vars, fns, quietl)
+				res%sca%i64 = min(res%sca%i64, arg%sca%i64)
+			end do
+
+		case ("0max_i32")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%i32 = arg%sca%i32
+
 			do i = 2, size(node%args)
-				!print *, 'arg ', i
 				arg = syntax_eval(node%args(i), vars, fns, quietl)
 				res%sca%i32 = max(res%sca%i32, arg%sca%i32)
+			end do
+
+		case ("0max_i64")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%sca%i64 = arg%sca%i64
+
+			do i = 2, size(node%args)
+				arg = syntax_eval(node%args(i), vars, fns, quietl)
+				res%sca%i64 = max(res%sca%i64, arg%sca%i64)
 			end do
 
 		case ("println")
@@ -1620,24 +1695,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				! TODO: this should be a runtime error (like bounds-checking),
 				! not an internal_error.  I just don't have infrastructure for
 				! runtime error handling yet
-				write(*,*) 'Error: rank mismatch in size() call'
+				write(*,*) err_int_prefix//'rank mismatch in size() call'//color_reset
 				call internal_error()
 			end if
 
-			! TODO: return type?  Make separate size64() fn?
-			res%sca%i32 = int(arg1%array%size( arg2%sca%i32 + 1 ))
-
-			! TODO: if the array pointer is not deallocated here, this was
-			! causing a memory leak which is especially bad when `size()` is
-			! called in a loop.  For something that was affected by the mem
-			! leak, see this Advent of Code solution:
-			!
-			!     https://github.com/JeffIrwin/aoc-syntran/blob/609ff26a1e4d4b7cc00fd4836f26b47d237aea71/2023/08/main-v3.syntran#L306
-			!
-			!
-			! Might not be strictly necessary now that %array is allocatable
-			! instead of pointable
-			!deallocate(arg1%array)
+			res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
 
 		case ("count")
 
@@ -1720,6 +1782,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			select case (node%lsubscripts(1)%sub_kind)
 			case (scalar_sub)
 				i8 = subscript_eval(node, vars, fns, quietl)
+				!print *, 'i8 = ', i8
 				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
 
 			case (range_sub)
@@ -1761,6 +1824,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				! This could probably be lumped in with the range_sub case now
 				! that I have it fully generalized
 				i8 = subscript_eval(node, vars, fns, quietl)
+				!print *, 'i8 = ', i8
 				res = get_array_value_t(vars%vals(node%id_index)%array, i8)
 
 			else
@@ -3499,13 +3563,13 @@ subroutine set_array_value_t(array, i, val)
 			array%bool(i + 1) = val%sca%bool
 
 		case (i32_type)
-			array%i32(i + 1) = val%sca%i32
+			array%i32(i + 1) = val%to_i32()
 
 		case (i64_type)
-			array%i64(i + 1) = val%sca%i64
+			array%i64(i + 1) = val%to_i64()
 
 		case (f32_type)
-			array%f32(i + 1) = val%sca%f32
+			array%f32(i + 1) = val%to_f32()
 
 		case (str_type)
 			array%str(i + 1) = val%sca%str

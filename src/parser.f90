@@ -261,6 +261,8 @@ function parse_for_statement(parser) result(statement)
 	type(syntax_node_t)  :: array, body
 	type(syntax_token_t) :: for_token, in_token, identifier
 
+	type(value_t) :: dummy
+
 	!  For loop syntax:
 	!
 	!    for i in [1: 5]
@@ -305,8 +307,16 @@ function parse_for_statement(parser) result(statement)
 
 	if (allocated(array%lbound)) then
 		! Pathological code like `for <EOF>` can crash the parser :(
-		call parser%vars%insert(identifier%text, array%lbound%val, &
+
+		!print *, 'array%type = ', kind_name(array%val%type) ! "array_type" :(
+		!print *, 'array%type = ', kind_name(array%val%array%type)
+
+		! Array iterator type could be i32 or i64, and lbound type might not
+		! match ubound type!
+		dummy%type = array%val%array%type
+		call parser%vars%insert(identifier%text, dummy, &
 			statement%id_index)
+
 	end if
 
 	body = parser%parse_statement()
@@ -1409,7 +1419,7 @@ function parse_primary_expr(parser) result(expr)
 
 	character(len = :), allocatable :: param_type, arg_type
 	integer :: i, io, id_index, param_rank, arg_rank, span0, span1, &
-		ptype, atype, exp_rank, pos0
+		ptype, atype, exp_rank, pos0, type_
 	logical :: bool, types_match
 
 	type(fn_t) :: fn
@@ -1576,7 +1586,43 @@ function parse_primary_expr(parser) result(expr)
 
 				rparen  = parser%match(rparen_token)
 
-				fn = parser%fns%search(identifier%text, id_index, io)
+				expr%kind = fn_call_expr
+				expr%identifier = identifier
+
+				! Resolve special overloaded intrinsic fns
+				select case (identifier%text)
+				case ("min")
+
+					type_ = i32_type
+					if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+					select case (type_)
+					case (i64_type)
+						expr%identifier%text = "0min_i64"
+					case default
+						expr%identifier%text = "0min_i32"
+					end select
+
+				case ("max")
+
+					type_ = i32_type
+					if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+					select case (type_)
+					case (i64_type)
+						expr%identifier%text = "0max_i64"
+					case default
+						expr%identifier%text = "0max_i32"
+					end select
+
+				end select
+
+				! Lookup by expr%identifier%text (e.g. "0min_i32"), but log
+				! diagnostics based on identifier%text (e.g. "min")
+				!
+				! Might need to add separate internal/external fn names for
+				! overloaded cases
+				fn = parser%fns%search(expr%identifier%text, id_index, io)
 				if (io /= exit_success) then
 
 					span = new_span(identifier%pos, len(identifier%text))
@@ -1589,10 +1635,6 @@ function parse_primary_expr(parser) result(expr)
 					return
 
 				end if
-
-				expr%kind = fn_call_expr
-
-				expr%identifier = identifier
 
 				expr%val%type = fn%type
 				if (fn%type == array_type) then
@@ -1673,6 +1715,17 @@ function parse_primary_expr(parser) result(expr)
 
 					types_match = &
 						ptype == any_type .or. ptype == args%v(i)%val%type
+
+					!! make a fn for use here and for array `atype` below? this
+					!! could be more easily extended if i add fn's with something
+					!! generic like `int_type` or `num_type`
+					!types_match = .false.
+					!select case (ptype)
+					!case (any_type)
+					!	types_match = .true.
+					!case default
+					!	types_match = ptype == args%v(i)%val%type
+					!end select
 
 					if (.not. types_match) then
 

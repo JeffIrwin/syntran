@@ -136,7 +136,7 @@ fn part1(): i32
 		// RHS of "->"
 		let r = rhs[i];
 		let outs = split_(r, ", ");
-		max_out = max(max_out, size(outs, 0));
+		max_out = max(max_out, i32(size(outs, 0)));
 
 		//println();
 	}
@@ -371,7 +371,7 @@ fn part2(): i32
 		// RHS of "->"
 		let r = rhs[i];
 		let outs = split_(r, ", ");
-		max_out = max(max_out, size(outs, 0));
+		max_out = max(max_out, i32(size(outs, 0)));
 
 		//println();
 	}

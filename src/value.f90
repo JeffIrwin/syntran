@@ -91,6 +91,7 @@ module syntran__value_m
 
 		contains
 			procedure :: to_str => value_to_str
+			procedure :: to_f32 => value_to_f32
 			procedure :: to_i32 => value_to_i32
 			procedure :: to_i64 => value_to_i64
 
@@ -559,6 +560,44 @@ subroutine push_array(vector, val)
 	end if
 
 end subroutine push_array
+
+!===============================================================================
+
+function value_to_f32(val) result(ans)
+
+	class(value_t) :: val
+
+	real(kind = 4) :: ans
+
+	select case (val%type)
+
+		case (f32_type)
+			ans = val%sca%f32
+
+		case (i32_type)
+			ans = val%sca%i32
+
+		case (i64_type)
+			ans = val%sca%i64
+
+		case (str_type)
+
+			if (len(val%sca%str%s) == 1) then
+				ans = iachar(val%sca%str%s)
+			else
+				write(*,*) err_int_prefix//'cannot convert from type `' &
+					//kind_name(val%type)//'` to f32 '//color_reset
+				call internal_error()
+			end if
+
+		case default
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to f32 '//color_reset
+			call internal_error()
+
+	end select
+
+end function value_to_f32
 
 !===============================================================================
 
