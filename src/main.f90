@@ -4,7 +4,6 @@
 program main
 
 	use syntran__app_m
-	use syntran__core_m
 	use syntran
 
 	implicit none

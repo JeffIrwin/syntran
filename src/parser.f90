@@ -3,10 +3,13 @@
 
 module syntran__parser_m
 
-	use syntran__errors_m
+	!use syntran__errors_m
 	use syntran__lexer_m
-	use syntran__types_m
-	use syntran__utils_m
+
+	!! types and utils are used indirectly through lexer, so it doesn't matter
+	!! much if they're explicitly included here
+	!use syntran__types_m
+	!use syntran__utils_m
 
 	implicit none
 

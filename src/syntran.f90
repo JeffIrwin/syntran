@@ -7,6 +7,8 @@ module syntran
 	! any private statements, so you just have to be careful if you use the
 	! syntran library as an API (as opposed to using the syntran CLI)
 
+	use syntran__core_m
+
 	implicit none
 
 !===============================================================================
@@ -31,9 +33,6 @@ function syntran_interpret(str_, quiet) result(res_str)
 	! However, it's still useful for testing to have something that evals 1 line
 	! at a time, so that we can have automatic test coverage of weird
 	! interactive interpreter edge cases
-
-	use syntran__core_m
-	use syntran__utils_m
 
 	character(len = *), intent(in), optional :: str_
 	logical, intent(in), optional :: quiet
@@ -179,8 +178,6 @@ end function syntran_interpret
 
 integer function syntran_eval_i32(str_) result(eval_i32)
 
-	use syntran__core_m
-
 	character(len = *), intent(in) :: str_
 
 	type(fns_t) :: fns
@@ -209,8 +206,6 @@ end function syntran_eval_i32
 
 integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 
-	use syntran__core_m
-
 	character(len = *), intent(in) :: str_
 
 	type(fns_t) :: fns
@@ -238,8 +233,6 @@ end function syntran_eval_i64
 !===============================================================================
 
 real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
-
-	use syntran__core_m
 
 	character(len = *), intent(in) :: str_
 
@@ -281,8 +274,6 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
 	! for syntran_interpret_file() is boolean
-
-	use syntran__core_m
 
 	character(len = *), intent(in)  :: str_
 	character(len = :), allocatable :: res
@@ -358,8 +349,6 @@ function syntran_interpret_file(file, quiet, chdir_) result(res)
 	!   - enable input echo for file input (not for stdin)
 	!   - echo inputs w/o "syntran$" prompt and print outputs after a comment,
 	!     for ease of updating documentation with consistent styling
-
-	use syntran__core_m
 
 	character(len = *), intent(in)  :: file
 	character(len = :), allocatable :: res

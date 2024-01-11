@@ -6,7 +6,7 @@ module syntran__value_m
 	use syntran__consts_m
 	use syntran__errors_m
 	!use syntran__types_m
-	use syntran__utils_m
+	!use syntran__utils_m
 
 	implicit none
 

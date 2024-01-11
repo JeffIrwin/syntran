@@ -3,9 +3,9 @@
 
 module syntran__types_m
 
-	use syntran__consts_m
-	use syntran__errors_m
-	use syntran__utils_m
+	!use syntran__consts_m
+	!use syntran__errors_m
+	!use syntran__utils_m
 	use syntran__value_m
 
 	implicit none
