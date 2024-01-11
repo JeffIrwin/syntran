@@ -1599,12 +1599,11 @@ end function parse_name_expr
 
 !===============================================================================
 
-! TODO: rename `expr` return val
-function parse_fn_call(parser) result(expr)
+function parse_fn_call(parser) result(fn_call)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: expr
+	type(syntax_node_t) :: fn_call
 
 	!********
 
@@ -1625,7 +1624,6 @@ function parse_fn_call(parser) result(expr)
 	! Function call expression
 	identifier = parser%match(identifier_token)
 	
-	!print *, 'parsing fn_call_expr'
 	!print *, 'identifier = ', identifier%text
 	
 	args = new_syntax_node_vector()
@@ -1664,8 +1662,8 @@ function parse_fn_call(parser) result(expr)
 	
 	rparen  = parser%match(rparen_token)
 	
-	expr%kind = fn_call_expr
-	expr%identifier = identifier
+	fn_call%kind = fn_call_expr
+	fn_call%identifier = identifier
 	
 	! Resolve special overloaded intrinsic fns
 	select case (identifier%text)
@@ -1676,9 +1674,9 @@ function parse_fn_call(parser) result(expr)
 	
 		select case (type_)
 		case (i64_type)
-			expr%identifier%text = "0min_i64"
+			fn_call%identifier%text = "0min_i64"
 		case default
-			expr%identifier%text = "0min_i32"
+			fn_call%identifier%text = "0min_i32"
 		end select
 	
 	case ("max")
@@ -1688,19 +1686,19 @@ function parse_fn_call(parser) result(expr)
 	
 		select case (type_)
 		case (i64_type)
-			expr%identifier%text = "0max_i64"
+			fn_call%identifier%text = "0max_i64"
 		case default
-			expr%identifier%text = "0max_i32"
+			fn_call%identifier%text = "0max_i32"
 		end select
 	
 	end select
 	
-	! Lookup by expr%identifier%text (e.g. "0min_i32"), but log
+	! Lookup by fn_call%identifier%text (e.g. "0min_i32"), but log
 	! diagnostics based on identifier%text (e.g. "min")
 	!
 	! Might need to add separate internal/external fn names for
 	! overloaded cases
-	fn = parser%fns%search(expr%identifier%text, id_index, io)
+	fn = parser%fns%search(fn_call%identifier%text, id_index, io)
 	if (io /= exit_success) then
 	
 		span = new_span(identifier%pos, len(identifier%text))
@@ -1714,11 +1712,11 @@ function parse_fn_call(parser) result(expr)
 	
 	end if
 	
-	expr%val%type = fn%type
+	fn_call%val%type = fn%type
 	if (fn%type == array_type) then
-		allocate(expr%val%array)
-		expr%val%array%type = fn%array_type
-		expr%val%array%rank = fn%rank
+		allocate(fn_call%val%array)
+		fn_call%val%array%type = fn%array_type
+		fn_call%val%array%rank = fn%rank
 	end if
 	
 	! Intrinsic fns don't have a syntax node: they are implemented
@@ -1735,16 +1733,16 @@ function parse_fn_call(parser) result(expr)
 		! copying is a waste of memory.  Also try to encapsulate
 		! both body and params into a wrapped type (fn_t?)
 	
-		allocate(expr%body)
-		expr%body = fn%node%body
-		expr%params = fn%node%params
+		allocate(fn_call%body)
+		fn_call%body = fn%node%body
+		fn_call%params = fn%node%params
 	
 	end if
 	
 	! TODO: does fn need to be a syntax node member?  I think we can
 	! just look it up later by identifier/id_index like we do for
 	! variable value
-	!expr%fn = fn
+	!fn_call%fn = fn
 	
 	!print *, 'fn params size = ', size(fn%params)
 	if (fn%variadic_min < 0 .and. size(fn%params) /= args%len_) then
@@ -1863,12 +1861,12 @@ function parse_fn_call(parser) result(expr)
 	
 	end do
 	
-	expr%id_index = id_index
+	fn_call%id_index = id_index
 	
-	call syntax_nodes_copy(expr%args, &
+	call syntax_nodes_copy(fn_call%args, &
 		args%v( 1: args%len_ ))
 	
-	!print *, 'done parsing fn_call_expr'
+	!print *, 'done parsing fn_call'
 
 end function parse_fn_call
 

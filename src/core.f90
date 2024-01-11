@@ -29,6 +29,7 @@ module syntran__core_m
 
 	! TODO:
 	!  - purge unused fortran vars (check cmake or verbose fpm build)
+	!  - refactor syntrax_eval() deep nesting
 	!  - size(), len(), count(), etc. should return i64
 	!  - negative for loop steps.  at least throw parser error
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
