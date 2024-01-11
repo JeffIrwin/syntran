@@ -49,7 +49,8 @@ module syntran__parser_m
 				parse_fn_declaration, parse_subscripts, parse_type, &
 				parse_size, peek_unit, current_unit, &
 				context => parser_current_context, &
-				text => parser_text, preprocess, match_pre, parse_fn_call
+				text => parser_text, preprocess, match_pre, parse_fn_call, &
+				parse_name_expr
 
 	end type parser_t
 
@@ -1469,10 +1470,59 @@ function parse_primary_expr(parser) result(expr)
 
 		case (identifier_token)
 
-			! TODO: make fns for these long, deeply-nested cases
-
 			if (parser%peek_kind(1) /= lparen_token) then
+				expr = parser%parse_name_expr()
+			else
+				expr = parser%parse_fn_call()
+			end if
 
+		case (f32_token)
+
+			token = parser%match(f32_token)
+			expr  = new_f32(token%val%sca%f32)
+
+		case (str_token)
+
+			token = parser%match(str_token)
+			expr  = new_str(token%val%sca%str%s)
+
+		case (i64_token)
+
+			token = parser%match(i64_token)
+			expr  = new_i64(token%val%sca%i64)
+
+		case default
+
+			token = parser%match(i32_token)
+			expr  = new_i32(token%val%sca%i32)
+
+			if (debug > 1) print *, 'token = ', expr%val%to_str()
+
+	end select
+
+end function parse_primary_expr
+
+!===============================================================================
+
+function parse_name_expr(parser) result(expr)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	character(len = :), allocatable :: param_type, arg_type
+	integer :: i, io, id_index, param_rank, arg_rank, span0, span1, &
+		ptype, atype, exp_rank, pos0, type_
+	logical :: bool, types_match
+
+	type(fn_t) :: fn
+	type(syntax_node_t) :: arg
+	type(syntax_node_vector_t) :: args
+	type(syntax_token_t) :: left, right, keyword, identifier, &
+		comma, lparen, rparen, token, dummy
+	type(text_span_t) :: span
 				! Variable name expression
 
 				identifier = parser%match(identifier_token)
@@ -1545,37 +1595,7 @@ function parse_primary_expr(parser) result(expr)
 						span, identifier%text))
 				end if
 
-			else
-
-				expr = parser%parse_fn_call()
-
-			end if
-
-		case (f32_token)
-
-			token = parser%match(f32_token)
-			expr  = new_f32(token%val%sca%f32)
-
-		case (str_token)
-
-			token = parser%match(str_token)
-			expr  = new_str(token%val%sca%str%s)
-
-		case (i64_token)
-
-			token = parser%match(i64_token)
-			expr  = new_i64(token%val%sca%i64)
-
-		case default
-
-			token = parser%match(i32_token)
-			expr  = new_i32(token%val%sca%i32)
-
-			if (debug > 1) print *, 'token = ', expr%val%to_str()
-
-	end select
-
-end function parse_primary_expr
+end function parse_name_expr
 
 !===============================================================================
 

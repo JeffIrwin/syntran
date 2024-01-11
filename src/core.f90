@@ -28,6 +28,7 @@ module syntran__core_m
 		syntran_patch =  38
 
 	! TODO:
+	!  - purge unused fortran vars (check cmake or verbose fpm build)
 	!  - size(), len(), count(), etc. should return i64
 	!  - negative for loop steps.  at least throw parser error
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
