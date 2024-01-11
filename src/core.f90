@@ -430,14 +430,11 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	! TODO: return i64?
-
 	size_fn%type = i64_type
 	allocate(size_fn%params(2))
 
 	size_fn%params(1)%type = array_type
 
-	!size_fn%params(1)%array_type = i32_type
 	size_fn%params(1)%array_type = any_type
 	size_fn%params(1)%rank = -1  ! negative means any rank
 
@@ -893,7 +890,6 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 	! str scalar with single char subscript
 	if (vars%vals(node%id_index)%type == str_type) then
 		subscript = syntax_eval(node%lsubscripts(1), vars, fns, quietl)
-		!index_ = subscript%sca%i32
 		index_ = subscript%to_i64()
 		return
 	end if
@@ -915,7 +911,6 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 		! checking turned off in release, and setting a compiler macro
 		! definition to enable it only in debug
 
-		!index_ = index_ + prod * subscript%sca%i32
 		index_ = index_ + prod * subscript%to_i64()
 		prod  = prod * vars%vals(node%id_index)%array%size(i)
 
@@ -1103,7 +1098,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!elem = lbound
 
 			array%type = node%val%array%type
-			!array%len_  = len_%sca%i32
 			array%len_  = len_%to_i64()
 			array%cap  = array%len_
 
@@ -1114,8 +1108,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				do i = 0, len_%to_i32() - 1
 					array%f32(i+1) = lbound%sca%f32 + i * fstep
-					!elem%sca%f32 = lbound%sca%f32 + i * fstep
-					!call array%push(elem)
 				end do
 
 			else
@@ -1142,7 +1134,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				do i = 1, array%rank
 					len_ = syntax_eval(node%size(i), vars, fns, quietl)
-					!array%size(i) = len_%sca%i32
 					array%size(i) = len_%to_i64()
 					!print *, 'size['//str(i)//'] = ', array%size(i)
 				end do
@@ -1260,7 +1251,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!array%size = array%len_
 			do i = 1, array%rank
 				len_ = syntax_eval(node%size(i), vars, fns, quietl)
-				!array%size(i) = len_%sca%i32
 				array%size(i) = len_%to_i64()
 			end do
 
@@ -1315,9 +1305,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! push scope to make the loop iterator local
 		call vars%push_scope()
 
-		! Get the type of the loop iterator for future i64 compatibility but
-		! throw an error since it's not supported yet
-		!itr%type = lbound%type
 		if (any([lbound%type, ubound%type] == i64_type)) then
 			itr%type = i64_type
 		else
@@ -1332,7 +1319,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call internal_error()
 		end if
 
-		!if (ubound%type /= i32_type) then
 		if (.not. any (ubound%type == [i32_type, i64_type])) then
 			write(*,*) err_eval_i32_itr(node%identifier%text)
 			call internal_error()
@@ -1341,7 +1327,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'lbound = ', lbound%to_i64()
 		!print *, 'ubound = ', ubound%to_i64()
 
-		!do i = lbound%sca%i32, ubound%sca%i32 - 1
 		do i8 = lbound%to_i64(), ubound%to_i64() - 1
 
 			if (any([lbound%type, ubound%type] == i64_type)) then
@@ -1710,11 +1695,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				! TODO: this should be a runtime error (like bounds-checking),
 				! not an internal_error.  I just don't have infrastructure for
 				! runtime error handling yet
-				write(*,*) 'Error: rank mismatch in size() call'
+				write(*,*) err_int_prefix//'rank mismatch in size() call'//color_reset
 				call internal_error()
 			end if
 
-			! TODO: return type?  Make separate size64() fn?
 			res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
 
 		case ("count")

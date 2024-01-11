@@ -314,8 +314,6 @@ function parse_for_statement(parser) result(statement)
 		! Array iterator type could be i32 or i64, and lbound type might not
 		! match ubound type!
 		dummy%type = array%val%array%type
-
-		!call parser%vars%insert(identifier%text, array%lbound%val, &
 		call parser%vars%insert(identifier%text, dummy, &
 			statement%id_index)
 
@@ -1591,6 +1589,7 @@ function parse_primary_expr(parser) result(expr)
 				expr%kind = fn_call_expr
 				expr%identifier = identifier
 
+				! Resolve special overloaded intrinsic fns
 				select case (identifier%text)
 				case ("min")
 
@@ -1719,7 +1718,7 @@ function parse_primary_expr(parser) result(expr)
 
 					!! make a fn for use here and for array `atype` below? this
 					!! could be more easily extended if i add fn's with something
-					!! like `int_type` or `num_type`
+					!! generic like `int_type` or `num_type`
 					!types_match = .false.
 					!select case (ptype)
 					!case (any_type)
