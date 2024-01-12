@@ -358,8 +358,7 @@ function syntran_interpret_file(file, quiet, chdir_) result(res)
 
 	!********
 
-	character(len = 1024) :: buffer
-	character(len = :), allocatable :: cwd, source_text
+	character(len = :), allocatable :: source_text
 
 	integer :: iostat
 

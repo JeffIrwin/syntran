@@ -5,10 +5,11 @@
 #
 #     fpm clean --all
 #
-#     # debug is the default
+#     # debug is the default profile
 #     fpm build
 #     fpm build --profile release
 #     fpm build --verbose --flag -Wno-tabs
+#     fpm @build  # use options defined in file `build.rsp`
 #
 #     # `runner` is a prefix to the syntran cmd.  anything after `-- ` is a cmd
 #     # arg passed after `syntran`, e.g. the syntran filename

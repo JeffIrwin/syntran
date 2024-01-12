@@ -41,7 +41,7 @@ else()
 	# More false alarms than anything
 	add_compile_options("-Wno-maybe-uninitialized")
 
-	# I need to compare reals because syntran uses need to be able to compare
+	# I need to compare reals because syntran users need to be able to compare
 	# reals if they want to
 	add_compile_options("-Wno-compare-reals")
 

@@ -204,7 +204,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			if (array%type == f32_type) then
 
 				allocate(array%f32( array%cap ))
-				fstep = (ubound%sca%f32 - lbound%sca%f32) / (len_%to_i64() - 1)
+				fstep = (ubound%sca%f32 - lbound%sca%f32) &
+					/ real((len_%to_i64() - 1))
 
 				do i = 0, len_%to_i32() - 1
 					array%f32(i+1) = lbound%sca%f32 + i * fstep
@@ -432,7 +433,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			if (any([lbound%type, ubound%type] == i64_type)) then
 				itr%sca%i64 = i8
 			else
-				itr%sca%i32 = i8
+				itr%sca%i32 = int(i8, 4)
 			end if
 
 			!print *, 'itr = ', itr%to_str()
@@ -1168,13 +1169,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				! [-Wcompare-reals]
 
 			case        (magic * f32_type + i64_type)
-				res%sca%bool = left%sca%f32 == right%sca%i64
+				res%sca%bool = left%sca%f32 == real(right%sca%i64)
 
 			case        (magic * i32_type + f32_type)
 				res%sca%bool = left%sca%i32 == right%sca%f32
 
 			case        (magic * i64_type + f32_type)
-				res%sca%bool = left%sca%i64 == right%sca%f32
+				res%sca%bool = real(left%sca%i64) == right%sca%f32
 
 			case        (magic * bool_type + bool_type)
 				res%sca%bool = left%sca%bool .eqv. right%sca%bool
@@ -1217,7 +1218,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%f32 == right%sca%i64
+					res%array%bool = left%array%f32 == real(right%sca%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1237,7 +1238,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%i64 == right%sca%f32
+					res%array%bool = real(left%array%i64) == right%sca%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1265,8 +1266,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					!! Fortran is weird about string arrays
 					!res%array%bool = left%array%str%s == right%sca%str%s
 					allocate(res%array%bool( res%array%len_ ))
-					do i = 1, res%array%len_
-						res%array%bool(i) = left%array%str(i)%s == right%sca%str%s
+					do i8 = 1, res%array%len_
+						res%array%bool(i8) = left%array%str(i8)%s == right%sca%str%s
 					end do
 
 				case default
@@ -1307,7 +1308,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%i64 == right%array%f32
+					res%array%bool = real(left%sca%i64) == right%array%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1327,7 +1328,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%f32 == right%array%i64
+					res%array%bool = left%sca%f32 == real(right%array%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1354,8 +1355,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					! Fortran is weird about string arrays
 					allocate(res%array%bool( res%array%len_ ))
-					do i = 1, res%array%len_
-						res%array%bool(i) = left%sca%str%s == right%array%str(i)%s
+					do i8 = 1, res%array%len_
+						res%array%bool(i8) = left%sca%str%s == right%array%str(i8)%s
 					end do
 
 				case default
@@ -1398,11 +1399,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (magic * i64_type + f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%i64 == right%array%f32
+					res%array%bool = real(left%array%i64) == right%array%f32
 
 				case (magic * f32_type + i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%f32 == right%array%i64
+					res%array%bool = left%array%f32 == real(right%array%i64)
 
 				case (magic * bool_type + bool_type)
 					res%array = mold(right%array, bool_type)
@@ -1413,8 +1414,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					! Fortran is weird about string arrays
 					allocate(res%array%bool( res%array%len_ ))
-					do i = 1, res%array%len_
-						res%array%bool(i) = left%array%str(i)%s == right%array%str(i)%s
+					do i8 = 1, res%array%len_
+						res%array%bool(i8) = left%array%str(i8)%s == right%array%str(i8)%s
 					end do
 
 				case default
@@ -1450,13 +1451,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%sca%bool = left%sca%f32 /= right%sca%i32
 
 			case        (magic * f32_type + i64_type)
-				res%sca%bool = left%sca%f32 /= right%sca%i64
+				res%sca%bool = left%sca%f32 /= real(right%sca%i64)
 
 			case        (magic * i32_type + f32_type)
 				res%sca%bool = left%sca%i32 /= right%sca%f32
 
 			case        (magic * i64_type + f32_type)
-				res%sca%bool = left%sca%i64 /= right%sca%f32
+				res%sca%bool = real(left%sca%i64) /= right%sca%f32
 
 			case        (magic * bool_type + bool_type)
 				res%sca%bool = left%sca%bool .neqv. right%sca%bool
@@ -1496,7 +1497,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%f32 /= right%sca%i64
+					res%array%bool = left%array%f32 /= real(right%sca%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1516,7 +1517,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%i64 /= right%sca%f32
+					res%array%bool = real(left%array%i64) /= right%sca%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1543,8 +1544,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					! Fortran is weird about string arrays
 					allocate(res%array%bool( res%array%len_ ))
-					do i = 1, res%array%len_
-						res%array%bool(i) = left%array%str(i)%s /= right%sca%str%s
+					do i8 = 1, res%array%len_
+						res%array%bool(i8) = left%array%str(i8)%s /= right%sca%str%s
 					end do
 
 				case default
@@ -1585,7 +1586,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%i64 /= right%array%f32
+					res%array%bool = real(left%sca%i64) /= right%array%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1605,7 +1606,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%f32 /= right%array%i64
+					res%array%bool = left%sca%f32 /= real(right%array%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1632,8 +1633,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					! Fortran is weird about string arrays
 					allocate(res%array%bool( res%array%len_ ))
-					do i = 1, res%array%len_
-						res%array%bool(i) = left%sca%str%s /= right%array%str(i)%s
+					do i8 = 1, res%array%len_
+						res%array%bool(i8) = left%sca%str%s /= right%array%str(i8)%s
 					end do
 
 				case default
@@ -1674,11 +1675,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (magic * i64_type + f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%i64 /= right%array%f32
+					res%array%bool = real(left%array%i64) /= right%array%f32
 
 				case (magic * f32_type + i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%f32 /= right%array%i64
+					res%array%bool = left%array%f32 /= real(right%array%i64)
 
 				case (magic * bool_type + bool_type)
 					res%array = mold(right%array, bool_type)
@@ -1689,8 +1690,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					! Fortran is weird about string arrays
 					allocate(res%array%bool( res%array%len_ ))
-					do i = 1, res%array%len_
-						res%array%bool(i) = left%array%str(i)%s /= right%array%str(i)%s
+					do i8 = 1, res%array%len_
+						res%array%bool(i8) = left%array%str(i8)%s /= right%array%str(i8)%s
 					end do
 
 				case default
@@ -1726,13 +1727,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%sca%bool = left%sca%f32 < right%sca%i32
 
 			case        (magic * f32_type + i64_type)
-				res%sca%bool = left%sca%f32 < right%sca%i64
+				res%sca%bool = left%sca%f32 < real(right%sca%i64)
 
 			case        (magic * i32_type + f32_type)
 				res%sca%bool = left%sca%i32 < right%sca%f32
 
 			case        (magic * i64_type + f32_type)
-				res%sca%bool = left%sca%i64 < right%sca%f32
+				res%sca%bool = real(left%sca%i64) < right%sca%f32
 
 			case        (magic * array_type + i32_type)
 
@@ -1767,7 +1768,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%f32 < right%sca%i64
+					res%array%bool = left%array%f32 < real(right%sca%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1787,7 +1788,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%i64 < right%sca%f32
+					res%array%bool = real(left%array%i64) < right%sca%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1827,7 +1828,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%i64 < right%array%f32
+					res%array%bool = real(left%sca%i64) < right%array%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1847,7 +1848,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%f32 < right%array%i64
+					res%array%bool = left%sca%f32 < real(right%array%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1887,11 +1888,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (magic * i64_type + f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%i64 < right%array%f32
+					res%array%bool = real(left%array%i64) < right%array%f32
 
 				case (magic * f32_type + i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%f32 < right%array%i64
+					res%array%bool = left%array%f32 < real(right%array%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1926,13 +1927,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%sca%bool = left%sca%f32 <= right%sca%i32
 
 			case        (magic * f32_type + i64_type)
-				res%sca%bool = left%sca%f32 <= right%sca%i64
+				res%sca%bool = left%sca%f32 <= real(right%sca%i64)
 
 			case        (magic * i32_type + f32_type)
 				res%sca%bool = left%sca%i32 <= right%sca%f32
 
 			case        (magic * i64_type + f32_type)
-				res%sca%bool = left%sca%i64 <= right%sca%f32
+				res%sca%bool = real(left%sca%i64) <= right%sca%f32
 
 			case        (magic * array_type + i32_type)
 
@@ -1967,7 +1968,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%f32 <= right%sca%i64
+					res%array%bool = left%array%f32 <= real(right%sca%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -1987,7 +1988,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%i64 <= right%sca%f32
+					res%array%bool = real(left%array%i64) <= right%sca%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2027,7 +2028,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%i64 <= right%array%f32
+					res%array%bool = real(left%sca%i64) <= right%array%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2047,7 +2048,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%f32 <= right%array%i64
+					res%array%bool = left%sca%f32 <= real(right%array%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2087,11 +2088,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (magic * i64_type + f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%i64 <= right%array%f32
+					res%array%bool = real(left%array%i64) <= right%array%f32
 
 				case (magic * f32_type + i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%f32 <= right%array%i64
+					res%array%bool = left%array%f32 <= real(right%array%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2127,13 +2128,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%sca%bool = left%sca%f32 > right%sca%i32
 
 			case        (magic * f32_type + i64_type)
-				res%sca%bool = left%sca%f32 > right%sca%i64
+				res%sca%bool = left%sca%f32 > real(right%sca%i64)
 
 			case        (magic * i32_type + f32_type)
 				res%sca%bool = left%sca%i32 > right%sca%f32
 
 			case        (magic * i64_type + f32_type)
-				res%sca%bool = left%sca%i64 > right%sca%f32
+				res%sca%bool = real(left%sca%i64) > right%sca%f32
 
 			case        (magic * array_type + i32_type)
 
@@ -2168,7 +2169,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%f32 > right%sca%i64
+					res%array%bool = left%array%f32 > real(right%sca%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2188,7 +2189,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%i64 > right%sca%f32
+					res%array%bool = real(left%array%i64) > right%sca%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2228,7 +2229,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%i64 > right%array%f32
+					res%array%bool = real(left%sca%i64) > right%array%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2248,7 +2249,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%f32 > right%array%i64
+					res%array%bool = left%sca%f32 > real(right%array%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2288,11 +2289,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (magic * i64_type + f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%i64 > right%array%f32
+					res%array%bool = real(left%array%i64) > right%array%f32
 
 				case (magic * f32_type + i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%f32 > right%array%i64
+					res%array%bool = left%array%f32 > real(right%array%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2327,13 +2328,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%sca%bool = left%sca%f32 >= right%sca%i32
 
 			case        (magic * f32_type + i64_type)
-				res%sca%bool = left%sca%f32 >= right%sca%i64
+				res%sca%bool = left%sca%f32 >= real(right%sca%i64)
 
 			case        (magic * i32_type + f32_type)
 				res%sca%bool = left%sca%i32 >= right%sca%f32
 
 			case        (magic * i64_type + f32_type)
-				res%sca%bool = left%sca%i64 >= right%sca%f32
+				res%sca%bool = real(left%sca%i64) >= right%sca%f32
 
 			case        (magic * array_type + i32_type)
 
@@ -2368,7 +2369,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%f32 >= right%sca%i64
+					res%array%bool = left%array%f32 >= real(right%sca%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2388,7 +2389,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(left%array, bool_type)
-					res%array%bool = left%array%i64 >= right%sca%f32
+					res%array%bool = real(left%array%i64) >= right%sca%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2428,7 +2429,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%i64 >= right%array%f32
+					res%array%bool = real(left%sca%i64) >= right%array%f32
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2448,7 +2449,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%sca%f32 >= right%array%i64
+					res%array%bool = left%sca%f32 >= real(right%array%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)
@@ -2488,11 +2489,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				case (magic * i64_type + f32_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%i64 >= right%array%f32
+					res%array%bool = real(left%array%i64) >= right%array%f32
 
 				case (magic * f32_type + i64_type)
 					res%array = mold(right%array, bool_type)
-					res%array%bool = left%array%f32 >= right%array%i64
+					res%array%bool = left%array%f32 >= real(right%array%i64)
 
 				case default
 					write(*,*) err_eval_binary_types(node%op%text)

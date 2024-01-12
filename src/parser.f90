@@ -1421,17 +1421,9 @@ function parse_primary_expr(parser) result(expr)
 
 	!********
 
-	character(len = :), allocatable :: param_type, arg_type
-	integer :: i, io, id_index, param_rank, arg_rank, span0, span1, &
-		ptype, atype, exp_rank, pos0, type_
-	logical :: bool, types_match
+	logical :: bool
 
-	type(fn_t) :: fn
-	type(syntax_node_t) :: arg
-	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: left, right, keyword, identifier, &
-		comma, lparen, rparen, token, dummy
-	type(text_span_t) :: span
+	type(syntax_token_t) :: left, right, keyword, token
 
 	if (debug > 1) print *, 'parse_primary_expr'
 
@@ -1512,88 +1504,82 @@ function parse_name_expr(parser) result(expr)
 
 	!********
 
-	character(len = :), allocatable :: param_type, arg_type
-	integer :: i, io, id_index, param_rank, arg_rank, span0, span1, &
-		ptype, atype, exp_rank, pos0, type_
-	logical :: bool, types_match
+	integer :: io, id_index, span0, span1, exp_rank
 
-	type(fn_t) :: fn
-	type(syntax_node_t) :: arg
-	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: left, right, keyword, identifier, &
-		comma, lparen, rparen, token, dummy
+	type(syntax_token_t) :: identifier
 	type(text_span_t) :: span
-				! Variable name expression
 
-				identifier = parser%match(identifier_token)
+	! Variable name expression
 
-				!print *, 'RHS identifier = ', identifier%text
-				!print *, '%current_kind() = ', kind_name(parser%current_kind())
+	identifier = parser%match(identifier_token)
 
-				!print *, 'searching'
-				expr = new_name_expr(identifier, &
-					parser%vars%search(identifier%text, id_index, io))
-				expr%id_index = id_index
+	!print *, 'RHS identifier = ', identifier%text
+	!print *, '%current_kind() = ', kind_name(parser%current_kind())
 
-				if (io /= exit_success) then
-					span = new_span(identifier%pos, len(identifier%text))
-					call parser%diagnostics%push( &
-						err_undeclare_var(parser%context(), &
-						span, identifier%text))
-				end if
+	!print *, 'searching'
+	expr = new_name_expr(identifier, &
+		parser%vars%search(identifier%text, id_index, io))
+	expr%id_index = id_index
 
-				!print *, 'type = ', kind_name(expr%val%type)
-				!print *, 'allocated(expr%val%array) = ', &
-				!	allocated(expr%val%array)
+	if (io /= exit_success) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push( &
+			err_undeclare_var(parser%context(), &
+			span, identifier%text))
+	end if
 
-				!print *, '%current_kind() = ', kind_name(parser%current_kind())
-				span0 = parser%current_pos()
-				call parser%parse_subscripts(expr)
+	!print *, 'type = ', kind_name(expr%val%type)
+	!print *, 'allocated(expr%val%array) = ', &
+	!	allocated(expr%val%array)
 
-				span1 = parser%current_pos() - 1
-				if (size(expr%lsubscripts) <= 0) then
-					deallocate(expr%lsubscripts)
-				else if (expr%val%type == array_type) then
+	!print *, '%current_kind() = ', kind_name(parser%current_kind())
+	span0 = parser%current_pos()
+	call parser%parse_subscripts(expr)
 
-					!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
+	span1 = parser%current_pos() - 1
+	if (size(expr%lsubscripts) <= 0) then
+		deallocate(expr%lsubscripts)
+	else if (expr%val%type == array_type) then
 
-					if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
-						! this is not necessarily true for strings
-						expr%val%type = expr%val%array%type
-					end if
+		!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
 
-					! TODO: allow rank+1 for str arrays
-					if (expr%val%array%rank /= size(expr%lsubscripts)) then
-						span = new_span(span0, span1 - span0 + 1)
-						call parser%diagnostics%push( &
-							err_bad_sub_count(parser%context(), span, &
-							identifier%text, &
-							expr%val%array%rank, size(expr%lsubscripts)))
-					end if
+		if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
+			! this is not necessarily true for strings
+			expr%val%type = expr%val%array%type
+		end if
 
-					! A slice operation can change the result rank
+		! TODO: allow rank+1 for str arrays
+		if (expr%val%array%rank /= size(expr%lsubscripts)) then
+			span = new_span(span0, span1 - span0 + 1)
+			call parser%diagnostics%push( &
+				err_bad_sub_count(parser%context(), span, &
+				identifier%text, &
+				expr%val%array%rank, size(expr%lsubscripts)))
+		end if
 
-					!print *, 'rank in  = ', expr%val%array%rank
-					expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
-					!print *, 'rank out = ', expr%val%array%rank
+		! A slice operation can change the result rank
 
-				else if (expr%val%type == str_type) then
-					!print *, 'string type'
+		!print *, 'rank in  = ', expr%val%array%rank
+		expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
+		!print *, 'rank out = ', expr%val%array%rank
 
-					exp_rank = 1
-					if (size(expr%lsubscripts) /= exp_rank) then
-						span = new_span(span0, span1 - span0 + 1)
-						call parser%diagnostics%push( &
-							err_bad_sub_count(parser%context(), span, &
-							identifier%text, &
-							exp_rank, size(expr%lsubscripts)))
-					end if
-				else
-					span = new_span(span0, span1 - span0 + 1)
-					call parser%diagnostics%push( &
-						err_scalar_subscript(parser%context(), &
-						span, identifier%text))
-				end if
+	else if (expr%val%type == str_type) then
+		!print *, 'string type'
+
+		exp_rank = 1
+		if (size(expr%lsubscripts) /= exp_rank) then
+			span = new_span(span0, span1 - span0 + 1)
+			call parser%diagnostics%push( &
+				err_bad_sub_count(parser%context(), span, &
+				identifier%text, &
+				exp_rank, size(expr%lsubscripts)))
+		end if
+	else
+		span = new_span(span0, span1 - span0 + 1)
+		call parser%diagnostics%push( &
+			err_scalar_subscript(parser%context(), &
+			span, identifier%text))
+	end if
 
 end function parse_name_expr
 
@@ -1608,15 +1594,13 @@ function parse_fn_call(parser) result(fn_call)
 	!********
 
 	character(len = :), allocatable :: param_type, arg_type
-	integer :: i, io, id_index, param_rank, arg_rank, span0, span1, &
-		ptype, atype, exp_rank, pos0, type_
-	logical :: bool, types_match
+	integer :: i, io, id_index, param_rank, arg_rank, ptype, atype, pos0, type_
+	logical :: types_match
 
 	type(fn_t) :: fn
 	type(syntax_node_t) :: arg
 	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: left, right, keyword, identifier, &
-		comma, lparen, rparen, token, dummy
+	type(syntax_token_t) :: identifier, comma, lparen, rparen, dummy
 	type(text_span_t) :: span
 
 	if (debug > 1) print *, 'parse_fn_call'

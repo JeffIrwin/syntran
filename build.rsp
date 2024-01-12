@@ -1,0 +1,7 @@
+# my build options
+options build
+options --verbose
+options --compiler gfortran
+options --flag "-Wno-tabs -Wall -Wextra -Wno-maybe-uninitialized
+	-Wno-compare-reals"
+
