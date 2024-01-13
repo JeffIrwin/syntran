@@ -29,6 +29,8 @@ module syntran__core_m
 
 	! TODO:
 	!  - refactor syntrax_eval() deep nesting
+	!    * encapsulation of syntax_eval() args (vars, fns, quiet, etc.) should
+	!      be done first
 	!  - len(), count(), etc. should return i64
 	!    * size() done
 	!  - negative for loop steps.  at least throw parser error
@@ -43,6 +45,7 @@ module syntran__core_m
 	!    * array comparison
 	!    * any(), all(), count() intrinsics
 	!    * -c arg, shebang
+	!  - parse_f32() intrinsic fn
 	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
 	!    versions don't allow a user-defined type that references another type
 	!    which is defined below it

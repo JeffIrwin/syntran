@@ -45,7 +45,6 @@ module syntran__value_m
 		! The array type is i32_type, f32_type, etc. while the kind is
 		! impl_array (bound-based) or expl_array (CSV list)
 		integer :: type, kind
-		!type(value_t), allocatable :: lbound, step, ubound
 		type(scalar_t), allocatable :: lbound, step, ubound
 
 		! Note that these are arrays of primitive Fortran types, instead of
@@ -71,6 +70,8 @@ module syntran__value_m
 			procedure :: push => push_array
 
 	end type array_t
+
+	!********
 
 	type value_t
 		integer :: type
@@ -1306,7 +1307,6 @@ function mold(mold_, type_) result(array)
 	! calling fn
 
 	type(array_t), intent(in) :: mold_
-	!type(value_t), intent(in) :: mold_
 
 	integer, intent(in) :: type_
 
@@ -1396,20 +1396,21 @@ subroutine push_array(vector, val)
 
 	end if
 
-	if      (vector%type == i32_type) then
+	select case (vector%type)
+	case (i32_type)
 		vector%i32 ( vector%len_ ) = val%sca%i32
-	else if (vector%type == i64_type) then
+	case (i64_type)
 		vector%i64 ( vector%len_ ) = val%sca%i64
-	else if (vector%type == f32_type) then
+	case (f32_type)
 		vector%f32 ( vector%len_ ) = val%sca%f32
-	else if (vector%type == bool_type) then
+	case (bool_type)
 		vector%bool( vector%len_ ) = val%sca%bool
-	else if (vector%type == str_type) then
+	case (str_type)
 		vector%str ( vector%len_ ) = val%sca%str
-	else
+	case default
 		write(*,*) 'Error: push_array type not implemented'
 		call internal_error()
-	end if
+	end select
 
 end subroutine push_array
 
@@ -1437,6 +1438,7 @@ function value_to_f32(val) result(ans)
 			if (len(val%sca%str%s) == 1) then
 				ans = iachar(val%sca%str%s)
 			else
+				! TODO: suggest `parse_i32()` when that exists
 				write(*,*) err_int_prefix//'cannot convert from type `' &
 					//kind_name(val%type)//'` to f32 '//color_reset
 				call internal_error()
@@ -1476,7 +1478,7 @@ function value_to_i32(val) result(ans)
 				ans = iachar(val%sca%str%s)
 			else
 				write(*,*) err_int_prefix//'cannot convert from type `' &
-					//kind_name(val%type)//'` to i32 '//color_reset
+					//kind_name(val%type)//'` to i32.  Use `parse_i32()`'//color_reset
 				call internal_error()
 			end if
 
@@ -1506,13 +1508,11 @@ function value_to_i64(val) result(ans)
 			ans = val%sca%i32
 
 		case (i64_type)
-			!write(buffer, '(i0)') val%sca%i64
-			!ans = trim(buffer)
 			ans = val%sca%i64
 
 		case default
 			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to i64 '//color_reset
+				//kind_name(val%type)//'` to i64.  Use `parse_i64()`'//color_reset
 			call internal_error()
 
 	end select
@@ -1722,12 +1722,10 @@ recursive function scalar_to_str(val, type) result(ans)
 			ans = buf16  ! no trim for alignment
 
 		case (i32_type)
-			write(buffer, '(i0)') val%i32
-			ans = trim(buffer)
+			ans = i32_str(val%i32)
 
 		case (i64_type)
-			write(buffer, '(i0)') val%i64
-			ans = trim(buffer)
+			ans = i64_str(val%i64)
 
 		case (str_type)
 			! TODO: wrap str in quotes for clarity, both scalars and str array

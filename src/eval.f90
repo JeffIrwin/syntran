@@ -51,9 +51,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	real(kind = 4) :: f, fstep
 
-	! TODO: rename lbound/ubound to avoid intrinsic clash
 	type(array_t) :: array
-	type(value_t) :: left, right, condition, lbound, ubound, itr, elem, &
+	type(value_t) :: left, right, condition, lbound_, ubound_, itr, elem, &
 		step, len_, arg, arg1, arg2, array_val, lsubval, usubval
 
 	!print *, 'starting syntax_eval()'
@@ -74,7 +73,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	select case (node%kind)
 
 	case (literal_expr)
-		! This handles both ints, bools, etc.
+		! This handles ints, bools, etc.
 		res = node%val
 		!print *, 'res = ', res%str()
 
@@ -91,40 +90,40 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! array form instead of checking whether various syntax nodes are
 			! allocated
 
-			lbound = syntax_eval(node%lbound, vars, fns, quietl)
+			lbound_ = syntax_eval(node%lbound, vars, fns, quietl)
 			step   = syntax_eval(node%step  , vars, fns, quietl)
-			ubound = syntax_eval(node%ubound, vars, fns, quietl)
+			ubound_ = syntax_eval(node%ubound, vars, fns, quietl)
 
 			array%type = node%val%array%type
 
 			! If any bound or step is i64, cast the others up to match
-			if (any(i64_type == [lbound%type, step%type, ubound%type])) then
+			if (any(i64_type == [lbound_%type, step%type, ubound_%type])) then
 
 				!! this happens during parsing
 				!array%type = i64_type
 
-				call promote_i32_i64(lbound)
+				call promote_i32_i64(lbound_)
 				call promote_i32_i64(step)
-				call promote_i32_i64(ubound)
+				call promote_i32_i64(ubound_)
 			end if
 
-			!print *, 'lbound = ', lbound%sca%i64
+			!print *, 'lbound_ = ', lbound_%sca%i64
 			!print *, 'step32 = ', step  %sca%i32
 			!print *, 'step64 = ', step  %sca%i64
-			!print *, 'ubound = ', ubound%sca%i64
+			!print *, 'ubound_ = ', ubound_%sca%i64
 
 			if (array%type == i32_type) then
 
-				array%cap = (ubound%sca%i32 - lbound%sca%i32) / step%sca%i32 + 1
+				array%cap = (ubound_%sca%i32 - lbound_%sca%i32) / step%sca%i32 + 1
 				allocate(array%i32( array%cap ))
 
 				j = 1
-				i = lbound%sca%i32
-				if (lbound%sca%i32 < ubound%sca%i32 .neqv. 0 < step%sca%i32) i = ubound%sca%i32
+				i = lbound_%sca%i32
+				if (lbound_%sca%i32 < ubound_%sca%i32 .neqv. 0 < step%sca%i32) i = ubound_%sca%i32
 
 				! Step may be negative
-				do while ((i  < ubound%sca%i32 .eqv. lbound%sca%i32 < ubound%sca%i32) &
-				     .and. i /= ubound%sca%i32)
+				do while ((i  < ubound_%sca%i32 .eqv. lbound_%sca%i32 < ubound_%sca%i32) &
+				     .and. i /= ubound_%sca%i32)
 					array%i32(j) = i
 					i = i + step%sca%i32
 					j = j + 1
@@ -133,18 +132,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			else if (array%type == i64_type) then
 
-				array%cap = int((ubound%sca%i64 - lbound%sca%i64) / step%sca%i64 + 1)
+				array%cap = int((ubound_%sca%i64 - lbound_%sca%i64) / step%sca%i64 + 1)
 				allocate(array%i64( array%cap ))
 
 				j = 1
-				i8 = lbound%sca%i64
-				if (lbound%sca%i64 < ubound%sca%i64 .neqv. 0 < step%sca%i64) then
-					i8 = ubound%sca%i64
+				i8 = lbound_%sca%i64
+				if (lbound_%sca%i64 < ubound_%sca%i64 .neqv. 0 < step%sca%i64) then
+					i8 = ubound_%sca%i64
 				end if
 
 				! Step may be negative
-				do while ((i8  < ubound%sca%i64 .eqv. lbound%sca%i64 < ubound%sca%i64) &
-				     .and. i8 /= ubound%sca%i64)
+				do while ((i8  < ubound_%sca%i64 .eqv. lbound_%sca%i64 < ubound_%sca%i64) &
+				     .and. i8 /= ubound_%sca%i64)
 					array%i64(j) = i8
 					i8 = i8 + step%sca%i64
 					j = j + 1
@@ -153,18 +152,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			else if (array%type == f32_type) then
 
-				!print *, 'lbound, ubound = ', lbound%sca%f32, ubound%sca%f32
+				!print *, 'lbound_, ubound_ = ', lbound_%sca%f32, ubound_%sca%f32
 				!print *, 'step = ', step%sca%f32
 
-				array%cap = ceiling((ubound%sca%f32 - lbound%sca%f32) / step%sca%f32) + 1
+				array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32) + 1
 				allocate(array%f32( array%cap ))
 
 				j = 1
-				f = lbound%sca%f32
-				if (lbound%sca%f32 < ubound%sca%f32 .neqv. 0 < step%sca%f32) f = ubound%sca%f32
+				f = lbound_%sca%f32
+				if (lbound_%sca%f32 < ubound_%sca%f32 .neqv. 0 < step%sca%f32) f = ubound_%sca%f32
 
-				do while ((f  < ubound%sca%f32 .eqv. lbound%sca%f32 < ubound%sca%f32) &
-				     .and. f /= ubound%sca%f32)
+				do while ((f  < ubound_%sca%f32 .eqv. lbound_%sca%f32 < ubound_%sca%f32) &
+				     .and. f /= ubound_%sca%f32)
 					array%f32(j) = f
 					f = f + step%sca%f32
 					j = j + 1
@@ -190,12 +189,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! len-based impl arrays
 
 			!print *, 'len array'
-			lbound = syntax_eval(node%lbound, vars, fns, quietl)
-			ubound = syntax_eval(node%ubound, vars, fns, quietl)
+			lbound_ = syntax_eval(node%lbound, vars, fns, quietl)
+			ubound_ = syntax_eval(node%ubound, vars, fns, quietl)
 			len_   = syntax_eval(node%len_   , vars, fns, quietl)
 
 			!array = new_array(node%val%array%type)
-			!elem = lbound
+			!elem = lbound_
 
 			array%type = node%val%array%type
 			array%len_  = len_%to_i64()
@@ -204,11 +203,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			if (array%type == f32_type) then
 
 				allocate(array%f32( array%cap ))
-				fstep = (ubound%sca%f32 - lbound%sca%f32) &
+				fstep = (ubound_%sca%f32 - lbound_%sca%f32) &
 					/ real((len_%to_i64() - 1))
 
 				do i = 0, len_%to_i32() - 1
-					array%f32(i+1) = lbound%sca%f32 + i * fstep
+					array%f32(i+1) = lbound_%sca%f32 + i * fstep
 				end do
 
 			else
@@ -245,7 +244,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! at initialization, but they are of course mutable)
 
 			!print *, 'len array'
-			lbound = syntax_eval(node%lbound, vars, fns, quietl)
+			lbound_ = syntax_eval(node%lbound, vars, fns, quietl)
 
 			! Allocate in one shot without growing
 
@@ -256,15 +255,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call allocate_array(array, array%len_)
 			select case (array%type)
 			case (i32_type)
-				array%i32 = lbound%sca%i32
+				array%i32 = lbound_%sca%i32
 			case (i64_type)
-				array%i64 = lbound%sca%i64
+				array%i64 = lbound_%sca%i64
 			case (f32_type)
-				array%f32 = lbound%sca%f32
+				array%f32 = lbound_%sca%f32
 			case (bool_type)
-				array%bool = lbound%sca%bool
+				array%bool = lbound_%sca%bool
 			case (str_type)
-				array%str = lbound%sca%str
+				array%str = lbound_%sca%str
 			case default
 				write(*,*) err_eval_len_array(kind_name(array%type))
 				call internal_error()
@@ -289,16 +288,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! statement requires it to be explicit, so we might as well expand
 			! at initialization
 
-			lbound = syntax_eval(node%lbound, vars, fns, quietl)
-			ubound = syntax_eval(node%ubound, vars, fns, quietl)
+			lbound_ = syntax_eval(node%lbound, vars, fns, quietl)
+			ubound_ = syntax_eval(node%ubound, vars, fns, quietl)
 
 			!array = new_array(node%val%array%type)
 
 			array%type = node%val%array%type
 
-			if (any(i64_type == [lbound%type, ubound%type])) then
-				call promote_i32_i64(lbound)
-				call promote_i32_i64(ubound)
+			if (any(i64_type == [lbound_%type, ubound_%type])) then
+				call promote_i32_i64(lbound_)
+				call promote_i32_i64(ubound_)
 			end if
 
 			if (.not. any(array%type == [i32_type, i64_type])) then
@@ -307,23 +306,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end if
 
 			if (array%type == i32_type) then
-				array%len_ = ubound%sca%i32 - lbound%sca%i32
+				array%len_ = ubound_%sca%i32 - lbound_%sca%i32
 			else !if (array%type == i64_type) then
-				array%len_ = ubound%sca%i64 - lbound%sca%i64
+				array%len_ = ubound_%sca%i64 - lbound_%sca%i64
 			end if
 
 			call allocate_array(array, array%len_)
 
-			!print *, 'bounds in [', lbound%str(), ': ', ubound%str(), ']'
+			!print *, 'bounds in [', lbound_%str(), ': ', ubound_%str(), ']'
 			!print *, 'node%val%array%type = ', node%val%array%type
 
 			if (array%type == i32_type) then
-				do i = lbound%sca%i32, ubound%sca%i32 - 1
-					array%i32(i - lbound%sca%i32 + 1) = i
+				do i = lbound_%sca%i32, ubound_%sca%i32 - 1
+					array%i32(i - lbound_%sca%i32 + 1) = i
 				end do
 			else !if (array%type == i64_type) then
-				do i8 = lbound%sca%i64, ubound%sca%i64 - 1
-					array%i64(i8 - lbound%sca%i64 + 1) = i8
+				do i8 = lbound_%sca%i64, ubound_%sca%i64 - 1
+					array%i64(i8 - lbound_%sca%i64 + 1) = i8
 				end do
 			end if
 
@@ -400,13 +399,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! array_expr eval.  If possible, don't expand implicit arrays for for
 		! loops
 
-		lbound = syntax_eval(node%array%lbound, vars, fns, quietl)
-		ubound = syntax_eval(node%array%ubound, vars, fns, quietl)
+		lbound_ = syntax_eval(node%array%lbound, vars, fns, quietl)
+		ubound_ = syntax_eval(node%array%ubound, vars, fns, quietl)
 
 		! push scope to make the loop iterator local
 		call vars%push_scope()
 
-		if (any([lbound%type, ubound%type] == i64_type)) then
+		if (any([lbound_%type, ubound_%type] == i64_type)) then
 			itr%type = i64_type
 		else
 			itr%type = i32_type
@@ -415,22 +414,22 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		! TODO: f32 for loop iterators.  Also check parse_for_statement(), which
 		! sets the type of the iterator
-		if (.not. any (lbound%type == [i32_type, i64_type])) then
+		if (.not. any (lbound_%type == [i32_type, i64_type])) then
 			write(*,*) err_eval_i32_itr(node%identifier%text)
 			call internal_error()
 		end if
 
-		if (.not. any (ubound%type == [i32_type, i64_type])) then
+		if (.not. any (ubound_%type == [i32_type, i64_type])) then
 			write(*,*) err_eval_i32_itr(node%identifier%text)
 			call internal_error()
 		end if
 
-		!print *, 'lbound = ', lbound%to_i64()
-		!print *, 'ubound = ', ubound%to_i64()
+		!print *, 'lbound_ = ', lbound_%to_i64()
+		!print *, 'ubound_ = ', ubound_%to_i64()
 
-		do i8 = lbound%to_i64(), ubound%to_i64() - 1
+		do i8 = lbound_%to_i64(), ubound_%to_i64() - 1
 
-			if (any([lbound%type, ubound%type] == i64_type)) then
+			if (any([lbound_%type, ubound_%type] == i64_type)) then
 				itr%sca%i64 = i8
 			else
 				itr%sca%i32 = int(i8, 4)
