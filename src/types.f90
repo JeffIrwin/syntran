@@ -1248,19 +1248,23 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 	select case (op)
 
 		case (plus_token, plus_equals_token)
+			! the + operator works on numbers and strings
 
 			if (left == array_type .and. right == array_type) then
 				! TODO
 				allowed = .false.
 
 			else if (left == array_type) then
+
+				! TODO: would recursion help for arrays here?
+
 				! TODO: should vec str + scalar str be allowed?
 				allowed = &
 					(is_num_type(left_arr) .and. is_num_type(right))
 
 			else if (right == array_type) then
-				! TODO
-				allowed = .false.
+				allowed = &
+					(is_num_type(left) .and. is_num_type(right_arr))
 
 			else
 				allowed = &
@@ -1272,6 +1276,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 		case (minus_token, sstar_token, star_token, slash_token, &
 				percent_token, minus_equals_token, star_equals_token, &
 				slash_equals_token, sstar_equals_token, percent_equals_token)
+			! these operators work on numbers but not strings
 
 			allowed = is_num_type(left) .and. is_num_type(right)
 
@@ -1512,6 +1517,7 @@ function new_binary_expr(left, op, right) result(expr)
 	! Pass the result value type up the tree for type checking in parent
 	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type, &
 		larrtype, rarrtype)
+	!print *, 'type_ = ', kind_name(type_)
 
 	select case (type_)
 	case (bool_array_type)
@@ -1532,7 +1538,11 @@ function new_binary_expr(left, op, right) result(expr)
 		!print *, 'allocating i32_array_type'
 		allocate(expr%val%array)
 
+		! TODO: consolidate this case with above.  This next line is the only
+		! difference, which could be combined with a array_to_scalar_type()
+		! helper fn
 		expr%val%array%type = i32_type
+
 		if (left%val%type == array_type) then
 			expr%val%array%rank = left %val%array%rank
 		else
@@ -1631,7 +1641,9 @@ integer function get_binary_op_kind(left, op, right, left_arr, right_arr) &
 			! TODO
 
 		else if (left == array_type) then
-			! TODO: it should be possible to clean this up with recursion
+			! TODO: it should be possible to clean this up with recursion.
+			! Remember to call scalar_to_array_type() on result
+
 			if (left_arr == right) then
 				!kind_ = left_arr
 				kind_ = scalar_to_array_type(left_arr)
@@ -1653,6 +1665,30 @@ integer function get_binary_op_kind(left, op, right, left_arr, right_arr) &
 				! i32+i64 and i64+i32 cast to i64
 				!! TODO: scalar_to_array_type()
 				!kind_ = i64_type
+				return
+
+			end if
+
+		else if (right == array_type) then
+			!print *, 'right == array_type'
+
+			if (left == right_arr) then
+				kind_ = scalar_to_array_type(left)
+				return
+			end if
+
+			if (left == f32_type .or. right_arr == f32_type) then
+				! int + float casts to float
+				kind_ = scalar_to_array_type(f32_type)
+				return
+			end if
+
+			if ( &
+				(left      == i64_type .and. is_int_type(right_arr)) .or. &
+				(right_arr == i64_type .and. is_int_type(left ))) then
+
+				! i32+i64 and i64+i32 cast to i64
+				kind_ = scalar_to_array_type(i64_type)
 				return
 
 			end if

@@ -1218,6 +1218,11 @@ subroutine unit_test_array_i32_1(npass, nfail)
 			eval('[0, 1, 2] + -1;') == '[-1, 0, 1]', &
 			eval('[3: 9] + -2;') == '[1, 2, 3, 4, 5, 6]', &
 			eval('[3: 2: 9] + -2;') == '[1, 3, 5]', &
+			eval('2 + [0, 1];') == '[2, 3]', &
+			eval('3 + [0, 1, 2];') == '[3, 4, 5]', &
+			eval('-1 + [0, 1, 2];') == '[-1, 0, 1]', &
+			eval('-2 + [3: 9];') == '[1, 2, 3, 4, 5, 6]', &
+			eval('-2 + [3: 2: 9];') == '[1, 3, 5]', &
 			eval('[48-6, 13*100 + 37];') == '[42, 1337]'  &
 		]
 
@@ -1238,7 +1243,7 @@ subroutine unit_test_comp_arr(npass, nfail)
 
 	!********
 
-	character(len = *), parameter :: label = 'array operations'
+	character(len = *), parameter :: label = 'array comparisons'
 
 	logical, allocatable :: tests(:)
 

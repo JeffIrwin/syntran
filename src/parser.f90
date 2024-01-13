@@ -802,8 +802,8 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		!if (ltype == array_type) ltype = expr%left %val%array%type
 		!if (rtype == array_type) rtype = expr%right%val%array%type
 
-		larrtype = 0
-		rarrtype = 0
+		larrtype = unknown_type
+		rarrtype = unknown_type
 		if (ltype == array_type) larrtype = expr%left %val%array%type
 		if (rtype == array_type) rarrtype = expr%right%val%array%type
 
