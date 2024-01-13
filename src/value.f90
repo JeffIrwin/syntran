@@ -166,13 +166,27 @@ subroutine add_value_t(left, right, res, op_text)
 
 	!********
 
-	!print *, 'starting add_value_t()'
-	!print *, 'res%type = ', kind_name(res%type)
+	print *, 'starting add_value_t()'
+	print *, 'res%type = ', kind_name(res%type)
 
 	! Case selector must be a scalar expression, so use this nasty hack.
 	! This will break if magic is smaller than the largest type enum
 	! parameter
 	select case (magic**2 * res%type + magic * left%type + right%type)
+
+	!****
+	case        (magic**2 * array_type + magic * array_type + i32_type)
+		print *, 'array_type + i32_type'
+
+		select case (left%array%type)
+		case (i32_type)
+			res%array = mold(left%array, i32_type)
+			res%array%i32 = left%array%i32 + right%sca%i32
+		case default
+			! FIXME: other numeric types (f64, etc.)
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
 
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)

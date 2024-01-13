@@ -1249,9 +1249,25 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 		case (plus_token, plus_equals_token)
 
-			allowed = &
-				(is_num_type(left) .and. is_num_type(right)) .or. &
-				(left == str_type  .and. right == str_type)
+			if (left == array_type .and. right == array_type) then
+				! TODO
+				allowed = .false.
+
+			else if (left == array_type) then
+				! TODO: should vec str + scalar str be allowed?
+				allowed = &
+					(is_num_type(left_arr) .and. is_num_type(right))
+
+			else if (right == array_type) then
+				! TODO
+				allowed = .false.
+
+			else
+				allowed = &
+					(is_num_type(left) .and. is_num_type(right)) .or. &
+					(left == str_type  .and. right == str_type)
+
+			end if
 
 		case (minus_token, sstar_token, star_token, slash_token, &
 				percent_token, minus_equals_token, star_equals_token, &
@@ -1486,15 +1502,16 @@ function new_binary_expr(left, op, right) result(expr)
 
 	!print *, 'left type  = ', kind_name(left%val%type)
 
-	larrtype = 0
-	rarrtype = 0
+	larrtype = unknown_type
+	rarrtype = unknown_type
 	if (left %val%type == array_type) larrtype = left %val%array%type
 	if (right%val%type == array_type) rarrtype = right%val%array%type
 
 	!print *, 'larrtype = ', kind_name(larrtype)
 
 	! Pass the result value type up the tree for type checking in parent
-	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type)
+	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type, &
+		larrtype, rarrtype)
 
 	select case (type_)
 	case (bool_array_type)
@@ -1509,6 +1526,21 @@ function new_binary_expr(left, op, right) result(expr)
 		end if
 
 		expr%val%type = array_type
+
+	case (i32_array_type)
+
+		print *, 'allocating i32_array_type'
+		allocate(expr%val%array)
+
+		expr%val%array%type = i32_type
+		if (left%val%type == array_type) then
+			expr%val%array%rank = left %val%array%rank
+		else
+			expr%val%array%rank = right%val%array%rank
+		end if
+
+		expr%val%type = array_type
+		print *, 'done allocating'
 
 	! TODO: other array sub types.  Maybe make a mold_val() helper fn similar to
 	! mold() (for arrays)
@@ -1560,12 +1592,15 @@ end function new_unary_expr
 
 !===============================================================================
 
-integer function get_binary_op_kind(left, op, right) result(kind_)
+integer function get_binary_op_kind(left, op, right, left_arr, right_arr) &
+		result(kind_)
 
 	! Return the resulting type yielded by operator op on operands left and
 	! right
 
 	integer, intent(in) :: left, op, right
+	!integer, intent(in), optional :: left_arr, right_arr
+	integer, intent(in) :: left_arr, right_arr
 
 	select case (op)
 	case ( &
@@ -1590,32 +1625,91 @@ integer function get_binary_op_kind(left, op, right) result(kind_)
 		!
 		! FIXME: i64, f64, etc.
 
-		if (left == right) then
-			kind_ = left
-			return
-		end if
-
-		if (left == f32_type .or. right == f32_type) then
-			! int + float casts to float
-			kind_ = f32_type
-			return
-		end if
-
-		if ( &
-			(left  == i64_type .and. is_int_type(right)) .or. &
-			(right == i64_type .and. is_int_type(left ))) then
-
-			! i32+i64 and i64+i32 cast to i64
-			kind_ = i64_type
-			return
-
-		end if
-
 		kind_ = unknown_type
+
+		if (left == array_type .and. right == array_type) then
+			! TODO
+
+		else if (left == array_type) then
+			! TODO: it should be possible to clean this up with recursion
+			if (left_arr == right) then
+				!kind_ = left_arr
+				kind_ = scalar_to_array_type(left_arr)
+				print *, 'kind_ = ', kind_name(kind_)
+				return
+			end if
+
+			if (left_arr == f32_type .or. right == f32_type) then
+				! int + float casts to float
+				!! TODO: scalar_to_array_type()
+				!kind_ = f32_type
+				return
+			end if
+
+			if ( &
+				(left_arr  == i64_type .and. is_int_type(right)) .or. &
+				(right     == i64_type .and. is_int_type(left_arr))) then
+
+				! i32+i64 and i64+i32 cast to i64
+				!! TODO: scalar_to_array_type()
+				!kind_ = i64_type
+				return
+
+			end if
+
+		else
+			if (left == right) then
+				kind_ = left
+				return
+			end if
+
+			if (left == f32_type .or. right == f32_type) then
+				! int + float casts to float
+				kind_ = f32_type
+				return
+			end if
+
+			if ( &
+				(left  == i64_type .and. is_int_type(right)) .or. &
+				(right == i64_type .and. is_int_type(left ))) then
+
+				! i32+i64 and i64+i32 cast to i64
+				kind_ = i64_type
+				return
+
+			end if
+		end if
+
+		print *, 'unknown_type'
 
 	end select
 
 end function get_binary_op_kind
+
+!===============================================================================
+
+function scalar_to_array_type(scalar_type_) result(array_type_)
+
+	! Convert a scalar type to its corresponding array type
+
+	integer, intent(in) :: scalar_type_
+	integer :: array_type_
+
+	select case (scalar_type_)
+	case (bool_type)
+		array_type_ = bool_array_type
+
+	case (i32_type)
+		array_type_ = i32_array_type
+
+	! TODO: extend to other types
+
+	case default
+		array_type_ = unknown_type
+
+	end select
+
+end function scalar_to_array_type
 
 !===============================================================================
 

@@ -43,7 +43,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	character(len = :), allocatable :: color
 
-	integer :: i, j, io, rank, rank_res, idim_, idim_res
+	integer :: i, j, io, rank, rank_res, idim_, idim_res, larrtype, rarrtype
 	integer(kind = 8) :: il, iu, i8, index_, prod
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
@@ -1097,9 +1097,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'left  type = ', kind_name(left%type)
 		!print *, 'right type = ', kind_name(right%type)
 
-		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
+		larrtype = unknown_type
+		rarrtype = unknown_type
+		if (left %type == array_type) larrtype = left %array%type
+		if (right%type == array_type) rarrtype = right%array%type
+
+		res%type = get_binary_op_kind(left%type, node%op%kind, right%type, &
+			larrtype, rarrtype)
 		select case (res%type)
-		case (bool_array_type)
+		case (i32_array_type, bool_array_type)
 			res%type = array_type
 			! TODO: other array sub types
 		end select
