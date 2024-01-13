@@ -15,7 +15,7 @@ module syntran__core_m
 	use syntran__utils_m
 	use syntran__value_m
 
-	implicit  none
+	implicit none
 
 	! Syntax translator (think FORmula TRANslator)
 	!
@@ -27,11 +27,10 @@ module syntran__core_m
 		syntran_minor =  0, &
 		syntran_patch =  38
 
-
 	! TODO:
-	!  - purge unused fortran vars (check cmake or verbose fpm build)
 	!  - refactor syntrax_eval() deep nesting
-	!  - size(), len(), count(), etc. should return i64
+	!  - len(), count(), etc. should return i64
+	!    * size() done
 	!  - negative for loop steps.  at least throw parser error
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
