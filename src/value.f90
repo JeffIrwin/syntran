@@ -127,6 +127,10 @@ module syntran__value_m
 		module procedure is_eq_value_t
 	end interface is_eq
 
+	interface is_ne
+		module procedure is_ne_value_t
+	end interface is_ne
+
 !===============================================================================
 
 contains
@@ -777,6 +781,27 @@ subroutine is_eq_value_t(left, right, res, op_text)
 	end select
 
 end subroutine is_eq_value_t
+
+!===============================================================================
+
+subroutine is_ne_value_t(left, right, res, op_text)
+
+	type(value_t), intent(in)  :: left, right
+
+	type(value_t), intent(inout) :: res
+
+	character(len = *), intent(in) :: op_text
+
+	! It seems inefficient to invert a whole array, but is_eq() is 300
+	! LOC and I'm eager to make this tradeoff
+	call is_eq(left, right, res, op_text)
+	if (res%type == array_type) then
+		res%array%bool = .not. res%array%bool
+	else
+		res%sca%bool = .not. res%sca%bool
+	end if
+
+end subroutine is_ne_value_t
 
 !===============================================================================
 

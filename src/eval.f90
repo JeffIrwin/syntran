@@ -1139,15 +1139,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call is_eq(left, right, res, node%op%text)
 
 		case (bang_equals_token)
-
-			! It seems inefficient to invert a whole array, but is_eq() is 300
-			! LOC and I'm eager to make this tradeoff
-			call is_eq(left, right, res, node%op%text)
-			if (res%type == array_type) then
-				res%array%bool = .not. res%array%bool
-			else
-				res%sca%bool = .not. res%sca%bool
-			end if
+			call is_ne(left, right, res, node%op%text)
 
 		case (less_token)
 
