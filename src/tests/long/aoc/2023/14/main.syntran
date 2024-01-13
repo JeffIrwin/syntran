@@ -1,0 +1,366 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+let grid = [""; 0, 0];
+
+//==============================================================================
+
+// Cardinal directions
+let DIRS =
+	[
+		 0, -1, // north
+		-1,  0, // west
+		 0,  1, // south
+		 1,  0  // east
+		 ;
+		 2,  4
+	];
+//println("DIRS = ", DIRS);
+
+// Note consistent ordering with DIRS array
+let NORTH = 0;
+let WEST  = 1;
+let SOUTH = 2;
+let EAST  = 3;
+
+//==============================================================================
+
+fn can_slide(xn: i32, yn: i32, nx: i32, ny: i32): bool
+{
+	//while 0 <= xn and xn < nx and
+	//      0 <= yn and yn < ny and
+	//	grid[xn, yn] == "."
+	let slide = false;
+	if 0 <= xn and xn < nx and
+	   0 <= yn and yn < ny
+		slide = grid[xn, yn] == ".";
+	let ans = slide;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx = len(str_);
+
+	//println("nx, ny = ", nx, ", ", ny);
+
+	grid = [""; nx, ny];
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: nx]
+			grid[x, y] = str_[x];
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("initial grid = ", grid);
+
+	let idir = NORTH;
+
+	let xbeg = 0;
+	let xend = nx;
+	let dx   = 1;
+	if idir == EAST
+	{
+		// Move the rocks that are already furthest in the sliding direction
+		// first, so that other rocks don't get stuck on them
+		xbeg = nx - 1;
+		xend = -1;
+		dx   = -1;
+	}
+
+	let ybeg = 0;
+	let yend = ny;
+	let dy   = 1;
+	if idir == SOUTH
+	{
+		ybeg = ny - 1;
+		yend = -1;
+		dy   = -1;
+	}
+
+	// Slide direction
+	let dxs = DIRS[0, idir];
+	let dys = DIRS[1, idir];
+
+	// Slide the rounded rocks "O"
+	let y = ybeg;
+	while y != yend
+	{
+		let x = xbeg;
+		while x != xend
+		{
+			//println("x, y = ", x, ", ", y);
+
+			if grid[x, y] == "O"
+			{
+				//println("round rock");
+
+				// Initial position of rock
+				let x0 = x;
+				let y0 = y;
+
+				// Next candidate position
+				let xn = x0 + dxs;
+				let yn = y0 + dys;
+
+				//while 0 <= xn and xn < nx and
+				//      0 <= yn and yn < ny and
+				//      grid[xn, yn] == "."
+				while can_slide(xn, yn, nx, ny)
+				{
+					grid[x0, y0] = ".";
+					grid[xn, yn] = "O";
+
+					x0 = xn;
+					y0 = yn;
+					xn = x0 + dxs;
+					yn = y0 + dys;
+				}
+			}
+			x += dx;
+		}
+		y += dy;
+	}
+	//println("grid = ", grid);
+
+	// Add up the score
+	let sum_ = 0;
+	for y in [0: ny]
+		for x in [0: nx]
+			if grid[x, y] == "O"
+				sum_ += ny - y;
+	
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx = len(str_);
+
+	//println("nx, ny = ", nx, ", ", ny);
+
+	grid = [""; nx, ny];
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: nx]
+			grid[x, y] = str_[x];
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("initial grid = ", grid);
+
+	// nstep_min is the number of steps to simulate before starting check for
+	// periodic steady state.  There are 4 steps per cycle
+	//
+	// There is some guess work here.  I can't guarantee that this will work for
+	// all inputs.  If not, you'll just have to watch the logs and look for
+	// cycles manually, or try increasing nstep_min and buffer
+	//
+	// nstep_min = 500 worked for me, but I've increased it just in case other
+	// inputs take longer to get to a steady state
+
+	let nstep_min = 600;
+	let buffer    = 300;
+
+	let period_steps = -1;
+
+	let done_cycling = false;
+	let step = 0;
+	while step < nstep_min + buffer and not done_cycling
+	{
+		//println("step = ", step);
+		//let idir = NORTH;
+		let idir = step % 4;
+
+		let xbeg = 0;
+		let xend = nx;
+		let dx   = 1;
+		if idir == EAST
+		{
+			// Move the rocks that are already furthest in the sliding direction
+			// first, so that other rocks don't get stuck on them
+			xbeg = nx - 1;
+			xend = -1;
+			dx   = -1;
+		}
+
+		let ybeg = 0;
+		let yend = ny;
+		let dy   = 1;
+		if idir == SOUTH
+		{
+			ybeg = ny - 1;
+			yend = -1;
+			dy   = -1;
+		}
+
+		// Slide direction
+		let dxs = DIRS[0, idir];
+		let dys = DIRS[1, idir];
+
+		// Slide the rounded rocks "O"
+		let y = ybeg;
+		while y != yend
+		{
+			let x = xbeg;
+			while x != xend
+			{
+				//println("x, y = ", x, ", ", y);
+
+				if grid[x, y] == "O"
+				{
+					//println("round rock");
+
+					// Initial position of rock
+					let x0 = x;
+					let y0 = y;
+
+					// Next candidate position
+					let xn = x0 + dxs;
+					let yn = y0 + dys;
+
+					//while 0 <= xn and xn < nx and
+					//      0 <= yn and yn < ny and
+					//      grid[xn, yn] == "."
+					while can_slide(xn, yn, nx, ny)
+					{
+						grid[x0, y0] = ".";
+						grid[xn, yn] = "O";
+
+						x0 = xn;
+						y0 = yn;
+						xn = x0 + dxs;
+						yn = y0 + dys;
+					}
+				}
+				x += dx;
+			}
+			y += dy;
+		}
+		//println("grid = ", grid);
+
+		//// Add up the score.  Uncomment this block if you need to debug and
+		//// look for periodic cycles manually
+		//{
+		//let sum_ = 0;
+		//for y in [0: ny]
+		//	for x in [0: nx]
+		//		if grid[x, y] == "O"
+		//			sum_ += ny - y;
+		//println("step, sum = ", step, ", ", sum_);
+		//println("step = ", step);
+		//}
+
+		if step == nstep_min
+			let grid_cache = grid;
+		else if step > nstep_min and period_steps < 0
+		{
+			// Check if a period has been reached (i.e. if the grid is exactly
+			// the same as the cached grid)
+			let all_eq_ = true;
+			let y = 0;
+			while all_eq_ and y < ny
+			{
+				let x = 0;
+				while all_eq_ and x < nx
+				{
+					all_eq_ = grid[x, y] == grid_cache[x, y];
+					x += 1;
+				}
+				y += 1;
+			}
+			if all_eq_
+			{
+				period_steps = step - nstep_min;
+				//println("period_steps = ", period_steps);
+			}
+		}
+
+		// If we've found the period, stop cycling as soon as we get to the next
+		// cycle that will have the same state as 1 billion cycles
+		if period_steps > 0 and (3999999999 - step) % period_steps == 0
+		{
+			done_cycling = true;
+		}
+
+		step += 1;
+	}
+
+	let sum_ = 0;
+	//println("period_steps = ", period_steps);
+	if period_steps < 0
+	{
+		println();
+		println("Error: cyclic period not found");
+		println();
+		sum_ = -1;
+	}
+	else
+	{
+		// Add up the score
+		for y in [0: ny]
+			for x in [0: nx]
+				if grid[x, y] == "O"
+					sum_ += ny - y;
+	}
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = 0;
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

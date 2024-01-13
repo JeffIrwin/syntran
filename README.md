@@ -15,7 +15,7 @@ An interpreter written in Fortran, I guess
 >
 > Kramer: Fungus.
 
-This is a sandbox for me to play in as I follow along with [Immo Landwerth's _building a compiler_ series](https://www.youtube.com/playlist?list=PLRAdsfhKI4OWNOSfS7EUu5GRAVmze1t2y)
+This began as a sandbox for me to play in as I followed along with [Immo Landwerth's _building a compiler_ series](https://www.youtube.com/playlist?list=PLRAdsfhKI4OWNOSfS7EUu5GRAVmze1t2y), but it has since diverged.  Syntran has morphed into an interpretted, array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
 
 ## Build the interpreter
 

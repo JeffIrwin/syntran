@@ -7,6 +7,8 @@ module syntran
 	! any private statements, so you just have to be careful if you use the
 	! syntran library as an API (as opposed to using the syntran CLI)
 
+	use syntran__core_m
+
 	implicit none
 
 !===============================================================================
@@ -15,27 +17,24 @@ contains
 
 !===============================================================================
 
-function syntran_interpret(str, quiet) result(res_str)
+function syntran_interpret(str_, quiet) result(res_str)
 
 	! This is the interactive interpreter shell
 	!
 	! To interpret a whole file all at once, use syntran_interpret_file()
 	! instead
 	!
-	! Interpret stdin by default, or interpret the multi-line string str if it
+	! Interpret stdin by default, or interpret the multi-line string str_ if it
 	! is given.  The return value res_str is the result of the final expression
 	! (like how Rust doesn't have a return statement, but fns just return the
 	! final expression in their body)
 	!
-	! Using the str arg is deprecated here.  Prefer eval() or interpret_file().
+	! Using the str_ arg is deprecated here.  Prefer eval() or interpret_file().
 	! However, it's still useful for testing to have something that evals 1 line
 	! at a time, so that we can have automatic test coverage of weird
 	! interactive interpreter edge cases
 
-	use syntran__core_m
-	use syntran__utils_m
-
-	character(len = *), intent(in), optional :: str
+	character(len = *), intent(in), optional :: str_
 	logical, intent(in), optional :: quiet
 
 	character(len = :), allocatable :: res_str
@@ -66,9 +65,9 @@ function syntran_interpret(str, quiet) result(res_str)
 	cont = .false.
 	show_tree = .false.
 
-	if (present(str)) then
+	if (present(str_)) then
 		! Append a trailing line feed in case it does not exist
-		sv = new_string_view(str//line_feed)
+		sv = new_string_view(str_//line_feed)
 		src_file = '<string>'
 	end if
 
@@ -80,7 +79,7 @@ function syntran_interpret(str, quiet) result(res_str)
 	! Read-eval-print-loop
 	do
 
-		if (present(str)) then
+		if (present(str_)) then
 
 			! Interpret multi-line strings one line at a time to mock the
 			! interpreter getting continued stdin lines.  If you know your whole
@@ -147,7 +146,7 @@ function syntran_interpret(str, quiet) result(res_str)
 		! Continue current parse with next line since more chars are expected
 		cont = compilation%expecting
 
-		!if (cont .and. present(str)) exit
+		!if (cont .and. present(str_)) exit
 		if (cont) cycle
 
 		if (compilation%is_empty) cycle
@@ -167,7 +166,7 @@ function syntran_interpret(str, quiet) result(res_str)
 
 		! Consider MATLAB-style "ans = " log?
 		res_str = res%to_str()
-		if (.not. present(str)) write(ou, '(a)') res_str
+		if (.not. present(str_)) write(ou, '(a)') res_str
 
 	end do
 
@@ -177,36 +176,9 @@ end function syntran_interpret
 
 !===============================================================================
 
-subroutine syntran_banner()
+integer function syntran_eval_i32(str_) result(eval_i32)
 
-	use syntran__core_m
-
-	!! Already done in main
-	!character(len = :), allocatable :: version
-	!version = &
-	!	str(syntran_major)//'.'// &
-	!	str(syntran_minor)//'.'// &
-	!	str(syntran_patch)
-	!write(*,*)
-	!write(*,*) lang_name//' '//version
-	!write(*,*) 'https://github.com/JeffIrwin/syntran'
-
-	write(*,*) 'Usage:'
-	write(*,*) tab//'#tree to toggle tree display'
-	write(*,*) tab//'`exit(0);` or Ctrl+C to exit'
-	write(*,*)
-
-	! TODO: add #help directive and arg for more in depth info
-
-end subroutine syntran_banner
-
-!===============================================================================
-
-integer function syntran_eval_i32(str) result(eval_i32)
-
-	use syntran__core_m
-
-	character(len = *), intent(in) :: str
+	character(len = *), intent(in) :: str_
 
 	type(fns_t) :: fns
 	type(syntax_node_t) :: tree
@@ -214,7 +186,7 @@ integer function syntran_eval_i32(str) result(eval_i32)
 	type(vars_t) :: vars
 
 	fns = declare_intrinsic_fns()
-	tree = syntax_parse(str, vars, fns)
+	tree = syntax_parse(str_, vars, fns)
 	call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -232,11 +204,37 @@ end function syntran_eval_i32
 
 !===============================================================================
 
-real(kind = 4) function syntran_eval_f32(str, quiet) result(eval_f32)
+integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 
-	use syntran__core_m
+	character(len = *), intent(in) :: str_
 
-	character(len = *), intent(in) :: str
+	type(fns_t) :: fns
+	type(syntax_node_t) :: tree
+	type(value_t) :: val
+	type(vars_t) :: vars
+
+	fns = declare_intrinsic_fns()
+	tree = syntax_parse(str_, vars, fns)
+	call tree%log_diagnostics()
+
+	if (tree%diagnostics%len_ > 0) then
+		! TODO: iostat
+		val_ = 0
+		return
+	end if
+
+	val = syntax_eval(tree, vars, fns)
+
+	! TODO: check kind, add optional iostat arg
+	val_ = val%sca%i64
+
+end function syntran_eval_i64
+
+!===============================================================================
+
+real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
+
+	character(len = *), intent(in) :: str_
 
 	logical, optional, intent(in) :: quiet
 
@@ -253,7 +251,7 @@ real(kind = 4) function syntran_eval_f32(str, quiet) result(eval_f32)
 	if (present(quiet)) quietl = quiet
 
 	fns = declare_intrinsic_fns()
-	tree = syntax_parse(str, vars, fns)
+	tree = syntax_parse(str_, vars, fns)
 	if (.not. quietl) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -272,21 +270,24 @@ end function syntran_eval_f32
 
 !===============================================================================
 
-function syntran_eval(str, quiet, src_file) result(res)
+function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
-	use syntran__core_m
+	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
+	! for syntran_interpret_file() is boolean
 
-	character(len = *), intent(in)  :: str
+	character(len = *), intent(in)  :: str_
 	character(len = :), allocatable :: res
 
 	logical, optional, intent(in) :: quiet
-	character(len = *), optional, intent(in)  :: src_file
+	character(len = *), optional, intent(in) :: src_file
+	character(len = *), optional, intent(in) :: chdir_
 
 	!********
 
-	character(len = :), allocatable :: src_filel
+	character(len = 1024) :: buffer
+	character(len = :), allocatable :: src_filel, dir, cwd
 
-	logical :: quietl
+	logical :: quietl, chdirl
 
 	type(fns_t) :: fns
 	type(syntax_node_t) :: tree
@@ -299,15 +300,17 @@ function syntran_eval(str, quiet, src_file) result(res)
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
 
+	chdirl = .false.
+	if (present(chdir_)) then
+		chdirl = .true.
+		dir = chdir_
+	end if
+
 	! TODO: make a helper fn here that all the eval_* fns use
 
 	fns = declare_intrinsic_fns()
 
-	! TODO: perform pre-processing here, e.g. to process #include directives.
-	! Do this by taking str as input, expanding the includes, and returning
-	! another string
-
-	tree = syntax_parse(str, vars, fns, src_filel)
+	tree = syntax_parse(str_, vars, fns, src_filel)
 	if (.not. quietl) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -315,46 +318,72 @@ function syntran_eval(str, quiet, src_file) result(res)
 		return
 	end if
 
+	if (chdirl) then
+
+		! chdir *after* syntax_parse() so that #include paths are correct, but
+		! *before* syntax_eval() so that runtime open() paths are correct
+		!
+		! I've only implemented this chdir option so that I can copy/paste my
+		! AOC solutions to unit tests in subdirs with minimal changes
+
+		! pushd
+		call getcwd(buffer)
+		cwd = trim(buffer)
+		call chdir(dir)
+
+	end if
+
 	val = syntax_eval(tree, vars, fns, quietl)
 	res = val%to_str()
+
+	! popd
+	if (chdirl) call chdir(cwd)
 
 end function syntran_eval
 
 !===============================================================================
 
-function syntran_interpret_file(file, quiet) result(res)
+function syntran_interpret_file(file, quiet, chdir_) result(res)
 
 	! TODO:
 	!   - enable input echo for file input (not for stdin)
 	!   - echo inputs w/o "syntran$" prompt and print outputs after a comment,
 	!     for ease of updating documentation with consistent styling
 
-	use syntran__core_m
-
 	character(len = *), intent(in)  :: file
 	character(len = :), allocatable :: res
 
 	logical, optional, intent(in) :: quiet
+	logical, optional, intent(in) :: chdir_
 
 	!********
 
 	character(len = :), allocatable :: source_text
+
 	integer :: iostat
-	logical :: quietl
+
+	logical :: quietl, chdirl
 
 	quietl = .false.
-	if (present(quiet)) quietl = quiet
+	if (present(quiet )) quietl = quiet
+
+	chdirl = .false.
+	if (present(chdir_)) chdirl = chdir_
 
 	if (.not. quietl) write(*,*) 'Interpreting file "'//file//'"'
-	!print *, 'fullpath = ', fullpath(file)
 
 	source_text = read_file(file, iostat)
+
 	if (iostat /= exit_success) then
 		if (.not. quietl) write(*,*) err_404(file)
 		return
 	end if
 
-	res = trim(adjustl(syntran_eval(source_text, quiet, file)))
+	if (chdirl) then
+		res = trim(adjustl(syntran_eval(source_text, quiet, file, chdir_ = get_dir(file))))
+	else
+		res = trim(adjustl(syntran_eval(source_text, quiet, file)))
+	end if
 
 end function syntran_interpret_file
 

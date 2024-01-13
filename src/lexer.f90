@@ -3,7 +3,7 @@
 
 module syntran__lexer_m
 
-	use syntran__errors_m
+	!use syntran__errors_m
 	use syntran__types_m
 	use syntran__utils_m
 
@@ -214,6 +214,20 @@ function lex(lexer) result(token)
 		kind = get_keyword_kind(text)
 		token = new_token(kind, start, text)
 		token%unit_ = lexer%unit_
+		return
+
+	end if
+
+	if (lexer%pos == 1           .and. &
+		lexer%current()   == "#" .and. &
+		lexer%lookahead() == "!") then
+
+		! Handle a special shebang `#!` case at very beginning of file and
+		! ignore the rest of the first line
+		call lexer%read_single_line_comment()
+
+		text = lexer%text(start: lexer%pos-1)
+		token = new_token(whitespace_token, start, text)
 		return
 
 	end if

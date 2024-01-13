@@ -3,9 +3,9 @@
 
 module syntran__types_m
 
-	use syntran__consts_m
-	use syntran__errors_m
-	use syntran__utils_m
+	!use syntran__consts_m
+	!use syntran__errors_m
+	!use syntran__utils_m
 	use syntran__value_m
 
 	implicit none
@@ -1494,8 +1494,7 @@ function new_binary_expr(left, op, right) result(expr)
 	!print *, 'larrtype = ', kind_name(larrtype)
 
 	! Pass the result value type up the tree for type checking in parent
-	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type, &
-		larrtype, rarrtype)
+	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type)
 
 	select case (type_)
 	case (bool_array_type)
@@ -1561,14 +1560,12 @@ end function new_unary_expr
 
 !===============================================================================
 
-integer function get_binary_op_kind(left, op, right, left_array, right_array) &
-		result(kind_)
+integer function get_binary_op_kind(left, op, right) result(kind_)
 
 	! Return the resulting type yielded by operator op on operands left and
 	! right
 
 	integer, intent(in) :: left, op, right
-	integer, intent(in), optional :: left_array, right_array
 
 	select case (op)
 	case ( &

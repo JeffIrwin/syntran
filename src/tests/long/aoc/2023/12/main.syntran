@@ -1,0 +1,191 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+// Real input works but it takes too long.  Use test input just for syntran unit
+// testing
+let ifile = 0;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i32
+{
+	// This takes 15 minutes to run!
+	//
+	// I'm thinking it might be better to take the inverse approach:  generate
+	// every combination with the correct length and groupings but ignoring
+	// known `.` and `#` locations, and then filter if the known chars match.
+	// I'm not sure if this would generate any fewer combinations to filter or
+	// if a yet more clever approach is needed
+
+	let sum_ = 0;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let iline = 0;
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+		//println("iline = ", iline);
+
+		let ns = len(str_);
+
+		// Count question marks `?`.  Could split str_ before counting
+		let nq = 0;
+		for i in [0: ns]
+			if (str_[i] == "?") nq += 1;
+
+		//println("nq = ", nq);
+
+		// Count known hashes (question marks don't count here)
+		let nknown_hash = 0;
+		for i in [0: ns]
+			if (str_[i] == "#") nknown_hash += 1;
+
+		// Save indices of every question mark
+		let iqs = [-1; nq];
+		nq = 0;
+		for i in [0: ns]
+			if (str_[i] == "?")
+			{
+				iqs[nq] = i;
+				nq += 1;
+			}
+
+		//println("iqs = ", iqs);
+
+		let groups = parse_i32_delim(str_, ".#? ,");
+		let ng = size(groups,0);
+		//println("groups = ", groups);
+
+		// Sum total number of hashes, including known and unknown locations
+		let nhash = 0;
+		for i in [0: ng]
+			nhash = nhash + groups[i];
+		//println("nhash = ", nhash);
+
+		let nunknown_hash = nhash - nknown_hash;
+		//println("nunknown_hash = ", nunknown_hash);
+
+		// Total number of combinations of unknowns is `nq choose nunknown_hash` (n
+		// choose k)
+		//
+		// Only check combinations that have the correct number of hashes.
+		// Then, filter them down to just the combos that meet the grouping
+		// criteria too
+
+		// First combination is all hashes as far left as possible at the
+		// unknown locations
+		//
+		// Index array of first combo for next combo algorithm
+		let a = [0: nunknown_hash];
+		//println("a = ", a);
+
+		// Iterate through combinations
+		let last = false;
+		while not last
+		{
+			// Reset combo str then fill in hashes from index array `a`
+			//println("setting combo str");
+			let combo = str_;
+			for i in [0: nunknown_hash]
+				//combo[a[iqs[i]]] = "#";
+				combo[iqs[a[i]]] = "#";
+
+			//println("combo = ", combo);
+			//println("a = ", a);
+
+			// Check if the combo str meets the grouping criteria
+			let g = split_(combo, ".?, " + digit_chars);
+			//println("combo = ", combo);
+			//println("g = ", g);
+			if (size(g,0) == ng)
+			{
+				//println("size match");
+
+				let all_eq_ = true;
+				let i = 0;
+				while i < ng and all_eq_
+				{
+					all_eq_ = len(g[i]) == groups[i];
+					i += 1;
+				}
+				if (all_eq_)
+				{
+					//println("valid combo");
+					sum_ += 1;
+				}
+			}
+
+			// Get next combination.  Ref:  https://cp-algorithms.com/combinatorics/generating_combinations.html
+			//
+			// This should be a next_combo() fn but I'm working around mem leaks
+
+			//println("getting next combo");
+			let k = nunknown_hash;
+			let ii = 0;
+			let found = false;
+			while ii < k and not found // ii is unnecessary since i could be decremented directly
+			{
+				let i = k - ii - 1;
+				//println("i = ", i);
+
+				if (a[i] < nq - k + i)
+				{
+					found = true;
+					a[i] += 1;
+					for j in [i + 1: k]
+						a[j] = a[j - 1] + 1;
+				}
+				ii += 1;
+			}
+			if (not found) last = true;
+
+			//println();
+		}
+		//println();
+		iline += 1;
+		str_ = readln(f);
+	}
+	close(f);
+
+	//// Paranoid unit test for split_()
+	//str_ = "##?.###";
+	//let g = split_(str_, ".?");
+	//println("split_(" + str_ + ") = ", g);
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = 0;
+
+	sum_ += part1();
+	//sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

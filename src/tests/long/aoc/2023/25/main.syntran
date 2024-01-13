@@ -1,0 +1,769 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt",
+	"test-input2.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+let NNAMES_CAP = 4 * 1024;  // 1493 for my input
+let names = [""; NNAMES_CAP];
+let nn = 0; // # of names == # of (graph) nodes
+
+//==============================================================================
+
+fn qsort(v: [i32; :]): [i32; :]
+{
+	// Quick sort algorithm.  Return index array instead of modifying the input
+	// array in-place
+
+	//println("starting qsort()");
+	//println("v = ", v);
+
+	let l = 0;
+	let h = size(v,0) - 1;
+
+	let ix = [l: h + 1];
+
+	if l < h
+	{
+		let stack = [0; h - l + 1];
+
+		let top = -1;
+
+		top += 1;
+		stack[top] = l;
+
+		top += 1;
+		stack[top] = h;
+
+		while top >= 0
+		{
+			//println("h = ", h);
+			h = stack[top];
+			top -= 1;
+
+			l = stack[top];
+			top -= 1;
+
+			// Median-of-three pivot.  40x faster for AOC day 21!
+			let m = (l + h) / 2;
+			if v[ix[m]] < v[ix[l]]
+			{
+				let tmp = ix[m];
+				ix[m]   = ix[l];
+				ix[l]   = tmp;
+			}
+			if v[ix[h]] < v[ix[l]]
+			{
+				let tmp = ix[h];
+				ix[h]   = ix[l];
+				ix[l]   = tmp;
+			}
+			if v[ix[m]] < v[ix[h]]
+			{
+				let tmp = ix[m];
+				ix[m]   = ix[h];
+				ix[h]   = tmp;
+			}
+			let x = v[ix[h]];
+
+			let i = (l - 1);
+			for j in [l: h]
+				if v[ix[j]] <= x
+				{
+					i += 1;
+					let tmp = ix[i];
+					ix[i]   = ix[j];
+					ix[j]   = tmp;
+				}
+			let tmp = ix[i+1];
+			ix[i+1] = ix[h];
+			ix[h]   = tmp;
+			let p = i + 1;
+
+			if p - 1 > l
+			{
+				top += 1;
+				stack[top] = l;
+
+				top += 1;
+				stack[top] = p - 1;
+			}
+
+			if p + 1 < h
+			{
+				top += 1;
+				stack[top] = p + 1;
+
+				top += 1;
+				stack[top] = h;
+			}
+		}
+	}
+	//println("v = ", v);
+	//let ans = v;
+	let ans = ix;
+}
+
+//==============================================================================
+
+fn push_name(name_: str)
+{
+	//println("starting push_name()");
+	//println("name_ = ", name_);
+
+	// Check if name is already listed.  It would be faster to load everything
+	// as duplicates and then sort alphabetically and equivalence
+	let listed = false;
+	let i = 0;
+	while not listed and i < nn
+	{
+		listed = names[i] == name_;
+		i += 1;
+	}
+
+	if not listed
+	{
+		if nn >= NNAMES_CAP
+		{
+			println();
+			println("Error: NNAMES_CAP overflow!");
+			println();
+			exit(-1);
+		}
+
+		names[nn] = name_;
+		nn += 1;
+	}
+}
+
+//==============================================================================
+
+fn lookup_name(name_: str): i32
+{
+	// Again, this would be faster with a sorted list
+	let found = false;
+	let i = 0;
+	while not found and i < nn
+	{
+		found = names[i] == name_;
+		i += 1;
+	}
+	if found
+		i -= 1;
+	let ans = i;
+}
+
+//==============================================================================
+
+fn part1_tarjan(): i32
+{
+	// Attempt an O(n**3) method based on Tarjan's bridge algorithm
+	//
+	// This felt clever but it's too slow :(
+
+	let sum_ = 0;
+
+	// First pass: save list of unique names
+	//println("Loading names ...");
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, ": ");
+		for i in [0: size(strs, 0)]
+			push_name(strs[i]);
+
+		str_ = readln(f);
+	}
+
+	//println("names = ");
+	//for i in [0: nn]
+	//	println(names[i]);
+	//println("Number of nodes = ", nn);
+
+	// Second pass: save one-way directed connections as graph gdir
+	let NADJ_CAP = 16;
+	let gdir = [-1; NADJ_CAP, nn];
+	let nadjdir = [0; nn];
+	close(f);
+	f = open(filename);
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, ": ");
+		let from = lookup_name(strs[0]);
+		for i in [1: size(strs, 0)]
+		{
+			let to = lookup_name(strs[i]);
+
+			if nadjdir[from] > NADJ_CAP
+			{
+				println();
+				println("Error: NADJ_CAP overflow 1!");
+				println();
+				exit(-1);
+			}
+
+			gdir[ nadjdir[from], from ] = to;
+			nadjdir[from] += 1;
+		}
+
+		str_ = readln(f);
+	}
+	//println("gdir = ", gdir);
+
+	let g = gdir;
+	let nadj = nadjdir;
+
+	// Double each edge to convert the directed graph to an undirected graph
+	for i in [0: nn]
+	for j in [0: nadjdir[i]]
+	{
+		let from = i;
+		let to   = gdir[j, i];
+		if nadj[to] > NADJ_CAP
+		{
+			println();
+			println("Error: NADJ_CAP overflow 2!");
+			println();
+			exit(-1);
+		}
+		g[ nadj[to], to ] = from;
+		nadj[to] += 1;
+	}
+	//println("g = ", g);
+	//println("nadj = ", nadj);
+
+	// Stack for iterative (non-recursive) depth-first search
+	let stack = [0; 16 * nn];
+
+	// To find a triple bridge, iterate through every pair of (directed) edges.
+	// Remove them and remove their undirected counterparts, and then use
+	// Tarjan's bridge algorithm to search for a bridge (i.e. an edge whose
+	// removal would cause the graph to become disconnected)
+	//
+	// With modified input test-input2.txt, I have already removed 2 critical
+	// edges, so Tarjan's algorithm should find the remaining edge immediately
+
+	// Backup unmodified input graph
+	let g0 = g;
+	let nadj0 = nadj;
+	
+	// Iterate through unique pairs of directed edges
+	for i1r in [0: nn]
+	{
+	//println("removing ", i1r);
+	for j1r in [0: nadjdir[i1r]]
+	//for i2r in [0: min(i1r + 1, nn)]
+	for i2r in [0: i1r + 1]
+	for j2r in [0: nadjdir[i2r]]
+	//if i1r != i2r or j1r != j2r  // TODO: removal needs modified for removed edges with shared vertices
+	if i1r != i2r
+	{
+
+	// Restore
+	g = g0;
+	nadj = nadj0;
+
+	// Remove edges from i1r to child j1r, and from i2r to child j2r
+
+	// Remove first edge
+
+	// Shift successive edges to fill gap left by removal
+	let back = g[j1r, i1r];
+	for j in [j1r: nadj[i1r]]
+		g[j, i1r] = g[j+1, i1r];
+	nadj[i1r] -= 1;
+
+	// Remove sibling directed edge back to i1r
+	let found = false;
+	for j in [0: nadj[back]]
+	{
+		found = found or g[j, back] == i1r;
+		if found
+			g[j, back] = g[j+1, back];
+	}
+	nadj[back] -= 1;
+
+	// Remove second edge
+
+	// Shift successive edges to fill gap left by removal
+	back = g[j2r, i2r];
+	for j in [j2r: nadj[i2r]]
+		g[j, i2r] = g[j+1, i2r];
+	nadj[i2r] -= 1;
+
+	// Remove sibling directed edge back to i2r
+	found = false;
+	for j in [0: nadj[back]]
+	{
+		found = found or g[j, back] == i2r;
+		if found
+			g[j, back] = g[j+1, back];
+	}
+	nadj[back] -= 1;
+
+	// TODO: maybe publish this as a blog post.  I didn't see any google search
+	// results for iterative versions of Tarjan's bridge algorithm, only
+	// recursive versions :(
+	let sp = -1; // stack pointer
+
+	// Push root
+	stack[(sp += 1)] = 0;
+
+	let visited = [false; nn];
+	let defer   = [false; nn];
+	let parent  = [-1; nn];
+	let low	    = [-1; nn];
+	let tin     = [-1; nn];
+
+	let timer = 0;
+
+	// FIXME: implementations that I have seen online for Tarjan's algorithm
+	// wrap the following loop in another `for` loop which iterates and pushes
+	// every possible vertex.  I suppose this is just in case the graph
+	// *already* has multiple disconnected components.  I don't think I need it
+	// for AOC
+	while sp >= 0
+	{
+		// pop
+		let v = stack[(sp -= 1) + 1];
+		//println("v = ", v, " = ", names[v]);
+
+		if not visited[v]
+		{
+			low[v] = timer;
+			tin[v] = timer;
+			timer += 1;
+		}
+		visited[v] = true;
+
+		for ito in [0: nadj[v]]
+		{
+			let to = g[ito, v];
+			if to == parent[v]
+			{
+				// Do nothing
+			}
+			else if visited[to]
+			{
+				low[v] = min(low[v], tin[to]);
+			}
+			else
+			{
+				parent[to] = v;
+
+				stack[(sp += 1)] = v;  // re-push parent for deferred processing
+				defer[v] = true;
+
+				stack[(sp += 1)] = to; // push child. order matters wrt parent
+				// TODO: stack cap check
+			}
+		}
+
+		if defer[v]
+		{
+			for ito in [0: nadj[v]]
+			{
+				let to = g[ito, v];
+				if to != parent[v] and visited[to]
+				{
+					low[v] = min(low[v], low[to]);
+					if (low[to] > tin[v])
+					{
+						//// TODO: this may log the same bridge multiple times.
+						//// Pushing to an equivalenced set is left as an exercise
+						//// for the reader
+						//println();
+						//println("****************");
+
+						//println("Found bridge = ", [v, to], " = ", [names[v], names[to]]);
+						//println();
+						//exit(0); // TODO
+					}
+				}
+			}
+		}
+	}
+	//println("visited = ", visited);
+	//println("parent = ", parent);
+	//println("tin    = ", tin);
+	//println("low  = ", low);
+
+	}
+	}
+
+	// TODO: backup g, nadj, gdir, and nadjdir before removing edges
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	// Use a randomized statistical method.  The gist of it is, if you travel
+	// from one random node to another, you are almost guaranteed to cross a
+	// bridge at some point.  Do this enough times and you can identify all
+	// bridges
+
+	// First pass: save list of unique names
+	//println("Loading names ...");
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, ": ");
+		for i in [0: size(strs, 0)]
+			push_name(strs[i]);
+
+		str_ = readln(f);
+	}
+
+	//println("names = ");
+	//for i in [0: nn]
+	//	println(names[i]);
+	//println("Number of nodes = ", nn);
+
+	// Second pass: save one-way directed connections as graph gdir
+	let NADJ_CAP = 16;
+	let gdir = [-1; NADJ_CAP, nn];
+	let nadjdir = [0; nn];
+	close(f);
+	f = open(filename);
+	str_ = readln(f);
+	//println("Looking up names ...");
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, ": ");
+		let from = lookup_name(strs[0]);
+		for i in [1: size(strs, 0)]
+		{
+			let to = lookup_name(strs[i]);
+
+			if nadjdir[from] > NADJ_CAP
+			{
+				println();
+				println("Error: NADJ_CAP overflow 1!");
+				println();
+				exit(-1);
+			}
+
+			gdir[ nadjdir[from], from ] = to;
+			nadjdir[from] += 1;
+		}
+
+		str_ = readln(f);
+	}
+	//println("gdir = ", gdir);
+
+	let g = gdir;
+	let nadj = nadjdir;
+
+	// Double each edge to convert the directed graph to an undirected graph
+	for i in [0: nn]
+	for j in [0: nadjdir[i]]
+	{
+		let from = i;
+		let to   = gdir[j, i];
+		if nadj[to] > NADJ_CAP
+		{
+			println();
+			println("Error: NADJ_CAP overflow 2!");
+			println();
+			exit(-1);
+		}
+		g[ nadj[to], to ] = from;
+		nadj[to] += 1;
+	}
+	//println("g = ", g);
+	//println("nadj = ", nadj);
+
+	// Queue for iterative (non-recursive) breadth-first search
+	//
+	// Graph is unweighted, so BFS is sufficient instead of Dijkstra's algorithm
+	let QUEUE_CAP = 16 * nn;
+	let q = [0; QUEUE_CAP];
+
+	// Use a statistical method.  BFS from a "few" source nodes and find the
+	// shortest paths to a few destination nodes.  Trace out those shortest
+	// paths and build up a histogram of how many times each node/edge is
+	// encountered on a path.  Nodes which are encountered more often are
+	// probably on the bridges
+
+	// Node histogram
+	let hist = [0; nn];
+
+	// Edge histogram.  O(nn**2) is bad!  But who doesn't have a few MBs of RAM?
+	let histe = [0; nn, nn];
+
+	let srcs = [0; 0];
+	let dsts = [0; 0];
+	if ifile == 1
+	{
+		// You can run a "convergence test" by changing the step here and seeing
+		// how the results change.  With too few sources/destinations (i.e.
+		// large steps), the 6th element in the histogram will not be
+		// significantly different than the 7th element, so you can't tell which
+		// nodes compose the bridges
+		//
+		// As more test sources/destinations are added, the results will
+		// converge and the distinction between bridge nodes and non-bridge nodes
+		// becomes very clear.  For my input, a step of 12 seems good enough,
+		// but a step of 8 doesn't take much longer and adds more confidence
+		//
+		// Start/end bounds are irrelevant, we just want to get a pseudorandom
+		// representative sample of different parts of the graph (and I don't
+		// have rand() in syntran)
+
+		//srcs = [ 101,  201,  301,  401,  501];
+		//dsts = [1001, 1101, 1201, 1301, 1401];
+		//srcs = [ 100:   50:  600];
+		//dsts = [ 900:   50: 1400];
+
+		//srcs = [ 100:   12:  600];
+		//dsts = [ 900:   12: 1400];
+		srcs = [ 100:    8:  600];
+		dsts = [ 900:    8: 1400];
+	}
+	else
+	{
+		//srcs = [ 1,  2,  3,  4,  5,  6];
+		//dsts = [ 9, 10, 11, 12, 13, 14];
+		srcs = [0: nn];
+		dsts = [0: nn];
+	}
+	//println("srcs = ", srcs);
+	//println("dsts = ", dsts);
+
+	// Iterate through all srcs
+	//println("Searching for bridges ...");
+	for isrc in [0: size(srcs, 0)]
+	{
+		let src = srcs[isrc];
+
+		let qb = -1;  // queue begin
+		let qe = -1;  // queue end
+
+		// BFS
+		let prev = [-1; nn];
+		let visited = [false; nn];
+		q[(qe += 1)] = src; // push
+		visited[src] = true;
+		while qe > qb
+		{
+			let v = q[(qb += 1)]; // pop
+			//println("v = ", v);
+
+			for iw in [0: nadj[v]]
+			{
+				let w = g[iw, v];
+				if not visited[w]
+				{
+					visited[w] = true;
+					prev[w] = v;
+					if qe >= QUEUE_CAP - 1
+					{
+						println();
+						println("Error: QUEUE_CAP overflow!");
+						println();
+						exit(-1);
+					}
+					q[(qe += 1)] = w; // push
+				}
+			}
+		}
+
+		// Iterate through all dsts
+		for idst in [0: size(dsts, 0)]
+		{
+			let dst = dsts[idst];
+
+			// Trace back path from dst to src
+			let v = dst;
+			//println("reverse path from ", src, " to ", dst, " = ");
+			while v != src
+			{
+				//println("v = ", v);
+				if v != dst
+					hist[v] += 1;
+
+				let pv = prev[v];
+
+				// Set edge histogram with edges directed consistently
+				let emin = min(v, pv);
+				let emax = max(v, pv);
+				histe[emin, emax] += 1;
+
+				v = pv;
+			}
+		}
+	}
+	//println("histe = ", histe);
+
+	// Don't sort the edge histogram!  Just select the top 3 in 3 passes
+	//println("Sorting histogram ...");
+	let neb = 3; // # edge bridges
+	let eb = [-1; 2, neb];
+
+	let max = 0;
+	for i in [0: nn]
+	for j in [0: i]
+	{
+		if histe[j, i] > max
+		{
+			max = histe[j, i];
+			eb[0, 0] = j;
+			eb[1, 0] = i;
+		}
+	}
+	let max0 = max;
+
+	// WET!
+	max = 0;
+	for i in [0: nn]
+	for j in [0: i]
+	{
+		if max0 > histe[j, i] and histe[j, i] > max
+		{
+			max = histe[j, i];
+			eb[0, 1] = j;
+			eb[1, 1] = i;
+		}
+	}
+	max0 = max;
+
+	max = 0;
+	for i in [0: nn]
+	for j in [0: i]
+	{
+		if max0 > histe[j, i] and histe[j, i] > max
+		{
+			max = histe[j, i];
+			eb[0, 2] = j;
+			eb[1, 2] = i;
+		}
+	}
+	//println("eb = ", eb);
+	//println();
+
+	//println("Bridge edges = ");
+	//for i in [0: neb]
+	//	println("between ", names[eb[0,i]], " and ", names[eb[1,i]]);
+	//println();
+
+	// Remove bridge edges
+
+	//println("g = ", g);
+	for i in [0: neb]
+	{
+		let i0 = eb[0, i];
+		let i1 = eb[1, i];
+
+		// Shift successive edges to fill gap left by removal
+		let found = false;
+		for j in [0: nadj[i0]]
+		{
+			found = found or g[j, i0] == i1;
+			if found
+				g[j, i0] = g[j+1, i0];
+		}
+		nadj[i0] -= 1;
+
+		// Remove the paired directed edge too
+		found = false;
+		for j in [0: nadj[i1]]
+		{
+			found = found or g[j, i1] == i0;
+			if found
+				g[j, i1] = g[j+1, i1];
+		}
+		nadj[i1] -= 1;
+	}
+	//println("g = ", g);
+
+	// Count size of each connected component
+	let ncomp = 2;
+	let sizes_ = [0; ncomp];
+
+	// Iterate through nodes and BFS through the rest of that node's component
+	ncomp = 0;
+	let visited = [false; nn];
+	for i in [0: nn]
+	{
+		if not visited[i]
+		{
+			let qb = -1;  // queue begin
+			let qe = -1;  // queue end
+
+			// BFS
+			q[(qe += 1)] = i; // push
+			visited[i] = true;
+			while qe > qb
+			{
+				let v = q[(qb += 1)]; // pop
+				sizes_[ncomp] += 1;
+				//println("v = ", v);
+
+				for iw in [0: nadj[v]]
+				{
+					let w = g[iw, v];
+					if not visited[w]
+					{
+						visited[w] = true;
+						q[(qe += 1)] = w; // push
+					}
+				}
+			}
+			ncomp += 1;
+		}
+	}
+	//println("sizes_ = ", sizes_);
+
+	let sum_ = sizes_[0] * sizes_[1];
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	sum_ += part1();
+	//sum_ += part2(); // no part2 on day 25
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

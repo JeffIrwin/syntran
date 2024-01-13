@@ -1,0 +1,443 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+// Real input works but it takes too long.  Use test input just for syntran unit
+// testing
+let ifile = 0;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+let NDIM = 2;        // spatial dimensions
+
+let NDIRS = 4;
+
+// Cardinal directions
+let DIRS =
+	[
+		 0, -1, // north
+		-1,  0, // west
+		 0,  1, // south
+		 1,  0  // east
+		 ;
+		 2,  NDIRS
+	];
+//println("DIRS = ", DIRS);
+
+// Note consistent ordering with DIRS array
+let NORTH = 0;
+let WEST  = 1;
+let SOUTH = 2;
+let EAST  = 3;
+
+let DIRS_STR = "^<v>";
+
+// Number of state variables.  State contains:
+//
+//     0. dist ("heat loss")
+//     1. x pos
+//     2. y pos
+//     3. direction (encoded as a single i32 from enum above)
+//     4. length of straight line
+//
+// Obviously the state has to contain [x,y] pos at the very least.  I had tried
+// separately to add direction to the state, and also total number of search
+// steps (not exactly the same as distance or length).  The trick is to save
+// both direction *and* length in the state.  I wouldn't have figured this out
+// without looking at hyper-neutrino's solution:
+//
+//     https://github.com/hyper-neutrino/advent-of-code/blob/main/2023/day17p1.py
+//
+let NSTATE = 5;
+
+// Queue data structure.  I don't have pass-by-reference but I do have
+// pass-by-global-variable :)
+let QUEUE_CAP = 2 * 1024 * 1024;
+let queue = [-1; NSTATE, QUEUE_CAP];
+let queue_beg  = 0;
+let queue_end  = 0;
+let queue_end0 = 0;
+
+//****************
+
+fn sort_queue()
+{
+	// Quick sort
+
+	//println("starting qsort()");
+	////println("queue = ", queue);
+
+	let l = queue_beg;
+	let h = queue_end - 1;
+
+	if (l < h)
+	{
+		let stack = [0; h - l + 1];
+
+		let top = -1;
+
+		top += 1;
+		stack[top] = l;
+
+		top += 1;
+		stack[top] = h;
+
+		while top >= 0
+		{
+			h = stack[top];
+			top -= 1;
+
+			l = stack[top];
+			top -= 1;
+
+			//// inlined
+			//let p = partition(queue, l, h);
+
+			// TODO: use median-of-3 pivot like later day(s)
+			let x = queue[0,h];
+
+			let i = l - 1;
+			for j in [l: h]
+				if queue[0,j] <= x
+				{
+					i += 1;
+					for k in [0: NSTATE]
+					{
+						let tmp     = queue[k, i];
+						queue[k, i] = queue[k, j];
+						queue[k, j] = tmp;
+					}
+				}
+			for k in [0: NSTATE]
+			{
+				let tmp       = queue[k, i+1];
+				queue[k, i+1] = queue[k, h];
+				queue[k, h] = tmp;
+			}
+
+			let p = i + 1;
+
+			if p - 1 > l
+			{
+				top += 1;
+				stack[top] = l;
+			
+				top += 1;
+				stack[top] = p - 1;
+			}
+
+			if p + 1 < h
+			{
+				top += 1;
+				stack[top] = p + 1;
+
+				top += 1;
+				stack[top] = h;
+			}
+		}
+	}
+	//println("queue = ", queue);
+
+	// This could also prune popped elements entirely to avoid QUEUE_CAP issues
+	while queue[0, queue_beg] < 0 and queue_beg < queue_end
+		queue_beg += 1;
+
+	// After sorting, new unsorted elements will be pushed onto the queue after
+	// this position
+	queue_end0 = queue_end;
+}
+
+//****************
+
+let push_count = 0;
+fn push_(v: [i32; :])
+{
+	//println("pushing ", v);
+	if queue_end >= QUEUE_CAP
+	{
+		println();
+		println("Error: QUEUE_CAP overflow!");
+		println();
+	}
+
+	queue[0, queue_end ] = v[0]; // dist;
+	queue[1, queue_end ] = v[1]; // x;
+	queue[2, queue_end ] = v[2]; // y;
+	queue[3, queue_end ] = v[3]; // dir;
+	queue[4, queue_end ] = v[4]; // len_;
+
+	queue_end += 1;
+
+	// I don't actually know if sorting the queue provides any perf benefit.
+	// Even if it does, the sort period should be tuned to the specific
+	// problem based on vibes
+	if push_count % 3000 == 0
+		sort_queue();
+	push_count += 1;
+}
+
+//****************
+
+fn pop_(): [i32; :]
+{
+	// Linear scan because I'm not implementing a min-heap queue :(
+
+	// queue_beg is guaranteed to be in the queue (i think)
+	let i = queue_beg;
+	let imin = i;
+	let min_ = queue[0,i];
+
+	// Scan only the unsorted part of the queue
+	let x = [-1; NSTATE];
+	i = queue_end0;
+	while i < queue_end
+	{
+		if queue[0,i] >= 0
+		{
+			if queue[0,i] < min_
+			{
+				min_ = queue[0,i];
+				imin = i;
+			}
+		}
+		i += 1;
+	}
+	x[0] = queue[0,imin];
+	x[1] = queue[1,imin];
+	x[2] = queue[2,imin];
+	x[3] = queue[3,imin];
+	x[4] = queue[4,imin];
+
+	queue[0, imin] = -1;  // mark popped element as out of queue
+
+	// When queue[0,:] happens to get popped, increment it to the next element
+	// still in queue
+	while queue[0, queue_beg] < 0 and queue_beg < queue_end
+		queue_beg += 1;
+
+	let ans = x;
+}
+
+//==============================================================================
+
+fn dijkstra(map: [i32; :, :], xbeg: [i32; :], xend: [i32; :], len_min: i32, len_max: i32): i32
+{
+	// Directly adapted from:  https://github.com/hyper-neutrino/advent-of-code/blob/main/2023/day17p2.py
+
+	//println();
+	//println("starting dijkstra()");
+	//println("xbeg = ", xbeg);
+	//println("xend = ", xend);
+	//println("len_min = ", len_min);
+	//println("len_max = ", len_max);
+
+	queue_beg  = 0;
+	queue_end  = 0;
+	queue_end0 = 0;
+	queue = [-1; NSTATE, QUEUE_CAP];
+
+	let nx = size(map, 0);
+	let ny = size(map, 1);
+
+	//println("nx, ny = ", [nx, ny]);
+
+	// initialize distance to practical infinity.  using a negative with extra
+	// logic might be more robust
+	let DIST_INFTY = 2000000000;
+
+	let dist = [DIST_INFTY; nx, ny, NDIRS+1, len_max];
+	let unvisited = [true ; nx, ny, NDIRS+1, len_max];
+
+	// Initialize source vertex to 0 distance.  We do not enter the start point
+	// in any particulal direction, so encode that as dir == NDIRS (one-past
+	// usual end of DIRS array)
+	dist  [   xbeg[0], xbeg[1], NDIRS, 0] = 0;
+	push_([0, xbeg[0], xbeg[1], NDIRS, 0]);
+
+	let dist_progress = -1;
+
+	let found = false;
+	let dist_end = DIST_INFTY;
+	while not found
+	{
+		let u = pop_();
+		//println("u = ", u);
+
+		// unpack from array
+		let dist0 = u[0];
+		let x0    = u[1];
+		let y0    = u[2];
+		let dir0  = u[3];
+		let len0  = u[4];
+
+		if dist0 > dist_progress
+		{
+			dist_progress = dist0;
+			//println("u = ", u);
+		}
+
+		if x0 == xend[0] and y0 == xend[1] and len0 >= len_min
+		{
+			found = true;
+			dist_end = dist0;
+			//println("dist_end = ", dist_end);
+		}
+		
+		let continue_ = false;
+
+		if not unvisited[x0, y0, dir0, len0]
+			continue_ = true;
+
+		if not continue_
+			unvisited[x0, y0, dir0, len0] = false;
+
+		if not continue_
+			if len0 < len_max-1 and dir0 != NDIRS
+			{
+				let x = x0 + DIRS[0, dir0];
+				let y = y0 + DIRS[1, dir0];
+				if 0 <= x and x < nx and 0 <= y and y < ny
+				{
+					// The alt calculation and dist comparison could be
+					// refactored inside of push_(), at the cost of scanning to
+					// see if a value with larger dist already exists.  This way
+					// should be more efficient (at least, if I don't use an
+					// actual priority queue)
+
+					let alt = dist0 + map[x,y];
+					if alt < dist[x, y, dir0, len0 + 1]
+					{
+						push_([dist0 + map[x,y], x, y, dir0, len0 + 1]);
+						dist[x, y, dir0, len0 + 1] = alt;
+					}
+				}
+			}
+
+		if not continue_
+			if len0 >= len_min or dir0 == NDIRS
+				for dir in [0: NDIRS]
+					if dir != dir0 and ((dir + 2) % 4) != dir0
+					{
+						let x = x0 + DIRS[0, dir];
+						let y = y0 + DIRS[1, dir];
+						if 0 <= x and x < nx and 0 <= y and y < ny
+						{
+							let alt = dist0 + map[x,y];
+							if alt < dist[x, y, dir, 1]
+							{
+								push_([dist0 + map[x,y], x, y, dir, 1]);
+								dist[x, y, dir, 1] = alt;
+							}
+						}
+					}
+	}
+	let ans = dist_end;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx = len(str_);
+
+	//println("nx, ny = ", [nx, ny]);
+
+	let grid = [-1; nx, ny];
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: nx]
+			grid[x, y] = parse_i32(str_[x]);
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("grid = ", grid);
+
+	// Start at northwest corner, end at southeast
+	let xbeg = [0, 0];
+	let xend = [nx - 1, ny - 1];
+
+	let sum_ = dijkstra(grid, xbeg, xend, 0, 4);
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx = len(str_);
+
+	//println("nx, ny = ", [nx, ny]);
+
+	let grid = [-1; nx, ny];
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: nx]
+			grid[x, y] = parse_i32(str_[x]);
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("grid = ", grid);
+
+	// Start at northwest corner, end at southeast
+	let xbeg = [0, 0];
+	let xend = [nx - 1, ny - 1];
+
+	let sum_ = dijkstra(grid, xbeg, xend, 4, 11);
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = 0;
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

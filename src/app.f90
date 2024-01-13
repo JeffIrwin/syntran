@@ -3,6 +3,7 @@
 
 module syntran__app_m
 
+	use syntran
 	use syntran__core_m
 	use syntran__errors_m
 	use syntran__utils_m
@@ -11,12 +12,12 @@ module syntran__app_m
 
 	type args_t
 
-		character(len = :), allocatable :: syntran_file
+		character(len = :), allocatable :: syntran_file, command
 
 		integer :: maxerr
 
 		logical :: &
-			!any_arg          = .false., &
+			command_arg      = .false., &
 			syntran_file_arg = .false., &
 			version          = .false., &
 			help             = .false.
@@ -30,7 +31,6 @@ contains
 subroutine get_next_arg(i, argv)
 	integer, intent(inout) :: i
 	character(len = :), allocatable, intent(out) :: argv
-	!character(len = *), intent(in) :: argv0
 	!********
 	character(len = :), allocatable, save :: argv0
 	character(len = 1024) :: buffer
@@ -81,11 +81,11 @@ function parse_args() result(args)
 
 	!********
 
-	character(len = :), allocatable :: argv, str_
+	character(len = :), allocatable :: argv, str_, url, version
 
 	integer :: i, io, argc, ipos
 
-	logical :: lerror = .false.
+	logical :: error = .false., interactive
 
 	! Defaults
 	args%maxerr = maxerr_def
@@ -100,39 +100,30 @@ function parse_args() result(args)
 
 		select case (argv)
 		case ("-h", "--help", "-help")
-			!args%any_arg = .true.
 			args%help    = .true.
 
 		case ("--fmax-errors")
-			!args%any_arg = .true.
 			call get_next_arg(i, str_)
 
 			read(str_, *, iostat = io) args%maxerr
 			if (io /= exit_success) then
 				write(*,*) err_prefix//"--fmax-errors "//str_ &
 					//" is not a valid integer"
-				lerror = .true.
+				error = .true.
 			end if
 
 		! TODO: add "-i" arg to start interactive interpretter with a given
 		! #include file.  The difference compared to args%syntran_file is that
 		! it should not exit, but instead start taking live stdin
 
-		!case ("-l", "--language")
-		!	args%any_arg = .true.
-		!	call get_next_arg(i, args%language)
-		!	!if (.not. any(langs == args%language)) then
-		!	!	write(*,*) err_prefix//"language """//args%language &
-		!	!		//""" not supported or invalid ISO 639-1 language code"
-		!	!	lerror = .true.
-		!	!end if
+		case ("-c", "--command")
+			args%command_arg = .true.
+			call get_next_arg(i, args%command)
 
 		case ("--version")
-			!args%any_arg = .true.
 			args%version = .true.
 
 		case default
-			!args%any_arg = .true.
 
 			! Positional arg
 			ipos = ipos + 1
@@ -147,7 +138,7 @@ function parse_args() result(args)
 
 			else
 				write(*,*) err_prefix//"unknown argument `"//argv//"`"
-				lerror = .true.
+				error = .true.
 
 			end if
 
@@ -157,21 +148,62 @@ function parse_args() result(args)
 
 	!if (ipos < 1 .and. .not. (args%help .or. args%version)) then
 	!	write(*,*) err_prefix//"syntran file not defined"
-	!	lerror = .true.
+	!	error = .true.
 	!end if
 
-	if (lerror .or. args%help) then
+	url = 'https://github.com/JeffIrwin/syntran'
+
+	version = &
+		str(syntran_major)//'.'// &
+		str(syntran_minor)//'.'// &
+		str(syntran_patch)
+
+	if (.not. error) then
+
+		interactive = .not. &
+			( &
+				args%command_arg      .or. &
+				args%version          .or. &
+				args%syntran_file_arg .or. &
+				args%help                  &
+			)
+
+		!call  syntran_banner(args%command_arg, interactive)
+
+		! TODO: add a "--no-banner" cmd arg to turn off?
+
+		if (.not. args%command_arg) then
+			write(*,*)
+			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
+			write(*,*) fg_bright_magenta//url//color_reset
+			write(*,*)
+		end if
+
+		if (interactive) then
+			write(*,*) 'Usage:'
+			write(*,*) tab//'#tree to toggle tree display'
+			write(*,*) tab//'`exit(0);` or Ctrl+C to exit'
+			write(*,*)
+		end if
+
+		! TODO: add an interactive #help directive for more in depth info.  -h help
+		! cmd arg already exists
+	end if
+
+	if (error .or. args%help) then
 
 		write(*,*) fg_bold//"Usage:"//color_reset
 		write(*,*) "	syntran <file.syntran> [--fmax-errors <n>]"
 		write(*,*) "	syntran"
+		write(*,*) "	syntran -c <cmd> | --command <cmd>"
 		write(*,*) "	syntran -h | --help"
 		write(*,*) "	syntran --version"
 		write(*,*)
 		write(*,*) fg_bold//"Options:"//color_reset
-		write(*,*) "	-h --help          Show this help"
-		write(*,*) "	--version          Show version"
-		write(*,*) "	--fmax-errors <n>  Limit max " &
+		write(*,*) "	-h --help           Show this help"
+		write(*,*) "	--version           Show version"
+		write(*,*) "	-c --command <cmd>  Run program passed in as string"
+		write(*,*) "	--fmax-errors <n>   Limit max " &
 			//"error messages to <n> [default: "//str(maxerr_def)//"]"
 		write(*,*)
 

@@ -1,0 +1,269 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt",
+	"test-input2.txt",
+	"test-input3.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = 0;
+
+	let n = countln_(filename) - 2;
+	//println("n = ", n);
+
+	let f = open(filename);
+	let instr = readln(f);
+
+	let str_ = readln(f);  // blank line
+
+	let nodes  = [""; n];
+	let lefts  = [""; n];
+	let rights = [""; n];
+
+	for i in [0: n]
+	{
+		str_ = readln(f);
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, "= (),");
+
+		nodes [i] = strs[0];
+		lefts [i] = strs[1];
+		rights[i] = strs[2];
+
+	}
+	close(f);
+
+	//println("instr = ", instr);
+
+	let ninstr = len(instr);
+	//println("ninstr = ", ninstr);
+
+	//println("nodes = ", nodes);
+	//println("lefts = ", lefts);
+	//println("rights = ", rights);
+	
+	// Translate node identifiers to integer indices
+
+	let lefts_idx = [-1; n];
+	let rights_idx = [-1; n];
+	//println("lefts_idx = ", lefts_idx);
+
+	for i in [0: n]
+	{
+		let j = 0;
+		let found = false;
+		while j < n and not found
+		{
+			found = nodes[j] == lefts[i];
+			j += 1;
+		}
+		lefts_idx[i] = j-1;
+
+		j = 0;
+		found = false;
+		while j < n and not found
+		{
+			found = nodes[j] == rights[i];
+			j += 1;
+		}
+		rights_idx[i] = j-1;
+
+	}
+	//println("lefts_idx = ", lefts_idx);
+	//println("rights_idx = ", rights_idx);
+
+	// Traverse the graph of nodes according to the instructions
+	let i = 0;
+
+	// Lookup location of "AAA"
+	let j = 0;
+	while not (nodes[j] == "AAA")
+		j += 1;
+
+	while not (nodes[j] == "ZZZ")
+	{
+		let ins = instr[i % ninstr];
+		//println("ins = ", ins);
+		//println("node = ", nodes[j]);
+
+		if (ins == "L")
+			j =  lefts_idx[j];
+		else if (ins == "R")
+			j = rights_idx[j];
+		//else
+		//	println("Error: bad instr");
+
+		i += 1;
+	}
+	sum_ = i;
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	//println("starting part2()");
+
+	let n = countln_(filename) - 2;
+	//println("n = ", n);
+
+	let f = open(filename);
+	let instr = readln(f);
+
+	let str_ = readln(f);  // blank line
+
+	let nodes  = [""; n];
+	let lefts  = [""; n];
+	let rights = [""; n];
+
+	for i in [0: n]
+	{
+		str_ = readln(f);
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, "= (),");
+
+		nodes [i] = strs[0];
+		lefts [i] = strs[1];
+		rights[i] = strs[2];
+	}
+	close(f);
+
+	//println("instr = ", instr);
+
+	let ninstr = len(instr);
+	//println("ninstr = ", ninstr);
+
+	//println("nodes = ", nodes);
+	//println("lefts = ", lefts);
+	//println("rights = ", rights);
+	
+	// Translate node identifiers to integer indices
+
+	//let nodes_idx = [0: n];
+	//println("nodes_idx = ", nodes_idx);
+
+	let lefts_idx = [-1; n];
+	let rights_idx = [-1; n];
+	//println("lefts_idx = ", lefts_idx);
+
+	for i in [0: n]
+	{
+		let j = 0;
+		let found = false;
+		while j < n and not found
+		{
+			found = nodes[j] == lefts[i];
+			j += 1;
+		}
+		lefts_idx[i] = j-1;
+
+		j = 0;
+		found = false;
+		while j < n and not found
+		{
+			found = nodes[j] == rights[i];
+			j += 1;
+		}
+		rights_idx[i] = j-1;
+	}
+
+	// Traverse the graph of nodes according to the instructions
+
+	// Number of nodes that end with "A"
+	let na = 0;
+	for i in [0: n]
+		if (ends_with_(nodes[i], "A")) na += 1;
+	//println("na = ", na);
+
+	// Lookup location of "..A"
+	let j = [0; na];
+
+	let k = 0;
+	for i in [0: n]
+		if (ends_with_(nodes[i], "A"))
+		{
+			j[k] = i;
+			k += 1;
+		}
+	//println("j = ", j);
+
+	// Which nodes end with "Z"?
+	let end_z = [false; n];
+	for i in [0: n]
+		end_z[i] = ends_with_(nodes[i], "Z");
+
+	// Find cycle len for each thread.  Then multiply them all together to find
+	// the part2 answer.  Might need LCM instead of actual product.  I think
+	// this actually won't work if you get to "Z" on any thread before the first
+	// loop through all of the instructions, but fortunately that doesn't happen
+	// with the given input
+
+	let prod_ = i64(1);
+	let lcm_  = i64(1);
+	for k in [0: na]
+	{
+		let i = 0;
+		while not end_z[j[k]]
+		{
+			let ins = instr[i % ninstr];
+			if (ins == "L")
+				j[k] =  lefts_idx[j[k]];
+			else
+				j[k] = rights_idx[j[k]];
+			i += 1;
+		}
+		//println("cycle len [", k, "] = ", i);
+		prod_ *= i;
+		lcm_ = lcm64(lcm_, i64(i));
+	}
+
+	//// unit tests :)
+	//println("gcd64(6,9) = ", gcd64(i64(6), i64(9)));
+	//println("lcm64(13939, 11309) = ", lcm64(i64(13939), i64(11309)));
+
+	//println("ans_str = ", ans_str);
+	println("part 2 = ", lcm_);
+	//println("part 2 = ", prod_); // Wrong!  Product is not LCM
+	lcm_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

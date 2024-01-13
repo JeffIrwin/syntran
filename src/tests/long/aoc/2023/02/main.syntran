@@ -205,17 +205,19 @@ fn part2(): i32
 
 //==============================================================================
 
-fn main()
+fn main(): i32
 {
 	println();
 	println("Starting AOC syntran main");
 
-	part1();
-	part2();
+	let sum_ = 0;
+
+	sum_ += part1();
+	sum_ += part2();
 
 	println("Ending AOC syntran main");
 	println();
-	//0;
+	let ans = sum_;
 }
 
 //==============================================================================

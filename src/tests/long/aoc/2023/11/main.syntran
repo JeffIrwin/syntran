@@ -1,0 +1,261 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = 0;
+
+	// The size [nx0, ny0] is the size of the canonical (un-expanded) universe
+	let ny0 = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx0 = len(str_);
+	//println("nx0, ny0 = ", nx0, ", ", ny0);
+
+	let grid0 = [""; nx0, ny0];
+
+	// Load data from file
+	for iy in [0: ny0]
+	{
+		//println("str_ = ", str_);
+
+		for ix in [0: nx0]
+			grid0[ix, iy] = str_[ix];
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("grid0 = ");
+	//println(grid0);
+
+	// Count number of galaxies `#`.  This could be done in the same loop as
+	// loading
+	let ngalaxies = 0;
+	for iy in [0: ny0]
+		for ix in [0: nx0]
+			if (grid0[ix, iy] == "#") ngalaxies += 1;
+
+	//println("ngalaxies = ", ngalaxies);
+
+	// Find empty rows
+	let is_row_empty = [false; ny0];
+	for iy in [0: ny0]
+	{
+		// In Fortran this would just be `is_row_empty(iy) = all(grid0(:,iy) == ".")`
+		//
+		// Alas, I do not have such nice array expressions in syntran yet :(
+
+		let empty = true;
+		let ix = 0;
+		while empty and ix < nx0
+		{
+			empty = grid0[ix,iy] == ".";
+			ix += 1;
+		}
+		is_row_empty[iy] = empty;
+	}
+	//println("is_row_empty = ", is_row_empty);
+
+	// Find empty columns
+	let is_col_empty = [false; nx0];
+	for ix in [0: nx0]
+	{
+		let empty = true;
+		let iy = 0;
+		while empty and iy < ny0
+		{
+			empty = grid0[ix,iy] == ".";
+			iy += 1;
+		}
+		is_col_empty[ix] = empty;
+	}
+	//println("is_col_empty = ", is_col_empty);
+
+	// Save and expand coordinates.  Iterators ix0 and iy0 only iterate through
+	// the size of the canonical universe
+	let galaxies = [0; 2, ngalaxies];
+	let ig = 0;
+	let iy = 0; // expanded y coordinate
+	for iy0 in [0: ny0]
+	{
+		if (is_row_empty[iy0]) iy += 1;
+
+		let ix = 0; // expanded x coordinate
+		for ix0 in [0: nx0]
+		{
+			if (is_col_empty[ix0]) ix += 1;
+			if (grid0[ix0, iy0] == "#")
+			{
+				galaxies[0,ig] = ix;
+				galaxies[1,ig] = iy;
+				ig += 1;
+			}
+			ix += 1;
+		}
+		iy += 1;
+	}
+	//println("galaxies = ", galaxies);
+
+	// Iterate through pairs of galaxies (order is not important)
+	for i in [0: ngalaxies]
+		for j in [0: i]
+		{
+			// Get 1-norm distance (taxicab/manhattan norm) between galaxy i and
+			// galaxy j
+			let dist = abs_i32(galaxies[0,i] - galaxies[0,j])
+			         + abs_i32(galaxies[1,i] - galaxies[1,j]);
+			//println("dist = ", dist);
+			sum_ += dist;
+		}
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let ny0 = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx0 = len(str_);
+	//println("nx0, ny0 = ", nx0, ", ", ny0);
+
+	let grid0 = [""; nx0, ny0];
+
+	// Load data from file
+	for iy in [0: ny0]
+	{
+		//println("str_ = ", str_);
+
+		for ix in [0: nx0]
+			grid0[ix, iy] = str_[ix];
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("grid0 = ");
+	//println(grid0);
+
+	// Count number of galaxies `#`
+	let ngalaxies = 0;
+	for iy in [0: ny0]
+		for ix in [0: nx0]
+			if (grid0[ix, iy] == "#") ngalaxies += 1;
+
+	//println("ngalaxies = ", ngalaxies);
+
+	// Find empty rows
+	let is_row_empty = [false; ny0];
+	for iy in [0: ny0]
+	{
+		let empty = true;
+		let ix = 0;
+		while empty and ix < nx0
+		{
+			empty = grid0[ix,iy] == ".";
+			ix += 1;
+		}
+		is_row_empty[iy] = empty;
+	}
+	//println("is_row_empty = ", is_row_empty);
+
+	// Find empty columns
+	let is_col_empty = [false; nx0];
+	for ix in [0: nx0]
+	{
+		let empty = true;
+		let iy = 0;
+		while empty and iy < ny0
+		{
+			empty = grid0[ix,iy] == ".";
+			iy += 1;
+		}
+		is_col_empty[ix] = empty;
+	}
+	//println("is_col_empty = ", is_col_empty);
+
+	// Expand coordinates
+	let galaxies = [0; 2, ngalaxies];
+	let ig = 0;
+	let iy = 0; // expanded y coordinate
+	for iy0 in [0: ny0]
+	{
+		if (is_row_empty[iy0]) iy += 999999;
+
+		let ix = 0; // expanded x coordinate
+		for ix0 in [0: nx0]
+		{
+			if (is_col_empty[ix0]) ix += 999999;
+			if (grid0[ix0, iy0] == "#")
+			{
+				galaxies[0,ig] = ix;
+				galaxies[1,ig] = iy;
+				ig += 1;
+			}
+			ix += 1;
+		}
+		iy += 1;
+	}
+	//println("galaxies = ", galaxies);
+
+	// Iterate through pairs of galaxies (order is not important)
+	let sum_ = i64(0);
+	for i in [0: ngalaxies]
+		for j in [0: i]
+		{
+			// Get 1-norm distance (taxicab/manhattan norm) between galaxy i and
+			// galaxy j
+			let dist = abs_i32(galaxies[0,i] - galaxies[0,j])
+			         + abs_i32(galaxies[1,i] - galaxies[1,j]);
+			//println("dist = ", dist);
+			sum_ += dist;
+		}
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

@@ -1,0 +1,556 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+// real inputs work but are too slow
+let ifile = 0;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//****************
+
+let NDIM = 2; // spatial dimensions
+
+let NDIRS = 4;
+
+// Cardinal directions
+let DIRS =
+	[
+		// 0, -1, // north // toggling order converges at different speeds but still gives correct answer
+		//-1,  0, // west
+		// 0,  1, // south
+		// 1,  0  // east
+
+		 0,  1, // south
+		 1,  0, // east
+		 0, -1, // north
+		-1,  0  // west
+		 ;
+		 NDIM,  NDIRS
+	];
+//println("DIRS = ", DIRS);
+
+// Note consistent ordering with DIRS array
+let SOUTH = 0;
+let EAST  = 1;
+let NORTH = 2;
+let WEST  = 3;
+
+let NSTATE = 3;
+
+let STACK_CAP = 2 * 1024 * 1024;
+
+//==============================================================================
+
+fn dfs_longest(map: [str; :, :], xbeg: [i32; :], xend: [i32; :]): i32
+{
+	// Use depth-first search to find the *longest* path from xbeg to xend
+	//
+	// This could be optimized for this AOC problem by precomputing where the
+	// *junctions* are and then only traversing a graph from
+	// junction-to-junction (rather than one tile at a time)
+
+	//println();
+	//println("starting dfs_longest()");
+	//println("xbeg = ", xbeg);
+	//println("xend = ", xend);
+
+	let stack_end  = 0;
+	let stack = [0; NSTATE, STACK_CAP];
+
+	let nx = size(map, 0);
+	let ny = size(map, 1);
+
+	//println("nx, ny = ", [nx, ny]);
+
+	let dist = [0; nx, ny];
+	let discovered = [false ; nx, ny];
+
+	// push
+	stack[0, stack_end] = 0; // dist
+	stack[1, stack_end] = xbeg[0];
+	stack[2, stack_end] = xbeg[1];
+	stack_end += 1;
+
+	let dist_max = 0;
+
+	let dist_progress = -1;
+
+	let found = false;
+	while stack_end > 0
+	{
+		// pop
+		let v = [-1; NSTATE];  // temp var, not really necessary
+		stack_end -= 1;
+		v[0] = stack[0, stack_end];
+		v[1] = stack[1, stack_end];
+		v[2] = stack[2, stack_end];
+		//println("v = ", v);
+
+		// unpack from array
+		let dist0 = v[0];
+		let x0    = v[1];
+		let y0    = v[2];
+
+		// reset discovery for everything past v.  this is the trick that makes
+		// DFS backtrack and follow *all* paths to the end instead of just one.
+		// it's also a bit slow and there's probably a better solution
+		for y in [0: ny]
+		for x in [0: nx]
+			if dist[x,y] > dist0
+				discovered[x,y] = false;
+
+		if x0 == xend[0] and y0 == xend[1]
+		{
+			found = true;
+			//dist_end = dist0;
+			//dist_end = min(dist_end, dist0);
+			dist_max = max(dist_max, dist0);
+			//println("dist_max = ", dist_max);
+		}
+
+		let continue_ = false;
+
+		if discovered[x0, y0]
+			continue_ = true;
+
+		//// Don't go into the forest.  Should this be checked inside the NDIRS
+		//// loop below?
+		//if not continue_
+		//	if map[x0, y0] == "#"
+		//		continue_ = true;
+
+		if not continue_
+		{
+			discovered[x0, y0] = true;
+			dist      [x0, y0] = dist0;
+		}
+
+		if not continue_
+			for dir in [0: NDIRS]
+			{
+				let x = x0 + DIRS[0, dir];
+				let y = y0 + DIRS[1, dir];
+				if 0 <= x and x < nx and 0 <= y and y < ny
+				{
+					//if ((dir == EAST  and map[x, y] != "<") or
+					//    (dir == WEST  and map[x, y] != ">") or
+					//    (dir == NORTH and map[x, y] != "v") or
+					//    (dir == SOUTH and map[x, y] != "^")) or
+					//    (                 map[x, y] == ".")
+					//    //(                 map[x, y] != "#")
+
+					// Equivalent to above
+					if (dir == EAST  and map[x0, y0] == ">") or
+					   (dir == WEST  and map[x0, y0] == "<") or
+					   (dir == NORTH and map[x0, y0] == "^") or
+					   (dir == SOUTH and map[x0, y0] == "v") or
+					   (                 map[x0, y0] == ".")
+
+					if map[x, y] != "#"
+					{
+						// push
+						stack[0, stack_end] = dist0 + 1;
+						stack[1, stack_end] = x;
+						stack[2, stack_end] = y;
+						stack_end += 1;
+
+						//let alt = dist0 - 1;
+						//if alt < dist[x, y]
+						//{
+						//	push_([alt, x, y]);
+						//	dist[x, y] = alt;
+						//}
+					}
+				}
+			}
+	}
+	let ans = dist_max;
+}
+
+//==============================================================================
+
+fn get_max_dist(map: [str; :, :], xbeg: [i32; :], xend: [i32; :]): i32
+{
+	// Get max distance by walking *all* paths from xbeg to xend.  This is a bit
+	// slow, but it converges to the right answer in about 10 minutes for me
+
+	//println();
+	//println("starting get_max_dist()");
+	//println("xbeg = ", xbeg);
+	//println("xend = ", xend);
+
+	let stack_end  = 0;
+	let stack = [0; NSTATE, STACK_CAP];
+
+	let nx = size(map, 0);
+	let ny = size(map, 1);
+
+	//println("nx, ny = ", [nx, ny]);
+
+	// Count the number of junction nodes.  A junction is a point with at least
+	// three open (non-hash) neighbors and will form a node on the compressed
+	// graph.  Begin and end points are also junctions
+	//
+	// Save an array of their coordinates `xn`
+	let nn = 0;
+	let NN_CAP = 64;  // 34 for my input
+	let xn = [0; NDIM, NN_CAP];
+
+	// Number of adjacent nodes per node
+	let nadj = [0; NN_CAP];
+
+	xn[0, nn] = xbeg[0];
+	xn[1, nn] = xbeg[1];
+	nadj[ nn] = 1; // assume
+	nn += 1;
+
+	for y0 in [0: ny]
+	for x0 in [0: nx]
+	{
+		nadj[nn] = 0;
+		if map[x0, y0] != "#"
+		for dir in [0: NDIRS]
+		{
+			let x = x0 + DIRS[0, dir];
+			let y = y0 + DIRS[1, dir];
+			if 0 <= x and x < nx and 0 <= y and y < ny
+				if map[x, y] != "#"
+					nadj[nn] += 1;
+		}
+		if nadj[nn] >= 3
+		{
+			xn[0, nn] = x0;
+			xn[1, nn] = y0;
+
+			nn += 1;
+		}
+	}
+
+	xn[0, nn] = xend[0];
+	xn[1, nn] = xend[1];
+	nadj[ nn] = 1; // assume
+	nn += 1;
+
+	//println("number of junctions = ", nn);
+	//println("xn = ");
+	//for i in [0: nn]
+	//	println([xn[0, i], xn[1, i]]);
+	//println("nadj = ");
+	//for i in [0: nn]
+	//	println(nadj[i]);
+
+	// Reset
+	nadj = [0; NN_CAP];
+
+	// Find which nodes neighbor each other to form the compressed graph `g`
+	let nadj_max = 4;
+	let g = [-1; nadj_max, nn];
+	let w = [-1; nadj_max, nn]; // weights (distances)
+	for i in [0: nn]
+	{
+		let x00 = xn[0, i];
+		let y00 = xn[1, i];
+
+		// Start DFS from node [x00, y00]
+
+		let discovered = [false ; nx, ny];
+
+		// push
+		stack_end  = 0;
+		stack[0, stack_end] = x00;
+		stack[1, stack_end] = y00;
+		stack[2, stack_end] = 0;
+		stack_end += 1;
+
+		while stack_end > 0
+		{
+			// pop
+			let v = [-1; NSTATE];  // temp var, not really necessary
+			stack_end -= 1;
+			v[0] = stack[0, stack_end];
+			v[1] = stack[1, stack_end];
+			v[2] = stack[2, stack_end];
+			//println("v = ", v);
+
+			// unpack from array
+			let x0 = v[0];
+			let y0 = v[1];
+			let d0 = v[2];
+
+			let continue_ = false;
+
+			if discovered[x0, y0]
+				continue_ = true;
+
+			if not continue_
+			{
+				discovered[x0, y0] = true;
+				if not (x0 == x00 and y0 == y00)
+				{
+					let is_node = false;
+					let j = 0;
+					while not is_node and j < nn
+					{
+						is_node = x0 == xn[0,j] and y0 == xn[1,j];
+						j += 1;
+					}
+					if is_node
+					{
+						j -= 1;
+						//println("nadj[i] = ", nadj[i]);
+						g[nadj[i], i] = j;
+						w[nadj[i], i] = d0;
+
+						nadj[i] += 1;
+
+						// stop search after finding a node on this path
+						continue_ = true;
+					}
+				}
+			}
+
+			if not continue_
+				for dir in [0: NDIRS]
+				{
+					let x = x0 + DIRS[0, dir];
+					let y = y0 + DIRS[1, dir];
+					if 0 <= x and x < nx and 0 <= y and y < ny
+					{
+						if map[x, y] != "#"
+						{
+							// push
+							stack[0, stack_end] = x;
+							stack[1, stack_end] = y;
+							stack[2, stack_end] = d0 + 1;
+							stack_end += 1;
+						}
+					}
+				}
+		}
+	}
+	//println("nadj = ", nadj);
+	//println("g = ", g);
+	//println("w = ", w);
+	
+	let dist_max = 0;
+
+	// Now traverse all paths from xbeg to xend on the compressed graph g.  The
+	// number of paths is the product of nadj[0: nn]
+	//
+	// Encode the path as an i32 vector
+	let path = [0; nn];
+
+	let last_path = false;
+	let nwalked = 0;
+	//println("Walking paths ...");
+	while not last_path
+	{
+		//println("path = ", path);
+
+		// This will overflow for actual input
+		nwalked += 1;
+
+		// Walk the path.  If we re-visit a visited node or go past nadj, break.
+		// Else if we make it to xend, update dist_max
+		let dist = 0;
+		let visited = [false; nn];
+		let v = 0;
+		let break_ = false;
+		let i = 0;
+		while not break_
+		{
+			if visited[v]
+			{
+				// Optimize
+				for i in [i: nn]
+					path[i] = nadj_max - 1;
+				break_ = true;
+			}
+			visited[v] = true;
+
+			if path[i] >= nadj[v]
+			{
+				// Optimize the next path getter for early breaks: get ready to
+				// rollover
+				for i in [i: nn]
+					path[i] = nadj_max - 1;
+				break_ = true;
+			}
+
+			if not break_
+			{
+				dist += w[path[i], v];
+				v     = g[path[i], v];
+
+				if v == nn - 1
+				{
+					if dist > dist_max
+					{
+						dist_max = dist;
+						//println("dist_max = ", dist_max);
+					}
+
+					// Optimize.  This could be DRY'd up
+					for i in [i: nn]
+						path[i] = nadj_max - 1;
+					break_ = true;
+				}
+			}
+			i += 1;
+		}
+
+		// Get the next path.  This is basically a bignum += 1 algorithm
+		//
+		// With this endianness, it is easier to optimize for early breaks
+		// because we can prune an entire tree after the current vertex when we
+		// hit a dead end
+		i = nn - 1;
+		while path[i] == nadj_max - 1 and i > 0
+			i -= 1;
+		if path[i] == nadj_max - 1
+			i -= 1;
+
+		if i == -1
+			last_path = true;
+		else
+		{
+			path[i] += 1;
+			for i in [i+1: nn]
+				path[i] = 0;
+		}
+
+		//println("path = ", path);
+	}
+	//println("nwalked = ", nwalked);
+
+	//println("dist_max = ", dist_max);
+	let ans = dist_max;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx = len(str_);
+
+	//println("nx, ny = ", [nx, ny]);
+
+	let grid = [""; nx, ny];
+
+	let ybeg = 0;
+	let yend = ny - 1;
+
+	// Scan for these later
+	let xbeg = -1;
+	let xend = -1;
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: nx]
+			grid[x, y] = str_[x];
+
+		if y == ybeg
+			xbeg = scan(str_, ".");
+		else if y == yend
+			xend = scan(str_, ".");
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("grid = ", grid);
+	//println("xbeg, xend = ", [xbeg, xend]);
+
+	let sum_ = dfs_longest(grid, [xbeg, ybeg], [xend, yend]);
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx = len(str_);
+
+	//println("nx, ny = ", [nx, ny]);
+
+	let grid = [""; nx, ny];
+
+	let ybeg = 0;
+	let yend = ny - 1;
+
+	// Scan for these later
+	let xbeg = -1;
+	let xend = -1;
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: nx]
+			grid[x, y] = str_[x];
+
+		if y == ybeg
+			xbeg = scan(str_, ".");
+		else if y == yend
+			xend = scan(str_, ".");
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("grid = ", grid);
+	//println("xbeg, xend = ", [xbeg, xend]);
+
+	let sum_ = get_max_dist(grid, [xbeg, ybeg], [xend, yend]);
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	//// TODO: this is probably broken now after my changes for part2.  The
+	//// easiest thing to do is probably copy part2() to part1() and modify for
+	//// direction constraints
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

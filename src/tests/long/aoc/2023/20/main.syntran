@@ -1,0 +1,616 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt",
+	"test-input2.txt"
+];
+let filename = filenames[ifile];
+
+println("filename = ", filename);
+
+// Pulse type enum
+let LO = 1;
+let HI = 2;
+
+// Module type enum
+let FLIP = 1;  // %
+let CONJ = 2;  // &
+let BROA = 3;  // broadcaster
+
+// Module types and labels/names/identifiers
+let type_ = [0; 0];
+let name_ = [""; 0];
+
+// Inputs and outputs of every module
+let inp = [0; 0, 0];
+let out = [0; 0, 0];
+let max_inp = 0;
+let max_out = 0;
+
+// Number of inputs/outputs per module
+let ninp = [0; 1];
+let nout = [0; 1];
+
+// Queue of pulse signals
+let QUEUE_CAP = 1024 * 1024;
+let pulse_queue = [0; 3, QUEUE_CAP];  // pulse type and destination
+let queue_beg = 0;
+let queue_end = 0;
+
+// Module states
+let flip_state = [false; 0];  // false is off, true is on
+let conj_state = [LO; 0, 0];
+
+//==============================================================================
+
+fn push_(pulse_type: i32, dst: i32, src: i32)
+{
+	//println("pushing ", v);
+	if queue_end >= QUEUE_CAP
+	{
+		println();
+		println("Error: QUEUE_CAP overflow!");
+		println();
+		exit(-1);
+	}
+
+	pulse_queue[0, queue_end] = pulse_type;
+	pulse_queue[1, queue_end] = dst;
+	pulse_queue[2, queue_end] = src;
+
+	queue_end += 1;
+}
+
+fn pop_(): [i32; :]
+{
+	let vec =
+		[
+			pulse_queue[0, queue_beg],
+			pulse_queue[1, queue_beg],
+			pulse_queue[2, queue_beg]
+		];
+	queue_beg += 1;
+
+	let ans = vec;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let nmod = countln_(filename);
+	//println("nmod = ", nmod);
+
+	type_ = [0; nmod];
+	name_ = [""; nmod];
+
+	let rhs = [""; nmod];
+
+	// First pass:  load data
+	let f = open(filename);
+	for i in [0: nmod]
+	{
+		let str_ = readln(f);
+		//println("str_ = ", str_);
+
+		//let strs = split_(str_, "->, ");
+		let strs = split_(str_, "->");
+		//println("strs = ", strs);
+
+		rhs[i] = strs[1];
+		//println("rhs[i] = ", rhs[i]);
+
+		//println("splitting ...");
+		//println("strs[0] = ", strs[0]);
+		let tmp = strs[0];
+		//strs = split_(strs[0], " "); // TODO: this should work but it crashes
+		strs = split_(tmp, " ");
+		//println("done");
+
+		let lhs = strs[0];
+		//println("lhs = ", lhs);
+
+		if lhs[0] == "%"
+		{
+			type_[i] = FLIP;
+			name_[i] = lhs[1: len(lhs)];
+		}
+		else if lhs[0] == "&"
+		{
+			type_[i] = CONJ;
+			name_[i] = lhs[1: len(lhs)];
+		}
+		else
+		{
+			type_[i] = BROA;
+			name_[i] = lhs;
+		}
+
+		// RHS of "->"
+		let r = rhs[i];
+		let outs = split_(r, ", ");
+		max_out = max(max_out, i32(size(outs, 0)));
+
+		//println();
+	}
+	close(f);
+
+	//println("type_ = ", type_);
+	//println("name_ = ", name_);
+	//println("rhs   = ", rhs);
+	//println();
+	//println("max_out = ", max_out);
+
+	out  = [0; max_out, nmod];
+	nout = [0; nmod];
+	ninp = [0; nmod];
+
+	// Second pass: process outputs on RHS of "->" for each module
+	for i in [0: nmod]
+	{
+		//println("i = ", i);
+
+		let r = rhs[i];
+		//println("r = ", r);
+
+		let outputs = split_(r, ", ");
+		nout[i] = size(outputs, 0);
+		//println("done split_");
+		//println("outputs = ", outputs);
+		//println("done");
+
+		for j in [0: nout[i]]
+		{
+			let out_str = outputs[j];
+			//println("out_str = ", out_str);
+
+			// Lookup output module name in table of (input) names
+			while name_[out[j, i]] != out_str and out[j, i] < nmod - 1
+				out[j, i] += 1;
+
+			//println("out[j, i] = ", out[j, i]);
+
+			// Output only which doesn't exist in input side
+			if name_[out[j, i]] != out_str
+				out[j, i] = nmod;
+
+			if out[j, i] < nmod
+			{
+				ninp[out[j, i]] += 1;
+				max_inp = max(max_inp, ninp[out[j, i]]);
+			}
+		}
+		//println();
+	}
+
+	//println("out = ", out);
+	//println("ninp = ", ninp);
+	//println("max_inp = ", max_inp);
+
+	// Lookup broadcaster module
+	let broadcaster = 0;
+	while name_[broadcaster] != "broadcaster"
+		broadcaster += 1;
+	//println("broadcaster = ", broadcaster);
+
+	//for ... // TODO: this crashes the interpretter :(
+	//.234;
+	//1.234e5;
+
+	// Invert the output table to get the input table
+	inp = [0; max_inp, nmod];
+	ninp = [0; nmod];
+	for i in [0: nmod]
+	{
+		for j in [0: nout[i]]
+		{
+			let o = out[j, i];
+			if o < nmod
+			{
+				inp[ninp[o], o] = i;
+				ninp[o] += 1;
+			}
+		}
+	}
+	//println("inp = ", inp);
+
+	flip_state = [false; nmod];
+
+	//conj_state = [LO; max_inp, nmod]; // mem could be saved by mapping local input number to each conj
+	conj_state = [LO; nmod, nmod];
+
+	let nlo = 0;
+	let nhi = 0;
+
+	for iouter in [0: 1000]
+	{
+	// Start by pushing a button press onto the pulse queue
+	push_(LO, broadcaster, -1);
+
+	// Loop until all pulses have been processed and no more pulses have been
+	// pushed to the queue
+	while queue_beg < queue_end
+	{
+		let signal = pop_();
+		let pulse_type = signal[0];
+		let dst        = signal[1];
+		let src        = signal[2];
+		//println("pulse_type, dst, src = ", [pulse_type, dst, src]);
+
+		if pulse_type == LO
+			nlo += 1;
+		else
+			nhi += 1;
+
+		if dst < nmod if type_[dst] == FLIP
+		{
+			// If a flip-flop module receives a high pulse, it is ignored and
+			// nothing happens
+			if pulse_type == LO
+			{
+				let pulse = 0;
+				if flip_state[dst]
+					// If it was on, it sends a low pulse
+					pulse = LO;
+				else
+					// If it was off, it sends a high pulse
+					pulse = HI;
+
+				for j in [0: nout[dst]]
+					push_(pulse, out[j, dst], dst);
+
+				flip_state[dst] = not flip_state[dst];
+			}
+		}
+		else if type_[dst] == CONJ
+		{
+			// When a pulse is received, the conjunction module first updates
+			// its memory for that input. Then, if it remembers high pulses for
+			// all inputs, it sends a low pulse; otherwise, it sends a high
+			// pulse
+			conj_state[src, dst] = pulse_type;
+
+			let all_hi = true;
+			let j = 0;
+			while all_hi and j < ninp[dst]
+			{
+				//println("j = ", j);
+
+				let in_ = inp[j, dst];
+				//println("in_ = ", in_);
+
+				all_hi = conj_state[in_, dst] == HI;
+
+				j += 1;
+			}
+			let pulse = 0;
+			if all_hi
+				pulse = LO;
+			else
+				pulse = HI;
+			for j in [0: nout[dst]]
+				push_(pulse, out[j, dst], dst);
+		}
+		else // type_[dst] == BROA
+		{
+			// When [broadcaster] receives a pulse, it sends the same pulse to
+			// all of its destination modules
+			for j in [0: nout[dst]]
+				push_(pulse_type, out[j, dst], dst);
+		}
+
+	}
+	}
+
+	//println("nlo, nhi = ", [nlo, nhi]);
+
+	let sum_ = nlo * nhi;
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let nmod = countln_(filename);
+	println("nmod = ", nmod);
+
+	type_ = [0; nmod];
+	name_ = [""; nmod];
+
+	let rhs = [""; nmod];
+
+	// First pass:  load data
+	let f = open(filename);
+	for i in [0: nmod]
+	{
+		let str_ = readln(f);
+		//println("str_ = ", str_);
+
+		//let strs = split_(str_, "->, ");
+		let strs = split_(str_, "->");
+		//println("strs = ", strs);
+
+		rhs[i] = strs[1];
+		//println("rhs[i] = ", rhs[i]);
+
+		//println("splitting ...");
+		//println("strs[0] = ", strs[0]);
+		let tmp = strs[0];
+		//strs = split_(strs[0], " "); // TODO: this should work but it crashes
+		strs = split_(tmp, " ");
+		//println("done");
+
+		let lhs = strs[0];
+		//println("lhs = ", lhs);
+
+		if lhs[0] == "%"
+		{
+			type_[i] = FLIP;
+			name_[i] = lhs[1: len(lhs)];
+		}
+		else if lhs[0] == "&"
+		{
+			type_[i] = CONJ;
+			name_[i] = lhs[1: len(lhs)];
+		}
+		else
+		{
+			type_[i] = BROA;
+			name_[i] = lhs;
+		}
+
+		// RHS of "->"
+		let r = rhs[i];
+		let outs = split_(r, ", ");
+		max_out = max(max_out, i32(size(outs, 0)));
+
+		//println();
+	}
+	close(f);
+
+	//println("type_ = ", type_);
+	//println("name_ = ", name_);
+	//println("rhs   = ", rhs);
+	//println();
+	//println("max_out = ", max_out);
+
+	out  = [0; max_out, nmod];
+	nout = [0; nmod];
+	ninp = [0; nmod];
+
+	// Second pass: process outputs on RHS of "->" for each module
+	for i in [0: nmod]
+	{
+		//println("i = ", i);
+
+		let r = rhs[i];
+		//println("r = ", r);
+
+		let outputs = split_(r, ", ");
+		nout[i] = size(outputs, 0);
+		//println("done split_");
+		//println("outputs = ", outputs);
+		//println("done");
+
+		for j in [0: nout[i]]
+		{
+			let out_str = outputs[j];
+			//println("out_str = ", out_str);
+
+			// Lookup output module name in table of (input) names
+			while name_[out[j, i]] != out_str and out[j, i] < nmod - 1
+				out[j, i] += 1;
+
+			//println("out[j, i] = ", out[j, i]);
+
+			// Output only which doesn't exist in input side
+			if name_[out[j, i]] != out_str
+				out[j, i] = nmod;
+
+			if out[j, i] < nmod
+			{
+				ninp[out[j, i]] += 1;
+				max_inp = max(max_inp, ninp[out[j, i]]);
+			}
+		}
+		//println();
+	}
+
+	//println("out = ", out);
+	//println("ninp = ", ninp);
+	//println("max_inp = ", max_inp);
+
+	// Lookup broadcaster module
+	let broadcaster = 0;
+	while name_[broadcaster] != "broadcaster"
+		broadcaster += 1;
+	//println("broadcaster = ", broadcaster);
+
+	//// Lookup rx module DOESN'T EXIST IN INPUT LHS
+	//let rx = 0;
+	//while name_[rx] != "rx"
+	//	rx += 1;
+	//println("rx = ", rx);
+
+	// Invert the output table to get the input table
+	inp = [0; max_inp, nmod];
+	ninp = [0; nmod];
+	for i in [0: nmod]
+	{
+		for j in [0: nout[i]]
+		{
+			let o = out[j, i];
+			if o < nmod
+			{
+				inp[ninp[o], o] = i;
+				ninp[o] += 1;
+			}
+		}
+	}
+	//println("inp = ", inp);
+
+	flip_state = [false; nmod];
+
+	//conj_state = [LO; max_inp, nmod]; // mem could be saved by mapping local input number to each conj
+	conj_state = [LO; nmod, nmod];
+
+	let nlo = 0;
+	let nhi = 0;
+	let found_rx = false;
+	let npresses = 0;
+
+	// TODO: somehow this network acts like a binary adder/xor operation where
+	// the flip_state is like the bits being added.  Each button press adds a
+	// constant input number again.  This is evident looking at the fs flip
+	// state string
+	//
+	// Start at rx and walk backwards from its inputs.  Every conjunction and
+	// flip-flop input will mask a binary operation.  The flip state alone (not
+	// even consering the conjunction state) is a ~48 bit number, so the answer
+	// must be a huge number
+	//
+	// The hard part is figuring out what the input number being added is and/or
+	// what order the bits are listed in.  The first flip-flop isn't necessarily
+	// the first one to change state on a button press
+
+	//for iouter in [0: 1000]
+	while not found_rx
+	{
+
+	//println("flip_state = ", flip_state);
+	if true
+	{
+		// debug only
+		let fs = "";
+		for i in [0: nmod]
+			if type_[i] == FLIP
+			{
+				if flip_state[i]
+					fs = fs + "1";
+				else
+					fs = fs + "0";
+			}
+		println("fs = ", fs);
+	}
+
+	// Start by pushing a button press onto the pulse queue
+	push_(LO, broadcaster, -1);
+	npresses += 1;
+
+	// Loop until all pulses have been processed and no more pulses have been
+	// pushed to the queue
+	while queue_beg < queue_end
+	{
+		let signal = pop_();
+		let pulse_type = signal[0];
+		let dst        = signal[1];
+		let src        = signal[2];
+		println("pulse_type, dst, src = ", [pulse_type, dst, src]);
+
+		if pulse_type == LO
+			nlo += 1;
+		else
+			nhi += 1;
+
+		if dst == nmod and pulse_type == LO
+			found_rx = true;
+
+		if dst < nmod if type_[dst] == FLIP
+		{
+			// If a flip-flop module receives a high pulse, it is ignored and
+			// nothing happens
+			if pulse_type == LO
+			{
+				let pulse = 0;
+				if flip_state[dst]
+					// If it was on, it sends a low pulse
+					pulse = LO;
+				else
+					// If it was off, it sends a high pulse
+					pulse = HI;
+
+				for j in [0: nout[dst]]
+					push_(pulse, out[j, dst], dst);
+
+				flip_state[dst] = not flip_state[dst];
+			}
+		}
+		else if type_[dst] == CONJ
+		{
+			// When a pulse is received, the conjunction module first updates
+			// its memory for that input. Then, if it remembers high pulses for
+			// all inputs, it sends a low pulse; otherwise, it sends a high
+			// pulse
+			conj_state[src, dst] = pulse_type;
+
+			let all_hi = true;
+			let j = 0;
+			while all_hi and j < ninp[dst]
+			{
+				//println("j = ", j);
+
+				let in_ = inp[j, dst];
+				//println("in_ = ", in_);
+
+				all_hi = conj_state[in_, dst] == HI;
+
+				j += 1;
+			}
+			let pulse = 0;
+			if all_hi
+				pulse = LO;
+			else
+				pulse = HI;
+			for j in [0: nout[dst]]
+				push_(pulse, out[j, dst], dst);
+		}
+		else // type_[dst] == BROA
+		{
+			// When [broadcaster] receives a pulse, it sends the same pulse to
+			// all of its destination modules
+			for j in [0: nout[dst]]
+				push_(pulse_type, out[j, dst], dst);
+		}
+
+	}
+	}
+
+	//println("nlo, nhi = ", [nlo, nhi]);
+
+	let sum_ = npresses;
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	sum_ += part1();
+	//sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

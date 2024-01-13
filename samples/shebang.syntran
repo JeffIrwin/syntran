@@ -1,0 +1,17 @@
+#!/usr/bin/env syntran
+
+// Simply run this script with `./samples/shebang.syntran`
+//
+// You may first need to `chmod +x ./samples/shebang.syntran`
+//
+// The first line depends on syntran being in your path
+//
+// If syntran is not in your path, you can use a shebang line as the first line
+// which gives the full path to syntran, e.g.:
+//
+//     #!/home/jeff/bin/syntran
+//
+
+println("hello world from shebang syntran script");
+0;
+

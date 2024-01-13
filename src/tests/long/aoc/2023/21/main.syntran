@@ -1,0 +1,420 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+// Number of time steps
+let nts =
+[
+	10, //6,
+	64
+];
+let nt = nts[ifile];
+
+//==============================================================================
+
+let NDIM = 2;        // spatial dimensions
+
+let NDIRS = 4;
+
+// Cardinal directions
+let DIRS =
+	[
+		 0, -1, // north
+		-1,  0, // west
+		 0,  1, // south
+		 1,  0  // east
+		 ;
+		 2,  NDIRS
+	];
+//println("DIRS = ", DIRS);
+
+// Note consistent ordering with DIRS array
+let NORTH = 0;
+let WEST  = 1;
+let SOUTH = 2;
+let EAST  = 3;
+
+//****************
+
+// List of reachable positions
+let NPCAP = 1024 * 1024;
+let p = [-1; NDIM, NPCAP];
+let np = 0;
+
+fn push_(x: i32, y: i32)
+{
+	if np >= NPCAP
+	{
+		println();
+		println("Error: NPCAP overflow!");
+		println();
+		exit(-1);
+	}
+
+	p[0, np] = x;
+	p[1, np] = y;
+	np += 1;
+}
+
+//==============================================================================
+
+fn qsort(v: [i32; :]): [i32; :]
+{
+	// Quick sort algorithm
+
+	//println("starting qsort()");
+	//println("v = ", v);
+
+	let l = 0;
+	let h = size(v,0) - 1;
+
+	if l < h
+	{
+		let stack = [0; h - l + 1];
+
+		let top = -1;
+
+		top += 1;
+		stack[top] = l;
+
+		top += 1;
+		stack[top] = h;
+
+		while top >= 0
+		{
+			//println("h = ", h);
+			h = stack[top];
+			top -= 1;
+
+			l = stack[top];
+			top -= 1;
+
+			//// inlined
+			//let p = partition(v, l, h);
+
+			//let x = v[h];
+
+			// Median-of-three pivot.  40x faster for AOC!
+			let m = (l + h) / 2;
+			if v[m] < v[l]
+			{
+				let tmp = v[m];
+				v[m]    = v[l];
+				v[l]    = tmp;
+			}
+			if v[h] < v[l]
+			{
+				let tmp = v[h];
+				v[h]    = v[l];
+				v[l]    = tmp;
+			}
+			if v[m] < v[h]
+			{
+				let tmp = v[m];
+				v[m]    = v[h];
+				v[h]    = tmp;
+			}
+			let x = v[h];
+
+			let i = (l - 1);
+			for j in [l: h]
+				if v[j] <= x
+				{
+					i += 1;
+					let tmp = v[i];
+					v[i]  = v[j];
+					v[j]  = tmp;
+				}
+			let tmp = v[i+1];
+			v[i+1] = v[h];
+			v[h] = tmp;
+			let p = i + 1;
+
+			if p - 1 > l
+			{
+				top += 1;
+				stack[top] = l;
+
+				top += 1;
+				stack[top] = p - 1;
+			}
+
+			if p + 1 < h
+			{
+				top += 1;
+				stack[top] = p + 1;
+
+				top += 1;
+				stack[top] = h;
+			}
+		}
+	}
+	//println("v = ", v);
+	let ans = v;
+}
+
+fn uniq(v_in: [i32; :]): [i32; :]
+{
+	let v = qsort(v_in);
+	let u = v;
+
+	u[0] = v[0];
+	let nu = 1;
+	for i in [1: size(v, 0)]
+	{
+		if v[i] != v[i - 1]
+		{
+			u[nu] = v[i];
+			nu += 1;
+		}
+	}
+	//println("u = ", u);
+
+	// Trim
+	let ut = [-1; nu];
+	for i in [0: nu]
+		ut[i] = u[i];
+
+	let ans = ut;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx = len(str_);
+
+	//println("nx, ny = ", [nx, ny]);
+
+	let grid = [""; nx, ny];
+	let xs = -1;
+	let ys = -1;
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: nx]
+		{
+			grid[x, y] = str_[x];
+			if grid[x, y] == "S"
+			{
+				xs = x;
+				ys = y;
+			}
+		}
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("grid = ", grid);
+	//println("xs, ys = ", [xs, ys]);
+
+	push_(xs, ys);
+
+	for it in [0: nt]
+	{
+		//println("step ", it);
+
+		// Could be optimized by only copying 0: np
+		let p0 = p;
+		let np0 = np;
+
+		np = 0;
+		for ip0 in [0: np0]
+		{
+			for dir in [0: NDIRS]
+			{
+				let x = p0[0, ip0] + DIRS[0, dir];
+				let y = p0[1, ip0] + DIRS[1, dir];
+				if grid[x, y] != "#"
+					push_(x, y);
+			}
+		}
+
+		//println("p dup = ");
+		//for i in [0: np]
+		//	println([p[0,i], p[1,i]]);
+
+		// Convert 2D indices p to 1D indices p1
+		let p1 = [-1; np];
+		for ip in [0: np]
+			p1[ip] = p[0,ip] + nx * p[1,ip];
+		//println("p1 = ", p1);
+
+		//println("sorting points ...");
+		let pu = uniq(p1);
+		//println("done");
+		//println("pu = ", pu);
+
+		// Convert unique 1D indices back to 2D
+		np = 0;
+		for i in [0: size(pu, 0)]
+		{
+			let x = pu[i] % nx;
+			let y = pu[i] / nx;
+			push_(x, y);
+		}
+		//println("np = ", np);
+		//println("p unq = ");
+		//for i in [0: np]
+		//	println([p[0,i], p[1,i]]);
+		//println();
+	}
+
+	let sum_ = np;
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let nx = len(str_);
+
+	println("nx, ny = ", [nx, ny]);
+
+	let grid = [""; nx, ny];
+	let xs = -1;
+	let ys = -1;
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: nx]
+		{
+			grid[x, y] = str_[x];
+			if grid[x, y] == "S"
+			{
+				xs = x;
+				ys = y;
+			}
+		}
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("grid = ", grid);
+	println("xs, ys = ", [xs, ys]);
+
+	push_(xs, ys);
+
+	for it in [0: nt]
+	{
+		println("step ", it);
+
+		// Could be optimized by only copying 0: np
+		let p0 = p;
+		let np0 = np;
+
+		// TODO: the points expand outward ~~in a ring~~.  Points in the interior of
+		// the ring just flip-flop between white and black squares like a
+		// checkerboard pattern.  Even steps have all points on white squares,
+		// and and odd steps have all points on black squares
+		//
+		// Nothing new happens on the interior, only points on the frontier of
+		// expansion do anything interesting.  Compare set of points with all
+		// points from two steps ago (e.g. compare black to black and white to
+		// white), maybe using a bisection search on lexicographical ordering.
+		// Only points that expand "outwards" need to be processed in the next
+		// step
+		//
+		// Actually it's not necessarily a ring.  Because of rocks, the
+		// expansion could happen around obstacles but back towards the starting
+		// point
+
+		np = 0;
+		for ip0 in [0: np0]
+		{
+			for dir in [0: NDIRS]
+			{
+				let x = p0[0, ip0] + DIRS[0, dir];
+				let y = p0[1, ip0] + DIRS[1, dir];
+				if grid[pmod(x, nx), pmod(y, ny)] != "#"
+					push_(x, y);
+			}
+		}
+
+		//println("p dup = ");
+		//for i in [0: np]
+		//	println([p[0,i], p[1,i]]);
+
+		// Convert 2D indices p to 1D indices p1
+		//
+		// TODO: this doesn't work for infinitely tiled grids.  Instead of
+		// making p1, sort p directly, lexicographically
+		let p1 = [-1; np];
+		for ip in [0: np]
+			p1[ip] = p[0,ip] + nx * p[1,ip];
+		//println("p1 = ", p1);
+
+		println("sorting points ...");
+		let pu = uniq(p1);
+		println("done");
+		//println("pu = ", pu);
+
+		// Convert unique 1D indices back to 2D
+		np = 0;
+		for i in [0: size(pu, 0)]
+		{
+			let x = pu[i] % nx;
+			let y = pu[i] / nx;
+			push_(x, y);
+		}
+		println("np = ", np);
+		//println("p unq = ");
+		//for i in [0: np]
+		//	println([p[0,i], p[1,i]]);
+		println();
+	}
+
+	let sum_ = np;
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	sum_ += part1();
+	//sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

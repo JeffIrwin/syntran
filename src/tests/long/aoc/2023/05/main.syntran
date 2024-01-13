@@ -1,0 +1,300 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+// The brute force approach will eat up at least 16 GB just for the initial
+// seeds array on the real input!
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn map_fn(seeds: [i64; :], dst_range: [i64; :], src_range: [i64; :],
+		  len_range: [i64; :]): [i64; :]
+{
+	//println("starting map_fn()");
+
+	//println("mapping seeds     = ", seeds);
+	//println("dst_range = ", dst_range);
+	//println("src_range = ", src_range);
+	//println("len_range = ", len_range);
+
+	// outputs
+	//let vec_ = [i64(0); size(seeds, 0)];
+	let vec_ = seeds;
+
+	for i in [0: size(seeds, 0)]
+	{
+		let seed = seeds[i];
+		//println("seed = ", seed);
+
+		//for j in [0: size(dst_range, 0)]
+		let j = 0;
+		let found = false;
+		while not found and j < size(dst_range, 0)
+		{
+			let offset = seed - src_range[j];
+			if 0 <= offset and offset < len_range[j]
+			{
+				found = true;
+				//vec_[i] = dst_range[j] + seed - src_range[j];
+				//vec_[i] = seed - src_range[j] + dst_range[j] - src_range[j];
+				//vec_[i] = seed - dst_range[j] + src_range[j];
+				vec_[i] = seed + (dst_range[j] - src_range[j]);
+				//println("diff = ", dst_range[j], " - ", src_range[j], " = ", (dst_range[j] - src_range[j]));
+				//println("mapped ", vec_[i]);
+			}
+			j += 1;
+		}
+		//println();
+	}
+
+	// return
+	let ans = vec_;
+}
+
+//==============================================================================
+
+// TODO: utils, consistent naming
+fn min64_(a: i64, b: i64): i64
+{
+	let ans = a;
+	if b < a
+		ans = b;
+}
+
+//==============================================================================
+
+fn part1(): i32
+{
+	let sum_ = i64(0);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let strs = split_(str_, ":");
+	//let nums_str = split_(strs[1], " ");
+	//println("nums_str = ", nums_str);
+	let seeds = parse_i64_delim(strs[1], " ");
+	//println("seeds = ", seeds);
+
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let nln = 0;
+
+		str_ = readln(f);
+		let mapname = str_;
+		//println("mapname = ", mapname);
+		while not (str_ == "")
+		{
+			str_ = readln(f);
+			//println("str_ = ", str_);
+			nln += 1;
+		}
+		nln -= 1;
+		//println("nln = ", nln);
+
+		// Rewind and read until the mapname that we left off at
+		close(f);
+		f = open(filename);
+		str_ = readln(f);
+		while not (str_ == mapname)
+		{
+			str_ = readln(f);
+		}
+
+		// TODO: syntran fails to type check when re-assigning vector elements
+		// to i64 instead of i32
+		let dst_range = [i64(0); nln];
+		let src_range = [i64(0); nln];
+		let len_range = [i64(0); nln];
+
+		for i in [0: nln]
+		{
+			str_ = readln(f);
+			//println("str_ = ", str_);
+			let ints = parse_i64_delim(str_, " ");
+			//println("ints = ", ints);
+			dst_range[i] = ints[0];
+			src_range[i] = ints[1];
+			len_range[i] = ints[2];
+		}
+
+		//println("dst_range = ", dst_range);
+		//println("src_range = ", src_range);
+		//println("len_range = ", len_range);
+
+		//println("calling map_fn() ...");
+
+		seeds = map_fn(seeds, dst_range, src_range, len_range);
+
+		//println("seeds = ", seeds);
+
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	sum_ = seeds[0];
+	for i in [0: size(seeds, 0)]
+		sum_ = min64_(sum_, seeds[i]);
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn part2(): i32
+{
+	let sum_ = i64(0);
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let strs = split_(str_, ":");
+	//let nums_str = split_(strs[1], " ");
+	//println("nums_str = ", nums_str);
+	let seed_ranges = parse_i64_delim(strs[1], " ");
+	println("seed_ranges = ", seed_ranges);
+
+	// Expand seed ranges into actual seeds
+	let nseeds = i64(0);
+	let i = 1;
+	while i < size(seed_ranges, 0)
+	{
+		println("i = ", i);
+		println("adding ", seed_ranges[i]);
+		nseeds += seed_ranges[i];
+		i += 2;
+	}
+	println("nseeds = ", nseeds);
+
+	// TODO: syntran cannot have arrays with a 64 bit size
+	let seeds = [i64(0); i32(nseeds)];
+
+	println("size(seeds,0) = ", size(seeds,0));
+
+	i = 1;
+	let k = 0;
+	while i < size(seed_ranges, 0)
+	{
+		println("i = ", i);
+		println("adding ", seed_ranges[i]);
+		//nseeds += seed_ranges[i];
+
+		//for j in [0: seed_ranges[i]]
+		let j = 0;
+		while j < seed_ranges[i]
+		{
+			println("j = ", j);
+			seeds[k] = i64(seed_ranges[i-1] + j);
+			k += 1;
+			j += 1;
+		}
+
+		i += 2;
+	}
+	println("k = ", k);
+	println("seeds = ", seeds);
+	println("size(seeds,0) = ", size(seeds,0));
+
+//} fn dummy() {
+
+	str_ = readln(f);
+	while not eof(f)
+	{
+		println("str_ = ", str_);
+
+		let nln = 0;
+
+		str_ = readln(f);
+		let mapname = str_;
+		println("mapname = ", mapname);
+		while not (str_ == "")
+		{
+			str_ = readln(f);
+			println("str_ = ", str_);
+			nln += 1;
+		}
+		nln -= 1;
+		println("nln = ", nln);
+
+		// Rewind and read until the mapname that we left off at
+		close(f);
+		f = open(filename);
+		str_ = readln(f);
+		while not (str_ == mapname)
+		{
+			str_ = readln(f);
+		}
+
+		// TODO: syntran fails to type check when re-assigning vector elements
+		// to i64 instead of i32
+		let dst_range = [i64(0); nln];
+		let src_range = [i64(0); nln];
+		let len_range = [i64(0); nln];
+
+		for i in [0: nln]
+		{
+			str_ = readln(f);
+			//println("str_ = ", str_);
+			let ints = parse_i64_delim(str_, " ");
+			//println("ints = ", ints);
+			dst_range[i] = ints[0];
+			src_range[i] = ints[1];
+			len_range[i] = ints[2];
+		}
+
+		println("dst_range = ", dst_range);
+		println("src_range = ", src_range);
+		println("len_range = ", len_range);
+
+		seeds = map_fn(seeds, dst_range, src_range, len_range);
+		//println("seeds = ", seeds);
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	sum_ = seeds[0];
+	for i in [0: size(seeds, 0)]
+		sum_ = min64_(sum_, seeds[i]);
+
+	println("part 2 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	sum_ += part1();
+	//sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

@@ -1,0 +1,293 @@
+
+#include("../../utils.syntran");
+
+//==============================================================================
+
+let ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+let xmin = 0.0;
+let ymin = 0.0;
+let xmax = 0.0;
+let ymax = 0.0;
+
+if ifile == 0
+{
+	xmin = 7.0;
+	ymin = 7.0;
+	xmax = 27.0;
+	ymax = 27.0;
+}
+else
+{
+	xmin = 200000000000000.0;
+	ymin = 200000000000000.0;
+	xmax = 400000000000000.0;
+	ymax = 400000000000000.0;
+}
+
+let N3D = 3;
+
+//==============================================================================
+
+fn int_ray_ray_2d(p0: [i64; :], v0: [i64; :], p1: [i64; :], v1: [i64; :]): i64
+{
+	// Determine of two rays will intersect.  Return codes:
+	//
+	//     -1: no intersection because the lines intersect on the wrong end of one or both rays
+	//      0: no intersection because rays are parallel
+	//      1: intersection exists and is inside x/y min/max test area bounds!
+	//      2: intersection exists but is outside test area
+	//
+
+	//println("p0 = ", p0);
+	//println("v0 = ", v0);
+	//println("p1 = ", p1);
+	//println("v1 = ", v1);
+
+	// p == p0 + v0 * t0
+	// p == p1 + v1 * t1
+	//
+	// p0 + v0 * t0 == p1 + v1 * t1
+	//
+	// p0x + v0x * t0 == p1x + v1x * t1
+	// p0y + v0y * t0 == p1y + v1y * t1
+	//
+	// v0x * t0 - v1x * t1 == p1x - p0x
+	// v0y * t0 - v1y * t1 == p1y - p0y
+	//
+	// [[ v0x, -v1x ]]   [t0]    [ p1x - p0x ]
+	// [[           ]] * [  ] == [           ]
+	// [[ v0y, -v1y ]]   [t1]    [ p1y - p0y ]
+	//
+	//       A         *  x   ==       b
+
+	let p01 =
+		[
+			p1[0] - p0[0],
+			p1[1] - p0[1]
+		];
+	//println("p01 = ", p01);
+
+	// Matrix A elements
+	let a =  v0[0];
+	let b = -v1[0];
+	let c =  v0[1];
+	let d = -v1[1];
+
+	// RHS b elements
+	let b0 = p1[0] - p0[0];
+	let b1 = p1[1] - p0[1];
+
+	//// Determinant
+	//let det = v0x * (-v1y) - v0y * (-v1x);
+	//let det = v0[0] * (-v1[1]) - v0[1] * (-v1[0]);
+	let det = a * d - b * c;
+
+	let ans = 0;
+
+	//println("det = ", det);
+	if det == 0
+	{
+		//println("Parallel!");
+		ans = 0;
+	}
+	else
+	{
+		//// Solution x
+		//let t0 = ( d * b0 - b * b1) / det;
+		//let t1 = (-c * b0 + a * b1) / det;
+		////let t0 = 1.0 * ( d * b0 - b * b1) / det;
+		////let t1 = 1.0 * (-c * b0 + a * b1) / det;
+
+		let t0 = 1.0 * ( d * b0 - b * b1) / (1.0 * det);
+		let t1 = 1.0 * (-c * b0 + a * b1) / (1.0 * det);
+
+		if t0 > 0 and t1 > 0
+		{
+			// p == p0 + v0 * t0
+			let px = p0[0] + v0[0] * t0;
+			let py = p0[1] + v0[1] * t0;
+
+			if xmin <= px and px <= xmax and
+			   ymin <= py and py <= ymax
+				ans = +1;
+			else
+				ans = +2;
+
+		}
+		else
+			ans = -1;
+
+		//// Solution x but multiplied by det to avoid floats
+		//let t0det =  d * b0 - b * b1;
+		//let t1det = -c * b0 + a * b1;
+
+		//// Sign of t == sign(tdet) / sign(det) == sign(tdet) * sign(det)
+		//let s0 = sign_64(t0det) * sign_64(det);
+		//let s1 = sign_64(t1det) * sign_64(det);
+
+		//println("t0det = ", t0det);
+		//println("t1det = ", t1det);
+		////println();
+		//println("s0, s1 = ", [s0, s1]);
+		//println("sign_64(t0det) = ", sign_64(t0det));
+		//println("sign_64(det) = ", sign_64(det));
+		//println("sign prod = ", sign_64(t0det) * sign_64(det));
+
+		//if s0 > 0 and s1 > 0
+		//{
+		//	// Intersection point can be calculated by either one of these:
+		//	//
+		//	//     p == p0 + v0 * t0
+		//	//     p == p1 + v1 * t1
+
+		//	// Still avoiding floats :( thanks tsoding for the olivecs training :)
+
+		//// This works for the test input but not the real input.  Overflow
+		//// probably occurs somewhere
+		//
+		//	let pxdet = p0[0] * det + v0[0] * t0det;
+		//	let pydet = p0[1] * det + v0[1] * t0det;
+
+		//	let xmindet = 0;
+		//	let ymindet = 0;
+		//	let xmaxdet = 0;
+		//	let ymaxdet = 0;
+
+		//	//if det > 0
+		//	//{
+		//		xmindet = xmin * det;
+		//		ymindet = ymin * det;
+		//		xmaxdet = xmax * det;
+		//		ymaxdet = ymax * det;
+		//	//}
+		//	//else
+		//	//{
+		//	//	// :ugh:
+		//	//	xmindet = xmax * det;
+		//	//	ymindet = ymax * det;
+		//	//	xmaxdet = xmin * det;
+		//	//	ymaxdet = ymin * det;
+		//	//}
+
+		//	if (det > 0 and
+		//	   (xmindet <= pxdet and pxdet <= xmaxdet and
+		//	    ymindet <= pydet and pydet <= ymaxdet)) or
+		//	   (det < 0 and
+		//	   (-xmindet <= -pxdet and -pxdet <= -xmaxdet and
+		//	    -ymindet <= -pydet and -pydet <= -ymaxdet))
+		//		ans = +1;
+		//	else
+		//		ans = +2;
+		//}
+		//else
+		//	ans = -1;
+	}
+
+	//let v10 =
+	//	[
+	//		v0[0] - v1[0],
+	//		v0[1] - v1[1]
+	//	];
+	//println("v10 = ", v10);
+
+	//println();
+	let return_val = ans;
+}
+
+//==============================================================================
+
+// Brief outline for part 2 (still very open):
+//
+// Find 3 rays such that no pair of rays are parallel.  Such a triplet should be
+// common unless the input is carefully crafted to be difficult
+//
+// Then construct a 4th ray which intersects with all of the other 3.
+
+fn part1(): i32
+{
+	let n = countln_(filename);
+
+	let p = [i64(0); N3D, n];
+	let v = [i64(0); N3D, n];
+
+	let f = open(filename);
+	for i in [0: n]
+	{
+		let str_ = readln(f);
+		//println("str_ = ", str_);
+
+		let vec = parse_i64_delim(str_, ",@ ");
+
+		// Unpack
+		p[0,i] = vec[0];
+		p[1,i] = vec[1];
+		p[2,i] = vec[2];
+
+		v[0,i] = vec[3];
+		v[1,i] = vec[4];
+		v[2,i] = vec[5];
+
+	}
+	close(f);
+
+	//println("p = ", p);
+	//println("v = ", v);
+
+	// Iterate through pairs of hailstones
+	let sum_ = 0;
+	for i in [0: n]
+	for j in [0: i]
+	{
+		//println("i, j = ", [i, j]);
+
+		// Repack
+
+		let p0 = [p[0,i], p[1,i], p[2,i]];
+		let p1 = [p[0,j], p[1,j], p[2,j]];
+
+		let v0 = [v[0,i], v[1,i], v[2,i]];
+		let v1 = [v[0,j], v[1,j], v[2,j]];
+
+		//let int = int_ray_ray_2d(p0, v0, p1, v1);
+		let int = int_ray_ray_2d(p1, v1, p0, v0);
+
+		if int == 1
+			sum_ += 1;
+
+	}
+
+	println("part 1 = ", sum_);
+	sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	println();
+	println("Starting AOC syntran main");
+
+	let sum_ = i64(0);
+
+	sum_ += part1();
+	//sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	let ans = sum_;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+
