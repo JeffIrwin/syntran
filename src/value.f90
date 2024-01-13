@@ -166,8 +166,8 @@ subroutine add_value_t(left, right, res, op_text)
 
 	!********
 
-	print *, 'starting add_value_t()'
-	print *, 'res%type = ', kind_name(res%type)
+	!print *, 'starting add_value_t()'
+	!print *, 'res%type = ', kind_name(res%type)
 
 	! Case selector must be a scalar expression, so use this nasty hack.
 	! This will break if magic is smaller than the largest type enum
@@ -176,7 +176,7 @@ subroutine add_value_t(left, right, res, op_text)
 
 	!****
 	case        (magic**2 * array_type + magic * array_type + i32_type)
-		print *, 'array_type + i32_type'
+		!print *, 'array_type + i32_type'
 
 		select case (left%array%type)
 		case (i32_type)

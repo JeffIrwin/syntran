@@ -1529,7 +1529,7 @@ function new_binary_expr(left, op, right) result(expr)
 
 	case (i32_array_type)
 
-		print *, 'allocating i32_array_type'
+		!print *, 'allocating i32_array_type'
 		allocate(expr%val%array)
 
 		expr%val%array%type = i32_type
@@ -1540,7 +1540,7 @@ function new_binary_expr(left, op, right) result(expr)
 		end if
 
 		expr%val%type = array_type
-		print *, 'done allocating'
+		!print *, 'done allocating'
 
 	! TODO: other array sub types.  Maybe make a mold_val() helper fn similar to
 	! mold() (for arrays)
@@ -1635,7 +1635,7 @@ integer function get_binary_op_kind(left, op, right, left_arr, right_arr) &
 			if (left_arr == right) then
 				!kind_ = left_arr
 				kind_ = scalar_to_array_type(left_arr)
-				print *, 'kind_ = ', kind_name(kind_)
+				!print *, 'kind_ = ', kind_name(kind_)
 				return
 			end if
 
@@ -1680,7 +1680,7 @@ integer function get_binary_op_kind(left, op, right, left_arr, right_arr) &
 			end if
 		end if
 
-		print *, 'unknown_type'
+		!print *, 'unknown_type'
 
 	end select
 
