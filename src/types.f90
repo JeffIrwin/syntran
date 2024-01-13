@@ -1251,14 +1251,15 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 			! the + operator works on numbers and strings
 
 			if (left == array_type .and. right == array_type) then
-				! TODO
-				allowed = .false.
-
-			else if (left == array_type) then
 
 				! TODO: would recursion help for arrays here?
 
 				! TODO: should vec str + scalar str be allowed?
+
+				allowed = &
+					(is_num_type(left_arr) .and. is_num_type(right_arr))
+
+			else if (left == array_type) then
 				allowed = &
 					(is_num_type(left_arr) .and. is_num_type(right))
 
@@ -1520,11 +1521,11 @@ function new_binary_expr(left, op, right) result(expr)
 	!print *, 'type_ = ', kind_name(type_)
 
 	select case (type_)
-	case (bool_array_type)
+	case (i32_array_type, bool_array_type)
 
 		allocate(expr%val%array)
 
-		expr%val%array%type = bool_type
+		expr%val%array%type = array_to_scalar_type(type_)
 		if (left%val%type == array_type) then
 			expr%val%array%rank = left %val%array%rank
 		else
@@ -1532,25 +1533,6 @@ function new_binary_expr(left, op, right) result(expr)
 		end if
 
 		expr%val%type = array_type
-
-	case (i32_array_type)
-
-		!print *, 'allocating i32_array_type'
-		allocate(expr%val%array)
-
-		! TODO: consolidate this case with above.  This next line is the only
-		! difference, which could be combined with a array_to_scalar_type()
-		! helper fn
-		expr%val%array%type = i32_type
-
-		if (left%val%type == array_type) then
-			expr%val%array%rank = left %val%array%rank
-		else
-			expr%val%array%rank = right%val%array%rank
-		end if
-
-		expr%val%type = array_type
-		!print *, 'done allocating'
 
 	! TODO: other array sub types.  Maybe make a mold_val() helper fn similar to
 	! mold() (for arrays)
@@ -1602,8 +1584,8 @@ end function new_unary_expr
 
 !===============================================================================
 
-integer function get_binary_op_kind(left, op, right, left_arr, right_arr) &
-		result(kind_)
+recursive integer function get_binary_op_kind(left, op, right, &
+		left_arr, right_arr) result(kind_)
 
 	! Return the resulting type yielded by operator op on operands left and
 	! right
@@ -1638,60 +1620,22 @@ integer function get_binary_op_kind(left, op, right, left_arr, right_arr) &
 		kind_ = unknown_type
 
 		if (left == array_type .and. right == array_type) then
-			! TODO
+			kind_ = get_binary_op_kind(left_arr, op, right_arr, unknown_type, unknown_type)
+			kind_ = scalar_to_array_type(kind_)
+			return
+
+			! Some of these early returns are no-ops.  If/case nesting could be
+			! refactored
 
 		else if (left == array_type) then
-			! TODO: it should be possible to clean this up with recursion.
-			! Remember to call scalar_to_array_type() on result
-
-			if (left_arr == right) then
-				!kind_ = left_arr
-				kind_ = scalar_to_array_type(left_arr)
-				!print *, 'kind_ = ', kind_name(kind_)
-				return
-			end if
-
-			if (left_arr == f32_type .or. right == f32_type) then
-				! int + float casts to float
-				!! TODO: scalar_to_array_type()
-				!kind_ = f32_type
-				return
-			end if
-
-			if ( &
-				(left_arr  == i64_type .and. is_int_type(right)) .or. &
-				(right     == i64_type .and. is_int_type(left_arr))) then
-
-				! i32+i64 and i64+i32 cast to i64
-				!! TODO: scalar_to_array_type()
-				!kind_ = i64_type
-				return
-
-			end if
+			kind_ = get_binary_op_kind(left_arr, op, right, unknown_type, unknown_type)
+			kind_ = scalar_to_array_type(kind_)
+			return
 
 		else if (right == array_type) then
-			!print *, 'right == array_type'
-
-			if (left == right_arr) then
-				kind_ = scalar_to_array_type(left)
-				return
-			end if
-
-			if (left == f32_type .or. right_arr == f32_type) then
-				! int + float casts to float
-				kind_ = scalar_to_array_type(f32_type)
-				return
-			end if
-
-			if ( &
-				(left      == i64_type .and. is_int_type(right_arr)) .or. &
-				(right_arr == i64_type .and. is_int_type(left ))) then
-
-				! i32+i64 and i64+i32 cast to i64
-				kind_ = scalar_to_array_type(i64_type)
-				return
-
-			end if
+			kind_ = get_binary_op_kind(left, op, right_arr, unknown_type, unknown_type)
+			kind_ = scalar_to_array_type(kind_)
+			return
 
 		else
 			if (left == right) then
@@ -1746,6 +1690,31 @@ function scalar_to_array_type(scalar_type_) result(array_type_)
 	end select
 
 end function scalar_to_array_type
+
+!===============================================================================
+
+function array_to_scalar_type(array_type_) result(scalar_type_)
+
+	! Convert an array type to its corresponding scalar type
+
+	integer, intent(in) :: array_type_
+	integer :: scalar_type_
+
+	select case (array_type_)
+	case (bool_array_type)
+		scalar_type_ = bool_type
+
+	case (i32_array_type)
+		scalar_type_ = i32_type
+
+	! TODO: extend to other types
+
+	case default
+		scalar_type_ = unknown_type
+
+	end select
+
+end function array_to_scalar_type
 
 !===============================================================================
 

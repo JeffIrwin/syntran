@@ -115,6 +115,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			if (array%type == i32_type) then
 
 				array%cap = (ubound_%sca%i32 - lbound_%sca%i32) / step%sca%i32 + 1
+				!array%cap = (ubound_%sca%i32 - lbound_%sca%i32) / step%sca%i32
 				allocate(array%i32( array%cap ))
 
 				j = 1
@@ -130,9 +131,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end do
 				array%len_ = j - 1
 
+				! TODO: can cap be calculated correctly at the start, without
+				! breakign tests? Find out which test crashes without commented
+				! `+1` in above cap calculation
+				if (array%len_ < array%cap) then
+					array%cap = array%len_
+					array%i32 = array%i32(1: array%len_)
+				end if
+
 			else if (array%type == i64_type) then
 
 				array%cap = int((ubound_%sca%i64 - lbound_%sca%i64) / step%sca%i64 + 1)
+				!array%cap = int((ubound_%sca%i64 - lbound_%sca%i64) / step%sca%i64)
 				allocate(array%i64( array%cap ))
 
 				j = 1
@@ -149,6 +159,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					j = j + 1
 				end do
 				array%len_ = j - 1
+
+				! TODO: can cap be calculated correctly at the start, without
+				! breakign tests? Find out which test crashes without commented
+				! `+1` in above cap calculation
+				if (array%len_ < array%cap) then
+					array%cap = array%len_
+					array%i64 = array%i64(1: array%len_)
+				end if
 
 			else if (array%type == f32_type) then
 
@@ -169,6 +187,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					j = j + 1
 				end do
 				array%len_ = j - 1
+
+				! TODO: can cap be calculated correctly at the start, without
+				! breakign tests? Find out which test crashes without commented
+				! `+1` in above cap calculation
+				if (array%len_ < array%cap) then
+					array%cap = array%len_
+					array%f32 = array%f32(1: array%len_)
+				end if
 
 			else
 				write(*,*) 'Error: step array type eval not implemented'

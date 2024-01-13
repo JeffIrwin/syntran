@@ -1213,16 +1213,6 @@ subroutine unit_test_array_i32_1(npass, nfail)
 			eval('let myArray = [2-3: 6/3 + 3];') == '[-1, 0, 1, 2, 3, 4]', &
 			eval('[42; 3];') == '[42, 42, 42]', &
 			eval('[1337; 4];') == '[1337, 1337, 1337, 1337]', &
-			eval('[0, 1] + 2;') == '[2, 3]', &
-			eval('[0, 1, 2] + 3;') == '[3, 4, 5]', &
-			eval('[0, 1, 2] + -1;') == '[-1, 0, 1]', &
-			eval('[3: 9] + -2;') == '[1, 2, 3, 4, 5, 6]', &
-			eval('[3: 2: 9] + -2;') == '[1, 3, 5]', &
-			eval('2 + [0, 1];') == '[2, 3]', &
-			eval('3 + [0, 1, 2];') == '[3, 4, 5]', &
-			eval('-1 + [0, 1, 2];') == '[-1, 0, 1]', &
-			eval('-2 + [3: 9];') == '[1, 2, 3, 4, 5, 6]', &
-			eval('-2 + [3: 2: 9];') == '[1, 3, 5]', &
 			eval('[48-6, 13*100 + 37];') == '[42, 1337]'  &
 		]
 
@@ -1485,6 +1475,53 @@ subroutine unit_test_comp_arr(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_comp_arr
+
+!===============================================================================
+
+subroutine unit_test_op_arr(npass, nfail)
+
+	! Maybe rename this to unit_test_array_cmp?  It's long enough without +, *,
+	! etc.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'array arithmetic'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval('[0, 1] + 2;') == '[2, 3]', &
+			eval('[0, 1, 2] + 3;') == '[3, 4, 5]', &
+			eval('[0, 1, 2] + -1;') == '[-1, 0, 1]', &
+			eval('[3: 9] + -2;') == '[1, 2, 3, 4, 5, 6]', &
+			eval('[3: 2: 9] + -2;') == '[1, 3, 5]', &
+			eval('2 + [0, 1];') == '[2, 3]', &
+			eval('3 + [0, 1, 2];') == '[3, 4, 5]', &
+			eval('-1 + [0, 1, 2];') == '[-1, 0, 1]', &
+			eval('-2 + [3: 9];') == '[1, 2, 3, 4, 5, 6]', &
+			eval('-2 + [3: 2: 9];') == '[1, 3, 5]', &
+			eval('[0, 1] + [1, 2];') == '[1, 3]', &
+			eval('[0, 1, 2] + [3, 4, 5];') == '[3, 5, 7]', &
+			eval('[0, 1, 2] + [-1, 5, -3];') == '[-1, 6, -1]', &
+			eval('[3: 9] + [-3: -1: -9];') == '[0, 0, 0, 0, 0, 0]', &
+			eval('[3: 2: 9] + [-2, -3, -4];') == '[1, 2, 3]', &
+			eval('all([0: 99] + [99: -1: 0] == 99);') == 'true', &
+			.false. &
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_op_arr
 
 !===============================================================================
 
@@ -2147,6 +2184,7 @@ subroutine unit_tests(iostat)
 	call unit_test_include    (npass, nfail)
 	call unit_test_slice_1    (npass, nfail)
 	call unit_test_comp_arr   (npass, nfail)
+	call unit_test_op_arr     (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
