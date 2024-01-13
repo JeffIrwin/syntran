@@ -135,6 +135,10 @@ module syntran__value_m
 		module procedure is_lt_value_t
 	end interface is_lt
 
+	interface is_ge
+		module procedure is_ge_value_t
+	end interface is_ge
+
 !===============================================================================
 
 contains
@@ -1020,6 +1024,33 @@ subroutine is_lt_value_t(left, right, res, op_text)
 	end select
 
 end subroutine is_lt_value_t
+
+!===============================================================================
+
+subroutine is_ge_value_t(left, right, res, op_text)
+
+	type(value_t), intent(in)  :: left, right
+
+	type(value_t), intent(inout) :: res
+
+	character(len = *), intent(in) :: op_text
+
+	! Efficiency vs LOC tradeoff again
+	!
+	! Actually, all other comparison operations could be implemented in terms of
+	! just is_lt() and is_gt().  For example, `is_eq(x,y) = is_lt(x,y) .or.
+	! is_gt(x,y)`, etc., but that means some comparisons would require *two* base
+	! comparisons, and I'm not going to sacrifice that much efficiency.  A
+	! simple inversion seems more worthwhile
+
+	call is_lt(left, right, res, op_text)
+	if (res%type == array_type) then
+		res%array%bool = .not. res%array%bool
+	else
+		res%sca%bool = .not. res%sca%bool
+	end if
+
+end subroutine is_ge_value_t
 
 !===============================================================================
 
