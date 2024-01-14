@@ -504,7 +504,8 @@ recursive function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	integer :: io, ltype, rtype, pos0, span0, span1, lrank, rrank
+	integer :: io, ltype, rtype, pos0, span0, span1, lrank, rrank, larrtype, &
+		rarrtype
 
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: let, identifier, op
@@ -629,6 +630,7 @@ recursive function parse_expr_statement(parser) result(expr)
 		expr%right = right
 
 		!print *, 'expr ident text = ', expr%identifier%text
+		!print *, 'op = ', op%text
 
 		! Get the identifier's type and index from the dict and check that it
 		! has been declared
@@ -695,9 +697,16 @@ recursive function parse_expr_statement(parser) result(expr)
 		!if (rtype == array_type) rtype = expr%right%val%array%type
 		!if (rtype == array_type) rtype = right%val%array%type
 
+		larrtype = unknown_type
+		rarrtype = unknown_type
+		if (ltype == array_type) larrtype = expr%val%array%type
+		if (rtype == array_type) rarrtype = expr%right%val%array%type
+		!print *, 'larrtype = ', kind_name(larrtype)
+		!print *, 'rarrtype = ', kind_name(rarrtype)
+
 		! This check could be moved inside of is_binary_op_allowed, but we would
 		! need to pass parser to it to push diagnostics
-		if (.not. is_binary_op_allowed(ltype, op%kind, rtype)) then
+		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
 
 			!print *, 'bin not allowed in parse_expr_statement'
 

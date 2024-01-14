@@ -576,6 +576,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! parsing
 
 			!print *, 'compound assign'
+			!print *, 'lhs type = ', kind_name( vars%vals(node%id_index)%type )
+
 			call compound_assign(vars%vals(node%id_index), res, node%op)
 
 			! For compound assignment, ensure that the LHS is returned
@@ -1293,27 +1295,33 @@ subroutine compound_assign(lhs, rhs, op)
 
 	type(syntax_token_t), intent(in) :: op
 
+	!******
+
+	type(value_t) :: tmp  ! necessary for arrays
+
+	if (op%kind /= equals_token) tmp = lhs
+
 	select case (op%kind)
 	case (equals_token)
 		lhs = rhs  ! simply overwrite
 
 	case (plus_equals_token)
-		call add(lhs, rhs, lhs, op%text)
+		call add(tmp, rhs, lhs, op%text)
 
 	case (minus_equals_token)
-		call subtract(lhs, rhs, lhs, op%text)
+		call subtract(tmp, rhs, lhs, op%text)
 
 	case (star_equals_token)
-		call mul(lhs, rhs, lhs, op%text)
+		call mul(tmp, rhs, lhs, op%text)
 
 	case (slash_equals_token)
-		call div(lhs, rhs, lhs, op%text)
+		call div(tmp, rhs, lhs, op%text)
 
 	case (sstar_equals_token)
-		call pow(lhs, rhs, lhs, op%text)
+		call pow(tmp, rhs, lhs, op%text)
 
 	case (percent_equals_token)
-		call mod_(lhs, rhs, lhs, op%text)
+		call mod_(tmp, rhs, lhs, op%text)
 
 	case default
 		write(*,*) 'Error: unexpected assignment operator ', quote(op%text)
@@ -1395,6 +1403,7 @@ function get_array_value_t(array, i) result(val)
 
 		case (i32_type)
 			val%sca%i32 = array%i32(i + 1)
+
 		case (i64_type)
 			val%sca%i64 = array%i64(i + 1)
 
