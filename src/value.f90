@@ -182,6 +182,9 @@ subroutine add_value_t(left, right, res, op_text)
 		case (f32_type)
 			res%array = mold(left%array, f32_type)
 			res%array%f32 = left%array%f32 + right%sca%f32
+		case (i32_type)
+			res%array = mold(left%array, f32_type)
+			res%array%f32 = left%array%i32 + right%sca%f32
 		case default
 			! FIXME: other numeric types (f64, etc.)
 			write(*,*) err_eval_binary_types(op_text)
@@ -196,6 +199,9 @@ subroutine add_value_t(left, right, res, op_text)
 		case (i32_type)
 			res%array = mold(left%array, i32_type)
 			res%array%i32 = left%array%i32 + right%sca%i32
+		case (f32_type)
+			res%array = mold(left%array, f32_type)
+			res%array%f32 = left%array%f32 + right%sca%i32
 		case default
 			! FIXME: other numeric types (f64, etc.)
 			write(*,*) err_eval_binary_types(op_text)
@@ -210,6 +216,9 @@ subroutine add_value_t(left, right, res, op_text)
 		case (i32_type)
 			res%array = mold(right%array, i32_type)
 			res%array%i32 = left%sca%i32 + right%array%i32
+		case (f32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = left%sca%i32 + right%array%f32
 		case default
 			! FIXME: other numeric types (f64, etc.)
 			write(*,*) err_eval_binary_types(op_text)
@@ -224,6 +233,9 @@ subroutine add_value_t(left, right, res, op_text)
 		case (f32_type)
 			res%array = mold(right%array, f32_type)
 			res%array%f32 = left%sca%f32 + right%array%f32
+		case (i32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = left%sca%f32 + right%array%i32
 		case default
 			! FIXME: other numeric types (f64, etc.)
 			write(*,*) err_eval_binary_types(op_text)
@@ -242,6 +254,14 @@ subroutine add_value_t(left, right, res, op_text)
 		case (magic * f32_type + f32_type)
 			res%array = mold(right%array, f32_type)
 			res%array%f32 = left%array%f32 + right%array%f32
+
+		case (magic * i32_type + f32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = left%array%i32 + right%array%f32
+
+		case (magic * f32_type + i32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = left%array%f32 + right%array%i32
 
 		case default
 			! FIXME: other numeric types (f64, etc.)
