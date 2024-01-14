@@ -175,6 +175,20 @@ subroutine add_value_t(left, right, res, op_text)
 	select case (magic**2 * res%type + magic * left%type + right%type)
 
 	!****
+	case        (magic**2 * array_type + magic * array_type + f32_type)
+		!print *, 'array_type + f32_type'
+
+		select case (left%array%type)
+		case (f32_type)
+			res%array = mold(left%array, f32_type)
+			res%array%f32 = left%array%f32 + right%sca%f32
+		case default
+			! FIXME: other numeric types (f64, etc.)
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	!****
 	case        (magic**2 * array_type + magic * array_type + i32_type)
 		!print *, 'array_type + i32_type'
 
@@ -203,6 +217,20 @@ subroutine add_value_t(left, right, res, op_text)
 		end select
 
 	!****
+	case        (magic**2 * array_type + magic * f32_type + array_type)
+		!print *, 'f32_type + array_type'
+
+		select case (right%array%type)
+		case (f32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = left%sca%f32 + right%array%f32
+		case default
+			! FIXME: other numeric types (f64, etc.)
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	!****
 	case        (magic**2 * array_type + magic * array_type + array_type)
 		!print *, 'i32_type + array_type'
 
@@ -210,10 +238,16 @@ subroutine add_value_t(left, right, res, op_text)
 		case (magic * i32_type + i32_type)
 			res%array = mold(right%array, i32_type)
 			res%array%i32 = left%array%i32 + right%array%i32
+
+		case (magic * f32_type + f32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = left%array%f32 + right%array%f32
+
 		case default
 			! FIXME: other numeric types (f64, etc.)
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
+
 		end select
 
 	!****

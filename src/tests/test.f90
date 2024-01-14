@@ -1222,7 +1222,7 @@ end subroutine unit_test_array_i32_1
 
 !===============================================================================
 
-subroutine unit_test_comp_arr(npass, nfail)
+subroutine unit_test_arr_comp(npass, nfail)
 
 	! Maybe rename this to unit_test_array_cmp?  It's long enough without +, *,
 	! etc.
@@ -1474,14 +1474,11 @@ subroutine unit_test_comp_arr(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_comp_arr
+end subroutine unit_test_arr_comp
 
 !===============================================================================
 
-subroutine unit_test_op_arr(npass, nfail)
-
-	! Maybe rename this to unit_test_array_cmp?  It's long enough without +, *,
-	! etc.
+subroutine unit_test_arr_op(npass, nfail)
 
 	implicit none
 
@@ -1513,6 +1510,22 @@ subroutine unit_test_op_arr(npass, nfail)
 			eval('[3: 9] + [-3: -1: -9];') == '[0, 0, 0, 0, 0, 0]', &
 			eval('[3: 2: 9] + [-2, -3, -4];') == '[1, 2, 3]', &
 			eval('all([0: 99] + [99: -1: 0] == 99);') == 'true', &
+			eval('[0.0, 1.0] + 2.0;') == '[2.000000E+00, 3.000000E+00]', &
+			eval('[0.0, 1.0, 2.0] + 3.0;') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
+			eval('[0.0, 1.0, 2.0] + -1.0;') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
+			eval('[3.0: 1.0: 5.1] + -2.0;') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('[3.0: 2.0: 7.1] + -2.0;') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
+			eval('2.0 + [0.0, 1.0];') == '[2.000000E+00, 3.000000E+00]', &
+			eval('3.0 + [0.0, 1.0, 2.0];') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
+			eval('-1.0 + [0.0, 1.0, 2.0];') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
+			eval('-2.0 + [3.0: 1.0: 5.1];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('-2.0 + [3.0: 2.0: 7.1];') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
+			eval('[0.0, 1.0] + [1.0, 2.0];') == '[1.000000E+00, 3.000000E+00]', &
+			eval('[0.0, 1.0, 2.0] + [3.0, 4.0, 5.0];') == '[3.000000E+00, 5.000000E+00, 7.000000E+00]', &
+			eval('[0.0, 1.0, 2.0] + [-1.0, 5.0, -3.0];') == '[-1.000000E+00, 6.000000E+00, -1.000000E+00]', &
+			eval('[3.0: 1.0: 5.1] + [-3.0: -1.0: -5.1];') == '[0.000000E+00, 0.000000E+00, 0.000000E+00]', &
+			eval('[3.0: 2.0: 7.1] + [-2.0, -3.0, -4.0];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('all([0.0: 1.0: 99.1] + [99.0: -1.0: -0.1] == 9.900000E+01);') == 'true', &
 			.false. &
 		]
 
@@ -1521,7 +1534,7 @@ subroutine unit_test_op_arr(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_op_arr
+end subroutine unit_test_arr_op
 
 !===============================================================================
 
@@ -2183,8 +2196,8 @@ subroutine unit_tests(iostat)
 	call unit_test_i64        (npass, nfail)
 	call unit_test_include    (npass, nfail)
 	call unit_test_slice_1    (npass, nfail)
-	call unit_test_comp_arr   (npass, nfail)
-	call unit_test_op_arr     (npass, nfail)
+	call unit_test_arr_comp   (npass, nfail)
+	call unit_test_arr_op     (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

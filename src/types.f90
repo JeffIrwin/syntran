@@ -1252,7 +1252,8 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 			if (left == array_type .and. right == array_type) then
 
-				! TODO: would recursion help for arrays here?
+				! Would recursion help for arrays here?  It seems like it
+				! wouldn't reduce very many LOC
 
 				! TODO: should vec str + scalar str be allowed?
 
@@ -1520,8 +1521,8 @@ function new_binary_expr(left, op, right) result(expr)
 		larrtype, rarrtype)
 	!print *, 'type_ = ', kind_name(type_)
 
-	select case (type_)
-	case (i32_array_type, bool_array_type)
+	if (any(type_ == [bool_array_type, f32_array_type, i32_array_type, &
+		i64_array_type, str_array_type])) then
 
 		allocate(expr%val%array)
 
@@ -1537,10 +1538,10 @@ function new_binary_expr(left, op, right) result(expr)
 	! TODO: other array sub types.  Maybe make a mold_val() helper fn similar to
 	! mold() (for arrays)
 
-	case default
+	else
 		expr%val%type = type_
 
-	end select
+	end if
 
 	! TODO: array subtype if subscripted?  I think parse_primary_expr should
 	! already set the subtype when subscripts are present
@@ -1612,8 +1613,8 @@ recursive integer function get_binary_op_kind(left, op, right, &
 	case default
 		!print *, 'default'
 
-		! Other operations return the same type as their operands if they match
-		! or cast up
+		! Other operations return the same type as their operands if they match,
+		! or cast "up"
 		!
 		! FIXME: i64, f64, etc.
 
@@ -1622,46 +1623,34 @@ recursive integer function get_binary_op_kind(left, op, right, &
 		if (left == array_type .and. right == array_type) then
 			kind_ = get_binary_op_kind(left_arr, op, right_arr, unknown_type, unknown_type)
 			kind_ = scalar_to_array_type(kind_)
-			return
-
-			! Some of these early returns are no-ops.  If/case nesting could be
-			! refactored
 
 		else if (left == array_type) then
 			kind_ = get_binary_op_kind(left_arr, op, right, unknown_type, unknown_type)
 			kind_ = scalar_to_array_type(kind_)
-			return
 
 		else if (right == array_type) then
 			kind_ = get_binary_op_kind(left, op, right_arr, unknown_type, unknown_type)
 			kind_ = scalar_to_array_type(kind_)
-			return
 
 		else
+			! Default scalar case (no arrays)
+
 			if (left == right) then
 				kind_ = left
-				return
-			end if
 
-			if (left == f32_type .or. right == f32_type) then
+			else if (left == f32_type .or. right == f32_type) then
 				! int + float casts to float
 				kind_ = f32_type
-				return
-			end if
 
-			if ( &
+			else if ( &
 				(left  == i64_type .and. is_int_type(right)) .or. &
 				(right == i64_type .and. is_int_type(left ))) then
 
 				! i32+i64 and i64+i32 cast to i64
 				kind_ = i64_type
-				return
 
 			end if
 		end if
-
-		!print *, 'unknown_type'
-
 	end select
 
 end function get_binary_op_kind
@@ -1679,10 +1668,19 @@ function scalar_to_array_type(scalar_type_) result(array_type_)
 	case (bool_type)
 		array_type_ = bool_array_type
 
+	case (f32_type)
+		array_type_ = f32_array_type
+
 	case (i32_type)
 		array_type_ = i32_array_type
 
-	! TODO: extend to other types
+	case (i64_type)
+		array_type_ = i64_array_type
+
+	case (str_type)
+		array_type_ = str_array_type
+
+	! TODO: file_type?
 
 	case default
 		array_type_ = unknown_type
@@ -1704,10 +1702,19 @@ function array_to_scalar_type(array_type_) result(scalar_type_)
 	case (bool_array_type)
 		scalar_type_ = bool_type
 
+	case (f32_array_type)
+		scalar_type_ = f32_type
+
 	case (i32_array_type)
 		scalar_type_ = i32_type
 
-	! TODO: extend to other types
+	case (i64_array_type)
+		scalar_type_ = i64_type
+
+	case (str_array_type)
+		scalar_type_ = str_type
+
+	! TODO: file_type?
 
 	case default
 		scalar_type_ = unknown_type

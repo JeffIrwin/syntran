@@ -1131,9 +1131,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		res%type = get_binary_op_kind(left%type, node%op%kind, right%type, &
 			larrtype, rarrtype)
 		select case (res%type)
-		case (i32_array_type, bool_array_type)
+		case (bool_array_type, f32_array_type, i32_array_type, i64_array_type, &
+			str_array_type)
 			res%type = array_type
-			! TODO: other array sub types
 		end select
 
 		if (res%type == unknown_type) then
