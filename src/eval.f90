@@ -50,7 +50,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound_, ubound_, itr, elem, &
-		step, len_, arg, arg1, arg2, array_val, lsubval, usubval
+		step, len_, arg, arg1, arg2, array_val, lsubval, usubval, tmp
 
 	!print *, 'starting syntax_eval()'
 
@@ -72,7 +72,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (literal_expr)
 		! This handles ints, bools, etc.
 		res = node%val
-		!print *, 'res = ', res%str()
+		!print *, 'res = ', res%to_str()
 
 	case (array_expr)
 
@@ -475,6 +475,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (while_statement)
 
 		condition = syntax_eval(node%condition, vars, fns, quietl)
+		res%type = unknown_type
 		do while (condition%sca%bool)
 			res = syntax_eval(node%body, vars, fns, quietl)
 			condition = syntax_eval(node%condition, vars, fns, quietl)
@@ -485,13 +486,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		condition = syntax_eval(node%condition, vars, fns, quietl)
 		!print *, 'condition = ', condition%str()
 
+		res%type = unknown_type
 		if (condition%sca%bool) then
+			!print *, 'if'
 			res = syntax_eval(node%if_clause, vars, fns, quietl)
 
 		else if (allocated(node%else_clause)) then
+			!print *, 'else'
 			res = syntax_eval(node%else_clause, vars, fns, quietl)
 
 		end if
+		!print *, 'done'
 
 	case (translation_unit)
 
@@ -513,7 +518,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res = syntax_eval(node%members(i), vars, fns, quietl)
 
 			!print *, 'kind = ', node%members(i)%kind
-			!print *, i, ' res = ', res%str()
+			!print *, i, ' res = ', res%to_str()
 			!print *, ''
 
 			! HolyC feature: implicitly print name expression members.  I may
@@ -534,17 +539,22 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! The final statement of a block returns the actual result.  Non-final
 		! members only change the (vars) state.
 		do i = 1, size(node%members)
-			res = syntax_eval(node%members(i), vars, fns, quietl)
+			tmp = syntax_eval(node%members(i), vars, fns, quietl)
 
 			!print *, 'kind = ', node%members(i)%kind
-			!print *, i, ' res = ', res%str()
+			!print *, i, ' tmp = ', tmp%to_str()
+			!print *, 'type = ', tmp%type, kind_name(tmp%type)
 			!print *, ''
+
+			!if (.not. any(tmp%type == [0, unknown_type])) res = tmp
+			!if (.not. any(tmp%type == [unknown_type])) res = tmp
+			if (tmp%type /= unknown_type) res = tmp
 
 			! HolyC feature: implicitly print name expression members.  I may
 			! remove this after I implement an intrinsic print() fn.  May also
 			! need to suppress this for void fn calls later
 			if (node%members(i)%kind == name_expr .and. .not. quietl) then
-				write(*,*) res%to_str()
+				write(*,*) tmp%to_str()
 			end if
 
 		end do

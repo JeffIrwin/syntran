@@ -28,8 +28,6 @@ fn parse_subgame(str_: str): [i32; :]
 
 	while not end_
 	{
-		//println("ibeg = ", ibeg);
-		//println("setting iend ...");
 		let iend = scan(str_[ibeg+1:n], ",") + ibeg + 1;
 
 		//println("ibeg = ", ibeg);
@@ -68,15 +66,12 @@ fn parse_subgame(str_: str): [i32; :]
 			i = 2;
 			icolor = iblue;
 		}
-		//println("icolor = ", icolor);
 	
 		ncolors[i] = parse_i32(pair[0: icolor]);
-		//println("ncolors[i] = ", ncolors[i]);
 
-		ibeg = i32(iend);
+		ibeg = iend;
 	}
 
-	//println("done parse_subgame");
 	//println();
 
 	// return
