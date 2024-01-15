@@ -584,6 +584,10 @@ subroutine div_value_t(left, right, res, op_text)
 	case        (magic**2 * array_type + magic * i32_type + array_type)
 		!print *, 'i32_type + array_type'
 
+		! Divide scalars by arrays:  `12 / [3, 4, 6] == [4, 3, 2]`.  This might
+		! not make a lot of sense mathematically, but Fortran and numpy also
+		! allow it
+
 		select case (right%array%type)
 		case (i32_type)
 			res%array = mold(right%array, i32_type)
@@ -950,6 +954,10 @@ end subroutine subtract_value_t
 
 subroutine modulo_value_t(left, right, res, op_text)
 
+	! The Fortran mod() fn is consistent with the C operator `%`, while modulo()
+	! works differently for negative args (it's actually a remainder function,
+	! not a true modulo)
+
 	type(value_t), intent(in)  :: left, right
 
 	! For binary_expr, the type is set before calling this routine, so res is
@@ -960,9 +968,172 @@ subroutine modulo_value_t(left, right, res, op_text)
 
 	select case (magic**2 * res%type + magic * left%type + right%type)
 
-	! The Fortran mod() fn is consistent with the C operator `%`, while modulo()
-	! works differently for negative args (it's actually a remainder function,
-	! not a true modulo)
+	!****
+	case        (magic**2 * array_type + magic * array_type + f32_type)
+		!print *, 'array_type + f32_type'
+
+		select case (left%array%type)
+		case (f32_type)
+			res%array = mold(left%array, f32_type)
+			res%array%f32 = mod(left%array%f32, right%sca%f32)
+		case (i32_type)
+			res%array = mold(left%array, f32_type)
+			res%array%f32 = mod(real(left%array%i32), right%sca%f32)
+		case (i64_type)
+			res%array = mold(left%array, f32_type)
+			res%array%f32 = mod(real(left%array%i64, 4), right%sca%f32)
+		case default
+			! FIXME: other numeric types (f64, etc.)
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	!****
+	case        (magic**2 * array_type + magic * array_type + i32_type)
+		!print *, 'array_type + i32_type'
+
+		select case (left%array%type)
+		case (i32_type)
+			res%array = mold(left%array, i32_type)
+			res%array%i32 = mod(left%array%i32, right%sca%i32)
+		case (i64_type)
+			res%array = mold(left%array, i64_type)
+			res%array%i64 = mod(left%array%i64, right%sca%i32)
+		case (f32_type)
+			res%array = mold(left%array, f32_type)
+			res%array%f32 = mod(left%array%f32, real(right%sca%i32))
+		case default
+			! FIXME: other numeric types (f64, etc.)
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	!****
+	case        (magic**2 * array_type + magic * array_type + i64_type)
+		!print *, 'array_type + i64_type'
+
+		select case (left%array%type)
+		case (i32_type)
+			res%array = mold(left%array, i64_type)
+			res%array%i64 = mod(left%array%i32, right%sca%i64)
+		case (i64_type)
+			res%array = mold(left%array, i64_type)
+			res%array%i64 = mod(left%array%i64, right%sca%i64)
+		case (f32_type)
+			res%array = mold(left%array, f32_type)
+			res%array%f32 = mod(left%array%f32, real(right%sca%i64, 4))
+		case default
+			! FIXME: other numeric types (f64, etc.)
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	!****
+	case        (magic**2 * array_type + magic * i32_type + array_type)
+		!print *, 'i32_type + array_type'
+
+		select case (right%array%type)
+		case (i32_type)
+			res%array = mold(right%array, i32_type)
+			res%array%i32 = mod(left%sca%i32, right%array%i32)
+		case (i64_type)
+			res%array = mold(right%array, i64_type)
+			res%array%i64 = mod(left%sca%i32, right%array%i64)
+		case (f32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = mod(real(left%sca%i32), right%array%f32)
+		case default
+			! FIXME: other numeric types (f64, etc.)
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	!****
+	case        (magic**2 * array_type + magic * i64_type + array_type)
+		!print *, 'i32_type + array_type'
+
+		select case (right%array%type)
+		case (i32_type)
+			res%array = mold(right%array, i64_type)
+			res%array%i64 = mod(left%sca%i64, right%array%i32)
+		case (i64_type)
+			res%array = mold(right%array, i64_type)
+			res%array%i64 = mod(left%sca%i64, right%array%i64)
+		case (f32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = mod(real(left%sca%i64, 4), right%array%f32)
+		case default
+			! FIXME: other numeric types (f64, etc.)
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	!****
+	case        (magic**2 * array_type + magic * f32_type + array_type)
+		!print *, 'f32_type + array_type'
+
+		select case (right%array%type)
+		case (f32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = mod(left%sca%f32, right%array%f32)
+		case (i32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = mod(left%sca%f32, real(right%array%i32))
+		case (i64_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = mod(left%sca%f32, real(right%array%i64, 4))
+		case default
+			! FIXME: other numeric types (f64, etc.)
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	!****
+	case        (magic**2 * array_type + magic * array_type + array_type)
+
+		select case (magic * left%array%type + right%array%type)
+		case (magic * i32_type + i32_type)
+			res%array = mold(right%array, i32_type)
+			res%array%i32 = mod(left%array%i32, right%array%i32)
+
+		case (magic * i64_type + i64_type)
+			res%array = mold(right%array, i64_type)
+			res%array%i64 = mod(left%array%i64, right%array%i64)
+
+		case (magic * f32_type + f32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = mod(left%array%f32, right%array%f32)
+
+		case (magic * i32_type + f32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = mod(real(left%array%i32), right%array%f32)
+
+		case (magic * f32_type + i32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = mod(left%array%f32, real(right%array%i32))
+
+		case (magic * i64_type + f32_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = mod(real(left%array%i64, 4), right%array%f32)
+
+		case (magic * f32_type + i64_type)
+			res%array = mold(right%array, f32_type)
+			res%array%f32 = mod(left%array%f32, real(right%array%i64, 4))
+
+		case (magic * i32_type + i64_type)
+			res%array = mold(right%array, i64_type)
+			res%array%i64 = mod(left%array%i32, right%array%i64)
+
+		case (magic * i64_type + i32_type)
+			res%array = mold(right%array, i64_type)
+			res%array%i64 = mod(left%array%i64, right%array%i32)
+
+		case default
+			! FIXME: other numeric types (f64, etc.)
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+
+		end select
 
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
