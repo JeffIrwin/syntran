@@ -140,8 +140,8 @@ jobs:
         toolchain:
           - {compiler: intel, version: '2023.2'}
           - {compiler: intel, version: '2023.1'}
-          - {compiler: intel, version: '2023.0'}
-            #- {compiler: intel, version: '2022.2'}  # ifx 2022.2 doesn't have `do while ()` :(
+          #- {compiler: intel, version: '2023.0'}  # crashes on ` 	do while (is_whitespace(context%text(j:j)))`
+          #- {compiler: intel, version: '2022.2'}  # ifx 2022.2 doesn't have `do while ()` :(
           #- {compiler: intel, version: '2024.0'}
           - {compiler: intel-classic, version: '2021.1'}
           - {compiler: intel-classic, version: '2021.10'}
