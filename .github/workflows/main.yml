@@ -138,8 +138,8 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         toolchain:
-          #- {compiler: intel, version: '2023.2'}
-          - {compiler: intel, version: '2024.0'}
+          - {compiler: intel, version: '2023.2'}
+          #- {compiler: intel, version: '2024.0'}
           #- {compiler: intel-classic, version: '2021.10'}
 
           #- {compiler: nvidia-hpc, version: '23.11'}  # TODO: might be worth a try
