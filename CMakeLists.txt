@@ -31,6 +31,7 @@ endif()
 
 if(DEFINED ENV{SYNTRAN_INTEL})
 	set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC -fpp")
+	add_compile_definitions(SYNTRAN_INTEL)
 else()
 
 	set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp -cpp")

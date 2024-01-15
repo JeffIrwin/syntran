@@ -200,6 +200,8 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 	! TODO: check kind, add optional iostat arg
 	eval_i32 = val%sca%i32
 
+	if (debug >= 1) print *, 'eval_i32 = ', eval_i32
+
 end function syntran_eval_i32
 
 !===============================================================================

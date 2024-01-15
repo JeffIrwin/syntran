@@ -731,7 +731,9 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	tree%expecting       = parser%expecting
 	tree%first_expecting = parser%first_expecting
 
-	tree%first_expected = parser%first_expected
+	if (allocated(parser%first_expected)) then
+		tree%first_expected = parser%first_expected
+	end if
 
 	if (debug > 1) print *, 'tree = ', tree%str()
 

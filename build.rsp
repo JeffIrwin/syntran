@@ -1,4 +1,5 @@
-# my build options
+
+# Run with `fpm @build`.  File extension .rsp is implied
 options build
 options --verbose
 options --compiler gfortran

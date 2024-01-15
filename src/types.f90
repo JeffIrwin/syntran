@@ -176,8 +176,15 @@ module syntran__types_m
 			! TODO: rename to to_str() for consistency with value_t
 			procedure :: str => syntax_node_str, log_diagnostics
 
+			! For gfortran, use a hand-written copy constructor.  For ifx, use
+			! the intrinsic copy constructor.  If you try anything else, both
+			! compilers will crash :(
+			!
+			! TODO: try gfortran 13.  Maybe it also needs the intrinsic like ifx
+#ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => syntax_node_copy
 			generic, public :: assignment(=) => copy
+#endif
 
 	end type syntax_node_t
 
@@ -523,6 +530,9 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	if (debug > 3) print *, 'starting syntax_node_copy()'
 
+	!print *, 'src%kind = ', src%kind
+	!print *, 'dst%kind = ', dst%kind
+
 	dst%kind = src%kind
 	dst%op   = src%op
 
@@ -536,7 +546,11 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%expecting       = src%expecting
 	dst%first_expecting = src%first_expecting
 
-	dst%first_expected = src%first_expected
+	!print *, 'allocated(src%first_expected) = ', allocated(src%first_expected)
+	if (allocated(src%first_expected)) then
+		dst%first_expected = src%first_expected
+	end if
+
 	dst%diagnostics    = src%diagnostics
 
 	dst%is_empty    = src%is_empty
@@ -551,7 +565,9 @@ recursive subroutine syntax_node_copy(dst, src)
 	if (allocated(src%left)) then
 		!if (debug > 1) print *, 'copy() left'
 		if (.not. allocated(dst%left)) allocate(dst%left)
+		!print *, 'allocated(dst%left) = ', allocated(dst%left)
 		dst%left = src%left
+		!call syntax_node_copy(dst%left, src%left)
 	else if (allocated(dst%left)) then
 		deallocate(dst%left)
 	end if
@@ -559,7 +575,9 @@ recursive subroutine syntax_node_copy(dst, src)
 	if (allocated(src%right)) then
 		!if (debug > 1) print *, 'copy() right'
 		if (.not. allocated(dst%right)) allocate(dst%right)
+		!print *, 'allocated(dst%right) = ', allocated(dst%right)
 		dst%right = src%right
+		!call syntax_node_copy(dst%right, src%right)
 	else if (allocated(dst%right)) then
 		deallocate(dst%right)
 	end if
