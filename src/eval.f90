@@ -57,6 +57,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
 
+	! if_statement and while_statement may return an uninitialized type
+	! otherwise if their conditions are false
+	res%type = unknown_type
+
 	if (node%is_empty) then
 		!print *, 'returning'
 		return
@@ -475,7 +479,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (while_statement)
 
 		condition = syntax_eval(node%condition, vars, fns, quietl)
-		res%type = unknown_type
 		do while (condition%sca%bool)
 			res = syntax_eval(node%body, vars, fns, quietl)
 			condition = syntax_eval(node%condition, vars, fns, quietl)
@@ -486,7 +489,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		condition = syntax_eval(node%condition, vars, fns, quietl)
 		!print *, 'condition = ', condition%str()
 
-		res%type = unknown_type
 		if (condition%sca%bool) then
 			!print *, 'if'
 			res = syntax_eval(node%if_clause, vars, fns, quietl)
