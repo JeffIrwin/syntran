@@ -132,7 +132,7 @@ jobs:
 
   test-compilers:
 
-    name: Test with ${{ matrix.compiler }}-${{ matrix.version }}
+    name: Test with ${{ matrix.toolchain.compiler }}-${{ matrix.toolchain.version }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -140,6 +140,7 @@ jobs:
         toolchain:
           - {compiler: intel, version: '2023.2'}
           - {compiler: intel, version: '2023.1'}
+          - {compiler: intel, version: '2023.0'}
             #- {compiler: intel, version: '2022.2'}  # ifx 2022.2 doesn't have `do while ()` :(
           #- {compiler: intel, version: '2024.0'}
           - {compiler: intel-classic, version: '2021.1'}
