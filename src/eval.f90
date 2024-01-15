@@ -498,7 +498,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res = syntax_eval(node%else_clause, vars, fns, quietl)
 
 		end if
-		!print *, 'done'
 
 	case (translation_unit)
 
@@ -548,8 +547,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'type = ', tmp%type, kind_name(tmp%type)
 			!print *, ''
 
-			!if (.not. any(tmp%type == [0, unknown_type])) res = tmp
-			!if (.not. any(tmp%type == [unknown_type])) res = tmp
+			! In case of no-op if statements and while loops
 			if (tmp%type /= unknown_type) res = tmp
 
 			! HolyC feature: implicitly print name expression members.  I may
@@ -1216,6 +1214,10 @@ end function syntax_eval
 subroutine promote_i32_i64(val)
 
 	! If val is i32 type, change it to i64 and copy the values
+	!
+	! TODO: consider refactoring with to_i64()? at least add internal error.
+	! to_i64() is a fn which returns a new val, whereas this is a subroutine
+	! that changes the type of a given value
 
 	type(value_t), intent(inout) :: val
 
@@ -1468,3 +1470,4 @@ end subroutine set_array_value_t
 end module syntran__eval_m
 
 !===============================================================================
+

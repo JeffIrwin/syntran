@@ -37,7 +37,8 @@ module syntran__core_m
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
 	!    * array and, or, not
-	!    * element-wise add, sub, mul, div, pow done
+	!    * array unary -, (and unary +? seems weird but should be allowed i guess)
+	!    * element-wise add, sub, mul, div, pow, mod done
 	!      + compound array assignment works but needs unit tests
 	!    * vector dot product, matrix mul, ...
 	!      + new operator tokens, something like `.*`?
