@@ -1,6 +1,6 @@
 
 // include paths are relative to *this* file, not the top-level syntran file or
-// the pwd where the interpretter is run
+// the pwd where the interpreter is run
 
 #include("../test-04-nest.syntran");
 

@@ -200,10 +200,6 @@ fn part1(): i32
 		broadcaster += 1;
 	//println("broadcaster = ", broadcaster);
 
-	//for ... // TODO: this crashes the interpretter :(
-	//.234;
-	//1.234e5;
-
 	// Invert the output table to get the input table
 	inp = [0; max_inp, nmod];
 	ninp = [0; nmod];

@@ -112,7 +112,7 @@ function parse_args() result(args)
 				error = .true.
 			end if
 
-		! TODO: add "-i" arg to start interactive interpretter with a given
+		! TODO: add "-i" arg to start interactive interpreter with a given
 		! #include file.  The difference compared to args%syntran_file is that
 		! it should not exit, but instead start taking live stdin
 

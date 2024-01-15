@@ -30,7 +30,7 @@ fail_find()
 	exit -1
 }
 
-# Copy the syntran interpretter built here to the user/system's bin folder.
+# Copy the syntran interpreter built here to the user/system's bin folder.
 # Really more of a updater than an installer
 
 set -xe
