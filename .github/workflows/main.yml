@@ -165,7 +165,9 @@ jobs:
       env:
         #FPM_FC: ifx
         FPM_FC: ${{ env.FC }}
+      # TODO: if this is generalize to other compilers (e.g. lfortran,
+      # nvfortran, etc.), flags may need to be set differently
       run: |
         fpm test test --verbose --flag "-DSYNTRAN_INTEL -fpp"
-        #fpm test long TODO flags
+        fpm test long --verbose --flag "-DSYNTRAN_INTEL -fpp"
 
