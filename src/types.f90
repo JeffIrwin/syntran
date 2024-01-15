@@ -1275,10 +1275,26 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 			end if
 
-		case (minus_token, sstar_token, star_token, slash_token, &
+		case (minus_token)
+			! these operators work on numbers but not strings
+
+			if (left == array_type .and. right == array_type) then
+				allowed = is_num_type(left_arr) .and. is_num_type(right_arr)
+			else if (left == array_type) then
+				allowed = is_num_type(left_arr) .and. is_num_type(right)
+			else if (right == array_type) then
+				allowed = is_num_type(left) .and. is_num_type(right_arr)
+			else
+				allowed = is_num_type(left) .and. is_num_type(right)
+			end if
+
+		case (sstar_token, star_token, slash_token, &
 				percent_token, minus_equals_token, star_equals_token, &
 				slash_equals_token, sstar_equals_token, percent_equals_token)
 			! these operators work on numbers but not strings
+			!
+			! TODO: consolidate with above case after all array operators are
+			! supported
 
 			allowed = is_num_type(left) .and. is_num_type(right)
 
@@ -1614,7 +1630,8 @@ recursive integer function get_binary_op_kind(left, op, right, &
 		!print *, 'default'
 
 		! Other operations return the same type as their operands if they match,
-		! or cast "up"
+		! or cast "up" to the type of the operand with the greatest range or
+		! precision
 		!
 		! FIXME: i64, f64, etc.
 
