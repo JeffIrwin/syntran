@@ -99,6 +99,7 @@ fn verifyback(str_: str, set: str): i32
 
 fn scan(str_: str, set: str): i32
 {
+	//println("starting scan()");
 	let i = 0;
 	let found = false;
 	while not found and i < len(str_)
@@ -113,9 +114,15 @@ fn scan(str_: str, set: str): i32
 	}
 
 	// return
+	//println("(almost) done scan()");
 	let ans = -1;
 	if found
 		ans = i - 1;
+	//println("done scan()");
+
+	// TODO: ifx doesn't work without this.  I guess `if found` when found is
+	// false breaks the return type somehow.  Syntran needs return statement
+	let ans2 = ans;
 }
 
 //==============================================================================

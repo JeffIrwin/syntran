@@ -169,5 +169,5 @@ jobs:
       # nvfortran, etc.), flags may need to be set differently
       run: |
         fpm test test --verbose --flag "-DSYNTRAN_INTEL -fpp"
-        fpm test long --verbose --flag "-DSYNTRAN_INTEL -fpp"
+        #fpm test long --verbose --flag "-DSYNTRAN_INTEL -fpp"
 

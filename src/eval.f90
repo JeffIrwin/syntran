@@ -1140,6 +1140,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call internal_error()
 		end if
 
+		!print *, 'op = ', node%op%text
+
 		select case (node%op%kind)
 		case (plus_token)
 			call add(left, right, res, node%op%text)

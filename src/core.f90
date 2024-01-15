@@ -36,6 +36,7 @@ module syntran__core_m
 	!  - negative for loop steps.  at least throw parser error
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
+	!    * array and, or, not
 	!    * element-wise add, sub, mul, div, pow done
 	!      + compound array assignment works but needs unit tests
 	!    * vector dot product, matrix mul, ...

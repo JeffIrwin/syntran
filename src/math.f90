@@ -50,7 +50,9 @@ subroutine add_value_t(left, right, res, op_text)
 	!********
 
 	!print *, 'starting add_value_t()'
-	!print *, 'res%type = ', kind_name(res%type)
+	!print *, 'res  %type = ', kind_name(res%type)
+	!print *, 'left %type = ', kind_name(left%type)
+	!print *, 'right%type = ', kind_name(right%type)
 
 	! Case selector must be a scalar expression, so use this nasty hack.
 	! This will break if magic is smaller than the largest type enum
@@ -226,6 +228,7 @@ subroutine add_value_t(left, right, res, op_text)
 
 	!****
 	case        (magic**2 * i32_type + magic * i32_type + i32_type)
+		!print *, 'scalar i32 addition'
 		res%sca%i32 = left%sca%i32 + right%sca%i32
 
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
@@ -269,7 +272,9 @@ subroutine add_value_t(left, right, res, op_text)
 		! FIXME: other numeric types (f64, etc.)
 		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
+
 	end select
+	!print *, 'done add_value_t()'
 
 end subroutine add_value_t
 
