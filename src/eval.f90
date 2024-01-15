@@ -5,12 +5,9 @@ module syntran__eval_m
 
 	use iso_fortran_env
 
-	!use syntran__consts_m
-	!use syntran__errors_m
-	!use syntran__parser_m
+	use syntran__bool_m
+	use syntran__math_m
 	use syntran__types_m
-	!use syntran__utils_m
-	!use syntran__value_m
 
 	implicit none
 
@@ -43,7 +40,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	character(len = :), allocatable :: color
 
-	integer :: i, j, io, rank, rank_res, idim_, idim_res
+	integer :: i, j, io, rank, rank_res, idim_, idim_res, larrtype, rarrtype
 	integer(kind = 8) :: il, iu, i8, index_, prod
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
@@ -115,6 +112,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			if (array%type == i32_type) then
 
 				array%cap = (ubound_%sca%i32 - lbound_%sca%i32) / step%sca%i32 + 1
+				!array%cap = (ubound_%sca%i32 - lbound_%sca%i32) / step%sca%i32
 				allocate(array%i32( array%cap ))
 
 				j = 1
@@ -130,9 +128,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end do
 				array%len_ = j - 1
 
+				! TODO: can cap be calculated correctly at the start, without
+				! breakign tests? Find out which test crashes without commented
+				! `+1` in above cap calculation
+				if (array%len_ < array%cap) then
+					array%cap = array%len_
+					array%i32 = array%i32(1: array%len_)
+				end if
+
 			else if (array%type == i64_type) then
 
 				array%cap = int((ubound_%sca%i64 - lbound_%sca%i64) / step%sca%i64 + 1)
+				!array%cap = int((ubound_%sca%i64 - lbound_%sca%i64) / step%sca%i64)
 				allocate(array%i64( array%cap ))
 
 				j = 1
@@ -149,6 +156,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					j = j + 1
 				end do
 				array%len_ = j - 1
+
+				! TODO: can cap be calculated correctly at the start, without
+				! breakign tests? Find out which test crashes without commented
+				! `+1` in above cap calculation
+				if (array%len_ < array%cap) then
+					array%cap = array%len_
+					array%i64 = array%i64(1: array%len_)
+				end if
 
 			else if (array%type == f32_type) then
 
@@ -169,6 +184,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					j = j + 1
 				end do
 				array%len_ = j - 1
+
+				! TODO: can cap be calculated correctly at the start, without
+				! breakign tests? Find out which test crashes without commented
+				! `+1` in above cap calculation
+				if (array%len_ < array%cap) then
+					array%cap = array%len_
+					array%f32 = array%f32(1: array%len_)
+				end if
 
 			else
 				write(*,*) 'Error: step array type eval not implemented'
@@ -550,6 +573,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! parsing
 
 			!print *, 'compound assign'
+			!print *, 'lhs type = ', kind_name( vars%vals(node%id_index)%type )
+
 			call compound_assign(vars%vals(node%id_index), res, node%op)
 
 			! For compound assignment, ensure that the LHS is returned
@@ -1097,11 +1122,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'left  type = ', kind_name(left%type)
 		!print *, 'right type = ', kind_name(right%type)
 
-		res%type = get_binary_op_kind(left%type, node%op%kind, right%type)
+		larrtype = unknown_type
+		rarrtype = unknown_type
+		if (left %type == array_type) larrtype = left %array%type
+		if (right%type == array_type) rarrtype = right%array%type
+
+		res%type = get_binary_op_kind(left%type, node%op%kind, right%type, &
+			larrtype, rarrtype)
 		select case (res%type)
-		case (bool_array_type)
+		case (bool_array_type, f32_array_type, i32_array_type, i64_array_type, &
+			str_array_type)
 			res%type = array_type
-			! TODO: other array sub types
 		end select
 
 		if (res%type == unknown_type) then
@@ -1261,27 +1292,33 @@ subroutine compound_assign(lhs, rhs, op)
 
 	type(syntax_token_t), intent(in) :: op
 
+	!******
+
+	type(value_t) :: tmp  ! necessary for arrays
+
+	if (op%kind /= equals_token) tmp = lhs
+
 	select case (op%kind)
 	case (equals_token)
 		lhs = rhs  ! simply overwrite
 
 	case (plus_equals_token)
-		call add(lhs, rhs, lhs, op%text)
+		call add(tmp, rhs, lhs, op%text)
 
 	case (minus_equals_token)
-		call subtract(lhs, rhs, lhs, op%text)
+		call subtract(tmp, rhs, lhs, op%text)
 
 	case (star_equals_token)
-		call mul(lhs, rhs, lhs, op%text)
+		call mul(tmp, rhs, lhs, op%text)
 
 	case (slash_equals_token)
-		call div(lhs, rhs, lhs, op%text)
+		call div(tmp, rhs, lhs, op%text)
 
 	case (sstar_equals_token)
-		call pow(lhs, rhs, lhs, op%text)
+		call pow(tmp, rhs, lhs, op%text)
 
 	case (percent_equals_token)
-		call mod_(lhs, rhs, lhs, op%text)
+		call mod_(tmp, rhs, lhs, op%text)
 
 	case default
 		write(*,*) 'Error: unexpected assignment operator ', quote(op%text)
@@ -1363,6 +1400,7 @@ function get_array_value_t(array, i) result(val)
 
 		case (i32_type)
 			val%sca%i32 = array%i32(i + 1)
+
 		case (i64_type)
 			val%sca%i64 = array%i64(i + 1)
 

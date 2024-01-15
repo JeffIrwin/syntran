@@ -176,8 +176,15 @@ module syntran__types_m
 			! TODO: rename to to_str() for consistency with value_t
 			procedure :: str => syntax_node_str, log_diagnostics
 
+			! For gfortran, use a hand-written copy constructor.  For ifx, use
+			! the intrinsic copy constructor.  If you try anything else, both
+			! compilers will crash :(
+			!
+			! TODO: try gfortran 13.  Maybe it also needs the intrinsic like ifx
+#ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => syntax_node_copy
 			generic, public :: assignment(=) => copy
+#endif
 
 	end type syntax_node_t
 
@@ -523,6 +530,9 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	if (debug > 3) print *, 'starting syntax_node_copy()'
 
+	!print *, 'src%kind = ', src%kind
+	!print *, 'dst%kind = ', dst%kind
+
 	dst%kind = src%kind
 	dst%op   = src%op
 
@@ -536,7 +546,11 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%expecting       = src%expecting
 	dst%first_expecting = src%first_expecting
 
-	dst%first_expected = src%first_expected
+	!print *, 'allocated(src%first_expected) = ', allocated(src%first_expected)
+	if (allocated(src%first_expected)) then
+		dst%first_expected = src%first_expected
+	end if
+
 	dst%diagnostics    = src%diagnostics
 
 	dst%is_empty    = src%is_empty
@@ -551,7 +565,9 @@ recursive subroutine syntax_node_copy(dst, src)
 	if (allocated(src%left)) then
 		!if (debug > 1) print *, 'copy() left'
 		if (.not. allocated(dst%left)) allocate(dst%left)
+		!print *, 'allocated(dst%left) = ', allocated(dst%left)
 		dst%left = src%left
+		!call syntax_node_copy(dst%left, src%left)
 	else if (allocated(dst%left)) then
 		deallocate(dst%left)
 	end if
@@ -559,7 +575,9 @@ recursive subroutine syntax_node_copy(dst, src)
 	if (allocated(src%right)) then
 		!if (debug > 1) print *, 'copy() right'
 		if (.not. allocated(dst%right)) allocate(dst%right)
+		!print *, 'allocated(dst%right) = ', allocated(dst%right)
 		dst%right = src%right
+		!call syntax_node_copy(dst%right, src%right)
 	else if (allocated(dst%right)) then
 		deallocate(dst%right)
 	end if
@@ -1248,16 +1266,47 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 	select case (op)
 
 		case (plus_token, plus_equals_token)
+			! the + operator works on numbers and strings
 
-			allowed = &
-				(is_num_type(left) .and. is_num_type(right)) .or. &
-				(left == str_type  .and. right == str_type)
+			if (left == array_type .and. right == array_type) then
 
-		case (minus_token, sstar_token, star_token, slash_token, &
-				percent_token, minus_equals_token, star_equals_token, &
-				slash_equals_token, sstar_equals_token, percent_equals_token)
+				! Would recursion help for arrays here?  It seems like it
+				! wouldn't reduce very many LOC
 
-			allowed = is_num_type(left) .and. is_num_type(right)
+				! TODO: should vec str + scalar str be allowed?
+
+				allowed = &
+					(is_num_type(left_arr) .and. is_num_type(right_arr))
+
+			else if (left == array_type) then
+				allowed = &
+					(is_num_type(left_arr) .and. is_num_type(right))
+
+			else if (right == array_type) then
+				allowed = &
+					(is_num_type(left) .and. is_num_type(right_arr))
+
+			else
+				allowed = &
+					(is_num_type(left) .and. is_num_type(right)) .or. &
+					(left == str_type  .and. right == str_type)
+
+			end if
+
+		case (minus_token, star_token, sstar_token, slash_token, &
+			minus_equals_token, star_equals_token, slash_equals_token, &
+			sstar_equals_token, percent_token, percent_equals_token)
+			! these operators work on numbers but not strings
+
+			if (left == array_type .and. right == array_type) then
+				allowed = is_num_type(left_arr) .and. is_num_type(right_arr)
+			else if (left == array_type) then
+				allowed = is_num_type(left_arr) .and. is_num_type(right)
+			else if (right == array_type) then
+				allowed = is_num_type(left) .and. is_num_type(right_arr)
+			else
+				allowed = is_num_type(left) .and. is_num_type(right)
+			end if
 
 		case (greater_token, less_token, greater_equals_token, less_equals_token)
 			! TODO: consolidate with above case after implementing remaining
@@ -1486,22 +1535,24 @@ function new_binary_expr(left, op, right) result(expr)
 
 	!print *, 'left type  = ', kind_name(left%val%type)
 
-	larrtype = 0
-	rarrtype = 0
+	larrtype = unknown_type
+	rarrtype = unknown_type
 	if (left %val%type == array_type) larrtype = left %val%array%type
 	if (right%val%type == array_type) rarrtype = right%val%array%type
 
 	!print *, 'larrtype = ', kind_name(larrtype)
 
 	! Pass the result value type up the tree for type checking in parent
-	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type)
+	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type, &
+		larrtype, rarrtype)
+	!print *, 'type_ = ', kind_name(type_)
 
-	select case (type_)
-	case (bool_array_type)
+	if (any(type_ == [bool_array_type, f32_array_type, i32_array_type, &
+		i64_array_type, str_array_type])) then
 
 		allocate(expr%val%array)
 
-		expr%val%array%type = bool_type
+		expr%val%array%type = array_to_scalar_type(type_)
 		if (left%val%type == array_type) then
 			expr%val%array%rank = left %val%array%rank
 		else
@@ -1513,10 +1564,10 @@ function new_binary_expr(left, op, right) result(expr)
 	! TODO: other array sub types.  Maybe make a mold_val() helper fn similar to
 	! mold() (for arrays)
 
-	case default
+	else
 		expr%val%type = type_
 
-	end select
+	end if
 
 	! TODO: array subtype if subscripted?  I think parse_primary_expr should
 	! already set the subtype when subscripts are present
@@ -1560,12 +1611,15 @@ end function new_unary_expr
 
 !===============================================================================
 
-integer function get_binary_op_kind(left, op, right) result(kind_)
+recursive integer function get_binary_op_kind(left, op, right, &
+		left_arr, right_arr) result(kind_)
 
 	! Return the resulting type yielded by operator op on operands left and
 	! right
 
 	integer, intent(in) :: left, op, right
+	!integer, intent(in), optional :: left_arr, right_arr
+	integer, intent(in) :: left_arr, right_arr
 
 	select case (op)
 	case ( &
@@ -1585,37 +1639,116 @@ integer function get_binary_op_kind(left, op, right) result(kind_)
 	case default
 		!print *, 'default'
 
-		! Other operations return the same type as their operands if they match
-		! or cast up
+		! Other operations return the same type as their operands if they match,
+		! or cast "up" to the type of the operand with the greatest range or
+		! precision
 		!
 		! FIXME: i64, f64, etc.
 
-		if (left == right) then
-			kind_ = left
-			return
-		end if
-
-		if (left == f32_type .or. right == f32_type) then
-			! int + float casts to float
-			kind_ = f32_type
-			return
-		end if
-
-		if ( &
-			(left  == i64_type .and. is_int_type(right)) .or. &
-			(right == i64_type .and. is_int_type(left ))) then
-
-			! i32+i64 and i64+i32 cast to i64
-			kind_ = i64_type
-			return
-
-		end if
-
 		kind_ = unknown_type
 
+		if (left == array_type .and. right == array_type) then
+			kind_ = get_binary_op_kind(left_arr, op, right_arr, unknown_type, unknown_type)
+			kind_ = scalar_to_array_type(kind_)
+
+		else if (left == array_type) then
+			kind_ = get_binary_op_kind(left_arr, op, right, unknown_type, unknown_type)
+			kind_ = scalar_to_array_type(kind_)
+
+		else if (right == array_type) then
+			kind_ = get_binary_op_kind(left, op, right_arr, unknown_type, unknown_type)
+			kind_ = scalar_to_array_type(kind_)
+
+		else
+			! Default scalar case (no arrays)
+
+			if (left == right) then
+				kind_ = left
+
+			else if (left == f32_type .or. right == f32_type) then
+				! int + float casts to float
+				kind_ = f32_type
+
+			else if ( &
+				(left  == i64_type .and. is_int_type(right)) .or. &
+				(right == i64_type .and. is_int_type(left ))) then
+
+				! i32+i64 and i64+i32 cast to i64
+				kind_ = i64_type
+
+			end if
+		end if
 	end select
 
 end function get_binary_op_kind
+
+!===============================================================================
+
+function scalar_to_array_type(scalar_type_) result(array_type_)
+
+	! Convert a scalar type to its corresponding array type
+
+	integer, intent(in) :: scalar_type_
+	integer :: array_type_
+
+	select case (scalar_type_)
+	case (bool_type)
+		array_type_ = bool_array_type
+
+	case (f32_type)
+		array_type_ = f32_array_type
+
+	case (i32_type)
+		array_type_ = i32_array_type
+
+	case (i64_type)
+		array_type_ = i64_array_type
+
+	case (str_type)
+		array_type_ = str_array_type
+
+	! TODO: file_type?
+
+	case default
+		array_type_ = unknown_type
+
+	end select
+
+end function scalar_to_array_type
+
+!===============================================================================
+
+function array_to_scalar_type(array_type_) result(scalar_type_)
+
+	! Convert an array type to its corresponding scalar type
+
+	integer, intent(in) :: array_type_
+	integer :: scalar_type_
+
+	select case (array_type_)
+	case (bool_array_type)
+		scalar_type_ = bool_type
+
+	case (f32_array_type)
+		scalar_type_ = f32_type
+
+	case (i32_array_type)
+		scalar_type_ = i32_type
+
+	case (i64_array_type)
+		scalar_type_ = i64_type
+
+	case (str_array_type)
+		scalar_type_ = str_type
+
+	! TODO: file_type?
+
+	case default
+		scalar_type_ = unknown_type
+
+	end select
+
+end function array_to_scalar_type
 
 !===============================================================================
 

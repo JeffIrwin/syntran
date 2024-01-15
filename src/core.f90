@@ -36,13 +36,17 @@ module syntran__core_m
 	!  - negative for loop steps.  at least throw parser error
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
-	!    * vector addition, dot product, scalar-vector mult, ...
+	!    * element-wise add, sub, mul, div, pow done
+	!      + compound array assignment works but needs unit tests
+	!    * vector dot product, matrix mul, ...
+	!      + new operator tokens, something like `.*`?
 	!    * optional `dim` argument for any() and all(). 1 arg versions done
 	!    * comparisons done
 	!  - document recent features:
 	!    * array slicing
 	!    * casting?
 	!    * array comparison
+	!    * array arithmetic operations
 	!    * any(), all(), count() intrinsics
 	!    * -c arg, shebang
 	!  - parse_f32() intrinsic fn
@@ -731,7 +735,9 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	tree%expecting       = parser%expecting
 	tree%first_expecting = parser%first_expecting
 
-	tree%first_expected = parser%first_expected
+	if (allocated(parser%first_expected)) then
+		tree%first_expected = parser%first_expected
+	end if
 
 	if (debug > 1) print *, 'tree = ', tree%str()
 

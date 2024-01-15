@@ -128,7 +128,7 @@ sudo apt install rlwrap
 rlwrap ./build/syntran
 ```
 
-With `rlwrap`, the arrow keys work as expected within the `syntran` interpretter.  Plus, you get `rlwrap`'s other powerful features, like Ctrl+R for history search and saved history across separate invocations of `syntran`.
+With `rlwrap`, the arrow keys work as expected within the `syntran` interpreter.  Plus, you get `rlwrap`'s other powerful features, like Ctrl+R for history search and saved history across separate invocations of `syntran`.
 
 Also see [`run.sh`](run.sh), which checks if you have `rlwrap` installed and then starts `syntran` appropriately.  You can make a bash function or alias in your `~/.bashrc` file to help with this:
 

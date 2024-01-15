@@ -11,6 +11,9 @@
 #     fpm build --verbose --flag -Wno-tabs
 #     fpm @build  # use options defined in file `build.rsp`
 #
+#     # TODO: incorporate ifx testing into ci/cd.  Try ifort too
+#     fpm build --compiler ifx --flag "-DSYNTRAN_INTEL -fpp"
+#
 #     # `runner` is a prefix to the syntran cmd.  anything after `-- ` is a cmd
 #     # arg passed after `syntran`, e.g. the syntran filename
 #     fpm run

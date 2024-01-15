@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Build the syntran interpretter, run syntran, plot the frames in
+# Build the syntran interpreter, run syntran, plot the frames in
 # Scilab, then make a video with ffmpeg
 #
 # Start this script from the root of the syntran repo:
