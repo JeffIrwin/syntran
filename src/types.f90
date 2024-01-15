@@ -1275,7 +1275,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 			end if
 
-		case (minus_token, star_token, sstar_token)
+		case (minus_token, star_token, sstar_token, slash_token)
 			! these operators work on numbers but not strings
 
 			if (left == array_type .and. right == array_type) then
@@ -1288,7 +1288,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = is_num_type(left) .and. is_num_type(right)
 			end if
 
-		case (slash_token, &
+		case ( &
 				percent_token, minus_equals_token, star_equals_token, &
 				slash_equals_token, sstar_equals_token, percent_equals_token)
 			! these operators work on numbers but not strings
