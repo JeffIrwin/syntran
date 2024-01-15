@@ -6,12 +6,8 @@ module syntran__eval_m
 	use iso_fortran_env
 
 	use syntran__bool_m
-	!use syntran__consts_m
-	!use syntran__errors_m
-	!use syntran__parser_m
+	use syntran__math_m
 	use syntran__types_m
-	!use syntran__utils_m
-	!use syntran__value_m
 
 	implicit none
 
