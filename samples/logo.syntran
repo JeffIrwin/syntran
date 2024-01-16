@@ -5,21 +5,21 @@
 
 // Global constants and variables
 
-//let CANVAS_XLEN = 1080;
-let CANVAS_XLEN = 800;
-let CANVAS_YLEN = CANVAS_XLEN;
+//let NX_CANVAS = 1080;
+let NX_CANVAS = 800;
+let NY_CANVAS = NX_CANVAS;
 
-//let CANVAS_XLEN = 300;
-//let CANVAS_YLEN = 400;
+//let NX_CANVAS = 300;
+//let NY_CANVAS = 400;
 
-//let CANVAS_XLEN = 150;
-//let CANVAS_YLEN = 200;
+//let NX_CANVAS = 150;
+//let NY_CANVAS = 200;
 
-let NRGB = 3;
 let NDIM = 2;
+let NRGB = 3;
 let NTRI = 3;
 
-let canvas = [0; NRGB, CANVAS_XLEN, CANVAS_YLEN];
+let canvas = [0; NRGB, NX_CANVAS, NY_CANVAS];
 
 //==============================================================================
 
@@ -46,8 +46,8 @@ fn draw_tri(v0: [i32; :], v1: [i32; :], v2: [i32; :],
 	// Clamp to canvas bounds
 	xmin = max(0, xmin);
 	ymin = max(0, ymin);
-	xmax = min(CANVAS_XLEN, xmax);
-	ymax = min(CANVAS_YLEN, ymax);
+	xmax = min(NX_CANVAS, xmax);
+	ymax = min(NY_CANVAS, ymax);
 
 	// Triangle determinant
 	let det_ = (v0[0] - v2[0]) * (v1[1] - v2[1])
@@ -59,24 +59,23 @@ fn draw_tri(v0: [i32; :], v1: [i32; :], v2: [i32; :],
 	for y in [ymin: ymax]
 	for x in [xmin: xmax]
 	{
-		// Get barycentric coordinates l0, l1, and l2
+		// Get barycentric coordinates
+		let bary = [0.0; NTRI];
 
 		// Note similar form as determinant, but v0 is replaced with [x,y]
-		let l0 = ((x     - v2[0]) * (v1[1] - v2[1])
-		       -  (v1[0] - v2[0]) * (y     - v2[1])) * 1.0
-		       / det_;
+		bary[0] = ((x     - v2[0]) * (v1[1] - v2[1])
+		        -  (v1[0] - v2[0]) * (y     - v2[1])) * 1.0
+		        / det_;
 
 		// v1 is replaced with [x,y]
-		let l1 = ((v0[0] - v2[0]) * (y     - v2[1])
-		       -  (x     - v2[0]) * (v0[1] - v2[1])) * 1.0
-		       / det_;
+		bary[1] = ((v0[0] - v2[0]) * (y     - v2[1])
+		        -  (x     - v2[0]) * (v0[1] - v2[1])) * 1.0
+		        / det_;
 
-		let l2 = 1.0 - l0 - l1;
-		//println("ls = ", [l0, l1, l2]);
+		bary[2] = 1.0 - bary[0] - bary[1];
+		//println("bary = ", bary);
 
-		if -tol <= l0 and l0 <= 1 + tol and
-		   -tol <= l1 and l1 <= 1 + tol and
-		   -tol <= l2 and l2 <= 1 + tol
+		if all(-tol <= bary) and all(bary <= 1+tol)
 		{
 		   canvas[0,x,y] = c0[0];
 		   canvas[1,x,y] = c0[1];
@@ -92,8 +91,8 @@ fn draw_logo()
 	println("drawing logo ...");
 
 	// Set background
-	for y in [0: CANVAS_YLEN]
-	for x in [0: CANVAS_XLEN]
+	for y in [0: NY_CANVAS]
+	for x in [0: NX_CANVAS]
 	{
 		//canvas[0,x,y] = 170;
 		//canvas[1,x,y] = 190;
@@ -105,26 +104,26 @@ fn draw_logo()
 	}
 
 	// One-sided margin dimensions
-	let xmargin = i32(0.175 * CANVAS_XLEN);
-	let ymargin = i32(0.025 * CANVAS_YLEN);
+	let xmargin = i32(0.175 * NX_CANVAS);
+	let ymargin = i32(0.025 * NY_CANVAS);
 	//println("margins = ", [xmargin, ymargin]);
 
 	// Dimensions of each part of cool S logo
 
 	// Heights
 
-	let h1 = i32((CANVAS_YLEN - 2 * ymargin) / 5.0);
+	let h1 = i32((NY_CANVAS - 2 * ymargin) / 5.0);
 	let h5 = h1;
 
-	let h2 = i32((CANVAS_YLEN - 2 * ymargin - h1 - h5) / 3.0);
+	let h2 = i32((NY_CANVAS - 2 * ymargin - h1 - h5) / 3.0);
 	let h4 = h2;
 
-	let h3 = (CANVAS_YLEN - 2 * ymargin - h1 - h2 - h4 - h5);
+	let h3 = (NY_CANVAS - 2 * ymargin - h1 - h2 - h4 - h5);
 
 	//println("h dimensions = ", [h1, h2, h3, h4, h5]);
 
 	// Widths
-	let w1 = i32((CANVAS_XLEN - 2 * xmargin) / 2.0);
+	let w1 = i32((NX_CANVAS - 2 * xmargin) / 2.0);
 	let w2 = w1;
 
 	//println("w dimensions = ", [w1, w2]);
@@ -200,22 +199,22 @@ fn draw_logo()
 	// Triangle colors.  TODO: add extra rank for per-vertex colors
 	let colors =
 		[
-			000,  000,   64, // tri 1
-			000,  000,   48, // tri 2
-			000,  000,   96, // .   3
-			000,  000,   80, // .   4
-			000,  000,   16, // .   5
-			000,  000,   32, //     6
-			000,  000,  112, //     7
-			000,  000,   00, //     8
-			000,  000,  128, //     9
-			000,  000,  240, //    10
-			000,  000,  208, //    11
-			000,  000,  224, //    12
-			000,  000,  160, //    13
-			000,  000,  144, //    14
-			000,  000,  192, //    15
-			000,  000,  176  //    16
+			000, 000,  64, // tri 1
+			000, 000,  48, // tri 2
+			000, 000,  96, // .   3
+			000, 000,  80, // .   4
+			000, 000,  16, // .   5
+			000, 000,  32, //     6
+			000, 000, 112, //     7
+			000, 000,  00, //     8
+			000, 000, 128, //     9
+			000, 000, 240, //    10
+			000, 000, 208, //    11
+			000, 000, 224, //    12
+			000, 000, 160, //    13
+			000, 000, 144, //    14
+			000, 000, 192, //    15
+			000, 000, 176  //    16
 			;
 			NRGB, ntri
 		];
@@ -243,11 +242,11 @@ fn write_ppm(filename: str)
 	let f = open(filename);
 
 	writeln(f, "P3");
-	writeln(f, CANVAS_XLEN, " ", CANVAS_YLEN);
+	writeln(f, NX_CANVAS, " ", NY_CANVAS);
 	writeln(f, 255);
 
-	for y in [0: CANVAS_YLEN]
-	for x in [0: CANVAS_XLEN]
+	for y in [0: NY_CANVAS]
+	for x in [0: NX_CANVAS]
 	{
 		//// TODO: can I/O be optimized without so much looping?
 		//let str_ = str(
@@ -273,7 +272,7 @@ fn main(): i32
 	println("starting syntran logo main");
 
 	draw_logo();
-	write_ppm("logo-syntran-v6.ppm");
+	write_ppm("logo-syntran-v7.ppm");
 
 	println("ending main");
 	0;
