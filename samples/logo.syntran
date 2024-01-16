@@ -1,0 +1,277 @@
+
+// This script draws the "cool S" syntran logo
+
+//==============================================================================
+
+// Global constants and variables
+
+let CANVAS_XLEN = 800;
+let CANVAS_YLEN = CANVAS_XLEN;
+
+//let CANVAS_XLEN = 300;
+//let CANVAS_YLEN = 400;
+
+//let CANVAS_XLEN = 150;
+//let CANVAS_YLEN = 200;
+
+let NRGB = 3;
+let NDIM = 2;
+let NTRI = 3;
+
+let canvas = [0; NRGB, CANVAS_XLEN, CANVAS_YLEN];
+
+//==============================================================================
+
+fn draw_tri(v0: [i32; :], v1: [i32; :], v2: [i32; :],
+            c0: [i32; :])
+{
+	// Output a triangle onto the global canvas
+
+	//println("drawing tri ...");
+	//println("v0 = ", v0);
+	//println("v1 = ", v1);
+	//println("v2 = ", v2);
+	//println();
+
+	// Buffer by 1 in case of rounding errors
+	let xmin = min(v0[0], v1[0], v2[0]) - 1;
+	let ymin = min(v0[1], v1[1], v2[1]) - 1;
+	//println("mins = ", [xmin, ymin]);
+
+	let xmax = max(v0[0], v1[0], v2[0]) + 2;
+	let ymax = max(v0[1], v1[1], v2[1]) + 2;
+	//println("maxs = ", [xmax, ymax]);
+
+	// Clamp to canvas bounds
+	xmin = max(0, xmin);
+	ymin = max(0, ymin);
+	xmax = min(CANVAS_XLEN, xmax);
+	ymax = min(CANVAS_YLEN, ymax);
+
+	// Triangle determinant
+	let det_ = (v0[0] - v2[0]) * (v1[1] - v2[1])
+	         - (v1[0] - v2[0]) * (v0[1] - v2[1]);
+
+	let tol = 0.001;
+
+	// Iterate over pixels in triangle's bounding box
+	for y in [ymin: ymax]
+	for x in [xmin: xmax]
+	{
+		// Get barycentric coordinates l0, l1, and l2
+
+		// Note similar form as determinant, but v0 is replaced with [x,y]
+		let l0 = ((x     - v2[0]) * (v1[1] - v2[1]) * 1.0
+		       -  (v1[0] - v2[0]) * (y     - v2[1]))
+			   / det_;
+
+		// v1 is replaced with [x,y]
+		let l1 = ((v0[0] - v2[0]) * (y     - v2[1]) * 1.0
+		       -  (x     - v2[0]) * (v0[1] - v2[1]))
+			   / det_;
+
+		let l2 = 1.0 - l0 - l1;
+		//println("ls = ", [l0, l1, l2]);
+
+		if -tol <= l0 and l0 <= 1 + tol and
+		   -tol <= l1 and l1 <= 1 + tol and
+		   -tol <= l2 and l2 <= 1 + tol
+	   {
+		   canvas[0,x,y] = c0[0];
+		   canvas[1,x,y] = c0[1];
+		   canvas[2,x,y] = c0[2];
+	   }
+	}
+}
+
+//==============================================================================
+
+fn draw_logo()
+{
+	println("drawing logo ...");
+
+	// Set background
+	for y in [0: CANVAS_YLEN]
+	for x in [0: CANVAS_XLEN]
+	{
+		//canvas[0,x,y] = 170;
+		//canvas[1,x,y] = 190;
+		//canvas[2,x,y] = 210;
+
+		canvas[0,x,y] =  70;
+		canvas[1,x,y] =  90;
+		canvas[2,x,y] = 110;
+	}
+
+	// One-sided margin dimensions
+	let xmargin = i32(0.175 * CANVAS_XLEN);
+	let ymargin = i32(0.025 * CANVAS_YLEN);
+	//println("margins = ", [xmargin, ymargin]);
+
+	// Dimensions of each part of cool S logo
+
+	// Heights
+
+	let h1 = i32((CANVAS_YLEN - 2 * ymargin) / 5.0);
+	let h5 = h1;
+
+	let h2 = i32((CANVAS_YLEN - 2 * ymargin - h1 - h5) / 3.0);
+	let h4 = h2;
+
+	let h3 = (CANVAS_YLEN - 2 * ymargin - h1 - h2 - h4 - h5);
+
+	//println("h dimensions = ", [h1, h2, h3, h4, h5]);
+
+	// Widths
+	let w1 = i32((CANVAS_XLEN - 2 * xmargin) / 2.0);
+	let w2 = w1;
+
+	//println("w dimensions = ", [w1, w2]);
+
+	// Helper dimensions (sums of others)
+
+	let w12 = w1 + w2;
+
+	let w1h = w1/2;
+	let w2h = w1  + w2/2;
+
+	let h12 = h1  + h2; // TODO: other height helpers
+	let h13 = h12 + h3;
+	let h14 = h13 + h4;
+	let h15 = h14 + h5;
+
+	let h2h = h1 + h2 + h3/2;
+
+	// Numbers of vertices and triangles
+	let nvrt = 16;
+	let ntri = 16;
+
+	// Vertices
+	let vrt = 
+		[
+			xmargin + w1 , ymargin      , // point 0
+			xmargin      , ymargin + h1 , // point 1
+			xmargin + w1 , ymargin + h1 , // .     2
+			xmargin + w12, ymargin + h1 , // .     3
+			xmargin      , ymargin + h12, // .     4
+			xmargin + w1 , ymargin + h12, //       5
+			xmargin + w12, ymargin + h12, //       6
+			xmargin + w1h, ymargin + h2h, //       7
+			xmargin + w2h, ymargin + h2h, //       8
+			xmargin      , ymargin + h13, //       9
+			xmargin + w1 , ymargin + h13, //      10
+			xmargin + w12, ymargin + h13, //      11
+			xmargin      , ymargin + h14, //      12
+			xmargin + w1 , ymargin + h14, //      13
+			xmargin + w12, ymargin + h14, //      14
+			xmargin + w1 , ymargin + h15  //      15
+			;
+			NDIM, nvrt
+		];
+	//println("vrt = ", vrt);
+
+	// Triangles
+	let tri =
+		[
+			 0,   1,   2, // tri 1
+			 0,   2,   3, // tri 2
+			 1,   4,   5, // .   3
+			 1,   5,   2, // .   4
+			 2,   5,   6, // .   5
+			 2,   6,   3, //     6
+			 4,  10,   5, //     7
+			 5,   8,   6, //     8
+			 5,  10,  11, //     9
+			 7,   9,  10, //    10
+			 9,  12,  13, //    11
+			 9,  13,  10, //    12
+			10,  13,  14, //    13
+			10,  14,  11, //    14
+			12,  15,  13, //    15
+			13,  15,  14  //    16
+			;
+			NTRI, ntri
+		];
+	//println("tri = ", tri);
+
+	// 0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240
+
+	// Triangle colors.  TODO: add extra rank for per-vertex colors
+	let colors =
+		[
+			000,  000,   64, // tri 1
+			000,  000,   48, // tri 2
+			000,  000,   96, // .   3
+			000,  000,   80, // .   4
+			000,  000,   16, // .   5
+			000,  000,   32, //     6
+			000,  000,  112, //     7
+			000,  000,   00, //     8
+			000,  000,  128, //     9
+			000,  000,  240, //    10
+			000,  000,  208, //    11
+			000,  000,  224, //    12
+			000,  000,  160, //    13
+			000,  000,  144, //    14
+			000,  000,  192, //    15
+			000,  000,  176  //    16
+			;
+			NRGB, ntri
+		];
+
+	for i in [0: ntri]
+	{
+		println("drawing tri ", i, "/", ntri, " ...");
+		draw_tri(
+			vrt[:, tri[0,i]],
+			vrt[:, tri[1,i]],
+			vrt[:, tri[2,i]],
+			colors[:,i] // TODO: 1 color per vertex (but neighboring tris don't necessarily share colors)
+			//[130, 180, 210] // solid color
+			//[1, 1, 1] // helpful for debugging text output before ppm output
+			);
+	}
+	//println("red = ", canvas[0,:,:]);
+}
+
+//==============================================================================
+
+fn write_ppm(filename: str)
+{
+	println("writing ppm `" + filename + "` ...");
+	let f = open(filename);
+
+	writeln(f, "P3");
+	writeln(f, CANVAS_XLEN, " ", CANVAS_YLEN);
+	writeln(f, 255);
+
+	for y in [0: CANVAS_YLEN]
+	for x in [0: CANVAS_XLEN]
+	{
+		writeln(f,
+			canvas[0,x,y], " ",
+			canvas[1,x,y], " ",
+			canvas[2,x,y]);
+	}
+
+	close(f);
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("starting syntran logo main");
+
+	draw_logo();
+	write_ppm("logo-syntran-v3.ppm");
+
+	println("ending main");
+	0;
+}
+
+//==============================================================================
+
+main();
+

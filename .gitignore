@@ -7,6 +7,9 @@ syntran.exe
 test
 test.exe
 
+/logo-syntran*.ppm
+/logo-syntran*.png
+
 /scratch
 /build
 
