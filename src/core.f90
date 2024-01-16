@@ -28,6 +28,7 @@ module syntran__core_m
 		syntran_patch =  40
 
 	! TODO:
+	!  - add logo to readme and link to source
 	!  - refactor syntrax_eval() deep nesting
 	!    * encapsulation of syntax_eval() args (vars, fns, quiet, etc.) should
 	!      be done first
@@ -51,6 +52,7 @@ module syntran__core_m
 	!    * array arithmetic operations
 	!    * any(), all(), count() intrinsics
 	!    * -c arg, shebang
+	!    * ifx/ifort pass tests but perform order of magnitude slower
 	!  - parse_f32() intrinsic fn
 	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
 	!    versions don't allow a user-defined type that references another type

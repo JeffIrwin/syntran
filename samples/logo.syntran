@@ -5,6 +5,7 @@
 
 // Global constants and variables
 
+//let CANVAS_XLEN = 1080;
 let CANVAS_XLEN = 800;
 let CANVAS_YLEN = CANVAS_XLEN;
 
@@ -61,14 +62,14 @@ fn draw_tri(v0: [i32; :], v1: [i32; :], v2: [i32; :],
 		// Get barycentric coordinates l0, l1, and l2
 
 		// Note similar form as determinant, but v0 is replaced with [x,y]
-		let l0 = ((x     - v2[0]) * (v1[1] - v2[1]) * 1.0
-		       -  (v1[0] - v2[0]) * (y     - v2[1]))
-			   / det_;
+		let l0 = ((x     - v2[0]) * (v1[1] - v2[1])
+		       -  (v1[0] - v2[0]) * (y     - v2[1])) * 1.0
+		       / det_;
 
 		// v1 is replaced with [x,y]
-		let l1 = ((v0[0] - v2[0]) * (y     - v2[1]) * 1.0
-		       -  (x     - v2[0]) * (v0[1] - v2[1]))
-			   / det_;
+		let l1 = ((v0[0] - v2[0]) * (y     - v2[1])
+		       -  (x     - v2[0]) * (v0[1] - v2[1])) * 1.0
+		       / det_;
 
 		let l2 = 1.0 - l0 - l1;
 		//println("ls = ", [l0, l1, l2]);
@@ -76,11 +77,11 @@ fn draw_tri(v0: [i32; :], v1: [i32; :], v2: [i32; :],
 		if -tol <= l0 and l0 <= 1 + tol and
 		   -tol <= l1 and l1 <= 1 + tol and
 		   -tol <= l2 and l2 <= 1 + tol
-	   {
+		{
 		   canvas[0,x,y] = c0[0];
 		   canvas[1,x,y] = c0[1];
 		   canvas[2,x,y] = c0[2];
-	   }
+		}
 	}
 }
 
@@ -248,6 +249,13 @@ fn write_ppm(filename: str)
 	for y in [0: CANVAS_YLEN]
 	for x in [0: CANVAS_XLEN]
 	{
+		//// TODO: can I/O be optimized without so much looping?
+		//let str_ = str(
+		//	canvas[0,x,y], " ",
+		//	canvas[1,x,y], " ",
+		//	canvas[2,x,y]);
+		//writeln(f, str_);
+
 		writeln(f,
 			canvas[0,x,y], " ",
 			canvas[1,x,y], " ",
@@ -265,7 +273,7 @@ fn main(): i32
 	println("starting syntran logo main");
 
 	draw_logo();
-	write_ppm("logo-syntran-v3.ppm");
+	write_ppm("logo-syntran-v6.ppm");
 
 	println("ending main");
 	0;
