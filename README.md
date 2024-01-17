@@ -3,7 +3,7 @@
 
 # Syntran
 
-![](doc/imgs/logo-syntran-256p.png)
+![](doc/imgs/logo-syntran-128p.png)
 
 ⚠️ Syntran is pre-alpha and I don't recommend using it for anything serious.  You will discover bugs, missing features, many pain points in general; and later updates will be incompatible.
 

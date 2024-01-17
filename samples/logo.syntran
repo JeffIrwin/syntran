@@ -31,18 +31,13 @@ fn draw_tri(v0: [i32; :], v1: [i32; :], v2: [i32; :],
 
 	//println("drawing tri ...");
 	//println("v0 = ", v0);
-	//println("v1 = ", v1);
-	//println("v2 = ", v2);
-	//println();
 
 	// Buffer by 1 in case of rounding errors
 	let xmin = min(v0[0], v1[0], v2[0]) - 1;
 	let ymin = min(v0[1], v1[1], v2[1]) - 1;
-	//println("mins = ", [xmin, ymin]);
 
 	let xmax = max(v0[0], v1[0], v2[0]) + 2;
 	let ymax = max(v0[1], v1[1], v2[1]) + 2;
-	//println("maxs = ", [xmax, ymax]);
 
 	// Clamp to canvas bounds
 	xmin = max(0, xmin);
@@ -110,19 +105,6 @@ fn draw_logo()
 		color_up_left,
 		color_mid,
 		color_down_right);
-
-	//// Solid background color
-	//for y in [0: NY_CANVAS]
-	//for x in [0: NX_CANVAS]
-	//{
-	//	//canvas[0,x,y] = 170;
-	//	//canvas[1,x,y] = 190;
-	//	//canvas[2,x,y] = 210;
-
-	//	canvas[0,x,y] =  70;
-	//	canvas[1,x,y] =  90;
-	//	canvas[2,x,y] = 110;
-	//}
 
 	// One-sided margin dimensions
 	let xmargin = i32(0.175 * NX_CANVAS);
@@ -287,28 +269,6 @@ fn draw_logo()
 			NTRI, ntri
 		];
 
-	//let colors =
-	//	[
-	//		000, 000,  64, // tri 1
-	//		000, 000,  48, // tri 2
-	//		000, 000,  96, // .   3
-	//		000, 000,  80, // .   4
-	//		000, 000,  16, // .   5
-	//		000, 000,  32, //     6
-	//		000, 000, 112, //     7
-	//		000, 000,  00, //     8
-	//		000, 000, 128, //     9
-	//		000, 000, 240, //    10
-	//		000, 000, 208, //    11
-	//		000, 000, 224, //    12
-	//		000, 000, 160, //    13
-	//		000, 000, 144, //    14
-	//		000, 000, 192, //    15
-	//		000, 000, 176  //    16
-	//		;
-	//		NRGB, ntri
-	//	];
-
 	for i in [0: ntri]
 	{
 		println("drawing tri ", i, "/", ntri, " ...");
@@ -316,15 +276,9 @@ fn draw_logo()
 			vrt[:, tri[0,i]],
 			vrt[:, tri[1,i]],
 			vrt[:, tri[2,i]],
-
 			colors[:, tri_colors[0,i]],
 			colors[:, tri_colors[1,i]],
 			colors[:, tri_colors[2,i]]);
-
-			//colors[:,i],
-			//colors[:,i],
-			//colors[:,i]);
-
 	}
 }
 
