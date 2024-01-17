@@ -6,7 +6,8 @@
 // Global constants and variables
 
 //let NX_CANVAS = 1080;
-let NX_CANVAS = 800;
+//let NX_CANVAS = 256;
+let NX_CANVAS = 128;
 let NY_CANVAS = NX_CANVAS;
 
 //let NX_CANVAS = 300;
@@ -24,7 +25,7 @@ let canvas = [0; NRGB, NX_CANVAS, NY_CANVAS];
 //==============================================================================
 
 fn draw_tri(v0: [i32; :], v1: [i32; :], v2: [i32; :],
-            c0: [i32; :])
+            c0: [i32; :], c1: [i32; :], c2: [i32; :])
 {
 	// Output a triangle onto the global canvas
 
@@ -77,9 +78,10 @@ fn draw_tri(v0: [i32; :], v1: [i32; :], v2: [i32; :],
 
 		if all(-tol <= bary) and all(bary <= 1+tol)
 		{
-		   canvas[0,x,y] = c0[0];
-		   canvas[1,x,y] = c0[1];
-		   canvas[2,x,y] = c0[2];
+			let c = bary[0] * c0 + bary[1] * c1 + bary[2] * c2;
+			canvas[0,x,y] = i32(c[0]);
+			canvas[1,x,y] = i32(c[1]);
+			canvas[2,x,y] = i32(c[2]);
 		}
 	}
 }
@@ -90,18 +92,37 @@ fn draw_logo()
 {
 	println("drawing logo ...");
 
-	// Set background
-	for y in [0: NY_CANVAS]
-	for x in [0: NX_CANVAS]
-	{
-		//canvas[0,x,y] = 170;
-		//canvas[1,x,y] = 190;
-		//canvas[2,x,y] = 210;
+	// Set background diagonal gradient
+	let color_up_left    = [10,  20, 110];
+	let color_down_right = [10, 110,  20];
+	let color_mid        = [10,  65,  65];
+	draw_tri(
+		[0, 0],
+		[NX_CANVAS, NY_CANVAS],
+		[NX_CANVAS, 0],
+		color_up_left,
+		color_down_right,
+		color_mid);
+	draw_tri(
+		[0, 0],
+		[0, NY_CANVAS],
+		[NX_CANVAS, NY_CANVAS],
+		color_up_left,
+		color_mid,
+		color_down_right);
 
-		canvas[0,x,y] =  70;
-		canvas[1,x,y] =  90;
-		canvas[2,x,y] = 110;
-	}
+	//// Solid background color
+	//for y in [0: NY_CANVAS]
+	//for x in [0: NX_CANVAS]
+	//{
+	//	//canvas[0,x,y] = 170;
+	//	//canvas[1,x,y] = 190;
+	//	//canvas[2,x,y] = 210;
+
+	//	canvas[0,x,y] =  70;
+	//	canvas[1,x,y] =  90;
+	//	canvas[2,x,y] = 110;
+	//}
 
 	// One-sided margin dimensions
 	let xmargin = i32(0.175 * NX_CANVAS);
@@ -135,7 +156,7 @@ fn draw_logo()
 	let w1h = w1/2;
 	let w2h = w1  + w2/2;
 
-	let h12 = h1  + h2; // TODO: other height helpers
+	let h12 = h1  + h2;
 	let h13 = h12 + h3;
 	let h14 = h13 + h4;
 	let h15 = h14 + h5;
@@ -147,7 +168,7 @@ fn draw_logo()
 	let ntri = 16;
 
 	// Vertices
-	let vrt = 
+	let vrt =
 		[
 			xmargin + w1 , ymargin      , // point 0
 			xmargin      , ymargin + h1 , // point 1
@@ -170,7 +191,7 @@ fn draw_logo()
 		];
 	//println("vrt = ", vrt);
 
-	// Triangles
+	// Triangle vertex indices
 	let tri =
 		[
 			 0,   1,   2, // tri 1
@@ -194,30 +215,99 @@ fn draw_logo()
 		];
 	//println("tri = ", tri);
 
-	// 0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240
+	// Control colors, to be interpolated
+	let c0  = [200, 200, 200];
+	let c3  = [ 40, 220,  40];
+	let c8  = [ 40,  40, 220];
+	let c11 = c0;
 
-	// Triangle colors.  TODO: add extra rank for per-vertex colors
+	// Interpolate colors with floats
+
+	let fc1  = 2.0 / 3.0 * c0 + 1.0 / 3.0 * c3;
+	let fc2  = 1.0 / 3.0 * c0 + 2.0 / 3.0 * c3;
+
+	let fc4  = 4.0 / 5.0 * c3 + 1.0 / 5.0 * c8;
+	let fc5  = 3.0 / 5.0 * c3 + 2.0 / 5.0 * c8;
+	let fc6  = 2.0 / 5.0 * c3 + 3.0 / 5.0 * c8;
+	let fc7  = 1.0 / 5.0 * c3 + 4.0 / 5.0 * c8;
+
+	let fc9  = 2.0 / 3.0 * c8 + 1.0 / 3.0 * c11;
+	let fc10 = 1.0 / 3.0 * c8 + 2.0 / 3.0 * c11;
+
+	// Cast.  i32() should support arrays :(
+	let c1  = [i32(fc1 [0]), i32(fc1 [1]), i32(fc1 [2])];
+	let c2  = [i32(fc2 [0]), i32(fc2 [1]), i32(fc2 [2])];
+	let c4  = [i32(fc4 [0]), i32(fc4 [1]), i32(fc4 [2])];
+	let c5  = [i32(fc5 [0]), i32(fc5 [1]), i32(fc5 [2])];
+	let c6  = [i32(fc6 [0]), i32(fc6 [1]), i32(fc6 [2])];
+	let c7  = [i32(fc7 [0]), i32(fc7 [1]), i32(fc7 [2])];
+	let c9  = [i32(fc9 [0]), i32(fc9 [1]), i32(fc9 [2])];
+	let c10 = [i32(fc10[0]), i32(fc10[1]), i32(fc10[2])];
+
+	// Syntran needs array concatenation :(
+	let ncolor = 11;
 	let colors =
 		[
-			000, 000,  64, // tri 1
-			000, 000,  48, // tri 2
-			000, 000,  96, // .   3
-			000, 000,  80, // .   4
-			000, 000,  16, // .   5
-			000, 000,  32, //     6
-			000, 000, 112, //     7
-			000, 000,  00, //     8
-			000, 000, 128, //     9
-			000, 000, 240, //    10
-			000, 000, 208, //    11
-			000, 000, 224, //    12
-			000, 000, 160, //    13
-			000, 000, 144, //    14
-			000, 000, 192, //    15
-			000, 000, 176  //    16
+			c0 [0], c0 [1], c0 [2],
+			c1 [0], c1 [1], c1 [2],
+			c2 [0], c2 [1], c2 [2],
+			c3 [0], c3 [1], c3 [2],
+			c4 [0], c4 [1], c4 [2],
+			c5 [0], c5 [1], c5 [2],
+			c6 [0], c6 [1], c6 [2],
+			c7 [0], c7 [1], c7 [2],
+			c8 [0], c8 [1], c8 [2],
+			c9 [0], c9 [1], c9 [2],
+			c10[0], c10[1], c10[2],
+			c11[0], c11[1], c11[2]
 			;
-			NRGB, ntri
+			NRGB, ncolor
 		];
+
+	// Triangle vertex colors, as an index of `colors` array
+	let tri_colors =
+		[
+			 3,  4,  3, // tri 1
+			 3,  3,  2, // tri 2
+			 4,  5,  5, // .   3
+			 4,  5,  3, // .   4
+			 3,  1,  1, // .   5
+			 3,  1,  2, //     6
+			 5,  6,  5, //     7
+			 1,  0,  1, //     8
+			 5,  6,  6, //     9
+			11, 10, 10, //    10
+			10,  9,  8, //    11
+			10,  8, 10, //    12
+			 6,  8,  7, //    13
+			 6,  7,  6, //    14
+			 9,  8,  8, //    15
+			 8,  8,  7  //    16
+			;
+			NTRI, ntri
+		];
+
+	//let colors =
+	//	[
+	//		000, 000,  64, // tri 1
+	//		000, 000,  48, // tri 2
+	//		000, 000,  96, // .   3
+	//		000, 000,  80, // .   4
+	//		000, 000,  16, // .   5
+	//		000, 000,  32, //     6
+	//		000, 000, 112, //     7
+	//		000, 000,  00, //     8
+	//		000, 000, 128, //     9
+	//		000, 000, 240, //    10
+	//		000, 000, 208, //    11
+	//		000, 000, 224, //    12
+	//		000, 000, 160, //    13
+	//		000, 000, 144, //    14
+	//		000, 000, 192, //    15
+	//		000, 000, 176  //    16
+	//		;
+	//		NRGB, ntri
+	//	];
 
 	for i in [0: ntri]
 	{
@@ -226,12 +316,16 @@ fn draw_logo()
 			vrt[:, tri[0,i]],
 			vrt[:, tri[1,i]],
 			vrt[:, tri[2,i]],
-			colors[:,i] // TODO: 1 color per vertex (but neighboring tris don't necessarily share colors)
-			//[130, 180, 210] // solid color
-			//[1, 1, 1] // helpful for debugging text output before ppm output
-			);
+
+			colors[:, tri_colors[0,i]],
+			colors[:, tri_colors[1,i]],
+			colors[:, tri_colors[2,i]]);
+
+			//colors[:,i],
+			//colors[:,i],
+			//colors[:,i]);
+
 	}
-	//println("red = ", canvas[0,:,:]);
 }
 
 //==============================================================================
@@ -272,7 +366,7 @@ fn main(): i32
 	println("starting syntran logo main");
 
 	draw_logo();
-	write_ppm("logo-syntran-v7.ppm");
+	write_ppm("logo-syntran-v12.ppm");
 
 	println("ending main");
 	0;
