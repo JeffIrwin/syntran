@@ -5,7 +5,8 @@
 
 <!-- ![](doc/imgs/logo-syntran-128p.png) -->
 <!-- TODO: do relative links work for logo.syntran? -->
-[<img src="doc/img/logo-syntran-128p.png">](https://github.com/JeffIrwin/syntran/blob/main/samples/logo.syntran)
+<!-- [<img src="doc/img/logo-syntran-128p.png">](https://github.com/JeffIrwin/syntran/blob/main/samples/logo.syntran) -->
+[![](doc/imgs/logo-syntran-128p.png)](https://github.com/JeffIrwin/syntran/blob/main/samples/logo.syntran)
 
 ⚠️ Syntran is pre-alpha and I don't recommend using it for anything serious.  You will discover bugs, missing features, many pain points in general; and later updates will be incompatible.
 
