@@ -731,10 +731,16 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			read(arg%sca%str%s, *) res%sca%i64  ! TODO: catch iostat
 
-		case ("i32")
+		case ("0i32_sca")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%i32 = arg%to_i32()
+
+		case ("0i32_arr")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			!res%sca%i32 = arg%to_i32()
+			res%array = arg%to_i32_array()
 
 		case ("i64")
 

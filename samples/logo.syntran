@@ -6,8 +6,8 @@
 // Global constants and variables
 
 //let NX_CANVAS = 1080;
-//let NX_CANVAS = 256;
-let NX_CANVAS = 128;
+let NX_CANVAS = 256;
+//let NX_CANVAS = 128;
 let NY_CANVAS = NX_CANVAS;
 
 //let NX_CANVAS = 300;
@@ -208,6 +208,11 @@ fn draw_logo()
 	let fc1  = 2.0 / 3.0 * c0 + 1.0 / 3.0 * c3;
 	let fc2  = 1.0 / 3.0 * c0 + 2.0 / 3.0 * c3;
 
+	println("c0  = ", c0);
+	println("fc1 = ", fc1);
+	println("fc2 = ", fc2);
+	println("c3  = ", c3);
+
 	let fc4  = 4.0 / 5.0 * c3 + 1.0 / 5.0 * c8;
 	let fc5  = 3.0 / 5.0 * c3 + 2.0 / 5.0 * c8;
 	let fc6  = 2.0 / 5.0 * c3 + 3.0 / 5.0 * c8;
@@ -217,7 +222,9 @@ fn draw_logo()
 	let fc10 = 1.0 / 3.0 * c8 + 2.0 / 3.0 * c11;
 
 	// Cast.  i32() should support arrays :(
-	let c1  = [i32(fc1 [0]), i32(fc1 [1]), i32(fc1 [2])];
+	//let c1  = [i32(fc1 [0]), i32(fc1 [1]), i32(fc1 [2])];
+	let c1 = i32(fc1);
+
 	let c2  = [i32(fc2 [0]), i32(fc2 [1]), i32(fc2 [2])];
 	let c4  = [i32(fc4 [0]), i32(fc4 [1]), i32(fc4 [2])];
 	let c5  = [i32(fc5 [0]), i32(fc5 [1]), i32(fc5 [2])];

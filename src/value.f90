@@ -95,6 +95,7 @@ module syntran__value_m
 			procedure :: to_f32 => value_to_f32
 			procedure :: to_i32 => value_to_i32
 			procedure :: to_i64 => value_to_i64
+			procedure :: to_i32_array => value_to_i32_array
 
 	end type value_t
 
@@ -297,6 +298,53 @@ function value_to_i32(val) result(ans)
 	end select
 
 end function value_to_i32
+
+!===============================================================================
+
+function value_to_i32_array(val) result(ans)
+
+	class(value_t) :: val
+
+	!integer(kind = 4) :: ans
+	type(array_t) :: ans
+
+	print *, "starting value_to_i32_array()"
+	print *, "val%type = ", kind_name(val%type)
+	print *, "val%array%type = ", kind_name(val%array%type)
+
+	ans = mold(val%array, i32_type)
+
+	select case (val%array%type)
+
+		case (f32_type)
+			!ans = int(val%sca%f32, 4)
+			ans%i32 = int(val%array%f32, 4)
+
+		!! TODO
+		!case (i32_type)
+		!	ans = val%sca%i32
+
+		!case (i64_type)
+		!	ans = int(val%sca%i64, 4)
+
+		!case (str_type)
+
+		!	if (len(val%sca%str%s) == 1) then
+		!		ans = iachar(val%sca%str%s)
+		!	else
+		!		write(*,*) err_int_prefix//'cannot convert from type `' &
+		!			//kind_name(val%type)//'` to i32.  Use `parse_i32()`'//color_reset
+		!		call internal_error()
+		!	end if
+
+		case default
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to i32 '//color_reset
+			call internal_error()
+
+	end select
+
+end function value_to_i32_array
 
 !===============================================================================
 

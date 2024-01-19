@@ -177,8 +177,8 @@ function declare_intrinsic_fns() result(fns)
 
 	type(fn_t) :: exp_fn, min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
-		i64_fn, parse_i64_fn, i32_fn, exit_fn, any_fn, all_fn, count_fn, &
-		min_i64_fn, max_i64_fn
+		i64_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
+		min_i64_fn, max_i64_fn, i32_arr_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -349,17 +349,36 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	i32_fn%type = i32_type
-	allocate(i32_fn%params(1))
+	i32_sca_fn%type = i32_type
+	allocate(i32_sca_fn%params(1))
 
-	i32_fn%params(1)%type = any_type
+	i32_sca_fn%params(1)%type = any_type
 
-	i32_fn%params(1)%name = "a"
+	i32_sca_fn%params(1)%name = "a"
 
 	id_index = id_index + 1
-	call fns%insert("i32", i32_fn, id_index)
+	call fns%insert("0i32_sca", i32_sca_fn, id_index)
 
 	!********
+
+	i32_arr_fn%type = array_type
+	i32_arr_fn%array_type = i32_type
+	i32_arr_fn%rank = -1
+
+	allocate(i32_arr_fn%params(1))
+
+	i32_arr_fn%params(1)%type = any_type
+
+	i32_arr_fn%params(1)%name = "a"
+
+	id_index = id_index + 1
+	call fns%insert("0i32_arr", i32_arr_fn, id_index)
+
+	!********
+
+	! TODO: scalar/array versions of i64 casting
+
+	! TODO: to f32 casting
 
 	i64_fn%type = i64_type
 	allocate(i64_fn%params(1))
@@ -542,7 +561,8 @@ function declare_intrinsic_fns() result(fns)
 			len_fn      , &
 			parse_i32_fn, &
 			parse_i64_fn, &
-			i32_fn      , &
+			i32_sca_fn  , &
+			i32_arr_fn  , &
 			i64_fn      , &
 			open_fn     , &
 			readln_fn   , &
