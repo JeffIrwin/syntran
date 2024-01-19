@@ -305,7 +305,6 @@ function value_to_i32_array(val) result(ans)
 
 	class(value_t) :: val
 
-	!integer(kind = 4) :: ans
 	type(array_t) :: ans
 
 	!print *, "starting value_to_i32_array()"
@@ -317,20 +316,21 @@ function value_to_i32_array(val) result(ans)
 	select case (val%array%type)
 
 		case (f32_type)
-			!ans = int(val%sca%f32, 4)
 			ans%i32 = int(val%array%f32, 4)
 
-		!! TODO
-		!case (i32_type)
-		!	ans = val%sca%i32
+		case (i32_type)
+			ans%i32 = val%array%i32
 
-		!case (i64_type)
-		!	ans = int(val%sca%i64, 4)
+		case (i64_type)
+			ans%i32 = int(val%array%i64, 4)
 
 		!case (str_type)
 
-		!	if (len(val%sca%str%s) == 1) then
-		!		ans = iachar(val%sca%str%s)
+		!	! TODO: loops are needed for str array conversion via iachar
+		!	if (all(len(val%sca%str%s) == 1)) then
+		!		!ans = iachar(val%sca%str%s)
+		!		ans%i32 = iachar(val%array%str%s)
+
 		!	else
 		!		write(*,*) err_int_prefix//'cannot convert from type `' &
 		!			//kind_name(val%type)//'` to i32.  Use `parse_i32()`'//color_reset
