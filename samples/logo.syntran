@@ -88,9 +88,15 @@ fn draw_logo()
 	println("drawing logo ...");
 
 	// Set background diagonal gradient
-	let color_up_left    = [10,  20, 110];
-	let color_down_right = [10, 110,  20];
-	let color_mid        = [10,  65,  65];
+
+	//let color_up_left    = [10,  20, 110];
+	//let color_down_right = [10, 110,  20];
+	//let color_mid        = [10,  65,  65];
+
+	let color_up_left    = [ 20, 10, 110];
+	let color_down_right = [110, 10,  20];
+	let color_mid        = [ 65, 10,  20];
+
 	draw_tri(
 		[0, 0],
 		[NX_CANVAS, NY_CANVAS],
@@ -199,19 +205,16 @@ fn draw_logo()
 
 	// Control colors, to be interpolated
 	let c0  = [200, 200, 200];
-	let c3  = [ 40, 220,  40];
+	//let c3  = [ 40, 220,  40];
+	let c3  = [220,  40,  40];
 	let c8  = [ 40,  40, 220];
 	let c11 = c0;
 
 	// Interpolate colors with floats
 
+	// This temp vars could be removed since we can cast arrays immediately now
 	let fc1  = 2.0 / 3.0 * c0 + 1.0 / 3.0 * c3;
 	let fc2  = 1.0 / 3.0 * c0 + 2.0 / 3.0 * c3;
-
-	println("c0  = ", c0);
-	println("fc1 = ", fc1);
-	println("fc2 = ", fc2);
-	println("c3  = ", c3);
 
 	let fc4  = 4.0 / 5.0 * c3 + 1.0 / 5.0 * c8;
 	let fc5  = 3.0 / 5.0 * c3 + 2.0 / 5.0 * c8;
@@ -221,17 +224,15 @@ fn draw_logo()
 	let fc9  = 2.0 / 3.0 * c8 + 1.0 / 3.0 * c11;
 	let fc10 = 1.0 / 3.0 * c8 + 2.0 / 3.0 * c11;
 
-	// Cast.  i32() should support arrays :(
-	//let c1  = [i32(fc1 [0]), i32(fc1 [1]), i32(fc1 [2])];
-	let c1 = i32(fc1);
-
-	let c2  = [i32(fc2 [0]), i32(fc2 [1]), i32(fc2 [2])];
-	let c4  = [i32(fc4 [0]), i32(fc4 [1]), i32(fc4 [2])];
-	let c5  = [i32(fc5 [0]), i32(fc5 [1]), i32(fc5 [2])];
-	let c6  = [i32(fc6 [0]), i32(fc6 [1]), i32(fc6 [2])];
-	let c7  = [i32(fc7 [0]), i32(fc7 [1]), i32(fc7 [2])];
-	let c9  = [i32(fc9 [0]), i32(fc9 [1]), i32(fc9 [2])];
-	let c10 = [i32(fc10[0]), i32(fc10[1]), i32(fc10[2])];
+	// Cast
+	let c1  = i32(fc1);
+	let c2  = i32(fc2);
+	let c4  = i32(fc4);
+	let c5  = i32(fc5);
+	let c6  = i32(fc6);
+	let c7  = i32(fc7);
+	let c9  = i32(fc9);
+	let c10 = i32(fc10);
 
 	// Syntran needs array concatenation :(
 	//
