@@ -308,9 +308,9 @@ function value_to_i32_array(val) result(ans)
 	!integer(kind = 4) :: ans
 	type(array_t) :: ans
 
-	print *, "starting value_to_i32_array()"
-	print *, "val%type = ", kind_name(val%type)
-	print *, "val%array%type = ", kind_name(val%array%type)
+	!print *, "starting value_to_i32_array()"
+	!print *, "val%type = ", kind_name(val%type)
+	!print *, "val%array%type = ", kind_name(val%array%type)
 
 	ans = mold(val%array, i32_type)
 

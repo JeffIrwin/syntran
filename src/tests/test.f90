@@ -599,6 +599,9 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('len(  "htn");')  == 3,  &
 			eval_i32('len( "htns");')  == 4,  &
 			eval_i32('len("htns-");')  == 5,  &
+			eval('i32( 0.0);') ==   "0", &
+			eval('i32( 1.1);') ==   "1", &
+			eval('i32(-1.1);') ==  "-1", &
 			eval('i32(  0);') ==   "0", &
 			eval('i32(  1);') ==   "1", &
 			eval('i32( -1);') ==  "-1", &
@@ -613,6 +616,9 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('i32("(");') ==  "40", &
 			eval('i32(")");') ==  "41", &
 			eval('i32(" ");') ==  "32", &
+			eval('i32([ 0.0, 2.2, 3.3]);') ==  "[0, 2, 3]", &
+			eval('i32([ 1.1, 2.2, 3.3]);') ==  "[1, 2, 3]", &
+			eval('i32([-1.1, 2.2, 3.3]);') ==  "[-1, 2, 3]", &
 			eval('any([true]);') == "true", &
 			eval('any([false]);') == "false", &
 			eval('any([false, true]);') == "true", &

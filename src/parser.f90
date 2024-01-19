@@ -1691,7 +1691,7 @@ function parse_fn_call(parser) result(fn_call)
 
 		select case (type_)
 		case (array_type)
-			print *, "resolving 0i32_arr"
+			!print *, "resolving 0i32_arr"
 			fn_call%identifier%text = "0i32_arr"
 
 			if (args%len_ >= 1) then
