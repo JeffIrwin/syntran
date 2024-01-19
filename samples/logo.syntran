@@ -186,8 +186,8 @@ fn draw_logo()
 			 5,   8,   6, //     8
 			 5,  10,  11, //     9
 			 7,   9,  10, //    10
-			 9,  12,  13, //    11
-			 9,  13,  10, //    12
+			 9,  12,  10, //    11
+			10,  12,  13, //    12
 			10,  13,  14, //    13
 			10,  14,  11, //    14
 			12,  15,  13, //    15
@@ -234,6 +234,9 @@ fn draw_logo()
 	let c10 = [i32(fc10[0]), i32(fc10[1]), i32(fc10[2])];
 
 	// Syntran needs array concatenation :(
+	//
+	// Or LHS slicing, so the `colors` array can be constructed directly without
+	// scalar hepers c0, c1, ...
 	let ncolor = 11;
 	let colors =
 		[
@@ -266,8 +269,8 @@ fn draw_logo()
 			 1,  0,  1, //     8
 			 5,  6,  6, //     9
 			11, 10, 10, //    10
-			10,  9,  8, //    11
-			10,  8, 10, //    12
+			10,  9, 10, //    11
+			10,  9,  8, //    12
 			 6,  8,  7, //    13
 			 6,  7,  6, //    14
 			 9,  8,  8, //    15
@@ -327,7 +330,7 @@ fn main(): i32
 	println("starting syntran logo main");
 
 	draw_logo();
-	write_ppm("logo-syntran-v12.ppm");
+	write_ppm("logo-syntran-v14.ppm");
 
 	println("ending main");
 	0;

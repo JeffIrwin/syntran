@@ -28,7 +28,23 @@ module syntran__core_m
 		syntran_patch =  40
 
 	! TODO:
-	!  - add logo to readme and link to source
+	!  - i32() et al. should work with array args
+	!  - array concatenation:
+	!        let arr1 = [0: 4];
+	!        let arr2 = [4: 8];
+	!        let cat  = [arr1, arr2]; // [0: 8]
+	!  - arrays
+	!    * add slice subscripts for LHS:
+	!      > RHS slicing done
+	!      > a[:]     -> a[0], a[1], a[2], ...
+	!      > a[1:4]   -> a[1], a[2], a[3]  // already parsed bc of str feature, just can't eval yet
+	!      > a[1:2:6] -> a[1], a[3], a[5]
+	!      > higher rank:  a[:,1], a[2,:], a[2:4, 1], ...
+	!      > in general, count the number of scalar subscripts.  that is the
+	!        difference between the input rank and the output rank of the
+	!        subscripting operation.  e.g. if every subscript is a slice, then
+	!        the rank is unchanged, 1 scalar subscript decreases rank by 1, etc.
+	!    * refactor the way implicit arrays are handled as for loop iterators
 	!  - refactor syntrax_eval() deep nesting
 	!    * encapsulation of syntax_eval() args (vars, fns, quiet, etc.) should
 	!      be done first
@@ -103,18 +119,6 @@ module syntran__core_m
 	!    * also add a file_stat() fn which checks IO of previous file operation.
 	!      this way I don't need to add structs, multiple return vals, or out
 	!      args yet
-	!  - arrays
-	!    * add slice subscripts for LHS:
-	!      > RHS slicing done
-	!      > a[:]     -> a[0], a[1], a[2], ...
-	!      > a[1:4]   -> a[1], a[2], a[3]  // already parsed bc of str feature, just can't eval yet
-	!      > a[1:2:6] -> a[1], a[3], a[5]
-	!      > higher rank:  a[:,1], a[2,:], a[2:4, 1], ...
-	!      > in general, count the number of scalar subscripts.  that is the
-	!        difference between the input rank and the output rank of the
-	!        subscripting operation.  e.g. if every subscript is a slice, then
-	!        the rank is unchanged, 1 scalar subscript decreases rank by 1, etc.
-	!    * refactor the way implicit arrays are handled as for loop iterators
 	!  - compound assignment: logical &=, |=, etc.
 	!    * +=, -=, *=, /=, %=, **= done
 	!  - ++, --
