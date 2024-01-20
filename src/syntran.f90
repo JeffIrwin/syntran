@@ -296,6 +296,8 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	type(value_t) :: val
 	type(vars_t) :: vars
 
+	!print *, 'str_ = ', str_
+
 	quietl = .false.
 	if (present(quiet)) quietl = quiet
 

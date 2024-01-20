@@ -109,8 +109,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			if (array%type == i32_type) then
 
-				array%cap = (ubound_%sca%i32 - lbound_%sca%i32) / step%sca%i32 + 1
-				!array%cap = (ubound_%sca%i32 - lbound_%sca%i32) / step%sca%i32
+				!array%cap = (ubound_%sca%i32 - lbound_%sca%i32) / step%sca%i32 + 1
+				!array%cap = (ubound_%sca%i32 - lbound_%sca%i32 + abs(step%sca%i32) - 1) / step%sca%i32
+				array%cap = (ubound_%sca%i32 - lbound_%sca%i32 &
+					+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
+
+				!print *, 'cap = ', array%cap
+
 				allocate(array%i32( array%cap ))
 
 				j = 1
@@ -126,18 +131,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end do
 				array%len_ = j - 1
 
-				! TODO: can cap be calculated correctly at the start, without
-				! breaking tests? Find out which test crashes without commented
-				! `+1` in above cap calculation
-				if (array%len_ < array%cap) then
-					array%cap = array%len_
-					array%i32 = array%i32(1: array%len_)
-				end if
-
 			else if (array%type == i64_type) then
 
-				array%cap = int((ubound_%sca%i64 - lbound_%sca%i64) / step%sca%i64 + 1)
+				!array%cap = int((ubound_%sca%i64 - lbound_%sca%i64) / step%sca%i64 + 1)
 				!array%cap = int((ubound_%sca%i64 - lbound_%sca%i64) / step%sca%i64)
+				array%cap = (ubound_%sca%i64 - lbound_%sca%i64 &
+					+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
+
 				allocate(array%i64( array%cap ))
 
 				j = 1
@@ -155,20 +155,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end do
 				array%len_ = j - 1
 
-				! TODO: can cap be calculated correctly at the start, without
-				! breakign tests? Find out which test crashes without commented
-				! `+1` in above cap calculation
-				if (array%len_ < array%cap) then
-					array%cap = array%len_
-					array%i64 = array%i64(1: array%len_)
-				end if
-
 			else if (array%type == f32_type) then
 
 				!print *, 'lbound_, ubound_ = ', lbound_%sca%f32, ubound_%sca%f32
 				!print *, 'step = ', step%sca%f32
 
-				array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32) + 1
+				!array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32) + 1
+				array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
 				allocate(array%f32( array%cap ))
 
 				j = 1
@@ -178,18 +171,28 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				do while ((f  < ubound_%sca%f32 .eqv. lbound_%sca%f32 < ubound_%sca%f32) &
 				     .and. f /= ubound_%sca%f32)
 					array%f32(j) = f
-					f = f + step%sca%f32
+
+					! Using only addition here seems more efficient, but
+					! rounding errors accumulate differently.  Compare
+					! `[0.0: 0.1: 0.9];` with both methods.  First ends in
+					! 0.800001, while second method (with multiplication) ends
+					! in 0.8
+
+					!f = f + step%sca%f32
+					f = lbound_%sca%f32 + j * step%sca%f32
+
 					j = j + 1
 				end do
 				array%len_ = j - 1
+				!array%len_ = array%cap
 
-				! TODO: can cap be calculated correctly at the start, without
-				! breakign tests? Find out which test crashes without commented
-				! `+1` in above cap calculation
-				if (array%len_ < array%cap) then
-					array%cap = array%len_
-					array%f32 = array%f32(1: array%len_)
-				end if
+				!! TODO: can cap be calculated correctly at the start, without
+				!! breaking tests? Find out which test crashes without commented
+				!! `+1` in above cap calculation
+				!if (array%len_ < array%cap) then
+				!	array%cap = array%len_
+				!	array%f32 = array%f32(1: array%len_)
+				!end if
 
 			else
 				write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
@@ -431,63 +434,55 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'lbound type = ', kind_name(lbound_%type)
 		!print *, 'ubound type = ', kind_name(ubound_%type)
 
-		! push scope to make the loop iterator local
-		call vars%push_scope()
-
-		!if (any([lbound_%type, ubound_%type] == i64_type)) then
-		!	itr%type = i64_type
-		!else
-		!	itr%type = i32_type
-		!end if
-		!!print *, 'itr%type = ', kind_name(itr%type)
-
-		!if (.not. any (lbound_%type == [i32_type, i64_type])) then
-		!	write(*,*) err_eval_i32_itr(node%identifier%text)
-		!	call internal_error()
-		!end if
-		!if (.not. any (ubound_%type == [i32_type, i64_type])) then
-		!	write(*,*) err_eval_i32_itr(node%identifier%text)
-		!	call internal_error()
-		!end if
+		if (.not. any (lbound_%type == [i32_type, i64_type])) then
+			write(*,*) err_eval_i32_itr(node%identifier%text)
+			call internal_error()
+		end if
+		if (.not. any (ubound_%type == [i32_type, i64_type])) then
+			write(*,*) err_eval_i32_itr(node%identifier%text)
+			call internal_error()
+		end if
 
 		!print *, 'lbound_ = ', lbound_%to_i64()
 		!print *, 'ubound_ = ', ubound_%to_i64()
-
-		!type_ = node%val%array%type
-		!val%type = type_
-
-		!print *, 'node%array%type = ', kind_name(node%array%val%array%type)
-
-		! Do promotion once before loop
 		!print *, 'lbound type = ', kind_name(lbound_%type)
 		!print *, 'ubound type = ', kind_name(ubound_%type)
-		if (any(i64_type == [lbound_%type, ubound_%type])) then
-			!print *, 'promoting'
-			call promote_i32_i64(lbound_)
-			call promote_i32_i64(ubound_)
-			itr%type = i64_type
-		else
-			itr%type = i32_type
+		!print *, 'node%array%type = ', kind_name(node%array%val%array%type)
 
-		! TODO: f32
+		select case (node%array%val%array%kind)
+		case (bound_array)
 
-		end if
+			! Do promotion once before loop
+			if (any(i64_type == [lbound_%type, ubound_%type])) then
+				!print *, 'promoting'
+				call promote_i32_i64(lbound_)
+				call promote_i32_i64(ubound_)
+				itr%type = i64_type
+			else
+				itr%type = i32_type
+			end if
+
+			if (.not. any(itr%type == [i32_type, i64_type])) then
+				write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
+				call internal_error()
+			end if
+
+			len8 = ubound_%to_i64() - lbound_%to_i64()
+
+		case default
+			write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
+			call internal_error()
+		end select
 
 		!print *, 'itr%type = ', kind_name(itr%type)
 
 		!print *, 'lbound type = ', kind_name(lbound_%type)
 		!print *, 'val%type    = ', kind_name(val%type)
 
-		if (.not. any(itr%type == [i32_type, i64_type])) then
-			write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
-			call internal_error()
-		end if
-
-		len8 = ubound_%to_i64() - lbound_%to_i64()
-
+		! push scope to make the loop iterator local
+		call vars%push_scope()
 		do i8 = 1, len8
 
-			!itr = array_at(node%array, i8, lbound_, ubound_)
 			call array_at(itr, node%array, i8, lbound_, ubound_)
 			!print *, 'itr = ', itr%to_str()
 
@@ -501,7 +496,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res = syntax_eval(node%body, vars, fns, quietl)
 
 		end do
-
 		call vars%pop_scope()
 
 	case (while_statement)
@@ -1434,6 +1428,9 @@ end function subscript_eval
 
 subroutine array_at(val, node, i, lbound_, ubound_)
 
+	! This lazily gets an array value at an index i without expanding the whole
+	! implicit array in memory.  Used for for loops
+
 	type(value_t), intent(inout) :: val
 
 	type(syntax_node_t), intent(in) :: node
@@ -1444,16 +1441,19 @@ subroutine array_at(val, node, i, lbound_, ubound_)
 
 	!*********
 
-	!integer :: type_
+	select case (node%val%array%kind)
+	case (bound_array)
 
-	if (val%type == i32_type) then
-		val%sca%i32 = lbound_%sca%i32 + i - 1
-	else !if (val%type == i64_type) then
-		val%sca%i64 = lbound_%sca%i64 + i - 1
+		if (val%type == i32_type) then
+			val%sca%i32 = lbound_%sca%i32 + i - 1
+		else !if (val%type == i64_type) then
+			val%sca%i64 = lbound_%sca%i64 + i - 1
+		end if
 
-	! TODO: f32
-
-	end if
+	case default
+		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
+		call internal_error()
+	end select
 
 end subroutine array_at
 
