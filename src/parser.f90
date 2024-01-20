@@ -39,18 +39,38 @@ module syntran__parser_m
 		integer :: num_fns = 0
 
 		contains
-			procedure :: match, tokens_str, current_kind, &
-				current => current_token, next => next_parser_token, &
-				peek => parser_peek_token, peek_kind, &
-				parse_expr, parse_primary_expr, parse_expr_statement, &
-				parse_statement, parse_block_statement, parse_if_statement, &
-				current_pos, peek_pos, parse_for_statement, &
-				parse_while_statement, parse_array_expr, parse_unit, &
-				parse_fn_declaration, parse_subscripts, parse_type, &
-				parse_size, peek_unit, current_unit, &
-				context => parser_current_context, &
-				text => parser_text, preprocess, match_pre, parse_fn_call, &
-				parse_name_expr
+			procedure :: &
+				context => current_context, &
+				current => current_token, &
+				current_kind, &
+				current_pos, &
+				current_unit, &
+				match, &
+				match_pre, &
+				next => next_token, &
+				parse_array_expr, &
+				parse_block_statement, &
+				parse_expr, &
+				parse_expr_statement, &
+				parse_fn_call, &
+				parse_fn_declaration, &
+				parse_for_statement, &
+				parse_if_statement, &
+				parse_name_expr, &
+				parse_primary_expr, &
+				parse_size, &
+				parse_statement, &
+				parse_subscripts, &
+				parse_type, &
+				parse_unit, &
+				parse_while_statement, &
+				peek => peek_token, &
+				peek_kind, &
+				peek_pos, &
+				peek_unit, &
+				preprocess, &
+				text => parser_text, &
+				tokens_str
 
 	end type parser_t
 
@@ -182,7 +202,7 @@ function current_token(parser)
 	current_token = parser%peek(0)
 end function current_token
 
-function parser_peek_token(parser, offset) result(token)
+function peek_token(parser, offset) result(token)
 
 	class(parser_t) :: parser
 
@@ -205,16 +225,16 @@ function parser_peek_token(parser, offset) result(token)
 
 	token = parser%tokens(pos)
 
-end function parser_peek_token
+end function peek_token
 
 !===============================================================================
 
-function next_parser_token(parser) result(next)
+function next_token(parser) result(next)
 	class(parser_t) :: parser
 	type(syntax_token_t) :: next
 	next = parser%current()
 	parser%pos = parser%pos + 1
-end function next_parser_token
+end function next_token
 
 !===============================================================================
 
@@ -1055,6 +1075,9 @@ function parse_array_expr(parser) result(expr)
 	!
 	!     // Explicit list for any rank-1 type
 	!     [elem_0, elem_1, elem_2, ... ]
+	!
+	!     // Explicit list and size for higher ranks
+	!     [elem_0, elem_1, elem_2, ... ; size_0, size_1, ... ]
 	!
 	! A note on the term "rank-1":  Maybe there's an argument to be made that
 	! for a language with 0-based arrays, we should call vectors "rank-0" and
@@ -1925,14 +1948,14 @@ end function peek_unit
 
 !********
 
-function parser_current_context(parser) result(context)
+function current_context(parser) result(context)
 	class(parser_t) :: parser
 	type(text_context_t) :: context
 
 	!parser%contexts%v(parser%current_unit()), span, type_text))
 	context = parser%contexts%v( parser%current_unit() )
 
-end function parser_current_context
+end function current_context
 
 !********
 

@@ -331,7 +331,7 @@ fn main(): i32
 	println("starting syntran logo main");
 
 	draw_logo();
-	write_ppm("logo-syntran-v14.ppm");
+	write_ppm("logo-syntran-v15.ppm");
 
 	println("ending main");
 	0;

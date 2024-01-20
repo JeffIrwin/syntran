@@ -28,7 +28,14 @@ module syntran__core_m
 		syntran_patch =  40
 
 	! TODO:
-	!  - i32() et al. should work with array args
+	!  - negative for loop steps.  at least throw parser error
+	!  - check assignment to void type? guard against things like
+	!    `let x = println();`
+	!    * did i allow this to stop cascading errors?  i think i used
+	!      unknown_type for that
+	!  - casting fns should work with array args
+	!    * i64() TBD.  f32() doesn't exist (you can mul by 1.0 as a workaround)
+	!    * i32() done
 	!  - array concatenation:
 	!        let arr1 = [0: 4];
 	!        let arr2 = [4: 8];
@@ -50,7 +57,6 @@ module syntran__core_m
 	!      be done first
 	!  - len(), count(), etc. should return i64
 	!    * size() done
-	!  - negative for loop steps.  at least throw parser error
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
 	!    * array and, or, not
