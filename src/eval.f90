@@ -434,14 +434,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'lbound type = ', kind_name(lbound_%type)
 		!print *, 'ubound type = ', kind_name(ubound_%type)
 
-		if (.not. any (lbound_%type == [i32_type, i64_type])) then
-			write(*,*) err_eval_i32_itr(node%identifier%text)
-			call internal_error()
-		end if
-		if (.not. any (ubound_%type == [i32_type, i64_type])) then
-			write(*,*) err_eval_i32_itr(node%identifier%text)
-			call internal_error()
-		end if
+		!if (.not. any (lbound_%type == [i32_type, i64_type])) then
+		!	write(*,*) err_eval_i32_itr(node%identifier%text)
+		!	call internal_error()
+		!end if
+		!if (.not. any (ubound_%type == [i32_type, i64_type])) then
+		!	write(*,*) err_eval_i32_itr(node%identifier%text)
+		!	call internal_error()
+		!end if
 
 		!print *, 'lbound_ = ', lbound_%to_i64()
 		!print *, 'ubound_ = ', ubound_%to_i64()
@@ -459,6 +459,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				call promote_i32_i64(ubound_)
 				itr%type = i64_type
 			else
+				! TODO: type check above is removed.  Add is_int_type() check
+				! here
 				itr%type = i32_type
 			end if
 
@@ -468,6 +470,35 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end if
 
 			len8 = ubound_%to_i64() - lbound_%to_i64()
+
+		case (step_array)
+
+			! If any bound or step is i64, cast the others up to match
+			if (any(i64_type == [lbound_%type, step%type, ubound_%type])) then
+				call promote_i32_i64(lbound_)
+				call promote_i32_i64(step)
+				call promote_i32_i64(ubound_)
+				itr%type = i64_type
+			else
+				itr%type = lbound_%type
+			end if
+
+			select case (itr%type)
+			case (i32_type)
+				len8 = (ubound_%sca%i32 - lbound_%sca%i32 &
+					+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
+
+			case (i64_type)
+				len8 = (ubound_%sca%i64 - lbound_%sca%i64 &
+					+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
+
+			case (f32_type)
+				len8 = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
+
+			case default
+				write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
+				call internal_error()
+			end select
 
 		case default
 			write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
@@ -483,7 +514,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		call vars%push_scope()
 		do i8 = 1, len8
 
-			call array_at(itr, node%array, i8, lbound_, ubound_)
+			call array_at(itr, node%array, i8, lbound_, step, ubound_)
 			!print *, 'itr = ', itr%to_str()
 
 			! During evaluation, insert variables by array id_index instead of
@@ -1426,7 +1457,7 @@ end function subscript_eval
 
 !===============================================================================
 
-subroutine array_at(val, node, i, lbound_, ubound_)
+subroutine array_at(val, node, i, lbound_, step, ubound_)
 
 	! This lazily gets an array value at an index i without expanding the whole
 	! implicit array in memory.  Used for for loops
@@ -1437,7 +1468,8 @@ subroutine array_at(val, node, i, lbound_, ubound_)
 
 	integer(kind = 8), intent(in) :: i
 
-	type(value_t), intent(inout) :: lbound_, ubound_
+	!type(value_t), intent(inout) :: lbound_, step, ubound_
+	type(value_t), intent(in) :: lbound_, step, ubound_
 
 	!*********
 
@@ -1449,6 +1481,20 @@ subroutine array_at(val, node, i, lbound_, ubound_)
 		else !if (val%type == i64_type) then
 			val%sca%i64 = lbound_%sca%i64 + i - 1
 		end if
+
+	case (step_array)
+
+		select case (val%type)
+		case (i32_type)
+			val%sca%i32 = lbound_%sca%i32 + (i - 1) * step%sca%i32
+
+		case (i64_type)
+			val%sca%i64 = lbound_%sca%i64 + (i - 1) * step%sca%i64
+
+		case (f32_type)
+			val%sca%f32 = lbound_%sca%f32 + (i - 1) * step%sca%f32
+
+		end select
 
 	case default
 		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
