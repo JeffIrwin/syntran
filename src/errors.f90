@@ -416,6 +416,21 @@ end function err_unary_types
 
 !===============================================================================
 
+function err_non_array_loop(context, span, range_) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: range_
+	err = err_prefix &
+		//'range `'//trimw(range_)//'` of for loop is not an array' &
+		//underline(context, span) &
+		//" non-array range"//color_reset
+
+end function err_non_array_loop
+
+!===============================================================================
+
 function err_non_bool_condition(context, span, condition, statement) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

@@ -280,10 +280,12 @@ function parse_for_statement(parser) result(statement)
 
 	!********
 
-	!integer :: bound_beg, bound_end
+	integer :: arr_beg, arr_end
 
 	type(syntax_node_t)  :: array, body
 	type(syntax_token_t) :: for_token, in_token, identifier
+
+	type(text_span_t) :: span
 
 	type(value_t) :: dummy
 
@@ -312,7 +314,10 @@ function parse_for_statement(parser) result(statement)
 
 	in_token   = parser%match(in_keyword)
 
-	array      = parser%parse_array_expr()
+	arr_beg  = parser%peek_pos(0)
+	!array      = parser%parse_array_expr()
+	array      = parser%parse_primary_expr()
+	arr_end  = parser%peek_pos(0) - 1
 
 	parser%num_vars = parser%num_vars + 1
 	statement%id_index = parser%num_vars
@@ -329,17 +334,31 @@ function parse_for_statement(parser) result(statement)
 	!print *, 'identifier%text = ', identifier%text
 	!print *, 'allocated(array%lbound) = ', allocated(array%lbound)
 
-	if (allocated(array%lbound)) then
-		! Pathological code like `for <EOF>` can crash the parser :(
+	!if (allocated(array%lbound)) then
+	if (allocated(array%val%array)) then
 
-		!print *, 'array%type = ', kind_name(array%val%type) ! "array_type" :(
-		!print *, 'array%type = ', kind_name(array%val%array%type)
+		!print *, 'array%val%type = ', kind_name(array%val%type) ! "array_type" :(
+		!print *, 'array type = ', kind_name(array%val%array%type)
+
+		! Pathological code like `for <EOF>` can crash the parser :(
 
 		! Array iterator type could be i32 or i64, and lbound type might not
 		! match ubound type!
 		dummy%type = array%val%array%type
 		call parser%vars%insert(identifier%text, dummy, &
 			statement%id_index)
+
+	else
+
+		dummy%type = array%val%type
+		call parser%vars%insert(identifier%text, dummy, &
+			statement%id_index)
+
+		! I guess we could allow a 1-loop iteration on a scalar if that's
+		! worthwhile.  Eval would need some work
+		span = new_span(arr_beg, arr_end - arr_beg + 1)
+		call parser%diagnostics%push(err_non_array_loop( &
+			parser%context(), span, parser%text(arr_beg, arr_end)))
 
 	end if
 

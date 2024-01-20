@@ -40,7 +40,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	character(len = :), allocatable :: color
 
-	integer :: i, j, io, rank, rank_res, idim_, idim_res, larrtype, rarrtype
+	integer :: i, j, io, rank, rank_res, idim_, idim_res, larrtype, rarrtype, &
+		for_kind
 	integer(kind = 8) :: il, iu, i8, index_, prod, len8
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
@@ -416,6 +417,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			write(*,*) err_int_prefix//'unexpected array kind'//color_reset
 			call internal_error()
 		end if
+		!res%array%kind = expl_array
 
 	case (for_statement)
 
@@ -449,60 +451,86 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'ubound type = ', kind_name(ubound_%type)
 		!print *, 'node%array%type = ', kind_name(node%array%val%array%type)
 
-		select case (node%array%val%array%kind)
-		case (bound_array)
+		!print *, 'node array kind = ', kind_name(node%array%kind)
+		!print *, 'array kind      = ', kind_name(node%array%val%array%kind)
 
-			! Do promotion once before loop
-			if (any(i64_type == [lbound_%type, ubound_%type])) then
-				!print *, 'promoting'
-				call promote_i32_i64(lbound_)
-				call promote_i32_i64(ubound_)
-				itr%type = i64_type
-			else
-				! TODO: type check above is removed.  Add is_int_type() check
-				! here
-				itr%type = i32_type
-			end if
+		select case (node%array%kind)
+		case (array_expr)
 
-			if (.not. any(itr%type == [i32_type, i64_type])) then
-				write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
-				call internal_error()
-			end if
+			! Primary array exprs are evaluated lazily without wasting memory
+			for_kind = node%array%val%array%kind
 
-			len8 = ubound_%to_i64() - lbound_%to_i64()
+			select case (node%array%val%array%kind)
+			case (bound_array)
 
-		case (step_array)
+				! Do promotion once before loop
+				if (any(i64_type == [lbound_%type, ubound_%type])) then
+					!print *, 'promoting'
+					call promote_i32_i64(lbound_)
+					call promote_i32_i64(ubound_)
+					itr%type = i64_type
+				else
+					! TODO: type check above is removed.  Add is_int_type() check
+					! here
+					itr%type = i32_type
+				end if
 
-			! If any bound or step is i64, cast the others up to match
-			if (any(i64_type == [lbound_%type, step%type, ubound_%type])) then
-				call promote_i32_i64(lbound_)
-				call promote_i32_i64(step)
-				call promote_i32_i64(ubound_)
-				itr%type = i64_type
-			else
-				itr%type = lbound_%type
-			end if
+				if (.not. any(itr%type == [i32_type, i64_type])) then
+					write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
+					call internal_error()
+				end if
 
-			select case (itr%type)
-			case (i32_type)
-				len8 = (ubound_%sca%i32 - lbound_%sca%i32 &
-					+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
+				len8 = ubound_%to_i64() - lbound_%to_i64()
 
-			case (i64_type)
-				len8 = (ubound_%sca%i64 - lbound_%sca%i64 &
-					+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
+			case (step_array)
 
-			case (f32_type)
-				len8 = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
+				! If any bound or step is i64, cast the others up to match
+				if (any(i64_type == [lbound_%type, step%type, ubound_%type])) then
+					call promote_i32_i64(lbound_)
+					call promote_i32_i64(step)
+					call promote_i32_i64(ubound_)
+					itr%type = i64_type
+				else
+					itr%type = lbound_%type
+				end if
+
+				select case (itr%type)
+				case (i32_type)
+					len8 = (ubound_%sca%i32 - lbound_%sca%i32 &
+						+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
+
+				case (i64_type)
+					len8 = (ubound_%sca%i64 - lbound_%sca%i64 &
+						+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
+
+				case (f32_type)
+					len8 = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
+
+				case default
+					write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
+					call internal_error()
+				end select
 
 			case default
-				write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
+				write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
 				call internal_error()
 			end select
 
 		case default
-			write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
-			call internal_error()
+			!print *, 'non-primary array expression'
+
+			! Any non-primitive array needs to be evaluated before iterating
+			! over it.  Parser guarantees that this is an array
+			for_kind = array_expr
+
+			tmp = syntax_eval(node%array, vars, fns, quietl)
+			array = tmp%array
+
+			len8 = array%len_
+
+			!print *, 'len8 = ', len8
+
+
 		end select
 
 		!print *, 'itr%type = ', kind_name(itr%type)
@@ -514,7 +542,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		call vars%push_scope()
 		do i8 = 1, len8
 
-			call array_at(itr, node%array, i8, lbound_, step, ubound_)
+			call array_at(itr, for_kind, i8, lbound_, step, ubound_, array)
 			!print *, 'itr = ', itr%to_str()
 
 			! During evaluation, insert variables by array id_index instead of
@@ -1457,23 +1485,26 @@ end function subscript_eval
 
 !===============================================================================
 
-subroutine array_at(val, node, i, lbound_, step, ubound_)
+subroutine array_at(val, kind_, i, lbound_, step, ubound_, array)
 
 	! This lazily gets an array value at an index i without expanding the whole
 	! implicit array in memory.  Used for for loops
 
 	type(value_t), intent(inout) :: val
 
-	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: kind_
+	!type(syntax_node_t), intent(in) :: node
 
 	integer(kind = 8), intent(in) :: i
 
 	!type(value_t), intent(inout) :: lbound_, step, ubound_
 	type(value_t), intent(in) :: lbound_, step, ubound_
 
+	type(array_t), intent(in) :: array
+
 	!*********
 
-	select case (node%val%array%kind)
+	select case (kind_)
 	case (bound_array)
 
 		if (val%type == i32_type) then
@@ -1495,6 +1526,10 @@ subroutine array_at(val, node, i, lbound_, step, ubound_)
 			val%sca%f32 = lbound_%sca%f32 + (i - 1) * step%sca%f32
 
 		end select
+
+	case (array_expr)
+		! Non-primary array expr
+		val = get_array_value_t(array, i - 1)
 
 	case default
 		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset

@@ -28,7 +28,6 @@ module syntran__core_m
 		syntran_patch =  40
 
 	! TODO:
-	!  - negative for loop steps.  at least throw parser error
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
@@ -51,7 +50,6 @@ module syntran__core_m
 	!        difference between the input rank and the output rank of the
 	!        subscripting operation.  e.g. if every subscript is a slice, then
 	!        the rank is unchanged, 1 scalar subscript decreases rank by 1, etc.
-	!    * refactor the way implicit arrays are handled as for loop iterators
 	!  - refactor syntrax_eval() deep nesting
 	!    * encapsulation of syntax_eval() args (vars, fns, quiet, etc.) should
 	!      be done first
