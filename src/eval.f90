@@ -428,6 +428,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		if (allocated(node%array%step  )) step    = syntax_eval(node%array%step  , vars, fns, quietl)
 		if (allocated(node%array%ubound)) ubound_ = syntax_eval(node%array%ubound, vars, fns, quietl)
 
+		!print *, 'lbound type = ', kind_name(lbound_%type)
+		!print *, 'ubound type = ', kind_name(ubound_%type)
+
 		! push scope to make the loop iterator local
 		call vars%push_scope()
 
@@ -450,35 +453,54 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'lbound_ = ', lbound_%to_i64()
 		!print *, 'ubound_ = ', ubound_%to_i64()
 
+		!type_ = node%val%array%type
+		!val%type = type_
+
+		!print *, 'node%array%type = ', kind_name(node%array%val%array%type)
+
+		! Do promotion once before loop
+		!print *, 'lbound type = ', kind_name(lbound_%type)
+		!print *, 'ubound type = ', kind_name(ubound_%type)
+		if (any(i64_type == [lbound_%type, ubound_%type])) then
+			!print *, 'promoting'
+			call promote_i32_i64(lbound_)
+			call promote_i32_i64(ubound_)
+			itr%type = i64_type
+		else
+			itr%type = i32_type
+
+		! TODO: f32
+
+		end if
+
+		!print *, 'itr%type = ', kind_name(itr%type)
+
+		!print *, 'lbound type = ', kind_name(lbound_%type)
+		!print *, 'val%type    = ', kind_name(val%type)
+
+		if (.not. any(itr%type == [i32_type, i64_type])) then
+			write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
+			call internal_error()
+		end if
+
 		len8 = ubound_%to_i64() - lbound_%to_i64()
 
-		!i8 = 0
-		!do
-		!	i8 = i8 + 1
 		do i8 = 1, len8
 
-			itr = array_at(node%array, i8, lbound_, ubound_)
+			!itr = array_at(node%array, i8, lbound_, ubound_)
+			call array_at(itr, node%array, i8, lbound_, ubound_)
+			!print *, 'itr = ', itr%to_str()
+
+			! During evaluation, insert variables by array id_index instead of
+			! dict lookup.  This is much faster and can be done during
+			! evaluation now that we know all of the variable identifiers.
+			! Parsing still needs to rely on dictionary lookups because it does
+			! not know the entire list of variable identifiers ahead of time
 			vars%vals(node%id_index) = itr
 
 			res = syntax_eval(node%body, vars, fns, quietl)
 
 		end do
-
-		!do i8 = lbound_%to_i64(), ubound_%to_i64() - 1
-		!	if (any([lbound_%type, ubound_%type] == i64_type)) then
-		!		itr%sca%i64 = i8
-		!	else
-		!		itr%sca%i32 = int(i8, 4)
-		!	end if
-		!	!print *, 'itr = ', itr%to_str()
-		!	! During evaluation, insert variables by array id_index instead of
-		!	! dict lookup.  This is much faster and can be done during
-		!	! evaluation now that we know all of the variable identifiers.
-		!	! Parsing still needs to rely on dictionary lookups because it does
-		!	! not know the entire list of variable identifiers ahead of time
-		!	vars%vals(node%id_index) = itr
-		!	res = syntax_eval(node%body, vars, fns, quietl)
-		!end do
 
 		call vars%pop_scope()
 
@@ -1410,61 +1432,30 @@ end function subscript_eval
 
 !===============================================================================
 
-function array_at(node, i, lbound_, ubound_) result(val)
+subroutine array_at(val, node, i, lbound_, ubound_)
 
-	!type(array_t), intent(in) :: array
+	type(value_t), intent(inout) :: val
+
 	type(syntax_node_t), intent(in) :: node
 
 	integer(kind = 8), intent(in) :: i
 
-	type(value_t) :: val
+	type(value_t), intent(inout) :: lbound_, ubound_
 
 	!*********
 
-	integer :: type_
+	!integer :: type_
 
-	type(value_t) :: lbound_, ubound_
-
-	!! TODO: set type once before loop.  Make val inout arg
-	!array%type = node%val%array%type
-	type_ = node%val%array%type
-
-	val%type = type_
-
-	! TODO: do promotion once before loop
-	if (any(i64_type == [lbound_%type, ubound_%type])) then
-		call promote_i32_i64(lbound_)
-		call promote_i32_i64(ubound_)
-	end if
-
-	if (.not. any(type_ == [i32_type, i64_type])) then
-		write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
-		call internal_error()
-	end if
-
-	!if (array%type == i32_type) then
-	!	array%len_ = ubound_%sca%i32 - lbound_%sca%i32
-	!else !if (array%type == i64_type) then
-	!	array%len_ = ubound_%sca%i64 - lbound_%sca%i64
-	!end if
-	!call allocate_array(array, array%len_)
-
-	!print *, 'bounds in [', lbound_%str(), ': ', ubound_%str(), ']'
-	!print *, 'node%val%array%type = ', node%val%array%type
-
-	if (type_ == i32_type) then
-		!do i = lbound_%sca%i32, ubound_%sca%i32 - 1
-		!	array%i32(i - lbound_%sca%i32 + 1) = i
-		!end do
+	if (val%type == i32_type) then
 		val%sca%i32 = lbound_%sca%i32 + i - 1
-	else !if (type_ == i64_type) then
-		!do i8 = lbound_%sca%i64, ubound_%sca%i64 - 1
-		!	array%i64(i8 - lbound_%sca%i64 + 1) = i8
-		!end do
+	else !if (val%type == i64_type) then
 		val%sca%i64 = lbound_%sca%i64 + i - 1
+
+	! TODO: f32
+
 	end if
 
-end function array_at
+end subroutine array_at
 
 !===============================================================================
 

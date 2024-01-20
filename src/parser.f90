@@ -1336,6 +1336,7 @@ function parse_array_expr(parser) result(expr)
 			![lbound%val%type, ubound%val%type])) then
 			) then
 
+			!print *, 'setting lbound type'
 			expr%val%array%type = lbound%val%type
 
 		! TODO: make is_int_type() elemental, then we can sugar up this syntax
@@ -1343,6 +1344,7 @@ function parse_array_expr(parser) result(expr)
 			is_int_type(lbound%val%type), &
 			is_int_type(ubound%val%type)])) then
 
+			!print *, 'setting i64_type'
 			expr%val%array%type = i64_type
 
 		else
