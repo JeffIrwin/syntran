@@ -15,6 +15,9 @@ module syntran__consts_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			bound_array          = 89, &
+			len_array            = 88, &
+			step_array           = 87, &
 			str_array_type       = 86, &
 			f32_array_type       = 85, &
 			i64_array_type       = 84, &
@@ -49,7 +52,7 @@ module syntran__consts_m
 			array_type           = 55, &
 			array_expr           = 54, &
 			expl_array           = 53, &
-			impl_array           = 52, &
+			unif_array           = 52, &
 			f32_type             = 51, &
 			f32_token            = 50, &
 			greater_equals_token = 49, &
@@ -166,7 +169,7 @@ function kind_token(kind)
 			">=                   ", & ! 49
 			"[0-9.+-e]            ", & ! 50
 			"f32 expression       ", & ! 51
-			"Implicit array       ", & ! 52
+			"Uniform array        ", & ! 52
 			"Explicit array       ", & ! 53
 			"Array expression     ", & ! 54
 			"Array type           ", & ! 55
@@ -201,6 +204,9 @@ function kind_token(kind)
 			"i64_array_type       ", & ! 84
 			"f32_array_type       ", & ! 85
 			"str_array_type       ", & ! 86
+			"step_array           ", & ! 87
+			"len_array            ", & ! 88
+			"bound_array          ", & ! 89
 			"unknown              "  & ! inf
 		]
 
@@ -273,7 +279,7 @@ function kind_name(kind)
 			"greater_equals_token", & ! 49
 			"f32_token           ", & ! 50
 			"f32_type            ", & ! 51
-			"impl_array          ", & ! 52
+			"unif_array          ", & ! 52
 			"expl_array          ", & ! 53
 			"array_expr          ", & ! 54
 			"array_type          ", & ! 55
@@ -308,6 +314,9 @@ function kind_name(kind)
 			"i64_array_type      ", & ! 84
 			"f32_array_type      ", & ! 85
 			"str_array_type      ", & ! 86
+			"step_array          ", & ! 87
+			"len_array           ", & ! 88
+			"bound_array         ", & ! 89
 			"unknown             "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too

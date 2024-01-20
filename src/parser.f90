@@ -1141,7 +1141,7 @@ function parse_array_expr(parser) result(expr)
 		expr%val%type       = array_type
 
 		expr%val%array%type = lbound%val%type
-		expr%val%array%kind = impl_array
+		expr%val%array%kind = unif_array
 		expr%val%array%rank = size%len_
 
 		!print *, 'expr%val%type       = ', expr%val%type
@@ -1240,7 +1240,7 @@ function parse_array_expr(parser) result(expr)
 					parser%text(span_beg, span_end)))
 			end if
 
-			expr%val%array%kind = impl_array
+			expr%val%array%kind = step_array
 			expr%val%array%rank = 1
 
 			expr%lbound = lbound
@@ -1298,7 +1298,7 @@ function parse_array_expr(parser) result(expr)
 			expr%val%type       = array_type
 
 			expr%val%array%type = lbound%val%type
-			expr%val%array%kind = impl_array
+			expr%val%array%kind = len_array
 			expr%val%array%rank = 1
 
 			expr%lbound = lbound
@@ -1324,7 +1324,7 @@ function parse_array_expr(parser) result(expr)
 
 		expr%val%type = array_type
 
-		expr%val%array%kind = impl_array
+		expr%val%array%kind = bound_array
 		expr%val%array%rank = 1
 
 		expr%lbound = lbound
@@ -1439,7 +1439,7 @@ function parse_array_expr(parser) result(expr)
 	!        [0: 3   ,   5, 6,   10: 13    ]
 	!     // [0, 1, 2,   5, 6,   10, 11, 12]
 	!
-	! But how useful would that really be?
+	! Maybe require nesting inside extra brackets []?
 
 end function parse_array_expr
 

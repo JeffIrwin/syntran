@@ -83,13 +83,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		!print *, 'evaluating array_expr'
 		!print *, 'identifier = ', node%identifier%text
 
-		if (node%val%array%kind == impl_array .and. allocated(node%step)) then
-
-			! step-based impl array
-			!
-			! TODO: make several more impl_*_array enum variations for each impl
-			! array form instead of checking whether various syntax nodes are
-			! allocated
+		if (node%val%array%kind == step_array) then
 
 			lbound_ = syntax_eval(node%lbound, vars, fns, quietl)
 			step   = syntax_eval(node%step  , vars, fns, quietl)
@@ -210,10 +204,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res%type  = array_type
 			res%array = array
 
-		else if (node%val%array%kind == impl_array &
-			.and. allocated(node%ubound) .and. allocated(node%len_)) then
-
-			! len-based impl arrays
+		else if (node%val%array%kind == len_array) then
 
 			!print *, 'len array'
 			lbound_ = syntax_eval(node%lbound, vars, fns, quietl)
@@ -251,7 +242,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res%type  = array_type
 			res%array = array
 
-		else if (node%val%array%kind == impl_array .and. allocated(node%len_)) then
+		else if (node%val%array%kind == unif_array) then
 
 			! Initialize rank-2+ arrays
 			if (allocated(node%size)) then
@@ -300,12 +291,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res%type  = array_type
 			res%array = array
 
-		else if (node%val%array%kind == impl_array) then
+		else if (node%val%array%kind == bound_array) then
 			!print *, 'impl_array'
 
-			! Unit step impl integer array
-
-			! Expand impl_array to expl_array here on evaluation.  Consider
+			! Expand implicit array kinds here on evaluation.  Consider
 			! something like this:
 			!
 			!     let a = [0: 5];
@@ -362,8 +351,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res%type  = array_type
 			res%array = array
 
-		else if (node%val%array%kind == expl_array .and. allocated(node%size)) then
+		else if (node%val%array%kind == expl_array .and. &
+		         node%val%array%rank > 1) then
 			! Explicit rank-2+ arrays
+			!
+			! There are two different cases here for `expl_array`.  Should one
+			! be renamed?  e.g. expl_array vs expl_vec? expl_rmany vs expl_r1?
 
 			array = new_array(node%val%array%type, size(node%elems))
 

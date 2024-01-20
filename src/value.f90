@@ -43,7 +43,7 @@ module syntran__value_m
 	type array_t
 
 		! The array type is i32_type, f32_type, etc. while the kind is
-		! impl_array (bound-based) or expl_array (CSV list)
+		! unif_array, bound_array, len_array, step_array, or expl_array
 		integer :: type, kind
 		type(scalar_t), allocatable :: lbound, step, ubound
 
@@ -398,7 +398,8 @@ recursive function value_to_str(val) result(ans)
 
 			! This whole case could be an array_to_str() fn
 
-			if (val%array%kind == impl_array) then
+			if (val%array%kind == bound_array) then
+				! This is unreachable in short tests
 				ans = '['//val%array%lbound%to_str(val%array%type)//': ' &
 				         //val%array%ubound%to_str(val%array%type)//']'
 				return
