@@ -398,12 +398,12 @@ recursive function value_to_str(val) result(ans)
 
 			! This whole case could be an array_to_str() fn
 
-			if (val%array%kind == bound_array) then
-				! This is unreachable in short tests
-				ans = '['//val%array%lbound%to_str(val%array%type)//': ' &
-				         //val%array%ubound%to_str(val%array%type)//']'
-				return
-			end if
+			!if (val%array%kind == bound_array) then
+			!	! This is unreachable in short tests.  Not sure why I wrote it
+			!	ans = '['//val%array%lbound%to_str(val%array%type)//': ' &
+			!	         //val%array%ubound%to_str(val%array%type)//']'
+			!	return
+			!end if
 
 			!print *, 'array type = ', val%array%type
 

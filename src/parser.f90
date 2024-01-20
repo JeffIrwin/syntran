@@ -1393,7 +1393,7 @@ function parse_array_expr(parser) result(expr)
 
 	if (parser%current_kind() == semicolon_token) then
 
-		! Rank-2+ array: [elem_0, elem_1, elem_2, ... ; size_0, size_1, ... ];
+		! Explicit rank-2+ size_array: [elem_0, elem_1, elem_2, ... ; size_0, size_1, ... ];
 		semicolon = parser%match(semicolon_token)
 
 		size = parser%parse_size()
@@ -1409,7 +1409,7 @@ function parse_array_expr(parser) result(expr)
 		expr%val%type       = array_type
 
 		expr%val%array%type = lbound%val%type
-		expr%val%array%kind = expl_array
+		expr%val%array%kind = size_array
 		expr%val%array%rank = size%len_
 
 		call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len_ ))
@@ -1418,7 +1418,7 @@ function parse_array_expr(parser) result(expr)
 
 	end if
 
-	! Rank-1 array (size is implicitly defined by number of elements)
+	! Explicit rank-1 array (size is implicitly defined by number of elements)
 
 	rbracket = parser%match(rbracket_token)
 

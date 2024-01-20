@@ -12,6 +12,8 @@ module syntran__errors_m
 	character(len = *), parameter :: &
 		err_prefix = fg_bold_bright_red//'Error'//fg_bold//': ', &
 		err_int_prefix = fg_bold_bright_red//'Internal syntran error' &
+			//fg_bold//': ', &
+		err_rt_prefix = fg_bold_bright_red//'Runtime error' &
 			//fg_bold//': '
 
 	! A text span indicates which characters to underline in a faulty line of

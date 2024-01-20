@@ -192,7 +192,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end if
 
 			else
-				write(*,*) 'Error: step array type eval not implemented'
+				write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
 				call internal_error()
 			end if
 
@@ -229,7 +229,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end do
 
 			else
-				write(*,*) 'Error: bound/len array type eval not implemented'
+				write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
 				call internal_error()
 			end if
 
@@ -317,7 +317,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end if
 
 			if (.not. any(array%type == [i32_type, i64_type])) then
-				write(*,*) 'Error: unit step array type eval not implemented'
+				write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
 				call internal_error()
 			end if
 
@@ -351,12 +351,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			res%type  = array_type
 			res%array = array
 
-		else if (node%val%array%kind == expl_array .and. &
-		         node%val%array%rank > 1) then
-			! Explicit rank-2+ arrays
-			!
-			! There are two different cases here for `expl_array`.  Should one
-			! be renamed?  e.g. expl_array vs expl_vec? expl_rmany vs expl_r1?
+		else if (node%val%array%kind == size_array) then
+
+			! Explicit array with size
 
 			array = new_array(node%val%array%type, size(node%elems))
 
@@ -373,6 +370,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				len_ = syntax_eval(node%size(i), vars, fns, quietl)
 				array%size(i) = len_%to_i64()
 			end do
+
+			if (size(node%elems) /= product(array%size)) then
+				write(*,*) err_rt_prefix//"size of explicit array "// &
+					"does not match number of elements"//color_reset
+				call internal_error()
+			end if
 
 			!print *, 'copying array'
 			allocate(res%array)
@@ -407,7 +410,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		else
 			!TODO
-			write(*,*) 'Error: unexpected array kind'
+			write(*,*) err_int_prefix//'unexpected array kind'//color_reset
 			call internal_error()
 		end if
 
@@ -826,10 +829,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg2 = syntax_eval(node%args(2), vars, fns, quietl)
 
 			if (arg2%sca%i32 < 0 .or. arg2%sca%i32 >= arg1%array%rank) then
-				! TODO: this should be a runtime error (like bounds-checking),
-				! not an internal_error.  I just don't have infrastructure for
-				! runtime error handling yet
-				write(*,*) err_int_prefix//'rank mismatch in size() call'//color_reset
+				! TODO: re-think runtime errors.  A different prefix here
+				! besides err_int_prefix helps, but context should be given if
+				! possible like for parser/lexer error diagnostics
+				write(*,*) err_rt_prefix//'rank mismatch in size() call'//color_reset
 				call internal_error()
 			end if
 
@@ -860,7 +863,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! User-defined function
 
 			if (.not. allocated(node%params)) then
-				write(*,*) 'Error: unexpected fn'
+				write(*,*) err_int_prefix//'unexpected fn'//color_reset
 				call internal_error()
 			end if
 
@@ -939,14 +942,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(il: iu-1)
 
 			case default
-				write(*,*) 'Error: unexpected subscript kind'
+				write(*,*) err_int_prefix//'unexpected subscript kind'//color_reset
 				call internal_error()
 			end select
 
 		else if (allocated(node%lsubscripts)) then
 
 			if (vars%vals(node%id_index)%type /= array_type) then
-				write(*,*) 'Error: bad type, expected array'
+				write(*,*) err_int_prefix//'bad type, expected array'//color_reset
 				call internal_error()
 			end if
 
@@ -1284,7 +1287,7 @@ function new_array(type, cap) result(vector)
 	else if (type == str_type) then
 		allocate(vector%str ( vector%cap ))
 	else
-		write(*,*) 'Error: array type not implemented'
+		write(*,*) err_int_prefix//'array type not implemented'//color_reset
 		call internal_error()
 	end if
 
@@ -1336,7 +1339,7 @@ subroutine compound_assign(lhs, rhs, op)
 		call mod_(tmp, rhs, lhs, op%text)
 
 	case default
-		write(*,*) 'Error: unexpected assignment operator ', quote(op%text)
+		write(*,*) err_int_prefix//'unexpected assignment operator ', quote(op%text)//color_reset
 		call internal_error()
 	end select
 
