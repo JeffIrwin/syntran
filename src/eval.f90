@@ -41,7 +41,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	character(len = :), allocatable :: color
 
 	integer :: i, j, io, rank, rank_res, idim_, idim_res, larrtype, rarrtype
-	integer(kind = 8) :: il, iu, i8, index_, prod
+	integer(kind = 8) :: il, iu, i8, index_, prod, len8
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
 	logical :: quietl
@@ -86,7 +86,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		if (node%val%array%kind == step_array) then
 
 			lbound_ = syntax_eval(node%lbound, vars, fns, quietl)
-			step   = syntax_eval(node%step  , vars, fns, quietl)
+			step    = syntax_eval(node%step  , vars, fns, quietl)
 			ubound_ = syntax_eval(node%ubound, vars, fns, quietl)
 
 			array%type = node%val%array%type
@@ -127,7 +127,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				array%len_ = j - 1
 
 				! TODO: can cap be calculated correctly at the start, without
-				! breakign tests? Find out which test crashes without commented
+				! breaking tests? Find out which test crashes without commented
 				! `+1` in above cap calculation
 				if (array%len_ < array%cap) then
 					array%cap = array%len_
@@ -422,53 +422,63 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		! array_expr eval.  If possible, don't expand implicit arrays for for
 		! loops
 
-		lbound_ = syntax_eval(node%array%lbound, vars, fns, quietl)
-		ubound_ = syntax_eval(node%array%ubound, vars, fns, quietl)
+		! TODO: evaluate all of these ahead of loop, but only if they are
+		! allocated!  Also eval array step, size, etc.
+		if (allocated(node%array%lbound)) lbound_ = syntax_eval(node%array%lbound, vars, fns, quietl)
+		if (allocated(node%array%step  )) step    = syntax_eval(node%array%step  , vars, fns, quietl)
+		if (allocated(node%array%ubound)) ubound_ = syntax_eval(node%array%ubound, vars, fns, quietl)
 
 		! push scope to make the loop iterator local
 		call vars%push_scope()
 
-		if (any([lbound_%type, ubound_%type] == i64_type)) then
-			itr%type = i64_type
-		else
-			itr%type = i32_type
-		end if
-		!print *, 'itr%type = ', kind_name(itr%type)
+		!if (any([lbound_%type, ubound_%type] == i64_type)) then
+		!	itr%type = i64_type
+		!else
+		!	itr%type = i32_type
+		!end if
+		!!print *, 'itr%type = ', kind_name(itr%type)
 
-		! TODO: f32 for loop iterators.  Also check parse_for_statement(), which
-		! sets the type of the iterator
-		if (.not. any (lbound_%type == [i32_type, i64_type])) then
-			write(*,*) err_eval_i32_itr(node%identifier%text)
-			call internal_error()
-		end if
-
-		if (.not. any (ubound_%type == [i32_type, i64_type])) then
-			write(*,*) err_eval_i32_itr(node%identifier%text)
-			call internal_error()
-		end if
+		!if (.not. any (lbound_%type == [i32_type, i64_type])) then
+		!	write(*,*) err_eval_i32_itr(node%identifier%text)
+		!	call internal_error()
+		!end if
+		!if (.not. any (ubound_%type == [i32_type, i64_type])) then
+		!	write(*,*) err_eval_i32_itr(node%identifier%text)
+		!	call internal_error()
+		!end if
 
 		!print *, 'lbound_ = ', lbound_%to_i64()
 		!print *, 'ubound_ = ', ubound_%to_i64()
 
-		do i8 = lbound_%to_i64(), ubound_%to_i64() - 1
+		len8 = ubound_%to_i64() - lbound_%to_i64()
 
-			if (any([lbound_%type, ubound_%type] == i64_type)) then
-				itr%sca%i64 = i8
-			else
-				itr%sca%i32 = int(i8, 4)
-			end if
+		!i8 = 0
+		!do
+		!	i8 = i8 + 1
+		do i8 = 1, len8
 
-			!print *, 'itr = ', itr%to_str()
-
-			! During evaluation, insert variables by array id_index instead of
-			! dict lookup.  This is much faster and can be done during
-			! evaluation now that we know all of the variable identifiers.
-			! Parsing still needs to rely on dictionary lookups because it does
-			! not know the entire list of variable identifiers ahead of time
+			itr = array_at(node%array, i8, lbound_, ubound_)
 			vars%vals(node%id_index) = itr
 
 			res = syntax_eval(node%body, vars, fns, quietl)
+
 		end do
+
+		!do i8 = lbound_%to_i64(), ubound_%to_i64() - 1
+		!	if (any([lbound_%type, ubound_%type] == i64_type)) then
+		!		itr%sca%i64 = i8
+		!	else
+		!		itr%sca%i32 = int(i8, 4)
+		!	end if
+		!	!print *, 'itr = ', itr%to_str()
+		!	! During evaluation, insert variables by array id_index instead of
+		!	! dict lookup.  This is much faster and can be done during
+		!	! evaluation now that we know all of the variable identifiers.
+		!	! Parsing still needs to rely on dictionary lookups because it does
+		!	! not know the entire list of variable identifiers ahead of time
+		!	vars%vals(node%id_index) = itr
+		!	res = syntax_eval(node%body, vars, fns, quietl)
+		!end do
 
 		call vars%pop_scope()
 
@@ -1397,6 +1407,64 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 	end do
 
 end function subscript_eval
+
+!===============================================================================
+
+function array_at(node, i, lbound_, ubound_) result(val)
+
+	!type(array_t), intent(in) :: array
+	type(syntax_node_t), intent(in) :: node
+
+	integer(kind = 8), intent(in) :: i
+
+	type(value_t) :: val
+
+	!*********
+
+	integer :: type_
+
+	type(value_t) :: lbound_, ubound_
+
+	!! TODO: set type once before loop.  Make val inout arg
+	!array%type = node%val%array%type
+	type_ = node%val%array%type
+
+	val%type = type_
+
+	! TODO: do promotion once before loop
+	if (any(i64_type == [lbound_%type, ubound_%type])) then
+		call promote_i32_i64(lbound_)
+		call promote_i32_i64(ubound_)
+	end if
+
+	if (.not. any(type_ == [i32_type, i64_type])) then
+		write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
+		call internal_error()
+	end if
+
+	!if (array%type == i32_type) then
+	!	array%len_ = ubound_%sca%i32 - lbound_%sca%i32
+	!else !if (array%type == i64_type) then
+	!	array%len_ = ubound_%sca%i64 - lbound_%sca%i64
+	!end if
+	!call allocate_array(array, array%len_)
+
+	!print *, 'bounds in [', lbound_%str(), ': ', ubound_%str(), ']'
+	!print *, 'node%val%array%type = ', node%val%array%type
+
+	if (type_ == i32_type) then
+		!do i = lbound_%sca%i32, ubound_%sca%i32 - 1
+		!	array%i32(i - lbound_%sca%i32 + 1) = i
+		!end do
+		val%sca%i32 = lbound_%sca%i32 + i - 1
+	else !if (type_ == i64_type) then
+		!do i8 = lbound_%sca%i64, ubound_%sca%i64 - 1
+		!	array%i64(i8 - lbound_%sca%i64 + 1) = i8
+		!end do
+		val%sca%i64 = lbound_%sca%i64 + i - 1
+	end if
+
+end function array_at
 
 !===============================================================================
 
