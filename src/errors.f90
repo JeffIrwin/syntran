@@ -464,6 +464,51 @@ end function err_non_int_bound
 
 !===============================================================================
 
+function err_non_float_len_range(context, span, range) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: range
+	err = err_prefix &
+		//'bound `'//range//'` of length-based array range is not a float' &
+		//underline(context, span) &
+		//" non-float bound"//color_reset
+
+end function err_non_float_len_range
+
+!===============================================================================
+
+function err_non_int_len(context, span, len) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: len
+	err = err_prefix &
+		//'length `'//len//'` of array is not an i32 integer' &
+		//underline(context, span) &
+		//" non-i32 length"//color_reset
+
+end function err_non_int_len
+
+!===============================================================================
+
+function err_bound_type_mismatch(context, span, range) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: range
+	err = err_prefix &
+		//'types of lower and upper range bounds do not match' &
+		//underline(context, span) &
+		//" mismatched types"//color_reset
+
+end function err_bound_type_mismatch
+
+!===============================================================================
+
 function err_non_int_range(context, span, range) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

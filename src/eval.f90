@@ -213,10 +213,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'len array'
 			lbound_ = syntax_eval(node%lbound, vars, fns, quietl)
 			ubound_ = syntax_eval(node%ubound, vars, fns, quietl)
-			len_   = syntax_eval(node%len_   , vars, fns, quietl)
-
-			!array = new_array(node%val%array%type)
-			!elem = lbound_
+			len_    = syntax_eval(node%len_  , vars, fns, quietl)
 
 			array%type = node%val%array%type
 			array%len_  = len_%to_i64()
@@ -233,7 +230,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end do
 
 			else
-				! TODO: catch in parser
 				write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
 				call internal_error()
 			end if

@@ -1075,7 +1075,7 @@ function parse_array_expr(parser) result(expr)
 
 	!********
 
-	integer :: span_beg, span_end, pos0
+	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end
 
 	type(syntax_node_t)  :: lbound, step, ubound, len, elem
 	type(syntax_node_vector_t) :: elems, size
@@ -1120,8 +1120,10 @@ function parse_array_expr(parser) result(expr)
 	lbracket = parser%match(lbracket_token)
 
 	span_beg = parser%peek_pos(0)
+	lb_beg   = span_beg
 	lbound   = parser%parse_expr()
 	span_end = parser%peek_pos(0) - 1
+	lb_end   = span_end
 
 	!print *, 'lbound = ', parser%text(span_beg, span_end)
 
@@ -1193,8 +1195,10 @@ function parse_array_expr(parser) result(expr)
 		colon    = parser%match(colon_token)
 
 		span_beg = parser%peek_pos(0)
+		ub_beg   = span_beg
 		ubound   = parser%parse_expr()
 		span_end = parser%peek_pos(0) - 1
+		ub_end   = span_end
 
 		!print *, 'lbound type = ', kind_name(lbound%val%type)
 		!print *, 'ubound type = ', kind_name(ubound%val%type)
@@ -1295,7 +1299,7 @@ function parse_array_expr(parser) result(expr)
 				! Length is not an integer type
 				span = new_span(span_beg, span_end - span_beg + 1)
 				! TODO: different diag for each (or at least some) case
-				call parser%diagnostics%push(err_non_int_range( &
+				call parser%diagnostics%push(err_non_int_len( &
 					parser%context(), span, &
 					parser%text(span_beg, span_end)))
 			end if
@@ -1303,14 +1307,17 @@ function parse_array_expr(parser) result(expr)
 			! This used to be checked further up before i64 arrays
 			if (ubound%val%type /= lbound%val%type) then
 				! lbound type and ubound type do not match for length-based array
-				span = new_span(span_beg, span_end - span_beg + 1)
-				! TODO: different diag for each (or at least some) case.  Need
-				! to save spans of different parts of the array text, because we
-				! can't know if the lbound type needs to match the ubound type
-				! until after we check for the semicolon_token in this block
-				call parser%diagnostics%push(err_non_int_range( &
+				span = new_span(lb_beg, ub_end - lb_beg + 1)
+				call parser%diagnostics%push(err_bound_type_mismatch( &
 					parser%context(), span, &
-					parser%text(span_beg, span_end)))
+					parser%text(lb_beg, ub_end)))
+			end if
+
+			if (lbound%val%type /= f32_type) then
+				span = new_span(lb_beg, lb_end - lb_beg + 1)
+				call parser%diagnostics%push(err_non_float_len_range( &
+					parser%context(), span, &
+					parser%text(lb_beg, lb_end)))
 			end if
 
 			rbracket = parser%match(rbracket_token)
