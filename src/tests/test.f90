@@ -837,6 +837,12 @@ subroutine unit_test_for_1(npass, nfail)
 			eval('let vec = [0:6]; let sum_ = 0; for x in vec sum_ += x; sum_;', quiet) == '15', &
 			eval('let vec = [0.0:1.0:6.0]; let sum_ = 0.0; for x in vec sum_ += x; [sum_];', quiet) == '[1.500000E+01]', &
 			eval('let mat = [1,2,3, 4,5,6; 3,2]; let sum_ = 0; for x in mat sum_ += x; sum_;', quiet) == '21', &
+			eval('let sum_ = 0.0; for x in [0.0: 4.0; 5] sum_ += x; [sum_];', quiet) == '[1.000000E+01]', &  ! [] is poor man's trim()
+			eval('let sum_ = 0.0; for x in [0.0: 5.0; 6] sum_ += x; [sum_];', quiet)   == '[1.500000E+01]', &
+			eval('let sum_ = 0.0; for x in [10.0: 15.0; 6] sum_ += x; [sum_];', quiet) == '[7.500000E+01]', &
+			eval('let sum_ = 0.0; for x in [5.0: 1.0; 5] sum_ += x; [sum_];', quiet)  == '[1.500000E+01]', &
+			eval('let sum_ = 0.0; for x in [5.0: -1.0; 7] sum_ += x; [sum_];', quiet) == '[1.400000E+01]', &
+			eval('let sum_ = 0.0; for x in [0.0: 4.0; 3] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

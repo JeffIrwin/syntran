@@ -233,6 +233,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end do
 
 			else
+				! TODO: catch in parser
 				write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
 				call internal_error()
 			end if
@@ -426,6 +427,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		if (allocated(node%array%lbound)) lbound_ = syntax_eval(node%array%lbound, vars, fns, quietl)
 		if (allocated(node%array%step  )) step    = syntax_eval(node%array%step  , vars, fns, quietl)
 		if (allocated(node%array%ubound)) ubound_ = syntax_eval(node%array%ubound, vars, fns, quietl)
+		if (allocated(node%array%len_  )) len_    = syntax_eval(node%array%len_  , vars, fns, quietl)
 
 		!print *, 'lbound_ = ', lbound_%to_i64()
 		!print *, 'ubound_ = ', ubound_%to_i64()
@@ -452,11 +454,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					call promote_i32_i64(ubound_)
 					itr%type = i64_type
 				else
-
-					!  TODO: type check above is removed.  Add is_int_type() check 
-					!  here?  I think it's already caught in parser from testing
 					itr%type = i32_type
-
 				end if
 
 				if (.not. any(itr%type == [i32_type, i64_type])) then
@@ -495,6 +493,19 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					call internal_error()
 				end select
 
+			case (len_array)
+
+				itr%type = node%array%val%array%type
+
+				select case (itr%type)
+				!select case (node%array%val%array%type)
+				case (f32_type)
+					len8 = len_%to_i64()
+				case default
+					write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
+					call internal_error()
+				end select
+
 			case default
 				write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
 				call internal_error()
@@ -524,7 +535,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		call vars%push_scope()
 		do i8 = 1, len8
 
-			call array_at(itr, for_kind, i8, lbound_, step, ubound_, array)
+			call array_at(itr, for_kind, i8, lbound_, step, ubound_, len_, array)
 			!print *, 'itr = ', itr%to_str()
 
 			! During evaluation, insert variables by array id_index instead of
@@ -1467,7 +1478,7 @@ end function subscript_eval
 
 !===============================================================================
 
-subroutine array_at(val, kind_, i, lbound_, step, ubound_, array)
+subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array)
 
 	! This lazily gets an array value at an index i without expanding the whole
 	! implicit array in memory.  Used for for loops
@@ -1475,12 +1486,10 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, array)
 	type(value_t), intent(inout) :: val
 
 	integer, intent(in) :: kind_
-	!type(syntax_node_t), intent(in) :: node
 
 	integer(kind = 8), intent(in) :: i
 
-	!type(value_t), intent(inout) :: lbound_, step, ubound_
-	type(value_t), intent(in) :: lbound_, step, ubound_
+	type(value_t), intent(in) :: lbound_, step, ubound_, len_
 
 	type(array_t), intent(in) :: array
 
@@ -1508,6 +1517,11 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, array)
 			val%sca%f32 = lbound_%sca%f32 + (i - 1) * step%sca%f32
 
 		end select
+
+	case (len_array)
+
+		val%sca%f32 = lbound_%sca%f32 + (i - 1) * &
+			(ubound_%sca%f32 - lbound_%sca%f32) / real((len_%to_i64() - 1))
 
 	case (array_expr)
 		! Non-primary array expr
