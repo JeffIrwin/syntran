@@ -847,6 +847,9 @@ subroutine unit_test_for_1(npass, nfail)
 			eval('let sum_ = 0; for x in [4, 0, 2] sum_ += x; sum_;', quiet)   == '6', &
 			eval('let sum_ = 0; for x in i32([4, 0, 2]) sum_ += x; sum_;', quiet)   == '6', &
 			eval('let sum_ = i64(0); for x in [i64(4), i64(0), i64(2)] sum_ += x; sum_;', quiet)   == '6', &
+			eval('let sum_ = 0; for x in [4, 0, 3, 2; 2, 2] sum_ += x; sum_;', quiet)   == '9', &
+			eval('let sum_ = i64(0); for x in [i64(4), i64(0), i64(3), i64(2); 2, 2] sum_ += x; sum_;', quiet)   == '9', &
+			eval('let sum_ = 0.0; for x in [4.0, 0.0, 3.0, 2.0; 2, 2] sum_ += x; [sum_];', quiet)   == '[9.000000E+00]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

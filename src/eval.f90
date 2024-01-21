@@ -366,7 +366,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			array%rank = size( node%size )
 			allocate(array%size( array%rank ))
-			!array%size = array%len_
 			do i = 1, array%rank
 				len_ = syntax_eval(node%size(i), vars, fns, quietl)
 				array%size(i) = len_%to_i64()
@@ -501,6 +500,24 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			case (expl_array)
 				len8 = node%array%val%array%len_
+
+			case (size_array)
+
+				rank = size( node%array%size )
+				!allocate(array%size( rank ))
+				len8 = 1
+				do i = 1, rank
+					len_ = syntax_eval(node%array%size(i), vars, fns, quietl)
+					len8 = len8 * len_%to_i64()
+				end do
+
+				!print *, 'len8 = ', len8
+
+				if (size(node%array%elems) /= len8) then
+					write(*,*) err_rt_prefix//"size of explicit array "// &
+						"does not match number of elements"//color_reset
+					call internal_error()
+				end if
 
 			case default
 				write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
@@ -1538,7 +1555,7 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 		val%sca%f32 = lbound_%sca%f32 + (i - 1) * &
 			(ubound_%sca%f32 - lbound_%sca%f32) / real((len_%to_i64() - 1))
 
-	case (expl_array)
+	case (expl_array, size_array)
 		val = syntax_eval(elems(i), vars, fns, quietl)
 
 	case (array_expr)
