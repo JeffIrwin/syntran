@@ -1077,8 +1077,8 @@ function parse_array_expr(parser) result(expr)
 
 	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end
 
-	type(syntax_node_t)  :: lbound, step, ubound, len, elem
-	type(syntax_node_vector_t) :: elems, size
+	type(syntax_node_t)  :: lbound_, step, ubound_, len_, elem
+	type(syntax_node_vector_t) :: elems, size_
 	type(syntax_token_t) :: lbracket, rbracket, colon, semicolon, comma, dummy
 	type(text_span_t) :: span
 
@@ -1121,16 +1121,16 @@ function parse_array_expr(parser) result(expr)
 
 	span_beg = parser%peek_pos(0)
 	lb_beg   = span_beg
-	lbound   = parser%parse_expr()
+	lbound_  = parser%parse_expr()
 	span_end = parser%peek_pos(0) - 1
 	lb_end   = span_end
 
-	!print *, 'lbound = ', parser%text(span_beg, span_end)
+	!print *, 'lbound_ = ', parser%text(span_beg, span_end)
 
 	! TODO: should type checking be done by caller, or should we pass an
 	! expected type arg for the RHS of this check?
 
-	! TODO: check if lbound%val is allocated, e.g. for assigning one array to
+	! TODO: check if lbound_%val is allocated, e.g. for assigning one array to
 	! a cat of another?  How would this work for rank-2+?
 	!
 	!     let a = [0: 3];
@@ -1139,7 +1139,7 @@ function parse_array_expr(parser) result(expr)
 
 	!! TODO: there should still be *some* type checking.  At least, implicit
 	!! ranges cannot use bool
-	!if (lbound%val%type /= i32_type) then
+	!if (lbound_%val%type /= i32_type) then
 	!	span = new_span(span_beg, span_end - span_beg + 1)
 	!	call parser%diagnostics%push(err_non_int_range( &
 	!		parser%context, span, parser%text(span_beg, span_end)))
@@ -1156,23 +1156,22 @@ function parse_array_expr(parser) result(expr)
 		! [lbound; rows, cols]
 		! [lbound; rows, cols, sheets, ...]
 
-		size = parser%parse_size()
+		size_ = parser%parse_size()
 
 		rbracket = parser%match(rbracket_token)
 
 		allocate(expr%val%array)
 		allocate(expr%lbound)
-		!allocate(expr%len_)
 
-		call syntax_nodes_copy(expr%size, size%v( 1: size%len_ ))
+		call syntax_nodes_copy(expr%size, size_%v( 1: size_%len_ ))
 
 		expr%kind           = array_expr
 
 		expr%val%type       = array_type
 
-		expr%val%array%type = lbound%val%type
+		expr%val%array%type = lbound_%val%type
 		expr%val%array%kind = unif_array
-		expr%val%array%rank = size%len_
+		expr%val%array%rank = size_%len_
 
 		!print *, 'expr%val%type       = ', expr%val%type
 		!print *, 'expr%val%array%type = ', expr%val%array%type
@@ -1182,8 +1181,7 @@ function parse_array_expr(parser) result(expr)
 		! may be an expression and not just a literal.  So, sizes have to be
 		! allocated dynamically during evaluation, not during parsing
 
-		expr%lbound = lbound
-		!expr%len_   = len
+		expr%lbound = lbound_
 
 		return
 
@@ -1196,16 +1194,16 @@ function parse_array_expr(parser) result(expr)
 
 		span_beg = parser%peek_pos(0)
 		ub_beg   = span_beg
-		ubound   = parser%parse_expr()
+		ubound_  = parser%parse_expr()
 		span_end = parser%peek_pos(0) - 1
 		ub_end   = span_end
 
-		!print *, 'lbound type = ', kind_name(lbound%val%type)
-		!print *, 'ubound type = ', kind_name(ubound%val%type)
+		!print *, 'lbound_ type = ', kind_name(lbound_%val%type)
+		!print *, 'ubound_ type = ', kind_name(ubound_%val%type)
 
 		if (.not. all([ &
-			is_num_type(lbound%val%type), &
-			is_num_type(ubound%val%type)])) then
+			is_num_type(lbound_%val%type), &
+			is_num_type(ubound_%val%type)])) then
 
 			span = new_span(lb_beg, ub_end - lb_beg + 1)
 			call parser%diagnostics%push(err_non_num_range( &
@@ -1218,22 +1216,22 @@ function parse_array_expr(parser) result(expr)
 			! Implicit form [lbound: step: ubound]
 
 			! Step has just been parsed as ubound above
-			step = ubound
+			step = ubound_
 
 			colon    = parser%match(colon_token)
 
 			span_beg = parser%peek_pos(0)
-			ubound   = parser%parse_expr()
+			ubound_  = parser%parse_expr()
 			span_end = parser%peek_pos(0) - 1
 
-			if (.not. is_num_type(ubound%val%type)) then
+			if (.not. is_num_type(ubound_%val%type)) then
 				span = new_span(span_beg, span_end - span_beg + 1)
 				call parser%diagnostics%push(err_non_num_range( &
 					parser%context(), span, &
 					parser%text(span_beg, span_end)))
 			end if
 
-			! If [lbound: step: ubound] are all specified, then specifying the
+			! If [lbound_: step: ubound] are all specified, then specifying the
 			! len would be overconstrained!  Next token must be rbracket
 
 			rbracket = parser%match(rbracket_token)
@@ -1247,17 +1245,17 @@ function parse_array_expr(parser) result(expr)
 			expr%val%type       = array_type
 
 			if (all(i32_type == &
-				[lbound%val%type, step%val%type, ubound%val%type]) .or. &
+				[lbound_%val%type, step%val%type, ubound_%val%type]) .or. &
 				all(f32_type == &
-				[lbound%val%type, step%val%type, ubound%val%type])) then
+				[lbound_%val%type, step%val%type, ubound_%val%type])) then
 
-				expr%val%array%type = lbound%val%type
+				expr%val%array%type = lbound_%val%type
 
 			! TODO: make is_int_type() elemental, then we can sugar up this syntax
 			else if (all([ &
-				is_int_type(lbound%val%type), &
+				is_int_type(lbound_%val%type), &
 				is_int_type(step  %val%type), &
-				is_int_type(ubound%val%type)])) then
+				is_int_type(ubound_%val%type)])) then
 
 				expr%val%array%type = i64_type
 
@@ -1272,9 +1270,9 @@ function parse_array_expr(parser) result(expr)
 			expr%val%array%kind = step_array
 			expr%val%array%rank = 1
 
-			expr%lbound = lbound
+			expr%lbound = lbound_
 			expr%step   = step
-			expr%ubound = ubound
+			expr%ubound = ubound_
 
 			return
 
@@ -1282,17 +1280,17 @@ function parse_array_expr(parser) result(expr)
 
 		if (parser%current_kind() == semicolon_token) then
 
-			! Implicit form [lbound: ubound; len]
+			! Implicit form [lbound: ubound_; len]
 
 			semicolon    = parser%match(semicolon_token)
 
 			span_beg = parser%peek_pos(0)
-			len      = parser%parse_expr()
+			len_     = parser%parse_expr()
 			span_end = parser%peek_pos(0) - 1
 
-			!print *, 'len = ', parser%text(span_beg, span_end)
+			!print *, 'len_ = ', parser%text(span_beg, span_end)
 
-			if (.not. any(len%val%type == [i32_type, i64_type])) then
+			if (.not. any(len_%val%type == [i32_type, i64_type])) then
 				! Length is not an integer type
 				span = new_span(span_beg, span_end - span_beg + 1)
 				! TODO: different diag for each (or at least some) case
@@ -1302,15 +1300,15 @@ function parse_array_expr(parser) result(expr)
 			end if
 
 			! This used to be checked further up before i64 arrays
-			if (ubound%val%type /= lbound%val%type) then
-				! lbound type and ubound type do not match for length-based array
+			if (ubound_%val%type /= lbound_%val%type) then
+				! lbound_ type and ubound_ type do not match for length-based array
 				span = new_span(lb_beg, ub_end - lb_beg + 1)
 				call parser%diagnostics%push(err_bound_type_mismatch( &
 					parser%context(), span, &
 					parser%text(lb_beg, ub_end)))
 			end if
 
-			if (lbound%val%type /= f32_type) then
+			if (lbound_%val%type /= f32_type) then
 				span = new_span(lb_beg, lb_end - lb_beg + 1)
 				call parser%diagnostics%push(err_non_float_len_range( &
 					parser%context(), span, &
@@ -1326,13 +1324,13 @@ function parse_array_expr(parser) result(expr)
 
 			expr%kind           = array_expr
 			expr%val%type       = array_type
-			expr%val%array%type = lbound%val%type
+			expr%val%array%type = lbound_%val%type
 			expr%val%array%kind = len_array
 			expr%val%array%rank = 1
 
-			expr%lbound = lbound
-			expr%ubound = ubound
-			expr%len_   = len
+			expr%lbound = lbound_
+			expr%ubound = ubound_
+			expr%len_   = len_
 
 			return
 
@@ -1342,8 +1340,8 @@ function parse_array_expr(parser) result(expr)
 
 		rbracket = parser%match(rbracket_token)
 
-		!print *, 'lbound = ', lbound%str()
-		!print *, 'ubound = ', ubound%str()
+		!print *, 'lbound_ = ', lbound_%str()
+		!print *, 'ubound_ = ', ubound_%str()
 
 		allocate(expr%val%array)
 		allocate(expr%lbound)
@@ -1356,20 +1354,20 @@ function parse_array_expr(parser) result(expr)
 		expr%val%array%kind = bound_array
 		expr%val%array%rank = 1
 
-		expr%lbound = lbound
-		expr%ubound = ubound
+		expr%lbound = lbound_
+		expr%ubound = ubound_
 
 		if (all(i32_type == &
-			[lbound%val%type, ubound%val%type]) &! .or. &
+			[lbound_%val%type, ubound_%val%type]) &! .or. &
 			) then
 
-			!print *, 'setting lbound type'
-			expr%val%array%type = lbound%val%type
+			!print *, 'setting lbound_ type'
+			expr%val%array%type = lbound_%val%type
 
 		! TODO: make is_int_type() elemental, then we can sugar up this syntax
 		else if (all([ &
-			is_int_type(lbound%val%type), &
-			is_int_type(ubound%val%type)])) then
+			is_int_type(lbound_%val%type), &
+			is_int_type(ubound_%val%type)])) then
 
 			!print *, 'setting i64_type'
 			expr%val%array%type = i64_type
@@ -1389,10 +1387,10 @@ function parse_array_expr(parser) result(expr)
 	! Explicit array form [elem_0, elem_1, elem_2, ... ].  elem_0 has already been
 	! parsed as lbound above
 
-	!print *, 'elem ', lbound%val%str()
+	!print *, 'elem ', lbound_%val%str()
 
 	elems = new_syntax_node_vector()
-	call elems%push(lbound)
+	call elems%push(lbound_)
 	do while (&
 		parser%current_kind() /= rbracket_token  .and. &
 		parser%current_kind() /= semicolon_token .and. &
@@ -1407,7 +1405,7 @@ function parse_array_expr(parser) result(expr)
 
 		!print *, 'elem ', elem%val%str()
 
-		if (elem%val%type /= lbound%val%type) then
+		if (elem%val%type /= lbound_%val%type) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
 				parser%context(), span, parser%text(span_beg, span_end)))
@@ -1425,21 +1423,21 @@ function parse_array_expr(parser) result(expr)
 		! Explicit rank-2+ size_array: [elem_0, elem_1, elem_2, ... ; size_0, size_1, ... ];
 		semicolon = parser%match(semicolon_token)
 
-		size = parser%parse_size()
+		size_ = parser%parse_size()
 
 		rbracket = parser%match(rbracket_token)
 
 		allocate(expr%val%array)
 
-		call syntax_nodes_copy(expr%size, size%v( 1: size%len_ ))
+		call syntax_nodes_copy(expr%size, size_%v( 1: size_%len_ ))
 
 		expr%kind           = array_expr
 
 		expr%val%type       = array_type
 
-		expr%val%array%type = lbound%val%type
+		expr%val%array%type = lbound_%val%type
 		expr%val%array%kind = size_array
-		expr%val%array%rank = size%len_
+		expr%val%array%rank = size_%len_
 
 		call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len_ ))
 
@@ -1454,10 +1452,10 @@ function parse_array_expr(parser) result(expr)
 	allocate(expr%val%array)
 	expr%kind           = array_expr
 
-	!expr%val%type       = lbound%val%type
+	!expr%val%type       = lbound_%val%type
 	expr%val%type       = array_type
 
-	expr%val%array%type = lbound%val%type
+	expr%val%array%type = lbound_%val%type
 	expr%val%array%kind = expl_array
 	expr%val%array%rank = 1
 	expr%val%array%len_ = elems%len_
