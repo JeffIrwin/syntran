@@ -410,11 +410,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'done'
 
 		else
-			!TODO
 			write(*,*) err_int_prefix//'unexpected array kind'//color_reset
 			call internal_error()
 		end if
-		!res%array%kind = expl_array
 
 	case (for_statement)
 
@@ -494,13 +492,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				itr%type = node%array%val%array%type
 
 				select case (itr%type)
-				!select case (node%array%val%array%type)
 				case (f32_type)
 					len8 = len_%to_i64()
 				case default
 					write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
 					call internal_error()
 				end select
+
+			case (expl_array)
+
+				!len8 = len_%to_i64()
+				len8 = node%array%val%array%len_
 
 			case default
 				write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
@@ -531,7 +533,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		call vars%push_scope()
 		do i8 = 1, len8
 
-			call array_at(itr, for_kind, i8, lbound_, step, ubound_, len_, array)
+			!call array_at(itr, for_kind, i8, lbound_, step, ubound_, len_, &
+			!	array, node%array%elems)
+
+			if (node%array%val%array%kind == expl_array) then
+				itr = syntax_eval(node%array%elems(i8), vars, fns, quietl)
+			else
+				call array_at(itr, for_kind, i8, lbound_, step, ubound_, len_, array)
+			end if
+
 			!print *, 'itr = ', itr%to_str()
 
 			! During evaluation, insert variables by array id_index instead of
@@ -1474,6 +1484,7 @@ end function subscript_eval
 
 !===============================================================================
 
+!subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, elems)
 subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array)
 
 	! This lazily gets an array value at an index i without expanding the whole
@@ -1488,6 +1499,8 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array)
 	type(value_t), intent(in) :: lbound_, step, ubound_, len_
 
 	type(array_t), intent(in) :: array
+
+	!type(syntax_node_t), allocatable :: elems(:)
 
 	!*********
 
@@ -1518,6 +1531,10 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array)
 
 		val%sca%f32 = lbound_%sca%f32 + (i - 1) * &
 			(ubound_%sca%f32 - lbound_%sca%f32) / real((len_%to_i64() - 1))
+
+	!case (expl_array)
+	!	!elem = syntax_eval(node%elems(i), vars, fns, quietl)
+	!	val = syntax_eval(node%elems(i), vars, fns, quietl)
 
 	case (array_expr)
 		! Non-primary array expr

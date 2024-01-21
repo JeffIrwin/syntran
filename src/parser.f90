@@ -1468,6 +1468,7 @@ function parse_array_expr(parser) result(expr)
 	expr%val%array%type = lbound%val%type
 	expr%val%array%kind = expl_array
 	expr%val%array%rank = 1
+	expr%val%array%len_ = elems%len_
 
 	call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len_ ))
 
