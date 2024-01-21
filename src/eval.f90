@@ -245,22 +245,18 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		else if (node%val%array%kind == unif_array) then
 
-			! Initialize rank-2+ arrays
-			if (allocated(node%size)) then
+			array%rank = size( node%size )
+			allocate(array%size( array%rank ))
 
-				array%rank = size( node%size )
-				allocate(array%size( array%rank ))
+			do i = 1, array%rank
+				len_ = syntax_eval(node%size(i), vars, fns, quietl)
+				array%size(i) = len_%to_i64()
+				!print *, 'size['//str(i)//'] = ', array%size(i)
+			end do
 
-				do i = 1, array%rank
-					len_ = syntax_eval(node%size(i), vars, fns, quietl)
-					array%size(i) = len_%to_i64()
-					!print *, 'size['//str(i)//'] = ', array%size(i)
-				end do
-
-			end if
-
-			! Constant-value impl arrays (i.e. every element has the same value
-			! at initialization, but they are of course mutable)
+			! Uniform-value impl arrays (every element has the same value at
+			! initialization, and you could say "constant" but they are of
+			! course mutable)
 
 			!print *, 'len array'
 			lbound_ = syntax_eval(node%lbound, vars, fns, quietl)
@@ -415,8 +411,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	case (for_statement)
 
-		! TODO: evaluate all of these ahead of loop, but only if they are
-		! allocated!  Also eval array step, size, etc.
+		! Evaluate all of these ahead of loop, but only if they are allocated!
+		! Also eval array step, size, etc.
 		if (allocated(node%array%lbound)) lbound_ = syntax_eval(node%array%lbound, vars, fns, quietl)
 		if (allocated(node%array%step  )) step    = syntax_eval(node%array%step  , vars, fns, quietl)
 		if (allocated(node%array%ubound)) ubound_ = syntax_eval(node%array%ubound, vars, fns, quietl)
@@ -504,20 +500,28 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			case (size_array)
 
 				rank = size( node%array%size )
-				!allocate(array%size( rank ))
 				len8 = 1
 				do i = 1, rank
 					len_ = syntax_eval(node%array%size(i), vars, fns, quietl)
 					len8 = len8 * len_%to_i64()
 				end do
 
-				!print *, 'len8 = ', len8
-
 				if (size(node%array%elems) /= len8) then
 					write(*,*) err_rt_prefix//"size of explicit array "// &
 						"does not match number of elements"//color_reset
 					call internal_error()
 				end if
+
+			case (unif_array)
+
+				rank = size(node%array%size)
+				!print *, 'rank = ', rank
+				len8 = 1
+				do i = 1, rank
+					len_ = syntax_eval(node%array%size(i), vars, fns, quietl)
+					len8 = len8 * len_%to_i64()
+				end do
+				!print *, 'len8 = ', len8
 
 			case default
 				write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
@@ -1557,6 +1561,9 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	case (expl_array, size_array)
 		val = syntax_eval(elems(i), vars, fns, quietl)
+
+	case (unif_array)
+		val = lbound_
 
 	case (array_expr)
 		! Non-primary array expr

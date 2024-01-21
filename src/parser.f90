@@ -1162,7 +1162,7 @@ function parse_array_expr(parser) result(expr)
 
 		allocate(expr%val%array)
 		allocate(expr%lbound)
-		allocate(expr%len_)
+		!allocate(expr%len_)
 
 		call syntax_nodes_copy(expr%size, size%v( 1: size%len_ ))
 
@@ -1183,7 +1183,7 @@ function parse_array_expr(parser) result(expr)
 		! allocated dynamically during evaluation, not during parsing
 
 		expr%lbound = lbound
-		expr%len_    = len
+		!expr%len_   = len
 
 		return
 
