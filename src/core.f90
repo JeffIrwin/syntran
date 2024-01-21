@@ -28,9 +28,6 @@ module syntran__core_m
 		syntran_patch =  40
 
 	! TODO:
-	!  - for loop range generalization
-	!    * TBD: size_array, unif_array
-	!    * bound_array, step_array, len_array, expl_array, and (e.g. named) array expressions are done
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
