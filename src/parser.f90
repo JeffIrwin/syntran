@@ -1060,6 +1060,15 @@ end function parse_size
 
 function parse_array_expr(parser) result(expr)
 
+	! These are the possible kinds of array literals:
+	!
+	!     unif_array :  [0; 6] or [0; 2, 3]           uniform (constant) value, size after `;`
+	!     bound_array:  [0: 6]                        bounded range with default step=1
+	!     step_array :  [0: 2: 6] or [0.0: 2.0: 6.0]  range with given step
+	!     len_array  :  [0.0: 4.0; 3]                 range with len (inclusive of upper bound!)
+	!     expl_array :  [0, 1, 2, 3, 4, 5]            explicit csv vector
+	!     size_array :  [0,1,2,3,4,5 ; 2,3]           explicit csv multi-rank array
+
 	class(parser_t) :: parser
 
 	type(syntax_node_t) :: expr
