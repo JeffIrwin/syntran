@@ -71,6 +71,7 @@ module syntran__core_m
 	!    * array comparison
 	!    * array arithmetic operations
 	!    * any(), all(), count() intrinsics
+	!    * new generalized for loops
 	!    * -c arg, shebang
 	!    * ifx/ifort pass tests but perform order of magnitude slower
 	!  - parse_f32() intrinsic fn

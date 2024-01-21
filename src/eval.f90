@@ -110,13 +110,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			if (array%type == i32_type) then
 
-				!array%cap = (ubound_%sca%i32 - lbound_%sca%i32) / step%sca%i32 + 1
-				!array%cap = (ubound_%sca%i32 - lbound_%sca%i32 + abs(step%sca%i32) - 1) / step%sca%i32
 				array%cap = (ubound_%sca%i32 - lbound_%sca%i32 &
 					+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
 
 				!print *, 'cap = ', array%cap
-
 				allocate(array%i32( array%cap ))
 
 				j = 1
@@ -134,8 +131,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			else if (array%type == i64_type) then
 
-				!array%cap = int((ubound_%sca%i64 - lbound_%sca%i64) / step%sca%i64 + 1)
-				!array%cap = int((ubound_%sca%i64 - lbound_%sca%i64) / step%sca%i64)
 				array%cap = (ubound_%sca%i64 - lbound_%sca%i64 &
 					+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
 
@@ -161,7 +156,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!print *, 'lbound_, ubound_ = ', lbound_%sca%f32, ubound_%sca%f32
 				!print *, 'step = ', step%sca%f32
 
-				!array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32) + 1
 				array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
 				allocate(array%f32( array%cap ))
 
@@ -186,14 +180,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				end do
 				array%len_ = j - 1
 				!array%len_ = array%cap
-
-				!! TODO: can cap be calculated correctly at the start, without
-				!! breaking tests? Find out which test crashes without commented
-				!! `+1` in above cap calculation
-				!if (array%len_ < array%cap) then
-				!	array%cap = array%len_
-				!	array%f32 = array%f32(1: array%len_)
-				!end if
 
 			else
 				write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
@@ -412,7 +398,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 	case (for_statement)
 
 		! Evaluate all of these ahead of loop, but only if they are allocated!
-		! Also eval array step, size, etc.
 		if (allocated(node%array%lbound)) lbound_ = syntax_eval(node%array%lbound, vars, fns, quietl)
 		if (allocated(node%array%step  )) step    = syntax_eval(node%array%step  , vars, fns, quietl)
 		if (allocated(node%array%ubound)) ubound_ = syntax_eval(node%array%ubound, vars, fns, quietl)

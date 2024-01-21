@@ -1038,7 +1038,7 @@ function parse_size(parser) result(size)
 		if (.not. any(len%val%type == [i32_type, i64_type])) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			! TODO: different diag for each (or at least some) case
-			call parser%diagnostics%push(err_non_int_range( &
+			call parser%diagnostics%push(err_non_int_len( &
 				parser%context(), span, &
 				parser%text(span_beg, span_end)))
 		end if
@@ -1203,15 +1203,13 @@ function parse_array_expr(parser) result(expr)
 		!print *, 'lbound type = ', kind_name(lbound%val%type)
 		!print *, 'ubound type = ', kind_name(ubound%val%type)
 
-		!if (ubound%val%type /= lbound%val%type) then
 		if (.not. all([ &
 			is_num_type(lbound%val%type), &
 			is_num_type(ubound%val%type)])) then
 
-			!print *, 'HERE'
-			span = new_span(span_beg, span_end - span_beg + 1)
-			call parser%diagnostics%push(err_non_int_range( &
-				parser%context(), span, parser%text(span_beg, span_end)))
+			span = new_span(lb_beg, ub_end - lb_beg + 1)
+			call parser%diagnostics%push(err_non_num_range( &
+				parser%context(), span, parser%text(lb_beg, ub_end)))
 
 		end if
 
@@ -1228,10 +1226,9 @@ function parse_array_expr(parser) result(expr)
 			ubound   = parser%parse_expr()
 			span_end = parser%peek_pos(0) - 1
 
-			!if (ubound%val%type /= lbound%val%type) then
 			if (.not. is_num_type(ubound%val%type)) then
 				span = new_span(span_beg, span_end - span_beg + 1)
-				call parser%diagnostics%push(err_non_int_range( &
+				call parser%diagnostics%push(err_non_num_range( &
 					parser%context(), span, &
 					parser%text(span_beg, span_end)))
 			end if
@@ -1328,17 +1325,14 @@ function parse_array_expr(parser) result(expr)
 			allocate(expr%len_)
 
 			expr%kind           = array_expr
-
-			!expr%val%type       = lbound%val%type
 			expr%val%type       = array_type
-
 			expr%val%array%type = lbound%val%type
 			expr%val%array%kind = len_array
 			expr%val%array%rank = 1
 
 			expr%lbound = lbound
 			expr%ubound = ubound
-			expr%len_    = len
+			expr%len_   = len
 
 			return
 
@@ -1367,8 +1361,6 @@ function parse_array_expr(parser) result(expr)
 
 		if (all(i32_type == &
 			[lbound%val%type, ubound%val%type]) &! .or. &
-			!all(f32_type == &  ! is f32 even allowed here?
-			![lbound%val%type, ubound%val%type])) then
 			) then
 
 			!print *, 'setting lbound type'

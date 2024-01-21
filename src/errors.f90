@@ -446,24 +446,6 @@ end function err_non_bool_condition
 
 !===============================================================================
 
-function err_non_int_bound(context, span, bound) result(err)
-	type(text_context_t) :: context
-	type(text_span_t), intent(in) :: span
-	character(len = :), allocatable :: err
-
-	character(len = *), intent(in) :: bound
-
-	! TODO: several error messages need updated for i64/i32
-
-	err = err_prefix &
-		//'bound `'//bound//'` of for-loop is not an i32 integer' &
-		//underline(context, span) &
-		//" non-i32 bound"//color_reset
-
-end function err_non_int_bound
-
-!===============================================================================
-
 function err_non_float_len_range(context, span, range) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
@@ -486,9 +468,9 @@ function err_non_int_len(context, span, len) result(err)
 
 	character(len = *), intent(in) :: len
 	err = err_prefix &
-		//'length `'//len//'` of array is not an i32 integer' &
+		//'length `'//len//'` of array is not an integer' &
 		//underline(context, span) &
-		//" non-i32 length"//color_reset
+		//" non-int length"//color_reset
 
 end function err_non_int_len
 
@@ -506,6 +488,25 @@ function err_bound_type_mismatch(context, span, range) result(err)
 		//" mismatched types"//color_reset
 
 end function err_bound_type_mismatch
+
+!===============================================================================
+
+function err_non_num_range(context, span, range) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: range
+
+	! This language will be technically wrong if I add a complex number type
+	! (complex numbers are numbers, but un-ordered and hence unsuitable for
+	! ranges)
+	err = err_prefix &
+		//'bound `'//range//'` of array range is not a numeric type' &
+		//underline(context, span) &
+		//" non-numeric range"//color_reset
+
+end function err_non_num_range
 
 !===============================================================================
 
