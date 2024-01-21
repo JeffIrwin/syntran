@@ -421,29 +421,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	case (for_statement)
 
-		! TODO: this assumes for statement array range is i32/64 of the form
-		! [imin: imax].  Generalize for other forms, maybe make an array%at()
-		! method for shared use here for for_statement eval and above for
-		! array_expr eval.  If possible, don't expand implicit arrays for for
-		! loops
-
 		! TODO: evaluate all of these ahead of loop, but only if they are
 		! allocated!  Also eval array step, size, etc.
 		if (allocated(node%array%lbound)) lbound_ = syntax_eval(node%array%lbound, vars, fns, quietl)
 		if (allocated(node%array%step  )) step    = syntax_eval(node%array%step  , vars, fns, quietl)
 		if (allocated(node%array%ubound)) ubound_ = syntax_eval(node%array%ubound, vars, fns, quietl)
-
-		!print *, 'lbound type = ', kind_name(lbound_%type)
-		!print *, 'ubound type = ', kind_name(ubound_%type)
-
-		!if (.not. any (lbound_%type == [i32_type, i64_type])) then
-		!	write(*,*) err_eval_i32_itr(node%identifier%text)
-		!	call internal_error()
-		!end if
-		!if (.not. any (ubound_%type == [i32_type, i64_type])) then
-		!	write(*,*) err_eval_i32_itr(node%identifier%text)
-		!	call internal_error()
-		!end if
 
 		!print *, 'lbound_ = ', lbound_%to_i64()
 		!print *, 'ubound_ = ', ubound_%to_i64()
@@ -470,9 +452,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					call promote_i32_i64(ubound_)
 					itr%type = i64_type
 				else
-					! TODO: type check above is removed.  Add is_int_type() check
-					! here
+
+					!  TODO: type check above is removed.  Add is_int_type() check 
+					!  here?  I think it's already caught in parser from testing
 					itr%type = i32_type
+
 				end if
 
 				if (.not. any(itr%type == [i32_type, i64_type])) then
@@ -521,24 +505,22 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			! Any non-primitive array needs to be evaluated before iterating
 			! over it.  Parser guarantees that this is an array
+			!
+			! Unlike step_array, itr%type does not need to be set here because
+			! it is set in array_at() (via get_array_value_t())
 			for_kind = array_expr
 
 			tmp = syntax_eval(node%array, vars, fns, quietl)
 			array = tmp%array
 
 			len8 = array%len_
-
 			!print *, 'len8 = ', len8
-
 
 		end select
 
 		!print *, 'itr%type = ', kind_name(itr%type)
 
-		!print *, 'lbound type = ', kind_name(lbound_%type)
-		!print *, 'val%type    = ', kind_name(val%type)
-
-		! push scope to make the loop iterator local
+		! Push scope to make the loop iterator local
 		call vars%push_scope()
 		do i8 = 1, len8
 

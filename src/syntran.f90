@@ -339,6 +339,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	val = syntax_eval(tree, vars, fns, quietl)
 	res = val%to_str()
+	!print *, 'res = ', res
 
 	! popd
 	if (chdirl) call chdir(cwd)

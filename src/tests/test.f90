@@ -772,6 +772,83 @@ end subroutine unit_test_if_else
 
 !===============================================================================
 
+subroutine unit_test_for_1(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'short for loops'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	real, parameter :: tol = 1.e-9
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval('let sum_ = 0; for x in [0:5] sum_ += x; sum_;', quiet) == '10', &
+			eval('let sum_ = 0; for x in [0:6] sum_ += x; sum_;', quiet) == '15', &
+			eval('let sum_ = 0; for x in [10:16] sum_ += x; sum_;', quiet) == '75', &
+			eval('let sum_ = 0; for x in [5:-1:0] sum_ += x; sum_;', quiet) == '15', &
+			eval('let sum_ = 0; for x in [5:-1:-2] sum_ += x; sum_;', quiet) == '14', &
+			eval('let sum_ = 0; for x in [0:2:6] sum_ += x; sum_;', quiet) == '6', &
+			eval('let sum_ = 0; for x in [0:2:7] sum_ += x; sum_;', quiet) == '12', &
+			eval('let sum_ = 0; for x in [0:2:8] sum_ += x; sum_;', quiet) == '12', &
+			eval('let sum_ = 0; for x in [0:2:9] sum_ += x; sum_;', quiet) == '20', &
+			eval('let sum_ = 0; for x in [5:-2:0] sum_ += x; sum_;', quiet) == '9', &
+			eval('let sum_ = 0; for x in [6:-2:0] sum_ += x; sum_;', quiet) == '12', &
+			eval('let sum_ = 0; for x in [7:-2:0] sum_ += x; sum_;', quiet) == '16', &
+			eval('let sum_ = 0; for x in [8:-2:0] sum_ += x; sum_;', quiet) == '20', &
+			eval('let sum_ = 0; for x in [5:-2:-1] sum_ += x; sum_;', quiet) == '9', &
+			eval('let sum_ = 0; for x in [6:-2:-1] sum_ += x; sum_;', quiet) == '12', &
+			eval('let sum_ = 0; for x in [7:-2:-1] sum_ += x; sum_;', quiet) == '16', &
+			eval('let sum_ = 0; for x in [8:-2:-1] sum_ += x; sum_;', quiet) == '20', &
+			eval('let sum_ = 0; for x in [5:-2:-2] sum_ += x; sum_;', quiet) == '8', &
+			eval('let sum_ = 0; for x in [6:-2:-2] sum_ += x; sum_;', quiet) == '12', &
+			eval('let sum_ = 0; for x in [7:-2:-2] sum_ += x; sum_;', quiet) == '15', &
+			eval('let sum_ = 0; for x in [8:-2:-2] sum_ += x; sum_;', quiet) == '20', &
+			eval('let sum_ = 0; for x in [5:-2:-3] sum_ += x; sum_;', quiet) == '8', &
+			eval('let sum_ = 0; for x in [6:-2:-3] sum_ += x; sum_;', quiet) == '10', &
+			eval('let sum_ = 0; for x in [7:-2:-3] sum_ += x; sum_;', quiet) == '15', &
+			eval('let sum_ = 0; for x in [8:-2:-3] sum_ += x; sum_;', quiet) == '18', &
+			eval('let sum_ = i64(0); for x in [0:5] sum_ += x; sum_;', quiet) == '10', &
+			eval('let sum_ = i64(0); for x in [0:6] sum_ += x; sum_;', quiet) == '15', &
+			eval('let sum_ = i64(0); for x in [10:16] sum_ += x; sum_;', quiet) == '75', &
+			eval('let sum_ = i64(0); for x in [5:-1:0] sum_ += x; sum_;', quiet) == '15', &
+			eval('let sum_ = i64(0); for x in [5:-1:-2] sum_ += x; sum_;', quiet) == '14', &
+			eval('let sum_ = i64(0); for x in [0:2:6] sum_ += x; sum_;', quiet) == '6', &
+			eval('let sum_ = i64(0); for x in [i64(0):5] sum_ += x; sum_;', quiet) == '10', &
+			eval('let sum_ = i64(0); for x in [i64(0):6] sum_ += x; sum_;', quiet) == '15', &
+			eval('let sum_ = i64(0); for x in [i64(10):16] sum_ += x; sum_;', quiet) == '75', &
+			eval('let sum_ = i64(0); for x in [i64(5):-1:0] sum_ += x; sum_;', quiet) == '15', &
+			eval('let sum_ = i64(0); for x in [i64(5):-1:-2] sum_ += x; sum_;', quiet) == '14', &
+			eval('let sum_ = i64(0); for x in [i64(0):2:6] sum_ += x; sum_;', quiet) == '6', &
+			eval('let sum_ = 0.0; for x in [0.0: 1.0: 5.0] sum_ += x; [sum_];', quiet) == '[1.000000E+01]', &  ! [] is poor man's trim()
+			eval('let sum_ = 0.0; for x in [0.0:1.0:6.0] sum_ += x; [sum_];', quiet)   == '[1.500000E+01]', &
+			eval('let sum_ = 0.0; for x in [10.0:1.0:16.0] sum_ += x; [sum_];', quiet) == '[7.500000E+01]', &
+			eval('let sum_ = 0.0; for x in [5.0:-1.0:0.0] sum_ += x; [sum_];', quiet)  == '[1.500000E+01]', &
+			eval('let sum_ = 0.0; for x in [5.0:-1.0:-2.0] sum_ += x; [sum_];', quiet) == '[1.400000E+01]', &
+			eval('let sum_ = 0.0; for x in [0.0:2.0:6.0] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
+			eval('let vec = [0:6]; let sum_ = 0; for x in vec sum_ += x; sum_;', quiet) == '15', &
+			eval('let vec = [0.0:1.0:6.0]; let sum_ = 0.0; for x in vec sum_ += x; [sum_];', quiet) == '[1.500000E+01]', &
+			eval('let mat = [1,2,3, 4,5,6; 3,2]; let sum_ = 0; for x in mat sum_ += x; sum_;', quiet) == '21', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_for_1
+
+!===============================================================================
+
 subroutine unit_test_for(npass, nfail)
 
 	implicit none
@@ -2356,6 +2433,7 @@ subroutine unit_tests(iostat)
 	call unit_test_str        (npass, nfail)
 	call unit_test_substr     (npass, nfail)
 	call unit_test_if_else    (npass, nfail)
+	call unit_test_for_1      (npass, nfail)
 	call unit_test_for        (npass, nfail)
 	call unit_test_while      (npass, nfail)
 	call unit_test_var_scopes (npass, nfail)
