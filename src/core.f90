@@ -28,13 +28,6 @@ module syntran__core_m
 		syntran_patch =  40
 
 	! TODO:
-	!  - rename lexer.f90 to lex.f90 and parser to parse, for consistency with
-	!    eval.f90 (as opposed to evaler.f90)
-	!    * move parse_fn_decl*() to parse_fn.f90
-	!    * fix submodule issues.  gfortran-9 segfaults and ifort doesn't compile
-	!      but it works locally with 
-	!    * use more submodules.  parse_array_expr() is a good candidate because
-	!      it's so long
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
