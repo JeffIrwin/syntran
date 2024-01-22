@@ -30,9 +30,12 @@ module syntran__core_m
 	! TODO:
 	!  - rename lexer.f90 to lex.f90 and parser to parse, for consistency with
 	!    eval.f90 (as opposed to evaler.f90)
-	!    * move parse_fn_decl*() to parse_fn.f90
 	!    * use more submodules.  parse_array_expr() is a good candidate because
-	!      it's so long
+	!      it's so long.  could move parse_size() and parse_subscripts() along
+	!      with it since they are related
+	!    * anything else is getting into micro-optimization, but control-flow
+	!      parsing routines like parse_if_statement(), parse_while_statement(),
+	!      parse_for_statement() could be moved together
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used

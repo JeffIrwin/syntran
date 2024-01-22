@@ -5,7 +5,15 @@ submodule (syntran__parser_m) syntran__parse_fn
 
 	implicit none
 
+	! FIXME: remember to prepend routines like `module function` or `module
+	! subroutine` when pasting them into a submodule.  gfortran doesn't care but
+	! intel fortran will refuse to compile otherwise
+
+!===============================================================================
+
 contains
+
+!===============================================================================
 
 module function parse_fn_call(parser) result(fn_call)
 
@@ -297,6 +305,272 @@ module function parse_fn_call(parser) result(fn_call)
 	!print *, 'done parsing fn_call'
 
 end function parse_fn_call
+
+!===============================================================================
+
+module function parse_fn_declaration(parser) result(decl)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: decl
+
+	!********
+
+	character(len = :), allocatable :: type_text
+
+	integer :: i, pos0, pos1, pos2, rank, itype
+
+	type(fn_t) :: fn
+
+	type( string_vector_t) :: names, types
+	type(logical_vector_t) :: is_array
+	type(integer_vector_t) :: ranks
+
+	type(syntax_node_t) :: body
+	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, &
+		name, comma, dummy
+
+	type(text_span_t) :: span
+
+	type(value_t) :: val
+
+	! Like a for statement, a fn declaration has its own scope (for its
+	! parameters).  Its block body will have yet another scope
+	call parser%vars%push_scope()
+
+	fn_kw = parser%match(fn_keyword)
+
+	identifier = parser%match(identifier_token)
+
+	!print *, 'parsing fn ', identifier%text
+
+	! TODO: be careful with parser%pos (token index) vs parser%current_pos()
+	! (character index) when constructing a span.  I probably have similar bugs
+	! throughout to the one that I just fixed here
+	pos1 = parser%current_pos()
+
+	!print *, 'matching lparen'
+	lparen = parser%match(lparen_token)
+
+	! Parse parameter names and types.  Save in temp string vectors initially
+	names    = new_string_vector()
+	types    = new_string_vector()
+	is_array = new_logical_vector()
+	ranks    = new_integer_vector()
+
+	! Array params use this syntax:
+	!
+	!     fn sum_fn(v: [i32; :]): i32
+	!     {
+	!         let s = 0;
+	!         for i in [0: size(v, 0)]
+	!             s = s + v[i];
+	!         s;
+	!     }
+	!
+	!     fn mat_fn(a: [i32; :,:]): i32
+	!     {
+	!         // do something with a[i,j]
+	!     }
+
+	do while ( &
+		parser%current_kind() /= rparen_token .and. &
+		parser%current_kind() /= eof_token)
+
+		pos0 = parser%current_pos()
+
+		!print *, 'matching name'
+		name  = parser%match(identifier_token)
+		!print *, 'matching colon'
+		colon = parser%match(colon_token)
+
+		call parser%parse_type(type_text, rank)
+
+		call names%push( name%text )
+		call types%push( type_text )
+		call ranks%push( rank      )
+
+		! This array is technically redundant but helps readability?
+		call is_array%push( rank >= 0 )
+
+		if (parser%current_kind() /= rparen_token) then
+			!print *, 'matching comma'
+			comma = parser%match(comma_token)
+		end if
+
+		! Break infinite loop
+		if (parser%current_pos() == pos0) dummy = parser%next()
+
+	end do
+
+	!print *, 'matching rparen'
+	rparen = parser%match(rparen_token)
+	pos2 = parser%current_pos()
+
+	! Now that we have the number of params, save them
+
+	allocate(fn  %params( names%len_ ))
+	allocate(decl%params( names%len_ ))
+
+	do i = 1, names%len_
+		!print *, 'name, type = ', names%v(i)%s, ', ', types%v(i)%s
+
+		fn%params(i)%name = names%v(i)%s
+
+		itype = lookup_type( types%v(i)%s )
+		if (itype == unknown_type) then
+
+			! TODO: make an array of pos's for each param to underline
+			! individual param, not whole param list
+
+			span = new_span(pos1, pos2 - pos1 + 1)
+			call parser%diagnostics%push(err_bad_type( &
+				parser%context(), span, types%v(i)%s))
+				!parser%contexts%v(name%unit_), span, types%v(i)%s))
+
+		end if
+
+		if (is_array%v(i)) then
+			fn%params(i)%type = array_type
+			fn%params(i)%array_type = itype
+			fn%params(i)%rank = ranks%v(i)
+		else
+			fn%params(i)%type = itype
+		end if
+
+		! Declare the parameter variable
+		parser%num_vars = parser%num_vars + 1
+
+		! Save parameters by id_index.  TODO: stack frames
+		decl%params(i) = parser%num_vars
+
+		! Create a value_t object to store the type
+		val%type = fn%params(i)%type
+		if (is_array%v(i)) then
+			if (allocated(val%array)) deallocate(val%array)
+			allocate(val%array)
+			val%array%type = fn%params(i)%array_type
+			val%array%rank = fn%params(i)%rank
+		end if
+
+		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
+
+	end do
+
+	! Rust uses "->" as a delimiter between the fn and its return type.  Here
+	! I choose ":" instead as it seems more consistent, at least for normal
+	! non-assignable fns.  There is some discussion on the Rust reasoning here:
+	!
+	!     https://stackoverflow.com/questions/35018919/whats-the-origin-of-in-rust-function-definition-return-types
+	!
+
+	fn%type = void_type
+	if (parser%current_kind() == colon_token) then
+
+		colon = parser%match(colon_token)
+
+		pos1 = parser%current_pos()
+		call parser%parse_type(type_text, rank)
+		pos2 = parser%current_pos()
+
+		itype = lookup_type(type_text)
+
+		if (itype == unknown_type) then
+			span = new_span(pos1, pos2 - pos1 + 1)
+			call parser%diagnostics%push(err_bad_type( &
+				parser%context(), span, type_text))
+				!parser%contexts%v(parser%current_unit()), span, type_text))
+		end if
+
+		if (rank >= 0) then
+			fn%type = array_type
+			fn%rank = rank
+			fn%array_type = itype
+		else
+			fn%type = itype
+		end if
+
+	end if
+	!print *, 'fn%type = ', fn%type
+
+	body = parser%parse_statement()
+
+	! Insert fn into parser%fns
+
+	parser%num_fns = parser%num_fns + 1
+	decl%id_index  = parser%num_fns
+
+	allocate(decl%body)
+
+	decl%kind = fn_declaration
+
+	decl%identifier = identifier
+	decl%body       = body
+
+	call parser%vars%pop_scope()
+
+	allocate(fn%node)
+	fn%node = decl
+
+	call parser%fns%insert(identifier%text, fn, decl%id_index)
+	! TODO: error if fn already declared. be careful in future if fn prototypes
+	! are added
+
+	!print *, 'size(decl%params) = ', size(decl%params)
+	!print *, 'decl%params = ', decl%params
+
+end function parse_fn_declaration
+
+!===============================================================================
+
+module subroutine parse_type(parser, type_text, rank)
+
+	! TODO: encapsulate out-args in struct if adding any more
+
+	class(parser_t) :: parser
+
+	character(len = :), intent(out), allocatable :: type_text
+
+	integer, intent(out) :: rank
+
+	!********
+
+	type(syntax_token_t) :: colon, type, comma, lbracket, rbracket, semi
+
+	if (parser%current_kind() == lbracket_token) then
+
+		! Array param
+		lbracket = parser%match(lbracket_token)
+		type     = parser%match(identifier_token)
+		semi     = parser%match(semicolon_token)
+
+		rank  = 0
+		do while ( &
+			parser%current_kind() /= rbracket_token .and. &
+			parser%current_kind() /= eof_token)
+
+			rank = rank + 1
+			colon = parser%match(colon_token)
+			if (parser%current_kind() /= rbracket_token) then
+				comma = parser%match(comma_token)
+			end if
+
+		end do
+		!print *, 'rank = ', rank
+
+		rbracket = parser%match(rbracket_token)
+
+	else
+		! Scalar param
+		type = parser%match(identifier_token)
+		rank = -1
+	end if
+
+	type_text = type%text
+
+end subroutine parse_type
+
+!===============================================================================
 
 end submodule syntran__parse_fn
 
