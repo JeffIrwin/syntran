@@ -30,12 +30,15 @@ module syntran__core_m
 	! TODO:
 	!  - rename lexer.f90 to lex.f90 and parser to parse, for consistency with
 	!    eval.f90 (as opposed to evaler.f90)
-	!    * use more submodules.  parse_array_expr() is a good candidate because
-	!      it's so long.  could move parse_size() and parse_subscripts() along
-	!      with it since they are related
-	!    * anything else is getting into micro-optimization, but control-flow
-	!      parsing routines like parse_if_statement(), parse_while_statement(),
-	!      parse_for_statement() could be moved together
+	!    * use more submodules
+	!    * control-flow parsing routines like parse_if_statement(),
+	!      parse_while_statement(), parse_for_statement() could be moved together
+	!    * parse.f90 should be interface-only now with all of its routines split
+	!      to separate files.  they way submodules work is that if I touch
+	!      parse.f90, all of its submodules (parse_fn.f90, parse_array.f90) will
+	!      get a cascaded recompilation.  the only way the experience is
+	!      improved is if I touch a submodule (e.g. parse_fn.f90), then the
+	!      parent module and siblings are *not* recompiled
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
