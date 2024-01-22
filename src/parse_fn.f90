@@ -7,7 +7,7 @@ submodule (syntran__parser_m) syntran__parse_fn
 
 contains
 
-function parse_fn_call(parser) result(fn_call)
+module function parse_fn_call(parser) result(fn_call)
 
 	class(parser_t) :: parser
 
