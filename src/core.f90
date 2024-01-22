@@ -25,9 +25,14 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  40
+		syntran_patch =  41
 
 	! TODO:
+	!  - rename lexer.f90 to lex.f90 and parser to parse, for consistency with
+	!    eval.f90 (as opposed to evaler.f90)
+	!    * move parse_fn_decl*() to parse_fn.f90
+	!    * use more submodules.  parse_array_expr() is a good candidate because
+	!      it's so long
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
