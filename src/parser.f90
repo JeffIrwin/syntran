@@ -865,8 +865,9 @@ recursive function parse_expr(parser, parent_prec) result(expr)
 		expr  = new_unary_expr(op, right)
 
 		rtype = right%val%type
+		if (rtype == array_type) rarrtype = expr%right%val%array%type
 
-		if (.not. is_unary_op_allowed(op%kind, rtype)) then
+		if (.not. is_unary_op_allowed(op%kind, rtype, rarrtype)) then
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &

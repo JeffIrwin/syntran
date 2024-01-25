@@ -958,6 +958,44 @@ end subroutine or_
 
 !===============================================================================
 
+subroutine not_(right, res, op_text)
+
+	type(value_t), intent(in)  :: right
+
+	type(value_t), intent(inout) :: res
+
+	character(len = *), intent(in) :: op_text
+
+	!****
+
+	integer(kind = 8) :: i8
+
+	select case (right%type)
+	case        (bool_type)
+		res%sca%bool = .not. right%sca%bool
+
+	case        (array_type)
+
+		select case (right%array%type)
+		case (bool_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = .not. right%array%bool
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case default
+		! FIXME: other numeric types (f64, etc.)
+		write(*,*) err_eval_binary_types(op_text)
+		call internal_error()
+	end select
+
+end subroutine not_
+
+!===============================================================================
+
 end module syntran__bool_m
 
 !===============================================================================

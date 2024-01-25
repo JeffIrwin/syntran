@@ -1201,7 +1201,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			end select
 
 		case (not_keyword)
-			res%sca%bool = .not. right%sca%bool
+			call not_(right, res, node%op%text)
 
 		case default
 			write(*,*) err_eval_unary_op(node%op%text)

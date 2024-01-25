@@ -68,7 +68,6 @@ module syntran__core_m
 	!    * size() done
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
-	!    * array and, or, not
 	!    * array unary -, (and unary +? seems weird but should be allowed i guess)
 	!    * element-wise add, sub, mul, div, pow, mod done
 	!      + compound array assignment works but needs unit tests
@@ -76,6 +75,7 @@ module syntran__core_m
 	!      + new operator tokens, something like `.*`?
 	!    * optional `dim` argument for any() and all(). 1 arg versions done
 	!    * comparisons done
+	!    * array and, or, not, done
 	!  - document recent features:
 	!    * array slicing
 	!    * casting?

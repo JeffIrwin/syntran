@@ -1383,15 +1383,15 @@ end function is_binary_op_allowed
 
 !===============================================================================
 
-logical function is_unary_op_allowed(op, operand)
+logical function is_unary_op_allowed(op, right, right_arr)
 
-	! Is a unary operation allowed with kinds operator op and operand?
+	! Is a unary operation allowed with kinds operator op and right operand?
 
-	integer, intent(in) :: op, operand
+	integer, intent(in) :: op, right, right_arr
 
 	is_unary_op_allowed = .false.
 
-	if (operand == unknown_type) then
+	if (right == unknown_type) then
 		! Stop cascading errors
 		is_unary_op_allowed = .true.
 		return
@@ -1400,10 +1400,14 @@ logical function is_unary_op_allowed(op, operand)
 	select case (op)
 
 		case (plus_token, minus_token)
-			is_unary_op_allowed = is_num_type(operand)
+			is_unary_op_allowed = is_num_type(right)
 
 		case (not_keyword)
-			is_unary_op_allowed = operand == bool_type
+			if (right == array_type) then
+				is_unary_op_allowed = right_arr == bool_type
+			else
+				is_unary_op_allowed = right == bool_type
+			end if
 
 	end select
 
