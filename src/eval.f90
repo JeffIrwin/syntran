@@ -1259,7 +1259,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call and_(left, right, res, node%op%text)
 
 		case (or_keyword)
-			res%sca%bool = left%sca%bool .or.  right%sca%bool
+			call or_(left, right, res, node%op%text)
 
 		case (eequals_token)
 			call is_eq(left, right, res, node%op%text)

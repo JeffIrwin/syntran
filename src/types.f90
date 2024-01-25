@@ -1329,7 +1329,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 			end if
 
-		case (and_keyword)
+		case (and_keyword, or_keyword)
 
 			if (left == array_type .and. right == array_type) then
 				allowed = left_arr == bool_type .and. right_arr == bool_type
@@ -1344,10 +1344,6 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = left == bool_type .and. right == bool_type
 
 			end if
-
-		case (or_keyword)
-			! TODO: consolidate with and_keyword after vectorizing
-			allowed = left == bool_type .and. right == bool_type
 
 		case (equals_token)
 			allowed = &

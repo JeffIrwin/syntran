@@ -1803,6 +1803,9 @@ subroutine unit_test_arr_op(npass, nfail)
 			eval('[true, false] and [true, true];') == '[true, false]', &
 			eval('[true, false] and true;') == '[true, false]', &
 			eval('true and [false, true];') == '[false, true]', &
+			eval('[true, false] or [true, false];') == '[true, false]', &
+			eval('[true, false] or true;') == '[true, true]', &
+			eval('false or [false, true];') == '[false, true]', &
 			.false. &
 		]
 
