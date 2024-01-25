@@ -264,7 +264,7 @@ end function parse_expr_statement
 
 !===============================================================================
 
-recursive function parse_expr(parser, parent_prec) result(expr)
+module recursive function parse_expr(parser, parent_prec) result(expr)
 
 	! In episode 3, Immo renamed this fn to "ParseBinaryExpression()", but
 	! I consider that confusing because the result could be either unary or
