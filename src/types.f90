@@ -1329,7 +1329,24 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 			end if
 
-		case (and_keyword, or_keyword)
+		case (and_keyword)
+
+			if (left == array_type .and. right == array_type) then
+				allowed = left_arr == bool_type .and. right_arr == bool_type
+
+			else if (left  == array_type) then
+				allowed = left_arr == bool_type .and. right == bool_type
+
+			else if (right == array_type) then
+				allowed = left == bool_type .and. right_arr == bool_type
+
+			else
+				allowed = left == bool_type .and. right == bool_type
+
+			end if
+
+		case (or_keyword)
+			! TODO: consolidate with and_keyword after vectorizing
 			allowed = left == bool_type .and. right == bool_type
 
 		case (equals_token)
@@ -1522,6 +1539,7 @@ function new_binary_expr(left, op, right) result(expr)
 
 	if (debug > 1) print *, 'new_binary_expr'
 	if (debug > 1) print *, 'left  = ', left %str()
+	if (debug > 1) print *, 'op    = ', op%text
 	if (debug > 1) print *, 'right = ', right%str()
 
 	expr%kind = binary_expr
@@ -1618,7 +1636,6 @@ recursive integer function get_binary_op_kind(left, op, right, &
 	! right
 
 	integer, intent(in) :: left, op, right
-	!integer, intent(in), optional :: left_arr, right_arr
 	integer, intent(in) :: left_arr, right_arr
 
 	select case (op)

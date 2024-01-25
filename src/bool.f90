@@ -834,6 +834,68 @@ end subroutine is_gt_value_t
 
 !===============================================================================
 
+subroutine and_(left, right, res, op_text)
+
+	type(value_t), intent(in)  :: left, right
+
+	type(value_t), intent(inout) :: res
+
+	character(len = *), intent(in) :: op_text
+
+	!****
+
+	integer(kind = 8) :: i8
+
+	select case (magic * left%type + right%type)
+	case        (magic * bool_type + bool_type)
+		res%sca%bool = left%sca%bool .and. right%sca%bool
+
+	case        (magic * array_type + bool_type)
+
+		select case (left%array%type)
+		case (bool_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%bool .and. right%sca%bool
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic * bool_type + array_type)
+
+		select case (right%array%type)
+		case (bool_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%bool .and. right%array%bool
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic * array_type + array_type)
+
+		select case (magic * left%array%type + right%array%type)
+		case (magic * bool_type + bool_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%bool .and. right%array%bool
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case default
+		! FIXME: other numeric types (f64, etc.)
+		write(*,*) err_eval_binary_types(op_text)
+		call internal_error()
+	end select
+
+end subroutine and_
+
+!===============================================================================
+
 end module syntran__bool_m
 
 !===============================================================================

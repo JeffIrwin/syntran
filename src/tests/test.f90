@@ -1800,6 +1800,9 @@ subroutine unit_test_arr_op(npass, nfail)
 			eval('[i64(3), i64(5)] % [2, 3];') == '[1, 2]', &
 			eval('[3.0, 5.0] % [i64(2), i64(3)];') == '[1.000000E+00, 2.000000E+00]', &
 			eval('[i64(3), i64(5)] % [2.0, 3.0];') == '[1.000000E+00, 2.000000E+00]', &
+			eval('[true, false] and [true, true];') == '[true, false]', &
+			eval('[true, false] and true;') == '[true, false]', &
+			eval('true and [false, true];') == '[false, true]', &
 			.false. &
 		]
 

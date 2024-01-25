@@ -1256,7 +1256,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			call mod_(left, right, res, node%op%text)
 
 		case (and_keyword)
-			res%sca%bool = left%sca%bool .and. right%sca%bool
+			call and_(left, right, res, node%op%text)
 
 		case (or_keyword)
 			res%sca%bool = left%sca%bool .or.  right%sca%bool
