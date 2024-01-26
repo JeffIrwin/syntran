@@ -31,10 +31,8 @@ module syntran__core_m
 	!  - rename lexer.f90 to lex.f90 and parser to parse, for consistency with
 	!    eval.f90 (as opposed to evaler.f90)
 	!    * use more submodules
-	!    * control-flow parsing routines like parse_if_statement(),
-	!      parse_while_statement(), parse_for_statement() could be moved together
 	!    * parse.f90 should be interface-only now with all of its routines split
-	!      to separate files.  they way submodules work is that if I touch
+	!      to separate files.  the way submodules work is that if I touch
 	!      parse.f90, all of its submodules (parse_fn.f90, parse_array.f90) will
 	!      get a cascaded recompilation.  the only way the experience is
 	!      improved is if I touch a submodule (e.g. parse_fn.f90), then the

@@ -15,7 +15,7 @@ contains
 
 !===============================================================================
 
-module recursive function parse_expr_statement(parser) result(expr)
+recursive module function parse_expr_statement(parser) result(expr)
 
 	class(parser_t) :: parser
 
@@ -264,7 +264,7 @@ end function parse_expr_statement
 
 !===============================================================================
 
-module recursive function parse_expr(parser, parent_prec) result(expr)
+recursive module function parse_expr(parser, parent_prec) result(expr)
 
 	! In episode 3, Immo renamed this fn to "ParseBinaryExpression()", but
 	! I consider that confusing because the result could be either unary or
