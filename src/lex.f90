@@ -1,7 +1,7 @@
 
 !===============================================================================
 
-module syntran__lexer_m
+module syntran__lex_m
 
 	!use syntran__errors_m
 	use syntran__types_m
@@ -570,7 +570,7 @@ end function new_lexer
 
 !===============================================================================
 
-end module syntran__lexer_m
+end module syntran__lex_m
 
 !===============================================================================
 

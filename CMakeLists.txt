@@ -97,13 +97,13 @@ set(LIB_SRC
 	${SRC_DIR}/bool.f90
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/types.f90
-	${SRC_DIR}/lexer.f90
+	${SRC_DIR}/lex.f90
 	${SRC_DIR}/parse_array.f90
 	${SRC_DIR}/parse_control.f90
 	${SRC_DIR}/parse_expr.f90
 	${SRC_DIR}/parse_fn.f90
 	${SRC_DIR}/parse_misc.f90
-	${SRC_DIR}/parser.f90
+	${SRC_DIR}/parse.f90
 	${SRC_DIR}/eval.f90
 	${SRC_DIR}/core.f90
 	${SRC_DIR}/syntran.f90

@@ -1,7 +1,7 @@
 
 !===============================================================================
 
-submodule (syntran__parser_m) syntran__parse_control
+submodule (syntran__parse_m) syntran__parse_control
 
 	implicit none
 

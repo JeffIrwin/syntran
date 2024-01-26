@@ -1,7 +1,7 @@
 
 !===============================================================================
 
-module syntran__parser_m
+module syntran__parse_m
 
 	! This module is almost entirely interfaces to routines implemented in
 	! src/parse_*.f90.  The remaining fns implemented directly in this file are
@@ -9,7 +9,7 @@ module syntran__parser_m
 	! lines of code
 
 	!use syntran__errors_m
-	use syntran__lexer_m
+	use syntran__lex_m
 
 	!! types and utils are used indirectly through lexer, so it doesn't matter
 	!! much if they're explicitly included here
@@ -366,7 +366,7 @@ end function parser_text
 
 !===============================================================================
 
-end module syntran__parser_m
+end module syntran__parse_m
 
 !===============================================================================
 
