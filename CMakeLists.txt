@@ -102,6 +102,7 @@ set(LIB_SRC
 	${SRC_DIR}/parse_control.f90
 	${SRC_DIR}/parse_expr.f90
 	${SRC_DIR}/parse_fn.f90
+	${SRC_DIR}/parse_misc.f90
 	${SRC_DIR}/parser.f90
 	${SRC_DIR}/eval.f90
 	${SRC_DIR}/core.f90
