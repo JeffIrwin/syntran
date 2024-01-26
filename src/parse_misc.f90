@@ -41,7 +41,7 @@ end function tokens_str
 
 !===============================================================================
 
-function match(parser, kind) result(token)
+module function match(parser, kind) result(token)
 
 	class(parser_t) :: parser
 
