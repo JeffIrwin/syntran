@@ -1295,7 +1295,9 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 		case (minus_token, star_token, sstar_token, slash_token, &
 			minus_equals_token, star_equals_token, slash_equals_token, &
-			sstar_equals_token, percent_token, percent_equals_token)
+			sstar_equals_token, percent_token, percent_equals_token, &
+			greater_token, less_token, greater_equals_token, &
+			less_equals_token)
 			! these operators work on numbers but not strings
 
 			if (left == array_type .and. right == array_type) then
@@ -1306,27 +1308,6 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = is_num_type(left) .and. is_num_type(right_arr)
 			else
 				allowed = is_num_type(left) .and. is_num_type(right)
-			end if
-
-		case (greater_token, less_token, greater_equals_token, less_equals_token)
-			! TODO: consolidate with above case after implementing remaining
-			! array ops
-
-			if (left == array_type .and. right == array_type) then
-				allowed = &
-					(is_num_type(left_arr) .and. is_num_type(right_arr))
-
-			else if (left  == array_type) then
-				allowed = &
-					(is_num_type(left_arr) .and. is_num_type(right))
-
-			else if (right == array_type) then
-				allowed = &
-					(is_num_type(left) .and. is_num_type(right_arr))
-
-			else
-				allowed = is_num_type(left) .and. is_num_type(right)
-
 			end if
 
 		case (and_keyword, or_keyword)

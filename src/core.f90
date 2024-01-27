@@ -28,15 +28,9 @@ module syntran__core_m
 		syntran_patch =  41
 
 	! TODO:
-	!  - rename lexer.f90 to lex.f90 and parser to parse, for consistency with
-	!    eval.f90 (as opposed to evaler.f90)
-	!    * use more submodules
-	!    * parse.f90 should be interface-only now with all of its routines split
-	!      to separate files.  the way submodules work is that if I touch
-	!      parse.f90, all of its submodules (parse_fn.f90, parse_array.f90) will
-	!      get a cascaded recompilation.  the only way the experience is
-	!      improved is if I touch a submodule (e.g. parse_fn.f90), then the
-	!      parent module and siblings are *not* recompiled
+	!  - block_statement eval had a bug which is now fixed by setting tmp =
+	!    syntax_eval() in case of a block which ends with a null if_statement.
+	!    check translation_unit and other eval case branches for similar bugs
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
@@ -155,6 +149,9 @@ module syntran__core_m
 	!      > len (of str)
 	!      > non-recursive user-defined fns
 	!  - structs
+	!  - use more submodules
+	!    * types.f90 is long and close to leaves of dependency tree.  value.f90
+	!      is also highly depended upon
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!    * using rust syntrax highlighting in neovim is not bad (except for "\" string)
 	!  - enums
