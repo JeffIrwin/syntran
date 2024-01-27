@@ -28,9 +28,14 @@ module syntran__core_m
 		syntran_patch =  41
 
 	! TODO:
+	!  - add more tests for lhs slicing (and rhs slicing). slicing needs more
+	!    in-depths tests with medium to long scripts
 	!  - block_statement eval had a bug which is now fixed by setting tmp =
 	!    syntax_eval() in case of a block which ends with a null if_statement.
 	!    check translation_unit and other eval case branches for similar bugs
+	!  - cmd args
+	!    * args would be useful for logo sample, e.g. image size and some
+	!      control color options
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
@@ -39,17 +44,6 @@ module syntran__core_m
 	!        let arr1 = [0: 4];
 	!        let arr2 = [4: 8];
 	!        let cat  = [arr1, arr2]; // [0: 8]
-	!  - arrays
-	!    * add slice subscripts for LHS:
-	!      > RHS slicing done
-	!      > a[:]     -> a[0], a[1], a[2], ...
-	!      > a[1:4]   -> a[1], a[2], a[3]  // already parsed bc of str feature, just can't eval yet
-	!      > a[1:2:6] -> a[1], a[3], a[5]
-	!      > higher rank:  a[:,1], a[2,:], a[2:4, 1], ...
-	!      > in general, count the number of scalar subscripts.  that is the
-	!        difference between the input rank and the output rank of the
-	!        subscripting operation.  e.g. if every subscript is a slice, then
-	!        the rank is unchanged, 1 scalar subscript decreases rank by 1, etc.
 	!  - refactor syntrax_eval() deep nesting
 	!    * encapsulation of syntax_eval() args (vars, fns, quiet, etc.) should
 	!      be done first

@@ -10,11 +10,12 @@ let NX_CANVAS = 256;
 //let NX_CANVAS = 128;
 let NY_CANVAS = NX_CANVAS;
 
-//let NX_CANVAS = 300;
-//let NY_CANVAS = 400;
+let THEME_RB = 0;
+let THEME_GB = 1;
+//let THEME = THEME_GB;
+let THEME = THEME_RB;
 
-//let NX_CANVAS = 150;
-//let NY_CANVAS = 200;
+//********
 
 let NDIM = 2;
 let NRGB = 3;
@@ -89,13 +90,16 @@ fn draw_logo()
 
 	// Set background diagonal gradient
 
-	//let color_up_left    = [10,  20, 110];
-	//let color_down_right = [10, 110,  20];
-	//let color_mid        = [10,  65,  65];
+	let color_up_left    = [10,  20, 110];
+	let color_down_right = [10, 110,  20];
+	let color_mid        = [10,  65,  65];
 
-	let color_up_left    = [ 20, 10, 110];
-	let color_down_right = [110, 10,  20];
-	let color_mid        = [ 65, 10,  20];
+	if THEME == THEME_RB
+	{
+		color_up_left    = [ 20, 10, 110];
+		color_down_right = [110, 10,  20];
+		color_mid        = [ 65, 10,  20];
+	}
 
 	draw_tri(
 		[0, 0],
@@ -205,46 +209,33 @@ fn draw_logo()
 
 	// Control colors, to be interpolated
 	let c0  = [200, 200, 200];
-	//let c3  = [ 40, 220,  40];
-	let c3  = [220,  40,  40];
+
+	let c3  = [ 40, 220,  40];
+	if THEME == THEME_RB
+		c3  = [220,  40,  40];
+
 	let c8  = [ 40,  40, 220];
 	let c11 = c0;
 
+	let ncolor = 12;
+	let colors = [0; NRGB, ncolor];
+
 	// Interpolate colors with floats
+	colors[:,  0] = c0;
+	colors[:,  1] = i32(2.0 / 3.0 * c0 + 1.0 / 3.0 * c3);
+	colors[:,  2] = i32(1.0 / 3.0 * c0 + 2.0 / 3.0 * c3);
 
-	let c1  = i32(2.0 / 3.0 * c0 + 1.0 / 3.0 * c3);
-	let c2  = i32(1.0 / 3.0 * c0 + 2.0 / 3.0 * c3);
+	colors[:,  3] = c3;
+	colors[:,  4] = i32(4.0 / 5.0 * c3 + 1.0 / 5.0 * c8);
+	colors[:,  5] = i32(3.0 / 5.0 * c3 + 2.0 / 5.0 * c8);
+	colors[:,  6] = i32(2.0 / 5.0 * c3 + 3.0 / 5.0 * c8);
+	colors[:,  7] = i32(1.0 / 5.0 * c3 + 4.0 / 5.0 * c8);
 
-	let c4  = i32(4.0 / 5.0 * c3 + 1.0 / 5.0 * c8);
-	let c5  = i32(3.0 / 5.0 * c3 + 2.0 / 5.0 * c8);
-	let c6  = i32(2.0 / 5.0 * c3 + 3.0 / 5.0 * c8);
-	let c7  = i32(1.0 / 5.0 * c3 + 4.0 / 5.0 * c8);
+	colors[:,  8] = c8;
+	colors[:,  9] = i32(2.0 / 3.0 * c8 + 1.0 / 3.0 * c11);
+	colors[:, 10] = i32(1.0 / 3.0 * c8 + 2.0 / 3.0 * c11);
 
-	let c9  = i32(2.0 / 3.0 * c8 + 1.0 / 3.0 * c11);
-	let c10 = i32(1.0 / 3.0 * c8 + 2.0 / 3.0 * c11);
-
-	// Syntran needs array concatenation :(
-	//
-	// Or LHS slicing, so the `colors` array can be constructed directly without
-	// scalar hepers c0, c1, ...
-	let ncolor = 11;
-	let colors =
-		[
-			c0 [0], c0 [1], c0 [2],
-			c1 [0], c1 [1], c1 [2],
-			c2 [0], c2 [1], c2 [2],
-			c3 [0], c3 [1], c3 [2],
-			c4 [0], c4 [1], c4 [2],
-			c5 [0], c5 [1], c5 [2],
-			c6 [0], c6 [1], c6 [2],
-			c7 [0], c7 [1], c7 [2],
-			c8 [0], c8 [1], c8 [2],
-			c9 [0], c9 [1], c9 [2],
-			c10[0], c10[1], c10[2],
-			c11[0], c11[1], c11[2]
-			;
-			NRGB, ncolor
-		];
+	colors[:, 11] = c11;
 
 	// Triangle vertex colors, as an index of `colors` array
 	let tri_colors =
@@ -320,7 +311,7 @@ fn main(): i32
 	println("starting syntran logo main");
 
 	draw_logo();
-	write_ppm("logo-syntran-v15.ppm");
+	write_ppm("logo-syntran-v17.ppm");
 
 	println("ending main");
 	0;
