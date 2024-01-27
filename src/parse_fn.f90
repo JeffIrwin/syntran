@@ -124,6 +124,26 @@ module function parse_fn_call(parser) result(fn_call)
 			fn_call%identifier%text = "0i32_sca"
 		end select
 
+	case ("i64")
+
+		type_ = i64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+			!print *, "resolving 0i64_arr"
+			fn_call%identifier%text = "0i64_arr"
+
+			if (args%len_ >= 1) then
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case default
+			!print *, "resolving 0i64_sca"
+			fn_call%identifier%text = "0i64_sca"
+		end select
+
 	end select
 
 	! Lookup by fn_call%identifier%text (e.g. "0min_i32"), but log

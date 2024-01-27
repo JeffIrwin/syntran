@@ -96,6 +96,7 @@ module syntran__value_m
 			procedure :: to_i32 => value_to_i32
 			procedure :: to_i64 => value_to_i64
 			procedure :: to_i32_array => value_to_i32_array
+			procedure :: to_i64_array => value_to_i64_array
 
 	end type value_t
 
@@ -373,6 +374,42 @@ function value_to_i64(val) result(ans)
 	end select
 
 end function value_to_i64
+
+!===============================================================================
+
+function value_to_i64_array(val) result(ans)
+
+	class(value_t) :: val
+
+	type(array_t) :: ans
+
+	!print *, "starting value_to_i64_array()"
+	!print *, "val%type = ", kind_name(val%type)
+	!print *, "val%array%type = ", kind_name(val%array%type)
+
+	ans = mold(val%array, i64_type)
+
+	select case (val%array%type)
+
+		case (f32_type)
+			!ans%i64 = int(val%array%f32, 4)
+			ans%i64 = val%array%f32
+
+		case (i32_type)
+			ans%i64 = val%array%i32
+
+		case (i64_type)
+			!ans%i64 = int(val%array%i64, 4)
+			ans%i64 = val%array%i64
+
+		case default
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to i64 '//color_reset
+			call internal_error()
+
+	end select
+
+end function value_to_i64_array
 
 !===============================================================================
 

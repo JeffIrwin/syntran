@@ -817,13 +817,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 		case ("0i32_arr")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
-			!res%sca%i32 = arg%to_i32()
 			res%array = arg%to_i32_array()
 
-		case ("i64")
+		case ("0i64_sca")
 
 			arg = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%i64 = arg%to_i64()
+
+		case ("0i64_arr")
+
+			arg = syntax_eval(node%args(1), vars, fns, quietl)
+			res%array = arg%to_i64_array()
 
 		case ("open")
 
