@@ -1835,7 +1835,7 @@ end subroutine unit_test_arr_op
 
 !===============================================================================
 
-subroutine unit_test_slice_1(npass, nfail)
+subroutine unit_test_rhs_slc_1(npass, nfail)
 
 	! Simple array slicing tests
 
@@ -1845,7 +1845,7 @@ subroutine unit_test_slice_1(npass, nfail)
 
 	!********
 
-	character(len = *), parameter :: label = 'array slicing'
+	character(len = *), parameter :: label = 'rhs array slicing'
 
 	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
@@ -1896,7 +1896,39 @@ subroutine unit_test_slice_1(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_slice_1
+end subroutine unit_test_rhs_slc_1
+
+!===============================================================================
+
+subroutine unit_test_lhs_slc_1(npass, nfail)
+
+	! Simple array slicing tests
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'lhs array slicing'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval('let v = [0: 5]; v[1: 4] = [3:-1:0]; v;', quiet) == '[0, 3, 2, 1, 4]', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_lhs_slc_1
 
 !===============================================================================
 
@@ -2493,9 +2525,10 @@ subroutine unit_tests(iostat)
 	call unit_test_io         (npass, nfail)
 	call unit_test_i64        (npass, nfail)
 	call unit_test_include    (npass, nfail)
-	call unit_test_slice_1    (npass, nfail)
+	call unit_test_rhs_slc_1  (npass, nfail)
 	call unit_test_arr_comp   (npass, nfail)
 	call unit_test_arr_op     (npass, nfail)
+	call unit_test_lhs_slc_1  (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

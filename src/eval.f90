@@ -677,7 +677,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! identifier at each scope level
 
 		else
-			print *, 'LHS array subscript assignment'
+			!print *, 'LHS array subscript assignment'
 			!print *, 'LHS type = ', kind_name(vars%vals(node%id_index)%array%type)  ! not alloc for str
 
 			! Assign return value from RHS
@@ -686,7 +686,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			!print *, 'RHS = ', res%to_str()
 
 			if (vars%vals(node%id_index)%type == str_type) then
-				print *, 'str_type'
+				!print *, 'str_type'
 
 				! TODO: ban compound character substring assignment
 				i8 = subscript_eval(node, vars, fns, quietl)
@@ -694,7 +694,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 
-				print *, 'non str_type scalar subscript'
+				!print *, 'non str_type scalar subscript'
 				!print *, 'LHS array type = ', &
 				!	vars%vals(node%id_index)%array%type
 				!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
@@ -708,7 +708,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			else
 
-				print *, 'lhs slice assignment'
+				!print *, 'lhs slice assignment'
 
 				! TODO: refactor subscript slice eval so this code can be shared
 				! with LHS and RHS slicing
@@ -751,8 +751,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					end select
 
 				end do
-				print *, 'lsubs = ', lsubs
-				print *, 'usubs = ', usubs
+				!print *, 'lsubs = ', lsubs
+				!print *, 'usubs = ', usubs
 				!print *, 'rank_res = ', rank_res
 
 				!print *, 'type = ', kind_name( node%val%array%type )
@@ -794,7 +794,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				! array
 				subs = lsubs
 				do i8 = 0, res%array%len_ - 1
-					print *, 'subs = ', int(subs, 4)
+					!print *, 'subs = ', int(subs, 4)
 
 					! subscript_eval() inlined.  is there a way to copy a slice
 					! without doing so much math?

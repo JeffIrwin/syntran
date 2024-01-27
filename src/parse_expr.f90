@@ -210,9 +210,9 @@ recursive module function parse_expr_statement(parser) result(expr)
 						expr%val%array%rank, size(expr%lsubscripts)))
 				end if
 
-				print *, 'rank in  = ', expr%val%array%rank
+				!print *, 'rank in  = ', expr%val%array%rank
 				expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
-				print *, 'rank out = ', expr%val%array%rank
+				!print *, 'rank out = ', expr%val%array%rank
 
 			end if
 
