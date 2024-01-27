@@ -1817,7 +1817,7 @@ subroutine unit_test_arr_op(npass, nfail)
 			eval('false or [false, true];') == '[false, true]', &
 			eval('not [true, false];') == '[false, true]', &
 			eval('not [false, true];') == '[true, false]', &
-			eval('-[0.0, 1.0];') == '[-0.000000E+00, -1.000000E+00]', &
+			eval('-[1.0, 2.0];') == '[-1.000000E+00, -2.000000E+00]', &
 			eval('-[0, 1];') == '[0, -1]', &
 			eval('-[i64(0), i64(1)];') == '[0, -1]', &
 			eval('[0.0, 1.0];') == '[0.000000E+00, 1.000000E+00]', &
