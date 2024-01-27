@@ -51,7 +51,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound_, ubound_, itr, elem, &
-		step, len_, arg, arg1, arg2, array_val, lsubval, usubval, tmp
+		step, len_, arg, arg1, arg2, array_val, lsubval, usubval, tmp, res_val
 
 	!print *, 'starting syntax_eval()'
 
@@ -677,7 +677,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			! identifier at each scope level
 
 		else
-			!print *, 'LHS array subscript assignment'
+			print *, 'LHS array subscript assignment'
 			!print *, 'LHS type = ', kind_name(vars%vals(node%id_index)%array%type)  ! not alloc for str
 
 			! Assign return value from RHS
@@ -685,22 +685,169 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			!print *, 'RHS = ', res%to_str()
 
-			i8 = subscript_eval(node, vars, fns, quietl)
-
 			if (vars%vals(node%id_index)%type == str_type) then
-				! TODO: ban compound character substring assignment
-				vars%vals(node%id_index)%sca%str%s(i8+1: i8+1) = res%sca%str%s
-			else
+				print *, 'str_type'
 
+				! TODO: ban compound character substring assignment
+				i8 = subscript_eval(node, vars, fns, quietl)
+				vars%vals(node%id_index)%sca%str%s(i8+1: i8+1) = res%sca%str%s
+
+			else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+
+				print *, 'non str_type scalar subscript'
 				!print *, 'LHS array type = ', &
 				!	vars%vals(node%id_index)%array%type
 				!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
 
+				i8 = subscript_eval(node, vars, fns, quietl)
 				array_val = get_array_value_t(vars%vals(node%id_index)%array, i8)
 				call compound_assign(array_val, res, node%op)
 				call set_array_value_t( &
 					vars%vals(node%id_index)%array, i8, array_val)
 				res = array_val
+
+			else
+
+				print *, 'lhs slice assignment'
+
+				! TODO: refactor subscript slice eval so this code can be shared
+				! with LHS and RHS slicing
+
+				rank = vars%vals(node%id_index)%array%rank
+				allocate(lsubs(rank), usubs(rank))
+				rank_res = 0
+				do i = 1, rank
+
+					if (node%lsubscripts(i)%sub_kind == all_sub) then
+						lsubs(i) = 0
+						!print *, 'lsubs(i) = ', lsubs(i)
+					else
+						lsubval = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
+						lsubs(i) = lsubval%sca%i32
+					end if
+
+					select case (node%lsubscripts(i)%sub_kind)
+					case (all_sub)
+						usubs(i) = vars%vals(node%id_index)%array%size(i)
+						!print *, 'usubs(i) = ', usubs(i)
+
+						rank_res = rank_res + 1
+
+					case (range_sub)
+						usubval = syntax_eval(node%usubscripts(i), vars, fns, quietl)
+						usubs(i) = usubval%sca%i32
+
+						rank_res = rank_res + 1
+
+					case (scalar_sub)
+						! Scalar subs are converted to a range-1 sub so we can
+						! iterate later without further case logic
+						usubs(i) = lsubs(i) + 1
+
+					case default
+						write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
+						call internal_error()
+
+					end select
+
+				end do
+				print *, 'lsubs = ', lsubs
+				print *, 'usubs = ', usubs
+				!print *, 'rank_res = ', rank_res
+
+				!print *, 'type = ', kind_name( node%val%array%type )
+
+				!print *, 'type  = ', node%val%array%type
+				!print *, 'rank  = ', node%val%array%rank
+				!print *, 'size  = ', node%val%array%size
+				!print *, 'len_  = ', node%val%array%len_
+				!print *, 'cap   = ', node%val%array%cap
+
+				!! TODO: some size/shape checking might be needed here between
+				!! LHS and RHS
+
+				!allocate(res%array)
+				!res%type = array_type
+				!res%array%kind = expl_array
+				!res%array%type = node%val%array%type
+				!res%array%rank = rank_res
+
+				!allocate(res%array%size( rank_res ))
+				!idim_res = 1
+				!do idim_ = 1, rank
+				!	select case (node%lsubscripts(idim_)%sub_kind)
+				!	case (range_sub, all_sub)
+
+				!		res%array%size(idim_res) = usubs(idim_) - lsubs(idim_)
+
+				!		idim_res = idim_res + 1
+				!	end select
+				!end do
+				!!print *, 'res size = ', res%array%size
+
+				!res%array%len_ = product(res%array%size)
+				!!print *, 'res len = ', res%array%len_
+
+				!call allocate_array(res%array, res%array%len_)
+
+				! Iterate through all subscripts in range and copy to result
+				! array
+				subs = lsubs
+				do i8 = 0, res%array%len_ - 1
+					print *, 'subs = ', int(subs, 4)
+
+					! subscript_eval() inlined.  is there a way to copy a slice
+					! without doing so much math?
+					!
+					! TODO: bound checking if enabled.  unlike subscript_eval(),
+					! we can do it here outside the i8 loop
+					prod  = 1
+					index_ = 0
+					do j = 1, rank
+						!print *, 'j = ', j
+						index_ = index_ + prod * subs(j)
+						prod  = prod * vars%vals(node%id_index)%array%size(j)
+					end do
+					!print *, 'index_ = ', index_
+
+					!call set_array_value_t(res%array, i8, &
+					!     get_array_value_t(vars%vals(node%id_index)%array, index_))
+
+					! TODO: this doesn't handle compound assignment.  Try using
+					! temp res_val
+					call set_array_value_t(vars%vals(node%id_index)%array, index_, &
+					     get_array_value_t(res%array, i8))
+
+					!print *, 'getting'
+					!array_val = get_array_value_t(vars%vals(node%id_index)%array, i8)
+					!!print *, 'assigning'
+					!!call compound_assign(array_val, res, node%op)
+					!print *, 'setting'
+					!call set_array_value_t( &
+					!	vars%vals(node%id_index)%array, i8, array_val)
+					!print *, 'done'
+
+					! get next subscript.  this is the bignum += 1 algorithm but
+					! in an arbitrary mixed radix
+					j = 1
+					do while (j < rank .and. subs(j) == usubs(j) - 1)
+						subs(j) = lsubs(j)
+						j = j + 1
+					end do
+					subs(j) = subs(j) + 1
+
+				end do
+
+				! TODO: set res (whole array (slice?)) for return val in case of
+				! compound assignment
+
+				!! Scalar setter
+				!i8 = subscript_eval(node, vars, fns, quietl)
+				!array_val = get_array_value_t(vars%vals(node%id_index)%array, i8)
+				!call compound_assign(array_val, res, node%op)
+				!call set_array_value_t( &
+				!	vars%vals(node%id_index)%array, i8, array_val)
+				!res = array_val
 
 			end if
 		end if

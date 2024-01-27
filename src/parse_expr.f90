@@ -178,16 +178,16 @@ recursive module function parse_expr_statement(parser) result(expr)
 					span, identifier%text))
 				return
 
-			!else if (any(expr%lsubscripts%sub_kind /= scalar_sub) .and. &
-			!	expr%val%array%rank > 1) then
-			else if (any(expr%lsubscripts%sub_kind /= scalar_sub)) then
+			!!else if (any(expr%lsubscripts%sub_kind /= scalar_sub) .and. &
+			!!	expr%val%array%rank > 1) then
+			!else if (any(expr%lsubscripts%sub_kind /= scalar_sub)) then
 
-				! TODO: allow LHS slices
+			!	! TODO: allow LHS slices
 
-				span = new_span(span0, span1 - span0 + 1)
-				call parser%diagnostics%push( &
-					err_bad_sub_rank(parser%context(), span, &
-					identifier%text, expr%val%array%rank))
+			!	span = new_span(span0, span1 - span0 + 1)
+			!	call parser%diagnostics%push( &
+			!		err_bad_sub_rank(parser%context(), span, &
+			!		identifier%text, expr%val%array%rank))
 
 			end if
 
@@ -195,7 +195,10 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 			if (expr%val%type /= str_type) then
 
-				expr%val%type = expr%val%array%type
+				if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
+					! this is not necessarily true for strings
+					expr%val%type = expr%val%array%type
+				end if
 
 				!print *, 'rank = ', expr%val%array%rank
 				!print *, 'subs = ', size(expr%lsubscripts)
@@ -206,6 +209,11 @@ recursive module function parse_expr_statement(parser) result(expr)
 						err_bad_sub_count(parser%context(), span, identifier%text, &
 						expr%val%array%rank, size(expr%lsubscripts)))
 				end if
+
+				print *, 'rank in  = ', expr%val%array%rank
+				expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
+				print *, 'rank out = ', expr%val%array%rank
+
 			end if
 
 		end if
@@ -462,7 +470,7 @@ module function parse_name_expr(parser) result(expr)
 
 	!********
 
-	integer :: io, id_index, span0, span1, exp_rank
+	integer :: io, id_index, span0, span1, expect_rank
 
 	type(syntax_token_t) :: identifier
 	type(text_span_t) :: span
@@ -524,13 +532,13 @@ module function parse_name_expr(parser) result(expr)
 	else if (expr%val%type == str_type) then
 		!print *, 'string type'
 
-		exp_rank = 1
-		if (size(expr%lsubscripts) /= exp_rank) then
+		expect_rank = 1
+		if (size(expr%lsubscripts) /= expect_rank) then
 			span = new_span(span0, span1 - span0 + 1)
 			call parser%diagnostics%push( &
 				err_bad_sub_count(parser%context(), span, &
 				identifier%text, &
-				exp_rank, size(expr%lsubscripts)))
+				expect_rank, size(expr%lsubscripts)))
 		end if
 	else
 		span = new_span(span0, span1 - span0 + 1)
