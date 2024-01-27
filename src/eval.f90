@@ -51,7 +51,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 	type(array_t) :: array
 	type(value_t) :: left, right, condition, lbound_, ubound_, itr, elem, &
-		step, len_, arg, arg1, arg2, array_val, lsubval, usubval, tmp, res_val
+		step, len_, arg, arg1, arg2, array_val, lsubval, usubval, tmp
 
 	!print *, 'starting syntax_eval()'
 
@@ -810,13 +810,17 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					end do
 					!print *, 'index_ = ', index_
 
-					!call set_array_value_t(res%array, i8, &
-					!     get_array_value_t(vars%vals(node%id_index)%array, index_))
+					!! this doesn't handle compound assignment.  Try using
+					!! tmp val
+					!call set_array_value_t(vars%vals(node%id_index)%array, index_, &
+					!     get_array_value_t(res%array, i8))
 
-					! TODO: this doesn't handle compound assignment.  Try using
-					! temp res_val
-					call set_array_value_t(vars%vals(node%id_index)%array, index_, &
-					     get_array_value_t(res%array, i8))
+					! This is confusing.  Maybe rename array_val -> rhs_val and
+					! tmp -> lhs_val or something
+					array_val = get_array_value_t(res%array, i8)
+					tmp       = get_array_value_t(vars%vals(node%id_index)%array, index_)
+					call compound_assign(tmp, array_val, node%op)
+					call set_array_value_t(vars%vals(node%id_index)%array, index_, tmp)
 
 					!print *, 'getting'
 					!array_val = get_array_value_t(vars%vals(node%id_index)%array, i8)
