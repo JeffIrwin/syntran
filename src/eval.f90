@@ -810,26 +810,13 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					end do
 					!print *, 'index_ = ', index_
 
-					!! this doesn't handle compound assignment.  Try using
-					!! tmp val
-					!call set_array_value_t(vars%vals(node%id_index)%array, index_, &
-					!     get_array_value_t(res%array, i8))
-
 					! This is confusing.  Maybe rename array_val -> rhs_val and
 					! tmp -> lhs_val or something
 					array_val = get_array_value_t(res%array, i8)
 					tmp       = get_array_value_t(vars%vals(node%id_index)%array, index_)
 					call compound_assign(tmp, array_val, node%op)
 					call set_array_value_t(vars%vals(node%id_index)%array, index_, tmp)
-
-					!print *, 'getting'
-					!array_val = get_array_value_t(vars%vals(node%id_index)%array, i8)
-					!!print *, 'assigning'
-					!!call compound_assign(array_val, res, node%op)
-					!print *, 'setting'
-					!call set_array_value_t( &
-					!	vars%vals(node%id_index)%array, i8, array_val)
-					!print *, 'done'
+					call set_array_value_t(res%array, i8, tmp)
 
 					! get next subscript.  this is the bignum += 1 algorithm but
 					! in an arbitrary mixed radix

@@ -1920,6 +1920,8 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 	tests = &
 		[   &
 			eval('let v = [0: 5]; v[1: 4] = [3:-1:0]; v;', quiet) == '[0, 3, 2, 1, 4]', &
+			eval('let v = [0: 5]; v[1: 4] += [10; 3]; v;', quiet) == '[0, 11, 12, 13, 4]', &
+			eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[11, 12, 13]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
