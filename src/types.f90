@@ -1381,7 +1381,11 @@ logical function is_unary_op_allowed(op, right, right_arr)
 	select case (op)
 
 		case (plus_token, minus_token)
-			is_unary_op_allowed = is_num_type(right)
+			if (right == array_type) then
+				is_unary_op_allowed = is_num_type(right_arr)
+			else
+				is_unary_op_allowed = is_num_type(right)
+			end if
 
 		case (not_keyword)
 			if (right == array_type) then

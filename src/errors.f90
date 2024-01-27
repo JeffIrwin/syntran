@@ -579,6 +579,18 @@ end function err_404
 
 !===============================================================================
 
+function err_eval_unary_type(op) result(err)
+	character(len = *), intent(in) :: op
+	character(len = :), allocatable :: err
+
+	err = err_int_prefix &
+		//'unary operator `'//op//'` cannot be evaluated for operand type ' &
+		//color_reset
+
+end function err_eval_unary_type
+
+!===============================================================================
+
 function err_eval_binary_types(op) result(err)
 	character(len = *), intent(in) :: op
 	character(len = :), allocatable :: err

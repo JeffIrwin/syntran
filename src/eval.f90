@@ -1184,21 +1184,12 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 		res%type = right%type
 
-		! TODO: add fallback type checking here
-
 		select case (node%op%kind)
 		case (plus_token)
 			res = right
 
 		case (minus_token)
-			select case (right%type)
-				case (i32_type)
-					res%sca%i32 = -right%sca%i32
-				case (i64_type)
-					res%sca%i64 = -right%sca%i64
-				case (f32_type)
-					res%sca%f32 = -right%sca%f32
-			end select
+			call negate(right, res, node%op%text)
 
 		case (not_keyword)
 			call not_(right, res, node%op%text)

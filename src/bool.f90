@@ -982,13 +982,13 @@ subroutine not_(right, res, op_text)
 			res%array%bool = .not. right%array%bool
 
 		case default
-			write(*,*) err_eval_binary_types(op_text)
+			write(*,*) err_eval_unary_type(op_text)
 			call internal_error()
 		end select
 
 	case default
 		! FIXME: other numeric types (f64, etc.)
-		write(*,*) err_eval_binary_types(op_text)
+		write(*,*) err_eval_unary_type(op_text)
 		call internal_error()
 	end select
 
