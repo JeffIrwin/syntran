@@ -710,50 +710,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				!print *, 'lhs slice assignment'
 
-				! TODO: refactor subscript slice eval so this code can be shared
-				! with LHS and RHS slicing
-
-				rank = vars%vals(node%id_index)%array%rank
-				allocate(lsubs(rank), usubs(rank))
-				rank_res = 0
-				do i = 1, rank
-
-					if (node%lsubscripts(i)%sub_kind == all_sub) then
-						lsubs(i) = 0
-						!print *, 'lsubs(i) = ', lsubs(i)
-					else
-						lsubval = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
-						lsubs(i) = lsubval%sca%i32
-					end if
-
-					select case (node%lsubscripts(i)%sub_kind)
-					case (all_sub)
-						usubs(i) = vars%vals(node%id_index)%array%size(i)
-						!print *, 'usubs(i) = ', usubs(i)
-
-						rank_res = rank_res + 1
-
-					case (range_sub)
-						usubval = syntax_eval(node%usubscripts(i), vars, fns, quietl)
-						usubs(i) = usubval%sca%i32
-
-						rank_res = rank_res + 1
-
-					case (scalar_sub)
-						! Scalar subs are converted to a range-1 sub so we can
-						! iterate later without further case logic
-						usubs(i) = lsubs(i) + 1
-
-					case default
-						write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
-						call internal_error()
-
-					end select
-
-				end do
-				!print *, 'lsubs = ', lsubs
-				!print *, 'usubs = ', usubs
-				!print *, 'rank_res = ', rank_res
+				call get_subscript_range(node, vars, fns, quietl, lsubs, usubs, rank_res)
+				rank = size(lsubs) ! same as usubs
 
 				!print *, 'type = ', kind_name( node%val%array%type )
 
@@ -1238,47 +1196,8 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			else
 
-				rank = vars%vals(node%id_index)%array%rank
-				allocate(lsubs(rank), usubs(rank))
-				rank_res = 0
-				do i = 1, rank
-
-					if (node%lsubscripts(i)%sub_kind == all_sub) then
-						lsubs(i) = 0
-						!print *, 'lsubs(i) = ', lsubs(i)
-					else
-						lsubval = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
-						lsubs(i) = lsubval%sca%i32
-					end if
-
-					select case (node%lsubscripts(i)%sub_kind)
-					case (all_sub)
-						usubs(i) = vars%vals(node%id_index)%array%size(i)
-						!print *, 'usubs(i) = ', usubs(i)
-
-						rank_res = rank_res + 1
-
-					case (range_sub)
-						usubval = syntax_eval(node%usubscripts(i), vars, fns, quietl)
-						usubs(i) = usubval%sca%i32
-
-						rank_res = rank_res + 1
-
-					case (scalar_sub)
-						! Scalar subs are converted to a range-1 sub so we can
-						! iterate later without further case logic
-						usubs(i) = lsubs(i) + 1
-
-					case default
-						write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
-						call internal_error()
-
-					end select
-
-				end do
-				!print *, 'lsubs = ', lsubs
-				!print *, 'usubs = ', usubs
-				!print *, 'rank_res = ', rank_res
+				call get_subscript_range(node, vars, fns, quietl, lsubs, usubs, rank_res)
+				rank = size(lsubs) ! same as usubs
 
 				!print *, 'type = ', kind_name( node%val%array%type )
 
@@ -1609,6 +1528,73 @@ subroutine compound_assign(lhs, rhs, op)
 	end select
 
 end subroutine compound_assign
+
+!===============================================================================
+
+subroutine get_subscript_range(node, vars, fns, quietl, lsubs, usubs, rank_res)
+
+	! TODO: `rank_res` is a misnomer.  For LHS slicing it's the rank of the LHS
+	! *after* being sliced
+
+	implicit none
+
+	type(syntax_node_t), intent(in) :: node
+	type(vars_t) :: vars
+	type(fns_t) :: fns
+	logical, intent(in) :: quietl
+
+	integer(kind = 8), allocatable, intent(out) :: lsubs(:), usubs(:)
+	integer, intent(out) :: rank_res
+
+	!********
+
+	integer :: i, rank_
+
+	type(value_t) :: lsubval, usubval
+
+	rank_ = vars%vals(node%id_index)%array%rank
+	allocate(lsubs(rank_), usubs(rank_))
+	rank_res = 0
+	do i = 1, rank_
+
+		if (node%lsubscripts(i)%sub_kind == all_sub) then
+			lsubs(i) = 0
+			!print *, 'lsubs(i) = ', lsubs(i)
+		else
+			lsubval = syntax_eval(node%lsubscripts(i), vars, fns, quietl)
+			lsubs(i) = lsubval%sca%i32
+		end if
+
+		select case (node%lsubscripts(i)%sub_kind)
+		case (all_sub)
+			usubs(i) = vars%vals(node%id_index)%array%size(i)
+			!print *, 'usubs(i) = ', usubs(i)
+
+			rank_res = rank_res + 1
+
+		case (range_sub)
+			usubval = syntax_eval(node%usubscripts(i), vars, fns, quietl)
+			usubs(i) = usubval%sca%i32
+
+			rank_res = rank_res + 1
+
+		case (scalar_sub)
+			! Scalar subs are converted to a range-1 sub so we can
+			! iterate later without further case logic
+			usubs(i) = lsubs(i) + 1
+
+		case default
+			write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
+			call internal_error()
+
+		end select
+
+	end do
+	!print *, 'lsubs = ', lsubs
+	!print *, 'usubs = ', usubs
+	!print *, 'rank_res = ', rank_res
+
+end subroutine get_subscript_range
 
 !===============================================================================
 
