@@ -647,6 +647,11 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('count([0: 10] <  4);') == "4", &
 			eval('count([0: 10] <  7);') == "7", &
 			eval('count([0: 10] < 15);') == "10", &
+			eval('sum([1: 4]);') == "6", &
+			eval('sum([2: 4]);') == "5", &
+			eval('sum([1: 5]);') == "10", &
+			eval('sum([1: 2: 6]);') == "9", &
+			eval('sum([7, 3, 15, 1; 2, 2]);') == "26", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 
@@ -1888,8 +1893,34 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[2, :];', quiet) == '[2, 5, 8]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[:, 0];', quiet) == '[0, 1, 2]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[:, 2];', quiet) == '[6, 7, 8]', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; sum(m[0:2, 0:2]);', quiet) == '8', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; sum(m[0:3, 0:2]);', quiet) == '15', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; sum(m[0:2, 0:3]);', quiet) == '21', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; sum(m[1:3, 1:3]);', quiet) == '24', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; sum(m[0:3, 1:3]);', quiet) == '33', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; sum(m[1:3, 0:3]);', quiet) == '27', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11; 3, 4]; sum(m[1:3, 0:3]);', quiet) == '27', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11; 3, 4]; sum(m[1:3, 0:4]);', quiet) == '48', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[:,:,0]);', quiet) == '6', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[:,:,1]);', quiet) == '22', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[:,:,:]);', quiet) == '28', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[0,:,:]);', quiet) == '12', &
+			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[:,0,:]);', quiet) == '10', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
+
+	!     [
+	!     0, 1,
+	!     2, 3,
+	!
+	!     4, 5,
+	!     6, 7
+	!     ]
+
+	!     0,  1,  2,
+	!     3,  4,  5,
+	!     6,  7,  8,
+	!     9, 10, 11,
 
 	! Trim dummy false element
 	tests = tests(1: size(tests) - 1)
@@ -1922,6 +1953,7 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 			eval('let v = [0: 5]; v[1: 4] = [3:-1:0]; v;', quiet) == '[0, 3, 2, 1, 4]', &
 			eval('let v = [0: 5]; v[1: 4] += [10; 3]; v;', quiet) == '[0, 11, 12, 13, 4]', &
 			eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[11, 12, 13]', &
+			eval('let v = [0: 5]; v[1: 4] += [10; 3]; sum(v);', quiet) == '40', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

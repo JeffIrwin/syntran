@@ -65,7 +65,8 @@ module syntran__core_m
 	!    * casting?
 	!    * array comparison
 	!    * array arithmetic operations
-	!    * any(), all(), count() intrinsics
+	!    * any(), all(), count(), sum(), i32(array), i64(), exit(), polymorphic
+	!      min/max intrinsics
 	!    * new generalized for loops
 	!    * -c arg, shebang
 	!    * ifx/ifort pass tests but perform order of magnitude slower
