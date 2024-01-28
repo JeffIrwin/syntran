@@ -1066,7 +1066,11 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%i32 = count(arg1%array%bool)
-			!deallocate(arg1%array)
+
+		case ("sum")
+
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+			res%sca%i32 = sum(arg1%array%i32)
 
 		case ("all")
 
@@ -1081,7 +1085,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%bool = any(arg1%array%bool)
-			!deallocate(arg1%array)
 
 		case default
 			! User-defined function
