@@ -1949,6 +1949,8 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
+	! TODO: test i64, bool, and str lhs slicing
+
 	tests = &
 		[   &
 			eval('let v = [0: 5]; v[1: 4] = [3:-1:0]; v;', quiet) == '[0, 3, 2, 1, 4]', &

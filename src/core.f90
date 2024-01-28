@@ -28,8 +28,12 @@ module syntran__core_m
 		syntran_patch =  41
 
 	! TODO:
-	!  - add more tests for lhs slicing (and rhs slicing). slicing needs more
-	!    in-depths tests with medium to long scripts
+	!  - refactor syntrax_eval() deep nesting
+	!    * encapsulation of syntax_eval() args (vars, fns, quiet, etc.) should
+	!      be done first
+	!  - add more tests for lhs slicing
+	!    * str, bool, and i64 need testing
+	!    * write another wave equation sample using slicing and array operations
 	!  - block_statement eval had a bug which is now fixed by setting tmp =
 	!    syntax_eval() in case of a block which ends with a null if_statement.
 	!    check translation_unit and other eval case branches for similar bugs
@@ -44,9 +48,6 @@ module syntran__core_m
 	!        let arr1 = [0: 4];
 	!        let arr2 = [4: 8];
 	!        let cat  = [arr1, arr2]; // [0: 8]
-	!  - refactor syntrax_eval() deep nesting
-	!    * encapsulation of syntax_eval() args (vars, fns, quiet, etc.) should
-	!      be done first
 	!  - len(), count(), etc. should return i64
 	!    * size() done
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
@@ -129,13 +130,13 @@ module syntran__core_m
 	!      > abs, norm, dot
 	!      > log
 	!      > trig: sin, cos, tan, asin, ...
-	!      > norm, sum, product
+	!      > norm, product
 	!      > reshape
 	!      > system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
 	!    * done:
 	!      > exp  (non-variadic, non-polymorphic)
-	!      > min, max (variadic but non-polymorphic)
+	!      > min, max, sum
 	!      > size (non-variadic but polymorphic)
 	!      > readln, writeln, println, open, close, str casting
 	!      > len (of str)
