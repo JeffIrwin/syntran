@@ -188,7 +188,7 @@ function declare_intrinsic_fns() result(fns)
 	type(fn_t) :: exp_fn, min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
 		i64_sca_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
-		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_fn
+		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, sum_f32_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -524,24 +524,39 @@ function declare_intrinsic_fns() result(fns)
 
 	! TODO: overload sum for other numeric types
 
-	sum_fn%type = i32_type
-	allocate(sum_fn%params(1))
+	sum_i32_fn%type = i32_type
+	allocate(sum_i32_fn%params(1))
 
-	sum_fn%params(1)%type = array_type
+	sum_i32_fn%params(1)%type = array_type
 
-	sum_fn%params(1)%array_type = i32_type
-	sum_fn%params(1)%rank = -1  ! negative means any rank
+	sum_i32_fn%params(1)%array_type = i32_type
+	sum_i32_fn%params(1)%rank = -1  ! negative means any rank
 
-	sum_fn%params(1)%name = "array"
+	sum_i32_fn%params(1)%name =  "array"
 
 	!! TODO: add mask and dim args to sum() like Fortran.  Maybe overload
 	!! several distinct internal fn's like 0min_i32 vs 0min_i64?  The return
 	!! value is still the same so maybe there's an easier way
-	!sum_fn%params(2)%type = i32_type
-	!sum_fn%params(2)%name = "dim"
+	!sum_i32_fn%params(2)%type = i32_type
+	!sum_i32_fn%params(2)%name = "dim"
 
 	id_index = id_index + 1
-	call fns%insert("sum", sum_fn, id_index)
+	call fns%insert("0sum_i32", sum_i32_fn, id_index)
+
+	!********
+
+	sum_f32_fn%type = f32_type
+	allocate(sum_f32_fn%params(1))
+
+	sum_f32_fn%params(1)%type = array_type
+
+	sum_f32_fn%params(1)%array_type = f32_type
+	sum_f32_fn%params(1)%rank = -1  ! negative means any rank
+
+	sum_f32_fn%params(1)%name =  "array"
+
+	id_index = id_index + 1
+	call fns%insert("0sum_f32", sum_f32_fn, id_index)
 
 	!********
 
@@ -612,7 +627,8 @@ function declare_intrinsic_fns() result(fns)
 			exit_fn     , &
 			size_fn     , &
 			count_fn    , &
-			sum_fn      , &
+			sum_i32_fn  , &
+			sum_f32_fn  , &
 			all_fn      , &
 			any_fn        &
 		]

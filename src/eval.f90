@@ -1107,10 +1107,15 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%i32 = count(arg1%array%bool)
 
-		case ("sum")
+		case ("0sum_i32")
 
 			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
 			res%sca%i32 = sum(arg1%array%i32)
+
+		case ("0sum_f32")
+
+			arg1 = syntax_eval(node%args(1), vars, fns, quietl)
+			res%sca%f32 = sum(arg1%array%f32)
 
 		case ("all")
 
