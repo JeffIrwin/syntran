@@ -28,7 +28,6 @@ module syntran__core_m
 		syntran_patch =  41
 
 	! TODO:
-	!  - allow slice assignment with scalar rhs, e.g. `vec[2:6] = 42;`
 	!  - add more tests for lhs slicing (and rhs slicing). slicing needs more
 	!    in-depths tests with medium to long scripts
 	!  - block_statement eval had a bug which is now fixed by setting tmp =

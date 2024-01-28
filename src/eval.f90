@@ -788,12 +788,21 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!res%array%len_ = product(res%array%size)
 				!!print *, 'res len = ', res%array%len_
 
+				len8 = product(usubs - lsubs)
+				!print *, 'len8 = ', len8
+
 				!call allocate_array(res%array, res%array%len_)
+
+				if (res%type /= array_type) then
+					array_val = res
+				end if
 
 				! Iterate through all subscripts in range and copy to result
 				! array
 				subs = lsubs
-				do i8 = 0, res%array%len_ - 1
+				!do i8 = 0, res%array%len_ - 1
+				do i8 = 0, len8 - 1
+
 					!print *, 'subs = ', int(subs, 4)
 
 					! subscript_eval() inlined.  is there a way to copy a slice
@@ -812,11 +821,50 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					! This is confusing.  Maybe rename array_val -> rhs_val and
 					! tmp -> lhs_val or something
-					array_val = get_array_value_t(res%array, i8)
+
+					! TODO: move conditions out of loop for perf?
+					if (res%type == array_type) then
+						array_val = get_array_value_t(res%array, i8)
+					!else
+					!	array_val = res
+					end if
+
 					tmp       = get_array_value_t(vars%vals(node%id_index)%array, index_)
 					call compound_assign(tmp, array_val, node%op)
 					call set_array_value_t(vars%vals(node%id_index)%array, index_, tmp)
-					call set_array_value_t(res%array, i8, tmp)
+
+					! TODO: move conditions out of loop for perf?
+					if (res%type == array_type) then
+						call set_array_value_t(res%array, i8, tmp)
+					else
+
+						! TODO: this makes the res return value a scalar.  Maybe
+						! not correct for fn return values or paren exprs, at
+						! least it's not consistent with the way that array rhs
+						! vals work.  Maybe I will make a breaking change on the
+						! return value here because copying res val can also
+						! have a large perf overhead.
+						res = tmp
+
+						! This is illegal in python numpy:
+						!
+						! >>> import numpy as np
+						! >>> a = np.arange(1, 6)
+						! >>> b = (a[1:4] := 3)
+						!   File "<stdin>", line 1
+						!     b = (a[1:4] := 3)
+						!          ^^^^^^
+						! SyntaxError: cannot use assignment expressions with subscript
+						! >>>
+						!
+						! Of course, such an assignment is legal as its own
+						! statement without the "walrus" operator `:=` :
+						!
+						! >>> a[1:4] = 3
+						! >>> a
+						!     # [1, 3, 3, 3, 5]
+
+					end if
 
 					! get next subscript.  this is the bignum += 1 algorithm but
 					! in an arbitrary mixed radix
@@ -1536,7 +1584,9 @@ subroutine compound_assign(lhs, rhs, op)
 
 	select case (op%kind)
 	case (equals_token)
-		lhs = rhs  ! simply overwrite
+		!print *, 'assign'
+		!lhs = rhs  ! simply overwrite
+		call assign_(lhs, rhs, op%text)
 
 	case (plus_equals_token)
 		call add(tmp, rhs, lhs, op%text)

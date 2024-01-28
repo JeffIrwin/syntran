@@ -1327,9 +1327,18 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 			end if
 
 		case (equals_token)
-			allowed = &
-				(is_int_type(left) .and. is_int_type(right)) .or. &
-				(left == right)
+
+			! `array = scalar` is allowed but `scalar = array` is not
+
+			if (left == array_type) then
+				allowed = &
+					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
+					(left_arr == right) .or. (left == right)
+			else
+				allowed = &
+					(is_int_type(left) .and. is_int_type(right)) .or. &
+					(left == right)
+			end if
 
 		case (eequals_token, bang_equals_token)
 

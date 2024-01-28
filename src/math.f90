@@ -7,6 +7,10 @@ module syntran__math_m
 
 	implicit none
 
+	interface assign_
+		module procedure assign_value_t
+	end interface assign_
+
 	interface add
 		module procedure add_value_t
 	end interface add
@@ -38,6 +42,62 @@ module syntran__math_m
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+subroutine assign_value_t(left, right, op_text)
+
+	! This is arguably not math
+
+	type(value_t), intent(in)  :: right
+
+	! The type is set before calling this routine, so left is inout
+	type(value_t), intent(inout) :: left
+
+	character(len = *), intent(in) :: op_text
+
+	!********
+
+	!print *, 'starting assign_value_t()'
+	!print *, 'left %type = ', kind_name(left%type)
+	!print *, 'right%type = ', kind_name(right%type)
+
+	!if (left%type == right%type) then
+	!	left = right  ! simply overwrite, for any type
+	!	return
+	!end if
+
+	if (left%type == array_type .and. right%type /= array_type) then
+
+		select case (left%type)
+		case (array_type)
+			select case (left%array%type)
+			case (bool_type)
+				left%array%bool = right%sca%bool
+			case (f32_type)
+				left%array%f32 = right%sca%f32
+			case (i32_type)
+				left%array%i32 = right%sca%i32
+			case (i64_type)
+				left%array%i64 = right%sca%i64
+			case (str_type)
+				left%array%str = right%sca%str
+			case default
+				! FIXME: other numeric types (f64, etc.)
+				write(*,*) err_eval_binary_types(op_text)
+				call internal_error()
+			end select
+		case default
+			!left = right  ! simply overwrite, for any type
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	else
+		left = right
+	end if
+
+end subroutine assign_value_t
 
 !===============================================================================
 
