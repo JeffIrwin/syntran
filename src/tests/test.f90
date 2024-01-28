@@ -1952,8 +1952,10 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 		[   &
 			eval('let v = [0: 5]; v[1: 4] = [3:-1:0]; v;', quiet) == '[0, 3, 2, 1, 4]', &
 			eval('let v = [0: 5]; v[1: 4] += [10; 3]; v;', quiet) == '[0, 11, 12, 13, 4]', &
-			eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[11, 12, 13]', &
 			eval('let v = [0: 5]; v[1: 4] += [10; 3]; sum(v);', quiet) == '40', &
+			eval('let v = [0: 5]; v[1: 4] += 10; v;', quiet) == '[0, 11, 12, 13, 4]', &
+			eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[0, 11, 12, 13, 4]', &  ! i might decide to break this
+			!eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[11, 12, 13]', &  ! i might decide to break this
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

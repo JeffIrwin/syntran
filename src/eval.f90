@@ -822,7 +822,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					! This is confusing.  Maybe rename array_val -> rhs_val and
 					! tmp -> lhs_val or something
 
-					! TODO: move conditions out of loop for perf?
 					if (res%type == array_type) then
 						array_val = get_array_value_t(res%array, i8)
 					!else
@@ -833,38 +832,38 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					call compound_assign(tmp, array_val, node%op)
 					call set_array_value_t(vars%vals(node%id_index)%array, index_, tmp)
 
-					! TODO: move conditions out of loop for perf?
-					if (res%type == array_type) then
-						call set_array_value_t(res%array, i8, tmp)
-					else
+					!! move conditions out of loop for perf?
+					!if (res%type == array_type) then
+					!	call set_array_value_t(res%array, i8, tmp)
+					!else
 
-						! TODO: this makes the res return value a scalar.  Maybe
-						! not correct for fn return values or paren exprs, at
-						! least it's not consistent with the way that array rhs
-						! vals work.  Maybe I will make a breaking change on the
-						! return value here because copying res val can also
-						! have a large perf overhead.
-						res = tmp
+					!	! this makes the res return value a scalar.  Maybe
+					!	! not correct for fn return values or paren exprs, at
+					!	! least it's not consistent with the way that array rhs
+					!	! vals work.  Maybe I will make a breaking change on the
+					!	! return value here because copying res val can also
+					!	! have a large perf overhead.
+					!	res = tmp
 
-						! This is illegal in python numpy:
-						!
-						! >>> import numpy as np
-						! >>> a = np.arange(1, 6)
-						! >>> b = (a[1:4] := 3)
-						!   File "<stdin>", line 1
-						!     b = (a[1:4] := 3)
-						!          ^^^^^^
-						! SyntaxError: cannot use assignment expressions with subscript
-						! >>>
-						!
-						! Of course, such an assignment is legal as its own
-						! statement without the "walrus" operator `:=` :
-						!
-						! >>> a[1:4] = 3
-						! >>> a
-						!     # [1, 3, 3, 3, 5]
+					!	! This is illegal in python numpy:
+					!	!
+					!	! >>> import numpy as np
+					!	! >>> a = np.arange(1, 6)
+					!	! >>> b = (a[1:4] := 3)
+					!	!   File "<stdin>", line 1
+					!	!     b = (a[1:4] := 3)
+					!	!          ^^^^^^
+					!	! SyntaxError: cannot use assignment expressions with subscript
+					!	! >>>
+					!	!
+					!	! Of course, such an assignment is legal as its own
+					!	! statement without the "walrus" operator `:=` :
+					!	!
+					!	! >>> a[1:4] = 3
+					!	! >>> a
+					!	!     # [1, 3, 3, 3, 5]
 
-					end if
+					!end if
 
 					! get next subscript.  this is the bignum += 1 algorithm but
 					! in an arbitrary mixed radix
@@ -877,16 +876,9 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				end do
 
-				! TODO: set res (whole array (slice?)) for return val in case of
-				! compound assignment
-
-				!! Scalar setter
-				!i8 = subscript_eval(node, vars, fns, quietl)
-				!array_val = get_array_value_t(vars%vals(node%id_index)%array, i8)
-				!call compound_assign(array_val, res, node%op)
-				!call set_array_value_t( &
-				!	vars%vals(node%id_index)%array, i8, array_val)
-				!res = array_val
+				! set res (whole array (slice?)) for return val in case of
+				! compound assignment.  see note above re walrus operator
+				res = vars%vals(node%id_index)
 
 			end if
 		end if
