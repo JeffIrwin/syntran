@@ -712,70 +712,23 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				call get_subscript_range(node, vars, fns, quietl, lsubs, usubs, rank_res)
 				rank = size(lsubs) ! same as usubs
-
-				!print *, 'type = ', kind_name( node%val%array%type )
-
-				!print *, 'type  = ', node%val%array%type
-				!print *, 'rank  = ', node%val%array%rank
-				!print *, 'size  = ', node%val%array%size
-				!print *, 'len_  = ', node%val%array%len_
-				!print *, 'cap   = ', node%val%array%cap
-
-				!! TODO: some size/shape checking might be needed here between
-				!! LHS and RHS
-
-				!allocate(res%array)
-				!res%type = array_type
-				!res%array%kind = expl_array
-				!res%array%type = node%val%array%type
-				!res%array%rank = rank_res
-
-				!allocate(res%array%size( rank_res ))
-				!idim_res = 1
-				!do idim_ = 1, rank
-				!	select case (node%lsubscripts(idim_)%sub_kind)
-				!	case (range_sub, all_sub)
-
-				!		res%array%size(idim_res) = usubs(idim_) - lsubs(idim_)
-
-				!		idim_res = idim_res + 1
-				!	end select
-				!end do
-				!!print *, 'res size = ', res%array%size
-
-				!res%array%len_ = product(res%array%size)
-				!!print *, 'res len = ', res%array%len_
-
 				len8 = product(usubs - lsubs)
 				!print *, 'len8 = ', len8
 
-				!call allocate_array(res%array, res%array%len_)
+				! TODO: some size/shape checking might be needed here between
+				! LHS and RHS
 
 				if (res%type /= array_type) then
+					! Scalar rhs
 					array_val = res
 				end if
 
 				! Iterate through all subscripts in range and copy to result
 				! array
 				subs = lsubs
-				!do i8 = 0, res%array%len_ - 1
 				do i8 = 0, len8 - 1
 
 					!print *, 'subs = ', int(subs, 4)
-
-					! subscript_eval() inlined.  is there a way to copy a slice
-					! without doing so much math?
-					!
-					! TODO: bound checking if enabled.  unlike subscript_eval(),
-					! we can do it here outside the i8 loop
-					prod  = 1
-					index_ = 0
-					do j = 1, rank
-						!print *, 'j = ', j
-						index_ = index_ + prod * subs(j)
-						prod  = prod * vars%vals(node%id_index)%array%size(j)
-					end do
-					!print *, 'index_ = ', index_
 
 					! This is confusing.  Maybe rename array_val -> rhs_val and
 					! tmp -> lhs_val or something
@@ -786,6 +739,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					!	array_val = res
 					end if
 
+					index_ = subscript_i32_eval(subs, vars%vals(node%id_index)%array)
 					tmp       = get_array_value_t(vars%vals(node%id_index)%array, index_)
 					call compound_assign(tmp, array_val, node%op)
 					call set_array_value_t(vars%vals(node%id_index)%array, index_, tmp)
@@ -1237,20 +1191,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				do i8 = 0, res%array%len_ - 1
 					!print *, 'subs = ', int(subs, 4)
 
-					! subscript_eval() inlined.  is there a way to copy a slice
-					! without doing so much math?
-					!
-					! TODO: bound checking if enabled.  unlike subscript_eval(),
-					! we can do it here outside the i8 loop
-					prod  = 1
-					index_ = 0
-					do j = 1, rank
-						!print *, 'j = ', j
-						index_ = index_ + prod * subs(j)
-						prod  = prod * vars%vals(node%id_index)%array%size(j)
-					end do
-					!print *, 'index_ = ', index_
-
+					index_ = subscript_i32_eval(subs, vars%vals(node%id_index)%array)
 					call set_array_value_t(res%array, i8, &
 					     get_array_value_t(vars%vals(node%id_index)%array, index_))
 
@@ -1533,10 +1474,11 @@ end subroutine compound_assign
 
 subroutine get_subscript_range(node, vars, fns, quietl, lsubs, usubs, rank_res)
 
+	! Evaluate the lower- and upper-bounds of each range of a subscripted array
+	! slice
+	!
 	! TODO: `rank_res` is a misnomer.  For LHS slicing it's the rank of the LHS
 	! *after* being sliced
-
-	implicit none
 
 	type(syntax_node_t), intent(in) :: node
 	type(vars_t) :: vars
@@ -1595,6 +1537,41 @@ subroutine get_subscript_range(node, vars, fns, quietl, lsubs, usubs, rank_res)
 	!print *, 'rank_res = ', rank_res
 
 end subroutine get_subscript_range
+
+!===============================================================================
+
+function subscript_i32_eval(subs, array) result(index_)
+
+	! subscript_eval() but with a primitive subs int array
+	!
+	! Is there a way to copy a slice without doing so much math?
+	!
+	! TODO: bound checking if enabled.  unlike subscript_eval(),
+	! we can do it here outside the i8 loop
+
+	integer(kind = 8), intent(in) :: subs(:)
+	type(array_t) :: array
+
+	integer(kind = 8) :: index_
+
+	!********
+
+	integer :: j
+	integer(kind = 8) :: prod
+
+	prod  = 1
+	index_ = 0
+	do j = 1, array%rank
+		!print *, 'j = ', j
+		index_ = index_ + prod * subs(j)
+
+		!prod  = prod * vars%vals(node%id_index)%array%size(j)
+		prod  = prod * array%size(j)
+
+	end do
+	!print *, 'index_ = ', index_
+
+end function subscript_i32_eval
 
 !===============================================================================
 
