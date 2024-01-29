@@ -150,15 +150,12 @@ module function parse_fn_call(parser) result(fn_call)
 		if (args%len_ >= 1) then
 			if (args%v(1)%val%type == array_type) type_ = args%v(1)%val%array%type
 		end if
-		!print *, 'sum type_ = ', kind_name(type_)
 
 		select case (type_)
 		case (f32_type)
 			fn_call%identifier%text = "0sum_f32"
-			!print *, '0sum_f32'
 		case default
 			fn_call%identifier%text = "0sum_i32"
-			!print *, '0sum_i32'
 		end select
 
 	end select

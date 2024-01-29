@@ -178,17 +178,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 					span, identifier%text))
 				return
 
-			!!else if (any(expr%lsubscripts%sub_kind /= scalar_sub) .and. &
-			!!	expr%val%array%rank > 1) then
-			!else if (any(expr%lsubscripts%sub_kind /= scalar_sub)) then
-
-			!	! TODO: allow LHS slices
-
-			!	span = new_span(span0, span1 - span0 + 1)
-			!	call parser%diagnostics%push( &
-			!		err_bad_sub_rank(parser%context(), span, &
-			!		identifier%text, expr%val%array%rank))
-
 			end if
 
 			!print *, 'type = ', expr%val%type
@@ -220,9 +209,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		ltype = expr%val%type
 		rtype = expr%right%val%type
-
-		!if (rtype == array_type) rtype = expr%right%val%array%type
-		!if (rtype == array_type) rtype = right%val%array%type
 
 		larrtype = unknown_type
 		rarrtype = unknown_type

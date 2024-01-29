@@ -711,17 +711,14 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!print *, 'lhs slice assignment'
 
 				call get_subscript_range(node, vars, fns, quietl, lsubs, usubs, rank_res)
-				!rank = size(lsubs) ! same as usubs
 				len8 = product(usubs - lsubs)
 				!print *, 'len8 = ', len8
 
 				! TODO: some size/shape checking might be needed here between
 				! LHS and RHS
 
-				if (res%type /= array_type) then
-					! Scalar rhs
-					array_val = res
-				end if
+				! Scalar rhs
+				if (res%type /= array_type) array_val = res
 
 				! Iterate through all subscripts in range and copy to result
 				! array
@@ -1618,6 +1615,10 @@ function subscript_eval(node, vars, fns, quietl) result(index_)
 	!	! internal_error?
 	!end if
 
+	! This could be refactored to run syntax_eval() on each subscript first, and
+	! then call subscript_i32_eval() after the loop.  There would be a small
+	! memory overhead to save i32 sub array but probably no significant time or
+	! space perf difference
 	prod  = 1
 	index_ = 0
 	do i = 1, vars%vals(node%id_index)%array%rank
