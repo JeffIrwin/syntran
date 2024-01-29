@@ -711,7 +711,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 				!print *, 'lhs slice assignment'
 
 				call get_subscript_range(node, vars, fns, quietl, lsubs, usubs, rank_res)
-				rank = size(lsubs) ! same as usubs
+				!rank = size(lsubs) ! same as usubs
 				len8 = product(usubs - lsubs)
 				!print *, 'len8 = ', len8
 
@@ -735,12 +735,10 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 					if (res%type == array_type) then
 						array_val = get_array_value_t(res%array, i8)
-					!else
-					!	array_val = res
 					end if
 
 					index_ = subscript_i32_eval(subs, vars%vals(node%id_index)%array)
-					tmp       = get_array_value_t(vars%vals(node%id_index)%array, index_)
+					tmp  = get_array_value_t(vars%vals(node%id_index)%array, index_)
 					call compound_assign(tmp, array_val, node%op)
 					call set_array_value_t(vars%vals(node%id_index)%array, index_, tmp)
 
@@ -774,18 +772,19 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					!	! >>> a[1:4] = 3
 					!	! >>> a
 					!	!     # [1, 3, 3, 3, 5]
+					!	!
+					!	! I believe it is illegal in python because of the
+					!	! ambiguity of what should `b` be if it is assigned.
+					!	! Should `b` be the whole `a` array as in syntran, or
+					!	! just the slice `a[1:4]`, or just the scalar `3`?
+					!	!
+					!	! I think there's a good case to be made that it should
+					!	! be the slice `a[1:4]`, but the implementation is more
+					!	! simple by setting `b` to the whole array `a`.
 
 					!end if
 
-					! get next subscript.  this is the bignum += 1 algorithm but
-					! in an arbitrary mixed radix
-					j = 1
-					do while (j < rank .and. subs(j) == usubs(j) - 1)
-						subs(j) = lsubs(j)
-						j = j + 1
-					end do
-					subs(j) = subs(j) + 1
-
+					call get_next_subscript(lsubs, usubs, subs)
 				end do
 
 				! set res (whole array (slice?)) for return val in case of
@@ -1151,7 +1150,6 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 			else
 
 				call get_subscript_range(node, vars, fns, quietl, lsubs, usubs, rank_res)
-				rank = size(lsubs) ! same as usubs
 
 				!print *, 'type = ', kind_name( node%val%array%type )
 
@@ -1169,7 +1167,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 
 				allocate(res%array%size( rank_res ))
 				idim_res = 1
-				do idim_ = 1, rank
+				do idim_ = 1, size(lsubs)
 					select case (node%lsubscripts(idim_)%sub_kind)
 					case (range_sub, all_sub)
 
@@ -1195,15 +1193,7 @@ recursive function syntax_eval(node, vars, fns, quiet) result(res)
 					call set_array_value_t(res%array, i8, &
 					     get_array_value_t(vars%vals(node%id_index)%array, index_))
 
-					! get next subscript.  this is the bignum += 1 algorithm but
-					! in an arbitrary mixed radix
-					j = 1
-					do while (j < rank .and. subs(j) == usubs(j) - 1)
-						subs(j) = lsubs(j)
-						j = j + 1
-					end do
-					subs(j) = subs(j) + 1
-
+					call get_next_subscript(lsubs, usubs, subs)
 				end do
 			end if
 
@@ -1537,6 +1527,28 @@ subroutine get_subscript_range(node, vars, fns, quietl, lsubs, usubs, rank_res)
 	!print *, 'rank_res = ', rank_res
 
 end subroutine get_subscript_range
+
+!===============================================================================
+
+subroutine get_next_subscript(lsubs, usubs, subs)
+
+	! This is like a bignum += 1 algorithm but in an arbitrary mixed radix
+
+	integer(kind = 8), intent(in) :: lsubs(:), usubs(:)
+	integer(kind = 8), intent(inout) :: subs(:)
+
+	!********
+
+	integer :: j
+
+	j = 1
+	do while (j < size(subs) .and. subs(j) == usubs(j) - 1)
+		subs(j) = lsubs(j)
+		j = j + 1
+	end do
+	subs(j) = subs(j) + 1
+
+end subroutine get_next_subscript
 
 !===============================================================================
 
