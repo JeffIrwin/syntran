@@ -653,6 +653,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('sum([1: 2: 6]);') == "9", &
 			eval('sum([7, 3, 15, 1; 2, 2]);') == "26", &
 			eval('[sum([0.0: 3.0; 4])];') == "[6.000000E+00]", &
+			eval('sum(i64([1: 4]));') == "6", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 

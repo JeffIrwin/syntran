@@ -56,6 +56,8 @@ module syntran__core_m
 	!      + compound array assignment works but needs unit tests
 	!    * vector dot product, matrix mul, ...
 	!      + new operator tokens, something like `.*`?
+	!      + maybe `:*`. I like that I can just hold shift while typing it
+	!        unlike MATLAB's `.*` and it's shorter than R's `%*%`
 	!    * optional `dim` argument for any() and all(). 1 arg versions done
 	!    * comparisons done
 	!    * array and, or, not, done
@@ -189,7 +191,8 @@ function declare_intrinsic_fns() result(fns)
 	type(fn_t) :: exp_fn, min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
 		i64_sca_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
-		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, sum_f32_fn
+		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, &
+		sum_f32_fn, sum_i64_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -546,6 +549,21 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
+	sum_i64_fn%type = i64_type
+	allocate(sum_i64_fn%params(1))
+
+	sum_i64_fn%params(1)%type = array_type
+
+	sum_i64_fn%params(1)%array_type = i64_type
+	sum_i64_fn%params(1)%rank = -1  ! negative means any rank
+
+	sum_i64_fn%params(1)%name =  "array"
+
+	id_index = id_index + 1
+	call fns%insert("0sum_i64", sum_i64_fn, id_index)
+
+	!********
+
 	sum_f32_fn%type = f32_type
 	allocate(sum_f32_fn%params(1))
 
@@ -629,6 +647,7 @@ function declare_intrinsic_fns() result(fns)
 			size_fn     , &
 			count_fn    , &
 			sum_i32_fn  , &
+			sum_i64_fn  , &
 			sum_f32_fn  , &
 			all_fn      , &
 			any_fn        &

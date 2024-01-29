@@ -154,6 +154,8 @@ module function parse_fn_call(parser) result(fn_call)
 		select case (type_)
 		case (f32_type)
 			fn_call%identifier%text = "0sum_f32"
+		case (i64_type)
+			fn_call%identifier%text = "0sum_i64"
 		case default
 			fn_call%identifier%text = "0sum_i32"
 		end select
