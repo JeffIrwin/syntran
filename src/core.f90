@@ -117,7 +117,8 @@ module syntran__core_m
 	!      > done
 	!    * then, range-based slicing
 	!      > done
-	!  - file reading
+	!  - file reading/writing
+	!    * binary file i/o
 	!    * readln(), eof() done
 	!    * also add a file_stat() fn which checks IO of previous file operation.
 	!      this way I don't need to add structs, multiple return vals, or out

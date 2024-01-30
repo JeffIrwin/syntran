@@ -5,21 +5,21 @@
 #
 # Start this script from the root of the syntran repo:
 #
-#     ./samples/wave-equation-2d-paraview/run.sh
+#     ./samples/wave-equation-2d-vector/run.sh
 
 #./build.sh release
 
-#rm samples/wave-equation-2d-paraview/wave-output.txt
+#rm samples/wave-equation-2d-vector/wave-output.txt
 
-pushd samples/wave-equation-2d-paraview
+pushd samples/wave-equation-2d-vector
 rm -rf frames
 mkdir frames
 popd
 
-#./build/syntran samples/wave-equation-2d-paraview/wave.syntran
-fpm run --profile release -- samples/wave-equation-2d-paraview/wave.syntran
+#./build/syntran samples/wave-equation-2d-vector/wave.syntran
+fpm run --profile release -- samples/wave-equation-2d-vector/wave.syntran
 
-pushd samples/wave-equation-2d-paraview
+pushd samples/wave-equation-2d-vector
 
 #pvpython="/c/Program Files/ParaView 5.8.0-Windows-Python3.7-msvc2015-64bit/bin/pvpython.exe"
 pvpython="/mnt/c/Program Files/ParaView 5.8.0-Windows-Python3.7-msvc2015-64bit/bin/pvpython.exe"

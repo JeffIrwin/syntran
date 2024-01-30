@@ -1,0 +1,196 @@
+
+// 2D wave equation finite difference solver
+//
+// Ref:  http://hplgit.github.io/num-methods-for-PDEs/doc/pub/wave/pdf/wave-4print-A4-2up.pdf
+//
+//     (page 72)
+//
+// Solve this partial-differential equation:
+//
+//     d^2/dt^2 u = c^2 * D(u)
+//
+// where u is displacement, t is time, c  is the wave speed, d^2/dt^2 is
+// the second derivative wrt t, and D(.) is the Laplacian operator.
+// Displacement u is a function of time t and position x and y.
+//
+// The PDE is solved numerically using an explicit finite difference
+// method
+
+fn write_vtk(filename: str, u: [f32; :,:])
+{
+	// Ref:  http://www.princeton.edu/~efeibush/viscourse/vtk.pdf
+
+	let file = open(filename);
+
+	writeln(file, "# vtk DataFile Version 2.0");
+	writeln(file, "wave.syntran output from " +
+		"https://github.com/JeffIrwin/syntran");
+	writeln(file, "ASCII");
+	writeln(file, "DATASET STRUCTURED_POINTS");
+
+	writeln(file, "DIMENSIONS ",
+		size(u,0), " ",
+		size(u,1), " 1");
+
+	writeln(file, "ASPECT_RATIO 1 1 1");
+	writeln(file, "ORIGIN 0 0 0");
+	writeln(file, "POINT_DATA ", str(size(u,0) * size(u,1)));
+
+	writeln(file, "VECTORS Amplitude float");
+
+	// VTK uses x-major ordering
+	//
+	// TODO: allow vectorized writes in syntran without wrapping [brackets],
+	// without comma delimeters, and without temporary str concatenation.  Just
+	// write an array with a single fortran write statement
+	for iy in [0: size(u,1)]
+		for ix in [0: size(u,0)]
+			writeln(file, 0.0, 0.0, u[ix,iy]);
+
+	//// Use something like this once vectorized writes are ready
+	////
+	//// Pad scalar-per-point with zeros to make a vector-per-point
+	//let uvec = [0.0; 3, size(u,0), size(u,1)];
+	//uvec[2,:,:] = u;
+	//writeln(file, uvec);
+
+	close(file);
+}
+
+let e = 2.718281828;
+
+// Spatial domain bounds
+let xmin = 1.0;
+let xmax = 3.8;
+
+let ymin = 2.0;
+let ymax = 4.0;
+
+// Wave speed
+let c = 10.0;
+
+// Time bounds for wave to travel domain twice (i.e. forth and back)
+let tmin = 0.0;
+let tmax = tmin + 8 * (xmax - xmin) / c;
+
+// Number of points in spatial grid
+let nx = 36;//201;
+
+// With VTK output, size is saved in results.  y size doesn't necesssarily have
+// to be the same as x
+//let ny = nx;
+let ny = 101;
+//let ny = 31;
+
+//// Allocate displacement solution vector and initialize to 0.0.
+//let u = [0.0; nx, ny];
+
+// Make spatial grid.  Compare linspace() fn from MATLAB or Scilab
+// and the Rusty syntax for u above
+let x = [xmin: xmax; nx];
+let y = [ymin: ymax; ny];
+
+// Grid spacing
+let dx = x[1] - x[0];
+let dy = y[1] - y[0];
+
+// Time step size just under stability criterion
+let dt = 0.225 * dx / c;
+//let dt = 0.450 * dx / c;
+//let dt = 0.9 * dx / c;
+
+// Courant number squared
+let cx2 = (c * dt / dx) ** 2;
+let cy2 = (c * dt / dy) ** 2;
+
+// Time step index
+let it = 0;
+
+// Initial condition: Gaussian pulse
+
+let xpulse = xmin + 0.6666 * (xmax - xmin);
+let ypulse = ymin + 0.7500 * (ymax - ymin);
+//let xpulse = xmin + 0.5 * (xmax - xmin);
+//let ypulse = ymin + 0.5 * (ymax - ymin);
+
+let pwidth = 0.05 * (xmax - xmin);
+
+let dist = [0.0; nx, ny];
+for iy in [0: ny]
+{
+	dist[:,iy] = (
+		(x     - xpulse) ** 2 +
+		(y[iy] - ypulse) ** 2) ** 0.5;
+}
+let u = e ** (-0.5 * (dist / pwidth) ** 2);
+
+//u;
+
+// Dirichlet boundary conditions on west, east, south, and north
+// bounds
+let uw = 0.0;
+let ue = 0.0;
+let us = 0.0;
+let un = 0.0;
+
+let u0 = u;
+
+// First step only: first-order finite difference time derivative
+it = it + 1;
+
+u[0,:] = uw;
+u[:,0] = us;
+u[nx-1,:] = ue;
+u[:,ny-1] = un;
+
+// Space loop
+for iy in [1: ny-1]
+{
+	let u_xx = u0[0:nx-2, iy  ] - 2 * u0[1:nx-1, iy] + u0[2:nx  , iy  ];
+	let u_yy = u0[1:nx-1, iy-1] - 2 * u0[1:nx-1, iy] + u0[1:nx-1, iy+1];
+
+	// It might be possible to take this last line out of the y loop like we did
+	// above for the pulse initial condition
+	u[1:nx-1,iy] = u0[1:nx-1,iy] + 0.5 * cx2 * u_xx + 0.5 * cy2 * u_yy;
+}
+
+// Time loop for steps 2+
+let t = tmin;
+while t < tmax - dt
+{
+	it = it + 1;
+
+	println("Time ", t, " / ", tmax);
+
+	// u00 is u from 2 steps ago, u0 is u from 1 step ago
+	let u00 = u0;
+	u0 = u;
+
+	u[0,:] = uw;
+	u[:,0] = us;
+	u[nx-1,:] = ue;
+	u[:,ny-1] = un;
+
+	// Space loop
+	for iy in [1: ny-1]
+	{
+		let u_xx = u0[0:nx-2, iy  ] - 2 * u0[1:nx-1, iy] + u0[2:nx  , iy  ];
+		let u_yy = u0[1:nx-1, iy-1] - 2 * u0[1:nx-1, iy] + u0[1:nx-1, iy+1];
+
+		u[1:nx-1,iy] = 2 * u0[1:nx-1,iy] - u00[1:nx-1,iy]
+			+ 0.5 * cx2 * u_xx + 0.5 * cy2 * u_yy;
+	}
+
+	// TODO: write vtk for initial condition and special-case first step too
+	let dir = "samples/wave-equation-2d-vector/frames";
+	let filename = dir + "/wave-" + str(it) + ".vtk";
+	write_vtk(filename, u);
+
+	t = t + dt;
+
+	//if it == 5 exit(0);
+
+	//// Print
+	//u;
+}
+
