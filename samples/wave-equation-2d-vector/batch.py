@@ -1,12 +1,16 @@
 
+#print("starting batch.py")
+
 import argparse
+import re
 import sys
+from math import sin, cos
 
 from paraview.simple import *
 
 paraview.simple._DisableFirstRenderCameraReset()
 
-def exportPng(f, png):
+def exportPng(f, png, inc):
 
     print("Reading \"" + f + "\" ...")
     sys.stdout.flush()
@@ -65,7 +69,20 @@ def exportPng(f, png):
     PWF.RescaleTransferFunction(cmin, cmax)
 
     #LUT.ApplyPreset('Blue to Red Rainbow', True)
-    LUT.ApplyPreset('Plasma (matplotlib)', True)
+    #LUT.ApplyPreset('Plasma (matplotlib)', True)
+    LUT.ApplyPreset('Viridis (matplotlib)', True)
+
+    # With a symmetric cmin/cmax range and lots of amplitudes close to 0
+    # initially, an even num values can cause horrific z-fighting.  Odd number
+    # works around that
+    LUT.NumberOfTableValues = 37
+
+    renderView.UseColorPaletteForBackground = 0
+
+    renderView.BackgroundColorMode = 'Gradient'
+    renderView.Background2 = [0.02, 0.25, 0.16]
+    #renderView.Background = [0.03, 0.21, 0.33]
+    renderView.Background = [0.02, 0.16, 0.25]
 
     display.SetScalarBarVisibility(renderView, True)
     LUTColorBar = GetScalarBar(LUT, renderView)
@@ -85,8 +102,12 @@ def exportPng(f, png):
     #print(f"cen1 = {cen1}")
     #print(f"cen2 = {cen2}")
 
-    cameraScale = 36
-    cameraVec = [-1, -3, 6]
+    cameraScale = 72
+
+    angle = inc / 420.0
+    cameraVec = [-cos(angle) - 3 * sin(angle), sin(angle) - 3 * cos(angle), 6]
+    #cameraVec = [-1, -3, 6]
+
     cameraOffset = [
             cameraScale * cameraVec[0], 
             cameraScale * cameraVec[1],
@@ -115,10 +136,11 @@ def exportPng(f, png):
     #SaveScreenshot(png, renderView, ImageResolution=[540,540])
     #SaveScreenshot(png, renderView, ImageResolution=[1080,1080])
     #SaveScreenshot(png, renderView, ImageResolution=[1920, 1080])
+    #SaveScreenshot(png, renderView, ImageResolution=[960, 540])
     #SaveScreenshot(png, renderView, ImageResolution=[1920, 1080])
-    #SaveScreenshot(png, renderView, ImageResolution=[2160,2160])
+    SaveScreenshot(png, renderView, ImageResolution=[2160,2160])
     #SaveScreenshot(png, renderView, ImageResolution=[3840,3840])
-    SaveScreenshot(png, renderView, ImageResolution=[3840,2160])
+    #SaveScreenshot(png, renderView, ImageResolution=[3840,2160])
 
     Delete(renderView)
     del renderView
@@ -131,7 +153,12 @@ parser.add_argument("-f", "--files",
         required = True)
 args = parser.parse_args()
 
-for myfile in args.files:
-    png = myfile.replace(".vtk", "") + ".png"
-    exportPng(myfile, png)
+for file in args.files:
+    png = file.replace(".vtk", "") + ".png"
+    nums = [int(s) for s in re.findall(r'\d+', file)]
+    inc = nums[-1]
+    #print("inc = ", inc)
+    exportPng(file, png, inc)
+
+#print("ending batch.py")
 

@@ -74,12 +74,17 @@ let tmin = 0.0;
 let tmax = tmin + 8 * (xmax - xmin) / c;
 
 // Number of points in spatial grid
-let nx = 36;//201;
+let nx = 201;
 
 // With VTK output, size is saved in results.  y size doesn't necesssarily have
 // to be the same as x
+//
+// Set ny for aspect ratio ~1 because I'm not saving coords in this vtk
+// flavor
+
+let ny = i32(nx * (ymax - ymin) / (xmax - xmin));
 //let ny = nx;
-let ny = 101;
+//let ny = 101;
 //let ny = 31;
 
 //// Allocate displacement solution vector and initialize to 0.0.
@@ -95,8 +100,8 @@ let dx = x[1] - x[0];
 let dy = y[1] - y[0];
 
 // Time step size just under stability criterion
-let dt = 0.225 * dx / c;
-//let dt = 0.450 * dx / c;
+//let dt = 0.225 * dx / c;
+let dt = 0.450 * dx / c;
 //let dt = 0.9 * dx / c;
 
 // Courant number squared
@@ -108,11 +113,13 @@ let it = 0;
 
 // Initial condition: Gaussian pulse
 
+// Pulse position
 let xpulse = xmin + 0.6666 * (xmax - xmin);
 let ypulse = ymin + 0.7500 * (ymax - ymin);
 //let xpulse = xmin + 0.5 * (xmax - xmin);
 //let ypulse = ymin + 0.5 * (ymax - ymin);
 
+// Pulse width
 let pwidth = 0.05 * (xmax - xmin);
 
 let dist = [0.0; nx, ny];
