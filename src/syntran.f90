@@ -47,7 +47,7 @@ function syntran_interpret(str_, quiet) result(res_str)
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io
 
-	logical :: quietl, cont, show_tree
+	logical :: quietl, continue_, show_tree
 	logical, parameter :: allow_cont = .true.
 
 	type(string_view_t) :: sv
@@ -62,7 +62,7 @@ function syntran_interpret(str_, quiet) result(res_str)
 	!print *, 'len(line_feed) = ', len(line_feed)
 
 	src_file = '<stdin>'
-	cont = .false.
+	continue_ = .false.
 	show_tree = .false.
 
 	if (present(str_)) then
@@ -88,7 +88,7 @@ function syntran_interpret(str_, quiet) result(res_str)
 
 		else
 
-			if (cont) then
+			if (continue_) then
 
 				! If expecting more characters, re-parse the whole line from the
 				! beginning.  An alternative implementation would not append but
@@ -144,10 +144,10 @@ function syntran_interpret(str_, quiet) result(res_str)
 		!	allocated(vars%dicts(1)%root)
 
 		! Continue current parse with next line since more chars are expected
-		cont = compilation%expecting
+		continue_ = compilation%expecting
 
-		!if (cont .and. present(str_)) exit
-		if (cont) cycle
+		!if (continue_ .and. present(str_)) exit
+		if (continue_) cycle
 
 		if (compilation%is_empty) cycle
 
@@ -348,14 +348,14 @@ end function syntran_eval
 
 !===============================================================================
 
-function syntran_interpret_file(file, quiet, chdir_) result(res)
+function syntran_interpret_file(filename, quiet, chdir_) result(res)
 
 	! TODO:
 	!   - enable input echo for file input (not for stdin)
 	!   - echo inputs w/o "syntran$" prompt and print outputs after a comment,
 	!     for ease of updating documentation with consistent styling
 
-	character(len = *), intent(in)  :: file
+	character(len = *), intent(in)  :: filename
 	character(len = :), allocatable :: res
 
 	logical, optional, intent(in) :: quiet
@@ -375,19 +375,20 @@ function syntran_interpret_file(file, quiet, chdir_) result(res)
 	chdirl = .false.
 	if (present(chdir_)) chdirl = chdir_
 
-	if (.not. quietl) write(*,*) 'Interpreting file "'//file//'"'
+	if (.not. quietl) write(*,*) 'Interpreting file "'//filename//'"'
 
-	source_text = read_file(file, iostat)
+	source_text = read_file(filename, iostat)
 
 	if (iostat /= exit_success) then
-		if (.not. quietl) write(*,*) err_404(file)
+		if (.not. quietl) write(*,*) err_404(filename)
 		return
 	end if
 
 	if (chdirl) then
-		res = trim(adjustl(syntran_eval(source_text, quiet, file, chdir_ = get_dir(file))))
+		res = trim(adjustl(syntran_eval(source_text, quiet, filename, &
+			chdir_ = get_dir(filename))))
 	else
-		res = trim(adjustl(syntran_eval(source_text, quiet, file)))
+		res = trim(adjustl(syntran_eval(source_text, quiet, filename)))
 	end if
 
 end function syntran_interpret_file

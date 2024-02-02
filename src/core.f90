@@ -31,6 +31,27 @@ module syntran__core_m
 	!  - refactor syntrax_eval() deep nesting
 	!    * encapsulation of syntax_eval() args (vars, fns, quiet, etc.) should
 	!      be done first
+	!  - structs
+	!  - triage notes from AOC.  many things are already fixed
+	!  - jumping control flow:
+	!    * fn return statement. i like the cleanliness of rust but i still need
+	!      a way to return early.  rust does have an explicit "return"
+	!      statement, i guess it's just not the rust style to use it when it's
+	!      not needed
+	!    * cycle (continue), break ((loop) exit)
+	!    * (sys) exit done
+	!      > should final return value be used as an implicit sys exit value?
+	!        currently, default exit stat is 0, regardless of what syntran "main"
+	!        returns
+	!  - consider using subroutines with out-args instead of fn return vals for
+	!    parse_*() fns?  i believe this is the source of segfaults for gfortran
+	!    8 and maybe 13.  subroutines allow passing-by-reference instead of
+	!    requiring a copy of a complex syntax_node_t type on return.  would this
+	!    eliminate all node copies?  it could be a lot of work, gfortran 8 might
+	!    still segfault, and code will be uglier with out-args instead of return
+	!    vals. is copying syntax_node_t a perf bottleneck? i suspect that eval
+	!    is bottleneck and not parsing, but i haven't actually benchmarked poor
+	!    perf of intel compilers for AOC solution tests
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
 	!    * write another wave equation sample using slicing and array operations
@@ -91,16 +112,6 @@ module syntran__core_m
 	!      it's in the ternary dict first.
 	!    * any use cases for #let? i probbaly don't want to get into general
 	!      expression parsing like `#let x = 1 + 2;` during preprocessing
-	!  - jumping control flow:
-	!    * fn return statement. i like the cleanliness of rust but i still need
-	!      a way to return early.  rust does have an explicit "return"
-	!      statement, i guess it's just not the rust style to use it when it's
-	!      not needed
-	!    * cycle (continue), break ((loop) exit)
-	!    * (sys) exit done
-	!      > should final return value be used as an implicit sys exit value?
-	!        currently, default exit stat is 0, regardless of what syntran "main"
-	!        returns
 	!  - str comparison operations:
 	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
 	!      matching leading chars but diff lens
@@ -119,6 +130,9 @@ module syntran__core_m
 	!      > done
 	!  - file reading/writing
 	!    * binary file i/o
+	!    * vectorized writes (and reads) for arrays without syntran loops. c.f.
+	!      vectorized wave sample (all math is vectorized but writes are not).
+	!      need to strip bracket [] wrapping and comma delimiters
 	!    * readln(), eof() done
 	!    * also add a file_stat() fn which checks IO of previous file operation.
 	!      this way I don't need to add structs, multiple return vals, or out
@@ -140,11 +154,11 @@ module syntran__core_m
 	!    * done:
 	!      > exp  (non-variadic, non-polymorphic)
 	!      > min, max, sum
+	!        * need min/max for f32 (i32/i64 done)
 	!      > size (non-variadic but polymorphic)
 	!      > readln, writeln, println, open, close, str casting
 	!      > len (of str)
 	!      > non-recursive user-defined fns
-	!  - structs
 	!  - use more submodules
 	!    * types.f90 is long and close to leaves of dependency tree.  value.f90
 	!      is also highly depended upon
