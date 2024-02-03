@@ -1,0 +1,378 @@
+
+// TODO:
+// - write graph to dot file and make figures with graphviz
+// - add a loop exit condition after bridge is found
+
+#include("utils.syntran");
+
+//==============================================================================
+
+let IFILE = 4;
+let FILENAMES =
+[
+	"samples/bridge/test-input-0.txt",
+	"samples/bridge/test-input-1.txt",
+	"samples/bridge/test-input-2.txt",
+	"samples/bridge/input-0.txt",
+	"samples/bridge/input-1.txt",
+	"samples/bridge/input-2.txt"
+];
+let filename_glbl = FILENAMES[IFILE];
+
+//==============================================================================
+
+let NNAMES_CAP = 3500 * 1024;  // 3200 works but it's cutting it close
+
+let names    = [""; NNAMES_CAP];
+let name_arr = [""; NNAMES_CAP];
+let name_ids = [-1; NNAMES_CAP];
+let nn = 0; // # of names == # of (graph) nodes
+
+//==============================================================================
+
+fn is_str_lt(a: str, b: str): bool
+{
+	// Is a < b?
+
+	let len_a = len(a);
+	let len_b = len(b);
+	let len_ = min(len_a, len_b);
+
+	let i = 0;
+	let loop_ = i < len_;
+	if (loop_) loop_ = a[i] == b[i];
+	while loop_
+	{
+		i += 1;
+		loop_ = i < len_;
+		if (loop_) loop_ = a[i] == b[i];
+	}
+
+	let lt = false;
+	let return_ = false;
+	if i < len_
+	{
+		if a[i] != b[i]
+		{
+			return_ = true;
+			lt = i32(a[i]) < i32(b[i]);
+		}
+	}
+
+	if not return_
+	{
+		// One str is a prefix of the other
+		lt = len_a < len_b;
+	}
+
+	let ans = lt;
+}
+
+//==============================================================================
+
+fn push_name(name_: str)
+{
+	// Push name_ onto a list of unique names
+	//
+	// Use an implicit heap data structure where each node's parent and child
+	// links are defined by simple arithmetic on array indices:
+	//
+	//     parent  | left = 2*i+1 | right = 2*i+2
+	//     --------------------------------------
+	//     0         1              2
+	//     1         3              4
+	//     2         5              6
+	//     3         7              8
+	//     ...
+
+	//println("starting push_name()");
+	//println("name_ = ", name_);
+
+	let listed = false;
+	let i = 0;
+	let done_search = false;
+	while not done_search
+	{
+		if i >= NNAMES_CAP
+		{
+			println();
+			println("Error: NNAMES_CAP overflow!");
+			println();
+			exit(-1);
+		}
+
+		//if names[i] == ""
+		if name_ids[i] < 0
+		{
+			names[i] = name_;
+			name_ids[i] = nn;
+			done_search = true;
+		}
+		else
+		{
+			if names[i] == name_
+				listed = done_search = true;
+			else if is_str_lt(name_, names[i])
+				// Iterate into left sub-tree
+				i = 2*i + 1;
+			else // greater than
+				// Iterate into right sub-tree
+				i = 2*i + 2;
+		}
+	}
+
+	if not listed
+	{
+		name_arr[nn] = name_;
+		nn += 1;
+	}
+	//println("name_, listed = ", name_, ", ", listed);
+}
+
+//==============================================================================
+
+fn lookup_name(name_: str): i32
+{
+	let i = 0;
+	let done_search = false;
+	while not done_search
+	{
+		if i >= NNAMES_CAP
+		{
+			println();
+			println("Error: NNAMES_CAP overflow!");
+			println();
+			exit(-1);
+		}
+
+		//if names[i] == ""
+		if name_ids[i] < 0
+		{
+			println();
+			println("Error: name lookup failed!");
+			println();
+			exit(-1);
+		}
+		else
+		{
+			if names[i] == name_
+				done_search = true;
+			else if is_str_lt(name_, names[i])
+				// Iterate into left sub-tree
+				i = 2*i + 1;
+			else // greater than
+				// Iterate into right sub-tree
+				i = 2*i + 2;
+		}
+	}
+	let ans = name_ids[i];
+}
+
+//==============================================================================
+
+// Due to lack of structs in syntran, read_aoc_graph() returns values by a pair of
+// global variables
+let g_glbl = [0; 0, 0];
+let nadj_glbl = [0; 0];
+fn read_aoc_graph(filename: str)
+{
+	// First pass: save list of unique names
+	println("Reading graph from file """ + filename + """ ...");
+	println("1st pass ...");
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, ": ");
+		for i in [0: size(strs, 0)]
+			push_name(strs[i]);
+
+		str_ = readln(f);
+	}
+
+	//println("Number of nodes = ", nn);
+	//println("name_arr = ");
+	//for i in [0: nn]
+	//	println(name_arr[i]);
+
+	// Second pass: save one-way directed connections as graph gdir
+	//
+	// TODO: 2nd pass could probably be optimized by not using lookup_name().
+	// Need to return id from push_name() and save it somewhere in 1st pass
+	let NADJ_CAP = 16;
+	let gdir = [-1; NADJ_CAP, nn];
+	let nadjdir = [0; nn];
+	close(f);
+	println("2nd pass ...");
+	f = open(filename);
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, ": ");
+		let from = lookup_name(strs[0]);
+		for i in [1: size(strs, 0)]
+		{
+			let to = lookup_name(strs[i]);
+
+			if nadjdir[from] > NADJ_CAP
+			{
+				println();
+				println("Error: NADJ_CAP overflow 1!");
+				println();
+				exit(-1);
+			}
+
+			gdir[ nadjdir[from], from ] = to;
+			nadjdir[from] += 1;
+		}
+
+		str_ = readln(f);
+	}
+	//println("gdir = ", gdir);
+
+	g_glbl = gdir;
+	nadj_glbl = nadjdir;
+
+	// Double each edge to convert the directed graph to an undirected graph
+	for i in [0: nn]
+	for j in [0: nadjdir[i]]
+	{
+		let from = i;
+		let to   = gdir[j, i];
+		if nadj_glbl[to] > NADJ_CAP
+		{
+			println();
+			println("Error: NADJ_CAP overflow 2!");
+			println();
+			exit(-1);
+		}
+		g_glbl[ nadj_glbl[to], to ] = from;
+		nadj_glbl[to] += 1;
+	}
+	//println("g_glbl = ", g_glbl);
+	//println("nadj_glbl = ", nadj_glbl);
+}
+
+//==============================================================================
+
+fn get_bridge(g: [i32; :, :], nadj: [i32; :]): i32
+{
+	println("Running Tarjan's bridge algorithm ...");
+
+	// Stack for iterative (non-recursive) depth-first search
+	let stack = [0; 16 * nn];
+	let sp = -1; // stack "pointer"
+
+	// Push root
+	stack[(sp += 1)] = 0;
+
+	let visited = [false; nn];
+	let defer   = [false; nn];
+	let parent  = [-1; nn];
+	let low	    = [-1; nn];
+	let dists   = [-1; nn];
+
+	let dist = 0;
+
+	// FIXME: implementations that I have seen online for Tarjan's algorithm
+	// wrap the following loop in another `for` loop which iterates and pushes
+	// every possible vertex.  I suppose this is just in case the graph
+	// *already* has multiple disconnected components.  I don't think I need it
+	// for AOC
+	//
+	// At least add a loop exit condition after bridge is found
+	while sp >= 0
+	{
+		// pop
+		let v = stack[(sp -= 1) + 1];
+		//println("v = ", v, " = ", name_arr[v]);
+
+		if not visited[v]
+		{
+			low[v]   = dist;
+			dists[v] = dist;
+			dist += 1;
+		}
+		visited[v] = true;
+
+		for iw in [0: nadj[v]]
+		{
+			let w = g[iw, v];
+			if w == parent[v]
+			{
+				// Do nothing
+			}
+			else if visited[w]
+			{
+				low[v] = min(low[v], dists[w]);
+			}
+			else
+			{
+				parent[w] = v;
+
+				stack[(sp += 1)] = v;  // re-push parent for deferred processing
+				defer[v] = true;
+
+				stack[(sp += 1)] = w; // push child. order matters wrt parent
+				// TODO: stack cap check
+			}
+		}
+
+		if defer[v]
+		{
+			for iw in [0: nadj[v]]
+			{
+				let w = g[iw, v];
+				if w != parent[v] and visited[w]
+				{
+					low[v] = min(low[v], low[w]);
+					if (low[w] > dists[v])
+					{
+						//// TODO: this may log the same bridge multiple times.
+						//// Pushing to an equivalenced set is left as an exercise
+						//// for the reader
+						//println();
+						//println("****************");
+
+						println("Found bridge = ", [v, w], " = ", [name_arr[v], name_arr[w]]);
+						//println("Found bridge = ", [v, w], " = ", [names[v], names[w]]);
+					}
+				}
+			}
+		}
+	}
+	//println("visited = ", visited);
+	//println("parent = ", parent);
+	//println("dists    = ", dists);
+	//println("low  = ", low);
+
+	// TODO: return val?  Return vector len 2 with pair of nodes that make up
+	// the bridge edge?
+	let ans = 0;
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	println();
+	println("Starting Tarjan's bridge sample");
+
+	read_aoc_graph(filename_glbl);
+	let res = get_bridge(g_glbl, nadj_glbl);
+
+	println("Ending Tarjan's bridge sample");
+	println();
+	let ans = 0;
+}
+
+//==============================================================================
+
+main();
+
+//==============================================================================
+

@@ -1,0 +1,145 @@
+
+// These are the minimal string helper fns needed to load an AOC graph.  See
+// also "./src/tests/long/aoc/utils.syntran"
+
+//==============================================================================
+
+fn scan(str_: str, set: str): i32
+{
+	//println("starting scan()");
+	let i = 0;
+	let found = false;
+	while not found and i < len(str_)
+	{
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	//println("(almost) done scan()");
+	let ans = -1;
+	if found
+		ans = i - 1;
+	//println("done scan()");
+
+	// TODO: ifx doesn't work without this.  I guess `if found` when found is
+	// false breaks the return type somehow.  Syntran needs return statement
+	let ans2 = ans;
+}
+
+//==============================================================================
+
+fn verify(str_: str, set: str): i32
+{
+	//println("");
+	//println("starting verify");
+	//println("str_ = ", str_);
+	//println("set  = ", set);
+
+	let i = 0;
+	let found = true;
+	while found and i < len(str_)
+	{
+		let j = 0;
+		//found = true;
+		found = false;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	//
+	// TODO: it might make more sense to return `ans = len(str_)` instead of ans
+	// = -1 in the `not found` case.  This is not consistent with the way that
+	// Fortran's `verify()` fn works, but it could simplify the logic for many
+	// use cases.  Similarly for scanback (but not verifyback or scan)
+	let ans = -1;
+	if not found
+	{
+		//println("ans = ", i - 1);
+		ans = i - 1;
+	}
+}
+
+//==============================================================================
+
+fn any_str_eq_set(str_: str, set: str): bool
+{
+	let ans = scan(str_, set) >= 0;
+}
+
+//==============================================================================
+
+fn split_(str_: str, delims: str): [str; :]
+{
+	// Split an input str_ into a vector of strs based on a set of delimiters
+
+	//println("starting split_()");
+	//println("str_ = """, str_, """");
+
+	let n = len(str_);
+	//println("n = ", n);
+
+	let nout = 0;
+	if (any_str_eq_set(str_[0], delims)) nout -= 1;
+
+	// First pass: count delimited strings
+	let i = 0;
+	while i < n
+	{
+		//println("i = ", i);
+		let i0 = i;
+
+		i = scan  (str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+
+		i0 = i;
+		i = verify(str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+		//i += 1;
+
+		nout += 1;
+	}
+	//println("nout = ", nout);
+
+	let out = [""; nout];
+
+	nout = 0;
+	if (any_str_eq_set(str_[0], delims)) nout -= 1;
+
+	// Second pass: save split strings
+	i = 0;
+	while i < n
+	{
+		//println("i = ", i);
+		let i0 = i;
+
+		i = scan  (str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+
+		if (nout >= 0) out[nout] = str_[i0: i];
+
+		i0 = i;
+		i = verify(str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+		//i += 1;
+
+		nout += 1;
+	}
+
+	// return
+	//out;
+	let ans = out;
+}
+
+//==============================================================================
+
