@@ -1,7 +1,7 @@
 
 // TODO:
-// - write graph to dot file and make figures with graphviz
-// - add a loop exit condition after bridge is found
+// - write graph to dot file and make figures with graphviz.  only need to do
+//   this once in syntran, not C
 
 #include("utils.syntran");
 
@@ -23,51 +23,11 @@ let filename_glbl = FILENAMES[IFILE];
 
 let NNAMES_CAP = 4 * 1024;  // 1493 for my input
 
-let names    = [""; NNAMES_CAP];
-let name_ids = [-1; NNAMES_CAP];
-let left     = [-1; NNAMES_CAP];
-let right    = [-1; NNAMES_CAP];
-let num_nodes = 0;
-
-//==============================================================================
-
-fn is_str_lt(a: str, b: str): bool
-{
-	// Is a < b?
-
-	let len_a = len(a);
-	let len_b = len(b);
-	let len_ = min(len_a, len_b);
-
-	let i = 0;
-	let loop_ = i < len_;
-	if (loop_) loop_ = a[i] == b[i];
-	while loop_
-	{
-		i += 1;
-		loop_ = i < len_;
-		if (loop_) loop_ = a[i] == b[i];
-	}
-
-	let lt = false;
-	let return_ = false;
-	if i < len_
-	{
-		if a[i] != b[i]
-		{
-			return_ = true;
-			lt = i32(a[i]) < i32(b[i]);
-		}
-	}
-
-	if not return_
-	{
-		// One str is a prefix of the other
-		lt = len_a < len_b;
-	}
-
-	let ans = lt;
-}
+let names_glbl = [""; NNAMES_CAP];
+let name_ids   = [-1; NNAMES_CAP];
+let left       = [-1; NNAMES_CAP];
+let right      = [-1; NNAMES_CAP];
+let num_nodes  = 0;
 
 //==============================================================================
 
@@ -96,15 +56,15 @@ fn push_name(name_: str)
 
 		if name_ids[i] < 0
 		{
-			names[i] = name_;
+			names_glbl[i] = name_;
 			name_ids[i] = num_nodes;
 			done_search = true;
 		}
 		else
 		{
-			if names[i] == name_
+			if names_glbl[i] == name_
 				listed = done_search = true;
-			else if is_str_lt(name_, names[i])
+			else if is_str_lt(name_, names_glbl[i])
 			{
 				// Iterate into left sub-tree
 				if (left[i] < 0) left[i] = num_nodes;
@@ -149,9 +109,9 @@ fn lookup_name(name_: str): i32
 		}
 		else
 		{
-			if names[i] == name_
+			if names_glbl[i] == name_
 				done_search = true;
-			else if is_str_lt(name_, names[i])
+			else if is_str_lt(name_, names_glbl[i])
 				// Iterate into left sub-tree
 				i = left[i];
 			else // greater than
@@ -164,8 +124,8 @@ fn lookup_name(name_: str): i32
 
 //==============================================================================
 
-// Due to lack of structs in syntran, read_aoc_graph() returns values by a pair of
-// global variables
+// Due to lack of structs in syntran, read_aoc_graph() returns the graph by a
+// pair of global variables
 let g_glbl = [0; 0, 0];
 let num_adj_glbl = [0; 0];
 fn read_aoc_graph(filename: str)
@@ -249,14 +209,30 @@ fn read_aoc_graph(filename: str)
 
 //==============================================================================
 
-fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): i32
+fn check_stack_cap(n: i32, cap: i64)
 {
-	println("Running Tarjan's bridge algorithm ...");
+	if n >= cap
+	{
+		println();
+		println("Error: STACK_CAP overflow!");
+		println();
+		exit(-1);
+	}
+}
+
+//==============================================================================
+
+fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): [i32; :]
+{
+	// Search for a bridge in graph g in the component connected to node 0.
+	// Return the pair of nodes that make up the first bridge found, or [-1, -1]
+	// if no bridges are found
 
 	let nn = size(num_adj, 0);
 
 	// Stack for iterative (non-recursive) depth-first search
-	let stack = [0; 16 * nn];
+	let STACK_CAP = 16 * nn;
+	let stack = [0; STACK_CAP];
 	let sp = -1; // stack "pointer"
 
 	// Push node 0 as root
@@ -269,15 +245,9 @@ fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): i32
 	let dists   = [-1   ; nn];
 
 	let dist = 0;
-
-	// FIXME: implementations that I have seen online for Tarjan's algorithm
-	// wrap the following loop in another `for` loop which iterates and pushes
-	// every possible vertex.  I suppose this is just in case the graph
-	// *already* has multiple disconnected components.  I don't think I need it
-	// for AOC
-	//
-	// At least add a loop exit condition after bridge is found
-	while sp >= 0
+	let found = false;
+	let bridge = [-1, -1];
+	while sp >= 0 and not found
 	{
 		let v = stack[(sp -= 1) + 1]; // pop
 		if not visited[v]
@@ -304,10 +274,11 @@ fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): i32
 				parent[w] = v;
 
 				stack[(sp += 1)] = v;  // re-push parent for deferred processing
+				check_stack_cap(sp, STACK_CAP);
 				defer[v] = true;
 
 				stack[(sp += 1)] = w; // push child. order matters wrt parent
-				// TODO: stack cap check
+				check_stack_cap(sp, STACK_CAP);
 			}
 		}
 
@@ -321,13 +292,9 @@ fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): i32
 					low[v] = min(low[v], low[w]);
 					if (low[w] > dists[v])
 					{
-						//// TODO: this may log the same bridge multiple times.
-						//// Pushing to an equivalenced set is left as an exercise
-						//// for the reader
-						//println();
-						//println("****************");
-
-						println("Found bridge = ", [v, w], " = ", [names[v], names[w]]);
+						//println("Found bridge = ", [v, w], " = ", [names_glbl[v], names_glbl[w]]);
+						bridge = [v, w];
+						found = true;
 					}
 				}
 			}
@@ -338,9 +305,7 @@ fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): i32
 	//println("dists    = ", dists);
 	//println("low  = ", low);
 
-	// TODO: return val?  Return vector len 2 with pair of nodes that make up
-	// the bridge edge?
-	let ans = 0;
+	let ans = bridge;
 }
 
 //==============================================================================
@@ -351,7 +316,16 @@ fn main(): i32
 	println("Starting Tarjan's bridge sample");
 
 	read_aoc_graph(filename_glbl);
-	let res = get_bridge(g_glbl, num_adj_glbl);
+
+	println("Running Tarjan's bridge algorithm ...");
+	let bridge = get_bridge(g_glbl, num_adj_glbl);
+	if bridge[0] < 0
+		println("No bridges were found");
+	else
+	{
+		println("Found bridge between nodes ", bridge, " = ",
+				[names_glbl[bridge[0]], names_glbl[bridge[1]]]);
+	}
 
 	println("Ending Tarjan's bridge sample");
 	println();

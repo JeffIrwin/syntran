@@ -143,3 +143,43 @@ fn split_(str_: str, delims: str): [str; :]
 
 //==============================================================================
 
+fn is_str_lt(a: str, b: str): bool
+{
+	// Is a < b?
+
+	let len_a = len(a);
+	let len_b = len(b);
+	let len_ = min(len_a, len_b);
+
+	let i = 0;
+	let loop_ = i < len_;
+	if (loop_) loop_ = a[i] == b[i];
+	while loop_
+	{
+		i += 1;
+		loop_ = i < len_;
+		if (loop_) loop_ = a[i] == b[i];
+	}
+
+	let lt = false;
+	let return_ = false;
+	if i < len_
+	{
+		if a[i] != b[i]
+		{
+			return_ = true;
+			lt = i32(a[i]) < i32(b[i]);
+		}
+	}
+
+	if not return_
+	{
+		// One str is a prefix of the other
+		lt = len_a < len_b;
+	}
+
+	let ans = lt;
+}
+
+//==============================================================================
+
