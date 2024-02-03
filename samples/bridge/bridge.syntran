@@ -21,12 +21,13 @@ let filename_glbl = FILENAMES[IFILE];
 
 //==============================================================================
 
-let NNAMES_CAP = 3500 * 1024;  // 3200 works but it's cutting it close
+let NNAMES_CAP = 4 * 1024;  // 1493 for my input
 
 let names    = [""; NNAMES_CAP];
-let name_arr = [""; NNAMES_CAP];
 let name_ids = [-1; NNAMES_CAP];
-let nn = 0; // # of names == # of (graph) nodes
+let left     = [-1; NNAMES_CAP];
+let right    = [-1; NNAMES_CAP];
+let num_nodes = 0;
 
 //==============================================================================
 
@@ -74,16 +75,8 @@ fn push_name(name_: str)
 {
 	// Push name_ onto a list of unique names
 	//
-	// Use an implicit heap data structure where each node's parent and child
-	// links are defined by simple arithmetic on array indices:
-	//
-	//     parent  | left = 2*i+1 | right = 2*i+2
-	//     --------------------------------------
-	//     0         1              2
-	//     1         3              4
-	//     2         5              6
-	//     3         7              8
-	//     ...
+	// Use an array-based binary tree with parallel arrays `left` and `right` to
+	// store child node indices
 
 	//println("starting push_name()");
 	//println("name_ = ", name_);
@@ -101,11 +94,10 @@ fn push_name(name_: str)
 			exit(-1);
 		}
 
-		//if names[i] == ""
 		if name_ids[i] < 0
 		{
 			names[i] = name_;
-			name_ids[i] = nn;
+			name_ids[i] = num_nodes;
 			done_search = true;
 		}
 		else
@@ -113,19 +105,22 @@ fn push_name(name_: str)
 			if names[i] == name_
 				listed = done_search = true;
 			else if is_str_lt(name_, names[i])
+			{
 				// Iterate into left sub-tree
-				i = 2*i + 1;
+				if (left[i] < 0) left[i] = num_nodes;
+				i = left[i];
+			}
 			else // greater than
+			{
 				// Iterate into right sub-tree
-				i = 2*i + 2;
+				if (right[i] < 0) right[i] = num_nodes;
+				i = right[i];
+			}
 		}
 	}
 
 	if not listed
-	{
-		name_arr[nn] = name_;
-		nn += 1;
-	}
+		num_nodes += 1;
 	//println("name_, listed = ", name_, ", ", listed);
 }
 
@@ -145,7 +140,6 @@ fn lookup_name(name_: str): i32
 			exit(-1);
 		}
 
-		//if names[i] == ""
 		if name_ids[i] < 0
 		{
 			println();
@@ -159,10 +153,10 @@ fn lookup_name(name_: str): i32
 				done_search = true;
 			else if is_str_lt(name_, names[i])
 				// Iterate into left sub-tree
-				i = 2*i + 1;
+				i = left[i];
 			else // greater than
 				// Iterate into right sub-tree
-				i = 2*i + 2;
+				i = right[i];
 		}
 	}
 	let ans = name_ids[i];
@@ -173,7 +167,7 @@ fn lookup_name(name_: str): i32
 // Due to lack of structs in syntran, read_aoc_graph() returns values by a pair of
 // global variables
 let g_glbl = [0; 0, 0];
-let nadj_glbl = [0; 0];
+let num_adj_glbl = [0; 0];
 fn read_aoc_graph(filename: str)
 {
 	// First pass: save list of unique names
@@ -191,19 +185,15 @@ fn read_aoc_graph(filename: str)
 
 		str_ = readln(f);
 	}
-
-	//println("Number of nodes = ", nn);
-	//println("name_arr = ");
-	//for i in [0: nn]
-	//	println(name_arr[i]);
+	//println("Number of nodes = ", num_nodes);
 
 	// Second pass: save one-way directed connections as graph gdir
 	//
 	// TODO: 2nd pass could probably be optimized by not using lookup_name().
 	// Need to return id from push_name() and save it somewhere in 1st pass
 	let NADJ_CAP = 16;
-	let gdir = [-1; NADJ_CAP, nn];
-	let nadjdir = [0; nn];
+	let gdir = [-1; NADJ_CAP, num_nodes];
+	let num_adjdir = [0; num_nodes];
 	close(f);
 	println("2nd pass ...");
 	f = open(filename);
@@ -218,7 +208,7 @@ fn read_aoc_graph(filename: str)
 		{
 			let to = lookup_name(strs[i]);
 
-			if nadjdir[from] > NADJ_CAP
+			if num_adjdir[from] > NADJ_CAP
 			{
 				println();
 				println("Error: NADJ_CAP overflow 1!");
@@ -226,8 +216,8 @@ fn read_aoc_graph(filename: str)
 				exit(-1);
 			}
 
-			gdir[ nadjdir[from], from ] = to;
-			nadjdir[from] += 1;
+			gdir[ num_adjdir[from], from ] = to;
+			num_adjdir[from] += 1;
 		}
 
 		str_ = readln(f);
@@ -235,46 +225,48 @@ fn read_aoc_graph(filename: str)
 	//println("gdir = ", gdir);
 
 	g_glbl = gdir;
-	nadj_glbl = nadjdir;
+	num_adj_glbl = num_adjdir;
 
 	// Double each edge to convert the directed graph to an undirected graph
-	for i in [0: nn]
-	for j in [0: nadjdir[i]]
+	for i in [0: num_nodes]
+	for j in [0: num_adjdir[i]]
 	{
 		let from = i;
 		let to   = gdir[j, i];
-		if nadj_glbl[to] > NADJ_CAP
+		if num_adj_glbl[to] > NADJ_CAP
 		{
 			println();
 			println("Error: NADJ_CAP overflow 2!");
 			println();
 			exit(-1);
 		}
-		g_glbl[ nadj_glbl[to], to ] = from;
-		nadj_glbl[to] += 1;
+		g_glbl[ num_adj_glbl[to], to ] = from;
+		num_adj_glbl[to] += 1;
 	}
 	//println("g_glbl = ", g_glbl);
-	//println("nadj_glbl = ", nadj_glbl);
+	//println("num_adj_glbl = ", num_adj_glbl);
 }
 
 //==============================================================================
 
-fn get_bridge(g: [i32; :, :], nadj: [i32; :]): i32
+fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): i32
 {
 	println("Running Tarjan's bridge algorithm ...");
+
+	let nn = size(num_adj, 0);
 
 	// Stack for iterative (non-recursive) depth-first search
 	let stack = [0; 16 * nn];
 	let sp = -1; // stack "pointer"
 
-	// Push root
+	// Push node 0 as root
 	stack[(sp += 1)] = 0;
 
 	let visited = [false; nn];
 	let defer   = [false; nn];
-	let parent  = [-1; nn];
-	let low	    = [-1; nn];
-	let dists   = [-1; nn];
+	let parent  = [-1   ; nn];
+	let low	    = [-1   ; nn];
+	let dists   = [-1   ; nn];
 
 	let dist = 0;
 
@@ -287,10 +279,7 @@ fn get_bridge(g: [i32; :, :], nadj: [i32; :]): i32
 	// At least add a loop exit condition after bridge is found
 	while sp >= 0
 	{
-		// pop
-		let v = stack[(sp -= 1) + 1];
-		//println("v = ", v, " = ", name_arr[v]);
-
+		let v = stack[(sp -= 1) + 1]; // pop
 		if not visited[v]
 		{
 			low[v]   = dist;
@@ -299,7 +288,7 @@ fn get_bridge(g: [i32; :, :], nadj: [i32; :]): i32
 		}
 		visited[v] = true;
 
-		for iw in [0: nadj[v]]
+		for iw in [0: num_adj[v]]
 		{
 			let w = g[iw, v];
 			if w == parent[v]
@@ -324,7 +313,7 @@ fn get_bridge(g: [i32; :, :], nadj: [i32; :]): i32
 
 		if defer[v]
 		{
-			for iw in [0: nadj[v]]
+			for iw in [0: num_adj[v]]
 			{
 				let w = g[iw, v];
 				if w != parent[v] and visited[w]
@@ -338,8 +327,7 @@ fn get_bridge(g: [i32; :, :], nadj: [i32; :]): i32
 						//println();
 						//println("****************");
 
-						println("Found bridge = ", [v, w], " = ", [name_arr[v], name_arr[w]]);
-						//println("Found bridge = ", [v, w], " = ", [names[v], names[w]]);
+						println("Found bridge = ", [v, w], " = ", [names[v], names[w]]);
 					}
 				}
 			}
@@ -363,7 +351,7 @@ fn main(): i32
 	println("Starting Tarjan's bridge sample");
 
 	read_aoc_graph(filename_glbl);
-	let res = get_bridge(g_glbl, nadj_glbl);
+	let res = get_bridge(g_glbl, num_adj_glbl);
 
 	println("Ending Tarjan's bridge sample");
 	println();
