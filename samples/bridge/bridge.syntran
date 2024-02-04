@@ -7,7 +7,7 @@
 
 //==============================================================================
 
-let IFILE = 4;
+let IFILE = 0;
 let FILENAMES =
 [
 	"samples/bridge/test-input-0.txt",
@@ -244,12 +244,19 @@ fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): [i32; :]
 	let low	    = [-1   ; nn];
 	let dists   = [-1   ; nn];
 
+	let loop_count = 0;
+
 	let dist = 0;
 	let found = false;
 	let bridge = [-1, -1];
 	while sp >= 0 and not found
 	{
+		loop_count += 1;
+		if (loop_count > 3) exit(0);
+
 		let v = stack[(sp -= 1) + 1]; // pop
+		println();
+		println("v = ", v);
 		if not visited[v]
 		{
 			low[v]   = dist;
@@ -261,6 +268,7 @@ fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): [i32; :]
 		for iw in [0: num_adj[v]]
 		{
 			let w = g[iw, v];
+			println("w = ", w);
 			if w == parent[v]
 			{
 				// Do nothing
@@ -273,10 +281,12 @@ fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): [i32; :]
 			{
 				parent[w] = v;
 
+				println("pushing ", v);
 				stack[(sp += 1)] = v;  // re-push parent for deferred processing
 				check_stack_cap(sp, STACK_CAP);
 				defer[v] = true;
 
+				println("pushing ", w);
 				stack[(sp += 1)] = w; // push child. order matters wrt parent
 				check_stack_cap(sp, STACK_CAP);
 			}
@@ -318,6 +328,7 @@ fn main(): i32
 	read_aoc_graph(filename_glbl);
 
 	println("Running Tarjan's bridge algorithm ...");
+	println("g_glbl = ", g_glbl);
 	let bridge = get_bridge(g_glbl, num_adj_glbl);
 	if bridge[0] < 0
 		println("No bridges were found");
