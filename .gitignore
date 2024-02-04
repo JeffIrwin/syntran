@@ -13,3 +13,5 @@ test.exe
 /scratch
 /build
 
+# C executable for multi-lang sample
+/samples/bridge/bridge
