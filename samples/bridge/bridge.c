@@ -263,21 +263,20 @@ void read_aoc_graph(char* filename)
 
 		num_adj_glbl[to] += 1;
 	}
-	//println("g_glbl = ", g_glbl);
 
-	printf("num_adj_glbl = \n");
-	for (int i = 0; i < num_nodes; i++)
-		printf("%d  ", num_adj_glbl[i]);
-	printf("\n");
+	//printf("num_adj_glbl = \n");
+	//for (int i = 0; i < num_nodes; i++)
+	//	printf("%d  ", num_adj_glbl[i]);
+	//printf("\n");
 
-	printf("g_glbl = \n");
-	for (int i = 0; i < num_nodes; i++)
-	{
-		for (int j = 0; j < num_adj_glbl[i]; j++)
-			printf("%d  ", g_glbl[i * NADJ_CAP + j]);
-		printf("\n");
-	}
-	printf("\n");
+	//printf("g_glbl = \n");
+	//for (int i = 0; i < num_nodes; i++)
+	//{
+	//	for (int j = 0; j < num_adj_glbl[i]; j++)
+	//		printf("%d  ", g_glbl[i * NADJ_CAP + j]);
+	//	printf("\n");
+	//}
+	//printf("\n");
 
 	fclose(f);
 }
@@ -291,25 +290,8 @@ int min(int a, int b)
 
 //********
 
-//int* get_bridge(g: [i32; :, :], num_adj: [i32; :])
-//int* get_bridge(int* g, int* num_adj)
 int* get_bridge(int* g, int* num_adj, int nn)
 {
-	// Search for a bridge in graph g in the component connected to node 0.
-	// Return the pair of nodes that make up the first bridge found, or [-1, -1]
-	// if no bridges are found
-
-	//printf("g = \n");
-	//for (int i = 0; i < nn; i++)
-	//{
-	//	for (int j = 0; j < num_adj[i]; j++)
-	//		printf("%d  ", g[i * NADJ_CAP + j]);
-	//	printf("\n");
-	//}
-	//printf("\n");
-
-	//int nn = size(num_adj, 0);
-
 	// Stack for iterative (non-recursive) depth-first search
 	int STACK_CAP = 16 * nn;
 	int* stack = malloc(STACK_CAP * sizeof(int));
@@ -317,8 +299,7 @@ int* get_bridge(int* g, int* num_adj, int nn)
 	int sp = -1; // stack "pointer"
 
 	// Push node 0 as root
-	//stack[(sp += 1)] = 0;
-	stack[++sp] = 0;
+	stack[(sp += 1)] = 0;
 
 	bool* visited = malloc(nn * sizeof(bool));
 	bool* defer   = malloc(nn * sizeof(bool));
@@ -326,33 +307,18 @@ int* get_bridge(int* g, int* num_adj, int nn)
 	int*  low     = malloc(nn * sizeof(int));
 	int*  dists   = malloc(nn * sizeof(int));
 
-	//// idk why the first memset doesn't work :shrug:
-	//memset(visited, false, sizeof(visited));
-	//memset(defer  , false, sizeof(defer  ));
 	memset(visited, false, nn * sizeof(bool));
 	memset(defer  , false, nn * sizeof(bool));
-
-	memset(parent , -1   , sizeof(parent ));
-	memset(low    , -1   , sizeof(low    ));
-	memset(dists  , -1   , sizeof(dists  ));
-
-	int loop_count = 0;
+	memset(parent , -1   , nn * sizeof(int));
+	memset(low    , -1   , nn * sizeof(int));
+	memset(dists  , -1   , nn * sizeof(int));
 
 	int dist = 0;
 	bool found = false;
-	//int bridge[2]; bridge[0] = -1; bridge[1] = -1;
 	int* bridge = malloc(2 * sizeof(int)); bridge[0] = -1; bridge[1] = -1;
 	while (sp >= 0 && !found)
 	{
-		loop_count++;
-		//if (loop_count > 3) exit(0);
-
-		//int v = stack[(sp -= 1) + 1]; // pop
-		int v = stack[sp--]; // pop
-
-		printf("\n");
-		printf("v = %d\n", v);
-
+		int v = stack[(sp -= 1) + 1]; // pop
 		if (!visited[v])
 		{
 			low[v]   = dist;
@@ -361,54 +327,40 @@ int* get_bridge(int* g, int* num_adj, int nn)
 		}
 		visited[v] = true;
 
-		//for iw in [0: num_adj[v]]
 		for (int iw = 0; iw < num_adj[v]; iw++)
 		{
-			//int w = g[iw, v];
 			int w = g[v * NADJ_CAP + iw];
-			printf("w = %d\n", w);
-
 			if (w == parent[v])
 			{
 				// Do nothing
-				printf("parent\n");
 			}
 			else if (visited[w])
-			{
 				low[v] = min(low[v], dists[w]);
-				printf("visited\n");
-			}
 			else
 			{
 				parent[w] = v;
 
-				printf("pushing %d\n", v);
-				stack[++sp] = v;  // re-push parent for deferred processing
+				// Re-push parent for deferred processing
+				stack[(sp += 1)] = v;
 				//check_stack_cap(sp, STACK_CAP); // TODO
 				defer[v] = true;
 
-				printf("pushing %d\n", w);
-				stack[++sp] = w; // push child. order matters wrt parent
+				// Push child. order matters wrt parent
+				stack[(sp += 1)] = w;
 				//check_stack_cap(sp, STACK_CAP); // TODO
 			}
 		}
 
 		if (defer[v])
 		{
-			//for iw in [0: num_adj[v]]
 			for (int iw = 0; iw < num_adj[v]; iw++)
 			{
-				//int w = g[iw, v];
 				int w = g[v * NADJ_CAP + iw];
-
 				if ((w != parent[v]) && visited[w])
 				{
 					low[v] = min(low[v], low[w]);
 					if (low[w] > dists[v])
 					{
-						//println("Found bridge = ", [v, w], " = ", [names_glbl[v], names_glbl[w]]);
-						printf("Found bridge = [%d, %d]", v, w);
-						//bridge = [v, w];
 						bridge[0] = v; bridge[1] = w;
 						found = true;
 					}
@@ -416,11 +368,6 @@ int* get_bridge(int* g, int* num_adj, int nn)
 			}
 		}
 	}
-	//println("visited = ", visited);
-	//println("parent = ", parent);
-	//println("dists    = ", dists);
-	//println("low  = ", low);
-
 	return bridge;
 }
 
@@ -439,12 +386,9 @@ int main()
 		println("No bridges were found");
 	else
 	{
-		//println("Found bridge");
 		printf("Found bridge between nodes [%d, %d] = [%s, %s]\n",
 				bridge[0], bridge[1],
 				names_glbl[bridge[0]], names_glbl[bridge[1]]);
-		//println("Found bridge between nodes ", bridge, " = ",
-		//		[names_glbl[bridge[0]], names_glbl[bridge[1]]]);
 	}
 
 	println("Ending C Tarjan's bridge sample");
