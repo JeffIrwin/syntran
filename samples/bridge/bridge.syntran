@@ -19,6 +19,9 @@ let FILENAMES =
 ];
 let filename_glbl = FILENAMES[IFILE];
 
+//// Blog example, not from AOC
+//filename_glbl = "samples/bridge/shuffle-input-0.txt";
+
 //==============================================================================
 
 let NNAMES_CAP = 4 * 1024;  // 1493 for my input
@@ -124,6 +127,40 @@ fn lookup_name(name_: str): i32
 
 //==============================================================================
 
+//fn main_write_dot(): i32
+fn write_dot(g: [i32; :, :], num_adj: [i32; :]): i32
+{
+	// To save an image from a dot/gv file:
+	//
+	//     `dot graph-dummy.gv -Tpng > dummy.png`
+	//
+
+	//let f = open("graph-" + filename_glbl + ".gv");
+	let f = open("graph-dummy.gv");
+
+	//writeln(f, "graph " + filename_glbl);
+	writeln(f, "graph dummy");
+	writeln(f, "{");
+
+	//let g = g_glbl;
+	//let num_adj = num_adj_glbl;
+
+	let nn = size(num_adj, 0);
+	for v in [0: nn]
+		for iw in [0: num_adj[v]]
+		{
+			let w = g[iw, v];
+			writeln(f, names_glbl[v] + " -- " + names_glbl[w]);
+		}
+
+	writeln(f, "}");
+
+	close(f);
+	let ans = 0;
+}
+
+//==============================================================================
+
 // Due to lack of structs in syntran, read_aoc_graph() returns the graph by a
 // pair of global variables
 let g_glbl = [0; 0, 0];
@@ -183,6 +220,9 @@ fn read_aoc_graph(filename: str)
 		str_ = readln(f);
 	}
 	//println("gdir = ", gdir);
+
+	//// It's important to write to dot file before doubling edges
+	//write_dot(gdir, num_adjdir);
 
 	g_glbl = gdir;
 	num_adj_glbl = num_adjdir;
@@ -301,23 +341,15 @@ fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): [i32; :]
 
 fn main(): i32
 {
-	println();
-	println("Starting Tarjan's bridge sample");
-
 	read_aoc_graph(filename_glbl);
 
-	println("Running Tarjan's bridge algorithm ...");
 	let bridge = get_bridge(g_glbl, num_adj_glbl);
 	if bridge[0] < 0
 		println("No bridges were found");
 	else
-	{
 		println("Found bridge between nodes ", bridge, " = ",
 				[names_glbl[bridge[0]], names_glbl[bridge[1]]]);
-	}
 
-	println("Ending Tarjan's bridge sample");
-	println();
 	let ans = 0;
 }
 

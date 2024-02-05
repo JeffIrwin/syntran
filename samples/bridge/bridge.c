@@ -375,24 +375,16 @@ int* get_bridge(int* g, int* num_adj, int nn)
 
 int main()
 {
-	println("");
-	println("Starting C Tarjan's bridge sample");
-
 	read_aoc_graph(filename_glbl);
 
-	println("Running C Tarjan's bridge algorithm ...");
 	int* bridge = get_bridge(g_glbl, num_adj_glbl, num_nodes);
 	if (bridge[0] < 0)
 		println("No bridges were found");
 	else
-	{
 		printf("Found bridge between nodes [%d, %d] = [%s, %s]\n",
 				bridge[0], bridge[1],
 				names_glbl[bridge[0]], names_glbl[bridge[1]]);
-	}
 
-	println("Ending C Tarjan's bridge sample");
-	println("");
 	return 0;
 }
 
