@@ -35,7 +35,7 @@ recursive function syntax_eval(node, state) result(res)
 	! TODO: add diagnostics to state for runtime errors (bounds overflow, rank
 	! mismatch, etc.)
 
-	type(syntax_node_t) :: node
+	type(syntax_node_t), intent(in) :: node
 
 	type(state_t) :: state
 
@@ -555,27 +555,10 @@ recursive function syntax_eval(node, state) result(res)
 		call state%vars%pop_scope()
 
 	case (while_statement)
-
-		condition = syntax_eval(node%condition, state)
-		do while (condition%sca%bool)
-			res = syntax_eval(node%body, state)
-			condition = syntax_eval(node%condition, state)
-		end do
+		res = eval_while_statement(node, state)
 
 	case (if_statement)
-
-		condition = syntax_eval(node%condition, state)
-		!print *, 'condition = ', condition%str()
-
-		if (condition%sca%bool) then
-			!print *, 'if'
-			res = syntax_eval(node%if_clause, state)
-
-		else if (allocated(node%else_clause)) then
-			!print *, 'else'
-			res = syntax_eval(node%else_clause, state)
-
-		end if
+		res = eval_if_statement(node, state)
 
 	case (translation_unit)
 
@@ -612,32 +595,7 @@ recursive function syntax_eval(node, state) result(res)
 		!call state%vars%pop_scope()
 
 	case (block_statement)
-
-		call state%vars%push_scope()
-
-		! The final statement of a block returns the actual result.  Non-final
-		! members only change the (vars) state.
-		do i = 1, size(node%members)
-			tmp = syntax_eval(node%members(i), state)
-
-			!print *, 'kind = ', node%members(i)%kind
-			!print *, i, ' tmp = ', tmp%to_str()
-			!print *, 'type = ', tmp%type, kind_name(tmp%type)
-			!print *, ''
-
-			! In case of no-op if statements and while loops
-			if (tmp%type /= unknown_type) res = tmp
-
-			! HolyC feature: implicitly print name expression members.  I may
-			! remove this after I implement an intrinsic print() fn.  May also
-			! need to suppress this for void fn calls later
-			if (node%members(i)%kind == name_expr .and. .not. state%quiet) then
-				write(*,*) tmp%to_str()
-			end if
-
-		end do
-
-		call state%vars%pop_scope()
+		res = eval_block_statement(node, state)
 
 	case (assignment_expr)
 
@@ -1204,26 +1162,7 @@ recursive function syntax_eval(node, state) result(res)
 		end if
 
 	case (unary_expr)
-
-		right = syntax_eval(node%right, state)
-		!print *, 'right = ', right
-
-		res%type = right%type
-
-		select case (node%op%kind)
-		case (plus_token)
-			res = right
-
-		case (minus_token)
-			call negate(right, res, node%op%text)
-
-		case (not_keyword)
-			call not_(right, res, node%op%text)
-
-		case default
-			write(*,*) err_eval_unary_op(node%op%text)
-			call internal_error()
-		end select
+		res = eval_unary_expr(node, state)
 
 	case (binary_expr)
 
@@ -1309,6 +1248,133 @@ recursive function syntax_eval(node, state) result(res)
 	end select
 
 end function syntax_eval
+
+!===============================================================================
+
+function eval_while_statement(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	type(value_t) :: condition
+
+	condition = syntax_eval(node%condition, state)
+	do while (condition%sca%bool)
+		res = syntax_eval(node%body, state)
+		condition = syntax_eval(node%condition, state)
+	end do
+
+end function eval_while_statement
+
+!===============================================================================
+
+function eval_if_statement(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	type(value_t) :: condition
+
+	condition = syntax_eval(node%condition, state)
+	!print *, 'condition = ', condition%str()
+
+	if (condition%sca%bool) then
+		!print *, 'if'
+		res = syntax_eval(node%if_clause, state)
+
+	else if (allocated(node%else_clause)) then
+		!print *, 'else'
+		res = syntax_eval(node%else_clause, state)
+
+	end if
+
+end function eval_if_statement
+
+!===============================================================================
+
+function eval_block_statement(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	integer :: i
+
+	type(value_t) :: tmp
+
+	call state%vars%push_scope()
+
+	! The final statement of a block returns the actual result.  Non-final
+	! members only change the (vars) state.
+	do i = 1, size(node%members)
+		tmp = syntax_eval(node%members(i), state)
+
+		!print *, 'kind = ', node%members(i)%kind
+		!print *, i, ' tmp = ', tmp%to_str()
+		!print *, 'type = ', tmp%type, kind_name(tmp%type)
+		!print *, ''
+
+		! In case of no-op if statements and while loops
+		if (tmp%type /= unknown_type) res = tmp
+
+		! HolyC feature: implicitly print name expression members.  I may
+		! remove this after I implement an intrinsic print() fn.  May also
+		! need to suppress this for void fn calls later
+		if (node%members(i)%kind == name_expr .and. .not. state%quiet) then
+			write(*,*) tmp%to_str()
+		end if
+
+	end do
+
+	call state%vars%pop_scope()
+
+end function eval_block_statement
+
+!===============================================================================
+
+function eval_unary_expr(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	type(value_t) :: right
+
+	right = syntax_eval(node%right, state)
+	!print *, 'right = ', right
+
+	res%type = right%type
+
+	select case (node%op%kind)
+	case (plus_token)
+		res = right
+
+	case (minus_token)
+		call negate(right, res, node%op%text)
+
+	case (not_keyword)
+		call not_(right, res, node%op%text)
+
+	case default
+		write(*,*) err_eval_unary_op(node%op%text)
+		call internal_error()
+	end select
+
+end function eval_unary_expr
 
 !===============================================================================
 

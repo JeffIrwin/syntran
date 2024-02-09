@@ -29,8 +29,6 @@ module syntran__core_m
 
 	! TODO:
 	!  - refactor syntrax_eval() deep nesting
-	!    * encapsulation of syntax_eval() args (vars, fns, quiet, etc.) should
-	!      be done first
 	!  - structs
 	!  - triage notes from AOC.  many things are already fixed
 	!  - jumping control flow:
