@@ -47,12 +47,13 @@ function syntran_interpret(str_, quiet) result(res_str)
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io
 
-	logical :: quietl, continue_, show_tree
+	logical :: continue_, show_tree
 	logical, parameter :: allow_cont = .true.
 
 	type(string_view_t) :: sv
 
 	type(fns_t) :: fns
+	type(state_t) :: state
 	type(syntax_node_t) :: compilation
 	type(value_t) :: res
 	type(vars_t) :: vars
@@ -71,8 +72,8 @@ function syntran_interpret(str_, quiet) result(res_str)
 		src_file = '<string>'
 	end if
 
-	quietl = .false.
-	if (present(quiet)) quietl = quiet
+	state%quiet = .false.
+	if (present(quiet)) state%quiet = quiet
 
 	fns = declare_intrinsic_fns()
 
@@ -157,12 +158,12 @@ function syntran_interpret(str_, quiet) result(res_str)
 
 		if (debug > 0 .or. show_tree) print *, 'tree = ', compilation%str()
 
-		if (.not. quietl) call compilation%log_diagnostics(ou)
+		if (.not. state%quiet) call compilation%log_diagnostics(ou)
 
 		! Don't try to evaluate with errors
 		if (compilation%diagnostics%len_ > 0) cycle
 
-		res  = syntax_eval(compilation, vars, fns)
+		res  = syntax_eval(compilation, vars, fns, state)
 
 		! Consider MATLAB-style "ans = " log?
 		res_str = res%to_str()
@@ -181,6 +182,7 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 	character(len = *), intent(in) :: str_
 
 	type(fns_t) :: fns
+	type(state_t) :: state
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 	type(vars_t) :: vars
@@ -195,7 +197,8 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 		return
 	end if
 
-	val = syntax_eval(tree, vars, fns)
+	state%quiet = .false.
+	val = syntax_eval(tree, vars, fns, state)
 
 	! TODO: check kind, add optional iostat arg
 	eval_i32 = val%sca%i32
@@ -211,6 +214,7 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 	character(len = *), intent(in) :: str_
 
 	type(fns_t) :: fns
+	type(state_t) :: state
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 	type(vars_t) :: vars
@@ -225,7 +229,8 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 		return
 	end if
 
-	val = syntax_eval(tree, vars, fns)
+	state%quiet = .false.
+	val = syntax_eval(tree, vars, fns, state)
 
 	! TODO: check kind, add optional iostat arg
 	val_ = val%sca%i64
@@ -242,19 +247,18 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 
 	!*******
 
-	logical :: quietl
-
 	type(fns_t) :: fns
+	type(state_t) :: state
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 	type(vars_t) :: vars
 
-	quietl = .false.
-	if (present(quiet)) quietl = quiet
+	state%quiet = .false.
+	if (present(quiet)) state%quiet = quiet
 
 	fns = declare_intrinsic_fns()
 	tree = syntax_parse(str_, vars, fns)
-	if (.not. quietl) call tree%log_diagnostics()
+	if (.not. state%quiet) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
 		! TODO: iostat
@@ -262,7 +266,7 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 		return
 	end if
 
-	val = syntax_eval(tree, vars, fns, quietl)
+	val = syntax_eval(tree, vars, fns, state)
 
 	! TODO: check kind, add optional iostat arg
 	eval_f32 = val%sca%f32
@@ -289,17 +293,18 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	character(len = 1024) :: buffer
 	character(len = :), allocatable :: src_filel, dir, cwd
 
-	logical :: quietl, chdirl
+	logical :: chdirl
 
 	type(fns_t) :: fns
+	type(state_t) :: state
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 	type(vars_t) :: vars
 
 	!print *, 'str_ = ', str_
 
-	quietl = .false.
-	if (present(quiet)) quietl = quiet
+	state%quiet = .false.
+	if (present(quiet)) state%quiet = quiet
 
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
@@ -315,7 +320,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	fns = declare_intrinsic_fns()
 
 	tree = syntax_parse(str_, vars, fns, src_filel)
-	if (.not. quietl) call tree%log_diagnostics()
+	if (.not. state%quiet) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
 		res = ''
@@ -337,7 +342,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	end if
 
-	val = syntax_eval(tree, vars, fns, quietl)
+	val = syntax_eval(tree, vars, fns, state)
 	res = val%to_str()
 	!print *, 'res = ', res
 
@@ -367,28 +372,30 @@ function syntran_interpret_file(filename, quiet, chdir_) result(res)
 
 	integer :: iostat
 
-	logical :: quietl, chdirl
+	logical :: chdirl
 
-	quietl = .false.
-	if (present(quiet )) quietl = quiet
+	type(state_t) :: state
+
+	state%quiet = .false.
+	if (present(quiet )) state%quiet = quiet
 
 	chdirl = .false.
 	if (present(chdir_)) chdirl = chdir_
 
-	if (.not. quietl) write(*,*) 'Interpreting file "'//filename//'"'
+	if (.not. state%quiet) write(*,*) 'Interpreting file "'//filename//'"'
 
 	source_text = read_file(filename, iostat)
 
 	if (iostat /= exit_success) then
-		if (.not. quietl) write(*,*) err_404(filename)
+		if (.not. state%quiet) write(*,*) err_404(filename)
 		return
 	end if
 
 	if (chdirl) then
-		res = trim(adjustl(syntran_eval(source_text, quiet, filename, &
+		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
 			chdir_ = get_dir(filename))))
 	else
-		res = trim(adjustl(syntran_eval(source_text, quiet, filename)))
+		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename)))
 	end if
 
 end function syntran_interpret_file

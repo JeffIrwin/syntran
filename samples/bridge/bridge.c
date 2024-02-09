@@ -382,8 +382,7 @@ int main()
 		println("No bridges were found");
 	else
 		printf("Found bridge between nodes [%d, %d] = [%s, %s]\n",
-				bridge[0], bridge[1],
-				names_glbl[bridge[0]], names_glbl[bridge[1]]);
+				bridge[0], bridge[1], names_glbl[bridge[0]], names_glbl[bridge[1]]);
 
 	return 0;
 }
