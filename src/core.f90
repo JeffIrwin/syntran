@@ -674,6 +674,8 @@ end function declare_intrinsic_fns
 
 function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
+	! TODO: take state struct instead of separate vars and fns members?
+
 	character(len = *) :: str
 
 	type(vars_t), intent(inout) :: vars

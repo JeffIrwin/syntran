@@ -18,6 +18,8 @@ module syntran__eval_m
 
 		logical :: quiet
 
+		type(fns_t) :: fns
+
 	end type state_t
 
 !===============================================================================
@@ -26,7 +28,7 @@ contains
 
 !===============================================================================
 
-recursive function syntax_eval(node, vars, fns, state) result(res)
+recursive function syntax_eval(node, vars, state) result(res)
 
 	! TODO: encapsulate vars, fns, and quiet into a state struct.  Add
 	! diagnostics to state for runtime errors (bounds overflow, rank mismatch,
@@ -38,8 +40,6 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 	! copying a potentially large struct to a local var without fancy use of
 	! move_alloc()
 	type(vars_t) :: vars
-
-	type(fns_t) :: fns
 
 	!logical, optional, intent(in) :: quiet
 	type(state_t) :: state
@@ -94,9 +94,9 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 		if (node%val%array%kind == step_array) then
 
-			lbound_ = syntax_eval(node%lbound, vars, fns, state)
-			step    = syntax_eval(node%step  , vars, fns, state)
-			ubound_ = syntax_eval(node%ubound, vars, fns, state)
+			lbound_ = syntax_eval(node%lbound, vars, state)
+			step    = syntax_eval(node%step  , vars, state)
+			ubound_ = syntax_eval(node%ubound, vars, state)
 
 			array%type = node%val%array%type
 
@@ -205,9 +205,9 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 		else if (node%val%array%kind == len_array) then
 
 			!print *, 'len array'
-			lbound_ = syntax_eval(node%lbound, vars, fns, state)
-			ubound_ = syntax_eval(node%ubound, vars, fns, state)
-			len_    = syntax_eval(node%len_  , vars, fns, state)
+			lbound_ = syntax_eval(node%lbound, vars, state)
+			ubound_ = syntax_eval(node%ubound, vars, state)
+			len_    = syntax_eval(node%len_  , vars, state)
 
 			array%type = node%val%array%type
 			array%len_  = len_%to_i64()
@@ -243,7 +243,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			allocate(array%size( array%rank ))
 
 			do i = 1, array%rank
-				len_ = syntax_eval(node%size(i), vars, fns, state)
+				len_ = syntax_eval(node%size(i), vars, state)
 				array%size(i) = len_%to_i64()
 				!print *, 'size['//str(i)//'] = ', array%size(i)
 			end do
@@ -253,7 +253,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			! course mutable)
 
 			!print *, 'len array'
-			lbound_ = syntax_eval(node%lbound, vars, fns, state)
+			lbound_ = syntax_eval(node%lbound, vars, state)
 
 			! Allocate in one shot without growing
 
@@ -295,8 +295,8 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			! statement requires it to be explicit, so we might as well expand
 			! at initialization
 
-			lbound_ = syntax_eval(node%lbound, vars, fns, state)
-			ubound_ = syntax_eval(node%ubound, vars, fns, state)
+			lbound_ = syntax_eval(node%lbound, vars, state)
+			ubound_ = syntax_eval(node%ubound, vars, state)
 
 			!array = new_array(node%val%array%type)
 
@@ -349,7 +349,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			array = new_array(node%val%array%type, size(node%elems))
 
 			do i = 1, size(node%elems)
-				elem = syntax_eval(node%elems(i), vars, fns, state)
+				elem = syntax_eval(node%elems(i), vars, state)
 				!print *, 'elem['//str(i)//'] = ', elem%str()
 				call array%push(elem)
 			end do
@@ -357,7 +357,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			array%rank = size( node%size )
 			allocate(array%size( array%rank ))
 			do i = 1, array%rank
-				len_ = syntax_eval(node%size(i), vars, fns, state)
+				len_ = syntax_eval(node%size(i), vars, state)
 				array%size(i) = len_%to_i64()
 			end do
 
@@ -383,7 +383,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			array = new_array(node%val%array%type, size(node%elems))
 
 			do i = 1, size(node%elems)
-				elem = syntax_eval(node%elems(i), vars, fns, state)
+				elem = syntax_eval(node%elems(i), vars, state)
 				!print *, 'elem['//str(i)//'] = ', elem%str()
 				call array%push(elem)
 			end do
@@ -406,10 +406,10 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 	case (for_statement)
 
 		! Evaluate all of these ahead of loop, but only if they are allocated!
-		if (allocated(node%array%lbound)) lbound_ = syntax_eval(node%array%lbound, vars, fns, state)
-		if (allocated(node%array%step  )) step    = syntax_eval(node%array%step  , vars, fns, state)
-		if (allocated(node%array%ubound)) ubound_ = syntax_eval(node%array%ubound, vars, fns, state)
-		if (allocated(node%array%len_  )) len_    = syntax_eval(node%array%len_  , vars, fns, state)
+		if (allocated(node%array%lbound)) lbound_ = syntax_eval(node%array%lbound, vars, state)
+		if (allocated(node%array%step  )) step    = syntax_eval(node%array%step  , vars, state)
+		if (allocated(node%array%ubound)) ubound_ = syntax_eval(node%array%ubound, vars, state)
+		if (allocated(node%array%len_  )) len_    = syntax_eval(node%array%len_  , vars, state)
 
 		!print *, 'lbound_ = ', lbound_%to_i64()
 		!print *, 'ubound_ = ', ubound_%to_i64()
@@ -495,7 +495,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 				rank = size( node%array%size )
 				len8 = 1
 				do i = 1, rank
-					len_ = syntax_eval(node%array%size(i), vars, fns, state)
+					len_ = syntax_eval(node%array%size(i), vars, state)
 					len8 = len8 * len_%to_i64()
 				end do
 
@@ -511,7 +511,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 				!print *, 'rank = ', rank
 				len8 = 1
 				do i = 1, rank
-					len_ = syntax_eval(node%array%size(i), vars, fns, state)
+					len_ = syntax_eval(node%array%size(i), vars, state)
 					len8 = len8 * len_%to_i64()
 				end do
 				!print *, 'len8 = ', len8
@@ -531,7 +531,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			! it is set in array_at() (via get_array_value_t())
 			for_kind = array_expr
 
-			tmp = syntax_eval(node%array, vars, fns, state)
+			tmp = syntax_eval(node%array, vars, state)
 			array = tmp%array
 
 			len8 = array%len_
@@ -546,7 +546,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 		do i8 = 1, len8
 
 			call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
-				len_, array, node%array%elems, vars, fns, state)
+				len_, array, node%array%elems, vars, state)
 
 			!print *, 'itr = ', itr%to_str()
 
@@ -557,31 +557,31 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			! not know the entire list of variable identifiers ahead of time
 			vars%vals(node%id_index) = itr
 
-			res = syntax_eval(node%body, vars, fns, state)
+			res = syntax_eval(node%body, vars, state)
 
 		end do
 		call vars%pop_scope()
 
 	case (while_statement)
 
-		condition = syntax_eval(node%condition, vars, fns, state)
+		condition = syntax_eval(node%condition, vars, state)
 		do while (condition%sca%bool)
-			res = syntax_eval(node%body, vars, fns, state)
-			condition = syntax_eval(node%condition, vars, fns, state)
+			res = syntax_eval(node%body, vars, state)
+			condition = syntax_eval(node%condition, vars, state)
 		end do
 
 	case (if_statement)
 
-		condition = syntax_eval(node%condition, vars, fns, state)
+		condition = syntax_eval(node%condition, vars, state)
 		!print *, 'condition = ', condition%str()
 
 		if (condition%sca%bool) then
 			!print *, 'if'
-			res = syntax_eval(node%if_clause, vars, fns, state)
+			res = syntax_eval(node%if_clause, vars, state)
 
 		else if (allocated(node%else_clause)) then
 			!print *, 'else'
-			res = syntax_eval(node%else_clause, vars, fns, state)
+			res = syntax_eval(node%else_clause, vars, state)
 
 		end if
 
@@ -602,7 +602,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			! TODO: is this where we should copy fn dict to array?
 			if (node%members(i)%kind == fn_declaration) cycle
 
-			res = syntax_eval(node%members(i), vars, fns, state)
+			res = syntax_eval(node%members(i), vars, state)
 
 			!print *, 'kind = ', node%members(i)%kind
 			!print *, i, ' res = ', res%to_str()
@@ -626,7 +626,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 		! The final statement of a block returns the actual result.  Non-final
 		! members only change the (vars) state.
 		do i = 1, size(node%members)
-			tmp = syntax_eval(node%members(i), vars, fns, state)
+			tmp = syntax_eval(node%members(i), vars, state)
 
 			!print *, 'kind = ', node%members(i)%kind
 			!print *, i, ' tmp = ', tmp%to_str()
@@ -663,7 +663,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 			! Assign return value
 			!print *, 'eval and set res'
-			res = syntax_eval(node%right, vars, fns, state)
+			res = syntax_eval(node%right, vars, state)
 
 			! TODO: test int/float casting.  It should be an error during
 			! parsing
@@ -689,7 +689,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			!print *, 'LHS type = ', kind_name(vars%vals(node%id_index)%array%type)  ! not alloc for str
 
 			! Assign return value from RHS
-			res = syntax_eval(node%right, vars, fns, state)
+			res = syntax_eval(node%right, vars, state)
 
 			!print *, 'RHS = ', res%to_str()
 
@@ -697,7 +697,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 				!print *, 'str_type'
 
 				! TODO: ban compound character substring assignment
-				i8 = subscript_eval(node, vars, fns, state)
+				i8 = subscript_eval(node, vars, state)
 				vars%vals(node%id_index)%sca%str%s(i8+1: i8+1) = res%sca%str%s
 
 			else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
@@ -707,7 +707,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 				!	vars%vals(node%id_index)%array%type
 				!print *, 'LHS array = ', vars%vals(node%id_index)%array%i32
 
-				i8 = subscript_eval(node, vars, fns, state)
+				i8 = subscript_eval(node, vars, state)
 				array_val = get_array_value_t(vars%vals(node%id_index)%array, i8)
 				call compound_assign(array_val, res, node%op)
 				call set_array_value_t( &
@@ -718,7 +718,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 				!print *, 'lhs slice assignment'
 
-				call get_subscript_range(node, vars, fns, state, lsubs, usubs, rank_res)
+				call get_subscript_range(node, vars, state, lsubs, usubs, rank_res)
 				len8 = product(usubs - lsubs)
 				!print *, 'len8 = ', len8
 
@@ -802,7 +802,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 	case (let_expr)
 
 		! Assign return value
-		res = syntax_eval(node%right, vars, fns, state)
+		res = syntax_eval(node%right, vars, state)
 
 		!print *, 'assigning identifier ', quote(node%identifier%text)
 		vars%vals(node%id_index) = res
@@ -813,7 +813,6 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 		!print *, 'fn identifier = ', node%identifier%text
 		!print *, 'fn id_index   = ', node%id_index
 
-		!res%type = fns%fns(node%id_index)%type
 		res%type = node%val%type
 
 		!print *, 'res type = ', res%type
@@ -822,56 +821,56 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 		select case (node%identifier%text)
 		case ("exp")
 
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
 			res%sca%f32 = exp(arg1%sca%f32)
 
 		case ("0min_i32")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			res%sca%i32 = arg%sca%i32
 
 			! Note that min/max/println etc. are variadic, so we loop to
 			! size(node%args) instead of size(node%params)
 
 			do i = 2, size(node%args)
-				arg = syntax_eval(node%args(i), vars, fns, state)
+				arg = syntax_eval(node%args(i), vars, state)
 				res%sca%i32 = min(res%sca%i32, arg%sca%i32)
 			end do
 
 		case ("0min_i64")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			res%sca%i64 = arg%sca%i64
 
 			do i = 2, size(node%args)
-				arg = syntax_eval(node%args(i), vars, fns, state)
+				arg = syntax_eval(node%args(i), vars, state)
 				res%sca%i64 = min(res%sca%i64, arg%sca%i64)
 			end do
 
 		case ("0max_i32")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			res%sca%i32 = arg%sca%i32
 
 			do i = 2, size(node%args)
-				arg = syntax_eval(node%args(i), vars, fns, state)
+				arg = syntax_eval(node%args(i), vars, state)
 				res%sca%i32 = max(res%sca%i32, arg%sca%i32)
 			end do
 
 		case ("0max_i64")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			res%sca%i64 = arg%sca%i64
 
 			do i = 2, size(node%args)
-				arg = syntax_eval(node%args(i), vars, fns, state)
+				arg = syntax_eval(node%args(i), vars, state)
 				res%sca%i64 = max(res%sca%i64, arg%sca%i64)
 			end do
 
 		case ("println")
 
 			do i = 1, size(node%args)
-				arg = syntax_eval(node%args(i), vars, fns, state)
+				arg = syntax_eval(node%args(i), vars, state)
 				write(output_unit, '(a)', advance = 'no') arg%to_str()
 			end do
 			write(output_unit, *)
@@ -883,49 +882,49 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 			res%sca%str%s = ''
 			do i = 1, size(node%args)
-				arg = syntax_eval(node%args(i), vars, fns, state)
+				arg = syntax_eval(node%args(i), vars, state)
 				res%sca%str%s = res%sca%str%s // arg%to_str()  ! TODO: use char_vector_t
 			end do
 
 		case ("len")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			res%sca%i32 = len(arg%sca%str%s, 4)
 			!res%sca%i32 = mylen( arg%sca%str%s )
 
 		case ("parse_i32")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			read(arg%sca%str%s, *) res%sca%i32  ! TODO: catch iostat
 
 		case ("parse_i64")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			read(arg%sca%str%s, *) res%sca%i64  ! TODO: catch iostat
 
 		case ("0i32_sca")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			res%sca%i32 = arg%to_i32()
 
 		case ("0i32_arr")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			res%array = arg%to_i32_array()
 
 		case ("0i64_sca")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			res%sca%i64 = arg%to_i64()
 
 		case ("0i64_arr")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			res%array = arg%to_i64_array()
 
 		case ("open")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 
 			! TODO: catch iostat, e.g. same file opened twice, folder doesn't
 			! exist, etc.
@@ -937,7 +936,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 		case ("readln")
 
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
 
 			!print *, "reading from unit", arg1%sca%file_%unit_
 			res%sca%str%s = read_line(arg1%sca%file_%unit_, io)
@@ -964,18 +963,18 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 		case ("writeln")
 
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
 
 			!print *, 'writing to unit ', arg1%sca%file_%unit_
 			do i = 2, size(node%args)
-				arg = syntax_eval(node%args(i), vars, fns, state)
+				arg = syntax_eval(node%args(i), vars, state)
 				write(arg1%sca%file_%unit_, '(a)', advance = 'no') arg%to_str()
 			end do
 			write(arg1%sca%file_%unit_, *)
 
 		case ("eof")
 
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
 
 			!print *, "checking eof for unit", arg1%sca%file_%unit_
 			res%sca%bool = arg1%sca%file_%eof
@@ -983,13 +982,13 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 			!print *, 'eof fn = ', arg1%sca%file_%eof
 
 		case ("close")
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 			!print *, 'closing unit ', arg%sca%file_%unit_
 			close(arg%sca%file_%unit_)
 
 		case ("exit")
 
-			arg = syntax_eval(node%args(1), vars, fns, state)
+			arg = syntax_eval(node%args(1), vars, state)
 
 			io = arg%sca%i32
 			if (io == 0) then
@@ -1005,8 +1004,8 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 		case ("size")
 
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
-			arg2 = syntax_eval(node%args(2), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
+			arg2 = syntax_eval(node%args(2), vars, state)
 
 			if (arg2%sca%i32 < 0 .or. arg2%sca%i32 >= arg1%array%rank) then
 				! TODO: re-think runtime errors.  A different prefix here
@@ -1020,24 +1019,24 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 		case ("count")
 
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
 			res%sca%i32 = count(arg1%array%bool)
 
 		case ("0sum_i32")
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
 			res%sca%i32 = sum(arg1%array%i32)
 
 		case ("0sum_i64")
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
 			res%sca%i64 = sum(arg1%array%i64)
 
 		case ("0sum_f32")
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
 			res%sca%f32 = sum(arg1%array%f32)
 
 		case ("all")
 
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
 			res%sca%bool = all(arg1%array%bool)
 
 			! Might not be strictly necessary now that %array is allocatable
@@ -1046,7 +1045,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 		case ("any")
 
-			arg1 = syntax_eval(node%args(1), vars, fns, state)
+			arg1 = syntax_eval(node%args(1), vars, state)
 			res%sca%bool = any(arg1%array%bool)
 
 		case default
@@ -1073,26 +1072,14 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 				!print *, 'copying param ', i
 
 				vars%vals( node%params(i) ) = &
-					syntax_eval(node%args(i), vars, fns, state)
-
-				!!print *, 'set tmp'
-				!tmp = syntax_eval(node%args(i), vars, fns, state)
-				!!print *, 'set param var'
-				!vars%vals( node%params(i) ) = tmp
+					syntax_eval(node%args(i), vars, state)
 
 				!print *, 'done'
 				!print *, ''
 			end do
 
-			res = syntax_eval(node%body, vars, fns, state)
+			res = syntax_eval(node%body, vars, state)
 			!print *, 'res = ', res%to_str()
-
-			!do i = 1, size(node%params)
-			!	if (allocated(vars%vals( node%params(i) )%array)) then
-			!		!print *, 'deallocating node%params ... array'
-			!		deallocate(vars%vals( node%params(i) )%array)
-			!	end if
-			!end do
 
 		end select
 
@@ -1108,7 +1095,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 			select case (node%lsubscripts(1)%sub_kind)
 			case (scalar_sub)
-				i8 = subscript_eval(node, vars, fns, state)
+				i8 = subscript_eval(node, vars, state)
 				!print *, 'i8 = ', i8
 				res%sca%str%s = vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
 
@@ -1116,10 +1103,10 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 				! TODO: str all_sub
 
-				il = subscript_eval(node, vars, fns, state) + 1
+				il = subscript_eval(node, vars, state) + 1
 
 				! This feels inconsistent and not easy to extend to higher ranks
-				right = syntax_eval(node%usubscripts(1), vars, fns, state)
+				right = syntax_eval(node%usubscripts(1), vars, state)
 				iu = right%sca%i32 + 1
 
 				!print *, ''
@@ -1150,13 +1137,13 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 				! This could probably be lumped in with the range_sub case now
 				! that I have it fully generalized
-				i8 = subscript_eval(node, vars, fns, state)
+				i8 = subscript_eval(node, vars, state)
 				!print *, 'i8 = ', i8
 				res = get_array_value_t(vars%vals(node%id_index)%array, i8)
 
 			else
 
-				call get_subscript_range(node, vars, fns, state, lsubs, usubs, rank_res)
+				call get_subscript_range(node, vars, state, lsubs, usubs, rank_res)
 
 				!print *, 'type = ', kind_name( node%val%array%type )
 
@@ -1226,7 +1213,7 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 	case (unary_expr)
 
-		right = syntax_eval(node%right, vars, fns, state)
+		right = syntax_eval(node%right, vars, state)
 		!print *, 'right = ', right
 
 		res%type = right%type
@@ -1248,8 +1235,8 @@ recursive function syntax_eval(node, vars, fns, state) result(res)
 
 	case (binary_expr)
 
-		left  = syntax_eval(node%left , vars, fns, state)
-		right = syntax_eval(node%right, vars, fns, state)
+		left  = syntax_eval(node%left , vars, state)
+		right = syntax_eval(node%right, vars, state)
 
 		!print *, 'left  type = ', kind_name(left%type)
 		!print *, 'right type = ', kind_name(right%type)
@@ -1469,7 +1456,7 @@ end subroutine compound_assign
 
 !===============================================================================
 
-subroutine get_subscript_range(node, vars, fns, state, lsubs, usubs, rank_res)
+subroutine get_subscript_range(node, vars, state, lsubs, usubs, rank_res)
 
 	! Evaluate the lower- and upper-bounds of each range of a subscripted array
 	! slice
@@ -1479,7 +1466,6 @@ subroutine get_subscript_range(node, vars, fns, state, lsubs, usubs, rank_res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(vars_t) :: vars
-	type(fns_t) :: fns
 	type(state_t) :: state
 
 	integer(kind = 8), allocatable, intent(out) :: lsubs(:), usubs(:)
@@ -1500,7 +1486,7 @@ subroutine get_subscript_range(node, vars, fns, state, lsubs, usubs, rank_res)
 			lsubs(i) = 0
 			!print *, 'lsubs(i) = ', lsubs(i)
 		else
-			lsubval = syntax_eval(node%lsubscripts(i), vars, fns, state)
+			lsubval = syntax_eval(node%lsubscripts(i), vars, state)
 			lsubs(i) = lsubval%sca%i32
 		end if
 
@@ -1512,7 +1498,7 @@ subroutine get_subscript_range(node, vars, fns, state, lsubs, usubs, rank_res)
 			rank_res = rank_res + 1
 
 		case (range_sub)
-			usubval = syntax_eval(node%usubscripts(i), vars, fns, state)
+			usubval = syntax_eval(node%usubscripts(i), vars, state)
 			usubs(i) = usubval%sca%i32
 
 			rank_res = rank_res + 1
@@ -1594,14 +1580,13 @@ end function subscript_i32_eval
 
 !===============================================================================
 
-function subscript_eval(node, vars, fns, state) result(index_)
+function subscript_eval(node, vars, state) result(index_)
 
 	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
 	! subscript index_
 
 	type(syntax_node_t) :: node
 	type(vars_t) :: vars
-	type(fns_t) :: fns
 	type(state_t) :: state
 
 	integer(kind = 8) :: index_
@@ -1616,7 +1601,7 @@ function subscript_eval(node, vars, fns, state) result(index_)
 
 	! str scalar with single char subscript
 	if (vars%vals(node%id_index)%type == str_type) then
-		subscript = syntax_eval(node%lsubscripts(1), vars, fns, state)
+		subscript = syntax_eval(node%lsubscripts(1), vars, state)
 		index_ = subscript%to_i64()
 		return
 	end if
@@ -1634,7 +1619,7 @@ function subscript_eval(node, vars, fns, state) result(index_)
 	do i = 1, vars%vals(node%id_index)%array%rank
 		!print *, 'i = ', i
 
-		subscript = syntax_eval(node%lsubscripts(i), vars, fns, state)
+		subscript = syntax_eval(node%lsubscripts(i), vars, state)
 
 		! TODO: bound checking? by default or enabled with cmd line flag?
 		!
@@ -1652,7 +1637,7 @@ end function subscript_eval
 !===============================================================================
 
 subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
-		elems, vars, fns, state)
+		elems, vars, state)
 
 	! This lazily gets an array value at an index i without expanding the whole
 	! implicit array in memory.  Used for for loops
@@ -1678,8 +1663,6 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 	type(syntax_node_t), allocatable :: elems(:)
 
 	type(vars_t) :: vars
-
-	type(fns_t) :: fns
 
 	type(state_t) :: state
 
@@ -1714,7 +1697,7 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 			(ubound_%sca%f32 - lbound_%sca%f32) / real((len_%to_i64() - 1))
 
 	case (expl_array, size_array)
-		val = syntax_eval(elems(i), vars, fns, state)
+		val = syntax_eval(elems(i), vars, state)
 
 	case (unif_array)
 		val = lbound_
