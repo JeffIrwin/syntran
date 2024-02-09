@@ -1,0 +1,13 @@
+teg: pro tej saw
+awn: lev kex ist
+pam: eth ket mim
+yag: teg pro ket
+eth: ket
+kex: ist ket
+fid: yag saw tej pro
+lev: eth mim ist
+pro: saw
+tej: pro saw
+ket: mim
+ist: mim
+rom: eth pam ist awn
