@@ -60,6 +60,9 @@ recursive function syntax_eval(node, state) result(res)
 
 	! if_statement and while_statement may return an uninitialized type
 	! otherwise if their conditions are false
+	!
+	! TODO: setting here should be unnecessary now that type is initialized
+	! inside the value_t declaration
 	res%type = unknown_type
 
 	if (node%is_empty) then

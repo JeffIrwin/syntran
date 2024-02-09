@@ -74,7 +74,7 @@ module syntran__value_m
 	!********
 
 	type value_t
-		integer :: type
+		integer :: type = unknown_type
 
 		type(scalar_t) :: sca
 
