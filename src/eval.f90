@@ -43,12 +43,6 @@ recursive function syntax_eval(node, state) result(res)
 
 	!********
 
-	integer :: rank_res, idim_, idim_res, larrtype, rarrtype
-	integer(kind = 8) :: il, iu, i8, index_
-	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
-
-	type(value_t) :: left, right
-
 	!print *, 'starting syntax_eval()'
 
 	! if_statement and while_statement may return an uninitialized type
@@ -106,212 +100,13 @@ recursive function syntax_eval(node, state) result(res)
 		res = eval_fn_call(node, state)
 
 	case (name_expr)
-		!print *, 'searching identifier ', node%identifier%text
-
-		if (allocated(node%lsubscripts) .and. &
-			state%vars%vals(node%id_index)%type == str_type) then
-			!print *, 'string subscript RHS name expr'
-
-			!print *, 'str type'
-			res%type = state%vars%vals(node%id_index)%type
-
-			select case (node%lsubscripts(1)%sub_kind)
-			case (scalar_sub)
-				i8 = subscript_eval(node, state)
-				!print *, 'i8 = ', i8
-				res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
-
-			case (range_sub)
-
-				! TODO: str all_sub
-
-				il = subscript_eval(node, state) + 1
-
-				! This feels inconsistent and not easy to extend to higher ranks
-				right = syntax_eval(node%usubscripts(1), state)
-				iu = right%sca%i32 + 1
-
-				!print *, ''
-				!print *, 'identifier ', node%identifier%text
-				!print *, 'il = ', il
-				!print *, 'iu = ', iu
-				!print *, 'str = ', state%vars%vals(node%id_index)%sca%str%s
-
-				! Not inclusive of upper bound
-				res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(il: iu-1)
-
-			case default
-				write(*,*) err_int_prefix//'unexpected subscript kind'//color_reset
-				call internal_error()
-			end select
-
-		else if (allocated(node%lsubscripts)) then
-
-			if (state%vars%vals(node%id_index)%type /= array_type) then
-				write(*,*) err_int_prefix//'bad type, expected array'//color_reset
-				call internal_error()
-			end if
-
-			!print *, 'sub kind 1 = ', kind_name(node%lsubscripts(1)%sub_kind)
-			!print *, 'rank = ', node%val%array%rank
-
-			if (all(node%lsubscripts%sub_kind == scalar_sub)) then
-
-				! This could probably be lumped in with the range_sub case now
-				! that I have it fully generalized
-				i8 = subscript_eval(node, state)
-				!print *, 'i8 = ', i8
-				res = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
-
-			else
-
-				call get_subscript_range(node, state, lsubs, usubs, rank_res)
-
-				!print *, 'type = ', kind_name( node%val%array%type )
-
-				!print *, 'type  = ', node%val%array%type
-				!print *, 'rank  = ', node%val%array%rank
-				!print *, 'size  = ', node%val%array%size
-				!print *, 'len_  = ', node%val%array%len_
-				!print *, 'cap   = ', node%val%array%cap
-
-				allocate(res%array)
-				res%type = array_type
-				res%array%kind = expl_array
-				res%array%type = node%val%array%type
-				res%array%rank = rank_res
-
-				allocate(res%array%size( rank_res ))
-				idim_res = 1
-				do idim_ = 1, size(lsubs)
-					select case (node%lsubscripts(idim_)%sub_kind)
-					case (range_sub, all_sub)
-
-						res%array%size(idim_res) = usubs(idim_) - lsubs(idim_)
-
-						idim_res = idim_res + 1
-					end select
-				end do
-				!print *, 'res size = ', res%array%size
-
-				res%array%len_ = product(res%array%size)
-				!print *, 'res len = ', res%array%len_
-
-				call allocate_array(res%array, res%array%len_)
-
-				! Iterate through all subscripts in range and copy to result
-				! array
-				subs = lsubs
-				do i8 = 0, res%array%len_ - 1
-					!print *, 'subs = ', int(subs, 4)
-
-					index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-					call set_array_value_t(res%array, i8, &
-					     get_array_value_t(state%vars%vals(node%id_index)%array, index_))
-
-					call get_next_subscript(lsubs, usubs, subs)
-				end do
-			end if
-
-		else
-			!print *, 'name expr'
-			res = state%vars%vals(node%id_index)
-
-			! Deep copy of whole array instead of aliasing pointers
-			if (res%type == array_type) then
-				!print *, 'array  name_expr'
-
-				if (allocated(res%array)) deallocate(res%array)
-
-				allocate(res%array)
-				res%type = array_type
-				res%array = state%vars%vals(node%id_index)%array
-
-			!else
-			!	print *, 'scalar name_expr'
-			end if
-
-		end if
+		res = eval_name_expr(node, state)
 
 	case (unary_expr)
 		res = eval_unary_expr(node, state)
 
 	case (binary_expr)
-
-		left  = syntax_eval(node%left , state)
-		right = syntax_eval(node%right, state)
-
-		!print *, 'left  type = ', kind_name(left%type)
-		!print *, 'right type = ', kind_name(right%type)
-
-		larrtype = unknown_type
-		rarrtype = unknown_type
-		if (left %type == array_type) larrtype = left %array%type
-		if (right%type == array_type) rarrtype = right%array%type
-
-		res%type = get_binary_op_kind(left%type, node%op%kind, right%type, &
-			larrtype, rarrtype)
-		select case (res%type)
-		case (bool_array_type, f32_array_type, i32_array_type, i64_array_type, &
-			str_array_type)
-			res%type = array_type
-		end select
-
-		if (res%type == unknown_type) then
-			write(*,*) err_eval_binary_types(node%op%text)
-			call internal_error()
-		end if
-
-		!print *, 'op = ', node%op%text
-
-		select case (node%op%kind)
-		case (plus_token)
-			call add(left, right, res, node%op%text)
-
-		case (minus_token)
-			call subtract(left, right, res, node%op%text)
-
-		case (star_token)
-			call mul(left, right, res, node%op%text)
-
-		case (sstar_token)
-			call pow(left, right, res, node%op%text)
-
-		case (slash_token)
-			call div(left, right, res, node%op%text)
-
-		case (percent_token)
-			call mod_(left, right, res, node%op%text)
-
-		case (and_keyword)
-			call and_(left, right, res, node%op%text)
-
-		case (or_keyword)
-			call or_(left, right, res, node%op%text)
-
-		case (eequals_token)
-			call is_eq(left, right, res, node%op%text)
-
-		case (bang_equals_token)
-			call is_ne(left, right, res, node%op%text)
-
-		case (less_token)
-			call is_lt(left, right, res, node%op%text)
-
-		case (less_equals_token)
-			call is_le(left, right, res, node%op%text)
-
-		case (greater_token)
-			call is_gt(left, right, res, node%op%text)
-
-		case (greater_equals_token)
-			call is_ge(left, right, res, node%op%text)
-
-		case default
-			write(*,*) err_eval_binary_op(node%op%text)
-			call internal_error()
-
-		end select
+		res = eval_binary_expr(node, state)
 
 	case default
 		write(*,*) err_eval_node(kind_name(node%kind))
@@ -320,6 +115,246 @@ recursive function syntax_eval(node, state) result(res)
 	end select
 
 end function syntax_eval
+
+!===============================================================================
+
+function eval_binary_expr(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	integer :: larrtype, rarrtype
+
+	type(value_t) :: left, right
+
+	left  = syntax_eval(node%left , state)
+	right = syntax_eval(node%right, state)
+
+	!print *, 'left  type = ', kind_name(left%type)
+	!print *, 'right type = ', kind_name(right%type)
+
+	larrtype = unknown_type
+	rarrtype = unknown_type
+	if (left %type == array_type) larrtype = left %array%type
+	if (right%type == array_type) rarrtype = right%array%type
+
+	res%type = get_binary_op_kind(left%type, node%op%kind, right%type, &
+		larrtype, rarrtype)
+	select case (res%type)
+	case (bool_array_type, f32_array_type, i32_array_type, i64_array_type, &
+		str_array_type)
+		res%type = array_type
+	end select
+
+	if (res%type == unknown_type) then
+		write(*,*) err_eval_binary_types(node%op%text)
+		call internal_error()
+	end if
+
+	!print *, 'op = ', node%op%text
+
+	select case (node%op%kind)
+	case (plus_token)
+		call add(left, right, res, node%op%text)
+
+	case (minus_token)
+		call subtract(left, right, res, node%op%text)
+
+	case (star_token)
+		call mul(left, right, res, node%op%text)
+
+	case (sstar_token)
+		call pow(left, right, res, node%op%text)
+
+	case (slash_token)
+		call div(left, right, res, node%op%text)
+
+	case (percent_token)
+		call mod_(left, right, res, node%op%text)
+
+	case (and_keyword)
+		call and_(left, right, res, node%op%text)
+
+	case (or_keyword)
+		call or_(left, right, res, node%op%text)
+
+	case (eequals_token)
+		call is_eq(left, right, res, node%op%text)
+
+	case (bang_equals_token)
+		call is_ne(left, right, res, node%op%text)
+
+	case (less_token)
+		call is_lt(left, right, res, node%op%text)
+
+	case (less_equals_token)
+		call is_le(left, right, res, node%op%text)
+
+	case (greater_token)
+		call is_gt(left, right, res, node%op%text)
+
+	case (greater_equals_token)
+		call is_ge(left, right, res, node%op%text)
+
+	case default
+		write(*,*) err_eval_binary_op(node%op%text)
+		call internal_error()
+
+	end select
+
+end function eval_binary_expr
+
+!===============================================================================
+
+function eval_name_expr(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	integer :: rank_res, idim_, idim_res
+	integer(kind = 8) :: il, iu, i8, index_
+	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
+
+	type(value_t) :: right
+
+	!print *, 'searching identifier ', node%identifier%text
+
+	if (allocated(node%lsubscripts) .and. &
+		state%vars%vals(node%id_index)%type == str_type) then
+		!print *, 'string subscript RHS name expr'
+
+		!print *, 'str type'
+		res%type = state%vars%vals(node%id_index)%type
+
+		select case (node%lsubscripts(1)%sub_kind)
+		case (scalar_sub)
+			i8 = subscript_eval(node, state)
+			!print *, 'i8 = ', i8
+			res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
+
+		case (range_sub)
+
+			! TODO: str all_sub
+
+			il = subscript_eval(node, state) + 1
+
+			! This feels inconsistent and not easy to extend to higher ranks
+			right = syntax_eval(node%usubscripts(1), state)
+			iu = right%sca%i32 + 1
+
+			!print *, ''
+			!print *, 'identifier ', node%identifier%text
+			!print *, 'il = ', il
+			!print *, 'iu = ', iu
+			!print *, 'str = ', state%vars%vals(node%id_index)%sca%str%s
+
+			! Not inclusive of upper bound
+			res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(il: iu-1)
+
+		case default
+			write(*,*) err_int_prefix//'unexpected subscript kind'//color_reset
+			call internal_error()
+		end select
+
+	else if (allocated(node%lsubscripts)) then
+
+		if (state%vars%vals(node%id_index)%type /= array_type) then
+			write(*,*) err_int_prefix//'bad type, expected array'//color_reset
+			call internal_error()
+		end if
+
+		!print *, 'sub kind 1 = ', kind_name(node%lsubscripts(1)%sub_kind)
+		!print *, 'rank = ', node%val%array%rank
+
+		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+
+			! This could probably be lumped in with the range_sub case now
+			! that I have it fully generalized
+			i8 = subscript_eval(node, state)
+			!print *, 'i8 = ', i8
+			res = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
+
+		else
+
+			call get_subscript_range(node, state, lsubs, usubs, rank_res)
+
+			!print *, 'type = ', kind_name( node%val%array%type )
+
+			!print *, 'type  = ', node%val%array%type
+			!print *, 'rank  = ', node%val%array%rank
+			!print *, 'size  = ', node%val%array%size
+			!print *, 'len_  = ', node%val%array%len_
+			!print *, 'cap   = ', node%val%array%cap
+
+			allocate(res%array)
+			res%type = array_type
+			res%array%kind = expl_array
+			res%array%type = node%val%array%type
+			res%array%rank = rank_res
+
+			allocate(res%array%size( rank_res ))
+			idim_res = 1
+			do idim_ = 1, size(lsubs)
+				select case (node%lsubscripts(idim_)%sub_kind)
+				case (range_sub, all_sub)
+
+					res%array%size(idim_res) = usubs(idim_) - lsubs(idim_)
+
+					idim_res = idim_res + 1
+				end select
+			end do
+			!print *, 'res size = ', res%array%size
+
+			res%array%len_ = product(res%array%size)
+			!print *, 'res len = ', res%array%len_
+
+			call allocate_array(res%array, res%array%len_)
+
+			! Iterate through all subscripts in range and copy to result
+			! array
+			subs = lsubs
+			do i8 = 0, res%array%len_ - 1
+				!print *, 'subs = ', int(subs, 4)
+
+				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
+				call set_array_value_t(res%array, i8, &
+				     get_array_value_t(state%vars%vals(node%id_index)%array, index_))
+
+				call get_next_subscript(lsubs, usubs, subs)
+			end do
+		end if
+
+	else
+		!print *, 'name expr'
+		res = state%vars%vals(node%id_index)
+
+		! Deep copy of whole array instead of aliasing pointers
+		if (res%type == array_type) then
+			!print *, 'array  name_expr'
+
+			if (allocated(res%array)) deallocate(res%array)
+
+			allocate(res%array)
+			res%type = array_type
+			res%array = state%vars%vals(node%id_index)%array
+
+		!else
+		!	print *, 'scalar name_expr'
+		end if
+
+	end if
+
+end function eval_name_expr
 
 !===============================================================================
 
