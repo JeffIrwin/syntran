@@ -801,8 +801,6 @@ subroutine unit_test_for_1(npass, nfail)
 	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
-	real, parameter :: tol = 1.e-9
-
 	write(*,*) 'Unit testing '//label//' ...'
 
 	tests = &

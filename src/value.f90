@@ -393,7 +393,7 @@ function value_to_i64_array(val) result(ans)
 
 		case (f32_type)
 			!ans%i64 = int(val%array%f32, 4)
-			ans%i64 = val%array%f32
+			ans%i64 = int(val%array%f32, 8)
 
 		case (i32_type)
 			ans%i64 = val%array%i32
@@ -594,7 +594,6 @@ recursive function scalar_to_str(val, type) result(ans)
 	!********
 
 	character(len = 16) :: buf16
-	character(len = 32) :: buffer
 
 	select case (type)
 

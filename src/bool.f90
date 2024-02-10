@@ -369,8 +369,6 @@ subroutine is_lt_value_t(left, right, res, op_text)
 
 	!****
 
-	integer(kind = 8) :: i8
-
 	select case (magic * left%type + right%type)
 	case        (magic * i32_type + i32_type)
 		res%sca%bool = left%sca%i32 < right%sca%i32
@@ -610,8 +608,6 @@ subroutine is_le_value_t(left, right, res, op_text)
 
 	!****
 
-	integer(kind = 8) :: i8
-
 	select case (magic * left%type + right%type)
 	case        (magic * i32_type + i32_type)
 		res%sca%bool = left%sca%i32 <= right%sca%i32
@@ -844,8 +840,6 @@ subroutine and_(left, right, res, op_text)
 
 	!****
 
-	integer(kind = 8) :: i8
-
 	select case (magic * left%type + right%type)
 	case        (magic * bool_type + bool_type)
 		res%sca%bool = left%sca%bool .and. right%sca%bool
@@ -906,8 +900,6 @@ subroutine or_(left, right, res, op_text)
 
 	!****
 
-	integer(kind = 8) :: i8
-
 	select case (magic * left%type + right%type)
 	case        (magic * bool_type + bool_type)
 		res%sca%bool = left%sca%bool .or. right%sca%bool
@@ -967,8 +959,6 @@ subroutine not_(right, res, op_text)
 	character(len = *), intent(in) :: op_text
 
 	!****
-
-	integer(kind = 8) :: i8
 
 	select case (right%type)
 	case        (bool_type)

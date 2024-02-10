@@ -45,16 +45,14 @@ recursive function syntax_eval(node, state) result(res)
 
 	character(len = :), allocatable :: color
 
-	integer :: i, j, io, rank, rank_res, idim_, idim_res, larrtype, rarrtype, &
+	integer :: i, io, rank, rank_res, idim_, idim_res, larrtype, rarrtype, &
 		for_kind
-	integer(kind = 8) :: il, iu, i8, index_, prod, len8
+	integer(kind = 8) :: il, iu, i8, index_, len8
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
-	real(kind = 4) :: f, fstep
-
 	type(array_t) :: array
-	type(value_t) :: left, right, condition, lbound_, ubound_, itr, elem, &
-		step, len_, arg, arg1, arg2, array_val, lsubval, usubval, tmp
+	type(value_t) :: left, right, lbound_, ubound_, itr, &
+		step, len_, arg, arg1, arg2, array_val, tmp
 
 	!print *, 'starting syntax_eval()'
 
@@ -78,325 +76,10 @@ recursive function syntax_eval(node, state) result(res)
 	select case (node%kind)
 
 	case (literal_expr)
-		! This handles ints, bools, etc.
-		res = node%val
-		!print *, 'res = ', res%to_str()
+		res = node%val  ! this handles ints, bools, etc.
 
 	case (array_expr)
-
-		!print *, 'evaluating array_expr'
-		!print *, 'identifier = ', node%identifier%text
-
-		if (node%val%array%kind == step_array) then
-
-			lbound_ = syntax_eval(node%lbound, state)
-			step    = syntax_eval(node%step  , state)
-			ubound_ = syntax_eval(node%ubound, state)
-
-			array%type = node%val%array%type
-
-			! If any bound or step is i64, cast the others up to match
-			if (any(i64_type == [lbound_%type, step%type, ubound_%type])) then
-
-				!! this happens during parsing
-				!array%type = i64_type
-
-				call promote_i32_i64(lbound_)
-				call promote_i32_i64(step)
-				call promote_i32_i64(ubound_)
-			end if
-
-			!print *, 'lbound_ = ', lbound_%sca%i64
-			!print *, 'step32 = ', step  %sca%i32
-			!print *, 'step64 = ', step  %sca%i64
-			!print *, 'ubound_ = ', ubound_%sca%i64
-
-			if (array%type == i32_type) then
-
-				array%cap = (ubound_%sca%i32 - lbound_%sca%i32 &
-					+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
-
-				!print *, 'cap = ', array%cap
-				allocate(array%i32( array%cap ))
-
-				j = 1
-				i = lbound_%sca%i32
-				if (lbound_%sca%i32 < ubound_%sca%i32 .neqv. 0 < step%sca%i32) i = ubound_%sca%i32
-
-				! Step may be negative
-				do while ((i  < ubound_%sca%i32 .eqv. lbound_%sca%i32 < ubound_%sca%i32) &
-				     .and. i /= ubound_%sca%i32)
-					array%i32(j) = i
-					i = i + step%sca%i32
-					j = j + 1
-				end do
-				array%len_ = j - 1
-
-			else if (array%type == i64_type) then
-
-				array%cap = (ubound_%sca%i64 - lbound_%sca%i64 &
-					+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
-
-				allocate(array%i64( array%cap ))
-
-				j = 1
-				i8 = lbound_%sca%i64
-				if (lbound_%sca%i64 < ubound_%sca%i64 .neqv. 0 < step%sca%i64) then
-					i8 = ubound_%sca%i64
-				end if
-
-				! Step may be negative
-				do while ((i8  < ubound_%sca%i64 .eqv. lbound_%sca%i64 < ubound_%sca%i64) &
-				     .and. i8 /= ubound_%sca%i64)
-					array%i64(j) = i8
-					i8 = i8 + step%sca%i64
-					j = j + 1
-				end do
-				array%len_ = j - 1
-
-			else if (array%type == f32_type) then
-
-				!print *, 'lbound_, ubound_ = ', lbound_%sca%f32, ubound_%sca%f32
-				!print *, 'step = ', step%sca%f32
-
-				array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
-				allocate(array%f32( array%cap ))
-
-				j = 1
-				f = lbound_%sca%f32
-				if (lbound_%sca%f32 < ubound_%sca%f32 .neqv. 0 < step%sca%f32) f = ubound_%sca%f32
-
-				do while ((f  < ubound_%sca%f32 .eqv. lbound_%sca%f32 < ubound_%sca%f32) &
-				     .and. f /= ubound_%sca%f32)
-					array%f32(j) = f
-
-					! Using only addition here seems more efficient, but
-					! rounding errors accumulate differently.  Compare
-					! `[0.0: 0.1: 0.9];` with both methods.  First ends in
-					! 0.800001, while second method (with multiplication) ends
-					! in 0.8
-
-					!f = f + step%sca%f32
-					f = lbound_%sca%f32 + j * step%sca%f32
-
-					j = j + 1
-				end do
-				array%len_ = j - 1
-				!array%len_ = array%cap
-
-			else
-				write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
-				call internal_error()
-			end if
-
-			array%rank = 1
-			allocate(array%size( array%rank ))
-			array%size = array%len_
-
-			allocate(res%array)
-			res%type  = array_type
-			res%array = array
-
-		else if (node%val%array%kind == len_array) then
-
-			!print *, 'len array'
-			lbound_ = syntax_eval(node%lbound, state)
-			ubound_ = syntax_eval(node%ubound, state)
-			len_    = syntax_eval(node%len_  , state)
-
-			array%type = node%val%array%type
-			array%len_  = len_%to_i64()
-			array%cap  = array%len_
-
-			if (array%type == f32_type) then
-
-				allocate(array%f32( array%cap ))
-				fstep = (ubound_%sca%f32 - lbound_%sca%f32) &
-					/ real((len_%to_i64() - 1))
-
-				do i = 0, len_%to_i32() - 1
-					array%f32(i+1) = lbound_%sca%f32 + i * fstep
-				end do
-
-			else
-				write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
-				call internal_error()
-			end if
-
-			array%rank = 1
-			allocate(array%size( array%rank ))
-			array%size = array%len_
-
-			allocate(res%array)
-
-			res%type  = array_type
-			res%array = array
-
-		else if (node%val%array%kind == unif_array) then
-
-			array%rank = size( node%size )
-			allocate(array%size( array%rank ))
-
-			do i = 1, array%rank
-				len_ = syntax_eval(node%size(i), state)
-				array%size(i) = len_%to_i64()
-				!print *, 'size['//str(i)//'] = ', array%size(i)
-			end do
-
-			! Uniform-value impl arrays (every element has the same value at
-			! initialization, and you could say "constant" but they are of
-			! course mutable)
-
-			!print *, 'len array'
-			lbound_ = syntax_eval(node%lbound, state)
-
-			! Allocate in one shot without growing
-
-			array%type = node%val%array%type
-			array%len_  = product(array%size)
-			!print *, 'array%len_ = ', array%len_
-
-			call allocate_array(array, array%len_)
-			select case (array%type)
-			case (i32_type)
-				array%i32 = lbound_%sca%i32
-			case (i64_type)
-				array%i64 = lbound_%sca%i64
-			case (f32_type)
-				array%f32 = lbound_%sca%f32
-			case (bool_type)
-				array%bool = lbound_%sca%bool
-			case (str_type)
-				array%str = lbound_%sca%str
-			case default
-				write(*,*) err_eval_len_array(kind_name(array%type))
-				call internal_error()
-			end select
-
-			allocate(res%array)
-			res%type  = array_type
-			res%array = array
-
-		else if (node%val%array%kind == bound_array) then
-			!print *, 'impl_array'
-
-			! Expand implicit array kinds here on evaluation.  Consider
-			! something like this:
-			!
-			!     let a = [0: 5];
-			!     a[2] = -3;
-			!
-			! Even though a is initialized to an implicit array, the second
-			! statement requires it to be explicit, so we might as well expand
-			! at initialization
-
-			lbound_ = syntax_eval(node%lbound, state)
-			ubound_ = syntax_eval(node%ubound, state)
-
-			!array = new_array(node%val%array%type)
-
-			array%type = node%val%array%type
-
-			if (any(i64_type == [lbound_%type, ubound_%type])) then
-				call promote_i32_i64(lbound_)
-				call promote_i32_i64(ubound_)
-			end if
-
-			if (.not. any(array%type == [i32_type, i64_type])) then
-				write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
-				call internal_error()
-			end if
-
-			if (array%type == i32_type) then
-				array%len_ = ubound_%sca%i32 - lbound_%sca%i32
-			else !if (array%type == i64_type) then
-				array%len_ = ubound_%sca%i64 - lbound_%sca%i64
-			end if
-
-			call allocate_array(array, array%len_)
-
-			!print *, 'bounds in [', lbound_%str(), ': ', ubound_%str(), ']'
-			!print *, 'node%val%array%type = ', node%val%array%type
-
-			if (array%type == i32_type) then
-				do i = lbound_%sca%i32, ubound_%sca%i32 - 1
-					array%i32(i - lbound_%sca%i32 + 1) = i
-				end do
-			else !if (array%type == i64_type) then
-				do i8 = lbound_%sca%i64, ubound_%sca%i64 - 1
-					array%i64(i8 - lbound_%sca%i64 + 1) = i8
-				end do
-			end if
-
-			array%rank = 1
-			allocate(array%size( array%rank ))
-			array%size = array%len_
-
-			allocate(res%array)
-
-			res%type  = array_type
-			res%array = array
-
-		else if (node%val%array%kind == size_array) then
-
-			! Explicit array with size
-
-			array = new_array(node%val%array%type, size(node%elems))
-
-			do i = 1, size(node%elems)
-				elem = syntax_eval(node%elems(i), state)
-				!print *, 'elem['//str(i)//'] = ', elem%str()
-				call array%push(elem)
-			end do
-
-			array%rank = size( node%size )
-			allocate(array%size( array%rank ))
-			do i = 1, array%rank
-				len_ = syntax_eval(node%size(i), state)
-				array%size(i) = len_%to_i64()
-			end do
-
-			if (size(node%elems) /= product(array%size)) then
-				write(*,*) err_rt_prefix//"size of explicit array "// &
-					"does not match number of elements"//color_reset
-				call internal_error()
-			end if
-
-			!print *, 'copying array'
-			allocate(res%array)
-			res%type  = array_type
-			res%array = array
-			!print *, 'done'
-
-		else if (node%val%array%kind == expl_array) then
-			!print *, 'expl_array'
-
-			! Explicit rank-1 arrays
-
-			! TODO: allow empty arrays?  Sub type of empty array?  Empty arrays
-			! can currently be created like [0: -1];
-			array = new_array(node%val%array%type, size(node%elems))
-
-			do i = 1, size(node%elems)
-				elem = syntax_eval(node%elems(i), state)
-				!print *, 'elem['//str(i)//'] = ', elem%str()
-				call array%push(elem)
-			end do
-
-			array%rank = 1
-			allocate(array%size( array%rank ))
-			array%size = array%len_
-
-			!print *, 'copying array'
-			allocate(res%array)
-			res%type  = array_type
-			res%array = array
-			!print *, 'done'
-
-		else
-			write(*,*) err_int_prefix//'unexpected array kind'//color_reset
-			call internal_error()
-		end if
+		res = eval_array_expr(node, state)
 
 	case (for_statement)
 
@@ -1254,6 +937,344 @@ end function syntax_eval
 
 !===============================================================================
 
+function eval_array_expr(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	integer :: i, j
+	integer(kind = 8) :: i8
+
+	real(kind = 4) :: f, fstep
+
+	type(array_t) :: array
+	type(value_t) :: lbound_, ubound_, elem, &
+		step, len_
+
+
+	!print *, 'evaluating array_expr'
+	!print *, 'identifier = ', node%identifier%text
+
+	if (node%val%array%kind == step_array) then
+
+		lbound_ = syntax_eval(node%lbound, state)
+		step    = syntax_eval(node%step  , state)
+		ubound_ = syntax_eval(node%ubound, state)
+
+		array%type = node%val%array%type
+
+		! If any bound or step is i64, cast the others up to match
+		if (any(i64_type == [lbound_%type, step%type, ubound_%type])) then
+
+			!! this happens during parsing
+			!array%type = i64_type
+
+			call promote_i32_i64(lbound_)
+			call promote_i32_i64(step)
+			call promote_i32_i64(ubound_)
+		end if
+
+		!print *, 'lbound_ = ', lbound_%sca%i64
+		!print *, 'step32 = ', step  %sca%i32
+		!print *, 'step64 = ', step  %sca%i64
+		!print *, 'ubound_ = ', ubound_%sca%i64
+
+		if (array%type == i32_type) then
+
+			array%cap = (ubound_%sca%i32 - lbound_%sca%i32 &
+				+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
+
+			!print *, 'cap = ', array%cap
+			allocate(array%i32( array%cap ))
+
+			j = 1
+			i = lbound_%sca%i32
+			if (lbound_%sca%i32 < ubound_%sca%i32 .neqv. 0 < step%sca%i32) i = ubound_%sca%i32
+
+			! Step may be negative
+			do while ((i  < ubound_%sca%i32 .eqv. lbound_%sca%i32 < ubound_%sca%i32) &
+			     .and. i /= ubound_%sca%i32)
+				array%i32(j) = i
+				i = i + step%sca%i32
+				j = j + 1
+			end do
+			array%len_ = j - 1
+
+		else if (array%type == i64_type) then
+
+			array%cap = (ubound_%sca%i64 - lbound_%sca%i64 &
+				+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
+
+			allocate(array%i64( array%cap ))
+
+			j = 1
+			i8 = lbound_%sca%i64
+			if (lbound_%sca%i64 < ubound_%sca%i64 .neqv. 0 < step%sca%i64) then
+				i8 = ubound_%sca%i64
+			end if
+
+			! Step may be negative
+			do while ((i8  < ubound_%sca%i64 .eqv. lbound_%sca%i64 < ubound_%sca%i64) &
+			     .and. i8 /= ubound_%sca%i64)
+				array%i64(j) = i8
+				i8 = i8 + step%sca%i64
+				j = j + 1
+			end do
+			array%len_ = j - 1
+
+		else if (array%type == f32_type) then
+
+			!print *, 'lbound_, ubound_ = ', lbound_%sca%f32, ubound_%sca%f32
+			!print *, 'step = ', step%sca%f32
+
+			array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
+			allocate(array%f32( array%cap ))
+
+			j = 1
+			f = lbound_%sca%f32
+			if (lbound_%sca%f32 < ubound_%sca%f32 .neqv. 0 < step%sca%f32) f = ubound_%sca%f32
+
+			do while ((f  < ubound_%sca%f32 .eqv. lbound_%sca%f32 < ubound_%sca%f32) &
+			     .and. f /= ubound_%sca%f32)
+				array%f32(j) = f
+
+				! Using only addition here seems more efficient, but
+				! rounding errors accumulate differently.  Compare
+				! `[0.0: 0.1: 0.9];` with both methods.  First ends in
+				! 0.800001, while second method (with multiplication) ends
+				! in 0.8
+
+				!f = f + step%sca%f32
+				f = lbound_%sca%f32 + j * step%sca%f32
+
+				j = j + 1
+			end do
+			array%len_ = j - 1
+			!array%len_ = array%cap
+
+		else
+			write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
+			call internal_error()
+		end if
+
+		array%rank = 1
+		allocate(array%size( array%rank ))
+		array%size = array%len_
+
+		allocate(res%array)
+		res%type  = array_type
+		res%array = array
+
+	else if (node%val%array%kind == len_array) then
+
+		!print *, 'len array'
+		lbound_ = syntax_eval(node%lbound, state)
+		ubound_ = syntax_eval(node%ubound, state)
+		len_    = syntax_eval(node%len_  , state)
+
+		array%type = node%val%array%type
+		array%len_  = len_%to_i64()
+		array%cap  = array%len_
+
+		if (array%type == f32_type) then
+
+			allocate(array%f32( array%cap ))
+			fstep = (ubound_%sca%f32 - lbound_%sca%f32) &
+				/ real((len_%to_i64() - 1))
+
+			do i = 0, len_%to_i32() - 1
+				array%f32(i+1) = lbound_%sca%f32 + i * fstep
+			end do
+
+		else
+			write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
+			call internal_error()
+		end if
+
+		array%rank = 1
+		allocate(array%size( array%rank ))
+		array%size = array%len_
+
+		allocate(res%array)
+
+		res%type  = array_type
+		res%array = array
+
+	else if (node%val%array%kind == unif_array) then
+
+		array%rank = size( node%size )
+		allocate(array%size( array%rank ))
+
+		do i = 1, array%rank
+			len_ = syntax_eval(node%size(i), state)
+			array%size(i) = len_%to_i64()
+			!print *, 'size['//str(i)//'] = ', array%size(i)
+		end do
+
+		! Uniform-value impl arrays (every element has the same value at
+		! initialization, and you could say "constant" but they are of
+		! course mutable)
+
+		!print *, 'len array'
+		lbound_ = syntax_eval(node%lbound, state)
+
+		! Allocate in one shot without growing
+
+		array%type = node%val%array%type
+		array%len_  = product(array%size)
+		!print *, 'array%len_ = ', array%len_
+
+		call allocate_array(array, array%len_)
+		select case (array%type)
+		case (i32_type)
+			array%i32 = lbound_%sca%i32
+		case (i64_type)
+			array%i64 = lbound_%sca%i64
+		case (f32_type)
+			array%f32 = lbound_%sca%f32
+		case (bool_type)
+			array%bool = lbound_%sca%bool
+		case (str_type)
+			array%str = lbound_%sca%str
+		case default
+			write(*,*) err_eval_len_array(kind_name(array%type))
+			call internal_error()
+		end select
+
+		allocate(res%array)
+		res%type  = array_type
+		res%array = array
+
+	else if (node%val%array%kind == bound_array) then
+		!print *, 'impl_array'
+
+		! Expand implicit array kinds here on evaluation.  Consider
+		! something like this:
+		!
+		!     let a = [0: 5];
+		!     a[2] = -3;
+		!
+		! Even though a is initialized to an implicit array, the second
+		! statement requires it to be explicit, so we might as well expand
+		! at initialization
+
+		lbound_ = syntax_eval(node%lbound, state)
+		ubound_ = syntax_eval(node%ubound, state)
+
+		!array = new_array(node%val%array%type)
+
+		array%type = node%val%array%type
+
+		if (any(i64_type == [lbound_%type, ubound_%type])) then
+			call promote_i32_i64(lbound_)
+			call promote_i32_i64(ubound_)
+		end if
+
+		if (.not. any(array%type == [i32_type, i64_type])) then
+			write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
+			call internal_error()
+		end if
+
+		if (array%type == i32_type) then
+			array%len_ = ubound_%sca%i32 - lbound_%sca%i32
+		else !if (array%type == i64_type) then
+			array%len_ = ubound_%sca%i64 - lbound_%sca%i64
+		end if
+
+		call allocate_array(array, array%len_)
+
+		!print *, 'bounds in [', lbound_%str(), ': ', ubound_%str(), ']'
+		!print *, 'node%val%array%type = ', node%val%array%type
+
+		if (array%type == i32_type) then
+			do i = lbound_%sca%i32, ubound_%sca%i32 - 1
+				array%i32(i - lbound_%sca%i32 + 1) = i
+			end do
+		else !if (array%type == i64_type) then
+			do i8 = lbound_%sca%i64, ubound_%sca%i64 - 1
+				array%i64(i8 - lbound_%sca%i64 + 1) = i8
+			end do
+		end if
+
+		array%rank = 1
+		allocate(array%size( array%rank ))
+		array%size = array%len_
+
+		allocate(res%array)
+
+		res%type  = array_type
+		res%array = array
+
+	else if (node%val%array%kind == size_array) then
+
+		! Explicit array with size
+
+		array = new_array(node%val%array%type, size(node%elems))
+
+		do i = 1, size(node%elems)
+			elem = syntax_eval(node%elems(i), state)
+			!print *, 'elem['//str(i)//'] = ', elem%str()
+			call array%push(elem)
+		end do
+
+		array%rank = size( node%size )
+		allocate(array%size( array%rank ))
+		do i = 1, array%rank
+			len_ = syntax_eval(node%size(i), state)
+			array%size(i) = len_%to_i64()
+		end do
+
+		if (size(node%elems) /= product(array%size)) then
+			write(*,*) err_rt_prefix//"size of explicit array "// &
+				"does not match number of elements"//color_reset
+			call internal_error()
+		end if
+
+		!print *, 'copying array'
+		allocate(res%array)
+		res%type  = array_type
+		res%array = array
+		!print *, 'done'
+
+	else if (node%val%array%kind == expl_array) then
+		!print *, 'expl_array'
+
+		! Explicit rank-1 arrays
+
+		! TODO: allow empty arrays?  Sub type of empty array?  Empty arrays
+		! can currently be created like [0: -1];
+		array = new_array(node%val%array%type, size(node%elems))
+
+		do i = 1, size(node%elems)
+			elem = syntax_eval(node%elems(i), state)
+			!print *, 'elem['//str(i)//'] = ', elem%str()
+			call array%push(elem)
+		end do
+
+		array%rank = 1
+		allocate(array%size( array%rank ))
+		array%size = array%len_
+
+		!print *, 'copying array'
+		allocate(res%array)
+		res%type  = array_type
+		res%array = array
+		!print *, 'done'
+
+	else
+		write(*,*) err_int_prefix//'unexpected array kind'//color_reset
+		call internal_error()
+	end if
+
+end function eval_array_expr
+
+!===============================================================================
+
 function eval_while_statement(node, state) result(res)
 
 	type(syntax_node_t), intent(in) :: node
@@ -1725,7 +1746,7 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 	case (bound_array)
 
 		if (val%type == i32_type) then
-			val%sca%i32 = lbound_%sca%i32 + i - 1
+			val%sca%i32 = lbound_%sca%i32 + int(i) - 1
 		else !if (val%type == i64_type) then
 			val%sca%i64 = lbound_%sca%i64 + i - 1
 		end if
@@ -1734,19 +1755,19 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 		select case (val%type)
 		case (i32_type)
-			val%sca%i32 = lbound_%sca%i32 + (i - 1) * step%sca%i32
+			val%sca%i32 = lbound_%sca%i32 + int(i - 1) * step%sca%i32
 
 		case (i64_type)
 			val%sca%i64 = lbound_%sca%i64 + (i - 1) * step%sca%i64
 
 		case (f32_type)
-			val%sca%f32 = lbound_%sca%f32 + (i - 1) * step%sca%f32
+			val%sca%f32 = lbound_%sca%f32 + real(i - 1) * step%sca%f32
 
 		end select
 
 	case (len_array)
 
-		val%sca%f32 = lbound_%sca%f32 + (i - 1) * &
+		val%sca%f32 = lbound_%sca%f32 + real(i - 1) * &
 			(ubound_%sca%f32 - lbound_%sca%f32) / real((len_%to_i64() - 1))
 
 	case (expl_array, size_array)

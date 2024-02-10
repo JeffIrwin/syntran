@@ -261,8 +261,7 @@ module function parse_array_expr(parser) result(expr)
 				! lbound_ type and ubound_ type do not match for length-based array
 				span = new_span(lb_beg, ub_end - lb_beg + 1)
 				call parser%diagnostics%push(err_bound_type_mismatch( &
-					parser%context(), span, &
-					parser%text(lb_beg, ub_end)))
+					parser%context(), span))
 			end if
 
 			if (lbound_%val%type /= f32_type) then
