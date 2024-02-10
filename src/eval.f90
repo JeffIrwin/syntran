@@ -43,16 +43,11 @@ recursive function syntax_eval(node, state) result(res)
 
 	!********
 
-	character(len = :), allocatable :: color
-
-	integer :: i, io, rank, rank_res, idim_, idim_res, larrtype, rarrtype, &
-		for_kind
-	integer(kind = 8) :: il, iu, i8, index_, len8
+	integer :: rank_res, idim_, idim_res, larrtype, rarrtype
+	integer(kind = 8) :: il, iu, i8, index_
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
-	type(array_t) :: array
-	type(value_t) :: left, right, lbound_, ubound_, itr, &
-		step, len_, arg, arg1, arg2, array_val, tmp
+	type(value_t) :: left, right
 
 	!print *, 'starting syntax_eval()'
 
@@ -82,163 +77,7 @@ recursive function syntax_eval(node, state) result(res)
 		res = eval_array_expr(node, state)
 
 	case (for_statement)
-
-		! Evaluate all of these ahead of loop, but only if they are allocated!
-		if (allocated(node%array%lbound)) lbound_ = syntax_eval(node%array%lbound, state)
-		if (allocated(node%array%step  )) step    = syntax_eval(node%array%step  , state)
-		if (allocated(node%array%ubound)) ubound_ = syntax_eval(node%array%ubound, state)
-		if (allocated(node%array%len_  )) len_    = syntax_eval(node%array%len_  , state)
-
-		!print *, 'lbound_ = ', lbound_%to_i64()
-		!print *, 'ubound_ = ', ubound_%to_i64()
-		!print *, 'lbound type = ', kind_name(lbound_%type)
-		!print *, 'ubound type = ', kind_name(ubound_%type)
-		!print *, 'node%array%type = ', kind_name(node%array%val%array%type)
-
-		!print *, 'node array kind = ', kind_name(node%array%kind)
-		!print *, 'array kind      = ', kind_name(node%array%val%array%kind)
-
-		select case (node%array%kind)
-		case (array_expr)
-
-			! Primary array exprs are evaluated lazily without wasting memory
-			for_kind = node%array%val%array%kind
-
-			select case (node%array%val%array%kind)
-			case (bound_array)
-
-				! Do promotion once before loop
-				if (any(i64_type == [lbound_%type, ubound_%type])) then
-					!print *, 'promoting'
-					call promote_i32_i64(lbound_)
-					call promote_i32_i64(ubound_)
-					itr%type = i64_type
-				else
-					itr%type = i32_type
-				end if
-
-				if (.not. any(itr%type == [i32_type, i64_type])) then
-					write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
-					call internal_error()
-				end if
-
-				len8 = ubound_%to_i64() - lbound_%to_i64()
-
-			case (step_array)
-
-				! If any bound or step is i64, cast the others up to match
-				if (any(i64_type == [lbound_%type, step%type, ubound_%type])) then
-					call promote_i32_i64(lbound_)
-					call promote_i32_i64(step)
-					call promote_i32_i64(ubound_)
-					itr%type = i64_type
-				else
-					itr%type = lbound_%type
-				end if
-
-				select case (itr%type)
-				case (i32_type)
-					len8 = (ubound_%sca%i32 - lbound_%sca%i32 &
-						+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
-
-				case (i64_type)
-					len8 = (ubound_%sca%i64 - lbound_%sca%i64 &
-						+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
-
-				case (f32_type)
-					len8 = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
-
-				case default
-					write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
-					call internal_error()
-				end select
-
-			case (len_array)
-
-				itr%type = node%array%val%array%type
-
-				select case (itr%type)
-				case (f32_type)
-					len8 = len_%to_i64()
-				case default
-					write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
-					call internal_error()
-				end select
-
-			case (expl_array)
-				len8 = node%array%val%array%len_
-
-			case (size_array)
-
-				rank = size( node%array%size )
-				len8 = 1
-				do i = 1, rank
-					len_ = syntax_eval(node%array%size(i), state)
-					len8 = len8 * len_%to_i64()
-				end do
-
-				if (size(node%array%elems) /= len8) then
-					write(*,*) err_rt_prefix//"size of explicit array "// &
-						"does not match number of elements"//color_reset
-					call internal_error()
-				end if
-
-			case (unif_array)
-
-				rank = size(node%array%size)
-				!print *, 'rank = ', rank
-				len8 = 1
-				do i = 1, rank
-					len_ = syntax_eval(node%array%size(i), state)
-					len8 = len8 * len_%to_i64()
-				end do
-				!print *, 'len8 = ', len8
-
-			case default
-				write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
-				call internal_error()
-			end select
-
-		case default
-			!print *, 'non-primary array expression'
-
-			! Any non-primitive array needs to be evaluated before iterating
-			! over it.  Parser guarantees that this is an array
-			!
-			! Unlike step_array, itr%type does not need to be set here because
-			! it is set in array_at() (via get_array_value_t())
-			for_kind = array_expr
-
-			tmp = syntax_eval(node%array, state)
-			array = tmp%array
-
-			len8 = array%len_
-			!print *, 'len8 = ', len8
-
-		end select
-
-		!print *, 'itr%type = ', kind_name(itr%type)
-
-		! Push scope to make the loop iterator local
-		call state%vars%push_scope()
-		do i8 = 1, len8
-
-			call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
-				len_, array, node%array%elems, state)
-
-			!print *, 'itr = ', itr%to_str()
-
-			! During evaluation, insert variables by array id_index instead of
-			! dict lookup.  This is much faster and can be done during
-			! evaluation now that we know all of the variable identifiers.
-			! Parsing still needs to rely on dictionary lookups because it does
-			! not know the entire list of variable identifiers ahead of time
-			state%vars%vals(node%id_index) = itr
-
-			res = syntax_eval(node%body, state)
-
-		end do
-		call state%vars%pop_scope()
+		res = eval_for_statement(node, state)
 
 	case (while_statement)
 		res = eval_while_statement(node, state)
@@ -247,193 +86,13 @@ recursive function syntax_eval(node, state) result(res)
 		res = eval_if_statement(node, state)
 
 	case (translation_unit)
-
-		! TODO: do we want to globally push/pop scope for whole
-		! translation_unit?  Will this have impacts on interpretting multiple
-		! files, or allowing the user to override intrinsic fns?
-		!call vars%push_scope()
-
-		! The final statement of a unit returns the actual result.  Non-final
-		! members only change the (vars) state or define fns
-		do i = 1, size(node%members)
-
-			! Only eval statements, not fns declarations.  TODO: cycle structs
-			! too.
-			!
-			! TODO: is this where we should copy fn dict to array?
-			if (node%members(i)%kind == fn_declaration) cycle
-
-			res = syntax_eval(node%members(i), state)
-
-			!print *, 'kind = ', node%members(i)%kind
-			!print *, i, ' res = ', res%to_str()
-			!print *, ''
-
-			! HolyC feature: implicitly print name expression members.  I may
-			! remove this after I implement an intrinsic print() fn.  May also
-			! need to suppress this for void fn calls later
-			if (node%members(i)%kind == name_expr .and. .not. state%quiet) then
-				write(*,*) res%to_str()
-			end if
-
-		end do
-
-		!call state%vars%pop_scope()
+		res = eval_translation_unit(node, state)
 
 	case (block_statement)
 		res = eval_block_statement(node, state)
 
 	case (assignment_expr)
-
-		if (.not. allocated(node%lsubscripts)) then
-
-			!! This deallocation will cause a crash when an array appears on both
-			!! the LHS and RHS of fn_call assignment, e.g. `dv = diff_(dv, i)` in
-			!! AOC 2023/09
-			!if (allocated(state%vars%vals)) then
-			!if (allocated(state%vars%vals(node%id_index)%array)) then
-			!	!print *, "deallocating lhs array"
-			!	deallocate(state%vars%vals(node%id_index)%array)
-			!end if
-			!end if
-
-			! Assign return value
-			!print *, 'eval and set res'
-			res = syntax_eval(node%right, state)
-
-			! TODO: test int/float casting.  It should be an error during
-			! parsing
-
-			!print *, 'compound assign'
-			!print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
-
-			call compound_assign(state%vars%vals(node%id_index), res, node%op)
-
-			! For compound assignment, ensure that the LHS is returned
-			!print *, 'setting res again'
-			res = state%vars%vals(node%id_index)
-			!print *, 'done'
-
-			! The difference between let and assign is inserting into the
-			! current scope (let) vs possibly searching parent scopes (assign).
-			! During evaluation we don't need any extra logic for scoping.  The
-			! parser has already assigned a separate id_index for each
-			! identifier at each scope level
-
-		else
-			!print *, 'LHS array subscript assignment'
-			!print *, 'LHS type = ', kind_name(state%vars%vals(node%id_index)%array%type)  ! not alloc for str
-
-			! Assign return value from RHS
-			res = syntax_eval(node%right, state)
-
-			!print *, 'RHS = ', res%to_str()
-
-			if (state%vars%vals(node%id_index)%type == str_type) then
-				!print *, 'str_type'
-
-				! TODO: ban compound character substring assignment
-				i8 = subscript_eval(node, state)
-				state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1) = res%sca%str%s
-
-			else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
-
-				!print *, 'non str_type scalar subscript'
-				!print *, 'LHS array type = ', &
-				!	state%vars%vals(node%id_index)%array%type
-				!print *, 'LHS array = ', state%vars%vals(node%id_index)%array%i32
-
-				i8 = subscript_eval(node, state)
-				array_val = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
-				call compound_assign(array_val, res, node%op)
-				call set_array_value_t( &
-					state%vars%vals(node%id_index)%array, i8, array_val)
-				res = array_val
-
-			else
-
-				!print *, 'lhs slice assignment'
-
-				call get_subscript_range(node, state, lsubs, usubs, rank_res)
-				len8 = product(usubs - lsubs)
-				!print *, 'len8 = ', len8
-
-				! TODO: some size/shape checking might be needed here between
-				! LHS and RHS
-
-				! Scalar rhs
-				if (res%type /= array_type) array_val = res
-
-				! Iterate through all subscripts in range and copy to result
-				! array
-				subs = lsubs
-				do i8 = 0, len8 - 1
-
-					!print *, 'subs = ', int(subs, 4)
-
-					! This is confusing.  Maybe rename array_val -> rhs_val and
-					! tmp -> lhs_val or something
-
-					if (res%type == array_type) then
-						array_val = get_array_value_t(res%array, i8)
-					end if
-
-					index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-					tmp  = get_array_value_t(state%vars%vals(node%id_index)%array, index_)
-					call compound_assign(tmp, array_val, node%op)
-					call set_array_value_t(state%vars%vals(node%id_index)%array, index_, tmp)
-
-					!! move conditions out of loop for perf?
-					!if (res%type == array_type) then
-					!	call set_array_value_t(res%array, i8, tmp)
-					!else
-
-					!	! this makes the res return value a scalar.  Maybe
-					!	! not correct for fn return values or paren exprs, at
-					!	! least it's not consistent with the way that array rhs
-					!	! vals work.  Maybe I will make a breaking change on the
-					!	! return value here because copying res val can also
-					!	! have a large perf overhead.
-					!	res = tmp
-
-					!	! This is illegal in python numpy:
-					!	!
-					!	! >>> import numpy as np
-					!	! >>> a = np.arange(1, 6)
-					!	! >>> b = (a[1:4] := 3)
-					!	!   File "<stdin>", line 1
-					!	!     b = (a[1:4] := 3)
-					!	!          ^^^^^^
-					!	! SyntaxError: cannot use assignment expressions with subscript
-					!	! >>>
-					!	!
-					!	! Of course, such an assignment is legal as its own
-					!	! statement without the "walrus" operator `:=` :
-					!	!
-					!	! >>> a[1:4] = 3
-					!	! >>> a
-					!	!     # [1, 3, 3, 3, 5]
-					!	!
-					!	! I believe it is illegal in python because of the
-					!	! ambiguity of what should `b` be if it is assigned.
-					!	! Should `b` be the whole `a` array as in syntran, or
-					!	! just the slice `a[1:4]`, or just the scalar `3`?
-					!	!
-					!	! I think there's a good case to be made that it should
-					!	! be the slice `a[1:4]`, but the implementation is more
-					!	! simple by setting `b` to the whole array `a`.
-
-					!end if
-
-					call get_next_subscript(lsubs, usubs, subs)
-				end do
-
-				! set res (whole array (slice?)) for return val in case of
-				! compound assignment.  see note above re walrus operator
-				res = state%vars%vals(node%id_index)
-
-			end if
-		end if
+		res = eval_assignment_expr(node, state)
 
 	case (let_expr)
 
@@ -444,280 +103,7 @@ recursive function syntax_eval(node, state) result(res)
 		state%vars%vals(node%id_index) = res
 
 	case (fn_call_expr)
-
-		!print *, 'eval fn_call_expr'
-		!print *, 'fn identifier = ', node%identifier%text
-		!print *, 'fn id_index   = ', node%id_index
-
-		res%type = node%val%type
-
-		!print *, 'res type = ', res%type
-
-		! Intrinsic fns
-		select case (node%identifier%text)
-		case ("exp")
-
-			arg1 = syntax_eval(node%args(1), state)
-			res%sca%f32 = exp(arg1%sca%f32)
-
-		case ("0min_i32")
-
-			arg = syntax_eval(node%args(1), state)
-			res%sca%i32 = arg%sca%i32
-
-			! Note that min/max/println etc. are variadic, so we loop to
-			! size(node%args) instead of size(node%params)
-
-			do i = 2, size(node%args)
-				arg = syntax_eval(node%args(i), state)
-				res%sca%i32 = min(res%sca%i32, arg%sca%i32)
-			end do
-
-		case ("0min_i64")
-
-			arg = syntax_eval(node%args(1), state)
-			res%sca%i64 = arg%sca%i64
-
-			do i = 2, size(node%args)
-				arg = syntax_eval(node%args(i), state)
-				res%sca%i64 = min(res%sca%i64, arg%sca%i64)
-			end do
-
-		case ("0max_i32")
-
-			arg = syntax_eval(node%args(1), state)
-			res%sca%i32 = arg%sca%i32
-
-			do i = 2, size(node%args)
-				arg = syntax_eval(node%args(i), state)
-				res%sca%i32 = max(res%sca%i32, arg%sca%i32)
-			end do
-
-		case ("0max_i64")
-
-			arg = syntax_eval(node%args(1), state)
-			res%sca%i64 = arg%sca%i64
-
-			do i = 2, size(node%args)
-				arg = syntax_eval(node%args(i), state)
-				res%sca%i64 = max(res%sca%i64, arg%sca%i64)
-			end do
-
-		case ("println")
-
-			do i = 1, size(node%args)
-				arg = syntax_eval(node%args(i), state)
-				write(output_unit, '(a)', advance = 'no') arg%to_str()
-			end do
-			write(output_unit, *)
-
-			!! TODO: what, if anything, should println return?
-			!res%sca%i32 = 0
-
-		case ("str")
-
-			res%sca%str%s = ''
-			do i = 1, size(node%args)
-				arg = syntax_eval(node%args(i), state)
-				res%sca%str%s = res%sca%str%s // arg%to_str()  ! TODO: use char_vector_t
-			end do
-
-		case ("len")
-
-			arg = syntax_eval(node%args(1), state)
-			res%sca%i32 = len(arg%sca%str%s, 4)
-			!res%sca%i32 = mylen( arg%sca%str%s )
-
-		case ("parse_i32")
-
-			arg = syntax_eval(node%args(1), state)
-			read(arg%sca%str%s, *) res%sca%i32  ! TODO: catch iostat
-
-		case ("parse_i64")
-
-			arg = syntax_eval(node%args(1), state)
-			read(arg%sca%str%s, *) res%sca%i64  ! TODO: catch iostat
-
-		case ("0i32_sca")
-
-			arg = syntax_eval(node%args(1), state)
-			res%sca%i32 = arg%to_i32()
-
-		case ("0i32_arr")
-
-			arg = syntax_eval(node%args(1), state)
-			res%array = arg%to_i32_array()
-
-		case ("0i64_sca")
-
-			arg = syntax_eval(node%args(1), state)
-			res%sca%i64 = arg%to_i64()
-
-		case ("0i64_arr")
-
-			arg = syntax_eval(node%args(1), state)
-			res%array = arg%to_i64_array()
-
-		case ("open")
-
-			arg = syntax_eval(node%args(1), state)
-
-			! TODO: catch iostat, e.g. same file opened twice, folder doesn't
-			! exist, etc.
-			open(newunit = res%sca%file_%unit_, file = arg%sca%str%s)
-
-			!print *, 'opened unit ', res%sca%file_%unit_
-			res%sca%file_%name_ = arg%sca%str%s
-			res%sca%file_%eof = .false.
-
-		case ("readln")
-
-			arg1 = syntax_eval(node%args(1), state)
-
-			!print *, "reading from unit", arg1%sca%file_%unit_
-			res%sca%str%s = read_line(arg1%sca%file_%unit_, io)
-			!print *, 'done reading'
-
-			! This could be a very dangerous side effect!  The file argument of
-			! readln() acts as an out-arg:  it's eof flag can be toggled on.  I
-			! don't have out-args anywhere else so I may want to rethink this
-			! :exploding-head:
-			!
-			! writeln() does not need to mess with the vars struct like this
-			! because the file is the actual return value for that fn
-
-			!!print *, 'ident = ', node%args(1)%identifier%text
-			!!state%vars%vals(node%id_index) = res
-
-			! TODO:  set eof flag or crash for other non-zero io
-			if (io == iostat_end) then
-			!if (io /= 0) then
-				!arg1%sca%file_%eof = .true.
-				state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
-			end if
-			!print *, 'eof   = ', arg1%sca%file_%eof
-
-		case ("writeln")
-
-			arg1 = syntax_eval(node%args(1), state)
-
-			!print *, 'writing to unit ', arg1%sca%file_%unit_
-			do i = 2, size(node%args)
-				arg = syntax_eval(node%args(i), state)
-				write(arg1%sca%file_%unit_, '(a)', advance = 'no') arg%to_str()
-			end do
-			write(arg1%sca%file_%unit_, *)
-
-		case ("eof")
-
-			arg1 = syntax_eval(node%args(1), state)
-
-			!print *, "checking eof for unit", arg1%sca%file_%unit_
-			res%sca%bool = arg1%sca%file_%eof
-
-			!print *, 'eof fn = ', arg1%sca%file_%eof
-
-		case ("close")
-			arg = syntax_eval(node%args(1), state)
-			!print *, 'closing unit ', arg%sca%file_%unit_
-			close(arg%sca%file_%unit_)
-
-		case ("exit")
-
-			arg = syntax_eval(node%args(1), state)
-
-			io = arg%sca%i32
-			if (io == 0) then
-				color = fg_bright_green
-			else
-				color = fg_bold_bright_red
-			end if
-
-			write(*,*) color//'Exiting syntran with status '// &
-				str(io)//color_reset
-
-			call exit(io)
-
-		case ("size")
-
-			arg1 = syntax_eval(node%args(1), state)
-			arg2 = syntax_eval(node%args(2), state)
-
-			if (arg2%sca%i32 < 0 .or. arg2%sca%i32 >= arg1%array%rank) then
-				! TODO: re-think runtime errors.  A different prefix here
-				! besides err_int_prefix helps, but context should be given if
-				! possible like for parser/lexer error diagnostics
-				write(*,*) err_rt_prefix//'rank mismatch in size() call'//color_reset
-				call internal_error()
-			end if
-
-			res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
-
-		case ("count")
-
-			arg1 = syntax_eval(node%args(1), state)
-			res%sca%i32 = count(arg1%array%bool)
-
-		case ("0sum_i32")
-			arg1 = syntax_eval(node%args(1), state)
-			res%sca%i32 = sum(arg1%array%i32)
-
-		case ("0sum_i64")
-			arg1 = syntax_eval(node%args(1), state)
-			res%sca%i64 = sum(arg1%array%i64)
-
-		case ("0sum_f32")
-			arg1 = syntax_eval(node%args(1), state)
-			res%sca%f32 = sum(arg1%array%f32)
-
-		case ("all")
-
-			arg1 = syntax_eval(node%args(1), state)
-			res%sca%bool = all(arg1%array%bool)
-
-			! Might not be strictly necessary now that %array is allocatable
-			! instead of pointable
-			!deallocate(arg1%array)
-
-		case ("any")
-
-			arg1 = syntax_eval(node%args(1), state)
-			res%sca%bool = any(arg1%array%bool)
-
-		case default
-			! User-defined function
-
-			if (.not. allocated(node%params)) then
-				write(*,*) err_int_prefix//'unexpected fn'//color_reset
-				call internal_error()
-			end if
-
-			!print *, 'fn name = ', node%identifier%text
-			!print *, 'fn idx  = ', node%id_index
-			!print *, 'node type = ', node%val%type
-			!print *, 'size params = ', size(node%params)
-			!print *, 'param ids = ', node%params
-
-			! TODO: Shared param scope is ok at first, but eventually target
-			! recursive fns with scoped stack frames
-
-			! Pass by value (for now, at least).  Arguments are evaluated and
-			! their values are copied to the fn parameters
-
-			do i = 1, size(node%params)
-				!print *, 'copying param ', i
-
-				state%vars%vals( node%params(i) ) = &
-					syntax_eval(node%args(i), state)
-
-				!print *, 'done'
-				!print *, ''
-			end do
-
-			res = syntax_eval(node%body, state)
-			!print *, 'res = ', res%to_str()
-
-		end select
+		res = eval_fn_call(node, state)
 
 	case (name_expr)
 		!print *, 'searching identifier ', node%identifier%text
@@ -934,6 +320,696 @@ recursive function syntax_eval(node, state) result(res)
 	end select
 
 end function syntax_eval
+
+!===============================================================================
+
+function eval_fn_call(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	character(len = :), allocatable :: color
+
+	integer :: i, io
+
+	type(value_t) :: arg, arg1, arg2
+
+	!print *, 'eval fn_call_expr'
+	!print *, 'fn identifier = ', node%identifier%text
+	!print *, 'fn id_index   = ', node%id_index
+
+	res%type = node%val%type
+
+	!print *, 'res type = ', res%type
+
+	! Intrinsic fns
+	select case (node%identifier%text)
+	case ("exp")
+
+		arg1 = syntax_eval(node%args(1), state)
+		res%sca%f32 = exp(arg1%sca%f32)
+
+	case ("0min_i32")
+
+		arg = syntax_eval(node%args(1), state)
+		res%sca%i32 = arg%sca%i32
+
+		! Note that min/max/println etc. are variadic, so we loop to
+		! size(node%args) instead of size(node%params)
+
+		do i = 2, size(node%args)
+			arg = syntax_eval(node%args(i), state)
+			res%sca%i32 = min(res%sca%i32, arg%sca%i32)
+		end do
+
+	case ("0min_i64")
+
+		arg = syntax_eval(node%args(1), state)
+		res%sca%i64 = arg%sca%i64
+
+		do i = 2, size(node%args)
+			arg = syntax_eval(node%args(i), state)
+			res%sca%i64 = min(res%sca%i64, arg%sca%i64)
+		end do
+
+	case ("0max_i32")
+
+		arg = syntax_eval(node%args(1), state)
+		res%sca%i32 = arg%sca%i32
+
+		do i = 2, size(node%args)
+			arg = syntax_eval(node%args(i), state)
+			res%sca%i32 = max(res%sca%i32, arg%sca%i32)
+		end do
+
+	case ("0max_i64")
+
+		arg = syntax_eval(node%args(1), state)
+		res%sca%i64 = arg%sca%i64
+
+		do i = 2, size(node%args)
+			arg = syntax_eval(node%args(i), state)
+			res%sca%i64 = max(res%sca%i64, arg%sca%i64)
+		end do
+
+	case ("println")
+
+		do i = 1, size(node%args)
+			arg = syntax_eval(node%args(i), state)
+			write(output_unit, '(a)', advance = 'no') arg%to_str()
+		end do
+		write(output_unit, *)
+
+		!! TODO: what, if anything, should println return?
+		!res%sca%i32 = 0
+
+	case ("str")
+
+		res%sca%str%s = ''
+		do i = 1, size(node%args)
+			arg = syntax_eval(node%args(i), state)
+			res%sca%str%s = res%sca%str%s // arg%to_str()  ! TODO: use char_vector_t
+		end do
+
+	case ("len")
+
+		arg = syntax_eval(node%args(1), state)
+		res%sca%i32 = len(arg%sca%str%s, 4)
+		!res%sca%i32 = mylen( arg%sca%str%s )
+
+	case ("parse_i32")
+
+		arg = syntax_eval(node%args(1), state)
+		read(arg%sca%str%s, *) res%sca%i32  ! TODO: catch iostat
+
+	case ("parse_i64")
+
+		arg = syntax_eval(node%args(1), state)
+		read(arg%sca%str%s, *) res%sca%i64  ! TODO: catch iostat
+
+	case ("0i32_sca")
+
+		arg = syntax_eval(node%args(1), state)
+		res%sca%i32 = arg%to_i32()
+
+	case ("0i32_arr")
+
+		arg = syntax_eval(node%args(1), state)
+		res%array = arg%to_i32_array()
+
+	case ("0i64_sca")
+
+		arg = syntax_eval(node%args(1), state)
+		res%sca%i64 = arg%to_i64()
+
+	case ("0i64_arr")
+
+		arg = syntax_eval(node%args(1), state)
+		res%array = arg%to_i64_array()
+
+	case ("open")
+
+		arg = syntax_eval(node%args(1), state)
+
+		! TODO: catch iostat, e.g. same file opened twice, folder doesn't
+		! exist, etc.
+		open(newunit = res%sca%file_%unit_, file = arg%sca%str%s)
+
+		!print *, 'opened unit ', res%sca%file_%unit_
+		res%sca%file_%name_ = arg%sca%str%s
+		res%sca%file_%eof = .false.
+
+	case ("readln")
+
+		arg1 = syntax_eval(node%args(1), state)
+
+		!print *, "reading from unit", arg1%sca%file_%unit_
+		res%sca%str%s = read_line(arg1%sca%file_%unit_, io)
+		!print *, 'done reading'
+
+		! This could be a very dangerous side effect!  The file argument of
+		! readln() acts as an out-arg:  it's eof flag can be toggled on.  I
+		! don't have out-args anywhere else so I may want to rethink this
+		! :exploding-head:
+		!
+		! writeln() does not need to mess with the vars struct like this
+		! because the file is the actual return value for that fn
+
+		!!print *, 'ident = ', node%args(1)%identifier%text
+		!!state%vars%vals(node%id_index) = res
+
+		! TODO:  set eof flag or crash for other non-zero io
+		if (io == iostat_end) then
+		!if (io /= 0) then
+			!arg1%sca%file_%eof = .true.
+			state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
+		end if
+		!print *, 'eof   = ', arg1%sca%file_%eof
+
+	case ("writeln")
+
+		arg1 = syntax_eval(node%args(1), state)
+
+		!print *, 'writing to unit ', arg1%sca%file_%unit_
+		do i = 2, size(node%args)
+			arg = syntax_eval(node%args(i), state)
+			write(arg1%sca%file_%unit_, '(a)', advance = 'no') arg%to_str()
+		end do
+		write(arg1%sca%file_%unit_, *)
+
+	case ("eof")
+
+		arg1 = syntax_eval(node%args(1), state)
+
+		!print *, "checking eof for unit", arg1%sca%file_%unit_
+		res%sca%bool = arg1%sca%file_%eof
+
+		!print *, 'eof fn = ', arg1%sca%file_%eof
+
+	case ("close")
+		arg = syntax_eval(node%args(1), state)
+		!print *, 'closing unit ', arg%sca%file_%unit_
+		close(arg%sca%file_%unit_)
+
+	case ("exit")
+
+		arg = syntax_eval(node%args(1), state)
+
+		io = arg%sca%i32
+		if (io == 0) then
+			color = fg_bright_green
+		else
+			color = fg_bold_bright_red
+		end if
+
+		write(*,*) color//'Exiting syntran with status '// &
+			str(io)//color_reset
+
+		call exit(io)
+
+	case ("size")
+
+		arg1 = syntax_eval(node%args(1), state)
+		arg2 = syntax_eval(node%args(2), state)
+
+		if (arg2%sca%i32 < 0 .or. arg2%sca%i32 >= arg1%array%rank) then
+			! TODO: re-think runtime errors.  A different prefix here
+			! besides err_int_prefix helps, but context should be given if
+			! possible like for parser/lexer error diagnostics
+			write(*,*) err_rt_prefix//'rank mismatch in size() call'//color_reset
+			call internal_error()
+		end if
+
+		res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
+
+	case ("count")
+
+		arg1 = syntax_eval(node%args(1), state)
+		res%sca%i32 = count(arg1%array%bool)
+
+	case ("0sum_i32")
+		arg1 = syntax_eval(node%args(1), state)
+		res%sca%i32 = sum(arg1%array%i32)
+
+	case ("0sum_i64")
+		arg1 = syntax_eval(node%args(1), state)
+		res%sca%i64 = sum(arg1%array%i64)
+
+	case ("0sum_f32")
+		arg1 = syntax_eval(node%args(1), state)
+		res%sca%f32 = sum(arg1%array%f32)
+
+	case ("all")
+
+		arg1 = syntax_eval(node%args(1), state)
+		res%sca%bool = all(arg1%array%bool)
+
+		! Might not be strictly necessary now that %array is allocatable
+		! instead of pointable
+		!deallocate(arg1%array)
+
+	case ("any")
+
+		arg1 = syntax_eval(node%args(1), state)
+		res%sca%bool = any(arg1%array%bool)
+
+	case default
+		! User-defined function
+
+		if (.not. allocated(node%params)) then
+			write(*,*) err_int_prefix//'unexpected fn'//color_reset
+			call internal_error()
+		end if
+
+		!print *, 'fn name = ', node%identifier%text
+		!print *, 'fn idx  = ', node%id_index
+		!print *, 'node type = ', node%val%type
+		!print *, 'size params = ', size(node%params)
+		!print *, 'param ids = ', node%params
+
+		! TODO: Shared param scope is ok at first, but eventually target
+		! recursive fns with scoped stack frames
+
+		! Pass by value (for now, at least).  Arguments are evaluated and
+		! their values are copied to the fn parameters
+
+		do i = 1, size(node%params)
+			!print *, 'copying param ', i
+
+			state%vars%vals( node%params(i) ) = &
+				syntax_eval(node%args(i), state)
+
+			!print *, 'done'
+			!print *, ''
+		end do
+
+		res = syntax_eval(node%body, state)
+		!print *, 'res = ', res%to_str()
+
+	end select
+
+end function eval_fn_call
+
+!===============================================================================
+
+function eval_for_statement(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	integer :: i, rank, for_kind
+	integer(kind = 8) :: i8, len8
+
+	type(array_t) :: array
+	type(value_t) :: lbound_, ubound_, itr, &
+		step, len_, tmp
+
+	! Evaluate all of these ahead of loop, but only if they are allocated!
+	if (allocated(node%array%lbound)) lbound_ = syntax_eval(node%array%lbound, state)
+	if (allocated(node%array%step  )) step    = syntax_eval(node%array%step  , state)
+	if (allocated(node%array%ubound)) ubound_ = syntax_eval(node%array%ubound, state)
+	if (allocated(node%array%len_  )) len_    = syntax_eval(node%array%len_  , state)
+
+	!print *, 'lbound_ = ', lbound_%to_i64()
+	!print *, 'ubound_ = ', ubound_%to_i64()
+	!print *, 'lbound type = ', kind_name(lbound_%type)
+	!print *, 'ubound type = ', kind_name(ubound_%type)
+	!print *, 'node%array%type = ', kind_name(node%array%val%array%type)
+
+	!print *, 'node array kind = ', kind_name(node%array%kind)
+	!print *, 'array kind      = ', kind_name(node%array%val%array%kind)
+
+	select case (node%array%kind)
+	case (array_expr)
+
+		! Primary array exprs are evaluated lazily without wasting memory
+		for_kind = node%array%val%array%kind
+
+		select case (node%array%val%array%kind)
+		case (bound_array)
+
+			! Do promotion once before loop
+			if (any(i64_type == [lbound_%type, ubound_%type])) then
+				!print *, 'promoting'
+				call promote_i32_i64(lbound_)
+				call promote_i32_i64(ubound_)
+				itr%type = i64_type
+			else
+				itr%type = i32_type
+			end if
+
+			if (.not. any(itr%type == [i32_type, i64_type])) then
+				write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
+				call internal_error()
+			end if
+
+			len8 = ubound_%to_i64() - lbound_%to_i64()
+
+		case (step_array)
+
+			! If any bound or step is i64, cast the others up to match
+			if (any(i64_type == [lbound_%type, step%type, ubound_%type])) then
+				call promote_i32_i64(lbound_)
+				call promote_i32_i64(step)
+				call promote_i32_i64(ubound_)
+				itr%type = i64_type
+			else
+				itr%type = lbound_%type
+			end if
+
+			select case (itr%type)
+			case (i32_type)
+				len8 = (ubound_%sca%i32 - lbound_%sca%i32 &
+					+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
+
+			case (i64_type)
+				len8 = (ubound_%sca%i64 - lbound_%sca%i64 &
+					+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
+
+			case (f32_type)
+				len8 = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
+
+			case default
+				write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
+				call internal_error()
+			end select
+
+		case (len_array)
+
+			itr%type = node%array%val%array%type
+
+			select case (itr%type)
+			case (f32_type)
+				len8 = len_%to_i64()
+			case default
+				write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
+				call internal_error()
+			end select
+
+		case (expl_array)
+			len8 = node%array%val%array%len_
+
+		case (size_array)
+
+			rank = size( node%array%size )
+			len8 = 1
+			do i = 1, rank
+				len_ = syntax_eval(node%array%size(i), state)
+				len8 = len8 * len_%to_i64()
+			end do
+
+			if (size(node%array%elems) /= len8) then
+				write(*,*) err_rt_prefix//"size of explicit array "// &
+					"does not match number of elements"//color_reset
+				call internal_error()
+			end if
+
+		case (unif_array)
+
+			rank = size(node%array%size)
+			!print *, 'rank = ', rank
+			len8 = 1
+			do i = 1, rank
+				len_ = syntax_eval(node%array%size(i), state)
+				len8 = len8 * len_%to_i64()
+			end do
+			!print *, 'len8 = ', len8
+
+		case default
+			write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
+			call internal_error()
+		end select
+
+	case default
+		!print *, 'non-primary array expression'
+
+		! Any non-primitive array needs to be evaluated before iterating
+		! over it.  Parser guarantees that this is an array
+		!
+		! Unlike step_array, itr%type does not need to be set here because
+		! it is set in array_at() (via get_array_value_t())
+		for_kind = array_expr
+
+		tmp = syntax_eval(node%array, state)
+		array = tmp%array
+
+		len8 = array%len_
+		!print *, 'len8 = ', len8
+
+	end select
+
+	!print *, 'itr%type = ', kind_name(itr%type)
+
+	! Push scope to make the loop iterator local
+	call state%vars%push_scope()
+	do i8 = 1, len8
+
+		call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
+			len_, array, node%array%elems, state)
+
+		!print *, 'itr = ', itr%to_str()
+
+		! During evaluation, insert variables by array id_index instead of
+		! dict lookup.  This is much faster and can be done during
+		! evaluation now that we know all of the variable identifiers.
+		! Parsing still needs to rely on dictionary lookups because it does
+		! not know the entire list of variable identifiers ahead of time
+		state%vars%vals(node%id_index) = itr
+
+		res = syntax_eval(node%body, state)
+
+	end do
+	call state%vars%pop_scope()
+
+end function eval_for_statement
+
+!===============================================================================
+
+function eval_assignment_expr(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	integer :: rank_res
+	integer(kind = 8) :: i8, index_, len8
+	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
+
+	type(value_t) :: array_val, tmp
+
+	if (.not. allocated(node%lsubscripts)) then
+
+		!! This deallocation will cause a crash when an array appears on both
+		!! the LHS and RHS of fn_call assignment, e.g. `dv = diff_(dv, i)` in
+		!! AOC 2023/09
+		!if (allocated(state%vars%vals)) then
+		!if (allocated(state%vars%vals(node%id_index)%array)) then
+		!	!print *, "deallocating lhs array"
+		!	deallocate(state%vars%vals(node%id_index)%array)
+		!end if
+		!end if
+
+		! Assign return value
+		!print *, 'eval and set res'
+		res = syntax_eval(node%right, state)
+
+		! TODO: test int/float casting.  It should be an error during
+		! parsing
+
+		!print *, 'compound assign'
+		!print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
+
+		call compound_assign(state%vars%vals(node%id_index), res, node%op)
+
+		! For compound assignment, ensure that the LHS is returned
+		!print *, 'setting res again'
+		res = state%vars%vals(node%id_index)
+		!print *, 'done'
+
+		! The difference between let and assign is inserting into the
+		! current scope (let) vs possibly searching parent scopes (assign).
+		! During evaluation we don't need any extra logic for scoping.  The
+		! parser has already assigned a separate id_index for each
+		! identifier at each scope level
+
+	else
+		!print *, 'LHS array subscript assignment'
+		!print *, 'LHS type = ', kind_name(state%vars%vals(node%id_index)%array%type)  ! not alloc for str
+
+		! Assign return value from RHS
+		res = syntax_eval(node%right, state)
+
+		!print *, 'RHS = ', res%to_str()
+
+		if (state%vars%vals(node%id_index)%type == str_type) then
+			!print *, 'str_type'
+
+			! TODO: ban compound character substring assignment
+			i8 = subscript_eval(node, state)
+			state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1) = res%sca%str%s
+
+		else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+
+			!print *, 'non str_type scalar subscript'
+			!print *, 'LHS array type = ', &
+			!	state%vars%vals(node%id_index)%array%type
+			!print *, 'LHS array = ', state%vars%vals(node%id_index)%array%i32
+
+			i8 = subscript_eval(node, state)
+			array_val = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
+			call compound_assign(array_val, res, node%op)
+			call set_array_value_t( &
+				state%vars%vals(node%id_index)%array, i8, array_val)
+			res = array_val
+
+		else
+
+			!print *, 'lhs slice assignment'
+
+			call get_subscript_range(node, state, lsubs, usubs, rank_res)
+			len8 = product(usubs - lsubs)
+			!print *, 'len8 = ', len8
+
+			! TODO: some size/shape checking might be needed here between
+			! LHS and RHS
+
+			! Scalar rhs
+			if (res%type /= array_type) array_val = res
+
+			! Iterate through all subscripts in range and copy to result
+			! array
+			subs = lsubs
+			do i8 = 0, len8 - 1
+
+				!print *, 'subs = ', int(subs, 4)
+
+				! This is confusing.  Maybe rename array_val -> rhs_val and
+				! tmp -> lhs_val or something
+
+				if (res%type == array_type) then
+					array_val = get_array_value_t(res%array, i8)
+				end if
+
+				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
+				tmp  = get_array_value_t(state%vars%vals(node%id_index)%array, index_)
+				call compound_assign(tmp, array_val, node%op)
+				call set_array_value_t(state%vars%vals(node%id_index)%array, index_, tmp)
+
+				!! move conditions out of loop for perf?
+				!if (res%type == array_type) then
+				!	call set_array_value_t(res%array, i8, tmp)
+				!else
+
+				!	! this makes the res return value a scalar.  Maybe
+				!	! not correct for fn return values or paren exprs, at
+				!	! least it's not consistent with the way that array rhs
+				!	! vals work.  Maybe I will make a breaking change on the
+				!	! return value here because copying res val can also
+				!	! have a large perf overhead.
+				!	res = tmp
+
+				!	! This is illegal in python numpy:
+				!	!
+				!	! >>> import numpy as np
+				!	! >>> a = np.arange(1, 6)
+				!	! >>> b = (a[1:4] := 3)
+				!	!   File "<stdin>", line 1
+				!	!     b = (a[1:4] := 3)
+				!	!          ^^^^^^
+				!	! SyntaxError: cannot use assignment expressions with subscript
+				!	! >>>
+				!	!
+				!	! Of course, such an assignment is legal as its own
+				!	! statement without the "walrus" operator `:=` :
+				!	!
+				!	! >>> a[1:4] = 3
+				!	! >>> a
+				!	!     # [1, 3, 3, 3, 5]
+				!	!
+				!	! I believe it is illegal in python because of the
+				!	! ambiguity of what should `b` be if it is assigned.
+				!	! Should `b` be the whole `a` array as in syntran, or
+				!	! just the slice `a[1:4]`, or just the scalar `3`?
+				!	!
+				!	! I think there's a good case to be made that it should
+				!	! be the slice `a[1:4]`, but the implementation is more
+				!	! simple by setting `b` to the whole array `a`.
+
+				!end if
+
+				call get_next_subscript(lsubs, usubs, subs)
+			end do
+
+			! set res (whole array (slice?)) for return val in case of
+			! compound assignment.  see note above re walrus operator
+			res = state%vars%vals(node%id_index)
+
+		end if
+	end if
+
+end function eval_assignment_expr
+
+!===============================================================================
+
+function eval_translation_unit(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	integer :: i
+
+	! TODO: do we want to globally push/pop scope for whole
+	! translation_unit?  Will this have impacts on interpretting multiple
+	! files, or allowing the user to override intrinsic fns?
+	!call vars%push_scope()
+
+	! The final statement of a unit returns the actual result.  Non-final
+	! members only change the (vars) state or define fns
+	do i = 1, size(node%members)
+
+		! Only eval statements, not fns declarations.  TODO: cycle structs
+		! too.
+		!
+		! TODO: is this where we should copy fn dict to array?
+		if (node%members(i)%kind == fn_declaration) cycle
+
+		res = syntax_eval(node%members(i), state)
+
+		!print *, 'kind = ', node%members(i)%kind
+		!print *, i, ' res = ', res%to_str()
+		!print *, ''
+
+		! HolyC feature: implicitly print name expression members.  I may
+		! remove this after I implement an intrinsic print() fn.  May also
+		! need to suppress this for void fn calls later
+		if (node%members(i)%kind == name_expr .and. .not. state%quiet) then
+			write(*,*) res%to_str()
+		end if
+
+	end do
+
+	!call state%vars%pop_scope()
+
+end function eval_translation_unit
 
 !===============================================================================
 
