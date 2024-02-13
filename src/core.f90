@@ -92,10 +92,12 @@ module syntran__core_m
 	!    * casting?
 	!    * array comparison
 	!    * array arithmetic operations
-	!    * any(), all(), count(), sum(), i32(array), i64(), exit(), polymorphic
-	!      min/max intrinsics
+	!    * any(), all(), count(), sum(), i32(array), exit(), polymorphic
+	!      min/max intrinsics parse_i64() intrinsic
 	!    * new generalized for loops
+	!    * compound `**=` assignment, %=
 	!    * -c arg, shebang
+	!    * --fmax-errors arg
 	!    * ifx/ifort pass tests but perform order of magnitude slower
 	!  - parse_f32() intrinsic fn
 	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
