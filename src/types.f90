@@ -1263,6 +1263,11 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 		return
 	end if
 
+	if (left == file_type .or. right == file_type) then
+		allowed = .false.
+		return
+	end if
+
 	select case (op)
 
 		case (plus_token, plus_equals_token)

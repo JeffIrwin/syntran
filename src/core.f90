@@ -28,7 +28,6 @@ module syntran__core_m
 		syntran_patch =  42
 
 	! TODO:
-	!  - refactor syntrax_eval() deep nesting
 	!  - structs
 	!  - triage notes from AOC.  many things are already fixed
 	!  - jumping control flow:
@@ -50,12 +49,19 @@ module syntran__core_m
 	!    vals. is copying syntax_node_t a perf bottleneck? i suspect that eval
 	!    is bottleneck and not parsing, but i haven't actually benchmarked poor
 	!    perf of intel compilers for AOC solution tests
+	!  - hacker sdk:
+	!    * bitwise operations: shift left and right, and, or, not, xor
+	!    * hex, binary, (and octal) literals
+	!    * these features are especially useful when implementing encryption,
+	!      hashing, utf, and rng algorithms
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
 	!    * write another wave equation sample using slicing and array operations
 	!  - block_statement eval had a bug which is now fixed by setting tmp =
 	!    syntax_eval() in case of a block which ends with a null if_statement.
 	!    check translation_unit and other eval case branches for similar bugs
+	!    * maybe fixed after syntax_eval() refactor?  unknown_type is
+	!      initialized inside the value_t struct declaration
 	!  - cmd args
 	!    * args would be useful for logo sample, e.g. image size and some
 	!      control color options
@@ -175,7 +181,6 @@ module syntran__core_m
 	!    * xnor(bool1, bool2) is just (bool1 == bool2)
 	!    * is there any value to having plain language versions of these
 	!      operators, like `and` or `not` in syntran?
-	!  - bitwise operators
 	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
 	!    include quick-start and links in top-level README?
 	!    * github automatically includes a Table of Contents in a menu, so maybe
