@@ -248,7 +248,7 @@ let n = 100;
 let prime = 0;
 
 // This check is O(n**2) time, which might be the best we can do without
-// having arrays in the language yet
+// arrays
 
 // If we had while loops, we could loop from n downards and stop as soon as
 // we find the first prime
@@ -455,7 +455,7 @@ let v3 = [-5, 3+1, 1, 10, 7/2];
 
 ### Rank-2 and higher arrays
 
-Syntran has a more compact syntax for higher-rank arrays than Rust, which requires nested rank-1 arrays of rank-1 arrays.  As above, the sizes go after the semicolon `;`.  To initialize a rank-2 array with size 3 by 4 to all zeros:
+Syntran has a more compact syntax for multi-rank arrays than Rust, which requires nested rank-1 arrays of rank-1 arrays.  As above, the sizes go after the semicolon `;`.  To initialize a rank-2 array with size 3 by 4 to all zeros:
 ```rust
 let matrix = [0; 3, 4];
 // [
@@ -493,13 +493,13 @@ let array = [0; rows, cols, shts];
 // ]
 ```
 
-Indices for higher-rank arrays are separated by commas:
+Indices for multi-rank arrays are separated by commas:
 ```rust
 array[3,2,1];
 // 0
 ```
 
-To initialize a higher-rank array with an explicit list of values, separate the values with commas and then provide the size after a semicolon:
+To initialize a multi-rank array with an explicit list of values, separate the values with commas and then provide the size after a semicolon:
 ```rust
 let a = [1, 2, 3, 4, 5, 6;  2, 3];
 // [
@@ -511,6 +511,46 @@ let a = [1, 2, 3, 4, 5, 6;  2, 3];
 a[1,2];
 // 6
 ```
+
+Many languages refer to these arrays as *multidimensional* arrays.  This can be
+ambiguous, as a vector like `let v = [9, 16, 25]` is three-dimensional in at
+least some sense, but only rank-1.  We will call these *multi-rank* arrays.
+
+### Array slicing
+
+Indexing an array with a range subscript, as opposed to a scalar subscript,
+produces yet another array:
+```rust
+let v0 = [0: 5];
+// [0, 1, 2, 3, 4]
+v0[1: 4];
+// [1, 2, 3]
+
+let v1 = [0: 2: 10];
+// [0, 2, 4, 6, 8];
+v1[1: 4];
+// [2, 4, 6]
+```
+
+As with other expressions, the range bounds are inclusive of the lower bound and
+exclusive of the upper bound.
+
+Subscripting with just a colon `:` and no bounds returns the whole array:
+```rust
+v1[:];
+// [0, 2, 4, 6, 8];
+```
+
+For rank-1 arrays, boundless whole-array slicing is not useful and less
+performant than omitting the subscript expression altogether:
+```rust
+v1;
+// [0, 2, 4, 6, 8];
+```
+
+#### Multi-rank array slicing
+
+<!-- TODO -->
 
 ## Functions
 
@@ -638,6 +678,7 @@ string3[2];
 // l
 ```
 
+<!-- TODO: not TBD anymore! -->
 Slice indexing for substrings of length > 1 is TBD.
 To slice a substring, use a range:
 ```rust
