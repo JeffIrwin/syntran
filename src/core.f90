@@ -25,7 +25,7 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  42
+		syntran_patch =  43
 
 	! TODO:
 	!  - structs
@@ -91,11 +91,14 @@ module syntran__core_m
 	!    * array slicing
 	!    * casting?
 	!    * array comparison
-	!    * array arithmetic operations
+	!    * array arithmetic and boolean operations, test and doc array compound assignment
+	!    * caveat about return val from nested slice compound assignemnt:
+	!          `let u = (v[3: 7] += 7);`
 	!    * any(), all(), count(), sum(), i32(array), exit(), polymorphic
-	!      min/max intrinsics parse_i64() intrinsic
+	!      min/max intrinsics, parse_i64() intrinsic
 	!    * new generalized for loops
 	!    * compound `**=` assignment, %=
+	!    * --help arg
 	!    * -c arg, shebang
 	!    * --fmax-errors arg
 	!    * ifx/ifort pass tests but perform order of magnitude slower
