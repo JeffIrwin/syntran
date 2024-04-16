@@ -272,6 +272,9 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
 	! for syntran_interpret_file() is boolean
+	!
+	! TODO: add optional io arg in case of errors.  Especially for "-c" cmd arg.
+	! See note below
 
 	character(len = *), intent(in)  :: str_
 	character(len = :), allocatable :: res
@@ -313,6 +316,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	if (.not. state%quiet) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
+		! TODO: set io
 		res = ''
 		return
 	end if
