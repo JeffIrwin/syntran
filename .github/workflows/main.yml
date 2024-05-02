@@ -1,4 +1,5 @@
 {
+	# can haz comments?
 	"name": "CI",
 	"on": [
 		"push"
