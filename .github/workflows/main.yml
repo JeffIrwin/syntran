@@ -1,4 +1,4 @@
-
+{
 name: CI
 
 on: [push]
@@ -79,6 +79,9 @@ jobs:
         ./build/syntran < samples/arithmetic.syntran
         #./build/syntran < samples/bad-syntax.syntran
         time ./build/test
+
+    # TODO: add a docker test run somewhere, if docker will run at all in github
+    # actions
 
     - if: matrix.os != 'windows-latest'
       name: Test release
@@ -172,3 +175,4 @@ jobs:
         fpm test test --verbose --flag "-DSYNTRAN_INTEL -fpp"
         fpm test long --verbose --flag "-DSYNTRAN_INTEL -fpp"
 
+}
