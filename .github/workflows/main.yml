@@ -18,9 +18,7 @@
 				}
 			},
 			"steps": [
-				{
-					"uses": "actions/checkout@v1"
-				},
+				{"uses": "actions/checkout@v1"},
 				{
 					"uses": "fortran-lang/setup-fpm@v5",
 					"with": {
@@ -43,11 +41,13 @@
 				},
 				{
 					"if": "matrix.os == 'ubuntu-latest'",
-					"run": "sudo apt-get install gfortran\n"
+					"run": "sudo apt-get install gfortran"
 				},
 				{
 					"if": "matrix.os == 'macOS-latest'",
-					"run": "brew install gcc@12\nbrew reinstall gcc@12\n"
+					"run": "
+						brew install gcc@12 &&
+						brew reinstall gcc@12"
 				},
 				{
 					"name": "Build",
@@ -56,7 +56,12 @@
 				{
 					"if": "matrix.os != 'windows-latest'",
 					"name": "Test debug",
-					"run": "./build/syntran < samples/arithmetic.syntran\n#./build/syntran < samples/bad-syntax.syntran\ntime ./build/test\n"
+					"run":
+					"
+						./build/syntran < samples/arithmetic.syntran  \n
+						#./build/syntran < samples/bad-syntax.syntran \n
+						time ./build/test\n
+					"
 				},
 
 				# TODO: add a docker test run somewhere, if docker will run at all in
