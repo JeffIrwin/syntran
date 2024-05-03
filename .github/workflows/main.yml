@@ -30,13 +30,14 @@
 					"name": "Test docker",
 					"run":
 					"
+						#./test-docker.sh \n
 						docker --version \n
 						docker build . -t sy \n
 						docker run --entrypoint syntran sy --version \n
 						docker run sy --version # syntran is already the default entrypoint \n
 						docker run sy -c \"1 + 2;\" \n
 						ans=$(docker run sy -c \"1 + 2;\") \n
-						if [[ \"$ans\" == \"ans = \\`3\\`\" ]] ; then \n
+						if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
 							echo \"win\" \n
 						else \n
 							echo \"fail\" \n
