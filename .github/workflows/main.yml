@@ -32,8 +32,9 @@
 					"
 						sudo docker --version \n
 						sudo docker build . -t sy \n
-						sudo docker run --entrypoint syntran -i -t sy --version \n
-						sudo docker run --entrypoint syntran -i -t sy -c \"1 + 2;\" \n
+						sudo docker run --entrypoint syntran sy --version \n
+						sudo docker run sy --version # syntran is already the default entrypoint \n
+						sudo docker run sy -c \"1 + 2;\" \n
 					"
 				},
 				{
