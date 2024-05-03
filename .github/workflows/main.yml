@@ -27,6 +27,17 @@
 				},
 				{
 					"if": "matrix.os == 'ubuntu-latest'",
+					"name": "Test docker",
+					"run":
+					"
+						sudo docker --version \n
+						sudo docker build . -t sy \n
+						sudo docker run --entrypoint syntran -i -t sy --version \n
+						sudo docker run --entrypoint syntran -i -t sy -c \"1 + 2;\" \n
+					"
+				},
+				{
+					"if": "matrix.os == 'ubuntu-latest'",
 					"name": "Set ubuntu PATH",
 					"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 				},
