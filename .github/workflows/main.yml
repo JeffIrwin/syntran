@@ -28,7 +28,7 @@
 				{
 					"if": "matrix.os == 'ubuntu-latest'",
 					"name": "Set ubuntu PATH",
-					"run": "echo \"$HOME/bin\" >> $GITHUB_PATH\n"
+					"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 				},
 				{
 					"if": "matrix.os == 'ubuntu-latest'",
@@ -37,7 +37,20 @@
 					"env": {
 						"FPM_FC": "gfortran-12"
 					},
-					"run": "fpm install --prefix='$HOME'\nwhich syntran\nchmod +x ./samples/shebang.syntran\n./samples/shebang.syntran\n#\n# No significant difference between release and (default) debug profile.\n# Maybe that will change after I copy the other half of AOC tests\n#fpm test test\n#fpm test long\nfpm test test --profile release\nfpm test long --profile release\n"
+					"run":
+					"
+						fpm install --prefix='$HOME' \n
+						which syntran \n
+						chmod +x ./samples/shebang.syntran \n
+						./samples/shebang.syntran \n
+
+						# No significant difference between release and (default) debug profile. \n
+						# Maybe that will change after I copy the other half of AOC tests \n
+						#fpm test test \n
+						#fpm test long \n
+						fpm test test --profile release \n
+						fpm test long --profile release \n
+					"
 				},
 				{
 					"if": "matrix.os == 'ubuntu-latest'",
@@ -51,7 +64,12 @@
 				},
 				{
 					"name": "Build",
-					"run": "#export OMP_NUM_THREADS=1\nbash ./build.sh debug\n#ls -ltrh build/\n"
+					"run":
+					"
+						#export OMP_NUM_THREADS=1 \n
+						bash ./build.sh debug \n
+						#ls -ltrh build/ \n
+					"
 				},
 				{
 					"if": "matrix.os != 'windows-latest'",
@@ -60,7 +78,7 @@
 					"
 						./build/syntran < samples/arithmetic.syntran  \n
 						#./build/syntran < samples/bad-syntax.syntran \n
-						time ./build/test\n
+						time ./build/test \n
 					"
 				},
 
@@ -70,7 +88,11 @@
 				{
 					"if": "matrix.os != 'windows-latest'",
 					"name": "Test release",
-					"run": "bash ./build.sh release\ntime ./build/test\n"
+					"run":
+					"
+						bash ./build.sh release \n
+						time ./build/test \n
+					"
 				}
 			]
 		},
@@ -104,7 +126,13 @@
 					"env": {
 						"FPM_FC": "gfortran-${{ matrix.gfortran }}"
 					},
-					"run": "#fpm test test --verbose --flag -Wno-tabs\n#fpm test long\nfpm test test --profile release --verbose --flag -Wno-tabs\nfpm test long --profile release --flag -Wno-tabs\n"
+					"run":
+					"
+						#fpm test test --verbose --flag -Wno-tabs \n
+						#fpm test long \n
+						fpm test test --profile release --verbose --flag -Wno-tabs \n
+						fpm test long --profile release --flag -Wno-tabs \n
+					"
 				}
 			]
 		},
@@ -154,7 +182,11 @@
 					"env": {
 						"FPM_FC": "${{ env.FC }}"
 					},
-					"run": "fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp\"\nfpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp\"\n"
+					"run":
+					"
+						fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+						fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+					"
 				}
 			]
 		}
