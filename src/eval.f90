@@ -467,6 +467,11 @@ function eval_fn_call(node, state) result(res)
 		arg = syntax_eval(node%args(1), state)
 		read(arg%sca%str%s, *) res%sca%i64  ! TODO: catch iostat
 
+	case ("parse_f32")
+
+		arg = syntax_eval(node%args(1), state)
+		read(arg%sca%str%s, *) res%sca%f32  ! TODO: catch iostat
+
 	case ("0i32_sca")
 
 		arg = syntax_eval(node%args(1), state)

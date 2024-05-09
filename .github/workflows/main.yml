@@ -30,7 +30,6 @@
 					"name": "Test docker",
 					"run":
 					"
-						#./test-docker.sh \n
 						docker --version \n
 						docker build . -t sy \n
 						docker run --entrypoint syntran sy --version \n
