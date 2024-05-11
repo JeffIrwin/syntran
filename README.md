@@ -38,6 +38,10 @@ fpm build
 
 Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm install`, etc.  Most of the example commands in this documentation will assume that cmake was used, but there is usually (always?) an fpm alternative.
 
+As an alternative to installing dependencies yourself, you can run syntran in a
+docker container using the included [Dockerfile](Dockerfile).  See the
+[instructions for docker](doc/docker.md).
+
 ## Run
 
 Start the interpreter:

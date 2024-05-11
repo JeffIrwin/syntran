@@ -588,6 +588,19 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('parse_i64("-1337");')  == "-1337",  &
 			eval('parse_i64("-9123123123");')  == "-9123123123",  &
 			eval('parse_i64( "9123123123");')  ==  "9123123123",  &
+			abs(eval_f32('parse_f32("6.000000E+00");') - 6.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("3.000000E+00");') - 3.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("2.000000E+00");') - 2.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("-3.000000E+00");') - -3.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("-2.000000E+00");') - -2.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("3.0");') - 3.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("2.0");') - 2.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("-3.0");') - -3.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("-2.0");') - -2.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("3");') - 3.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("2");') - 2.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("-3");') - -3.000000E+00) < tol, &
+			abs(eval_f32('parse_f32("-2");') - -2.000000E+00) < tol, &
 			eval_i32('len(     "");')  == 0,  &
 			eval_i32('len(    " ");')  == 1,  &
 			eval_i32('len(   "  ");')  == 2,  &

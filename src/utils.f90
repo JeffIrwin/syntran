@@ -62,10 +62,13 @@ module syntran__utils_m
 	!********
 
 	type char_vector_t
+		! This is more of a "string builder".  c.f. ribbit
 		character(len = :), allocatable :: v
 		integer :: len_, cap
 		contains
-			procedure :: push => push_char
+			procedure :: &
+				push => push_char, &
+				trim => trim_char_vector
 	end type char_vector_t
 
 	!********
@@ -317,6 +320,17 @@ end subroutine push_char
 
 !===============================================================================
 
+function trim_char_vector(sb) result(str)
+
+	class(char_vector_t), intent(in) :: sb
+	character(len = :), allocatable :: str
+
+	str = sb%v(1: sb%len_)
+
+end function trim_char_vector
+
+!===============================================================================
+
 subroutine push_all_string(vector, add)
 
 	! Push all elements of add into vector
@@ -398,16 +412,12 @@ function read_line(iu, iostat) result(str)
 
 	integer :: i, io, str_cap, tmp_cap
 
+	type(char_vector_t) :: sb  ! string builder
+
 	!print *, 'starting read_line()'
 
-	! Buffer string with some initial length
-	!
-	! TODO: use char_vector_t
-	str_cap = 64
-	allocate(character(len = str_cap) :: str)
-
 	! Read 1 character at a time until end
-	i = 0
+	sb = new_char_vector()
 	do
 		read(iu, '(a)', advance = 'no', iostat = io) c
 
@@ -420,29 +430,11 @@ function read_line(iu, iostat) result(str)
 
 		!if (c == carriage_return) exit
 		!if (c == line_feed) exit
-		i = i + 1
 
-		if (i > str_cap) then
-			!print *, 'growing str'
-
-			! Grow the buffer capacity.  What is the optimal growth factor?
-			tmp_cap = 2 * str_cap
-			allocate(character(len = tmp_cap) :: tmp)
-			tmp(1: str_cap) = str
-
-			call move_alloc(tmp, str)
-			str_cap = tmp_cap
-
-			!print *, 'str_cap  = ', str_cap
-			!print *, 'len(str) = ', len(str)
-
-		end if
-		str(i:i) = c
+		call sb%push(c)
 
 	end do
-
-	! Trim unused chars from buffer
-	str = str(1:i)
+	str = sb%trim()
 
 	if (present(iostat)) iostat = io
 

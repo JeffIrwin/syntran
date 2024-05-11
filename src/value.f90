@@ -450,6 +450,9 @@ recursive function value_to_str(val) result(ans)
 			!else if (val%array%type == f32_type) then
 			!	str_vec = new_char_vector( 16 * val%array%len_ )
 			!end if
+
+			! This naming is terrible.  It's a string builder, not a vector of
+			! strings
 			str_vec = new_char_vector()
 
 			call str_vec%push('[')
