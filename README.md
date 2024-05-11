@@ -535,22 +535,60 @@ v1[1: 4];
 As with other expressions, the range bounds are inclusive of the lower bound and
 exclusive of the upper bound.
 
-Subscripting with just a colon `:` and no bounds returns the whole array:
+Subscripting with just a colon `:` and no bounds returns the whole array along
+that dimension:
 ```rust
 v1[:];
 // [0, 2, 4, 6, 8];
 ```
 
 For rank-1 arrays, boundless whole-array slicing is not useful and less
-performant than omitting the subscript expression altogether:
+performant than omitting the subscript `[]` expression altogether:
 ```rust
 v1;
 // [0, 2, 4, 6, 8];
 ```
 
+#### LHS and RHS slicing
+
+Arrays can be sliced whether they are on the left-hand side (LHS) or the
+right-hand side (RHS) of an assignment operator.  The examples above show RHS
+slicing.
+
+Assigning to an LHS slice changes only the sliced part of the array:
+```rust
+let v2 = [0: 5];
+// [0, 1, 2, 3, 4]
+v2[1: 4] = 7;
+// [0, 7, 7, 7, 4]
+```
+The value returned by the entire assignment expression above is the
+whole v2 array, not just the assigned slice.  This distinction is important when
+such an assignment expression is the return value of a function, or if an
+assignment is nested on the RHS of another assignment:
+```rust
+let v3 = [0: 5];
+let v4 = v3[1: 4] = 7;
+v4;
+// [0, 7, 7, 7, 4]
+```
+Note that `v4` is *neither* just the scalar `7` nor the slice `[7, 7, 7]`,
+rather it is the whole `v3` array.  Nested subscripted assignments such as this
+are [illegal in python](https://stackoverflow.com/a/60909096/4347028).
+
+This behaviour is in contrast to non-nested assignment:
+```rust
+let v5 = [0: 5];
+let v6 = v5[1: 4];
+v6;
+// [1, 2, 3]
+```
+
 #### Multi-rank array slicing
 
-<!-- TODO -->
+
+<!--  TODO  -->
+
 
 ## Functions
 

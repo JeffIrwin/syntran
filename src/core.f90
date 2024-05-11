@@ -88,7 +88,6 @@ module syntran__core_m
 	!    * array and, or, not, done
 	!    * unary -, + done
 	!  - document recent features:
-	!    * array slicing
 	!    * casting?
 	!    * array comparison
 	!    * array arithmetic and boolean operations, test and doc array compound assignment
