@@ -412,6 +412,16 @@ function eval_fn_call(node, state) result(res)
 			res%sca%i64 = min(res%sca%i64, arg%sca%i64)
 		end do
 
+	case ("0min_f32")
+
+		arg = syntax_eval(node%args(1), state)
+		res%sca%f32 = arg%sca%f32
+
+		do i = 2, size(node%args)
+			arg = syntax_eval(node%args(i), state)
+			res%sca%f32 = min(res%sca%f32, arg%sca%f32)
+		end do
+
 	case ("0max_i32")
 
 		arg = syntax_eval(node%args(1), state)

@@ -548,6 +548,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('min(5, 2, 3, 4);')  == 2,  &
 			eval_i32('min(5, 1, 3, 4);')  == 1,  &
 			eval_i32('min(5, 0, 3, 4);')  == 0,  &
+			abs(eval_f32('min(3.0, 2.0);') - 2.0) < tol, &
+			abs(eval_f32('min(2.0, 3.0);') - 2.0) < tol, &
+			abs(eval_f32('min(4.0, 3.0, 5.0);') - 3.0) < tol, &
+			abs(eval_f32('min(4.0, 3.0, -5.0);') - -5.0) < tol, &
 			eval_i32('max(3, 2);')  == 3,  &
 			eval_i32('max(2, 2);')  == 2,  &
 			eval_i32('max(2, 3, 4);')  == 4,  &

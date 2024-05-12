@@ -89,6 +89,8 @@ module function parse_fn_call(parser) result(fn_call)
 		select case (type_)
 		case (i64_type)
 			fn_call%identifier%text = "0min_i64"
+		case (f32_type)
+			fn_call%identifier%text = "0min_f32"
 		case default
 			fn_call%identifier%text = "0min_i32"
 		end select
