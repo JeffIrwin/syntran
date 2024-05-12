@@ -548,10 +548,16 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('min(5, 2, 3, 4);')  == 2,  &
 			eval_i32('min(5, 1, 3, 4);')  == 1,  &
 			eval_i32('min(5, 0, 3, 4);')  == 0,  &
+			eval('min(4000000000, 3000000000);')  == "3000000000",  &
+			eval('min(4000000000, 5000000000);')  == "4000000000",  &
 			abs(eval_f32('min(3.0, 2.0);') - 2.0) < tol, &
 			abs(eval_f32('min(2.0, 3.0);') - 2.0) < tol, &
 			abs(eval_f32('min(4.0, 3.0, 5.0);') - 3.0) < tol, &
 			abs(eval_f32('min(4.0, 3.0, -5.0);') - -5.0) < tol, &
+			abs(eval_f32('max(3.0, 2.0);') - 3.0) < tol, &
+			abs(eval_f32('max(2.0, 3.0);') - 3.0) < tol, &
+			abs(eval_f32('max(4.0, 3.0, 5.0);') - 5.0) < tol, &
+			abs(eval_f32('max(4.0, 3.0, -5.0);') - 4.0) < tol, &
 			eval_i32('max(3, 2);')  == 3,  &
 			eval_i32('max(2, 2);')  == 2,  &
 			eval_i32('max(2, 3, 4);')  == 4,  &
@@ -564,6 +570,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('max(2, 2, 2);')  == 2,  &
 			eval_i32('max(2, 4, 3, 5);')  == 5,  &
 			eval_i32('max(5, 2, 3, 4);')  == 5,  &
+			eval('max(4000000000, 3000000000);')  == "4000000000",  &
+			eval('max(4000000000, 5000000000);')  == "5000000000",  &
 			eval_i64('size([0; 5], 0);')  == 5,  &
 			eval_i64('size([0; 6, 7], 0);')  == 6,  &
 			eval_i64('size([0; 6, 7], 1);')  == 7,  &
