@@ -23,9 +23,6 @@ program main
 	! TODO: move into settings constructor?
 	maxerr = args%maxerr
 
-	print *, "args%interactive = ", args%interactive
-
-
 	if (args%interactive) then
 		! "Interactive" keeps running with the same vars and fns workspace after
 		! running a startup file

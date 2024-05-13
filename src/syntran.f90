@@ -46,7 +46,7 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
 	integer, parameter :: iu = input_unit, ou = output_unit
-	integer :: io, iostat
+	integer :: io
 
 	logical :: continue_, show_tree
 	logical, parameter :: allow_cont = .true.
@@ -77,11 +77,11 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 	state%fns = declare_intrinsic_fns()
 
 	if (present(startup_file)) then
-		print *, "startup_file = ", startup_file
+		!print *, "startup_file = ", startup_file
 
-		source_text = read_file(startup_file, iostat)
+		source_text = read_file(startup_file, io)
 
-		if (iostat /= exit_success) then
+		if (io /= exit_success) then
 			if (.not. state%quiet) write(*,*) err_404(startup_file)
 			return
 		end if
@@ -191,6 +191,8 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 		res  = syntax_eval(compilation, state)
 
 		! Consider MATLAB-style "ans = " log?
+		!
+		! TODO: suppress unknown value logging (e.g. after #include())
 		res_str = res%to_str()
 		if (.not. present(str_)) write(ou, '(a)') res_str
 
