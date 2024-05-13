@@ -23,11 +23,21 @@ program main
 	! TODO: move into settings constructor?
 	maxerr = args%maxerr
 
-	if (args%syntran_file_arg) then
+	print *, "args%interactive = ", args%interactive
+
+
+	if (args%interactive) then
+		! "Interactive" keeps running with the same vars and fns workspace after
+		! running a startup file
+		res = syntran_interpret(startup_file = args%syntran_file)
+
+	else if (args%syntran_file_arg) then
+		! Interpret a file and exit
 		res = syntran_interpret_file(args%syntran_file)
 		write(*,*) '    '//res
 
 	else if (args%command_arg) then
+		! Interpret a cmd arg string
 		res = syntran_eval(args%command)
 		write(*,*) "ans = `", res, "`"  ! format subject to change
 
@@ -35,6 +45,7 @@ program main
 		! inside it
 
 	else
+		! Start a clean interactive shell (without any startup file)
 		res = syntran_interpret()
 
 	end if

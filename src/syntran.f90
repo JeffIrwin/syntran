@@ -17,7 +17,7 @@ contains
 
 !===============================================================================
 
-function syntran_interpret(str_, quiet) result(res_str)
+function syntran_interpret(str_, quiet, startup_file) result(res_str)
 
 	! This is the interactive interpreter shell
 	!
@@ -36,16 +36,17 @@ function syntran_interpret(str_, quiet) result(res_str)
 
 	character(len = *), intent(in), optional :: str_
 	logical, intent(in), optional :: quiet
+	character(len = *), intent(in), optional :: startup_file
 
 	character(len = :), allocatable :: res_str
 
 	!********
 
-	character(len = :), allocatable :: line, src_file
+	character(len = :), allocatable :: line, src_file, source_text
 	character(len = *), parameter :: prompt = lang_name//'$ '
 
 	integer, parameter :: iu = input_unit, ou = output_unit
-	integer :: io
+	integer :: io, iostat
 
 	logical :: continue_, show_tree
 	logical, parameter :: allow_cont = .true.
@@ -74,6 +75,32 @@ function syntran_interpret(str_, quiet) result(res_str)
 	if (present(quiet)) state%quiet = quiet
 
 	state%fns = declare_intrinsic_fns()
+
+	if (present(startup_file)) then
+		print *, "startup_file = ", startup_file
+
+		source_text = read_file(startup_file, iostat)
+
+		if (iostat /= exit_success) then
+			if (.not. state%quiet) write(*,*) err_404(startup_file)
+			return
+		end if
+
+		compilation = syntax_parse(source_text, state%vars, state%fns, startup_file)
+		if (.not. state%quiet) call compilation%log_diagnostics()
+
+		if (compilation%diagnostics%len_ > 0) then
+			res_str = ''
+			return
+		end if
+
+		! TODO: chdir option?
+
+		res = syntax_eval(compilation, state)
+		res_str = res%to_str()
+		write(*,*) '    '//res_str
+
+	end if
 
 	! Read-eval-print-loop
 	do

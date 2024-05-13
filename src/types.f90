@@ -351,7 +351,7 @@ subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 	class(fns_t) :: dict
 	character(len = *), intent(in) :: key
 	type(fn_t), intent(in) :: val
-	integer, intent(in) :: id_index
+	integer, intent(inout) :: id_index
 
 	integer, intent(out), optional :: iostat
 	logical, intent(in), optional :: overwrite
@@ -362,6 +362,7 @@ subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 	logical :: overwritel
 
 	!print *, 'inserting ', quote(key)
+	id_index = id_index + 1
 
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite

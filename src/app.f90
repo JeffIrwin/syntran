@@ -18,6 +18,7 @@ module syntran__app_m
 
 		logical :: &
 			command_arg      = .false., &
+			interactive      = .false., &
 			syntran_file_arg = .false., &
 			version          = .false., &
 			help             = .false.
@@ -112,13 +113,12 @@ function parse_args() result(args)
 				error = .true.
 			end if
 
-		! TODO: add "-i" arg to start interactive interpreter with a given
-		! #include file.  The difference compared to args%syntran_file is that
-		! it should not exit, but instead start taking live stdin
-
 		case ("-c", "--command")
 			args%command_arg = .true.
 			call get_next_arg(i, args%command)
+
+		case ("-i", "--interactive")
+			args%interactive = .true.
 
 		case ("--version")
 			args%version = .true.
@@ -193,17 +193,18 @@ function parse_args() result(args)
 	if (error .or. args%help) then
 
 		write(*,*) fg_bold//"Usage:"//color_reset
-		write(*,*) "	syntran <file.syntran> [--fmax-errors <n>]"
-		write(*,*) "	syntran"
-		write(*,*) "	syntran -c <cmd> | --command <cmd>"
-		write(*,*) "	syntran -h | --help"
-		write(*,*) "	syntran --version"
+		write(*,*) "    syntran <file.syntran> [--fmax-errors <n>] [-i | --interactive]"
+		write(*,*) "    syntran"
+		write(*,*) "    syntran -c <cmd> | --command <cmd>"
+		write(*,*) "    syntran -h | --help"
+		write(*,*) "    syntran --version"
 		write(*,*)
 		write(*,*) fg_bold//"Options:"//color_reset
-		write(*,*) "	-h --help           Show this help"
-		write(*,*) "	--version           Show version"
-		write(*,*) "	-c --command <cmd>  Run program passed in as string"
-		write(*,*) "	--fmax-errors <n>   Limit max " &
+		write(*,*) "    -h --help           Show this help"
+		write(*,*) "    --version           Show version"
+		write(*,*) "    -c --command <cmd>  Run program passed in as string"
+		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
+		write(*,*) "    --fmax-errors <n>   Limit max " &
 			//"error messages to <n> [default: "//str(maxerr_def)//"]"
 		write(*,*)
 

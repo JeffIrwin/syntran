@@ -38,8 +38,8 @@ module syntran__core_m
 	!    * cycle (continue), break ((loop) exit)
 	!    * (sys) exit done
 	!      > should final return value be used as an implicit sys exit value?
-	!        currently, default exit stat is 0, regardless of what syntran "main"
-	!        returns
+	!        currently, default exit stat is 0, regardless of what syntran
+	!        "main" returns
 	!  - consider using subroutines with out-args instead of fn return vals for
 	!    parse_*() fns?  i believe this is the source of segfaults for gfortran
 	!    8 and maybe 13.  subroutines allow passing-by-reference instead of
@@ -90,7 +90,8 @@ module syntran__core_m
 	!  - document recent features:
 	!    * casting?
 	!    * array comparison
-	!    * array arithmetic and boolean operations, test and doc array compound assignment
+	!    * array arithmetic and boolean operations, test and doc array compound
+	!      assignment
 	!    * caveat about return val from nested slice compound assignemnt:
 	!          `let u = (v[3: 7] += 7);`
 	!    * any(), all(), count(), sum(), i32(array), exit(), polymorphic
@@ -101,7 +102,6 @@ module syntran__core_m
 	!    * -c arg, shebang
 	!    * --fmax-errors arg
 	!    * ifx/ifort pass tests but perform order of magnitude slower
-	!  - parse_f32() intrinsic fn
 	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
 	!    versions don't allow a user-defined type that references another type
 	!    which is defined below it
@@ -162,7 +162,6 @@ module syntran__core_m
 	!    * done:
 	!      > exp  (non-variadic, non-polymorphic)
 	!      > min, max, sum
-	!        * need min/max for f32 (i32/i64 done)
 	!      > size (non-variadic but polymorphic)
 	!      > readln, writeln, println, open, close, str casting
 	!      > len (of str)
@@ -230,8 +229,6 @@ function declare_intrinsic_fns() result(fns)
 	! Insert the fn into the dict. These are global intrinsic fns, so there's no
 	! need to check iostat
 
-	! TODO: push_fn() fn, or just increment id_index inside insert()?
-	id_index = id_index + 1
 	call fns%insert("exp", exp_fn, id_index)
 
 	!********
@@ -241,14 +238,13 @@ function declare_intrinsic_fns() result(fns)
 	! like an arbitrary limitation.  Anyway we follow the Fortran convention
 	! here
 
-	! TODO: polymorphic in any numeric type i32, f32, i64, f64, etc.  Also an
-	! array version min(array) as opposed to Fortran's minval()
+	! TODO: add an array version min(array) as opposed to Fortran's minval()
 	!
 	! In Fortran, min() is polymorphic and variadic, but all args must be the
 	! same type.  For example, min(1, 2) and min(1.1, 2.1) are allowed, but
 	! min(1, 2.1) does not compile.  I think that's a reasonable restriction
 
-	! TODO: min_f32_fn, max_f32_fn, more as e.g. f64 is added, ...
+	! TODO: min_f64_fn, max_f64_fn
 
 	min_i32_fn%type = i32_type
 	allocate(min_i32_fn%params(2))
@@ -264,7 +260,6 @@ function declare_intrinsic_fns() result(fns)
 
 	! Internal overloaded name starts with a "0" because this would be illegal
 	! for user-defined fn's, so there can never be a clash
-	id_index = id_index + 1
 	call fns%insert("0min_i32", min_i32_fn, id_index)
 
 	!********
@@ -281,7 +276,6 @@ function declare_intrinsic_fns() result(fns)
 	min_i64_fn%variadic_min  = 0
 	min_i64_fn%variadic_type = i64_type
 
-	id_index = id_index + 1
 	call fns%insert("0min_i64", min_i64_fn, id_index)
 
 	!********
@@ -298,7 +292,6 @@ function declare_intrinsic_fns() result(fns)
 	min_f32_fn%variadic_min  = 0
 	min_f32_fn%variadic_type = f32_type
 
-	id_index = id_index + 1
 	call fns%insert("0min_f32", min_f32_fn, id_index)
 
 	!********
@@ -317,7 +310,6 @@ function declare_intrinsic_fns() result(fns)
 
 	! Internal overloaded name starts with a "0" because this would be illegal
 	! for user-defined fn's, so there can never be a clash
-	id_index = id_index + 1
 	call fns%insert("0max_i32", max_i32_fn, id_index)
 
 	!********
@@ -334,7 +326,6 @@ function declare_intrinsic_fns() result(fns)
 	max_i64_fn%variadic_min  = 0
 	max_i64_fn%variadic_type = i64_type
 
-	id_index = id_index + 1
 	call fns%insert("0max_i64", max_i64_fn, id_index)
 
 	!********
@@ -351,7 +342,6 @@ function declare_intrinsic_fns() result(fns)
 	max_f32_fn%variadic_min  = 0
 	max_f32_fn%variadic_type = f32_type
 
-	id_index = id_index + 1
 	call fns%insert("0max_f32", max_f32_fn, id_index)
 
 	!********
@@ -365,7 +355,6 @@ function declare_intrinsic_fns() result(fns)
 	println_fn%variadic_min  = 0
 	println_fn%variadic_type = any_type
 
-	id_index = id_index + 1
 	call fns%insert("println", println_fn, id_index)
 
 	!********
@@ -377,7 +366,6 @@ function declare_intrinsic_fns() result(fns)
 	str_fn%variadic_min  = 0
 	str_fn%variadic_type = any_type
 
-	id_index = id_index + 1
 	call fns%insert("str", str_fn, id_index)
 
 	!********
@@ -389,12 +377,11 @@ function declare_intrinsic_fns() result(fns)
 	len_fn%params(1)%type = str_type
 	len_fn%params(1)%name = "str"
 
-	id_index = id_index + 1
 	call fns%insert("len", len_fn, id_index)
 
 	!********
 
-	! TODO: add fns for parsing str to other types (f32, bool, etc.)
+	! TODO: add fns for parsing str to other types (bool, etc.)
 
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
@@ -404,7 +391,6 @@ function declare_intrinsic_fns() result(fns)
 	parse_i32_fn%params(1)%type = str_type
 	parse_i32_fn%params(1)%name = "str"
 
-	id_index = id_index + 1
 	call fns%insert("parse_i32", parse_i32_fn, id_index)
 
 	!********
@@ -414,7 +400,6 @@ function declare_intrinsic_fns() result(fns)
 	parse_i64_fn%params(1)%type = str_type
 	parse_i64_fn%params(1)%name = "str"
 
-	id_index = id_index + 1
 	call fns%insert("parse_i64", parse_i64_fn, id_index)
 
 	!********
@@ -424,7 +409,6 @@ function declare_intrinsic_fns() result(fns)
 	parse_f32_fn%params(1)%type = str_type
 	parse_f32_fn%params(1)%name = "str"
 
-	id_index = id_index + 1
 	call fns%insert("parse_f32", parse_f32_fn, id_index)
 
 	!********
@@ -436,7 +420,6 @@ function declare_intrinsic_fns() result(fns)
 
 	i32_sca_fn%params(1)%name = "a"
 
-	id_index = id_index + 1
 	call fns%insert("0i32_sca", i32_sca_fn, id_index)
 
 	!********
@@ -451,7 +434,6 @@ function declare_intrinsic_fns() result(fns)
 
 	i32_arr_fn%params(1)%name = "a"
 
-	id_index = id_index + 1
 	call fns%insert("0i32_arr", i32_arr_fn, id_index)
 
 	!********
@@ -465,7 +447,6 @@ function declare_intrinsic_fns() result(fns)
 
 	i64_sca_fn%params(1)%name = "a"
 
-	id_index = id_index + 1
 	call fns%insert("0i64_sca", i64_sca_fn, id_index)
 
 	!********
@@ -480,7 +461,6 @@ function declare_intrinsic_fns() result(fns)
 
 	i64_arr_fn%params(1)%name = "a"
 
-	id_index = id_index + 1
 	call fns%insert("0i64_arr", i64_arr_fn, id_index)
 
 	!********
@@ -490,7 +470,6 @@ function declare_intrinsic_fns() result(fns)
 	open_fn%params(1)%type = str_type
 	open_fn%params(1)%name = "filename"
 
-	id_index = id_index + 1
 	call fns%insert("open", open_fn, id_index)
 
 	!********
@@ -500,7 +479,6 @@ function declare_intrinsic_fns() result(fns)
 	readln_fn%params(1)%type = file_type
 	readln_fn%params(1)%name = "file_handle"
 
-	id_index = id_index + 1
 	call fns%insert("readln", readln_fn, id_index)
 
 	!********
@@ -514,7 +492,6 @@ function declare_intrinsic_fns() result(fns)
 	!writeln_fn%variadic_min = 1
 	writeln_fn%variadic_type = any_type
 
-	id_index = id_index + 1
 	call fns%insert("writeln", writeln_fn, id_index)
 
 	!********
@@ -524,7 +501,6 @@ function declare_intrinsic_fns() result(fns)
 	eof_fn%params(1)%type = file_type
 	eof_fn%params(1)%name = "file_handle"
 
-	id_index = id_index + 1
 	call fns%insert("eof", eof_fn, id_index)
 
 	!********
@@ -534,7 +510,6 @@ function declare_intrinsic_fns() result(fns)
 	close_fn%params(1)%type = file_type
 	close_fn%params(1)%name = "file_handle"
 
-	id_index = id_index + 1
 	call fns%insert("close", close_fn, id_index)
 
 	!********
@@ -544,7 +519,6 @@ function declare_intrinsic_fns() result(fns)
 	exit_fn%params(1)%type = i32_type
 	exit_fn%params(1)%name = "exit_status"
 
-	id_index = id_index + 1
 	call fns%insert("exit", exit_fn, id_index)
 
 	!********
@@ -562,7 +536,6 @@ function declare_intrinsic_fns() result(fns)
 	size_fn%params(2)%type = i32_type
 	size_fn%params(2)%name = "dim"
 
-	id_index = id_index + 1
 	call fns%insert("size", size_fn, id_index)
 
 	! It might also be useful to make size() variadic and have size(array)
@@ -587,12 +560,9 @@ function declare_intrinsic_fns() result(fns)
 	!count_fn%params(2)%type = i32_type
 	!count_fn%params(2)%name = "dim"
 
-	id_index = id_index + 1
 	call fns%insert("count", count_fn, id_index)
 
 	!********
-
-	! TODO: overload sum for other numeric types
 
 	sum_i32_fn%type = i32_type
 	allocate(sum_i32_fn%params(1))
@@ -610,7 +580,6 @@ function declare_intrinsic_fns() result(fns)
 	!sum_i32_fn%params(2)%type = i32_type
 	!sum_i32_fn%params(2)%name = "dim"
 
-	id_index = id_index + 1
 	call fns%insert("0sum_i32", sum_i32_fn, id_index)
 
 	!********
@@ -625,7 +594,6 @@ function declare_intrinsic_fns() result(fns)
 
 	sum_i64_fn%params(1)%name =  "array"
 
-	id_index = id_index + 1
 	call fns%insert("0sum_i64", sum_i64_fn, id_index)
 
 	!********
@@ -640,7 +608,6 @@ function declare_intrinsic_fns() result(fns)
 
 	sum_f32_fn%params(1)%name =  "array"
 
-	id_index = id_index + 1
 	call fns%insert("0sum_f32", sum_f32_fn, id_index)
 
 	!********
@@ -659,7 +626,6 @@ function declare_intrinsic_fns() result(fns)
 	!all_fn%params(2)%type = i32_type
 	!all_fn%params(2)%name = "dim"
 
-	id_index = id_index + 1
 	call fns%insert("all", all_fn, id_index)
 
 	!********
@@ -678,7 +644,6 @@ function declare_intrinsic_fns() result(fns)
 	!any_fn%params(2)%type = i32_type
 	!any_fn%params(2)%name = "dim"
 
-	id_index = id_index + 1
 	call fns%insert("any", any_fn, id_index)
 
 	!********
@@ -789,20 +754,6 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		tree%diagnostics = parser%diagnostics
 		return
 	end if
-
-	! TODO: something funny is happening with vars backup/restore.  Run these
-	! commands in interactive interpreter:
-	!
-	!     let x = 1;
-	!     #include("src/tests/test-src/include/str.syntran");
-	!     scan("1234", "3");
-	!     // works as expected
-	!
-	! Then in a new syntran session, run these:
-	!
-	!     #include("src/tests/test-src/include/str.syntran");
-	!     scan("1234", "3");
-	!     // crashes
 
 	! Point parser member to vars dict.  This could be done in the
 	! constructor new_parser(), but it seems reasonable to do it here since it

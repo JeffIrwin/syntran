@@ -1,40 +1,38 @@
 
+// Search for the first n primes
+let n = 200;
+
+// Pre-allocate an array of n primes
+let primes = [0: n];
+
+// Start at 2 because 1 is not prime by definition
+let i = 2;
+let num_primes = 0;
+while num_primes < n
 {
-	// Search for the first n primes
-	let n = 200;
+	let is_composite = false;
 
-	// Pre-allocate an array of n primes
-	let primes = [0: n];
-
-	// Start at 2 because 1 is not prime by definition
-	let i = 2;
-	let num_primes = 0;
-	while num_primes < n
+	let j = 0;
+	while j < num_primes and not is_composite
 	{
-		let is_composite = false;
+		let p = primes[j];
 
-		let j = 0;
-		while j < num_primes and not is_composite
-		{
-			let p = primes[j];
+		// Is i divisible by p?
+		let divisible = p * (i / p) == i;  // mod == 0
+		is_composite = is_composite or divisible;
 
-			// Is i divisible by p?
-			let divisible = p * (i / p) == i;  // mod == 0
-			is_composite = is_composite or divisible;
-
-			j = j + 1;
-		}
-
-		if not is_composite
-		{
-			primes[num_primes] = i;
-			num_primes = num_primes + 1;
-		}
-		i = i + 1;
+		j = j + 1;
 	}
 
-	// Final list of primes
-	primes;
-	// [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, ... ]
+	if not is_composite
+	{
+		primes[num_primes] = i;
+		num_primes = num_primes + 1;
+	}
+	i = i + 1;
 }
+
+// Final list of primes
+primes;
+	// [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, ... ]
 
