@@ -131,7 +131,6 @@ module syntran__core_m
 	!      > str_vec[0] == str_vec[:,0]
 	!      > str_mat[0,0] == str_mat[:,0,0]
 	!      > etc.
-	!    * str len intrinsic?  name it len() or size()?
 	!    * first, single-character indexing
 	!      > done
 	!    * then, range-based slicing
@@ -544,9 +543,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	! TODO: return i64?
-
-	count_fn%type = i32_type
+	count_fn%type = i64_type
 	allocate(count_fn%params(1))
 
 	count_fn%params(1)%type = array_type

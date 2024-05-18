@@ -26,6 +26,8 @@ program main
 	if (args%interactive) then
 		! "Interactive" keeps running with the same vars and fns workspace after
 		! running a startup file
+		!
+		! TODO: add a test that covers a "-i" interactive run
 		res = syntran_interpret(startup_file = args%syntran_file)
 
 	else if (args%syntran_file_arg) then

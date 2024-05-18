@@ -610,7 +610,7 @@ function eval_fn_call(node, state) result(res)
 	case ("count")
 
 		arg1 = syntax_eval(node%args(1), state)
-		res%sca%i32 = count(arg1%array%bool)
+		res%sca%i64 = count(arg1%array%bool)
 
 	case ("0sum_i32")
 		arg1 = syntax_eval(node%args(1), state)
