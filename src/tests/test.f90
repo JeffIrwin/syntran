@@ -505,6 +505,19 @@ subroutine unit_test_comp_ass(npass, nfail)
 			eval('let j = 5; j %= 4; j;', quiet) == '1', &
 			eval('let j = 4; j %= 4; j;', quiet) == '0', &
 			eval('let j = 3; j %= 4; j;', quiet) == '3', &
+			eval('let j = i64(3); j += i64(4); j;', quiet) == '7', &
+			eval('let j = 3; j += i64(4); j;', quiet) == '7', &
+			eval('let j = i64(3); j += 4; j;', quiet) == '7', &
+			eval('let j = 3; j -= i64(4); j;', quiet) == '-1', &
+			eval('let j = i64(3); j -= 4; j;', quiet) == '-1', &
+			eval('let j = 3; j *= i64(4); j;', quiet) == '12', &
+			eval('let j = i64(3); j *= 4; j;', quiet) == '12', &
+			eval('let j = 20; j /= i64(4); j;', quiet) == '5', &
+			eval('let j = i64(24); j /= 4; j;', quiet) == '6', &
+			eval('let j = 13; j %= i64(4); j;', quiet) == '1', &
+			eval('let j = i64(14); j %= 4; j;', quiet) == '2', &
+			eval('let j = 2; j **= i64(4); j;', quiet) == '16', &
+			eval('let j = i64(2); j **= 5; j;', quiet) == '32', &
 			eval('let j = 10; j += 3;', quiet) == '13'  &
 		]
 

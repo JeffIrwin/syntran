@@ -79,36 +79,6 @@ fn scan(str_: str, set: str): i64
 
 //==========================================================
 
-fn scanback(str_: str, set: str): i64
-{
-	// c.f. Fortran intrinsic scan() with back = true
-
-	//println("str_ = ", str_);
-	//println("set = ", set);
-
-	let found = false;
-	let i = len(str_) - 1;
-	while not found and i > 0
-	{
-
-		let j = 0;
-		while not found and j < len(set)
-		{
-			found = str_[i] == set[j];
-			j += 1;
-		}
-		i -= 1;
-	}
-
-	// return
-	if (found)
-		i += 1;
-	else
-		i = -1;
-}
-
-//==========================================================
-
 fn verify(str_: str, set: str): i64
 {
 	// c.f. Fortran intrinsic verify()

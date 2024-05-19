@@ -291,7 +291,18 @@ subroutine add_value_t(left, right, res, op_text)
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
 		res%sca%i64 = left%sca%i32 + right%sca%i64
 
-	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+	case        (magic**2 * i32_type + magic * i32_type + i64_type)
+		! This seems like a sane thing to allow, e.g.:
+		!
+		!     let x = 1;
+		!     x += i64(2);
+		!
+		! Also, it was manifesting as a runtime error, not caught during
+		! parsing, which is bad.  TODO: check similar cases for arrays and
+		! int/float mixing
+		res%sca%i32 = left%sca%i32 + right%sca%i64
+
+	! TODO: i64/f32 casting
 
 	! Usually, adding f32 to i32 casts to an i32 result.  But for compound
 	! assignment we may want to make it an i32, e.g. i += 3.1;
@@ -530,7 +541,10 @@ subroutine mul_value_t(left, right, res, op_text)
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
 		res%sca%i64 = left%sca%i32 * right%sca%i64
 
-	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+	case        (magic**2 * i32_type + magic * i32_type + i64_type)
+		res%sca%i32 = left%sca%i32 * right%sca%i64
+
+	! TODO: i64/f32 casting
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%sca%i32 = int(left%sca%f32 * right%sca%i32)
@@ -760,7 +774,10 @@ subroutine div_value_t(left, right, res, op_text)
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
 		res%sca%i64 = left%sca%i32 / right%sca%i64
 
-	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+	case        (magic**2 * i32_type + magic * i32_type + i64_type)
+		res%sca%i32 = left%sca%i32 / right%sca%i64
+
+	! TODO: i64/f32 casting
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%sca%i32 = int(left%sca%f32 / right%sca%i32)
@@ -980,7 +997,10 @@ subroutine subtract_value_t(left, right, res, op_text)
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
 		res%sca%i64 = left%sca%i32 - right%sca%i64
 
-	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+	case        (magic**2 * i32_type + magic * i32_type + i64_type)
+		res%sca%i32 = left%sca%i32 - right%sca%i64
+
+	! TODO: i64/f32 casting
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%sca%i32 = int(left%sca%f32 - right%sca%i32)
@@ -1204,7 +1224,10 @@ subroutine modulo_value_t(left, right, res, op_text)
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
 		res%sca%i64 = mod(int(left%sca%i32, 8), right%sca%i64)
 
-	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+	case        (magic**2 * i32_type + magic * i32_type + i64_type)
+		res%sca%i32 = mod(int(left%sca%i32, 8), right%sca%i64)
+
+	! TODO: i64/f32 casting
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%sca%i32 = mod(int(left%sca%f32), right%sca%i32)
@@ -1424,7 +1447,10 @@ subroutine pow_value_t(left, right, res, op_text)
 	case        (magic**2 * i64_type + magic * i32_type + i64_type)
 		res%sca%i64 = left%sca%i32 ** right%sca%i64
 
-	! TODO: i64/f32 casting, i32 LHS w/ i64 RHS
+	case        (magic**2 * i32_type + magic * i32_type + i64_type)
+		res%sca%i32 = left%sca%i32 ** right%sca%i64
+
+	! TODO: i64/f32 casting
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%sca%i32 = int(left%sca%f32 ** right%sca%i32)
