@@ -150,7 +150,7 @@ fn part2(): i64
 fn main(): i64
 {
 	println();
-	println("Starting AOC syntran main");
+	println("Starting AOC syntran main 2023/18");
 
 	let sum_ = i64(0);
 

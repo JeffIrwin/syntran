@@ -400,7 +400,7 @@ fn part2(): i32
 fn main(): i64
 {
 	println();
-	println("Starting AOC syntran main");
+	println("Starting AOC syntran main 2023/21");
 
 	let sum_ = i64(0);
 

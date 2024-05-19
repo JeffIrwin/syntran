@@ -208,7 +208,7 @@ fn part2(): i32
 fn main(): i32
 {
 	println();
-	println("Starting AOC syntran main");
+	println("Starting AOC syntran main 2023/02");
 
 	let sum_ = 0;
 
