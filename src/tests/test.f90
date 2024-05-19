@@ -613,17 +613,17 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f32('parse_f32("2");') - 2.000000E+00) < tol, &
 			abs(eval_f32('parse_f32("-3");') - -3.000000E+00) < tol, &
 			abs(eval_f32('parse_f32("-2");') - -2.000000E+00) < tol, &
-			eval_i32('len(     "");')  == 0,  &
-			eval_i32('len(    " ");')  == 1,  &
-			eval_i32('len(   "  ");')  == 2,  &
-			eval_i32('len(  "   ");')  == 3,  &
-			eval_i32('len( "    ");')  == 4,  &
-			eval_i32('len("     ");')  == 5,  &
-			eval_i32('len(    "h");')  == 1,  &
-			eval_i32('len(   "ht");')  == 2,  &
-			eval_i32('len(  "htn");')  == 3,  &
-			eval_i32('len( "htns");')  == 4,  &
-			eval_i32('len("htns-");')  == 5,  &
+			eval_i64('len(     "");')  == 0,  &
+			eval_i64('len(    " ");')  == 1,  &
+			eval_i64('len(   "  ");')  == 2,  &
+			eval_i64('len(  "   ");')  == 3,  &
+			eval_i64('len( "    ");')  == 4,  &
+			eval_i64('len("     ");')  == 5,  &
+			eval_i64('len(    "h");')  == 1,  &
+			eval_i64('len(   "ht");')  == 2,  &
+			eval_i64('len(  "htn");')  == 3,  &
+			eval_i64('len( "htns");')  == 4,  &
+			eval_i64('len("htns-");')  == 5,  &
 			eval('i32( 0.0);') ==   "0", &
 			eval('i32( 1.1);') ==   "1", &
 			eval('i32(-1.1);') ==  "-1", &

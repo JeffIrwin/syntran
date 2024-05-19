@@ -439,11 +439,12 @@ fn get_max_dist(map: [str; :, :], xbeg: [i32; :], xend: [i32; :]): i32
 fn part1(): i32
 {
 	let ny = countln_(filename);
+	//println("ny = ", ny);
 
 	let f = open(filename);
 	let str_ = readln(f);
 
-	let nx = len(str_);
+	let nx = i32(len(str_));
 
 	//println("nx, ny = ", [nx, ny]);
 
@@ -464,9 +465,9 @@ fn part1(): i32
 			grid[x, y] = str_[x];
 
 		if y == ybeg
-			xbeg = scan(str_, ".");
+			xbeg = i32(scan(str_, "."));
 		else if y == yend
-			xend = scan(str_, ".");
+			xend = i32(scan(str_, "."));
 
 		str_ = readln(f);
 	}
@@ -490,7 +491,7 @@ fn part2(): i32
 	let f = open(filename);
 	let str_ = readln(f);
 
-	let nx = len(str_);
+	let nx = i32(len(str_));
 
 	//println("nx, ny = ", [nx, ny]);
 
@@ -511,9 +512,9 @@ fn part2(): i32
 			grid[x, y] = str_[x];
 
 		if y == ybeg
-			xbeg = scan(str_, ".");
+			xbeg = i32(scan(str_, "."));
 		else if y == yend
-			xend = scan(str_, ".");
+			xend = i32(scan(str_, "."));
 
 		str_ = readln(f);
 	}

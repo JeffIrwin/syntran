@@ -250,7 +250,7 @@ function eval_name_expr(node, state) result(res)
 
 			! This feels inconsistent and not easy to extend to higher ranks
 			right = syntax_eval(node%usubscripts(1), state)
-			iu = right%sca%i32 + 1
+			iu = right%to_i64() + 1
 
 			!print *, ''
 			!print *, 'identifier ', node%identifier%text
@@ -474,8 +474,7 @@ function eval_fn_call(node, state) result(res)
 	case ("len")
 
 		arg = syntax_eval(node%args(1), state)
-		res%sca%i32 = len(arg%sca%str%s, 4)
-		!res%sca%i32 = mylen( arg%sca%str%s )
+		res%sca%i64 = len(arg%sca%str%s, 8)
 
 	case ("parse_i32")
 
@@ -1716,7 +1715,8 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 
 		case (range_sub)
 			usubval = syntax_eval(node%usubscripts(i), state)
-			usubs(i) = usubval%sca%i32
+			!usubs(i) = usubval%sca%i32
+			usubs(i) = usubval%to_i64()
 
 			rank_res = rank_res + 1
 

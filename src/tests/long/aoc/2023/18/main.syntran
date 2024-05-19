@@ -83,6 +83,7 @@ fn part1(): i64
 
 fn part2(): i64
 {
+	//println("starting part2");
 	let x = 0;
 	let y = 0;
 
@@ -127,8 +128,8 @@ fn part2(): i64
 		// Trapezoid area:  https://en.wikipedia.org/wiki/Shoelace_formula
 		let trap_area = (i64(y0) + y) * (x0 - x) / 2;
 
-		area += trap_area;
-		perimeter += dist;
+		area += i64(trap_area);
+		perimeter += i64(dist);
 
 		//println();
 		str_ = readln(f);

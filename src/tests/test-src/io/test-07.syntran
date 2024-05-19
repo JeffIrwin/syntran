@@ -4,7 +4,7 @@
 
 //==========================================================
 
-fn scan(str_: str, set: str): i32
+fn scan(str_: str, set: str): i64
 {
 	// c.f. Fortran intrinsic scan()
 
@@ -12,7 +12,7 @@ fn scan(str_: str, set: str): i32
 	//println("set = ", set);
 
 	let found = false;
-	let i = 0;
+	let i = i64(0);
 	while not found and i < len(str_)
 	{
 
@@ -34,7 +34,7 @@ fn scan(str_: str, set: str): i32
 
 //==========================================================
 
-fn scanback(str_: str, set: str): i32
+fn scanback(str_: str, set: str): i64
 {
 	// c.f. Fortran intrinsic scan() with back = true
 
@@ -64,15 +64,16 @@ fn scanback(str_: str, set: str): i32
 
 //==========================================================
 
-fn verify(str_: str, set: str): i32
+fn verify(str_: str, set: str): i64
 {
 	// c.f. Fortran intrinsic verify()
 
-	//println("str_ = ", str_);
+	//println("starting verify()");
+	//println("str_ = """, str_, """");
 	//println("set = ", set);
 
 	let found = true;
-	let i = 0;
+	let i = i64(0);
 	while found and i < len(str_)
 	{
 		//println(i);
@@ -98,7 +99,7 @@ fn verify(str_: str, set: str): i32
 
 //==========================================================
 
-fn tok_i32(str_: str): [i32; :]
+fn tok_i32(str_: str): [i64; :]
 {
 	// tokenize a string into the first int contained within it, then return the
 	// substring start index, end index, and length
@@ -108,6 +109,7 @@ fn tok_i32(str_: str): [i32; :]
 
 	let nums = "1234567890";
 	let beg_ = scan    (str_, nums);
+	//println("beg_ = ", beg_);
 
 	let n = len(str_);
 	//println("n = ", n);
@@ -116,7 +118,7 @@ fn tok_i32(str_: str): [i32; :]
 	let len_ = verify(str_[beg_:n], nums);
 	//println("len_ = ", len_);
 
-	let end_ = -1;
+	let end_ = i64(-1);
 	if (len_ < 0)
 	{
 		// This is consistent with the way that verify() works in Fortran

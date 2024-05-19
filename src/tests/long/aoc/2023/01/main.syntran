@@ -17,6 +17,7 @@ let filename = filenames[ifile];
 
 fn part1(): i32
 {
+	//println("starting part1");
 	let sum_ = 0;
 
 	let f = open(filename);
@@ -29,6 +30,7 @@ fn part1(): i32
 		//println("first = ", str_[i]);
 
 		let j = scanback(str_, digit_chars);
+		//println("j = ", j);
 		//println("last  = ", str_[j]);
 
 		let digits = str_[i] + str_[j];
@@ -48,6 +50,7 @@ fn part1(): i32
 
 fn part2(): i32
 {
+	//println("starting part2");
 	let sum_ = 0;
 
 	let nums =

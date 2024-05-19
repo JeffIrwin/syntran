@@ -197,7 +197,7 @@ fn part1(): i32
 	let f = open(filename);
 	let str_ = readln(f);
 
-	let nx = len(str_);
+	let nx = i32(len(str_));
 
 	//println("nx, ny = ", [nx, ny]);
 
@@ -291,7 +291,7 @@ fn part2(): i32
 	let f = open(filename);
 	let str_ = readln(f);
 
-	let nx = len(str_);
+	let nx = i32(len(str_));
 
 	println("nx, ny = ", [nx, ny]);
 

@@ -27,20 +27,19 @@ fn countln_(filename: str): i32
 
 //==============================================================================
 
-fn verify(str_: str, set: str): i32
+fn scan(str_: str, set: str): i64
 {
-	//println("");
-	//println("starting verify");
-	//println("str_ = ", str_);
-	//println("set  = ", set);
+	// c.f. Fortran intrinsic scan()
 
-	let i = 0;
-	let found = true;
-	while found and i < len(str_)
+	//println("str_ = ", str_);
+	//println("set = ", set);
+
+	let found = false;
+	let i = i64(0);
+	while not found and i < len(str_)
 	{
+
 		let j = 0;
-		//found = true;
-		found = false;
 		while not found and j < len(set)
 		{
 			found = str_[i] == set[j];
@@ -50,22 +49,194 @@ fn verify(str_: str, set: str): i32
 	}
 
 	// return
-	//
-	// TODO: it might make more sense to return `ans = len(str_)` instead of ans
-	// = -1 in the `not found` case.  This is not consistent with the way that
-	// Fortran's `verify()` fn works, but it could simplify the logic for many
-	// use cases.  Similarly for scanback (but not verifyback or scan)
-	let ans = -1;
-	if not found
-	{
-		//println("ans = ", i - 1);
-		ans = i - 1;
-	}
+	if (found)
+		i -= 1;
+	else
+		i = i64(-1);
 }
+
+//==========================================================
+
+fn scanback(str_: str, set: str): i64
+{
+	// c.f. Fortran intrinsic scan() with back = true
+
+	//println("str_ = ", str_);
+	//println("set = ", set);
+
+	let found = false;
+	let i = len(str_) - 1;
+	while not found and i >= 0
+	{
+
+		let j = i64(0);
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i -= 1;
+	}
+	//println("found = ", found);
+
+	// return
+	if (found)
+		i += 1;
+	else
+		i = i64(-1);
+}
+
+//==========================================================
+
+fn verify(str_: str, set: str): i64
+{
+	// c.f. Fortran intrinsic verify()
+
+	//println("starting verify()");
+	//println("str_ = """, str_, """");
+	//println("set = ", set);
+
+	let found = true;
+	let i = i64(0);
+	while found and i < len(str_)
+	{
+		//println(i);
+
+		let j = 0;
+		found = false;
+		while not found and j < len(set)
+		{
+			//found = str_[i] != set[j];
+			//found = not (str_[i] == set[j]);
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	// return
+	if (not found)
+		i -= 1;
+	else
+		i = i64(-1);
+}
+
+//==========================================================
+
+fn tok_i32(str_: str): [i64; :]
+{
+	// tokenize a string into the first int contained within it, then return the
+	// substring start index, end index, and length
+
+	//println("starting tok_i32()");
+	//println("str_ = """, str_, """");
+
+	let nums = "1234567890";
+	let beg_ = scan    (str_, nums);
+	//println("beg_ = ", beg_);
+
+	let n = len(str_);
+	//println("n = ", n);
+
+	// nasty bug which was just fixed
+	let len_ = i64(-1);
+	if (beg_ >= 0)
+		len_ = verify(str_[beg_:n], nums);
+	//println("len_ = ", len_);
+
+	let end_ = i64(-1);
+	if (beg_ < 0)
+	{
+		//println("no beg_");
+	}
+	else if (len_ < 0)
+	{
+		// This is consistent with the way that verify() works in Fortran
+		end_ = n - 1;
+		len_ = end_ - beg_ + 1;
+	}
+	else
+		end_ = beg_ + len_ - 1;
+
+	//println("beg_ = ", beg_);
+	//println("end_ = ", end_);
+
+	//println("num beg = ", str_[beg_]);
+	//println("num end = ", str_[end_]);
+	//println("num str = ", str_[beg_: end_+1]);
+
+	// return
+	[beg_, end_, len_];
+}
+
+//==========================================================
+
+fn read_i32(str_: str): i32
+{
+	let toks = tok_i32(str_);
+
+	// multiple return vals are packed into a vec bc i don't have structs :sad:
+	let beg_ = toks[0];
+	let end_ = toks[1];
+	//let len_ = toks[2]; // not needed
+
+	//println("read_i32 substr = ", str_[beg_: end_+1]);
+
+	let ans = parse_i32(str_[beg_: end_+1]);
+	//println("read_i32 = ", ans);
+
+	// return
+	ans;
+}
+
+fn read_i32s(str_: str): [i32; :]
+{
+	// Parse a vector of i32 integers from a string.  Any non-int characters are
+	// treated as delimiters
+
+	let i = i64(0);
+	let n = len(str_);
+
+	//println("str_ = ", str_);
+	//println("n = ", n);
+
+	//let toks = i64([0, 0, 0]);
+	let toks = [i64(0); 3];
+	let num_nums = 0;  // the number of numbers
+
+	while toks[0] >= 0
+	{
+		//println("i = ", i);
+		toks = tok_i32(str_[i:n]);
+		//println("toks = ", toks);
+		//println("num = ", num);
+		num_nums += 1;
+		i += toks[1] + 1;
+	}
+	num_nums -= 1;
+
+	let nums = [0; num_nums];
+	i = i64(0);
+	for j in [0: num_nums]
+	{
+		//println("i = ", i);
+		toks = tok_i32(str_[i:n]);
+		//println("toks = ", toks);
+		let num = parse_i32(str_[i + toks[0]: i + toks[1]+1]);
+		//println("num = ", num);
+		nums[j] = num;
+		//num_nums += 1;
+		i += toks[1] + 1;
+	}
+
+	// return
+	nums;
+}
+
 
 //==============================================================================
 
-fn verifyback(str_: str, set: str): i32
+fn verifyback(str_: str, set: str): i64
 {
 	//println("");
 	//println("starting verifyback");
@@ -87,7 +258,7 @@ fn verifyback(str_: str, set: str): i32
 	}
 
 	// return
-	let ans = -1;
+	let ans = i64(-1);
 	if not found
 	{
 		//println("ans = ", i + 1);
@@ -96,34 +267,6 @@ fn verifyback(str_: str, set: str): i32
 }
 
 //==============================================================================
-
-fn scan(str_: str, set: str): i32
-{
-	//println("starting scan()");
-	let i = 0;
-	let found = false;
-	while not found and i < len(str_)
-	{
-		let j = 0;
-		while not found and j < len(set)
-		{
-			found = str_[i] == set[j];
-			j += 1;
-		}
-		i += 1;
-	}
-
-	// return
-	//println("(almost) done scan()");
-	let ans = -1;
-	if found
-		ans = i - 1;
-	//println("done scan()");
-
-	// TODO: ifx doesn't work without this.  I guess `if found` when found is
-	// false breaks the return type somehow.  Syntran needs return statement
-	let ans2 = ans;
-}
 
 //==============================================================================
 
@@ -275,37 +418,14 @@ fn any_str_eq(str_: str, v: [str; :]): bool
 
 //==============================================================================
 
-fn scanback(str_: str, set: str): i32
-{
-	let i = len(str_) - 1;
-	let found = false;
-	while not found and i >= 0
-	{
-		let j = 0;
-		while not found and j < len(set)
-		{
-			found = str_[i] == set[j];
-			j += 1;
-		}
-		i -= 1;
-	}
-
-	// return
-	let ans = -1;
-	if found
-		ans = i + 1;
-}
-
-//==============================================================================
-
-fn index_(str_: str, substr: str): i32
+fn index_(str_: str, substr: str): i64
 {
 	//println("str_   = ", str_);
 	//println("substr = ", substr);
 
 	let nsub = len(substr);
 
-	let i = 0;
+	let i = i64(0);
 	let found = false;
 	while not found and i < len(str_) - len(substr) + 1
 	{
@@ -339,14 +459,14 @@ fn index_(str_: str, substr: str): i32
 	else
 	{
 		//println("not found");
-		let ans = -1;
+		let ans = i64(-1);
 	}
 
 }
 
 //==============================================================================
 
-fn indexback(str_: str, substr: str): i32
+fn indexback(str_: str, substr: str): i64
 {
 	//println("str_   = ", str_);
 	//println("substr = ", substr);
@@ -385,7 +505,7 @@ fn indexback(str_: str, substr: str): i32
 	else
 	{
 		//println("not found");
-		let ans = -1;
+		let ans = i64(-1);
 	}
 
 }
@@ -467,7 +587,7 @@ fn parse_i32_hex(str_: str): i32
 		let i = len(str_) - ii - 1;
 		let c = str_[i];
 		let val = scan(hex_chars, c);
-		num += val * 16 ** ii;
+		num += i32(val * 16 ** ii);
 	}
 	let ans = num;
 }

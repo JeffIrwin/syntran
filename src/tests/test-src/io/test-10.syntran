@@ -49,7 +49,7 @@ fn norm_diff(u: [i32; :], v: [i32; :]): i32
 
 //==========================================================
 
-fn scan(str_: str, set: str): i32
+fn scan(str_: str, set: str): i64
 {
 	// c.f. Fortran intrinsic scan()
 
@@ -57,7 +57,7 @@ fn scan(str_: str, set: str): i32
 	//println("set = ", set);
 
 	let found = false;
-	let i = 0;
+	let i = i64(0);
 	while not found and i < len(str_)
 	{
 
@@ -74,12 +74,12 @@ fn scan(str_: str, set: str): i32
 	if (found)
 		i -= 1;
 	else
-		i = -1;
+		i = i64(-1);
 }
 
 //==========================================================
 
-fn scanback(str_: str, set: str): i32
+fn scanback(str_: str, set: str): i64
 {
 	// c.f. Fortran intrinsic scan() with back = true
 
@@ -109,15 +109,16 @@ fn scanback(str_: str, set: str): i32
 
 //==========================================================
 
-fn verify(str_: str, set: str): i32
+fn verify(str_: str, set: str): i64
 {
 	// c.f. Fortran intrinsic verify()
 
-	//println("str_ = ", str_);
+	//println("starting verify()");
+	//println("str_ = """, str_, """");
 	//println("set = ", set);
 
 	let found = true;
-	let i = 0;
+	let i = i64(0);
 	while found and i < len(str_)
 	{
 		//println(i);
@@ -126,6 +127,8 @@ fn verify(str_: str, set: str): i32
 		found = false;
 		while not found and j < len(set)
 		{
+			//found = str_[i] != set[j];
+			//found = not (str_[i] == set[j]);
 			found = str_[i] == set[j];
 			j += 1;
 		}
@@ -136,51 +139,52 @@ fn verify(str_: str, set: str): i32
 	if (not found)
 		i -= 1;
 	else
-		i = -1;
+		i = i64(-1);
 }
 
 //==========================================================
 
-fn tok_i32(str_: str): [i32; :]
+fn tok_i32(str_: str): [i64; :]
 {
 	// tokenize a string into the first int contained within it, then return the
 	// substring start index, end index, and length
 
 	//println("starting tok_i32()");
-	//println("str_ = ", str_);
+	//println("str_ = """, str_, """");
 
-	// TODO: `-` (negatives).  Maybe separate u32 and i32 fns
 	let nums = "1234567890";
 	let beg_ = scan    (str_, nums);
+	//println("beg_ = ", beg_);
 
-	let end_ = -1;
-	let len_ = -1;
+	let n = len(str_);
+	//println("n = ", n);
 
+	// nasty bug which was just fixed
+	let len_ = i64(-1);
 	if (beg_ >= 0)
-	{
-
-		let n = len(str_);
-		//println("n = ", n);
-	
 		len_ = verify(str_[beg_:n], nums);
-		//println("len_ = ", len_);
-	
-		if (len_ < 0)
-		{
-			// This is consistent with the way that verify() works in Fortran
-			end_ = n - 1;
-			len_ = end_ - beg_ + 1;
-		}
-		else
-			end_ = beg_ + len_ - 1;
-	
-		//println("beg_ = ", beg_);
-		//println("end_ = ", end_);
-	
-		//println("num beg = ", str_[beg_]);
-		//println("num end = ", str_[end_]);
-		//println("num str = ", str_[beg_: end_+1]);
+	//println("len_ = ", len_);
+
+	let end_ = i64(-1);
+	if (beg_ < 0)
+	{
+		//println("no beg_");
 	}
+	else if (len_ < 0)
+	{
+		// This is consistent with the way that verify() works in Fortran
+		end_ = n - 1;
+		len_ = end_ - beg_ + 1;
+	}
+	else
+		end_ = beg_ + len_ - 1;
+
+	//println("beg_ = ", beg_);
+	//println("end_ = ", end_);
+
+	//println("num beg = ", str_[beg_]);
+	//println("num end = ", str_[end_]);
+	//println("num str = ", str_[beg_: end_+1]);
 
 	// return
 	[beg_, end_, len_];
@@ -188,18 +192,37 @@ fn tok_i32(str_: str): [i32; :]
 
 //==========================================================
 
+fn read_i32(str_: str): i32
+{
+	let toks = tok_i32(str_);
+
+	// multiple return vals are packed into a vec bc i don't have structs :sad:
+	let beg_ = toks[0];
+	let end_ = toks[1];
+	//let len_ = toks[2]; // not needed
+
+	//println("read_i32 substr = ", str_[beg_: end_+1]);
+
+	let ans = parse_i32(str_[beg_: end_+1]);
+	//println("read_i32 = ", ans);
+
+	// return
+	ans;
+}
+
 fn read_i32s(str_: str): [i32; :]
 {
 	// Parse a vector of i32 integers from a string.  Any non-int characters are
 	// treated as delimiters
 
-	let i = 0;
+	let i = i64(0);
 	let n = len(str_);
 
 	//println("str_ = ", str_);
 	//println("n = ", n);
 
-	let toks = [0, 0, 0];
+	//let toks = i64([0, 0, 0]);
+	let toks = [i64(0); 3];
 	let num_nums = 0;  // the number of numbers
 
 	while toks[0] >= 0
@@ -214,7 +237,7 @@ fn read_i32s(str_: str): [i32; :]
 	num_nums -= 1;
 
 	let nums = [0; num_nums];
-	i = 0;
+	i = i64(0);
 	for j in [0: num_nums]
 	{
 		//println("i = ", i);
@@ -226,7 +249,6 @@ fn read_i32s(str_: str): [i32; :]
 		//num_nums += 1;
 		i += toks[1] + 1;
 	}
-	//println("nums = ", nums);
 
 	// return
 	nums;

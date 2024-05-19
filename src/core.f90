@@ -73,8 +73,6 @@ module syntran__core_m
 	!        let arr1 = [0: 4];
 	!        let arr2 = [4: 8];
 	!        let cat  = [arr1, arr2]; // [0: 8]
-	!  - len(), count(), etc. should return i64
-	!    * size() done
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
 	!    * element-wise add, sub, mul, div, pow, mod done
@@ -369,9 +367,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	! TODO: return i64?
-
-	len_fn%type = i32_type
+	len_fn%type = i64_type
 	allocate(len_fn%params(1))
 	len_fn%params(1)%type = str_type
 	len_fn%params(1)%name = "str"

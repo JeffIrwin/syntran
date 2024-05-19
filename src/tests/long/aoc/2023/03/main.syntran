@@ -24,7 +24,7 @@ fn part1(): i32
 	let f = open(filename);
 	let str_ = readln(f);
 
-	let nx = len(str_);
+	let nx = i32(len(str_));
 	//println("nx = ", nx);
 
 	let grid = [false; nx, ny];
@@ -63,7 +63,7 @@ fn part1(): i32
 			let len_ = 0;
 			if scan(str_[ix], digit_chars) >= 0
 			{
-				len_ = verify(str_[ix: nx], digit_chars);
+				len_ = i32(verify(str_[ix: nx], digit_chars));
 				if (len_ < 0) len_ = nx - ix;
 
 				num = parse_i32(str_[ix: ix+len_]);
@@ -112,7 +112,7 @@ fn part2(): i32
 	let f = open(filename);
 	let str_ = readln(f);
 
-	let nx = len(str_);
+	let nx = i32(len(str_));
 	//println("nx = ", nx);
 
 	// Save strings in a vector
@@ -152,8 +152,8 @@ fn part2(): i32
 				if is_digit(strl[ix])
 				{
 					// There is 1 number above
-					let ibeg = verifyback(strl[0: ix+1], digit_chars);
-					let iend = verify    (strl[ix: nx ], digit_chars) + ix;
+					let ibeg = i32(verifyback(strl[0: ix+1], digit_chars));
+					let iend = i32(verify    (strl[ix: nx ], digit_chars)) + ix;
 					if (iend < ix) iend = nx;
 
 					nums[nnums] = parse_i32(strl[ibeg+1: iend]);
@@ -167,8 +167,8 @@ fn part2(): i32
 					if is_digit(strl[ix-1])
 					{
 						// Number to the top left
-						let ibeg = verifyback(strl[0: ix], digit_chars);
-						let iend = verify    (strl[ix-1: nx ], digit_chars) + ix-1;
+						let ibeg = i32(verifyback(strl[0: ix], digit_chars));
+						let iend = i32(verify    (strl[ix-1: nx ], digit_chars)) + ix-1;
 						if (iend < ix-1) iend = nx;
 
 						nums[nnums] = parse_i32(strl[ibeg+1: iend]);
@@ -179,8 +179,8 @@ fn part2(): i32
 					if is_digit(strl[ix+1])
 					{
 						// Number to the top right
-						let ibeg = verifyback(strl[0: ix+2], digit_chars);
-						let iend = verify    (strl[ix+1: nx ], digit_chars) + ix+1;
+						let ibeg = i32(verifyback(strl[0: ix+2], digit_chars));
+						let iend = i32(verify    (strl[ix+1: nx ], digit_chars)) + ix+1;
 						if (iend < ix+1) iend = nx;
 
 						nums[nnums] = parse_i32(strl[ibeg+1: iend]);
@@ -198,8 +198,8 @@ fn part2(): i32
 			if is_digit(strl[ix-1])
 			{
 				// Number to the left
-				let ibeg = verifyback(strl[0: ix], digit_chars);
-				let iend = verify    (strl[ix-1: nx ], digit_chars) + ix-1;
+				let ibeg = i32(verifyback(strl[0: ix], digit_chars));
+				let iend = i32(verify    (strl[ix-1: nx ], digit_chars)) + ix-1;
 				if (iend < ix-1) iend = nx;
 
 				nums[nnums] = parse_i32(strl[ibeg+1: iend]);
@@ -210,8 +210,8 @@ fn part2(): i32
 			if is_digit(strl[ix+1])
 			{
 				// Number to the right
-				let ibeg = verifyback(strl[0: ix+2], digit_chars);
-				let iend = verify    (strl[ix+1: nx ], digit_chars) + ix+1;
+				let ibeg = i32(verifyback(strl[0: ix+2], digit_chars));
+				let iend = i32(verify    (strl[ix+1: nx ], digit_chars)) + ix+1;
 				if (iend < ix+1) iend = nx;
 
 				nums[nnums] = parse_i32(strl[ibeg+1: iend]);
@@ -226,8 +226,8 @@ fn part2(): i32
 				if is_digit(strl[ix])
 				{
 					// There is 1 number below
-					let ibeg = verifyback(strl[0: ix+1], digit_chars);
-					let iend = verify    (strl[ix: nx ], digit_chars) + ix;
+					let ibeg = i32(verifyback(strl[0: ix+1], digit_chars));
+					let iend = i32(verify    (strl[ix: nx ], digit_chars)) + ix;
 					if (iend < ix) iend = nx;
 
 					nums[nnums] = parse_i32(strl[ibeg+1: iend]);
@@ -241,8 +241,8 @@ fn part2(): i32
 					if is_digit(strl[ix-1])
 					{
 						// Number to the bottom left
-						let ibeg = verifyback(strl[0: ix], digit_chars);
-						let iend = verify    (strl[ix-1: nx ], digit_chars) + ix-1;
+						let ibeg = i32(verifyback(strl[0: ix], digit_chars));
+						let iend = i32(verify    (strl[ix-1: nx ], digit_chars)) + ix-1;
 						if (iend < ix-1) iend = nx;
 
 						nums[nnums] = parse_i32(strl[ibeg+1: iend]);
@@ -253,8 +253,8 @@ fn part2(): i32
 					if is_digit(strl[ix+1])
 					{
 						// Number to the bottom right
-						let ibeg = verifyback(strl[0: ix+2], digit_chars);
-						let iend = verify    (strl[ix+1: nx ], digit_chars) + ix+1;
+						let ibeg = i32(verifyback(strl[0: ix+2], digit_chars));
+						let iend = i32(verify    (strl[ix+1: nx ], digit_chars)) + ix+1;
 						if (iend < ix+1) iend = nx;
 
 						nums[nnums] = parse_i32(strl[ibeg+1: iend]);

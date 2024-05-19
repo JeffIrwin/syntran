@@ -406,6 +406,7 @@ function syntran_interpret_file(filename, quiet, chdir_) result(res)
 	if (present(chdir_)) chdirl = chdir_
 
 	if (.not. state%quiet) write(*,*) 'Interpreting file "'//filename//'"'
+	!if (.true. .or. .not. state%quiet) write(*,*) 'Interpreting file "'//filename//'"'
 
 	source_text = read_file(filename, iostat)
 
