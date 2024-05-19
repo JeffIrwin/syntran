@@ -20,12 +20,12 @@ module syntran__core_m
 	! Syntax translator (think FORmula TRANslator)
 	!
 	! I mean what could she have?  Fungus?
-	character(len = *), parameter :: lang_name = 'syntran'
+	character(len = *), parameter :: lang_name = "syntran"
 
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  44
+		syntran_patch =  45
 
 	! TODO:
 	!  - structs
@@ -147,7 +147,8 @@ module syntran__core_m
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
-	!    * check return value is correct type
+	!    * check return value is correct type.  return statements could help
+	!      with this
 	!    * intrinsic
 	!      > abs, norm, dot
 	!      > log
