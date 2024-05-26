@@ -382,8 +382,8 @@ function eval_fn_call(node, state) result(res)
 
 	type(value_t) :: arg, arg1, arg2
 
-	print *, 'eval fn_call_expr'
-	print *, 'fn identifier = ', node%identifier%text
+	!print *, 'eval fn_call_expr'
+	!print *, 'fn identifier = ', node%identifier%text
 	!print *, 'fn id_index   = ', node%id_index
 
 	state%ifn = state%ifn + 1  ! push.  TODO: overflow check if not dynamic
@@ -864,6 +864,8 @@ function eval_for_statement(node, state) result(res)
 
 		res = syntax_eval(node%body, state)
 
+		if (state%returned( state%ifn )) exit
+
 	end do
 	call state%vars%pop_scope()
 
@@ -1080,6 +1082,8 @@ function eval_translation_unit(node, state) result(res)
 		if (node%members(i)%kind == name_expr .and. .not. state%quiet) then
 			write(*,*) res%to_str()
 		end if
+
+		if (state%returned( state%ifn )) exit
 
 	end do
 
@@ -1440,11 +1444,9 @@ function eval_while_statement(node, state) result(res)
 
 	condition = syntax_eval(node%condition, state)
 	do while (condition%sca%bool)
-		! TODO: check `returned` like in block statement here.  It might make a
-		! perf diff, and I think it's required for syntactic correctness
-		! sometimes.  Check similarly in for loops.  Anywhere else?
 		res = syntax_eval(node%body, state)
 		condition = syntax_eval(node%condition, state)
+		if (state%returned( state%ifn )) exit
 	end do
 
 end function eval_while_statement
@@ -1518,9 +1520,8 @@ function eval_block_statement(node, state) result(res)
 		!print *, 'kind = ', node%members(i)%kind
 		!print *, i, ' tmp = ', tmp%to_str()
 		!print *, 'type = ', tmp%type, kind_name(tmp%type)
+		!print *, "i, ifn, ret = ", i, state%ifn, state%returned( state%ifn )
 		!print *, ''
-
-		print *, "i, ifn, ret = ", i, state%ifn, state%returned( state%ifn )
 
 		! In case of no-op if statements and while loops
 		if (tmp%type /= unknown_type) res = tmp
