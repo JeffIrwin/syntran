@@ -74,7 +74,10 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
+	! TODO: make an init_state() fn
 	state%fns = declare_intrinsic_fns()
+	state%ifn = 1
+	state%returned(1) = .false.
 
 	if (present(startup_file)) then
 		!print *, "startup_file = ", startup_file
@@ -213,6 +216,9 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 	type(value_t) :: val
 
 	state%fns = declare_intrinsic_fns()
+	state%ifn = 1
+	state%returned(1) = .false.
+
 	tree = syntax_parse(str_, state%vars, state%fns)
 	call tree%log_diagnostics()
 
@@ -243,6 +249,9 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 	type(value_t) :: val
 
 	state%fns = declare_intrinsic_fns()
+	state%ifn = 1
+	state%returned(1) = .false.
+
 	tree = syntax_parse(str_, state%vars, state%fns)
 	call tree%log_diagnostics()
 
@@ -278,6 +287,9 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 	if (present(quiet)) state%quiet = quiet
 
 	state%fns = declare_intrinsic_fns()
+	state%ifn = 1
+	state%returned(1) = .false.
+
 	tree = syntax_parse(str_, state%vars, state%fns)
 	if (.not. state%quiet) call tree%log_diagnostics()
 
@@ -340,6 +352,8 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	! TODO: make a helper fn here that all the eval_* fns use
 
 	state%fns = declare_intrinsic_fns()
+	state%ifn = 1
+	state%returned(1) = .false.
 
 	tree = syntax_parse(str_, state%vars, state%fns, src_filel)
 	if (.not. state%quiet) call tree%log_diagnostics()

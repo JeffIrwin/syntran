@@ -1123,6 +1123,9 @@ integer function get_keyword_kind(text) result(kind)
 		case ("include")
 			kind = include_keyword
 
+		case ("return")
+			kind = return_keyword
+
 		case default
 			kind = identifier_token
 

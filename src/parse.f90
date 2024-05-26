@@ -61,6 +61,7 @@ module syntran__parse_m
 				parse_fn_declaration, &
 				parse_for_statement, &
 				parse_if_statement, &
+				parse_return_statement, &
 				parse_name_expr, &
 				parse_primary_expr, &
 				parse_size, &
@@ -133,6 +134,11 @@ module syntran__parse_m
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
 		end function parse_if_statement
+
+		module function parse_return_statement(parser) result(statement)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: statement
+		end function parse_return_statement
 
 		module function parse_for_statement(parser) result(statement)
 			class(parser_t) :: parser

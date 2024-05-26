@@ -15,6 +15,36 @@ contains
 
 !===============================================================================
 
+module function parse_return_statement(parser) result(statement)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: statement
+
+	!********
+
+	type(syntax_token_t) :: return_token, semi
+
+	return_token = parser%match(return_keyword)
+
+	statement%kind = return_statement
+
+	! expr or statement?
+	allocate(statement%right)
+	statement%right = parser%parse_expr()
+
+	! TODO: check type (unless we're at global level ifn == 1).  That's half the
+	! point of return statements
+	!
+	! There should also be a check that every branch of a fn has a return
+	! statement, but that seems more difficult
+
+	semi = parser%match(semicolon_token)
+
+end function parse_return_statement
+
+!===============================================================================
+
 module function parse_if_statement(parser) result(statement)
 
 	class(parser_t) :: parser
@@ -301,6 +331,9 @@ module function parse_statement(parser) result(statement)
 
 		case (while_keyword)
 			statement = parser%parse_while_statement()
+
+		case (return_keyword)
+			statement = parser%parse_return_statement()
 
 		case default
 			statement = parser%parse_expr_statement()

@@ -22,6 +22,11 @@ module syntran__eval_m
 
 		type(vars_t) :: vars
 
+		! Function nesting index.  Each function call increments, each return
+		! decrements
+		integer :: ifn
+		logical :: returned(1024)  ! TODO: dynamic array
+
 	end type state_t
 
 !===============================================================================
@@ -78,6 +83,9 @@ recursive function syntax_eval(node, state) result(res)
 
 	case (if_statement)
 		res = eval_if_statement(node, state)
+
+	case (return_statement)
+		res = eval_return_statement(node, state)
 
 	case (translation_unit)
 		res = eval_translation_unit(node, state)
@@ -374,9 +382,12 @@ function eval_fn_call(node, state) result(res)
 
 	type(value_t) :: arg, arg1, arg2
 
-	!print *, 'eval fn_call_expr'
-	!print *, 'fn identifier = ', node%identifier%text
+	print *, 'eval fn_call_expr'
+	print *, 'fn identifier = ', node%identifier%text
 	!print *, 'fn id_index   = ', node%id_index
+
+	state%ifn = state%ifn + 1  ! push.  TODO: overflow check if not dynamic
+	state%returned( state%ifn ) = .false.
 
 	res%type = node%val%type
 
@@ -671,6 +682,12 @@ function eval_fn_call(node, state) result(res)
 		!print *, 'res = ', res%to_str()
 
 	end select
+
+	state%ifn = state%ifn - 1  ! pop
+	! TODO: add runtime check here to enforce return statements?  Might be a
+	! more robust stopgap until i can figure out parse-time return branch
+	! checking.  Checking for unreachable statements after returns also seems
+	! hard
 
 end function eval_fn_call
 
@@ -1423,6 +1440,9 @@ function eval_while_statement(node, state) result(res)
 
 	condition = syntax_eval(node%condition, state)
 	do while (condition%sca%bool)
+		! TODO: check `returned` like in block statement here.  It might make a
+		! perf diff, and I think it's required for syntactic correctness
+		! sometimes.  Check similarly in for loops.  Anywhere else?
 		res = syntax_eval(node%body, state)
 		condition = syntax_eval(node%condition, state)
 	end do
@@ -1459,6 +1479,22 @@ end function eval_if_statement
 
 !===============================================================================
 
+function eval_return_statement(node, state) result(res)
+
+	type(syntax_node_t), intent(in) :: node
+	type(state_t) :: state
+
+	type(value_t) :: res
+
+	!********
+
+	res = syntax_eval(node%right, state)
+	state%returned( state%ifn ) = .true.
+
+end function eval_return_statement
+
+!===============================================================================
+
 function eval_block_statement(node, state) result(res)
 
 	type(syntax_node_t), intent(in) :: node
@@ -1484,6 +1520,8 @@ function eval_block_statement(node, state) result(res)
 		!print *, 'type = ', tmp%type, kind_name(tmp%type)
 		!print *, ''
 
+		print *, "i, ifn, ret = ", i, state%ifn, state%returned( state%ifn )
+
 		! In case of no-op if statements and while loops
 		if (tmp%type /= unknown_type) res = tmp
 
@@ -1493,6 +1531,8 @@ function eval_block_statement(node, state) result(res)
 		if (node%members(i)%kind == name_expr .and. .not. state%quiet) then
 			write(*,*) tmp%to_str()
 		end if
+
+		if (state%returned( state%ifn )) exit
 
 	end do
 
