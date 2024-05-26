@@ -25,7 +25,7 @@ module syntran__eval_m
 		! Function nesting index.  Each function call increments, each return
 		! decrements
 		integer :: ifn
-		logical :: returned(1024)  ! TODO: dynamic array
+		type(logical_vector_t) :: returned
 
 	end type state_t
 
@@ -386,8 +386,8 @@ function eval_fn_call(node, state) result(res)
 	!print *, 'fn identifier = ', node%identifier%text
 	!print *, 'fn id_index   = ', node%id_index
 
-	state%ifn = state%ifn + 1  ! push.  TODO: overflow check if not dynamic
-	state%returned( state%ifn ) = .false.
+	state%ifn = state%ifn + 1  ! push
+	call state%returned%push(.false.)
 
 	res%type = node%val%type
 
@@ -684,6 +684,7 @@ function eval_fn_call(node, state) result(res)
 	end select
 
 	state%ifn = state%ifn - 1  ! pop
+	state%returned%len_ = state%returned%len_ - 1
 	! TODO: add runtime check here to enforce return statements?  Might be a
 	! more robust stopgap until i can figure out parse-time return branch
 	! checking.  Checking for unreachable statements after returns also seems
@@ -864,7 +865,7 @@ function eval_for_statement(node, state) result(res)
 
 		res = syntax_eval(node%body, state)
 
-		if (state%returned( state%ifn )) exit
+		if (state%returned%v( state%ifn )) exit
 
 	end do
 	call state%vars%pop_scope()
@@ -1083,7 +1084,7 @@ function eval_translation_unit(node, state) result(res)
 			write(*,*) res%to_str()
 		end if
 
-		if (state%returned( state%ifn )) exit
+		if (state%returned%v( state%ifn )) exit
 
 	end do
 
@@ -1446,7 +1447,7 @@ function eval_while_statement(node, state) result(res)
 	do while (condition%sca%bool)
 		res = syntax_eval(node%body, state)
 		condition = syntax_eval(node%condition, state)
-		if (state%returned( state%ifn )) exit
+		if (state%returned%v( state%ifn )) exit
 	end do
 
 end function eval_while_statement
@@ -1491,7 +1492,7 @@ function eval_return_statement(node, state) result(res)
 	!********
 
 	res = syntax_eval(node%right, state)
-	state%returned( state%ifn ) = .true.
+	state%returned%v( state%ifn ) = .true.
 
 end function eval_return_statement
 
@@ -1520,7 +1521,6 @@ function eval_block_statement(node, state) result(res)
 		!print *, 'kind = ', node%members(i)%kind
 		!print *, i, ' tmp = ', tmp%to_str()
 		!print *, 'type = ', tmp%type, kind_name(tmp%type)
-		!print *, "i, ifn, ret = ", i, state%ifn, state%returned( state%ifn )
 		!print *, ''
 
 		! In case of no-op if statements and while loops
@@ -1533,7 +1533,7 @@ function eval_block_statement(node, state) result(res)
 			write(*,*) tmp%to_str()
 		end if
 
-		if (state%returned( state%ifn )) exit
+		if (state%returned%v( state%ifn )) exit
 
 	end do
 
