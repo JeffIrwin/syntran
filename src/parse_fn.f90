@@ -505,6 +505,7 @@ module function parse_fn_declaration(parser) result(decl)
 	!
 
 	fn%type = void_type
+	rank = 0
 	if (parser%current_kind() == colon_token) then
 
 		colon = parser%match(colon_token)
@@ -533,7 +534,13 @@ module function parse_fn_declaration(parser) result(decl)
 	end if
 	!print *, 'fn%type = ', fn%type
 
-	! TODO: set fn_type
+	! Copy for later return type checking
+	parser%fn_name = identifier%text
+	parser%fn_type = fn%type
+	if (rank >= 0) then
+		parser%fn_rank = fn%rank
+		parser%fn_array_type = fn%array_type
+	end if
 
 	body = parser%parse_statement()
 

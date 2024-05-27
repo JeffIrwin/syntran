@@ -324,6 +324,64 @@ end function err_bad_array_arg_type
 
 !===============================================================================
 
+function err_bad_ret_rank(context, span, fn, expect, actual) &
+		result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn
+	integer, intent(in) :: expect, actual
+
+	err = err_prefix &
+		//'function `'//fn &
+		//'` requires an array return value of rank-'//str(expect) &
+		//' but returns an array of rank-'//str(actual) &
+		//underline(context, span)//" wrong return rank"//color_reset
+
+end function err_bad_ret_rank
+
+!===============================================================================
+
+function err_bad_array_ret_type(context, span, fn, expect, actual) &
+		result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn, expect, actual
+
+	err = err_prefix &
+		//'function `'//fn &
+		//'` requires an array return value of ['//expect &
+		//'] but returns an array value of ['//actual//']' &
+		//underline(context, span)//" wrong array return type"//color_reset
+
+end function err_bad_array_ret_type
+
+!===============================================================================
+
+function err_bad_ret_type(context, span, fn, expect, actual) &
+		result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn, expect, actual
+
+	err = err_prefix &
+		//'function `'//fn &
+		//'` requires return value of '//expect//' but returns a value of ' &
+		//actual &
+		//underline(context, span)//" wrong return type"//color_reset
+
+end function err_bad_ret_type
+
+!===============================================================================
+
 function err_bad_arg_type(context, span, fn, iarg, param, expect, actual) &
 		result(err)
 

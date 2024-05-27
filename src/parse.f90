@@ -43,9 +43,14 @@ module syntran__parse_m
 		type(fns_t) :: fns
 		integer :: num_fns = 0
 
-		! TODO: set this to (the current) fn's return type.  Check that each
-		! return statement matches while parsing
-		integer :: fn_type
+		! Set this to (the current) fn's return type.  Check that each return
+		! statement matches while parsing.  This is redundant since the fn
+		! syntax node also has the type, but it's easier to store it here than
+		! to walk back up the syntax tree to do return type checking
+		!
+		! This won't work with nested fns but we don't allow that anyway
+		integer :: fn_type, fn_rank, fn_array_type
+		character(len = :), allocatable :: fn_name
 
 		contains
 			procedure :: &
