@@ -358,7 +358,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: i, pos0, pos1, pos2, rank, itype
+	integer :: i, pos0, pos1, pos2, rank, itype, fn_beg, fn_name_end
 
 	type(fn_t) :: fn
 
@@ -378,9 +378,12 @@ module function parse_fn_declaration(parser) result(decl)
 	! parameters).  Its block body will have yet another scope
 	call parser%vars%push_scope()
 
+	parser%returned = .false.
+	fn_beg = parser%peek_pos(0)
 	fn_kw = parser%match(fn_keyword)
 
 	identifier = parser%match(identifier_token)
+	fn_name_end = parser%peek_pos(0) - 1
 
 	!print *, 'parsing fn ', identifier%text
 
@@ -543,6 +546,14 @@ module function parse_fn_declaration(parser) result(decl)
 	end if
 
 	body = parser%parse_statement()
+
+	!! TODO: major compatibility break
+	!if (.not. parser%returned) then
+	!	span = new_span(fn_beg, fn_name_end - fn_beg + 1)
+	!	call parser%diagnostics%push( &
+	!		err_no_return(parser%context(), &
+	!		span, identifier%text))
+	!end if
 
 	! Reset to allow the global scope to return anything
 	parser%fn_type = any_type

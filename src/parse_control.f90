@@ -31,6 +31,7 @@ module function parse_return_statement(parser) result(statement)
 	type(text_span_t) :: span
 
 	return_token = parser%match(return_keyword)
+	parser%returned = .true.
 
 	statement%kind = return_statement
 

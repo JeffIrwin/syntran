@@ -722,8 +722,6 @@ function eval_fn_call(node, state) result(res)
 	!!
 	!! TODO: uncomment this for a very major break
 	!if (.not. state%returned%v( state%ifn )) then
-	!	! TODO: also throw a parser error if a fn does not have at least 1
-	!	! return statement
 	!	write(*,*) err_int_prefix//"reached end of function `", &
 	!		node%identifier%text, "` without a return statement"//color_reset
 	!	call internal_error()

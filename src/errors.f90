@@ -197,6 +197,20 @@ end function err_undeclare_fn
 
 !===============================================================================
 
+function err_no_return(context, span, fn) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn
+	err = err_prefix &
+		//'function `'//fn//'` does not have any return statements' &
+		//underline(context, span)//" function without returns"//color_reset
+
+end function err_no_return
+
+!===============================================================================
+
 function err_bad_arg_count(context, span, fn, expect, actual) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
