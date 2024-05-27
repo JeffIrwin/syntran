@@ -742,6 +742,13 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	parser = new_parser(str, src_filel, contexts, unit_)
 	!print *, 'units = ', parser%tokens(:)%unit_
 
+	! The global scope can return any type.  This is initialized here and not
+	! inside new_parser() in case you have half of a function body inside an
+	! include file (!)
+	!
+	! Not sure what will happen with the repl shell
+	parser%fn_type = any_type
+
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
 		tree%is_empty = .true.

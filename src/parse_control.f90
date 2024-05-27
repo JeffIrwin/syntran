@@ -62,7 +62,6 @@ module function parse_return_statement(parser) result(statement)
 	! Check array type and rank if needed
 	if (parser%fn_type == array_type) then
 		exp_type = parser%fn_array_type
-		!act_type = statement%right%array%val%type
 		act_type = statement%right%val%array%type
 		types_match = exp_type == any_type .or. exp_type == act_type
 	end if

@@ -534,7 +534,7 @@ module function parse_fn_declaration(parser) result(decl)
 	end if
 	!print *, 'fn%type = ', fn%type
 
-	! Copy for later return type checking
+	! Copy for later return type checking while parsing body
 	parser%fn_name = identifier%text
 	parser%fn_type = fn%type
 	if (rank >= 0) then
@@ -543,6 +543,9 @@ module function parse_fn_declaration(parser) result(decl)
 	end if
 
 	body = parser%parse_statement()
+
+	! Reset to allow the global scope to return anything
+	parser%fn_type = any_type
 
 	! Insert fn into parser%fns
 
