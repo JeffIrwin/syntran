@@ -30,6 +30,7 @@ fn scan(str_: str, set: str): i64
 		i -= 1;
 	else
 		i = i64(-1);
+	return i;
 }
 
 //==========================================================
@@ -60,6 +61,7 @@ fn scanback(str_: str, set: str): i64
 		i += 1;
 	else
 		i = -1;
+	return i;
 }
 
 //==========================================================
@@ -95,6 +97,7 @@ fn verify(str_: str, set: str): i64
 		i -= 1;
 	else
 		i = i64(-1);
+	return i;
 }
 
 //==========================================================
@@ -142,7 +145,7 @@ fn tok_i32(str_: str): [i64; :]
 	//println("num str = ", str_[beg_: end_+1]);
 
 	// return
-	[beg_, end_, len_];
+	return [beg_, end_, len_];
 }
 
 //==========================================================
@@ -162,7 +165,7 @@ fn read_i32(str_: str): i32
 	//println("read_i32 = ", ans);
 
 	// return
-	ans;
+	return ans;
 }
 
 fn read_i32s(str_: str): [i32; :]
@@ -206,7 +209,7 @@ fn read_i32s(str_: str): [i32; :]
 	}
 
 	// return
-	nums;
+	return nums;
 }
 
 //==========================================================

@@ -12,7 +12,7 @@ fn sub_fn(u: [f32; :], v: [f32; :]): [f32; :]
 
 	for i in [0: size(u,0)]
 		w[i] = u[i] - v[i];
-	w;
+	return w;
 }
 
 fn norm_fn(u: [f32; :]): f32
@@ -20,13 +20,13 @@ fn norm_fn(u: [f32; :]): f32
 	let norm = 0.0;
 	for i in [0: size(u,0)]
 		norm = norm + u[i] ** 2;
-	norm ** 0.5;
+	return norm ** 0.5;
 }
 
 fn norm_diff(u: [f32; :], v: [f32; :]): f32
 {
 	// Return the norm of the difference between u and v
-	norm_fn(sub_fn(u, v));
+	return norm_fn(sub_fn(u, v));
 }
 
 let a = [62.0, 84.0, 68.0];
@@ -37,5 +37,5 @@ let b = [a[0] + 3, a[1] + 4, a[2] + 12];
 a;
 b;
 
-norm_diff(a, b);
+return norm_diff(a, b);
 

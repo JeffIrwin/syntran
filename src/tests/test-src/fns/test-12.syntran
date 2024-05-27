@@ -14,7 +14,7 @@ fn add_fn(u: [i32; :], v: [i32; :]): [i32; :]
 		//w = u[i] + v[i];
 		w[i] = u[i] + v[i];
 	}
-	w;
+	return w;
 }
 
 let n = 3;
@@ -23,7 +23,7 @@ let a = [0: n];
 let b = [n+1: -1: 1];
 
 let ans = add_fn(a, b);
-ans;
+return ans;
 
 //ans = add_fn(a, [2; n]);
 

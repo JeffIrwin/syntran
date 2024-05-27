@@ -9,7 +9,7 @@ fn sub_fn(u: [f32; :], v: [f32; :]): [f32; :]
 
 	for i in [0: size(u,0)]
 		w[i] = u[i] - v[i];
-	w;
+	return w;
 }
 
 fn norm_fn(u: [f32; :]): f32
@@ -17,13 +17,13 @@ fn norm_fn(u: [f32; :]): f32
 	let norm = 0.0;
 	for i in [0: size(u,0)]
 		norm = norm + u[i] ** 2;
-	norm ** 0.5;
+	return norm ** 0.5;
 }
 
 fn norm_diff(u: [f32; :], v: [f32; :]): f32
 {
 	// Return the norm of the difference between u and v
-	norm_fn(sub_fn(u, v));
+	return norm_fn(sub_fn(u, v));
 }
 
 fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
@@ -35,7 +35,7 @@ fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 	for     j in [0: size(mat,1)]
 		for i in [0: size(mat,0)]
 			ans[i] = ans[i] + mat[i,j] * vec[j];
-	ans;
+	return ans;
 }
 
 let x = [62.0, 84.0, 68.0, 42.0];
@@ -48,7 +48,7 @@ a[1,0] =  0.8659232 ; a[1,1] =  -0.2767278 ; a[1,2] =  -0.0347056 ; a[1,3] =   0
 a[2,0] = -0.5707984 ; a[2,1] =  -0.4155467 ; a[2,2] =  -0.3356562 ; a[2,3] =  -0.1262825;
 
 let b = mul_mat_vec(a, x);
-b;
+return b;
 
 //norm_diff(a, amul);
 

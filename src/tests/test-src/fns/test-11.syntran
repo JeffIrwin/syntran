@@ -7,7 +7,7 @@ fn sum_fn(v: [i32; :,:]): i32
 	for j in [0: size(v, 1)]
 		for i in [0: size(v, 0)]
 			s = s + v[i,j];
-	s;
+	return s;
 }
 
 // Nagarjuniya magic square
@@ -35,5 +35,5 @@ for i in [0: n]
 a;
 
 let ans = sum_fn(a) * 3 / 4;
-ans;
+return ans;
 

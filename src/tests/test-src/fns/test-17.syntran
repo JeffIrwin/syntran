@@ -10,7 +10,7 @@ let num_primes = 0;
 
 fn is_divisible(numerator: i32, denominator: i32): bool
 {
-	numerator % denominator == 0;
+	return numerator % denominator == 0;
 }
 
 fn is_prime(number: i32): bool
@@ -29,7 +29,7 @@ fn is_prime(number: i32): bool
 	}
 
 	// Function return value
-	prime;
+	return prime;
 }
 
 //======================================================================
@@ -77,5 +77,5 @@ for i in [0: n]
 	if (diff < 0) diff = -diff;
 	norm = norm + diff;
 }
-norm;
+return norm;
 

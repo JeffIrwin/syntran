@@ -3,6 +3,6 @@
 
 fn fn_inc(): i32
 {
-	2;
+	return 2;
 }
 
