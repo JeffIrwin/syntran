@@ -24,7 +24,7 @@ fn count_eq(v: [i32; :], x: i32): i32
 	let n = 0;
 	for i in [0: size(v,0)]
 		if (v[i] == x) n += 1;
-	let ans = n;
+	return n;
 }
 
 fn get_counts(a: str): [i32; :]
@@ -50,8 +50,7 @@ fn get_counts(a: str): [i32; :]
 	//println("counts_ = ", counts_);
 	//println();
 
-	// return
-	let ans = counts_;
+	return counts_;
 }
 
 fn get_counts2(a: str): [i32; :]
@@ -109,8 +108,7 @@ fn get_counts2(a: str): [i32; :]
 
 	//println("wild    counts_ = ", counts_);
 
-	// return
-	let ans = counts_;
+	return counts_;
 }
 
 // Types of hands enum
@@ -155,7 +153,7 @@ fn get_strength(c: str): i32
 	if (c == "3") strength = STR_3;
 	if (c == "2") strength = STR_2;
 
-	let ans = strength;
+	return strength;
 }
 
 fn get_strength2(c: str): i32
@@ -175,7 +173,7 @@ fn get_strength2(c: str): i32
 	if (c == "3") strength = STR_3;
 	if (c == "2") strength = STR_2;
 
-	let ans = strength;
+	return strength;
 }
 
 fn type_to_str(t: i32): str
@@ -189,7 +187,7 @@ fn type_to_str(t: i32): str
 	if (t == QUAD     ) str_ = "QUAD"      ;
 	if (t == PENT     ) str_ = "PENT"      ;
 
-	let ans = str_;
+	return str_;
 }
 
 fn get_type(a: str): i32
@@ -206,7 +204,7 @@ fn get_type(a: str): i32
 	if (count_eq(counts_, 3) == 1 and count_eq(counts_, 2) == 1) type_ = FULL_HAUS;
 	if (count_eq(counts_, 2) == 2) type_ = TWO_PAIR;
 
-	let ans = type_;
+	return type_;
 }
 
 fn get_type2(a: str): i32
@@ -223,7 +221,7 @@ fn get_type2(a: str): i32
 	if (count_eq(counts_, 3) == 1 and count_eq(counts_, 2) == 1) type_ = FULL_HAUS;
 	if (count_eq(counts_, 2) == 2) type_ = TWO_PAIR;
 
-	let ans = type_;
+	return type_;
 }
 
 fn is_hand_gt(a: str, b: str): bool
@@ -266,7 +264,7 @@ fn is_hand_gt(a: str, b: str): bool
 	//println("gt = ", gt);
 	//println();
 
-	let ans = gt;
+	return gt;
 }
 
 fn is_hand_gt2(a: str, b: str): bool
@@ -309,7 +307,7 @@ fn is_hand_gt2(a: str, b: str): bool
 	//println("gt = ", gt);
 	//println();
 
-	let ans = gt;
+	return gt;
 }
 
 //==============================================================================
@@ -318,7 +316,7 @@ fn bubble_sort_hands(hands: [str; :]): [i32; :]
 {
 	//println("starting bubble_sort_hands()");
 
-	let n = size(hands, 0);
+	let n = i32(size(hands, 0));
 	let idx = [0: n];
 	//let idx = bubble_sort_hands(hands);
 
@@ -345,8 +343,7 @@ fn bubble_sort_hands(hands: [str; :]): [i32; :]
 	//println("ending bubble_sort_hands()");
 	//println();
 
-	let ans = idx;
-	//idx;
+	return idx;
 }
 
 //==============================================================================
@@ -362,7 +359,7 @@ fn quick_sort_hands(v: [str; :]): [i32; :]
 	//println("v = ", v);
 
 	let l = 0;
-	let h = size(v,0) - 1;
+	let h = i32(size(v,0)) - 1;
 
 	let ix = [l: h + 1];
 
@@ -448,7 +445,7 @@ fn quick_sort_hands(v: [str; :]): [i32; :]
 	}
 	//println("v = ", v);
 	//let ans = v;
-	let ans = ix;
+	return ix;
 }
 
 //==============================================================================
@@ -462,7 +459,7 @@ fn quick_sort_hands2(v: [str; :]): [i32; :]
 	//println("v = ", v);
 
 	let l = 0;
-	let h = size(v,0) - 1;
+	let h = i32(size(v,0)) - 1;
 
 	let ix = [l: h + 1];
 
@@ -548,7 +545,7 @@ fn quick_sort_hands2(v: [str; :]): [i32; :]
 	}
 	//println("v = ", v);
 	//let ans = v;
-	let ans = ix;
+	return ix;
 }
 
 //==============================================================================
@@ -601,7 +598,7 @@ fn part1(): i32
 	}
 
 	println("part 1 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -654,7 +651,7 @@ fn part2(): i32
 	}
 
 	println("part 2 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -671,12 +668,12 @@ fn main(): i32
 
 	println("Ending AOC syntran main");
 	println();
-	let ans = sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-main();
+return main();
 
 //==============================================================================
 

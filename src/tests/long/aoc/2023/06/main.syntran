@@ -20,12 +20,14 @@ fn floor_(x: f32): i32
 {
 	let i = i32(x);
 	if (i > x) i -= 1;
+	return i;
 }
 
 fn ceil_(x: f32): i32
 {
 	let i = i32(x);
 	if (i < x) i += 1;
+	return i;
 }
 
 // TODO: utils, consistent naming
@@ -34,6 +36,7 @@ fn minf32(a: f32, b: f32): f32
 	let ans = a;
 	if b < a
 		ans = b;
+	return ans;
 }
 
 fn maxf32(a: f32, b: f32): f32
@@ -41,6 +44,7 @@ fn maxf32(a: f32, b: f32): f32
 	let ans = a;
 	if b > a
 		ans = b;
+	return ans;
 }
 
 //==============================================================================
@@ -107,7 +111,7 @@ fn part1(): i32
 	close(f);
 
 	println("part 1 = ", prod_);
-	prod_;
+	return prod_;
 }
 
 //==============================================================================
@@ -222,12 +226,12 @@ fn part2(): i64
 	close(f);
 
 	println("part 2 = ", prod_);
-	prod_;
+	return prod_;
 }
 
 //==============================================================================
 
-fn main(): i32
+fn main(): i64
 {
 	println();
 	println("Starting AOC syntran main 2023/06");
@@ -239,12 +243,12 @@ fn main(): i32
 
 	println("Ending AOC syntran main");
 	println();
-	let ans = sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-main();
+return main();
 
 //==============================================================================
 

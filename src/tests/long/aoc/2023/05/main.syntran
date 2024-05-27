@@ -56,8 +56,7 @@ fn map_fn(seeds: [i64; :], dst_range: [i64; :], src_range: [i64; :],
 		//println();
 	}
 
-	// return
-	let ans = vec_;
+	return vec_;
 }
 
 //==============================================================================
@@ -68,11 +67,12 @@ fn min64_(a: i64, b: i64): i64
 	let ans = a;
 	if b < a
 		ans = b;
+	return ans;
 }
 
 //==============================================================================
 
-fn part1(): i32
+fn part1(): i64
 {
 	let sum_ = i64(0);
 
@@ -150,12 +150,12 @@ fn part1(): i32
 		sum_ = min64_(sum_, seeds[i]);
 
 	println("part 1 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-fn part2(): i32
+fn part2(): i64
 {
 	let sum_ = i64(0);
 
@@ -272,12 +272,12 @@ fn part2(): i32
 		sum_ = min64_(sum_, seeds[i]);
 
 	println("part 2 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-fn main(): i32
+fn main(): i64
 {
 	println();
 	println("Starting AOC syntran main 2023/05");
@@ -289,12 +289,12 @@ fn main(): i32
 
 	println("Ending AOC syntran main");
 	println();
-	let ans = sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-main();
+return main();
 
 //==============================================================================
 
