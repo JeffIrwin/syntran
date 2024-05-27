@@ -12,7 +12,7 @@ fn get_pi(): f32
 			1.0 / (8 * k + 6)
 		);
 	}
-	pi;
+	return pi;
 }
 
 fn my_sin(x: f32): f32
@@ -36,8 +36,7 @@ fn my_sin(x: f32): f32
 		frac *= x2 / (k2 * (k2 + 1));
 	}
 
-	// Hack return w/o printing
-	+s;
+	return s;
 }
 
 let pi = get_pi();
@@ -67,5 +66,5 @@ let tol = 1.e-9;
 for i in [0: size(expected, 0)]
 	norm += (sin_array[i] - expected[i]) ** 2;
 
--tol < norm and norm < tol;
+return -tol < norm and norm < tol;
 

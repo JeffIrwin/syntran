@@ -716,16 +716,14 @@ function eval_fn_call(node, state) result(res)
 
 	end select
 
-	!! This is a runtime stopgap check that every fn returns, until (?) i can
-	!! figure out parse-time return branch checking.  Checking for unreachable
-	!! statements after returns also seems hard
-	!!
-	!! TODO: uncomment this for a very major break
-	!if (.not. state%returned%v( state%ifn )) then
-	!	write(*,*) err_int_prefix//"reached end of function `", &
-	!		node%identifier%text, "` without a return statement"//color_reset
-	!	call internal_error()
-	!end if
+	! This is a runtime stopgap check that every fn returns, until (?) i can
+	! figure out parse-time return branch checking.  Checking for unreachable
+	! statements after returns also seems hard
+	if (.not. state%returned%v( state%ifn )) then
+		write(*,*) err_int_prefix//"reached end of function `", &
+			node%identifier%text, "` without a return statement"//color_reset
+		call internal_error()
+	end if
 
 	state%ifn = state%ifn - 1  ! pop
 	state%returned%len_ = state%returned%len_ - 1
@@ -1531,8 +1529,18 @@ function eval_return_statement(node, state) result(res)
 
 	!********
 
-	res = syntax_eval(node%right, state)
+	!print *, "starting eval_return_statement"
+
 	state%returned%v( state%ifn ) = .true.
+
+	if (node%right%val%type == void_type) then
+		!res%type = unknown_type
+		return
+	end if
+
+	res = syntax_eval(node%right, state)
+
+	!print *, "ending eval_return_statement"
 
 end function eval_return_statement
 

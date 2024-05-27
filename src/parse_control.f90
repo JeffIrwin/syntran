@@ -30,16 +30,32 @@ module function parse_return_statement(parser) result(statement)
 	type(syntax_token_t) :: return_token, semi
 	type(text_span_t) :: span
 
+	right_beg = parser%peek_pos(0)
 	return_token = parser%match(return_keyword)
 	parser%returned = .true.
 
 	statement%kind = return_statement
 
-	! expr or statement?
 	allocate(statement%right)
-	right_beg = parser%peek_pos(0)
-	statement%right = parser%parse_expr()
-	right_end = parser%peek_pos(0) - 1
+
+	if (parser%current_kind() == semicolon_token) then
+		! Void return statement
+
+		!! already matched below
+		!semi = parser%match(semicolon_token)
+
+		!right_end = parser%peek_pos(0) - 1
+		right_end = parser%peek_pos(0)
+
+		statement%right%val%type = void_type
+
+	else
+		! expr or statement?
+		right_beg = parser%peek_pos(0)
+		statement%right = parser%parse_expr()
+		right_end = parser%peek_pos(0) - 1
+
+	end if
 
 	! Check return type (unless we're at global level ifn == 1).  That's half
 	! the point of return statements

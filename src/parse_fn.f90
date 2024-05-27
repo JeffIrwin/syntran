@@ -547,13 +547,12 @@ module function parse_fn_declaration(parser) result(decl)
 
 	body = parser%parse_statement()
 
-	!! TODO: major compatibility break
-	!if (.not. parser%returned) then
-	!	span = new_span(fn_beg, fn_name_end - fn_beg + 1)
-	!	call parser%diagnostics%push( &
-	!		err_no_return(parser%context(), &
-	!		span, identifier%text))
-	!end if
+	if (.not. parser%returned) then
+		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
+		call parser%diagnostics%push( &
+			err_no_return(parser%context(), &
+			span, identifier%text))
+	end if
 
 	! Reset to allow the global scope to return anything
 	parser%fn_type = any_type

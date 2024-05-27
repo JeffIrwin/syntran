@@ -28,7 +28,7 @@ fn is_prime(number: i32): bool
 	}
 
 	// Function return value
-	prime;
+	return prime;
 }
 
 //======================================================================
@@ -76,5 +76,5 @@ for i in [0: n]
 	if (diff < 0) diff = -diff;
 	norm = norm + diff;
 }
-norm;
+return norm;
 
