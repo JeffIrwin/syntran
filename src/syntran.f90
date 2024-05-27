@@ -360,6 +360,8 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 		dir = chdir_
 	end if
 
+	! TODO: make a helper fn that all the eval_* fns use
+
 	tree = syntax_parse(str_, state%vars, state%fns, src_filel)
 	if (.not. state%quiet) call tree%log_diagnostics()
 

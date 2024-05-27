@@ -533,6 +533,8 @@ module function parse_fn_declaration(parser) result(decl)
 	end if
 	!print *, 'fn%type = ', fn%type
 
+	! TODO: set fn_type
+
 	body = parser%parse_statement()
 
 	! Insert fn into parser%fns

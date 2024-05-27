@@ -43,6 +43,10 @@ module syntran__parse_m
 		type(fns_t) :: fns
 		integer :: num_fns = 0
 
+		! TODO: set this to (the current) fn's return type.  Check that each
+		! return statement matches while parsing
+		integer :: fn_type
+
 		contains
 			procedure :: &
 				context => current_context, &

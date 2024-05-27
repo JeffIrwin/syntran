@@ -24,6 +24,9 @@ module syntran__eval_m
 
 		! Function nesting index.  Each function call increments, each return
 		! decrements
+		!
+		! TODO: does returned need to be an array?  I think we can just use one
+		! scalar
 		integer :: ifn
 		type(logical_vector_t) :: returned
 
@@ -399,6 +402,7 @@ function eval_fn_call(node, state) result(res)
 
 		arg1 = syntax_eval(node%args(1), state)
 		res%sca%f32 = exp(arg1%sca%f32)
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0min_i32")
 
@@ -412,6 +416,7 @@ function eval_fn_call(node, state) result(res)
 			arg = syntax_eval(node%args(i), state)
 			res%sca%i32 = min(res%sca%i32, arg%sca%i32)
 		end do
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0min_i64")
 
@@ -422,6 +427,7 @@ function eval_fn_call(node, state) result(res)
 			arg = syntax_eval(node%args(i), state)
 			res%sca%i64 = min(res%sca%i64, arg%sca%i64)
 		end do
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0min_f32")
 
@@ -432,6 +438,7 @@ function eval_fn_call(node, state) result(res)
 			arg = syntax_eval(node%args(i), state)
 			res%sca%f32 = min(res%sca%f32, arg%sca%f32)
 		end do
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0max_i32")
 
@@ -442,6 +449,7 @@ function eval_fn_call(node, state) result(res)
 			arg = syntax_eval(node%args(i), state)
 			res%sca%i32 = max(res%sca%i32, arg%sca%i32)
 		end do
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0max_i64")
 
@@ -452,6 +460,7 @@ function eval_fn_call(node, state) result(res)
 			arg = syntax_eval(node%args(i), state)
 			res%sca%i64 = max(res%sca%i64, arg%sca%i64)
 		end do
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0max_f32")
 
@@ -462,6 +471,7 @@ function eval_fn_call(node, state) result(res)
 			arg = syntax_eval(node%args(i), state)
 			res%sca%f32 = max(res%sca%f32, arg%sca%f32)
 		end do
+		state%returned%v( state%ifn ) = .true.
 
 	case ("println")
 
@@ -473,6 +483,7 @@ function eval_fn_call(node, state) result(res)
 
 		!! TODO: what, if anything, should println return?
 		!res%sca%i32 = 0
+		state%returned%v( state%ifn ) = .true.
 
 	case ("str")
 
@@ -481,46 +492,55 @@ function eval_fn_call(node, state) result(res)
 			arg = syntax_eval(node%args(i), state)
 			res%sca%str%s = res%sca%str%s // arg%to_str()  ! TODO: use char_vector_t
 		end do
+		state%returned%v( state%ifn ) = .true.
 
 	case ("len")
 
 		arg = syntax_eval(node%args(1), state)
 		res%sca%i64 = len(arg%sca%str%s, 8)
+		state%returned%v( state%ifn ) = .true.
 
 	case ("parse_i32")
 
 		arg = syntax_eval(node%args(1), state)
 		read(arg%sca%str%s, *) res%sca%i32  ! TODO: catch iostat
+		state%returned%v( state%ifn ) = .true.
 
 	case ("parse_i64")
 
 		arg = syntax_eval(node%args(1), state)
 		read(arg%sca%str%s, *) res%sca%i64  ! TODO: catch iostat
+		state%returned%v( state%ifn ) = .true.
 
 	case ("parse_f32")
 
 		arg = syntax_eval(node%args(1), state)
 		read(arg%sca%str%s, *) res%sca%f32  ! TODO: catch iostat
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0i32_sca")
 
 		arg = syntax_eval(node%args(1), state)
 		res%sca%i32 = arg%to_i32()
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0i32_arr")
 
 		arg = syntax_eval(node%args(1), state)
 		res%array = arg%to_i32_array()
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0i64_sca")
 
 		arg = syntax_eval(node%args(1), state)
 		res%sca%i64 = arg%to_i64()
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0i64_arr")
 
 		arg = syntax_eval(node%args(1), state)
 		res%array = arg%to_i64_array()
+		state%returned%v( state%ifn ) = .true.
 
 	case ("open")
 
@@ -533,6 +553,7 @@ function eval_fn_call(node, state) result(res)
 		!print *, 'opened unit ', res%sca%file_%unit_
 		res%sca%file_%name_ = arg%sca%str%s
 		res%sca%file_%eof = .false.
+		state%returned%v( state%ifn ) = .true.
 
 	case ("readln")
 
@@ -560,6 +581,7 @@ function eval_fn_call(node, state) result(res)
 			state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
 		end if
 		!print *, 'eof   = ', arg1%sca%file_%eof
+		state%returned%v( state%ifn ) = .true.
 
 	case ("writeln")
 
@@ -571,6 +593,7 @@ function eval_fn_call(node, state) result(res)
 			write(arg1%sca%file_%unit_, '(a)', advance = 'no') arg%to_str()
 		end do
 		write(arg1%sca%file_%unit_, *)
+		state%returned%v( state%ifn ) = .true.
 
 	case ("eof")
 
@@ -580,11 +603,13 @@ function eval_fn_call(node, state) result(res)
 		res%sca%bool = arg1%sca%file_%eof
 
 		!print *, 'eof fn = ', arg1%sca%file_%eof
+		state%returned%v( state%ifn ) = .true.
 
 	case ("close")
 		arg = syntax_eval(node%args(1), state)
 		!print *, 'closing unit ', arg%sca%file_%unit_
 		close(arg%sca%file_%unit_)
+		state%returned%v( state%ifn ) = .true.
 
 	case ("exit")
 
@@ -601,6 +626,7 @@ function eval_fn_call(node, state) result(res)
 			str(io)//color_reset
 
 		call exit(io)
+		state%returned%v( state%ifn ) = .true.  ! no-op
 
 	case ("size")
 
@@ -616,28 +642,34 @@ function eval_fn_call(node, state) result(res)
 		end if
 
 		res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
+		state%returned%v( state%ifn ) = .true.
 
 	case ("count")
 
 		arg1 = syntax_eval(node%args(1), state)
 		res%sca%i64 = count(arg1%array%bool)
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0sum_i32")
 		arg1 = syntax_eval(node%args(1), state)
 		res%sca%i32 = sum(arg1%array%i32)
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0sum_i64")
 		arg1 = syntax_eval(node%args(1), state)
 		res%sca%i64 = sum(arg1%array%i64)
+		state%returned%v( state%ifn ) = .true.
 
 	case ("0sum_f32")
 		arg1 = syntax_eval(node%args(1), state)
 		res%sca%f32 = sum(arg1%array%f32)
+		state%returned%v( state%ifn ) = .true.
 
 	case ("all")
 
 		arg1 = syntax_eval(node%args(1), state)
 		res%sca%bool = all(arg1%array%bool)
+		state%returned%v( state%ifn ) = .true.
 
 		! Might not be strictly necessary now that %array is allocatable
 		! instead of pointable
@@ -647,6 +679,7 @@ function eval_fn_call(node, state) result(res)
 
 		arg1 = syntax_eval(node%args(1), state)
 		res%sca%bool = any(arg1%array%bool)
+		state%returned%v( state%ifn ) = .true.
 
 	case default
 		! User-defined function
@@ -683,12 +716,21 @@ function eval_fn_call(node, state) result(res)
 
 	end select
 
+	!! This is a runtime stopgap check that every fn returns, until (?) i can
+	!! figure out parse-time return branch checking.  Checking for unreachable
+	!! statements after returns also seems hard
+	!!
+	!! TODO: uncomment this for a very major break
+	!if (.not. state%returned%v( state%ifn )) then
+	!	! TODO: also throw a parser error if a fn does not have at least 1
+	!	! return statement
+	!	write(*,*) err_int_prefix//"reached end of function `", &
+	!		node%identifier%text, "` without a return statement"//color_reset
+	!	call internal_error()
+	!end if
+
 	state%ifn = state%ifn - 1  ! pop
 	state%returned%len_ = state%returned%len_ - 1
-	! TODO: add runtime check here to enforce return statements?  Might be a
-	! more robust stopgap until i can figure out parse-time return branch
-	! checking.  Checking for unreachable statements after returns also seems
-	! hard
 
 end function eval_fn_call
 
