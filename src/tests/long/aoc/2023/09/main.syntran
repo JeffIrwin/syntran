@@ -26,7 +26,7 @@ fn diff_(v: [i32; :], n: i32): [i32; :]
 	for i in [n: size(v,0)]
 		dv[i] = v[i] - v[i - 1];
 
-	let ans = dv;
+	return dv;
 }
 
 fn integrate_(dv: [i32; :], n: i32): [i32; :]
@@ -40,7 +40,7 @@ fn integrate_(dv: [i32; :], n: i32): [i32; :]
 		sum_ += dv[i];
 		v[i] = sum_;
 	}
-	let ans = v;
+	return v;
 }
 
 //==============================================================================
@@ -58,12 +58,12 @@ fn any_trail_ne(vec: [i32; :], num_skip: i32, val: i32): bool
 		found = vec[i] != val;
 		i += 1;
 	}
-	let ans = found;
+	return found;
 }
 
 //==============================================================================
 
-fn part1(): i32
+fn part1(): i64
 {
 	let sum_ = i64(0); // 32 bit might work :shrug:
 
@@ -118,12 +118,12 @@ fn part1(): i32
 	close(f);
 
 	println("part 1 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-fn part2(): i32
+fn part2(): i64
 {
 	let sum_ = i64(0);
 
@@ -178,7 +178,7 @@ fn part2(): i32
 	close(f);
 
 	println("part 2 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -195,12 +195,12 @@ fn main(): i64
 
 	println("Ending AOC syntran main");
 	println();
-	let ans = sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-main();
+return main();
 
 //==============================================================================
 

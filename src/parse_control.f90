@@ -56,6 +56,7 @@ module function parse_return_statement(parser) result(statement)
 		right_end = parser%peek_pos(0) - 1
 
 	end if
+	semi = parser%match(semicolon_token)
 
 	! Check return type (unless we're at global level ifn == 1).  That's half
 	! the point of return statements
@@ -107,8 +108,6 @@ module function parse_return_statement(parser) result(statement)
 			return
 		end if
 	end if
-
-	semi = parser%match(semicolon_token)
 
 end function parse_return_statement
 
