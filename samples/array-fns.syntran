@@ -1,6 +1,4 @@
 
-// TODO: this is broken
-
 fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 {
 	// Matrix-vector multiplication.  Return mat * vec
@@ -70,19 +68,33 @@ println(mul_mat_vec(rotx, vec));
 // [1.0, -3.0, 2.0]
 
 // Apply 180 degree x rotation
-println(mul_mat_vec(mul_mat(rotx, rotx), vec));
+
+//println(mul_mat_vec(mul_mat(rotx, rotx), vec));
+let rotxx = mul_mat(rotx, rotx);
+println(mul_mat_vec(rotxx, vec));
+
 // [1.0, -2.0, -3.0]
 //********************
 
 // Apply 180 degree x rotation then 180 degree y rotation, which is equivalent
 // to applying a 180 degree z rotation
 println("calling 1");
-println(mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty), vec));
+
+//// TODO: this is broken.  It should work as a chain of fn calls (without temp
+//// var rotxx) but there's a syntran bug, maybe re deep copy of value_t
+////
+//println(mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty), vec));
+let rotxxy = mul_mat(rotxx, roty);
+println(mul_mat_vec(mul_mat(rotxxy, roty), vec));
+
 println("done 1");
 // [-1.0, -2.0, 3.0]
 
 println("calling 2");
-println(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty));
+
+//println(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty));
+println(mul_mat(rotxxy, roty));
+
 println("done 2");
 // [
 //      -1.000000E+00,  0.000000E+00, 0.000000E+00,
