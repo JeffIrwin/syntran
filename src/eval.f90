@@ -39,6 +39,9 @@ contains
 !===============================================================================
 
 recursive function syntax_eval(node, state) result(res)
+	! TODO: make res an out-arg to return it by reference instead of requiring
+	! copying.  This will be like a trial run to see if the deep copy problem
+	! can be solved this way
 
 	! TODO: add diagnostics to state for runtime errors (bounds overflow, rank
 	! mismatch, etc.)

@@ -31,11 +31,8 @@ module syntran__core_m
 	!  - structs
 	!  - triage notes from AOC.  many things are already fixed
 	!  - jumping control flow:
-	!    * fn return statement. i like the cleanliness of rust but i still need
-	!      a way to return early.  rust does have an explicit "return"
-	!      statement, i guess it's just not the rust style to use it when it's
-	!      not needed
-	!    * cycle (continue), break ((loop) exit)
+	!    * fn return statement done
+	!    * c continue (fortran cycle), c break (fortran loop exit)
 	!    * (sys) exit done
 	!      > should final return value be used as an implicit sys exit value?
 	!        currently, default exit stat is 0, regardless of what syntran
