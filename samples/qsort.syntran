@@ -75,13 +75,15 @@ fn qsort(arr: [i32; :])
 		}
 	}
 	println("arr = ", arr);
+	return;
 }
 
-fn main()
+fn main(): i32
 {
 	let arr = [4, 3, 5, 2, 1, 3, 2, 3]; 
 	qsort(arr);
+	return 0;
 }
 
-main();
+return main();
 

@@ -27,9 +27,7 @@ fn scan(str_: str, set: str): i32
 		ans = i - 1;
 	//println("done scan()");
 
-	// TODO: ifx doesn't work without this.  I guess `if found` when found is
-	// false breaks the return type somehow.  Syntran needs return statement
-	let ans2 = ans;
+	return ans;
 }
 
 //==============================================================================
@@ -68,13 +66,14 @@ fn verify(str_: str, set: str): i32
 		//println("ans = ", i - 1);
 		ans = i - 1;
 	}
+	return ans;
 }
 
 //==============================================================================
 
 fn any_str_eq_set(str_: str, set: str): bool
 {
-	let ans = scan(str_, set) >= 0;
+	return scan(str_, set) >= 0;
 }
 
 //==============================================================================
@@ -135,10 +134,7 @@ fn split_(str_: str, delims: str): [str; :]
 
 		nout += 1;
 	}
-
-	// return
-	//out;
-	let ans = out;
+	return out;
 }
 
 //==============================================================================
@@ -178,7 +174,7 @@ fn is_str_lt(a: str, b: str): bool
 		lt = len_a < len_b;
 	}
 
-	let ans = lt;
+	return lt;
 }
 
 //==============================================================================

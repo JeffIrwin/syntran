@@ -85,6 +85,7 @@ fn push_name(name_: str)
 	if not listed
 		num_nodes += 1;
 	//println("name_, listed = ", name_, ", ", listed);
+	return;
 }
 
 //==============================================================================
@@ -122,7 +123,7 @@ fn lookup_name(name_: str): i32
 				i = right[i];
 		}
 	}
-	let ans = name_ids[i];
+	return name_ids[i];
 }
 
 //==============================================================================
@@ -156,7 +157,7 @@ fn write_dot(g: [i32; :, :], num_adj: [i32; :]): i32
 	writeln(f, "}");
 
 	close(f);
-	let ans = 0;
+	return 0;
 }
 
 //==============================================================================
@@ -245,6 +246,7 @@ fn read_aoc_graph(filename: str)
 	}
 	//println("g_glbl = ", g_glbl);
 	//println("num_adj_glbl = ", num_adj_glbl);
+	return;
 }
 
 //==============================================================================
@@ -258,6 +260,7 @@ fn check_stack_cap(n: i32, cap: i64)
 		println();
 		exit(-1);
 	}
+	return;
 }
 
 //==============================================================================
@@ -334,7 +337,7 @@ fn get_bridge(g: [i32; :, :], num_adj: [i32; :]): [i32; :]
 			}
 		}
 	}
-	let ans = bridge;
+	return bridge;
 }
 
 //==============================================================================
@@ -350,12 +353,12 @@ fn main(): i32
 		println("Found bridge between nodes ", bridge, " = ",
 				[names_glbl[bridge[0]], names_glbl[bridge[1]]]);
 
-	let ans = 0;
+	return 0;
 }
 
 //==============================================================================
 
-main();
+return main();
 
 //==============================================================================
 

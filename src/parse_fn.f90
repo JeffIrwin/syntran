@@ -385,7 +385,7 @@ module function parse_fn_declaration(parser) result(decl)
 	identifier = parser%match(identifier_token)
 	fn_name_end = parser%peek_pos(0) - 1
 
-	!print *, 'parsing fn ', identifier%text
+	!print *, "parsing fn ", identifier%text
 
 	! TODO: be careful with parser%pos (token index) vs parser%current_pos()
 	! (character index) when constructing a span.  I probably have similar bugs
@@ -456,7 +456,7 @@ module function parse_fn_declaration(parser) result(decl)
 	allocate(decl%params( names%len_ ))
 
 	do i = 1, names%len_
-		!print *, 'name, type = ', names%v(i)%s, ', ', types%v(i)%s
+		!print *, "name, type = ", names%v(i)%s, ", ", types%v(i)%s
 
 		fn%params(i)%name = names%v(i)%s
 
@@ -477,8 +477,10 @@ module function parse_fn_declaration(parser) result(decl)
 			fn%params(i)%type = array_type
 			fn%params(i)%array_type = itype
 			fn%params(i)%rank = ranks%v(i)
+			!print *, "rank = ", fn%params(i)%rank
 		else
 			fn%params(i)%type = itype
+			!print *, "(scalar)"
 		end if
 
 		! Declare the parameter variable
@@ -494,8 +496,9 @@ module function parse_fn_declaration(parser) result(decl)
 			allocate(val%array)
 			val%array%type = fn%params(i)%array_type
 			val%array%rank = fn%params(i)%rank
+			!!print *, "rank = ", val%array%rank
 		end if
-
+!
 		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
 
 	end do

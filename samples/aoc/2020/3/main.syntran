@@ -39,7 +39,7 @@ fn countlines(filename: str): i32
 	nlines -= 1;
 	close(fi);
 
-	let ans = nlines;
+	return nlines;
 }
 
 //==============================================================================
@@ -70,11 +70,12 @@ fn scan(str_: str, set: str): i32
 		i -= 1;
 	else
 		i = -1;
+	return i;
 }
 
 //==============================================================================
 
-fn scanback(str_: str, set: str): i32
+fn scanback(str_: str, set: str): i64
 {
 	// c.f. Fortran intrinsic scan() with back = true
 
@@ -100,6 +101,7 @@ fn scanback(str_: str, set: str): i32
 		i += 1;
 	else
 		i = -1;
+	return i;
 }
 
 //==============================================================================
@@ -132,6 +134,7 @@ fn verify(str_: str, set: str): i32
 		i -= 1;
 	else
 		i = -1;
+	return i;
 }
 
 //==============================================================================
@@ -184,8 +187,7 @@ fn tok_i32(str_: str): [i32; :]
 		//println("num str = ", str_[beg_: end_+1]);
 	}
 
-	// return
-	[beg_, end_, len_];
+	return [beg_, end_, len_];
 }
 
 //==============================================================================
@@ -196,7 +198,7 @@ fn xor_(p: bool, q: bool): bool
 	//// it's not even worth having a fn
 
 	//(p and not q) or (q and not p);
-	p != q;
+	return p != q;
 }
 
 //==============================================================================
@@ -252,12 +254,12 @@ fn part1(): i32
 	}
 
 	println("part1 = ", sum_);
-	let ans = sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-fn part2(): i32
+fn part2(): i64
 {
 
 	let ny = countlines(input_file);
@@ -348,7 +350,7 @@ fn part2(): i32
 
 	println("part2 = ", prod_);
 	//println("part2 = ", prod_str);
-	let ans = prod_;
+	return prod_;
 }
 
 //==============================================================================
@@ -358,11 +360,12 @@ fn main(): i32
 	println("Reading input file """, input_file, """");
 	part1();
 	part2();
+	return 0;
 }
 
 //==============================================================================
 
-main();
+return main();
 
 //==============================================================================
 

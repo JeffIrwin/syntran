@@ -44,6 +44,7 @@ fn write_vtk(filename: str, u: [f32; :,:])
 			writeln(file, 0.0, 0.0, u[ix,iy]);
 
 	close(file);
+	return;
 }
 
 let e = 2.718281828;

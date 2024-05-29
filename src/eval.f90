@@ -238,6 +238,7 @@ function eval_name_expr(node, state) result(res)
 
 	type(value_t) :: right
 
+	!print *, "starting eval_name_expr()"
 	!print *, 'searching identifier ', node%identifier%text
 
 	if (allocated(node%lsubscripts) .and. &
@@ -346,10 +347,16 @@ function eval_name_expr(node, state) result(res)
 		end if
 
 	else
-		!print *, 'name expr'
+		!print *, "name expr without subscripts"
 		res = state%vars%vals(node%id_index)
 
 		! Deep copy of whole array instead of aliasing pointers
+		!
+		! I suspect that value_t now has a deep copy problem like syntax_node_t
+		! does, and this may be why samples/array-fns.syntran doesn't work.  May
+		! need to convert return-by-value to subroutine out-arg as reference (or
+		! override the copy operator, but that hasn't worked out so well for
+		! syntax_node_t)
 		if (res%type == array_type) then
 			!print *, 'array  name_expr'
 
@@ -358,6 +365,11 @@ function eval_name_expr(node, state) result(res)
 			allocate(res%array)
 			res%type = array_type
 			res%array = state%vars%vals(node%id_index)%array
+
+			!res%array%rank = state%vars%vals(node%id_index)%array%rank
+			!!print *, "allocated(size j) = ", allocated(state%vars%vals(node%id_index)%array%size)
+			!res%array%size = state%vars%vals(node%id_index)%array%size
+			!print *, "rank = ", res%array%rank, state%vars%vals(node%id_index)%array%rank
 
 		!else
 		!	print *, 'scalar name_expr'
@@ -637,10 +649,13 @@ function eval_fn_call(node, state) result(res)
 			! TODO: re-think runtime errors.  A different prefix here
 			! besides err_int_prefix helps, but context should be given if
 			! possible like for parser/lexer error diagnostics
-			write(*,*) err_rt_prefix//'rank mismatch in size() call'//color_reset
+			write(*,*) err_rt_prefix//"rank mismatch in size() call"//color_reset
+			!print *, "rank     = ", arg1%array%rank
+			!print *, "size arg = ", arg2%sca%i32
 			call internal_error()
 		end if
 
+		!print *, "allocated(size) = ", allocated(arg1%array%size)
 		res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
 		state%returned%v( state%ifn ) = .true.
 
@@ -707,11 +722,15 @@ function eval_fn_call(node, state) result(res)
 			state%vars%vals( node%params(i) ) = &
 				syntax_eval(node%args(i), state)
 
+			!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
+			!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
+
 			!print *, 'done'
 			!print *, ''
 		end do
 
 		res = syntax_eval(node%body, state)
+		!print *, "res rank = ", res%array%rank
 		!print *, 'res = ', res%to_str()
 
 	end select
@@ -1151,8 +1170,7 @@ function eval_array_expr(node, state) result(res)
 	type(value_t) :: lbound_, ubound_, elem, &
 		step, len_
 
-
-	!print *, 'evaluating array_expr'
+	!print *, "starting eval_array_expr()"
 	!print *, 'identifier = ', node%identifier%text
 
 	if (node%val%array%kind == step_array) then
@@ -1435,6 +1453,9 @@ function eval_array_expr(node, state) result(res)
 		res%type  = array_type
 		res%array = array
 		!print *, 'done'
+
+		!print *, "size_array"
+		!print *, "size = ", array%size
 
 	else if (node%val%array%kind == expl_array) then
 		!print *, 'expl_array'
