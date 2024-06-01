@@ -48,7 +48,7 @@ recursive function syntax_eval(node, state) result(res)
 
 	type(syntax_node_t), intent(in) :: node
 
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
 	type(value_t) :: res
 
@@ -79,28 +79,28 @@ recursive function syntax_eval(node, state) result(res)
 		res = node%val  ! this handles ints, bools, etc.
 
 	case (array_expr)
-		res = eval_array_expr(node, state)
+		call eval_array_expr(node, state, res)
 
 	case (for_statement)
-		res = eval_for_statement(node, state)
+		call eval_for_statement(node, state, res)
 
 	case (while_statement)
-		res = eval_while_statement(node, state)
+		call eval_while_statement(node, state, res)
 
 	case (if_statement)
-		res = eval_if_statement(node, state)
+		call eval_if_statement(node, state, res)
 
 	case (return_statement)
-		res = eval_return_statement(node, state)
+		call eval_return_statement(node, state, res)
 
 	case (translation_unit)
-		res = eval_translation_unit(node, state)
+		call eval_translation_unit(node, state, res)
 
 	case (block_statement)
-		res = eval_block_statement(node, state)
+		call eval_block_statement(node, state, res)
 
 	case (assignment_expr)
-		res = eval_assignment_expr(node, state)
+		call eval_assignment_expr(node, state, res)
 
 	case (let_expr)
 
@@ -108,19 +108,21 @@ recursive function syntax_eval(node, state) result(res)
 		res = syntax_eval(node%right, state)
 
 		!print *, 'assigning identifier ', quote(node%identifier%text)
+
+		! TODO: deep copy?
 		state%vars%vals(node%id_index) = res
 
 	case (fn_call_expr)
-		res = eval_fn_call(node, state)
+		call eval_fn_call(node, state, res)
 
 	case (name_expr)
-		res = eval_name_expr(node, state)
+		call eval_name_expr(node, state, res)
 
 	case (unary_expr)
-		res = eval_unary_expr(node, state)
+		call eval_unary_expr(node, state, res)
 
 	case (binary_expr)
-		res = eval_binary_expr(node, state)
+		call eval_binary_expr(node, state, res)
 
 	case default
 		write(*,*) err_eval_node(kind_name(node%kind))
@@ -132,13 +134,13 @@ end function syntax_eval
 
 !===============================================================================
 
-function eval_binary_expr(node, state) result(res)
+subroutine eval_binary_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -221,17 +223,17 @@ function eval_binary_expr(node, state) result(res)
 
 	end select
 
-end function eval_binary_expr
+end subroutine eval_binary_expr
 
 !===============================================================================
 
-function eval_name_expr(node, state) result(res)
+subroutine eval_name_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -380,17 +382,17 @@ function eval_name_expr(node, state) result(res)
 
 	end if
 
-end function eval_name_expr
+end subroutine eval_name_expr
 
 !===============================================================================
 
-function eval_fn_call(node, state) result(res)
+subroutine eval_fn_call(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -750,17 +752,17 @@ function eval_fn_call(node, state) result(res)
 	state%ifn = state%ifn - 1  ! pop
 	state%returned%len_ = state%returned%len_ - 1
 
-end function eval_fn_call
+end subroutine eval_fn_call
 
 !===============================================================================
 
-function eval_for_statement(node, state) result(res)
+subroutine eval_for_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -930,17 +932,17 @@ function eval_for_statement(node, state) result(res)
 	end do
 	call state%vars%pop_scope()
 
-end function eval_for_statement
+end subroutine eval_for_statement
 
 !===============================================================================
 
-function eval_assignment_expr(node, state) result(res)
+subroutine eval_assignment_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1100,17 +1102,17 @@ function eval_assignment_expr(node, state) result(res)
 		end if
 	end if
 
-end function eval_assignment_expr
+end subroutine eval_assignment_expr
 
 !===============================================================================
 
-function eval_translation_unit(node, state) result(res)
+subroutine eval_translation_unit(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1150,17 +1152,17 @@ function eval_translation_unit(node, state) result(res)
 
 	!call state%vars%pop_scope()
 
-end function eval_translation_unit
+end subroutine eval_translation_unit
 
 !===============================================================================
 
-function eval_array_expr(node, state) result(res)
+subroutine eval_array_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1490,16 +1492,16 @@ function eval_array_expr(node, state) result(res)
 		call internal_error()
 	end if
 
-end function eval_array_expr
+end subroutine eval_array_expr
 
 !===============================================================================
 
-function eval_while_statement(node, state) result(res)
+subroutine eval_while_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1512,16 +1514,16 @@ function eval_while_statement(node, state) result(res)
 		if (state%returned%v( state%ifn )) exit
 	end do
 
-end function eval_while_statement
+end subroutine eval_while_statement
 
 !===============================================================================
 
-function eval_if_statement(node, state) result(res)
+subroutine eval_if_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1540,16 +1542,16 @@ function eval_if_statement(node, state) result(res)
 
 	end if
 
-end function eval_if_statement
+end subroutine eval_if_statement
 
 !===============================================================================
 
-function eval_return_statement(node, state) result(res)
+subroutine eval_return_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1566,16 +1568,16 @@ function eval_return_statement(node, state) result(res)
 
 	!print *, "ending eval_return_statement"
 
-end function eval_return_statement
+end subroutine eval_return_statement
 
 !===============================================================================
 
-function eval_block_statement(node, state) result(res)
+subroutine eval_block_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1611,16 +1613,16 @@ function eval_block_statement(node, state) result(res)
 
 	call state%vars%pop_scope()
 
-end function eval_block_statement
+end subroutine eval_block_statement
 
 !===============================================================================
 
-function eval_unary_expr(node, state) result(res)
+subroutine eval_unary_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1646,7 +1648,7 @@ function eval_unary_expr(node, state) result(res)
 		call internal_error()
 	end select
 
-end function eval_unary_expr
+end subroutine eval_unary_expr
 
 !===============================================================================
 
@@ -1795,7 +1797,7 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 	! *after* being sliced
 
 	type(syntax_node_t), intent(in) :: node
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
 	integer(kind = 8), allocatable, intent(out) :: lsubs(:), usubs(:)
 	integer, intent(out) :: rank_res
@@ -1913,7 +1915,7 @@ function subscript_eval(node, state) result(index_)
 	! subscript index_
 
 	type(syntax_node_t) :: node
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
 	integer(kind = 8) :: index_
 
@@ -1987,7 +1989,7 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	type(syntax_node_t), allocatable :: elems(:)
 
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
 	!*********
 
