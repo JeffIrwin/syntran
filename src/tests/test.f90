@@ -2434,6 +2434,7 @@ subroutine unit_test_return(npass, nfail)
 	tests = &
 		[   &
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

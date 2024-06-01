@@ -1,0 +1,89 @@
+let n = 5;
+
+fn f1(i: i32): i32 {
+	let sum_ = 0;
+	if i < 10
+	{
+		for k in [0: n]
+			sum_ += 1;
+		return sum_ + 11;
+	}
+	else
+	{
+		let k = 0;
+		while k < n
+		{
+			k += 1;
+			sum_ += 2;
+		}
+		return sum_ + 12;
+	}
+	for k in [0: n]
+		sum_ += 3;
+	return sum_ + 13;
+}
+fn f2(i: i32): i32 {
+	let sum_ = 0;
+	if i < 60
+	{
+		for k in [0: n]
+			sum_ += 4;
+		return sum_ + 21;
+	}
+	else if i < 70
+	{
+		let k = 0;
+		while k < n
+		{
+			k += 1;
+			sum_ += 5;
+		}
+		return sum_ + 22;
+	}
+	for k in [0: n]
+		sum_ += 6;
+	return sum_ + 23;
+}
+fn f3(i: i32): i32 {
+	//println("i = ", i);
+	let sum_ = 0;
+	if i < 50
+	{
+		for k in [0: n]
+			sum_ += 20;
+		return sum_ + f1(i);
+	}
+	else if i < 100
+	{
+		{
+			sum_ += 40;
+			sum_ += 40;
+			sum_ += 40;
+			sum_ += 40;
+			sum_ += 40;
+		}
+		return sum_ + f2(i);
+	}
+
+	let k = 0;
+	while true
+	{
+		k += 1;
+		sum_ += 60;
+		if (k == 4 and i < 120)
+			return sum_ + 30;
+		if (k == 9)
+			return sum_ + 30;
+	}
+}
+
+let ans = [ f3(-10), f3(0), f3(15),
+	f3(50), f3(65), f3(75),
+	f3(100), f3(150) ];
+//println("ans = ", ans);
+
+let exp = [116, 116, 122, 241,
+	247, 253, 270, 570];
+
+return all(ans == exp);
+
