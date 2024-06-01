@@ -20,7 +20,7 @@ fn sub_fn(u: [i32; :], v: [i32; :]): [i32; :]
 
 	for i in [0: n]
 		w[i] = u[i] - v[i];
-	w;
+	return w;
 }
 
 fn norm_fn(u: [i32; :]): i32
@@ -30,7 +30,7 @@ fn norm_fn(u: [i32; :]): i32
 	for i in [0: size(u,0)]
 		norm = norm + u[i] ** 2;
 	//norm ** 0.5;  // not an int
-	norm;
+	return norm;
 }
 
 fn norm_diff(u: [i32; :], v: [i32; :]): i32
@@ -44,7 +44,7 @@ fn norm_diff(u: [i32; :], v: [i32; :]): i32
 	let sub_ = sub_fn(u, v);
 	let ans = norm_fn(sub_);
 
-	ans;
+	return ans;
 }
 
 //==========================================================
@@ -75,6 +75,7 @@ fn scan(str_: str, set: str): i64
 		i -= 1;
 	else
 		i = i64(-1);
+	return i;
 }
 
 //==========================================================
@@ -110,6 +111,7 @@ fn verify(str_: str, set: str): i64
 		i -= 1;
 	else
 		i = i64(-1);
+	return i;
 }
 
 //==========================================================
@@ -157,7 +159,7 @@ fn tok_i32(str_: str): [i64; :]
 	//println("num str = ", str_[beg_: end_+1]);
 
 	// return
-	[beg_, end_, len_];
+	return [beg_, end_, len_];
 }
 
 //==========================================================
@@ -177,7 +179,7 @@ fn read_i32(str_: str): i32
 	//println("read_i32 = ", ans);
 
 	// return
-	ans;
+	return ans;
 }
 
 fn read_i32s(str_: str): [i32; :]
@@ -221,7 +223,7 @@ fn read_i32s(str_: str): [i32; :]
 	}
 
 	// return
-	nums;
+	return nums;
 }
 
 //==========================================================
@@ -265,12 +267,12 @@ fn main(): i32
 	sum += norm_diff(expect, actual);
 
 	//println("sum = ", sum);
-	sum;
+	return sum;
 }
 
 //==========================================================
 
-main();
+return main();
 
 //==========================================================
 

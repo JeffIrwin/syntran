@@ -47,8 +47,8 @@ fn main(): bool
 
 	let ans = not eof1 and eof2;
 	//println("ans = ", ans);
-	ans;
+	return ans;
 }
 
-main();
+return main();
 

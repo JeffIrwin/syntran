@@ -4,11 +4,12 @@ let global = 0;
 fn increment()
 {
 	global = global + 1;
+	return;
 }
 
 let dummy = increment();
 dummy = increment();
 dummy = increment();
 
-global;
+return global;
 

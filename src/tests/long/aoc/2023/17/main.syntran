@@ -153,6 +153,7 @@ fn sort_queue()
 	// After sorting, new unsorted elements will be pushed onto the queue after
 	// this position
 	queue_end0 = queue_end;
+	return;
 }
 
 //****************
@@ -182,6 +183,7 @@ fn push_(v: [i32; :])
 	if push_count % 3000 == 0
 		sort_queue();
 	push_count += 1;
+	return;
 }
 
 //****************
@@ -223,7 +225,7 @@ fn pop_(): [i32; :]
 	while queue[0, queue_beg] < 0 and queue_beg < queue_end
 		queue_beg += 1;
 
-	let ans = x;
+	return x;
 }
 
 //==============================================================================
@@ -339,7 +341,7 @@ fn dijkstra(map: [i32; :, :], xbeg: [i32; :], xend: [i32; :], len_min: i32, len_
 						}
 					}
 	}
-	let ans = dist_end;
+	return dist_end;
 }
 
 //==============================================================================
@@ -377,7 +379,7 @@ fn part1(): i32
 	let sum_ = dijkstra(grid, xbeg, xend, 0, 4);
 
 	println("part 1 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -415,7 +417,7 @@ fn part2(): i32
 	let sum_ = dijkstra(grid, xbeg, xend, 4, 11);
 
 	println("part 2 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -432,12 +434,12 @@ fn main(): i32
 
 	println("Ending AOC syntran main");
 	println();
-	let ans = sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-main();
+return main();
 
 //==============================================================================
 

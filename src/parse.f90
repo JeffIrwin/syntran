@@ -43,6 +43,16 @@ module syntran__parse_m
 		type(fns_t) :: fns
 		integer :: num_fns = 0
 
+		! Set this to (the current) fn's return type.  Check that each return
+		! statement matches while parsing.  This is redundant since the fn
+		! syntax node also has the type, but it's easier to store it here than
+		! to walk back up the syntax tree to do return type checking
+		!
+		! This won't work with nested fns but we don't allow that anyway
+		integer :: fn_type, fn_rank, fn_array_type
+		character(len = :), allocatable :: fn_name
+		logical :: returned
+
 		contains
 			procedure :: &
 				context => current_context, &
@@ -61,6 +71,7 @@ module syntran__parse_m
 				parse_fn_declaration, &
 				parse_for_statement, &
 				parse_if_statement, &
+				parse_return_statement, &
 				parse_name_expr, &
 				parse_primary_expr, &
 				parse_size, &
@@ -133,6 +144,11 @@ module syntran__parse_m
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
 		end function parse_if_statement
+
+		module function parse_return_statement(parser) result(statement)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: statement
+		end function parse_return_statement
 
 		module function parse_for_statement(parser) result(statement)
 			class(parser_t) :: parser

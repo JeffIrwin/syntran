@@ -16,7 +16,7 @@ fn countlines(filename: str): i32
 	nlines -= 1;
 	close(fi);
 
-	nlines;
+	return nlines;
 }
 
 fn main(): bool
@@ -86,8 +86,8 @@ fn main(): bool
 
 	//println("ending main");
 
-	ans;
+	return ans;
 }
 
-main();
+return main();
 

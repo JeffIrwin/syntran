@@ -4,8 +4,8 @@ fn func(): bool
 {
 	let array = [true, true, false, true];
 
-	array[0] and not array[2];
+	return array[0] and not array[2];
 }
 
-func();
+return func();
 

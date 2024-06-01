@@ -63,7 +63,8 @@ fn qsort(arr: [i32; :]): [i32; :]
 		}
 	}
 	//println("arr = ", arr);
-	let ans = arr;
+	//let ans = arr;
+	return arr;
 }
 
 let arr = [1223, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
@@ -120,5 +121,5 @@ for i in [0: size(expect, 0)]
 	if (diff < 0) diff = -diff;
 	norm = norm + diff;
 }
-norm;
+return norm;
 

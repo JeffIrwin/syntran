@@ -62,6 +62,7 @@ fn push_(dir: i32, x: i32, y: i32)
 	stack_[1, sptr] = x;
 	stack_[2, sptr] = y;
 	sptr += 1;
+	return;
 }
 
 fn pop_(): [i32; :]
@@ -73,7 +74,7 @@ fn pop_(): [i32; :]
 		println("Error: STACK_CAP underflow!");
 		println();
 	}
-	let vec =
+	return
 		[
 			stack_[0, sptr],
 			stack_[1, sptr],
@@ -83,7 +84,7 @@ fn pop_(): [i32; :]
 
 fn beams_empty(): bool
 {
-	sptr <= 0;
+	return sptr <= 0;
 }
 
 //==============================================================================
@@ -217,7 +218,7 @@ fn part1(): i32
 		}
 
 	println("part 1 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -306,7 +307,7 @@ fn count_energized_tiles(dir: i32, x: i32, y: i32, nx: i32, ny: i32): i32
 				sum_ += 1;
 			}
 
-	let ans = sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -379,7 +380,7 @@ fn part2(): i32
 
 	let sum_ = tiles_max;
 	println("part 2 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -396,12 +397,12 @@ fn main(): i32
 
 	println("Ending AOC syntran main");
 	println();
-	let ans = sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-main();
+return main();
 
 //==============================================================================
 

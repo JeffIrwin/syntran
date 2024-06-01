@@ -21,8 +21,7 @@ fn countln_(filename: str): i32
 	}
 	close(f);
 
-	// return
-	let ans = nlines;
+	return nlines;
 }
 
 //==============================================================================
@@ -53,6 +52,7 @@ fn scan(str_: str, set: str): i64
 		i -= 1;
 	else
 		i = i64(-1);
+	return i;
 }
 
 //==========================================================
@@ -84,6 +84,7 @@ fn scanback(str_: str, set: str): i64
 		i += 1;
 	else
 		i = i64(-1);
+	return i;
 }
 
 //==========================================================
@@ -119,6 +120,7 @@ fn verify(str_: str, set: str): i64
 		i -= 1;
 	else
 		i = i64(-1);
+	return i;
 }
 
 //==========================================================
@@ -166,7 +168,7 @@ fn tok_i32(str_: str): [i64; :]
 	//println("num str = ", str_[beg_: end_+1]);
 
 	// return
-	[beg_, end_, len_];
+	return [beg_, end_, len_];
 }
 
 //==========================================================
@@ -186,7 +188,7 @@ fn read_i32(str_: str): i32
 	//println("read_i32 = ", ans);
 
 	// return
-	ans;
+	return ans;
 }
 
 fn read_i32s(str_: str): [i32; :]
@@ -230,7 +232,7 @@ fn read_i32s(str_: str): [i32; :]
 	}
 
 	// return
-	nums;
+	return nums;
 }
 
 
@@ -264,6 +266,7 @@ fn verifyback(str_: str, set: str): i64
 		//println("ans = ", i + 1);
 		ans = i + 1;
 	}
+	return ans;
 }
 
 //==============================================================================
@@ -273,13 +276,14 @@ fn verifyback(str_: str, set: str): i64
 fn is_digit(char_: str): bool
 {
 	// TODO: optimize with i32() char casting, like is_alpha()
-	let ans = scan(char_, digit_chars) >= 0;
+	return scan(char_, digit_chars) >= 0;
 }
 
 fn is_alpha(char_: str): bool
 {
-	(i32("a") <= i32(char_) and i32(char_) <= i32("z")) or
-	(i32("A") <= i32(char_) and i32(char_) <= i32("Z"));
+	return
+		(i32("a") <= i32(char_) and i32(char_) <= i32("z")) or
+		(i32("A") <= i32(char_) and i32(char_) <= i32("Z"));
 }
 
 //==============================================================================
@@ -287,7 +291,7 @@ fn is_alpha(char_: str): bool
 // TODO: rename to any_char_eq_str or any_char_eq_set
 fn any_str_eq_set(str_: str, set: str): bool
 {
-	let ans = scan(str_, set) >= 0;
+	return scan(str_, set) >= 0;
 }
 
 //==============================================================================
@@ -306,7 +310,7 @@ fn any_mat(v: [bool; :, :]): bool
 		}
 		i += 1;
 	}
-	let ans = found;
+	return found;
 }
 
 //==============================================================================
@@ -330,7 +334,7 @@ fn any_r3(v: [bool; :, :, :]): bool
 		}
 		i += 1;
 	}
-	let ans = found;
+	return found;
 }
 
 //==============================================================================
@@ -363,7 +367,7 @@ fn minloc_mat(dist: [i32; :, :], q: [bool; :, :]): [i32; :]
 		}
 	}
 	//let ans = min_;
-	let ans = minloc_;
+	return minloc_;
 }
 
 //==============================================================================
@@ -396,7 +400,7 @@ fn minloc_r3(dist: [i32; :, :, :], q: [bool; :, :, :]): [i32; :]
 		}
 	}
 	//let ans = min_;
-	let ans = minloc_;
+	return minloc_;
 }
 
 //==============================================================================
@@ -413,7 +417,7 @@ fn any_str_eq(str_: str, v: [str; :]): bool
 		found = str_ == v[i];
 		i += 1;
 	}
-	let ans = found;
+	return found;
 }
 
 //==============================================================================
@@ -454,14 +458,13 @@ fn index_(str_: str, substr: str): i64
 		//println("str_[] = ", str_[i: i + len(substr)]);
 		//println("substr = ", substr);
 		//println();
-		let ans = i;
+		return i;
 	}
 	else
 	{
 		//println("not found");
-		let ans = i64(-1);
+		return i64(-1);
 	}
-
 }
 
 //==============================================================================
@@ -500,14 +503,13 @@ fn indexback(str_: str, substr: str): i64
 		//println("str_[] = ", str_[i: i + len(substr)]);
 		//println("substr = ", substr);
 		//println();
-		let ans = i;
+		return i;
 	}
 	else
 	{
 		//println("not found");
-		let ans = i64(-1);
+		return i64(-1);
 	}
-
 }
 
 //==============================================================================
@@ -568,10 +570,7 @@ fn split_(str_: str, delims: str): [str; :]
 
 		nout += 1;
 	}
-
-	// return
-	//out;
-	let ans = out;
+	return out;
 }
 
 //==============================================================================
@@ -589,7 +588,7 @@ fn parse_i32_hex(str_: str): i32
 		let val = scan(hex_chars, c);
 		num += i32(val * 16 ** ii);
 	}
-	let ans = num;
+	return num;
 }
 
 //==============================================================================
@@ -601,7 +600,7 @@ fn parse_i32_delim(str_: str, delims: str): [i32; :]
 	let vec = [i32(0); size(str_vec, 0)];
 	for i in [0: size(str_vec, 0)]
 		vec[i] = parse_i32(str_vec[i]);
-	let ans = vec;
+	return vec;
 }
 
 //==============================================================================
@@ -613,7 +612,7 @@ fn parse_i64_delim(str_: str, delims: str): [i64; :]
 	let vec = [i64(0); size(str_vec, 0)];
 	for i in [0: size(str_vec, 0)]
 		vec[i] = parse_i64(str_vec[i]);
-	let ans = vec;
+	return vec;
 }
 
 //==============================================================================
@@ -635,8 +634,8 @@ fn rm_char(str_: str, char_: str): str
 		}
 	}
 
-	// trim and return
-	out = out[0: j];
+	// trim
+	return out[0: j];
 }
 
 fn reverse_str(str_: str): str
@@ -646,14 +645,14 @@ fn reverse_str(str_: str): str
 	let n = len(str_);
 	for i in [0: n]
 		rev[i] = str_[n-i-1];
-	let ans = rev;
+	return rev;
 }
 
 //==============================================================================
 
 fn ends_with_(str_: str, char_: str): bool
 {
-	str_[ len(str_) - 1 ] == char_;
+	return str_[ len(str_) - 1 ] == char_;
 }
 
 fn all_ends_with_(strs: [str; :], j: [i32; :], char_: str): bool
@@ -665,7 +664,7 @@ fn all_ends_with_(strs: [str; :], j: [i32; :], char_: str): bool
 		all_end = ends_with_(strs[j[i]], char_);
 		i += 1;
 	}
-	let ans = all_end;
+	return all_end;
 }
 
 //==============================================================================
@@ -679,21 +678,21 @@ fn gcd64(a: i64, b: i64): i64
 		b = a % b;
 		a = t;
 	}
-	let ans = a;
+	return a;
 }
 
 fn lcm64(a: i64, b: i64): i64
 {
 	let abs_ = a * b;
 	if (abs_ < 0) abs_ = -abs_;
-	abs_ / gcd64(a, b);
+	return abs_ / gcd64(a, b);
 }
 
 fn abs_i32(a: i32): i32
 {
 	let abs_ = a;
 	if (abs_ < 0) abs_ = -abs_;
-	let ans = abs_;
+	return abs_;
 }
 
 //==============================================================================
@@ -705,7 +704,7 @@ fn sign_(x: i32): i32
 		s = +1;
 	else if x < 0
 		s = -1;
-	let ans = s;
+	return s;
 }
 
 fn sign_64(x: i64): i64
@@ -715,7 +714,7 @@ fn sign_64(x: i64): i64
 		s = +i64(1);
 	else if x < 0
 		s = -i64(1);
-	let ans = s;
+	return s;
 }
 
 //==============================================================================
@@ -725,7 +724,7 @@ fn sum_i32(v: [i32; :]): i32
 	let sum_ = 0;
 	for i in [0: size(v,0)]
 		sum_ += v[i];
-	let ans = sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -733,7 +732,9 @@ fn sum_i32(v: [i32; :]): i32
 fn pmod(i: i32, n: i32): i32
 {
 	// Modulo/remainder but always positive
-	(i % n + n) % n;
+	//
+	// TODO: this is actually wrong
+	return (i % n + n) % n;
 }
 
 //==============================================================================

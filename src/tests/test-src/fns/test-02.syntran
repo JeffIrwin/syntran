@@ -4,11 +4,13 @@ let global = 0;
 fn increment()
 {
 	global = global + 1;
+	return;
 }
 
 fn decrement()
 {
 	global = global - 1;
+	return;
 }
 
 let dummy = increment();
@@ -16,5 +18,5 @@ dummy = increment();
 dummy = increment();
 dummy = decrement();
 
-global;
+return global;
 

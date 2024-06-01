@@ -17,6 +17,7 @@ fn get_pi(): f32
 
 	//local_pi;
 	// 3.141593E+00
+	return local_pi;
 }
 
 fn sin_fn(x: f32): f32
@@ -43,7 +44,7 @@ fn sin_fn(x: f32): f32
 		sign = -sign;
 	}
 
-	sinx;
+	return sinx;
 }
 
 let pi = get_pi();
@@ -90,5 +91,5 @@ norm = norm ** 0.5;
 norm;
 
 let tol = 1.e-5;
--tol < norm and norm < tol;
+return -tol < norm and norm < tol;
 

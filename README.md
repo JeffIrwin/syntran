@@ -603,7 +603,7 @@ Use the `fn` keyword to declare a function, as in Rust.  Unlike Rust, use a colo
 ```rust
 fn add(a1: i32, a2: i32): i32
 {
-	a1 + a2;
+	return a1 + a2;
 }
 ```
 
@@ -630,7 +630,7 @@ fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 	for     j in [0: size(mat,1)]
 		for i in [0: size(mat,0)]
 			ans[i] = ans[i] + mat[i,j] * vec[j];
-	ans;
+	return ans;
 }
 ```
 
@@ -646,7 +646,7 @@ fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
 		for     j in [0: size(a,1)]
 			for i in [0: size(a,0)]
 				c[i,k] = c[i,k] + a[i,j] * b[j,k];
-	c;
+	return c;
 }
 ```
 
@@ -815,6 +815,7 @@ fn my_scan(str_: str, set: str): i32
 		i -= 1;
 	else
 		i = -1;
+	return i;
 }
 ```
 
@@ -835,6 +836,8 @@ fn main()
 
 	println(my_scan("012345", "3"));
 	// 3
+
+	return;
 }
 
 main();

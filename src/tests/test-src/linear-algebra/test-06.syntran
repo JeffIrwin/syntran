@@ -6,7 +6,7 @@ fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 	for     j in [0: size(mat,1)]
 		for i in [0: size(mat,0)]
 			ans[i] = ans[i] + mat[i,j] * vec[j];
-	ans;
+	return ans;
 }
 
 fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
@@ -17,7 +17,7 @@ fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
 		for     j in [0: size(a,1)]
 			for i in [0: size(a,0)]
 				c[i,k] = c[i,k] + a[i,j] * b[j,k];
-	c;
+	return c;
 }
 
 // 3D vector with x = 1.0, y = 2.0, z = 3.0
@@ -55,6 +55,6 @@ let roty =
 
 // Apply 180 degree x rotation then 180 degree y rotation, which is equivalent
 // to applying a 180 degree z rotation
-mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty), vec);
+return mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty), vec);
 // [-1.0, -2.0, 3.0]
 

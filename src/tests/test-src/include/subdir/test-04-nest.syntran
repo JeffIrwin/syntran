@@ -1,6 +1,6 @@
 
 fn fn_nested(): i32
 {
-	4;
+	return 4;
 }
 

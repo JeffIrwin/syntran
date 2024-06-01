@@ -7,7 +7,7 @@
 fn fn1(): i32
 {
 	//println("1 starting fn1()");
-	1;
+	return 1;
 }
 
 fn main(): i32
@@ -18,8 +18,8 @@ fn main(): i32
 	sum_ += fn_inc(); // defined in included file
 
 	// return
-	sum_;
+	return sum_;
 }
 
-main();
+return main();
 

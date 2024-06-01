@@ -171,7 +171,7 @@ fn dfs_longest(map: [str; :, :], xbeg: [i32; :], xend: [i32; :]): i32
 				}
 			}
 	}
-	let ans = dist_max;
+	return dist_max;
 }
 
 //==============================================================================
@@ -431,7 +431,7 @@ fn get_max_dist(map: [str; :, :], xbeg: [i32; :], xend: [i32; :]): i32
 	//println("nwalked = ", nwalked);
 
 	//println("dist_max = ", dist_max);
-	let ans = dist_max;
+	return dist_max;
 }
 
 //==============================================================================
@@ -479,7 +479,7 @@ fn part1(): i32
 	let sum_ = dfs_longest(grid, [xbeg, ybeg], [xend, yend]);
 
 	println("part 1 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -526,7 +526,7 @@ fn part2(): i32
 	let sum_ = get_max_dist(grid, [xbeg, ybeg], [xend, yend]);
 
 	println("part 2 = ", sum_);
-	sum_;
+	return sum_;
 }
 
 //==============================================================================
@@ -546,12 +546,12 @@ fn main(): i64
 
 	println("Ending AOC syntran main");
 	println();
-	let ans = sum_;
+	return sum_;
 }
 
 //==============================================================================
 
-main();
+return main();
 
 //==============================================================================
 

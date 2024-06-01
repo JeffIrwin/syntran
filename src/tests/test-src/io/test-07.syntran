@@ -25,11 +25,11 @@ fn scan(str_: str, set: str): i64
 		i += 1;
 	}
 
-	// return
 	if (found)
 		i -= 1;
 	else
 		i = -1;
+	return i;
 }
 
 //==========================================================
@@ -60,11 +60,11 @@ fn verify(str_: str, set: str): i64
 		i += 1;
 	}
 
-	// return
 	if (not found)
 		i -= 1;
 	else
 		i = -1;
+	return i;
 }
 
 //==========================================================
@@ -105,8 +105,7 @@ fn tok_i32(str_: str): [i64; :]
 	//println("num end = ", str_[end_]);
 	//println("num str = ", str_[beg_: end_+1]);
 
-	// return
-	[beg_, end_, len_];
+	return [beg_, end_, len_];
 }
 
 //==========================================================
@@ -125,8 +124,7 @@ fn read_i32(str_: str): i32
 	let ans = parse_i32(str_[beg_: end_+1]);
 	//println("read_i32 = ", ans);
 
-	// return
-	ans;
+	return ans;
 }
 
 //==========================================================
@@ -136,12 +134,12 @@ fn main(): i32
 	//let ans = tok_i32("haystack1337haystack");
 	let ans = read_i32("haystack1337haystack");
 	//println("ans = ", ans);
-	ans;
+	return ans;
 }
 
 //==========================================================
 
-main();
+return main();
 
 //==========================================================
 

@@ -19,7 +19,7 @@ fn sub_fn(u: [i32; :], v: [i32; :]): [i32; :]
 
 	for i in [0: n]
 		w[i] = u[i] - v[i];
-	w;
+	return w;
 }
 
 fn norm_fn(u: [i32; :]): i32
@@ -29,7 +29,7 @@ fn norm_fn(u: [i32; :]): i32
 	for i in [0: size(u,0)]
 		norm = norm + u[i] ** 2;
 	//norm ** 0.5;  // not an int
-	norm;
+	return norm;
 }
 
 fn norm_diff(u: [i32; :], v: [i32; :]): i32
@@ -43,7 +43,7 @@ fn norm_diff(u: [i32; :], v: [i32; :]): i32
 	let sub_ = sub_fn(u, v);
 	let ans = norm_fn(sub_);
 
-	ans;
+	return ans;
 }
 
 //==========================================================

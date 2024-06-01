@@ -71,10 +71,9 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 		src_file = '<string>'
 	end if
 
+	call init_state(state)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
-
-	state%fns = declare_intrinsic_fns()
 
 	if (present(startup_file)) then
 		!print *, "startup_file = ", startup_file
@@ -212,7 +211,9 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 
-	state%fns = declare_intrinsic_fns()
+	call init_state(state)
+	state%quiet = .false.
+
 	tree = syntax_parse(str_, state%vars, state%fns)
 	call tree%log_diagnostics()
 
@@ -222,7 +223,6 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 		return
 	end if
 
-	state%quiet = .false.
 	val = syntax_eval(tree, state)
 
 	! TODO: check kind, add optional iostat arg
@@ -242,7 +242,9 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 
-	state%fns = declare_intrinsic_fns()
+	call init_state(state)
+	state%quiet = .false.
+
 	tree = syntax_parse(str_, state%vars, state%fns)
 	call tree%log_diagnostics()
 
@@ -252,7 +254,6 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 		return
 	end if
 
-	state%quiet = .false.
 	val = syntax_eval(tree, state)
 
 	! TODO: check kind, add optional iostat arg
@@ -274,10 +275,10 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 
+	call init_state(state)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
-	state%fns = declare_intrinsic_fns()
 	tree = syntax_parse(str_, state%vars, state%fns)
 	if (.not. state%quiet) call tree%log_diagnostics()
 
@@ -294,6 +295,27 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 	!print *, 'eval_f32 = ', eval_f32
 
 end function syntran_eval_f32
+
+!===============================================================================
+
+subroutine init_state(state)
+
+	! This sets everything but state%quiet, since some routines have that as an
+	! optional argument
+	!
+	! Maybe the state_t definition should be moved to types.f90, and then this
+	! could be a class-bound procedure
+
+	type(state_t), intent(inout) :: state
+
+	state%fns = declare_intrinsic_fns()
+	state%ifn = 1
+
+	!state%returned(1) = .false.
+	state%returned = new_logical_vector()
+	call state%returned%push(.false.)
+
+end subroutine init_state
 
 !===============================================================================
 
@@ -325,6 +347,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	!print *, 'str_ = ', str_
 
+	call init_state(state)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
@@ -337,9 +360,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 		dir = chdir_
 	end if
 
-	! TODO: make a helper fn here that all the eval_* fns use
-
-	state%fns = declare_intrinsic_fns()
+	! TODO: make a helper fn that all the eval_* fns use
 
 	tree = syntax_parse(str_, state%vars, state%fns, src_filel)
 	if (.not. state%quiet) call tree%log_diagnostics()

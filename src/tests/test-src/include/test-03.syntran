@@ -3,7 +3,7 @@
 
 fn fn1(): i32
 {
-	1;
+	return 1;
 }
 
 fn main(): i32
@@ -14,8 +14,8 @@ fn main(): i32
 	sum_ += fn_inc(); // 2
 	sum_ += fn_nested(); // 4
 
-	sum_; // 7
+	return sum_; // 7
 }
 
-main();
+return main();
 
