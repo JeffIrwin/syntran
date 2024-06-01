@@ -496,9 +496,10 @@ module function parse_fn_declaration(parser) result(decl)
 			allocate(val%array)
 			val%array%type = fn%params(i)%array_type
 			val%array%rank = fn%params(i)%rank
-			!!print *, "rank = ", val%array%rank
+			!print *, "rank = ", val%array%rank
 		end if
-!
+
+		!print *, "insert var type ", kind_name(val%type)
 		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
 
 	end do
@@ -511,6 +512,7 @@ module function parse_fn_declaration(parser) result(decl)
 	!
 
 	fn%type = void_type
+	!fn%type = i32_type
 	rank = 0
 	if (parser%current_kind() == colon_token) then
 
