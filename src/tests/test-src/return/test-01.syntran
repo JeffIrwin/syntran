@@ -1,0 +1,23 @@
+fn f1(i: i32): i32 {
+	if i < 10  return 1011;
+	else       return 1012;
+	return 1013;
+}
+fn f2(i: i32): i32 {
+	if i < 60       return 1021;
+	else if i < 70  return 1022;
+	return 1023;
+}
+fn f3(i: i32): i32 {
+	if i < 50       return f1(i);
+	else if i < 100 return f2(i);
+	return 1030;
+}
+
+let ans = [ f3(-10), f3(0), f3(15),
+	f3(50), f3(65), f3(75),
+	f3(100), f3(150) ];
+let exp = [1011, 1011, 1012, 1021,
+	1022, 1023, 1030, 1030];
+return all(ans == exp);
+
