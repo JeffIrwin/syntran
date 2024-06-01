@@ -48,7 +48,7 @@ recursive function syntax_eval(node, state) result(res)
 
 	type(syntax_node_t), intent(in) :: node
 
-	type(state_t) :: state
+	type(state_t), intent(inout) :: state
 
 	type(value_t) :: res
 
