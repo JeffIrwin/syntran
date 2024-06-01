@@ -310,10 +310,6 @@ subroutine init_state(state)
 
 	state%fns = declare_intrinsic_fns()
 
-	!state%ifn = 1
-	!state%returned(1) = .false.
-	!state%returned = new_logical_vector()
-	!call state%returned%push(.false.)
 	state%returned = .false.
 
 end subroutine init_state
