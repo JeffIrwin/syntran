@@ -80,6 +80,8 @@ else
 	println(mul_mat_vec(rotxx, vec));
 }
 
+println(mul_mat_vec(mul_mat(rotx, rotx), vec));
+
 // [1.0, -2.0, -3.0]
 //********************
 

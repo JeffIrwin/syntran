@@ -25,7 +25,7 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  45
+		syntran_patch =  46
 
 	! TODO:
 	!  - structs
@@ -742,8 +742,6 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	! The global scope can return any type.  This is initialized here and not
 	! inside new_parser() in case you have half of a function body inside an
 	! include file (!)
-	!
-	! Not sure what will happen with the repl shell
 	parser%fn_type = any_type
 
 	! Do nothing for blank lines (or comments)
