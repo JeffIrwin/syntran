@@ -271,12 +271,7 @@ contains
 
 recursive subroutine fn_copy(dst, src)
 
-	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-	! source, they will be gone!
-	!
-	! This should be avoided for efficient compilation, but the interactive
-	! interpreter uses it to backup and restore the variable dict for
-	! partially-evaluated continuation lines
+	! Deep copy.  This overwrites dst with src
 
 	class(fn_t), intent(inout) :: dst
 	class(fn_t), intent(in)    :: src

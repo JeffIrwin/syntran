@@ -101,30 +101,7 @@ recursive subroutine syntax_eval(node, state, res)
 
 		!print *, 'assigning identifier ', quote(node%identifier%text)
 
-		! TODO: deep copy?
 		state%vars%vals(node%id_index) = res
-
-		if (res%type == array_type) then
-			!print *, "array let expr"
-
-			!if (allocated(res%array)) deallocate(res%array)
-			!allocate(res%array)
-			!if (.not. allocated(res%array)) allocate(res%array)
-			if (.not. allocated(state%vars%vals(node%id_index)%array)) &
-				allocate(state%vars%vals(node%id_index)%array)
-
-			state%vars%vals(node%id_index)%type  = array_type
-			state%vars%vals(node%id_index)%array = res%array 
-
-			!! TODO: this might be unnecessary
-			state%vars%vals(node%id_index)%array%rank = res%array%rank 
-			!!print *, "allocated(size j) = ", allocated(state%vars%vals(node%id_index)%array%size)
-			state%vars%vals(node%id_index)%array%size = res%array%size 
-			!print *, "rank = ", res%array%rank, state%vars%vals(node%id_index)%array%rank
-
-		!else
-		!	print *, 'scalar name_expr'
-		end if
 
 	case (fn_call_expr)
 		call eval_fn_call(node, state, res)
@@ -382,31 +359,31 @@ subroutine eval_name_expr(node, state, res)
 		!	kind_name(state%vars%vals(node%id_index)%type), &
 		!	          state%vars%vals(node%id_index)%type
 
-		! Deep copy of whole array instead of aliasing pointers
-		!
-		! I suspect that value_t now has a deep copy problem like syntax_node_t
-		! does, and this may be why samples/array-fns.syntran doesn't work.  May
-		! need to convert return-by-value to subroutine out-arg as reference (or
-		! override the copy operator, but that hasn't worked out so well for
-		! syntax_node_t)
-		if (res%type == array_type) then
-			!print *, 'array name_expr'
+		!! Deep copy of whole array instead of aliasing pointers
+		!!
+		!! I suspect that value_t now has a deep copy problem like syntax_node_t
+		!! does, and this may be why samples/array-fns.syntran doesn't work.  May
+		!! need to convert return-by-value to subroutine out-arg as reference (or
+		!! override the copy operator, but that hasn't worked out so well for
+		!! syntax_node_t)
+		!if (res%type == array_type) then
+		!	!print *, 'array name_expr'
 
-			if (allocated(res%array)) deallocate(res%array)
+		!	if (allocated(res%array)) deallocate(res%array)
 
-			allocate(res%array)
-			res%type = array_type
-			res%array = state%vars%vals(node%id_index)%array
+		!	allocate(res%array)
+		!	res%type = array_type
+		!	res%array = state%vars%vals(node%id_index)%array
 
-			!! TODO: this might be unnecessary
-			res%array%rank = state%vars%vals(node%id_index)%array%rank
-			!!print *, "allocated(size j) = ", allocated(state%vars%vals(node%id_index)%array%size)
-			res%array%size = state%vars%vals(node%id_index)%array%size
-			!print *, "rank = ", res%array%rank, state%vars%vals(node%id_index)%array%rank
+		!	!! TODO: this might be unnecessary
+		!	res%array%rank = state%vars%vals(node%id_index)%array%rank
+		!	!!print *, "allocated(size j) = ", allocated(state%vars%vals(node%id_index)%array%size)
+		!	res%array%size = state%vars%vals(node%id_index)%array%size
+		!	!print *, "rank = ", res%array%rank, state%vars%vals(node%id_index)%array%rank
 
-		!else
-		!	print *, 'scalar name_expr'
-		end if
+		!!else
+		!!	print *, 'scalar name_expr'
+		!end if
 
 	end if
 
@@ -1651,14 +1628,12 @@ subroutine eval_block_statement(node, state, res)
 		!print *, ''
 
 		! In case of no-op if statements and while loops
-		!
-		! TODO: deep copy?
 		if (tmp%type /= unknown_type) then
 			res = tmp
 
-			if (tmp%type == array_type) then
-				res%array = tmp%array
-			end if
+			!if (tmp%type == array_type) then
+			!	res%array = tmp%array
+			!end if
 		end if
 
 		! HolyC feature: implicitly print name expression members.  I may

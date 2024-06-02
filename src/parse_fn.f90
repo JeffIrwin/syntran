@@ -513,7 +513,6 @@ module function parse_fn_declaration(parser) result(decl)
 	!
 
 	fn%type = void_type
-	!fn%type = i32_type
 	rank = 0
 	if (parser%current_kind() == colon_token) then
 
