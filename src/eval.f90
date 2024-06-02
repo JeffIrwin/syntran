@@ -47,8 +47,8 @@ recursive subroutine syntax_eval(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	!type(value_t), intent(inout) :: res
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
+	!type(value_t), intent(out) :: res
 
 	!********
 
@@ -161,7 +161,7 @@ subroutine eval_binary_expr(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -254,7 +254,7 @@ subroutine eval_name_expr(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -334,13 +334,16 @@ subroutine eval_name_expr(node, state, res)
 			!print *, 'len_  = ', node%val%array%len_
 			!print *, 'cap   = ', node%val%array%cap
 
-			allocate(res%array)
+			if (.not. allocated(res%array)) allocate(res%array)
 			res%type = array_type
 			res%array%kind = expl_array
 			res%array%type = node%val%array%type
 			res%array%rank = rank_res
 
+			!if (.not. allocated(res%array%size)) allocate(res%array%size( rank_res ))
+			if (allocated(res%array%size)) deallocate(res%array%size)
 			allocate(res%array%size( rank_res ))
+
 			idim_res = 1
 			do idim_ = 1, size(lsubs)
 				select case (node%lsubscripts(idim_)%sub_kind)
@@ -423,7 +426,7 @@ subroutine eval_fn_call(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -767,10 +770,10 @@ subroutine eval_fn_call(node, state, res)
 			! deeply-nested fn calls can crash without the tmp value.  idk why i
 			! can't just eval directly into the state var like commented above
 			! :(.  probably state var type is getting cleared by passing it to
-			! an intent(out) arg? or, nested fn calls basically create a stack
-			! in which we store each nested arg in different copies of tmp.  if
-			! you try to store them all in the same state var at multiple stack
-			! levels it breaks?
+			! an intent(out) arg? more likely, nested fn calls basically create
+			! a stack in which we store each nested arg in different copies of
+			! tmp.  if you try to store them all in the same state var at
+			! multiple stack levels it breaks?
 			call syntax_eval(node%args(i), state, tmp)
 			state%vars%vals( node%params(i) ) = tmp
 
@@ -810,7 +813,7 @@ subroutine eval_for_statement(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -990,7 +993,7 @@ subroutine eval_assignment_expr(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -1160,7 +1163,7 @@ subroutine eval_translation_unit(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -1210,7 +1213,7 @@ subroutine eval_array_expr(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -1332,7 +1335,7 @@ subroutine eval_array_expr(node, state, res)
 		allocate(array%size( array%rank ))
 		array%size = array%len_
 
-		allocate(res%array)
+		if (.not. allocated(res%array)) allocate(res%array)
 		res%type  = array_type
 		res%array = array
 
@@ -1416,7 +1419,7 @@ subroutine eval_array_expr(node, state, res)
 			call internal_error()
 		end select
 
-		allocate(res%array)
+		if (.not. allocated(res%array)) allocate(res%array)
 		res%type  = array_type
 		res%array = array
 
@@ -1506,7 +1509,7 @@ subroutine eval_array_expr(node, state, res)
 		end if
 
 		!print *, 'copying array'
-		allocate(res%array)
+		if (.not. allocated(res%array)) allocate(res%array)
 		res%type  = array_type
 		res%array = array
 		!print *, 'done'
@@ -1534,7 +1537,7 @@ subroutine eval_array_expr(node, state, res)
 		array%size = array%len_
 
 		!print *, 'copying array'
-		allocate(res%array)
+		if (.not. allocated(res%array)) allocate(res%array)
 		res%type  = array_type
 		res%array = array
 		!print *, 'done'
@@ -1553,7 +1556,7 @@ subroutine eval_while_statement(node, state, res)
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -1575,7 +1578,7 @@ subroutine eval_if_statement(node, state, res)
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -1603,7 +1606,7 @@ subroutine eval_return_statement(node, state, res)
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -1629,7 +1632,7 @@ subroutine eval_block_statement(node, state, res)
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -1682,7 +1685,7 @@ subroutine eval_unary_expr(node, state, res)
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(out) :: res
+	type(value_t), intent(inout) :: res
 
 	!********
 
@@ -1738,16 +1741,24 @@ subroutine allocate_array(array, cap)
 
 	array%cap = cap
 
+	! this could potentially be optimized by only re-allocating if over previous
+	! cap (or change of type?)
+
 	select case (array%type)
 	case (i32_type)
+		if (allocated(array%i32)) deallocate(array%i32)
 		allocate(array%i32( cap ))
 	case (i64_type)
+		if (allocated(array%i64)) deallocate(array%i64)
 		allocate(array%i64( cap ))
 	case (f32_type)
+		if (allocated(array%f32)) deallocate(array%f32)
 		allocate(array%f32( cap ))
 	case (bool_type)
+		if (allocated(array%bool)) deallocate(array%bool)
 		allocate(array%bool( cap ))
 	case (str_type)
+		if (allocated(array%str)) deallocate(array%str)
 		allocate(array%str( cap ))
 	case default
 		write(*,*) err_int_prefix//'cannot allocate array of type `' &
