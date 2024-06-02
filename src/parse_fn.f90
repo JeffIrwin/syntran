@@ -602,7 +602,9 @@ module subroutine parse_type(parser, type_text, rank)
 
 	!********
 
-	type(syntax_token_t) :: colon, type, comma, lbracket, rbracket, semi
+	integer :: pos0
+
+	type(syntax_token_t) :: colon, type, comma, lbracket, rbracket, semi, dummy
 
 	if (parser%current_kind() == lbracket_token) then
 
@@ -616,11 +618,16 @@ module subroutine parse_type(parser, type_text, rank)
 			parser%current_kind() /= rbracket_token .and. &
 			parser%current_kind() /= eof_token)
 
+			pos0 = parser%pos
+
 			rank = rank + 1
 			colon = parser%match(colon_token)
 			if (parser%current_kind() /= rbracket_token) then
 				comma = parser%match(comma_token)
 			end if
+
+			! break infinite loop
+			if (parser%pos == pos0) dummy = parser%next()
 
 		end do
 		!print *, 'rank = ', rank
