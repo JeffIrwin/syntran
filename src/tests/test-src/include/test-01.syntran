@@ -17,7 +17,6 @@ fn main(): i32
 	sum_ += fn1();
 	sum_ += fn_inc(); // defined in included file
 
-	// return
 	return sum_;
 }
 

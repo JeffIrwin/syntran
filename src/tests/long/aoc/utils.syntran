@@ -47,7 +47,6 @@ fn scan(str_: str, set: str): i64
 		i += 1;
 	}
 
-	// return
 	if (found)
 		i -= 1;
 	else
@@ -79,7 +78,6 @@ fn scanback(str_: str, set: str): i64
 	}
 	//println("found = ", found);
 
-	// return
 	if (found)
 		i += 1;
 	else
@@ -115,7 +113,6 @@ fn verify(str_: str, set: str): i64
 		i += 1;
 	}
 
-	// return
 	if (not found)
 		i -= 1;
 	else
@@ -167,7 +164,6 @@ fn tok_i32(str_: str): [i64; :]
 	//println("num end = ", str_[end_]);
 	//println("num str = ", str_[beg_: end_+1]);
 
-	// return
 	return [beg_, end_, len_];
 }
 
@@ -187,7 +183,6 @@ fn read_i32(str_: str): i32
 	let ans = parse_i32(str_[beg_: end_+1]);
 	//println("read_i32 = ", ans);
 
-	// return
 	return ans;
 }
 
@@ -231,7 +226,6 @@ fn read_i32s(str_: str): [i32; :]
 		i += toks[1] + 1;
 	}
 
-	// return
 	return nums;
 }
 
@@ -259,7 +253,6 @@ fn verifyback(str_: str, set: str): i64
 		i -= 1;
 	}
 
-	// return
 	let ans = i64(-1);
 	if not found
 	{
@@ -450,7 +443,6 @@ fn index_(str_: str, substr: str): i64
 		//i = i + 1;
 	}
 
-	// return
 	if found
 	{
 		i -= 1;
@@ -495,7 +487,6 @@ fn indexback(str_: str, substr: str): i64
 		i -= 1;
 	}
 
-	// return
 	if found
 	{
 		i += 1;

@@ -607,7 +607,7 @@ fn add(a1: i32, a2: i32): i32
 }
 ```
 
-The final statement of a function implicitly defines the return value.  The function defined above could be used like this:
+The function defined above could be used like this:
 
 ```rust
 let a = 3;
@@ -810,7 +810,6 @@ fn my_scan(str_: str, set: str): i32
 		i += 1;
 	}
 
-	// return
 	if (found)
 		i -= 1;
 	else

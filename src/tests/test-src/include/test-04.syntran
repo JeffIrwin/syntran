@@ -15,7 +15,6 @@ fn main(): i32
 	sum_ += fn_inc(); // defined in included file
 	sum_ += fn_nested(); // defined in nested included file
 
-	// return
 	return sum_;
 }
 
