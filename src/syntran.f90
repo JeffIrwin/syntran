@@ -94,8 +94,7 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 		end if
 
 		! TODO: chdir option?
-
-		res = syntax_eval(compilation, state)
+		call syntax_eval(compilation, state, res)
 		res_str = res%to_str()
 		write(*,*) '    '//res_str
 
@@ -187,7 +186,7 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 		! Don't try to evaluate with errors
 		if (compilation%diagnostics%len_ > 0) cycle
 
-		res  = syntax_eval(compilation, state)
+		call syntax_eval(compilation, state, res )
 
 		! Consider MATLAB-style "ans = " log?
 		!
@@ -223,7 +222,7 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 		return
 	end if
 
-	val = syntax_eval(tree, state)
+	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
 	eval_i32 = val%sca%i32
@@ -254,7 +253,7 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 		return
 	end if
 
-	val = syntax_eval(tree, state)
+	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
 	val_ = val%sca%i64
@@ -288,7 +287,7 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 		return
 	end if
 
-	val = syntax_eval(tree, state)
+	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
 	eval_f32 = val%sca%f32
@@ -383,7 +382,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	end if
 
-	val = syntax_eval(tree, state)
+	call syntax_eval(tree, state, val)
 	res = val%to_str()
 	!print *, 'res = ', res
 

@@ -66,19 +66,6 @@ let roty =
 //println(rotx);
 //println(roty);
 
-// Apply 180 degree x rotation then 180 degree y rotation, which is equivalent
-// to applying a 180 degree z rotation
-//println("calling");
-
-//let rotx1 = rotx;
-//return mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx1), roty), roty), vec);
-
-//// TODO: nested fn calls should work
-//return mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty), vec);
-
-let rotxx  = mul_mat(rotx, rotx);
-let rotxxy = mul_mat(rotxx, roty);
-return mul_mat_vec(mul_mat(rotxxy, roty), vec);
-
+return mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty), vec);
 // [-1.0, -2.0, 3.0]
 

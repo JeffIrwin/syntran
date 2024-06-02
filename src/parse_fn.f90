@@ -197,7 +197,8 @@ module function parse_fn_call(parser) result(fn_call)
 
 	! Intrinsic fns don't have a syntax node: they are implemented
 	! in Fortran, not syntran
-	if (associated(fn%node)) then
+	!if (associated(fn%node)) then
+	if (allocated(fn%node)) then
 		!print *, 'assigning fn node'
 
 		! If I understand my own code, this is inlining:  every fn
@@ -496,9 +497,10 @@ module function parse_fn_declaration(parser) result(decl)
 			allocate(val%array)
 			val%array%type = fn%params(i)%array_type
 			val%array%rank = fn%params(i)%rank
-			!!print *, "rank = ", val%array%rank
+			!print *, "rank = ", val%array%rank
 		end if
-!
+
+		!print *, "insert var type ", kind_name(val%type)
 		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
 
 	end do
