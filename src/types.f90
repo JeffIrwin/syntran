@@ -54,7 +54,12 @@ module syntran__types_m
 		! dangerous (see memory leaks due to now removed value_t -> array_t
 		! pointer).  Can we avoid having a pointer here and make it allocatable
 		! instead?
-		type(syntax_node_t), pointer :: node => null()
+		!type(syntax_node_t), pointer :: node => null()
+		type(syntax_node_t), allocatable :: node
+
+		contains
+			procedure, pass(dst) :: copy => fn_copy
+			generic, public :: assignment(=) => copy
 
 	end type fn_t
 
@@ -261,6 +266,48 @@ module syntran__types_m
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+recursive subroutine fn_copy(dst, src)
+
+	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
+	! source, they will be gone!
+	!
+	! This should be avoided for efficient compilation, but the interactive
+	! interpreter uses it to backup and restore the variable dict for
+	! partially-evaluated continuation lines
+
+	class(fn_t), intent(inout) :: dst
+	class(fn_t), intent(in)    :: src
+
+	!********
+
+	!print *, 'starting fn_copy()'
+
+	dst%type = src%type
+	dst%array_type = src%array_type
+	dst%rank = src%rank
+	dst%variadic_min = src%variadic_min
+	dst%variadic_type = src%variadic_type
+
+	if (allocated(src%params)) then
+		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+		dst%params = src%params
+	else if (allocated(dst%params)) then
+		deallocate(dst%params)
+	end if
+
+	if (allocated(src%node)) then
+		if (.not. allocated(dst%node)) allocate(dst%node)
+		dst%node = src%node
+	else if (allocated(dst%node)) then
+		deallocate(dst%node)
+	end if
+
+	!print *, 'done fn_copy()'
+
+end subroutine fn_copy
 
 !===============================================================================
 
@@ -1880,6 +1927,7 @@ recursive function fn_ternary_search(node, key, id_index, iostat) result(val)
 		return
 	end if
 
+	!allocate(val)
 	val      = node%val
 	id_index = node%id_index
 
@@ -1948,6 +1996,7 @@ recursive subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwri
 		return
 	end if
 
+	allocate(node%val)
 	node%val      = val
 	node%id_index = id_index
 

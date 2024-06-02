@@ -1,6 +1,6 @@
 
 let chain = true;
-chain = false;
+//chain = false;
 
 fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 {

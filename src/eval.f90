@@ -47,7 +47,7 @@ recursive subroutine syntax_eval(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	!type(value_t) :: res
+	!type(value_t), intent(inout) :: res
 	type(value_t), intent(out) :: res
 
 	!********
@@ -378,8 +378,8 @@ subroutine eval_name_expr(node, state, res)
 		!print *, "size(vals) = ", size(state%vars%vals)
 		res = state%vars%vals(node%id_index)
 
-		! How are these both void types???
-		!if (res%type == void_type) res%type = array_type
+		!! How are these both void types???
+		!!if (res%type == void_type) res%type = array_type
 		!print *, "res type = ", kind_name(res%type)
 		!print *, "var type = ", &
 		!	kind_name(state%vars%vals(node%id_index)%type), &
@@ -431,7 +431,7 @@ subroutine eval_fn_call(node, state, res)
 
 	integer :: i, io
 
-	type(value_t) :: arg, arg1, arg2
+	type(value_t) :: arg, arg1, arg2, tmp
 
 	!print *, 'eval fn_call_expr'
 	!print *, 'fn identifier = ', node%identifier%text
@@ -682,6 +682,7 @@ subroutine eval_fn_call(node, state, res)
 		call syntax_eval(node%args(1), state, arg1)
 		call syntax_eval(node%args(2), state, arg2)
 
+		!print *, "arg 1 type = ", kind_name(node%args(1)%kind)
 		!print *, "allocated = ", allocated(arg1%array)
 		!print *, "arg2 = ", arg2%sca%i32
 		!print *, "arg1 type = ", kind_name(arg1%type)
@@ -760,8 +761,18 @@ subroutine eval_fn_call(node, state, res)
 		do i = 1, size(node%params)
 			!print *, 'copying param ', i
 
-			call syntax_eval(node%args(i), state, &
-				state%vars%vals( node%params(i) ))
+			!call syntax_eval(node%args(i), state, &
+			!	state%vars%vals( node%params(i) ))
+
+			! deeply-nested fn calls can crash without the tmp value.  idk why i
+			! can't just eval directly into the state var like commented above
+			! :(.  probably state var type is getting cleared by passing it to
+			! an intent(out) arg? or, nested fn calls basically create a stack
+			! in which we store each nested arg in different copies of tmp.  if
+			! you try to store them all in the same state var at multiple stack
+			! levels it breaks?
+			call syntax_eval(node%args(i), state, tmp)
+			state%vars%vals( node%params(i) ) = tmp
 
 			!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
 			!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
@@ -1367,7 +1378,10 @@ subroutine eval_array_expr(node, state, res)
 		allocate(array%size( array%rank ))
 
 		do i = 1, array%rank
+			!print *, "i = ", i
 			call syntax_eval(node%size(i), state, len_)
+			!print *, "len_%type = ", kind_name(len_%type)
+			!print *, "len_      = ", len_%to_i64()
 			array%size(i) = len_%to_i64()
 			!print *, 'size['//str(i)//'] = ', array%size(i)
 		end do
