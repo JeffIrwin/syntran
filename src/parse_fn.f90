@@ -465,7 +465,8 @@ module function parse_fn_declaration(parser) result(decl)
 		if (itype == unknown_type) then
 
 			! TODO: make an array of pos's for each param to underline
-			! individual param, not whole param list
+			! individual param, not whole param list.  Struct parser does this
+			! slightly better
 
 			span = new_span(pos1, pos2 - pos1 + 1)
 			call parser%diagnostics%push(err_bad_type( &
@@ -504,6 +505,8 @@ module function parse_fn_declaration(parser) result(decl)
 		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
 
 	end do
+
+	! Parse fn return type
 
 	! Rust uses "->" as a delimiter between the fn and its return type.  Here
 	! I choose ":" instead as it seems more consistent, at least for normal
@@ -600,10 +603,20 @@ module function parse_struct_declaration(parser) result(decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: pos0, rank
+	integer :: itype, i, pos0, pos1, pos2, rank
+
+	type(struct_t) :: struct
 
 	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
 		colon, name, struct_kw
+
+	type(text_span_t) :: span
+
+	type( string_vector_t) :: names, types
+	type(logical_vector_t) :: is_array
+	type(integer_vector_t) :: ranks, pos_mems
+
+	type(value_t) :: val
 
 	!! TODO?
 	!call parser%vars%push_scope()
@@ -612,6 +625,8 @@ module function parse_struct_declaration(parser) result(decl)
 
 	identifier = parser%match(identifier_token)
 	print *, "parsing struct ", identifier%text
+
+	pos1 = parser%current_pos()
 
 	lbrace = parser%match(lbrace_token)
 
@@ -630,6 +645,15 @@ module function parse_struct_declaration(parser) result(decl)
 	! fn parameters, we have a list of struct members.  Unlike a fn declaration,
 	! there is no "body" for a struct, only members.
 
+	! Parse member names and types.  Save in temp vectors initially
+	names    = new_string_vector()
+	types    = new_string_vector()
+	is_array = new_logical_vector()
+	ranks    = new_integer_vector()
+
+	! For diagnostic text spans
+	pos_mems = new_integer_vector()
+
 	do while ( &
 		parser%current_kind() /= rbrace_token .and. &
 		parser%current_kind() /= eof_token)
@@ -639,18 +663,19 @@ module function parse_struct_declaration(parser) result(decl)
 		!print *, 'matching name'
 		name  = parser%match(identifier_token)
 		print *, "name = ", name%text
+		call pos_mems%push( name%pos )
 		!print *, 'matching colon'
 		colon = parser%match(colon_token)
 
 		call parser%parse_type(type_text, rank)
 		print *, "type = ", type_text
 
-		!call names%push( name%text )
-		!call types%push( type_text )
-		!call ranks%push( rank      )
+		call names%push( name%text )
+		call types%push( type_text )
+		call ranks%push( rank      )
 
-		!! This array is technically redundant but helps readability?
-		!call is_array%push( rank >= 0 )
+		! This array is technically redundant but helps readability?
+		call is_array%push( rank >= 0 )
 
 		if (parser%current_kind() /= rbrace_token) then
 			!print *, 'matching comma'
@@ -664,6 +689,61 @@ module function parse_struct_declaration(parser) result(decl)
 
 	!print *, 'matching rbrace'
 	rbrace = parser%match(rbrace_token)
+	call pos_mems%push( rbrace%pos )
+	pos2 = parser%current_pos() - 1
+
+	! Now that we have the number of members, save them
+
+	allocate(struct%members( names%len_ ))
+	!allocate(decl  %params( names%len_ ))  ! if this is needed, we need a new
+	!! name.  "members" already means the member statements of a block statement
+
+	do i = 1, names%len_
+		!print *, "name, type = ", names%v(i)%s, ", ", types%v(i)%s
+
+		struct%members(i)%name = names%v(i)%s
+
+		itype = lookup_type( types%v(i)%s )
+		if (itype == unknown_type) then
+
+			!span = new_span(pos1, pos2 - pos1 - 1)
+			!span = new_span(lbrace%pos, rbrace%pos - lbrace%pos + 1)
+			span = new_span(pos_mems%v(i), pos_mems%v(i+1) - pos_mems%v(i))
+			call parser%diagnostics%push(err_bad_type( &
+				parser%context(), span, types%v(i)%s))
+
+		end if
+
+		if (is_array%v(i)) then
+			struct%members(i)%type = array_type
+			struct%members(i)%array_type = itype
+			struct%members(i)%rank = ranks%v(i)
+			!print *, "rank = ", struct%members(i)%rank
+		else
+			struct%members(i)%type = itype
+			!print *, "(scalar)"
+		end if
+
+		! Declare the parameter variable
+		parser%num_vars = parser%num_vars + 1
+
+		!! Save parameters by id_index
+		!decl%params(i) = parser%num_vars
+
+		! Create a value_t object to store the type
+		val%type = struct%members(i)%type
+		if (is_array%v(i)) then
+			if (allocated(val%array)) deallocate(val%array)
+			allocate(val%array)
+			val%array%type = struct%members(i)%array_type
+			val%array%rank = struct%members(i)%rank
+			!print *, "rank = ", val%array%rank
+		end if
+
+		!print *, "insert var type ", kind_name(val%type)
+		call parser%vars%insert(struct%members(i)%name, val, parser%num_vars)
+
+	end do
 
 	! TODO: insert struct into a new dict type
 

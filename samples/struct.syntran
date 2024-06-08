@@ -10,9 +10,13 @@ struct time
 	mm: i32,
 	ss: f32,  // trailing comma is optional
 }
+
 //let t1 = time{hh = 9, mm = 20, ss = 0.030,};
 //t1.hh = 10;
 //println("t1 = ", t1);
+//
+//let t2 = time{hh = 13, mm = 37, ss = 0.069,};
+//
 //fn print_time(t: time)
 //{
 //	println("h = ", t.hh);
@@ -20,6 +24,14 @@ struct time
 //	println("s = ", t.ss);
 //	return;
 //}
+
+struct date {
+	d: i32,
+	//m: stri, // err: bad type
+	m: str,
+	y: i64
+}
+
 //********
 
 fn set_time_glbl(h: i32, m: i32, s:f32)

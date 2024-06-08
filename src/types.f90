@@ -12,6 +12,32 @@ module syntran__types_m
 
 	!********
 
+	type member_t
+		! Struct member.  Basically the same as a fn param_t
+
+		integer :: type
+		character(len = :), allocatable :: name
+
+		integer :: array_type, rank
+
+	end type member_t
+
+	!********
+
+	type struct_t
+		! Structure declaration.  Will this be different than a struct instance?
+
+		!type(param_t), allocatable :: params(:)
+		type(member_t), allocatable :: members(:)
+
+		!contains
+		!	procedure, pass(dst) :: copy => fn_copy
+		!	generic, public :: assignment(=) => copy
+
+	end type struct_t
+
+	!********
+
 	type param_t
 		! Function parameter (argument)
 
