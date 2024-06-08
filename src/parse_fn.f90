@@ -603,7 +603,7 @@ module function parse_struct_declaration(parser) result(decl)
 	integer :: pos0, rank
 
 	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
-		colon, member, struct_kw
+		colon, name, struct_kw
 
 	!! TODO?
 	!call parser%vars%push_scope()
@@ -636,16 +636,16 @@ module function parse_struct_declaration(parser) result(decl)
 
 		pos0 = parser%current_pos()
 
-		!print *, 'matching member'
-		member  = parser%match(identifier_token)
-		print *, "member = ", member%text
+		!print *, 'matching name'
+		name  = parser%match(identifier_token)
+		print *, "name = ", name%text
 		!print *, 'matching colon'
 		colon = parser%match(colon_token)
 
 		call parser%parse_type(type_text, rank)
 		print *, "type = ", type_text
 
-		!call member%push( member%text )
+		!call names%push( name%text )
 		!call types%push( type_text )
 		!call ranks%push( rank      )
 
