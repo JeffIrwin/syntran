@@ -4,20 +4,25 @@ let mm_glbl = 0;
 let ss_glbl = 0.0;
 
 //********
-struct time
+struct Time
 {
 	hh: i32,
 	mm: i32,
 	ss: f32,  // trailing comma is optional
 }
 
-//let t1 = time{hh = 9, mm = 20, ss = 0.030,};
+//let t1 = Time(hh = 9, mm = 20, ss = 0.030,);
+let t1 = Time{hh = 9, mm = 20, ss = 0.030,};
+
+//println("t1.hh = ", t1.hh);
+
 //t1.hh = 10;
+//println("t1.hh = ", t1.hh);
 //println("t1 = ", t1);
-//
-//let t2 = time{hh = 13, mm = 37, ss = 0.069,};
-//
-//fn print_time(t: time)
+
+let t2 = Time{hh = 13, mm = 37, ss = 0.069,};
+
+//fn print_time(t: Time)
 //{
 //	println("h = ", t.hh);
 //	println("m = ", t.mm);
@@ -25,12 +30,14 @@ struct time
 //	return;
 //}
 
-struct date {
+struct Date {
 	d: i32,
 	//m: stri, // err: bad type
 	m: str,
 	y: i64
 }
+
+let d1 = Date{y = 1900 + 12, m = "Apr", d = 14};
 
 //********
 

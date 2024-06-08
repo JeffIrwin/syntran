@@ -662,13 +662,13 @@ module function parse_struct_declaration(parser) result(decl)
 
 		!print *, 'matching name'
 		name  = parser%match(identifier_token)
-		print *, "name = ", name%text
+		!print *, "name = ", name%text
 		call pos_mems%push( name%pos )
 		!print *, 'matching colon'
 		colon = parser%match(colon_token)
 
 		call parser%parse_type(type_text, rank)
-		print *, "type = ", type_text
+		!print *, "type = ", type_text
 
 		call names%push( name%text )
 		call types%push( type_text )
@@ -745,13 +745,77 @@ module function parse_struct_declaration(parser) result(decl)
 
 	end do
 
-	! TODO: insert struct into a new dict type
+	! TODO: insert struct into a new dict type and save its members somewhere
+	!call parser%structs%insert(identifier%text, fn, decl%id_index)
 
 	decl%kind = struct_declaration
 
-	print *, "done parsing struct"
+	!print *, "done parsing struct"
 
 end function parse_struct_declaration
+
+!===============================================================================
+
+module function parse_struct_instance(parser) result(instance)
+
+	! A struct instantiator initializes all the members of an instance of a
+	! struct
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: instance
+
+	!********
+
+	integer :: pos0
+
+	type(syntax_node_t) :: mem
+	type(syntax_node_vector_t) :: mems
+
+	type(syntax_token_t) :: identifier, name, equals, comma, lbrace, rbrace, dummy
+
+	!print *, "starting parse_struct_instance()"
+
+	identifier = parser%match(identifier_token)
+
+	!print *, 'identifier = ', identifier%text
+
+	mems = new_syntax_node_vector()
+	lbrace  = parser%match(lbrace_token)
+
+	do while ( &
+		parser%current_kind() /= rbrace_token .and. &
+		parser%current_kind() /= eof_token)
+
+		pos0 = parser%pos
+
+		name   = parser%match(identifier_token)
+		equals = parser%match(equals_token)
+		mem    = parser%parse_expr()
+
+		call mems%push(mem)
+
+		if (parser%current_kind() /= rbrace_token) then
+			comma = parser%match(comma_token)
+		end if
+
+		! break infinite loop
+		if (parser%pos == pos0) dummy = parser%next()
+
+	end do
+
+	rbrace  = parser%match(rbrace_token)
+
+	instance%kind = struct_instance_expr
+	!instance%identifier = identifier
+
+	! TODO: save everything in the instance syntax node
+
+	! TODO: check number and type of members match
+
+	!print *, "ending parse_struct_instance()"
+
+end function parse_struct_instance
 
 !===============================================================================
 

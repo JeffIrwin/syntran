@@ -414,10 +414,14 @@ module function parse_primary_expr(parser) result(expr)
 
 		case (identifier_token)
 
-			if (parser%peek_kind(1) /= lparen_token) then
-				expr = parser%parse_name_expr()
-			else
+			!print *, "parser%peek_kind(1) = ", kind_name(parser%peek_kind(1))
+
+			if (parser%peek_kind(1) == lparen_token) then
 				expr = parser%parse_fn_call()
+			else if (parser%peek_kind(1) == lbrace_token) then
+				expr = parser%parse_struct_instance()
+			else
+				expr = parser%parse_name_expr()
 			end if
 
 		case (f32_token)

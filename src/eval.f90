@@ -106,6 +106,10 @@ recursive subroutine syntax_eval(node, state, res)
 	case (fn_call_expr)
 		call eval_fn_call(node, state, res)
 
+	case (struct_instance_expr)
+		!! TODO
+		!call eval_struct_instance(node, state, res)
+
 	case (name_expr)
 		!print *, "name_expr"
 		call eval_name_expr(node, state, res)

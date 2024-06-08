@@ -67,9 +67,10 @@ module syntran__parse_m
 				parse_block_statement, &
 				parse_expr, &
 				parse_expr_statement, &
-				parse_fn_call, &
 				parse_fn_declaration, &
+				parse_fn_call, &
 				parse_struct_declaration, &
+				parse_struct_instance, &
 				parse_for_statement, &
 				parse_if_statement, &
 				parse_return_statement, &
@@ -96,15 +97,15 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_fn.f90
 
-		module function parse_fn_call(parser) result(fn_call)
-			class(parser_t) :: parser
-			type(syntax_node_t) :: fn_call
-		end function parse_fn_call
-
 		module function parse_fn_declaration(parser) result(decl)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: decl
 		end function parse_fn_declaration
+
+		module function parse_fn_call(parser) result(fn_call)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: fn_call
+		end function parse_fn_call
 
 		module subroutine parse_type(parser, type_text, rank)
 			class(parser_t) :: parser
@@ -112,10 +113,16 @@ module syntran__parse_m
 			integer, intent(out) :: rank
 		end subroutine parse_type
 
+		! TODO: move struct stuff to another translation unit
 		module function parse_struct_declaration(parser) result(decl)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: decl
 		end function parse_struct_declaration
+
+		module function parse_struct_instance(parser) result(instance)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: instance
+		end function parse_struct_instance
 
 	end interface
 
