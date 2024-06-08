@@ -1,0 +1,46 @@
+
+let hh_glbl = 0;
+let mm_glbl = 0;
+let ss_glbl = 0.0;
+
+//********
+struct time
+{
+	hh: i32,
+	mm: i32,
+	ss: f32,  // trailing comma is optional
+}
+//let t1 = time{hh = 9, mm = 20, ss = 0.030,};
+//t1.hh = 10;
+//println("t1 = ", t1);
+//fn print_time(t: time)
+//{
+//	println("h = ", t.hh);
+//	println("m = ", t.mm);
+//	println("s = ", t.ss);
+//	return;
+//}
+//********
+
+fn set_time_glbl(h: i32, m: i32, s:f32)
+{
+	hh_glbl = h;
+	mm_glbl = m;
+	ss_glbl = s;
+	return;
+}
+
+fn print_time_glbl()
+{
+	//println(hh_glbl, ":", mm_glbl, ":", ss_glbl);
+	println("h = ", hh_glbl);
+	println("m = ", mm_glbl);
+	println("s = ", ss_glbl);
+	return;
+}
+
+set_time_glbl(10, 20, 0.030);
+print_time_glbl();
+
+return 0;
+

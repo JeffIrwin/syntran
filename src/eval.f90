@@ -1153,11 +1153,11 @@ subroutine eval_translation_unit(node, state, res)
 	! members only change the (vars) state or define fns
 	do i = 1, size(node%members)
 
-		! Only eval statements, not fns declarations.  TODO: cycle structs
-		! too.
+		! Only eval statements, not fn or struct declarations
 		!
 		! TODO: is this where we should copy fn dict to array?
-		if (node%members(i)%kind == fn_declaration) cycle
+		if (node%members(i)%kind == fn_declaration    ) cycle
+		if (node%members(i)%kind == struct_declaration) cycle
 
 		call syntax_eval(node%members(i), state, res)
 

@@ -1162,6 +1162,9 @@ integer function get_keyword_kind(text) result(kind)
 		case ("fn")
 			kind = fn_keyword
 
+		case ("struct")
+			kind = struct_keyword
+
 		case ("include")
 			kind = include_keyword
 

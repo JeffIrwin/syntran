@@ -590,6 +590,91 @@ end function parse_fn_declaration
 
 !===============================================================================
 
+module function parse_struct_declaration(parser) result(decl)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: decl
+
+	!********
+
+	character(len = :), allocatable :: type_text
+
+	integer :: pos0, rank
+
+	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
+		colon, member, struct_kw
+
+	!! TODO?
+	!call parser%vars%push_scope()
+
+	struct_kw = parser%match(struct_keyword)
+
+	identifier = parser%match(identifier_token)
+	print *, "parsing struct ", identifier%text
+
+	lbrace = parser%match(lbrace_token)
+
+	! Structs use this syntax:
+	!
+	!     struct time
+	!     {
+	!     	hh: i32,
+	!     	mm: i32,
+	!     	ss: f32,
+	!     }
+	!     let t1 = time{hh = 9, mm = 20, ss = 0.030,};
+	!     t1.hh = 10;
+	!
+	! A struct declaration is a lot like a fn declaration.  Instead of a list of
+	! fn parameters, we have a list of struct members.  Unlike a fn declaration,
+	! there is no "body" for a struct, only members.
+
+	do while ( &
+		parser%current_kind() /= rbrace_token .and. &
+		parser%current_kind() /= eof_token)
+
+		pos0 = parser%current_pos()
+
+		!print *, 'matching member'
+		member  = parser%match(identifier_token)
+		print *, "member = ", member%text
+		!print *, 'matching colon'
+		colon = parser%match(colon_token)
+
+		call parser%parse_type(type_text, rank)
+		print *, "type = ", type_text
+
+		!call member%push( member%text )
+		!call types%push( type_text )
+		!call ranks%push( rank      )
+
+		!! This array is technically redundant but helps readability?
+		!call is_array%push( rank >= 0 )
+
+		if (parser%current_kind() /= rbrace_token) then
+			!print *, 'matching comma'
+			comma = parser%match(comma_token)
+		end if
+
+		! Break infinite loop
+		if (parser%current_pos() == pos0) dummy = parser%next()
+
+	end do
+
+	!print *, 'matching rbrace'
+	rbrace = parser%match(rbrace_token)
+
+	! TODO: insert struct into a new dict type
+
+	decl%kind = struct_declaration
+
+	print *, "done parsing struct"
+
+end function parse_struct_declaration
+
+!===============================================================================
+
 module subroutine parse_type(parser, type_text, rank)
 
 	! TODO: encapsulate out-args in struct if adding any more

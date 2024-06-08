@@ -69,6 +69,7 @@ module syntran__parse_m
 				parse_expr_statement, &
 				parse_fn_call, &
 				parse_fn_declaration, &
+				parse_struct_declaration, &
 				parse_for_statement, &
 				parse_if_statement, &
 				parse_return_statement, &
@@ -110,6 +111,11 @@ module syntran__parse_m
 			character(len = :), intent(out), allocatable :: type_text
 			integer, intent(out) :: rank
 		end subroutine parse_type
+
+		module function parse_struct_declaration(parser) result(decl)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: decl
+		end function parse_struct_declaration
 
 	end interface
 

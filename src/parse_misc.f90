@@ -380,6 +380,8 @@ module function parse_unit(parser) result(unit)
 
 		if (parser%current_kind() == fn_keyword) then
 			call members%push(parser%parse_fn_declaration())
+		else if (parser%current_kind() == struct_keyword) then
+			call members%push(parser%parse_struct_declaration())
 		else
 			call members%push(parser%parse_statement())
 		end if

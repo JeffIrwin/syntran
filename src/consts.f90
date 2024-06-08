@@ -9,12 +9,16 @@ module syntran__consts_m
 	integer :: maxerr  ! TODO: move this (not default) into a settings struct that gets passed around
 	integer, parameter :: maxerr_def = 4
 
-	! Must be larger than largest token enum below
+	! Must be larger than largest token enum below.  TODO: add an init check for
+	! this
 	integer, parameter :: magic = 128
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			struct_declaration   = 95, &
+		    struct_keyword       = 94, &
+		    dot_token            = 93, &
 			return_statement     = 92, &
 			return_keyword       = 91, &
 			size_array           = 90, &
@@ -213,6 +217,9 @@ function kind_token(kind)
 			"size_array           ", & ! 90
 			"return               ", & ! 91
 			"return statement     ", & ! 92
+			".                    ", & ! 93
+			"struct               ", & ! 94
+			"struct declaration   ", & ! 95
 			"unknown              "  & ! inf
 		]
 
@@ -326,6 +333,9 @@ function kind_name(kind)
 			"size_array          ", & ! 90
 			"return_keyword      ", & ! 91
 			"return_statement    ", & ! 92
+			"comma_token         ", & ! 93
+			"struct_keyword      ", & ! 94
+			"struct_declaration  ", & ! 95
 			"unknown             "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too

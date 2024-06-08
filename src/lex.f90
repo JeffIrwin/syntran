@@ -329,6 +329,9 @@ function lex(lexer) result(token)
 		case (",")
 			token = new_token(comma_token, lexer%pos, lexer%current())
 
+		case (".")
+			token = new_token(dot_token, lexer%pos, lexer%current())
+
 		case ("#")
 			token = new_token(hash_token, lexer%pos, lexer%current())
 
