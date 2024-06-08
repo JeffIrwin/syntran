@@ -373,7 +373,11 @@ module function parse_primary_expr(parser) result(expr)
 
 	!********
 
+	integer :: io, dummy_id
+
 	logical :: bool
+
+	type(struct_t) :: dummy
 
 	type(syntax_token_t) :: left, right, keyword, token
 
@@ -419,7 +423,25 @@ module function parse_primary_expr(parser) result(expr)
 			if (parser%peek_kind(1) == lparen_token) then
 				expr = parser%parse_fn_call()
 			else if (parser%peek_kind(1) == lbrace_token) then
-				expr = parser%parse_struct_instance()
+
+		!expr%val = parser%vars%search(identifier%text, expr%id_index, io)
+		!if (io /= exit_success) then
+
+				! Lookup identifier in structs.  If it exists, parse struct
+				! instance.  Otherwise, parse name_expr like other default case
+				! below
+
+				print *, "text = ", parser%current_text()
+
+				dummy = parser%structs%search(parser%current_text(), dummy_id, io)
+				print *, "io = ", io
+
+				if (io == 0) then
+					expr = parser%parse_struct_instance()
+				else
+					expr = parser%parse_name_expr()
+				end if
+
 			else
 				expr = parser%parse_name_expr()
 			end if

@@ -43,6 +43,9 @@ module syntran__parse_m
 		type(fns_t) :: fns
 		integer :: num_fns = 0
 
+		type(structs_t) :: structs
+		integer :: num_structs = 0
+
 		! Set this to (the current) fn's return type.  Check that each return
 		! statement matches while parsing.  This is redundant since the fn
 		! syntax node also has the type, but it's easier to store it here than
@@ -84,6 +87,8 @@ module syntran__parse_m
 				parse_while_statement, &
 				peek => peek_token, &
 				peek_kind, &
+				peek_text, &
+				current_text, &
 				peek_pos, &
 				peek_unit, &
 				preprocess, &
@@ -283,6 +288,25 @@ integer function peek_kind(parser, offset)
 	peek = parser%peek(offset)
 	peek_kind = peek%kind
 end function peek_kind
+
+!===============================================================================
+
+function current_text(parser)
+	character(len = :), allocatable :: current_text
+	class(parser_t) :: parser
+	current_text = parser%peek_text(0)
+end function current_text
+
+!********
+
+function peek_text(parser, offset)
+	character(len = :), allocatable :: peek_text
+	class(parser_t) :: parser
+	type(syntax_token_t) :: peek
+	integer, intent(in) :: offset
+	peek = parser%peek(offset)
+	peek_text = peek%text
+end function peek_text
 
 !===============================================================================
 

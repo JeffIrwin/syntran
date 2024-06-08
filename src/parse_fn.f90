@@ -745,8 +745,14 @@ module function parse_struct_declaration(parser) result(decl)
 
 	end do
 
-	! TODO: insert struct into a new dict type and save its members somewhere
-	!call parser%structs%insert(identifier%text, fn, decl%id_index)
+	! Insert struct into dict
+
+	parser%num_structs = parser%num_structs + 1
+	decl%id_index  = parser%num_structs
+
+	call parser%structs%insert(identifier%text, struct, decl%id_index)
+
+	! TODO: save members somewhere
 
 	decl%kind = struct_declaration
 

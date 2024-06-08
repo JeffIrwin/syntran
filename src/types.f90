@@ -143,6 +143,51 @@ module syntran__types_m
 
 	!********
 
+	type struct_ternary_tree_node_t
+
+		character :: split_char = ''
+		type(struct_ternary_tree_node_t), allocatable :: left, mid, right
+
+		type(struct_t), allocatable :: val
+		integer :: id_index
+
+		contains
+			procedure, pass(dst) :: copy => struct_ternary_tree_copy
+			generic, public :: assignment(=) => copy
+
+	end type struct_ternary_tree_node_t
+
+	!********
+
+	type struct_dict_t
+		! This is the struct dictionary of a single scope
+		type(struct_ternary_tree_node_t), allocatable :: root
+	end type struct_dict_t
+
+	!********
+
+	type structs_t
+
+		! A list of struct dictionaries used during parsing
+		type(struct_dict_t) :: dicts(scope_max)
+
+		! Flat array of structs, used for efficient interpreted evaluation
+		type(struct_t), allocatable :: structs(:)
+
+		! TODO: is this needed for structs?  Is it needed for fns?
+		integer :: scope = 1
+
+		! TODO: scoping for nested structs?
+		contains
+			procedure :: &
+				insert => struct_insert, &
+				search => struct_search
+		!		push_scope, pop_scope
+
+	end type structs_t
+
+	!********
+
 	type syntax_token_t
 
 		integer :: kind
@@ -2104,6 +2149,241 @@ recursive subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
 	!print *, ''
 
 end subroutine ternary_insert
+
+!===============================================================================
+
+recursive function struct_ternary_search(node, key, id_index, iostat) result(val)
+
+	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
+	character(len = *), intent(in) :: key
+
+	integer, intent(out) :: id_index
+	integer, intent(out) :: iostat
+	type(struct_t) :: val
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	!print *, 'searching key ', quote(key)
+
+	iostat = exit_success
+
+	if (.not. allocated(node)) then
+		! Search key not found
+		iostat = exit_failure
+		return
+	end if
+
+	! :)
+	k   = key(1:1)
+	 ey = key(2:)
+
+	if (k < node%split_char) then
+		val = struct_ternary_search(node%left , key, id_index, iostat)
+		return
+	else if (k > node%split_char) then
+		val = struct_ternary_search(node%right, key, id_index, iostat)
+		return
+	else if (len(ey) > 0) then
+		val = struct_ternary_search(node%mid  , ey, id_index, iostat)
+		return
+	end if
+
+	!print *, 'setting val'
+
+	if (.not. allocated(node%val)) then
+		iostat = exit_failure
+		return
+	end if
+
+	!allocate(val)
+	val      = node%val
+	id_index = node%id_index
+
+	!print *, 'done struct_ternary_search'
+	!print *, ''
+
+end function struct_ternary_search
+
+!===============================================================================
+
+recursive subroutine struct_ternary_insert(node, key, val, id_index, iostat, overwrite)
+
+	type(struct_ternary_tree_node_t), intent(inout), allocatable :: node
+	character(len = *), intent(in) :: key
+	type(struct_t), intent(in) :: val
+	integer, intent(in) :: id_index
+
+	integer, intent(out) :: iostat
+	logical, intent(in) :: overwrite
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	iostat = exit_success
+
+	!print *, 'inserting key ', quote(key)
+
+	! key == k//ey.  Get it? :)
+	k   = key(1:1)
+	 ey = key(2:)
+
+	if (.not. allocated(node)) then
+		!print *, 'allocate'
+		allocate(node)
+		node%split_char = k
+	else if (k < node%split_char) then
+		!print *, 'left'
+		call struct_ternary_insert(node%left , key, val, id_index, iostat, overwrite)
+		return
+	else if (k > node%split_char) then
+		!print *, 'right'
+		call struct_ternary_insert(node%right, key, val, id_index, iostat, overwrite)
+		return
+	end if
+
+	!print *, 'mid'
+
+	if (len(ey) /= 0) then
+		call struct_ternary_insert(node%mid  , ey, val, id_index, iostat, overwrite)
+		return
+	end if
+
+	! node%val doesn't really need to be declared as allocatable (it's
+	! a scalar anyway), but it's just a convenient way to check if
+	! a duplicate key has already been inserted or not.  We could add
+	! a separate logical member to node for this instead if needed
+
+	! This is not necessarily a failure unless we don't want to overwrite.  In
+	! the evaluator, we will insert values for vars which have already been
+	! declared
+	if (allocated(node%val) .and. .not. overwrite) then
+		!print *, 'key already inserted'
+		iostat = exit_failure
+		return
+	end if
+
+	allocate(node%val)
+	node%val      = val
+	node%id_index = id_index
+
+	!print *, 'done inserting'
+	!print *, ''
+
+end subroutine struct_ternary_insert
+
+!===============================================================================
+
+recursive subroutine struct_ternary_tree_copy(dst, src)
+
+	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
+	! source, they will be gone!
+	!
+	! This should be avoided for efficient compilation, but the interactive
+	! interpreter uses it to backup and restore the variable dict for
+	! partially-evaluated continuation lines
+
+	class(struct_ternary_tree_node_t), intent(inout) :: dst
+	class(struct_ternary_tree_node_t), intent(in)    :: src
+
+	!********
+
+	!print *, 'starting struct_ternary_tree_node_t()'
+
+	dst%split_char = src%split_char
+
+	dst%id_index = src%id_index
+
+	if (allocated(src%val)) then
+		if (.not. allocated(dst%val)) allocate(dst%val)
+		dst%val = src%val
+	end if
+
+	if (allocated(src%left)) then
+		if (.not. allocated(dst%left)) allocate(dst%left)
+		dst%left = src%left
+	end if
+
+	if (allocated(src%mid)) then
+		if (.not. allocated(dst%mid)) allocate(dst%mid)
+		dst%mid = src%mid
+	end if
+
+	if (allocated(src%right)) then
+		if (.not. allocated(dst%right)) allocate(dst%right)
+		dst%right = src%right
+	end if
+
+	!print *, 'done struct_ternary_tree_node_t()'
+
+end subroutine struct_ternary_tree_copy
+
+!===============================================================================
+
+subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
+
+	class(structs_t) :: dict
+	character(len = *), intent(in) :: key
+	type(struct_t), intent(in) :: val
+	integer, intent(inout) :: id_index
+
+	integer, intent(out), optional :: iostat
+	logical, intent(in), optional :: overwrite
+
+	!********
+
+	integer :: i, io
+	logical :: overwritel
+
+	!print *, 'inserting ', quote(key)
+	id_index = id_index + 1
+
+	overwritel = .true.
+	if (present(overwrite)) overwritel = overwrite
+
+	i = dict%scope
+	call struct_ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwritel)
+
+	if (present(iostat)) iostat = io
+
+end subroutine struct_insert
+
+!===============================================================================
+
+function struct_search(dict, key, id_index, iostat) result(val)
+
+	! An id_index is not normally part of dictionary searching, but we use it
+	! here for converting the dictionary into an array after parsing and before
+	! evaluation for better performance
+
+	class(structs_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+	integer, intent(out) :: id_index
+	type(struct_t) :: val
+
+	integer, intent(out), optional :: iostat
+
+	!********
+
+	integer :: i, io
+
+	i = dict%scope
+
+	val = struct_ternary_search(dict%dicts(i)%root, key, id_index, io)
+
+	! If not found in current scope, search parent scopes too
+	do while (io /= exit_success .and. i > 1)
+		i = i - 1
+		val = struct_ternary_search(dict%dicts(i)%root, key, id_index, io)
+	end do
+
+	if (present(iostat)) iostat = io
+
+end function struct_search
 
 !===============================================================================
 

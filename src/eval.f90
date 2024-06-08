@@ -20,6 +20,8 @@ module syntran__eval_m
 
 		type(fns_t) :: fns
 
+		type(structs_t) :: structs
+
 		type(vars_t) :: vars
 
 		logical :: returned
