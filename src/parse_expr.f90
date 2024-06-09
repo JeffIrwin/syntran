@@ -424,21 +424,35 @@ module function parse_primary_expr(parser) result(expr)
 				expr = parser%parse_fn_call()
 			else if (parser%peek_kind(1) == lbrace_token) then
 
-		!expr%val = parser%vars%search(identifier%text, expr%id_index, io)
-		!if (io /= exit_success) then
-
-				! Lookup identifier in structs.  If it exists, parse struct
-				! instance.  Otherwise, parse name_expr like other default case
-				! below
-
-				print *, "text = ", parser%current_text()
+				! There is an ambiguity here because struct instantiators and
+				! block statements both look similar, using braces{}.  Compare
+				! an if statement:
+				!
+				!     if my_bool
+				!     { ...
+				!     }
+				!
+				!
+				! To a struct instantiator:
+				!
+				!     let my_struct = Struct
+				!     { ...
+				!     };
+				!
+				! We resolve this by looking up the identifier ("my_bool" vs
+				! "Struct") in the structs dict.  Alternatively, I could change
+				! syntran to use a different token for struct instantiators,
+				! e.g. `.{`, but I prefer this solution.
 
 				dummy = parser%structs%search(parser%current_text(), dummy_id, io)
-				print *, "io = ", io
+
+				!print *, "text = ", parser%current_text()
+				!print *, "io = ", io
 
 				if (io == 0) then
 					expr = parser%parse_struct_instance()
 				else
+					! Same as default case below
 					expr = parser%parse_name_expr()
 				end if
 
@@ -491,7 +505,7 @@ module function parse_name_expr(parser) result(expr)
 
 	identifier = parser%match(identifier_token)
 
-	!print *, 'RHS identifier = ', identifier%text
+	print *, 'RHS identifier = ', identifier%text
 	!print *, '%current_kind() = ', kind_name(parser%current_kind())
 
 	!print *, 'searching'
@@ -559,7 +573,41 @@ module function parse_name_expr(parser) result(expr)
 			span, identifier%text))
 	end if
 
+	call parser%parse_dot(expr)
+
 end function parse_name_expr
+
+!===============================================================================
+
+module subroutine parse_dot(parser, expr)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t), intent(inout) :: expr
+
+	!********
+
+	type(syntax_token_t) :: dot, identifier
+
+	if (parser%current_kind() /= dot_token) then
+
+		!! The function has to return something.  Caller deallocates
+		!allocate( expr%lsubscripts(0))
+		return
+
+	end if
+
+	print *, "parsing dot"
+
+	dot  = parser%match(dot_token)
+
+	! TODO: can this handle recursion?  `a.b.c`
+
+	identifier = parser%match(identifier_token)
+
+	print *, 'dot identifier = ', identifier%text
+
+end subroutine parse_dot
 
 !===============================================================================
 

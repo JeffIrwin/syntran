@@ -17,7 +17,8 @@ let t1 = Time{hh = 9, mm = 20, ss = 0.030,};
 //println("t1.hh = ", t1.hh);
 
 //t1.hh = 10;
-//println("t1.hh = ", t1.hh);
+println("t1.hh = ", t1.hh);
+//let t3 = t1;
 //println("t1 = ", t1);
 
 let t2 = Time{hh = 13, mm = 37, ss = 0.069,};
@@ -51,6 +52,7 @@ fn set_time_glbl(h: i32, m: i32, s:f32)
 
 fn print_time_glbl()
 {
+	println("starting print_time_glbl()");
 	//println(hh_glbl, ":", mm_glbl, ":", ss_glbl);
 	println("h = ", hh_glbl);
 	println("m = ", mm_glbl);

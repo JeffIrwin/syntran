@@ -82,6 +82,7 @@ module syntran__parse_m
 				parse_size, &
 				parse_statement, &
 				parse_subscripts, &
+				parse_dot, &
 				parse_type, &
 				parse_unit, &
 				parse_while_statement, &
@@ -215,6 +216,11 @@ module syntran__parse_m
 			class(parser_t) :: parser
 			type(syntax_node_t) :: expr
 		end function parse_name_expr
+
+		module subroutine parse_dot(parser, expr)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(inout) :: expr
+		end subroutine parse_dot
 
 	end interface
 

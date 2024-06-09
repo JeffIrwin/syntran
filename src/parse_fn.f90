@@ -740,6 +740,12 @@ module function parse_struct_declaration(parser) result(decl)
 			!print *, "rank = ", val%array%rank
 		end if
 
+		! TODO: each struct should get its own dict of members.  Create one and
+		! insert the member name into that dict instead of the (global) vars
+		! dict here.  Might not need a new type, could probably just re-use the
+		! `vars_t` type, just like `parser%vars`.  Just add one inside of the
+		! `struct_t` type.
+		!
 		!print *, "insert var type ", kind_name(val%type)
 		call parser%vars%insert(struct%members(i)%name, val, parser%num_vars)
 

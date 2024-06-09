@@ -519,18 +519,6 @@ module subroutine parse_subscripts(parser, expr)
 	rbracket  = parser%match(rbracket_token)
 	!print *, 'done'
 
-	! TODO: check that num of subscripts matches array rank, both LHS and
-	! RHS parsing.  May need to pass identifier to this function.  LHS and RHS
-	! cases are different in tricky ways.  RHS has already lookup up identifier
-	! in vars dictionary when it calls parse_subscripts(), but LHS has not.
-	! When LHS calls this, it does not yet know whether the identifier is an
-	! array or a scalar or a function call in an expression statement.
-	!
-	! Check that the expr is actually an array (not a scalar), or do that next
-	! to err_bad_sub_count() elsewhere
-	!
-	! So, only check rank match here if lsubscripts%len_ > 0
-
 	call syntax_nodes_copy(expr%lsubscripts, &
 		lsubscripts_vec%v( 1: lsubscripts_vec%len_ ))
 

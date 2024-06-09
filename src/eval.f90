@@ -109,8 +109,7 @@ recursive subroutine syntax_eval(node, state, res)
 		call eval_fn_call(node, state, res)
 
 	case (struct_instance_expr)
-		!! TODO
-		!call eval_struct_instance(node, state, res)
+		call eval_struct_instance(node, state, res)
 
 	case (name_expr)
 		!print *, "name_expr"
@@ -394,6 +393,54 @@ subroutine eval_name_expr(node, state, res)
 	end if
 
 end subroutine eval_name_expr
+
+!===============================================================================
+
+subroutine eval_struct_instance(node, state, res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(inout) :: res
+
+	!********
+
+	print *, 'eval struct_instance_expr'
+	!print *, 'struct identifier = ', node%identifier%text
+	!print *, 'struct id_index   = ', node%id_index
+
+	res%type = node%val%type
+
+	print *, 'res type = ', kind_name(res%type)
+
+	!case default
+	!	! User-defined function
+	!	if (.not. allocated(node%params)) then
+	!		write(*,*) err_int_prefix//'unexpected fn'//color_reset
+	!		call internal_error()
+	!	end if
+	!	!print *, 'fn name = ', node%identifier%text
+	!	!print *, 'fn idx  = ', node%id_index
+	!	!print *, 'node type = ', node%val%type
+	!	!print *, 'size params = ', size(node%params)
+	!	!print *, 'param ids = ', node%params
+	!	! Pass by value (for now, at least).  Arguments are evaluated and
+	!	! their values are copied to the fn parameters
+	!	do i = 1, size(node%params)
+	!		!print *, 'copying param ', i
+	!		call syntax_eval(node%args(i), state, tmp)
+	!		state%vars%vals( node%params(i) ) = tmp
+	!		!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
+	!		!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
+	!		!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
+	!	end do
+	!	call syntax_eval(node%body, state, res)
+	!	!print *, "res rank = ", res%array%rank
+	!	!print *, 'res = ', res%to_str()
+	!end select
+
+end subroutine eval_struct_instance
 
 !===============================================================================
 
