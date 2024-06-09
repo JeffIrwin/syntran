@@ -712,7 +712,10 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	type(fns_t) :: fns0
 
-	type(parser_t) :: parser
+	! Without `save`, gfortran crashes when this goes out of scope.  Maybe I
+	! need to work on a manual finalizer to deallocate ternary trees, not just
+	! for structs but for the vars_t trees contained within
+	type(parser_t), save :: parser
 
 	type(syntax_token_t) :: token
 
@@ -928,6 +931,17 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	if (allocated(fns0%fns)) then
 		fns%fns( 1: size(fns0%fns) ) = fns0%fns
 	end if
+
+	!if (allocated(parser%structs)) then
+	!	! TODO: manually finalize recursively?
+	!	deallocate(parser%structs)
+	!end if
+	!print *, "size = ", size(parser%structs%structs)
+	!print *, "allocated = ", allocated(parser%structs%structs)
+	!print *, "size = ", size(parser%structs%dicts)
+	print *, "allocated = ", allocated(parser%structs%dict%root)
+	!deallocate(parser%structs%dict%root)
+	!call struct_ternary_tree_final(parser%structs%dict%root)
 
 	if (debug > 0) print *, 'done syntax_parse'
 

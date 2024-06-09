@@ -316,7 +316,6 @@ subroutine eval_name_expr(node, state, res)
 			res%array%type = node%val%array%type
 			res%array%rank = rank_res
 
-			!if (.not. allocated(res%array%size)) allocate(res%array%size( rank_res ))
 			if (allocated(res%array%size)) deallocate(res%array%size)
 			allocate(res%array%size( rank_res ))
 
@@ -352,43 +351,12 @@ subroutine eval_name_expr(node, state, res)
 		end if
 
 	else
+		! TODO: add another branch for dot member access expressions
+
 		!print *, "name expr without subscripts"
 		!print *, "id_index = ", node%id_index
 		!print *, "size(vals) = ", size(state%vars%vals)
 		res = state%vars%vals(node%id_index)
-
-		!! How are these both void types???
-		!!if (res%type == void_type) res%type = array_type
-		!print *, "res type = ", kind_name(res%type)
-		!print *, "var type = ", &
-		!	kind_name(state%vars%vals(node%id_index)%type), &
-		!	          state%vars%vals(node%id_index)%type
-
-		!! Deep copy of whole array instead of aliasing pointers
-		!!
-		!! I suspect that value_t now has a deep copy problem like syntax_node_t
-		!! does, and this may be why samples/array-fns.syntran doesn't work.  May
-		!! need to convert return-by-value to subroutine out-arg as reference (or
-		!! override the copy operator, but that hasn't worked out so well for
-		!! syntax_node_t)
-		!if (res%type == array_type) then
-		!	!print *, 'array name_expr'
-
-		!	if (allocated(res%array)) deallocate(res%array)
-
-		!	allocate(res%array)
-		!	res%type = array_type
-		!	res%array = state%vars%vals(node%id_index)%array
-
-		!	!! TODO: this might be unnecessary
-		!	res%array%rank = state%vars%vals(node%id_index)%array%rank
-		!	!!print *, "allocated(size j) = ", allocated(state%vars%vals(node%id_index)%array%size)
-		!	res%array%size = state%vars%vals(node%id_index)%array%size
-		!	!print *, "rank = ", res%array%rank, state%vars%vals(node%id_index)%array%rank
-
-		!!else
-		!!	print *, 'scalar name_expr'
-		!end if
 
 	end if
 

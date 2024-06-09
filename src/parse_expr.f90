@@ -375,9 +375,9 @@ module function parse_primary_expr(parser) result(expr)
 
 	integer :: io, dummy_id
 
-	logical :: bool
+	logical :: bool, exists
 
-	type(struct_t) :: dummy
+	!type(struct_t) :: dummy
 
 	type(syntax_token_t) :: left, right, keyword, token
 
@@ -444,13 +444,23 @@ module function parse_primary_expr(parser) result(expr)
 				! syntran to use a different token for struct instantiators,
 				! e.g. `.{`, but I prefer this solution.
 
-				dummy = parser%structs%search(parser%current_text(), dummy_id, io)
-
-				!print *, "text = ", parser%current_text()
-				!print *, "io = ", io
+				! TODO: is the exists() method needed?  Search will probably
+				! work and simplify the code.  I was experimenting while
+				! debugging memory issue, but exists might not be necessary.  On
+				! the other hand, it might be more optimal to check existence
+				! w/o copying an output val (which could containt big nested dict
+				! types)
+				print *, "text = ", parser%current_text()
+				!dummy = parser%structs%search(parser%current_text(), dummy_id, io)
+				exists = parser%structs%exists(parser%current_text(), dummy_id, io)
+				!deallocate(dummy%members)
+				!deallocate(dummy%vars)
+				print *, "io = ", io
 
 				if (io == 0) then
+				!if (exists) then
 					expr = parser%parse_struct_instance()
+					print *, "back in parse_expr.f90"
 				else
 					! Same as default case below
 					expr = parser%parse_name_expr()
@@ -606,6 +616,8 @@ module subroutine parse_dot(parser, expr)
 	identifier = parser%match(identifier_token)
 
 	print *, 'dot identifier = ', identifier%text
+
+	! TODO: save dot info in syntax node
 
 end subroutine parse_dot
 

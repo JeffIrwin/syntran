@@ -24,20 +24,6 @@ module syntran__types_m
 
 	!********
 
-	type struct_t
-		! Structure declaration.  Will this be different than a struct instance?
-
-		!type(param_t), allocatable :: params(:)
-		type(member_t), allocatable :: members(:)
-
-		!contains
-		!	procedure, pass(dst) :: copy => fn_copy
-		!	generic, public :: assignment(=) => copy
-
-	end type struct_t
-
-	!********
-
 	type param_t
 		! Function parameter (argument)
 
@@ -140,51 +126,6 @@ module syntran__types_m
 		!		push_scope, pop_scope
 
 	end type fns_t
-
-	!********
-
-	type struct_ternary_tree_node_t
-
-		character :: split_char = ''
-		type(struct_ternary_tree_node_t), allocatable :: left, mid, right
-
-		type(struct_t), allocatable :: val
-		integer :: id_index
-
-		contains
-			procedure, pass(dst) :: copy => struct_ternary_tree_copy
-			generic, public :: assignment(=) => copy
-
-	end type struct_ternary_tree_node_t
-
-	!********
-
-	type struct_dict_t
-		! This is the struct dictionary of a single scope
-		type(struct_ternary_tree_node_t), allocatable :: root
-	end type struct_dict_t
-
-	!********
-
-	type structs_t
-
-		! A list of struct dictionaries used during parsing
-		type(struct_dict_t) :: dicts(scope_max)
-
-		! Flat array of structs, used for efficient interpreted evaluation
-		type(struct_t), allocatable :: structs(:)
-
-		! TODO: is this needed for structs?  Is it needed for fns?
-		integer :: scope = 1
-
-		! TODO: scoping for nested structs?
-		contains
-			procedure :: &
-				insert => struct_insert, &
-				search => struct_search
-		!		push_scope, pop_scope
-
-	end type structs_t
 
 	!********
 
@@ -318,6 +259,75 @@ module syntran__types_m
 
 	!********
 
+	type struct_t
+		! Structure declaration.  Will this be different than a struct instance?
+
+		!! TODO: do we need members inside struct_t? Or only a local var inside
+		!! parse_struct_instance?  I think all the same info is also contained
+		!! in struct%vars
+		!type(param_t), allocatable :: params(:)
+		type(member_t), allocatable :: members(:)
+
+		!type(vars_t) :: vars  ! can't compile w/o allocatable if vars_t is defined below
+		type(vars_t), allocatable :: vars
+		integer :: num_vars = 0
+
+		contains
+			procedure, pass(dst) :: copy => struct_copy
+			generic, public :: assignment(=) => copy
+
+	end type struct_t
+
+	!********
+
+	type struct_ternary_tree_node_t
+
+		character :: split_char = ''
+		type(struct_ternary_tree_node_t), allocatable :: left, mid, right
+
+		type(struct_t), allocatable :: val
+		integer :: id_index
+
+		contains
+			procedure, pass(dst) :: copy => struct_ternary_tree_copy
+			generic, public :: assignment(=) => copy
+			!final :: struct_ternary_tree_final
+
+	end type struct_ternary_tree_node_t
+
+	!********
+
+	type struct_dict_t
+		! This is the struct dictionary of a single scope
+		type(struct_ternary_tree_node_t), allocatable :: root
+	end type struct_dict_t
+
+	!********
+
+	type structs_t
+
+		! A list of struct dictionaries used during parsing
+		!type(struct_dict_t) :: dicts(scope_max)
+		type(struct_dict_t) :: dict
+
+		!! Flat array of structs, used for efficient interpreted evaluation
+		!type(struct_t), allocatable :: structs(:)
+
+		! TODO: is this needed for structs?  Is it needed for fns?
+		integer :: scope = 1
+
+		! TODO: scoping for nested structs?
+		contains
+			procedure :: &
+				insert => struct_insert, &
+				exists => struct_exists, &
+				search => struct_search
+		!		push_scope, pop_scope
+
+	end type structs_t
+
+	!********
+
 	type syntax_token_vector_t
 		type(syntax_token_t), allocatable :: v(:)
 		integer :: len_, cap
@@ -337,6 +347,39 @@ module syntran__types_m
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+recursive subroutine struct_copy(dst, src)
+
+	! Deep copy.  This overwrites dst with src
+
+	class(struct_t), intent(inout) :: dst
+	class(struct_t), intent(in)    :: src
+
+	!********
+
+	!print *, 'starting struct_copy()'
+
+	dst%num_vars = src%num_vars
+
+	if (allocated(src%members)) then
+		if (.not. allocated(dst%members)) allocate(dst%members( size(src%members) ))
+		dst%members = src%members
+	else if (allocated(dst%members)) then
+		deallocate(dst%members)
+	end if
+
+	if (allocated(src%vars)) then
+		if (.not. allocated(dst%vars)) allocate(dst%vars)
+		dst%vars = src%vars
+	else if (allocated(dst%vars)) then
+		deallocate(dst%vars)
+	end if
+
+	!print *, 'done struct_copy()'
+
+end subroutine struct_copy
 
 !===============================================================================
 
@@ -2152,6 +2195,66 @@ end subroutine ternary_insert
 
 !===============================================================================
 
+recursive function struct_ternary_exists(node, key, id_index, iostat) result(exists)
+
+	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
+	character(len = *), intent(in) :: key
+
+	integer, intent(out) :: id_index
+	integer, intent(out) :: iostat
+	!type(struct_t) :: val
+	logical :: exists
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	!print *, 'searching key ', quote(key)
+
+	iostat = exit_success
+
+	if (.not. allocated(node)) then
+		! Search key not found
+		iostat = exit_failure
+		return
+	end if
+
+	! :)
+	k   = key(1:1)
+	 ey = key(2:)
+
+	if (k < node%split_char) then
+		exists = struct_ternary_exists(node%left , key, id_index, iostat)
+		return
+	else if (k > node%split_char) then
+		exists = struct_ternary_exists(node%right, key, id_index, iostat)
+		return
+	else if (len(ey) > 0) then
+		exists = struct_ternary_exists(node%mid  , ey, id_index, iostat)
+		return
+	end if
+
+	!print *, 'setting val'
+
+	if (.not. allocated(node%val)) then
+		exists = .false.
+		iostat = exit_failure
+		return
+	end if
+
+	!allocate(val)
+	!val      = node%val
+	exists = .true.
+	id_index = node%id_index
+
+	!print *, 'done struct_ternary_exists'
+	!print *, ''
+
+end function struct_ternary_exists
+
+!===============================================================================
+
 recursive function struct_ternary_search(node, key, id_index, iostat) result(val)
 
 	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
@@ -2324,6 +2427,32 @@ end subroutine struct_ternary_tree_copy
 
 !===============================================================================
 
+recursive subroutine struct_ternary_tree_final(src)
+!subroutine struct_ternary_tree_final(src)
+
+	!class(struct_ternary_tree_node_t) :: src
+	type(struct_ternary_tree_node_t) :: src
+
+	if (allocated(src%val)) then
+		deallocate(src%val)
+	end if
+
+	if (allocated(src%left)) then
+		call struct_ternary_tree_final(src%left)
+	end if
+
+	if (allocated(src%mid)) then
+		call struct_ternary_tree_final(src%mid)
+	end if
+
+	if (allocated(src%right)) then
+		call struct_ternary_tree_final(src%right)
+	end if
+
+end subroutine struct_ternary_tree_final
+
+!===============================================================================
+
 subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 
 	class(structs_t) :: dict
@@ -2346,11 +2475,46 @@ subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 	if (present(overwrite)) overwritel = overwrite
 
 	i = dict%scope
-	call struct_ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwritel)
+	call struct_ternary_insert(dict%dict%root, key, val, id_index, io, overwritel)
 
 	if (present(iostat)) iostat = io
 
 end subroutine struct_insert
+
+!===============================================================================
+
+function struct_exists(dict, key, id_index, iostat) result(exists)
+
+	! Check if a key exists, without copying an output val unlike
+	! struct_search()
+	!
+	! TODO: some of these args (iostat at least) are unnecessary
+
+	class(structs_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+	integer, intent(out) :: id_index
+	!type(struct_t) :: val
+	logical :: exists
+
+	integer, intent(out), optional :: iostat
+
+	!********
+
+	integer :: i, io
+
+	i = dict%scope
+
+	exists = struct_ternary_exists(dict%dict%root, key, id_index, io)
+
+	! If not found in current scope, search parent scopes too
+	do while (io /= exit_success .and. i > 1)
+		i = i - 1
+		exists = struct_ternary_exists(dict%dict%root, key, id_index, io)
+	end do
+
+	if (present(iostat)) iostat = io
+
+end function struct_exists
 
 !===============================================================================
 
@@ -2373,12 +2537,12 @@ function struct_search(dict, key, id_index, iostat) result(val)
 
 	i = dict%scope
 
-	val = struct_ternary_search(dict%dicts(i)%root, key, id_index, io)
+	val = struct_ternary_search(dict%dict%root, key, id_index, io)
 
 	! If not found in current scope, search parent scopes too
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		val = struct_ternary_search(dict%dicts(i)%root, key, id_index, io)
+		val = struct_ternary_search(dict%dict%root, key, id_index, io)
 	end do
 
 	if (present(iostat)) iostat = io

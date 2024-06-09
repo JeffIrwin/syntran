@@ -14,6 +14,8 @@ struct Time
 //let t1 = Time(hh = 9, mm = 20, ss = 0.030,);
 let t1 = Time{hh = 9, mm = 20, ss = 0.030,};
 
+//let taoeu = Timeaoeu{hh = 9, mm = 20, ss = 0.030,};
+
 //println("t1.hh = ", t1.hh);
 
 //t1.hh = 10;
@@ -37,7 +39,6 @@ struct Date {
 	m: str,
 	y: i64
 }
-
 let d1 = Date{y = 1900 + 12, m = "Apr", d = 14};
 
 //********

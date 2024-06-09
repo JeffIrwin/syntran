@@ -603,7 +603,7 @@ module function parse_struct_declaration(parser) result(decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: itype, i, pos0, pos1, pos2, rank
+	integer :: itype, i, io, pos0, pos1, pos2, rank
 
 	type(struct_t) :: struct
 
@@ -698,6 +698,8 @@ module function parse_struct_declaration(parser) result(decl)
 	!allocate(decl  %params( names%len_ ))  ! if this is needed, we need a new
 	!! name.  "members" already means the member statements of a block statement
 
+	allocate(struct%vars)
+
 	do i = 1, names%len_
 		!print *, "name, type = ", names%v(i)%s, ", ", types%v(i)%s
 
@@ -724,8 +726,10 @@ module function parse_struct_declaration(parser) result(decl)
 			!print *, "(scalar)"
 		end if
 
-		! Declare the parameter variable
-		parser%num_vars = parser%num_vars + 1
+		! Declare the member
+		!parser%num_vars = parser%num_vars + 1
+		struct%num_vars = struct%num_vars + 1
+		print *, "struct%num_vars = ", struct%num_vars
 
 		!! Save parameters by id_index
 		!decl%params(i) = parser%num_vars
@@ -740,29 +744,51 @@ module function parse_struct_declaration(parser) result(decl)
 			!print *, "rank = ", val%array%rank
 		end if
 
-		! TODO: each struct should get its own dict of members.  Create one and
-		! insert the member name into that dict instead of the (global) vars
-		! dict here.  Might not need a new type, could probably just re-use the
-		! `vars_t` type, just like `parser%vars`.  Just add one inside of the
-		! `struct_t` type.
-		!
-		!print *, "insert var type ", kind_name(val%type)
-		call parser%vars%insert(struct%members(i)%name, val, parser%num_vars)
+		! Each struct has its own dict of members.  Create one and insert the
+		! member name into that dict instead of the (global) vars dict here.
+		! Might not need a new type, could probably just re-use the `vars_t`
+		! type, just like `parser%vars`.  Just add one inside of the `struct_t`
+		! type.
+
+		! TODO: check for duplicate member names
+
+		print *, "insert var type ", kind_name(val%type)
+		!call parser%vars%insert(struct%members(i)%name, val, parser%num_vars)
+		!call struct%vars%insert(struct%members(i)%name, val, struct%num_vars)
+
+		call struct%vars%insert(struct%members(i)%name, val, &
+			struct%num_vars, io, overwrite = .false.)
+		!print *, 'io = ', io
+		if (io /= exit_success) then
+			print *, "Error: re-declared struct member"
+			!span = new_span(identifier%pos, len(identifier%text))
+			!call parser%diagnostics%push( &
+			!	err_redeclare_var(parser%context(), &
+			!	span, identifier%text))
+		end if
+
+		!call parser%vars%insert(identifier%text, expr%val, &
+		!	expr%id_index, io, overwrite = .false.)
+		!!print *, 'io = ', io
+		!if (io /= exit_success) then
+		!	span = new_span(identifier%pos, len(identifier%text))
+		!	call parser%diagnostics%push( &
+		!		err_redeclare_var(parser%context(), &
+		!		span, identifier%text))
+		!end if
 
 	end do
 
-	! Insert struct into dict
+	! Insert struct into parser dict
 
 	parser%num_structs = parser%num_structs + 1
 	decl%id_index  = parser%num_structs
 
 	call parser%structs%insert(identifier%text, struct, decl%id_index)
 
-	! TODO: save members somewhere
-
 	decl%kind = struct_declaration
 
-	!print *, "done parsing struct"
+	print *, "done parsing struct"
 
 end function parse_struct_declaration
 
@@ -786,11 +812,11 @@ module function parse_struct_instance(parser) result(instance)
 
 	type(syntax_token_t) :: identifier, name, equals, comma, lbrace, rbrace, dummy
 
-	!print *, "starting parse_struct_instance()"
+	print *, "starting parse_struct_instance()"
 
 	identifier = parser%match(identifier_token)
 
-	!print *, 'identifier = ', identifier%text
+	print *, 'identifier = ', identifier%text
 
 	mems = new_syntax_node_vector()
 	lbrace  = parser%match(lbrace_token)
@@ -825,7 +851,7 @@ module function parse_struct_instance(parser) result(instance)
 
 	! TODO: check number and type of members match
 
-	!print *, "ending parse_struct_instance()"
+	print *, "ending parse_struct_instance()"
 
 end function parse_struct_instance
 
