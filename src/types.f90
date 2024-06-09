@@ -268,8 +268,8 @@ module syntran__types_m
 		!type(param_t), allocatable :: params(:)
 		type(member_t), allocatable :: members(:)
 
-		!type(vars_t) :: vars  ! can't compile w/o allocatable if vars_t is defined below
-		type(vars_t), allocatable :: vars
+		type(vars_t) :: vars  ! can't compile w/o allocatable if vars_t is defined below
+		!type(vars_t), allocatable :: vars
 		integer :: num_vars = 0
 
 		contains
@@ -370,12 +370,13 @@ recursive subroutine struct_copy(dst, src)
 		deallocate(dst%members)
 	end if
 
-	if (allocated(src%vars)) then
-		if (.not. allocated(dst%vars)) allocate(dst%vars)
+	!if (allocated(src%vars)) then
+	!	if (.not. allocated(dst%vars)) allocate(dst%vars)
 		dst%vars = src%vars
-	else if (allocated(dst%vars)) then
-		deallocate(dst%vars)
-	end if
+	!	!dst%vars%dicts = src%vars%dicts
+	!else if (allocated(dst%vars)) then
+	!	deallocate(dst%vars)
+	!end if
 
 	!print *, 'done struct_copy()'
 

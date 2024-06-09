@@ -698,7 +698,7 @@ module function parse_struct_declaration(parser) result(decl)
 	!allocate(decl  %params( names%len_ ))  ! if this is needed, we need a new
 	!! name.  "members" already means the member statements of a block statement
 
-	allocate(struct%vars)
+	!allocate(struct%vars)
 
 	do i = 1, names%len_
 		!print *, "name, type = ", names%v(i)%s, ", ", types%v(i)%s
@@ -753,6 +753,7 @@ module function parse_struct_declaration(parser) result(decl)
 		! TODO: check for duplicate member names
 
 		print *, "insert var type ", kind_name(val%type)
+		print *, "name = ", struct%members(i)%name
 		!call parser%vars%insert(struct%members(i)%name, val, parser%num_vars)
 		!call struct%vars%insert(struct%members(i)%name, val, struct%num_vars)
 
@@ -805,18 +806,26 @@ module function parse_struct_instance(parser) result(instance)
 
 	!********
 
-	integer :: pos0
+	integer :: io, pos0, struct_id, member_id
+
+	!type(struct_t), save :: struct
+	type(struct_t) :: struct
 
 	type(syntax_node_t) :: mem
 	type(syntax_node_vector_t) :: mems
 
 	type(syntax_token_t) :: identifier, name, equals, comma, lbrace, rbrace, dummy
 
+	type(value_t) :: member
+
 	print *, "starting parse_struct_instance()"
 
 	identifier = parser%match(identifier_token)
 
 	print *, 'identifier = ', identifier%text
+
+	struct = parser%structs%search(identifier%text, struct_id, io)
+	print *, "struct io = ", io
 
 	mems = new_syntax_node_vector()
 	lbrace  = parser%match(lbrace_token)
@@ -830,6 +839,23 @@ module function parse_struct_instance(parser) result(instance)
 		name   = parser%match(identifier_token)
 		equals = parser%match(equals_token)
 		mem    = parser%parse_expr()
+
+		print *, "name%text = ", name%text
+
+		!call struct%vars%insert(struct%members(i)%name, val, &
+		!	struct%num_vars, io, overwrite = .false.)
+
+		print *, "allocated = ", allocated(struct%vars%dicts(1)%root)
+
+		member = struct%vars%search(name%text, member_id, io)
+		!member = parser%structs(struct_id)%vars%search(name%text, member_id, io)
+		print *, "member io = ", io
+
+		if (io /= 0) then
+			! TODO: diag
+			print *, "Error: member does not exist in struct"
+			stop
+		end if
 
 		call mems%push(mem)
 
