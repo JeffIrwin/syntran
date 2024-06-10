@@ -73,6 +73,10 @@ module syntran__value_m
 
 	!********
 
+	!type struct_val_t
+	!	type(value_t), allocatable :: vals(:)
+	!end type struct_val_t
+
 	type value_t
 		integer :: type = unknown_type
 
@@ -89,6 +93,10 @@ module syntran__value_m
 		! Note that a type containing itself is fine (e.g. ternary_tree_node_t),
 		! but two types containing each other is bad
 		type(array_t), allocatable :: array
+
+		!type(struct_t), allocatable :: struct
+		!type(struct_val_t), allocatable :: struct
+		type(value_t), allocatable :: struct(:)
 
 		contains
 			procedure :: to_str => value_to_str
@@ -430,6 +438,8 @@ recursive function value_to_str(val) result(ans)
 	type(char_vector_t) :: str_vec
 
 	select case (val%type)
+
+		! TODO: add a case for struct_type
 
 		case (array_type)
 

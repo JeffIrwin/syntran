@@ -795,14 +795,14 @@ end function parse_struct_declaration
 
 !===============================================================================
 
-module function parse_struct_instance(parser) result(instance)
+module function parse_struct_instance(parser) result(inst)
 
 	! A struct instantiator initializes all the members of an instance of a
 	! struct
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: instance
+	type(syntax_node_t) :: inst
 
 	!********
 
@@ -827,8 +827,22 @@ module function parse_struct_instance(parser) result(instance)
 	struct = parser%structs%search(identifier%text, struct_id, io)
 	print *, "struct io = ", io
 
+	! TODO: do we need `mems`? Or just inst%members
 	mems = new_syntax_node_vector()
+
 	lbrace  = parser%match(lbrace_token)
+
+	inst%kind = struct_instance_expr
+	!inst%identifier = identifier
+
+	! Save everything in the inst syntax node
+	inst%val%type = struct_type
+	allocate(inst%val%struct( struct%num_vars ))
+	allocate(inst%members   ( struct%num_vars ))
+
+	! TODO: each struct should get a different sub type (like array_type) for
+	! type checking, so you don't try to assign one type of struct to another
+	! struct
 
 	do while ( &
 		parser%current_kind() /= rbrace_token .and. &
@@ -850,12 +864,20 @@ module function parse_struct_instance(parser) result(instance)
 		member = struct%vars%search(name%text, member_id, io)
 		!member = parser%structs(struct_id)%vars%search(name%text, member_id, io)
 		print *, "member io = ", io
+		print *, "member id = ", member_id
 
 		if (io /= 0) then
 			! TODO: diag
 			print *, "Error: member does not exist in struct"
 			stop
 		end if
+
+		! TODO: add a size check here too
+		print *, "mem type = ", kind_name(mem%val%type)
+
+		! Members can be instantiated out of order
+		inst%val%struct( member_id ) = mem%val
+		inst%members( member_id ) = mem
 
 		call mems%push(mem)
 
@@ -870,12 +892,15 @@ module function parse_struct_instance(parser) result(instance)
 
 	rbrace  = parser%match(rbrace_token)
 
-	instance%kind = struct_instance_expr
-	!instance%identifier = identifier
+	print *, "size = ", struct%num_vars
+	print *, "size = ", mems%len_
+	if (mems%len_ /= struct%num_vars) then
+		! TODO: diag
+		print *, "Error: struct instance does not have the right number of members"
+		stop
+	end if
 
-	! TODO: save everything in the instance syntax node
-
-	! TODO: check number and type of members match
+	! TODO: check type of members match
 
 	print *, "ending parse_struct_instance()"
 

@@ -617,6 +617,10 @@ module subroutine parse_dot(parser, expr)
 
 	print *, 'dot identifier = ', identifier%text
 
+	!! TODO
+	!!expr%kind = name_expr
+	!expr%kind = dot_expr
+
 	! TODO: save dot info in syntax node
 
 end subroutine parse_dot

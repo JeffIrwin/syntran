@@ -13,6 +13,7 @@ struct Time
 
 //let t1 = Time(hh = 9, mm = 20, ss = 0.030,);
 let t1 = Time{hh = 9, mm = 20, ss = 0.030,};
+//let t1num = Time{hh = 9, mm = 20};
 //let t1htns = Time{hh = 9, mm = 20, sshtns = 0.030,};
 
 //let taoeu = Timeaoeu{hh = 9, mm = 20, ss = 0.030,};

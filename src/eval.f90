@@ -101,9 +101,18 @@ recursive subroutine syntax_eval(node, state, res)
 		! Assign return value
 		call syntax_eval(node%right, state, res)
 
-		!print *, 'assigning identifier ', quote(node%identifier%text)
+		print *, 'assigning identifier ', quote(node%identifier%text)
 
 		state%vars%vals(node%id_index) = res
+
+		print *, "res type = ", kind_name(res%type)
+		print *, "allocated(struct) = ", allocated(res%struct)
+		if (res%type == struct_type) then
+			print *, "size struct = ", size(res%struct)
+			print *, "size struct = ", size( state%vars%vals(node%id_index)%struct )
+			print *, "struct[1] = ", res%struct(1)%to_str()
+			print *, "struct[1] = ", state%vars%vals(node%id_index)%struct(1)%to_str()
+		end if
 
 	case (fn_call_expr)
 		call eval_fn_call(node, state, res)
@@ -374,13 +383,27 @@ subroutine eval_struct_instance(node, state, res)
 
 	!********
 
+	integer :: i
+
 	print *, 'eval struct_instance_expr'
 	!print *, 'struct identifier = ', node%identifier%text
 	!print *, 'struct id_index   = ', node%id_index
 
 	res%type = node%val%type
 
+	if (allocated(res%struct)) deallocate(res%struct)
+	allocate(res%struct( size(node%members) ))
+
 	print *, 'res type = ', kind_name(res%type)
+	print *, "num members = ", size(node%members)
+	print *, "num members = ", size(res%struct)
+
+	do i = 1, size(node%members)
+
+		call syntax_eval(node%members(i), state, res%struct(i))
+
+		print *, "mem[", str(i), "] = ", res%struct(i)%to_str()
+	end do
 
 	!case default
 	!	! User-defined function
@@ -1027,6 +1050,8 @@ subroutine eval_assignment_expr(node, state, res)
 		!print *, 'setting res again'
 		res = state%vars%vals(node%id_index)
 		!print *, 'done'
+
+		!print *, "node identifier = ", node%identifier%text
 
 		! The difference between let and assign is inserting into the
 		! current scope (let) vs possibly searching parent scopes (assign).
