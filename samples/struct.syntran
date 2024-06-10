@@ -29,6 +29,7 @@ let t2 = Time{hh = 13, mm = 37, ss = 0.069,};
 
 //fn print_time(t: Time)
 //{
+//	// TODO
 //	println("h = ", t.hh);
 //	println("m = ", t.mm);
 //	println("s = ", t.ss);
@@ -59,10 +60,21 @@ println("t2.hh = ", t2.hh);
 println("t2.mm = ", t2.mm);
 println("t2.ss = ", t2.ss);
 
+t2 = t1;
+println("t2.hh = ", t2.hh);
+println("t2.mm = ", t2.mm);
+println("t2.ss = ", t2.ss);
+
 d1 = Date{y = 1900 + 45, m = "Ma" + "y", d = 5*4};
 println("d1.y = ", d1.y);
 println("d1.m = ", d1.m);
 println("d1.d = ", d1.d);
+
+// TODO: date is cast as time by member indices!
+t2 = d1;
+println("t2.hh = ", t2.hh);
+println("t2.mm = ", t2.mm);
+println("t2.ss = ", t2.ss);
 
 //********
 

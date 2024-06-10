@@ -29,12 +29,25 @@ module syntran__core_m
 
 	! TODO:
 	!  - structs
+	!    * mvp wip
+	!    * tbd:
+	!      + why does gfort crash but ifx works?
+	!      + LHS dot expr
+	!      + struct type checking
+	!        > check dot member types
+	!        > check mismatches of assigning one struct to another, or passing a
+	!          struct to a fn
+	!      + struct fn args
+	!      + struct fn return values
+	!      + nested structs
+	!      + structs of arrays
+	!      + arrays of structs
 	!  - triage notes from AOC.  many things are already fixed
 	!  - jumping control flow:
 	!    * fn return statement done
 	!    * c continue (fortran cycle), c break (fortran loop exit)
 	!    * (sys) exit done
-	!      > should final return value be used as an implicit sys exit value?
+	!      + should final return value be used as an implicit sys exit value?
 	!        currently, default exit stat is 0, regardless of what syntran
 	!        "main" returns
 	!  - consider using subroutines with out-args instead of fn return vals for
@@ -123,13 +136,13 @@ module syntran__core_m
 	!  - substring indexing and slicing:
 	!    * string arrays get an optional extra rank.  omitting the extra rank
 	!      refers to the whole string at that position in the array:
-	!      > str_vec[0] == str_vec[:,0]
-	!      > str_mat[0,0] == str_mat[:,0,0]
-	!      > etc.
+	!      + str_vec[0] == str_vec[:,0]
+	!      + str_mat[0,0] == str_mat[:,0,0]
+	!      + etc.
 	!    * first, single-character indexing
-	!      > done
+	!      + done
 	!    * then, range-based slicing
-	!      > done
+	!      + done
 	!  - file reading/writing
 	!    * binary file i/o
 	!    * vectorized writes (and reads) for arrays without syntran loops. c.f.
@@ -147,20 +160,20 @@ module syntran__core_m
 	!    * check return value is correct type.  return statements could help
 	!      with this
 	!    * intrinsic
-	!      > abs, norm, dot
-	!      > log
-	!      > trig: sin, cos, tan, asin, ...
-	!      > norm, product
-	!      > reshape
-	!      > system: multiple out args? iostat and stdout
+	!      + abs, norm, dot
+	!      + log
+	!      + trig: sin, cos, tan, asin, ...
+	!      + norm, product
+	!      + reshape
+	!      + system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
 	!    * done:
-	!      > exp  (non-variadic, non-polymorphic)
-	!      > min, max, sum
-	!      > size (non-variadic but polymorphic)
-	!      > readln, writeln, println, open, close, str casting
-	!      > len (of str)
-	!      > non-recursive user-defined fns
+	!      + exp  (non-variadic, non-polymorphic)
+	!      + min, max, sum
+	!      + size (non-variadic but polymorphic)
+	!      + readln, writeln, println, open, close, str casting
+	!      + len (of str)
+	!      + non-recursive user-defined fns
 	!  - use more submodules
 	!    * types.f90 is long and close to leaves of dependency tree.  value.f90
 	!      is also highly depended upon
