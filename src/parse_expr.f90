@@ -97,6 +97,14 @@ recursive module function parse_expr_statement(parser) result(expr)
 				span, identifier%text))
 		end if
 
+		! TODO: this should be unnecessary.  Store the struct name in the value
+		! instead
+		print *, "right type = ", kind_name(right%val%type)
+		if (right%val%type == struct_type) then
+			print *, "struct_name = ", right%struct_name
+			expr%struct_name = right%struct_name
+		end if
+
 		return
 
 	end if
@@ -597,7 +605,13 @@ module subroutine parse_dot(parser, expr)
 
 	!********
 
+	integer :: io, struct_id, member_id
+
+	type(struct_t) :: struct
+
 	type(syntax_token_t) :: dot, identifier
+
+	type(value_t) :: member
 
 	if (parser%current_kind() /= dot_token) then
 
@@ -615,13 +629,39 @@ module subroutine parse_dot(parser, expr)
 
 	identifier = parser%match(identifier_token)
 
-	print *, 'dot identifier = ', identifier%text
+	print *, "dot identifier = ", identifier%text
+	!print *, "struct name = ", expr%struct_name
+	print *, "struct name = ", expr%val%struct_name
 
-	!! TODO
-	!!expr%kind = name_expr
-	!expr%kind = dot_expr
+	!expr%kind = name_expr
+	expr%kind = dot_expr
 
-	! TODO: save dot info in syntax node
+	! Save dot info in syntax node
+	allocate(expr%right)
+
+	!parser%vars%search(identifier%text, id_index, io)
+	!dummy = parser%structs%search(parser%current_text(), dummy_id, io)
+
+	! Is there a better way than looking up every struct by name again?
+
+	!struct = parser%structs%search(parser%current_text(), struct_id, io)
+	struct = parser%structs%search(expr%val%struct_name, struct_id, io)
+	if (io /= 0) then
+		print *, "Error: unreachable struct lookup failure"
+		stop
+	end if
+
+	!member = struct%vars%search(name%text, member_id, io)
+	member = struct%vars%search(identifier%text, member_id, io)
+	if (io /= 0) then
+		! TODO: diag
+		print *, "Error: struct dot member does not exist"
+		stop
+	end if
+	print *, "member id = ", member_id
+
+	expr%right%id_index = member_id
+	!expr%right%id_index = 2
 
 end subroutine parse_dot
 

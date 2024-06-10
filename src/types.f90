@@ -178,6 +178,9 @@ module syntran__types_m
 
 		type(value_t) :: val
 
+		!type(struct_t), allocatable :: struct
+		character(len = :), allocatable :: struct_name
+
 		type(string_vector_t) :: diagnostics
 
 		! Only used to handle comment/whitespace lines for now
@@ -701,6 +704,10 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%identifier  = src%identifier
 	dst%id_index    = src%id_index
 
+	if (allocated(src%struct_name)) then
+		dst%struct_name = src%struct_name
+	end if
+
 	dst%expecting       = src%expecting
 	dst%first_expecting = src%first_expecting
 
@@ -760,6 +767,13 @@ recursive subroutine syntax_node_copy(dst, src)
 	else if (allocated(dst%body)) then
 		deallocate(dst%body)
 	end if
+
+	!if (allocated(src%struct)) then
+	!	if (.not. allocated(dst%struct)) allocate(dst%struct)
+	!	dst%struct = src%struct
+	!else if (allocated(dst%struct)) then
+	!	deallocate(dst%struct)
+	!end if
 
 	if (allocated(src%array)) then
 		if (.not. allocated(dst%array)) allocate(dst%array)

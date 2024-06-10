@@ -124,6 +124,9 @@ recursive subroutine syntax_eval(node, state, res)
 		!print *, "name_expr"
 		call eval_name_expr(node, state, res)
 
+	case (dot_expr)
+		call eval_dot_expr(node, state, res)
+
 	case (unary_expr)
 		call eval_unary_expr(node, state, res)
 
@@ -370,6 +373,26 @@ subroutine eval_name_expr(node, state, res)
 	end if
 
 end subroutine eval_name_expr
+
+!===============================================================================
+
+subroutine eval_dot_expr(node, state, res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(inout) :: res
+
+	!********
+
+	print *, "eval dot_expr"
+
+	!!res = node%members%val(1)
+	!res = node%val%struct(1)
+	res = node%val%struct( node%right%id_index )
+
+end subroutine eval_dot_expr
 
 !===============================================================================
 

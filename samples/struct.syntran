@@ -41,7 +41,16 @@ struct Date {
 	m: str,
 	y: i64
 }
-let d1 = Date{y = 1900 + 12, m = "Apr", d = 14};
+
+//// TODO: expr is eval'd but not saved in struct
+//let d1 = Date{y = 1900 + 12, m = "Apr", d = 14};
+
+let d1 = Date{y = 1912, m = "Apr", d = 14};
+//d1.d = 1969;
+
+println("d1.y = ", d1.y);
+println("d1.m = ", d1.m);
+println("d1.d = ", d1.d);
 
 //********
 

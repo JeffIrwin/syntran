@@ -97,6 +97,7 @@ module syntran__value_m
 		!type(struct_t), allocatable :: struct
 		!type(struct_val_t), allocatable :: struct
 		type(value_t), allocatable :: struct(:)
+		character(len = :), allocatable :: struct_name
 
 		contains
 			procedure :: to_str => value_to_str

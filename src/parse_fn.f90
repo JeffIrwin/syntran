@@ -840,6 +840,13 @@ module function parse_struct_instance(parser) result(inst)
 	allocate(inst%val%struct( struct%num_vars ))
 	allocate(inst%members   ( struct%num_vars ))
 
+	!if (allocated(inst%struct)) deallocate(inst%struct)
+	!allocate(inst%struct)
+	!inst%struct = struct
+	inst%struct_name = identifier%text
+
+	inst%val%struct_name = identifier%text
+
 	! TODO: each struct should get a different sub type (like array_type) for
 	! type checking, so you don't try to assign one type of struct to another
 	! struct
