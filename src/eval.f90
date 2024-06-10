@@ -48,6 +48,8 @@ recursive subroutine syntax_eval(node, state, res)
 
 	!********
 
+	integer :: i
+
 	!print *, 'starting syntax_eval()'
 
 	! if_statement and while_statement may return an uninitialized type
@@ -110,8 +112,12 @@ recursive subroutine syntax_eval(node, state, res)
 		if (res%type == struct_type) then
 			print *, "size struct = ", size(res%struct)
 			print *, "size struct = ", size( state%vars%vals(node%id_index)%struct )
-			print *, "struct[1] = ", res%struct(1)%to_str()
-			print *, "struct[1] = ", state%vars%vals(node%id_index)%struct(1)%to_str()
+
+			do i = 1, size(res%struct)
+				print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
+				print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
+			end do
+
 		end if
 
 	case (fn_call_expr)
@@ -386,11 +392,25 @@ subroutine eval_dot_expr(node, state, res)
 
 	!********
 
-	print *, "eval dot_expr"
+	type(value_t) :: tmp
+
+	!print *, "eval dot_expr"
 
 	!!res = node%members%val(1)
 	!res = node%val%struct(1)
-	res = node%val%struct( node%right%id_index )
+	!res = node%val%struct( node%right%id_index )
+
+	!call syntax_eval(node%members( node%right%id_index ), state, res)
+
+	! This won't work for struct literal member access.  It only works for
+	! `identifier.member`
+	res = state%vars%vals(node%id_index)%struct( node%right%id_index )
+
+	!print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
+	!print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
+
+	!call syntax_eval(node%members(i), state, res%struct(i))
+	!call syntax_eval(node%members( node%right%id_index ), state, res)
 
 end subroutine eval_dot_expr
 
@@ -405,6 +425,8 @@ subroutine eval_struct_instance(node, state, res)
 	type(value_t), intent(inout) :: res
 
 	!********
+
+	type(value_t) :: tmp
 
 	integer :: i
 
@@ -423,9 +445,14 @@ subroutine eval_struct_instance(node, state, res)
 
 	do i = 1, size(node%members)
 
-		call syntax_eval(node%members(i), state, res%struct(i))
+		!call syntax_eval(node%members(i), state, res%struct(i))
+		call syntax_eval(node%members(i), state, tmp)
+		res%struct(i) = tmp
 
 		print *, "mem[", str(i), "] = ", res%struct(i)%to_str()
+		!res = node%val%struct( node%right%id_index )
+		!node%members(i)%val = res
+
 	end do
 
 	!case default
