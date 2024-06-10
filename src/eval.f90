@@ -426,7 +426,7 @@ subroutine eval_struct_instance(node, state, res)
 
 	!********
 
-	type(value_t) :: tmp
+	!type(value_t) :: tmp
 
 	integer :: i
 
@@ -445,9 +445,9 @@ subroutine eval_struct_instance(node, state, res)
 
 	do i = 1, size(node%members)
 
-		!call syntax_eval(node%members(i), state, res%struct(i))
-		call syntax_eval(node%members(i), state, tmp)
-		res%struct(i) = tmp
+		call syntax_eval(node%members(i), state, res%struct(i))
+		!call syntax_eval(node%members(i), state, tmp)
+		!res%struct(i) = tmp
 
 		print *, "mem[", str(i), "] = ", res%struct(i)%to_str()
 		!res = node%val%struct( node%right%id_index )

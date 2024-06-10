@@ -32,6 +32,7 @@ module syntran__core_m
 	!    * mvp wip
 	!    * tbd:
 	!      + why does gfort crash but ifx works?
+	!      + tests
 	!      + LHS dot expr
 	!      + struct type checking
 	!        > check dot member types
