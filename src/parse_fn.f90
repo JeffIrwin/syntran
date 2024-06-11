@@ -605,7 +605,8 @@ module function parse_struct_declaration(parser) result(decl)
 
 	integer :: itype, i, io, pos0, pos1, pos2, rank
 
-	type(struct_t) :: struct
+	type(struct_t), save :: struct
+	!type(struct_t) :: struct
 
 	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
 		colon, name, struct_kw
@@ -768,16 +769,6 @@ module function parse_struct_declaration(parser) result(decl)
 			!	span, identifier%text))
 		end if
 
-		!call parser%vars%insert(identifier%text, expr%val, &
-		!	expr%id_index, io, overwrite = .false.)
-		!!print *, 'io = ', io
-		!if (io /= exit_success) then
-		!	span = new_span(identifier%pos, len(identifier%text))
-		!	call parser%diagnostics%push( &
-		!		err_redeclare_var(parser%context(), &
-		!		span, identifier%text))
-		!end if
-
 	end do
 
 	! Insert struct into parser dict
@@ -785,7 +776,12 @@ module function parse_struct_declaration(parser) result(decl)
 	parser%num_structs = parser%num_structs + 1
 	decl%id_index  = parser%num_structs
 
+	print *, "inserting identifier ", identifier%text, " into parser structs"
 	call parser%structs%insert(identifier%text, struct, decl%id_index)
+
+	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
+	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
+	!call ternary_tree_final(struct%vars%dicts(1)%root)
 
 	decl%kind = struct_declaration
 
@@ -824,7 +820,13 @@ module function parse_struct_instance(parser) result(inst)
 
 	print *, 'identifier = ', identifier%text
 
-	struct = parser%structs%search(identifier%text, struct_id, io)
+	!print *, ""
+	!print *, "in parse_struct_instance():"
+	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
+	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
+
+	!struct = parser%structs%search(identifier%text, struct_id, io)
+	call parser%structs%search(identifier%text, struct_id, io, struct)
 	print *, "struct io = ", io
 
 	! TODO: do we need `mems`? Or just inst%members
@@ -866,9 +868,12 @@ module function parse_struct_instance(parser) result(inst)
 		!call struct%vars%insert(struct%members(i)%name, val, &
 		!	struct%num_vars, io, overwrite = .false.)
 
-		print *, "allocated = ", allocated(struct%vars%dicts(1)%root)
+		!print *, "allocated = ", allocated(struct%vars%dicts(1)%root)
+		!print *, "char root = ", struct%vars%dicts(1)%root%split_char
+		!print *, "char mid  = ", struct%vars%dicts(1)%root%mid%split_char
 
-		member = struct%vars%search(name%text, member_id, io)
+		call struct%vars%search(name%text, member_id, io, member)
+
 		!member = parser%structs(struct_id)%vars%search(name%text, member_id, io)
 		print *, "member io = ", io
 		print *, "member id = ", member_id

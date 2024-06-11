@@ -382,6 +382,12 @@ module function parse_unit(parser) result(unit)
 			call members%push(parser%parse_fn_declaration())
 		else if (parser%current_kind() == struct_keyword) then
 			call members%push(parser%parse_struct_declaration())
+
+			!print *, ""
+			!print *, "in parse_misc.f90:"
+			!print *, "parser structs root     = ", parser%structs%dict%root%split_char
+			!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
+
 		else
 			call members%push(parser%parse_statement())
 		end if

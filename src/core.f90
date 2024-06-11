@@ -726,10 +726,12 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	type(fns_t) :: fns0
 
-	! Without `save`, gfortran crashes when this goes out of scope.  Maybe I
-	! need to work on a manual finalizer to deallocate ternary trees, not just
-	! for structs but for the vars_t trees contained within
-	type(parser_t), save :: parser
+	! This no longer seems to make a difference.  Previously, without `save`,
+	! gfortran crashes when this goes out of scope.  Maybe I need to work on a
+	! manual finalizer to deallocate ternary trees, not just for structs but for
+	! the vars_t trees contained within
+	type(parser_t) :: parser
+	!type(parser_t), save :: parser
 
 	type(syntax_token_t) :: token
 
@@ -868,6 +870,12 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	!*******************************
 	! Parse the tokens
 	tree = parser%parse_unit()
+
+	!print *, ""
+	!print *, "in core.f90:"
+	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
+	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
+
 	!*******************************
 
 	tree%expecting       = parser%expecting
@@ -953,7 +961,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	!print *, "size = ", size(parser%structs%structs)
 	!print *, "allocated = ", allocated(parser%structs%structs)
 	!print *, "size = ", size(parser%structs%dicts)
-	print *, "allocated = ", allocated(parser%structs%dict%root)
+	!print *, "allocated = ", allocated(parser%structs%dict%root)
 	!deallocate(parser%structs%dict%root)
 	!call struct_ternary_tree_final(parser%structs%dict%root)
 

@@ -366,12 +366,13 @@ recursive subroutine struct_copy(dst, src)
 
 	dst%num_vars = src%num_vars
 
-	if (allocated(src%members)) then
-		if (.not. allocated(dst%members)) allocate(dst%members( size(src%members) ))
-		dst%members = src%members
-	else if (allocated(dst%members)) then
-		deallocate(dst%members)
-	end if
+	!! TODO: re-enable this or delete members from fortran type
+	!if (allocated(src%members)) then
+	!	if (.not. allocated(dst%members)) allocate(dst%members( size(src%members) ))
+	!	dst%members = src%members
+	!else if (allocated(dst%members)) then
+	!	deallocate(dst%members)
+	!end if
 
 	!if (allocated(src%vars)) then
 	!	if (.not. allocated(dst%vars)) allocate(dst%vars)
@@ -897,21 +898,25 @@ recursive subroutine ternary_tree_copy(dst, src)
 	if (allocated(src%val)) then
 		if (.not. allocated(dst%val)) allocate(dst%val)
 		dst%val = src%val
+		!call ternary_tree_copy(dst%val, src%val)
 	end if
 
 	if (allocated(src%left)) then
 		if (.not. allocated(dst%left)) allocate(dst%left)
-		dst%left = src%left
+		!dst%left = src%left
+		call ternary_tree_copy(dst%left, src%left)
 	end if
 
 	if (allocated(src%mid)) then
 		if (.not. allocated(dst%mid)) allocate(dst%mid)
-		dst%mid = src%mid
+		!dst%mid = src%mid
+		call ternary_tree_copy(dst%mid, src%mid)
 	end if
 
 	if (allocated(src%right)) then
 		if (.not. allocated(dst%right)) allocate(dst%right)
-		dst%right = src%right
+		!dst%right = src%right
+		call ternary_tree_copy(dst%right, src%right)
 	end if
 
 end subroutine ternary_tree_copy
@@ -960,7 +965,7 @@ end subroutine var_insert
 
 !===============================================================================
 
-function var_search(dict, key, id_index, iostat) result(val)
+subroutine var_search(dict, key, id_index, iostat, val)
 
 	! An id_index is not normally part of dictionary searching, but we use it
 	! here for converting the dictionary into an array after parsing and before
@@ -979,17 +984,17 @@ function var_search(dict, key, id_index, iostat) result(val)
 
 	i = dict%scope
 
-	val = ternary_search(dict%dicts(i)%root, key, id_index, io)
+	call ternary_search(dict%dicts(i)%root, key, id_index, io, val)
 
 	! If not found in current scope, search parent scopes too
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		val = ternary_search(dict%dicts(i)%root, key, id_index, io)
+		call ternary_search(dict%dicts(i)%root, key, id_index, io, val)
 	end do
 
 	if (present(iostat)) iostat = io
 
-end function var_search
+end subroutine var_search
 
 !===============================================================================
 
@@ -1362,7 +1367,7 @@ end function is_assignment_op
 
 !===============================================================================
 
-recursive function ternary_search(node, key, id_index, iostat) result(val)
+recursive subroutine ternary_search(node, key, id_index, iostat, val)
 
 	type(ternary_tree_node_t), intent(in), allocatable :: node
 	character(len = *), intent(in) :: key
@@ -1391,13 +1396,13 @@ recursive function ternary_search(node, key, id_index, iostat) result(val)
 	 ey = key(2:)
 
 	if (k < node%split_char) then
-		val = ternary_search(node%left , key, id_index, iostat)
+		call ternary_search(node%left , key, id_index, iostat, val)
 		return
 	else if (k > node%split_char) then
-		val = ternary_search(node%right, key, id_index, iostat)
+		call ternary_search(node%right, key, id_index, iostat, val)
 		return
 	else if (len(ey) > 0) then
-		val = ternary_search(node%mid  , ey, id_index, iostat)
+		call ternary_search(node%mid  , ey, id_index, iostat, val)
 		return
 	end if
 
@@ -1414,7 +1419,7 @@ recursive function ternary_search(node, key, id_index, iostat) result(val)
 	!print *, 'done ternary_search'
 	!print *, ''
 
-end function ternary_search
+end subroutine ternary_search
 
 !===============================================================================
 
@@ -2270,21 +2275,22 @@ end function struct_ternary_exists
 
 !===============================================================================
 
-recursive function struct_ternary_search(node, key, id_index, iostat) result(val)
+!recursive function struct_ternary_search(node, key, id_index, iostat) result(val)
+recursive subroutine struct_ternary_search(node, key, id_index, iostat, val)
 
 	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
 	character(len = *), intent(in) :: key
 
 	integer, intent(out) :: id_index
 	integer, intent(out) :: iostat
-	type(struct_t) :: val
+	type(struct_t) :: val  ! intent inout?
 
 	!********
 
 	character :: k
 	character(len = :), allocatable :: ey
 
-	!print *, 'searching key ', quote(key)
+	print *, 'searching key ', quote(key)
 
 	iostat = exit_success
 
@@ -2299,17 +2305,20 @@ recursive function struct_ternary_search(node, key, id_index, iostat) result(val
 	 ey = key(2:)
 
 	if (k < node%split_char) then
-		val = struct_ternary_search(node%left , key, id_index, iostat)
+		call struct_ternary_search(node%left , key, id_index, iostat, val)
+		print *, "return left"
 		return
 	else if (k > node%split_char) then
-		val = struct_ternary_search(node%right, key, id_index, iostat)
+		call struct_ternary_search(node%right, key, id_index, iostat, val)
+		print *, "return right"
 		return
 	else if (len(ey) > 0) then
-		val = struct_ternary_search(node%mid  , ey, id_index, iostat)
+		call struct_ternary_search(node%mid  , ey, id_index, iostat, val)
+		print *, "return mid"
 		return
 	end if
 
-	!print *, 'setting val'
+	print *, 'setting val'
 
 	if (.not. allocated(node%val)) then
 		iostat = exit_failure
@@ -2320,10 +2329,37 @@ recursive function struct_ternary_search(node, key, id_index, iostat) result(val
 	val      = node%val
 	id_index = node%id_index
 
-	!print *, 'done struct_ternary_search'
+	print *, 'done struct_ternary_search'
 	!print *, ''
 
-end function struct_ternary_search
+!end function struct_ternary_search
+end subroutine struct_ternary_search
+
+!===============================================================================
+
+recursive subroutine ternary_tree_final(node)
+	type(ternary_tree_node_t), intent(inout), allocatable :: node
+		!type(ternary_tree_node_t), allocatable :: left, mid, right
+		!type(value_t), allocatable :: val
+
+	if (.not. allocated(node)) return
+
+	!if (allocated(node%val)) deallocate(node%val)
+
+	if (allocated(node%left )) then
+		call ternary_tree_final(node%left )
+		deallocate(node%left)
+	end if
+	if (allocated(node%mid  )) then
+		call ternary_tree_final(node%mid  )
+		deallocate(node%mid)
+	end if
+	if (allocated(node%right)) then
+		call ternary_tree_final(node%right)
+		deallocate(node%right)
+	end if
+
+end subroutine ternary_tree_final
 
 !===============================================================================
 
@@ -2387,6 +2423,7 @@ recursive subroutine struct_ternary_insert(node, key, val, id_index, iostat, ove
 
 	allocate(node%val)
 	node%val      = val
+	node%val%vars = val%vars
 	node%id_index = id_index
 
 	!print *, 'done inserting'
@@ -2533,7 +2570,8 @@ end function struct_exists
 
 !===============================================================================
 
-function struct_search(dict, key, id_index, iostat) result(val)
+!function struct_search(dict, key, id_index, iostat) result(val)
+subroutine struct_search(dict, key, id_index, iostat, val)
 
 	! An id_index is not normally part of dictionary searching, but we use it
 	! here for converting the dictionary into an array after parsing and before
@@ -2550,19 +2588,24 @@ function struct_search(dict, key, id_index, iostat) result(val)
 
 	integer :: i, io
 
+	print *, "starting struct search"
+
 	i = dict%scope
 
-	val = struct_ternary_search(dict%dict%root, key, id_index, io)
+	!val = struct_ternary_search(dict%dict%root, key, id_index, io)
+	call struct_ternary_search(dict%dict%root, key, id_index, io, val)
+	print *, "io = ", io
 
-	! If not found in current scope, search parent scopes too
-	do while (io /= exit_success .and. i > 1)
-		i = i - 1
-		val = struct_ternary_search(dict%dict%root, key, id_index, io)
-	end do
+	!! If not found in current scope, search parent scopes too
+	!do while (io /= exit_success .and. i > 1)
+	!	i = i - 1
+	!	val = struct_ternary_search(dict%dict%root, key, id_index, io)
+	!end do
 
 	if (present(iostat)) iostat = io
 
-end function struct_search
+!end function struct_search
+end subroutine struct_search
 
 !===============================================================================
 
