@@ -106,12 +106,73 @@ module syntran__value_m
 			procedure :: to_i64 => value_to_i64
 			procedure :: to_i32_array => value_to_i32_array
 			procedure :: to_i64_array => value_to_i64_array
+			procedure, pass(dst) :: copy => value_copy
+			generic, public :: assignment(=) => copy
 
 	end type value_t
 
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+recursive subroutine value_copy(dst, src)
+
+	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
+	! correctly for my node type, leaving dangling refs to src when it is
+	! deallocated.
+	!
+	! Args have to be in the confusing dst, src order for overloading
+
+	class(value_t), intent(inout) :: dst
+	class(value_t), intent(in)    :: src
+
+	!********
+
+	integer :: i
+
+	if (debug > 3) print *, 'starting value_copy()'
+
+	!type value_t
+	!	integer :: type = unknown_type
+	!	type(scalar_t) :: sca
+	!	type(array_t), allocatable :: array
+	!	type(value_t), allocatable :: struct(:)
+	!	character(len = :), allocatable :: struct_name
+
+	dst%type = src%type
+	dst%sca  = src%sca
+
+	if (allocated(src%struct_name)) then
+		dst%struct_name = src%struct_name
+	end if
+
+	if (allocated(src%array)) then
+		if (.not. allocated(dst%array)) allocate(dst%array)
+		dst%array = src%array
+	else if (allocated(dst%array)) then
+		deallocate(dst%array)
+	end if
+
+	if (allocated(src%struct)) then
+		if (.not. allocated(dst%struct)) allocate(dst%struct( size(src%struct) ))
+		!dst%struct = src%struct
+		do i = 1, size(src%struct)
+			dst%struct(i) = src%struct(i)
+		end do
+	else if (allocated(dst%struct)) then
+		deallocate(dst%struct)
+	end if
+
+	!if (allocated(src%left)) then
+	!	if (.not. allocated(dst%left)) allocate(dst%left)
+	!	dst%left = src%left
+	!else if (allocated(dst%left)) then
+	!	deallocate(dst%left)
+	!end if
+
+end subroutine value_copy
 
 !===============================================================================
 

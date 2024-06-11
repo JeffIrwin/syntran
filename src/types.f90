@@ -257,6 +257,8 @@ module syntran__types_m
 				insert => var_insert, &
 				search => var_search, &
 				push_scope, pop_scope
+			procedure, pass(dst) :: copy => vars_copy
+			generic, public :: assignment(=) => copy
 
 	end type vars_t
 
@@ -350,6 +352,49 @@ module syntran__types_m
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+recursive subroutine vars_copy(dst, src)
+
+	! Deep copy.  This overwrites dst with src
+
+	class(vars_t), intent(inout) :: dst
+	class(vars_t), intent(in)    :: src
+
+	!********
+
+	integer :: i
+
+	!print *, 'starting vars_copy()'
+
+	!type vars_t
+	!	type(var_dict_t) :: dicts(scope_max)
+	!	type(value_t), allocatable :: vals(:)
+	!	integer :: scope = 1
+
+	dst%scope = src%scope
+
+	!dst%dicts = src%dicts
+	do i = 1, size(src%dicts)
+		if (allocated(src%dicts(i)%root)) then
+			if (.not. allocated(dst%dicts(i)%root)) allocate(dst%dicts(i)%root)
+			dst%dicts(i)%root = src%dicts(i)%root
+		else if (allocated(dst%dicts(i)%root)) then
+			deallocate(dst%dicts(i)%root)
+		end if
+	end do
+
+	if (allocated(src%vals)) then
+		if (.not. allocated(dst%vals)) allocate(dst%vals( size(src%vals) ))
+		dst%vals = src%vals
+	else if (allocated(dst%vals)) then
+		deallocate(dst%vals)
+	end if
+
+	!print *, 'done vars_copy()'
+
+end subroutine vars_copy
 
 !===============================================================================
 
@@ -2205,6 +2250,7 @@ recursive subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
 		return
 	end if
 
+	allocate(node%val)
 	node%val      = val
 	node%id_index = id_index
 

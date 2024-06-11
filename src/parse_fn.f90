@@ -605,8 +605,8 @@ module function parse_struct_declaration(parser) result(decl)
 
 	integer :: itype, i, io, pos0, pos1, pos2, rank
 
-	type(struct_t), save :: struct
-	!type(struct_t) :: struct
+	!type(struct_t), save :: struct
+	type(struct_t) :: struct
 
 	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
 		colon, name, struct_kw
