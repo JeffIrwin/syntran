@@ -2469,9 +2469,21 @@ subroutine unit_test_struct(npass, nfail)
 
 	tests = &
 		[   &
-			eval('struct Date{y: i64, m: str, d: i32} let date = Date{y=1912, m="Apr", d=14}; date.y;', quiet) == '1912', &
-			eval('struct Date{y: i64, m: str, d: i32} let date = Date{y=1912, m="Apr", d=14}; date.m;', quiet) == 'Apr', &
-			eval('struct Date{y: i64, m: str, d: i32} let date = Date{y=1912, m="Apr", d=14}; date.d;', quiet) == '14', &
+			eval('struct D{y:i64, m:str, d:i32} let d = D{y=1912, m="Apr", d=14}; d.y;', quiet) == '1912', &
+			eval('struct D{y:i64, m:str, d:i32} let d = D{y=1912, m="Apr", d=14}; d.m;', quiet) == 'Apr', &
+			eval('struct D{y:i64, m:str, d:i32} let d = D{y=1912, m="Apr", d=14}; d.d;', quiet) == '14', &
+			eval('struct D{y:i64, m:str, d:i32} let d = D{y=1900+12, m="Apr", d=14}; d.y;', quiet) == '1912', &
+			eval('struct D{y:i64, m:str, d:i32} let d = D{y=1912, m="Apr", d=7*2}; let e=d; e.d;', quiet) == '14', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &
+			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let e=d;' &
+			    //'e = D{y=1945, m="May", d=5*3};' &
+			    //'e.d;', quiet) == '15', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &
+			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let e=d;' &
+			    //'e = D{y=1945, m="May", d=5*3};' &
+			    //'d.d;', quiet) == '14', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
