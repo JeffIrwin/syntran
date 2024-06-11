@@ -695,6 +695,8 @@ module function parse_struct_declaration(parser) result(decl)
 
 	! Now that we have the number of members, save them
 
+	struct%num_vars = 0
+	if (allocated(struct%members)) deallocate(struct%members)
 	allocate(struct%members( names%len_ ))
 	!allocate(decl  %params( names%len_ ))  ! if this is needed, we need a new
 	!! name.  "members" already means the member statements of a block statement

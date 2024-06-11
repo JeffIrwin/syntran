@@ -633,7 +633,14 @@ module subroutine parse_dot(parser, expr)
 	identifier = parser%match(identifier_token)
 
 	print *, "dot identifier = ", identifier%text
-	!print *, "struct name = ", expr%struct_name
+	print *, "type = ", kind_name(expr%val%type)
+
+	if (expr%val%type /= struct_type) then
+		! TODO: diag.  Skip if unknown_type?  Probably already threw a diag in caller
+		print *, "Error: variable in dot expr is not a struct"
+		return
+	end if
+
 	print *, "struct name = ", expr%val%struct_name
 
 	!expr%kind = name_expr

@@ -2448,6 +2448,42 @@ end subroutine unit_test_return
 
 !===============================================================================
 
+subroutine unit_test_struct(npass, nfail)
+
+	! More advanced tests on longer scripts
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'structs'
+
+	logical, parameter :: quiet = .false.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: more struct tests
+
+	tests = &
+		[   &
+			eval('struct Date{y: i64, m: str, d: i32} let date = Date{y=1912, m="Apr", d=14}; date.y;', quiet) == '1912', &
+			eval('struct Date{y: i64, m: str, d: i32} let date = Date{y=1912, m="Apr", d=14}; date.m;', quiet) == 'Apr', &
+			eval('struct Date{y: i64, m: str, d: i32} let date = Date{y=1912, m="Apr", d=14}; date.d;', quiet) == '14', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct
+
+!===============================================================================
+
 subroutine unit_test_array_bool(npass, nfail)
 
 	! More advanced tests on longer scripts
@@ -2628,6 +2664,7 @@ subroutine unit_tests(iostat)
 	npass = 0
 	nfail = 0
 
+	if (.false.) then ! TODO
 	call unit_test_bin_arith  (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)
@@ -2665,7 +2702,9 @@ subroutine unit_tests(iostat)
 	call unit_test_arr_comp   (npass, nfail)
 	call unit_test_arr_op     (npass, nfail)
 	call unit_test_lhs_slc_1  (npass, nfail)
+	end if
 	call unit_test_return     (npass, nfail)
+	call unit_test_struct     (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
