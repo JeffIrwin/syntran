@@ -2279,6 +2279,7 @@ recursive function struct_ternary_exists(node, key, id_index, iostat) result(exi
 	!print *, 'searching key ', quote(key)
 
 	iostat = exit_success
+	exists = .false.
 
 	if (.not. allocated(node)) then
 		! Search key not found

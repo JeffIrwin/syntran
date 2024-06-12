@@ -120,7 +120,7 @@ contains
 recursive subroutine value_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
-	! correctly for my node type, leaving dangling refs to src when it is
+	! correctly for my types, leaving dangling refs to src when it is
 	! deallocated.
 	!
 	! Args have to be in the confusing dst, src order for overloading
@@ -157,20 +157,13 @@ recursive subroutine value_copy(dst, src)
 
 	if (allocated(src%struct)) then
 		if (.not. allocated(dst%struct)) allocate(dst%struct( size(src%struct) ))
-		!dst%struct = src%struct
-		do i = 1, size(src%struct)
-			dst%struct(i) = src%struct(i)
-		end do
+		dst%struct = src%struct
+		!do i = 1, size(src%struct)
+		!	dst%struct(i) = src%struct(i)
+		!end do
 	else if (allocated(dst%struct)) then
 		deallocate(dst%struct)
 	end if
-
-	!if (allocated(src%left)) then
-	!	if (.not. allocated(dst%left)) allocate(dst%left)
-	!	dst%left = src%left
-	!else if (allocated(dst%left)) then
-	!	deallocate(dst%left)
-	!end if
 
 end subroutine value_copy
 
