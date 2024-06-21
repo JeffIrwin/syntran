@@ -625,7 +625,7 @@ module function parse_struct_declaration(parser) result(decl)
 	struct_kw = parser%match(struct_keyword)
 
 	identifier = parser%match(identifier_token)
-	print *, "parsing struct ", identifier%text
+	!print *, "parsing struct ", identifier%text
 
 	pos1 = parser%current_pos()
 
@@ -732,7 +732,7 @@ module function parse_struct_declaration(parser) result(decl)
 		! Declare the member
 		!parser%num_vars = parser%num_vars + 1
 		struct%num_vars = struct%num_vars + 1
-		print *, "struct%num_vars = ", struct%num_vars
+		!print *, "struct%num_vars = ", struct%num_vars
 
 		!! Save parameters by id_index
 		!decl%params(i) = parser%num_vars
@@ -755,8 +755,8 @@ module function parse_struct_declaration(parser) result(decl)
 
 		! TODO: check for duplicate member names
 
-		print *, "insert var type ", kind_name(val%type)
-		print *, "name = ", struct%members(i)%name
+		!print *, "insert var type ", kind_name(val%type)
+		print *, "insert var name = ", struct%members(i)%name
 		!call parser%vars%insert(struct%members(i)%name, val, parser%num_vars)
 		!call struct%vars%insert(struct%members(i)%name, val, struct%num_vars)
 
@@ -764,6 +764,7 @@ module function parse_struct_declaration(parser) result(decl)
 			struct%num_vars, io, overwrite = .false.)
 		!print *, 'io = ', io
 		if (io /= exit_success) then
+			! TODO: diag
 			print *, "Error: re-declared struct member"
 			!span = new_span(identifier%pos, len(identifier%text))
 			!call parser%diagnostics%push( &
@@ -778,7 +779,7 @@ module function parse_struct_declaration(parser) result(decl)
 	parser%num_structs = parser%num_structs + 1
 	decl%id_index  = parser%num_structs
 
-	print *, "inserting identifier ", identifier%text, " into parser structs"
+	!print *, "inserting identifier ", identifier%text, " into parser structs"
 	call parser%structs%insert(identifier%text, struct, decl%id_index)
 
 	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
@@ -787,7 +788,7 @@ module function parse_struct_declaration(parser) result(decl)
 
 	decl%kind = struct_declaration
 
-	print *, "done parsing struct"
+	!print *, "done parsing struct"
 
 end function parse_struct_declaration
 
@@ -816,11 +817,11 @@ module function parse_struct_instance(parser) result(inst)
 
 	type(value_t) :: member
 
-	print *, "starting parse_struct_instance()"
+	!print *, "starting parse_struct_instance()"
 
 	identifier = parser%match(identifier_token)
 
-	print *, 'identifier = ', identifier%text
+	print *, "parsing struct instance of identifier = ", identifier%text
 
 	!print *, ""
 	!print *, "in parse_struct_instance():"
@@ -829,7 +830,7 @@ module function parse_struct_instance(parser) result(inst)
 
 	!struct = parser%structs%search(identifier%text, struct_id, io)
 	call parser%structs%search(identifier%text, struct_id, io, struct)
-	print *, "struct io = ", io
+	!print *, "struct io = ", io
 
 	! TODO: do we need `mems`? Or just inst%members
 	mems = new_syntax_node_vector()
@@ -877,8 +878,8 @@ module function parse_struct_instance(parser) result(inst)
 		call struct%vars%search(name%text, member_id, io, member)
 
 		!member = parser%structs(struct_id)%vars%search(name%text, member_id, io)
-		print *, "member io = ", io
-		print *, "member id = ", member_id
+		!print *, "member io = ", io
+		!print *, "member id = ", member_id
 
 		if (io /= 0) then
 			! TODO: diag
@@ -887,7 +888,7 @@ module function parse_struct_instance(parser) result(inst)
 		end if
 
 		! TODO: add a size check here too
-		print *, "mem type = ", kind_name(mem%val%type)
+		!print *, "mem type = ", kind_name(mem%val%type)
 
 		! Members can be instantiated out of order
 		inst%val%struct( member_id ) = mem%val
@@ -906,8 +907,8 @@ module function parse_struct_instance(parser) result(inst)
 
 	rbrace  = parser%match(rbrace_token)
 
-	print *, "size = ", struct%num_vars
-	print *, "size = ", mems%len_
+	!print *, "size = ", struct%num_vars
+	!print *, "size = ", mems%len_
 	if (mems%len_ /= struct%num_vars) then
 		! TODO: diag
 		print *, "Error: struct instance does not have the right number of members"
@@ -916,7 +917,7 @@ module function parse_struct_instance(parser) result(inst)
 
 	! TODO: check type of members match
 
-	print *, "ending parse_struct_instance()"
+	!print *, "ending parse_struct_instance()"
 
 end function parse_struct_instance
 

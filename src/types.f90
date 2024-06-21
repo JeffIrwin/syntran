@@ -2337,7 +2337,7 @@ recursive subroutine struct_ternary_search(node, key, id_index, iostat, val)
 	character :: k
 	character(len = :), allocatable :: ey
 
-	print *, 'searching key ', quote(key)
+	!print *, 'searching key ', quote(key)
 
 	iostat = exit_success
 
@@ -2353,19 +2353,19 @@ recursive subroutine struct_ternary_search(node, key, id_index, iostat, val)
 
 	if (k < node%split_char) then
 		call struct_ternary_search(node%left , key, id_index, iostat, val)
-		print *, "return left"
+		!print *, "return left"
 		return
 	else if (k > node%split_char) then
 		call struct_ternary_search(node%right, key, id_index, iostat, val)
-		print *, "return right"
+		!print *, "return right"
 		return
 	else if (len(ey) > 0) then
 		call struct_ternary_search(node%mid  , ey, id_index, iostat, val)
-		print *, "return mid"
+		!print *, "return mid"
 		return
 	end if
 
-	print *, 'setting val'
+	!print *, 'setting val'
 
 	if (.not. allocated(node%val)) then
 		iostat = exit_failure
@@ -2376,7 +2376,7 @@ recursive subroutine struct_ternary_search(node, key, id_index, iostat, val)
 	val      = node%val
 	id_index = node%id_index
 
-	print *, 'done struct_ternary_search'
+	!print *, 'done struct_ternary_search'
 	!print *, ''
 
 !end function struct_ternary_search
@@ -2635,13 +2635,13 @@ subroutine struct_search(dict, key, id_index, iostat, val)
 
 	integer :: i, io
 
-	print *, "starting struct search"
+	!print *, "starting struct search"
 
 	i = dict%scope
 
 	!val = struct_ternary_search(dict%dict%root, key, id_index, io)
 	call struct_ternary_search(dict%dict%root, key, id_index, io, val)
-	print *, "io = ", io
+	!print *, "io = ", io
 
 	!! If not found in current scope, search parent scopes too
 	!do while (io /= exit_success .and. i > 1)

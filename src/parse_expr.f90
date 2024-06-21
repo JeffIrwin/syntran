@@ -99,7 +99,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		! TODO: this should be unnecessary.  Store the struct name in the value
 		! instead
-		print *, "right type = ", kind_name(right%val%type)
+		!print *, "right type = ", kind_name(right%val%type)
 		if (right%val%type == struct_type) then
 			!print *, "struct_name = ", right%struct_name
 			expr%struct_name = right%val%struct_name
@@ -458,17 +458,17 @@ module function parse_primary_expr(parser) result(expr)
 				! the other hand, it might be more optimal to check existence
 				! w/o copying an output val (which could containt big nested dict
 				! types)
-				print *, "text = ", parser%current_text()
+				!print *, "text = ", parser%current_text()
 				!dummy = parser%structs%search(parser%current_text(), dummy_id, io)
 				exists = parser%structs%exists(parser%current_text(), dummy_id, io)
 				!deallocate(dummy%members)
 				!deallocate(dummy%vars)
-				print *, "io = ", io
+				!print *, "io = ", io
 
-				if (io == 0) then
-				!if (exists) then
+				!if (io == 0) then
+				if (exists) then
 					expr = parser%parse_struct_instance()
-					print *, "back in parse_expr.f90"
+					!print *, "back in parse_expr.f90"
 				else
 					! Same as default case below
 					expr = parser%parse_name_expr()
@@ -525,7 +525,7 @@ module function parse_name_expr(parser) result(expr)
 
 	identifier = parser%match(identifier_token)
 
-	print *, 'RHS identifier = ', identifier%text
+	!print *, 'RHS identifier = ', identifier%text
 	!print *, '%current_kind() = ', kind_name(parser%current_kind())
 
 	!print *, 'searching'
@@ -632,8 +632,8 @@ module subroutine parse_dot(parser, expr)
 
 	identifier = parser%match(identifier_token)
 
-	print *, "dot identifier = ", identifier%text
-	print *, "type = ", kind_name(expr%val%type)
+	!print *, "dot identifier = ", identifier%text
+	!print *, "type = ", kind_name(expr%val%type)
 
 	if (expr%val%type /= struct_type) then
 		! TODO: diag.  Skip if unknown_type?  Probably already threw a diag in caller
@@ -641,7 +641,7 @@ module subroutine parse_dot(parser, expr)
 		return
 	end if
 
-	print *, "struct name = ", expr%val%struct_name
+	!print *, "struct name = ", expr%val%struct_name
 
 	!expr%kind = name_expr
 	expr%kind = dot_expr
@@ -658,6 +658,7 @@ module subroutine parse_dot(parser, expr)
 	call parser%structs%search(expr%val%struct_name, struct_id, io, struct)
 
 	if (io /= 0) then
+		! TODO: diag
 		print *, "Error: unreachable struct lookup failure"
 		stop
 	end if
@@ -669,10 +670,9 @@ module subroutine parse_dot(parser, expr)
 		print *, "Error: struct dot member does not exist"
 		stop
 	end if
-	print *, "member id = ", member_id
+	!print *, "member id = ", member_id
 
 	expr%right%id_index = member_id
-	!expr%right%id_index = 2
 
 end subroutine parse_dot
 

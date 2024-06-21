@@ -2676,7 +2676,6 @@ subroutine unit_tests(iostat)
 	npass = 0
 	nfail = 0
 
-	if (.false.) then ! TODO
 	call unit_test_bin_arith  (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)
@@ -2714,7 +2713,6 @@ subroutine unit_tests(iostat)
 	call unit_test_arr_comp   (npass, nfail)
 	call unit_test_arr_op     (npass, nfail)
 	call unit_test_lhs_slc_1  (npass, nfail)
-	end if
 	call unit_test_return     (npass, nfail)
 	call unit_test_struct     (npass, nfail)
 

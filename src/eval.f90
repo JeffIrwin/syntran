@@ -103,22 +103,20 @@ recursive subroutine syntax_eval(node, state, res)
 		! Assign return value
 		call syntax_eval(node%right, state, res)
 
-		print *, 'assigning identifier ', quote(node%identifier%text)
+		!print *, 'assigning identifier ', quote(node%identifier%text)
 
 		state%vars%vals(node%id_index) = res
 
-		print *, "res type = ", kind_name(res%type)
-		print *, "allocated(struct) = ", allocated(res%struct)
-		if (res%type == struct_type) then
-			print *, "size struct = ", size(res%struct)
-			print *, "size struct = ", size( state%vars%vals(node%id_index)%struct )
-
-			do i = 1, size(res%struct)
-				print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
-				print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
-			end do
-
-		end if
+		!print *, "res type = ", kind_name(res%type)
+		!print *, "allocated(struct) = ", allocated(res%struct)
+		!if (res%type == struct_type) then
+		!	print *, "size struct = ", size(res%struct)
+		!	print *, "size struct = ", size( state%vars%vals(node%id_index)%struct )
+		!	do i = 1, size(res%struct)
+		!		print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
+		!		print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
+		!	end do
+		!end if
 
 	case (fn_call_expr)
 		call eval_fn_call(node, state, res)
@@ -439,9 +437,9 @@ subroutine eval_struct_instance(node, state, res)
 	if (allocated(res%struct)) deallocate(res%struct)
 	allocate(res%struct( size(node%members) ))
 
-	print *, 'res type = ', kind_name(res%type)
-	print *, "num members = ", size(node%members)
-	print *, "num members = ", size(res%struct)
+	!print *, 'res type = ', kind_name(res%type)
+	!print *, "num members = ", size(node%members)
+	!print *, "num members = ", size(res%struct)
 
 	do i = 1, size(node%members)
 
@@ -454,32 +452,6 @@ subroutine eval_struct_instance(node, state, res)
 		!node%members(i)%val = res
 
 	end do
-
-	!case default
-	!	! User-defined function
-	!	if (.not. allocated(node%params)) then
-	!		write(*,*) err_int_prefix//'unexpected fn'//color_reset
-	!		call internal_error()
-	!	end if
-	!	!print *, 'fn name = ', node%identifier%text
-	!	!print *, 'fn idx  = ', node%id_index
-	!	!print *, 'node type = ', node%val%type
-	!	!print *, 'size params = ', size(node%params)
-	!	!print *, 'param ids = ', node%params
-	!	! Pass by value (for now, at least).  Arguments are evaluated and
-	!	! their values are copied to the fn parameters
-	!	do i = 1, size(node%params)
-	!		!print *, 'copying param ', i
-	!		call syntax_eval(node%args(i), state, tmp)
-	!		state%vars%vals( node%params(i) ) = tmp
-	!		!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
-	!		!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
-	!		!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
-	!	end do
-	!	call syntax_eval(node%body, state, res)
-	!	!print *, "res rank = ", res%array%rank
-	!	!print *, 'res = ', res%to_str()
-	!end select
 
 end subroutine eval_struct_instance
 

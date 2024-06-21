@@ -29,7 +29,7 @@ module syntran__core_m
 
 	! TODO:
 	!  - structs
-	!    * mvp wip
+	!    * mvp done
 	!    * tbd:
 	!      + why does gfort crash but ifx works?
 	!        > fixed by implementing value_copy()
