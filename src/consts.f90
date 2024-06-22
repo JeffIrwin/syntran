@@ -20,8 +20,8 @@ module syntran__consts_m
 			struct_type          = 97, &
 			struct_instance_expr = 96, &
 			struct_declaration   = 95, &
-		    struct_keyword       = 94, &
-		    dot_token            = 93, &
+			struct_keyword       = 94, &
+			dot_token            = 93, &
 			return_statement     = 92, &
 			return_keyword       = 91, &
 			size_array           = 90, &

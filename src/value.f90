@@ -73,10 +73,6 @@ module syntran__value_m
 
 	!********
 
-	!type struct_val_t
-	!	type(value_t), allocatable :: vals(:)
-	!end type struct_val_t
-
 	type value_t
 		integer :: type = unknown_type
 
@@ -94,8 +90,9 @@ module syntran__value_m
 		! but two types containing each other is bad
 		type(array_t), allocatable :: array
 
-		!type(struct_t), allocatable :: struct
-		!type(struct_val_t), allocatable :: struct
+		! i played with having a separate `struct_val_t` type and having an
+		! array of those, but it works better just having a direct array of
+		! `value_t`'s here instead
 		type(value_t), allocatable :: struct(:)
 		character(len = :), allocatable :: struct_name
 
@@ -134,13 +131,6 @@ recursive subroutine value_copy(dst, src)
 
 	if (debug > 3) print *, 'starting value_copy()'
 
-	!type value_t
-	!	integer :: type = unknown_type
-	!	type(scalar_t) :: sca
-	!	type(array_t), allocatable :: array
-	!	type(value_t), allocatable :: struct(:)
-	!	character(len = :), allocatable :: struct_name
-
 	dst%type = src%type
 	dst%sca  = src%sca
 
@@ -158,9 +148,6 @@ recursive subroutine value_copy(dst, src)
 	if (allocated(src%struct)) then
 		if (.not. allocated(dst%struct)) allocate(dst%struct( size(src%struct) ))
 		dst%struct = src%struct
-		!do i = 1, size(src%struct)
-		!	dst%struct(i) = src%struct(i)
-		!end do
 	else if (allocated(dst%struct)) then
 		deallocate(dst%struct)
 	end if

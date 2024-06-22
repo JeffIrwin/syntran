@@ -1,9 +1,4 @@
 
-let hh_glbl = 0;
-let mm_glbl = 0;
-let ss_glbl = 0.0;
-
-//********
 struct Time
 {
 	hh: i32,
@@ -75,29 +70,6 @@ t2 = d1;
 println("t2.hh = ", t2.hh);
 println("t2.mm = ", t2.mm);
 println("t2.ss = ", t2.ss);
-
-//********
-
-fn set_time_glbl(h: i32, m: i32, s:f32)
-{
-	hh_glbl = h;
-	mm_glbl = m;
-	ss_glbl = s;
-	return;
-}
-
-fn print_time_glbl()
-{
-	println("starting print_time_glbl()");
-	//println(hh_glbl, ":", mm_glbl, ":", ss_glbl);
-	println("h = ", hh_glbl);
-	println("m = ", mm_glbl);
-	println("s = ", ss_glbl);
-	return;
-}
-
-//set_time_glbl(10, 20, 0.030);
-//print_time_glbl();
 
 return 0;
 

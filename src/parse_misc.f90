@@ -378,19 +378,14 @@ module function parse_unit(parser) result(unit)
 		i = i + 1
 		!print *, '    statement ', i
 
-		if (parser%current_kind() == fn_keyword) then
+		select case (parser%current_kind())
+		case (fn_keyword)
 			call members%push(parser%parse_fn_declaration())
-		else if (parser%current_kind() == struct_keyword) then
+		case (struct_keyword)
 			call members%push(parser%parse_struct_declaration())
-
-			!print *, ""
-			!print *, "in parse_misc.f90:"
-			!print *, "parser structs root     = ", parser%structs%dict%root%split_char
-			!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
-
-		else
+		case default
 			call members%push(parser%parse_statement())
-		end if
+		end select
 
 		! Break infinite loops
 		if (parser%pos == pos0) dummy = parser%next()

@@ -257,6 +257,8 @@ module syntran__types_m
 				insert => var_insert, &
 				search => var_search, &
 				push_scope, pop_scope
+
+			! This is required unfortunately
 			procedure, pass(dst) :: copy => vars_copy
 			generic, public :: assignment(=) => copy
 
@@ -278,6 +280,7 @@ module syntran__types_m
 		integer :: num_vars = 0
 
 		contains
+			! This is also required unfortunately
 			procedure, pass(dst) :: copy => struct_copy
 			generic, public :: assignment(=) => copy
 
@@ -294,6 +297,7 @@ module syntran__types_m
 		integer :: id_index
 
 		contains
+			! This is also required unfortunately too
 			procedure, pass(dst) :: copy => struct_ternary_tree_copy
 			generic, public :: assignment(=) => copy
 			!final :: struct_ternary_tree_final
@@ -2384,29 +2388,29 @@ end subroutine struct_ternary_search
 
 !===============================================================================
 
-recursive subroutine ternary_tree_final(node)
-	type(ternary_tree_node_t), intent(inout), allocatable :: node
-		!type(ternary_tree_node_t), allocatable :: left, mid, right
-		!type(value_t), allocatable :: val
-
-	if (.not. allocated(node)) return
-
-	!if (allocated(node%val)) deallocate(node%val)
-
-	if (allocated(node%left )) then
-		call ternary_tree_final(node%left )
-		deallocate(node%left)
-	end if
-	if (allocated(node%mid  )) then
-		call ternary_tree_final(node%mid  )
-		deallocate(node%mid)
-	end if
-	if (allocated(node%right)) then
-		call ternary_tree_final(node%right)
-		deallocate(node%right)
-	end if
-
-end subroutine ternary_tree_final
+!recursive subroutine ternary_tree_final(node)
+!	type(ternary_tree_node_t), intent(inout), allocatable :: node
+!		!type(ternary_tree_node_t), allocatable :: left, mid, right
+!		!type(value_t), allocatable :: val
+!
+!	if (.not. allocated(node)) return
+!
+!	!if (allocated(node%val)) deallocate(node%val)
+!
+!	if (allocated(node%left )) then
+!		call ternary_tree_final(node%left )
+!		deallocate(node%left)
+!	end if
+!	if (allocated(node%mid  )) then
+!		call ternary_tree_final(node%mid  )
+!		deallocate(node%mid)
+!	end if
+!	if (allocated(node%right)) then
+!		call ternary_tree_final(node%right)
+!		deallocate(node%right)
+!	end if
+!
+!end subroutine ternary_tree_final
 
 !===============================================================================
 
@@ -2526,29 +2530,29 @@ end subroutine struct_ternary_tree_copy
 
 !===============================================================================
 
-recursive subroutine struct_ternary_tree_final(src)
-!subroutine struct_ternary_tree_final(src)
-
-	!class(struct_ternary_tree_node_t) :: src
-	type(struct_ternary_tree_node_t) :: src
-
-	if (allocated(src%val)) then
-		deallocate(src%val)
-	end if
-
-	if (allocated(src%left)) then
-		call struct_ternary_tree_final(src%left)
-	end if
-
-	if (allocated(src%mid)) then
-		call struct_ternary_tree_final(src%mid)
-	end if
-
-	if (allocated(src%right)) then
-		call struct_ternary_tree_final(src%right)
-	end if
-
-end subroutine struct_ternary_tree_final
+!recursive subroutine struct_ternary_tree_final(src)
+!!subroutine struct_ternary_tree_final(src)
+!
+!	!class(struct_ternary_tree_node_t) :: src
+!	type(struct_ternary_tree_node_t) :: src
+!
+!	if (allocated(src%val)) then
+!		deallocate(src%val)
+!	end if
+!
+!	if (allocated(src%left)) then
+!		call struct_ternary_tree_final(src%left)
+!	end if
+!
+!	if (allocated(src%mid)) then
+!		call struct_ternary_tree_final(src%mid)
+!	end if
+!
+!	if (allocated(src%right)) then
+!		call struct_ternary_tree_final(src%right)
+!	end if
+!
+!end subroutine struct_ternary_tree_final
 
 !===============================================================================
 

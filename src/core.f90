@@ -31,10 +31,6 @@ module syntran__core_m
 	!  - structs
 	!    * mvp done
 	!    * tbd:
-	!      + why does gfort crash but ifx works?
-	!        > fixed by implementing value_copy()
-	!        > a lot of the other junk that i tried before stumbling onto
-	!          value_copy() can probably be reverted and cleaned up
 	!      + tests
 	!        > moar
 	!      + remove unused things like mems/members copies in various
