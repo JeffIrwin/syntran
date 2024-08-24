@@ -257,12 +257,22 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		! !if (ltype == struct_type) larrtype = expr%val%struct(1)%type
 		! !if (ltype == struct_type) larrtype = expr%val%struct( expr%right%id_index )%type
-		!if (ltype == struct_type) larrtype = expr%val%struct( member%id_index )%type
-		if (is_dot) larrtype = expr%val%struct( member%id_index )%type
+		! !if (ltype == struct_type) larrtype = expr%val%struct( member%id_index )%type
+
+		!if (is_dot) larrtype = expr%val%struct( member%id_index )%type
+		if (is_dot) ltype = expr%val%struct( member%id_index )%type
+
+		! Descend similarly for rarrtype if dot expr
+		if (expr%right%kind == dot_expr) then
+			!rarrtype = expr%right%val%type
+			!rarrtype = expr%right%val%struct(expr%right%id_index)%type
+			rtype = expr%right%val%struct(expr%right%id_index)%type
+		end if
 
 		print *, "larrtype = ", kind_name(larrtype)
 		print *, "rarrtype = ", kind_name(rarrtype)
 		print *, "ltype    = ", kind_name(ltype)
+		print *, "rtype    = ", kind_name(rtype)
 
 		! This check could be moved inside of is_binary_op_allowed, but we would
 		! need to pass parser to it to push diagnostics

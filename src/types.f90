@@ -1574,10 +1574,18 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
 					(left_arr == right) .or. (left == right)
 
-			else if (left == struct_type) then
-				allowed = &
-					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
-					(left_arr == right) .or. (left == right)
+			!! TODO: just combine this with condition above
+			!else if (left == struct_type) then
+			!	allowed = &
+			!		(is_int_type(left_arr) .and. is_int_type(right)) .or. &
+			!		(left_arr == right) .or. (left == right)
+
+			!else if (right == struct_type) then
+			!	! I'm not sure about this one.  It's needed at least for things
+			!	! like `x = t1.m` but I think it's too broad and general
+			!	allowed = &
+			!		(is_int_type(left) .and. is_int_type(right_arr)) .or. &
+			!		(left == right_arr) .or. (left == right)
 
 			else
 				allowed = &
