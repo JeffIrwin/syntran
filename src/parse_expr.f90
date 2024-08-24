@@ -261,6 +261,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		!if (is_dot) larrtype = expr%val%struct( member%id_index )%type
 		if (is_dot) ltype = expr%val%struct( member%id_index )%type
+		!if (expr%kind == dot_expr) ltype = expr%val%struct( member%id_index )%type
 
 		! Descend similarly for rarrtype if dot expr
 		if (expr%right%kind == dot_expr) then
@@ -380,6 +381,14 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 		rarrtype = unknown_type
 		if (ltype == array_type) larrtype = expr%left %val%array%type
 		if (rtype == array_type) rarrtype = expr%right%val%array%type
+
+		if (expr%left%kind == dot_expr) then
+			ltype = expr%left%val%struct(expr%left%id_index)%type
+		end if
+
+		if (expr%right%kind == dot_expr) then
+			rtype = expr%right%val%struct(expr%right%id_index)%type
+		end if
 
 		!print *, 'larrtype = ', kind_name(larrtype)
 		!print *, 'rarrtype = ', kind_name(rarrtype)
