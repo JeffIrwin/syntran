@@ -433,6 +433,7 @@ subroutine eval_struct_instance(node, state, res)
 	!print *, 'struct id_index   = ', node%id_index
 
 	res%type = node%val%type
+	res%struct_name = node%struct_name
 
 	if (allocated(res%struct)) deallocate(res%struct)
 	allocate(res%struct( size(node%members) ))

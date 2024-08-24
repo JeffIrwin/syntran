@@ -35,7 +35,6 @@ module syntran__core_m
 	!        > moar
 	!      + remove unused things like mems/members copies in various
 	!        types/routines
-	!      + LHS dot expr
 	!      + struct type checking
 	!        > check dot member types
 	!        > check mismatches of assigning one struct to another, or passing a

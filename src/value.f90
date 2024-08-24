@@ -483,8 +483,6 @@ recursive function value_to_str(val) result(ans)
 
 		case (struct_type)
 
-			! Why is struct_name empty?
-
 			str_vec = new_char_vector()
 			call str_vec%push(val%struct_name//"{")
 
@@ -493,7 +491,7 @@ recursive function value_to_str(val) result(ans)
 
 				! It would be nice to label each member with its name
 
-				!call str_vec%push( val%struct(i8)%struct_name )
+				!call str_vec%push( val%struct(i8)%struct_name//" = " )
 
 				call str_vec%push( trimw(val%struct(i8)%to_str()) )
 				if (i8 < n) call str_vec%push(", ")

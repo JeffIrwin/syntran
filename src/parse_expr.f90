@@ -103,13 +103,13 @@ recursive module function parse_expr_statement(parser) result(expr)
 				span, identifier%text))
 		end if
 
-		! TODO: this should be unnecessary.  Store the struct name in the value
-		! instead
-		!print *, "right type = ", kind_name(right%val%type)
-		if (right%val%type == struct_type) then
-			!print *, "struct_name = ", right%struct_name
-			expr%struct_name = right%val%struct_name
-		end if
+		!! this should be unnecessary
+		!!print *, "right type = ", kind_name(right%val%type)
+		!if (right%val%type == struct_type) then
+		!	!print *, "struct_name = ", right%struct_name
+		!	!expr%struct_name = right%struct_name
+		!	!expr%val%struct_name = right%struct_name
+		!end if
 
 		return
 
