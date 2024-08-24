@@ -474,14 +474,34 @@ recursive function value_to_str(val) result(ans)
 	!character(len = 16) :: buf16
 
 	integer :: j
-	integer(kind = 8) :: i8, prod
+	integer(kind = 8) :: i8, prod, n
 
 	!type(string_vector_t) :: str_vec
 	type(char_vector_t) :: str_vec
 
 	select case (val%type)
 
-		! TODO: add a case for struct_type
+		case (struct_type)
+
+			! Why is struct_name empty?
+
+			str_vec = new_char_vector()
+			call str_vec%push(val%struct_name//"{")
+
+			n = size(val%struct)
+			do i8 = 1, n
+
+				! It would be nice to label each member with its name
+
+				!call str_vec%push( val%struct(i8)%struct_name )
+
+				call str_vec%push( trimw(val%struct(i8)%to_str()) )
+				if (i8 < n) call str_vec%push(", ")
+
+			end do
+			call str_vec%push("}")
+			!ans = str_vec%v( 1: str_vec%len_ )
+			ans = str_vec%trim()
 
 		case (array_type)
 

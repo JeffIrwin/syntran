@@ -852,6 +852,8 @@ module function parse_struct_instance(parser) result(inst)
 
 	inst%val%struct_name = identifier%text
 
+	!print *, "stuct name = ", inst%struct_name
+
 	! TODO: each struct should get a different sub type (like array_type) for
 	! type checking, so you don't try to assign one type of struct to another
 	! struct
