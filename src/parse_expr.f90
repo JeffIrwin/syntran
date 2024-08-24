@@ -152,6 +152,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 			!expr%val%type = var%type
 
 			call parser%parse_dot(expr)
+			if (.not. allocated(expr%right)) return
 			member = expr%right  ! swap because this will be re-used as RHS of whole expr
 
 			allocate(expr%member)
