@@ -124,11 +124,11 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! %pos is the lexer token index, %current_pos() is the character index!
 		pos0 = parser%pos
 
-		print *, "assign expr"
+		!print *, "assign expr"
 
 		identifier = parser%match(identifier_token)
 
-		print *, "ident = ", identifier%text
+		!print *, "ident = ", identifier%text
 
 		! Parse array subscript indices if present
 
@@ -141,7 +141,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		span1 = parser%current_pos() - 1
 
 		if (parser%peek_kind(0) == dot_token) then
-			print *, "dot token"
+			!print *, "dot token"
 			is_dot = .true.
 
 			!call parser%vars%search(identifier%text, id_index, io, var)
@@ -157,21 +157,21 @@ recursive module function parse_expr_statement(parser) result(expr)
 			allocate(expr%member)
 			expr%member = member ! TODO: could get rid of local member var
 
-			print *, "index = ", expr%right%id_index
-			print *, "mndex = ", member%id_index
+			!print *, "index = ", expr%right%id_index
+			!print *, "mndex = ", member%id_index
 
 		end if
 
 		if (.not. is_assignment_op(parser%current_kind())) then
 			! Rewind and do the default case (same as outside the assignment if
 			! block).  Could use goto or probably refactor somehow
-			print *, "rewinding"
+			!print *, "rewinding"
 			parser%pos = pos0
 			!print *, 'pos0 = ', pos0
 			expr = parser%parse_expr()
 			return
 		end if
-		print *, 'parsing assignment'
+		!print *, 'parsing assignment'
 
 		op    = parser%next()
 		right = parser%parse_expr_statement()
@@ -187,7 +187,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		expr%op    = op
 		expr%right = right
 
-		print *, 'expr ident text = ', expr%identifier%text
+		!print *, 'expr ident text = ', expr%identifier%text
 		!print *, 'op = ', op%text
 
 		! Get the identifier's type and index from the dict and check that it
@@ -269,16 +269,16 @@ recursive module function parse_expr_statement(parser) result(expr)
 			rtype = expr%right%val%struct(expr%right%id_index)%type
 		end if
 
-		print *, "larrtype = ", kind_name(larrtype)
-		print *, "rarrtype = ", kind_name(rarrtype)
-		print *, "ltype    = ", kind_name(ltype)
-		print *, "rtype    = ", kind_name(rtype)
+		!print *, "larrtype = ", kind_name(larrtype)
+		!print *, "rarrtype = ", kind_name(rarrtype)
+		!print *, "ltype    = ", kind_name(ltype)
+		!print *, "rtype    = ", kind_name(rtype)
 
 		! This check could be moved inside of is_binary_op_allowed, but we would
 		! need to pass parser to it to push diagnostics
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
 
-			print *, 'bin not allowed in parse_expr_statement'
+			!print *, 'bin not allowed in parse_expr_statement'
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -386,7 +386,7 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
 
-			print *, 'bin not allowed in parse_expr'
+			!print *, 'bin not allowed in parse_expr'
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -673,7 +673,7 @@ module subroutine parse_dot(parser, expr)
 
 	end if
 
-	print *, "parsing dot"
+	!print *, "parsing dot"
 
 	dot  = parser%match(dot_token)
 
@@ -720,11 +720,11 @@ module subroutine parse_dot(parser, expr)
 		print *, err_prefix//"struct dot member does not exist"//color_reset
 		stop
 	end if
-	print *, "member id = ", member_id
-	print *, "mem type  = ", kind_name(member%type)
+	!print *, "member id = ", member_id
+	!print *, "mem type  = ", kind_name(member%type)
 
 	expr%right%id_index = member_id
-	print *, "index = ", expr%right%id_index
+	!print *, "index = ", expr%right%id_index
 
 end subroutine parse_dot
 

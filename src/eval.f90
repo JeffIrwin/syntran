@@ -428,7 +428,7 @@ subroutine eval_struct_instance(node, state, res)
 
 	integer :: i
 
-	print *, 'eval struct_instance_expr'
+	!print *, 'eval struct_instance_expr'
 	!print *, 'struct identifier = ', node%identifier%text
 	!print *, 'struct id_index   = ', node%id_index
 
@@ -447,7 +447,7 @@ subroutine eval_struct_instance(node, state, res)
 		!call syntax_eval(node%members(i), state, tmp)
 		!res%struct(i) = tmp
 
-		print *, "mem[", str(i), "] = ", res%struct(i)%to_str()
+		!print *, "mem[", str(i), "] = ", res%struct(i)%to_str()
 		!res = node%val%struct( node%right%id_index )
 		!node%members(i)%val = res
 
@@ -1044,17 +1044,17 @@ subroutine eval_assignment_expr(node, state, res)
 
 	type(value_t) :: array_val, tmp
 
-	print *, "eval assignment_expr"
-	print *, "node identifier = ", node%identifier%text
-	print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
+	!print *, "eval assignment_expr"
+	!print *, "node identifier = ", node%identifier%text
+	!print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
 	!if (state%vars%vals(node%id_index)%type == struct_type) then
-	if (allocated( node%member )) then
-		print *, "mem index = ", node%member%id_index
-	end if
+	!if (allocated( node%member )) then
+	!	print *, "mem index = ", node%member%id_index
+	!end if
 
 	!if (state%vars%vals(node%id_index)%type == struct_type) then
 	if (allocated( node%member )) then
-		print *, "assign dot member"
+		!print *, "assign dot member"
 
 		call syntax_eval(node%right, state, res)
 
