@@ -2505,6 +2505,12 @@ subroutine unit_test_struct(npass, nfail)
 			    //'let d = D{y=1912, m="Apr", d=7*2};' &
 			    //'d.d += 3;' &
 			    //'d.d;', quiet) == '17', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &
+			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'d.m + "il";', quiet) == 'April', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &
+			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'"month " + d.m;', quiet) == 'month Apr', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

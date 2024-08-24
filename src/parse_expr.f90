@@ -175,6 +175,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		op    = parser%next()
 		right = parser%parse_expr_statement()
+		!print *, "1a right index = ", right%right%id_index
 
 		! regular vs compound assignment exprs are denoted by the op.  all of
 		! them are the same kind
@@ -267,7 +268,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 		if (expr%right%kind == dot_expr) then
 			!rarrtype = expr%right%val%type
 			!rarrtype = expr%right%val%struct(expr%right%id_index)%type
-			rtype = expr%right%val%struct(expr%right%id_index)%type
+			!print *, "1 right index = ", expr%right%right%id_index
+			rtype = expr%right%val%struct(expr%right%right%id_index)%type
 		end if
 
 		!print *, "larrtype = ", kind_name(larrtype)
@@ -383,11 +385,17 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 		if (rtype == array_type) rarrtype = expr%right%val%array%type
 
 		if (expr%left%kind == dot_expr) then
-			ltype = expr%left%val%struct(expr%left%id_index)%type
+			! The index that I need is nested in an insane way
+
+			!print *, "left index = ", expr%left%id_index
+			!print *, "left index = ", expr%left%right%id_index
+			ltype = expr%left%val%struct(expr%left%right%id_index)%type
 		end if
 
 		if (expr%right%kind == dot_expr) then
-			rtype = expr%right%val%struct(expr%right%id_index)%type
+			!print *, "2 right index = ", expr%right%id_index
+			!rtype = expr%right%val%struct(expr%right%id_index)%type
+			rtype = expr%right%val%struct(expr%right%right%id_index)%type
 		end if
 
 		!print *, 'larrtype = ', kind_name(larrtype)
