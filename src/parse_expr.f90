@@ -24,14 +24,20 @@ recursive module function parse_expr_statement(parser) result(expr)
 	!********
 
 	integer :: io, ltype, rtype, pos0, span0, span1, lrank, rrank, larrtype, &
-		rarrtype
+		rarrtype, id_index
 
-	type(syntax_node_t) :: right
+	logical :: is_dot
+
+	type(syntax_node_t) :: right, member
 	type(syntax_token_t) :: let, identifier, op
 
 	type(text_span_t) :: span
 
+	type(value_t) :: var
+
 	!print *, 'starting parse_expr_statement()'
+
+	is_dot = .false.
 
 	! TODO: provide a way to declare variable types without initializing them?
 	! Rust discourages mutability, instead preferring patterns like this:
@@ -118,29 +124,54 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! %pos is the lexer token index, %current_pos() is the character index!
 		pos0 = parser%pos
 
-		!print *, 'assign expr'
+		print *, "assign expr"
 
 		identifier = parser%match(identifier_token)
+
+		print *, "ident = ", identifier%text
 
 		! Parse array subscript indices if present
 
 		! Subscript can appear in assignment expr but not let expr, because let
-		! must initialize the whole array
+		! must initialize the whole array.  Similarly for dot member access
 		span0 = parser%current_pos()
 		call parser%parse_subscripts(expr)
 
 		if (size(expr%lsubscripts) <= 0) deallocate(expr%lsubscripts)
 		span1 = parser%current_pos() - 1
 
+		if (parser%peek_kind(0) == dot_token) then
+			print *, "dot token"
+			is_dot = .true.
+
+			!call parser%vars%search(identifier%text, id_index, io, var)
+			call parser%vars%search(identifier%text, id_index, io, var)
+
+			!deallocate(expr%val)
+			expr%val = var
+			!expr%val%type = var%type
+
+			call parser%parse_dot(expr)
+			member = expr%right  ! swap because this will be re-used as RHS of whole expr
+
+			allocate(expr%member)
+			expr%member = member ! TODO: could get rid of local member var
+
+			print *, "index = ", expr%right%id_index
+			print *, "mndex = ", member%id_index
+
+		end if
+
 		if (.not. is_assignment_op(parser%current_kind())) then
 			! Rewind and do the default case (same as outside the assignment if
 			! block).  Could use goto or probably refactor somehow
+			print *, "rewinding"
 			parser%pos = pos0
 			!print *, 'pos0 = ', pos0
 			expr = parser%parse_expr()
 			return
 		end if
-		!print *, 'parsing assignment'
+		print *, 'parsing assignment'
 
 		op    = parser%next()
 		right = parser%parse_expr_statement()
@@ -149,14 +180,14 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! them are the same kind
 		expr%kind = assignment_expr
 
-		allocate(expr%right)
+		if (.not. allocated(expr%right)) allocate(expr%right)
 
 		expr%identifier = identifier
 
 		expr%op    = op
 		expr%right = right
 
-		!print *, 'expr ident text = ', expr%identifier%text
+		print *, 'expr ident text = ', expr%identifier%text
 		!print *, 'op = ', op%text
 
 		! Get the identifier's type and index from the dict and check that it
@@ -218,18 +249,26 @@ recursive module function parse_expr_statement(parser) result(expr)
 		ltype = expr%val%type
 		rtype = expr%right%val%type
 
+		! TODO: rename as *subtype instead of *arrtype
 		larrtype = unknown_type
 		rarrtype = unknown_type
 		if (ltype == array_type) larrtype = expr%val%array%type
 		if (rtype == array_type) rarrtype = expr%right%val%array%type
-		!print *, 'larrtype = ', kind_name(larrtype)
-		!print *, 'rarrtype = ', kind_name(rarrtype)
+
+		! !if (ltype == struct_type) larrtype = expr%val%struct(1)%type
+		! !if (ltype == struct_type) larrtype = expr%val%struct( expr%right%id_index )%type
+		!if (ltype == struct_type) larrtype = expr%val%struct( member%id_index )%type
+		if (is_dot) larrtype = expr%val%struct( member%id_index )%type
+
+		print *, "larrtype = ", kind_name(larrtype)
+		print *, "rarrtype = ", kind_name(rarrtype)
+		print *, "ltype    = ", kind_name(ltype)
 
 		! This check could be moved inside of is_binary_op_allowed, but we would
 		! need to pass parser to it to push diagnostics
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
 
-			!print *, 'bin not allowed in parse_expr_statement'
+			print *, 'bin not allowed in parse_expr_statement'
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -337,7 +376,7 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
 
-			!print *, 'bin not allowed in parse_expr'
+			print *, 'bin not allowed in parse_expr'
 
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
@@ -637,7 +676,8 @@ module subroutine parse_dot(parser, expr)
 
 	if (expr%val%type /= struct_type) then
 		! TODO: diag.  Skip if unknown_type?  Probably already threw a diag in caller
-		print *, "Error: variable in dot expr is not a struct"
+		print *, err_prefix//"variable in dot expr is not a struct"//color_reset
+		print *, "type = ", kind_name(expr%val%type)
 		return
 	end if
 
@@ -659,7 +699,7 @@ module subroutine parse_dot(parser, expr)
 
 	if (io /= 0) then
 		! TODO: diag
-		print *, "Error: unreachable struct lookup failure"
+		print *, err_prefix//"unreachable struct lookup failure"//color_reset
 		stop
 	end if
 
@@ -667,12 +707,14 @@ module subroutine parse_dot(parser, expr)
 	call struct%vars%search(identifier%text, member_id, io, member)
 	if (io /= 0) then
 		! TODO: diag
-		print *, "Error: struct dot member does not exist"
+		print *, err_prefix//"struct dot member does not exist"//color_reset
 		stop
 	end if
-	!print *, "member id = ", member_id
+	print *, "member id = ", member_id
+	print *, "mem type  = ", kind_name(member%type)
 
 	expr%right%id_index = member_id
+	print *, "index = ", expr%right%id_index
 
 end subroutine parse_dot
 

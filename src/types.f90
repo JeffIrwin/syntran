@@ -156,7 +156,7 @@ module syntran__types_m
 		! allocated
 
 		type(syntax_node_t), allocatable :: left, right, members(:), &
-			condition, if_clause, else_clause, body, array
+			condition, if_clause, else_clause, body, array, member
 
 		! Array expression syntax nodes.  TODO: rename lbound, ubound to avoid
 		! conflicts w/ Fortran keywords
@@ -918,6 +918,13 @@ recursive subroutine syntax_node_copy(dst, src)
 		deallocate(dst%members)
 	end if
 
+	if (allocated(src%member)) then
+		if (.not. allocated(dst%member)) allocate(dst%member)
+		dst%member = src%member
+	else if (allocated(dst%member)) then
+		deallocate(dst%member)
+	end if
+
 	if (debug > 3) print *, 'done syntax_node_copy()'
 
 end subroutine syntax_node_copy
@@ -1566,10 +1573,17 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = &
 					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
 					(left_arr == right) .or. (left == right)
+
+			else if (left == struct_type) then
+				allowed = &
+					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
+					(left_arr == right) .or. (left == right)
+
 			else
 				allowed = &
 					(is_int_type(left) .and. is_int_type(right)) .or. &
 					(left == right)
+
 			end if
 
 		case (eequals_token, bang_equals_token)

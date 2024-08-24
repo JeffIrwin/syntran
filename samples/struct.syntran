@@ -61,6 +61,7 @@ println("t2.mm = ", t2.mm);
 println("t2.ss = ", t2.ss);
 
 d1 = Date{y = 1900 + 45, m = "Ma" + "y", d = 5*4};
+d1.m = "June";
 println("d1.y = ", d1.y);
 println("d1.m = ", d1.m);
 println("d1.d = ", d1.d);

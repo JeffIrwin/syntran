@@ -40,6 +40,7 @@ module syntran__core_m
 	!        > check dot member types
 	!        > check mismatches of assigning one struct to another, or passing a
 	!          struct to a fn
+	!      + improved to_str() conversion with labels of struct name and member names
 	!      + struct fn args
 	!      + struct fn return values
 	!      + nested structs

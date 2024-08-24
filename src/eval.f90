@@ -1044,7 +1044,35 @@ subroutine eval_assignment_expr(node, state, res)
 
 	type(value_t) :: array_val, tmp
 
-	if (.not. allocated(node%lsubscripts)) then
+	print *, "eval assignment_expr"
+	print *, "node identifier = ", node%identifier%text
+	print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
+	!if (state%vars%vals(node%id_index)%type == struct_type) then
+	if (allocated( node%member )) then
+		print *, "mem index = ", node%member%id_index
+	end if
+
+	!if (state%vars%vals(node%id_index)%type == struct_type) then
+	if (allocated( node%member )) then
+		print *, "assign dot member"
+
+		call syntax_eval(node%right, state, res)
+
+		! !call compound_assign(state%vars%vals(node%id_index), res, node%op)
+		! !res = state%vars%vals(node%id_index)
+		! !res = state%vars%vals(node%id_index)%struct( node%right%id_index )
+
+		!state%vars%vals(node%id_index)%struct( node%member%id_index ) = res
+		call compound_assign( &
+			state%vars%vals(node%id_index)%struct( node%member%id_index ), &
+			res, &
+			node%op &
+		)
+
+		!res = state%vars%vals(node%id_index)
+		res = state%vars%vals(node%id_index)%struct( node%member%id_index )
+
+	else if (.not. allocated(node%lsubscripts)) then
 
 		!! This deallocation will cause a crash when an array appears on both
 		!! the LHS and RHS of fn_call assignment, e.g. `dv = diff_(dv, i)` in
