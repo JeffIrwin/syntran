@@ -2527,6 +2527,34 @@ subroutine unit_test_struct(npass, nfail)
 			eval( 'struct C{r:i32, g:i32, b:i32}' &           ! 16
 			    //'let c = C{r = 32, g = 64, b = 128};' &
 			    //'c.r + c.g + c.b;', quiet) == '224', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 17
+			    //'fn x_year(dd: D): i64 {return dd.y;}' &
+			    //'let d = D{y=1884, m="Apr", d=7*2};' &
+			    //'x_year(d);', quiet) == '1884', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 18
+			    //'fn x_year(dd: D): i64 {return dd.y;}' &
+			    //'let d = D{y=1776, m="Jul", d=3+1};' &
+			    //'x_year(d);', quiet) == '1776', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 19
+			    //'fn x_day(dd: D): i32 {return dd.d;}' &
+			    //'let d = D{y=1884, m="Apr", d=7*2};' &
+			    //'x_day(d);', quiet) == '14', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 20
+			    //'fn x_day(dd: D): i32 {return dd.d;}' &
+			    //'let d = D{y=1776, m="Jul", d=3+1};' &
+			    //'x_day(d);', quiet) == '4', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 21
+			    //'fn x_mon(dd: D): str {return dd.m;}' &
+			    //'let d = D{y=1884, m="Apr", d=7*2};' &
+			    //'x_mon(d);', quiet) == 'Apr', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 22
+			    //'fn x_mon(dd: D): str {return dd.m;}' &
+			    //'let d = D{y=1776, m="Jul", d=3+1};' &
+			    //'x_mon(d);', quiet) == 'Jul', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 23
+			    //'let glbl = D{y=i64(1883), m="Apr", d=7*2};' &
+			    //'fn x_year(): i64 {return glbl.y;}' &
+			    //'x_year();', .false.) == '1883', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
