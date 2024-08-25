@@ -43,7 +43,10 @@ recursive subroutine syntax_eval(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	!type(value_t), intent(inout) :: res
+	! I experimented with making res intent(inout) in commit 993345ad, but it
+	! had a negative imact on perf, making gfortran about twice as slow on aoc
+	! tests, likely due to the extra work of checking `if allocated(...)
+	! deallocate` in lots of places
 	type(value_t), intent(out) :: res
 
 	!********
