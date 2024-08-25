@@ -2469,52 +2469,62 @@ subroutine unit_test_struct(npass, nfail)
 
 	tests = &
 		[   &
-			eval('struct D{y:i64, m:str, d:i32} let d = D{y=1912, m="Apr", d=14}; d.y;', quiet) == '1912', &
-			eval('struct D{y:i64, m:str, d:i32} let d = D{y=1912, m="Apr", d=14}; d.m;', quiet) == 'Apr', &
-			eval('struct D{y:i64, m:str, d:i32} let d = D{y=1912, m="Apr", d=14}; d.d;', quiet) == '14', &
-			eval('struct D{y:i64, m:str, d:i32} let d = D{y=1900+12, m="Apr", d=14}; d.y;', quiet) == '1912', &
-			eval('struct D{y:i64, m:str, d:i32} let d = D{y=1912, m="Apr", d=7*2}; let e=d; e.d;', quiet) == '14', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &            ! 1
+				//'let d = D{y=1912, m="Apr", d=14};' &
+				//'d.y;', quiet) == '1912', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &            ! 2
+				//'let d = D{y=1912, m="Apr", d=14};' &
+				//'d.m;', quiet) == 'Apr', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &            ! 3
+				//'let d = D{y=1912, m="Apr", d=14};' &
+				//'d.d;', quiet) == '14', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &            ! 4
+				//'let d = D{y=1900+12, m="Apr", d=14};' &
+				//'d.y;', quiet) == '1912', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &            ! 5
+				//'let d = D{y=1912, m="Apr", d=7*2};' &
+				//'let e=d; e.d;', quiet) == '14', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 6
 			    //'let d = D{y=1912, m="Apr", d=7*2};' &
 			    //'let e=d;' &
 			    //'e = D{y=1945, m="May", d=5*3};' &
 			    //'e.d;', quiet) == '15', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 7
 			    //'let d = D{y=1912, m="Apr", d=7*2};' &
 			    //'let e=d;' &
 			    //'e = D{y=1945, m="May", d=5*3};' &
 			    //'d.d;', quiet) == '14', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 8
 			    //'let d = D{y=1912, m="Apr", d=7*2};' &
 			    //'let x = 42;' &
 			    //'x = d.d;' &
 			    //'x;', quiet) == '14', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 9
 			    //'let d = D{y=1912, m="Apr", d=7*2};' &
 			    //'let x = d.y + 5;' &
 			    //'x;', quiet) == '1917', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 10
 			    //'let d = D{y=1912, m="Apr", d=7*2};' &
 			    //'let x = 6 + d.y;' &
 			    //'x;', quiet) == '1918', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 11
 			    //'let d = D{y=1912, m="Apr", d=7*2};' &
 			    //'d.d = 18;' &
 			    //'d.d;', quiet) == '18', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 12
 			    //'let d = D{y=1912, m="Apr", d=7*2};' &
 			    //'d.d += 3;' &
 			    //'d.d;', quiet) == '17', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 13
 			    //'let d = D{y=1912, m="Apr", d=7*2};' &
 			    //'d.m + "il";', quiet) == 'April', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 14
 			    //'let d = D{y=1912, m="Apr", d=7*2};' &
 			    //'"month " + d.m;', quiet) == 'month Apr', &
-			eval( 'struct C{r:i32, g:i32, b:i32}' &
+			eval( 'struct C{r:i32, g:i32, b:i32}' &           ! 15
 			    //'let c = C{r = 32, g = 64, b = 128};' &
 			    //'max(c.r, c.g);', quiet) == '64', &
-			eval( 'struct C{r:i32, g:i32, b:i32}' &
+			eval( 'struct C{r:i32, g:i32, b:i32}' &           ! 16
 			    //'let c = C{r = 32, g = 64, b = 128};' &
 			    //'c.r + c.g + c.b;', quiet) == '224', &
 			.false.  & ! so I don't have to bother w/ trailing commas
@@ -2522,6 +2532,7 @@ subroutine unit_test_struct(npass, nfail)
 
 	! Trim dummy false element
 	tests = tests(1: size(tests) - 1)
+	!print *, "number of struct tests = ", size(tests)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
