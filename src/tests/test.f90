@@ -2469,57 +2469,57 @@ subroutine unit_test_struct(npass, nfail)
 
 	tests = &
 		[   &
-			eval( 'struct D{y:i64, m:str, d:i32}' &            ! 1
-				//'let d = D{y=1912, m="Apr", d=14};' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 1
+				//'let d = D{y=i64(1912), m="Apr", d=14};' &
 				//'d.y;', quiet) == '1912', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &            ! 2
-				//'let d = D{y=1912, m="Apr", d=14};' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 2
+				//'let d = D{y=i64(1912), m="Apr", d=14};' &
 				//'d.m;', quiet) == 'Apr', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &            ! 3
-				//'let d = D{y=1912, m="Apr", d=14};' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 3
+				//'let d = D{y=i64(1912), m="Apr", d=14};' &
 				//'d.d;', quiet) == '14', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &            ! 4
-				//'let d = D{y=1900+12, m="Apr", d=14};' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 4
+				//'let d = D{y=i64(1900)+12, m="Apr", d=14};' &
 				//'d.y;', quiet) == '1912', &
-			eval( 'struct D{y:i64, m:str, d:i32}' &            ! 5
-				//'let d = D{y=1912, m="Apr", d=7*2};' &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 5
+				//'let d = D{y=i64(1912), m="Apr", d=7*2};' &
 				//'let e=d; e.d;', quiet) == '14', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 6
-			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
 			    //'let e=d;' &
-			    //'e = D{y=1945, m="May", d=5*3};' &
+			    //'e = D{y=i64(1945), m="May", d=5*3};' &
 			    //'e.d;', quiet) == '15', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 7
-			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
 			    //'let e=d;' &
-			    //'e = D{y=1945, m="May", d=5*3};' &
+			    //'e = D{y=i64(1945), m="May", d=5*3};' &
 			    //'d.d;', quiet) == '14', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 8
-			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
 			    //'let x = 42;' &
 			    //'x = d.d;' &
 			    //'x;', quiet) == '14', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 9
-			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
 			    //'let x = d.y + 5;' &
 			    //'x;', quiet) == '1917', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 10
-			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
 			    //'let x = 6 + d.y;' &
 			    //'x;', quiet) == '1918', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 11
-			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
 			    //'d.d = 18;' &
 			    //'d.d;', quiet) == '18', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 12
-			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
 			    //'d.d += 3;' &
 			    //'d.d;', quiet) == '17', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 13
-			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
 			    //'d.m + "il";', quiet) == 'April', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 14
-			    //'let d = D{y=1912, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
 			    //'"month " + d.m;', quiet) == 'month Apr', &
 			eval( 'struct C{r:i32, g:i32, b:i32}' &           ! 15
 			    //'let c = C{r = 32, g = 64, b = 128};' &
@@ -2529,27 +2529,27 @@ subroutine unit_test_struct(npass, nfail)
 			    //'c.r + c.g + c.b;', quiet) == '224', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 17
 			    //'fn x_year(dd: D): i64 {return dd.y;}' &
-			    //'let d = D{y=1884, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1884), m="Apr", d=7*2};' &
 			    //'x_year(d);', quiet) == '1884', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 18
 			    //'fn x_year(dd: D): i64 {return dd.y;}' &
-			    //'let d = D{y=1776, m="Jul", d=3+1};' &
+			    //'let d = D{y=i64(1776), m="Jul", d=3+1};' &
 			    //'x_year(d);', quiet) == '1776', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 19
 			    //'fn x_day(dd: D): i32 {return dd.d;}' &
-			    //'let d = D{y=1884, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1884), m="Apr", d=7*2};' &
 			    //'x_day(d);', quiet) == '14', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 20
 			    //'fn x_day(dd: D): i32 {return dd.d;}' &
-			    //'let d = D{y=1776, m="Jul", d=3+1};' &
+			    //'let d = D{y=i64(1776), m="Jul", d=3+1};' &
 			    //'x_day(d);', quiet) == '4', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 21
 			    //'fn x_mon(dd: D): str {return dd.m;}' &
-			    //'let d = D{y=1884, m="Apr", d=7*2};' &
+			    //'let d = D{y=i64(1884), m="Apr", d=7*2};' &
 			    //'x_mon(d);', quiet) == 'Apr', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 22
 			    //'fn x_mon(dd: D): str {return dd.m;}' &
-			    //'let d = D{y=1776, m="Jul", d=3+1};' &
+			    //'let d = D{y=i64(1776), m="Jul", d=3+1};' &
 			    //'x_mon(d);', quiet) == 'Jul', &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 23
 			    //'let glbl = D{y=i64(1883), m="Apr", d=7*2};' &
