@@ -1209,9 +1209,17 @@ end function new_token
 
 !===============================================================================
 
-integer function lookup_type(name) result(type)
+integer function lookup_type(name, structs, struct) result(type)
 
 	character(len = *), intent(in) :: name
+
+	type(structs_t), intent(in) :: structs
+
+	type(struct_t), intent(out) :: struct
+
+	!********
+
+	integer :: io, struct_id
 
 	! Immo also has an "any" type.  Should I allow that?
 
@@ -1231,7 +1239,18 @@ integer function lookup_type(name) result(type)
 			type = str_type
 
 		case default
-			type = unknown_type
+
+			!call parser%structs%search(identifier%text, struct_id, io, struct)
+			call structs%search(name, struct_id, io, struct)
+			!print *, "struct search io = ", io
+
+			if (io == 0) then
+				type = struct_type
+				!print *, "struct num vars = ", struct%num_vars
+			else
+				type = unknown_type
+			end if
+
 	end select
 	!print *, 'lookup_type = ', type
 

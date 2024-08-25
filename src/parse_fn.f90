@@ -378,6 +378,8 @@ module function parse_fn_declaration(parser) result(decl)
 	type(logical_vector_t) :: is_array
 	type(integer_vector_t) :: ranks
 
+	type(struct_t) :: struct
+
 	type(syntax_node_t) :: body
 	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, &
 		name, comma, dummy
@@ -472,7 +474,8 @@ module function parse_fn_declaration(parser) result(decl)
 
 		fn%params(i)%name = names%v(i)%s
 
-		itype = lookup_type( types%v(i)%s )
+		itype = lookup_type(types%v(i)%s, parser%structs, struct)
+		!print *, "itype = ", itype
 		if (itype == unknown_type) then
 
 			! TODO: make an array of pos's for each param to underline
@@ -483,6 +486,29 @@ module function parse_fn_declaration(parser) result(decl)
 			call parser%diagnostics%push(err_bad_type( &
 				parser%context(), span, types%v(i)%s))
 				!parser%contexts%v(name%unit_), span, types%v(i)%s))
+
+		end if
+
+		if (itype == struct_type) then
+			!print *, "struct_type"
+			!print *, "struct num vars = ", struct%num_vars
+			!print *, "struct name = ", types%v(i)%s
+
+			!! Save everything in the inst syntax node
+			!inst%kind = struct_instance_expr
+			!inst%val%type = struct_type
+			!allocate(inst%val%struct( struct%num_vars ))
+			!allocate(inst%members   ( struct%num_vars ))
+			!inst%struct_name = identifier%text
+			!inst%val%struct_name = identifier%text
+
+			!fn%params(i)%type = struct_type
+			!allocate(fn%params(i)%struct( struct%num_vars ))
+			!fn%params(i)%struct_name = types%v(i)%s
+
+			val%struct_name = types%v(i)%s
+			allocate(val%struct( struct%num_vars ))
+			!val = struct
 
 		end if
 
@@ -536,7 +562,7 @@ module function parse_fn_declaration(parser) result(decl)
 		call parser%parse_type(type_text, rank)
 		pos2 = parser%current_pos()
 
-		itype = lookup_type(type_text)
+		itype = lookup_type(type_text, parser%structs, struct)
 
 		if (itype == unknown_type) then
 			span = new_span(pos1, pos2 - pos1 + 1)
@@ -617,7 +643,7 @@ module function parse_struct_declaration(parser) result(decl)
 	integer :: itype, i, io, pos0, pos1, pos2, rank
 
 	!type(struct_t), save :: struct
-	type(struct_t) :: struct
+	type(struct_t) :: struct, dummy_struct
 
 	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
 		colon, name, struct_kw
@@ -719,7 +745,8 @@ module function parse_struct_declaration(parser) result(decl)
 
 		struct%members(i)%name = names%v(i)%s
 
-		itype = lookup_type( types%v(i)%s )
+		! TODO: consume dummy_struct for nested structs
+		itype = lookup_type(types%v(i)%s, parser%structs, dummy_struct)
 		if (itype == unknown_type) then
 
 			!span = new_span(pos1, pos2 - pos1 - 1)
@@ -767,7 +794,7 @@ module function parse_struct_declaration(parser) result(decl)
 		! TODO: check for duplicate member names
 
 		!print *, "insert var type ", kind_name(val%type)
-		print *, "insert var name = ", struct%members(i)%name
+		!print *, "insert var name = ", struct%members(i)%name
 		!call parser%vars%insert(struct%members(i)%name, val, parser%num_vars)
 		!call struct%vars%insert(struct%members(i)%name, val, struct%num_vars)
 
@@ -776,7 +803,7 @@ module function parse_struct_declaration(parser) result(decl)
 		!print *, 'io = ', io
 		if (io /= exit_success) then
 			! TODO: diag
-			print *, "Error: re-declared struct member"
+			write(*,*) err_prefix//"re-declared struct member"//color_reset
 			!span = new_span(identifier%pos, len(identifier%text))
 			!call parser%diagnostics%push( &
 			!	err_redeclare_var(parser%context(), &
@@ -832,7 +859,7 @@ module function parse_struct_instance(parser) result(inst)
 
 	identifier = parser%match(identifier_token)
 
-	print *, "parsing struct instance of identifier = ", identifier%text
+	!print *, "parsing struct instance of identifier = ", identifier%text
 
 	!print *, ""
 	!print *, "in parse_struct_instance():"
@@ -863,7 +890,7 @@ module function parse_struct_instance(parser) result(inst)
 
 	inst%val%struct_name = identifier%text
 
-	!print *, "stuct name = ", inst%struct_name
+	!print *, "struct name = ", inst%struct_name
 
 	! TODO: each struct should get a different sub type (like array_type) for
 	! type checking, so you don't try to assign one type of struct to another
@@ -879,7 +906,7 @@ module function parse_struct_instance(parser) result(inst)
 		equals = parser%match(equals_token)
 		mem    = parser%parse_expr()
 
-		print *, "name%text = ", name%text
+		!print *, "name%text = ", name%text
 
 		!call struct%vars%insert(struct%members(i)%name, val, &
 		!	struct%num_vars, io, overwrite = .false.)
@@ -896,7 +923,7 @@ module function parse_struct_instance(parser) result(inst)
 
 		if (io /= 0) then
 			! TODO: diag
-			print *, "Error: member does not exist in struct"
+			write(*,*) err_prefix//"member does not exist in struct"//color_reset
 			stop
 		end if
 
@@ -924,7 +951,7 @@ module function parse_struct_instance(parser) result(inst)
 	!print *, "size = ", mems%len_
 	if (mems%len_ /= struct%num_vars) then
 		! TODO: diag
-		print *, "Error: struct instance does not have the right number of members"
+		write(*,*) err_prefix//"struct instance does not have the right number of members"//color_reset
 		stop
 	end if
 

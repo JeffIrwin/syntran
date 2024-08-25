@@ -2460,7 +2460,7 @@ subroutine unit_test_struct(npass, nfail)
 
 	character(len = *), parameter :: label = 'structs'
 
-	logical, parameter :: quiet = .false.
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'

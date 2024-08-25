@@ -31,6 +31,8 @@ module syntran__core_m
 	!  - structs
 	!    * mvp done
 	!    * tbd:
+	!      + make aoc 2023 day 2 struct version as a test
+	!      + unary ops on dot exprs
 	!      + tests
 	!        > moar
 	!      + remove unused things like mems/members copies in various
@@ -40,7 +42,6 @@ module syntran__core_m
 	!        > check mismatches of assigning one struct to another, or passing a
 	!          struct to a fn
 	!      + improved to_str() conversion with labels of struct name and member names
-	!      + struct fn args
 	!      + struct fn return values
 	!      + nested structs
 	!      + structs of arrays

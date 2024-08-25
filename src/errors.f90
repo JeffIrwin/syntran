@@ -59,10 +59,10 @@ function err_bad_int(context, span, num) result(err)
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: num
-	err = err_prefix//'invalid i32 integer `'//num &
+	err = err_prefix//'bad i32 integer `'//num &
 		//'` does not fit in 32 bits' &
 		//underline(context, span) &
-		//' invalid integer'//color_reset
+		//' bad integer'//color_reset
 
 end function err_bad_int
 
@@ -104,9 +104,9 @@ function err_bad_float(context, span, num) result(err)
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: num
-	err = err_prefix//'invalid f32 float `'//num//'`' &
+	err = err_prefix//'bad f32 float `'//num//'`' &
 		//underline(context, span) &
-		//' invalid float'//color_reset
+		//' bad float'//color_reset
 
 end function err_bad_float
 
@@ -118,7 +118,7 @@ function err_bad_type(context, span, type) result(err)
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: type
-	err = err_prefix//'invalid type annotation `'//type//'`' &
+	err = err_prefix//'bad type annotation `'//type//'`' &
 		//underline(context, span) &
 		//' bad type'//color_reset
 

@@ -706,8 +706,8 @@ module subroutine parse_dot(parser, expr)
 
 	if (expr%val%type /= struct_type) then
 		! TODO: diag.  Skip if unknown_type?  Probably already threw a diag in caller
-		print *, err_prefix//"variable in dot expr is not a struct"//color_reset
-		print *, "type = ", kind_name(expr%val%type)
+		write(*,*) err_prefix//"variable in dot expr is not a struct"//color_reset
+		!print *, "type = ", kind_name(expr%val%type)
 		return
 	end if
 
@@ -724,12 +724,14 @@ module subroutine parse_dot(parser, expr)
 
 	! Is there a better way than looking up every struct by name again?
 
+	!print *, "struct_name = """, expr%val%struct_name, """"
+
 	!struct = parser%structs%search(expr%val%struct_name, struct_id, io)
 	call parser%structs%search(expr%val%struct_name, struct_id, io, struct)
 
 	if (io /= 0) then
 		! TODO: diag
-		print *, err_prefix//"unreachable struct lookup failure"//color_reset
+		write(*,*) err_prefix//"unreachable struct lookup failure"//color_reset
 		stop
 	end if
 
@@ -737,7 +739,7 @@ module subroutine parse_dot(parser, expr)
 	call struct%vars%search(identifier%text, member_id, io, member)
 	if (io /= 0) then
 		! TODO: diag
-		print *, err_prefix//"struct dot member does not exist"//color_reset
+		write(*,*) err_prefix//"struct dot member does not exist"//color_reset
 		stop
 	end if
 	!print *, "member id = ", member_id
