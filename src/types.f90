@@ -1788,7 +1788,7 @@ function new_binary_expr(left, op, right) result(expr)
 
 	!********
 
-	integer :: larrtype, rarrtype, type_
+	integer :: larrtype, rarrtype, type_, ltype, rtype
 
 	if (debug > 1) print *, 'new_binary_expr'
 	if (debug > 1) print *, 'left  = ', left %str()
@@ -1813,8 +1813,23 @@ function new_binary_expr(left, op, right) result(expr)
 
 	!print *, 'larrtype = ', kind_name(larrtype)
 
+	! TODO: whatever i've done for structs in is_binary_op_allowed() and
+	! get_binary_op_kind() will need to be applied for unary ops too
+
+	ltype = left%val%type
+	if (left%kind == dot_expr) then
+		!print *, "left index = ", left%id_index
+		!print *, "left index = ", left%right%id_index
+		ltype = left%val%struct(left%right%id_index)%type
+	end if
+
+	rtype = right%val%type
+	if (right%kind == dot_expr) then
+		rtype = right%val%struct(right%right%id_index)%type
+	end if
+
 	! Pass the result value type up the tree for type checking in parent
-	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type, &
+	type_ = get_binary_op_kind(ltype, op%kind, rtype, &
 		larrtype, rarrtype)
 	!print *, 'type_ = ', kind_name(type_)
 

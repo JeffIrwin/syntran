@@ -24,7 +24,10 @@ module function parse_fn_call(parser) result(fn_call)
 	!********
 
 	character(len = :), allocatable :: param_type, arg_type
-	integer :: i, io, id_index, param_rank, arg_rank, ptype, atype, pos0, type_
+
+	integer :: i, io, id_index, param_rank, arg_rank, ptype, atype, pos0, &
+		type_, val_type
+
 	logical :: types_match
 
 	type(fn_t) :: fn
@@ -242,7 +245,15 @@ module function parse_fn_call(parser) result(fn_call)
 	end if
 
 	do i = 1, args%len_
-		!print *, kind_name(args%v(i)%val%type)
+
+		val_type = args%v(i)%val%type
+
+		if (args%v(i)%kind == dot_expr) then
+			!print *, "dot_expr"
+			val_type = args%v(i)%val%struct( args%v(i)%right%id_index )%type
+		end if
+
+		!print *, kind_name(val_type)
 		!print *, kind_name(fn%params(i)%type)
 
 		! For variadic fns, check the argument type against the type
@@ -267,7 +278,7 @@ module function parse_fn_call(parser) result(fn_call)
 		!ptype = fn%params(j)%type
 
 		types_match = &
-			ptype == any_type .or. ptype == args%v(i)%val%type
+			ptype == any_type .or. ptype == val_type
 
 		!! make a fn for use here and for array `atype` below? this
 		!! could be more easily extended if i add fn's with something
@@ -277,7 +288,7 @@ module function parse_fn_call(parser) result(fn_call)
 		!case (any_type)
 		!	types_match = .true.
 		!case default
-		!	types_match = ptype == args%v(i)%val%type
+		!	types_match = ptype == val_type
 		!end select
 
 		if (.not. types_match) then
@@ -288,7 +299,7 @@ module function parse_fn_call(parser) result(fn_call)
 				err_bad_arg_type(parser%context(), &
 				span, identifier%text, i, fn%params(i)%name, &
 				kind_name(ptype), &
-				kind_name(args%v(i)%val%type)))
+				kind_name(val_type)))
 			return
 
 		end if

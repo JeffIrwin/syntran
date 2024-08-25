@@ -401,6 +401,8 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 
 		!print *, 'larrtype = ', kind_name(larrtype)
 		!print *, 'rarrtype = ', kind_name(rarrtype)
+		!print *, 'ltype = ', kind_name(ltype)
+		!print *, 'rtype = ', kind_name(rtype)
 
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
 
