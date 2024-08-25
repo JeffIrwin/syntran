@@ -748,6 +748,10 @@ module subroutine parse_dot(parser, expr)
 	expr%right%id_index = member_id
 	!print *, "index = ", expr%right%id_index
 
+	! TODO: can we set the expr%val%type to the member's type here?  Currently I
+	! have to do a lot of checks for `if kind == dot_expr` in other places that
+	! seem unnecessary
+
 end subroutine parse_dot
 
 !===============================================================================

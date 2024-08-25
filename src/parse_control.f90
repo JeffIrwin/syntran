@@ -58,13 +58,24 @@ module function parse_return_statement(parser) result(statement)
 	end if
 	semi = parser%match(semicolon_token)
 
+	act_type = statement%right%val%type
+	if (act_type == struct_type) then
+		print *, "return struct type"
+	end if
+	if (statement%right%kind == dot_expr) then
+		print *, "return dot expr"
+		!if (expr%right%kind == dot_expr) then
+		!rtype = expr%right%val%struct(expr%right%right%id_index)%type
+		act_type = statement%right%val%struct( statement%right%right%id_index )%type
+	end if
+
 	! Check return type (unless we're at global level ifn == 1).  That's half
 	! the point of return statements
 	!
 	! There should also be a check that every branch of a fn has a return
 	! statement, but that seems more difficult
 	types_match = &
-		parser%fn_type == any_type .or. parser%fn_type == statement%right%val%type
+		parser%fn_type == any_type .or. parser%fn_type == act_type
 
 	if (.not. types_match) then
 		span = new_span(right_beg, right_end - right_beg + 1)
@@ -72,7 +83,7 @@ module function parse_return_statement(parser) result(statement)
 			err_bad_ret_type(parser%context(), &
 			span, parser%fn_name, &
 			kind_name(parser%fn_type), &
-			kind_name(statement%right%val%type)))
+			kind_name(act_type)))
 
 		return
 	end if

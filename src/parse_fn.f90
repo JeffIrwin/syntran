@@ -370,7 +370,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: i, io, pos0, pos1, pos2, rank, itype, fn_beg, fn_name_end
+	integer :: i, j, io, pos0, pos1, pos2, rank, itype, fn_beg, fn_name_end
 
 	type(fn_t) :: fn
 
@@ -494,21 +494,23 @@ module function parse_fn_declaration(parser) result(decl)
 			!print *, "struct num vars = ", struct%num_vars
 			!print *, "struct name = ", types%v(i)%s
 
-			!! Save everything in the inst syntax node
-			!inst%kind = struct_instance_expr
-			!inst%val%type = struct_type
-			!allocate(inst%val%struct( struct%num_vars ))
-			!allocate(inst%members   ( struct%num_vars ))
-			!inst%struct_name = identifier%text
-			!inst%val%struct_name = identifier%text
-
-			!fn%params(i)%type = struct_type
-			!allocate(fn%params(i)%struct( struct%num_vars ))
-			!fn%params(i)%struct_name = types%v(i)%s
+			!! members are allocated here, vars%vals are not. probably ok, maybe
+			!! need a deep copy if the vars dict is really needed
+			!print *, "allocated = ", allocated(struct%members)
+			!print *, "allocated = ", allocated(struct%vars%vals)
 
 			val%struct_name = types%v(i)%s
 			allocate(val%struct( struct%num_vars ))
+			!allocate(val%members( struct%num_vars ))
 			!val = struct
+			do j = 1, struct%num_vars
+				!val%struct(j) = struct%members(j)%val
+				val%struct(j)%type = struct%members(j)%type
+				!val%struct(j) = struct%vars%vals(j)
+
+				!inst%val%struct( member_id ) = mem%val
+
+			end do
 
 		end if
 

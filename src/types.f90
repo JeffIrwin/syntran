@@ -2435,7 +2435,9 @@ recursive subroutine struct_ternary_search(node, key, id_index, iostat, val)
 
 	!allocate(val)
 	val      = node%val
+	!val%vars = node%val%vars
 	id_index = node%id_index
+	val%members = node%val%members
 
 	!print *, 'done struct_ternary_search'
 	!print *, ''
@@ -2531,8 +2533,9 @@ recursive subroutine struct_ternary_insert(node, key, val, id_index, iostat, ove
 
 	allocate(node%val)
 	node%val      = val
-	node%val%vars = val%vars
+	!node%val%vars = val%vars
 	node%id_index = id_index
+	node%val%members = val%members
 
 	!print *, 'done inserting'
 	!print *, ''
