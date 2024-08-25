@@ -370,7 +370,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: i, pos0, pos1, pos2, rank, itype, fn_beg, fn_name_end
+	integer :: i, io, pos0, pos1, pos2, rank, itype, fn_beg, fn_name_end
 
 	type(fn_t) :: fn
 
@@ -619,9 +619,17 @@ module function parse_fn_declaration(parser) result(decl)
 	allocate(fn%node)
 	fn%node = decl
 
-	call parser%fns%insert(identifier%text, fn, decl%id_index)
-	! TODO: error if fn already declared. be careful in future if fn prototypes
-	! are added
+	call parser%fns%insert(identifier%text, fn, decl%id_index, io)
+	!print *, "fn insert io = ", io
+
+	! error if fn already declared. be careful in future if fn prototypes are
+	! added
+	if (io /= 0) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push( &
+			err_redeclare_fn(parser%context(), &
+			span, identifier%text))
+	end if
 
 	!print *, 'size(decl%params) = ', size(decl%params)
 	!print *, 'decl%params = ', decl%params

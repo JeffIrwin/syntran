@@ -169,6 +169,20 @@ end function err_redeclare_var
 
 !===============================================================================
 
+function err_redeclare_fn(context, span, fn) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn
+	err = err_prefix &
+		//'function `'//fn//'` has already been declared' &
+		//underline(context, span)//" function already declared"//color_reset
+
+end function err_redeclare_fn
+
+!===============================================================================
+
 function err_undeclare_var(context, span, var) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

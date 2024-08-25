@@ -574,7 +574,7 @@ subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 	!print *, 'inserting ', quote(key)
 	id_index = id_index + 1
 
-	overwritel = .true.
+	overwritel = .false.
 	if (present(overwrite)) overwritel = overwrite
 
 	i = dict%scope
@@ -1009,6 +1009,7 @@ subroutine var_insert(dict, key, val, id_index, iostat, overwrite)
 	!print *, 'inserting ', quote(key)
 	!print *, 'val = ', val%to_str()
 
+	! Note that this is different than the fn insert default
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
@@ -2630,6 +2631,7 @@ subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 	!print *, 'inserting ', quote(key)
 	id_index = id_index + 1
 
+	! TODO: flip this like fns to check for redeclared structs. Catch in caller
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
