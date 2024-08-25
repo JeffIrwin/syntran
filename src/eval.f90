@@ -817,6 +817,11 @@ subroutine eval_fn_call(node, state, res)
 			! a stack in which we store each nested arg in different copies of
 			! tmp.  if you try to store them all in the same state var at
 			! multiple stack levels it breaks?
+			!
+			! this also seems to have led to a dramatic perf improvement for
+			! intel compilers in commit 324ad414, running full tests in ~25
+			! minutes instead of 50.  gfortran perf remains good and unchanged
+			!
 			call syntax_eval(node%args(i), state, tmp)
 			state%vars%vals( node%params(i) ) = tmp
 
