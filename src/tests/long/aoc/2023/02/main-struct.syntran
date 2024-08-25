@@ -1,13 +1,13 @@
 
-// TODO: make this a test
-
 // This is not my original implementation (see main.syntran), rather this is an
 // alternative approach using structs
 
 #include("../../utils.syntran");
 
-let infile = "src/tests/long/aoc/2023/02/test-input.txt";
-infile = "src/tests/long/aoc/2023/02/input.txt";
+//let infile = "src/tests/long/aoc/2023/02/test-input.txt";
+//infile = "src/tests/long/aoc/2023/02/input.txt";
+let infile = "test-input.txt";
+infile = "input.txt";
 
 struct Subset
 {
@@ -151,16 +151,18 @@ fn part2(): i32
 	return sum;
 }
 
-fn main(): bool
+fn main(): i32
 {
-	let pass = true;
-	pass = pass and part1() == 2256;
-	pass = pass and part2() == 74229;
-	return pass;
+	println();
+	println("Starting AOC syntran main-struct 2023/02");
+	let sum = 0;
+	sum += part1();
+	sum += part2();
+
+	println("Ending AOC syntran main-struct");
+	println();
+	return sum;
 }
 
-if main()
-	return 0;
-else
-	return -1;
+return main();
 

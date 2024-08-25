@@ -38,9 +38,9 @@ struct Date {
 	y: i64
 }
 
-let d1 = Date{y = 1900 + 12, m = "Apr", d = 14};
+let d1 = Date{y = i64(1900) + 12, m = "Apr", d = 14};
 
-//let d1 = Date{y = 1912, m = "Apr", d = 14};
+//let d1 = Date{y = i64(1912), m = "Apr", d = 14};
 //d1.d = 1969;
 
 println("d1.y = ", d1.y);
@@ -60,7 +60,7 @@ println("t2.hh = ", t2.hh);
 println("t2.mm = ", t2.mm);
 println("t2.ss = ", t2.ss);
 
-d1 = Date{y = 1900 + 45, m = "Ma" + "y", d = 5*4};
+d1 = Date{y = i64(1900) + 45, m = "Ma" + "y", d = 5*4};
 d1.m = "June";
 println("d1.y = ", d1.y);
 println("d1.m = ", d1.m);

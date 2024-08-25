@@ -59,13 +59,11 @@ module function parse_return_statement(parser) result(statement)
 	semi = parser%match(semicolon_token)
 
 	act_type = statement%right%val%type
-	if (act_type == struct_type) then
-		print *, "return struct type"
-	end if
+	!if (act_type == struct_type) then
+	!	print *, "return struct type"
+	!end if
 	if (statement%right%kind == dot_expr) then
-		print *, "return dot expr"
-		!if (expr%right%kind == dot_expr) then
-		!rtype = expr%right%val%struct(expr%right%right%id_index)%type
+		!print *, "return dot expr"
 		act_type = statement%right%val%struct( statement%right%right%id_index )%type
 	end if
 

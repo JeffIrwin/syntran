@@ -29,18 +29,17 @@ module syntran__core_m
 
 	! TODO:
 	!  - structs
-	!    * mvp done
-	!    * tbd:
+	!    * mvp done:
 	!      + struct fn return values
-	!        * this already works! wtf? test more
-	!      + make aoc 2023 day 2 struct version as a test
+	!    * tbd:
 	!      + unary ops on dot exprs
 	!      + tests
 	!        > moar
 	!      + remove unused things like mems/members copies in various
 	!        types/routines
+	!        > currently using members for fn param declarations
 	!      + struct type checking
-	!        > check dot member types
+	!        > check dot member types in instantiation
 	!        > check mismatches of assigning one struct to another, or passing a
 	!          struct to a fn
 	!      + improved to_str() conversion with labels of struct name and member names
