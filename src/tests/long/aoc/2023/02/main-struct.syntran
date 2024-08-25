@@ -87,8 +87,6 @@ fn part2(): i32
 {
 	let sum = 0;
 
-	//let maxset = Subset{red = 12, green = 13, blue = 14};
-
 	let fid = open(infile);
 	let str_ = readln(fid);
 	let id = 0;
@@ -125,7 +123,7 @@ fn part2(): i32
 					subset.blue = num;
 				else
 				{
-					//println("Error: bad color """, color, """");
+					println("Error: bad color """, color, """");
 					exit(-1);
 				}
 			}
@@ -138,11 +136,6 @@ fn part2(): i32
 		//println("minset = ", minset);
 
 		let power = minset.red * minset.green * minset.blue;
-		//let power = 1;
-		//power = minset.red * minset.green;
-		//power = power * minset.blue;
-		//let power = (minset.red) * (minset.green) * (minset.blue);
-
 		//println("power = ", power);
 
 		sum += power;
@@ -156,13 +149,16 @@ fn part2(): i32
 	return sum;
 }
 
-fn main(): i32
+fn main(): bool
 {
-	let sum = 0;
-	sum += part1();
-	sum += part2();
-	return sum;
+	let pass = true;
+	pass = pass and part1() == 2256;
+	pass = pass and part2() == 74229;
+	return pass;
 }
 
-return main();
+if main()
+	return 0;
+else
+	return -1;
 
