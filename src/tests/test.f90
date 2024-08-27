@@ -2554,7 +2554,19 @@ subroutine unit_test_struct(npass, nfail)
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 23
 			    //'let glbl = D{y=i64(1883), m="Apr", d=7*2};' &
 			    //'fn x_year(): i64 {return glbl.y;}' &
-			    //'x_year();', .false.) == '1883', &
+			    //'x_year();', quiet) == '1883', &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 24
+			    //'let p1 = P{x=6, y=13};' &
+			    //'let p2 = P{x=5, y=p1.y};' &
+			    //'p2.x;', quiet) == '5', &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 25
+			    //'let p1 = P{x=6, y=13};' &
+			    //'let p2 = P{x=5, y=p1.y};' &
+			    //'p1.x;', quiet) == '6', &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 26
+			    //'let p1 = P{x=6, y=13};' &
+			    //'let p2 = P{x=5, y=p1.y};' &
+			    //'p2.y;', quiet) == '13', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

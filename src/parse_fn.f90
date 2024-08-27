@@ -933,7 +933,8 @@ module function parse_struct_instance(parser) result(inst)
 
 		if (io /= 0) then
 			! TODO: diag
-			write(*,*) err_prefix//"member does not exist in struct"//color_reset
+			write(*,*) err_prefix//"member """//name%text &
+				//""" does not exist in struct"//color_reset
 			stop
 		end if
 
