@@ -16,7 +16,7 @@ module syntran__consts_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
-			dot_expr             = 98, &
+			dot_expr             = 98, &  ! TODO: rename to rhs_dot_expr
 			struct_type          = 97, &
 			struct_instance_expr = 96, &
 			struct_declaration   = 95, &

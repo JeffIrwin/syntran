@@ -26,8 +26,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 	integer :: io, ltype, rtype, pos0, span0, span1, lrank, rrank, larrtype, &
 		rarrtype, id_index
 
-	logical :: is_dot
-
 	type(syntax_node_t) :: right, member
 	type(syntax_token_t) :: let, identifier, op
 
@@ -36,8 +34,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 	type(value_t) :: var
 
 	!print *, 'starting parse_expr_statement()'
-
-	is_dot = .false.
 
 	! TODO: provide a way to declare variable types without initializing them?
 	! Rust discourages mutability, instead preferring patterns like this:
@@ -142,24 +138,20 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		if (parser%peek_kind(0) == dot_token) then
 			!print *, "dot token"
-			is_dot = .true.
 
-			!call parser%vars%search(identifier%text, id_index, io, var)
-			call parser%vars%search(identifier%text, id_index, io, var)
-
-			!deallocate(expr%val)
-			expr%val = var
-			!expr%val%type = var%type
+			!call parser%vars%search(identifier%text, expr%id_index, io, var)
+			!expr%val = var
+			call parser%vars%search(identifier%text, expr%id_index, io, expr%val)
 
 			call parser%parse_dot(expr)
-			if (.not. allocated(expr%right)) return
-			member = expr%right  ! swap because this will be re-used as RHS of whole expr
+			if (.not. allocated(expr%member)) return
 
-			allocate(expr%member)
-			expr%member = member ! TODO: could get rid of local member var
+			!allocate(expr%member)
+			!!member = expr%right  
+			!!expr%member = member
+			!expr%member = expr%right  ! swap because this will be re-used as RHS of whole expr
 
-			!print *, "index = ", expr%right%id_index
-			!print *, "mndex = ", member%id_index
+			!print *, "index = ", expr%member%id_index
 
 		end if
 
@@ -194,13 +186,14 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		! Get the identifier's type and index from the dict and check that it
 		! has been declared
-		call parser%vars%search(identifier%text, expr%id_index, io, expr%val)
-
-		if (io /= exit_success) then
-			span = new_span(identifier%pos, len(identifier%text))
-			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), &
-				span, identifier%text))
+		if (.not. allocated(expr%member)) then
+			call parser%vars%search(identifier%text, expr%id_index, io, expr%val)
+			if (io /= exit_success) then
+				span = new_span(identifier%pos, len(identifier%text))
+				call parser%diagnostics%push( &
+					err_undeclare_var(parser%context(), &
+					span, identifier%text))
+			end if
 		end if
 
 		!print *, 'type = ', kind_name(expr%val%type)
@@ -257,21 +250,15 @@ recursive module function parse_expr_statement(parser) result(expr)
 		if (ltype == array_type) larrtype = expr%val%array%type
 		if (rtype == array_type) rarrtype = expr%right%val%array%type
 
-		! !if (ltype == struct_type) larrtype = expr%val%struct(1)%type
-		! !if (ltype == struct_type) larrtype = expr%val%struct( expr%right%id_index )%type
-		! !if (ltype == struct_type) larrtype = expr%val%struct( member%id_index )%type
+		!if (allocated(expr%member)) ltype = expr%val%struct( member%id_index )%type
 
-		!if (is_dot) larrtype = expr%val%struct( member%id_index )%type
-		if (is_dot) ltype = expr%val%struct( member%id_index )%type
-		!if (expr%kind == dot_expr) ltype = expr%val%struct( member%id_index )%type
-
-		! Descend similarly for rarrtype if dot expr
-		if (expr%right%kind == dot_expr) then
-			!rarrtype = expr%right%val%type
-			!rarrtype = expr%right%val%struct(expr%right%id_index)%type
-			!print *, "1 right index = ", expr%right%right%id_index
-			rtype = expr%right%val%struct(expr%right%right%id_index)%type
-		end if
+		!! Descend similarly for rarrtype if dot expr
+		!if (expr%right%kind == dot_expr) then
+		!	!rarrtype = expr%right%val%type
+		!	!rarrtype = expr%right%val%struct(expr%right%id_index)%type
+		!	!print *, "1 right index = ", expr%right%right%id_index
+		!	rtype = expr%right%val%struct(expr%right%right%id_index)%type
+		!end if
 
 		!print *, "larrtype = ", kind_name(larrtype)
 		!print *, "rarrtype = ", kind_name(rarrtype)
@@ -385,19 +372,19 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 		if (ltype == array_type) larrtype = expr%left %val%array%type
 		if (rtype == array_type) rarrtype = expr%right%val%array%type
 
-		if (expr%left%kind == dot_expr) then
-			! The index that I need is nested in an insane way
+		!if (expr%left%kind == dot_expr) then
+		!	! The index that I need is nested in an insane way
 
-			!print *, "left index = ", expr%left%id_index
-			!print *, "left index = ", expr%left%right%id_index
-			ltype = expr%left%val%struct(expr%left%right%id_index)%type
-		end if
+		!	!print *, "left index = ", expr%left%id_index
+		!	!print *, "left index = ", expr%left%right%id_index
+		!	ltype = expr%left%val%struct(expr%left%right%id_index)%type
+		!end if
 
-		if (expr%right%kind == dot_expr) then
-			!print *, "2 right index = ", expr%right%id_index
-			!rtype = expr%right%val%struct(expr%right%id_index)%type
-			rtype = expr%right%val%struct(expr%right%right%id_index)%type
-		end if
+		!if (expr%right%kind == dot_expr) then
+		!	!print *, "2 right index = ", expr%right%id_index
+		!	!rtype = expr%right%val%struct(expr%right%id_index)%type
+		!	rtype = expr%right%val%struct(expr%right%right%id_index)%type
+		!end if
 
 		!print *, 'larrtype = ', kind_name(larrtype)
 		!print *, 'rarrtype = ', kind_name(rarrtype)
@@ -713,11 +700,12 @@ module subroutine parse_dot(parser, expr)
 
 	!print *, "struct name = ", expr%val%struct_name
 
-	!expr%kind = name_expr
+	! For RHS dots, this will stick.  For LHS dots, this will be shortly
+	! overwritten as assignment_expr in the caller
 	expr%kind = dot_expr
 
-	! Save dot info in syntax node
-	allocate(expr%right)
+	! Save dot info in member syntax node
+	allocate(expr%member)
 
 	!parser%vars%search(identifier%text, id_index, io)
 	!dummy = parser%structs%search(parser%current_text(), dummy_id, io)
@@ -745,12 +733,21 @@ module subroutine parse_dot(parser, expr)
 	!print *, "member id = ", member_id
 	!print *, "mem type  = ", kind_name(member%type)
 
-	expr%right%id_index = member_id
-	!print *, "index = ", expr%right%id_index
+	expr%member%id_index = member_id
+	!print *, "index = ", expr%member%id_index
 
-	! TODO: can we set the expr%val%type to the member's type here?  Currently I
-	! have to do a lot of checks for `if kind == dot_expr` in other places that
-	! seem unnecessary
+	! Can we set the expr%val%type to the member's type here?  Currently I have
+	! to do a lot of checks for `if kind == dot_expr` in other places that seem
+	! unnecessary
+	!
+	! Seems to work
+	expr%val%type = member%type
+
+	! TODO: I think this needs a recursive call to `parse_dot()` right here to
+	! handle things like `a.b.c`.  There should probably be a parse_subscripts()
+	! call here too. For both, might need to differentiate between lvalues and
+	! rvalues, i.e. use separate parse_ldot(), parse_rdot(),
+	! parse_lsubscripts(), ...
 
 end subroutine parse_dot
 

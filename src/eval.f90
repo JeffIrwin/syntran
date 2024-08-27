@@ -383,6 +383,8 @@ end subroutine eval_name_expr
 
 subroutine eval_dot_expr(node, state, res)
 
+	! This is an RHS dot expr.  LHS dots are handled in eval_assignment_expr().
+
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
@@ -395,21 +397,12 @@ subroutine eval_dot_expr(node, state, res)
 
 	!print *, "eval dot_expr"
 
-	!!res = node%members%val(1)
-	!res = node%val%struct(1)
-	!res = node%val%struct( node%right%id_index )
-
-	!call syntax_eval(node%members( node%right%id_index ), state, res)
-
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
-	res = state%vars%vals(node%id_index)%struct( node%right%id_index )
+	res = state%vars%vals(node%id_index)%struct( node%member%id_index )
 
 	!print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
 	!print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
-
-	!call syntax_eval(node%members(i), state, res%struct(i))
-	!call syntax_eval(node%members( node%right%id_index ), state, res)
 
 end subroutine eval_dot_expr
 
@@ -1061,7 +1054,7 @@ subroutine eval_assignment_expr(node, state, res)
 
 	!if (state%vars%vals(node%id_index)%type == struct_type) then
 	if (allocated( node%member )) then
-		!print *, "assign dot member"
+		!print *, "assign LHS dot member"
 
 		call syntax_eval(node%right, state, res)
 

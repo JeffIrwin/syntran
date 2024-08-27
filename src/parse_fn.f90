@@ -248,10 +248,10 @@ module function parse_fn_call(parser) result(fn_call)
 
 		val_type = args%v(i)%val%type
 
-		if (args%v(i)%kind == dot_expr) then
-			!print *, "dot_expr"
-			val_type = args%v(i)%val%struct( args%v(i)%right%id_index )%type
-		end if
+		!if (args%v(i)%kind == dot_expr) then
+		!	!print *, "dot_expr"
+		!	val_type = args%v(i)%val%struct( args%v(i)%right%id_index )%type
+		!end if
 
 		!print *, kind_name(val_type)
 		!print *, kind_name(fn%params(i)%type)

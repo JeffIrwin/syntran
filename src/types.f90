@@ -1837,16 +1837,16 @@ function new_binary_expr(left, op, right) result(expr)
 	! get_binary_op_kind() will need to be applied for unary ops too
 
 	ltype = left%val%type
-	if (left%kind == dot_expr) then
-		!print *, "left index = ", left%id_index
-		!print *, "left index = ", left%right%id_index
-		ltype = left%val%struct(left%right%id_index)%type
-	end if
+	!if (left%kind == dot_expr) then
+	!	!print *, "left index = ", left%id_index
+	!	!print *, "left index = ", left%right%id_index
+	!	ltype = left%val%struct(left%right%id_index)%type
+	!end if
 
 	rtype = right%val%type
-	if (right%kind == dot_expr) then
-		rtype = right%val%struct(right%right%id_index)%type
-	end if
+	!if (right%kind == dot_expr) then
+	!	rtype = right%val%struct(right%right%id_index)%type
+	!end if
 
 	! Pass the result value type up the tree for type checking in parent
 	type_ = get_binary_op_kind(ltype, op%kind, rtype, &

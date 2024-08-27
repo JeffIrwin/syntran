@@ -62,10 +62,10 @@ module function parse_return_statement(parser) result(statement)
 	!if (act_type == struct_type) then
 	!	print *, "return struct type"
 	!end if
-	if (statement%right%kind == dot_expr) then
-		!print *, "return dot expr"
-		act_type = statement%right%val%struct( statement%right%right%id_index )%type
-	end if
+	!if (statement%right%kind == dot_expr) then
+	!	!print *, "return dot expr"
+	!	act_type = statement%right%val%struct( statement%right%right%id_index )%type
+	!end if
 
 	! Check return type (unless we're at global level ifn == 1).  That's half
 	! the point of return statements
