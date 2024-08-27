@@ -78,7 +78,7 @@ module function parse_array_expr(parser) result(expr)
 
 	span_beg = parser%peek_pos(0)
 	lb_beg   = span_beg
-	lbound_  = parser%parse_expr()
+	call parser%parse_expr(lbound_)
 	span_end = parser%peek_pos(0) - 1
 	lb_end   = span_end
 
@@ -151,7 +151,7 @@ module function parse_array_expr(parser) result(expr)
 
 		span_beg = parser%peek_pos(0)
 		ub_beg   = span_beg
-		ubound_  = parser%parse_expr()
+		call parser%parse_expr(ubound_)
 		span_end = parser%peek_pos(0) - 1
 		ub_end   = span_end
 
@@ -178,7 +178,7 @@ module function parse_array_expr(parser) result(expr)
 			colon    = parser%match(colon_token)
 
 			span_beg = parser%peek_pos(0)
-			ubound_  = parser%parse_expr()
+			call parser%parse_expr(ubound_)
 			span_end = parser%peek_pos(0) - 1
 
 			if (.not. is_num_type(ubound_%val%type)) then
@@ -242,7 +242,7 @@ module function parse_array_expr(parser) result(expr)
 			semicolon    = parser%match(semicolon_token)
 
 			span_beg = parser%peek_pos(0)
-			len_     = parser%parse_expr()
+			call parser%parse_expr(len_)
 			span_end = parser%peek_pos(0) - 1
 
 			!print *, 'len_ = ', parser%text(span_beg, span_end)
@@ -356,7 +356,7 @@ module function parse_array_expr(parser) result(expr)
 		comma    = parser%match(comma_token)
 
 		span_beg = parser%peek_pos(0)
-		elem     = parser%parse_expr()
+		call parser%parse_expr(elem)
 		span_end = parser%peek_pos(0) - 1
 
 		!print *, 'elem ', elem%val%str()
@@ -473,7 +473,7 @@ module subroutine parse_subscripts(parser, expr)
 			lsubscript%sub_kind = all_sub
 		else
 
-			lsubscript = parser%parse_expr()
+			call parser%parse_expr(lsubscript)
 
 			!print *, 'lsubscript = ', lsubscript%str()
 			!print *, 'lsubscript = ', parser%text(span0, parser%current_pos()-1)
@@ -490,7 +490,7 @@ module subroutine parse_subscripts(parser, expr)
 				colon = parser%match(colon_token)
 				lsubscript%sub_kind = range_sub
 
-				usubscript = parser%parse_expr()
+				call parser%parse_expr(usubscript)
 				! TODO: type check i32
 
 			else
@@ -551,7 +551,7 @@ module function parse_size(parser) result(size)
 		pos0 = parser%pos
 
 		span_beg = parser%peek_pos(0)
-		len      = parser%parse_expr()
+		call parser%parse_expr(len)
 		span_end = parser%peek_pos(0) - 1
 
 		!print *, 'len = ', parser%text(span_beg, span_end)

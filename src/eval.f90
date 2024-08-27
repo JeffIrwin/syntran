@@ -53,7 +53,8 @@ recursive subroutine syntax_eval(node, state, res)
 
 	integer :: i
 
-	!print *, 'starting syntax_eval()'
+	!print *, "starting syntax_eval()"
+	!print *, "node kind = ", kind_name(node%kind)
 
 	! if_statement and while_statement may return an uninitialized type
 	! otherwise if their conditions are false
@@ -1760,8 +1761,9 @@ subroutine eval_unary_expr(node, state, res)
 
 	type(value_t) :: right
 
+	!print *, "eval right"
 	call syntax_eval(node%right, state, right)
-	!print *, 'right = ', right
+	!print *, "right = ", right%to_str()
 
 	res%type = right%type
 

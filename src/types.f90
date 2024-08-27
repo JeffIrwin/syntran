@@ -1395,7 +1395,7 @@ end function get_keyword_kind
 function new_declaration_expr(identifier, op, right) result(expr)
 
 	! TODO: IMO this fn is overly abstracted.  It's only used once, so
-	! just paste it their and delete the fn.  That will make it easier to
+	! just paste it there and delete the fn.  That will make it easier to
 	! refactor and consolidate declaration_expr and assignment_expr parsing
 
 	type(syntax_token_t), intent(in) :: identifier, op
