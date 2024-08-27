@@ -147,7 +147,9 @@ recursive subroutine value_copy(dst, src)
 
 	if (allocated(src%struct)) then
 		if (.not. allocated(dst%struct)) allocate(dst%struct( size(src%struct) ))
-		dst%struct = src%struct
+		do i = 1, size(src%struct)
+			dst%struct(i) = src%struct(i)
+		end do
 	else if (allocated(dst%struct)) then
 		deallocate(dst%struct)
 	end if
