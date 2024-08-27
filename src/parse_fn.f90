@@ -51,7 +51,7 @@ module function parse_fn_call(parser) result(fn_call)
 		parser%current_kind() /= eof_token)
 
 		pos0 = parser%pos
-		call parser%parse_expr(arg)
+		arg = parser%parse_expr()
 		call args%push(arg)
 
 		!! TODO: we need a delete method for syntax_node_t (i.e.
@@ -869,7 +869,7 @@ module function parse_struct_instance(parser) result(inst)
 
 	identifier = parser%match(identifier_token)
 
-	print *, "parsing struct instance of identifier = ", identifier%text
+	!print *, "parsing struct instance of identifier = ", identifier%text
 
 	!print *, ""
 	!print *, "in parse_struct_instance():"
@@ -914,9 +914,9 @@ module function parse_struct_instance(parser) result(inst)
 
 		name   = parser%match(identifier_token)
 		equals = parser%match(equals_token)
-		call parser%parse_expr(mem)
+		mem    = parser%parse_expr()
 
-		print *, "name%text = ", name%text
+		!print *, "name%text = ", name%text
 
 		!call struct%vars%insert(struct%members(i)%name, val, &
 		!	struct%num_vars, io, overwrite = .false.)
@@ -957,7 +957,7 @@ module function parse_struct_instance(parser) result(inst)
 
 	rbrace  = parser%match(rbrace_token)
 
-	print *, "size = ", struct%num_vars
+	!print *, "size = ", struct%num_vars
 	!print *, "size = ", mems%len_
 	if (mems%len_ /= struct%num_vars) then
 		! TODO: diag
@@ -967,7 +967,7 @@ module function parse_struct_instance(parser) result(inst)
 
 	! TODO: check type of members match
 
-	print *, "ending parse_struct_instance()"
+	!print *, "ending parse_struct_instance()"
 
 end function parse_struct_instance
 

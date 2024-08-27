@@ -52,7 +52,7 @@ module function parse_return_statement(parser) result(statement)
 	else
 		! expr or statement?
 		right_beg = parser%peek_pos(0)
-		call parser%parse_expr(statement%right)
+		statement%right = parser%parse_expr()
 		right_end = parser%peek_pos(0) - 1
 
 	end if
@@ -141,7 +141,7 @@ module function parse_if_statement(parser) result(statement)
 	if_token  = parser%match(if_keyword)
 
 	cond_beg  = parser%peek_pos(0)
-	call parser%parse_expr(condition)
+	condition = parser%parse_expr()
 
 	!cond_end  = parser%peek_pos(-1)
 	cond_end  = parser%peek_pos(0) - 1
@@ -310,7 +310,7 @@ module function parse_while_statement(parser) result(statement)
 	while_token  = parser%match(while_keyword)
 
 	cond_beg  = parser%peek_pos(0)
-	call parser%parse_expr(condition)
+	condition = parser%parse_expr()
 	cond_end  = parser%peek_pos(0) - 1
 
 	! Check that condition type is bool
@@ -413,7 +413,7 @@ module function parse_statement(parser) result(statement)
 			statement = parser%parse_return_statement()
 
 		case default
-			call parser%parse_expr_statement(statement)
+			statement = parser%parse_expr_statement()
 			semi      = parser%match(semicolon_token)
 
 	end select

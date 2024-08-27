@@ -196,16 +196,16 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_expr.f90
 
-		recursive module subroutine parse_expr_statement(parser, expr)
+		recursive module function parse_expr_statement(parser) result(expr)
 			class(parser_t) :: parser
-			type(syntax_node_t), intent(out) :: expr
-		end subroutine parse_expr_statement
+			type(syntax_node_t) :: expr
+		end function parse_expr_statement
 
-		recursive module subroutine parse_expr(parser, expr, parent_prec)
+		recursive module function parse_expr(parser, parent_prec) result(expr)
 			class(parser_t) :: parser
-			type(syntax_node_t), intent(out) :: expr
 			integer, optional, intent(in) :: parent_prec
-		end subroutine parse_expr
+			type(syntax_node_t) :: expr
+		end function parse_expr
 
 		module function parse_primary_expr(parser) result(expr)
 			class(parser_t) :: parser

@@ -129,7 +129,7 @@ recursive subroutine value_copy(dst, src)
 
 	integer :: i
 
-	if (debug > 1) print *, 'starting value_copy()'
+	if (debug > 3) print *, 'starting value_copy()'
 
 	dst%type = src%type
 	dst%sca  = src%sca
@@ -147,16 +147,10 @@ recursive subroutine value_copy(dst, src)
 
 	if (allocated(src%struct)) then
 		if (.not. allocated(dst%struct)) allocate(dst%struct( size(src%struct) ))
-		!dst%struct = src%struct
-		do i = 1, size(src%struct)
-			dst%struct(i) = src%struct(i)
-		end do
-
+		dst%struct = src%struct
 	else if (allocated(dst%struct)) then
 		deallocate(dst%struct)
 	end if
-
-	if (debug > 1) print *, 'ending value_copy()'
 
 end subroutine value_copy
 

@@ -15,11 +15,11 @@ contains
 
 !===============================================================================
 
-recursive module subroutine parse_expr_statement(parser, expr)
+recursive module function parse_expr_statement(parser) result(expr)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t), intent(out) :: expr
+	type(syntax_node_t) :: expr
 
 	!********
 
@@ -63,8 +63,8 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		identifier = parser%next()
 		op         = parser%next()
 
-		call parser%parse_expr_statement(right)
-		!call parser%parse_expr(right)
+		right      = parser%parse_expr_statement()
+		!right      = parser%parse_expr()
 
 		!! I think the way to get conditional initialization like rust is
 		!! something like this.  May need to peek current and check if it's
@@ -72,21 +72,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		!right      = parser%parse_statement()
 		!!semi       = parser%match(semicolon_token)
 
-		!expr = new_declaration_expr(identifier, op, right)
-		!********
-		! new_declaration_expr() inlined
-		expr%kind = let_expr
-
-		allocate(expr%right)
-
-		expr%identifier = identifier
-
-		expr%op    = op
-		expr%right = right
-
-		! Pass the result value type up the tree for type checking in parent
-		expr%val = right%val
-		!********
+		expr = new_declaration_expr(identifier, op, right)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 
@@ -175,14 +161,13 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			!print *, "rewinding"
 			parser%pos = pos0
 			!print *, 'pos0 = ', pos0
-			call parser%parse_expr(expr)
-			!print *, "here"
+			expr = parser%parse_expr()
 			return
 		end if
 		!print *, 'parsing assignment'
 
 		op    = parser%next()
-		call parser%parse_expr_statement(right)
+		right = parser%parse_expr_statement()
 		!print *, "1a right index = ", right%right%id_index
 
 		! regular vs compound assignment exprs are denoted by the op.  all of
@@ -314,15 +299,14 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 	end if
 
-	call parser%parse_expr(expr)
+	expr = parser%parse_expr()
 	!semi       = parser%match(semicolon_token)
 
-end subroutine parse_expr_statement
+end function parse_expr_statement
 
 !===============================================================================
 
-!recursive module function parse_expr(parser, parent_prec) result(expr)
-recursive module subroutine parse_expr(parser, expr, parent_prec)
+recursive module function parse_expr(parser, parent_prec) result(expr)
 
 	! In episode 3, Immo renamed this fn to "ParseBinaryExpression()", but
 	! I consider that confusing because the result could be either unary or
@@ -332,8 +316,7 @@ recursive module subroutine parse_expr(parser, expr, parent_prec)
 
 	integer, optional, intent(in) :: parent_prec
 
-	!type(syntax_node_t) :: expr
-	type(syntax_node_t), intent(out) :: expr
+	type(syntax_node_t) :: expr
 
 	!********
 
@@ -354,7 +337,7 @@ recursive module subroutine parse_expr(parser, expr, parent_prec)
 	if (prec /= 0 .and. prec >= parent_precl) then
 
 		op    = parser%next()
-		call parser%parse_expr(right, prec)
+		right = parser%parse_expr(prec)
 		expr  = new_unary_expr(op, right)
 
 		rtype = right%val%type
@@ -378,7 +361,7 @@ recursive module subroutine parse_expr(parser, expr, parent_prec)
 		if (prec == 0 .or. prec <= parent_precl) exit
 
 		op    = parser%next()
-		call parser%parse_expr(right, prec)
+		right = parser%parse_expr(prec)
 		expr  = new_binary_expr(expr, op, right)
 
 		ltype = expr%left %val%type
@@ -442,10 +425,7 @@ recursive module subroutine parse_expr(parser, expr, parent_prec)
 
 	end do
 
-	!print *, "ending parse_expr"
-
-!end function parse_expr
-end subroutine parse_expr
+end function parse_expr
 
 !===============================================================================
 
@@ -479,8 +459,8 @@ module function parse_primary_expr(parser) result(expr)
 			! These two lines are the difference between allowing statement
 			! "a = (b = 1)" or not.  Note that "a = b = 1" is allowed either way
 
-			!call parser%parse_expr(expr)
-			call parser%parse_expr_statement(expr)
+			!expr  = parser%parse_expr()
+			expr  = parser%parse_expr_statement()
 
 			right = parser%match(rparen_token)
 
@@ -577,8 +557,6 @@ module function parse_primary_expr(parser) result(expr)
 			if (debug > 1) print *, 'token = ', expr%val%to_str()
 
 	end select
-
-	!print *, "ending parse_primary_expr"
 
 end function parse_primary_expr
 
