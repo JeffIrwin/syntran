@@ -2567,6 +2567,10 @@ subroutine unit_test_struct(npass, nfail)
 			    //'let p1 = P{x=6, y=13};' &
 			    //'let p2 = P{x=5, y=p1.y};' &
 			    //'p2.y;', quiet) == '13', &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 27
+			    //'let p1 = P{x=6, y=13};' &
+			    //'let p2 = P{x=5, y=p1.y};' &
+			    //'p1.y;', quiet) == '13', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
