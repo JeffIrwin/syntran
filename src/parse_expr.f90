@@ -131,7 +131,9 @@ recursive module function parse_expr_statement(parser) result(expr)
 		if (parser%peek_kind(0) == dot_token) then
 			!print *, "dot token"
 
+			! Lookup the struct now because parse_dot() needs its data
 			call parser%vars%search(identifier%text, expr%id_index, io, expr%val)
+			! TODO: check io as in other search call below
 
 			call parser%parse_dot(expr)
 			if (.not. allocated(expr%member)) return
@@ -168,7 +170,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!print *, 'op = ', op%text
 
 		! Get the identifier's type and index from the dict and check that it
-		! has been declared
+		! has been declared, unless it is a struct which has already been looked
+		! up above
 		if (.not. allocated(expr%member)) then
 			call parser%vars%search(identifier%text, expr%id_index, io, expr%val)
 			if (io /= exit_success) then

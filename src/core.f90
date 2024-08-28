@@ -31,6 +31,8 @@ module syntran__core_m
 	!  - structs
 	!    * mvp done:
 	!      + struct fn return values
+	!      + nested structs
+	!        * works, but not nested dot exprs yet
 	!    * tbd:
 	!      + unary ops on dot exprs
 	!      + tests
@@ -43,7 +45,6 @@ module syntran__core_m
 	!        > check mismatches of assigning one struct to another, or passing a
 	!          struct to a fn
 	!      + improved to_str() conversion with labels of struct name and member names
-	!      + nested structs
 	!      + structs of arrays
 	!        * kinda works if you statically initialize the whole array in the
 	!          struct and only refer to the whole array later. doesn't work if

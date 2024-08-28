@@ -505,6 +505,12 @@ module function parse_fn_declaration(parser) result(decl)
 
 				!inst%val%struct( member_id ) = mem%val
 
+				! TODO: test a fn with a 2nd-order struct arg (i.e. a struct
+				! made up of other structs).  Maybe more data needs to be copied
+				! here, especially struct_name.  Essentially every %type should
+				! be bundled along with a %struct_name as in
+				! parse_struct_declaration()
+
 			end do
 
 		end if
@@ -675,13 +681,16 @@ module function parse_struct_declaration(parser) result(decl)
 
 	! Structs use this syntax:
 	!
-	!     struct time
+	!     // declaration
+	!     struct Time
 	!     {
 	!     	hh: i32,
 	!     	mm: i32,
 	!     	ss: f32,
 	!     }
-	!     let t1 = time{hh = 9, mm = 20, ss = 0.030,};
+	!
+	!     // instance
+	!     let t1 = Time{hh = 9, mm = 20, ss = 0.030,};
 	!     t1.hh = 10;
 	!
 	! A struct declaration is a lot like a fn declaration.  Instead of a list of
@@ -782,6 +791,7 @@ module function parse_struct_declaration(parser) result(decl)
 
 		! Create a value_t object to store the type
 		val%type = struct%members(i)%type
+		val%struct_name = types%v(i)%s
 		if (is_array%v(i)) then
 			if (allocated(val%array)) deallocate(val%array)
 			allocate(val%array)
@@ -789,7 +799,6 @@ module function parse_struct_declaration(parser) result(decl)
 			val%array%rank = struct%members(i)%rank
 			!print *, "rank = ", val%array%rank
 		end if
-		val%struct_name = types%v(i)%s
 
 		! Each struct has its own dict of members.  Create one and insert the
 		! member name into that dict instead of the (global) vars dict here.

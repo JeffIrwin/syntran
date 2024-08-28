@@ -368,8 +368,6 @@ subroutine eval_name_expr(node, state, res)
 		end if
 
 	else
-		! TODO: add another branch for dot member access expressions
-
 		!print *, "name expr without subscripts"
 		!print *, "id_index = ", node%id_index
 		!print *, "size(vals) = ", size(state%vars%vals)
@@ -562,6 +560,9 @@ subroutine eval_fn_call(node, state, res)
 		state%returned = .true.
 
 	case ("println")
+
+		! TODO: if struct, pass a struct_t as opt arg to to_str(), which
+		! contains member names that can then be printed
 
 		do i = 1, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
