@@ -563,6 +563,11 @@ subroutine eval_fn_call(node, state, res)
 
 		! TODO: if struct, pass a struct_t as opt arg to to_str(), which
 		! contains member names that can then be printed
+		!
+		! Actually it's a huge pain to pass structs dict from parser to evaler.
+		! I tried for a bit but stashed it.  I will probably need to do this
+		! eventually anyway for interactive runs with structs.  I can see why
+		! rust requires #derive[debug] to allow printing a whole struct
 
 		do i = 1, size(node%args)
 			call syntax_eval(node%args(i), state, arg)

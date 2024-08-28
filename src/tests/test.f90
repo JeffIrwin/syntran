@@ -2607,6 +2607,47 @@ subroutine unit_test_struct(npass, nfail)
 				//'let po = r1.tr;' &
 				//'let yo = po.y;' &
 				, quiet) == '17', &
+			eval(''                         &                 ! 32
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'return v1.name;' &
+				, quiet) == 'myvec1', &
+			eval(''                         &                 ! 33
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'return v1.v;' &
+				, quiet) == '[6, 2, 5]', &
+			eval(''                         &                 ! 34
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'v1.v = [3, 1, 2];' &
+				//'return v1.v;' &
+				, quiet) == '[3, 1, 2]', &
+			eval(''                         &                 ! 35
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'let v2 = v1.v;' &
+				//'return v2;' &
+				, quiet) == '[6, 2, 5]', &
+			eval(''                         &                 ! 36
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'let v2 = v1.v;' &
+				//'return v2[0];' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 37
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'let v2 = v1.v;' &
+				//'return v2[1];' &
+				, quiet) == '2', &
+			eval(''                         &                 ! 38
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'let v2 = [3, 1, 2];' &
+				//'v1.v = v2;' &
+				//'return v1.v;' &
+				, quiet) == '[3, 1, 2]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
