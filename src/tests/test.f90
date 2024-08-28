@@ -2571,6 +2571,42 @@ subroutine unit_test_struct(npass, nfail)
 			    //'let p1 = P{x=6, y=13};' &
 			    //'let p2 = P{x=5, y=p1.y};' &
 			    //'p1.y;', quiet) == '13', &
+			eval(''                         &                 ! 28
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let po = r1.bl;' &
+				//'let yo = po.x;' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 29
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let po = r1.bl;' &
+				//'let yo = po.y;' &
+				, quiet) == '13', &
+			eval(''                         &                 ! 30
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let po = r1.tr;' &
+				//'let yo = po.x;' &
+				, quiet) == '9', &
+			eval(''                         &                 ! 31
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let po = r1.tr;' &
+				//'let yo = po.y;' &
+				, quiet) == '17', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

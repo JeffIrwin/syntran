@@ -61,6 +61,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		let        = parser%next()
 		identifier = parser%next()
+		!print *, 'let ident = ', identifier%text
+
 		op         = parser%next()
 
 		right      = parser%parse_expr_statement()
@@ -73,8 +75,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!!semi       = parser%match(semicolon_token)
 
 		expr = new_declaration_expr(identifier, op, right)
-
-		!print *, 'expr ident text = ', expr%identifier%text
 
 		! Increment the variable array index and save it in the expr node.
 		! TODO: make this a push_var fn?  parse_for_statement uses it too
@@ -102,9 +102,9 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!! this should be unnecessary
 		!!print *, "right type = ", kind_name(right%val%type)
 		!if (right%val%type == struct_type) then
-		!	!print *, "struct_name = ", right%struct_name
-		!	!expr%struct_name = right%struct_name
-		!	!expr%val%struct_name = right%struct_name
+		!	print *, "struct_name = ", right%struct_name
+		!	expr%struct_name = right%struct_name
+		!	expr%val%struct_name = right%struct_name
 		!end if
 
 		return
@@ -650,6 +650,7 @@ module function parse_name_expr(parser) result(expr)
 			span, identifier%text))
 	end if
 
+	!print *, "tail parse_dot"
 	call parser%parse_dot(expr)
 
 end function parse_name_expr
@@ -672,6 +673,9 @@ module subroutine parse_dot(parser, expr)
 
 	type(value_t) :: member
 
+	!integer :: idbg = 0
+	!idbg = idbg + 1
+
 	if (parser%current_kind() /= dot_token) then
 
 		!! The function has to return something.  Caller deallocates
@@ -679,6 +683,9 @@ module subroutine parse_dot(parser, expr)
 		return
 
 	end if
+
+	!print *, ""
+	!print *, "idbg = ", idbg
 
 	!print *, "parsing dot"
 
@@ -736,12 +743,23 @@ module subroutine parse_dot(parser, expr)
 	expr%member%id_index = member_id
 	!print *, "index = ", expr%member%id_index
 
-	! Can we set the expr%val%type to the member's type here?  Currently I have
-	! to do a lot of checks for `if kind == dot_expr` in other places that seem
-	! unnecessary
-	!
-	! Seems to work
 	expr%val%type = member%type
+
+	!! TODO: val%type and val%struct_name at a minimum need to be copied, but it
+	!! might be cleaner to just copy the whole val
+	!expr%val = member
+
+	!print *, "member%struct_name = ", member%struct_name
+	!print *, "member name = ", struct%members( member_id )%name
+
+	expr%val%struct_name = member%struct_name
+	!expr%val%struct_name = struct%members(member_id)%name  ! this is close, but we need the type not the name
+
+	!! just testing a proof-of-concept
+	!if (idbg == 4) then
+	!	expr%val%struct_name = "P"
+	!end if
+	!expr%val%struct_name = member%type_name
 
 	! TODO: I think this needs a recursive call to `parse_dot()` right here to
 	! handle things like `a.b.c`.  There should probably be a parse_subscripts()

@@ -794,6 +794,7 @@ module function parse_struct_declaration(parser) result(decl)
 			val%array%rank = struct%members(i)%rank
 			!print *, "rank = ", val%array%rank
 		end if
+		val%struct_name = types%v(i)%s
 
 		! Each struct has its own dict of members.  Create one and insert the
 		! member name into that dict instead of the (global) vars dict here.
@@ -943,6 +944,7 @@ module function parse_struct_instance(parser) result(inst)
 
 		! Members can be instantiated out of order
 		inst%val%struct( member_id ) = mem%val
+		!inst%val%struct( member_id )%struct_name = mem%val%struct_name
 		inst%members( member_id ) = mem
 
 		call mems%push(mem)
