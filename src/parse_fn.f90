@@ -248,11 +248,6 @@ module function parse_fn_call(parser) result(fn_call)
 
 		val_type = args%v(i)%val%type
 
-		!if (args%v(i)%kind == dot_expr) then
-		!	!print *, "dot_expr"
-		!	val_type = args%v(i)%val%struct( args%v(i)%right%id_index )%type
-		!end if
-
 		!print *, kind_name(val_type)
 		!print *, kind_name(fn%params(i)%type)
 
@@ -905,7 +900,8 @@ module function parse_struct_instance(parser) result(inst)
 
 	! TODO: each struct should get a different sub type (like array_type) for
 	! type checking, so you don't try to assign one type of struct to another
-	! struct
+	! struct.  Should be able to use struct_name for this, although comparing
+	! ints might be more efficient than comparing strings
 
 	do while ( &
 		parser%current_kind() /= rbrace_token .and. &
@@ -944,7 +940,6 @@ module function parse_struct_instance(parser) result(inst)
 
 		! Members can be instantiated out of order
 		inst%val%struct( member_id ) = mem%val
-		!inst%val%struct( member_id )%struct_name = mem%val%struct_name
 		inst%members( member_id ) = mem
 
 		call mems%push(mem)

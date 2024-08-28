@@ -1416,7 +1416,6 @@ function new_declaration_expr(identifier, op, right) result(expr)
 
 	! Pass the result value type up the tree for type checking in parent
 	expr%val = right%val
-	!expr%struct_name = right%val%struct_name
 
 	!expr%val%type = right%val%type
 	!if (expr%val%type == array_type) then
@@ -1491,7 +1490,6 @@ recursive subroutine ternary_search(node, key, id_index, iostat, val)
 	end if
 
 	val      = node%val
-	!val%struct_name = node%val%struct_name
 	id_index = node%id_index
 
 	!print *, 'done ternary_search'

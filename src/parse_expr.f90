@@ -99,14 +99,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 				span, identifier%text))
 		end if
 
-		!! this should be unnecessary
-		!!print *, "right type = ", kind_name(right%val%type)
-		!if (right%val%type == struct_type) then
-		!	print *, "struct_name = ", right%struct_name
-		!	expr%struct_name = right%struct_name
-		!	expr%val%struct_name = right%struct_name
-		!end if
-
 		return
 
 	end if
@@ -139,27 +131,18 @@ recursive module function parse_expr_statement(parser) result(expr)
 		if (parser%peek_kind(0) == dot_token) then
 			!print *, "dot token"
 
-			!call parser%vars%search(identifier%text, expr%id_index, io, var)
-			!expr%val = var
 			call parser%vars%search(identifier%text, expr%id_index, io, expr%val)
 
 			call parser%parse_dot(expr)
 			if (.not. allocated(expr%member)) return
-
-			!allocate(expr%member)
-			!!member = expr%right  
-			!!expr%member = member
-			!expr%member = expr%right  ! swap because this will be re-used as RHS of whole expr
-
-			!print *, "index = ", expr%member%id_index
 
 		end if
 
 		if (.not. is_assignment_op(parser%current_kind())) then
 			! Rewind and do the default case (same as outside the assignment if
 			! block).  Could use goto or probably refactor somehow
-			!print *, "rewinding"
 			parser%pos = pos0
+			!print *, "rewinding"
 			!print *, 'pos0 = ', pos0
 			expr = parser%parse_expr()
 			return
@@ -244,21 +227,10 @@ recursive module function parse_expr_statement(parser) result(expr)
 		ltype = expr%val%type
 		rtype = expr%right%val%type
 
-		! TODO: rename as *subtype instead of *arrtype
 		larrtype = unknown_type
 		rarrtype = unknown_type
 		if (ltype == array_type) larrtype = expr%val%array%type
 		if (rtype == array_type) rarrtype = expr%right%val%array%type
-
-		!if (allocated(expr%member)) ltype = expr%val%struct( member%id_index )%type
-
-		!! Descend similarly for rarrtype if dot expr
-		!if (expr%right%kind == dot_expr) then
-		!	!rarrtype = expr%right%val%type
-		!	!rarrtype = expr%right%val%struct(expr%right%id_index)%type
-		!	!print *, "1 right index = ", expr%right%right%id_index
-		!	rtype = expr%right%val%struct(expr%right%right%id_index)%type
-		!end if
 
 		!print *, "larrtype = ", kind_name(larrtype)
 		!print *, "rarrtype = ", kind_name(rarrtype)
@@ -371,20 +343,6 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 		rarrtype = unknown_type
 		if (ltype == array_type) larrtype = expr%left %val%array%type
 		if (rtype == array_type) rarrtype = expr%right%val%array%type
-
-		!if (expr%left%kind == dot_expr) then
-		!	! The index that I need is nested in an insane way
-
-		!	!print *, "left index = ", expr%left%id_index
-		!	!print *, "left index = ", expr%left%right%id_index
-		!	ltype = expr%left%val%struct(expr%left%right%id_index)%type
-		!end if
-
-		!if (expr%right%kind == dot_expr) then
-		!	!print *, "2 right index = ", expr%right%id_index
-		!	!rtype = expr%right%val%struct(expr%right%id_index)%type
-		!	rtype = expr%right%val%struct(expr%right%right%id_index)%type
-		!end if
 
 		!print *, 'larrtype = ', kind_name(larrtype)
 		!print *, 'rarrtype = ', kind_name(rarrtype)
@@ -673,25 +631,13 @@ module subroutine parse_dot(parser, expr)
 
 	type(value_t) :: member
 
-	!integer :: idbg = 0
-	!idbg = idbg + 1
-
-	if (parser%current_kind() /= dot_token) then
-
-		!! The function has to return something.  Caller deallocates
-		!allocate( expr%lsubscripts(0))
-		return
-
-	end if
-
-	!print *, ""
-	!print *, "idbg = ", idbg
+	if (parser%current_kind() /= dot_token) return
 
 	!print *, "parsing dot"
 
 	dot  = parser%match(dot_token)
 
-	! TODO: can this handle recursion?  `a.b.c`
+	! TODO: this can't handle recursion, e.g. `a.b.c`
 
 	identifier = parser%match(identifier_token)
 
@@ -705,8 +651,6 @@ module subroutine parse_dot(parser, expr)
 		return
 	end if
 
-	!print *, "struct name = ", expr%val%struct_name
-
 	! For RHS dots, this will stick.  For LHS dots, this will be shortly
 	! overwritten as assignment_expr in the caller
 	expr%kind = dot_expr
@@ -714,14 +658,9 @@ module subroutine parse_dot(parser, expr)
 	! Save dot info in member syntax node
 	allocate(expr%member)
 
-	!parser%vars%search(identifier%text, id_index, io)
-	!dummy = parser%structs%search(parser%current_text(), dummy_id, io)
-
-	! Is there a better way than looking up every struct by name again?
-
 	!print *, "struct_name = """, expr%val%struct_name, """"
 
-	!struct = parser%structs%search(expr%val%struct_name, struct_id, io)
+	! Is there a better way than looking up every struct by name again?
 	call parser%structs%search(expr%val%struct_name, struct_id, io, struct)
 
 	if (io /= 0) then
@@ -730,7 +669,6 @@ module subroutine parse_dot(parser, expr)
 		stop
 	end if
 
-	!member = struct%vars%search(name%text, member_id, io)
 	call struct%vars%search(identifier%text, member_id, io, member)
 	if (io /= 0) then
 		! TODO: diag
@@ -741,25 +679,7 @@ module subroutine parse_dot(parser, expr)
 	!print *, "mem type  = ", kind_name(member%type)
 
 	expr%member%id_index = member_id
-	!print *, "index = ", expr%member%id_index
-
-	expr%val%type = member%type
-
-	!! TODO: val%type and val%struct_name at a minimum need to be copied, but it
-	!! might be cleaner to just copy the whole val
-	!expr%val = member
-
-	!print *, "member%struct_name = ", member%struct_name
-	!print *, "member name = ", struct%members( member_id )%name
-
-	expr%val%struct_name = member%struct_name
-	!expr%val%struct_name = struct%members(member_id)%name  ! this is close, but we need the type not the name
-
-	!! just testing a proof-of-concept
-	!if (idbg == 4) then
-	!	expr%val%struct_name = "P"
-	!end if
-	!expr%val%struct_name = member%type_name
+	expr%val = member
 
 	! TODO: I think this needs a recursive call to `parse_dot()` right here to
 	! handle things like `a.b.c`.  There should probably be a parse_subscripts()
