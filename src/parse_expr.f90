@@ -684,11 +684,19 @@ module subroutine parse_dot(parser, expr)
 	expr%member%id_index = member_id
 	expr%val = member
 
-	! TODO: I think this needs a recursive call to `parse_dot()` right here to
-	! handle things like `a.b.c`.  There should probably be a parse_subscripts()
-	! call here too. For both, might need to differentiate between lvalues and
+	! I think this needs a recursive call to `parse_dot()` right here to handle
+	! things like `a.b.c`.  There should probably be a parse_subscripts() call
+	! here too. For both, might need to differentiate between lvalues and
 	! rvalues, i.e. use separate parse_ldot(), parse_rdot(),
 	! parse_lsubscripts(), ...
+	if (parser%peek_kind(0) == dot_token) then
+
+		!expr%member%val%type = struct_type
+		expr%member%val = member
+
+		call parser%parse_dot(expr%member)
+
+	end if
 
 end subroutine parse_dot
 

@@ -2648,6 +2648,22 @@ subroutine unit_test_struct(npass, nfail)
 				//'v1.v = v2;' &
 				//'return v1.v;' &
 				, quiet) == '[3, 1, 2]', &
+			eval(''                         &                 ! 39
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let o = r1.bl.x;' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 40
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let o = r1.tr.y;' &
+				, quiet) == '17', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

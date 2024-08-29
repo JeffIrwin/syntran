@@ -391,13 +391,50 @@ subroutine eval_dot_expr(node, state, res)
 
 	!********
 
+	integer :: id, mem_kind
+
+	type(syntax_node_t) :: mem
+
 	type(value_t) :: tmp
+	type(value_t) :: val
 
 	!print *, "eval dot_expr"
 
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
-	res = state%vars%vals(node%id_index)%struct( node%member%id_index )
+
+	!res = state%vars%vals(node%id_index)%struct( node%member%id_index )
+	val = state%vars%vals(node%id_index)
+	id = node%member%id_index
+	res = val%struct(id)
+
+	mem_kind = node%member%kind
+
+	!print *, "res struct name = ", res%struct_name
+	!print *, "member kind = ", kind_name(node%member%kind)
+	!if (allocated(val%struct(id)%struct)) then
+	!	print *, "member 2[1] = ", val%struct(id)%struct(1)%to_str()
+	!	print *, "member 2[2] = ", val%struct(id)%struct(2)%to_str()
+	!	!print *, "member 2 = ", res%struct(1)%to_str()
+	!end if
+
+	do while (mem_kind == dot_expr)
+
+		! It's highly suspicious that I got this right on the first try.  Test
+		! with deeper nesting
+
+		! TODO: LHS dot members need to be iterated similarly
+
+		!mem = val%struct(id)%
+		mem = node%member
+		val = state%vars%vals( mem%id_index )
+		id  = mem%member%id_index
+
+		res = val%struct(id)
+
+		mem_kind = mem%member%kind
+
+	end do
 
 	!print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
 	!print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
