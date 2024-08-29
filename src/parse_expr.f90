@@ -618,7 +618,7 @@ end function parse_name_expr
 
 !===============================================================================
 
-module subroutine parse_dot(parser, expr)
+recursive module subroutine parse_dot(parser, expr)
 
 	class(parser_t) :: parser
 

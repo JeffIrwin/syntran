@@ -217,7 +217,7 @@ module syntran__parse_m
 			type(syntax_node_t) :: expr
 		end function parse_name_expr
 
-		module subroutine parse_dot(parser, expr)
+		recursive module subroutine parse_dot(parser, expr)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(inout) :: expr
 		end subroutine parse_dot
