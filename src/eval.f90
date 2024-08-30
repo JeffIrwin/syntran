@@ -395,44 +395,36 @@ subroutine eval_dot_expr(node, state, res)
 
 	type(syntax_node_t) :: mem, tmp_node
 
-	type(value_t) :: val
+	type(value_t) :: val, tmp_val
 
 	!print *, "eval dot_expr"
 
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
+	! In nested expressions, like `a.b.c.d`, val begins as the top-most
+	! (left-most, outer-most) value `a`
 	val = state%vars%vals(node%id_index)
-	id = node%member%id_index
-
-	! TODO: some of these operations are redundant now that i've fixed the loop
-	! below
-	res = val%struct(id)
-	mem_kind = node%member%kind
-
-	!print *, "res struct name = ", res%struct_name
-	!print *, "member kind = ", kind_name(node%member%kind)
-	!if (allocated(val%struct(id)%struct)) then
-	!	print *, "member 2[1] = ", val%struct(id)%struct(1)%to_str()
-	!	print *, "member 2[2] = ", val%struct(id)%struct(2)%to_str()
-	!	!print *, "member 2 = ", res%struct(1)%to_str()
-	!end if
-
 	mem = node%member
-	do while (mem_kind == dot_expr)
+	do while (mem%kind == dot_expr)
 		!print *, "loop"
+
+		! For a 1st-order dot expr like `c.d` the loop never executes.  For a
+		! 2nd-order expr `b.c.d` it iterates once
 
 		! TODO: LHS dot members need to be iterated similarly
 
-		! TODO: mem is the same at each iteration? sus
-
-		!id  = mem%member%id_index
+		! `id` tracks whether each member is the 1st, 2nd, etc. member in the
+		! struct array of its parent.  A local variable isnt' really needed but
+		! I think it helps readability
 		id  = mem%id_index
 
-		res = val%struct(id)
-		val = res
+		! Descend the val from `a` to `b`, etc.  A temporary value is needed
+		! because copy assignment is a complex overridden routine
+		tmp_val = val%struct(id)
+		val = tmp_val
 
-		mem_kind = mem%member%kind
+		! Descend the syntax node too
 		tmp_node = mem%member
 		mem = tmp_node
 
