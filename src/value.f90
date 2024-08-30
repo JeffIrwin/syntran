@@ -146,7 +146,10 @@ recursive subroutine value_copy(dst, src)
 	end if
 
 	if (allocated(src%struct)) then
-		if (.not. allocated(dst%struct)) allocate(dst%struct( size(src%struct) ))
+		! TODO: some of the allocations above are wrong.  make them like this
+		! one which crashed on a 3rd-order Pyramid struct befored i fixed it
+		if (allocated(dst%struct)) deallocate(dst%struct)
+		allocate(dst%struct( size(src%struct) ))
 		do i = 1, size(src%struct)
 			dst%struct(i) = src%struct(i)
 		end do

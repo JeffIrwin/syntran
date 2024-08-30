@@ -393,9 +393,8 @@ subroutine eval_dot_expr(node, state, res)
 
 	integer :: id, mem_kind
 
-	type(syntax_node_t) :: mem
+	type(syntax_node_t) :: mem, tmp_node
 
-	type(value_t) :: tmp
 	type(value_t) :: val
 
 	!print *, "eval dot_expr"
@@ -403,11 +402,12 @@ subroutine eval_dot_expr(node, state, res)
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
-	!res = state%vars%vals(node%id_index)%struct( node%member%id_index )
 	val = state%vars%vals(node%id_index)
 	id = node%member%id_index
-	res = val%struct(id)
 
+	! TODO: some of these operations are redundant now that i've fixed the loop
+	! below
+	res = val%struct(id)
 	mem_kind = node%member%kind
 
 	!print *, "res struct name = ", res%struct_name
@@ -418,23 +418,27 @@ subroutine eval_dot_expr(node, state, res)
 	!	!print *, "member 2 = ", res%struct(1)%to_str()
 	!end if
 
+	mem = node%member
 	do while (mem_kind == dot_expr)
-
-		! It's highly suspicious that I got this right on the first try.  Test
-		! with deeper nesting
+		!print *, "loop"
 
 		! TODO: LHS dot members need to be iterated similarly
 
-		!mem = val%struct(id)%
-		mem = node%member
-		val = state%vars%vals( mem%id_index )
-		id  = mem%member%id_index
+		! TODO: mem is the same at each iteration? sus
+
+		!id  = mem%member%id_index
+		id  = mem%id_index
 
 		res = val%struct(id)
+		val = res
 
 		mem_kind = mem%member%kind
+		tmp_node = mem%member
+		mem = tmp_node
 
 	end do
+	id  = mem%id_index
+	res = val%struct(id)
 
 	!print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
 	!print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
@@ -1081,11 +1085,16 @@ subroutine eval_assignment_expr(node, state, res)
 
 	!********
 
-	integer :: rank_res
+	integer :: rank_res, id, mem_kind
 	integer(kind = 8) :: i8, index_, len8
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
+	type(syntax_node_t) :: mem
+
 	type(value_t) :: array_val, tmp
+	!type(value_t), pointer :: val, ptmp
+	type(value_t), allocatable :: val, ptmp, vals(:)
+	!type(value_t) :: val
 
 	!print *, "eval assignment_expr"
 	!print *, "node identifier = ", node%identifier%text
@@ -1095,25 +1104,55 @@ subroutine eval_assignment_expr(node, state, res)
 	!	print *, "mem index = ", node%member%id_index
 	!end if
 
-	!if (state%vars%vals(node%id_index)%type == struct_type) then
 	if (allocated( node%member )) then
 		!print *, "assign LHS dot member"
 
 		call syntax_eval(node%right, state, res)
 
-		! !call compound_assign(state%vars%vals(node%id_index), res, node%op)
-		! !res = state%vars%vals(node%id_index)
-		! !res = state%vars%vals(node%id_index)%struct( node%right%id_index )
+		! TODO: honestly probably just delete all this junk and start it again.
+		! I started working on LHS nested dots when I realized I had bugs in my
+		! RHS nested dot code
 
-		!state%vars%vals(node%id_index)%struct( node%member%id_index ) = res
+		!allocate(val, ptmp)
+		!val = state%vars%vals(node%id_index)
+		!call move_alloc(state%vars%vals(node%id_index), val)
+		call move_alloc(state%vars%vals(node%id_index)%struct, vals)
+		id = node%member%id_index
+		!ptmp = val%struct(id)
+
+		!val = state%vars%vals(node%id_index)
+		!id = node%member%id_index
+		!ptmp = val%struct(id)
+		!mem_kind = node%member%kind
+		!do while (mem_kind == dot_expr)
+		!	mem = node%member
+		!	val = state%vars%vals( mem%id_index )
+		!	id  = mem%member%id_index
+		!
+		!	ptmp = val%struct(id)
+		!	mem_kind = mem%member%kind
+		!end do
+
+		!mem = node%member
+		!do while (allocated(mem%member))
+		!end do
+
 		call compound_assign( &
-			state%vars%vals(node%id_index)%struct( node%member%id_index ), &
+			!state%vars%vals(node%id_index)%struct( node%member%id_index ), &
+			!val%struct(id), &
+			vals(id), &
+			!ptmp, &
 			res, &
 			node%op &
 		)
+		!state%vars%vals(node%id_index) = val
 
-		!res = state%vars%vals(node%id_index)
-		res = state%vars%vals(node%id_index)%struct( node%member%id_index )
+		!res = state%vars%vals(node%id_index)%struct( node%member%id_index )
+		!res = val%struct(id)
+		res = vals(id)
+		!res = ptmp
+
+		call move_alloc(vals, state%vars%vals(node%id_index)%struct)
 
 	else if (.not. allocated(node%lsubscripts)) then
 

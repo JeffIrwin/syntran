@@ -32,7 +32,7 @@ module syntran__core_m
 	!    * mvp done:
 	!      + struct fn return values
 	!      + nested structs
-	!        * works, but not nested dot exprs yet
+	!        * works, but not nested lhs dot exprs yet
 	!    * tbd:
 	!      + unary ops on dot exprs
 	!      + tests

@@ -685,8 +685,8 @@ recursive module subroutine parse_dot(parser, expr)
 	expr%val = member
 
 	! I think this needs a recursive call to `parse_dot()` right here to handle
-	! things like `a.b.c`.  There should probably be a parse_subscripts() call
-	! here too. For both, might need to differentiate between lvalues and
+	! things like `a.b.c`.  TODO: there should probably be a parse_subscripts()
+	! call here too. For both, might need to differentiate between lvalues and
 	! rvalues, i.e. use separate parse_ldot(), parse_rdot(),
 	! parse_lsubscripts(), ...
 	if (parser%peek_kind(0) == dot_token) then
@@ -695,6 +695,8 @@ recursive module subroutine parse_dot(parser, expr)
 		expr%member%val = member
 
 		call parser%parse_dot(expr%member)
+
+		expr%val = expr%member%val
 
 	end if
 
