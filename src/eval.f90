@@ -398,87 +398,48 @@ subroutine eval_dot_expr(node, state, res)
 	type(value_t) :: val, tmp_val
 
 	!print *, "eval dot_expr"
+	!print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
 
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
 	res = get_val(node, state%vars%vals(node%id_index))
-	return
-
-	! TODO: delete
-
-	! In nested expressions, like `a.b.c.d`, val begins as the top-most
-	! (left-most, outer-most) value `a`
-	val = state%vars%vals(node%id_index)
-	mem = node%member
-	do while (mem%kind == dot_expr)
-		!print *, "loop"
-
-		! For a 1st-order dot expr like `c.d` the loop never executes.  For a
-		! 2nd-order expr `b.c.d` it iterates once
-
-		! TODO: LHS dot members need to be iterated similarly
-
-		! `id` tracks whether each member is the 1st, 2nd, etc. member in the
-		! struct array of its parent.  A local variable isnt' really needed but
-		! I think it helps readability
-		id  = mem%id_index
-
-		! Descend the val from `a` to `b`, etc.  A temporary value is needed
-		! because copy assignment is a complex overridden routine
-		!
-		! I think LHS dot assignment will need to traverse the `a.b.c.d` tree
-		! twice, or in a loop.  First descend from a to d, and ascend back up
-		! from d back to a to finally assign the outermost struct
-		!
-		! Actually, a better way to handle dot exprs on both sides is with
-		! recursive getter and setter fn's.  These would avoid issues with
-		! copying and having to double walk the tree.  Here, use a getter.  In
-		! LHS dot exprs, first use a getter, then do compound assignment, and
-		! finally use a setter.  This will act similarly to get_array_value_t()
-		! and set_array_value_t()
-		tmp_val = val%struct(id)
-		val = tmp_val
-
-		! Descend the syntax node too
-		tmp_node = mem%member
-		mem = tmp_node
-
-	end do
-	id  = mem%id_index
-	res = val%struct(id)
-
-	!print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
-	!print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
 
 end subroutine eval_dot_expr
 
 !===============================================================================
 
-recursive function get_val(node, val) result(res)
+recursive function get_val(node, var) result(res)
+
+	! As is, maybe I should rename this to get_dot_val(), but I would like to
+	! extend it to process subscripts too
+
+	! In nested expressions, like `a.b.c.d`, var begins as the top-most
+	! (left-most, outer-most) value `a`
 
 	type(syntax_node_t), intent(in) :: node
-	type(value_t), intent(in) :: val
+	type(value_t), intent(in) :: var
 
 	!type(value_t), intent(inout) :: res
 	type(value_t) :: res
 
 	!********
-	!type(value_t) :: val, tmp_val
-	!type(syntax_node_t) :: mem, tmp_node
+
 	integer :: id
 
+	! `id` tracks whether each member is the 1st, 2nd, etc. member in the struct
+	! array of its parent.  A local variable isnt' really needed but I think it
+	! helps readability
 	id = node%member%id_index
 
 	if (node%member%kind == dot_expr) then
 		! Recurse
-		res = get_val(node%member, val%struct(id))
+		res = get_val(node%member, var%struct(id))
 		return
 	end if
 
 	! Base case
-	res = val%struct(id)
-	!res = val%struct(node%member%id_index)
+	res = var%struct(id)
 
 end function get_val
 
