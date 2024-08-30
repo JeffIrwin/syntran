@@ -1089,7 +1089,7 @@ subroutine eval_assignment_expr(node, state, res)
 
 	type(syntax_node_t) :: mem
 
-	type(value_t) :: array_val, tmp
+	type(value_t) :: array_val, rhs, tmp
 	!type(value_t), pointer :: val, ptmp
 	type(value_t), allocatable :: val, ptmp, vals(:)
 	!type(value_t) :: val
@@ -1105,52 +1105,14 @@ subroutine eval_assignment_expr(node, state, res)
 	if (allocated( node%member )) then
 		!print *, "assign LHS dot member"
 
-		call syntax_eval(node%right, state, res)
+		call syntax_eval(node%right, state, rhs)
 
-		! TODO: honestly probably just delete all this junk and start it again.
-		! I started working on LHS nested dots when I realized I had bugs in my
-		! RHS nested dot code
-
-		!allocate(val, ptmp)
-		!val = state%vars%vals(node%id_index)
-		!call move_alloc(state%vars%vals(node%id_index), val)
-		call move_alloc(state%vars%vals(node%id_index)%struct, vals)
 		id = node%member%id_index
-		!ptmp = val%struct(id)
+		res = state%vars%vals(node%id_index)%struct(id)  ! get_val()
 
-		!val = state%vars%vals(node%id_index)
-		!id = node%member%id_index
-		!ptmp = val%struct(id)
-		!mem_kind = node%member%kind
-		!do while (mem_kind == dot_expr)
-		!	mem = node%member
-		!	val = state%vars%vals( mem%id_index )
-		!	id  = mem%member%id_index
-		!
-		!	ptmp = val%struct(id)
-		!	mem_kind = mem%member%kind
-		!end do
+		call compound_assign(res, rhs, node%op)
 
-		!mem = node%member
-		!do while (allocated(mem%member))
-		!end do
-
-		call compound_assign( &
-			!state%vars%vals(node%id_index)%struct( node%member%id_index ), &
-			!val%struct(id), &
-			vals(id), &
-			!ptmp, &
-			res, &
-			node%op &
-		)
-		!state%vars%vals(node%id_index) = val
-
-		!res = state%vars%vals(node%id_index)%struct( node%member%id_index )
-		!res = val%struct(id)
-		res = vals(id)
-		!res = ptmp
-
-		call move_alloc(vals, state%vars%vals(node%id_index)%struct)
+		state%vars%vals(node%id_index)%struct(id) = res  ! set_val()
 
 	else if (.not. allocated(node%lsubscripts)) then
 
