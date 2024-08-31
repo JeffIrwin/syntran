@@ -125,7 +125,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		span0 = parser%current_pos()
 		call parser%parse_subscripts(expr)
 
-		if (size(expr%lsubscripts) <= 0) deallocate(expr%lsubscripts)
+		!if (size(expr%lsubscripts) <= 0) deallocate(expr%lsubscripts)
 		span1 = parser%current_pos() - 1
 
 		if (parser%peek_kind(0) == dot_token) then
@@ -186,13 +186,15 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		!print *, 'allocated(expr%val%array) = ', allocated(expr%val%array)
 
-		if (size(expr%lsubscripts) > 0) then
+		!if (size(expr%lsubscripts) > 0) then
+		if (allocated(expr%lsubscripts)) then
 
 			if (expr%val%type == str_type) then
 				!print *, 'str type'
 				! TODO: check rank == 1
 			else if (expr%val%type /= array_type) then
 				span = new_span(span0, span1 - span0 + 1)
+				print *, "err_scalar_subscript 2"
 				call parser%diagnostics%push( &
 					err_scalar_subscript(parser%context(), &
 					span, identifier%text))
@@ -569,8 +571,9 @@ module function parse_name_expr(parser) result(expr)
 	! TODO: can any of this coda be moved inside of parse_subscripts()?  Are
 	! there differences between lval and rval subscripts?
 	span1 = parser%current_pos() - 1
-	if (size(expr%lsubscripts) <= 0) then
-		deallocate(expr%lsubscripts)
+	!if (size(expr%lsubscripts) <= 0) then
+	if (.not. allocated(expr%lsubscripts)) then
+		!deallocate(expr%lsubscripts)
 	else if (expr%val%type == array_type) then
 
 		!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
@@ -608,6 +611,7 @@ module function parse_name_expr(parser) result(expr)
 		end if
 	else
 		span = new_span(span0, span1 - span0 + 1)
+		print *, "err_scalar_subscript 1"
 		call parser%diagnostics%push( &
 			err_scalar_subscript(parser%context(), &
 			span, identifier%text))
@@ -689,21 +693,14 @@ recursive module subroutine parse_dot(parser, expr)
 	! I think this is the right place to parse subscripts. Or should it be after
 	! the recursive parse_dot()?
 	call parser%parse_subscripts(expr%member)
-	!call parser%parse_subscripts(expr)
-	if (size(expr%member%lsubscripts) <= 0) deallocate(expr%member%lsubscripts)
+	!if (size(expr%member%lsubscripts) <= 0) deallocate(expr%member%lsubscripts)
 
 	! I think this needs a recursive call to `parse_dot()` right here to handle
-	! things like `a.b.c`.  TODO: there should probably be a parse_subscripts()
-	! call here too. For both, might need to differentiate between lvalues and
-	! rvalues, i.e. use separate parse_ldot(), parse_rdot(),
-	! parse_lsubscripts(), ...
+	! things like `a.b.c`
 	if (parser%peek_kind(0) == dot_token) then
 
-		!expr%member%val%type = struct_type
 		expr%member%val = member
-
 		call parser%parse_dot(expr%member)
-
 		expr%val = expr%member%val
 
 	end if

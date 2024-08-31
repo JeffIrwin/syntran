@@ -2450,8 +2450,6 @@ end subroutine unit_test_return
 
 subroutine unit_test_struct(npass, nfail)
 
-	! More advanced tests on longer scripts
-
 	implicit none
 
 	integer, intent(inout) :: npass, nfail
@@ -2464,8 +2462,6 @@ subroutine unit_test_struct(npass, nfail)
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
-
-	! TODO: more struct tests
 
 	tests = &
 		[   &
@@ -2738,11 +2734,62 @@ subroutine unit_test_struct(npass, nfail)
 
 	! Trim dummy false element
 	tests = tests(1: size(tests) - 1)
-	!print *, "number of struct tests = ", size(tests)
+	!print *, "number of "//label//" tests = ", size(tests)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_struct
+
+!===============================================================================
+
+subroutine unit_test_struct_arr(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'structs/arrays'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval(''                         &                 ! 1
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'return v1.v[0];' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 2
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'return v1.v[1];' &
+				, quiet) == '2', &
+			eval(''                         &                 ! 3
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'return v1.v[1] + 1;' &
+				, quiet) == '3', &
+			eval(''                         &                 ! 3
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'v1.v = [3, 1, 2];' &
+				//'return v1.v[0] + v1.v[1];' &
+				, quiet) == '4', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_arr
 
 !===============================================================================
 
@@ -2965,6 +3012,7 @@ subroutine unit_tests(iostat)
 	call unit_test_lhs_slc_1  (npass, nfail)
 	call unit_test_return     (npass, nfail)
 	call unit_test_struct     (npass, nfail)
+	call unit_test_struct_arr (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

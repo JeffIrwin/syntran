@@ -387,8 +387,7 @@ subroutine eval_dot_expr(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	! TODO: can res be just out?  There's one other routine in here that does this
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -439,8 +438,8 @@ end subroutine set_val
 
 recursive function get_val(node, var, state) result(res)
 
-	! As is, maybe I should rename this to get_dot_val(), but I would like to
-	! extend it to process subscripts too
+	! TODO: should res be an out arg for consistency? Similar question for
+	! get_array_value_t()
 
 	! In nested expressions, like `a.b.c.d`, var begins as the top-most
 	! (left-most, outer-most) value `a`
@@ -449,7 +448,6 @@ recursive function get_val(node, var, state) result(res)
 	type(value_t), intent(in) :: var
 	type(state_t), intent(inout) :: state
 
-	!type(value_t), intent(inout) :: res
 	type(value_t) :: res
 
 	!********
@@ -470,45 +468,36 @@ recursive function get_val(node, var, state) result(res)
 
 	! Base case
 
-	! TODO: maybe invert if to never nest? Is this ordered correctly in the
-	! recursion wrt parsing?
-	if (allocated(node%member%lsubscripts)) then
-	!if (allocated(node%lsubscripts)) then
-		!print *, "lsubscripts allocated"
-
-		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-			!print *, "slice sub"
-			! TODO: not implemented, throw error
-		else
-			!print *, "scalar_sub"
-
-			!i8 = subscript_eval(node, state)
-			!array_val = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
-			!call compound_assign(array_val, res, node%op)
-			!call set_array_value_t( &
-			!	state%vars%vals(node%id_index)%array, i8, array_val)
-			!res = array_val
-
-			!! beware this print only works for literals. in general we need to
-			!! eval via sub_eval()
-			!print *, "lsub 1 = ", node%member%lsubscripts(1)%val%to_str()
-
-			!i8 = subscript_eval(node%member, state)
-			!i8 = sub_eval(node%member, state)
-			!i8 = sub_eval(node%member, var%struct(id)%array, state)
-			i8 = sub_eval(node%member, var%struct(id), state)
-
-			!array_val = ...
-			!res = get_array_value_t(node%member%array, i8)
-			res = get_array_value_t(var%struct(id)%array, i8)
-
-			return
-
-		end if
-
+	if (.not. allocated(node%member%lsubscripts)) then
+		res = var%struct(id)
+		return
 	end if
 
-	res = var%struct(id)
+	! TODO: is this ordered correctly in the
+	! recursion wrt parsing?
+	!print *, "lsubscripts allocated"
+
+	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+		!print *, "slice sub"
+
+		! TODO: not implemented, throw error.  Add code to catch in parser first
+		write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+		call internal_error()
+	end if
+
+	!print *, "scalar_sub"
+
+	!! beware this print only works for literals. in general we need to
+	!! eval via sub_eval()
+	!print *, "lsub 1 = ", node%member%lsubscripts(1)%val%to_str()
+
+	! TODO: i don't think this works for subs nested in between multiple
+	! dot exprs.  Still need to recurse
+
+	i8 = sub_eval(node%member, var%struct(id), state)
+	res = get_array_value_t(var%struct(id)%array, i8)
+
+	!return
 
 end function get_val
 
@@ -520,7 +509,7 @@ subroutine eval_struct_instance(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 

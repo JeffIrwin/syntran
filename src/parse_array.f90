@@ -449,8 +449,7 @@ module subroutine parse_subscripts(parser, expr)
 
 	if (parser%current_kind() /= lbracket_token) then
 
-		!! The function has to return something.  Caller deallocates
-		allocate( expr%lsubscripts(0))
+		!allocate( expr%lsubscripts(0))
 		return
 
 	end if

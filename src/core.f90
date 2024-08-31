@@ -34,9 +34,9 @@ module syntran__core_m
 	!      + nested structs
 	!    * tbd:
 	!      + structs of arrays
-	!        * kinda works if you statically initialize the whole array in the
-	!          struct and only refer to the whole array later. doesn't work if
-	!          you try to subscript anything inside a struct
+	!        * wip
+	!        * lhs subs tbd
+	!        * rhs subs done
 	!      + arrays of structs
 	!      + unary ops on dot exprs
 	!      + tests
