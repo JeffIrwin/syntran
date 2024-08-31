@@ -125,7 +125,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 		span0 = parser%current_pos()
 		call parser%parse_subscripts(expr)
 
-		!if (size(expr%lsubscripts) <= 0) deallocate(expr%lsubscripts)
 		span1 = parser%current_pos() - 1
 
 		if (parser%peek_kind(0) == dot_token) then
@@ -186,7 +185,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		!print *, 'allocated(expr%val%array) = ', allocated(expr%val%array)
 
-		!if (size(expr%lsubscripts) > 0) then
 		if (allocated(expr%lsubscripts)) then
 
 			if (expr%val%type == str_type) then
@@ -571,9 +569,8 @@ module function parse_name_expr(parser) result(expr)
 	! TODO: can any of this coda be moved inside of parse_subscripts()?  Are
 	! there differences between lval and rval subscripts?
 	span1 = parser%current_pos() - 1
-	!if (size(expr%lsubscripts) <= 0) then
 	if (.not. allocated(expr%lsubscripts)) then
-		!deallocate(expr%lsubscripts)
+		! do nothing
 	else if (expr%val%type == array_type) then
 
 		!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
@@ -693,7 +690,6 @@ recursive module subroutine parse_dot(parser, expr)
 	! I think this is the right place to parse subscripts. Or should it be after
 	! the recursive parse_dot()?
 	call parser%parse_subscripts(expr%member)
-	!if (size(expr%member%lsubscripts) <= 0) deallocate(expr%member%lsubscripts)
 
 	! I think this needs a recursive call to `parse_dot()` right here to handle
 	! things like `a.b.c`
