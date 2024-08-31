@@ -32,8 +32,12 @@ module syntran__core_m
 	!    * mvp done:
 	!      + struct fn return values
 	!      + nested structs
-	!        * works, but not nested lhs dot exprs yet
 	!    * tbd:
+	!      + structs of arrays
+	!        * kinda works if you statically initialize the whole array in the
+	!          struct and only refer to the whole array later. doesn't work if
+	!          you try to subscript anything inside a struct
+	!      + arrays of structs
 	!      + unary ops on dot exprs
 	!      + tests
 	!        > moar
@@ -45,11 +49,6 @@ module syntran__core_m
 	!        > check mismatches of assigning one struct to another, or passing a
 	!          struct to a fn
 	!      + improved to_str() conversion with labels of struct name and member names
-	!      + structs of arrays
-	!        * kinda works if you statically initialize the whole array in the
-	!          struct and only refer to the whole array later. doesn't work if
-	!          you try to subscript anything inside a struct
-	!      + arrays of structs
 	!  - triage notes from AOC.  many things are already fixed
 	!  - jumping control flow:
 	!    * fn return statement done

@@ -566,6 +566,8 @@ module function parse_name_expr(parser) result(expr)
 	span0 = parser%current_pos()
 	call parser%parse_subscripts(expr)
 
+	! TODO: can any of this coda be moved inside of parse_subscripts()?  Are
+	! there differences between lval and rval subscripts?
 	span1 = parser%current_pos() - 1
 	if (size(expr%lsubscripts) <= 0) then
 		deallocate(expr%lsubscripts)
@@ -683,6 +685,12 @@ recursive module subroutine parse_dot(parser, expr)
 
 	expr%member%id_index = member_id
 	expr%val = member
+
+	! I think this is the right place to parse subscripts. Or should it be after
+	! the recursive parse_dot()?
+	call parser%parse_subscripts(expr%member)
+	!call parser%parse_subscripts(expr)
+	if (size(expr%member%lsubscripts) <= 0) deallocate(expr%member%lsubscripts)
 
 	! I think this needs a recursive call to `parse_dot()` right here to handle
 	! things like `a.b.c`.  TODO: there should probably be a parse_subscripts()

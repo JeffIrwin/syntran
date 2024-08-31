@@ -387,6 +387,7 @@ subroutine eval_dot_expr(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
+	! TODO: can res be just out?  There's one other routine in here that does this
 	type(value_t), intent(inout) :: res
 
 	!********
@@ -403,7 +404,7 @@ subroutine eval_dot_expr(node, state, res)
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
-	res = get_val(node, state%vars%vals(node%id_index))
+	res = get_val(node, state%vars%vals(node%id_index), state)
 
 end subroutine eval_dot_expr
 
@@ -436,7 +437,7 @@ end subroutine set_val
 
 !===============================================================================
 
-recursive function get_val(node, var) result(res)
+recursive function get_val(node, var, state) result(res)
 
 	! As is, maybe I should rename this to get_dot_val(), but I would like to
 	! extend it to process subscripts too
@@ -446,6 +447,7 @@ recursive function get_val(node, var) result(res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(value_t), intent(in) :: var
+	type(state_t), intent(inout) :: state
 
 	!type(value_t), intent(inout) :: res
 	type(value_t) :: res
@@ -453,6 +455,7 @@ recursive function get_val(node, var) result(res)
 	!********
 
 	integer :: id
+	integer(kind = 8) :: i8
 
 	! `id` tracks whether each member is the 1st, 2nd, etc. member in the struct
 	! array of its parent.  A local variable isnt' really needed but I think it
@@ -461,11 +464,50 @@ recursive function get_val(node, var) result(res)
 
 	if (node%member%kind == dot_expr) then
 		! Recurse
-		res = get_val(node%member, var%struct(id))
+		res = get_val(node%member, var%struct(id), state)
 		return
 	end if
 
 	! Base case
+
+	! TODO: maybe invert if to never nest? Is this ordered correctly in the
+	! recursion wrt parsing?
+	if (allocated(node%member%lsubscripts)) then
+	!if (allocated(node%lsubscripts)) then
+		!print *, "lsubscripts allocated"
+
+		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+			!print *, "slice sub"
+			! TODO: not implemented, throw error
+		else
+			!print *, "scalar_sub"
+
+			!i8 = subscript_eval(node, state)
+			!array_val = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
+			!call compound_assign(array_val, res, node%op)
+			!call set_array_value_t( &
+			!	state%vars%vals(node%id_index)%array, i8, array_val)
+			!res = array_val
+
+			!! beware this print only works for literals. in general we need to
+			!! eval via sub_eval()
+			!print *, "lsub 1 = ", node%member%lsubscripts(1)%val%to_str()
+
+			!i8 = subscript_eval(node%member, state)
+			!i8 = sub_eval(node%member, state)
+			!i8 = sub_eval(node%member, var%struct(id)%array, state)
+			i8 = sub_eval(node%member, var%struct(id), state)
+
+			!array_val = ...
+			!res = get_array_value_t(node%member%array, i8)
+			res = get_array_value_t(var%struct(id)%array, i8)
+
+			return
+
+		end if
+
+	end if
+
 	res = var%struct(id)
 
 end function get_val
@@ -1140,7 +1182,7 @@ subroutine eval_assignment_expr(node, state, res)
 
 		! Get the initial value from the LHS, which could be nested like `a.b.c.d`
 		id = node%member%id_index
-		res = get_val(node, state%vars%vals(node%id_index))
+		res = get_val(node, state%vars%vals(node%id_index), state)
 
 		! Do the assignment or += or whatever and set res
 		call compound_assign(res, rhs, node%op)
@@ -2116,6 +2158,64 @@ function subscript_i32_eval(subs, array) result(index_)
 	!print *, 'index_ = ', index_
 
 end function subscript_i32_eval
+
+!===============================================================================
+
+! TODO: DRY
+function sub_eval(node, var, state) result(index_)
+
+	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
+	! subscript index_
+
+	type(syntax_node_t) :: node
+	type(value_t) :: var
+	type(state_t), intent(inout) :: state
+
+	integer(kind = 8) :: index_
+
+	!******
+
+	integer :: i
+	integer(kind = 8) :: prod
+	type(value_t) :: subscript
+
+	!print *, 'starting sub_eval()'
+
+	!! TODO
+	!! str scalar with single char subscript
+	!if (state%vars%vals(node%id_index)%type == str_type) then
+	!	call syntax_eval(node%lsubscripts(1), state, subscript)
+	!	index_ = subscript%to_i64()
+	!	return
+	!end if
+
+	!if (state%vars%vals(node%id_index)%type /= array_type) then
+	!	! internal_error?
+	!end if
+
+	prod  = 1
+	index_ = 0
+	!do i = 1, state%vars%vals(node%id_index)%array%rank
+	!do i = 1, node%array%rank
+	do i = 1, var%array%rank
+		!print *, 'i = ', i
+
+		call syntax_eval(node%lsubscripts(i), state, subscript)
+
+		! TODO: bound checking? by default or enabled with cmd line flag?
+		!
+		! I think the only way to do it without killing perf is by having bound
+		! checking turned off in release, and setting a compiler macro
+		! definition to enable it only in debug
+
+		index_ = index_ + prod * subscript%to_i64()
+		!prod  = prod * state%vars%vals(node%id_index)%array%size(i)
+		!prod  = prod * node%array%size(i)
+		prod  = prod * var%array%size(i)
+
+	end do
+
+end function sub_eval
 
 !===============================================================================
 
