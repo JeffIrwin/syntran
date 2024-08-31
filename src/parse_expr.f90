@@ -614,6 +614,8 @@ module function parse_name_expr(parser) result(expr)
 			span, identifier%text))
 	end if
 
+	!print *, "expr%val%type = ", kind_name(expr%val%type)
+
 	!print *, "tail parse_dot"
 	call parser%parse_dot(expr)
 

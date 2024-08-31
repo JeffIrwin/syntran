@@ -253,7 +253,7 @@ subroutine eval_name_expr(node, state, res)
 
 	!********
 
-	integer :: rank_res, idim_, idim_res
+	integer :: rank_res, idim_, idim_res, type
 	integer(kind = 8) :: il, iu, i8, index_
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
@@ -311,11 +311,23 @@ subroutine eval_name_expr(node, state, res)
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 
-			! This could probably be lumped in with the range_sub case now
-			! that I have it fully generalized
-			i8 = subscript_eval(node, state)
-			!print *, 'i8 = ', i8
-			res = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
+			!print *, "rval scalar sub"
+
+			type = state%vars%vals(node%id_index)%array%type
+			!print *, "type = ", kind_name(type)
+
+			if (type == struct_type) then
+				res = get_val(node, state%vars%vals(node%id_index), state)
+			else
+
+				! This could probably be lumped in with the range_sub case now
+				! that I have it fully generalized
+				!
+				! TODO: try to unify with get_val() branch above
+				i8 = subscript_eval(node, state)
+				res = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
+
+			end if
 
 		else
 
@@ -351,7 +363,7 @@ subroutine eval_name_expr(node, state, res)
 			res%array%len_ = product(res%array%size)
 			!print *, 'res len = ', res%array%len_
 
-			call allocate_array(res%array, res%array%len_)
+			call allocate_array(res, res%array%len_)
 
 			! Iterate through all subscripts in range and copy to result
 			! array
@@ -454,6 +466,26 @@ recursive function get_val(node, var, state) result(res)
 
 	integer :: id
 	integer(kind = 8) :: i8
+
+	if (allocated(node%lsubscripts)) then
+
+		!print *, "rval scalar sub"
+		!print *, "lsubscripts allocated"
+		i8 = subscript_eval(node, state)
+		!print *, 'i8 = ', i8
+
+		!res = get_val(node, var%struct(i8), state)
+		!res = var%struct(i8)%struct
+		res = var%struct(i8+1)
+		res%type = struct_type
+		!res%struct_name = var%struct_name
+		res%struct_name = var%struct(i8+1)%struct_name ! TODO: empty
+
+		! TODO: recurse somehow
+
+		return
+
+	end if
 
 	! `id` tracks whether each member is the 1st, 2nd, etc. member in the struct
 	! array of its parent.  A local variable isnt' really needed but I think it
@@ -1556,17 +1588,18 @@ subroutine eval_array_expr(node, state, res)
 
 	else if (node%val%array%kind == unif_array) then
 
-		array%rank = size( node%size )
-		!print *, "rank = ", array%rank
-		allocate(array%size( array%rank ))
+		allocate(res%array)
+		res%array%rank = size( node%size )
+		!print *, "rank = ", res%array%rank
+		allocate(res%array%size( res%array%rank ))
 
-		do i = 1, array%rank
+		do i = 1, res%array%rank
 			!print *, "i = ", i
 			call syntax_eval(node%size(i), state, len_)
 			!print *, "len_%type = ", kind_name(len_%type)
 			!print *, "len_      = ", len_%to_i64()
-			array%size(i) = len_%to_i64()
-			!print *, 'size['//str(i)//'] = ', array%size(i)
+			res%array%size(i) = len_%to_i64()
+			!print *, 'size['//str(i)//'] = ', res%array%size(i)
 		end do
 
 		! Uniform-value impl arrays (every element has the same value at
@@ -1578,30 +1611,49 @@ subroutine eval_array_expr(node, state, res)
 
 		! Allocate in one shot without growing
 
-		array%type = node%val%array%type
-		array%len_  = product(array%size)
-		!print *, 'array%len_ = ', array%len_
+		res%array%type = node%val%array%type
+		res%array%len_  = product(res%array%size)
+		!print *, 'res%array%len_ = ', res%array%len_
 
-		call allocate_array(array, array%len_)
-		select case (array%type)
+		call allocate_array(res, res%array%len_)
+		select case (res%array%type)
 		case (i32_type)
-			array%i32 = lbound_%sca%i32
+			res%array%i32 = lbound_%sca%i32
+
 		case (i64_type)
-			array%i64 = lbound_%sca%i64
+			res%array%i64 = lbound_%sca%i64
+
 		case (f32_type)
-			array%f32 = lbound_%sca%f32
+			res%array%f32 = lbound_%sca%f32
+
 		case (bool_type)
-			array%bool = lbound_%sca%bool
+			res%array%bool = lbound_%sca%bool
+
 		case (str_type)
-			array%str = lbound_%sca%str
+			res%array%str = lbound_%sca%str
+
+		case (struct_type)
+			!res%array%str = lbound_%sca%str
+			!res%struct(:) = lbound_
+			!res%struct(:)%struct = lbound_
+
+			print *, "lbound_ size = ", size(lbound_%struct)
+
+			!res%struct(:)%struct = lbound_%struct
+			do i8 = 1, res%array%len_
+				!allocate(res%struct(i8)%struct)
+				!res%struct(i8)%struct = lbound_
+				res%struct(i8)%struct = lbound_%struct
+			end do
+
 		case default
-			write(*,*) err_eval_len_array(kind_name(array%type))
+			write(*,*) err_eval_len_array(kind_name(res%array%type))
 			call internal_error()
 		end select
 
-		allocate(res%array)
 		res%type  = array_type
-		res%array = array
+		!allocate(res%array)
+		!res%array = array
 
 	else if (node%val%array%kind == bound_array) then
 		!print *, 'impl_array'
@@ -1621,47 +1673,47 @@ subroutine eval_array_expr(node, state, res)
 
 		!array = new_array(node%val%array%type)
 
-		array%type = node%val%array%type
+		allocate(res%array)
+		res%array%type = node%val%array%type
 
 		if (any(i64_type == [lbound_%type, ubound_%type])) then
 			call promote_i32_i64(lbound_)
 			call promote_i32_i64(ubound_)
 		end if
 
-		if (.not. any(array%type == [i32_type, i64_type])) then
+		if (.not. any(res%array%type == [i32_type, i64_type])) then
 			write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
 			call internal_error()
 		end if
 
-		if (array%type == i32_type) then
-			array%len_ = ubound_%sca%i32 - lbound_%sca%i32
-		else !if (array%type == i64_type) then
-			array%len_ = ubound_%sca%i64 - lbound_%sca%i64
+		if (res%array%type == i32_type) then
+			res%array%len_ = ubound_%sca%i32 - lbound_%sca%i32
+		else !if (res%array%type == i64_type) then
+			res%array%len_ = ubound_%sca%i64 - lbound_%sca%i64
 		end if
 
-		call allocate_array(array, array%len_)
+		call allocate_array(res, res%array%len_)
 
 		!print *, 'bounds in [', lbound_%str(), ': ', ubound_%str(), ']'
 		!print *, 'node%val%array%type = ', node%val%array%type
 
-		if (array%type == i32_type) then
+		if (res%array%type == i32_type) then
 			do i = lbound_%sca%i32, ubound_%sca%i32 - 1
-				array%i32(i - lbound_%sca%i32 + 1) = i
+				res%array%i32(i - lbound_%sca%i32 + 1) = i
 			end do
-		else !if (array%type == i64_type) then
+		else !if (res%array%type == i64_type) then
 			do i8 = lbound_%sca%i64, ubound_%sca%i64 - 1
-				array%i64(i8 - lbound_%sca%i64 + 1) = i8
+				res%array%i64(i8 - lbound_%sca%i64 + 1) = i8
 			end do
 		end if
 
-		array%rank = 1
-		allocate(array%size( array%rank ))
-		array%size = array%len_
-
-		allocate(res%array)
+		res%array%rank = 1
+		allocate(res%array%size( res%array%rank ))
+		res%array%size = res%array%len_
 
 		res%type  = array_type
-		res%array = array
+		!allocate(res%array)
+		!res%array = array
 
 	else if (node%val%array%kind == size_array) then
 
@@ -1912,27 +1964,40 @@ end subroutine promote_i32_i64
 
 !===============================================================================
 
-subroutine allocate_array(array, cap)
+!subroutine allocate_array(array, cap)
+subroutine allocate_array(val, cap)
 
-	type(array_t), intent(inout) :: array
+	!type(array_t), intent(inout) :: array
+	type(value_t), intent(inout) :: val
 	integer(kind = 8), intent(in) :: cap
 
-	array%cap = cap
+	val%array%cap = cap
 
-	select case (array%type)
+	select case (val%array%type)
 	case (i32_type)
-		allocate(array%i32( cap ))
+		allocate(val%array%i32( cap ))
+
 	case (i64_type)
-		allocate(array%i64( cap ))
+		allocate(val%array%i64( cap ))
+
 	case (f32_type)
-		allocate(array%f32( cap ))
+		allocate(val%array%f32( cap ))
+
 	case (bool_type)
-		allocate(array%bool( cap ))
+		allocate(val%array%bool( cap ))
+
 	case (str_type)
-		allocate(array%str( cap ))
+		allocate(val%array%str( cap ))
+
+	case (struct_type)
+		!allocate(val%array%struct( cap ))
+		!print *, "val%array of structs"
+		allocate(val%struct( cap ))
+		!call internal_error()
+
 	case default
 		write(*,*) err_int_prefix//'cannot allocate array of type `' &
-			//kind_name(array%type)//'`'//color_reset
+			//kind_name(val%array%type)//'`'//color_reset
 		call internal_error()
 	end select
 
@@ -2366,6 +2431,9 @@ function get_array_value_t(array, i) result(val)
 
 		case (str_type)
 			val%sca%str = array%str(i + 1)
+
+		case default
+			print *, "bad type in get_array_value_t"
 
 	end select
 

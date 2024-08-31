@@ -60,6 +60,9 @@ module syntran__value_m
 
 		type(string_t   ), allocatable ::  str(:)
 
+		!type(value_t), allocatable :: struct(:)
+		!type(value_t), pointer :: struct(:)
+
 		! TODO: file arrays
 
 		integer :: rank
@@ -483,6 +486,8 @@ recursive function value_to_str(val) result(ans)
 
 	!type(string_vector_t) :: str_vec
 	type(char_vector_t) :: str_vec
+
+	!print *, "val type = ", kind_name(val%type)
 
 	select case (val%type)
 

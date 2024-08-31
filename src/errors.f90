@@ -693,7 +693,7 @@ function err_eval_len_array(type_name) result(err)
 	character(len = :), allocatable :: err
 
 	err = err_int_prefix &
-		//'array cannot be evaluated for type `' &
+		//'len array cannot be evaluated for type `' &
 		//type_name//'`'//color_reset
 
 end function err_eval_len_array

@@ -350,6 +350,8 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
 
+	!print * , "src_filel = """, src_filel, """"
+
 	chdirl = .false.
 	if (present(chdir_)) then
 		chdirl = .true.
