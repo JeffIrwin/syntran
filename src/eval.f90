@@ -409,6 +409,34 @@ end subroutine eval_dot_expr
 
 !===============================================================================
 
+!call set_val(node, state%vars%vals(node%id_index), res)
+recursive subroutine set_val(node, var, val)
+
+	type(syntax_node_t), intent(in) :: node
+	type(value_t), intent(inout) :: var
+	type(value_t), intent(in) :: val
+
+	!********
+
+	integer :: id
+
+	id = node%member%id_index
+
+	if (node%member%kind == dot_expr) then
+		! Recurse
+		!res = get_val(node%member, var%struct(id))
+		call set_val(node%member, var%struct(id), val)
+		return
+	end if
+
+	! Base case
+	!res = var%struct(id)
+	var%struct(id) = val
+
+end subroutine set_val
+
+!===============================================================================
+
 recursive function get_val(node, var) result(res)
 
 	! As is, maybe I should rename this to get_dot_val(), but I would like to
@@ -1108,11 +1136,12 @@ subroutine eval_assignment_expr(node, state, res)
 		call syntax_eval(node%right, state, rhs)
 
 		id = node%member%id_index
-		res = state%vars%vals(node%id_index)%struct(id)  ! get_val()
+		res = get_val(node, state%vars%vals(node%id_index))
 
 		call compound_assign(res, rhs, node%op)
 
-		state%vars%vals(node%id_index)%struct(id) = res  ! set_val()
+		!state%vars%vals(node%id_index)%struct(id) = res  ! set_val()
+		call set_val(node, state%vars%vals(node%id_index), res)
 
 	else if (.not. allocated(node%lsubscripts)) then
 
