@@ -482,7 +482,7 @@ recursive function value_to_str(val) result(ans)
 	!character(len = 16) :: buf16
 
 	integer :: j
-	integer(kind = 8) :: i8, prod, n
+	integer(kind = 8) :: i8, j8, prod, n, nj
 
 	!type(string_vector_t) :: str_vec
 	type(char_vector_t) :: str_vec
@@ -504,11 +504,15 @@ recursive function value_to_str(val) result(ans)
 				!call str_vec%push( val%struct(i8)%struct_name//" = " )
 
 				call str_vec%push( trimw(val%struct(i8)%to_str()) )
+
+				!do j8 = 1, size(val%struct(i8)%struct)
+				!	call str_vec%push( trimw(val%struct(i8)%struct(j8)%to_str()) )
+				!end do
+
 				if (i8 < n) call str_vec%push(", ")
 
 			end do
 			call str_vec%push("}")
-			!ans = str_vec%v( 1: str_vec%len_ )
 			ans = str_vec%trim()
 
 		case (array_type)
@@ -646,10 +650,48 @@ recursive function value_to_str(val) result(ans)
 
 				end do
 
+			else if (val%array%type == struct_type) then
+
+				call str_vec%push("array<"//val%struct_name//"> ")
+	
+				n = size(val%struct)
+				do i8 = 1, n
+	
+					!! TODO: can we just recurse instead of nesting a loop?
+					!call str_vec%push( val%struct(i8)%to_str() )
+
+					! It would be nice to label each member with its name
+	
+					!call str_vec%push( val%struct(i8)%struct_name//" = " )
+	
+					!call str_vec%push( trimw(val%struct(i8)%to_str()) )
+	
+					call str_vec%push("{")
+					nj = size(val%struct(i8)%struct)
+					do j8 = 1, nj
+						call str_vec%push( trimw(val%struct(i8)%struct(j8)%to_str()) )
+						if (j8 < nj) call str_vec%push(", ")
+					end do
+	
+					if (i8 < n) call str_vec%push("}, ")
+	
+				end do
+				call str_vec%push("}")
+				!ans = str_vec%trim()
+
 			else
-				write(*,*) 'Error: array ans conversion not implemented' &
-					//' for this type'
-				call internal_error()
+
+				! Do *not* print anything in this function, as recursive IO will
+				! cause a hang
+
+				!call str_vec%push(err_prefix//"array str conversion not" &
+				!	//" implemented for this type")
+				call str_vec%push(err_prefix//"<invalid_array_value>"//color_reset)
+
+				!write(*,*) 'Error: array ans conversion not implemented' &
+				!	//' for this type'
+				!call internal_error()
+
 			end if
 
 			if (val%array%rank > 1) call str_vec%push(line_feed)

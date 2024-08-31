@@ -469,19 +469,23 @@ recursive function get_val(node, var, state) result(res)
 
 	if (allocated(node%lsubscripts)) then
 
+		! TODO: throw error for anything but scalar_sub
+
 		!print *, "rval scalar sub"
 		!print *, "lsubscripts allocated"
 		i8 = subscript_eval(node, state)
 		!print *, 'i8 = ', i8
 
+		! TODO: recurse somehow
+
+		!res = get_val(node%member, var%struct(i8+1), state)
 		!res = get_val(node, var%struct(i8), state)
 		!res = var%struct(i8)%struct
 		res = var%struct(i8+1)
-		res%type = struct_type
-		!res%struct_name = var%struct_name
-		res%struct_name = var%struct(i8+1)%struct_name ! TODO: empty
 
-		! TODO: recurse somehow
+		res%type = struct_type
+		res%struct_name = var%struct_name
+		!res%struct_name = var%struct(i8+1)%struct_name
 
 		return
 
@@ -1644,7 +1648,12 @@ subroutine eval_array_expr(node, state, res)
 				!allocate(res%struct(i8)%struct)
 				!res%struct(i8)%struct = lbound_
 				res%struct(i8)%struct = lbound_%struct
+				!res%struct(i8)%struct_name = lbound_%struct_name
 			end do
+
+			! Arrays are homogeneous, so every element shares one struct_name
+			! for efficiency
+			res%struct_name = lbound_%struct_name
 
 		case default
 			write(*,*) err_eval_len_array(kind_name(res%array%type))
