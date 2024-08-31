@@ -2686,7 +2686,7 @@ subroutine unit_test_struct(npass, nfail)
 				//'let y1 = Y{ba=r1,  p=p3};' &
 				//'let o = y1.ba.bl.y;' &
 				, quiet) == '13', &
-			eval(''                         &                 ! 42
+			eval(''                         &                 ! 43
 				//'struct P{x:i32, y:i32, z:i32}' &  ! point
 				//'struct R{bl: P, tr: P}' &         ! rectangle with bottom-left and top-right points
 				//'struct Y{ba: R, p: P}' &          ! pyramid with base rect and a point
@@ -2697,6 +2697,42 @@ subroutine unit_test_struct(npass, nfail)
 				//'let y1 = Y{ba=r1,  p=p3};' &
 				//'let o = y1.p.z;' &
 				, quiet) == '5', &
+			eval(''                         &                 ! 44
+				//'struct P{x:i32, y:i32, z:i32}' &  ! point
+				//'struct R{bl: P, tr: P}' &         ! rectangle with bottom-left and top-right points
+				//'struct Y{ba: R, p: P}' &          ! pyramid with base rect and a point
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'y1.ba.tr.x = 10;' &
+				//'return y1.ba.tr.x;' &
+				, quiet) == '10', &
+			eval(''                         &                 ! 45
+				//'struct P{x:i32, y:i32, z:i32}' &  ! point
+				//'struct R{bl: P, tr: P}' &         ! rectangle with bottom-left and top-right points
+				//'struct Y{ba: R, p: P}' &          ! pyramid with base rect and a point
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'y1.ba.bl.y += 1;' &
+				//'return y1.ba.bl.y;' &
+				, quiet) == '14', &
+			eval(''                         &                 ! 46
+				//'struct P{x:i32, y:i32, z:i32}' &  ! point
+				//'struct R{bl: P, tr: P}' &         ! rectangle with bottom-left and top-right points
+				//'struct Y{ba: R, p: P}' &          ! pyramid with base rect and a point
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'y1.p.z -= y1.ba.tr.x;' &
+				//'return y1.p.z;' &
+				, quiet) == '-4', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

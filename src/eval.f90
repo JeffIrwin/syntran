@@ -409,8 +409,9 @@ end subroutine eval_dot_expr
 
 !===============================================================================
 
-!call set_val(node, state%vars%vals(node%id_index), res)
 recursive subroutine set_val(node, var, val)
+
+	! Assign var.mem = val, or recurse if mem is also a dot expr
 
 	type(syntax_node_t), intent(in) :: node
 	type(value_t), intent(inout) :: var
@@ -424,13 +425,11 @@ recursive subroutine set_val(node, var, val)
 
 	if (node%member%kind == dot_expr) then
 		! Recurse
-		!res = get_val(node%member, var%struct(id))
 		call set_val(node%member, var%struct(id), val)
 		return
 	end if
 
 	! Base case
-	!res = var%struct(id)
 	var%struct(id) = val
 
 end subroutine set_val
@@ -1133,14 +1132,20 @@ subroutine eval_assignment_expr(node, state, res)
 	if (allocated( node%member )) then
 		!print *, "assign LHS dot member"
 
+		! This is similar to what I do below with get_array_value_t() and
+		! set_array_value_t(), but I've renamed some of the variables
+
+		! Evaluate the RHS
 		call syntax_eval(node%right, state, rhs)
 
+		! Get the initial value from the LHS, which could be nested like `a.b.c.d`
 		id = node%member%id_index
 		res = get_val(node, state%vars%vals(node%id_index))
 
+		! Do the assignment or += or whatever and set res
 		call compound_assign(res, rhs, node%op)
 
-		!state%vars%vals(node%id_index)%struct(id) = res  ! set_val()
+		! Save it back into the LHS var
 		call set_val(node, state%vars%vals(node%id_index), res)
 
 	else if (.not. allocated(node%lsubscripts)) then
@@ -1155,7 +1160,7 @@ subroutine eval_assignment_expr(node, state, res)
 		!end if
 		!end if
 
-		! Assign return value
+		! Eval the RHS
 		!print *, 'eval and set res'
 		call syntax_eval(node%right, state, res)
 
@@ -1184,7 +1189,9 @@ subroutine eval_assignment_expr(node, state, res)
 		!print *, 'LHS array subscript assignment'
 		!print *, 'LHS type = ', kind_name(state%vars%vals(node%id_index)%array%type)  ! not alloc for str
 
-		! Assign return value from RHS
+		! Eval the RHS.  I should probably rename `res` to `rhs` here like I did
+		! with get_val() for dot exprs above, because it's not really the result
+		! yet in cases of compound assignment
 		call syntax_eval(node%right, state, res)
 
 		!print *, 'RHS = ', res%to_str()
