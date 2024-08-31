@@ -2774,18 +2774,18 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
 				//'return v1.v[1] + 1;' &
 				, quiet) == '3', &
-			eval(''                         &                 ! 4
+			eval(''                         &                 ! 3
 				//'struct V{v:[i32;:], name:str,}' &
 				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
 				//'v1.v = [3, 1, 2];' &
 				//'return v1.v[0] + v1.v[1];' &
 				, quiet) == '4', &
-			eval(''                         &                 ! 5
+			eval(''                         &                 ! 4
 				//'struct V{v:[i32;:], name:str,}' &
 				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
 				//'let x = v1.v[1] + [3, 2, 1];' &
 				, quiet) == '[5, 4, 3]', &
-			eval(''                         &                 ! 6
+			eval(''                         &                 ! 5
 				//'struct V{v:[i32;:], name:str,}' &  ! vector
 				//'struct L{s:V, e:V}'             &  ! line with start and end vectors
 				//'let v1 = V{v=[3,2,1], name="myvec1"};' &
@@ -2793,7 +2793,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let l1 = L{s=v1, e=v2};' &
 				//'return l1.s.v[0];' &
 				, quiet) == '3', &
-			eval(''                         &                 ! 7
+			eval(''                         &                 ! 5
 				//'struct V{v:[i32;:], name:str,}' &  ! vector
 				//'struct L{s:V, e:V}'             &  ! line with start and end vectors
 				//'let v1 = V{v=[3,2,1], name="myvec1"};' &
@@ -2801,7 +2801,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let l1 = L{s=v1, e=v2};' &
 				//'return l1.e.v[1];' &
 				, quiet) == '2', &
-			eval(''                         &                 ! 8
+			eval(''                         &                 ! 6
 				//'struct V{v:[i32;:], name:str,}' &  ! vector
 				//'struct L{s:V, e:V}'             &  ! line with start and end vectors
 				//'let v1 = V{v=[3,2,1], name="myvec1"};' &
@@ -2809,22 +2809,6 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let l1 = L{s=v1, e=v2};' &
 				//'return l1.e.name;' &
 				, quiet) == 'myvec2', &
-			eval(''                         &                 ! 9
-				//'struct V{v:[i32;:], name:str,}' &  ! vector
-				//'struct L{s:V, e:V}'             &  ! line with start and end vectors
-				//'let v1 = V{v=[3,2,1], name="myvec1"};' &
-				//'let v2 = V{v=[6,2,5], name="myvec2"};' &
-				//'let l1 = L{s=v1, e=v2};' &
-				//'return l1.e.name[0];' &
-				, quiet) == 'm', &
-			eval(''                         &                 ! 10
-				//'struct V{v:[i32;:], name:str,}' &  ! vector
-				//'struct L{s:V, e:V}'             &  ! line with start and end vectors
-				//'let v1 = V{v=[3,2,1], name="myvec1"};' &
-				//'let v2 = V{v=[6,2,5], name="myvec2"};' &
-				//'let l1 = L{s=v1, e=v2};' &
-				//'return l1.e.name[0];' &
-				, quiet) == 'm', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

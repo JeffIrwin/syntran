@@ -495,27 +495,6 @@ recursive function get_val(node, var, state) result(res)
 	! dot exprs.  Still need to recurse
 
 	i8 = sub_eval(node%member, var%struct(id), state)
-
-	! TODO: keep str dot subscripts here, but that's not a priority yet. I want
-	! to do lhs dot subs and arrays of structs first
-
-	!if () then
-	!if (var%type == str_type) then
-	if (var%struct(id)%type == str_type) then
-
-		! TODO: this feels like a dirty hack.  Can it be refactored inside of
-		! get_array_value_t?
-
-		!res%type = state%vars%vals(node%id_index)%type
-		res%type = str_type
-
-		!res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
-		!res%sca%str%s = var%sca%str%s(i8+1: i8+1)
-		res%sca%str%s = var%struct(id)%sca%str%s(i8+1: i8+1)
-
-		return
-
-	end if
 	res = get_array_value_t(var%struct(id)%array, i8)
 
 	!return
@@ -2191,14 +2170,13 @@ function sub_eval(node, var, state) result(index_)
 
 	!print *, 'starting sub_eval()'
 
-	! str scalar with single char subscript
-	if (var%type == str_type) then
+	!! TODO
+	!! str scalar with single char subscript
 	!if (state%vars%vals(node%id_index)%type == str_type) then
-		print *, "str type"
-		call syntax_eval(node%lsubscripts(1), state, subscript)
-		index_ = subscript%to_i64()
-		return
-	end if
+	!	call syntax_eval(node%lsubscripts(1), state, subscript)
+	!	index_ = subscript%to_i64()
+	!	return
+	!end if
 
 	!if (state%vars%vals(node%id_index)%type /= array_type) then
 	!	! internal_error?
