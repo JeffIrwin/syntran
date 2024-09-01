@@ -497,14 +497,10 @@ recursive function get_val(node, var, state) result(res)
 			return
 		end if
 
-		!res = get_val(node%member, var%struct(i8+1), state)
-		!res = get_val(node, var%struct(i8), state)
-		!res = var%struct(i8)%struct
 		res = var%struct(i8+1)
 
 		res%type = struct_type
 		res%struct_name = var%struct_name
-		!res%struct_name = var%struct(i8+1)%struct_name
 
 		return
 
@@ -527,9 +523,6 @@ recursive function get_val(node, var, state) result(res)
 		res = var%struct(id)
 		return
 	end if
-
-	! TODO: is this ordered correctly in the
-	! recursion wrt parsing?
 	!print *, "lsubscripts allocated"
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
@@ -539,20 +532,10 @@ recursive function get_val(node, var, state) result(res)
 		write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
 		call internal_error()
 	end if
-
 	!print *, "scalar_sub"
-
-	!! beware this print only works for literals. in general we need to
-	!! eval via sub_eval()
-	!print *, "lsub 1 = ", node%member%lsubscripts(1)%val%to_str()
-
-	! TODO: i don't think this works for subs nested in between multiple
-	! dot exprs.  Still need to recurse
 
 	i8 = sub_eval(node%member, var%struct(id), state)
 	res = get_array_value_t(var%struct(id)%array, i8)
-
-	!return
 
 end function get_val
 
@@ -1777,23 +1760,50 @@ subroutine eval_array_expr(node, state, res)
 
 		! TODO: allow empty arrays?  Sub type of empty array?  Empty arrays
 		! can currently be created like [0: -1];
-		array = new_array(node%val%array%type, size(node%elems))
+
+		allocate(res%array)
+		res%array%type = node%val%array%type
+		!array = new_array(node%val%array%type, size(node%elems))
+		!call allocate_array(res, res%array%len_)
+		call allocate_array(res, size(node%elems, kind = 8))
+
+		! TODO: dry
+		res%array%len_ = 0
+		!res%array%cap
+		!res%array%type = 
 
 		do i = 1, size(node%elems)
 			call syntax_eval(node%elems(i), state, elem)
 			!print *, 'elem['//str(i)//'] = ', elem%str()
-			call array%push(elem)
+
+			if (res%array%type == struct_type) then
+				res%struct(i) = elem
+			else
+				call res%array%push(elem)
+			end if
+
 		end do
 
-		array%rank = 1
-		allocate(array%size( array%rank ))
-		array%size = array%len_
+		if (res%array%type == struct_type) then
+			res%array%len_ = size(node%elems)
+		end if
 
-		!print *, 'copying array'
-		allocate(res%array)
+		res%array%rank = 1
+		allocate(res%array%size( res%array%rank ))
+		res%array%size = res%array%len_
+
 		res%type  = array_type
-		res%array = array
-		!print *, 'done'
+
+		!res%struct_name = lbound_%struct_name
+		!res%struct_name = node%elems(1)%struct_name
+		res%struct_name = node%val%struct_name
+
+		!print *, "struct_name = ", res%struct_name
+
+		!!print *, 'copying array'
+		!allocate(res%array)
+		!res%array = array
+		!!print *, 'done'
 
 	else
 		write(*,*) err_int_prefix//'unexpected array kind'//color_reset
@@ -1985,12 +1995,14 @@ end subroutine promote_i32_i64
 
 !===============================================================================
 
-!subroutine allocate_array(array, cap)
 subroutine allocate_array(val, cap)
 
 	!type(array_t), intent(inout) :: array
 	type(value_t), intent(inout) :: val
 	integer(kind = 8), intent(in) :: cap
+
+	!! always done in caller
+	!if (.not. allocated(val%array)) allocate(val%array)
 
 	val%array%cap = cap
 
@@ -2011,10 +2023,7 @@ subroutine allocate_array(val, cap)
 		allocate(val%array%str( cap ))
 
 	case (struct_type)
-		!allocate(val%array%struct( cap ))
-		!print *, "val%array of structs"
 		allocate(val%struct( cap ))
-		!call internal_error()
 
 	case default
 		write(*,*) err_int_prefix//'cannot allocate array of type `' &

@@ -2729,6 +2729,9 @@ subroutine unit_test_struct(npass, nfail)
 				//'y1.p.z -= y1.ba.tr.x;' &
 				//'return y1.p.z;' &
 				, quiet) == '-4', &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 47
+			    //'let p1 = P{x=6, y=13};' &  ! might be premature to test struct to str conversion
+			    //'p1;', quiet) == 'P{6, 13}', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2835,6 +2838,26 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
 				//'return ps[1].y;' &
 				, quiet) == '13', &
+			eval(''                         &                 ! 11
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
+				//'return ps[0];' &            ! might be premature to test struct to str conversion
+				, quiet) == 'P{6, 13}', &
+			eval(''                         &                 ! 12
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let p2 = P{x=4, y=15,};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[0].x;' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 12
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let p2 = P{x=4, y=15,};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[1].y;' &
+				, quiet) == '15', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

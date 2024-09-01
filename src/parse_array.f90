@@ -124,7 +124,7 @@ module function parse_array_expr(parser) result(expr)
 
 		expr%kind           = array_expr
 
-		expr%val%type       = array_type
+		expr%val%type        = array_type
 		expr%val%struct_name = lbound_%val%struct_name
 
 		expr%val%array%type = lbound_%val%type
@@ -410,9 +410,14 @@ module function parse_array_expr(parser) result(expr)
 	expr%kind           = array_expr
 
 	!expr%val%type       = lbound_%val%type
-	expr%val%type       = array_type
+	expr%val%type        = array_type
+	expr%val%struct_name = lbound_%val%struct_name
+
+	!print *, "expr struct_name = ", expr%val%struct_name
 
 	expr%val%array%type = lbound_%val%type
+	expr%val%array%type = lbound_%val%type
+
 	expr%val%array%kind = expl_array
 	expr%val%array%rank = 1
 	expr%val%array%len_ = elems%len_

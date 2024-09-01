@@ -33,11 +33,11 @@ module syntran__core_m
 	!      + struct fn return values
 	!      + nested structs
 	!    * tbd:
-	!      + structs of arrays
+	!      + structs of arrays (and arrays of structs)
 	!        * wip
-	!        * lhs subs tbd
+	!        * lhs subs tbd. want to finish rhs recursion first, then lhs will
+	!          be a very similar structure but with setters instead of getters
 	!        * rhs subs done
-	!      + arrays of structs
 	!      + unary ops on dot exprs
 	!      + tests
 	!        > moar
