@@ -2762,6 +2762,9 @@ subroutine unit_test_struct_arr(npass, nfail)
 
 	!********
 
+	! This tests both structs of arrays and arrays of structs.  There are
+	! limited structs of arrays covered in unit_test_struct(), but more complex
+	! cases are covered here
 	character(len = *), parameter :: label = 'structs/arrays'
 
 	logical, parameter :: quiet = .true.
@@ -2891,6 +2894,39 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let l2 = L{s = p3, e = p4};' &
 				//'let ls = [l1, l2];' &
 				//'return ls[1].s.y;' &
+				, quiet) == '18', &
+			eval(''                         &                 ! 18
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'let p1 = P{v=[6, 13], s="pt1"};' &
+				//'let p2 = P{v=[4, 15], s="pt2"};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[0].v[1];' &
+				, quiet) == '13', &
+			eval(''                         &                 ! 19
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'let p1 = P{v=[6, 13], s="pt1"};' &
+				//'let p2 = P{v=[4, 15], s="pt2"};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[1].v[0];' &
+				, quiet) == '4', &
+			eval(''                         &                 ! 20
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'let p1 = P{v=[6, 13], s="pt1"};' &
+				//'let p2 = P{v=[4, 15], s="pt2"};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[1].s;' &
+				, quiet) == 'pt2', &
+			eval(''                         &                 ! 17
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'struct L{s:P, e:P}'      &      ! line
+				//'let p1 = P{v=[ 6, 13], s="pt1"};' &
+				//'let p2 = P{v=[ 4, 15], s="pt2"};' &
+				//'let p3 = P{v=[16, 18], s="pt3"};' &
+				//'let p4 = P{v=[14, 20], s="pt4"};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'return ls[1].s.v[1];' &
 				, quiet) == '18', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]

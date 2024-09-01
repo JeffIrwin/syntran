@@ -432,6 +432,12 @@ end subroutine set_val
 
 recursive function get_val(node, var, state) result(res)
 
+	! TODO: this is a mess because %member and %lsubscripts are children of the
+	! same syntax node.  If I nest %lsubscripts inside of an %elem child or
+	! something, can this be implemented more cleanly with recursion?  It will
+	! require lots of changes for (non-struct) arrays elsewhere but it could be
+	! worth it
+	!
 	! TODO: should res be an out arg for consistency? Similar question for
 	! get_array_val()
 	!
@@ -449,7 +455,7 @@ recursive function get_val(node, var, state) result(res)
 	!********
 
 	integer :: id
-	integer(kind = 8) :: i8
+	integer(kind = 8) :: i8, j8
 
 	if (allocated(node%lsubscripts)) then
 
@@ -472,7 +478,21 @@ recursive function get_val(node, var, state) result(res)
 				return
 			end if
 
-			res = var%struct(i8+1)%struct(id)
+			if (.not. allocated(node%member%lsubscripts)) then
+				res = var%struct(i8+1)%struct(id)
+				return
+			end if
+
+			! Arrays chained by a dot: `a[0].b[0]`
+			!
+			! TODO: ban non-scalar subscripts like below
+
+			!print *, "array dot chain"
+
+			!i8 = sub_eval(node%member, var%struct(id), state)
+			!res = get_array_val(var%struct(id)%array, i8)
+			j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
+			res = get_array_val(var%struct(i8+1)%struct(id)%array, j8)
 			return
 
 		end if

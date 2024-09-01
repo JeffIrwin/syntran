@@ -61,11 +61,6 @@ module syntran__types_m
 
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
-		!
-		! TODO: my experience has taught me that Fortran pointers are extremely
-		! dangerous (see memory leaks due to now removed value_t -> array_t
-		! pointer).  Can we avoid having a pointer here and make it allocatable
-		! instead?
 		!type(syntax_node_t), pointer :: node => null()
 		type(syntax_node_t), allocatable :: node
 
