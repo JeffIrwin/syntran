@@ -534,6 +534,8 @@ recursive function get_val(node, var, state) result(res)
 	! Now realize that the node var expression could be any permutation like
 	! `a.b[1].c[2].d`, with the tail value `d` being either a primitive type,
 	! array, or another struct.  That is what this routine abstracts
+	!
+	! FIXME: if you change something in the getter, change it in the setter too
 
 	type(syntax_node_t), intent(in) :: node
 	type(value_t), intent(in) :: var
@@ -548,7 +550,9 @@ recursive function get_val(node, var, state) result(res)
 
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
-		i8 = subscript_eval(node, state)
+		!i8 = subscript_eval(node, state)
+		i8 = sub_eval(node, var, state)
+		!print *, "i8 = ", i8
 		id = node%member%id_index
 
 		! Recursion could still be required.  Unfortunately, if an
@@ -572,13 +576,18 @@ recursive function get_val(node, var, state) result(res)
 		!
 		! TODO: ban non-scalar subscripts like below
 		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
+		!print *, "get_array_val 1"
 		res = get_array_val(var%struct(i8+1)%struct(id)%array, j8)
 		return
 
 	else if (allocated(node%lsubscripts)) then
 
-		i8 = subscript_eval(node, state)
+		! TODO: prefer sub_eval()
+		!i8 = subscript_eval(node, state)
+		i8 = sub_eval(node, var, state)
+
 		if (var%array%type /= struct_type) then
+			!print *, "get_array_val 2"
 			res = get_array_val(var%array, i8)
 			return
 		end if
@@ -618,8 +627,21 @@ recursive function get_val(node, var, state) result(res)
 	end if
 	!print *, "scalar_sub"
 
+	!i8 = sub_eval(node%member, var%struct(id), state)
+	!!print *, "get_array_val 3"
+	!res = get_array_val(var%struct(id)%array, i8)
+
+	!i8 = subscript_eval(node%member, state)
 	i8 = sub_eval(node%member, var%struct(id), state)
-	res = get_array_val(var%struct(id)%array, i8)
+	if (var%struct(id)%array%type /= struct_type) then
+		!print *, "get_array_val 3"
+		res = get_array_val(var%struct(id)%array, i8)
+		return
+	end if
+
+	res = var%struct(id)%struct(i8+1)
+	res%type = struct_type
+	res%struct_name = var%struct(id)%struct_name
 
 end function get_val
 

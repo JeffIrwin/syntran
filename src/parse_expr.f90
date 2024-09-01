@@ -630,7 +630,9 @@ recursive module subroutine parse_dot(parser, expr)
 	! things like `a.b.c`
 	if (parser%peek_kind(0) == dot_token) then
 
-		expr%member%val = member
+		!expr%member%val = member
+		expr%member%val = expr%val
+
 		call parser%parse_dot(expr%member)
 		expr%val = expr%member%val
 
