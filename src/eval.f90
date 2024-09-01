@@ -325,7 +325,7 @@ subroutine eval_name_expr(node, state, res)
 			!	!
 			!	! TODO: try to unify with get_val() branch above
 			!	i8 = subscript_eval(node, state)
-			!	res = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
+			!	res = get_array_val(state%vars%vals(node%id_index)%array, i8)
 
 			!end if
 
@@ -372,8 +372,8 @@ subroutine eval_name_expr(node, state, res)
 				!print *, 'subs = ', int(subs, 4)
 
 				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-				call set_array_value_t(res%array, i8, &
-				     get_array_value_t(state%vars%vals(node%id_index)%array, index_))
+				call set_array_val(res%array, i8, &
+				     get_array_val(state%vars%vals(node%id_index)%array, index_))
 
 				call get_next_subscript(lsubs, usubs, subs)
 			end do
@@ -451,7 +451,7 @@ end subroutine set_val
 recursive function get_val(node, var, state) result(res)
 
 	! TODO: should res be an out arg for consistency? Similar question for
-	! get_array_value_t()
+	! get_array_val()
 	!
 	! Should I rename this eval_*() for consistency?
 
@@ -503,8 +503,8 @@ recursive function get_val(node, var, state) result(res)
 			res%type = struct_type
 			res%struct_name = var%struct_name
 		else
-			!res = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
-			res = get_array_value_t(var%array, i8)
+			!res = get_array_val(state%vars%vals(node%id_index)%array, i8)
+			res = get_array_val(var%array, i8)
 		end if
 
 		return
@@ -540,7 +540,7 @@ recursive function get_val(node, var, state) result(res)
 	!print *, "scalar_sub"
 
 	i8 = sub_eval(node%member, var%struct(id), state)
-	res = get_array_value_t(var%struct(id)%array, i8)
+	res = get_array_val(var%struct(id)%array, i8)
 
 end function get_val
 
@@ -1134,7 +1134,7 @@ subroutine eval_for_statement(node, state, res)
 		! over it.  Parser guarantees that this is an array
 		!
 		! Unlike step_array, itr%type does not need to be set here because
-		! it is set in array_at() (via get_array_value_t())
+		! it is set in array_at() (via get_array_val())
 		for_kind = array_expr
 
 		call syntax_eval(node%array, state, tmp)
@@ -1206,8 +1206,8 @@ subroutine eval_assignment_expr(node, state, res)
 	if (allocated( node%member )) then
 		!print *, "assign LHS dot member"
 
-		! This is similar to what I do below with get_array_value_t() and
-		! set_array_value_t(), but I've renamed some of the variables
+		! This is similar to what I do below with get_array_val() and
+		! set_array_val(), but I've renamed some of the variables
 
 		! Evaluate the RHS
 		call syntax_eval(node%right, state, rhs)
@@ -1285,9 +1285,9 @@ subroutine eval_assignment_expr(node, state, res)
 			!print *, 'LHS array = ', state%vars%vals(node%id_index)%array%i32
 
 			i8 = subscript_eval(node, state)
-			array_val = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
+			array_val = get_array_val(state%vars%vals(node%id_index)%array, i8)
 			call compound_assign(array_val, res, node%op)
-			call set_array_value_t( &
+			call set_array_val( &
 				state%vars%vals(node%id_index)%array, i8, array_val)
 			res = array_val
 
@@ -1316,17 +1316,17 @@ subroutine eval_assignment_expr(node, state, res)
 				! tmp -> lhs_val or something
 
 				if (res%type == array_type) then
-					array_val = get_array_value_t(res%array, i8)
+					array_val = get_array_val(res%array, i8)
 				end if
 
 				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-				tmp  = get_array_value_t(state%vars%vals(node%id_index)%array, index_)
+				tmp  = get_array_val(state%vars%vals(node%id_index)%array, index_)
 				call compound_assign(tmp, array_val, node%op)
-				call set_array_value_t(state%vars%vals(node%id_index)%array, index_, tmp)
+				call set_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
 
 				!! move conditions out of loop for perf?
 				!if (res%type == array_type) then
-				!	call set_array_value_t(res%array, i8, tmp)
+				!	call set_array_val(res%array, i8, tmp)
 				!else
 
 				!	! this makes the res return value a scalar.  Maybe
@@ -2428,7 +2428,7 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	case (array_expr)
 		! Non-primary array expr
-		val = get_array_value_t(array, i - 1)
+		val = get_array_val(array, i - 1)
 
 	case default
 		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
@@ -2439,7 +2439,7 @@ end subroutine array_at
 
 !===============================================================================
 
-function get_array_value_t(array, i) result(val)
+function get_array_val(array, i) result(val)
 
 	type(array_t), intent(in) :: array
 
@@ -2447,7 +2447,7 @@ function get_array_value_t(array, i) result(val)
 
 	type(value_t) :: val
 
-	!print *, 'starting get_array_value_t()'
+	!print *, 'starting get_array_val()'
 	!print *, 'array%type = ', kind_name(array%type)
 
 	val%type = array%type
@@ -2468,15 +2468,15 @@ function get_array_value_t(array, i) result(val)
 			val%sca%str = array%str(i + 1)
 
 		case default
-			print *, "bad type in get_array_value_t"
+			print *, "bad type in get_array_val"
 
 	end select
 
-end function get_array_value_t
+end function get_array_val
 
 !===============================================================================
 
-subroutine set_array_value_t(array, i, val)
+subroutine set_array_val(array, i, val)
 
 	type(array_t), intent(inout) :: array
 
@@ -2484,7 +2484,7 @@ subroutine set_array_value_t(array, i, val)
 
 	type(value_t), intent(in) :: val
 
-	!print *, 'starting set_array_value_t()'
+	!print *, 'starting set_array_val()'
 	!print *, 'array%type = ', kind_name(array%type)
 	!print *, 'val%type   = ', kind_name(val%type)
 
@@ -2507,7 +2507,7 @@ subroutine set_array_value_t(array, i, val)
 
 	end select
 
-end subroutine set_array_value_t
+end subroutine set_array_val
 
 !===============================================================================
 
