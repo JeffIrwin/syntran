@@ -430,17 +430,12 @@ end function parse_array_expr
 
 !===============================================================================
 
-module subroutine parse_subscripts(parser, expr, set_types)
+module subroutine parse_subscripts(parser, expr)
 
 	! Parse array subscripts, if present
-	!
-	! TODO: get rid of set_types now that it's never present
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(inout) :: expr
-
-	logical, intent(in), optional :: set_types
-	logical :: set_typesl
 
 	!********
 
@@ -454,9 +449,6 @@ module subroutine parse_subscripts(parser, expr, set_types)
 	type(text_span_t) :: span
 
 	if (parser%current_kind() /= lbracket_token) return
-
-	set_typesl = .true.
-	if (present(set_types)) set_typesl = set_types
 
 	!print *, 'parsing subscripts'
 
@@ -529,21 +521,15 @@ module subroutine parse_subscripts(parser, expr, set_types)
 		usubscripts_vec%v( 1: usubscripts_vec%len_ ))
 
 	! Do some type juggling which the caller used to do
-	if (.not. set_typesl) return
 
-	! TODO: can any of this coda be moved inside of parse_subscripts()?  Are
-	! there differences between lval and rval subscripts?
 	span1 = parser%current_pos() - 1
-	if (.not. allocated(expr%lsubscripts)) then
-		! do nothing
-	else if (expr%val%type == array_type) then
+	if (expr%val%type == array_type) then
 
 		!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
 
 		if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
 			! this is not necessarily true for strings
 			expr%val%type = expr%val%array%type
-			expr%val%struct_name = expr%val%struct_name
 		end if
 
 		! TODO: allow rank+1 for str arrays
@@ -572,6 +558,7 @@ module subroutine parse_subscripts(parser, expr, set_types)
 				expr%identifier%text, &
 				expect_rank, size(expr%lsubscripts)))
 		end if
+
 	else
 		span = new_span(span0, span1 - span0 + 1)
 		!print *, "err_scalar_subscript 1"

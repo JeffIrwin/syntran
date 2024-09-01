@@ -1637,18 +1637,11 @@ subroutine eval_array_expr(node, state, res)
 			res%array%str = lbound_%sca%str
 
 		case (struct_type)
-			!res%array%str = lbound_%sca%str
-			!res%struct(:) = lbound_
-			!res%struct(:)%struct = lbound_
 
-			print *, "lbound_ size = ", size(lbound_%struct)
+			!print *, "lbound_ size = ", size(lbound_%struct)
 
-			!res%struct(:)%struct = lbound_%struct
 			do i8 = 1, res%array%len_
-				!allocate(res%struct(i8)%struct)
-				!res%struct(i8)%struct = lbound_
 				res%struct(i8)%struct = lbound_%struct
-				!res%struct(i8)%struct_name = lbound_%struct_name
 			end do
 
 			! Arrays are homogeneous, so every element shares one struct_name

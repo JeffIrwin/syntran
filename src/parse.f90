@@ -147,10 +147,9 @@ module syntran__parse_m
 			type(syntax_node_vector_t) :: size
 		end function parse_size
 
-		module subroutine parse_subscripts(parser, expr, set_types)
+		module subroutine parse_subscripts(parser, expr)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(inout) :: expr
-			logical, intent(in), optional :: set_types
 		end subroutine parse_subscripts
 
 	end interface

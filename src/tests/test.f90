@@ -2809,6 +2809,20 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let l1 = L{s=v1, e=v2};' &
 				//'return l1.e.name;' &
 				, quiet) == 'myvec2', &
+			eval(''                         &                 ! 9
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &
+				//'let po = ps[0];' &
+				//'return po.x;' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 10
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &
+				//'let po = ps[1];' &
+				//'return po.y;' &
+				, quiet) == '13', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
