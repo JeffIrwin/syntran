@@ -61,7 +61,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		let        = parser%next()
 		identifier = parser%next()
-		print *, 'let ident = ', identifier%text
+		!print *, 'let ident = ', identifier%text
 
 		op         = parser%next()
 
@@ -76,10 +76,10 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		expr = new_declaration_expr(identifier, op, right)
 
-		print *, "right type = ", kind_name(right%val%type)
-		print *, "expr  type = ", kind_name(expr %val%type)
-		print *, "right struct = ", right%val%struct_name
-		print *, "expr  struct = ", expr %val%struct_name
+		!print *, "right type = ", kind_name(right%val%type)
+		!print *, "expr  type = ", kind_name(expr %val%type)
+		!print *, "right struct = ", right%val%struct_name
+		!print *, "expr  struct = ", expr %val%struct_name
 
 		! Increment the variable array index and save it in the expr node.
 		! TODO: make this a push_var fn?  parse_for_statement uses it too
@@ -216,7 +216,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 				! TODO: check rank == 1
 			else if (expr%val%type /= array_type) then
 				span = new_span(span0, span1 - span0 + 1)
-				print *, "err_scalar_subscript 2"
+				!print *, "err_scalar_subscript 2"
 				call parser%diagnostics%push( &
 					err_scalar_subscript(parser%context(), &
 					span, identifier%text))

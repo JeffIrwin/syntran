@@ -574,7 +574,7 @@ module subroutine parse_subscripts(parser, expr, set_types)
 		end if
 	else
 		span = new_span(span0, span1 - span0 + 1)
-		print *, "err_scalar_subscript 1"
+		!print *, "err_scalar_subscript 1"
 		call parser%diagnostics%push( &
 			err_scalar_subscript(parser%context(), &
 			span, expr%identifier%text))
