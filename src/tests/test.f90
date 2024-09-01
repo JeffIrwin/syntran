@@ -3014,6 +3014,36 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let g0 = G{x=[p0, p1, p2], s="tri"};' &
 				//'return g0.x[2].v[1];' &
 				, quiet) == '17', &
+			eval(''                         &                 ! 30
+				//'struct P{v:[i32; :], s:str,}' &  ! point
+				//'struct G{x:[P  ; :], s:str,}' &  ! polyGon of points
+				//'let p0 = P{v=[6, 13], s="pta"};' &
+				//'let p1 = P{v=[4, 15], s="ptb"};' &
+				//'let p2 = P{v=[3, 17], s="ptc"};' &
+				//'let g0 = G{x=[p0, p1, p2], s="tri"};' &
+				//'g0.x[0].v[0] = 7;' &
+				//'return g0.x[0].v[0];' &
+				, quiet) == '7', &
+			eval(''                         &                 ! 31
+				//'struct P{v:[i32; :], s:str,}' &  ! point
+				//'struct G{x:[P  ; :], s:str,}' &  ! polyGon of points
+				//'let p0 = P{v=[6, 13], s="pta"};' &
+				//'let p1 = P{v=[4, 15], s="ptb"};' &
+				//'let p2 = P{v=[3, 17], s="ptc"};' &
+				//'let g0 = G{x=[p0, p1, p2], s="tri"};' &
+				//'g0.x[2].v[1] += 1;' &
+				//'return g0.x[2].v[1];' &
+				, quiet) == '18', &
+			eval(''                         &                 ! 31
+				//'struct P{v:[i32; :], s:str,}' &  ! point
+				//'struct G{x:[P  ; :], s:str,}' &  ! polyGon of points
+				//'let p0 = P{v=[6, 13], s="pta"};' &
+				//'let p1 = P{v=[4, 15], s="ptb"};' &
+				//'let p2 = P{v=[3, 17], s="ptc"};' &
+				//'let g0 = G{x=[p0, p1, p2], s="tri"};' &
+				//'g0.x[2].v = [2, 19];' &
+				//'return g0.x[2].v;' &
+				, quiet) == '[2, 19]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

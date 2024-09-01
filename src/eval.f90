@@ -419,7 +419,7 @@ recursive subroutine set_val(node, var, state, val)
 
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
-		i8 = subscript_eval(node, state)
+		i8 = sub_eval(node, var, state)
 		id = node%member%id_index
 
 		! Recursion could still be required.  Unfortunately, if an
@@ -451,7 +451,7 @@ recursive subroutine set_val(node, var, state, val)
 
 	else if (allocated(node%lsubscripts)) then
 
-		i8 = subscript_eval(node, state)
+		i8 = sub_eval(node, var, state)
 		if (var%array%type /= struct_type) then
 			!res = get_array_val(var%array, i8)
 			call set_array_val(var%array, i8, val)
@@ -498,24 +498,15 @@ recursive subroutine set_val(node, var, state, val)
 	!print *, "scalar_sub"
 
 	i8 = sub_eval(node%member, var%struct(id), state)
-	!res = get_array_val(var%struct(id)%array, i8)
-	call set_array_val(var%struct(id)%array, i8, val)
-
-	!********************
-	return
-	! TODO
-	!********************
-
-	id = node%member%id_index
-
-	if (node%member%kind == dot_expr) then
-		! Recurse
-		call set_val(node%member, var%struct(id), state, val)
+	if (var%struct(id)%array%type /= struct_type) then
+		call set_array_val(var%struct(id)%array, i8, val)
 		return
 	end if
 
-	! Base case
-	var%struct(id) = val
+	!res = var%struct(id)%struct(i8+1)
+	var%struct(id)%struct(i8+1) = val
+	!res%type = struct_type
+	!res%struct_name = var%struct(id)%struct_name
 
 end subroutine set_val
 
@@ -550,7 +541,6 @@ recursive function get_val(node, var, state) result(res)
 
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
-		!i8 = subscript_eval(node, state)
 		i8 = sub_eval(node, var, state)
 		!print *, "i8 = ", i8
 		id = node%member%id_index
@@ -582,8 +572,8 @@ recursive function get_val(node, var, state) result(res)
 
 	else if (allocated(node%lsubscripts)) then
 
-		! TODO: prefer sub_eval()
-		!i8 = subscript_eval(node, state)
+		! Prefer sub_eval() over subscript_eval() because it doesn't make any
+		! assumptions about var's relation to node
 		i8 = sub_eval(node, var, state)
 
 		if (var%array%type /= struct_type) then
@@ -627,11 +617,6 @@ recursive function get_val(node, var, state) result(res)
 	end if
 	!print *, "scalar_sub"
 
-	!i8 = sub_eval(node%member, var%struct(id), state)
-	!!print *, "get_array_val 3"
-	!res = get_array_val(var%struct(id)%array, i8)
-
-	!i8 = subscript_eval(node%member, state)
 	i8 = sub_eval(node%member, var%struct(id), state)
 	if (var%struct(id)%array%type /= struct_type) then
 		!print *, "get_array_val 3"
