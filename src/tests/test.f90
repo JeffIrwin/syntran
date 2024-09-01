@@ -2729,6 +2729,18 @@ subroutine unit_test_struct(npass, nfail)
 				//'y1.p.z -= y1.ba.tr.x;' &
 				//'return y1.p.z;' &
 				, quiet) == '-4', &
+			eval(''                         &                 ! 47
+				//'struct P{z:i32, x:i32, y:i32}' &  ! point with members in weird order
+				//'struct R{bl: P, tr: P}' &
+				//'struct Y{ba: R, p: P}' &
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'y1.p.z -= y1.ba.tr.x;' &
+				//'return y1.p.z;' &
+				, quiet) == '-4', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2823,32 +2835,63 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let po = ps[1];' &
 				//'return po.y;' &
 				, quiet) == '13', &
-			eval(''                         &                 ! 10
+			eval(''                         &                 ! 11
 				//'struct P{x:i32, y:i32,}' &  ! point
 				//'let p1 = P{x=6, y=13,};' &
 				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
 				//'return ps[0].x;' &
 				, quiet) == '6', &
-			eval(''                         &                 ! 10
+			eval(''                         &                 ! 12
 				//'struct P{x:i32, y:i32,}' &  ! point
 				//'let p1 = P{x=6, y=13,};' &
 				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
 				//'return ps[1].y;' &
 				, quiet) == '13', &
-			eval(''                         &                 ! 12
+			eval(''                         &                 ! 13
 				//'struct P{x:i32, y:i32,}' &  ! point
 				//'let p1 = P{x=6, y=13,};' &
 				//'let p2 = P{x=4, y=15,};' &
 				//'let ps = [p1, p2];' &
 				//'return ps[0].x;' &
 				, quiet) == '6', &
-			eval(''                         &                 ! 12
+			eval(''                         &                 ! 14
 				//'struct P{x:i32, y:i32,}' &  ! point
 				//'let p1 = P{x=6, y=13,};' &
 				//'let p2 = P{x=4, y=15,};' &
 				//'let ps = [p1, p2];' &
 				//'return ps[1].y;' &
 				, quiet) == '15', &
+			eval(''                         &                 ! 15
+				//'struct P{y:i32, x:i32,}' &  ! point in weird order
+				//'let p1 = P{x=6, y=13,};' &
+				//'let p2 = P{x=4, y=15,};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[1].y;' &
+				, quiet) == '15', &
+			eval(''                         &                 ! 16
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'struct L{s:P, e:P}'      &  ! line
+				//'let p1 = P{x= 6, y=13,};' &
+				//'let p2 = P{x= 4, y=15,};' &
+				//'let p3 = P{x=16, y=18,};' &
+				//'let p4 = P{x=14, y=20,};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'return ls[0].e.x;' &
+				, quiet) == '4', &
+			eval(''                         &                 ! 17
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'struct L{s:P, e:P}'      &  ! line
+				//'let p1 = P{x= 6, y=13,};' &
+				//'let p2 = P{x= 4, y=15,};' &
+				//'let p3 = P{x=16, y=18,};' &
+				//'let p4 = P{x=14, y=20,};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'return ls[1].s.y;' &
+				, quiet) == '18', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

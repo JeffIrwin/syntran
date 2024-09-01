@@ -310,25 +310,7 @@ subroutine eval_name_expr(node, state, res)
 		!print *, 'rank = ', node%val%array%rank
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
-
-			!print *, "rval scalar sub"
-
-			type = state%vars%vals(node%id_index)%array%type
-			!print *, "type = ", kind_name(type)
-
-			!if (type == struct_type) then
-				res = get_val(node, state%vars%vals(node%id_index), state)
-			!else
-
-			!	! This could probably be lumped in with the range_sub case now
-			!	! that I have it fully generalized
-			!	!
-			!	! TODO: try to unify with get_val() branch above
-			!	i8 = subscript_eval(node, state)
-			!	res = get_array_val(state%vars%vals(node%id_index)%array, i8)
-
-			!end if
-
+			res = get_val(node, state%vars%vals(node%id_index), state)
 		else
 
 			call get_subscript_range(node, state, lsubs, usubs, rank_res)
@@ -472,38 +454,34 @@ recursive function get_val(node, var, state) result(res)
 	if (allocated(node%lsubscripts)) then
 
 		! TODO: throw error for anything but scalar_sub for now
-
-		!print *, "rval scalar sub"
-		!print *, "lsubscripts allocated"
 		i8 = subscript_eval(node, state)
 		!print *, 'i8 = ', i8
-
-		!! this indicates recursion may be needed
-		!print *, "allocated(member) = ", allocated(node%member)
 
 		if (allocated(node%member)) then
 
 			id = node%member%id_index
 
-			! TODO: recursion could still be required.  Unfortunately, if an
+			! Recursion could still be required.  Unfortunately, if an
 			! identifier has a subscript *and* a dot, then so does its node.  I
 			! think this might require a bunch of if() logic like this instead
 			! of any possibility of clean recursion
 
-			!res = get_val(node%member, var%struct(i8+1), state)
-			!res = var%struct(id)
-			res = var%struct(i8+1)%struct(id)
+			if (node%member%kind == dot_expr) then
+				! Recurse
+				res = get_val(node%member, var%struct(i8+1)%struct(id), state)
+				return
+			end if
 
+			res = var%struct(i8+1)%struct(id)
 			return
+
 		end if
 
-		!if (type == struct_type) then
 		if (var%array%type == struct_type) then
 			res = var%struct(i8+1)
 			res%type = struct_type
 			res%struct_name = var%struct_name
 		else
-			!res = get_array_val(state%vars%vals(node%id_index)%array, i8)
 			res = get_array_val(var%array, i8)
 		end if
 
