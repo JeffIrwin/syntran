@@ -918,6 +918,11 @@ module function parse_struct_instance(parser) result(inst)
 
 		pos0 = parser%pos
 
+		! TODO: allow "anonymous" members where the name (and type) is implied
+		! by the order?  This is the way that structs are printed, so unless I
+		! change print str conversion is might be nice to allow print output to
+		! be pasted back into syntran source code.  Could be dangerous tho
+
 		name   = parser%match(identifier_token)
 		equals = parser%match(equals_token)
 		mem    = parser%parse_expr()

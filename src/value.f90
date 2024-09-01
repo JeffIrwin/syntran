@@ -505,10 +505,6 @@ recursive function value_to_str(val) result(ans)
 
 				call str_vec%push( trimw(val%struct(i8)%to_str()) )
 
-				!do j8 = 1, size(val%struct(i8)%struct)
-				!	call str_vec%push( trimw(val%struct(i8)%struct(j8)%to_str()) )
-				!end do
-
 				if (i8 < n) call str_vec%push(", ")
 
 			end do
@@ -538,6 +534,10 @@ recursive function value_to_str(val) result(ans)
 			! This naming is terrible.  It's a string builder, not a vector of
 			! strings
 			str_vec = new_char_vector()
+
+			!if (val%array%type == struct_type) then
+			!	call str_vec%push(val%struct_name)
+			!end if
 
 			call str_vec%push('[')
 			if (val%array%rank > 1) call str_vec%push(line_feed)
@@ -651,29 +651,24 @@ recursive function value_to_str(val) result(ans)
 				end do
 
 			else if (val%array%type == struct_type) then
-
-				call str_vec%push("array<"//val%struct_name//"> ")
 	
 				n = size(val%struct)
 				do i8 = 1, n
 	
-					!! TODO: can we just recurse instead of nesting a loop?
-					!call str_vec%push( val%struct(i8)%to_str() )
+					! Just recurse instead of nesting a loop
+					call str_vec%push( val%struct(i8)%to_str() )
 
 					! It would be nice to label each member with its name
 	
-					!call str_vec%push( val%struct(i8)%struct_name//" = " )
-	
-					!call str_vec%push( trimw(val%struct(i8)%to_str()) )
-	
-					call str_vec%push("{")
-					nj = size(val%struct(i8)%struct)
-					do j8 = 1, nj
-						call str_vec%push( trimw(val%struct(i8)%struct(j8)%to_str()) )
-						if (j8 < nj) call str_vec%push(", ")
-					end do
-	
-					if (i8 < n) call str_vec%push("}, ")
+					!call str_vec%push("{")
+					!nj = size(val%struct(i8)%struct)
+					!do j8 = 1, nj
+					!	call str_vec%push( trimw(val%struct(i8)%struct(j8)%to_str()) )
+					!	if (j8 < nj) call str_vec%push(", ")
+					!end do
+					!if (i8 < n) call str_vec%push("}, ")
+
+					if (i8 < n) call str_vec%push(", ")
 	
 				end do
 				call str_vec%push("}")
