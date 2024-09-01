@@ -125,6 +125,7 @@ module function parse_array_expr(parser) result(expr)
 		expr%kind           = array_expr
 
 		expr%val%type       = array_type
+		expr%val%struct_name = lbound_%val%struct_name
 
 		expr%val%array%type = lbound_%val%type
 		expr%val%array%kind = unif_array
@@ -429,16 +430,21 @@ end function parse_array_expr
 
 !===============================================================================
 
-module subroutine parse_subscripts(parser, expr)
+module subroutine parse_subscripts(parser, expr, set_types)
 
 	! Parse array subscripts, if present
+	!
+	! TODO: get rid of set_types now that it's never present
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(inout) :: expr
 
+	logical, intent(in), optional :: set_types
+	logical :: set_typesl
+
 	!********
 
-	integer :: pos0, span0
+	integer :: pos0, span0, span1, expect_rank
 
 	type(syntax_node_t) :: lsubscript, usubscript
 	type(syntax_node_vector_t) :: lsubscripts_vec, usubscripts_vec
@@ -447,12 +453,10 @@ module subroutine parse_subscripts(parser, expr)
 
 	type(text_span_t) :: span
 
-	if (parser%current_kind() /= lbracket_token) then
+	if (parser%current_kind() /= lbracket_token) return
 
-		!allocate( expr%lsubscripts(0))
-		return
-
-	end if
+	set_typesl = .true.
+	if (present(set_types)) set_typesl = set_types
 
 	!print *, 'parsing subscripts'
 
@@ -523,6 +527,58 @@ module subroutine parse_subscripts(parser, expr)
 
 	call syntax_nodes_copy(expr%usubscripts, &
 		usubscripts_vec%v( 1: usubscripts_vec%len_ ))
+
+	! Do some type juggling which the caller used to do
+	if (.not. set_typesl) return
+
+	! TODO: can any of this coda be moved inside of parse_subscripts()?  Are
+	! there differences between lval and rval subscripts?
+	span1 = parser%current_pos() - 1
+	if (.not. allocated(expr%lsubscripts)) then
+		! do nothing
+	else if (expr%val%type == array_type) then
+
+		!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
+
+		if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
+			! this is not necessarily true for strings
+			expr%val%type = expr%val%array%type
+			expr%val%struct_name = expr%val%struct_name
+		end if
+
+		! TODO: allow rank+1 for str arrays
+		if (expr%val%array%rank /= size(expr%lsubscripts)) then
+			span = new_span(span0, span1 - span0 + 1)
+			call parser%diagnostics%push( &
+				err_bad_sub_count(parser%context(), span, &
+				expr%identifier%text, &
+				expr%val%array%rank, size(expr%lsubscripts)))
+		end if
+
+		! A slice operation can change the result rank
+
+		!print *, 'rank in  = ', expr%val%array%rank
+		expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
+		!print *, 'rank out = ', expr%val%array%rank
+
+	else if (expr%val%type == str_type) then
+		!print *, 'string type'
+
+		expect_rank = 1
+		if (size(expr%lsubscripts) /= expect_rank) then
+			span = new_span(span0, span1 - span0 + 1)
+			call parser%diagnostics%push( &
+				err_bad_sub_count(parser%context(), span, &
+				expr%identifier%text, &
+				expect_rank, size(expr%lsubscripts)))
+		end if
+	else
+		span = new_span(span0, span1 - span0 + 1)
+		print *, "err_scalar_subscript 1"
+		call parser%diagnostics%push( &
+			err_scalar_subscript(parser%context(), &
+			span, expr%identifier%text))
+	end if
 
 end subroutine parse_subscripts
 

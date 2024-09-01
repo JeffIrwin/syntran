@@ -61,7 +61,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		let        = parser%next()
 		identifier = parser%next()
-		!print *, 'let ident = ', identifier%text
+		print *, 'let ident = ', identifier%text
 
 		op         = parser%next()
 
@@ -75,6 +75,11 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!!semi       = parser%match(semicolon_token)
 
 		expr = new_declaration_expr(identifier, op, right)
+
+		print *, "right type = ", kind_name(right%val%type)
+		print *, "expr  type = ", kind_name(expr %val%type)
+		print *, "right struct = ", right%val%struct_name
+		print *, "expr  struct = ", expr %val%struct_name
 
 		! Increment the variable array index and save it in the expr node.
 		! TODO: make this a push_var fn?  parse_for_statement uses it too
@@ -116,6 +121,15 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		identifier = parser%match(identifier_token)
 
+		! TODO: DRY
+			call parser%vars%search(identifier%text, expr%id_index, io, expr%val)
+			!if (io /= exit_success) then
+			!	span = new_span(identifier%pos, len(identifier%text))
+			!	call parser%diagnostics%push( &
+			!		err_undeclare_var(parser%context(), &
+			!		span, identifier%text))
+			!end if
+
 		!print *, "ident = ", identifier%text
 
 		! Parse array subscript indices if present
@@ -123,6 +137,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! Subscript can appear in assignment expr but not let expr, because let
 		! must initialize the whole array.  Similarly for dot member access
 		span0 = parser%current_pos()
+		!call parser%parse_subscripts(expr, set_types = .false.)
 		call parser%parse_subscripts(expr)
 
 		span1 = parser%current_pos() - 1
@@ -132,7 +147,12 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 			! Lookup the struct now because parse_dot() needs its data
 			call parser%vars%search(identifier%text, expr%id_index, io, expr%val)
-			! TODO: check io as in other search call below
+			if (io /= exit_success) then
+				span = new_span(identifier%pos, len(identifier%text))
+				call parser%diagnostics%push( &
+					err_undeclare_var(parser%context(), &
+					span, identifier%text))
+			end if
 
 			call parser%parse_dot(expr)
 			if (.not. allocated(expr%member)) return
@@ -185,6 +205,10 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		!print *, 'allocated(expr%val%array) = ', allocated(expr%val%array)
 
+		! TODO: can this be deleted now that it's copied inside of
+		! parse_subscripts()?  Maybe I'll need a separate set type fn if it's
+		! important, so it can be called separately here instead of at the same
+		! time as parse_subscripts()
 		if (allocated(expr%lsubscripts)) then
 
 			if (expr%val%type == str_type) then
@@ -531,7 +555,7 @@ module function parse_name_expr(parser) result(expr)
 
 	!********
 
-	integer :: io, id_index, span0, span1, expect_rank
+	integer :: io, id_index, span0, span1
 
 	type(syntax_token_t) :: identifier
 	type(text_span_t) :: span
@@ -565,54 +589,6 @@ module function parse_name_expr(parser) result(expr)
 	!print *, '%current_kind() = ', kind_name(parser%current_kind())
 	span0 = parser%current_pos()
 	call parser%parse_subscripts(expr)
-
-	! TODO: can any of this coda be moved inside of parse_subscripts()?  Are
-	! there differences between lval and rval subscripts?
-	span1 = parser%current_pos() - 1
-	if (.not. allocated(expr%lsubscripts)) then
-		! do nothing
-	else if (expr%val%type == array_type) then
-
-		!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
-
-		if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
-			! this is not necessarily true for strings
-			expr%val%type = expr%val%array%type
-		end if
-
-		! TODO: allow rank+1 for str arrays
-		if (expr%val%array%rank /= size(expr%lsubscripts)) then
-			span = new_span(span0, span1 - span0 + 1)
-			call parser%diagnostics%push( &
-				err_bad_sub_count(parser%context(), span, &
-				identifier%text, &
-				expr%val%array%rank, size(expr%lsubscripts)))
-		end if
-
-		! A slice operation can change the result rank
-
-		!print *, 'rank in  = ', expr%val%array%rank
-		expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
-		!print *, 'rank out = ', expr%val%array%rank
-
-	else if (expr%val%type == str_type) then
-		!print *, 'string type'
-
-		expect_rank = 1
-		if (size(expr%lsubscripts) /= expect_rank) then
-			span = new_span(span0, span1 - span0 + 1)
-			call parser%diagnostics%push( &
-				err_bad_sub_count(parser%context(), span, &
-				identifier%text, &
-				expect_rank, size(expr%lsubscripts)))
-		end if
-	else
-		span = new_span(span0, span1 - span0 + 1)
-		print *, "err_scalar_subscript 1"
-		call parser%diagnostics%push( &
-			err_scalar_subscript(parser%context(), &
-			span, identifier%text))
-	end if
 
 	!print *, "expr%val%type = ", kind_name(expr%val%type)
 
@@ -691,7 +667,17 @@ recursive module subroutine parse_dot(parser, expr)
 
 	! I think this is the right place to parse subscripts. Or should it be after
 	! the recursive parse_dot()?
+	!call parser%parse_subscripts(expr%member, set_types = .false.)
+	expr%member%val = member
 	call parser%parse_subscripts(expr%member)
+	if (allocated(expr%member%lsubscripts)) then
+		expr%val = expr%member%val  ! important
+
+		! TODO: these don't seem to do anything important
+		expr%val%type = expr%member%val%type
+		expr%val%struct_name = expr%member%val%struct_name
+
+	end if
 
 	! I think this needs a recursive call to `parse_dot()` right here to handle
 	! things like `a.b.c`
