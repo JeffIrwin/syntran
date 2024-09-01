@@ -2729,9 +2729,6 @@ subroutine unit_test_struct(npass, nfail)
 				//'y1.p.z -= y1.ba.tr.x;' &
 				//'return y1.p.z;' &
 				, quiet) == '-4', &
-			eval( 'struct P{x:i32, y:i32,}' &                 ! 47
-			    //'let p1 = P{x=6, y=13};' &  ! might be premature to test struct to str conversion
-			    //'p1;', quiet) == 'P{6, 13}', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2838,12 +2835,6 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
 				//'return ps[1].y;' &
 				, quiet) == '13', &
-			eval(''                         &                 ! 11
-				//'struct P{x:i32, y:i32,}' &  ! point
-				//'let p1 = P{x=6, y=13,};' &
-				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
-				//'return ps[0];' &            ! might be premature to test struct to str conversion
-				, quiet) == 'P{6, 13}', &
 			eval(''                         &                 ! 12
 				//'struct P{x:i32, y:i32,}' &  ! point
 				//'let p1 = P{x=6, y=13,};' &
@@ -2868,6 +2859,58 @@ subroutine unit_test_struct_arr(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_struct_arr
+
+!===============================================================================
+
+subroutine unit_test_struct_str(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'struct str formatting'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! This is a separate test from other struct stuff because struct to string
+	! conversion is subject to change, especially if I figure out how to label
+	! each member with its name
+	!
+	! TODO: update documentation to reflect any changes here
+
+	tests = &
+		[   &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 1
+			    //'let p1 = P{x=6, y=13};' &
+			    //'p1;', quiet) == 'P{6, 13}', &
+			eval(''                         &                 ! 2
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
+				//'return ps[0];' &
+				, quiet) == 'P{6, 13}', &
+			eval(''                         &                 ! 3
+				//'struct P{x:i32, y:i32,}' &
+				//'let p1 = P{x=6, y=13,};' &
+				//'let p2 = P{x=4, y=15,};' &
+				//'let ps = [p1, p2];' &
+				//'return ps;' &
+				, quiet) == '[P{6, 13}, P{4, 15}]', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_str
 
 !===============================================================================
 
@@ -3091,6 +3134,7 @@ subroutine unit_tests(iostat)
 	call unit_test_return     (npass, nfail)
 	call unit_test_struct     (npass, nfail)
 	call unit_test_struct_arr (npass, nfail)
+	call unit_test_struct_str (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

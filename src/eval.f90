@@ -316,18 +316,18 @@ subroutine eval_name_expr(node, state, res)
 			type = state%vars%vals(node%id_index)%array%type
 			!print *, "type = ", kind_name(type)
 
-			if (type == struct_type) then
+			!if (type == struct_type) then
 				res = get_val(node, state%vars%vals(node%id_index), state)
-			else
+			!else
 
-				! This could probably be lumped in with the range_sub case now
-				! that I have it fully generalized
-				!
-				! TODO: try to unify with get_val() branch above
-				i8 = subscript_eval(node, state)
-				res = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
+			!	! This could probably be lumped in with the range_sub case now
+			!	! that I have it fully generalized
+			!	!
+			!	! TODO: try to unify with get_val() branch above
+			!	i8 = subscript_eval(node, state)
+			!	res = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
 
-			end if
+			!end if
 
 		else
 
@@ -497,10 +497,15 @@ recursive function get_val(node, var, state) result(res)
 			return
 		end if
 
-		res = var%struct(i8+1)
-
-		res%type = struct_type
-		res%struct_name = var%struct_name
+		!if (type == struct_type) then
+		if (var%array%type == struct_type) then
+			res = var%struct(i8+1)
+			res%type = struct_type
+			res%struct_name = var%struct_name
+		else
+			!res = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
+			res = get_array_value_t(var%array, i8)
+		end if
 
 		return
 

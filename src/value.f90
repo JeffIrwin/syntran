@@ -671,8 +671,7 @@ recursive function value_to_str(val) result(ans)
 					if (i8 < n) call str_vec%push(", ")
 	
 				end do
-				call str_vec%push("}")
-				!ans = str_vec%trim()
+				!call str_vec%push("}")
 
 			else
 
