@@ -445,6 +445,9 @@ recursive function get_val(node, var, state) result(res)
 
 	! In nested expressions, like `a.b.c.d`, var begins as the top-most
 	! (left-most, outer-most) value `a`
+	!
+	! Now realize that the node var expression could be any permutation like
+	! `a.b[1].c[2].d`.  That is what this routine abstracts
 
 	type(syntax_node_t), intent(in) :: node
 	type(value_t), intent(in) :: var
@@ -460,6 +463,9 @@ recursive function get_val(node, var, state) result(res)
 	if (allocated(node%lsubscripts)) then
 
 		! TODO: throw error for anything but scalar_sub for now
+		!
+		! I might want a separate variable for `i8+1` but it's going to invite
+		! mixups
 		i8 = subscript_eval(node, state)
 		!print *, 'i8 = ', i8
 
@@ -482,15 +488,11 @@ recursive function get_val(node, var, state) result(res)
 				res = var%struct(i8+1)%struct(id)
 				return
 			end if
+			!print *, "array dot chain"
 
 			! Arrays chained by a dot: `a[0].b[0]`
 			!
 			! TODO: ban non-scalar subscripts like below
-
-			!print *, "array dot chain"
-
-			!i8 = sub_eval(node%member, var%struct(id), state)
-			!res = get_array_val(var%struct(id)%array, i8)
 			j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
 			res = get_array_val(var%struct(i8+1)%struct(id)%array, j8)
 			return
