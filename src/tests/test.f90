@@ -2928,6 +2928,22 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let ls = [l1, l2];' &
 				//'return ls[1].s.v[1];' &
 				, quiet) == '18', &
+			eval(''                         &                 ! 18
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'let p1 = P{v=[6, 13], s="pt1"};' &
+				//'let p2 = P{v=[4, 15], s="pt2"};' &
+				//'let ps = [p1, p2];' &
+				//'ps[1].v[0] = 3;' &
+				//'return ps[1].v[0];' &
+				, quiet) == '3', &
+			eval(''                         &                 ! 19
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'let p1 = P{v=[6, 13], s="pt1"};' &
+				//'let p2 = P{v=[4, 15], s="pt2"};' &
+				//'let ps = [p1, p2];' &
+				//'ps[1].v[0] -= 1;' &
+				//'return ps[1].v[0];' &
+				, quiet) == '3', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

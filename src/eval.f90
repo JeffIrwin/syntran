@@ -403,23 +403,114 @@ end subroutine eval_dot_expr
 
 !===============================================================================
 
-recursive subroutine set_val(node, var, val)
+recursive subroutine set_val(node, var, state, val)
 
 	! Assign var.mem = val, or recurse if mem is also a dot expr
 
 	type(syntax_node_t), intent(in) :: node
 	type(value_t), intent(inout) :: var
+	type(state_t), intent(inout) :: state
 	type(value_t), intent(in) :: val
 
 	!********
 
 	integer :: id
+	integer(kind = 8) :: i8, j8
+
+	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
+
+		i8 = subscript_eval(node, state)
+		id = node%member%id_index
+
+		! Recursion could still be required.  Unfortunately, if an
+		! identifier has a subscript *and* a dot, then so does its node.  I
+		! think this might require a bunch of if() logic like this instead
+		! of any possibility of clean recursion
+
+		if (node%member%kind == dot_expr) then
+			! Recurse
+			!res = get_val(node%member, var%struct(i8+1)%struct(id), state)
+			call set_val(node%member, var%struct(i8+1)%struct(id), state, val)
+			return
+		end if
+
+		if (.not. allocated(node%member%lsubscripts)) then
+			!res = var%struct(i8+1)%struct(id)
+			var%struct(i8+1)%struct(id) = val
+			return
+		end if
+		!print *, "array dot chain"
+
+		! Arrays chained by a dot: `a[0].b[0]`
+		!
+		! TODO: ban non-scalar subscripts like below
+		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
+		!res = get_array_val(var%struct(i8+1)%struct(id)%array, j8)
+		call set_array_val(var%struct(i8+1)%struct(id)%array, j8, val)
+		return
+
+	else if (allocated(node%lsubscripts)) then
+
+		i8 = subscript_eval(node, state)
+		if (var%array%type /= struct_type) then
+			!res = get_array_val(var%array, i8)
+			call set_array_val(var%array, i8, val)
+			return
+		end if
+
+		!res = var%struct(i8+1)
+		!res%type = struct_type
+		!res%struct_name = var%struct_name
+		var%struct(i8+1) = val
+		!res%type = struct_type  ! TODO?
+		!res%struct_name = var%struct_name
+		return
+
+	end if
+
+	! `id` tracks whether each member is the 1st, 2nd, etc. member in the struct
+	! array of its parent.  A local variable isnt' really needed but I think it
+	! helps readability
+	id = node%member%id_index
+
+	if (node%member%kind == dot_expr) then
+		! Recurse
+		call set_val(node%member, var%struct(id), state, val)
+		return
+	end if
+
+	! Base case
+
+	if (.not. allocated(node%member%lsubscripts)) then
+		!res = var%struct(id)
+		var%struct(id) = val
+		return
+	end if
+	!print *, "lsubscripts allocated"
+
+	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+		!print *, "slice sub"
+
+		! TODO: not implemented, throw error.  Add code to catch in parser first
+		write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+		call internal_error()
+	end if
+	!print *, "scalar_sub"
+
+	i8 = sub_eval(node%member, var%struct(id), state)
+	!res = get_array_val(var%struct(id)%array, i8)
+	call set_array_val(var%struct(id)%array, i8, val)
+
+	!********************
+	return
+	! TODO
+	!********************
 
 	id = node%member%id_index
 
 	if (node%member%kind == dot_expr) then
 		! Recurse
-		call set_val(node%member, var%struct(id), val)
+		call set_val(node%member, var%struct(id), state, val)
 		return
 	end if
 
@@ -432,12 +523,6 @@ end subroutine set_val
 
 recursive function get_val(node, var, state) result(res)
 
-	! TODO: this is a mess because %member and %lsubscripts are children of the
-	! same syntax node.  If I nest %lsubscripts inside of an %elem child or
-	! something, can this be implemented more cleanly with recursion?  It will
-	! require lots of changes for (non-struct) arrays elsewhere but it could be
-	! worth it
-	!
 	! TODO: should res be an out arg for consistency? Similar question for
 	! get_array_val()
 	!
@@ -447,7 +532,8 @@ recursive function get_val(node, var, state) result(res)
 	! (left-most, outer-most) value `a`
 	!
 	! Now realize that the node var expression could be any permutation like
-	! `a.b[1].c[2].d`.  That is what this routine abstracts
+	! `a.b[1].c[2].d`, with the tail value `d` being either a primitive type,
+	! array, or another struct.  That is what this routine abstracts
 
 	type(syntax_node_t), intent(in) :: node
 	type(value_t), intent(in) :: var
@@ -1213,7 +1299,7 @@ subroutine eval_assignment_expr(node, state, res)
 		call compound_assign(res, rhs, node%op)
 
 		! Save it back into the LHS var
-		call set_val(node, state%vars%vals(node%id_index), res)
+		call set_val(node, state%vars%vals(node%id_index), state, res)
 
 	else if (.not. allocated(node%lsubscripts)) then
 

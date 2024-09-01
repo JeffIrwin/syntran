@@ -150,6 +150,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 			call parser%parse_dot(expr)
 			if (.not. allocated(expr%member)) return
+			val_sub = expr%val
 
 		end if
 
@@ -621,9 +622,9 @@ recursive module subroutine parse_dot(parser, expr)
 	! the recursive parse_dot()?
 	expr%member%val = member
 	call parser%parse_subscripts(expr%member)
-	!if (allocated(expr%member%lsubscripts)) then
-	!	expr%val = expr%member%val
-	!end if
+	if (allocated(expr%member%lsubscripts)) then
+		expr%val = expr%member%val
+	end if
 
 	! I think this needs a recursive call to `parse_dot()` right here to handle
 	! things like `a.b.c`
