@@ -2819,9 +2819,21 @@ subroutine unit_test_struct_arr(npass, nfail)
 			eval(''                         &                 ! 10
 				//'struct P{x:i32, y:i32,}' &  ! point
 				//'let p1 = P{x=6, y=13,};' &
-				//'let ps = [p1; 2];' &
+				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
 				//'let po = ps[1];' &
 				//'return po.y;' &
+				, quiet) == '13', &
+			eval(''                         &                 ! 10
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
+				//'return ps[0].x;' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 10
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
+				//'return ps[1].y;' &
 				, quiet) == '13', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]

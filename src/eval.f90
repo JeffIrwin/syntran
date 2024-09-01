@@ -452,6 +452,8 @@ recursive function get_val(node, var, state) result(res)
 
 	! TODO: should res be an out arg for consistency? Similar question for
 	! get_array_value_t()
+	!
+	! Should I rename this eval_*() for consistency?
 
 	! In nested expressions, like `a.b.c.d`, var begins as the top-most
 	! (left-most, outer-most) value `a`
@@ -469,14 +471,31 @@ recursive function get_val(node, var, state) result(res)
 
 	if (allocated(node%lsubscripts)) then
 
-		! TODO: throw error for anything but scalar_sub
+		! TODO: throw error for anything but scalar_sub for now
 
 		!print *, "rval scalar sub"
 		!print *, "lsubscripts allocated"
 		i8 = subscript_eval(node, state)
 		!print *, 'i8 = ', i8
 
-		! TODO: recurse somehow
+		!! this indicates recursion may be needed
+		!print *, "allocated(member) = ", allocated(node%member)
+
+		if (allocated(node%member)) then
+
+			id = node%member%id_index
+
+			! TODO: recursion could still be required.  Unfortunately, if an
+			! identifier has a subscript *and* a dot, then so does its node.  I
+			! think this might require a bunch of if() logic like this instead
+			! of any possibility of clean recursion
+
+			!res = get_val(node%member, var%struct(i8+1), state)
+			!res = var%struct(id)
+			res = var%struct(i8+1)%struct(id)
+
+			return
+		end if
 
 		!res = get_val(node%member, var%struct(i8+1), state)
 		!res = get_val(node, var%struct(i8), state)
