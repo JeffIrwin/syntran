@@ -460,53 +460,46 @@ recursive function get_val(node, var, state) result(res)
 	integer :: id
 	integer(kind = 8) :: i8, j8
 
-	if (allocated(node%lsubscripts)) then
+	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
-		! TODO: throw error for anything but scalar_sub for now
-		!
-		! I might want a separate variable for `i8+1` but it's going to invite
-		! mixups
 		i8 = subscript_eval(node, state)
-		!print *, 'i8 = ', i8
+		id = node%member%id_index
 
-		if (allocated(node%member)) then
+		! Recursion could still be required.  Unfortunately, if an
+		! identifier has a subscript *and* a dot, then so does its node.  I
+		! think this might require a bunch of if() logic like this instead
+		! of any possibility of clean recursion
 
-			id = node%member%id_index
-
-			! Recursion could still be required.  Unfortunately, if an
-			! identifier has a subscript *and* a dot, then so does its node.  I
-			! think this might require a bunch of if() logic like this instead
-			! of any possibility of clean recursion
-
-			if (node%member%kind == dot_expr) then
-				! Recurse
-				res = get_val(node%member, var%struct(i8+1)%struct(id), state)
-				return
-			end if
-
-			if (.not. allocated(node%member%lsubscripts)) then
-				res = var%struct(i8+1)%struct(id)
-				return
-			end if
-			!print *, "array dot chain"
-
-			! Arrays chained by a dot: `a[0].b[0]`
-			!
-			! TODO: ban non-scalar subscripts like below
-			j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
-			res = get_array_val(var%struct(i8+1)%struct(id)%array, j8)
+		if (node%member%kind == dot_expr) then
+			! Recurse
+			res = get_val(node%member, var%struct(i8+1)%struct(id), state)
 			return
-
 		end if
 
-		if (var%array%type == struct_type) then
-			res = var%struct(i8+1)
-			res%type = struct_type
-			res%struct_name = var%struct_name
-		else
+		if (.not. allocated(node%member%lsubscripts)) then
+			res = var%struct(i8+1)%struct(id)
+			return
+		end if
+		!print *, "array dot chain"
+
+		! Arrays chained by a dot: `a[0].b[0]`
+		!
+		! TODO: ban non-scalar subscripts like below
+		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
+		res = get_array_val(var%struct(i8+1)%struct(id)%array, j8)
+		return
+
+	else if (allocated(node%lsubscripts)) then
+
+		i8 = subscript_eval(node, state)
+		if (var%array%type /= struct_type) then
 			res = get_array_val(var%array, i8)
+			return
 		end if
 
+		res = var%struct(i8+1)
+		res%type = struct_type
+		res%struct_name = var%struct_name
 		return
 
 	end if
