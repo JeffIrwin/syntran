@@ -2916,7 +2916,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let ps = [p1, p2];' &
 				//'return ps[1].s;' &
 				, quiet) == 'pt2', &
-			eval(''                         &                 ! 17
+			eval(''                         &                 ! 21
 				//'struct P{v:[i32;:], s:str,}' &  ! point
 				//'struct L{s:P, e:P}'      &      ! line
 				//'let p1 = P{v=[ 6, 13], s="pt1"};' &
@@ -2928,15 +2928,15 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let ls = [l1, l2];' &
 				//'return ls[1].s.v[1];' &
 				, quiet) == '18', &
-			eval(''                         &                 ! 18
+			eval(''                         &                 ! 22
 				//'struct P{v:[i32;:], s:str,}' &  ! point
 				//'let p1 = P{v=[6, 13], s="pt1"};' &
 				//'let p2 = P{v=[4, 15], s="pt2"};' &
 				//'let ps = [p1, p2];' &
-				//'ps[1].v[0] = 3;' &
+				//'ps[1].v[0] = 3;' &     ! dot/subscript expr on lhs
 				//'return ps[1].v[0];' &
 				, quiet) == '3', &
-			eval(''                         &                 ! 19
+			eval(''                         &                 ! 23
 				//'struct P{v:[i32;:], s:str,}' &  ! point
 				//'let p1 = P{v=[6, 13], s="pt1"};' &
 				//'let p2 = P{v=[4, 15], s="pt2"};' &
@@ -2944,8 +2944,63 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'ps[1].v[0] -= 1;' &
 				//'return ps[1].v[0];' &
 				, quiet) == '3', &
+			eval(''                         &                 ! 24
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'struct L{s:P, e:P}'      &      ! line
+				//'let p1 = P{v=[ 6, 13], s="pt1"};' &
+				//'let p2 = P{v=[ 4, 15], s="pt2"};' &
+				//'let p3 = P{v=[16, 18], s="pt3"};' &
+				//'let p4 = P{v=[14, 20], s="pt4"};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'ls[1].s.v[1] = 19;' &
+				//'return ls[1].s.v[1];' &
+				, quiet) == '19', &
+			eval(''                         &                 ! 25
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'struct L{s:P, e:P}'      &      ! line
+				//'let p1 = P{v=[ 6, 13], s="pt1"};' &
+				//'let p2 = P{v=[ 4, 15], s="pt2"};' &
+				//'let p3 = P{v=[16, 18], s="pt3"};' &
+				//'let p4 = P{v=[14, 20], s="pt4"};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'ls[1].s.v[1] += 1;' &
+				//'return ls[1].s.v[1];' &
+				, quiet) == '19', &
+			eval(''                         &                 ! 26
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'struct L{s:P, e:P}'      &  ! line
+				//'let p1 = P{x= 6, y=13,};' &
+				//'let p2 = P{x= 4, y=15,};' &
+				//'let p3 = P{x=16, y=18,};' &
+				//'let p4 = P{x=14, y=20,};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'ls[1].s.y = 21;' &
+				//'return ls[1].s.y;' &
+				, quiet) == '21', &
+			eval(''                         &                 ! 27
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'struct L{s:P, e:P}'      &  ! line
+				//'let p1 = P{x= 6, y=13,};' &
+				//'let p2 = P{x= 4, y=15,};' &
+				//'let p3 = P{x=16, y=18,};' &
+				//'let p4 = P{x=14, y=20,};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'ls[1].s.y += p1.x / 2;' &
+				//'return ls[1].s.y;' &
+				, quiet) == '21', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
+
+	! I developed LHS dot exprs almost all at once, so I might have missed some
+	! cases. For RHS dot exprs I did it piece-by-piece and added tests as I went
 
 	! Trim dummy false element
 	tests = tests(1: size(tests) - 1)
