@@ -868,6 +868,8 @@ module function parse_struct_instance(parser) result(inst)
 
 	type(syntax_token_t) :: identifier, name, equals, comma, lbrace, rbrace, dummy
 
+	type(text_span_t) :: span
+
 	type(value_t) :: member
 
 	!print *, "starting parse_struct_instance()"
@@ -947,6 +949,22 @@ module function parse_struct_instance(parser) result(inst)
 			write(*,*) err_prefix//"member """//name%text &
 				//""" does not exist in struct"//color_reset
 			stop
+		end if
+
+		!! TODO: if both are struct_type, use struct_name in condition instead
+		!! of int enum
+		!print *, "member type = ", kind_name(member%type)
+		!print *, "mem    type = ", kind_name(mem%val%type)
+		if (member%type /= mem%val%type) then
+			!span = new_span(name%pos, parser%current_pos() - name%pos + 1)      ! `mem = expr`
+			span = new_span(equals%pos+1, parser%current_pos() - equals%pos - 1) ! just `expr`
+			call parser%diagnostics%push(err_bad_member_type( &
+				parser%context(), &
+				span, &
+				name%text, &
+				identifier%text, &
+				kind_name(mem%val%type), &
+				kind_name(member%type)))
 		end if
 
 		! TODO: add a size check here too

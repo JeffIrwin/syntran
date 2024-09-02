@@ -626,6 +626,22 @@ end function err_het_array
 
 !===============================================================================
 
+function err_bad_member_type(context, span, mem_name, struct_name, act_type, exp_type) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, struct_name, exp_type, act_type
+	err = err_prefix &
+		//'member `'//mem_name//'` in struct `'//struct_name//'` has the wrong type.  ' &
+		//'Member requires type `'//exp_type//'` but was given `'//act_type//'`' &
+		//underline(context, span) &
+		//" bad member type"//color_reset
+
+end function err_bad_member_type
+
+!===============================================================================
+
 function err_inc_404(context, span, filename) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

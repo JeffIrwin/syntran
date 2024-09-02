@@ -136,7 +136,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! Delay the error-handling on search_io because we might end up rewinding
 		call parser%vars%search(identifier%text, expr%id_index, search_io, expr%val)
 		call parser%parse_subscripts(expr)
-		val_sub = expr%val ! backup for later
+		!val_sub = expr%val ! backup for later
 
 		if (parser%peek_kind(0) == dot_token) then
 			!print *, "dot token"
@@ -150,7 +150,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 			call parser%parse_dot(expr)
 			if (.not. allocated(expr%member)) return
-			val_sub = expr%val
+			!val_sub = expr%val
 
 		end if
 
@@ -200,9 +200,9 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		!print *, 'allocated(expr%val%array) = ', allocated(expr%val%array)
 
-		if (allocated(expr%lsubscripts)) then
-			expr%val = val_sub
-		end if
+		!if (allocated(expr%lsubscripts)) then
+		!	expr%val = val_sub
+		!end if
 
 		ltype = expr%val%type
 		rtype = expr%right%val%type

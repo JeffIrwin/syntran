@@ -34,14 +34,18 @@ module syntran__core_m
 	!      + nested structs
 	!      + structs of arrays (and arrays of structs)
 	!        * string indexing tbd. should be do-able
+	!          + was done in a reverted commit before i re-focused on struct/array combos
 	!        * slice indexing tbd (more difficult)
-	!    * tbd:
 	!      + unary ops on dot exprs
+	!        * i had broken and fixed binary ops at some point, but i think i
+	!          changed things later which automatically fixed unary ops?
+	!    * tbd:
 	!      + remove unused things like mems/members copies in various
 	!        types/routines
 	!        > currently using members for fn param declarations
 	!      + struct type checking
 	!        > check dot member types in instantiation
+	!          * done for primitives, still need to compare struct subtypes
 	!        > check mismatches of assigning one struct to another, or passing a
 	!          struct to a fn
 	!      + improved to_str() conversion with labels of struct name and member names

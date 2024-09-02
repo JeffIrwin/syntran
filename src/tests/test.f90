@@ -3034,7 +3034,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'g0.x[2].v[1] += 1;' &
 				//'return g0.x[2].v[1];' &
 				, quiet) == '18', &
-			eval(''                         &                 ! ??
+			eval(''                         &                 ! 32
 				//'struct P{v:[i32; :], s:str,}' &  ! point
 				//'struct G{x:[P  ; :], s:str,}' &  ! polyGon of points
 				//'let p0 = P{v=[6, 13], s="pta"};' &
@@ -3044,7 +3044,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'g0.x[2].v = [2, 19];' &
 				//'return g0.x[2].v;' &
 				, quiet) == '[2, 19]', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 33
 				//'struct A{a: i32}' &
 				//'struct B{b: A}' &
 				//'struct C{c: B}' &
@@ -3057,7 +3057,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let e = E{e = d};' &
 				//'return e.e.d.c.b.a;' &
 				, quiet) == '42', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 34
 				//'struct A{a: i32}' &
 				//'struct B{b: A}' &
 				//'struct C{c: [B;:]}' &  ! middle array
@@ -3070,7 +3070,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let e = E{e = d};' &
 				//'return e.e.d.c[0].b.a;' &
 				, quiet) == '42', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 35
 				//'struct A{a: [i32;:]}' & ! inner-most array
 				//'struct B{b: A}' &
 				//'struct C{c: B}' &
@@ -3083,7 +3083,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let e = E{e = d};' &
 				//'return e.e.d.c.b.a[0];' &
 				, quiet) == '42', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 36
 				//'struct A{a: i32}' &
 				//'struct B{b: A}' &
 				//'struct C{c: B}' &
@@ -3096,7 +3096,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let e = [E{e = d}];' &
 				//'return e[0].e.d.c.b.a;' &
 				, quiet) == '42', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 37
 				//'struct A{a: [i32;:]}' &
 				//'struct B{b: [A;:]}' &
 				//'struct C{c: [B;:]}' &
@@ -3109,7 +3109,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let e = [E{e = [d]}];' &
 				//'return e[0].e[0].d[0].c[0].b[0].a[0];' &
 				, quiet) == '42', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 38
 				//'struct A{a: i32}' &
 				//'struct B{b: [A;:]}' &
 				//'struct C{c: B}' &
@@ -3122,7 +3122,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let e = [E{e = d}];' &
 				//'return e[0].e.d[0].c.b[0].a;' &
 				, quiet) == '1337', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 39
 				//'struct A{a: [i32;:]}' &
 				//'struct B{b: A}' &
 				//'struct C{c: [B;:]}' &
@@ -3135,7 +3135,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let e = E{e = [d]};' &
 				//'return e.e[0].d.c[0].b.a[0];' &
 				, quiet) == '42', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 40
 				//'struct A{a: i32}' &
 				//'struct B{b: A}' &
 				//'struct C{c: B}' &
@@ -3149,7 +3149,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'e.e.d.c.b.a = 69;' &
 				//'return e.e.d.c.b.a;' &
 				, quiet) == '69', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 41
 				//'struct A{a: i32}' &
 				//'struct B{b: A}' &
 				//'struct C{c: [B;:]}' &  ! middle array
@@ -3163,7 +3163,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'e.e.d.c[0].b.a = 69;' &
 				//'return e.e.d.c[0].b.a;' &
 				, quiet) == '69', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 42
 				//'struct A{a: [i32;:]}' & ! inner-most array
 				//'struct B{b: A}' &
 				//'struct C{c: B}' &
@@ -3177,7 +3177,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'e.e.d.c.b.a[0] = 69;' &
 				//'return e.e.d.c.b.a[0];' &
 				, quiet) == '69', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 43
 				//'struct A{a: i32}' &
 				//'struct B{b: A}' &
 				//'struct C{c: B}' &
@@ -3191,7 +3191,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'e[0].e.d.c.b.a = 69;' &
 				//'return e[0].e.d.c.b.a;' &
 				, quiet) == '69', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 44
 				//'struct A{a: [i32;:]}' &
 				//'struct B{b: [A;:]}' &
 				//'struct C{c: [B;:]}' &
@@ -3205,7 +3205,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'e[0].e[0].d[0].c[0].b[0].a[0] = 69;' &
 				//'return e[0].e[0].d[0].c[0].b[0].a[0];' &
 				, quiet) == '69', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 45
 				//'struct A{a: i32}' &
 				//'struct B{b: [A;:]}' &
 				//'struct C{c: B}' &
@@ -3219,7 +3219,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'e[0].e.d[0].c.b[0].a = 420;' &
 				//'return e[0].e.d[0].c.b[0].a;' &
 				, quiet) == '420', &
-			eval('' &                                         ! ??
+			eval('' &                                         ! 46
 				//'struct A{a: [i32;:]}' &
 				//'struct B{b: A}' &
 				//'struct C{c: [B;:]}' &
