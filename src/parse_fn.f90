@@ -9,6 +9,13 @@ submodule (syntran__parse_m) syntran__parse_fn
 	! subroutine` when pasting them into a submodule.  gfortran doesn't care but
 	! intel fortran will refuse to compile otherwise
 
+	integer, parameter :: &
+		TYPE_RANK_MISMATCH = 4, &
+		TYPE_ARRAY_MISMATCH = 3, &
+		TYPE_STRUCT_MISMATCH = 2, &
+		TYPE_MISMATCH = 1, &
+		TYPE_MATCH = 0
+
 !===============================================================================
 
 contains
@@ -858,14 +865,13 @@ module function parse_struct_instance(parser) result(inst)
 
 	!********
 
-	character(len = :), allocatable :: unset_name
+	character(len = :), allocatable :: unset_name, exp_type, act_type
 
 	integer :: io, pos0, pos1, struct_id, member_id, id1(1)
 
 	logical :: is_ok
 	logical, allocatable :: member_set(:)
 
-	!type(struct_t), save :: struct
 	type(struct_t) :: struct
 
 	type(syntax_node_t) :: mem
@@ -905,10 +911,7 @@ module function parse_struct_instance(parser) result(inst)
 	allocate(inst%val%struct( struct%num_vars ))
 	allocate(inst%members   ( struct%num_vars ))
 
-	!allocate(member_set     ( struct%num_vars ))
-	!member_set = .false.
 	member_set = spread(.false., 1, struct%num_vars)
-	!print *, "member_set = ", member_set
 
 	!if (allocated(inst%struct)) deallocate(inst%struct)
 	!allocate(inst%struct)
@@ -963,16 +966,15 @@ module function parse_struct_instance(parser) result(inst)
 			!return
 		end if
 
-		!! TODO: if both are struct_type, use struct_name in condition instead
-		!! of int enum
-		!!
-		!! TODO: check array sub type.  Might be time for a do_types_match() fn.
-		!! Is numeric casting allowed?
-
 		!print *, "member type = ", kind_name(member%type)
 		!print *, "mem    type = ", kind_name(mem%val%type)
 		if (is_ok) then
-		if (member%type /= mem%val%type) then
+
+		if (do_types_match(member, mem%val) /= TYPE_MATCH) then
+
+			exp_type = type_str(member)
+			act_type = type_str(mem%val)
+
 			!span = new_span(name%pos, parser%current_pos() - name%pos + 1)      ! `mem = expr`
 			span = new_span(pos1, parser%current_pos() - pos1) ! just `expr`
 			call parser%diagnostics%push(err_bad_member_type( &
@@ -980,8 +982,9 @@ module function parse_struct_instance(parser) result(inst)
 				span, &
 				name%text, &
 				identifier%text, &
-				kind_name(mem%val%type), &
-				kind_name(member%type)))
+				act_type, &
+				exp_type))
+
 		end if
 		end if
 		!print *, "mem type = ", kind_name(mem%val%type)
@@ -993,8 +996,6 @@ module function parse_struct_instance(parser) result(inst)
 		if (is_ok) then
 
 			if (member_set(member_id)) then
-				!span = new_span(identifier%pos, len(identifier%text))
-				!span = new_span(pos1, parser%current_pos() - pos1)
 				span = new_span(name%pos, len(name%text))
 				call parser%diagnostics%push(err_reset_member( &
 					parser%context(), &
@@ -1031,9 +1032,9 @@ module function parse_struct_instance(parser) result(inst)
 		! There could be more than 1 unset member but we only log diag for the
 		! 1st one
 		id1 = findlocl1(member_set, .false.)
-		!print *, "id1 = ", id1
-		!print *, "name = ", struct%members(id1(1))%name
 		unset_name = struct%members(id1(1))%name
+		!print *, "id1 = ", id1
+		!print *, "name = ", unset_name
 
 		span = new_span(identifier%pos, len(identifier%text))
 		call parser%diagnostics%push(err_unset_member( &
@@ -1057,6 +1058,78 @@ module function parse_struct_instance(parser) result(inst)
 	!print *, "ending parse_struct_instance()"
 
 end function parse_struct_instance
+
+!===============================================================================
+
+function type_str(a) result(str_)
+	type(value_t), intent(in) :: a
+	character(len = :), allocatable :: str_
+
+	if (a%type == struct_type) then
+		str_ = a%struct_name
+	else if (a%type == array_type) then
+		! TODO: syntran style?  Maybe `[i32; :]` instead of `array<i32>`.  I
+		! think the fn call type checker already has a precedent for this
+		str_ = "array<"//kind_name(a%array%type)//">"
+	else
+		str_ = kind_name(a%type)
+	end if
+
+end function type_str
+
+!===============================================================================
+
+integer function do_types_match(a, b) result(io)
+
+	! Check if the type of value a matches value b
+	!
+	! Numeric casting, e.g. i32 to f32, is not allowed.  Maybe we could add a
+	! flag if some callers need to allow casting
+	!
+	! TODO: maybe this fn and type_str() should be moved to types.f90 or
+	! somewhere else
+
+	type(value_t), intent(in) :: a, b
+
+	!****************
+
+	! TODO: use this for fn calls too
+
+	io = TYPE_MATCH
+
+	if (.not. (a%type == any_type .or. a%type == b%type)) then
+		! Top-level type mismatch (e.g. f32 vs str)
+		io = TYPE_MISMATCH
+		return
+	end if
+
+	if (a%type == struct_type) then
+		if (a%struct_name /= b%struct_name) then
+			! Both are structs but different kinds of structs
+			io = TYPE_STRUCT_MISMATCH
+			return
+		end if
+	end if
+
+	if (a%type == array_type) then
+
+		if (.not. (a%array%type == any_type .or. a%array%type == b%array%type)) then
+			! Both arrays but with different types of elements
+			io = TYPE_ARRAY_MISMATCH
+			return
+		end if
+
+		if (.not. (a%array%rank == 0 .or. a%array%rank == b%array%rank)) then
+			! Both arrays but with different ranks (e.g. vector vs matrix)
+			io = TYPE_RANK_MISMATCH
+			return
+		end if
+
+		! TODO: for arrays of structs, check struct sub type
+
+	end if
+
+end function do_types_match
 
 !===============================================================================
 
