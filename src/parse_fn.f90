@@ -31,9 +31,13 @@ module function parse_fn_call(parser) result(fn_call)
 	logical :: types_match
 
 	type(fn_t) :: fn
+
+	type(integer_vector_t) :: ranks, pos_args
+
 	type(syntax_node_t) :: arg
 	type(syntax_node_vector_t) :: args
 	type(syntax_token_t) :: identifier, comma, lparen, rparen, dummy
+
 	type(text_span_t) :: span
 
 	if (debug > 1) print *, 'parse_fn_call'
@@ -44,6 +48,7 @@ module function parse_fn_call(parser) result(fn_call)
 	!print *, 'identifier = ', identifier%text
 
 	args = new_syntax_node_vector()
+	pos_args = new_integer_vector()
 	lparen  = parser%match(lparen_token)
 
 	do while ( &
@@ -51,22 +56,9 @@ module function parse_fn_call(parser) result(fn_call)
 		parser%current_kind() /= eof_token)
 
 		pos0 = parser%pos
+		call pos_args%push(parser%current_pos())
 		arg = parser%parse_expr()
 		call args%push(arg)
-
-		!! TODO: we need a delete method for syntax_node_t (i.e.
-		!! arg).  There was a bug here where the fact that the
-		!! subscripts for the 1st fn arg were allocated, leaked into
-		!! the 2nd arg because of this loop.  For example:
-		!!
-		!!     let result = my_fn_call(str1[beg:end], str2);
-		!!
-		!! We should delete the whole thing just to be safe, to
-		!! prevent anything else from leaking.
-
-		!if (allocated(arg%lsubscripts)) then
-		!	deallocate(arg%lsubscripts)
-		!end if
 
 		if (parser%current_kind() /= rparen_token) then
 			comma = parser%match(comma_token)
@@ -76,6 +68,7 @@ module function parse_fn_call(parser) result(fn_call)
 		if (parser%pos == pos0) dummy = parser%next()
 
 	end do
+	call pos_args%push(parser%current_pos() + 1)
 
 	rparen  = parser%match(rparen_token)
 
@@ -288,8 +281,7 @@ module function parse_fn_call(parser) result(fn_call)
 
 		if (.not. types_match) then
 
-			! TODO: get span of individual arg, not whole arg list
-			span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
 			call parser%diagnostics%push( &
 				err_bad_arg_type(parser%context(), &
 				span, identifier%text, i, fn%params(i)%name, &
@@ -667,7 +659,6 @@ module function parse_struct_declaration(parser) result(decl)
 
 	type(value_t) :: val
 
-	!! TODO?
 	!call parser%vars%push_scope()
 
 	struct_kw = parser%match(struct_keyword)
@@ -817,8 +808,6 @@ module function parse_struct_declaration(parser) result(decl)
 		! type, just like `parser%vars`.  Just add one inside of the `struct_t`
 		! type.
 
-		! TODO: check for duplicate member names
-
 		!print *, "insert var type ", kind_name(val%type)
 		!print *, "insert var name = ", struct%members(i)%name
 		!call parser%vars%insert(struct%members(i)%name, val, parser%num_vars)
@@ -828,12 +817,11 @@ module function parse_struct_declaration(parser) result(decl)
 			struct%num_vars, io, overwrite = .false.)
 		!print *, 'io = ', io
 		if (io /= exit_success) then
-			! TODO: diag
-			write(*,*) err_prefix//"re-declared struct member"//color_reset
-			!span = new_span(identifier%pos, len(identifier%text))
-			!call parser%diagnostics%push( &
-			!	err_redeclare_var(parser%context(), &
-			!	span, identifier%text))
+			span = new_span(pos_mems%v(i), pos_mems%v(i+1) - pos_mems%v(i))
+			call parser%diagnostics%push(err_redeclare_mem( &
+				parser%context(), &
+				span, &
+				struct%members(i)%name))
 		end if
 
 	end do
@@ -960,16 +948,16 @@ module function parse_struct_instance(parser) result(inst)
 		!print *, "char mid  = ", struct%vars%dicts(1)%root%mid%split_char
 
 		call struct%vars%search(name%text, member_id, io, member)
-
-		!member = parser%structs(struct_id)%vars%search(name%text, member_id, io)
 		!print *, "member io = ", io
 		!print *, "member id = ", member_id
-
 		if (io /= 0) then
-			! TODO: diag
-			write(*,*) err_prefix//"member """//name%text &
-				//""" does not exist in struct"//color_reset
-			stop
+			span = new_span(name%pos, len(name%text))
+			call parser%diagnostics%push(err_bad_member_name( &
+				parser%context(), &
+				span, &
+				name%text, &
+				identifier%text))
+			!return
 		end if
 
 		!! TODO: if both are struct_type, use struct_name in condition instead

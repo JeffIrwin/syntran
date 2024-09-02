@@ -169,6 +169,20 @@ end function err_redeclare_var
 
 !===============================================================================
 
+function err_redeclare_mem(context, span, var) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: var
+	err = err_prefix &
+		//'member `'//var//'` has already been declared in this struct' &
+		//underline(context, span)//" member already declared"//color_reset
+
+end function err_redeclare_mem
+
+!===============================================================================
+
 function err_redeclare_fn(context, span, fn) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
@@ -651,6 +665,21 @@ function err_het_array(context, span, elem) result(err)
 		//" heterogeneous array element"//color_reset
 
 end function err_het_array
+
+!===============================================================================
+
+function err_bad_member_name(context, span, mem_name, struct_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, struct_name
+	err = err_prefix &
+		//'member `'//mem_name//'` in struct `'//struct_name//'` does not exist' &
+		//underline(context, span) &
+		//" bad member name"//color_reset
+
+end function err_bad_member_name
 
 !===============================================================================
 
