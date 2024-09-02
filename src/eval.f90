@@ -429,13 +429,11 @@ recursive subroutine set_val(node, var, state, val)
 
 		if (node%member%kind == dot_expr) then
 			! Recurse
-			!res = get_val(node%member, var%struct(i8+1)%struct(id), state)
 			call set_val(node%member, var%struct(i8+1)%struct(id), state, val)
 			return
 		end if
 
 		if (.not. allocated(node%member%lsubscripts)) then
-			!res = var%struct(i8+1)%struct(id)
 			var%struct(i8+1)%struct(id) = val
 			return
 		end if
@@ -445,7 +443,6 @@ recursive subroutine set_val(node, var, state, val)
 		!
 		! TODO: ban non-scalar subscripts like below
 		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
-		!res = get_array_val(var%struct(i8+1)%struct(id)%array, j8)
 		call set_array_val(var%struct(i8+1)%struct(id)%array, j8, val)
 		return
 
@@ -453,14 +450,10 @@ recursive subroutine set_val(node, var, state, val)
 
 		i8 = sub_eval(node, var, state)
 		if (var%array%type /= struct_type) then
-			!res = get_array_val(var%array, i8)
 			call set_array_val(var%array, i8, val)
 			return
 		end if
 
-		!res = var%struct(i8+1)
-		!res%type = struct_type
-		!res%struct_name = var%struct_name
 		var%struct(i8+1) = val
 		!res%type = struct_type  ! TODO?
 		!res%struct_name = var%struct_name
@@ -482,7 +475,6 @@ recursive subroutine set_val(node, var, state, val)
 	! Base case
 
 	if (.not. allocated(node%member%lsubscripts)) then
-		!res = var%struct(id)
 		var%struct(id) = val
 		return
 	end if
@@ -503,7 +495,6 @@ recursive subroutine set_val(node, var, state, val)
 		return
 	end if
 
-	!res = var%struct(id)%struct(i8+1)
 	var%struct(id)%struct(i8+1) = val
 	!res%type = struct_type
 	!res%struct_name = var%struct(id)%struct_name

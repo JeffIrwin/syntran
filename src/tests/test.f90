@@ -3034,7 +3034,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'g0.x[2].v[1] += 1;' &
 				//'return g0.x[2].v[1];' &
 				, quiet) == '18', &
-			eval(''                         &                 ! 31
+			eval(''                         &                 ! ??
 				//'struct P{v:[i32; :], s:str,}' &  ! point
 				//'struct G{x:[P  ; :], s:str,}' &  ! polyGon of points
 				//'let p0 = P{v=[6, 13], s="pta"};' &
@@ -3044,6 +3044,195 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'g0.x[2].v = [2, 19];' &
 				//'return g0.x[2].v;' &
 				, quiet) == '[2, 19]', &
+			eval('' &                                         ! ??
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'return e.e.d.c.b.a;' &
+				, quiet) == '42', &
+			eval('' &                                         ! ??
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: [B;:]}' &  ! middle array
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'return e.e.d.c[0].b.a;' &
+				, quiet) == '42', &
+			eval('' &                                         ! ??
+				//'struct A{a: [i32;:]}' & ! inner-most array
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &       ! order-5 struct
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'return e.e.d.c.b.a[0];' &
+				, quiet) == '42', &
+			eval('' &                                         ! ??
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct, outer-most array
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = [E{e = d}];' &
+				//'return e[0].e.d.c.b.a;' &
+				, quiet) == '42', &
+			eval('' &                                         ! ??
+				//'struct A{a: [i32;:]}' &
+				//'struct B{b: [A;:]}' &
+				//'struct C{c: [B;:]}' &
+				//'struct D{d: [C;:]}' &
+				//'struct E{e: [D;:]}' &      ! order-5 struct, all arrays
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = [a]};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = [c]};' &
+				//'let e = [E{e = [d]}];' &
+				//'return e[0].e[0].d[0].c[0].b[0].a[0];' &
+				, quiet) == '42', &
+			eval('' &                                         ! ??
+				//'struct A{a: i32}' &
+				//'struct B{b: [A;:]}' &
+				//'struct C{c: B}' &
+				//'struct D{d: [C;:]}' &
+				//'struct E{e: D}' &      ! order-5 struct, alternating arrays
+				//'let a = A{a = 1337};' &
+				//'let b = B{b = [a]};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = [c]};' &
+				//'let e = [E{e = d}];' &
+				//'return e[0].e.d[0].c.b[0].a;' &
+				, quiet) == '1337', &
+			eval('' &                                         ! ??
+				//'struct A{a: [i32;:]}' &
+				//'struct B{b: A}' &
+				//'struct C{c: [B;:]}' &
+				//'struct D{d: C}' &
+				//'struct E{e: [D;:]}' &      ! order-5 struct, alternating arrays the other way
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = [d]};' &
+				//'return e.e[0].d.c[0].b.a[0];' &
+				, quiet) == '42', &
+			eval('' &                                         ! ??
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'e.e.d.c.b.a = 69;' &
+				//'return e.e.d.c.b.a;' &
+				, quiet) == '69', &
+			eval('' &                                         ! ??
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: [B;:]}' &  ! middle array
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'e.e.d.c[0].b.a = 69;' &
+				//'return e.e.d.c[0].b.a;' &
+				, quiet) == '69', &
+			eval('' &                                         ! ??
+				//'struct A{a: [i32;:]}' & ! inner-most array
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &       ! order-5 struct
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'e.e.d.c.b.a[0] = 69;' &
+				//'return e.e.d.c.b.a[0];' &
+				, quiet) == '69', &
+			eval('' &                                         ! ??
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct, outer-most array
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = [E{e = d}];' &
+				//'e[0].e.d.c.b.a = 69;' &
+				//'return e[0].e.d.c.b.a;' &
+				, quiet) == '69', &
+			eval('' &                                         ! ??
+				//'struct A{a: [i32;:]}' &
+				//'struct B{b: [A;:]}' &
+				//'struct C{c: [B;:]}' &
+				//'struct D{d: [C;:]}' &
+				//'struct E{e: [D;:]}' &      ! order-5 struct, all arrays
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = [a]};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = [c]};' &
+				//'let e = [E{e = [d]}];' &
+				//'e[0].e[0].d[0].c[0].b[0].a[0] = 69;' &
+				//'return e[0].e[0].d[0].c[0].b[0].a[0];' &
+				, quiet) == '69', &
+			eval('' &                                         ! ??
+				//'struct A{a: i32}' &
+				//'struct B{b: [A;:]}' &
+				//'struct C{c: B}' &
+				//'struct D{d: [C;:]}' &
+				//'struct E{e: D}' &      ! order-5 struct, alternating arrays
+				//'let a = A{a = 1337};' &
+				//'let b = B{b = [a]};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = [c]};' &
+				//'let e = [E{e = d}];' &
+				//'e[0].e.d[0].c.b[0].a = 420;' &
+				//'return e[0].e.d[0].c.b[0].a;' &
+				, quiet) == '420', &
+			eval('' &                                         ! ??
+				//'struct A{a: [i32;:]}' &
+				//'struct B{b: A}' &
+				//'struct C{c: [B;:]}' &
+				//'struct D{d: C}' &
+				//'struct E{e: [D;:]}' &      ! order-5 struct, alternating arrays the other way
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = [d]};' &
+				//'e.e[0].d.c[0].b.a[0] += 27;' &
+				//'return e.e[0].d.c[0].b.a[0];' &
+				, quiet) == '69', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
