@@ -675,6 +675,17 @@ module function parse_struct_declaration(parser) result(decl)
 	identifier = parser%match(identifier_token)
 	!print *, "parsing struct ", identifier%text
 
+	itype = lookup_type(identifier%text, parser%structs, dummy_struct)
+	!print *, "itype = ", itype, kind_name(itype)
+	if (itype /= unknown_type .and. itype /= struct_type) then
+		! Redeclared structs are caught below
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_redeclare_primitive( &
+			parser%context(), &
+			span, &
+			identifier%text))
+	end if
+
 	pos1 = parser%current_pos()
 
 	lbrace = parser%match(lbrace_token)
@@ -833,7 +844,16 @@ module function parse_struct_declaration(parser) result(decl)
 	decl%id_index  = parser%num_structs
 
 	!print *, "inserting identifier ", identifier%text, " into parser structs"
-	call parser%structs%insert(identifier%text, struct, decl%id_index)
+	call parser%structs%insert( &
+		identifier%text, struct, decl%id_index, io, overwrite = .false.)
+	!print *, "io = ", io
+	if (io /= 0) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_redeclare_struct( &
+			parser%context(), &
+			span, &
+			identifier%text))
+	end if
 
 	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
 	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
@@ -858,7 +878,7 @@ module function parse_struct_instance(parser) result(inst)
 
 	!********
 
-	integer :: io, pos0, struct_id, member_id
+	integer :: io, pos0, pos1, struct_id, member_id
 
 	!type(struct_t), save :: struct
 	type(struct_t) :: struct
@@ -927,6 +947,7 @@ module function parse_struct_instance(parser) result(inst)
 
 		name   = parser%match(identifier_token)
 		equals = parser%match(equals_token)
+		pos1   = parser%current_pos()
 		mem    = parser%parse_expr()
 
 		!print *, "name%text = ", name%text
@@ -953,11 +974,15 @@ module function parse_struct_instance(parser) result(inst)
 
 		!! TODO: if both are struct_type, use struct_name in condition instead
 		!! of int enum
+		!!
+		!! TODO: check array sub type.  Might be time for a do_types_match() fn.
+		!! Is numeric casting allowed?
+
 		!print *, "member type = ", kind_name(member%type)
 		!print *, "mem    type = ", kind_name(mem%val%type)
 		if (member%type /= mem%val%type) then
 			!span = new_span(name%pos, parser%current_pos() - name%pos + 1)      ! `mem = expr`
-			span = new_span(equals%pos+1, parser%current_pos() - equals%pos - 1) ! just `expr`
+			span = new_span(pos1, parser%current_pos() - pos1) ! just `expr`
 			call parser%diagnostics%push(err_bad_member_type( &
 				parser%context(), &
 				span, &

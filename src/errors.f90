@@ -183,6 +183,34 @@ end function err_redeclare_fn
 
 !===============================================================================
 
+function err_redeclare_struct(context, span, struct) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: struct
+	err = err_prefix &
+		//'struct `'//struct//'` has already been declared' &
+		//underline(context, span)//" struct already declared"//color_reset
+
+end function err_redeclare_struct
+
+!===============================================================================
+
+function err_redeclare_primitive(context, span, struct) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: struct
+	err = err_prefix &
+		//'struct name `'//struct//'` is reserved for a primitive type' &
+		//underline(context, span)//" cannot redeclare primitives"//color_reset
+
+end function err_redeclare_primitive
+
+!===============================================================================
+
 function err_undeclare_var(context, span, var) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
