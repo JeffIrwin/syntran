@@ -264,9 +264,9 @@ module function parse_fn_call(parser) result(fn_call)
 			ptype = fn%params(i)%type
 
 			param_val%type = fn%params(i)%type
-			param_val%array%type = fn%params(i)%array_type
-			param_val%array%rank = fn%params(i)%rank
-			! TODO: struct_name
+			param_val%array%type  = fn%params(i)%array_type
+			param_val%array%rank  = fn%params(i)%rank
+			param_val%struct_name = fn%params(i)%struct_name
 
 		else
 			ptype = fn%variadic_type
@@ -295,7 +295,7 @@ module function parse_fn_call(parser) result(fn_call)
 				parser%context(), &
 				span, &
 				identifier%text, &
-				i, &
+				i - 1, &  ! 0-based index in err msg
 				fn%params(i)%name, &
 				exp_type, &
 				act_type))
@@ -480,6 +480,12 @@ module function parse_fn_declaration(parser) result(decl)
 			!print *, "(scalar)"
 		end if
 
+		! TODO: i think this will fail for an array of structs
+		if (itype == struct_type) then
+			fn%params(i)%struct_name = val%struct_name
+			print *, "struct_name = ", val%struct_name
+		end if
+
 		! Declare the parameter variable
 		parser%num_vars = parser%num_vars + 1
 
@@ -536,6 +542,7 @@ module function parse_fn_declaration(parser) result(decl)
 		else
 			fn%type = itype
 		end if
+		! TODO: struct_name for fn return type
 
 	end if
 	!print *, 'fn%type = ', fn%type
@@ -1038,7 +1045,7 @@ function type_name(a) result(str_)
 
 		! Repeat ":, " appropriately
 		str_ = "["//type_name_primitive(a%array%type)//"; "
-		str_ = str_//repeat(":, ", a%array%rank - 1)
+		str_ = str_//repeat(":, ", max(a%array%rank - 1, 0))
 		str_ = str_//":]"
 
 	else
@@ -1113,7 +1120,7 @@ integer function types_match(a, b) result(io)
 			return
 		end if
 
-		if (.not. (a%array%rank == 0 .or. a%array%rank == b%array%rank)) then
+		if (.not. (a%array%rank < 0 .or. a%array%rank == b%array%rank)) then
 			! Both arrays but with different ranks (e.g. vector vs matrix)
 			io = TYPE_RANK_MISMATCH
 			return

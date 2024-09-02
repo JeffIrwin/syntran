@@ -29,6 +29,7 @@ module syntran__types_m
 
 		integer :: type
 		character(len = :), allocatable :: name
+		character(len = :), allocatable :: struct_name
 
 		integer :: array_type, rank
 
