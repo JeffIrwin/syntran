@@ -464,8 +464,8 @@ function err_bad_arg_type(context, span, fn, iarg, param, expect, actual) &
 
 	err = err_prefix &
 		//'function `'//fn//'` parameter '//str(iarg)//' `'//param &
-		//'` requires value of '//expect//' but was given a value of ' &
-		//actual &
+		//'` requires type `'//expect//'` but was given `' &
+		//actual//'`' &
 		//underline(context, span)//" wrong argument type"//color_reset
 
 end function err_bad_arg_type

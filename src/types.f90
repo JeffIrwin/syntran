@@ -43,7 +43,7 @@ module syntran__types_m
 	type fn_t
 		! Function signature: input and output types
 
-		! Return type
+		! Return type. TODO: add struct_name and check it
 		integer :: type, array_type, rank
 
 		! Arguments/parameters.  Technically, "arguments" in most languages are

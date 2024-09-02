@@ -30,12 +30,10 @@ module function parse_fn_call(parser) result(fn_call)
 
 	!********
 
-	character(len = :), allocatable :: param_type, arg_type
+	character(len = :), allocatable :: param_type, arg_type, exp_type, act_type
 
 	integer :: i, io, id_index, param_rank, arg_rank, ptype, atype, pos0, &
-		type_, val_type
-
-	logical :: types_match
+		type_
 
 	type(fn_t) :: fn
 
@@ -46,6 +44,8 @@ module function parse_fn_call(parser) result(fn_call)
 	type(syntax_token_t) :: identifier, comma, lparen, rparen, dummy
 
 	type(text_span_t) :: span
+
+	type(value_t) :: param_val
 
 	if (debug > 1) print *, 'parse_fn_call'
 
@@ -244,12 +244,9 @@ module function parse_fn_call(parser) result(fn_call)
 
 	end if
 
+	allocate(param_val%array)
+
 	do i = 1, args%len_
-
-		val_type = args%v(i)%val%type
-
-		!print *, kind_name(val_type)
-		!print *, kind_name(fn%params(i)%type)
 
 		! For variadic fns, check the argument type against the type
 		! of the last required parameter.  This may need to change,
@@ -259,88 +256,51 @@ module function parse_fn_call(parser) result(fn_call)
 
 		! TODO: re-test min/max arg count/type checking
 
-		!! We want println() to just print an empty line
-		!if (fn%variadic_min == 0) exit
+		! Construct a param val just for type checking.  I think this is the
+		! only way to do it for intrinsic fns, which don't actually have a val
+		! anywhere
 
 		if (i <= size(fn%params)) then
 			ptype = fn%params(i)%type
+
+			param_val%type = fn%params(i)%type
+			param_val%array%type = fn%params(i)%array_type
+			param_val%array%rank = fn%params(i)%rank
+			! TODO: struct_name
+
 		else
 			ptype = fn%variadic_type
+
+			param_val%type = fn%variadic_type
+			param_val%array%type = unknown_type
+			param_val%array%rank = 0
+			param_val%struct_name = ""
+
 		end if
 
-		!j = i
-		!if (fn%variadic_min > 0) j = fn%variadic_min
-		!ptype = fn%params(j)%type
+		if (types_match(param_val, args%v(i)%val) /= TYPE_MATCH) then
 
-		types_match = &
-			ptype == any_type .or. ptype == val_type
+			exp_type = type_name(param_val)
+			act_type = type_name(args%v(i)%val)
 
-		!! make a fn for use here and for array `atype` below? this
-		!! could be more easily extended if i add fn's with something
-		!! generic like `int_type` or `num_type`
-		!types_match = .false.
-		!select case (ptype)
-		!case (any_type)
-		!	types_match = .true.
-		!case default
-		!	types_match = ptype == val_type
-		!end select
+			! This used to call a different diagnostic fn depending on whether
+			! it was a top-level type mismatch, array mismatch, or rank
+			! mismatch.  types_match() returns an enum so we could make it that
+			! way again if there's a need. Currently err_bad_arg_rank() is
+			! unused
 
-		if (.not. types_match) then
-
+			!span = new_span(pos1, parser%current_pos() - pos1)
 			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-			call parser%diagnostics%push( &
-				err_bad_arg_type(parser%context(), &
-				span, identifier%text, i, fn%params(i)%name, &
-				kind_name(ptype), &
-				kind_name(val_type)))
-			return
+			call parser%diagnostics%push(err_bad_arg_type( &
+				parser%context(), &
+				span, &
+				identifier%text, &
+				i, &
+				fn%params(i)%name, &
+				exp_type, &
+				act_type))
 
 		end if
-
-		! TODO: fns w/ variadic array params are not implemented
-		if (fn%variadic_min >= 0 .and. i > size(fn%params)) cycle
-
-		if (ptype == array_type) then
-			atype = fn%params(i)%array_type
-			types_match = &
-				atype == any_type .or. &
-				atype == args%v(i)%val%array%type
-		end if
-
-		if (.not. types_match) then
-
-			span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-			param_type = kind_name( atype)
-			arg_type   = kind_name(args%v(i)%val%array%type)
-
-			call parser%diagnostics%push( &
-				err_bad_array_arg_type(parser%context(), &
-				span, identifier%text, i, fn%params(i)%name, &
-				param_type, arg_type))
-			return
-
-		end if
-
-		if (ptype == array_type) then
-			param_rank = fn%params(i)%rank
-			arg_rank = args%v(i)%val%array%rank
-
-			if (param_rank >= 0 .and. param_rank /= arg_rank) then
-
-				span = new_span(lparen%pos, &
-					rparen%pos - lparen%pos + 1)
-
-				call parser%diagnostics%push( &
-					err_bad_arg_rank(parser%context(), &
-					span, identifier%text, i, fn%params(i)%name, &
-					param_rank, arg_rank))
-				return
-
-			end if
-
-		end if
-
 	end do
 
 	fn_call%id_index = id_index
@@ -970,10 +930,10 @@ module function parse_struct_instance(parser) result(inst)
 		!print *, "mem    type = ", kind_name(mem%val%type)
 		if (is_ok) then
 
-		if (do_types_match(member, mem%val) /= TYPE_MATCH) then
+		if (types_match(member, mem%val) /= TYPE_MATCH) then
 
-			exp_type = type_str(member)
-			act_type = type_str(mem%val)
+			exp_type = type_name(member)
+			act_type = type_name(mem%val)
 
 			!span = new_span(name%pos, parser%current_pos() - name%pos + 1)      ! `mem = expr`
 			span = new_span(pos1, parser%current_pos() - pos1) ! just `expr`
@@ -1061,25 +1021,61 @@ end function parse_struct_instance
 
 !===============================================================================
 
-function type_str(a) result(str_)
+function type_name(a) result(str_)
+	! c.f. lookup_type() which is mostly the inverse of this
 	type(value_t), intent(in) :: a
 	character(len = :), allocatable :: str_
 
 	if (a%type == struct_type) then
 		str_ = a%struct_name
 	else if (a%type == array_type) then
+
 		! TODO: syntran style?  Maybe `[i32; :]` instead of `array<i32>`.  I
 		! think the fn call type checker already has a precedent for this
-		str_ = "array<"//kind_name(a%array%type)//">"
+
+		!str_ = "array<"//type_name_primitive(a%array%type)//">"
+		!str_ = "["//type_name_primitive(a%array%type)//"; :]"
+
+		! Repeat ":, " appropriately
+		str_ = "["//type_name_primitive(a%array%type)//"; "
+		str_ = str_//repeat(":, ", a%array%rank - 1)
+		str_ = str_//":]"
+
 	else
-		str_ = kind_name(a%type)
+		str_ = type_name_primitive(a%type)
 	end if
 
-end function type_str
+end function type_name
 
 !===============================================================================
 
-integer function do_types_match(a, b) result(io)
+function type_name_primitive(itype) result(str_)
+	! c.f. lookup_type() which is mostly the inverse of this
+	integer, intent(in) :: itype
+	character(len = :), allocatable :: str_
+
+	select case (itype)
+	case (i32_type)
+		str_ = "i32"
+	case (i64_type)
+		str_ = "i64"
+	case (f32_type)
+		str_ = "f32"
+	case (str_type)
+		str_ = "str"
+	case (bool_type)
+		str_ = "bool"
+	case (any_type)
+		str_ = "any"
+	case default
+		str_ = "unknown"
+	end select
+
+end function type_name_primitive
+
+!===============================================================================
+
+integer function types_match(a, b) result(io)
 
 	! Check if the type of value a matches value b
 	!
@@ -1092,8 +1088,6 @@ integer function do_types_match(a, b) result(io)
 	type(value_t), intent(in) :: a, b
 
 	!****************
-
-	! TODO: use this for fn calls too
 
 	io = TYPE_MATCH
 
@@ -1129,7 +1123,7 @@ integer function do_types_match(a, b) result(io)
 
 	end if
 
-end function do_types_match
+end function types_match
 
 !===============================================================================
 

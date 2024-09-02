@@ -40,6 +40,7 @@ module syntran__core_m
 	!        * i had broken and fixed binary ops at some point, but i think i
 	!          changed things later which automatically fixed unary ops?
 	!    * tbd:
+	!      + remove unused vars per cmake warnings
 	!      + remove unused things like mems/members copies in various
 	!        types/routines
 	!        > currently using members for fn param declarations
