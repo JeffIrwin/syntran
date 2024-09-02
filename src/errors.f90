@@ -668,6 +668,37 @@ end function err_het_array
 
 !===============================================================================
 
+function err_unset_member(context, span, mem_name, struct_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, struct_name
+	err = err_prefix &
+		//'not all members in struct `'//struct_name//'` are initialized.  ' &
+		//'Member `'//mem_name//'` is uninitialized' &
+		//underline(context, span) &
+		//" uninitialized member(s)"//color_reset
+
+end function err_unset_member
+
+!===============================================================================
+
+function err_reset_member(context, span, mem_name, struct_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, struct_name
+	err = err_prefix &
+		//'member `'//mem_name//'` is already initialized in struct `'//struct_name//'`' &
+		//underline(context, span) &
+		//" duplicate member"//color_reset
+
+end function err_reset_member
+
+!===============================================================================
+
 function err_bad_member_name(context, span, mem_name, struct_name) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

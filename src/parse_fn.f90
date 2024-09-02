@@ -363,7 +363,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 	type( string_vector_t) :: names, types
 	type(logical_vector_t) :: is_array
-	type(integer_vector_t) :: ranks
+	type(integer_vector_t) :: ranks, pos_args
 
 	type(struct_t) :: struct
 
@@ -401,6 +401,7 @@ module function parse_fn_declaration(parser) result(decl)
 	types    = new_string_vector()
 	is_array = new_logical_vector()
 	ranks    = new_integer_vector()
+	pos_args = new_integer_vector()  ! technically params not args
 
 	! Array params use this syntax:
 	!
@@ -422,6 +423,7 @@ module function parse_fn_declaration(parser) result(decl)
 		parser%current_kind() /= eof_token)
 
 		pos0 = parser%current_pos()
+		call pos_args%push(pos0)
 
 		!print *, 'matching name'
 		name  = parser%match(identifier_token)
@@ -446,6 +448,7 @@ module function parse_fn_declaration(parser) result(decl)
 		if (parser%current_pos() == pos0) dummy = parser%next()
 
 	end do
+	call pos_args%push(parser%current_pos() + 1)
 
 	!print *, 'matching rparen'
 	rparen = parser%match(rparen_token)
@@ -464,16 +467,9 @@ module function parse_fn_declaration(parser) result(decl)
 		itype = lookup_type(types%v(i)%s, parser%structs, struct)
 		!print *, "itype = ", itype
 		if (itype == unknown_type) then
-
-			! TODO: make an array of pos's for each param to underline
-			! individual param, not whole param list.  Struct parser does this
-			! slightly better
-
-			span = new_span(pos1, pos2 - pos1 + 1)
+			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
 			call parser%diagnostics%push(err_bad_type( &
 				parser%context(), span, types%v(i)%s))
-				!parser%contexts%v(name%unit_), span, types%v(i)%s))
-
 		end if
 
 		if (itype == struct_type) then
@@ -764,13 +760,9 @@ module function parse_struct_declaration(parser) result(decl)
 		! TODO: consume dummy_struct for nested structs
 		itype = lookup_type(types%v(i)%s, parser%structs, dummy_struct)
 		if (itype == unknown_type) then
-
-			!span = new_span(pos1, pos2 - pos1 - 1)
-			!span = new_span(lbrace%pos, rbrace%pos - lbrace%pos + 1)
 			span = new_span(pos_mems%v(i), pos_mems%v(i+1) - pos_mems%v(i))
 			call parser%diagnostics%push(err_bad_type( &
 				parser%context(), span, types%v(i)%s))
-
 		end if
 
 		if (is_array%v(i)) then
@@ -866,7 +858,12 @@ module function parse_struct_instance(parser) result(inst)
 
 	!********
 
-	integer :: io, pos0, pos1, struct_id, member_id
+	character(len = :), allocatable :: unset_name
+
+	integer :: io, pos0, pos1, struct_id, member_id, id1(1)
+
+	logical :: is_ok
+	logical, allocatable :: member_set(:)
 
 	!type(struct_t), save :: struct
 	type(struct_t) :: struct
@@ -907,6 +904,11 @@ module function parse_struct_instance(parser) result(inst)
 	inst%val%type = struct_type
 	allocate(inst%val%struct( struct%num_vars ))
 	allocate(inst%members   ( struct%num_vars ))
+
+	!allocate(member_set     ( struct%num_vars ))
+	!member_set = .false.
+	member_set = spread(.false., 1, struct%num_vars)
+	!print *, "member_set = ", member_set
 
 	!if (allocated(inst%struct)) deallocate(inst%struct)
 	!allocate(inst%struct)
@@ -950,7 +952,8 @@ module function parse_struct_instance(parser) result(inst)
 		call struct%vars%search(name%text, member_id, io, member)
 		!print *, "member io = ", io
 		!print *, "member id = ", member_id
-		if (io /= 0) then
+		is_ok = io == 0
+		if (.not. is_ok) then
 			span = new_span(name%pos, len(name%text))
 			call parser%diagnostics%push(err_bad_member_name( &
 				parser%context(), &
@@ -968,6 +971,7 @@ module function parse_struct_instance(parser) result(inst)
 
 		!print *, "member type = ", kind_name(member%type)
 		!print *, "mem    type = ", kind_name(mem%val%type)
+		if (is_ok) then
 		if (member%type /= mem%val%type) then
 			!span = new_span(name%pos, parser%current_pos() - name%pos + 1)      ! `mem = expr`
 			span = new_span(pos1, parser%current_pos() - pos1) ! just `expr`
@@ -979,13 +983,32 @@ module function parse_struct_instance(parser) result(inst)
 				kind_name(mem%val%type), &
 				kind_name(member%type)))
 		end if
-
-		! TODO: add a size check here too
+		end if
 		!print *, "mem type = ", kind_name(mem%val%type)
 
-		! Members can be instantiated out of order
-		inst%val%struct( member_id ) = mem%val
-		inst%members( member_id ) = mem
+		! member_id may be out-of-bounds.  Probably want to parse the rest of
+		! the tokens in this loop but not try any indexing by member_id if not
+		! ok
+
+		if (is_ok) then
+
+			if (member_set(member_id)) then
+				!span = new_span(identifier%pos, len(identifier%text))
+				!span = new_span(pos1, parser%current_pos() - pos1)
+				span = new_span(name%pos, len(name%text))
+				call parser%diagnostics%push(err_reset_member( &
+					parser%context(), &
+					span, &
+					name%text, &
+					identifier%text))
+			end if
+
+			! Members can be instantiated out of order.  Insert by id, not loop iterator
+			inst%val%struct( member_id ) = mem%val
+			inst%members( member_id ) = mem
+			member_set(member_id) = .true.
+
+		end if
 
 		call mems%push(mem)
 
@@ -1000,15 +1023,36 @@ module function parse_struct_instance(parser) result(inst)
 
 	rbrace  = parser%match(rbrace_token)
 
-	!print *, "size = ", struct%num_vars
-	!print *, "size = ", mems%len_
-	if (mems%len_ /= struct%num_vars) then
-		! TODO: diag
-		write(*,*) err_prefix//"struct instance does not have the right number of members"//color_reset
-		stop
+	! Use a boolean array to check if all members are set.  You could have the
+	! correct number but with duplicates and other members missing
+	!print *, "member_set = ", member_set
+	if (.not. all(member_set)) then
+
+		! There could be more than 1 unset member but we only log diag for the
+		! 1st one
+		id1 = findlocl1(member_set, .false.)
+		!print *, "id1 = ", id1
+		!print *, "name = ", struct%members(id1(1))%name
+		unset_name = struct%members(id1(1))%name
+
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_unset_member( &
+			parser%context(), &
+			span, &
+			unset_name, &
+			identifier%text))
 	end if
 
-	! TODO: check type of members match
+	!print *, "size = ", struct%num_vars
+	!print *, "size = ", mems%len_
+	if (mems%len_ < struct%num_vars) then
+		! I think this is unreachable given the other checks
+		write(*,*) err_prefix//"struct instance does not have enough members"//color_reset
+		call internal_error()
+	!else if (mems%len_ > struct%num_vars) then
+	!	write(*,*) err_prefix//"struct instance has too many members"//color_reset
+	!	call internal_error()
+	end if
 
 	!print *, "ending parse_struct_instance()"
 
