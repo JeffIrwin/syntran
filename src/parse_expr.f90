@@ -33,7 +33,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 	type(text_span_t) :: span
 
-	type(value_t) :: var, val_sub
+	type(value_t) :: var
 
 	!print *, 'starting parse_expr_statement()'
 
@@ -138,7 +138,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! Delay the error-handling on search_io because we might end up rewinding
 		call parser%vars%search(identifier%text, expr%id_index, search_io, expr%val)
 		call parser%parse_subscripts(expr)
-		!val_sub = expr%val ! backup for later
 
 		if (parser%peek_kind(0) == dot_token) then
 			!print *, "dot token"
@@ -152,7 +151,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 			call parser%parse_dot(expr)
 			if (.not. allocated(expr%member)) return
-			!val_sub = expr%val
 
 		end if
 
@@ -189,7 +187,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! has been declared, unless it is a struct which has already been looked
 		! up above
 		if (.not. allocated(expr%member)) then
-			!call parser%vars%search(identifier%text, expr%id_index, io, expr%val)
 			if (search_io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
@@ -199,12 +196,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		end if
 
 		!print *, 'type = ', kind_name(expr%val%type)
-
 		!print *, 'allocated(expr%val%array) = ', allocated(expr%val%array)
-
-		!if (allocated(expr%lsubscripts)) then
-		!	expr%val = val_sub
-		!end if
 
 		ltype = expr%val%type
 		rtype = expr%right%val%type
@@ -222,6 +214,10 @@ recursive module function parse_expr_statement(parser) result(expr)
 		is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
 		if (ltype == struct_type .and. is_op_allowed) then
 			if (expr%val%struct_name /= expr%right%val%struct_name) then
+				! TODO: this is a one-off check for assignment of one struct to
+				! another. It should really be inside of is_binary_op_allowed(),
+				! but I should change is_binary_op_allowed() to take 2 value_t
+				! args, instead of a bunch of int args as-is
 				is_op_allowed = .false.
 			end if
 		end if
@@ -229,18 +225,13 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! This check could be moved inside of is_binary_op_allowed, but we would
 		! need to pass parser to it to push diagnostics
 		if (.not. is_op_allowed) then
-
 			!print *, 'bin not allowed in parse_expr_statement'
-
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context(), &
 				span, op%text, &
 				type_name(expr%val), &
 				type_name(expr%right%val)))
-				!kind_name(ltype), &
-				!kind_name(rtype)))
-
 		end if
 
 		if (ltype == array_type .and. rtype == array_type) then

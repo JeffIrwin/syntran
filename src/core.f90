@@ -50,7 +50,6 @@ module syntran__core_m
 	!        > check mismatches of assigning one struct to another, or passing a
 	!          struct to a fn
 	!      + improved to_str() conversion with labels of struct name and member names
-	!  - triage notes from AOC.  many things are already fixed
 	!  - jumping control flow:
 	!    * fn return statement done
 	!    * c continue (fortran cycle), c break (fortran loop exit)
@@ -83,6 +82,7 @@ module syntran__core_m
 	!  - cmd args
 	!    * args would be useful for logo sample, e.g. image size and some
 	!      control color options
+	!    * related: environment variables
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used

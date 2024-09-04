@@ -25,8 +25,7 @@ module function parse_fn_call(parser) result(fn_call)
 
 	character(len = :), allocatable :: param_type, arg_type, exp_type, act_type
 
-	integer :: i, io, id_index, param_rank, arg_rank, ptype, atype, pos0, &
-		type_
+	integer :: i, io, id_index, param_rank, arg_rank, pos0, type_
 
 	type(fn_t) :: fn
 
@@ -238,7 +237,6 @@ module function parse_fn_call(parser) result(fn_call)
 	end if
 
 	allocate(param_val%array)
-
 	do i = 1, args%len_
 
 		! For variadic fns, check the argument type against the type
@@ -252,24 +250,16 @@ module function parse_fn_call(parser) result(fn_call)
 		! Construct a param val just for type checking.  I think this is the
 		! only way to do it for intrinsic fns, which don't actually have a val
 		! anywhere
-
 		if (i <= size(fn%params)) then
-			ptype = fn%params(i)%type
-
 			param_val%type = fn%params(i)%type
 			param_val%array%type  = fn%params(i)%array_type
 			param_val%array%rank  = fn%params(i)%rank
 			param_val%struct_name = fn%params(i)%struct_name
-			!param_val%array%struct_name = fn%params(i)%array_struct_name
-
 		else
-			ptype = fn%variadic_type
-
 			param_val%type = fn%variadic_type
 			param_val%array%type = unknown_type
 			param_val%array%rank = 0
 			param_val%struct_name = ""
-
 		end if
 
 		if (types_match(param_val, args%v(i)%val) /= TYPE_MATCH) then
@@ -283,7 +273,6 @@ module function parse_fn_call(parser) result(fn_call)
 			! way again if there's a need. Currently err_bad_arg_rank() is
 			! unused
 
-			!span = new_span(pos1, parser%current_pos() - pos1)
 			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
 			call parser%diagnostics%push(err_bad_arg_type( &
 				parser%context(), &
@@ -881,11 +870,6 @@ module function parse_struct_instance(parser) result(inst)
 	inst%val%struct_name = identifier%text
 
 	!print *, "struct name = ", inst%struct_name
-
-	! TODO: each struct should get a different sub type (like array_type) for
-	! type checking, so you don't try to assign one type of struct to another
-	! struct.  Should be able to use struct_name for this, although comparing
-	! ints might be more efficient than comparing strings
 
 	do while ( &
 		parser%current_kind() /= rbrace_token .and. &

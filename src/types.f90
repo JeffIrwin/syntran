@@ -38,7 +38,6 @@ module syntran__types_m
 		integer :: type
 		character(len = :), allocatable :: name
 		character(len = :), allocatable :: struct_name
-		!character(len = :), allocatable :: array_struct_name
 
 		integer :: array_type, rank
 
@@ -1519,10 +1518,6 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 	!allowed = .true.
 	!return
 
-	! TODO: pass struct_name into this somehow and check it.  Maybe just pass a
-	! val instead of ints?  Maybe just special-case check assignment ops in
-	! caller for structs
-
 	allowed = .false.
 
 	if (left == unknown_type .or. right == unknown_type) then
@@ -1602,19 +1597,6 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = &
 					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
 					(left_arr == right) .or. (left == right)
-
-			!! TODO: just combine this with condition above
-			!else if (left == struct_type) then
-			!	allowed = &
-			!		(is_int_type(left_arr) .and. is_int_type(right)) .or. &
-			!		(left_arr == right) .or. (left == right)
-
-			!else if (right == struct_type) then
-			!	! I'm not sure about this one.  It's needed at least for things
-			!	! like `x = t1.m` but I think it's too broad and general
-			!	allowed = &
-			!		(is_int_type(left) .and. is_int_type(right_arr)) .or. &
-			!		(left == right_arr) .or. (left == right)
 
 			else
 				allowed = &

@@ -63,6 +63,8 @@ module function parse_return_statement(parser) result(statement)
 	!
 	! There should also be a check that every branch of a fn has a return
 	! statement, but that seems more difficult
+	!
+	! TODO: use types_match() and then pass type_name() to err_bad_ret*()
 	act_type = statement%right%val%type
 	types_match = &
 		parser%fn_type == any_type .or. parser%fn_type == act_type
