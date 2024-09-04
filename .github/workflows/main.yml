@@ -26,12 +26,6 @@
 					}
 				},
 				{
-					"uses": "actions/upload-artifact@v4",
-					"with": {
-						"path": "~/.local/bin/syntran"
-					}
-				},
-				{
 					"if": "matrix.os == 'ubuntu-latest'",
 					"name": "Test docker",
 					"run":
@@ -76,9 +70,13 @@
 						#fpm test long \n
 						fpm test test --profile release \n
 						# TODO fpm test long --profile release \n
-
-						fpm install --profile release --prefix ~/.local \n
 					"
+				},
+				{
+					"uses": "actions/upload-artifact@v4",
+					"with": {
+						"path": "$HOME/bin/syntran"
+					}
 				},
 				{
 					"if": "matrix.os == 'ubuntu-latest'",
