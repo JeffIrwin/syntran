@@ -60,7 +60,7 @@
 					"run":
 					"
 						fpm install --prefix='$HOME' \n
-						cp $HOME/bin/syntran .
+						cp $HOME/bin/syntran . \n
 						which syntran \n
 						chmod +x ./samples/shebang.syntran \n
 						./samples/shebang.syntran \n
