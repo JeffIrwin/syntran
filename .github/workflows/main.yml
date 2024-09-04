@@ -75,7 +75,7 @@
 				{
 					"uses": "actions/upload-artifact@v4",
 					"with": {
-						"path": "$HOME/bin/syntran"
+						"path": "/home/runner/bin/syntran"
 					}
 				},
 				{
