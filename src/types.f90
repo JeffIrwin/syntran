@@ -10,6 +10,14 @@ module syntran__types_m
 
 	implicit none
 
+	integer, parameter :: &
+		TYPE_ARRAY_STRUCT_MISMATCH = 5, &
+		TYPE_RANK_MISMATCH = 4, &
+		TYPE_ARRAY_MISMATCH = 3, &
+		TYPE_STRUCT_MISMATCH = 2, &
+		TYPE_MISMATCH = 1, &
+		TYPE_MATCH = 0
+
 	!********
 
 	type member_t
@@ -30,6 +38,7 @@ module syntran__types_m
 		integer :: type
 		character(len = :), allocatable :: name
 		character(len = :), allocatable :: struct_name
+		!character(len = :), allocatable :: array_struct_name
 
 		integer :: array_type, rank
 
@@ -1510,6 +1519,10 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 	!allowed = .true.
 	!return
 
+	! TODO: pass struct_name into this somehow and check it.  Maybe just pass a
+	! val instead of ints?  Maybe just special-case check assignment ops in
+	! caller for structs
+
 	allowed = .false.
 
 	if (left == unknown_type .or. right == unknown_type) then
@@ -2705,6 +2718,116 @@ subroutine struct_search(dict, key, id_index, iostat, val)
 
 !end function struct_search
 end subroutine struct_search
+
+!===============================================================================
+
+function type_name(a) result(str_)
+	! c.f. lookup_type() which is mostly the inverse of this
+	type(value_t), intent(in) :: a
+	character(len = :), allocatable :: str_, array_name
+
+	if (a%type == struct_type) then
+		str_ = a%struct_name
+	else if (a%type == array_type) then
+
+		if (a%array%type == struct_type) then
+			array_name = a%struct_name
+		else
+			array_name = type_name_primitive(a%array%type)
+		end if
+
+		str_ = "["//array_name//"; "
+
+		! Repeat ":, " appropriately
+		str_ = str_//repeat(":, ", max(a%array%rank - 1, 0))
+		str_ = str_//":]"
+
+	else
+		str_ = type_name_primitive(a%type)
+	end if
+
+end function type_name
+
+!===============================================================================
+
+function type_name_primitive(itype) result(str_)
+	! c.f. lookup_type() which is mostly the inverse of this
+	integer, intent(in) :: itype
+	character(len = :), allocatable :: str_
+
+	select case (itype)
+	case (i32_type)
+		str_ = "i32"
+	case (i64_type)
+		str_ = "i64"
+	case (f32_type)
+		str_ = "f32"
+	case (str_type)
+		str_ = "str"
+	case (bool_type)
+		str_ = "bool"
+	case (any_type)
+		str_ = "any"
+	case default
+		str_ = "unknown"
+	end select
+
+end function type_name_primitive
+
+!===============================================================================
+
+integer function types_match(a, b) result(io)
+
+	! Check if the type of value a matches value b
+	!
+	! Numeric casting, e.g. i32 to f32, is not allowed.  Maybe we could add a
+	! flag if some callers need to allow casting
+
+	type(value_t), intent(in) :: a, b
+
+	!****************
+
+	io = TYPE_MATCH
+
+	if (.not. (a%type == any_type .or. a%type == b%type)) then
+		! Top-level type mismatch (e.g. f32 vs str)
+		io = TYPE_MISMATCH
+		return
+	end if
+
+	if (a%type == struct_type) then
+		if (a%struct_name /= b%struct_name) then
+			! Both are structs but different kinds of structs
+			io = TYPE_STRUCT_MISMATCH
+			return
+		end if
+	end if
+
+	if (a%type == array_type) then
+
+		if (.not. (a%array%type == any_type .or. a%array%type == b%array%type)) then
+			! Both arrays but with different types of elements
+			io = TYPE_ARRAY_MISMATCH
+			return
+		end if
+
+		if (.not. (a%array%rank < 0 .or. a%array%rank == b%array%rank)) then
+			! Both arrays but with different ranks (e.g. vector vs matrix)
+			io = TYPE_RANK_MISMATCH
+			return
+		end if
+
+		if (a%array%type == struct_type) then
+			if (a%struct_name /= b%struct_name) then
+				! Both are arrays of structs but different kinds of structs
+				io = TYPE_ARRAY_STRUCT_MISMATCH
+				return
+			end if
+		end if
+
+	end if
+
+end function types_match
 
 !===============================================================================
 

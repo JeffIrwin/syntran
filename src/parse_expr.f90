@@ -23,6 +23,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 	!********
 
+	logical :: is_op_allowed
+
 	integer :: io, ltype, rtype, pos0, lrank, rrank, larrtype, &
 		rarrtype, id_index, search_io
 
@@ -217,9 +219,16 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!print *, "ltype    = ", kind_name(ltype)
 		!print *, "rtype    = ", kind_name(rtype)
 
+		is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
+		if (ltype == struct_type .and. is_op_allowed) then
+			if (expr%val%struct_name /= expr%right%val%struct_name) then
+				is_op_allowed = .false.
+			end if
+		end if
+
 		! This check could be moved inside of is_binary_op_allowed, but we would
 		! need to pass parser to it to push diagnostics
-		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
+		if (.not. is_op_allowed) then
 
 			!print *, 'bin not allowed in parse_expr_statement'
 
@@ -227,8 +236,10 @@ recursive module function parse_expr_statement(parser) result(expr)
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context(), &
 				span, op%text, &
-				kind_name(ltype), &
-				kind_name(rtype)))
+				type_name(expr%val), &
+				type_name(expr%right%val)))
+				!kind_name(ltype), &
+				!kind_name(rtype)))
 
 		end if
 
