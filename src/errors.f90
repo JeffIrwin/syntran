@@ -83,6 +83,37 @@ end function err_unterminated_str
 
 !===============================================================================
 
+function err_array_struct_slice(context, span, array) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: array
+
+	err = err_prefix &
+		//'slices are not implemented for arrays of structs, on array `' &
+		//array//'`' &
+		//underline(context, span) &
+		//" slice subscript not implemented"//color_reset
+
+end function err_array_struct_slice
+
+!===============================================================================
+
+function err_struct_array_slice(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_prefix//'slices are not implemented for structs of arrays.  ' &
+		//'Only scalar subscripts can be used here' &
+		//underline(context, span) &
+		//' slice subscript not implemented'//color_reset
+
+end function err_struct_array_slice
+
+!===============================================================================
+
 function err_non_int_subscript(context, span, subscript) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

@@ -562,11 +562,13 @@ recursive module subroutine parse_dot(parser, expr)
 
 	!********
 
-	integer :: io, struct_id, member_id
+	integer :: io, struct_id, member_id, pos0, pos1
 
 	type(struct_t) :: struct
 
 	type(syntax_token_t) :: dot, identifier
+
+	type(text_span_t) :: span
 
 	type(value_t) :: member
 
@@ -623,9 +625,19 @@ recursive module subroutine parse_dot(parser, expr)
 	! I think this is the right place to parse subscripts. Or should it be after
 	! the recursive parse_dot()?
 	expr%member%val = member
+	pos0 = parser%current_pos()
 	call parser%parse_subscripts(expr%member)
+	pos1 = parser%current_pos()
 	if (allocated(expr%member%lsubscripts)) then
 		expr%val = expr%member%val
+
+		if (.not. all(expr%member%lsubscripts%sub_kind == scalar_sub)) then
+			span = new_span(pos0, pos1 - pos0)
+			call parser%diagnostics%push(err_struct_array_slice( &
+				parser%context(), &
+				span))
+		end if
+
 	end if
 
 	! I think this needs a recursive call to `parse_dot()` right here to handle

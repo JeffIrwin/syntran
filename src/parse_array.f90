@@ -535,6 +535,12 @@ module subroutine parse_subscripts(parser, expr)
 		if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
 			! this is not necessarily true for strings
 			expr%val%type = expr%val%array%type
+		else if (expr%val%array%type == struct_type) then
+			span = new_span(span0, span1 - span0 + 1)
+			call parser%diagnostics%push(err_array_struct_slice( &
+				parser%context(), &
+				span, &
+				expr%identifier%text))
 		end if
 
 		! TODO: allow rank+1 for str arrays
