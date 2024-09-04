@@ -60,6 +60,7 @@
 					"run":
 					"
 						fpm install --prefix='$HOME' \n
+						cp $HOME/bin/syntran .
 						which syntran \n
 						chmod +x ./samples/shebang.syntran \n
 						./samples/shebang.syntran \n
@@ -69,13 +70,15 @@
 						#fpm test test \n
 						#fpm test long \n
 						fpm test test --profile release \n
-						# TODO fpm test long --profile release \n
+						fpm test long --profile release \n
 					"
 				},
 				{
 					"uses": "actions/upload-artifact@v4",
 					"with": {
-						"path": "/home/runner/bin/syntran"
+						#"path": "/home/runner/bin/syntran"
+						"path": "./syntran"
+						"name": "syntran-linux"
 					}
 				},
 				{
@@ -107,10 +110,6 @@
 						time ./build/test \n
 					"
 				},
-
-				# TODO: add a docker test run somewhere, if docker will run at all in
-				# github actions
-
 				{
 					"if": "matrix.os != 'windows-latest'",
 					"name": "Test release",
