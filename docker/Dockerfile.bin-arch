@@ -1,0 +1,21 @@
+
+FROM archlinux:latest
+
+WORKDIR workdir
+
+RUN pacman -Sy
+#RUN yes | pacman install curl
+RUN yes | pacman -S unzip
+
+ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux-gfortran-11.zip"
+#ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/download/0.0.47/syntran-linux.zip"
+
+RUN curl -LO "$SY_URL"
+RUN unzip syntran-linux*.zip
+RUN rm syntran-linux*.zip
+RUN chmod +x ./syntran
+RUN mv syntran libquadmath.so.0 /usr/local/bin
+
+RUN syntran --version
+RUN syntran -c 'println("hello world");'
+
