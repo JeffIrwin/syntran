@@ -55,7 +55,7 @@
 					"name": "Test fpm default",
 
 					"env": {
-						"FPM_FC": "gfortran-12"
+						"FPM_FC": "gfortran-11"
 					},
 					"run":
 					"
