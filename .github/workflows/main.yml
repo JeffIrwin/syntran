@@ -89,10 +89,10 @@
 					"uses": "actions/upload-artifact@v4",
 					"with": {
 						# unfortunately gfortran-12 does not support -static-libquadmath
-						"path": [
-						  "./syntran",
-						  "/lib/x86_64-linux-gnu/libquadmath.so.0"
-						],
+						"path": "
+						  ./syntran
+						  /lib/x86_64-linux-gnu/libquadmath.so.0
+						",
 						#"path": "/home/runner/bin/syntran",
 						"name": "syntran-linux"
 					}
