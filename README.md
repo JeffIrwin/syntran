@@ -28,6 +28,8 @@ curl -LO https://github.com/JeffIrwin/syntran/releases/latest/download/syntran
 chmod +x ./syntran
 ./syntran -h
 ```
+<!-- TODO: this only works if you have a bunch of gfortran .so files! can probably link differently -->
+<!-- TODO: maybe upload release as zip/tar and have curl cmd pipe into tar/unzip? -->
 
 ## Build the interpreter
 

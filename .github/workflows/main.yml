@@ -59,9 +59,20 @@
 					},
 					"run":
 					"
-						fpm install --prefix='$HOME' \n
+						fpm install
+						  --profile release
+						  --link-flag '-static-libgcc -static-libgfortran'
+						  --prefix='$HOME' \n
+
 						cp $HOME/bin/syntran . \n
 						which syntran \n
+						which patchelf \n
+						chmod +x ./syntran \n
+						patchelf --set-rpath '$ORIGIN' ./syntran \n
+
+						# TODO \n
+						exit 0 \n
+
 						chmod +x ./samples/shebang.syntran \n
 						./samples/shebang.syntran \n
 
@@ -74,10 +85,15 @@
 					"
 				},
 				{
+					# TODO: upload binary artifacts for other OS's. Include them in a tagged release
 					"uses": "actions/upload-artifact@v4",
 					"with": {
+						# unfortunately gfortran-12 does not support -static-libquadmath
+						"path": [
+						  "./syntran",
+						  "/lib/x86_64-linux-gnu/libquadmath.so.0"
+						],
 						#"path": "/home/runner/bin/syntran",
-						"path": "./syntran",
 						"name": "syntran-linux"
 					}
 				},
