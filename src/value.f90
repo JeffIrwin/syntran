@@ -150,7 +150,8 @@ recursive subroutine value_copy(dst, src)
 
 	if (allocated(src%struct)) then
 		! TODO: some of the allocations above are wrong.  make them like this
-		! one which crashed on a 3rd-order Pyramid struct befored i fixed it
+		! one which crashed on a 3rd-order Pyramid struct befored i fixed it.
+		! there are similar potential issues in fn_copy()
 		if (allocated(dst%struct)) deallocate(dst%struct)
 		allocate(dst%struct( size(src%struct) ))
 		do i = 1, size(src%struct)

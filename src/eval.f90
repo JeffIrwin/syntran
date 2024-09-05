@@ -440,8 +440,6 @@ recursive subroutine set_val(node, var, state, val)
 		!print *, "array dot chain"
 
 		! Arrays chained by a dot: `a[0].b[0]`
-		!
-		! TODO: ban non-scalar subscripts like below
 		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
 		call set_array_val(var%struct(i8+1)%struct(id)%array, j8, val)
 		return
@@ -481,9 +479,7 @@ recursive subroutine set_val(node, var, state, val)
 	!print *, "lsubscripts allocated"
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-		!print *, "slice sub"
-
-		! TODO: not implemented, throw error.  Add code to catch in parser first
+		! Already caught in parser
 		write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
 		call internal_error()
 	end if
@@ -506,7 +502,7 @@ end subroutine set_val
 recursive function get_val(node, var, state) result(res)
 
 	! TODO: should res be an out arg for consistency? Similar question for
-	! get_array_val()
+	! get_array_val().  Yes:  https://github.com/JeffIrwin/syntran/pull/12
 	!
 	! Should I rename this eval_*() for consistency?
 
@@ -633,8 +629,6 @@ subroutine eval_struct_instance(node, state, res)
 
 	!********
 
-	!type(value_t) :: tmp
-
 	integer :: i
 
 	!print *, 'eval struct_instance_expr'
@@ -654,8 +648,6 @@ subroutine eval_struct_instance(node, state, res)
 	do i = 1, size(node%members)
 
 		call syntax_eval(node%members(i), state, res%struct(i))
-		!call syntax_eval(node%members(i), state, tmp)
-		!res%struct(i) = tmp
 
 		!print *, "mem[", str(i), "] = ", res%struct(i)%to_str()
 		!res = node%val%struct( node%right%id_index )
