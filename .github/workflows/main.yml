@@ -64,16 +64,18 @@
 						  --link-flag '-static-libgcc -static-libgfortran'
 						  --prefix='$HOME' \n
 
+						# TODO: copy to a subdir for easier upload \n
 						cp $HOME/bin/syntran . \n
+						cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
 						which syntran \n
 						which patchelf \n
 						chmod +x ./syntran \n
 						patchelf --set-rpath '$ORIGIN' ./syntran \n
 
-						echo 'libquadmath ls:' \n
-						ls /lib/x86_64-linux-gnu/libquadmath.so.0 \n
-						ls /lib/x86_64-linux-gnu/ \n
-						ls /lib/ \n
+						#echo 'libquadmath ls:' \n
+						#ls /lib/x86_64-linux-gnu/libquadmath.so.0 \n
+						#ls /lib/x86_64-linux-gnu/ \n
+						#ls /lib/ \n
 
 						# TODO \n
 						exit 0 \n
@@ -94,7 +96,7 @@
 					"uses": "actions/upload-artifact@v4",
 					"with": {
 						# unfortunately gfortran-12 does not support -static-libquadmath
-						"path": "./syntran\n/lib/x86_64-linux-gnu/libquadmath.so.0",
+						"path": "./syntran\n./libquadmath.so.0",
 						#"path": "/home/runner/bin/syntran",
 						"name": "syntran-linux"
 					}
