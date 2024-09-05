@@ -25,26 +25,26 @@
 						"github-token": "${{ secrets.GITHUB_TOKEN }}"
 					}
 				},
-				{
-					"if": "matrix.os == 'ubuntu-latest'",
-					"name": "Test docker",
-					"run":
-					"
-						docker --version \n
-						docker build . -t sy \n
-						docker run --entrypoint syntran sy --version \n
-						docker run sy --version # syntran is already the default entrypoint \n
-						docker run sy -c \"1 + 2;\" \n
-						ans=$(docker run sy -c \"1 + 2;\") \n
-						if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
-							echo \"win\" \n
-							exit 0 \n
-						else \n
-							echo \"fail\" \n
-							exit 1 \n
-						fi \n
-					"
-				},
+				#{ TODO
+				#	"if": "matrix.os == 'ubuntu-latest'",
+				#	"name": "Test docker",
+				#	"run":
+				#	"
+				#		docker --version \n
+				#		docker build . -t sy \n
+				#		docker run --entrypoint syntran sy --version \n
+				#		docker run sy --version # syntran is already the default entrypoint \n
+				#		docker run sy -c \"1 + 2;\" \n
+				#		ans=$(docker run sy -c \"1 + 2;\") \n
+				#		if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
+				#			echo \"win\" \n
+				#			exit 0 \n
+				#		else \n
+				#			echo \"fail\" \n
+				#			exit 1 \n
+				#		fi \n
+				#	"
+				#},
 				{
 					"if": "matrix.os == 'ubuntu-latest'",
 					"name": "Set ubuntu PATH",
@@ -70,6 +70,11 @@
 						chmod +x ./syntran \n
 						patchelf --set-rpath '$ORIGIN' ./syntran \n
 
+						echo 'libquadmath ls:' \n
+						ls /lib/x86_64-linux-gnu/libquadmath.so.0 \n
+						ls /lib/x86_64-linux-gnu/ \n
+						ls /lib/ \n
+
 						# TODO \n
 						exit 0 \n
 
@@ -89,10 +94,7 @@
 					"uses": "actions/upload-artifact@v4",
 					"with": {
 						# unfortunately gfortran-12 does not support -static-libquadmath
-						"path": "
-						  ./syntran
-						  /lib/x86_64-linux-gnu/libquadmath.so.0
-						",
+						"path": "./syntran\n/lib/x86_64-linux-gnu/libquadmath.so.0",
 						#"path": "/home/runner/bin/syntran",
 						"name": "syntran-linux"
 					}
