@@ -20,7 +20,7 @@ An interpreter written in Fortran, I guess
 
 This began as a sandbox for me to play in as I followed along with [Immo Landwerth's _building a compiler_ series](https://www.youtube.com/playlist?list=PLRAdsfhKI4OWNOSfS7EUu5GRAVmze1t2y), but it has since diverged.  Syntran has morphed into an interpretted, array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
 
-## Install binary: Ubuntu Linux only
+## Install binary: Linux only
 
 Download the binary from the latest github release:
 ```
@@ -29,8 +29,6 @@ unzip syntran-linux*.zip
 chmod +x ./syntran
 ./syntran -h
 ```
-<!-- TODO: this only works if you have a bunch of gfortran .so files! can probably link differently -->
-<!-- TODO: maybe upload release as zip/tar and have curl cmd pipe into tar/unzip? -->
 
 ## Build the interpreter
 
