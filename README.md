@@ -20,6 +20,16 @@ An interpreter written in Fortran, I guess
 
 This began as a sandbox for me to play in as I followed along with [Immo Landwerth's _building a compiler_ series](https://www.youtube.com/playlist?list=PLRAdsfhKI4OWNOSfS7EUu5GRAVmze1t2y), but it has since diverged.  Syntran has morphed into an interpretted, array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
 
+## Install binary: Linux only
+
+Download the binary from the latest github release:
+```
+curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux-gfortran-11.zip"
+unzip syntran-linux*.zip
+chmod +x ./syntran
+./syntran -h
+```
+
 ## Build the interpreter
 
 Using cmake:

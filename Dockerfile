@@ -1,18 +1,22 @@
 FROM alpine:3.18
 #FROM alpine:3.19.1
 
+WORKDIR workdir
+
 # Alpine 3.18 has gfortran 12.  3.19 has gfortran 13 which doesn't work with
 # syntran :(
 
 RUN apk add gfortran musl-dev
 RUN apk add libc6-compat  # syntran needs glibc compatibility, not alpine's musl libc
 RUN apk add rlwrap        # nice to have
+RUN apk add curl
 
-COPY . .
+COPY src src
+COPY CMakeLists.txt .
+COPY fpm.toml .
 
 #************
-## Build the fortran build system fpm from source.  Binaries are available but
-## source might be more portable although slower.  Takes 3+ minutes
+## Build the fortran build system fpm from source.  Takes 3+ minutes
 #RUN apk add git
 #RUN git clone https://github.com/jeffirwin/fpm /fpm
 #RUN cd /fpm && ./install.sh --prefix="/usr/"
@@ -21,18 +25,30 @@ COPY . .
 #RUN fpm install --prefix="/usr/"
 #************
 
-# Takes 30 seconds
-RUN apk add cmake make
-#RUN ./build.sh  # no bash on alpine :(
+# Install fpm from binary
+RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64
+RUN mv fpm-linux-x86_64 fpm
+RUN chmod +x fpm
+RUN mv fpm /usr/local/bin
+RUN fpm --version
 
-RUN cmake -S . -B "build" -DCMAKE_BUILD_TYPE=Debug
-RUN cmake --build "build" --config Debug
-#RUN cmake -S . -B "build" -DCMAKE_BUILD_TYPE=Release
-#RUN cmake --build "build" --config Release
+RUN fpm install --prefix="/usr/"
+RUN fpm test test
 
-RUN cp ./build/syntran /usr/bin/
-
-#************
+##************
+## Takes 30 seconds
+#RUN apk add cmake make
+##RUN ./build.sh  # no bash on alpine :(
+#
+#RUN cmake -S . -B "build" -DCMAKE_BUILD_TYPE=Debug
+#RUN cmake --build "build" --config Debug
+##RUN cmake -S . -B "build" -DCMAKE_BUILD_TYPE=Release
+##RUN cmake --build "build" --config Release
+#
+#RUN ./build/test
+#
+#RUN cp ./build/syntran /usr/bin/
+##************
 
 ENTRYPOINT ["rlwrap", "syntran"]
 

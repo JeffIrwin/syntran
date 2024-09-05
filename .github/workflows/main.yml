@@ -26,6 +26,7 @@
 					}
 				},
 				{
+					# TODO: add a stage to test the binary dockerfiles in the docker dir
 					"if": "matrix.os == 'ubuntu-latest'",
 					"name": "Test docker",
 					"run":
@@ -55,12 +56,32 @@
 					"name": "Test fpm default",
 
 					"env": {
-						"FPM_FC": "gfortran-12"
+						"FPM_FC": "gfortran-11"
 					},
 					"run":
 					"
-						fpm install --prefix='$HOME' \n
+						gfortran --version \n
+
+						fpm install
+						  --profile release
+						  --link-flag '-static-libgcc -static-libgfortran'
+						  --prefix='$HOME' \n
+
+						# TODO: copy to a subdir for easier upload \n
+						cp $HOME/bin/syntran . \n
+						cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
 						which syntran \n
+						which patchelf \n
+						chmod +x ./syntran \n
+						patchelf --set-rpath '$ORIGIN' ./syntran \n
+
+						#echo 'libquadmath ls:' \n
+						#ls /lib/x86_64-linux-gnu/libquadmath.so.0 \n
+						#ls /lib/x86_64-linux-gnu/ \n
+						#ls /lib/ \n
+
+						#exit 0 \n
+
 						chmod +x ./samples/shebang.syntran \n
 						./samples/shebang.syntran \n
 
@@ -71,6 +92,16 @@
 						fpm test test --profile release \n
 						fpm test long --profile release \n
 					"
+				},
+				{
+					# TODO: upload binary artifacts for other OS's. Include them in a tagged release
+					"uses": "actions/upload-artifact@v4",
+					"with": {
+						# unfortunately gfortran-12 does not support -static-libquadmath
+						"path": "./syntran\n./libquadmath.so.0",
+						#"path": "/home/runner/bin/syntran",
+						"name": "syntran-linux"
+					}
 				},
 				{
 					"if": "matrix.os == 'ubuntu-latest'",
@@ -101,10 +132,6 @@
 						time ./build/test \n
 					"
 				},
-
-				# TODO: add a docker test run somewhere, if docker will run at all in
-				# github actions
-
 				{
 					"if": "matrix.os != 'windows-latest'",
 					"name": "Test release",
