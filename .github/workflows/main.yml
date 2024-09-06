@@ -73,16 +73,6 @@
 					"
 				},
 				{
-					# TODO: upload binary artifacts for other OS's. Include them in a tagged release
-					"uses": "actions/upload-artifact@v4",
-					"with": {
-						# unfortunately gfortran-12 does not support -static-libquadmath
-						"path": "./syntran\n./libquadmath.so.0",
-						#"path": "/home/runner/bin/syntran",
-						"name": "syntran-linux"
-					}
-				},
-				{
 					"if": "matrix.os == 'ubuntu-latest'",
 					"run": "sudo apt-get install gfortran"
 				},
@@ -119,7 +109,35 @@
 						bash ./build.sh release \n
 						time ./build/test \n
 					"
-				}
+				},
+				{
+					# TODO: make a release build instead of debug
+					"if": "matrix.os == 'windows-latest'",
+					"name": "Pack Windows",
+					"run":
+					"
+						copy .\\build\\syntran.exe .\\ \n
+					"
+				},
+				{
+					# TODO: test Windows, and try uploading mac. Include binaries in a tagged release
+					"uses": "actions/upload-artifact@v4",
+					"if": "matrix.os == 'windows-latest'",
+					"with": {
+						# unfortunately gfortran-12 does not support -static-libquadmath
+						"path": "./syntran.exe",
+						"name": "syntran-windows-alpha"
+					}
+				},
+				{
+					"uses": "actions/upload-artifact@v4",
+					"if": "matrix.os == 'ubuntu-latest'",
+					"with": {
+						# unfortunately gfortran-12 does not support -static-libquadmath
+						"path": "./syntran\n./libquadmath.so.0",
+						"name": "syntran-linux"
+					}
+				},
 			]
 		},
 		"test-gfortran": {
