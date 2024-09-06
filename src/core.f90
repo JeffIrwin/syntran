@@ -218,6 +218,7 @@ contains
 !===============================================================================
 
 function declare_intrinsic_fns() result(fns)
+	! TODO: this should be a subroutine to help with gfortran-13
 
 	type(fns_t) :: fns
 

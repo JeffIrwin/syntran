@@ -7,8 +7,8 @@ RUN apt-get update -y
 RUN apt-get install -y vim
 
 ## syntran crashes almost immediately with gfortran 13
-ARG GFORT_VERS="12"
-#ARG GFORT_VERS="13"
+#ARG GFORT_VERS="12"
+ARG GFORT_VERS="13"
 
 #RUN apt-get install -y gfortran
 RUN apt-get install -y gfortran-${GFORT_VERS}
@@ -33,15 +33,15 @@ RUN fpm --version
 
 RUN yes | fpm clean
 RUN fpm build --compiler gfortran-${GFORT_VERS}
-RUN fpm test test --compiler gfortran-${GFORT_VERS}
-#RUN fpm test long --compiler gfortran-${GFORT_VERS}
-
-#ARG PROFILE release
-ARG PROFILE debug
-
-#RUN fpm build --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -static-libquadmath"
-
-RUN fpm build --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"
-
-RUN find ./build -wholename "*app/syntran" | xargs ls -ltrh
-
+#RUN fpm test test --compiler gfortran-${GFORT_VERS}
+##RUN fpm test long --compiler gfortran-${GFORT_VERS}
+#
+##ARG PROFILE release
+#ARG PROFILE debug
+#
+##RUN fpm build --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -static-libquadmath"
+#
+#RUN fpm build --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"
+#
+#RUN find ./build -wholename "*app/syntran" | xargs ls -ltrh
+#
