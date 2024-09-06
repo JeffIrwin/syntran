@@ -116,6 +116,9 @@
 					"name": "Pack Windows",
 					"run":
 					"
+						where gfortran \n
+						dir C:\\mingw64\\bin \n
+						dir C:\\mingw64\\lib \n
 						bash ./build.sh release \n
 						copy .\\build\\syntran.exe .\\ \n
 					"
