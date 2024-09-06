@@ -117,9 +117,9 @@
 					"name": "Pack Windows",
 					"run":
 					"
-						REM where gfortran \n
-						REM dir C:\\mingw64\\bin \n
-						REM dir C:\\mingw64\\lib \n
+						#where gfortran \n
+						#dir C:\\mingw64\\bin \n
+						#dir C:\\mingw64\\lib \n
 
 						where api-ms-win-crt-time-l1-1-0.dll
 
