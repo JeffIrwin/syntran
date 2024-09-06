@@ -223,7 +223,6 @@
 				{"uses": "actions/checkout@v1"},
 				{
 					# TODO: add a stage to test the binary dockerfiles in the docker dir
-					"if": "matrix.os == 'ubuntu-latest'",
 					"name": "Test docker",
 					"run":
 					"
