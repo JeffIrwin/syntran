@@ -121,6 +121,7 @@
 						dir C:\\mingw64\\lib \n
 						bash ./build.sh release \n
 						copy .\\build\\syntran.exe .\\ \n
+						copy C:\\mingw64\\bin\\libgfortran-5.dll .\\ \n
 					"
 				},
 				{
@@ -129,7 +130,7 @@
 					"if": "matrix.os == 'windows-latest'",
 					"with": {
 						# unfortunately gfortran-12 does not support -static-libquadmath
-						"path": "./syntran.exe",
+						"path": "./syntran.exe\n./libgfortran-5.dll",
 						"name": "syntran-windows-alpha"
 					}
 				},
