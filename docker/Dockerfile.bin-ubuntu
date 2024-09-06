@@ -12,6 +12,7 @@ ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/latest/download/syntra
 #ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/download/0.0.48/syntran-linux.zip"
 
 RUN curl -LO "$SY_URL"
+ADD "$SY_URL" ./syntran-linux.zip
 RUN unzip syntran-linux*.zip
 RUN chmod +x ./syntran
 RUN rm syntran-linux*.zip
