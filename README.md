@@ -24,11 +24,12 @@ This began as a sandbox for me to play in as I followed along with [Immo Landwer
 
 Download the binary from the latest github release:
 ```
-curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux-gfortran-11.zip"
+curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux.zip"
 unzip syntran-linux*.zip
 chmod +x ./syntran
 ./syntran -h
 ```
+<!-- TODO: list supported distros and ref docker files -->
 
 ## Build the interpreter
 

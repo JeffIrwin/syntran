@@ -7,10 +7,10 @@ RUN yum update -y
 #RUN yum install -y curl
 RUN yum install -y unzip
 
-ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux-gfortran-11.zip"
-#ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/download/0.0.47/syntran-linux.zip"
+ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux.zip"
+#ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/download/0.0.48/syntran-linux.zip"
 
-RUN curl -LO "$SY_URL"
+ADD "$SY_URL" ./syntran-linux.zip
 RUN unzip syntran-linux*.zip
 RUN rm syntran-linux*.zip
 RUN chmod +x ./syntran
