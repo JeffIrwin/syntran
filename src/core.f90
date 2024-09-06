@@ -25,7 +25,7 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  47
+		syntran_patch =  48
 
 	! TODO:
 	!  - structs
