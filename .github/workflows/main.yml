@@ -116,6 +116,7 @@
 					"name": "Pack Windows",
 					"run":
 					"
+						bash ./build.sh release \n
 						copy .\\build\\syntran.exe .\\ \n
 					"
 				},
