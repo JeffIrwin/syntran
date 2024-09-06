@@ -217,12 +217,12 @@
 			]
 		},
 		"test-docker-build": {
+			# Build syntran from source in default top-level alpine Dockerfile
 			"name": "test-docker-build",
 			"runs-on": "ubuntu-latest",
 			"steps": [
 				{"uses": "actions/checkout@v1"},
 				{
-					# TODO: add a stage to test the binary dockerfiles in the docker dir
 					"name": "Test docker",
 					"run":
 					"
@@ -242,6 +242,24 @@
 					"
 				},
 			]
-		}
+		},
+		"test-docker-bin": {
+			# Test binary syntran installations on dockerfiles from ./docker/
+			# dir.  These download the latest github "release", so there will be
+			# a lag between when you build the release and manually upload a
+			# binary package to github
+			"name": "test-docker-bin",
+			"runs-on": "ubuntu-latest",
+			"steps": [
+				{"uses": "actions/checkout@v1"},
+				{
+					"name": "Test docker",
+					"run":
+					"
+						bash ./test-bin.sh \n
+					"
+				},
+			]
+		},
 	}
 }
