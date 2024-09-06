@@ -215,7 +215,7 @@
 					"
 				}
 			]
-		}
+		},
 		"test-docker-build": {
 			"name": "test-docker-build",
 			"runs-on": "ubuntu-latest",
@@ -243,6 +243,6 @@
 					"
 				},
 			]
-		},
+		}
 	}
 }
