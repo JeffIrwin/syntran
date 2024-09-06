@@ -83,27 +83,6 @@
 					}
 				},
 				{
-					# TODO: add a stage to test the binary dockerfiles in the docker dir
-					"if": "matrix.os == 'ubuntu-latest'",
-					"name": "Test docker",
-					"run":
-					"
-						docker --version \n
-						docker build . -t sy \n
-						docker run --entrypoint syntran sy --version \n
-						docker run sy --version # syntran is already the default entrypoint \n
-						docker run sy -c \"1 + 2;\" \n
-						ans=$(docker run sy -c \"1 + 2;\") \n
-						if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
-							echo \"win\" \n
-							exit 0 \n
-						else \n
-							echo \"fail\" \n
-							exit 1 \n
-						fi \n
-					"
-				},
-				{
 					"if": "matrix.os == 'ubuntu-latest'",
 					"run": "sudo apt-get install gfortran"
 				},
@@ -237,5 +216,33 @@
 				}
 			]
 		}
+		"test-docker-build": {
+			"name": "test-docker-build",
+			"runs-on": "ubuntu-latest",
+			"steps": [
+				{"uses": "actions/checkout@v1"},
+				{
+					# TODO: add a stage to test the binary dockerfiles in the docker dir
+					"if": "matrix.os == 'ubuntu-latest'",
+					"name": "Test docker",
+					"run":
+					"
+						docker --version \n
+						docker build . -t sy \n
+						docker run --entrypoint syntran sy --version \n
+						docker run sy --version # syntran is already the default entrypoint \n
+						docker run sy -c \"1 + 2;\" \n
+						ans=$(docker run sy -c \"1 + 2;\") \n
+						if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
+							echo \"win\" \n
+							exit 0 \n
+						else \n
+							echo \"fail\" \n
+							exit 1 \n
+						fi \n
+					"
+				},
+			]
+		},
 	}
 }
