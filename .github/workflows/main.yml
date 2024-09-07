@@ -25,6 +25,8 @@
 					"
 						set -exu \n
 
+						mv /opt/homebrew/bin /opt/homebrew/bin-BACKUP \n
+
 						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos-alpha.zip\" \n
 						unzip syntran-macos*.zip \n
 						chmod +x ./syntran \n
@@ -35,6 +37,8 @@
 						./syntran -c '1 + 2 * 3;' \n
 						./syntran -c '4 + 5 * [6: 10];' \n
 						./syntran -c 'sum([0: 101]);' \n
+
+						mv /opt/homebrew/bin-BACKUP /opt/homebrew/bin \n
 
 					"
 				},
@@ -159,9 +163,6 @@
 				{
 					"if": "matrix.os == 'macOS-latest'",
 					"name": "Pack macOS",
-					#"env": {
-					#	"FPM_FC": "gfortran-12"
-					#},
 					"run":
 					"
 						# TODO \n
@@ -178,9 +179,9 @@
 						#cp $HOME/bin/syntran . \n
 						cp ./build/syntran . \n
 
+						otool -L ./syntran \n
+
 						#cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
-						#which syntran \n
-						which patchelf || true \n
 						chmod +x ./syntran \n
 						#patchelf --set-rpath '$ORIGIN' ./syntran \n
 
@@ -194,18 +195,15 @@
 					"uses": "actions/upload-artifact@v4",
 					"if": "matrix.os == 'macOS-latest'",
 					"with": {
-						# unfortunately gfortran-12 does not support -static-libquadmath
 						"path": "./syntran",
 						#"path": "./syntran\n./libquadmath.so.0",
 						"name": "syntran-macos-alpha"
 					}
 				},
 				{
-					# TODO: try uploading mac. Include binaries in a tagged release
 					"uses": "actions/upload-artifact@v4",
 					"if": "matrix.os == 'windows-latest'",
 					"with": {
-						# unfortunately gfortran-12 does not support -static-libquadmath
 						"path": "./syntran.exe\n./libgfortran-5.dll\n./libquadmath-0.dll\n./libgcc_s_seh-1.dll\n./libwinpthread-1.dll",
 						"name": "syntran-windows"
 					}
@@ -284,10 +282,10 @@
 					],
 					"toolchain": [
 						{"compiler": "intel", "version": "2024.2"},
-						{"compiler": "intel", "version": "2024.1"},
-						{"compiler": "intel", "version": "2024.0"},
-						{"compiler": "intel", "version": "2023.2"}, # works
-						{"compiler": "intel", "version": "2023.1"}, # works
+						#{"compiler": "intel", "version": "2024.1"}, # works
+						#{"compiler": "intel", "version": "2024.0"}, # works
+						#{"compiler": "intel", "version": "2023.2"}, # works
+						{"compiler": "intel", "version": "2023.1"},
 
 						##{"compiler": "intel", "version": "2023.0"},  # crashes on ` 	do while (is_whitespace(context%text(j:j)))`
 						##{"compiler": "intel", "version": "2022.2"},  # ifx 2022.2 doesn't have `do while ()` :(
