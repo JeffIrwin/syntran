@@ -55,13 +55,6 @@ recursive subroutine syntax_eval(node, state, res)
 
 	!print *, 'starting syntax_eval()'
 
-	! if_statement and while_statement may return an uninitialized type
-	! otherwise if their conditions are false
-	!
-	! TODO: setting here should be unnecessary now that type is initialized
-	! inside the value_t declaration
-	res%type = unknown_type
-
 	if (node%is_empty) then
 		!print *, 'returning'
 		return
@@ -257,7 +250,7 @@ subroutine eval_name_expr(node, state, res)
 	integer(kind = 8) :: il, iu, i8, index_
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
-	type(value_t) :: right
+	type(value_t) :: right, tmp
 
 	!print *, "starting eval_name_expr()"
 	!print *, 'searching identifier ', node%identifier%text
@@ -311,7 +304,7 @@ subroutine eval_name_expr(node, state, res)
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 			i8 = subscript_eval(node, state)
-			res = get_val(node, state%vars%vals(node%id_index), state, index_ = i8)
+			call get_val(node, state%vars%vals(node%id_index), state, res, index_ = i8)
 		else
 
 			call get_subscript_range(node, state, lsubs, usubs, rank_res)
@@ -355,9 +348,8 @@ subroutine eval_name_expr(node, state, res)
 				!print *, 'subs = ', int(subs, 4)
 
 				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-				call set_array_val(res%array, i8, &
-				     get_array_val(state%vars%vals(node%id_index)%array, index_))
-
+				call get_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
+				call set_array_val(res%array, i8, tmp)
 				call get_next_subscript(lsubs, usubs, subs)
 			end do
 		end if
@@ -398,7 +390,7 @@ subroutine eval_dot_expr(node, state, res)
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
-	res = get_val(node, state%vars%vals(node%id_index), state)
+	call get_val(node, state%vars%vals(node%id_index), state, res)
 
 end subroutine eval_dot_expr
 
@@ -464,10 +456,7 @@ recursive subroutine set_val(node, var, state, val, index_)
 			return
 		end if
 
-		!print *, "set subscript val"
 		var%struct(i8+1) = val
-		!res%type = struct_type  ! TODO?
-		!res%struct_name = var%struct_name
 		return
 
 	end if
@@ -516,12 +505,7 @@ end subroutine set_val
 
 !===============================================================================
 
-recursive function get_val(node, var, state, index_) result(res)
-
-	! TODO: should res be an out arg for consistency? Similar question for
-	! get_array_val().  Yes:  https://github.com/JeffIrwin/syntran/pull/12
-	!
-	! Should I rename this eval_*() for consistency?
+recursive subroutine get_val(node, var, state, res, index_)
 
 	! In nested expressions, like `a.b.c.d`, var begins as the top-most
 	! (left-most, outer-most) value `a`
@@ -531,6 +515,8 @@ recursive function get_val(node, var, state, index_) result(res)
 	! array, or another struct.  That is what this routine abstracts
 	!
 	! FIXME: if you change something in the getter, change it in the setter too
+	!
+	! Should I rename this eval_*() for consistency?
 
 	type(syntax_node_t), intent(in) :: node
 	type(value_t), intent(in) :: var
@@ -538,7 +524,7 @@ recursive function get_val(node, var, state, index_) result(res)
 
 	integer(kind = 8), optional, intent(in) :: index_
 
-	type(value_t) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -550,6 +536,13 @@ recursive function get_val(node, var, state, index_) result(res)
 		if (present(index_)) then
 			i8 = index_
 		else
+
+			if (.not. all(node%lsubscripts%sub_kind == scalar_sub)) then
+				!print *, "slice sub"
+				write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+				call internal_error()
+			end if
+
 			i8 = sub_eval(node, var, state)
 		end if
 
@@ -563,7 +556,7 @@ recursive function get_val(node, var, state, index_) result(res)
 
 		if (node%member%kind == dot_expr) then
 			! Recurse
-			res = get_val(node%member, var%struct(i8+1)%struct(id), state)
+			call get_val(node%member, var%struct(i8+1)%struct(id), state, res)
 			return
 		end if
 
@@ -573,12 +566,16 @@ recursive function get_val(node, var, state, index_) result(res)
 		end if
 		!print *, "array dot chain"
 
+		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+			!print *, "slice sub"
+			write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+			call internal_error()
+		end if
+
 		! Arrays chained by a dot: `a[0].b[0]`
-		!
-		! TODO: ban non-scalar subscripts like below
 		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
 		!print *, "get_array_val 1"
-		res = get_array_val(var%struct(i8+1)%struct(id)%array, j8)
+		call get_array_val(var%struct(i8+1)%struct(id)%array, j8, res)
 		return
 
 	else if (allocated(node%lsubscripts)) then
@@ -593,7 +590,7 @@ recursive function get_val(node, var, state, index_) result(res)
 
 		if (var%array%type /= struct_type) then
 			!print *, "get_array_val 2"
-			res = get_array_val(var%array, i8)
+			call get_array_val(var%array, i8, res)
 			return
 		end if
 
@@ -611,7 +608,7 @@ recursive function get_val(node, var, state, index_) result(res)
 
 	if (node%member%kind == dot_expr) then
 		! Recurse
-		res = get_val(node%member, var%struct(id), state)
+		call get_val(node%member, var%struct(id), state, res)
 		return
 	end if
 
@@ -637,7 +634,7 @@ recursive function get_val(node, var, state, index_) result(res)
 	end if
 	if (var%struct(id)%array%type /= struct_type) then
 		!print *, "get_array_val 3"
-		res = get_array_val(var%struct(id)%array, i8)
+		call get_array_val(var%struct(id)%array, i8, res)
 		return
 	end if
 
@@ -645,7 +642,7 @@ recursive function get_val(node, var, state, index_) result(res)
 	res%type = struct_type
 	res%struct_name = var%struct(id)%struct_name
 
-end function get_val
+end subroutine get_val
 
 !===============================================================================
 
@@ -704,6 +701,8 @@ subroutine eval_fn_call(node, state, res)
 	integer :: i, io
 
 	logical :: returned0
+
+	type(char_vector_t) :: str_
 
 	type(value_t) :: arg, arg1, arg2, tmp
 
@@ -820,11 +819,12 @@ subroutine eval_fn_call(node, state, res)
 
 	case ("str")
 
-		res%sca%str%s = ''
+		str_ = new_char_vector()
 		do i = 1, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
-			res%sca%str%s = res%sca%str%s // arg%to_str()  ! TODO: use char_vector_t
+			call str_%push(arg%to_str())
 		end do
+		res%sca%str%s = str_%trim()
 		state%returned = .true.
 
 	case ("len")
@@ -836,19 +836,34 @@ subroutine eval_fn_call(node, state, res)
 	case ("parse_i32")
 
 		call syntax_eval(node%args(1), state, arg)
-		read(arg%sca%str%s, *) res%sca%i32  ! TODO: catch iostat
+		read(arg%sca%str%s, *, iostat = io) res%sca%i32
+		if (io /= 0) then
+			write(*,*) err_rt_prefix//" cannot parse_i32() for argument `"// &
+				arg%sca%str%s//"`"//color_reset
+			call internal_error()
+		end if
 		state%returned = .true.
 
 	case ("parse_i64")
 
 		call syntax_eval(node%args(1), state, arg)
-		read(arg%sca%str%s, *) res%sca%i64  ! TODO: catch iostat
+		read(arg%sca%str%s, *, iostat = io) res%sca%i64
+		if (io /= 0) then
+			write(*,*) err_rt_prefix//" cannot parse_i64() for argument `"// &
+				arg%sca%str%s//"`"//color_reset
+			call internal_error()
+		end if
 		state%returned = .true.
 
 	case ("parse_f32")
 
 		call syntax_eval(node%args(1), state, arg)
-		read(arg%sca%str%s, *) res%sca%f32  ! TODO: catch iostat
+		read(arg%sca%str%s, *, iostat = io) res%sca%f32
+		if (io /= 0) then
+			write(*,*) err_rt_prefix//" cannot parse_f32() for argument `"// &
+				arg%sca%str%s//"`"//color_reset
+			call internal_error()
+		end if
 		state%returned = .true.
 
 	case ("0i32_sca")
@@ -1313,7 +1328,7 @@ subroutine eval_assignment_expr(node, state, res)
 
 		! Get the initial value from the LHS, which could be nested like `a.b.c.d`
 		id = node%member%id_index
-		res = get_val(node, state%vars%vals(node%id_index), state)
+		call get_val(node, state%vars%vals(node%id_index), state, res)
 
 		! Do the assignment or += or whatever and set res
 		call compound_assign(res, rhs, node%op)
@@ -1390,7 +1405,7 @@ subroutine eval_assignment_expr(node, state, res)
 			! 1)];`.  Maybe I should ban expression statements as indices, but
 			! src/tests/test-src/fns/test-19.syntran at least will need updated
 			i8 = subscript_eval(node, state)
-			array_val = get_val(node, state%vars%vals(node%id_index), state, index_ = i8)
+			call get_val(node, state%vars%vals(node%id_index), state, array_val, index_ = i8)
 			call compound_assign(array_val, res, node%op)
 			call set_val(node, state%vars%vals(node%id_index), state, array_val, index_ = i8)
 			res = array_val
@@ -1420,11 +1435,11 @@ subroutine eval_assignment_expr(node, state, res)
 				! tmp -> lhs_val or something
 
 				if (res%type == array_type) then
-					array_val = get_array_val(res%array, i8)
+					call get_array_val(res%array, i8, array_val)
 				end if
 
 				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-				tmp  = get_array_val(state%vars%vals(node%id_index)%array, index_)
+				call get_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
 				call compound_assign(tmp, array_val, node%op)
 				call set_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
 
@@ -2533,7 +2548,7 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	case (array_expr)
 		! Non-primary array expr
-		val = get_array_val(array, i - 1)
+		call get_array_val(array, i - 1, val)
 
 	case default
 		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
@@ -2544,13 +2559,13 @@ end subroutine array_at
 
 !===============================================================================
 
-function get_array_val(array, i) result(val)
+subroutine get_array_val(array, i, val)
 
 	type(array_t), intent(in) :: array
 
 	integer(kind = 8), intent(in) :: i
 
-	type(value_t) :: val
+	type(value_t), intent(out) :: val
 
 	!print *, 'starting get_array_val()'
 	!print *, 'array%type = ', kind_name(array%type)
@@ -2578,7 +2593,7 @@ function get_array_val(array, i) result(val)
 
 	end select
 
-end function get_array_val
+end subroutine get_array_val
 
 !===============================================================================
 
