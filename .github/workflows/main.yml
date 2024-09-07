@@ -189,15 +189,18 @@
 						#/usr/lib/libSystem.B.dylib
 
 						install_name_tool -change
-							libgfortran.5.dylib \"@executable_path/libgfortran.5.dylib\"
+							\"${GCC_LIB_DIR}/libgfortran.5.dylib\"
+							\"@executable_path/libgfortran.5.dylib\"
 							\"./syntran\" \n
 
 						install_name_tool -change
-							libgomp.1.dylib \"@executable_path/libgomp.1.dylib\"
+							\"${GCC_LIB_DIR}/libgomp.1.dylib\"
+							\"@executable_path/libgomp.1.dylib\"
 							\"./syntran\" \n
 
 						install_name_tool -change
-							libquadmath.0.dylib \"@executable_path/libquadmath.0.dylib\"
+							\"${GCC_LIB_DIR}/libquadmath.0.dylib\"
+							\"@executable_path/libquadmath.0.dylib\"
 							\"./syntran\" \n
 
 						chmod +x ./syntran \n
