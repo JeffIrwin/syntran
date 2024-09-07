@@ -403,14 +403,17 @@ end subroutine eval_dot_expr
 
 !===============================================================================
 
-recursive subroutine set_val(node, var, state, val)
+recursive subroutine set_val(node, var, state, val, index_)
 
 	! Assign var.mem = val, or recurse if mem is also a dot expr
 
 	type(syntax_node_t), intent(in) :: node
 	type(value_t), intent(inout) :: var
 	type(state_t), intent(inout) :: state
+
 	type(value_t), intent(in) :: val
+
+	integer(kind = 8), optional, intent(in) :: index_
 
 	!********
 
@@ -419,7 +422,11 @@ recursive subroutine set_val(node, var, state, val)
 
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
-		i8 = sub_eval(node, var, state)
+		if (present(index_)) then
+			i8 = index_
+		else
+			i8 = sub_eval(node, var, state)
+		end if
 		id = node%member%id_index
 
 		! Recursion could still be required.  Unfortunately, if an
@@ -446,12 +453,17 @@ recursive subroutine set_val(node, var, state, val)
 
 	else if (allocated(node%lsubscripts)) then
 
-		i8 = sub_eval(node, var, state)
+		if (present(index_)) then
+			i8 = index_
+		else
+			i8 = sub_eval(node, var, state)
+		end if
 		if (var%array%type /= struct_type) then
 			call set_array_val(var%array, i8, val)
 			return
 		end if
 
+		!print *, "set subscript val"
 		var%struct(i8+1) = val
 		!res%type = struct_type  ! TODO?
 		!res%struct_name = var%struct_name
@@ -485,7 +497,11 @@ recursive subroutine set_val(node, var, state, val)
 	end if
 	!print *, "scalar_sub"
 
-	i8 = sub_eval(node%member, var%struct(id), state)
+	if (present(index_)) then
+		i8 = index_
+	else
+		i8 = sub_eval(node%member, var%struct(id), state)
+	end if
 	if (var%struct(id)%array%type /= struct_type) then
 		call set_array_val(var%struct(id)%array, i8, val)
 		return
@@ -499,7 +515,7 @@ end subroutine set_val
 
 !===============================================================================
 
-recursive function get_val(node, var, state) result(res)
+recursive function get_val(node, var, state, index_) result(res)
 
 	! TODO: should res be an out arg for consistency? Similar question for
 	! get_array_val().  Yes:  https://github.com/JeffIrwin/syntran/pull/12
@@ -519,6 +535,8 @@ recursive function get_val(node, var, state) result(res)
 	type(value_t), intent(in) :: var
 	type(state_t), intent(inout) :: state
 
+	integer(kind = 8), optional, intent(in) :: index_
+
 	type(value_t) :: res
 
 	!********
@@ -528,7 +546,12 @@ recursive function get_val(node, var, state) result(res)
 
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
-		i8 = sub_eval(node, var, state)
+		if (present(index_)) then
+			i8 = index_
+		else
+			i8 = sub_eval(node, var, state)
+		end if
+
 		!print *, "i8 = ", i8
 		id = node%member%id_index
 
@@ -561,7 +584,11 @@ recursive function get_val(node, var, state) result(res)
 
 		! Prefer sub_eval() over subscript_eval() because it doesn't make any
 		! assumptions about var's relation to node
-		i8 = sub_eval(node, var, state)
+		if (present(index_)) then
+			i8 = index_
+		else
+			i8 = sub_eval(node, var, state)
+		end if
 
 		if (var%array%type /= struct_type) then
 			!print *, "get_array_val 2"
@@ -604,7 +631,11 @@ recursive function get_val(node, var, state) result(res)
 	end if
 	!print *, "scalar_sub"
 
-	i8 = sub_eval(node%member, var%struct(id), state)
+	if (present(index_)) then
+		i8 = index_
+	else
+		i8 = sub_eval(node%member, var%struct(id), state)
+	end if
 	if (var%struct(id)%array%type /= struct_type) then
 		!print *, "get_array_val 3"
 		res = get_array_val(var%struct(id)%array, i8)
@@ -1353,11 +1384,15 @@ subroutine eval_assignment_expr(node, state, res)
 			!	state%vars%vals(node%id_index)%array%type
 			!print *, 'LHS array = ', state%vars%vals(node%id_index)%array%i32
 
+			!print *, "get_array_val a"
+
+			! It is important to only eval the subscript once, in case it is an
+			! expression which changes the state!  For example, `array[(index += 1)];`
 			i8 = subscript_eval(node, state)
-			array_val = get_array_val(state%vars%vals(node%id_index)%array, i8)
+			array_val = get_val(node, state%vars%vals(node%id_index), state, index_ = i8)
+			!res = get_val(node, state%vars%vals(node%id_index), state)
 			call compound_assign(array_val, res, node%op)
-			call set_array_val( &
-				state%vars%vals(node%id_index)%array, i8, array_val)
+			call set_val(node, state%vars%vals(node%id_index), state, array_val, index_ = i8)
 			res = array_val
 
 		else
@@ -2372,6 +2407,7 @@ function sub_eval(node, var, state) result(index_)
 		prod  = prod * var%array%size(i)
 
 	end do
+	!print *, "index_ = ", index_
 
 end function sub_eval
 
@@ -2537,6 +2573,7 @@ function get_array_val(array, i) result(val)
 			val%sca%str = array%str(i + 1)
 
 		case default
+			! TODO: internal error
 			print *, "bad type in get_array_val"
 
 	end select

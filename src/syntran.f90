@@ -70,6 +70,7 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 		sv = new_string_view(str_//line_feed)
 		src_file = '<string>'
 	end if
+	!print *, "src_file = ", src_file
 
 	call init_state(state)
 	state%quiet = .false.
