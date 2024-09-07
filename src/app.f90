@@ -179,7 +179,6 @@ function parse_args() result(args)
 			if (args%version) then
 				write(*,*) "toolchain details:"
 				write(*,*) "	fortran compiler = "//fort_compiler//" "//str(fort_vers)
-				!write(*,*) "	fortran compiler = "//fort_compiler//" "//fort_vers
 			end if
 			write(*,*)
 		end if

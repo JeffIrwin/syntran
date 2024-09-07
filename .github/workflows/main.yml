@@ -126,6 +126,8 @@
 						#bash ./build.sh release \n
 						bash ./build.sh debug \n
 
+						# Could try adding -static-gcc etc in cmake to reduce the burden here \n
+
 						copy .\\build\\syntran.exe .\\ \n
 						copy C:\\mingw64\\bin\\libgfortran-5.dll .\\ \n
 						copy C:\\mingw64\\bin\\libquadmath-0.dll .\\ \n

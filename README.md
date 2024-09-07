@@ -48,7 +48,7 @@ Using cmake:
 ./build.sh
 ```
 
-A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required
+A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required.  Supported compilers are gfortran 10, 11, or 12, or Intel 2023.2.  Also check `matrix.gfortran` in the [github actions workflow ](.github/workflows/main.yml) to see which compilers are regularly tested in CI/CD.  For performance, gfortran is recommended over Intel.
 
 Two independent build systems are provided for syntran.  You can either use cmake, which is run by `build.sh` as shown above, or you can use the Fortran Package Manager `fpm`:
 
