@@ -25,7 +25,8 @@
 					"
 						set -exu \n
 
-						mv /opt/homebrew/opt /opt/homebrew/opt-BACKUP \n
+						# TODO: test this to run syntran without homebrew gcc lib paths
+						#mv /opt/homebrew/opt /opt/homebrew/opt-BACKUP \n
 
 						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos-alpha.zip\" \n
 						unzip syntran-macos*.zip \n
@@ -38,7 +39,7 @@
 						./syntran -c '4 + 5 * [6: 10];' \n
 						./syntran -c 'sum([0: 101]);' \n
 
-						mv /opt/homebrew/opt-BACKUP /opt/homebrew/opt \n
+						#mv /opt/homebrew/opt-BACKUP /opt/homebrew/opt \n
 
 					"
 				},
