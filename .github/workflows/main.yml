@@ -18,6 +18,22 @@
 				}
 			},
 			"steps": [
+				{
+					"if": "matrix.os == 'macOS-latest'",
+					"name": "Test bin install macOS",
+					"run":
+					"
+						# TODO \n
+						#set -exu \n
+						set -x \n
+
+						curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos-alpha.zip" \n
+						unzip syntran-macos*.zip \n
+						chmod +x ./syntran \n
+						./syntran -h \n
+
+					"
+				},
 				{"uses": "actions/checkout@v1"},
 				{
 					"uses": "fortran-lang/setup-fpm@v5",
