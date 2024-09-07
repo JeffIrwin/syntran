@@ -18,31 +18,6 @@
 				}
 			},
 			"steps": [
-				{
-					"if": "matrix.os == 'macOS-latest'",
-					"name": "Test bin install macOS",
-					"run":
-					"
-						set -exu \n
-
-						# Test this to run syntran without homebrew gcc lib paths
-						brew remove gcc@12 \n
-
-						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos.zip\" \n
-						unzip syntran-macos*.zip \n
-						chmod +x ./syntran \n
-						./syntran -h \n
-						./syntran --version \n
-
-						./syntran -c 'println(\"hello world\");' \n
-						./syntran -c '1 + 2 * 3;' \n
-						./syntran -c '4 + 5 * [6: 10];' \n
-						./syntran -c 'sum([0: 101]);' \n
-
-						otool -L ./syntran \n
-
-					"
-				},
 				{"uses": "actions/checkout@v1"},
 				{
 					"uses": "fortran-lang/setup-fpm@v5",
@@ -376,20 +351,70 @@
 				},
 			]
 		},
-		"test-docker-bin": {
+		"test-linux-bin": {
 			# Test binary syntran installations on dockerfiles from ./docker/
 			# dir.  These download the latest github "release", so there will be
 			# a lag between when you build the release and manually upload a
 			# binary package to github
-			"name": "Test docker bin",
+			"name": "Test linux bin",
 			"runs-on": "ubuntu-latest",
 			"steps": [
 				{"uses": "actions/checkout@v1"},
 				{
-					"name": "Test docker",
+					"name": "Test linux bin",
 					"run":
 					"
 						bash ./test-bin.sh \n
+					"
+				},
+			]
+		},
+		"test-macos-bin": {
+			"name": "Test macos bin",
+			"runs-on": "macOS-latest",
+			"steps": [
+				{
+					"name": "Test macos bin",
+					"run":
+					"
+						set -exu \n
+
+						# Test this to run syntran without homebrew gcc lib paths
+						brew remove gcc@12 \n
+
+						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos.zip\" \n
+						unzip syntran-macos*.zip \n
+						chmod +x ./syntran \n
+						./syntran -h \n
+						./syntran --version \n
+
+						./syntran -c 'println(\"hello world\");' \n
+						./syntran -c '1 + 2 * 3;' \n
+						./syntran -c '4 + 5 * [6: 10];' \n
+						./syntran -c 'sum([0: 101]);' \n
+
+						otool -L ./syntran \n
+					"
+				},
+			]
+		},
+		"test-windows-bin": {
+			"name": "Test windows bin",
+			"runs-on": "macOS-latest",
+			"steps": [
+				{
+					"name": "Test windows bin",
+					"run":
+					"
+						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-windows.zip\" \n
+						tar -xvf syntran-windows*.zip \n
+						.\\syntran -h \n
+						.\\syntran --version \n
+
+						.\\syntran -c \"println(\"\"hello world\"\");\" \n
+						.\\syntran -c \"1 + 2 * 3;\" \n
+						.\\syntran -c \"4 + 5 * [6: 10];\" \n
+						.\\syntran -c \"sum([0: 101]);\" \n
 					"
 				},
 			]
