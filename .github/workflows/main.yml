@@ -25,7 +25,7 @@
 					"
 						set -exu \n
 
-						mv /opt/homebrew/bin /opt/homebrew/bin-BACKUP \n
+						mv /opt/homebrew /opt/homebrew-BACKUP \n
 
 						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos-alpha.zip\" \n
 						unzip syntran-macos*.zip \n
@@ -38,7 +38,7 @@
 						./syntran -c '4 + 5 * [6: 10];' \n
 						./syntran -c 'sum([0: 101]);' \n
 
-						mv /opt/homebrew/bin-BACKUP /opt/homebrew/bin \n
+						mv /opt/homebrew-BACKUP /opt/homebrew \n
 
 					"
 				},
@@ -165,9 +165,8 @@
 					"name": "Pack macOS",
 					"run":
 					"
-						# TODO \n
-						#set -exu \n
-						set -x \n
+						set -exu \n
+						#set -x \n
 
 						gfortran-12 --version \n
 						which gfortran-12 \n
@@ -176,27 +175,39 @@
 
 						# TODO: copy to a subdir for easier upload \n
 
-						#cp $HOME/bin/syntran . \n
 						cp ./build/syntran . \n
 
 						otool -L ./syntran \n
 
-						#cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
+						GCC_LIB_DIR=/opt/homebrew/opt/gcc@12/lib/gcc/12
+
+						cp ${GCC_LIB_DIR}/libgfortran.5.dylib . \n
+						cp ${GCC_LIB_DIR}/libgomp.1.dylib . \n
+						cp ${GCC_LIB_DIR}/libquadmath.0.dylib . \n
+
+						#/usr/lib/libSystem.B.dylib
+
+						install_name_tool -change
+							libgfortran.5.dylib "@executable_path/libgfortran.5.dylib"
+							"./syntran" \n
+
+						install_name_tool -change
+							libgomp.1.dylib "@executable_path/libgomp.1.dylib"
+							"./syntran" \n
+
+						install_name_tool -change
+							libquadmath.0.dylib "@executable_path/libquadmath.0.dylib"
+							"./syntran" \n
+
 						chmod +x ./syntran \n
 						#patchelf --set-rpath '$ORIGIN' ./syntran \n
-
-						#echo 'libquadmath ls:' \n
-						#ls /lib/x86_64-linux-gnu/libquadmath.so.0 \n
-						#ls /lib/x86_64-linux-gnu/ \n
-						#ls /lib/ \n
 					"
 				},
 				{
 					"uses": "actions/upload-artifact@v4",
 					"if": "matrix.os == 'macOS-latest'",
 					"with": {
-						"path": "./syntran",
-						#"path": "./syntran\n./libquadmath.so.0",
+						"path": "./syntran\n./libgfortran.5.dylib\n./libgomp.1.dylib\n./libquadmath.0.dylib",
 						"name": "syntran-macos-alpha"
 					}
 				},
