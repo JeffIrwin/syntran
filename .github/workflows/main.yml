@@ -152,18 +152,23 @@
 						gfortran-12 --version \n
 						which gfortran-12 \n
 
-						fpm install
-						  --profile release
-						  --link-flag '-static-libgcc -static-libgfortran'
-						  --prefix='$HOME' \n
+						bash ./build.sh release \n
+
+						#fpm install
+						#  --profile release
+						#  --link-flag '-static-libgcc -static-libgfortran'
+						#  --prefix='$HOME' \n
 
 						# TODO: copy to a subdir for easier upload \n
-						cp $HOME/bin/syntran . \n
+
+						#cp $HOME/bin/syntran . \n
+						cp ./build/syntran . \n
+
 						#cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
 						which syntran \n
 						which patchelf \n
 						chmod +x ./syntran \n
-						patchelf --set-rpath '$ORIGIN' ./syntran \n
+						#patchelf --set-rpath '$ORIGIN' ./syntran \n
 
 						#echo 'libquadmath ls:' \n
 						#ls /lib/x86_64-linux-gnu/libquadmath.so.0 \n
