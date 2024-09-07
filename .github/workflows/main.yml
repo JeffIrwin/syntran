@@ -139,17 +139,18 @@
 				{
 					"if": "matrix.os == 'macOS-latest'",
 					"name": "Pack macOS",
-					"env": {
-						"FPM_FC": "gfortran-11"
-					},
+					#"env": {
+					#	"FPM_FC": "gfortran-12"
+					#},
 					"run":
 					"
 						# TODO
 						#set -exu \n
 
-						gfortran --version \n
-						which gfortran
-						which gfortran-11
+						#gfortran --version \n
+						#which gfortran \n
+						gfortran-12 --version \n
+						which gfortran-12 \n
 
 						fpm install
 						  --profile release
