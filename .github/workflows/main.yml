@@ -408,13 +408,14 @@
 					"
 						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-windows.zip\" \n
 						tar -xvf syntran-windows*.zip \n
-						./syntran -h \n
-						./syntran --version \n
+						dir \n
+						./syntran.exe -h \n
+						./syntran.exe --version \n
 
-						./syntran -c \"println(\"\"hello world\"\");\" \n
-						./syntran -c \"1 + 2 * 3;\" \n
-						./syntran -c \"4 + 5 * [6: 10];\" \n
-						./syntran -c \"sum([0: 101]);\" \n
+						./syntran.exe -c \"println(\"\"hello world\"\");\" \n
+						./syntran.exe -c \"1 + 2 * 3;\" \n
+						./syntran.exe -c \"4 + 5 * [6: 10];\" \n
+						./syntran.exe -c \"sum([0: 101]);\" \n
 					"
 				},
 			]
