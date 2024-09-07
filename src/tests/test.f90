@@ -3233,6 +3233,24 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'e.e[0].d.c[0].b.a[0] += 27;' &
 				//'return e.e[0].d.c[0].b.a[0];' &
 				, quiet) == '69', &
+			eval(''                         &                 ! 47
+				//'struct P{v:[i32; :],}' &  ! point
+				//'let p0 = P{v=[6, 13]};' &
+				//'let p1 = P{v=[4, 15]};' &
+				//'let p2 = P{v=[3, 17]};' &
+				//'let ps = [p0, p1];' &
+				//'ps[0] = p2;' &
+				//'return ps[1].v;' &
+				, quiet) == '[4, 15]', &
+			eval(''                         &                 ! 48
+				//'struct P{v:[i32; :],}' &  ! point
+				//'let p0 = P{v=[6, 13]};' &
+				//'let p1 = P{v=[4, 15]};' &
+				//'let p2 = P{v=[3, 17]};' &
+				//'let ps = [p0, p1];' &
+				//'ps[0] = p2;' &
+				//'return ps[0].v;' &
+				, quiet) == '[3, 17]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

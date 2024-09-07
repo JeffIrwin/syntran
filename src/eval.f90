@@ -1388,6 +1388,11 @@ subroutine eval_assignment_expr(node, state, res)
 
 			! It is important to only eval the subscript once, in case it is an
 			! expression which changes the state!  For example, `array[(index += 1)];`
+			!
+			! TODO: check for other get_val/set_val calls which should use the
+			! index opt arg.  Maybe I should ban expression statements as
+			! indices, but src/tests/test-src/fns/test-19.syntran at least will
+			! need updated
 			i8 = subscript_eval(node, state)
 			array_val = get_val(node, state%vars%vals(node%id_index), state, index_ = i8)
 			!res = get_val(node, state%vars%vals(node%id_index), state)
@@ -2573,8 +2578,8 @@ function get_array_val(array, i) result(val)
 			val%sca%str = array%str(i + 1)
 
 		case default
-			! TODO: internal error
-			print *, "bad type in get_array_val"
+			write(*,*) err_int_prefix//"bad type in get_array_val"//color_reset
+			call internal_error()
 
 	end select
 
