@@ -26,6 +26,9 @@
 					}
 				},
 				{
+				  "run": "bash gen-header.sh"
+				},
+				{
 					"if": "matrix.os == 'ubuntu-latest'",
 					"name": "Set ubuntu PATH",
 					"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"

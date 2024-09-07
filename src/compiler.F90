@@ -35,6 +35,8 @@ module syntran__compiler_m
 
 #endif
 
+	! dev commit is replaced with the git hash by gen-header.sh
+	character(len = *), parameter :: git_commit = "DEV_COMMIT"
 	character(len = *), parameter :: build_date = __DATE__
 
 end module syntran__compiler_m
