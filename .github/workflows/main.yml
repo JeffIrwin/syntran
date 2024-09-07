@@ -376,7 +376,7 @@
 					"
 						set -exu \n
 
-						# Test this to run syntran without homebrew gcc lib paths
+						# Test this to run syntran without homebrew gcc lib paths \n
 						brew remove gcc@12 \n
 
 						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos.zip\" \n
@@ -390,7 +390,12 @@
 						./syntran -c '4 + 5 * [6: 10];' \n
 						./syntran -c 'sum([0: 101]);' \n
 
+						# otool shows the dependent dylibs (like `ldd` on linux) \n
 						otool -L ./syntran \n
+
+						# lipo shows which architecture this bin was built for
+						# (e.g. arm64 (apple silly con) or x86_64 (intel)). as
+						# of september 2024, github action runners are arm64 \n
 						lipo -info ./syntran \n
 					"
 				},

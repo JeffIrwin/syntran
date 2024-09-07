@@ -1887,14 +1887,8 @@ subroutine eval_array_expr(node, state, res)
 
 		allocate(res%array)
 		res%array%type = node%val%array%type
-		!array = new_array(node%val%array%type, size(node%elems))
-		!call allocate_array(res, res%array%len_)
 		call allocate_array(res, size(node%elems, kind = 8))
-
-		! TODO: dry
 		res%array%len_ = 0
-		!res%array%cap
-		!res%array%type = 
 
 		do i = 1, size(node%elems)
 			call syntax_eval(node%elems(i), state, elem)
@@ -2121,7 +2115,6 @@ end subroutine promote_i32_i64
 
 subroutine allocate_array(val, cap)
 
-	!type(array_t), intent(inout) :: array
 	type(value_t), intent(inout) :: val
 	integer(kind = 8), intent(in) :: cap
 
@@ -2369,11 +2362,12 @@ end function subscript_i32_eval
 
 !===============================================================================
 
-! TODO: DRY
 function sub_eval(node, var, state) result(index_)
 
 	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
 	! subscript index_
+	!
+	! Can this be dried up with subscript_eval()?
 
 	type(syntax_node_t) :: node
 	type(value_t) :: var
@@ -2389,7 +2383,7 @@ function sub_eval(node, var, state) result(index_)
 
 	!print *, 'starting sub_eval()'
 
-	!! TODO
+	!! TODO: i think member string indexing is broken without this
 	!! str scalar with single char subscript
 	!if (state%vars%vals(node%id_index)%type == str_type) then
 	!	call syntax_eval(node%lsubscripts(1), state, subscript)
@@ -2403,8 +2397,6 @@ function sub_eval(node, var, state) result(index_)
 
 	prod  = 1
 	index_ = 0
-	!do i = 1, state%vars%vals(node%id_index)%array%rank
-	!do i = 1, node%array%rank
 	do i = 1, var%array%rank
 		!print *, 'i = ', i
 
@@ -2417,9 +2409,7 @@ function sub_eval(node, var, state) result(index_)
 		! definition to enable it only in debug
 
 		index_ = index_ + prod * subscript%to_i64()
-		!prod  = prod * state%vars%vals(node%id_index)%array%size(i)
-		!prod  = prod * node%array%size(i)
-		prod  = prod * var%array%size(i)
+		prod   = prod * var%array%size(i)
 
 	end do
 	!print *, "index_ = ", index_

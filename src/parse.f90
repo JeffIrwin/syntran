@@ -52,7 +52,8 @@ module syntran__parse_m
 		! to walk back up the syntax tree to do return type checking
 		!
 		! This won't work with nested fns but we don't allow that anyway
-		integer :: fn_type, fn_rank, fn_array_type
+		type(value_t) :: fn_type
+		!integer :: fn_type, fn_rank, fn_array_type
 		character(len = :), allocatable :: fn_name
 		logical :: returned
 
@@ -119,7 +120,8 @@ module syntran__parse_m
 			integer, intent(out) :: rank
 		end subroutine parse_type
 
-		! TODO: move struct stuff to another translation unit
+		! TODO: move struct stuff to another translation unit? parse_fn.f90 is a
+		! very manageable ~1100 lines rn, so not much benefit to splitting
 		module function parse_struct_declaration(parser) result(decl)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: decl

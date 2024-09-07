@@ -524,17 +524,21 @@ module function parse_fn_declaration(parser) result(decl)
 		else
 			fn%type = itype
 		end if
-		! TODO: struct_name for fn return type
+		fn%struct_name = type_text
 
 	end if
 	!print *, 'fn%type = ', fn%type
 
 	! Copy for later return type checking while parsing body
 	parser%fn_name = identifier%text
-	parser%fn_type = fn%type
+	!parser%fn_type = fn%type
+	parser%fn_type%type = fn%type
+	parser%fn_type%struct_name = fn%struct_name
 	if (rank >= 0) then
-		parser%fn_rank = fn%rank
-		parser%fn_array_type = fn%array_type
+		!parser%fn_rank = fn%rank
+		!parser%fn_array_type = fn%array_type
+		parser%fn_type%array%rank = fn%rank
+		parser%fn_type%array%type = fn%array_type
 	end if
 
 	body = parser%parse_statement()
@@ -547,7 +551,8 @@ module function parse_fn_declaration(parser) result(decl)
 	end if
 
 	! Reset to allow the global scope to return anything
-	parser%fn_type = any_type
+	parser%fn_type%type = any_type
+	!parser%fn_type = any_type
 
 	! Insert fn into parser%fns
 
