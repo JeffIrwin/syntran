@@ -407,7 +407,7 @@
 					"run":
 					"
 						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-windows.zip\" \n
-						tar -xvf syntran-windows*.zip \n
+						tar -xvf syntran-windows.zip \n
 						dir \n
 						.\\syntran.exe -h \n
 						.\\syntran.exe --version \n
