@@ -385,10 +385,16 @@
 					"name": "Test macos bin",
 					"run":
 					"
-						set -exu \n
+						# TODO
+						#set -exu \n
+						set -x \n
 
-						# TODO: Test this to run syntran without homebrew gcc lib paths \n
+						# Test this to run syntran without homebrew gcc lib paths \n
 						brew remove gcc@12 \n
+
+						mv /opt/homebrew/bin /opt/homebrew/bin-BACKUP \n
+						mv /opt/homebrew/opt /opt/homebrew/opt-BACKUP \n
+						mv /opt/homebrew/Cellar /opt/homebrew/Cellar-BACKUP \n
 
 						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos-alpha.zip\" \n
 						unzip syntran-macos*.zip \n
