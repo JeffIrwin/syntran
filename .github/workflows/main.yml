@@ -391,6 +391,7 @@
 						./syntran -c 'sum([0: 101]);' \n
 
 						otool -L ./syntran \n
+						lipo -info ./syntran \n
 					"
 				},
 			]
