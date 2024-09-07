@@ -144,20 +144,14 @@
 					#},
 					"run":
 					"
-						# TODO
+						# TODO \n
 						#set -exu \n
+						set -x \n
 
-						#gfortran --version \n
-						#which gfortran \n
 						gfortran-12 --version \n
 						which gfortran-12 \n
 
 						bash ./build.sh release \n
-
-						#fpm install
-						#  --profile release
-						#  --link-flag '-static-libgcc -static-libgfortran'
-						#  --prefix='$HOME' \n
 
 						# TODO: copy to a subdir for easier upload \n
 
