@@ -177,8 +177,9 @@ function parse_args() result(args)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
 			if (args%version) then
-				! TODO: add build date, maybe git hash
+				! TODO: add git hash.  Need to auto-generate/sed some source
 				write(*,*) "fortran compiler = "//fort_compiler//" "//str(fort_vers)
+				write(*,*) "build date = "//build_date
 			end if
 			write(*,*)
 		end if

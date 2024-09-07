@@ -35,6 +35,8 @@ module syntran__compiler_m
 
 #endif
 
+	character(len = *), parameter :: build_date = __DATE__
+
 end module syntran__compiler_m
 
 !===============================================================================
