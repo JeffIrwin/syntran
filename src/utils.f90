@@ -93,6 +93,7 @@ module syntran__utils_m
 
 	interface str
 		module procedure  i32_str
+		module procedure  i32_vec_str
 		module procedure  i64_str
 		module procedure  f32_str
 		module procedure bool1_str
@@ -849,6 +850,24 @@ function i32_str(x) result(str)
 	str = trim(buffer)
 
 end function i32_str
+
+!===============================================================================
+
+function i32_vec_str(x) result(str)
+
+	integer(kind = 4), intent(in) :: x(:)
+
+	character(len = :), allocatable :: str
+
+	integer :: i
+	str = "["
+	do i = 1, size(x)
+		str = str//i32_str(x(i))
+		if (i < size(x)) str = str//", "
+	end do
+	str = str//"]"
+
+end function i32_vec_str
 
 !===============================================================================
 

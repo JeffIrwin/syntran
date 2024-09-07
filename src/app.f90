@@ -176,6 +176,11 @@ function parse_args() result(args)
 			write(*,*)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
+			if (args%version) then
+				write(*,*) "toolchain details:"
+				write(*,*) "	fortran compiler = "//fort_compiler//" "//str(fort_vers)
+				!write(*,*) "	fortran compiler = "//fort_compiler//" "//fort_vers
+			end if
 			write(*,*)
 		end if
 
