@@ -159,8 +159,8 @@
 						cp ./build/syntran . \n
 
 						#cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
-						which syntran \n
-						which patchelf \n
+						#which syntran \n
+						which patchelf || true \n
 						chmod +x ./syntran \n
 						#patchelf --set-rpath '$ORIGIN' ./syntran \n
 
