@@ -155,10 +155,15 @@
 
 						otool -L ./syntran \n
 
-						GCC_LIB_DIR=/opt/homebrew/opt/gcc@12/lib/gcc/12
+						GCC_LIB_DIR=/opt/homebrew/opt/gcc@12/lib/gcc/12 \n
+
+						ls ${GCC_LIB_DIR} \n
 
 						# A loop might be nice to dry this up \n
+						# libgcc_s is a dependency of libgfortran, not a direct \n
+						# dependency of syntran \n
 
+						cp ${GCC_LIB_DIR}/libgcc_s.1.1.dylib . \n
 						cp ${GCC_LIB_DIR}/libgfortran.5.dylib . \n
 						cp ${GCC_LIB_DIR}/libgomp.1.dylib . \n
 						cp ${GCC_LIB_DIR}/libquadmath.0.dylib . \n
@@ -169,6 +174,9 @@
 							\"${GCC_LIB_DIR}/libgfortran.5.dylib\"
 							\"@executable_path/libgfortran.5.dylib\"
 							\"./syntran\" \n
+
+						# There's no need to run install_name_tool for libgcc_s,
+						# it's already relative to @rpath in libgfortran \n
 
 						install_name_tool -change
 							\"${GCC_LIB_DIR}/libgomp.1.dylib\"
@@ -188,7 +196,7 @@
 					"uses": "actions/upload-artifact@v4",
 					"if": "matrix.os == 'macOS-latest'",
 					"with": {
-						"path": "./syntran\n./libgfortran.5.dylib\n./libgomp.1.dylib\n./libquadmath.0.dylib",
+						"path": "./syntran\n./libgfortran.5.dylib\n./libgcc_s.1.1.dylib\n./libgomp.1.dylib\n./libquadmath.0.dylib",
 						"name": "syntran-macos"
 					}
 				},
@@ -379,8 +387,8 @@
 					"
 						set -exu \n
 
-						# Test this to run syntran without homebrew gcc lib paths
-						brew remove gcc@12 \n
+						# TODO: Test this to run syntran without homebrew gcc lib paths \n
+						#brew remove gcc@12 \n
 
 						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos.zip\" \n
 						unzip syntran-macos*.zip \n
