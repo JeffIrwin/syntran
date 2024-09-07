@@ -39,6 +39,7 @@
 					},
 					"run":
 					"
+						set -exu \n
 						gfortran --version \n
 
 						fpm install
@@ -71,16 +72,6 @@
 						fpm test test --profile release \n
 						fpm test long --profile release \n
 					"
-				},
-				{
-					# TODO: upload binary artifacts for other OS's. Include them in a tagged release
-					"uses": "actions/upload-artifact@v4",
-					"with": {
-						# unfortunately gfortran-12 does not support -static-libquadmath
-						"path": "./syntran\n./libquadmath.so.0",
-						#"path": "/home/runner/bin/syntran",
-						"name": "syntran-linux"
-					}
 				},
 				{
 					"if": "matrix.os == 'ubuntu-latest'",
@@ -119,7 +110,117 @@
 						bash ./build.sh release \n
 						time ./build/test \n
 					"
-				}
+				},
+				{
+					# TODO: make a bash pack script, then libgfortran-5.dll
+					# location can be automatically found
+					"if": "matrix.os == 'windows-latest'",
+					"name": "Pack Windows",
+					"run":
+					"
+						#where gfortran \n
+						dir C:\\mingw64\\bin\\libquad* \n
+						#dir C:\\mingw64\\lib \n
+
+						where api-ms-win-crt-time-l1-1-0.dll
+
+						#bash ./build.sh release \n
+						bash ./build.sh debug \n
+
+						# Could try adding -static-gcc etc in cmake to reduce the burden here \n
+
+						copy .\\build\\syntran.exe .\\ \n
+						copy C:\\mingw64\\bin\\libgfortran-5.dll .\\ \n
+						copy C:\\mingw64\\bin\\libquadmath-0.dll .\\ \n
+						copy C:\\mingw64\\bin\\libgcc_s_seh-1.dll .\\ \n
+						copy C:\\mingw64\\bin\\libwinpthread-1.dll .\\ \n
+					"
+				},
+				{
+					"if": "matrix.os == 'macOS-latest'",
+					"name": "Pack macOS",
+					"run":
+					"
+						set -exu \n
+						#set -x \n
+
+						gfortran-12 --version \n
+						which gfortran-12 \n
+
+						bash ./build.sh release \n
+
+						# TODO: copy to a subdir for easier upload \n
+
+						cp ./build/syntran . \n
+
+						otool -L ./syntran \n
+
+						GCC_LIB_DIR=/opt/homebrew/opt/gcc@12/lib/gcc/12
+
+						# A loop might be nice to dry this up \n
+
+						cp ${GCC_LIB_DIR}/libgfortran.5.dylib . \n
+						cp ${GCC_LIB_DIR}/libgomp.1.dylib . \n
+						cp ${GCC_LIB_DIR}/libquadmath.0.dylib . \n
+
+						#/usr/lib/libSystem.B.dylib
+
+						install_name_tool -change
+							\"${GCC_LIB_DIR}/libgfortran.5.dylib\"
+							\"@executable_path/libgfortran.5.dylib\"
+							\"./syntran\" \n
+
+						install_name_tool -change
+							\"${GCC_LIB_DIR}/libgomp.1.dylib\"
+							\"@executable_path/libgomp.1.dylib\"
+							\"./syntran\" \n
+
+						install_name_tool -change
+							\"${GCC_LIB_DIR}/libquadmath.0.dylib\"
+							\"@executable_path/libquadmath.0.dylib\"
+							\"./syntran\" \n
+
+						chmod +x ./syntran \n
+						#patchelf --set-rpath '$ORIGIN' ./syntran \n
+					"
+				},
+				{
+					"uses": "actions/upload-artifact@v4",
+					"if": "matrix.os == 'macOS-latest'",
+					"with": {
+						"path": "./syntran\n./libgfortran.5.dylib\n./libgomp.1.dylib\n./libquadmath.0.dylib",
+						"name": "syntran-macos"
+					}
+				},
+				{
+					"uses": "actions/upload-artifact@v4",
+					"if": "matrix.os == 'windows-latest'",
+					"with": {
+						"path": "./syntran.exe\n./libgfortran-5.dll\n./libquadmath-0.dll\n./libgcc_s_seh-1.dll\n./libwinpthread-1.dll",
+						"name": "syntran-windows"
+					}
+				},
+				{
+					"uses": "actions/upload-artifact@v4",
+					"if": "matrix.os == 'ubuntu-latest'",
+					"with": {
+						# unfortunately gfortran-12 does not support -static-libquadmath
+						"path": "./syntran\n./libquadmath.so.0",
+						"name": "syntran-linux"
+					}
+				},
+				#{
+				#	# TODO: just remove conditional from other test stage.  This
+				#	# never used to work on Windows bc gfortran-compiled bins
+				#	# just wouldn't run on the github win runners. Maybe go back
+				#	# to debug.  Release has intermittent issues
+				#	"if": "matrix.os == 'windows-latest'",
+				#	"name": "Test Windows",
+				#	"run":
+				#	"
+				#		bash ./test.sh \n
+				#	"
+				#},
 			]
 		},
 		"test-gfortran": {
@@ -154,6 +255,7 @@
 					},
 					"run":
 					"
+						set -exu \n
 						#fpm test test --verbose --flag -Wno-tabs \n
 						#fpm test long \n
 						fpm test test --profile release --verbose --flag -Wno-tabs \n
@@ -171,14 +273,16 @@
 						"ubuntu-latest"
 					],
 					"toolchain": [
-						{"compiler": "intel", "version": "2023.2"},
+						{"compiler": "intel", "version": "2024.2"},
+						#{"compiler": "intel", "version": "2024.1"}, # works
+						#{"compiler": "intel", "version": "2024.0"}, # works
+						#{"compiler": "intel", "version": "2023.2"}, # works
 						{"compiler": "intel", "version": "2023.1"},
-						#{"compiler": "intel", "version": "2023.0"},  # crashes on ` 	do while (is_whitespace(context%text(j:j)))`
-						#{"compiler": "intel", "version": "2022.2"},  # ifx 2022.2 doesn't have `do while ()` :(
-						#{"compiler": "intel", "version": "2024.0"},
-						#{"compiler": "intel-classic", "version": "2021.1"},  # complains about coarrays???
+
 						{"compiler": "intel-classic", "version": "2021.10"},
-						#{"compiler": "nvidia-hpc", "version": "23.11"}  # setup fails
+						#{"compiler": "intel-classic", "version": "2021.1"},  # complains about coarrays???
+
+						##{"compiler": "nvidia-hpc", "version": "23.11"}  # setup fails
 					]
 				}
 			},
@@ -210,6 +314,7 @@
 					},
 					"run":
 					"
+						set -exu \n
 						fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
 						fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
 					"
@@ -243,20 +348,71 @@
 				},
 			]
 		},
-		"test-docker-bin": {
+		"test-linux-bin": {
 			# Test binary syntran installations on dockerfiles from ./docker/
 			# dir.  These download the latest github "release", so there will be
 			# a lag between when you build the release and manually upload a
 			# binary package to github
-			"name": "Test docker bin",
+			"name": "Test linux bin",
 			"runs-on": "ubuntu-latest",
 			"steps": [
 				{"uses": "actions/checkout@v1"},
 				{
-					"name": "Test docker",
+					"name": "Test linux bin",
 					"run":
 					"
 						bash ./test-bin.sh \n
+					"
+				},
+			]
+		},
+		"test-macos-bin": {
+			"name": "Test macos bin",
+			"runs-on": "macOS-latest",
+			"steps": [
+				{
+					"name": "Test macos bin",
+					"run":
+					"
+						set -exu \n
+
+						# Test this to run syntran without homebrew gcc lib paths
+						brew remove gcc@12 \n
+
+						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos.zip\" \n
+						unzip syntran-macos*.zip \n
+						chmod +x ./syntran \n
+						./syntran -h \n
+						./syntran --version \n
+
+						./syntran -c 'println(\"hello world\");' \n
+						./syntran -c '1 + 2 * 3;' \n
+						./syntran -c '4 + 5 * [6: 10];' \n
+						./syntran -c 'sum([0: 101]);' \n
+
+						otool -L ./syntran \n
+					"
+				},
+			]
+		},
+		"test-windows-bin": {
+			"name": "Test windows bin",
+			"runs-on": "windows-latest",
+			"steps": [
+				{
+					"name": "Test windows bin",
+					"run":
+					"
+						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-windows.zip\" \n
+						tar -xvf syntran-windows.zip \n
+						dir \n
+						.\\syntran.exe -h \n
+						.\\syntran.exe --version \n
+
+						.\\syntran.exe -c \"println(\"\"hello world\"\");\" \n
+						.\\syntran.exe -c \"1 + 2 * 3;\" \n
+						.\\syntran.exe -c \"4 + 5 * [6: 10];\" \n
+						.\\syntran.exe -c \"sum([0: 101]);\" \n
 					"
 				},
 			]

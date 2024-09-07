@@ -176,6 +176,10 @@ function parse_args() result(args)
 			write(*,*)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
+			if (args%version) then
+				! TODO: add build date, maybe git hash
+				write(*,*) "fortran compiler = "//fort_compiler//" "//str(fort_vers)
+			end if
 			write(*,*)
 		end if
 
