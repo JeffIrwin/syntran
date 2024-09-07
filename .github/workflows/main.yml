@@ -39,6 +39,7 @@
 					},
 					"run":
 					"
+						set -exu \n
 						gfortran --version \n
 
 						fpm install
@@ -136,6 +137,50 @@
 					"
 				},
 				{
+					"if": "matrix.os == 'macOS-latest'",
+					"name": "Pack macOS",
+					"env": {
+						"FPM_FC": "gfortran-11"
+					},
+					"run":
+					"
+						# TODO
+						#set -exu \n
+
+						gfortran --version \n
+						which gfortran
+						which gfortran-11
+
+						fpm install
+						  --profile release
+						  --link-flag '-static-libgcc -static-libgfortran'
+						  --prefix='$HOME' \n
+
+						# TODO: copy to a subdir for easier upload \n
+						cp $HOME/bin/syntran . \n
+						#cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
+						which syntran \n
+						which patchelf \n
+						chmod +x ./syntran \n
+						patchelf --set-rpath '$ORIGIN' ./syntran \n
+
+						#echo 'libquadmath ls:' \n
+						#ls /lib/x86_64-linux-gnu/libquadmath.so.0 \n
+						#ls /lib/x86_64-linux-gnu/ \n
+						#ls /lib/ \n
+					"
+				},
+				{
+					"uses": "actions/upload-artifact@v4",
+					"if": "matrix.os == 'ubuntu-latest'",
+					"with": {
+						# unfortunately gfortran-12 does not support -static-libquadmath
+						"path": "./syntran",
+						#"path": "./syntran\n./libquadmath.so.0",
+						"name": "syntran-macos-alpha"
+					}
+				},
+				{
 					# TODO: try uploading mac. Include binaries in a tagged release
 					"uses": "actions/upload-artifact@v4",
 					"if": "matrix.os == 'windows-latest'",
@@ -200,6 +245,7 @@
 					},
 					"run":
 					"
+						set -exu \n
 						#fpm test test --verbose --flag -Wno-tabs \n
 						#fpm test long \n
 						fpm test test --profile release --verbose --flag -Wno-tabs \n
@@ -217,15 +263,19 @@
 						"ubuntu-latest"
 					],
 					"toolchain": [
+						{"compiler": "intel", "version": "2024.2"},
 						{"compiler": "intel", "version": "2024.1"},
 						{"compiler": "intel", "version": "2024.0"},
-						{"compiler": "intel", "version": "2023.2"},
-						{"compiler": "intel", "version": "2023.1"},
-						#{"compiler": "intel", "version": "2023.0"},  # crashes on ` 	do while (is_whitespace(context%text(j:j)))`
-						#{"compiler": "intel", "version": "2022.2"},  # ifx 2022.2 doesn't have `do while ()` :(
-						{"compiler": "intel-classic", "version": "2021.1"},
+						{"compiler": "intel", "version": "2023.2"}, # works
+						{"compiler": "intel", "version": "2023.1"}, # works
+
+						##{"compiler": "intel", "version": "2023.0"},  # crashes on ` 	do while (is_whitespace(context%text(j:j)))`
+						##{"compiler": "intel", "version": "2022.2"},  # ifx 2022.2 doesn't have `do while ()` :(
+
 						{"compiler": "intel-classic", "version": "2021.10"},
-						#{"compiler": "nvidia-hpc", "version": "23.11"}  # setup fails
+						{"compiler": "intel-classic", "version": "2021.1"},
+
+						##{"compiler": "nvidia-hpc", "version": "23.11"}  # setup fails
 					]
 				}
 			},
@@ -257,6 +307,7 @@
 					},
 					"run":
 					"
+						set -exu \n
 						fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
 						fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
 					"
