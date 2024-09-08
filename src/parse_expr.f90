@@ -448,12 +448,12 @@ module function parse_primary_expr(parser) result(expr)
 				! syntran to use a different token for struct instantiators,
 				! e.g. `.{`, but I prefer this solution.
 
-				! TODO: is the exists() method needed?  Search will probably
-				! work and simplify the code.  I was experimenting while
-				! debugging memory issue, but exists might not be necessary.  On
-				! the other hand, it might be more optimal to check existence
-				! w/o copying an output val (which could containt big nested dict
-				! types)
+				! The exists() method is not strictly needed.  Search could work
+				! and simplify the code.  I was experimenting while debugging
+				! memory issue, but exists is not necessary.  On the other hand,
+				! it might be more optimal to check existence w/o copying an
+				! output val (which could containt big nested dict types)
+
 				!print *, "text = ", parser%current_text()
 				!dummy = parser%structs%search(parser%current_text(), dummy_id, io)
 				exists = parser%structs%exists(parser%current_text(), dummy_id, io)
@@ -578,15 +578,13 @@ recursive module subroutine parse_dot(parser, expr)
 
 	dot  = parser%match(dot_token)
 
-	! TODO: this can't handle recursion, e.g. `a.b.c`
-
 	identifier = parser%match(identifier_token)
 
 	!print *, "dot identifier = ", identifier%text
 	!print *, "type = ", kind_name(expr%val%type)
 
 	if (expr%val%type /= struct_type) then
-		! TODO: diag.  Skip if unknown_type?  Probably already threw a diag in caller
+		! TODO: need to catch in parser
 		write(*,*) err_prefix//"variable in dot expr is not a struct"//color_reset
 		!print *, "type = ", kind_name(expr%val%type)
 		return

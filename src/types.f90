@@ -2761,7 +2761,8 @@ end function type_name_primitive
 
 integer function types_match(a, b) result(io)
 
-	! Check if the type of value a matches value b
+	! Check if the type of value `a` matches value `b`. Arguments are not
+	! transitive!  If `a` is of value any_type, enforcement is less strict.
 	!
 	! Numeric casting, e.g. i32 to f32, is not allowed.  Maybe we could add a
 	! flag if some callers need to allow casting
