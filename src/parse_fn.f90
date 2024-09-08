@@ -557,11 +557,8 @@ module function parse_struct_declaration(parser) result(decl)
 
 		pos0 = parser%current_pos()
 
-		!print *, 'matching name'
 		name  = parser%match(identifier_token)
-		!print *, "name = ", name%text
 		call pos_mems%push( name%pos )
-		!print *, 'matching colon'
 		colon = parser%match(colon_token)
 
 		call parser%parse_type(type_text, type)
@@ -571,7 +568,7 @@ module function parse_struct_declaration(parser) result(decl)
 		call names%push( name%text )
 
 		if (parser%current_kind() /= rbrace_token) then
-			!print *, 'matching comma'
+			! Delimiting commas are required; trailing comma is optional
 			comma = parser%match(comma_token)
 		end if
 
@@ -588,8 +585,6 @@ module function parse_struct_declaration(parser) result(decl)
 
 	struct%num_vars = 0
 	allocate(struct%member_names%v( names%len_ ))
-
-	!allocate(struct%vars)
 
 	do i = 1, names%len_
 		!print *, "name = ", names%v(i)%s
@@ -695,7 +690,6 @@ module function parse_struct_instance(parser) result(inst)
 	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
 	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
 
-	!struct = parser%structs%search(identifier%text, struct_id, io)
 	call parser%structs%search(identifier%text, struct_id, io, struct)
 	!print *, "struct io = ", io
 
@@ -712,10 +706,6 @@ module function parse_struct_instance(parser) result(inst)
 	allocate(inst%members   ( struct%num_vars ))
 
 	member_set = spread(.false., 1, struct%num_vars)
-
-	!if (allocated(inst%struct)) deallocate(inst%struct)
-	!allocate(inst%struct)
-	!inst%struct = struct
 
 	inst%struct_name = identifier%text
 	inst%val%struct_name = identifier%text
@@ -924,7 +914,7 @@ module subroutine parse_type(parser, type_text, type)
 		type%array%type = itype
 	else
 		type%type = itype
-		if (allocated(type%array)) deallocate(type%array)
+		!if (allocated(type%array)) deallocate(type%array)
 	end if
 
 	if (itype == struct_type) type%struct_name = type_text

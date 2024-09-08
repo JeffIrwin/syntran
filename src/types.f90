@@ -343,14 +343,8 @@ recursive subroutine vars_copy(dst, src)
 
 	!print *, 'starting vars_copy()'
 
-	!type vars_t
-	!	type(var_dict_t) :: dicts(scope_max)
-	!	type(value_t), allocatable :: vals(:)
-	!	integer :: scope = 1
-
 	dst%scope = src%scope
 
-	!dst%dicts = src%dicts
 	do i = 1, size(src%dicts)
 		if (allocated(src%dicts(i)%root)) then
 			if (.not. allocated(dst%dicts(i)%root)) allocate(dst%dicts(i)%root)
@@ -407,8 +401,6 @@ recursive subroutine fn_copy(dst, src)
 	!print *, 'starting fn_copy()'
 
 	dst%type = src%type
-	!dst%array_type = src%array_type
-	!dst%rank = src%rank
 	dst%variadic_min = src%variadic_min
 	dst%variadic_type = src%variadic_type
 
@@ -715,6 +707,8 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
+	else if (allocated(dst%struct_name)) then
+		deallocate(dst%struct_name)
 	end if
 
 	dst%expecting       = src%expecting
@@ -723,6 +717,8 @@ recursive subroutine syntax_node_copy(dst, src)
 	!print *, 'allocated(src%first_expected) = ', allocated(src%first_expected)
 	if (allocated(src%first_expected)) then
 		dst%first_expected = src%first_expected
+	else if (allocated(dst%first_expected)) then
+		deallocate(dst%first_expected)
 	end if
 
 	dst%diagnostics    = src%diagnostics
@@ -776,13 +772,6 @@ recursive subroutine syntax_node_copy(dst, src)
 	else if (allocated(dst%body)) then
 		deallocate(dst%body)
 	end if
-
-	!if (allocated(src%struct)) then
-	!	if (.not. allocated(dst%struct)) allocate(dst%struct)
-	!	dst%struct = src%struct
-	!else if (allocated(dst%struct)) then
-	!	deallocate(dst%struct)
-	!end if
 
 	if (allocated(src%array)) then
 		if (.not. allocated(dst%array)) allocate(dst%array)
@@ -913,25 +902,21 @@ recursive subroutine ternary_tree_copy(dst, src)
 	if (allocated(src%val)) then
 		if (.not. allocated(dst%val)) allocate(dst%val)
 		dst%val = src%val
-		!call ternary_tree_copy(dst%val, src%val)
 	end if
 
 	if (allocated(src%left)) then
 		if (.not. allocated(dst%left)) allocate(dst%left)
-		!dst%left = src%left
-		call ternary_tree_copy(dst%left, src%left)
+		dst%left = src%left
 	end if
 
 	if (allocated(src%mid)) then
 		if (.not. allocated(dst%mid)) allocate(dst%mid)
-		!dst%mid = src%mid
-		call ternary_tree_copy(dst%mid, src%mid)
+		dst%mid = src%mid
 	end if
 
 	if (allocated(src%right)) then
 		if (.not. allocated(dst%right)) allocate(dst%right)
-		!dst%right = src%right
-		call ternary_tree_copy(dst%right, src%right)
+		dst%right = src%right
 	end if
 
 end subroutine ternary_tree_copy

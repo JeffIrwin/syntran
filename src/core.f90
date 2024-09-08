@@ -30,6 +30,8 @@ module syntran__core_m
 
 	! TODO:
 	!  - structs
+	!    * TODO: make one last release on main before merging structs. bump
+	!      version to 0.0.49
 	!    * post-merge TODO struct items:
 	!      + update struct sample.  include struct/array combos, nesting, etc.
 	!        maybe make separate simple and compound struct samples
