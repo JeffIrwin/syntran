@@ -150,7 +150,10 @@ recursive module function parse_expr_statement(parser) result(expr)
 			end if
 
 			call parser%parse_dot(expr)
-			if (.not. allocated(expr%member)) return
+			if (.not. allocated(expr%member)) then
+				!print *, "RETURNING ******"
+				return
+			end if
 
 		end if
 
@@ -158,7 +161,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 			! Rewind and do the default case (same as outside the assignment if
 			! block).  Could use goto or probably refactor somehow
 			parser%pos = pos0
-			!print *, "rewinding"
+			!print *, "rewinding ********"
 			!print *, 'pos0 = ', pos0
 			expr = parser%parse_expr()
 			return
@@ -588,7 +591,8 @@ recursive module subroutine parse_dot(parser, expr)
 		! Don't cascade errors for undeclared vars
 		if (expr%val%type /= unknown_type) then
 			! Does expr%identifier always exist to create a span?  May need to just
-			! underline dot itself, e.g. for struct_array[0].member
+			! underline dot itself.  I've tested this with arrays of structs
+			! `struct_array[0].member` and nested dot exprs `a.b.c.z`
 			span = new_span(expr%identifier%pos, dot%pos - expr%identifier%pos + 1)
 			call parser%diagnostics%push(err_non_struct_dot( &
 				parser%context(), &
@@ -625,6 +629,7 @@ recursive module subroutine parse_dot(parser, expr)
 			identifier%text, &
 			expr%identifier%text, &
 			expr%val%struct_name))
+		expr%val%type = unknown_type  ! this prevents cascades later
 		return
 	end if
 	!print *, "member id = ", member_id
@@ -654,13 +659,10 @@ recursive module subroutine parse_dot(parser, expr)
 	! I think this needs a recursive call to `parse_dot()` right here to handle
 	! things like `a.b.c`
 	if (parser%peek_kind(0) == dot_token) then
-
-		!expr%member%val = member
 		expr%member%val = expr%val
-
+		expr%member%identifier = identifier  ! set for diags in recursed parse_dot()
 		call parser%parse_dot(expr%member)
 		expr%val = expr%member%val
-
 	end if
 
 end subroutine parse_dot

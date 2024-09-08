@@ -3258,7 +3258,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'return ps[0].v;' &
 				, quiet) == '[3, 17]', &
 			eval('' &
-				//'struct D{y:i32, m:str, d:i32}' &           ! 48
+				//'struct D{y:i32, m:str, d:i32}' &           ! 49
 			    //'fn get_ds(): [D;:] {'&
 				//'    let d0 = D{y=2024, m="Sep", d=21};' &
 				//'    let d1 = D{y=1990, m="Aug", d=2};' &
@@ -3268,7 +3268,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 			    //'return ds[1].m;' &
 				, quiet) == 'Aug', &
 			eval('' &
-				//'struct D{y:i32, m:str, d:i32}' &           ! 48
+				//'struct D{y:i32, m:str, d:i32}' &           ! 50
 			    //'fn get_ds(): [D;:] {'&
 				//'    let d0 = D{y=2024, m="Sep", d=21};' &
 				//'    let d1 = D{y=1990, m="Aug", d=2};' &
@@ -3277,6 +3277,20 @@ subroutine unit_test_struct_arr(npass, nfail)
 			    //'let ds = get_ds();' &
 			    //'return ds[0].d;' &
 				, quiet) == '21', &
+			eval('' &                                         ! 51
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct
+				//'fn extract_a(x: E): i32 { return x.e.d.c.b.a; }' &
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'return extract_a(e);' &
+				, quiet = .false.) == '42', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

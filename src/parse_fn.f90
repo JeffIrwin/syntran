@@ -369,6 +369,7 @@ module function parse_fn_declaration(parser) result(decl)
 	!         // do something with a[i,j]
 	!     }
 
+	! Parse fn parameters (arguments)
 	do while ( &
 		parser%current_kind() /= rparen_token .and. &
 		parser%current_kind() /= eof_token)
@@ -444,10 +445,10 @@ module function parse_fn_declaration(parser) result(decl)
 
 				!inst%val%struct( member_id ) = mem%val
 
-				! TODO: test a fn with a 2nd-order struct arg (i.e. a struct
-				! made up of other structs).  Maybe more data needs to be copied
-				! here, especially struct_name.  Essentially every %type should
-				! be bundled along with a %struct_name as in
+				! Test a fn with a 2nd-order struct arg (i.e. a struct made up
+				! of other structs).  Maybe more data needs to be copied here,
+				! especially struct_name.  Essentially every %type should be
+				! bundled along with a %struct_name as in
 				! parse_struct_declaration()
 
 			end do
