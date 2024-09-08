@@ -730,6 +730,22 @@ end function err_reset_member
 
 !===============================================================================
 
+function err_non_struct_dot(context, span, ident) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: ident
+	err = err_prefix &
+		//'dot member access cannot be performed on non-struct variable `' &
+		//ident//'`' &
+		//underline(context, span) &
+		//" dot on a non-struct"//color_reset
+
+end function err_non_struct_dot
+
+!===============================================================================
+
 function err_bad_member_name(context, span, mem_name, struct_name) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

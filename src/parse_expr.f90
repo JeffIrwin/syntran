@@ -575,6 +575,7 @@ recursive module subroutine parse_dot(parser, expr)
 	if (parser%current_kind() /= dot_token) return
 
 	!print *, "parsing dot"
+	!print *, "expr type = ", type_name(expr%val)
 
 	dot  = parser%match(dot_token)
 
@@ -584,9 +585,14 @@ recursive module subroutine parse_dot(parser, expr)
 	!print *, "type = ", kind_name(expr%val%type)
 
 	if (expr%val%type /= struct_type) then
-		! TODO: need to catch in parser
-		write(*,*) err_prefix//"variable in dot expr is not a struct"//color_reset
-		!print *, "type = ", kind_name(expr%val%type)
+		! Does expr%identifier always exist to create a span?  May need to just
+		! underline dot itself, e.g. for struct_array[0].member
+		span = new_span(expr%identifier%pos, dot%pos - expr%identifier%pos + 1)
+		!span = new_span(expr%identifier%pos, len(expr%identifier%text))
+		call parser%diagnostics%push(err_non_struct_dot( &
+			parser%context(), &
+			span, &
+			expr%identifier%text))
 		return
 	end if
 

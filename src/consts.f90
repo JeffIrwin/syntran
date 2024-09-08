@@ -339,7 +339,7 @@ function kind_name(kind)
 			"size_array          ", & ! 90
 			"return_keyword      ", & ! 91
 			"return_statement    ", & ! 92
-			"comma_token         ", & ! 93
+			"dot_token           ", & ! 93
 			"struct_keyword      ", & ! 94
 			"struct_declaration  ", & ! 95
 			"struct_instance_expr", & ! 96
