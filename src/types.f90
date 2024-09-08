@@ -21,7 +21,8 @@ module syntran__types_m
 	!********
 
 	type member_t
-		! Struct member.  Basically the same as a fn param_t
+		! Struct member.  Basically the same as a fn param_t.  TODO: delete this
+		! whole struct
 
 		integer :: type
 		character(len = :), allocatable :: name
@@ -35,11 +36,8 @@ module syntran__types_m
 	type param_t
 		! Function parameter (argument)
 
-		integer :: type
 		character(len = :), allocatable :: name
-		character(len = :), allocatable :: struct_name
-
-		integer :: array_type, rank
+		type(value_t) :: type
 
 		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
 		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).

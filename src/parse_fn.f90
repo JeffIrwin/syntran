@@ -252,14 +252,15 @@ module function parse_fn_call(parser) result(fn_call)
 		! only way to do it for intrinsic fns, which don't actually have a val
 		! anywhere
 		if (i <= size(fn%params)) then
-			param_val%type = fn%params(i)%type
-			param_val%array%type  = fn%params(i)%array_type
-			param_val%array%rank  = fn%params(i)%rank
-			param_val%struct_name = fn%params(i)%struct_name
+			param_val = fn%params(i)%type
+			!param_val%type = fn%params(i)%type%type
+			!param_val%array%type  = fn%params(i)%type%array%type
+			!param_val%array%rank  = fn%params(i)%type%array%rank
+			!param_val%struct_name = fn%params(i)%type%struct_name
 		else
 			param_val%type = fn%variadic_type
-			param_val%array%type = unknown_type
-			param_val%array%rank = 0
+			!param_val%array%type = unknown_type
+			!param_val%array%rank = 0
 			param_val%struct_name = ""
 		end if
 
@@ -429,58 +430,36 @@ module function parse_fn_declaration(parser) result(decl)
 			!print *, "struct num vars = ", struct%num_vars
 			!print *, "struct name = ", types%v(i)%s
 
-			!! members are allocated here, vars%vals are not. probably ok, maybe
-			!! need a deep copy if the vars dict is really needed
-			!print *, "allocated = ", allocated(struct%members)
-			!print *, "allocated = ", allocated(struct%vars%vals)
-
 			val%struct_name = types%v(i)%s
-			!allocate(val%struct( struct%num_vars ))
-			!!allocate(val%members( struct%num_vars ))
-			!!val = struct
-			!do j = 1, struct%num_vars
-			!	!val%struct(j) = struct%members(j)%val
-			!	val%struct(j)%type = struct%members(j)%type
-			!	!val%struct(j) = struct%vars%vals(j)
 
-			!	!inst%val%struct( member_id ) = mem%val
-
-			!	! ~~Test a fn with a 2nd-order struct arg (i.e. a struct made up
-			!	! of other structs).  Maybe more data needs to be copied here,
-			!	! especially struct_name.  Essentially every %type should be
-			!	! bundled along with a %struct_name as in
-			!	! parse_struct_declaration()~~
-			!	!
-			!	! Unit test added in 012f1404.  This code works, but I think it
-			!	! could be significantly simplified by following my new mantra:
-			!	! "a type is a value!"  Roughly a dozen lines here could be
-			!	! replaced by a single value_t copy to handle the parameter
-			!	! types.  The return type has already accomplished this
-			!	! simplification by assigning `parser%fn_type = fn%type` below.
-			!	! Parameters could probably be simplified similarly, but it will
-			!	! take a little refactoring.  member_t contains an int `type`
-			!	! and param_t also contains an int `type` and associated array
-			!	! type enums, etc.  Both member_t and param_t should be changed
-			!	! to simply wrap a `value_t` to contain the type meta-data.
-			!	! Perhaps member_t and/or param_t could be entirely eliminated
-			!	! if they become only a wrapper for the value_t.
-
-			!end do
+			! Unit test added in 012f1404.  This code works, but I think it
+			! could be significantly simplified by following my new mantra: "a
+			! type is a value!"  Roughly a dozen lines here could be replaced by
+			! a single value_t copy to handle the parameter types.  The return
+			! type has already accomplished this simplification by assigning
+			! `parser%fn_type = fn%type` below. Parameters could probably be
+			! simplified similarly, but it will take a little refactoring.
+			! member_t contains an int `type` and param_t also contains an int
+			! `type` and associated array type enums, etc.  Both member_t and
+			! param_t should be changed to simply wrap a `value_t` to contain
+			! the type meta-data. Perhaps member_t and/or param_t could be
+			! entirely eliminated if they become only a wrapper for the value_t.
 
 		end if
 
+		!fn%params(i)%type = val
 		if (is_array%v(i)) then
-			fn%params(i)%type = array_type
-			fn%params(i)%array_type = itype
-			fn%params(i)%rank = ranks%v(i)
+			fn%params(i)%type%type = array_type
+			allocate(fn%params(i)%type%array)
+			fn%params(i)%type%array%type = itype
+			fn%params(i)%type%array%rank = ranks%v(i)
 			!print *, "rank = ", fn%params(i)%rank
 		else
-			fn%params(i)%type = itype
+			fn%params(i)%type%type = itype
 			!print *, "(scalar)"
 		end if
-
 		if (itype == struct_type) then
-			fn%params(i)%struct_name = val%struct_name
+			fn%params(i)%type%struct_name = val%struct_name
 			!print *, "struct_name = ", val%struct_name
 		end if
 
@@ -491,14 +470,15 @@ module function parse_fn_declaration(parser) result(decl)
 		decl%params(i) = parser%num_vars
 
 		! Create a value_t object to store the type
-		val%type = fn%params(i)%type
-		if (is_array%v(i)) then
-			if (allocated(val%array)) deallocate(val%array)
-			allocate(val%array)
-			val%array%type = fn%params(i)%array_type
-			val%array%rank = fn%params(i)%rank
-			!print *, "rank = ", val%array%rank
-		end if
+		val = fn%params(i)%type
+		!val%type = fn%params(i)%type
+		!if (is_array%v(i)) then
+		!	if (allocated(val%array)) deallocate(val%array)
+		!	allocate(val%array)
+		!	val%array%type = fn%params(i)%array_type
+		!	val%array%rank = fn%params(i)%rank
+		!	!print *, "rank = ", val%array%rank
+		!end if
 
 		!print *, "insert var type ", kind_name(val%type)
 		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
