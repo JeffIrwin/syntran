@@ -20,18 +20,6 @@ module syntran__types_m
 
 	!********
 
-	!type param_t
-	!	! Function parameter (argument)
-	!	!
-	!	!  TODO: this is basically a wrapper of a value_t.  Move name into an
-	!	!  array of names in fn_t and get rid of param_t type, like I got rid of
-	!	!  member_t.
-	!	character(len = :), allocatable :: name
-	!	type(value_t) :: type
-	!end type param_t
-
-	!********
-
 	type fn_t
 		! Function signature: input and output types
 
@@ -40,13 +28,12 @@ module syntran__types_m
 
 		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
 		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
-		! Maybe add an array of types(:) for each allowable type of a param?
+		! Maybe add an matrix of types(:,:) for each allowable type of a param?
 
 		! Arguments/parameters.  Technically, "arguments" in most languages are
 		! what Fortran calls "actual arguments" and "parameters" are Fortran
 		! "dummy arguments"
 		type(value_t), allocatable :: params(:)
-		!type(param_t), allocatable :: params(:)
 		type(string_vector_t) :: param_names
 
 		! Min number of variadic params.  Default < 0 means fn is not variadic
@@ -311,16 +298,11 @@ module syntran__types_m
 		!! Flat array of structs, used for efficient interpreted evaluation
 		!type(struct_t), allocatable :: structs(:)
 
-		! TODO: is this needed for structs?  Is it needed for fns?
-		integer :: scope = 1
-
-		! TODO: scoping for nested structs?
 		contains
 			procedure :: &
 				insert => struct_insert, &
 				exists => struct_exists, &
 				search => struct_search
-		!		push_scope, pop_scope
 
 	end type structs_t
 
@@ -379,7 +361,9 @@ recursive subroutine vars_copy(dst, src)
 	end do
 
 	if (allocated(src%vals)) then
-		if (.not. allocated(dst%vals)) allocate(dst%vals( size(src%vals) ))
+		!if (.not. allocated(dst%vals)) allocate(dst%vals( size(src%vals) ))
+		if (allocated(dst%vals)) deallocate(dst%vals)
+		allocate(dst%vals( size(src%vals) ))
 		dst%vals = src%vals
 	else if (allocated(dst%vals)) then
 		deallocate(dst%vals)
@@ -402,23 +386,9 @@ recursive subroutine struct_copy(dst, src)
 
 	!print *, 'starting struct_copy()'
 
+	dst%member_names = src%member_names
 	dst%num_vars = src%num_vars
-
-	!! TODO: re-enable this or delete members from fortran type
-	!if (allocated(src%members)) then
-	!	if (.not. allocated(dst%members)) allocate(dst%members( size(src%members) ))
-	!	dst%members = src%members
-	!else if (allocated(dst%members)) then
-	!	deallocate(dst%members)
-	!end if
-
-	!if (allocated(src%vars)) then
-	!	if (.not. allocated(dst%vars)) allocate(dst%vars)
-		dst%vars = src%vars
-	!	!dst%vars%dicts = src%vars%dicts
-	!else if (allocated(dst%vars)) then
-	!	deallocate(dst%vars)
-	!end if
+	dst%vars = src%vars
 
 	!print *, 'done struct_copy()'
 
@@ -444,7 +414,9 @@ recursive subroutine fn_copy(dst, src)
 	dst%variadic_type = src%variadic_type
 
 	if (allocated(src%params)) then
-		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+		!if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+		if (allocated(dst%params)) deallocate(dst%params)
+		allocate(dst%params( size(src%params) ))
 		dst%params = src%params
 	else if (allocated(dst%params)) then
 		deallocate(dst%params)
@@ -1809,9 +1781,6 @@ function new_binary_expr(left, op, right) result(expr)
 
 	!print *, 'larrtype = ', kind_name(larrtype)
 
-	! TODO: whatever i've done for structs in is_binary_op_allowed() and
-	! get_binary_op_kind() will need to be applied for unary ops too
-
 	ltype = left%val%type
 	rtype = right%val%type
 
@@ -2289,13 +2258,11 @@ end subroutine ternary_insert
 
 !===============================================================================
 
-recursive function struct_ternary_exists(node, key, id_index, iostat) result(exists)
+recursive function struct_ternary_exists(node, key) result(exists)
 
 	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
 	character(len = *), intent(in) :: key
 
-	integer, intent(out) :: id_index
-	integer, intent(out) :: iostat
 	!type(struct_t) :: val
 	logical :: exists
 
@@ -2306,27 +2273,23 @@ recursive function struct_ternary_exists(node, key, id_index, iostat) result(exi
 
 	!print *, 'searching key ', quote(key)
 
-	iostat = exit_success
 	exists = .false.
 
-	if (.not. allocated(node)) then
-		! Search key not found
-		iostat = exit_failure
-		return
-	end if
+	! Search key not found
+	if (.not. allocated(node)) return
 
 	! :)
 	k   = key(1:1)
 	 ey = key(2:)
 
 	if (k < node%split_char) then
-		exists = struct_ternary_exists(node%left , key, id_index, iostat)
+		exists = struct_ternary_exists(node%left , key)
 		return
 	else if (k > node%split_char) then
-		exists = struct_ternary_exists(node%right, key, id_index, iostat)
+		exists = struct_ternary_exists(node%right, key)
 		return
 	else if (len(ey) > 0) then
-		exists = struct_ternary_exists(node%mid  , ey, id_index, iostat)
+		exists = struct_ternary_exists(node%mid  ,  ey)
 		return
 	end if
 
@@ -2334,14 +2297,10 @@ recursive function struct_ternary_exists(node, key, id_index, iostat) result(exi
 
 	if (.not. allocated(node%val)) then
 		exists = .false.
-		iostat = exit_failure
 		return
 	end if
 
-	!allocate(val)
-	!val      = node%val
 	exists = .true.
-	id_index = node%id_index
 
 	!print *, 'done struct_ternary_exists'
 	!print *, ''
@@ -2601,11 +2560,11 @@ subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 	!print *, 'inserting ', quote(key)
 	id_index = id_index + 1
 
-	! TODO: flip this like fns to check for redeclared structs. Catch in caller
+	! Note that this is different than the fn insert default.  Re-declared
+	! structs are caught in the caller (in parse_struct_declaration())
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
-	i = dict%scope
 	call struct_ternary_insert(dict%dict%root, key, val, id_index, io, overwritel)
 
 	if (present(iostat)) iostat = io
@@ -2614,42 +2573,25 @@ end subroutine struct_insert
 
 !===============================================================================
 
-function struct_exists(dict, key, id_index, iostat) result(exists)
+function struct_exists(dict, key) result(exists)
 
 	! Check if a key exists, without copying an output val unlike
 	! struct_search()
-	!
-	! TODO: some of these args (iostat at least) are unnecessary
 
 	class(structs_t), intent(in) :: dict
 	character(len = *), intent(in) :: key
-	integer, intent(out) :: id_index
-	!type(struct_t) :: val
 	logical :: exists
-
-	integer, intent(out), optional :: iostat
 
 	!********
 
-	integer :: i, io
+	integer :: i, io, id_index
 
-	i = dict%scope
-
-	exists = struct_ternary_exists(dict%dict%root, key, id_index, io)
-
-	! If not found in current scope, search parent scopes too
-	do while (io /= exit_success .and. i > 1)
-		i = i - 1
-		exists = struct_ternary_exists(dict%dict%root, key, id_index, io)
-	end do
-
-	if (present(iostat)) iostat = io
+	exists = struct_ternary_exists(dict%dict%root, key)
 
 end function struct_exists
 
 !===============================================================================
 
-!function struct_search(dict, key, id_index, iostat) result(val)
 subroutine struct_search(dict, key, id_index, iostat, val)
 
 	! An id_index is not normally part of dictionary searching, but we use it
@@ -2669,21 +2611,11 @@ subroutine struct_search(dict, key, id_index, iostat, val)
 
 	!print *, "starting struct search"
 
-	i = dict%scope
-
-	!val = struct_ternary_search(dict%dict%root, key, id_index, io)
 	call struct_ternary_search(dict%dict%root, key, id_index, io, val)
 	!print *, "io = ", io
 
-	!! If not found in current scope, search parent scopes too
-	!do while (io /= exit_success .and. i > 1)
-	!	i = i - 1
-	!	val = struct_ternary_search(dict%dict%root, key, id_index, io)
-	!end do
-
 	if (present(iostat)) iostat = io
 
-!end function struct_search
 end subroutine struct_search
 
 !===============================================================================

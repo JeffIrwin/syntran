@@ -380,11 +380,9 @@ module function parse_primary_expr(parser) result(expr)
 
 	!********
 
-	integer :: io, dummy_id
+	integer :: io
 
 	logical :: bool, exists
-
-	!type(struct_t) :: dummy
 
 	type(syntax_token_t) :: left, right, keyword, token
 
@@ -459,7 +457,7 @@ module function parse_primary_expr(parser) result(expr)
 
 				!print *, "text = ", parser%current_text()
 				!dummy = parser%structs%search(parser%current_text(), dummy_id, io)
-				exists = parser%structs%exists(parser%current_text(), dummy_id, io)
+				exists = parser%structs%exists(parser%current_text())
 				!deallocate(dummy%members)
 				!deallocate(dummy%vars)
 				!print *, "io = ", io
