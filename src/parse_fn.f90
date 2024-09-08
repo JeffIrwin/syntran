@@ -319,7 +319,9 @@ module function parse_fn_declaration(parser) result(decl)
 
 	type(text_span_t) :: span
 
-	type(value_t) :: val
+	type(value_t) :: val, vtype
+	!type(value_t), allocatable :: vtypes(:)
+	type(value_vector_t) :: vtypes
 
 	! Like a for statement, a fn declaration has its own scope (for its
 	! parameters).  Its block body will have yet another scope
@@ -345,9 +347,10 @@ module function parse_fn_declaration(parser) result(decl)
 	! Parse parameter names and types.  Save in temp string vectors initially
 	names    = new_string_vector()
 	types    = new_string_vector()
-	is_array = new_logical_vector()
-	ranks    = new_integer_vector()
+	!is_array = new_logical_vector()
+	!ranks    = new_integer_vector()
 	pos_args = new_integer_vector()  ! technically params not args
+	vtypes = new_value_vector()
 
 	! Array params use this syntax:
 	!
@@ -365,9 +368,11 @@ module function parse_fn_declaration(parser) result(decl)
 	!     }
 
 	! Parse fn parameters (arguments)
+	i = 0
 	do while ( &
-		parser%current_kind() /= rparen_token .and. &
-		parser%current_kind() /= eof_token)
+			parser%current_kind() /= rparen_token .and. &
+			parser%current_kind() /= eof_token)
+		i = i + 1
 
 		pos0 = parser%current_pos()
 		call pos_args%push(pos0)
@@ -377,14 +382,18 @@ module function parse_fn_declaration(parser) result(decl)
 		!print *, 'matching colon'
 		colon = parser%match(colon_token)
 
-		call parser%parse_type(type_text, rank)
+		call parser%parse_type(type_text, vtype)
+		!call parser%parse_type(type_text, vtypes(i))
 
+		! TODO: just push vtype (and maybe name).  Delete unused stuff
 		call names%push( name%text )
 		call types%push( type_text )
-		call ranks%push( rank      )
+		!call ranks%push( rank      )
+		!vtypes(i) = vtype
+		call vtypes%push(vtype)
 
 		! This array is technically redundant but helps readability?
-		call is_array%push( rank >= 0 )
+		!call is_array%push( rank >= 0 )
 
 		if (parser%current_kind() /= rparen_token) then
 			!print *, 'matching comma'
@@ -411,6 +420,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 		fn%params(i)%name = names%v(i)%s
 
+		! TODO: already done inside parse_type() now
 		itype = lookup_type(types%v(i)%s, parser%structs, struct)
 		!print *, "itype = ", itype
 		if (itype == unknown_type) then
@@ -419,21 +429,22 @@ module function parse_fn_declaration(parser) result(decl)
 				parser%context(), span, types%v(i)%s))
 		end if
 
-		! Create a value_t object to store the type
-		if (is_array%v(i)) then
-			fn%params(i)%type%type = array_type
-			allocate(fn%params(i)%type%array)
-			fn%params(i)%type%array%type = itype
-			fn%params(i)%type%array%rank = ranks%v(i)
-			!print *, "rank = ", fn%params(i)%rank
-		else
-			fn%params(i)%type%type = itype
-			!print *, "(scalar)"
-		end if
-		if (itype == struct_type) then
-			fn%params(i)%type%struct_name = types%v(i)%s
-			!print *, "struct_name = ", val%struct_name
-		end if
+		! Copy a value_t object to store the type
+		fn%params(i)%type = vtypes%v(i)
+		!if (is_array%v(i)) then
+		!	fn%params(i)%type%type = array_type
+		!	allocate(fn%params(i)%type%array)
+		!	fn%params(i)%type%array%type = itype
+		!	fn%params(i)%type%array%rank = ranks%v(i)
+		!	!print *, "rank = ", fn%params(i)%rank
+		!else
+		!	fn%params(i)%type%type = itype
+		!	!print *, "(scalar)"
+		!end if
+		!if (itype == struct_type) then
+		!	fn%params(i)%type%struct_name = types%v(i)%s
+		!	!print *, "struct_name = ", val%struct_name
+		!end if
 
 		! Declare the parameter variable
 		parser%num_vars = parser%num_vars + 1
@@ -441,6 +452,7 @@ module function parse_fn_declaration(parser) result(decl)
 		! Save parameters by id_index.  TODO: stack frames
 		decl%params(i) = parser%num_vars
 
+		! TODO: get rid of unnecessary `val` var
 		val = fn%params(i)%type
 		!print *, "insert var type ", kind_name(val%type)
 		call parser%vars%insert(fn%params(i)%name, val, parser%num_vars)
@@ -463,7 +475,7 @@ module function parse_fn_declaration(parser) result(decl)
 		colon = parser%match(colon_token)
 
 		pos1 = parser%current_pos()
-		call parser%parse_type(type_text, rank)
+		call parser%parse_type(type_text, vtype)
 		pos2 = parser%current_pos()
 
 		itype = lookup_type(type_text, parser%structs, struct)
@@ -475,16 +487,17 @@ module function parse_fn_declaration(parser) result(decl)
 				!parser%contexts%v(parser%current_unit()), span, type_text))
 		end if
 
-		if (rank >= 0) then
-			fn%type%type = array_type
-			allocate(fn%type%array)
-			fn%type%array%rank = rank
-			fn%type%array%type = itype
-		else
-			fn%type%type = itype
-		end if
-		!fn%struct_name = type_text
-		fn%type%struct_name = type_text
+		fn%type = vtype
+		!if (rank >= 0) then
+		!	fn%type%type = array_type
+		!	allocate(fn%type%array)
+		!	fn%type%array%rank = rank
+		!	fn%type%array%type = itype
+		!else
+		!	fn%type%type = itype
+		!end if
+		!!fn%struct_name = type_text
+		fn%type%struct_name = type_text  ! TODO: should be unnecessary
 
 	end if
 	!print *, 'fn%type = ', fn%type
@@ -575,6 +588,9 @@ module function parse_struct_declaration(parser) result(decl)
 	type(integer_vector_t) :: ranks, pos_mems
 
 	type(value_t) :: member  ! local type meta-data
+	type(value_t) :: vtype
+	!type(value_t), allocatable :: vtypes(:)
+	type(value_vector_t) :: vtypes
 
 	struct_kw = parser%match(struct_keyword)
 
@@ -617,15 +633,20 @@ module function parse_struct_declaration(parser) result(decl)
 	! Parse member names and types.  Save in temp vectors initially
 	names    = new_string_vector()
 	types    = new_string_vector()
-	is_array = new_logical_vector()
-	ranks    = new_integer_vector()
+	!is_array = new_logical_vector()
+	!ranks    = new_integer_vector()
+
+	vtypes = new_value_vector()
+	!allocate(vtypes(100))  ! TODO: value_t vector type w/ push fn
 
 	! For diagnostic text spans
 	pos_mems = new_integer_vector()
 
+	i = 0
 	do while ( &
-		parser%current_kind() /= rbrace_token .and. &
-		parser%current_kind() /= eof_token)
+			parser%current_kind() /= rbrace_token .and. &
+			parser%current_kind() /= eof_token)
+		i = i + 1
 
 		pos0 = parser%current_pos()
 
@@ -636,15 +657,18 @@ module function parse_struct_declaration(parser) result(decl)
 		!print *, 'matching colon'
 		colon = parser%match(colon_token)
 
-		call parser%parse_type(type_text, rank)
+		call parser%parse_type(type_text, vtype)
 		!print *, "type = ", type_text
+
+		!vtypes(i) = vtype
+		call vtypes%push(vtype)
 
 		call names%push( name%text )
 		call types%push( type_text )
-		call ranks%push( rank      )
+		!call ranks%push( rank      )
 
 		! This array is technically redundant but helps readability?
-		call is_array%push( rank >= 0 )
+		!call is_array%push( rank >= 0 )
 
 		if (parser%current_kind() /= rbrace_token) then
 			!print *, 'matching comma'
@@ -680,16 +704,17 @@ module function parse_struct_declaration(parser) result(decl)
 				parser%context(), span, types%v(i)%s))
 		end if
 
-		! Create a value_t object to store the type
-		if (is_array%v(i)) then
-			member%type = array_type
-			allocate(member%array)
-			member%array%type = itype
-			member%array%rank = ranks%v(i)
-		else
-			member%type = itype
-			!print *, "(scalar)"
-		end if
+		! Copy a value_t object to store the type
+		member = vtypes%v(i)
+		!if (is_array%v(i)) then
+		!	member%type = array_type
+		!	allocate(member%array)
+		!	member%array%type = itype
+		!	member%array%rank = ranks%v(i)
+		!else
+		!	member%type = itype
+		!	!print *, "(scalar)"
+		!end if
 
 		! Declare the member
 		!parser%num_vars = parser%num_vars + 1
@@ -699,7 +724,7 @@ module function parse_struct_declaration(parser) result(decl)
 		!! Save parameters by id_index
 		!decl%params(i) = parser%num_vars
 
-		member%struct_name = types%v(i)%s
+		member%struct_name = types%v(i)%s  ! TODO: unnecessary
 
 		! Each struct has its own dict of members.  Create one and insert the
 		! member name into that dict instead of the (global) vars dict here.
@@ -946,25 +971,28 @@ end function parse_struct_instance
 
 !===============================================================================
 
-module subroutine parse_type(parser, type_text, rank)
-
-	! TODO: it might simplify several things if this returned a value_t.  A type
-	! is a value!
-
-	! TODO: encapsulate out-args in struct if adding any more
+!module subroutine parse_type(parser, type_text, rank)
+module subroutine parse_type(parser, type_text, vtype)
 
 	class(parser_t) :: parser
 
 	character(len = :), intent(out), allocatable :: type_text
 
-	integer, intent(out) :: rank
+	!integer, intent(out) :: rank
+	type(value_t), intent(out) :: vtype
 
 	!********
 
-	integer :: pos0
+	integer :: rank, itype
+	integer :: pos0, pos1, pos2
+
+	type(struct_t) :: struct
 
 	type(syntax_token_t) :: colon, type, comma, lbracket, rbracket, semi, dummy
 
+	type(text_span_t) :: span
+
+	pos1 = parser%current_pos()
 	if (parser%current_kind() == lbracket_token) then
 
 		! Array param
@@ -998,8 +1026,45 @@ module subroutine parse_type(parser, type_text, rank)
 		type = parser%match(identifier_token)
 		rank = -1
 	end if
+	pos2 = parser%current_pos()
 
 	type_text = type%text
+
+	!itype = lookup_type(type_text, parser%structs, struct)
+	!if (itype == unknown_type) then
+	!	span = new_span(pos1, pos2 - pos1 + 1)
+	!	call parser%diagnostics%push(err_bad_type( &
+	!		parser%context(), span, type_text))
+	!end if
+	!if (rank >= 0) then
+	!	fn%type%type = array_type
+	!	allocate(fn%type%array)
+	!	fn%type%array%rank = rank
+	!	fn%type%array%type = itype
+	!else
+	!	fn%type%type = itype
+	!end if
+	!fn%type%struct_name = type_text
+
+
+	itype = lookup_type(type_text, parser%structs, struct)
+
+	if (itype == unknown_type) then
+		span = new_span(pos1, pos2 - pos1 + 1)
+		call parser%diagnostics%push(err_bad_type( &
+			parser%context(), span, type_text))
+	end if
+
+	if (rank >= 0) then
+		vtype%type = array_type
+		allocate(vtype%array)
+		vtype%array%rank = rank
+		vtype%array%type = itype
+	else
+		vtype%type = itype
+		if (allocated(vtype%array)) deallocate(vtype%array)
+	end if
+	vtype%struct_name = type_text  ! TODO: only if struct_type
 
 end subroutine parse_type
 

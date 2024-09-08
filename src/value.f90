@@ -111,9 +111,82 @@ module syntran__value_m
 
 	end type value_t
 
+	type value_vector_t
+		type(value_t), allocatable :: v(:)
+		integer :: len_, cap
+		contains
+			procedure :: push => push_value
+	end type value_vector_t
+
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+function new_value_vector() result(vector)
+
+	type(value_vector_t) :: vector
+
+	vector%len_ = 0
+	vector%cap = 2  ! I think a small default makes sense here
+
+	allocate(vector%v( vector%cap ))
+
+end function new_value_vector
+
+!===============================================================================
+
+subroutine push_value(vector, val)
+
+	class(value_vector_t) :: vector
+	type(value_t) :: val
+
+	!********
+
+	type(value_t), allocatable :: tmp(:)
+
+	integer :: tmp_cap, i
+
+	vector%len_ = vector%len_ + 1
+
+	if (vector%len_ > vector%cap) then
+		!print *, 'growing vector ====================================='
+
+		tmp_cap = 2 * vector%len_
+		allocate(tmp( tmp_cap ))
+
+		!print *, 'copy 1'
+		!!tmp(1: vector%cap) = vector%v
+		do i = 1, vector%cap
+			tmp(i) = vector%v(i)
+		end do
+
+		!print *, 'move'
+		!!call move_alloc(tmp, vector%v)
+
+		deallocate(vector%v)
+		allocate(vector%v( tmp_cap ))
+
+		! Unfortunately we have to copy TO tmp AND back FROM tmp.  I guess the
+		! fact that each node itself has allocatable members creates invalid
+		! references otherwise.
+
+		!print *, 'copy 2'
+		!!vector%v(1: vector%cap) = tmp(1: vector%cap)
+		do i = 1, vector%cap
+			vector%v(i) = tmp(i)
+		end do
+
+		vector%cap = tmp_cap
+
+	end if
+
+	!print *, 'set val'
+	vector%v( vector%len_ ) = val
+	!print *, 'done push_value'
+
+end subroutine push_value
 
 !===============================================================================
 

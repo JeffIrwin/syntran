@@ -23,9 +23,11 @@ module syntran__types_m
 	type param_t
 		! Function parameter (argument)
 		!
-		! TODO: this is basically a wrapper of a value_t.  Move name into an
-		! array of names in fn_t and get rid of param_t type, like I got rid of
-		! member_t.
+
+		!  TODO: this is basically a wrapper of a value_t.  Move name into an
+		!  array of names in fn_t and get rid of param_t type, like I got rid of
+		!  member_t.
+
 
 		character(len = :), allocatable :: name
 		type(value_t) :: type
