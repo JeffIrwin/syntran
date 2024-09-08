@@ -114,12 +114,10 @@ module syntran__parse_m
 			type(syntax_node_t) :: fn_call
 		end function parse_fn_call
 
-		!module subroutine parse_type(parser, type_text, rank)
-		module subroutine parse_type(parser, type_text, vtype)
+		module subroutine parse_type(parser, type_text, type)
 			class(parser_t) :: parser
 			character(len = :), intent(out), allocatable :: type_text
-			!integer, intent(out) :: rank
-			type(value_t), intent(out) :: vtype
+			type(value_t), intent(out) :: type
 		end subroutine parse_type
 
 		! TODO: move struct stuff to another translation unit? parse_fn.f90 is a
