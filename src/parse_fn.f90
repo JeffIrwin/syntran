@@ -574,10 +574,7 @@ module function parse_struct_declaration(parser) result(decl)
 	type(logical_vector_t) :: is_array
 	type(integer_vector_t) :: ranks, pos_mems
 
-	type(value_t) :: val
-	type(value_t), allocatable :: members(:)  ! local type meta-data
-
-	!call parser%vars%push_scope()
+	type(value_t) :: member  ! local type meta-data
 
 	struct_kw = parser%match(struct_keyword)
 
@@ -667,7 +664,6 @@ module function parse_struct_declaration(parser) result(decl)
 	! Now that we have the number of members, save them
 
 	struct%num_vars = 0
-	allocate(members( names%len_ ))  ! TODO: just use a scalar within loop instead of array
 	allocate(struct%member_names%v( names%len_ ))
 
 	!allocate(struct%vars)
@@ -675,7 +671,6 @@ module function parse_struct_declaration(parser) result(decl)
 	do i = 1, names%len_
 		!print *, "name, type = ", names%v(i)%s, ", ", types%v(i)%s
 
-		!members(i)%name = names%v(i)%s
 		struct%member_names%v(i)%s = names%v(i)%s
 
 		itype = lookup_type(types%v(i)%s, parser%structs, dummy_struct)
@@ -685,13 +680,14 @@ module function parse_struct_declaration(parser) result(decl)
 				parser%context(), span, types%v(i)%s))
 		end if
 
+		! Create a value_t object to store the type
 		if (is_array%v(i)) then
-			members(i)%type = array_type
-			allocate(members(i)%array)
-			members(i)%array%type = itype
-			members(i)%array%rank = ranks%v(i)
+			member%type = array_type
+			allocate(member%array)
+			member%array%type = itype
+			member%array%rank = ranks%v(i)
 		else
-			members(i)%type = itype
+			member%type = itype
 			!print *, "(scalar)"
 		end if
 
@@ -703,10 +699,7 @@ module function parse_struct_declaration(parser) result(decl)
 		!! Save parameters by id_index
 		!decl%params(i) = parser%num_vars
 
-		! Create a value_t object to store the type
-		!val%type = members(i)%type
-		val = members(i)
-		val%struct_name = types%v(i)%s
+		member%struct_name = types%v(i)%s
 
 		! Each struct has its own dict of members.  Create one and insert the
 		! member name into that dict instead of the (global) vars dict here.
@@ -714,7 +707,7 @@ module function parse_struct_declaration(parser) result(decl)
 		! type, just like `parser%vars`.  Just add one inside of the `struct_t`
 		! type.
 
-		call struct%vars%insert(names%v(i)%s, val, &
+		call struct%vars%insert(names%v(i)%s, member, &
 			struct%num_vars, io, overwrite = .false.)
 		!print *, 'io = ', io
 		if (io /= exit_success) then
@@ -725,6 +718,7 @@ module function parse_struct_declaration(parser) result(decl)
 				names%v(i)%s))
 		end if
 
+		if (allocated(member%array)) deallocate(member%array)
 	end do
 
 	! Insert struct into parser dict
@@ -839,9 +833,6 @@ module function parse_struct_instance(parser) result(inst)
 		mem    = parser%parse_expr()
 
 		!print *, "name%text = ", name%text
-
-		!call struct%vars%insert(struct%members(i)%name, val, &
-		!	struct%num_vars, io, overwrite = .false.)
 
 		!print *, "allocated = ", allocated(struct%vars%dicts(1)%root)
 		!print *, "char root = ", struct%vars%dicts(1)%root%split_char
