@@ -53,7 +53,6 @@ module syntran__parse_m
 		!
 		! This won't work with nested fns but we don't allow that anyway
 		type(value_t) :: fn_type
-		!integer :: fn_type, fn_rank, fn_array_type
 		character(len = :), allocatable :: fn_name
 		logical :: returned
 

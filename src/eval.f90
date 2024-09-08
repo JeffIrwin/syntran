@@ -494,11 +494,7 @@ recursive subroutine set_val(node, var, state, val, index_)
 	end if
 
 	if (var%struct(id)%type == str_type) then
-
 		var%struct(id)%sca%str%s(i8+1: i8+1) = val%sca%str%s
-		!res%sca%str%s = var%struct(id)%sca%str%s(i8+1: i8+1)
-		!res%type = str_type
-
 		return
 	end if
 
@@ -642,12 +638,8 @@ recursive subroutine get_val(node, var, state, res, index_)
 	end if
 
 	if (var%struct(id)%type == str_type) then
-		!state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1) = res%sca%str%s
-		!res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
-
 		res%sca%str%s = var%struct(id)%sca%str%s(i8+1: i8+1)
 		res%type = str_type
-
 		return
 	end if
 
@@ -1322,9 +1314,6 @@ subroutine eval_assignment_expr(node, state, res)
 	type(syntax_node_t) :: mem
 
 	type(value_t) :: array_val, rhs, tmp
-	!type(value_t), pointer :: val, ptmp
-	type(value_t), allocatable :: val, ptmp, vals(:)
-	!type(value_t) :: val
 
 	!print *, "eval assignment_expr"
 	!print *, "node identifier = ", node%identifier%text
@@ -1797,8 +1786,6 @@ subroutine eval_array_expr(node, state, res)
 		end select
 
 		res%type  = array_type
-		!allocate(res%array)
-		!res%array = array
 
 	else if (node%val%array%kind == bound_array) then
 		!print *, 'impl_array'
@@ -1857,8 +1844,6 @@ subroutine eval_array_expr(node, state, res)
 		res%array%size = res%array%len_
 
 		res%type  = array_type
-		!allocate(res%array)
-		!res%array = array
 
 	else if (node%val%array%kind == size_array) then
 
@@ -1929,16 +1914,9 @@ subroutine eval_array_expr(node, state, res)
 
 		res%type  = array_type
 
-		!res%struct_name = lbound_%struct_name
-		!res%struct_name = node%elems(1)%struct_name
 		res%struct_name = node%val%struct_name
 
 		!print *, "struct_name = ", res%struct_name
-
-		!!print *, 'copying array'
-		!allocate(res%array)
-		!res%array = array
-		!!print *, 'done'
 
 	else
 		write(*,*) err_int_prefix//'unexpected array kind'//color_reset
