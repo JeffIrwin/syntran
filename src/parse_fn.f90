@@ -445,11 +445,25 @@ module function parse_fn_declaration(parser) result(decl)
 
 				!inst%val%struct( member_id ) = mem%val
 
-				! Test a fn with a 2nd-order struct arg (i.e. a struct made up
+				! ~~Test a fn with a 2nd-order struct arg (i.e. a struct made up
 				! of other structs).  Maybe more data needs to be copied here,
 				! especially struct_name.  Essentially every %type should be
 				! bundled along with a %struct_name as in
-				! parse_struct_declaration()
+				! parse_struct_declaration()~~
+				!
+				! Unit test added in 012f1404.  This code works, but I think it
+				! could be significantly simplified by following my new mantra:
+				! "a type is a value!"  Roughly a dozen lines here could be
+				! replaced by a single value_t copy to handle the parameter
+				! types.  The return type has already accomplished this
+				! simplification by assigning `parser%fn_type = fn%type` below.
+				! Parameters could probably be simplified similarly, but it will
+				! take a little refactoring.  member_t contains an int `type`
+				! and param_t also contains an int `type` and associated array
+				! type enums, etc.  Both member_t and param_t should be changed
+				! to simply wrap a `value_t` to contain the type meta-data.
+				! Perhaps member_t and/or param_t could be entirely eliminated
+				! if they become only a wrapper for the value_t.
 
 			end do
 
@@ -723,7 +737,6 @@ module function parse_struct_declaration(parser) result(decl)
 
 		struct%members(i)%name = names%v(i)%s
 
-		! TODO: consume dummy_struct for nested structs
 		itype = lookup_type(types%v(i)%s, parser%structs, dummy_struct)
 		if (itype == unknown_type) then
 			span = new_span(pos_mems%v(i), pos_mems%v(i+1) - pos_mems%v(i))
@@ -826,7 +839,7 @@ module function parse_struct_instance(parser) result(inst)
 
 	character(len = :), allocatable :: unset_name, exp_type, act_type
 
-	integer :: io, pos0, pos1, struct_id, member_id, id1(1)
+	integer :: io, pos0, pos1, struct_id, member_id, id1(1), num_mems
 
 	logical :: is_ok
 	logical, allocatable :: member_set(:)
@@ -834,7 +847,6 @@ module function parse_struct_instance(parser) result(inst)
 	type(struct_t) :: struct
 
 	type(syntax_node_t) :: mem
-	type(syntax_node_vector_t) :: mems
 
 	type(syntax_token_t) :: identifier, name, equals, comma, lbrace, rbrace, dummy
 
@@ -857,8 +869,7 @@ module function parse_struct_instance(parser) result(inst)
 	call parser%structs%search(identifier%text, struct_id, io, struct)
 	!print *, "struct io = ", io
 
-	! TODO: do we need `mems`? Or just inst%members
-	mems = new_syntax_node_vector()
+	num_mems = 0
 
 	lbrace  = parser%match(lbrace_token)
 
@@ -965,7 +976,7 @@ module function parse_struct_instance(parser) result(inst)
 
 		end if
 
-		call mems%push(mem)
+		num_mems = num_mems + 1
 
 		if (parser%current_kind() /= rbrace_token) then
 			comma = parser%match(comma_token)
@@ -999,12 +1010,12 @@ module function parse_struct_instance(parser) result(inst)
 	end if
 
 	!print *, "size = ", struct%num_vars
-	!print *, "size = ", mems%len_
-	if (mems%len_ < struct%num_vars) then
+	!print *, "size = ", num_mems
+	if (num_mems < struct%num_vars) then
 		! I think this is unreachable given the other checks
 		write(*,*) err_prefix//"struct instance does not have enough members"//color_reset
 		call internal_error()
-	!else if (mems%len_ > struct%num_vars) then
+	!else if (num_mems > struct%num_vars) then
 	!	write(*,*) err_prefix//"struct instance has too many members"//color_reset
 	!	call internal_error()
 	end if
