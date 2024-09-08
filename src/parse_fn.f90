@@ -244,10 +244,9 @@ module function parse_fn_call(parser) result(fn_call)
 		! only way to do it for intrinsic fns, which don't actually have a val
 		! anywhere
 		if (i <= size(fn%params)) then
-			param_val = fn%params(i)%type
+			param_val = fn%params(i)
 		else
 			param_val%type = fn%variadic_type
-			!param_val%struct_name = ""
 		end if
 
 		if (types_match(param_val, args%v(i)%val) /= TYPE_MATCH) then
@@ -267,7 +266,7 @@ module function parse_fn_call(parser) result(fn_call)
 				span, &
 				identifier%text, &
 				i - 1, &  ! 0-based index in err msg
-				fn%params(i)%name, &
+				fn%param_names%v(i)%s, &
 				exp_type, &
 				act_type))
 
@@ -336,7 +335,7 @@ module function parse_fn_declaration(parser) result(decl)
 	! Parse parameter names and types.  Save in temp vectors initially
 	names    = new_string_vector()
 	pos_args = new_integer_vector()  ! technically params not args
-	types   = new_value_vector()
+	types    = new_value_vector()
 
 	! Array params use this syntax:
 	!
@@ -389,16 +388,17 @@ module function parse_fn_declaration(parser) result(decl)
 
 	! Now that we have the number of params, save them
 
-	allocate(fn  %params( names%len_ ))
-	allocate(decl%params( names%len_ ))
+	allocate(fn  %params     ( names%len_ ))
+	allocate(fn%param_names%v( names%len_ ))
+	allocate(decl%params     ( names%len_ ))
 
 	do i = 1, names%len_
 		!print *, "name, type = ", names%v(i)%s, ", ", types%v(i)%s
 
-		fn%params(i)%name = names%v(i)%s
+		fn%param_names%v(i)%s = names%v(i)%s
 
 		! Copy a value_t object to store the type
-		fn%params(i)%type = types%v(i)
+		fn%params(i) = types%v(i)
 
 		! Declare the parameter variable
 		parser%num_vars = parser%num_vars + 1
@@ -406,7 +406,7 @@ module function parse_fn_declaration(parser) result(decl)
 		! Save parameters by id_index.  TODO: stack frames
 		decl%params(i) = parser%num_vars
 
-		call parser%vars%insert(fn%params(i)%name, fn%params(i)%type, parser%num_vars)
+		call parser%vars%insert(fn%param_names%v(i)%s, fn%params(i), parser%num_vars)
 
 	end do
 

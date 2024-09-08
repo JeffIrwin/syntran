@@ -20,23 +20,15 @@ module syntran__types_m
 
 	!********
 
-	type param_t
-		! Function parameter (argument)
-		!
-
-		!  TODO: this is basically a wrapper of a value_t.  Move name into an
-		!  array of names in fn_t and get rid of param_t type, like I got rid of
-		!  member_t.
-
-
-		character(len = :), allocatable :: name
-		type(value_t) :: type
-
-		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
-		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
-		! Maybe add an array of types(:) for each allowable type of a param?
-
-	end type param_t
+	!type param_t
+	!	! Function parameter (argument)
+	!	!
+	!	!  TODO: this is basically a wrapper of a value_t.  Move name into an
+	!	!  array of names in fn_t and get rid of param_t type, like I got rid of
+	!	!  member_t.
+	!	character(len = :), allocatable :: name
+	!	type(value_t) :: type
+	!end type param_t
 
 	!********
 
@@ -46,10 +38,16 @@ module syntran__types_m
 		! Return type.  "A type is a value!"
 		type(value_t) :: type
 
+		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
+		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
+		! Maybe add an array of types(:) for each allowable type of a param?
+
 		! Arguments/parameters.  Technically, "arguments" in most languages are
 		! what Fortran calls "actual arguments" and "parameters" are Fortran
 		! "dummy arguments"
-		type(param_t), allocatable :: params(:)
+		type(value_t), allocatable :: params(:)
+		!type(param_t), allocatable :: params(:)
+		type(string_vector_t) :: param_names
 
 		! Min number of variadic params.  Default < 0 means fn is not variadic
 		!
