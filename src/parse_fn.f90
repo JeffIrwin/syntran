@@ -180,15 +180,16 @@ module function parse_fn_call(parser) result(fn_call)
 
 	end if
 
-	fn_call%val%type = fn%type
-	if (fn%type == array_type) then
-		if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
-		fn_call%val%array%type = fn%array_type
+	fn_call%val = fn%type
+	!fn_call%val%type = fn%type
+	!if (fn%type == array_type) then
+	!	if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
+	!	fn_call%val%array%type = fn%array_type
 
-		! i32_arr_fn returns same rank as arg (not -1)
-		if (fn%rank > 0) fn_call%val%array%rank = fn%rank
+	!	! i32_arr_fn returns same rank as arg (not -1)
+	!	if (fn%rank > 0) fn_call%val%array%rank = fn%rank
 
-	end if
+	!end if
 
 	! Intrinsic fns don't have a syntax node: they are implemented
 	! in Fortran, not syntran
@@ -498,7 +499,7 @@ module function parse_fn_declaration(parser) result(decl)
 	!     https://stackoverflow.com/questions/35018919/whats-the-origin-of-in-rust-function-definition-return-types
 	!
 
-	fn%type = void_type
+	fn%type%type = void_type
 	rank = 0
 	if (parser%current_kind() == colon_token) then
 
@@ -518,28 +519,31 @@ module function parse_fn_declaration(parser) result(decl)
 		end if
 
 		if (rank >= 0) then
-			fn%type = array_type
-			fn%rank = rank
-			fn%array_type = itype
+			fn%type%type = array_type
+			allocate(fn%type%array)
+			fn%type%array%rank = rank
+			fn%type%array%type = itype
 		else
-			fn%type = itype
+			fn%type%type = itype
 		end if
-		fn%struct_name = type_text
+		!fn%struct_name = type_text
+		fn%type%struct_name = type_text
 
 	end if
 	!print *, 'fn%type = ', fn%type
 
 	! Copy for later return type checking while parsing body
 	parser%fn_name = identifier%text
-	!parser%fn_type = fn%type
-	parser%fn_type%type = fn%type
-	parser%fn_type%struct_name = fn%struct_name
-	if (rank >= 0) then
-		!parser%fn_rank = fn%rank
-		!parser%fn_array_type = fn%array_type
-		parser%fn_type%array%rank = fn%rank
-		parser%fn_type%array%type = fn%array_type
-	end if
+	parser%fn_type = fn%type
+	!!parser%fn_type = fn%type
+	!parser%fn_type%type = fn%type
+	!parser%fn_type%struct_name = fn%struct_name
+	!if (rank >= 0) then
+	!	!parser%fn_rank = fn%rank
+	!	!parser%fn_array_type = fn%array_type
+	!	parser%fn_type%array%rank = fn%rank
+	!	parser%fn_type%array%type = fn%array_type
+	!end if
 
 	body = parser%parse_statement()
 

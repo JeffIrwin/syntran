@@ -239,7 +239,7 @@ function declare_intrinsic_fns() result(fns)
 	!********
 
 	! TODO: polymorphic in f32, f64, etc.
-	exp_fn%type = f32_type
+	exp_fn%type%type = f32_type
 	allocate(exp_fn%params(1))
 	exp_fn%params(1)%type = f32_type
 	exp_fn%params(1)%name = "x"
@@ -264,7 +264,7 @@ function declare_intrinsic_fns() result(fns)
 
 	! TODO: min_f64_fn, max_f64_fn
 
-	min_i32_fn%type = i32_type
+	min_i32_fn%type%type = i32_type
 	allocate(min_i32_fn%params(2))
 
 	min_i32_fn%params(1)%type = i32_type
@@ -282,7 +282,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	min_i64_fn%type = i64_type
+	min_i64_fn%type%type = i64_type
 	allocate(min_i64_fn%params(2))
 
 	min_i64_fn%params(1)%type = i64_type
@@ -298,7 +298,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	min_f32_fn%type = f32_type
+	min_f32_fn%type%type = f32_type
 	allocate(min_f32_fn%params(2))
 
 	min_f32_fn%params(1)%type = f32_type
@@ -314,7 +314,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	max_i32_fn%type = i32_type
+	max_i32_fn%type%type = i32_type
 	allocate(max_i32_fn%params(2))
 
 	max_i32_fn%params(1)%type = i32_type
@@ -332,7 +332,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	max_i64_fn%type = i64_type
+	max_i64_fn%type%type = i64_type
 	allocate(max_i64_fn%params(2))
 
 	max_i64_fn%params(1)%type = i64_type
@@ -348,7 +348,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	max_f32_fn%type = f32_type
+	max_f32_fn%type%type = f32_type
 	allocate(max_f32_fn%params(2))
 
 	max_f32_fn%params(1)%type = f32_type
@@ -366,7 +366,7 @@ function declare_intrinsic_fns() result(fns)
 
 	! TODO: update docs to use println() instead of old holyc implicit prints
 
-	println_fn%type = void_type ! TODO?
+	println_fn%type%type = void_type ! TODO?
 
 	allocate(println_fn%params(0))
 
@@ -377,7 +377,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	str_fn%type = str_type
+	str_fn%type%type = str_type
 
 	allocate(str_fn%params(0))
 
@@ -388,7 +388,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	len_fn%type = i64_type
+	len_fn%type%type = i64_type
 	allocate(len_fn%params(1))
 	len_fn%params(1)%type = str_type
 	len_fn%params(1)%name = "str"
@@ -402,7 +402,7 @@ function declare_intrinsic_fns() result(fns)
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
 
-	parse_i32_fn%type = i32_type
+	parse_i32_fn%type%type = i32_type
 	allocate(parse_i32_fn%params(1))
 	parse_i32_fn%params(1)%type = str_type
 	parse_i32_fn%params(1)%name = "str"
@@ -411,7 +411,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	parse_i64_fn%type = i64_type
+	parse_i64_fn%type%type = i64_type
 	allocate(parse_i64_fn%params(1))
 	parse_i64_fn%params(1)%type = str_type
 	parse_i64_fn%params(1)%name = "str"
@@ -420,7 +420,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	parse_f32_fn%type = f32_type
+	parse_f32_fn%type%type = f32_type
 	allocate(parse_f32_fn%params(1))
 	parse_f32_fn%params(1)%type = str_type
 	parse_f32_fn%params(1)%name = "str"
@@ -429,7 +429,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	i32_sca_fn%type = i32_type
+	i32_sca_fn%type%type = i32_type
 	allocate(i32_sca_fn%params(1))
 
 	i32_sca_fn%params(1)%type = any_type
@@ -440,9 +440,10 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	i32_arr_fn%type = array_type
-	i32_arr_fn%array_type = i32_type
-	i32_arr_fn%rank = -1
+	i32_arr_fn%type%type = array_type
+	allocate(i32_arr_fn%type%array)
+	i32_arr_fn%type%array%type = i32_type
+	i32_arr_fn%type%array%rank = -1
 
 	allocate(i32_arr_fn%params(1))
 
@@ -456,7 +457,7 @@ function declare_intrinsic_fns() result(fns)
 
 	! TODO: to f32 casting
 
-	i64_sca_fn%type = i64_type
+	i64_sca_fn%type%type = i64_type
 	allocate(i64_sca_fn%params(1))
 
 	i64_sca_fn%params(1)%type = any_type
@@ -467,9 +468,10 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	i64_arr_fn%type = array_type
-	i64_arr_fn%array_type = i64_type
-	i64_arr_fn%rank = -1
+	i64_arr_fn%type%type = array_type
+	allocate(i64_arr_fn%type%array)
+	i64_arr_fn%type%array%type = i64_type
+	i64_arr_fn%type%array%rank = -1
 
 	allocate(i64_arr_fn%params(1))
 
@@ -481,7 +483,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	open_fn%type = file_type
+	open_fn%type%type = file_type
 	allocate(open_fn%params(1))
 	open_fn%params(1)%type = str_type
 	open_fn%params(1)%name = "filename"
@@ -490,7 +492,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	readln_fn%type = str_type
+	readln_fn%type%type = str_type
 	allocate(readln_fn%params(1))
 	readln_fn%params(1)%type = file_type
 	readln_fn%params(1)%name = "file_handle"
@@ -499,7 +501,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	writeln_fn%type = void_type
+	writeln_fn%type%type = void_type
 	allocate(writeln_fn%params(1))
 	writeln_fn%params(1)%type = file_type
 	writeln_fn%params(1)%name = "file_handle"
@@ -512,7 +514,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	eof_fn%type = bool_type
+	eof_fn%type%type = bool_type
 	allocate(eof_fn%params(1))
 	eof_fn%params(1)%type = file_type
 	eof_fn%params(1)%name = "file_handle"
@@ -521,7 +523,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	close_fn%type = void_type
+	close_fn%type%type = void_type
 	allocate(close_fn%params(1))
 	close_fn%params(1)%type = file_type
 	close_fn%params(1)%name = "file_handle"
@@ -530,7 +532,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	exit_fn%type = void_type
+	exit_fn%type%type = void_type
 	allocate(exit_fn%params(1))
 	exit_fn%params(1)%type = i32_type
 	exit_fn%params(1)%name = "exit_status"
@@ -539,7 +541,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	size_fn%type = i64_type
+	size_fn%type%type = i64_type
 	allocate(size_fn%params(2))
 
 	size_fn%params(1)%type = array_type
@@ -560,7 +562,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	count_fn%type = i64_type
+	count_fn%type%type = i64_type
 	allocate(count_fn%params(1))
 
 	count_fn%params(1)%type = array_type
@@ -578,7 +580,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	sum_i32_fn%type = i32_type
+	sum_i32_fn%type%type = i32_type
 	allocate(sum_i32_fn%params(1))
 
 	sum_i32_fn%params(1)%type = array_type
@@ -598,7 +600,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	sum_i64_fn%type = i64_type
+	sum_i64_fn%type%type = i64_type
 	allocate(sum_i64_fn%params(1))
 
 	sum_i64_fn%params(1)%type = array_type
@@ -612,7 +614,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	sum_f32_fn%type = f32_type
+	sum_f32_fn%type%type = f32_type
 	allocate(sum_f32_fn%params(1))
 
 	sum_f32_fn%params(1)%type = array_type
@@ -626,7 +628,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	all_fn%type = bool_type
+	all_fn%type%type = bool_type
 	allocate(all_fn%params(1))
 
 	all_fn%params(1)%type = array_type
@@ -644,7 +646,7 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	any_fn%type = bool_type
+	any_fn%type%type = bool_type
 	allocate(any_fn%params(1))
 
 	any_fn%params(1)%type = array_type

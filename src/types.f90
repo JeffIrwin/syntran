@@ -53,8 +53,9 @@ module syntran__types_m
 		! Function signature: input and output types
 
 		! Return type
-		integer :: type, array_type, rank
-		character(len = :), allocatable :: struct_name
+		type(value_t) :: type
+		!integer :: type, array_type, rank
+		!character(len = :), allocatable :: struct_name
 
 		! Arguments/parameters.  Technically, "arguments" in most languages are
 		! what Fortran calls "actual arguments" and "parameters" are Fortran
@@ -454,8 +455,8 @@ recursive subroutine fn_copy(dst, src)
 	!print *, 'starting fn_copy()'
 
 	dst%type = src%type
-	dst%array_type = src%array_type
-	dst%rank = src%rank
+	!dst%array_type = src%array_type
+	!dst%rank = src%rank
 	dst%variadic_min = src%variadic_min
 	dst%variadic_type = src%variadic_type
 
