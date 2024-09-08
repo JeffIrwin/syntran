@@ -271,13 +271,10 @@ module syntran__types_m
 	!********
 
 	type struct_t
-		! Structure declaration.  Will this be different than a struct instance?
+		! User-defined structure, aka derived type
 
-		!! TODO: do we need members inside struct_t? Or only a local var inside
-		!! parse_struct_instance?  I think all the same info is also contained
-		!! in struct%vars
-		!type(param_t), allocatable :: params(:)
-		type(member_t), allocatable :: members(:)
+		!type(member_t), allocatable :: members(:)
+		type(string_vector_t) :: member_names
 
 		type(vars_t) :: vars  ! can't compile w/o allocatable if vars_t is defined below
 		!type(vars_t), allocatable :: vars
@@ -2419,7 +2416,7 @@ recursive subroutine struct_ternary_search(node, key, id_index, iostat, val)
 	val      = node%val
 	!val%vars = node%val%vars
 	id_index = node%id_index
-	val%members = node%val%members
+	!val%members = node%val%members
 
 	!print *, 'done struct_ternary_search'
 	!print *, ''
@@ -2517,7 +2514,7 @@ recursive subroutine struct_ternary_insert(node, key, val, id_index, iostat, ove
 	node%val      = val
 	!node%val%vars = val%vars
 	node%id_index = id_index
-	node%val%members = val%members
+	!node%val%members = val%members
 
 	!print *, 'done inserting'
 	!print *, ''

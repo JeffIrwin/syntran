@@ -435,37 +435,37 @@ module function parse_fn_declaration(parser) result(decl)
 			!print *, "allocated = ", allocated(struct%vars%vals)
 
 			val%struct_name = types%v(i)%s
-			allocate(val%struct( struct%num_vars ))
-			!allocate(val%members( struct%num_vars ))
-			!val = struct
-			do j = 1, struct%num_vars
-				!val%struct(j) = struct%members(j)%val
-				val%struct(j)%type = struct%members(j)%type
-				!val%struct(j) = struct%vars%vals(j)
+			!allocate(val%struct( struct%num_vars ))
+			!!allocate(val%members( struct%num_vars ))
+			!!val = struct
+			!do j = 1, struct%num_vars
+			!	!val%struct(j) = struct%members(j)%val
+			!	val%struct(j)%type = struct%members(j)%type
+			!	!val%struct(j) = struct%vars%vals(j)
 
-				!inst%val%struct( member_id ) = mem%val
+			!	!inst%val%struct( member_id ) = mem%val
 
-				! ~~Test a fn with a 2nd-order struct arg (i.e. a struct made up
-				! of other structs).  Maybe more data needs to be copied here,
-				! especially struct_name.  Essentially every %type should be
-				! bundled along with a %struct_name as in
-				! parse_struct_declaration()~~
-				!
-				! Unit test added in 012f1404.  This code works, but I think it
-				! could be significantly simplified by following my new mantra:
-				! "a type is a value!"  Roughly a dozen lines here could be
-				! replaced by a single value_t copy to handle the parameter
-				! types.  The return type has already accomplished this
-				! simplification by assigning `parser%fn_type = fn%type` below.
-				! Parameters could probably be simplified similarly, but it will
-				! take a little refactoring.  member_t contains an int `type`
-				! and param_t also contains an int `type` and associated array
-				! type enums, etc.  Both member_t and param_t should be changed
-				! to simply wrap a `value_t` to contain the type meta-data.
-				! Perhaps member_t and/or param_t could be entirely eliminated
-				! if they become only a wrapper for the value_t.
+			!	! ~~Test a fn with a 2nd-order struct arg (i.e. a struct made up
+			!	! of other structs).  Maybe more data needs to be copied here,
+			!	! especially struct_name.  Essentially every %type should be
+			!	! bundled along with a %struct_name as in
+			!	! parse_struct_declaration()~~
+			!	!
+			!	! Unit test added in 012f1404.  This code works, but I think it
+			!	! could be significantly simplified by following my new mantra:
+			!	! "a type is a value!"  Roughly a dozen lines here could be
+			!	! replaced by a single value_t copy to handle the parameter
+			!	! types.  The return type has already accomplished this
+			!	! simplification by assigning `parser%fn_type = fn%type` below.
+			!	! Parameters could probably be simplified similarly, but it will
+			!	! take a little refactoring.  member_t contains an int `type`
+			!	! and param_t also contains an int `type` and associated array
+			!	! type enums, etc.  Both member_t and param_t should be changed
+			!	! to simply wrap a `value_t` to contain the type meta-data.
+			!	! Perhaps member_t and/or param_t could be entirely eliminated
+			!	! if they become only a wrapper for the value_t.
 
-			end do
+			!end do
 
 		end if
 
@@ -621,6 +621,9 @@ module function parse_struct_declaration(parser) result(decl)
 
 	integer :: itype, i, io, pos0, pos1, pos2, rank
 
+	! TODO: this is the only use of member_t. Maybe eliminate it
+	type(member_t), allocatable :: members(:)
+
 	!type(struct_t), save :: struct
 	type(struct_t) :: struct, dummy_struct
 
@@ -725,8 +728,8 @@ module function parse_struct_declaration(parser) result(decl)
 	! Now that we have the number of members, save them
 
 	struct%num_vars = 0
-	if (allocated(struct%members)) deallocate(struct%members)
-	allocate(struct%members( names%len_ ))
+	allocate(members( names%len_ ))
+	allocate(struct%member_names%v( names%len_ ))
 	!allocate(decl  %params( names%len_ ))  ! if this is needed, we need a new
 	!! name.  "members" already means the member statements of a block statement
 
@@ -735,7 +738,8 @@ module function parse_struct_declaration(parser) result(decl)
 	do i = 1, names%len_
 		!print *, "name, type = ", names%v(i)%s, ", ", types%v(i)%s
 
-		struct%members(i)%name = names%v(i)%s
+		members(i)%name = names%v(i)%s
+		struct%member_names%v(i)%s = names%v(i)%s
 
 		itype = lookup_type(types%v(i)%s, parser%structs, dummy_struct)
 		if (itype == unknown_type) then
@@ -745,12 +749,12 @@ module function parse_struct_declaration(parser) result(decl)
 		end if
 
 		if (is_array%v(i)) then
-			struct%members(i)%type = array_type
-			struct%members(i)%array_type = itype
-			struct%members(i)%rank = ranks%v(i)
-			!print *, "rank = ", struct%members(i)%rank
+			members(i)%type = array_type
+			members(i)%array_type = itype
+			members(i)%rank = ranks%v(i)
+			!print *, "rank = ", members(i)%rank
 		else
-			struct%members(i)%type = itype
+			members(i)%type = itype
 			!print *, "(scalar)"
 		end if
 
@@ -763,13 +767,13 @@ module function parse_struct_declaration(parser) result(decl)
 		!decl%params(i) = parser%num_vars
 
 		! Create a value_t object to store the type
-		val%type = struct%members(i)%type
+		val%type = members(i)%type
 		val%struct_name = types%v(i)%s
 		if (is_array%v(i)) then
 			if (allocated(val%array)) deallocate(val%array)
 			allocate(val%array)
-			val%array%type = struct%members(i)%array_type
-			val%array%rank = struct%members(i)%rank
+			val%array%type = members(i)%array_type
+			val%array%rank = members(i)%rank
 			!print *, "rank = ", val%array%rank
 		end if
 
@@ -779,12 +783,7 @@ module function parse_struct_declaration(parser) result(decl)
 		! type, just like `parser%vars`.  Just add one inside of the `struct_t`
 		! type.
 
-		!print *, "insert var type ", kind_name(val%type)
-		!print *, "insert var name = ", struct%members(i)%name
-		!call parser%vars%insert(struct%members(i)%name, val, parser%num_vars)
-		!call struct%vars%insert(struct%members(i)%name, val, struct%num_vars)
-
-		call struct%vars%insert(struct%members(i)%name, val, &
+		call struct%vars%insert(members(i)%name, val, &
 			struct%num_vars, io, overwrite = .false.)
 		!print *, 'io = ', io
 		if (io /= exit_success) then
@@ -792,7 +791,7 @@ module function parse_struct_declaration(parser) result(decl)
 			call parser%diagnostics%push(err_redeclare_mem( &
 				parser%context(), &
 				span, &
-				struct%members(i)%name))
+				members(i)%name))
 		end if
 
 	end do
@@ -996,7 +995,8 @@ module function parse_struct_instance(parser) result(inst)
 		! There could be more than 1 unset member but we only log diag for the
 		! 1st one
 		id1 = findlocl1(member_set, .false.)
-		unset_name = struct%members(id1(1))%name
+		!unset_name = struct%members(id1(1))%name
+		unset_name = struct%member_names%v(id1(1))%s
 		!print *, "id1 = ", id1
 		!print *, "name = ", unset_name
 
