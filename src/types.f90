@@ -52,10 +52,8 @@ module syntran__types_m
 	type fn_t
 		! Function signature: input and output types
 
-		! Return type
+		! Return type.  "A type is a value!"
 		type(value_t) :: type
-		!integer :: type, array_type, rank
-		!character(len = :), allocatable :: struct_name
 
 		! Arguments/parameters.  Technically, "arguments" in most languages are
 		! what Fortran calls "actual arguments" and "parameters" are Fortran

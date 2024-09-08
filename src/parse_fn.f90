@@ -934,7 +934,6 @@ module function parse_struct_instance(parser) result(inst)
 		!print *, "member type = ", kind_name(member%type)
 		!print *, "mem    type = ", kind_name(mem%val%type)
 		if (is_ok) then
-
 		if (types_match(member, mem%val) /= TYPE_MATCH) then
 
 			exp_type = type_name(member)

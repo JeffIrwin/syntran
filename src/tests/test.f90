@@ -3326,7 +3326,7 @@ subroutine unit_test_struct_str(npass, nfail)
 	! conversion is subject to change, especially if I figure out how to label
 	! each member with its name
 	!
-	! TODO: update documentation to reflect any changes here
+	! TODO: update documentation to reflect any struct-to-str changes here
 
 	tests = &
 		[   &
