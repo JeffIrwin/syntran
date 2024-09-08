@@ -2741,6 +2741,12 @@ subroutine unit_test_struct(npass, nfail)
 				//'y1.p.z -= y1.ba.tr.x;' &
 				//'return y1.p.z;' &
 				, quiet) == '-4', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 48
+			    //'fn get_d(): D {return D{y=2024, m="Sep", d=21};}' &
+			    //'let d0 = get_d();' &
+			    //'return d0.m;' &
+				, quiet) == 'Sep', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
