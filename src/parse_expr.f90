@@ -608,14 +608,17 @@ recursive module subroutine parse_dot(parser, expr)
 	! Is there a better way than looking up every struct by name again?
 	call parser%structs%search(expr%val%struct_name, struct_id, io, struct)
 	if (io /= 0) then
-		! TODO: diag
-		write(*,*) err_prefix//"unreachable struct lookup failure"//color_reset
-		stop
+		! Type is already confirmed as struct_type above, so I'm fairly sure
+		! this is unreachable
+		write(*,*) err_int_prefix//"unreachable struct lookup failure"//color_reset
+		call internal_error()
 	end if
 
 	call struct%vars%search(identifier%text, member_id, io, member)
 	if (io /= 0) then
-		! TODO: diag
+
+		! TODO:  diag 
+
 		write(*,*) err_prefix//"struct dot member does not exist"//color_reset
 		stop
 	end if

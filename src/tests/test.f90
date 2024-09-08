@@ -3257,6 +3257,26 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'ps[0] = p2;' &
 				//'return ps[0].v;' &
 				, quiet) == '[3, 17]', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 48
+			    //'fn get_ds(): [D;:] {'&
+				//'    let d0 = D{y=2024, m="Sep", d=21};' &
+				//'    let d1 = D{y=1990, m="Aug", d=2};' &
+				//'    return [d0, d1];' &
+				//'}' &
+			    //'let ds = get_ds();' &
+			    //'return ds[1].m;' &
+				, quiet) == 'Aug', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 48
+			    //'fn get_ds(): [D;:] {'&
+				//'    let d0 = D{y=2024, m="Sep", d=21};' &
+				//'    let d1 = D{y=1990, m="Aug", d=2};' &
+				//'    return [d0, d1];' &
+				//'}' &
+			    //'let ds = get_ds();' &
+			    //'return ds[0].d;' &
+				, quiet) == '21', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
