@@ -585,14 +585,16 @@ recursive module subroutine parse_dot(parser, expr)
 	!print *, "type = ", kind_name(expr%val%type)
 
 	if (expr%val%type /= struct_type) then
-		! Does expr%identifier always exist to create a span?  May need to just
-		! underline dot itself, e.g. for struct_array[0].member
-		span = new_span(expr%identifier%pos, dot%pos - expr%identifier%pos + 1)
-		!span = new_span(expr%identifier%pos, len(expr%identifier%text))
-		call parser%diagnostics%push(err_non_struct_dot( &
-			parser%context(), &
-			span, &
-			expr%identifier%text))
+		! Don't cascade errors for undeclared vars
+		if (expr%val%type /= unknown_type) then
+			! Does expr%identifier always exist to create a span?  May need to just
+			! underline dot itself, e.g. for struct_array[0].member
+			span = new_span(expr%identifier%pos, dot%pos - expr%identifier%pos + 1)
+			call parser%diagnostics%push(err_non_struct_dot( &
+				parser%context(), &
+				span, &
+				expr%identifier%text))
+		end if
 		return
 	end if
 
@@ -616,11 +618,14 @@ recursive module subroutine parse_dot(parser, expr)
 
 	call struct%vars%search(identifier%text, member_id, io, member)
 	if (io /= 0) then
-
-		! TODO:  diag 
-
-		write(*,*) err_prefix//"struct dot member does not exist"//color_reset
-		stop
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_bad_member_name( &
+			parser%context(), &
+			span, &
+			identifier%text, &
+			expr%identifier%text, &
+			expr%val%struct_name))
+		return
 	end if
 	!print *, "member id = ", member_id
 	!print *, "mem type  = ", kind_name(member%type)

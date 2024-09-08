@@ -911,7 +911,7 @@ module function parse_struct_instance(parser) result(inst)
 		is_ok = io == 0
 		if (.not. is_ok) then
 			span = new_span(name%pos, len(name%text))
-			call parser%diagnostics%push(err_bad_member_name( &
+			call parser%diagnostics%push(err_bad_member_name_short( &
 				parser%context(), &
 				span, &
 				name%text, &

@@ -746,18 +746,41 @@ end function err_non_struct_dot
 
 !===============================================================================
 
-function err_bad_member_name(context, span, mem_name, struct_name) result(err)
+function err_bad_member_name(context, span, mem_name, struct_var_name, struct_name) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
-	character(len = *), intent(in) :: mem_name, struct_name
+	! This msg yells about both the variable name `struct_var_name` and its
+	! "class" `struct_name`.  Its useful for dot expressions `var.mem`
+
+	character(len = *), intent(in) :: mem_name, struct_var_name, struct_name
 	err = err_prefix &
-		//'member `'//mem_name//'` in struct `'//struct_name//'` does not exist' &
+		//'member `'//mem_name//'` does not exist in struct `'//struct_var_name//'`' &
+		//' of type `'//struct_name//'`' &
 		//underline(context, span) &
 		//" bad member name"//color_reset
 
 end function err_bad_member_name
+
+!===============================================================================
+
+function err_bad_member_name_short(context, span, mem_name, struct_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	! This msg yells only about the "class" `struct_name`.  Its useful for
+	! struct instantiations as in `return Class{mem = val};` where there may not
+	! be a variable identifier like in the longer fn above
+
+	character(len = *), intent(in) :: mem_name, struct_name
+	err = err_prefix &
+		//'member `'//mem_name//'` does not exist in struct `'//struct_name//'`' &
+		//underline(context, span) &
+		//" bad member name"//color_reset
+
+end function err_bad_member_name_short
 
 !===============================================================================
 
