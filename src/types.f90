@@ -361,7 +361,6 @@ recursive subroutine vars_copy(dst, src)
 	end do
 
 	if (allocated(src%vals)) then
-		!if (.not. allocated(dst%vals)) allocate(dst%vals( size(src%vals) ))
 		if (allocated(dst%vals)) deallocate(dst%vals)
 		allocate(dst%vals( size(src%vals) ))
 		dst%vals = src%vals
@@ -414,7 +413,6 @@ recursive subroutine fn_copy(dst, src)
 	dst%variadic_type = src%variadic_type
 
 	if (allocated(src%params)) then
-		!if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
 		if (allocated(dst%params)) deallocate(dst%params)
 		allocate(dst%params( size(src%params) ))
 		dst%params = src%params

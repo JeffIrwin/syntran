@@ -30,6 +30,10 @@ module syntran__core_m
 
 	! TODO:
 	!  - structs
+	!    * post-merge TODO struct items:
+	!      + update struct sample.  include struct/array combos, nesting, etc.
+	!        maybe make separate simple and compound struct samples
+	!      + note in docs that structs don't work in interactive interpreter
 	!    * mvp done:
 	!      + struct fn return values
 	!      + nested structs
@@ -42,14 +46,6 @@ module syntran__core_m
 	!          changed things later which automatically fixed unary ops?
 	!    * tbd:
 	!      + remove unused vars per cmake warnings
-	!      + remove unused things like mems/members copies in various
-	!        types/routines
-	!        > currently using members for fn param declarations
-	!      + struct type checking
-	!        > check dot member types in instantiation
-	!          * done for primitives, still need to compare struct subtypes
-	!        > check mismatches of assigning one struct to another, or passing a
-	!          struct to a fn
 	!      + improved to_str() conversion with labels of struct name and member names
 	!  - jumping control flow:
 	!    * fn return statement done

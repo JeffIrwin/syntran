@@ -492,14 +492,22 @@ recursive subroutine set_val(node, var, state, val, index_)
 	else
 		i8 = sub_eval(node%member, var%struct(id), state)
 	end if
+
+	if (var%struct(id)%type == str_type) then
+
+		var%struct(id)%sca%str%s(i8+1: i8+1) = val%sca%str%s
+		!res%sca%str%s = var%struct(id)%sca%str%s(i8+1: i8+1)
+		!res%type = str_type
+
+		return
+	end if
+
 	if (var%struct(id)%array%type /= struct_type) then
 		call set_array_val(var%struct(id)%array, i8, val)
 		return
 	end if
 
 	var%struct(id)%struct(i8+1) = val
-	!res%type = struct_type
-	!res%struct_name = var%struct(id)%struct_name
 
 end subroutine set_val
 
@@ -632,6 +640,17 @@ recursive subroutine get_val(node, var, state, res, index_)
 	else
 		i8 = sub_eval(node%member, var%struct(id), state)
 	end if
+
+	if (var%struct(id)%type == str_type) then
+		!state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1) = res%sca%str%s
+		!res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
+
+		res%sca%str%s = var%struct(id)%sca%str%s(i8+1: i8+1)
+		res%type = str_type
+
+		return
+	end if
+
 	if (var%struct(id)%array%type /= struct_type) then
 		!print *, "get_array_val 3"
 		call get_array_val(var%struct(id)%array, i8, res)
@@ -639,8 +658,6 @@ recursive subroutine get_val(node, var, state, res, index_)
 	end if
 
 	res = var%struct(id)%struct(i8+1)
-	res%type = struct_type
-	res%struct_name = var%struct(id)%struct_name
 
 end subroutine get_val
 
@@ -2383,13 +2400,12 @@ function sub_eval(node, var, state) result(index_)
 
 	!print *, 'starting sub_eval()'
 
-	!! TODO: i think member string indexing is broken without this
-	!! str scalar with single char subscript
 	!if (state%vars%vals(node%id_index)%type == str_type) then
-	!	call syntax_eval(node%lsubscripts(1), state, subscript)
-	!	index_ = subscript%to_i64()
-	!	return
-	!end if
+	if (var%type == str_type) then
+		call syntax_eval(node%lsubscripts(1), state, subscript)
+		index_ = subscript%to_i64()
+		return
+	end if
 
 	!if (state%vars%vals(node%id_index)%type /= array_type) then
 	!	! internal_error?

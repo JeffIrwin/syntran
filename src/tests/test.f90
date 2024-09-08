@@ -3291,6 +3291,30 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let e = E{e = d};' &
 				//'return extract_a(e);' &
 				, quiet = .false.) == '42', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 52
+				//'let d0 = D{y=2024, m="Sep", d=21};' &
+			    //'let c = d0.m[0];' &
+			    //'return c;' &
+				, quiet) == 'S', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 53
+				//'let d0 = D{y=2024, m="Sep", d=21};' &
+			    //'let c = d0.m[1];' &
+			    //'return c;' &
+				, quiet) == 'e', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 54
+				//'let d0 = D{y=2024, m="Sep", d=21};' &
+			    //'d0.m[0] = "P";' &
+			    //'return d0.m;' &
+				, quiet) == 'Pep', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 55
+				//'let d0 = D{y=2024, m="Sep", d=21};' &
+			    //'d0.m[2] = "a";' &
+			    //'return d0.m;' &
+				, quiet) == 'Sea', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
