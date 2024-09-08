@@ -20,21 +20,12 @@ module syntran__types_m
 
 	!********
 
-	type member_t
-		! Struct member.  Basically the same as a fn param_t.  TODO: delete this
-		! whole struct
-
-		integer :: type
-		character(len = :), allocatable :: name
-
-		integer :: array_type, rank
-
-	end type member_t
-
-	!********
-
 	type param_t
 		! Function parameter (argument)
+		!
+		! TODO: this is basically a wrapper of a value_t.  Move name into an
+		! array of names in fn_t and get rid of param_t type, like I got rid of
+		! member_t.
 
 		character(len = :), allocatable :: name
 		type(value_t) :: type
@@ -271,7 +262,6 @@ module syntran__types_m
 	type struct_t
 		! User-defined structure, aka derived type
 
-		!type(member_t), allocatable :: members(:)
 		type(string_vector_t) :: member_names
 
 		type(vars_t) :: vars  ! can't compile w/o allocatable if vars_t is defined below
