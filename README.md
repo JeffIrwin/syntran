@@ -60,6 +60,8 @@ Using cmake:
 ./build.sh
 ```
 
+If you installed syntran as a binary, you can skip this section.
+
 A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required.  Supported compilers are gfortran 10, 11, or 12, or Intel 2023.1 through 2024.  Also check `matrix.gfortran` in the [github actions workflow ](.github/workflows/main.yml) to see which compilers are regularly tested in CI/CD.  For performance, gfortran is recommended over Intel.
 
 Two independent build systems are provided for syntran.  You can either use cmake, which is run by `build.sh` as shown above, or you can use the Fortran Package Manager `fpm`:
@@ -218,20 +220,33 @@ Make sure to wrap the entire script in a main block with braces `{}`.  The globa
 Run `syntran -h` to see a comprehensive listing of syntran command-line arguments:
 
 ```
- syntran 0.0.34
+ syntran 0.0.48
  https://github.com/JeffIrwin/syntran
 
  Usage:
-        syntran <file.syntran> [--fmax-errors <n>]
-        syntran
-        syntran -h | --help
-        syntran --version
+     syntran <file.syntran> [--fmax-errors <n>] [-i | --interactive]
+     syntran
+     syntran -c <cmd> | --command <cmd>
+     syntran -h | --help
+     syntran --version
 
  Options:
-        -h --help          Show this help
-        --version          Show version
-        --fmax-errors <n>  Limit max error messages to <n> [default: 4]
+     -h --help           Show this help
+     --version           Show version and build details
+     -c --command <cmd>  Run program passed in as string
+     -i --interactive    Interpret a file then start an interactive shell
+     --fmax-errors <n>   Limit max error messages to <n> [default: 4]
 ```
+
+Although the semantic version is always shown, `--version` shows more details:
+```
+ syntran 0.0.48
+ https://github.com/JeffIrwin/syntran
+ git commit = 6ab926d
+ build date = Sep  7 2024
+ fortran compiler = gfortran [11, 4, 0]
+```
+This can be helpful for binary installations.  If you built from source, most of the details are pointlessly redundant, and the `git commit` will not be shown.
 
 ## If statements and for loops
 
