@@ -10,5 +10,8 @@ header=./src/compiler.F90
 sed \
 	's/\(git_commit\s*=\s*\)".*"/\1"'$hash'"/' \
 	"$header" > "$header.sed"
+rm "$header"
+cat "$header.sed"
 mv "$header.sed" "$header"
+cat "$header"
 

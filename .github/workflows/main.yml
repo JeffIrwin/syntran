@@ -163,7 +163,7 @@
 
 						GCC_LIB_DIR=/opt/homebrew/opt/gcc@12/lib/gcc/12 \n
 
-						ls ${GCC_LIB_DIR} \n
+						#ls ${GCC_LIB_DIR} \n
 
 						# A loop might be nice to dry this up \n
 						# libgcc_s is a dependency of libgfortran, not a direct \n
@@ -195,7 +195,8 @@
 							\"./syntran\" \n
 
 						chmod +x ./syntran \n
-						#patchelf --set-rpath '$ORIGIN' ./syntran \n
+						./syntran --version \n
+						cat ./src/compiler.F90 \n
 					"
 				},
 				{
