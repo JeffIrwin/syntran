@@ -26,6 +26,11 @@
 					}
 				},
 				{
+					"if": "matrix.os == 'macOS-latest'",
+					"name": "unfuck stupid macos sed",
+					"run": "brew install gnu-sed && sudo mv $(which gsed) $(which sed)"
+				},
+				{
 				  "run": "bash gen-header.sh"
 				},
 				{
