@@ -22,25 +22,37 @@ This began as a sandbox for me to play in as I followed along with [Immo Landwer
 
 ## Install binary
 
+To run syntran, you can either install a binary or build it from the Fortran source code.  To build it from source, [see the next section](#build-the-interpreter-from-source).
+
 Download the binary from the latest github release for your operating system:
 
 ### Linux
 ```
 curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux.zip"
-unzip syntran-linux*.zip
+unzip syntran-linux.zip
 chmod +x ./syntran
 ./syntran -h
 ```
-<!-- TODO: list supported distros and ref docker files -->
 
 ### Windows
 ```
 curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-windows.zip"
-tar -xvf .\syntran-windows.zip
+tar -xvf syntran-windows.zip
 .\syntran -h
 ```
+Or, download and unzip it however you like.
 
-## Build the interpreter
+More or less any terminal on Windows should work, but [Windows Terminal](https://aka.ms/terminal) supports colors and arrow key history better than Windows CMD.  A git bash shell is even better.  Also see the [section on arrow keys](#arrow-keys-and-command-history).
+
+<!-- mac works too but i don't want to encourage apple usery -->
+
+### Path
+
+Feel free to add the directory to your PATH environment variable, or type the full path.
+
+Whenever you see something like `./build/syntran` or `fpm run` in the rest of this documentation, replace that with `/path/to/syntran` or `C:\path\to\syntran.exe` appropriately, depending on your operating system and where you downloaded the binary.
+
+## Build the interpreter from source
 
 Using cmake:
 
@@ -48,7 +60,7 @@ Using cmake:
 ./build.sh
 ```
 
-A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required.  Supported compilers are gfortran 10, 11, or 12, or Intel 2023.2.  Also check `matrix.gfortran` in the [github actions workflow ](.github/workflows/main.yml) to see which compilers are regularly tested in CI/CD.  For performance, gfortran is recommended over Intel.
+A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required.  Supported compilers are gfortran 10, 11, or 12, or Intel 2023.1 through 2024.  Also check `matrix.gfortran` in the [github actions workflow ](.github/workflows/main.yml) to see which compilers are regularly tested in CI/CD.  For performance, gfortran is recommended over Intel.
 
 Two independent build systems are provided for syntran.  You can either use cmake, which is run by `build.sh` as shown above, or you can use the Fortran Package Manager `fpm`:
 
@@ -56,7 +68,7 @@ Two independent build systems are provided for syntran.  You can either use cmak
 fpm build
 ```
 
-Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm install`, etc.  Most of the example commands in this documentation will assume that cmake was used, but there is usually (always?) an fpm alternative.
+Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm install`, etc.  Most of the example commands in this documentation will assume that cmake was used, but there is usually an fpm alternative.
 
 As an alternative to installing dependencies yourself, you can run syntran in a
 docker container using the included [Dockerfile](Dockerfile).  See the
@@ -64,7 +76,7 @@ docker container using the included [Dockerfile](Dockerfile).  See the
 
 ## Run
 
-Start the interpreter:
+Start the interpreter.  Adjust the path if you built with fpm or installed a binary:
 
 ```
 ./build/syntran
