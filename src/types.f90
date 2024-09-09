@@ -448,6 +448,7 @@ recursive subroutine fn_ternary_tree_copy(dst, src)
 	if (allocated(src%val)) then
 		if (.not. allocated(dst%val)) allocate(dst%val)
 		dst%val = src%val
+	! TODO: else deallocate?  Other tree copiers too
 	end if
 
 	if (allocated(src%left)) then
@@ -1185,7 +1186,8 @@ integer function lookup_type(name, structs, struct) result(type)
 
 		case default
 
-			!call parser%structs%search(identifier%text, struct_id, io, struct)
+			! TODO: this should be able to use %exists instead of %search,
+			! possible minor perf boost
 			call structs%search(name, struct_id, io, struct)
 			!print *, "struct search io = ", io
 
@@ -2246,7 +2248,6 @@ recursive function struct_ternary_exists(node, key) result(exists)
 	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
 	character(len = *), intent(in) :: key
 
-	!type(struct_t) :: val
 	logical :: exists
 
 	!********
@@ -2292,7 +2293,6 @@ end function struct_ternary_exists
 
 !===============================================================================
 
-!recursive function struct_ternary_search(node, key, id_index, iostat) result(val)
 recursive subroutine struct_ternary_search(node, key, id_index, iostat, val)
 
 	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
@@ -2351,7 +2351,6 @@ recursive subroutine struct_ternary_search(node, key, id_index, iostat, val)
 	!print *, 'done struct_ternary_search'
 	!print *, ''
 
-!end function struct_ternary_search
 end subroutine struct_ternary_search
 
 !===============================================================================

@@ -60,9 +60,6 @@ module syntran__value_m
 
 		type(string_t   ), allocatable ::  str(:)
 
-		!type(value_t), allocatable :: struct(:)
-		!type(value_t), pointer :: struct(:)
-
 		! TODO: file arrays
 
 		integer :: rank
@@ -550,12 +547,9 @@ recursive function value_to_str(val) result(ans)
 
 	!********
 
-	!character(len = 16) :: buf16
-
 	integer :: j
 	integer(kind = 8) :: i8, j8, prod, n, nj
 
-	!type(string_vector_t) :: str_vec
 	type(char_vector_t) :: str_vec
 
 	!print *, "val type = ", kind_name(val%type)
@@ -605,10 +599,6 @@ recursive function value_to_str(val) result(ans)
 			! This naming is terrible.  It's a string builder, not a vector of
 			! strings
 			str_vec = new_char_vector()
-
-			!if (val%array%type == struct_type) then
-			!	call str_vec%push(val%struct_name)
-			!end if
 
 			call str_vec%push('[')
 			if (val%array%rank > 1) call str_vec%push(line_feed)
@@ -725,37 +715,16 @@ recursive function value_to_str(val) result(ans)
 	
 				n = size(val%struct)
 				do i8 = 1, n
-	
 					! Just recurse instead of nesting a loop
 					call str_vec%push( val%struct(i8)%to_str() )
-
-					! It would be nice to label each member with its name
-	
-					!call str_vec%push("{")
-					!nj = size(val%struct(i8)%struct)
-					!do j8 = 1, nj
-					!	call str_vec%push( trimw(val%struct(i8)%struct(j8)%to_str()) )
-					!	if (j8 < nj) call str_vec%push(", ")
-					!end do
-					!if (i8 < n) call str_vec%push("}, ")
-
 					if (i8 < n) call str_vec%push(", ")
-	
 				end do
-				!call str_vec%push("}")
 
 			else
 
 				! Do *not* print anything in this function, as recursive IO will
 				! cause a hang
-
-				!call str_vec%push(err_prefix//"array str conversion not" &
-				!	//" implemented for this type")
 				call str_vec%push(err_prefix//"<invalid_array_value>"//color_reset)
-
-				!write(*,*) 'Error: array ans conversion not implemented' &
-				!	//' for this type'
-				!call internal_error()
 
 			end if
 
