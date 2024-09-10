@@ -6,7 +6,7 @@
 ],
 "jobs": {
 	"test-os": {
-		"name": "Test on ${{ matrix.os }}",
+		"name": "Build on ${{ matrix.os }}",
 		"runs-on": "${{ matrix.os }}",
 		"strategy": {
 			"matrix": {
@@ -201,7 +201,7 @@
 
 					chmod +x ./syntran \n
 					./syntran --version \n
-					cat ./src/compiler.F90 \n
+					#cat ./src/compiler.F90 \n
 				"
 			},
 			{

@@ -9,5 +9,5 @@ sed -i \
 	's/\(git_commit\s*=\s*\)".*"/\1"'$hash'"/' \
 	"$header"
 
-cat "$header"
+#cat "$header"
 
