@@ -303,9 +303,7 @@
 					##{"compiler": "intel", "version": "2022.2"},  # ifx 2022.2 doesn't have `do while ()` :(
 
 					{"compiler": "intel-classic", "version": "2021.10"},
-					{"compiler": "intel-classic", "version": "2021.1"},
-
-					##{"compiler": "nvidia-hpc", "version": "23.11"}  # setup fails
+					#{"compiler": "intel-classic", "version": "2021.1"},  # complains about coarrays???
 				]
 			}
 		},
@@ -405,7 +403,7 @@
 					mv /opt/homebrew/bin /opt/homebrew/bin-BACKUP || true \n
 					mv /opt/homebrew/opt /opt/homebrew/opt-BACKUP || true \n
 					mv /opt/homebrew/Cellar /opt/homebrew/Cellar-BACKUP || true \n
-					ls /opt/homebrew/ \n
+					#ls /opt/homebrew/ \n
 
 					curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos.zip\" \n
 					unzip syntran-macos*.zip \n
