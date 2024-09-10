@@ -127,7 +127,7 @@ module syntran__types_m
 		! FIXME: when adding new members here, make sure to explicitly copy them
 		! in syntax_node_copy, or else assignment will yield bugs
 
-		integer :: kind
+		integer :: kind = 0
 
 		! This structure could be more efficient.  For example, unary
 		! expressions don't use left, name expressions don't use left or right,

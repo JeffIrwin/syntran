@@ -308,7 +308,7 @@ subroutine init_state(state)
 
 	type(state_t), intent(inout) :: state
 
-	state%fns = declare_intrinsic_fns()
+	call declare_intrinsic_fns(state%fns)
 
 	state%returned = .false.
 
@@ -342,7 +342,9 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	type(syntax_node_t) :: tree
 	type(value_t) :: val
 
+	!print *, ''
 	!print *, 'str_ = ', str_
+	!print *, ''
 
 	call init_state(state)
 	state%quiet = .false.
@@ -361,7 +363,9 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	! TODO: make a helper fn that all the eval_* fns use
 
+	!print *, "parsing"
 	tree = syntax_parse(str_, state%vars, state%fns, src_filel)
+	!print *, "done"
 	if (.not. state%quiet) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -385,7 +389,9 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	end if
 
+	!print *, "evaling "
 	call syntax_eval(tree, state, val)
+	!print *, "done"
 	res = val%to_str()
 	!print *, 'res = ', res
 

@@ -20,7 +20,7 @@ module syntran__eval_m
 
 		type(fns_t) :: fns
 
-		type(structs_t) :: structs
+		!type(structs_t) :: structs
 
 		type(vars_t) :: vars
 
@@ -53,7 +53,8 @@ recursive subroutine syntax_eval(node, state, res)
 
 	integer :: i
 
-	!print *, 'starting syntax_eval()'
+	!print *, "starting syntax_eval()"
+	!print *, "node kind = ", kind_name(node%kind)
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -385,6 +386,7 @@ subroutine eval_dot_expr(node, state, res)
 	type(value_t) :: val, tmp_val
 
 	!print *, "eval dot_expr"
+	!print *, "id_index = ", node%id_index
 	!print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
 
 	! This won't work for struct literal member access.  It only works for
@@ -535,6 +537,8 @@ recursive subroutine get_val(node, var, state, res, index_)
 	integer :: id
 	integer(kind = 8) :: i8, j8
 
+	!print *, "get_val()"
+
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
 		if (present(index_)) then
@@ -611,7 +615,9 @@ recursive subroutine get_val(node, var, state, res, index_)
 	id = node%member%id_index
 
 	if (node%member%kind == dot_expr) then
-		! Recurse
+		! Recurse.  This branch was incorrectly entering sometimes because
+		! `kind` was uninitialized, only on Windows in release build
+		!print *, "recursing"
 		call get_val(node%member, var%struct(id), state, res)
 		return
 	end if
@@ -619,6 +625,7 @@ recursive subroutine get_val(node, var, state, res, index_)
 	! Base case
 
 	if (.not. allocated(node%member%lsubscripts)) then
+		!print *, "base"
 		res = var%struct(id)
 		return
 	end if

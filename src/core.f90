@@ -218,10 +218,9 @@ contains
 
 !===============================================================================
 
-function declare_intrinsic_fns() result(fns)
-	! TODO: this should be a subroutine to help with gfortran-13
+subroutine declare_intrinsic_fns(fns)
 
-	type(fns_t) :: fns
+	type(fns_t), intent(out) :: fns
 
 	!********
 
@@ -740,7 +739,7 @@ function declare_intrinsic_fns() result(fns)
 			any_fn        &
 		]
 
-end function declare_intrinsic_fns
+end subroutine declare_intrinsic_fns
 
 !===============================================================================
 
