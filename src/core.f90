@@ -29,9 +29,11 @@ module syntran__core_m
 		syntran_patch =  48
 
 	! TODO:
+	!  - add version summary as a text file to release packages
+	!    * doc. readme? samples?
+	!    * try -static-libgcc etc. on win/mac to ease packaging
+	!    * ship syntran.a static lib? don't know who would want that
 	!  - structs
-	!    * TODO: make one last release on main before merging structs. bump
-	!      version to 0.0.49
 	!    * post-merge TODO struct items:
 	!      + update struct sample.  include struct/array combos, nesting, etc.
 	!        maybe make separate simple and compound struct samples
