@@ -1,446 +1,449 @@
 {
-	# can haz comments?
-	"name": "CI",
-	"on": [
-		"push"
-	],
-	"jobs": {
-		"test-os": {
-			"name": "Test on ${{ matrix.os }}",
-			"runs-on": "${{ matrix.os }}",
-			"strategy": {
-				"matrix": {
-					"os": [
-						"ubuntu-latest",
-						"windows-latest",
-						"macOS-latest"
-					]
+# can haz comments?
+"name": "CI",
+"on": [
+	"push"
+],
+"jobs": {
+	"test-os": {
+		"name": "Build on ${{ matrix.os }}",
+		"runs-on": "${{ matrix.os }}",
+		"strategy": {
+			"matrix": {
+				"os": [
+					"ubuntu-latest",
+					"windows-latest",
+					"macOS-latest"
+				]
+			}
+		},
+		"steps": [
+			{"uses": "actions/checkout@v1"},
+			{
+				"uses": "fortran-lang/setup-fpm@v5",
+				"with": {
+					"github-token": "${{ secrets.GITHUB_TOKEN }}"
 				}
 			},
-			"steps": [
-				{"uses": "actions/checkout@v1"},
-				{
-					"uses": "fortran-lang/setup-fpm@v5",
-					"with": {
-						"github-token": "${{ secrets.GITHUB_TOKEN }}"
-					}
+			{
+				"if": "matrix.os == 'macOS-latest'",
+				"name": "unfuck stupid macos sed",  # https://stackoverflow.com/a/60562182/4347028
+				"run": "brew install gnu-sed && sudo cp $(which gsed) /usr/local/bin/sed"
+			},
+			{
+			  "run": "bash gen-header.sh"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-latest'",
+				"name": "Set ubuntu PATH",
+				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-latest'",
+				"name": "Test fpm default",
+
+				"env": {
+					"FPM_FC": "gfortran-11"
 				},
-				{
-				  "run": "bash gen-header.sh"
-				},
-				{
-					"if": "matrix.os == 'ubuntu-latest'",
-					"name": "Set ubuntu PATH",
-					"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
-				},
-				{
-					"if": "matrix.os == 'ubuntu-latest'",
-					"name": "Test fpm default",
+				"run":
+				"
+					set -exu \n
+					gfortran --version \n
 
-					"env": {
-						"FPM_FC": "gfortran-11"
-					},
-					"run":
-					"
-						set -exu \n
-						gfortran --version \n
+					# This is the pack linux stage, but it also does some \n
+					# testing.  CI/CD could use some disentangling \n
 
-						# This is the pack linux stage, but it also does some \n
-						# testing.  CI/CD could use some disentangling \n
+					fpm install
+					  --profile release
+					  --link-flag '-static-libgcc -static-libgfortran'
+					  --prefix='$HOME' \n
 
-						fpm install
-						  --profile release
-						  --link-flag '-static-libgcc -static-libgfortran'
-						  --prefix='$HOME' \n
+					# TODO: copy to a subdir for easier upload \n
+					cp $HOME/bin/syntran . \n
+					cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
+					which syntran \n
+					which patchelf \n
+					chmod +x ./syntran \n
+					patchelf --set-rpath '$ORIGIN' ./syntran \n
 
-						# TODO: copy to a subdir for easier upload \n
-						cp $HOME/bin/syntran . \n
-						cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
-						which syntran \n
-						which patchelf \n
-						chmod +x ./syntran \n
-						patchelf --set-rpath '$ORIGIN' ./syntran \n
+					#echo 'libquadmath ls:' \n
+					#ls /lib/x86_64-linux-gnu/libquadmath.so.0 \n
+					#ls /lib/x86_64-linux-gnu/ \n
+					#ls /lib/ \n
 
-						#echo 'libquadmath ls:' \n
-						#ls /lib/x86_64-linux-gnu/libquadmath.so.0 \n
-						#ls /lib/x86_64-linux-gnu/ \n
-						#ls /lib/ \n
+					#exit 0 \n
 
-						#exit 0 \n
+					chmod +x ./samples/shebang.syntran \n
+					./samples/shebang.syntran \n
 
-						chmod +x ./samples/shebang.syntran \n
-						./samples/shebang.syntran \n
+					# No significant difference between release and (default) debug profile. \n
+					# Maybe that will change after I copy the other half of AOC tests \n
+					#fpm test test \n
+					#fpm test long \n
+					fpm test test --profile release \n
+					fpm test long --profile release \n
+				"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-latest'",
+				"run": "sudo apt-get install gfortran"
+			},
+			{
+				"if": "matrix.os == 'macOS-latest'",
+				"run": "
+					brew install gcc@12 &&
+					brew reinstall gcc@12"
+			},
+			{
+				"name": "Build",
+				"run":
+				"
+					#export OMP_NUM_THREADS=1 \n
+					bash ./build.sh debug \n
+					#ls -ltrh build/ \n
+				"
+			},
+			{
+				"if": "matrix.os != 'windows-latest'",
+				"name": "Test debug",
+				"run":
+				"
+					./build/syntran < samples/arithmetic.syntran  \n
+					#./build/syntran < samples/bad-syntax.syntran \n
+					time ./build/test \n
+				"
+			},
+			{
+				"if": "matrix.os != 'windows-latest'",
+				"name": "Test release",
+				"run":
+				"
+					bash ./build.sh release \n
+					time ./build/test \n
+				"
+			},
+			{
+				# TODO: make a bash pack script, then libgfortran-5.dll
+				# location can be automatically found
+				"if": "matrix.os == 'windows-latest'",
+				"name": "Pack Windows",
+				"run":
+				"
+					#where gfortran \n
+					dir C:\\mingw64\\bin\\libquad* \n
+					#dir C:\\mingw64\\lib \n
 
-						# No significant difference between release and (default) debug profile. \n
-						# Maybe that will change after I copy the other half of AOC tests \n
-						#fpm test test \n
-						#fpm test long \n
-						fpm test test --profile release \n
-						fpm test long --profile release \n
-					"
-				},
-				{
-					"if": "matrix.os == 'ubuntu-latest'",
-					"run": "sudo apt-get install gfortran"
-				},
-				{
-					"if": "matrix.os == 'macOS-latest'",
-					"run": "
-						brew install gcc@12 &&
-						brew reinstall gcc@12"
-				},
-				{
-					"name": "Build",
-					"run":
-					"
-						#export OMP_NUM_THREADS=1 \n
-						bash ./build.sh debug \n
-						#ls -ltrh build/ \n
-					"
-				},
-				{
-					"if": "matrix.os != 'windows-latest'",
-					"name": "Test debug",
-					"run":
-					"
-						./build/syntran < samples/arithmetic.syntran  \n
-						#./build/syntran < samples/bad-syntax.syntran \n
-						time ./build/test \n
-					"
-				},
-				{
-					"if": "matrix.os != 'windows-latest'",
-					"name": "Test release",
-					"run":
-					"
-						bash ./build.sh release \n
-						time ./build/test \n
-					"
-				},
-				{
-					# TODO: make a bash pack script, then libgfortran-5.dll
-					# location can be automatically found
-					"if": "matrix.os == 'windows-latest'",
-					"name": "Pack Windows",
-					"run":
-					"
-						#where gfortran \n
-						dir C:\\mingw64\\bin\\libquad* \n
-						#dir C:\\mingw64\\lib \n
+					where api-ms-win-crt-time-l1-1-0.dll
 
-						where api-ms-win-crt-time-l1-1-0.dll
+					#bash ./build.sh release \n
+					bash ./build.sh debug \n
 
-						#bash ./build.sh release \n
-						bash ./build.sh debug \n
+					# Could try adding -static-gcc etc in cmake to reduce the burden here \n
 
-						# Could try adding -static-gcc etc in cmake to reduce the burden here \n
+					copy .\\build\\syntran.exe .\\ \n
+					copy C:\\mingw64\\bin\\libgfortran-5.dll .\\ \n
+					copy C:\\mingw64\\bin\\libquadmath-0.dll .\\ \n
+					copy C:\\mingw64\\bin\\libgcc_s_seh-1.dll .\\ \n
+					copy C:\\mingw64\\bin\\libwinpthread-1.dll .\\ \n
+				"
+			},
+			{
+				"if": "matrix.os == 'macOS-latest'",
+				"name": "Pack macOS",
+				"run":
+				"
+					set -exu \n
+					#set -x \n
 
-						copy .\\build\\syntran.exe .\\ \n
-						copy C:\\mingw64\\bin\\libgfortran-5.dll .\\ \n
-						copy C:\\mingw64\\bin\\libquadmath-0.dll .\\ \n
-						copy C:\\mingw64\\bin\\libgcc_s_seh-1.dll .\\ \n
-						copy C:\\mingw64\\bin\\libwinpthread-1.dll .\\ \n
-					"
-				},
-				{
-					"if": "matrix.os == 'macOS-latest'",
-					"name": "Pack macOS",
-					"run":
-					"
-						set -exu \n
-						#set -x \n
+					gfortran-12 --version \n
+					which gfortran-12 \n
 
-						gfortran-12 --version \n
-						which gfortran-12 \n
+					bash ./build.sh release \n
 
-						bash ./build.sh release \n
+					# TODO: copy to a subdir for easier upload \n
 
-						# TODO: copy to a subdir for easier upload \n
+					cp ./build/syntran . \n
 
-						cp ./build/syntran . \n
+					otool -L ./syntran \n
 
-						otool -L ./syntran \n
+					GCC_LIB_DIR=/opt/homebrew/opt/gcc@12/lib/gcc/12 \n
 
-						GCC_LIB_DIR=/opt/homebrew/opt/gcc@12/lib/gcc/12 \n
+					#ls ${GCC_LIB_DIR} \n
 
-						ls ${GCC_LIB_DIR} \n
+					# A loop might be nice to dry this up \n
+					# libgcc_s is a dependency of libgfortran, not a direct \n
+					# dependency of syntran \n
 
-						# A loop might be nice to dry this up \n
-						# libgcc_s is a dependency of libgfortran, not a direct \n
-						# dependency of syntran \n
+					cp ${GCC_LIB_DIR}/libgcc_s.1.1.dylib . \n
+					cp ${GCC_LIB_DIR}/libgfortran.5.dylib . \n
+					cp ${GCC_LIB_DIR}/libgomp.1.dylib . \n
+					cp ${GCC_LIB_DIR}/libquadmath.0.dylib . \n
 
-						cp ${GCC_LIB_DIR}/libgcc_s.1.1.dylib . \n
-						cp ${GCC_LIB_DIR}/libgfortran.5.dylib . \n
-						cp ${GCC_LIB_DIR}/libgomp.1.dylib . \n
-						cp ${GCC_LIB_DIR}/libquadmath.0.dylib . \n
+					#/usr/lib/libSystem.B.dylib
 
-						#/usr/lib/libSystem.B.dylib
+					install_name_tool -change
+						\"${GCC_LIB_DIR}/libgfortran.5.dylib\"
+						\"@executable_path/libgfortran.5.dylib\"
+						\"./syntran\" \n
 
-						install_name_tool -change
-							\"${GCC_LIB_DIR}/libgfortran.5.dylib\"
-							\"@executable_path/libgfortran.5.dylib\"
-							\"./syntran\" \n
+					# There's no need to run install_name_tool for libgcc_s,
+					# it's already relative to @rpath in libgfortran \n
 
-						# There's no need to run install_name_tool for libgcc_s,
-						# it's already relative to @rpath in libgfortran \n
+					install_name_tool -change
+						\"${GCC_LIB_DIR}/libgomp.1.dylib\"
+						\"@executable_path/libgomp.1.dylib\"
+						\"./syntran\" \n
 
-						install_name_tool -change
-							\"${GCC_LIB_DIR}/libgomp.1.dylib\"
-							\"@executable_path/libgomp.1.dylib\"
-							\"./syntran\" \n
+					install_name_tool -change
+						\"${GCC_LIB_DIR}/libquadmath.0.dylib\"
+						\"@executable_path/libquadmath.0.dylib\"
+						\"./syntran\" \n
 
-						install_name_tool -change
-							\"${GCC_LIB_DIR}/libquadmath.0.dylib\"
-							\"@executable_path/libquadmath.0.dylib\"
-							\"./syntran\" \n
-
-						chmod +x ./syntran \n
-						#patchelf --set-rpath '$ORIGIN' ./syntran \n
-					"
-				},
-				{
-					"uses": "actions/upload-artifact@v4",
-					"if": "matrix.os == 'macOS-latest'",
-					"with": {
-						"path": "./syntran\n./libgfortran.5.dylib\n./libgcc_s.1.1.dylib\n./libgomp.1.dylib\n./libquadmath.0.dylib",
-						"name": "syntran-macos"
-					}
-				},
-				{
-					"uses": "actions/upload-artifact@v4",
-					"if": "matrix.os == 'windows-latest'",
-					"with": {
-						"path": "./syntran.exe\n./libgfortran-5.dll\n./libquadmath-0.dll\n./libgcc_s_seh-1.dll\n./libwinpthread-1.dll",
-						"name": "syntran-windows"
-					}
-				},
-				{
-					"uses": "actions/upload-artifact@v4",
-					"if": "matrix.os == 'ubuntu-latest'",
-					"with": {
-						# unfortunately gfortran-12 does not support -static-libquadmath
-						"path": "./syntran\n./libquadmath.so.0",
-						"name": "syntran-linux"
-					}
-				},
-				#{
-				#	# TODO: just remove conditional from other test stage.  This
-				#	# never used to work on Windows bc gfortran-compiled bins
-				#	# just wouldn't run on the github win runners. Maybe go back
-				#	# to debug.  Release has intermittent issues
-				#	"if": "matrix.os == 'windows-latest'",
-				#	"name": "Test Windows",
-				#	"run":
-				#	"
-				#		bash ./test.sh \n
-				#	"
-				#},
-			]
-		},
-		"test-gfortran": {
-			"name": "Test with gfortran-${{ matrix.gfortran }}",
-			"runs-on": "${{ matrix.os }}",
-			"strategy": {
-				"matrix": {
-					"os": [
-						"ubuntu-latest"
-					],
-					#"gfortran": [10, 11, 12, 13]  # TODO: gfort 13 has an issue
-					#"gfortran": [9, 10, 11, 12]  # gfort 9 started segfaulting with the introduction of fortran submodules circa 9ae38b9d
-					"gfortran": [10, 11, 12]  # gfort <= 8 not available by default on github ci workers
+					chmod +x ./syntran \n
+					./syntran --version \n
+					#cat ./src/compiler.F90 \n
+				"
+			},
+			{
+				"uses": "actions/upload-artifact@v4",
+				"if": "matrix.os == 'macOS-latest'",
+				"with": {
+					"path": "./syntran\n./libgfortran.5.dylib\n./libgcc_s.1.1.dylib\n./libgomp.1.dylib\n./libquadmath.0.dylib",
+					"name": "syntran-macos"
 				}
 			},
-			"steps": [
-				{
-					"uses": "actions/checkout@v1"
-				},
-				{
-					"uses": "fortran-lang/setup-fpm@v5",
-					"with": {
-						"github-token": "${{ secrets.GITHUB_TOKEN }}"
-					}
-
-				},
-				{
-					"if": "matrix.os == 'ubuntu-latest'",
-					"name": "Test ubuntu gfortran-${{ matrix.gfortran }}",
-					"env": {
-						"FPM_FC": "gfortran-${{ matrix.gfortran }}"
-					},
-					"run":
-					"
-						set -exu \n
-						#fpm test test --verbose --flag -Wno-tabs \n
-						#fpm test long \n
-						fpm test test --profile release --verbose --flag -Wno-tabs \n
-						fpm test long --profile release --flag -Wno-tabs \n
-					"
-				}
-			]
-		},
-		"test-compilers": {
-			"name": "Test with ${{ matrix.toolchain.compiler }}-${{ matrix.toolchain.version }}",
-			"runs-on": "${{ matrix.os }}",
-			"strategy": {
-				"matrix": {
-					"os": [
-						"ubuntu-latest"
-					],
-					"toolchain": [
-						{"compiler": "intel", "version": "2024.2"},
-						#{"compiler": "intel", "version": "2024.1"}, # works
-						#{"compiler": "intel", "version": "2024.0"}, # works
-						#{"compiler": "intel", "version": "2023.2"}, # works
-						{"compiler": "intel", "version": "2023.1"},
-
-						{"compiler": "intel-classic", "version": "2021.10"},
-						#{"compiler": "intel-classic", "version": "2021.1"},  # complains about coarrays???
-
-						##{"compiler": "nvidia-hpc", "version": "23.11"}  # setup fails
-					]
+			{
+				"uses": "actions/upload-artifact@v4",
+				"if": "matrix.os == 'windows-latest'",
+				"with": {
+					"path": "./syntran.exe\n./libgfortran-5.dll\n./libquadmath-0.dll\n./libgcc_s_seh-1.dll\n./libwinpthread-1.dll",
+					"name": "syntran-windows"
 				}
 			},
-			"steps": [
-				{
-					"uses": "actions/checkout@v1"
-
-				},
-				{
-					"uses": "fortran-lang/setup-fpm@v5",
-					"with": {
-						"github-token": "${{ secrets.GITHUB_TOKEN }}"
-					}
-
-				},
-				{
-					"uses": "fortran-lang/setup-fortran@v1",
-					"id": "setup-fortran",
-					"with": {
-						"compiler": "${{ matrix.toolchain.compiler }}",
-						"version": "${{ matrix.toolchain.version }}"
-					}
-				},
-				{
-					"if": "matrix.os == 'ubuntu-latest'",
-					"name": "Test ${{ matrix.toolchain.compiler }} ${{ matrix.toolchain.version }}",
-					"env": {
-						"FPM_FC": "${{ env.FC }}"
-					},
-					"run":
-					"
-						set -exu \n
-						fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
-						fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
-					"
+			{
+				"uses": "actions/upload-artifact@v4",
+				"if": "matrix.os == 'ubuntu-latest'",
+				"with": {
+					# unfortunately gfortran-12 does not support -static-libquadmath
+					"path": "./syntran\n./libquadmath.so.0",
+					"name": "syntran-linux"
 				}
-			]
+			},
+			#{
+			#	# TODO: just remove conditional from other test stage.  This
+			#	# never used to work on Windows bc gfortran-compiled bins
+			#	# just wouldn't run on the github win runners. Maybe go back
+			#	# to debug.  Release has intermittent issues
+			#	"if": "matrix.os == 'windows-latest'",
+			#	"name": "Test Windows",
+			#	"run":
+			#	"
+			#		bash ./test.sh \n
+			#	"
+			#},
+		]
+	},
+	"test-gfortran": {
+		"name": "Test with gfortran-${{ matrix.gfortran }}",
+		"runs-on": "${{ matrix.os }}",
+		"strategy": {
+			"matrix": {
+				"os": [
+					"ubuntu-latest"
+				],
+				#"gfortran": [10, 11, 12, 13]  # TODO: gfort 13 has an issue
+				#"gfortran": [9, 10, 11, 12]  # gfort 9 started segfaulting with the introduction of fortran submodules circa 9ae38b9d
+				"gfortran": [10, 11, 12]  # gfort <= 8 not available by default on github ci workers
+			}
 		},
-		"test-docker-build": {
-			# Build syntran from source in default top-level alpine Dockerfile
-			"name": "Test docker build",
-			"runs-on": "ubuntu-latest",
-			"steps": [
-				{"uses": "actions/checkout@v1"},
-				{
-					"name": "Test docker build",
-					"run":
-					"
-						docker --version \n
-						docker build . -t sy \n
-						docker run --entrypoint syntran sy --version \n
-						docker run sy --version # syntran is already the default entrypoint \n
-						docker run sy -c \"1 + 2;\" \n
-						ans=$(docker run sy -c \"1 + 2;\" | tail -1) \n
-						if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
-							echo \"win\" \n
-							exit 0 \n
-						else \n
-							echo \"fail\" \n
-							exit 1 \n
-						fi \n
-					"
+		"steps": [
+			{
+				"uses": "actions/checkout@v1"
+			},
+			{
+				"uses": "fortran-lang/setup-fpm@v5",
+				"with": {
+					"github-token": "${{ secrets.GITHUB_TOKEN }}"
+				}
+
+			},
+			{
+				"if": "matrix.os == 'ubuntu-latest'",
+				"name": "Test ubuntu gfortran-${{ matrix.gfortran }}",
+				"env": {
+					"FPM_FC": "gfortran-${{ matrix.gfortran }}"
 				},
-			]
+				"run":
+				"
+					set -exu \n
+					#fpm test test --verbose --flag -Wno-tabs \n
+					#fpm test long \n
+					fpm test test --profile release --verbose --flag -Wno-tabs \n
+					fpm test long --profile release --flag -Wno-tabs \n
+				"
+			}
+		]
+	},
+	"test-compilers": {
+		"name": "Test with ${{ matrix.toolchain.compiler }}-${{ matrix.toolchain.version }}",
+		"runs-on": "${{ matrix.os }}",
+		"strategy": {
+			"matrix": {
+				"os": [
+					"ubuntu-latest"
+				],
+				"toolchain": [
+					{"compiler": "intel", "version": "2024.2"},
+					#{"compiler": "intel", "version": "2024.1"}, # works
+					#{"compiler": "intel", "version": "2024.0"}, # works
+					#{"compiler": "intel", "version": "2023.2"}, # works
+					{"compiler": "intel", "version": "2023.1"},
+
+					##{"compiler": "intel", "version": "2023.0"},  # crashes on ` 	do while (is_whitespace(context%text(j:j)))`
+					##{"compiler": "intel", "version": "2022.2"},  # ifx 2022.2 doesn't have `do while ()` :(
+
+					{"compiler": "intel-classic", "version": "2021.10"},
+					{"compiler": "intel-classic", "version": "2021.1"},
+
+					##{"compiler": "nvidia-hpc", "version": "23.11"}  # setup fails
+				]
+			}
 		},
-		"test-linux-bin": {
-			# Test binary syntran installations on dockerfiles from ./docker/
-			# dir.  These download the latest github "release", so there will be
-			# a lag between when you build the release and manually upload a
-			# binary package to github
-			"name": "Test linux bin",
-			"runs-on": "ubuntu-latest",
-			"steps": [
-				{"uses": "actions/checkout@v1"},
-				{
-					"name": "Test linux bin",
-					"run":
-					"
-						bash ./test-bin.sh \n
-					"
+		"steps": [
+			{
+				"uses": "actions/checkout@v1"
+
+			},
+			{
+				"uses": "fortran-lang/setup-fpm@v5",
+				"with": {
+					"github-token": "${{ secrets.GITHUB_TOKEN }}"
+				}
+
+			},
+			{
+				"uses": "fortran-lang/setup-fortran@v1",
+				"id": "setup-fortran",
+				"with": {
+					"compiler": "${{ matrix.toolchain.compiler }}",
+					"version": "${{ matrix.toolchain.version }}"
+				}
+			},
+			{
+				"if": "matrix.os == 'ubuntu-latest'",
+				"name": "Test ${{ matrix.toolchain.compiler }} ${{ matrix.toolchain.version }}",
+				"env": {
+					"FPM_FC": "${{ env.FC }}"
 				},
-			]
-		},
-		"test-macos-bin": {
-			"name": "Test macos bin",
-			"runs-on": "macOS-latest",
-			"steps": [
-				{
-					"name": "Test macos bin",
-					"run":
-					"
-						set -exu \n
+				"run":
+				"
+					set -exu \n
+					fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+					fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+				"
+			}
+		]
+	},
+	"test-docker-build": {
+		# Build syntran from source in default top-level alpine Dockerfile
+		"name": "Test docker build",
+		"runs-on": "ubuntu-latest",
+		"steps": [
+			{"uses": "actions/checkout@v1"},
+			{
+				"name": "Test docker",
+				"run":
+				"
+					docker --version \n
+					docker build . -t sy \n
+					docker run --entrypoint syntran sy --version \n
+					docker run sy --version # syntran is already the default entrypoint \n
+					docker run sy -c \"1 + 2;\" \n
+					ans=$(docker run sy -c \"1 + 2;\") \n
+					if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
+						echo \"win\" \n
+						exit 0 \n
+					else \n
+						echo \"fail\" \n
+						exit 1 \n
+					fi \n
+				"
+			},
+		]
+	},
+	"test-linux-bin": {
+		# Test binary syntran installations on dockerfiles from ./docker/
+		# dir.  These download the latest github "release", so there will be
+		# a lag between when you build the release and manually upload a
+		# binary package to github
+		"name": "Test linux bin",
+		"runs-on": "ubuntu-latest",
+		"steps": [
+			{"uses": "actions/checkout@v1"},
+			{
+				"name": "Test linux bin",
+				"run":
+				"
+					bash ./test-bin.sh \n
+				"
+			},
+		]
+	},
+	"test-macos-bin": {
+		"name": "Test macos bin",
+		"runs-on": "macOS-latest",
+		"steps": [
+			{
+				"name": "Test macos bin",
+				"run":
+				"
+					set -exu \n
 
-						# Test this to run syntran without homebrew gcc lib paths \n
-						brew remove gcc@12 \n
+					# Test this to run syntran without homebrew gcc lib paths \n
+					brew remove gcc@12 \n
 
-						mv /opt/homebrew/bin /opt/homebrew/bin-BACKUP || true \n
-						mv /opt/homebrew/opt /opt/homebrew/opt-BACKUP || true \n
-						mv /opt/homebrew/Cellar /opt/homebrew/Cellar-BACKUP || true \n
-						ls /opt/homebrew/ \n
+					mv /opt/homebrew/bin /opt/homebrew/bin-BACKUP || true \n
+					mv /opt/homebrew/opt /opt/homebrew/opt-BACKUP || true \n
+					mv /opt/homebrew/Cellar /opt/homebrew/Cellar-BACKUP || true \n
+					ls /opt/homebrew/ \n
 
-						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos.zip\" \n
-						unzip syntran-macos*.zip \n
-						chmod +x ./syntran \n
-						./syntran -h \n
-						./syntran --version \n
+					curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos.zip\" \n
+					unzip syntran-macos*.zip \n
+					chmod +x ./syntran \n
+					./syntran -h \n
+					./syntran --version \n
 
-						./syntran -c 'println(\"hello world\");' \n
-						./syntran -c '1 + 2 * 3;' \n
-						./syntran -c '4 + 5 * [6: 10];' \n
-						./syntran -c 'sum([0: 101]);' \n
+					./syntran -c 'println(\"hello world\");' \n
+					./syntran -c '1 + 2 * 3;' \n
+					./syntran -c '4 + 5 * [6: 10];' \n
+					./syntran -c 'sum([0: 101]);' \n
 
-						# otool shows the dependent dylibs (like `ldd` on linux) \n
-						otool -L ./syntran \n
+					otool -L ./syntran \n
+				"
+			},
+		]
+	},
+	"test-windows-bin": {
+		"name": "Test windows bin",
+		"runs-on": "windows-latest",
+		"steps": [
+			{
+				"name": "Test windows bin",
+				"run":
+				"
+					curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-windows.zip\" \n
+					tar -xvf syntran-windows.zip \n
+					dir \n
+					.\\syntran.exe -h \n
+					.\\syntran.exe --version \n
 
-						# lipo shows which architecture this bin was built for
-						# (e.g. arm64 (apple silly con) or x86_64 (intel)). as
-						# of september 2024, github action runners are arm64 \n
-						lipo -info ./syntran \n
-					"
-				},
-			]
-		},
-		"test-windows-bin": {
-			"name": "Test windows bin",
-			"runs-on": "windows-latest",
-			"steps": [
-				{
-					"name": "Test windows bin",
-					"run":
-					"
-						curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-windows.zip\" \n
-						tar -xvf syntran-windows.zip \n
-						dir \n
-						.\\syntran.exe -h \n
-						.\\syntran.exe --version \n
-
-						.\\syntran.exe -c \"println(\"\"hello world\"\");\" \n
-						.\\syntran.exe -c \"1 + 2 * 3;\" \n
-						.\\syntran.exe -c \"4 + 5 * [6: 10];\" \n
-						.\\syntran.exe -c \"sum([0: 101]);\" \n
-					"
-				},
-			]
-		},
-	}
+					.\\syntran.exe -c \"println(\"\"hello world\"\");\" \n
+					.\\syntran.exe -c \"1 + 2 * 3;\" \n
+					.\\syntran.exe -c \"4 + 5 * [6: 10];\" \n
+					.\\syntran.exe -c \"sum([0: 101]);\" \n
+				"
+			},
+		]
+	},
+}
 }

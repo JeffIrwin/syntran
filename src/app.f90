@@ -208,7 +208,7 @@ function parse_args() result(args)
 		write(*,*)
 		write(*,*) fg_bold//"Options:"//color_reset
 		write(*,*) "    -h --help           Show this help"
-		write(*,*) "    --version           Show version"
+		write(*,*) "    --version           Show version and build details"
 		write(*,*) "    -c --command <cmd>  Run program passed in as string"
 		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
 		write(*,*) "    --fmax-errors <n>   Limit max " &
