@@ -113,7 +113,7 @@ end function match
 
 !===============================================================================
 
-module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
+recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 
 	! src_file is the filename of the current file being processed, i.e. the
 	! *includer*, not the includee

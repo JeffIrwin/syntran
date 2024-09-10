@@ -108,7 +108,7 @@ module syntran__parse_m
 			type(syntax_node_t) :: decl
 		end function parse_fn_declaration
 
-		module function parse_fn_call(parser) result(fn_call)
+		recursive module function parse_fn_call(parser) result(fn_call)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: fn_call
 		end function parse_fn_call
@@ -138,7 +138,7 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_array.f90
 
-		module function parse_array_expr(parser) result(expr)
+		recursive module function parse_array_expr(parser) result(expr)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: expr
 		end function
@@ -148,7 +148,7 @@ module syntran__parse_m
 			type(syntax_node_vector_t) :: size
 		end function parse_size
 
-		module subroutine parse_subscripts(parser, expr)
+		recursive module subroutine parse_subscripts(parser, expr)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(inout) :: expr
 		end subroutine parse_subscripts
@@ -160,7 +160,7 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_control.f90
 
-		module function parse_if_statement(parser) result(statement)
+		recursive module function parse_if_statement(parser) result(statement)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
 		end function parse_if_statement
@@ -170,22 +170,22 @@ module syntran__parse_m
 			type(syntax_node_t) :: statement
 		end function parse_return_statement
 
-		module function parse_for_statement(parser) result(statement)
+		recursive module function parse_for_statement(parser) result(statement)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
 		end function parse_for_statement
 
-		module function parse_while_statement(parser) result(statement)
+		recursive module function parse_while_statement(parser) result(statement)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
 		end function parse_while_statement
 
-		module function parse_block_statement(parser) result(block)
+		recursive module function parse_block_statement(parser) result(block)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: block
 		end function parse_block_statement
 
-		module function parse_statement(parser) result(statement)
+		recursive module function parse_statement(parser) result(statement)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
 		end function parse_statement
@@ -208,12 +208,12 @@ module syntran__parse_m
 			type(syntax_node_t) :: expr
 		end function parse_expr
 
-		module function parse_primary_expr(parser) result(expr)
+		recursive module function parse_primary_expr(parser) result(expr)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: expr
 		end function parse_primary_expr
 
-		module function parse_name_expr(parser) result(expr)
+		recursive module function parse_name_expr(parser) result(expr)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: expr
 		end function parse_name_expr
@@ -241,7 +241,7 @@ module syntran__parse_m
 			type(syntax_token_t) :: token
 		end function match
 
-		module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
+		recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 			class(parser_t) :: parser
 			type(syntax_token_t), intent(in) :: tokens_in(:)
 			character(len = *), intent(in) :: src_file

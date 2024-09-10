@@ -344,7 +344,6 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	!print *, ''
 	!print *, 'str_ = ', str_
-	!print *, ''
 
 	call init_state(state)
 	state%quiet = .false.
@@ -397,6 +396,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	! popd
 	if (chdirl) call chdir(cwd)
+	!print *, "done syntran_eval()"
 
 end function syntran_eval
 

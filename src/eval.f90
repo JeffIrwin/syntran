@@ -144,7 +144,7 @@ end subroutine syntax_eval
 
 !===============================================================================
 
-subroutine eval_binary_expr(node, state, res)
+recursive subroutine eval_binary_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
@@ -237,7 +237,7 @@ end subroutine eval_binary_expr
 
 !===============================================================================
 
-subroutine eval_name_expr(node, state, res)
+recursive subroutine eval_name_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
@@ -702,7 +702,7 @@ end subroutine eval_struct_instance
 
 !===============================================================================
 
-subroutine eval_fn_call(node, state, res)
+recursive subroutine eval_fn_call(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
@@ -1124,7 +1124,7 @@ end subroutine eval_fn_call
 
 !===============================================================================
 
-subroutine eval_for_statement(node, state, res)
+recursive subroutine eval_for_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
@@ -1304,7 +1304,7 @@ end subroutine eval_for_statement
 
 !===============================================================================
 
-subroutine eval_assignment_expr(node, state, res)
+recursive subroutine eval_assignment_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
@@ -1562,7 +1562,7 @@ end subroutine eval_translation_unit
 
 !===============================================================================
 
-subroutine eval_array_expr(node, state, res)
+recursive subroutine eval_array_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
@@ -1934,7 +1934,7 @@ end subroutine eval_array_expr
 
 !===============================================================================
 
-subroutine eval_while_statement(node, state, res)
+recursive subroutine eval_while_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
@@ -1956,7 +1956,7 @@ end subroutine eval_while_statement
 
 !===============================================================================
 
-subroutine eval_if_statement(node, state, res)
+recursive subroutine eval_if_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
@@ -1984,7 +1984,7 @@ end subroutine eval_if_statement
 
 !===============================================================================
 
-subroutine eval_return_statement(node, state, res)
+recursive subroutine eval_return_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
@@ -2010,7 +2010,7 @@ end subroutine eval_return_statement
 
 !===============================================================================
 
-subroutine eval_block_statement(node, state, res)
+recursive subroutine eval_block_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
@@ -2061,7 +2061,7 @@ end subroutine eval_block_statement
 
 !===============================================================================
 
-subroutine eval_unary_expr(node, state, res)
+recursive subroutine eval_unary_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
@@ -2419,7 +2419,7 @@ end function sub_eval
 
 !===============================================================================
 
-function subscript_eval(node, state) result(index_)
+recursive function subscript_eval(node, state) result(index_)
 
 	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
 	! subscript index_

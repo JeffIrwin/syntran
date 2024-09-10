@@ -372,7 +372,7 @@ end function parse_expr
 
 !===============================================================================
 
-module function parse_primary_expr(parser) result(expr)
+recursive module function parse_primary_expr(parser) result(expr)
 
 	class(parser_t) :: parser
 
@@ -503,7 +503,7 @@ end function parse_primary_expr
 
 !===============================================================================
 
-module function parse_name_expr(parser) result(expr)
+recursive module function parse_name_expr(parser) result(expr)
 
 	class(parser_t) :: parser
 

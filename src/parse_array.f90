@@ -15,7 +15,7 @@ contains
 
 !===============================================================================
 
-module function parse_array_expr(parser) result(expr)
+recursive module function parse_array_expr(parser) result(expr)
 
 	! These are the possible kinds of array literals:
 	!
@@ -435,7 +435,7 @@ end function parse_array_expr
 
 !===============================================================================
 
-module subroutine parse_subscripts(parser, expr)
+recursive module subroutine parse_subscripts(parser, expr)
 
 	! Parse array subscripts, if present
 

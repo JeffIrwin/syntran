@@ -76,7 +76,7 @@ end function parse_return_statement
 
 !===============================================================================
 
-module function parse_if_statement(parser) result(statement)
+recursive module function parse_if_statement(parser) result(statement)
 
 	class(parser_t) :: parser
 
@@ -140,7 +140,7 @@ end function parse_if_statement
 
 !===============================================================================
 
-module function parse_for_statement(parser) result(statement)
+recursive module function parse_for_statement(parser) result(statement)
 
 	class(parser_t) :: parser
 
@@ -247,7 +247,7 @@ end function parse_for_statement
 
 !===============================================================================
 
-module function parse_while_statement(parser) result(statement)
+recursive module function parse_while_statement(parser) result(statement)
 
 	class(parser_t) :: parser
 
@@ -288,7 +288,7 @@ end function parse_while_statement
 
 !===============================================================================
 
-module function parse_block_statement(parser) result(block)
+recursive module function parse_block_statement(parser) result(block)
 
 	class(parser_t) :: parser
 
@@ -339,7 +339,7 @@ end function parse_block_statement
 
 !===============================================================================
 
-module function parse_statement(parser) result(statement)
+recursive module function parse_statement(parser) result(statement)
 
 	class(parser_t) :: parser
 

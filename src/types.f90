@@ -1218,7 +1218,7 @@ end function new_syntax_node_vector
 
 !===============================================================================
 
-subroutine syntax_nodes_copy(dst, src)
+recursive subroutine syntax_nodes_copy(dst, src)
 
 	! Array copy
 

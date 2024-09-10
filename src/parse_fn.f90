@@ -15,7 +15,7 @@ contains
 
 !===============================================================================
 
-module function parse_fn_call(parser) result(fn_call)
+recursive module function parse_fn_call(parser) result(fn_call)
 
 	class(parser_t) :: parser
 
