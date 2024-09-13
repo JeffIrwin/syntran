@@ -39,6 +39,7 @@ subroutine unit_test_aoc_2023(npass, nfail)
 		[   &
 			interpret_file(path//"01/main.syntran", quiet = .true., chdir_ = .true.) == '107443', &
 			interpret_file(path//"02/main.syntran", quiet = .true., chdir_ = .true.) == '76485', &
+			interpret_file(path//"02/main-struct.syntran", quiet = .true., chdir_ = .true.) == '76485', &
 			interpret_file(path//"03/main.syntran", quiet = .true., chdir_ = .true.) == '88145909', &
 			interpret_file(path//"04/main.syntran", quiet = .true., chdir_ = .true.) == '6311320', &
 			interpret_file(path//"05/main.syntran", quiet = .true., chdir_ = .true.) == '261668924', &

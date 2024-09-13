@@ -59,10 +59,10 @@ function err_bad_int(context, span, num) result(err)
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: num
-	err = err_prefix//'invalid i32 integer `'//num &
+	err = err_prefix//'bad i32 integer `'//num &
 		//'` does not fit in 32 bits' &
 		//underline(context, span) &
-		//' invalid integer'//color_reset
+		//' bad integer'//color_reset
 
 end function err_bad_int
 
@@ -80,6 +80,37 @@ function err_unterminated_str(context, span, str) result(err)
 		//' unterminated str'//color_reset
 
 end function err_unterminated_str
+
+!===============================================================================
+
+function err_array_struct_slice(context, span, array) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: array
+
+	err = err_prefix &
+		//'slices are not implemented for arrays of structs, on array `' &
+		//array//'`' &
+		//underline(context, span) &
+		//" slice subscript not implemented"//color_reset
+
+end function err_array_struct_slice
+
+!===============================================================================
+
+function err_struct_array_slice(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_prefix//'slices are not implemented for structs of arrays.  ' &
+		//'Only scalar subscripts can be used here' &
+		//underline(context, span) &
+		//' slice subscript not implemented'//color_reset
+
+end function err_struct_array_slice
 
 !===============================================================================
 
@@ -104,9 +135,9 @@ function err_bad_float(context, span, num) result(err)
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: num
-	err = err_prefix//'invalid f32 float `'//num//'`' &
+	err = err_prefix//'bad f32 float `'//num//'`' &
 		//underline(context, span) &
-		//' invalid float'//color_reset
+		//' bad float'//color_reset
 
 end function err_bad_float
 
@@ -118,7 +149,7 @@ function err_bad_type(context, span, type) result(err)
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: type
-	err = err_prefix//'invalid type annotation `'//type//'`' &
+	err = err_prefix//'bad type annotation `'//type//'`' &
 		//underline(context, span) &
 		//' bad type'//color_reset
 
@@ -166,6 +197,62 @@ function err_redeclare_var(context, span, var) result(err)
 		//underline(context, span)//" variable already declared"//color_reset
 
 end function err_redeclare_var
+
+!===============================================================================
+
+function err_redeclare_mem(context, span, var) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: var
+	err = err_prefix &
+		//'member `'//var//'` has already been declared in this struct' &
+		//underline(context, span)//" member already declared"//color_reset
+
+end function err_redeclare_mem
+
+!===============================================================================
+
+function err_redeclare_fn(context, span, fn) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn
+	err = err_prefix &
+		//'function `'//fn//'` has already been declared' &
+		//underline(context, span)//" function already declared"//color_reset
+
+end function err_redeclare_fn
+
+!===============================================================================
+
+function err_redeclare_struct(context, span, struct) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: struct
+	err = err_prefix &
+		//'struct `'//struct//'` has already been declared' &
+		//underline(context, span)//" struct already declared"//color_reset
+
+end function err_redeclare_struct
+
+!===============================================================================
+
+function err_redeclare_primitive(context, span, struct) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: struct
+	err = err_prefix &
+		//'struct name `'//struct//'` is reserved for a primitive type' &
+		//underline(context, span)//" cannot redeclare primitives"//color_reset
+
+end function err_redeclare_primitive
 
 !===============================================================================
 
@@ -408,8 +495,8 @@ function err_bad_arg_type(context, span, fn, iarg, param, expect, actual) &
 
 	err = err_prefix &
 		//'function `'//fn//'` parameter '//str(iarg)//' `'//param &
-		//'` requires value of '//expect//' but was given a value of ' &
-		//actual &
+		//'` requires type `'//expect//'` but was given `' &
+		//actual//'`' &
 		//underline(context, span)//" wrong argument type"//color_reset
 
 end function err_bad_arg_type
@@ -612,6 +699,107 @@ end function err_het_array
 
 !===============================================================================
 
+function err_unset_member(context, span, mem_name, struct_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, struct_name
+	err = err_prefix &
+		//'not all members in struct `'//struct_name//'` are initialized.  ' &
+		//'Member `'//mem_name//'` is uninitialized' &
+		//underline(context, span) &
+		//" uninitialized member(s)"//color_reset
+
+end function err_unset_member
+
+!===============================================================================
+
+function err_reset_member(context, span, mem_name, struct_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, struct_name
+	err = err_prefix &
+		//'member `'//mem_name//'` is already initialized in struct `'//struct_name//'`' &
+		//underline(context, span) &
+		//" duplicate member"//color_reset
+
+end function err_reset_member
+
+!===============================================================================
+
+function err_non_struct_dot(context, span, ident) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: ident
+	err = err_prefix &
+		//'dot member access cannot be performed on non-struct variable `' &
+		//ident//'`' &
+		//underline(context, span) &
+		//" dot on a non-struct"//color_reset
+
+end function err_non_struct_dot
+
+!===============================================================================
+
+function err_bad_member_name(context, span, mem_name, struct_var_name, struct_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	! This msg yells about both the variable name `struct_var_name` and its
+	! "class" `struct_name`.  Its useful for dot expressions `var.mem`
+
+	character(len = *), intent(in) :: mem_name, struct_var_name, struct_name
+	err = err_prefix &
+		//'member `'//mem_name//'` does not exist in struct `'//struct_var_name//'`' &
+		//' of type `'//struct_name//'`' &
+		//underline(context, span) &
+		//" bad member name"//color_reset
+
+end function err_bad_member_name
+
+!===============================================================================
+
+function err_bad_member_name_short(context, span, mem_name, struct_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	! This msg yells only about the "class" `struct_name`.  Its useful for
+	! struct instantiations as in `return Class{mem = val};` where there may not
+	! be a variable identifier like in the longer fn above
+
+	character(len = *), intent(in) :: mem_name, struct_name
+	err = err_prefix &
+		//'member `'//mem_name//'` does not exist in struct `'//struct_name//'`' &
+		//underline(context, span) &
+		//" bad member name"//color_reset
+
+end function err_bad_member_name_short
+
+!===============================================================================
+
+function err_bad_member_type(context, span, mem_name, struct_name, act_type, exp_type) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, struct_name, exp_type, act_type
+	err = err_prefix &
+		//'member `'//mem_name//'` in struct `'//struct_name//'` has the wrong type.  ' &
+		//'Member requires type `'//exp_type//'` but was given `'//act_type//'`' &
+		//underline(context, span) &
+		//" bad member type"//color_reset
+
+end function err_bad_member_type
+
+!===============================================================================
+
 function err_inc_404(context, span, filename) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
@@ -679,7 +867,7 @@ function err_eval_len_array(type_name) result(err)
 	character(len = :), allocatable :: err
 
 	err = err_int_prefix &
-		//'array cannot be evaluated for type `' &
+		//'len array cannot be evaluated for type `' &
 		//type_name//'`'//color_reset
 
 end function err_eval_len_array

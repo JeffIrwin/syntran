@@ -90,6 +90,12 @@ module syntran__value_m
 		! but two types containing each other is bad
 		type(array_t), allocatable :: array
 
+		! i played with having a separate `struct_val_t` type and having an
+		! array of those, but it works better just having a direct array of
+		! `value_t`'s here instead
+		type(value_t), allocatable :: struct(:)
+		character(len = :), allocatable :: struct_name
+
 		contains
 			procedure :: to_str => value_to_str
 			procedure :: to_f32 => value_to_f32
@@ -97,12 +103,132 @@ module syntran__value_m
 			procedure :: to_i64 => value_to_i64
 			procedure :: to_i32_array => value_to_i32_array
 			procedure :: to_i64_array => value_to_i64_array
+			procedure, pass(dst) :: copy => value_copy
+			generic, public :: assignment(=) => copy
 
 	end type value_t
+
+	type value_vector_t
+		type(value_t), allocatable :: v(:)
+		integer :: len_, cap
+		contains
+			procedure :: push => push_value
+	end type value_vector_t
 
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+function new_value_vector() result(vector)
+
+	type(value_vector_t) :: vector
+
+	vector%len_ = 0
+	vector%cap = 2  ! I think a small default makes sense here
+
+	allocate(vector%v( vector%cap ))
+
+end function new_value_vector
+
+!===============================================================================
+
+subroutine push_value(vector, val)
+
+	class(value_vector_t) :: vector
+	type(value_t) :: val
+
+	!********
+
+	type(value_t), allocatable :: tmp(:)
+
+	integer :: tmp_cap, i
+
+	vector%len_ = vector%len_ + 1
+
+	if (vector%len_ > vector%cap) then
+		!print *, 'growing vector ====================================='
+
+		tmp_cap = 2 * vector%len_
+		allocate(tmp( tmp_cap ))
+
+		!print *, 'copy 1'
+		!!tmp(1: vector%cap) = vector%v
+		do i = 1, vector%cap
+			tmp(i) = vector%v(i)
+		end do
+
+		!print *, 'move'
+		!!call move_alloc(tmp, vector%v)
+
+		deallocate(vector%v)
+		allocate(vector%v( tmp_cap ))
+
+		! Unfortunately we have to copy TO tmp AND back FROM tmp.  I guess the
+		! fact that each node itself has allocatable members creates invalid
+		! references otherwise.
+
+		!print *, 'copy 2'
+		!!vector%v(1: vector%cap) = tmp(1: vector%cap)
+		do i = 1, vector%cap
+			vector%v(i) = tmp(i)
+		end do
+
+		vector%cap = tmp_cap
+
+	end if
+
+	!print *, 'set val'
+	vector%v( vector%len_ ) = val
+	!print *, 'done push_value'
+
+end subroutine push_value
+
+!===============================================================================
+
+recursive subroutine value_copy(dst, src)
+
+	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
+	! correctly for my types, leaving dangling refs to src when it is
+	! deallocated.
+	!
+	! Args have to be in the confusing dst, src order for overloading
+
+	class(value_t), intent(inout) :: dst
+	class(value_t), intent(in)    :: src
+
+	!********
+
+	integer :: i
+
+	if (debug > 3) print *, 'starting value_copy()'
+
+	dst%type = src%type
+	dst%sca  = src%sca
+
+	if (allocated(src%struct_name)) then
+		dst%struct_name = src%struct_name
+	end if
+
+	if (allocated(src%array)) then
+		if (.not. allocated(dst%array)) allocate(dst%array)
+		dst%array = src%array
+	else if (allocated(dst%array)) then
+		deallocate(dst%array)
+	end if
+
+	if (allocated(src%struct)) then
+		if (allocated(dst%struct)) deallocate(dst%struct)
+		allocate(dst%struct( size(src%struct) ))
+		do i = 1, size(src%struct)
+			dst%struct(i) = src%struct(i)
+		end do
+	else if (allocated(dst%struct)) then
+		deallocate(dst%struct)
+	end if
+
+end subroutine value_copy
 
 !===============================================================================
 
@@ -421,15 +547,34 @@ recursive function value_to_str(val) result(ans)
 
 	!********
 
-	!character(len = 16) :: buf16
-
 	integer :: j
-	integer(kind = 8) :: i8, prod
+	integer(kind = 8) :: i8, j8, prod, n, nj
 
-	!type(string_vector_t) :: str_vec
 	type(char_vector_t) :: str_vec
 
+	!print *, "val type = ", kind_name(val%type)
+
 	select case (val%type)
+
+		case (struct_type)
+
+			str_vec = new_char_vector()
+			call str_vec%push(val%struct_name//"{")
+
+			n = size(val%struct)
+			do i8 = 1, n
+
+				! It would be nice to label each member with its name
+
+				!call str_vec%push( val%struct(i8)%struct_name//" = " )
+
+				call str_vec%push( trimw(val%struct(i8)%to_str()) )
+
+				if (i8 < n) call str_vec%push(", ")
+
+			end do
+			call str_vec%push("}")
+			ans = str_vec%trim()
 
 		case (array_type)
 
@@ -566,10 +711,21 @@ recursive function value_to_str(val) result(ans)
 
 				end do
 
+			else if (val%array%type == struct_type) then
+	
+				n = size(val%struct)
+				do i8 = 1, n
+					! Just recurse instead of nesting a loop
+					call str_vec%push( val%struct(i8)%to_str() )
+					if (i8 < n) call str_vec%push(", ")
+				end do
+
 			else
-				write(*,*) 'Error: array ans conversion not implemented' &
-					//' for this type'
-				call internal_error()
+
+				! Do *not* print anything in this function, as recursive IO will
+				! cause a hang
+				call str_vec%push(err_prefix//"<invalid_array_value>"//color_reset)
+
 			end if
 
 			if (val%array%rank > 1) call str_vec%push(line_feed)

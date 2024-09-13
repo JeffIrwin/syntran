@@ -25,8 +25,6 @@ module function parse_return_statement(parser) result(statement)
 
 	integer :: right_beg, right_end, exp_type, act_type, exp_rank, act_rank
 
-	logical :: types_match
-
 	type(syntax_token_t) :: return_token, semi
 	type(text_span_t) :: span
 
@@ -58,62 +56,27 @@ module function parse_return_statement(parser) result(statement)
 	end if
 	semi = parser%match(semicolon_token)
 
-	! Check return type (unless we're at global level ifn == 1).  That's half
-	! the point of return statements
+	! Check return type (unless we're at global level ifn == 1, in which case
+	! %fn_type is any_type).  That's half the point of return statements
 	!
 	! There should also be a check that every branch of a fn has a return
 	! statement, but that seems more difficult
-	types_match = &
-		parser%fn_type == any_type .or. parser%fn_type == statement%right%val%type
-
-	if (.not. types_match) then
+	if (types_match(parser%fn_type, statement%right%val) /= TYPE_MATCH) then
+	if (statement%right%val%type /= unknown_type) then  ! don't cascade
 		span = new_span(right_beg, right_end - right_beg + 1)
 		call parser%diagnostics%push( &
 			err_bad_ret_type(parser%context(), &
 			span, parser%fn_name, &
-			kind_name(parser%fn_type), &
-			kind_name(statement%right%val%type)))
-
-		return
+			type_name(parser%fn_type), &
+			type_name(statement%right%val)))
 	end if
-
-	! Check array type and rank if needed
-	if (parser%fn_type == array_type) then
-		exp_type = parser%fn_array_type
-		act_type = statement%right%val%array%type
-		types_match = exp_type == any_type .or. exp_type == act_type
-	end if
-
-	if (.not. types_match) then
-		span = new_span(right_beg, right_end - right_beg + 1)
-		call parser%diagnostics%push( &
-			err_bad_array_ret_type(parser%context(), &
-			span, parser%fn_name, &
-			kind_name(exp_type), kind_name(act_type)))
-
-		return
-	end if
-
-	if (parser%fn_type == array_type) then
-		exp_rank = parser%fn_rank
-		act_rank = statement%right%val%array%rank
-
-		if (exp_rank >= 0 .and. exp_rank /= act_rank) then
-			span = new_span(right_beg, right_end - right_beg + 1)
-			call parser%diagnostics%push( &
-				err_bad_ret_rank(parser%context(), &
-				span, parser%fn_name, &
-				exp_rank, act_rank))
-
-			return
-		end if
 	end if
 
 end function parse_return_statement
 
 !===============================================================================
 
-module function parse_if_statement(parser) result(statement)
+recursive module function parse_if_statement(parser) result(statement)
 
 	class(parser_t) :: parser
 
@@ -177,7 +140,7 @@ end function parse_if_statement
 
 !===============================================================================
 
-module function parse_for_statement(parser) result(statement)
+recursive module function parse_for_statement(parser) result(statement)
 
 	class(parser_t) :: parser
 
@@ -284,7 +247,7 @@ end function parse_for_statement
 
 !===============================================================================
 
-module function parse_while_statement(parser) result(statement)
+recursive module function parse_while_statement(parser) result(statement)
 
 	class(parser_t) :: parser
 
@@ -325,7 +288,7 @@ end function parse_while_statement
 
 !===============================================================================
 
-module function parse_block_statement(parser) result(block)
+recursive module function parse_block_statement(parser) result(block)
 
 	class(parser_t) :: parser
 
@@ -376,7 +339,7 @@ end function parse_block_statement
 
 !===============================================================================
 
-module function parse_statement(parser) result(statement)
+recursive module function parse_statement(parser) result(statement)
 
 	class(parser_t) :: parser
 

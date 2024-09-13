@@ -1,0 +1,168 @@
+
+// This is not my original implementation (see main.syntran), rather this is an
+// alternative approach using structs
+
+#include("../../utils.syntran");
+
+//let infile = "src/tests/long/aoc/2023/02/test-input.txt";
+//infile = "src/tests/long/aoc/2023/02/input.txt";
+let infile = "test-input.txt";
+infile = "input.txt";
+
+struct Subset
+{
+	red: i32,
+	green: i32,
+	blue: i32,
+}
+
+fn part1(): i32
+{
+	let sum = 0;
+
+	let maxset = Subset{red = 12, green = 13, blue = 14};
+
+	let fid = open(infile);
+	let str_ = readln(fid);
+	let id = 0;
+	while (not eof(fid))
+	{
+		id += 1;
+
+		//println("str_ = ", str_);
+		let strs = split_(str_, ":");
+
+		let games = split_(strs[1], ";");
+		//println("games[0] = ", games[0]);
+
+		let possible = true;
+		for i in [0: size(games, 0)]
+		{
+			//println("game = ", games[i]);
+
+			let subset = Subset{red = 0, green = 0, blue = 0};
+
+			let chunks = split_(games[i], ",");
+			for j in [0: size(chunks, 0)]
+			{
+				let num_color = split_(chunks[j], " ");
+				let num = parse_i32(num_color[0]);
+				let color = num_color[1];
+
+				if color == "red"
+					subset.red = num;
+				else if color == "green"
+					subset.green = num;
+				else if color == "blue"
+					subset.blue = num;
+				else
+				{
+					println("Error: bad color """, color, """");
+					exit(-1);
+				}
+			}
+			//println("subset = ", subset);
+
+			if not
+			(
+				subset.red   <= maxset.red   and
+				subset.green <= maxset.green and
+				subset.blue  <= maxset.blue
+			)
+			{
+				possible = false;
+			}
+		}
+		if possible
+			sum += id;
+
+		//println();
+		str_ = readln(fid);
+	}
+	close(fid);
+
+	println("part 1 = ", sum);
+	return sum;
+}
+
+fn part2(): i32
+{
+	let sum = 0;
+
+	let fid = open(infile);
+	let str_ = readln(fid);
+	let id = 0;
+	while (not eof(fid))
+	{
+		id += 1;
+		let minset = Subset{red = 0, green = 0, blue = 0};
+
+		//println("str_ = ", str_);
+		let strs = split_(str_, ":");
+
+		let games = split_(strs[1], ";");
+		//println("games[0] = ", games[0]);
+
+		let possible = true;
+		for i in [0: size(games, 0)]
+		{
+			//println("game = ", games[i]);
+
+			let subset = Subset{red = 0, green = 0, blue = 0};
+
+			let chunks = split_(games[i], ",");
+			for j in [0: size(chunks, 0)]
+			{
+				let num_color = split_(chunks[j], " ");
+				let num = parse_i32(num_color[0]);
+				let color = num_color[1];
+
+				if color == "red"
+					subset.red = num;
+				else if color == "green"
+					subset.green = num;
+				else if color == "blue"
+					subset.blue = num;
+				else
+				{
+					println("Error: bad color """, color, """");
+					exit(-1);
+				}
+			}
+			//println("subset = ", subset);
+
+			minset.red   = max(minset.red  , subset.red  );
+			minset.green = max(minset.green, subset.green);
+			minset.blue  = max(minset.blue , subset.blue );
+		}
+		//println("minset = ", minset);
+
+		let power = minset.red * minset.green * minset.blue;
+		//println("power = ", power);
+
+		sum += power;
+
+		//println();
+		str_ = readln(fid);
+	}
+	close(fid);
+
+	println("part 2 = ", sum);
+	return sum;
+}
+
+fn main(): i32
+{
+	println();
+	println("Starting AOC syntran main-struct 2023/02");
+	let sum = 0;
+	sum += part1();
+	sum += part2();
+
+	println("Ending AOC syntran main-struct");
+	println();
+	return sum;
+}
+
+return main();
+

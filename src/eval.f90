@@ -20,6 +20,8 @@ module syntran__eval_m
 
 		type(fns_t) :: fns
 
+		!type(structs_t) :: structs
+
 		type(vars_t) :: vars
 
 		logical :: returned
@@ -41,19 +43,18 @@ recursive subroutine syntax_eval(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
-	!type(value_t), intent(out) :: res
+	! I experimented with making res intent(inout) in commit 993345ad, but it
+	! had a negative imact on perf, making gfortran about twice as slow on aoc
+	! tests, likely due to the extra work of checking `if allocated(...)
+	! deallocate` in lots of places
+	type(value_t), intent(out) :: res
 
 	!********
 
-	!print *, 'starting syntax_eval()'
+	integer :: i
 
-	! if_statement and while_statement may return an uninitialized type
-	! otherwise if their conditions are false
-	!
-	! TODO: setting here should be unnecessary now that type is initialized
-	! inside the value_t declaration
-	res%type = unknown_type
+	!print *, "starting syntax_eval()"
+	!print *, "node kind = ", kind_name(node%kind)
 
 	if (node%is_empty) then
 		!print *, 'returning'
@@ -103,12 +104,29 @@ recursive subroutine syntax_eval(node, state, res)
 
 		state%vars%vals(node%id_index) = res
 
+		!print *, "res type = ", kind_name(res%type)
+		!print *, "allocated(struct) = ", allocated(res%struct)
+		!if (res%type == struct_type) then
+		!	print *, "size struct = ", size(res%struct)
+		!	print *, "size struct = ", size( state%vars%vals(node%id_index)%struct )
+		!	do i = 1, size(res%struct)
+		!		print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
+		!		print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
+		!	end do
+		!end if
+
 	case (fn_call_expr)
 		call eval_fn_call(node, state, res)
+
+	case (struct_instance_expr)
+		call eval_struct_instance(node, state, res)
 
 	case (name_expr)
 		!print *, "name_expr"
 		call eval_name_expr(node, state, res)
+
+	case (dot_expr)
+		call eval_dot_expr(node, state, res)
 
 	case (unary_expr)
 		call eval_unary_expr(node, state, res)
@@ -126,13 +144,13 @@ end subroutine syntax_eval
 
 !===============================================================================
 
-subroutine eval_binary_expr(node, state, res)
+recursive subroutine eval_binary_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -219,21 +237,21 @@ end subroutine eval_binary_expr
 
 !===============================================================================
 
-subroutine eval_name_expr(node, state, res)
+recursive subroutine eval_name_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
-	integer :: rank_res, idim_, idim_res
+	integer :: rank_res, idim_, idim_res, type
 	integer(kind = 8) :: il, iu, i8, index_
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
-	type(value_t) :: right
+	type(value_t) :: right, tmp
 
 	!print *, "starting eval_name_expr()"
 	!print *, 'searching identifier ', node%identifier%text
@@ -286,13 +304,8 @@ subroutine eval_name_expr(node, state, res)
 		!print *, 'rank = ', node%val%array%rank
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
-
-			! This could probably be lumped in with the range_sub case now
-			! that I have it fully generalized
 			i8 = subscript_eval(node, state)
-			!print *, 'i8 = ', i8
-			res = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
-
+			call get_val(node, state%vars%vals(node%id_index), state, res, index_ = i8)
 		else
 
 			call get_subscript_range(node, state, lsubs, usubs, rank_res)
@@ -305,16 +318,13 @@ subroutine eval_name_expr(node, state, res)
 			!print *, 'len_  = ', node%val%array%len_
 			!print *, 'cap   = ', node%val%array%cap
 
-			if (.not. allocated(res%array)) allocate(res%array)
+			allocate(res%array)
 			res%type = array_type
 			res%array%kind = expl_array
 			res%array%type = node%val%array%type
 			res%array%rank = rank_res
 
-			!if (.not. allocated(res%array%size)) allocate(res%array%size( rank_res ))
-			if (allocated(res%array%size)) deallocate(res%array%size)
 			allocate(res%array%size( rank_res ))
-
 			idim_res = 1
 			do idim_ = 1, size(lsubs)
 				select case (node%lsubscripts(idim_)%sub_kind)
@@ -330,7 +340,7 @@ subroutine eval_name_expr(node, state, res)
 			res%array%len_ = product(res%array%size)
 			!print *, 'res len = ', res%array%len_
 
-			call allocate_array(res%array, res%array%len_)
+			call allocate_array(res, res%array%len_)
 
 			! Iterate through all subscripts in range and copy to result
 			! array
@@ -339,9 +349,8 @@ subroutine eval_name_expr(node, state, res)
 				!print *, 'subs = ', int(subs, 4)
 
 				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-				call set_array_value_t(res%array, i8, &
-				     get_array_value_t(state%vars%vals(node%id_index)%array, index_))
-
+				call get_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
+				call set_array_val(res%array, i8, tmp)
 				call get_next_subscript(lsubs, usubs, subs)
 			end do
 		end if
@@ -352,52 +361,354 @@ subroutine eval_name_expr(node, state, res)
 		!print *, "size(vals) = ", size(state%vars%vals)
 		res = state%vars%vals(node%id_index)
 
-		!! How are these both void types???
-		!!if (res%type == void_type) res%type = array_type
-		!print *, "res type = ", kind_name(res%type)
-		!print *, "var type = ", &
-		!	kind_name(state%vars%vals(node%id_index)%type), &
-		!	          state%vars%vals(node%id_index)%type
-
-		!! Deep copy of whole array instead of aliasing pointers
-		!!
-		!! I suspect that value_t now has a deep copy problem like syntax_node_t
-		!! does, and this may be why samples/array-fns.syntran doesn't work.  May
-		!! need to convert return-by-value to subroutine out-arg as reference (or
-		!! override the copy operator, but that hasn't worked out so well for
-		!! syntax_node_t)
-		!if (res%type == array_type) then
-		!	!print *, 'array name_expr'
-
-		!	if (allocated(res%array)) deallocate(res%array)
-
-		!	allocate(res%array)
-		!	res%type = array_type
-		!	res%array = state%vars%vals(node%id_index)%array
-
-		!	!! TODO: this might be unnecessary
-		!	res%array%rank = state%vars%vals(node%id_index)%array%rank
-		!	!!print *, "allocated(size j) = ", allocated(state%vars%vals(node%id_index)%array%size)
-		!	res%array%size = state%vars%vals(node%id_index)%array%size
-		!	!print *, "rank = ", res%array%rank, state%vars%vals(node%id_index)%array%rank
-
-		!!else
-		!!	print *, 'scalar name_expr'
-		!end if
-
 	end if
 
 end subroutine eval_name_expr
 
 !===============================================================================
 
-subroutine eval_fn_call(node, state, res)
+subroutine eval_dot_expr(node, state, res)
+
+	! This is an RHS dot expr.  LHS dots are handled in eval_assignment_expr().
 
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
+
+	!********
+
+	integer :: id, mem_kind
+
+	type(syntax_node_t) :: mem, tmp_node
+
+	type(value_t) :: val, tmp_val
+
+	!print *, "eval dot_expr"
+	!print *, "id_index = ", node%id_index
+	!print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
+
+	! This won't work for struct literal member access.  It only works for
+	! `identifier.member`
+
+	call get_val(node, state%vars%vals(node%id_index), state, res)
+
+end subroutine eval_dot_expr
+
+!===============================================================================
+
+recursive subroutine set_val(node, var, state, val, index_)
+
+	! Assign var.mem = val, or recurse if mem is also a dot expr
+
+	type(syntax_node_t), intent(in) :: node
+	type(value_t), intent(inout) :: var
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(in) :: val
+
+	integer(kind = 8), optional, intent(in) :: index_
+
+	!********
+
+	integer :: id
+	integer(kind = 8) :: i8, j8
+
+	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
+
+		if (present(index_)) then
+			i8 = index_
+		else
+			i8 = sub_eval(node, var, state)
+		end if
+		id = node%member%id_index
+
+		! Recursion could still be required.  Unfortunately, if an
+		! identifier has a subscript *and* a dot, then so does its node.  I
+		! think this might require a bunch of if() logic like this instead
+		! of any possibility of clean recursion
+
+		if (node%member%kind == dot_expr) then
+			! Recurse
+			call set_val(node%member, var%struct(i8+1)%struct(id), state, val)
+			return
+		end if
+
+		if (.not. allocated(node%member%lsubscripts)) then
+			var%struct(i8+1)%struct(id) = val
+			return
+		end if
+		!print *, "array dot chain"
+
+		! Arrays chained by a dot: `a[0].b[0]`
+		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
+		call set_array_val(var%struct(i8+1)%struct(id)%array, j8, val)
+		return
+
+	else if (allocated(node%lsubscripts)) then
+
+		if (present(index_)) then
+			i8 = index_
+		else
+			i8 = sub_eval(node, var, state)
+		end if
+		if (var%array%type /= struct_type) then
+			call set_array_val(var%array, i8, val)
+			return
+		end if
+
+		var%struct(i8+1) = val
+		return
+
+	end if
+
+	! `id` tracks whether each member is the 1st, 2nd, etc. member in the struct
+	! array of its parent.  A local variable isnt' really needed but I think it
+	! helps readability
+	id = node%member%id_index
+
+	if (node%member%kind == dot_expr) then
+		! Recurse
+		call set_val(node%member, var%struct(id), state, val)
+		return
+	end if
+
+	! Base case
+
+	if (.not. allocated(node%member%lsubscripts)) then
+		var%struct(id) = val
+		return
+	end if
+	!print *, "lsubscripts allocated"
+
+	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+		! Already caught in parser
+		write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+		call internal_error()
+	end if
+	!print *, "scalar_sub"
+
+	if (present(index_)) then
+		i8 = index_
+	else
+		i8 = sub_eval(node%member, var%struct(id), state)
+	end if
+
+	if (var%struct(id)%type == str_type) then
+		var%struct(id)%sca%str%s(i8+1: i8+1) = val%sca%str%s
+		return
+	end if
+
+	if (var%struct(id)%array%type /= struct_type) then
+		call set_array_val(var%struct(id)%array, i8, val)
+		return
+	end if
+
+	var%struct(id)%struct(i8+1) = val
+
+end subroutine set_val
+
+!===============================================================================
+
+recursive subroutine get_val(node, var, state, res, index_)
+
+	! In nested expressions, like `a.b.c.d`, var begins as the top-most
+	! (left-most, outer-most) value `a`
+	!
+	! Now realize that the node var expression could be any permutation like
+	! `a.b[1].c[2].d`, with the tail value `d` being either a primitive type,
+	! array, or another struct.  That is what this routine abstracts
+	!
+	! FIXME: if you change something in the getter, change it in the setter too
+	!
+	! Should I rename this eval_*() for consistency?
+
+	type(syntax_node_t), intent(in) :: node
+	type(value_t), intent(in) :: var
+	type(state_t), intent(inout) :: state
+
+	integer(kind = 8), optional, intent(in) :: index_
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	integer :: id
+	integer(kind = 8) :: i8, j8
+
+	!print *, "get_val()"
+
+	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
+
+		if (present(index_)) then
+			i8 = index_
+		else
+
+			if (.not. all(node%lsubscripts%sub_kind == scalar_sub)) then
+				!print *, "slice sub"
+				write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+				call internal_error()
+			end if
+
+			i8 = sub_eval(node, var, state)
+		end if
+
+		!print *, "i8 = ", i8
+		id = node%member%id_index
+
+		! Recursion could still be required.  Unfortunately, if an
+		! identifier has a subscript *and* a dot, then so does its node.  I
+		! think this might require a bunch of if() logic like this instead
+		! of any possibility of clean recursion
+
+		if (node%member%kind == dot_expr) then
+			! Recurse
+			call get_val(node%member, var%struct(i8+1)%struct(id), state, res)
+			return
+		end if
+
+		if (.not. allocated(node%member%lsubscripts)) then
+			res = var%struct(i8+1)%struct(id)
+			return
+		end if
+		!print *, "array dot chain"
+
+		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+			!print *, "slice sub"
+			write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+			call internal_error()
+		end if
+
+		! Arrays chained by a dot: `a[0].b[0]`
+		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
+		!print *, "get_array_val 1"
+		call get_array_val(var%struct(i8+1)%struct(id)%array, j8, res)
+		return
+
+	else if (allocated(node%lsubscripts)) then
+
+		! Prefer sub_eval() over subscript_eval() because it doesn't make any
+		! assumptions about var's relation to node
+		if (present(index_)) then
+			i8 = index_
+		else
+			i8 = sub_eval(node, var, state)
+		end if
+
+		if (var%array%type /= struct_type) then
+			!print *, "get_array_val 2"
+			call get_array_val(var%array, i8, res)
+			return
+		end if
+
+		res = var%struct(i8+1)
+		res%type = struct_type
+		res%struct_name = var%struct_name
+		return
+
+	end if
+
+	! `id` tracks whether each member is the 1st, 2nd, etc. member in the struct
+	! array of its parent.  A local variable isnt' really needed but I think it
+	! helps readability
+	id = node%member%id_index
+
+	if (node%member%kind == dot_expr) then
+		! Recurse.  This branch was incorrectly entering sometimes because
+		! `kind` was uninitialized, only on Windows in release build
+		!print *, "recursing"
+		call get_val(node%member, var%struct(id), state, res)
+		return
+	end if
+
+	! Base case
+
+	if (.not. allocated(node%member%lsubscripts)) then
+		!print *, "base"
+		res = var%struct(id)
+		return
+	end if
+	!print *, "lsubscripts allocated"
+
+	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+		!print *, "slice sub"
+		write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+		call internal_error()
+	end if
+	!print *, "scalar_sub"
+
+	if (present(index_)) then
+		i8 = index_
+	else
+		i8 = sub_eval(node%member, var%struct(id), state)
+	end if
+
+	if (var%struct(id)%type == str_type) then
+		res%sca%str%s = var%struct(id)%sca%str%s(i8+1: i8+1)
+		res%type = str_type
+		return
+	end if
+
+	if (var%struct(id)%array%type /= struct_type) then
+		!print *, "get_array_val 3"
+		call get_array_val(var%struct(id)%array, i8, res)
+		return
+	end if
+
+	res = var%struct(id)%struct(i8+1)
+
+end subroutine get_val
+
+!===============================================================================
+
+subroutine eval_struct_instance(node, state, res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	integer :: i
+
+	!print *, 'eval struct_instance_expr'
+	!print *, 'struct identifier = ', node%identifier%text
+	!print *, 'struct id_index   = ', node%id_index
+
+	res%type = node%val%type
+	res%struct_name = node%struct_name
+
+	if (allocated(res%struct)) deallocate(res%struct)
+	allocate(res%struct( size(node%members) ))
+
+	!print *, 'res type = ', kind_name(res%type)
+	!print *, "num members = ", size(node%members)
+	!print *, "num members = ", size(res%struct)
+
+	do i = 1, size(node%members)
+
+		call syntax_eval(node%members(i), state, res%struct(i))
+
+		!print *, "mem[", str(i), "] = ", res%struct(i)%to_str()
+		!res = node%val%struct( node%right%id_index )
+		!node%members(i)%val = res
+
+	end do
+
+end subroutine eval_struct_instance
+
+!===============================================================================
+
+recursive subroutine eval_fn_call(node, state, res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -406,6 +717,8 @@ subroutine eval_fn_call(node, state, res)
 	integer :: i, io
 
 	logical :: returned0
+
+	type(char_vector_t) :: str_
 
 	type(value_t) :: arg, arg1, arg2, tmp
 
@@ -502,6 +815,14 @@ subroutine eval_fn_call(node, state, res)
 
 	case ("println")
 
+		! TODO: if struct, pass a struct_t as opt arg to to_str(), which
+		! contains member names that can then be printed
+		!
+		! Actually it's a huge pain to pass structs dict from parser to evaler.
+		! I tried for a bit but stashed it.  I will probably need to do this
+		! eventually anyway for interactive runs with structs.  I can see why
+		! rust requires #derive[debug] to allow printing a whole struct
+
 		do i = 1, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
 			write(output_unit, '(a)', advance = 'no') arg%to_str()
@@ -514,11 +835,12 @@ subroutine eval_fn_call(node, state, res)
 
 	case ("str")
 
-		res%sca%str%s = ''
+		str_ = new_char_vector()
 		do i = 1, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
-			res%sca%str%s = res%sca%str%s // arg%to_str()  ! TODO: use char_vector_t
+			call str_%push(arg%to_str())
 		end do
+		res%sca%str%s = str_%trim()
 		state%returned = .true.
 
 	case ("len")
@@ -530,19 +852,34 @@ subroutine eval_fn_call(node, state, res)
 	case ("parse_i32")
 
 		call syntax_eval(node%args(1), state, arg)
-		read(arg%sca%str%s, *) res%sca%i32  ! TODO: catch iostat
+		read(arg%sca%str%s, *, iostat = io) res%sca%i32
+		if (io /= 0) then
+			write(*,*) err_rt_prefix//" cannot parse_i32() for argument `"// &
+				arg%sca%str%s//"`"//color_reset
+			call internal_error()
+		end if
 		state%returned = .true.
 
 	case ("parse_i64")
 
 		call syntax_eval(node%args(1), state, arg)
-		read(arg%sca%str%s, *) res%sca%i64  ! TODO: catch iostat
+		read(arg%sca%str%s, *, iostat = io) res%sca%i64
+		if (io /= 0) then
+			write(*,*) err_rt_prefix//" cannot parse_i64() for argument `"// &
+				arg%sca%str%s//"`"//color_reset
+			call internal_error()
+		end if
 		state%returned = .true.
 
 	case ("parse_f32")
 
 		call syntax_eval(node%args(1), state, arg)
-		read(arg%sca%str%s, *) res%sca%f32  ! TODO: catch iostat
+		read(arg%sca%str%s, *, iostat = io) res%sca%f32
+		if (io /= 0) then
+			write(*,*) err_rt_prefix//" cannot parse_f32() for argument `"// &
+				arg%sca%str%s//"`"//color_reset
+			call internal_error()
+		end if
 		state%returned = .true.
 
 	case ("0i32_sca")
@@ -750,6 +1087,11 @@ subroutine eval_fn_call(node, state, res)
 			! a stack in which we store each nested arg in different copies of
 			! tmp.  if you try to store them all in the same state var at
 			! multiple stack levels it breaks?
+			!
+			! this also seems to have led to a dramatic perf improvement for
+			! intel compilers in commit 324ad414, running full tests in ~25
+			! minutes instead of 50.  gfortran perf remains good and unchanged
+			!
 			call syntax_eval(node%args(i), state, tmp)
 			state%vars%vals( node%params(i) ) = tmp
 
@@ -782,13 +1124,13 @@ end subroutine eval_fn_call
 
 !===============================================================================
 
-subroutine eval_for_statement(node, state, res)
+recursive subroutine eval_for_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -922,7 +1264,7 @@ subroutine eval_for_statement(node, state, res)
 		! over it.  Parser guarantees that this is an array
 		!
 		! Unlike step_array, itr%type does not need to be set here because
-		! it is set in array_at() (via get_array_value_t())
+		! it is set in array_at() (via get_array_val())
 		for_kind = array_expr
 
 		call syntax_eval(node%array, state, tmp)
@@ -962,23 +1304,52 @@ end subroutine eval_for_statement
 
 !===============================================================================
 
-subroutine eval_assignment_expr(node, state, res)
+recursive subroutine eval_assignment_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
-	integer :: rank_res
+	integer :: rank_res, id, mem_kind
 	integer(kind = 8) :: i8, index_, len8
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
-	type(value_t) :: array_val, tmp
+	type(syntax_node_t) :: mem
 
-	if (.not. allocated(node%lsubscripts)) then
+	type(value_t) :: array_val, rhs, tmp
+
+	!print *, "eval assignment_expr"
+	!print *, "node identifier = ", node%identifier%text
+	!print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
+	!if (state%vars%vals(node%id_index)%type == struct_type) then
+	!if (allocated( node%member )) then
+	!	print *, "mem index = ", node%member%id_index
+	!end if
+
+	if (allocated( node%member )) then
+		!print *, "assign LHS dot member"
+
+		! This is similar to what I do below with get_array_val() and
+		! set_array_val(), but I've renamed some of the variables
+
+		! Evaluate the RHS
+		call syntax_eval(node%right, state, rhs)
+
+		! Get the initial value from the LHS, which could be nested like `a.b.c.d`
+		id = node%member%id_index
+		call get_val(node, state%vars%vals(node%id_index), state, res)
+
+		! Do the assignment or += or whatever and set res
+		call compound_assign(res, rhs, node%op)
+
+		! Save it back into the LHS var
+		call set_val(node, state%vars%vals(node%id_index), state, res)
+
+	else if (.not. allocated(node%lsubscripts)) then
 
 		!! This deallocation will cause a crash when an array appears on both
 		!! the LHS and RHS of fn_call assignment, e.g. `dv = diff_(dv, i)` in
@@ -990,7 +1361,7 @@ subroutine eval_assignment_expr(node, state, res)
 		!end if
 		!end if
 
-		! Assign return value
+		! Eval the RHS
 		!print *, 'eval and set res'
 		call syntax_eval(node%right, state, res)
 
@@ -1007,6 +1378,8 @@ subroutine eval_assignment_expr(node, state, res)
 		res = state%vars%vals(node%id_index)
 		!print *, 'done'
 
+		!print *, "node identifier = ", node%identifier%text
+
 		! The difference between let and assign is inserting into the
 		! current scope (let) vs possibly searching parent scopes (assign).
 		! During evaluation we don't need any extra logic for scoping.  The
@@ -1017,7 +1390,9 @@ subroutine eval_assignment_expr(node, state, res)
 		!print *, 'LHS array subscript assignment'
 		!print *, 'LHS type = ', kind_name(state%vars%vals(node%id_index)%array%type)  ! not alloc for str
 
-		! Assign return value from RHS
+		! Eval the RHS.  I should probably rename `res` to `rhs` here like I did
+		! with get_val() for dot exprs above, because it's not really the result
+		! yet in cases of compound assignment
 		call syntax_eval(node%right, state, res)
 
 		!print *, 'RHS = ', res%to_str()
@@ -1036,11 +1411,16 @@ subroutine eval_assignment_expr(node, state, res)
 			!	state%vars%vals(node%id_index)%array%type
 			!print *, 'LHS array = ', state%vars%vals(node%id_index)%array%i32
 
+			!print *, "get_array_val a"
+
+			! It is important to only eval the subscript once, in case it is an
+			! expression which changes the state!  For example, `array[(index +=
+			! 1)];`.  Maybe I should ban expression statements as indices, but
+			! src/tests/test-src/fns/test-19.syntran at least will need updated
 			i8 = subscript_eval(node, state)
-			array_val = get_array_value_t(state%vars%vals(node%id_index)%array, i8)
+			call get_val(node, state%vars%vals(node%id_index), state, array_val, index_ = i8)
 			call compound_assign(array_val, res, node%op)
-			call set_array_value_t( &
-				state%vars%vals(node%id_index)%array, i8, array_val)
+			call set_val(node, state%vars%vals(node%id_index), state, array_val, index_ = i8)
 			res = array_val
 
 		else
@@ -1068,17 +1448,17 @@ subroutine eval_assignment_expr(node, state, res)
 				! tmp -> lhs_val or something
 
 				if (res%type == array_type) then
-					array_val = get_array_value_t(res%array, i8)
+					call get_array_val(res%array, i8, array_val)
 				end if
 
 				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-				tmp  = get_array_value_t(state%vars%vals(node%id_index)%array, index_)
+				call get_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
 				call compound_assign(tmp, array_val, node%op)
-				call set_array_value_t(state%vars%vals(node%id_index)%array, index_, tmp)
+				call set_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
 
 				!! move conditions out of loop for perf?
 				!if (res%type == array_type) then
-				!	call set_array_value_t(res%array, i8, tmp)
+				!	call set_array_val(res%array, i8, tmp)
 				!else
 
 				!	! this makes the res return value a scalar.  Maybe
@@ -1138,7 +1518,7 @@ subroutine eval_translation_unit(node, state, res)
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1153,11 +1533,11 @@ subroutine eval_translation_unit(node, state, res)
 	! members only change the (vars) state or define fns
 	do i = 1, size(node%members)
 
-		! Only eval statements, not fns declarations.  TODO: cycle structs
-		! too.
+		! Only eval statements, not fn or struct declarations
 		!
 		! TODO: is this where we should copy fn dict to array?
-		if (node%members(i)%kind == fn_declaration) cycle
+		if (node%members(i)%kind == fn_declaration    ) cycle
+		if (node%members(i)%kind == struct_declaration) cycle
 
 		call syntax_eval(node%members(i), state, res)
 
@@ -1182,13 +1562,13 @@ end subroutine eval_translation_unit
 
 !===============================================================================
 
-subroutine eval_array_expr(node, state, res)
+recursive subroutine eval_array_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1310,7 +1690,7 @@ subroutine eval_array_expr(node, state, res)
 		allocate(array%size( array%rank ))
 		array%size = array%len_
 
-		if (.not. allocated(res%array)) allocate(res%array)
+		allocate(res%array)
 		res%type  = array_type
 		res%array = array
 
@@ -1351,17 +1731,18 @@ subroutine eval_array_expr(node, state, res)
 
 	else if (node%val%array%kind == unif_array) then
 
-		array%rank = size( node%size )
-		!print *, "rank = ", array%rank
-		allocate(array%size( array%rank ))
+		allocate(res%array)
+		res%array%rank = size( node%size )
+		!print *, "rank = ", res%array%rank
+		allocate(res%array%size( res%array%rank ))
 
-		do i = 1, array%rank
+		do i = 1, res%array%rank
 			!print *, "i = ", i
 			call syntax_eval(node%size(i), state, len_)
 			!print *, "len_%type = ", kind_name(len_%type)
 			!print *, "len_      = ", len_%to_i64()
-			array%size(i) = len_%to_i64()
-			!print *, 'size['//str(i)//'] = ', array%size(i)
+			res%array%size(i) = len_%to_i64()
+			!print *, 'size['//str(i)//'] = ', res%array%size(i)
 		end do
 
 		! Uniform-value impl arrays (every element has the same value at
@@ -1373,30 +1754,45 @@ subroutine eval_array_expr(node, state, res)
 
 		! Allocate in one shot without growing
 
-		array%type = node%val%array%type
-		array%len_  = product(array%size)
-		!print *, 'array%len_ = ', array%len_
+		res%array%type = node%val%array%type
+		res%array%len_  = product(res%array%size)
+		!print *, 'res%array%len_ = ', res%array%len_
 
-		call allocate_array(array, array%len_)
-		select case (array%type)
+		call allocate_array(res, res%array%len_)
+		select case (res%array%type)
 		case (i32_type)
-			array%i32 = lbound_%sca%i32
+			res%array%i32 = lbound_%sca%i32
+
 		case (i64_type)
-			array%i64 = lbound_%sca%i64
+			res%array%i64 = lbound_%sca%i64
+
 		case (f32_type)
-			array%f32 = lbound_%sca%f32
+			res%array%f32 = lbound_%sca%f32
+
 		case (bool_type)
-			array%bool = lbound_%sca%bool
+			res%array%bool = lbound_%sca%bool
+
 		case (str_type)
-			array%str = lbound_%sca%str
+			res%array%str = lbound_%sca%str
+
+		case (struct_type)
+
+			!print *, "lbound_ size = ", size(lbound_%struct)
+
+			do i8 = 1, res%array%len_
+				res%struct(i8)%struct = lbound_%struct
+			end do
+
+			! Arrays are homogeneous, so every element shares one struct_name
+			! for efficiency
+			res%struct_name = lbound_%struct_name
+
 		case default
-			write(*,*) err_eval_len_array(kind_name(array%type))
+			write(*,*) err_eval_len_array(kind_name(res%array%type))
 			call internal_error()
 		end select
 
-		if (.not. allocated(res%array)) allocate(res%array)
 		res%type  = array_type
-		res%array = array
 
 	else if (node%val%array%kind == bound_array) then
 		!print *, 'impl_array'
@@ -1416,47 +1812,45 @@ subroutine eval_array_expr(node, state, res)
 
 		!array = new_array(node%val%array%type)
 
-		array%type = node%val%array%type
+		allocate(res%array)
+		res%array%type = node%val%array%type
 
 		if (any(i64_type == [lbound_%type, ubound_%type])) then
 			call promote_i32_i64(lbound_)
 			call promote_i32_i64(ubound_)
 		end if
 
-		if (.not. any(array%type == [i32_type, i64_type])) then
+		if (.not. any(res%array%type == [i32_type, i64_type])) then
 			write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
 			call internal_error()
 		end if
 
-		if (array%type == i32_type) then
-			array%len_ = ubound_%sca%i32 - lbound_%sca%i32
-		else !if (array%type == i64_type) then
-			array%len_ = ubound_%sca%i64 - lbound_%sca%i64
+		if (res%array%type == i32_type) then
+			res%array%len_ = ubound_%sca%i32 - lbound_%sca%i32
+		else !if (res%array%type == i64_type) then
+			res%array%len_ = ubound_%sca%i64 - lbound_%sca%i64
 		end if
 
-		call allocate_array(array, array%len_)
+		call allocate_array(res, res%array%len_)
 
 		!print *, 'bounds in [', lbound_%str(), ': ', ubound_%str(), ']'
 		!print *, 'node%val%array%type = ', node%val%array%type
 
-		if (array%type == i32_type) then
+		if (res%array%type == i32_type) then
 			do i = lbound_%sca%i32, ubound_%sca%i32 - 1
-				array%i32(i - lbound_%sca%i32 + 1) = i
+				res%array%i32(i - lbound_%sca%i32 + 1) = i
 			end do
-		else !if (array%type == i64_type) then
+		else !if (res%array%type == i64_type) then
 			do i8 = lbound_%sca%i64, ubound_%sca%i64 - 1
-				array%i64(i8 - lbound_%sca%i64 + 1) = i8
+				res%array%i64(i8 - lbound_%sca%i64 + 1) = i8
 			end do
 		end if
 
-		array%rank = 1
-		allocate(array%size( array%rank ))
-		array%size = array%len_
-
-		allocate(res%array)
+		res%array%rank = 1
+		allocate(res%array%size( res%array%rank ))
+		res%array%size = res%array%len_
 
 		res%type  = array_type
-		res%array = array
 
 	else if (node%val%array%kind == size_array) then
 
@@ -1484,7 +1878,7 @@ subroutine eval_array_expr(node, state, res)
 		end if
 
 		!print *, 'copying array'
-		if (.not. allocated(res%array)) allocate(res%array)
+		allocate(res%array)
 		res%type  = array_type
 		res%array = array
 		!print *, 'done'
@@ -1499,23 +1893,37 @@ subroutine eval_array_expr(node, state, res)
 
 		! TODO: allow empty arrays?  Sub type of empty array?  Empty arrays
 		! can currently be created like [0: -1];
-		array = new_array(node%val%array%type, size(node%elems))
+
+		allocate(res%array)
+		res%array%type = node%val%array%type
+		call allocate_array(res, size(node%elems, kind = 8))
+		res%array%len_ = 0
 
 		do i = 1, size(node%elems)
 			call syntax_eval(node%elems(i), state, elem)
 			!print *, 'elem['//str(i)//'] = ', elem%str()
-			call array%push(elem)
+
+			if (res%array%type == struct_type) then
+				res%struct(i) = elem
+			else
+				call res%array%push(elem)
+			end if
+
 		end do
 
-		array%rank = 1
-		allocate(array%size( array%rank ))
-		array%size = array%len_
+		if (res%array%type == struct_type) then
+			res%array%len_ = size(node%elems)
+		end if
 
-		!print *, 'copying array'
-		if (.not. allocated(res%array)) allocate(res%array)
+		res%array%rank = 1
+		allocate(res%array%size( res%array%rank ))
+		res%array%size = res%array%len_
+
 		res%type  = array_type
-		res%array = array
-		!print *, 'done'
+
+		res%struct_name = node%val%struct_name
+
+		!print *, "struct_name = ", res%struct_name
 
 	else
 		write(*,*) err_int_prefix//'unexpected array kind'//color_reset
@@ -1526,12 +1934,12 @@ end subroutine eval_array_expr
 
 !===============================================================================
 
-subroutine eval_while_statement(node, state, res)
+recursive subroutine eval_while_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1548,12 +1956,12 @@ end subroutine eval_while_statement
 
 !===============================================================================
 
-subroutine eval_if_statement(node, state, res)
+recursive subroutine eval_if_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1576,12 +1984,12 @@ end subroutine eval_if_statement
 
 !===============================================================================
 
-subroutine eval_return_statement(node, state, res)
+recursive subroutine eval_return_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1602,12 +2010,12 @@ end subroutine eval_return_statement
 
 !===============================================================================
 
-subroutine eval_block_statement(node, state, res)
+recursive subroutine eval_block_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1653,12 +2061,12 @@ end subroutine eval_block_statement
 
 !===============================================================================
 
-subroutine eval_unary_expr(node, state, res)
+recursive subroutine eval_unary_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	type(value_t), intent(inout) :: res
+	type(value_t), intent(out) :: res
 
 	!********
 
@@ -1707,35 +2115,38 @@ end subroutine promote_i32_i64
 
 !===============================================================================
 
-subroutine allocate_array(array, cap)
+subroutine allocate_array(val, cap)
 
-	type(array_t), intent(inout) :: array
+	type(value_t), intent(inout) :: val
 	integer(kind = 8), intent(in) :: cap
 
-	array%cap = cap
+	!! always done in caller
+	!if (.not. allocated(val%array)) allocate(val%array)
 
-	! this could potentially be optimized by only re-allocating if over previous
-	! cap (or change of type?)
+	val%array%cap = cap
 
-	select case (array%type)
+	select case (val%array%type)
 	case (i32_type)
-		if (allocated(array%i32)) deallocate(array%i32)
-		allocate(array%i32( cap ))
+		allocate(val%array%i32( cap ))
+
 	case (i64_type)
-		if (allocated(array%i64)) deallocate(array%i64)
-		allocate(array%i64( cap ))
+		allocate(val%array%i64( cap ))
+
 	case (f32_type)
-		if (allocated(array%f32)) deallocate(array%f32)
-		allocate(array%f32( cap ))
+		allocate(val%array%f32( cap ))
+
 	case (bool_type)
-		if (allocated(array%bool)) deallocate(array%bool)
-		allocate(array%bool( cap ))
+		allocate(val%array%bool( cap ))
+
 	case (str_type)
-		if (allocated(array%str)) deallocate(array%str)
-		allocate(array%str( cap ))
+		allocate(val%array%str( cap ))
+
+	case (struct_type)
+		allocate(val%struct( cap ))
+
 	case default
 		write(*,*) err_int_prefix//'cannot allocate array of type `' &
-			//kind_name(array%type)//'`'//color_reset
+			//kind_name(val%array%type)//'`'//color_reset
 		call internal_error()
 	end select
 
@@ -1953,7 +2364,62 @@ end function subscript_i32_eval
 
 !===============================================================================
 
-function subscript_eval(node, state) result(index_)
+function sub_eval(node, var, state) result(index_)
+
+	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
+	! subscript index_
+	!
+	! Can this be dried up with subscript_eval()?
+
+	type(syntax_node_t) :: node
+	type(value_t) :: var
+	type(state_t), intent(inout) :: state
+
+	integer(kind = 8) :: index_
+
+	!******
+
+	integer :: i
+	integer(kind = 8) :: prod
+	type(value_t) :: subscript
+
+	!print *, 'starting sub_eval()'
+
+	!if (state%vars%vals(node%id_index)%type == str_type) then
+	if (var%type == str_type) then
+		call syntax_eval(node%lsubscripts(1), state, subscript)
+		index_ = subscript%to_i64()
+		return
+	end if
+
+	!if (state%vars%vals(node%id_index)%type /= array_type) then
+	!	! internal_error?
+	!end if
+
+	prod  = 1
+	index_ = 0
+	do i = 1, var%array%rank
+		!print *, 'i = ', i
+
+		call syntax_eval(node%lsubscripts(i), state, subscript)
+
+		! TODO: bound checking? by default or enabled with cmd line flag?
+		!
+		! I think the only way to do it without killing perf is by having bound
+		! checking turned off in release, and setting a compiler macro
+		! definition to enable it only in debug
+
+		index_ = index_ + prod * subscript%to_i64()
+		prod   = prod * var%array%size(i)
+
+	end do
+	!print *, "index_ = ", index_
+
+end function sub_eval
+
+!===============================================================================
+
+recursive function subscript_eval(node, state) result(index_)
 
 	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
 	! subscript index_
@@ -2073,7 +2539,7 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	case (array_expr)
 		! Non-primary array expr
-		val = get_array_value_t(array, i - 1)
+		call get_array_val(array, i - 1, val)
 
 	case default
 		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
@@ -2084,15 +2550,15 @@ end subroutine array_at
 
 !===============================================================================
 
-function get_array_value_t(array, i) result(val)
+subroutine get_array_val(array, i, val)
 
 	type(array_t), intent(in) :: array
 
 	integer(kind = 8), intent(in) :: i
 
-	type(value_t) :: val
+	type(value_t), intent(out) :: val
 
-	!print *, 'starting get_array_value_t()'
+	!print *, 'starting get_array_val()'
 	!print *, 'array%type = ', kind_name(array%type)
 
 	val%type = array%type
@@ -2112,13 +2578,17 @@ function get_array_value_t(array, i) result(val)
 		case (str_type)
 			val%sca%str = array%str(i + 1)
 
+		case default
+			write(*,*) err_int_prefix//"bad type in get_array_val"//color_reset
+			call internal_error()
+
 	end select
 
-end function get_array_value_t
+end subroutine get_array_val
 
 !===============================================================================
 
-subroutine set_array_value_t(array, i, val)
+subroutine set_array_val(array, i, val)
 
 	type(array_t), intent(inout) :: array
 
@@ -2126,7 +2596,7 @@ subroutine set_array_value_t(array, i, val)
 
 	type(value_t), intent(in) :: val
 
-	!print *, 'starting set_array_value_t()'
+	!print *, 'starting set_array_val()'
 	!print *, 'array%type = ', kind_name(array%type)
 	!print *, 'val%type   = ', kind_name(val%type)
 
@@ -2149,7 +2619,7 @@ subroutine set_array_value_t(array, i, val)
 
 	end select
 
-end subroutine set_array_value_t
+end subroutine set_array_val
 
 !===============================================================================
 

@@ -43,13 +43,16 @@ module syntran__parse_m
 		type(fns_t) :: fns
 		integer :: num_fns = 0
 
+		type(structs_t) :: structs
+		integer :: num_structs = 0
+
 		! Set this to (the current) fn's return type.  Check that each return
 		! statement matches while parsing.  This is redundant since the fn
 		! syntax node also has the type, but it's easier to store it here than
 		! to walk back up the syntax tree to do return type checking
 		!
 		! This won't work with nested fns but we don't allow that anyway
-		integer :: fn_type, fn_rank, fn_array_type
+		type(value_t) :: fn_type
 		character(len = :), allocatable :: fn_name
 		logical :: returned
 
@@ -67,8 +70,10 @@ module syntran__parse_m
 				parse_block_statement, &
 				parse_expr, &
 				parse_expr_statement, &
-				parse_fn_call, &
 				parse_fn_declaration, &
+				parse_fn_call, &
+				parse_struct_declaration, &
+				parse_struct_instance, &
 				parse_for_statement, &
 				parse_if_statement, &
 				parse_return_statement, &
@@ -77,11 +82,14 @@ module syntran__parse_m
 				parse_size, &
 				parse_statement, &
 				parse_subscripts, &
+				parse_dot, &
 				parse_type, &
 				parse_unit, &
 				parse_while_statement, &
 				peek => peek_token, &
 				peek_kind, &
+				peek_text, &
+				current_text, &
 				peek_pos, &
 				peek_unit, &
 				preprocess, &
@@ -95,21 +103,33 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_fn.f90
 
-		module function parse_fn_call(parser) result(fn_call)
-			class(parser_t) :: parser
-			type(syntax_node_t) :: fn_call
-		end function parse_fn_call
-
 		module function parse_fn_declaration(parser) result(decl)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: decl
 		end function parse_fn_declaration
 
-		module subroutine parse_type(parser, type_text, rank)
+		recursive module function parse_fn_call(parser) result(fn_call)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: fn_call
+		end function parse_fn_call
+
+		module subroutine parse_type(parser, type_text, type)
 			class(parser_t) :: parser
 			character(len = :), intent(out), allocatable :: type_text
-			integer, intent(out) :: rank
+			type(value_t), intent(out) :: type
 		end subroutine parse_type
+
+		! TODO: move struct stuff to another translation unit? parse_fn.f90 is a
+		! very manageable ~1100 lines rn, so not much benefit to splitting
+		module function parse_struct_declaration(parser) result(decl)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: decl
+		end function parse_struct_declaration
+
+		module function parse_struct_instance(parser) result(instance)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: instance
+		end function parse_struct_instance
 
 	end interface
 
@@ -118,7 +138,7 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_array.f90
 
-		module function parse_array_expr(parser) result(expr)
+		recursive module function parse_array_expr(parser) result(expr)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: expr
 		end function
@@ -128,7 +148,7 @@ module syntran__parse_m
 			type(syntax_node_vector_t) :: size
 		end function parse_size
 
-		module subroutine parse_subscripts(parser, expr)
+		recursive module subroutine parse_subscripts(parser, expr)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(inout) :: expr
 		end subroutine parse_subscripts
@@ -140,7 +160,7 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_control.f90
 
-		module function parse_if_statement(parser) result(statement)
+		recursive module function parse_if_statement(parser) result(statement)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
 		end function parse_if_statement
@@ -150,22 +170,22 @@ module syntran__parse_m
 			type(syntax_node_t) :: statement
 		end function parse_return_statement
 
-		module function parse_for_statement(parser) result(statement)
+		recursive module function parse_for_statement(parser) result(statement)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
 		end function parse_for_statement
 
-		module function parse_while_statement(parser) result(statement)
+		recursive module function parse_while_statement(parser) result(statement)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
 		end function parse_while_statement
 
-		module function parse_block_statement(parser) result(block)
+		recursive module function parse_block_statement(parser) result(block)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: block
 		end function parse_block_statement
 
-		module function parse_statement(parser) result(statement)
+		recursive module function parse_statement(parser) result(statement)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
 		end function parse_statement
@@ -188,15 +208,20 @@ module syntran__parse_m
 			type(syntax_node_t) :: expr
 		end function parse_expr
 
-		module function parse_primary_expr(parser) result(expr)
+		recursive module function parse_primary_expr(parser) result(expr)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: expr
 		end function parse_primary_expr
 
-		module function parse_name_expr(parser) result(expr)
+		recursive module function parse_name_expr(parser) result(expr)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: expr
 		end function parse_name_expr
+
+		recursive module subroutine parse_dot(parser, expr)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(inout) :: expr
+		end subroutine parse_dot
 
 	end interface
 
@@ -216,7 +241,7 @@ module syntran__parse_m
 			type(syntax_token_t) :: token
 		end function match
 
-		module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
+		recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 			class(parser_t) :: parser
 			type(syntax_token_t), intent(in) :: tokens_in(:)
 			character(len = *), intent(in) :: src_file
@@ -270,6 +295,25 @@ integer function peek_kind(parser, offset)
 	peek = parser%peek(offset)
 	peek_kind = peek%kind
 end function peek_kind
+
+!===============================================================================
+
+function current_text(parser)
+	character(len = :), allocatable :: current_text
+	class(parser_t) :: parser
+	current_text = parser%peek_text(0)
+end function current_text
+
+!********
+
+function peek_text(parser, offset)
+	character(len = :), allocatable :: peek_text
+	class(parser_t) :: parser
+	type(syntax_token_t) :: peek
+	integer, intent(in) :: offset
+	peek = parser%peek(offset)
+	peek_text = peek%text
+end function peek_text
 
 !===============================================================================
 

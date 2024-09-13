@@ -113,7 +113,7 @@ end function match
 
 !===============================================================================
 
-module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
+recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 
 	! src_file is the filename of the current file being processed, i.e. the
 	! *includer*, not the includee
@@ -378,11 +378,14 @@ module function parse_unit(parser) result(unit)
 		i = i + 1
 		!print *, '    statement ', i
 
-		if (parser%current_kind() == fn_keyword) then
+		select case (parser%current_kind())
+		case (fn_keyword)
 			call members%push(parser%parse_fn_declaration())
-		else
+		case (struct_keyword)
+			call members%push(parser%parse_struct_declaration())
+		case default
 			call members%push(parser%parse_statement())
-		end if
+		end select
 
 		! Break infinite loops
 		if (parser%pos == pos0) dummy = parser%next()

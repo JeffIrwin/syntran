@@ -22,16 +22,16 @@ module syntran__compiler_m
 
 #elif defined(__INTEL_COMPILER)
 
-	! Could be ifx or ifort
+	! Could be either ifx or ifort
 	character(len = *), parameter :: fort_compiler = "intel"
 	integer, parameter :: fort_vers(*) = [__INTEL_COMPILER]
 
 #else
 
+#error Neither __GFORTRAN__ nor __INTEL__ are defined.  Please use a supported compiler and compile with pre-processing `-cpp` (gfortran) or `-fpp` (intel)
+
 	character(len = *), parameter :: fort_compiler = "unknown"
 	integer, parameter :: fort_vers(*) = []
-
-#error Neither __GFORTRAN__ nor __INTEL__ are defined.  Please use a supported compiler and compile with pre-processing `-cpp` (gfortran) or `-fpp` (intel)
 
 #endif
 

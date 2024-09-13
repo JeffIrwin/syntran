@@ -29,13 +29,33 @@ module syntran__core_m
 		syntran_patch =  49
 
 	! TODO:
+	!  - add version summary as a text file to release packages
+	!    * doc. readme? samples?
+	!    * try -static-libgcc etc. on win/mac to ease packaging
+	!    * ship syntran.a static lib? don't know who would want that
 	!  - structs
-	!  - triage notes from AOC.  many things are already fixed
+	!    * post-merge TODO struct items:
+	!      + update struct sample.  include struct/array combos, nesting, etc.
+	!        maybe make separate simple and compound struct samples
+	!      + note in docs that structs don't work in interactive interpreter
+	!    * mvp done:
+	!      + struct fn return values
+	!      + nested structs
+	!      + structs of arrays (and arrays of structs)
+	!        * string indexing tbd. should be do-able
+	!          + was done in a reverted commit before i re-focused on struct/array combos
+	!        * slice indexing tbd (more difficult)
+	!      + unary ops on dot exprs
+	!        * i had broken and fixed binary ops at some point, but i think i
+	!          changed things later which automatically fixed unary ops?
+	!    * tbd:
+	!      + remove unused vars per cmake warnings
+	!      + improved to_str() conversion with labels of struct name and member names
 	!  - jumping control flow:
 	!    * fn return statement done
 	!    * c continue (fortran cycle), c break (fortran loop exit)
 	!    * (sys) exit done
-	!      > should final return value be used as an implicit sys exit value?
+	!      + should final return value be used as an implicit sys exit value?
 	!        currently, default exit stat is 0, regardless of what syntran
 	!        "main" returns
 	!  - consider using subroutines with out-args instead of fn return vals for
@@ -63,6 +83,7 @@ module syntran__core_m
 	!  - cmd args
 	!    * args would be useful for logo sample, e.g. image size and some
 	!      control color options
+	!    * related: environment variables
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
@@ -124,13 +145,13 @@ module syntran__core_m
 	!  - substring indexing and slicing:
 	!    * string arrays get an optional extra rank.  omitting the extra rank
 	!      refers to the whole string at that position in the array:
-	!      > str_vec[0] == str_vec[:,0]
-	!      > str_mat[0,0] == str_mat[:,0,0]
-	!      > etc.
+	!      + str_vec[0] == str_vec[:,0]
+	!      + str_mat[0,0] == str_mat[:,0,0]
+	!      + etc.
 	!    * first, single-character indexing
-	!      > done
+	!      + done
 	!    * then, range-based slicing
-	!      > done
+	!      + done
 	!  - file reading/writing
 	!    * binary file i/o
 	!    * vectorized writes (and reads) for arrays without syntran loops. c.f.
@@ -148,20 +169,20 @@ module syntran__core_m
 	!    * check return value is correct type.  return statements could help
 	!      with this
 	!    * intrinsic
-	!      > abs, norm, dot
-	!      > log
-	!      > trig: sin, cos, tan, asin, ...
-	!      > norm, product
-	!      > reshape
-	!      > system: multiple out args? iostat and stdout
+	!      + abs, norm, dot
+	!      + log
+	!      + trig: sin, cos, tan, asin, ...
+	!      + norm, product
+	!      + reshape
+	!      + system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
 	!    * done:
-	!      > exp  (non-variadic, non-polymorphic)
-	!      > min, max, sum
-	!      > size (non-variadic but polymorphic)
-	!      > readln, writeln, println, open, close, str casting
-	!      > len (of str)
-	!      > non-recursive user-defined fns
+	!      + exp  (non-variadic, non-polymorphic)
+	!      + min, max, sum
+	!      + size (non-variadic but polymorphic)
+	!      + readln, writeln, println, open, close, str casting
+	!      + len (of str)
+	!      + non-recursive user-defined fns
 	!  - use more submodules
 	!    * types.f90 is long and close to leaves of dependency tree.  value.f90
 	!      is also highly depended upon
@@ -197,9 +218,9 @@ contains
 
 !===============================================================================
 
-function declare_intrinsic_fns() result(fns)
+subroutine declare_intrinsic_fns(fns)
 
-	type(fns_t) :: fns
+	type(fns_t), intent(out) :: fns
 
 	!********
 
@@ -217,10 +238,11 @@ function declare_intrinsic_fns() result(fns)
 	!********
 
 	! TODO: polymorphic in f32, f64, etc.
-	exp_fn%type = f32_type
+	exp_fn%type%type = f32_type
 	allocate(exp_fn%params(1))
+	allocate(exp_fn%param_names%v(1))
 	exp_fn%params(1)%type = f32_type
-	exp_fn%params(1)%name = "x"
+	exp_fn%param_names%v(1)%s = "x"
 
 	! Insert the fn into the dict. These are global intrinsic fns, so there's no
 	! need to check iostat
@@ -242,14 +264,15 @@ function declare_intrinsic_fns() result(fns)
 
 	! TODO: min_f64_fn, max_f64_fn
 
-	min_i32_fn%type = i32_type
+	min_i32_fn%type%type = i32_type
 	allocate(min_i32_fn%params(2))
+	allocate(min_i32_fn%param_names%v(2))
 
 	min_i32_fn%params(1)%type = i32_type
-	min_i32_fn%params(1)%name = "a0"
+	min_i32_fn%param_names%v(1)%s = "a0"
 
 	min_i32_fn%params(2)%type = i32_type
-	min_i32_fn%params(2)%name = "a1"
+	min_i32_fn%param_names%v(2)%s = "a1"
 
 	min_i32_fn%variadic_min  = 0
 	min_i32_fn%variadic_type = i32_type
@@ -260,14 +283,15 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	min_i64_fn%type = i64_type
+	min_i64_fn%type%type = i64_type
 	allocate(min_i64_fn%params(2))
+	allocate(min_i64_fn%param_names%v(2))
 
 	min_i64_fn%params(1)%type = i64_type
-	min_i64_fn%params(1)%name = "a0"
+	min_i64_fn%param_names%v(1)%s = "a0"
 
 	min_i64_fn%params(2)%type = i64_type
-	min_i64_fn%params(2)%name = "a1"
+	min_i64_fn%param_names%v(2)%s = "a1"
 
 	min_i64_fn%variadic_min  = 0
 	min_i64_fn%variadic_type = i64_type
@@ -276,14 +300,15 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	min_f32_fn%type = f32_type
+	min_f32_fn%type%type = f32_type
 	allocate(min_f32_fn%params(2))
+	allocate(min_f32_fn%param_names%v(2))
 
 	min_f32_fn%params(1)%type = f32_type
-	min_f32_fn%params(1)%name = "a0"
+	min_f32_fn%param_names%v(1)%s = "a0"
 
 	min_f32_fn%params(2)%type = f32_type
-	min_f32_fn%params(2)%name = "a1"
+	min_f32_fn%param_names%v(2)%s = "a1"
 
 	min_f32_fn%variadic_min  = 0
 	min_f32_fn%variadic_type = f32_type
@@ -292,14 +317,15 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	max_i32_fn%type = i32_type
+	max_i32_fn%type%type = i32_type
 	allocate(max_i32_fn%params(2))
+	allocate(max_i32_fn%param_names%v(2))
 
 	max_i32_fn%params(1)%type = i32_type
-	max_i32_fn%params(1)%name = "a0"
+	max_i32_fn%param_names%v(1)%s = "a0"
 
 	max_i32_fn%params(2)%type = i32_type
-	max_i32_fn%params(2)%name = "a1"
+	max_i32_fn%param_names%v(2)%s = "a1"
 
 	max_i32_fn%variadic_min  = 0
 	max_i32_fn%variadic_type = i32_type
@@ -310,14 +336,15 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	max_i64_fn%type = i64_type
+	max_i64_fn%type%type = i64_type
 	allocate(max_i64_fn%params(2))
+	allocate(max_i64_fn%param_names%v(2))
 
 	max_i64_fn%params(1)%type = i64_type
-	max_i64_fn%params(1)%name = "a0"
+	max_i64_fn%param_names%v(1)%s = "a0"
 
 	max_i64_fn%params(2)%type = i64_type
-	max_i64_fn%params(2)%name = "a1"
+	max_i64_fn%param_names%v(2)%s = "a1"
 
 	max_i64_fn%variadic_min  = 0
 	max_i64_fn%variadic_type = i64_type
@@ -326,14 +353,15 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	max_f32_fn%type = f32_type
+	max_f32_fn%type%type = f32_type
 	allocate(max_f32_fn%params(2))
+	allocate(max_f32_fn%param_names%v(2))
 
 	max_f32_fn%params(1)%type = f32_type
-	max_f32_fn%params(1)%name = "a0"
+	max_f32_fn%param_names%v(1)%s = "a0"
 
 	max_f32_fn%params(2)%type = f32_type
-	max_f32_fn%params(2)%name = "a1"
+	max_f32_fn%param_names%v(2)%s = "a1"
 
 	max_f32_fn%variadic_min  = 0
 	max_f32_fn%variadic_type = f32_type
@@ -344,9 +372,10 @@ function declare_intrinsic_fns() result(fns)
 
 	! TODO: update docs to use println() instead of old holyc implicit prints
 
-	println_fn%type = void_type ! TODO?
+	println_fn%type%type = void_type ! TODO?
 
 	allocate(println_fn%params(0))
+	allocate(println_fn%param_names%v(0))
 
 	println_fn%variadic_min  = 0
 	println_fn%variadic_type = any_type
@@ -355,9 +384,10 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	str_fn%type = str_type
+	str_fn%type%type = str_type
 
 	allocate(str_fn%params(0))
+	allocate(str_fn%param_names%v(0))
 
 	str_fn%variadic_min  = 0
 	str_fn%variadic_type = any_type
@@ -366,10 +396,11 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	len_fn%type = i64_type
+	len_fn%type%type = i64_type
 	allocate(len_fn%params(1))
+	allocate(len_fn%param_names%v(1))
 	len_fn%params(1)%type = str_type
-	len_fn%params(1)%name = "str"
+	len_fn%param_names%v(1)%s = "str"
 
 	call fns%insert("len", len_fn, id_index)
 
@@ -380,53 +411,59 @@ function declare_intrinsic_fns() result(fns)
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
 
-	parse_i32_fn%type = i32_type
+	parse_i32_fn%type%type = i32_type
 	allocate(parse_i32_fn%params(1))
+	allocate(parse_i32_fn%param_names%v(1))
 	parse_i32_fn%params(1)%type = str_type
-	parse_i32_fn%params(1)%name = "str"
+	parse_i32_fn%param_names%v(1)%s = "str"
 
 	call fns%insert("parse_i32", parse_i32_fn, id_index)
 
 	!********
 
-	parse_i64_fn%type = i64_type
+	parse_i64_fn%type%type = i64_type
 	allocate(parse_i64_fn%params(1))
+	allocate(parse_i64_fn%param_names%v(1))
 	parse_i64_fn%params(1)%type = str_type
-	parse_i64_fn%params(1)%name = "str"
+	parse_i64_fn%param_names%v(1)%s = "str"
 
 	call fns%insert("parse_i64", parse_i64_fn, id_index)
 
 	!********
 
-	parse_f32_fn%type = f32_type
+	parse_f32_fn%type%type = f32_type
 	allocate(parse_f32_fn%params(1))
+	allocate(parse_f32_fn%param_names%v(1))
 	parse_f32_fn%params(1)%type = str_type
-	parse_f32_fn%params(1)%name = "str"
+	parse_f32_fn%param_names%v(1)%s = "str"
 
 	call fns%insert("parse_f32", parse_f32_fn, id_index)
 
 	!********
 
-	i32_sca_fn%type = i32_type
+	i32_sca_fn%type%type = i32_type
 	allocate(i32_sca_fn%params(1))
+	allocate(i32_sca_fn%param_names%v(1))
 
 	i32_sca_fn%params(1)%type = any_type
 
-	i32_sca_fn%params(1)%name = "a"
+	i32_sca_fn%param_names%v(1)%s = "a"
 
 	call fns%insert("0i32_sca", i32_sca_fn, id_index)
 
 	!********
 
-	i32_arr_fn%type = array_type
-	i32_arr_fn%array_type = i32_type
-	i32_arr_fn%rank = -1
+	i32_arr_fn%type%type = array_type
+	allocate(i32_arr_fn%type%array)
+	i32_arr_fn%type%array%type = i32_type
+	i32_arr_fn%type%array%rank = -1
 
 	allocate(i32_arr_fn%params(1))
+	allocate(i32_arr_fn%param_names%v(1))
 
 	i32_arr_fn%params(1)%type = any_type
 
-	i32_arr_fn%params(1)%name = "a"
+	i32_arr_fn%param_names%v(1)%s = "a"
 
 	call fns%insert("0i32_arr", i32_arr_fn, id_index)
 
@@ -434,53 +471,59 @@ function declare_intrinsic_fns() result(fns)
 
 	! TODO: to f32 casting
 
-	i64_sca_fn%type = i64_type
+	i64_sca_fn%type%type = i64_type
 	allocate(i64_sca_fn%params(1))
+	allocate(i64_sca_fn%param_names%v(1))
 
 	i64_sca_fn%params(1)%type = any_type
 
-	i64_sca_fn%params(1)%name = "a"
+	i64_sca_fn%param_names%v(1)%s = "a"
 
 	call fns%insert("0i64_sca", i64_sca_fn, id_index)
 
 	!********
 
-	i64_arr_fn%type = array_type
-	i64_arr_fn%array_type = i64_type
-	i64_arr_fn%rank = -1
+	i64_arr_fn%type%type = array_type
+	allocate(i64_arr_fn%type%array)
+	i64_arr_fn%type%array%type = i64_type
+	i64_arr_fn%type%array%rank = -1
 
 	allocate(i64_arr_fn%params(1))
+	allocate(i64_arr_fn%param_names%v(1))
 
 	i64_arr_fn%params(1)%type = any_type
 
-	i64_arr_fn%params(1)%name = "a"
+	i64_arr_fn%param_names%v(1)%s = "a"
 
 	call fns%insert("0i64_arr", i64_arr_fn, id_index)
 
 	!********
 
-	open_fn%type = file_type
+	open_fn%type%type = file_type
 	allocate(open_fn%params(1))
+	allocate(open_fn%param_names%v(1))
 	open_fn%params(1)%type = str_type
-	open_fn%params(1)%name = "filename"
+	open_fn%param_names%v(1)%s = "filename"
 
 	call fns%insert("open", open_fn, id_index)
 
 	!********
 
-	readln_fn%type = str_type
+	readln_fn%type%type = str_type
 	allocate(readln_fn%params(1))
+	allocate(readln_fn%param_names%v(1))
 	readln_fn%params(1)%type = file_type
-	readln_fn%params(1)%name = "file_handle"
+	readln_fn%param_names%v(1)%s = "file_handle"
 
 	call fns%insert("readln", readln_fn, id_index)
 
 	!********
 
-	writeln_fn%type = void_type
+	writeln_fn%type%type = void_type
 	allocate(writeln_fn%params(1))
+	allocate(writeln_fn%param_names%v(1))
 	writeln_fn%params(1)%type = file_type
-	writeln_fn%params(1)%name = "file_handle"
+	writeln_fn%param_names%v(1)%s = "file_handle"
 
 	writeln_fn%variadic_min  = 0
 	!writeln_fn%variadic_min = 1
@@ -490,45 +533,50 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	eof_fn%type = bool_type
+	eof_fn%type%type = bool_type
 	allocate(eof_fn%params(1))
+	allocate(eof_fn%param_names%v(1))
 	eof_fn%params(1)%type = file_type
-	eof_fn%params(1)%name = "file_handle"
+	eof_fn%param_names%v(1)%s = "file_handle"
 
 	call fns%insert("eof", eof_fn, id_index)
 
 	!********
 
-	close_fn%type = void_type
+	close_fn%type%type = void_type
 	allocate(close_fn%params(1))
+	allocate(close_fn%param_names%v(1))
 	close_fn%params(1)%type = file_type
-	close_fn%params(1)%name = "file_handle"
+	close_fn%param_names%v(1)%s = "file_handle"
 
 	call fns%insert("close", close_fn, id_index)
 
 	!********
 
-	exit_fn%type = void_type
+	exit_fn%type%type = void_type
 	allocate(exit_fn%params(1))
+	allocate(exit_fn%param_names%v(1))
 	exit_fn%params(1)%type = i32_type
-	exit_fn%params(1)%name = "exit_status"
+	exit_fn%param_names%v(1)%s = "exit_status"
 
 	call fns%insert("exit", exit_fn, id_index)
 
 	!********
 
-	size_fn%type = i64_type
+	size_fn%type%type = i64_type
 	allocate(size_fn%params(2))
+	allocate(size_fn%param_names%v(2))
 
 	size_fn%params(1)%type = array_type
 
-	size_fn%params(1)%array_type = any_type
-	size_fn%params(1)%rank = -1  ! negative means any rank
+	allocate(size_fn%params(1)%array)
+	size_fn%params(1)%array%type = any_type
+	size_fn%params(1)%array%rank = -1  ! negative means any rank
 
-	size_fn%params(1)%name = "array"
+	size_fn%param_names%v(1)%s = "array"
 
 	size_fn%params(2)%type = i32_type
-	size_fn%params(2)%name = "dim"
+	size_fn%param_names%v(2)%s = "dim"
 
 	call fns%insert("size", size_fn, id_index)
 
@@ -538,103 +586,115 @@ function declare_intrinsic_fns() result(fns)
 
 	!********
 
-	count_fn%type = i64_type
+	count_fn%type%type = i64_type
 	allocate(count_fn%params(1))
+	allocate(count_fn%param_names%v(1))
 
 	count_fn%params(1)%type = array_type
 
-	count_fn%params(1)%array_type = bool_type
-	count_fn%params(1)%rank = -1  ! negative means any rank
+	allocate(count_fn%params(1)%array)
+	count_fn%params(1)%array%type = bool_type
+	count_fn%params(1)%array%rank = -1  ! negative means any rank
 
-	count_fn%params(1)%name = "mask"
+	count_fn%param_names%v(1)%s = "mask"
 
 	!! TODO: add dim arg to count() like Fortran
 	!count_fn%params(2)%type = i32_type
-	!count_fn%params(2)%name = "dim"
+	!count_fn%param_names%v(2)%s = "dim"
 
 	call fns%insert("count", count_fn, id_index)
 
 	!********
 
-	sum_i32_fn%type = i32_type
+	sum_i32_fn%type%type = i32_type
 	allocate(sum_i32_fn%params(1))
+	allocate(sum_i32_fn%param_names%v(1))
 
 	sum_i32_fn%params(1)%type = array_type
 
-	sum_i32_fn%params(1)%array_type = i32_type
-	sum_i32_fn%params(1)%rank = -1  ! negative means any rank
+	allocate(sum_i32_fn%params(1)%array)
+	sum_i32_fn%params(1)%array%type = i32_type
+	sum_i32_fn%params(1)%array%rank = -1  ! negative means any rank
 
-	sum_i32_fn%params(1)%name =  "array"
+	sum_i32_fn%param_names%v(1)%s =  "array"
 
 	!! TODO: add mask and dim args to sum() like Fortran.  Maybe overload
 	!! several distinct internal fn's like 0min_i32 vs 0min_i64?  The return
 	!! value is still the same so maybe there's an easier way
 	!sum_i32_fn%params(2)%type = i32_type
-	!sum_i32_fn%params(2)%name = "dim"
+	!sum_i32_fn%param_names%v(2)%s = "dim"
 
 	call fns%insert("0sum_i32", sum_i32_fn, id_index)
 
 	!********
 
-	sum_i64_fn%type = i64_type
+	sum_i64_fn%type%type = i64_type
 	allocate(sum_i64_fn%params(1))
+	allocate(sum_i64_fn%param_names%v(1))
 
 	sum_i64_fn%params(1)%type = array_type
 
-	sum_i64_fn%params(1)%array_type = i64_type
-	sum_i64_fn%params(1)%rank = -1  ! negative means any rank
+	allocate(sum_i64_fn%params(1)%array)
+	sum_i64_fn%params(1)%array%type = i64_type
+	sum_i64_fn%params(1)%array%rank = -1  ! negative means any rank
 
-	sum_i64_fn%params(1)%name =  "array"
+	sum_i64_fn%param_names%v(1)%s =  "array"
 
 	call fns%insert("0sum_i64", sum_i64_fn, id_index)
 
 	!********
 
-	sum_f32_fn%type = f32_type
+	sum_f32_fn%type%type = f32_type
 	allocate(sum_f32_fn%params(1))
+	allocate(sum_f32_fn%param_names%v(1))
 
 	sum_f32_fn%params(1)%type = array_type
 
-	sum_f32_fn%params(1)%array_type = f32_type
-	sum_f32_fn%params(1)%rank = -1  ! negative means any rank
+	allocate(sum_f32_fn%params(1)%array)
+	sum_f32_fn%params(1)%array%type = f32_type
+	sum_f32_fn%params(1)%array%rank = -1  ! negative means any rank
 
-	sum_f32_fn%params(1)%name =  "array"
+	sum_f32_fn%param_names%v(1)%s =  "array"
 
 	call fns%insert("0sum_f32", sum_f32_fn, id_index)
 
 	!********
 
-	all_fn%type = bool_type
+	all_fn%type%type = bool_type
 	allocate(all_fn%params(1))
+	allocate(all_fn%param_names%v(1))
 
 	all_fn%params(1)%type = array_type
 
-	all_fn%params(1)%array_type = bool_type
-	all_fn%params(1)%rank = -1  ! negative means any rank
+	allocate(all_fn%params(1)%array)
+	all_fn%params(1)%array%type = bool_type
+	all_fn%params(1)%array%rank = -1  ! negative means any rank
 
-	all_fn%params(1)%name = "mask"
+	all_fn%param_names%v(1)%s = "mask"
 
 	!! TODO: add dim arg to all() like Fortran
 	!all_fn%params(2)%type = i32_type
-	!all_fn%params(2)%name = "dim"
+	!all_fn%param_names%v(2)%s = "dim"
 
 	call fns%insert("all", all_fn, id_index)
 
 	!********
 
-	any_fn%type = bool_type
+	any_fn%type%type = bool_type
 	allocate(any_fn%params(1))
+	allocate(any_fn%param_names%v(1))
 
 	any_fn%params(1)%type = array_type
 
-	any_fn%params(1)%array_type = bool_type
-	any_fn%params(1)%rank = -1  ! negative means any rank
+	allocate(any_fn%params(1)%array)
+	any_fn%params(1)%array%type = bool_type
+	any_fn%params(1)%array%rank = -1  ! negative means any rank
 
-	any_fn%params(1)%name = "mask"
+	any_fn%param_names%v(1)%s = "mask"
 
 	!! TODO: add dim arg to any() like Fortran
 	!any_fn%params(2)%type = i32_type
-	!any_fn%params(2)%name = "dim"
+	!any_fn%param_names%v(2)%s = "dim"
 
 	call fns%insert("any", any_fn, id_index)
 
@@ -679,13 +739,15 @@ function declare_intrinsic_fns() result(fns)
 			any_fn        &
 		]
 
-end function declare_intrinsic_fns
+end subroutine declare_intrinsic_fns
 
 !===============================================================================
 
 function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	! TODO: take state struct instead of separate vars and fns members?
+
+	! TODO: take structs arg (like existing fns arg)
 
 	character(len = *) :: str
 
@@ -711,7 +773,12 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	type(fns_t) :: fns0
 
+	! This no longer seems to make a difference.  Previously, without `save`,
+	! gfortran crashes when this goes out of scope.  Maybe I need to work on a
+	! manual finalizer to deallocate ternary trees, not just for structs but for
+	! the vars_t trees contained within
 	type(parser_t) :: parser
+	!type(parser_t), save :: parser
 
 	type(syntax_token_t) :: token
 
@@ -743,7 +810,9 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	! The global scope can return any type.  This is initialized here and not
 	! inside new_parser() in case you have half of a function body inside an
 	! include file (!)
-	parser%fn_type = any_type
+	parser%fn_type%type = any_type
+	allocate(parser%fn_type%array)
+	!parser%fn_type = any_type
 
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
@@ -850,6 +919,12 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	!*******************************
 	! Parse the tokens
 	tree = parser%parse_unit()
+
+	!print *, ""
+	!print *, "in core.f90:"
+	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
+	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
+
 	!*******************************
 
 	tree%expecting       = parser%expecting
@@ -927,6 +1002,17 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	if (allocated(fns0%fns)) then
 		fns%fns( 1: size(fns0%fns) ) = fns0%fns
 	end if
+
+	!if (allocated(parser%structs)) then
+	!	! TODO: manually finalize recursively?
+	!	deallocate(parser%structs)
+	!end if
+	!print *, "size = ", size(parser%structs%structs)
+	!print *, "allocated = ", allocated(parser%structs%structs)
+	!print *, "size = ", size(parser%structs%dicts)
+	!print *, "allocated = ", allocated(parser%structs%dict%root)
+	!deallocate(parser%structs%dict%root)
+	!call struct_ternary_tree_final(parser%structs%dict%root)
 
 	if (debug > 0) print *, 'done syntax_parse'
 

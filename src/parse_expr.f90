@@ -23,13 +23,17 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	integer :: io, ltype, rtype, pos0, span0, span1, lrank, rrank, larrtype, &
-		rarrtype
+	logical :: is_op_allowed
 
-	type(syntax_node_t) :: right
+	integer :: io, ltype, rtype, pos0, lrank, rrank, larrtype, &
+		rarrtype, id_index, search_io
+
+	type(syntax_node_t) :: right, member
 	type(syntax_token_t) :: let, identifier, op
 
 	type(text_span_t) :: span
+
+	type(value_t) :: var
 
 	!print *, 'starting parse_expr_statement()'
 
@@ -59,6 +63,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		let        = parser%next()
 		identifier = parser%next()
+		!print *, 'let ident = ', identifier%text
+
 		op         = parser%next()
 
 		right      = parser%parse_expr_statement()
@@ -72,7 +78,10 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		expr = new_declaration_expr(identifier, op, right)
 
-		!print *, 'expr ident text = ', expr%identifier%text
+		!print *, "right type = ", kind_name(right%val%type)
+		!print *, "expr  type = ", kind_name(expr %val%type)
+		!print *, "right struct = ", right%val%struct_name
+		!print *, "expr  struct = ", expr %val%struct_name
 
 		! Increment the variable array index and save it in the expr node.
 		! TODO: make this a push_var fn?  parse_for_statement uses it too
@@ -110,24 +119,49 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! %pos is the lexer token index, %current_pos() is the character index!
 		pos0 = parser%pos
 
-		!print *, 'assign expr'
+		!print *, "assign expr"
 
 		identifier = parser%match(identifier_token)
+
+		! this makes `identifier` a redundant copy, although a convenient
+		! shorthand. we need expr%identifier for error handling inside
+		! parse_subscripts()
+		expr%identifier = identifier;
+
+		!print *, "ident = ", identifier%text
 
 		! Parse array subscript indices if present
 
 		! Subscript can appear in assignment expr but not let expr, because let
-		! must initialize the whole array
-		span0 = parser%current_pos()
+		! must initialize the whole array.  Similarly for dot member access
+
+		! Delay the error-handling on search_io because we might end up rewinding
+		call parser%vars%search(identifier%text, expr%id_index, search_io, expr%val)
 		call parser%parse_subscripts(expr)
 
-		if (size(expr%lsubscripts) <= 0) deallocate(expr%lsubscripts)
-		span1 = parser%current_pos() - 1
+		if (parser%peek_kind(0) == dot_token) then
+			!print *, "dot token"
+
+			if (search_io /= exit_success) then
+				span = new_span(identifier%pos, len(identifier%text))
+				call parser%diagnostics%push( &
+					err_undeclare_var(parser%context(), &
+					span, identifier%text))
+			end if
+
+			call parser%parse_dot(expr)
+			if (.not. allocated(expr%member)) then
+				!print *, "RETURNING ******"
+				return
+			end if
+
+		end if
 
 		if (.not. is_assignment_op(parser%current_kind())) then
 			! Rewind and do the default case (same as outside the assignment if
 			! block).  Could use goto or probably refactor somehow
 			parser%pos = pos0
+			!print *, "rewinding ********"
 			!print *, 'pos0 = ', pos0
 			expr = parser%parse_expr()
 			return
@@ -136,12 +170,13 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		op    = parser%next()
 		right = parser%parse_expr_statement()
+		!print *, "1a right index = ", right%right%id_index
 
 		! regular vs compound assignment exprs are denoted by the op.  all of
 		! them are the same kind
 		expr%kind = assignment_expr
 
-		allocate(expr%right)
+		if (.not. allocated(expr%right)) allocate(expr%right)
 
 		expr%identifier = identifier
 
@@ -152,60 +187,19 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!print *, 'op = ', op%text
 
 		! Get the identifier's type and index from the dict and check that it
-		! has been declared
-		expr%val = parser%vars%search(identifier%text, expr%id_index, io)
-
-		if (io /= exit_success) then
-			span = new_span(identifier%pos, len(identifier%text))
-			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), &
-				span, identifier%text))
+		! has been declared, unless it is a struct which has already been looked
+		! up above
+		if (.not. allocated(expr%member)) then
+			if (search_io /= exit_success) then
+				span = new_span(identifier%pos, len(identifier%text))
+				call parser%diagnostics%push( &
+					err_undeclare_var(parser%context(), &
+					span, identifier%text))
+			end if
 		end if
 
 		!print *, 'type = ', kind_name(expr%val%type)
-
 		!print *, 'allocated(expr%val%array) = ', allocated(expr%val%array)
-
-		if (size(expr%lsubscripts) > 0) then
-
-			if (expr%val%type == str_type) then
-				!print *, 'str type'
-				! TODO: check rank == 1
-			else if (expr%val%type /= array_type) then
-				span = new_span(span0, span1 - span0 + 1)
-				call parser%diagnostics%push( &
-					err_scalar_subscript(parser%context(), &
-					span, identifier%text))
-				return
-
-			end if
-
-			!print *, 'type = ', expr%val%type
-
-			if (expr%val%type /= str_type) then
-
-				if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
-					! this is not necessarily true for strings
-					expr%val%type = expr%val%array%type
-				end if
-
-				!print *, 'rank = ', expr%val%array%rank
-				!print *, 'subs = ', size(expr%lsubscripts)
-
-				if (expr%val%array%rank /= size(expr%lsubscripts)) then
-					span = new_span(span0, span1 - span0 + 1)
-					call parser%diagnostics%push( &
-						err_bad_sub_count(parser%context(), span, identifier%text, &
-						expr%val%array%rank, size(expr%lsubscripts)))
-				end if
-
-				!print *, 'rank in  = ', expr%val%array%rank
-				expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
-				!print *, 'rank out = ', expr%val%array%rank
-
-			end if
-
-		end if
 
 		ltype = expr%val%type
 		rtype = expr%right%val%type
@@ -214,22 +208,33 @@ recursive module function parse_expr_statement(parser) result(expr)
 		rarrtype = unknown_type
 		if (ltype == array_type) larrtype = expr%val%array%type
 		if (rtype == array_type) rarrtype = expr%right%val%array%type
-		!print *, 'larrtype = ', kind_name(larrtype)
-		!print *, 'rarrtype = ', kind_name(rarrtype)
+
+		!print *, "larrtype = ", kind_name(larrtype)
+		!print *, "rarrtype = ", kind_name(rarrtype)
+		!print *, "ltype    = ", kind_name(ltype)
+		!print *, "rtype    = ", kind_name(rtype)
+
+		is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
+		if (ltype == struct_type .and. is_op_allowed) then
+			if (expr%val%struct_name /= expr%right%val%struct_name) then
+				! TODO: this is a one-off check for assignment of one struct to
+				! another. It should really be inside of is_binary_op_allowed(),
+				! but I should change is_binary_op_allowed() to take 2 value_t
+				! args, instead of a bunch of int args as-is
+				is_op_allowed = .false.
+			end if
+		end if
 
 		! This check could be moved inside of is_binary_op_allowed, but we would
 		! need to pass parser to it to push diagnostics
-		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
-
+		if (.not. is_op_allowed) then
 			!print *, 'bin not allowed in parse_expr_statement'
-
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context(), &
 				span, op%text, &
-				kind_name(ltype), &
-				kind_name(rtype)))
-
+				type_name(expr%val), &
+				type_name(expr%right%val)))
 		end if
 
 		if (ltype == array_type .and. rtype == array_type) then
@@ -326,6 +331,8 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 
 		!print *, 'larrtype = ', kind_name(larrtype)
 		!print *, 'rarrtype = ', kind_name(rarrtype)
+		!print *, 'ltype = ', kind_name(ltype)
+		!print *, 'rtype = ', kind_name(rtype)
 
 		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
 
@@ -365,7 +372,7 @@ end function parse_expr
 
 !===============================================================================
 
-module function parse_primary_expr(parser) result(expr)
+recursive module function parse_primary_expr(parser) result(expr)
 
 	class(parser_t) :: parser
 
@@ -373,7 +380,9 @@ module function parse_primary_expr(parser) result(expr)
 
 	!********
 
-	logical :: bool
+	integer :: io
+
+	logical :: bool, exists
 
 	type(syntax_token_t) :: left, right, keyword, token
 
@@ -414,10 +423,56 @@ module function parse_primary_expr(parser) result(expr)
 
 		case (identifier_token)
 
-			if (parser%peek_kind(1) /= lparen_token) then
-				expr = parser%parse_name_expr()
-			else
+			!print *, "parser%peek_kind(1) = ", kind_name(parser%peek_kind(1))
+
+			if (parser%peek_kind(1) == lparen_token) then
 				expr = parser%parse_fn_call()
+			else if (parser%peek_kind(1) == lbrace_token) then
+
+				! There is an ambiguity here because struct instantiators and
+				! block statements both look similar, using braces{}.  Compare
+				! an if statement:
+				!
+				!     if my_bool
+				!     { ...
+				!     }
+				!
+				!
+				! To a struct instantiator:
+				!
+				!     let my_struct = Struct
+				!     { ...
+				!     };
+				!
+				! We resolve this by looking up the identifier ("my_bool" vs
+				! "Struct") in the structs dict.  Alternatively, I could change
+				! syntran to use a different token for struct instantiators,
+				! e.g. `.{`, but I prefer this solution.
+
+				! The exists() method is not strictly needed.  Search could work
+				! and simplify the code.  I was experimenting while debugging
+				! memory issue, but exists is not necessary.  On the other hand,
+				! it might be more optimal to check existence w/o copying an
+				! output val (which could containt big nested dict types)
+
+				!print *, "text = ", parser%current_text()
+				!dummy = parser%structs%search(parser%current_text(), dummy_id, io)
+				exists = parser%structs%exists(parser%current_text())
+				!deallocate(dummy%members)
+				!deallocate(dummy%vars)
+				!print *, "io = ", io
+
+				!if (io == 0) then
+				if (exists) then
+					expr = parser%parse_struct_instance()
+					!print *, "back in parse_expr.f90"
+				else
+					! Same as default case below
+					expr = parser%parse_name_expr()
+				end if
+
+			else
+				expr = parser%parse_name_expr()
 			end if
 
 		case (f32_token)
@@ -448,7 +503,7 @@ end function parse_primary_expr
 
 !===============================================================================
 
-module function parse_name_expr(parser) result(expr)
+recursive module function parse_name_expr(parser) result(expr)
 
 	class(parser_t) :: parser
 
@@ -456,10 +511,12 @@ module function parse_name_expr(parser) result(expr)
 
 	!********
 
-	integer :: io, id_index, span0, span1, expect_rank
+	integer :: io, id_index, span0, span1
 
 	type(syntax_token_t) :: identifier
 	type(text_span_t) :: span
+
+	type(value_t) :: var
 
 	! Variable name expression
 
@@ -469,8 +526,9 @@ module function parse_name_expr(parser) result(expr)
 	!print *, '%current_kind() = ', kind_name(parser%current_kind())
 
 	!print *, 'searching'
-	expr = new_name_expr(identifier, &
-		parser%vars%search(identifier%text, id_index, io))
+
+	call parser%vars%search(identifier%text, id_index, io, var)
+	expr = new_name_expr(identifier, var)
 	expr%id_index = id_index
 
 	if (io /= exit_success) then
@@ -488,52 +546,124 @@ module function parse_name_expr(parser) result(expr)
 	span0 = parser%current_pos()
 	call parser%parse_subscripts(expr)
 
-	span1 = parser%current_pos() - 1
-	if (size(expr%lsubscripts) <= 0) then
-		deallocate(expr%lsubscripts)
-	else if (expr%val%type == array_type) then
+	!print *, "expr%val%type = ", kind_name(expr%val%type)
 
-		!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
-
-		if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
-			! this is not necessarily true for strings
-			expr%val%type = expr%val%array%type
-		end if
-
-		! TODO: allow rank+1 for str arrays
-		if (expr%val%array%rank /= size(expr%lsubscripts)) then
-			span = new_span(span0, span1 - span0 + 1)
-			call parser%diagnostics%push( &
-				err_bad_sub_count(parser%context(), span, &
-				identifier%text, &
-				expr%val%array%rank, size(expr%lsubscripts)))
-		end if
-
-		! A slice operation can change the result rank
-
-		!print *, 'rank in  = ', expr%val%array%rank
-		expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
-		!print *, 'rank out = ', expr%val%array%rank
-
-	else if (expr%val%type == str_type) then
-		!print *, 'string type'
-
-		expect_rank = 1
-		if (size(expr%lsubscripts) /= expect_rank) then
-			span = new_span(span0, span1 - span0 + 1)
-			call parser%diagnostics%push( &
-				err_bad_sub_count(parser%context(), span, &
-				identifier%text, &
-				expect_rank, size(expr%lsubscripts)))
-		end if
-	else
-		span = new_span(span0, span1 - span0 + 1)
-		call parser%diagnostics%push( &
-			err_scalar_subscript(parser%context(), &
-			span, identifier%text))
-	end if
+	!print *, "tail parse_dot"
+	call parser%parse_dot(expr)
 
 end function parse_name_expr
+
+!===============================================================================
+
+recursive module subroutine parse_dot(parser, expr)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t), intent(inout) :: expr
+
+	!********
+
+	integer :: io, struct_id, member_id, pos0, pos1
+
+	type(struct_t) :: struct
+
+	type(syntax_token_t) :: dot, identifier
+
+	type(text_span_t) :: span
+
+	type(value_t) :: member
+
+	if (parser%current_kind() /= dot_token) return
+
+	!print *, "parsing dot"
+	!print *, "expr type = ", type_name(expr%val)
+
+	dot  = parser%match(dot_token)
+
+	identifier = parser%match(identifier_token)
+
+	!print *, "dot identifier = ", identifier%text
+	!print *, "type = ", kind_name(expr%val%type)
+
+	if (expr%val%type /= struct_type) then
+		! Don't cascade errors for undeclared vars
+		if (expr%val%type /= unknown_type) then
+			! Does expr%identifier always exist to create a span?  May need to just
+			! underline dot itself.  I've tested this with arrays of structs
+			! `struct_array[0].member` and nested dot exprs `a.b.c.z`
+			span = new_span(expr%identifier%pos, dot%pos - expr%identifier%pos + 1)
+			call parser%diagnostics%push(err_non_struct_dot( &
+				parser%context(), &
+				span, &
+				expr%identifier%text))
+		end if
+		return
+	end if
+
+	! For RHS dots, this will stick.  For LHS dots, this will be shortly
+	! overwritten as assignment_expr in the caller
+	expr%kind = dot_expr
+
+	! Save dot info in member syntax node
+	allocate(expr%member)
+
+	!print *, "struct_name = """, expr%val%struct_name, """"
+
+	! Is there a better way than looking up every struct by name again?
+	call parser%structs%search(expr%val%struct_name, struct_id, io, struct)
+	if (io /= 0) then
+		! Type is already confirmed as struct_type above, so I'm fairly sure
+		! this is unreachable
+		write(*,*) err_int_prefix//"unreachable struct lookup failure"//color_reset
+		call internal_error()
+	end if
+
+	call struct%vars%search(identifier%text, member_id, io, member)
+	if (io /= 0) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_bad_member_name( &
+			parser%context(), &
+			span, &
+			identifier%text, &
+			expr%identifier%text, &
+			expr%val%struct_name))
+		expr%val%type = unknown_type  ! this prevents cascades later
+		return
+	end if
+	!print *, "member id = ", member_id
+	!print *, "mem type  = ", kind_name(member%type)
+
+	expr%member%id_index = member_id
+	expr%val = member
+
+	! I think this is the right place to parse subscripts. Or should it be after
+	! the recursive parse_dot()?
+	expr%member%val = member
+	pos0 = parser%current_pos()
+	call parser%parse_subscripts(expr%member)
+	pos1 = parser%current_pos()
+	if (allocated(expr%member%lsubscripts)) then
+		expr%val = expr%member%val
+
+		if (.not. all(expr%member%lsubscripts%sub_kind == scalar_sub)) then
+			span = new_span(pos0, pos1 - pos0)
+			call parser%diagnostics%push(err_struct_array_slice( &
+				parser%context(), &
+				span))
+		end if
+
+	end if
+
+	! I think this needs a recursive call to `parse_dot()` right here to handle
+	! things like `a.b.c`
+	if (parser%peek_kind(0) == dot_token) then
+		expr%member%val = expr%val
+		expr%member%identifier = identifier  ! set for diags in recursed parse_dot()
+		call parser%parse_dot(expr%member)
+		expr%val = expr%member%val
+	end if
+
+end subroutine parse_dot
 
 !===============================================================================
 

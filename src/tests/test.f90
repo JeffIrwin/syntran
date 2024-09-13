@@ -2448,6 +2448,941 @@ end subroutine unit_test_return
 
 !===============================================================================
 
+subroutine unit_test_struct(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'structs'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 1
+				//'let d = D{y=i64(1912), m="Apr", d=14};' &
+				//'d.y;', quiet) == '1912', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 2
+				//'let d = D{y=i64(1912), m="Apr", d=14};' &
+				//'d.m;', quiet) == 'Apr', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 3
+				//'let d = D{y=i64(1912), m="Apr", d=14};' &
+				//'d.d;', quiet) == '14', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 4
+				//'let d = D{y=i64(1900)+12, m="Apr", d=14};' &
+				//'d.y;', quiet) == '1912', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 5
+				//'let d = D{y=i64(1912), m="Apr", d=7*2};' &
+				//'let e=d; e.d;', quiet) == '14', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 6
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
+			    //'let e=d;' &
+			    //'e = D{y=i64(1945), m="May", d=5*3};' &
+			    //'e.d;', quiet) == '15', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 7
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
+			    //'let e=d;' &
+			    //'e = D{y=i64(1945), m="May", d=5*3};' &
+			    //'d.d;', quiet) == '14', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 8
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
+			    //'let x = 42;' &
+			    //'x = d.d;' &
+			    //'x;', quiet) == '14', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 9
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
+			    //'let x = d.y + 5;' &
+			    //'x;', quiet) == '1917', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 10
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
+			    //'let x = 6 + d.y;' &
+			    //'x;', quiet) == '1918', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 11
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
+			    //'d.d = 18;' &
+			    //'d.d;', quiet) == '18', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 12
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
+			    //'d.d += 3;' &
+			    //'d.d;', quiet) == '17', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 13
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
+			    //'d.m + "il";', quiet) == 'April', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 14
+			    //'let d = D{y=i64(1912), m="Apr", d=7*2};' &
+			    //'"month " + d.m;', quiet) == 'month Apr', &
+			eval( 'struct C{r:i32, g:i32, b:i32}' &           ! 15
+			    //'let c = C{r = 32, g = 64, b = 128};' &
+			    //'max(c.r, c.g);', quiet) == '64', &
+			eval( 'struct C{r:i32, g:i32, b:i32}' &           ! 16
+			    //'let c = C{r = 32, g = 64, b = 128};' &
+			    //'c.r + c.g + c.b;', quiet) == '224', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 17
+			    //'fn x_year(dd: D): i64 {return dd.y;}' &
+			    //'let d = D{y=i64(1884), m="Apr", d=7*2};' &
+			    //'x_year(d);', quiet) == '1884', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 18
+			    //'fn x_year(dd: D): i64 {return dd.y;}' &
+			    //'let d = D{y=i64(1776), m="Jul", d=3+1};' &
+			    //'x_year(d);', quiet) == '1776', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 19
+			    //'fn x_day(dd: D): i32 {return dd.d;}' &
+			    //'let d = D{y=i64(1884), m="Apr", d=7*2};' &
+			    //'x_day(d);', quiet) == '14', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 20
+			    //'fn x_day(dd: D): i32 {return dd.d;}' &
+			    //'let d = D{y=i64(1776), m="Jul", d=3+1};' &
+			    //'x_day(d);', quiet) == '4', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 21
+			    //'fn x_mon(dd: D): str {return dd.m;}' &
+			    //'let d = D{y=i64(1884), m="Apr", d=7*2};' &
+			    //'x_mon(d);', quiet) == 'Apr', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 22
+			    //'fn x_mon(dd: D): str {return dd.m;}' &
+			    //'let d = D{y=i64(1776), m="Jul", d=3+1};' &
+			    //'x_mon(d);', quiet) == 'Jul', &
+			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 23
+			    //'let glbl = D{y=i64(1883), m="Apr", d=7*2};' &
+			    //'fn x_year(): i64 {return glbl.y;}' &
+			    //'x_year();', quiet) == '1883', &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 24
+			    //'let p1 = P{x=6, y=13};' &
+			    //'let p2 = P{x=5, y=p1.y};' &
+			    //'p2.x;', quiet) == '5', &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 25
+			    //'let p1 = P{x=6, y=13};' &
+			    //'let p2 = P{x=5, y=p1.y};' &
+			    //'p1.x;', quiet) == '6', &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 26
+			    //'let p1 = P{x=6, y=13};' &
+			    //'let p2 = P{x=5, y=p1.y};' &
+			    //'p2.y;', quiet) == '13', &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 27
+			    //'let p1 = P{x=6, y=13};' &
+			    //'let p2 = P{x=5, y=p1.y};' &
+			    //'p1.y;', quiet) == '13', &
+			eval(''                         &                 ! 28
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let po = r1.bl;' &
+				//'let yo = po.x;' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 29
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let po = r1.bl;' &
+				//'let yo = po.y;' &
+				, quiet) == '13', &
+			eval(''                         &                 ! 30
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let po = r1.tr;' &
+				//'let yo = po.x;' &
+				, quiet) == '9', &
+			eval(''                         &                 ! 31
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let po = r1.tr;' &
+				//'let yo = po.y;' &
+				, quiet) == '17', &
+			eval(''                         &                 ! 32
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'return v1.name;' &
+				, quiet) == 'myvec1', &
+			eval(''                         &                 ! 33
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'return v1.v;' &
+				, quiet) == '[6, 2, 5]', &
+			eval(''                         &                 ! 34
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'v1.v = [3, 1, 2];' &
+				//'return v1.v;' &
+				, quiet) == '[3, 1, 2]', &
+			eval(''                         &                 ! 35
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'let v2 = v1.v;' &
+				//'return v2;' &
+				, quiet) == '[6, 2, 5]', &
+			eval(''                         &                 ! 36
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'let v2 = v1.v;' &
+				//'return v2[0];' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 37
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'let v2 = v1.v;' &
+				//'return v2[1];' &
+				, quiet) == '2', &
+			eval(''                         &                 ! 38
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'let v2 = [3, 1, 2];' &
+				//'v1.v = v2;' &
+				//'return v1.v;' &
+				, quiet) == '[3, 1, 2]', &
+			eval(''                         &                 ! 39
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let o = r1.bl.x;' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 40
+				//'struct P{x:i32, y:i32,}' &
+				//'struct R{bl: P, tr: P}' &
+				//'let p1 = P{x=6, y=13};' &
+				//'let p2 = P{x=9, y=17};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let o = r1.tr.y;' &
+				, quiet) == '17', &
+			eval(''                         &                 ! 41
+				//'struct P{x:i32, y:i32, z:i32}' &  ! point
+				//'struct R{bl: P, tr: P}' &         ! rectangle with bottom-left and top-right points
+				//'struct Y{ba: R, p: P}' &          ! pyramid with base rect and a point
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'let o = y1.ba.tr.x;' &
+				, quiet) == '9', &
+			eval(''                         &                 ! 42
+				//'struct P{x:i32, y:i32, z:i32}' &  ! point
+				//'struct R{bl: P, tr: P}' &         ! rectangle with bottom-left and top-right points
+				//'struct Y{ba: R, p: P}' &          ! pyramid with base rect and a point
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'let o = y1.ba.bl.y;' &
+				, quiet) == '13', &
+			eval(''                         &                 ! 43
+				//'struct P{x:i32, y:i32, z:i32}' &  ! point
+				//'struct R{bl: P, tr: P}' &         ! rectangle with bottom-left and top-right points
+				//'struct Y{ba: R, p: P}' &          ! pyramid with base rect and a point
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'let o = y1.p.z;' &
+				, quiet) == '5', &
+			eval(''                         &                 ! 44
+				//'struct P{x:i32, y:i32, z:i32}' &  ! point
+				//'struct R{bl: P, tr: P}' &         ! rectangle with bottom-left and top-right points
+				//'struct Y{ba: R, p: P}' &          ! pyramid with base rect and a point
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'y1.ba.tr.x = 10;' &
+				//'return y1.ba.tr.x;' &
+				, quiet) == '10', &
+			eval(''                         &                 ! 45
+				//'struct P{x:i32, y:i32, z:i32}' &  ! point
+				//'struct R{bl: P, tr: P}' &         ! rectangle with bottom-left and top-right points
+				//'struct Y{ba: R, p: P}' &          ! pyramid with base rect and a point
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'y1.ba.bl.y += 1;' &
+				//'return y1.ba.bl.y;' &
+				, quiet) == '14', &
+			eval(''                         &                 ! 46
+				//'struct P{x:i32, y:i32, z:i32}' &  ! point
+				//'struct R{bl: P, tr: P}' &         ! rectangle with bottom-left and top-right points
+				//'struct Y{ba: R, p: P}' &          ! pyramid with base rect and a point
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'y1.p.z -= y1.ba.tr.x;' &
+				//'return y1.p.z;' &
+				, quiet) == '-4', &
+			eval(''                         &                 ! 47
+				//'struct P{z:i32, x:i32, y:i32}' &  ! point with members in weird order
+				//'struct R{bl: P, tr: P}' &
+				//'struct Y{ba: R, p: P}' &
+				//'let p1 = P{x=6, y=13, z=0};' &
+				//'let p2 = P{x=9, y=17, z=0};' &
+				//'let p3 = P{x=7, y=15, z=5};' &
+				//'let r1 = R{bl=p1, tr=p2};' &
+				//'let y1 = Y{ba=r1,  p=p3};' &
+				//'y1.p.z -= y1.ba.tr.x;' &
+				//'return y1.p.z;' &
+				, quiet) == '-4', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 48
+			    //'fn get_d(): D {return D{y=2024, m="Sep", d=21};}' &
+			    //'let d0 = get_d();' &
+			    //'return d0.m;' &
+				, quiet) == 'Sep', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct
+
+!===============================================================================
+
+subroutine unit_test_struct_arr(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	! This tests both structs of arrays and arrays of structs.  There are
+	! limited structs of arrays covered in unit_test_struct(), but more complex
+	! cases are covered here
+	character(len = *), parameter :: label = 'structs/arrays'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			eval(''                         &                 ! 1
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'return v1.v[0];' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 2
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'return v1.v[1];' &
+				, quiet) == '2', &
+			eval(''                         &                 ! 3
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'return v1.v[1] + 1;' &
+				, quiet) == '3', &
+			eval(''                         &                 ! 4
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'v1.v = [3, 1, 2];' &
+				//'return v1.v[0] + v1.v[1];' &
+				, quiet) == '4', &
+			eval(''                         &                 ! 5
+				//'struct V{v:[i32;:], name:str,}' &
+				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
+				//'let x = v1.v[1] + [3, 2, 1];' &
+				, quiet) == '[5, 4, 3]', &
+			eval(''                         &                 ! 6
+				//'struct V{v:[i32;:], name:str,}' &  ! vector
+				//'struct L{s:V, e:V}'             &  ! line with start and end vectors
+				//'let v1 = V{v=[3,2,1], name="myvec1"};' &
+				//'let v2 = V{v=[6,2,5], name="myvec2"};' &
+				//'let l1 = L{s=v1, e=v2};' &
+				//'return l1.s.v[0];' &
+				, quiet) == '3', &
+			eval(''                         &                 ! 7
+				//'struct V{v:[i32;:], name:str,}' &  ! vector
+				//'struct L{s:V, e:V}'             &  ! line with start and end vectors
+				//'let v1 = V{v=[3,2,1], name="myvec1"};' &
+				//'let v2 = V{v=[6,2,5], name="myvec2"};' &
+				//'let l1 = L{s=v1, e=v2};' &
+				//'return l1.e.v[1];' &
+				, quiet) == '2', &
+			eval(''                         &                 ! 8
+				//'struct V{v:[i32;:], name:str,}' &  ! vector
+				//'struct L{s:V, e:V}'             &  ! line with start and end vectors
+				//'let v1 = V{v=[3,2,1], name="myvec1"};' &
+				//'let v2 = V{v=[6,2,5], name="myvec2"};' &
+				//'let l1 = L{s=v1, e=v2};' &
+				//'return l1.e.name;' &
+				, quiet) == 'myvec2', &
+			eval(''                         &                 ! 9
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &
+				//'let po = ps[0];' &
+				//'return po.x;' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 10
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
+				//'let po = ps[1];' &
+				//'return po.y;' &
+				, quiet) == '13', &
+			eval(''                         &                 ! 11
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
+				//'return ps[0].x;' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 12
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
+				//'return ps[1].y;' &
+				, quiet) == '13', &
+			eval(''                         &                 ! 13
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let p2 = P{x=4, y=15,};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[0].x;' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 14
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let p2 = P{x=4, y=15,};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[1].y;' &
+				, quiet) == '15', &
+			eval(''                         &                 ! 15
+				//'struct P{y:i32, x:i32,}' &  ! point in weird order
+				//'let p1 = P{x=6, y=13,};' &
+				//'let p2 = P{x=4, y=15,};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[1].y;' &
+				, quiet) == '15', &
+			eval(''                         &                 ! 16
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'struct L{s:P, e:P}'      &  ! line
+				//'let p1 = P{x= 6, y=13,};' &
+				//'let p2 = P{x= 4, y=15,};' &
+				//'let p3 = P{x=16, y=18,};' &
+				//'let p4 = P{x=14, y=20,};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'return ls[0].e.x;' &
+				, quiet) == '4', &
+			eval(''                         &                 ! 17
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'struct L{s:P, e:P}'      &  ! line
+				//'let p1 = P{x= 6, y=13,};' &
+				//'let p2 = P{x= 4, y=15,};' &
+				//'let p3 = P{x=16, y=18,};' &
+				//'let p4 = P{x=14, y=20,};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'return ls[1].s.y;' &
+				, quiet) == '18', &
+			eval(''                         &                 ! 18
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'let p1 = P{v=[6, 13], s="pt1"};' &
+				//'let p2 = P{v=[4, 15], s="pt2"};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[0].v[1];' &
+				, quiet) == '13', &
+			eval(''                         &                 ! 19
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'let p1 = P{v=[6, 13], s="pt1"};' &
+				//'let p2 = P{v=[4, 15], s="pt2"};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[1].v[0];' &
+				, quiet) == '4', &
+			eval(''                         &                 ! 20
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'let p1 = P{v=[6, 13], s="pt1"};' &
+				//'let p2 = P{v=[4, 15], s="pt2"};' &
+				//'let ps = [p1, p2];' &
+				//'return ps[1].s;' &
+				, quiet) == 'pt2', &
+			eval(''                         &                 ! 21
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'struct L{s:P, e:P}'      &      ! line
+				//'let p1 = P{v=[ 6, 13], s="pt1"};' &
+				//'let p2 = P{v=[ 4, 15], s="pt2"};' &
+				//'let p3 = P{v=[16, 18], s="pt3"};' &
+				//'let p4 = P{v=[14, 20], s="pt4"};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'return ls[1].s.v[1];' &
+				, quiet) == '18', &
+			eval(''                         &                 ! 22
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'let p1 = P{v=[6, 13], s="pt1"};' &
+				//'let p2 = P{v=[4, 15], s="pt2"};' &
+				//'let ps = [p1, p2];' &
+				//'ps[1].v[0] = 3;' &     ! dot/subscript expr on lhs
+				//'return ps[1].v[0];' &
+				, quiet) == '3', &
+			eval(''                         &                 ! 23
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'let p1 = P{v=[6, 13], s="pt1"};' &
+				//'let p2 = P{v=[4, 15], s="pt2"};' &
+				//'let ps = [p1, p2];' &
+				//'ps[1].v[0] -= 1;' &
+				//'return ps[1].v[0];' &
+				, quiet) == '3', &
+			eval(''                         &                 ! 24
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'struct L{s:P, e:P}'      &      ! line
+				//'let p1 = P{v=[ 6, 13], s="pt1"};' &
+				//'let p2 = P{v=[ 4, 15], s="pt2"};' &
+				//'let p3 = P{v=[16, 18], s="pt3"};' &
+				//'let p4 = P{v=[14, 20], s="pt4"};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'ls[1].s.v[1] = 19;' &
+				//'return ls[1].s.v[1];' &
+				, quiet) == '19', &
+			eval(''                         &                 ! 25
+				//'struct P{v:[i32;:], s:str,}' &  ! point
+				//'struct L{s:P, e:P}'      &      ! line
+				//'let p1 = P{v=[ 6, 13], s="pt1"};' &
+				//'let p2 = P{v=[ 4, 15], s="pt2"};' &
+				//'let p3 = P{v=[16, 18], s="pt3"};' &
+				//'let p4 = P{v=[14, 20], s="pt4"};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'ls[1].s.v[1] += 1;' &
+				//'return ls[1].s.v[1];' &
+				, quiet) == '19', &
+			eval(''                         &                 ! 26
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'struct L{s:P, e:P}'      &  ! line
+				//'let p1 = P{x= 6, y=13,};' &
+				//'let p2 = P{x= 4, y=15,};' &
+				//'let p3 = P{x=16, y=18,};' &
+				//'let p4 = P{x=14, y=20,};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'ls[1].s.y = 21;' &
+				//'return ls[1].s.y;' &
+				, quiet) == '21', &
+			eval(''                         &                 ! 27
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'struct L{s:P, e:P}'      &  ! line
+				//'let p1 = P{x= 6, y=13,};' &
+				//'let p2 = P{x= 4, y=15,};' &
+				//'let p3 = P{x=16, y=18,};' &
+				//'let p4 = P{x=14, y=20,};' &
+				//'let l1 = L{s = p1, e = p2};' &
+				//'let l2 = L{s = p3, e = p4};' &
+				//'let ls = [l1, l2];' &
+				//'ls[1].s.y += p1.x / 2;' &
+				//'return ls[1].s.y;' &
+				, quiet) == '21', &
+			eval(''                         &                 ! 28
+				//'struct P{v:[i32; :], s:str,}' &  ! point
+				//'struct G{x:[P  ; :], s:str,}' &  ! polyGon of points
+				//'let p0 = P{v=[6, 13], s="pta"};' &
+				//'let p1 = P{v=[4, 15], s="ptb"};' &
+				//'let p2 = P{v=[3, 17], s="ptc"};' &
+				//'let g0 = G{x=[p0, p1, p2], s="tri"};' &
+				//'return g0.x[0].v[0];' &
+				, quiet) == '6', &
+			eval(''                         &                 ! 29
+				//'struct P{v:[i32; :], s:str,}' &  ! point
+				//'struct G{x:[P  ; :], s:str,}' &  ! polyGon of points
+				//'let p0 = P{v=[6, 13], s="pta"};' &
+				//'let p1 = P{v=[4, 15], s="ptb"};' &
+				//'let p2 = P{v=[3, 17], s="ptc"};' &
+				//'let g0 = G{x=[p0, p1, p2], s="tri"};' &
+				//'return g0.x[2].v[1];' &
+				, quiet) == '17', &
+			eval(''                         &                 ! 30
+				//'struct P{v:[i32; :], s:str,}' &  ! point
+				//'struct G{x:[P  ; :], s:str,}' &  ! polyGon of points
+				//'let p0 = P{v=[6, 13], s="pta"};' &
+				//'let p1 = P{v=[4, 15], s="ptb"};' &
+				//'let p2 = P{v=[3, 17], s="ptc"};' &
+				//'let g0 = G{x=[p0, p1, p2], s="tri"};' &
+				//'g0.x[0].v[0] = 7;' &
+				//'return g0.x[0].v[0];' &
+				, quiet) == '7', &
+			eval(''                         &                 ! 31
+				//'struct P{v:[i32; :], s:str,}' &  ! point
+				//'struct G{x:[P  ; :], s:str,}' &  ! polyGon of points
+				//'let p0 = P{v=[6, 13], s="pta"};' &
+				//'let p1 = P{v=[4, 15], s="ptb"};' &
+				//'let p2 = P{v=[3, 17], s="ptc"};' &
+				//'let g0 = G{x=[p0, p1, p2], s="tri"};' &
+				//'g0.x[2].v[1] += 1;' &
+				//'return g0.x[2].v[1];' &
+				, quiet) == '18', &
+			eval(''                         &                 ! 32
+				//'struct P{v:[i32; :], s:str,}' &  ! point
+				//'struct G{x:[P  ; :], s:str,}' &  ! polyGon of points
+				//'let p0 = P{v=[6, 13], s="pta"};' &
+				//'let p1 = P{v=[4, 15], s="ptb"};' &
+				//'let p2 = P{v=[3, 17], s="ptc"};' &
+				//'let g0 = G{x=[p0, p1, p2], s="tri"};' &
+				//'g0.x[2].v = [2, 19];' &
+				//'return g0.x[2].v;' &
+				, quiet) == '[2, 19]', &
+			eval('' &                                         ! 33
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'return e.e.d.c.b.a;' &
+				, quiet) == '42', &
+			eval('' &                                         ! 34
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: [B;:]}' &  ! middle array
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'return e.e.d.c[0].b.a;' &
+				, quiet) == '42', &
+			eval('' &                                         ! 35
+				//'struct A{a: [i32;:]}' & ! inner-most array
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &       ! order-5 struct
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'return e.e.d.c.b.a[0];' &
+				, quiet) == '42', &
+			eval('' &                                         ! 36
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct, outer-most array
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = [E{e = d}];' &
+				//'return e[0].e.d.c.b.a;' &
+				, quiet) == '42', &
+			eval('' &                                         ! 37
+				//'struct A{a: [i32;:]}' &
+				//'struct B{b: [A;:]}' &
+				//'struct C{c: [B;:]}' &
+				//'struct D{d: [C;:]}' &
+				//'struct E{e: [D;:]}' &      ! order-5 struct, all arrays
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = [a]};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = [c]};' &
+				//'let e = [E{e = [d]}];' &
+				//'return e[0].e[0].d[0].c[0].b[0].a[0];' &
+				, quiet) == '42', &
+			eval('' &                                         ! 38
+				//'struct A{a: i32}' &
+				//'struct B{b: [A;:]}' &
+				//'struct C{c: B}' &
+				//'struct D{d: [C;:]}' &
+				//'struct E{e: D}' &      ! order-5 struct, alternating arrays
+				//'let a = A{a = 1337};' &
+				//'let b = B{b = [a]};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = [c]};' &
+				//'let e = [E{e = d}];' &
+				//'return e[0].e.d[0].c.b[0].a;' &
+				, quiet) == '1337', &
+			eval('' &                                         ! 39
+				//'struct A{a: [i32;:]}' &
+				//'struct B{b: A}' &
+				//'struct C{c: [B;:]}' &
+				//'struct D{d: C}' &
+				//'struct E{e: [D;:]}' &      ! order-5 struct, alternating arrays the other way
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = [d]};' &
+				//'return e.e[0].d.c[0].b.a[0];' &
+				, quiet) == '42', &
+			eval('' &                                         ! 40
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'e.e.d.c.b.a = 69;' &
+				//'return e.e.d.c.b.a;' &
+				, quiet) == '69', &
+			eval('' &                                         ! 41
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: [B;:]}' &  ! middle array
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'e.e.d.c[0].b.a = 69;' &
+				//'return e.e.d.c[0].b.a;' &
+				, quiet) == '69', &
+			eval('' &                                         ! 42
+				//'struct A{a: [i32;:]}' & ! inner-most array
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &       ! order-5 struct
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'e.e.d.c.b.a[0] = 69;' &
+				//'return e.e.d.c.b.a[0];' &
+				, quiet) == '69', &
+			eval('' &                                         ! 43
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct, outer-most array
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = [E{e = d}];' &
+				//'e[0].e.d.c.b.a = 69;' &
+				//'return e[0].e.d.c.b.a;' &
+				, quiet) == '69', &
+			eval('' &                                         ! 44
+				//'struct A{a: [i32;:]}' &
+				//'struct B{b: [A;:]}' &
+				//'struct C{c: [B;:]}' &
+				//'struct D{d: [C;:]}' &
+				//'struct E{e: [D;:]}' &      ! order-5 struct, all arrays
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = [a]};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = [c]};' &
+				//'let e = [E{e = [d]}];' &
+				//'e[0].e[0].d[0].c[0].b[0].a[0] = 69;' &
+				//'return e[0].e[0].d[0].c[0].b[0].a[0];' &
+				, quiet) == '69', &
+			eval('' &                                         ! 45
+				//'struct A{a: i32}' &
+				//'struct B{b: [A;:]}' &
+				//'struct C{c: B}' &
+				//'struct D{d: [C;:]}' &
+				//'struct E{e: D}' &      ! order-5 struct, alternating arrays
+				//'let a = A{a = 1337};' &
+				//'let b = B{b = [a]};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = [c]};' &
+				//'let e = [E{e = d}];' &
+				//'e[0].e.d[0].c.b[0].a = 420;' &
+				//'return e[0].e.d[0].c.b[0].a;' &
+				, quiet) == '420', &
+			eval('' &                                         ! 46
+				//'struct A{a: [i32;:]}' &
+				//'struct B{b: A}' &
+				//'struct C{c: [B;:]}' &
+				//'struct D{d: C}' &
+				//'struct E{e: [D;:]}' &      ! order-5 struct, alternating arrays the other way
+				//'let a = A{a = [42]};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = [b]};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = [d]};' &
+				//'e.e[0].d.c[0].b.a[0] += 27;' &
+				//'return e.e[0].d.c[0].b.a[0];' &
+				, quiet) == '69', &
+			eval(''                         &                 ! 47
+				//'struct P{v:[i32; :],}' &  ! point
+				//'let p0 = P{v=[6, 13]};' &
+				//'let p1 = P{v=[4, 15]};' &
+				//'let p2 = P{v=[3, 17]};' &
+				//'let ps = [p0, p1];' &
+				//'ps[0] = p2;' &
+				//'return ps[1].v;' &
+				, quiet) == '[4, 15]', &
+			eval(''                         &                 ! 48
+				//'struct P{v:[i32; :],}' &  ! point
+				//'let p0 = P{v=[6, 13]};' &
+				//'let p1 = P{v=[4, 15]};' &
+				//'let p2 = P{v=[3, 17]};' &
+				//'let ps = [p0, p1];' &
+				//'ps[0] = p2;' &
+				//'return ps[0].v;' &
+				, quiet) == '[3, 17]', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 49
+			    //'fn get_ds(): [D;:] {'&
+				//'    let d0 = D{y=2024, m="Sep", d=21};' &
+				//'    let d1 = D{y=1990, m="Aug", d=2};' &
+				//'    return [d0, d1];' &
+				//'}' &
+			    //'let ds = get_ds();' &
+			    //'return ds[1].m;' &
+				, quiet) == 'Aug', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 50
+			    //'fn get_ds(): [D;:] {'&
+				//'    let d0 = D{y=2024, m="Sep", d=21};' &
+				//'    let d1 = D{y=1990, m="Aug", d=2};' &
+				//'    return [d0, d1];' &
+				//'}' &
+			    //'let ds = get_ds();' &
+			    //'return ds[0].d;' &
+				, quiet) == '21', &
+			eval('' &                                         ! 51
+				//'struct A{a: i32}' &
+				//'struct B{b: A}' &
+				//'struct C{c: B}' &
+				//'struct D{d: C}' &
+				//'struct E{e: D}' &      ! order-5 struct
+				//'fn extract_a(x: E): i32 { return x.e.d.c.b.a; }' &
+				//'let a = A{a = 42};' &
+				//'let b = B{b = a};' &
+				//'let c = C{c = b};' &
+				//'let d = D{d = c};' &
+				//'let e = E{e = d};' &
+				//'return extract_a(e);' &
+				, quiet = .false.) == '42', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 52
+				//'let d0 = D{y=2024, m="Sep", d=21};' &
+			    //'let c = d0.m[0];' &
+			    //'return c;' &
+				, quiet) == 'S', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 53
+				//'let d0 = D{y=2024, m="Sep", d=21};' &
+			    //'let c = d0.m[1];' &
+			    //'return c;' &
+				, quiet) == 'e', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 54
+				//'let d0 = D{y=2024, m="Sep", d=21};' &
+			    //'d0.m[0] = "P";' &
+			    //'return d0.m;' &
+				, quiet) == 'Pep', &
+			eval('' &
+				//'struct D{y:i32, m:str, d:i32}' &           ! 55
+				//'let d0 = D{y=2024, m="Sep", d=21};' &
+			    //'d0.m[2] = "a";' &
+			    //'return d0.m;' &
+				, quiet) == 'Sea', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! I developed LHS dot exprs almost all at once, so I might have missed some
+	! cases. For RHS dot exprs I did it piece-by-piece and added tests as I went
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_arr
+
+!===============================================================================
+
+subroutine unit_test_struct_str(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'struct str formatting'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! This is a separate test from other struct stuff because struct to string
+	! conversion is subject to change, especially if I figure out how to label
+	! each member with its name
+	!
+	! TODO: update documentation to reflect any struct-to-str changes here
+
+	tests = &
+		[   &
+			eval( 'struct P{x:i32, y:i32,}' &                 ! 1
+			    //'let p1 = P{x=6, y=13};' &
+			    //'p1;', quiet) == 'P{6, 13}', &
+			eval(''                         &                 ! 2
+				//'struct P{x:i32, y:i32,}' &  ! point
+				//'let p1 = P{x=6, y=13,};' &
+				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
+				//'return ps[0];' &
+				, quiet) == 'P{6, 13}', &
+			eval(''                         &                 ! 3
+				//'struct P{x:i32, y:i32,}' &
+				//'let p1 = P{x=6, y=13,};' &
+				//'let p2 = P{x=4, y=15,};' &
+				//'let ps = [p1, p2];' &
+				//'return ps;' &
+				, quiet) == '[P{6, 13}, P{4, 15}]', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_str
+
+!===============================================================================
+
 subroutine unit_test_array_bool(npass, nfail)
 
 	! More advanced tests on longer scripts
@@ -2666,6 +3601,9 @@ subroutine unit_tests(iostat)
 	call unit_test_arr_op     (npass, nfail)
 	call unit_test_lhs_slc_1  (npass, nfail)
 	call unit_test_return     (npass, nfail)
+	call unit_test_struct     (npass, nfail)
+	call unit_test_struct_arr (npass, nfail)
+	call unit_test_struct_str (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

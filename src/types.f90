@@ -10,34 +10,31 @@ module syntran__types_m
 
 	implicit none
 
-	!********
-
-	type param_t
-		! Function parameter (argument)
-
-		integer :: type
-		character(len = :), allocatable :: name
-
-		integer :: array_type, rank
-
-		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
-		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
-		! Maybe add an array of types(:) for each allowable type of a param?
-
-	end type param_t
+	integer, parameter :: &
+		TYPE_ARRAY_STRUCT_MISMATCH = 5, &
+		TYPE_RANK_MISMATCH = 4, &
+		TYPE_ARRAY_MISMATCH = 3, &
+		TYPE_STRUCT_MISMATCH = 2, &
+		TYPE_MISMATCH = 1, &
+		TYPE_MATCH = 0
 
 	!********
 
 	type fn_t
 		! Function signature: input and output types
 
-		! Return type
-		integer :: type, array_type, rank
+		! Return type.  "A type is a value!"
+		type(value_t) :: type
+
+		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
+		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
+		! Maybe add an matrix of types(:,:) for each allowable type of a param?
 
 		! Arguments/parameters.  Technically, "arguments" in most languages are
 		! what Fortran calls "actual arguments" and "parameters" are Fortran
 		! "dummy arguments"
-		type(param_t), allocatable :: params(:)
+		type(value_t), allocatable :: params(:)
+		type(string_vector_t) :: param_names
 
 		! Min number of variadic params.  Default < 0 means fn is not variadic
 		!
@@ -49,11 +46,6 @@ module syntran__types_m
 
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
-		!
-		! TODO: my experience has taught me that Fortran pointers are extremely
-		! dangerous (see memory leaks due to now removed value_t -> array_t
-		! pointer).  Can we avoid having a pointer here and make it allocatable
-		! instead?
 		!type(syntax_node_t), pointer :: node => null()
 		type(syntax_node_t), allocatable :: node
 
@@ -135,7 +127,7 @@ module syntran__types_m
 		! FIXME: when adding new members here, make sure to explicitly copy them
 		! in syntax_node_copy, or else assignment will yield bugs
 
-		integer :: kind
+		integer :: kind = 0
 
 		! This structure could be more efficient.  For example, unary
 		! expressions don't use left, name expressions don't use left or right,
@@ -144,7 +136,7 @@ module syntran__types_m
 		! allocated
 
 		type(syntax_node_t), allocatable :: left, right, members(:), &
-			condition, if_clause, else_clause, body, array
+			condition, if_clause, else_clause, body, array, member
 
 		! Array expression syntax nodes.  TODO: rename lbound, ubound to avoid
 		! conflicts w/ Fortran keywords
@@ -165,6 +157,9 @@ module syntran__types_m
 		integer, allocatable :: params(:)
 
 		type(value_t) :: val
+
+		!type(struct_t), allocatable :: struct
+		character(len = :), allocatable :: struct_name
 
 		type(string_vector_t) :: diagnostics
 
@@ -243,7 +238,73 @@ module syntran__types_m
 				search => var_search, &
 				push_scope, pop_scope
 
+			! This is required unfortunately
+			procedure, pass(dst) :: copy => vars_copy
+			generic, public :: assignment(=) => copy
+
 	end type vars_t
+
+	!********
+
+	type struct_t
+		! User-defined structure, aka derived type
+
+		type(string_vector_t) :: member_names
+
+		type(vars_t) :: vars  ! can't compile w/o allocatable if vars_t is defined below
+		!type(vars_t), allocatable :: vars
+		integer :: num_vars = 0
+
+		contains
+			! This is also required unfortunately
+			procedure, pass(dst) :: copy => struct_copy
+			generic, public :: assignment(=) => copy
+
+	end type struct_t
+
+	!********
+
+	type struct_ternary_tree_node_t
+
+		character :: split_char = ''
+		type(struct_ternary_tree_node_t), allocatable :: left, mid, right
+
+		type(struct_t), allocatable :: val
+		integer :: id_index
+
+		contains
+			! This is also required unfortunately too
+			procedure, pass(dst) :: copy => struct_ternary_tree_copy
+			generic, public :: assignment(=) => copy
+			!final :: struct_ternary_tree_final
+
+	end type struct_ternary_tree_node_t
+
+	!********
+
+	type struct_dict_t
+		! This is the struct dictionary of a single scope
+		type(struct_ternary_tree_node_t), allocatable :: root
+	end type struct_dict_t
+
+	!********
+
+	type structs_t
+
+		! A list of struct dictionaries used during parsing
+		!type(struct_dict_t) :: dicts(scope_max)
+		type(struct_dict_t) :: dict
+
+		!! Flat array of structs, used for efficient interpreted evaluation
+		!type(struct_t), allocatable :: structs(:)
+
+		contains
+			procedure :: &
+				insert => struct_insert, &
+				exists => struct_exists, &
+				search => struct_search
+
+	end type structs_t
 
 	!********
 
@@ -269,6 +330,65 @@ contains
 
 !===============================================================================
 
+recursive subroutine vars_copy(dst, src)
+
+	! Deep copy.  This overwrites dst with src
+
+	class(vars_t), intent(inout) :: dst
+	class(vars_t), intent(in)    :: src
+
+	!********
+
+	integer :: i
+
+	!print *, 'starting vars_copy()'
+
+	dst%scope = src%scope
+
+	do i = 1, size(src%dicts)
+		if (allocated(src%dicts(i)%root)) then
+			if (.not. allocated(dst%dicts(i)%root)) allocate(dst%dicts(i)%root)
+			dst%dicts(i)%root = src%dicts(i)%root
+		else if (allocated(dst%dicts(i)%root)) then
+			deallocate(dst%dicts(i)%root)
+		end if
+	end do
+
+	if (allocated(src%vals)) then
+		if (allocated(dst%vals)) deallocate(dst%vals)
+		allocate(dst%vals( size(src%vals) ))
+		dst%vals = src%vals
+	else if (allocated(dst%vals)) then
+		deallocate(dst%vals)
+	end if
+
+	!print *, 'done vars_copy()'
+
+end subroutine vars_copy
+
+!===============================================================================
+
+recursive subroutine struct_copy(dst, src)
+
+	! Deep copy.  This overwrites dst with src
+
+	class(struct_t), intent(inout) :: dst
+	class(struct_t), intent(in)    :: src
+
+	!********
+
+	!print *, 'starting struct_copy()'
+
+	dst%member_names = src%member_names
+	dst%num_vars = src%num_vars
+	dst%vars = src%vars
+
+	!print *, 'done struct_copy()'
+
+end subroutine struct_copy
+
+!===============================================================================
+
 recursive subroutine fn_copy(dst, src)
 
 	! Deep copy.  This overwrites dst with src
@@ -281,13 +401,12 @@ recursive subroutine fn_copy(dst, src)
 	!print *, 'starting fn_copy()'
 
 	dst%type = src%type
-	dst%array_type = src%array_type
-	dst%rank = src%rank
 	dst%variadic_min = src%variadic_min
 	dst%variadic_type = src%variadic_type
 
 	if (allocated(src%params)) then
-		if (.not. allocated(dst%params)) allocate(dst%params( size(src%params) ))
+		if (allocated(dst%params)) deallocate(dst%params)
+		allocate(dst%params( size(src%params) ))
 		dst%params = src%params
 	else if (allocated(dst%params)) then
 		deallocate(dst%params)
@@ -329,6 +448,7 @@ recursive subroutine fn_ternary_tree_copy(dst, src)
 	if (allocated(src%val)) then
 		if (.not. allocated(dst%val)) allocate(dst%val)
 		dst%val = src%val
+	! TODO: else deallocate?  Other tree copiers too
 	end if
 
 	if (allocated(src%left)) then
@@ -406,7 +526,7 @@ subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 	!print *, 'inserting ', quote(key)
 	id_index = id_index + 1
 
-	overwritel = .true.
+	overwritel = .false.
 	if (present(overwrite)) overwritel = overwrite
 
 	i = dict%scope
@@ -586,12 +706,20 @@ recursive subroutine syntax_node_copy(dst, src)
 	dst%identifier  = src%identifier
 	dst%id_index    = src%id_index
 
+	if (allocated(src%struct_name)) then
+		dst%struct_name = src%struct_name
+	else if (allocated(dst%struct_name)) then
+		deallocate(dst%struct_name)
+	end if
+
 	dst%expecting       = src%expecting
 	dst%first_expecting = src%first_expecting
 
 	!print *, 'allocated(src%first_expected) = ', allocated(src%first_expected)
 	if (allocated(src%first_expected)) then
 		dst%first_expected = src%first_expected
+	else if (allocated(dst%first_expected)) then
+		deallocate(dst%first_expected)
 	end if
 
 	dst%diagnostics    = src%diagnostics
@@ -739,6 +867,13 @@ recursive subroutine syntax_node_copy(dst, src)
 		deallocate(dst%members)
 	end if
 
+	if (allocated(src%member)) then
+		if (.not. allocated(dst%member)) allocate(dst%member)
+		dst%member = src%member
+	else if (allocated(dst%member)) then
+		deallocate(dst%member)
+	end if
+
 	if (debug > 3) print *, 'done syntax_node_copy()'
 
 end subroutine syntax_node_copy
@@ -819,6 +954,7 @@ subroutine var_insert(dict, key, val, id_index, iostat, overwrite)
 	!print *, 'inserting ', quote(key)
 	!print *, 'val = ', val%to_str()
 
+	! Note that this is different than the fn insert default
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
@@ -831,7 +967,7 @@ end subroutine var_insert
 
 !===============================================================================
 
-function var_search(dict, key, id_index, iostat) result(val)
+subroutine var_search(dict, key, id_index, iostat, val)
 
 	! An id_index is not normally part of dictionary searching, but we use it
 	! here for converting the dictionary into an array after parsing and before
@@ -850,17 +986,17 @@ function var_search(dict, key, id_index, iostat) result(val)
 
 	i = dict%scope
 
-	val = ternary_search(dict%dicts(i)%root, key, id_index, io)
+	call ternary_search(dict%dicts(i)%root, key, id_index, io, val)
 
 	! If not found in current scope, search parent scopes too
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		val = ternary_search(dict%dicts(i)%root, key, id_index, io)
+		call ternary_search(dict%dicts(i)%root, key, id_index, io, val)
 	end do
 
 	if (present(iostat)) iostat = io
 
-end function var_search
+end subroutine var_search
 
 !===============================================================================
 
@@ -1019,9 +1155,17 @@ end function new_token
 
 !===============================================================================
 
-integer function lookup_type(name) result(type)
+integer function lookup_type(name, structs, struct) result(type)
 
 	character(len = *), intent(in) :: name
+
+	type(structs_t), intent(in) :: structs
+
+	type(struct_t), intent(out) :: struct
+
+	!********
+
+	integer :: io, struct_id
 
 	! Immo also has an "any" type.  Should I allow that?
 
@@ -1041,7 +1185,19 @@ integer function lookup_type(name) result(type)
 			type = str_type
 
 		case default
-			type = unknown_type
+
+			! TODO: this should be able to use %exists instead of %search,
+			! possible minor perf boost
+			call structs%search(name, struct_id, io, struct)
+			!print *, "struct search io = ", io
+
+			if (io == 0) then
+				type = struct_type
+				!print *, "struct num vars = ", struct%num_vars
+			else
+				type = unknown_type
+			end if
+
 	end select
 	!print *, 'lookup_type = ', type
 
@@ -1062,7 +1218,7 @@ end function new_syntax_node_vector
 
 !===============================================================================
 
-subroutine syntax_nodes_copy(dst, src)
+recursive subroutine syntax_nodes_copy(dst, src)
 
 	! Array copy
 
@@ -1162,6 +1318,9 @@ integer function get_keyword_kind(text) result(kind)
 		case ("fn")
 			kind = fn_keyword
 
+		case ("struct")
+			kind = struct_keyword
+
 		case ("include")
 			kind = include_keyword
 
@@ -1230,7 +1389,7 @@ end function is_assignment_op
 
 !===============================================================================
 
-recursive function ternary_search(node, key, id_index, iostat) result(val)
+recursive subroutine ternary_search(node, key, id_index, iostat, val)
 
 	type(ternary_tree_node_t), intent(in), allocatable :: node
 	character(len = *), intent(in) :: key
@@ -1259,13 +1418,13 @@ recursive function ternary_search(node, key, id_index, iostat) result(val)
 	 ey = key(2:)
 
 	if (k < node%split_char) then
-		val = ternary_search(node%left , key, id_index, iostat)
+		call ternary_search(node%left , key, id_index, iostat, val)
 		return
 	else if (k > node%split_char) then
-		val = ternary_search(node%right, key, id_index, iostat)
+		call ternary_search(node%right, key, id_index, iostat, val)
 		return
 	else if (len(ey) > 0) then
-		val = ternary_search(node%mid  , ey, id_index, iostat)
+		call ternary_search(node%mid  , ey, id_index, iostat, val)
 		return
 	end if
 
@@ -1282,7 +1441,7 @@ recursive function ternary_search(node, key, id_index, iostat) result(val)
 	!print *, 'done ternary_search'
 	!print *, ''
 
-end function ternary_search
+end subroutine ternary_search
 
 !===============================================================================
 
@@ -1380,10 +1539,12 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = &
 					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
 					(left_arr == right) .or. (left == right)
+
 			else
 				allowed = &
 					(is_int_type(left) .and. is_int_type(right)) .or. &
 					(left == right)
+
 			end if
 
 		case (eequals_token, bang_equals_token)
@@ -1580,7 +1741,7 @@ function new_binary_expr(left, op, right) result(expr)
 
 	!********
 
-	integer :: larrtype, rarrtype, type_
+	integer :: larrtype, rarrtype, type_, ltype, rtype
 
 	if (debug > 1) print *, 'new_binary_expr'
 	if (debug > 1) print *, 'left  = ', left %str()
@@ -1605,8 +1766,11 @@ function new_binary_expr(left, op, right) result(expr)
 
 	!print *, 'larrtype = ', kind_name(larrtype)
 
+	ltype = left%val%type
+	rtype = right%val%type
+
 	! Pass the result value type up the tree for type checking in parent
-	type_ = get_binary_op_kind(left%val%type, op%kind, right%val%type, &
+	type_ = get_binary_op_kind(ltype, op%kind, rtype, &
 		larrtype, rarrtype)
 	!print *, 'type_ = ', kind_name(type_)
 
@@ -2068,6 +2232,7 @@ recursive subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
 		return
 	end if
 
+	allocate(node%val)
 	node%val      = val
 	node%id_index = id_index
 
@@ -2075,6 +2240,476 @@ recursive subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
 	!print *, ''
 
 end subroutine ternary_insert
+
+!===============================================================================
+
+recursive function struct_ternary_exists(node, key) result(exists)
+
+	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
+	character(len = *), intent(in) :: key
+
+	logical :: exists
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	!print *, 'searching key ', quote(key)
+
+	exists = .false.
+
+	! Search key not found
+	if (.not. allocated(node)) return
+
+	! :)
+	k   = key(1:1)
+	 ey = key(2:)
+
+	if (k < node%split_char) then
+		exists = struct_ternary_exists(node%left , key)
+		return
+	else if (k > node%split_char) then
+		exists = struct_ternary_exists(node%right, key)
+		return
+	else if (len(ey) > 0) then
+		exists = struct_ternary_exists(node%mid  ,  ey)
+		return
+	end if
+
+	!print *, 'setting val'
+
+	if (.not. allocated(node%val)) then
+		exists = .false.
+		return
+	end if
+
+	exists = .true.
+
+	!print *, 'done struct_ternary_exists'
+	!print *, ''
+
+end function struct_ternary_exists
+
+!===============================================================================
+
+recursive subroutine struct_ternary_search(node, key, id_index, iostat, val)
+
+	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
+	character(len = *), intent(in) :: key
+
+	integer, intent(out) :: id_index
+	integer, intent(out) :: iostat
+	type(struct_t) :: val  ! intent inout?
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	!print *, 'searching key ', quote(key)
+
+	iostat = exit_success
+
+	if (.not. allocated(node)) then
+		! Search key not found
+		iostat = exit_failure
+		return
+	end if
+
+	! :)
+	k   = key(1:1)
+	 ey = key(2:)
+
+	if (k < node%split_char) then
+		call struct_ternary_search(node%left , key, id_index, iostat, val)
+		!print *, "return left"
+		return
+	else if (k > node%split_char) then
+		call struct_ternary_search(node%right, key, id_index, iostat, val)
+		!print *, "return right"
+		return
+	else if (len(ey) > 0) then
+		call struct_ternary_search(node%mid  , ey, id_index, iostat, val)
+		!print *, "return mid"
+		return
+	end if
+
+	!print *, 'setting val'
+
+	if (.not. allocated(node%val)) then
+		iostat = exit_failure
+		return
+	end if
+
+	!allocate(val)
+	val      = node%val
+	!val%vars = node%val%vars
+	id_index = node%id_index
+	!val%members = node%val%members
+
+	!print *, 'done struct_ternary_search'
+	!print *, ''
+
+end subroutine struct_ternary_search
+
+!===============================================================================
+
+!recursive subroutine ternary_tree_final(node)
+!	type(ternary_tree_node_t), intent(inout), allocatable :: node
+!		!type(ternary_tree_node_t), allocatable :: left, mid, right
+!		!type(value_t), allocatable :: val
+!
+!	if (.not. allocated(node)) return
+!
+!	!if (allocated(node%val)) deallocate(node%val)
+!
+!	if (allocated(node%left )) then
+!		call ternary_tree_final(node%left )
+!		deallocate(node%left)
+!	end if
+!	if (allocated(node%mid  )) then
+!		call ternary_tree_final(node%mid  )
+!		deallocate(node%mid)
+!	end if
+!	if (allocated(node%right)) then
+!		call ternary_tree_final(node%right)
+!		deallocate(node%right)
+!	end if
+!
+!end subroutine ternary_tree_final
+
+!===============================================================================
+
+recursive subroutine struct_ternary_insert(node, key, val, id_index, iostat, overwrite)
+
+	type(struct_ternary_tree_node_t), intent(inout), allocatable :: node
+	character(len = *), intent(in) :: key
+	type(struct_t), intent(in) :: val
+	integer, intent(in) :: id_index
+
+	integer, intent(out) :: iostat
+	logical, intent(in) :: overwrite
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	iostat = exit_success
+
+	!print *, 'inserting key ', quote(key)
+
+	! key == k//ey.  Get it? :)
+	k   = key(1:1)
+	 ey = key(2:)
+
+	if (.not. allocated(node)) then
+		!print *, 'allocate'
+		allocate(node)
+		node%split_char = k
+	else if (k < node%split_char) then
+		!print *, 'left'
+		call struct_ternary_insert(node%left , key, val, id_index, iostat, overwrite)
+		return
+	else if (k > node%split_char) then
+		!print *, 'right'
+		call struct_ternary_insert(node%right, key, val, id_index, iostat, overwrite)
+		return
+	end if
+
+	!print *, 'mid'
+
+	if (len(ey) /= 0) then
+		call struct_ternary_insert(node%mid  , ey, val, id_index, iostat, overwrite)
+		return
+	end if
+
+	! node%val doesn't really need to be declared as allocatable (it's
+	! a scalar anyway), but it's just a convenient way to check if
+	! a duplicate key has already been inserted or not.  We could add
+	! a separate logical member to node for this instead if needed
+
+	! This is not necessarily a failure unless we don't want to overwrite.  In
+	! the evaluator, we will insert values for vars which have already been
+	! declared
+	if (allocated(node%val) .and. .not. overwrite) then
+		!print *, 'key already inserted'
+		iostat = exit_failure
+		return
+	end if
+
+	allocate(node%val)
+	node%val      = val
+	!node%val%vars = val%vars
+	node%id_index = id_index
+	!node%val%members = val%members
+
+	!print *, 'done inserting'
+	!print *, ''
+
+end subroutine struct_ternary_insert
+
+!===============================================================================
+
+recursive subroutine struct_ternary_tree_copy(dst, src)
+
+	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
+	! source, they will be gone!
+	!
+	! This should be avoided for efficient compilation, but the interactive
+	! interpreter uses it to backup and restore the variable dict for
+	! partially-evaluated continuation lines
+
+	class(struct_ternary_tree_node_t), intent(inout) :: dst
+	class(struct_ternary_tree_node_t), intent(in)    :: src
+
+	!********
+
+	!print *, 'starting struct_ternary_tree_node_t()'
+
+	dst%split_char = src%split_char
+
+	dst%id_index = src%id_index
+
+	if (allocated(src%val)) then
+		if (.not. allocated(dst%val)) allocate(dst%val)
+		dst%val = src%val
+	end if
+
+	if (allocated(src%left)) then
+		if (.not. allocated(dst%left)) allocate(dst%left)
+		dst%left = src%left
+	end if
+
+	if (allocated(src%mid)) then
+		if (.not. allocated(dst%mid)) allocate(dst%mid)
+		dst%mid = src%mid
+	end if
+
+	if (allocated(src%right)) then
+		if (.not. allocated(dst%right)) allocate(dst%right)
+		dst%right = src%right
+	end if
+
+	!print *, 'done struct_ternary_tree_node_t()'
+
+end subroutine struct_ternary_tree_copy
+
+!===============================================================================
+
+!recursive subroutine struct_ternary_tree_final(src)
+!!subroutine struct_ternary_tree_final(src)
+!
+!	!class(struct_ternary_tree_node_t) :: src
+!	type(struct_ternary_tree_node_t) :: src
+!
+!	if (allocated(src%val)) then
+!		deallocate(src%val)
+!	end if
+!
+!	if (allocated(src%left)) then
+!		call struct_ternary_tree_final(src%left)
+!	end if
+!
+!	if (allocated(src%mid)) then
+!		call struct_ternary_tree_final(src%mid)
+!	end if
+!
+!	if (allocated(src%right)) then
+!		call struct_ternary_tree_final(src%right)
+!	end if
+!
+!end subroutine struct_ternary_tree_final
+
+!===============================================================================
+
+subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
+
+	class(structs_t) :: dict
+	character(len = *), intent(in) :: key
+	type(struct_t), intent(in) :: val
+	integer, intent(inout) :: id_index
+
+	integer, intent(out), optional :: iostat
+	logical, intent(in), optional :: overwrite
+
+	!********
+
+	integer :: i, io
+	logical :: overwritel
+
+	!print *, 'inserting ', quote(key)
+	id_index = id_index + 1
+
+	! Note that this is different than the fn insert default.  Re-declared
+	! structs are caught in the caller (in parse_struct_declaration())
+	overwritel = .true.
+	if (present(overwrite)) overwritel = overwrite
+
+	call struct_ternary_insert(dict%dict%root, key, val, id_index, io, overwritel)
+
+	if (present(iostat)) iostat = io
+
+end subroutine struct_insert
+
+!===============================================================================
+
+function struct_exists(dict, key) result(exists)
+
+	! Check if a key exists, without copying an output val unlike
+	! struct_search()
+
+	class(structs_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+	logical :: exists
+
+	!********
+
+	integer :: i, io, id_index
+
+	exists = struct_ternary_exists(dict%dict%root, key)
+
+end function struct_exists
+
+!===============================================================================
+
+subroutine struct_search(dict, key, id_index, iostat, val)
+
+	! An id_index is not normally part of dictionary searching, but we use it
+	! here for converting the dictionary into an array after parsing and before
+	! evaluation for better performance
+
+	class(structs_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+	integer, intent(out) :: id_index
+	type(struct_t) :: val
+
+	integer, intent(out), optional :: iostat
+
+	!********
+
+	integer :: i, io
+
+	!print *, "starting struct search"
+
+	call struct_ternary_search(dict%dict%root, key, id_index, io, val)
+	!print *, "io = ", io
+
+	if (present(iostat)) iostat = io
+
+end subroutine struct_search
+
+!===============================================================================
+
+function type_name(a) result(str_)
+	! c.f. lookup_type() which is mostly the inverse of this
+	type(value_t), intent(in) :: a
+	character(len = :), allocatable :: str_, array_name
+
+	if (a%type == struct_type) then
+		str_ = a%struct_name
+	else if (a%type == array_type) then
+
+		if (a%array%type == struct_type) then
+			array_name = a%struct_name
+		else
+			array_name = type_name_primitive(a%array%type)
+		end if
+
+		str_ = "["//array_name//"; "
+
+		! Repeat ":, " appropriately
+		str_ = str_//repeat(":, ", max(a%array%rank - 1, 0))
+		str_ = str_//":]"
+
+	else
+		str_ = type_name_primitive(a%type)
+	end if
+
+end function type_name
+
+!===============================================================================
+
+function type_name_primitive(itype) result(str_)
+	! c.f. lookup_type() which is mostly the inverse of this
+	integer, intent(in) :: itype
+	character(len = :), allocatable :: str_
+
+	select case (itype)
+	case (i32_type)
+		str_ = "i32"
+	case (i64_type)
+		str_ = "i64"
+	case (f32_type)
+		str_ = "f32"
+	case (str_type)
+		str_ = "str"
+	case (bool_type)
+		str_ = "bool"
+	case (any_type)
+		str_ = "any"
+	case default
+		str_ = "unknown"
+	end select
+
+end function type_name_primitive
+
+!===============================================================================
+
+integer function types_match(a, b) result(io)
+
+	! Check if the type of value `a` matches value `b`. Arguments are not
+	! transitive!  If `a` is of value any_type, enforcement is less strict.
+	!
+	! Numeric casting, e.g. i32 to f32, is not allowed.  Maybe we could add a
+	! flag if some callers need to allow casting
+
+	type(value_t), intent(in) :: a, b
+
+	!****************
+
+	io = TYPE_MATCH
+
+	if (.not. (a%type == any_type .or. a%type == b%type)) then
+		! Top-level type mismatch (e.g. f32 vs str)
+		io = TYPE_MISMATCH
+		return
+	end if
+
+	if (a%type == struct_type) then
+		if (a%struct_name /= b%struct_name) then
+			! Both are structs but different kinds of structs
+			io = TYPE_STRUCT_MISMATCH
+			return
+		end if
+	end if
+
+	if (a%type == array_type) then
+
+		if (.not. (a%array%type == any_type .or. a%array%type == b%array%type)) then
+			! Both arrays but with different types of elements
+			io = TYPE_ARRAY_MISMATCH
+			return
+		end if
+
+		if (.not. (a%array%rank < 0 .or. a%array%rank == b%array%rank)) then
+			! Both arrays but with different ranks (e.g. vector vs matrix)
+			io = TYPE_RANK_MISMATCH
+			return
+		end if
+
+		if (a%array%type == struct_type) then
+			if (a%struct_name /= b%struct_name) then
+				! Both are arrays of structs but different kinds of structs
+				io = TYPE_ARRAY_STRUCT_MISMATCH
+				return
+			end if
+		end if
+
+	end if
+
+end function types_match
 
 !===============================================================================
 

@@ -15,7 +15,7 @@ contains
 
 !===============================================================================
 
-module function parse_array_expr(parser) result(expr)
+recursive module function parse_array_expr(parser) result(expr)
 
 	! These are the possible kinds of array literals:
 	!
@@ -124,7 +124,8 @@ module function parse_array_expr(parser) result(expr)
 
 		expr%kind           = array_expr
 
-		expr%val%type       = array_type
+		expr%val%type        = array_type
+		expr%val%struct_name = lbound_%val%struct_name
 
 		expr%val%array%type = lbound_%val%type
 		expr%val%array%kind = unif_array
@@ -409,9 +410,14 @@ module function parse_array_expr(parser) result(expr)
 	expr%kind           = array_expr
 
 	!expr%val%type       = lbound_%val%type
-	expr%val%type       = array_type
+	expr%val%type        = array_type
+	expr%val%struct_name = lbound_%val%struct_name
+
+	!print *, "expr struct_name = ", expr%val%struct_name
 
 	expr%val%array%type = lbound_%val%type
+	expr%val%array%type = lbound_%val%type
+
 	expr%val%array%kind = expl_array
 	expr%val%array%rank = 1
 	expr%val%array%len_ = elems%len_
@@ -429,7 +435,7 @@ end function parse_array_expr
 
 !===============================================================================
 
-module subroutine parse_subscripts(parser, expr)
+recursive module subroutine parse_subscripts(parser, expr)
 
 	! Parse array subscripts, if present
 
@@ -438,7 +444,7 @@ module subroutine parse_subscripts(parser, expr)
 
 	!********
 
-	integer :: pos0, span0
+	integer :: pos0, span0, span1, expect_rank
 
 	type(syntax_node_t) :: lsubscript, usubscript
 	type(syntax_node_vector_t) :: lsubscripts_vec, usubscripts_vec
@@ -447,13 +453,7 @@ module subroutine parse_subscripts(parser, expr)
 
 	type(text_span_t) :: span
 
-	if (parser%current_kind() /= lbracket_token) then
-
-		!! The function has to return something.  Caller deallocates
-		allocate( expr%lsubscripts(0))
-		return
-
-	end if
+	if (parser%current_kind() /= lbracket_token) return
 
 	!print *, 'parsing subscripts'
 
@@ -519,23 +519,64 @@ module subroutine parse_subscripts(parser, expr)
 	rbracket  = parser%match(rbracket_token)
 	!print *, 'done'
 
-	! TODO: check that num of subscripts matches array rank, both LHS and
-	! RHS parsing.  May need to pass identifier to this function.  LHS and RHS
-	! cases are different in tricky ways.  RHS has already lookup up identifier
-	! in vars dictionary when it calls parse_subscripts(), but LHS has not.
-	! When LHS calls this, it does not yet know whether the identifier is an
-	! array or a scalar or a function call in an expression statement.
-	!
-	! Check that the expr is actually an array (not a scalar), or do that next
-	! to err_bad_sub_count() elsewhere
-	!
-	! So, only check rank match here if lsubscripts%len_ > 0
-
 	call syntax_nodes_copy(expr%lsubscripts, &
 		lsubscripts_vec%v( 1: lsubscripts_vec%len_ ))
 
 	call syntax_nodes_copy(expr%usubscripts, &
 		usubscripts_vec%v( 1: usubscripts_vec%len_ ))
+
+	! Do some type juggling which the caller used to do
+
+	span1 = parser%current_pos() - 1
+	if (expr%val%type == array_type) then
+
+		!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
+
+		if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
+			! this is not necessarily true for strings
+			expr%val%type = expr%val%array%type
+		else if (expr%val%array%type == struct_type) then
+			span = new_span(span0, span1 - span0 + 1)
+			call parser%diagnostics%push(err_array_struct_slice( &
+				parser%context(), &
+				span, &
+				expr%identifier%text))
+		end if
+
+		! TODO: allow rank+1 for str arrays
+		if (expr%val%array%rank /= size(expr%lsubscripts)) then
+			span = new_span(span0, span1 - span0 + 1)
+			call parser%diagnostics%push( &
+				err_bad_sub_count(parser%context(), span, &
+				expr%identifier%text, &
+				expr%val%array%rank, size(expr%lsubscripts)))
+		end if
+
+		! A slice operation can change the result rank
+
+		!print *, 'rank in  = ', expr%val%array%rank
+		expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
+		!print *, 'rank out = ', expr%val%array%rank
+
+	else if (expr%val%type == str_type) then
+		!print *, 'string type'
+
+		expect_rank = 1
+		if (size(expr%lsubscripts) /= expect_rank) then
+			span = new_span(span0, span1 - span0 + 1)
+			call parser%diagnostics%push( &
+				err_bad_sub_count(parser%context(), span, &
+				expr%identifier%text, &
+				expect_rank, size(expr%lsubscripts)))
+		end if
+
+	else
+		span = new_span(span0, span1 - span0 + 1)
+		!print *, "err_scalar_subscript 1"
+		call parser%diagnostics%push( &
+			err_scalar_subscript(parser%context(), &
+			span, expr%identifier%text))
+	end if
 
 end subroutine parse_subscripts
 
