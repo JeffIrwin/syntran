@@ -600,6 +600,9 @@ v1;
 // [0, 2, 4, 6, 8];
 ```
 
+Step slicing (with a non-unit step), e.g. to extract every other element of a
+vector, is not yet implemented.
+
 #### LHS and RHS slicing
 
 Arrays can be sliced whether they are on the left-hand side (LHS) or the
@@ -637,9 +640,36 @@ v6;
 
 #### Multi-rank array slicing
 
+Rank-2 and higher arrays can also be sliced.  In general, this returns an array
+of a different rank.  For example, slicing an array with 1 slice subscript `:`
+and the rest scalar subscripts will return a rank-1 array.  Slicing an array
+with 2 slice subscripts and the rest scalars will return a rank-2 array.
 
-<!--  TODO  -->
+```rust
+let matrix = [
+	 0,  1,  2,  // values
+	 3,  4,  5,
+	 6,  7,  8,
+	 9, 10, 11 ;
+	3, 4         // size
+];
 
+let x_slice = matrix[:,0];
+println("x_slice = ", x_slice);
+// x_slice = [0, 1, 2]
+
+let y_slice = matrix[1,:];
+println("y_slice = ", y_slice);
+// y_slice = [1, 4, 7, 10]
+
+let mat_slice = matrix[0: 2, 1: 4];
+println("mat_slice = ", mat_slice);
+// mat_slice = [
+// 3, 4,
+// 6, 7,
+// 9, 10
+// ]
+```
 
 ## Functions
 
