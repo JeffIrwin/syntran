@@ -130,6 +130,9 @@
 				"name": "Test release",
 				"run":
 				"
+					# TODO: fix cmake to use diff target dirs per config so that
+					# all these cleans aren't necessary \n
+					bash ./clean.sh \n
 					bash ./build.sh release \n
 					time ./build/test \n
 				"
@@ -147,8 +150,9 @@
 
 					where api-ms-win-crt-time-l1-1-0.dll
 
-					#bash ./build.sh release \n
-					bash ./build.sh debug \n
+					bash ./clean.sh \n
+					bash ./build.sh release \n
+					#bash ./build.sh debug \n
 
 					# Could try adding -static-gcc etc in cmake to reduce the burden here \n
 
@@ -170,6 +174,7 @@
 					gfortran-12 --version \n
 					which gfortran-12 \n
 
+					bash ./clean.sh \n
 					bash ./build.sh release \n
 
 					# TODO: copy to a subdir for easier upload \n
