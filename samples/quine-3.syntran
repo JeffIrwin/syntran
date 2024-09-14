@@ -1,9 +1,9 @@
 
-let lparen    = char(40);
-let rparen    = char(41);
-let quote     = char(34);
-let semicolon = char(59);
 fn quine(s: str) {
+	let lparen    = char(40);
+	let rparen    = char(41);
+	let quote     = char(34);
+	let semicolon = char(59);
 	println(
 		s + lparen + quote +
 		s + quote + rparen + semicolon
@@ -11,11 +11,11 @@ fn quine(s: str) {
 	return;
 }
 quine("
-let lparen    = char(40);
-let rparen    = char(41);
-let quote     = char(34);
-let semicolon = char(59);
 fn quine(s: str) {
+	let lparen    = char(40);
+	let rparen    = char(41);
+	let quote     = char(34);
+	let semicolon = char(59);
 	println(
 		s + lparen + quote +
 		s + quote + rparen + semicolon
