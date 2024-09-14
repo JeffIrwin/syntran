@@ -3392,6 +3392,40 @@ end subroutine unit_test_struct_str
 
 !===============================================================================
 
+subroutine unit_test_struct_1(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'struct scripts'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/struct/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_1
+
+!===============================================================================
+
 subroutine unit_test_array_bool(npass, nfail)
 
 	! More advanced tests on longer scripts
@@ -3613,6 +3647,7 @@ subroutine unit_tests(iostat)
 	call unit_test_struct     (npass, nfail)
 	call unit_test_struct_arr (npass, nfail)
 	call unit_test_struct_str (npass, nfail)
+	call unit_test_struct_1   (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

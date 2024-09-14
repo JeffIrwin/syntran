@@ -1,0 +1,53 @@
+
+struct Point
+{
+	x: [i32; :],
+	name: str,
+}
+
+let pt0 = Point{x = [20, 10], name = "my-pt0"};
+let pt1 = Point{x = [40, 50], name = "my-pt1"};
+
+struct Rect
+{
+	bottom_left: Point, 
+	upper_right: Point,
+	name: str
+}
+
+let rect0 = Rect{bottom_left = pt0, upper_right = pt1, name = "my-rect"};
+
+fn area(rect: Rect): i32
+{
+	let width =
+		rect.upper_right.x[0] -
+		rect.bottom_left.x[0];
+	let height =
+		rect.upper_right.x[1] -
+		rect.bottom_left.x[1];
+
+	// Taking the absolute value is left as an exercise for the reader
+	return width * height;
+}
+
+//println("area = ", area(rect0));
+let a0 = area(rect0);
+// area = 800
+
+fn get_unit_rect(): Rect
+{
+	return Rect
+	{
+		bottom_left = Point{x = [0, 0], name = "bl"},
+		//bottom_left = Point{x = [-1, -1], name = "bl"},
+		upper_right = Point{x = [1, 1], name = "ur"},
+		name = "unit-rect",
+	};
+}
+//println("unit area = ", area(get_unit_rect()));
+// unit area = 1
+
+let a1 = area(get_unit_rect());
+
+return all([a0, a1] == [800, 1]);
+

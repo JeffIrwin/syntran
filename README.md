@@ -965,8 +965,8 @@ represent vector data.  As syntran is an array-oriented language, we use an
 array in this example.  This will generalize nicely from 2D to 3D or any
 dimension.
 
-Note that each member is delimited by a comma `,` in the struct declaration.
-The trailing comma after the last member `name: str,` is optional.
+Note that each member of the struct is delimited by a comma `,` in the struct
+declaration. The trailing comma after the last member `name: str,` is optional.
 
 Also note that there is no semicolon at the end of the struct declaration `}`.
 This makes struct declaration consistent with the way that functions are
