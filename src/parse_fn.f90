@@ -828,7 +828,8 @@ module function parse_struct_instance(parser) result(inst)
 	!print *, "size = ", struct%num_vars
 	!print *, "size = ", num_mems
 	if (num_mems < struct%num_vars) then
-		! I think this is unreachable given the other checks
+		! I think this is unreachable given the other checks.  TODO: don't do
+		! anything, just let the diag get thrown
 		write(*,*) err_prefix//"struct instance does not have enough members"//color_reset
 		call internal_error()
 	!else if (num_mems > struct%num_vars) then

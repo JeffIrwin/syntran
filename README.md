@@ -969,7 +969,8 @@ Note that each member is delimited by a comma `,` in the struct declaration.
 The trailing comma after the last member `name: str,` is optional.
 
 Also note that there is no semicolon at the end of the struct declaration `}`.
-This is consistent with the way that functions are declared.
+This makes struct declaration consistent with the way that functions are
+declared.
 
 Next, we can instantiate or initialize a couple variables `pt0` and `pt1` of the
 `Point` type:
@@ -982,6 +983,10 @@ Unlike rust, members are assigned using an assignment operator `=`, not a colon
 `:`.  Instantiating a struct, just like instantiating any other primitive type
 variable such as `let x = 42;`, is a statement.  Hence, the instantiation
 statement ends with a semicolon `;`.
+
+When a struct is initialized, _all_ of its members must be initialized.  If you
+want to have a struct with some default values that you don't want to explicitly
+define every time, you can use a helper function to construct it.
 
 Structs can be nested.  We can build upon the 1st order `Point` struct by
 declaring a `Rect` struct, some of whose members are also structs:
@@ -1016,6 +1021,21 @@ fn area(rect: Rect): i32
 
 println("area = ", area(rect0));
 // area = 800
+```
+
+Here is a function that constructs and returns a `Rect`:
+```rust
+fn get_unit_rect(): Rect
+{
+	return Rect
+	{
+		bottom_left = Point{x = [0, 0], name = "bl"},
+		upper_right = Point{x = [1, 1], name = "ur"},
+		name = "unit-rect",
+	};
+}
+println("unit area = ", area(get_unit_rect()));
+// unit area = 1
 ```
 
 Structs can be nested arbitrarily.  You can make structs of arrays and arrays of
