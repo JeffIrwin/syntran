@@ -199,8 +199,12 @@ function parse_args() result(args)
 
 	if (error .or. args%help) then
 
+		! TODO: first <file> line is long enough that I should probbaly just say
+		! `[options]`
+
 		write(*,*) fg_bold//"Usage:"//color_reset
-		write(*,*) "    syntran <file.syntran> [--fmax-errors <n>] [-i | --interactive]"
+		write(*,*) "    syntran <file.syntran> [--fmax-errors <n>] " &
+			//"[-i | --interactive] [-q | --quiet]"
 		write(*,*) "    syntran"
 		write(*,*) "    syntran -c <cmd> | --command <cmd>"
 		write(*,*) "    syntran -h | --help"
@@ -210,9 +214,10 @@ function parse_args() result(args)
 		write(*,*) "    -h --help           Show this help"
 		write(*,*) "    --version           Show version and build details"
 		write(*,*) "    -c --command <cmd>  Run program passed in as string"
-		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
 		write(*,*) "    --fmax-errors <n>   Limit max " &
 			//"error messages to <n> [default: "//str(maxerr_def)//"]"
+		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
+		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
 		write(*,*)
 
 		if (.not. args%help) call exit(EXIT_FAILURE)

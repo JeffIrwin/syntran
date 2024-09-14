@@ -73,8 +73,13 @@
 
 					#exit 0 \n
 
+					# Test 'shebang' usage with no 'syntran' cmd prefix
 					chmod +x ./samples/shebang.syntran \n
 					./samples/shebang.syntran \n
+
+					# Test quine. May not be perfect with whitespace on Windows
+					syntran -q samples/quine-1.syntran > quine-1.syntran
+					diff quine-1.syntran samples/quine-1.syntran
 
 					# No significant difference between release and (default) debug profile. \n
 					# Maybe that will change after I copy the other half of AOC tests \n
