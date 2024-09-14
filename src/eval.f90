@@ -662,7 +662,7 @@ end subroutine get_val
 
 !===============================================================================
 
-subroutine eval_struct_instance(node, state, res)
+recursive subroutine eval_struct_instance(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
 
