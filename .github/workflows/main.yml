@@ -50,11 +50,6 @@
 					set -exu \n
 					gfortran --version \n
 
-					fpm install --profile debug \n
-					# Test quine. May not be perfect with whitespace on Windows \n
-					syntran -q samples/quine-1.syntran > quine-1.syntran \n
-					diff quine-1.syntran samples/quine-1.syntran \n
-
 					# This is the pack linux stage, but it also does some \n
 					# testing.  CI/CD could use some disentangling \n
 
@@ -81,6 +76,12 @@
 					# Test 'shebang' usage with no 'syntran' cmd prefix \n
 					chmod +x ./samples/shebang.syntran \n
 					./samples/shebang.syntran \n
+
+					# Test quines. May not be perfect with whitespace on Windows \n
+					syntran -q samples/quine-1.syntran > quine-1.syntran \n
+					diff quine-1.syntran samples/quine-1.syntran \n
+					syntran -q samples/quine-2.syntran > quine-2.syntran \n
+					diff quine-2.syntran samples/quine-2.syntran \n
 
 					# No significant difference between release and (default) debug profile. \n
 					# Maybe that will change after I copy the other half of AOC tests \n
