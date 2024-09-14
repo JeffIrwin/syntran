@@ -400,9 +400,10 @@ recursive subroutine fn_copy(dst, src)
 
 	!print *, 'starting fn_copy()'
 
-	dst%type = src%type
-	dst%variadic_min = src%variadic_min
+	dst%type          = src%type
+	dst%variadic_min  = src%variadic_min
 	dst%variadic_type = src%variadic_type
+	dst%param_names   = src%param_names
 
 	if (allocated(src%params)) then
 		if (allocated(dst%params)) deallocate(dst%params)

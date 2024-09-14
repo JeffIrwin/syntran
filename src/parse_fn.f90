@@ -44,7 +44,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	! Function call expression
 	identifier = parser%match(identifier_token)
 
-	!print *, 'identifier = ', identifier%text
+	!print *, "identifier = ", identifier%text
 
 	args = new_syntax_node_vector()
 	pos_args = new_integer_vector()
@@ -68,6 +68,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	end do
 	call pos_args%push(parser%current_pos() + 1)
+	!print *, "args%len_ = ", args%len_
 
 	rparen  = parser%match(rparen_token)
 
@@ -210,6 +211,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	!fn_call%fn = fn
 
 	!print *, 'fn params size = ', size(fn%params)
+	!print *, 'fn param names size = ', size(fn%param_names%v)
 	if (fn%variadic_min < 0 .and. size(fn%params) /= args%len_) then
 
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)

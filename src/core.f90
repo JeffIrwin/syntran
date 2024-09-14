@@ -29,9 +29,6 @@ module syntran__core_m
 		syntran_patch =  50
 
 	! TODO:
-	!  - syntran crashes when trying to interpret quine.f90 (fortran!) as
-	!    syntran
-	!    * d'oh, but shouldn't crash at least
 	!  - add version summary as a text file to release packages
 	!    * doc. readme? samples?
 	!    * try -static-libgcc etc. on win/mac to ease packaging
@@ -40,17 +37,6 @@ module syntran__core_m
 	!    * post-merge TODO struct items:
 	!      + update struct sample.  include struct/array combos, nesting, etc.
 	!        maybe make separate simple and compound struct samples
-	!      + note in docs that structs don't work in interactive interpreter
-	!    * mvp done:
-	!      + struct fn return values
-	!      + nested structs
-	!      + structs of arrays (and arrays of structs)
-	!        * string indexing tbd. should be do-able
-	!          + was done in a reverted commit before i re-focused on struct/array combos
-	!        * slice indexing tbd (more difficult)
-	!      + unary ops on dot exprs
-	!        * i had broken and fixed binary ops at some point, but i think i
-	!          changed things later which automatically fixed unary ops?
 	!    * tbd:
 	!      + remove unused vars per cmake warnings
 	!      + improved to_str() conversion with labels of struct name and member names
