@@ -371,6 +371,7 @@ function value_to_f32(val) result(ans)
 		case (str_type)
 
 			if (len(val%sca%str%s) == 1) then
+				! TODO: ban this.  I must've accidentlly copied it from i32
 				ans = iachar(val%sca%str%s)
 			else
 				! TODO: suggest `parse_i32()` when that exists

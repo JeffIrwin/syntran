@@ -884,8 +884,13 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	case ("char")
 
+		! The `i32()` intrinsic uses iachar(), so this should use achar(), not
+		! char().  While achar() is guaranteed to be ASCII, char() could be some
+		! other character set
+
 		call syntax_eval(node%args(1), state, arg)
-		res%sca%str%s = char(arg%sca%i32)
+		!res%sca%str%s = char(arg%sca%i32)
+		res%sca%str%s = achar(arg%sca%i32)
 		state%returned = .true.
 
 	case ("0i32_sca")

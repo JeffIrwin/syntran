@@ -663,6 +663,15 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('i32([ 0, 2, 3]);') ==  "[0, 2, 3]", &
 			eval('i32([ 1, 2, 3]);') ==  "[1, 2, 3]", &
 			eval('i32([-1, 2, 3]);') ==  "[-1, 2, 3]", &
+			eval('char(99);') ==  "c", &  ! char() is inverse of i32(), but i32() can also do float-to-int casting
+			eval('char(100);') ==  "d", &
+			eval('char(67);') ==  "C", &
+			eval('char(68);') ==  "D", &
+			eval('char(49);') ==  "1", &
+			eval('char(50);') ==  "2", &
+			eval('char(40);') ==  "(", &
+			eval('char(41);') ==  ")", &
+			eval('char(32);') ==  " ", &
 			eval('i64([ 0.0, 2.2, 3.3]);') ==  "[0, 2, 3]", &
 			eval('i64([ 1.1, 2.2, 3.3]);') ==  "[1, 2, 3]", &
 			eval('i64([-1.1, 2.2, 3.3]);') ==  "[-1, 2, 3]", &

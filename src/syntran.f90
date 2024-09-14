@@ -413,7 +413,17 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_) result(res)
 	character(len = :), allocatable :: res
 
 	! TODO: refactor verbosity as an int for silent, error, warn, info, debug, etc.
-	! Maybe not all those options yet, but at least silent, error, and info
+	! Maybe not all those options yet, but at least silent, error, and info.
+	! Debug/trace could have an impact on perf so maybe that should still be a
+	! compile-time const:
+	!
+	!     SILENT = -20
+	!     ERROR  = -10
+	!     WARN   =   0
+	!     INFO   =  10
+	!     DEBUG  =  20
+	!     TRACE  =  30
+	!
 	logical, optional, intent(in) :: quiet, quiet_info
 
 	logical, optional, intent(in) :: chdir_

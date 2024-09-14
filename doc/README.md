@@ -34,6 +34,18 @@ fn exp(x: f32): f32
 
 Compute the base _e_ exponential of `x`
 
+## `i32`
+```rust
+fn i32(a: any): i32
+```
+
+Explicitly cast any numeric type (e.g. `i64`, `f32`, etc.) to 32-bit integer
+`i32`. The `i32()` fn also casts single-character strings to their ASCII values,
+e.g. `i32("A")` returns `65`.  To read a decimal number from a string, use
+`parse_i32()` instead.
+
+Other non-numeric types (`bool`, `file`) cannot be cast to `i64`.
+
 ## `i64`
 ```rust
 fn i64(a: any): i64
@@ -82,9 +94,13 @@ Related functions: [`close`](#close), [`writeln`](#writeln)
 fn parse_i32(s: str): i32
 ```
 
-Convert from a string to an integer `i32`.  Any invalid numbers will cause a runtime
-error.  Other languages variously refer to similar functions as `atoi()`,
-`stoi()`, `read()`, `parse()`, `strtol()`, `str2int()`, etc.
+Convert from a string to an integer `i32`.  For example, `parse_i32("65")`
+returns `65`.  This is in contrast to calling `i32()` on character arguments,
+which performs an ASCII table lookup.
+
+Any invalid numbers will cause a runtime error.  Other languages variously refer
+to similar functions as `atoi()`, `stoi()`, `read()`, `parse()`, `strtol()`,
+`str2int()`, etc.
 
 Note that other numeric types (`f32`) can be implicitly cast to `i32`.
 
