@@ -26,9 +26,12 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  49
+		syntran_patch =  50
 
 	! TODO:
+	!  - syntran crashes when trying to interpret quine.f90 (fortran!) as
+	!    syntran
+	!    * d'oh, but shouldn't crash at least
 	!  - add version summary as a text file to release packages
 	!    * doc. readme? samples?
 	!    * try -static-libgcc etc. on win/mac to ease packaging
