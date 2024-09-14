@@ -78,10 +78,15 @@
 					./samples/shebang.syntran \n
 
 					# Test quines. May not be perfect with whitespace on Windows \n
+
 					syntran -q samples/quine-1.syntran > quine-1.syntran \n
 					diff quine-1.syntran samples/quine-1.syntran \n
+
 					syntran -q samples/quine-2.syntran > quine-2.syntran \n
 					diff quine-2.syntran samples/quine-2.syntran \n
+
+					syntran -q samples/quine-3.syntran > quine-3.syntran \n
+					diff quine-3.syntran samples/quine-3.syntran \n
 
 					# No significant difference between release and (default) debug profile. \n
 					# Maybe that will change after I copy the other half of AOC tests \n

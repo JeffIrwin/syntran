@@ -13,7 +13,6 @@ fn quine(t: str)
 	println(t + "(" + quote + s + quote + ");" + newline + "return 0;");
 	return;
 }
-// TODO: try breaking the quine ci/cd test (this comment should do it)
 quine("// run with `syntran -q` to suppress banner
 let newline = char(10);
 let quote = char(34);
