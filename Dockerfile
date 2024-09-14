@@ -45,9 +45,9 @@ RUN fpm test test
 ##RUN cmake -S . -B "build" -DCMAKE_BUILD_TYPE=Release
 ##RUN cmake --build "build" --config Release
 #
-#RUN ./build/test
+#RUN ./build/Release/test
 #
-#RUN cp ./build/syntran /usr/bin/
+#RUN cp ./build/Release/syntran /usr/bin/
 ##************
 
 ENTRYPOINT ["rlwrap", "syntran"]

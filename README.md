@@ -50,7 +50,7 @@ More or less any terminal on Windows should work, but [Windows Terminal](https:/
 
 Feel free to add the directory to your PATH environment variable, or type the full path.
 
-Whenever you see something like `./build/syntran` or `fpm run` in the rest of this documentation, replace that with `/path/to/syntran` or `C:\path\to\syntran.exe` appropriately, depending on your operating system and where you downloaded the binary.
+Whenever you see something like `./build/Debug/syntran` or `fpm run` in the rest of this documentation, replace that with `/path/to/syntran` or `C:\path\to\syntran.exe` appropriately, depending on your operating system and where you downloaded the binary.
 
 ## Build the interpreter from source
 
@@ -81,7 +81,7 @@ docker container using the included [Dockerfile](Dockerfile).  See the
 Start the interpreter.  Adjust the path if you built with fpm or installed a binary:
 
 ```
-./build/syntran
+./build/Debug/syntran
 ```
 
 Then enter arithmetic expressions like `1 + 2 * 3;` in the interpreter.  Semicolons are required at the end of statements!
@@ -151,7 +151,7 @@ In many shells such as `bash`, the up and down arrow keys can be used to scroll 
 Arrow keys do _not_ work by default in syntran running within bash, but there is a simple and powerful workaround with `rlwrap`.  If you run `syntran` by itself, it processes text in cooked mode:
 
 ```
-./build/syntran
+./build/Debug/syntran
 ```
 
 Cooked mode means that `syntran` does not read or process any text until after you press the ENTER key.  Further, when you use an arrow key, you will see escape sequences like this:
@@ -166,7 +166,7 @@ To overcome this, install and run `rlwrap` with `syntran`:
 
 ```
 sudo apt install rlwrap
-rlwrap ./build/syntran
+rlwrap ./build/Debug/syntran
 ```
 
 With `rlwrap`, the arrow keys work as expected within the `syntran` interpreter.  Plus, you get `rlwrap`'s other powerful features, like Ctrl+R for history search and saved history across separate invocations of `syntran`.
@@ -206,7 +206,7 @@ vim.cmd.autocmd("BufRead,BufNewFile *.syntran set filetype=rust")
 As programs get longer and more complicated, it becomes difficult to enter them into the interactive interpreter.  To interpret a whole file, provide it as a command line argument:
 
 ```
-./build/syntran samples/primes-1.syntran
+./build/Debug/syntran samples/primes-1.syntran
 ```
 
 <!--

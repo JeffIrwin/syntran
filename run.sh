@@ -3,11 +3,13 @@
 set -e
 #set -xe
 
-./build.sh
+config="Debug"
+
+./build.sh $config
 
 if [[ -x "$(command -v rlwrap)" ]]; then
-	time rlwrap ./build/syntran $*
+	time rlwrap ./build/$config/syntran $*
 else
-	time ./build/syntran $*
+	time ./build/$config/syntran $*
 fi
 

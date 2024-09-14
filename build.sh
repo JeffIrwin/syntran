@@ -52,7 +52,9 @@ if [[ "$machine" == "Mac" ]]; then
 
 fi
 
-build=build
+#build=build
+build="build/$config"
+
 cmake -S . -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=$config
 cmake --build "$build" --config $config
 

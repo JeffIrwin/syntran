@@ -11,7 +11,7 @@
 
 rm samples/wave-equation-1d/wave-output.txt
 
-./build/syntran samples/wave-equation-1d/wave.syntran > samples/wave-equation-1d/wave-output.txt
+./build/Debug/syntran samples/wave-equation-1d/wave.syntran > samples/wave-equation-1d/wave-output.txt
 
 pushd samples/wave-equation-1d
 rm -rf frames

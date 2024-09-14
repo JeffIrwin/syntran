@@ -112,7 +112,7 @@
 				"
 					#export OMP_NUM_THREADS=1 \n
 					bash ./build.sh debug \n
-					#ls -ltrh build/ \n
+					#ls -ltrh build/Debug \n
 				"
 			},
 			{
@@ -120,9 +120,9 @@
 				"name": "Test debug",
 				"run":
 				"
-					./build/syntran < samples/arithmetic.syntran  \n
-					#./build/syntran < samples/bad-syntax.syntran \n
-					time ./build/test \n
+					./build/Debug/syntran < samples/arithmetic.syntran  \n
+					#./build/Debug/syntran < samples/bad-syntax.syntran \n
+					time ./build/Debug/test \n
 				"
 			},
 			{
@@ -130,11 +130,8 @@
 				"name": "Test release",
 				"run":
 				"
-					# TODO: fix cmake to use diff target dirs per config so that
-					# all these cleans aren't necessary \n
-					bash ./clean.sh \n
 					bash ./build.sh release \n
-					time ./build/test \n
+					time ./build/Release/test \n
 				"
 			},
 			{
@@ -150,7 +147,6 @@
 
 					where api-ms-win-crt-time-l1-1-0.dll
 
-					bash ./clean.sh \n
 					bash ./build.sh release \n
 					#bash ./build.sh debug \n
 
@@ -174,12 +170,11 @@
 					gfortran-12 --version \n
 					which gfortran-12 \n
 
-					bash ./clean.sh \n
 					bash ./build.sh release \n
 
 					# TODO: copy to a subdir for easier upload \n
 
-					cp ./build/syntran . \n
+					cp ./build/Release/syntran . \n
 
 					otool -L ./syntran \n
 

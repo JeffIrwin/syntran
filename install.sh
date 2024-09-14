@@ -11,7 +11,7 @@ echo
 echo -e "${magenta}Installing syntran ... ${reset}"
 echo
 
-this_syntran="./build/syntran"
+this_syntran="./build/Release/syntran"
 
 fail_find()
 {

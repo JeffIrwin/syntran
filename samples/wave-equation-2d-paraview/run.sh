@@ -16,7 +16,6 @@ rm -rf frames
 mkdir frames
 popd
 
-#./build/syntran samples/wave-equation-2d-paraview/wave.syntran
 fpm run --profile release -- samples/wave-equation-2d-paraview/wave.syntran
 
 pushd samples/wave-equation-2d-paraview
