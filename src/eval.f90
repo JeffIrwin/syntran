@@ -882,6 +882,12 @@ recursive subroutine eval_fn_call(node, state, res)
 		end if
 		state%returned = .true.
 
+	case ("char")
+
+		call syntax_eval(node%args(1), state, arg)
+		res%sca%str%s = char(arg%sca%i32)
+		state%returned = .true.
+
 	case ("0i32_sca")
 
 		call syntax_eval(node%args(1), state, arg)

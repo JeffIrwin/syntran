@@ -233,7 +233,8 @@ subroutine declare_intrinsic_fns(fns)
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
 		i64_sca_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
 		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, &
-		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn
+		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn, &
+		char_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -441,6 +442,18 @@ subroutine declare_intrinsic_fns(fns)
 	parse_f32_fn%param_names%v(1)%s = "str"
 
 	call fns%insert("parse_f32", parse_f32_fn, id_index)
+
+	!********
+
+	char_fn%type%type = str_type
+	allocate(char_fn%params(1))
+	allocate(char_fn%param_names%v(1))
+
+	char_fn%params(1)%type = i32_type
+
+	char_fn%param_names%v(1)%s = "i"
+
+	call fns%insert("char", char_fn, id_index)
 
 	!********
 
@@ -723,6 +736,7 @@ subroutine declare_intrinsic_fns(fns)
 			parse_i32_fn, &
 			parse_i64_fn, &
 			parse_f32_fn, &
+			char_fn     , &
 			i32_sca_fn  , &
 			i32_arr_fn  , &
 			i64_sca_fn  , &
