@@ -931,19 +931,116 @@ For example, it is *not* possible to concatenate strings together into the inclu
 #include("header." + "syntran");
 // Error: #include file `"header."` not found
 //   --> main.syntran:3:10
-//    | 
+//    |
 //  3 | #include("header." + "syntran");
 //    |          ^^^^^^^^^ file not found
-// 
+//
 // Error: unexpected token `+` of kind `plus_token`, expected `rparen_token`
 //   --> main.syntran:3:20
-//    | 
+//    |
 //  3 | #include("header." + "syntran");
 //    |                    ^ unexpected token
 // ...
 ```
 
 The argument must be a single static lex-time constant string.
+
+## Structs
+
+Structs, also known as user-defined types or derived types, can be used in
+syntran.  The declaration or definition of a struct in syntran uses similar
+syntax as rust:
+```rust
+struct Point
+{
+	x: [i32; :],
+	name: str,
+}
+```
+
+Here, a `Point` contains an array of integer coordinates `x` and a name.  In
+other languages, you may see introductory struct examples represent a point with
+separate scalar `x` and `y` members.  However, this is an insane way to
+represent vector data.  As syntran is an array-oriented language, we use an
+array in this example.  This will generalize nicely from 2D to 3D or any
+dimension.
+
+Note that each member is delimited by a comma `,` in the struct declaration.
+The trailing comma after the last member `name: str,` is optional.
+
+Also note that there is no semicolon at the end of the struct declaration `}`.
+This is consistent with the way that functions are declared.
+
+Next, we can instantiate or initialize a couple variables `pt0` and `pt1` of the
+`Point` type:
+```rust
+let pt0 = Point{x = [20, 10], name = "my-pt0"};
+let pt1 = Point{x = [40, 50], name = "my-pt1"};
+```
+
+Unlike rust, members are assigned using an assignment operator `=`, not a colon
+`:`.  Instantiating a struct, just like instantiating any other primitive type
+variable such as `let x = 42;`, is a statement.  Hence, the instantiation
+statement ends with a semicolon `;`.
+
+Structs can be nested.  We can build upon the 1st order `Point` struct by
+declaring a `Rect` struct, some of whose members are also structs:
+```rust
+// declare
+struct Rect
+{
+	bottom_left: Point,
+	upper_right: Point,
+	name: str
+}
+
+// instantiate
+let rect0 = Rect{bottom_left = pt0, upper_right = pt1, name = "my-rect"};
+```
+
+Functions can take struct arguments and return struct values.  For example, here
+is a function that computes the area of a rectangle:
+```rust
+fn area(rect: Rect): i32
+{
+	let width =
+		rect.upper_right.x[0] -
+		rect.bottom_left.x[0];
+	let height =
+		rect.upper_right.x[1] -
+		rect.bottom_left.x[1];
+
+	// Taking the absolute value is left as an exercise for the reader
+	return width * height;
+}
+
+println("area = ", area(rect0));
+// area = 800
+```
+
+Structs can be nested arbitrarily.  You can make structs of arrays and arrays of
+structs.  One noteable missing feature currently is that structs of arrays (and
+arrays of structs) cannot be sliced, only scalar subscripts are supported.
+
+Here is a contrived example of a high-order struct, including arrays at various
+levels:
+```rust
+struct A{_:  i32 }
+struct B{a: [A;:]}
+struct C{b:  B   }
+struct D{c: [C;:]}
+struct E{d:  D   }
+
+let a =  A{_ = 1337};
+let b =  B{a = [a] };
+let c =  C{b =  b  };
+let d =  D{c = [c] };
+let e = [E{d =  d  }];
+
+e[0].d.c[0].b.a[0]._ -= 1295;
+println(e[0].d.c[0].b.a[0]._);
+// 42
+```
 
 ## Samples
 
