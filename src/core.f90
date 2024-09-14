@@ -64,14 +64,10 @@ module syntran__core_m
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
 	!    * write another wave equation sample using slicing and array operations
-	!  - block_statement eval had a bug which is now fixed by setting tmp =
-	!    syntax_eval() in case of a block which ends with a null if_statement.
-	!    check translation_unit and other eval case branches for similar bugs
-	!    * maybe fixed after syntax_eval() refactor?  unknown_type is
-	!      initialized inside the value_t struct declaration
 	!  - cmd args
 	!    * args would be useful for logo sample, e.g. image size and some
 	!      control color options
+	!    * pass after a ` -- `?
 	!    * related: environment variables
 	!  - check assignment to void type? guard against things like
 	!    `let x = println();`

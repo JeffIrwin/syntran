@@ -3,9 +3,9 @@
 set -x
 
 config=Debug
-if [[ "${1,,}" == "release" ]]; then
+if [[ "${1}" == "release" || "${1}" == "Release" ]]; then
 	config=Release
-elif [[ "${1,,}" == "debug" ]]; then
+elif [[ "${1}" == "debug" || "${1}" == "Debug" ]]; then
 	config=Debug
 elif [[ $# -gt 0 ]]; then
 	echo "Error: unrecognized cmd arg \"$1\""
