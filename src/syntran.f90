@@ -402,7 +402,7 @@ end function syntran_eval
 
 !===============================================================================
 
-function syntran_interpret_file(filename, quiet, chdir_) result(res)
+function syntran_interpret_file(filename, quiet, quiet_info, chdir_) result(res)
 
 	! TODO:
 	!   - enable input echo for file input (not for stdin)
@@ -412,7 +412,10 @@ function syntran_interpret_file(filename, quiet, chdir_) result(res)
 	character(len = *), intent(in)  :: filename
 	character(len = :), allocatable :: res
 
-	logical, optional, intent(in) :: quiet
+	! TODO: refactor verbosity as an int for silent, error, warn, info, debug, etc.
+	! Maybe not all those options yet, but at least silent, error, and info
+	logical, optional, intent(in) :: quiet, quiet_info
+
 	logical, optional, intent(in) :: chdir_
 
 	!********
@@ -421,17 +424,21 @@ function syntran_interpret_file(filename, quiet, chdir_) result(res)
 
 	integer :: iostat
 
-	logical :: chdirl
+	logical :: chdirl, quiet_infol
 
 	type(state_t) :: state
 
 	state%quiet = .false.
-	if (present(quiet )) state%quiet = quiet
+	quiet_infol = .false.
+	if (present(quiet     )) state%quiet = quiet
+	if (present(quiet_info)) quiet_infol = quiet_info
 
 	chdirl = .false.
 	if (present(chdir_)) chdirl = chdir_
 
-	if (.not. state%quiet) write(*,*) 'Interpreting file "'//filename//'"'
+	if (.not. state%quiet .and. .not. quiet_infol) then
+		write(*,*) 'Interpreting file "'//filename//'"'
+	end if
 	!if (.true. .or. .not. state%quiet) write(*,*) 'Interpreting file "'//filename//'"'
 
 	source_text = read_file(filename, iostat)

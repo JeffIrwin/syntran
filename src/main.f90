@@ -36,13 +36,13 @@ program main
 
 	else if (args%syntran_file_arg) then
 		! Interpret a file and exit
-		res = syntran_interpret_file(args%syntran_file, args%quiet)
+		res = syntran_interpret_file(args%syntran_file, quiet_info = args%quiet)
 		if (.not. args%quiet) write(*,*) '    '//res
 
 	else if (args%command_arg) then
 		! Interpret a cmd arg string
 		res = syntran_eval(args%command)
-		write(*,*) "ans = `", res, "`"  ! format subject to change
+		if (.not. args%quiet) write(*,*) "ans = `", res, "`"  ! format subject to change
 
 		! python -c command doesn't print anything unless you call print()
 		! inside it
