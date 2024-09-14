@@ -653,7 +653,7 @@ end function parse_struct_declaration
 
 !===============================================================================
 
-module function parse_struct_instance(parser) result(inst)
+recursive module function parse_struct_instance(parser) result(inst)
 
 	! A struct instantiator initializes all the members of an instance of a
 	! struct
