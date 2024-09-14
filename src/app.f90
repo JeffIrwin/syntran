@@ -19,6 +19,7 @@ module syntran__app_m
 		logical :: &
 			command_arg      = .false., &
 			interactive      = .false., &
+			quiet            = .false., &
 			syntran_file_arg = .false., &
 			version          = .false., &
 			help             = .false.
@@ -117,6 +118,9 @@ function parse_args() result(args)
 			args%command_arg = .true.
 			call get_next_arg(i, args%command)
 
+		case ("-q", "--quiet")
+			args%quiet = .true.
+
 		case ("-i", "--interactive")
 			args%interactive = .true.
 
@@ -158,7 +162,7 @@ function parse_args() result(args)
 		str(syntran_minor)//'.'// &
 		str(syntran_patch)
 
-	if (.not. error) then
+	if (.not. error .and. .not. args%quiet) then
 
 		interactive = .not. &
 			( &
@@ -167,10 +171,6 @@ function parse_args() result(args)
 				args%syntran_file_arg .or. &
 				args%help                  &
 			)
-
-		!call  syntran_banner(args%command_arg, interactive)
-
-		! TODO: add a "--no-banner" cmd arg to turn off?
 
 		if (.not. args%command_arg) then
 			write(*,*)

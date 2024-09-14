@@ -1,0 +1,32 @@
+// run with `syntran -q` to suppress banner
+let newline = char(10);
+let quote = char(34);
+fn eniuq(t: str)
+{
+	let s = "";
+	for i in [0: len(t)]
+	{
+		if t[i] == quote
+			s = s + quote;
+		s = s + t[i];
+	}
+	println(t + "(" + quote + s + quote + ");" + newline + "return 0;");
+	return;
+}
+eniuq("// run with `syntran -q` to suppress banner
+let newline = char(10);
+let quote = char(34);
+fn eniuq(t: str)
+{
+	let s = """";
+	for i in [0: len(t)]
+	{
+		if t[i] == quote
+			s = s + quote;
+		s = s + t[i];
+	}
+	println(t + ""("" + quote + s + quote + "");"" + newline + ""return 0;"");
+	return;
+}
+eniuq");
+return 0;

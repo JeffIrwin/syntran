@@ -36,8 +36,8 @@ program main
 
 	else if (args%syntran_file_arg) then
 		! Interpret a file and exit
-		res = syntran_interpret_file(args%syntran_file)
-		write(*,*) '    '//res
+		res = syntran_interpret_file(args%syntran_file, args%quiet)
+		if (.not. args%quiet) write(*,*) '    '//res
 
 	else if (args%command_arg) then
 		! Interpret a cmd arg string

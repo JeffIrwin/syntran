@@ -1,0 +1,46 @@
+// run with `syntran -q` to suppress banner
+let newline = char(10);
+let tab = char(9);
+let quote = char(34);
+
+fn quine(t: str)
+{
+	let s = str();
+	for i in [0: len(t)]
+	{
+		if t[i] == quote
+			s = s + quote + quote;
+		else if t[i] == newline
+			s = s + quote + " + newline +" + t[i] + tab + quote;
+		else
+			s = s + t[i];
+	}
+	println(t + "(" + newline + tab + quote + s + quote + ");" + newline + newline + "return 0;");
+	return;
+}
+
+quine(
+	"// run with `syntran -q` to suppress banner" + newline +
+	"let newline = char(10);" + newline +
+	"let tab = char(9);" + newline +
+	"let quote = char(34);" + newline +
+	"" + newline +
+	"fn quine(t: str)" + newline +
+	"{" + newline +
+	"	let s = str();" + newline +
+	"	for i in [0: len(t)]" + newline +
+	"	{" + newline +
+	"		if t[i] == quote" + newline +
+	"			s = s + quote + quote;" + newline +
+	"		else if t[i] == newline" + newline +
+	"			s = s + quote + "" + newline +"" + t[i] + tab + quote;" + newline +
+	"		else" + newline +
+	"			s = s + t[i];" + newline +
+	"	}" + newline +
+	"	println(t + ""("" + newline + tab + quote + s + quote + "");"" + newline + newline + ""return 0;"");" + newline +
+	"	return;" + newline +
+	"}" + newline +
+	"" + newline +
+	"quine");
+
+return 0;
