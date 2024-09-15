@@ -12,7 +12,8 @@ for dir in $dirs ; do
 	echo "dir = $dir"
 	pushd "$dir"
 
-	syntran main.syntran
+	#syntran main.syntran
+	/mnt/c/Users/jirwi/Downloads/syntran-release-0.0.51/syntran-linux/syntran main.syntran
 
 	popd
 done

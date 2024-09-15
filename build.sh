@@ -3,6 +3,9 @@
 set -x
 
 config=Debug
+
+# I used to use ${1,,} for lowercase conversion, but that's bash 4 which isn't
+# available on poor little macos :(
 if [[ "${1}" == "release" || "${1}" == "Release" ]]; then
 	config=Release
 elif [[ "${1}" == "debug" || "${1}" == "Debug" ]]; then

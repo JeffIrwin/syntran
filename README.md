@@ -947,7 +947,7 @@ The argument must be a single static lex-time constant string.
 
 ## Structs
 
-*Disclaimer*: structs currently do not work in the interactive interpretter
+**Disclaimer**: structs currently do not work in the interactive interpretter
 shell.  To use structs, you must save your syntran script in a file.
 
 Structs, also known as user-defined types or derived types, can be used in
