@@ -273,7 +273,7 @@ foo + bar;
 // 7
 ```
 
-When the clause of the if statement is only a single line, braces `{}` are optional.
+When the clause of the if statement is only a single statement, braces `{}` are optional.
 
 The bounds of for loops, like ranges in Rust and Python, are inclusive of the lower bound and exclusive of the upper bound:
 
