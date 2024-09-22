@@ -706,7 +706,7 @@ fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 	let ans =  [0.0; size(mat,0)];
 	for     j in [0: size(mat,1)]
 		for i in [0: size(mat,0)]
-			ans[i] = ans[i] + mat[i,j] * vec[j];
+			ans[i] += mat[i,j] * vec[j];
 	return ans;
 }
 ```
@@ -722,7 +722,7 @@ fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
 	for         k in [0: size(b,1)]
 		for     j in [0: size(a,1)]
 			for i in [0: size(a,0)]
-				c[i,k] = c[i,k] + a[i,j] * b[j,k];
+				c[i,k] += a[i,j] * b[j,k];
 	return c;
 }
 ```
