@@ -29,6 +29,9 @@ module syntran__core_m
 		syntran_patch =  51
 
 	! TODO:
+	!  - add tests to cover syntran-explorer samples. might be a bit much to
+	!    automate cross-repo testing on the same source, but a little copy/paste
+	!    is better than nothing
 	!  - add version summary as a text file to release packages
 	!    * doc. readme? samples?
 	!    * try -static-libgcc etc. on win/mac to ease packaging
