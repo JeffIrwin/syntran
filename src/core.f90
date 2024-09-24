@@ -220,6 +220,8 @@ subroutine declare_intrinsic_fns(fns)
 	! Increment index for each fn and then set num_fns
 	id_index = 0
 
+	! TODO: f64 intrinsic fns
+
 	!********
 
 	! TODO: polymorphic in f32, f64, etc.
@@ -359,8 +361,9 @@ subroutine declare_intrinsic_fns(fns)
 
 	println_fn%type%type = void_type ! TODO?
 
-	allocate(println_fn%params(0))
-	allocate(println_fn%param_names%v(0))
+	allocate(println_fn%params(1))
+	allocate(println_fn%param_names%v(1))
+	max_f32_fn%param_names%v(1)%s = "a"
 
 	println_fn%variadic_min  = 0
 	println_fn%variadic_type = any_type
@@ -371,8 +374,9 @@ subroutine declare_intrinsic_fns(fns)
 
 	str_fn%type%type = str_type
 
-	allocate(str_fn%params(0))
-	allocate(str_fn%param_names%v(0))
+	allocate(str_fn%params(1))
+	allocate(str_fn%param_names%v(1))
+	max_f32_fn%param_names%v(1)%s = "a"
 
 	str_fn%variadic_min  = 0
 	str_fn%variadic_type = any_type

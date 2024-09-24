@@ -32,6 +32,7 @@ module syntran__value_m
 		integer(kind = 4) :: i32
 		integer(kind = 8) :: i64
 		real   (kind = 4) :: f32
+		real   (kind = 8) :: f64
 
 		contains
 			procedure :: to_str => scalar_to_str
@@ -57,6 +58,7 @@ module syntran__value_m
 		integer(kind = 8), allocatable ::  i64(:)
 
 		real   (kind = 4), allocatable ::  f32(:)
+		real   (kind = 8), allocatable ::  f64(:)
 
 		type(string_t   ), allocatable ::  str(:)
 
@@ -99,9 +101,10 @@ module syntran__value_m
 		contains
 			procedure :: to_str => value_to_str
 			procedure :: to_f32 => value_to_f32
+			procedure :: to_f64 => value_to_f64
 			procedure :: to_i32 => value_to_i32
 			procedure :: to_i64 => value_to_i64
-			procedure :: to_i32_array => value_to_i32_array
+			procedure :: to_i32_array => value_to_i32_array  ! for user-facing casting fn
 			procedure :: to_i64_array => value_to_i64_array
 			procedure, pass(dst) :: copy => value_copy
 			generic, public :: assignment(=) => copy
@@ -276,6 +279,7 @@ subroutine push_array(vector, val)
 	integer(kind = 8), allocatable :: tmp_i64 (:)
 
 	real   (kind = 4), allocatable :: tmp_f32 (:)
+	real   (kind = 8), allocatable :: tmp_f64 (:)
 
 	logical(kind = 1), allocatable :: tmp_bool(:)
 
@@ -308,6 +312,12 @@ subroutine push_array(vector, val)
 			tmp_f32(1: vector%cap) = vector%f32
 			call move_alloc(tmp_f32, vector%f32)
 
+		else if (vector%type == f64_type) then
+
+			allocate(tmp_f64 ( tmp_cap ))
+			tmp_f64(1: vector%cap) = vector%f64
+			call move_alloc(tmp_f64, vector%f64)
+
 		else if (vector%type == bool_type) then
 
 			allocate(tmp_bool( tmp_cap ))
@@ -338,6 +348,8 @@ subroutine push_array(vector, val)
 		vector%i64 ( vector%len_ ) = val%sca%i64
 	case (f32_type)
 		vector%f32 ( vector%len_ ) = val%sca%f32
+	case (f64_type)
+		vector%f64 ( vector%len_ ) = val%sca%f64
 	case (bool_type)
 		vector%bool( vector%len_ ) = val%sca%bool
 	case (str_type)
@@ -361,6 +373,9 @@ function value_to_f32(val) result(ans)
 
 		case (f32_type)
 			ans = val%sca%f32
+
+		case (f64_type)
+			ans = val%sca%f64
 
 		case (i32_type)
 			ans = val%sca%i32
@@ -391,6 +406,49 @@ end function value_to_f32
 
 !===============================================================================
 
+function value_to_f64(val) result(ans)
+
+	class(value_t) :: val
+
+	real(kind = 8) :: ans
+
+	select case (val%type)
+
+		case (f32_type)
+			ans = val%sca%f32
+
+		case (f64_type)
+			ans = val%sca%f64
+
+		case (i32_type)
+			ans = val%sca%i32
+
+		case (i64_type)
+			ans = real(val%sca%i64)
+
+		case (str_type)
+
+			if (len(val%sca%str%s) == 1) then
+				! TODO: ban this.  I must've accidentlly copied it from i32
+				ans = iachar(val%sca%str%s)
+			else
+				! TODO: suggest `parse_i32()` when that exists
+				write(*,*) err_int_prefix//'cannot convert from type `' &
+					//kind_name(val%type)//'` to f64 '//color_reset
+				call internal_error()
+			end if
+
+		case default
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to f64 '//color_reset
+			call internal_error()
+
+	end select
+
+end function value_to_f64
+
+!===============================================================================
+
 function value_to_i32(val) result(ans)
 
 	class(value_t) :: val
@@ -401,6 +459,9 @@ function value_to_i32(val) result(ans)
 
 		case (f32_type)
 			ans = int(val%sca%f32, 4)
+
+		case (f64_type)
+			ans = int(val%sca%f64, 4)
 
 		case (i32_type)
 			ans = val%sca%i32
@@ -446,6 +507,9 @@ function value_to_i32_array(val) result(ans)
 		case (f32_type)
 			ans%i32 = int(val%array%f32, 4)
 
+		case (f64_type)
+			ans%i32 = int(val%array%f64, 4)
+
 		case (i32_type)
 			ans%i32 = val%array%i32
 
@@ -487,6 +551,9 @@ function value_to_i64(val) result(ans)
 		case (f32_type)
 			ans = int(val%sca%f32, 8)
 
+		case (f64_type)
+			ans = int(val%sca%f64, 8)
+
 		case (i32_type)
 			ans = val%sca%i32
 
@@ -519,8 +586,10 @@ function value_to_i64_array(val) result(ans)
 	select case (val%array%type)
 
 		case (f32_type)
-			!ans%i64 = int(val%array%f32, 4)
 			ans%i64 = int(val%array%f32, 8)
+
+		case (f64_type)
+			ans%i64 = int(val%array%f64, 8)
 
 		case (i32_type)
 			ans%i64 = val%array%i32
@@ -674,6 +743,30 @@ recursive function value_to_str(val) result(ans)
 
 				end do
 
+			else if (val%array%type == f64_type) then
+
+				do i8 = 1, val%array%len_
+
+					!! Nice alignment, but breaks tests
+					!write(buf16, '(es16.6)') val%array%f64(i8)
+					!call str_vec%push(buf16)
+
+					! Trimmed string (not aligned)
+					call str_vec%push(str(val%array%f64(i8)))
+
+					if (i8 >= val%array%len_) cycle
+
+					call str_vec%push(', ')
+
+					! Products could be saved ahead of time outside of loop
+					prod = val%array%size(1)
+					do j = 2, val%array%rank
+						if (mod(i8, prod) == 0) call str_vec%push(line_feed)
+						prod = prod * val%array%size(j)
+					end do
+
+				end do
+
 			else if (val%array%type == bool_type) then
 
 				do i8 = 1, val%array%len_
@@ -754,6 +847,7 @@ recursive function scalar_to_str(val, type) result(ans)
 	!********
 
 	character(len = 16) :: buf16
+	character(len = 28) :: buf28
 
 	select case (type)
 
@@ -772,6 +866,11 @@ recursive function scalar_to_str(val, type) result(ans)
 			write(buf16, '(es16.6)') val%f32
 			!ans = trim(buf16)
 			ans = buf16  ! no trim for alignment
+
+		case (f64_type)
+			write(buf28, '(es25.15)') val%f64
+			!ans = trim(buf28)
+			ans = buf28  ! no trim for alignment
 
 		case (i32_type)
 			ans = i32_str(val%i32)

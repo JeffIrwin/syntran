@@ -476,6 +476,11 @@ recursive module function parse_primary_expr(parser) result(expr)
 			token = parser%match(f32_token)
 			expr  = new_f32(token%val%sca%f32)
 
+		case (f64_token)
+
+			token = parser%match(f64_token)
+			expr  = new_f64(token%val%sca%f64)
+
 		case (str_token)
 
 			token = parser%match(str_token)

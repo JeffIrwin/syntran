@@ -170,8 +170,9 @@ recursive subroutine eval_binary_expr(node, state, res)
 	res%type = get_binary_op_kind(left%type, node%op%kind, right%type, &
 		larrtype, rarrtype)
 	select case (res%type)
-	case (bool_array_type, f32_array_type, i32_array_type, i64_array_type, &
-		str_array_type)
+	case (bool_array_type, f32_array_type, f64_array_type, &
+		i32_array_type, i64_array_type, str_array_type)
+
 		res%type = array_type
 	end select
 
@@ -1209,6 +1210,9 @@ recursive subroutine eval_for_statement(node, state, res)
 			case (f32_type)
 				len8 = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
 
+			case (f64_type)
+				len8 = ceiling((ubound_%sca%f64 - lbound_%sca%f64) / step%sca%f64)
+
 			case default
 				write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
 				call internal_error()
@@ -1220,6 +1224,8 @@ recursive subroutine eval_for_statement(node, state, res)
 
 			select case (itr%type)
 			case (f32_type)
+				len8 = len_%to_i64()
+			case (f64_type)
 				len8 = len_%to_i64()
 			case default
 				write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
@@ -1577,6 +1583,7 @@ recursive subroutine eval_array_expr(node, state, res)
 	integer(kind = 8) :: i8
 
 	real(kind = 4) :: f, fstep
+	real(kind = 8) :: f64, fstep64
 
 	type(array_t) :: array
 	type(value_t) :: lbound_, ubound_, elem, &
@@ -1682,6 +1689,36 @@ recursive subroutine eval_array_expr(node, state, res)
 			array%len_ = j - 1
 			!array%len_ = array%cap
 
+		else if (array%type == f64_type) then
+
+			!print *, 'lbound_, ubound_ = ', lbound_%sca%f64, ubound_%sca%f64
+			!print *, 'step = ', step%sca%f64
+
+			array%cap = ceiling((ubound_%sca%f64 - lbound_%sca%f64) / step%sca%f64)
+			allocate(array%f64( array%cap ))
+
+			j = 1
+			f64 = lbound_%sca%f64
+			if (lbound_%sca%f64 < ubound_%sca%f64 .neqv. 0 < step%sca%f64) f64 = ubound_%sca%f64
+
+			do while ((f64  < ubound_%sca%f64 .eqv. lbound_%sca%f64 < ubound_%sca%f64) &
+			     .and. f64 /= ubound_%sca%f64)
+				array%f64(j) = f64
+
+				! Using only addition here seems more efficient, but
+				! rounding errors accumulate differently.  Compare
+				! `[0.0: 0.1: 0.9];` with both methods.  First ends in
+				! 0.800001, while second method (with multiplication) ends
+				! in 0.8
+
+				!f64 = f64 + step%sca%f64
+				f64 = lbound_%sca%f64 + j * step%sca%f64
+
+				j = j + 1
+			end do
+			array%len_ = j - 1
+			!array%len_ = array%cap
+
 		else
 			write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
 			call internal_error()
@@ -1714,6 +1751,16 @@ recursive subroutine eval_array_expr(node, state, res)
 
 			do i = 0, len_%to_i32() - 1
 				array%f32(i+1) = lbound_%sca%f32 + i * fstep
+			end do
+
+		else if (array%type == f64_type) then
+
+			allocate(array%f64( array%cap ))
+			fstep64 = (ubound_%sca%f64 - lbound_%sca%f64) &
+				/ real((len_%to_i64() - 1), 8)
+
+			do i = 0, len_%to_i32() - 1
+				array%f64(i+1) = lbound_%sca%f64 + i * fstep64
 			end do
 
 		else
@@ -1769,6 +1816,9 @@ recursive subroutine eval_array_expr(node, state, res)
 
 		case (f32_type)
 			res%array%f32 = lbound_%sca%f32
+
+		case (f64_type)
+			res%array%f64 = lbound_%sca%f64
 
 		case (bool_type)
 			res%array%bool = lbound_%sca%bool
@@ -2136,6 +2186,9 @@ subroutine allocate_array(val, cap)
 	case (f32_type)
 		allocate(val%array%f32( cap ))
 
+	case (f64_type)
+		allocate(val%array%f64( cap ))
+
 	case (bool_type)
 		allocate(val%array%bool( cap ))
 
@@ -2177,6 +2230,8 @@ function new_array(type, cap) result(vector)
 		allocate(vector%i64 ( vector%cap ))
 	else if (type == f32_type) then
 		allocate(vector%f32 ( vector%cap ))
+	else if (type == f64_type) then
+		allocate(vector%f64 ( vector%cap ))
 	else if (type == bool_type) then
 		allocate(vector%bool( vector%cap ))
 	else if (type == str_type) then
@@ -2525,12 +2580,23 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 		case (f32_type)
 			val%sca%f32 = lbound_%sca%f32 + real(i - 1) * step%sca%f32
 
+		case (f64_type)
+			val%sca%f64 = lbound_%sca%f64 + real(i - 1, 8) * step%sca%f64
+
 		end select
 
 	case (len_array)
 
-		val%sca%f32 = lbound_%sca%f32 + real(i - 1) * &
-			(ubound_%sca%f32 - lbound_%sca%f32) / real((len_%to_i64() - 1))
+		select case (val%type)
+		case (f32_type)
+			val%sca%f32 = lbound_%sca%f32 + real(i - 1) * &
+				(ubound_%sca%f32 - lbound_%sca%f32) / real((len_%to_i64() - 1))
+
+		case (f64_type)
+			val%sca%f64 = lbound_%sca%f64 + real(i - 1, 8) * &
+				(ubound_%sca%f64 - lbound_%sca%f64) / real((len_%to_i64() - 1), 8)
+
+		end select
 
 	case (expl_array, size_array)
 		call syntax_eval(elems(i), state, val)
@@ -2576,6 +2642,9 @@ subroutine get_array_val(array, i, val)
 		case (f32_type)
 			val%sca%f32 = array%f32(i + 1)
 
+		case (f64_type)
+			val%sca%f64 = array%f64(i + 1)
+
 		case (str_type)
 			val%sca%str = array%str(i + 1)
 
@@ -2614,6 +2683,9 @@ subroutine set_array_val(array, i, val)
 
 		case (f32_type)
 			array%f32(i + 1) = val%to_f32()
+
+		case (f64_type)
+			array%f64(i + 1) = val%to_f64()
 
 		case (str_type)
 			array%str(i + 1) = val%sca%str

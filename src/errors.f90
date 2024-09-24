@@ -129,17 +129,31 @@ end function err_non_int_subscript
 
 !===============================================================================
 
-function err_bad_float(context, span, num) result(err)
+function err_bad_f32(context, span, num) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: num
-	err = err_prefix//'bad f32 float `'//num//'`' &
+	err = err_prefix//'bad f32 number `'//num//'`' &
 		//underline(context, span) &
-		//' bad float'//color_reset
+		//' bad real number'//color_reset
 
-end function err_bad_float
+end function err_bad_f32
+
+!===============================================================================
+
+function err_bad_f64(context, span, num) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: num
+	err = err_prefix//'bad f64 number `'//num//'`' &
+		//underline(context, span) &
+		//' bad real number'//color_reset
+
+end function err_bad_f64
 
 !===============================================================================
 

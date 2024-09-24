@@ -23,7 +23,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	!********
 
-	character(len = :), allocatable :: exp_type, act_type
+	character(len = :), allocatable :: exp_type, act_type, param_name
 
 	integer :: i, io, id_index, pos0, type_
 
@@ -246,9 +246,11 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		! only way to do it for intrinsic fns, which don't actually have a val
 		! anywhere
 		if (i <= size(fn%params)) then
-			param_val = fn%params(i)
+			param_val  = fn%params(i)
+			param_name = fn%param_names%v(i)%s
 		else
 			param_val%type = fn%variadic_type
+			param_name = fn%param_names%v( size(fn%params) )%s
 		end if
 
 		if (types_match(param_val, args%v(i)%val) /= TYPE_MATCH) then
@@ -268,7 +270,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 				span, &
 				identifier%text, &
 				i - 1, &  ! 0-based index in err msg
-				fn%param_names%v(i)%s, &
+				param_name, &
 				exp_type, &
 				act_type))
 

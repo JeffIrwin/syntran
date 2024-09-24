@@ -96,6 +96,7 @@ module syntran__utils_m
 		module procedure  i32_vec_str
 		module procedure  i64_str
 		module procedure  f32_str
+		module procedure  f64_str
 		module procedure bool1_str
 	end interface str
 
@@ -876,6 +877,21 @@ function f32_str(x) result(str)
 	str = trim(adjustl(buffer))
 
 end function f32_str
+
+!===============================================================================
+
+function f64_str(x) result(str)
+
+	real(kind = 8), intent(in) :: x
+
+	character(len = :), allocatable :: str
+
+	character(len = 28) :: buffer
+
+	write(buffer, '(es25.15)') x
+	str = trim(adjustl(buffer))
+
+end function f64_str
 
 !===============================================================================
 

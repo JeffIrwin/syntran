@@ -55,9 +55,10 @@ function lex(lexer) result(token)
 	integer(kind = 4) :: i32
 	integer(kind = 8) :: i64
 
-	logical :: float
+	logical :: float, float32, float64
 
 	real(kind = 4) :: f32
+	real(kind = 8) :: f64
 
 	type(char_vector_t) :: char_vec
 	type(text_span_t) :: span
@@ -91,26 +92,48 @@ function lex(lexer) result(token)
 
 			lexer%pos = lexer%pos + 1
 		end do
+
+		! TODO: think about this.  Is it consistent with the way that i32/i64
+		! vars are inferred on declaration from a literal?
+		float32 = .false.
+		float64 = .false.
+		if (float .and. lexer%current() == "f") then
+			float32 = .true.
+			lexer%pos = lexer%pos + 1
+		else if (float) then
+			float64 = .true.
+		end if
 		text = lexer%text(start: lexer%pos-1)
 
 		!print *, 'float text = ', quote(text)
 
-		if (float) then
-
-			! TODO: after f64 is supported, consider parsing that as the default
-			! float type and requiring something like 1.0f for f32
+		if (float32) then
 
 			! This io check can catch problems like `1.234e+1e+2` which look
 			! like a float but aren't correctly formatted
 			read(text, *, iostat = io) f32
 			if (io /= exit_success) then
 				span = new_span(start, len(text))
-				call lexer%diagnostics%push(err_bad_float( &
+				call lexer%diagnostics%push(err_bad_f32( &
 					lexer%context, span, text))
 			end if
 
 			val   = new_literal_value(f32_type, f32 = f32)
 			token = new_token(f32_token, start, text, val)
+
+		else if (float64) then
+
+			! This io check can catch problems like `1.234e+1e+2` which look
+			! like a float but aren't correctly formatted
+			read(text, *, iostat = io) f64
+			if (io /= exit_success) then
+				span = new_span(start, len(text))
+				call lexer%diagnostics%push(err_bad_f64( &
+					lexer%context, span, text))
+			end if
+
+			val   = new_literal_value(f64_type, f64 = f64)
+			token = new_token(f64_token, start, text, val)
 
 		else
 
