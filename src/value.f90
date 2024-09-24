@@ -549,7 +549,7 @@ recursive function value_to_str(val) result(ans)
 	!********
 
 	integer :: j
-	integer(kind = 8) :: i8, j8, prod, n, nj
+	integer(kind = 8) :: i8, prod, n
 
 	type(char_vector_t) :: str_vec
 

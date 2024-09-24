@@ -23,13 +23,13 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	!********
 
-	character(len = :), allocatable :: param_type, arg_type, exp_type, act_type
+	character(len = :), allocatable :: exp_type, act_type
 
-	integer :: i, io, id_index, param_rank, arg_rank, pos0, type_
+	integer :: i, io, id_index, pos0, type_
 
 	type(fn_t) :: fn
 
-	type(integer_vector_t) :: ranks, pos_args
+	type(integer_vector_t) :: pos_args
 
 	type(syntax_node_t) :: arg
 	type(syntax_node_vector_t) :: args
@@ -296,14 +296,12 @@ module function parse_fn_declaration(parser) result(decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: i, j, io, pos0, rank, fn_beg, fn_name_end
+	integer :: i, io, pos0, rank, fn_beg, fn_name_end
 
 	type(fn_t) :: fn
 
 	type( string_vector_t) :: names
 	type(integer_vector_t) :: pos_args
-
-	type(struct_t) :: struct
 
 	type(syntax_node_t) :: body
 	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, &
@@ -311,7 +309,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 	type(text_span_t) :: span
 
-	type(value_t) :: val, type
+	type(value_t) :: type
 	type(value_vector_t) :: types
 
 	! Like a for statement, a fn declaration has its own scope (for its
@@ -492,7 +490,7 @@ module function parse_struct_declaration(parser) result(decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: itype, i, io, pos0, rank
+	integer :: itype, i, io, pos0
 
 	type(struct_t) :: struct, dummy_struct
 

@@ -23,7 +23,7 @@ module function parse_return_statement(parser) result(statement)
 
 	!********
 
-	integer :: right_beg, right_end, exp_type, act_type, exp_rank, act_rank
+	integer :: right_beg, right_end
 
 	type(syntax_token_t) :: return_token, semi
 	type(text_span_t) :: span

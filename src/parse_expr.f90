@@ -26,14 +26,12 @@ recursive module function parse_expr_statement(parser) result(expr)
 	logical :: is_op_allowed
 
 	integer :: io, ltype, rtype, pos0, lrank, rrank, larrtype, &
-		rarrtype, id_index, search_io
+		rarrtype, search_io
 
-	type(syntax_node_t) :: right, member
+	type(syntax_node_t) :: right
 	type(syntax_token_t) :: let, identifier, op
 
 	type(text_span_t) :: span
-
-	type(value_t) :: var
 
 	!print *, 'starting parse_expr_statement()'
 
@@ -380,8 +378,6 @@ recursive module function parse_primary_expr(parser) result(expr)
 
 	!********
 
-	integer :: io
-
 	logical :: bool, exists
 
 	type(syntax_token_t) :: left, right, keyword, token
@@ -511,7 +507,7 @@ recursive module function parse_name_expr(parser) result(expr)
 
 	!********
 
-	integer :: io, id_index, span0, span1
+	integer :: io, id_index
 
 	type(syntax_token_t) :: identifier
 	type(text_span_t) :: span
@@ -543,7 +539,6 @@ recursive module function parse_name_expr(parser) result(expr)
 	!	allocated(expr%val%array)
 
 	!print *, '%current_kind() = ', kind_name(parser%current_kind())
-	span0 = parser%current_pos()
 	call parser%parse_subscripts(expr)
 
 	!print *, "expr%val%type = ", kind_name(expr%val%type)

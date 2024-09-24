@@ -51,8 +51,6 @@ recursive subroutine syntax_eval(node, state, res)
 
 	!********
 
-	integer :: i
-
 	!print *, "starting syntax_eval()"
 	!print *, "node kind = ", kind_name(node%kind)
 
@@ -247,7 +245,7 @@ recursive subroutine eval_name_expr(node, state, res)
 
 	!********
 
-	integer :: rank_res, idim_, idim_res, type
+	integer :: rank_res, idim_, idim_res
 	integer(kind = 8) :: il, iu, i8, index_
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
@@ -378,12 +376,6 @@ subroutine eval_dot_expr(node, state, res)
 	type(value_t), intent(out) :: res
 
 	!********
-
-	integer :: id, mem_kind
-
-	type(syntax_node_t) :: mem, tmp_node
-
-	type(value_t) :: val, tmp_val
 
 	!print *, "eval dot_expr"
 	!print *, "id_index = ", node%id_index
@@ -1325,11 +1317,9 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 	!********
 
-	integer :: rank_res, id, mem_kind
+	integer :: rank_res, id
 	integer(kind = 8) :: i8, index_, len8
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
-
-	type(syntax_node_t) :: mem
 
 	type(value_t) :: array_val, rhs, tmp
 

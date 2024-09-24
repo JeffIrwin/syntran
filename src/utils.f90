@@ -409,9 +409,8 @@ function read_line(iu, iostat) result(str)
 	!********
 
 	character :: c
-	character(len = :), allocatable :: tmp
 
-	integer :: i, io, str_cap, tmp_cap
+	integer :: io
 
 	type(char_vector_t) :: sb  ! string builder
 
@@ -463,9 +462,10 @@ function read_file(file, iostat) result(str)
 	!********
 
 	character :: c
-	character(len = :), allocatable :: tmp
 
-	integer :: i, io, str_cap, tmp_cap, iu
+	integer :: io, iu
+
+	type(char_vector_t) :: sb  ! string builder
 
 	open(file = file, newunit = iu, status = 'old', iostat = io)
 	if (io /= exit_success) then
@@ -473,14 +473,8 @@ function read_file(file, iostat) result(str)
 		return
 	end if
 
-	! Buffer string with some initial length
-	!
-	! TODO: char_vector_t
-	str_cap = 64
-	allocate(character(len = str_cap) :: str)
-
 	! Read 1 character at a time until end
-	i = 0
+	sb = new_char_vector()
 	do
 		read(iu, '(a)', advance = 'no', iostat = io) c
 		if (io == iostat_end) then
@@ -491,30 +485,11 @@ function read_file(file, iostat) result(str)
 		!if (io == iostat_eor) exit
 		if (io == iostat_eor) c = line_feed
 
-		i = i + 1
-
-		if (i > str_cap) then
-			!print *, 'growing str'
-
-			! Grow the buffer capacity.  What is the optimal growth factor?
-			tmp_cap = 2 * str_cap
-			allocate(character(len = tmp_cap) :: tmp)
-			tmp(1: str_cap) = str
-
-			call move_alloc(tmp, str)
-			str_cap = tmp_cap
-
-			!print *, 'str_cap  = ', str_cap
-			!print *, 'len(str) = ', len(str)
-
-		end if
-		str(i:i) = c
+		call sb%push(c)
 
 	end do
 	close(iu)
-
-	! Trim unused chars from buffer
-	str = str(1:i)
+	str = sb%trim()
 
 	!print *, 'str = '
 	!print *, str

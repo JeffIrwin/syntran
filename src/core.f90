@@ -38,7 +38,6 @@ module syntran__core_m
 	!      + update struct sample.  include struct/array combos, nesting, etc.
 	!        maybe make separate simple and compound struct samples
 	!    * tbd:
-	!      + remove unused vars per cmake warnings
 	!      + improved to_str() conversion with labels of struct name and member names
 	!  - jumping control flow:
 	!    * fn return statement done

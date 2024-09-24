@@ -2537,7 +2537,7 @@ subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 
 	!********
 
-	integer :: i, io
+	integer :: io
 	logical :: overwritel
 
 	!print *, 'inserting ', quote(key)
@@ -2565,10 +2565,6 @@ function struct_exists(dict, key) result(exists)
 	character(len = *), intent(in) :: key
 	logical :: exists
 
-	!********
-
-	integer :: i, io, id_index
-
 	exists = struct_ternary_exists(dict%dict%root, key)
 
 end function struct_exists
@@ -2590,7 +2586,7 @@ subroutine struct_search(dict, key, id_index, iostat, val)
 
 	!********
 
-	integer :: i, io
+	integer :: io
 
 	!print *, "starting struct search"
 
