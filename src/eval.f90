@@ -866,6 +866,8 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	case ("parse_f32")
 
+		! TODO: trim "f" literal suffix if present
+
 		call syntax_eval(node%args(1), state, arg)
 		read(arg%sca%str%s, *, iostat = io) res%sca%f32
 		if (io /= 0) then

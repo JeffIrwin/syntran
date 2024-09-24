@@ -95,6 +95,10 @@ function lex(lexer) result(token)
 
 		! TODO: think about this.  Is it consistent with the way that i32/i64
 		! vars are inferred on declaration from a literal?
+
+		! TODO: presence of "f" should force float regardless of whether there's
+		! a decimal point, e.g. "69f" should be float not int
+
 		float32 = .false.
 		float64 = .false.
 		if (float .and. lexer%current() == "f") then
@@ -111,7 +115,7 @@ function lex(lexer) result(token)
 
 			! This io check can catch problems like `1.234e+1e+2` which look
 			! like a float but aren't correctly formatted
-			read(text, *, iostat = io) f32
+			read(text(1: len(text)-1), *, iostat = io) f32
 			if (io /= exit_success) then
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_f32( &
