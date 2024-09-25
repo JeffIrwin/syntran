@@ -377,9 +377,9 @@ subroutine declare_intrinsic_fns(fns)
 
 	str_fn%type%type = str_type
 
-	allocate(str_fn%params(1))
-	allocate(str_fn%param_names%v(1))
-	max_f32_fn%param_names%v(1)%s = "a"
+	allocate(str_fn%params(0))
+	allocate(str_fn%param_names%v(0))
+	!str_fn%param_names%v(1)%s = "a"
 
 	str_fn%variadic_min  = 0
 	str_fn%variadic_type = any_type

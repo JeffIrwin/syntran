@@ -3,13 +3,13 @@ fn sum_fn(v: [f32; :]): f32
 {
 	// Don't use this in production.  There will be a sum() intrinsic soon
 	// enough
-	let s = 0.0;
+	let s = 0.0f;
 	for i in [0: size(v, 0)]
 		s = s + v[i];
 	return s;
 }
 
-let vec = [0.0: 5.0; 6];
+let vec = [0.0f: 5.0f; 6];
 let ans = sum_fn(vec);
 return ans;
 

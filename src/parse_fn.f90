@@ -250,7 +250,12 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			param_name = fn%param_names%v(i)%s
 		else
 			param_val%type = fn%variadic_type
-			param_name = fn%param_names%v( size(fn%params) )%s
+
+			if (size(fn%params) > 0) then
+				param_name = fn%param_names%v( size(fn%params) )%s
+			else
+				param_name = ""
+			end if
 		end if
 
 		if (types_match(param_val, args%v(i)%val) /= TYPE_MATCH) then

@@ -3,9 +3,9 @@ fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 {
 	// Matrix-vector multiplication.  Return mat * vec
 	//println("starting mul_mat_vec()");
-	//let ans =  [0.0; size(mat,0)];
+	//let ans =  [0.0f; size(mat,0)];
 	let n = size(mat,0);
-	let ans =  [0.0; n];
+	let ans =  [0.0f; n];
 	for     j in [0: size(mat,1)]
 		for i in [0: size(mat,0)]
 			ans[i] = ans[i] + mat[i,j] * vec[j];
@@ -22,7 +22,7 @@ fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
 	//println("m = ", m);
 	let n = size(b,1);
 	//println("n = ", n);
-	let c = [0.0; l, n];
+	let c = [0.0f; l, n];
 	for         k in [0: n]
 		for     j in [0: m]
 			for i in [0: l]
@@ -30,15 +30,15 @@ fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
 	return c;
 }
 
-// 3D vector with x = 1.0, y = 2.0, z = 3.0
-let vec = [1.0, 2.0, 3.0];
+// 3D vector with x = 1.0f, y = 2.0f, z = 3.0f
+let vec = [1.0f, 2.0f, 3.0f];
 
 // 3x3 identity matrix.  Sizes go after the semicolon
 let eye3 =
 	[
-		1.0, 0.0, 0.0,
-		0.0, 1.0, 0.0,
-		0.0, 0.0, 1.0 ;
+		1.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 1.0f ;
 		3, 3
 	];
 
@@ -48,18 +48,18 @@ eye3;
 // this appears transposed
 let rotx =
 	[
-		1.0,  0.0,  0.0,
-		0.0,  0.0,  1.0,
-		0.0, -1.0,  0.0 ;
+		1.0f,  0.0f,  0.0f,
+		0.0f,  0.0f,  1.0f,
+		0.0f, -1.0f,  0.0f ;
 		3, 3
 	];
 
 // 90 degree y rotation
 let roty =
 	[
-		0.0,  0.0, -1.0,
-		0.0,  1.0,  0.0,
-		1.0,  0.0,  0.0 ;
+		0.0f,  0.0f, -1.0f,
+		0.0f,  1.0f,  0.0f,
+		1.0f,  0.0f,  0.0f ;
 		3, 3
 	];
 
@@ -80,5 +80,5 @@ let rotxx  = mul_mat(rotx, rotx);
 let rotxxy = mul_mat(rotxx, roty);
 return mul_mat_vec(mul_mat(rotxxy, roty), vec);
 
-// [-1.0, -2.0, 3.0]
+// [-1.0f, -2.0f, 3.0f]
 

@@ -701,7 +701,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('sum([1: 5]);') == "10", &
 			eval('sum([1: 2: 6]);') == "9", &
 			eval('sum([7, 3, 15, 1; 2, 2]);') == "26", &
-			eval('[sum([0.0: 3.0; 4])];') == "[6.000000E+00]", &
+			eval('[sum([0.0f: 3.0f; 4])];') == "[6.000000E+00]", &
 			eval('sum(i64([1: 4]));') == "6", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
@@ -891,31 +891,31 @@ subroutine unit_test_for_1(npass, nfail)
 			eval('let sum_ = i64(0); for x in [i64(5):-1:0] sum_ += x; sum_;', quiet) == '15', &
 			eval('let sum_ = i64(0); for x in [i64(5):-1:-2] sum_ += x; sum_;', quiet) == '14', &
 			eval('let sum_ = i64(0); for x in [i64(0):2:6] sum_ += x; sum_;', quiet) == '6', &
-			eval('let sum_ = 0.0; for x in [0.0: 1.0: 5.0] sum_ += x; [sum_];', quiet) == '[1.000000E+01]', &  ! [] is poor man's trim()
-			eval('let sum_ = 0.0; for x in [0.0:1.0:6.0] sum_ += x; [sum_];', quiet)   == '[1.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [10.0:1.0:16.0] sum_ += x; [sum_];', quiet) == '[7.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [5.0:-1.0:0.0] sum_ += x; [sum_];', quiet)  == '[1.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [5.0:-1.0:-2.0] sum_ += x; [sum_];', quiet) == '[1.400000E+01]', &
-			eval('let sum_ = 0.0; for x in [0.0:2.0:6.0] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
+			eval('let sum_ = 0.0f; for x in [0.0f: 1.0f: 5.0f] sum_ += x; [sum_];', quiet) == '[1.000000E+01]', &  ! [] is poor man's trim()
+			eval('let sum_ = 0.0f; for x in [0.0f:1.0f:6.0f] sum_ += x; [sum_];', quiet)   == '[1.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [10.0f:1.0f:16.0f] sum_ += x; [sum_];', quiet) == '[7.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [5.0f:-1.0f:0.0f] sum_ += x; [sum_];', quiet)  == '[1.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [5.0f:-1.0f:-2.0f] sum_ += x; [sum_];', quiet) == '[1.400000E+01]', &
+			eval('let sum_ = 0.0f; for x in [0.0f:2.0f:6.0f] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
 			eval('let vec = [0:6]; let sum_ = 0; for x in vec sum_ += x; sum_;', quiet) == '15', &
-			eval('let vec = [0.0:1.0:6.0]; let sum_ = 0.0; for x in vec sum_ += x; [sum_];', quiet) == '[1.500000E+01]', &
+			eval('let vec = [0.0f:1.0f:6.0f]; let sum_ = 0.0f; for x in vec sum_ += x; [sum_];', quiet) == '[1.500000E+01]', &
 			eval('let mat = [1,2,3, 4,5,6; 3,2]; let sum_ = 0; for x in mat sum_ += x; sum_;', quiet) == '21', &
-			eval('let sum_ = 0.0; for x in [0.0: 4.0; 5] sum_ += x; [sum_];', quiet) == '[1.000000E+01]', &  ! [] is poor man's trim()
-			eval('let sum_ = 0.0; for x in [0.0: 5.0; 6] sum_ += x; [sum_];', quiet)   == '[1.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [10.0: 15.0; 6] sum_ += x; [sum_];', quiet) == '[7.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [5.0: 1.0; 5] sum_ += x; [sum_];', quiet)  == '[1.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [5.0: -1.0; 7] sum_ += x; [sum_];', quiet) == '[1.400000E+01]', &
-			eval('let sum_ = 0.0; for x in [0.0: 4.0; 3] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
-			eval('let sum_ = 0.0; for x in [0.0, 4.0, 2.0] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
+			eval('let sum_ = 0.0f; for x in [0.0f: 4.0f; 5] sum_ += x; [sum_];', quiet) == '[1.000000E+01]', &  ! [] is poor man's trim()
+			eval('let sum_ = 0.0f; for x in [0.0f: 5.0f; 6] sum_ += x; [sum_];', quiet)   == '[1.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [10.0f: 15.0f; 6] sum_ += x; [sum_];', quiet) == '[7.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [5.0f: 1.0f; 5] sum_ += x; [sum_];', quiet)  == '[1.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [5.0f: -1.0f; 7] sum_ += x; [sum_];', quiet) == '[1.400000E+01]', &
+			eval('let sum_ = 0.0f; for x in [0.0f: 4.0f; 3] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
+			eval('let sum_ = 0.0f; for x in [0.0f, 4.0f, 2.0f] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
 			eval('let sum_ = 0; for x in [4, 0, 2] sum_ += x; sum_;', quiet)   == '6', &
 			eval('let sum_ = 0; for x in i32([4, 0, 2]) sum_ += x; sum_;', quiet)   == '6', &
 			eval('let sum_ = i64(0); for x in [i64(4), i64(0), i64(2)] sum_ += x; sum_;', quiet)   == '6', &
 			eval('let sum_ = 0; for x in [4, 0, 3, 2; 2, 2] sum_ += x; sum_;', quiet)   == '9', &
 			eval('let sum_ = i64(0); for x in [i64(4), i64(0), i64(3), i64(2); 2, 2] sum_ += x; sum_;', quiet)   == '9', &
-			eval('let sum_ = 0.0; for x in [4.0, 0.0, 3.0, 2.0; 2, 2] sum_ += x; [sum_];', quiet)   == '[9.000000E+00]', &
+			eval('let sum_ = 0.0f; for x in [4.0f, 0.0f, 3.0f, 2.0f; 2, 2] sum_ += x; [sum_];', quiet)   == '[9.000000E+00]', &
 			eval('let sum_ = 0; for x in [42; 5] sum_ += x; sum_;', quiet)   == '210', &
 			eval('let sum_ = i64(0); for x in [i64(42); 5] sum_ += x; sum_;', quiet)   == '210', &
-			eval('let sum_ = 0.0; for x in [42.0; 5] sum_ += x; [sum_];', quiet)   == '[2.100000E+02]', &
+			eval('let sum_ = 0.0f; for x in [42.0f; 5] sum_ += x; [sum_];', quiet)   == '[2.100000E+02]', &
 			eval('let sum_ = 0; for x in [42; 2, 3] sum_ += x; sum_;', quiet)   == '252', &
 			eval('let sum_ = 0; for x in [42; 2, 10, 3] sum_ += x; sum_;', quiet)   == '2520', &
 			.false.  & ! so I don't have to bother w/ trailing commas
@@ -1082,7 +1082,7 @@ subroutine unit_test_f32_1(npass, nfail)
 			abs(eval_f32('1.1f /  2  ;') - (1.1 /  2  )) < tol, &
 			abs(eval_f32('1   /  2.1f;') - (1   /  2.1)) < tol, &
 			abs(eval_f32('1.1f /  2.1f;') - (1.1 /  2.1)) < tol, &
-			abs(eval_f32('1.1 f** 2  ;') - (1.1 ** 2  )) < tol, &
+			abs(eval_f32('1.1f ** 2  ;') - (1.1 ** 2  )) < tol, &
 			abs(eval_f32('1   ** 2.1f;') - (1   ** 2.1)) < tol, &
 			abs(eval_f32('1.1f ** 2.1f;') - (1.1 ** 2.1)) < tol, &
 			abs(eval_f32('1.2e-3f + 4.5e-3f;') - (1.2e-3 + 4.5e-3)) < tol, &
@@ -1286,7 +1286,7 @@ subroutine unit_test_str(npass, nfail)
 			eval('"testing " + str(1);') == 'testing 1', &
 			eval('"testing " + str(true) ;') == 'testing true', &
 			eval('"testing " + str(false);') == 'testing false', &
-			eval('"testing " + str(1.0);') == 'testing     1.000000E+00', &
+			eval('"testing " + str(1.0f);') == 'testing     1.000000E+00', &
 			eval('"testing testing " + str(1) + " " + str(2);') == 'testing testing 1 2', &
 			eval('"testing " + str(1, " ", 2, " ", 1, " ", 2);') == 'testing 1 2 1 2', &
 			eval('"hello world";') == 'hello world'  &
@@ -2070,24 +2070,25 @@ subroutine unit_test_array_f32_1(npass, nfail)
 
 	tests = &
 		[   &
-			eval('[42.0];') == '[4.200000E+01]',  &
-			eval('[-42.,1337.];') == '[-4.200000E+01, 1.337000E+03]', &
-			eval('[3., 2., 1.];') == '[3.000000E+00, 2.000000E+00, 1.000000E+00]', &
-			eval('[3.: 1.; 3];') == '[3.000000E+00, 2.000000E+00, 1.000000E+00]', &
-			eval('[3.: 1.; 5];') == '[3.000000E+00, 2.500000E+00, 2.000000E+00, 1.500000E+00, 1.000000E+00]', &
-			eval('[1.: 3.; 3];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
-			eval('[1.: 3.; 5];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
-			eval('[1.: 0.5: 2.9];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00]', &
-			eval('[1.: 0.5: 3.4];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
-			eval('[1.: 0.5: 3.9];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00, 3.500000E+00]', &
-			eval('[4.: 0.5: 5.4];') == '[4.000000E+00, 4.500000E+00, 5.000000E+00]', &
-			eval('[5.4: -0.5: 4.0];') == '[5.400000E+00, 4.900000E+00, 4.400000E+00]', &
-			eval('[2.-3.: 1.1: 6./3. + 3.];') == '[-1.000000E+00, 1.000000E-01, 1.200000E+00, 2.300000E+00, 3.400000E+00, 4.500000E+00]', &
-			eval('[42.0; 3];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
-			eval('[42.0; 4];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
-			eval('let myArray = [2.-3.: 1.1: 6./3. + 3.];') &
+			eval('[42.0f];') == '[4.200000E+01]',  &
+			eval('[-42.f,1337.f];') == '[-4.200000E+01, 1.337000E+03]', &
+			eval('[3.f, 2.f, 1.f];') == '[3.000000E+00, 2.000000E+00, 1.000000E+00]', &
+			eval('[3.f: 1.f; 3];') == '[3.000000E+00, 2.000000E+00, 1.000000E+00]', &
+			eval('[3.f: 1.f; 5];') == '[3.000000E+00, 2.500000E+00, 2.000000E+00, 1.500000E+00, 1.000000E+00]', &
+			eval('[1.f: 3.f; 3];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('[1.f: 3.f; 5];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
+			eval('[1.f: 0.5f: 2.9f];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00]', &
+			eval('[1.f: 0.5f: 3.4f];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
+			eval('[1.f: 0.5f: 3.9f];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00, 3.500000E+00]', &
+			eval('[4.f: 0.5f: 5.4f];') == '[4.000000E+00, 4.500000E+00, 5.000000E+00]', &
+			eval('[5.4f: -0.5f: 4.0f];') == '[5.400000E+00, 4.900000E+00, 4.400000E+00]', &
+			eval('[2.f-3.f: 1.1f: 6.f/3.f + 3.f];') &
 				== '[-1.000000E+00, 1.000000E-01, 1.200000E+00, 2.300000E+00, 3.400000E+00, 4.500000E+00]', &
-			eval('[48.-6., 13.*100. + 37.];') == '[4.200000E+01, 1.337000E+03]'  &
+			eval('[42.0f; 3];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
+			eval('[42.0f; 4];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
+			eval('let myArray = [2.f-3.f: 1.1f: 6.f/3.f + 3.f];') &
+				== '[-1.000000E+00, 1.000000E-01, 1.200000E+00, 2.300000E+00, 3.400000E+00, 4.500000E+00]', &
+			eval('[48.f-6.f, 13.f*100.f + 37.f];') == '[4.200000E+01, 1.337000E+03]'  &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
