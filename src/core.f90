@@ -364,9 +364,9 @@ subroutine declare_intrinsic_fns(fns)
 
 	println_fn%type%type = void_type ! TODO?
 
-	allocate(println_fn%params(1))
-	allocate(println_fn%param_names%v(1))
-	max_f32_fn%param_names%v(1)%s = "a"
+	allocate(println_fn%params(0))
+	allocate(println_fn%param_names%v(0))
+	!println_fn%param_names%v(1)%s = "a"
 
 	println_fn%variadic_min  = 0
 	println_fn%variadic_type = any_type
