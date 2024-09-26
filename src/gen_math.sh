@@ -17,13 +17,13 @@ table+=("mul"      "*" )
 table+=("div"      "\/" )
 table+=("pow"      "**")
 
-echo "table = ${table[@]}"
+#echo "table = ${table[@]}"
 
 ncols=2
 nrows=$(( ${#table[@]} / $ncols ))
 
-echo "nrows = $nrows"
-echo "table 0 = ${table[0]}"
+#echo "nrows = $nrows"
+#echo "table 0 = ${table[0]}"
 
 bin_str_case="
 	case        (magic**2 * str_type + magic * str_type + str_type)
@@ -46,9 +46,6 @@ for i in $(seq 0 $(( $nrows - 1 )) ) ; do
 		# Strings only have the "+" operator defined
 		#
 		# Multi-line replacement requires awk
-
-		#sed -i "s/BIN_STR_CASE/$bin_str_case/g" "$ofile"
-		#awk -v r="$DATA" '{gsub(/_data_/,r)}1' test
 		mv "$ofile" temp
 		awk -v r="$bin_str_case" '{gsub(/BIN_STR_CASE/,r)}1' "temp" > "$ofile"
 		rm temp

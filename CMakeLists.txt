@@ -96,6 +96,11 @@ set(LIB_SRC
 	${SRC_DIR}/errors.f90
 	${SRC_DIR}/value.f90
 	${SRC_DIR}/bool.f90
+	${SRC_DIR}/math_bin_add.f90
+	${SRC_DIR}/math_bin_subtract.f90
+	${SRC_DIR}/math_bin_mul.f90
+	${SRC_DIR}/math_bin_div.f90
+	${SRC_DIR}/math_bin_pow.f90
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/types.f90
 	${SRC_DIR}/lex.f90
