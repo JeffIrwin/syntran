@@ -328,6 +328,23 @@ subroutine mul_value_t(left, right, res, op_text)
 	case        (magic**2 * f64_type + magic * i32_type + f64_type)
 		res%sca%f64 = left%sca%i32 * right%sca%f64
 
+	!****
+	! Mixed f32/f64 cases
+	case        (magic**2 * f64_type + magic * f64_type + f32_type)
+		res%sca%f64 = left%sca%f64 * right%sca%f32
+	case        (magic**2 * f64_type + magic * f32_type + f64_type)
+		res%sca%f64 = left%sca%f32 * right%sca%f64
+
+	! TODO: array cases above too
+
+	!! TODO?
+	!case        (magic**2 * f32_type + magic * f64_type + f32_type)
+	!	res%sca%f32 = left%sca%f64 * right%sca%f32
+	!case        (magic**2 * f32_type + magic * f32_type + f64_type)
+	!	res%sca%f32 = left%sca%f32 * right%sca%f64
+
+	!****
+
 
 
 	case default

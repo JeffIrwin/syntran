@@ -31,6 +31,7 @@ module syntran__core_m
 	! TODO:
 	!  - f64
 	!    * remove auto-gen source from git tracking
+	!    * document auto-gen in readme
 	!    * overload intrinsic fns
 	!    * mixed f32/f64 arithmetic/comparison operators
 	!  - add tests to cover syntran-explorer samples. might be a bit much to
