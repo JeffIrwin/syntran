@@ -731,10 +731,16 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	! Intrinsic fns
 	select case (node%identifier%text)
-	case ("exp")
+	case ("0exp_f32")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f32 = exp(arg1%sca%f32)
+		state%returned = .true.
+
+	case ("0exp_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = exp(arg1%sca%f64)
 		state%returned = .true.
 
 	case ("0min_i32")

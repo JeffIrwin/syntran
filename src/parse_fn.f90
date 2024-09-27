@@ -81,6 +81,18 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	!  TODO: split out to a routine if possible 
 	!
 	select case (identifier%text)
+	case ("exp")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (f32_type)
+			fn_call%identifier%text = "0exp_f32"
+		case default
+			fn_call%identifier%text = "0exp_f64"
+		end select
+
 	case ("min")
 
 		type_ = i32_type

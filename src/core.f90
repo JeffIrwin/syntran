@@ -221,12 +221,12 @@ subroutine declare_intrinsic_fns(fns)
 
 	integer :: id_index, num_fns
 
-	type(fn_t) :: exp_fn, min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
+	type(fn_t) :: exp_f32_fn, min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
 		i64_sca_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
 		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, &
 		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn, &
-		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn
+		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn, exp_f64_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -235,17 +235,31 @@ subroutine declare_intrinsic_fns(fns)
 
 	!********
 
-	! TODO: polymorphic in f32, f64, etc.
-	exp_fn%type%type = f32_type
-	allocate(exp_fn%params(1))
-	allocate(exp_fn%param_names%v(1))
-	exp_fn%params(1)%type = f32_type
-	exp_fn%param_names%v(1)%s = "x"
+	! Should exp be overloaded for ints?
+
+	exp_f32_fn%type%type = f32_type
+	allocate(exp_f32_fn%params(1))
+	allocate(exp_f32_fn%param_names%v(1))
+	exp_f32_fn%params(1)%type = f32_type
+	exp_f32_fn%param_names%v(1)%s = "x"
 
 	! Insert the fn into the dict. These are global intrinsic fns, so there's no
 	! need to check iostat
 
-	call fns%insert("exp", exp_fn, id_index)
+	call fns%insert("0exp_f32", exp_f32_fn, id_index)
+
+	!********
+
+	exp_f64_fn%type%type = f64_type
+	allocate(exp_f64_fn%params(1))
+	allocate(exp_f64_fn%param_names%v(1))
+	exp_f64_fn%params(1)%type = f64_type
+	exp_f64_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0exp_f64", exp_f64_fn, id_index)
 
 	!********
 
@@ -778,6 +792,8 @@ subroutine declare_intrinsic_fns(fns)
 
 	fns%fns = &
 		[ &
+			exp_f32_fn  , &
+			exp_f64_fn  , &
 			min_i32_fn  , &
 			min_i64_fn  , &
 			min_f32_fn  , &

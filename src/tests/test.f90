@@ -624,6 +624,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 		[   &
 			abs(eval_f32('exp(0.0f);') - 1.0) < tol,  &
 			abs(eval_f32('exp(1.0f);') - exp(1.0)) < tol,  &
+			abs(eval_f64('exp(0.0);') - 1.0d0) < tol,  &
+			abs(eval_f64('exp(1.0);') - exp(1.0d0)) < tol,  &
 			eval_i32('min(3, 2);')  == 2,  &
 			eval_i32('min(2, 2);')  == 2,  &
 			eval_i32('min(2, 3, 4);')  == 2,  &
@@ -705,6 +707,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f32('parse_f32("2");') - 2.000000E+00) < tol, &
 			abs(eval_f32('parse_f32("-3");') - -3.000000E+00) < tol, &
 			abs(eval_f32('parse_f32("-2");') - -2.000000E+00) < tol, &
+			abs(eval_f64('parse_f64("-3.000000E+00");') - -3.000000d+00) < tol, &
+			abs(eval_f64('parse_f64("-2.000000E+00");') - -2.000000d+00) < tol, &
+			abs(eval_f64('parse_f64("3.0");') - 3.000000d+00) < tol, &
+			abs(eval_f64('parse_f64("2.0");') - 2.000000d+00) < tol, &
 			eval_i64('len(     "");')  == 0,  &
 			eval_i64('len(    " ");')  == 1,  &
 			eval_i64('len(   "  ");')  == 2,  &
