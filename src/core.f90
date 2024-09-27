@@ -34,6 +34,8 @@ module syntran__core_m
 	!    * document auto-gen in readme
 	!    * overload intrinsic fns
 	!    * mixed f32/f64 arithmetic/comparison operators
+	!      + arithmetic wip
+	!      + modulo, unary negative need work
 	!  - add tests to cover syntran-explorer samples. might be a bit much to
 	!    automate cross-repo testing on the same source, but a little copy/paste
 	!    is better than nothing
