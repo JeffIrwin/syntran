@@ -287,7 +287,48 @@ subroutine unit_test_comp_f32(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: copy for f32/f64
+	tests = &
+		[   &
+			eval('13.37f >  13.36f ;')  == 'true',  &
+			eval('13.37f >  13.36f ;')  == 'true',  &
+			eval('13.37f >  13.37f ;')  == 'false',  &
+			eval('13.37f >  13.38f ;')  == 'false',  &
+			eval('13.37f <  13.36f ;')  == 'false',  &
+			eval('13.37f <  13.37f ;')  == 'false',  &
+			eval('13.37f <  13.38f ;')  == 'true',  &
+			eval('13.37f >= 13.36f ;')  == 'true',  &
+			eval('13.37f >= 13.37f ;')  == 'true',  &
+			eval('13.37f >= 13.38f ;')  == 'false',  &
+			eval('13.37f <= 13.36f ;')  == 'false',  &
+			eval('13.37f <= 13.37f ;')  == 'true',  &
+			eval('13.37f <= 13.38f ;')  == 'true',  &
+			eval('13.37f != 13.36f ;')  == 'true',  &
+			eval('13.37f != 13.37f ;')  == 'false',  &
+			eval('13.37f != 13.38f ;')  == 'true',  &
+			eval('13.37f == 4.2f   ;')  == 'false',  &
+			eval('4.2f   == 13.37f ;')  == 'false',  &
+			eval('1.0f   == 1.0f   ;')  == 'true'    &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_comp_f32
+
+!===============================================================================
+
+subroutine unit_test_comp_f64(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f64 comparisons'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
 
 	tests = &
 		[   &
@@ -313,7 +354,7 @@ subroutine unit_test_comp_f32(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_comp_f32
+end subroutine unit_test_comp_f64
 
 !===============================================================================
 
@@ -441,28 +482,39 @@ subroutine unit_test_comp_ass(npass, nfail)
 		[   &
 			eval('let j = 10; j += 3; j;', quiet) == '13', &
 			abs(eval_f32('let f = 0.5f; f += 0.25f; f;', quiet) - 0.75) < tol, &
+			abs(eval_f64('let f = 0.5; f += 0.25; f;', quiet) - 0.75d0) < tol, &
 			eval('let s = "hello "; s += "world"; s;', quiet) == 'hello world', &
 			abs(eval_f32('let f = 0.5f; f += 0.25f;', quiet) - 0.75) < tol, &
+			abs(eval_f64('let f = 0.5; f += 0.25;', quiet) - 0.75d0) < tol, &
 			eval('let s = "hello "; s += "world";', quiet) == 'hello world', &
 			eval('let iv = [10; 3]; iv[0] += 5;', quiet) == '15', &
 			eval('let iv = [10; 3]; iv[0] += 5; iv;', quiet) == '[15, 10, 10]', &
 			eval('let iv = [10; 3]; iv[1] += 5; iv;', quiet) == '[10, 15, 10]', &
 			eval('let iv = [10; 3]; iv[1] += 5.1; iv;', quiet) == '[10, 15, 10]', &
 			abs(eval_f32('let v = [10.0f; 3]; v[0] += 5.0f;', quiet) - 15) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[0] += 5.0;', quiet) - 15) < tol, &
 			eval('let v = [10.0f; 3]; v[0] += 5.0f; v;', quiet) == '[1.500000E+01, 1.000000E+01, 1.000000E+01]', &
 			eval('let v = [10.0f; 3]; v[1] += 5.0f; v;', quiet) == '[1.000000E+01, 1.500000E+01, 1.000000E+01]', &
 			eval('let v = [10.0f; 3]; v[1] += 5; v;', quiet) == '[1.000000E+01, 1.500000E+01, 1.000000E+01]', &
+			abs(eval_f64('let v = [10.0; 3]; v[0] += 5.0; sum(v);', quiet) - 35) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] += 5.0; sum(v);', quiet) - 35) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] += 5; sum(v);', quiet) - 35) < tol, &
 			eval('let i = 20; i += 5.1f;', quiet) == '25', &
+			eval('let i = 20; i += 5.1;', quiet) == '25', &
 			abs(eval_f32('let i = 20.1f; i += 5;', quiet) - 25.1) < tol, &
+			abs(eval_f64('let i = 20.1; i += 5;', quiet) - 25.1d0) < tol, &
 			eval('let j = 10; j -= 3; j;', quiet) == '7', &
 			abs(eval_f32('let f = 0.75f; f -= 0.25f; f;', quiet) - 0.5) < tol, &
+			abs(eval_f64('let f = 0.75; f -= 0.25; f;', quiet) - 0.5d0) < tol, &
 			eval('let j = 10; j -= 3;', quiet) == '7', &
 			abs(eval_f32('let f = 0.75f; f -= 0.25f;', quiet) - 0.5) < tol, &
+			abs(eval_f64('let f = 0.75; f -= 0.25;', quiet) - 0.5d0) < tol, &
 			eval('let iv = [10; 3]; iv[0] -= 4;', quiet) == '6', &
 			eval('let iv = [10; 3]; iv[0] -= 4; iv;', quiet) == '[6, 10, 10]', &
 			eval('let iv = [10; 3]; iv[1] -= 4; iv;', quiet) == '[10, 6, 10]', &
 			eval('let iv = [10; 3]; iv[1] -= 3.9; iv;', quiet) == '[10, 6, 10]', &
 			abs(eval_f32('let v = [10.0f; 3]; v[0] -= 4.0f;', quiet) - 6) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[0] -= 4.0;', quiet) - 6) < tol, &
 			eval('let v = [10.0f; 3]; v[0] -= 4.0f; v;', quiet) == '[6.000000E+00, 1.000000E+01, 1.000000E+01]', &
 			eval('let v = [20.0f; 3]; v[1] -= 4.0f; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
 			eval('let v = [20.0f; 3]; v[1] -= 4; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
@@ -3678,6 +3730,7 @@ subroutine unit_tests(iostat)
 	call unit_test_bool       (npass, nfail)
 	call unit_test_comparisons(npass, nfail)
 	call unit_test_comp_f32   (npass, nfail)
+	call unit_test_comp_f64   (npass, nfail)
 	call unit_test_bad_syntax (npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
