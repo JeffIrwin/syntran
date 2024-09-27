@@ -1098,6 +1098,8 @@ subroutine unit_test_f32_1(npass, nfail)
 			abs(eval_f32('24 / 6 / 2.1f;') - (24 / 6 / 2.1)) < tol, &
 			abs(eval_f32('2.0f ** 5;') - (2.0 ** 5)) < tol, &
 			abs(eval_f32('3 ** 4.1f;') - (3 ** 4.1)) < tol, &
+			abs(eval_f32('1.1f + i64(2);') - (3.1)) < tol, &
+			abs(eval_f32('i64(2) + 1.1f;') - (3.1)) < tol, &
 			abs(eval_f32('3.43f - 87654345 / 27 + 76 * 234 - 65432 / 63;') &
 			       - (3.43 - 87654345 / 27 + 76 * 234 - 65432 / 63)) < tol &
 		]
@@ -1105,6 +1107,52 @@ subroutine unit_test_f32_1(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_f32_1
+
+!===============================================================================
+
+subroutine unit_test_f64_mix(npass, nfail)
+
+	! Simple f32 float tests of arithmetic and comparisons with single-line
+	! evaluations
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f64 arithmetic'
+
+	logical, allocatable :: tests(:)
+
+	real(kind = 8), parameter :: tol = 1.e-12
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! There's not much need to test other operators besides `+` because of the
+	! way `-`, `*`, `/`, and `**` are generated from templates
+	!
+	! mod (%) and unary negation are still independent
+
+	tests = &
+		[   &
+			abs(eval_f64('1.1 + 2.0;') - (3.1d0)) < tol, &
+			abs(eval_f64('1.1 + 2  ;') - (3.1d0)) < tol, &
+			abs(eval_f64('1.1 + i64(2);') - (3.1d0)) < tol, &
+			abs(eval_f64('1   + 2.1;') - (3.1d0)) < tol, &
+			abs(eval_f64('i64(1) + 2.1;') - (3.1d0)) < tol, &
+			abs(eval_f64('1.2e-3 + 4.5e-3;') - (1.2d-3 + 4.5d-3)) < tol, &
+			abs(eval_f64('1.2e-3f + 4.5e-3;') - (1.2e-3 + 4.5d-3)) < tol, &
+			abs(eval_f64('1.2e-3 + 4.5e-3f;') - (1.2d-3 + 4.5e-3)) < tol, &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_f64_mix
 
 !===============================================================================
 
@@ -3652,6 +3700,7 @@ subroutine unit_tests(iostat)
 	call unit_test_struct_arr (npass, nfail)
 	call unit_test_struct_str (npass, nfail)
 	call unit_test_struct_1   (npass, nfail)
+	call unit_test_f64_mix    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

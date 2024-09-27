@@ -3,6 +3,8 @@
 
 module syntran__bool_m
 
+	! TODO: consider auto-generating from template like math_bin_*.f90
+
 	use syntran__value_m
 
 	implicit none
