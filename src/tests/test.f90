@@ -518,37 +518,60 @@ subroutine unit_test_comp_ass(npass, nfail)
 			eval('let v = [10.0f; 3]; v[0] -= 4.0f; v;', quiet) == '[6.000000E+00, 1.000000E+01, 1.000000E+01]', &
 			eval('let v = [20.0f; 3]; v[1] -= 4.0f; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
 			eval('let v = [20.0f; 3]; v[1] -= 4; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
+			abs(eval_f64('let v = [10.0; 3]; v[0] -= 4.0; sum(v);', quiet) - 26) < tol, &
+			abs(eval_f64('let v = [20.0; 3]; v[1] -= 4.0; sum(v);', quiet) - 56) < tol, &
+			abs(eval_f64('let v = [20.0; 3]; v[1] -= 4; sum(v);', quiet) - 56) < tol, &
 			eval('let i = 20; i -= 5.1f;', quiet) == '14', &
 			abs(eval_f32('let i = 20.1f; i -= 5;', quiet) - 15.1) < tol, &
 			eval('let i = 20; i -= 3.1f;', quiet) == '16', &
 			abs(eval_f32('let i = 20.1f; i -= 3;', quiet) - 17.1) < tol, &
+			eval('let i = 20; i -= 5.1;', quiet) == '14', &
+			abs(eval_f64('let i = 20.1; i -= 5;', quiet) - 15.1d0) < tol, &
+			eval('let i = 20; i -= 3.1;', quiet) == '16', &
+			abs(eval_f64('let i = 20.1; i -= 3;', quiet) - 17.1d0) < tol, &
 			eval('let j =  7; j *= 6; j;', quiet) == '42', &
 			eval('let j = 10; j *= 3; j;', quiet) == '30', &
 			abs(eval_f32('let f = 0.5f; f *= 0.25f; f;', quiet) - 0.125) < tol, &
 			abs(eval_f32('let f = 0.5f; f *= 0.25f;', quiet) - 0.125) < tol, &
+			abs(eval_f64('let f = 0.5; f *= 0.25; f;', quiet) - 0.125d0) < tol, &
+			abs(eval_f64('let f = 0.5; f *= 0.25;', quiet) - 0.125d0) < tol, &
 			eval('let iv = [10; 3]; iv[0] *= 5;', quiet) == '50', &
 			eval('let iv = [10; 3]; iv[0] *= 5; iv;', quiet) == '[50, 10, 10]', &
 			eval('let iv = [10; 3]; iv[1] *= 5; iv;', quiet) == '[10, 50, 10]', &
 			eval('let iv = [10; 3]; iv[1] *= 5.101; iv;', quiet) == '[10, 51, 10]', &
 			abs(eval_f32('let v = [10.0f; 3]; v[0] *= 5.0f;', quiet) - 50) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[0] *= 5.0;', quiet) - 50) < tol, &
 			eval('let v = [10.0f; 3]; v[0] *= 5.0f; v;', quiet) == '[5.000000E+01, 1.000000E+01, 1.000000E+01]', &
 			eval('let v = [10.0f; 3]; v[1] *= 5.0f; v;', quiet) == '[1.000000E+01, 5.000000E+01, 1.000000E+01]', &
 			eval('let v = [10.0f; 3]; v[1] *= 5; v;', quiet) == '[1.000000E+01, 5.000000E+01, 1.000000E+01]', &
+			abs(eval_f64('let v = [10.0; 3]; v[0] *= 5.0; sum(v);', quiet) - 70) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] *= 5.0; sum(v);', quiet) - 70) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] *= 5; sum(v);', quiet) - 70) < tol, &
 			eval('let i = 20; i *= 5.101f;', quiet) == '102', &
 			abs(eval_f32('let i = 20.1f; i *= 5;', quiet) - 100.5) < tol, &
 			eval('let j = 12; j /= 3; j;', quiet) == '4', &
 			abs(eval_f32('let f = 0.5f; f /= 0.25f; f;', quiet) - 2.0) < tol, &
 			abs(eval_f32('let f = 0.5f; f /= 0.25f;', quiet) - 2.0) < tol, &
+			eval('let i = 20; i *= 5.101;', quiet) == '102', &
+			abs(eval_f64('let i = 20.1; i *= 5;', quiet) - 100.5) < tol, &
+			eval('let j = 12; j /= 3; j;', quiet) == '4', &
+			abs(eval_f64('let f = 0.5; f /= 0.25; f;', quiet) - 2.0d0) < tol, &
+			abs(eval_f64('let f = 0.5; f /= 0.25;', quiet) - 2.0d0) < tol, &
 			eval('let iv = [10; 3]; iv[0] /= 5;', quiet) == '2', &
 			eval('let iv = [10; 3]; iv[0] /= 5; iv;', quiet) == '[2, 10, 10]', &
 			eval('let iv = [10; 3]; iv[1] /= 5; iv;', quiet) == '[10, 2, 10]', &
 			eval('let iv = [10; 3]; iv[1] /= 4.9; iv;', quiet) == '[10, 2, 10]', &
 			abs(eval_f32('let v = [10.0f; 3]; v[0] /= 5.0f;', quiet) - 2) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[0] /= 5.0;', quiet) - 2) < tol, &
 			eval('let v = [10.0f; 3]; v[0] /= 5.0f; v;', quiet) == '[2.000000E+00, 1.000000E+01, 1.000000E+01]', &
 			eval('let v = [10.0f; 3]; v[1] /= 5.0f; v;', quiet) == '[1.000000E+01, 2.000000E+00, 1.000000E+01]', &
 			eval('let v = [10.0f; 3]; v[1] /= 5; v;', quiet) == '[1.000000E+01, 2.000000E+00, 1.000000E+01]', &
+			abs(eval_f64('let v = [10.0; 3]; v[0] /= 5.0; sum(v);', quiet) - 22) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] /= 5.0; sum(v);', quiet) - 22) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] /= 5; sum(v);', quiet) - 22) < tol, &
 			eval('let i = 20; i /= 4.9;', quiet) == '4', &
 			abs(eval_f32('let i = 20.5f; i /= 5;', quiet) - 4.1) < tol, &
+			abs(eval_f64('let i = 20.5; i /= 5;', quiet) - 4.1d0) < tol, &
 			eval('let j = 3; j **= 2; j;', quiet) == '9', &
 			eval('let j = 4; j **= 2; j;', quiet) == '16', &
 			eval('let j = 2; j **= 3; j;', quiet) == '8', &
