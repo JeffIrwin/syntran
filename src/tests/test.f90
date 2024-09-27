@@ -1125,7 +1125,7 @@ subroutine unit_test_f64_mix(npass, nfail)
 
 	logical, allocatable :: tests(:)
 
-	real(kind = 8), parameter :: tol = 1.e-12
+	real(kind = 8), parameter :: tol = 1.e-12, ftol = 1.e-9
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -1144,6 +1144,16 @@ subroutine unit_test_f64_mix(npass, nfail)
 			abs(eval_f64('1.2e-3 + 4.5e-3;') - (1.2d-3 + 4.5d-3)) < tol, &
 			abs(eval_f64('1.2e-3f + 4.5e-3;') - (1.2e-3 + 4.5d-3)) < tol, &
 			abs(eval_f64('1.2e-3 + 4.5e-3f;') - (1.2d-3 + 4.5e-3)) < tol, &
+			abs(eval_f64('1.1 + 2.0f;') - (1.1d0 + 2.0e0)) < tol, &
+			abs(eval_f64('1.1f + 2.0;') - (1.1e0 + 2.0d0)) < tol, &
+			abs(eval_f64('sum([1.1] + [2.0]);') - (3.1d0)) < ftol, &
+			abs(eval_f64('sum([1.1f] + [2.0]);') - (1.1e0 + 2.0d0)) < ftol, &
+			abs(eval_f64('sum([1.1] + [2.0f]);') - (1.1d0 + 2.0e0)) < ftol, &
+			abs(eval_f64('sum([1.1] + [2]);') - (3.1d0)) < ftol, &
+			abs(eval_f64('sum([2] + [1.1]);') - (3.1d0)) < ftol, &
+			abs(eval_f64('sum(1.1 + [2.0]);') - (3.1d0)) < ftol, &
+			abs(eval_f64('sum([1.1] + 2.0);') - (3.1d0)) < ftol, &
+			!abs(eval_f64('sum(1.1f + [2.0]);') - (3.1d0)) < ftol, &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

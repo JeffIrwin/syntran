@@ -1044,6 +1044,11 @@ recursive subroutine eval_fn_call(node, state, res)
 		res%sca%f32 = sum(arg1%array%f32)
 		state%returned = .true.
 
+	case ("0sum_f64")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = sum(arg1%array%f64)
+		state%returned = .true.
+
 	case ("all")
 
 		call syntax_eval(node%args(1), state, arg1)

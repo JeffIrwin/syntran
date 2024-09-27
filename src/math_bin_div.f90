@@ -236,6 +236,14 @@ subroutine div_value_t(left, right, res, op_text)
 			res%array = mold(right%array, f64_type)
 			res%array%f64 = left%array%f64 / right%array%f64
 
+		case (magic * f32_type + f64_type)
+			res%array = mold(right%array, f64_type)
+			res%array%f64 = left%array%f32 / right%array%f64
+
+		case (magic * f64_type + f32_type)
+			res%array = mold(right%array, f64_type)
+			res%array%f64 = left%array%f64 / right%array%f32
+
 		case (magic * i32_type + f64_type)
 			res%array = mold(right%array, f64_type)
 			res%array%f64 = left%array%i32 / right%array%f64

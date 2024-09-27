@@ -223,7 +223,7 @@ subroutine declare_intrinsic_fns(fns)
 		i64_sca_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
 		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, &
 		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn, &
-		char_fn
+		char_fn, sum_f64_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -669,6 +669,22 @@ subroutine declare_intrinsic_fns(fns)
 
 	!********
 
+	sum_f64_fn%type%type = f64_type
+	allocate(sum_f64_fn%params(1))
+	allocate(sum_f64_fn%param_names%v(1))
+
+	sum_f64_fn%params(1)%type = array_type
+
+	allocate(sum_f64_fn%params(1)%array)
+	sum_f64_fn%params(1)%array%type = f64_type
+	sum_f64_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	sum_f64_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0sum_f64", sum_f64_fn, id_index)
+
+	!********
+
 	all_fn%type%type = bool_type
 	allocate(all_fn%params(1))
 	allocate(all_fn%param_names%v(1))
@@ -745,6 +761,7 @@ subroutine declare_intrinsic_fns(fns)
 			sum_i32_fn  , &
 			sum_i64_fn  , &
 			sum_f32_fn  , &
+			sum_f64_fn  , &
 			all_fn      , &
 			any_fn        &
 		]
