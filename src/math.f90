@@ -48,8 +48,38 @@ subroutine assign_value_t(left, right, op_text)
 	!print *, 'left %type = ', kind_name(left%type)
 	!print *, 'right%type = ', kind_name(right%type)
 
-	if (left%type /= array_type .or. right%type == array_type) then
+	if (right%type == array_type) then
+		! TODO: check for subtle bugs where this might cast an f32 array to an
+		! f64 array (or i32 to/from i64)
 		left = right  ! simply overwrite, for any type
+		return
+	end if
+
+	if (left%type /= array_type) then
+
+		! For numeric types, cast the rhs if necessary without changing the type
+		! of the lhs.  Bools and strs are straight forward
+
+		select case (left%type)
+		case (bool_type)
+			left%sca%bool = right%sca%bool
+		case (f32_type)
+			left%sca%f32 = right%to_f32()
+		case (f64_type)
+			left%sca%f64 = right%to_f64()
+		case (i32_type)
+			left%sca%i32 = right%to_i32()
+		case (i64_type)
+			left%sca%i64 = right%to_i64()
+		case (str_type)
+			left%sca%str = right%sca%str
+		case (struct_type)
+			left = right
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
 		return
 	end if
 

@@ -249,6 +249,7 @@ subroutine BINFN_value_t(left, right, res, op_text)
 			res%array%f64 = left%array%f64 BINOP right%array%f64
 
 		case (magic * f32_type + f64_type)
+			!print *, "f32 BINOP f64"
 			res%array = mold(right%array, f64_type)
 			res%array%f64 = left%array%f32 BINOP right%array%f64
 
@@ -302,7 +303,11 @@ subroutine BINFN_value_t(left, right, res, op_text)
 	case        (magic**2 * i32_type + magic * i32_type + i64_type)
 		res%sca%i32 = left%sca%i32 BINOP right%sca%i64
 
-	! TODO: i64/f32 casting
+	case        (magic**2 * i64_type + magic * f32_type + i64_type)
+		res%sca%i64 = left%sca%f32 BINOP right%sca%i64
+
+	case        (magic**2 * i64_type + magic * i64_type + f32_type)
+		res%sca%i64 = left%sca%i64 BINOP right%sca%f32
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%sca%i32 = int(left%sca%f32 BINOP right%sca%i32)
@@ -355,13 +360,12 @@ subroutine BINFN_value_t(left, right, res, op_text)
 	case        (magic**2 * f64_type + magic * f32_type + f64_type)
 		res%sca%f64 = left%sca%f32 BINOP right%sca%f64
 
-	! TODO: array cases above too
-
-	!! TODO?
 	!case        (magic**2 * f32_type + magic * f64_type + f32_type)
 	!	res%sca%f32 = left%sca%f64 BINOP right%sca%f32
-	!case        (magic**2 * f32_type + magic * f32_type + f64_type)
-	!	res%sca%f32 = left%sca%f32 BINOP right%sca%f64
+
+	case        (magic**2 * f32_type + magic * f32_type + f64_type)
+		! compound assignment only
+		res%sca%f32 = left%sca%f32 BINOP right%sca%f64
 
 	!****
 

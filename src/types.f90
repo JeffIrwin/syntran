@@ -1542,12 +1542,14 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 			if (left == array_type) then
 				allowed = &
-					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
+					(is_float_type(left_arr) .and. is_float_type(right)) .or. &
+					(is_int_type  (left_arr) .and. is_int_type  (right)) .or. &
 					(left_arr == right) .or. (left == right)
 
 			else
 				allowed = &
-					(is_int_type(left) .and. is_int_type(right)) .or. &
+					(is_float_type(left) .and. is_float_type(right)) .or. &
+					(is_int_type  (left) .and. is_int_type  (right)) .or. &
 					(left == right)
 
 			end if
@@ -1559,6 +1561,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				return
 			end if
 
+			! TODO: allow and then implement comparisons on mixed float types
 			if (left == array_type .and. right == array_type) then
 				allowed = &
 					(is_int_type(left_arr) .and. is_int_type(right_arr)) .or. &
@@ -1711,6 +1714,16 @@ logical function is_int_type(type)
 	is_int_type = any(type == [i32_type, i64_type])
 
 end function is_int_type
+
+!===============================================================================
+
+logical function is_float_type(type)
+
+	integer, intent(in) :: type
+
+	is_float_type = any(type == [f32_type, f64_type])
+
+end function is_float_type
 
 !===============================================================================
 
