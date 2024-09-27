@@ -226,7 +226,7 @@ subroutine declare_intrinsic_fns(fns)
 		i64_sca_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
 		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, &
 		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn, &
-		char_fn, sum_f64_fn
+		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -259,8 +259,6 @@ subroutine declare_intrinsic_fns(fns)
 	! In Fortran, min() is polymorphic and variadic, but all args must be the
 	! same type.  For example, min(1, 2) and min(1.1, 2.1) are allowed, but
 	! min(1, 2.1) does not compile.  I think that's a reasonable restriction
-
-	! TODO: min_f64_fn, max_f64_fn
 
 	min_i32_fn%type%type = i32_type
 	allocate(min_i32_fn%params(2))
@@ -315,6 +313,23 @@ subroutine declare_intrinsic_fns(fns)
 
 	!********
 
+	min_f64_fn%type%type = f64_type
+	allocate(min_f64_fn%params(2))
+	allocate(min_f64_fn%param_names%v(2))
+
+	min_f64_fn%params(1)%type = f64_type
+	min_f64_fn%param_names%v(1)%s = "a0"
+
+	min_f64_fn%params(2)%type = f64_type
+	min_f64_fn%param_names%v(2)%s = "a1"
+
+	min_f64_fn%variadic_min  = 0
+	min_f64_fn%variadic_type = f64_type
+
+	call fns%insert("0min_f64", min_f64_fn, id_index)
+
+	!********
+
 	max_i32_fn%type%type = i32_type
 	allocate(max_i32_fn%params(2))
 	allocate(max_i32_fn%param_names%v(2))
@@ -365,6 +380,23 @@ subroutine declare_intrinsic_fns(fns)
 	max_f32_fn%variadic_type = f32_type
 
 	call fns%insert("0max_f32", max_f32_fn, id_index)
+
+	!********
+
+	max_f64_fn%type%type = f64_type
+	allocate(max_f64_fn%params(2))
+	allocate(max_f64_fn%param_names%v(2))
+
+	max_f64_fn%params(1)%type = f64_type
+	max_f64_fn%param_names%v(1)%s = "a0"
+
+	max_f64_fn%params(2)%type = f64_type
+	max_f64_fn%param_names%v(2)%s = "a1"
+
+	max_f64_fn%variadic_min  = 0
+	max_f64_fn%variadic_type = f64_type
+
+	call fns%insert("0max_f64", max_f64_fn, id_index)
 
 	!********
 
@@ -438,6 +470,16 @@ subroutine declare_intrinsic_fns(fns)
 	parse_f32_fn%param_names%v(1)%s = "str"
 
 	call fns%insert("parse_f32", parse_f32_fn, id_index)
+
+	!********
+
+	parse_f64_fn%type%type = f64_type
+	allocate(parse_f64_fn%params(1))
+	allocate(parse_f64_fn%param_names%v(1))
+	parse_f64_fn%params(1)%type = str_type
+	parse_f64_fn%param_names%v(1)%s = "str"
+
+	call fns%insert("parse_f64", parse_f64_fn, id_index)
 
 	!********
 
@@ -739,15 +781,18 @@ subroutine declare_intrinsic_fns(fns)
 			min_i32_fn  , &
 			min_i64_fn  , &
 			min_f32_fn  , &
+			min_f64_fn  , &
 			max_i32_fn  , &
 			max_i64_fn  , &
 			max_f32_fn  , &
+			max_f64_fn  , &
 			println_fn  , &
 			str_fn      , &
 			len_fn      , &
 			parse_i32_fn, &
 			parse_i64_fn, &
 			parse_f32_fn, &
+			parse_f64_fn, &
 			char_fn     , &
 			i32_sca_fn  , &
 			i32_arr_fn  , &

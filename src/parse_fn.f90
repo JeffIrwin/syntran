@@ -77,7 +77,9 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	! Resolve special overloaded intrinsic fns
 	!
-	! TODO: split out to a routine if possible
+	!
+	!  TODO: split out to a routine if possible 
+	!
 	select case (identifier%text)
 	case ("min")
 
@@ -89,6 +91,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			fn_call%identifier%text = "0min_i64"
 		case (f32_type)
 			fn_call%identifier%text = "0min_f32"
+		case (f64_type)
+			fn_call%identifier%text = "0min_f64"
 		case default
 			fn_call%identifier%text = "0min_i32"
 		end select
@@ -103,6 +107,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			fn_call%identifier%text = "0max_i64"
 		case (f32_type)
 			fn_call%identifier%text = "0max_f32"
+		case (f64_type)
+			fn_call%identifier%text = "0max_f64"
 		case default
 			fn_call%identifier%text = "0max_i32"
 		end select

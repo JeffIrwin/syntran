@@ -773,6 +773,17 @@ recursive subroutine eval_fn_call(node, state, res)
 		end do
 		state%returned = .true.
 
+	case ("0min_f64")
+
+		call syntax_eval(node%args(1), state, arg)
+		res%sca%f64 = arg%sca%f64
+
+		do i = 2, size(node%args)
+			call syntax_eval(node%args(i), state, arg)
+			res%sca%f64 = min(res%sca%f64, arg%sca%f64)
+		end do
+		state%returned = .true.
+
 	case ("0max_i32")
 
 		call syntax_eval(node%args(1), state, arg)
@@ -803,6 +814,17 @@ recursive subroutine eval_fn_call(node, state, res)
 		do i = 2, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
 			res%sca%f32 = max(res%sca%f32, arg%sca%f32)
+		end do
+		state%returned = .true.
+
+	case ("0max_f64")
+
+		call syntax_eval(node%args(1), state, arg)
+		res%sca%f64 = arg%sca%f64
+
+		do i = 2, size(node%args)
+			call syntax_eval(node%args(i), state, arg)
+			res%sca%f64 = max(res%sca%f64, arg%sca%f64)
 		end do
 		state%returned = .true.
 
@@ -872,6 +894,17 @@ recursive subroutine eval_fn_call(node, state, res)
 		read(arg%sca%str%s, *, iostat = io) res%sca%f32
 		if (io /= 0) then
 			write(*,*) err_rt_prefix//" cannot parse_f32() for argument `"// &
+				arg%sca%str%s//"`"//color_reset
+			call internal_error()
+		end if
+		state%returned = .true.
+
+	case ("parse_f64")
+
+		call syntax_eval(node%args(1), state, arg)
+		read(arg%sca%str%s, *, iostat = io) res%sca%f64
+		if (io /= 0) then
+			write(*,*) err_rt_prefix//" cannot parse_f64() for argument `"// &
 				arg%sca%str%s//"`"//color_reset
 			call internal_error()
 		end if
