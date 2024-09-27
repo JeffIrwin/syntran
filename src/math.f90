@@ -63,18 +63,26 @@ subroutine assign_value_t(left, right, op_text)
 		select case (left%type)
 		case (bool_type)
 			left%sca%bool = right%sca%bool
+
 		case (f32_type)
 			left%sca%f32 = right%to_f32()
 		case (f64_type)
 			left%sca%f64 = right%to_f64()
+
+		case (file_type)
+			left = right
+
 		case (i32_type)
 			left%sca%i32 = right%to_i32()
 		case (i64_type)
 			left%sca%i64 = right%to_i64()
+
 		case (str_type)
 			left%sca%str = right%sca%str
+
 		case (struct_type)
 			left = right
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -83,6 +91,7 @@ subroutine assign_value_t(left, right, op_text)
 		return
 	end if
 
+	! TODO: looks like this fails on arrays of structs
 	select case (left%array%type)
 	case (bool_type)
 		left%array%bool = right%sca%bool
