@@ -349,8 +349,16 @@ subroutine unit_test_comp_f64(npass, nfail)
 			eval('13.37 != 13.38 ;')  == 'true',  &
 			eval('13.37 == 4.2   ;')  == 'false',  &
 			eval('4.2   == 13.37 ;')  == 'false',  &
-			eval('1.0   == 1.0   ;')  == 'true'    &
+			eval('1.0   == 1.0   ;')  == 'true',   &
+			eval('13.37f >  13.36 ;')  == 'true',  &
+			eval('13.37 >  13.36f ;')  == 'true',  &
+			eval('13.37f >= 13.38 ;')  == 'false',  &
+			eval('13.37 >= 13.38f ;')  == 'false',  &
+			eval('13.37f <= 13.38 ;')  == 'true',  &
+			.false.  &
 		]
+
+	tests = tests(1: size(tests) - 1)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
@@ -1664,6 +1672,9 @@ subroutine unit_test_arr_comp(npass, nfail)
 			eval('2.0 == [0.0, 2.0, 3.0];') == '[false, true, false]', &
 			eval('[0.0, 2.0, 3.0] == 3.0;') == '[false, false, true]', &
 			eval('[0.0, 2.0, 3.0] == [4.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('2.0f == [0.0f, 2.0f, 3.0f];') == '[false, true, false]', &
+			eval('[0.0f, 2.0f, 3.0f] == 3.0f;') == '[false, false, true]', &
+			eval('[0.0f, 2.0f, 3.0f] == [4.0f, 2.0f, 3.0f];') == '[false, true, true]', &
 			eval('2 == [i64(0), i64(2), i64(3)];') == '[false, true, false]', &
 			eval('[0, 2, 3] == i64(3);') == '[false, false, true]', &
 			eval('[0, 2, 3] == [i64(4), i64(2), i64(3)];') == '[false, true, true]', &
@@ -1735,6 +1746,9 @@ subroutine unit_test_arr_comp(npass, nfail)
 			eval('2.0 > [0.0, 2.0, 3.0];') == '[true, false, false]', &
 			eval('[0.0, 2.0, 3.0] > 2.0;') == '[false, false, true]', &
 			eval('[4.0, 2.0, 3.0] > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2.0f > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			!eval('[0.0f, 2.0f, 3.0f] > 2.0;') == '[false, false, true]', &
+			!eval('[4.0f, 2.0f, 3.0f] > [0.0, 2.0, 3.0];') == '[true, false, false]', &
 			eval('2 > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
 			eval('[0, 2, 3] > i64(2);') == '[false, false, true]', &
 			eval('[4, 2, 3] > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
