@@ -294,6 +294,9 @@ subroutine add_value_t(left, right, res, op_text)
 	case        (magic**2 * i64_type + magic * i64_type + i64_type)
 		res%sca%i64 = left%sca%i64 + right%sca%i64
 
+	case        (magic**2 * i64_type + magic * i64_type + f64_type)
+		res%sca%i64 = left%sca%i64 + right%sca%f64
+
 	case        (magic**2 * i64_type + magic * i64_type + i32_type)
 		res%sca%i64 = left%sca%i64 + right%sca%i32
 
