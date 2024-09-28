@@ -172,7 +172,7 @@ module syntran__core_m
 	!      + system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
 	!    * done:
-	!      + exp  (non-variadic, non-polymorphic)
+	!      + exp  (non-variadic)
 	!      + min, max, sum
 	!      + size (non-variadic but polymorphic)
 	!      + readln, writeln, println, open, close, str casting
@@ -230,8 +230,6 @@ subroutine declare_intrinsic_fns(fns)
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
-
-	! TODO: f64 intrinsic fns
 
 	!********
 

@@ -725,6 +725,9 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('i32( 0.0);') ==   "0", &
 			eval('i32( 1.1);') ==   "1", &
 			eval('i32(-1.1);') ==  "-1", &
+			eval('i32( 0.0f);') ==   "0", &
+			eval('i32( 1.1f);') ==   "1", &
+			eval('i32(-1.1f);') ==  "-1", &
 			eval('i32(  0);') ==   "0", &
 			eval('i32(  1);') ==   "1", &
 			eval('i32( -1);') ==  "-1", &
@@ -757,6 +760,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('char(40);') ==  "(", &
 			eval('char(41);') ==  ")", &
 			eval('char(32);') ==  " ", &
+			eval('i64([ 0.0f, 2.2f, 3.3f]);') ==  "[0, 2, 3]", &
 			eval('i64([ 0.0, 2.2, 3.3]);') ==  "[0, 2, 3]", &
 			eval('i64([ 1.1, 2.2, 3.3]);') ==  "[1, 2, 3]", &
 			eval('i64([-1.1, 2.2, 3.3]);') ==  "[-1, 2, 3]", &
@@ -785,6 +789,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('sum([1: 2: 6]);') == "9", &
 			eval('sum([7, 3, 15, 1; 2, 2]);') == "26", &
 			eval('[sum([0.0f: 3.0f; 4])];') == "[6.000000E+00]", &
+			eval('i32([sum([0.0: 3.0; 4])]);') == "[6]", &
 			eval('sum(i64([1: 4]));') == "6", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
@@ -1193,9 +1198,9 @@ end subroutine unit_test_f32_1
 
 !===============================================================================
 
-subroutine unit_test_f64_mix(npass, nfail)
+subroutine unit_test_f64_1(npass, nfail)
 
-	! Simple f32 float tests of arithmetic and comparisons with single-line
+	! Simple f64 float tests of arithmetic and comparisons with single-line
 	! evaluations
 
 	implicit none
@@ -1205,6 +1210,76 @@ subroutine unit_test_f64_mix(npass, nfail)
 	!********
 
 	character(len = *), parameter :: label = 'f64 arithmetic'
+
+	logical, allocatable :: tests(:)
+
+	real, parameter :: tol = 1.e-12
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			abs(eval_f64('1.0;') - 1) < tol, &
+			abs(eval_f64('6.9e1;') - 6.9d1) < tol, &
+			abs(eval_f64('+6.9e1;') - +6.9d1) < tol, &
+			abs(eval_f64('-6.9e1;') - -6.9d1) < tol, &
+			abs(eval_f64('0.333333333;') - 0.333333333d0) < tol, &
+			abs(eval_f64('1.1 +  2  ;') - (1.1d0 +  2  )) < tol, &
+			abs(eval_f64('1   +  2.1;') - (1   +  2.1d0)) < tol, &
+			abs(eval_f64('1.1 +  2.1;') - (1.1d0 +  2.1d0)) < tol, &
+			abs(eval_f64('1.1 -  2  ;') - (1.1d0 -  2  )) < tol, &
+			abs(eval_f64('1   -  2.1;') - (1   -  2.1d0)) < tol, &
+			abs(eval_f64('1.1 -  2.1;') - (1.1d0 -  2.1d0)) < tol, &
+			abs(eval_f64('1.1 *  2  ;') - (1.1d0 *  2  )) < tol, &
+			abs(eval_f64('1   *  2.1;') - (1   *  2.1d0)) < tol, &
+			abs(eval_f64('1.1 *  2.1;') - (1.1d0 *  2.1d0)) < tol, &
+			abs(eval_f64('1.1 /  2  ;') - (1.1d0 /  2  )) < tol, &
+			abs(eval_f64('1   /  2.1;') - (1   /  2.1d0)) < tol, &
+			abs(eval_f64('1.1 /  2.1;') - (1.1d0 /  2.1d0)) < tol, &
+			abs(eval_f64('1.1 ** 2  ;') - (1.1d0 ** 2  )) < tol, &
+			abs(eval_f64('1   ** 2.1;') - (1   ** 2.1d0)) < tol, &
+			abs(eval_f64('1.1 ** 2.1;') - (1.1d0 ** 2.1d0)) < tol, &
+			abs(eval_f64('1.2e-3 + 4.5e-3;') - (1.2d-3 + 4.5d-3)) < tol, &
+			abs(eval_f64('1.2e-3+4.5e-3;') - (1.2d-3+4.5d-3)) < tol, &
+			abs(eval_f64('1.2e-3-4.5e-3;') - (1.2d-3-4.5d-3)) < tol, &
+			abs(eval_f64('1.2e+3-4.5e+3;') - (1.2d+3-4.5d+3)) < tol, &
+			abs(eval_f64('1.1 + 2.2 + 34;') - (1.1d0 + 2.2d0 + 34)) < tol, &
+			abs(eval_f64('1 + 2 * 3.3;') - (1 + 2 * 3.3d0)) < tol, &
+			abs(eval_f64('1 * 2 * 3.6 * 4;') - (1 * 2 * 3.6d0 * 4)) < tol, &
+			abs(eval_f64('73 - 48.0;') - (73 - 48.0d0)) < tol, &
+			abs(eval_f64('73.1 - 48 - 21;') - (73.1d0 - 48 - 21)) < tol, &
+			abs(eval_f64('24 / 6.3;') - (24 / 6.3d0)) < tol, &
+			abs(eval_f64('24 / 6 / 2.1;') - (24 / 6 / 2.1d0)) < tol, &
+			abs(eval_f64('2.0 ** 5;') - (2.0d0 ** 5)) < tol, &
+			abs(eval_f64('3 ** 4.1;') - (3 ** 4.1d0)) < tol, &
+			abs(eval_f64('1.1 + i64(2);') - (3.1d0)) < tol, &
+			abs(eval_f64('i64(2) + 1.1;') - (3.1d0)) < tol, &
+			abs(eval_f64('3.43 - 87654345 / 27 + 76 * 234 - 65432 / 63;') &
+			       - (3.43d0 - 87654345 / 27 + 76 * 234 - 65432 / 63)) < tol, &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_f64_1
+
+!===============================================================================
+
+subroutine unit_test_f64_mix(npass, nfail)
+
+	! Simple f64 float tests of arithmetic and comparisons with single-line
+	! evaluations
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f64 mixed arithmetic'
 
 	logical, allocatable :: tests(:)
 
@@ -1368,6 +1443,10 @@ subroutine unit_test_i64(npass, nfail)
 			abs(eval_f32('3.0f * i64(2);', quiet) - 6.0) < tol, &
 			abs(eval_f32('i64(2) + 3.0f;', quiet) - 5.0) < tol, &
 			abs(eval_f32('3.0f + i64(2);', quiet) - 5.0) < tol, &
+			abs(eval_f64('i64(2) * 3.0;', quiet) - 6.0d0) < tol, &
+			abs(eval_f64('3.0 * i64(2);', quiet) - 6.0d0) < tol, &
+			abs(eval_f64('i64(2) + 3.0;', quiet) - 5.0d0) < tol, &
+			abs(eval_f64('3.0 + i64(2);', quiet) - 5.0d0) < tol, &
 			eval('[8000000000; 3];') == '[8000000000, 8000000000, 8000000000]', &
 			eval('[8000000000: 8000000003];') == '[8000000000, 8000000001, 8000000002]', &
 			eval('[8000000000: 2: 8000000006];') == '[8000000000, 8000000002, 8000000004]', &
@@ -1434,6 +1513,7 @@ subroutine unit_test_str(npass, nfail)
 			eval('"testing " + str(1.0f);') == 'testing     1.000000E+00', &
 			eval('"testing testing " + str(1) + " " + str(2);') == 'testing testing 1 2', &
 			eval('"testing " + str(1, " ", 2, " ", 1, " ", 2);') == 'testing 1 2 1 2', &
+			trimw(eval('str(1.0);')) == '1.000000000000000E+00', &
 			eval('"hello world";') == 'hello world'  &
 		]
 
@@ -3767,6 +3847,7 @@ subroutine unit_tests(iostat)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)
 	call unit_test_f32_1      (npass, nfail)
+	call unit_test_f64_1      (npass, nfail)
 	call unit_test_str        (npass, nfail)
 	call unit_test_substr     (npass, nfail)
 	call unit_test_if_else    (npass, nfail)
