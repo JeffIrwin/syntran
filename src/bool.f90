@@ -89,6 +89,12 @@ subroutine is_eq_value_t(left, right, res, op_text)
 	case        (magic * f64_type + f64_type)
 		res%sca%bool = left%sca%f64 == right%sca%f64
 
+	!! Banned in parser.  Allowed for <, <=, >, etc. but not strict (in)equality
+	!case        (magic * f32_type + f64_type)
+	!	res%sca%bool = left%sca%f32 == right%sca%f64
+	!case        (magic * f64_type + f32_type)
+	!	res%sca%bool = left%sca%f64 == right%sca%f32
+
 	case        (magic * f64_type + i32_type)
 		res%sca%bool = left%sca%f64 == right%sca%i32
 		! TODO: is this even possible or should I ban comparing ints and
@@ -500,6 +506,12 @@ subroutine is_lt_value_t(left, right, res, op_text)
 	case        (magic * f64_type + f64_type)
 		res%sca%bool = left%sca%f64 < right%sca%f64
 
+	case        (magic * f32_type + f64_type)
+		res%sca%bool = left%sca%f32 < right%sca%f64
+
+	case        (magic * f64_type + f32_type)
+		res%sca%bool = left%sca%f64 < right%sca%f32
+
 	case        (magic * f64_type + i32_type)
 		res%sca%bool = left%sca%f64 < right%sca%i32
 
@@ -731,6 +743,14 @@ subroutine is_lt_value_t(left, right, res, op_text)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%array%f64 < right%array%f64
 
+		case (magic * f32_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f32 < right%array%f64
+
+		case (magic * f64_type + f32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 < right%array%f32
+
 		case (magic * i32_type + f64_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%array%i32 < right%array%f64
@@ -829,6 +849,12 @@ subroutine is_le_value_t(left, right, res, op_text)
 
 	case        (magic * f64_type + f64_type)
 		res%sca%bool = left%sca%f64 <= right%sca%f64
+
+	case        (magic * f32_type + f64_type)
+		res%sca%bool = left%sca%f32 <= right%sca%f64
+
+	case        (magic * f64_type + f32_type)
+		res%sca%bool = left%sca%f64 <= right%sca%f32
 
 	case        (magic * f64_type + i32_type)
 		res%sca%bool = left%sca%f64 <= right%sca%i32
@@ -1060,6 +1086,14 @@ subroutine is_le_value_t(left, right, res, op_text)
 		case (magic * f64_type + f64_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%array%f64 <= right%array%f64
+
+		case (magic * f32_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f32 <= right%array%f64
+
+		case (magic * f64_type + f32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 <= right%array%f32
 
 		case (magic * i32_type + f64_type)
 			res%array = mold(right%array, bool_type)
