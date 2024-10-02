@@ -30,13 +30,15 @@ module syntran__core_m
 
 	! TODO:
 	!  - f64
-	!    * remove auto-gen source from git tracking
+	!    * document newly overloaded intrinsics (e.g. sum, exp can take any
+	!      float)
+	!    * test and port samples if needed from f32 to f64
+	!    * make a way to cast f64 down to f32
+	!    * casting from f32 up to f64 (or from int to float) is easy, just
+	!      multiple by 1.0
 	!    * document auto-gen in readme
-	!    * or just leave it in git
-	!    * mixed f32/f64 arithmetic/comparison operators
-	!      + modulo, unary negative (?) need work
-	!      + comparison done but needs unit tests
-	!      + arithmetic done
+	!      + could remove from git tracking but it's a burden on users and
+	!        probably a pain on macos
 	!  - add tests to cover syntran-explorer samples. might be a bit much to
 	!    automate cross-repo testing on the same source, but a little copy/paste
 	!    is better than nothing

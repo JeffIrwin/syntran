@@ -109,7 +109,7 @@ There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/mat
 
 Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.  Variables are mutable.
 
-Integer `i32` and `i64`, float `f32`, string `str`, and Boolean `bool` types are supported.  Attempting operations on the wrong types yields an error, e.g. trying to add a bool or use logical `and` on an int or float.
+Integer `i32` and `i64`, float `f32` and `f64`, string `str`, and Boolean `bool` types are supported.  Attempting operations on the wrong types yields an error, e.g. trying to add a bool or use logical `and` on an int or float.
 
 ```cpp
 let foo = 1;
@@ -139,6 +139,20 @@ foo and p;
 ```
 
 Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g. `.true.`) but without the dots.  Note that they are lower case-sensitive, unlike Python (e.g. `True`).
+
+### Floating point types
+
+The default floating point type is `f64`, i.e. double precision.  To make an `f32` float literal, append an `f` suffix, like in the C language.  For example:
+- the literal `1.0` is of type `f64`
+- the literal `1.0f` is of type `f32`
+- the literal `6.0221408e+23` (Avogadro's number) is of type `f64`
+- the literal `6.0221408e+23f` is of type `f32`
+
+When float types are mixed in an arithmetic expression, the result is casted up to the higher expression of the operands.  For example:
+```rust
+let x = 1.0 + 1.0f;
+```
+Here, the variable `x` is of type `f64`.
 
 ## Comments
 
@@ -191,7 +205,7 @@ set enable-bracketed-paste off
 
 I do not plan on writing any syntax highlighting plugins.
 
-The easiest way to get highlighting is to have your editor treat syntran as a similar language.  Rust is a pretty good match with keywords like `let`, `fn`, and type names `i32`, `f32`, etc.  C++ is also an ok match (it has `and` and `or` keywords).
+The easiest way to get highlighting is to have your editor treat syntran as a similar language.  Rust is a pretty good match with keywords like `let`, `fn`, and type names `i32`, `f64`, etc.  C++ is also an ok match (it has `and` and `or` keywords).
 
 For neovim, add this line to your `~/.config/nvim/ftdetect/syntran.lua` file:
 
@@ -456,7 +470,7 @@ In the pi series, there is a float term `16.0 ** k`.  The loop iterator `k` is a
 
 Similarly, the pi term `4.0 / (8*k + 1)` has a float numerator and int denominator.  Again we must use a float to avoid integer division.
 
-Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/15379/26435), but it allows you to do numeric work without constantly manually casting things [`as f32` like in Rust](https://doc.rust-lang.org/rust-by-example/types/cast.html).
+Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/15379/26435), but it allows you to do numeric work without constantly manually casting things [`as f64` like in Rust](https://doc.rust-lang.org/rust-by-example/types/cast.html).
 
 ## Arrays
 
@@ -700,7 +714,7 @@ Functions must be defined before they are called.  That means that recursive fun
 Here's a function that performs matrix-vector multiplication:
 
 ```rust
-fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
+fn mul_mat_vec(mat: [f64; :,:], vec: [f64; :]): [f64; :]
 {
 	// Matrix-vector multiplication.  Return mat * vec
 	let ans =  [0.0; size(mat,0)];
@@ -711,12 +725,12 @@ fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 }
 ```
 
-Note that array rank is specified in function signatures with comma-separated colons.  For example, `vec` is a rank-1 array `[f32; :]` and `mat` is a rank-2 array `[f32; :,:]`.  Arrays of any size can be passed to functions, but ranks and types must match.  The use of a colon as a wildcard like this is [borrowed from Fortran](https://www.intel.com/content/www/us/en/develop/documentation/fortran-compiler-oneapi-dev-guide-and-reference/top/language-reference/specification-statements/type-declarations/declarations-for-arrays/assumed-shape-specifications.html).
+Note that array rank is specified in function signatures with comma-separated colons.  For example, `vec` is a rank-1 array `[f64; :]` and `mat` is a rank-2 array `[f64; :,:]`.  Arrays of any size can be passed to functions, but ranks and types must match.  The use of a colon as a wildcard like this is [borrowed from Fortran](https://www.intel.com/content/www/us/en/develop/documentation/fortran-compiler-oneapi-dev-guide-and-reference/top/language-reference/specification-statements/type-declarations/declarations-for-arrays/assumed-shape-specifications.html).
 
 Here's a function that performs [matrix multiplication](https://en.wikipedia.org/wiki/Matrix_multiplication) on two matrices `a` and `b`, without checking that the inner dimensions agree:
 
 ```rust
-fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
+fn mul_mat(a: [f64; :,:], b: [f64; :,:]): [f64; :,:]
 {
 	let c = [0.0; size(a,0), size(b,1)];
 	for         k in [0: size(b,1)]
