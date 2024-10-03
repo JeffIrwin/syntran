@@ -70,11 +70,16 @@ Two independent build systems are provided for syntran.  You can either use cmak
 fpm build
 ```
 
-Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm install`, etc.  Most of the example commands in this documentation will assume that cmake was used, but there is usually an fpm alternative.
+Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm
+install`, etc.  Most of the example commands in this documentation will assume
+that cmake was used, but there is usually an fpm alternative.
 
 As an alternative to installing dependencies yourself, you can run syntran in a
 docker container using the included [Dockerfile](Dockerfile).  See the
 [instructions for docker](doc/docker.md).
+
+You shouldn't need to worry about this, but note that some of the source code is
+auto-generated.  [Go here for details](doc/src-gen.md).
 
 ## Run
 
@@ -148,7 +153,7 @@ The default floating point type is `f64`, i.e. double precision.  To make an `f3
 - the literal `6.0221408e+23` (Avogadro's number) is of type `f64`
 - the literal `6.0221408e+23f` is of type `f32`
 
-When float types are mixed in an arithmetic expression, the result is casted up to the higher expression of the operands.  For example:
+When float types are mixed in an arithmetic expression, the result is casted up to the higher precision of the operands.  For example:
 ```rust
 let x = 1.0 + 1.0f;
 ```
