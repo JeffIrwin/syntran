@@ -30,10 +30,8 @@ module syntran__core_m
 
 	! TODO:
 	!  - f64
-	!    * document newly overloaded intrinsics (e.g. sum, exp can take any
-	!      float)
 	!    * test and port samples if needed from f32 to f64
-	!    * make a way to cast f64 down to f32
+	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
 	!      multiple by 1.0
 	!  - add tests to cover syntran-explorer samples. might be a bit much to
@@ -105,8 +103,8 @@ module syntran__core_m
 	!      assignment
 	!    * caveat about return val from nested slice compound assignemnt:
 	!          `let u = (v[3: 7] += 7);`
-	!    * any(), all(), count(), sum(), i32(array), exit(), polymorphic
-	!      min/max intrinsics, parse_f32(), parse_i64() intrinsic
+	!    * any(), all(), count(), i32(array), exit(), parse_f32(), parse_i64()
+	!      intrinsic
 	!    * new generalized for loops
 	!    * compound `**=` assignment, %=
 	!    * --help arg
