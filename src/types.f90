@@ -1176,6 +1176,8 @@ integer function lookup_type(name, structs, struct) result(type)
 
 		case ("f32")
 			type = f32_type
+		case ("f64")
+			type = f64_type
 
 		case ("i32")
 			type = i32_type
@@ -1253,13 +1255,14 @@ end function new_syntax_token_vector
 
 !===============================================================================
 
-function new_literal_value(type, bool, i32, i64, f32, str) result(val)
+function new_literal_value(type, bool, i32, i64, f32, f64, str) result(val)
 
 	integer, intent(in) :: type
 
 	integer(kind = 4), intent(in), optional :: i32
 	integer(kind = 8), intent(in), optional :: i64
 	real   (kind = 4), intent(in), optional :: f32
+	real   (kind = 8), intent(in), optional :: f64
 	logical          , intent(in), optional :: bool
 	character(len=*) , intent(in), optional :: str
 
@@ -1268,6 +1271,7 @@ function new_literal_value(type, bool, i32, i64, f32, str) result(val)
 	val%type = type
 	if (present(bool)) val%sca%bool  = bool
 	if (present(f32 )) val%sca%f32   = f32
+	if (present(f64 )) val%sca%f64   = f64
 	if (present(i32 )) val%sca%i32   = i32
 	if (present(i64 )) val%sca%i64   = i64
 	if (present(str )) val%sca%str%s = str
@@ -1538,12 +1542,14 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 			if (left == array_type) then
 				allowed = &
-					(is_int_type(left_arr) .and. is_int_type(right)) .or. &
+					(is_float_type(left_arr) .and. is_float_type(right)) .or. &
+					(is_int_type  (left_arr) .and. is_int_type  (right)) .or. &
 					(left_arr == right) .or. (left == right)
 
 			else
 				allowed = &
-					(is_int_type(left) .and. is_int_type(right)) .or. &
+					(is_float_type(left) .and. is_float_type(right)) .or. &
+					(is_int_type  (left) .and. is_int_type  (right)) .or. &
 					(left == right)
 
 			end if
@@ -1555,6 +1561,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				return
 			end if
 
+			! TODO: allow and then implement comparisons on mixed float types
 			if (left == array_type .and. right == array_type) then
 				allowed = &
 					(is_int_type(left_arr) .and. is_int_type(right_arr)) .or. &
@@ -1694,8 +1701,7 @@ logical function is_num_type(type)
 
 	integer, intent(in) :: type
 
-	! FIXME: other numeric types (f64, etc.)
-	is_num_type = any(type == [i32_type, i64_type, f32_type])
+	is_num_type = any(type == [i32_type, i64_type, f32_type, f64_type])
 
 end function is_num_type
 
@@ -1705,10 +1711,19 @@ logical function is_int_type(type)
 
 	integer, intent(in) :: type
 
-	! FIXME: other numeric types (i64, f64, etc.)
 	is_int_type = any(type == [i32_type, i64_type])
 
 end function is_int_type
+
+!===============================================================================
+
+logical function is_float_type(type)
+
+	integer, intent(in) :: type
+
+	is_float_type = any(type == [f32_type, f64_type])
+
+end function is_float_type
 
 !===============================================================================
 
@@ -1775,8 +1790,8 @@ function new_binary_expr(left, op, right) result(expr)
 		larrtype, rarrtype)
 	!print *, 'type_ = ', kind_name(type_)
 
-	if (any(type_ == [bool_array_type, f32_array_type, i32_array_type, &
-		i64_array_type, str_array_type])) then
+	if (any(type_ == [bool_array_type, f32_array_type, f64_array_type, &
+		i32_array_type, i64_array_type, str_array_type])) then
 
 		allocate(expr%val%array)
 
@@ -1892,6 +1907,12 @@ recursive integer function get_binary_op_kind(left, op, right, &
 			if (left == right) then
 				kind_ = left
 
+			else if (left == f64_type .or. right == f64_type) then
+				! int + float casts to float, f32 + f64 casts to f64
+				!
+				! Order matters compared to next condition branch!
+				kind_ = f64_type
+
 			else if (left == f32_type .or. right == f32_type) then
 				! int + float casts to float
 				kind_ = f32_type
@@ -1924,6 +1945,9 @@ function scalar_to_array_type(scalar_type_) result(array_type_)
 
 	case (f32_type)
 		array_type_ = f32_array_type
+
+	case (f64_type)
+		array_type_ = f64_array_type
 
 	case (i32_type)
 		array_type_ = i32_array_type
@@ -1958,6 +1982,9 @@ function array_to_scalar_type(array_type_) result(scalar_type_)
 
 	case (f32_array_type)
 		scalar_type_ = f32_type
+
+	case (f64_array_type)
+		scalar_type_ = f64_type
 
 	case (i32_array_type)
 		scalar_type_ = i32_type
@@ -2002,6 +2029,18 @@ function new_f32(f32) result(expr)
 	expr%val  = new_literal_value(f32_type, f32 = f32)
 
 end function new_f32
+
+!********
+
+function new_f64(f64) result(expr)
+
+	real(kind = 8), intent(in) :: f64
+	type(syntax_node_t) :: expr
+
+	expr%kind = literal_expr
+	expr%val  = new_literal_value(f64_type, f64 = f64)
+
+end function new_f64
 
 !********
 
@@ -2640,6 +2679,8 @@ function type_name_primitive(itype) result(str_)
 		str_ = "i64"
 	case (f32_type)
 		str_ = "f32"
+	case (f64_type)
+		str_ = "f64"
 	case (str_type)
 		str_ = "str"
 	case (bool_type)

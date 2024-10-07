@@ -7,10 +7,10 @@
 	let sign = 1.0;
 	for k in [1: 100000]
 	{
-		pi = pi + sign / (2*k - 1);
+		pi += sign / (2*k - 1);
 		sign = -sign;
 	}
-	pi = 4 * pi;
+	pi *= 4;
 
 	pi;
 }

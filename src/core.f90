@@ -29,6 +29,14 @@ module syntran__core_m
 		syntran_patch =  51
 
 	! TODO:
+	!  - f64
+	!    * test and port samples if needed from f32 to f64
+	!    * make a fn to cast f64 down to f32
+	!    * casting from f32 up to f64 (or from int to float) is easy, just
+	!      multiple by 1.0
+	!  - add tests to cover syntran-explorer samples. might be a bit much to
+	!    automate cross-repo testing on the same source, but a little copy/paste
+	!    is better than nothing
 	!  - add version summary as a text file to release packages
 	!    * doc. readme? samples?
 	!    * try -static-libgcc etc. on win/mac to ease packaging
@@ -95,8 +103,8 @@ module syntran__core_m
 	!      assignment
 	!    * caveat about return val from nested slice compound assignemnt:
 	!          `let u = (v[3: 7] += 7);`
-	!    * any(), all(), count(), sum(), i32(array), exit(), polymorphic
-	!      min/max intrinsics, parse_f32(), parse_i64() intrinsic
+	!    * any(), all(), count(), i32(array), exit(), parse_f32(), parse_i64()
+	!      intrinsic
 	!    * new generalized for loops
 	!    * compound `**=` assignment, %=
 	!    * --help arg
@@ -161,7 +169,7 @@ module syntran__core_m
 	!      + system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
 	!    * done:
-	!      + exp  (non-variadic, non-polymorphic)
+	!      + exp  (non-variadic)
 	!      + min, max, sum
 	!      + size (non-variadic but polymorphic)
 	!      + readln, writeln, println, open, close, str casting
@@ -210,29 +218,43 @@ subroutine declare_intrinsic_fns(fns)
 
 	integer :: id_index, num_fns
 
-	type(fn_t) :: exp_fn, min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
+	type(fn_t) :: exp_f32_fn, min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
 		i64_sca_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
 		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, &
 		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn, &
-		char_fn
+		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn, exp_f64_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
 
 	!********
 
-	! TODO: polymorphic in f32, f64, etc.
-	exp_fn%type%type = f32_type
-	allocate(exp_fn%params(1))
-	allocate(exp_fn%param_names%v(1))
-	exp_fn%params(1)%type = f32_type
-	exp_fn%param_names%v(1)%s = "x"
+	! Should exp be overloaded for ints?
+
+	exp_f32_fn%type%type = f32_type
+	allocate(exp_f32_fn%params(1))
+	allocate(exp_f32_fn%param_names%v(1))
+	exp_f32_fn%params(1)%type = f32_type
+	exp_f32_fn%param_names%v(1)%s = "x"
 
 	! Insert the fn into the dict. These are global intrinsic fns, so there's no
 	! need to check iostat
 
-	call fns%insert("exp", exp_fn, id_index)
+	call fns%insert("0exp_f32", exp_f32_fn, id_index)
+
+	!********
+
+	exp_f64_fn%type%type = f64_type
+	allocate(exp_f64_fn%params(1))
+	allocate(exp_f64_fn%param_names%v(1))
+	exp_f64_fn%params(1)%type = f64_type
+	exp_f64_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0exp_f64", exp_f64_fn, id_index)
 
 	!********
 
@@ -246,8 +268,6 @@ subroutine declare_intrinsic_fns(fns)
 	! In Fortran, min() is polymorphic and variadic, but all args must be the
 	! same type.  For example, min(1, 2) and min(1.1, 2.1) are allowed, but
 	! min(1, 2.1) does not compile.  I think that's a reasonable restriction
-
-	! TODO: min_f64_fn, max_f64_fn
 
 	min_i32_fn%type%type = i32_type
 	allocate(min_i32_fn%params(2))
@@ -299,6 +319,23 @@ subroutine declare_intrinsic_fns(fns)
 	min_f32_fn%variadic_type = f32_type
 
 	call fns%insert("0min_f32", min_f32_fn, id_index)
+
+	!********
+
+	min_f64_fn%type%type = f64_type
+	allocate(min_f64_fn%params(2))
+	allocate(min_f64_fn%param_names%v(2))
+
+	min_f64_fn%params(1)%type = f64_type
+	min_f64_fn%param_names%v(1)%s = "a0"
+
+	min_f64_fn%params(2)%type = f64_type
+	min_f64_fn%param_names%v(2)%s = "a1"
+
+	min_f64_fn%variadic_min  = 0
+	min_f64_fn%variadic_type = f64_type
+
+	call fns%insert("0min_f64", min_f64_fn, id_index)
 
 	!********
 
@@ -355,12 +392,30 @@ subroutine declare_intrinsic_fns(fns)
 
 	!********
 
+	max_f64_fn%type%type = f64_type
+	allocate(max_f64_fn%params(2))
+	allocate(max_f64_fn%param_names%v(2))
+
+	max_f64_fn%params(1)%type = f64_type
+	max_f64_fn%param_names%v(1)%s = "a0"
+
+	max_f64_fn%params(2)%type = f64_type
+	max_f64_fn%param_names%v(2)%s = "a1"
+
+	max_f64_fn%variadic_min  = 0
+	max_f64_fn%variadic_type = f64_type
+
+	call fns%insert("0max_f64", max_f64_fn, id_index)
+
+	!********
+
 	! TODO: update docs to use println() instead of old holyc implicit prints
 
 	println_fn%type%type = void_type ! TODO?
 
 	allocate(println_fn%params(0))
 	allocate(println_fn%param_names%v(0))
+	!println_fn%param_names%v(1)%s = "a"
 
 	println_fn%variadic_min  = 0
 	println_fn%variadic_type = any_type
@@ -373,6 +428,7 @@ subroutine declare_intrinsic_fns(fns)
 
 	allocate(str_fn%params(0))
 	allocate(str_fn%param_names%v(0))
+	!str_fn%param_names%v(1)%s = "a"
 
 	str_fn%variadic_min  = 0
 	str_fn%variadic_type = any_type
@@ -423,6 +479,16 @@ subroutine declare_intrinsic_fns(fns)
 	parse_f32_fn%param_names%v(1)%s = "str"
 
 	call fns%insert("parse_f32", parse_f32_fn, id_index)
+
+	!********
+
+	parse_f64_fn%type%type = f64_type
+	allocate(parse_f64_fn%params(1))
+	allocate(parse_f64_fn%param_names%v(1))
+	parse_f64_fn%params(1)%type = str_type
+	parse_f64_fn%param_names%v(1)%s = "str"
+
+	call fns%insert("parse_f64", parse_f64_fn, id_index)
 
 	!********
 
@@ -657,6 +723,22 @@ subroutine declare_intrinsic_fns(fns)
 
 	!********
 
+	sum_f64_fn%type%type = f64_type
+	allocate(sum_f64_fn%params(1))
+	allocate(sum_f64_fn%param_names%v(1))
+
+	sum_f64_fn%params(1)%type = array_type
+
+	allocate(sum_f64_fn%params(1)%array)
+	sum_f64_fn%params(1)%array%type = f64_type
+	sum_f64_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	sum_f64_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0sum_f64", sum_f64_fn, id_index)
+
+	!********
+
 	all_fn%type%type = bool_type
 	allocate(all_fn%params(1))
 	allocate(all_fn%param_names%v(1))
@@ -705,18 +787,23 @@ subroutine declare_intrinsic_fns(fns)
 
 	fns%fns = &
 		[ &
+			exp_f32_fn  , &
+			exp_f64_fn  , &
 			min_i32_fn  , &
 			min_i64_fn  , &
 			min_f32_fn  , &
+			min_f64_fn  , &
 			max_i32_fn  , &
 			max_i64_fn  , &
 			max_f32_fn  , &
+			max_f64_fn  , &
 			println_fn  , &
 			str_fn      , &
 			len_fn      , &
 			parse_i32_fn, &
 			parse_i64_fn, &
 			parse_f32_fn, &
+			parse_f64_fn, &
 			char_fn     , &
 			i32_sca_fn  , &
 			i32_arr_fn  , &
@@ -733,6 +820,7 @@ subroutine declare_intrinsic_fns(fns)
 			sum_i32_fn  , &
 			sum_i64_fn  , &
 			sum_f32_fn  , &
+			sum_f64_fn  , &
 			all_fn      , &
 			any_fn        &
 		]

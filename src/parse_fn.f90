@@ -23,7 +23,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	!********
 
-	character(len = :), allocatable :: exp_type, act_type
+	character(len = :), allocatable :: exp_type, act_type, param_name
 
 	integer :: i, io, id_index, pos0, type_
 
@@ -77,8 +77,22 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	! Resolve special overloaded intrinsic fns
 	!
-	! TODO: split out to a routine if possible
+	!
+	!  TODO: split out to a routine if possible 
+	!
 	select case (identifier%text)
+	case ("exp")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (f32_type)
+			fn_call%identifier%text = "0exp_f32"
+		case default
+			fn_call%identifier%text = "0exp_f64"
+		end select
+
 	case ("min")
 
 		type_ = i32_type
@@ -89,6 +103,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			fn_call%identifier%text = "0min_i64"
 		case (f32_type)
 			fn_call%identifier%text = "0min_f32"
+		case (f64_type)
+			fn_call%identifier%text = "0min_f64"
 		case default
 			fn_call%identifier%text = "0min_i32"
 		end select
@@ -103,6 +119,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			fn_call%identifier%text = "0max_i64"
 		case (f32_type)
 			fn_call%identifier%text = "0max_f32"
+		case (f64_type)
+			fn_call%identifier%text = "0max_f64"
 		case default
 			fn_call%identifier%text = "0max_i32"
 		end select
@@ -156,6 +174,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		select case (type_)
 		case (f32_type)
 			fn_call%identifier%text = "0sum_f32"
+		case (f64_type)
+			fn_call%identifier%text = "0sum_f64"
 		case (i64_type)
 			fn_call%identifier%text = "0sum_i64"
 		case default
@@ -246,9 +266,16 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		! only way to do it for intrinsic fns, which don't actually have a val
 		! anywhere
 		if (i <= size(fn%params)) then
-			param_val = fn%params(i)
+			param_val  = fn%params(i)
+			param_name = fn%param_names%v(i)%s
 		else
 			param_val%type = fn%variadic_type
+
+			if (size(fn%params) > 0) then
+				param_name = fn%param_names%v( size(fn%params) )%s
+			else
+				param_name = ""
+			end if
 		end if
 
 		if (types_match(param_val, args%v(i)%val) /= TYPE_MATCH) then
@@ -268,7 +295,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 				span, &
 				identifier%text, &
 				i - 1, &  ! 0-based index in err msg
-				fn%param_names%v(i)%s, &
+				param_name, &
 				exp_type, &
 				act_type))
 

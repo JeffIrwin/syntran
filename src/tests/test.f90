@@ -289,6 +289,49 @@ subroutine unit_test_comp_f32(npass, nfail)
 
 	tests = &
 		[   &
+			eval('13.37f >  13.36f ;')  == 'true',  &
+			eval('13.37f >  13.36f ;')  == 'true',  &
+			eval('13.37f >  13.37f ;')  == 'false',  &
+			eval('13.37f >  13.38f ;')  == 'false',  &
+			eval('13.37f <  13.36f ;')  == 'false',  &
+			eval('13.37f <  13.37f ;')  == 'false',  &
+			eval('13.37f <  13.38f ;')  == 'true',  &
+			eval('13.37f >= 13.36f ;')  == 'true',  &
+			eval('13.37f >= 13.37f ;')  == 'true',  &
+			eval('13.37f >= 13.38f ;')  == 'false',  &
+			eval('13.37f <= 13.36f ;')  == 'false',  &
+			eval('13.37f <= 13.37f ;')  == 'true',  &
+			eval('13.37f <= 13.38f ;')  == 'true',  &
+			eval('13.37f != 13.36f ;')  == 'true',  &
+			eval('13.37f != 13.37f ;')  == 'false',  &
+			eval('13.37f != 13.38f ;')  == 'true',  &
+			eval('13.37f == 4.2f   ;')  == 'false',  &
+			eval('4.2f   == 13.37f ;')  == 'false',  &
+			eval('1.0f   == 1.0f   ;')  == 'true'    &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_comp_f32
+
+!===============================================================================
+
+subroutine unit_test_comp_f64(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f64 comparisons'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
 			eval('13.37 >  13.36 ;')  == 'true',  &
 			eval('13.37 >  13.37 ;')  == 'false',  &
 			eval('13.37 >  13.38 ;')  == 'false',  &
@@ -306,12 +349,20 @@ subroutine unit_test_comp_f32(npass, nfail)
 			eval('13.37 != 13.38 ;')  == 'true',  &
 			eval('13.37 == 4.2   ;')  == 'false',  &
 			eval('4.2   == 13.37 ;')  == 'false',  &
-			eval('1.0   == 1.0   ;')  == 'true'    &
+			eval('1.0   == 1.0   ;')  == 'true',   &
+			eval('13.37f >  13.36 ;')  == 'true',  &
+			eval('13.37 >  13.36f ;')  == 'true',  &
+			eval('13.37f >= 13.38 ;')  == 'false',  &
+			eval('13.37 >= 13.38f ;')  == 'false',  &
+			eval('13.37f <= 13.38 ;')  == 'true',  &
+			.false.  &
 		]
+
+	tests = tests(1: size(tests) - 1)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_comp_f32
+end subroutine unit_test_comp_f64
 
 !===============================================================================
 
@@ -438,63 +489,97 @@ subroutine unit_test_comp_ass(npass, nfail)
 	tests = &
 		[   &
 			eval('let j = 10; j += 3; j;', quiet) == '13', &
-			abs(eval_f32('let f = 0.5; f += 0.25; f;', quiet) - 0.75) < tol, &
+			abs(eval_f32('let f = 0.5f; f += 0.25f; f;', quiet) - 0.75) < tol, &
+			abs(eval_f64('let f = 0.5; f += 0.25; f;', quiet) - 0.75d0) < tol, &
 			eval('let s = "hello "; s += "world"; s;', quiet) == 'hello world', &
-			abs(eval_f32('let f = 0.5; f += 0.25;', quiet) - 0.75) < tol, &
+			abs(eval_f32('let f = 0.5f; f += 0.25f;', quiet) - 0.75) < tol, &
+			abs(eval_f64('let f = 0.5; f += 0.25;', quiet) - 0.75d0) < tol, &
 			eval('let s = "hello "; s += "world";', quiet) == 'hello world', &
 			eval('let iv = [10; 3]; iv[0] += 5;', quiet) == '15', &
 			eval('let iv = [10; 3]; iv[0] += 5; iv;', quiet) == '[15, 10, 10]', &
 			eval('let iv = [10; 3]; iv[1] += 5; iv;', quiet) == '[10, 15, 10]', &
 			eval('let iv = [10; 3]; iv[1] += 5.1; iv;', quiet) == '[10, 15, 10]', &
-			abs(eval_f32('let v = [10.0; 3]; v[0] += 5.0;', quiet) - 15) < tol, &
-			eval('let v = [10.0; 3]; v[0] += 5.0; v;', quiet) == '[1.500000E+01, 1.000000E+01, 1.000000E+01]', &
-			eval('let v = [10.0; 3]; v[1] += 5.0; v;', quiet) == '[1.000000E+01, 1.500000E+01, 1.000000E+01]', &
-			eval('let v = [10.0; 3]; v[1] += 5; v;', quiet) == '[1.000000E+01, 1.500000E+01, 1.000000E+01]', &
+			abs(eval_f32('let v = [10.0f; 3]; v[0] += 5.0f;', quiet) - 15) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[0] += 5.0;', quiet) - 15) < tol, &
+			eval('let v = [10.0f; 3]; v[0] += 5.0f; v;', quiet) == '[1.500000E+01, 1.000000E+01, 1.000000E+01]', &
+			eval('let v = [10.0f; 3]; v[1] += 5.0f; v;', quiet) == '[1.000000E+01, 1.500000E+01, 1.000000E+01]', &
+			eval('let v = [10.0f; 3]; v[1] += 5; v;', quiet) == '[1.000000E+01, 1.500000E+01, 1.000000E+01]', &
+			abs(eval_f64('let v = [10.0; 3]; v[0] += 5.0; sum(v);', quiet) - 35) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] += 5.0; sum(v);', quiet) - 35) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] += 5; sum(v);', quiet) - 35) < tol, &
+			eval('let i = 20; i += 5.1f;', quiet) == '25', &
 			eval('let i = 20; i += 5.1;', quiet) == '25', &
-			abs(eval_f32('let i = 20.1; i += 5;', quiet) - 25.1) < tol, &
+			abs(eval_f32('let i = 20.1f; i += 5;', quiet) - 25.1) < tol, &
+			abs(eval_f64('let i = 20.1; i += 5;', quiet) - 25.1d0) < tol, &
 			eval('let j = 10; j -= 3; j;', quiet) == '7', &
-			abs(eval_f32('let f = 0.75; f -= 0.25; f;', quiet) - 0.5) < tol, &
+			abs(eval_f32('let f = 0.75f; f -= 0.25f; f;', quiet) - 0.5) < tol, &
+			abs(eval_f64('let f = 0.75; f -= 0.25; f;', quiet) - 0.5d0) < tol, &
 			eval('let j = 10; j -= 3;', quiet) == '7', &
-			abs(eval_f32('let f = 0.75; f -= 0.25;', quiet) - 0.5) < tol, &
+			abs(eval_f32('let f = 0.75f; f -= 0.25f;', quiet) - 0.5) < tol, &
+			abs(eval_f64('let f = 0.75; f -= 0.25;', quiet) - 0.5d0) < tol, &
 			eval('let iv = [10; 3]; iv[0] -= 4;', quiet) == '6', &
 			eval('let iv = [10; 3]; iv[0] -= 4; iv;', quiet) == '[6, 10, 10]', &
 			eval('let iv = [10; 3]; iv[1] -= 4; iv;', quiet) == '[10, 6, 10]', &
 			eval('let iv = [10; 3]; iv[1] -= 3.9; iv;', quiet) == '[10, 6, 10]', &
-			abs(eval_f32('let v = [10.0; 3]; v[0] -= 4.0;', quiet) - 6) < tol, &
-			eval('let v = [10.0; 3]; v[0] -= 4.0; v;', quiet) == '[6.000000E+00, 1.000000E+01, 1.000000E+01]', &
-			eval('let v = [20.0; 3]; v[1] -= 4.0; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
-			eval('let v = [20.0; 3]; v[1] -= 4; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
+			abs(eval_f32('let v = [10.0f; 3]; v[0] -= 4.0f;', quiet) - 6) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[0] -= 4.0;', quiet) - 6) < tol, &
+			eval('let v = [10.0f; 3]; v[0] -= 4.0f; v;', quiet) == '[6.000000E+00, 1.000000E+01, 1.000000E+01]', &
+			eval('let v = [20.0f; 3]; v[1] -= 4.0f; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
+			eval('let v = [20.0f; 3]; v[1] -= 4; v;', quiet) == '[2.000000E+01, 1.600000E+01, 2.000000E+01]', &
+			abs(eval_f64('let v = [10.0; 3]; v[0] -= 4.0; sum(v);', quiet) - 26) < tol, &
+			abs(eval_f64('let v = [20.0; 3]; v[1] -= 4.0; sum(v);', quiet) - 56) < tol, &
+			abs(eval_f64('let v = [20.0; 3]; v[1] -= 4; sum(v);', quiet) - 56) < tol, &
+			eval('let i = 20; i -= 5.1f;', quiet) == '14', &
+			abs(eval_f32('let i = 20.1f; i -= 5;', quiet) - 15.1) < tol, &
+			eval('let i = 20; i -= 3.1f;', quiet) == '16', &
+			abs(eval_f32('let i = 20.1f; i -= 3;', quiet) - 17.1) < tol, &
 			eval('let i = 20; i -= 5.1;', quiet) == '14', &
-			abs(eval_f32('let i = 20.1; i -= 5;', quiet) - 15.1) < tol, &
+			abs(eval_f64('let i = 20.1; i -= 5;', quiet) - 15.1d0) < tol, &
 			eval('let i = 20; i -= 3.1;', quiet) == '16', &
-			abs(eval_f32('let i = 20.1; i -= 3;', quiet) - 17.1) < tol, &
+			abs(eval_f64('let i = 20.1; i -= 3;', quiet) - 17.1d0) < tol, &
 			eval('let j =  7; j *= 6; j;', quiet) == '42', &
 			eval('let j = 10; j *= 3; j;', quiet) == '30', &
-			abs(eval_f32('let f = 0.5; f *= 0.25; f;', quiet) - 0.125) < tol, &
-			abs(eval_f32('let f = 0.5; f *= 0.25;', quiet) - 0.125) < tol, &
+			abs(eval_f32('let f = 0.5f; f *= 0.25f; f;', quiet) - 0.125) < tol, &
+			abs(eval_f32('let f = 0.5f; f *= 0.25f;', quiet) - 0.125) < tol, &
+			abs(eval_f64('let f = 0.5; f *= 0.25; f;', quiet) - 0.125d0) < tol, &
+			abs(eval_f64('let f = 0.5; f *= 0.25;', quiet) - 0.125d0) < tol, &
 			eval('let iv = [10; 3]; iv[0] *= 5;', quiet) == '50', &
 			eval('let iv = [10; 3]; iv[0] *= 5; iv;', quiet) == '[50, 10, 10]', &
 			eval('let iv = [10; 3]; iv[1] *= 5; iv;', quiet) == '[10, 50, 10]', &
 			eval('let iv = [10; 3]; iv[1] *= 5.101; iv;', quiet) == '[10, 51, 10]', &
-			abs(eval_f32('let v = [10.0; 3]; v[0] *= 5.0;', quiet) - 50) < tol, &
-			eval('let v = [10.0; 3]; v[0] *= 5.0; v;', quiet) == '[5.000000E+01, 1.000000E+01, 1.000000E+01]', &
-			eval('let v = [10.0; 3]; v[1] *= 5.0; v;', quiet) == '[1.000000E+01, 5.000000E+01, 1.000000E+01]', &
-			eval('let v = [10.0; 3]; v[1] *= 5; v;', quiet) == '[1.000000E+01, 5.000000E+01, 1.000000E+01]', &
-			eval('let i = 20; i *= 5.101;', quiet) == '102', &
-			abs(eval_f32('let i = 20.1; i *= 5;', quiet) - 100.5) < tol, &
+			abs(eval_f32('let v = [10.0f; 3]; v[0] *= 5.0f;', quiet) - 50) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[0] *= 5.0;', quiet) - 50) < tol, &
+			eval('let v = [10.0f; 3]; v[0] *= 5.0f; v;', quiet) == '[5.000000E+01, 1.000000E+01, 1.000000E+01]', &
+			eval('let v = [10.0f; 3]; v[1] *= 5.0f; v;', quiet) == '[1.000000E+01, 5.000000E+01, 1.000000E+01]', &
+			eval('let v = [10.0f; 3]; v[1] *= 5; v;', quiet) == '[1.000000E+01, 5.000000E+01, 1.000000E+01]', &
+			abs(eval_f64('let v = [10.0; 3]; v[0] *= 5.0; sum(v);', quiet) - 70) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] *= 5.0; sum(v);', quiet) - 70) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] *= 5; sum(v);', quiet) - 70) < tol, &
+			eval('let i = 20; i *= 5.101f;', quiet) == '102', &
+			abs(eval_f32('let i = 20.1f; i *= 5;', quiet) - 100.5) < tol, &
 			eval('let j = 12; j /= 3; j;', quiet) == '4', &
-			abs(eval_f32('let f = 0.5; f /= 0.25; f;', quiet) - 2.0) < tol, &
-			abs(eval_f32('let f = 0.5; f /= 0.25;', quiet) - 2.0) < tol, &
+			abs(eval_f32('let f = 0.5f; f /= 0.25f; f;', quiet) - 2.0) < tol, &
+			abs(eval_f32('let f = 0.5f; f /= 0.25f;', quiet) - 2.0) < tol, &
+			eval('let i = 20; i *= 5.101;', quiet) == '102', &
+			abs(eval_f64('let i = 20.1; i *= 5;', quiet) - 100.5) < tol, &
+			eval('let j = 12; j /= 3; j;', quiet) == '4', &
+			abs(eval_f64('let f = 0.5; f /= 0.25; f;', quiet) - 2.0d0) < tol, &
+			abs(eval_f64('let f = 0.5; f /= 0.25;', quiet) - 2.0d0) < tol, &
 			eval('let iv = [10; 3]; iv[0] /= 5;', quiet) == '2', &
 			eval('let iv = [10; 3]; iv[0] /= 5; iv;', quiet) == '[2, 10, 10]', &
 			eval('let iv = [10; 3]; iv[1] /= 5; iv;', quiet) == '[10, 2, 10]', &
 			eval('let iv = [10; 3]; iv[1] /= 4.9; iv;', quiet) == '[10, 2, 10]', &
-			abs(eval_f32('let v = [10.0; 3]; v[0] /= 5.0;', quiet) - 2) < tol, &
-			eval('let v = [10.0; 3]; v[0] /= 5.0; v;', quiet) == '[2.000000E+00, 1.000000E+01, 1.000000E+01]', &
-			eval('let v = [10.0; 3]; v[1] /= 5.0; v;', quiet) == '[1.000000E+01, 2.000000E+00, 1.000000E+01]', &
-			eval('let v = [10.0; 3]; v[1] /= 5; v;', quiet) == '[1.000000E+01, 2.000000E+00, 1.000000E+01]', &
+			abs(eval_f32('let v = [10.0f; 3]; v[0] /= 5.0f;', quiet) - 2) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[0] /= 5.0;', quiet) - 2) < tol, &
+			eval('let v = [10.0f; 3]; v[0] /= 5.0f; v;', quiet) == '[2.000000E+00, 1.000000E+01, 1.000000E+01]', &
+			eval('let v = [10.0f; 3]; v[1] /= 5.0f; v;', quiet) == '[1.000000E+01, 2.000000E+00, 1.000000E+01]', &
+			eval('let v = [10.0f; 3]; v[1] /= 5; v;', quiet) == '[1.000000E+01, 2.000000E+00, 1.000000E+01]', &
+			abs(eval_f64('let v = [10.0; 3]; v[0] /= 5.0; sum(v);', quiet) - 22) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] /= 5.0; sum(v);', quiet) - 22) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v[1] /= 5; sum(v);', quiet) - 22) < tol, &
 			eval('let i = 20; i /= 4.9;', quiet) == '4', &
-			abs(eval_f32('let i = 20.5; i /= 5;', quiet) - 4.1) < tol, &
+			abs(eval_f32('let i = 20.5f; i /= 5;', quiet) - 4.1) < tol, &
+			abs(eval_f64('let i = 20.5; i /= 5;', quiet) - 4.1d0) < tol, &
 			eval('let j = 3; j **= 2; j;', quiet) == '9', &
 			eval('let j = 4; j **= 2; j;', quiet) == '16', &
 			eval('let j = 2; j **= 3; j;', quiet) == '8', &
@@ -545,8 +630,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 
 	tests = &
 		[   &
-			abs(eval_f32('exp(0.0);') - 1.0) < tol,  &
-			abs(eval_f32('exp(1.0);') - exp(1.0)) < tol,  &
+			abs(eval_f32('exp(0.0f);') - 1.0) < tol,  &
+			abs(eval_f32('exp(1.0f);') - exp(1.0)) < tol,  &
+			abs(eval_f64('exp(0.0);') - 1.0d0) < tol,  &
+			abs(eval_f64('exp(1.0);') - exp(1.0d0)) < tol,  &
 			eval_i32('min(3, 2);')  == 2,  &
 			eval_i32('min(2, 2);')  == 2,  &
 			eval_i32('min(2, 3, 4);')  == 2,  &
@@ -563,14 +650,16 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('min(5, 0, 3, 4);')  == 0,  &
 			eval('min(4000000000, 3000000000);')  == "3000000000",  &
 			eval('min(4000000000, 5000000000);')  == "4000000000",  &
-			abs(eval_f32('min(3.0, 2.0);') - 2.0) < tol, &
-			abs(eval_f32('min(2.0, 3.0);') - 2.0) < tol, &
-			abs(eval_f32('min(4.0, 3.0, 5.0);') - 3.0) < tol, &
-			abs(eval_f32('min(4.0, 3.0, -5.0);') - -5.0) < tol, &
-			abs(eval_f32('max(3.0, 2.0);') - 3.0) < tol, &
-			abs(eval_f32('max(2.0, 3.0);') - 3.0) < tol, &
-			abs(eval_f32('max(4.0, 3.0, 5.0);') - 5.0) < tol, &
-			abs(eval_f32('max(4.0, 3.0, -5.0);') - 4.0) < tol, &
+			abs(eval_f32('min(3.0f, 2.0f);') - 2.0) < tol, &
+			abs(eval_f32('min(2.0f, 3.0f);') - 2.0) < tol, &
+			abs(eval_f32('min(4.0f, 3.0f, 5.0f);') - 3.0) < tol, &
+			abs(eval_f32('min(4.0f, 3.0f, -5.0f);') - -5.0) < tol, &
+			abs(eval_f32('max(3.0f, 2.0f);') - 3.0) < tol, &
+			abs(eval_f32('max(2.0f, 3.0f);') - 3.0) < tol, &
+			abs(eval_f32('max(4.0f, 3.0f, 5.0f);') - 5.0) < tol, &
+			abs(eval_f32('max(4.0f, 3.0f, -5.0f);') - 4.0) < tol, &
+			abs(eval_f64('min(3.0, 2.0);') - 2.0) < tol, &
+			abs(eval_f64('min(2.0, 3.0);') - 2.0) < tol, &
 			eval_i32('max(3, 2);')  == 3,  &
 			eval_i32('max(2, 2);')  == 2,  &
 			eval_i32('max(2, 3, 4);')  == 4,  &
@@ -626,6 +715,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f32('parse_f32("2");') - 2.000000E+00) < tol, &
 			abs(eval_f32('parse_f32("-3");') - -3.000000E+00) < tol, &
 			abs(eval_f32('parse_f32("-2");') - -2.000000E+00) < tol, &
+			abs(eval_f64('parse_f64("-3.000000E+00");') - -3.000000d+00) < tol, &
+			abs(eval_f64('parse_f64("-2.000000E+00");') - -2.000000d+00) < tol, &
+			abs(eval_f64('parse_f64("3.0");') - 3.000000d+00) < tol, &
+			abs(eval_f64('parse_f64("2.0");') - 2.000000d+00) < tol, &
 			eval_i64('len(     "");')  == 0,  &
 			eval_i64('len(    " ");')  == 1,  &
 			eval_i64('len(   "  ");')  == 2,  &
@@ -640,6 +733,9 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('i32( 0.0);') ==   "0", &
 			eval('i32( 1.1);') ==   "1", &
 			eval('i32(-1.1);') ==  "-1", &
+			eval('i32( 0.0f);') ==   "0", &
+			eval('i32( 1.1f);') ==   "1", &
+			eval('i32(-1.1f);') ==  "-1", &
 			eval('i32(  0);') ==   "0", &
 			eval('i32(  1);') ==   "1", &
 			eval('i32( -1);') ==  "-1", &
@@ -672,6 +768,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('char(40);') ==  "(", &
 			eval('char(41);') ==  ")", &
 			eval('char(32);') ==  " ", &
+			eval('i64([ 0.0f, 2.2f, 3.3f]);') ==  "[0, 2, 3]", &
 			eval('i64([ 0.0, 2.2, 3.3]);') ==  "[0, 2, 3]", &
 			eval('i64([ 1.1, 2.2, 3.3]);') ==  "[1, 2, 3]", &
 			eval('i64([-1.1, 2.2, 3.3]);') ==  "[-1, 2, 3]", &
@@ -699,7 +796,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('sum([1: 5]);') == "10", &
 			eval('sum([1: 2: 6]);') == "9", &
 			eval('sum([7, 3, 15, 1; 2, 2]);') == "26", &
-			eval('[sum([0.0: 3.0; 4])];') == "[6.000000E+00]", &
+			eval('[sum([0.0f: 3.0f; 4])];') == "[6.000000E+00]", &
+			eval('i32([sum([0.0: 3.0; 4])]);') == "[6]", &
 			eval('sum(i64([1: 4]));') == "6", &
 			eval_i32('min(1, 2);')  == 1   &
 		]
@@ -889,31 +987,31 @@ subroutine unit_test_for_1(npass, nfail)
 			eval('let sum_ = i64(0); for x in [i64(5):-1:0] sum_ += x; sum_;', quiet) == '15', &
 			eval('let sum_ = i64(0); for x in [i64(5):-1:-2] sum_ += x; sum_;', quiet) == '14', &
 			eval('let sum_ = i64(0); for x in [i64(0):2:6] sum_ += x; sum_;', quiet) == '6', &
-			eval('let sum_ = 0.0; for x in [0.0: 1.0: 5.0] sum_ += x; [sum_];', quiet) == '[1.000000E+01]', &  ! [] is poor man's trim()
-			eval('let sum_ = 0.0; for x in [0.0:1.0:6.0] sum_ += x; [sum_];', quiet)   == '[1.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [10.0:1.0:16.0] sum_ += x; [sum_];', quiet) == '[7.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [5.0:-1.0:0.0] sum_ += x; [sum_];', quiet)  == '[1.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [5.0:-1.0:-2.0] sum_ += x; [sum_];', quiet) == '[1.400000E+01]', &
-			eval('let sum_ = 0.0; for x in [0.0:2.0:6.0] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
+			eval('let sum_ = 0.0f; for x in [0.0f: 1.0f: 5.0f] sum_ += x; [sum_];', quiet) == '[1.000000E+01]', &  ! [] is poor man's trim()
+			eval('let sum_ = 0.0f; for x in [0.0f:1.0f:6.0f] sum_ += x; [sum_];', quiet)   == '[1.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [10.0f:1.0f:16.0f] sum_ += x; [sum_];', quiet) == '[7.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [5.0f:-1.0f:0.0f] sum_ += x; [sum_];', quiet)  == '[1.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [5.0f:-1.0f:-2.0f] sum_ += x; [sum_];', quiet) == '[1.400000E+01]', &
+			eval('let sum_ = 0.0f; for x in [0.0f:2.0f:6.0f] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
 			eval('let vec = [0:6]; let sum_ = 0; for x in vec sum_ += x; sum_;', quiet) == '15', &
-			eval('let vec = [0.0:1.0:6.0]; let sum_ = 0.0; for x in vec sum_ += x; [sum_];', quiet) == '[1.500000E+01]', &
+			eval('let vec = [0.0f:1.0f:6.0f]; let sum_ = 0.0f; for x in vec sum_ += x; [sum_];', quiet) == '[1.500000E+01]', &
 			eval('let mat = [1,2,3, 4,5,6; 3,2]; let sum_ = 0; for x in mat sum_ += x; sum_;', quiet) == '21', &
-			eval('let sum_ = 0.0; for x in [0.0: 4.0; 5] sum_ += x; [sum_];', quiet) == '[1.000000E+01]', &  ! [] is poor man's trim()
-			eval('let sum_ = 0.0; for x in [0.0: 5.0; 6] sum_ += x; [sum_];', quiet)   == '[1.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [10.0: 15.0; 6] sum_ += x; [sum_];', quiet) == '[7.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [5.0: 1.0; 5] sum_ += x; [sum_];', quiet)  == '[1.500000E+01]', &
-			eval('let sum_ = 0.0; for x in [5.0: -1.0; 7] sum_ += x; [sum_];', quiet) == '[1.400000E+01]', &
-			eval('let sum_ = 0.0; for x in [0.0: 4.0; 3] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
-			eval('let sum_ = 0.0; for x in [0.0, 4.0, 2.0] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
+			eval('let sum_ = 0.0f; for x in [0.0f: 4.0f; 5] sum_ += x; [sum_];', quiet) == '[1.000000E+01]', &  ! [] is poor man's trim()
+			eval('let sum_ = 0.0f; for x in [0.0f: 5.0f; 6] sum_ += x; [sum_];', quiet)   == '[1.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [10.0f: 15.0f; 6] sum_ += x; [sum_];', quiet) == '[7.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [5.0f: 1.0f; 5] sum_ += x; [sum_];', quiet)  == '[1.500000E+01]', &
+			eval('let sum_ = 0.0f; for x in [5.0f: -1.0f; 7] sum_ += x; [sum_];', quiet) == '[1.400000E+01]', &
+			eval('let sum_ = 0.0f; for x in [0.0f: 4.0f; 3] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
+			eval('let sum_ = 0.0f; for x in [0.0f, 4.0f, 2.0f] sum_ += x; [sum_];', quiet)   == '[6.000000E+00]', &
 			eval('let sum_ = 0; for x in [4, 0, 2] sum_ += x; sum_;', quiet)   == '6', &
 			eval('let sum_ = 0; for x in i32([4, 0, 2]) sum_ += x; sum_;', quiet)   == '6', &
 			eval('let sum_ = i64(0); for x in [i64(4), i64(0), i64(2)] sum_ += x; sum_;', quiet)   == '6', &
 			eval('let sum_ = 0; for x in [4, 0, 3, 2; 2, 2] sum_ += x; sum_;', quiet)   == '9', &
 			eval('let sum_ = i64(0); for x in [i64(4), i64(0), i64(3), i64(2); 2, 2] sum_ += x; sum_;', quiet)   == '9', &
-			eval('let sum_ = 0.0; for x in [4.0, 0.0, 3.0, 2.0; 2, 2] sum_ += x; [sum_];', quiet)   == '[9.000000E+00]', &
+			eval('let sum_ = 0.0f; for x in [4.0f, 0.0f, 3.0f, 2.0f; 2, 2] sum_ += x; [sum_];', quiet)   == '[9.000000E+00]', &
 			eval('let sum_ = 0; for x in [42; 5] sum_ += x; sum_;', quiet)   == '210', &
 			eval('let sum_ = i64(0); for x in [i64(42); 5] sum_ += x; sum_;', quiet)   == '210', &
-			eval('let sum_ = 0.0; for x in [42.0; 5] sum_ += x; [sum_];', quiet)   == '[2.100000E+02]', &
+			eval('let sum_ = 0.0f; for x in [42.0f; 5] sum_ += x; [sum_];', quiet)   == '[2.100000E+02]', &
 			eval('let sum_ = 0; for x in [42; 2, 3] sum_ += x; sum_;', quiet)   == '252', &
 			eval('let sum_ = 0; for x in [42; 2, 10, 3] sum_ += x; sum_;', quiet)   == '2520', &
 			.false.  & ! so I don't have to bother w/ trailing commas
@@ -1063,46 +1161,178 @@ subroutine unit_test_f32_1(npass, nfail)
 
 	tests = &
 		[   &
-			abs(eval_f32('1.0;') - 1) < tol, &
-			abs(eval_f32('6.9e1;') - 6.9e1) < tol, &
-			abs(eval_f32('+6.9e1;') - +6.9e1) < tol, &
-			abs(eval_f32('-6.9e1;') - -6.9e1) < tol, &
-			abs(eval_f32('0.333333333;') - 0.333333333) < tol, &
-			abs(eval_f32('1.1 +  2  ;') - (1.1 +  2  )) < tol, &
-			abs(eval_f32('1   +  2.1;') - (1   +  2.1)) < tol, &
-			abs(eval_f32('1.1 +  2.1;') - (1.1 +  2.1)) < tol, &
-			abs(eval_f32('1.1 -  2  ;') - (1.1 -  2  )) < tol, &
-			abs(eval_f32('1   -  2.1;') - (1   -  2.1)) < tol, &
-			abs(eval_f32('1.1 -  2.1;') - (1.1 -  2.1)) < tol, &
-			abs(eval_f32('1.1 *  2  ;') - (1.1 *  2  )) < tol, &
-			abs(eval_f32('1   *  2.1;') - (1   *  2.1)) < tol, &
-			abs(eval_f32('1.1 *  2.1;') - (1.1 *  2.1)) < tol, &
-			abs(eval_f32('1.1 /  2  ;') - (1.1 /  2  )) < tol, &
-			abs(eval_f32('1   /  2.1;') - (1   /  2.1)) < tol, &
-			abs(eval_f32('1.1 /  2.1;') - (1.1 /  2.1)) < tol, &
-			abs(eval_f32('1.1 ** 2  ;') - (1.1 ** 2  )) < tol, &
-			abs(eval_f32('1   ** 2.1;') - (1   ** 2.1)) < tol, &
-			abs(eval_f32('1.1 ** 2.1;') - (1.1 ** 2.1)) < tol, &
-			abs(eval_f32('1.2e-3 + 4.5e-3;') - (1.2e-3 + 4.5e-3)) < tol, &
-			abs(eval_f32('1.2e-3+4.5e-3;') - (1.2e-3+4.5e-3)) < tol, &
-			abs(eval_f32('1.2e-3-4.5e-3;') - (1.2e-3-4.5e-3)) < tol, &
-			abs(eval_f32('1.2e+3-4.5e+3;') - (1.2e+3-4.5e+3)) < tol, &
-			abs(eval_f32('1.1 + 2.2 + 34;') - (1.1 + 2.2 + 34)) < tol, &
-			abs(eval_f32('1 + 2 * 3.3;') - (1 + 2 * 3.3)) < tol, &
-			abs(eval_f32('1 * 2 * 3.6 * 4;') - (1 * 2 * 3.6 * 4)) < tol, &
-			abs(eval_f32('73 - 48.0;') - (73 - 48.0)) < tol, &
-			abs(eval_f32('73.1 - 48 - 21;') - (73.1 - 48 - 21)) < tol, &
-			abs(eval_f32('24 / 6.3;') - (24 / 6.3)) < tol, &
-			abs(eval_f32('24 / 6 / 2.1;') - (24 / 6 / 2.1)) < tol, &
-			abs(eval_f32('2.0 ** 5;') - (2.0 ** 5)) < tol, &
-			abs(eval_f32('3 ** 4.1;') - (3 ** 4.1)) < tol, &
-			abs(eval_f32('3.43 - 87654345 / 27 + 76 * 234 - 65432 / 63;') &
+			abs(eval_f32('1.0f;') - 1) < tol, &
+			abs(eval_f32('6.9e1f;') - 6.9e1) < tol, &
+			abs(eval_f32('+6.9e1f;') - +6.9e1) < tol, &
+			abs(eval_f32('-6.9e1f;') - -6.9e1) < tol, &
+			abs(eval_f32('0.333333333f;') - 0.333333333) < tol, &
+			abs(eval_f32('1.1f +  2  ;') - (1.1 +  2  )) < tol, &
+			abs(eval_f32('1   +  2.1f;') - (1   +  2.1)) < tol, &
+			abs(eval_f32('1.1f +  2.1f;') - (1.1 +  2.1)) < tol, &
+			abs(eval_f32('1.1f -  2  ;') - (1.1 -  2  )) < tol, &
+			abs(eval_f32('1   -  2.1f;') - (1   -  2.1)) < tol, &
+			abs(eval_f32('1.1f -  2.1f;') - (1.1 -  2.1)) < tol, &
+			abs(eval_f32('1.1f *  2  ;') - (1.1 *  2  )) < tol, &
+			abs(eval_f32('1   *  2.1f;') - (1   *  2.1)) < tol, &
+			abs(eval_f32('1.1f *  2.1f;') - (1.1 *  2.1)) < tol, &
+			abs(eval_f32('1.1f /  2  ;') - (1.1 /  2  )) < tol, &
+			abs(eval_f32('1   /  2.1f;') - (1   /  2.1)) < tol, &
+			abs(eval_f32('1.1f /  2.1f;') - (1.1 /  2.1)) < tol, &
+			abs(eval_f32('1.1f ** 2  ;') - (1.1 ** 2  )) < tol, &
+			abs(eval_f32('1   ** 2.1f;') - (1   ** 2.1)) < tol, &
+			abs(eval_f32('1.1f ** 2.1f;') - (1.1 ** 2.1)) < tol, &
+			abs(eval_f32('1.2e-3f + 4.5e-3f;') - (1.2e-3 + 4.5e-3)) < tol, &
+			abs(eval_f32('1.2e-3f+4.5e-3f;') - (1.2e-3+4.5e-3)) < tol, &
+			abs(eval_f32('1.2e-3f-4.5e-3f;') - (1.2e-3-4.5e-3)) < tol, &
+			abs(eval_f32('1.2e+3f-4.5e+3f;') - (1.2e+3-4.5e+3)) < tol, &
+			abs(eval_f32('1.1f + 2.2f + 34;') - (1.1 + 2.2 + 34)) < tol, &
+			abs(eval_f32('1 + 2 * 3.3f;') - (1 + 2 * 3.3)) < tol, &
+			abs(eval_f32('1 * 2 * 3.6f * 4;') - (1 * 2 * 3.6 * 4)) < tol, &
+			abs(eval_f32('73 - 48.0f;') - (73 - 48.0)) < tol, &
+			abs(eval_f32('73.1f - 48 - 21;') - (73.1 - 48 - 21)) < tol, &
+			abs(eval_f32('24 / 6.3f;') - (24 / 6.3)) < tol, &
+			abs(eval_f32('24 / 6 / 2.1f;') - (24 / 6 / 2.1)) < tol, &
+			abs(eval_f32('2.0f ** 5;') - (2.0 ** 5)) < tol, &
+			abs(eval_f32('3 ** 4.1f;') - (3 ** 4.1)) < tol, &
+			abs(eval_f32('1.1f + i64(2);') - (3.1)) < tol, &
+			abs(eval_f32('i64(2) + 1.1f;') - (3.1)) < tol, &
+			abs(eval_f32('3.43f - 87654345 / 27 + 76 * 234 - 65432 / 63;') &
 			       - (3.43 - 87654345 / 27 + 76 * 234 - 65432 / 63)) < tol &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_f32_1
+
+!===============================================================================
+
+subroutine unit_test_f64_1(npass, nfail)
+
+	! Simple f64 float tests of arithmetic and comparisons with single-line
+	! evaluations
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f64 arithmetic'
+
+	logical, allocatable :: tests(:)
+
+	real, parameter :: tol = 1.e-12
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			abs(eval_f64('1.0;') - 1) < tol, &
+			abs(eval_f64('6.9e1;') - 6.9d1) < tol, &
+			abs(eval_f64('+6.9e1;') - +6.9d1) < tol, &
+			abs(eval_f64('-6.9e1;') - -6.9d1) < tol, &
+			abs(eval_f64('0.333333333;') - 0.333333333d0) < tol, &
+			abs(eval_f64('1.1 +  2  ;') - (1.1d0 +  2  )) < tol, &
+			abs(eval_f64('1   +  2.1;') - (1   +  2.1d0)) < tol, &
+			abs(eval_f64('1.1 +  2.1;') - (1.1d0 +  2.1d0)) < tol, &
+			abs(eval_f64('1.1 -  2  ;') - (1.1d0 -  2  )) < tol, &
+			abs(eval_f64('1   -  2.1;') - (1   -  2.1d0)) < tol, &
+			abs(eval_f64('1.1 -  2.1;') - (1.1d0 -  2.1d0)) < tol, &
+			abs(eval_f64('1.1 *  2  ;') - (1.1d0 *  2  )) < tol, &
+			abs(eval_f64('1   *  2.1;') - (1   *  2.1d0)) < tol, &
+			abs(eval_f64('1.1 *  2.1;') - (1.1d0 *  2.1d0)) < tol, &
+			abs(eval_f64('1.1 /  2  ;') - (1.1d0 /  2  )) < tol, &
+			abs(eval_f64('1   /  2.1;') - (1   /  2.1d0)) < tol, &
+			abs(eval_f64('1.1 /  2.1;') - (1.1d0 /  2.1d0)) < tol, &
+			abs(eval_f64('1.1 ** 2  ;') - (1.1d0 ** 2  )) < tol, &
+			abs(eval_f64('1   ** 2.1;') - (1   ** 2.1d0)) < tol, &
+			abs(eval_f64('1.1 ** 2.1;') - (1.1d0 ** 2.1d0)) < tol, &
+			abs(eval_f64('1.2e-3 + 4.5e-3;') - (1.2d-3 + 4.5d-3)) < tol, &
+			abs(eval_f64('1.2e-3+4.5e-3;') - (1.2d-3+4.5d-3)) < tol, &
+			abs(eval_f64('1.2e-3-4.5e-3;') - (1.2d-3-4.5d-3)) < tol, &
+			abs(eval_f64('1.2e+3-4.5e+3;') - (1.2d+3-4.5d+3)) < tol, &
+			abs(eval_f64('1.1 + 2.2 + 34;') - (1.1d0 + 2.2d0 + 34)) < tol, &
+			abs(eval_f64('1 + 2 * 3.3;') - (1 + 2 * 3.3d0)) < tol, &
+			abs(eval_f64('1 * 2 * 3.6 * 4;') - (1 * 2 * 3.6d0 * 4)) < tol, &
+			abs(eval_f64('73 - 48.0;') - (73 - 48.0d0)) < tol, &
+			abs(eval_f64('73.1 - 48 - 21;') - (73.1d0 - 48 - 21)) < tol, &
+			abs(eval_f64('24 / 6.3;') - (24 / 6.3d0)) < tol, &
+			abs(eval_f64('24 / 6 / 2.1;') - (24 / 6 / 2.1d0)) < tol, &
+			abs(eval_f64('2.0 ** 5;') - (2.0d0 ** 5)) < tol, &
+			abs(eval_f64('3 ** 4.1;') - (3 ** 4.1d0)) < tol, &
+			abs(eval_f64('1.1 + i64(2);') - (3.1d0)) < tol, &
+			abs(eval_f64('i64(2) + 1.1;') - (3.1d0)) < tol, &
+			abs(eval_f64('3.43 - 87654345 / 27 + 76 * 234 - 65432 / 63;') &
+			       - (3.43d0 - 87654345 / 27 + 76 * 234 - 65432 / 63)) < tol, &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_f64_1
+
+!===============================================================================
+
+subroutine unit_test_f64_mix(npass, nfail)
+
+	! Simple f64 float tests of arithmetic and comparisons with single-line
+	! evaluations
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f64 mixed arithmetic'
+
+	logical, allocatable :: tests(:)
+
+	real(kind = 8), parameter :: tol = 1.e-12, ftol = 1.e-9
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! There's not much need to test other operators besides `+` because of the
+	! way `-`, `*`, `/`, and `**` are generated from templates
+	!
+	! mod (%) and unary negation are still independent
+
+	tests = &
+		[   &
+			abs(eval_f64('1.1 + 2.0;') - (3.1d0)) < tol, &
+			abs(eval_f64('1.1 + 2  ;') - (3.1d0)) < tol, &
+			abs(eval_f64('1.1 + i64(2);') - (3.1d0)) < tol, &
+			abs(eval_f64('1   + 2.1;') - (3.1d0)) < tol, &
+			abs(eval_f64('i64(1) + 2.1;') - (3.1d0)) < tol, &
+			abs(eval_f64('1.2e-3 + 4.5e-3;') - (1.2d-3 + 4.5d-3)) < tol, &
+			abs(eval_f64('1.2e-3f + 4.5e-3;') - (1.2e-3 + 4.5d-3)) < tol, &
+			abs(eval_f64('1.2e-3 + 4.5e-3f;') - (1.2d-3 + 4.5e-3)) < tol, &
+			abs(eval_f64('1.1 + 2.0f;') - (1.1d0 + 2.0e0)) < tol, &
+			abs(eval_f64('1.1f + 2.0;') - (1.1e0 + 2.0d0)) < tol, &
+			abs(eval_f64('sum([1.1] + [2.0]);') - (3.1d0)) < ftol, &
+			abs(eval_f64('sum([1.1f] + [2.0]);') - (1.1e0 + 2.0d0)) < ftol, &
+			abs(eval_f64('sum([1.1] + [2.0f]);') - (1.1d0 + 2.0e0)) < ftol, &
+			abs(eval_f64('sum([1.1] + [2]);') - (3.1d0)) < ftol, &
+			abs(eval_f64('sum([2] + [1.1]);') - (3.1d0)) < ftol, &
+			abs(eval_f64('sum(1.1 + [2.0]);') - (3.1d0)) < ftol, &
+			abs(eval_f64('sum([1.1] + 2.0);') - (3.1d0)) < ftol, &
+			abs(eval_f64('sum(1.1f + [2.0]);') - (1.1e0 + 2.0d0)) < ftol, &
+			abs(eval_f64('sum([1.1f] + 2.0);') - (1.1e0 + 2.0d0)) < ftol, &
+			abs(eval_f64('sum(1.1 + [2.0f]);') - (1.1d0 + 2.0e0)) < ftol, &
+			abs(eval_f64('sum([1.1] + 2.0f);') - (1.1d0 + 2.0e0)) < ftol, &
+			abs(eval_f64('sum([1.1] + 2);') - (3.1d0)) < ftol, &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_f64_mix
 
 !===============================================================================
 
@@ -1217,10 +1447,14 @@ subroutine unit_test_i64(npass, nfail)
 			eval('1337 >=  i64(1338  );')  == 'false',  &
 			eval('1337 >=  i64(1337  );')  == 'true' ,  &
 			eval('1337 >=  i64(1336  );')  == 'true' ,  &
-			abs(eval_f32('i64(2) * 3.0;', quiet) - 6.0) < tol, &
-			abs(eval_f32('3.0 * i64(2);', quiet) - 6.0) < tol, &
-			abs(eval_f32('i64(2) + 3.0;', quiet) - 5.0) < tol, &
-			abs(eval_f32('3.0 + i64(2);', quiet) - 5.0) < tol, &
+			abs(eval_f32('i64(2) * 3.0f;', quiet) - 6.0) < tol, &
+			abs(eval_f32('3.0f * i64(2);', quiet) - 6.0) < tol, &
+			abs(eval_f32('i64(2) + 3.0f;', quiet) - 5.0) < tol, &
+			abs(eval_f32('3.0f + i64(2);', quiet) - 5.0) < tol, &
+			abs(eval_f64('i64(2) * 3.0;', quiet) - 6.0d0) < tol, &
+			abs(eval_f64('3.0 * i64(2);', quiet) - 6.0d0) < tol, &
+			abs(eval_f64('i64(2) + 3.0;', quiet) - 5.0d0) < tol, &
+			abs(eval_f64('3.0 + i64(2);', quiet) - 5.0d0) < tol, &
 			eval('[8000000000; 3];') == '[8000000000, 8000000000, 8000000000]', &
 			eval('[8000000000: 8000000003];') == '[8000000000, 8000000001, 8000000002]', &
 			eval('[8000000000: 2: 8000000006];') == '[8000000000, 8000000002, 8000000004]', &
@@ -1284,9 +1518,10 @@ subroutine unit_test_str(npass, nfail)
 			eval('"testing " + str(1);') == 'testing 1', &
 			eval('"testing " + str(true) ;') == 'testing true', &
 			eval('"testing " + str(false);') == 'testing false', &
-			eval('"testing " + str(1.0);') == 'testing     1.000000E+00', &
+			eval('"testing " + str(1.0f);') == 'testing     1.000000E+00', &
 			eval('"testing testing " + str(1) + " " + str(2);') == 'testing testing 1 2', &
 			eval('"testing " + str(1, " ", 2, " ", 1, " ", 2);') == 'testing 1 2 1 2', &
+			trimw(eval('str(1.0);')) == '1.000000000000000E+00', &
 			eval('"hello world";') == 'hello world'  &
 		]
 
@@ -1437,6 +1672,9 @@ subroutine unit_test_arr_comp(npass, nfail)
 			eval('2.0 == [0.0, 2.0, 3.0];') == '[false, true, false]', &
 			eval('[0.0, 2.0, 3.0] == 3.0;') == '[false, false, true]', &
 			eval('[0.0, 2.0, 3.0] == [4.0, 2.0, 3.0];') == '[false, true, true]', &
+			eval('2.0f == [0.0f, 2.0f, 3.0f];') == '[false, true, false]', &
+			eval('[0.0f, 2.0f, 3.0f] == 3.0f;') == '[false, false, true]', &
+			eval('[0.0f, 2.0f, 3.0f] == [4.0f, 2.0f, 3.0f];') == '[false, true, true]', &
 			eval('2 == [i64(0), i64(2), i64(3)];') == '[false, true, false]', &
 			eval('[0, 2, 3] == i64(3);') == '[false, false, true]', &
 			eval('[0, 2, 3] == [i64(4), i64(2), i64(3)];') == '[false, true, true]', &
@@ -1508,6 +1746,12 @@ subroutine unit_test_arr_comp(npass, nfail)
 			eval('2.0 > [0.0, 2.0, 3.0];') == '[true, false, false]', &
 			eval('[0.0, 2.0, 3.0] > 2.0;') == '[false, false, true]', &
 			eval('[4.0, 2.0, 3.0] > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2.0f > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('[0.0f, 2.0f, 3.0f] > 2.0;') == '[false, false, true]', &
+			eval('[4.0f, 2.0f, 3.0f] > [0.0, 2.0, 3.0];') == '[true, false, false]', &
+			eval('2.0 > [0.0f, 2.0f, 3.0f];') == '[true, false, false]', &
+			eval('[0.0, 2.0, 3.0] > 2.0f;') == '[false, false, true]', &
+			eval('[4.0, 2.0, 3.0] > [0.0f, 2.0f, 3.0f];') == '[true, false, false]', &
 			eval('2 > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
 			eval('[0, 2, 3] > i64(2);') == '[false, false, true]', &
 			eval('[4, 2, 3] > [i64(0), i64(2), i64(3)];') == '[true, false, false]', &
@@ -1678,189 +1922,200 @@ subroutine unit_test_arr_op(npass, nfail)
 			eval('[3: 9] + [-3: -1: -9];') == '[0, 0, 0, 0, 0, 0]', &
 			eval('[3: 2: 9] + [-2, -3, -4];') == '[1, 2, 3]', &
 			eval('all([0: 99] + [99: -1: 0] == 99);') == 'true', &
-			eval('[0.0, 1.0] + 2.0;') == '[2.000000E+00, 3.000000E+00]', &
-			eval('[0.0, 1.0, 2.0] + 3.0;') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
-			eval('[0.0, 1.0, 2.0] + -1.0;') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
-			eval('[3.0: 1.0: 5.1] + -2.0;') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
-			eval('[3.0: 2.0: 7.1] + -2.0;') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
-			eval('2.0 + [0.0, 1.0];') == '[2.000000E+00, 3.000000E+00]', &
-			eval('3.0 + [0.0, 1.0, 2.0];') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
-			eval('-1.0 + [0.0, 1.0, 2.0];') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
-			eval('-2.0 + [3.0: 1.0: 5.1];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
-			eval('-2.0 + [3.0: 2.0: 7.1];') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
-			eval('[0.0, 1.0] + [1.0, 2.0];') == '[1.000000E+00, 3.000000E+00]', &
-			eval('[0.0, 1.0, 2.0] + [3.0, 4.0, 5.0];') == '[3.000000E+00, 5.000000E+00, 7.000000E+00]', &
-			eval('[0.0, 1.0, 2.0] + [-1.0, 5.0, -3.0];') == '[-1.000000E+00, 6.000000E+00, -1.000000E+00]', &
-			eval('[3.0: 1.0: 5.1] + [-3.0: -1.0: -5.1];') == '[0.000000E+00, 0.000000E+00, 0.000000E+00]', &
-			eval('[3.0: 2.0: 7.1] + [-2.0, -3.0, -4.0];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('i32([0.0f, 1.0f] + 2.0);') == '[2, 3]', &
+			eval('i32([0.0, 1.0] + 2.0f);') == '[2, 3]', &
+			eval('[0.0f, 1.0f] + 2.0f;') == '[2.000000E+00, 3.000000E+00]', &
+			eval('[0.0f, 1.0f, 2.0f] + 3.0f;') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
+			eval('[0.0f, 1.0f, 2.0f] + -1.0f;') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
+			eval('[3.0f: 1.0f: 5.1f] + -2.0f;') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('[3.0f: 2.0f: 7.1f] + -2.0f;') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
+			eval('2.0f + [0.0f, 1.0f];') == '[2.000000E+00, 3.000000E+00]', &
+			eval('3.0f + [0.0f, 1.0f, 2.0f];') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
+			eval('-1.0f + [0.0f, 1.0f, 2.0f];') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
+			eval('-2.0f + [3.0f: 1.0f: 5.1f];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('-2.0f + [3.0f: 2.0f: 7.1f];') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
+			eval('[0.0f, 1.0f] + [1.0f, 2.0f];') == '[1.000000E+00, 3.000000E+00]', &
+			eval('[0.0f, 1.0f, 2.0f] + [3.0f, 4.0f, 5.0f];') == '[3.000000E+00, 5.000000E+00, 7.000000E+00]', &
+			eval('[0.0f, 1.0f, 2.0f] + [-1.0f, 5.0f, -3.0f];') == '[-1.000000E+00, 6.000000E+00, -1.000000E+00]', &
+			eval('[3.0f: 1.0f: 5.1f] + [-3.0f: -1.0f: -5.1f];') == '[0.000000E+00, 0.000000E+00, 0.000000E+00]', &
+			eval('[3.0f: 2.0f: 7.1f] + [-2.0f, -3.0f, -4.0f];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
 			eval('all([0.0: 1.0: 99.1] + [99.0: -1.0: -0.1] == 9.900000E+01);') == 'true', &
-			eval('[0, 1] + 2.0;') == '[2.000000E+00, 3.000000E+00]', &
-			eval('[0, 1, 2] + 3.0;') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
-			eval('[0, 1, 2] + -1.0;') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
-			eval('[3: 1: 6] + -2.0;') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
-			eval('[3: 2: 8] + -2.0;') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
-			eval('2 + [0.0, 1.0];') == '[2.000000E+00, 3.000000E+00]', &
-			eval('3 + [0.0, 1.0, 2.0];') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
-			eval('-1 + [0.0, 1.0, 2.0];') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
-			eval('-2 + [3.0: 1.0: 5.1];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
-			eval('-2 + [3.0: 2.0: 7.1];') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
-			eval('[0, 1] + [1.0, 2.0];') == '[1.000000E+00, 3.000000E+00]', &
-			eval('[0, 1, 2] + [3.0, 4.0, 5.0];') == '[3.000000E+00, 5.000000E+00, 7.000000E+00]', &
-			eval('[0, 1, 2] + [-1.0, 5.0, -3.0];') == '[-1.000000E+00, 6.000000E+00, -1.000000E+00]', &
-			eval('[3: 1: 6] + [-3.0: -1.0: -5.1];') == '[0.000000E+00, 0.000000E+00, 0.000000E+00]', &
-			eval('[3: 2: 8] + [-2.0, -3.0, -4.0];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
-			eval('all([0: 1: 100] + [99.0: -1.0: -0.1] == 9.900000E+01);') == 'true', &
-			eval('[0.0, 1.0] + 2;') == '[2.000000E+00, 3.000000E+00]', &
-			eval('[0.0, 1.0, 2.0] + 3;') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
-			eval('[0.0, 1.0, 2.0] + -1;') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
-			eval('[3.0: 1.0: 5.1] + -2;') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
-			eval('[3.0: 2.0: 7.1] + -2;') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
-			eval('2.0 + [0, 1];') == '[2.000000E+00, 3.000000E+00]', &
-			eval('3.0 + [0, 1, 2];') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
-			eval('-1.0 + [0, 1, 2];') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
-			eval('-2.0 + [3: 1: 6];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
-			eval('-2.0 + [3: 2: 8];') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
-			eval('[0.0, 1.0] + [1, 2];') == '[1.000000E+00, 3.000000E+00]', &
-			eval('[0.0, 1.0, 2.0] + [3, 4, 5];') == '[3.000000E+00, 5.000000E+00, 7.000000E+00]', &
-			eval('[0.0, 1.0, 2.0] + [-1, 5, -3];') == '[-1.000000E+00, 6.000000E+00, -1.000000E+00]', &
-			eval('[3.0: 1.0: 5.1] + [-3: -1: -6];') == '[0.000000E+00, 0.000000E+00, 0.000000E+00]', &
-			eval('[3.0: 2.0: 7.1] + [-2, -3, -4];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
-			eval('all([0.0: 1.0: 99.1] + [99: -1: -1] == 9.900000E+01);') == 'true', &
+			eval('all([0.0f: 1.0f: 99.1f] + [99.0f: -1.0f: -0.1f] == 9.900000E+01f);') == 'true', &
+			eval('[0, 1] + 2.0f;') == '[2.000000E+00, 3.000000E+00]', &
+			eval('[0, 1, 2] + 3.0f;') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
+			eval('[0, 1, 2] + -1.0f;') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
+			eval('[3: 1: 6] + -2.0f;') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('[3: 2: 8] + -2.0f;') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
+			eval('2 + [0.0f, 1.0f];') == '[2.000000E+00, 3.000000E+00]', &
+			eval('3 + [0.0f, 1.0f, 2.0f];') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
+			eval('-1 + [0.0f, 1.0f, 2.0f];') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
+			eval('-2 + [3.0f: 1.0f: 5.1f];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('-2 + [3.0f: 2.0f: 7.1f];') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
+			eval('[0, 1] + [1.0f, 2.0f];') == '[1.000000E+00, 3.000000E+00]', &
+			eval('[0, 1, 2] + [3.0f, 4.0f, 5.0f];') == '[3.000000E+00, 5.000000E+00, 7.000000E+00]', &
+			eval('[0, 1, 2] + [-1.0f, 5.0f, -3.0f];') == '[-1.000000E+00, 6.000000E+00, -1.000000E+00]', &
+			eval('[3: 1: 6] + [-3.0f: -1.0f: -5.1f];') == '[0.000000E+00, 0.000000E+00, 0.000000E+00]', &
+			eval('[3: 2: 8] + [-2.0f, -3.0f, -4.0f];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('all([0: 1: 100] + [99.0f: -1.0f: -0.1f] == 9.900000E+01f);') == 'true', &
+			eval('[0.0f, 1.0f] + 2;') == '[2.000000E+00, 3.000000E+00]', &
+			eval('[0.0f, 1.0f, 2.0f] + 3;') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
+			eval('[0.0f, 1.0f, 2.0f] + -1;') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
+			eval('[3.0f: 1.0f: 5.1f] + -2;') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('[3.0f: 2.0f: 7.1f] + -2;') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
+			eval('2.0f + [0, 1];') == '[2.000000E+00, 3.000000E+00]', &
+			eval('3.0f + [0, 1, 2];') == '[3.000000E+00, 4.000000E+00, 5.000000E+00]', &
+			eval('-1.0f + [0, 1, 2];') == '[-1.000000E+00, 0.000000E+00, 1.000000E+00]', &
+			eval('-2.0f + [3: 1: 6];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('-2.0f + [3: 2: 8];') == '[1.000000E+00, 3.000000E+00, 5.000000E+00]', &
+			eval('[0.0f, 1.0f] + [1, 2];') == '[1.000000E+00, 3.000000E+00]', &
+			eval('[0.0f, 1.0f, 2.0f] + [3, 4, 5];') == '[3.000000E+00, 5.000000E+00, 7.000000E+00]', &
+			eval('[0.0f, 1.0f, 2.0f] + [-1, 5, -3];') == '[-1.000000E+00, 6.000000E+00, -1.000000E+00]', &
+			eval('[3.0f: 1.0f: 5.1f] + [-3: -1: -6];') == '[0.000000E+00, 0.000000E+00, 0.000000E+00]', &
+			eval('[3.0f: 2.0f: 7.1f] + [-2, -3, -4];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('all([0.0f: 1.0f: 99.1f] + [99: -1: -1] == 9.900000E+01f);') == 'true', &
 			eval('[i64(0), i64(1)] + i64(2);') == '[2, 3]', &
 			eval('i64(2) + [i64(0), i64(1)];') == '[2, 3]', &
 			eval('[i64(0), i64(1)] + 2;') == '[2, 3]', &
 			eval('i64(2) + [0, 1];') == '[2, 3]', &
 			eval('[0, 1] + i64(2);') == '[2, 3]', &
 			eval('2 + [i64(0), i64(1)];') == '[2, 3]', &
-			eval('[i64(0), i64(1)] + 2.0;') == '[2.000000E+00, 3.000000E+00]', &
-			eval('i64(2) + [0.0, 1.0];') == '[2.000000E+00, 3.000000E+00]', &
-			eval('[0.0, 1.0] + i64(2);') == '[2.000000E+00, 3.000000E+00]', &
-			eval('2.0 + [i64(0), i64(1)];') == '[2.000000E+00, 3.000000E+00]', &
+			eval('[i64(0), i64(1)] + 2.0f;') == '[2.000000E+00, 3.000000E+00]', &
+			eval('i64(2) + [0.0f, 1.0f];') == '[2.000000E+00, 3.000000E+00]', &
+			eval('[0.0f, 1.0f] + i64(2);') == '[2.000000E+00, 3.000000E+00]', &
+			eval('2.0f + [i64(0), i64(1)];') == '[2.000000E+00, 3.000000E+00]', &
 			eval('[i64(0), i64(1)] + [i64(1), i64(2)];') == '[1, 3]', &
 			eval('[0, 1] + [i64(1), i64(2)];') == '[1, 3]', &
 			eval('[i64(0), i64(1)] + [1, 2];') == '[1, 3]', &
-			eval('[0.0, 1.0] + [i64(1), i64(2)];') == '[1.000000E+00, 3.000000E+00]', &
-			eval('[i64(0), i64(1)] + [1.0, 2.0];') == '[1.000000E+00, 3.000000E+00]', &
+			eval('[0.0f, 1.0f] + [i64(1), i64(2)];') == '[1.000000E+00, 3.000000E+00]', &
+			eval('[i64(0), i64(1)] + [1.0f, 2.0f];') == '[1.000000E+00, 3.000000E+00]', &
 			eval('[0, 1] - [-1, -2];') == '[1, 3]', &
 			eval('[0, 1] - -2;') == '[2, 3]', &
 			eval('2 - [-0, -1];') == '[2, 3]', &
-			eval('[0, 1] - -2.0;') == '[2.000000E+00, 3.000000E+00]', &
-			eval('2 - [-0.0, -1.0];') == '[2.000000E+00, 3.000000E+00]', &
-			eval('[0.0, 1.0] - -2;') == '[2.000000E+00, 3.000000E+00]', &
-			eval('2.0 - [-0, -1];') == '[2.000000E+00, 3.000000E+00]', &
-			eval('[0.0, 1.0] - [-1, -2];') == '[1.000000E+00, 3.000000E+00]', &
-			eval('[0, 1] - [-1.0, -2.0];') == '[1.000000E+00, 3.000000E+00]', &
+			eval('[0, 1] - -2.0f;') == '[2.000000E+00, 3.000000E+00]', &
+			eval('2 - [-0.0f, -1.0f];') == '[2.000000E+00, 3.000000E+00]', &
+			eval('[0.0f, 1.0f] - -2;') == '[2.000000E+00, 3.000000E+00]', &
+			eval('2.0f - [-0, -1];') == '[2.000000E+00, 3.000000E+00]', &
+			eval('[0.0f, 1.0f] - [-1, -2];') == '[1.000000E+00, 3.000000E+00]', &
+			eval('[0, 1] - [-1.0f, -2.0f];') == '[1.000000E+00, 3.000000E+00]', &
 			eval('[i64(0), i64(1)] - i64(-2);') == '[2, 3]', &
 			eval('i64(2) - [i64(-0), i64(-1)];') == '[2, 3]', &
 			eval('[i64(0), i64(1)] - -2;') == '[2, 3]', &
 			eval('i64(2) - [-0, -1];') == '[2, 3]', &
 			eval('[0, 1] - i64(-2);') == '[2, 3]', &
 			eval('2 - [i64(-0), i64(-1)];') == '[2, 3]', &
-			eval('[i64(0), i64(1)] - -2.0;') == '[2.000000E+00, 3.000000E+00]', &
-			eval('i64(2) - [-0.0, -1.0];') == '[2.000000E+00, 3.000000E+00]', &
-			eval('[0.0, 1.0] - i64(-2);') == '[2.000000E+00, 3.000000E+00]', &
-			eval('2.0 - [i64(0), i64(-1)];') == '[2.000000E+00, 3.000000E+00]', &
+			eval('[i64(0), i64(1)] - -2.0f;') == '[2.000000E+00, 3.000000E+00]', &
+			eval('i64(2) - [-0.0f, -1.0f];') == '[2.000000E+00, 3.000000E+00]', &
+			eval('[0.0f, 1.0f] - i64(-2);') == '[2.000000E+00, 3.000000E+00]', &
+			eval('2.0f - [i64(0), i64(-1)];') == '[2.000000E+00, 3.000000E+00]', &
 			eval('[i64(0), i64(1)] - [i64(-1), i64(-2)];') == '[1, 3]', &
 			eval('[0, 1] - [i64(-1), i64(-2)];') == '[1, 3]', &
 			eval('[i64(0), i64(1)] - [-1, -2];') == '[1, 3]', &
-			eval('[0.0, 1.0] - [i64(-1), i64(-2)];') == '[1.000000E+00, 3.000000E+00]', &
-			eval('[i64(0), i64(1)] - [-1.0, -2.0];') == '[1.000000E+00, 3.000000E+00]', &
+			eval('[0.0f, 1.0f] - [i64(-1), i64(-2)];') == '[1.000000E+00, 3.000000E+00]', &
+			eval('[i64(0), i64(1)] - [-1.0f, -2.0f];') == '[1.000000E+00, 3.000000E+00]', &
 			eval('[2, 3] * [1, 2];') == '[2, 6]', &
 			eval('[2, 3] * 2;') == '[4, 6]', &
 			eval('2 * [1, 2];') == '[2, 4]', &
-			eval('[1, 2] * 2.0;') == '[2.000000E+00, 4.000000E+00]', &
-			eval('2 * [1.0, 2.0];') == '[2.000000E+00, 4.000000E+00]', &
-			eval('[1.0, 2.0] * 2;') == '[2.000000E+00, 4.000000E+00]', &
-			eval('2.0 * [1, 2];') == '[2.000000E+00, 4.000000E+00]', &
-			eval('[1.0, 2.0] * [1, 2];') == '[1.000000E+00, 4.000000E+00]', &
-			eval('[2, 3] * [1.0, 2.0];') == '[2.000000E+00, 6.000000E+00]', &
+			eval('[1, 2] * 2.0f;') == '[2.000000E+00, 4.000000E+00]', &
+			eval('2 * [1.0f, 2.0f];') == '[2.000000E+00, 4.000000E+00]', &
+			eval('[1.0f, 2.0f] * 2;') == '[2.000000E+00, 4.000000E+00]', &
+			eval('2.0f * [1, 2];') == '[2.000000E+00, 4.000000E+00]', &
+			eval('[1.0f, 2.0f] * [1, 2];') == '[1.000000E+00, 4.000000E+00]', &
+			eval('[2, 3] * [1.0f, 2.0f];') == '[2.000000E+00, 6.000000E+00]', &
 			eval('[i64(2), i64(3)] * i64(2);') == '[4, 6]', &
 			eval('i64(2) * [i64(2), i64(3)];') == '[4, 6]', &
 			eval('[i64(2), i64(3)] * 2;') == '[4, 6]', &
 			eval('i64(2) * [2, 3];') == '[4, 6]', &
 			eval('[2, 4] * i64(2);') == '[4, 8]', &
 			eval('2 * [i64(3), i64(4)];') == '[6, 8]', &
-			eval('[i64(2), i64(3)] * 2.0;') == '[4.000000E+00, 6.000000E+00]', &
-			eval('i64(2) * [2.0, 3.0];') == '[4.000000E+00, 6.000000E+00]', &
-			eval('[2.0, 3.0] * i64(2);') == '[4.000000E+00, 6.000000E+00]', &
-			eval('2.0 * [i64(2), i64(3)];') == '[4.000000E+00, 6.000000E+00]', &
+			eval('[i64(2), i64(3)] * 2.0f;') == '[4.000000E+00, 6.000000E+00]', &
+			eval('i64(2) * [2.0f, 3.0f];') == '[4.000000E+00, 6.000000E+00]', &
+			eval('[2.0f, 3.0f] * i64(2);') == '[4.000000E+00, 6.000000E+00]', &
+			eval('2.0f * [i64(2), i64(3)];') == '[4.000000E+00, 6.000000E+00]', &
 			eval('[i64(3), i64(4)] * [i64(1), i64(2)];') == '[3, 8]', &
 			eval('[3, 4] * [i64(1), i64(2)];') == '[3, 8]', &
 			eval('[i64(3), i64(4)] * [1, 2];') == '[3, 8]', &
-			eval('[5.0, 4.0] * [i64(1), i64(2)];') == '[5.000000E+00, 8.000000E+00]', &
-			eval('[i64(5), i64(4)] * [1.0, 2.0];') == '[5.000000E+00, 8.000000E+00]', &
+			eval('[5.0f, 4.0f] * [i64(1), i64(2)];') == '[5.000000E+00, 8.000000E+00]', &
+			eval('[i64(5), i64(4)] * [1.0f, 2.0f];') == '[5.000000E+00, 8.000000E+00]', &
 			eval('[2, 3] ** [1, 2];') == '[2, 9]', &
 			eval('[2, 3] ** 2;') == '[4, 9]', &
 			eval('2 ** [1, 2];') == '[2, 4]', &
-			eval('[1, 2] ** 2.0;') == '[1.000000E+00, 4.000000E+00]', &
-			eval('2 ** [1.0, 2.0];') == '[2.000000E+00, 4.000000E+00]', &
-			eval('[1.0, 2.0] ** 2;') == '[1.000000E+00, 4.000000E+00]', &
-			eval('2.0 ** [1, 2];') == '[2.000000E+00, 4.000000E+00]', &
-			eval('[1.0, 2.0] ** [1, 2];') == '[1.000000E+00, 4.000000E+00]', &
-			eval('[2, 3] ** [1.0, 2.0];') == '[2.000000E+00, 9.000000E+00]', &
+			eval('[1, 2] ** 2.0f;') == '[1.000000E+00, 4.000000E+00]', &
+			eval('2 ** [1.0f, 2.0f];') == '[2.000000E+00, 4.000000E+00]', &
+			eval('[1.0f, 2.0f] ** 2;') == '[1.000000E+00, 4.000000E+00]', &
+			eval('2.0f ** [1, 2];') == '[2.000000E+00, 4.000000E+00]', &
+			eval('[1.0f, 2.0f] ** [1, 2];') == '[1.000000E+00, 4.000000E+00]', &
+			eval('[2, 3] ** [1.0f, 2.0f];') == '[2.000000E+00, 9.000000E+00]', &
 			eval('[i64(2), i64(3)] ** i64(2);') == '[4, 9]', &
 			eval('i64(2) ** [i64(2), i64(3)];') == '[4, 8]', &
 			eval('[i64(2), i64(3)] ** 2;') == '[4, 9]', &
 			eval('i64(2) ** [2, 3];') == '[4, 8]', &
 			eval('[2, 4] ** i64(2);') == '[4, 16]', &
 			eval('2 ** [i64(3), i64(4)];') == '[8, 16]', &
-			eval('[i64(2), i64(3)] ** 2.0;') == '[4.000000E+00, 9.000000E+00]', &
-			eval('i64(2) ** [2.0, 3.0];') == '[4.000000E+00, 8.000000E+00]', &
-			eval('[2.0, 3.0] ** i64(2);') == '[4.000000E+00, 9.000000E+00]', &
-			eval('2.0 ** [i64(2), i64(3)];') == '[4.000000E+00, 8.000000E+00]', &
+			eval('[i64(2), i64(3)] ** 2.0f;') == '[4.000000E+00, 9.000000E+00]', &
+			eval('i64(2) ** [2.0f, 3.0f];') == '[4.000000E+00, 8.000000E+00]', &
+			eval('[2.0f, 3.0f] ** i64(2);') == '[4.000000E+00, 9.000000E+00]', &
+			eval('2.0f ** [i64(2), i64(3)];') == '[4.000000E+00, 8.000000E+00]', &
 			eval('[i64(3), i64(4)] ** [i64(1), i64(2)];') == '[3, 16]', &
 			eval('[3, 4] ** [i64(1), i64(2)];') == '[3, 16]', &
 			eval('[i64(3), i64(4)] ** [1, 2];') == '[3, 16]', &
-			eval('[5.0, 4.0] ** [i64(1), i64(2)];') == '[5.000000E+00, 1.600000E+01]', &
-			eval('[i64(5), i64(4)] ** [1.0, 2.0];') == '[5.000000E+00, 1.600000E+01]', &
+			eval('[5.0f, 4.0f] ** [i64(1), i64(2)];') == '[5.000000E+00, 1.600000E+01]', &
+			eval('[i64(5), i64(4)] ** [1.0f, 2.0f];') == '[5.000000E+00, 1.600000E+01]', &
 			eval('[2, 4] / [1, 2];') == '[2, 2]', &
 			eval('[2, 4] / 2;') == '[1, 2]', &
 			eval('4 / [1, 2];') == '[4, 2]', &
-			eval('[1, 2] / 2.0;') == '[5.000000E-01, 1.000000E+00]', &
-			eval('2 / [1.0, 2.0];') == '[2.000000E+00, 1.000000E+00]', &
-			eval('[1.0, 2.0] / 2;') == '[5.000000E-01, 1.000000E+00]', &
-			eval('2.0 / [1, 2];') == '[2.000000E+00, 1.000000E+00]', &
-			eval('[1.0, 2.0] / [1, 2];') == '[1.000000E+00, 1.000000E+00]', &
-			eval('[2, 3] / [1.0, 2.0];') == '[2.000000E+00, 1.500000E+00]', &
+			eval('[1, 2] / 2.0f;') == '[5.000000E-01, 1.000000E+00]', &
+			eval('2 / [1.0f, 2.0f];') == '[2.000000E+00, 1.000000E+00]', &
+			eval('[1.0f, 2.0f] / 2;') == '[5.000000E-01, 1.000000E+00]', &
+			eval('2.0f / [1, 2];') == '[2.000000E+00, 1.000000E+00]', &
+			eval('[1.0f, 2.0f] / [1, 2];') == '[1.000000E+00, 1.000000E+00]', &
+			eval('[2, 3] / [1.0f, 2.0f];') == '[2.000000E+00, 1.500000E+00]', &
 			eval('[i64(2), i64(4)] / i64(2);') == '[1, 2]', &
 			eval('i64(6) / [i64(2), i64(3)];') == '[3, 2]', &
 			eval('[i64(2), i64(4)] / 2;') == '[1, 2]', &
 			eval('i64(6) / [2, 3];') == '[3, 2]', &
 			eval('[2, 4] / i64(2);') == '[1, 2]', &
 			eval('2 / [i64(1), i64(2)];') == '[2, 1]', &
-			eval('[i64(2), i64(3)] / 2.0;') == '[1.000000E+00, 1.500000E+00]', &
-			eval('i64(3) / [2.0, 3.0];') == '[1.500000E+00, 1.000000E+00]', &
-			eval('[2.0, 3.0] / i64(2);') == '[1.000000E+00, 1.500000E+00]', &
-			eval('3.0 / [i64(2), i64(3)];') == '[1.500000E+00, 1.000000E+00]', &
+			eval('[i64(2), i64(3)] / 2.0f;') == '[1.000000E+00, 1.500000E+00]', &
+			eval('i64(3) / [2.0f, 3.0f];') == '[1.500000E+00, 1.000000E+00]', &
+			eval('[2.0f, 3.0f] / i64(2);') == '[1.000000E+00, 1.500000E+00]', &
+			eval('3.0f / [i64(2), i64(3)];') == '[1.500000E+00, 1.000000E+00]', &
 			eval('[i64(3), i64(4)] / [i64(1), i64(2)];') == '[3, 2]', &
 			eval('[3, 4] / [i64(1), i64(2)];') == '[3, 2]', &
 			eval('[i64(3), i64(4)] / [1, 2];') == '[3, 2]', &
-			eval('[5.0, 4.0] / [i64(1), i64(2)];') == '[5.000000E+00, 2.000000E+00]', &
-			eval('[i64(5), i64(4)] / [1.0, 2.0];') == '[5.000000E+00, 2.000000E+00]', &
+			eval('[5.0f, 4.0f] / [i64(1), i64(2)];') == '[5.000000E+00, 2.000000E+00]', &
+			eval('[i64(5), i64(4)] / [1.0f, 2.0f];') == '[5.000000E+00, 2.000000E+00]', &
 			eval('[2, 4] % [1, 2];') == '[0, 0]', &
 			eval('[2, 4] % 3;') == '[2, 1]', &
 			eval('4 % [2, 3];') == '[0, 1]', &
-			eval('[1, 2] % 2.0;') == '[1.000000E+00, 0.000000E+00]', &
-			eval('2 % [3.0, 2.0];') == '[2.000000E+00, 0.000000E+00]', &
-			eval('[4.0, 5.0] % 3;') == '[1.000000E+00, 2.000000E+00]', &
-			eval('2.0 % [2, 3];') == '[0.000000E+00, 2.000000E+00]', &
-			eval('[3.0, 4.0] % [2, 3];') == '[1.000000E+00, 1.000000E+00]', &
-			eval('[2, 3] % [1.0, 2.0];') == '[0.000000E+00, 1.000000E+00]', &
+			eval('[1, 2] % 2.0f;') == '[1.000000E+00, 0.000000E+00]', &
+			eval('2 % [3.0f, 2.0f];') == '[2.000000E+00, 0.000000E+00]', &
+			eval('[4.0f, 5.0f] % 3;') == '[1.000000E+00, 2.000000E+00]', &
+			eval('[4.0f, 5.0f] % 3.0f;') == '[1.000000E+00, 2.000000E+00]', &
+			eval('i32([4.0f, 5.0f] % 3.0f);') == '[1, 2]', &
+			eval('i32([4.0f, 5.0f] % 3.0);') == '[1, 2]', &
+			eval('i32([4.0, 5.0] % 3.0f);') == '[1, 2]', &
+			eval('i32([3.0f, 4.0f] % [2.0, 3.0]);') == '[1, 1]', &
+			eval('i32([3.0, 4.0] % [2.0f, 3.0f]);') == '[1, 1]', &
+			eval('i32(3.0 % [2.0f, 3.0f]);') == '[1, 0]', &
+			eval('i32(3.0f % [2.0, 3.0]);') == '[1, 0]', &
+			eval('2.0f % [2, 3];') == '[0.000000E+00, 2.000000E+00]', &
+			eval('[3.0f, 4.0f] % [2, 3];') == '[1.000000E+00, 1.000000E+00]', &
+			eval('[2, 3] % [1.0f, 2.0f];') == '[0.000000E+00, 1.000000E+00]', &
 			eval('[i64(3), i64(4)] % i64(2);') == '[1, 0]', &
 			eval('i64(5) % [i64(2), i64(3)];') == '[1, 2]', &
 			eval('[i64(3), i64(4)] % 2;') == '[1, 0]', &
 			eval('i64(5) % [2, 3];') == '[1, 2]', &
 			eval('[3, 4] % i64(2);') == '[1, 0]', &
 			eval('3 % [i64(2), i64(3)];') == '[1, 0]', &
-			eval('[i64(2), i64(3)] % 2.0;') == '[0.000000E+00, 1.000000E+00]', &
-			eval('i64(3) % [2.0, 3.0];') == '[1.000000E+00, 0.000000E+00]', &
-			eval('[2.0, 3.0] % i64(2);') == '[0.000000E+00, 1.000000E+00]', &
-			eval('3.0 % [i64(2), i64(3)];') == '[1.000000E+00, 0.000000E+00]', &
+			eval('[i64(2), i64(3)] % 2.0f;') == '[0.000000E+00, 1.000000E+00]', &
+			eval('i64(3) % [2.0f, 3.0f];') == '[1.000000E+00, 0.000000E+00]', &
+			eval('[2.0f, 3.0f] % i64(2);') == '[0.000000E+00, 1.000000E+00]', &
+			eval('3.0f % [i64(2), i64(3)];') == '[1.000000E+00, 0.000000E+00]', &
 			eval('[i64(3), i64(5)] % [i64(2), i64(3)];') == '[1, 2]', &
 			eval('[3, 5] % [i64(2), i64(3)];') == '[1, 2]', &
 			eval('[i64(3), i64(5)] % [2, 3];') == '[1, 2]', &
-			eval('[3.0, 5.0] % [i64(2), i64(3)];') == '[1.000000E+00, 2.000000E+00]', &
-			eval('[i64(3), i64(5)] % [2.0, 3.0];') == '[1.000000E+00, 2.000000E+00]', &
+			eval('[3.0f, 5.0f] % [i64(2), i64(3)];') == '[1.000000E+00, 2.000000E+00]', &
+			eval('[i64(3), i64(5)] % [2.0f, 3.0f];') == '[1.000000E+00, 2.000000E+00]', &
 			eval('[true, false] and [true, true];') == '[true, false]', &
 			eval('[true, false] and true;') == '[true, false]', &
 			eval('true and [false, true];') == '[false, true]', &
@@ -1869,10 +2124,10 @@ subroutine unit_test_arr_op(npass, nfail)
 			eval('false or [false, true];') == '[false, true]', &
 			eval('not [true, false];') == '[false, true]', &
 			eval('not [false, true];') == '[true, false]', &
-			eval('-[1.0, 2.0];') == '[-1.000000E+00, -2.000000E+00]', &
+			eval('-[1.0f, 2.0f];') == '[-1.000000E+00, -2.000000E+00]', &
 			eval('-[0, 1];') == '[0, -1]', &
 			eval('-[i64(0), i64(1)];') == '[0, -1]', &
-			eval('[0.0, 1.0];') == '[0.000000E+00, 1.000000E+00]', &
+			eval('[0.0f, 1.0f];') == '[0.000000E+00, 1.000000E+00]', &
 			eval('[0, 1];') == '[0, 1]', &
 			eval('[i64(0), i64(1)];') == '[0, 1]', &
 			.false. &
@@ -1935,7 +2190,7 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			eval('let m = ["a", "b", "c", "d", "e", "f"; 3, 2]; m[2, 0:2];', quiet) == '[c, f]', &
 			eval('let m = [true; 2, 2]; m[0, 0:2];', quiet) == '[true, true]', &
 			eval('let m = [i64(42); 2, 2]; m[0:2, 1];', quiet) == '[42, 42]', &
-			eval('let m = [1.0; 2, 2]; m[0:2, 1];', quiet) == '[1.000000E+00, 1.000000E+00]', &
+			eval('let m = [1.0f; 2, 2]; m[0:2, 1];', quiet) == '[1.000000E+00, 1.000000E+00]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0, :];', quiet) == '[0, 3, 6]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[2, :];', quiet) == '[2, 5, 8]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[:, 0];', quiet) == '[0, 1, 2]', &
@@ -2004,8 +2259,8 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 			eval('let v = [0: 5]; v[1: 4] += [10; 3]; sum(v);', quiet) == '40', &
 			eval('let v = [0: 5]; v[1: 4] += 10; v;', quiet) == '[0, 11, 12, 13, 4]', &
 			eval('let v = [0: 5]; v[1: 4] = 10; v;', quiet) == '[0, 10, 10, 10, 4]', &
-			eval('let v = [0.0: 4.0; 5]; v[1: 4]  = 10.0; [sum(v)];', quiet) == '[3.400000E+01]', &
-			eval('let v = [0.0: 4.0; 5]; v[1: 4] += 10.0; [sum(v)];', quiet) == '[4.000000E+01]', &
+			eval('let v = [0.0f: 4.0f; 5]; v[1: 4]  = 10.0f; [sum(v)];', quiet) == '[3.400000E+01]', &
+			eval('let v = [0.0f: 4.0f; 5]; v[1: 4] += 10.0f; [sum(v)];', quiet) == '[4.000000E+01]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0,:] += 1; m[0,:];', quiet) == '[1, 4, 7]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0,:] += [1,2,3]; m[0,:];', quiet) == '[1, 5, 9]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7, 8; 3, 3]; m[0,:] += 1; m[:,0];', quiet) == '[1, 1, 2]', &
@@ -2067,24 +2322,25 @@ subroutine unit_test_array_f32_1(npass, nfail)
 
 	tests = &
 		[   &
-			eval('[42.0];') == '[4.200000E+01]',  &
-			eval('[-42.,1337.];') == '[-4.200000E+01, 1.337000E+03]', &
-			eval('[3., 2., 1.];') == '[3.000000E+00, 2.000000E+00, 1.000000E+00]', &
-			eval('[3.: 1.; 3];') == '[3.000000E+00, 2.000000E+00, 1.000000E+00]', &
-			eval('[3.: 1.; 5];') == '[3.000000E+00, 2.500000E+00, 2.000000E+00, 1.500000E+00, 1.000000E+00]', &
-			eval('[1.: 3.; 3];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
-			eval('[1.: 3.; 5];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
-			eval('[1.: 0.5: 2.9];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00]', &
-			eval('[1.: 0.5: 3.4];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
-			eval('[1.: 0.5: 3.9];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00, 3.500000E+00]', &
-			eval('[4.: 0.5: 5.4];') == '[4.000000E+00, 4.500000E+00, 5.000000E+00]', &
-			eval('[5.4: -0.5: 4.0];') == '[5.400000E+00, 4.900000E+00, 4.400000E+00]', &
-			eval('[2.-3.: 1.1: 6./3. + 3.];') == '[-1.000000E+00, 1.000000E-01, 1.200000E+00, 2.300000E+00, 3.400000E+00, 4.500000E+00]', &
-			eval('[42.0; 3];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
-			eval('[42.0; 4];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
-			eval('let myArray = [2.-3.: 1.1: 6./3. + 3.];') &
+			eval('[42.0f];') == '[4.200000E+01]',  &
+			eval('[-42.f,1337.f];') == '[-4.200000E+01, 1.337000E+03]', &
+			eval('[3.f, 2.f, 1.f];') == '[3.000000E+00, 2.000000E+00, 1.000000E+00]', &
+			eval('[3.f: 1.f; 3];') == '[3.000000E+00, 2.000000E+00, 1.000000E+00]', &
+			eval('[3.f: 1.f; 5];') == '[3.000000E+00, 2.500000E+00, 2.000000E+00, 1.500000E+00, 1.000000E+00]', &
+			eval('[1.f: 3.f; 3];') == '[1.000000E+00, 2.000000E+00, 3.000000E+00]', &
+			eval('[1.f: 3.f; 5];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
+			eval('[1.f: 0.5f: 2.9f];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00]', &
+			eval('[1.f: 0.5f: 3.4f];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00]', &
+			eval('[1.f: 0.5f: 3.9f];') == '[1.000000E+00, 1.500000E+00, 2.000000E+00, 2.500000E+00, 3.000000E+00, 3.500000E+00]', &
+			eval('[4.f: 0.5f: 5.4f];') == '[4.000000E+00, 4.500000E+00, 5.000000E+00]', &
+			eval('[5.4f: -0.5f: 4.0f];') == '[5.400000E+00, 4.900000E+00, 4.400000E+00]', &
+			eval('[2.f-3.f: 1.1f: 6.f/3.f + 3.f];') &
 				== '[-1.000000E+00, 1.000000E-01, 1.200000E+00, 2.300000E+00, 3.400000E+00, 4.500000E+00]', &
-			eval('[48.-6., 13.*100. + 37.];') == '[4.200000E+01, 1.337000E+03]'  &
+			eval('[42.0f; 3];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
+			eval('[42.0f; 4];') == '[4.200000E+01, 4.200000E+01, 4.200000E+01, 4.200000E+01]',  &
+			eval('let myArray = [2.f-3.f: 1.1f: 6.f/3.f + 3.f];') &
+				== '[-1.000000E+00, 1.000000E-01, 1.200000E+00, 2.300000E+00, 3.400000E+00, 4.500000E+00]', &
+			eval('[48.f-6.f, 13.f*100.f + 37.f];') == '[4.200000E+01, 1.337000E+03]'  &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -3612,11 +3868,13 @@ subroutine unit_tests(iostat)
 	call unit_test_bool       (npass, nfail)
 	call unit_test_comparisons(npass, nfail)
 	call unit_test_comp_f32   (npass, nfail)
+	call unit_test_comp_f64   (npass, nfail)
 	call unit_test_bad_syntax (npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)
 	call unit_test_f32_1      (npass, nfail)
+	call unit_test_f64_1      (npass, nfail)
 	call unit_test_str        (npass, nfail)
 	call unit_test_substr     (npass, nfail)
 	call unit_test_if_else    (npass, nfail)
@@ -3648,6 +3906,7 @@ subroutine unit_tests(iostat)
 	call unit_test_struct_arr (npass, nfail)
 	call unit_test_struct_str (npass, nfail)
 	call unit_test_struct_1   (npass, nfail)
+	call unit_test_f64_mix    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

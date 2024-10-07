@@ -3,6 +3,8 @@
 
 module syntran__bool_m
 
+	! TODO: consider auto-generating from template like math_bin_*.f90
+
 	use syntran__value_m
 
 	implicit none
@@ -62,6 +64,8 @@ subroutine is_eq_value_t(left, right, res, op_text)
 	case        (magic * i64_type + i32_type)
 		res%sca%bool = left%sca%i64 == right%sca%i32
 
+	! TODO: mixed f32 <compare_op> f64 operators
+
 	case        (magic * f32_type + f32_type)
 		res%sca%bool = left%sca%f32 == right%sca%f32
 
@@ -81,6 +85,32 @@ subroutine is_eq_value_t(left, right, res, op_text)
 
 	case        (magic * i64_type + f32_type)
 		res%sca%bool = real(left%sca%i64) == right%sca%f32
+
+	case        (magic * f64_type + f64_type)
+		res%sca%bool = left%sca%f64 == right%sca%f64
+
+	!! Banned in parser.  Allowed for <, <=, >, etc. but not strict (in)equality
+	!case        (magic * f32_type + f64_type)
+	!	res%sca%bool = left%sca%f32 == right%sca%f64
+	!case        (magic * f64_type + f32_type)
+	!	res%sca%bool = left%sca%f64 == right%sca%f32
+
+	case        (magic * f64_type + i32_type)
+		res%sca%bool = left%sca%f64 == right%sca%i32
+		! TODO: is this even possible or should I ban comparing ints and
+		! floats?  Similarly for other comparisons
+		!
+		! GNU says Warning: Equality comparison for REAL(4) at (1)
+		! [-Wcompare-reals]
+
+	case        (magic * f64_type + i64_type)
+		res%sca%bool = left%sca%f64 == real(right%sca%i64)
+
+	case        (magic * i32_type + f64_type)
+		res%sca%bool = left%sca%i32 == right%sca%f64
+
+	case        (magic * i64_type + f64_type)
+		res%sca%bool = real(left%sca%i64) == right%sca%f64
 
 	case        (magic * bool_type + bool_type)
 		res%sca%bool = left%sca%bool .eqv. right%sca%bool
@@ -105,6 +135,10 @@ subroutine is_eq_value_t(left, right, res, op_text)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = left%array%f32 == right%sca%i32
 
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 == right%sca%i32
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -125,6 +159,10 @@ subroutine is_eq_value_t(left, right, res, op_text)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = left%array%f32 == real(right%sca%i64)
 
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 == real(right%sca%i64)
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -144,6 +182,26 @@ subroutine is_eq_value_t(left, right, res, op_text)
 		case (i64_type)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = real(left%array%i64) == right%sca%f32
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic * array_type + f64_type)
+
+		select case (left%array%type)
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 == right%sca%f64
+
+		case (i32_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%i32 == right%sca%f64
+
+		case (i64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = real(left%array%i64) == right%sca%f64
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -195,6 +253,10 @@ subroutine is_eq_value_t(left, right, res, op_text)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%sca%i32 == right%array%f32
 
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%i32 == right%array%f64
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -215,6 +277,10 @@ subroutine is_eq_value_t(left, right, res, op_text)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = real(left%sca%i64) == right%array%f32
 
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = real(left%sca%i64) == right%array%f64
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -234,6 +300,26 @@ subroutine is_eq_value_t(left, right, res, op_text)
 		case (i64_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%sca%f32 == real(right%array%i64)
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic * f64_type + array_type)
+
+		select case (right%array%type)
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 == right%array%f64
+
+		case (i32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 == right%array%i32
+
+		case (i64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 == real(right%array%i64)
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -309,6 +395,26 @@ subroutine is_eq_value_t(left, right, res, op_text)
 		case (magic * f32_type + i64_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%array%f32 == real(right%array%i64)
+
+		case (magic * f64_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 == right%array%f64
+
+		case (magic * i32_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%i32 == right%array%f64
+
+		case (magic * f64_type + i32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 == right%array%i32
+
+		case (magic * i64_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = real(left%array%i64) == right%array%f64
+
+		case (magic * f64_type + i64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 == real(right%array%i64)
 
 		case (magic * bool_type + bool_type)
 			res%array = mold(right%array, bool_type)
@@ -397,6 +503,27 @@ subroutine is_lt_value_t(left, right, res, op_text)
 	case        (magic * i64_type + f32_type)
 		res%sca%bool = real(left%sca%i64) < right%sca%f32
 
+	case        (magic * f64_type + f64_type)
+		res%sca%bool = left%sca%f64 < right%sca%f64
+
+	case        (magic * f32_type + f64_type)
+		res%sca%bool = left%sca%f32 < right%sca%f64
+
+	case        (magic * f64_type + f32_type)
+		res%sca%bool = left%sca%f64 < right%sca%f32
+
+	case        (magic * f64_type + i32_type)
+		res%sca%bool = left%sca%f64 < right%sca%i32
+
+	case        (magic * f64_type + i64_type)
+		res%sca%bool = left%sca%f64 < real(right%sca%i64)
+
+	case        (magic * i32_type + f64_type)
+		res%sca%bool = left%sca%i32 < right%sca%f64
+
+	case        (magic * i64_type + f64_type)
+		res%sca%bool = real(left%sca%i64) < right%sca%f64
+
 	case        (magic * array_type + i32_type)
 
 		select case (left%array%type)
@@ -411,6 +538,10 @@ subroutine is_lt_value_t(left, right, res, op_text)
 		case (f32_type)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = left%array%f32 < right%sca%i32
+
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 < right%sca%i32
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -432,6 +563,10 @@ subroutine is_lt_value_t(left, right, res, op_text)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = left%array%f32 < real(right%sca%i64)
 
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 < real(right%sca%i64)
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -444,6 +579,10 @@ subroutine is_lt_value_t(left, right, res, op_text)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = left%array%f32 < right%sca%f32
 
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 < right%sca%f32
+
 		case (i32_type)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = left%array%i32 < right%sca%f32
@@ -451,6 +590,30 @@ subroutine is_lt_value_t(left, right, res, op_text)
 		case (i64_type)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = real(left%array%i64) < right%sca%f32
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic * array_type + f64_type)
+
+		select case (left%array%type)
+		case (f32_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f32 < right%sca%f64
+
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 < right%sca%f64
+
+		case (i32_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%i32 < right%sca%f64
+
+		case (i64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = real(left%array%i64) < right%sca%f64
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -472,6 +635,10 @@ subroutine is_lt_value_t(left, right, res, op_text)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%sca%i32 < right%array%f32
 
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%i32 < right%array%f64
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -492,6 +659,10 @@ subroutine is_lt_value_t(left, right, res, op_text)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = real(left%sca%i64) < right%array%f32
 
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = real(left%sca%i64) < right%array%f64
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -504,6 +675,10 @@ subroutine is_lt_value_t(left, right, res, op_text)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%sca%f32 < right%array%f32
 
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f32 < right%array%f64
+
 		case (i32_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%sca%f32 < right%array%i32
@@ -511,6 +686,30 @@ subroutine is_lt_value_t(left, right, res, op_text)
 		case (i64_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%sca%f32 < real(right%array%i64)
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic * f64_type + array_type)
+
+		select case (right%array%type)
+		case (f32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 < right%array%f32
+
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 < right%array%f64
+
+		case (i32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 < right%array%i32
+
+		case (i64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 < real(right%array%i64)
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -555,6 +754,34 @@ subroutine is_lt_value_t(left, right, res, op_text)
 		case (magic * f32_type + i64_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%array%f32 < real(right%array%i64)
+
+		case (magic * f64_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 < right%array%f64
+
+		case (magic * f32_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f32 < right%array%f64
+
+		case (magic * f64_type + f32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 < right%array%f32
+
+		case (magic * i32_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%i32 < right%array%f64
+
+		case (magic * f64_type + i32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 < right%array%i32
+
+		case (magic * i64_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = real(left%array%i64) < right%array%f64
+
+		case (magic * f64_type + i64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 < real(right%array%i64)
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -636,6 +863,27 @@ subroutine is_le_value_t(left, right, res, op_text)
 	case        (magic * i64_type + f32_type)
 		res%sca%bool = real(left%sca%i64) <= right%sca%f32
 
+	case        (magic * f64_type + f64_type)
+		res%sca%bool = left%sca%f64 <= right%sca%f64
+
+	case        (magic * f32_type + f64_type)
+		res%sca%bool = left%sca%f32 <= right%sca%f64
+
+	case        (magic * f64_type + f32_type)
+		res%sca%bool = left%sca%f64 <= right%sca%f32
+
+	case        (magic * f64_type + i32_type)
+		res%sca%bool = left%sca%f64 <= right%sca%i32
+
+	case        (magic * f64_type + i64_type)
+		res%sca%bool = left%sca%f64 <= real(right%sca%i64)
+
+	case        (magic * i32_type + f64_type)
+		res%sca%bool = left%sca%i32 <= right%sca%f64
+
+	case        (magic * i64_type + f64_type)
+		res%sca%bool = real(left%sca%i64) <= right%sca%f64
+
 	case        (magic * array_type + i32_type)
 
 		select case (left%array%type)
@@ -650,6 +898,10 @@ subroutine is_le_value_t(left, right, res, op_text)
 		case (f32_type)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = left%array%f32 <= right%sca%i32
+
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 <= right%sca%i32
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -671,6 +923,10 @@ subroutine is_le_value_t(left, right, res, op_text)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = left%array%f32 <= real(right%sca%i64)
 
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 <= real(right%sca%i64)
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -683,6 +939,10 @@ subroutine is_le_value_t(left, right, res, op_text)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = left%array%f32 <= right%sca%f32
 
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 <= right%sca%f32
+
 		case (i32_type)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = left%array%i32 <= right%sca%f32
@@ -690,6 +950,30 @@ subroutine is_le_value_t(left, right, res, op_text)
 		case (i64_type)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = real(left%array%i64) <= right%sca%f32
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic * array_type + f64_type)
+
+		select case (left%array%type)
+		case (f32_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f32 <= right%sca%f64
+
+		case (f64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%f64 <= right%sca%f64
+
+		case (i32_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = left%array%i32 <= right%sca%f64
+
+		case (i64_type)
+			res%array = mold(left%array, bool_type)
+			res%array%bool = real(left%array%i64) <= right%sca%f64
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -711,6 +995,10 @@ subroutine is_le_value_t(left, right, res, op_text)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%sca%i32 <= right%array%f32
 
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%i32 <= right%array%f64
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -731,6 +1019,10 @@ subroutine is_le_value_t(left, right, res, op_text)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = real(left%sca%i64) <= right%array%f32
 
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = real(left%sca%i64) <= right%array%f64
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -743,6 +1035,10 @@ subroutine is_le_value_t(left, right, res, op_text)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%sca%f32 <= right%array%f32
 
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f32 <= right%array%f64
+
 		case (i32_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%sca%f32 <= right%array%i32
@@ -750,6 +1046,30 @@ subroutine is_le_value_t(left, right, res, op_text)
 		case (i64_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%sca%f32 <= real(right%array%i64)
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic * f64_type + array_type)
+
+		select case (right%array%type)
+		case (f32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 <= right%array%f32
+
+		case (f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 <= right%array%f64
+
+		case (i32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 <= right%array%i32
+
+		case (i64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%sca%f64 <= real(right%array%i64)
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -794,6 +1114,34 @@ subroutine is_le_value_t(left, right, res, op_text)
 		case (magic * f32_type + i64_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%array%f32 <= real(right%array%i64)
+
+		case (magic * f64_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 <= right%array%f64
+
+		case (magic * f32_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f32 <= right%array%f64
+
+		case (magic * f64_type + f32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 <= right%array%f32
+
+		case (magic * i32_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%i32 <= right%array%f64
+
+		case (magic * f64_type + i32_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 <= right%array%i32
+
+		case (magic * i64_type + f64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = real(left%array%i64) <= right%array%f64
+
+		case (magic * f64_type + i64_type)
+			res%array = mold(right%array, bool_type)
+			res%array%bool = left%array%f64 <= real(right%array%i64)
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)

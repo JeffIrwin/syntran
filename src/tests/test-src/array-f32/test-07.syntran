@@ -2,7 +2,7 @@
 {
 	// Array assignment should deep copy, not alias pointers
 
-	let x = [10.0, 10.5, 11.0, 11.5, 12.0];
+	let x = [10.0f, 10.5f, 11.0f, 11.5f, 12.0f];
 	let y = x;
 	y;
 	x[3] = -x[2] + 2 * x[4];

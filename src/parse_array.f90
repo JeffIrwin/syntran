@@ -205,6 +205,8 @@ recursive module function parse_array_expr(parser) result(expr)
 			if (all(i32_type == &
 				[lbound_%val%type, step%val%type, ubound_%val%type]) .or. &
 				all(f32_type == &
+				[lbound_%val%type, step%val%type, ubound_%val%type]) .or. &
+				all(f64_type == &
 				[lbound_%val%type, step%val%type, ubound_%val%type])) then
 
 				expr%val%array%type = lbound_%val%type
@@ -265,7 +267,7 @@ recursive module function parse_array_expr(parser) result(expr)
 					parser%context(), span))
 			end if
 
-			if (lbound_%val%type /= f32_type) then
+			if (.not. any(lbound_%val%type == [f32_type, f64_type])) then
 				span = new_span(lb_beg, lb_end - lb_beg + 1)
 				call parser%diagnostics%push(err_non_float_len_range( &
 					parser%context(), span, &

@@ -2,16 +2,16 @@
 fn get_pi(): f32
 {
 	// Calculate pi
-	let local_pi = 0.0;
+	let local_pi = 0.0f;
 
 	for k in [0: 10]
 	{
-		local_pi = local_pi + 1 / (16.0 ** k) *
+		local_pi = local_pi + 1 / (16.0f ** k) *
 			(
-				4.0 / (8*k + 1) -
-				2.0 / (8*k + 4) -
-				1.0 / (8*k + 5) -
-				1.0 / (8*k + 6)
+				4.0f / (8*k + 1) -
+				2.0f / (8*k + 4) -
+				1.0f / (8*k + 5) -
+				1.0f / (8*k + 6)
 			);
 	}
 
@@ -31,11 +31,11 @@ fn sin_fn(x: f32): f32
 
 	// Initialize Taylor series terms
 	let xpow = x;
-	let factorial = 1.0;
+	let factorial = 1.0f;
 	let sign = 1;
 
 	// Sum odd terms only
-	let sinx = 0.0;
+	let sinx = 0.0f;
 	for k in [1: 10]
 	{
 		sinx = sinx + sign * xpow / factorial;
@@ -69,27 +69,27 @@ ans;
 
 let expect =
 	[
-		-0.5,
-		 0.0,
-		 0.5,
-		 2 ** 0.5 / 2,
-		 3 ** 0.5 / 2,
-		 1.0,
-		 3 ** 0.5 / 2,
-		 2 ** 0.5 / 2,
-		 0.5,
-		 0.0
+		-0.5f,
+		 0.0f,
+		 0.5f,
+		 2 ** 0.5f / 2,
+		 3 ** 0.5f / 2,
+		 1.0f,
+		 3 ** 0.5f / 2,
+		 2 ** 0.5f / 2,
+		 0.5f,
+		 0.0f
 	];
 
 expect;
 
-let norm = 0.0;
+let norm = 0.0f;
 for i in [0: 10]
 	norm = norm + (ans[i] - expect[i]) ** 2;
-norm = norm ** 0.5;
+norm = norm ** 0.5f;
 
 norm;
 
-let tol = 1.e-5;
+let tol = 1.e-5f;
 return -tol < norm and norm < tol;
 

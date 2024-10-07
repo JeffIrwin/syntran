@@ -298,6 +298,41 @@ end function syntran_eval_f32
 
 !===============================================================================
 
+real(kind = 8) function syntran_eval_f64(str_, quiet) result(eval_f64)
+
+	character(len = *), intent(in) :: str_
+
+	logical, optional, intent(in) :: quiet
+
+	!*******
+
+	type(state_t) :: state
+	type(syntax_node_t) :: tree
+	type(value_t) :: val
+
+	call init_state(state)
+	state%quiet = .false.
+	if (present(quiet)) state%quiet = quiet
+
+	tree = syntax_parse(str_, state%vars, state%fns)
+	if (.not. state%quiet) call tree%log_diagnostics()
+
+	if (tree%diagnostics%len_ > 0) then
+		! TODO: iostat
+		eval_f64 = 0
+		return
+	end if
+
+	call syntax_eval(tree, state, val)
+
+	! TODO: check kind, add optional iostat arg
+	eval_f64 = val%sca%f64
+	!print *, 'eval_f64 = ', eval_f64
+
+end function syntran_eval_f64
+
+!===============================================================================
+
 subroutine init_state(state)
 
 	! This sets everything but state%quiet, since some routines have that as an

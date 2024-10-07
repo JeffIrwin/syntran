@@ -88,12 +88,12 @@ fn part1(): i32
 		//
 		//   a = -1;  b = race_time;  c = -rec_dist;
 
-		let a = -1.0;
-		let b =  1.0 * race_time;
-		let c = -1.0 * rec_dist;
+		let a = -1.0f;
+		let b =  1.0f * race_time;
+		let c = -1.0f * rec_dist;
 
-		let j1 = (-b + (b ** 2 - 4 * a * c) ** 0.5) / (2 * a);
-		let j2 = (-b - (b ** 2 - 4 * a * c) ** 0.5) / (2 * a);
+		let j1 = (-b + (b ** 2 - 4 * a * c) ** 0.5f) / (2 * a);
+		let j2 = (-b - (b ** 2 - 4 * a * c) ** 0.5f) / (2 * a);
 
 		//println(" j1,  j2 = ", j1, ", ", j2);
 		//println("fj1, fj2 = ", floor_(j1), ", ", floor_(j2));

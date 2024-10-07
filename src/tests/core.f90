@@ -10,7 +10,8 @@ module syntran__test_core_m
 		eval      => syntran_eval     , &
 		eval_i32  => syntran_eval_i32, &
 		eval_i64  => syntran_eval_i64, &
-		eval_f32  => syntran_eval_f32
+		eval_f32  => syntran_eval_f32, &
+		eval_f64  => syntran_eval_f64
 
 	use syntran__utils_m, only: fg_bright_red, fg_bright_green, line_feed, &
 		findlocl1, console_color, console_color_reset
