@@ -159,6 +159,25 @@ let x = 1.0 + 1.0f;
 ```
 Here, the variable `x` is of type `f64`.
 
+### Integer types
+
+There isn't really a _default_ integer type in the same way that `f64` is the
+default float type.
+
+Small integer literals, in an absolute sense of being close to 0, are `i32`.
+Larger integer literals outside the `i32` range are automatically inferred as
+`i64`.  For example:
+- the literal `2000000000` is of type `i32`
+- the literal `3000000000` is of type `i64`
+- the literal `-2000000000` is of type `i32`
+- the literal `-3000000000` is of type `i64`
+
+Small literals can be explicitly cast up to `i64` using the [`i64()` function](doc/README.md#i64).
+
+Be careful with integer overflow.  For example, `2000000000 + 2000000000` will
+overflow silently and without warning.  If you expect large values, cast at
+leats one of the operands up to `i64`.
+
 ## Comments
 
 Only single-line `// comments` are supported.  There are _no_ multi-line `/*comments*/`.
