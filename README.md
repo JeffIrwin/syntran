@@ -176,7 +176,7 @@ Small literals can be explicitly cast up to `i64` using the [`i64()` function](d
 
 Be careful with integer overflow.  For example, `2000000000 + 2000000000` will
 overflow silently and without warning.  If you expect large values, cast at
-leats one of the operands up to `i64`.
+least one of the operands up to `i64`.
 
 ## Comments
 

@@ -1,18 +1,66 @@
 
-# Variadic and polymorphic functions
+<!-- # Variadic and polymorphic functions -->
+# Special functions
+
+Some of the intrinsic functions have special properties:
+- variadic
+- polymorphic
+- elemental
 
 [Variadic](https://en.wikipedia.org/wiki/Variadic_function) intrinsic functions are indicated with `...`.
 
-[Polymorphic](https://en.wikipedia.org/wiki/Polymorphism_(computer_science)) function parameters are indicated with special types.  Rank-polymorphic array function parameters are indicated with `any_rank`.
+[Polymorphic](https://en.wikipedia.org/wiki/Polymorphism_(computer_science))
+function parameters are indicated with special types.  Rank-polymorphic array
+function parameters are indicated with `any_rank`.
+
+[Elemental](https://fortran-lang.org/en/learn/best_practices/element_operations/)
+functions are tagged with `#elemental`.  Elemental functions can take either a
+scalar argument or an array argument.  When given an array argument, the result
+is also an array, with the same rank and size as the argument, with values as if
+the function had been called element-wise on each member of the array.
 
 These are the special polymorphic types used in documentation:
 - `any`: any unlimitted primitive, built-in syntran type
 - `any_num`: any numeric type, i.e. `i32`, `i64`, `f32`, or `f64`
 - `any_float`: any floating-point type, i.e. `f32` or `f64`
 
-These are special cases for intrinsic functions.  For now at least, user-defined functions cannot be variadic or polymorphic.
+All of these special properties are special cases for intrinsic functions.  For
+now at least, user-defined functions cannot be variadic, polymorphic, or
+elemental.
 
 # List of intrinsic functions
+
+## `all`
+```rust
+fn all(mask: [bool; any_rank])
+```
+
+Return `true` if every element of `mask` is `true`, including the case where
+`mask` is empty.  Otherwise, i.e. if at least 1 element of `mask` is `false`,
+return `false`.
+
+Related functions: [`any`](#any)
+
+## `any`
+```rust
+fn any(mask: [bool; any_rank])
+```
+
+Return `true` if at least 1 element of `mask` is `true`.  Otherwise, i.e. if
+all elements of `mask` are `false` or `mask` is empty, return `false`.
+
+Related functions: [`all`](#all)
+
+## `char`
+```rust
+fn char(i: i32): str
+```
+
+Perform an ASCII table lookup and return the single-character string with ASCII
+index `i`.  For example, `char(65)` is `"A"`.  The inverse if the ASCII lookup
+is [`i32`](#i32), which is also overloaded to do other casting operations.
+
+Related functions: [`i32`](#i32)
 
 ## `close`
 ```rust
@@ -23,6 +71,16 @@ Close a `file_handle` created by [`open`](#open)
 
 Related functions: [`open`](#open), [`writeln`](#writeln)
 
+## `count`
+```rust
+fn count(mask: [bool; any_rank]): i64
+```
+
+Return how many elements of `mask` are `true`.  If `mask` is empty, return `0`.
+Not to be confused with [`size`](#size).
+
+Related functions: [`any`](#any), [`all`](#all)
+
 ## `eof`
 ```rust
 fn eof(file_handle: file): bool
@@ -31,6 +89,19 @@ fn eof(file_handle: file): bool
 Has the end of file (EOF) been reached yet while reading from `file_handle`?  The return value is `false` until and including the last line is read and does not become `true` until reading *past* the EOF is attempted, for which [`readln()`](#readln) will return an empty string
 
 Related functions: [`close`](#close), [`readln`](#readln), [`open`](#open)
+
+## `exit`
+```rust
+fn exit(status: i32)
+```
+
+Terminate the process normally,
+return the system exit status `status`, and
+perform the regular cleanup for terminating programs.
+
+By the C convention, use status `0` for success and any other value for failure.
+
+<!-- Abort execution and return the system exit status `status`. -->
 
 ## `exp`
 ```rust
@@ -42,17 +113,25 @@ Compute the base _e_ exponential of `x`
 ## `i32`
 ```rust
 fn i32(a: any_num): i32
+#elemental
 ```
 
 Explicitly cast any numeric type to 32-bit integer `i32`. The `i32()` fn also
 casts single-character strings to their ASCII values, e.g. `i32("A")` returns
-`65`.  To read a decimal number from a string, use `parse_i32()` instead.
+`65`.  The inverse ASCII lookup is [`char`](#char).  To read a decimal number
+from a string, use `parse_i32()` instead.
+
+The `i32` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
 
 Other non-numeric types (`bool`, `file`) cannot be cast to `i64`.
+
+Related functions: [`char`](#char)
 
 ## `i64`
 ```rust
 fn i64(a: any_num): i64
+#elemental
 ```
 
 Explicitly cast any numeric type to 64-bit integer `i64`.
@@ -110,6 +189,36 @@ Open a `file` handle named `filename`
 
 Related functions: [`close`](#close), [`writeln`](#writeln)
 
+## `parse_f32`
+```rust
+fn parse_f32(s: str): f32
+```
+
+Convert from a string to a float `f32`.  For example, `parse_f32("65.4")`
+returns roughly `65.4f`.
+
+Any invalid numbers will cause a runtime error.
+
+Note that other numeric types (`i32`) can be converted to float simply by
+multiplying by `1.0f`.
+
+Related functions: [`parse_i32`](`parse_i32`), [`str`](#str)
+
+## `parse_f64`
+```rust
+fn parse_f64(s: str): f64
+```
+
+Convert from a string to a double `f64`.  For example, `parse_f64("65.4")`
+returns roughly `65.4`.
+
+Any invalid numbers will cause a runtime error.
+
+Note that other numeric types (`i32`) can be converted to double simply by
+multiplying by `1.0`.
+
+Related functions: [`parse_f32`](`parse_f32`), [`str`](#str)
+
 ## `parse_i32`
 ```rust
 fn parse_i32(s: str): i32
@@ -125,7 +234,19 @@ to similar functions as `atoi()`, `stoi()`, `read()`, `parse()`, `strtol()`,
 
 Note that other numeric types (`f32`) can be implicitly cast to `i32`.
 
-Related functions: [`str`](#str)
+Related functions: [`parse_i64`](`parse_i64`), [`str`](#str)
+
+## `parse_i64`
+```rust
+fn parse_i64(s: str): i64
+```
+
+Convert from a string to an integer `i64`.  For example, `parse_i64("65")`
+returns `65`.
+
+Any invalid numbers will cause a runtime error.
+
+Related functions: [`parse_i32`](`parse_i32`), [`str`](#str)
 
 ## `println`
 ```rust
