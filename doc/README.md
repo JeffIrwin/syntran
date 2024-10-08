@@ -57,7 +57,7 @@ fn char(i: i32): str
 ```
 
 Perform an ASCII table lookup and return the single-character string with ASCII
-index `i`.  For example, `char(65)` is `"A"`.  The inverse if the ASCII lookup
+index `i`.  For example, `char(65)` is `"A"`.  The inverse of the ASCII lookup
 is [`i32`](#i32), which is also overloaded to do other casting operations.
 
 Related functions: [`i32`](#i32)
