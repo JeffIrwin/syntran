@@ -115,6 +115,8 @@ Compute the base _e_ exponential of `x`
 fn i32(a: any_num): i32
 #elemental
 ```
+<!-- TODO: not just `any_num` type. Strings are allowed, but it's a runtime
+error if you try a string of 2 or more chars. -->
 
 Explicitly cast any numeric type to 32-bit integer `i32`. The `i32()` fn also
 casts single-character strings to their ASCII values, e.g. `i32("A")` returns

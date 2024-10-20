@@ -25,7 +25,9 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	character(len = :), allocatable :: exp_type, act_type, param_name
 
-	integer :: i, io, id_index, pos0, type_
+	integer :: i, io, id_index, pos0, type_, rank
+
+	logical :: has_rank
 
 	type(fn_t) :: fn
 
@@ -77,9 +79,9 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	! Resolve special overloaded intrinsic fns
 	!
-	!
 	!  TODO: split out to a routine if possible 
 	!
+	has_rank = .false.
 	select case (identifier%text)
 	case ("exp")
 
@@ -138,6 +140,10 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			if (args%len_ >= 1) then
 				allocate(fn_call%val%array)
 				fn_call%val%array%rank = args%v(1)%val%array%rank
+				!print *, "rank = ", fn_call%val%array%rank
+
+				rank = fn_call%val%array%rank
+				has_rank = .true.
 			end if
 
 		case default
@@ -157,6 +163,9 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			if (args%len_ >= 1) then
 				allocate(fn_call%val%array)
 				fn_call%val%array%rank = args%v(1)%val%array%rank
+
+				rank = fn_call%val%array%rank
+				has_rank = .true.
 			end if
 
 		case default
@@ -204,6 +213,20 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	end if
 
 	fn_call%val = fn%type
+	if (has_rank) then
+		! The line above overwrites the rank for overloaded intrinsics like
+		! i32() and i64().  TODO: cover a low-res version of logo.syntran in a
+		! unit test
+		if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
+		fn_call%val%array%rank = rank
+
+		! Not sure if these 2 lines are required. Maybe not since it should only
+		! apply to intrinsics fns, but it might be safer to copy anyway
+		if (.not. allocated(fn%type%array)) allocate(fn%type%array)
+		fn%type%array%rank = rank
+
+	end if
+	!print *, "rank = ", fn_call%val%array%rank
 
 	! Intrinsic fns don't have a syntax node: they are implemented
 	! in Fortran, not syntran

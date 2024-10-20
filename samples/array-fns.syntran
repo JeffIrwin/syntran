@@ -1,5 +1,5 @@
 
-fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
+fn mul_mat_vec(mat: [f64; :,:], vec: [f64; :]): [f64; :]
 {
 	// Matrix-vector multiplication.  Return mat * vec
 	println("starting mul_mat_vec()");
@@ -10,7 +10,7 @@ fn mul_mat_vec(mat: [f32; :,:], vec: [f32; :]): [f32; :]
 	return ans;
 }
 
-fn mul_mat(a: [f32; :,:], b: [f32; :,:]): [f32; :,:]
+fn mul_mat(a: [f64; :,:], b: [f64; :,:]): [f64; :,:]
 {
 	// Matrix-matrix multiplication.  Return a * b
 	println("starting mul_mat()");

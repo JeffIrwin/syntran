@@ -33,7 +33,7 @@ module syntran__core_m
 	!    * test and port samples if needed from f32 to f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
-	!      multiple by 1.0
+	!      multiply by 1.0
 	!  - add tests to cover syntran-explorer samples. might be a bit much to
 	!    automate cross-repo testing on the same source, but a little copy/paste
 	!    is better than nothing
@@ -97,14 +97,11 @@ module syntran__core_m
 	!    * array and, or, not, done
 	!    * unary -, + done
 	!  - document recent features:
-	!    * casting?
 	!    * array comparison
 	!    * array arithmetic and boolean operations, test and doc array compound
 	!      assignment
 	!    * caveat about return val from nested slice compound assignemnt:
 	!          `let u = (v[3: 7] += 7);`
-	!    * any(), all(), count(), i32(array), exit(), parse_f32(), parse_i64()
-	!      intrinsic
 	!    * new generalized for loops
 	!    * compound `**=` assignment, %=
 	!    * --help arg
