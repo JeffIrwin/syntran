@@ -3,7 +3,7 @@ struct Time
 {
 	hh: i32,
 	mm: i32,
-	ss: f32,  // trailing comma is optional
+	ss: f64,  // trailing comma is optional
 }
 
 let t1 = Time{hh = 9, mm = 20, ss = 0.030,};

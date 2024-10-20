@@ -16,7 +16,7 @@
 // The PDE is solved numerically using an explicit finite difference
 // method
 
-fn write_vtk(filename: str, u: [f32; :,:])
+fn write_vtk(filename: str, u: [f64; :,:])
 {
 	// Ref:  http://www.princeton.edu/~efeibush/viscourse/vtk.pdf
 

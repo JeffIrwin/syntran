@@ -30,7 +30,6 @@ module syntran__core_m
 
 	! TODO:
 	!  - f64
-	!    * test and port samples if needed from f32 to f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
 	!      multiply by 1.0

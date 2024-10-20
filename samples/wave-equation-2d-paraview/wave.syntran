@@ -41,26 +41,26 @@ fn write_vtk(filename: str, u: [f32; :,:])
 	// VTK uses x-major ordering
 	for iy in [0: size(u,1)]
 		for ix in [0: size(u,0)]
-			writeln(file, 0.0, 0.0, u[ix,iy]);
+			writeln(file, 0.0f, 0.0f, u[ix,iy]);
 
 	close(file);
 	return;
 }
 
-let e = 2.718281828;
+let e = 2.718281828f;
 
 // Spatial domain bounds
-let xmin = 1.0;
-let xmax = 3.8;
+let xmin = 1.0f;
+let xmax = 3.8f;
 
-let ymin = 2.0;
-let ymax = 4.0;
+let ymin = 2.0f;
+let ymax = 4.0f;
 
 // Wave speed
-let c = 10.0;
+let c = 10.0f;
 
 // Time bounds for wave to travel domain twice (i.e. forth and back)
-let tmin = 0.0;
+let tmin = 0.0f;
 let tmax = tmin + 8 * (xmax - xmin) / c;
 
 // Number of points in spatial grid
@@ -73,7 +73,7 @@ let ny = 101;
 //let ny = 31;
 
 // Allocate displacement solution vector and initialize to 0.0.
-let u = [0.0; nx, ny];
+let u = [0.0f; nx, ny];
 
 // Make spatial grid.  Compare linspace() fn from MATLAB or Scilab
 // and the Rusty syntax for u above
@@ -85,9 +85,9 @@ let dx = x[1] - x[0];
 let dy = y[1] - y[0];
 
 // Time step size just under stability criterion
-//let dt = 0.225 * dx / c;
-let dt = 0.450 * dx / c;
-//let dt = 0.9 * dx / c;
+//let dt = 0.225f * dx / c;
+let dt = 0.450f * dx / c;
+//let dt = 0.9f * dx / c;
 
 // Courant number squared
 let cx2 = (c * dt / dx) ** 2;
@@ -98,30 +98,30 @@ let it = 0;
 
 // Initial condition: Gaussian pulse
 
-let xpulse = xmin + 0.6666 * (xmax - xmin);
-let ypulse = ymin + 0.7500 * (ymax - ymin);
-//let xpulse = xmin + 0.5 * (xmax - xmin);
-//let ypulse = ymin + 0.5 * (ymax - ymin);
+let xpulse = xmin + 0.6666f * (xmax - xmin);
+let ypulse = ymin + 0.7500f * (ymax - ymin);
+//let xpulse = xmin + 0.5f * (xmax - xmin);
+//let ypulse = ymin + 0.5f * (ymax - ymin);
 
-let pwidth = 0.05 * (xmax - xmin);
+let pwidth = 0.05f * (xmax - xmin);
 for iy in [0: ny]
 	for ix in [0: nx]
 	{
 		let dist = (
 			(x[ix] - xpulse) ** 2 +
-			(y[iy] - ypulse) ** 2) ** 0.5;
+			(y[iy] - ypulse) ** 2) ** 0.5f;
 
-		u[ix,iy] = e ** (-0.5 * (dist / pwidth) ** 2);
+		u[ix,iy] = e ** (-0.5f * (dist / pwidth) ** 2);
 	}
 
 //u;
 
 // Dirichlet boundary conditions on west, east, south, and north
 // bounds
-let uw = 0.0;
-let ue = 0.0;
-let us = 0.0;
-let un = 0.0;
+let uw = 0.0f;
+let ue = 0.0f;
+let us = 0.0f;
+let un = 0.0f;
 
 let u0 = u;
 
@@ -139,7 +139,7 @@ for iy in [1: ny-1]
 		let u_xx = u0[ix-1, iy] - 2 * u0[ix, iy] + u0[ix+1, iy];
 		let u_yy = u0[ix, iy-1] - 2 * u0[ix, iy] + u0[ix, iy+1];
 
-		u[ix,iy] = u0[ix,iy] + 0.5 * cx2 * u_xx + 0.5 * cy2 * u_yy;
+		u[ix,iy] = u0[ix,iy] + 0.5f * cx2 * u_xx + 0.5f * cy2 * u_yy;
 	}
 
 for iy in [0: ny] u[nx-1,iy] = ue;
@@ -169,7 +169,7 @@ while t < tmax - dt
 			let u_yy = u0[ix, iy-1] - 2 * u0[ix, iy] + u0[ix, iy+1];
 
 			u[ix,iy] = 2 * u0[ix,iy] - u00[ix,iy]
-				+ 0.5 * cx2 * u_xx + 0.5 * cy2 * u_yy;
+				+ 0.5f * cx2 * u_xx + 0.5f * cy2 * u_yy;
 		}
 
 	for iy in [0: ny] u[nx-1,iy] = ue;
