@@ -46,8 +46,9 @@ module syntran__types_m
 
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
-		!type(syntax_node_t), pointer :: node => null()
 		type(syntax_node_t), allocatable :: node
+
+		logical :: is_intrinsic = .true.
 
 		contains
 			procedure, pass(dst) :: copy => fn_copy
@@ -404,6 +405,7 @@ recursive subroutine fn_copy(dst, src)
 	dst%variadic_min  = src%variadic_min
 	dst%variadic_type = src%variadic_type
 	dst%param_names   = src%param_names
+	dst%is_intrinsic  = src%is_intrinsic
 
 	if (allocated(src%params)) then
 		if (allocated(dst%params)) deallocate(dst%params)

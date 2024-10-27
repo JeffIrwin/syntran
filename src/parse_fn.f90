@@ -101,6 +101,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	end if
 
+	if (fn%is_intrinsic) fn_call%kind = fn_call_intr_expr
+
 	fn_call%val = fn%type
 	if (has_rank) then
 		! The line above overwrites the rank for overloaded intrinsics like
@@ -261,6 +263,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 	identifier = parser%match(identifier_token)
 	fn_name_end = parser%peek_pos(0) - 1
+	fn%is_intrinsic = .false.
 
 	!print *, "parsing fn ", identifier%text
 

@@ -116,6 +116,9 @@ recursive subroutine syntax_eval(node, state, res)
 	case (fn_call_expr)
 		call eval_fn_call(node, state, res)
 
+	case (fn_call_intr_expr)
+		call eval_fn_call_intr(node, state, res)
+
 	case (struct_instance_expr)
 		call eval_struct_instance(node, state, res)
 
@@ -729,6 +732,114 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	!print *, 'res type = ', res%type
 
+	! TODO: remove noop select case
+	select case (node%identifier%text)
+	case default
+		! User-defined function
+
+		if (.not. allocated(node%params)) then
+			write(*,*) err_int_prefix//'unexpected fn'//color_reset
+			call internal_error()
+		end if
+
+		!print *, 'fn name = ', node%identifier%text
+		!print *, 'fn idx  = ', node%id_index
+		!print *, 'node type = ', node%val%type
+		!print *, 'size params = ', size(node%params)
+		!print *, 'param ids = ', node%params
+
+		! TODO: Shared param scope is ok at first, but eventually target
+		! recursive fns with scoped stack frames
+
+		! Pass by value (for now, at least).  Arguments are evaluated and
+		! their values are copied to the fn parameters
+
+		do i = 1, size(node%params)
+			!print *, 'copying param ', i
+
+			!call syntax_eval(node%args(i), state, &
+			!	state%vars%vals( node%params(i) ))
+
+			! deeply-nested fn calls can crash without the tmp value.  idk why i
+			! can't just eval directly into the state var like commented above
+			! :(.  probably state var type is getting cleared by passing it to
+			! an intent(out) arg? more likely, nested fn calls basically create
+			! a stack in which we store each nested arg in different copies of
+			! tmp.  if you try to store them all in the same state var at
+			! multiple stack levels it breaks?
+			!
+			! this also seems to have led to a dramatic perf improvement for
+			! intel compilers in commit 324ad414, running full tests in ~25
+			! minutes instead of 50.  gfortran perf remains good and unchanged
+			!
+			call syntax_eval(node%args(i), state, tmp)
+			state%vars%vals( node%params(i) ) = tmp
+
+			!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
+			!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
+			!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
+
+			!print *, 'done'
+			!print *, ''
+		end do
+
+		call syntax_eval(node%body, state, res)
+		!print *, "res rank = ", res%array%rank
+		!print *, 'res = ', res%to_str()
+
+	end select
+
+	! This is a runtime stopgap check that every fn returns, until (?) i can
+	! figure out parse-time return branch checking.  Checking for unreachable
+	! statements after returns also seems hard
+	if (.not. state%returned) then
+		write(*,*) err_int_prefix//"reached end of function `", &
+			node%identifier%text, "` without a return statement"//color_reset
+		call internal_error()
+	end if
+
+	state%returned = returned0  ! pop
+
+end subroutine eval_fn_call
+
+!===============================================================================
+
+recursive subroutine eval_fn_call_intr(node, state, res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	character(len = :), allocatable :: color
+
+	integer :: i, io
+
+	logical :: returned0
+
+	type(char_vector_t) :: str_
+
+	type(value_t) :: arg, arg1, arg2, tmp
+
+	!print *, 'eval fn_call_intr_expr'
+	!print *, 'fn identifier = ', node%identifier%text
+	!print *, 'fn id_index   = ', node%id_index
+
+	! TODO: no need to track return status for intr fns
+
+	! i think this is technically not different than using an explicit array.
+	! we're just using fortran's call stack and recursive calls to
+	! eval_fn_call() to mock a whole array with just `returned0` and `returned`.
+	returned0 = state%returned  ! push
+	state%returned = .false.
+
+	res%type = node%val%type
+
+	!print *, 'res type = ', res%type
+
 	! Intrinsic fns
 	select case (node%identifier%text)
 	!********
@@ -1289,57 +1400,14 @@ recursive subroutine eval_fn_call(node, state, res)
 		state%returned = .true.
 
 	case default
-		! User-defined function
-
-		if (.not. allocated(node%params)) then
-			write(*,*) err_int_prefix//'unexpected fn'//color_reset
-			call internal_error()
-		end if
+		write(*,*) err_int_prefix//'unexpected fn'//color_reset
+		call internal_error()
 
 		!print *, 'fn name = ', node%identifier%text
 		!print *, 'fn idx  = ', node%id_index
 		!print *, 'node type = ', node%val%type
 		!print *, 'size params = ', size(node%params)
 		!print *, 'param ids = ', node%params
-
-		! TODO: Shared param scope is ok at first, but eventually target
-		! recursive fns with scoped stack frames
-
-		! Pass by value (for now, at least).  Arguments are evaluated and
-		! their values are copied to the fn parameters
-
-		do i = 1, size(node%params)
-			!print *, 'copying param ', i
-
-			!call syntax_eval(node%args(i), state, &
-			!	state%vars%vals( node%params(i) ))
-
-			! deeply-nested fn calls can crash without the tmp value.  idk why i
-			! can't just eval directly into the state var like commented above
-			! :(.  probably state var type is getting cleared by passing it to
-			! an intent(out) arg? more likely, nested fn calls basically create
-			! a stack in which we store each nested arg in different copies of
-			! tmp.  if you try to store them all in the same state var at
-			! multiple stack levels it breaks?
-			!
-			! this also seems to have led to a dramatic perf improvement for
-			! intel compilers in commit 324ad414, running full tests in ~25
-			! minutes instead of 50.  gfortran perf remains good and unchanged
-			!
-			call syntax_eval(node%args(i), state, tmp)
-			state%vars%vals( node%params(i) ) = tmp
-
-			!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
-			!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
-			!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
-
-			!print *, 'done'
-			!print *, ''
-		end do
-
-		call syntax_eval(node%body, state, res)
-		!print *, "res rank = ", res%array%rank
-		!print *, 'res = ', res%to_str()
 
 	end select
 
@@ -1354,7 +1422,7 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	state%returned = returned0  ! pop
 
-end subroutine eval_fn_call
+end subroutine eval_fn_call_intr
 
 !===============================================================================
 
