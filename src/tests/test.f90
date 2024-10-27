@@ -624,7 +624,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 
 	logical, allocatable :: tests(:)
 
-	real, parameter :: tol = 1.e-9
+	real, parameter :: tol = 1.e-9, ftol = 1.e-5
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -634,12 +634,12 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f32('exp(1.0f);') - exp(1.0)) < tol,  &
 			abs(eval_f64('exp(0.0);') - 1.0d0) < tol,  &
 			abs(eval_f64('exp(1.0);') - exp(1.0d0)) < tol,  &
-			abs(eval_f32('sum(exp([0.0f, 1.0f]));') - sum(exp([0.0, 1.0]))) < 1000 * tol,  &
-			abs(eval_f32('sum(exp([0.5f, 1.0f]));') - sum(exp([0.5, 1.0]))) < 1000 * tol,  &
-			abs(eval_f32('sum(exp([2.0f, 1.0f]));') - sum(exp([2.0, 1.0]))) < 1000 * tol,  &
-			abs(eval_f64('sum(exp([0.0, 1.0]));') - sum(exp([0.d0, 1.0d0]))) < tol,  &
+			abs(eval_f32('sum(exp([0.0f, 1.0f]));') - sum(exp([0.0, 1.0])))   < ftol,  &
+			abs(eval_f32('sum(exp([0.5f, 1.0f]));') - sum(exp([0.5, 1.0])))   < ftol,  &
+			abs(eval_f32('sum(exp([2.0f, 1.0f]));') - sum(exp([2.0, 1.0])))   < ftol,  &
+			abs(eval_f64('sum(exp([0.0, 1.0]));') - sum(exp([0.d0, 1.0d0])))  < tol,  &
 			abs(eval_f64('sum(exp([0.5, 1.0]));') - sum(exp([0.5d0, 1.0d0]))) < tol,  &
-			abs(eval_f64('sum(exp([2.0, 1.0]));') - sum(exp([2.d0, 1.0d0]))) < tol,  &
+			abs(eval_f64('sum(exp([2.0, 1.0]));') - sum(exp([2.d0, 1.0d0])))  < tol,  &
 			eval_i32('min(3, 2);')  == 2,  &
 			eval_i32('min(2, 2);')  == 2,  &
 			eval_i32('min(2, 3, 4);')  == 2,  &

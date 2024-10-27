@@ -15,22 +15,25 @@ contains
 
 !===============================================================================
 
-recursive subroutine resolve_overload(has_rank, rank, identifier, args, fn_call)
-
-	! TODO: sort fn args, set intents
-
+recursive subroutine resolve_overload(args, fn_call, has_rank)
 
 	! Resolve special overloaded intrinsic fns
 
-	integer :: type_, rank, arr_type
-	logical :: has_rank
+	type(syntax_node_vector_t), intent(in) :: args
 
-	type(syntax_node_t) :: fn_call
-	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: identifier
+	type(syntax_node_t), intent(inout) :: fn_call
+
+	logical, intent(out) :: has_rank
+
+	!********
+
+	integer :: type_, arr_type
 
 	has_rank = .false.
-	select case (identifier%text)
+
+	!select case (identifier%text)
+	select case (fn_call%identifier%text)
+
 	case ("exp")
 
 		type_ = f64_type
@@ -53,12 +56,9 @@ recursive subroutine resolve_overload(has_rank, rank, identifier, args, fn_call)
 			end select
 
 			if (args%len_ >= 1) then
+				has_rank = .true.
 				allocate(fn_call%val%array)
 				fn_call%val%array%rank = args%v(1)%val%array%rank
-
-				!print *, "exp has_rank"
-				rank = fn_call%val%array%rank
-				has_rank = .true.
 			end if
 
 		case (f32_type)
@@ -110,12 +110,9 @@ recursive subroutine resolve_overload(has_rank, rank, identifier, args, fn_call)
 			fn_call%identifier%text = "0i32_arr"
 
 			if (args%len_ >= 1) then
+				has_rank = .true.
 				allocate(fn_call%val%array)
 				fn_call%val%array%rank = args%v(1)%val%array%rank
-				!print *, "rank = ", fn_call%val%array%rank
-
-				rank = fn_call%val%array%rank
-				has_rank = .true.
 			end if
 
 		case default
@@ -133,11 +130,9 @@ recursive subroutine resolve_overload(has_rank, rank, identifier, args, fn_call)
 			fn_call%identifier%text = "0i64_arr"
 
 			if (args%len_ >= 1) then
+				has_rank = .true.
 				allocate(fn_call%val%array)
 				fn_call%val%array%rank = args%v(1)%val%array%rank
-
-				rank = fn_call%val%array%rank
-				has_rank = .true.
 			end if
 
 		case default
@@ -231,7 +226,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	fn_call%kind = fn_call_expr
 	fn_call%identifier = identifier
 
-	call resolve_overload(has_rank, rank, identifier, args, fn_call)
+	call resolve_overload(args, fn_call, has_rank)
+	if (has_rank) rank = fn_call%val%array%rank
 
 	! Lookup by fn_call%identifier%text (e.g. "0min_i32"), but log
 	! diagnostics based on identifier%text (e.g. "min")
