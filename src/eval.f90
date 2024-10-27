@@ -14,7 +14,7 @@ module syntran__eval_m
 	!********
 
 	type state_t
-		! Run time state
+		! Run time (eval time) state
 
 		logical :: quiet
 

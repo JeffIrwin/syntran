@@ -3,7 +3,7 @@
 
 submodule (syntran__parse_m) syntran__parse_fn
 
-	use syntran__intrinsic_fns_m
+	use syntran__intr_fns_m
 
 	implicit none
 
@@ -101,7 +101,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	end if
 
-	if (fn%is_intrinsic) fn_call%kind = fn_call_intr_expr
+	if (fn%is_intr) fn_call%kind = fn_call_intr_expr
 
 	fn_call%val = fn%type
 	if (has_rank) then
@@ -263,7 +263,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 	identifier = parser%match(identifier_token)
 	fn_name_end = parser%peek_pos(0) - 1
-	fn%is_intrinsic = .false.
+	fn%is_intr = .false.
 
 	!print *, "parsing fn ", identifier%text
 

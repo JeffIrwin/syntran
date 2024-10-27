@@ -1,7 +1,7 @@
 
 !===============================================================================
 
-module syntran__intrinsic_fns_m
+module syntran__intr_fns_m
 
 	use syntran__types_m
 
@@ -13,7 +13,7 @@ contains
 
 !===============================================================================
 
-subroutine declare_intrinsic_fns(fns)
+subroutine declare_intr_fns(fns)
 
 	type(fns_t), intent(out) :: fns
 
@@ -1000,7 +1000,7 @@ subroutine declare_intrinsic_fns(fns)
 			any_fn          &
 		]
 
-end subroutine declare_intrinsic_fns
+end subroutine declare_intr_fns
 
 !===============================================================================
 
@@ -1350,7 +1350,7 @@ end subroutine resolve_overload
 
 !===============================================================================
 
-end module syntran__intrinsic_fns_m
+end module syntran__intr_fns_m
 
 !===============================================================================
 

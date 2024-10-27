@@ -48,7 +48,7 @@ module syntran__types_m
 		! the function parameters and body
 		type(syntax_node_t), allocatable :: node
 
-		logical :: is_intrinsic = .true.
+		logical :: is_intr = .true.
 
 		contains
 			procedure, pass(dst) :: copy => fn_copy
@@ -405,7 +405,7 @@ recursive subroutine fn_copy(dst, src)
 	dst%variadic_min  = src%variadic_min
 	dst%variadic_type = src%variadic_type
 	dst%param_names   = src%param_names
-	dst%is_intrinsic  = src%is_intrinsic
+	dst%is_intr       = src%is_intr
 
 	if (allocated(src%params)) then
 		if (allocated(dst%params)) deallocate(dst%params)

@@ -343,7 +343,7 @@ subroutine init_state(state)
 
 	type(state_t), intent(inout) :: state
 
-	call declare_intrinsic_fns(state%fns)
+	call declare_intr_fns(state%fns)
 
 	state%returned = .false.
 
