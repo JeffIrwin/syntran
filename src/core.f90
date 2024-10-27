@@ -165,7 +165,7 @@ module syntran__core_m
 	!      + system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
 	!    * done:
-	!      + exp  (non-variadic)
+	!      + exp
 	!      + min, max, sum
 	!      + size (non-variadic but polymorphic)
 	!      + readln, writeln, println, open, close, str casting
@@ -219,14 +219,16 @@ subroutine declare_intrinsic_fns(fns)
 		i64_sca_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
 		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, &
 		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn, &
-		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn, exp_f64_fn
+		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn, exp_f64_fn, &
+		exp_f64_arr_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
 
 	!********
 
-	! Should exp be overloaded for ints?
+	! Should exp be overloaded for ints?  No, fortran only allows exp on real or
+	! complex types
 
 	exp_f32_fn%type%type = f32_type
 	allocate(exp_f32_fn%params(1))
@@ -247,10 +249,23 @@ subroutine declare_intrinsic_fns(fns)
 	exp_f64_fn%params(1)%type = f64_type
 	exp_f64_fn%param_names%v(1)%s = "x"
 
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
-
 	call fns%insert("0exp_f64", exp_f64_fn, id_index)
+
+	!********
+
+	exp_f64_arr_fn%type%type = array_type
+	allocate(exp_f64_arr_fn%type%array)
+	exp_f64_arr_fn%type%array%type = f64_type
+	exp_f64_arr_fn%type%array%rank = -1
+
+	allocate(exp_f64_arr_fn%params(1))
+	allocate(exp_f64_arr_fn%param_names%v(1))
+
+	exp_f64_arr_fn%params(1)%type = any_type
+
+	exp_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0exp_f64_arr", exp_f64_arr_fn, id_index)
 
 	!********
 
@@ -783,42 +798,43 @@ subroutine declare_intrinsic_fns(fns)
 
 	fns%fns = &
 		[ &
-			exp_f32_fn  , &
-			exp_f64_fn  , &
-			min_i32_fn  , &
-			min_i64_fn  , &
-			min_f32_fn  , &
-			min_f64_fn  , &
-			max_i32_fn  , &
-			max_i64_fn  , &
-			max_f32_fn  , &
-			max_f64_fn  , &
-			println_fn  , &
-			str_fn      , &
-			len_fn      , &
-			parse_i32_fn, &
-			parse_i64_fn, &
-			parse_f32_fn, &
-			parse_f64_fn, &
-			char_fn     , &
-			i32_sca_fn  , &
-			i32_arr_fn  , &
-			i64_sca_fn  , &
-			i64_arr_fn  , &
-			open_fn     , &
-			readln_fn   , &
-			writeln_fn  , &
-			eof_fn      , &
-			close_fn    , &
-			exit_fn     , &
-			size_fn     , &
-			count_fn    , &
-			sum_i32_fn  , &
-			sum_i64_fn  , &
-			sum_f32_fn  , &
-			sum_f64_fn  , &
-			all_fn      , &
-			any_fn        &
+			exp_f32_fn    , &
+			exp_f64_fn    , &
+			exp_f64_arr_fn, &
+			min_i32_fn    , &
+			min_i64_fn    , &
+			min_f32_fn    , &
+			min_f64_fn    , &
+			max_i32_fn    , &
+			max_i64_fn    , &
+			max_f32_fn    , &
+			max_f64_fn    , &
+			println_fn    , &
+			str_fn        , &
+			len_fn        , &
+			parse_i32_fn  , &
+			parse_i64_fn  , &
+			parse_f32_fn  , &
+			parse_f64_fn  , &
+			char_fn       , &
+			i32_sca_fn    , &
+			i32_arr_fn    , &
+			i64_sca_fn    , &
+			i64_arr_fn    , &
+			open_fn       , &
+			readln_fn     , &
+			writeln_fn    , &
+			eof_fn        , &
+			close_fn      , &
+			exit_fn       , &
+			size_fn       , &
+			count_fn      , &
+			sum_i32_fn    , &
+			sum_i64_fn    , &
+			sum_f32_fn    , &
+			sum_f64_fn    , &
+			all_fn        , &
+			any_fn          &
 		]
 
 end subroutine declare_intrinsic_fns

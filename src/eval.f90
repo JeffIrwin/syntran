@@ -743,6 +743,29 @@ recursive subroutine eval_fn_call(node, state, res)
 		res%sca%f64 = exp(arg1%sca%f64)
 		state%returned = .true.
 
+	case ("0exp_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+
+		! This requires an explicit call to mold() to copy array meta-data.  The
+		! similar fn 0i32_arr already calls mold() via to_i32_array()
+
+		!res = arg1
+		res%array = mold(arg1%array, f64_type)
+		!allocate(res%array)
+		!res%array%rank = arg1%array%rank
+		!res%array%size = arg1%array%size
+		!res%type = array_type
+		!res%array%type = f64_type
+
+		!allocate(res%array)
+		!res%type = array_type
+		!res%array%type = f64_type
+
+		res%array%f64 = exp(arg1%array%f64)
+		!print *, "arr = ", res%array%f64
+		state%returned = .true.
+
 	case ("0min_i32")
 
 		call syntax_eval(node%args(1), state, arg)

@@ -89,6 +89,21 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		if (args%len_ >= 1) type_ = args%v(1)%val%type
 
 		select case (type_)
+		case (array_type)
+
+			! TODO: select array sub type
+
+			fn_call%identifier%text = "0exp_f64_arr"
+
+			if (args%len_ >= 1) then
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+
+				!print *, "exp has_rank"
+				rank = fn_call%val%array%rank
+				has_rank = .true.
+			end if
+
 		case (f32_type)
 			fn_call%identifier%text = "0exp_f32"
 		case default
