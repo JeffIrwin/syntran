@@ -844,6 +844,87 @@ recursive subroutine eval_fn_call(node, state, res)
 		state%returned = .true.
 
 	!********
+	case ("0acos_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = acos(arg1%sca%f32)
+		state%returned = .true.
+
+	case ("0acos_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = acos(arg1%sca%f64)
+		state%returned = .true.
+
+	case ("0acos_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = acos(arg1%array%f32)
+		state%returned = .true.
+
+	case ("0acos_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = acos(arg1%array%f64)
+		state%returned = .true.
+
+	!********
+	case ("0asin_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = asin(arg1%sca%f32)
+		state%returned = .true.
+
+	case ("0asin_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = asin(arg1%sca%f64)
+		state%returned = .true.
+
+	case ("0asin_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = asin(arg1%array%f32)
+		state%returned = .true.
+
+	case ("0asin_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = asin(arg1%array%f64)
+		state%returned = .true.
+
+	!********
+	case ("0atan_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = atan(arg1%sca%f32)
+		state%returned = .true.
+
+	case ("0atan_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = atan(arg1%sca%f64)
+		state%returned = .true.
+
+	case ("0atan_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = atan(arg1%array%f32)
+		state%returned = .true.
+
+	case ("0atan_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = atan(arg1%array%f64)
+		state%returned = .true.
+
+	!********
 	case ("0min_i32")
 
 		call syntax_eval(node%args(1), state, arg)

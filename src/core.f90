@@ -157,13 +157,18 @@ module syntran__core_m
 	!    * intrinsic
 	!      + abs, norm, dot
 	!      + log, log10, log2, (gamma, log_gamma?)
-	!      + trig: sin, cos, tan, asin, acos, atan, atan2, (sec, cos, hyperbolic, ... ?)
+	!      + trig: atan2, (sind, sec, cos, hyperbolic, ... ?)
 	!      + norm, product
 	!      + reshape
 	!      + system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
 	!    * done:
 	!      + exp
+	!        > need documentation for elemental array overloading
+	!      + sin, cos, tan, asin, acos, atan
+	!        > TODO: add a few non-circular tests that don't just compare result
+	!          to fortran trig fns
+	!        > needs documentation
 	!      + min, max, sum
 	!      + size (non-variadic but polymorphic)
 	!      + readln, writeln, println, open, close, str casting
@@ -221,7 +226,10 @@ subroutine declare_intrinsic_fns(fns)
 		exp_f32_arr_fn, exp_f64_arr_fn, &
 		cos_f32_fn, cos_f64_fn, cos_f32_arr_fn, cos_f64_arr_fn, &
 		sin_f32_fn, sin_f64_fn, sin_f32_arr_fn, sin_f64_arr_fn, &
-		tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn
+		tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn, &
+		acos_f32_fn, acos_f64_fn, acos_f32_arr_fn, acos_f64_arr_fn, &
+		asin_f32_fn, asin_f64_fn, asin_f32_arr_fn, asin_f64_arr_fn, &
+		atan_f32_fn, atan_f64_fn, atan_f32_arr_fn, atan_f64_arr_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -448,6 +456,171 @@ subroutine declare_intrinsic_fns(fns)
 	tan_f64_arr_fn%param_names%v(1)%s = "x"
 
 	call fns%insert("0tan_f64_arr", tan_f64_arr_fn, id_index)
+
+	!********
+
+	acos_f32_fn%type%type = f32_type
+	allocate(acos_f32_fn%params(1))
+	allocate(acos_f32_fn%param_names%v(1))
+	acos_f32_fn%params(1)%type = f32_type
+	acos_f32_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0acos_f32", acos_f32_fn, id_index)
+
+	!********
+
+	acos_f64_fn%type%type = f64_type
+	allocate(acos_f64_fn%params(1))
+	allocate(acos_f64_fn%param_names%v(1))
+	acos_f64_fn%params(1)%type = f64_type
+	acos_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0acos_f64", acos_f64_fn, id_index)
+
+	!********
+
+	acos_f32_arr_fn%type%type = array_type
+	allocate(acos_f32_arr_fn%type%array)
+	acos_f32_arr_fn%type%array%type = f32_type
+	acos_f32_arr_fn%type%array%rank = -1
+
+	allocate(acos_f32_arr_fn%params(1))
+	allocate(acos_f32_arr_fn%param_names%v(1))
+
+	acos_f32_arr_fn%params(1)%type = any_type
+
+	acos_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0acos_f32_arr", acos_f32_arr_fn, id_index)
+
+	!********
+
+	acos_f64_arr_fn%type%type = array_type
+	allocate(acos_f64_arr_fn%type%array)
+	acos_f64_arr_fn%type%array%type = f64_type
+	acos_f64_arr_fn%type%array%rank = -1
+
+	allocate(acos_f64_arr_fn%params(1))
+	allocate(acos_f64_arr_fn%param_names%v(1))
+
+	acos_f64_arr_fn%params(1)%type = any_type
+
+	acos_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0acos_f64_arr", acos_f64_arr_fn, id_index)
+
+	!********
+
+	asin_f32_fn%type%type = f32_type
+	allocate(asin_f32_fn%params(1))
+	allocate(asin_f32_fn%param_names%v(1))
+	asin_f32_fn%params(1)%type = f32_type
+	asin_f32_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0asin_f32", asin_f32_fn, id_index)
+
+	!********
+
+	asin_f64_fn%type%type = f64_type
+	allocate(asin_f64_fn%params(1))
+	allocate(asin_f64_fn%param_names%v(1))
+	asin_f64_fn%params(1)%type = f64_type
+	asin_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0asin_f64", asin_f64_fn, id_index)
+
+	!********
+
+	asin_f32_arr_fn%type%type = array_type
+	allocate(asin_f32_arr_fn%type%array)
+	asin_f32_arr_fn%type%array%type = f32_type
+	asin_f32_arr_fn%type%array%rank = -1
+
+	allocate(asin_f32_arr_fn%params(1))
+	allocate(asin_f32_arr_fn%param_names%v(1))
+
+	asin_f32_arr_fn%params(1)%type = any_type
+
+	asin_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0asin_f32_arr", asin_f32_arr_fn, id_index)
+
+	!********
+
+	asin_f64_arr_fn%type%type = array_type
+	allocate(asin_f64_arr_fn%type%array)
+	asin_f64_arr_fn%type%array%type = f64_type
+	asin_f64_arr_fn%type%array%rank = -1
+
+	allocate(asin_f64_arr_fn%params(1))
+	allocate(asin_f64_arr_fn%param_names%v(1))
+
+	asin_f64_arr_fn%params(1)%type = any_type
+
+	asin_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0asin_f64_arr", asin_f64_arr_fn, id_index)
+
+	!********
+
+	atan_f32_fn%type%type = f32_type
+	allocate(atan_f32_fn%params(1))
+	allocate(atan_f32_fn%param_names%v(1))
+	atan_f32_fn%params(1)%type = f32_type
+	atan_f32_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0atan_f32", atan_f32_fn, id_index)
+
+	!********
+
+	atan_f64_fn%type%type = f64_type
+	allocate(atan_f64_fn%params(1))
+	allocate(atan_f64_fn%param_names%v(1))
+	atan_f64_fn%params(1)%type = f64_type
+	atan_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0atan_f64", atan_f64_fn, id_index)
+
+	!********
+
+	atan_f32_arr_fn%type%type = array_type
+	allocate(atan_f32_arr_fn%type%array)
+	atan_f32_arr_fn%type%array%type = f32_type
+	atan_f32_arr_fn%type%array%rank = -1
+
+	allocate(atan_f32_arr_fn%params(1))
+	allocate(atan_f32_arr_fn%param_names%v(1))
+
+	atan_f32_arr_fn%params(1)%type = any_type
+
+	atan_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0atan_f32_arr", atan_f32_arr_fn, id_index)
+
+	!********
+
+	atan_f64_arr_fn%type%type = array_type
+	allocate(atan_f64_arr_fn%type%array)
+	atan_f64_arr_fn%type%array%type = f64_type
+	atan_f64_arr_fn%type%array%rank = -1
+
+	allocate(atan_f64_arr_fn%params(1))
+	allocate(atan_f64_arr_fn%param_names%v(1))
+
+	atan_f64_arr_fn%params(1)%type = any_type
+
+	atan_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0atan_f64_arr", atan_f64_arr_fn, id_index)
 
 	!********
 
@@ -984,6 +1157,9 @@ subroutine declare_intrinsic_fns(fns)
 			cos_f32_fn    , cos_f64_fn    , cos_f32_arr_fn, cos_f64_arr_fn, &
 			sin_f32_fn    , sin_f64_fn    , sin_f32_arr_fn, sin_f64_arr_fn, &
 			tan_f32_fn    , tan_f64_fn    , tan_f32_arr_fn, tan_f64_arr_fn, &
+			acos_f32_fn   , acos_f64_fn   , acos_f32_arr_fn, acos_f64_arr_fn, &
+			asin_f32_fn   , asin_f64_fn   , asin_f32_arr_fn, asin_f64_arr_fn, &
+			atan_f32_fn   , atan_f64_fn   , atan_f32_arr_fn, atan_f64_arr_fn, &
 			min_i32_fn    , &
 			min_i64_fn    , &
 			min_f32_fn    , &
