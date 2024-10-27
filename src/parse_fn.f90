@@ -23,6 +23,8 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 
 	type(syntax_node_t), intent(inout) :: fn_call
 
+	! It might be possible to eliminate the has_rank variable and instead check
+	! if fn_call%val%array is allocated, but it might be cleaner this way
 	logical, intent(out) :: has_rank
 
 	!********
@@ -30,10 +32,7 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 	integer :: type_, arr_type
 
 	has_rank = .false.
-
-	!select case (identifier%text)
 	select case (fn_call%identifier%text)
-
 	case ("exp")
 
 		type_ = f64_type
@@ -65,6 +64,39 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0exp_f32"
 		case default
 			fn_call%identifier%text = "0exp_f64"
+		end select
+
+	case ("cos")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+
+			arr_type = args%v(1)%val%array%type
+			!print *, "type = ", kind_name(arr_type)
+
+			select case (arr_type)
+			case (f32_type)
+				fn_call%identifier%text = "0cos_f32_arr"
+			case (f64_type)
+				fn_call%identifier%text = "0cos_f64_arr"
+			case default
+				! Fall-back on scalar to throw a parser error later
+				fn_call%identifier%text = "0cos_f64"
+			end select
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case (f32_type)
+			fn_call%identifier%text = "0cos_f32"
+		case default
+			fn_call%identifier%text = "0cos_f64"
 		end select
 
 	case ("min")

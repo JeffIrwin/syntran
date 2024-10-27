@@ -731,6 +731,7 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	! Intrinsic fns
 	select case (node%identifier%text)
+	!********
 	case ("0exp_f32")
 
 		call syntax_eval(node%args(1), state, arg1)
@@ -761,6 +762,34 @@ recursive subroutine eval_fn_call(node, state, res)
 		res%array%f64 = exp(arg1%array%f64)
 		state%returned = .true.
 
+	!********
+	case ("0cos_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = cos(arg1%sca%f32)
+		state%returned = .true.
+
+	case ("0cos_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = cos(arg1%sca%f64)
+		state%returned = .true.
+
+	case ("0cos_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = cos(arg1%array%f32)
+		state%returned = .true.
+
+	case ("0cos_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = cos(arg1%array%f64)
+		state%returned = .true.
+
+	!********
 	case ("0min_i32")
 
 		call syntax_eval(node%args(1), state, arg)
@@ -808,6 +837,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		end do
 		state%returned = .true.
 
+	!********
 	case ("0max_i32")
 
 		call syntax_eval(node%args(1), state, arg)
@@ -852,6 +882,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		end do
 		state%returned = .true.
 
+	!********
 	case ("println")
 
 		! TODO: if struct, pass a struct_t as opt arg to to_str(), which
