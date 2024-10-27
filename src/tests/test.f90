@@ -632,10 +632,14 @@ subroutine unit_test_intr_fns(npass, nfail)
 
 	spi = str(pi)
 
+	! It's important to use ftol for f32 instead of (double) tol.  This has a
+	! tendency to work for one compiler/os but not all, e.g. it may break but
+	! only for ifx, or only in docker env, etc.
+
 	tests = &
 		[   &
-			abs(eval_f32('exp(0.0f);') - 1.0) < tol,  &
-			abs(eval_f32('exp(1.0f);') - exp(1.0)) < tol,  &
+			abs(eval_f32('exp(0.0f);') - 1.0) < ftol,  &
+			abs(eval_f32('exp(1.0f);') - exp(1.0)) < ftol,  &
 			abs(eval_f64('exp(0.0);') - 1.0d0) < tol,  &
 			abs(eval_f64('exp(1.0);') - exp(1.0d0)) < tol,  &
 			abs(eval_f32('sum(exp([0.0f, 1.0f]));') - sum(exp([0.0, 1.0])))   < ftol,  &
@@ -644,7 +648,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(exp([0.0, 1.0]));') - sum(exp([0.d0, 1.0d0])))  < tol,  &
 			abs(eval_f64('sum(exp([0.5, 1.0]));') - sum(exp([0.5d0, 1.0d0]))) < tol,  &
 			abs(eval_f64('sum(exp([2.0, 1.0]));') - sum(exp([2.d0, 1.0d0])))  < tol,  &
-			abs(eval_f32('cos(0.0f);') - cos(0.0)) < tol,  &
+			abs(eval_f32('cos(0.0f);') - cos(0.0)) < ftol,  &
 			abs(eval_f32('cos(1.0f);') - cos(1.0)) < ftol,  &
 			abs(eval_f64('cos(0.0);') - cos(0.d0)) < tol,  &
 			abs(eval_f64('cos(1.0);') - cos(1.0d0)) < tol,  &
@@ -654,8 +658,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(cos([0.0, 1.0]));') - sum(cos([0.d0, 1.0d0])))  < tol,  &
 			abs(eval_f64('sum(cos([0.5, 1.0]));') - sum(cos([0.5d0, 1.0d0]))) < tol,  &
 			abs(eval_f64('sum(cos([2.0, 1.0]));') - sum(cos([2.d0, 1.0d0])))  < tol,  &
-			abs(eval_f32('sin(0.0f);') - sin(0.0)) < tol,  &
-			abs(eval_f32('sin(1.0f);') - sin(1.0)) < tol,  &
+			abs(eval_f32('sin(0.0f);') - sin(0.0)) < ftol,  &
+			abs(eval_f32('sin(1.0f);') - sin(1.0)) < ftol,  &
 			abs(eval_f64('sin(0.0);') - sin(0.d0)) < tol,  &
 			abs(eval_f64('sin(1.0);') - sin(1.0d0)) < tol,  &
 			abs(eval_f32('sum(sin([0.0f, 1.0f]));') - sum(sin([0.0, 1.0])))   < ftol,  &
@@ -664,8 +668,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(sin([0.0, 1.0]));') - sum(sin([0.d0, 1.0d0])))  < tol,  &
 			abs(eval_f64('sum(sin([0.5, 1.0]));') - sum(sin([0.5d0, 1.0d0]))) < tol,  &
 			abs(eval_f64('sum(sin([2.0, 1.0]));') - sum(sin([2.d0, 1.0d0])))  < tol,  &
-			abs(eval_f32('tan(0.0f);') - tan(0.0)) < tol,  &
-			abs(eval_f32('tan(1.0f);') - tan(1.0)) < tol,  &
+			abs(eval_f32('tan(0.0f);') - tan(0.0)) < ftol,  &
+			abs(eval_f32('tan(1.0f);') - tan(1.0)) < ftol,  &
 			abs(eval_f64('tan(0.0);') - tan(0.d0)) < tol,  &
 			abs(eval_f64('tan(1.0);') - tan(1.0d0)) < tol,  &
 			abs(eval_f32('sum(tan([0.0f, 1.0f]));') - sum(tan([0.0, 1.0])))   < ftol,  &
@@ -684,8 +688,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(acos([0.0, 0.1]));') - sum(acos([0.d0, 0.1d0])))  < tol,  &
 			abs(eval_f64('sum(acos([0.5, 0.1]));') - sum(acos([0.5d0, 0.1d0]))) < tol,  &
 			abs(eval_f64('sum(acos([0.2, 0.1]));') - sum(acos([0.2d0, 0.1d0])))  < tol,  &
-			abs(eval_f32('asin(0.0f);') - asin(0.0)) < tol,  &
-			abs(eval_f32('asin(0.1f);') - asin(0.1)) < tol,  &
+			abs(eval_f32('asin(0.0f);') - asin(0.0)) < ftol,  &
+			abs(eval_f32('asin(0.1f);') - asin(0.1)) < ftol,  &
 			abs(eval_f64('asin(0.0);') - asin(0.d0)) < tol,  &
 			abs(eval_f64('asin(0.1);') - asin(0.1d0)) < tol,  &
 			abs(eval_f32('sum(asin([0.0f, 0.1f]));') - sum(asin([0.0, 0.1])))   < ftol,  &
@@ -694,8 +698,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(asin([0.0, 0.1]));') - sum(asin([0.d0, 0.1d0])))  < tol,  &
 			abs(eval_f64('sum(asin([0.5, 0.1]));') - sum(asin([0.5d0, 0.1d0]))) < tol,  &
 			abs(eval_f64('sum(asin([0.2, 0.1]));') - sum(asin([0.2d0, 0.1d0])))  < tol,  &
-			abs(eval_f32('atan(0.0f);') - atan(0.0)) < tol,  &
-			abs(eval_f32('atan(1.0f);') - atan(1.0)) < tol,  &
+			abs(eval_f32('atan(0.0f);') - atan(0.0)) < ftol,  &
+			abs(eval_f32('atan(1.0f);') - atan(1.0)) < ftol,  &
 			abs(eval_f64('atan(0.0);') - atan(0.d0)) < tol,  &
 			abs(eval_f64('atan(1.0);') - atan(1.0d0)) < tol,  &
 			abs(eval_f32('sum(atan([0.0f, 1.0f]));') - sum(atan([0.0, 1.0])))   < ftol,  &
