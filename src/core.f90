@@ -161,6 +161,7 @@ module syntran__core_m
 	!      + log, log10, log2, (gamma, log_gamma?)
 	!      + trig: atan2, (sind, sec, cos, hyperbolic, ... ?)
 	!      + norm, product
+	!      + bessel_jn
 	!      + reshape
 	!      + system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns

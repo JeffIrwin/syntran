@@ -674,7 +674,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(tan([0.0, 1.0]));') - sum(tan([0.d0, 1.0d0])))  < tol,  &
 			abs(eval_f64('sum(tan([0.5, 1.0]));') - sum(tan([0.5d0, 1.0d0]))) < tol,  &
 			abs(eval_f64('sum(tan([2.0, 1.0]));') - sum(tan([2.d0, 1.0d0])))  < tol,  &
-			abs(eval_f32('acos(0.0f);') - acos(0.0)) < tol,  &
+			abs(eval_f32('acos(0.0f);') - acos(0.0)) < ftol,  &
 			abs(eval_f32('acos(1.0f);') - acos(1.0)) < ftol,  &
 			abs(eval_f64('acos(0.0);') - acos(0.d0)) < tol,  &
 			abs(eval_f64('acos(1.0);') - acos(1.0d0)) < tol,  &
