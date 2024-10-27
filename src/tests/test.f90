@@ -621,12 +621,16 @@ subroutine unit_test_intr_fns(npass, nfail)
 	!********
 
 	character(len = *), parameter :: label = 'intrinsic functions'
+	character(len = :), allocatable :: spi
 
 	logical, allocatable :: tests(:)
 
+	double precision, parameter :: pi = 4.d0 * atan(1.d0)
 	real, parameter :: tol = 1.e-9, ftol = 1.e-5
 
 	write(*,*) 'Unit testing '//label//' ...'
+
+	spi = str(pi)
 
 	tests = &
 		[   &
@@ -700,6 +704,33 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(atan([0.0, 1.0]));') - sum(atan([0.d0, 1.0d0])))  < tol,  &
 			abs(eval_f64('sum(atan([0.5, 1.0]));') - sum(atan([0.5d0, 1.0d0]))) < tol,  &
 			abs(eval_f64('sum(atan([2.0, 1.0]));') - sum(atan([2.d0, 1.0d0])))  < tol,  &
+			abs(eval_f64('sin(0.0);') - 0.d0) < tol, &
+			abs(eval_f64('sin('//spi//');') - 0.d0) < tol, &
+			abs(eval_f64('sin('//spi//' / 2);') - 1.d0) < tol, &
+			abs(eval_f64('sin(-'//spi//' / 2);') - -1.d0) < tol, &
+			abs(eval_f64('sin('//spi//' / 6);') - 0.5d0) < tol, &
+			abs(eval_f64('sin('//spi//' / 4);') - sqrt(2.d0)/2) < tol, &
+			abs(eval_f64('sin('//spi//' / 3);') - sqrt(3.d0)/2) < tol, &
+			abs(eval_f64('cos(0.0);')           - 1.0d0) < tol, &
+			abs(eval_f64('cos('//spi//' / 6);') - sqrt(3.d0)/2) < tol, &
+			abs(eval_f64('cos('//spi//' / 4);') - sqrt(2.d0)/2) < tol, &
+			abs(eval_f64('cos('//spi//' / 3);') - 0.5d0       ) < tol, &
+			abs(eval_f64('tan(0.0);')           - 0.0d0) < tol, &
+			abs(eval_f64('tan('//spi//' / 6);') - sqrt(3.d0)/3) < tol, &
+			abs(eval_f64('tan('//spi//' / 4);') - 1.d0        ) < tol, &
+			abs(eval_f64('tan('//spi//' / 3);') - sqrt(3.d0)  ) < tol, &
+			abs(eval_f64('asin(0.0);') - 0.d0) < tol, &
+			abs(eval_f64('asin(0.5);') - pi/6) < tol, &
+			abs(eval_f64('asin(2.0**0.5 / 2);') - pi/4) < tol, &
+			abs(eval_f64('asin(3.0**0.5 / 2);') - pi/3) < tol, &
+			abs(eval_f64('acos(1.0);')           - 0.d0) < tol, &
+			abs(eval_f64('acos(3.0**0.5 / 2);') - pi/6) < tol, &
+			abs(eval_f64('acos(2.0**0.5 / 2);') - pi/4) < tol, &
+			abs(eval_f64('acos(0.5);') - pi/3) < tol, &
+			abs(eval_f64('atan(0.0);')           - 0.d0) < tol, &
+			abs(eval_f64('atan(3.0**0.5 / 3);') - pi/6) < tol, &
+			abs(eval_f64('atan(1.0);') - pi/4) < tol, &
+			abs(eval_f64('atan(3.0**0.5);') - pi/3) < tol, &
 			eval_i32('min(3, 2);')  == 2,  &
 			eval_i32('min(2, 2);')  == 2,  &
 			eval_i32('min(2, 3, 4);')  == 2,  &

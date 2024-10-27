@@ -155,7 +155,9 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      + abs, norm, dot
+	!      + abs, norm, dot, sqrt
+	!        > x ** 0.5 works as sqrt, but sqrt lends optimization and
+	!          consistency with other langs
 	!      + log, log10, log2, (gamma, log_gamma?)
 	!      + trig: atan2, (sind, sec, cos, hyperbolic, ... ?)
 	!      + norm, product
@@ -166,8 +168,6 @@ module syntran__core_m
 	!      + exp
 	!        > need documentation for elemental array overloading
 	!      + sin, cos, tan, asin, acos, atan
-	!        > TODO: add a few non-circular tests that don't just compare result
-	!          to fortran trig fns
 	!        > needs documentation
 	!      + min, max, sum
 	!      + size (non-variadic but polymorphic)
