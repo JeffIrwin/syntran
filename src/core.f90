@@ -219,7 +219,9 @@ subroutine declare_intrinsic_fns(fns)
 		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn, &
 		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn, exp_f64_fn, &
 		exp_f32_arr_fn, exp_f64_arr_fn, &
-		cos_f32_fn, cos_f64_fn, cos_f32_arr_fn, cos_f64_arr_fn
+		cos_f32_fn, cos_f64_fn, cos_f32_arr_fn, cos_f64_arr_fn, &
+		sin_f32_fn, sin_f64_fn, sin_f32_arr_fn, sin_f64_arr_fn, &
+		tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -336,6 +338,116 @@ subroutine declare_intrinsic_fns(fns)
 	cos_f64_arr_fn%param_names%v(1)%s = "x"
 
 	call fns%insert("0cos_f64_arr", cos_f64_arr_fn, id_index)
+
+	!********
+
+	sin_f32_fn%type%type = f32_type
+	allocate(sin_f32_fn%params(1))
+	allocate(sin_f32_fn%param_names%v(1))
+	sin_f32_fn%params(1)%type = f32_type
+	sin_f32_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0sin_f32", sin_f32_fn, id_index)
+
+	!********
+
+	sin_f64_fn%type%type = f64_type
+	allocate(sin_f64_fn%params(1))
+	allocate(sin_f64_fn%param_names%v(1))
+	sin_f64_fn%params(1)%type = f64_type
+	sin_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0sin_f64", sin_f64_fn, id_index)
+
+	!********
+
+	sin_f32_arr_fn%type%type = array_type
+	allocate(sin_f32_arr_fn%type%array)
+	sin_f32_arr_fn%type%array%type = f32_type
+	sin_f32_arr_fn%type%array%rank = -1
+
+	allocate(sin_f32_arr_fn%params(1))
+	allocate(sin_f32_arr_fn%param_names%v(1))
+
+	sin_f32_arr_fn%params(1)%type = any_type
+
+	sin_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0sin_f32_arr", sin_f32_arr_fn, id_index)
+
+	!********
+
+	sin_f64_arr_fn%type%type = array_type
+	allocate(sin_f64_arr_fn%type%array)
+	sin_f64_arr_fn%type%array%type = f64_type
+	sin_f64_arr_fn%type%array%rank = -1
+
+	allocate(sin_f64_arr_fn%params(1))
+	allocate(sin_f64_arr_fn%param_names%v(1))
+
+	sin_f64_arr_fn%params(1)%type = any_type
+
+	sin_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0sin_f64_arr", sin_f64_arr_fn, id_index)
+
+	!********
+
+	tan_f32_fn%type%type = f32_type
+	allocate(tan_f32_fn%params(1))
+	allocate(tan_f32_fn%param_names%v(1))
+	tan_f32_fn%params(1)%type = f32_type
+	tan_f32_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0tan_f32", tan_f32_fn, id_index)
+
+	!********
+
+	tan_f64_fn%type%type = f64_type
+	allocate(tan_f64_fn%params(1))
+	allocate(tan_f64_fn%param_names%v(1))
+	tan_f64_fn%params(1)%type = f64_type
+	tan_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0tan_f64", tan_f64_fn, id_index)
+
+	!********
+
+	tan_f32_arr_fn%type%type = array_type
+	allocate(tan_f32_arr_fn%type%array)
+	tan_f32_arr_fn%type%array%type = f32_type
+	tan_f32_arr_fn%type%array%rank = -1
+
+	allocate(tan_f32_arr_fn%params(1))
+	allocate(tan_f32_arr_fn%param_names%v(1))
+
+	tan_f32_arr_fn%params(1)%type = any_type
+
+	tan_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0tan_f32_arr", tan_f32_arr_fn, id_index)
+
+	!********
+
+	tan_f64_arr_fn%type%type = array_type
+	allocate(tan_f64_arr_fn%type%array)
+	tan_f64_arr_fn%type%array%type = f64_type
+	tan_f64_arr_fn%type%array%rank = -1
+
+	allocate(tan_f64_arr_fn%params(1))
+	allocate(tan_f64_arr_fn%param_names%v(1))
+
+	tan_f64_arr_fn%params(1)%type = any_type
+
+	tan_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0tan_f64_arr", tan_f64_arr_fn, id_index)
 
 	!********
 
@@ -870,6 +982,8 @@ subroutine declare_intrinsic_fns(fns)
 		[ &
 			exp_f32_fn    , exp_f64_fn    , exp_f32_arr_fn, exp_f64_arr_fn, &
 			cos_f32_fn    , cos_f64_fn    , cos_f32_arr_fn, cos_f64_arr_fn, &
+			sin_f32_fn    , sin_f64_fn    , sin_f32_arr_fn, sin_f64_arr_fn, &
+			tan_f32_fn    , tan_f64_fn    , tan_f32_arr_fn, tan_f64_arr_fn, &
 			min_i32_fn    , &
 			min_i64_fn    , &
 			min_f32_fn    , &

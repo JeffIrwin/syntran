@@ -650,6 +650,26 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(cos([0.0, 1.0]));') - sum(cos([0.d0, 1.0d0])))  < tol,  &
 			abs(eval_f64('sum(cos([0.5, 1.0]));') - sum(cos([0.5d0, 1.0d0]))) < tol,  &
 			abs(eval_f64('sum(cos([2.0, 1.0]));') - sum(cos([2.d0, 1.0d0])))  < tol,  &
+			abs(eval_f32('sin(0.0f);') - sin(0.0)) < tol,  &
+			abs(eval_f32('sin(1.0f);') - sin(1.0)) < tol,  &
+			abs(eval_f64('sin(0.0);') - sin(0.d0)) < tol,  &
+			abs(eval_f64('sin(1.0);') - sin(1.0d0)) < tol,  &
+			abs(eval_f32('sum(sin([0.0f, 1.0f]));') - sum(sin([0.0, 1.0])))   < ftol,  &
+			abs(eval_f32('sum(sin([0.5f, 1.0f]));') - sum(sin([0.5, 1.0])))   < ftol,  &
+			abs(eval_f32('sum(sin([2.0f, 1.0f]));') - sum(sin([2.0, 1.0])))   < ftol,  &
+			abs(eval_f64('sum(sin([0.0, 1.0]));') - sum(sin([0.d0, 1.0d0])))  < tol,  &
+			abs(eval_f64('sum(sin([0.5, 1.0]));') - sum(sin([0.5d0, 1.0d0]))) < tol,  &
+			abs(eval_f64('sum(sin([2.0, 1.0]));') - sum(sin([2.d0, 1.0d0])))  < tol,  &
+			abs(eval_f32('tan(0.0f);') - tan(0.0)) < tol,  &
+			abs(eval_f32('tan(1.0f);') - tan(1.0)) < tol,  &
+			abs(eval_f64('tan(0.0);') - tan(0.d0)) < tol,  &
+			abs(eval_f64('tan(1.0);') - tan(1.0d0)) < tol,  &
+			abs(eval_f32('sum(tan([0.0f, 1.0f]));') - sum(tan([0.0, 1.0])))   < ftol,  &
+			abs(eval_f32('sum(tan([0.5f, 1.0f]));') - sum(tan([0.5, 1.0])))   < ftol,  &
+			abs(eval_f32('sum(tan([2.0f, 1.0f]));') - sum(tan([2.0, 1.0])))   < ftol,  &
+			abs(eval_f64('sum(tan([0.0, 1.0]));') - sum(tan([0.d0, 1.0d0])))  < tol,  &
+			abs(eval_f64('sum(tan([0.5, 1.0]));') - sum(tan([0.5d0, 1.0d0]))) < tol,  &
+			abs(eval_f64('sum(tan([2.0, 1.0]));') - sum(tan([2.d0, 1.0d0])))  < tol,  &
 			eval_i32('min(3, 2);')  == 2,  &
 			eval_i32('min(2, 2);')  == 2,  &
 			eval_i32('min(2, 3, 4);')  == 2,  &

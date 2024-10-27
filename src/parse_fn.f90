@@ -99,6 +99,72 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0cos_f64"
 		end select
 
+	case ("sin")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+
+			arr_type = args%v(1)%val%array%type
+			!print *, "type = ", kind_name(arr_type)
+
+			select case (arr_type)
+			case (f32_type)
+				fn_call%identifier%text = "0sin_f32_arr"
+			case (f64_type)
+				fn_call%identifier%text = "0sin_f64_arr"
+			case default
+				! Fall-back on scalar to throw a parser error later
+				fn_call%identifier%text = "0sin_f64"
+			end select
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case (f32_type)
+			fn_call%identifier%text = "0sin_f32"
+		case default
+			fn_call%identifier%text = "0sin_f64"
+		end select
+
+	case ("tan")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+
+			arr_type = args%v(1)%val%array%type
+			!print *, "type = ", kind_name(arr_type)
+
+			select case (arr_type)
+			case (f32_type)
+				fn_call%identifier%text = "0tan_f32_arr"
+			case (f64_type)
+				fn_call%identifier%text = "0tan_f64_arr"
+			case default
+				! Fall-back on scalar to throw a parser error later
+				fn_call%identifier%text = "0tan_f64"
+			end select
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case (f32_type)
+			fn_call%identifier%text = "0tan_f32"
+		case default
+			fn_call%identifier%text = "0tan_f64"
+		end select
+
 	case ("min")
 
 		type_ = i32_type

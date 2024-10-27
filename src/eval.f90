@@ -790,6 +790,60 @@ recursive subroutine eval_fn_call(node, state, res)
 		state%returned = .true.
 
 	!********
+	case ("0sin_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = sin(arg1%sca%f32)
+		state%returned = .true.
+
+	case ("0sin_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = sin(arg1%sca%f64)
+		state%returned = .true.
+
+	case ("0sin_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = sin(arg1%array%f32)
+		state%returned = .true.
+
+	case ("0sin_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = sin(arg1%array%f64)
+		state%returned = .true.
+
+	!********
+	case ("0tan_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = tan(arg1%sca%f32)
+		state%returned = .true.
+
+	case ("0tan_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = tan(arg1%sca%f64)
+		state%returned = .true.
+
+	case ("0tan_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = tan(arg1%array%f32)
+		state%returned = .true.
+
+	case ("0tan_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = tan(arg1%array%f64)
+		state%returned = .true.
+
+	!********
 	case ("0min_i32")
 
 		call syntax_eval(node%args(1), state, arg)
