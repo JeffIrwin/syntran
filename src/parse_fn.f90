@@ -15,72 +15,20 @@ contains
 
 !===============================================================================
 
-recursive module function parse_fn_call(parser) result(fn_call)
+recursive subroutine resolve_overload(has_rank, rank, identifier, args, fn_call)
 
-	class(parser_t) :: parser
+	! TODO: sort fn args, set intents
 
-	type(syntax_node_t) :: fn_call
-
-	!********
-
-	character(len = :), allocatable :: exp_type, act_type, param_name
-
-	integer :: i, io, id_index, pos0, type_, rank, arr_type
-
-	logical :: has_rank
-
-	type(fn_t) :: fn
-
-	type(integer_vector_t) :: pos_args
-
-	type(syntax_node_t) :: arg
-	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: identifier, comma, lparen, rparen, dummy
-
-	type(text_span_t) :: span
-
-	type(value_t) :: param_val
-
-	if (debug > 1) print *, 'parse_fn_call'
-
-	! Function call expression
-	identifier = parser%match(identifier_token)
-
-	!print *, "identifier = ", identifier%text
-
-	args = new_syntax_node_vector()
-	pos_args = new_integer_vector()
-	lparen  = parser%match(lparen_token)
-
-	do while ( &
-		parser%current_kind() /= rparen_token .and. &
-		parser%current_kind() /= eof_token)
-
-		pos0 = parser%pos
-		call pos_args%push(parser%current_pos())
-		arg = parser%parse_expr()
-		call args%push(arg)
-
-		if (parser%current_kind() /= rparen_token) then
-			comma = parser%match(comma_token)
-		end if
-
-		! break infinite loop
-		if (parser%pos == pos0) dummy = parser%next()
-
-	end do
-	call pos_args%push(parser%current_pos() + 1)
-	!print *, "args%len_ = ", args%len_
-
-	rparen  = parser%match(rparen_token)
-
-	fn_call%kind = fn_call_expr
-	fn_call%identifier = identifier
 
 	! Resolve special overloaded intrinsic fns
-	!
-	!  TODO: split out to a routine if possible 
-	!
+
+	integer :: type_, rank, arr_type
+	logical :: has_rank
+
+	type(syntax_node_t) :: fn_call
+	type(syntax_node_vector_t) :: args
+	type(syntax_token_t) :: identifier
+
 	has_rank = .false.
 	select case (identifier%text)
 	case ("exp")
@@ -216,6 +164,74 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		end select
 
 	end select
+
+end subroutine resolve_overload
+
+!===============================================================================
+
+recursive module function parse_fn_call(parser) result(fn_call)
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: fn_call
+
+	!********
+
+	character(len = :), allocatable :: exp_type, act_type, param_name
+
+	integer :: i, io, id_index, pos0, type_, rank, arr_type
+
+	logical :: has_rank
+
+	type(fn_t) :: fn
+
+	type(integer_vector_t) :: pos_args
+
+	type(syntax_node_t) :: arg
+	type(syntax_node_vector_t) :: args
+	type(syntax_token_t) :: identifier, comma, lparen, rparen, dummy
+
+	type(text_span_t) :: span
+
+	type(value_t) :: param_val
+
+	if (debug > 1) print *, 'parse_fn_call'
+
+	! Function call expression
+	identifier = parser%match(identifier_token)
+
+	!print *, "identifier = ", identifier%text
+
+	args = new_syntax_node_vector()
+	pos_args = new_integer_vector()
+	lparen  = parser%match(lparen_token)
+
+	do while ( &
+		parser%current_kind() /= rparen_token .and. &
+		parser%current_kind() /= eof_token)
+
+		pos0 = parser%pos
+		call pos_args%push(parser%current_pos())
+		arg = parser%parse_expr()
+		call args%push(arg)
+
+		if (parser%current_kind() /= rparen_token) then
+			comma = parser%match(comma_token)
+		end if
+
+		! break infinite loop
+		if (parser%pos == pos0) dummy = parser%next()
+
+	end do
+	call pos_args%push(parser%current_pos() + 1)
+	!print *, "args%len_ = ", args%len_
+
+	rparen  = parser%match(rparen_token)
+
+	fn_call%kind = fn_call_expr
+	fn_call%identifier = identifier
+
+	call resolve_overload(has_rank, rank, identifier, args, fn_call)
 
 	! Lookup by fn_call%identifier%text (e.g. "0min_i32"), but log
 	! diagnostics based on identifier%text (e.g. "min")
