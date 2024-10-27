@@ -25,7 +25,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	character(len = :), allocatable :: exp_type, act_type, param_name
 
-	integer :: i, io, id_index, pos0, type_, rank
+	integer :: i, io, id_index, pos0, type_, rank, arr_type
 
 	logical :: has_rank
 
@@ -91,9 +91,18 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		select case (type_)
 		case (array_type)
 
-			! TODO: select array sub type
+			arr_type = args%v(1)%val%array%type
+			!print *, "type = ", kind_name(arr_type)
 
-			fn_call%identifier%text = "0exp_f64_arr"
+			select case (arr_type)
+			case (f32_type)
+				fn_call%identifier%text = "0exp_f32_arr"
+			case (f64_type)
+				fn_call%identifier%text = "0exp_f64_arr"
+			case default
+				! Fall-back on scalar to throw a parser error later
+				fn_call%identifier%text = "0exp_f64"
+			end select
 
 			if (args%len_ >= 1) then
 				allocate(fn_call%val%array)

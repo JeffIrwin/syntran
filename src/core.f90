@@ -220,7 +220,7 @@ subroutine declare_intrinsic_fns(fns)
 		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, &
 		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn, &
 		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn, exp_f64_fn, &
-		exp_f64_arr_fn
+		exp_f64_arr_fn, exp_f32_arr_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -250,6 +250,22 @@ subroutine declare_intrinsic_fns(fns)
 	exp_f64_fn%param_names%v(1)%s = "x"
 
 	call fns%insert("0exp_f64", exp_f64_fn, id_index)
+
+	!********
+
+	exp_f32_arr_fn%type%type = array_type
+	allocate(exp_f32_arr_fn%type%array)
+	exp_f32_arr_fn%type%array%type = f32_type
+	exp_f32_arr_fn%type%array%rank = -1
+
+	allocate(exp_f32_arr_fn%params(1))
+	allocate(exp_f32_arr_fn%param_names%v(1))
+
+	exp_f32_arr_fn%params(1)%type = any_type
+
+	exp_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0exp_f32_arr", exp_f32_arr_fn, id_index)
 
 	!********
 
@@ -800,6 +816,7 @@ subroutine declare_intrinsic_fns(fns)
 		[ &
 			exp_f32_fn    , &
 			exp_f64_fn    , &
+			exp_f32_arr_fn, &
 			exp_f64_arr_fn, &
 			min_i32_fn    , &
 			min_i64_fn    , &
