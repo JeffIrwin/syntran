@@ -113,7 +113,7 @@ recursive subroutine syntax_eval(node, state, res)
 		!	end do
 		!end if
 
-	case (fn_call_expr)
+	case (fn_call_expr)  ! user-defined
 		call eval_fn_call(node, state, res)
 
 	case (fn_call_intr_expr)
@@ -732,62 +732,57 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	!print *, 'res type = ', res%type
 
-	! TODO: remove noop select case
-	select case (node%identifier%text)
-	case default
-		! User-defined function
+	! User-defined function
 
-		if (.not. allocated(node%params)) then
-			write(*,*) err_int_prefix//'unexpected fn'//color_reset
-			call internal_error()
-		end if
+	if (.not. allocated(node%params)) then
+		write(*,*) err_int_prefix//'unexpected fn'//color_reset
+		call internal_error()
+	end if
 
-		!print *, 'fn name = ', node%identifier%text
-		!print *, 'fn idx  = ', node%id_index
-		!print *, 'node type = ', node%val%type
-		!print *, 'size params = ', size(node%params)
-		!print *, 'param ids = ', node%params
+	!print *, 'fn name = ', node%identifier%text
+	!print *, 'fn idx  = ', node%id_index
+	!print *, 'node type = ', node%val%type
+	!print *, 'size params = ', size(node%params)
+	!print *, 'param ids = ', node%params
 
-		! TODO: Shared param scope is ok at first, but eventually target
-		! recursive fns with scoped stack frames
+	! TODO: Shared param scope is ok at first, but eventually target
+	! recursive fns with scoped stack frames
 
-		! Pass by value (for now, at least).  Arguments are evaluated and
-		! their values are copied to the fn parameters
+	! Pass by value (for now, at least).  Arguments are evaluated and
+	! their values are copied to the fn parameters
 
-		do i = 1, size(node%params)
-			!print *, 'copying param ', i
+	do i = 1, size(node%params)
+		!print *, 'copying param ', i
 
-			!call syntax_eval(node%args(i), state, &
-			!	state%vars%vals( node%params(i) ))
+		!call syntax_eval(node%args(i), state, &
+		!	state%vars%vals( node%params(i) ))
 
-			! deeply-nested fn calls can crash without the tmp value.  idk why i
-			! can't just eval directly into the state var like commented above
-			! :(.  probably state var type is getting cleared by passing it to
-			! an intent(out) arg? more likely, nested fn calls basically create
-			! a stack in which we store each nested arg in different copies of
-			! tmp.  if you try to store them all in the same state var at
-			! multiple stack levels it breaks?
-			!
-			! this also seems to have led to a dramatic perf improvement for
-			! intel compilers in commit 324ad414, running full tests in ~25
-			! minutes instead of 50.  gfortran perf remains good and unchanged
-			!
-			call syntax_eval(node%args(i), state, tmp)
-			state%vars%vals( node%params(i) ) = tmp
+		! deeply-nested fn calls can crash without the tmp value.  idk why i
+		! can't just eval directly into the state var like commented above
+		! :(.  probably state var type is getting cleared by passing it to
+		! an intent(out) arg? more likely, nested fn calls basically create
+		! a stack in which we store each nested arg in different copies of
+		! tmp.  if you try to store them all in the same state var at
+		! multiple stack levels it breaks?
+		!
+		! this also seems to have led to a dramatic perf improvement for
+		! intel compilers in commit 324ad414, running full tests in ~25
+		! minutes instead of 50.  gfortran perf remains good and unchanged
+		!
+		call syntax_eval(node%args(i), state, tmp)
+		state%vars%vals( node%params(i) ) = tmp
 
-			!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
-			!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
-			!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
+		!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
+		!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
+		!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
 
-			!print *, 'done'
-			!print *, ''
-		end do
+		!print *, 'done'
+		!print *, ''
+	end do
 
-		call syntax_eval(node%body, state, res)
-		!print *, "res rank = ", res%array%rank
-		!print *, 'res = ', res%to_str()
-
-	end select
+	call syntax_eval(node%body, state, res)
+	!print *, "res rank = ", res%array%rank
+	!print *, 'res = ', res%to_str()
 
 	! This is a runtime stopgap check that every fn returns, until (?) i can
 	! figure out parse-time return branch checking.  Checking for unreachable
@@ -818,8 +813,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 	integer :: i, io
 
-	logical :: returned0
-
 	type(char_vector_t) :: str_
 
 	type(value_t) :: arg, arg1, arg2, tmp
@@ -827,14 +820,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 	!print *, 'eval fn_call_intr_expr'
 	!print *, 'fn identifier = ', node%identifier%text
 	!print *, 'fn id_index   = ', node%id_index
-
-	! TODO: no need to track return status for intr fns
-
-	! i think this is technically not different than using an explicit array.
-	! we're just using fortran's call stack and recursive calls to
-	! eval_fn_call() to mock a whole array with just `returned0` and `returned`.
-	returned0 = state%returned  ! push
-	state%returned = .false.
 
 	res%type = node%val%type
 
@@ -847,13 +832,11 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f32 = exp(arg1%sca%f32)
-		state%returned = .true.
 
 	case ("0exp_f64")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = exp(arg1%sca%f64)
-		state%returned = .true.
 
 	case ("0exp_f32_arr")
 
@@ -864,176 +847,150 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		res%array = mold(arg1%array, f32_type)
 		res%array%f32 = exp(arg1%array%f32)
-		state%returned = .true.
 
 	case ("0exp_f64_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f64_type)
 		res%array%f64 = exp(arg1%array%f64)
-		state%returned = .true.
 
 	!********
 	case ("0cos_f32")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f32 = cos(arg1%sca%f32)
-		state%returned = .true.
 
 	case ("0cos_f64")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = cos(arg1%sca%f64)
-		state%returned = .true.
 
 	case ("0cos_f32_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f32_type)
 		res%array%f32 = cos(arg1%array%f32)
-		state%returned = .true.
 
 	case ("0cos_f64_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f64_type)
 		res%array%f64 = cos(arg1%array%f64)
-		state%returned = .true.
 
 	!********
 	case ("0sin_f32")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f32 = sin(arg1%sca%f32)
-		state%returned = .true.
 
 	case ("0sin_f64")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = sin(arg1%sca%f64)
-		state%returned = .true.
 
 	case ("0sin_f32_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f32_type)
 		res%array%f32 = sin(arg1%array%f32)
-		state%returned = .true.
 
 	case ("0sin_f64_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f64_type)
 		res%array%f64 = sin(arg1%array%f64)
-		state%returned = .true.
 
 	!********
 	case ("0tan_f32")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f32 = tan(arg1%sca%f32)
-		state%returned = .true.
 
 	case ("0tan_f64")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = tan(arg1%sca%f64)
-		state%returned = .true.
 
 	case ("0tan_f32_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f32_type)
 		res%array%f32 = tan(arg1%array%f32)
-		state%returned = .true.
 
 	case ("0tan_f64_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f64_type)
 		res%array%f64 = tan(arg1%array%f64)
-		state%returned = .true.
 
 	!********
 	case ("0acos_f32")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f32 = acos(arg1%sca%f32)
-		state%returned = .true.
 
 	case ("0acos_f64")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = acos(arg1%sca%f64)
-		state%returned = .true.
 
 	case ("0acos_f32_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f32_type)
 		res%array%f32 = acos(arg1%array%f32)
-		state%returned = .true.
 
 	case ("0acos_f64_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f64_type)
 		res%array%f64 = acos(arg1%array%f64)
-		state%returned = .true.
 
 	!********
 	case ("0asin_f32")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f32 = asin(arg1%sca%f32)
-		state%returned = .true.
 
 	case ("0asin_f64")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = asin(arg1%sca%f64)
-		state%returned = .true.
 
 	case ("0asin_f32_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f32_type)
 		res%array%f32 = asin(arg1%array%f32)
-		state%returned = .true.
 
 	case ("0asin_f64_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f64_type)
 		res%array%f64 = asin(arg1%array%f64)
-		state%returned = .true.
 
 	!********
 	case ("0atan_f32")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f32 = atan(arg1%sca%f32)
-		state%returned = .true.
 
 	case ("0atan_f64")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = atan(arg1%sca%f64)
-		state%returned = .true.
 
 	case ("0atan_f32_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f32_type)
 		res%array%f32 = atan(arg1%array%f32)
-		state%returned = .true.
 
 	case ("0atan_f64_arr")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f64_type)
 		res%array%f64 = atan(arg1%array%f64)
-		state%returned = .true.
 
 	!********
 	case ("0min_i32")
@@ -1048,7 +1005,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			call syntax_eval(node%args(i), state, arg)
 			res%sca%i32 = min(res%sca%i32, arg%sca%i32)
 		end do
-		state%returned = .true.
 
 	case ("0min_i64")
 
@@ -1059,7 +1015,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			call syntax_eval(node%args(i), state, arg)
 			res%sca%i64 = min(res%sca%i64, arg%sca%i64)
 		end do
-		state%returned = .true.
 
 	case ("0min_f32")
 
@@ -1070,7 +1025,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			call syntax_eval(node%args(i), state, arg)
 			res%sca%f32 = min(res%sca%f32, arg%sca%f32)
 		end do
-		state%returned = .true.
 
 	case ("0min_f64")
 
@@ -1081,7 +1035,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			call syntax_eval(node%args(i), state, arg)
 			res%sca%f64 = min(res%sca%f64, arg%sca%f64)
 		end do
-		state%returned = .true.
 
 	!********
 	case ("0max_i32")
@@ -1093,7 +1046,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			call syntax_eval(node%args(i), state, arg)
 			res%sca%i32 = max(res%sca%i32, arg%sca%i32)
 		end do
-		state%returned = .true.
 
 	case ("0max_i64")
 
@@ -1104,7 +1056,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			call syntax_eval(node%args(i), state, arg)
 			res%sca%i64 = max(res%sca%i64, arg%sca%i64)
 		end do
-		state%returned = .true.
 
 	case ("0max_f32")
 
@@ -1115,7 +1066,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			call syntax_eval(node%args(i), state, arg)
 			res%sca%f32 = max(res%sca%f32, arg%sca%f32)
 		end do
-		state%returned = .true.
 
 	case ("0max_f64")
 
@@ -1126,7 +1076,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			call syntax_eval(node%args(i), state, arg)
 			res%sca%f64 = max(res%sca%f64, arg%sca%f64)
 		end do
-		state%returned = .true.
 
 	!********
 	case ("println")
@@ -1145,9 +1094,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		end do
 		write(output_unit, *)
 
-		!! TODO: what, if anything, should println return?
 		!res%sca%i32 = 0
-		state%returned = .true.
 
 	case ("str")
 
@@ -1157,13 +1104,11 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			call str_%push(arg%to_str())
 		end do
 		res%sca%str%s = str_%trim()
-		state%returned = .true.
 
 	case ("len")
 
 		call syntax_eval(node%args(1), state, arg)
 		res%sca%i64 = len(arg%sca%str%s, 8)
-		state%returned = .true.
 
 	case ("parse_i32")
 
@@ -1174,7 +1119,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 				arg%sca%str%s//"`"//color_reset
 			call internal_error()
 		end if
-		state%returned = .true.
 
 	case ("parse_i64")
 
@@ -1185,7 +1129,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 				arg%sca%str%s//"`"//color_reset
 			call internal_error()
 		end if
-		state%returned = .true.
 
 	case ("parse_f32")
 
@@ -1198,7 +1141,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 				arg%sca%str%s//"`"//color_reset
 			call internal_error()
 		end if
-		state%returned = .true.
 
 	case ("parse_f64")
 
@@ -1209,7 +1151,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 				arg%sca%str%s//"`"//color_reset
 			call internal_error()
 		end if
-		state%returned = .true.
 
 	case ("char")
 
@@ -1220,31 +1161,26 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		call syntax_eval(node%args(1), state, arg)
 		!res%sca%str%s = char(arg%sca%i32)
 		res%sca%str%s = achar(arg%sca%i32)
-		state%returned = .true.
 
 	case ("0i32_sca")
 
 		call syntax_eval(node%args(1), state, arg)
 		res%sca%i32 = arg%to_i32()
-		state%returned = .true.
 
 	case ("0i32_arr")
 
 		call syntax_eval(node%args(1), state, arg)
 		res%array = arg%to_i32_array()
-		state%returned = .true.
 
 	case ("0i64_sca")
 
 		call syntax_eval(node%args(1), state, arg)
 		res%sca%i64 = arg%to_i64()
-		state%returned = .true.
 
 	case ("0i64_arr")
 
 		call syntax_eval(node%args(1), state, arg)
 		res%array = arg%to_i64_array()
-		state%returned = .true.
 
 	case ("open")
 
@@ -1257,7 +1193,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		!print *, 'opened unit ', res%sca%file_%unit_
 		res%sca%file_%name_ = arg%sca%str%s
 		res%sca%file_%eof = .false.
-		state%returned = .true.
 
 	case ("readln")
 
@@ -1273,7 +1208,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		! :exploding-head:
 		!
 		! writeln() does not need to mess with the vars struct like this
-		! because the file is the actual return value for that fn
 
 		!!print *, 'ident = ', node%args(1)%identifier%text
 		!!state%vars%vals(node%id_index) = res
@@ -1285,7 +1219,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
 		end if
 		!print *, 'eof   = ', arg1%sca%file_%eof
-		state%returned = .true.
 
 	case ("writeln")
 
@@ -1297,7 +1230,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			write(arg1%sca%file_%unit_, '(a)', advance = 'no') arg%to_str()
 		end do
 		write(arg1%sca%file_%unit_, *)
-		state%returned = .true.
 
 	case ("eof")
 
@@ -1307,13 +1239,11 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		res%sca%bool = arg1%sca%file_%eof
 
 		!print *, 'eof fn = ', arg1%sca%file_%eof
-		state%returned = .true.
 
 	case ("close")
 		call syntax_eval(node%args(1), state, arg)
 		!print *, 'closing unit ', arg%sca%file_%unit_
 		close(arg%sca%file_%unit_)
-		state%returned = .true.
 
 	case ("exit")
 
@@ -1330,7 +1260,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			str(io)//color_reset
 
 		call exit(io)
-		state%returned = .true.
 
 	case ("size")
 
@@ -1355,39 +1284,32 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		!print *, "allocated(size) = ", allocated(arg1%array%size)
 		res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
-		state%returned = .true.
 
 	case ("count")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%i64 = count(arg1%array%bool)
-		state%returned = .true.
 
 	case ("0sum_i32")
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%i32 = sum(arg1%array%i32)
-		state%returned = .true.
 
 	case ("0sum_i64")
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%i64 = sum(arg1%array%i64)
-		state%returned = .true.
 
 	case ("0sum_f32")
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f32 = sum(arg1%array%f32)
-		state%returned = .true.
 
 	case ("0sum_f64")
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = sum(arg1%array%f64)
-		state%returned = .true.
 
 	case ("all")
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%bool = all(arg1%array%bool)
-		state%returned = .true.
 
 		! Might not be strictly necessary now that %array is allocatable
 		! instead of pointable
@@ -1397,7 +1319,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%bool = any(arg1%array%bool)
-		state%returned = .true.
 
 	case default
 		write(*,*) err_int_prefix//'unexpected fn'//color_reset
@@ -1410,17 +1331,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		!print *, 'param ids = ', node%params
 
 	end select
-
-	! This is a runtime stopgap check that every fn returns, until (?) i can
-	! figure out parse-time return branch checking.  Checking for unreachable
-	! statements after returns also seems hard
-	if (.not. state%returned) then
-		write(*,*) err_int_prefix//"reached end of function `", &
-			node%identifier%text, "` without a return statement"//color_reset
-		call internal_error()
-	end if
-
-	state%returned = returned0  ! pop
 
 end subroutine eval_fn_call_intr
 
