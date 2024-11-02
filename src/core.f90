@@ -48,12 +48,16 @@ module syntran__core_m
 	!    * tbd:
 	!      + improved to_str() conversion with labels of struct name and member names
 	!  - jumping control flow:
-	!    * fn return statement done
-	!    * c continue (fortran cycle), c break (fortran loop exit)
-	!    * (sys) exit done
-	!      + should final return value be used as an implicit sys exit value?
-	!        currently, default exit stat is 0, regardless of what syntran
-	!        "main" returns
+	!    * c break (fortran loop exit)
+	!      > should break be allowed outside of loops, e.g. in non-loop blocks?
+	!        if not, throw parse time error
+	!    * c continue (fortran cycle)
+	!    * done:
+	!      > fn return statement done
+	!      > (sys) exit done
+	!        + should final return value be used as an implicit sys exit value?
+	!          currently, default exit stat is 0, regardless of what syntran
+	!          "main" returns
 	!  - consider using subroutines with out-args instead of fn return vals for
 	!    parse_*() fns?  i believe this is the source of segfaults for gfortran
 	!    8 and maybe 13.  subroutines allow passing-by-reference instead of

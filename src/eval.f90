@@ -24,7 +24,9 @@ module syntran__eval_m
 
 		type(vars_t) :: vars
 
-		logical :: returned
+		! Grammatically, "breaked" should be "broke", but it's going to be a
+		! nightmare if you grep for "break" and don't find "broke"
+		logical :: returned, breaked
 
 	end type state_t
 
@@ -54,10 +56,8 @@ recursive subroutine syntax_eval(node, state, res)
 	!print *, "starting syntax_eval()"
 	!print *, "node kind = ", kind_name(node%kind)
 
-	if (node%is_empty) then
-		!print *, 'returning'
-		return
-	end if
+	if (node%is_empty) return
+	!if (state%breaked) return
 
 	!********
 
@@ -83,6 +83,9 @@ recursive subroutine syntax_eval(node, state, res)
 
 	case (return_statement)
 		call eval_return_statement(node, state, res)
+
+	case (break_statement)
+		call eval_break_statement(node, state, res)
 
 	case (translation_unit)
 		call eval_translation_unit(node, state, res)
@@ -727,6 +730,9 @@ recursive subroutine eval_fn_call(node, state, res)
 	! eval_fn_call() to mock a whole array with just `returned0` and `returned`.
 	returned0 = state%returned  ! push
 	state%returned = .false.
+
+	! i don't think we need a stack of "breaked" bools.  that's just loop local,
+	! right?
 
 	res%type = node%val%type
 
@@ -1680,6 +1686,8 @@ recursive subroutine eval_for_statement(node, state, res)
 
 	! Push scope to make the loop iterator local
 	call state%vars%push_scope()
+	state%breaked = .false.
+	!res%type = unknown_type
 	do i8 = 1, len8
 
 		call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
@@ -1697,8 +1705,10 @@ recursive subroutine eval_for_statement(node, state, res)
 		call syntax_eval(node%body, state, res)
 
 		if (state%returned) exit
+		if (state%breaked ) exit
 
 	end do
+	state%breaked = .false.
 	call state%vars%pop_scope()
 
 end subroutine eval_for_statement
@@ -2389,11 +2399,16 @@ recursive subroutine eval_while_statement(node, state, res)
 	type(value_t) :: condition
 
 	call syntax_eval(node%condition, state, condition)
+	state%breaked = .false.
 	do while (condition%sca%bool)
 		call syntax_eval(node%body, state, res)
 		call syntax_eval(node%condition, state, condition)
+
 		if (state%returned) exit
+		if (state%breaked ) exit
+
 	end do
+	state%breaked = .false.
 
 end subroutine eval_while_statement
 
@@ -2453,6 +2468,26 @@ end subroutine eval_return_statement
 
 !===============================================================================
 
+recursive subroutine eval_break_statement(node, state, res)
+
+	type(syntax_node_t), intent(in) :: node
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	!print *, "starting eval_break_statement"
+
+	!res%type = unknown_type
+	state%breaked = .true.
+
+	!print *, "ending eval_break_statement"
+
+end subroutine eval_break_statement
+
+!===============================================================================
+
 recursive subroutine eval_block_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
@@ -2495,6 +2530,9 @@ recursive subroutine eval_block_statement(node, state, res)
 		end if
 
 		if (state%returned) exit
+		if (state%breaked ) exit
+		! TODO: allow breaking out of a non-loop block? idk. what do other langs
+		! do?
 
 	end do
 

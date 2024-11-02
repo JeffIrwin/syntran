@@ -1334,6 +1334,9 @@ integer function get_keyword_kind(text) result(kind)
 		case ("return")
 			kind = return_keyword
 
+		case ("break")
+			kind = break_keyword
+
 		case default
 			kind = identifier_token
 

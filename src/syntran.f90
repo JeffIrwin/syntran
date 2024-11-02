@@ -335,6 +335,8 @@ end function syntran_eval_f64
 
 subroutine init_state(state)
 
+	! TODO: move to eval.f90
+
 	! This sets everything but state%quiet, since some routines have that as an
 	! optional argument
 	!
@@ -346,6 +348,7 @@ subroutine init_state(state)
 	call declare_intr_fns(state%fns)
 
 	state%returned = .false.
+	state%breaked  = .false.
 
 end subroutine init_state
 
