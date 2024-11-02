@@ -79,36 +79,12 @@ end function parse_return_statement
 module function parse_break_statement(parser) result(statement)
 
 	class(parser_t) :: parser
-
 	type(syntax_node_t) :: statement
-
 	!********
-
-	!integer :: right_beg, right_end
-
 	type(syntax_token_t) :: break_token, semi
-	type(text_span_t) :: span
 
-	!right_beg = parser%peek_pos(0)
 	break_token = parser%match(break_keyword)
-	!parser%returned = .true.
-
 	statement%kind = break_statement
-
-	!allocate(statement%right)
-	!if (parser%current_kind() == semicolon_token) then
-	!	! Void return statement
-	!	!! already matched below
-	!	!semi = parser%match(semicolon_token)
-	!	!right_end = parser%peek_pos(0) - 1
-	!	right_end = parser%peek_pos(0)
-	!	statement%right%val%type = void_type
-	!else
-	!	! expr or statement?
-	!	right_beg = parser%peek_pos(0)
-	!	statement%right = parser%parse_expr()
-	!	right_end = parser%peek_pos(0) - 1
-	!end if
 	semi = parser%match(semicolon_token)
 
 end function parse_break_statement

@@ -57,7 +57,6 @@ recursive subroutine syntax_eval(node, state, res)
 	!print *, "node kind = ", kind_name(node%kind)
 
 	if (node%is_empty) return
-	!if (state%breaked) return
 
 	!********
 
@@ -1687,7 +1686,6 @@ recursive subroutine eval_for_statement(node, state, res)
 	! Push scope to make the loop iterator local
 	call state%vars%push_scope()
 	state%breaked = .false.
-	!res%type = unknown_type
 	do i8 = 1, len8
 
 		call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
@@ -2479,7 +2477,6 @@ recursive subroutine eval_break_statement(node, state, res)
 
 	!print *, "starting eval_break_statement"
 
-	!res%type = unknown_type
 	state%breaked = .true.
 
 	!print *, "ending eval_break_statement"
@@ -2531,8 +2528,6 @@ recursive subroutine eval_block_statement(node, state, res)
 
 		if (state%returned) exit
 		if (state%breaked ) exit
-		! TODO: allow breaking out of a non-loop block? idk. what do other langs
-		! do?
 
 	end do
 
