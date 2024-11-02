@@ -156,20 +156,22 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      + abs, norm, dot, sqrt
+	!      + norm, dot, sqrt
 	!        > x ** 0.5 works as sqrt, but sqrt lends optimization and
 	!          consistency with other langs
 	!      + log10, log2, (gamma, log_gamma?)
-	!      + trig: atan2, (sind, sec, cos, hyperbolic, ... ?)
-	!      + norm, product
+	!      + trig: atan2, (sec, cos, hyperbolic, ... ?)
+	!      + product
 	!      + bessel_jn
 	!      + reshape
 	!      + system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
 	!    * done:
+	!      + abs
 	!      + exp
 	!        > need documentation for elemental array overloading
 	!      + log
+	!      + sind, cosd, tand, asind, acosd, atand
 	!      + sin, cos, tan, asin, acos, atan
 	!        > needs documentation
 	!      + min, max, sum

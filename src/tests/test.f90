@@ -638,6 +638,16 @@ subroutine unit_test_intr_fns(npass, nfail)
 
 	tests = &
 		[   &
+			abs(eval_f32('abs(0.01f);') - abs(0.01)) < ftol,  &
+			abs(eval_f32('abs(-0.1f);') - abs(-0.1)) < ftol,  &
+			abs(eval_f64('abs(-0.01);') - abs(-0.01d0)) < tol,  &
+			abs(eval_f64('abs(0.1);') - abs(0.1d0)) < tol,  &
+			abs(eval_f32('sum(abs([0.01f, 0.1f]));') - sum(abs([0.01, 0.1])))   < ftol,  &
+			abs(eval_f32('sum(abs([-0.5f, -0.1f]));') - sum(abs([-0.5, -0.1])))   < ftol,  &
+			abs(eval_f32('sum(abs([0.2f, 0.1f]));') - sum(abs([0.2, 0.1])))   < ftol,  &
+			abs(eval_f64('sum(abs([-0.01, -0.1]));') - sum(abs([-0.01d0, -0.1d0])))  < tol,  &
+			abs(eval_f64('sum(abs([0.5, -0.1]));') - sum(abs([0.5d0, -0.1d0]))) < tol,  &
+			abs(eval_f64('sum(abs([0.2, -0.1]));') - sum(abs([0.2d0, -0.1d0])))  < tol,  &
 			abs(eval_f32('exp(0.0f);') - 1.0) < ftol,  &
 			abs(eval_f32('exp(1.0f);') - exp(1.0)) < ftol,  &
 			abs(eval_f64('exp(0.0);') - 1.0d0) < tol,  &
