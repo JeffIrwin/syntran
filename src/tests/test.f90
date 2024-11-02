@@ -760,6 +760,12 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('tand(180.0 / 6);') - sqrt(3.d0)/3) < tol, &
 			abs(eval_f64('tand(180.0 / 4);') - 1.d0        ) < tol, &
 			abs(eval_f64('tand(180.0 / 3);') - sqrt(3.d0)  ) < tol, &
+			abs(eval_f32('sum(cosd([0.2f, 0.8f]));') - sum(cosd([0.2, 0.8])))   < ftol,  &
+			abs(eval_f64('sum(cosd([0.1, 0.9]));') - sum(cosd([0.1d0, 0.9d0])))  < tol,  &
+			abs(eval_f32('sum(sind([0.2f, 0.8f]));') - sum(sind([0.2, 0.8])))   < ftol,  &
+			abs(eval_f64('sum(sind([0.1, 0.9]));') - sum(sind([0.1d0, 0.9d0])))  < tol,  &
+			abs(eval_f32('sum(tand([0.2f, 0.8f]));') - sum(tand([0.2, 0.8])))   < ftol,  &
+			abs(eval_f64('sum(tand([0.1, 0.9]));') - sum(tand([0.1d0, 0.9d0])))  < tol,  &
 			eval_i32('min(3, 2);')  == 2,  &
 			eval_i32('min(2, 2);')  == 2,  &
 			eval_i32('min(2, 3, 4);')  == 2,  &
