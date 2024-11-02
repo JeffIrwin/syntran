@@ -745,6 +745,21 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('atan(3.0**0.5 / 3);') - pi/6) < tol, &
 			abs(eval_f64('atan(1.0);') - pi/4) < tol, &
 			abs(eval_f64('atan(3.0**0.5);') - pi/3) < tol, &
+			abs(eval_f64('sind(0.0);') - 0.d0) < tol, &
+			abs(eval_f64('sind(180.0);') - 0.d0) < tol, &
+			abs(eval_f64('sind(180.0 / 2);') - 1.d0) < tol, &
+			abs(eval_f64('sind(-180.0 / 2);') - -1.d0) < tol, &
+			abs(eval_f64('sind(180.0 / 6);') - 0.5d0) < tol, &
+			abs(eval_f64('sind(180.0 / 4);') - sqrt(2.d0)/2) < tol, &
+			abs(eval_f64('sind(180.0 / 3);') - sqrt(3.d0)/2) < tol, &
+			abs(eval_f64('cosd(0.0);')           - 1.0d0) < tol, &
+			abs(eval_f64('cosd(180.0 / 6);') - sqrt(3.d0)/2) < tol, &
+			abs(eval_f64('cosd(180.0 / 4);') - sqrt(2.d0)/2) < tol, &
+			abs(eval_f64('cosd(180.0 / 3);') - 0.5d0       ) < tol, &
+			abs(eval_f64('tand(0.0);')           - 0.0d0) < tol, &
+			abs(eval_f64('tand(180.0 / 6);') - sqrt(3.d0)/3) < tol, &
+			abs(eval_f64('tand(180.0 / 4);') - 1.d0        ) < tol, &
+			abs(eval_f64('tand(180.0 / 3);') - sqrt(3.d0)  ) < tol, &
 			eval_i32('min(3, 2);')  == 2,  &
 			eval_i32('min(2, 2);')  == 2,  &
 			eval_i32('min(2, 3, 4);')  == 2,  &

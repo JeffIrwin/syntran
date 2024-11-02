@@ -32,6 +32,9 @@ subroutine declare_intr_fns(fns)
 		cos_f32_fn, cos_f64_fn, cos_f32_arr_fn, cos_f64_arr_fn, &
 		sin_f32_fn, sin_f64_fn, sin_f32_arr_fn, sin_f64_arr_fn, &
 		tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn, &
+		cosd_f32_fn, cosd_f64_fn, cosd_f32_arr_fn, cosd_f64_arr_fn, &
+		sind_f32_fn, sind_f64_fn, sind_f32_arr_fn, sind_f64_arr_fn, &
+		tand_f32_fn, tand_f64_fn, tand_f32_arr_fn, tand_f64_arr_fn, &
 		acos_f32_fn, acos_f64_fn, acos_f32_arr_fn, acos_f64_arr_fn, &
 		asin_f32_fn, asin_f64_fn, asin_f32_arr_fn, asin_f64_arr_fn, &
 		atan_f32_fn, atan_f64_fn, atan_f32_arr_fn, atan_f64_arr_fn
@@ -316,6 +319,171 @@ subroutine declare_intr_fns(fns)
 	tan_f64_arr_fn%param_names%v(1)%s = "x"
 
 	call fns%insert("0tan_f64_arr", tan_f64_arr_fn, id_index)
+
+	!********
+
+	cosd_f32_fn%type%type = f32_type
+	allocate(cosd_f32_fn%params(1))
+	allocate(cosd_f32_fn%param_names%v(1))
+	cosd_f32_fn%params(1)%type = f32_type
+	cosd_f32_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0cosd_f32", cosd_f32_fn, id_index)
+
+	!********
+
+	cosd_f64_fn%type%type = f64_type
+	allocate(cosd_f64_fn%params(1))
+	allocate(cosd_f64_fn%param_names%v(1))
+	cosd_f64_fn%params(1)%type = f64_type
+	cosd_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0cosd_f64", cosd_f64_fn, id_index)
+
+	!********
+
+	cosd_f32_arr_fn%type%type = array_type
+	allocate(cosd_f32_arr_fn%type%array)
+	cosd_f32_arr_fn%type%array%type = f32_type
+	cosd_f32_arr_fn%type%array%rank = -1
+
+	allocate(cosd_f32_arr_fn%params(1))
+	allocate(cosd_f32_arr_fn%param_names%v(1))
+
+	cosd_f32_arr_fn%params(1)%type = any_type
+
+	cosd_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0cosd_f32_arr", cosd_f32_arr_fn, id_index)
+
+	!********
+
+	cosd_f64_arr_fn%type%type = array_type
+	allocate(cosd_f64_arr_fn%type%array)
+	cosd_f64_arr_fn%type%array%type = f64_type
+	cosd_f64_arr_fn%type%array%rank = -1
+
+	allocate(cosd_f64_arr_fn%params(1))
+	allocate(cosd_f64_arr_fn%param_names%v(1))
+
+	cosd_f64_arr_fn%params(1)%type = any_type
+
+	cosd_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0cosd_f64_arr", cosd_f64_arr_fn, id_index)
+
+	!********
+
+	sind_f32_fn%type%type = f32_type
+	allocate(sind_f32_fn%params(1))
+	allocate(sind_f32_fn%param_names%v(1))
+	sind_f32_fn%params(1)%type = f32_type
+	sind_f32_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0sind_f32", sind_f32_fn, id_index)
+
+	!********
+
+	sind_f64_fn%type%type = f64_type
+	allocate(sind_f64_fn%params(1))
+	allocate(sind_f64_fn%param_names%v(1))
+	sind_f64_fn%params(1)%type = f64_type
+	sind_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0sind_f64", sind_f64_fn, id_index)
+
+	!********
+
+	sind_f32_arr_fn%type%type = array_type
+	allocate(sind_f32_arr_fn%type%array)
+	sind_f32_arr_fn%type%array%type = f32_type
+	sind_f32_arr_fn%type%array%rank = -1
+
+	allocate(sind_f32_arr_fn%params(1))
+	allocate(sind_f32_arr_fn%param_names%v(1))
+
+	sind_f32_arr_fn%params(1)%type = any_type
+
+	sind_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0sind_f32_arr", sind_f32_arr_fn, id_index)
+
+	!********
+
+	sind_f64_arr_fn%type%type = array_type
+	allocate(sind_f64_arr_fn%type%array)
+	sind_f64_arr_fn%type%array%type = f64_type
+	sind_f64_arr_fn%type%array%rank = -1
+
+	allocate(sind_f64_arr_fn%params(1))
+	allocate(sind_f64_arr_fn%param_names%v(1))
+
+	sind_f64_arr_fn%params(1)%type = any_type
+
+	sind_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0sind_f64_arr", sind_f64_arr_fn, id_index)
+
+	!********
+
+	tand_f32_fn%type%type = f32_type
+	allocate(tand_f32_fn%params(1))
+	allocate(tand_f32_fn%param_names%v(1))
+	tand_f32_fn%params(1)%type = f32_type
+	tand_f32_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0tand_f32", tand_f32_fn, id_index)
+
+	!********
+
+	tand_f64_fn%type%type = f64_type
+	allocate(tand_f64_fn%params(1))
+	allocate(tand_f64_fn%param_names%v(1))
+	tand_f64_fn%params(1)%type = f64_type
+	tand_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0tand_f64", tand_f64_fn, id_index)
+
+	!********
+
+	tand_f32_arr_fn%type%type = array_type
+	allocate(tand_f32_arr_fn%type%array)
+	tand_f32_arr_fn%type%array%type = f32_type
+	tand_f32_arr_fn%type%array%rank = -1
+
+	allocate(tand_f32_arr_fn%params(1))
+	allocate(tand_f32_arr_fn%param_names%v(1))
+
+	tand_f32_arr_fn%params(1)%type = any_type
+
+	tand_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0tand_f32_arr", tand_f32_arr_fn, id_index)
+
+	!********
+
+	tand_f64_arr_fn%type%type = array_type
+	allocate(tand_f64_arr_fn%type%array)
+	tand_f64_arr_fn%type%array%type = f64_type
+	tand_f64_arr_fn%type%array%rank = -1
+
+	allocate(tand_f64_arr_fn%params(1))
+	allocate(tand_f64_arr_fn%param_names%v(1))
+
+	tand_f64_arr_fn%params(1)%type = any_type
+
+	tand_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0tand_f64_arr", tand_f64_arr_fn, id_index)
 
 	!********
 
@@ -1017,14 +1185,17 @@ subroutine declare_intr_fns(fns)
 			asin_f32_fn, asin_f64_fn, asin_f32_arr_fn, asin_f64_arr_fn, &
 			atan_f32_fn, atan_f64_fn, atan_f32_arr_fn, atan_f64_arr_fn, &
 			cos_f32_fn, cos_f64_fn, cos_f32_arr_fn, cos_f64_arr_fn, &
+			cosd_f32_fn, cosd_f64_fn, cosd_f32_arr_fn, cosd_f64_arr_fn, &
 			exp_f32_fn, exp_f64_fn, exp_f32_arr_fn, exp_f64_arr_fn, &
 			log_f32_fn, log_f64_fn, log_f32_arr_fn, log_f64_arr_fn, &
 			max_i32_fn, max_i64_fn, max_f32_fn, max_f64_fn, &
 			min_i32_fn, min_i64_fn, min_f32_fn, min_f64_fn, &
 			parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
 			sin_f32_fn, sin_f64_fn, sin_f32_arr_fn, sin_f64_arr_fn, &
+			sind_f32_fn, sind_f64_fn, sind_f32_arr_fn, sind_f64_arr_fn, &
 			sum_i32_fn, sum_i64_fn, sum_f32_fn, sum_f64_fn, &
 			tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn, &
+			tand_f32_fn, tand_f64_fn, tand_f32_arr_fn, tand_f64_arr_fn, &
 			i32_sca_fn, i32_arr_fn, &
 			i64_sca_fn, i64_arr_fn, &
 			all_fn        , &
@@ -1228,6 +1399,105 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0tan_f32"
 		case default
 			fn_call%identifier%text = "0tan_f64"
+		end select
+
+	case ("cosd")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+
+			arr_type = args%v(1)%val%array%type
+			!print *, "type = ", kind_name(arr_type)
+
+			select case (arr_type)
+			case (f32_type)
+				fn_call%identifier%text = "0cosd_f32_arr"
+			case (f64_type)
+				fn_call%identifier%text = "0cosd_f64_arr"
+			case default
+				! Fall-back on scalar to throw a parser error later
+				fn_call%identifier%text = "0cosd_f64"
+			end select
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case (f32_type)
+			fn_call%identifier%text = "0cosd_f32"
+		case default
+			fn_call%identifier%text = "0cosd_f64"
+		end select
+
+	case ("sind")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+
+			arr_type = args%v(1)%val%array%type
+			!print *, "type = ", kind_name(arr_type)
+
+			select case (arr_type)
+			case (f32_type)
+				fn_call%identifier%text = "0sind_f32_arr"
+			case (f64_type)
+				fn_call%identifier%text = "0sind_f64_arr"
+			case default
+				! Fall-back on scalar to throw a parser error later
+				fn_call%identifier%text = "0sind_f64"
+			end select
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case (f32_type)
+			fn_call%identifier%text = "0sind_f32"
+		case default
+			fn_call%identifier%text = "0sind_f64"
+		end select
+
+	case ("tand")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+
+			arr_type = args%v(1)%val%array%type
+			!print *, "type = ", kind_name(arr_type)
+
+			select case (arr_type)
+			case (f32_type)
+				fn_call%identifier%text = "0tand_f32_arr"
+			case (f64_type)
+				fn_call%identifier%text = "0tand_f64_arr"
+			case default
+				! Fall-back on scalar to throw a parser error later
+				fn_call%identifier%text = "0tand_f64"
+			end select
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case (f32_type)
+			fn_call%identifier%text = "0tand_f32"
+		case default
+			fn_call%identifier%text = "0tand_f64"
 		end select
 
 	case ("acos")
