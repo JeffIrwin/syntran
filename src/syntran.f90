@@ -347,8 +347,9 @@ subroutine init_state(state)
 
 	call declare_intr_fns(state%fns)
 
-	state%returned = .false.
-	state%breaked  = .false.
+	state%returned  = .false.
+	state%breaked   = .false.
+	state%continued = .false.
 
 end subroutine init_state
 

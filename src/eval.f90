@@ -26,7 +26,7 @@ module syntran__eval_m
 
 		! Grammatically, "breaked" should be "broke", but it's going to be a
 		! nightmare if you grep for "break" and don't find "broke"
-		logical :: returned, breaked
+		logical :: returned, breaked, continued
 
 	end type state_t
 
@@ -85,6 +85,9 @@ recursive subroutine syntax_eval(node, state, res)
 
 	case (break_statement)
 		call eval_break_statement(node, state, res)
+
+	case (continue_statement)
+		call eval_continue_statement(node, state, res)
 
 	case (translation_unit)
 		call eval_translation_unit(node, state, res)
@@ -1685,8 +1688,9 @@ recursive subroutine eval_for_statement(node, state, res)
 
 	! Push scope to make the loop iterator local
 	call state%vars%push_scope()
-	state%breaked = .false.
+	state%breaked   = .false.
 	do i8 = 1, len8
+		state%continued = .false.
 
 		call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
 			len_, array, node%array%elems, state)
@@ -1706,7 +1710,8 @@ recursive subroutine eval_for_statement(node, state, res)
 		if (state%breaked ) exit
 
 	end do
-	state%breaked = .false.
+	state%breaked   = .false.
+	state%continued = .false.
 	call state%vars%pop_scope()
 
 end subroutine eval_for_statement
@@ -2397,8 +2402,9 @@ recursive subroutine eval_while_statement(node, state, res)
 	type(value_t) :: condition
 
 	call syntax_eval(node%condition, state, condition)
-	state%breaked = .false.
+	state%breaked   = .false.
 	do while (condition%sca%bool)
+		state%continued = .false.
 		call syntax_eval(node%body, state, res)
 		call syntax_eval(node%condition, state, condition)
 
@@ -2406,7 +2412,8 @@ recursive subroutine eval_while_statement(node, state, res)
 		if (state%breaked ) exit
 
 	end do
-	state%breaked = .false.
+	state%breaked   = .false.
+	state%continued = .false.
 
 end subroutine eval_while_statement
 
@@ -2485,6 +2492,25 @@ end subroutine eval_break_statement
 
 !===============================================================================
 
+recursive subroutine eval_continue_statement(node, state, res)
+
+	type(syntax_node_t), intent(in) :: node
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	!print *, "starting eval_continue_statement"
+
+	state%continued = .true.
+
+	!print *, "ending eval_continue_statement"
+
+end subroutine eval_continue_statement
+
+!===============================================================================
+
 recursive subroutine eval_block_statement(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
@@ -2526,8 +2552,9 @@ recursive subroutine eval_block_statement(node, state, res)
 			write(*,*) tmp%to_str()
 		end if
 
-		if (state%returned) exit
-		if (state%breaked ) exit
+		if (state%returned ) exit
+		if (state%breaked  ) exit
+		if (state%continued) exit  ! exit (break) the block but not the enclosing loop
 
 	end do
 

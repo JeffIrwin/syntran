@@ -48,12 +48,10 @@ module syntran__core_m
 	!    * tbd:
 	!      + improved to_str() conversion with labels of struct name and member names
 	!  - jumping control flow:
-	!    * c break (fortran loop exit)
-	!      > should break be allowed outside of loops, e.g. in non-loop blocks?
-	!        if not, throw parse time error
-	!    * c continue (fortran cycle)
+	!    * break and continue need testing and documentation
+	!    * goto: useful to break nested loops? or add break with loop label
 	!    * done:
-	!      > fn return statement done
+	!      > return, break, continue
 	!      > (sys) exit done
 	!        + should final return value be used as an implicit sys exit value?
 	!          currently, default exit stat is 0, regardless of what syntran

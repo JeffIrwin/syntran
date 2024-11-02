@@ -91,6 +91,21 @@ end function parse_break_statement
 
 !===============================================================================
 
+module function parse_continue_statement(parser) result(statement)
+
+	class(parser_t) :: parser
+	type(syntax_node_t) :: statement
+	!********
+	type(syntax_token_t) :: continue_token, semi
+
+	continue_token = parser%match(continue_keyword)
+	statement%kind = continue_statement
+	semi = parser%match(semicolon_token)
+
+end function parse_continue_statement
+
+!===============================================================================
+
 recursive module function parse_if_statement(parser) result(statement)
 
 	class(parser_t) :: parser
@@ -383,6 +398,9 @@ recursive module function parse_statement(parser) result(statement)
 
 		case (break_keyword)
 			statement = parser%parse_break_statement()
+
+		case (continue_keyword)
+			statement = parser%parse_continue_statement()
 
 		case default
 			statement = parser%parse_expr_statement()
