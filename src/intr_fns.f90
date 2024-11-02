@@ -21,13 +21,14 @@ subroutine declare_intr_fns(fns)
 
 	integer :: id_index, num_fns
 
-	type(fn_t) :: exp_f32_fn, min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
+	type(fn_t) :: min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
 		i64_sca_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
 		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, &
 		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn, &
-		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn, exp_f64_fn, &
-		exp_f32_arr_fn, exp_f64_arr_fn, &
+		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn, &
+		exp_f32_fn, exp_f64_fn, exp_f32_arr_fn, exp_f64_arr_fn, &
+		log_f32_fn, log_f64_fn, log_f32_arr_fn, log_f64_arr_fn, &
 		cos_f32_fn, cos_f64_fn, cos_f32_arr_fn, cos_f64_arr_fn, &
 		sin_f32_fn, sin_f64_fn, sin_f32_arr_fn, sin_f64_arr_fn, &
 		tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn, &
@@ -95,6 +96,61 @@ subroutine declare_intr_fns(fns)
 	exp_f64_arr_fn%param_names%v(1)%s = "x"
 
 	call fns%insert("0exp_f64_arr", exp_f64_arr_fn, id_index)
+
+	!********
+
+	log_f32_fn%type%type = f32_type
+	allocate(log_f32_fn%params(1))
+	allocate(log_f32_fn%param_names%v(1))
+	log_f32_fn%params(1)%type = f32_type
+	log_f32_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0log_f32", log_f32_fn, id_index)
+
+	!********
+
+	log_f64_fn%type%type = f64_type
+	allocate(log_f64_fn%params(1))
+	allocate(log_f64_fn%param_names%v(1))
+	log_f64_fn%params(1)%type = f64_type
+	log_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0log_f64", log_f64_fn, id_index)
+
+	!********
+
+	log_f32_arr_fn%type%type = array_type
+	allocate(log_f32_arr_fn%type%array)
+	log_f32_arr_fn%type%array%type = f32_type
+	log_f32_arr_fn%type%array%rank = -1
+
+	allocate(log_f32_arr_fn%params(1))
+	allocate(log_f32_arr_fn%param_names%v(1))
+
+	log_f32_arr_fn%params(1)%type = any_type
+
+	log_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0log_f32_arr", log_f32_arr_fn, id_index)
+
+	!********
+
+	log_f64_arr_fn%type%type = array_type
+	allocate(log_f64_arr_fn%type%array)
+	log_f64_arr_fn%type%array%type = f64_type
+	log_f64_arr_fn%type%array%rank = -1
+
+	allocate(log_f64_arr_fn%params(1))
+	allocate(log_f64_arr_fn%param_names%v(1))
+
+	log_f64_arr_fn%params(1)%type = any_type
+
+	log_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0log_f64_arr", log_f64_arr_fn, id_index)
 
 	!********
 
@@ -957,47 +1013,34 @@ subroutine declare_intr_fns(fns)
 
 	fns%fns = &
 		[ &
-			exp_f32_fn    , exp_f64_fn    , exp_f32_arr_fn, exp_f64_arr_fn, &
-			cos_f32_fn    , cos_f64_fn    , cos_f32_arr_fn, cos_f64_arr_fn, &
-			sin_f32_fn    , sin_f64_fn    , sin_f32_arr_fn, sin_f64_arr_fn, &
-			tan_f32_fn    , tan_f64_fn    , tan_f32_arr_fn, tan_f64_arr_fn, &
-			acos_f32_fn   , acos_f64_fn   , acos_f32_arr_fn, acos_f64_arr_fn, &
-			asin_f32_fn   , asin_f64_fn   , asin_f32_arr_fn, asin_f64_arr_fn, &
-			atan_f32_fn   , atan_f64_fn   , atan_f32_arr_fn, atan_f64_arr_fn, &
-			min_i32_fn    , &
-			min_i64_fn    , &
-			min_f32_fn    , &
-			min_f64_fn    , &
-			max_i32_fn    , &
-			max_i64_fn    , &
-			max_f32_fn    , &
-			max_f64_fn    , &
-			println_fn    , &
-			str_fn        , &
-			len_fn        , &
-			parse_i32_fn  , &
-			parse_i64_fn  , &
-			parse_f32_fn  , &
-			parse_f64_fn  , &
-			char_fn       , &
-			i32_sca_fn    , &
-			i32_arr_fn    , &
-			i64_sca_fn    , &
-			i64_arr_fn    , &
-			open_fn       , &
-			readln_fn     , &
-			writeln_fn    , &
-			eof_fn        , &
-			close_fn      , &
-			exit_fn       , &
-			size_fn       , &
-			count_fn      , &
-			sum_i32_fn    , &
-			sum_i64_fn    , &
-			sum_f32_fn    , &
-			sum_f64_fn    , &
+			acos_f32_fn, acos_f64_fn, acos_f32_arr_fn, acos_f64_arr_fn, &
+			asin_f32_fn, asin_f64_fn, asin_f32_arr_fn, asin_f64_arr_fn, &
+			atan_f32_fn, atan_f64_fn, atan_f32_arr_fn, atan_f64_arr_fn, &
+			cos_f32_fn, cos_f64_fn, cos_f32_arr_fn, cos_f64_arr_fn, &
+			exp_f32_fn, exp_f64_fn, exp_f32_arr_fn, exp_f64_arr_fn, &
+			log_f32_fn, log_f64_fn, log_f32_arr_fn, log_f64_arr_fn, &
+			max_i32_fn, max_i64_fn, max_f32_fn, max_f64_fn, &
+			min_i32_fn, min_i64_fn, min_f32_fn, min_f64_fn, &
+			parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
+			sin_f32_fn, sin_f64_fn, sin_f32_arr_fn, sin_f64_arr_fn, &
+			sum_i32_fn, sum_i64_fn, sum_f32_fn, sum_f64_fn, &
+			tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn, &
+			i32_sca_fn, i32_arr_fn, &
+			i64_sca_fn, i64_arr_fn, &
 			all_fn        , &
-			any_fn          &
+			any_fn        , &
+			char_fn       , &
+			close_fn      , &
+			count_fn      , &
+			eof_fn        , &
+			exit_fn       , &
+			len_fn        , &
+			open_fn       , &
+			println_fn    , &
+			readln_fn     , &
+			size_fn       , &
+			str_fn        , &
+			writeln_fn      &
 		]
 
 end subroutine declare_intr_fns
@@ -1053,6 +1096,39 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0exp_f32"
 		case default
 			fn_call%identifier%text = "0exp_f64"
+		end select
+
+	case ("log")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+
+			arr_type = args%v(1)%val%array%type
+			!print *, "type = ", kind_name(arr_type)
+
+			select case (arr_type)
+			case (f32_type)
+				fn_call%identifier%text = "0log_f32_arr"
+			case (f64_type)
+				fn_call%identifier%text = "0log_f64_arr"
+			case default
+				! Fall-back on scalar to throw a parser error later
+				fn_call%identifier%text = "0log_f64"
+			end select
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case (f32_type)
+			fn_call%identifier%text = "0log_f32"
+		case default
+			fn_call%identifier%text = "0log_f64"
 		end select
 
 	case ("cos")

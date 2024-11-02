@@ -855,6 +855,29 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		res%array%f64 = exp(arg1%array%f64)
 
 	!********
+	case ("0log_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = log(arg1%sca%f32)
+
+	case ("0log_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = log(arg1%sca%f64)
+
+	case ("0log_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = log(arg1%array%f32)
+
+	case ("0log_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = log(arg1%array%f64)
+
+	!********
 	case ("0cos_f32")
 
 		call syntax_eval(node%args(1), state, arg1)

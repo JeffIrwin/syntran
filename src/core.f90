@@ -159,7 +159,7 @@ module syntran__core_m
 	!      + abs, norm, dot, sqrt
 	!        > x ** 0.5 works as sqrt, but sqrt lends optimization and
 	!          consistency with other langs
-	!      + log, log10, log2, (gamma, log_gamma?)
+	!      + log10, log2, (gamma, log_gamma?)
 	!      + trig: atan2, (sind, sec, cos, hyperbolic, ... ?)
 	!      + norm, product
 	!      + bessel_jn
@@ -169,6 +169,7 @@ module syntran__core_m
 	!    * done:
 	!      + exp
 	!        > need documentation for elemental array overloading
+	!      + log
 	!      + sin, cos, tan, asin, acos, atan
 	!        > needs documentation
 	!      + min, max, sum

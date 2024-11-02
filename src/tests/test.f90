@@ -648,6 +648,16 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(exp([0.0, 1.0]));') - sum(exp([0.d0, 1.0d0])))  < tol,  &
 			abs(eval_f64('sum(exp([0.5, 1.0]));') - sum(exp([0.5d0, 1.0d0]))) < tol,  &
 			abs(eval_f64('sum(exp([2.0, 1.0]));') - sum(exp([2.d0, 1.0d0])))  < tol,  &
+			abs(eval_f32('log(0.01f);') - log(0.01)) < ftol,  &
+			abs(eval_f32('log(0.1f);') - log(0.1)) < ftol,  &
+			abs(eval_f64('log(0.01);') - log(0.01d0)) < tol,  &
+			abs(eval_f64('log(0.1);') - log(0.1d0)) < tol,  &
+			abs(eval_f32('sum(log([0.01f, 0.1f]));') - sum(log([0.01, 0.1])))   < ftol,  &
+			abs(eval_f32('sum(log([0.5f, 0.1f]));') - sum(log([0.5, 0.1])))   < ftol,  &
+			abs(eval_f32('sum(log([0.2f, 0.1f]));') - sum(log([0.2, 0.1])))   < ftol,  &
+			abs(eval_f64('sum(log([0.01, 0.1]));') - sum(log([0.01d0, 0.1d0])))  < tol,  &
+			abs(eval_f64('sum(log([0.5, 0.1]));') - sum(log([0.5d0, 0.1d0]))) < tol,  &
+			abs(eval_f64('sum(log([0.2, 0.1]));') - sum(log([0.2d0, 0.1d0])))  < tol,  &
 			abs(eval_f32('cos(0.0f);') - cos(0.0)) < ftol,  &
 			abs(eval_f32('cos(1.0f);') - cos(1.0)) < ftol,  &
 			abs(eval_f64('cos(0.0);') - cos(0.d0)) < tol,  &
