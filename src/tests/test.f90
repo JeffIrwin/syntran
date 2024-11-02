@@ -766,6 +766,12 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(sind([0.1, 0.9]));') - sum(sind([0.1d0, 0.9d0])))  < tol,  &
 			abs(eval_f32('sum(tand([0.2f, 0.8f]));') - sum(tand([0.2, 0.8])))   < ftol,  &
 			abs(eval_f64('sum(tand([0.1, 0.9]));') - sum(tand([0.1d0, 0.9d0])))  < tol,  &
+			abs(eval_f32('sum(acosd([0.2f, 0.8f]));') - sum(acosd([0.2, 0.8])))   < ftol,  &
+			abs(eval_f64('sum(acosd([0.1, 0.9]));') - sum(acosd([0.1d0, 0.9d0])))  < tol,  &
+			abs(eval_f32('sum(asind([0.2f, 0.8f]));') - sum(asind([0.2, 0.8])))   < ftol,  &
+			abs(eval_f64('sum(asind([0.1, 0.9]));') - sum(asind([0.1d0, 0.9d0])))  < tol,  &
+			abs(eval_f32('sum(atand([0.2f, 0.8f]));') - sum(atand([0.2, 0.8])))   < ftol,  &
+			abs(eval_f64('sum(atand([0.1, 0.9]));') - sum(atand([0.1d0, 0.9d0])))  < tol,  &
 			eval_i32('min(3, 2);')  == 2,  &
 			eval_i32('min(2, 2);')  == 2,  &
 			eval_i32('min(2, 3, 4);')  == 2,  &

@@ -1085,6 +1085,75 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		res%array%f64 = atan(arg1%array%f64)
 
 	!********
+	case ("0acosd_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = acosd(arg1%sca%f32)
+
+	case ("0acosd_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = acosd(arg1%sca%f64)
+
+	case ("0acosd_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = acosd(arg1%array%f32)
+
+	case ("0acosd_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = acosd(arg1%array%f64)
+
+	!********
+	case ("0asind_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = asind(arg1%sca%f32)
+
+	case ("0asind_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = asind(arg1%sca%f64)
+
+	case ("0asind_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = asind(arg1%array%f32)
+
+	case ("0asind_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = asind(arg1%array%f64)
+
+	!********
+	case ("0atand_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = atand(arg1%sca%f32)
+
+	case ("0atand_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = atand(arg1%sca%f64)
+
+	case ("0atand_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = atand(arg1%array%f32)
+
+	case ("0atand_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = atand(arg1%array%f64)
+
+	!********
 	case ("0min_i32")
 
 		call syntax_eval(node%args(1), state, arg)
