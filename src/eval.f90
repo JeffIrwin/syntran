@@ -886,6 +886,29 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		res%array%f64 = log(arg1%array%f64)
 
 	!********
+	case ("0sqrt_f32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = sqrt(arg1%sca%f32)
+
+	case ("0sqrt_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = sqrt(arg1%sca%f64)
+
+	case ("0sqrt_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = sqrt(arg1%array%f32)
+
+	case ("0sqrt_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = sqrt(arg1%array%f64)
+
+	!********
 	case ("0abs_f32")
 
 		call syntax_eval(node%args(1), state, arg1)
@@ -1497,6 +1520,22 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 	case ("0sum_f64")
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = sum(arg1%array%f64)
+
+	case ("0product_i32")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%i32 = product(arg1%array%i32)
+
+	case ("0product_i64")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%i64 = product(arg1%array%i64)
+
+	case ("0product_f32")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = product(arg1%array%f32)
+
+	case ("0product_f64")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = product(arg1%array%f64)
 
 	case ("all")
 

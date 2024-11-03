@@ -24,12 +24,15 @@ subroutine declare_intr_fns(fns)
 	type(fn_t) :: min_i32_fn, max_i32_fn, println_fn, size_fn, open_fn, &
 		close_fn, readln_fn, writeln_fn, str_fn, eof_fn, parse_i32_fn, len_fn, &
 		i64_sca_fn, parse_i64_fn, i32_sca_fn, exit_fn, any_fn, all_fn, count_fn, &
-		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, sum_i32_fn, &
-		sum_f32_fn, sum_i64_fn, parse_f32_fn, min_f32_fn, max_f32_fn, &
-		char_fn, sum_f64_fn, parse_f64_fn, min_f64_fn, max_f64_fn, &
+		min_i64_fn, max_i64_fn, i32_arr_fn, i64_arr_fn, &
+		parse_f32_fn, min_f32_fn, max_f32_fn, &
+		char_fn, parse_f64_fn, min_f64_fn, max_f64_fn, &
+		sum_i32_fn, sum_f32_fn, sum_i64_fn, sum_f64_fn, &
+		product_i32_fn, product_f32_fn, product_i64_fn, product_f64_fn, &
 		abs_f32_fn, abs_f64_fn, abs_f32_arr_fn, abs_f64_arr_fn, &
 		exp_f32_fn, exp_f64_fn, exp_f32_arr_fn, exp_f64_arr_fn, &
 		log_f32_fn, log_f64_fn, log_f32_arr_fn, log_f64_arr_fn, &
+		sqrt_f32_fn, sqrt_f64_fn, sqrt_f32_arr_fn, sqrt_f64_arr_fn, &
 		cos_f32_fn, cos_f64_fn, cos_f32_arr_fn, cos_f64_arr_fn, &
 		sin_f32_fn, sin_f64_fn, sin_f32_arr_fn, sin_f64_arr_fn, &
 		tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn, &
@@ -158,6 +161,61 @@ subroutine declare_intr_fns(fns)
 	log_f64_arr_fn%param_names%v(1)%s = "x"
 
 	call fns%insert("0log_f64_arr", log_f64_arr_fn, id_index)
+
+	!********
+
+	sqrt_f32_fn%type%type = f32_type
+	allocate(sqrt_f32_fn%params(1))
+	allocate(sqrt_f32_fn%param_names%v(1))
+	sqrt_f32_fn%params(1)%type = f32_type
+	sqrt_f32_fn%param_names%v(1)%s = "x"
+
+	! Insert the fn into the dict. These are global intrinsic fns, so there's no
+	! need to check iostat
+
+	call fns%insert("0sqrt_f32", sqrt_f32_fn, id_index)
+
+	!********
+
+	sqrt_f64_fn%type%type = f64_type
+	allocate(sqrt_f64_fn%params(1))
+	allocate(sqrt_f64_fn%param_names%v(1))
+	sqrt_f64_fn%params(1)%type = f64_type
+	sqrt_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0sqrt_f64", sqrt_f64_fn, id_index)
+
+	!********
+
+	sqrt_f32_arr_fn%type%type = array_type
+	allocate(sqrt_f32_arr_fn%type%array)
+	sqrt_f32_arr_fn%type%array%type = f32_type
+	sqrt_f32_arr_fn%type%array%rank = -1
+
+	allocate(sqrt_f32_arr_fn%params(1))
+	allocate(sqrt_f32_arr_fn%param_names%v(1))
+
+	sqrt_f32_arr_fn%params(1)%type = any_type
+
+	sqrt_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0sqrt_f32_arr", sqrt_f32_arr_fn, id_index)
+
+	!********
+
+	sqrt_f64_arr_fn%type%type = array_type
+	allocate(sqrt_f64_arr_fn%type%array)
+	sqrt_f64_arr_fn%type%array%type = f64_type
+	sqrt_f64_arr_fn%type%array%rank = -1
+
+	allocate(sqrt_f64_arr_fn%params(1))
+	allocate(sqrt_f64_arr_fn%param_names%v(1))
+
+	sqrt_f64_arr_fn%params(1)%type = any_type
+
+	sqrt_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0sqrt_f64_arr", sqrt_f64_arr_fn, id_index)
 
 	!********
 
@@ -1357,6 +1415,70 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
+	product_i32_fn%type%type = i32_type
+	allocate(product_i32_fn%params(1))
+	allocate(product_i32_fn%param_names%v(1))
+
+	product_i32_fn%params(1)%type = array_type
+
+	allocate(product_i32_fn%params(1)%array)
+	product_i32_fn%params(1)%array%type = i32_type
+	product_i32_fn%params(1)%array%rank = -1
+
+	product_i32_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0product_i32", product_i32_fn, id_index)
+
+	!********
+
+	product_i64_fn%type%type = i64_type
+	allocate(product_i64_fn%params(1))
+	allocate(product_i64_fn%param_names%v(1))
+
+	product_i64_fn%params(1)%type = array_type
+
+	allocate(product_i64_fn%params(1)%array)
+	product_i64_fn%params(1)%array%type = i64_type
+	product_i64_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	product_i64_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0product_i64", product_i64_fn, id_index)
+
+	!********
+
+	product_f32_fn%type%type = f32_type
+	allocate(product_f32_fn%params(1))
+	allocate(product_f32_fn%param_names%v(1))
+
+	product_f32_fn%params(1)%type = array_type
+
+	allocate(product_f32_fn%params(1)%array)
+	product_f32_fn%params(1)%array%type = f32_type
+	product_f32_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	product_f32_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0product_f32", product_f32_fn, id_index)
+
+	!********
+
+	product_f64_fn%type%type = f64_type
+	allocate(product_f64_fn%params(1))
+	allocate(product_f64_fn%param_names%v(1))
+
+	product_f64_fn%params(1)%type = array_type
+
+	allocate(product_f64_fn%params(1)%array)
+	product_f64_fn%params(1)%array%type = f64_type
+	product_f64_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	product_f64_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0product_f64", product_f64_fn, id_index)
+
+	!********
+
 	all_fn%type%type = bool_type
 	allocate(all_fn%params(1))
 	allocate(all_fn%param_names%v(1))
@@ -1416,12 +1538,14 @@ subroutine declare_intr_fns(fns)
 			cosd_f32_fn, cosd_f64_fn, cosd_f32_arr_fn, cosd_f64_arr_fn, &
 			exp_f32_fn, exp_f64_fn, exp_f32_arr_fn, exp_f64_arr_fn, &
 			log_f32_fn, log_f64_fn, log_f32_arr_fn, log_f64_arr_fn, &
+			sqrt_f32_fn, sqrt_f64_fn, sqrt_f32_arr_fn, sqrt_f64_arr_fn, &
 			max_i32_fn, max_i64_fn, max_f32_fn, max_f64_fn, &
 			min_i32_fn, min_i64_fn, min_f32_fn, min_f64_fn, &
 			parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
 			sin_f32_fn, sin_f64_fn, sin_f32_arr_fn, sin_f64_arr_fn, &
 			sind_f32_fn, sind_f64_fn, sind_f32_arr_fn, sind_f64_arr_fn, &
 			sum_i32_fn, sum_i64_fn, sum_f32_fn, sum_f64_fn, &
+			product_i32_fn, product_i64_fn, product_f32_fn, product_f64_fn, &
 			tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn, &
 			tand_f32_fn, tand_f64_fn, tand_f32_arr_fn, tand_f64_arr_fn, &
 			i32_sca_fn, i32_arr_fn, &
@@ -1528,6 +1652,39 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0log_f32"
 		case default
 			fn_call%identifier%text = "0log_f64"
+		end select
+
+	case ("sqrt")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+
+			arr_type = args%v(1)%val%array%type
+			!print *, "type = ", kind_name(arr_type)
+
+			select case (arr_type)
+			case (f32_type)
+				fn_call%identifier%text = "0sqrt_f32_arr"
+			case (f64_type)
+				fn_call%identifier%text = "0sqrt_f64_arr"
+			case default
+				! Fall-back on scalar to throw a parser error later
+				fn_call%identifier%text = "0sqrt_f64"
+			end select
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case (f32_type)
+			fn_call%identifier%text = "0sqrt_f32"
+		case default
+			fn_call%identifier%text = "0sqrt_f64"
 		end select
 
 	case ("abs")
@@ -2048,6 +2205,24 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0sum_i64"
 		case default
 			fn_call%identifier%text = "0sum_i32"
+		end select
+
+	case ("product")
+
+		type_ = i32_type
+		if (args%len_ >= 1) then
+			if (args%v(1)%val%type == array_type) type_ = args%v(1)%val%array%type
+		end if
+
+		select case (type_)
+		case (f32_type)
+			fn_call%identifier%text = "0product_f32"
+		case (f64_type)
+			fn_call%identifier%text = "0product_f64"
+		case (i64_type)
+			fn_call%identifier%text = "0product_i64"
+		case default
+			fn_call%identifier%text = "0product_i32"
 		end select
 
 	end select

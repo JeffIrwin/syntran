@@ -668,6 +668,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(log([0.01, 0.1]));') - sum(log([0.01d0, 0.1d0])))  < tol,  &
 			abs(eval_f64('sum(log([0.5, 0.1]));') - sum(log([0.5d0, 0.1d0]))) < tol,  &
 			abs(eval_f64('sum(log([0.2, 0.1]));') - sum(log([0.2d0, 0.1d0])))  < tol,  &
+			abs(eval_f32('sqrt(1.0f);') - sqrt(1.0)) < ftol,  &
+			abs(eval_f64('sqrt(4.0);') - sqrt(4.0d0)) < tol,  &
+			abs(eval_f32('sum(sqrt([0.2f, 0.1f]));') - sum(sqrt([0.2, 0.1])))   < ftol,  &
+			abs(eval_f64('sum(sqrt([0.01, 0.1]));') - sum(sqrt([0.01d0, 0.1d0])))  < tol,  &
 			abs(eval_f32('cos(0.0f);') - cos(0.0)) < ftol,  &
 			abs(eval_f32('cos(1.0f);') - cos(1.0)) < ftol,  &
 			abs(eval_f64('cos(0.0);') - cos(0.d0)) < tol,  &
@@ -959,6 +963,11 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('[sum([0.0f: 3.0f; 4])];') == "[6.000000E+00]", &
 			eval('i32([sum([0.0: 3.0; 4])]);') == "[6]", &
 			eval('sum(i64([1: 4]));') == "6", &
+			eval('product([1: 5]);') == "24", &
+			eval('product([2: 5]);') == "24", &
+			eval('product(i64([3: 5]));') == "12", &
+			abs(eval_f64('product([1.0: 4.0; 4]);') - 24.d0) < tol, &
+			abs(eval_f32('product([1.0f: 4.0f; 4]);') - 24.0) < ftol, &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 
