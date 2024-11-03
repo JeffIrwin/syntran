@@ -1,0 +1,11 @@
+
+let sum_ = 0;
+for i in [0: 8]
+{
+	if (i == 5) break;
+	if (i % 2 == 0) continue;
+	sum_ += i;
+}
+
+return sum_ == 4;
+

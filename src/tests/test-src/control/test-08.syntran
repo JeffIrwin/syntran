@@ -1,0 +1,10 @@
+
+let sum_ = 0;
+for i in [0: 6]
+{
+	if (i % 2 == 0) continue;
+	sum_ += i;
+}
+
+return sum_ == 9;
+
