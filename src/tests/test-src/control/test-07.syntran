@@ -1,0 +1,17 @@
+
+fn main(): i32
+{
+	let ans = 0;
+	let i = 0;
+	while i < 10
+	{
+		i += 1;
+		ans = i;
+		if (i == 20) break;
+	}
+
+	return ans;
+}
+
+return main() == 10;
+

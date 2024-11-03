@@ -1,0 +1,15 @@
+
+fn main(): i32
+{
+	let ans = 0;
+	for i in [0: 10]
+	{
+		ans = i;
+		if (i == 4) break;
+	}
+
+	return ans;
+}
+
+return main() == 4;
+

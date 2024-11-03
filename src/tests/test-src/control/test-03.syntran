@@ -1,0 +1,10 @@
+
+let ans = 0;
+for i in [0: 10]
+{
+	ans = i;
+	if (i == 3) break;
+}
+
+return ans == 3;
+

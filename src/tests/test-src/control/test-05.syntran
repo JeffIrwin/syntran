@@ -1,0 +1,12 @@
+
+let ans = 0;
+let i = 0;
+while i < 10
+{
+	i += 1;
+	ans = i;
+	if (i == 5) break;
+}
+
+return ans == 5;
+

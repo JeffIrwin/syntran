@@ -272,6 +272,11 @@ module function parse_fn_declaration(parser) result(decl)
 	! throughout to the one that I just fixed here
 
 	!print *, 'matching lparen'
+
+	! This is a bit of a hack, but parser can crash otherwise if parens are
+	! missing.  Should parens be optional for fns without params?
+	if (parser%current_kind() /= lparen_token) return
+
 	lparen = parser%match(lparen_token)
 
 	! Parse parameter names and types.  Save in temp vectors initially
@@ -325,6 +330,7 @@ module function parse_fn_declaration(parser) result(decl)
 	end do
 	call pos_args%push(parser%current_pos() + 1)
 
+	!print *, "names len = ", names%len_
 	!print *, 'matching rparen'
 	rparen = parser%match(rparen_token)
 
