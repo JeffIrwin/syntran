@@ -48,7 +48,7 @@ module syntran__core_m
 	!    * tbd:
 	!      + improved to_str() conversion with labels of struct name and member names
 	!  - jumping control flow:
-	!    * break and continue need testing and documentation
+	!    * break and continue need documentation
 	!    * goto: useful to break nested loops? or add break with loop label
 	!    * done:
 	!      > return, break, continue
@@ -126,7 +126,7 @@ module syntran__core_m
 	!    * for #once include guards, insert filename path as key into a ternary
 	!      tree w/ bool value true.  then when something is included, check if
 	!      it's in the ternary dict first.
-	!    * any use cases for #let? i probbaly don't want to get into general
+	!    * any use cases for #let? i probably don't want to get into general
 	!      expression parsing like `#let x = 1 + 2;` during preprocessing
 	!  - str comparison operations:
 	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have

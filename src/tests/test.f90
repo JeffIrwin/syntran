@@ -2839,7 +2839,7 @@ end subroutine unit_test_include
 
 !===============================================================================
 
-subroutine unit_test_return(npass, nfail)
+subroutine unit_test_control(npass, nfail)
 
 	implicit none
 
@@ -2847,10 +2847,10 @@ subroutine unit_test_return(npass, nfail)
 
 	!********
 
-	character(len = *), parameter :: label = 'return statements'
+	character(len = *), parameter :: label = 'control flow'
 
 	! Path to syntran test files from root of repo
-	character(len = *), parameter :: path = 'src/tests/test-src/return/'
+	character(len = *), parameter :: path = 'src/tests/test-src/control/'
 
 	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
@@ -2869,7 +2869,7 @@ subroutine unit_test_return(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_return
+end subroutine unit_test_control
 
 !===============================================================================
 
@@ -4061,7 +4061,7 @@ subroutine unit_tests(iostat)
 	call unit_test_arr_comp   (npass, nfail)
 	call unit_test_arr_op     (npass, nfail)
 	call unit_test_lhs_slc_1  (npass, nfail)
-	call unit_test_return     (npass, nfail)
+	call unit_test_control    (npass, nfail)
 	call unit_test_struct     (npass, nfail)
 	call unit_test_struct_arr (npass, nfail)
 	call unit_test_struct_str (npass, nfail)

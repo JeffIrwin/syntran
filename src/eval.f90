@@ -1688,8 +1688,11 @@ recursive subroutine eval_for_statement(node, state, res)
 
 	! Push scope to make the loop iterator local
 	call state%vars%push_scope()
-	state%breaked   = .false.
+	state%breaked = .false.
 	do i8 = 1, len8
+
+		! `breaked` is set once per loop instance, while `continued` is reset on
+		! every iteration
 		state%continued = .false.
 
 		call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
@@ -1710,8 +1713,11 @@ recursive subroutine eval_for_statement(node, state, res)
 		if (state%breaked ) exit
 
 	end do
+
+	! Reset for nested loops
 	state%breaked   = .false.
 	state%continued = .false.
+
 	call state%vars%pop_scope()
 
 end subroutine eval_for_statement
@@ -2402,9 +2408,10 @@ recursive subroutine eval_while_statement(node, state, res)
 	type(value_t) :: condition
 
 	call syntax_eval(node%condition, state, condition)
-	state%breaked   = .false.
+	state%breaked = .false.
 	do while (condition%sca%bool)
 		state%continued = .false.
+
 		call syntax_eval(node%body, state, res)
 		call syntax_eval(node%condition, state, condition)
 
