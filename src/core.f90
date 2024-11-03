@@ -158,7 +158,6 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      + norm, dot
 	!      + log10, log2, (gamma, log_gamma?)
 	!      + trig: atan2, (sec, cos, hyperbolic, ... ?)
 	!      + bessel_jn
@@ -170,6 +169,8 @@ module syntran__core_m
 	!      + exp
 	!        > need documentation for elemental array overloading
 	!      + log
+	!      + norm2, dot
+	!        > boolean dot not implemented yet
 	!      + sind, cosd, tand, asind, acosd, atand
 	!      + sin, cos, tan, asin, acos, atan
 	!        > needs documentation

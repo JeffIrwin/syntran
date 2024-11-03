@@ -975,6 +975,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f32('norm2([3.0f, 4.0f]);') - 5.0) < ftol, &
 			abs(eval_f64('norm2([1.0: 6.0; 6]);') - norm2(1.d0 * [(i, i = 1, 6)])) < tol, &
 			abs(eval_f64('norm2([1.0,2.0,  3.0,4.0,  5.0,6.0;  2,3]);') - norm2(1.d0 * [(i, i = 1, 6)])) < tol, &
+			abs(eval_f32('dot([1.0f, 2.0f], [3.0f, 4.0f]);') - 11.0) < ftol, &
+			abs(eval_f64('dot([1.0, 2.0], [3.0, 4.0]);') - 11.d0) < tol, &
+			abs(eval_i32('dot([1, 2], [3, 4]);') - 11) == 0, &
+			abs(eval_i64('dot(i64([1, 2]), i64([3, 4]));') - 11) == 0, &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 

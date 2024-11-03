@@ -30,6 +30,7 @@ subroutine declare_intr_fns(fns)
 		sum_i32_fn, sum_f32_fn, sum_i64_fn, sum_f64_fn, &
 		product_i32_fn, product_f32_fn, product_i64_fn, product_f64_fn, &
 		norm2_f32_fn, norm2_f64_fn, &
+		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
 		abs_f32_fn, abs_f64_fn, abs_f32_arr_fn, abs_f64_arr_fn, &
 		exp_f32_fn, exp_f64_fn, exp_f32_arr_fn, exp_f64_arr_fn, &
 		log_f32_fn, log_f64_fn, log_f32_arr_fn, log_f64_arr_fn, &
@@ -1467,6 +1468,90 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
+	dot_f32_fn%type%type = f32_type
+
+	allocate(dot_f32_fn%params(2))
+	allocate(dot_f32_fn%param_names%v(2))
+
+	dot_f32_fn%params(1)%type = array_type
+	allocate(dot_f32_fn%params(1)%array)
+	dot_f32_fn%params(1)%array%type = f32_type
+	dot_f32_fn%params(1)%array%rank = 1
+	dot_f32_fn%param_names%v(1)%s =  "vector_a"
+
+	dot_f32_fn%params(2)%type = array_type
+	allocate(dot_f32_fn%params(2)%array)
+	dot_f32_fn%params(2)%array%type = f32_type
+	dot_f32_fn%params(2)%array%rank = 1
+	dot_f32_fn%param_names%v(2)%s =  "vector_b"
+
+	call fns%insert("0dot_f32", dot_f32_fn, id_index)
+
+	!********
+
+	dot_f64_fn%type%type = f64_type
+
+	allocate(dot_f64_fn%params(2))
+	allocate(dot_f64_fn%param_names%v(2))
+
+	dot_f64_fn%params(1)%type = array_type
+	allocate(dot_f64_fn%params(1)%array)
+	dot_f64_fn%params(1)%array%type = f64_type
+	dot_f64_fn%params(1)%array%rank = 1
+	dot_f64_fn%param_names%v(1)%s =  "vector_a"
+
+	dot_f64_fn%params(2)%type = array_type
+	allocate(dot_f64_fn%params(2)%array)
+	dot_f64_fn%params(2)%array%type = f64_type
+	dot_f64_fn%params(2)%array%rank = 1
+	dot_f64_fn%param_names%v(2)%s =  "vector_b"
+
+	call fns%insert("0dot_f64", dot_f64_fn, id_index)
+
+	!********
+
+	dot_i32_fn%type%type = i32_type
+
+	allocate(dot_i32_fn%params(2))
+	allocate(dot_i32_fn%param_names%v(2))
+
+	dot_i32_fn%params(1)%type = array_type
+	allocate(dot_i32_fn%params(1)%array)
+	dot_i32_fn%params(1)%array%type = i32_type
+	dot_i32_fn%params(1)%array%rank = 1
+	dot_i32_fn%param_names%v(1)%s =  "vector_a"
+
+	dot_i32_fn%params(2)%type = array_type
+	allocate(dot_i32_fn%params(2)%array)
+	dot_i32_fn%params(2)%array%type = i32_type
+	dot_i32_fn%params(2)%array%rank = 1
+	dot_i32_fn%param_names%v(2)%s =  "vector_b"
+
+	call fns%insert("0dot_i32", dot_i32_fn, id_index)
+
+	!********
+
+	dot_i64_fn%type%type = i64_type
+
+	allocate(dot_i64_fn%params(2))
+	allocate(dot_i64_fn%param_names%v(2))
+
+	dot_i64_fn%params(1)%type = array_type
+	allocate(dot_i64_fn%params(1)%array)
+	dot_i64_fn%params(1)%array%type = i64_type
+	dot_i64_fn%params(1)%array%rank = 1
+	dot_i64_fn%param_names%v(1)%s =  "vector_a"
+
+	dot_i64_fn%params(2)%type = array_type
+	allocate(dot_i64_fn%params(2)%array)
+	dot_i64_fn%params(2)%array%type = i64_type
+	dot_i64_fn%params(2)%array%rank = 1
+	dot_i64_fn%param_names%v(2)%s =  "vector_b"
+
+	call fns%insert("0dot_i64", dot_i64_fn, id_index)
+
+	!********
+
 	all_fn%type%type = bool_type
 	allocate(all_fn%params(1))
 	allocate(all_fn%param_names%v(1))
@@ -1535,6 +1620,7 @@ subroutine declare_intr_fns(fns)
 			sum_i32_fn, sum_i64_fn, sum_f32_fn, sum_f64_fn, &
 			product_i32_fn, product_i64_fn, product_f32_fn, product_f64_fn, &
 			norm2_f32_fn, norm2_f64_fn, &
+			dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
 			tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn, &
 			tand_f32_fn, tand_f64_fn, tand_f32_arr_fn, tand_f64_arr_fn, &
 			i32_sca_fn, i32_arr_fn, &
@@ -2229,6 +2315,26 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0norm2_f32"
 		case default
 			fn_call%identifier%text = "0norm2_f64"
+		end select
+
+	case ("dot")
+
+		type_ = f64_type
+		if (args%len_ >= 1) then
+			if (args%v(1)%val%type == array_type) type_ = args%v(1)%val%array%type
+		end if
+
+		! Fortran also offers dot_product for logical args.  Should syntran
+		! support that?  Could be useful
+		select case (type_)
+		case (i32_type)
+			fn_call%identifier%text = "0dot_i32"
+		case (i64_type)
+			fn_call%identifier%text = "0dot_i64"
+		case (f32_type)
+			fn_call%identifier%text = "0dot_f32"
+		case default
+			fn_call%identifier%text = "0dot_f64"
 		end select
 
 	end select
