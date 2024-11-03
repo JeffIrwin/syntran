@@ -1,0 +1,18 @@
+
+let s = "a";
+{
+	s += "b";
+	{
+		s += "c";
+		{
+			break;
+			s += "xyz";
+		}
+		s += "xyz";
+	}
+	s += "xyz";
+}
+s += "e";
+
+return s == "abce";
+

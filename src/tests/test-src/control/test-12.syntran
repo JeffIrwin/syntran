@@ -1,0 +1,21 @@
+
+let s = "a";
+{
+	s += "b";
+	
+	for i in [0: 10]
+	{
+		s += "c";
+		break;
+		s += "xyz";
+	}
+	
+	s += "e";
+	break;
+	s += "xyz";
+}
+
+s += "g";
+
+return s == "abceg";
+

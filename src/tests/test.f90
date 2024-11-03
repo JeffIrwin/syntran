@@ -2870,6 +2870,14 @@ subroutine unit_test_control(npass, nfail)
 			interpret_file(path//'test-09.syntran', quiet) == 'true', &
 			interpret_file(path//'test-10.syntran', quiet) == 'true', &
 			interpret_file(path//'test-11.syntran', quiet) == 'true', &
+			interpret_file(path//'test-12.syntran', quiet) == 'true', &
+			interpret_file(path//'test-13.syntran', quiet) == 'true', &
+			interpret_file(path//'test-14.syntran', quiet) == 'true', &
+			interpret_file(path//'test-15.syntran', quiet) == 'true', &
+			interpret_file(path//'test-16.syntran', quiet) == 'true', &
+			interpret_file(path//'test-17.syntran', quiet) == 'true', &
+			interpret_file(path//'test-18.syntran', quiet) == 'true', &
+			interpret_file(path//'test-19.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

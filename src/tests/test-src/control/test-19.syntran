@@ -1,0 +1,13 @@
+
+let sum_ = 0;
+for i in [0: 4] {
+	//println("i = ", i);
+	for j in [0: 5] {
+		//println("  j = ", j);
+		sum_ += 1;
+		if (j == 2) break;
+	}
+}
+
+return sum_ == 12;
+
