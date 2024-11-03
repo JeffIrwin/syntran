@@ -1537,6 +1537,14 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = product(arg1%array%f64)
 
+	case ("0norm2_f32")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = norm2(arg1%array%f32)
+
+	case ("0norm2_f64")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = norm2(arg1%array%f64)
+
 	case ("all")
 
 		call syntax_eval(node%args(1), state, arg1)

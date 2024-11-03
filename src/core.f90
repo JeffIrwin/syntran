@@ -159,8 +159,6 @@ module syntran__core_m
 	!  - functions
 	!    * intrinsic
 	!      + norm, dot
-	!        > x ** 0.5 works as sqrt, but sqrt lends optimization and
-	!          consistency with other langs
 	!      + log10, log2, (gamma, log_gamma?)
 	!      + trig: atan2, (sec, cos, hyperbolic, ... ?)
 	!      + bessel_jn

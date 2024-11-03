@@ -623,6 +623,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 	character(len = *), parameter :: label = 'intrinsic functions'
 	character(len = :), allocatable :: spi
 
+	integer :: i
+
 	logical, allocatable :: tests(:)
 
 	double precision, parameter :: pi = 4.d0 * atan(1.d0)
@@ -968,6 +970,11 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('product(i64([3: 5]));') == "12", &
 			abs(eval_f64('product([1.0: 4.0; 4]);') - 24.d0) < tol, &
 			abs(eval_f32('product([1.0f: 4.0f; 4]);') - 24.0) < ftol, &
+			abs(eval_f64('norm2([3.0, 4.0]);') - 5.d0) < tol, &
+			abs(eval_f64('norm2([3.0, 4.0, 12.0]);') - 13.d0) < tol, &
+			abs(eval_f32('norm2([3.0f, 4.0f]);') - 5.0) < ftol, &
+			abs(eval_f64('norm2([1.0: 6.0; 6]);') - norm2(1.d0 * [(i, i = 1, 6)])) < tol, &
+			abs(eval_f64('norm2([1.0,2.0,  3.0,4.0,  5.0,6.0;  2,3]);') - norm2(1.d0 * [(i, i = 1, 6)])) < tol, &
 			eval_i32('min(1, 2);')  == 1   &
 		]
 

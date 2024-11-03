@@ -29,6 +29,7 @@ subroutine declare_intr_fns(fns)
 		char_fn, parse_f64_fn, min_f64_fn, max_f64_fn, &
 		sum_i32_fn, sum_f32_fn, sum_i64_fn, sum_f64_fn, &
 		product_i32_fn, product_f32_fn, product_i64_fn, product_f64_fn, &
+		norm2_f32_fn, norm2_f64_fn, &
 		abs_f32_fn, abs_f64_fn, abs_f32_arr_fn, abs_f64_arr_fn, &
 		exp_f32_fn, exp_f64_fn, exp_f32_arr_fn, exp_f64_arr_fn, &
 		log_f32_fn, log_f64_fn, log_f32_arr_fn, log_f64_arr_fn, &
@@ -115,9 +116,6 @@ subroutine declare_intr_fns(fns)
 	log_f32_fn%params(1)%type = f32_type
 	log_f32_fn%param_names%v(1)%s = "x"
 
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
-
 	call fns%insert("0log_f32", log_f32_fn, id_index)
 
 	!********
@@ -169,9 +167,6 @@ subroutine declare_intr_fns(fns)
 	allocate(sqrt_f32_fn%param_names%v(1))
 	sqrt_f32_fn%params(1)%type = f32_type
 	sqrt_f32_fn%param_names%v(1)%s = "x"
-
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
 
 	call fns%insert("0sqrt_f32", sqrt_f32_fn, id_index)
 
@@ -225,9 +220,6 @@ subroutine declare_intr_fns(fns)
 	abs_f32_fn%params(1)%type = f32_type
 	abs_f32_fn%param_names%v(1)%s = "x"
 
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
-
 	call fns%insert("0abs_f32", abs_f32_fn, id_index)
 
 	!********
@@ -279,9 +271,6 @@ subroutine declare_intr_fns(fns)
 	allocate(cos_f32_fn%param_names%v(1))
 	cos_f32_fn%params(1)%type = f32_type
 	cos_f32_fn%param_names%v(1)%s = "x"
-
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
 
 	call fns%insert("0cos_f32", cos_f32_fn, id_index)
 
@@ -335,9 +324,6 @@ subroutine declare_intr_fns(fns)
 	sin_f32_fn%params(1)%type = f32_type
 	sin_f32_fn%param_names%v(1)%s = "x"
 
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
-
 	call fns%insert("0sin_f32", sin_f32_fn, id_index)
 
 	!********
@@ -389,9 +375,6 @@ subroutine declare_intr_fns(fns)
 	allocate(tan_f32_fn%param_names%v(1))
 	tan_f32_fn%params(1)%type = f32_type
 	tan_f32_fn%param_names%v(1)%s = "x"
-
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
 
 	call fns%insert("0tan_f32", tan_f32_fn, id_index)
 
@@ -445,9 +428,6 @@ subroutine declare_intr_fns(fns)
 	cosd_f32_fn%params(1)%type = f32_type
 	cosd_f32_fn%param_names%v(1)%s = "x"
 
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
-
 	call fns%insert("0cosd_f32", cosd_f32_fn, id_index)
 
 	!********
@@ -499,9 +479,6 @@ subroutine declare_intr_fns(fns)
 	allocate(sind_f32_fn%param_names%v(1))
 	sind_f32_fn%params(1)%type = f32_type
 	sind_f32_fn%param_names%v(1)%s = "x"
-
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
 
 	call fns%insert("0sind_f32", sind_f32_fn, id_index)
 
@@ -555,9 +532,6 @@ subroutine declare_intr_fns(fns)
 	tand_f32_fn%params(1)%type = f32_type
 	tand_f32_fn%param_names%v(1)%s = "x"
 
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
-
 	call fns%insert("0tand_f32", tand_f32_fn, id_index)
 
 	!********
@@ -609,9 +583,6 @@ subroutine declare_intr_fns(fns)
 	allocate(acos_f32_fn%param_names%v(1))
 	acos_f32_fn%params(1)%type = f32_type
 	acos_f32_fn%param_names%v(1)%s = "x"
-
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
 
 	call fns%insert("0acos_f32", acos_f32_fn, id_index)
 
@@ -665,9 +636,6 @@ subroutine declare_intr_fns(fns)
 	asin_f32_fn%params(1)%type = f32_type
 	asin_f32_fn%param_names%v(1)%s = "x"
 
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
-
 	call fns%insert("0asin_f32", asin_f32_fn, id_index)
 
 	!********
@@ -719,9 +687,6 @@ subroutine declare_intr_fns(fns)
 	allocate(atan_f32_fn%param_names%v(1))
 	atan_f32_fn%params(1)%type = f32_type
 	atan_f32_fn%param_names%v(1)%s = "x"
-
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
 
 	call fns%insert("0atan_f32", atan_f32_fn, id_index)
 
@@ -775,9 +740,6 @@ subroutine declare_intr_fns(fns)
 	acosd_f32_fn%params(1)%type = f32_type
 	acosd_f32_fn%param_names%v(1)%s = "x"
 
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
-
 	call fns%insert("0acosd_f32", acosd_f32_fn, id_index)
 
 	!********
@@ -830,9 +792,6 @@ subroutine declare_intr_fns(fns)
 	asind_f32_fn%params(1)%type = f32_type
 	asind_f32_fn%param_names%v(1)%s = "x"
 
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
-
 	call fns%insert("0asind_f32", asind_f32_fn, id_index)
 
 	!********
@@ -884,9 +843,6 @@ subroutine declare_intr_fns(fns)
 	allocate(atand_f32_fn%param_names%v(1))
 	atand_f32_fn%params(1)%type = f32_type
 	atand_f32_fn%param_names%v(1)%s = "x"
-
-	! Insert the fn into the dict. These are global intrinsic fns, so there's no
-	! need to check iostat
 
 	call fns%insert("0atand_f32", atand_f32_fn, id_index)
 
@@ -1479,6 +1435,38 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
+	norm2_f32_fn%type%type = f32_type
+	allocate(norm2_f32_fn%params(1))
+	allocate(norm2_f32_fn%param_names%v(1))
+
+	norm2_f32_fn%params(1)%type = array_type
+
+	allocate(norm2_f32_fn%params(1)%array)
+	norm2_f32_fn%params(1)%array%type = f32_type
+	norm2_f32_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	norm2_f32_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0norm2_f32", norm2_f32_fn, id_index)
+
+	!********
+
+	norm2_f64_fn%type%type = f64_type
+	allocate(norm2_f64_fn%params(1))
+	allocate(norm2_f64_fn%param_names%v(1))
+
+	norm2_f64_fn%params(1)%type = array_type
+
+	allocate(norm2_f64_fn%params(1)%array)
+	norm2_f64_fn%params(1)%array%type = f64_type
+	norm2_f64_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	norm2_f64_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0norm2_f64", norm2_f64_fn, id_index)
+
+	!********
+
 	all_fn%type%type = bool_type
 	allocate(all_fn%params(1))
 	allocate(all_fn%param_names%v(1))
@@ -1546,6 +1534,7 @@ subroutine declare_intr_fns(fns)
 			sind_f32_fn, sind_f64_fn, sind_f32_arr_fn, sind_f64_arr_fn, &
 			sum_i32_fn, sum_i64_fn, sum_f32_fn, sum_f64_fn, &
 			product_i32_fn, product_i64_fn, product_f32_fn, product_f64_fn, &
+			norm2_f32_fn, norm2_f64_fn, &
 			tan_f32_fn, tan_f64_fn, tan_f32_arr_fn, tan_f64_arr_fn, &
 			tand_f32_fn, tand_f64_fn, tand_f32_arr_fn, tand_f64_arr_fn, &
 			i32_sca_fn, i32_arr_fn, &
@@ -2223,6 +2212,23 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0product_i64"
 		case default
 			fn_call%identifier%text = "0product_i32"
+		end select
+
+	case ("norm2")
+		! I might change the name norm2 to norm later but I'm not ready to lock
+		! in.  `norm2` might have a second arg for `dim`, while `norm` might
+		! have a second arg for 1-norm vs infty-norm, etc.
+
+		type_ = f64_type
+		if (args%len_ >= 1) then
+			if (args%v(1)%val%type == array_type) type_ = args%v(1)%val%array%type
+		end if
+
+		select case (type_)
+		case (f32_type)
+			fn_call%identifier%text = "0norm2_f32"
+		case default
+			fn_call%identifier%text = "0norm2_f64"
 		end select
 
 	end select
