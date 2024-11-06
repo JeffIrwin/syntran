@@ -79,7 +79,49 @@ function lex(lexer) result(token)
 
 	start = lexer%pos
 
+	! TODO: allow "_" as numeric separater (e.g. thousands separater "1_000_000"
+	! == a million) for all numeric types (int, float, decimal, hex)
+
+	! TODO: can we add a method to grab 2 (or more) chars at a time from lexer
+	! instead of looking at current() .and. lookahead() (and peek())?  There is
+	! lexer%text() but it could go out-of-bounds.  Add a bounds-safe %get_text()
+	! method
+	if ( &
+		lexer%current()   == "0" .and. &
+		lexer%lookahead() == "x") then
+
+		! Hex literal
+		lexer%pos = lexer%pos + 2  ! skip "0x"
+
+		do while (is_hex(lexer%current()))
+			lexer%pos = lexer%pos + 1
+		end do
+
+		text = lexer%text(start: lexer%pos-1)
+
+		! TODO: auto-detect i32 vs i64
+
+		!read(text, *, iostat = io) i32
+		read(text(3:), "(z12)", iostat = io) i32
+		!print *, "i32 = ", i32
+
+		if (io == exit_success) then
+
+			val   = new_literal_value(i32_type, i32 = i32)
+			token = new_token(i32_token, start, text, val)
+
+		else
+			span = new_span(start, len(text))
+			call lexer%diagnostics%push(err_bad_hex( &
+				lexer%context, span, text))
+		end if
+
+		token%unit_ = lexer%unit_
+		return
+	end if
+
 	if (is_digit(lexer%current())) then
+		! Numeric decimal integer or float
 
 		float = .false.
 

@@ -68,6 +68,21 @@ end function err_bad_int
 
 !===============================================================================
 
+function err_bad_hex(context, span, num) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: num
+	err = err_prefix//'bad hexadecimal integer `'//num &
+		//'` does not fit in 32 bits' &
+		//underline(context, span) &
+		//' bad hex integer'//color_reset
+
+end function err_bad_hex
+
+!===============================================================================
+
 function err_unterminated_str(context, span, str) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

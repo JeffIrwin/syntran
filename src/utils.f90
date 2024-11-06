@@ -613,6 +613,20 @@ end function is_digit
 
 !===============================================================================
 
+logical function is_hex(c)
+	! This is only applicable to hex digits, not the "0x" prefix
+
+	character, intent(in) :: c
+
+	is_hex = &
+		is_digit(c) .or. &
+		('a' <= c .and. c <= 'f') .or. &
+		('A' <= c .and. c <= 'F')
+
+end function is_hex
+
+!===============================================================================
+
 logical function is_sign(c)
 
 	character, intent(in) :: c

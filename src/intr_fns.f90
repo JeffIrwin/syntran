@@ -1436,6 +1436,9 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
+	! norm2 only takes float args, not integer, while dot can take integers.
+	! This is intentional and matches fortran behavior
+
 	norm2_f32_fn%type%type = f32_type
 	allocate(norm2_f32_fn%params(1))
 	allocate(norm2_f32_fn%param_names%v(1))
@@ -1494,6 +1497,7 @@ subroutine declare_intr_fns(fns)
 	allocate(dot_f64_fn%params(2))
 	allocate(dot_f64_fn%param_names%v(2))
 
+	! dot only takes rank-1 arrays, like fortran's dot_product()
 	dot_f64_fn%params(1)%type = array_type
 	allocate(dot_f64_fn%params(1)%array)
 	dot_f64_fn%params(1)%array%type = f64_type

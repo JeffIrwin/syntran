@@ -67,7 +67,7 @@ module syntran__core_m
 	!    perf of intel compilers for AOC solution tests
 	!  - hacker sdk:
 	!    * bitwise operations: shift left and right, and, or, not, xor
-	!    * hex, binary, (and octal) literals
+	!    *  hex , binary, (and octal) literals
 	!    * these features are especially useful when implementing encryption,
 	!      hashing, utf, and rng algorithms
 	!  - add more tests for lhs slicing
@@ -88,7 +88,7 @@ module syntran__core_m
 	!        let cat  = [arr1, arr2]; // [0: 8]
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
 	!  - array operations:
-	!    * element-wise add, sub, mul, div, pow, mod done
+	!    * done: element-wise add, sub, mul, div, pow, mod
 	!      + compound array assignment works but needs unit tests
 	!    * vector dot product, matrix mul, ...
 	!      + new operator tokens, something like `.*`?
