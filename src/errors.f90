@@ -1065,7 +1065,7 @@ function underline(context, span)
 	! Same idea as 'last' adjustment: trim whitespace from error tokens.  It
 	! would make more sense to clamp length directly instead of clamping
 	! j :shrug:
-	j = min(len(context%text), span%start + length - 1)
+	j = max(min(len(context%text), span%start + length - 1), 1)
 	!print *, 'char = "', context%text(j:j), '"'
 	do while (is_whitespace(context%text(j:j)))
 		length = length - 1
@@ -1103,7 +1103,7 @@ function underline(context, span)
 		//fg1//     spaces//"| "//line_feed &
 		//fg1//" "//str_i//" | "//rst//text//line_feed &
 		//fg1//     spaces//"| " &
-		//repeat(' ', span%start - context%lines(i)) &
+		//repeat(' ', max(span%start - context%lines(i), 0)) &
 		//fg_bright_red//repeat('^', length)
 
 end function underline

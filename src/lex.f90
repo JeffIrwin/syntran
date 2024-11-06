@@ -99,6 +99,8 @@ function lex(lexer) result(token)
 
 		text = lexer%text(start: lexer%pos-1)
 
+		! TODO: tests
+
 		! TODO: auto-detect i32 vs i64
 
 		!read(text, *, iostat = io) i32
@@ -111,6 +113,7 @@ function lex(lexer) result(token)
 			token = new_token(i32_token, start, text, val)
 
 		else
+			token = new_token(bad_token, lexer%pos, text)
 			span = new_span(start, len(text))
 			call lexer%diagnostics%push(err_bad_hex( &
 				lexer%context, span, text))
@@ -200,6 +203,7 @@ function lex(lexer) result(token)
 					token = new_token(i64_token, start, text, val)
 
 				else
+					token = new_token(bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
 					call lexer%diagnostics%push(err_bad_int( &
 						lexer%context, span, text))
