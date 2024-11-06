@@ -103,7 +103,6 @@ function lex(lexer) result(token)
 
 		! TODO: auto-detect i32 vs i64
 
-		!read(text, *, iostat = io) i32
 		read(text(3:), "(z12)", iostat = io) i32
 		!print *, "i32 = ", i32
 

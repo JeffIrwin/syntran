@@ -1516,6 +1516,39 @@ end subroutine unit_test_f64_mix
 
 !===============================================================================
 
+subroutine unit_test_literals(npass, nfail)
+
+	! Hex, octal, and binary literals, use of "_" as numeric separators, ...
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = "literals"
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) "Unit testing "//label//" ..."
+
+	tests = &
+		[   &
+			eval_i32("0x0;")  == 0, &
+			eval_i32("0x1;")  == 1, &
+			eval_i32("0xff;")  == 255, &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_literals
+
+!===============================================================================
+
 subroutine unit_test_i64(npass, nfail)
 
 	! Simple i64 integer tests of arithmetic with single-line
@@ -4104,6 +4137,7 @@ subroutine unit_tests(iostat)
 	call unit_test_struct_str (npass, nfail)
 	call unit_test_struct_1   (npass, nfail)
 	call unit_test_f64_mix    (npass, nfail)
+	call unit_test_literals   (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
