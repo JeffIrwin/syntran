@@ -1532,11 +1532,16 @@ subroutine unit_test_literals(npass, nfail)
 
 	write(*,*) "Unit testing "//label//" ..."
 
+	! TODO: test 0xffffffff after i settle.  i'm leaning towards interpretting
+	! it as -1_i32, but also rust and julia treat this is 4294967295
+
 	tests = &
 		[   &
 			eval_i32("0x0;")  == 0, &
 			eval_i32("0x1;")  == 1, &
 			eval_i32("0xff;")  == 255, &
+			eval_i64("0x100000000;")  == int(2, 8) ** 32, &
+			eval_i64("0x100000001;")  == int(2, 8) ** 32 + 1, &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

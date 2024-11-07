@@ -99,23 +99,28 @@ function lex(lexer) result(token)
 
 		text = lexer%text(start: lexer%pos-1)
 
-		! TODO: tests
-
-		! TODO: auto-detect i32 vs i64
-
+		! 8 chars should be sufficient. pad by an extra 4 for safety
 		read(text(3:), "(z12)", iostat = io) i32
-		!print *, "i32 = ", i32
-
 		if (io == exit_success) then
 
 			val   = new_literal_value(i32_type, i32 = i32)
 			token = new_token(i32_token, start, text, val)
 
 		else
-			token = new_token(bad_token, lexer%pos, text)
-			span = new_span(start, len(text))
-			call lexer%diagnostics%push(err_bad_hex( &
-				lexer%context, span, text))
+
+			read(text(3:), "(z20)", iostat = io) i64  ! 16 chars should suffice
+			if (io == exit_success) then
+
+				print *, "i64 = ", i64
+				val   = new_literal_value(i64_type, i64 = i64)
+				token = new_token(i64_token, start, text, val)
+
+			else
+				token = new_token(bad_token, lexer%pos, text)
+				span = new_span(start, len(text))
+				call lexer%diagnostics%push(err_bad_hex( &
+					lexer%context, span, text))
+			end if
 		end if
 
 		token%unit_ = lexer%unit_

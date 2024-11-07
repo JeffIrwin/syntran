@@ -30,6 +30,10 @@ module syntran__core_m
 		syntran_patch =  54
 
 	! TODO:
+	!  - literals
+	!    * add general suffix option, e.g. 1_i32, 2_i64, 2.3_f32, ... to allow
+	!      explicit typing a la rust
+	!    * can also keep f32 "f" suffix for compatibility
 	!  - f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
