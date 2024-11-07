@@ -1549,6 +1549,13 @@ subroutine unit_test_literals(npass, nfail)
 			eval_i32("0x1____0_0__0___0;")  == 65536, &
 			eval_i64("0x1_0000_0000;")  == int(2, 8) ** 32, &
 			eval_i64("0x1_0000_0001;")  == int(2, 8) ** 32 + 1, &
+			eval_i32("0x0123;")  ==   291, &
+			eval_i32("0x4567;")  == 17767, &
+			eval_i32("0x89ab;")  == 35243, &
+			eval_i32("0xcdef;")  == 52719, &
+			eval_i32("0x89AB;")  == 35243, &
+			eval_i32("0xCDEF;")  == 52719, &
+			eval_i64("0x0123456789abcdef;")  == int(z"0123456789abcdef", 8), &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

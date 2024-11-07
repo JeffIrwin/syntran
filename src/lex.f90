@@ -109,6 +109,7 @@ function lex(lexer) result(token)
 			read(text_strip, "(z20)", iostat = io) i64  ! 16 chars should suffice
 			if (io == exit_success) then
 
+				!print *, "i64 = ", i64
 				val   = new_literal_value(i64_type, i64 = i64)
 				token = new_token(i64_token, start, text, val)
 
