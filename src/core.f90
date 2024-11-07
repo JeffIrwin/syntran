@@ -31,6 +31,8 @@ module syntran__core_m
 
 	! TODO:
 	!  - literals
+	!    * octal "0o", binary "0b"
+	!    * underscore separators for decimal (done for hex)
 	!    * add general suffix option, e.g. 1_i32, 2_i64, 2.3_f32, ... to allow
 	!      explicit typing a la rust
 	!    * can also keep f32 "f" suffix for compatibility

@@ -48,7 +48,7 @@ function lex(lexer) result(token)
 
 	!********
 
-	character(len = :), allocatable :: text
+	character(len = :), allocatable :: text, text_strip
 
 	integer :: kind
 	integer :: start, io
@@ -79,9 +79,6 @@ function lex(lexer) result(token)
 
 	start = lexer%pos
 
-	! TODO: allow "_" as numeric separater (e.g. thousands separater "1_000_000"
-	! == a million) for all numeric types (int, float, decimal, hex)
-
 	! TODO: can we add a method to grab 2 (or more) chars at a time from lexer
 	! instead of looking at current() .and. lookahead() (and peek())?  There is
 	! lexer%text() but it could go out-of-bounds.  Add a bounds-safe %get_text()
@@ -93,14 +90,15 @@ function lex(lexer) result(token)
 		! Hex literal
 		lexer%pos = lexer%pos + 2  ! skip "0x"
 
-		do while (is_hex(lexer%current()))
+		do while (is_hex_under(lexer%current()))
 			lexer%pos = lexer%pos + 1
 		end do
 
 		text = lexer%text(start: lexer%pos-1)
+		text_strip = rm_char(text(3:), "_")
 
 		! 8 chars should be sufficient. pad by an extra 4 for safety
-		read(text(3:), "(z12)", iostat = io) i32
+		read(text_strip, "(z12)", iostat = io) i32
 		if (io == exit_success) then
 
 			val   = new_literal_value(i32_type, i32 = i32)
@@ -108,10 +106,9 @@ function lex(lexer) result(token)
 
 		else
 
-			read(text(3:), "(z20)", iostat = io) i64  ! 16 chars should suffice
+			read(text_strip, "(z20)", iostat = io) i64  ! 16 chars should suffice
 			if (io == exit_success) then
 
-				print *, "i64 = ", i64
 				val   = new_literal_value(i64_type, i64 = i64)
 				token = new_token(i64_token, start, text, val)
 

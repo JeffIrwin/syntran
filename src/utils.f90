@@ -627,6 +627,17 @@ end function is_hex
 
 !===============================================================================
 
+logical function is_hex_under(c)
+	! This is only applicable to hex digits, not the "0x" prefix
+
+	character, intent(in) :: c
+
+	is_hex_under = is_hex(c) .or. c == "_"
+
+end function is_hex_under
+
+!===============================================================================
+
 logical function is_sign(c)
 
 	character, intent(in) :: c
@@ -703,6 +714,30 @@ logical function is_whitespace(c)
 	is_whitespace = any(c == [tab, line_feed, vert_tab, carriage_return, ' '])
 
 end function is_whitespace
+
+!===============================================================================
+
+function rm_char(str, char) result(str_out)
+
+	! Remove all occurences of character `char` from `str`
+
+	character(len = *), intent(in) :: str
+	character, intent(in) :: char
+
+	character(len = :), allocatable :: str_out
+
+	!********
+
+	integer :: i
+	type(char_vector_t) :: sb  ! string builder
+
+	sb = new_char_vector()
+	do i = 1, len(str)
+		if (str(i:i) /= char) call sb%push(str(i:i))
+	end do
+	str_out = sb%trim()
+
+end function rm_char
 
 !===============================================================================
 
