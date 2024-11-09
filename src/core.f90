@@ -30,8 +30,6 @@ module syntran__core_m
 		syntran_patch =  54
 
 	! TODO:
-	!  - literals
-	!    * octal "0o", binary "0b"
 	!  - f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
@@ -69,7 +67,6 @@ module syntran__core_m
 	!    perf of intel compilers for AOC solution tests
 	!  - hacker sdk:
 	!    * bitwise operations: shift left and right, and, or, not, xor
-	!    *  hex , binary, (and octal) literals
 	!    * these features are especially useful when implementing encryption,
 	!      hashing, utf, and rng algorithms
 	!  - add more tests for lhs slicing
@@ -195,6 +192,10 @@ module syntran__core_m
 	!  - casting fns should work with array args
 	!    * f32() doesn't exist (you can mul by 1.0 as a workaround)
 	!    * i32(), i64() done
+	!  - literals
+	!    * done
+	!    * some lex error message but be improvable
+	!    * hex float literals?  not worthwhile imo, but golang has them
 	!  - xor, xnor
 	!    * xor (bool1, bool2) is just (bool1 != bool2)
 	!    * xnor(bool1, bool2) is just (bool1 == bool2)

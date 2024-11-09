@@ -1547,14 +1547,23 @@ subroutine unit_test_literals(npass, nfail)
 			eval_i64("1'i64;") == 1, &
 			abs(eval_f32("1'f32;") - 1.0) < tol, &
 			abs(eval_f64("1'f64;") - 1.0d0) < tol, &
+			eval_i32("0o0;") == 0, &
+			eval_i32("0o1;") == 1, &
+			eval_i32("0o10;") == 8, &
+			eval_i32("0o10'i32;") == 8, &
+			eval_i64("0o10'i64;") == 8, &
+			eval_i32("0o377_7777_7777;") == -1, &
+			eval_i32("0o377_7777_7776;") == -2, &
+			eval    ("0o377_7777_7777'i64;") == "4294967295", &
+			eval_i32("0o1234_5670;") == 2739128, &
 			eval_i32("0x_1_;") == 1, &
 			eval_i32("0x__1___;") == 1, &
 			eval_i32("0xff;") == 255, &
 			eval_i32("0xffffffff;")     == -1, &  ! "overflow" is an intended feature
-			eval_i32("0xffffffff'i32;") == -1, &
-			eval_i64("0xffffffff'i64;") == int(2, 8) ** 32 - 1, &
-			eval    ("0xffffffff'i64;") == "4294967295", &
-			eval_i32("0xfffffffe;") == -2, &
+			eval_i32("0xffff_ffff'i32;") == -1, &
+			eval_i64("0xffff_ffff'i64;") == int(2, 8) ** 32 - 1, &
+			eval    ("0xffff_ffff'i64;") == "4294967295", &
+			eval_i32("0xffff_fffe;") == -2, &
 			eval_i32("0x10000;") == 65536, &
 			eval_i32("0x1_0000;") == 65536, &
 			eval_i32("0x1__0000;") == 65536, &

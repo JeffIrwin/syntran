@@ -648,6 +648,46 @@ end function is_hex_under
 
 !===============================================================================
 
+logical function is_oct(c)
+	! This is only applicable to octal digits, not the "0o" prefix
+
+	character, intent(in) :: c
+
+	is_oct = '0' <= c .and. c <= '7'
+
+end function is_oct
+
+!===============================================================================
+
+logical function is_oct_under(c)
+	character, intent(in) :: c
+
+	is_oct_under = is_oct(c) .or. c == "_"
+
+end function is_oct_under
+
+!===============================================================================
+
+logical function is_bin(c)
+	! This is only applicable to binary digits, not the "0b" prefix
+
+	character, intent(in) :: c
+
+	is_bin = '0' <= c .and. c <= '1'
+
+end function is_bin
+
+!===============================================================================
+
+logical function is_bin_under(c)
+	character, intent(in) :: c
+
+	is_bin_under = is_bin(c) .or. c == "_"
+
+end function is_bin_under
+
+!===============================================================================
+
 logical function is_sign(c)
 
 	character, intent(in) :: c

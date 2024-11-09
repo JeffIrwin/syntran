@@ -78,8 +78,9 @@ function lex(lexer) result(token)
 
 	start = lexer%pos
 
-	if (lexer%get_text(0,2) == "0x") then
+	!********
 
+	if (lexer%get_text(0,2) == "0x") then
 		! Hex literal
 		lexer%pos = lexer%pos + 2  ! skip "0x"
 
@@ -181,7 +182,114 @@ function lex(lexer) result(token)
 
 		token%unit_ = lexer%unit_
 		return
-	end if
+	end if  ! "0x"
+
+	!********
+
+	if (lexer%get_text(0,2) == "0o") then
+		! Octal literal
+		lexer%pos = lexer%pos + 2
+
+		do while (is_oct_under(lexer%current()))
+			! Lex literal body
+			lexer%pos = lexer%pos + 1
+		end do
+		end_ = lexer%pos
+
+		type = unknown_type
+		if (lexer%current() == "'") then
+			lexer%pos = lexer%pos + 1
+			!print *, "suffix"
+
+			! Lex literal type suffix
+			suffix_start = lexer%pos
+			do while (is_alphanum_under(lexer%current()))
+				lexer%pos = lexer%pos + 1
+			end do
+			suffix_end = lexer%pos
+
+			suffix = lexer%text(suffix_start: suffix_end-1)
+
+			! TODO: call lookup_type() on suffix? It would eliminate the magic
+			! strings like "i32" which are duplicated here, but we would still
+			! need a select/case here to block bad types (e.g. "f32")
+			select case (suffix)
+			case ("i32")
+				!print *, "i32"
+				type = i32_type
+			case ("i64")
+				type = i64_type
+			case default
+				! TODO: maybe hint in diag about which suffixes *are* allowed?
+				! Might want entirely different diag fns for oct vs dec instead
+				! of passing "oct" str arg
+				span = new_span(suffix_start, suffix_end - suffix_start)
+				call lexer%diagnostics%push(err_bad_type_suffix( &
+					lexer%context, span, suffix, "octal"))
+			end select
+
+		end if
+
+		text = lexer%text(start: end_ - 1)
+		text_strip = rm_char(text(3:), "_")
+
+		if (type == i32_type) then
+
+			read(text_strip, "(o20)", iostat = io) i32
+			if (io == exit_success) then
+				val   = new_literal_value(i32_type, i32 = i32)
+				token = new_token(i32_token, start, text, val)
+			else
+				token = new_token(bad_token, lexer%pos, text)
+				span = new_span(start, len(text))
+				call lexer%diagnostics%push(err_bad_oct32( &
+					lexer%context, span, text))
+			end if
+
+		else if (type == i64_type) then
+
+			read(text_strip, "(o36)", iostat = io) i64
+			if (io == exit_success) then
+				val   = new_literal_value(i64_type, i64 = i64)
+				token = new_token(i64_token, start, text, val)
+			else
+				token = new_token(bad_token, lexer%pos, text)
+				span = new_span(start, len(text))
+				call lexer%diagnostics%push(err_bad_oct64( &
+					lexer%context, span, text))
+			end if
+
+		else
+
+			! 16 chars should be sufficient. pad by an extra 4 for safety
+			read(text_strip, "(o20)", iostat = io) i32
+			if (io == exit_success) then
+
+				val   = new_literal_value(i32_type, i32 = i32)
+				token = new_token(i32_token, start, text, val)
+
+			else
+
+				read(text_strip, "(o36)", iostat = io) i64  ! 32 chars should suffice
+				if (io == exit_success) then
+
+					val   = new_literal_value(i64_type, i64 = i64)
+					token = new_token(i64_token, start, text, val)
+
+				else
+					token = new_token(bad_token, lexer%pos, text)
+					span = new_span(start, len(text))
+					call lexer%diagnostics%push(err_bad_oct64( &
+						lexer%context, span, text))
+				end if
+			end if
+		end if
+
+		token%unit_ = lexer%unit_
+		return
+	end if  ! "0o"
+
+	!********
 
 	if (is_digit_under(lexer%current())) then
 		! Numeric decimal integer or float
