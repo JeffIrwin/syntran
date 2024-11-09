@@ -102,6 +102,10 @@ function lex(lexer) result(token)
 			suffix_end = lexer%pos
 
 			suffix = lexer%text(suffix_start: suffix_end-1)
+
+			! TODO: call lookup_type() on suffix? It would eliminate the magic
+			! strings like "i32" which are duplicated here, but we would still
+			! need a select/case here to block bad types (e.g. "f32")
 			select case (suffix)
 			case ("i32")
 				!print *, "i32"
@@ -109,6 +113,9 @@ function lex(lexer) result(token)
 			case ("i64")
 				type = i64_type
 			case default
+				! TODO: maybe hint in diag about which suffixes *are* allowed?
+				! Might want entirely different diag fns for hex vs dec instead
+				! of passing "hex" str arg
 				span = new_span(suffix_start, suffix_end - suffix_start)
 				call lexer%diagnostics%push(err_bad_type_suffix( &
 					lexer%context, span, suffix, "hex"))
@@ -231,6 +238,9 @@ function lex(lexer) result(token)
 					lexer%context, span, suffix, "decimal"))
 			end select
 
+			! TODO: throw new diag if float and i32 or i64? Currently, `4.0'i32`
+			! throws err_bad_i32() which isn't exactly the right message
+
 		end if
 
 		text = lexer%text(start: end_ - 1)
@@ -251,7 +261,6 @@ function lex(lexer) result(token)
 				else
 					token = new_token(bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
-					! TODO: specific f32/f64 diags
 					call lexer%diagnostics%push(err_bad_f32( &
 						lexer%context, span, text))
 				end if
@@ -279,7 +288,7 @@ function lex(lexer) result(token)
 					token = new_token(bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
 					! TODO: specific i32/i64 diags
-					call lexer%diagnostics%push(err_bad_int( &
+					call lexer%diagnostics%push(err_bad_i32( &
 						lexer%context, span, text))
 				end if
 
@@ -292,7 +301,7 @@ function lex(lexer) result(token)
 				else
 					token = new_token(bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
-					call lexer%diagnostics%push(err_bad_int( &
+					call lexer%diagnostics%push(err_bad_i64( &
 						lexer%context, span, text))
 				end if
 
@@ -354,7 +363,7 @@ function lex(lexer) result(token)
 				else
 					token = new_token(bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
-					call lexer%diagnostics%push(err_bad_int( &
+					call lexer%diagnostics%push(err_bad_i64( &
 						lexer%context, span, text))
 				end if
 

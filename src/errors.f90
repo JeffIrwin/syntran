@@ -53,7 +53,7 @@ contains
 
 !===============================================================================
 
-function err_bad_int(context, span, num) result(err)
+function err_bad_i32(context, span, num) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
@@ -64,7 +64,22 @@ function err_bad_int(context, span, num) result(err)
 		//underline(context, span) &
 		//' bad integer'//color_reset
 
-end function err_bad_int
+end function err_bad_i32
+
+!===============================================================================
+
+function err_bad_i64(context, span, num) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: num
+	err = err_prefix//'bad i64 integer `'//num &
+		//'` does not fit in 64 bits' &
+		//underline(context, span) &
+		//' bad integer'//color_reset
+
+end function err_bad_i64
 
 !===============================================================================
 

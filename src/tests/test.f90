@@ -1519,7 +1519,7 @@ end subroutine unit_test_f64_mix
 subroutine unit_test_literals(npass, nfail)
 
 	! Hex, octal, and binary literals, use of "_" as numeric separators,
-	! explicit type suffixes, ...
+	! explicit type "'" suffixes, ...
 
 	implicit none
 
@@ -1539,6 +1539,8 @@ subroutine unit_test_literals(npass, nfail)
 		[   &
 			eval_i32("0x0;") == 0, &
 			eval_i32("0x1;") == 1, &
+			eval_i32(  "10;") == 5*2, &
+			eval_i32("0x10;") == 16, &
 			eval_i32("0x1'i32;") == 1, &
 			eval_i64("0x1'i64;") == 1, &
 			eval_i32("1'i32;") == 1, &
