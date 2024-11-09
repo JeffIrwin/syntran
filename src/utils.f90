@@ -727,6 +727,16 @@ end function is_alphanum
 
 !===============================================================================
 
+logical function is_alphanum_under(c)
+
+	character, intent(in) :: c
+
+	is_alphanum_under = is_letter(c) .or. is_digit(c) .or. c == "_"
+
+end function is_alphanum_under
+
+!===============================================================================
+
 logical function is_whitespace(c)
 
 	character, intent(in) :: c

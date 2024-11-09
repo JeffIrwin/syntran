@@ -68,7 +68,7 @@ end function err_bad_int
 
 !===============================================================================
 
-function err_bad_hex(context, span, num) result(err)
+function err_bad_hex32(context, span, num) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
@@ -79,7 +79,22 @@ function err_bad_hex(context, span, num) result(err)
 		//underline(context, span) &
 		//' bad hex integer'//color_reset
 
-end function err_bad_hex
+end function err_bad_hex32
+
+!===============================================================================
+
+function err_bad_hex64(context, span, num) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: num
+	err = err_prefix//'bad hexadecimal integer `'//num &
+		//'` does not fit in 64 bits' &
+		//underline(context, span) &
+		//' bad hex integer'//color_reset
+
+end function err_bad_hex64
 
 !===============================================================================
 
@@ -183,6 +198,21 @@ function err_bad_type(context, span, type) result(err)
 		//' bad type'//color_reset
 
 end function err_bad_type
+
+!===============================================================================
+
+function err_bad_type_suffix(context, span, type, literal_kind) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: type, literal_kind
+	err = err_prefix//'bad literal type suffix `'//type//'` after ' &
+		//literal_kind//' literal' &
+		//underline(context, span) &
+		//' bad type suffix'//color_reset
+
+end function err_bad_type_suffix
 
 !===============================================================================
 

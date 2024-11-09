@@ -1544,10 +1544,10 @@ subroutine unit_test_literals(npass, nfail)
 			eval_i32("0x_1_;") == 1, &
 			eval_i32("0x__1___;") == 1, &
 			eval_i32("0xff;") == 255, &
-			eval_i32("0xffffffff;") == -1, &  ! "overflow" is an intended feature
+			eval_i32("0xffffffff;")     == -1, &  ! "overflow" is an intended feature
 			eval_i32("0xffffffff'i32;") == -1, &
 			eval_i64("0xffffffff'i64;") == int(2, 8) ** 32 - 1, &
-			eval("0xffffffff'i64;") == "4294967295", &
+			eval    ("0xffffffff'i64;") == "4294967295", &
 			eval_i32("0xfffffffe;") == -2, &
 			eval_i32("0x10000;") == 65536, &
 			eval_i32("0x1_0000;") == 65536, &

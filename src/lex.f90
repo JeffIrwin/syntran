@@ -48,9 +48,9 @@ function lex(lexer) result(token)
 
 	!********
 
-	character(len = :), allocatable :: text, text_strip
+	character(len = :), allocatable :: text, text_strip, suffix
 
-	integer :: kind, type, start, end_, io
+	integer :: kind, type, start, end_, io, suffix_start, suffix_end
 	integer(kind = 4) :: i32
 	integer(kind = 8) :: i64
 
@@ -95,18 +95,25 @@ function lex(lexer) result(token)
 			lexer%pos = lexer%pos + 1
 			!print *, "suffix"
 
-			! I would use select/case, but types aren't all necessarily 3 chars long
-			if (lexer%get_text(0,3) == "i32") then
+			suffix_start = lexer%pos
+			do while (is_alphanum_under(lexer%current()))
+				lexer%pos = lexer%pos + 1
+			end do
+			suffix_end = lexer%pos
+
+			suffix = lexer%text(suffix_start: suffix_end-1)
+			select case (suffix)
+			case ("i32")
 				!print *, "i32"
 				type = i32_type
-				lexer%pos = lexer%pos + 3
-			else if (lexer%get_text(0,3) == "i64") then
+			case ("i64")
 				type = i64_type
-				lexer%pos = lexer%pos + 3
-			else
-				print *, "bad literal type suffix"
-				! TODO: specific diag
-			end if
+			case default
+				span = new_span(suffix_start, suffix_end - suffix_start)
+				call lexer%diagnostics%push(err_bad_type_suffix( &
+					lexer%context, span, suffix, "hex"))
+			end select
+
 		end if
 
 		text = lexer%text(start: end_ - 1)
@@ -121,8 +128,7 @@ function lex(lexer) result(token)
 			else
 				token = new_token(bad_token, lexer%pos, text)
 				span = new_span(start, len(text))
-				! TODO: i32 diag, not (default) i64
-				call lexer%diagnostics%push(err_bad_hex( &
+				call lexer%diagnostics%push(err_bad_hex32( &
 					lexer%context, span, text))
 			end if
 
@@ -135,7 +141,7 @@ function lex(lexer) result(token)
 			else
 				token = new_token(bad_token, lexer%pos, text)
 				span = new_span(start, len(text))
-				call lexer%diagnostics%push(err_bad_hex( &
+				call lexer%diagnostics%push(err_bad_hex64( &
 					lexer%context, span, text))
 			end if
 
@@ -160,7 +166,7 @@ function lex(lexer) result(token)
 				else
 					token = new_token(bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
-					call lexer%diagnostics%push(err_bad_hex( &
+					call lexer%diagnostics%push(err_bad_hex64( &
 						lexer%context, span, text))
 				end if
 			end if
