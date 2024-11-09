@@ -1541,6 +1541,10 @@ subroutine unit_test_literals(npass, nfail)
 			eval_i32("0x1;") == 1, &
 			eval_i32("0x1'i32;") == 1, &
 			eval_i64("0x1'i64;") == 1, &
+			eval_i32("1'i32;") == 1, &
+			eval_i64("1'i64;") == 1, &
+			abs(eval_f32("1'f32;") - 1.0) < tol, &
+			abs(eval_f64("1'f64;") - 1.0d0) < tol, &
 			eval_i32("0x_1_;") == 1, &
 			eval_i32("0x__1___;") == 1, &
 			eval_i32("0xff;") == 255, &

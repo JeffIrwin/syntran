@@ -91,10 +91,10 @@ function lex(lexer) result(token)
 
 		type = unknown_type
 		if (lexer%current() == "'") then
-			! Lex literal type suffix
 			lexer%pos = lexer%pos + 1
 			!print *, "suffix"
 
+			! Lex literal type suffix
 			suffix_start = lexer%pos
 			do while (is_alphanum_under(lexer%current()))
 				lexer%pos = lexer%pos + 1
@@ -134,7 +134,7 @@ function lex(lexer) result(token)
 
 		else if (type == i64_type) then
 
-			read(text_strip, "(z12)", iostat = io) i64
+			read(text_strip, "(z20)", iostat = io) i64
 			if (io == exit_success) then
 				val   = new_literal_value(i64_type, i64 = i64)
 				token = new_token(i64_token, start, text, val)
@@ -190,13 +190,9 @@ function lex(lexer) result(token)
 
 			lexer%pos = lexer%pos + 1
 		end do
+		end_ = lexer%pos
 
-		! TODO: think about this.  Is it consistent with the way that i32/i64
-		! vars are inferred on declaration from a literal?
-
-		! TODO: presence of "f" should force float regardless of whether there's
-		! a decimal point, e.g. "69f" should be float not int
-
+		! Legacy float-32 "f" type suffix.  Might break compat and remove?
 		float32 = .false.
 		float64 = .false.
 		if (float .and. lexer%current() == "f") then
@@ -205,16 +201,115 @@ function lex(lexer) result(token)
 		else if (float) then
 			float64 = .true.
 		end if
-		text = lexer%text(start: lexer%pos-1)
+
+		! Preferred apostrophe type suffix
+		type = unknown_type
+		if (lexer%current() == "'") then
+			lexer%pos = lexer%pos + 1
+			!print *, "suffix"
+
+			! Lex literal type suffix
+			suffix_start = lexer%pos
+			do while (is_alphanum_under(lexer%current()))
+				lexer%pos = lexer%pos + 1
+			end do
+			suffix_end = lexer%pos
+
+			suffix = lexer%text(suffix_start: suffix_end-1)
+			select case (suffix)
+			case ("f32")
+				type = f32_type
+			case ("f64")
+				type = f64_type
+			case ("i32")
+				type = i32_type
+			case ("i64")
+				type = i64_type
+			case default
+				span = new_span(suffix_start, suffix_end - suffix_start)
+				call lexer%diagnostics%push(err_bad_type_suffix( &
+					lexer%context, span, suffix, "decimal"))
+			end select
+
+		end if
+
+		text = lexer%text(start: end_ - 1)
 		text_strip = rm_char(text, "_")
 
 		!print *, 'float text = ', quote(text)
+
+		if (type /= unknown_type) then
+			! Handle explicit apostrophe type ascription suffixes
+
+			select case (type)
+			case (f32_type)
+
+				read(text_strip, *, iostat = io) f32
+				if (io == exit_success) then
+					val   = new_literal_value(f32_type, f32 = f32)
+					token = new_token(f32_token, start, text, val)
+				else
+					token = new_token(bad_token, lexer%pos, text)
+					span = new_span(start, len(text))
+					! TODO: specific f32/f64 diags
+					call lexer%diagnostics%push(err_bad_f32( &
+						lexer%context, span, text))
+				end if
+
+			case (f64_type)
+
+				read(text_strip, *, iostat = io) f64
+				if (io == exit_success) then
+					val   = new_literal_value(f64_type, f64 = f64)
+					token = new_token(f64_token, start, text, val)
+				else
+					token = new_token(bad_token, lexer%pos, text)
+					span = new_span(start, len(text))
+					call lexer%diagnostics%push(err_bad_f64( &
+						lexer%context, span, text))
+				end if
+
+			case (i32_type)
+
+				read(text_strip, *, iostat = io) i32
+				if (io == exit_success) then
+					val   = new_literal_value(i32_type, i32 = i32)
+					token = new_token(i32_token, start, text, val)
+				else
+					token = new_token(bad_token, lexer%pos, text)
+					span = new_span(start, len(text))
+					! TODO: specific i32/i64 diags
+					call lexer%diagnostics%push(err_bad_int( &
+						lexer%context, span, text))
+				end if
+
+			case (i64_type)
+
+				read(text_strip, *, iostat = io) i64
+				if (io == exit_success) then
+					val   = new_literal_value(i64_type, i64 = i64)
+					token = new_token(i64_token, start, text, val)
+				else
+					token = new_token(bad_token, lexer%pos, text)
+					span = new_span(start, len(text))
+					call lexer%diagnostics%push(err_bad_int( &
+						lexer%context, span, text))
+				end if
+
+			end select
+
+			return
+		end if
+
+		! Handle inferred type literals (and legacy "f" f32 suffix).  As noted
+		! above, I could clean this code up more if I broke compat and removed
+		! legacy f suffix
 
 		if (float32) then
 
 			! This io check can catch problems like `1.234e+1e+2` which look
 			! like a float but aren't correctly formatted
-			read(text_strip(1: len(text_strip)-1), *, iostat = io) f32
+			read(text_strip, *, iostat = io) f32
 			if (io /= exit_success) then
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_f32( &
