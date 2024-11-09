@@ -50,8 +50,7 @@ function lex(lexer) result(token)
 
 	character(len = :), allocatable :: text, text_strip
 
-	integer :: kind
-	integer :: start, io
+	integer :: kind, type, start, end_, io
 	integer(kind = 4) :: i32
 	integer(kind = 8) :: i64
 
@@ -85,33 +84,85 @@ function lex(lexer) result(token)
 		lexer%pos = lexer%pos + 2  ! skip "0x"
 
 		do while (is_hex_under(lexer%current()))
+			! Lex literal body
 			lexer%pos = lexer%pos + 1
 		end do
+		end_ = lexer%pos
 
-		text = lexer%text(start: lexer%pos-1)
+		type = unknown_type
+		if (lexer%current() == "'") then
+			! Lex literal type suffix
+			lexer%pos = lexer%pos + 1
+			!print *, "suffix"
+
+			! I would use select/case, but types aren't all necessarily 3 chars long
+			if (lexer%get_text(0,3) == "i32") then
+				!print *, "i32"
+				type = i32_type
+				lexer%pos = lexer%pos + 3
+			else if (lexer%get_text(0,3) == "i64") then
+				type = i64_type
+				lexer%pos = lexer%pos + 3
+			else
+				print *, "bad literal type suffix"
+				! TODO: specific diag
+			end if
+		end if
+
+		text = lexer%text(start: end_ - 1)
 		text_strip = rm_char(text(3:), "_")
 
-		! 8 chars should be sufficient. pad by an extra 4 for safety
-		read(text_strip, "(z12)", iostat = io) i32
-		if (io == exit_success) then
+		if (type == i32_type) then
 
-			val   = new_literal_value(i32_type, i32 = i32)
-			token = new_token(i32_token, start, text, val)
-
-		else
-
-			read(text_strip, "(z20)", iostat = io) i64  ! 16 chars should suffice
+			read(text_strip, "(z12)", iostat = io) i32
 			if (io == exit_success) then
+				val   = new_literal_value(i32_type, i32 = i32)
+				token = new_token(i32_token, start, text, val)
+			else
+				token = new_token(bad_token, lexer%pos, text)
+				span = new_span(start, len(text))
+				! TODO: i32 diag, not (default) i64
+				call lexer%diagnostics%push(err_bad_hex( &
+					lexer%context, span, text))
+			end if
 
-				!print *, "i64 = ", i64
+		else if (type == i64_type) then
+
+			read(text_strip, "(z12)", iostat = io) i64
+			if (io == exit_success) then
 				val   = new_literal_value(i64_type, i64 = i64)
 				token = new_token(i64_token, start, text, val)
-
 			else
 				token = new_token(bad_token, lexer%pos, text)
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_hex( &
 					lexer%context, span, text))
+			end if
+
+		else
+
+			! 8 chars should be sufficient. pad by an extra 4 for safety
+			read(text_strip, "(z12)", iostat = io) i32
+			if (io == exit_success) then
+
+				val   = new_literal_value(i32_type, i32 = i32)
+				token = new_token(i32_token, start, text, val)
+
+			else
+
+				read(text_strip, "(z20)", iostat = io) i64  ! 16 chars should suffice
+				if (io == exit_success) then
+
+					!print *, "i64 = ", i64
+					val   = new_literal_value(i64_type, i64 = i64)
+					token = new_token(i64_token, start, text, val)
+
+				else
+					token = new_token(bad_token, lexer%pos, text)
+					span = new_span(start, len(text))
+					call lexer%diagnostics%push(err_bad_hex( &
+						lexer%context, span, text))
+				end if
 			end if
 		end if
 
