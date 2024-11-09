@@ -1530,10 +1530,9 @@ subroutine unit_test_literals(npass, nfail)
 
 	logical, allocatable :: tests(:)
 
-	write(*,*) "Unit testing "//label//" ..."
+	double precision, parameter :: tol = 1.e-9
 
-	! TODO: test 0xffffffff after i settle.  i'm leaning towards interpretting
-	! it as -1_i32, but also rust and julia treat this is 4294967295
+	write(*,*) "Unit testing "//label//" ..."
 
 	tests = &
 		[   &
@@ -1543,11 +1542,16 @@ subroutine unit_test_literals(npass, nfail)
 			eval_i32("0x__1___;")  == 1, &
 			eval_i32("0xff;")  == 255, &
 			eval_i32("0xffffffff;")  == -1, &  ! "overflow" is an intended feature
+			eval_i32("0xfffffffe;")  == -2, &
 			eval_i32("0x10000;")  == 65536, &
 			eval_i32("0x1_0000;")  == 65536, &
 			eval_i32("0x1__0000;")  == 65536, &
 			eval_i32("0x1___0000;")  == 65536, &
 			eval_i32("0x1____0_0__0___0;")  == 65536, &
+			eval_i32("1_000_000;")  == 1000000, &
+			eval_i32("1_234_567;")  == 1234567, &
+			abs(eval_f64("1.234_567;") - 1.234567d0) < tol, &
+			abs(eval_f64("1._234_567_e3;") - 1234.567d0) < tol, &
 			eval_i64("0x1_0000_0000;")  == int(2, 8) ** 32, &
 			eval_i64("0x1_0000_0001;")  == int(2, 8) ** 32 + 1, &
 			eval_i32("0x0123;")  ==   291, &

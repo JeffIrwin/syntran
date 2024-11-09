@@ -125,17 +125,17 @@ function lex(lexer) result(token)
 		return
 	end if
 
-	if (is_digit(lexer%current())) then
+	if (is_digit_under(lexer%current())) then
 		! Numeric decimal integer or float
 
 		float = .false.
 
-		do while (is_float(lexer%current()))
+		do while (is_float_under(lexer%current()))
 
 			if (is_sign(lexer%current()) .and. .not. &
 				is_expo(lexer%peek(-1))) exit
 
-			float = float .or. .not. is_digit(lexer%current())
+			float = float .or. .not. is_digit_under(lexer%current())
 
 			lexer%pos = lexer%pos + 1
 		end do
@@ -155,6 +155,7 @@ function lex(lexer) result(token)
 			float64 = .true.
 		end if
 		text = lexer%text(start: lexer%pos-1)
+		text_strip = rm_char(text, "_")
 
 		!print *, 'float text = ', quote(text)
 
@@ -162,7 +163,7 @@ function lex(lexer) result(token)
 
 			! This io check can catch problems like `1.234e+1e+2` which look
 			! like a float but aren't correctly formatted
-			read(text(1: len(text)-1), *, iostat = io) f32
+			read(text_strip(1: len(text_strip)-1), *, iostat = io) f32
 			if (io /= exit_success) then
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_f32( &
@@ -176,7 +177,7 @@ function lex(lexer) result(token)
 
 			! This io check can catch problems like `1.234e+1e+2` which look
 			! like a float but aren't correctly formatted
-			read(text, *, iostat = io) f64
+			read(text_strip, *, iostat = io) f64
 			if (io /= exit_success) then
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_f64( &
@@ -188,7 +189,7 @@ function lex(lexer) result(token)
 
 		else
 
-			read(text, *, iostat = io) i32
+			read(text_strip, *, iostat = io) i32
 
 			if (io == exit_success) then
 
@@ -197,7 +198,7 @@ function lex(lexer) result(token)
 
 			else
 
-				read(text, *, iostat = io) i64
+				read(text_strip, *, iostat = io) i64
 
 				if (io == exit_success) then
 
@@ -283,7 +284,7 @@ function lex(lexer) result(token)
 		text = lexer%text(start: lexer%pos-1)
 
 		! This block handles booleans as well as identifiers, but note that it
-		! does not set the value here like the is_digit() case for numbers
+		! does not set the value here like the is_digit_under() case for numbers
 		! above.  The boolean value is not set until parse_primary_expr().
 
 		kind = get_keyword_kind(text)

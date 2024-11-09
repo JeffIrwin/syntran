@@ -613,6 +613,16 @@ end function is_digit
 
 !===============================================================================
 
+logical function is_digit_under(c)
+
+	character, intent(in) :: c
+
+	is_digit_under = is_digit(c) .or. c == "_"
+
+end function is_digit_under
+
+!===============================================================================
+
 logical function is_hex(c)
 	! This is only applicable to hex digits, not the "0x" prefix
 
@@ -684,6 +694,16 @@ logical function is_float(c)
 	is_float = is_digit(c) .or. is_sign(c) .or. is_expo(c) .or. c == '.'
 
 end function is_float
+
+!===============================================================================
+
+logical function is_float_under(c)
+
+	character, intent(in) :: c
+
+	is_float_under = is_float(c) .or. c == "_"
+
+end function is_float_under
 
 !===============================================================================
 
