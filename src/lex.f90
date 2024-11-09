@@ -30,7 +30,7 @@ module syntran__lex_m
 		! tokens
 		contains
 			procedure :: lex, peek => peek_char, current => current_char, &
-				lookahead => lookahead_char, read_single_line_comment
+				lookahead => lookahead_char, read_single_line_comment, get_text
 
 	end type lexer_t
 
@@ -79,13 +79,7 @@ function lex(lexer) result(token)
 
 	start = lexer%pos
 
-	! TODO: can we add a method to grab 2 (or more) chars at a time from lexer
-	! instead of looking at current() .and. lookahead() (and peek())?  There is
-	! lexer%text() but it could go out-of-bounds.  Add a bounds-safe %get_text()
-	! method
-	if ( &
-		lexer%current()   == "0" .and. &
-		lexer%lookahead() == "x") then
+	if (lexer%get_text(0,2) == "0x") then
 
 		! Hex literal
 		lexer%pos = lexer%pos + 2  ! skip "0x"
@@ -295,8 +289,7 @@ function lex(lexer) result(token)
 	end if
 
 	if (lexer%pos == 1           .and. &
-		lexer%current()   == "#" .and. &
-		lexer%lookahead() == "!") then
+		lexer%get_text(0,2) == "#!") then
 
 		! Handle a special shebang `#!` case at very beginning of file and
 		! ignore the rest of the first line
@@ -514,6 +507,25 @@ character function peek_char(lexer, offset)
 	peek_char = lexer%text(pos: pos)
 
 end function peek_char
+
+!===============================================================================
+
+function get_text(lexer, start, end_) result(text)
+	! start and end_ are 0-based offset indices.  start offset is inclusive,
+	! end_ is exclusive
+
+	class(lexer_t) :: lexer
+	integer, intent(in) :: start, end_
+	character(len = :), allocatable :: text
+
+	text = lexer%text( &
+		max(lexer%pos + start   , 1) : &
+		min(lexer%pos + end_ - 1, len(lexer%text)) &
+	)
+
+	!print *, "text = """, text, """"
+
+end function get_text
 
 !===============================================================================
 
