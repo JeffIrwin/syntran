@@ -822,6 +822,9 @@ function lex(lexer) result(token)
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
 				token = new_token(greater_equals_token, lexer%pos, ">=")
+			else if (lexer%lookahead() == ">") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(ggreater_token, lexer%pos, ">>")
 			else
 				token = new_token(greater_token, lexer%pos, lexer%current())
 			end if

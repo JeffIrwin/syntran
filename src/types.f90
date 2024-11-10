@@ -1528,7 +1528,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = is_num_type(left) .and. is_num_type(right)
 			end if
 
-		case (lless_token)
+		case (lless_token, ggreater_token)
 			! Bitwise shift operators work on any combination of ints
 
 			if (left == array_type .and. right == array_type) then
@@ -1922,12 +1922,14 @@ recursive integer function get_binary_op_kind( &
 			kind_ = bool_type
 		end if
 
-	case (lless_token)
+	case (lless_token, ggreater_token)
 		! Bitwise shifts return the left operand's type for scalars
 		if (left == array_type .or. right == array_type) then
 
+			! This logic could be refactored, could probably lose an indentation
+			! level
 			if (left == array_type) then
-				! All arrays
+				! Left array, right scalar or array
 				if (left_arr == i32_type) then
 					kind_ = i32_array_type
 				else
