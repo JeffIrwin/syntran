@@ -86,6 +86,10 @@ module syntran__core_m
 	!        non-negative.  c says it's undefined behavior to shift negative.
 	!        is there anything i should catch?  it would have to be a runtime
 	!        check if any.  actual result seems to shift circularly
+	!      > according to msvc, operands of bitwise and, xor, etc. can have
+	!        different sizes. seems dangerous.  should it be allowed? what does
+	!        rust do?
+	!          https://learn.microsoft.com/en-us/cpp/c-language/c-bitwise-operators?view=msvc-170
 	!      > done:
 	!        + <<, >>
 	!    * these features are especially useful when implementing encryption,
@@ -218,7 +222,7 @@ module syntran__core_m
 	!    * done
 	!    * some lex error messages might be improvable
 	!    * hex float literals?  not worthwhile imo, but c++ and golang have them
-	!  - xor, xnor
+	!  - logical xor, xnor
 	!    * xor (bool1, bool2) is just (bool1 != bool2)
 	!    * xnor(bool1, bool2) is just (bool1 == bool2)
 	!    * is there any value to having plain language versions of these

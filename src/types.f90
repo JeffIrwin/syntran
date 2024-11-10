@@ -1541,6 +1541,20 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = is_int_type(left) .and. is_int_type(right)
 			end if
 
+		case (xor_token)
+			! Other bitwise binary operators (besides shift) only work on ints
+			! of matching sizes (both 32 or 64 bit)
+
+			if (left == array_type .and. right == array_type) then
+				allowed = left_arr == right_arr
+			else if (left == array_type) then
+				allowed = left_arr == right
+			else if (right == array_type) then
+				allowed = left == right_arr
+			else
+				allowed = left == right
+			end if
+
 		case (and_keyword, or_keyword)
 
 			if (left == array_type .and. right == array_type) then
@@ -1683,7 +1697,6 @@ integer function get_binary_op_prec(kind) result(prec)
 
 	select case (kind)
 
-
 		! Follow C operator precedence here, except possible for bitwise and/or
 		!
 		! Ref:  https://en.cppreference.com/w/c/language/operator_precedence
@@ -1733,6 +1746,7 @@ integer function get_binary_op_prec(kind) result(prec)
 			prec = 0
 
 	end select
+	!print *, "prec = ", prec
 
 end function get_binary_op_prec
 

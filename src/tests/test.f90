@@ -1682,6 +1682,22 @@ subroutine unit_test_bitwise(npass, nfail)
 			eval_i32("0b10110000 >> 4;") == eval_i32("0b00001011;"), &
 			eval("1024 >> [0: 4];") == "[1024, 512, 256, 128]", &
 			eval("1024'i64 >> [0: 4];") == "[1024, 512, 256, 128]", &
+			eval_i32("0 ^ 0;") == 0, &
+			eval_i32("1 ^ 1;") == 0, &
+			eval_i32("255 ^ 255;") == 0, &
+			eval_i32("0xff00 ^ 0x00ff;") == eval_i32("0xffff;"), &
+			eval("(0xff00 ^ 0x00ff) == 0xffff;") == "true", &  ! TODO: prec shouldn't need parentheses?
+			eval("(0xf00f ^ 0x0ff0) == 0xffff;") == "true", &
+			eval("(0b1010 ^ 0b0101) == 0b1111;") == "true", &
+			eval("(0b1011 ^ 0b0101) == 0b1110;") == "true", &
+			eval("(0b1011'i64 ^ 0b0101'i64) == 0b1110;") == "true", &
+			eval("(0b1010 ^ 0b0001) == 0b1011;") == "true", &
+			eval("all(([0b1010] ^ 0b0001) == [0b1011]);") == "true", &
+			eval("all(([0b1110, 0b1101] ^ 0b1111) == [0b0001, 0b0010]);") == "true", &
+			eval("all((i64([0b1110, 0b1101]) ^ 0b1111'i64) == [0b0001, 0b0010]);") == "true", &
+			eval("all(([0b1110, 0b1101, 0b1011, 0b0111] ^ 0b1111) == [0b0001, 0b0010, 0b0100, 0b1000]);") == "true", &
+			eval("all((0b0000 ^ [0b1110, 0b1101, 0b1011, 0b0111]) == [0b1110, 0b1101, 0b1011, 0b0111]);") == "true", &
+			eval("all(([0b1110, 0b1101] ^ [0b1111, 0b0000]) == [0b0001, 0b1101]);") == "true", &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
