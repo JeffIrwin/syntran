@@ -1541,7 +1541,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = is_int_type(left) .and. is_int_type(right)
 			end if
 
-		case (bit_xor_token)
+		case (bit_xor_token, bit_or_token)
 			! Other bitwise binary operators (besides shift) only work on ints
 			! of matching sizes (both 32 or 64 bit)
 

@@ -1699,6 +1699,9 @@ subroutine unit_test_bitwise(npass, nfail)
 			eval("all(([0b1110, 0b1101, 0b1011, 0b0111] ^ 0b1111) == [0b0001, 0b0010, 0b0100, 0b1000]);") == "true", &
 			eval("all((0b0000 ^ [0b1110, 0b1101, 0b1011, 0b0111]) == [0b1110, 0b1101, 0b1011, 0b0111]);") == "true", &
 			eval("all(([0b1110, 0b1101] ^ [0b1111, 0b0000]) == [0b0001, 0b1101]);") == "true", &
+			eval("0xff00 | 0x00ff == 0xffff;") == "true", &
+			eval("0xffff | 0x00ff == 0xffff;") == "true", &
+			eval("0xffed | 0x00ff == 0xffff;") == "true", &  ! TODO: more bitwise or tests
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

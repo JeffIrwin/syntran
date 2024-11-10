@@ -12,6 +12,7 @@ module syntran__eval_m
 	use syntran__math_left_shift_m
 	use syntran__math_right_shift_m
 	use syntran__math_bit_xor_m
+	use syntran__math_bit_or_m
 
 	use syntran__types_m
 
@@ -248,6 +249,9 @@ recursive subroutine eval_binary_expr(node, state, res)
 
 	case (bit_xor_token)
 		call bit_xor(left, right, res, node%op%text)
+
+	case (bit_or_token)
+		call bit_or(left, right, res, node%op%text)
 
 	case default
 		write(*,*) err_eval_binary_op(node%op%text)
