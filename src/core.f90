@@ -80,15 +80,14 @@ module syntran__core_m
 	!        + i think c uses ~ because ! is already logical not, which can cast
 	!          ints to bools.  i'll prefer the rust style operator
 	!      > xor: ^
-	!      > lsh: << (shiftl(), i.e. left shift, not circular. note fortran's
-	!        cshift is array, not bitwise)
-	!      > rsh: >>
 	!      > compound assignment for all of the above
 	!      >
 	!      > according to c (and fortran), right operand of shift should be
 	!        non-negative.  c says it's undefined behavior to shift negative.
 	!        is there anything i should catch?  it would have to be a runtime
 	!        check if any.  actual result seems to shift circularly
+	!      > done:
+	!        + <<, >>
 	!    * these features are especially useful when implementing encryption,
 	!      hashing, utf, base64, and rng algorithms
 	!    * reinterpret cast -- used in quake fast inverse sqrt algo
