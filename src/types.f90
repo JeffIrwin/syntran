@@ -1697,12 +1697,29 @@ integer function get_binary_op_prec(kind) result(prec)
 
 	select case (kind)
 
-		! Follow C operator precedence here, except possible for bitwise and/or
+		! Syntran operator precedence is closest to rust:
 		!
-		! Ref:  https://en.cppreference.com/w/c/language/operator_precedence
+		!     https://doc.rust-lang.org/reference/expressions.html
+		!
+		! The exception is that ordering comparisons <, >, <=, and >= have
+		! higher precedence than (in)equality comparisons == and !=.  In rust,
+		! all comparisons have the same precedence.
+		!
+		! This is somewhat similar to C, except for bitwise and `&`, bitwise or
+		! `|`, and bitwise xor `^`, which have higher precedence here (and in
+		! rust) than comparisons.  The fact that C works this way could be
+		! considered a poor design, but it is due to historical reasons
+		! predating even C, according to Dennis Ritchie:
+		!
+		!    http://cm.bell-labs.co/who/dmr/chist.html
+		!
+		! C (and C++) precedence:
+		!
+		!    https://en.cppreference.com/w/c/language/operator_precedence
 		!
 		! Note that here, a higher `prec` int return value means higher
-		! precedence, while the ref is the opposite
+		! precedence, while the C++ ref is the opposite numerically (but the
+		! same top to bottom)
 
 		!********
 
@@ -1717,23 +1734,23 @@ integer function get_binary_op_prec(kind) result(prec)
 		case (plus_token, minus_token)
 			prec = 9
 
-		case (lless_token, ggreater_token)
+		case (lless_token, ggreater_token) ! `<<`, `>>`
 			prec = 8
+
+		case (and_token) ! `&` (bitwise and)
+			prec = 7
+
+		case (xor_token) ! `^` (bitwise xor)
+			prec = 6
+
+		case ( or_token) ! `|` (bitwise or)
+			prec = 5
 
 		case (less_token, less_equals_token, &
 				greater_token, greater_equals_token)
-			prec = 7
-
-		case (eequals_token, bang_equals_token)
-			prec = 6
-
-		case (and_token) ! `&` (bitwise and)
-			prec = 5
-
-		case (xor_token) ! `^` (bitwise xor)
 			prec = 4
 
-		case (or_token) ! `|` (bitwise or)
+		case (eequals_token, bang_equals_token)
 			prec = 3
 
 		case (and_keyword)  ! `and` (logical)

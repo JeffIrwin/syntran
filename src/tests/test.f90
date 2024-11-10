@@ -1686,7 +1686,8 @@ subroutine unit_test_bitwise(npass, nfail)
 			eval_i32("1 ^ 1;") == 0, &
 			eval_i32("255 ^ 255;") == 0, &
 			eval_i32("0xff00 ^ 0x00ff;") == eval_i32("0xffff;"), &
-			eval("(0xff00 ^ 0x00ff) == 0xffff;") == "true", &  ! TODO: prec shouldn't need parentheses?
+			eval("(0xff00 ^ 0x00ff) == 0xffff;") == "true", &
+			eval("0xff00 ^ 0x00ff == 0xffff;") == "true", &  ! ^ vs == precedence matches rust, not c
 			eval("(0xf00f ^ 0x0ff0) == 0xffff;") == "true", &
 			eval("(0b1010 ^ 0b0101) == 0b1111;") == "true", &
 			eval("(0b1011 ^ 0b0101) == 0b1110;") == "true", &

@@ -18,7 +18,7 @@ module syntran__consts_m
 	integer, parameter ::          &
 			not_token            = 112, &
 			xor_token            = 111, &
-			or_token             = 110, &
+			or_token             = 110, &  ! TODO: rename (bitwise) tokens to distinguish from logical kwords
 			and_token            = 109, &
 			ggreater_token       = 108, &
 			lless_token          = 107, &
