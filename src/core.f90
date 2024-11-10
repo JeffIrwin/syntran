@@ -84,6 +84,11 @@ module syntran__core_m
 	!        cshift is array, not bitwise)
 	!      > rsh: >>
 	!      > compound assignment for all of the above
+	!      >
+	!      > according to c (and fortran), right operand of shift should be
+	!        non-negative.  c says it's undefined behavior to shift negative.
+	!        is there anything i should catch?  it would have to be a runtime
+	!        check if any.  actual result seems to shift circularly
 	!    * these features are especially useful when implementing encryption,
 	!      hashing, utf, base64, and rng algorithms
 	!    * reinterpret cast -- used in quake fast inverse sqrt algo

@@ -1530,8 +1530,16 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 
 		case (less_less_token)
 			! Bitwise shift operators work on any combination of ints
-			allowed = is_int_type(left) .and. is_int_type(right)
-			! TODO: arrays in elemental sense
+
+			if (left == array_type .and. right == array_type) then
+				allowed = is_int_type(left_arr) .and. is_int_type(right_arr)
+			else if (left == array_type) then
+				allowed = is_int_type(left_arr) .and. is_int_type(right)
+			else if (right == array_type) then
+				allowed = is_int_type(left) .and. is_int_type(right_arr)
+			else
+				allowed = is_int_type(left) .and. is_int_type(right)
+			end if
 
 		case (and_keyword, or_keyword)
 
@@ -1870,8 +1878,11 @@ end function new_unary_expr
 
 !===============================================================================
 
-recursive integer function get_binary_op_kind(left, op, right, &
-		left_arr, right_arr) result(kind_)
+recursive integer function get_binary_op_kind( &
+		left, op, right, &
+		left_arr, right_arr &
+		) &
+		result(kind_)
 
 	! Return the resulting type yielded by operator op on operands left and
 	! right
@@ -1895,9 +1906,29 @@ recursive integer function get_binary_op_kind(left, op, right, &
 		end if
 
 	case (less_less_token)
-		! Bitwise shifts always return the left operand's type
-		kind_ = left
-		! TODO: arrays
+		! Bitwise shifts return the left operand's type for scalars
+		if (left == array_type .or. right == array_type) then
+
+			if (left == array_type) then
+				! All arrays
+				if (left_arr == i32_type) then
+					kind_ = i32_array_type
+				else
+					kind_ = i64_array_type
+				end if
+			else
+				! Left scalar, right array
+				if (left == i32_type) then
+					kind_ = i32_array_type
+				else
+					kind_ = i64_array_type
+				end if
+			end if
+
+		else
+			! All scalars
+			kind_ = left
+		end if
 
 	case default
 		!print *, 'default'
