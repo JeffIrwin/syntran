@@ -30,6 +30,13 @@ module syntran__core_m
 		syntran_patch =  54
 
 	! TODO:
+	!  - raw string literals
+	!    * easier to include quotes without doubling
+	!    * follow rust style:
+	!      + let str1 = r#" my raw str with "quotes" "#;
+	!      + let str2 = r##" my raw str with "#quotes"# "##;
+	!      + number of hashes at start matches end
+	!      + any use for zero hashes?  r"raw str"
 	!  - f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
@@ -66,9 +73,19 @@ module syntran__core_m
 	!    is bottleneck and not parsing, but i haven't actually benchmarked poor
 	!    perf of intel compilers for AOC solution tests
 	!  - hacker sdk:
-	!    * bitwise operations: shift left and right, and, or, not, xor
+	!    * bitwise operations
+	!      > and: &
+	!      > or : |
+	!      > not: ! (rust) or ~ (c)?
+	!        + i think c uses ~ because ! is already logical not, which can cast
+	!          ints to bools.  i'll prefer the rust style operator
+	!      > xor: ^
+	!      > lsh: << (shiftl(), i.e. left shift, not circular. note fortran's
+	!        cshift is array, not bitwise)
+	!      > rsh: >>
+	!      > compound assignment for all of the above
 	!    * these features are especially useful when implementing encryption,
-	!      hashing, utf, and rng algorithms
+	!      hashing, utf, base64, and rng algorithms
 	!    * reinterpret cast -- used in quake fast inverse sqrt algo
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
