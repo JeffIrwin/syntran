@@ -813,7 +813,7 @@ function lex(lexer) result(token)
 				token = new_token(less_equals_token, lexer%pos, "<=")
 			else if (lexer%lookahead() == "<") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(less_less_token, lexer%pos, "<<")
+				token = new_token(lless_token, lexer%pos, "<<")
 			else
 				token = new_token(less_token, lexer%pos, lexer%current())
 			end if

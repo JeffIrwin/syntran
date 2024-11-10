@@ -1528,7 +1528,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = is_num_type(left) .and. is_num_type(right)
 			end if
 
-		case (less_less_token)
+		case (lless_token)
 			! Bitwise shift operators work on any combination of ints
 
 			if (left == array_type .and. right == array_type) then
@@ -1660,8 +1660,9 @@ integer function get_unary_op_prec(kind) result(prec)
 
 	select case (kind)
 
-		case (plus_token, minus_token, not_keyword)
-			prec = 8
+		case (plus_token, minus_token, not_keyword, not_token)
+			! arithmetic +, arithmetic -, logical not, bitwise not
+			prec = 12
 
 		case default
 			prec = 0
@@ -1682,34 +1683,50 @@ integer function get_binary_op_prec(kind) result(prec)
 
 	select case (kind)
 
-		! FIXME: increment the unary operator precedence above after increasing
-		! the max binary precedence
 
 		! Follow C operator precedence here, except possible for bitwise and/or
+		!
+		! Ref:  https://en.cppreference.com/w/c/language/operator_precedence
+		!
+		! Note that here, a higher `prec` int return value means higher
+		! precedence, while the ref is the opposite
 
+		!********
+
+		! FIXME: increment the unary operator precedence in the fn above after
+		! increasing the max binary precedence
 		case (sstar_token)
-			prec = 8
+			prec = 11
 
 		case (star_token, slash_token, percent_token)
-			prec = 7
+			prec = 10
 
 		case (plus_token, minus_token)
-			prec = 6
+			prec = 9
+
+		case (lless_token, ggreater_token)
+			prec = 8
 
 		case (less_token, less_equals_token, &
 				greater_token, greater_equals_token)
-			prec = 5
-
-		case (less_less_token)
-			prec = 4
+			prec = 7
 
 		case (eequals_token, bang_equals_token)
+			prec = 6
+
+		case (and_token) ! `&` (bitwise and)
+			prec = 5
+
+		case (xor_token) ! `^` (bitwise xor)
+			prec = 4
+
+		case (or_token) ! `|` (bitwise or)
 			prec = 3
 
-		case (and_keyword)
+		case (and_keyword)  ! `and` (logical)
 			prec = 2
 
-		case (or_keyword)
+		case (or_keyword)  ! `or` (logical)
 			prec = 1
 
 		case default
@@ -1905,7 +1922,7 @@ recursive integer function get_binary_op_kind( &
 			kind_ = bool_type
 		end if
 
-	case (less_less_token)
+	case (lless_token)
 		! Bitwise shifts return the left operand's type for scalars
 		if (left == array_type .or. right == array_type) then
 

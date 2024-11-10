@@ -235,7 +235,7 @@ recursive subroutine eval_binary_expr(node, state, res)
 	case (greater_equals_token)
 		call is_ge(left, right, res, node%op%text)
 
-	case (less_less_token)
+	case (lless_token)
 		call left_shift(left, right, res, node%op%text)
 
 	case default
