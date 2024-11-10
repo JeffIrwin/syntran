@@ -1528,6 +1528,11 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = is_num_type(left) .and. is_num_type(right)
 			end if
 
+		case (less_less_token)
+			! Bitwise shift operators work on any combination of ints
+			allowed = is_int_type(left) .and. is_int_type(right)
+			! TODO: arrays in elemental sense
+
 		case (and_keyword, or_keyword)
 
 			if (left == array_type .and. right == array_type) then
@@ -1675,16 +1680,19 @@ integer function get_binary_op_prec(kind) result(prec)
 		! Follow C operator precedence here, except possible for bitwise and/or
 
 		case (sstar_token)
-			prec = 7
+			prec = 8
 
 		case (star_token, slash_token, percent_token)
-			prec = 6
+			prec = 7
 
 		case (plus_token, minus_token)
-			prec = 5
+			prec = 6
 
 		case (less_token, less_equals_token, &
 				greater_token, greater_equals_token)
+			prec = 5
+
+		case (less_less_token)
 			prec = 4
 
 		case (eequals_token, bang_equals_token)
@@ -1885,6 +1893,11 @@ recursive integer function get_binary_op_kind(left, op, right, &
 		else
 			kind_ = bool_type
 		end if
+
+	case (less_less_token)
+		! Bitwise shifts always return the left operand's type
+		kind_ = left
+		! TODO: arrays
 
 	case default
 		!print *, 'default'

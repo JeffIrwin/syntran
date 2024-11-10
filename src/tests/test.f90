@@ -1628,6 +1628,51 @@ end subroutine unit_test_literals
 
 !===============================================================================
 
+subroutine unit_test_bitwise(npass, nfail)
+
+	! Bitwise operators: shift, and, xor, etc.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = "bitwise operators"
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) "Unit testing "//label//" ..."
+
+	tests = &
+		[   &
+			eval_i32("1 << 0;") == 1, &
+			eval_i32("1 << 1;") == 2, &
+			eval_i32("1 << 3;") == 8, &
+			eval_i32("0x0f << 4;") == 15*16, &
+			eval_i32("0x0f << 4;") == eval_i32("0xf0;"), &
+			eval_i32("0x00ff << 8;") == eval_i32("0xff00;"), &
+			eval_i32("0x00ff00 << 8;") == eval_i32("0xff0000;"), &
+			eval_i32("0xff00_0000 << 1;") == eval_i32("0xfe00_0000;"), &
+			eval_i32("0xff00_0000 << 4;") == eval_i32("0xf000_0000;"), &
+			eval_i32("0xff00_0000 << 8;") == eval_i32("0x0000_0000;"), &
+			eval_i32("0b00001011 << 0;") == eval_i32("0b00001011;"), &
+			eval_i32("0b00001011 << 1;") == eval_i32("0b00010110;"), &
+			eval_i32("0b00001011 << 2;") == eval_i32("0b00101100;"), &
+			eval_i32("0b00001011 << 3;") == eval_i32("0b01011000;"), &
+			eval_i32("0b00001011 << 4;") == eval_i32("0b10110000;"), &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_bitwise
+
+!===============================================================================
+
 subroutine unit_test_i64(npass, nfail)
 
 	! Simple i64 integer tests of arithmetic with single-line
@@ -4217,6 +4262,7 @@ subroutine unit_tests(iostat)
 	call unit_test_struct_1   (npass, nfail)
 	call unit_test_f64_mix    (npass, nfail)
 	call unit_test_literals   (npass, nfail)
+	call unit_test_bitwise    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
