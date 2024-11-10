@@ -1541,7 +1541,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = is_int_type(left) .and. is_int_type(right)
 			end if
 
-		case (xor_token)
+		case (bit_xor_token)
 			! Other bitwise binary operators (besides shift) only work on ints
 			! of matching sizes (both 32 or 64 bit)
 
@@ -1674,7 +1674,7 @@ integer function get_unary_op_prec(kind) result(prec)
 
 	select case (kind)
 
-		case (plus_token, minus_token, not_keyword, not_token)
+		case (plus_token, minus_token, not_keyword, bit_not_token)
 			! arithmetic +, arithmetic -, logical not, bitwise not
 			prec = 12
 
@@ -1737,13 +1737,13 @@ integer function get_binary_op_prec(kind) result(prec)
 		case (lless_token, ggreater_token) ! `<<`, `>>`
 			prec = 8
 
-		case (and_token) ! `&` (bitwise and)
+		case (bit_and_token) ! `&`
 			prec = 7
 
-		case (xor_token) ! `^` (bitwise xor)
+		case (bit_xor_token) ! `^`
 			prec = 6
 
-		case ( or_token) ! `|` (bitwise or)
+		case (bit_or_token ) ! `|`
 			prec = 5
 
 		case (less_token, less_equals_token, &
@@ -1753,7 +1753,7 @@ integer function get_binary_op_prec(kind) result(prec)
 		case (eequals_token, bang_equals_token)
 			prec = 3
 
-		case (and_keyword)  ! `and` (logical)
+		case (and_keyword)  ! `and` (logical, not bitwise)
 			prec = 2
 
 		case (or_keyword)  ! `or` (logical)

@@ -830,7 +830,7 @@ function lex(lexer) result(token)
 			end if
 
 		case ("^")
-			token = new_token(xor_token, lexer%pos, lexer%current())
+			token = new_token(bit_xor_token, lexer%pos, lexer%current())
 
 		case default
 

@@ -1,7 +1,7 @@
 
 !===============================================================================
 
-module syntran__math_xor_m
+module syntran__math_bit_xor_m
 
 	! Unlike math_bin_*.f90, this source was manually generated, but by copying
 	! from src/math_bit_left_shift.f90 and removing all the size mismatch cases
@@ -13,9 +13,9 @@ module syntran__math_xor_m
 
 	implicit none
 
-	interface xor
-		module procedure xor_value_t
-	end interface xor
+	interface bit_xor
+		module procedure bit_xor_value_t
+	end interface bit_xor
 
 !===============================================================================
 
@@ -23,7 +23,7 @@ contains
 
 !===============================================================================
 
-subroutine xor_value_t(left, right, res, op_text)
+subroutine bit_xor_value_t(left, right, res, op_text)
 
 	type(value_t), intent(in)  :: left, right
 
@@ -114,11 +114,11 @@ subroutine xor_value_t(left, right, res, op_text)
 		call internal_error()
 	end select
 
-end subroutine xor_value_t
+end subroutine bit_xor_value_t
 
 !===============================================================================
 
-end module syntran__math_xor_m
+end module syntran__math_bit_xor_m
 
 !===============================================================================
 

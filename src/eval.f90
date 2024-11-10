@@ -11,7 +11,7 @@ module syntran__eval_m
 	! consider grouping/encapsulating in a math bitwise module?
 	use syntran__math_left_shift_m
 	use syntran__math_right_shift_m
-	use syntran__math_xor_m
+	use syntran__math_bit_xor_m
 
 	use syntran__types_m
 
@@ -246,8 +246,8 @@ recursive subroutine eval_binary_expr(node, state, res)
 	case (ggreater_token)
 		call right_shift(left, right, res, node%op%text)
 
-	case (xor_token)
-		call xor(left, right, res, node%op%text)
+	case (bit_xor_token)
+		call bit_xor(left, right, res, node%op%text)
 
 	case default
 		write(*,*) err_eval_binary_op(node%op%text)
