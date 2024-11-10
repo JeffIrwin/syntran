@@ -682,6 +682,18 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(log10([0.01, 0.1]));') - sum(log10([0.01d0, 0.1d0])))  < tol,  &
 			abs(eval_f64('sum(log10([0.5, 0.1]));') - sum(log10([0.5d0, 0.1d0]))) < tol,  &
 			abs(eval_f64('sum(log10([0.2, 0.1]));') - sum(log10([0.2d0, 0.1d0])))  < tol,  &
+			abs(eval_f32('log2(0.01f);') - log(0.01)/log(2.d0)) < ftol,  &
+			abs(eval_f32('log2(0.1f);') - log(0.1)/log(2.d0)) < ftol,  &
+			abs(eval_f64('log2(0.01);') - log(0.01d0)/log(2.d0)) < tol,  &
+			abs(eval_f64('log2(0.1);') - log(0.1d0)/log(2.d0)) < tol,  &
+			abs(eval_f64('log2(8.0);') - 3.0) < tol,  &
+			abs(eval_f64('log2(32.0);') - 5.0) < tol,  &
+			abs(eval_f32('sum(log2([0.01f, 0.1f]));') - sum(log([0.01, 0.1])/log(2.d0)))   < ftol,  &
+			abs(eval_f32('sum(log2([0.5f, 0.1f]));') - sum(log([0.5, 0.1])/log(2.d0)))   < ftol,  &
+			abs(eval_f32('sum(log2([0.2f, 0.1f]));') - sum(log([0.2, 0.1])/log(2.d0)))   < ftol,  &
+			abs(eval_f64('sum(log2([0.01, 0.1]));') - sum(log([0.01d0, 0.1d0])/log(2.d0)))  < tol,  &
+			abs(eval_f64('sum(log2([0.5, 0.1]));') - sum(log([0.5d0, 0.1d0])/log(2.d0))) < tol,  &
+			abs(eval_f64('sum(log2([0.2, 0.1]));') - sum(log([0.2d0, 0.1d0])/log(2.d0)))  < tol,  &
 			abs(eval_f32('sqrt(1.0f);') - sqrt(1.0)) < ftol,  &
 			abs(eval_f64('sqrt(4.0);') - sqrt(4.0d0)) < tol,  &
 			abs(eval_f32('sum(sqrt([0.2f, 0.1f]));') - sum(sqrt([0.2, 0.1])))   < ftol,  &

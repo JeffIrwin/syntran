@@ -158,9 +158,9 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      + log2, (gamma, log_gamma?)
 	!      + trig: atan2, (sec, cos, hyperbolic, ... ?)
 	!      + bessel_jn
+	!      + gamma, log_gamma?
 	!      + reshape
 	!      + system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
@@ -168,7 +168,7 @@ module syntran__core_m
 	!      + abs, sqrt
 	!      + exp
 	!        > need documentation for elemental array overloading
-	!      + log, log10
+	!      + log, log10, log2
 	!      + norm2, dot
 	!        > boolean dot not implemented yet
 	!      + sind, cosd, tand, asind, acosd, atand

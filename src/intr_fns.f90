@@ -35,6 +35,7 @@ subroutine declare_intr_fns(fns)
 		exp_f32_fn, exp_f64_fn, exp_f32_arr_fn, exp_f64_arr_fn, &
 		log_f32_fn, log_f64_fn, log_f32_arr_fn, log_f64_arr_fn, &
 		log10_f32_fn, log10_f64_fn, log10_f32_arr_fn, log10_f64_arr_fn, &
+		log2_f32_fn, log2_f64_fn, log2_f32_arr_fn, log2_f64_arr_fn, &
 		sqrt_f32_fn, sqrt_f64_fn, sqrt_f32_arr_fn, sqrt_f64_arr_fn, &
 		cos_f32_fn, cos_f64_fn, cos_f32_arr_fn, cos_f64_arr_fn, &
 		sin_f32_fn, sin_f64_fn, sin_f32_arr_fn, sin_f64_arr_fn, &
@@ -213,6 +214,58 @@ subroutine declare_intr_fns(fns)
 	log10_f64_arr_fn%param_names%v(1)%s = "x"
 
 	call fns%insert("0log10_f64_arr", log10_f64_arr_fn, id_index)
+
+	!********
+
+	log2_f32_fn%type%type = f32_type
+	allocate(log2_f32_fn%params(1))
+	allocate(log2_f32_fn%param_names%v(1))
+	log2_f32_fn%params(1)%type = f32_type
+	log2_f32_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0log2_f32", log2_f32_fn, id_index)
+
+	!********
+
+	log2_f64_fn%type%type = f64_type
+	allocate(log2_f64_fn%params(1))
+	allocate(log2_f64_fn%param_names%v(1))
+	log2_f64_fn%params(1)%type = f64_type
+	log2_f64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0log2_f64", log2_f64_fn, id_index)
+
+	!********
+
+	log2_f32_arr_fn%type%type = array_type
+	allocate(log2_f32_arr_fn%type%array)
+	log2_f32_arr_fn%type%array%type = f32_type
+	log2_f32_arr_fn%type%array%rank = -1
+
+	allocate(log2_f32_arr_fn%params(1))
+	allocate(log2_f32_arr_fn%param_names%v(1))
+
+	log2_f32_arr_fn%params(1)%type = any_type
+
+	log2_f32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0log2_f32_arr", log2_f32_arr_fn, id_index)
+
+	!********
+
+	log2_f64_arr_fn%type%type = array_type
+	allocate(log2_f64_arr_fn%type%array)
+	log2_f64_arr_fn%type%array%type = f64_type
+	log2_f64_arr_fn%type%array%rank = -1
+
+	allocate(log2_f64_arr_fn%params(1))
+	allocate(log2_f64_arr_fn%param_names%v(1))
+
+	log2_f64_arr_fn%params(1)%type = any_type
+
+	log2_f64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0log2_f64_arr", log2_f64_arr_fn, id_index)
 
 	!********
 
@@ -1669,6 +1722,7 @@ subroutine declare_intr_fns(fns)
 			exp_f32_fn, exp_f64_fn, exp_f32_arr_fn, exp_f64_arr_fn, &
 			log_f32_fn, log_f64_fn, log_f32_arr_fn, log_f64_arr_fn, &
 			log10_f32_fn, log10_f64_fn, log10_f32_arr_fn, log10_f64_arr_fn, &
+			log2_f32_fn, log2_f64_fn, log2_f32_arr_fn, log2_f64_arr_fn, &
 			sqrt_f32_fn, sqrt_f64_fn, sqrt_f32_arr_fn, sqrt_f64_arr_fn, &
 			max_i32_fn, max_i64_fn, max_f32_fn, max_f64_fn, &
 			min_i32_fn, min_i64_fn, min_f32_fn, min_f64_fn, &
@@ -1818,6 +1872,39 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0log10_f32"
 		case default
 			fn_call%identifier%text = "0log10_f64"
+		end select
+
+	case ("log2")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+
+			arr_type = args%v(1)%val%array%type
+			!print *, "type = ", kind_name(arr_type)
+
+			select case (arr_type)
+			case (f32_type)
+				fn_call%identifier%text = "0log2_f32_arr"
+			case (f64_type)
+				fn_call%identifier%text = "0log2_f64_arr"
+			case default
+				! Fall-back on scalar to throw a parser error later
+				fn_call%identifier%text = "0log2_f64"
+			end select
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case (f32_type)
+			fn_call%identifier%text = "0log2_f32"
+		case default
+			fn_call%identifier%text = "0log2_f64"
 		end select
 
 	case ("sqrt")

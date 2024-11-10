@@ -819,6 +819,9 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 	character(len = :), allocatable :: color
 
+	double precision, parameter :: LOG_E_2 = log(2.d0)
+	real, parameter :: LOG_E_2F = log(2.0)
+
 	integer :: i, io
 
 	type(char_vector_t) :: str_
@@ -907,6 +910,32 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f64_type)
 		res%array%f64 = log10(arg1%array%f64)
+
+	!********
+	case ("0log2_f32")
+
+		! TODO: there is an extra division operation here compared to other base
+		! log fns.  Is there a more efficient implementation? Shell out to c?
+		! Implement log2 myself?
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = log(arg1%sca%f32) / LOG_E_2F
+
+	case ("0log2_f64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = log(arg1%sca%f64) / LOG_E_2
+
+	case ("0log2_f32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f32_type)
+		res%array%f32 = log(arg1%array%f32) / LOG_E_2F
+
+	case ("0log2_f64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, f64_type)
+		res%array%f64 = log(arg1%array%f64) / LOG_E_2
 
 	!********
 	case ("0sqrt_f32")
