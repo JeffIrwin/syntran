@@ -263,7 +263,7 @@ function lex(lexer) result(token)
 
 			! 16 chars should be sufficient. pad by an extra 4 for safety
 			!
-			! TODO: these octal text widths are padded way to generously.
+			! TODO: these octal text widths are padded too generously.
 			! "(z8)" is the max for hex, but it's actually less then double that
 			! width for octal.  See the test on 0o377_7777_7777 which is -1 in
 			! octal, which is only 11 chars

@@ -69,6 +69,7 @@ module syntran__core_m
 	!    * bitwise operations: shift left and right, and, or, not, xor
 	!    * these features are especially useful when implementing encryption,
 	!      hashing, utf, and rng algorithms
+	!    * reinterpret cast -- used in quake fast inverse sqrt algo
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
 	!    * write another wave equation sample using slicing and array operations
@@ -157,7 +158,7 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      + log10, log2, (gamma, log_gamma?)
+	!      + log2, (gamma, log_gamma?)
 	!      + trig: atan2, (sec, cos, hyperbolic, ... ?)
 	!      + bessel_jn
 	!      + reshape
@@ -167,7 +168,7 @@ module syntran__core_m
 	!      + abs, sqrt
 	!      + exp
 	!        > need documentation for elemental array overloading
-	!      + log
+	!      + log, log10
 	!      + norm2, dot
 	!        > boolean dot not implemented yet
 	!      + sind, cosd, tand, asind, acosd, atand
@@ -194,8 +195,8 @@ module syntran__core_m
 	!    * i32(), i64() done
 	!  - literals
 	!    * done
-	!    * some lex error message but be improvable
-	!    * hex float literals?  not worthwhile imo, but golang has them
+	!    * some lex error messages might be improvable
+	!    * hex float literals?  not worthwhile imo, but c++ and golang have them
 	!  - xor, xnor
 	!    * xor (bool1, bool2) is just (bool1 != bool2)
 	!    * xnor(bool1, bool2) is just (bool1 == bool2)
