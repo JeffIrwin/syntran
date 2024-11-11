@@ -1701,7 +1701,22 @@ subroutine unit_test_bitwise(npass, nfail)
 			eval("all(([0b1110, 0b1101] ^ [0b1111, 0b0000]) == [0b0001, 0b1101]);") == "true", &
 			eval("0xff00 | 0x00ff == 0xffff;") == "true", &
 			eval("0xffff | 0x00ff == 0xffff;") == "true", &
-			eval("0xffed | 0x00ff == 0xffff;") == "true", &  ! TODO: more bitwise or tests
+			eval("0xffed | 0x00ff == 0xffff;") == "true", &
+			eval("0b0110 | 0b1011 == 0b1111;") == "true", &
+			eval("0b0110 | 0b1010 == 0b1110;") == "true", &
+			eval("0b0110'i64 | 0b1010'i64 == 0b1110;") == "true", &
+			eval("all([0b0110] | 0b1010 == [0b1110]);") == "true", &
+			eval("all(0b0110 | [0b1010, 0b0101] == [0b1110, 0b0111]);") == "true", &
+			eval("all(0b0110'i64 | i64([0b1010, 0b0101]) == [0b1110, 0b0111]);") == "true", &
+			eval("0xff00 & 0x00ff == 0x0000;") == "true", &
+			eval("0xffff & 0x00ff == 0x00ff;") == "true", &
+			eval("0xffed & 0x00ff == 0x00ed;") == "true", &
+			eval("0b0110 & 0b1011 == 0b0010;") == "true", &
+			eval("0b1110 & 0b1010 == 0b1010;") == "true", &
+			eval("0b0110'i64 & 0b1010'i64 == 0b0010;") == "true", &
+			eval("all([0b0110] & 0b1010 == [0b0010]);") == "true", &
+			eval("all(0b0110 & [0b1010, 0b0101] == [0b0010, 0b0100]);") == "true", &
+			eval("all(0b0110'i64 & i64([0b1010, 0b0101]) == [0b0010, 0b0100]);") == "true", &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

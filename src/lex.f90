@@ -835,6 +835,9 @@ function lex(lexer) result(token)
 		case ("|")
 			token = new_token(bit_or_token, lexer%pos, lexer%current())
 
+		case ("&")
+			token = new_token(bit_and_token, lexer%pos, lexer%current())
+
 		case default
 
 			!print *, 'bad token text = ', quote(lexer%current())

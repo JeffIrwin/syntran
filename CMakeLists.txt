@@ -105,6 +105,7 @@ set(LIB_SRC
 	${SRC_DIR}/math_bit_right_shift.f90
 	${SRC_DIR}/math_bit_xor.f90
 	${SRC_DIR}/math_bit_or.f90
+	${SRC_DIR}/math_bit_and.f90
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/types.f90
 	${SRC_DIR}/lex.f90
