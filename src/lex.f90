@@ -796,15 +796,7 @@ function lex(lexer) result(token)
 				lexer%pos = lexer%pos + 1
 				token = new_token(bang_equals_token, lexer%pos, "!=")
 			else
-
-				! FIXME: refactor w/ default case below since Fortran is weird
-				! about breaking in select case
-				token = new_token(bad_token, lexer%pos, lexer%current())
-				span = new_span(lexer%pos, len(lexer%current()))
-				call lexer%diagnostics%push( &
-					err_unexpected_char(lexer%context, &
-					span, lexer%current()))
-
+				token = new_token(bit_not_token, lexer%pos, lexer%current())
 			end if
 
 		case ("<")

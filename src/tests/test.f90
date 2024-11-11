@@ -1717,6 +1717,18 @@ subroutine unit_test_bitwise(npass, nfail)
 			eval("all([0b0110] & 0b1010 == [0b0010]);") == "true", &
 			eval("all(0b0110 & [0b1010, 0b0101] == [0b0010, 0b0100]);") == "true", &
 			eval("all(0b0110'i64 & i64([0b1010, 0b0101]) == [0b0010, 0b0100]);") == "true", &
+			eval("!0x0000_f00f == 0xffff_0ff0;") == "true", &
+			eval("!0x0f0f_000f_fff0_0fff == 0xf0f0_fff0_000f_f000;") == "true", &
+			eval("!-2 ==  1;") == "true", &
+			eval("!-1 ==  0;") == "true", &
+			eval("!0  == -1;") == "true", &
+			eval("!1  == -2;") == "true", &
+			eval("!-2'i64 ==  1;") == "true", &
+			eval("!-1'i64 ==  0;") == "true", &
+			eval("!0'i64  == -1;") == "true", &
+			eval("!1'i64  == -2;") == "true", &
+			eval("all(![0: 4] == [-1, -2, -3, -4]);") == "true", &
+			eval("all(!i64([0: 4]) == [-1, -2, -3, -4]);") == "true", &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

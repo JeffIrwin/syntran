@@ -14,6 +14,7 @@ module syntran__eval_m
 	use syntran__math_bit_xor_m
 	use syntran__math_bit_or_m
 	use syntran__math_bit_and_m
+	use syntran__math_bit_not_m
 
 	use syntran__types_m
 
@@ -2742,6 +2743,9 @@ recursive subroutine eval_unary_expr(node, state, res)
 
 	case (not_keyword)
 		call not_(right, res, node%op%text)
+
+	case (bit_not_token)
+		call bit_not(right, res, node%op%text)
 
 	case default
 		write(*,*) err_eval_unary_op(node%op%text)

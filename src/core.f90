@@ -74,14 +74,7 @@ module syntran__core_m
 	!    perf of intel compilers for AOC solution tests
 	!  - hacker sdk:
 	!    * bitwise operations
-	!      > and: &
-	!      > or : |
-	!      > not: ! (rust) or ~ (c)?
-	!        + i think c uses ~ because ! is already logical not, which can cast
-	!          ints to bools.  i'll prefer the rust style operator
-	!      > xor: ^
-	!      > compound assignment for all of the above
-	!      >
+	!      > compound assignment for all ops
 	!      > according to c (and fortran), right operand of shift should be
 	!        non-negative.  c says it's undefined behavior to shift negative.
 	!        is there anything i should catch?  it would have to be a runtime
@@ -90,11 +83,18 @@ module syntran__core_m
 	!        different sizes. seems dangerous.  should it be allowed? what does
 	!        rust do?
 	!          https://learn.microsoft.com/en-us/cpp/c-language/c-bitwise-operators?view=msvc-170
-	!      > done:
-	!        + <<, >>
+	!    * reinterpret cast -- used in quake fast inverse sqrt algo
+	!    * done:
+	!      > shifting: << and >>
+	!      > and: &
+	!      > or : |
+	!      > xor: ^
+	!      > not: ! (rust) or ~ (c)?
+	!        + i think c uses ~ because ! is already logical not, which can cast
+	!          ints to bools.  i'll prefer the rust style operator
 	!    * these features are especially useful when implementing encryption,
 	!      hashing, utf, base64, and rng algorithms
-	!    * reinterpret cast -- used in quake fast inverse sqrt algo
+	!      > implement some of these as tests
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
 	!    * write another wave equation sample using slicing and array operations

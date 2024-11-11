@@ -1651,6 +1651,13 @@ logical function is_unary_op_allowed(op, right, right_arr)
 				is_unary_op_allowed = is_num_type(right)
 			end if
 
+		case (bit_not_token)
+			if (right == array_type) then
+				is_unary_op_allowed = is_int_type(right_arr)
+			else
+				is_unary_op_allowed = is_int_type(right)
+			end if
+
 		case (not_keyword)
 			if (right == array_type) then
 				is_unary_op_allowed = right_arr == bool_type
