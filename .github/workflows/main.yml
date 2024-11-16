@@ -302,7 +302,7 @@
 			{
 				"uses": "actions/upload-artifact@v4",
 				"with": {
-					"path": "./bin/syntran\n./bin/libquadmath.so.0\nlibgfortran.so.5",
+					"path": "./bin/syntran\n./bin/libquadmath.so.0\n./bin/libgfortran.so.5",
 					"name": "syntran-rocky"
 				}
 			},
