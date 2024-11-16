@@ -1,0 +1,67 @@
+
+# Back when syntran binaries worked on rocky, I only covered tests on rocky 9
+# because rocky 8 didn't have the right glibc.  Maybe if I build it on 8, both
+# will work?
+
+#FROM rockylinux:8  # can't figure out how to get gfortran 11 on rocky 8 :(
+FROM rockylinux:9
+
+WORKDIR workdir
+
+RUN dnf update -y
+RUN dnf install -y vim
+
+## syntran crashes almost immediately with gfortran 13
+ARG GFORT_VERS="11"
+#ARG GFORT_VERS="12"
+#ARG GFORT_VERS="13"
+
+RUN dnf install -y gcc-gfortran
+##RUN dnf install -y gfortran
+#RUN dnf install -y gfortran-${GFORT_VERS}
+#RUN cp $(which "gfortran-${GFORT_VERS}") /usr/bin/gfortran
+
+#RUN dnf install -y curl
+
+RUN gfortran --version
+
+COPY src ./src
+COPY fpm.toml .
+
+ADD https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64 ./fpm
+#RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64
+#RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/v0.10.1/fpm-0.10.1-linux-x86_64
+#RUN mv fpm-*linux-x86_64 fpm
+
+RUN chmod +x fpm
+RUN mv fpm /usr/local/bin
+RUN fpm --version
+
+RUN yes | fpm clean
+
+#RUN fpm build --compiler gfortran
+#RUN fpm run   --compiler gfortran -- --version
+#RUN fpm run   --compiler gfortran -- -c "1 + 2;"
+#RUN fpm test test --compiler gfortran
+##RUN fpm test long --compiler gfortran
+
+ARG PROFILE release
+#ARG PROFILE debug
+
+#RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -static-libquadmath"
+#RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"
+#RUN find ./build -wholename "*app/syntran" | xargs ls -ltrh
+
+#RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran"
+RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
+RUN fpm test test --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
+RUN fpm install --prefix . --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
+
+# Package other binary dependencies
+RUN cp /lib64/libquadmath.so.0 ./bin/
+RUN cp /lib64/libgfortran.so.5 ./bin/
+#RUN cp /lib64/libc.so.6 ./bin/
+#RUN cp /lib64/libm.so.6 ./bin/
+
+RUN cd ./bin && tar czf syntran-rocky.tgz *
+
