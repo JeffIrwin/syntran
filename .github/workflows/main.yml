@@ -11,7 +11,7 @@
 		"strategy": {
 			"matrix": {
 				"os": [
-					"ubuntu-22",
+					"ubuntu-22.04",
 					"windows-latest",
 					"macOS-latest"
 				]
@@ -34,12 +34,12 @@
 			  "run": "bash gen-header.sh"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"name": "Set ubuntu PATH",
 				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"name": "Test fpm default",
 
 				"env": {
@@ -98,7 +98,7 @@
 				"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"run": "sudo apt-get install gfortran"
 			},
 			{
@@ -235,7 +235,7 @@
 			},
 			{
 				"uses": "actions/upload-artifact@v4",
-				"if": "matrix.os == 'ubuntu-22'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"with": {
 					# unfortunately gfortran-12 does not support -static-libquadmath
 					"path": "./syntran\n./libquadmath.so.0\n./libc.so.6",
@@ -262,7 +262,7 @@
 		"strategy": {
 			"matrix": {
 				"os": [
-					"ubuntu-22"
+					"ubuntu-22.04"
 				],
 				#"gfortran": [10, 11, 12, 13]  # TODO: gfort 13 has an issue
 				#"gfortran": [9, 10, 11, 12]  # gfort 9 started segfaulting with the introduction of fortran submodules circa 9ae38b9d
@@ -281,7 +281,7 @@
 
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"name": "Test ubuntu gfortran-${{ matrix.gfortran }}",
 				"env": {
 					"FPM_FC": "gfortran-${{ matrix.gfortran }}"
@@ -303,7 +303,7 @@
 		"strategy": {
 			"matrix": {
 				"os": [
-					"ubuntu-22"
+					"ubuntu-22.04"
 				],
 				"toolchain": [
 					{"compiler": "intel", "version": "2024.2"},
@@ -341,7 +341,7 @@
 				}
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"name": "Test ${{ matrix.toolchain.compiler }} ${{ matrix.toolchain.version }}",
 				"env": {
 					"FPM_FC": "${{ env.FC }}"
@@ -358,7 +358,7 @@
 	"test-docker-build": {
 		# Build syntran from source in default top-level alpine Dockerfile
 		"name": "Test docker build",
-		"runs-on": "ubuntu-22",
+		"runs-on": "ubuntu-22.04",
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
@@ -388,7 +388,7 @@
 		# a lag between when you build the release and manually upload a
 		# binary package to github
 		"name": "Test linux bin",
-		"runs-on": "ubuntu-22",
+		"runs-on": "ubuntu-22.04",
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
