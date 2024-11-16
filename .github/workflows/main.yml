@@ -61,7 +61,7 @@
 					# TODO: copy to a subdir for easier upload \n
 					cp $HOME/bin/syntran . \n
 					cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
-					cp /lib/x86_64-linux-gnu/libc.so.6 . \n
+					cp /lib/x86_64-linux-gnu/libc.so.6 . # not included \n
 					which syntran \n
 					which patchelf \n
 					chmod +x ./syntran \n
@@ -238,7 +238,10 @@
 				"if": "matrix.os == 'ubuntu-latest'",
 				"with": {
 					# unfortunately gfortran-12 does not support -static-libquadmath
-					"path": "./syntran\n./libquadmath.so.0\n./libc.so.6",
+
+					#"path": "./syntran\n./libquadmath.so.0\n./libc.so.6",
+					"path": "./syntran\n./libquadmath.so.0",
+
 					"name": "syntran-linux"
 				}
 			},
