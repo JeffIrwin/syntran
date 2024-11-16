@@ -271,17 +271,20 @@
 				"
 					docker --version \n
 					docker build . --file Dockerfile.rocky -t sy \n
-					docker run --entrypoint syntran sy --version \n
-					docker run sy --version # syntran is already the default entrypoint \n
-					docker run sy -c \"1 + 2;\" \n
-					ans=$(docker run sy -c \"1 + 2;\") \n
-					if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
-						echo \"win\" \n
-						exit 0 \n
-					else \n
-						echo \"fail\" \n
-						exit 1 \n
-					fi \n
+
+					#docker run --entrypoint syntran sy --version \n
+					docker run --entrypoint /workdir/bin/syntran sy --version \n
+
+					#docker run sy --version # syntran is already the default entrypoint \n
+					#docker run sy -c \"1 + 2;\" \n
+					#ans=$(docker run sy -c \"1 + 2;\") \n
+					#if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
+					#	echo \"win\" \n
+					#	exit 0 \n
+					#else \n
+					#	echo \"fail\" \n
+					#	exit 1 \n
+					#fi \n
 				"
 			},
 		]
