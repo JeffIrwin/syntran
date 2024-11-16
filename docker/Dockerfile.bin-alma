@@ -1,0 +1,31 @@
+
+# Currently alma doesn't have the right version of glibc that the syntran binary
+# needs.  It might work if you build from source
+
+FROM almalinux:latest
+#FROM almalinux:9.3
+#FROM almalinux:8
+
+WORKDIR workdir
+
+RUN yum update -y
+#RUN yum install -y curl
+RUN yum install -y unzip
+
+ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-rocky.zip"
+#ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux.zip"
+#ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/download/0.0.48/syntran-linux.zip"
+
+ADD "$SY_URL" ./syntran-rocky.zip
+RUN unzip syntran-rocky*.zip
+RUN rm syntran-rocky*.zip
+RUN chmod +x ./syntran
+#RUN mv syntran libquadmath.so.0 /usr/local/bin
+RUN mv syntran libquadmath.so.* libgfortran.so.* /usr/local/bin
+
+# Set LD_LIBRARY_PATH for dependent libs
+RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/bin" >> ~/.bashrc
+
+RUN source ~/.bashrc && syntran --version
+RUN source ~/.bashrc && syntran -c 'println("hello world");'
+
