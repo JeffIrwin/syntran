@@ -15,7 +15,11 @@ ADD "$SY_URL" ./syntran-linux.zip
 RUN unzip syntran-linux*.zip
 RUN rm syntran-linux*.zip
 RUN chmod +x ./syntran
+
+# TODO: cp new libs too
 RUN mv syntran libquadmath.so.* libc.so.* /usr/local/bin
+
+# TODO: export LD_LIBRARY_PATH for libs
 
 RUN syntran --version
 RUN syntran -c 'println("hello world");'

@@ -277,7 +277,7 @@
 					docker run --entrypoint /workdir/syntran/bin/syntran sy --version \n
 
 					# Start run in background (-d) with container name sy-ctr \n
-					sudo docker run --name sy-ctr -d -it sy-rocky \n
+					sudo docker run --name sy-ctr -d -it sy \n
 
 					# Copy artifact from container \n
 					sudo docker cp sy-ctr:/workdir/syntran/bin/syntran-rocky.tgz . \n
