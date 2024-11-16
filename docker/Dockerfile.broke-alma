@@ -1,5 +1,10 @@
 
+# Currently alma doesn't have the right version of glibc that the syntran binary
+# needs.  It might work if you build from source
+
 FROM almalinux:latest
+#FROM almalinux:9.3
+#FROM almalinux:8
 
 WORKDIR workdir
 
