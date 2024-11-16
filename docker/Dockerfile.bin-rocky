@@ -15,7 +15,7 @@ ADD "$SY_URL" ./syntran-linux.zip
 RUN unzip syntran-linux*.zip
 RUN rm syntran-linux*.zip
 RUN chmod +x ./syntran
-RUN mv syntran libquadmath.so.0 /usr/local/bin
+RUN mv syntran libquadmath.so.* libc.so.* /usr/local/bin
 
 RUN syntran --version
 RUN syntran -c 'println("hello world");'
