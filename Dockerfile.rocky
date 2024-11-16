@@ -25,8 +25,16 @@ RUN dnf install -y gcc-gfortran
 
 RUN gfortran --version
 
-COPY src ./src
-COPY fpm.toml .
+# Copying just the src dir would usually be sufficient, but gen-header.sh needs
+# to know the git commit for `--version` output, so we have to install git and
+# clone the whole repo
+
+RUN dnf install -y git
+#COPY src ./src
+#COPY fpm.toml .
+#COPY gen-header.sh .
+RUN git clone https://github.com/jeffirwin/syntran
+WORKDIR syntran
 
 ADD https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64 ./fpm
 #RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64
@@ -38,6 +46,8 @@ RUN mv fpm /usr/local/bin
 RUN fpm --version
 
 RUN yes | fpm clean
+
+RUN ./gen-header.sh
 
 #RUN fpm build --compiler gfortran
 #RUN fpm run   --compiler gfortran -- --version
