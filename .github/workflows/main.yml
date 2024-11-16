@@ -61,6 +61,7 @@
 					# TODO: copy to a subdir for easier upload \n
 					cp $HOME/bin/syntran . \n
 					cp /lib/x86_64-linux-gnu/libquadmath.so.0 . \n
+					cp /lib/x86_64-linux-gnu/libc.so.6 . # not included \n
 					which syntran \n
 					which patchelf \n
 					chmod +x ./syntran \n
@@ -237,7 +238,10 @@
 				"if": "matrix.os == 'ubuntu-latest'",
 				"with": {
 					# unfortunately gfortran-12 does not support -static-libquadmath
+
+					#"path": "./syntran\n./libquadmath.so.0\n./libc.so.6",
 					"path": "./syntran\n./libquadmath.so.0",
+
 					"name": "syntran-linux"
 				}
 			},
@@ -253,6 +257,55 @@
 			#		bash ./test.sh \n
 			#	"
 			#},
+		]
+	},
+	"build-rocky": {
+		# Build and package syntran from source in rocky linux Dockerfile
+		"name": "Build on rocky linux",
+		"runs-on": "ubuntu-latest",
+		"steps": [
+			{"uses": "actions/checkout@v1"},
+			{
+				"name": "Build docker",
+				"run":
+				"
+					docker --version \n
+					docker build . --file Dockerfile.rocky -t sy \n
+
+					## Test run \n
+					#docker run --entrypoint syntran sy --version \n
+					docker run --entrypoint /workdir/syntran/bin/syntran sy --version \n
+
+					# Start run in background (-d) with container name sy-ctr \n
+					sudo docker run --name sy-ctr -d -it sy \n
+
+					# Copy artifact from container \n
+					sudo docker cp sy-ctr:/workdir/syntran/bin/syntran-rocky.tgz . \n
+
+					# Extract to repackage as zip during upload \n
+					mkdir bin \n
+					cd bin \n
+					tar xvf ../syntran-rocky.tgz \n
+
+					#docker run sy --version # syntran is already the default entrypoint \n
+					#docker run sy -c \"1 + 2;\" \n
+					#ans=$(docker run sy -c \"1 + 2;\") \n
+					#if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
+					#	echo \"win\" \n
+					#	exit 0 \n
+					#else \n
+					#	echo \"fail\" \n
+					#	exit 1 \n
+					#fi \n
+				"
+			},
+			{
+				"uses": "actions/upload-artifact@v4",
+				"with": {
+					"path": "./bin/syntran\n./bin/libquadmath.so.0\n./bin/libgfortran.so.5",
+					"name": "syntran-rocky"
+				}
+			},
 		]
 	},
 	"test-gfortran": {

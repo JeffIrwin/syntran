@@ -27,7 +27,7 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  54
+		syntran_patch =  55
 
 	! TODO:
 	!  - raw string literals

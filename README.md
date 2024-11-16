@@ -26,13 +26,28 @@ To run syntran, you can either install a binary or build it from the Fortran sou
 
 Download the binary from the latest github release for your operating system:
 
-### Linux
+### Linux (most* distros)
 ```
 curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux.zip"
 unzip syntran-linux.zip
 chmod +x ./syntran
 ./syntran -h
 ```
+
+The binary asset `syntran-linux.zip` works on most distros:  arch, debian, ubuntu, fedora, kali, and ubuntu.  It does not work on rocky or alma due to glibc incompatibilities.
+
+### Linux (rocky and alma)
+```
+curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-rocky.zip"
+unzip syntran-rocky.zip
+chmod +x ./syntran
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.
+./syntran -h
+```
+
+Note that there is an extra step to set the `LD_LIBRARY_PATH` here, because the
+rocky build image cannot statically link libgfortran.  This works on ubuntu and
+probably other distros too, or you can just use the more universal asset above.
 
 ### Windows
 ```
