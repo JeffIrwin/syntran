@@ -1533,6 +1533,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 		case ( &
 				lless_token, ggreater_token, &
 				lless_equals_token, ggreater_equals_token)
+
 			! Bitwise shift operators work on any combination of ints
 
 			if (left == array_type .and. right == array_type) then
@@ -1553,13 +1554,13 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 			! of matching sizes (both 32 or 64 bit)
 
 			if (left == array_type .and. right == array_type) then
-				allowed = left_arr == right_arr
+				allowed = is_int_type(left_arr) .and. left_arr == right_arr
 			else if (left == array_type) then
-				allowed = left_arr == right
+				allowed = is_int_type(left_arr) .and. left_arr == right
 			else if (right == array_type) then
-				allowed = left == right_arr
+				allowed = is_int_type(left) .and. left == right_arr
 			else
-				allowed = left == right
+				allowed = is_int_type(left) .and. left == right
 			end if
 
 		case (and_keyword, or_keyword)

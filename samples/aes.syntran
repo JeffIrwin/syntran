@@ -239,6 +239,9 @@ fn aes_mix_column(r: i32): i32
 	let r2 = (r >>  8) & 0xff;
 	let r3 = (r >>  0) & 0xff;
 
+	// Column mixing and its inverse could potentially be optimized by using
+	// pre-calculated lookup tables for multiplication by 0x02 (and 0x03, etc)
+	// for every possible byte
 	let s0 = aes_gmul(0x02, r0) ^ aes_gmul(0x03, r1) ^ r2 ^ r3;
 	let s1 = aes_gmul(0x02, r1) ^ aes_gmul(0x03, r2) ^ r3 ^ r0;
 	let s2 = aes_gmul(0x02, r2) ^ aes_gmul(0x03, r3) ^ r0 ^ r1;
