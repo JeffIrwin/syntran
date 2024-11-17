@@ -1,0 +1,364 @@
+
+// This script contains functions for AES-256 encryption and decryption.  AES is
+// a symmetric key block cipher
+//
+// References:
+// - https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197-upd1.pdf
+// - https://csrc.nist.gov/files/pubs/fips/197/final/docs/fips-197.pdf
+//   * this pdf has more examples than the first pdf, including a 256-bit cipher
+//     example, in the appendix
+// - https://en.wikipedia.org/wiki/Advanced_Encryption_Standard
+// - https://en.wikipedia.org/wiki/Rijndael_S-box
+
+//==============================================================================
+
+// TODO: prefix global vars (and fns) with unique prefix (e.g. "AES_")
+
+// TODO: 128 bit matches example output.  Test 256 too, then implement reverse
+// cipher
+
+//// These constants are for AES-256.  AES-128 and 192 have different values for
+//// NK and NR
+//let NK = 8;
+//let NB = 4;
+//let NR = 14;
+
+// TODO: delete and revert to 256 after testing
+let NK = 4;
+let NB = 4;
+let NR = 10;
+
+let SBOX     = [0; 256];
+let SBOX_INV = [0; 256];
+
+fn rotl8(x: i32, shift: i32): i32
+{
+	return (x << shift) | (x >> (8 - shift));
+}
+
+fn aes_init_sbox()
+{
+	// Although many of these vars only require 8 bits for AES, the smallest int
+	// that syntran has is 32 bits.  This kills a little perf and requires
+	// masking with 0xff in a few places
+	let p = 1;
+	let q = 1;
+
+	// loop invariant: p * q == 1 in the galois field
+	while true
+	{
+		// multiply p by 3
+		let pxor = 0x1b;
+		if (p & 0x80 == 0) pxor = 0;
+		p = p ^ (p << 1) ^ pxor;
+
+		// divide q by 3 (equals multiply by 0xf6)
+		q = q ^ (q << 1); // TODO: use ^= compound assignment when available
+		q = q ^ (q << 2);
+		q = q ^ (q << 4);
+		let qxor = 0x09;
+		if (q & 0x80 == 0) qxor = 0;
+		q = q ^ qxor;
+
+		// mask 32 bits down to lowest byte only
+		p = p & 0xff;
+		q = q & 0xff;
+
+		// compute the affine transformation
+		let xformed = q ^ rotl8(q,1) ^ rotl8(q,2) ^ rotl8(q,3) ^ rotl8(q,4);
+
+		let sbox_p = (xformed ^ 0x63) & 0xff;  // mask lowest byte only
+		SBOX[p] = sbox_p;
+		SBOX_INV[sbox_p] = p;
+
+		if (p == 1) break;
+	}
+
+	// 0 is a special case since it has no inverse
+	SBOX[0] = 0x63;
+	SBOX_INV[0x63] = 0;
+
+	return;
+}
+aes_init_sbox();
+
+fn sub_word(a: i32): i32
+{
+	// Apply SBOX transformation to each byte of a word
+
+	// Split bytes
+	let a0 = (a >> 24) & 0xff;
+	let a1 = (a >> 16) & 0xff;
+	let a2 = (a >>  8) & 0xff;
+	let a3 = (a >>  0) & 0xff;
+
+	// Transform
+	let b0 = SBOX[a0];
+	let b1 = SBOX[a1];
+	let b2 = SBOX[a2];
+	let b3 = SBOX[a3];
+
+	// Combine bytes
+	let b =
+		(b0 << 24) |
+		(b1 << 16) |
+		(b2 <<  8) |
+		(b3 <<  0);
+
+	return b;
+}
+
+fn rot_word(a: i32): i32
+{
+	// Cyclically permute the bytes of a word
+
+	// Split bytes
+	let a0 = (a >> 24) & 0xff;
+	let a1 = (a >> 16) & 0xff;
+	let a2 = (a >>  8) & 0xff;
+	let a3 = (a >>  0) & 0xff;
+
+	// Rotate and combine bytes
+	return
+		(a1 << 24) |
+		(a2 << 16) |
+		(a3 <<  8) |
+		(a0 <<  0);
+}
+
+// RCON[0] is unused.  It could be deleted if the indexing is adjusted
+// accordingly
+let RCON = [0x0000_0000,
+	0x0100_0000, 0x0200_0000, 0x0400_0000, 0x0800_0000, 0x1000_0000,
+	0x2000_0000, 0x4000_0000, 0x8000_0000, 0x1b00_0000, 0x3600_0000
+];
+
+fn aes_expand_key(key: [i32; :]): [i32; :]
+{
+	let w = [0; NB * (NR + 1)];
+	w[0: NK] = key;
+	for i in [NK: NB * (NR + 1)]
+	{
+		let temp = w[i-1];
+		//println("i = ", i);
+		//println("temp = ", temp);
+		if (i % NK == 0) {
+			//println("rot_word = ", rot_word(temp));
+			//println("sub_word = ", sub_word(rot_word(temp)));
+			//println("RCON     = ", RCON[i/NK]);
+			temp = sub_word(rot_word(temp)) ^ RCON[i/NK];
+		} else if (NK > 6 and i % NK == 4) {
+			temp = sub_word(temp);
+		}
+		//println("temp = ", temp);
+		//println();
+		w[i] = w[i-NK] ^ temp;
+	}
+	return w;
+}
+
+fn aes_add_round_key(state: [i32; :], wr: [i32; :]): [i32; :]
+{
+	state = state ^ wr;
+	return state;
+}
+
+fn aes_sub_bytes(state: [i32; :]): [i32; :]
+{
+	for i in [0: NB]
+		state[i] = sub_word(state[i]);
+	return state;
+}
+
+fn aes_shift_rows(s: [i32; :]): [i32; :]
+{
+	// `s` is state
+
+	let t = [0; NB];
+	//let t = s; // could init to 0, but this sets correct size easily
+
+	// Could be done with a loop and mod
+	t[0] = (s[0] & 0xff00_0000) | (s[1] & 0x00ff_0000) | (s[2] & 0x0000_ff00) | (s[3] & 0x0000_00ff);
+	t[1] = (s[1] & 0xff00_0000) | (s[2] & 0x00ff_0000) | (s[3] & 0x0000_ff00) | (s[0] & 0x0000_00ff);
+	t[2] = (s[2] & 0xff00_0000) | (s[3] & 0x00ff_0000) | (s[0] & 0x0000_ff00) | (s[1] & 0x0000_00ff);
+	t[3] = (s[3] & 0xff00_0000) | (s[0] & 0x00ff_0000) | (s[1] & 0x0000_ff00) | (s[2] & 0x0000_00ff);
+
+	return t;
+}
+
+fn aes_mix_column(r: i32): i32
+{
+	// TODO: implement in terms of gmul() because that will be easier to invert
+
+	//unsigned char a[4];
+	//unsigned char b[4];
+	//unsigned char c;
+	//unsigned char h;
+	///* The array 'a' is simply a copy of the input array 'r'
+	// * The array 'b' is each element of the array 'a' multiplied by 2
+	// * in Rijndael's Galois field
+	// * a[n] ^ b[n] is element n multiplied by 3 in Rijndael's Galois field */ 
+	//for (c = 0; c < 4; c++) {
+	//    a[c] = r[c];
+	//    /* h is set to 0x01 if the high bit of r[c] is set, 0x00 otherwise */
+	//    h = r[c] >> 7;    /* logical right shift, thus shifting in zeros */
+	//    b[c] = r[c] << 1; /* implicitly removes high bit */
+	//    b[c] ^= h * 0x1B; /* Rijndael's Galois field */
+	//}
+	//r[0] = b[0] ^ a[3] ^ a[2] ^ b[1] ^ a[1]; /* 2 * a0 + a3 + a2 + 3 * a1 */
+	//r[1] = b[1] ^ a[0] ^ a[3] ^ b[2] ^ a[2]; /* 2 * a1 + a0 + a3 + 3 * a2 */
+	//r[2] = b[2] ^ a[1] ^ a[0] ^ b[3] ^ a[3]; /* 2 * a2 + a1 + a0 + 3 * a3 */
+	//r[3] = b[3] ^ a[2] ^ a[1] ^ b[0] ^ a[0]; /* 2 * a3 + a2 + a1 + 3 * a0 */
+
+	let a = [0; NB]; // 32 bits per entry due to syntran but only need 8
+	let b = [0; NB];
+	let s = [0; NB];
+	for i in [0: NB]
+	{
+		a[i] = (r >> 8*(3 - i)) & 0xff; // extract byte from r
+		//a[i] = (r >> 8*i) & 0xff; // extract byte from r
+		let h = a[i] >> 7;
+		b[i] = (a[i] << 1) & 0xff;
+		b[i] = b[i] ^ (h * 0x1b);
+	}
+	s[0] = (b[0] ^ a[3] ^ a[2] ^ b[1] ^ a[1]);// & 0xff; // TODO: this & does nothing
+	s[1] = (b[1] ^ a[0] ^ a[3] ^ b[2] ^ a[2]);// & 0xff;
+	s[2] = (b[2] ^ a[1] ^ a[0] ^ b[3] ^ a[3]);// & 0xff;
+	s[3] = (b[3] ^ a[2] ^ a[1] ^ b[0] ^ a[0]);// & 0xff;
+
+	// Combine bytes
+	return
+		(s[0] << 24) |
+		(s[1] << 16) |
+		(s[2] <<  8) |
+		(s[3] <<  0);
+	//return r;
+}
+
+fn aes_mix_columns(s: [i32; :]): [i32; :]
+{
+	for i in [0: NB]
+		s[i] = aes_mix_column(s[i]);
+	return s;
+}
+
+fn aes_cipher_block(in_: [i32; :], w: [i32; :]): [i32; :]
+{
+	let state = in_;
+	state = aes_add_round_key(state, w[0: NB]);
+	for round in [1: NR]  // start at 1, not 0
+	{
+		state = aes_sub_bytes(state);
+		println("sub bytes  = ", state);
+		state = aes_shift_rows(state);
+		println("shift rows = ", state);
+		state = aes_mix_columns(state);
+		println("mix cols   = ", state);
+		state = aes_add_round_key(state, w[round * NB: (round+1) * NB]);
+
+		//exit(0); // TODO
+	}
+	state = aes_sub_bytes(state);
+	state = aes_shift_rows(state);
+	state = aes_add_round_key(state, w[NR * NB: (NR+1) * NB]);
+
+	//state = in
+	//AddRoundKey(state, w[0, Nb-1]) // See Sec. 5.1.4
+	//for round = 1 step 1 to Nr–1
+	//	SubBytes(state) // See Sec. 5.1.1
+	//	ShiftRows(state) // See Sec. 5.1.2
+	//	MixColumns(state) // See Sec. 5.1.3
+	//	AddRoundKey(state, w[round*Nb, (round+1)*Nb-1])
+	//end for
+	//SubBytes(state)
+	//ShiftRows(state)
+	//AddRoundKey(state, w[Nr*Nb, (Nr+1)*Nb-1])
+	//out = state
+
+	return state;
+}
+
+fn aes_cipher()
+{
+	// TODO: take arbitrary size plaintext data and call aes_cipher_block()
+	// while iterating over it one "block" at a time.  Maybe take key arg
+	// instead of w and expand it automatically
+	return;
+}
+
+//==============================================================================
+
+fn assert_eq(a: i32, b: i32): i32
+{
+	if (a != b) return 1;
+	return 0;
+}
+
+fn main(): i32
+{
+	println("starting aes.syntran");
+
+	let status = 0;
+
+	// TODO: need a way to print hex format (and bin, octal)
+	println("SBOX = ");
+	//println(SBOX);
+	for i in [0: 16]
+		println(SBOX[16*i: 16*i + 16]);
+
+	println("SBOX_INV = ");
+	for i in [0: 16]
+		println(SBOX_INV[16*i: 16*i + 16]);
+
+	// TODO: test some asserts on SBOX/INV
+
+	// Cipher Key from pdf =
+	// 	60 3d eb 10 15 ca 71 be 2b 73 ae f0 85 7d 77 81
+	// 	1f 35 2c 07 3b 61 08 d7 2d 98 10 a3 09 14 df f4
+	let key1 = [
+		0x603d_eb10, 0x15ca_71be, 0x2b73_aef0, 0x857d_7781,
+		0x1f35_2c07, 0x3b61_08d7, 0x2d98_10a3, 0x0914_dff4
+	];
+	println("key1 = ", key1);
+	let w1 = aes_expand_key(key1);
+	println("w1   = ", w1);
+
+	// 128-bit example
+	let plaintext = [0x3243_f6a8, 0x885a_308d, 0x3131_98a2, 0xe037_0734];
+	println("plaintext = ", plaintext);
+	let key2 = [
+		0x2b7e_1516, 0x28ae_d2a6, 0xabf7_1588, 0x09cf_4f3c
+	];
+	let w2 = aes_expand_key(key2);
+	let output = aes_cipher_block(plaintext, w2);
+	println("output    = ", output);
+
+	//// 256-bit example
+	//let plaintext = [0x0011_2233, 0x4455_6677, 0x8899_aabb, 0xccdd_eeff];
+	//println("plaintext = ", plaintext);
+	//let key2 = [
+	//	0x0001_0203, 0x0405_0607, 0x0809_0a0b, 0x0c0d_0e0f,
+	//	0x1011_1213, 0x1415_1617, 0x1819_1a1b, 0x1c1d_1e1f
+	//];
+	//let w2 = aes_expand_key(key2);
+	//let output = aes_cipher_block(plaintext, w2);
+	//println("output    = ", output);
+
+	//seed(0);
+	//status += assert_eq(rand_i32(), -1937831252);
+	//status += assert_eq(rand_i32(), -1748719057);
+
+	if (status != 0)
+	{
+		println();
+		println("Error: aes test failure!");
+		println();
+		return 1;
+	}
+
+	println("ending aes.syntran");
+	return 0;
+}
+
+exit(main());
+
