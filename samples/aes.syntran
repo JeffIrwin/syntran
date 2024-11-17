@@ -33,6 +33,23 @@ fn rotl8(x: i32, shift: i32): i32
 	return (x << shift) | (x >> (8 - shift));
 }
 
+fn aes_gmul(a: i32, b: i32): i32
+{
+	// Galois field (256) multiplication of two bytes
+	let p = 0;
+	for i in [0: 8]
+	{
+		if b & 1 != 0
+			p = p ^ a; // TODO: use compound assignment when available
+		let hi_bit_set = (a & 0x80) != 0;
+		a = (a << 1) & 0xff;
+		if hi_bit_set
+			a = a ^ 0x1b;
+		b = b >> 1;
+	}
+	return p;
+}
+
 fn aes_init_sbox()
 {
 	// Although many of these vars only require 8 bits for AES, the smallest int
@@ -44,22 +61,8 @@ fn aes_init_sbox()
 	// loop invariant: p * q == 1 in the galois field
 	while true
 	{
-		// multiply p by 3
-		let pxor = 0x1b;
-		if (p & 0x80 == 0) pxor = 0;
-		p = p ^ (p << 1) ^ pxor;
-
-		// divide q by 3 (equals multiply by 0xf6)
-		q = q ^ (q << 1); // TODO: use ^= compound assignment when available
-		q = q ^ (q << 2);
-		q = q ^ (q << 4);
-		let qxor = 0x09;
-		if (q & 0x80 == 0) qxor = 0;
-		q = q ^ qxor;
-
-		// mask 32 bits down to lowest byte only
-		p = p & 0xff;
-		q = q & 0xff;
+		p = aes_gmul(p, 0x03);  // multiply p by 3
+		q = aes_gmul(q, 0xf6);  // divide q by 3 (equals multiply by 0xf6)
 
 		// compute the affine transformation
 		let xformed = q ^ rotl8(q,1) ^ rotl8(q,2) ^ rotl8(q,3) ^ rotl8(q,4);
@@ -183,29 +186,23 @@ fn aes_shift_rows(s: [i32; :]): [i32; :]
 
 fn aes_mix_column(r: i32): i32
 {
-	// TODO: implement in terms of gmul() because that will be easier to invert
+	// Split bytes.  TODO: fn?
+	let r0 = (r >> 24) & 0xff;
+	let r1 = (r >> 16) & 0xff;
+	let r2 = (r >>  8) & 0xff;
+	let r3 = (r >>  0) & 0xff;
 
-	let a = [0; NB]; // 32 bits per entry due to syntran but only need 8
-	let b = [0; NB];
-	let s = [0; NB];
-	for i in [0: NB]
-	{
-		a[i] = (r >> 8*(3 - i)) & 0xff; // extract byte from r
-		let h = a[i] >> 7;
-		b[i] = (a[i] << 1) & 0xff;
-		b[i] = b[i] ^ (h * 0x1b);
-	}
-	s[0] = (b[0] ^ a[3] ^ a[2] ^ b[1] ^ a[1]);
-	s[1] = (b[1] ^ a[0] ^ a[3] ^ b[2] ^ a[2]);
-	s[2] = (b[2] ^ a[1] ^ a[0] ^ b[3] ^ a[3]);
-	s[3] = (b[3] ^ a[2] ^ a[1] ^ b[0] ^ a[0]);
+	let s0 = aes_gmul(0x02, r0) ^ aes_gmul(0x03, r1) ^ r2 ^ r3;
+	let s1 = aes_gmul(0x02, r1) ^ aes_gmul(0x03, r2) ^ r3 ^ r0;
+	let s2 = aes_gmul(0x02, r2) ^ aes_gmul(0x03, r3) ^ r0 ^ r1;
+	let s3 = aes_gmul(0x02, r3) ^ aes_gmul(0x03, r0) ^ r1 ^ r2;
 
 	// Combine bytes
 	return
-		(s[0] << 24) |
-		(s[1] << 16) |
-		(s[2] <<  8) |
-		(s[3] <<  0);
+		(s0 << 24) |
+		(s1 << 16) |
+		(s2 <<  8) |
+		(s3 <<  0);
 }
 
 fn aes_mix_columns(s: [i32; :]): [i32; :]
