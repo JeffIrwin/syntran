@@ -1741,6 +1741,38 @@ end subroutine unit_test_bitwise
 
 !===============================================================================
 
+subroutine unit_test_bit_ass(npass, nfail)
+
+	! Compound assignment with bitwise operators: shift, and, xor, etc.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = "compound bitwise assignment"
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) "Unit testing "//label//" ..."
+
+	tests = &
+		[   &
+			eval_i32('let x = 0xff00; x |= 0x00ff; return x;') == 65535, &
+			eval_i32('let x = 0xff00; x |= 0x00fe; return x;') == 65534, &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_bit_ass
+
+!===============================================================================
+
 subroutine unit_test_i64(npass, nfail)
 
 	! Simple i64 integer tests of arithmetic with single-line
@@ -4331,6 +4363,7 @@ subroutine unit_tests(iostat)
 	call unit_test_f64_mix    (npass, nfail)
 	call unit_test_literals   (npass, nfail)
 	call unit_test_bitwise    (npass, nfail)
+	call unit_test_bit_ass    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

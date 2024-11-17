@@ -825,7 +825,12 @@ function lex(lexer) result(token)
 			token = new_token(bit_xor_token, lexer%pos, lexer%current())
 
 		case ("|")
-			token = new_token(bit_or_token, lexer%pos, lexer%current())
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(bit_or_equals_token, lexer%pos, "|=")
+			else
+				token = new_token(bit_or_token, lexer%pos, lexer%current())
+			end if
 
 		case ("&")
 			token = new_token(bit_and_token, lexer%pos, lexer%current())

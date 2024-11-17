@@ -2899,6 +2899,9 @@ subroutine compound_assign(lhs, rhs, op)
 	case (percent_equals_token)
 		call mod_(tmp, rhs, lhs, op%text)
 
+	case (bit_or_equals_token)
+		call bit_or(tmp, rhs, lhs, op%text)
+
 	case default
 		write(*,*) err_int_prefix//'unexpected assignment operator ', quote(op%text)//color_reset
 		call internal_error()

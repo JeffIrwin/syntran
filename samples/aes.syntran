@@ -2,6 +2,9 @@
 // This script contains functions for AES-256 encryption and decryption.  AES is
 // a symmetric key block cipher
 //
+// NOTE: this is *not* secure and is only intended as a demo of syntran bitwise
+// operations
+//
 // References:
 // - https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197-upd1.pdf
 // - https://csrc.nist.gov/files/pubs/fips/197/final/docs/fips-197.pdf
@@ -11,8 +14,6 @@
 // - https://en.wikipedia.org/wiki/Rijndael_S-box
 
 //==============================================================================
-
-// TODO: prefix global vars (and fns) with unique prefix (e.g. "AES_")
 
 // These constants are for AES-256.  AES-128 and 192 have different values for
 // AES_NK and AES_NR
