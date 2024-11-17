@@ -1770,6 +1770,10 @@ subroutine unit_test_bit_ass(npass, nfail)
 			eval('let x = 0xaaff; x &= 0xffaa; return x;') == eval('0xaaaa;'), &
 			eval('let x = 0xff00; x ^= 0x00fe; return x;') == eval('0xfffe;'), &
 			eval('let x = 0xff00; x ^= 0xfffe; return x;') == eval('0x00fe;'), &
+			eval('let x = 0xffff; x >>= 4; return x;') == eval('0x0fff;'), &
+			eval('let x = 0xffff; x <<= 4; return x;') == eval('0xffff0;'), &
+			eval('let x = 0xffff; x >>= 8; return x;') == eval('0x00ff;'), &
+			eval('let x = 0xffff; x <<= 8; return x;') == eval('0xffff00;'), &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

@@ -2908,6 +2908,12 @@ subroutine compound_assign(lhs, rhs, op)
 	case (bit_xor_equals_token)
 		call bit_xor(tmp, rhs, lhs, op%text)
 
+	case (lless_equals_token)
+		call left_shift(tmp, rhs, lhs, op%text)
+
+	case (ggreater_equals_token)
+		call right_shift(tmp, rhs, lhs, op%text)
+
 	case default
 		write(*,*) err_int_prefix//'unexpected assignment operator ', quote(op%text)//color_reset
 		call internal_error()

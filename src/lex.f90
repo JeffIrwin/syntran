@@ -804,8 +804,15 @@ function lex(lexer) result(token)
 				lexer%pos = lexer%pos + 1
 				token = new_token(less_equals_token, lexer%pos, "<=")
 			else if (lexer%lookahead() == "<") then
-				lexer%pos = lexer%pos + 1
-				token = new_token(lless_token, lexer%pos, "<<")
+
+				if (lexer%peek(2) == "=") then
+					lexer%pos = lexer%pos + 2
+					token = new_token(lless_equals_token, lexer%pos, "<<=")
+				else
+					lexer%pos = lexer%pos + 1
+					token = new_token(lless_token, lexer%pos, "<<")
+				end if
+
 			else
 				token = new_token(less_token, lexer%pos, lexer%current())
 			end if
@@ -815,8 +822,15 @@ function lex(lexer) result(token)
 				lexer%pos = lexer%pos + 1
 				token = new_token(greater_equals_token, lexer%pos, ">=")
 			else if (lexer%lookahead() == ">") then
-				lexer%pos = lexer%pos + 1
-				token = new_token(ggreater_token, lexer%pos, ">>")
+
+				if (lexer%peek(2) == "=") then
+					lexer%pos = lexer%pos + 2
+					token = new_token(ggreater_equals_token, lexer%pos, ">>=")
+				else
+					lexer%pos = lexer%pos + 1
+					token = new_token(ggreater_token, lexer%pos, ">>")
+				end if
+
 			else
 				token = new_token(greater_token, lexer%pos, lexer%current())
 			end if
