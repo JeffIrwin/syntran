@@ -108,6 +108,32 @@ fn sub_word(a: i32): i32
 	return b;
 }
 
+fn inv_sub_word(a: i32): i32
+{
+	// Apply SBOX_INV transformation to each byte of a word
+
+	// Split bytes
+	let a0 = (a >> 24) & 0xff;
+	let a1 = (a >> 16) & 0xff;
+	let a2 = (a >>  8) & 0xff;
+	let a3 = (a >>  0) & 0xff;
+
+	// Transform
+	let b0 = SBOX_INV[a0];
+	let b1 = SBOX_INV[a1];
+	let b2 = SBOX_INV[a2];
+	let b3 = SBOX_INV[a3];
+
+	// Combine bytes
+	let b =
+		(b0 << 24) |
+		(b1 << 16) |
+		(b2 <<  8) |
+		(b3 <<  0);
+
+	return b;
+}
+
 fn rot_word(a: i32): i32
 {
 	// Cyclically permute the bytes of a word
@@ -170,6 +196,13 @@ fn aes_sub_bytes(state: [i32; :]): [i32; :]
 	return state;
 }
 
+fn aes_inv_sub_bytes(state: [i32; :]): [i32; :]
+{
+	for i in [0: NB]
+		state[i] = inv_sub_word(state[i]);
+	return state;
+}
+
 fn aes_shift_rows(s: [i32; :]): [i32; :]
 {
 	// `s` is state
@@ -180,6 +213,20 @@ fn aes_shift_rows(s: [i32; :]): [i32; :]
 	t[1] = (s[1] & 0xff00_0000) | (s[2] & 0x00ff_0000) | (s[3] & 0x0000_ff00) | (s[0] & 0x0000_00ff);
 	t[2] = (s[2] & 0xff00_0000) | (s[3] & 0x00ff_0000) | (s[0] & 0x0000_ff00) | (s[1] & 0x0000_00ff);
 	t[3] = (s[3] & 0xff00_0000) | (s[0] & 0x00ff_0000) | (s[1] & 0x0000_ff00) | (s[2] & 0x0000_00ff);
+
+	return t;
+}
+
+fn aes_inv_shift_rows(s: [i32; :]): [i32; :]
+{
+	// `s` is state
+	let t = [0; NB];
+
+	// Could be done with a loop and mod
+	t[0] = (s[0] & 0xff00_0000) | (s[3] & 0x00ff_0000) | (s[2] & 0x0000_ff00) | (s[1] & 0x0000_00ff);
+	t[1] = (s[1] & 0xff00_0000) | (s[0] & 0x00ff_0000) | (s[3] & 0x0000_ff00) | (s[2] & 0x0000_00ff);
+	t[2] = (s[2] & 0xff00_0000) | (s[1] & 0x00ff_0000) | (s[0] & 0x0000_ff00) | (s[3] & 0x0000_00ff);
+	t[3] = (s[3] & 0xff00_0000) | (s[2] & 0x00ff_0000) | (s[1] & 0x0000_ff00) | (s[0] & 0x0000_00ff);
 
 	return t;
 }
@@ -205,10 +252,38 @@ fn aes_mix_column(r: i32): i32
 		(s3 <<  0);
 }
 
+fn aes_inv_mix_column(r: i32): i32
+{
+	// Split bytes
+	let r0 = (r >> 24) & 0xff;
+	let r1 = (r >> 16) & 0xff;
+	let r2 = (r >>  8) & 0xff;
+	let r3 = (r >>  0) & 0xff;
+
+	let s0 = aes_gmul(0x0e, r0) ^ aes_gmul(0x0b, r1) ^ aes_gmul(0x0d, r2) ^ aes_gmul(0x09, r3);
+	let s1 = aes_gmul(0x09, r0) ^ aes_gmul(0x0e, r1) ^ aes_gmul(0x0b, r2) ^ aes_gmul(0x0d, r3);
+	let s2 = aes_gmul(0x0d, r0) ^ aes_gmul(0x09, r1) ^ aes_gmul(0x0e, r2) ^ aes_gmul(0x0b, r3);
+	let s3 = aes_gmul(0x0b, r0) ^ aes_gmul(0x0d, r1) ^ aes_gmul(0x09, r2) ^ aes_gmul(0x0e, r3);
+
+	// Combine bytes
+	return
+		(s0 << 24) |
+		(s1 << 16) |
+		(s2 <<  8) |
+		(s3 <<  0);
+}
+
 fn aes_mix_columns(s: [i32; :]): [i32; :]
 {
 	for i in [0: NB]
 		s[i] = aes_mix_column(s[i]);
+	return s;
+}
+
+fn aes_inv_mix_columns(s: [i32; :]): [i32; :]
+{
+	for i in [0: NB]
+		s[i] = aes_inv_mix_column(s[i]);
 	return s;
 }
 
@@ -229,6 +304,24 @@ fn aes_cipher_block(in_: [i32; :], w: [i32; :]): [i32; :]
 	state = aes_sub_bytes(state);
 	state = aes_shift_rows(state);
 	state = aes_add_round_key(state, w[NR * NB: (NR+1) * NB]);
+
+	return state;
+}
+
+fn aes_inv_cipher_block(in_: [i32; :], w: [i32; :]): [i32; :]
+{
+	let state = in_;
+	state = aes_add_round_key(state, w[NR * NB: (NR+1) * NB]);
+	for round in [NR-1: -1: 0]
+	{
+		state = aes_inv_shift_rows(state);
+		state = aes_inv_sub_bytes(state);
+		state = aes_add_round_key(state, w[round * NB: (round+1) * NB]);
+		state = aes_inv_mix_columns(state);
+	}
+	state = aes_inv_shift_rows(state);
+	state = aes_inv_sub_bytes(state);
+	state = aes_add_round_key(state, w[0: NB]);
 
 	return state;
 }
@@ -294,16 +387,6 @@ fn main(): i32
 	status += assert_eq(w1[6], 0x2d98_10a3);
 	status += assert_eq(w1[7], 0x0914_dff4);
 
-	//// 128-bit example
-	//let plaintext = [0x3243_f6a8, 0x885a_308d, 0x3131_98a2, 0xe037_0734];
-	//println("plaintext = ", plaintext);
-	//let key2 = [
-	//	0x2b7e_1516, 0x28ae_d2a6, 0xabf7_1588, 0x09cf_4f3c
-	//];
-	//let w2 = aes_expand_key(key2);
-	//let output = aes_cipher_block(plaintext, w2);
-	//println("output    = ", output);
-
 	// 256-bit example
 	let plaintext = [0x0011_2233, 0x4455_6677, 0x8899_aabb, 0xccdd_eeff];
 	println("plaintext = ", plaintext);
@@ -318,6 +401,14 @@ fn main(): i32
 	// Expected output:  8ea2b7ca516745bfeafc49904b496089
 	status += assert_eq(output[0], 0x8ea2_b7ca);
 	status += assert_eq(output[3], 0x4b49_6089);
+
+	let iout = aes_inv_cipher_block(output, w2);
+	println("iout      = ", iout);
+
+	status += assert_eq(iout[0], plaintext[0]);
+	status += assert_eq(iout[1], plaintext[1]);
+	status += assert_eq(iout[2], plaintext[2]);
+	status += assert_eq(iout[3], plaintext[3]);
 
 	if (status != 0)
 	{
