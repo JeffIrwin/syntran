@@ -41,12 +41,12 @@ fn aes_gmul(a: i32, b: i32): i32
 	for i in [0: 8]
 	{
 		if b & 1 != 0
-			p = p ^ a; // TODO: use compound assignment when available
+			p ^= a;
 		let hi_bit_set = (a & 0x80) != 0;
 		a = (a << 1) & 0xff;
 		if hi_bit_set
-			a = a ^ 0x1b;
-		b = b >> 1;
+			a ^= 0x1b;
+		b >>= 1;
 	}
 	return p;
 }
@@ -186,8 +186,7 @@ fn aes_expand_key(key: [i32; :]): [i32; :]
 
 fn aes_add_round_key(state: [i32; :], wr: [i32; :]): [i32; :]
 {
-	state = state ^ wr;
-	return state;
+	return state ^ wr;
 }
 
 fn aes_sub_bytes(state: [i32; :]): [i32; :]
