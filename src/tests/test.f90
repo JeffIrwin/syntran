@@ -1757,10 +1757,19 @@ subroutine unit_test_bit_ass(npass, nfail)
 
 	write(*,*) "Unit testing "//label//" ..."
 
+	! TODO: test arrays too
 	tests = &
 		[   &
 			eval_i32('let x = 0xff00; x |= 0x00ff; return x;') == 65535, &
 			eval_i32('let x = 0xff00; x |= 0x00fe; return x;') == 65534, &
+			eval('let x = 0xff00; x |= 0x00fe; return x;') == eval('0xfffe;'), &
+			eval('let x = 0x00AD; x |= 0xDE00; return x;') == eval('0xDEAD;'), &
+			eval('let x = 0xff00; x &= 0x00ff; return x;') == eval('0x0000;'), &
+			eval('let x = 0xBABE; x &= 0xffff; return x;') == eval('0xbabe;'), &
+			eval('let x = 0xFFFF; x &= 0xbabe; return x;') == eval('0xbabe;'), &
+			eval('let x = 0xaaff; x &= 0xffaa; return x;') == eval('0xaaaa;'), &
+			eval('let x = 0xff00; x ^= 0x00fe; return x;') == eval('0xfffe;'), &
+			eval('let x = 0xff00; x ^= 0xfffe; return x;') == eval('0x00fe;'), &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

@@ -1396,7 +1396,8 @@ logical function is_assignment_op(op)
 
 	is_assignment_op = any(op == [equals_token, plus_equals_token, &
 		minus_equals_token, star_equals_token, slash_equals_token, &
-		sstar_equals_token, percent_equals_token, bit_or_equals_token])
+		sstar_equals_token, percent_equals_token, &
+		bit_and_equals_token, bit_or_equals_token, bit_xor_equals_token])
 
 end function is_assignment_op
 
@@ -1541,7 +1542,10 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = is_int_type(left) .and. is_int_type(right)
 			end if
 
-		case (bit_xor_token, bit_or_token, bit_and_token, bit_or_equals_token)
+		case ( &
+				bit_xor_token, bit_or_token, bit_and_token, &
+				bit_xor_equals_token, bit_or_equals_token, bit_and_equals_token)
+
 			! Other bitwise binary operators (besides shift) only work on ints
 			! of matching sizes (both 32 or 64 bit)
 
