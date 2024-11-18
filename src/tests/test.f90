@@ -3181,7 +3181,7 @@ end subroutine unit_test_control
 
 !===============================================================================
 
-subroutine unit_test_struct_1(npass, nfail)
+subroutine unit_test_struct(npass, nfail)
 
 	implicit none
 
@@ -3189,14 +3189,14 @@ subroutine unit_test_struct_1(npass, nfail)
 
 	!********
 
-	character(len = *), parameter :: label = 'structs part 1'
+	character(len = *), parameter :: label = 'structs'
 
 	logical, parameter :: quiet = .true.
-	logical, allocatable :: tests(:)
+	logical, allocatable :: tests1(:), tests2(:), tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	tests = &
+	tests1 = &
 		[   &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 1
 				//'let d = D{y=i64(1912), m="Apr", d=14};' &
@@ -3338,33 +3338,7 @@ subroutine unit_test_struct_1(npass, nfail)
 				, quiet) == '17', &
 			.false. &
 		]
-
-	! Trim dummy false element
-	tests = tests(1: size(tests) - 1)
-	!print *, "number of "//label//" tests = ", size(tests)
-
-	call unit_test_coda(tests, label, npass, nfail)
-
-end subroutine unit_test_struct_1
-
-!===============================================================================
-
-subroutine unit_test_struct_2(npass, nfail)
-
-	implicit none
-
-	integer, intent(inout) :: npass, nfail
-
-	!********
-
-	character(len = *), parameter :: label = 'structs part 2'
-
-	logical, parameter :: quiet = .true.
-	logical, allocatable :: tests(:)
-
-	write(*,*) 'Unit testing '//label//' ...'
-
-	tests = &
+	tests2 = &
 		[   &
 
 			eval(''                         &                 ! 32
@@ -3515,16 +3489,26 @@ subroutine unit_test_struct_2(npass, nfail)
 		]
 
 	! Trim dummy false element
-	tests = tests(1: size(tests) - 1)
+	tests1 = tests1(1: size(tests1) - 1)
+	tests2 = tests2(1: size(tests2) - 1)
 	!print *, "number of "//label//" tests = ", size(tests)
+
+	! Cat sub arrays
+	tests = [tests1, tests2]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_struct_2
+end subroutine unit_test_struct
 
 !===============================================================================
 
 subroutine unit_test_struct_arr1(npass, nfail)
+
+	! TODO: this is split into multiple parts to avoid compiler warnings about
+	! >255 continuation lines (which both gfort and ifort have no real issue
+	! with).  For logging, it would be cleaner to split the array but not the
+	! subroutine.  Concatenate the bool arrays before calling unit_test_coda()
+	! all within one subroutine, as in unit_test_struct()
 
 	implicit none
 
@@ -4467,8 +4451,7 @@ subroutine unit_tests(iostat)
 	call unit_test_arr_op     (npass, nfail)
 	call unit_test_lhs_slc_1  (npass, nfail)
 	call unit_test_control    (npass, nfail)
-	call unit_test_struct_1   (npass, nfail)
-	call unit_test_struct_2   (npass, nfail)
+	call unit_test_struct     (npass, nfail)
 	call unit_test_struct_arr1(npass, nfail)
 	call unit_test_struct_arr2(npass, nfail)
 	call unit_test_struct_arr3(npass, nfail)
