@@ -27,7 +27,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	character(len = :), allocatable :: exp_type, act_type, param_name
 
-	integer :: i, io, id_index, pos0, type_, rank, arr_type
+	integer :: i, io, id_index, pos0, rank
 
 	logical :: has_rank
 

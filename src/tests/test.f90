@@ -905,8 +905,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f32('parse_f32("2");') - 2.000000E+00) < tol, &
 			abs(eval_f32('parse_f32("-3");') - -3.000000E+00) < tol, &
 			abs(eval_f32('parse_f32("-2");') - -2.000000E+00) < tol, &
-			abs(eval_f64('parse_f64("-3.000000E+00");') - -3.000000d+00) < tol, &
-			abs(eval_f64('parse_f64("-2.000000E+00");') - -2.000000d+00) < tol, &
+			abs(eval_f64('parse_f64("-3.000000E+00");') - (-3.000000d+00)) < tol, &
+			abs(eval_f64('parse_f64("-2.000000E+00");') - (-2.000000d+00)) < tol, &
 			abs(eval_f64('parse_f64("3.0");') - 3.000000d+00) < tol, &
 			abs(eval_f64('parse_f64("2.0");') - 2.000000d+00) < tol, &
 			eval_i64('len(     "");')  == 0,  &
@@ -3181,7 +3181,7 @@ end subroutine unit_test_control
 
 !===============================================================================
 
-subroutine unit_test_struct(npass, nfail)
+subroutine unit_test_struct_1(npass, nfail)
 
 	implicit none
 
@@ -3189,7 +3189,7 @@ subroutine unit_test_struct(npass, nfail)
 
 	!********
 
-	character(len = *), parameter :: label = 'structs'
+	character(len = *), parameter :: label = 'structs part 1'
 
 	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
@@ -3336,6 +3336,37 @@ subroutine unit_test_struct(npass, nfail)
 				//'let po = r1.tr;' &
 				//'let yo = po.y;' &
 				, quiet) == '17', &
+			.false. &
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_1
+
+!===============================================================================
+
+subroutine unit_test_struct_2(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'structs part 2'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+
 			eval(''                         &                 ! 32
 				//'struct V{v:[i32;:], name:str,}' &
 				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
@@ -3489,11 +3520,11 @@ subroutine unit_test_struct(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_struct
+end subroutine unit_test_struct_2
 
 !===============================================================================
 
-subroutine unit_test_struct_arr(npass, nfail)
+subroutine unit_test_struct_arr1(npass, nfail)
 
 	implicit none
 
@@ -3504,7 +3535,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 	! This tests both structs of arrays and arrays of structs.  There are
 	! limited structs of arrays covered in unit_test_struct(), but more complex
 	! cases are covered here
-	character(len = *), parameter :: label = 'structs/arrays'
+	character(len = *), parameter :: label = 'structs/arrays part 1'
 
 	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
@@ -3696,6 +3727,39 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'ls[1].s.v[1] = 19;' &
 				//'return ls[1].s.v[1];' &
 				, quiet) == '19', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! I developed LHS dot exprs almost all at once, so I might have missed some
+	! cases. For RHS dot exprs I did it piece-by-piece and added tests as I went
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_arr1
+subroutine unit_test_struct_arr2(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	! This tests both structs of arrays and arrays of structs.  There are
+	! limited structs of arrays covered in unit_test_struct(), but more complex
+	! cases are covered here
+	character(len = *), parameter :: label = 'structs/arrays part 2'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
 			eval(''                         &                 ! 25
 				//'struct P{v:[i32;:], s:str,}' &  ! point
 				//'struct L{s:P, e:P}'      &      ! line
@@ -3874,6 +3938,39 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let e = E{e = [d]};' &
 				//'return e.e[0].d.c[0].b.a[0];' &
 				, quiet) == '42', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! I developed LHS dot exprs almost all at once, so I might have missed some
+	! cases. For RHS dot exprs I did it piece-by-piece and added tests as I went
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_arr2
+subroutine unit_test_struct_arr3(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	! This tests both structs of arrays and arrays of structs.  There are
+	! limited structs of arrays covered in unit_test_struct(), but more complex
+	! cases are covered here
+	character(len = *), parameter :: label = 'structs/arrays part 3'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
 			eval('' &                                         ! 40
 				//'struct A{a: i32}' &
 				//'struct B{b: A}' &
@@ -4060,7 +4157,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_struct_arr
+end subroutine unit_test_struct_arr3
 
 !===============================================================================
 
@@ -4116,7 +4213,7 @@ end subroutine unit_test_struct_str
 
 !===============================================================================
 
-subroutine unit_test_struct_1(npass, nfail)
+subroutine unit_test_struct_long(npass, nfail)
 
 	implicit none
 
@@ -4146,7 +4243,7 @@ subroutine unit_test_struct_1(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_struct_1
+end subroutine unit_test_struct_long
 
 !===============================================================================
 
@@ -4370,10 +4467,13 @@ subroutine unit_tests(iostat)
 	call unit_test_arr_op     (npass, nfail)
 	call unit_test_lhs_slc_1  (npass, nfail)
 	call unit_test_control    (npass, nfail)
-	call unit_test_struct     (npass, nfail)
-	call unit_test_struct_arr (npass, nfail)
-	call unit_test_struct_str (npass, nfail)
 	call unit_test_struct_1   (npass, nfail)
+	call unit_test_struct_2   (npass, nfail)
+	call unit_test_struct_arr1(npass, nfail)
+	call unit_test_struct_arr2(npass, nfail)
+	call unit_test_struct_arr3(npass, nfail)
+	call unit_test_struct_str (npass, nfail)
+	call unit_test_struct_long(npass, nfail)
 	call unit_test_f64_mix    (npass, nfail)
 	call unit_test_literals   (npass, nfail)
 	call unit_test_bitwise    (npass, nfail)

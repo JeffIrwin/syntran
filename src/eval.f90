@@ -93,10 +93,13 @@ recursive subroutine syntax_eval(node, state, res)
 		call eval_return_statement(node, state, res)
 
 	case (break_statement)
-		call eval_break_statement(node, state, res)
+		state%breaked = .true.
+		!call eval_break_statement(node, state, res)
 
 	case (continue_statement)
-		call eval_continue_statement(node, state, res)
+		! No need for a subroutine (with 2 unused args) for 1 line
+		state%continued = .true.
+		!call eval_continue_statement(node, state, res)
 
 	case (translation_unit)
 		call eval_translation_unit(node, state, res)
@@ -737,15 +740,11 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	!********
 
-	character(len = :), allocatable :: color
-
-	integer :: i, io
+	integer :: i
 
 	logical :: returned0
 
-	type(char_vector_t) :: str_
-
-	type(value_t) :: arg, arg1, arg2, tmp
+	type(value_t) :: tmp
 
 	!print *, 'eval fn_call_expr'
 	!print *, 'fn identifier = ', node%identifier%text
@@ -850,7 +849,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 	type(char_vector_t) :: str_
 
-	type(value_t) :: arg, arg1, arg2, tmp
+	type(value_t) :: arg, arg1, arg2
 
 	!print *, 'eval fn_call_intr_expr'
 	!print *, 'fn identifier = ', node%identifier%text
@@ -2627,41 +2626,25 @@ end subroutine eval_return_statement
 
 !===============================================================================
 
-recursive subroutine eval_break_statement(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	!print *, "starting eval_break_statement"
-
-	state%breaked = .true.
-
-	!print *, "ending eval_break_statement"
-
-end subroutine eval_break_statement
+!recursive subroutine eval_break_statement(node, state, res)
+!	type(syntax_node_t), intent(in) :: node
+!	type(state_t), intent(inout) :: state
+!	type(value_t), intent(out) :: res
+!	!print *, "starting eval_break_statement"
+!	state%breaked = .true.
+!	!print *, "ending eval_break_statement"
+!end subroutine eval_break_statement
 
 !===============================================================================
 
-recursive subroutine eval_continue_statement(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	!print *, "starting eval_continue_statement"
-
-	state%continued = .true.
-
-	!print *, "ending eval_continue_statement"
-
-end subroutine eval_continue_statement
+!recursive subroutine eval_continue_statement(node, state, res)
+!	type(syntax_node_t), intent(in) :: node
+!	type(state_t), intent(inout) :: state
+!	type(value_t), intent(out) :: res
+!	!print *, "starting eval_continue_statement"
+!	state%continued = .true.
+!	!print *, "ending eval_continue_statement"
+!end subroutine eval_continue_statement
 
 !===============================================================================
 

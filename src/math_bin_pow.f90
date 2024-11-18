@@ -295,7 +295,8 @@ subroutine pow_value_t(left, right, res, op_text)
 		res%sca%i64 = left%sca%i64 ** right%sca%i64
 
 	case        (magic**2 * i64_type + magic * i64_type + f64_type)
-		res%sca%i64 = left%sca%i64 ** right%sca%f64
+		! compound assignment
+		res%sca%i64 = int(left%sca%i64 ** right%sca%f64)
 
 	case        (magic**2 * i64_type + magic * i64_type + i32_type)
 		res%sca%i64 = left%sca%i64 ** right%sca%i32
@@ -304,13 +305,13 @@ subroutine pow_value_t(left, right, res, op_text)
 		res%sca%i64 = left%sca%i32 ** right%sca%i64
 
 	case        (magic**2 * i32_type + magic * i32_type + i64_type)
-		res%sca%i32 = left%sca%i32 ** right%sca%i64
+		res%sca%i32 = int(left%sca%i32 ** right%sca%i64)
 
 	case        (magic**2 * i64_type + magic * f32_type + i64_type)
-		res%sca%i64 = left%sca%f32 ** right%sca%i64
+		res%sca%i64 = int(left%sca%f32 ** real(right%sca%i64), 8)
 
 	case        (magic**2 * i64_type + magic * i64_type + f32_type)
-		res%sca%i64 = left%sca%i64 ** right%sca%f32
+		res%sca%i64 = int(real(left%sca%i64) ** right%sca%f32)
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
 		res%sca%i32 = int(left%sca%f32 ** right%sca%i32)
@@ -368,7 +369,7 @@ subroutine pow_value_t(left, right, res, op_text)
 
 	case        (magic**2 * f32_type + magic * f32_type + f64_type)
 		! compound assignment only
-		res%sca%f32 = left%sca%f32 ** right%sca%f64
+		res%sca%f32 = real(left%sca%f32 ** right%sca%f64)
 
 	!****
 
