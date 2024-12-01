@@ -30,6 +30,9 @@ module syntran__core_m
 		syntran_patch =  55
 
 	! TODO:
+	!  - add tests for non-trivial bitwise operation samples:
+	!    * aes
+	!    * base64
 	!  - raw string literals
 	!    * easier to include quotes without doubling
 	!    * follow rust style:
@@ -103,7 +106,6 @@ module syntran__core_m
 	!          ints to bools.  i'll prefer the rust style operator
 	!    * these features are especially useful when implementing encryption,
 	!      hashing, utf, base64, and rng algorithms
-	!      > implement some of these as tests
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
 	!    * write another wave equation sample using slicing and array operations

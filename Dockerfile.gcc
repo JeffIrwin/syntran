@@ -1,0 +1,79 @@
+
+FROM rockylinux:9
+
+WORKDIR workdir
+
+RUN dnf update -y
+#RUN dnf install -y vim
+RUN dnf install -y git
+RUN dnf install -y wget
+RUN dnf install -y bzip2
+RUN dnf install -y gcc g++
+RUN dnf install -y flex
+RUN dnf install -y diffutils
+RUN dnf install -y file
+RUN dnf install -y findutils  # needed?
+RUN dnf install -y which      # needed?
+
+# Relative to /workdir
+ARG SRC_DIR="gcc-src"
+
+RUN git clone \
+	https://github.com/gcc-mirror/gcc.git \
+	--depth 1 \
+	#--branch releases/gcc-12.2.0 \
+	--branch releases/gcc-12 \
+	$SRC_DIR
+
+WORKDIR $SRC_DIR
+
+RUN ./contrib/download_prerequisites
+WORKDIR ../objdir
+
+ARG BIN_DIR="/workdir/gcc"
+RUN mkdir $BIN_DIR
+
+#RUN $PWD/../gcc/configure --prefix=$HOME/GCC --enable-languages=c,c++,fortran,go
+#RUN $PWD/../$SRC_DIR/configure --prefix=$BIN_DIR --enable-languages=c,fortran --disable-multilib
+
+RUN $PWD/../$SRC_DIR/configure \
+	--prefix=$BIN_DIR \
+	--enable-languages=c,fortran \
+	--disable-multilib \
+	--disable-libquadmath-support
+
+#RUN make -j 2 # works with gcc 12.2
+RUN make -j 4 # works with gcc 12.2
+
+RUN make install
+RUN $BIN_DIR/bin/gcc --version
+RUN $BIN_DIR/bin/gfortran --version
+
+## It's not this easy.  gfortran binary depends on f951 in "/workdir/gcc/libexec/gcc/x86_64-pc-linux-gnu/12.4.1/f951" so idk how to move it to another folder
+#RUN cp $BIN_DIR/bin/* /usr/local/bin
+
+RUN echo "export PATH=$PATH:$BIN_DIR/bin" >> ~/.bashrc
+RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$BIN_DIR/lib64" >> ~/.bashrc
+
+#***************
+# Build syntran
+
+WORKDIR /workdir
+RUN git clone https://github.com/jeffirwin/syntran
+WORKDIR syntran
+
+# Install fpm from binary
+RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64
+RUN mv fpm-linux-x86_64 fpm
+RUN chmod +x fpm
+RUN mv fpm /usr/local/bin
+RUN fpm --version
+
+#RUN . ~/.bashrc && fpm install --link-flag "-l/workdir/gcc/lib64/libgfortran.a" --prefix="/usr/"
+
+#RUN . ~/.bashrc && fpm --link-flag "-static-libgfortran" test test
+RUN . ~/.bashrc && fpm --link-flag "-static-libgfortran -static-libc" test test
+RUN . ~/.bashrc && fpm --link-flag "-static-libgfortran -static-libc" install --prefix="/usr/"
+
+## TODO install release profile
+
