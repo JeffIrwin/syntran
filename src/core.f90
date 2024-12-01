@@ -37,6 +37,15 @@ module syntran__core_m
 	!      + let str2 = r##" my raw str with "#quotes"# "##;
 	!      + number of hashes at start matches end
 	!      + any use for zero hashes?  r"raw str"
+	!  - size() fn should optionally not need a 2nd argument for dim. in this
+	!    case, return product of extents of all dims (useful especially for vecs)
+	!  - overload abs() for int types i32 and i64 and arrays.  only works for
+	!    floats and float arrays currently
+	!  - allow using one array as an index of another array, as in fortran
+	!    * this is kinda similar to the current slice subscripting, so it might
+	!      not be too hard?  be careful with higher ranks
+	!    * note that the "err_bad_sub_rank" diag is commented-out, but it is
+	!      still a "non-integer subscript" error
 	!  - f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just

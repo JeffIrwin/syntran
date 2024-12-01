@@ -1,8 +1,4 @@
 
-# Back when syntran binaries worked on rocky, I only covered tests on rocky 9
-# because rocky 8 didn't have the right glibc.  Maybe if I build it on 8, both
-# will work?
-
 #FROM rockylinux:8  # can't figure out how to get gfortran 11 on rocky 8 :(
 FROM rockylinux:9
 
@@ -17,6 +13,8 @@ ARG GFORT_VERS="11"
 #ARG GFORT_VERS="13"
 
 RUN dnf install -y gcc-gfortran
+#RUN dnf install -y gcc-toolset-12-gcc-gfortran
+
 ##RUN dnf install -y gfortran
 #RUN dnf install -y gfortran-${GFORT_VERS}
 #RUN cp $(which "gfortran-${GFORT_VERS}") /usr/bin/gfortran
