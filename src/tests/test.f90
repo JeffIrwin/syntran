@@ -650,6 +650,11 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(abs([-0.01, -0.1]));') - sum(abs([-0.01d0, -0.1d0])))  < tol,  &
 			abs(eval_f64('sum(abs([0.5, -0.1]));') - sum(abs([0.5d0, -0.1d0]))) < tol,  &
 			abs(eval_f64('sum(abs([0.2, -0.1]));') - sum(abs([0.2d0, -0.1d0])))  < tol,  &
+			eval('abs(1) == 1;') == 'true', &
+			eval('abs(-1) == 1;') == 'true', &
+			eval('all(abs([-1, 3, -2]) == [1, 3, 2]);') == 'true', &
+			eval('abs(i64(-4)) == 4;') == 'true', &
+			eval('all(abs(i64([-10, 30, -20])) == [10, 30, 20]);') == 'true', &
 			abs(eval_f32('exp(0.0f);') - 1.0) < ftol,  &
 			abs(eval_f32('exp(1.0f);') - exp(1.0)) < ftol,  &
 			abs(eval_f64('exp(0.0);') - 1.0d0) < tol,  &

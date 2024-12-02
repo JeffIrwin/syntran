@@ -1007,6 +1007,29 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		res%array%f64 = abs(arg1%array%f64)
 
 	!********
+	case ("0abs_i32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%i32 = abs(arg1%sca%i32)
+
+	case ("0abs_i64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%i64 = abs(arg1%sca%i64)
+
+	case ("0abs_i32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, i32_type)
+		res%array%i32 = abs(arg1%array%i32)
+
+	case ("0abs_i64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, i64_type)
+		res%array%i64 = abs(arg1%array%i64)
+
+	!********
 	case ("0cos_f32")
 
 		call syntax_eval(node%args(1), state, arg1)

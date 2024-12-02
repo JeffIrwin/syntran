@@ -31,6 +31,7 @@ subroutine declare_intr_fns(fns)
 		product_i32_fn, product_f32_fn, product_i64_fn, product_f64_fn, &
 		norm2_f32_fn, norm2_f64_fn, &
 		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
+		abs_i32_fn, abs_i64_fn, abs_i32_arr_fn, abs_i64_arr_fn, &
 		abs_f32_fn, abs_f64_fn, abs_f32_arr_fn, abs_f64_arr_fn, &
 		exp_f32_fn, exp_f64_fn, exp_f32_arr_fn, exp_f64_arr_fn, &
 		log_f32_fn, log_f64_fn, log_f32_arr_fn, log_f64_arr_fn, &
@@ -370,6 +371,58 @@ subroutine declare_intr_fns(fns)
 	abs_f64_arr_fn%param_names%v(1)%s = "x"
 
 	call fns%insert("0abs_f64_arr", abs_f64_arr_fn, id_index)
+
+	!********
+
+	abs_i32_fn%type%type = i32_type
+	allocate(abs_i32_fn%params(1))
+	allocate(abs_i32_fn%param_names%v(1))
+	abs_i32_fn%params(1)%type = i32_type
+	abs_i32_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0abs_i32", abs_i32_fn, id_index)
+
+	!********
+
+	abs_i64_fn%type%type = i64_type
+	allocate(abs_i64_fn%params(1))
+	allocate(abs_i64_fn%param_names%v(1))
+	abs_i64_fn%params(1)%type = i64_type
+	abs_i64_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0abs_i64", abs_i64_fn, id_index)
+
+	!********
+
+	abs_i32_arr_fn%type%type = array_type
+	allocate(abs_i32_arr_fn%type%array)
+	abs_i32_arr_fn%type%array%type = i32_type
+	abs_i32_arr_fn%type%array%rank = -1
+
+	allocate(abs_i32_arr_fn%params(1))
+	allocate(abs_i32_arr_fn%param_names%v(1))
+
+	abs_i32_arr_fn%params(1)%type = any_type
+
+	abs_i32_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0abs_i32_arr", abs_i32_arr_fn, id_index)
+
+	!********
+
+	abs_i64_arr_fn%type%type = array_type
+	allocate(abs_i64_arr_fn%type%array)
+	abs_i64_arr_fn%type%array%type = i64_type
+	abs_i64_arr_fn%type%array%rank = -1
+
+	allocate(abs_i64_arr_fn%params(1))
+	allocate(abs_i64_arr_fn%param_names%v(1))
+
+	abs_i64_arr_fn%params(1)%type = any_type
+
+	abs_i64_arr_fn%param_names%v(1)%s = "x"
+
+	call fns%insert("0abs_i64_arr", abs_i64_arr_fn, id_index)
 
 	!********
 
@@ -1711,6 +1764,7 @@ subroutine declare_intr_fns(fns)
 	fns%fns = &
 		[ &
 			abs_f32_fn, abs_f64_fn, abs_f32_arr_fn, abs_f64_arr_fn, &
+			abs_i32_fn, abs_i64_fn, abs_i32_arr_fn, abs_i64_arr_fn, &
 			acos_f32_fn, acos_f64_fn, acos_f32_arr_fn, acos_f64_arr_fn, &
 			asin_f32_fn, asin_f64_fn, asin_f32_arr_fn, asin_f64_arr_fn, &
 			atan_f32_fn, atan_f64_fn, atan_f32_arr_fn, atan_f64_arr_fn, &
@@ -1956,6 +2010,10 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 				fn_call%identifier%text = "0abs_f32_arr"
 			case (f64_type)
 				fn_call%identifier%text = "0abs_f64_arr"
+			case (i32_type)
+				fn_call%identifier%text = "0abs_i32_arr"
+			case (i64_type)
+				fn_call%identifier%text = "0abs_i64_arr"
 			case default
 				! Fall-back on scalar to throw a parser error later
 				fn_call%identifier%text = "0abs_f64"
@@ -1967,6 +2025,10 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 				fn_call%val%array%rank = args%v(1)%val%array%rank
 			end if
 
+		case (i32_type)
+			fn_call%identifier%text = "0abs_i32"
+		case (i64_type)
+			fn_call%identifier%text = "0abs_i64"
 		case (f32_type)
 			fn_call%identifier%text = "0abs_f32"
 		case default

@@ -33,6 +33,7 @@ module syntran__core_m
 	!  - add tests for non-trivial bitwise operation samples:
 	!    * aes
 	!    * base64
+	!    * random mersenne twister
 	!  - raw string literals
 	!    * easier to include quotes without doubling
 	!    * follow rust style:
@@ -42,8 +43,6 @@ module syntran__core_m
 	!      + any use for zero hashes?  r"raw str"
 	!  - size() fn should optionally not need a 2nd argument for dim. in this
 	!    case, return product of extents of all dims (useful especially for vecs)
-	!  - overload abs() for int types i32 and i64 and arrays.  only works for
-	!    floats and float arrays currently
 	!  - allow using one array as an index of another array, as in fortran
 	!    * this is kinda similar to the current slice subscripting, so it might
 	!      not be too hard?  be careful with higher ranks
