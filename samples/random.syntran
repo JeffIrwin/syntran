@@ -1,0 +1,127 @@
+
+// This script contains functions for random number generation with Mersenne
+// twister
+//
+// Beware that Mersenne twister is *not* cryptographically secure!
+//
+// See also:  https://github.com/JeffIrwin/rfng/blob/main/rfng.f90
+
+//==============================================================================
+
+// TODO: prefix global vars (and fns) with unique prefix (e.g. "MT19937_")
+let N32 = 624;
+
+// TODO: consider encapsulating state in a struct for allowing multiple RNGs
+// concurrently
+let STATE_MT = [0; N32];
+let STATE_INDEX = N32 + 1;
+
+fn seed(seed_: i32)
+{
+	let w = 32;
+	let f = 1_812_433_253;
+
+	STATE_INDEX = N32;
+	STATE_MT[0] = seed_;
+
+	for i in [1: N32]
+		STATE_MT[i] = f * (STATE_MT[i-1] ^ (STATE_MT[i-1] >> w-2)) + i;
+	//println("STATE_MT = ", STATE_MT);
+
+	return;
+}
+
+fn twist()
+{
+	let a = 0x9908_b0df;
+	let m = 397;
+	let r =  31;
+
+	let lower_mask = (1 << r) - 1;
+	let upper_mask = !lower_mask;
+
+	for i in [0: N32]
+	{
+		let x =
+			(STATE_MT[ i         ] & upper_mask) |
+			(STATE_MT[(i+1) % N32] & lower_mask);
+		let xa = x >> 1;
+		if (x % 2 != 0) xa = xa ^ a;
+		STATE_MT[i] = STATE_MT[(i+m) % N32] ^ xa;
+	}
+	STATE_INDEX = 0;
+
+	return;
+}
+
+fn rand_i32(): i32
+{
+	let b = 0x9d2c_5680;
+	let c = 0xefc6_0000;
+	let d = 0xffff_ffff;
+	let l = 18;
+	let s =  7;
+	let t = 15;
+	let u = 11;
+
+	if (STATE_INDEX >= N32)
+	{
+		if (STATE_INDEX > N32) seed(5489);
+		twist();
+	}
+	let y = STATE_MT[STATE_INDEX];
+	y = y ^ ((y >> u) & d); // TODO: compound bitwise ^= when available
+	y = y ^ ((y << s) & b);
+	y = y ^ ((y << t) & c);
+	y = y ^ ( y >> l);
+	STATE_INDEX += 1;
+
+	//println("y = ", y);
+	return y;
+}
+
+fn assert_eq(a: i32, b: i32): i32
+{
+	if (a != b) return 1;
+	return 0;
+}
+
+fn main(): i32
+{
+	println("starting random.syntran");
+
+	let status = 0;
+
+	seed(0);
+	seed(1);
+	println("rand = ", rand_i32());
+	println("rand = ", rand_i32());
+	println("rand = ", rand_i32());
+	println("rand = ", rand_i32());
+	println("rand = ", rand_i32());
+	println("rand = ", rand_i32());
+	println("rand = ", rand_i32());
+	println("rand = ", rand_i32());
+	println("rand = ", rand_i32());
+
+	seed(0);
+	status += assert_eq(rand_i32(), -1937831252);
+	status += assert_eq(rand_i32(), -1748719057);
+	status += assert_eq(rand_i32(), -1223252363);
+	status += assert_eq(rand_i32(), -668873536);
+	status += assert_eq(rand_i32(), -1706118333);
+
+	if (status != 0)
+	{
+		println();
+		println("Error: random test failure!");
+		println();
+		return 1;
+	}
+
+	println("ending random.syntran");
+	return 0;
+}
+
+exit(main());
+
