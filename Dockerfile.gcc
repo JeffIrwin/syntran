@@ -1,4 +1,17 @@
 
+# This dockerfile builds the gcc (and gfortran) compiler(s) from source, and
+# then builds syntran using that version of gcc
+#
+# There are a few reasons you might want to do this:
+#
+# - the latest and greatest gcc versions might not be available. gcc 13 is not
+#   available on rocky or on wsl ubuntu as of ~ november 2024. gcc 13 doesn't
+#   currently work with syntran, but using it in a dockerfile like this is one
+#   of the only ways i can debug it
+# - syntran usually depends on libquadmath.so on linux.  the only way to get rid
+#   of this unnecessary dependency (at least until gcc 14 is released) is to
+#   configure with `--disable-libquadmath-support` and then compile gcc
+
 FROM rockylinux:9
 
 WORKDIR workdir
@@ -33,8 +46,8 @@ WORKDIR ../objdir
 ARG BIN_DIR="/workdir/gcc"
 RUN mkdir $BIN_DIR
 
-#RUN $PWD/../gcc/configure --prefix=$HOME/GCC --enable-languages=c,c++,fortran,go
-#RUN $PWD/../$SRC_DIR/configure --prefix=$BIN_DIR --enable-languages=c,fortran --disable-multilib
+#RUN      $PWD/../gcc/configure --prefix=$HOME/GCC --enable-languages=c,c++,fortran,go
+#RUN $PWD/../$SRC_DIR/configure --prefix=$BIN_DIR  --enable-languages=c,fortran --disable-multilib
 
 RUN $PWD/../$SRC_DIR/configure \
 	--prefix=$BIN_DIR \
