@@ -31,9 +31,9 @@ module syntran__core_m
 
 	! TODO:
 	!  - add tests for non-trivial bitwise operation samples:
-	!    * aes
 	!    * base64
 	!    * random mersenne twister
+	!    * aes: added
 	!  - raw string literals
 	!    * easier to include quotes without doubling
 	!    * follow rust style:
