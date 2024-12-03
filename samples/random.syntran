@@ -70,10 +70,10 @@ fn rand_i32(): i32
 		twist();
 	}
 	let y = STATE_MT[STATE_INDEX];
-	y = y ^ ((y >> u) & d); // TODO: compound bitwise ^= when available
-	y = y ^ ((y << s) & b);
-	y = y ^ ((y << t) & c);
-	y = y ^ ( y >> l);
+	y ^= ((y >> u) & d);
+	y ^= ((y << s) & b);
+	y ^= ((y << t) & c);
+	y ^= ( y >> l);
 	STATE_INDEX += 1;
 
 	//println("y = ", y);
