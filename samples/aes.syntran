@@ -1,0 +1,430 @@
+
+// This script contains functions for AES-256 encryption and decryption.  AES is
+// a symmetric key block cipher
+//
+// NOTE: this is *not* secure and is only intended as a demo of syntran bitwise
+// operations
+//
+// References:
+// - https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197-upd1.pdf
+// - https://csrc.nist.gov/files/pubs/fips/197/final/docs/fips-197.pdf
+//   * this pdf has more examples than the first pdf, including a 256-bit cipher
+//     example, in the appendix
+// - https://en.wikipedia.org/wiki/Advanced_Encryption_Standard
+// - https://en.wikipedia.org/wiki/Rijndael_S-box
+
+//==============================================================================
+
+// These constants are for AES-256.  AES-128 and 192 have different values for
+// AES_NK and AES_NR
+let AES_NK = 8;
+let AES_NB = 4;
+let AES_NR = 14;
+
+//// AES-128
+//let AES_NK = 4;
+//let AES_NB = 4;
+//let AES_NR = 10;
+
+let AES_SBOX     = [0; 256];
+let AES_INV_SBOX = [0; 256];
+
+fn aes_rotl8(x: i32, shift: i32): i32
+{
+	return (x << shift) | (x >> (8 - shift));
+}
+
+fn aes_gmul(a: i32, b: i32): i32
+{
+	// Galois field (256) multiplication of two bytes
+	let p = 0;
+	for i in [0: 8]
+	{
+		if b & 1 != 0
+			p ^= a;
+		let hi_bit_set = (a & 0x80) != 0;
+		a = (a << 1) & 0xff;
+		if hi_bit_set
+			a ^= 0x1b;
+		b >>= 1;
+	}
+	return p;
+}
+
+fn aes_init_sbox()
+{
+	// Although many of these vars only require 8 bits for AES, the smallest int
+	// that syntran has is 32 bits.  This kills a little perf and requires
+	// masking with 0xff in a few places
+	let p = 1;
+	let q = 1;
+
+	// loop invariant: p * q == 1 in the galois field
+	while true
+	{
+		p = aes_gmul(p, 0x03);  // multiply p by 3
+		q = aes_gmul(q, 0xf6);  // divide q by 3 (equals multiply by 0xf6)
+
+		// compute the affine transformation
+		let xformed = q ^ aes_rotl8(q,1) ^ aes_rotl8(q,2) ^ aes_rotl8(q,3) ^ aes_rotl8(q,4);
+
+		let sbox_p = (xformed ^ 0x63) & 0xff;  // mask lowest byte only
+		AES_SBOX[p] = sbox_p;
+		AES_INV_SBOX[sbox_p] = p;
+
+		if (p == 1) break;
+	}
+
+	// 0 is a special case since it has no inverse
+	AES_SBOX[0] = 0x63;
+	AES_INV_SBOX[0x63] = 0;
+
+	return;
+}
+aes_init_sbox();
+
+fn aes_sub_word(a: i32): i32
+{
+	// Apply AES_SBOX transformation to each byte of a word
+
+	// Split bytes
+	let a0 = (a >> 24) & 0xff;
+	let a1 = (a >> 16) & 0xff;
+	let a2 = (a >>  8) & 0xff;
+	let a3 = (a >>  0) & 0xff;
+
+	// Transform
+	let b0 = AES_SBOX[a0];
+	let b1 = AES_SBOX[a1];
+	let b2 = AES_SBOX[a2];
+	let b3 = AES_SBOX[a3];
+
+	// Combine bytes
+	let b =
+		(b0 << 24) |
+		(b1 << 16) |
+		(b2 <<  8) |
+		(b3 <<  0);
+
+	return b;
+}
+
+fn aes_inv_sub_word(a: i32): i32
+{
+	// Apply AES_INV_SBOX transformation to each byte of a word
+
+	// Split bytes
+	let a0 = (a >> 24) & 0xff;
+	let a1 = (a >> 16) & 0xff;
+	let a2 = (a >>  8) & 0xff;
+	let a3 = (a >>  0) & 0xff;
+
+	// Transform
+	let b0 = AES_INV_SBOX[a0];
+	let b1 = AES_INV_SBOX[a1];
+	let b2 = AES_INV_SBOX[a2];
+	let b3 = AES_INV_SBOX[a3];
+
+	// Combine bytes
+	let b =
+		(b0 << 24) |
+		(b1 << 16) |
+		(b2 <<  8) |
+		(b3 <<  0);
+
+	return b;
+}
+
+fn aes_rot_word(a: i32): i32
+{
+	// Cyclically permute the bytes of a word
+
+	// Split bytes
+	let a0 = (a >> 24) & 0xff;
+	let a1 = (a >> 16) & 0xff;
+	let a2 = (a >>  8) & 0xff;
+	let a3 = (a >>  0) & 0xff;
+
+	// Rotate and combine bytes
+	return
+		(a1 << 24) |
+		(a2 << 16) |
+		(a3 <<  8) |
+		(a0 <<  0);
+}
+
+// AES_RCON[0] is unused.  It could be deleted if the indexing is adjusted
+// accordingly
+let AES_RCON = [0x0000_0000,
+	0x0100_0000, 0x0200_0000, 0x0400_0000, 0x0800_0000, 0x1000_0000,
+	0x2000_0000, 0x4000_0000, 0x8000_0000, 0x1b00_0000, 0x3600_0000
+];
+
+fn aes_expand_key(key: [i32; :]): [i32; :]
+{
+	let w = [0; AES_NB * (AES_NR + 1)];
+	w[0: AES_NK] = key;
+	for i in [AES_NK: AES_NB * (AES_NR + 1)]
+	{
+		let temp = w[i-1];
+		//println("i = ", i);
+		//println("temp = ", temp);
+		if (i % AES_NK == 0) {
+			//println("aes_rot_word = ", aes_rot_word(temp));
+			//println("aes_sub_word = ", aes_sub_word(aes_rot_word(temp)));
+			//println("AES_RCON     = ", AES_RCON[i/AES_NK]);
+			temp = aes_sub_word(aes_rot_word(temp)) ^ AES_RCON[i/AES_NK];
+		} else if (AES_NK > 6 and i % AES_NK == 4) {
+			temp = aes_sub_word(temp);
+		}
+		//println("temp = ", temp);
+		//println();
+		w[i] = w[i-AES_NK] ^ temp;
+	}
+	return w;
+}
+
+fn aes_add_round_key(state: [i32; :], wr: [i32; :]): [i32; :]
+{
+	return state ^ wr;
+}
+
+fn aes_sub_bytes(state: [i32; :]): [i32; :]
+{
+	for i in [0: AES_NB]
+		state[i] = aes_sub_word(state[i]);
+	return state;
+}
+
+fn aes_inv_sub_bytes(state: [i32; :]): [i32; :]
+{
+	for i in [0: AES_NB]
+		state[i] = aes_inv_sub_word(state[i]);
+	return state;
+}
+
+fn aes_shift_rows(s: [i32; :]): [i32; :]
+{
+	// `s` is state
+	let t = [0; AES_NB];
+
+	// Could be done with a loop and mod
+	t[0] = (s[0] & 0xff00_0000) | (s[1] & 0x00ff_0000) | (s[2] & 0x0000_ff00) | (s[3] & 0x0000_00ff);
+	t[1] = (s[1] & 0xff00_0000) | (s[2] & 0x00ff_0000) | (s[3] & 0x0000_ff00) | (s[0] & 0x0000_00ff);
+	t[2] = (s[2] & 0xff00_0000) | (s[3] & 0x00ff_0000) | (s[0] & 0x0000_ff00) | (s[1] & 0x0000_00ff);
+	t[3] = (s[3] & 0xff00_0000) | (s[0] & 0x00ff_0000) | (s[1] & 0x0000_ff00) | (s[2] & 0x0000_00ff);
+
+	return t;
+}
+
+fn aes_inv_shift_rows(s: [i32; :]): [i32; :]
+{
+	// `s` is state
+	let t = [0; AES_NB];
+
+	// Could be done with a loop and mod
+	t[0] = (s[0] & 0xff00_0000) | (s[3] & 0x00ff_0000) | (s[2] & 0x0000_ff00) | (s[1] & 0x0000_00ff);
+	t[1] = (s[1] & 0xff00_0000) | (s[0] & 0x00ff_0000) | (s[3] & 0x0000_ff00) | (s[2] & 0x0000_00ff);
+	t[2] = (s[2] & 0xff00_0000) | (s[1] & 0x00ff_0000) | (s[0] & 0x0000_ff00) | (s[3] & 0x0000_00ff);
+	t[3] = (s[3] & 0xff00_0000) | (s[2] & 0x00ff_0000) | (s[1] & 0x0000_ff00) | (s[0] & 0x0000_00ff);
+
+	return t;
+}
+
+fn aes_mix_column(r: i32): i32
+{
+	// Split bytes.  TODO: fn?
+	let r0 = (r >> 24) & 0xff;
+	let r1 = (r >> 16) & 0xff;
+	let r2 = (r >>  8) & 0xff;
+	let r3 = (r >>  0) & 0xff;
+
+	// Column mixing and its inverse could potentially be optimized by using
+	// pre-calculated lookup tables for multiplication by 0x02 (and 0x03, etc)
+	// for every possible byte
+	let s0 = aes_gmul(0x02, r0) ^ aes_gmul(0x03, r1) ^ r2 ^ r3;
+	let s1 = aes_gmul(0x02, r1) ^ aes_gmul(0x03, r2) ^ r3 ^ r0;
+	let s2 = aes_gmul(0x02, r2) ^ aes_gmul(0x03, r3) ^ r0 ^ r1;
+	let s3 = aes_gmul(0x02, r3) ^ aes_gmul(0x03, r0) ^ r1 ^ r2;
+
+	// Combine bytes
+	return
+		(s0 << 24) |
+		(s1 << 16) |
+		(s2 <<  8) |
+		(s3 <<  0);
+}
+
+fn aes_inv_mix_column(r: i32): i32
+{
+	// Split bytes
+	let r0 = (r >> 24) & 0xff;
+	let r1 = (r >> 16) & 0xff;
+	let r2 = (r >>  8) & 0xff;
+	let r3 = (r >>  0) & 0xff;
+
+	let s0 = aes_gmul(0x0e, r0) ^ aes_gmul(0x0b, r1) ^ aes_gmul(0x0d, r2) ^ aes_gmul(0x09, r3);
+	let s1 = aes_gmul(0x09, r0) ^ aes_gmul(0x0e, r1) ^ aes_gmul(0x0b, r2) ^ aes_gmul(0x0d, r3);
+	let s2 = aes_gmul(0x0d, r0) ^ aes_gmul(0x09, r1) ^ aes_gmul(0x0e, r2) ^ aes_gmul(0x0b, r3);
+	let s3 = aes_gmul(0x0b, r0) ^ aes_gmul(0x0d, r1) ^ aes_gmul(0x09, r2) ^ aes_gmul(0x0e, r3);
+
+	// Combine bytes
+	return
+		(s0 << 24) |
+		(s1 << 16) |
+		(s2 <<  8) |
+		(s3 <<  0);
+}
+
+fn aes_mix_columns(s: [i32; :]): [i32; :]
+{
+	for i in [0: AES_NB]
+		s[i] = aes_mix_column(s[i]);
+	return s;
+}
+
+fn aes_inv_mix_columns(s: [i32; :]): [i32; :]
+{
+	for i in [0: AES_NB]
+		s[i] = aes_inv_mix_column(s[i]);
+	return s;
+}
+
+fn aes_cipher_block(in_: [i32; :], w: [i32; :]): [i32; :]
+{
+	// Apply cipher to 1 block of input (i.e. 4 words or 16 bytes)
+	let state = in_;
+	state = aes_add_round_key(state, w[0: AES_NB]);
+	for round in [1: AES_NR]  // start at 1, not 0
+	{
+		state = aes_sub_bytes(state);
+		//println("sub bytes  = ", state);
+		state = aes_shift_rows(state);
+		//println("shift rows = ", state);
+		state = aes_mix_columns(state);
+		//println("mix cols   = ", state);
+		state = aes_add_round_key(state, w[round * AES_NB: (round+1) * AES_NB]);
+	}
+	state = aes_sub_bytes(state);
+	state = aes_shift_rows(state);
+	state = aes_add_round_key(state, w[AES_NR * AES_NB: (AES_NR+1) * AES_NB]);
+
+	return state;
+}
+
+fn aes_inv_cipher_block(in_: [i32; :], w: [i32; :]): [i32; :]
+{
+	let state = in_;
+	state = aes_add_round_key(state, w[AES_NR * AES_NB: (AES_NR+1) * AES_NB]);
+	for round in [AES_NR-1: -1: 0]
+	{
+		state = aes_inv_shift_rows(state);
+		state = aes_inv_sub_bytes(state);
+		state = aes_add_round_key(state, w[round * AES_NB: (round+1) * AES_NB]);
+		state = aes_inv_mix_columns(state);
+	}
+	state = aes_inv_shift_rows(state);
+	state = aes_inv_sub_bytes(state);
+	state = aes_add_round_key(state, w[0: AES_NB]);
+
+	return state;
+}
+
+fn aes_cipher()
+{
+	// TODO: take arbitrary size plaintext data and call aes_cipher_block()
+	// while iterating over it one "block" at a time.  Maybe take key arg
+	// instead of w and expand it automatically
+	return;
+}
+
+//==============================================================================
+
+fn assert_eq(a: i32, b: i32): i32
+{
+	if (a != b) return 1;
+	return 0;
+}
+
+fn main(): i32
+{
+	println("starting aes.syntran");
+
+	let status = 0;
+
+	//// TODO: need a way to print hex format (and bin, octal)
+	//println("AES_SBOX = ");
+	////println(AES_SBOX);
+	//for i in [0: 16]
+	//	println(AES_SBOX[16*i: 16*i + 16]);
+
+	status += assert_eq(AES_SBOX[0], 0x63);
+	status += assert_eq(AES_SBOX[1], 0x7c);
+	status += assert_eq(AES_SBOX[2], 0x77);
+	status += assert_eq(AES_SBOX[3], 0x7b);
+	status += assert_eq(AES_SBOX[252], 0xb0);
+	status += assert_eq(AES_SBOX[253], 0x54);
+	status += assert_eq(AES_SBOX[254], 0xbb);
+	status += assert_eq(AES_SBOX[255], 0x16);
+
+	//println("AES_INV_SBOX = ");
+	//for i in [0: 16]
+	//	println(AES_INV_SBOX[16*i: 16*i + 16]);
+
+	status += assert_eq(AES_SBOX[AES_INV_SBOX[128]], 128);
+	status += assert_eq(AES_SBOX[AES_INV_SBOX[129]], 129);
+	status += assert_eq(AES_SBOX[AES_INV_SBOX[130]], 130);
+	status += assert_eq(AES_SBOX[AES_INV_SBOX[131]], 131);
+
+	// Cipher Key from pdf =
+	// 	60 3d eb 10 15 ca 71 be 2b 73 ae f0 85 7d 77 81
+	// 	1f 35 2c 07 3b 61 08 d7 2d 98 10 a3 09 14 df f4
+	let key1 = [
+		0x603d_eb10, 0x15ca_71be, 0x2b73_aef0, 0x857d_7781,
+		0x1f35_2c07, 0x3b61_08d7, 0x2d98_10a3, 0x0914_dff4
+	];
+	//println("key1 = ", key1);
+	let w1 = aes_expand_key(key1);
+	//println("w1   = ", w1);
+
+	status += assert_eq(w1[0], 0x603d_eb10);
+	status += assert_eq(w1[6], 0x2d98_10a3);
+	status += assert_eq(w1[7], 0x0914_dff4);
+
+	// 256-bit example
+	let plaintext = [0x0011_2233, 0x4455_6677, 0x8899_aabb, 0xccdd_eeff];
+	println("plaintext = ", plaintext);
+	let key2 = [
+		0x0001_0203, 0x0405_0607, 0x0809_0a0b, 0x0c0d_0e0f,
+		0x1011_1213, 0x1415_1617, 0x1819_1a1b, 0x1c1d_1e1f
+	];
+	let w2 = aes_expand_key(key2);
+	let output = aes_cipher_block(plaintext, w2);
+	println("output    = ", output);
+
+	// Expected output:  8ea2b7ca516745bfeafc49904b496089
+	status += assert_eq(output[0], 0x8ea2_b7ca);
+	status += assert_eq(output[3], 0x4b49_6089);
+
+	let iout = aes_inv_cipher_block(output, w2);
+	println("iout      = ", iout);
+
+	status += assert_eq(iout[0], plaintext[0]);
+	status += assert_eq(iout[1], plaintext[1]);
+	status += assert_eq(iout[2], plaintext[2]);
+	status += assert_eq(iout[3], plaintext[3]);
+
+	if (status != 0)
+	{
+		println();
+		println("Error: aes test failure!");
+		println();
+		return 1;
+	}
+
+	println("ending aes.syntran");
+	return 0;
+}
+
+exit(main());
+

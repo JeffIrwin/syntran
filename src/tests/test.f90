@@ -650,6 +650,11 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sum(abs([-0.01, -0.1]));') - sum(abs([-0.01d0, -0.1d0])))  < tol,  &
 			abs(eval_f64('sum(abs([0.5, -0.1]));') - sum(abs([0.5d0, -0.1d0]))) < tol,  &
 			abs(eval_f64('sum(abs([0.2, -0.1]));') - sum(abs([0.2d0, -0.1d0])))  < tol,  &
+			eval('abs(1) == 1;') == 'true', &
+			eval('abs(-1) == 1;') == 'true', &
+			eval('all(abs([-1, 3, -2]) == [1, 3, 2]);') == 'true', &
+			eval('abs(i64(-4)) == 4;') == 'true', &
+			eval('all(abs(i64([-10, 30, -20])) == [10, 30, 20]);') == 'true', &
 			abs(eval_f32('exp(0.0f);') - 1.0) < ftol,  &
 			abs(eval_f32('exp(1.0f);') - exp(1.0)) < ftol,  &
 			abs(eval_f64('exp(0.0);') - 1.0d0) < tol,  &
@@ -905,8 +910,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f32('parse_f32("2");') - 2.000000E+00) < tol, &
 			abs(eval_f32('parse_f32("-3");') - -3.000000E+00) < tol, &
 			abs(eval_f32('parse_f32("-2");') - -2.000000E+00) < tol, &
-			abs(eval_f64('parse_f64("-3.000000E+00");') - -3.000000d+00) < tol, &
-			abs(eval_f64('parse_f64("-2.000000E+00");') - -2.000000d+00) < tol, &
+			abs(eval_f64('parse_f64("-3.000000E+00");') - (-3.000000d+00)) < tol, &
+			abs(eval_f64('parse_f64("-2.000000E+00");') - (-2.000000d+00)) < tol, &
 			abs(eval_f64('parse_f64("3.0");') - 3.000000d+00) < tol, &
 			abs(eval_f64('parse_f64("2.0");') - 2.000000d+00) < tol, &
 			eval_i64('len(     "");')  == 0,  &
@@ -1625,6 +1630,165 @@ subroutine unit_test_literals(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_literals
+
+!===============================================================================
+
+subroutine unit_test_bitwise(npass, nfail)
+
+	! Bitwise operators: shift, and, xor, etc.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = "bitwise operators"
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) "Unit testing "//label//" ..."
+
+	tests = &
+		[   &
+			eval_i32("1 << 0;") == 1, &
+			eval_i32("1 << 1;") == 2, &
+			eval_i32("1 << 3;") == 8, &
+			eval_i32("0x0f << 4;") == 15*16, &
+			eval_i32("0x0f << 4;") == eval_i32("0xf0;"), &
+			eval_i32("0x00ff << 8;") == eval_i32("0xff00;"), &
+			eval_i32("0x00ff00 << 8;") == eval_i32("0xff0000;"), &
+			eval_i32("0xff00_0000 << 1;") == eval_i32("0xfe00_0000;"), &
+			eval_i32("0xff00_0000 << 4;") == eval_i32("0xf000_0000;"), &
+			eval_i32("0xff00_0000 << 8;") == eval_i32("0x0000_0000;"), &
+			eval_i32("0b00001011 << 0;") == eval_i32("0b00001011;"), &
+			eval_i32("0b00001011 << 1;") == eval_i32("0b00010110;"), &
+			eval_i32("0b00001011 << 2;") == eval_i32("0b00101100;"), &
+			eval_i32("0b00001011 << 3;") == eval_i32("0b01011000;"), &
+			eval_i32("0b00001011 << 4;") == eval_i32("0b10110000;"), &
+			eval("1 << [0: 4];") == "[1, 2, 4, 8]", &
+			eval("1'i64 << [1: 5];") == "[2, 4, 8, 16]", &
+			eval("[0: 4] << 0;") == "[0, 1, 2, 3]", &
+			eval("[0: 4] << 2;") == "[0, 4, 8, 12]", &
+			eval("[0b1111, 0b0111, 0b0011, 0b0001] << [0: 4];") == "[15, 14, 12, 8]", &
+			eval("i64([0b1111, 0b0111, 0b0011, 0b0001]) << [0: 4];") == "[15, 14, 12, 8]", &
+			eval("[0b1111, 0b0111, 0b0011, 0b0001] << i64([0: 4]);") == "[15, 14, 12, 8]", &
+			eval("i64([0b1111, 0b0111, 0b0011, 0b0001]) << i64([0: 4]);") == "[15, 14, 12, 8]", &
+			eval_i32("1024 >> 0;") == 1024, &
+			eval_i32("1024 >> 1;") == 512, &
+			eval_i32("1024 >> 2;") == 256, &
+			eval_i32("1024 >> 3;") == 128, &
+			eval_i32("1 >> 1;") == 0, &
+			eval_i32("0x00ff00 >> 8;") == eval_i32("0x0000ff;"), &
+			eval_i32("0b10110000 >> 0;") == eval_i32("0b10110000;"), &
+			eval_i32("0b10110000 >> 1;") == eval_i32("0b01011000;"), &
+			eval_i32("0b10110000 >> 2;") == eval_i32("0b00101100;"), &
+			eval_i32("0b10110000 >> 3;") == eval_i32("0b00010110;"), &
+			eval_i32("0b10110000 >> 4;") == eval_i32("0b00001011;"), &
+			eval("1024 >> [0: 4];") == "[1024, 512, 256, 128]", &
+			eval("1024'i64 >> [0: 4];") == "[1024, 512, 256, 128]", &
+			eval_i32("0 ^ 0;") == 0, &
+			eval_i32("1 ^ 1;") == 0, &
+			eval_i32("255 ^ 255;") == 0, &
+			eval_i32("0xff00 ^ 0x00ff;") == eval_i32("0xffff;"), &
+			eval("(0xff00 ^ 0x00ff) == 0xffff;") == "true", &
+			eval("0xff00 ^ 0x00ff == 0xffff;") == "true", &  ! ^ vs == precedence matches rust, not c
+			eval("(0xf00f ^ 0x0ff0) == 0xffff;") == "true", &
+			eval("(0b1010 ^ 0b0101) == 0b1111;") == "true", &
+			eval("(0b1011 ^ 0b0101) == 0b1110;") == "true", &
+			eval("(0b1011'i64 ^ 0b0101'i64) == 0b1110;") == "true", &
+			eval("(0b1010 ^ 0b0001) == 0b1011;") == "true", &
+			eval("all(([0b1010] ^ 0b0001) == [0b1011]);") == "true", &
+			eval("all(([0b1110, 0b1101] ^ 0b1111) == [0b0001, 0b0010]);") == "true", &
+			eval("all((i64([0b1110, 0b1101]) ^ 0b1111'i64) == [0b0001, 0b0010]);") == "true", &
+			eval("all(([0b1110, 0b1101, 0b1011, 0b0111] ^ 0b1111) == [0b0001, 0b0010, 0b0100, 0b1000]);") == "true", &
+			eval("all((0b0000 ^ [0b1110, 0b1101, 0b1011, 0b0111]) == [0b1110, 0b1101, 0b1011, 0b0111]);") == "true", &
+			eval("all(([0b1110, 0b1101] ^ [0b1111, 0b0000]) == [0b0001, 0b1101]);") == "true", &
+			eval("0xff00 | 0x00ff == 0xffff;") == "true", &
+			eval("0xffff | 0x00ff == 0xffff;") == "true", &
+			eval("0xffed | 0x00ff == 0xffff;") == "true", &
+			eval("0b0110 | 0b1011 == 0b1111;") == "true", &
+			eval("0b0110 | 0b1010 == 0b1110;") == "true", &
+			eval("0b0110'i64 | 0b1010'i64 == 0b1110;") == "true", &
+			eval("all([0b0110] | 0b1010 == [0b1110]);") == "true", &
+			eval("all(0b0110 | [0b1010, 0b0101] == [0b1110, 0b0111]);") == "true", &
+			eval("all(0b0110'i64 | i64([0b1010, 0b0101]) == [0b1110, 0b0111]);") == "true", &
+			eval("0xff00 & 0x00ff == 0x0000;") == "true", &
+			eval("0xffff & 0x00ff == 0x00ff;") == "true", &
+			eval("0xffed & 0x00ff == 0x00ed;") == "true", &
+			eval("0b0110 & 0b1011 == 0b0010;") == "true", &
+			eval("0b1110 & 0b1010 == 0b1010;") == "true", &
+			eval("0b0110'i64 & 0b1010'i64 == 0b0010;") == "true", &
+			eval("all([0b0110] & 0b1010 == [0b0010]);") == "true", &
+			eval("all(0b0110 & [0b1010, 0b0101] == [0b0010, 0b0100]);") == "true", &
+			eval("all(0b0110'i64 & i64([0b1010, 0b0101]) == [0b0010, 0b0100]);") == "true", &
+			eval("!0x0000_f00f == 0xffff_0ff0;") == "true", &
+			eval("!0x0f0f_000f_fff0_0fff == 0xf0f0_fff0_000f_f000;") == "true", &
+			eval("!-2 ==  1;") == "true", &
+			eval("!-1 ==  0;") == "true", &
+			eval("!0  == -1;") == "true", &
+			eval("!1  == -2;") == "true", &
+			eval("!-2'i64 ==  1;") == "true", &
+			eval("!-1'i64 ==  0;") == "true", &
+			eval("!0'i64  == -1;") == "true", &
+			eval("!1'i64  == -2;") == "true", &
+			eval("all(![0: 4] == [-1, -2, -3, -4]);") == "true", &
+			eval("all(!i64([0: 4]) == [-1, -2, -3, -4]);") == "true", &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_bitwise
+
+!===============================================================================
+
+subroutine unit_test_bit_ass(npass, nfail)
+
+	! Compound assignment with bitwise operators: shift, and, xor, etc.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = "compound bitwise assignment"
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) "Unit testing "//label//" ..."
+
+	! TODO: test arrays too
+	tests = &
+		[   &
+			eval_i32('let x = 0xff00; x |= 0x00ff; return x;') == 65535, &
+			eval_i32('let x = 0xff00; x |= 0x00fe; return x;') == 65534, &
+			eval('let x = 0xff00; x |= 0x00fe; return x;') == eval('0xfffe;'), &
+			eval('let x = 0x00AD; x |= 0xDE00; return x;') == eval('0xDEAD;'), &
+			eval('let x = 0xff00; x &= 0x00ff; return x;') == eval('0x0000;'), &
+			eval('let x = 0xBABE; x &= 0xffff; return x;') == eval('0xbabe;'), &
+			eval('let x = 0xFFFF; x &= 0xbeaf; return x;') == eval('0xBEAF;'), &
+			eval('let x = 0xaaff; x &= 0xffaa; return x;') == eval('0xaaaa;'), &
+			eval('let x = 0xff00; x ^= 0x00fe; return x;') == eval('0xfffe;'), &
+			eval('let x = 0xff00; x ^= 0xfffe; return x;') == eval('0x00fe;'), &
+			eval('let x = 0xffff; x >>= 4; return x;') == eval('0x0fff;'), &
+			eval('let x = 0xffff; x <<= 4; return x;') == eval('0xffff0;'), &
+			eval('let x = 0xffff; x >>= 8; return x;') == eval('0x00ff;'), &
+			eval('let x = 0xffff; x <<= 8; return x;') == eval('0xffff00;'), &
+			eval('let x = 0xCAFE; x <<= 16; x |= 0xBABE; return x;') == eval('0xCAFE_BABE;'), &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_bit_ass
 
 !===============================================================================
 
@@ -3033,11 +3197,11 @@ subroutine unit_test_struct(npass, nfail)
 	character(len = *), parameter :: label = 'structs'
 
 	logical, parameter :: quiet = .true.
-	logical, allocatable :: tests(:)
+	logical, allocatable :: tests1(:), tests2(:), tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	tests = &
+	tests1 = &
 		[   &
 			eval( 'struct D{y:i64, m:str, d:i32}' &           ! 1
 				//'let d = D{y=i64(1912), m="Apr", d=14};' &
@@ -3177,6 +3341,11 @@ subroutine unit_test_struct(npass, nfail)
 				//'let po = r1.tr;' &
 				//'let yo = po.y;' &
 				, quiet) == '17', &
+			.false. &
+		]
+	tests2 = &
+		[   &
+
 			eval(''                         &                 ! 32
 				//'struct V{v:[i32;:], name:str,}' &
 				//'let v1 = V{v=[6,2,5], name="myvec1"};' &
@@ -3325,8 +3494,12 @@ subroutine unit_test_struct(npass, nfail)
 		]
 
 	! Trim dummy false element
-	tests = tests(1: size(tests) - 1)
+	tests1 = tests1(1: size(tests1) - 1)
+	tests2 = tests2(1: size(tests2) - 1)
 	!print *, "number of "//label//" tests = ", size(tests)
+
+	! Cat sub arrays
+	tests = [tests1, tests2]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
@@ -3334,7 +3507,13 @@ end subroutine unit_test_struct
 
 !===============================================================================
 
-subroutine unit_test_struct_arr(npass, nfail)
+subroutine unit_test_struct_arr1(npass, nfail)
+
+	! TODO: this is split into multiple parts to avoid compiler warnings about
+	! >255 continuation lines (which both gfort and ifort have no real issue
+	! with).  For logging, it would be cleaner to split the array but not the
+	! subroutine.  Concatenate the bool arrays before calling unit_test_coda()
+	! all within one subroutine, as in unit_test_struct()
 
 	implicit none
 
@@ -3345,7 +3524,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 	! This tests both structs of arrays and arrays of structs.  There are
 	! limited structs of arrays covered in unit_test_struct(), but more complex
 	! cases are covered here
-	character(len = *), parameter :: label = 'structs/arrays'
+	character(len = *), parameter :: label = 'structs/arrays part 1'
 
 	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
@@ -3537,6 +3716,39 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'ls[1].s.v[1] = 19;' &
 				//'return ls[1].s.v[1];' &
 				, quiet) == '19', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! I developed LHS dot exprs almost all at once, so I might have missed some
+	! cases. For RHS dot exprs I did it piece-by-piece and added tests as I went
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_arr1
+subroutine unit_test_struct_arr2(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	! This tests both structs of arrays and arrays of structs.  There are
+	! limited structs of arrays covered in unit_test_struct(), but more complex
+	! cases are covered here
+	character(len = *), parameter :: label = 'structs/arrays part 2'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
 			eval(''                         &                 ! 25
 				//'struct P{v:[i32;:], s:str,}' &  ! point
 				//'struct L{s:P, e:P}'      &      ! line
@@ -3715,6 +3927,39 @@ subroutine unit_test_struct_arr(npass, nfail)
 				//'let e = E{e = [d]};' &
 				//'return e.e[0].d.c[0].b.a[0];' &
 				, quiet) == '42', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! I developed LHS dot exprs almost all at once, so I might have missed some
+	! cases. For RHS dot exprs I did it piece-by-piece and added tests as I went
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_arr2
+subroutine unit_test_struct_arr3(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	! This tests both structs of arrays and arrays of structs.  There are
+	! limited structs of arrays covered in unit_test_struct(), but more complex
+	! cases are covered here
+	character(len = *), parameter :: label = 'structs/arrays part 3'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
 			eval('' &                                         ! 40
 				//'struct A{a: i32}' &
 				//'struct B{b: A}' &
@@ -3901,7 +4146,7 @@ subroutine unit_test_struct_arr(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_struct_arr
+end subroutine unit_test_struct_arr3
 
 !===============================================================================
 
@@ -3957,7 +4202,7 @@ end subroutine unit_test_struct_str
 
 !===============================================================================
 
-subroutine unit_test_struct_1(npass, nfail)
+subroutine unit_test_struct_long(npass, nfail)
 
 	implicit none
 
@@ -3987,7 +4232,41 @@ subroutine unit_test_struct_1(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-end subroutine unit_test_struct_1
+end subroutine unit_test_struct_long
+
+!===============================================================================
+
+subroutine unit_test_bitwise_2(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'bitwise scripts'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/bitwise/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: also add random and base64 as bitwise script tests
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == '0', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_bitwise_2
 
 !===============================================================================
 
@@ -4212,11 +4491,16 @@ subroutine unit_tests(iostat)
 	call unit_test_lhs_slc_1  (npass, nfail)
 	call unit_test_control    (npass, nfail)
 	call unit_test_struct     (npass, nfail)
-	call unit_test_struct_arr (npass, nfail)
+	call unit_test_struct_arr1(npass, nfail)
+	call unit_test_struct_arr2(npass, nfail)
+	call unit_test_struct_arr3(npass, nfail)
 	call unit_test_struct_str (npass, nfail)
-	call unit_test_struct_1   (npass, nfail)
+	call unit_test_struct_long(npass, nfail)
 	call unit_test_f64_mix    (npass, nfail)
 	call unit_test_literals   (npass, nfail)
+	call unit_test_bitwise    (npass, nfail)
+	call unit_test_bit_ass    (npass, nfail)
+	call unit_test_bitwise_2  (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)

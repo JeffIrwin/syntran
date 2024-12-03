@@ -375,7 +375,7 @@ function value_to_f32(val) result(ans)
 			ans = val%sca%f32
 
 		case (f64_type)
-			ans = val%sca%f64
+			ans = real(val%sca%f64)
 
 		case (i32_type)
 			ans = val%sca%i32

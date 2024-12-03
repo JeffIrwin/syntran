@@ -30,6 +30,10 @@ module syntran__core_m
 		syntran_patch =  55
 
 	! TODO:
+	!  - add tests for non-trivial bitwise operation samples:
+	!    * base64
+	!    * random mersenne twister
+	!    * aes: added
 	!  - raw string literals
 	!    * easier to include quotes without doubling
 	!    * follow rust style:
@@ -37,6 +41,13 @@ module syntran__core_m
 	!      + let str2 = r##" my raw str with "#quotes"# "##;
 	!      + number of hashes at start matches end
 	!      + any use for zero hashes?  r"raw str"
+	!  - size() fn should optionally not need a 2nd argument for dim. in this
+	!    case, return product of extents of all dims (useful especially for vecs)
+	!  - allow using one array as an index of another array, as in fortran
+	!    * this is kinda similar to the current slice subscripting, so it might
+	!      not be too hard?  be careful with higher ranks
+	!    * note that the "err_bad_sub_rank" diag is commented-out, but it is
+	!      still a "non-integer subscript" error
 	!  - f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
@@ -74,19 +85,26 @@ module syntran__core_m
 	!    perf of intel compilers for AOC solution tests
 	!  - hacker sdk:
 	!    * bitwise operations
+	!      > compound assignment for all ops
+	!      > according to c (and fortran), right operand of shift should be
+	!        non-negative.  c says it's undefined behavior to shift negative.
+	!        is there anything i should catch?  it would have to be a runtime
+	!        check if any.  actual result seems to shift circularly
+	!      > according to msvc, operands of bitwise and, xor, etc. can have
+	!        different sizes. seems dangerous.  should it be allowed? what does
+	!        rust do?
+	!          https://learn.microsoft.com/en-us/cpp/c-language/c-bitwise-operators?view=msvc-170
+	!    * reinterpret cast -- used in quake fast inverse sqrt algo
+	!    * done:
+	!      > shifting: << and >>
 	!      > and: &
 	!      > or : |
+	!      > xor: ^
 	!      > not: ! (rust) or ~ (c)?
 	!        + i think c uses ~ because ! is already logical not, which can cast
 	!          ints to bools.  i'll prefer the rust style operator
-	!      > xor: ^
-	!      > lsh: << (shiftl(), i.e. left shift, not circular. note fortran's
-	!        cshift is array, not bitwise)
-	!      > rsh: >>
-	!      > compound assignment for all of the above
 	!    * these features are especially useful when implementing encryption,
 	!      hashing, utf, base64, and rng algorithms
-	!    * reinterpret cast -- used in quake fast inverse sqrt algo
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
 	!    * write another wave equation sample using slicing and array operations
@@ -214,7 +232,7 @@ module syntran__core_m
 	!    * done
 	!    * some lex error messages might be improvable
 	!    * hex float literals?  not worthwhile imo, but c++ and golang have them
-	!  - xor, xnor
+	!  - logical xor, xnor
 	!    * xor (bool1, bool2) is just (bool1 != bool2)
 	!    * xnor(bool1, bool2) is just (bool1 == bool2)
 	!    * is there any value to having plain language versions of these

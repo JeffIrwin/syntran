@@ -796,21 +796,23 @@ function lex(lexer) result(token)
 				lexer%pos = lexer%pos + 1
 				token = new_token(bang_equals_token, lexer%pos, "!=")
 			else
-
-				! FIXME: refactor w/ default case below since Fortran is weird
-				! about breaking in select case
-				token = new_token(bad_token, lexer%pos, lexer%current())
-				span = new_span(lexer%pos, len(lexer%current()))
-				call lexer%diagnostics%push( &
-					err_unexpected_char(lexer%context, &
-					span, lexer%current()))
-
+				token = new_token(bit_not_token, lexer%pos, lexer%current())
 			end if
 
 		case ("<")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
 				token = new_token(less_equals_token, lexer%pos, "<=")
+			else if (lexer%lookahead() == "<") then
+
+				if (lexer%peek(2) == "=") then
+					lexer%pos = lexer%pos + 2
+					token = new_token(lless_equals_token, lexer%pos, "<<=")
+				else
+					lexer%pos = lexer%pos + 1
+					token = new_token(lless_token, lexer%pos, "<<")
+				end if
+
 			else
 				token = new_token(less_token, lexer%pos, lexer%current())
 			end if
@@ -819,8 +821,42 @@ function lex(lexer) result(token)
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
 				token = new_token(greater_equals_token, lexer%pos, ">=")
+			else if (lexer%lookahead() == ">") then
+
+				if (lexer%peek(2) == "=") then
+					lexer%pos = lexer%pos + 2
+					token = new_token(ggreater_equals_token, lexer%pos, ">>=")
+				else
+					lexer%pos = lexer%pos + 1
+					token = new_token(ggreater_token, lexer%pos, ">>")
+				end if
+
 			else
 				token = new_token(greater_token, lexer%pos, lexer%current())
+			end if
+
+		case ("^")
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(bit_xor_equals_token, lexer%pos, "^=")
+			else
+				token = new_token(bit_xor_token, lexer%pos, lexer%current())
+			end if
+
+		case ("|")
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(bit_or_equals_token, lexer%pos, "|=")
+			else
+				token = new_token(bit_or_token, lexer%pos, lexer%current())
+			end if
+
+		case ("&")
+			if (lexer%lookahead() == "=") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(bit_and_equals_token, lexer%pos, "&=")
+			else
+				token = new_token(bit_and_token, lexer%pos, lexer%current())
 			end if
 
 		case default

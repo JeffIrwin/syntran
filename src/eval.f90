@@ -7,6 +7,15 @@ module syntran__eval_m
 
 	use syntran__bool_m
 	use syntran__math_m
+
+	! consider grouping/encapsulating in a math bitwise module?
+	use syntran__math_left_shift_m
+	use syntran__math_right_shift_m
+	use syntran__math_bit_xor_m
+	use syntran__math_bit_or_m
+	use syntran__math_bit_and_m
+	use syntran__math_bit_not_m
+
 	use syntran__types_m
 
 	implicit none
@@ -84,10 +93,13 @@ recursive subroutine syntax_eval(node, state, res)
 		call eval_return_statement(node, state, res)
 
 	case (break_statement)
-		call eval_break_statement(node, state, res)
+		state%breaked = .true.
+		!call eval_break_statement(node, state, res)
 
 	case (continue_statement)
-		call eval_continue_statement(node, state, res)
+		! No need for a subroutine (with 2 unused args) for 1 line
+		state%continued = .true.
+		!call eval_continue_statement(node, state, res)
 
 	case (translation_unit)
 		call eval_translation_unit(node, state, res)
@@ -233,6 +245,21 @@ recursive subroutine eval_binary_expr(node, state, res)
 
 	case (greater_equals_token)
 		call is_ge(left, right, res, node%op%text)
+
+	case (lless_token)
+		call left_shift(left, right, res, node%op%text)
+
+	case (ggreater_token)
+		call right_shift(left, right, res, node%op%text)
+
+	case (bit_xor_token)
+		call bit_xor(left, right, res, node%op%text)
+
+	case (bit_or_token)
+		call bit_or(left, right, res, node%op%text)
+
+	case (bit_and_token)
+		call bit_and(left, right, res, node%op%text)
 
 	case default
 		write(*,*) err_eval_binary_op(node%op%text)
@@ -713,15 +740,11 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	!********
 
-	character(len = :), allocatable :: color
-
-	integer :: i, io
+	integer :: i
 
 	logical :: returned0
 
-	type(char_vector_t) :: str_
-
-	type(value_t) :: arg, arg1, arg2, tmp
+	type(value_t) :: tmp
 
 	!print *, 'eval fn_call_expr'
 	!print *, 'fn identifier = ', node%identifier%text
@@ -826,7 +849,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 	type(char_vector_t) :: str_
 
-	type(value_t) :: arg, arg1, arg2, tmp
+	type(value_t) :: arg, arg1, arg2
 
 	!print *, 'eval fn_call_intr_expr'
 	!print *, 'fn identifier = ', node%identifier%text
@@ -982,6 +1005,29 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		call syntax_eval(node%args(1), state, arg1)
 		res%array = mold(arg1%array, f64_type)
 		res%array%f64 = abs(arg1%array%f64)
+
+	!********
+	case ("0abs_i32")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%i32 = abs(arg1%sca%i32)
+
+	case ("0abs_i64")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%i64 = abs(arg1%sca%i64)
+
+	case ("0abs_i32_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, i32_type)
+		res%array%i32 = abs(arg1%array%i32)
+
+	case ("0abs_i64_arr")
+
+		call syntax_eval(node%args(1), state, arg1)
+		res%array = mold(arg1%array, i64_type)
+		res%array%i64 = abs(arg1%array%i64)
 
 	!********
 	case ("0cos_f32")
@@ -2603,41 +2649,25 @@ end subroutine eval_return_statement
 
 !===============================================================================
 
-recursive subroutine eval_break_statement(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	!print *, "starting eval_break_statement"
-
-	state%breaked = .true.
-
-	!print *, "ending eval_break_statement"
-
-end subroutine eval_break_statement
+!recursive subroutine eval_break_statement(node, state, res)
+!	type(syntax_node_t), intent(in) :: node
+!	type(state_t), intent(inout) :: state
+!	type(value_t), intent(out) :: res
+!	!print *, "starting eval_break_statement"
+!	state%breaked = .true.
+!	!print *, "ending eval_break_statement"
+!end subroutine eval_break_statement
 
 !===============================================================================
 
-recursive subroutine eval_continue_statement(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	!print *, "starting eval_continue_statement"
-
-	state%continued = .true.
-
-	!print *, "ending eval_continue_statement"
-
-end subroutine eval_continue_statement
+!recursive subroutine eval_continue_statement(node, state, res)
+!	type(syntax_node_t), intent(in) :: node
+!	type(state_t), intent(inout) :: state
+!	type(value_t), intent(out) :: res
+!	!print *, "starting eval_continue_statement"
+!	state%continued = .true.
+!	!print *, "ending eval_continue_statement"
+!end subroutine eval_continue_statement
 
 !===============================================================================
 
@@ -2719,6 +2749,9 @@ recursive subroutine eval_unary_expr(node, state, res)
 
 	case (not_keyword)
 		call not_(right, res, node%op%text)
+
+	case (bit_not_token)
+		call bit_not(right, res, node%op%text)
 
 	case default
 		write(*,*) err_eval_unary_op(node%op%text)
@@ -2871,6 +2904,21 @@ subroutine compound_assign(lhs, rhs, op)
 
 	case (percent_equals_token)
 		call mod_(tmp, rhs, lhs, op%text)
+
+	case (bit_and_equals_token)
+		call bit_and(tmp, rhs, lhs, op%text)
+
+	case (bit_or_equals_token)
+		call bit_or(tmp, rhs, lhs, op%text)
+
+	case (bit_xor_equals_token)
+		call bit_xor(tmp, rhs, lhs, op%text)
+
+	case (lless_equals_token)
+		call left_shift(tmp, rhs, lhs, op%text)
+
+	case (ggreater_equals_token)
+		call right_shift(tmp, rhs, lhs, op%text)
 
 	case default
 		write(*,*) err_int_prefix//'unexpected assignment operator ', quote(op%text)//color_reset

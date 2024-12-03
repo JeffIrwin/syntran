@@ -16,112 +16,123 @@ module syntran__consts_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
-			continue_statement   = 106, &
-			continue_keyword     = 105, &
-			break_statement      = 104, &
-			break_keyword        = 103, &
-			fn_call_intr_expr    = 102, &
-			f64_array_type       = 101, &
-			f64_type             = 100, &
-			f64_token            =  99, &
-			dot_expr             =  98, &
-			struct_type          =  97, &
-			struct_instance_expr =  96, &
-			struct_declaration   =  95, &
-			struct_keyword       =  94, &
-			dot_token            =  93, &
-			return_statement     =  92, &
-			return_keyword       =  91, &
-			size_array           =  90, &
-			bound_array          =  89, &
-			len_array            =  88, &
-			step_array           =  87, &
-			str_array_type       =  86, &
-			f32_array_type       =  85, &
-			i64_array_type       =  84, &
-			i32_array_type       =  83, &
-			bool_array_type      =  82, &  ! only used so get_binary_op_kind can return a single int
-			all_sub              =  81, &
-			include_keyword      =  80, &
-			hash_token           =  79, &
-			percent_equals_token =  78, &
-			sstar_equals_token   =  77, &
-			i64_token            =  76, &
-			i64_type             =  75, &
-			file_type            =  74, &
-			slash_equals_token   =  73, &
-			step_sub             =  72, &
-			range_sub            =  71, &
-			scalar_sub           =  70, &
-			star_equals_token    =  69, &
-			minus_equals_token   =  68, &
-			plus_equals_token    =  67, &
-			percent_token        =  66, &
-			str_token            =  65, &
-			str_type             =  64, &
-			any_type             =  63, &
-			void_type            =  62, &
-			fn_keyword           =  61, &
-			fn_declaration       =  60, &
-			translation_unit     =  59, &
-			fn_call_expr         =  58, &
-			unknown_type         =  57, &
-			comma_token          =  56, &
-			array_type           =  55, &
-			array_expr           =  54, &
-			expl_array           =  53, &
-			unif_array           =  52, &
-			f32_type             =  51, &
-			f32_token            =  50, &
-			greater_equals_token =  49, &
-			greater_token        =  48, &
-			less_equals_token    =  47, &
-			less_token           =  46, &
-			let_expr             =  45, &
-			while_statement      =  44, &
-			colon_token          =  43, &
-			for_statement        =  42, &
-			lbracket_token       =  41, &
-			rbracket_token       =  40, &
-			if_statement         =  39, &
-			while_keyword        =  38, &
-			in_keyword           =  37, &
-			for_keyword          =  36, &
-			else_keyword         =  35, &
-			if_keyword           =  34, &
-			semicolon_token      =  33, &
-			block_statement      =  32, &
-			expr_statement       =  31, &
-			lbrace_token         =  30, &
-			rbrace_token         =  29, &
-			sstar_token          =  28, &
-			let_keyword          =  27, &
-			name_expr            =  26, &
-			equals_token         =  25, & ! '='
-			assignment_expr      =  24, &
-			bang_equals_token    =  23, &
-			eequals_token        =  22, & ! '=='
-			and_keyword          =  21, &
-			or_keyword           =  20, &
-			not_keyword          =  19, &
-			bool_type            =  18, &
-			literal_expr         =  17, &
-			true_keyword         =  16, &
-			false_keyword        =  15, &
-			identifier_token     =  14, &
-			unary_expr           =  13, &
-			lparen_token         =  12, &
-			rparen_token         =  11, &
-			i32_type             =  10, &
-			binary_expr          =   9, &
-			star_token           =   8, &
-			slash_token          =   7, &
-			bad_token            =   6, &
-			plus_token           =   5, &
-			minus_token          =   4, &
-			whitespace_token     =   3, &
-			i32_token            =   2, &
-			eof_token            =   1
+			bit_or_equals_token   = 117, &
+			bit_xor_equals_token  = 116, &
+			bit_and_equals_token  = 115, &
+			ggreater_equals_token = 114, &
+			lless_equals_token    = 113, &
+			bit_not_token         = 112, &
+			bit_xor_token         = 111, &
+			bit_or_token          = 110, &
+			bit_and_token         = 109, &
+			ggreater_token        = 108, &
+			lless_token           = 107, &
+			continue_statement    = 106, &
+			continue_keyword      = 105, &
+			break_statement       = 104, &
+			break_keyword         = 103, &
+			fn_call_intr_expr     = 102, &
+			f64_array_type        = 101, &
+			f64_type              = 100, &
+			f64_token             =  99, &
+			dot_expr              =  98, &
+			struct_type           =  97, &
+			struct_instance_expr  =  96, &
+			struct_declaration    =  95, &
+			struct_keyword        =  94, &
+			dot_token             =  93, &
+			return_statement      =  92, &
+			return_keyword        =  91, &
+			size_array            =  90, &
+			bound_array           =  89, &
+			len_array             =  88, &
+			step_array            =  87, &
+			str_array_type        =  86, &
+			f32_array_type        =  85, &
+			i64_array_type        =  84, &
+			i32_array_type        =  83, &
+			bool_array_type       =  82, &  ! only used so get_binary_op_kind can return a single int
+			all_sub               =  81, &
+			include_keyword       =  80, &
+			hash_token            =  79, &
+			percent_equals_token  =  78, &
+			sstar_equals_token    =  77, &
+			i64_token             =  76, &
+			i64_type              =  75, &
+			file_type             =  74, &
+			slash_equals_token    =  73, &
+			step_sub              =  72, &
+			range_sub             =  71, &
+			scalar_sub            =  70, &
+			star_equals_token     =  69, &
+			minus_equals_token    =  68, &
+			plus_equals_token     =  67, &
+			percent_token         =  66, &
+			str_token             =  65, &
+			str_type              =  64, &
+			any_type              =  63, &
+			void_type             =  62, &
+			fn_keyword            =  61, &
+			fn_declaration        =  60, &
+			translation_unit      =  59, &
+			fn_call_expr          =  58, &
+			unknown_type          =  57, &
+			comma_token           =  56, &
+			array_type            =  55, &
+			array_expr            =  54, &
+			expl_array            =  53, &
+			unif_array            =  52, &
+			f32_type              =  51, &
+			f32_token             =  50, &
+			greater_equals_token  =  49, &
+			greater_token         =  48, &
+			less_equals_token     =  47, &
+			less_token            =  46, &
+			let_expr              =  45, &
+			while_statement       =  44, &
+			colon_token           =  43, &
+			for_statement         =  42, &
+			lbracket_token        =  41, &
+			rbracket_token        =  40, &
+			if_statement          =  39, &
+			while_keyword         =  38, &
+			in_keyword            =  37, &
+			for_keyword           =  36, &
+			else_keyword          =  35, &
+			if_keyword            =  34, &
+			semicolon_token       =  33, &
+			block_statement       =  32, &
+			expr_statement        =  31, &
+			lbrace_token          =  30, &
+			rbrace_token          =  29, &
+			sstar_token           =  28, &
+			let_keyword           =  27, &
+			name_expr             =  26, &
+			equals_token          =  25, & ! '='
+			assignment_expr       =  24, &
+			bang_equals_token     =  23, &
+			eequals_token         =  22, & ! '=='
+			and_keyword           =  21, &
+			or_keyword            =  20, &
+			not_keyword           =  19, &
+			bool_type             =  18, &
+			literal_expr          =  17, &
+			true_keyword          =  16, &
+			false_keyword         =  15, &
+			identifier_token      =  14, &
+			unary_expr            =  13, &
+			lparen_token          =  12, &
+			rparen_token          =  11, &
+			i32_type              =  10, &
+			binary_expr           =   9, &
+			star_token            =   8, &
+			slash_token           =   7, &
+			bad_token             =   6, &
+			plus_token            =   5, &
+			minus_token           =   4, &
+			whitespace_token      =   3, &
+			i32_token             =   2, &
+			eof_token             =   1
 
 !===============================================================================
 
@@ -242,6 +253,17 @@ function kind_token(kind)
 			"break statement      ", & ! 104
 			"continue             ", & ! 105
 			"continue statement   ", & ! 106
+			"<<                   ", & ! 107
+			">>                   ", & ! 108
+			"&                    ", & ! 109
+			"|                    ", & ! 110
+			"^                    ", & ! 111
+			"!                    ", & ! 112
+			"<<=                  ", & ! 113
+			">>=                  ", & ! 114
+			"&=                   ", & ! 115
+			"^=                   ", & ! 116
+			"|=                   ", & ! 117
 			"unknown              "  & ! inf
 		]
 
@@ -263,113 +285,124 @@ function kind_name(kind)
 	character(len = :), allocatable :: kind_name
 
 	character(len = *), parameter :: names(*) = [ &
-			"eof_token           ", & !   1
-			"i32_token           ", & !   2
-			"whitespace_token    ", & !   3
-			"minus_token         ", & !   4
-			"plus_token          ", & !   5
-			"bad_token           ", & !   6
-			"slash_token         ", & !   7
-			"star_token          ", & !   8
-			"binary_expr         ", & !   9
-			"i32_type            ", & !  10
-			"rparen_token        ", & !  11
-			"lparen_token        ", & !  12
-			"unary_expr          ", & !  13
-			"identifier_token    ", & !  14
-			"false_keyword       ", & !  15
-			"true_keyword        ", & !  16
-			"literal_expr        ", & !  17
-			"bool_type           ", & !  18
-			"not_keyword         ", & !  19
-			"or_keyword          ", & !  20
-			"and_keyword         ", & !  21
-			"eequals_token       ", & !  22
-			"bang_equals_token   ", & !  23
-			"assignment_expr     ", & !  24
-			"equals_token        ", & !  25
-			"name_expr           ", & !  26
-			"let_keyword         ", & !  27
-			"sstar_token         ", & !  28
-			"rbrace_token        ", & !  29
-			"lbrace_token        ", & !  30
-			"expr_statement      ", & !  31
-			"block_statement     ", & !  32
-			"semicolon_token     ", & !  33
-			"if_keyword          ", & !  34
-			"else_keyword        ", & !  35
-			"for_keyword         ", & !  36
-			"in_keyword          ", & !  37
-			"while_keyword       ", & !  38
-			"if_statement        ", & !  39
-			"rbracket_token      ", & !  40
-			"lbracket_token      ", & !  41
-			"for_statement       ", & !  42
-			"colon_token         ", & !  43
-			"while_statement     ", & !  44
-			"let_expr            ", & !  45
-			"less_token          ", & !  46
-			"less_equals_token   ", & !  47
-			"greater_token       ", & !  48
-			"greater_equals_token", & !  49
-			"f32_token           ", & !  50
-			"f32_type            ", & !  51
-			"unif_array          ", & !  52
-			"expl_array          ", & !  53
-			"array_expr          ", & !  54
-			"array_type          ", & !  55
-			"comma_token         ", & !  56
-			"unknown_type        ", & !  57
-			"fn_call_expr        ", & !  58
-			"translation_unit    ", & !  59
-			"fn_declaration      ", & !  60
-			"fn_keyword          ", & !  61
-			"void_type           ", & !  62
-			"any_type            ", & !  63
-			"str_type            ", & !  64
-			"str_token           ", & !  65
-			"percent_token       ", & !  66
-			"plus_equals_token   ", & !  67
-			"minus_equals_token  ", & !  68
-			"star_equals_token   ", & !  69
-			"scalar_sub          ", & !  70
-			"range_sub           ", & !  71
-			"step_sub            ", & !  72
-			"slash_equals_token  ", & !  73
-			"file_type           ", & !  74
-			"i64_type            ", & !  75
-			"i64_token           ", & !  76
-			"sstar_equals_token  ", & !  77
-			"percent_equals_token", & !  78
-			"hash_token          ", & !  79
-			"include_keyword     ", & !  80
-			"all_sub             ", & !  81
-			"bool_array_type     ", & !  82
-			"i32_array_type      ", & !  83
-			"i64_array_type      ", & !  84
-			"f32_array_type      ", & !  85
-			"str_array_type      ", & !  86
-			"step_array          ", & !  87
-			"len_array           ", & !  88
-			"bound_array         ", & !  89
-			"size_array          ", & !  90
-			"return_keyword      ", & !  91
-			"return_statement    ", & !  92
-			"dot_token           ", & !  93
-			"struct_keyword      ", & !  94
-			"struct_declaration  ", & !  95
-			"struct_instance_expr", & !  96
-			"struct_type         ", & !  97
-			"dot_expr            ", & !  98
-			"f64_token           ", & !  99
-			"f64_type            ", & ! 100
-			"f64_array_type      ", & ! 101
-			"fn_call_intr_expr   ", & ! 102
-			"break_keyword       ", & ! 103
-			"break_statement     ", & ! 104
-			"continue keyword    ", & ! 105
-			"continue statement  ", & ! 106
-			"unknown             "  & ! inf (trailing comma hack)
+			"eof_token            ", & !   1
+			"i32_token            ", & !   2
+			"whitespace_token     ", & !   3
+			"minus_token          ", & !   4
+			"plus_token           ", & !   5
+			"bad_token            ", & !   6
+			"slash_token          ", & !   7
+			"star_token           ", & !   8
+			"binary_expr          ", & !   9
+			"i32_type             ", & !  10
+			"rparen_token         ", & !  11
+			"lparen_token         ", & !  12
+			"unary_expr           ", & !  13
+			"identifier_token     ", & !  14
+			"false_keyword        ", & !  15
+			"true_keyword         ", & !  16
+			"literal_expr         ", & !  17
+			"bool_type            ", & !  18
+			"not_keyword          ", & !  19
+			"or_keyword           ", & !  20
+			"and_keyword          ", & !  21
+			"eequals_token        ", & !  22
+			"bang_equals_token    ", & !  23
+			"assignment_expr      ", & !  24
+			"equals_token         ", & !  25
+			"name_expr            ", & !  26
+			"let_keyword          ", & !  27
+			"sstar_token          ", & !  28
+			"rbrace_token         ", & !  29
+			"lbrace_token         ", & !  30
+			"expr_statement       ", & !  31
+			"block_statement      ", & !  32
+			"semicolon_token      ", & !  33
+			"if_keyword           ", & !  34
+			"else_keyword         ", & !  35
+			"for_keyword          ", & !  36
+			"in_keyword           ", & !  37
+			"while_keyword        ", & !  38
+			"if_statement         ", & !  39
+			"rbracket_token       ", & !  40
+			"lbracket_token       ", & !  41
+			"for_statement        ", & !  42
+			"colon_token          ", & !  43
+			"while_statement      ", & !  44
+			"let_expr             ", & !  45
+			"less_token           ", & !  46
+			"less_equals_token    ", & !  47
+			"greater_token        ", & !  48
+			"greater_equals_token ", & !  49
+			"f32_token            ", & !  50
+			"f32_type             ", & !  51
+			"unif_array           ", & !  52
+			"expl_array           ", & !  53
+			"array_expr           ", & !  54
+			"array_type           ", & !  55
+			"comma_token          ", & !  56
+			"unknown_type         ", & !  57
+			"fn_call_expr         ", & !  58
+			"translation_unit     ", & !  59
+			"fn_declaration       ", & !  60
+			"fn_keyword           ", & !  61
+			"void_type            ", & !  62
+			"any_type             ", & !  63
+			"str_type             ", & !  64
+			"str_token            ", & !  65
+			"percent_token        ", & !  66
+			"plus_equals_token    ", & !  67
+			"minus_equals_token   ", & !  68
+			"star_equals_token    ", & !  69
+			"scalar_sub           ", & !  70
+			"range_sub            ", & !  71
+			"step_sub             ", & !  72
+			"slash_equals_token   ", & !  73
+			"file_type            ", & !  74
+			"i64_type             ", & !  75
+			"i64_token            ", & !  76
+			"sstar_equals_token   ", & !  77
+			"percent_equals_token ", & !  78
+			"hash_token           ", & !  79
+			"include_keyword      ", & !  80
+			"all_sub              ", & !  81
+			"bool_array_type      ", & !  82
+			"i32_array_type       ", & !  83
+			"i64_array_type       ", & !  84
+			"f32_array_type       ", & !  85
+			"str_array_type       ", & !  86
+			"step_array           ", & !  87
+			"len_array            ", & !  88
+			"bound_array          ", & !  89
+			"size_array           ", & !  90
+			"return_keyword       ", & !  91
+			"return_statement     ", & !  92
+			"dot_token            ", & !  93
+			"struct_keyword       ", & !  94
+			"struct_declaration   ", & !  95
+			"struct_instance_expr ", & !  96
+			"struct_type          ", & !  97
+			"dot_expr             ", & !  98
+			"f64_token            ", & !  99
+			"f64_type             ", & ! 100
+			"f64_array_type       ", & ! 101
+			"fn_call_intr_expr    ", & ! 102
+			"break_keyword        ", & ! 103
+			"break_statement      ", & ! 104
+			"continue keyword     ", & ! 105
+			"continue statement   ", & ! 106
+			"lless_token          ", & ! 107
+			"ggreater_token       ", & ! 108
+			"bit_and_token        ", & ! 109
+			"bit_or_token         ", & ! 110
+			"bit_xor_token        ", & ! 111
+			"bit_not_token        ", & ! 112
+			"lless_equals_token   ", & ! 113
+			"ggreater_equals_token", & ! 114
+			"bit_and_equals_token ", & ! 115
+			"bit_xor_equals_token ", & ! 116
+			"bit_or_equals_token  ", & ! 117
+			"unknown              "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too
 

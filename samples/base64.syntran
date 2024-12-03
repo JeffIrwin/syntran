@@ -1,0 +1,181 @@
+
+// This script contains functions for encoding and decoding base64
+//
+// See also:  https://github.com/JeffIrwin/vtk-io-rs/blob/main/src/base64.rs
+
+//==============================================================================
+
+// Encoding lookup table
+let BASE64_LUT_ENC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+let BASE64_PAD_CHAR = "=";
+
+// Decoding lookup table
+//
+// TODO: wrap this in a guarded init() fn? Still need global vars.  Call in
+// encoder *and* decoder
+let BASE64_LUT_DEC = [0; 256];
+for i in [0: len(BASE64_LUT_ENC)]
+	BASE64_LUT_DEC[i32(BASE64_LUT_ENC[i])] = i;
+
+fn base64_encode(in_str: str): str
+{
+	let len_in_str = len(in_str);
+
+	// Divide and round up
+	let len = (len_in_str + 2) / 3;
+	//println("len = ", len);
+
+	// TODO: need a way to pre-allocate a str, e.g. repeat() fn
+	//let out_str = repeat(" ", 4 * len);
+	let out_str = "";
+
+	for i in [0: len]
+	{
+		let i0 = 3*i + 0;
+		let i1 = 3*i + 1;
+		let i2 = 3*i + 2;
+
+		// Pad with zeros for partial chars
+		let v0 = 0; let v1 = 0; let v2 = 0;
+		if (i0 < len_in_str) v0 = i32(in_str[i0]);  // never 0
+		if (i1 < len_in_str) v1 = i32(in_str[i1]);
+		if (i2 < len_in_str) v2 = i32(in_str[i2]);
+
+		//println("v* = ", [v0, v1, v2]);
+
+		// First two chars are trivial
+		let s0 = BASE64_LUT_ENC[  v0                >> 2 ];
+		let s1 = BASE64_LUT_ENC[((v0 & 0b0000_0011) << 4)
+		                       | (v1                >> 4)];
+
+		// Add anywhere from 0 to 2 padding chars
+		let s2 = BASE64_PAD_CHAR;
+		let s3 = BASE64_PAD_CHAR;
+
+		if (i1 < len_in_str)
+		    s2 = BASE64_LUT_ENC[((v1 & 0b0000_1111) << 2)
+		                       | (v2                >> 6)];
+
+		if (i2 < len_in_str)
+		    s3 = BASE64_LUT_ENC[  v2 & 0b0011_1111       ];
+
+		//println("s* = ", s0, s1, s2, s3);
+
+		out_str += s0 + s1 + s2 + s3;
+	}
+
+	//println("out_str = ", out_str);
+	return out_str;
+}
+
+fn base64_decode(in_str: str): str
+{
+	let len_in_str = len(in_str);
+
+	// 6 bits per base64 character, 8 bits per u8
+	let len = len_in_str * 6 / 8;
+
+	// TODO: need a way to pre-allocate a str, e.g. repeat() fn
+	//let out_str = repeat(" ", len);
+	let out_str = "";
+
+	for i in [0: len / 3]
+	{
+		// Step bytes by 3 and base64 chars by 4
+
+		let s0 = in_str[4*i+0];
+		let s1 = in_str[4*i+1];
+		let s2 = in_str[4*i+2];
+		let s3 = in_str[4*i+3];
+
+		let v0 = ((BASE64_LUT_DEC[i32(s0)] & 0b0011_1111) << 2)
+		       | ((BASE64_LUT_DEC[i32(s1)] & 0b0011_0000) >> 4);
+		let v1 = ((BASE64_LUT_DEC[i32(s1)] & 0b0000_1111) << 4)
+		       | ((BASE64_LUT_DEC[i32(s2)] & 0b0011_1100) >> 2);
+		let v2 = ((BASE64_LUT_DEC[i32(s2)] & 0b0000_0011) << 6)
+		       |  (BASE64_LUT_DEC[i32(s3)] & 0b0011_1111);
+
+		//println("v* = ", [v0, v1, v2]);
+
+		// If you get rid of this logic and unconditionally concatenate all of
+		// v0, v1, and v2, it will pad with a few null chars at the end.  That
+		// might be fine for many applications, but it will break round-trip
+		// tests here
+		if (s3 == BASE64_PAD_CHAR and s2 == BASE64_PAD_CHAR)
+			out_str += char(v0);
+		else if (s3 == BASE64_PAD_CHAR)
+			out_str += char(v0) + char(v1);
+		else
+			// usual case
+			out_str += char(v0) + char(v1) + char(v2);
+	}
+
+	//println("out_str = ", out_str);
+	return out_str;
+}
+
+fn base64_test_round(str_: str): i32
+{
+	// Run a round-trip encode and decode test on `str_`.  System exit -1 on
+	// failure
+	let str_enc = base64_encode(str_);
+	let str_dec = base64_decode(str_enc);
+
+	//println("str_     = """, str_    , """");
+	println("str_enc = """, str_enc, """");
+	println("str_dec = """, str_dec, """");
+	//println("lens = ", [len(str_), len(str_dec)]);
+
+	let is_ok = str_ == str_dec;
+	println("round trip success? ", is_ok);
+	println();
+	if (not is_ok)
+	{
+		println();
+		println("Error: base64 test failure!");
+		println();
+		return 1;
+	}
+	return 0;
+}
+
+fn main(): i32
+{
+	println("starting base64.syntran");
+
+	//println("BASE64_STR = ", BASE64_STR);
+	//println("len(BASE64_STR) = ", len(BASE64_STR));
+	//println("LUT_DEC = ", LUT_DEC);
+
+	let status = 0;
+	status += base64_test_round("hello wo");
+	status += base64_test_round("hello wor");
+	status += base64_test_round("hello worl");
+	status += base64_test_round("hello world");
+	status += base64_test_round("hello worlds");
+	status += base64_test_round("hello worlds ");
+	status += base64_test_round("hello worlds  ");
+	status += base64_test_round(" hello worlds  ");
+	status += base64_test_round("  hello worlds  ");
+
+	// emoji include bytes > 128 unlike ascii strs above
+	status += base64_test_round("hello 🤯🧵🙏❌⚠️😊😂🤣❤️😍😒👌 world ");
+	status += base64_test_round(" hello 🤯🧵🙏❌⚠️😊😂🤣❤️😍😒👌 world ");
+	status += base64_test_round("  hello 🤯🧵🙏❌⚠️😊😂🤣❤️😍😒👌 world ");
+	status += base64_test_round("   hello 🤯🧵🙏❌⚠️😊😂🤣❤️😍😒👌 world ");
+	status += base64_test_round("    hello 🤯🧵🙏❌⚠️😊😂🤣❤️😍😒👌 world ");
+
+	if (status != 0)
+	{
+		println();
+		println("Error: base64 test failure!");
+		println();
+		return 1;
+	}
+
+	println("ending base64.syntran");
+	return 0;
+}
+
+exit(main());
+

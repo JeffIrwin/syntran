@@ -1396,7 +1396,9 @@ logical function is_assignment_op(op)
 
 	is_assignment_op = any(op == [equals_token, plus_equals_token, &
 		minus_equals_token, star_equals_token, slash_equals_token, &
-		sstar_equals_token, percent_equals_token])
+		sstar_equals_token, percent_equals_token, &
+		bit_and_equals_token, bit_or_equals_token, bit_xor_equals_token, &
+		lless_equals_token, ggreater_equals_token])
 
 end function is_assignment_op
 
@@ -1528,6 +1530,39 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				allowed = is_num_type(left) .and. is_num_type(right)
 			end if
 
+		case ( &
+				lless_token, ggreater_token, &
+				lless_equals_token, ggreater_equals_token)
+
+			! Bitwise shift operators work on any combination of ints
+
+			if (left == array_type .and. right == array_type) then
+				allowed = is_int_type(left_arr) .and. is_int_type(right_arr)
+			else if (left == array_type) then
+				allowed = is_int_type(left_arr) .and. is_int_type(right)
+			else if (right == array_type) then
+				allowed = is_int_type(left) .and. is_int_type(right_arr)
+			else
+				allowed = is_int_type(left) .and. is_int_type(right)
+			end if
+
+		case ( &
+				bit_xor_token, bit_or_token, bit_and_token, &
+				bit_xor_equals_token, bit_or_equals_token, bit_and_equals_token)
+
+			! Other bitwise binary operators (besides shift) only work on ints
+			! of matching sizes (both 32 or 64 bit)
+
+			if (left == array_type .and. right == array_type) then
+				allowed = is_int_type(left_arr) .and. left_arr == right_arr
+			else if (left == array_type) then
+				allowed = is_int_type(left_arr) .and. left_arr == right
+			else if (right == array_type) then
+				allowed = is_int_type(left) .and. left == right_arr
+			else
+				allowed = is_int_type(left) .and. left == right
+			end if
+
 		case (and_keyword, or_keyword)
 
 			if (left == array_type .and. right == array_type) then
@@ -1624,6 +1659,13 @@ logical function is_unary_op_allowed(op, right, right_arr)
 				is_unary_op_allowed = is_num_type(right)
 			end if
 
+		case (bit_not_token)
+			if (right == array_type) then
+				is_unary_op_allowed = is_int_type(right_arr)
+			else
+				is_unary_op_allowed = is_int_type(right)
+			end if
+
 		case (not_keyword)
 			if (right == array_type) then
 				is_unary_op_allowed = right_arr == bool_type
@@ -1647,8 +1689,9 @@ integer function get_unary_op_prec(kind) result(prec)
 
 	select case (kind)
 
-		case (plus_token, minus_token, not_keyword)
-			prec = 8
+		case (plus_token, minus_token, not_keyword, bit_not_token)
+			! arithmetic +, arithmetic -, logical not, bitwise not
+			prec = 12
 
 		case default
 			prec = 0
@@ -1669,18 +1712,53 @@ integer function get_binary_op_prec(kind) result(prec)
 
 	select case (kind)
 
-		! FIXME: increment the unary operator precedence above after increasing
-		! the max binary precedence
+		! Syntran operator precedence is closest to rust:
+		!
+		!     https://doc.rust-lang.org/reference/expressions.html
+		!
+		! The exception is that ordering comparisons <, >, <=, and >= have
+		! higher precedence than (in)equality comparisons == and !=.  In rust,
+		! all comparisons have the same precedence.
+		!
+		! This is somewhat similar to C, except for bitwise and `&`, bitwise or
+		! `|`, and bitwise xor `^`, which have higher precedence here (and in
+		! rust) than comparisons.  The fact that C works this way could be
+		! considered a poor design, but it is due to historical reasons
+		! predating even C, according to Dennis Ritchie:
+		!
+		!    http://cm.bell-labs.co/who/dmr/chist.html
+		!
+		! C (and C++) precedence:
+		!
+		!    https://en.cppreference.com/w/c/language/operator_precedence
+		!
+		! Note that here, a higher `prec` int return value means higher
+		! precedence, while the C++ ref is the opposite numerically (but the
+		! same top to bottom)
 
-		! Follow C operator precedence here, except possible for bitwise and/or
+		!********
 
+		! FIXME: increment the unary operator precedence in the fn above after
+		! increasing the max binary precedence
 		case (sstar_token)
-			prec = 7
+			prec = 11
 
 		case (star_token, slash_token, percent_token)
-			prec = 6
+			prec = 10
 
 		case (plus_token, minus_token)
+			prec = 9
+
+		case (lless_token, ggreater_token) ! `<<`, `>>`
+			prec = 8
+
+		case (bit_and_token) ! `&`
+			prec = 7
+
+		case (bit_xor_token) ! `^`
+			prec = 6
+
+		case (bit_or_token ) ! `|`
 			prec = 5
 
 		case (less_token, less_equals_token, &
@@ -1690,16 +1768,17 @@ integer function get_binary_op_prec(kind) result(prec)
 		case (eequals_token, bang_equals_token)
 			prec = 3
 
-		case (and_keyword)
+		case (and_keyword)  ! `and` (logical, not bitwise)
 			prec = 2
 
-		case (or_keyword)
+		case (or_keyword)  ! `or` (logical)
 			prec = 1
 
 		case default
 			prec = 0
 
 	end select
+	!print *, "prec = ", prec
 
 end function get_binary_op_prec
 
@@ -1862,8 +1941,11 @@ end function new_unary_expr
 
 !===============================================================================
 
-recursive integer function get_binary_op_kind(left, op, right, &
-		left_arr, right_arr) result(kind_)
+recursive integer function get_binary_op_kind( &
+		left, op, right, &
+		left_arr, right_arr &
+		) &
+		result(kind_)
 
 	! Return the resulting type yielded by operator op on operands left and
 	! right
@@ -1884,6 +1966,33 @@ recursive integer function get_binary_op_kind(left, op, right, &
 			kind_ = bool_array_type
 		else
 			kind_ = bool_type
+		end if
+
+	case (lless_token, ggreater_token)
+		! Bitwise shifts return the left operand's type for scalars
+		if (left == array_type .or. right == array_type) then
+
+			! This logic could be refactored, could probably lose an indentation
+			! level
+			if (left == array_type) then
+				! Left array, right scalar or array
+				if (left_arr == i32_type) then
+					kind_ = i32_array_type
+				else
+					kind_ = i64_array_type
+				end if
+			else
+				! Left scalar, right array
+				if (left == i32_type) then
+					kind_ = i32_array_type
+				else
+					kind_ = i64_array_type
+				end if
+			end if
+
+		else
+			! All scalars
+			kind_ = left
 		end if
 
 	case default
