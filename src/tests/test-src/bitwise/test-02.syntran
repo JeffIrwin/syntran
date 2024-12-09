@@ -90,21 +90,9 @@ fn assert_eq(a: i32, b: i32): i32
 
 fn main(): i32
 {
-	println("starting random.syntran");
+	//println("starting random.syntran");
 
 	let status = 0;
-
-	seed_mt19937(0);
-	seed_mt19937(1);
-	println("rand = ", rand_i32_mt19937());
-	println("rand = ", rand_i32_mt19937());
-	println("rand = ", rand_i32_mt19937());
-	println("rand = ", rand_i32_mt19937());
-	println("rand = ", rand_i32_mt19937());
-	println("rand = ", rand_i32_mt19937());
-	println("rand = ", rand_i32_mt19937());
-	println("rand = ", rand_i32_mt19937());
-	println("rand = ", rand_i32_mt19937());
 
 	seed_mt19937(0);
 	status += assert_eq(rand_i32_mt19937(), -1937831252);
@@ -115,15 +103,15 @@ fn main(): i32
 
 	if (status != 0)
 	{
-		println();
-		println("Error: random test failure!");
-		println();
+		//println();
+		//println("Error: random test failure!");
+		//println();
 		return 1;
 	}
 
-	println("ending random.syntran");
+	//println("ending random.syntran");
 	return 0;
 }
 
-exit(main());
+return main();
 

@@ -30,10 +30,6 @@ module syntran__core_m
 		syntran_patch =  56
 
 	! TODO:
-	!  - add tests for non-trivial bitwise operation samples:
-	!    * base64
-	!    * random mersenne twister
-	!    * aes: added
 	!  - raw string literals
 	!    * easier to include quotes without doubling
 	!    * follow rust style:
