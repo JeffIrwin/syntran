@@ -2959,7 +2959,7 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 			!print *, 'lsubs(i) = ', lsubs(i)
 		else
 			call syntax_eval(node%lsubscripts(i), state, lsubval)
-			lsubs(i) = lsubval%sca%i32
+			lsubs(i) = lsubval%to_i64()
 		end if
 
 		select case (node%lsubscripts(i)%sub_kind)
@@ -2971,7 +2971,6 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 
 		case (range_sub)
 			call syntax_eval(node%usubscripts(i), state, usubval)
-			!usubs(i) = usubval%sca%i32
 			usubs(i) = usubval%to_i64()
 
 			rank_res = rank_res + 1
