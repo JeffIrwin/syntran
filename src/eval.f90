@@ -37,6 +37,10 @@ module syntran__eval_m
 		! nightmare if you grep for "break" and don't find "broke"
 		logical :: returned, breaked, continued
 
+		! This table is used to make substitution to pass-by-reference.
+		! Otherwise it is an identity mapping [1, 2, 3, ... ]
+		integer, allocatable :: ref_sub(:)
+
 	end type state_t
 
 !===============================================================================
@@ -255,10 +259,13 @@ recursive subroutine eval_binary_expr(node, state, res)
 	case (bit_xor_token)
 		call bit_xor(left, right, res, node%op%text)
 
+	! TODO: rename bit_or_token (and others) to pipe_token, like bit_and_token
+	! was renamed to amp_token (it's also used for references, so bit_and_token
+	! is overly specific)
 	case (bit_or_token)
 		call bit_or(left, right, res, node%op%text)
 
-	case (bit_and_token)
+	case (amp_token)
 		call bit_and(left, right, res, node%op%text)
 
 	case default
@@ -740,7 +747,7 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	!********
 
-	integer :: i
+	integer :: i, id_index
 
 	logical :: returned0
 
@@ -799,9 +806,57 @@ recursive subroutine eval_fn_call(node, state, res)
 		! this also seems to have led to a dramatic perf improvement for
 		! intel compilers in commit 324ad414, running full tests in ~25
 		! minutes instead of 50.  gfortran perf remains good and unchanged
-		!
-		call syntax_eval(node%args(i), state, tmp)
-		state%vars%vals( node%params(i) ) = tmp
+
+		! TODO: this is where pass-by-reference will be implemented.  Just swap
+		! some %id_index values by backing up index before and restoring
+		! afterwards.  Check that the arg is actually an lval (i.e. usually a
+		! name expr, maybe don't allow subscript exprs or dot exprs in first
+		! cut) and skip the syntax_eval() call.  We also need new syntax,
+		! probably in the fn definition, or maybe in the fn call, to denote a
+		! reference `&`.  See also `readln()` implementation, which basically
+		! uses an out-arg to set eof status
+
+		print *, "is_ref = ", node%is_ref(i)
+
+		if (node%is_ref(i)) then
+
+			!  call syntax_eval(node%args(1), state, arg1)
+			!  res%sca%str%s = read_line(arg1%sca%file_%unit_, io)
+			!  !!print *, 'ident = ', node%args(1)%identifier%text
+			!  !!state%vars%vals(node%id_index) = res
+			!  if (io == iostat_end) then
+			!  	!arg1%sca%file_%eof = .true.
+			!  	state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
+			!  end if
+			!  !print *, 'eof   = ', arg1%sca%file_%eof
+
+			print *, "node param = ", node%params(i)
+			print *, "arg index  = ", node%args(i)%id_index
+			print *, "arg type   = ", kind_name(node%args(i)%val%type)
+
+			!! TODO: this eval defeats the purpose of ref passing
+			!call syntax_eval(node%args(i), state, tmp)
+			!state%vars%vals( node%params(i) ) = tmp
+
+			!id_index = node%params(i)  ! backup
+			!node%params(i) = node%args(i)%id_index  ! swap in ref
+			state%ref_sub( node%params(i) ) = node%args(i)%id_index
+			print *, "node param*= ", node%params(i)
+
+			!call move_alloc(node%args(i), state%vars%vals( node%params(i) ))
+
+			!!state%vars%vals( node%params(i) )%type = node%args(i)%type
+			!state%vars%vals( node%params(i) )%type = node%args(i)%val%type
+			!!state%vars%vals( node%params(i) ) = node%args(i)%val
+
+			! res = state%vars%vals(node%id_index)
+
+			! TODO: restore later?  Does it matter? Maybe it will for recursion
+
+		else
+			call syntax_eval(node%args(i), state, tmp)
+			state%vars%vals( node%params(i) ) = tmp
+		end if
 
 		!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
 		!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
@@ -1949,7 +2004,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		!end if
 
 		! Eval the RHS
-		!print *, 'eval and set res'
+		print *, 'scalar compound_assign'
 		call syntax_eval(node%right, state, res)
 
 		! TODO: test int/float casting.  It should be an error during
@@ -1958,11 +2013,12 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		!print *, 'compound assign'
 		!print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
 
-		call compound_assign(state%vars%vals(node%id_index), res, node%op)
+		! TODO: apply ref_sub elsewhere :(
+		call compound_assign(state%vars%vals( state%ref_sub(node%id_index) ), res, node%op)
 
 		! For compound assignment, ensure that the LHS is returned
 		!print *, 'setting res again'
-		res = state%vars%vals(node%id_index)
+		res = state%vars%vals( state%ref_sub(node%id_index) )
 		!print *, 'done'
 
 		!print *, "node identifier = ", node%identifier%text

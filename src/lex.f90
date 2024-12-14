@@ -856,7 +856,7 @@ function lex(lexer) result(token)
 				lexer%pos = lexer%pos + 1
 				token = new_token(bit_and_equals_token, lexer%pos, "&=")
 			else
-				token = new_token(bit_and_token, lexer%pos, lexer%current())
+				token = new_token(amp_token, lexer%pos, lexer%current())
 			end if
 
 		case default

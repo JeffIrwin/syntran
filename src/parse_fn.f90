@@ -29,15 +29,16 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	integer :: i, io, id_index, pos0, rank
 
-	logical :: has_rank
+	logical :: has_rank, param_is_ref
 
 	type(fn_t) :: fn
 
 	type(integer_vector_t) :: pos_args
+	type(logical_vector_t) :: is_ref
 
 	type(syntax_node_t) :: arg
 	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: identifier, comma, lparen, rparen, dummy
+	type(syntax_token_t) :: identifier, comma, lparen, rparen, dummy, amp
 
 	type(text_span_t) :: span
 
@@ -50,8 +51,10 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	!print *, "identifier = ", identifier%text
 
-	args = new_syntax_node_vector()
+	args     = new_syntax_node_vector()
 	pos_args = new_integer_vector()
+	is_ref   = new_logical_vector()
+
 	lparen  = parser%match(lparen_token)
 
 	do while ( &
@@ -60,6 +63,14 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 		pos0 = parser%pos
 		call pos_args%push(parser%current_pos())
+
+		if (parser%current_kind() == amp_token) then
+			amp = parser%match(amp_token)
+			call is_ref%push(.true.)
+		else
+			call is_ref%push(.false.)
+		end if
+
 		arg = parser%parse_expr()
 		call args%push(arg)
 
@@ -165,6 +176,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	end if
 
+	fn_call%is_ref = is_ref%v(1: is_ref%len_)
+
 	allocate(param_val%array)
 	do i = 1, args%len_
 
@@ -190,6 +203,18 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			else
 				param_name = ""
 			end if
+		end if
+
+		param_is_ref = .false.
+		if (allocated(fn%node)) param_is_ref = fn%node%is_ref(i)
+
+		!if (fn%is_ref(i) .neqv. is_ref%v(i)) then
+		!if (fn%node%is_ref(i) .neqv. is_ref%v(i)) then
+		if (param_is_ref .neqv. is_ref%v(i)) then
+
+			! TODO: diag
+			print *, "Error: bad reference in fn call"
+			print *, ""
 		end if
 
 		if (types_match(param_val, args%v(i)%val) /= TYPE_MATCH) then
@@ -243,10 +268,11 @@ module function parse_fn_declaration(parser) result(decl)
 
 	type( string_vector_t) :: names
 	type(integer_vector_t) :: pos_args
+	type(logical_vector_t) :: is_ref
 
 	type(syntax_node_t) :: body
 	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, &
-		name, comma, dummy
+		name, comma, dummy, amp
 
 	type(text_span_t) :: span
 
@@ -282,6 +308,7 @@ module function parse_fn_declaration(parser) result(decl)
 	! Parse parameter names and types.  Save in temp vectors initially
 	names    = new_string_vector()
 	pos_args = new_integer_vector()  ! technically params not args
+	is_ref   = new_logical_vector()
 	types    = new_value_vector()
 
 	! Array params use this syntax:
@@ -314,6 +341,15 @@ module function parse_fn_declaration(parser) result(decl)
 		!print *, 'matching colon'
 		colon = parser%match(colon_token)
 
+		! TODO: should this be part of parse_type()?  I think not, as refs can
+		! appear in fn decls but not struct decls
+		if (parser%current_kind() == amp_token) then
+			amp = parser%match(amp_token)
+			call is_ref%push(.true.)
+		else
+			call is_ref%push(.false.)
+		end if
+
 		call parser%parse_type(type_text, type)
 
 		call names%push( name%text )
@@ -339,6 +375,7 @@ module function parse_fn_declaration(parser) result(decl)
 	allocate(fn  %params     ( names%len_ ))
 	allocate(fn%param_names%v( names%len_ ))
 	allocate(decl%params     ( names%len_ ))
+	allocate(decl%is_ref     ( names%len_ ))
 
 	do i = 1, names%len_
 		!print *, "name, type = ", names%v(i)%s, ", ", types%v(i)%s
@@ -353,6 +390,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 		! Save parameters by id_index.  TODO: stack frames
 		decl%params(i) = parser%num_vars
+		decl%is_ref(i) = is_ref%v(i)
 
 		call parser%vars%insert(fn%param_names%v(i)%s, fn%params(i), parser%num_vars)
 
@@ -372,6 +410,9 @@ module function parse_fn_declaration(parser) result(decl)
 	if (parser%current_kind() == colon_token) then
 		colon = parser%match(colon_token)
 		call parser%parse_type(type_text, type)
+
+		! TODO: ban &references as return types
+
 		fn%type = type
 	end if
 	!print *, 'fn%type = ', fn%type

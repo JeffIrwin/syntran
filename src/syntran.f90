@@ -375,6 +375,8 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	character(len = 1024) :: buffer
 	character(len = :), allocatable :: src_filel, dir, cwd
 
+	integer :: i
+
 	logical :: chdirl
 
 	type(state_t) :: state
@@ -426,6 +428,13 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 		call chdir(dir)
 
 	end if
+
+	print *, "size vars = ", size(state%vars%vals)
+
+	! TODO: set ref_sub in every other place that calls syntax_eval(), add helper
+	! fn
+	state%ref_sub = [(i, i = 1, size(state%vars%vals))]
+	print *, "ref_sub = ", state%ref_sub
 
 	!print *, "evaling "
 	call syntax_eval(tree, state, val)
