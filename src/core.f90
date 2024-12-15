@@ -30,6 +30,23 @@ module syntran__core_m
 		syntran_patch =  57
 
 	! TODO:
+	!  - ban expression statements?
+	!    * these were needed before i had the return statement
+	!    * they were also used for HolyC-style implicit prints, which should
+	!      also probably be removed
+	!    * now it causes issues if i accidentally do a line like this:
+	!          x == y;
+	!      instead of:
+	!          x = y;
+	!      the first implicit bool expr line is currently allowed but never what
+	!      i meant!
+	!    * how can interactive interpretter still be used as a desktop
+	!      calculator tho? maybe have a "mode" flag which is set differently for
+	!      interactive runs (if there isn't already one)
+	!  - pass by reference for subscripted array name expressions and dot
+	!    expressions
+	!    * done for regular variable name expressions
+	!    * needs documentation
 	!  - raw string literals
 	!    * easier to include quotes without doubling
 	!    * follow rust style:
@@ -148,11 +165,6 @@ module syntran__core_m
 	!    * 8 isn't installed.  maybe i can install it in workflow?
 	!    * tried "setup-fortran" marketplace action but it can't install 8
 	!      either
-	!  - pass by reference?  big boost to perf for array fns.  should be
-	!    possible by swapping around some id_index values in vars%vals array.
-	!    harder part is ensuring that only lvalues are passed by ref (not
-	!    rvalues), e.g. `my_fn(x)` is allowed but `my_fn(x+1)` is not if arg is
-	!    passed by ref
 	!  - #(pragma)once  directive. #let var=val directive?
 	!    * for #once include guards, insert filename path as key into a ternary
 	!      tree w/ bool value true.  then when something is included, check if
@@ -252,7 +264,8 @@ contains
 
 function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
-	! TODO: take state struct instead of separate vars and fns members?
+	! TODO: take state struct instead of separate vars and fns members.  Then
+	! init_ref_sub() could be called at the end of this fn
 
 	! TODO: take structs arg (like existing fns arg)
 

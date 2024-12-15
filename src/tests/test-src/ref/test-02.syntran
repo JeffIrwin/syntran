@@ -1,0 +1,23 @@
+
+fn swap_i32_(a: &i32, b: &i32)
+{
+	let tmp = a;
+	a = b;
+	b = tmp;
+	return;
+}
+
+fn main(): bool
+{
+	let x = 42;
+	let y = 1337;
+	//println("x, y = ", [x, y]);
+	swap_i32_(&x, &y);
+	//println("x, y = ", [x, y]);
+	return
+		x == 1337 and
+		y == 42;
+}
+
+return main();
+

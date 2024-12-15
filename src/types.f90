@@ -156,6 +156,7 @@ module syntran__types_m
 		integer :: id_index
 
 		integer, allocatable :: params(:)
+		logical, allocatable :: is_ref(:)  ! is param passed by reference?
 
 		type(value_t) :: val
 
@@ -761,6 +762,12 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%params = src%params
 	else if (allocated(dst%params)) then
 		deallocate(dst%params)
+	end if
+
+	if (allocated(src%is_ref)) then
+		dst%is_ref = src%is_ref
+	else if (allocated(dst%is_ref)) then
+		deallocate(dst%is_ref)
 	end if
 
 	if (allocated(src%condition)) then
@@ -1547,7 +1554,7 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 			end if
 
 		case ( &
-				bit_xor_token, bit_or_token, bit_and_token, &
+				bit_xor_token, bit_or_token, amp_token, &
 				bit_xor_equals_token, bit_or_equals_token, bit_and_equals_token)
 
 			! Other bitwise binary operators (besides shift) only work on ints
@@ -1752,7 +1759,7 @@ integer function get_binary_op_prec(kind) result(prec)
 		case (lless_token, ggreater_token) ! `<<`, `>>`
 			prec = 8
 
-		case (bit_and_token) ! `&`
+		case (amp_token) ! `&`
 			prec = 7
 
 		case (bit_xor_token) ! `^`

@@ -37,6 +37,11 @@ module syntran__eval_m
 		! nightmare if you grep for "break" and don't find "broke"
 		logical :: returned, breaked, continued
 
+		! This table is used to make substitutions in the vars array for passing
+		! by reference. For values which are not references, it is otherwise an
+		! identity mapping [1, 2, 3, ... ]
+		integer, allocatable :: ref_sub(:)
+
 	end type state_t
 
 !===============================================================================
@@ -61,6 +66,8 @@ recursive subroutine syntax_eval(node, state, res)
 	type(value_t), intent(out) :: res
 
 	!********
+
+	integer :: id
 
 	!print *, "starting syntax_eval()"
 	!print *, "node kind = ", kind_name(node%kind)
@@ -117,16 +124,17 @@ recursive subroutine syntax_eval(node, state, res)
 
 		!print *, 'assigning identifier ', quote(node%identifier%text)
 
-		state%vars%vals(node%id_index) = res
+		id = state%ref_sub(node%id_index)
+		state%vars%vals(id) = res
 
 		!print *, "res type = ", kind_name(res%type)
 		!print *, "allocated(struct) = ", allocated(res%struct)
 		!if (res%type == struct_type) then
 		!	print *, "size struct = ", size(res%struct)
-		!	print *, "size struct = ", size( state%vars%vals(node%id_index)%struct )
+		!	print *, "size struct = ", size( state%vars%vals(id)%struct )
 		!	do i = 1, size(res%struct)
 		!		print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
-		!		print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
+		!		print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
 		!	end do
 		!end if
 
@@ -255,10 +263,13 @@ recursive subroutine eval_binary_expr(node, state, res)
 	case (bit_xor_token)
 		call bit_xor(left, right, res, node%op%text)
 
+	! TODO: rename bit_or_token (and others) to pipe_token, like bit_and_token
+	! was renamed to amp_token (it's also used for references, so bit_and_token
+	! is overly specific)
 	case (bit_or_token)
 		call bit_or(left, right, res, node%op%text)
 
-	case (bit_and_token)
+	case (amp_token)
 		call bit_and(left, right, res, node%op%text)
 
 	case default
@@ -281,7 +292,7 @@ recursive subroutine eval_name_expr(node, state, res)
 
 	!********
 
-	integer :: rank_res, idim_, idim_res
+	integer :: id, rank_res, idim_, idim_res
 	integer(kind = 8) :: il, iu, i8, index_
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
@@ -290,18 +301,19 @@ recursive subroutine eval_name_expr(node, state, res)
 	!print *, "starting eval_name_expr()"
 	!print *, 'searching identifier ', node%identifier%text
 
+	id = state%ref_sub(node%id_index)
 	if (allocated(node%lsubscripts) .and. &
-		state%vars%vals(node%id_index)%type == str_type) then
+		state%vars%vals(id)%type == str_type) then
 		!print *, 'string subscript RHS name expr'
 
 		!print *, 'str type'
-		res%type = state%vars%vals(node%id_index)%type
+		res%type = state%vars%vals(id)%type
 
 		select case (node%lsubscripts(1)%sub_kind)
 		case (scalar_sub)
 			i8 = subscript_eval(node, state)
 			!print *, 'i8 = ', i8
-			res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
+			res%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
 
 		case (range_sub)
 
@@ -317,10 +329,10 @@ recursive subroutine eval_name_expr(node, state, res)
 			!print *, 'identifier ', node%identifier%text
 			!print *, 'il = ', il
 			!print *, 'iu = ', iu
-			!print *, 'str = ', state%vars%vals(node%id_index)%sca%str%s
+			!print *, 'str = ', state%vars%vals(id)%sca%str%s
 
 			! Not inclusive of upper bound
-			res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(il: iu-1)
+			res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
 
 		case default
 			write(*,*) err_int_prefix//'unexpected subscript kind'//color_reset
@@ -329,7 +341,7 @@ recursive subroutine eval_name_expr(node, state, res)
 
 	else if (allocated(node%lsubscripts)) then
 
-		if (state%vars%vals(node%id_index)%type /= array_type) then
+		if (state%vars%vals(id)%type /= array_type) then
 			write(*,*) err_int_prefix//'bad type, expected array'//color_reset
 			call internal_error()
 		end if
@@ -339,7 +351,7 @@ recursive subroutine eval_name_expr(node, state, res)
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 			i8 = subscript_eval(node, state)
-			call get_val(node, state%vars%vals(node%id_index), state, res, index_ = i8)
+			call get_val(node, state%vars%vals(id), state, res, index_ = i8)
 		else
 
 			call get_subscript_range(node, state, lsubs, usubs, rank_res)
@@ -382,8 +394,8 @@ recursive subroutine eval_name_expr(node, state, res)
 			do i8 = 0, res%array%len_ - 1
 				!print *, 'subs = ', int(subs, 4)
 
-				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-				call get_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
+				index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
+				call get_array_val(state%vars%vals(id)%array, index_, tmp)
 				call set_array_val(res%array, i8, tmp)
 				call get_next_subscript(lsubs, usubs, subs)
 			end do
@@ -391,9 +403,9 @@ recursive subroutine eval_name_expr(node, state, res)
 
 	else
 		!print *, "name expr without subscripts"
-		!print *, "id_index = ", node%id_index
+		!print *, "id = ", id
 		!print *, "size(vals) = ", size(state%vars%vals)
-		res = state%vars%vals(node%id_index)
+		res = state%vars%vals(id)
 
 	end if
 
@@ -413,14 +425,17 @@ subroutine eval_dot_expr(node, state, res)
 
 	!********
 
+	integer :: id
+
+	id = state%ref_sub(node%id_index)
 	!print *, "eval dot_expr"
-	!print *, "id_index = ", node%id_index
-	!print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
+	!print *, "id_index = ", id
+	!print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
 
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
-	call get_val(node, state%vars%vals(node%id_index), state, res)
+	call get_val(node, state%vars%vals(id), state, res)
 
 end subroutine eval_dot_expr
 
@@ -717,13 +732,7 @@ recursive subroutine eval_struct_instance(node, state, res)
 	!print *, "num members = ", size(res%struct)
 
 	do i = 1, size(node%members)
-
 		call syntax_eval(node%members(i), state, res%struct(i))
-
-		!print *, "mem[", str(i), "] = ", res%struct(i)%to_str()
-		!res = node%val%struct( node%right%id_index )
-		!node%members(i)%val = res
-
 	end do
 
 end subroutine eval_struct_instance
@@ -740,7 +749,7 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	!********
 
-	integer :: i
+	integer :: i, id_index
 
 	logical :: returned0
 
@@ -788,20 +797,37 @@ recursive subroutine eval_fn_call(node, state, res)
 		!call syntax_eval(node%args(i), state, &
 		!	state%vars%vals( node%params(i) ))
 
-		! deeply-nested fn calls can crash without the tmp value.  idk why i
-		! can't just eval directly into the state var like commented above
-		! :(.  probably state var type is getting cleared by passing it to
-		! an intent(out) arg? more likely, nested fn calls basically create
-		! a stack in which we store each nested arg in different copies of
-		! tmp.  if you try to store them all in the same state var at
-		! multiple stack levels it breaks?
+		! deeply-nested fn calls can crash without the tmp value for the
+		! pass-by-value case.  idk why i can't just eval directly into the state
+		! var like commented above :(.  probably state var type is getting
+		! cleared by passing it to an intent(out) arg? more likely, nested fn
+		! calls basically create a stack in which we store each nested arg in
+		! different copies of tmp.  if you try to store them all in the same
+		! state var at multiple stack levels it breaks?
 		!
-		! this also seems to have led to a dramatic perf improvement for
-		! intel compilers in commit 324ad414, running full tests in ~25
-		! minutes instead of 50.  gfortran perf remains good and unchanged
-		!
-		call syntax_eval(node%args(i), state, tmp)
-		state%vars%vals( node%params(i) ) = tmp
+		! this also seems to have led to a dramatic perf improvement for intel
+		! compilers in commit 324ad414, running full tests in ~25 minutes
+		! instead of 50.  gfortran perf remains good and unchanged
+
+		!print *, "is_ref = ", node%is_ref(i)
+
+		if (node%is_ref(i)) then
+
+			!print *, "node param = ", node%params(i)
+			!print *, "arg index  = ", node%args(i)%id_index
+			!print *, "arg type   = ", kind_name(node%args(i)%val%type)
+
+			! TODO: backup and restore ref_sub later?  Does it matter? Maybe it will for recursion
+
+			! Map ref_sub on RHS too, in case of nested refs (one fn calling
+			! another fn)
+			state    %ref_sub( node%params(i) ) = &
+				state%ref_sub( node%args(i)%id_index )
+
+		else
+			call syntax_eval(node%args(i), state, tmp)
+			state%vars%vals( node%params(i) ) = tmp
+		end if
 
 		!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
 		!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
@@ -1529,6 +1555,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		if (io == iostat_end) then
 		!if (io /= 0) then
 			!arg1%sca%file_%eof = .true.
+			!id = state%ref_sub(node%id_index)
 			state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
 		end if
 		!print *, 'eof   = ', arg1%sca%file_%eof
@@ -1874,6 +1901,8 @@ recursive subroutine eval_for_statement(node, state, res)
 		! evaluation now that we know all of the variable identifiers.
 		! Parsing still needs to rely on dictionary lookups because it does
 		! not know the entire list of variable identifiers ahead of time
+		!
+		! Loop iterator should never be a ref, so no need to use ref_sub here
 		state%vars%vals(node%id_index) = itr
 
 		call syntax_eval(node%body, state, res)
@@ -1911,8 +1940,9 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 	!print *, "eval assignment_expr"
 	!print *, "node identifier = ", node%identifier%text
-	!print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
-	!if (state%vars%vals(node%id_index)%type == struct_type) then
+	!id = state%ref_sub(node%id_index)
+	!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
+	!if (state%vars%vals(id)%type == struct_type) then
 	!if (allocated( node%member )) then
 	!	print *, "mem index = ", node%member%id_index
 	!end if
@@ -1927,42 +1957,45 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		call syntax_eval(node%right, state, rhs)
 
 		! Get the initial value from the LHS, which could be nested like `a.b.c.d`
-		id = node%member%id_index
-		call get_val(node, state%vars%vals(node%id_index), state, res)
+		!id = node%member%id_index  ! was this doing anything? seems unused
+		id = state%ref_sub(node%id_index)
+		call get_val(node, state%vars%vals(id), state, res)
 
 		! Do the assignment or += or whatever and set res
 		call compound_assign(res, rhs, node%op)
 
 		! Save it back into the LHS var
-		call set_val(node, state%vars%vals(node%id_index), state, res)
+		call set_val(node, state%vars%vals(id), state, res)
 
 	else if (.not. allocated(node%lsubscripts)) then
+
+		id = state%ref_sub(node%id_index)
 
 		!! This deallocation will cause a crash when an array appears on both
 		!! the LHS and RHS of fn_call assignment, e.g. `dv = diff_(dv, i)` in
 		!! AOC 2023/09
 		!if (allocated(state%vars%vals)) then
-		!if (allocated(state%vars%vals(node%id_index)%array)) then
+		!if (allocated(state%vars%vals(id)%array)) then
 		!	!print *, "deallocating lhs array"
-		!	deallocate(state%vars%vals(node%id_index)%array)
+		!	deallocate(state%vars%vals(id)%array)
 		!end if
 		!end if
 
+		!print *, 'scalar compound_assign'
+
 		! Eval the RHS
-		!print *, 'eval and set res'
 		call syntax_eval(node%right, state, res)
 
 		! TODO: test int/float casting.  It should be an error during
 		! parsing
 
-		!print *, 'compound assign'
-		!print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
+		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 
-		call compound_assign(state%vars%vals(node%id_index), res, node%op)
+		call compound_assign(state%vars%vals(id), res, node%op)
 
 		! For compound assignment, ensure that the LHS is returned
 		!print *, 'setting res again'
-		res = state%vars%vals(node%id_index)
+		res = state%vars%vals(id)
 		!print *, 'done'
 
 		!print *, "node identifier = ", node%identifier%text
@@ -1974,8 +2007,10 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		! identifier at each scope level
 
 	else
+		id = state%ref_sub(node%id_index)
+
 		!print *, 'LHS array subscript assignment'
-		!print *, 'LHS type = ', kind_name(state%vars%vals(node%id_index)%array%type)  ! not alloc for str
+		!print *, 'LHS type = ', kind_name(state%vars%vals(id)%array%type)  ! not alloc for str
 
 		! Eval the RHS.  I should probably rename `res` to `rhs` here like I did
 		! with get_val() for dot exprs above, because it's not really the result
@@ -1984,19 +2019,19 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 		!print *, 'RHS = ', res%to_str()
 
-		if (state%vars%vals(node%id_index)%type == str_type) then
+		if (state%vars%vals(id)%type == str_type) then
 			!print *, 'str_type'
 
 			! TODO: ban compound character substring assignment
 			i8 = subscript_eval(node, state)
-			state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1) = res%sca%str%s
+			state%vars%vals(id)%sca%str%s(i8+1: i8+1) = res%sca%str%s
 
 		else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 
 			!print *, 'non str_type scalar subscript'
 			!print *, 'LHS array type = ', &
-			!	state%vars%vals(node%id_index)%array%type
-			!print *, 'LHS array = ', state%vars%vals(node%id_index)%array%i32
+			!	state%vars%vals(id)%array%type
+			!print *, 'LHS array = ', state%vars%vals(id)%array%i32
 
 			!print *, "get_array_val a"
 
@@ -2005,9 +2040,9 @@ recursive subroutine eval_assignment_expr(node, state, res)
 			! 1)];`.  Maybe I should ban expression statements as indices, but
 			! src/tests/test-src/fns/test-19.syntran at least will need updated
 			i8 = subscript_eval(node, state)
-			call get_val(node, state%vars%vals(node%id_index), state, array_val, index_ = i8)
+			call get_val(node, state%vars%vals(id), state, array_val, index_ = i8)
 			call compound_assign(array_val, res, node%op)
-			call set_val(node, state%vars%vals(node%id_index), state, array_val, index_ = i8)
+			call set_val(node, state%vars%vals(id), state, array_val, index_ = i8)
 			res = array_val
 
 		else
@@ -2038,10 +2073,10 @@ recursive subroutine eval_assignment_expr(node, state, res)
 					call get_array_val(res%array, i8, array_val)
 				end if
 
-				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-				call get_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
+				index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
+				call get_array_val(state%vars%vals(id)%array, index_, tmp)
 				call compound_assign(tmp, array_val, node%op)
-				call set_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
+				call set_array_val(state%vars%vals(id)%array, index_, tmp)
 
 				!! move conditions out of loop for perf?
 				!if (res%type == array_type) then
@@ -2090,7 +2125,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 			! set res (whole array (slice?)) for return val in case of
 			! compound assignment.  see note above re walrus operator
-			res = state%vars%vals(node%id_index)
+			res = state%vars%vals(id)
 
 		end if
 	end if
@@ -2945,11 +2980,12 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 
 	!********
 
-	integer :: i, rank_
+	integer :: i, id, rank_
 
 	type(value_t) :: lsubval, usubval
 
-	rank_ = state%vars%vals(node%id_index)%array%rank
+	id = state%ref_sub(node%id_index)
+	rank_ = state%vars%vals(id)%array%rank
 	allocate(lsubs(rank_), usubs(rank_))
 	rank_res = 0
 	do i = 1, rank_
@@ -2964,7 +3000,7 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 
 		select case (node%lsubscripts(i)%sub_kind)
 		case (all_sub)
-			usubs(i) = state%vars%vals(node%id_index)%array%size(i)
+			usubs(i) = state%vars%vals(id)%array%size(i)
 			!print *, 'usubs(i) = ', usubs(i)
 
 			rank_res = rank_res + 1
@@ -3070,16 +3106,11 @@ function sub_eval(node, var, state) result(index_)
 
 	!print *, 'starting sub_eval()'
 
-	!if (state%vars%vals(node%id_index)%type == str_type) then
 	if (var%type == str_type) then
 		call syntax_eval(node%lsubscripts(1), state, subscript)
 		index_ = subscript%to_i64()
 		return
 	end if
-
-	!if (state%vars%vals(node%id_index)%type /= array_type) then
-	!	! internal_error?
-	!end if
 
 	prod  = 1
 	index_ = 0
@@ -3116,20 +3147,21 @@ recursive function subscript_eval(node, state) result(index_)
 
 	!******
 
-	integer :: i
+	integer :: i, id
 	integer(kind = 8) :: prod
 	type(value_t) :: subscript
 
 	!print *, 'starting subscript_eval()'
 
 	! str scalar with single char subscript
-	if (state%vars%vals(node%id_index)%type == str_type) then
+	id = state%ref_sub(node%id_index)
+	if (state%vars%vals(id)%type == str_type) then
 		call syntax_eval(node%lsubscripts(1), state, subscript)
 		index_ = subscript%to_i64()
 		return
 	end if
 
-	!if (state%vars%vals(node%id_index)%type /= array_type) then
+	!if (state%vars%vals(id)%type /= array_type) then
 	!	! internal_error?
 	!end if
 
@@ -3139,7 +3171,7 @@ recursive function subscript_eval(node, state) result(index_)
 	! space perf difference
 	prod  = 1
 	index_ = 0
-	do i = 1, state%vars%vals(node%id_index)%array%rank
+	do i = 1, state%vars%vals(id)%array%rank
 		!print *, 'i = ', i
 
 		call syntax_eval(node%lsubscripts(i), state, subscript)
@@ -3151,7 +3183,7 @@ recursive function subscript_eval(node, state) result(index_)
 		! definition to enable it only in debug
 
 		index_ = index_ + prod * subscript%to_i64()
-		prod  = prod * state%vars%vals(node%id_index)%array%size(i)
+		prod  = prod * state%vars%vals(id)%array%size(i)
 
 	end do
 

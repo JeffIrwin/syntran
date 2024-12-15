@@ -1,0 +1,250 @@
+
+
+// TODO: keep this in-sync with aoc-syntran version until they're stable.  Also, src/tests/test-src/ref/test-07.syntran
+
+
+// A larger max hash val is ok with global vars, but copying in/out is very slow
+// for passing by value, so 256 is better in this implementation
+
+let HASH_MAX_DICT = 256;
+//HASH_MAX_DICT = 1024 * 8;
+
+//==============================================================================
+
+fn hash_str_dict(s: str): i32
+{
+	// This is the hash fn that determines which bucket a key goes into
+
+	//// djb2 hash fn
+	//let hash_ = 5381;
+	////let hash_ = 5381'i64;
+	//for j in [0: len(s)]
+	//{
+	//	hash_ = ((hash_ << 5) + hash_) + i32(s[j]);
+	//	//hash_ = hash_ * 33 + i32(s[j]);
+	//	hash_ %= HASH_MAX_DICT; // not part of djb2, but it crashes without this :(
+	//}
+	////hash_ %= HASH_MAX_DICT;
+	////return i32(hash_);
+	//return hash_;
+
+	// This is the hash fn from aoc 2023 day 15
+	let hash_ = 0;
+	for j in [0: len(s)]
+	{
+		hash_ += i32(s[j]);
+		hash_ *= 17;
+		hash_ %= HASH_MAX_DICT;
+	}
+	//println("hash_ = ", hash_);
+	return hash_;
+}
+
+struct dict_i64_bucket
+{
+	cap: i32,
+	len: i32,
+	keys: [str; :],
+	vals: [i64; :],
+}
+
+struct dict_i64
+{
+	len: i32,
+	buckets: [dict_i64_bucket; :],
+}
+
+fn new_dict_i64(): dict_i64
+{
+	let len_ = HASH_MAX_DICT;
+
+	let empty_bucket_ = dict_i64_bucket
+	{
+		cap = 0,
+		len = 0,
+		keys = [""   ; 0],
+		vals = [0'i64; 0],
+	};
+
+	let dict = dict_i64
+	{
+		len = len_,
+		buckets = [empty_bucket_; len_],
+	};
+
+	return dict;
+}
+
+fn print_lens_dict_i64(dict: &dict_i64)
+{
+	for i in [0: dict.len]
+	{
+		let len_ = dict.buckets[i].len;
+		if len_ != 0
+		{
+			println("bucket[", i, "] len = ", len_);
+			//println("bucket[", i, "] cap = ", dict.buckets[i].cap);
+		}
+	}
+	return;
+}
+
+fn get_dict_i64(dict: &dict_i64, key: str): i64
+{
+	let ib = hash_str_dict(key); // bucket index
+	let len_ = dict.buckets[ib].len;
+	for i in [0: len_]
+	{
+		if dict.buckets[ib].keys[i] == key
+		{
+			return dict.buckets[ib].vals[i];
+		}
+	}
+	// TODO: should we panic?
+	return -1'i64;
+	//return 0;
+}
+
+fn keys_dict_i64(dict: &dict_i64): [str; :]
+{
+	// Return a flat array of all the keys in the dict
+	let n = 0;
+	for i in [0: dict.len]
+		n += dict.buckets[i].len;
+	let keys = [""; n];
+	let k = 0;
+	for i in [0: dict.len]
+	for j in [0: dict.buckets[i].len]
+	{
+		keys[k] = dict.buckets[i].keys[j];
+		k += 1;
+	}
+	return keys;
+}
+
+fn vals_dict_i64(dict: &dict_i64): [i64; :]
+{
+	// Return a flat array of all the vals in the dict
+	let n = 0;
+	for i in [0: dict.len]
+		n += dict.buckets[i].len;
+	let vals = [0'i64; n];
+	let k = 0;
+	for i in [0: dict.len]
+	for j in [0: dict.buckets[i].len]
+	{
+		vals[k] = dict.buckets[i].vals[j];
+		k += 1;
+	}
+	return vals;
+}
+
+fn set_dict_i64(dict: &dict_i64, key: str, val: i64)
+{
+	let ib = hash_str_dict(key); // bucket index
+	//println("ib = ", ib);
+
+	let len_ = dict.buckets[ib].len;
+	//println("len_ = ", len_);
+	for i in [0: len_]
+	{
+		if dict.buckets[ib].keys[i] == key
+		{
+			// Reset existing value
+			dict.buckets[ib].vals[i] = val;
+			return;
+		}
+	}
+
+	let cap_ = dict.buckets[ib].cap;
+	if len_ >= cap_
+	{
+		// Grow arrays
+		if cap_ == 0
+			cap_ = 1;
+		else
+			cap_ *= 2;
+
+		//println("new cap_ = ", cap_);
+		dict.buckets[ib].cap = cap_;
+		//println("done setting cap");
+		let keys = dict.buckets[ib].keys;
+		let vals = dict.buckets[ib].vals;
+
+		dict.buckets[ib].keys = [""; cap_];
+
+		dict.buckets[ib].vals = [0'i64 ; cap_];
+
+		//dict.buckets[ib].keys[0: len_] = keys; // struct array slices not implemented :(
+		//dict.buckets[ib].vals[0: len_] = vals;
+		for i in [0: len_]
+		{
+			dict.buckets[ib].keys[i] = keys[i];
+			dict.buckets[ib].vals[i] = vals[i];
+		}
+	}
+	//println("setting ", key, ", ", val);
+
+	// Append new key value pair
+	dict.buckets[ib].keys[len_] = key;
+	dict.buckets[ib].vals[len_] = val;
+	dict.buckets[ib].len += 1;
+
+	return;
+}
+
+//==============================================================================
+
+fn assert_eq64(a: i64, b: i64): i64
+{
+	if a == b
+		return 0'i64;
+	return 1'i64;
+}
+
+fn main(): i64
+{
+	// Unit tests
+	let status = 0'i64;
+
+	//println("starting dict.syntran");
+
+	let dict = new_dict_i64();
+
+	set_dict_i64(&dict, "rn", 1'i64);
+	set_dict_i64(&dict, "qp", 3'i64);
+	set_dict_i64(&dict, "cm", 2'i64);
+	set_dict_i64(&dict, "pc", 4'i64);
+	set_dict_i64(&dict, "ot", 9'i64);
+	set_dict_i64(&dict, "ab", 5'i64);
+
+	let rn = get_dict_i64(&dict, "rn");
+	let qp = get_dict_i64(&dict, "qp");
+	let cm = get_dict_i64(&dict, "cm");
+	let pc = get_dict_i64(&dict, "pc");
+	let ot = get_dict_i64(&dict, "ot");
+	let ab = get_dict_i64(&dict, "ab");
+
+	println("get 'rn' = ", rn);
+	println("get 'qp' = ", qp);
+	println("get 'cm' = ", cm);
+	println("get 'pc' = ", pc);
+	println("get 'ot' = ", ot);
+	println("get 'ab' = ", ab);
+
+	//print_lens_dict_i64(&dict);
+	//println("keys = ", keys_dict_i64(&dict));
+	//println("vals = ", vals_dict_i64(&dict));
+
+	status += assert_eq64(rn, 1'i64);
+	status += assert_eq64(qp, 3'i64);
+	status += assert_eq64(cm, 2'i64);
+	status += assert_eq64(pc, 4'i64);
+	status += assert_eq64(ot, 9'i64);
+	status += assert_eq64(ab, 5'i64);
+
+	//println("ending dict.syntran");
+	return status;
+}
+return main();
+

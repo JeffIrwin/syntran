@@ -637,6 +637,74 @@ end function err_bad_arg_type
 
 !===============================================================================
 
+function err_bad_arg_val(context, span, fn, iarg, param) &
+		result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	integer, intent(in):: iarg
+
+	character(len = *), intent(in) :: fn, param
+
+	err = err_prefix &
+		//'function `'//fn//'` parameter '//str(iarg)//' `'//param &
+		//'` requires a `&` reference but was given a value argument' &
+		//underline(context, span)//" missing `&` ref"//color_reset
+
+end function err_bad_arg_val
+
+!===============================================================================
+
+function err_bad_arg_ref(context, span, fn, iarg, param) &
+		result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	integer, intent(in):: iarg
+
+	character(len = *), intent(in) :: fn, param
+
+	err = err_prefix &
+		//'function `'//fn//'` parameter '//str(iarg)//' `'//param &
+		//'` requires a value but was given a `&` reference argument' &
+		//underline(context, span)//" bad `&` ref"//color_reset
+
+end function err_bad_arg_ref
+
+!===============================================================================
+
+function err_non_name_ref(context, span) result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_prefix &
+		//'`&` reference to unexpected expression kind.  references can only ' &
+		//'be made to variable name expressions' &
+		//underline(context, span)//" non-name `&` ref"//color_reset
+
+end function err_non_name_ref
+
+!===============================================================================
+
+function err_sub_ref(context, span) result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_prefix &
+		//'`&` reference to unexpected subscripted expression.  references can only ' &
+		//'be made to name expressions without subscripts' &
+		//underline(context, span)//" subscripted `&` ref"//color_reset
+
+end function err_sub_ref
+
+!===============================================================================
+
 function err_bad_arg_rank(context, span, fn, iarg, param, expect, actual) &
 		result(err)
 

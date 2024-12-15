@@ -270,6 +270,11 @@
 				"run":
 				"
 					docker --version \n
+
+					# TODO: this always builds main branch. Pass branch as arg \n
+					# into docker. Same problem with Dockerfile.ubuntu.  Only \n
+					# alpine Dockerfile copies src folder instead of cloning, so
+					# it does not have this issue \n
 					docker build . --file Dockerfile.rocky -t sy \n
 
 					## Test run \n

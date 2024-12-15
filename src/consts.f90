@@ -24,7 +24,7 @@ module syntran__consts_m
 			bit_not_token         = 112, &
 			bit_xor_token         = 111, &
 			bit_or_token          = 110, &
-			bit_and_token         = 109, &
+			amp_token             = 109, &
 			ggreater_token        = 108, &
 			lless_token           = 107, &
 			continue_statement    = 106, &
@@ -393,7 +393,7 @@ function kind_name(kind)
 			"continue statement   ", & ! 106
 			"lless_token          ", & ! 107
 			"ggreater_token       ", & ! 108
-			"bit_and_token        ", & ! 109
+			"amp_token            ", & ! 109
 			"bit_or_token         ", & ! 110
 			"bit_xor_token        ", & ! 111
 			"bit_not_token        ", & ! 112
