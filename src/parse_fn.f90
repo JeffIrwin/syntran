@@ -29,7 +29,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	integer :: i, io, id_index, pos0, rank
 
-	logical :: has_rank, param_is_ref
+	logical :: has_rank, param_is_ref, arg_is_ref
 
 	type(fn_t) :: fn
 
@@ -64,17 +64,33 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		pos0 = parser%pos
 		call pos_args%push(parser%current_pos())
 
+		arg_is_ref = .false.
 		if (parser%current_kind() == amp_token) then
 			amp = parser%match(amp_token)
-			call is_ref%push(.true.)
-		else
-			call is_ref%push(.false.)
+			arg_is_ref = .true.
 		end if
+		call is_ref%push(arg_is_ref)
 
 		arg = parser%parse_expr()
 
-		! TODO: if is_ref, check that arg expr is name_expr.  Maybe it can be
-		! extended later to subscript exprs, but for now only names work
+		! Check that arg expr is name_expr.  Maybe it can be extended later to
+		! subscript exprs, but for now only names work
+		if (arg_is_ref .and. arg%kind /= name_expr) then
+			! This also catches dot exprs, but not subscripted name exprs
+			span = new_span(amp%pos, parser%current_pos() - amp%pos + 1)
+			call parser%diagnostics%push(err_non_name_ref( &
+				parser%context(), &
+				span &
+			))
+		end if
+
+		if (arg_is_ref .and. allocated(arg%lsubscripts)) then
+			span = new_span(amp%pos, parser%current_pos() - amp%pos + 1)
+			call parser%diagnostics%push(err_sub_ref( &
+				parser%context(), &
+				span &
+			))
+		end if
 
 		call args%push(arg)
 

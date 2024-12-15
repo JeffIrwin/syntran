@@ -675,6 +675,36 @@ end function err_bad_arg_ref
 
 !===============================================================================
 
+function err_non_name_ref(context, span) result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_prefix &
+		//'`&` reference to unexpected expression kind.  references can only ' &
+		//'be made to variable name expressions' &
+		//underline(context, span)//" non-name `&` ref"//color_reset
+
+end function err_non_name_ref
+
+!===============================================================================
+
+function err_sub_ref(context, span) result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_prefix &
+		//'`&` reference to unexpected subscripted expression.  references can only ' &
+		//'be made to name expressions without subscripts' &
+		//underline(context, span)//" subscripted `&` ref"//color_reset
+
+end function err_sub_ref
+
+!===============================================================================
+
 function err_bad_arg_rank(context, span, fn, iarg, param, expect, actual) &
 		result(err)
 
