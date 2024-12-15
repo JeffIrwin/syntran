@@ -72,6 +72,10 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		end if
 
 		arg = parser%parse_expr()
+
+		! TODO: if is_ref, check that arg expr is name_expr.  Maybe it can be
+		! extended later to subscript exprs, but for now only names work
+
 		call args%push(arg)
 
 		if (parser%current_kind() /= rparen_token) then
@@ -212,10 +216,28 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		!if (fn%node%is_ref(i) .neqv. is_ref%v(i)) then
 		if (param_is_ref .neqv. is_ref%v(i)) then
 
-			! TODO: diag
-			print *, "Error: bad reference in fn call"
-			print *, ""
-			stop
+			! TODO: pass by ref tests
+
+			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
+
+			! The "param" is in the decl, the "arg" is in the call
+			if (param_is_ref) then
+				call parser%diagnostics%push(err_bad_arg_val( &
+					parser%context(), &
+					span, &
+					identifier%text, &
+					i - 1, &  ! 0-based index in err msg
+					param_name &
+				))
+			else
+				call parser%diagnostics%push(err_bad_arg_ref( &
+					parser%context(), &
+					span, &
+					identifier%text, &
+					i - 1, &
+					param_name &
+				))
+			end if
 
 		end if
 

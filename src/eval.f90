@@ -37,9 +37,9 @@ module syntran__eval_m
 		! nightmare if you grep for "break" and don't find "broke"
 		logical :: returned, breaked, continued
 
-		! This table is used to make substitutions for passing by reference.
-		! For values which are not references, it is mostly an identity mapping
-		! [1, 2, 3, ... ]
+		! This table is used to make substitutions in the vars array for passing
+		! by reference. For values which are not references, it is otherwise an
+		! identity mapping [1, 2, 3, ... ]
 		integer, allocatable :: ref_sub(:)
 
 	end type state_t

@@ -30,6 +30,19 @@ module syntran__core_m
 		syntran_patch =  57
 
 	! TODO:
+	!  - ban expression statements?
+	!    * these were needed before i had the return statement
+	!    * they were also used for HolyC-style implicit prints, which should
+	!      also probably be removed
+	!    * now it causes issues if i accidentally do a line like this:
+	!          x == y;
+	!      instead of:
+	!          x = y;
+	!      the first implicit bool expr line is currently allowed but never what
+	!      i meant!
+	!    * how can interactive interpretter still be used as a desktop
+	!      calculator tho? maybe have a "mode" flag which is set differently for
+	!      interactive runs (if there isn't already one)
 	!  - pass by reference?  big boost to perf for array fns.  should be
 	!    possible by swapping around some id_index values in vars%vals array.
 	!    harder part is ensuring that only lvalues are passed by ref (not
