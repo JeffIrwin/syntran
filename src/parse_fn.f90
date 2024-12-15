@@ -376,8 +376,9 @@ module function parse_fn_declaration(parser) result(decl)
 		!print *, 'matching colon'
 		colon = parser%match(colon_token)
 
-		! TODO: should this be part of parse_type()?  I think not, as refs can
-		! appear in fn decls but not struct decls
+		! Should this be part of parse_type()?  I think not, as refs can appear
+		! in fn decls but not struct decls.  Fn calls do not even call
+		! parse_type, they call parse_expr instead
 		if (parser%current_kind() == amp_token) then
 			amp = parser%match(amp_token)
 			call is_ref%push(.true.)

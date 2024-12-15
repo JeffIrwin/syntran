@@ -139,13 +139,8 @@ fn vals_dict_i64(dict: &dict_i64): [i64; :]
 	return vals;
 }
 
-//fn set_dict_i64(dict: &dict_i64, key: str, val: i64): dict_i64
 fn set_dict_i64(dict: &dict_i64, key: str, val: i64)
 {
-	// TODO: we really need dict arg as reference (not value) for efficiency
-	//
-	// Modifies a dict dict as a global var for now
-
 	let ib = hash_str_dict(key); // bucket index
 	//println("ib = ", ib);
 

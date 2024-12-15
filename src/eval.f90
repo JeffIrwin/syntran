@@ -797,26 +797,17 @@ recursive subroutine eval_fn_call(node, state, res)
 		!call syntax_eval(node%args(i), state, &
 		!	state%vars%vals( node%params(i) ))
 
-		! deeply-nested fn calls can crash without the tmp value.  idk why i
-		! can't just eval directly into the state var like commented above
-		! :(.  probably state var type is getting cleared by passing it to
-		! an intent(out) arg? more likely, nested fn calls basically create
-		! a stack in which we store each nested arg in different copies of
-		! tmp.  if you try to store them all in the same state var at
-		! multiple stack levels it breaks?
+		! deeply-nested fn calls can crash without the tmp value for the
+		! pass-by-value case.  idk why i can't just eval directly into the state
+		! var like commented above :(.  probably state var type is getting
+		! cleared by passing it to an intent(out) arg? more likely, nested fn
+		! calls basically create a stack in which we store each nested arg in
+		! different copies of tmp.  if you try to store them all in the same
+		! state var at multiple stack levels it breaks?
 		!
-		! this also seems to have led to a dramatic perf improvement for
-		! intel compilers in commit 324ad414, running full tests in ~25
-		! minutes instead of 50.  gfortran perf remains good and unchanged
-
-		! TODO: this is where pass-by-reference will be implemented.  Just swap
-		! some %id_index values by backing up index before and restoring
-		! afterwards.  Check that the arg is actually an lval (i.e. usually a
-		! name expr, maybe don't allow subscript exprs or dot exprs in first
-		! cut) and skip the syntax_eval() call.  We also need new syntax,
-		! probably in the fn definition, or maybe in the fn call, to denote a
-		! reference `&`.  See also `readln()` implementation, which basically
-		! uses an out-arg to set eof status
+		! this also seems to have led to a dramatic perf improvement for intel
+		! compilers in commit 324ad414, running full tests in ~25 minutes
+		! instead of 50.  gfortran perf remains good and unchanged
 
 		!print *, "is_ref = ", node%is_ref(i)
 
@@ -826,17 +817,12 @@ recursive subroutine eval_fn_call(node, state, res)
 			!print *, "arg index  = ", node%args(i)%id_index
 			!print *, "arg type   = ", kind_name(node%args(i)%val%type)
 
-			!id_index = node%params(i)  ! backup
-			!node%params(i) = node%args(i)%id_index  ! swap in ref
-			!print *, "node param*= ", node%params(i)
-
 			! TODO: backup and restore ref_sub later?  Does it matter? Maybe it will for recursion
 
 			! Map ref_sub on RHS too, in case of nested refs (one fn calling
 			! another fn)
-
-			!state%ref_sub( node%params(i) ) = node%args(i)%id_index  ! swap in ref
-			state%ref_sub( node%params(i) ) = state%ref_sub( node%args(i)%id_index )  ! swap in ref
+			state    %ref_sub( node%params(i) ) = &
+				state%ref_sub( node%args(i)%id_index )
 
 		else
 			call syntax_eval(node%args(i), state, tmp)

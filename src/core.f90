@@ -43,16 +43,10 @@ module syntran__core_m
 	!    * how can interactive interpretter still be used as a desktop
 	!      calculator tho? maybe have a "mode" flag which is set differently for
 	!      interactive runs (if there isn't already one)
-	!  - pass by reference?  big boost to perf for array fns.  should be
-	!    possible by swapping around some id_index values in vars%vals array.
-	!    harder part is ensuring that only lvalues are passed by ref (not
-	!    rvalues), e.g. `my_fn(x)` is allowed but `my_fn(x+1)` is not if arg is
-	!    passed by ref
-	!    * this would be helpful for lots of AOC problems. it would allow
-	!      efficient implementation of data structures like hash map
-	!      dictionaries.  this can be done already, but it requires either
-	!      copying in/out the whole dict for every modification (slow), or
-	!      modification of a singleton dict global variable
+	!  - pass by reference for subscripted array name expressions and dot
+	!    expressions
+	!    * done for regular variable name expressions
+	!    * needs documentation
 	!  - raw string literals
 	!    * easier to include quotes without doubling
 	!    * follow rust style:
