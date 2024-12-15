@@ -215,6 +215,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			! TODO: diag
 			print *, "Error: bad reference in fn call"
 			print *, ""
+			stop
+
 		end if
 
 		if (types_match(param_val, args%v(i)%val) /= TYPE_MATCH) then

@@ -1916,7 +1916,7 @@ recursive subroutine eval_for_statement(node, state, res)
 		! Parsing still needs to rely on dictionary lookups because it does
 		! not know the entire list of variable identifiers ahead of time
 		!
-		! Loop iterator should never be a ref
+		! Loop iterator should never be a ref, so no need to use ref_sub here
 		state%vars%vals(node%id_index) = itr
 
 		call syntax_eval(node%body, state, res)
@@ -1973,23 +1973,25 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		! Get the initial value from the LHS, which could be nested like `a.b.c.d`
 		!id = node%member%id_index  ! was this doing anything? seems unused
 		id = state%ref_sub(node%id_index)
-		call get_val(node, state%vars%vals(node%id_index), state, res)
+		call get_val(node, state%vars%vals(id), state, res)
 
 		! Do the assignment or += or whatever and set res
 		call compound_assign(res, rhs, node%op)
 
 		! Save it back into the LHS var
-		call set_val(node, state%vars%vals(node%id_index), state, res)
+		call set_val(node, state%vars%vals(id), state, res)
 
 	else if (.not. allocated(node%lsubscripts)) then
+
+		id = state%ref_sub(node%id_index)
 
 		!! This deallocation will cause a crash when an array appears on both
 		!! the LHS and RHS of fn_call assignment, e.g. `dv = diff_(dv, i)` in
 		!! AOC 2023/09
 		!if (allocated(state%vars%vals)) then
-		!if (allocated(state%vars%vals(node%id_index)%array)) then
+		!if (allocated(state%vars%vals(id)%array)) then
 		!	!print *, "deallocating lhs array"
-		!	deallocate(state%vars%vals(node%id_index)%array)
+		!	deallocate(state%vars%vals(id)%array)
 		!end if
 		!end if
 
@@ -2001,9 +2003,8 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		! TODO: test int/float casting.  It should be an error during
 		! parsing
 
-		!print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
+		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 
-		id = state%ref_sub(node%id_index)
 		call compound_assign(state%vars%vals(id), res, node%op)
 
 		! For compound assignment, ensure that the LHS is returned
@@ -2020,8 +2021,10 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		! identifier at each scope level
 
 	else
+		id = state%ref_sub(node%id_index)
+
 		!print *, 'LHS array subscript assignment'
-		!print *, 'LHS type = ', kind_name(state%vars%vals(node%id_index)%array%type)  ! not alloc for str
+		!print *, 'LHS type = ', kind_name(state%vars%vals(id)%array%type)  ! not alloc for str
 
 		! Eval the RHS.  I should probably rename `res` to `rhs` here like I did
 		! with get_val() for dot exprs above, because it's not really the result
@@ -2030,20 +2033,19 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 		!print *, 'RHS = ', res%to_str()
 
-		id = state%ref_sub(node%id_index)
-		if (state%vars%vals(node%id_index)%type == str_type) then
+		if (state%vars%vals(id)%type == str_type) then
 			!print *, 'str_type'
 
 			! TODO: ban compound character substring assignment
 			i8 = subscript_eval(node, state)
-			state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1) = res%sca%str%s
+			state%vars%vals(id)%sca%str%s(i8+1: i8+1) = res%sca%str%s
 
 		else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 
 			!print *, 'non str_type scalar subscript'
 			!print *, 'LHS array type = ', &
-			!	state%vars%vals(node%id_index)%array%type
-			!print *, 'LHS array = ', state%vars%vals(node%id_index)%array%i32
+			!	state%vars%vals(id)%array%type
+			!print *, 'LHS array = ', state%vars%vals(id)%array%i32
 
 			!print *, "get_array_val a"
 
@@ -2052,9 +2054,9 @@ recursive subroutine eval_assignment_expr(node, state, res)
 			! 1)];`.  Maybe I should ban expression statements as indices, but
 			! src/tests/test-src/fns/test-19.syntran at least will need updated
 			i8 = subscript_eval(node, state)
-			call get_val(node, state%vars%vals(node%id_index), state, array_val, index_ = i8)
+			call get_val(node, state%vars%vals(id), state, array_val, index_ = i8)
 			call compound_assign(array_val, res, node%op)
-			call set_val(node, state%vars%vals(node%id_index), state, array_val, index_ = i8)
+			call set_val(node, state%vars%vals(id), state, array_val, index_ = i8)
 			res = array_val
 
 		else
@@ -2085,10 +2087,10 @@ recursive subroutine eval_assignment_expr(node, state, res)
 					call get_array_val(res%array, i8, array_val)
 				end if
 
-				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-				call get_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
+				index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
+				call get_array_val(state%vars%vals(id)%array, index_, tmp)
 				call compound_assign(tmp, array_val, node%op)
-				call set_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
+				call set_array_val(state%vars%vals(id)%array, index_, tmp)
 
 				!! move conditions out of loop for perf?
 				!if (res%type == array_type) then
@@ -2137,7 +2139,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 			! set res (whole array (slice?)) for return val in case of
 			! compound assignment.  see note above re walrus operator
-			res = state%vars%vals(node%id_index)
+			res = state%vars%vals(id)
 
 		end if
 	end if
@@ -2997,7 +2999,7 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 	type(value_t) :: lsubval, usubval
 
 	id = state%ref_sub(node%id_index)
-	rank_ = state%vars%vals(node%id_index)%array%rank
+	rank_ = state%vars%vals(id)%array%rank
 	allocate(lsubs(rank_), usubs(rank_))
 	rank_res = 0
 	do i = 1, rank_
@@ -3012,7 +3014,7 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 
 		select case (node%lsubscripts(i)%sub_kind)
 		case (all_sub)
-			usubs(i) = state%vars%vals(node%id_index)%array%size(i)
+			usubs(i) = state%vars%vals(id)%array%size(i)
 			!print *, 'usubs(i) = ', usubs(i)
 
 			rank_res = rank_res + 1
@@ -3167,13 +3169,13 @@ recursive function subscript_eval(node, state) result(index_)
 
 	! str scalar with single char subscript
 	id = state%ref_sub(node%id_index)
-	if (state%vars%vals(node%id_index)%type == str_type) then
+	if (state%vars%vals(id)%type == str_type) then
 		call syntax_eval(node%lsubscripts(1), state, subscript)
 		index_ = subscript%to_i64()
 		return
 	end if
 
-	!if (state%vars%vals(node%id_index)%type /= array_type) then
+	!if (state%vars%vals(id)%type /= array_type) then
 	!	! internal_error?
 	!end if
 
@@ -3183,7 +3185,7 @@ recursive function subscript_eval(node, state) result(index_)
 	! space perf difference
 	prod  = 1
 	index_ = 0
-	do i = 1, state%vars%vals(node%id_index)%array%rank
+	do i = 1, state%vars%vals(id)%array%rank
 		!print *, 'i = ', i
 
 		call syntax_eval(node%lsubscripts(i), state, subscript)
@@ -3195,7 +3197,7 @@ recursive function subscript_eval(node, state) result(index_)
 		! definition to enable it only in debug
 
 		index_ = index_ + prod * subscript%to_i64()
-		prod  = prod * state%vars%vals(node%id_index)%array%size(i)
+		prod  = prod * state%vars%vals(id)%array%size(i)
 
 	end do
 
