@@ -228,15 +228,10 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		param_is_ref = .false.
 		if (allocated(fn%node)) param_is_ref = fn%node%is_ref(i)
 
-		!if (fn%is_ref(i) .neqv. is_ref%v(i)) then
-		!if (fn%node%is_ref(i) .neqv. is_ref%v(i)) then
 		if (param_is_ref .neqv. is_ref%v(i)) then
 
-			! TODO: pass by ref tests
-
-			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-
 			! The "param" is in the decl, the "arg" is in the call
+			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
 			if (param_is_ref) then
 				call parser%diagnostics%push(err_bad_arg_val( &
 					parser%context(), &
