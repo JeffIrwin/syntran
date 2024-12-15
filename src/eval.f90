@@ -37,8 +37,9 @@ module syntran__eval_m
 		! nightmare if you grep for "break" and don't find "broke"
 		logical :: returned, breaked, continued
 
-		! This table is used to make substitution to pass-by-reference.
-		! Otherwise it is an identity mapping [1, 2, 3, ... ]
+		! This table is used to make substitutions for passing by reference.
+		! For values which are not references, it is mostly an identity mapping
+		! [1, 2, 3, ... ]
 		integer, allocatable :: ref_sub(:)
 
 	end type state_t
@@ -65,6 +66,8 @@ recursive subroutine syntax_eval(node, state, res)
 	type(value_t), intent(out) :: res
 
 	!********
+
+	integer :: id
 
 	!print *, "starting syntax_eval()"
 	!print *, "node kind = ", kind_name(node%kind)
@@ -121,16 +124,17 @@ recursive subroutine syntax_eval(node, state, res)
 
 		!print *, 'assigning identifier ', quote(node%identifier%text)
 
-		state%vars%vals(node%id_index) = res
+		id = state%ref_sub(node%id_index)
+		state%vars%vals(id) = res
 
 		!print *, "res type = ", kind_name(res%type)
 		!print *, "allocated(struct) = ", allocated(res%struct)
 		!if (res%type == struct_type) then
 		!	print *, "size struct = ", size(res%struct)
-		!	print *, "size struct = ", size( state%vars%vals(node%id_index)%struct )
+		!	print *, "size struct = ", size( state%vars%vals(id)%struct )
 		!	do i = 1, size(res%struct)
 		!		print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
-		!		print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
+		!		print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
 		!	end do
 		!end if
 
@@ -288,7 +292,7 @@ recursive subroutine eval_name_expr(node, state, res)
 
 	!********
 
-	integer :: rank_res, idim_, idim_res
+	integer :: id, rank_res, idim_, idim_res
 	integer(kind = 8) :: il, iu, i8, index_
 	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
 
@@ -297,18 +301,19 @@ recursive subroutine eval_name_expr(node, state, res)
 	!print *, "starting eval_name_expr()"
 	!print *, 'searching identifier ', node%identifier%text
 
+	id = state%ref_sub(node%id_index)
 	if (allocated(node%lsubscripts) .and. &
-		state%vars%vals(node%id_index)%type == str_type) then
+		state%vars%vals(id)%type == str_type) then
 		!print *, 'string subscript RHS name expr'
 
 		!print *, 'str type'
-		res%type = state%vars%vals(node%id_index)%type
+		res%type = state%vars%vals(id)%type
 
 		select case (node%lsubscripts(1)%sub_kind)
 		case (scalar_sub)
 			i8 = subscript_eval(node, state)
 			!print *, 'i8 = ', i8
-			res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(i8+1: i8+1)
+			res%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
 
 		case (range_sub)
 
@@ -324,10 +329,10 @@ recursive subroutine eval_name_expr(node, state, res)
 			!print *, 'identifier ', node%identifier%text
 			!print *, 'il = ', il
 			!print *, 'iu = ', iu
-			!print *, 'str = ', state%vars%vals(node%id_index)%sca%str%s
+			!print *, 'str = ', state%vars%vals(id)%sca%str%s
 
 			! Not inclusive of upper bound
-			res%sca%str%s = state%vars%vals(node%id_index)%sca%str%s(il: iu-1)
+			res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
 
 		case default
 			write(*,*) err_int_prefix//'unexpected subscript kind'//color_reset
@@ -336,7 +341,7 @@ recursive subroutine eval_name_expr(node, state, res)
 
 	else if (allocated(node%lsubscripts)) then
 
-		if (state%vars%vals(node%id_index)%type /= array_type) then
+		if (state%vars%vals(id)%type /= array_type) then
 			write(*,*) err_int_prefix//'bad type, expected array'//color_reset
 			call internal_error()
 		end if
@@ -346,7 +351,7 @@ recursive subroutine eval_name_expr(node, state, res)
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 			i8 = subscript_eval(node, state)
-			call get_val(node, state%vars%vals(node%id_index), state, res, index_ = i8)
+			call get_val(node, state%vars%vals(id), state, res, index_ = i8)
 		else
 
 			call get_subscript_range(node, state, lsubs, usubs, rank_res)
@@ -389,8 +394,8 @@ recursive subroutine eval_name_expr(node, state, res)
 			do i8 = 0, res%array%len_ - 1
 				!print *, 'subs = ', int(subs, 4)
 
-				index_ = subscript_i32_eval(subs, state%vars%vals(node%id_index)%array)
-				call get_array_val(state%vars%vals(node%id_index)%array, index_, tmp)
+				index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
+				call get_array_val(state%vars%vals(id)%array, index_, tmp)
 				call set_array_val(res%array, i8, tmp)
 				call get_next_subscript(lsubs, usubs, subs)
 			end do
@@ -398,9 +403,9 @@ recursive subroutine eval_name_expr(node, state, res)
 
 	else
 		!print *, "name expr without subscripts"
-		!print *, "id_index = ", node%id_index
+		!print *, "id = ", id
 		!print *, "size(vals) = ", size(state%vars%vals)
-		res = state%vars%vals(node%id_index)
+		res = state%vars%vals(id)
 
 	end if
 
@@ -420,14 +425,17 @@ subroutine eval_dot_expr(node, state, res)
 
 	!********
 
+	integer :: id
+
+	id = state%ref_sub(node%id_index)
 	!print *, "eval dot_expr"
-	!print *, "id_index = ", node%id_index
-	!print *, "struct[", str(i), "] = ", state%vars%vals(node%id_index)%struct(i)%to_str()
+	!print *, "id_index = ", id
+	!print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
 
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
-	call get_val(node, state%vars%vals(node%id_index), state, res)
+	call get_val(node, state%vars%vals(id), state, res)
 
 end subroutine eval_dot_expr
 
@@ -724,13 +732,7 @@ recursive subroutine eval_struct_instance(node, state, res)
 	!print *, "num members = ", size(res%struct)
 
 	do i = 1, size(node%members)
-
 		call syntax_eval(node%members(i), state, res%struct(i))
-
-		!print *, "mem[", str(i), "] = ", res%struct(i)%to_str()
-		!res = node%val%struct( node%right%id_index )
-		!node%members(i)%val = res
-
 	end do
 
 end subroutine eval_struct_instance
@@ -816,42 +818,25 @@ recursive subroutine eval_fn_call(node, state, res)
 		! reference `&`.  See also `readln()` implementation, which basically
 		! uses an out-arg to set eof status
 
-		print *, "is_ref = ", node%is_ref(i)
+		!print *, "is_ref = ", node%is_ref(i)
 
 		if (node%is_ref(i)) then
 
-			!  call syntax_eval(node%args(1), state, arg1)
-			!  res%sca%str%s = read_line(arg1%sca%file_%unit_, io)
-			!  !!print *, 'ident = ', node%args(1)%identifier%text
-			!  !!state%vars%vals(node%id_index) = res
-			!  if (io == iostat_end) then
-			!  	!arg1%sca%file_%eof = .true.
-			!  	state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
-			!  end if
-			!  !print *, 'eof   = ', arg1%sca%file_%eof
-
-			print *, "node param = ", node%params(i)
-			print *, "arg index  = ", node%args(i)%id_index
-			print *, "arg type   = ", kind_name(node%args(i)%val%type)
-
-			!! TODO: this eval defeats the purpose of ref passing
-			!call syntax_eval(node%args(i), state, tmp)
-			!state%vars%vals( node%params(i) ) = tmp
+			!print *, "node param = ", node%params(i)
+			!print *, "arg index  = ", node%args(i)%id_index
+			!print *, "arg type   = ", kind_name(node%args(i)%val%type)
 
 			!id_index = node%params(i)  ! backup
 			!node%params(i) = node%args(i)%id_index  ! swap in ref
-			state%ref_sub( node%params(i) ) = node%args(i)%id_index
-			print *, "node param*= ", node%params(i)
+			!print *, "node param*= ", node%params(i)
 
-			!call move_alloc(node%args(i), state%vars%vals( node%params(i) ))
+			! TODO: backup and restore ref_sub later?  Does it matter? Maybe it will for recursion
 
-			!!state%vars%vals( node%params(i) )%type = node%args(i)%type
-			!state%vars%vals( node%params(i) )%type = node%args(i)%val%type
-			!!state%vars%vals( node%params(i) ) = node%args(i)%val
+			! Map ref_sub on RHS too, in case of nested refs (one fn calling
+			! another fn)
 
-			! res = state%vars%vals(node%id_index)
-
-			! TODO: restore later?  Does it matter? Maybe it will for recursion
+			!state%ref_sub( node%params(i) ) = node%args(i)%id_index  ! swap in ref
+			state%ref_sub( node%params(i) ) = state%ref_sub( node%args(i)%id_index )  ! swap in ref
 
 		else
 			call syntax_eval(node%args(i), state, tmp)
@@ -1584,6 +1569,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		if (io == iostat_end) then
 		!if (io /= 0) then
 			!arg1%sca%file_%eof = .true.
+			!id = state%ref_sub(node%id_index)
 			state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
 		end if
 		!print *, 'eof   = ', arg1%sca%file_%eof
@@ -1929,6 +1915,8 @@ recursive subroutine eval_for_statement(node, state, res)
 		! evaluation now that we know all of the variable identifiers.
 		! Parsing still needs to rely on dictionary lookups because it does
 		! not know the entire list of variable identifiers ahead of time
+		!
+		! Loop iterator should never be a ref
 		state%vars%vals(node%id_index) = itr
 
 		call syntax_eval(node%body, state, res)
@@ -1966,8 +1954,9 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 	!print *, "eval assignment_expr"
 	!print *, "node identifier = ", node%identifier%text
-	!print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
-	!if (state%vars%vals(node%id_index)%type == struct_type) then
+	!id = state%ref_sub(node%id_index)
+	!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
+	!if (state%vars%vals(id)%type == struct_type) then
 	!if (allocated( node%member )) then
 	!	print *, "mem index = ", node%member%id_index
 	!end if
@@ -1982,7 +1971,8 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		call syntax_eval(node%right, state, rhs)
 
 		! Get the initial value from the LHS, which could be nested like `a.b.c.d`
-		id = node%member%id_index
+		!id = node%member%id_index  ! was this doing anything? seems unused
+		id = state%ref_sub(node%id_index)
 		call get_val(node, state%vars%vals(node%id_index), state, res)
 
 		! Do the assignment or += or whatever and set res
@@ -2003,22 +1993,22 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		!end if
 		!end if
 
+		!print *, 'scalar compound_assign'
+
 		! Eval the RHS
-		print *, 'scalar compound_assign'
 		call syntax_eval(node%right, state, res)
 
 		! TODO: test int/float casting.  It should be an error during
 		! parsing
 
-		!print *, 'compound assign'
 		!print *, 'lhs type = ', kind_name( state%vars%vals(node%id_index)%type )
 
-		! TODO: apply ref_sub elsewhere :(
-		call compound_assign(state%vars%vals( state%ref_sub(node%id_index) ), res, node%op)
+		id = state%ref_sub(node%id_index)
+		call compound_assign(state%vars%vals(id), res, node%op)
 
 		! For compound assignment, ensure that the LHS is returned
 		!print *, 'setting res again'
-		res = state%vars%vals( state%ref_sub(node%id_index) )
+		res = state%vars%vals(id)
 		!print *, 'done'
 
 		!print *, "node identifier = ", node%identifier%text
@@ -2040,6 +2030,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 		!print *, 'RHS = ', res%to_str()
 
+		id = state%ref_sub(node%id_index)
 		if (state%vars%vals(node%id_index)%type == str_type) then
 			!print *, 'str_type'
 
@@ -3001,10 +2992,11 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 
 	!********
 
-	integer :: i, rank_
+	integer :: i, id, rank_
 
 	type(value_t) :: lsubval, usubval
 
+	id = state%ref_sub(node%id_index)
 	rank_ = state%vars%vals(node%id_index)%array%rank
 	allocate(lsubs(rank_), usubs(rank_))
 	rank_res = 0
@@ -3126,16 +3118,11 @@ function sub_eval(node, var, state) result(index_)
 
 	!print *, 'starting sub_eval()'
 
-	!if (state%vars%vals(node%id_index)%type == str_type) then
 	if (var%type == str_type) then
 		call syntax_eval(node%lsubscripts(1), state, subscript)
 		index_ = subscript%to_i64()
 		return
 	end if
-
-	!if (state%vars%vals(node%id_index)%type /= array_type) then
-	!	! internal_error?
-	!end if
 
 	prod  = 1
 	index_ = 0
@@ -3172,13 +3159,14 @@ recursive function subscript_eval(node, state) result(index_)
 
 	!******
 
-	integer :: i
+	integer :: i, id
 	integer(kind = 8) :: prod
 	type(value_t) :: subscript
 
 	!print *, 'starting subscript_eval()'
 
 	! str scalar with single char subscript
+	id = state%ref_sub(node%id_index)
 	if (state%vars%vals(node%id_index)%type == str_type) then
 		call syntax_eval(node%lsubscripts(1), state, subscript)
 		index_ = subscript%to_i64()
