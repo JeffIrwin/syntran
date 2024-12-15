@@ -223,30 +223,12 @@ fn main(): i64
 	set_dict_i64(&dict, "ot", 9'i64);
 	set_dict_i64(&dict, "ab", 5'i64);
 
-	let rn = get_dict_i64(&dict, "rn");
-	let qp = get_dict_i64(&dict, "qp");
-	let cm = get_dict_i64(&dict, "cm");
-	let pc = get_dict_i64(&dict, "pc");
-	let ot = get_dict_i64(&dict, "ot");
-	let ab = get_dict_i64(&dict, "ab");
-
-	println("get 'rn' = ", rn);
-	println("get 'qp' = ", qp);
-	println("get 'cm' = ", cm);
-	println("get 'pc' = ", pc);
-	println("get 'ot' = ", ot);
-	println("get 'ab' = ", ab);
-
-	//print_lens_dict_i64(&dict);
-	//println("keys = ", keys_dict_i64(&dict));
-	//println("vals = ", vals_dict_i64(&dict));
-
-	status += assert_eq64(rn, 1'i64);
-	status += assert_eq64(qp, 3'i64);
-	status += assert_eq64(cm, 2'i64);
-	status += assert_eq64(pc, 4'i64);
-	status += assert_eq64(ot, 9'i64);
-	status += assert_eq64(ab, 5'i64);
+	status += assert_eq64(get_dict_i64(&dict, "rn"), 1'i64);
+	status += assert_eq64(get_dict_i64(&dict, "qp"), 3'i64);
+	status += assert_eq64(get_dict_i64(&dict, "cm"), 2'i64);
+	status += assert_eq64(get_dict_i64(&dict, "pc"), 4'i64);
+	status += assert_eq64(get_dict_i64(&dict, "ot"), 9'i64);
+	status += assert_eq64(get_dict_i64(&dict, "ab"), 5'i64);
 
 	//println("ending dict.syntran");
 	return status;

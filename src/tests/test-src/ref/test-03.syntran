@@ -1,0 +1,65 @@
+
+fn swap_i64_(a: &i64, b: &i64)
+{
+	let tmp = a;
+	a = b;
+	b = tmp;
+	return;
+}
+
+fn swap_f64_(a: &f64, b: &f64)
+{
+	let tmp = a;
+	a = b;
+	b = tmp;
+	return;
+}
+
+fn swap_str_(a: &str, b: &str)
+{
+	let tmp = a;
+	a = b;
+	b = tmp;
+	return;
+}
+
+fn swap_bool_(a: &bool, b: &bool)
+{
+	let tmp = a;
+	a = b;
+	b = tmp;
+	return;
+}
+
+fn main(): bool
+{
+	let ix =   42'i64;
+	let iy = 1337'i64;
+	swap_i64_(&ix, &iy);
+
+	let fx = 3.1416;
+	let fy = 2.71828;
+	swap_f64_(&fx, &fy);
+
+	let sx = "hi";
+	let sy = "world";
+	swap_str_(&sx, &sy);
+
+	let bx = true;
+	let by = false;
+	swap_bool_(&bx, &by);
+
+	return
+		ix == 1337 and
+		iy ==   42 and
+		abs(fx - 2.71828) < 1.e-9 and
+		abs(fy - 3.1416 ) < 1.e-9 and
+		sx == "world" and
+		sy == "hi" and
+		bx == false and
+		by == true
+	;
+}
+
+return main();
+

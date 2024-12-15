@@ -1,0 +1,58 @@
+
+fn add_two(my_var: &i32)
+{
+	my_var += 2;
+	return;
+}
+
+fn add_three(var_ref: &i32)
+{
+	var_ref += 1;
+	add_two(&var_ref);
+	return;
+}
+
+fn assert_eq(a: i32, b: i32): i32
+{
+	if a == b
+		return 0;
+	return 1;
+}
+
+fn main(): i32
+{
+	let status = 0;
+
+	let x = 0;
+	x = 42;
+
+	add_three(&x);
+	status += assert_eq(x, 45);
+	add_three(&x);
+	status += assert_eq(x, 48);
+	add_three(&x);
+	status += assert_eq(x, 51);
+
+	let y = 1337;
+	add_three(&y);
+	status += assert_eq(y, 1340);
+	add_three(&y);
+	status += assert_eq(y, 1343);
+
+	add_three(&x);
+	status += assert_eq(x, 54);
+
+	let z = 69;
+	add_three(&z);
+	status += assert_eq(z, 72);
+
+	add_three(&x);
+	status += assert_eq(x, 57);
+	add_three(&x);
+	status += assert_eq(x, 60);
+
+	return status;
+}
+
+return main();
+

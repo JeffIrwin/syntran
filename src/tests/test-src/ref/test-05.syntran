@@ -1,0 +1,58 @@
+
+fn sub_one(my_var: &i32)
+{
+	my_var -= 1;
+	return;
+}
+
+fn noop(var_ref: &i32)
+{
+	var_ref += 1;
+	sub_one(&var_ref);
+	return;
+}
+
+fn assert_eq(a: i32, b: i32): i32
+{
+	if a == b
+		return 0;
+	return 1;
+}
+
+fn main(): i32
+{
+	let status = 0;
+
+	let x = 0;
+	x = 42;
+
+	noop(&x);
+	status += assert_eq(x, 42);
+	noop(&x);
+	status += assert_eq(x, 42);
+	noop(&x);
+	status += assert_eq(x, 42);
+
+	let y = 1337;
+	noop(&y);
+	status += assert_eq(y, 1337);
+	noop(&y);
+	status += assert_eq(y, 1337);
+
+	noop(&x);
+	status += assert_eq(x, 42);
+
+	let z = 69;
+	noop(&z);
+	status += assert_eq(z, 69);
+
+	noop(&x);
+	status += assert_eq(x, 42);
+	noop(&x);
+	status += assert_eq(x, 42);
+
+	return status;
+}
+
+return main();
+

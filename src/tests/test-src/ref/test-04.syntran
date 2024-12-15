@@ -1,0 +1,51 @@
+
+fn add_one(var_ref: &i32)
+{
+	var_ref += 1;
+	return;
+}
+
+fn assert_eq(a: i32, b: i32): i32
+{
+	if a == b
+		return 0;
+	return 1;
+}
+
+fn main(): i32
+{
+	let status = 0;
+
+	let x = 0;
+	x = 42;
+
+	add_one(&x);
+	status += assert_eq(x, 43);
+	add_one(&x);
+	status += assert_eq(x, 44);
+	add_one(&x);
+	status += assert_eq(x, 45);
+
+	let y = 1337;
+	add_one(&y);
+	status += assert_eq(y, 1338);
+	add_one(&y);
+	status += assert_eq(y, 1339);
+
+	add_one(&x);
+	status += assert_eq(x, 46);
+
+	let z = 69;
+	add_one(&z);
+	status += assert_eq(z, 70);
+
+	add_one(&x);
+	status += assert_eq(x, 47);
+	add_one(&x);
+	status += assert_eq(x, 48);
+
+	return status;
+}
+
+return main();
+
