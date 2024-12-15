@@ -95,6 +95,7 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 		end if
 
 		! TODO: chdir option?
+		call init_ref_sub(state)
 		call syntax_eval(compilation, state, res)
 		res_str = res%to_str()
 		write(*,*) '    '//res_str
@@ -187,6 +188,7 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 		! Don't try to evaluate with errors
 		if (compilation%diagnostics%len_ > 0) cycle
 
+		call init_ref_sub(state)
 		call syntax_eval(compilation, state, res )
 
 		! Consider MATLAB-style "ans = " log?
@@ -223,6 +225,7 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 		return
 	end if
 
+	call init_ref_sub(state)
 	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
@@ -254,6 +257,7 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 		return
 	end if
 
+	call init_ref_sub(state)
 	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
@@ -288,6 +292,7 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 		return
 	end if
 
+	call init_ref_sub(state)
 	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
@@ -323,6 +328,7 @@ real(kind = 8) function syntran_eval_f64(str_, quiet) result(eval_f64)
 		return
 	end if
 
+	call init_ref_sub(state)
 	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
@@ -330,6 +336,24 @@ real(kind = 8) function syntran_eval_f64(str_, quiet) result(eval_f64)
 	!print *, 'eval_f64 = ', eval_f64
 
 end function syntran_eval_f64
+
+!===============================================================================
+
+subroutine init_ref_sub(state)
+
+	! TODO: move to eval.f90
+
+	type(state_t), intent(inout) :: state
+
+	!********
+
+	integer :: i
+
+	!print *, "size vars = ", size(state%vars%vals)
+	state%ref_sub = [(i, i = 1, size(state%vars%vals))]
+	!print *, "ref_sub = ", state%ref_sub
+
+end subroutine init_ref_sub
 
 !===============================================================================
 
@@ -374,8 +398,6 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	character(len = 1024) :: buffer
 	character(len = :), allocatable :: src_filel, dir, cwd
-
-	integer :: i
 
 	logical :: chdirl
 
@@ -429,14 +451,8 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 
 	end if
 
-	print *, "size vars = ", size(state%vars%vals)
-
-	! TODO: set ref_sub in every other place that calls syntax_eval(), add helper
-	! fn
-	state%ref_sub = [(i, i = 1, size(state%vars%vals))]
-	print *, "ref_sub = ", state%ref_sub
-
 	!print *, "evaling "
+	call init_ref_sub(state)
 	call syntax_eval(tree, state, val)
 	!print *, "done"
 	res = val%to_str()

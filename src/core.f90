@@ -257,7 +257,8 @@ contains
 
 function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
-	! TODO: take state struct instead of separate vars and fns members?
+	! TODO: take state struct instead of separate vars and fns members.  Then
+	! init_ref_sub() could be called at the end of this fn
 
 	! TODO: take structs arg (like existing fns arg)
 
