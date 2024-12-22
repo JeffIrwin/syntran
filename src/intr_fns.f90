@@ -49,7 +49,8 @@ subroutine declare_intr_fns(fns)
 		atan_f32_fn, atan_f64_fn, atan_f32_arr_fn, atan_f64_arr_fn, &
 		acosd_f32_fn, acosd_f64_fn, acosd_f32_arr_fn, acosd_f64_arr_fn, &
 		asind_f32_fn, asind_f64_fn, asind_f32_arr_fn, asind_f64_arr_fn, &
-		atand_f32_fn, atand_f64_fn, atand_f32_arr_fn, atand_f64_arr_fn
+		atand_f32_fn, atand_f64_fn, atand_f32_arr_fn, atand_f64_arr_fn, &
+		repeat_fn
 
 	! Increment index for each fn and then set num_fns
 	id_index = 0
@@ -1239,6 +1240,21 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
+	repeat_fn%type%type = str_type
+	allocate(repeat_fn%params(2))
+	allocate(repeat_fn%param_names%v(2))
+
+	repeat_fn%params(1)%type = str_type
+	repeat_fn%param_names%v(1)%s = "str"
+
+	! TODO: overload for i32 and i64 ncopies? Not sure if you would need that many reps
+	repeat_fn%params(2)%type = i32_type
+	repeat_fn%param_names%v(2)%s = "ncopies"
+
+	call fns%insert("repeat", repeat_fn, id_index)
+
+	!********
+
 	! TODO: add fns for parsing str to other types (bool, etc.)
 
 	! Should this accept any type?  f32 can be converted implicitly so there
@@ -1799,6 +1815,7 @@ subroutine declare_intr_fns(fns)
 			eof_fn        , &
 			exit_fn       , &
 			len_fn        , &
+			repeat_fn     , &
 			open_fn       , &
 			println_fn    , &
 			readln_fn     , &

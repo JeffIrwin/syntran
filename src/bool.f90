@@ -38,6 +38,23 @@ module syntran__bool_m
 contains
 
 !===============================================================================
+logical function is_str_eq(a, b)
+	! Fortran considers spaces as insignificant in str comparisons, but no sane
+	! language would allow that
+	!
+	! I guess this is an artifact of fixed-length strings being common in older
+	! fortran code
+
+	character(len = *), intent(in) :: a, b
+
+	!is_str_eq = a == b  ! not what you expect!
+
+	is_str_eq = &
+		len(a) == len(b) .and. &
+		    a  ==     b
+
+end function is_str_eq
+!===============================================================================
 
 subroutine is_eq_value_t(left, right, res, op_text)
 
@@ -115,7 +132,7 @@ subroutine is_eq_value_t(left, right, res, op_text)
 	case        (magic * bool_type + bool_type)
 		res%sca%bool = left%sca%bool .eqv. right%sca%bool
 	case        (magic * str_type + str_type)
-		res%sca%bool = left%sca%str%s == right%sca%str%s
+		res%sca%bool = is_str_eq(left%sca%str%s, right%sca%str%s)
 
 	case        (magic * array_type + i32_type)
 
@@ -226,11 +243,9 @@ subroutine is_eq_value_t(left, right, res, op_text)
 		case (str_type)
 			res%array = mold(left%array, bool_type)
 
-			!! Fortran is weird about string arrays
-			!res%array%bool = left%array%str%s == right%sca%str%s
 			allocate(res%array%bool( res%array%len_ ))
 			do i8 = 1, res%array%len_
-				res%array%bool(i8) = left%array%str(i8)%s == right%sca%str%s
+				res%array%bool(i8) = is_str_eq(left%array%str(i8)%s, right%sca%str%s)
 			end do
 
 		case default
@@ -344,10 +359,9 @@ subroutine is_eq_value_t(left, right, res, op_text)
 		case (str_type)
 			res%array = mold(right%array, bool_type)
 
-			! Fortran is weird about string arrays
 			allocate(res%array%bool( res%array%len_ ))
 			do i8 = 1, res%array%len_
-				res%array%bool(i8) = left%sca%str%s == right%array%str(i8)%s
+				res%array%bool(i8) = is_str_eq(left%sca%str%s, right%array%str(i8)%s)
 			end do
 
 		case default
@@ -426,7 +440,7 @@ subroutine is_eq_value_t(left, right, res, op_text)
 			! Fortran is weird about string arrays
 			allocate(res%array%bool( res%array%len_ ))
 			do i8 = 1, res%array%len_
-				res%array%bool(i8) = left%array%str(i8)%s == right%array%str(i8)%s
+				res%array%bool(i8) = is_str_eq(left%array%str(i8)%s, right%array%str(i8)%s)
 			end do
 
 		case default

@@ -925,6 +925,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i64('len(  "htn");')  == 3,  &
 			eval_i64('len( "htns");')  == 4,  &
 			eval_i64('len("htns-");')  == 5,  &
+			eval('repeat("a", 2);')  == "aa",  &
+			eval('repeat("aBcD ", 3);')  == "aBcD aBcD aBcD ",  &
+			eval('repeat(" aBcD", 3);')  == " aBcD aBcD aBcD",  &
+			eval('repeat(" ", 4);')  == "    ",  &
 			eval('i32( 0.0);') ==   "0", &
 			eval('i32( 1.1);') ==   "1", &
 			eval('i32(-1.1);') ==  "-1", &
@@ -1978,6 +1982,21 @@ subroutine unit_test_str(npass, nfail)
 			eval('"testing testing " + str(1) + " " + str(2);') == 'testing testing 1 2', &
 			eval('"testing " + str(1, " ", 2, " ", 1, " ", 2);') == 'testing 1 2 1 2', &
 			trimw(eval('str(1.0);')) == '1.000000000000000E+00', &
+			eval('" " == " "  ;') == 'true', &
+			eval('"  " == "  ";') == 'true', &
+			eval('"" != " "   ;') == 'true', &
+			eval('" " != "	" ;') == 'true', &  ! space .ne. tab
+			eval('" " != ""   ;') == 'true', &
+			eval('" " != "  " ;') == 'true', &
+			eval('"  " != " " ;') == 'true', &
+			eval('" a " == " a ";')  == 'true', &
+			eval('"a " != " a ";')  == 'true', &
+			eval('" a" != " a ";')  == 'true', &
+			eval('" a " != "a ";')  == 'true', &
+			eval('" a " != " a";')  == 'true', &
+			eval('" " == ["", " ", "  "];')  == '[false, true, false]', &
+			eval('["", " ", "  "] == " ";')  == '[false, true, false]', &
+			eval('["", " ", "  "] == [" ", " ", " "];')  == '[false, true, false]', &
 			eval('"hello world";') == 'hello world'  &
 		]
 
@@ -4483,7 +4502,7 @@ subroutine unit_tests(iostat)
 
 	integer :: npass, nfail
 
-	write(*,*) repeat('=', 72)
+	write(*,*) repeat('=', 60)
 	write(*,*) 'Running syntran unit tests ...'
 	write(*,*)
 

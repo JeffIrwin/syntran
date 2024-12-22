@@ -47,6 +47,9 @@ module syntran__core_m
 	!    expressions
 	!    * done for regular variable name expressions
 	!    * needs documentation
+	!    * samples could be updated, e.g. sorting in place would be a lot more
+	!      efficient without copying large array vals in and out.  don't update
+	!      tests though.  if anything, add tests, but don't remove coverage
 	!  - raw string literals
 	!    * easier to include quotes without doubling
 	!    * follow rust style:
@@ -174,6 +177,9 @@ module syntran__core_m
 	!  - str comparison operations:
 	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
 	!      matching leading chars but diff lens
+	!    * also careful with fortran padding strs with spaces before
+	!      comparisons. i had a long-standing bug where "a" == "a " was true
+	!      because that's how fortran works :(
 	!    * ==, !=:  done
 	!  - fuzz testing
 	!  - substring indexing and slicing:

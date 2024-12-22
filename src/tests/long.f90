@@ -85,7 +85,7 @@ subroutine unit_tests_long(iostat)
 
 	integer :: npass, nfail
 
-	write(*,*) repeat('=', 72)
+	write(*,*) repeat('=', 60)
 	write(*,*) 'Running long syntran unit tests ...'
 	write(*,*)
 

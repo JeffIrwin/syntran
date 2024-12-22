@@ -1449,6 +1449,12 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		call syntax_eval(node%args(1), state, arg)
 		res%sca%i64 = len(arg%sca%str%s, 8)
 
+	case ("repeat")
+
+		call syntax_eval(node%args(1), state, arg1)
+		call syntax_eval(node%args(2), state, arg2)
+		res%sca%str%s = repeat(arg1%sca%str%s, arg2%sca%i32)
+
 	case ("parse_i32")
 
 		call syntax_eval(node%args(1), state, arg)

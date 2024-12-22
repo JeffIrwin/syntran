@@ -58,23 +58,24 @@ subroutine log_test_summary(npass, nfail)
 	integer, intent(in) :: npass, nfail
 
 	write(*,*)
-	write(*,*) repeat('+', 42)
+	write(*,*) ' ' // repeat('_', 40)
 
-	write(*, '(a)', advance = 'no') ' +'
+	write(*,*) '|' // repeat(' ', 40) // '|'
+	write(*, '(a)', advance = 'no') ' |'
 	if (npass > 0) call console_color(fg_bright_green)
 	write(*, '(i12,a)', advance = 'no') npass, ' total tests passed'
 	call console_color_reset()
-	write(*,*) '        +'
+	write(*,*) '        |'
 
-	write(*, '(a)', advance = 'no') ' +'
+	write(*, '(a)', advance = 'no') ' |'
 	if (nfail > 0) call console_color(fg_bright_red)
 	write(*, '(i12,a)', advance = 'no') nfail, ' total tests failed'
 	call console_color_reset()
-	write(*,*) '        +'
+	write(*,*) '        |'
 
-	write(*,*) repeat('+', 42)
+	write(*,*) '|' // repeat('_', 40) // '|'
 	write(*,*)
-	write(*,*) repeat('=', 72)
+	write(*,*) repeat('=', 60)
 
 end subroutine log_test_summary
 
