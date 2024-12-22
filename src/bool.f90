@@ -44,6 +44,9 @@ logical function is_str_eq(a, b)
 	!
 	! I guess this is an artifact of fixed-length strings being common in older
 	! fortran code
+	!
+	! Note that `is_ne()` is implemented as `.not. is_eq()`, which calls this
+	! fn, so there is no need for a separate is_str_ne()
 
 	character(len = *), intent(in) :: a, b
 
@@ -245,7 +248,10 @@ subroutine is_eq_value_t(left, right, res, op_text)
 
 			allocate(res%array%bool( res%array%len_ ))
 			do i8 = 1, res%array%len_
-				res%array%bool(i8) = is_str_eq(left%array%str(i8)%s, right%sca%str%s)
+				res%array%bool(i8) = is_str_eq( &
+					left%array%str(i8)%s, &
+					right%sca%str%s &
+				)
 			end do
 
 		case default
@@ -361,7 +367,10 @@ subroutine is_eq_value_t(left, right, res, op_text)
 
 			allocate(res%array%bool( res%array%len_ ))
 			do i8 = 1, res%array%len_
-				res%array%bool(i8) = is_str_eq(left%sca%str%s, right%array%str(i8)%s)
+				res%array%bool(i8) = is_str_eq( &
+					left%sca%str%s, &
+					right%array%str(i8)%s &
+				)
 			end do
 
 		case default
@@ -440,7 +449,10 @@ subroutine is_eq_value_t(left, right, res, op_text)
 			! Fortran is weird about string arrays
 			allocate(res%array%bool( res%array%len_ ))
 			do i8 = 1, res%array%len_
-				res%array%bool(i8) = is_str_eq(left%array%str(i8)%s, right%array%str(i8)%s)
+				res%array%bool(i8) = is_str_eq( &
+					left%array%str(i8)%s, &
+					right%array%str(i8)%s &
+				)
 			end do
 
 		case default

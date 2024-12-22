@@ -929,6 +929,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('repeat("aBcD ", 3);')  == "aBcD aBcD aBcD ",  &
 			eval('repeat(" aBcD", 3);')  == " aBcD aBcD aBcD",  &
 			eval('repeat(" ", 4);')  == "    ",  &
+			eval('repeat("aBcD", 0);')  == "",  &  ! 0 is empty. negatives crash
 			eval('i32( 0.0);') ==   "0", &
 			eval('i32( 1.1);') ==   "1", &
 			eval('i32(-1.1);') ==  "-1", &
