@@ -30,9 +30,6 @@ subroutine unit_test_aoc_2023(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: Add other aoc solutions.  Optimize if necessary, or just exclude
-	! anything that takes more than ~30 s to run
-
 	tests = &
 		[   &
 			interpret_file(path//"01/main.syntran", quiet = .true., chdir_ = .true.) == '107443', &
@@ -94,9 +91,6 @@ subroutine unit_test_aoc_2024(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: Add other aoc solutions.  Optimize if necessary, or just exclude
-	! anything that takes more than ~30 s to run
-
 	tests = &
 		[   &
 			interpret_file(path//"1/main.syntran" , quiet = .true., chdir_ = .true.) == '32625824', &
@@ -153,7 +147,7 @@ subroutine unit_tests_long(iostat)
 	npass = 0
 	nfail = 0
 
-	!call unit_test_aoc_2023(npass, nfail) ! TODO
+	call unit_test_aoc_2023(npass, nfail)
 	call unit_test_aoc_2024(npass, nfail)
 
 	call log_test_summary(npass, nfail)

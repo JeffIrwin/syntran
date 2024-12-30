@@ -152,7 +152,7 @@ fn part2(): i64
 			ye = y;
 		}
 	}
-	println("xys = ", [xs, ys]);
+	//println("xys = ", [xs, ys]);
 
 	// Pre-process input to find junctions.  It might help to also find
 	// dead-ends (1 outlet), mark them, and optimize them later
@@ -211,7 +211,7 @@ fn part2(): i64
 		chars2[x,y] = "J";
 		//chars2[x,y] = str(nout);
 	}
-	println("njunc = ", njunc);
+	//println("njunc = ", njunc);
 	//println("chars2 = ");
 	//print_char_mat(&chars2);
 
@@ -232,7 +232,7 @@ fn part2(): i64
 	for ij in [0: njunc]
 	{
 		//println();
-		println("ij = ", ij);
+		//println("ij = ", ij);
 		let x   = junc[0, ij];
 		let y   = junc[1, ij];
 		let dir = junc[2, ij];
@@ -261,7 +261,7 @@ fn part2(): i64
 			nadj[ij] += 1;
 		}
 	}
-	println("adj = ", adj);
+	//println("adj = ", adj);
 
 	// Now do flood fill from each junc to get neighbors with different positions
 	for ij in [0: njunc]
@@ -269,7 +269,7 @@ fn part2(): i64
 		let STACK_CAP = nx * ny;
 		let stack = [-1; 4, STACK_CAP];
 		let sptr  = 0;
-		println("junc[:, ", ij, "] = ", junc[:,ij]);
+		//println("junc[:, ", ij, "] = ", junc[:,ij]);
 
 		// push
 		stack[0:3, sptr] = junc[:, ij]; // x, y, dir
@@ -355,7 +355,7 @@ fn part2(): i64
 		}
 	}
 	//println("adj = ", adj);
-	println("w = ", w);
+	//println("w = ", w);
 
 	// Dijkstra's algorithm
 	let DIST_INFTY = 2_000_000_000;
@@ -585,9 +585,8 @@ fn part2(): i64
 	sum_ = count(chars == "O");
 	//println("chars = ", chars);
 
-	// TODO: some kind of UB is hapenning.  Check CAP overflows?
-	print_char_mat(&chars);
-	println(); // DO NOT REMOVE THIS :(
+	//print_char_mat(&chars);
+	//println();
 
 	println("part 2 = ", sum_);
 	return sum_;
