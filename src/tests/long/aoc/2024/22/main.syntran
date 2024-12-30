@@ -42,7 +42,10 @@ fn part1(): i64
 {
 	let sum_ = 0'i64;
 
+	if ifile == 0
+		filename = "test-input2.txt";
 	let f = open(filename);
+
 	let str_ = readln(f);
 	while not eof(f)
 	{
@@ -172,7 +175,10 @@ fn part2(): i64
 	let prices = [-1; NCHANGES, nmonkey];
 	let diffs  = [-1; NCHANGES, nmonkey];
 
+	if ifile == 0
+		filename = "test-input.txt";
 	let f = open(filename);
+
 	let str_ = readln(f);
 	for imon in [0: nmonkey]
 	{

@@ -624,6 +624,7 @@ fn main(): str
 
 	// Expect "60714423975686:cgh,frt,pmd,sps,tst,z05,z11,z23"
 	let p1 = str(part1());
+	let p2 = "";
 	//let p2 = part2();  // works in ~16 s but too slow for unit tests
 
 	println("Ending AOC syntran main");

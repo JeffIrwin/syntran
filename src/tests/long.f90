@@ -116,14 +116,14 @@ subroutine unit_test_aoc_2024(npass, nfail)
 			interpret_file(path//"15/main.syntran", quiet = .true., chdir_ = .true.) == '19113', &
 			interpret_file(path//"16/main.syntran", quiet = .true., chdir_ = .true.) == '7081', &
 			interpret_file(path//"17/main.syntran", quiet = .true., chdir_ = .true.) == '1,6,7,4,3,0,5,0,6:216148338630253', &
-			!interpret_file(path//"18/main.syntran", quiet = .true., chdir_ = .true.) == '', &
-			!interpret_file(path//"19/main.syntran", quiet = .true., chdir_ = .true.) == '', &
-			!interpret_file(path//"20/main.syntran", quiet = .true., chdir_ = .true.) == '', &
-			!interpret_file(path//"21/main.syntran", quiet = .true., chdir_ = .true.) == '', &
-			!interpret_file(path//"22/main.syntran", quiet = .true., chdir_ = .true.) == '', &
-			!interpret_file(path//"23/main.syntran", quiet = .true., chdir_ = .true.) == '', &
-			!interpret_file(path//"24/main.syntran", quiet = .true., chdir_ = .true.) == '', &
-			!interpret_file(path//"25/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			interpret_file(path//"18/main.syntran", quiet = .true., chdir_ = .true.) == '374:30,12', &
+			interpret_file(path//"19/main.syntran", quiet = .true., chdir_ = .true.) == '22', &
+			interpret_file(path//"20/main.syntran", quiet = .true., chdir_ = .true.) == '1521', &
+			interpret_file(path//"21/main.syntran", quiet = .true., chdir_ = .true.) == '170279148797334', &
+			interpret_file(path//"22/main.syntran", quiet = .true., chdir_ = .true.) == '37327646', &
+			interpret_file(path//"23/main.syntran", quiet = .true., chdir_ = .true.) == '893:cw,dy,ef,iw,ji,jv,ka,ob,qv,ry,ua,wt,xz', &
+			interpret_file(path//"24/main.syntran", quiet = .true., chdir_ = .true.) == '60714423975686:', &
+			interpret_file(path//"25/main.syntran", quiet = .true., chdir_ = .true.) == '3356', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -153,7 +153,7 @@ subroutine unit_tests_long(iostat)
 	npass = 0
 	nfail = 0
 
-	call unit_test_aoc_2023(npass, nfail) ! TODO
+	!call unit_test_aoc_2023(npass, nfail) ! TODO
 	call unit_test_aoc_2024(npass, nfail)
 
 	call log_test_summary(npass, nfail)

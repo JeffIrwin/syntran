@@ -152,7 +152,7 @@ fn part2(): i64
 			ye = y;
 		}
 	}
-	//println("xys = ", [xs, ys]);
+	println("xys = ", [xs, ys]);
 
 	// Pre-process input to find junctions.  It might help to also find
 	// dead-ends (1 outlet), mark them, and optimize them later
@@ -211,7 +211,7 @@ fn part2(): i64
 		chars2[x,y] = "J";
 		//chars2[x,y] = str(nout);
 	}
-	//println("njunc = ", njunc);
+	println("njunc = ", njunc);
 	//println("chars2 = ");
 	//print_char_mat(&chars2);
 
@@ -232,7 +232,7 @@ fn part2(): i64
 	for ij in [0: njunc]
 	{
 		//println();
-		//println("ij = ", ij);
+		println("ij = ", ij);
 		let x   = junc[0, ij];
 		let y   = junc[1, ij];
 		let dir = junc[2, ij];
@@ -242,6 +242,7 @@ fn part2(): i64
 		while true
 		{
 			ijn += 1;
+			if (ijn < 0) continue;
 			//println("    ijn = ", ijn);
 			if (ijn >= njunc)  break;
 			if (ijn >= ij + 4) break;
@@ -260,7 +261,7 @@ fn part2(): i64
 			nadj[ij] += 1;
 		}
 	}
-	//println("adj = ", adj);
+	println("adj = ", adj);
 
 	// Now do flood fill from each junc to get neighbors with different positions
 	for ij in [0: njunc]
@@ -268,11 +269,11 @@ fn part2(): i64
 		let STACK_CAP = nx * ny;
 		let stack = [-1; 4, STACK_CAP];
 		let sptr  = 0;
-		//println("junc[:, ", ij, "] = ", junc[:,ij]);
+		println("junc[:, ", ij, "] = ", junc[:,ij]);
 
 		// push
-		stack[0:4, sptr] = junc[:, ij]; // x, y, dir
-		stack[  4, sptr] = 0;           // dist
+		stack[0:3, sptr] = junc[:, ij]; // x, y, dir
+		stack[  3, sptr] = 0;           // dist
 		sptr += 1;
 
 		// I can reduce the rank of visited (without directions) and get the
@@ -354,7 +355,7 @@ fn part2(): i64
 		}
 	}
 	//println("adj = ", adj);
-	//println("w = ", w);
+	println("w = ", w);
 
 	// Dijkstra's algorithm
 	let DIST_INFTY = 2_000_000_000;
@@ -417,7 +418,7 @@ fn part2(): i64
 	//println("dist end_id_north = ", dist[end_id_north]);
 
 	// Backtrack all optimal paths using DFS
-	let STACK_CAP = nx * ny * 20; // probably don't need 10x
+	let STACK_CAP = nx * ny;
 	let stack = [-1; STACK_CAP];
 	let sptr = 0;
 
@@ -459,7 +460,7 @@ fn part2(): i64
 			//println();
 			//println("i0, i1 = ", [i0, i1]);
 	
-			let STACK_CAP2 = nx * ny * 10; // DING DING DING TODO THIS IS THE UB CAUSE! 10x seems safe
+			let STACK_CAP2 = nx * ny;
 			let stack2 = [-1; 4, STACK_CAP2];
 			let sptr2  = 0;
 	
@@ -467,8 +468,8 @@ fn part2(): i64
 			//println("junc[:, ", i1, "] = ", junc[:,i1]);
 	
 			// push
-			stack2[0:4, sptr2] = junc[:, i0]; // x, y, dir
-			stack2[  4, sptr2] = 0;           // dist
+			stack2[0:3, sptr2] = junc[:, i0]; // x, y, dir
+			stack2[  3, sptr2] = 0;           // dist
 			sptr2 += 1;
 	
 			let visited2 = [false; nx, ny, NDIRS];

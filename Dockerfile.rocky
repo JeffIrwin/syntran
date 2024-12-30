@@ -63,6 +63,7 @@ ARG PROFILE release
 #RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran"
 RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
 RUN fpm test test --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
+#RUN echo 1
 #RUN fpm test long --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
 RUN fpm install --prefix . --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
 
