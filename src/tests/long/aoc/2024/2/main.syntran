@@ -121,7 +121,7 @@ fn main(): i64
 	// For unit-testing (within the syntran repo), this main fn returns a value
 	// to be compared with expected results
 	println();
-	println("Starting AOC syntran main 2024/1");
+	println("Starting AOC syntran main 2024/2");
 
 	let sum_ = 0'i64;
 

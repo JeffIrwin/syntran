@@ -166,7 +166,7 @@ fn main(): i64
 
 	// Expect 4364915411363 + 38322057216320 for real input
 	//
-	// TODO: expected test results?
+	// 3749 + 11387 for sample
 	sum_ += part1();
 	sum_ += part2();
 

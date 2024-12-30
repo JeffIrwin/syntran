@@ -237,7 +237,9 @@ fn main(): i64
 
 	let sum_ = 0'i64;
 
-	// Expect 5208 + 1972
+	// Expect 5208 + 1972 for real input
+	//
+	// 41 + 6 for sample
 	sum_ += part1();
 	sum_ += part2();
 

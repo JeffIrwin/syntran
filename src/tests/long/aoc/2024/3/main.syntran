@@ -35,6 +35,7 @@ fn part1(): i64
 			//println("i = ", i);
 			//println(str_[i]);
 
+			if (i + len_start_str >= len(str_)) continue;
 			if (str_[i: i+len_start_str] != start_str) continue;
 
 			//println("found " + start_str);
@@ -92,10 +93,15 @@ fn part2(): i64
 			//println("i = ", i);
 			//println(str_[i]);
 
+			if (i + len_do_str >= len(str_)) continue;
 			if (str_[i: i+len_do_str  ] == do_str  ) enabled = true;
+
+			if (i + len_dont_str >= len(str_)) continue;
 			if (str_[i: i+len_dont_str] == dont_str) enabled = false;
 
 			if (not enabled) continue;
+
+			if (i + len_start_str >= len(str_)) continue;
 			if (str_[i: i+len_start_str] != start_str) continue;
 
 			//println("found " + start_str);

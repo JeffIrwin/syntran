@@ -99,31 +99,31 @@ subroutine unit_test_aoc_2024(npass, nfail)
 
 	tests = &
 		[   &
-			interpret_file(path//"1/main.syntran", quiet = .true., chdir_ = .true.) == '32625824', &
-			!interpret_file(path//"2/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"3/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"4/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"5/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"6/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"7/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"8/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"9/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"10/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"11/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"13/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"14/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"15/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"16/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"17/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"18/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"19/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"20/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"21/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"22/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"23/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"24/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
-			!interpret_file(path//"25/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			interpret_file(path//"1/main.syntran" , quiet = .true., chdir_ = .true.) == '32625824', &
+			interpret_file(path//"2/main.syntran" , quiet = .true., chdir_ = .true.) == '920', &
+			interpret_file(path//"3/main.syntran" , quiet = .true., chdir_ = .true.) == '266050255', &
+			interpret_file(path//"4/main.syntran" , quiet = .true., chdir_ = .true.) == '4596', &
+			interpret_file(path//"5/main.syntran" , quiet = .true., chdir_ = .true.) == '10050', &
+			interpret_file(path//"6/main.syntran" , quiet = .true., chdir_ = .true.) == '47', & !'7180', &
+			interpret_file(path//"7/main.syntran" , quiet = .true., chdir_ = .true.) == '15136', & !'42686972627683', &
+			interpret_file(path//"8/main.syntran" , quiet = .true., chdir_ = .true.) == '1731', &
+			interpret_file(path//"9/main.syntran" , quiet = .true., chdir_ = .true.) == '12764730558978', &
+			interpret_file(path//"10/main.syntran", quiet = .true., chdir_ = .true.) == '1493', &
+			interpret_file(path//"11/main.syntran", quiet = .true., chdir_ = .true.) == '218279375892027', &
+			interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '2202472', &
+			interpret_file(path//"13/main.syntran", quiet = .true., chdir_ = .true.) == '93866170426408', &
+			interpret_file(path//"14/main.syntran", quiet = .true., chdir_ = .true.) == '232253028', &
+			!interpret_file(path//"15/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			!interpret_file(path//"16/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			!interpret_file(path//"17/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			!interpret_file(path//"18/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			!interpret_file(path//"19/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			!interpret_file(path//"20/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			!interpret_file(path//"21/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			!interpret_file(path//"22/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			!interpret_file(path//"23/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			!interpret_file(path//"24/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			!interpret_file(path//"25/main.syntran", quiet = .true., chdir_ = .true.) == '', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
