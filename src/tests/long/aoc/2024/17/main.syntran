@@ -342,7 +342,7 @@ fn part2(): str
 
 //==============================================================================
 
-fn main(): i64
+fn main(): str
 {
 	// For unit-testing (within the syntran repo), this main fn returns a value
 	// to be compared with expected results
@@ -354,12 +354,12 @@ fn main(): i64
 	// Expect "1,6,7,4,3,0,5,0,6" and "216148338630253"
 	//
 	// Part 2 aka 216_148_338_630_253
-	let p1_str = part1();
-	let p2_str = part2();
+	let p1 = part1();
+	let p2 = part2();
 
 	println("Ending AOC syntran main");
 	println();
-	return sum_;
+	return p1 + ":" + p2;
 }
 
 //==============================================================================

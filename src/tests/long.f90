@@ -113,9 +113,9 @@ subroutine unit_test_aoc_2024(npass, nfail)
 			interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '2202472', &
 			interpret_file(path//"13/main.syntran", quiet = .true., chdir_ = .true.) == '93866170426408', &
 			interpret_file(path//"14/main.syntran", quiet = .true., chdir_ = .true.) == '232253028', &
-			!interpret_file(path//"15/main.syntran", quiet = .true., chdir_ = .true.) == '', &
-			!interpret_file(path//"16/main.syntran", quiet = .true., chdir_ = .true.) == '', &
-			!interpret_file(path//"17/main.syntran", quiet = .true., chdir_ = .true.) == '', &
+			interpret_file(path//"15/main.syntran", quiet = .true., chdir_ = .true.) == '19113', &
+			interpret_file(path//"16/main.syntran", quiet = .true., chdir_ = .true.) == '7081', &
+			interpret_file(path//"17/main.syntran", quiet = .true., chdir_ = .true.) == '1,6,7,4,3,0,5,0,6:216148338630253', &
 			!interpret_file(path//"18/main.syntran", quiet = .true., chdir_ = .true.) == '', &
 			!interpret_file(path//"19/main.syntran", quiet = .true., chdir_ = .true.) == '', &
 			!interpret_file(path//"20/main.syntran", quiet = .true., chdir_ = .true.) == '', &
@@ -153,7 +153,7 @@ subroutine unit_tests_long(iostat)
 	npass = 0
 	nfail = 0
 
-	call unit_test_aoc_2023(npass, nfail)
+	call unit_test_aoc_2023(npass, nfail) ! TODO
 	call unit_test_aoc_2024(npass, nfail)
 
 	call log_test_summary(npass, nfail)
