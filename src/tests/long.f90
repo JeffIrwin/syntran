@@ -153,7 +153,7 @@ subroutine unit_tests_long(iostat)
 	npass = 0
 	nfail = 0
 
-	!call unit_test_aoc_2023(npass, nfail) ! TODO
+	call unit_test_aoc_2023(npass, nfail)
 	call unit_test_aoc_2024(npass, nfail)
 
 	call log_test_summary(npass, nfail)
