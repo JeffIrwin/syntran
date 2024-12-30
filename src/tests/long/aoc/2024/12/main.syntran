@@ -1,0 +1,276 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+let NDIRS = 4;
+let DIRS =
+[
+	-1,  0,
+	 1,  0,
+	 0, -1,
+	 0,  1
+	 ;
+	 2, NDIRS
+];
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+
+	let chars = [""; nx, ny];
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+		for x in [0: nx]
+			chars[x, y] = str_[x];
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("chars = ", chars);
+
+	let visited      = [false; nx, ny];
+	let ever_visited = [false; nx, ny];
+
+	let stack = [-1; 2, nx * ny];
+
+	for y0 in [0: ny]
+	for x0 in [0: nx]
+	{
+		if (ever_visited[x0, y0]) continue;
+
+		visited = false;
+		let sptr = 0; // stack pointer
+
+		stack[:, sptr] = [x0, y0]; sptr += 1;  // push
+		let area = 0;
+		let peri = 0;
+		let char_ = chars[x0, y0];
+
+		while sptr > 0
+		{
+			// pop next search location [x, y]
+			sptr -= 1;
+			let x = stack[0, sptr];
+			let y = stack[1, sptr];
+
+			if (visited[x, y]) continue;
+			visited[x, y] = true;
+			area += 1;
+			peri += 4;
+
+			// push reachable neighbors [xn, yn]
+			for id in [0: NDIRS]
+			{
+				let xn = x + DIRS[0, id];
+				let yn = y + DIRS[1, id];
+
+				if (not in_bounds([0, 0], [xn, yn], [nx, ny])) continue;
+
+				if (chars[xn, yn] != char_) continue;
+				peri -= 1;
+
+				stack[:, sptr] = [xn, yn]; sptr += 1;
+			}
+		}
+		sum_ += area * peri;
+		ever_visited = ever_visited or visited;
+	}
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+
+	let chars = [""; nx, ny];
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+		for x in [0: nx]
+			chars[x, y] = str_[x];
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("chars = ", chars);
+
+	let visited      = [false; nx, ny];     // cells visited
+	let ever_visited = [false; nx, ny];
+
+	let stack = [-1; 2, nx * ny];
+
+	for y0 in [0: ny]
+	for x0 in [0: nx]
+	{
+		if (ever_visited[x0, y0]) continue;
+
+		visited  = false;
+		let sptr = 0; // stack pointer
+
+		stack[:, sptr] = [x0, y0]; sptr += 1;  // push
+		let area = 0;
+		let char_ = chars[x0, y0];
+
+		let xmin = 2 * nx;
+		let ymin = 2 * ny;
+		let xmax = -1;
+		let ymax = -1;
+
+		while sptr > 0
+		{
+			// pop next search location [x, y]
+			sptr -= 1;
+			let x = stack[0, sptr];
+			let y = stack[1, sptr];
+
+			if (visited[x, y]) continue;
+			visited[x, y] = true;
+			area += 1;
+			xmin = min(xmin, x);
+			ymin = min(ymin, y);
+			xmax = max(xmax, x);
+			ymax = max(ymax, y);
+
+			// push reachable neighbors [xn, yn]
+			for id in [0: NDIRS]
+			{
+				let xn = x + DIRS[0, id];
+				let yn = y + DIRS[1, id];
+
+				if (not in_bounds([0, 0], [xn, yn], [nx, ny])) continue;
+				if (chars[xn, yn] != char_) continue;
+
+				stack[:, sptr] = [xn, yn]; sptr += 1;
+			}
+		}
+
+		// Count angles after the DFS loop above.  Number of angles is the same
+		// as number of sides
+		let nang = 0;
+
+		// For optimal performance, only iterate over the points near the
+		// bounding box of the visited region
+		for py in [ymin: ymax + 2]
+		for px in [xmin: xmax + 2]
+		{
+			// Point p == [px, py] is in the middle surrounded by 4 cells like this:
+			//
+			//    +------+------+
+			//    |      |      |
+			//    |  c0  |  c1  |
+			//    |      |      |
+			//    +------p------+
+			//    |      |      |
+			//    |  c2  |  c3  |
+			//    |      |      |
+			//    +------+------+
+			//
+			// Cells correspond to the actual characters in the input data.  A
+			// Point is in between cells hence there is 1 more point than cells
+			// in both dimensions
+			//
+			// The number of angles at point p depends on which of c[0-4] are in
+			// the current "visited" region.  There are 10/16 cases with 1 or 2 angles
+
+			let cx = -1; let cy = -1;
+
+			// Are cells in region?
+			let c0 = false;
+			let c1 = false;
+			let c2 = false;
+			let c3 = false;
+
+			cx = px - 1; cy = py - 1;
+			if (in_bounds([0,0], [cx,cy], [nx,ny])) c0 = visited[cx, cy];
+
+			cx = px - 0; cy = py - 1;
+			if (in_bounds([0,0], [cx,cy], [nx,ny])) c1 = visited[cx, cy];
+
+			cx = px - 1; cy = py - 0;
+			if (in_bounds([0,0], [cx,cy], [nx,ny])) c2 = visited[cx, cy];
+
+			cx = px - 0; cy = py - 0;
+			if (in_bounds([0,0], [cx,cy], [nx,ny])) c3 = visited[cx, cy];
+
+			//// This is the most common case, so it's a decent optimization to
+			//// skip it early if you're not using the bounding box optimization
+			//// that I have here
+			//if (not any([c0, c1, c2, c3])) continue;
+
+			let count_ = count([c0, c1, c2, c3]);
+
+			// These four cases have 1 cell in and 3 cells out
+			if (count_ == 1) nang += 1;
+
+			// These four cases have 3 cells in and 1 cell out
+			if (count_ == 3) nang += 1;
+
+			// Diagonal cases with 2 in and 2 out
+			if (c0 and c3 and not c1 and not c2) nang += 2;
+			if (c1 and c2 and not c0 and not c3) nang += 2;
+
+			// The other 6 cases have 0 angles (4 straight edge cases and 2 cases
+			// with everything outside or everything inside)
+		}
+		sum_ += area * nang;
+		ever_visited = ever_visited or visited;
+	}
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/12");
+
+	let sum_ = 0'i64;
+
+	// Expect 1363484 + 838988
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

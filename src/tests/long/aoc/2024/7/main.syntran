@@ -1,0 +1,183 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+//ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nvmax = 0'i64;
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, ":");
+
+		let ans = parse_i64(strs[0]);
+		let v = parse_i64_delim(strs[1], " ");
+		//println("ans = ", ans);
+		//println("v = ", v);
+
+		let nv = size(v, 0);
+		nvmax = max(nvmax, nv);
+		for i in [0: 2 ** (nv - 1)] // permutations
+		{
+			let res = v[0];
+			for j in [1: nv]
+			{
+				//println("j = ", j);
+				let vb = v[j];
+				let op_bit = 1'i64 & (i >> (j-1));
+				if (op_bit == 0)
+					res += vb;
+				else
+					res *= vb;
+				//println("res = ", res);
+			}
+			if res == ans
+			{
+				//println("expected ans = ", ans);
+				sum_ += ans;
+				break;
+			}
+		}
+		//println();
+		str_ = readln(f);
+	}
+	close(f);
+	//println("nvmax = ", nvmax);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let k = 0; // debug progress only
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("k = ", k);
+		k += 1;
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, ":");
+
+		let ans = parse_i64(strs[0]);
+		let v = parse_i64_delim(strs[1], " ");
+
+		let nv = i32(size(v, 0));
+		//println("nv = ", nv);
+
+		//// Do a DFS.  Stack stores vector value and its index
+		////
+		//// DFS allows us to exit early if an answer is found.  BFS would search
+		//// nearly everything before completing
+		////
+		//// Again, clever, but not actually faster
+		////
+		//let s = [0'i64; 2, 3 ** (nv-1)];
+		//let ptr = 0;
+
+		//// Push
+		//s[:, ptr] = [v[0], 0'i64]; ptr += 1;
+		//while ptr > 0
+		//{
+		//	// Pop
+		//	ptr -= 1;
+		//	let vi = s[0, ptr];
+		//	let  i = s[1, ptr] + 1;
+
+		//	if vi > ans
+		//		continue;
+		//	if i == nv
+		//	{
+		//		if vi == ans
+		//		{
+		//			sum_ += ans;
+		//			break;
+		//		}
+		//		else
+		//			continue;
+		//	}
+
+		//	// Push
+		//	s[:, ptr] = [vi + v[i], i]; ptr += 1;
+		//	s[:, ptr] = [vi * v[i], i]; ptr += 1;
+		//	s[:, ptr] = [parse_i64(str(vi, v[i])), i]; ptr += 1;
+		//}
+
+		// Are you fucking kidding me?  Just saving every permutation in a big
+		// ass array is faster than any of the clever stuff that I tried?
+		let nums  = [0'i64; 3 ** (nv-1)];
+		let nums0 = nums;
+		nums[0] = v[0]; let ptr = 1;
+		for i in [1: nv]
+		{
+			nums0 = nums;
+			let ptr0 = ptr;
+			ptr = 0;
+			for j in [0: ptr0]
+			{
+				nums[ptr] = nums0[j] + v[i]; ptr += 1;
+				nums[ptr] = nums0[j] * v[i]; ptr += 1;
+				nums[ptr] = parse_i64(str(nums0[j], v[i])); ptr += 1;
+			}
+		}
+		if any(nums == ans)
+			sum_ += ans;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/7");
+
+	let sum_ = 0'i64;
+
+	// Expect 4364915411363 + 38322057216320 for real input
+	//
+	// TODO: expected test results?
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

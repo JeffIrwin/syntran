@@ -1,0 +1,365 @@
+
+#include("../../utils-2024.syntran");
+#include("../../dict_i64.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn name_to_id(name: str): i32
+{
+	// 2-char lowercase alphabetical name to int id
+	let i0 = i32(name[0]) - i32("a");
+	let i1 = i32(name[1]) - i32("a");
+	return 26 * i0 + i1;
+}
+fn id_to_name(id: i32): str
+{
+	let i0 = id / 26;
+	let i1 = id % 26;
+	let c0 = char(i0 + i32("a"));
+	let c1 = char(i1 + i32("a"));
+	return c0 + c1;
+}
+
+fn starts_t(id: i32): bool
+{
+	return (id / 26) == (i32("t") - i32("a"));
+}
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let npairs = countln_(filename);
+	let pairs = [-1; 2, npairs];
+
+	// Max number of 2-char alphabetical names.  Some may not be present
+	let NIDS = 26 ** 2;
+
+	// Adjacency matrix.  You could also use a dict for this which could save
+	// memory but incur more expensive lookups
+	let cons = [false; NIDS, NIDS];
+
+	let f = open(filename);
+	let str_ = readln(f);
+	for ip in [0: npairs]
+	{
+		//println("str_ = ", str_);
+
+		let name0 = str_[0:2];
+		let name1 = str_[3:5];
+
+		let id0 = name_to_id(name0);
+		let id1 = name_to_id(name1);
+
+		pairs[:, ip] = [id0, id1];
+		cons[id0, id1] = true;
+		cons[id1, id0] = true;
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("pairs = ", pairs);
+	//println("count(cons)  = ", count(cons));
+
+	// Build adjacency table
+	let NADJ_CAP = 32;
+	let nadj = [ 0; NIDS];
+	let adj  = [-1; NADJ_CAP, NIDS];
+	for ip in [0: npairs]
+	{
+		let id0 = pairs[0, ip];
+		let id1 = pairs[1, ip];
+
+		// Add first half-connection (they're symmetric)
+		adj[ nadj[id0], id0 ] = id1;
+		nadj[id0] += 1;
+		if nadj[id0] >= NADJ_CAP
+		{
+			println("Error: NADJ_CAP overflow!");
+			exit(-1);
+		}
+
+		// Add second half going the other way
+		adj[ nadj[id1], id1 ] = id0;
+		nadj[id1] += 1;
+		if nadj[id1] >= NADJ_CAP
+		{
+			println("Error: NADJ_CAP overflow!");
+			exit(-1);
+		}
+	}
+	//println("adj = ", adj);
+
+	// Find the LAN parties.  This algo is fast but it may visit a party
+	// multiple times.  Use a dict to equivalence the set of parties
+	let parties = new_dict_i64();
+
+	let NCAP = 32;  // 8 is too small but 16 is safe for me
+	let STACK_CAP = 32;
+	let stack    = [-1; STACK_CAP];
+	let subgraph = [-1; NCAP];
+	for id0 in [0: NIDS]
+	{
+		let sptr = 0;
+		let n = 0; // subgraph size
+
+		// Find a subgraph starting with id0
+
+		// IDs are added and removed to/from stack.  They are only added but
+		// never removed from subgraph
+
+		// push
+		stack[sptr] = id0; sptr += 1;
+		subgraph[n] = id0; n    += 1;
+
+		while sptr > 0
+		{
+			// pop from stack but not subgraph
+			sptr -= 1;
+			let id1 = stack[sptr];
+
+			// iterate over connections of id1
+			for id in adj[0: nadj[id1], id1]
+			{
+				// check if id is connected to everything in subgraph
+				let all_connected = true;
+				for idg in subgraph[0: n]
+				{
+					// this effectively acts as a `visited` check. node IDs are
+					// not connected to themselves!
+					all_connected = cons[id, idg];
+					if (not all_connected) break;
+				}
+				if (not all_connected) continue;
+
+				// push
+				stack[sptr] = id; sptr += 1;
+				subgraph[n] = id; n    += 1;
+				if sptr >= STACK_CAP
+				{
+					println("Error: STACK_CAP overflow!");
+					exit(-1);
+				}
+				if n >= NCAP
+				{
+					println("Error: NCAP overflow!");
+					exit(-1);
+				}
+			}
+		}
+		//println("n = ", n);
+
+		if (n < 3) continue;
+
+		// Iterate on n-choose-3 from the subgraph
+		for j0 in [2: n]
+		for j1 in [1: j0]
+		for j2 in [0: j1]
+		{
+			let i0 = subgraph[j0];
+			let i1 = subgraph[j1];
+			let i2 = subgraph[j2];
+
+			//println("i0 = ", i0);
+			//if (not (i0 < i1 and i1 < i2)) continue; // dict and sorting takes care of this
+			if (not (starts_t(i0) or starts_t(i1) or starts_t(i2))) continue;
+
+			let key = str(sort_inplace([i0, i1, i2]));
+			//println("key = ", key);
+			set_dict_i64(&parties, key, 1'i64);
+		}
+	}
+	sum_ = len_dict_i64(&parties);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): str
+{
+	let npairs = countln_(filename);
+	let pairs = [-1; 2, npairs];
+
+	let NIDS = 26 ** 2; // number of 2-char alphabetical names
+
+	let cons = [false; NIDS, NIDS];
+
+	let f = open(filename);
+	let str_ = readln(f);
+	for ip in [0: npairs]
+	{
+		//println("str_ = ", str_);
+
+		let name0 = str_[0:2];
+		let name1 = str_[3:5];
+
+		let id0 = name_to_id(name0);
+		let id1 = name_to_id(name1);
+
+		pairs[:, ip] = [id0, id1];
+		cons[id0, id1] = true;
+		cons[id1, id0] = true;
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("pairs = ", pairs);
+	//println("count(cons)  = ", count(cons));
+
+	// Build adjacency table
+	let NADJ_CAP = 32;
+	let nadj = [ 0; NIDS];
+	let adj  = [-1; NADJ_CAP, NIDS];
+	for ip in [0: npairs]
+	{
+		let id0 = pairs[0, ip];
+		let id1 = pairs[1, ip];
+
+		// Add first half-connection (they're symmetric)
+		adj[ nadj[id0], id0 ] = id1;
+		nadj[id0] += 1;
+		if nadj[id0] >= NADJ_CAP
+		{
+			println("Error: NADJ_CAP overflow!");
+			exit(-1);
+		}
+
+		// Add second half going the other way
+		adj[ nadj[id1], id1 ] = id0;
+		nadj[id1] += 1;
+		if nadj[id1] >= NADJ_CAP
+		{
+			println("Error: NADJ_CAP overflow!");
+			exit(-1);
+		}
+	}
+	//println("adj = ", adj);
+
+	// Find largest directly connected subgraph of max allowed size NCAP
+	//
+	// idk if this is proper graph terminology, but by "subgraph" i mean a
+	// subset of the graph where every node is directly connected to all other
+	// nodes in the subgraph.  having an intermediary node in between but no
+	// direct immediate connection doesn't count
+	//
+	// i guess the technical term is "strongly connected component"
+	//
+	let NCAP = 32;
+	let STACK_CAP = 32;
+	let stack    = [-1; STACK_CAP];
+	let subgraph = [-1; NCAP];
+	let subgraph_big = subgraph;
+	let nbig = 0;
+	for id0 in [0: NIDS]
+	{
+		let sptr = 0;
+		let n = 0; // subgraph size
+
+		// Find a subgraph starting with id0
+
+		// IDs are added and removed to/from stack.  They are only added but
+		// never removed from subgraph
+
+		// push
+		stack[sptr] = id0; sptr += 1;
+		subgraph[n] = id0; n    += 1;
+
+		while sptr > 0
+		{
+			// pop
+			sptr -= 1;
+			let id1 = stack[sptr];
+
+			// iterate over connections of id1
+			for id in adj[0: nadj[id1], id1]
+			{
+				// check if id is connected to everything in subgraph
+				let all_connected = true;
+				for idg in subgraph[0: n]
+				{
+					// this effectively acts as a `visited` check. node IDs are
+					// not connected to themselves!
+					all_connected = cons[id, idg];
+					if (not all_connected) break;
+				}
+				if (not all_connected) continue;
+
+				// push
+				stack[sptr] = id; sptr += 1;
+				subgraph[n] = id; n    += 1;
+				if sptr >= STACK_CAP
+				{
+					println("Error: STACK_CAP overflow!");
+					exit(-1);
+				}
+				if n >= NCAP
+				{
+					println("Error: NCAP overflow!");
+					exit(-1);
+				}
+			}
+		}
+		//println("n = ", n);
+
+		if n > nbig
+		{
+			nbig = n;
+			subgraph_big = subgraph;
+		}
+	}
+	subgraph_big = subgraph_big[0: nbig];  // trim
+
+	// With my name_to_id() endianness convention, sorting numerically *is*
+	// sorting alphabetically
+	subgraph_big = sort_inplace(subgraph_big);
+
+	// compact csv single str
+	let names = "";
+	for i in [0: nbig]
+	{
+		names += id_to_name(subgraph_big[i]);
+		if (i < nbig - 1) names += ",";
+	}
+
+	println("part 2 = ", names);
+	return names;
+}
+
+//==============================================================================
+
+fn main(): str
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/23");
+
+	let sum_ = 0'i64;
+
+	// Expect 893 and "cw,dy,ef,iw,ji,jv,ka,ob,qv,ry,ua,wt,xz"
+	let p1 = part1();
+	let p2 = part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return str(p1, ":", p2);
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

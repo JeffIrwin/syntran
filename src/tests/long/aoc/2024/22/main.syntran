@@ -1,0 +1,278 @@
+
+#include("../../utils-2024.syntran");
+#include("../../dict_i64.syntran");
+//HASH_MAX_DICT_I64 = 2048;
+
+//==============================================================================
+
+let ifile = 0;
+//ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+let PRUNE = 16_777_216;
+fn next_(num: i32): i32
+{
+	num ^= num * 64;
+	num %= PRUNE;
+
+	num ^= num / 32;
+	num %= PRUNE;
+
+	// This is the only step that overflows i32
+	num = (i64(num) ^ (num * 2048'i64)) % PRUNE;
+	//num ^= num * 2048;
+	//num %= PRUNE;
+
+	//println("next_ = ", num);
+
+	return num;
+}
+
+let NCHANGES = 2000;
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let num = parse_i32(str_);
+		for i in [0: NCHANGES]
+			num = next_(num);
+		//println("num = ", num);
+
+		sum_ += num;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+// TODO: sum_bananas is commented-out because it's unused now, but I've left it
+// here because there's a parser crash (double-commented) that needs to be fixed
+//
+////fn sum_bananas(&prices, &diffs, &seq): i64 // TODO: parser crash (bad arg types/names)
+//fn sum_bananas(prices: &[i32; :,:], diffs: &[i32; :,:], seq: &[i32; :]): i64
+//{
+//	println("starting sum_bananas()");
+//	let nbananas = 0'i64;
+//	let nseq = size(seq, 0);
+//	let nmonkey = size(prices, 1);
+//	for imon in [0: nmonkey]
+//	{
+//		//println("imon = ", imon);
+//		for it in [0: NCHANGES - nseq + 1]
+//		{
+//			if all(diffs[it: it + nseq, imon] == seq)
+//			{
+//				println("price = ", prices[it + nseq - 1, imon]);
+//				nbananas += prices[it + nseq - 1, imon];
+//				break;
+//			}
+//		}
+//		//println();
+//	}
+//	println();
+//	return nbananas;
+//}
+
+//fn part2dict(): i64
+//{
+//	// This was my initial dict-based implementation.  After I finished it, the
+//	// array-based solution was clear
+//	let sum_ = 0'i64;
+//
+//	let nmonkey = countln_(filename);
+//	let prices = [-1; NCHANGES, nmonkey];
+//	let diffs  = [-1; NCHANGES, nmonkey];
+//
+//	let f = open(filename);
+//	let str_ = readln(f);
+//	for imon in [0: nmonkey]
+//	{
+//		//println("str_ = ", str_);
+//		let num = parse_i32(str_);
+//		for i in [0: NCHANGES]
+//		{
+//			let num0 = num % 10;
+//			num = next_(num);
+//			let diff = (num % 10) - num0;
+//
+//			prices[i, imon] = num % 10;
+//			diffs [i, imon] = diff;
+//		}
+//		//println("num = ", num);
+//		str_ = readln(f);
+//	}
+//	close(f);
+//
+//	// Dict for all monkeys, containing the sum of bananas that we can get so
+//	// far (they are slowly added up per-monkey and updated)
+//	//
+//	// Honestly you could just use an 18x18x18x18 array (size ~100_000) for this
+//	// indexed by the 4 numbers in the sequence, shifted by +9
+//	let all = new_dict_i64();
+//
+//	let NSEQ = 4;
+//	for imon in [0: nmonkey]
+//	{
+//		// Dict for this monkey.  Only stores 1 to check if we've seen it or
+//		// not.  I need a boolean dict or an in-dict method
+//		let mon = new_dict_i64();
+//
+//		//if (imon % 10 == 0) println("imon = ", imon);
+//		for it in [NSEQ: NCHANGES]
+//		{
+//			let seq = diffs[it-NSEQ: it, imon];
+//
+//			// Use a compact str to make hashing slightly faster
+//			let seq_str = str(seq[0], ",", seq[1], ",", seq[2], ",", seq[3]);
+//			//let seq_str = str(seq); // default str with brackets and spaces
+//
+//			// Check if we've already seen this sequence and skip if necessary.
+//			// The monkey sells as soon as it first sees a sequence
+//			let seen = get_dict_i64(&mon, seq_str);
+//			if (seen > 0) continue;
+//			set_dict_i64(&mon, seq_str, 1'i64); // mark as seen
+//
+//			let price = prices[it-1, imon];
+//			let price0 = get_dict_i64(&all, seq_str);
+//			if (price0 > 0) price += price0;
+//
+//			sum_ = max(sum_, i64(price));
+//
+//			set_dict_i64(&all, seq_str, i64(price));
+//		}
+//	}
+//
+//	println("part 2 = ", sum_);
+//	return sum_;
+//}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let nmonkey = countln_(filename);
+	let prices = [-1; NCHANGES, nmonkey];
+	let diffs  = [-1; NCHANGES, nmonkey];
+
+	let f = open(filename);
+	let str_ = readln(f);
+	for imon in [0: nmonkey]
+	{
+		//println("str_ = ", str_);
+		let num = parse_i32(str_);
+		for i in [0: NCHANGES]
+		{
+			let num0 = num % 10;
+			num = next_(num);
+			let diff = (num % 10) - num0;
+
+			prices[i, imon] = num % 10;
+			diffs [i, imon] = diff;
+		}
+		//println("num = ", num);
+		str_ = readln(f);
+	}
+	close(f);
+
+	// Shift for array indexing with ranges [0: 19] instead of [-9: 10]
+	diffs += 9;
+
+	// Array for all monkeys, containing the sum of bananas that we can get so
+	// far (they are slowly added up per-monkey and updated)
+	//
+	// This is a 19x19x19x19 array (size ~130_000) for each [-9:10] quadruplet
+	// sequence , shifted by +9
+	//
+	// Many entries of this array will never be used, e.g. you can't have a
+	// sequence of diffs [+9, +9] because this would take your price over the
+	// max limit of 9!  But I need a rectangular array and this is an easy and
+	// very fast way to do it
+	//
+	// The array runs both parts in 13 seconds, as opposed to 3 minutes for the
+	// hash map version
+	let LEN = 2 * 9 + 1;
+	let all = [0; LEN, LEN, LEN, LEN];
+
+	let NSEQ = 4;
+	for imon in [0: nmonkey]
+	{
+		// Array for this monkey.  Only stores bool to check if we've seen it or
+		// not
+		let mon = [false; LEN, LEN, LEN, LEN];
+
+		//if (imon % 10 == 0) println("imon = ", imon);
+		for it in [NSEQ: NCHANGES]
+		{
+			let seq = diffs[it-NSEQ: it, imon];
+			let s0 = seq[0]; // unpack
+			let s1 = seq[1];
+			let s2 = seq[2];
+			let s3 = seq[3];
+
+			// Check if we've already seen this sequence and skip if necessary.
+			// The monkey sells as soon as it first sees a sequence
+			let seen = mon[s0, s1, s2, s3];
+			if (seen) continue;
+			mon[s0, s1, s2, s3] = true;
+
+			let price = prices[it-1, imon];
+			let price0 = all[s0, s1, s2, s3];
+			price += price0;
+
+			sum_ = max(sum_, i64(price));
+
+			all[s0, s1, s2, s3] = price;
+		}
+	}
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/22");
+
+	let sum_ = 0'i64;
+
+	// Expect 13584398738 + 1612
+	//
+	// TODO: part 1 and part 2 have different sample inputs.  Probably fine to
+	// just unit test part 2's sample
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

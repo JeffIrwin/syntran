@@ -1,0 +1,164 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+let NEWLINE_ = char(10);
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	// This is a backwards hack to start with an INPUT_STR of the whole file,
+	// for similarity to the web implementation
+	let INPUT_STR = "";
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		// readln does not return with a newline
+		INPUT_STR += str_ + NEWLINE_;
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("INPUT_STR = ");
+	//println(INPUT_STR);
+	
+	let lines = split_(INPUT_STR, NEWLINE_);
+	let nlines = size(lines, 0);
+	// println("nlines = ", nlines);
+
+	let v1 = [0; nlines];
+	let v2 = [0; nlines];
+	for i in [0: nlines]
+	{
+		let line = lines[i];
+		// println("line = ", line);
+
+		let nums = parse_i32_delim(line, " ");
+		v1[i] = nums[0];
+		v2[i] = nums[1];
+	}
+	// println("v1 = ", v1);
+	// println("v2 = ", v2);
+
+	v1 = sort_inplace(v1);
+	v2 = sort_inplace(v2);
+
+	//// You could just get ans in one-line in fortran:
+	// sum_ = sum(abs(v1 - v2));
+
+	for i in [0: nlines]
+	{
+		sum_ += abs_i32(v1[i] - v2[i]);
+	}
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	// This is a backwards hack to start with an INPUT_STR of the whole file,
+	// for similarity to the web implementation
+	let INPUT_STR = "";
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		// readln does not return with a newline
+		INPUT_STR += str_ + NEWLINE_;
+		str_ = readln(f);
+	}
+	close(f);
+
+	//println("INPUT_STR = ");
+	//println(INPUT_STR);
+
+	let lines = split_(INPUT_STR, NEWLINE_);
+	let nlines = size(lines, 0);
+	// println("nlines = ", nlines);
+
+	let v1 = [0; nlines];
+	let v2 = [0; nlines];
+	for i in [0: nlines]
+	{
+		let line = lines[i];
+		// println("line = ", line);
+
+		let nums = parse_i32_delim(line, " ");
+		v1[i] = nums[0];
+		v2[i] = nums[1];
+	}
+	// println("v1 = ", v1);
+	// println("v2 = ", v2);
+
+	// Use a brute force O(n**2) nested for loop.  n is 1000, so it's 1_000_000 which isn't bad
+	for j1 in [0: nlines]
+	{
+		let appearances = 0;
+		for j2 in [0: nlines]
+		{
+			if v1[j1] == v2[j2]
+				appearances += 1;
+		}
+		// println("appearances = ", appearances);
+		sum_ += v1[j1] * appearances;
+	}
+
+	//// If you wanted to optimize this implementation, you could sort again
+	//// like in part 1, and then do a bisection search on the 2nd list to count
+	//// the number of appearances.  Better yet, traverse both lists at the same
+	//// time, in sorted order and in sync to skip the need for bisection
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/1");
+
+	let sum_ = 0'i64;
+
+	// Expect part 1 = 3246517 and part 2 = 29379307
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

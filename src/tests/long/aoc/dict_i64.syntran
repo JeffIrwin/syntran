@@ -1,0 +1,263 @@
+
+// This file includes a single hash map dictionary that maps str keys to i64
+// values.  The primary functions for setting and getting key/value pairs are:
+//
+//     new_dict_i64(): dict_i64  // initialize an empty dictionary
+//     set_dict_i64(dict: &dict_i64, key: str, val: i64)
+//     get_dict_i64(dict: &dict_i64, key: str): i64
+//
+// There are several related functions:
+//
+//     keys_dict_i64(dict: &dict_i64): [str; :]  // return a flat array of all keys
+//     vals_dict_i64(dict: &dict_i64): [i64; :]  // return a flat array of all values
+//     len_dict_i64(dict: &dict_i64): i32        // return the total number of keys
+//     print_lens_dict_i64(dict: &dict_i64)      // print the length of each bucket in the dict
+
+//****************
+
+// Be careful about using very large HASH_MAX_DICT_I64 values (>~10k).  Besides the
+// memory footprint, keys_dict_i64() and vals_dict_i64() make a pass over all
+// buckets, so they can become slow
+let HASH_MAX_DICT_I64 = 256;
+//HASH_MAX_DICT_I64 = 1024 * 8;
+
+//==============================================================================
+
+fn hash_dict_i64(s: str): i32
+{
+	// This is the hash fn that determines which bucket a key goes into
+
+	//// djb2 hash fn
+	//let hash_ = 5381;
+	//for j in [0: len(s)]
+	//{
+	//	hash_ = ((hash_ << 5) + hash_) + i32(s[j]);
+	//	//hash_ = hash_ * 33 + i32(s[j]);
+	//	hash_ %= HASH_MAX_DICT_I64; // not part of djb2, but it crashes without this :(
+	//}
+	////hash_ %= HASH_MAX_DICT_I64;
+	////return i32(hash_);
+	//return hash_;
+
+	// This is the hash fn from aoc 2023 day 15
+	let hash_ = 0;
+	for j in [0: len(s)]
+	{
+		hash_ += i32(s[j]);
+		hash_ *= 17;
+		hash_ %= HASH_MAX_DICT_I64;
+	}
+	//println("hash_ = ", hash_);
+	return hash_;
+}
+
+struct dict_i64_bucket
+{
+	cap: i32,
+	len: i32,
+	keys: [str; :],
+	vals: [i64; :],
+}
+
+struct dict_i64
+{
+	len: i32,
+	buckets: [dict_i64_bucket; :],
+}
+
+fn new_dict_i64(): dict_i64
+{
+	// TODO: arg?  It's simpler to have len as a global var, otherwise hash fns
+	// need to now the size of their dicts
+
+	//let len_ = 256;
+	let len_ = HASH_MAX_DICT_I64;
+
+	let empty_bucket = dict_i64_bucket
+	{
+		cap = 0,
+		len = 0,
+		keys = [""   ; 0],
+		vals = [0'i64; 0],
+	};
+
+	let dict = dict_i64
+	{
+		len = len_,
+		buckets = [empty_bucket; len_],
+	};
+
+	return dict;
+}
+
+fn print_lens_dict_i64(dict: &dict_i64)
+{
+	for i in [0: dict.len]
+	{
+		let len_ = dict.buckets[i].len;
+		if len_ != 0
+		{
+			println("bucket[", i, "] len = ", len_);
+			//println("bucket[", i, "] cap = ", dict.buckets[i].cap);
+		}
+	}
+	return;
+}
+
+fn get_dict_i64(dict: &dict_i64, key: str): i64
+{
+	let ib = hash_dict_i64(key); // bucket index
+	let len_ = dict.buckets[ib].len;
+	for i in [0: len_]
+	{
+		if dict.buckets[ib].keys[i] == key
+		{
+			return dict.buckets[ib].vals[i];
+		}
+	}
+	// TODO: should we panic?
+	return -1'i64;
+	//return 0;
+}
+
+fn len_dict_i64(dict: &dict_i64): i32
+{
+	// Return the number of keys in the dict
+	let n = 0;
+	for i in [0: dict.len]
+		n += dict.buckets[i].len;
+	return n;
+}
+
+fn keys_dict_i64(dict: &dict_i64): [str; :]
+{
+	// Return a flat array of all the keys in the dict
+	let n = 0;
+	for i in [0: dict.len]
+		n += dict.buckets[i].len;
+	let keys = [""; n];
+	let k = 0;
+	for i in [0: dict.len]
+	for j in [0: dict.buckets[i].len]
+	{
+		keys[k] = dict.buckets[i].keys[j];
+		k += 1;
+	}
+	return keys;
+}
+
+fn vals_dict_i64(dict: &dict_i64): [i64; :]
+{
+	// Return a flat array of all the vals in the dict
+	let n = 0;
+	for i in [0: dict.len]
+		n += dict.buckets[i].len;
+	let vals = [0'i64; n];
+	let k = 0;
+	for i in [0: dict.len]
+	for j in [0: dict.buckets[i].len]
+	{
+		vals[k] = dict.buckets[i].vals[j];
+		k += 1;
+	}
+	return vals;
+}
+
+fn set_dict_i64(dict: &dict_i64, key: str, val: i64)
+{
+	let ib = hash_dict_i64(key); // bucket index
+	//println("ib = ", ib);
+
+	let len_ = dict.buckets[ib].len;
+	//println("len_ = ", len_);
+	for i in [0: len_]
+	{
+		if dict.buckets[ib].keys[i] == key
+		{
+			// Reset existing value
+			dict.buckets[ib].vals[i] = val;
+			return;
+		}
+	}
+
+	let cap_ = dict.buckets[ib].cap;
+	if len_ >= cap_
+	{
+		// Grow arrays
+		if cap_ == 0
+			cap_ = 1;
+		else
+			cap_ *= 2;
+
+		//println("new cap_ = ", cap_);
+		dict.buckets[ib].cap = cap_;
+		//println("done setting cap");
+		let keys = dict.buckets[ib].keys;
+		let vals = dict.buckets[ib].vals;
+
+		dict.buckets[ib].keys = [""; cap_];
+
+		dict.buckets[ib].vals = [0'i64 ; cap_];
+
+		//dict.buckets[ib].keys[0: len_] = keys; // struct array slices not implemented :(
+		//dict.buckets[ib].vals[0: len_] = vals;
+		for i in [0: len_]
+		{
+			dict.buckets[ib].keys[i] = keys[i];
+			dict.buckets[ib].vals[i] = vals[i];
+		}
+	}
+	//println("setting ", key, ", ", val);
+
+	// Append new key value pair
+	dict.buckets[ib].keys[len_] = key;
+	dict.buckets[ib].vals[len_] = val;
+	dict.buckets[ib].len += 1;
+
+	return;
+}
+
+//==============================================================================
+
+//fn main(): i32
+//{
+//	// Unit tests
+//
+//	println("starting dict.syntran");
+//
+//	let dict = new_dict_i64();
+//	println("len   = ", dict.len);
+//	println("len 0 = ", dict.buckets[0].len);
+//	println("cap 0 = ", dict.buckets[0].cap);
+//	//dict.buckets[0].cap = 7;
+//	//println("cap 0 = ", dict.buckets[0].cap);
+//
+//	println("hash 'HASH' = ", hash_dict_i64("HASH")); // 52
+//	println("hash 'rn=1' = ", hash_dict_i64("rn=1")); // 30
+//	println("hash 'rn'   = ", hash_dict_i64("rn"));   // 0
+//	println("hash 'cm'   = ", hash_dict_i64("cm"));   // 0 (hash clash, good for testing)
+//
+//	set_dict_i64(&dict, "rn", 1'i64);
+//	set_dict_i64(&dict, "qp", 3'i64);
+//	set_dict_i64(&dict, "cm", 2'i64);
+//	set_dict_i64(&dict, "pc", 4'i64);
+//	set_dict_i64(&dict, "ot", 9'i64);
+//	set_dict_i64(&dict, "ab", 5'i64);
+//
+//	println("get 'rn' = ", get_dict_i64(&dict, "rn"));
+//	println("get 'qp' = ", get_dict_i64(&dict, "qp"));
+//	println("get 'cm' = ", get_dict_i64(&dict, "cm"));
+//	println("get 'pc' = ", get_dict_i64(&dict, "pc"));
+//	println("get 'ot' = ", get_dict_i64(&dict, "ot"));
+//	println("get 'ab' = ", get_dict_i64(&dict, "ab"));
+//
+//	print_lens_dict_i64(&dict);
+//
+//	println("keys = ", keys_dict_i64(&dict));
+//	println("vals = ", vals_dict_i64(&dict));
+//
+//	println("ending dict.syntran");
+//	return 0;
+//}
+//return main();
+

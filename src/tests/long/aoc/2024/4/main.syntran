@@ -1,0 +1,203 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+// Cardinal directions and diagonals
+let NDIRS = 8;
+let DIRS = 
+[
+	 1,  0,
+	-1,  0,
+	 0,  1,
+	 0, -1,
+	 1,  1,
+	 1, -1,
+	-1,  1,
+	-1, -1
+	;
+	2, NDIRS
+];
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = countln_(filename);
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+	close(f);
+
+	//println("nx, ny = ", [nx, ny]);
+	let chars = [" "; nx, ny];
+
+	f = open(filename);
+	for iy in [0: ny]
+	{
+		let str_ = readln(f);
+		for ix in [0: nx]
+			chars[ix, iy] = str_[ix];
+	}
+	close(f);
+	//println("chars = ", chars);
+
+	let xmas = "XMAS";
+	let nxmas = len(xmas);
+
+	for iy in [0: ny]
+	for ix in [0: nx]
+	{
+		// Starting from position [ix, iy], look in all 8 cardinal and diagonal
+		// directions to see if xmas appears
+		for id in [0: NDIRS]
+		{
+			// Build a candidate string of the same length as xmas
+			for i in [0: nxmas]
+			{
+				let ixl = ix + i * DIRS[0, id];
+				let iyl = iy + i * DIRS[1, id];
+
+				// Check bounds
+				if (ixl < 0 or ixl >= nx) break;
+				if (iyl < 0 or iyl >= ny) break;
+
+				if (chars[ixl, iyl] != xmas[i]) break;
+
+				if (i == nxmas - 1) sum_ += 1;
+			}
+		}
+	}
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+// Search kernel size
+let nkx = 3;
+let nky = 3;
+let nk  = 4; // 4 possible rotations
+
+// Search kernels.  Hard code all 4 possible rotations of the pattern
+let ks = 
+[
+	"M", ".", "S",
+	".", "A", ".",
+	"M", ".", "S",
+
+	"M", ".", "M",
+	".", "A", ".",
+	"S", ".", "S",
+
+	"S", ".", "M",
+	".", "A", ".",
+	"S", ".", "M",
+
+	"S", ".", "S",
+	".", "A", ".",
+	"M", ".", "M"
+	;
+	nkx, nky, nk
+];
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = countln_(filename);
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+	close(f);
+
+	//println("nx, ny = ", [nx, ny]);
+	let chars = [" "; nx, ny];
+
+	f = open(filename);
+	for iy in [0: ny]
+	{
+		let str_ = readln(f);
+		for ix in [0: nx]
+			chars[ix, iy] = str_[ix];
+	}
+	close(f);
+	//println("chars = ", chars);
+
+	//println("kernels = ");
+	//println(ks);
+
+	for iy in [0: ny]
+	for ix in [0: nx]
+	{
+		// Starting from position [ix, iy], check if our current subgrid matches
+		// any of the 4 rotated search kernels
+
+		//// Before a loop i was thinking of using 4 different kernels
+		//search(chars, ix, iy, k0);
+		//search(chars, ix, iy, k1);
+		//search(chars, ix, iy, k2);
+		//search(chars, ix, iy, k3);
+
+		// Iterate over 4 possible rotations of kernel
+		for ik in [0: nk]
+		{
+			let match_ = true;
+			for iky in [0: nky]
+			for ikx in [0: nkx]
+			{
+				let ixl = ix + ikx;
+				let iyl = iy + iky;
+
+				if (ixl < 0 or ixl >= nx) {match_ = false; break;}
+				if (iyl < 0 or iyl >= ny) {match_ = false; break;}
+
+				let ck = ks[ikx, iky, ik];
+				if (chars[ixl, iyl] != ck and ck != ".") {match_ = false; break;}
+
+				//if (ikx == nkx-1 and iky == nky-1) sum_ += 1;
+			}
+			if (match_) sum_ += 1;
+		}
+	}
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/4");
+
+	let sum_ = 0'i64;
+
+	// Expect 2644 + 1952
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

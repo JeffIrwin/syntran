@@ -1,0 +1,200 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+// The test input and real input have different spatial sizes
+let nx = -1;
+let ny = -1;
+if ifile == 0
+{
+	nx = 11;
+	ny = 7;
+}
+else
+{
+	nx = 101;
+	ny = 103;
+}
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+	//println("nx, ny = ", [nx, ny]);
+
+	// Number of particles/positions/velocities/"robots"
+	let np = countln_(filename);
+
+	let ps = [-1; 2, np];
+	let vs = [-1; 2, np];
+
+	let f = open(filename);
+	for i in [0: np]
+	{
+		let str_ = readln(f);
+		//println("str_ = ", str_);
+
+		let nums = parse_i32_delim(str_, "pv=, ");
+
+		ps[:,i] = nums[0: 2];
+		vs[:,i] = nums[2: 4];
+
+	}
+	close(f);
+
+	//println("ps = ", ps);
+	//println("vs = ", vs);
+
+	let nt = 100;
+
+	// Jump 100 s all at once
+	ps += nt * vs;
+
+	for i in [0: np]
+	{
+		ps[0,i] = pmod(ps[0,i], nx);
+		ps[1,i] = pmod(ps[1,i], ny);
+	}
+	//println("ps = ", ps);
+
+	// Count particles in each quadrant.  Particles on midpoint lines don't
+	// count
+	let nq0 = 0;
+	let nq1 = 0;
+	let nq2 = 0;
+	let nq3 = 0;
+	for i in [0: np]
+	{
+		let x = ps[0,i];
+		let y = ps[1,i];
+		if (x < nx/2 and y < ny/2) nq0 += 1;
+		if (x < nx/2 and y > ny/2) nq1 += 1;
+		if (x > nx/2 and y < ny/2) nq2 += 1;
+		if (x > nx/2 and y > ny/2) nq3 += 1;
+	}
+	sum_ = nq0 * nq1 * nq2 * nq3;
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+	//println("nx, ny = ", [nx, ny]);
+
+	let np = countln_(filename);
+
+	let ps = [-1; 2, np];
+	let vs = [-1; 2, np];
+
+	let f = open(filename);
+	for i in [0: np]
+	{
+		let str_ = readln(f);
+		//println("str_ = ", str_);
+
+		let nums = parse_i32_delim(str_, "pv=, ");
+
+		ps[:,i] = nums[0: 2];
+		vs[:,i] = nums[2: 4];
+
+	}
+	close(f);
+
+	//println("ps = ", ps);
+	//println("vs = ", vs);
+
+	let it = 0;
+	let num_unique = 0;
+	while true
+	{
+		it += 1;
+		//if (it % 1000 == 0) println("it = ", it);
+		//println("it = ", it);
+
+		ps += vs;
+
+		for i in [0: np]
+		{
+			ps[0,i] = pmod(ps[0,i], nx);
+			ps[1,i] = pmod(ps[1,i], ny);
+		}
+		//println("ps = ", ps);
+
+		//let chars = ["."; nx, ny];
+		let counts = [0; nx, ny];
+		let max_count = -1;
+
+		for i in [0: np]
+		{
+			let x = ps[0,i];
+			let y = ps[1,i];
+			//chars[x,y] = "*";
+			counts[x,y] += 1;
+			max_count = max(max_count, counts[x,y]);
+		}
+
+		if max_count == 1
+		{
+			// I still don't fully understand what the puzzle is asking for.
+			// Maybe we can just break on the first num_unique, i.e. when all of
+			// the robots are in unique positions with no overlaps.  But do they
+			// necessarily form a picture of a christmas tree at that frame?
+			//
+			// This gives me the right answer, but I don't know if this will
+			// work for anyone else's input
+
+			//println("it = ", it);
+			sum_ = it;
+			num_unique += 1;
+			//for y in [0: ny]
+			//	println(cat_strs(chars[:,y]));
+			//if (num_unique >= 10) break;
+			break;
+		}
+		//println();
+	}
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/14");
+
+	let sum_ = 0'i64;
+
+	// Expect 232253028 + 8179
+	sum_ += part1();
+	//sum_ += part2(); // works but too slow
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

@@ -1,0 +1,40 @@
+
+// Input coords:
+ax, ay
+bx, by
+px, py
+
+// Find [na, nb] such that:
+na * ax + nb * bx == px
+na * ay + nb * by == py
+
+// and:
+minimize (3 * na + nb)
+
+// Convert the problem above to a matrix equation:
+[ax, bx] * [na] == [px]
+[ay, by] * [nb] == [py]
+minimize (3 * na + nb)
+
+// ********
+
+// I was confused because this *sounds* like a minimization problem, but unless
+// the matrix is singular (which never happens in my input), there is only ever
+// 1 or 0 solutions!  So you can ignore the part that looks like
+// optimization/minimization and just focus on the matrix equation:
+
+[ax, bx] * [na] == [px]
+[ay, by] * [nb] == [py]
+
+// To solve a 2x2 matrix problem, calculate the determinant to get the inverse
+// matrix and left-multiply that matrix by the RHS [px, py]:
+
+det = ax * by - ay * bx
+
+inv = 
+[ by, -bx]
+[-ay,  ax] / det
+
+// (the inverse swaps the diagonals and inverts the off-diagonals, then divides
+// by the determinant)
+

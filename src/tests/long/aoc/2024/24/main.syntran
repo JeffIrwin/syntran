@@ -1,0 +1,639 @@
+
+#include("../../utils-2024.syntran");
+#include("../../dict_i64.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+// TODO: z values have one more bit than x and y values and my code is a mess in
+// handling this difference
+let NBITS = 46;
+
+fn get_val_from_bits(var_name: str, dict: &dict_i64): i64
+{
+	// Combine the var_name [xyz]* bits
+	let val = 0'i64;
+	for i in [0: NBITS+1]
+	{
+		let zkey = var_name;
+		if (i < 10) zkey += "0" + str(i);
+		else        zkey +=       str(i);
+		//println("zkey = ", zkey);
+
+		let zval = get_dict_i64(&dict, zkey);
+		if (zval < 0) continue;
+		//println("zval = ", zval);
+
+		val |= (zval << i);
+	}
+	return val;
+}
+
+fn get_ids
+	(
+		left : &[str; :], // inputs
+		op   : &[str; :],
+		right: &[str; :],
+		res  : &[str; :],
+
+		left_id : &[i32; :], // outputs
+		right_id: &[i32; :],
+		res_id  : &[i32; :],
+		nvars   : &i32,
+		nadj    : &[i32; :],
+		ninc    : &[i32; :],
+		 adj    : &[i32; :,:],
+		 inc    : &[i32; :,:],
+	)
+{
+	// Map IDs for input and result values
+	let ids = new_dict_i64();
+	let id = 0'i64;
+	let NVALS_CAP = 1024;
+
+	// Set x and y in the dict
+
+	for i in [0: NBITS]
+	{
+		let key = "x";
+		if (i < 10) key += "0" + str(i);
+		else        key +=       str(i);
+
+		set_dict_i64(&ids , key, id); id += 1;
+	}
+
+	for i in [0: NBITS]
+	{
+		let key = "y";
+		if (i < 10) key += "0" + str(i);
+		else        key +=       str(i);
+
+		set_dict_i64(&ids , key, id); id += 1;
+	}
+
+	let ngates = size(left, 0);
+
+	// Map result IDs
+	res_id = [0; ngates];
+	for i in [0: ngates]
+	{
+		res_id[i] = id;
+		set_dict_i64(&ids, res[i], id); id += 1;
+	}
+
+	// Map left and right operand IDs
+	left_id  = [0; ngates];
+	right_id = [0; ngates];
+	for i in [0: ngates]
+	{
+		left_id [i] = get_dict_i64(&ids, left [i]);
+		right_id[i] = get_dict_i64(&ids, right[i]);
+	}
+	//println("left_id = ", left_id);
+
+	nvars = len_dict_i64(&ids);
+
+	// Build adjacency table
+	let NADJ_CAP = 4;
+	nadj = [ 0; nvars];
+	ninc = [ 0; nvars];
+	adj = [-1; NADJ_CAP, nvars];
+	inc = [-1; NADJ_CAP, nvars];
+	for i in [0: ngates]
+	{
+		let il =  left_id[i];
+		let ir = right_id[i];
+		let io =   res_id[i];
+
+		adj[ nadj[il], il ] = i; // not res_id!  i think this could be refactored better
+		nadj[il] += 1;
+
+		adj[ nadj[ir], ir ] = i;
+		nadj[ir] += 1;
+
+		inc[ ninc[res_id[i]], i ] = il; // idk
+		ninc[res_id[i]] += 1;
+
+		inc[ ninc[res_id[i]], i ] = ir;
+		ninc[res_id[i]] += 1;
+	}
+	//println("nadj = ", nadj);
+	//println("adj = ", adj);
+
+	return;
+}
+
+// TODO: left, op, right, etc. should be encapsulated in an adder struct
+fn run_adder(
+	x_in: i64, y_in: i64,
+	left : &[str; :], // `left` and `right` are (mostly) unused since refactoring
+	op   : &[str; :],
+	right: &[str; :],
+	res  : &[str; :],
+	left_id : &[i32; :],
+	right_id: &[i32; :],
+	res_id  : &[i32; :],
+	nvars   : i32,
+	nadj    : &[i32; :],
+	ninc    : &[i32; :],
+	 adj    : &[i32; :,:],
+	): i64
+{
+	let id = 0'i64;
+	let NVALS_CAP = 512;
+	let vals = [-1; NVALS_CAP];
+
+	// Set x and y in vals array
+	for i in [0: NBITS]
+	{
+		let bit = (x_in >> i) & 1'i64;
+		vals[id] = bit;
+		id += 1;
+	}
+
+	for i in [0: NBITS]
+	{
+		let bit = (y_in >> i) & 1'i64;
+		vals[id] = bit;
+		id += 1;
+	}
+
+	let ngates = size(left, 0);
+
+	//****************
+
+	let z = 0'i64;
+
+	// Use topological sort to evaluate nodes that have known dependencies
+	// first.  See also 2024 day 5
+
+	// No need to build `l` like in day 5.  We just evaluate the node
+	// immediately instead of building a sorted list and evaluating later
+	let s = [0; nvars]; // stack
+	let sptr = 0;
+
+	// Build `s` with known x and y inputs first
+	for i in [0: nvars]
+		if ninc[i] == 0
+		{
+			s[sptr] = i;
+			sptr += 1;
+		}
+	//println("s = ", s[0: sptr]);
+
+	let has_val = [false; nvars];
+	for u in s[0: sptr]
+		has_val[u] = true;
+	//println("has_val = ", has_val);
+
+	while sptr > 0
+	{
+		// Pop node from s
+		sptr -= 1;
+		let n = s[sptr];
+
+		// For each sink node `m` with an edge e from n to m
+		for im in [0: nadj[n]]
+		{
+			let m = adj[im, n];
+			if (has_val[ res_id[m] ]) continue;
+
+			// "Remove edge e from the graph" (nothing to do today, unlike day 5)
+
+			let il =  left_id[m];
+			let ir = right_id[m];
+			if has_val[il] and has_val[ir]
+			{
+				// If m has no other incoming edges, insert m into s
+				s[sptr] = res_id[m]; sptr += 1;
+
+				// Calculate value
+				let left_val  = vals[il];
+				let right_val = vals[ir];
+				let res_val = 0'i64;
+				if op[m] == "AND"
+				{
+					if (left_val == 1 and right_val == 1) res_val = 1;
+				}
+				else if op[m] == "OR"
+				{
+					if (left_val == 1 or right_val == 1) res_val = 1;
+				}
+				else if op[m] == "XOR"
+				{
+					if (left_val != right_val) res_val = 1;
+				}
+				vals[ res_id[m] ] = res_val;
+				has_val[ res_id[m] ] = true;
+
+				let res_name = res[m];
+				if (res_name[0] != "z") continue;
+
+				// Combine the z* bits
+				let iz = parse_i32(res_name[1:3]);
+				z |= (res_val << iz);
+			}
+		}
+	}
+	return z;
+}
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let dict = new_dict_i64();
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while str_ != ""
+	{
+		// Load initialization
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, ":");
+		let key = strs[0];
+		let val = parse_i64(strs[1]);
+
+		//println("key, val = ", key, " ", val);
+
+		// save keys/vals
+		set_dict_i64(&dict, key, val);
+
+		str_ = readln(f);
+	}
+	str_ = readln(f); // skip blank
+
+	let NGATES_CAP = 512;
+	let ngates = 0;
+	let left  = [""; NGATES_CAP];
+	let op    = [""; NGATES_CAP];
+	let right = [""; NGATES_CAP];
+	let res   = [""; NGATES_CAP];
+
+	while not eof(f)
+	{
+		// Load operation rules
+		//println("str_ = ", str_);
+
+		let strs = split_(str_, "-> ");
+		left [ngates] = strs[0];
+		op   [ngates] = strs[1];
+		right[ngates] = strs[2];
+		res  [ngates] = strs[3];
+
+		ngates += 1;
+		str_ = readln(f);
+	}
+	close(f);
+
+	// Trim
+	left  = left [0: ngates];
+	op    = op   [0: ngates];
+	right = right[0: ngates];
+	res   = res  [0: ngates];
+
+	//println("left  = ", left [0:9]);
+	//println("op    = ", op   [0:9]);
+	//println("right = ", right[0:9]);
+	//println("res   = ", res  [0:9]);
+
+	let x_in = get_val_from_bits("x", &dict);
+	let y_in = get_val_from_bits("y", &dict);
+	//println("x_in = ", x_in);
+	//println("y_in = ", y_in);
+
+	let left_id  = [0];
+	let right_id = [0];
+	let res_id   = [0];
+	let nvars    =  0 ;
+	let nadj     = [0];
+	let ninc     = [0];
+	let  adj     = [0; 1,1];
+	let  inc     = [0; 1,1];
+	get_ids(&left, &op, &right, &res,
+		&left_id, &right_id, &res_id, &nvars,
+		&nadj, &ninc, &adj, &inc,
+	);
+
+	let z = run_adder(
+		x_in, y_in,
+		&left, &op, &right, &res,
+		&left_id, &right_id, &res_id, nvars,
+		&nadj, &ninc, &adj,
+	);
+
+	sum_ = z;
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn sort_swaps(swaps: [str; :]): [str; :]
+{
+	let nswaps = size(swaps, 0);
+	let iswaps = [0; nswaps];
+
+	// Convert each swap to a sortable numeric ID
+	for i in [0: nswaps]
+	{
+		let swap = swaps[i];
+		let iswap = 0;
+		let k = 0;
+		for j in [len(swap) - 1: -1: -1]
+		{
+			iswap += i32(swap[j]) * (128 ** k); // idk if this is robust
+			k += 1;
+		}
+		iswaps[i] = iswap;
+	}
+
+	let idx = sort_index(iswaps);
+	let sorted = swaps;
+	for i in [0: nswaps]
+		sorted[i] = swaps[idx[i]];
+	return sorted;
+}
+
+fn part2(): str
+{
+	let sum_ = 0'i64;
+	let dict = new_dict_i64();
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while str_ != ""
+	{
+		// Load initialization
+
+		let strs = split_(str_, ":");
+		let key = strs[0];
+		let val = parse_i64(strs[1]);
+
+		// save keys/vals
+		set_dict_i64(&dict, key, val);
+
+		str_ = readln(f);
+	}
+	str_ = readln(f); // skip blank
+
+	let NGATES_CAP = 512;
+	let ngates = 0;
+	let left  = [""; NGATES_CAP];
+	let op    = [""; NGATES_CAP];
+	let right = [""; NGATES_CAP];
+	let res   = [""; NGATES_CAP];
+
+	while not eof(f)
+	{
+		// Load operation rules
+
+		let strs = split_(str_, "-> ");
+		left [ngates] = strs[0];
+		op   [ngates] = strs[1];
+		right[ngates] = strs[2];
+		res  [ngates] = strs[3];
+
+		ngates += 1;
+		str_ = readln(f);
+	}
+	close(f);
+
+	// Trim
+	left  = left [0: ngates];
+	op    = op   [0: ngates];
+	right = right[0: ngates];
+	res   = res  [0: ngates];
+
+	//*************************
+
+	let NSWAPS = 4;
+	let nswaps = 0;
+	let swaps = [""; 2 * NSWAPS];
+
+	let left_id  = [0];
+	let right_id = [0];
+	let res_id   = [0];
+	let nvars    =  0 ;
+	let nadj     = [0];
+	let ninc     = [0];
+	let  adj     = [0; 1,1];
+	let  inc     = [0; 1,1];
+	get_ids(&left, &op, &right, &res,
+		&left_id, &right_id, &res_id, &nvars,
+		&nadj, &ninc, &adj, &inc,
+	);
+
+	// Find the bad bits that don't add correctly
+	let bad_bits = [-1; NSWAPS];
+	let nbad = 0;
+	for i in [0: 45] // not over-valued NBITS
+	{
+		let x = 1'i64 << i;
+		let y = 0'i64;
+
+		let z = run_adder(
+			x, y,
+			&left, &op, &right, &res,
+			&left_id, &right_id, &res_id, nvars,
+			&nadj, &ninc, &adj,
+		);
+
+		let zexp = x + y;
+		//println("x + y ?= z:  ", [x, y, z, zexp]);
+		if z != zexp
+		{
+			//println("bad bit ", i);
+			bad_bits[nbad] = i;
+			nbad += 1;
+		}
+	}
+	if (nbad > NSWAPS)
+	{
+		println("Error: found too many bad bits!");
+		exit(-1);
+	}
+
+	// TODO: check if there are any consecutive bad bits.  I don't think my
+	// solution will work for that case because it assumes that you can fix each
+	// bad bit independently with a single swap.  If they carry into each other
+	// that won't work
+
+	let res_in = res; // backup input
+	let res_id_in = res_id;
+
+	for bad_bit in bad_bits
+	{
+
+	//println("searching swaps for bad bit ", bad_bit);
+
+	// Put all the broken test cases in an array
+	//
+	// Several test cases are needed for each bad bit, because it also depends
+	// on the bit that gets carried in and carried out
+	let test_cases =
+	[
+		(1'i64 << bad_bit), (1'i64 << bad_bit),
+		(0'i64 << bad_bit), (1'i64 << bad_bit),
+		(1'i64 << bad_bit), (0'i64 << bad_bit),
+		(0b11'i64 << (bad_bit-1)), (0b11'i64 << (bad_bit-1)),
+		(0b01'i64 << (bad_bit-1)), (0b11'i64 << (bad_bit-1)),
+		(0b11'i64 << (bad_bit-1)), (0b01'i64 << (bad_bit-1)),
+		(0b11'i64 << (bad_bit)), (0b11'i64 << (bad_bit)),
+		(0b01'i64 << (bad_bit)), (0b11'i64 << (bad_bit)),
+		(0b11'i64 << (bad_bit)), (0b01'i64 << (bad_bit))
+		;
+		2, 9
+	];
+
+	//*************************
+
+	// TODO: don't iterate over every possible pair of results to swap.
+	// Instead, do a BFS back by a small (~4?) number of steps and only try
+	// swapping variables reachable by that search
+	//
+	// But if z** is one of the results to swap, how do we find which other
+	// result to start BFS from?  Also search adjacent to x** and y**
+
+	//let zkey = "z";
+	//if (bad_bit < 10) zkey += "0" + str(bad_bit);
+	//else              zkey +=       str(bad_bit);
+
+	//// Scan for `zroot` result index matching bad bit
+	//let zroot = 0;
+	//while (res[zroot] != zkey) zroot += 1;
+
+	//println("res = ", res[zroot]);
+	////println("res = ", res[ res_id[zroot] ]);
+	//println("res id = ", res_id[zroot]);
+
+	////****
+
+	//let xkey = "x";
+	//if (bad_bit < 10) xkey += "0" + str(bad_bit);
+	//else              xkey +=       str(bad_bit);
+	//let xroot = 0;
+	//while ((left[xroot] != xkey and right[xroot] != xkey) or xroot == zroot) xroot += 1;
+	//println("l/r = ", left[xroot], " ", right[xroot]);
+	//println("res id = ", res_id[xroot]);
+	//println("adj x = ", adj[:, xroot]);
+	//println("inc x = ", inc[:, xroot]);
+
+	//// TODO: i think i need the inverse of `adj`, i.e. `inc`, to search in the
+	//// correct direction from xroot
+
+	//exit(0);
+
+	//****
+
+	// Iterate until we find the right pair to swap
+	let z = 0'i64;
+	let tests_passed = true;
+	for s0a in [1: ngates] {
+
+	//println("swapping ", s0a);
+
+	for s0b in [0: s0a]
+	{
+		// Reset from last swap
+		res = res_in;
+		res_id = res_id_in;
+
+		// Perform swap
+
+		//println("swapping ", s0a, " ", s0b, " ", res[s0a], " ", res[s0b]);
+		//println("swap ids ", [res_id[s0a], res_id[s0b]]);
+
+		let tmp = res[s0a];
+		res[s0a] = res[s0b];
+		res[s0b] = tmp;
+
+		let itmp = res_id[s0a];
+		res_id[s0a] = res_id[s0b];
+		res_id[s0b] = itmp;
+
+		// Run all tests
+		tests_passed = true;
+		for i in [0: size(test_cases, 1)]
+		{
+			let x = test_cases[0,i];
+			let y = test_cases[1,i];
+
+			let z = run_adder(
+				x, y,
+				&left, &op, &right, &res,
+				&left_id, &right_id, &res_id, nvars,
+				&nadj, &ninc, &adj,
+			);
+
+			let zexp = x + y;
+			//println("x + y ?= z:  ", [x, y, z, zexp]);
+			tests_passed = z == zexp;
+			if (not tests_passed) break;
+		}
+		if (tests_passed)
+		{
+			swaps[2*nswaps + 0] = res[s0a];
+			swaps[2*nswaps + 1] = res[s0b];
+			nswaps += 1;
+			break;
+		}
+
+	} // end swap loop b
+
+	if (tests_passed) break;
+
+	} // end swap loop a
+
+	// TODO: handle error if test still not passed
+
+	//println("swaps = ", swaps);
+
+	} // bad_bits loop
+
+	//println("unsorted swaps = ", swaps);
+	swaps = sort_swaps(swaps);
+	let ans = "";
+	for swap in swaps
+		ans += swap + ",";
+	ans = ans[0: len(ans) - 1];
+
+	println("part 2 = ", ans);
+	return ans;
+}
+
+//==============================================================================
+
+fn main(): str
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/24");
+
+	// Expect "60714423975686:cgh,frt,pmd,sps,tst,z05,z11,z23"
+	let p1 = str(part1());
+	//let p2 = part2();  // works in ~16 s but too slow for unit tests
+
+	println("Ending AOC syntran main");
+	println();
+	return p1 + ":" + p2;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

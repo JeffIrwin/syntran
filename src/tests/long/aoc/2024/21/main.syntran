@@ -1,0 +1,406 @@
+
+#include("../../utils-2024.syntran");
+#include("../../dict_str.syntran");
+#include("../../dict_i64.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+// CHUNK_LEN 2 is optimal for part 2.  Len 1 will break my algo, idk why.  This
+// is probably indicative that I should not be using dicts at all, there's
+// probably an array-based solution.  With only 5 chars on the DPAD and strings
+// of CHUNK_LEN 2, there are only 125 == 5 ** (2+1) possible strings, including
+// the "previous" char which also dictates the state, so an array instead of a
+// dict should be possible :shrug:
+//
+// Larger CHUNK_LEN gives the correct answer but it's slower
+
+let CHUNK_LEN = 2;
+//CHUNK_LEN = 4;
+//CHUNK_LEN = 8;
+//CHUNK_LEN = 16;
+//CHUNK_LEN = 32;
+//CHUNK_LEN = 128;
+
+//****************
+
+// Numeric keypad:
+//
+//     +---+---+---+
+//     | 7 | 8 | 9 |
+//     +---+---+---+
+//     | 4 | 5 | 6 |
+//     +---+---+---+
+//     | 1 | 2 | 3 |
+//     +---+---+---+
+//         | 0 | A |
+//         +---+---+
+//
+let LEN_NPAD = 11;
+
+// Coordinates [x,y] from top-left:
+let NPAD =
+[
+	0, 0, // 7
+	1, 0, // 8
+	2, 0, // 9
+	0, 1, // 4
+	1, 1, // 5
+	2, 1, // 6
+	0, 2, // 1
+	1, 2, // 2
+	2, 2, // 3
+	1, 3, // 0
+	2, 3  // A
+	;
+	2, LEN_NPAD
+];
+let NPAD_A = 10; // index
+let NPAD_STR = "7894561230A"; // same order as NPAD array
+
+// Directional keypad:
+//
+//         +---+---+
+//         | ^ | A |
+//     +---+---+---+
+//     | < | v | > |
+//     +---+---+---+
+let LEN_DPAD = 5;
+
+let DPAD = // coordinates
+[
+	1, 0, // ^ (U)
+	2, 0, // A (A)
+	0, 1, // < (L)
+	1, 1, // v (D)
+	2, 1  // > (R)
+	;
+	2, LEN_DPAD
+];
+let DPAD_A = 1; // index
+let DPAD_STR = "^A<v>";
+
+fn get_numpad_instrs(str_: str): str
+{
+	let out = "";
+	let idx0 = NPAD_A;
+	let char0 = "A";
+
+	let do_x_first = true;
+	//let do_x_first = false;
+
+	for i in [0: len(str_)]
+	{
+		let char_ = str_[i];
+		let idx = scan(NPAD_STR, char_);
+
+		// Relative motion vector to get from previous button idx0 to current button
+		let vec = NPAD[:, idx] - NPAD[:, idx0];
+		let dx = vec[0];
+		let dy = vec[1];
+
+		//println("char_, vec = ", char_, vec);
+
+		// We have to avoid the gap.  Also we want to make the next robot able
+		// to use as short a sequence as possible, so this impacts the order
+		// that we permute x and y motions
+		//
+		// idk how much of this logic is absolutely necessary but i had to hack
+		// at it for a long time before i got it right (including many
+		// iterations of getting the sample right but the real input too high of
+		// an answer)
+
+		if      (char0 == "1" and char_ == "0") do_x_first = true;
+		else if (char0 == "4" and char_ == "0") do_x_first = true;
+		else if (char0 == "7" and char_ == "0") do_x_first = true;
+		else if (char0 == "1" and char_ == "A") do_x_first = true;
+		else if (char0 == "4" and char_ == "A") do_x_first = true;
+		else if (char0 == "7" and char_ == "A") do_x_first = true;
+		else if (char0 == "0" and char_ == "1") do_x_first = false;
+		else if (char0 == "0" and char_ == "4") do_x_first = false;
+		else if (char0 == "0" and char_ == "7") do_x_first = false;
+		else if (char0 == "A" and char_ == "1") do_x_first = false;
+		else if (char0 == "A" and char_ == "4") do_x_first = false;
+		else if (char0 == "A" and char_ == "7") do_x_first = false;
+		else do_x_first = dx < 0;
+
+		if do_x_first
+			for x in [0: abs(dx)]
+			{
+				if (dx > 0) out += ">";
+				if (dx < 0) out += "<";
+			}
+		for y in [0: abs(dy)]
+		{
+			if (dy > 0) out += "v";
+			if (dy < 0) out += "^";
+		}
+		if not do_x_first
+			for x in [0: abs(dx)]
+			{
+				if (dx > 0) out += ">";
+				if (dx < 0) out += "<";
+			}
+
+		out += "A";
+
+		idx0  = idx;
+		char0 = char_;
+	}
+	return out;
+}
+
+fn get_dirpad_instrs_base(char0: str, str_: str): str
+{
+	// Base case: assemble instructions from scratch
+	//
+	// My first implementation of part1 initially used something like this
+	// without any dict caching
+
+	let out = "";
+	let idx0 = scan(DPAD_STR, char0);
+	let do_x_first = str_[0] == ">";
+
+	for i in [0: len(str_)]
+	{
+		let char_ = str_[i];
+		let idx = scan(DPAD_STR, char_);
+
+		// Relative motion vector to get from previous button idx0 to current button
+		let vec = DPAD[:, idx] - DPAD[:, idx0];
+		let dx = vec[0];
+		let dy = vec[1];
+
+		//println("char_, vec = ", char_, vec);
+
+		if      (char0 == "<" and char_ == "^") do_x_first = true;
+		else if (char0 == "<" and char_ == "A") do_x_first = true;
+		else if (char0 == "^" and char_ == "<") do_x_first = false;
+		else if (char0 == "A" and char_ == "<") do_x_first = false;
+		else do_x_first = dx < 0;
+
+		if do_x_first
+			for x in [0: abs(dx)]
+			{
+				if (dx > 0) out += ">";
+				if (dx < 0) out += "<";
+			}
+		for y in [0: abs(dy)]
+		{
+			if (dy > 0) out += "v";
+			if (dy < 0) out += "^";
+		}
+		if not do_x_first
+			for x in [0: abs(dx)]
+			{
+				if (dx > 0) out += ">";
+				if (dx < 0) out += "<";
+			}
+		out += "A";
+
+		idx0  = idx;
+		char0 = char_;
+	}
+	return out;
+}
+
+fn init_counts(str_: str): dict_i64
+{
+	// Initialize a dict of counts to 1 for each substring chunk within a larger
+	// str_
+	let counts = new_dict_i64();
+	let char0 = "A";
+	let nchunk = len(str_) / CHUNK_LEN;
+	for i in [0: nchunk + 1] // add 1: last chunk is shorter than the others
+	{
+		let chunk = str_[CHUNK_LEN * i: min(CHUNK_LEN * (i+1), len(str_))];
+		//println("char0, chunk = """, char0, ", ", chunk, """");
+
+		// State depends on last char from previous chunk (or "A" initially)
+		let key = char0 + chunk;
+		set_dict_i64(&counts, key, 1'i64);
+
+		char0 = chunk[len(chunk)-1];
+	}
+	//println("counts = ");
+	//println(keys_dict_i64(&counts));
+	//println(vals_dict_i64(&counts));
+
+	return counts;
+}
+
+fn get_dirpad_instrs(dict: &dict_str, counts: &dict_i64): dict_i64
+{
+	// The output is a dict of counts for the next iteration.  It restarts at 0
+	// every time
+	let out = new_dict_i64();
+
+	// Like this year's "plutonian pebbles" puzzle, the order of DPAD
+	// instructions isn't really important, we just need a count of each chunk
+	// (key) in the collection
+	for key in keys_dict_i64(&counts)
+	{
+		// State depends on char0 from previous chunk (or "A" initially)
+		let char0 = key[0];
+		let chunk = key[1: len(key)];
+
+		// The `val` is the transformation of the DPAD instruction chunk to the
+		// next DPAD iteration
+		let val = get_dict_str(&dict, key);
+		if (val == "")
+		{
+			// Cache miss.  Calculate instrs val from scratch
+			val = get_dirpad_instrs_base(char0, chunk);
+			set_dict_str(&dict, key, val);
+		}
+
+		// Even though key is not in (str) dict, it is in (i64) counts dict.
+		// This is the last bug I fixed before getting the answer and that
+		// took a while to figure out.  Because init_counts() initializes
+		// the same chunks, this is guaranteed to be set
+		let count_in = get_dict_i64(&counts, key);
+		if (count_in < 0)
+		{
+			// Unreachable :exploding-head:
+			println("Error: could not find count");
+			exit(-1);
+		}
+
+		let out_key = val;
+		let nchunk = len(out_key) / CHUNK_LEN;
+		char0 = "A";
+		for i in [0: nchunk + 1]
+		{
+			let chunk = out_key[CHUNK_LEN * i: min(CHUNK_LEN * (i+1), len(out_key))];
+			//println("char0, chunk = """, char0, ", ", chunk, """");
+
+			// State depends on char0 from previous chunk (or "A" initially)
+			let key = char0 + chunk;
+
+			let cnt0 = get_dict_i64(&out, key);
+			let cnt = count_in;
+			if (cnt0 > 0) cnt += cnt0;
+			set_dict_i64(&out, key, cnt);
+
+			char0 = chunk[len(chunk)-1];
+		}
+	}
+	//println("CHUNK_LEN = ", CHUNK_LEN);
+	//println("nchunk    = ", nchunk);
+
+	return out;
+}
+
+fn part1(): i64
+{
+	// Copied from part2 because I don't feel like fixing my original part1() to
+	// work with the edited get_dirpad_instrs(_base)()
+
+	let sum_ = 0'i64;
+	let dict = new_dict_str();
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		let num = read_i32(str_);
+		let instrs = get_numpad_instrs(str_);
+		let counts = init_counts(instrs);
+		for i in [0: 2'i64]
+			counts = get_dirpad_instrs(&dict, &counts);
+
+		let len_ = 0'i64;
+		for key in keys_dict_i64(&counts)
+		{
+			let count = get_dict_i64(&counts, key);
+			len_ += count * (len(key) - 1); // subtract 1 to account for leading previous char0
+		}
+		sum_ += num * len_;
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+	let dict = new_dict_str(); // shared dict for all DPAD iterations
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let num = read_i32(str_);
+		let instrs = get_numpad_instrs(str_);
+		let counts = init_counts(instrs);
+		for i in [0: 25'i64]
+		{
+			counts = get_dirpad_instrs(&dict, &counts);
+
+			//println("i = ", i);
+			//println("counts = ");
+			//println(keys_dict_i64(&counts));
+			//println(vals_dict_i64(&counts));
+		}
+
+		let len_ = 0'i64;
+		for key in keys_dict_i64(&counts)
+		{
+			let count = get_dict_i64(&counts, key);
+			len_ += count * (len(key) - 1); // subtract 1 to account for leading previous char0
+		}
+		//println("len_ = ", len_);
+		//println("num = ", num);
+		//println();
+
+		sum_ += num * len_;
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/21");
+
+	let sum_ = 0'i64;
+
+	// Expect 137870 + 170279148659464
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

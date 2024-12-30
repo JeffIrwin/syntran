@@ -1,0 +1,254 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+//ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+let NDIRS = 4;
+let DIRS =
+[
+	 0, -1, // north
+	 1,  0, // east
+	 0,  1, // south
+	-1,  0  // west
+	;
+	2, NDIRS
+];
+
+//==============================================================================
+
+fn get_visited(g: &[str; :,:], xin: i32, yin: i32): [i32; :,:]
+{
+	let x = xin;
+	let y = yin;
+
+	let nx = size(g, 0);
+	let ny = size(g, 1);
+
+	let loc = [-1; 2, nx*ny];
+	let nloc = 0;
+
+	let visited = [false; nx, ny];
+	let inside = true;
+	let id = 0;
+	while true
+	{
+		if not visited[x,y]
+		{
+			loc[:, nloc] = [x, y];
+			nloc += 1;
+		}
+		visited[x, y] = true;
+
+		let x0 = x;
+		let y0 = y;
+
+		x += DIRS[0, id];
+		y += DIRS[1, id];
+
+		inside = (x >= 0 and x < nx and y >= 0 and y < ny);
+		if (not inside) break;
+		if g[x, y] == "#"
+		{
+			x = x0;
+			y = y0;
+			id = (id + 1) % 4;
+		}
+	}
+	loc = loc[:, 0: nloc]; // trim
+	return loc;
+}
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+	//println("nx, ny = ", [nx, ny]);
+
+	let g = [" "; nx, ny];
+
+	let guardx = -1;
+	let guardy = -1;
+
+	let y = 0;
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: nx]
+		{
+			g[x, y] = str_[x];
+			if g[x, y] == "^"
+			{
+				guardx = x;
+				guardy = y;
+			}
+		}
+		y += 1;
+		str_ = readln(f);
+	}
+	close(f);
+	//println("g = ", g);
+	//println("guard = ", [guardx, guardy]);
+
+	let loc = get_visited(&g, guardx, guardy);
+	sum_ = size(loc, 1);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+	//println("nx, ny = ", [nx, ny]);
+
+	let g = [" "; nx, ny];
+
+	let guardx = -1;
+	let guardy = -1;
+
+	let y = 0;
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		for x in [0: nx]
+		{
+			g[x, y] = str_[x];
+			if g[x, y] == "^"
+			{
+				guardx = x;
+				guardy = y;
+			}
+		}
+		y += 1;
+		str_ = readln(f);
+	}
+	close(f);
+	//println("g = ", g);
+	//println("guard = ", [guardx, guardy]);
+
+	// Get visited locations without any extra obstructions first.  These are
+	// the only locations where placing an extra obstruction will make a
+	// difference
+	let loc = get_visited(&g, guardx, guardy);
+
+	let xprev = guardx;
+	let yprev = guardy;
+	let dprev = 0;
+	let vprev = [false; nx, ny, NDIRS];
+
+	// Iterate over all possible obstruction locations
+	//
+	// From part 1, i know that only about 1/3 of all locations are visited in
+	// the original path.  We could optimize 3x faster by not placing
+	// obstructions off the og path, because they will never be hit!  You could
+	// also place obstructions on the path in order, and then remember the state
+	// just before hitting it to save some work
+	//
+	// Start at 1 because we can't place an obstacle where the guard starts
+	for iloc in [1: size(loc, 1)]
+	{
+		let ox = loc[0, iloc];
+		let oy = loc[1, iloc];
+
+		//println("oy = ", oy);
+
+		let x  = xprev;
+		let y  = yprev;
+		let id = dprev;
+		let visited = vprev;
+
+		let inside = true;
+		let looping = false;
+		while true
+		{
+			looping = visited[x, y, id];
+			if (looping) break;
+			visited[x, y, id] = true;
+			//println("x, y, id = ", [x, y, id]);
+
+			let x0 = x;
+			let y0 = y;
+
+			x += DIRS[0, id];
+			y += DIRS[1, id];
+			inside = (x >= 0 and x < nx and y >= 0 and y < ny);
+			if (not inside) break;
+			if g[x, y] == "#" or (x == ox and y == oy)
+			{
+				x = x0;
+				y = y0;
+				id = (id + 1) % 4;
+			}
+		}
+
+		if looping
+		{
+			sum_ += 1;
+		}
+
+		vprev[xprev, yprev, dprev] = true;
+		if      (oy - yprev < 0)
+			dprev = 0;
+		else if (ox - xprev > 0)
+			dprev = 1;
+		else if (oy - yprev > 0)
+			dprev = 2;
+		else if (ox - xprev < 0)
+			dprev = 3;
+		xprev = ox;
+		yprev = oy;
+	}
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/6");
+
+	let sum_ = 0'i64;
+
+	// Expect 5208 + 1972
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

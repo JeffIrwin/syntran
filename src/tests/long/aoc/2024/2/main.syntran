@@ -1,0 +1,142 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let v = parse_i32_delim(str_, " ");
+		let nv = size(v, 0);
+
+		let dv = v[1: nv] - v[0: nv-1];
+
+		let safe = true;
+		if (any(dv == 0)) safe = false;
+		if (any(dv < 0) and any(dv > 0)) safe = false;
+		if (any(abs(dv) > 3)) safe = false;
+
+		if (safe) sum_ += 1;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let vlong = parse_i32_delim(str_, " ");
+
+		// There was a cursed syntran bug where this only worked if i
+		// cast down from i64 to i32.  The issue was that the slice later
+		// assumed that the left bound of the slice range was always i32
+		//
+		// This now works without casting in syntran 4213ec80 on main, which is
+		// not yet released as of 2024-12-08
+		let nvlong = i32(size(vlong, 0));
+		//let nvlong = size(vlong, 0);  // TODO: enable after next release
+
+		let nv = nvlong - 1;
+		//println("nvlong = ", nvlong);
+		//println("nv = ", nv);
+
+		// Try removing element i from vlong to create vector v
+		for i in [0: nvlong]
+		{
+			let v = [0; nv];
+			v[0: i]  = vlong[0: i];
+			v[i: nv] = vlong[i+1: nvlong]; // this slice wasn't working without i32 casting :(
+
+			//println("vlong slice = ", vlong[i+1: nvlong]);
+			//println("vlong slice = ", vlong[i32(i+1): i32(nvlong)]);
+			//println("i = ", i);
+			//println("v = ", v);
+
+			let dv = v[1: nv] - v[0: nv-1];
+
+			let safe = true;
+			if (any(dv == 0)) safe = false;
+			if (any(dv < 0) and any(dv > 0)) safe = false;
+			if (any(abs(dv) > 3)) safe = false;
+
+			//// There might be a more optimal solution where you "count" 0 or 1
+			//// unsafe levels, but you would need to be careful to symbolically
+			//// remove the same element in each of the three safety conditions
+			//// here
+			//let count_pos = count(dv > 0);
+			//if (count(dv == 0) > 1) safe = false;
+			//if (any(count_pos == [0, nv1])) safe = false;
+			//if (count(dv < -3) or count(dv > 3)) safe = false;
+
+			if (safe)
+			{
+				sum_ += 1;
+				break;
+			}
+		}
+		//println();
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/1");
+
+	let sum_ = 0'i64;
+
+	// Expect 432 + 488
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

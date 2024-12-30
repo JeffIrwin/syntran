@@ -1,0 +1,1096 @@
+
+// In the time since I originally wrote this in 2023, there are a lot of things
+// that could be cleaned up or outright removed from these utils, thanks to new
+// syntran features.  For example, abs_i32() and sum_i32() implemented here now
+// have better alternatives built in to syntran
+//
+// However, this is large and well-tested, so I'm afraid to change it.  Maybe
+// after 2024
+
+//==============================================================================
+
+let digit_chars = "0123456789";
+let hex_chars = digit_chars + "abcdef";
+
+//==============================================================================
+
+fn countln_(filename: str): i32
+{
+	let nlines = 0;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+		nlines += 1;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	return nlines;
+}
+
+//==============================================================================
+
+fn scan(str_: str, set: str): i64
+{
+	// c.f. Fortran intrinsic scan()
+
+	//println("str_ = ", str_);
+	//println("set = ", set);
+
+	let found = false;
+	let i = i64(0);
+	while not found and i < len(str_)
+	{
+
+		let j = 0;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	if (found)
+		i -= 1;
+	else
+		i = i64(-1);
+	return i;
+}
+
+//==========================================================
+
+fn scanback(str_: str, set: str): i64
+{
+	// c.f. Fortran intrinsic scan() with back = true
+
+	//println("str_ = ", str_);
+	//println("set = ", set);
+
+	let found = false;
+	let i = len(str_) - 1;
+	while not found and i >= 0
+	{
+
+		let j = i64(0);
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i -= 1;
+	}
+	//println("found = ", found);
+
+	if (found)
+		i += 1;
+	else
+		i = i64(-1);
+	return i;
+}
+
+//==========================================================
+
+fn verify(str_: str, set: str): i64
+{
+	// c.f. Fortran intrinsic verify()
+
+	//println("starting verify()");
+	//println("str_ = """, str_, """");
+	//println("set = ", set);
+
+	let found = true;
+	let i = i64(0);
+	while found and i < len(str_)
+	{
+		//println(i);
+
+		let j = 0;
+		found = false;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i += 1;
+	}
+
+	if (not found)
+		i -= 1;
+	else
+		i = i64(-1);
+	return i;
+}
+
+//==========================================================
+
+fn tok_i32(str_: str): [i64; :]
+{
+	// tokenize a string into the first int contained within it, then return the
+	// substring start index, end index, and length
+	//
+	// Some of these fns could be simplified with pass-by-ref to return multiple
+	// vals, but there's no huge perf impact
+
+	//println("starting tok_i32()");
+	//println("str_ = """, str_, """");
+
+	let nums = "1234567890";
+	let beg_ = scan    (str_, nums);
+	//println("beg_ = ", beg_);
+
+	let n = len(str_);
+	//println("n = ", n);
+
+	// nasty bug which was just fixed
+	let len_ = i64(-1);
+	if (beg_ >= 0)
+		len_ = verify(str_[beg_:n], nums);
+	//println("len_ = ", len_);
+
+	let end_ = i64(-1);
+	if (beg_ < 0)
+	{
+		//println("no beg_");
+	}
+	else if (len_ < 0)
+	{
+		// This is consistent with the way that verify() works in Fortran
+		end_ = n - 1;
+		len_ = end_ - beg_ + 1;
+	}
+	else
+		end_ = beg_ + len_ - 1;
+
+	//println("beg_ = ", beg_);
+	//println("end_ = ", end_);
+
+	//println("num beg = ", str_[beg_]);
+	//println("num end = ", str_[end_]);
+	//println("num str = ", str_[beg_: end_+1]);
+
+	return [beg_, end_, len_];
+}
+
+//==========================================================
+
+fn read_i32(str_: str): i32
+{
+	let toks = tok_i32(str_);
+
+	// multiple return vals are packed into a vec bc i don't have structs :sad:
+	let beg_ = toks[0];
+	let end_ = toks[1];
+	//let len_ = toks[2]; // not needed
+
+	//println("read_i32 substr = ", str_[beg_: end_+1]);
+
+	let ans = parse_i32(str_[beg_: end_+1]);
+	//println("read_i32 = ", ans);
+
+	return ans;
+}
+
+fn read_i32s(str_: str): [i32; :]
+{
+	// TODO: this should be read_u32s() because it treats `-` as delimiter.  In
+	// 2024 it's time for a clean break (I think 2023 relies on this behavior).
+	// Rename this and make a read_i32s() which returns negatives
+	//
+	// Parse a vector of i32 integers from a string.  Any non-int characters are
+	// treated as delimiters
+
+	let i = i64(0);
+	let n = len(str_);
+
+	//println("str_ = ", str_);
+	//println("n = ", n);
+
+	//let toks = i64([0, 0, 0]);
+	let toks = [i64(0); 3];
+	let num_nums = 0;  // the number of numbers
+
+	while toks[0] >= 0
+	{
+		//println("i = ", i);
+		toks = tok_i32(str_[i:n]);
+		//println("toks = ", toks);
+		//println("num = ", num);
+		num_nums += 1;
+		i += toks[1] + 1;
+	}
+	num_nums -= 1;
+
+	let nums = [0; num_nums];
+	i = i64(0);
+	for j in [0: num_nums]
+	{
+		//println("i = ", i);
+		toks = tok_i32(str_[i:n]);
+		//println("toks = ", toks);
+		let num = parse_i32(str_[i + toks[0]: i + toks[1]+1]);
+		//println("num = ", num);
+		nums[j] = num;
+		//num_nums += 1;
+		i += toks[1] + 1;
+	}
+
+	return nums;
+}
+
+
+//==============================================================================
+
+fn verifyback(str_: str, set: str): i64
+{
+	//println("");
+	//println("starting verifyback");
+	//println("str_ = ", str_);
+	//println("set  = ", set);
+
+	let i = len(str_) - 1;
+	let found = true;
+	while found and i >= 0
+	{
+		let j = 0;
+		found = false;
+		while not found and j < len(set)
+		{
+			found = str_[i] == set[j];
+			j += 1;
+		}
+		i -= 1;
+	}
+
+	let ans = i64(-1);
+	if not found
+	{
+		//println("ans = ", i + 1);
+		ans = i + 1;
+	}
+	return ans;
+}
+
+//==============================================================================
+
+fn is_digit(char_: str): bool
+{
+	// TODO: optimize with i32() char casting, like is_alpha()
+	return scan(char_, digit_chars) >= 0;
+}
+
+fn is_alpha(char_: str): bool
+{
+	return
+		(i32("a") <= i32(char_) and i32(char_) <= i32("z")) or
+		(i32("A") <= i32(char_) and i32(char_) <= i32("Z"));
+}
+
+//==============================================================================
+
+// TODO: rename to any_char_eq_str or any_char_eq_set
+fn any_str_eq_set(str_: str, set: str): bool
+{
+	return scan(str_, set) >= 0;
+}
+
+//==============================================================================
+
+fn any_mat(v: [bool; :, :]): bool
+{
+	let found = false;
+	let i = 0;
+	while i < size(v, 1) and not found
+	{
+		let j = 0;
+		while j < size(v, 0) and not found
+		{
+			found = v[j,i];
+			j += 1;
+		}
+		i += 1;
+	}
+	return found;
+}
+
+//==============================================================================
+
+fn any_r3(v: [bool; :, :, :]): bool
+{
+	let found = false;
+	let i = 0;
+	while i < size(v, 2) and not found
+	{
+		let j = 0;
+		while j < size(v, 1) and not found
+		{
+			let k = 0;
+			while k < size(v, 0) and not found
+			{
+				found = v[k,j,i];
+				k += 1;
+			}
+			j += 1;
+		}
+		i += 1;
+	}
+	return found;
+}
+
+//==============================================================================
+
+fn minloc_mat(dist: [i32; :, :], q: [bool; :, :]): [i32; :]
+{
+	let found = false;
+	let min_ = -1;
+	let minloc_ = [-1, -1];
+	for y in [0: size(dist,1)]
+	for x in [0: size(dist,0)]
+	{
+		if q[x,y]
+		{
+			if found
+			{
+				//min_ = min(min_, dist[x,y]);
+				if (dist[x,y] < min_)
+				{
+					min_ = dist[x,y];
+					minloc_ = [x, y];
+				}
+			}
+			else
+			{
+				found = true;
+				min_ = dist[x,y];
+				minloc_ = [x, y];
+			}
+		}
+	}
+	//let ans = min_;
+	return minloc_;
+}
+
+//==============================================================================
+
+fn minloc_r3(dist: [i32; :, :, :], q: [bool; :, :, :]): [i32; :]
+{
+	let found = false;
+	let min_ = -1;
+	let minloc_ = [-1, -1];
+	for z in [0: size(dist,2)]
+	for y in [0: size(dist,1)]
+	for x in [0: size(dist,0)]
+	{
+		if q[x,y,z]
+		{
+			if found
+			{
+				if (dist[x,y,z] < min_)
+				{
+					min_ = dist[x,y,z];
+					minloc_ = [x, y, z];
+				}
+			}
+			else
+			{
+				found = true;
+				min_ = dist[x,y,z];
+				minloc_ = [x, y, z];
+			}
+		}
+	}
+	//let ans = min_;
+	return minloc_;
+}
+
+//==============================================================================
+
+// TODO: rename to any_str_eq_vec
+fn any_str_eq(str_: str, v: [str; :]): bool
+{
+	//if (any_str_eq(my_num, wn_nums_str)) nwin = 1;
+
+	let found = false;
+	let i = 0;
+	while i < size(v, 0) and not found
+	{
+		found = str_ == v[i];
+		i += 1;
+	}
+	return found;
+}
+
+//==============================================================================
+
+fn index_(str_: str, substr: str): i64
+{
+	//println("str_   = ", str_);
+	//println("substr = ", substr);
+
+	let nsub = len(substr);
+
+	let i = i64(0);
+	let found = false;
+	while not found and i < len(str_) - len(substr) + 1
+	{
+		found = str_[i: i+nsub] == substr;
+		i += 1;
+	}
+
+	if found
+	{
+		i -= 1;
+		//println("str_ = ", str_);
+		//println("str_[] = ", str_[i: i + len(substr)]);
+		//println("substr = ", substr);
+		//println();
+		return i;
+	}
+	else
+	{
+		//println("not found");
+		return i64(-1);
+	}
+}
+
+//==============================================================================
+
+fn indexback(str_: str, substr: str): i64
+{
+	//println("str_   = ", str_);
+	//println("substr = ", substr);
+
+	let nsub = len(substr);
+
+	let i = len(str_) - len(substr);
+	let found = false;
+	while not found and i >= 0
+	{
+
+		found = str_[i: i+nsub] == substr;
+		i -= 1;
+	}
+
+	if found
+	{
+		i += 1;
+		//println("str_ = ", str_);
+		//println("str_[] = ", str_[i: i + len(substr)]);
+		//println("substr = ", substr);
+		//println();
+		return i;
+	}
+	else
+	{
+		//println("not found");
+		return i64(-1);
+	}
+}
+
+//==============================================================================
+
+fn split_(str_: str, delims: str): [str; :]
+{
+	// Split an input str_ into a vector of strs based on a set of delimiters
+
+	//println("starting split_()");
+	//println("str_ = """, str_, """");
+
+	let n = len(str_);
+	//println("n = ", n);
+
+	let nout = 0;
+	if (any_str_eq_set(str_[0], delims)) nout -= 1;
+
+	// First pass: count delimited strings
+	let i = 0;
+	while i < n
+	{
+		//println("i = ", i);
+		let i0 = i;
+
+		i = scan  (str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+
+		i0 = i;
+		i = verify(str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+		//i += 1;
+
+		nout += 1;
+	}
+	//println("nout = ", nout);
+
+	let out = [""; nout];
+
+	nout = 0;
+	if (any_str_eq_set(str_[0], delims)) nout -= 1;
+
+	// Second pass: save split strings
+	i = 0;
+	while i < n
+	{
+		//println("i = ", i);
+		let i0 = i;
+
+		i = scan  (str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+
+		if (nout >= 0) out[nout] = str_[i0: i];
+
+		i0 = i;
+		i = verify(str_[i:n], delims) + i0;
+		if (i < i0) i = n;
+		//i += 1;
+
+		nout += 1;
+	}
+	return out;
+}
+
+//==============================================================================
+
+fn parse_i32_hex(str_: str): i32
+{
+	// Lowercase hex only!  Read a hexadecimal number *without* any leading `0x`
+	// or `#` or anything besides literal hex characters
+
+	let num = 0;
+	for ii in [0: len(str_)]
+	{
+		let i = len(str_) - ii - 1;
+		let c = str_[i];
+		let val = scan(hex_chars, c);
+		num += i32(val * 16 ** ii);
+	}
+	return num;
+}
+
+//==============================================================================
+
+fn parse_i32_delim(str_: str, delims: str): [i32; :]
+{
+	let str_vec = split_(str_, delims);
+	//println("str_vec = ", str_vec);
+	let vec = [i32(0); size(str_vec, 0)];
+	for i in [0: size(str_vec, 0)]
+		vec[i] = parse_i32(str_vec[i]);
+	return vec;
+}
+
+//==============================================================================
+
+fn parse_i64_delim(str_: str, delims: str): [i64; :]
+{
+	let str_vec = split_(str_, delims);
+	//println("str_vec = ", str_vec);
+	let vec = [i64(0); size(str_vec, 0)];
+	for i in [0: size(str_vec, 0)]
+		vec[i] = parse_i64(str_vec[i]);
+	return vec;
+}
+
+//==============================================================================
+
+fn rm_char(str_: str, char_: str): str
+{
+	// Remove all occurences of a char from a str
+
+	// allocate to max possible length
+	let out = str_;
+
+	let j = 0;
+	for i in [0: len(str_)]
+	{
+		if not (str_[i] == char_)
+		{
+			out[j] = str_[i];
+			j += 1;
+		}
+	}
+
+	// trim
+	return out[0: j];
+}
+
+fn reverse_str(str_: str): str
+{
+	// Reverse a str
+	let rev = str_;
+	let n = len(str_);
+	for i in [0: n]
+		rev[i] = str_[n-i-1];
+	return rev;
+}
+
+//==============================================================================
+
+fn starts_with_(str_: str, substr_: str): bool
+{
+	if (len(substr_) > len(str_)) return false;
+	return str_[0: len(substr_)] == substr_;
+}
+	//// Unit tests
+	//println("starts_with_ = ", starts_with_("abcde", "abcd"));
+	//println("starts_with_ = ", starts_with_("abcde", "abc"));
+	//println("starts_with_ = ", starts_with_("abcde", "ab"));
+	//println("starts_with_ = ", starts_with_("abcde", "a"));
+	//println("starts_with_ = ", starts_with_("abcde", ""));
+	//println("starts_with_ = ", starts_with_("abcde", "abcdef"));
+	//println("starts_with_ = ", starts_with_("abcde", "abcdf"));
+	//println("starts_with_ = ", starts_with_("abcde", "_"));
+
+//==============================================================================
+
+fn ends_with_(str_: str, char_: str): bool
+{
+	return str_[ len(str_) - 1 ] == char_;
+}
+
+fn all_ends_with_(strs: [str; :], j: [i32; :], char_: str): bool
+{
+	let i = 0;
+	let all_end = true;
+	while all_end and i < size(j, 0)
+	{
+		all_end = ends_with_(strs[j[i]], char_);
+		i += 1;
+	}
+	return all_end;
+}
+
+//==============================================================================
+
+fn gcd32(a: i32, b: i32): i32
+{
+	// Euclidean algorithm for GCD (greatest common denominator)
+	while b != 0
+	{
+		let t = b;
+		b = a % b;
+		a = t;
+	}
+	return a;
+}
+
+fn gcd64(a: i64, b: i64): i64
+{
+	// Euclidean algorithm for GCD
+	while b != 0
+	{
+		let t = b;
+		b = a % b;
+		a = t;
+	}
+	return a;
+}
+
+fn lcm64(a: i64, b: i64): i64
+{
+	// Least common multiple
+	let abs_ = a * b;
+	if (abs_ < 0) abs_ = -abs_;
+	return abs_ / gcd64(a, b);
+}
+
+fn abs_i32(a: i32): i32
+{
+	let abs_ = a;
+	if (abs_ < 0) abs_ = -abs_;
+	return abs_;
+}
+
+//==============================================================================
+
+fn sign_(x: i32): i32
+{
+	let s = 0;
+	if x > 0
+		s = +1;
+	else if x < 0
+		s = -1;
+	return s;
+}
+
+fn sign_64(x: i64): i64
+{
+	let s = i64(0);
+	if x > 0
+		s = +i64(1);
+	else if x < 0
+		s = -i64(1);
+	return s;
+}
+
+//==============================================================================
+
+fn sum_i32(v: [i32; :]): i32
+{
+	let sum_ = 0;
+	for i in [0: size(v,0)]
+		sum_ += v[i];
+	return sum_;
+}
+
+//==============================================================================
+
+fn pmod(i: i32, n: i32): i32
+{
+	// Modulo/remainder but always positive
+	//
+	// TODO: this is actually wrong (when n is negative?).  But it works for 2024
+	// day 14, so it works for enough cases to be helpful for aoc
+	//
+	return (i % n + n) % n;
+}
+
+//==============================================================================
+
+fn sort_index(v: [i32; :]): [i32; :]
+{
+	// Quick sort algorithm.  Return index array instead of modifying the input
+	// array in-place
+	//
+	// TODO: arg should be passed by ref
+
+	//println("starting sort_index()");
+	//println("v = ", v);
+
+	let l = 0;
+	let h = i32(size(v,0)) - 1;
+
+	let ix = [l: h + 1];
+
+	if l < h
+	{
+		let stack = [0; h - l + 1];
+
+		let top = -1;
+
+		top += 1;
+		stack[top] = l;
+
+		top += 1;
+		stack[top] = h;
+
+		while top >= 0
+		{
+			//println("h = ", h);
+			h = stack[top];
+			top -= 1;
+
+			l = stack[top];
+			top -= 1;
+
+			// Median-of-three pivot.  40x faster for AOC day 21!
+			let m = (l + h) / 2;
+			if v[ix[m]] < v[ix[l]]
+			{
+				let tmp = ix[m];
+				ix[m]   = ix[l];
+				ix[l]   = tmp;
+			}
+			if v[ix[h]] < v[ix[l]]
+			{
+				let tmp = ix[h];
+				ix[h]   = ix[l];
+				ix[l]   = tmp;
+			}
+			if v[ix[m]] < v[ix[h]]
+			{
+				let tmp = ix[m];
+				ix[m]   = ix[h];
+				ix[h]   = tmp;
+			}
+			let x = v[ix[h]];
+
+			let i = (l - 1);
+			for j in [l: h]
+				if v[ix[j]] <= x
+				{
+					i += 1;
+					let tmp = ix[i];
+					ix[i]   = ix[j];
+					ix[j]   = tmp;
+				}
+			let tmp = ix[i+1];
+			ix[i+1] = ix[h];
+			ix[h]   = tmp;
+			let p = i + 1;
+
+			if p - 1 > l
+			{
+				top += 1;
+				stack[top] = l;
+
+				top += 1;
+				stack[top] = p - 1;
+			}
+
+			if p + 1 < h
+			{
+				top += 1;
+				stack[top] = p + 1;
+
+				top += 1;
+				stack[top] = h;
+			}
+		}
+	}
+	//println("v = ", v);
+	//let ans = v;
+	return ix;
+}
+
+//==============================================================================
+
+fn sort_inplace(v: [i32; :]): [i32; :]
+{
+	// Quick sort algorithm.  Return the input array but sorted (no index
+	// array).  This could be DRY'd up with the index version above at the cost
+	// of some time and space overhead
+	//
+	// TODO: arg should be passed by ref and then return nothing.  Even more
+	// important for this version than sort_index()
+
+	//println("starting sort_inplace()");
+	//println("v = ", v);
+
+	let l = 0;
+	let h = size(v,0) - 1;
+
+	if l < h
+	{
+		let stack = [0; h - l + 1];
+
+		let top = -1;
+
+		top += 1;
+		stack[top] = l;
+
+		top += 1;
+		stack[top] = h;
+
+		while top >= 0
+		{
+			//println("h = ", h);
+			h = stack[top];
+			top -= 1;
+
+			l = stack[top];
+			top -= 1;
+
+			//// inlined
+			//let p = partition(v, l, h);
+
+			//let x = v[h];
+
+			// Median-of-three pivot.  40x faster for AOC!
+			let m = (l + h) / 2;
+			if v[m] < v[l]
+			{
+				let tmp = v[m];
+				v[m]    = v[l];
+				v[l]    = tmp;
+			}
+			if v[h] < v[l]
+			{
+				let tmp = v[h];
+				v[h]    = v[l];
+				v[l]    = tmp;
+			}
+			if v[m] < v[h]
+			{
+				let tmp = v[m];
+				v[m]    = v[h];
+				v[h]    = tmp;
+			}
+			let x = v[h];
+
+			let i = (l - 1);
+			for j in [l: h]
+				if v[j] <= x
+				{
+					i += 1;
+					let tmp = v[i];
+					v[i]  = v[j];
+					v[j]  = tmp;
+				}
+			let tmp = v[i+1];
+			v[i+1] = v[h];
+			v[h] = tmp;
+			let p = i + 1;
+
+			if p - 1 > l
+			{
+				top += 1;
+				stack[top] = l;
+
+				top += 1;
+				stack[top] = p - 1;
+			}
+
+			if p + 1 < h
+			{
+				top += 1;
+				stack[top] = p + 1;
+
+				top += 1;
+				stack[top] = h;
+			}
+		}
+	}
+	//println("v = ", v);
+	return v;
+}
+
+//==============================================================================
+
+fn uniq(v_in: [i32; :]): [i32; :]
+{
+	// TODO: pass by ref
+	let v = sort_inplace(v_in);
+	let u = v;
+
+	u[0] = v[0];
+	let nu = 1;
+	for i in [1: size(v, 0)]
+	{
+		if v[i] != v[i - 1]
+		{
+			u[nu] = v[i];
+			nu += 1;
+		}
+	}
+	//println("u = ", u);
+
+	// Trim
+	let ut = [-1; nu];
+	for i in [0: nu]
+		ut[i] = u[i];
+
+	return ut;
+}
+
+//==============================================================================
+
+fn in_bounds(lo: [i32; :], x: [i32; :], hi: [i32; :]): bool
+{
+	// Vector bounds check.  Inclusive of lo, exclusive of hi
+	for i in [0: size(x, 0)]
+	{
+		if (x[i] <  lo[i]) return false;
+		if (x[i] >= hi[i]) return false;
+	}
+	return true;
+}
+
+//==============================================================================
+
+fn cat_strs(str_vec: [str; :]): str
+{
+	// Concatenate a vector of strings (or chars) into one big str
+	//
+	// The built-in str() fn is similar but wraps in [brackets] and adds comma
+	// and space delimiters
+	//
+	// TODO: ref
+	let str_ = "";
+	for i in [0: size(str_vec, 0)]
+		str_ += str_vec[i];
+	return str_;
+}
+
+//==============================================================================
+
+fn print_char_mat(chars: &[str; :,:])
+{
+	for iy in [0: size(chars, 1)]
+		println(cat_strs(chars[:,iy]));
+	println();
+	return;
+}
+
+//==============================================================================
+
+fn read_char_mat(filename: str): [str; :,:]
+{
+	// Read a matrix of characters from a file
+	let ny = countln_(filename);
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+	let chars = [""; nx, ny];
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+		for x in [0: nx]
+			chars[x,y] = str_[x];
+		str_ = readln(f);
+	}
+	close(f);
+	return chars;
+}
+
+//==============================================================================
+
+fn read_i32_mat(filename: str): [i32; :,:]
+{
+	// Read a matrix of comma-delimited i32 integers from a file
+	//
+	// TODO: should we take the delimiter(s) as an arg?
+	let delims = ",";
+	let ny = countln_(filename);
+	let f = open(filename);
+	let str_ = readln(f);
+	let row = parse_i32_delim(str_, delims);
+	let nx = size(row, 0);
+	let mat = [0; nx, ny];
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+		mat[:,y] = parse_i32_delim(str_, delims);
+		str_ = readln(f);
+	}
+	close(f);
+	return mat;
+}
+
+//==============================================================================
+
+fn base_n(a: i64, n: i64): [i32; :]
+{
+	// TODO: this is not well-tested.  I tried to use it in 2024/19 but then
+	// switched to another approach without really using this.  On the other
+	// hand, it is based on a base-3 converter from 2024/7
+
+	// Convert `a` to base n.  Max 64 (base n) digits allowed.  This is ok for
+	// the value of nvmax
+	let DIGITS_CAP = 64;
+	let res = [0'i32; DIGITS_CAP];
+	let iout = -1;
+	for i in [0: DIGITS_CAP]
+	{
+		iout = i;
+		let r = a % n;
+		a /= n;
+		res[i] = r;  // endianness is not important for aoc problem
+		if (a == 0) break;
+	}
+	//println("base3 = ", res);
+
+	return res;
+
+	//// Trimming?
+	//let ndigits = iout;
+	//if res[ndigits] == 0 and ndigits > 1
+	//	ndigits -= 1;
+	//return res[0: ndigits + 1]; // trim
+}
+
+//==============================================================================
+

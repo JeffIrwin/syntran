@@ -1,0 +1,167 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let nmax = 100;
+	let costa = 3;
+	let costb = 1;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let va = read_i32s(str_);
+		str_ = readln(f);
+		let vb = read_i32s(str_);
+		str_ = readln(f);
+		let vp = read_i32s(str_);
+
+		//println("va = ", va);
+		//println("vb = ", vb);
+		//println("vp = ", vp);
+
+		let cost_opt = costa * nmax + costb * nmax + 100;
+		let found = false;
+
+		// Brute force.  You could take the part2 approach and apply it here
+		for na in [0: nmax + 1]
+		for nb in [0: nmax + 1]
+		{
+			let v = na * va + nb * vb;
+			if all(v == vp)
+			{
+				found = true;
+				let cost = na * costa + nb * costb;
+				cost_opt = min(cost_opt, cost);
+			}
+		}
+		if found
+			sum_ += cost_opt;
+
+		str_ = readln(f); // skip blank line
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let ADD_POS = 10_000_000_000_000'i64;
+
+	let nmax = 100'i64;
+	let costa = 3'i64;
+	let costb = 1'i64;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let va = i64(read_i32s(str_));
+		str_ = readln(f);
+		let vb = i64(read_i32s(str_));
+		str_ = readln(f);
+		let vp = i64(read_i32s(str_));
+
+		vp += ADD_POS;
+
+		//println("va = ", va);
+		//println("vb = ", vb);
+		//println("vp = ", vp);
+
+		let ax = va[0];
+		let ay = va[1];
+		let bx = vb[0];
+		let by = vb[1];
+
+		let px = vp[0];
+		let py = vp[1];
+
+		// We have a 2x2 matrix problem:
+		//
+		//     [ax, bx] * [na] == [px]
+		//     [ay, by] * [nb] == [py]
+		//
+		// Invert the matrix and find solution [na, nb]
+		//
+		let det = ax * by - ay * bx;
+		if (det == 0)
+		{
+			// Could be 0 solutions or multiple solutions
+			println("Error: singular matrix!");
+			exit(-1);
+		}
+
+		let na = ( by * px - bx * py) / det;
+		let nb = (-ay * px + ax * py) / det;
+
+		// Check for rounding error from integer determinant division
+		let p = na * va + nb * vb;
+		if all(p == vp)
+		{
+			let cost_opt = na * costa + nb * costb;
+			sum_ += cost_opt;
+		}
+
+		str_ = readln(f); // skip blank line
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/13");
+
+	let sum_ = 0'i64;
+
+	// Expect 31065 + 93866170395343
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

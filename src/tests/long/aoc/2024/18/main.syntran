@@ -1,0 +1,235 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+let np = -1;
+let nx = -1;
+let ny = -1;
+if ifile == 0
+{
+	np = 12;
+	nx = 6 + 1;
+	ny = 6 + 1;
+}
+else
+{
+	np = 1024;
+	nx = 70 + 1;
+	ny = 70 + 1;
+}
+
+//==============================================================================
+
+let NDIRS = 4;
+let DIRS =
+[
+	-1,  0, // west
+	 1,  0, // east
+	 0, -1, // north
+	 0,  1  // south
+	 ;
+	 2, NDIRS
+];
+let WEST  = 0;
+let EAST  = 1;
+let NORTH = 2;
+let SOUTH = 3;
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let p = read_i32_mat(filename); // positions (of bytes)
+	//println("p = ", p);
+
+	let grid = [false; nx, ny];
+	for ip in [0: np]
+		grid[ p[0,ip], p[1,ip] ] = true;
+	//println("grid = ", grid);
+
+	// BFS
+
+	let QUEUE_CAP = nx * ny * 4;    // TODO: check overflow
+	let queue = [-1; 3, QUEUE_CAP]; // x, y, dist
+	let queue_beg = 0;
+	let queue_end = 0;
+
+	let visited = [false; nx, ny];
+
+	// Push
+	queue[:, queue_end] = [0, 0, 0]; queue_end += 1;
+
+	let dist_end = 2_000_000_000;
+	while queue_beg < queue_end
+	{
+		// Pop
+		let u = queue[:, queue_beg]; queue_beg += 1;
+
+		// Unpack from vec
+		let x0    = u[0];
+		let y0    = u[1];
+		let dist0 = u[2];
+
+		if x0 == nx - 1 and y0 == ny - 1
+		{
+			//sum_ = dist0;
+			dist_end = min(dist_end, dist0);
+		}
+
+		if (visited[x0, y0]) continue;
+		visited[x0, y0] = true;
+
+		for idir in [0: NDIRS]
+		{
+			let dir = DIRS[:, idir];
+			let x = x0 + dir[0];
+			let y = y0 + dir[1];
+
+			if (not in_bounds([0,0], [x,y], [nx,ny])) continue;
+			if (grid[x,y]) continue;
+
+			// Push neighbor
+			queue[:, queue_end] = [x, y, dist0 + 1]; queue_end += 1;
+		}
+	}
+
+	sum_ = dist_end;
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): str
+{
+	let sum_ = 0'i64;
+
+	let p = read_i32_mat(filename); // positions (of bytes)
+	//println("p = ", p);
+
+	// Bisection search on n1 and n2
+
+	//// We know that 1024 is safe from part 1, but starting from 0 is only a
+	//// couple more steps thanks to bisection search and it works with the
+	//// test input too
+	//let n1 = 1024'i64;
+	let n1 = 0'i64;
+	let n2 = size(p, 1);
+
+	while true
+	{
+		//println("n1, n2 = ", [n1, n2]);
+		if n1 == n2 - 1
+		{
+			np = n2;
+			break;
+		}
+		np = (n1 + n2) / 2;
+
+		//println("np = ", np);
+
+		let grid = [false; nx, ny];
+		for ip in [0: np]
+			grid[ p[0,ip], p[1,ip] ] = true;
+		//println("p[:, np-1] = ", p[:, np-1]);
+		//println("grid = ", grid);
+
+		// BFS
+
+		let QUEUE_CAP = nx * ny * 4;    // TODO: check overflow
+		let queue = [-1; 3, QUEUE_CAP]; // x, y, dist
+		let queue_beg = 0;
+		let queue_end = 0;
+
+		let visited = [false; nx, ny];
+
+		// Push
+		queue[:, queue_end] = [0, 0, 0]; queue_end += 1;
+
+		let DIST_INFTY = 2_000_000_000;
+		let dist_end   = DIST_INFTY;
+		while queue_beg < queue_end
+		{
+			// Pop
+			let u = queue[:, queue_beg]; queue_beg += 1;
+
+			// Unpack from vec
+			let x0    = u[0];
+			let y0    = u[1];
+			let dist0 = u[2];
+
+			if x0 == nx - 1 and y0 == ny - 1
+			{
+				//sum_ = dist0;
+				dist_end = min(dist_end, dist0);
+			}
+
+			if (visited[x0, y0]) continue;
+			visited[x0, y0] = true;
+
+			for idir in [0: NDIRS]
+			{
+				let dir = DIRS[:, idir];
+				let x = x0 + dir[0];
+				let y = y0 + dir[1];
+
+				if (not in_bounds([0,0], [x,y], [nx,ny])) continue;
+				if (grid[x,y]) continue;
+
+				// Push neighbor
+				queue[:, queue_end] = [x, y, dist0 + 1]; queue_end += 1;
+			}
+		}
+
+		if dist_end < DIST_INFTY
+		{
+			// End corner is reachable.  Update lower bound
+			n1 = np;
+		}
+		else
+		{
+			// End corner is not reachable.  Update upper bound
+			n2 = np;
+		}
+	}
+
+	let coords_str = str(p[0, np-1], ",", p[1, np-1]);
+	println("part 2 = ", coords_str);
+	return coords_str;
+}
+
+//==============================================================================
+
+fn main(): str
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/18");
+
+	let sum_ = 0'i64;
+
+	// Expect "374" and "30,12"
+	let p1 = str(part1());
+	let p2 = part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return p1 + ":" + p2;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

@@ -1,0 +1,248 @@
+
+// Be careful about using very large HASH_MAX_DICT_STR values (>~10k).  Besides the
+// memory footprint, keys_dict_str() and vals_dict_str() make a pass over all
+// buckets, so they can become slow
+
+let HASH_MAX_DICT_STR = 256;
+//HASH_MAX_DICT_STR = 1024 * 8;
+
+//==============================================================================
+
+fn hash_dict_str(s: str): i32
+{
+	// This is the hash fn that determines which bucket a key goes into
+
+	//// djb2 hash fn
+	//let hash_ = 5381;
+	//for j in [0: len(s)]
+	//{
+	//	hash_ = ((hash_ << 5) + hash_) + i32(s[j]);
+	//	//hash_ = hash_ * 33 + i32(s[j]);
+	//	hash_ %= HASH_MAX_DICT_STR; // not part of djb2, but it crashes without this :(
+	//}
+	////hash_ %= HASH_MAX_DICT_STR;
+	////return i32(hash_);
+	//return hash_;
+
+	// This is the hash fn from aoc 2023 day 15
+	let hash_ = 0;
+	for j in [0: len(s)]
+	{
+		hash_ += i32(s[j]);
+		hash_ *= 17;
+		hash_ %= HASH_MAX_DICT_STR;
+	}
+	//println("hash_ = ", hash_);
+	return hash_;
+}
+
+struct dict_str_bucket
+{
+	cap: i32,
+	len: i32,
+	keys: [str; :],
+	vals: [str; :],
+}
+
+struct dict_str
+{
+	len: i32,
+	buckets: [dict_str_bucket; :],
+}
+
+fn new_dict_str(): dict_str
+{
+	// TODO: arg?  It's simpler to have len as a global var, otherwise hash fns
+	// need to now the size of their dicts
+
+	//let len_ = 256;
+	let len_ = HASH_MAX_DICT_STR;
+
+	let empty_bucket = dict_str_bucket
+	{
+		cap = 0,
+		len = 0,
+		keys = [""; 0],
+		vals = [""; 0],
+	};
+
+	let dict = dict_str
+	{
+		len = len_,
+		buckets = [empty_bucket; len_],
+	};
+
+	return dict;
+}
+
+fn print_lens_dict_str(dict: &dict_str)
+{
+	for i in [0: dict.len]
+	{
+		let len_ = dict.buckets[i].len;
+		if len_ != 0
+		{
+			println("bucket[", i, "] len = ", len_);
+			//println("bucket[", i, "] cap = ", dict.buckets[i].cap);
+		}
+	}
+	return;
+}
+
+fn get_dict_str(dict: &dict_str, key: str): str
+{
+	let ib = hash_dict_str(key); // bucket index
+	let len_ = dict.buckets[ib].len;
+	for i in [0: len_]
+	{
+		if dict.buckets[ib].keys[i] == key
+		{
+			return dict.buckets[ib].vals[i];
+		}
+	}
+	// TODO: should we panic?
+	return "";
+	//return 0;
+}
+
+fn len_dict_str(dict: &dict_str): i32
+{
+	// Return the number of keys in the dict
+	let n = 0;
+	for i in [0: dict.len]
+		n += dict.buckets[i].len;
+	return n;
+}
+
+fn keys_dict_str(dict: &dict_str): [str; :]
+{
+	// Return a flat array of all the keys in the dict
+	let n = 0;
+	for i in [0: dict.len]
+		n += dict.buckets[i].len;
+	let keys = [""; n];
+	let k = 0;
+	for i in [0: dict.len]
+	for j in [0: dict.buckets[i].len]
+	{
+		keys[k] = dict.buckets[i].keys[j];
+		k += 1;
+	}
+	return keys;
+}
+
+fn vals_dict_str(dict: &dict_str): [str; :]
+{
+	// Return a flat array of all the vals in the dict
+	let n = 0;
+	for i in [0: dict.len]
+		n += dict.buckets[i].len;
+	let vals = [""; n];
+	let k = 0;
+	for i in [0: dict.len]
+	for j in [0: dict.buckets[i].len]
+	{
+		vals[k] = dict.buckets[i].vals[j];
+		k += 1;
+	}
+	return vals;
+}
+
+fn set_dict_str(dict: &dict_str, key: str, val: str)
+{
+	let ib = hash_dict_str(key); // bucket index
+	//println("ib = ", ib);
+
+	let len_ = dict.buckets[ib].len;
+	//println("len_ = ", len_);
+	for i in [0: len_]
+	{
+		if dict.buckets[ib].keys[i] == key
+		{
+			// Reset existing value
+			dict.buckets[ib].vals[i] = val;
+			return;
+		}
+	}
+
+	let cap_ = dict.buckets[ib].cap;
+	if len_ >= cap_
+	{
+		// Grow arrays
+		if cap_ == 0
+			cap_ = 1;
+		else
+			cap_ *= 2;
+
+		//println("new cap_ = ", cap_);
+		dict.buckets[ib].cap = cap_;
+		//println("done setting cap");
+		let keys = dict.buckets[ib].keys;
+		let vals = dict.buckets[ib].vals;
+
+		dict.buckets[ib].keys = [""; cap_];
+
+		dict.buckets[ib].vals = [""; cap_];
+
+		//dict.buckets[ib].keys[0: len_] = keys; // struct array slices not implemented :(
+		//dict.buckets[ib].vals[0: len_] = vals;
+		for i in [0: len_]
+		{
+			dict.buckets[ib].keys[i] = keys[i];
+			dict.buckets[ib].vals[i] = vals[i];
+		}
+	}
+	//println("setting ", key, ", ", val);
+
+	// Append new key value pair
+	dict.buckets[ib].keys[len_] = key;
+	dict.buckets[ib].vals[len_] = val;
+	dict.buckets[ib].len += 1;
+
+	return;
+}
+
+//==============================================================================
+
+//fn main(): i32
+//{
+//	// Unit tests
+//
+//	println("starting dict.syntran");
+//
+//	let dict = new_dict_str();
+//	println("len   = ", dict.len);
+//	println("len 0 = ", dict.buckets[0].len);
+//	println("cap 0 = ", dict.buckets[0].cap);
+//	//dict.buckets[0].cap = 7;
+//	//println("cap 0 = ", dict.buckets[0].cap);
+//
+//	println("hash 'HASH' = ", hash_dict_str("HASH")); // 52
+//	println("hash 'rn=1' = ", hash_dict_str("rn=1")); // 30
+//	println("hash 'rn'   = ", hash_dict_str("rn"));   // 0
+//	println("hash 'cm'   = ", hash_dict_str("cm"));   // 0 (hash clash, good for testing)
+//
+//	set_dict_str(&dict, "rn", "1");
+//	set_dict_str(&dict, "qp", "3");
+//	set_dict_str(&dict, "cm", "2");
+//	set_dict_str(&dict, "pc", "4");
+//	set_dict_str(&dict, "ot", "9");
+//	set_dict_str(&dict, "ab", "5");
+//
+//	println("get 'rn' = ", get_dict_str(&dict, "rn"));
+//	println("get 'qp' = ", get_dict_str(&dict, "qp"));
+//	println("get 'cm' = ", get_dict_str(&dict, "cm"));
+//	println("get 'pc' = ", get_dict_str(&dict, "pc"));
+//	println("get 'ot' = ", get_dict_str(&dict, "ot"));
+//	println("get 'ab' = ", get_dict_str(&dict, "ab"));
+//
+//	print_lens_dict_str(&dict);
+//
+//	println("keys = ", keys_dict_str(&dict));
+//	println("vals = ", vals_dict_str(&dict));
+//
+//	println("ending dict.syntran");
+//	return 0;
+//}
+//return main();
+

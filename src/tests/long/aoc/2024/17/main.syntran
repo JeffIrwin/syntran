@@ -1,0 +1,370 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+//ifile = 2; // test input 2
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt",
+	"test-input2.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+// opcode instructions
+let ADV = 0;
+let BXL = 1;
+let BST = 2;
+let JNZ = 3;
+let BXC = 4;
+let OUT = 5;
+let BDV = 6;
+let CDV = 7;
+
+fn part1(): str
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+
+	let str_ = readln(f);
+	let reg_a = read_i32(str_);
+
+	str_ = readln(f);
+	let reg_b = read_i32(str_);
+
+	str_ = readln(f);
+	let reg_c = read_i32(str_);
+
+	//println("reg a, b, c = ", [reg_a, reg_b, reg_c]);
+
+	str_ = readln(f); // skip blank line
+
+	str_ = readln(f);
+	let program = read_i32s(str_);
+	//println("program = ", program);
+
+	close(f);
+
+	let out_str = "";
+	let iptr = 0;
+	while 0 <= iptr and iptr < size(program, 0)
+	{
+		let instr         = program[iptr + 0];
+		let combo_operand = program[iptr + 1];
+
+		//println();
+		//println("instr = ", instr);
+		//println("combo = ", combo_operand);
+
+		// default to literal operand
+		let operand_val = combo_operand;
+
+		if any(instr == [ADV, BDV, CDV, BST, OUT])
+		{
+			if combo_operand == 4
+				operand_val = reg_a;
+			else if combo_operand == 5
+				operand_val = reg_b;
+			else if combo_operand == 6
+				operand_val = reg_c;
+			else if combo_operand == 7
+			{
+				//println("Error: invalid combo_operand 7");
+				exit(-1);
+			}
+		}
+
+		if instr == ADV
+		{
+			reg_a = reg_a / (2 ** operand_val);
+		}
+		else if instr == BDV
+		{
+			reg_b = reg_a / (2 ** operand_val);
+		}
+		else if instr == CDV
+		{
+			reg_c = reg_a / (2 ** operand_val);
+		}
+		else if instr == BXL
+		{
+			reg_b ^= operand_val;
+			//reg_b = reg_b ^ operand_val;
+		}
+		else if instr == BST
+		{
+			//reg_b %= 8;
+			//reg_b = reg_b % 8;
+			reg_b = operand_val % 8;
+		}
+		else if instr == JNZ
+		{
+			if reg_a != 0
+			{
+				iptr = operand_val;
+				//println("jnz ", iptr);
+				continue;
+			}
+		}
+		else if instr == BXC
+		{
+			reg_b ^= reg_c;
+			//reg_b = reg_b ^ reg_c;
+		}
+		else if instr == OUT
+		{
+			out_str += str(operand_val % 8, ",");
+			//out_str = str(out_str, operand_val % 8, ",");
+		}
+		else
+		{
+			//println("Error: invalid instruction ", instr);
+			exit(-2);
+		}
+
+		// skipped for jnz reg_a != 0
+		iptr += 2;
+	}
+	out_str = out_str[0: len(out_str) - 1]; // trim extra trailing comma
+
+	//println("reg_a = ", reg_a);
+	//println("reg_b = ", reg_b);
+	//println("reg_c = ", reg_c);
+	//println();
+
+	println("part 1 = ", out_str);
+	return out_str;
+}
+
+fn eval_prog(program: &[i32; :], reg_a: i64, reg_b: i64, reg_c: i64): [i32; :]
+{
+	// part1 should use this. will require casting for registers
+
+	let nprogram = size(program, 0);
+	let OUT_CAP = nprogram; // can't overflow this for part 2 anyway
+	let out = [-1; OUT_CAP];
+	let nout = 0;
+
+	let iptr = 0;
+	while 0 <= iptr and iptr < nprogram
+	{
+		let instr         = program[iptr + 0];
+		let combo_operand = program[iptr + 1];
+
+		//println();
+		//println("iptr = ", iptr);
+		//println("instr = ", instr);
+		//println("combo = ", combo_operand);
+
+		// default to literal operand
+		let operand_val = i64(combo_operand);
+
+		if any(instr == [ADV, BDV, CDV, BST, OUT])
+		{
+			if combo_operand == 4
+			{
+				operand_val = reg_a;
+				//println("break 1");
+				//exit(0);
+			}
+			else if combo_operand == 5
+				operand_val = reg_b;
+			else if combo_operand == 6
+				operand_val = reg_c;
+			else if combo_operand == 7
+			{
+				println("Error: invalid combo_operand 7");
+				exit(-1);
+			}
+		}
+
+		if instr == ADV
+		{
+			reg_a = reg_a / (2 ** operand_val);
+			//println("break 2");
+			//exit(0);
+		}
+		else if instr == BDV
+		{
+			reg_b = reg_a / (2 ** operand_val);
+			//println("break 3");
+			//exit(0);
+		}
+		else if instr == CDV
+		{
+			reg_c = reg_a / (2 ** operand_val);
+			//println("break 3");
+			//exit(0);
+		}
+		else if instr == BXL
+		{
+			reg_b ^= operand_val;
+			//reg_b = reg_b ^ operand_val;
+		}
+		else if instr == BST
+		{
+			//reg_b %= 8;
+			//reg_b = reg_b % 8;
+			reg_b = operand_val % 8;
+		}
+		else if instr == JNZ
+		{
+			//println("break 4");
+			//exit(0);
+			if reg_a != 0
+			{
+				iptr = operand_val;
+				//println("jnz ", iptr);
+				continue;
+			}
+		}
+		else if instr == BXC
+		{
+			reg_b ^= reg_c;
+			//reg_b = reg_b ^ reg_c;
+		}
+		else if instr == OUT
+		{
+			let out_val = operand_val % 8;
+
+			if nout >= OUT_CAP
+			{
+				// Answer too long compared to expected output
+				//is_quine = false;
+				break;
+			}
+			//else if out_val != program[nout]
+			//{
+			//	// Wrong answer.  No need to eval the rest of the program
+			//	is_quine = false;
+			//	break;
+			//}
+			out[nout] = out_val;
+			nout += 1;
+
+			//out_str += str(operand_val % 8, ",");
+			//out_str = str(out_str, operand_val % 8, ",");
+		}
+		else
+		{
+			println("Error: invalid instruction ", instr);
+			exit(-2);
+		}
+
+		// skipped for jnz reg_a != 0
+		iptr += 2;
+	}
+	//out_str = out_str[0: len(out_str) - 1]; // trim extra trailing comma
+
+	return out[0: nout];  // trim
+}
+
+fn part2(): str
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+
+	let str_ = readln(f);
+	let reg_a = i64(read_i32(str_)); // this is ignored for part 2
+
+	str_ = readln(f);
+	let reg_b = i64(read_i32(str_));
+
+	str_ = readln(f);
+	let reg_c = i64(read_i32(str_));
+
+	//println("reg a, b, c = ", [reg_a, reg_b, reg_c]);
+
+	str_ = readln(f); // skip blank line
+
+	str_ = readln(f);
+	let program = read_i32s(str_);
+	//println("program = ", program);
+	close(f);
+
+	//reg_a = 117440;
+	//let out = eval_prog(&program, reg_a, reg_b, reg_c);
+	//println("out = ", out);
+
+	let nprogram = size(program, 0);
+
+	// I couldn't figure out part 2 (other than attemping to brute force it,
+	// which overflowed i32 after 12 hours without finding a solution).  I don't
+	// understand this backtracking code at all.  Instead I have shamelessly
+	// cheated by porting this python code:
+	//
+	//     https://github.com/Fragger/advent-of-code/blob/master/2024/solution/17.py
+
+	reg_a = 0;
+	let j = 1;
+	let istart = 0;
+	while j <= nprogram and j >= 0
+	{
+		reg_a <<= 3;
+		let break_ = false;
+		let iouter = 0;
+		for i in [istart: 8]
+		{
+			iouter = i;
+			if all(
+				program[nprogram - j: nprogram] == 
+				eval_prog(&program, reg_a + i, reg_b, reg_c))
+			{
+				break_ = true;
+				break;
+			}
+		}
+		if not break_
+		{
+			j -= 1;
+			reg_a >>= 3;
+			istart = reg_a % 8 + 1;
+			reg_a >>= 3;
+			continue;
+		}
+		j += 1;
+		reg_a += iouter;
+		istart = 0;
+	}
+	//println("reg_a  = ", reg_a);
+	println("part 2 = ", reg_a);
+
+	return str(reg_a);
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/17");
+
+	let sum_ = 0'i64;
+
+	// Expect "1,6,7,4,3,0,5,0,6" and "216148338630253"
+	//
+	// Part 2 aka 216_148_338_630_253
+	let p1_str = part1();
+	let p2_str = part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

@@ -21,10 +21,8 @@ subroutine unit_test_aoc_2023(npass, nfail)
 
 	! Path to syntran test files from root of repo
 	character(len = *), parameter :: &
-		!path = 'src/tests/long-src/aoc/2023/'
 		path = 'src/tests/long/aoc/2023/'
 
-	character(len = 1024) :: buffer
 	character(len = :), allocatable :: cwd
 
 	logical, parameter :: quiet = .true.
@@ -75,6 +73,69 @@ end subroutine unit_test_aoc_2023
 
 !===============================================================================
 
+subroutine unit_test_aoc_2024(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'aoc 2024'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: &
+		path = 'src/tests/long/aoc/2024/'
+
+	character(len = :), allocatable :: cwd
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! TODO: Add other aoc solutions.  Optimize if necessary, or just exclude
+	! anything that takes more than ~30 s to run
+
+	tests = &
+		[   &
+			interpret_file(path//"1/main.syntran", quiet = .true., chdir_ = .true.) == '32625824', &
+			!interpret_file(path//"2/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"3/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"4/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"5/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"6/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"7/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"8/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"9/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"10/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"11/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"13/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"14/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"15/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"16/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"17/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"18/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"19/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"20/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"21/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"22/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"23/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"24/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			!interpret_file(path//"25/main.syntran", quiet = .true., chdir_ = .true.) == '0', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_aoc_2024
+
+!===============================================================================
+
 subroutine unit_tests_long(iostat)
 
 	implicit none
@@ -92,7 +153,8 @@ subroutine unit_tests_long(iostat)
 	npass = 0
 	nfail = 0
 
-	call unit_test_aoc_2023(npass, nfail)
+	!call unit_test_aoc_2023(npass, nfail) ! TODO
+	call unit_test_aoc_2024(npass, nfail)
 
 	call log_test_summary(npass, nfail)
 

@@ -1,0 +1,70 @@
+
+swaps:
+
+// // Are z swaps bad? Puzzle didn't actually say.  Probably don't want to swap
+2 z's though
+// swapping 74 41 z05 jkm
+// swapping 88 24 z12 z11
+
+// fixes test (1<<5):
+swapping 74 41 z05 jkm
+swapping 108 74 vtn z05
+swapping 124 74 z06 z05
+swapping 177 74 tst z05 // ***
+
+// fixes test (1<<11):
+swapping 109 32 sps rrr
+swapping 139 32 tdd rrr
+swapping 179 109 tff sps
+swapping 88 24 z12 z11  // bad
+swapping 88 32 z12 rrr
+swapping 109 24 sps z11 // ***
+swapping 109 32 sps rrr
+swapping 179 88 tff z12
+swapping 179 109 tff sps
+
+// fixes test (1<<23)
+swapping 33  9 z23 jkv
+swapping 33 20 z23 frt // ***
+swapping 64 33 z24 z23
+
+// fixes test (1<<38)
+swapping 101 3 pmd tpd
+swapping 101 50 pmd brw
+swapping 131 101 cgh pmd // ***
+swapping 191 101 gcd pmd
+
+//**************************
+// Final answer
+swapping 109 32 sps rrr
+swapping 131 101 cgh pmd
+swapping 177 74 tst z05
+swapping 33 20 z23 frt
+
+// sorted:
+cgh,frt,pmd,rrr,sps,tst,z05,z23
+
+
+// submitted:
+cgh,frt,pmd,rrr,sps,tst,z05,z23  // wrong
+
+//**************************
+// submission #2:
+
+swapping 179 109 tff sps AND NOT rrr
+
+cgh,frt,pmd,sps,tff,tst,z05,z23
+
+//**************************
+// submission #3:
+// CORRECT
+//
+swapping 177 74 tst z05 // ***
+swapping 109 24 sps z11 // ***
+swapping 33 20 z23 frt // ***
+swapping 131 101 cgh pmd // ***
+
+cgh,frt,pmd,sps,tst,z05,z11,z23
+
+
+

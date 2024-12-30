@@ -1,0 +1,154 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let start_str = "mul(";
+		let len_start_str = len(start_str);
+
+		// could use index_() from utils but it's easier to get all matches by
+		// copying here
+		for i in [0: len(str_)]
+		{
+			//println("i = ", i);
+			//println(str_[i]);
+
+			if (str_[i: i+len_start_str] != start_str) continue;
+
+			//println("found " + start_str);
+			let j = i + len_start_str;
+			let j0 = j;
+			while is_digit(str_[j]) j += 1;
+			if (str_[j] != ",") continue;
+			j += 1;
+
+			let a = parse_i32(str_[j0: j]);
+			//println("a = ", a);
+
+			j0 = j;
+			while is_digit(str_[j]) j += 1;
+			if (str_[j] != ")") continue;
+
+			let b = parse_i32(str_[j0: j]);
+			//println("b = ", b);
+
+			sum_ += a * b;
+			//println();
+		}
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let enabled = true;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let start_str = "mul(";
+		let do_str = "do()";
+		let dont_str = "don't()";
+
+		let len_start_str = len(start_str);
+		let len_do_str    = len(do_str);
+		let len_dont_str  = len(dont_str);
+
+		// could use index_() from utils but it's easier to get all matches by
+		// copying here
+		for i in [0: len(str_)]
+		{
+			//println("i = ", i);
+			//println(str_[i]);
+
+			if (str_[i: i+len_do_str  ] == do_str  ) enabled = true;
+			if (str_[i: i+len_dont_str] == dont_str) enabled = false;
+
+			if (not enabled) continue;
+			if (str_[i: i+len_start_str] != start_str) continue;
+
+			//println("found " + start_str);
+			let j = i + len_start_str;
+			let j0 = j;
+			while is_digit(str_[j]) j += 1;
+			if (str_[j] != ",") continue;
+			j += 1;
+
+			let a = parse_i32(str_[j0: j]);
+			//println("a = ", a);
+
+			j0 = j;
+			while is_digit(str_[j]) j += 1;
+			if (str_[j] != ")") continue;
+
+			let b = parse_i32(str_[j0: j]);
+			//println("b = ", b);
+
+			sum_ += a * b;
+			//println();
+		}
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/3");
+
+	let sum_ = 0'i64;
+
+	// Expect 178886550 + 87163705
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

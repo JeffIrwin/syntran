@@ -1,0 +1,218 @@
+
+#include("../../utils-2024.syntran");
+#include("../../dict_i64.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	//println("str_ = ", str_);
+	close(f);
+
+	let v = parse_i64_delim(str_, " ");
+	//println("v init = ", v);
+
+	let nblinks = 25;
+	//nblinks = 6;
+
+	let vmax = 0'i64;
+
+	for ib in [0: nblinks]
+	{
+		let v0 = v; // previous iteration
+		let nv0 = size(v0, 0);
+
+		for j in [0: nv0]
+			vmax = max(vmax, v0[j]);
+
+		v = [-1'i64; 2 * nv0]; // 2x as big in worst case scenario
+		let i = 0;
+		for i0 in [0: nv0]
+		{
+			let v0str = str(v0[i0]);
+			let len_ = len(v0str);
+			if v0[i0] == 0
+			{
+				v[i] = 1;
+				i += 1;
+			}
+			else if len_ % 2 == 0
+			{
+				// split digits in half
+				v[i] = parse_i64(v0str[0: len_ / 2]);
+				i += 1;
+				v[i] = parse_i64(v0str[len_ / 2: len_]);
+				i += 1;
+			}
+			else
+			{
+				v[i] = v0[i0] * 2024;
+				i += 1;
+			}
+		}
+		// trim
+		v = v[0: i];
+
+		//println("v = ", v);
+	}
+	sum_ = size(v, 0);
+
+	//// This is too big to just have an array for counts in part 2.  You need
+	//// some kind of dict with keys
+	//println("vmax = ", vmax);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+// There's no need for this to be a global var.  It could be created in part2
+// and passed to add_cnt
+let cnt_dict = new_dict_i64();
+
+fn add_cnt(key: i64, cnt: i64)
+//fn add_cnt(key: i64, cnt: i32)
+{
+	// If key is in (global) keys, increment its count.  If not, append a new
+	// key and set its count
+
+	let str_key = str(key);
+	let cnt0 = get_dict_i64(&cnt_dict, str_key);
+	//println("cnt0 = ", cnt0);
+
+	let set_cnt = cnt;
+	if (cnt0 > 0)
+		set_cnt += cnt0;
+
+	//println("set_cnt = ", set_cnt);
+	set_dict_i64(&cnt_dict, str_key, set_cnt);
+	return;
+}
+
+fn part2(): i64
+{
+	// I had to cheat by looking at other people's code in the reddit megathread
+	// to figure out part 2
+
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	//println("str_ = ", str_);
+	close(f);
+
+	let v = parse_i64_delim(str_, " ");
+	//println("v init = ", v);
+
+	let nblinks = 75;
+	//nblinks = 25;
+	//nblinks = 6;
+
+	for i in [0: size(v, 0)]
+		add_cnt(v[i], 1'i64);
+
+	//for i in [0: nkeys]
+	//	if cnts[i] != 0
+	//		println("key, cnt = ", [keys[i], cnts[i]]);
+	//println();
+
+	for ib in [0: nblinks]
+	{
+		//println("after ", ib + 1, " blinks:");
+
+		// buffer previous counts to not corrupt next in progress counts
+		let cnts0 = vals_dict_i64(&cnt_dict);
+		let keys  = keys_dict_i64(&cnt_dict);
+		let nkeys = size(keys, 0);
+		for i in [0: nkeys]
+			set_dict_i64(&cnt_dict, keys[i], 0'i64);
+
+		//println("cnts0 = ", cnts0);
+
+		for i in [0: nkeys]
+		{
+			let cnt = cnts0[i];
+			if cnt == 0
+				continue;
+
+			//println("* key, cnt = ", [keys[i], cnt]);
+
+			let v0str = str(keys[i]);
+			let len_ = len(v0str);
+			if keys[i] == "0"
+			{
+				add_cnt(1'i64, cnt);
+			}
+			else if len_ % 2 == 0
+			{
+				// split digits in half
+				add_cnt(parse_i64(v0str[0: len_ / 2   ]), cnt);
+				add_cnt(parse_i64(v0str[len_ / 2: len_]), cnt);
+			}
+			else
+			{
+				add_cnt(parse_i64(keys[i]) * 2024, cnt);
+			}
+		}
+
+		//for i in [0: nkeys]
+		//	if cnts[i] != 0
+		//		println("key, cnt = ", [keys[i], cnts[i]]);
+		//println("sum = ", sum(cnts[0: nkeys]));
+		//println();
+	}
+	let vals = vals_dict_i64(&cnt_dict);
+	//println("vals = ", vals);
+	sum_ = sum(vals);
+
+	//// 3880 unique keys.  This is manageable for brute-force add_cnt(), but
+	//// the hash map dict version is still 10x faster
+	//println("size vals = ", size(vals, 0));
+
+	//print_lens_dict_i64(&cnt_dict);
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/11");
+
+	let sum_ = 0'i64;
+
+	// Expect 183435 + 218279375708592
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

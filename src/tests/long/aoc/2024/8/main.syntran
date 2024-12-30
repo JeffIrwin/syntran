@@ -1,0 +1,226 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+
+	let grid = [" "; nx, ny];
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+		for x in [0: nx]
+			grid[x, y] = str_[x];
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("grid = ", grid);
+
+	let alnums = "";
+	for i in [0: 10]
+		alnums += str(i);
+	for i in [i32("a"): i32("z") + 1]
+		alnums += char(i);
+	for i in [i32("A"): i32("Z") + 1]
+		alnums += char(i);
+	//println("alnums = ", alnums);
+
+	let is_antinode = [false; nx, ny];
+	for iant in [0: len(alnums)]
+	{
+		let ant = alnums[iant];
+
+		let locs = [0; 2, count(grid == ant)];
+		let nant = 0;
+		for y in [0: ny]
+		for x in [0: nx]
+		{
+			if grid[x, y] == ant
+			{
+				locs[:, nant] = [x, y];
+				nant += 1;
+			}
+		}
+		//println("locs = ", locs);
+
+		for i in [1: nant]
+		for j in [0: i]
+		{
+			let li = locs[:, i];
+			let lj = locs[:, j];
+			//println("li, lj = ", li, lj);
+
+			let d = lj - li;
+			let anti = li - d;
+
+			if (anti[0] >= 0 and anti[0] < nx and
+			    anti[1] >= 0 and anti[1] < ny)
+			{
+				is_antinode[anti[0], anti[1]] = true;
+			}
+			//println("anti = ", anti);
+
+			anti = lj + d;
+			if (anti[0] >= 0 and anti[0] < nx and
+			    anti[1] >= 0 and anti[1] < ny)
+			{
+				is_antinode[anti[0], anti[1]] = true;
+			}
+			//println("anti = ", anti);
+		}
+	}
+	sum_ = count(is_antinode);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+
+	let grid = [" "; nx, ny];
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+		for x in [0: nx]
+			grid[x, y] = str_[x];
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("grid = ", grid);
+
+	let alnums = "";
+	for i in [0: 10]
+		alnums += str(i);
+	for i in [i32("a"): i32("z") + 1]
+		alnums += char(i);
+	for i in [i32("A"): i32("Z") + 1]
+		alnums += char(i);
+
+	let is_antinode = [false; nx, ny];
+	for iant in [0: len(alnums)]
+	{
+		let ant = alnums[iant];
+
+		let locs = [0; 2, count(grid == ant)];
+		let nant = 0;
+		for y in [0: ny]
+		for x in [0: nx]
+		{
+			if grid[x, y] == ant
+			{
+				locs[:, nant] = [x, y];
+				nant += 1;
+			}
+		}
+		//println("locs = ", locs);
+
+		for i in [1: nant]
+		for j in [0: i]
+		{
+			let li = locs[:, i];
+			let lj = locs[:, j];
+			//println("li, lj = ", li, lj);
+
+			let dbig = lj - li;  // non-reduced fractional slope
+			let gcd = gcd32(dbig[0], dbig[1]);
+			let d = dbig / gcd;
+			//println("dbig = ", dbig);
+			//println("gcd = ", gcd);
+			//println("d = ", d);
+
+			//if not (all(d == dbig) or all(d == -dbig))
+			//{
+			//	// All fractions are already reduced
+			//	println("slope reduction");
+			//	exit(0);
+			//}
+
+			let anti = li;
+			while true
+			{
+				is_antinode[anti[0], anti[1]] = true;
+				anti += d;
+
+				// This could just use in_bounds() from utils
+				if (not (anti[0] >= 0 and anti[0] < nx and
+				         anti[1] >= 0 and anti[1] < ny))
+				{
+					break;
+				}
+			}
+
+			anti = li;
+			while true
+			{
+				is_antinode[anti[0], anti[1]] = true;
+				anti -= d;
+				if (not (anti[0] >= 0 and anti[0] < nx and
+				         anti[1] >= 0 and anti[1] < ny))
+				{
+					break;
+				}
+			}
+		}
+	}
+	sum_ = count(is_antinode);
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/8");
+
+	let sum_ = 0'i64;
+
+	sum_ += part1();
+	sum_ += part2();
+
+	// Expect 398 + 1333
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

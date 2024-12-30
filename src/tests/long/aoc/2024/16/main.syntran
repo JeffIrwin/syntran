@@ -1,0 +1,621 @@
+
+#include("../../utils-2024.syntran");
+#include("../../minheap_vec_i32.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+//ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+let NDIRS = 4;
+let DIRS =
+[
+	 1,  0, // east
+	 0, -1, // north
+	-1,  0, // west
+	 0,  1  // south
+	 ;
+	 2, NDIRS
+];
+let EAST  = 0;
+let NORTH = 1;
+let WEST  = 2;
+let SOUTH = 3;
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let chars = read_char_mat(filename);
+	let nx = i32(size(chars, 0));
+	let ny = i32(size(chars, 1));
+	//println("chars = ", chars);
+
+	// Find start and end points
+	let xs = -1;
+	let ys = -1;
+	let xe = -1;
+	let ye = -1;
+	for y in [0: ny]
+	for x in [0: nx]
+	{
+		if chars[x,y] == "S"
+		{
+			xs = x;
+			ys = y;
+		}
+		else if chars[x,y] == "E"
+		{
+			xe = x;
+			ye = y;
+		}
+	}
+	//println("xys = ", [xs, ys]);
+
+	// Dijkstra's algorithm with a proper (binary tree) minheap priority queue
+	let DIST_INFTY = 2_000_000_000;
+	let dist = [DIST_INFTY; nx, ny, NDIRS];
+	let visited = [false  ; nx, ny, NDIRS];
+
+	// `prev` is only needed to backtrack the whole path. we don't need it to
+	// get the optimal score/dist for part 1
+
+	// Initialize source vertex to 0 distance
+	dist[xs, ys, EAST] = 0;
+	let q = new_minheap_vec_i32();
+	push_minheap_vec_i32(&q, [0, xs, ys, EAST]);
+
+	let dist_end = DIST_INFTY;
+	let dist_progress = dist_end + 1;
+	while q.len > 0 // TODO: make an is_empty_minheap*() fn
+	{
+		let u = pop_minheap_vec_i32(&q);
+
+		// unpack from array
+		let dist0 = u[0];
+		let x0    = u[1];
+		let y0    = u[2];
+		let dir0  = u[3];
+
+		if x0 == xe and y0 == ye
+			dist_end = min(dist_end, dist0);
+
+		if (dist_end < dist_progress)
+		{
+			dist_progress = dist_end;
+			//println("dist_progress = ", dist_progress);
+		}
+
+		if (visited[x0, y0, dir0]) continue;
+		visited[x0, y0, dir0] = true;
+
+		for dir in [0: NDIRS]
+		{
+			let x = x0 + DIRS[0, dir];
+			let y = y0 + DIRS[1, dir];
+
+			// Check bounds and walls
+			if (not in_bounds([0,0], [x,y], [nx,ny])) continue;
+			if (chars[x,y] == "#") continue;
+
+			let alt = dist0 + 1;
+			if (dir != dir0) alt += 1000;
+
+			if alt < dist[x, y, dir]
+			{
+				dist[x, y, dir] = alt;
+				push_minheap_vec_i32(&q, [alt, x, y, dir]);
+			}
+		}
+	}
+	sum_ = dist_end;
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let chars = read_char_mat(filename);
+	let nx = i32(size(chars, 0));
+	let ny = i32(size(chars, 1));
+	//println("chars = ", chars);
+	//print_char_mat(&chars);
+
+	// Find start and end points
+	let xs = -1;
+	let ys = -1;
+	let xe = -1;
+	let ye = -1;
+	for y in [0: ny]
+	for x in [0: nx]
+	{
+		if chars[x,y] == "S"
+		{
+			xs = x;
+			ys = y;
+		}
+		else if chars[x,y] == "E"
+		{
+			xe = x;
+			ye = y;
+		}
+	}
+	//println("xys = ", [xs, ys]);
+
+	// Pre-process input to find junctions.  It might help to also find
+	// dead-ends (1 outlet), mark them, and optimize them later
+	let chars2 = chars;
+	let njunc = 0;
+	let junc = [-1; 3, nx * ny]; // a junction is [x, y, dir]
+	let junc_grid = [-1; nx, ny];
+	let start_id    = -1;
+	let end_id_east  = -1;
+	let end_id_north = -1;
+	for y in [0: ny]
+	for x in [0: nx]
+	{
+		let c = chars[x,y];
+		if (c == "#") continue; // skip walls
+
+		// Count number of outlets (or inlets) to/from position [x,y]
+		let nout = 0;
+		for dir in [0: NDIRS]
+		{
+			let xn = x + DIRS[0, dir];
+			let yn = y + DIRS[1, dir];
+			if (not in_bounds([0,0], [xn,yn], [nx,ny])) continue;
+			if (chars[xn, yn] == "#") continue;
+
+			nout += 1;
+		}
+
+		// Count "S" and "E" as junctions regardless of nout
+		if (not (nout > 2 or c == "S" or c == "E")) continue;
+
+		if (junc_grid[x,y] < 0) junc_grid[x,y] = njunc;
+
+		junc[:, njunc + EAST ] = [x, y, EAST ];
+		junc[:, njunc + NORTH] = [x, y, NORTH];
+		junc[:, njunc + WEST ] = [x, y, WEST ];
+		junc[:, njunc + SOUTH] = [x, y, SOUTH];
+
+		// Save start/end junc IDs.  Start faces east, end can face north or
+		// east
+		if (x == xs and y == ys)
+		{
+			start_id = njunc + EAST;
+		}
+		if (x == xe and y == ye)
+		{
+			end_id_east  = njunc + EAST ;
+			end_id_north = njunc + NORTH;
+		}
+
+		// Junction positions have multiplicity.  Because turning has a cost on
+		// the score, count each outlet direction at one position as a separate
+		// junction
+		njunc += NDIRS;
+
+		chars2[x,y] = "J";
+		//chars2[x,y] = str(nout);
+	}
+	//println("njunc = ", njunc);
+	//println("chars2 = ");
+	//print_char_mat(&chars2);
+
+	junc = junc[:, 0: njunc]; // trim
+	//println("junc = ", junc);
+	//println("junc_grid = ", junc_grid);
+
+	// From the list of junctions, find the distance to each of its immediately reachable
+	// neighbor junctions by flood filling.  Put this data into an adjacency
+	// table
+	let NADJ_CAP = NDIRS * 2;
+	let nadj = [ 0; njunc];            // number of neighbors
+	let  adj = [-1; NADJ_CAP, njunc];  // list of neighbors
+	let w    = [-1; NADJ_CAP, njunc];  // weights/distances/scores between neighbors
+
+	// First, list adjacent junctions which can be reached by only turning
+	// without moving forward
+	for ij in [0: njunc]
+	{
+		//println();
+		//println("ij = ", ij);
+		let x   = junc[0, ij];
+		let y   = junc[1, ij];
+		let dir = junc[2, ij];
+
+		// this is messy but yolo
+		let ijn = ij - 4;
+		while true
+		{
+			ijn += 1;
+			//println("    ijn = ", ijn);
+			if (ijn >= njunc)  break;
+			if (ijn >= ij + 4) break;
+
+			let xn   = junc[0, ijn];
+			let yn   = junc[1, ijn];
+			let dirn = junc[2, ijn];
+			if (xn != x) continue;
+			if (yn != y) continue;
+			let ddir = abs(dirn - dir);
+			if (ddir != 1 and ddir != 3) continue;
+			//println("    nei");
+
+			adj[nadj[ij], ij] = ijn; 
+			w  [nadj[ij], ij] = 1000;
+			nadj[ij] += 1;
+		}
+	}
+	//println("adj = ", adj);
+
+	// Now do flood fill from each junc to get neighbors with different positions
+	for ij in [0: njunc]
+	{
+		let STACK_CAP = nx * ny;
+		let stack = [-1; 4, STACK_CAP];
+		let sptr  = 0;
+		//println("junc[:, ", ij, "] = ", junc[:,ij]);
+
+		// push
+		stack[0:4, sptr] = junc[:, ij]; // x, y, dir
+		stack[  4, sptr] = 0;           // dist
+		sptr += 1;
+
+		// I can reduce the rank of visited (without directions) and get the
+		// right answer for the test input, but not the real input
+		let visited = [false; nx, ny, NDIRS];
+		visited[ junc[0,ij], junc[1,ij], junc[2,ij] ] = true;
+
+		// DFS until neighbors are found
+		while sptr > 0
+		{
+			// Pop
+			sptr -= 1;
+			let x0    = stack[0, sptr];
+			let y0    = stack[1, sptr];
+			let dir0  = stack[2, sptr];
+			let dist0 = stack[3, sptr];
+			//println("xy0 dir0 = ", [x0, y0, dir0]);
+
+			for dir in [0: NDIRS]
+			{
+				let x = x0 + DIRS[0, dir];
+				let y = y0 + DIRS[1, dir];
+
+				if (not in_bounds([0,0], [x,y], [nx,ny])) continue;
+				if (chars[x, y] == "#") continue;
+				if (visited[x, y, dir]) continue;
+
+				let dist = dist0 + 1;
+				if (dir != dir0) dist += 1000;
+
+				let junc_id = junc_grid[x,y] + dir;
+				if junc_grid[x,y] >= 0 and not visited[x,y,dir]
+				{
+					//println("neighbor [x,y,dir] = ", [x,y,dir]);
+
+					// Fill in adjacency data
+
+					// Check if neigbor is already listed as adjacent
+					let is_in_adj = false;
+					let kadj = -1;
+					for k in [0: nadj[ij]]
+					{
+						kadj = k;
+						is_in_adj = adj[k, ij] == junc_id;
+						if (is_in_adj) break;
+					}
+
+					if is_in_adj
+					{
+						w[kadj, ij] = min(w[kadj, ij], dist);
+					}
+					else
+					{
+						adj[nadj[ij], ij] = junc_id;
+						w[nadj[ij], ij] = dist;
+						nadj[ij] += 1;
+					}
+
+					if (nadj[ij] >= NADJ_CAP)
+					{
+						println("Error: NADJ_CAP overflow!");
+						exit(-3);
+					}
+
+					//// this is not the path
+					//println("path = ", stack[0:2, 0:sptr]);
+					//println("path = ", stack[0:2, sptr0:sptr]);
+
+					// Stop search when another junction is found
+					visited[x, y, dir] = true;
+					continue;
+				}
+				visited[x, y, dir] = true;
+
+				// push
+				stack[:, sptr] = [x, y, dir, dist];
+				sptr += 1;
+			}
+		}
+	}
+	//println("adj = ", adj);
+	//println("w = ", w);
+
+	// Dijkstra's algorithm
+	let DIST_INFTY = 2_000_000_000;
+	let dist = [DIST_INFTY; njunc];
+	let visited = [false  ; njunc];
+
+	// Prev has a `4` dimension here because we need to keep track of *all*
+	// equally optimal paths that lead from the start to the end.  nprev is
+	// incremented to track this
+	let nprev = [ 0       ;    njunc];
+	let prev  = [-1       ; 4, njunc];
+
+	// Initialize source vertex to 0 distance
+	dist[start_id] = 0;
+	let q = new_minheap_vec_i32();
+	push_minheap_vec_i32(&q, [0, start_id]);
+
+	let dist_end = DIST_INFTY;
+	let dist_progress = dist_end + 1;
+	while q.len > 0
+	{
+		let u = pop_minheap_vec_i32(&q);
+
+		// unpack from array
+		let dist0 = u[0];
+		let id0   = u[1];
+
+		if id0 == end_id_east or id0 == end_id_north
+			dist_end = min(dist_end, dist0);
+
+		if (dist_end < dist_progress)
+		{
+			dist_progress = dist_end;
+			//println("dist_progress = ", dist_progress);
+		}
+
+		if (visited[id0]) continue;
+		visited[id0] = true;
+
+		for iv in [0: nadj[id0]]
+		{
+			let v   = adj[iv, id0];
+			let alt =   w[iv, id0] + dist0;
+			if alt <= dist[v]
+			{
+				// Reset non-optimal distances instead of appending
+				if (alt < dist[v]) nprev[v] = 0;
+
+				dist[v] = alt;
+
+				let n = nprev[v];
+				nprev[v] += 1;
+				prev[n, v] = id0;
+
+				push_minheap_vec_i32(&q, [alt, v]);
+			}
+		}
+	}
+	//println("dist end_id_east  = ", dist[end_id_east]);
+	//println("dist end_id_north = ", dist[end_id_north]);
+
+	// Backtrack all optimal paths using DFS
+	let STACK_CAP = nx * ny * 20; // probably don't need 10x
+	let stack = [-1; STACK_CAP];
+	let sptr = 0;
+
+	// You can end facing north or east, because the end point is in the
+	// top-right.  However, one of those might not be part of an optimal path
+	if (dist[end_id_north] == dist_end) { stack[sptr] = end_id_north; sptr += 1; }
+	if (dist[end_id_east ] == dist_end) { stack[sptr] = end_id_east ; sptr += 1; }
+
+	visited = false;
+	//println("backtracking ...");
+	while sptr > 0
+	{
+		// This outer loop backtracks along junctions
+
+		// Pop outer
+		sptr -= 1;
+		let i0o = stack[sptr];
+		//println("i0o = ", i0o);
+
+		chars[ junc[0,i0o], junc[1,i0o] ] = "O";
+
+		if (visited[i0o]) continue;
+		visited[i0o] = true;
+		for i in [0: nprev[i0o]]
+		{
+			let i1o = prev[i, i0o];
+			stack[sptr] = i1o; sptr += 1;
+
+			// Not enough RAM to save all paths.  Backtrack the path(s)
+			// from junc i0 to i1 on-the-fly right here
+
+			//let i0 = i0o;
+			//let i1 = i1o;
+			let i0 = i1o; // ugh
+			let i1 = i0o;
+
+			// Find path from junction i0 to junction i1
+
+			//println();
+			//println("i0, i1 = ", [i0, i1]);
+	
+			let STACK_CAP2 = nx * ny * 10; // DING DING DING TODO THIS IS THE UB CAUSE! 10x seems safe
+			let stack2 = [-1; 4, STACK_CAP2];
+			let sptr2  = 0;
+	
+			//println("junc[:, ", i0, "] = ", junc[:,i0]);
+			//println("junc[:, ", i1, "] = ", junc[:,i1]);
+	
+			// push
+			stack2[0:4, sptr2] = junc[:, i0]; // x, y, dir
+			stack2[  4, sptr2] = 0;           // dist
+			sptr2 += 1;
+	
+			let visited2 = [false; nx, ny, NDIRS];
+			visited2[ junc[0,i0], junc[1,i0], junc[2,i0] ] = true;
+	
+			let prev2 = [-1; 3, nx, ny, NDIRS];
+	
+			// DFS until junction i1 is found
+			while sptr2 > 0
+			{
+				// The inner loop backtracks every point between the two
+				// junctions from the outer loop.  I first tried doing this
+				// inner loop in a separate earlier loop, but there's not enough
+				// RAM to save all paths between every pair of junctions, at
+				// least not in one big rectangular array
+				//
+				// Most of the inner loop vars have a "2" appended, e.g. stack2
+				// vs stack.  You could probably get away with re-using names
+				// and just shadowing but that could be a nightmare for
+				// readability
+
+				// Pop inner
+				sptr2 -= 1;
+				let x0    = stack2[0, sptr2];
+				let y0    = stack2[1, sptr2];
+				let dir0  = stack2[2, sptr2];
+				let dist0 = stack2[3, sptr2];
+				//println("xy0 dir0 = ", [x0, y0, dir0]);
+	
+				for dir in [0: NDIRS]
+				{
+					let x = x0 + DIRS[0, dir];
+					let y = y0 + DIRS[1, dir];
+	
+					if (not in_bounds([0,0], [x,y], [nx,ny])) continue;
+					if (chars[x, y] == "#") continue;
+					if (visited2[x, y, dir]) continue;
+	
+					let dist = dist0 + 1;
+					if (dir != dir0) dist += 1000;
+	
+					//visited2[x, y, dir] = true;
+					prev2[:, x, y, dir] = [x0, y0, dir0];
+	
+					let junc_id = junc_grid[x,y] + dir;
+					if junc_grid[x,y] >= 0 and not visited2[x,y,dir]
+					{
+						if junc_id != i1
+						{
+							// Stop search when another junction is found
+							visited2[x, y, dir] = true;
+							continue;
+						}
+						//println("neighbor [x,y,dir] = ", [x,y,dir]);
+	
+						// Find neighbor in the adjacency list
+						let is_in_adj = false;
+						let kadj = -1;
+						for k in [0: nadj[i0]]
+						{
+							kadj = k;
+							is_in_adj = adj[k, i0] == junc_id;
+							if (is_in_adj) break;
+						}
+	
+						if not is_in_adj
+						{
+							println("Error: neighbor not found");
+							exit(-4);
+						}
+	
+						// only if dist is known best weight
+						//println("dist, w = ", [dist, w[kadj, i0]]);
+						if dist == w[kadj, i0]
+						{
+							//println("dist, w = ", [dist, w[kadj, i0]]);
+	
+							// backtrack path form junc i1 to i0
+							let np = 0;
+							let x1 = x;
+							let y1 = y;
+							let d1 = dir;
+							while true
+							{
+								//println("xy1 = ", [x1, y1]);
+								chars[x1, y1] = "O";
+								let xp = x1;
+								let yp = y1;
+								let dp = d1;
+	
+								x1 = prev2[0, xp, yp, dp];
+								y1 = prev2[1, xp, yp, dp];
+								d1 = prev2[2, xp, yp, dp];
+	
+								if (x1 == junc[0, i0] and y1 == junc[1, i0]) break;
+							}
+							chars[x1, y1] = "O";
+						}
+						// Stop search when another junction is found
+						visited2[x, y, dir] = true;
+						continue;
+					}
+					visited2[x, y, dir] = true;
+	
+					// push
+					stack2[:, sptr2] = [x, y, dir, dist];
+					sptr2 += 1;
+				}
+			}
+		}
+	}
+	chars[xs, ys] = "O";
+	sum_ = count(chars == "O");
+	//println("chars = ", chars);
+
+	// TODO: some kind of UB is hapenning.  Check CAP overflows?
+	print_char_mat(&chars);
+	println(); // DO NOT REMOVE THIS :(
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/16");
+
+	let sum_ = 0'i64;
+
+	// Expect 73432 + 496
+
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

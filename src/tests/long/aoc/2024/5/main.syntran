@@ -1,0 +1,781 @@
+
+#include("../../utils-2024.syntran");
+#include("../../dict_i64.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn is_le_rule(va: i32, vb: i32, rules: [i32; :, :]): bool
+{
+	// In the case that va == vb, this returns true which is correct.  Be
+	// careful about this if you need to implement is_lt_rule()
+
+	let nrules = size(rules, 1);
+
+	// Check all the rules by brute force
+	let ordered = true;
+	for ir in [0: nrules]
+	{
+		if (va == rules[0, ir] and vb == rules[1, ir])
+		{
+			break;
+		}
+		else if (vb == rules[0, ir] and va == rules[1, ir])
+		{
+			ordered = false;
+			break;
+		}
+	}
+	return ordered;
+}
+
+fn is_le_dict(va: i32, vb: i32, rules: &dict_i64): bool
+{
+	let ordered = false;
+	let key = str(va, "|", vb);
+	let val = get_dict_i64(&rules, key);
+	if (val == 1) ordered = true;
+	return ordered;
+}
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	// Count the number of ordering rules
+	let nrules = 0;
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f) and str_ != ""
+	{
+		//println("str_ = ", str_);
+		nrules += 1;
+		str_ = readln(f);
+	}
+	close(f);
+	//println("nrules = ", nrules);
+
+	let rules = [0; 2, nrules];
+	let rulesd = new_dict_i64();
+	f = open(filename);
+	for i in [0: nrules]
+	{
+		str_ = readln(f);
+		rules[:, i] = parse_i32_delim(str_, "|");
+
+		// Put the rule in a dictionary, in the input format with "|" as a
+		// delimiter
+		set_dict_i64(&rulesd, str_, 1'i64);
+	}
+	//println("rules = ", rules);
+	//println("keys = ", keys_dict_i64(&rulesd));
+
+	// Skip blank line
+	str_ = readln(f);
+
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let v = parse_i32_delim(str_, ",");
+		let nv = size(v, 0);
+		//println("v = ", v);
+
+		// Check if each pair of adjacent numbers in "update" vector v is in the
+		// correct order
+		let ordered = true;
+		for i in [0: nv - 1]
+		{
+			// Is v[i] < v[i+1] ? according to given ordering rules, not the usual `<`
+			ordered = true;
+			let va = v[i];
+			let vb = v[i+1];
+
+			//ordered = is_le_rule(va, vb, rules);
+			ordered = is_le_dict(va, vb, &rulesd);
+
+			if (not ordered) break;
+		}
+		if (ordered)
+			sum_ += v[nv / 2];
+
+		str_ = readln(f);
+	}
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn sort_rule(v: [i32; :], rules: [i32; :, :]): [i32; :]
+{
+	// Quick sort algorithm with a given set of ordering rules.  Copied from
+	// 2023 natural order sort
+
+	//println("starting sort_rule()");
+	//println("v = ", v);
+
+	let l = 0;
+	let h = size(v,0) - 1;
+
+	if l < h
+	{
+		let stack = [0; h - l + 1];
+
+		let top = -1;
+
+		top += 1;
+		stack[top] = l;
+
+		top += 1;
+		stack[top] = h;
+
+		while top >= 0
+		{
+			//println("h = ", h);
+			h = stack[top];
+			top -= 1;
+
+			l = stack[top];
+			top -= 1;
+
+			let x = v[h];
+
+			let i = (l - 1);
+			for j in [l: h]
+				if is_le_rule(v[j], x, rules)
+				{
+					i += 1;
+					let tmp = v[i];
+					v[i]  = v[j];
+					v[j]  = tmp;
+				}
+			let tmp = v[i+1];
+			v[i+1] = v[h];
+			v[h] = tmp;
+			let p = i + 1;
+
+			if p - 1 > l
+			{
+				top += 1;
+				stack[top] = l;
+
+				top += 1;
+				stack[top] = p - 1;
+			}
+
+			if p + 1 < h
+			{
+				top += 1;
+				stack[top] = p + 1;
+
+				top += 1;
+				stack[top] = h;
+			}
+		}
+	}
+	//println("v = ", v);
+	return v;
+}
+
+fn qsort_dict(v: [i32; :], rules: &dict_i64): [i32; :]
+{
+	// Quick sort algorithm with a given set of ordering rules.  Copied from
+	// 2023 natural order sort
+
+	//println("starting qsort_dict()");
+	//println("v = ", v);
+
+	let l = 0;
+	let h = size(v,0) - 1;
+
+	if l < h
+	{
+		let stack = [0; h - l + 1];
+
+		let top = -1;
+
+		top += 1;
+		stack[top] = l;
+
+		top += 1;
+		stack[top] = h;
+
+		while top >= 0
+		{
+			//println("h = ", h);
+			h = stack[top];
+			top -= 1;
+
+			l = stack[top];
+			top -= 1;
+
+			let x = v[h];
+
+			let i = (l - 1);
+			for j in [l: h]
+				if is_le_dict(v[j], x, &rules)
+				{
+					i += 1;
+					let tmp = v[i];
+					v[i]  = v[j];
+					v[j]  = tmp;
+				}
+			let tmp = v[i+1];
+			v[i+1] = v[h];
+			v[h] = tmp;
+			let p = i + 1;
+
+			if p - 1 > l
+			{
+				top += 1;
+				stack[top] = l;
+
+				top += 1;
+				stack[top] = p - 1;
+			}
+
+			if p + 1 < h
+			{
+				top += 1;
+				stack[top] = p + 1;
+
+				top += 1;
+				stack[top] = h;
+			}
+		}
+	}
+	//println("v = ", v);
+	return v;
+}
+
+fn sort_topo(v: [i32; :], rules: &[i32; :,:], rulesd: &dict_i64): [i32; :]
+{
+	// Topological sort
+
+	let nodes        = new_dict_i64();  // dict of node existence
+	let num_incoming = new_dict_i64();  // number of incoming edges for each node
+
+	for node in v
+	{
+		let key = str(node);
+		set_dict_i64(&nodes, key, 1'i64);
+		set_dict_i64(&num_incoming, key, 0'i64);
+	}
+	//println("nodes = ", keys_dict_i64(&nodes));
+
+	// Iterate over all rules and save only the relevant edges with nodes that
+	// exist in this "update"
+	let edges = new_dict_i64();
+	for i in [0: size(rules,1)]
+	{
+		// rules[0,i] is source, rules[1,i] is sink
+
+		let node_key = str(rules[1,i]);
+		if (get_dict_i64(&nodes, str(rules[0,i])) != 1) continue;
+		if (get_dict_i64(&nodes, node_key       ) != 1) continue;
+
+		let nin = get_dict_i64(&num_incoming, node_key);
+		nin += 1;
+		set_dict_i64          (&num_incoming, node_key, nin);
+
+		let edge_key = str(rules[0,i], "|", rules[1,i]);
+		set_dict_i64(&edges, edge_key, 1'i64);
+		//println("edge_key = ", edge_key);
+	}
+
+	let nv = size(v,0);
+	let l = [0; nv]; // empty list that will contain the sorted elements
+	let s = [0; nv]; // set (stack) of all nodes with no incoming edge
+	let sptr = 0; let lptr = 0;
+
+	// Build s
+	for key in keys_dict_i64(&num_incoming)
+	{
+		let nin = get_dict_i64(&num_incoming, key);
+		//println("node, num_incoming = ", key, " ", nin);
+		if nin == 0
+		{
+			s[sptr] = parse_i32(key);
+			sptr += 1;
+		}
+	}
+	//println("s = ", s[0: sptr]);
+
+	while sptr > 0
+	{
+		// Pop node n from s
+		sptr -= 1;
+		let n = s[sptr];
+
+		// Add n to l
+		l[lptr] = n;
+		lptr += 1;
+
+		// For each node `sink` with an edge e from n to sink
+		//
+		// I think this is the weak point of my topo sort implementation.  I'm
+		// iterating over every edge, checking that it hasn't been removed, and
+		// checking if its source is n.  An adjacency table should be able to do
+		// this more efficiently
+		for edge in keys_dict_i64(&edges)
+		{
+			let edge_val = get_dict_i64(&edges, edge);
+			if (edge_val != 1) continue;
+
+			let strs = split_(edge, "|");
+			let source = strs[0];
+			if (source != str(n)) continue;
+			let sink = strs[1];
+
+			// Remove edge e from the graph
+			set_dict_i64(&edges, edge, -1'i64);
+			let nin = get_dict_i64(&num_incoming, sink);
+			nin -= 1;
+			set_dict_i64(&num_incoming, sink, nin);
+			if nin == 0
+			{
+				// If sink has no other incoming edges, insert m into s
+				s[sptr] = parse_i32(sink);
+				sptr += 1;
+			}
+
+			// i'm starting to think an adjacency table would be a better way to
+			// do this. either shift values or mark with negative sentinels as
+			// edges are removed
+		}
+	}
+
+	return l;
+}
+
+fn sort_topo_tab(v: [i32; :], rules: &[i32; :,:]): [i32; :]
+{
+	// Topological sort using tables instead of dicts
+
+	//let nodes = new_dict_i64();  // dict of node IDs
+	//let k = 0'i64;
+	//for node in v
+	//{
+	//	let key = str(node);
+	//	set_dict_i64(&nodes, key, k);
+	//	k += 1;
+	//}
+	////println("nodes = ", keys_dict_i64(&nodes));
+
+	let nv = size(v,0);
+	let NADJ_CAP = nv;
+
+	// Iterate over all rules and save only the relevant edges with nodes that
+	// exist in this "update"
+	//
+	// Because topo sort is more concerned with "incoming" edges, this adjacency
+	// table also has an ninc count of incoming edges (as opposed to outgoing
+	// edges nadj)
+	let ninc = [0; nv];
+	let nadj = [0; nv];
+	let  adj = [0; NADJ_CAP, nv];
+	for i in [0: size(rules,1)]
+	{
+		// rules[0,i] is source, rules[1,i] is sink
+		let r0 = rules[0,i];
+		let r1 = rules[1,i];
+
+		//let i0 = get_dict_i64(&nodes, str(r0));
+
+		// Scan the whole node vector instead of doing a dict lookup.  Slightly
+		// faster for this problem's data but it probably doesn't scale in
+		// general
+		let i0 = 0;
+		while (v[i0] != r0 and i0 < nv) i0 += 1;
+		if (i0 >= nv) continue;
+
+		//let i1 = get_dict_i64(&nodes, str(r1));
+		let i1 = 0;
+		while (v[i1] != r1 and i1 < nv) i1 += 1;
+		if (i1 >= nv) continue;
+
+		adj[ nadj[i0], i0 ] = i1;
+		nadj[i0] += 1;
+		ninc[i1] += 1;
+	}
+	//println("ninc = ", ninc);
+
+	let l = [0; nv]; // empty list that will contain the sorted elements
+	let s = [0; nv]; // set (stack) of all nodes with no incoming edge
+	let sptr = 0; let lptr = 0;
+
+	// Build s
+	for i in [0: nv]
+	{
+		if ninc[i] == 0
+		{
+			s[sptr] = i; // store indices in s, not values
+			sptr += 1;
+		}
+	}
+	//println("s = ", s[0: sptr]);
+
+	while sptr > 0
+	{
+		// Pop node n from s
+		sptr -= 1;
+		let n = s[sptr];
+
+		// Add n (value, not index) to l
+		l[lptr] = v[n];
+		lptr += 1;
+
+		// For each sink node `m` with an edge e from n to m
+		for im in [0: nadj[n]]
+		{
+			let m = adj[im, n];
+
+			// Remove edge e from the graph.  No need to modify adj/nadj because
+			// we're processing the whole row in this loop
+			ninc[m] -= 1;
+			if ninc[m] == 0
+			{
+				// If m has no other incoming edges, insert m into s
+				s[sptr] = m;
+				sptr += 1;
+			}
+		}
+	}
+	return l;
+}
+
+// Quicksort version takes ~3.1 s off laptop charger
+fn part2qsort(): i64
+{
+	let sum_ = 0'i64;
+
+	// Count the number of ordering rules
+	let nrules = 0;
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f) and str_ != ""
+	{
+		//println("str_ = ", str_);
+		nrules += 1;
+		str_ = readln(f);
+	}
+	close(f);
+	//println("nrules = ", nrules);
+
+	let rules = [0; 2, nrules];
+	f = open(filename);
+	for i in [0: nrules]
+	{
+		str_ = readln(f);
+		rules[:, i] = parse_i32_delim(str_, "|");
+	}
+	//println("rules = ", rules);
+
+	// Skip blank line
+	str_ = readln(f);
+
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let v = parse_i32_delim(str_, ",");
+		let nv = size(v, 0);
+		//println("v = ", v);
+
+		// Check if each pair of adjacent numbers in "update" vector v is in the
+		// correct order
+		let ordered = true;
+		for i in [0: nv - 1]
+		{
+			// Is v[i] < v[i+1] ? according to given ordering rules, not the usual `<`
+			ordered = true;
+			let va = v[i];
+			let vb = v[i+1];
+			ordered = is_le_rule(va, vb, rules);
+			if (not ordered) break;
+		}
+		if (not ordered)
+		{
+			//println("v = ", v);
+			let s = sort_rule(v, rules);
+			//println("s = ", s);
+			//println();
+			sum_ += s[nv / 2];
+		}
+
+		str_ = readln(f);
+	}
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+fn part2topo(): i64
+{
+	let sum_ = 0'i64;
+
+	// Count the number of ordering rules
+	let nrules = 0;
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f) and str_ != ""
+	{
+		//println("str_ = ", str_);
+		nrules += 1;
+		str_ = readln(f);
+	}
+	close(f);
+	//println("nrules = ", nrules);
+
+	let rules = [0; 2, nrules];
+	let rulesd = new_dict_i64();
+	f = open(filename);
+	for i in [0: nrules]
+	{
+		str_ = readln(f);
+		rules[:, i] = parse_i32_delim(str_, "|");
+
+		// Put the rule in a dictionary, in the input format with "|" as a
+		// delimiter
+		set_dict_i64(&rulesd, str_, 1'i64);
+	}
+	//println("rules = ", rules);
+	//println("keys = ", keys_dict_i64(&rulesd));
+
+	// Skip blank line
+	str_ = readln(f);
+
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let v = parse_i32_delim(str_, ",");
+		let nv = size(v, 0);
+		//println("v = ", v);
+
+		// Check if each pair of adjacent numbers in "update" vector v is in the
+		// correct order
+		let ordered = true;
+		for i in [0: nv - 1]
+		{
+			// Is v[i] < v[i+1] ? according to given ordering rules, not the usual `<`
+			ordered = true;
+			let va = v[i];
+			let vb = v[i+1];
+
+			//ordered = is_le_rule(va, vb, rules);
+			ordered = is_le_dict(va, vb, &rulesd);
+
+			if (not ordered) break;
+		}
+		if (not ordered)
+		{
+			//println("v = ", v);
+			let s = sort_topo(v, &rules, &rulesd);
+			//println("s = ", s);
+			//println();
+			sum_ += s[nv / 2];
+		}
+
+		str_ = readln(f);
+	}
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+fn part2topo_tab(): i64
+{
+	let sum_ = 0'i64;
+
+	// Count the number of ordering rules
+	let nrules = 0;
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f) and str_ != ""
+	{
+		//println("str_ = ", str_);
+		nrules += 1;
+		str_ = readln(f);
+	}
+	close(f);
+	//println("nrules = ", nrules);
+
+	let rules = [0; 2, nrules];
+	let rulesd = new_dict_i64();
+	f = open(filename);
+	for i in [0: nrules]
+	{
+		str_ = readln(f);
+		rules[:, i] = parse_i32_delim(str_, "|");
+
+		// Put the rule in a dictionary, in the input format with "|" as a
+		// delimiter
+		set_dict_i64(&rulesd, str_, 1'i64);
+	}
+	//println("rules = ", rules);
+	//println("keys = ", keys_dict_i64(&rulesd));
+
+	// Skip blank line
+	str_ = readln(f);
+
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let v = parse_i32_delim(str_, ",");
+		let nv = size(v, 0);
+		//println("v = ", v);
+
+		// Check if each pair of adjacent numbers in "update" vector v is in the
+		// correct order
+		let ordered = true;
+		for i in [0: nv - 1]
+		{
+			// Is v[i] < v[i+1] ? according to given ordering rules, not the usual `<`
+			ordered = true;
+			let va = v[i];
+			let vb = v[i+1];
+
+			//ordered = is_le_rule(va, vb, rules);
+			ordered = is_le_dict(va, vb, &rulesd);
+
+			if (not ordered) break;
+		}
+		if (not ordered)
+		{
+			//println("v = ", v);
+			let s = sort_topo_tab(v, &rules);
+			//println("s = ", s);
+			//println();
+			sum_ += s[nv / 2];
+		}
+
+		str_ = readln(f);
+	}
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	// Use quicksort, but use a dictionary to lookup comparison rules instead of
+	// brute force scanning the whole array
+	let sum_ = 0'i64;
+
+	// Count the number of ordering rules
+	let nrules = 0;
+	let f = open(filename);
+	let str_ = readln(f);
+	while not eof(f) and str_ != ""
+	{
+		//println("str_ = ", str_);
+		nrules += 1;
+		str_ = readln(f);
+	}
+	close(f);
+	//println("nrules = ", nrules);
+
+	let rules = [0; 2, nrules];
+	let rulesd = new_dict_i64();
+	f = open(filename);
+	for i in [0: nrules]
+	{
+		str_ = readln(f);
+		rules[:, i] = parse_i32_delim(str_, "|");
+
+		// Put the rule in a dictionary, in the input format with "|" as a
+		// delimiter
+		set_dict_i64(&rulesd, str_, 1'i64);
+	}
+	//println("rules = ", rules);
+	//println("keys = ", keys_dict_i64(&rulesd));
+
+	// Skip blank line
+	str_ = readln(f);
+
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+
+		let v = parse_i32_delim(str_, ",");
+		let nv = size(v, 0);
+		//println("v = ", v);
+
+		// Check if each pair of adjacent numbers in "update" vector v is in the
+		// correct order
+		let ordered = true;
+		for i in [0: nv - 1]
+		{
+			// Is v[i] < v[i+1] ? according to given ordering rules, not the usual `<`
+			ordered = true;
+			let va = v[i];
+			let vb = v[i+1];
+
+			ordered = is_le_dict(va, vb, &rulesd);
+
+			if (not ordered) break;
+		}
+		if (not ordered)
+		{
+			//println("v = ", v);
+			let s = qsort_dict(v, &rulesd);
+			//println("s = ", s);
+			//println();
+			sum_ += s[nv / 2];
+		}
+
+		str_ = readln(f);
+	}
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/5");
+
+	let sum_ = 0'i64;
+
+	// Expect 5452 + 4598
+	sum_ += part1();
+
+	sum_ += part2();  // 0.8 s (qsort with dict compare)
+	//sum_ += part2topo_tab();  // 1.6 s
+	//sum_ += part2topo();  // 6.7 s
+	//sum_ += part2qsort();  // 3.1 s
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

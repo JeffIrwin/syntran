@@ -1,0 +1,212 @@
+
+// This file contains structs and fns for minheaps of i32 values, implemented
+// using an array as an implicit binary tree.  These are the primary functions
+// for pushing and popping values:
+//
+//     new_minheap_vec_i32(): minheap_vec_i32                     // initialize an empty heap
+//     push_minheap_vec_i32(mh: &minheap_vec_i32, val: [i32; :])  // push or insert a new value
+//     pop_minheap_vec_i32(mh: &minheap_vec_i32): [i32; :]        // remove and return the min value
+//
+// There are several related functions:
+//
+//     print_minheap_vec_i32(mh: &minheap_vec_i32)  // print all vals in tree-level order
+//
+// If you want a max heap instead of a min heap, you have two options:  (1)
+// negate all of your values and use this min heap implementation directly, or
+// (2) copy this and swap most of the comparison operators (but only the value
+// comparisons, not len/cap overflow comparisons)
+//
+// Besides pushing and popping, binary trees can efficiently offer other
+// operations, e.g. pushing and popping in one step.  These are not implemented
+// here
+//
+// TODO: it would probably be a little more efficient to pass around an index
+// array instead of swapping entire rows of values.  But for Dijkstra's
+// algorithm, the main application of minheaps (in my limited experience), the
+// state is usually only a vector of size ~5 in the worst case, so it's not that
+// expensive, and it was very easy to generalize the scalar minheap by copying
+// and modifying
+
+//****************
+
+// Apparently a Fibonacci heap is more efficient than a binary tree for a min
+// heap, but it seems more complicated
+
+struct minheap_vec_i32
+{
+	len: i64,
+	cap: i64,
+	vals: [i32; :,:],
+}
+
+fn new_minheap_vec_i32(): minheap_vec_i32
+{
+	// Initial size of dimension 0 doesn't matter.  It will be reallocated on
+	// first push
+	let cap = 0'i64;
+	return minheap_vec_i32
+	{
+		len = -1'i64,
+		cap = cap,
+		vals = [0; 0, cap],
+	};
+}
+
+fn push_minheap_vec_i32(mh: &minheap_vec_i32, val: [i32; :])
+{
+	//println("pushing ", val);
+	//println("size 0 = ", size(mh.vals, 0));
+	let nval = size(val, 0);
+	if mh.len >= 0 and nval != size(mh.vals, 0)
+	{
+		println("Error: in push_minheap_vec_i32(): size of pushed value does not match the heap's size");
+		//println("mh.len = ", mh.len);
+		//println("nval   = ", nval);
+		//println("size 0 = ", size(mh.vals, 0));
+		exit(-2);
+	}
+
+	// This indicates a new minheap
+	if (mh.len < 0) mh.len = 0;
+
+	if mh.len >= mh.cap
+	{
+		// Grow array
+		if mh.cap == 0
+			mh.cap = 1;
+		else
+			mh.cap *= 2;
+		let tmp = mh.vals;
+		mh.vals = [0'i32; nval, mh.cap];
+		for i in [0: mh.len]
+		for j in [0: nval]
+			mh.vals[j, i] = tmp[j, i];
+	}
+
+	for j in [0: nval]
+		mh.vals[j, mh.len] = val[j];
+	mh.len += 1;
+
+	// Trickle up
+	let i = mh.len - 1;
+	while true
+	{
+		if (i == 0) break;
+		let ip = (i-1) / 2;  // index of parent of index i
+
+		// Minheap order is based on element 0 of each vec
+		if (mh.vals[0, ip] <= mh.vals[0, i]) break;
+
+		// Swap parent and child such that parent <= child
+		for j in [0: nval]
+		{
+			let tmp = mh.vals[j, ip];
+			mh.vals[j, ip] = mh.vals[j, i];
+			mh.vals[j, i] = tmp;
+		}
+
+		i = ip;
+	}
+	return;
+}
+
+fn pop_minheap_vec_i32(mh: &minheap_vec_i32): [i32; :]
+{
+	if mh.len <= 0
+	{
+		println("Error: in pop_minheap_vec_i32(): heap is already empty.  There is nothing to pop!");
+		exit(-1);
+	}
+	//let val = mh.vals[:, 0];
+	let nval = size(mh.vals, 0);
+	let val = [0; nval];
+	for j in [0: nval]
+		val[j] = mh.vals[j, 0];
+
+	// Cap grows while pushing but never shrinks while popping
+
+	// Replace the root of the heap with the last element
+	mh.len -= 1;
+	for j in [0: nval]
+		mh.vals[j, 0] = mh.vals[j, mh.len];
+
+	// Trickle down
+	let i = 0'i64;
+	while true
+	{
+		let il = 2 * i + 1; // left and right child indices
+		let ir = 2 * i + 2;
+		if (il >= mh.len) break;
+
+		let ic = il; // child index to be swapped.  default left
+
+		if ir < mh.len
+		{
+			// Both children exist
+			if (mh.vals[0, i ] <= mh.vals[0, il] and mh.vals[0, i] <= mh.vals[0, ir]) break;
+			if (mh.vals[0, ir] <  mh.vals[0, il]) ic = ir; // swap with right child
+		}
+		else
+		{
+			// Only left child exists
+			if (mh.vals[0, i] <= mh.vals[0, il]) break;
+		}
+
+		// Swap parent and child such that parent <= child
+		for j in [0: nval]
+		{
+			let tmp = mh.vals[j, i];
+			mh.vals[j, i] = mh.vals[j, ic];
+			mh.vals[j, ic] = tmp;
+		}
+
+		i = ic;
+	}
+	return val;
+}
+
+fn print_minheap_vec_i32(mh: &minheap_vec_i32)
+{
+	let vals = mh.vals;
+	println("minheap = ", vals[:, 0: mh.len]);
+	return;
+}
+
+//fn main(): i32
+//{
+//	let minheap = new_minheap_vec_i32();
+//
+//	// These first several pushes are already in correct tree ordering and do
+//	// not require any trickling up.  This example is from wikipedia:
+//	//
+//	//     https://en.wikipedia.org/wiki/Binary_heap
+//	//
+//	push_minheap_vec_i32(&minheap, [1  , -1  ]);
+//	push_minheap_vec_i32(&minheap, [2  , -2  ]);
+//	push_minheap_vec_i32(&minheap, [3  , -3  ]);
+//	push_minheap_vec_i32(&minheap, [17 , -17 ]);
+//	push_minheap_vec_i32(&minheap, [19 , -19 ]);
+//	push_minheap_vec_i32(&minheap, [36 , -36 ]);
+//	push_minheap_vec_i32(&minheap, [7  , -7  ]);
+//	push_minheap_vec_i32(&minheap, [25 , -25 ]);
+//	push_minheap_vec_i32(&minheap, [100, -100]);
+//
+//	// Requires trickling all the way to the top
+//	push_minheap_vec_i32(&minheap, [0, 0]);
+//
+//	print_minheap_vec_i32(&minheap);
+//
+//	for i in [100: -1: 0]
+//		push_minheap_vec_i32(&minheap, [i, -i]);
+//
+//	while minheap.len > 0
+//	{
+//		println("pop = ", pop_minheap_vec_i32(&minheap));
+//		//print_minheap_vec_i32(&minheap);
+//	}
+//	//println("pop = ", pop_minheap_vec_i32(&minheap)); // error: empty heap
+//
+//	return 0;
+//}
+//return main();
+

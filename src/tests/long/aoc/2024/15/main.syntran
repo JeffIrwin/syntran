@@ -1,0 +1,439 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+//ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+let NDIRS = 4;
+let DIRS =
+[
+	-1,  0, // left
+	 1,  0, // right
+	 0, -1, // up
+	 0,  1  // down
+	 ;
+	 2, NDIRS
+];
+let INSTRS = "<>^v"; // same order as DIRS, crucially for scan() call
+
+fn part1(): i64
+{
+	// Somehow part1 is ~50% slower than part2 depsite the smaller grid size.
+	// You could probably re-implement part1 using the part2 algorithm to speed
+	// it up a bit
+
+	let sum_ = 0'i64;
+
+	let ny = 0;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+
+	while str_ != ""
+	{
+		ny += 1;
+		str_ = readln(f);
+	}
+
+	let chars = [""; nx, ny];
+	let ax = -1;
+	let ay = -1;
+
+	close(f);
+	f = open(filename);
+	str_ = readln(f);
+	ny = 0;
+	while str_ != ""
+	{
+		//println("str_ = ", str_);
+		for x in [0: nx]
+		{
+			chars[x,ny] = str_[x];
+			if chars[x,ny] == "@"
+			{
+				ax = x;
+				ay = ny;
+			}
+		}
+		ny += 1;
+		str_ = readln(f);
+	}
+	//println("nx, ny = ", [nx, ny]);
+	//println("chars = ", chars);
+
+	let instrs = "";
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+		instrs += str_;
+		str_ = readln(f);
+	}
+	close(f);
+	//println("instrs = ", instrs);
+	//println("axy = ", [ax, ay]);
+
+	// Fill in robot's position with empty space
+	chars[ax, ay] = ".";
+
+	let x = ax;
+	let y = ay;
+	for ii in [0: len(instrs)]
+	{
+		let instr = instrs[ii];
+		//println("instr = ", instr);
+
+		let chars0 = chars;
+
+		// Get direction
+		let id = scan(INSTRS, instr);
+		//println("id = ", id);
+
+		let d = DIRS[:,id];
+
+		let x0 = x;
+		let y0 = y;
+
+		// Move robot
+		x += d[0];
+		y += d[1];
+		//println("xy = ", [x, y]);
+
+		// Move boxes if necessary
+		let ox = x;
+		let oy = y;
+		let char0 = ".";
+		while true
+		{
+			if chars0[ox,oy] == "."
+			{
+				break;
+			}
+			if chars0[ox,oy] == "#"
+			{
+				// unresolvable wall collision
+
+				// Reset x, y, chars to 0
+				x = x0;
+				y = y0;
+				chars = chars0;
+
+				break;
+			}
+
+			// chars0[ox,oy] == "O"
+
+			//println("move box");
+			chars[ox,oy] = char0;
+			ox += d[0];
+			oy += d[1];
+			//println("oxy = ", [ox, oy]);
+			chars[ox,oy] = "O";
+			char0 = "O";
+		}
+		//println("chars = ", chars);
+	}
+	//println("chars = ", chars);
+
+	for y in [0: ny]
+	for x in [0: nx]
+	{
+		if (chars[x,y] != "O") continue;
+		sum_ += x + 100 * y;
+	}
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn print_chars(chars: [str; :,:])
+{
+	for y in [0: size(chars, 1)]
+		println(cat_strs(chars[:,y]));
+	return;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = 0;
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+
+	while str_ != ""
+	{
+		//println("str_ = ", str_);
+		ny += 1;
+		str_ = readln(f);
+	}
+
+	// Twice as wide, but same height as part 1
+	nx *= 2;
+
+	let chars = [""; nx, ny];
+	let chars_blank = [""; nx, ny];  // a template of only walls and blank spaces
+
+	// Robot "@" position
+	let ax = -1;
+	let ay = -1;
+
+	close(f);
+	f = open(filename);
+	str_ = readln(f);
+	ny = 0;
+	while str_ != ""
+	{
+		//println("str_ = ", str_);
+		for xh in [0: nx/2]
+		{
+			// Double from half-width `xh` to full-width `x`
+			let x = 2 * xh;
+			if str_[xh] == "O"
+			{
+				chars[x  ,ny] = "[";
+				chars[x+1,ny] = "]";
+				chars_blank[x  ,ny] = ".";
+				chars_blank[x+1,ny] = ".";
+			}
+			else if str_[xh] == "@"
+			{
+				ax = x;
+				ay = ny;
+				chars[x  ,ny] = ".";
+				chars[x+1,ny] = ".";
+				chars_blank[x  ,ny] = ".";
+				chars_blank[x+1,ny] = ".";
+			}
+			else
+			{
+				// "." or "#"
+				chars[x  ,ny] = str_[xh];
+				chars[x+1,ny] = str_[xh];
+				chars_blank[x  ,ny] = str_[xh];
+				chars_blank[x+1,ny] = str_[xh];
+			}
+		}
+		ny += 1;
+		str_ = readln(f);
+	}
+	//println("nx, ny = ", [nx, ny]);
+	//println("chars = ", chars);
+
+	let instrs = "";
+	while not eof(f)
+	{
+		instrs += str_;
+		str_ = readln(f);
+	}
+	close(f);
+	//println("instrs = ", instrs);
+	//println("axy = ", [ax, ay]);
+
+	// Fill in robot's position with empty space
+	chars[ax, ay] = ".";
+
+	let x = ax;
+	let y = ay;
+
+	// Scan grid to make a list of box positions
+	let nbox = count(chars == "[");
+	//println("nbox = ", nbox);
+	let box = [-1; 2, nbox];
+	let i = 0;
+	for y in [0: ny]
+	for x in [0: nx]
+	{
+		// Only left-brackets are saved.  Every box position in the list also
+		// has a "]" immediately to its right
+		if chars[x,y] == "["
+		{
+			box[:,i] = [x, y];
+			i += 1;
+		}
+	}
+	//println("box = ", box);
+	//print_chars(chars);
+	//print_chars(chars_blank);
+
+	// Make an index matrix of the box that is in each grid position, to
+	// optimize collision detection without O(n**2) loop on box pairs
+	let grid_box = [-1; nx, ny];
+	for i in [0: nbox]
+	{
+		grid_box[ box[0,i]    , box[1,i] ] = i;  // "["
+		grid_box[ box[0,i] + 1, box[1,i] ] = i;  // "]"
+	}
+	//println("grid_box = ", grid_box);
+
+	// Unlike my first attempt in the last commit, this stack is a list of
+	// boxes, not positions
+	let stack = [-1; nx * ny];
+	for ii in [0: len(instrs)]
+	{
+		let instr = instrs[ii];
+		//println("instrs[", ii, "]= ", instr);
+
+		// Get direction
+		let id = scan(INSTRS, instr);
+		let d = DIRS[:,id];
+		//println("id = ", id);
+
+		let x0 = x;
+		let y0 = y;
+
+		// Move robot
+		x += d[0];
+		y += d[1];
+		//println("xy = ", [x, y]);
+
+		if (chars[x,y] == "#")
+		{
+			// Reset after hitting wall
+			x = x0;
+			y = y0;
+			continue;
+		}
+		if (chars[x,y] == ".")
+		{
+			//// Moving robot into free space requires no box motion logic.
+			//// Continue to next instruction
+			//println("continue");
+			continue;
+		}
+
+		// Move a literal stack of boxes (not necessarily in a straight line),
+		// using a stack data structure.  Save previous chars0, grid_box0, etc.
+		// in case anything runs into a wall and we need to reset
+		let sptr = 0;
+		let box0 = box;
+		let chars0 = chars;
+		let grid_box0 = grid_box;
+
+		// Push box (other cases continue, so this must be a box)
+		stack[sptr] = grid_box[x,y]; sptr += 1;
+		//println("pushing char ", chars[x,y]);
+		//println("pushing init ", grid_box[x,y]);
+
+		// I usually call this `visited` in other stack algorithms
+		let moved = [false; nbox];
+
+		// Iterate until stack is empty
+		while sptr > 0
+		{
+			// Pop box
+			sptr -= 1;
+			let ib = stack[sptr];
+			//println("ib = ", ib);
+
+			if (moved[ib]) continue;
+			moved[ib] = true;
+
+			// Move box position
+			box[:,ib] += d;
+
+			let bx = box[0,ib];
+			let by = box[1,ib];
+			let c  = chars[bx  , by];
+			let c2 = chars[bx+1, by];
+
+			if c == "#" or c2 == "#"
+			{
+				// Unresolvable wall collision. Reset x, y, chars to previous state
+				x = x0;
+				y = y0;
+				box = box0;
+				chars = chars0;
+				grid_box = grid_box0;
+				//println("break");
+				break;
+			}
+
+			// Push the next box(es) in the stack
+			let ib1 = grid_box[bx, by];
+			if ib1 >= 0
+			{
+				stack[sptr] = ib1;
+				sptr += 1;
+			}
+			let ib2 = grid_box[bx+1, by];
+			if ib2 >= 0
+			{
+				stack[sptr] = ib2;
+				sptr += 1;
+			}
+		}
+
+		// Update chars AND grid_box. Set to chars_blank then fill in boxes
+		chars = chars_blank;
+		grid_box = -1;
+		for i in [0: nbox]
+		{
+			// It should be possible to refactor and only use grid_box and not
+			// chars array, by also encoding free spaces and walls as magic
+			// negative numbers in grid_box.  Anyway it's helpful to have chars
+			// to print for debugging
+			chars   [ box[0,i]    , box[1,i] ] = "[";
+			chars   [ box[0,i] + 1, box[1,i] ] = "]";
+			grid_box[ box[0,i]    , box[1,i] ] =  i ;
+			grid_box[ box[0,i] + 1, box[1,i] ] =  i ;
+		}
+
+		//let charsr = chars;
+		//charsr[x,y] = "@";
+		//println("instr chars =");
+		//print_chars(charsr);
+		//if (ii >= 2) exit(0);
+	}
+	//print_chars(chars);
+
+	for y in [0: ny]
+	for x in [0: nx]
+	{
+		if (chars[x,y] != "[") continue;
+		sum_ += x + 100 * y;
+	}
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/15");
+
+	let sum_ = 0'i64;
+
+	// Expect 1414416 + 1386070
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

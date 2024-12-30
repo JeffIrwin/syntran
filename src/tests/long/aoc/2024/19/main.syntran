@@ -1,0 +1,237 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+//ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	let a = split_(str_, ", ");
+	let na = size(a, 0);
+	//println("na = ", na);
+	//println("a  = ", a);
+
+	str_ = readln(f); // skip blank line
+
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+		let len_str_ = len(str_);
+
+		// Stack contains the length of the substring of `str_` that we've
+		// matched so far
+		let STACK_CAP = 128;
+		let stack = [-1; STACK_CAP];
+		let sptr = 0;
+
+		stack[sptr] = 0; sptr += 1; // push
+
+		let visited = [false; len_str_, na];
+
+		let matched = false;
+		while true
+		{
+			if (sptr == 0) break;
+
+			// Pop
+			sptr -= 1;
+			let i = stack[sptr];
+			//println("i = ", i);
+
+			if (i == len_str_)
+			{
+				matched = true;
+				break;
+			}
+
+			for ia in [0: na]
+			{
+				if (visited[i, ia]) continue;
+				visited[i, ia] = true;
+
+				if starts_with_(str_[i: len_str_], a[ia])
+				{
+					//println("starts_with_ ", i, " ", a[ia]);
+					stack[sptr] = i + len(a[ia]); sptr += 1; // push
+
+					if sptr >= STACK_CAP
+					{
+						println("Error: stack overflow");
+						exit(-1);
+					}
+				}
+			}
+		}
+		//println("matched = ", matched);
+		if (matched) sum_ += 1;
+
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename);
+	let str_ = readln(f);
+
+	// Array of smaller strings that we use to build a larger string
+	let ain = split_(str_, ", ");
+	let nain = i32(size(ain, 0));
+	//println("nain = ", nain);
+	//println("a  = ", a);
+
+	str_ = readln(f); // skip blank line
+
+	str_ = readln(f);
+	while not eof(f)
+	{
+		//println("str_ = ", str_);
+		let len_str_ = len(str_);
+
+		// Prune words from input dictionary `ain` that never appear in the
+		// current sentence `str_` to avoid them entirely.  I came up with this
+		// optimization while working on BFS, but the suffix matcher could
+		// probably perform well without it
+		let a = ain;
+		let na = 0;
+		for ia in [0: nain]
+		{
+			let amin = index_   (str_, ain[ia]);
+			if (amin < 0) continue;
+			a[na] = ain[ia];
+			na += 1;
+		}
+		//println("na = ", na);
+		//println("a = ", a[0: na]);
+
+		let len_a = [0; na];
+		for ia in [0: na]
+			len_a[ia] = len(a[ia]);
+		//println("len_a = ", len_a);
+		//exit(0);
+
+		// Build a table of a list of `a` entries that exist starting at each
+		// location of str_
+		let starters  = [-1; na, len_str_];
+		let nstarters = [ 0;     len_str_];
+		for i in [0: len_str_]
+		{
+			for ia in [0: na]
+			{
+				if (starts_with_(str_[i: len_str_], a[ia]))
+				{
+					starters[ nstarters[i] , i] = ia;
+					nstarters[i] += 1;
+				}
+			}
+		}
+		//println("starters = ", starters);
+		//println("starters = ");
+		//for i in [0: len_str_]
+		//	println(starters[0: nstarters[i], i]);
+		//println("nstarters = ", nstarters);
+
+
+		// I had to look at the reddit megathread before I figured this out.
+		// Mainly I looked at this recursive solution:
+		//
+		//     https://github.com/hugseverycat/aoc2024/blob/master/day19.py
+		//
+		// It still took me a while to figure out how to port the recursion to
+		// an iterative algorithm.  First I did a back-to-front iterator over
+		// the string which matches the recursive solution more closely (it
+		// doesn't start hitting caches until it gets all the way to the end of
+		// the str).  Then I converted it to a front-to-back iterator which is
+		// equivalent but saves a nested loop and a bounds check
+
+
+		// This is the number of total possible matches of a prefix up to
+		// position i in the str. There will be just a few short suffixes that
+		// match the start, and then exponentiallly more as we get towards the
+		// end of the str
+		let nmatches = [0'i64; len_str_];
+
+		// Base case: first, add up complete prefixes which match the very start
+		// of the str
+		for ia in starters[0: nstarters[0], 0]
+			nmatches[0 + len_a[ia] - 1] += 1;
+
+		// Now iterate to the end of the string and sum up compound prefixes
+		for i in [1: len_str_]
+			for ia in starters[0: nstarters[i], i]
+			{
+				// Check bounds
+				if i + len_a[ia] <= len_str_
+				{
+					// For every 1 substring match found here, we add all of the
+					// prefix matches that have been found before
+					nmatches[i + len_a[ia] - 1] += nmatches[i - 1];
+				}
+			}
+
+		//println("nmatches  = ", nmatches);
+		//println("len_str_ = ", len_str_);
+
+		// nmatches[end] is the total number of ways to build the whole string.
+		// the other entries nmatches[i] are ways to build shorter
+		// prefixes str_[1: i+1]
+		sum_ += nmatches[len_str_ - 1];
+
+		//println();
+		str_ = readln(f);
+	}
+	close(f);
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/19");
+
+	let sum_ = 0'i64;
+
+	// Expect 367 + 724388733465031
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

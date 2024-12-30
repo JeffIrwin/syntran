@@ -1,0 +1,111 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let n = countln_(filename);
+
+	// Dimensions of a single lock or key diagram
+	let nx = 5;
+	let ny = 7;
+
+	// Number of diagrams/schematics (keys plus locks)
+	//
+	// (ny + 1) because there's a blank line between each diagram
+	//
+	// (n + 1) because there's no blank after the last diagram
+	//
+	let ndiag = (n + 1) / (ny + 1);
+	//println("ndiag = ", ndiag);
+
+	let NCAP = ndiag;
+	let nkey  = 0;
+	let nlock = 0;
+
+	// Boolean arrays of each diagram.  You could count() the true's and make an
+	// int rank-2 array instead of a bool rank-3 array, but syntran's `not
+	// any()` feels so natural this way, like Fortran and matlab
+	let keys  = [false; nx, ny, NCAP];
+	let locks = [false; nx, ny, NCAP];
+
+	let f = open(filename);
+	for id in [0: ndiag]
+	{
+		let diag = [false; nx, ny];
+		for y in [0: ny]
+		{
+			let str_ = readln(f);
+			//println("str_ = ", str_);
+			for x in [0: nx]
+				diag[x,y] = str_[x] == "#";
+		}
+		//println("diag = ", diag);
+
+		if all(diag[:,0])
+		{
+			locks[:,:,nlock] = diag;
+			nlock += 1;
+		}
+		else
+		{
+			keys[:,:,nkey] = diag;
+			nkey += 1;
+		}
+		let str_ = readln(f); // skip blank
+	}
+	close(f);
+
+	for ik in [0: nkey]
+	for il in [0: nlock]
+	{
+		let fit = not any(keys[:,:,ik] and locks[:,:,il]);
+		if (fit) sum_ += 1;
+	}
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/25");
+
+	let sum_ = 0'i64;
+
+	// Expect 3356
+	//
+	// There is no part 2 for day 25
+	sum_ += part1();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

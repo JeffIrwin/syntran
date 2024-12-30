@@ -169,6 +169,7 @@ module syntran__core_m
 	!    * tried "setup-fortran" marketplace action but it can't install 8
 	!      either
 	!  - #(pragma)once  directive. #let var=val directive?
+	!    * maybe have an `const` qualifier instead of #let or #define
 	!    * for #once include guards, insert filename path as key into a ternary
 	!      tree w/ bool value true.  then when something is included, check if
 	!      it's in the ternary dict first.
@@ -242,10 +243,24 @@ module syntran__core_m
 	!  - casting fns should work with array args
 	!    * f32() doesn't exist (you can mul by 1.0 as a workaround)
 	!    * i32(), i64() done
+	!  - char type?
+	!    * there's not really anything that you can't do with str instead of
+	!      char
+	!    * could improve type-checking in situations where you have a fn that
+	!      only really expects 1 char
+	!    * strs have metadata (i think) in fortran, i.e. length.  for a large
+	!      array where each element is a single char this is not efficient,
+	!      probably 9x overhead if str/char is 1-byte and its length metadata is
+	!      8-bytes
+	!    * ascii only. utf out of scope
+	!  - other types?
+	!    * i16, i8
+	!    * any diff between i8 and char?
+	!    * unsigned? probably difficult without unsigneds existing in fortran
 	!  - literals
 	!    * done
 	!    * some lex error messages might be improvable
-	!    * hex float literals?  not worthwhile imo, but c++ and golang have them
+	!    * hex float literals?  not worthwhile imo, but c(++) and golang have them
 	!  - logical xor, xnor
 	!    * xor (bool1, bool2) is just (bool1 != bool2)
 	!    * xnor(bool1, bool2) is just (bool1 == bool2)

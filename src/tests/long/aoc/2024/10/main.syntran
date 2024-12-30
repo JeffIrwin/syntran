@@ -1,0 +1,203 @@
+
+#include("../../utils-2024.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+let NDIRS = 4;
+let DIRS =
+[
+	-1,  0,
+	 1,  0,
+	 0, -1,
+	 0,  1
+	 ;
+	 2, NDIRS
+];
+
+fn part1(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+
+	let heights = [0; nx, ny];
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+		for x in [0: nx]
+			heights[x, y] = parse_i32(str_[x]);
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("heights = ", heights);
+
+	//let nheads = count(heights == 0);
+	//println("nheads = ", nheads);
+
+	let stack = [-1; 2, nx * ny];
+	let visited = [false; nx, ny];
+
+	for y in [0: ny]
+	for x in [0: ny]
+	if heights[x, y] == 0 // trailheads are at 0
+	{
+		// Start a search from [x, y] increasing in height by 1, going up, down,
+		// left, or right.  Count the number of reachable 9's as the "score" of
+		// this trialhead
+		let score = 0;
+
+		visited = false;
+		let sptr = 0; // stack pointer
+
+		stack[:, sptr] = [x, y]; sptr += 1; // push trailhead
+		//let h1 = heights[x, y] + 1;
+		while sptr > 0
+		{
+			// pop next search location [xs, ys]
+			sptr -= 1;
+			let xs = stack[0, sptr];
+			let ys = stack[1, sptr];
+
+			if (visited[xs, ys]) continue;
+			visited[xs, ys] = true;
+
+			if (heights[xs, ys] == 9) score += 1;
+
+			// push reachable neighbors [xn, yn]
+			for id in [0: NDIRS]
+			{
+				let xn = xs + DIRS[0, id];
+				let yn = ys + DIRS[1, id];
+
+				if (not in_bounds([0, 0], [xn, yn], [nx, ny])) continue;
+				if (heights[xn, yn] != heights[xs, ys] + 1) continue;
+
+				stack[:, sptr] = [xn, yn]; sptr += 1;
+			}
+		}
+		//println("score = ", score);
+		sum_ += score;
+	}
+
+	println("part 1 = ", sum_);
+	return sum_;
+}
+
+fn part2(): i64
+{
+	let sum_ = 0'i64;
+
+	let ny = countln_(filename);
+
+	let f = open(filename);
+	let str_ = readln(f);
+	let nx = i32(len(str_));
+
+	let heights = [0; nx, ny];
+
+	for y in [0: ny]
+	{
+		//println("str_ = ", str_);
+		for x in [0: nx]
+			heights[x, y] = parse_i32(str_[x]);
+
+		str_ = readln(f);
+	}
+	close(f);
+	//println("heights = ", heights);
+
+	//let nheads = count(heights == 0);
+	//println("nheads = ", nheads);
+
+	let stack = [-1; 2, nx * ny];
+	let visited = [false; nx, ny];
+
+	for y in [0: ny]
+	for x in [0: ny]
+	if heights[x, y] == 0 // trailheads are at 0
+	{
+		// Start a search from [x, y] increasing in height by 1, going up, down,
+		// left, or right
+		let rating = 0;
+
+		visited = false;
+		let sptr = 0; // stack pointer
+
+		stack[:, sptr] = [x, y]; sptr += 1; // push trailhead
+		//let h1 = heights[x, y] + 1;
+		while sptr > 0
+		{
+			// pop next search location [xs, ys]
+			sptr -= 1;
+			let xs = stack[0, sptr];
+			let ys = stack[1, sptr];
+
+			//if (visited[xs, ys]) continue;
+			//visited[xs, ys] = true;
+
+			if (heights[xs, ys] == 9) rating += 1;
+
+			// push reachable neighbors [xn, yn]
+			for id in [0: NDIRS]
+			{
+				let xn = xs + DIRS[0, id];
+				let yn = ys + DIRS[1, id];
+
+				if (not in_bounds([0, 0], [xn, yn], [nx, ny])) continue;
+				if (heights[xn, yn] != heights[xs, ys] + 1) continue;
+
+				stack[:, sptr] = [xn, yn]; sptr += 1;
+			}
+		}
+		//println("rating = ", rating);
+		sum_ += rating;
+	}
+
+	println("part 2 = ", sum_);
+	return sum_;
+}
+
+//==============================================================================
+
+fn main(): i64
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2024/10");
+
+	let sum_ = 0'i64;
+
+	// Expect 459 + 1034
+	sum_ += part1();
+	sum_ += part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return sum_;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+
