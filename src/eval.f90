@@ -263,9 +263,6 @@ recursive subroutine eval_binary_expr(node, state, res)
 	case (bit_xor_token)
 		call bit_xor(left, right, res, node%op%text)
 
-	! TODO: rename bit_or_token (and others) to pipe_token, like bit_and_token
-	! was renamed to amp_token (it's also used for references, so bit_and_token
-	! is overly specific)
 	case (bit_or_token)
 		call bit_or(left, right, res, node%op%text)
 
@@ -2100,8 +2097,6 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
 
-			!len8 = product((usubs - lsubs) / ssubs)
-			!len8 = product(divceil((usubs - lsubs), ssubs))
 			len8 = 1
 			do i8 = 1, size(lsubs)
 				if (allocated(asubs(i8)%v)) then
@@ -2651,19 +2646,10 @@ recursive subroutine eval_array_expr(node, state, res)
 			if (res%array%type == struct_type) then
 				res%struct(i) = elem
 
-			!else if (res%array%type == array_type) then
 			else if (elem%type == array_type) then
-				!print *, "array_type"
-				!print *, "len = ", elem%array%len_
-
 				do j8 = 0, elem%array%len_ - 1
-
-					!call get_array_val(state%vars%vals(id)%array, index_, tmp)
 					call get_array_val(elem%array, j8, tmp)
-
-					!call res%array%push( elem%array%at(j8) )
 					call res%array%push(tmp)
-
 				end do
 
 			else
@@ -3100,7 +3086,6 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 			! TODO: refactor `if` to select/case. There is a fn
 			! value_to_i64_array() but it returns an array_t
 
-			!asubs(i)%v = int(asubval%v, 8)
 			if      (asubval%array%type == i32_type) then
 				asubs(i)%v = asubval%array%i32
 			else if (asubval%array%type == i64_type) then
@@ -3172,7 +3157,8 @@ end subroutine get_subscript_range
 
 subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 
-	! This is like a bignum += 1 algorithm but in an arbitrary mixed radix
+	! This is like a bignum += 1 algorithm but in an arbitrary mixed radix.  It
+	! was a bit more straightforward before I added index arrays (asub)
 
 	type(i64_vector_t), intent(in), allocatable :: asubs(:)
 	integer(kind = 8) , intent(in) :: lsubs(:), ssubs(:)
@@ -3181,19 +3167,9 @@ subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 	!********
 
 	logical :: carry
-	integer :: j, n, loc(1)
+	integer :: j, n
 
 	j = 1
-	n = -1  ! TODO: should be unnecessary
-
-	!carry = j < size(subs) .and. (subs(j) >= usubs(j) - 1)
-
-	!if (allocated(asubs(j)%v)) n = size(asubs(j)%v)
-	!print *, "n = ", n
-	!carry = j < size(subs) .and. &
-	!	((allocated(asubs(j)%v) .and. subs(j) == asubs(j)%v(n)) .or. &
-	!	(.not. allocated(asubs(j)%v) .and. subs(j) >= usubs(j) - 1))
-
 	if (allocated(asubs(j)%v)) then
 		n = size(asubs(j)%v)
 		carry = j < size(subs) .and. subs(j) == asubs(j)%v(n)
@@ -3202,33 +3178,19 @@ subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 	end if
 
 	do while (carry)
-	!do while (j < size(subs) .and. subs(j) == usubs(j) - 1)
-	!do while (j < size(subs) .and. subs(j) >= usubs(j) - 1)
-
 		subs(j) = lsubs(j)
 		if (allocated(asubs(j)%v)) then
 			usubs(j) = 1
 		end if
 		j = j + 1
 
-		!if (allocated(asubs(j)%v)) n = size(asubs(j)%v)
-		!print *, "n = ", n
-		!carry = j < size(subs) .and. &
-		!	((allocated(asubs(j)%v) .and. subs(j) == asubs(j)%v(n)) .or. &
-		!	(.not. allocated(asubs(j)%v) .and. subs(j) >= usubs(j) - 1))
 		if (allocated(asubs(j)%v)) then
-			!usubs(j-1) = 1
 			n = size(asubs(j)%v)
 			carry = j < size(subs) .and. subs(j) == asubs(j)%v(n)
 		else
 			carry = j < size(subs) .and. subs(j) >= usubs(j) - 1
 		end if
 	end do
-	!subs(j) = subs(j) + 1
-	!subs(j) = subs(j) + ssubs(j)
-
-	!print *, "carry = ", carry
-	!if (carry) return  ! TODO: this is a noop bc always j < size(subs)
 
 	if (allocated(asubs(j)%v)) then
 
@@ -3237,8 +3199,6 @@ subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 		usubs(j) = usubs(j) + 1
 		if (usubs(j) <= size(asubs(j)%v)) then
 			subs(j) = asubs(j)%v( usubs(j) )
-		!else
-		!	usubs(j) = 1
 		end if
 
 	else

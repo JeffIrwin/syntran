@@ -419,9 +419,11 @@ recursive module function parse_array_expr(parser) result(expr)
 
 	expr%val%array%type = lbound_%val%type
 	if (lbound_%val%type == array_type) then
-		! TODO: if lbound is another array, get its subtype here instead.  Also only
-		! allow array concatenation for rank-1 arrays.  Or check Fortran et al. to
-		! see how they handle multi-rank catting
+		! If lbound is another array, get its subtype here instead
+		!
+		! TODO: only allow array concatenation for rank-1 arrays.  Or check
+		! Fortran et al. to see how they handle multi-rank catting
+
 		expr%val%array%type = lbound_%val%array%type
 	end if
 
@@ -431,13 +433,6 @@ recursive module function parse_array_expr(parser) result(expr)
 	!print*, "expl_array"
 
 	call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len_ ))
-
-	! TODO: allow arbitrarily combinations catting expl and impl arrays, e.g.
-	!
-	!        [0: 3   ,   5, 6,   10: 13    ]
-	!     // [0, 1, 2,   5, 6,   10, 11, 12]
-	!
-	! Maybe require nesting inside extra brackets []? Yes
 
 end function parse_array_expr
 

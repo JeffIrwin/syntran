@@ -78,12 +78,6 @@ module syntran__core_m
 	!  - type() or typeof() fn to get type name as str?  could be useful for
 	!    debugging, but I don't want to encourage it's use for actual program
 	!    logic
-	!  - allow using one array as an index of another array, as in fortran
-	!    * only rank-1 index arrays are allowed
-	!    * this is kinda similar to the current slice subscripting, so it might
-	!      not be too hard?  be careful with higher ranks
-	!    * note that the "err_bad_sub_rank" diag is commented-out, but it is
-	!      still a "non-integer subscript" error
 	!  - f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
@@ -170,6 +164,13 @@ module syntran__core_m
 	!    * array and, or, not, done
 	!    * unary -, + done
 	!  - document recent features:
+	!    * index arrays
+	!    * step slicing
+	!    * array concatenation
+	!    * pass by reference
+	!    * hex/bin/oct literals
+	!    * bitwise ops
+	!    * literal postfix type ascriptions: 0xff'i32
 	!    * array comparison
 	!    * array arithmetic and boolean operations, test and doc array compound
 	!      assignment
