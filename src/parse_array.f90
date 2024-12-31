@@ -481,38 +481,49 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 			!print *, 'lsubscript = ', lsubscript%str()
 			!print *, 'lsubscript = ', parser%text(span0, parser%current_pos()-1)
+			!print *, "sub type = ", kind_name(lsubscript%val%type)
 
-			if (.not. any(lsubscript%val%type == [i32_type, i64_type])) then
-				span = new_span(span0, parser%current_pos() - span0)
-				call parser%diagnostics%push( &
-					err_non_int_subscript(parser%context(), span, &
-					parser%text(span0, parser%current_pos()-1)))
-			end if
+			if (lsubscript%val%type == array_type) then
+				lsubscript%sub_kind = arr_sub
+				! TODO: check rank-1, check i32 or i64 type
+			else
 
-			if (parser%current_kind() == colon_token) then
-				colon = parser%match(colon_token)
-				lsubscript%sub_kind = range_sub
+				! TODO: this is some nasty nested logic.  Can we refactor as a
+				! fn, invert conditions, never nest, and return early?  I can't
+				! cycle here bc there's important stuff at at end of loop.  Goto
+				! could work but fn might be better
 
-				usubscript = parser%parse_expr()
-				! TODO: type check i32 usubscript
+				if (.not. any(lsubscript%val%type == [i32_type, i64_type])) then
+					span = new_span(span0, parser%current_pos() - span0)
+					call parser%diagnostics%push( &
+						err_non_int_subscript(parser%context(), span, &
+						parser%text(span0, parser%current_pos()-1)))
+				end if
 
 				if (parser%current_kind() == colon_token) then
 					colon = parser%match(colon_token)
-					lsubscript%sub_kind = step_sub
-
-					! The last one that we parsed above was actually step, not ubound
-					ssubscript = usubscript
+					lsubscript%sub_kind = range_sub
 
 					usubscript = parser%parse_expr()
 					! TODO: type check i32 usubscript
 
+					if (parser%current_kind() == colon_token) then
+						colon = parser%match(colon_token)
+						lsubscript%sub_kind = step_sub
+
+						! The last one that we parsed above was actually step, not ubound
+						ssubscript = usubscript
+
+						usubscript = parser%parse_expr()
+						! TODO: type check i32 usubscript
+
+					end if
+
+				else
+					lsubscript%sub_kind = scalar_sub
 				end if
-
-			else
-				lsubscript%sub_kind = scalar_sub
-
+				!print *, kind_name(subscript%sub_kind)
 			end if
-			!print *, kind_name(subscript%sub_kind)
 
 		end if
 

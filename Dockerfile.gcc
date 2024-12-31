@@ -82,11 +82,15 @@ RUN chmod +x fpm
 RUN mv fpm /usr/local/bin
 RUN fpm --version
 
+#ARG LINK_FLAGS="-static-libgfortran"
+ARG LINK_FLAGS="-static-libgfortran -static-libgcc"
+
 #RUN . ~/.bashrc && fpm install --link-flag "-l/workdir/gcc/lib64/libgfortran.a" --prefix="/usr/"
 
-#RUN . ~/.bashrc && fpm --link-flag "-static-libgfortran" test test
-RUN . ~/.bashrc && fpm --link-flag "-static-libgfortran -static-libc" test test
-RUN . ~/.bashrc && fpm --link-flag "-static-libgfortran -static-libc" install --prefix="/usr/"
+RUN echo 2
+RUN . ~/.bashrc && fpm build     --link-flag "$LINK_FLAGS"
+RUN . ~/.bashrc && fpm test test --link-flag "$LINK_FLAGS"
+RUN . ~/.bashrc && fpm install   --link-flag "$LINK_FLAGS" --prefix="/usr/"
 
 ## TODO install release profile
 

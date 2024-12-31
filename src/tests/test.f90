@@ -2656,6 +2656,8 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			eval('let v = [0: 10]; let u = v[8:-3:-1]; u;', quiet) == '[8, 5, 2]', &
 			eval('let v = [0: 10]; let u = v[7:-3:-1]; u;', quiet) == '[7, 4, 1]', &
 			eval('let v = [0: 10]; let u = v[6:-3:-1]; u;', quiet) == '[6, 3, 0]', &
+			eval('let v = [10: 20]; let u = v[[0, 1, 3, 6]]; u;', quiet) == '[10, 11, 13, 16]', &
+			eval('let v = [10: 20]; let u = v[[0, 8, 4, 2]]; u;', quiet) == '[10, 18, 14, 12]', &
 			eval('let m = [0, 1, 2, 3; 2, 2]; m[0, 0:2];', quiet) == '[0, 2]', &
 			eval('let m = [0, 1, 2, 3; 2, 2]; m[1, 0:2];', quiet) == '[1, 3]', &
 			eval('let m = [0, 1, 2, 3; 2, 2]; m[0:2, 0];', quiet) == '[0, 1]', &

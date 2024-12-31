@@ -296,6 +296,7 @@ recursive subroutine eval_name_expr(node, state, res)
 	integer(kind = 8) :: il, iu, i8, index_, diff
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 
+	type(i64_vector_t), allocatable :: asubs(:)
 	type(value_t) :: right, tmp
 
 	!print *, "starting eval_name_expr()"
@@ -346,23 +347,24 @@ recursive subroutine eval_name_expr(node, state, res)
 			call internal_error()
 		end if
 
-		!print *, 'sub kind 1 = ', kind_name(node%lsubscripts(1)%sub_kind)
-		!print *, 'rank = ', node%val%array%rank
+		!print *, ""
+		!print *, "sub kind 1 = ", kind_name(node%lsubscripts(1)%sub_kind)
+		!print *, "rank = ", node%val%array%rank
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 			i8 = subscript_eval(node, state)
 			call get_val(node, state%vars%vals(id), state, res, index_ = i8)
 		else
 
-			call get_subscript_range(node, state, lsubs, ssubs, usubs, rank_res)
+			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
 
-			!print *, 'type = ', kind_name( node%val%array%type )
+			!print *, "type = ", kind_name( node%val%array%type )
 
-			!print *, 'type  = ', node%val%array%type
-			!print *, 'rank  = ', node%val%array%rank
-			!print *, 'size  = ', node%val%array%size
-			!print *, 'len_  = ', node%val%array%len_
-			!print *, 'cap   = ', node%val%array%cap
+			!print *, "type  = ", node%val%array%type
+			!print *, "rank  = ", node%val%array%rank
+			!print *, "size  = ", node%val%array%size
+			!print *, "len_  = ", node%val%array%len_
+			!print *, "cap   = ", node%val%array%cap
 
 			allocate(res%array)
 			res%type = array_type
@@ -378,15 +380,9 @@ recursive subroutine eval_name_expr(node, state, res)
 				case (step_sub, range_sub, all_sub)
 
 					diff = usubs(idim_) - lsubs(idim_)
-					
-					!! 1 + ((x - 1) / y)
-					!!res%array%size(idim_res) = 1 + ((diff - 1) / ssubs(idim_))
-					!res%array%size(idim_res) = (diff + ssubs(idim_) - 1) / ssubs(idim_)
-
-					!!res%array%size(idim_res) = (diff + 1) / ssubs(idim_)
 
 					! I basically have to divide integers and take the ceiling
-					! (not floor) here.  There are methods above that work for
+					! (not floor) here.  There are methods that work for
 					! positive ints but fail for negatives.  In C you can do it
 					! by casting bools to ints (ew)
 					res%array%size(idim_res) = diff / ssubs(idim_)
@@ -394,6 +390,13 @@ recursive subroutine eval_name_expr(node, state, res)
 						res%array%size(idim_res) = res%array%size(idim_res) + 1
 					end if
 
+					! TODO: add LHS step subscript tests, multi-rank step sub
+					! tests, etc.
+
+					idim_res = idim_res + 1
+
+				case (arr_sub)
+					res%array%size(idim_res) = size(asubs(idim_)%v)
 					idim_res = idim_res + 1
 
 				case (scalar_sub)
@@ -423,7 +426,7 @@ recursive subroutine eval_name_expr(node, state, res)
 				index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
 				call get_array_val(state%vars%vals(id)%array, index_, tmp)
 				call set_array_val(res%array, i8, tmp)
-				call get_next_subscript(lsubs, ssubs, usubs, subs)
+				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 			end do
 		end if
 
@@ -1968,6 +1971,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 	integer(kind = 8) :: i8, index_, len8
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 
+	type(i64_vector_t), allocatable :: asubs(:)
 	type(value_t) :: array_val, rhs, tmp
 
 	!print *, "eval assignment_expr"
@@ -2081,10 +2085,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 			!print *, 'lhs slice assignment'
 
-			! TODO: do i need abs(ssubs) anywhere?  I think not, as with
-			! negative subs, you should have lsubs > usubs unless the result is
-			! correctly empty
-			call get_subscript_range(node, state, lsubs, ssubs, usubs, rank_res)
+			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
 			len8 = product((usubs - lsubs) / ssubs)
 			!print *, 'len8 = ', len8
 
@@ -2155,7 +2156,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 				!end if
 
-				call get_next_subscript(lsubs, ssubs, usubs, subs)
+				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 			end do
 
 			! set res (whole array (slice?)) for return val in case of
@@ -2999,7 +3000,7 @@ end subroutine compound_assign
 
 !===============================================================================
 
-subroutine get_subscript_range(node, state, lsubs, ssubs, usubs, rank_res)
+subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
 
 	! Evaluate the lower- and upper-bounds of each range of a subscripted array
 	! slice
@@ -3010,6 +3011,7 @@ subroutine get_subscript_range(node, state, lsubs, ssubs, usubs, rank_res)
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
+	type(i64_vector_t), allocatable, intent(out) :: asubs(:)
 	integer(kind = 8), allocatable, intent(out) :: lsubs(:), ssubs(:), usubs(:)
 	integer, intent(out) :: rank_res
 
@@ -3017,21 +3019,44 @@ subroutine get_subscript_range(node, state, lsubs, ssubs, usubs, rank_res)
 
 	integer :: i, id, rank_
 
-	type(value_t) :: lsubval, usubval, ssubval
+	type(value_t) :: asubval, lsubval, usubval, ssubval
 
 	id = state%ref_sub(node%id_index)
 	rank_ = state%vars%vals(id)%array%rank
-	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_))
+	allocate(asubs(rank_), lsubs(rank_), ssubs(rank_), usubs(rank_))
 	rank_res = 0
 	do i = 1, rank_
 
 		if (node%lsubscripts(i)%sub_kind == all_sub) then
 			lsubs(i) = 0
 			!print *, 'lsubs(i) = ', lsubs(i)
+		else if (node%lsubscripts(i)%sub_kind == arr_sub) then
+
+			!print *, "arr_sub in get_subscript_range"
+
+			call syntax_eval(node%lsubscripts(i), state, asubval)
+
+			! TODO: refactor `if` to select/case. There is a fn
+			! value_to_i64_array() but it returns an array_t
+
+			!asubs(i)%v = int(asubval%v, 8)
+			if      (asubval%array%type == i32_type) then
+				asubs(i)%v = asubval%array%i32
+			else if (asubval%array%type == i64_type) then
+				asubs(i)%v = asubval%array%i64
+			else
+				write(*,*) err_int_prefix//'bad array subscript type'//color_reset
+				call internal_error()
+			end if
+
+			!print *, "asubs = ", asubs(i)%v
+
 		else
 			call syntax_eval(node%lsubscripts(i), state, lsubval)
 			lsubs(i) = lsubval%to_i64()
 		end if
+
+		!********
 
 		select case (node%lsubscripts(i)%sub_kind)
 		case (all_sub)
@@ -3064,6 +3089,11 @@ subroutine get_subscript_range(node, state, lsubs, ssubs, usubs, rank_res)
 			usubs(i) = lsubs(i) + 1
 			ssubs(i) = 1
 
+		case (arr_sub)
+			! TODO: anything to do besides inc rank? init lsub to first array val?
+			lsubs(i) = asubs(i)%v(1)
+			rank_res = rank_res + 1
+
 		case default
 			write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
 			call internal_error()
@@ -3079,25 +3109,80 @@ end subroutine get_subscript_range
 
 !===============================================================================
 
-subroutine get_next_subscript(lsubs, ssubs, usubs, subs)
+subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 
 	! This is like a bignum += 1 algorithm but in an arbitrary mixed radix
 
-	integer(kind = 8), intent(in) :: lsubs(:), ssubs(:), usubs(:)
-	integer(kind = 8), intent(inout) :: subs(:)
+	type(i64_vector_t), intent(in), allocatable :: asubs(:)
+	integer(kind = 8) , intent(in) :: lsubs(:), ssubs(:), usubs(:)
+	integer(kind = 8) , intent(inout) :: subs(:)
 
 	!********
 
-	integer :: j
+	logical :: carry
+	integer :: j, n, loc(1)
 
 	j = 1
+	n = -1  ! TODO: should be unnecessary
+
+	!carry = j < size(subs) .and. (subs(j) >= usubs(j) - 1)
+
+	!if (allocated(asubs(j)%v)) n = size(asubs(j)%v)
+	!print *, "n = ", n
+	!carry = j < size(subs) .and. &
+	!	((allocated(asubs(j)%v) .and. subs(j) == asubs(j)%v(n)) .or. &
+	!	(.not. allocated(asubs(j)%v) .and. subs(j) >= usubs(j) - 1))
+
+	if (allocated(asubs(j)%v)) then
+		n = size(asubs(j)%v)
+		carry = j < size(subs) .and. subs(j) == asubs(j)%v(n)
+	else
+		carry = j < size(subs) .and. subs(j) >= usubs(j) - 1
+	end if
+
+	do while (carry)
 	!do while (j < size(subs) .and. subs(j) == usubs(j) - 1)
-	do while (j < size(subs) .and. subs(j) >= usubs(j) - 1)
+	!do while (j < size(subs) .and. subs(j) >= usubs(j) - 1)
+
 		subs(j) = lsubs(j)
 		j = j + 1
+
+		!if (allocated(asubs(j)%v)) n = size(asubs(j)%v)
+		!print *, "n = ", n
+		!carry = j < size(subs) .and. &
+		!	((allocated(asubs(j)%v) .and. subs(j) == asubs(j)%v(n)) .or. &
+		!	(.not. allocated(asubs(j)%v) .and. subs(j) >= usubs(j) - 1))
+		if (allocated(asubs(j)%v)) then
+			n = size(asubs(j)%v)
+			carry = j < size(subs) .and. subs(j) == asubs(j)%v(n)
+		else
+			carry = j < size(subs) .and. subs(j) >= usubs(j) - 1
+		end if
 	end do
 	!subs(j) = subs(j) + 1
-	subs(j) = subs(j) + ssubs(j)
+	!subs(j) = subs(j) + ssubs(j)
+
+	!print *, "carry = ", carry
+	if (carry) return
+
+	if (allocated(asubs(j)%v)) then
+		! TODO: using findloc on every elem is inefficient.  Increment an index
+		! instead.  Maybe use usub (or ssub), which is otherwise unused, as an
+		! index of asubs.  Note that lsub *is* used to reset to first val after
+		! carrying.  Maybe that will be redundant
+		!
+		! Also this will break if you have duplicate indices, which should be
+		! allowed, e.g. `vec[[0, 0, 1, 2]]`
+		loc = findloc(asubs(j)%v, subs(j))
+		if (loc(1) < size(asubs(j)%v)) then
+			subs(j) = asubs(j)%v( loc(1) + 1 )
+			! Otherwise, going to carry on next call
+		end if
+	else
+		subs(j) = subs(j) + ssubs(j)
+	end if
+
+	!print *, "next sub = ", subs
 
 end subroutine get_next_subscript
 
@@ -3127,7 +3212,7 @@ function subscript_i32_eval(subs, array) result(index_)
 	do j = 1, array%rank
 		!print *, 'j = ', j
 		index_ = index_ + prod * subs(j)
-		prod  = prod * array%size(j)
+		prod = prod * array%size(j)
 	end do
 	!print *, 'index_ = ', index_
 

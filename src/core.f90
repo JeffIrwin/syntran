@@ -76,6 +76,7 @@ module syntran__core_m
 	!  - size() fn should optionally not need a 2nd argument for dim. in this
 	!    case, return product of extents of all dims (useful especially for vecs)
 	!  - allow using one array as an index of another array, as in fortran
+	!    * only rank-1 index arrays are allowed
 	!    * this is kinda similar to the current slice subscripting, so it might
 	!      not be too hard?  be careful with higher ranks
 	!    * note that the "err_bad_sub_rank" diag is commented-out, but it is

@@ -82,6 +82,15 @@ module syntran__utils_m
 
 	!********
 
+	type i64_vector_t
+		integer(kind = 8), allocatable :: v(:)
+		integer :: len_, cap
+		contains
+			procedure :: push => push_i64
+	end type i64_vector_t
+
+	!********
+
 	type logical_vector_t
 		logical(kind = 1), allocatable :: v(:)
 		integer :: len_, cap
@@ -146,6 +155,19 @@ end function new_integer_vector
 
 !===============================================================================
 
+function new_i64_vector() result(vector)
+
+	type(i64_vector_t) :: vector
+
+	vector%len_ = 0
+	vector%cap = 2
+
+	allocate(vector%v( vector%cap ))
+
+end function new_i64_vector
+
+!===============================================================================
+
 subroutine push_integer(vector, val)
 
 	class(integer_vector_t) :: vector
@@ -175,6 +197,38 @@ subroutine push_integer(vector, val)
 	vector%v( vector%len_ ) = val
 
 end subroutine push_integer
+
+!===============================================================================
+
+subroutine push_i64(vector, val)
+
+	class(i64_vector_t) :: vector
+
+	integer(kind = 8), intent(in) :: val
+
+	!********
+
+	integer(kind = 8), allocatable :: tmp(:)
+
+	integer :: tmp_cap
+
+	vector%len_ = vector%len_ + 1
+
+	if (vector%len_ > vector%cap) then
+		!print *, 'growing vector'
+
+		tmp_cap = 2 * vector%len_
+		allocate(tmp( tmp_cap ))
+		tmp(1: vector%cap) = vector%v
+
+		call move_alloc(tmp, vector%v)
+		vector%cap = tmp_cap
+
+	end if
+
+	vector%v( vector%len_ ) = val
+
+end subroutine push_i64
 
 !===============================================================================
 
