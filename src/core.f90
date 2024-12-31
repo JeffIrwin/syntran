@@ -30,6 +30,22 @@ module syntran__core_m
 		syntran_patch =  58
 
 	! TODO:
+	!  - implicit upper bound slicing:
+	!    * vec[3:] is equivalent to vec[3: size(vec,0)]
+	!    * step sub too:  vec[3: 2: ] or vec[:-1 : -1] (reverse whole vec).
+	!      lbound is implicit for negative step
+	!    * negative bound indices to count from end, like python? imo this is
+	!      bad for bounds checking (which doesn't exist yet outside of debug
+	!      builds) and it could let bugs return garbage instead of crashing.  i
+	!      think crashing is the correct behavior for index bugs
+	!  - struct array slicing:
+	!    * can't do my_struct.arr[1:4], currently have to loop with scalar index
+	!  - struct member fns
+	!    * it would be a nicer experience to be able to write
+	!      `dict.set("key", val)` instead of `set_dict_i64(&dict, "key", val)`,
+	!      effectively using the struct identifier as a namespace
+	!    * inside member fns, you should be allowed to just write `var` instead
+	!      of `this.var`
 	!  - ban expression statements?
 	!    * these were needed before i had the return statement
 	!    * they were also used for HolyC-style implicit prints, which should
@@ -261,6 +277,10 @@ module syntran__core_m
 	!    * done
 	!    * some lex error messages might be improvable
 	!    * hex float literals?  not worthwhile imo, but c(++) and golang have them
+	!  - built-in dictionary or hash map type?
+	!    * could have syntactic sugar like `dict["key"] = val`
+	!    * would perform better than syntran-implemented dicts
+	!    * how to handle many permutations of key/val types? templates?
 	!  - logical xor, xnor
 	!    * xor (bool1, bool2) is just (bool1 != bool2)
 	!    * xnor(bool1, bool2) is just (bool1 == bool2)

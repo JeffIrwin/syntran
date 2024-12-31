@@ -292,9 +292,9 @@ recursive subroutine eval_name_expr(node, state, res)
 
 	!********
 
-	integer :: id, rank_res, idim_, idim_res
-	integer(kind = 8) :: il, iu, i8, index_
-	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
+	integer :: id, rank_res, idim_, idim_res, sub_kind
+	integer(kind = 8) :: il, iu, i8, index_, diff
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 
 	type(value_t) :: right, tmp
 
@@ -317,7 +317,7 @@ recursive subroutine eval_name_expr(node, state, res)
 
 		case (range_sub)
 
-			! TODO: str all_sub
+			! TODO: str all_sub, step_sub
 
 			il = subscript_eval(node, state) + 1
 
@@ -335,7 +335,7 @@ recursive subroutine eval_name_expr(node, state, res)
 			res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
 
 		case default
-			write(*,*) err_int_prefix//'unexpected subscript kind'//color_reset
+			write(*,*) err_int_prefix//'unexpected str subscript kind'//color_reset
 			call internal_error()
 		end select
 
@@ -354,7 +354,7 @@ recursive subroutine eval_name_expr(node, state, res)
 			call get_val(node, state%vars%vals(id), state, res, index_ = i8)
 		else
 
-			call get_subscript_range(node, state, lsubs, usubs, rank_res)
+			call get_subscript_range(node, state, lsubs, ssubs, usubs, rank_res)
 
 			!print *, 'type = ', kind_name( node%val%array%type )
 
@@ -373,18 +373,44 @@ recursive subroutine eval_name_expr(node, state, res)
 			allocate(res%array%size( rank_res ))
 			idim_res = 1
 			do idim_ = 1, size(lsubs)
-				select case (node%lsubscripts(idim_)%sub_kind)
-				case (range_sub, all_sub)
+				sub_kind = node%lsubscripts(idim_)%sub_kind
+				select case (sub_kind)
+				case (step_sub, range_sub, all_sub)
 
-					res%array%size(idim_res) = usubs(idim_) - lsubs(idim_)
+					diff = usubs(idim_) - lsubs(idim_)
+					
+					!! 1 + ((x - 1) / y)
+					!!res%array%size(idim_res) = 1 + ((diff - 1) / ssubs(idim_))
+					!res%array%size(idim_res) = (diff + ssubs(idim_) - 1) / ssubs(idim_)
+
+					!!res%array%size(idim_res) = (diff + 1) / ssubs(idim_)
+
+					! I basically have to divide integers and take the ceiling
+					! (not floor) here.  There are methods above that work for
+					! positive ints but fail for negatives.  In C you can do it
+					! by casting bools to ints (ew)
+					res%array%size(idim_res) = diff / ssubs(idim_)
+					if (mod(diff, ssubs(idim_)) /= 0) then
+						res%array%size(idim_res) = res%array%size(idim_res) + 1
+					end if
 
 					idim_res = idim_res + 1
+
+				case (scalar_sub)
+					! noop
+				case default
+					write(*,*) err_rt_prefix//"bad subscript kind `"// &
+						kind_name(sub_kind)//"`"//color_reset
+					call internal_error()
 				end select
 			end do
-			!print *, 'res size = ', res%array%size
-
 			res%array%len_ = product(res%array%size)
-			!print *, 'res len = ', res%array%len_
+
+			!print *, "res len = ", res%array%len_
+			!print *, "lsubs = ", lsubs
+			!print *, "ssubs = ", ssubs
+			!print *, "usubs = ", usubs
+			!print *, "size  = ", res%array%size
 
 			call allocate_array(res, res%array%len_)
 
@@ -397,7 +423,7 @@ recursive subroutine eval_name_expr(node, state, res)
 				index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
 				call get_array_val(state%vars%vals(id)%array, index_, tmp)
 				call set_array_val(res%array, i8, tmp)
-				call get_next_subscript(lsubs, usubs, subs)
+				call get_next_subscript(lsubs, ssubs, usubs, subs)
 			end do
 		end if
 
@@ -1940,7 +1966,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 	integer :: rank_res, id
 	integer(kind = 8) :: i8, index_, len8
-	integer(kind = 8), allocatable :: lsubs(:), usubs(:), subs(:)
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 
 	type(value_t) :: array_val, rhs, tmp
 
@@ -2055,8 +2081,11 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 			!print *, 'lhs slice assignment'
 
-			call get_subscript_range(node, state, lsubs, usubs, rank_res)
-			len8 = product(usubs - lsubs)
+			! TODO: do i need abs(ssubs) anywhere?  I think not, as with
+			! negative subs, you should have lsubs > usubs unless the result is
+			! correctly empty
+			call get_subscript_range(node, state, lsubs, ssubs, usubs, rank_res)
+			len8 = product((usubs - lsubs) / ssubs)
 			!print *, 'len8 = ', len8
 
 			! TODO: some size/shape checking might be needed here between
@@ -2126,7 +2155,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 				!end if
 
-				call get_next_subscript(lsubs, usubs, subs)
+				call get_next_subscript(lsubs, ssubs, usubs, subs)
 			end do
 
 			! set res (whole array (slice?)) for return val in case of
@@ -2970,7 +2999,7 @@ end subroutine compound_assign
 
 !===============================================================================
 
-subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
+subroutine get_subscript_range(node, state, lsubs, ssubs, usubs, rank_res)
 
 	! Evaluate the lower- and upper-bounds of each range of a subscripted array
 	! slice
@@ -2981,18 +3010,18 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 
-	integer(kind = 8), allocatable, intent(out) :: lsubs(:), usubs(:)
+	integer(kind = 8), allocatable, intent(out) :: lsubs(:), ssubs(:), usubs(:)
 	integer, intent(out) :: rank_res
 
 	!********
 
 	integer :: i, id, rank_
 
-	type(value_t) :: lsubval, usubval
+	type(value_t) :: lsubval, usubval, ssubval
 
 	id = state%ref_sub(node%id_index)
 	rank_ = state%vars%vals(id)%array%rank
-	allocate(lsubs(rank_), usubs(rank_))
+	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_))
 	rank_res = 0
 	do i = 1, rank_
 
@@ -3006,13 +3035,25 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 
 		select case (node%lsubscripts(i)%sub_kind)
 		case (all_sub)
+			ssubs(i) = 1
 			usubs(i) = state%vars%vals(id)%array%size(i)
 			!print *, 'usubs(i) = ', usubs(i)
 
 			rank_res = rank_res + 1
 
 		case (range_sub)
+			! Range subs are basically handled as a step sub with step == 1
+			ssubs(i) = 1
+
 			call syntax_eval(node%usubscripts(i), state, usubval)
+			usubs(i) = usubval%to_i64()
+
+			rank_res = rank_res + 1
+
+		case (step_sub)
+			call syntax_eval(node%ssubscripts(i), state, ssubval)
+			call syntax_eval(node%usubscripts(i), state, usubval)
+			ssubs(i) = ssubval%to_i64()
 			usubs(i) = usubval%to_i64()
 
 			rank_res = rank_res + 1
@@ -3021,6 +3062,7 @@ subroutine get_subscript_range(node, state, lsubs, usubs, rank_res)
 			! Scalar subs are converted to a range-1 sub so we can
 			! iterate later without further case logic
 			usubs(i) = lsubs(i) + 1
+			ssubs(i) = 1
 
 		case default
 			write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
@@ -3037,11 +3079,11 @@ end subroutine get_subscript_range
 
 !===============================================================================
 
-subroutine get_next_subscript(lsubs, usubs, subs)
+subroutine get_next_subscript(lsubs, ssubs, usubs, subs)
 
 	! This is like a bignum += 1 algorithm but in an arbitrary mixed radix
 
-	integer(kind = 8), intent(in) :: lsubs(:), usubs(:)
+	integer(kind = 8), intent(in) :: lsubs(:), ssubs(:), usubs(:)
 	integer(kind = 8), intent(inout) :: subs(:)
 
 	!********
@@ -3049,11 +3091,13 @@ subroutine get_next_subscript(lsubs, usubs, subs)
 	integer :: j
 
 	j = 1
-	do while (j < size(subs) .and. subs(j) == usubs(j) - 1)
+	!do while (j < size(subs) .and. subs(j) == usubs(j) - 1)
+	do while (j < size(subs) .and. subs(j) >= usubs(j) - 1)
 		subs(j) = lsubs(j)
 		j = j + 1
 	end do
-	subs(j) = subs(j) + 1
+	!subs(j) = subs(j) + 1
+	subs(j) = subs(j) + ssubs(j)
 
 end subroutine get_next_subscript
 

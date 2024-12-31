@@ -2641,6 +2641,21 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			eval('let v = [0: 10]; v[2: 5];', quiet) == '[2, 3, 4]', &
 			eval('let v = [0: 10]; let u = v[2: 5]; u[0];', quiet) == '2', &
 			eval('let v = [0: 10]; let u = v[2: 5]; u;', quiet) == '[2, 3, 4]', &
+			eval('let v = [0: 10]; let u = v[0:2:10]; u;', quiet) == '[0, 2, 4, 6, 8]', &
+			eval('let v = [0: 10]; let u = v[1:2:10]; u;', quiet) == '[1, 3, 5, 7, 9]', &
+			eval('let v = [0: 10]; let u = v[2:2:10]; u;', quiet) == '[2, 4, 6, 8]', &
+			eval('let v = [0: 10]; let u = v[0:3:10]; u;', quiet) == '[0, 3, 6, 9]', &
+			eval('let v = [0: 10]; let u = v[1:3:10]; u;', quiet) == '[1, 4, 7]', &
+			eval('let v = [0: 10]; let u = v[2:3:10]; u;', quiet) == '[2, 5, 8]', &
+			eval('let v = [0: 10]; let u = v[3:3:10]; u;', quiet) == '[3, 6, 9]', &
+			eval('let v = [0: 10]; let u = v[4:3:10]; u;', quiet) == '[4, 7]', &
+			eval('let v = [0: 5]; let u = v[4: -1: -1]; u;', quiet) == '[4, 3, 2, 1, 0]', &
+			eval('let v = [0: 10]; let u = v[9:-2:-1]; u;', quiet) == '[9, 7, 5, 3, 1]', &
+			eval('let v = [0: 10]; let u = v[8:-2:-1]; u;', quiet) == '[8, 6, 4, 2, 0]', &
+			eval('let v = [0: 10]; let u = v[9:-3:-1]; u;', quiet) == '[9, 6, 3, 0]', &
+			eval('let v = [0: 10]; let u = v[8:-3:-1]; u;', quiet) == '[8, 5, 2]', &
+			eval('let v = [0: 10]; let u = v[7:-3:-1]; u;', quiet) == '[7, 4, 1]', &
+			eval('let v = [0: 10]; let u = v[6:-3:-1]; u;', quiet) == '[6, 3, 0]', &
 			eval('let m = [0, 1, 2, 3; 2, 2]; m[0, 0:2];', quiet) == '[0, 2]', &
 			eval('let m = [0, 1, 2, 3; 2, 2]; m[1, 0:2];', quiet) == '[1, 3]', &
 			eval('let m = [0, 1, 2, 3; 2, 2]; m[0:2, 0];', quiet) == '[0, 1]', &

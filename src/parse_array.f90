@@ -448,8 +448,9 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 	integer :: pos0, span0, span1, expect_rank
 
-	type(syntax_node_t) :: lsubscript, usubscript
-	type(syntax_node_vector_t) :: lsubscripts_vec, usubscripts_vec
+	type(syntax_node_t) :: lsubscript, usubscript, ssubscript
+	type(syntax_node_vector_t) :: lsubscripts_vec, usubscripts_vec, &
+		ssubscripts_vec
 	type(syntax_token_t) :: lbracket, rbracket, comma, &
 		dummy, colon
 
@@ -461,6 +462,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 	lsubscripts_vec = new_syntax_node_vector()  ! lower-bounds
 	usubscripts_vec = new_syntax_node_vector()  ! upper-bounds
+	ssubscripts_vec = new_syntax_node_vector()  ! steps
 
 	lbracket  = parser%match(lbracket_token)
 
@@ -487,13 +489,24 @@ recursive module subroutine parse_subscripts(parser, expr)
 					parser%text(span0, parser%current_pos()-1)))
 			end if
 
-			! TODO: set step_sub case for non-unit range step
 			if (parser%current_kind() == colon_token) then
 				colon = parser%match(colon_token)
 				lsubscript%sub_kind = range_sub
 
 				usubscript = parser%parse_expr()
-				! TODO: type check i32
+				! TODO: type check i32 usubscript
+
+				if (parser%current_kind() == colon_token) then
+					colon = parser%match(colon_token)
+					lsubscript%sub_kind = step_sub
+
+					! The last one that we parsed above was actually step, not ubound
+					ssubscript = usubscript
+
+					usubscript = parser%parse_expr()
+					! TODO: type check i32 usubscript
+
+				end if
 
 			else
 				lsubscript%sub_kind = scalar_sub
@@ -506,6 +519,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 		! Parallel arrays subscripts and usubscripts should be same size? Not
 		! sure if this is ideal for multi-rank ranges
 		call lsubscripts_vec%push(lsubscript)
+		call ssubscripts_vec%push(ssubscript)
 		call usubscripts_vec%push(usubscript)
 
 		! Break infinite loop
@@ -523,6 +537,9 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 	call syntax_nodes_copy(expr%lsubscripts, &
 		lsubscripts_vec%v( 1: lsubscripts_vec%len_ ))
+
+	call syntax_nodes_copy(expr%ssubscripts, &
+		ssubscripts_vec%v( 1: ssubscripts_vec%len_ ))
 
 	call syntax_nodes_copy(expr%usubscripts, &
 		usubscripts_vec%v( 1: usubscripts_vec%len_ ))

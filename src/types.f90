@@ -146,7 +146,7 @@ module syntran__types_m
 
 		! TODO: rename `size`
 		type(syntax_node_t), allocatable :: lsubscripts(:), size(:), args(:), &
-			usubscripts(:)!, ssubscripts(:) !TODO: subscript step
+			usubscripts(:), ssubscripts(:)
 
 		! Either scalar_sub, range_sub (unit step [0:2]), all_sub ([:]), or
 		! step_sub ([0: 2: 8])
@@ -842,6 +842,12 @@ recursive subroutine syntax_node_copy(dst, src)
 		call syntax_nodes_copy(dst%usubscripts, src%usubscripts)
 	else if (allocated(dst%usubscripts)) then
 		deallocate(dst%usubscripts)
+	end if
+
+	if (allocated(src%ssubscripts)) then
+		call syntax_nodes_copy(dst%ssubscripts, src%ssubscripts)
+	else if (allocated(dst%ssubscripts)) then
+		deallocate(dst%ssubscripts)
 	end if
 
 	if (allocated(src%args)) then
