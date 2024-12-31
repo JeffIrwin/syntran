@@ -1864,6 +1864,7 @@ recursive subroutine eval_for_statement(node, state, res)
 			end select
 
 		case (expl_array)
+			! TODO: array catting in for statements
 			len8 = node%array%val%array%len_
 
 		case (size_array)
@@ -2231,14 +2232,14 @@ recursive subroutine eval_array_expr(node, state, res)
 	!********
 
 	integer :: i, j
-	integer(kind = 8) :: i8
+	integer(kind = 8) :: i8, j8, size_
 
 	real(kind = 4) :: f, fstep
 	real(kind = 8) :: f64, fstep64
 
 	type(array_t) :: array
 	type(value_t) :: lbound_, ubound_, elem, &
-		step, len_
+		step, len_, tmp
 
 	!print *, "starting eval_array_expr()"
 	!print *, 'identifier = ', node%identifier%text
@@ -2593,12 +2594,32 @@ recursive subroutine eval_array_expr(node, state, res)
 
 		! Explicit rank-1 arrays
 
-		! TODO: allow empty arrays?  Sub type of empty array?  Empty arrays
-		! can currently be created like [0: -1];
+		! Allow empty arrays?  Sub type of empty array?  Empty arrays can
+		! currently be created like [0: -1] or [0; 0].  They need to have an inferrable
+		! type, so I don't think `[]` makes sense in syntran, but alternatives
+		! like `[0; 0]` are fine and currently allowed
 
 		allocate(res%array)
 		res%array%type = node%val%array%type
-		call allocate_array(res, size(node%elems, kind = 8))
+
+		!print *, "elem 1 type = ", kind_name(node%elems(1)%val%type)
+
+		if (node%elems(1)%val%type == array_type) then
+
+			!! I don't know if there's a good way to sum size ahead of time
+			!! without evaluating all children elems, which would probably have
+			!! some overhead
+			!size_ = 0
+			!do i = 1, size(node%elems)
+			!end do
+
+			! Lower-bound capacity.  Grow later as needed in %push()
+			call allocate_array(res, size(node%elems, kind = 8))
+
+		else
+			call allocate_array(res, size(node%elems, kind = 8))
+		end if
+
 		res%array%len_ = 0
 
 		do i = 1, size(node%elems)
@@ -2607,11 +2628,29 @@ recursive subroutine eval_array_expr(node, state, res)
 
 			if (res%array%type == struct_type) then
 				res%struct(i) = elem
+
+			!else if (res%array%type == array_type) then
+			else if (elem%type == array_type) then
+				!print *, "array_type"
+				!print *, "len = ", elem%array%len_
+
+				do j8 = 0, elem%array%len_ - 1
+
+					!call get_array_val(state%vars%vals(id)%array, index_, tmp)
+					call get_array_val(elem%array, j8, tmp)
+
+					!call res%array%push( elem%array%at(j8) )
+					call res%array%push(tmp)
+
+				end do
+
 			else
 				call res%array%push(elem)
 			end if
 
 		end do
+
+		! TODO: trim catted array?  It's a tradeoff
 
 		if (res%array%type == struct_type) then
 			res%array%len_ = size(node%elems)

@@ -75,6 +75,9 @@ module syntran__core_m
 	!      + any use for zero hashes?  r"raw str"
 	!  - size() fn should optionally not need a 2nd argument for dim. in this
 	!    case, return product of extents of all dims (useful especially for vecs)
+	!  - type() or typeof() fn to get type name as str?  could be useful for
+	!    debugging, but I don't want to encourage it's use for actual program
+	!    logic
 	!  - allow using one array as an index of another array, as in fortran
 	!    * only rank-1 index arrays are allowed
 	!    * this is kinda similar to the current slice subscripting, so it might
