@@ -3090,8 +3090,8 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 			ssubs(i) = 1
 
 		case (arr_sub)
-			! TODO: anything to do besides inc rank? init lsub to first array val?
-			lsubs(i) = asubs(i)%v(1)
+			lsubs(i) = asubs(i)%v(1)  ! reset to this after carrying
+			usubs(i) = 1              ! use this as an index to increment and get the next asub
 			rank_res = rank_res + 1
 
 		case default
@@ -3114,8 +3114,8 @@ subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 	! This is like a bignum += 1 algorithm but in an arbitrary mixed radix
 
 	type(i64_vector_t), intent(in), allocatable :: asubs(:)
-	integer(kind = 8) , intent(in) :: lsubs(:), ssubs(:), usubs(:)
-	integer(kind = 8) , intent(inout) :: subs(:)
+	integer(kind = 8) , intent(in) :: lsubs(:), ssubs(:)
+	integer(kind = 8) , intent(inout) :: usubs(:), subs(:)
 
 	!********
 
@@ -3145,6 +3145,9 @@ subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 	!do while (j < size(subs) .and. subs(j) >= usubs(j) - 1)
 
 		subs(j) = lsubs(j)
+		if (allocated(asubs(j)%v)) then
+			usubs(j) = 1
+		end if
 		j = j + 1
 
 		!if (allocated(asubs(j)%v)) n = size(asubs(j)%v)
@@ -3153,6 +3156,7 @@ subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 		!	((allocated(asubs(j)%v) .and. subs(j) == asubs(j)%v(n)) .or. &
 		!	(.not. allocated(asubs(j)%v) .and. subs(j) >= usubs(j) - 1))
 		if (allocated(asubs(j)%v)) then
+			!usubs(j-1) = 1
 			n = size(asubs(j)%v)
 			carry = j < size(subs) .and. subs(j) == asubs(j)%v(n)
 		else
@@ -3163,21 +3167,19 @@ subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 	!subs(j) = subs(j) + ssubs(j)
 
 	!print *, "carry = ", carry
-	if (carry) return
+	!if (carry) return  ! TODO: this is a noop bc always j < size(subs)
 
 	if (allocated(asubs(j)%v)) then
-		! TODO: using findloc on every elem is inefficient.  Increment an index
-		! instead.  Maybe use usub (or ssub), which is otherwise unused, as an
-		! index of asubs.  Note that lsub *is* used to reset to first val after
-		! carrying.  Maybe that will be redundant
-		!
-		! Also this will break if you have duplicate indices, which should be
-		! allowed, e.g. `vec[[0, 0, 1, 2]]`
-		loc = findloc(asubs(j)%v, subs(j))
-		if (loc(1) < size(asubs(j)%v)) then
-			subs(j) = asubs(j)%v( loc(1) + 1 )
-			! Otherwise, going to carry on next call
+
+		! usubs is overloaded as an index for array subscripts.  This is why it
+		! is inout while most other args are in
+		usubs(j) = usubs(j) + 1
+		if (usubs(j) <= size(asubs(j)%v)) then
+			subs(j) = asubs(j)%v( usubs(j) )
+		!else
+		!	usubs(j) = 1
 		end if
+
 	else
 		subs(j) = subs(j) + ssubs(j)
 	end if
