@@ -17,14 +17,14 @@ module syntran__consts_m
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
 			arr_sub               = 118, &
-			bit_or_equals_token   = 117, &
-			bit_xor_equals_token  = 116, &
-			bit_and_equals_token  = 115, &
+			pipe_equals_token     = 117, &
+			caret_equals_token    = 116, &
+			amp_equals_token      = 115, &
 			ggreater_equals_token = 114, &
 			lless_equals_token    = 113, &
-			bit_not_token         = 112, &
-			bit_xor_token         = 111, &
-			bit_or_token          = 110, &
+			bang_token            = 112, &
+			caret_token           = 111, &
+			pipe_token            = 110, &
 			amp_token             = 109, &
 			ggreater_token        = 108, &
 			lless_token           = 107, &
@@ -396,14 +396,14 @@ function kind_name(kind)
 			"lless_token          ", & ! 107
 			"ggreater_token       ", & ! 108
 			"amp_token            ", & ! 109
-			"bit_or_token         ", & ! 110
-			"bit_xor_token        ", & ! 111
-			"bit_not_token        ", & ! 112
+			"pipe_token           ", & ! 110
+			"caret_token          ", & ! 111
+			"bang_token           ", & ! 112
 			"lless_equals_token   ", & ! 113
 			"ggreater_equals_token", & ! 114
-			"bit_and_equals_token ", & ! 115
-			"bit_xor_equals_token ", & ! 116
-			"bit_or_equals_token  ", & ! 117
+			"amp_equals_token     ", & ! 115
+			"caret_equals_token   ", & ! 116
+			"pipe_equals_token    ", & ! 117
 			"arr_sub              ", & ! 118
 			"unknown              "  & ! inf (trailing comma hack)
 		]

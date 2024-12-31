@@ -1410,7 +1410,7 @@ logical function is_assignment_op(op)
 	is_assignment_op = any(op == [equals_token, plus_equals_token, &
 		minus_equals_token, star_equals_token, slash_equals_token, &
 		sstar_equals_token, percent_equals_token, &
-		bit_and_equals_token, bit_or_equals_token, bit_xor_equals_token, &
+		amp_equals_token, pipe_equals_token, caret_equals_token, &
 		lless_equals_token, ggreater_equals_token])
 
 end function is_assignment_op
@@ -1560,8 +1560,8 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 			end if
 
 		case ( &
-				bit_xor_token, bit_or_token, amp_token, &
-				bit_xor_equals_token, bit_or_equals_token, bit_and_equals_token)
+				caret_token, pipe_token, amp_token, &
+				caret_equals_token, pipe_equals_token, amp_equals_token)
 
 			! Other bitwise binary operators (besides shift) only work on ints
 			! of matching sizes (both 32 or 64 bit)
@@ -1672,7 +1672,7 @@ logical function is_unary_op_allowed(op, right, right_arr)
 				is_unary_op_allowed = is_num_type(right)
 			end if
 
-		case (bit_not_token)
+		case (bang_token)
 			if (right == array_type) then
 				is_unary_op_allowed = is_int_type(right_arr)
 			else
@@ -1702,7 +1702,7 @@ integer function get_unary_op_prec(kind) result(prec)
 
 	select case (kind)
 
-		case (plus_token, minus_token, not_keyword, bit_not_token)
+		case (plus_token, minus_token, not_keyword, bang_token)
 			! arithmetic +, arithmetic -, logical not, bitwise not
 			prec = 12
 
@@ -1768,10 +1768,10 @@ integer function get_binary_op_prec(kind) result(prec)
 		case (amp_token) ! `&`
 			prec = 7
 
-		case (bit_xor_token) ! `^`
+		case (caret_token) ! `^`, aka circumflex, hat
 			prec = 6
 
-		case (bit_or_token ) ! `|`
+		case (pipe_token) ! `|`
 			prec = 5
 
 		case (less_token, less_equals_token, &

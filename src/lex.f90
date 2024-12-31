@@ -796,7 +796,7 @@ function lex(lexer) result(token)
 				lexer%pos = lexer%pos + 1
 				token = new_token(bang_equals_token, lexer%pos, "!=")
 			else
-				token = new_token(bit_not_token, lexer%pos, lexer%current())
+				token = new_token(bang_token, lexer%pos, lexer%current())
 			end if
 
 		case ("<")
@@ -838,23 +838,23 @@ function lex(lexer) result(token)
 		case ("^")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(bit_xor_equals_token, lexer%pos, "^=")
+				token = new_token(caret_equals_token, lexer%pos, "^=")
 			else
-				token = new_token(bit_xor_token, lexer%pos, lexer%current())
+				token = new_token(caret_token, lexer%pos, lexer%current())
 			end if
 
 		case ("|")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(bit_or_equals_token, lexer%pos, "|=")
+				token = new_token(pipe_equals_token, lexer%pos, "|=")
 			else
-				token = new_token(bit_or_token, lexer%pos, lexer%current())
+				token = new_token(pipe_token, lexer%pos, lexer%current())
 			end if
 
 		case ("&")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(bit_and_equals_token, lexer%pos, "&=")
+				token = new_token(amp_equals_token, lexer%pos, "&=")
 			else
 				token = new_token(amp_token, lexer%pos, lexer%current())
 			end if

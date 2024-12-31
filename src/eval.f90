@@ -260,10 +260,10 @@ recursive subroutine eval_binary_expr(node, state, res)
 	case (ggreater_token)
 		call right_shift(left, right, res, node%op%text)
 
-	case (bit_xor_token)
+	case (caret_token)
 		call bit_xor(left, right, res, node%op%text)
 
-	case (bit_or_token)
+	case (pipe_token)
 		call bit_or(left, right, res, node%op%text)
 
 	case (amp_token)
@@ -2868,7 +2868,7 @@ recursive subroutine eval_unary_expr(node, state, res)
 	case (not_keyword)
 		call not_(right, res, node%op%text)
 
-	case (bit_not_token)
+	case (bang_token)
 		call bit_not(right, res, node%op%text)
 
 	case default
@@ -3023,13 +3023,13 @@ subroutine compound_assign(lhs, rhs, op)
 	case (percent_equals_token)
 		call mod_(tmp, rhs, lhs, op%text)
 
-	case (bit_and_equals_token)
+	case (amp_equals_token)
 		call bit_and(tmp, rhs, lhs, op%text)
 
-	case (bit_or_equals_token)
+	case (pipe_equals_token)
 		call bit_or(tmp, rhs, lhs, op%text)
 
-	case (bit_xor_equals_token)
+	case (caret_equals_token)
 		call bit_xor(tmp, rhs, lhs, op%text)
 
 	case (lless_equals_token)
