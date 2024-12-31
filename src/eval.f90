@@ -282,6 +282,30 @@ end subroutine eval_binary_expr
 
 !===============================================================================
 
+elemental function divceil(num, den) result(res)
+
+	! Integer division ceiling
+	!
+	! I initially made this elemental so I could call product() on a vector
+	! result, but I need to loop and select case for index arr_sub anyway so
+	! just a scalar fn would've sufficed
+	!
+	! TODO: move to utils?
+
+	integer(kind = 8), intent(in) :: num, den
+	integer(kind = 8) :: res
+
+	! I basically have to divide integers and take the ceiling (not floor) here.
+	! There are methods that work for positive ints but fail for negatives.  In
+	! C you can do it by casting bools to ints (ew)
+
+	res = num / den
+	if (mod(num, den) /= 0) res = res + 1  ! TODO: sign? -1 if negative? tests seem ok
+
+end function divceil
+
+!===============================================================================
+
 recursive subroutine eval_name_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
@@ -380,19 +404,7 @@ recursive subroutine eval_name_expr(node, state, res)
 				case (step_sub, range_sub, all_sub)
 
 					diff = usubs(idim_) - lsubs(idim_)
-
-					! I basically have to divide integers and take the ceiling
-					! (not floor) here.  There are methods that work for
-					! positive ints but fail for negatives.  In C you can do it
-					! by casting bools to ints (ew)
-					res%array%size(idim_res) = diff / ssubs(idim_)
-					if (mod(diff, ssubs(idim_)) /= 0) then
-						res%array%size(idim_res) = res%array%size(idim_res) + 1
-					end if
-
-					! TODO: add LHS step subscript tests, multi-rank step sub
-					! tests, etc.
-
+					res%array%size(idim_res) = divceil(diff, ssubs(idim_))
 					idim_res = idim_res + 1
 
 				case (arr_sub)
@@ -2087,7 +2099,17 @@ recursive subroutine eval_assignment_expr(node, state, res)
 			!print *, 'lhs slice assignment'
 
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
-			len8 = product((usubs - lsubs) / ssubs)
+
+			!len8 = product((usubs - lsubs) / ssubs)
+			!len8 = product(divceil((usubs - lsubs), ssubs))
+			len8 = 1
+			do i8 = 1, size(lsubs)
+				if (allocated(asubs(i8)%v)) then
+					len8 = len8 * size(asubs(i8)%v)
+				else
+					len8 = len8 * divceil(usubs(i8) - lsubs(i8), ssubs(i8))
+				end if
+			end do
 			!print *, 'len8 = ', len8
 
 			! TODO: some size/shape checking might be needed here between
@@ -3071,7 +3093,7 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 			!print *, 'lsubs(i) = ', lsubs(i)
 		else if (node%lsubscripts(i)%sub_kind == arr_sub) then
 
-			!print *, "arr_sub in get_subscript_range"
+			!print *, "arr_sub"
 
 			call syntax_eval(node%lsubscripts(i), state, asubval)
 
