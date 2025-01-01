@@ -30,6 +30,16 @@ module syntran__core_m
 		syntran_patch =  58
 
 	! TODO:
+	!  - installer packaging:
+	!    * bin exists.  nest it in a `bin` folder
+	!    * add version summary as a text file (major.minor.patch, git hash,
+	!      build date)
+	!    * doc. autogenerate pdf and/or html from markdown via pandoc or similar
+	!      + see build-doc.sh
+	!    * readme?
+	!    * samples?
+	!    * libsyntran.a and fortran sample?
+	!    * try -static-libgcc etc. on win/mac to ease packaging
 	!  - implicit upper bound slicing:
 	!    * vec[3:] is equivalent to vec[3: size(vec,0)]
 	!    * step sub too:  vec[3: 2: ] or vec[:-1 : -1] (reverse whole vec).
@@ -85,10 +95,6 @@ module syntran__core_m
 	!  - add tests to cover syntran-explorer samples. might be a bit much to
 	!    automate cross-repo testing on the same source, but a little copy/paste
 	!    is better than nothing
-	!  - add version summary as a text file to release packages
-	!    * doc. readme? samples?
-	!    * try -static-libgcc etc. on win/mac to ease packaging
-	!    * ship syntran.a static lib? don't know who would want that
 	!  - structs
 	!    * post-merge TODO struct items:
 	!      + update struct sample.  include struct/array combos, nesting, etc.
@@ -160,8 +166,6 @@ module syntran__core_m
 	!    * array and, or, not, done
 	!    * unary -, + done
 	!  - document recent features:
-	!    * array concatenation
-	!    * pass by reference
 	!    * hex/bin/oct literals
 	!    * bitwise ops
 	!    * literal postfix type ascriptions: 0xff'i32
@@ -172,8 +176,9 @@ module syntran__core_m
 	!          `let u = (v[3: 7] += 7);`
 	!    * new generalized for loops
 	!    * compound `**=` assignment, %=
-	!    * --help arg
 	!    * -c arg, shebang
+	!      + this is shown in `--help` output in readme but not further
+	!        explained
 	!    * --fmax-errors arg
 	!    * ifx/ifort pass tests but perform order of magnitude slower
 	!  - add a workflow that tests gfortran version 8 (and/or older?).  older

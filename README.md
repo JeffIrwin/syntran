@@ -527,7 +527,7 @@ let v0 = [0: 5];
 
 Array sizes do not need to be literals or constants.  Arrays are allocated dynamically at runtime.
 
-Besides ranges of consecutive integers, which is the only form that can be used in a for-loop for now, there are other array forms.
+Besides ranges of consecutive integers, there are other array forms.
 
 To initialize an array to a range with a step:
 ```rust
@@ -556,6 +556,15 @@ To initialize an array with an explicit list of comma-separated values:
 let v3 = [-5, 3+1, 1, 10, 7/2];
 // [-5, 4, 1, 10, 3]
 ```
+
+To concatenate rank-1 arrays, separate them by commas within an outer set of
+brackets:
+```rust
+let v4 = [[0: 3], [10], [20: 22]];
+// [0, 1, 2, 10, 20, 21]
+```
+Multi-rank arrays cannot be concatenated in a single statement.  Build them up
+over several statements with slices or for loops.
 
 ### Rank-2 and higher arrays
 
@@ -671,9 +680,10 @@ v1[[0, 1, 3]];
 // [0, 2, 6]
 ```
 The double brackets might look strange.  Here, the outer brackets denote a
-subscript or index of `v1`, while the inner brackets denote an array literal.
-This might be more clear if we have a help index array variable with the same
-effect as the last example:
+subscript or index of `v1`, while the inner brackets denote an array literal. If
+you wrote `v1[0, 1, 3]`, that would work on a rank-3 array, but it would throw a
+parser error for a rank-1 array `v1`. This might be more clear if we have a
+helper index array variable with the same effect as the last example:
 ```rust
 let indices = [0, 1, 3];
 v1[indices];
@@ -754,14 +764,14 @@ println("mat_slice = ", mat_slice);
 For every dimension of the array, you can mix and match scalar subscripts,
 whole-array slices, range-based slices, stepped slices, or index-array slices:
 ```rust
-matrix[:, [0, 1, 3]];
+matrix[:, [0, 1, 3]];  // all cols, rows 0, 1, and 3
 // [
 // 0, 1, 2,
 // 3, 4, 5,
 // 9, 10, 11
 // ]
 
-matrix[1, [0, 2, 3]];
+matrix[1, [0, 2, 3]];  // col 1, rows 0, 2, and 3
 // [1, 7, 10]
 ```
 
@@ -853,6 +863,42 @@ mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty);
 ```
 
 As expected, this is the same as a 180 degree _z_ rotation, i.e. the _x_ and _y_ components are negated while the _z_ component is unchanged.
+
+### Passing by value or by reference
+
+Syntran is pass-by-value by default, regardless of type.  Primitive scalars,
+arrays, and structs or all copied and passed by value.  Modifying a parameter
+within a function has no effect on the corresponding argument in the caller.
+Copying values incurs an overhead for large arrays and structs.
+
+To modify an argument as an extra function output, or to avoid the overhead of
+copying a large amount of data for an array or large struct, pass by reference
+instead.
+
+Denote the reference with an ampersand `&`, both in the function declaration and
+in the function call.  For example:
+```rust
+fn add_one(var_ref: &i32)
+{
+	var_ref += 1;
+	return;
+}
+
+let x = 42;
+println("x = ", x);
+// x = 42
+
+add_one(&x);
+println("x = ", x);
+// x = 43
+```
+
+If you make a reference `&` in the declaration but not the caller, or
+vice-versa, the parser will throw an error.
+
+Only variable identifiers can be used as a reference.  Literals cannot be
+referenced, and array elements and struct members cannot currently be
+referenced.
 
 ## Strings, printing, and file output
 
