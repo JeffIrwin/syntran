@@ -448,17 +448,6 @@ recursive module function parse_array_expr(parser) result(expr)
 	if (lbound_%val%type == array_type) then
 		! If lbound is another array, get its subtype here instead
 		expr%val%array%type = lbound_%val%array%type
-
-		! TODO: cleanup, this is not the place for this check
-		!rank_ = lbound_%val%array%rank
-		!print *, "rank = ", lbound_%val%array%rank
-		!if (rank_ /= 1) then
-		!	span = new_span(lb_beg, lb_end - lb_beg + 1)
-		!	call parser%diagnostics%push( &
-		!		err_bad_cat_rank(parser%context(), span, rank_) &
-		!	)
-		!end if
-
 	end if
 
 	expr%val%array%kind = expl_array

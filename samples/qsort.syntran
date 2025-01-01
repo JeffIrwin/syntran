@@ -1,19 +1,13 @@
 
 // Quick sort algorithm
-//
-// See `src/tests/test-src/fns/test-18.syntran` for a version that actually
-// returns a value
-//
-// This version can be good by adapting for global vars with a perf boost for
-// not passing args by value (c.f. AOC 2023 day 17)
 
-fn qsort(arr: [i32; :])
+fn qsort(arr: &[i32; :])
 {
 	println("starting qsort()");
 	println("arr = ", arr);
 
 	let l = 0;
-	let h = size(arr,0) - 1;
+	let h = i32(size(arr,0)) - 1;
 
 	if l < h
 	{
@@ -46,13 +40,9 @@ fn qsort(arr: [i32; :])
 				if arr[j] <= x
 				{
 					i += 1;
-					let tmp = arr[i];
-					arr[i]  = arr[j];
-					arr[j]  = tmp;
+					arr[[i, j]] = arr[[j, i]];
 				}
-			let tmp = arr[i+1];
-			arr[i+1] = arr[h];
-			arr[h] = tmp;
+			arr[[i+1, h]] = arr[[h, i+1]];
 			let p = i + 1;
 
 			if p - 1 > l
@@ -81,7 +71,7 @@ fn qsort(arr: [i32; :])
 fn main(): i32
 {
 	let arr = [4, 3, 5, 2, 1, 3, 2, 3]; 
-	qsort(arr);
+	qsort(&arr);
 	return 0;
 }
 
