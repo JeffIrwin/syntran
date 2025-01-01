@@ -522,6 +522,21 @@ end function err_bad_sub_count
 !
 !end function err_bad_sub_rank
 
+function err_bad_sub_rank(context, span, rank_) &
+		result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	integer, intent(in) :: rank_
+
+	err = err_prefix &
+		//"subscript index array of rank-"//str(rank_)//" is not rank-1" &
+		//underline(context, span)//" non-vector subscript"//color_reset
+
+end function err_bad_sub_rank
+
 !===============================================================================
 
 function err_scalar_subscript(context, span, scalar) result(err)
@@ -576,6 +591,23 @@ function err_bad_ret_rank(context, span, fn, expect, actual) &
 		//underline(context, span)//" wrong return rank"//color_reset
 
 end function err_bad_ret_rank
+
+!===============================================================================
+
+function err_bad_cat_rank(context, span, rank_) &
+		result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	integer, intent(in) :: rank_
+
+	err = err_prefix &
+		//"concatenated array of rank-"//str(rank_)//" is not rank-1" &
+		//underline(context, span)//" non-vector concatenation"//color_reset
+
+end function err_bad_cat_rank
 
 !===============================================================================
 

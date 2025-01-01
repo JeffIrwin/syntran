@@ -32,7 +32,7 @@ recursive module function parse_array_expr(parser) result(expr)
 
 	!********
 
-	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end
+	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end, rank_
 
 	type(syntax_node_t)  :: lbound_, step, ubound_, len_, elem
 	type(syntax_node_vector_t) :: elems, size_
@@ -347,6 +347,21 @@ recursive module function parse_array_expr(parser) result(expr)
 	! parsed as lbound above
 
 	!print *, 'elem ', lbound_%val%str()
+	if (lbound_%val%type == array_type) then
+
+		! Fortran actually allows concatenating multi-rank arrays.  It just
+		! reshapes them to a vector and then concatenates.  I don't think I like
+		! that
+		rank_ = lbound_%val%array%rank
+		!print *, "rank = ", lbound_%val%array%rank
+		if (rank_ /= 1) then
+			span = new_span(lb_beg, lb_end - lb_beg + 1)
+			call parser%diagnostics%push( &
+				err_bad_cat_rank(parser%context(), span, rank_) &
+			)
+		end if
+
+	end if
 
 	elems = new_syntax_node_vector()
 	call elems%push(lbound_)
@@ -368,6 +383,18 @@ recursive module function parse_array_expr(parser) result(expr)
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
 				parser%context(), span, parser%text(span_beg, span_end)))
+		end if
+
+		if (elem%val%type == array_type) then
+			! This check could be DRY'd up but it only happens twice
+			rank_ = elem%val%array%rank
+			!print *, "rank = ", elem%val%array%rank
+			if (rank_ /= 1) then
+				span = new_span(span_beg, span_end - span_beg + 1)
+				call parser%diagnostics%push( &
+					err_bad_cat_rank(parser%context(), span, rank_) &
+				)
+			end if
 		end if
 
 		call elems%push(elem)
@@ -420,11 +447,18 @@ recursive module function parse_array_expr(parser) result(expr)
 	expr%val%array%type = lbound_%val%type
 	if (lbound_%val%type == array_type) then
 		! If lbound is another array, get its subtype here instead
-		!
-		! TODO: only allow array concatenation for rank-1 arrays.  Or check
-		! Fortran et al. to see how they handle multi-rank catting
-
 		expr%val%array%type = lbound_%val%array%type
+
+		! TODO: cleanup, this is not the place for this check
+		!rank_ = lbound_%val%array%rank
+		!print *, "rank = ", lbound_%val%array%rank
+		!if (rank_ /= 1) then
+		!	span = new_span(lb_beg, lb_end - lb_beg + 1)
+		!	call parser%diagnostics%push( &
+		!		err_bad_cat_rank(parser%context(), span, rank_) &
+		!	)
+		!end if
+
 	end if
 
 	expr%val%array%kind = expl_array
@@ -447,7 +481,8 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 	!********
 
-	integer :: pos0, span0, span1, expect_rank
+	integer :: pos0, span0, span1, expect_rank, rank_, ls_beg, ls_end, &
+		us_beg, us_end
 
 	type(syntax_node_t) :: lsubscript, usubscript, ssubscript
 	type(syntax_node_vector_t) :: lsubscripts_vec, usubscripts_vec, &
@@ -478,7 +513,9 @@ recursive module subroutine parse_subscripts(parser, expr)
 			lsubscript%sub_kind = all_sub
 		else
 
+			ls_beg = parser%current_pos()
 			lsubscript = parser%parse_expr()
+			ls_end = parser%current_pos()
 
 			!print *, 'lsubscript = ', lsubscript%str()
 			!print *, 'lsubscript = ', parser%text(span0, parser%current_pos()-1)
@@ -486,7 +523,21 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 			if (lsubscript%val%type == array_type) then
 				lsubscript%sub_kind = arr_sub
-				! TODO: check rank-1, check i32 or i64 type
+
+				rank_ = lsubscript%val%array%rank
+				span = new_span(ls_beg, ls_end - ls_beg + 1)
+				!print *, "rank_ = ", rank_
+				if (rank_ /= 1) then
+					call parser%diagnostics%push( &
+						err_bad_sub_rank(parser%context(), span, rank_) &
+					)
+				end if
+				if (.not. any(lsubscript%val%array%type == [i32_type, i64_type])) then
+					call parser%diagnostics%push( &
+						err_non_int_subscript(parser%context(), span, &
+						parser%text(span0, parser%current_pos()-1)))
+				end if
+
 			else
 
 				! TODO: this is some nasty nested logic.  Can we refactor as a
@@ -505,8 +556,16 @@ recursive module subroutine parse_subscripts(parser, expr)
 					colon = parser%match(colon_token)
 					lsubscript%sub_kind = range_sub
 
+					us_beg = parser%current_pos()
 					usubscript = parser%parse_expr()
-					! TODO: type check i32 usubscript
+					us_end = parser%current_pos()
+
+					if (.not. any(usubscript%val%type == [i32_type, i64_type])) then
+						span = new_span(us_beg, us_end - us_beg + 1)
+						call parser%diagnostics%push( &
+							err_non_int_subscript(parser%context(), span, &
+							parser%text(span0, parser%current_pos()-1)))
+					end if
 
 					if (parser%current_kind() == colon_token) then
 						colon = parser%match(colon_token)
@@ -515,8 +574,15 @@ recursive module subroutine parse_subscripts(parser, expr)
 						! The last one that we parsed above was actually step, not ubound
 						ssubscript = usubscript
 
+						us_beg = parser%current_pos()
 						usubscript = parser%parse_expr()
-						! TODO: type check i32 usubscript
+						us_end = parser%current_pos()
+						if (.not. any(usubscript%val%type == [i32_type, i64_type])) then
+							span = new_span(us_beg, us_end - us_beg + 1)
+							call parser%diagnostics%push( &
+								err_non_int_subscript(parser%context(), span, &
+								parser%text(span0, parser%current_pos()-1)))
+						end if
 
 					end if
 

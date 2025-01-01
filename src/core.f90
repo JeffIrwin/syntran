@@ -30,6 +30,12 @@ module syntran__core_m
 		syntran_patch =  58
 
 	! TODO:
+	!  - quicksort sample and test:
+	!    * re-write sample to use index arrays
+	!      + no need for tmp val for swapping. just swap like vec[[0,1]] = vec[[1,0]]
+	!    * add corresponding test
+	!      + don't modify existing qsort tests, just add a new one
+	!      + cover pass-by-ref for qsort if not already covered
 	!  - implicit upper bound slicing:
 	!    * vec[3:] is equivalent to vec[3: size(vec,0)]
 	!    * step sub too:  vec[3: 2: ] or vec[:-1 : -1] (reverse whole vec).
@@ -137,7 +143,6 @@ module syntran__core_m
 	!      hashing, utf, base64, and rng algorithms
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
-	!    * write another wave equation sample using slicing and array operations
 	!  - cmd args
 	!    * args would be useful for logo sample, e.g. image size and some
 	!      control color options
@@ -147,11 +152,8 @@ module syntran__core_m
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
 	!      unknown_type for that
-	!  - array concatenation:
-	!        let arr1 = [0: 4];
-	!        let arr2 = [4: 8];
-	!        let cat  = [arr1, arr2]; // [0: 8]
 	!  - rethink open() fn.  add a mode.  read mode should check if file exists
+	!    * this will be a compatibility break. it's a must-have for 1.0
 	!  - array operations:
 	!    * done: element-wise add, sub, mul, div, pow, mod
 	!      + compound array assignment works but needs unit tests
@@ -235,6 +237,10 @@ module syntran__core_m
 	!      + reshape
 	!      + system: multiple out args? iostat and stdout
 	!    * recursive user-defined fns
+	!      + before recursion, allow calling fns (non-recursively) before they
+	!        are defined.  definition order in source file should not matter.
+	!        the 2-pass parsing required to do that will also be needed for
+	!        recursion
 	!    * done:
 	!      + abs, sqrt
 	!      + exp
