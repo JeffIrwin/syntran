@@ -6,7 +6,7 @@
 <!-- [![](doc/imgs/logo-syntran-128p.png)](https://github.com/JeffIrwin/syntran/blob/main/samples/logo.syntran) -->
 [![](doc/imgs/logo-syntran-128p.png)](samples/logo.syntran)
 
-⚠️ Syntran is pre-alpha and I don't recommend using it for anything serious.  You will discover bugs, missing features, many pain points in general; and later updates will be incompatible.
+⚠️ Syntran is alpha and I don't recommend using it for anything serious.  You will discover bugs, missing features, many pain points in general; and later updates will be incompatible.
 
 ## [Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
 
@@ -162,17 +162,21 @@ Logical keywords `true`, `false`, `not`, `and`, and `or` are like Fortran's (e.g
 
 ### Floating point types
 
-The default floating point type is `f64`, i.e. double precision.  To make an `f32` float literal, append an `f` suffix, like in the C language.  For example:
+The default floating point type is `f64`, i.e. double precision.  To make an `f32` float literal, append an `'f32` suffix, like in the C language.  For example:
 - the literal `1.0` is of type `f64`
-- the literal `1.0f` is of type `f32`
+- the literal `1.0'f32` is of type `f32`
 - the literal `6.0221408e+23` (Avogadro's number) is of type `f64`
-- the literal `6.0221408e+23f` is of type `f32`
+- the literal `6.0221408e+23'f32` is of type `f32`
 
 When float types are mixed in an arithmetic expression, the result is casted up to the higher precision of the operands.  For example:
 ```rust
-let x = 1.0 + 1.0f;
+let x = 1.0 + 1.0'f32;
 ```
 Here, the variable `x` is of type `f64`.
+
+There is also an option to denote `f32` types with a simple `f` suffix like in
+C, e.g. `1.0f`.  However, the full type name after an apostrophe is preferred,
+as this extends to other types.
 
 ### Integer types
 
@@ -187,7 +191,11 @@ Larger integer literals outside the `i32` range are automatically inferred as
 - the literal `-2000000000` is of type `i32`
 - the literal `-3000000000` is of type `i64`
 
-Small literals can be explicitly cast up to `i64` using the [`i64()` function](doc/README.md#i64).
+Small literals can be explicitly cast up to `i64` either by using a type suffix
+or by using the [`i64()` function](doc/README.md#i64):
+- `42'i64` is of type `i64`
+- `i64(42)` is a function call with a literal argument `42` of type `i32`, and
+  the function returns type `i64`
 
 Be careful with integer overflow.  For example, `2000000000 + 2000000000` will
 overflow silently and without warning.  If you expect large values, cast at
@@ -328,8 +336,7 @@ foo + bar;
 
 When the clause of the if statement is only a single statement, braces `{}` are optional.
 
-The bounds of for loops, like ranges in Rust and Python, are inclusive of the lower bound and exclusive of the upper bound:
-
+The bounds of for loops, like ranges in Rust and Python, are inclusive of the starting bound and exclusive of the ending bound:
 ```cpp
 for i in [0: 5]
 	println(i);
@@ -338,6 +345,19 @@ for i in [0: 5]
 // 2
 // 3
 // 4
+```
+I will often refer to the *starting bound* and *ending bound* as the lower
+and upper bounds respectively.  This is how the variables are named in the
+interpreter.  However, it is a poor choice of words for negative or downward
+steps:
+```rust
+for i in [5: -1: 0]
+    println(i);
+// 5
+// 4
+// 3
+// 2
+// 1
 ```
 
 ## Example:  calculating prime numbers inefficiently
@@ -354,8 +374,8 @@ let prime = 0;
 // This check is O(n**2) time, which might be the best we can do without
 // arrays
 
-// If we had while loops, we could loop from n downards and stop as soon as
-// we find the first prime
+// If we had while loops or `break` statements, we could loop from n downards
+// and stop as soon as we find the first prime
 for i in [0: n]
 {
 	// Check if i is composite, i.e. not prime
@@ -463,7 +483,7 @@ let pi = 0.0;
 
 for k in [0: 10]
 {
-	pi = pi + 1 / (16.0 ** k) *
+	pi += 1 / (16.0 ** k) *
 		(
 			4.0 / (8*k + 1) -
 			2.0 / (8*k + 4) -
@@ -489,9 +509,9 @@ let sign = 1;
 let sinx = 0.0;
 for k in [1: 10]
 {
-	sinx = sinx + sign * xpow / factorial;
-	xpow = xpow * x ** 2;
-	factorial = factorial * (2*k) * (2*k + 1);
+	sinx += sign * xpow / factorial;
+	xpow *= x ** 2;
+	factorial *= (2*k) * (2*k + 1);
 	sign = -sign;
 }
 

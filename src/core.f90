@@ -30,6 +30,14 @@ module syntran__core_m
 		syntran_patch =  58
 
 	! TODO:
+	!  - print improvements:
+	!    * hex format printing
+	!    * formatted printf?
+	!      + fully general formatting sounds hard
+	!    * print (without newline)
+	!      + can be worked around with str() to build a line and then println
+	!    * maybe strhex() as a stopgap?
+	!    * bin/oct too
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
 	!    * add version summary as a text file (major.minor.patch, git hash,
@@ -168,7 +176,6 @@ module syntran__core_m
 	!  - document recent features:
 	!    * hex/bin/oct literals
 	!    * bitwise ops
-	!    * literal postfix type ascriptions: 0xff'i32
 	!    * array comparison
 	!    * array arithmetic and boolean operations, test and doc array compound
 	!      assignment
