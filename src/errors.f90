@@ -902,6 +902,22 @@ end function err_non_num_range
 
 !===============================================================================
 
+function err_non_sca_val(context, span, val) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: val
+
+	err = err_prefix &
+		//'value `'//val//'` of uniform array is not a scalar' &
+		//underline(context, span) &
+		//" non-scalar array value"//color_reset
+
+end function err_non_sca_val
+
+!===============================================================================
+
 function err_non_int_range(context, span, range) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
@@ -1153,6 +1169,8 @@ end function err_eval_i32_itr
 !===============================================================================
 
 function new_span(start, length) result(span)
+	! Maybe this should take end pos instead of length?  Seems like I end up
+	! back-calculating len from pos most of the time
 
 	integer, intent(in) :: start, length
 

@@ -30,6 +30,8 @@ module syntran__core_m
 		syntran_patch =  59
 
 	! TODO:
+	!  - mention syntran explorer in readme
+	!    * note it may not exist in ~6 months
 	!  - print improvements:
 	!    * hex format printing
 	!    * formatted printf?

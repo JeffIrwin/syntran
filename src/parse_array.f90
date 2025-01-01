@@ -127,6 +127,12 @@ recursive module function parse_array_expr(parser) result(expr)
 		expr%val%type        = array_type
 		expr%val%struct_name = lbound_%val%struct_name
 
+		if (lbound_%val%type == array_type) then
+			span = new_span(lb_beg, lb_end - lb_beg + 1)
+			call parser%diagnostics%push(err_non_sca_val( &
+				parser%context(), span, parser%text(lb_beg, lb_end)))
+		end if
+
 		expr%val%array%type = lbound_%val%type
 		expr%val%array%kind = unif_array
 		expr%val%array%rank = size_%len_
@@ -355,6 +361,8 @@ recursive module function parse_array_expr(parser) result(expr)
 		rank_ = lbound_%val%array%rank
 		!print *, "rank = ", lbound_%val%array%rank
 		if (rank_ /= 1) then
+			! TODO: pass the array's text to err_bad_cat_rank like other better
+			! diags
 			span = new_span(lb_beg, lb_end - lb_beg + 1)
 			call parser%diagnostics%push( &
 				err_bad_cat_rank(parser%context(), span, rank_) &
@@ -408,6 +416,13 @@ recursive module function parse_array_expr(parser) result(expr)
 
 		! Explicit rank-2+ size_array: [elem_0, elem_1, elem_2, ... ; size_0, size_1, ... ];
 		semicolon = parser%match(semicolon_token)
+
+		if (lbound_%val%type == array_type) then
+			! TODO: this error msg shouldn't say "uniform" array here
+			span = new_span(lb_beg, lb_end - lb_beg + 1)
+			call parser%diagnostics%push(err_non_sca_val( &
+				parser%context(), span, parser%text(lb_beg, lb_end)))
+		end if
 
 		size_ = parser%parse_size()
 
