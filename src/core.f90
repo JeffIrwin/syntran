@@ -181,6 +181,8 @@ module syntran__core_m
 	!      assignment
 	!    * caveat about return val from nested slice compound assignemnt:
 	!          `let u = (v[3: 7] += 7);`
+	!      + i think i did this?  search "illegal in python". or is it something
+	!        else?
 	!    * new generalized for loops
 	!    * compound `**=` assignment, %=
 	!    * -c arg, shebang

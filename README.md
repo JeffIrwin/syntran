@@ -320,14 +320,14 @@ let other_condition = true;
 let foo = 0;
 let bar = 0;
 if condition {
-	foo = 1;
-	bar = 2;
+    foo = 1;
+    bar = 2;
 } else if other_condition {
-	foo = 3;
-	bar = 4;
+    foo = 3;
+    bar = 4;
 } else {
-	foo = 5;
-	bar = 6;
+    foo = 5;
+    bar = 6;
 }
 
 foo + bar;
@@ -339,7 +339,7 @@ When the clause of the if statement is only a single statement, braces `{}` are 
 The bounds of for loops, like ranges in Rust and Python, are inclusive of the starting bound and exclusive of the ending bound:
 ```cpp
 for i in [0: 5]
-	println(i);
+    println(i);
 // 0
 // 1
 // 2
@@ -378,20 +378,20 @@ let prime = 0;
 // and stop as soon as we find the first prime
 for i in [0: n]
 {
-	// Check if i is composite, i.e. not prime
-	let is_composite = false;
+    // Check if i is composite, i.e. not prime
+    let is_composite = false;
 
-	// Largest possible divisor of i is i/2.  Actually it's sqrt(i) but
-	// I don't have a sqrt fn yet
-	for j in [2: i/2 + 1]
-	{
-		// Is i divisible by j?
-		let divisible = i % j == 0;
-		is_composite = is_composite or divisible;
-	}
+    // Largest possible divisor of i is i/2.  Actually it's sqrt(i) but
+    // I don't have a sqrt fn yet
+    for j in [2: i/2 + 1]
+    {
+        // Is i divisible by j?
+        let divisible = i % j == 0;
+        is_composite = is_composite or divisible;
+    }
 
-	if not is_composite
-		prime = i;
+    if not is_composite
+        prime = i;
 }
 
 // Final result
@@ -411,16 +411,16 @@ let expect_1a = 0;
 
 let v = 1;
 {
-	// The LHS variable shadows and is initialized to the RHS value from the outer block
-	let v = v + 1;
-	expect_2a = v;
+    // The LHS variable shadows and is initialized to the RHS value from the outer block
+    let v = v + 1;
+    expect_2a = v;
 
-	{
-		let v = v * 2;
-		expect_4a = v;
-	}
+    {
+        let v = v * 2;
+        expect_4a = v;
+    }
 
-	expect_2b = v;
+    expect_2b = v;
 }
 
 expect_1a = v;
@@ -446,21 +446,21 @@ let i = n;
 
 while prime == 0
 {
-	i = i - 1;  // loop from n downwards
+    i = i - 1;  // loop from n downwards
 
-	let is_composite = false;
+    let is_composite = false;
 
-	let j = 1;
-	while j < i/2 + 1 and not is_composite
-	{
-		j = j + 1;
+    let j = 1;
+    while j < i/2 + 1 and not is_composite
+    {
+        j = j + 1;
 
-		let divisible = i % j == 0;
-		is_composite = is_composite or divisible;
-	}
+        let divisible = i % j == 0;
+        is_composite = is_composite or divisible;
+    }
 
-	if not is_composite
-		prime = i;
+    if not is_composite
+        prime = i;
 }
 
 println(prime);
@@ -483,13 +483,13 @@ let pi = 0.0;
 
 for k in [0: 10]
 {
-	pi += 1 / (16.0 ** k) *
-		(
-			4.0 / (8*k + 1) -
-			2.0 / (8*k + 4) -
-			1.0 / (8*k + 5) -
-			1.0 / (8*k + 6)
-		);
+    pi += 1 / (16.0 ** k) *
+        (
+            4.0 / (8*k + 1) -
+            2.0 / (8*k + 4) -
+            1.0 / (8*k + 5) -
+            1.0 / (8*k + 6)
+        );
 }
 
 println(pi);
@@ -509,10 +509,10 @@ let sign = 1;
 let sinx = 0.0;
 for k in [1: 10]
 {
-	sinx += sign * xpow / factorial;
-	xpow *= x ** 2;
-	factorial *= (2*k) * (2*k + 1);
-	sign = -sign;
+    sinx += sign * xpow / factorial;
+    xpow *= x ** 2;
+    factorial *= (2*k) * (2*k + 1);
+    sign = -sign;
 }
 
 println(sinx);
@@ -536,7 +536,7 @@ Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/153
 Recall the syntax for a for-loop:
 ```rust
 for i in [0: 5]
-	println(i);
+    println(i);
 ```
 
 The expression `[0: 5]` is one of several array forms, which can also be assigned to variables:
@@ -584,7 +584,9 @@ let v4 = [[0: 3], [10], [20: 22]];
 // [0, 1, 2, 10, 20, 21]
 ```
 Multi-rank arrays cannot be concatenated in a single statement.  Build them up
-over several statements with slices or for loops.
+over several statements with slices or for loops.  If you want to concatenate
+both scalars and vectors, you have to form the scalars into vectors of size 1,
+like `[10]` above.
 
 ### Rank-2 and higher arrays
 
@@ -710,8 +712,8 @@ v1[indices];
 /// [0, 2, 6]
 ```
 As in Fortran, only rank-1 arrays can be used as an index array.  Of course,
-they can index into an array of any rank, as shown in the multi-rank subsection
-below.
+they can index into an array of any rank, as shown in the [multi-rank
+subsection](#multi-rank-array-slicing) below.
 
 #### LHS and RHS slicing
 
@@ -757,11 +759,11 @@ with 2 slice subscripts and the rest scalars will return a rank-2 array.
 
 ```rust
 let matrix = [
-	 0,  1,  2,  // values
-	 3,  4,  5,
-	 6,  7,  8,
-	 9, 10, 11 ;
-	3, 4         // size
+     0,  1,  2,  // values
+     3,  4,  5,
+     6,  7,  8,
+     9, 10, 11 ;
+    3, 4         // size
 ];
 
 let x_slice = matrix[:,0];
@@ -804,7 +806,7 @@ Use the `fn` keyword to declare a function, as in Rust.  Unlike Rust, use a colo
 ```rust
 fn add(a1: i32, a2: i32): i32
 {
-	return a1 + a2;
+    return a1 + a2;
 }
 ```
 
@@ -822,32 +824,37 @@ let c = add(a + 1, b + 2);
 Functions must be defined before they are called.  That means that recursive functions are not possible currently, neither with a function directly calling itself, nor with two functions which both call each other.
 
 Here's a function that performs matrix-vector multiplication:
-
 ```rust
 fn mul_mat_vec(mat: [f64; :,:], vec: [f64; :]): [f64; :]
 {
-	// Matrix-vector multiplication.  Return mat * vec
-	let ans =  [0.0; size(mat,0)];
-	for     j in [0: size(mat,1)]
-		for i in [0: size(mat,0)]
-			ans[i] += mat[i,j] * vec[j];
-	return ans;
+    // Matrix-vector multiplication.  Return mat * vec
+    let ans =  [0.0; size(mat,0)];
+    for     j in [0: size(mat,1)]
+        for i in [0: size(mat,0)]
+            ans[i] += mat[i,j] * vec[j];
+    return ans;
 }
 ```
+Checking the inner dimensions is left as an exercise for the reader.
 
 Note that array rank is specified in function signatures with comma-separated colons.  For example, `vec` is a rank-1 array `[f64; :]` and `mat` is a rank-2 array `[f64; :,:]`.  Arrays of any size can be passed to functions, but ranks and types must match.  The use of a colon as a wildcard like this is [borrowed from Fortran](https://www.intel.com/content/www/us/en/develop/documentation/fortran-compiler-oneapi-dev-guide-and-reference/top/language-reference/specification-statements/type-declarations/declarations-for-arrays/assumed-shape-specifications.html).
 
-Here's a function that performs [matrix multiplication](https://en.wikipedia.org/wiki/Matrix_multiplication) on two matrices `a` and `b`, without checking that the inner dimensions agree:
+Here's a function that performs [matrix multiplication](https://en.wikipedia.org/wiki/Matrix_multiplication) on two matrices `a` and `b`:
 
 ```rust
 fn mul_mat(a: [f64; :,:], b: [f64; :,:]): [f64; :,:]
 {
-	let c = [0.0; size(a,0), size(b,1)];
-	for         k in [0: size(b,1)]
-		for     j in [0: size(a,1)]
-			for i in [0: size(a,0)]
-				c[i,k] += a[i,j] * b[j,k];
-	return c;
+    if size(a,1) != size(b,0)
+    {
+        println("Error in mul_mat: inner dimensions do not agree!");
+        exit(-1);
+    }
+    let c = [0.0; size(a,0), size(b,1)];
+    for         k in [0: size(b,1)]
+        for     j in [0: size(a,1)]
+            for i in [0: size(a,0)]
+                c[i,k] += a[i,j] * b[j,k];
+    return c;
 }
 ```
 
@@ -855,20 +862,20 @@ Then we can define [rotation matrices](https://en.wikipedia.org/wiki/Rotation_ma
 
 ```rust
 let rotx =
-	[
-		1.0,  0.0,  0.0,
-		0.0,  0.0,  1.0,
-		0.0, -1.0,  0.0 ;
-		3, 3
-	];
+    [
+        1.0,  0.0,  0.0,
+        0.0,  0.0,  1.0,
+        0.0, -1.0,  0.0 ;
+        3, 3
+    ];
 
 let roty =
-	[
-		0.0,  0.0, -1.0,
-		0.0,  1.0,  0.0,
-		1.0,  0.0,  0.0 ;
-		3, 3
-	];
+    [
+        0.0,  0.0, -1.0,
+        0.0,  1.0,  0.0,
+        1.0,  0.0,  0.0 ;
+        3, 3
+    ];
 ```
 
 Rotations can be composed by multiplying matrices, so we can apply a 180 degree _x_ rotation followed by a 180 degree _y_ rotation like this:
@@ -887,7 +894,7 @@ As expected, this is the same as a 180 degree _z_ rotation, i.e. the _x_ and _y_
 ### Passing by value or by reference
 
 Syntran is pass-by-value by default, regardless of type.  Primitive scalars,
-arrays, and structs or all copied and passed by value.  Modifying a parameter
+arrays, and structs are all copied and passed by value.  Modifying a parameter
 within a function has no effect on the corresponding argument in the caller.
 Copying values incurs an overhead for large arrays and structs.
 
@@ -900,8 +907,8 @@ in the function call.  For example:
 ```rust
 fn add_one(var_ref: &i32)
 {
-	var_ref += 1;
-	return;
+    var_ref += 1;
+    return;
 }
 
 let x = 42;
@@ -1029,29 +1036,29 @@ let my_global = 42;
 
 fn my_scan(str_: str, set: str): i32
 {
-	// Return the first substring index i of `str_` which matches any character
-	// from the string `set`.
-	//
-	// c.f. Fortran intrinsic scan()
+    // Return the first substring index i of `str_` which matches any character
+    // from the string `set`.
+    //
+    // c.f. Fortran intrinsic scan()
 
-	let found = false;
-	let i = 0;
-	while not found and i < len(str_)
-	{
-		let j = 0;
-		while not found and j < len(set)
-		{
-			found = str_[i] == set[j];
-			j += 1;
-		}
-		i += 1;
-	}
+    let found = false;
+    let i = 0;
+    while not found and i < len(str_)
+    {
+        let j = 0;
+        while not found and j < len(set)
+        {
+            found = str_[i] == set[j];
+            j += 1;
+        }
+        i += 1;
+    }
 
-	if (found)
-		i -= 1;
-	else
-		i = -1;
-	return i;
+    if (found)
+        i -= 1;
+    else
+        i = -1;
+    return i;
 }
 ```
 
@@ -1064,16 +1071,16 @@ This can be included in a main program, assuming `main.syntran` and `header.synt
 
 fn main()
 {
-	println(my_global);
-	// 42
+    println(my_global);
+    // 42
 
-	println(my_scan("012345", "2"));
-	// 2
+    println(my_scan("012345", "2"));
+    // 2
 
-	println(my_scan("012345", "3"));
-	// 3
+    println(my_scan("012345", "3"));
+    // 3
 
-	return;
+    return;
 }
 
 main();
@@ -1116,8 +1123,8 @@ syntax as rust:
 ```rust
 struct Point
 {
-	x: [i32; :],
-	name: str,
+    x: [i32; :],
+    name: str,
 }
 ```
 
@@ -1157,9 +1164,9 @@ declaring a `Rect` struct, some of whose members are also structs:
 // declare
 struct Rect
 {
-	bottom_left: Point,
-	upper_right: Point,
-	name: str
+    bottom_left: Point,
+    upper_right: Point,
+    name: str
 }
 
 // instantiate
@@ -1171,15 +1178,15 @@ is a function that computes the area of a rectangle:
 ```rust
 fn area(rect: Rect): i32
 {
-	let width =
-		rect.upper_right.x[0] -
-		rect.bottom_left.x[0];
-	let height =
-		rect.upper_right.x[1] -
-		rect.bottom_left.x[1];
+    let width =
+        rect.upper_right.x[0] -
+        rect.bottom_left.x[0];
+    let height =
+        rect.upper_right.x[1] -
+        rect.bottom_left.x[1];
 
-	// Taking the absolute value is left as an exercise for the reader
-	return width * height;
+    // Taking the absolute value is left as an exercise for the reader
+    return width * height;
 }
 
 println("area = ", area(rect0));
@@ -1190,12 +1197,12 @@ Here is a function that constructs and returns a `Rect`:
 ```rust
 fn get_unit_rect(): Rect
 {
-	return Rect
-	{
-		bottom_left = Point{x = [0, 0], name = "bl"},
-		upper_right = Point{x = [1, 1], name = "ur"},
-		name = "unit-rect",
-	};
+    return Rect
+    {
+        bottom_left = Point{x = [0, 0], name = "bl"},
+        upper_right = Point{x = [1, 1], name = "ur"},
+        name = "unit-rect",
+    };
 }
 println("unit area = ", area(get_unit_rect()));
 // unit area = 1
