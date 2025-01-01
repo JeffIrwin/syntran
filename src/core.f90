@@ -30,12 +30,6 @@ module syntran__core_m
 		syntran_patch =  58
 
 	! TODO:
-	!  - quicksort sample and test:
-	!    * re-write sample to use index arrays
-	!      + no need for tmp val for swapping. just swap like vec[[0,1]] = vec[[1,0]]
-	!    * add corresponding test
-	!      + don't modify existing qsort tests, just add a new one
-	!      + cover pass-by-ref for qsort if not already covered
 	!  - implicit upper bound slicing:
 	!    * vec[3:] is equivalent to vec[3: size(vec,0)]
 	!    * step sub too:  vec[3: 2: ] or vec[:-1 : -1] (reverse whole vec).
@@ -166,8 +160,6 @@ module syntran__core_m
 	!    * array and, or, not, done
 	!    * unary -, + done
 	!  - document recent features:
-	!    * index arrays
-	!    * step slicing
 	!    * array concatenation
 	!    * pass by reference
 	!    * hex/bin/oct literals

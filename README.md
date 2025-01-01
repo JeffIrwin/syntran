@@ -620,7 +620,7 @@ Many languages refer to these arrays as *multidimensional* arrays.  This can be
 ambiguous, as a vector like `let v = [9, 16, 25]` is three-dimensional in at
 least some sense, but only rank-1.  We will call these *multi-rank* arrays.
 
-### Array slicing
+### Array slicing and indexing
 
 Indexing an array with a range subscript, as opposed to a scalar subscript,
 produces yet another array:
@@ -653,8 +653,35 @@ v1;
 // [0, 2, 4, 6, 8];
 ```
 
-Step slicing (with a non-unit step), e.g. to extract every other element of a
-vector, is not yet implemented.
+You can also slice with a step in the form `lower_bound: step: upper_bound`:
+```rust
+v1[0: 2: 5];
+// [0, 4, 8];
+```
+Using negative steps, you can reverse a vector:
+```rust
+v1[size(v1,0)-1: -1: -1];
+// [8, 6, 4, 2, 0]
+```
+
+Arbitrary elements of an array with non-uniform steps can be extracted by using
+another rank-1 array (i.e. vector) as a subscript:
+```rust
+v1[[0, 1, 3]];
+// [0, 2, 6]
+```
+The double brackets might look strange.  Here, the outer brackets denote a
+subscript or index of `v1`, while the inner brackets denote an array literal.
+This might be more clear if we have a help index array variable with the same
+effect as the last example:
+```rust
+let indices = [0, 1, 3];
+v1[indices];
+/// [0, 2, 6]
+```
+As in Fortran, only rank-1 arrays can be used as an index array.  Of course,
+they can index into an array of any rank, as shown in the multi-rank subsection
+below.
 
 #### LHS and RHS slicing
 
@@ -722,6 +749,20 @@ println("mat_slice = ", mat_slice);
 // 6, 7,
 // 9, 10
 // ]
+```
+
+For every dimension of the array, you can mix and match scalar subscripts,
+whole-array slices, range-based slices, stepped slices, or index-array slices:
+```rust
+matrix[:, [0, 1, 3]];
+// [
+// 0, 1, 2,
+// 3, 4, 5,
+// 9, 10, 11
+// ]
+
+matrix[1, [0, 2, 3]];
+// [1, 7, 10]
 ```
 
 ## Functions
