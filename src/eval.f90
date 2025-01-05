@@ -279,6 +279,7 @@ end subroutine eval_binary_expr
 
 !===============================================================================
 
+!function divceil(num, den) result(res)
 elemental function divceil(num, den) result(res)
 
 	! Integer division ceiling
@@ -298,6 +299,10 @@ elemental function divceil(num, den) result(res)
 
 	res = num / den
 	if (mod(num, den) /= 0) res = res + 1  ! TODO: sign? -1 if negative? tests seem ok
+
+	!!!if (num < 0 .and. den
+
+	!print *, "num, den, ceil(num/den) = ", num, den, res
 
 end function divceil
 
@@ -2093,7 +2098,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 		else
 
-			!print *, 'lhs slice assignment'
+			!print *, "lhs slice assignment"
 
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
 
@@ -2103,9 +2108,18 @@ recursive subroutine eval_assignment_expr(node, state, res)
 					len8 = len8 * size(asubs(i8)%v)
 				else
 					len8 = len8 * divceil(usubs(i8) - lsubs(i8), ssubs(i8))
+
+					! Empty step slice?
+					!
+					! TODO: c.f. step_array cases (literals and for loops) for
+					! ways to do this without branching (or at least, without
+					! obvious branching)
+					if (lsubs(i8) > usubs(i8) .and. ssubs(i8) > 0) len8 = 0
+					if (lsubs(i8) < usubs(i8) .and. ssubs(i8) < 0) len8 = 0
+
 				end if
 			end do
-			!print *, 'len8 = ', len8
+			!print *, "len8 = ", len8
 
 			! TODO: some size/shape checking might be needed here between
 			! LHS and RHS
@@ -2179,7 +2193,16 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 			! set res (whole array (slice?)) for return val in case of
 			! compound assignment.  see note above re walrus operator
-			res = state%vars%vals(id)
+			!
+			! TODO: this might be the source of poor slice perf.  See the big
+			! comment above.  It's copying a huge array even if we only modify a
+			! small slice of it
+			!
+			! Commenting this out improves perf and just returns the RHS as the
+			! result.  Only 1 test depends on that and I already said I might
+			! decide to break it
+
+			!res = state%vars%vals(id)
 
 		end if
 	end if
@@ -3148,6 +3171,7 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 
 	end do
 	!print *, 'lsubs = ', lsubs
+	!print *, 'ssubs = ', ssubs
 	!print *, 'usubs = ', usubs
 	!print *, 'rank_res = ', rank_res
 

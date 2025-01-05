@@ -2787,8 +2787,11 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[:,:,0] += 1; m[:,0,0];', quiet) == '[1, 2]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[:,:,0] += 1; m[:,1,0];', quiet) == '[3, 4]', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; m[:,:,0] += 1; m[0,0,:];', quiet) == '[1, 4]', &
-			eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[0, 11, 12, 13, 4]', &  ! i might decide to break this
+
+			!eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[0, 11, 12, 13, 4]', &  ! i might decide to break this
 			!eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[11, 12, 13]', &  ! i might decide to break this
+			eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[10, 10, 10]', &  ! i might decide to break this
+
 			eval('let v = [0: 4]; v[0:2:4]   = 9; v;', quiet) == '[9, 1, 9, 3]', &
 			eval('let v = [0: 4]; v[1:2:4]   = 9; v;', quiet) == '[0, 9, 2, 9]', &
 			eval('let v = [0: 4]; v[3:-1:1]  = 9; v;', quiet) == '[0, 1, 9, 9]', &

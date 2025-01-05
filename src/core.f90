@@ -30,6 +30,21 @@ module syntran__core_m
 		syntran_patch =  59
 
 	! TODO:
+	!  - check that step of arrays is not 0 (this crashes syntran)
+	!  - minval, maxval fns
+	!    * until now, i had delayed these over confusion about whether
+	!      min/minval should be different
+	!    * these *should* be different from min() and max() fns.  min and max
+	!      should be elemental, while minval and maxval condense an array to a
+	!      scalar (or a lower-rank array with the opt dim arg).  i now see the
+	!      beauty of fortran's design here, while i previously wondered why min
+	!      and minval weren't one fn
+	!    * if min and minval were the same fn, what would they do with an array
+	!      arg?
+	!    * maybe you could auto invoke minval when there is only 1 arg, but this
+	!      gets complicated with the opt dim/mask args.  you would have to very
+	!      carefully resolve the overload based on type/rank of several args
+	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!  - mention syntran explorer in readme
 	!    * note it may not exist in ~6 months
 	!  - print improvements:
@@ -259,8 +274,9 @@ module syntran__core_m
 	!      + sind, cosd, tand, asind, acosd, atand
 	!      + sin, cos, tan, asin, acos, atan
 	!        > needs documentation
-	!      + min, max, sum, product
+	!      + sum, product
 	!        > these need an optional `dim` arg, and so do any/all
+	!      + min, max
 	!      + size (non-variadic but polymorphic)
 	!      + readln, writeln, println, open, close, str casting
 	!      + len (of str)
