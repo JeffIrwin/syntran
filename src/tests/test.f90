@@ -4334,6 +4334,7 @@ subroutine unit_test_bitwise_2(npass, nfail)
 			interpret_file(path//'test-01.syntran', quiet) == '0', &
 			interpret_file(path//'test-02.syntran', quiet) == '0', &
 			interpret_file(path//'test-03.syntran', quiet) == '0', &
+			interpret_file(path//'test-04.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

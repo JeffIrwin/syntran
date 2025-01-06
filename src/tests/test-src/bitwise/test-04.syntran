@@ -8,8 +8,6 @@
 
 //****************
 
-// This is covered as one of the bitwise unit tests
-
 //==============================================================================
 
 fn leftrotate_md5(x: i32, rot: i32): i32
@@ -174,6 +172,7 @@ fn assert_eq(a: str, b: str): i32
 	if (a == b) return 0;
 	return 1;
 }
+
 fn main(): i32
 {
 	let status = 0;
@@ -199,11 +198,11 @@ fn main(): i32
 			"000001dbbfa3a5c83a2d506429c7b00e"
 	);
 
-	if status != 0
-	{
-		println("Error: " + str(status) + " md5 tests failed");
-		exit(-1);
-	}
+	//if status != 0
+	//{
+	//	println("Error: " + str(status) + " md5 tests failed");
+	//	exit(-1);
+	//}
 	return status;
 }
 return main();
