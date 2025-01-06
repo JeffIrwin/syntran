@@ -2111,12 +2111,8 @@ recursive subroutine eval_assignment_expr(node, state, res)
 			j8 = 1
 			do i8 = 1, size(lsubs)
 				if (allocated(asubs(i8)%v)) then
-					!len8 = len8 * size(asubs(i8)%v)
-					!size_tmp(i8) = size(asubs(i8)%v)
 					size_i = size(asubs(i8)%v)
-
 				else
-					!len8 = len8 * divceil(usubs(i8) - lsubs(i8), ssubs(i8))
 					size_i = divceil(usubs(i8) - lsubs(i8), ssubs(i8))
 
 					! Empty step slice?
@@ -2130,7 +2126,6 @@ recursive subroutine eval_assignment_expr(node, state, res)
 				end if
 
 				len8 = len8 * size_i
-				!if (node%lsubscripts(i)%sub_kind == all_sub) then
 				if (node%lsubscripts(i8)%sub_kind /= scalar_sub) then
 					size_tmp(j8) = size_i
 					j8 = j8 + 1
@@ -2151,17 +2146,12 @@ recursive subroutine eval_assignment_expr(node, state, res)
 			tmp_array%array%rank = rank_res
 			tmp_array%array%type = state%vars%vals(id)%array%type
 			tmp_array%array%kind = expl_array
-
-			!! i think this first option is wrong for lower-rank slices of multi-rank
-			!! arrays
-			!tmp_array%array%size = state%vars%vals(id)%array%size
 			tmp_array%array%size = size_tmp
 
 			! We cannot use mold here because the return value could be a lower
 			! rank than the LHS array being sliced, and the RHS may be a scalar.
 			! All meta-data usually set by mold is set above on tmp_array
 			call allocate_array(tmp_array, len8)
-			!tmp_array%array = mold(res%array, res%array%type)
 
 			! Iterate through all subscripts in range and copy to result
 			! array
@@ -2184,21 +2174,18 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 				! Set the return val too
 				call set_array_val(tmp_array%array, i8, tmp)
-				!call set_array_val(tmp_array%array, index_, tmp)
 
 				!! move conditions out of loop for perf?
 				!if (res%type == array_type) then
 				!	call set_array_val(res%array, i8, tmp)
 				!else
-
+				!
 				!	! this makes the res return value a scalar.  Maybe
 				!	! not correct for fn return values or paren exprs, at
 				!	! least it's not consistent with the way that array rhs
-				!	! vals work.  Maybe I will make a breaking change on the
-				!	! return value here because copying res val can also
-				!	! have a large perf overhead.
+				!	! vals work
 				!	res = tmp
-
+				!
 				!	! This is illegal in python numpy:
 				!	!
 				!	! >>> import numpy as np
@@ -2223,9 +2210,8 @@ recursive subroutine eval_assignment_expr(node, state, res)
 				!	! just the slice `a[1:4]`, or just the scalar `3`?
 				!	!
 				!	! I think there's a good case to be made that it should
-				!	! be the slice `a[1:4]`, but the implementation is more
+				!	! be the slice `a[1:4]`, although the implementation was more
 				!	! simple by setting `b` to the whole array `a`.
-
 				!end if
 
 				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
@@ -2239,12 +2225,15 @@ recursive subroutine eval_assignment_expr(node, state, res)
 			! - setting to the whole array can trigger a big array copy and it's
 			!   not consistent with non-nested assignment
 			! - setting to the RHS performs well but it probably isn't the
-			!   resulting rank that most users would expect
+			!   resulting rank that most users would expect for the scalar case
 			! - setting the return value to only the modified slice makes the
-			!   most sense imo, but i avoided it because the code is more
+			!   most sense imo, but i avoided it before because the code is more
 			!   complex, requiring the tmp_array and getting all the size/rank
 			!   array meta-data
 
+
+			!! TODO: update readme for this change.  Search "contrast" or "This
+			!! behaviour is in contrast to non-nested assignment:"
 			!res = state%vars%vals(id)  ! big copy for returing the whole array
 			res = tmp_array  ! only return the modified slice
 
