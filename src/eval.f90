@@ -1983,11 +1983,12 @@ recursive subroutine eval_assignment_expr(node, state, res)
 	!********
 
 	integer :: rank_res, id
-	integer(kind = 8) :: i8, index_, len8
-	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+	integer(kind = 8) :: i8, j8, index_, len8, size_i
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:), &
+		size_tmp(:)
 
 	type(i64_vector_t), allocatable :: asubs(:)
-	type(value_t) :: array_val, rhs, tmp
+	type(value_t) :: array_val, rhs, tmp, tmp_array
 
 	!print *, "eval assignment_expr"
 	!print *, "node identifier = ", node%identifier%text
@@ -2101,23 +2102,40 @@ recursive subroutine eval_assignment_expr(node, state, res)
 			!print *, "lhs slice assignment"
 
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+			allocate(size_tmp(rank_res))
+
+			!print *, "rank     = ", state%vars%vals(id)%array%rank
+			!print *, "rank_res = ", rank_res
 
 			len8 = 1
+			j8 = 1
 			do i8 = 1, size(lsubs)
 				if (allocated(asubs(i8)%v)) then
-					len8 = len8 * size(asubs(i8)%v)
+					!len8 = len8 * size(asubs(i8)%v)
+					!size_tmp(i8) = size(asubs(i8)%v)
+					size_i = size(asubs(i8)%v)
+
 				else
-					len8 = len8 * divceil(usubs(i8) - lsubs(i8), ssubs(i8))
+					!len8 = len8 * divceil(usubs(i8) - lsubs(i8), ssubs(i8))
+					size_i = divceil(usubs(i8) - lsubs(i8), ssubs(i8))
 
 					! Empty step slice?
 					!
 					! TODO: c.f. step_array cases (literals and for loops) for
 					! ways to do this without branching (or at least, without
 					! obvious branching)
-					if (lsubs(i8) > usubs(i8) .and. ssubs(i8) > 0) len8 = 0
-					if (lsubs(i8) < usubs(i8) .and. ssubs(i8) < 0) len8 = 0
+					if (lsubs(i8) > usubs(i8) .and. ssubs(i8) > 0) size_i = 0
+					if (lsubs(i8) < usubs(i8) .and. ssubs(i8) < 0) size_i = 0
 
 				end if
+
+				len8 = len8 * size_i
+				!if (node%lsubscripts(i)%sub_kind == all_sub) then
+				if (node%lsubscripts(i8)%sub_kind /= scalar_sub) then
+					size_tmp(j8) = size_i
+					j8 = j8 + 1
+				end if
+
 			end do
 			!print *, "len8 = ", len8
 
@@ -2126,6 +2144,24 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 			! Scalar rhs
 			if (res%type /= array_type) array_val = res
+
+			allocate(tmp_array%array)
+			tmp_array%type = array_type
+			tmp_array%array%len_ = len8
+			tmp_array%array%rank = rank_res
+			tmp_array%array%type = state%vars%vals(id)%array%type
+			tmp_array%array%kind = expl_array
+
+			!! i think this first option is wrong for lower-rank slices of multi-rank
+			!! arrays
+			!tmp_array%array%size = state%vars%vals(id)%array%size
+			tmp_array%array%size = size_tmp
+
+			! We cannot use mold here because the return value could be a lower
+			! rank than the LHS array being sliced, and the RHS may be a scalar.
+			! All meta-data usually set by mold is set above on tmp_array
+			call allocate_array(tmp_array, len8)
+			!tmp_array%array = mold(res%array, res%array%type)
 
 			! Iterate through all subscripts in range and copy to result
 			! array
@@ -2145,6 +2181,10 @@ recursive subroutine eval_assignment_expr(node, state, res)
 				call get_array_val(state%vars%vals(id)%array, index_, tmp)
 				call compound_assign(tmp, array_val, node%op)
 				call set_array_val(state%vars%vals(id)%array, index_, tmp)
+
+				! Set the return val too
+				call set_array_val(tmp_array%array, i8, tmp)
+				!call set_array_val(tmp_array%array, index_, tmp)
 
 				!! move conditions out of loop for perf?
 				!if (res%type == array_type) then
@@ -2191,18 +2231,22 @@ recursive subroutine eval_assignment_expr(node, state, res)
 				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 			end do
 
-			! set res (whole array (slice?)) for return val in case of
-			! compound assignment.  see note above re walrus operator
+			! Not setting res to anything here leaves the return value as the
+			! RHS
 			!
-			! TODO: this might be the source of poor slice perf.  See the big
-			! comment above.  It's copying a huge array even if we only modify a
-			! small slice of it
+			! I think there are valid arguments for all 3 options here
 			!
-			! Commenting this out improves perf and just returns the RHS as the
-			! result.  Only 1 test depends on that and I already said I might
-			! decide to break it
+			! - setting to the whole array can trigger a big array copy and it's
+			!   not consistent with non-nested assignment
+			! - setting to the RHS performs well but it probably isn't the
+			!   resulting rank that most users would expect
+			! - setting the return value to only the modified slice makes the
+			!   most sense imo, but i avoided it because the code is more
+			!   complex, requiring the tmp_array and getting all the size/rank
+			!   array meta-data
 
-			!res = state%vars%vals(id)
+			!res = state%vars%vals(id)  ! big copy for returing the whole array
+			res = tmp_array  ! only return the modified slice
 
 		end if
 	end if
