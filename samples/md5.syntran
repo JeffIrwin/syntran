@@ -178,6 +178,12 @@ fn main(): i32
 {
 	let status = 0;
 
+	// Expected results can be generated in bash by `echo -n "str" | sha256sum`
+	//
+	// The `-n` suppresses the usual newline from echo.  Even though it's
+	// whitespace, a newline, like any other character, changes the entire hash
+	// result
+	//
 	status += assert_eq(md5(
 			""),
 			"d41d8cd98f00b204e9800998ecf8427e"
