@@ -49,6 +49,7 @@
 				"
 					set -exu \n
 					gfortran --version \n
+					gfortran-11 --version \n
 
 					# This is the pack linux stage, but it also does some \n
 					# testing.  CI/CD could use some disentangling \n
