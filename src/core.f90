@@ -30,7 +30,7 @@ module syntran__core_m
 		syntran_patch =  59
 
 	! TODO:
-	!  - check that step of arrays is not 0 (this crashes syntran)
+	!  - allow for loops that iterate on chars in a str
 	!  - minval, maxval fns
 	!    * until now, i had delayed these over confusion about whether
 	!      min/minval should be different

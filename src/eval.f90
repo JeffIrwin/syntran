@@ -1845,17 +1845,37 @@ recursive subroutine eval_for_statement(node, state, res)
 
 			select case (itr%type)
 			case (i32_type)
+
+				if (step%sca%i32 == 0) then
+					write(*,*) err_int_prefix//'for loop step is 0'//color_reset
+					call internal_error()
+				end if
 				len8 = (ubound_%sca%i32 - lbound_%sca%i32 &
 					+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
 
 			case (i64_type)
+
+				if (step%sca%i64 == 0) then
+					write(*,*) err_int_prefix//'for loop step is 0'//color_reset
+					call internal_error()
+				end if
 				len8 = (ubound_%sca%i64 - lbound_%sca%i64 &
 					+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
 
 			case (f32_type)
+
+				if (step%sca%f32 == 0.0) then
+					write(*,*) err_int_prefix//'for loop step is 0.0'//color_reset
+					call internal_error()
+				end if
 				len8 = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
 
 			case (f64_type)
+
+				if (step%sca%f64 == 0.0) then
+					write(*,*) err_int_prefix//'for loop step is 0.0'//color_reset
+					call internal_error()
+				end if
 				len8 = ceiling((ubound_%sca%f64 - lbound_%sca%f64) / step%sca%f64)
 
 			case default
@@ -2343,6 +2363,11 @@ recursive subroutine eval_array_expr(node, state, res)
 
 		if (array%type == i32_type) then
 
+			if (step%sca%i32 == 0) then
+				write(*,*) err_int_prefix//'array step is 0'//color_reset
+				call internal_error()
+			end if
+
 			array%cap = (ubound_%sca%i32 - lbound_%sca%i32 &
 				+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
 
@@ -2364,8 +2389,13 @@ recursive subroutine eval_array_expr(node, state, res)
 
 		else if (array%type == i64_type) then
 
+			if (step%sca%i64 == 0) then
+				write(*,*) err_int_prefix//'array step is 0'//color_reset
+				call internal_error()
+			end if
+
 			array%cap = (ubound_%sca%i64 - lbound_%sca%i64 &
-				+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
+				+ step%sca%i64 - sign(int(1,8), step%sca%i64)) / step%sca%i64
 
 			allocate(array%i64( array%cap ))
 
@@ -2388,6 +2418,11 @@ recursive subroutine eval_array_expr(node, state, res)
 
 			!print *, 'lbound_, ubound_ = ', lbound_%sca%f32, ubound_%sca%f32
 			!print *, 'step = ', step%sca%f32
+
+			if (step%sca%f32 == 0.0) then
+				write(*,*) err_int_prefix//'array step is 0.0'//color_reset
+				call internal_error()
+			end if
 
 			array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
 			allocate(array%f32( array%cap ))
@@ -2418,6 +2453,11 @@ recursive subroutine eval_array_expr(node, state, res)
 
 			!print *, 'lbound_, ubound_ = ', lbound_%sca%f64, ubound_%sca%f64
 			!print *, 'step = ', step%sca%f64
+
+			if (step%sca%f64 == 0.0) then
+				write(*,*) err_int_prefix//'array step is 0.0'//color_reset
+				call internal_error()
+			end if
 
 			array%cap = ceiling((ubound_%sca%f64 - lbound_%sca%f64) / step%sca%f64)
 			allocate(array%f64( array%cap ))
@@ -3182,6 +3222,11 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 			call syntax_eval(node%usubscripts(i), state, usubval)
 			ssubs(i) = ssubval%to_i64()
 			usubs(i) = usubval%to_i64()
+
+			if (ssubs(i) == 0) then
+				write(*,*) err_int_prefix//'subscript step is 0'//color_reset
+				call internal_error()
+			end if
 
 			rank_res = rank_res + 1
 
