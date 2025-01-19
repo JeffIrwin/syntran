@@ -119,7 +119,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	! Might need to add separate internal/external fn names for
 	! overloaded cases
 	fn = parser%fns%search(fn_call%identifier%text, id_index, io)
-	if (io /= exit_success) then
+	if (io /= exit_success .and. parser%ipass > 0) then
 
 		span = new_span(identifier%pos, len(identifier%text))
 		call parser%diagnostics%push( &
@@ -177,7 +177,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	!print *, 'fn params size = ', size(fn%params)
 	!print *, 'fn param names size = ', size(fn%param_names%v)
-	if (fn%variadic_min < 0 .and. size(fn%params) /= args%len_) then
+	if (fn%variadic_min < 0 .and. size(fn%params) /= args%len_ &
+		.and. parser%ipass > 0) then
 
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call parser%diagnostics%push( &
@@ -185,7 +186,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			span, identifier%text, size(fn%params), args%len_))
 		return
 
-	else if (args%len_ < size(fn%params) + fn%variadic_min) then
+	else if (args%len_ < size(fn%params) + fn%variadic_min &
+		.and. parser%ipass > 0) then
 
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call parser%diagnostics%push( &
@@ -200,6 +202,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	allocate(param_val%array)
 	do i = 1, args%len_
+		if (parser%ipass == 0) cycle
 
 		! For variadic fns, check the argument type against the type
 		! of the last required parameter.  This may need to change,
@@ -491,7 +494,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 	! error if fn already declared. be careful in future if fn prototypes are
 	! added
-	if (io /= 0) then
+	if (io /= 0 .and. parser%ipass == 0) then
 		span = new_span(identifier%pos, len(identifier%text))
 		call parser%diagnostics%push( &
 			err_redeclare_fn(parser%context(), &
@@ -538,7 +541,7 @@ module function parse_struct_declaration(parser) result(decl)
 
 	itype = lookup_type(identifier%text, parser%structs, dummy_struct)
 	!print *, "itype = ", itype, kind_name(itype)
-	if (itype /= unknown_type .and. itype /= struct_type) then
+	if (itype /= unknown_type .and. itype /= struct_type .and. parser%ipass == 0) then
 		! Redeclared structs are caught below
 		span = new_span(identifier%pos, len(identifier%text))
 		call parser%diagnostics%push(err_redeclare_primitive( &
@@ -636,7 +639,7 @@ module function parse_struct_declaration(parser) result(decl)
 		call struct%vars%insert(names%v(i)%s, member, &
 			struct%num_vars, io, overwrite = .false.)
 		!print *, 'io = ', io
-		if (io /= exit_success) then
+		if (io /= exit_success .and. parser%ipass == 0) then
 			span = new_span(pos_mems%v(i), pos_mems%v(i+1) - pos_mems%v(i))
 			call parser%diagnostics%push(err_redeclare_mem( &
 				parser%context(), &
@@ -656,7 +659,7 @@ module function parse_struct_declaration(parser) result(decl)
 	call parser%structs%insert( &
 		identifier%text, struct, decl%id_index, io, overwrite = .false.)
 	!print *, "io = ", io
-	if (io /= 0) then
+	if (io /= 0 .and. parser%ipass == 0) then
 		span = new_span(identifier%pos, len(identifier%text))
 		call parser%diagnostics%push(err_redeclare_struct( &
 			parser%context(), &

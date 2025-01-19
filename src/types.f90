@@ -2402,7 +2402,7 @@ recursive subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
 		return
 	end if
 
-	allocate(node%val)
+	if (.not. allocated(node%val)) allocate(node%val)
 	node%val      = val
 	node%id_index = id_index
 

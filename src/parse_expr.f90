@@ -23,7 +23,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 	!********
 
-	logical :: is_op_allowed
+	logical :: is_op_allowed, overwrite
 
 	integer :: io, ltype, rtype, pos0, lrank, rrank, larrtype, &
 		rarrtype, search_io
@@ -91,13 +91,19 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!	print *, 'rank = ', expr%val%array%rank
 		!end if
 
+		if (parser%ipass == 0) then
+			overwrite = .false.
+		else
+			overwrite = .true.
+		end if
+
 		! Insert the identifier's type into the dict and check that it
 		! hasn't already been declared
 		call parser%vars%insert(identifier%text, expr%val, &
-			expr%id_index, io, overwrite = .false.)
+			expr%id_index, io, overwrite = overwrite)
 
 		!print *, 'io = ', io
-		if (io /= exit_success) then
+		if (io /= exit_success .and. parser%ipass == 0) then
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
 				err_redeclare_var(parser%context(), &

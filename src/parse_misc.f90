@@ -361,6 +361,11 @@ module function parse_unit(parser) result(unit)
 
 	!print *, 'starting parse_unit()'
 
+	!****************
+
+	! First pass
+	parser%ipass = 0
+
 	members = new_syntax_node_vector()
 	i = 0
 
@@ -372,7 +377,10 @@ module function parse_unit(parser) result(unit)
 
 	!call parser%vars%push_scope()
 
+	!print *, "parser pos beg = ", parser%pos
 	do while (parser%current_kind() /= eof_token)
+
+		!print *, "    parser pos = ", parser%pos
 
 		pos0 = parser%pos
 		i = i + 1
@@ -391,10 +399,60 @@ module function parse_unit(parser) result(unit)
 		if (parser%pos == pos0) dummy = parser%next()
 
 	end do
+	!print *, "parser pos end = ", parser%pos
+
+	!****************
+
+	! TODO: if any errors, skip second pass.  Although be careful to still do
+	! stuff and end of routine
+
+	! Second pass
+	parser%pos = 1
+	parser%ipass = 1
+	parser%num_vars = 0
+
+	! TODO: does num_fns need to be reset?  Anything else?  num_structs?
+
+	members = new_syntax_node_vector()
+	i = 0
+
+	!left  = parser%match(lbrace_token)
+
+	!! Pushing scope breaks interactive interpretation, but we may want it later
+	!! for interpetting multiple files.  Another alternative would be chaining
+	!! interpreted statements like Immo does
+
+	!call parser%vars%push_scope()
+
+	!print *, "parser pos beg = ", parser%pos
+	do while (parser%current_kind() /= eof_token)
+
+		!print *, "    parser pos = ", parser%pos
+
+		pos0 = parser%pos
+		i = i + 1
+		!print *, '    statement ', i
+
+		select case (parser%current_kind())
+		case (fn_keyword)
+			call members%push(parser%parse_fn_declaration())
+		case (struct_keyword)
+			call members%push(parser%parse_struct_declaration())
+		case default
+			call members%push(parser%parse_statement())
+		end select
+
+		! Break infinite loops
+		if (parser%pos == pos0) dummy = parser%next()
+
+	end do
+	!print *, "parser pos end = ", parser%pos
 
 	!call parser%vars%pop_scope()
 
 	!right = parser%match(rbrace_token)
+
+	!****************
 
 	unit%kind = translation_unit
 
