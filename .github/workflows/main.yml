@@ -11,7 +11,7 @@
 		"strategy": {
 			"matrix": {
 				"os": [
-					"ubuntu-22.04",
+					"ubuntu-latest",
 					"windows-latest",
 					"macOS-latest"
 				]
@@ -34,12 +34,16 @@
 			  "run": "bash gen-header.sh"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"if": "matrix.os == 'ubuntu-latest'",
 				"name": "Set ubuntu PATH",
 				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"if": "matrix.os == 'ubuntu-latest'",
+				"run": "sudo apt-get install gfortran-11"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-latest'",
 				"name": "Test fpm default",
 
 				"env": {
@@ -97,10 +101,6 @@
 					fpm test test --profile release \n
 					fpm test long --profile release \n
 				"
-			},
-			{
-				"if": "matrix.os == 'ubuntu-22.04'",
-				"run": "sudo apt-get install gfortran"
 			},
 			{
 				"if": "matrix.os == 'macOS-latest'",
@@ -236,7 +236,7 @@
 			},
 			{
 				"uses": "actions/upload-artifact@v4",
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"if": "matrix.os == 'ubuntu-latest'",
 				"with": {
 					# unfortunately gfortran-12 does not support -static-libquadmath.  not until gfortran-14
 
@@ -263,7 +263,7 @@
 	"build-rocky": {
 		# Build and package syntran from source in rocky linux Dockerfile
 		"name": "Build on rocky linux",
-		"runs-on": "ubuntu-22.04",
+		"runs-on": "ubuntu-latest",
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
@@ -320,7 +320,7 @@
 		"strategy": {
 			"matrix": {
 				"os": [
-					"ubuntu-22.04"
+					"ubuntu-latest"
 				],
 				#"gfortran": [10, 11, 12, 13]  # TODO: gfort 13 has an issue
 				#"gfortran": [9, 10, 11, 12]  # gfort 9 started segfaulting with the introduction of fortran submodules circa 9ae38b9d
@@ -339,7 +339,11 @@
 
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"if": "matrix.os == 'ubuntu-latest'",
+				"run": "sudo apt-get install gfortran-${{ matrix.gfortran }}"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-latest'",
 				"name": "Test ubuntu gfortran-${{ matrix.gfortran }}",
 				"env": {
 					"FPM_FC": "gfortran-${{ matrix.gfortran }}"
@@ -361,7 +365,7 @@
 		"strategy": {
 			"matrix": {
 				"os": [
-					"ubuntu-22.04"
+					"ubuntu-latest"
 				],
 				"toolchain": [
 					{"compiler": "intel", "version": "2024.2"},
@@ -399,7 +403,7 @@
 				}
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"if": "matrix.os == 'ubuntu-latest'",
 				"name": "Test ${{ matrix.toolchain.compiler }} ${{ matrix.toolchain.version }}",
 				"env": {
 					"FPM_FC": "${{ env.FC }}"
@@ -416,7 +420,7 @@
 	"test-docker-build": {
 		# Build syntran from source in default top-level alpine Dockerfile
 		"name": "Test docker build",
-		"runs-on": "ubuntu-22.04",
+		"runs-on": "ubuntu-latest",
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
@@ -446,7 +450,7 @@
 		# a lag between when you build the release and manually upload a
 		# binary package to github
 		"name": "Test linux bin",
-		"runs-on": "ubuntu-22.04",
+		"runs-on": "ubuntu-latest",
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
