@@ -625,7 +625,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 
 	integer :: i
 
-	logical, allocatable :: tests(:)
+	logical, allocatable :: tests(:), tests1(:), tests2(:)
 
 	double precision, parameter :: pi = 4.d0 * atan(1.d0)
 	real, parameter :: tol = 1.e-9, ftol = 1.e-5
@@ -638,8 +638,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 	! tendency to work for one compiler/os but not all, e.g. it may break but
 	! only for ifx, or only in docker env, etc.
 
-	tests = &
-		[   &
+	tests1 = [ &
 			abs(eval_f32('abs(0.01f);') - abs(0.01)) < ftol,  &
 			abs(eval_f32('abs(-0.1f);') - abs(-0.1)) < ftol,  &
 			abs(eval_f64('abs(-0.01);') - abs(-0.01d0)) < tol,  &
@@ -890,6 +889,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('parse_i64(    "1");')  ==     "1",  &
 			eval('parse_i64(    "2");')  ==     "2",  &
 			eval('parse_i64(   "34");')  ==    "34",  &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	tests2 = [ &
 			eval('parse_i64( "1337");')  ==  "1337",  &
 			eval('parse_i64(   "-1");')  ==    "-1",  &
 			eval('parse_i64(   "-2");')  ==    "-2",  &
@@ -1013,8 +1016,27 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('dot([1.0, 2.0], [3.0, 4.0]);') - 11.d0) < tol, &
 			abs(eval_i32('dot([1, 2], [3, 4]);') - 11) == 0, &
 			abs(eval_i64('dot(i64([1, 2]), i64([3, 4]));') - 11) == 0, &
-			eval_i32('min(1, 2);')  == 1   &
+			eval('minval([2, 1, 3]);') == '1', &
+			eval('minval([2, 4, 3]);') == '2', &
+			eval('minval([6, 4, 3]);') == '3', &
+			eval('minval(i64([3, 2, 4]));') == '2', &
+			abs(eval_f64('minval([3.0, 2.0, 4.0]);') - 2.d0) < tol, &
+			abs(eval_f32("minval([3.0'f32, 2.0'f32, 4.0'f32]);") - 2.0) < ftol, &
+			eval('maxval(-[3, 2, 4]);') == '-2', &
+			eval('maxval(-i64([3, 2, 4]));') == '-2', &
+			abs(eval_f64('maxval(-[3.0, 2.0, 4.0]);') - (-2.d0)) < tol, &
+			abs(eval_f32("maxval(-[3.0'f32, 2.0'f32, 4.0'f32]);") - (-2.0)) < ftol, &
+			eval_i32('min(1, 2);')  == 1,   &
+			.false.  & ! so I don't have to bother w/ trailing commas
 		]
+
+	! Trim dummy false element
+	tests1 = tests1(1: size(tests1) - 1)
+	tests2 = tests2(1: size(tests2) - 1)
+	!print *, "number of "//label//" tests = ", size(tests)
+
+	! Cat sub arrays
+	tests = [tests1, tests2]
 
 	call unit_test_coda(tests, label, npass, nfail)
 

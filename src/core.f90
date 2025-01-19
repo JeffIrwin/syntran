@@ -34,20 +34,14 @@ module syntran__core_m
 	!    to install gfortran-11 and maybe copy the bin gfortran to gfortran-11
 	!    or modify workflow main.yml
 	!  - allow for loops that iterate on chars in a str
-	!  - minval, maxval fns
-	!    * add tests.  otherwise done
-	!    * until now, i had delayed these over confusion about whether
-	!      min/minval should be different
-	!    * these *should* be different from min() and max() fns.  min and max
-	!      should be elemental, while minval and maxval condense an array to a
-	!      scalar (or a lower-rank array with the opt dim arg).  i now see the
-	!      beauty of fortran's design here, while i previously wondered why min
-	!      and minval weren't one fn
-	!    * if min and minval were the same fn, what would they do with an array
-	!      arg?
-	!    * maybe you could auto invoke minval when there is only 1 arg, but this
-	!      gets complicated with the opt dim/mask args.  you would have to very
-	!      carefully resolve the overload based on type/rank of several args
+	!  - minloc, maxloc, findloc fns
+	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
+	!    etc.
+	!    * just use `reshape` and call the fortran built-in.  no need for any
+	!      slice logic on my end
+	!    * "all" that needs to be done is resolve overloads based on which args
+	!       are present, call fortran build-in with reshape to the appropriate
+	!       size, and then set the result data along with size/rank meta-data
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!  - mention syntran explorer in readme
 	!    * note it may not exist in ~6 months
@@ -329,6 +323,20 @@ module syntran__core_m
 	!    include quick-start and links in top-level README?
 	!    * github automatically includes a Table of Contents in a menu, so maybe
 	!      it's better as-is
+	!  - minval, maxval fns
+	!    * done
+	!    * until now, i had delayed these over confusion about whether
+	!      min/minval should be different
+	!    * these *should* be different from min() and max() fns.  min and max
+	!      should be elemental, while minval and maxval condense an array to a
+	!      scalar (or a lower-rank array with the opt dim arg).  i now see the
+	!      beauty of fortran's design here, while i previously wondered why min
+	!      and minval weren't one fn
+	!    * if min and minval were the same fn, what would they do with an array
+	!      arg?
+	!    * maybe you could auto invoke minval when there is only 1 arg, but this
+	!      gets complicated with the opt dim/mask args.  you would have to very
+	!      carefully resolve the overload based on type/rank of several args
 	!
 	!****************************************
 

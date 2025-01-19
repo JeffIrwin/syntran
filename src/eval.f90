@@ -1382,6 +1382,8 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		! Note that min/max/println etc. are variadic, so we loop to
 		! size(node%args) instead of size(node%params)
+		!
+		! TODO: add elemental array overloads for min/max (*not* minval/maxval)
 
 		do i = 2, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
