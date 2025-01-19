@@ -31,6 +31,8 @@ echo "machine = ${machine}"
 generator=""
 if [[ "$machine" == "MinGw" ]]; then
 	generator=(-G 'MSYS Makefiles')
+	export FC=gfortran
+	echo "FC = $FC"
 fi
 
 if [[ "$machine" == "Linux" ]]; then
