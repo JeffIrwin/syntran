@@ -40,7 +40,18 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-latest'",
-				"run": "sudo apt-get install gfortran-11"
+				"run":
+				"
+					sudo apt-get install gfortran-11 \n
+
+					# cmake assumes 'gfortran' is the compiler (no '-11') \n
+					mkdir -p \"$HOME/bin\" \n
+					cp $(which gfortran-11) \"$HOME/bin\" \n
+
+					which gfortran \n
+					which gfortran-11 \n
+					gfortran --version \n
+				"
 			},
 			{
 				"if": "matrix.os == 'ubuntu-latest'",
