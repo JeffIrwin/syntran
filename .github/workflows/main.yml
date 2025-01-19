@@ -44,13 +44,16 @@
 				"
 					sudo apt-get install gfortran-11 \n
 
-					# cmake assumes 'gfortran' is the compiler (no '-11') \n
-					mkdir -p \"$HOME/bin\" \n
-					cp $(which gfortran-11) \"$HOME/bin/gfortran\" \n
+					## c.f. build.sh \n
+					#export FC=$(which gfortran-11) \n
 
-					which gfortran \n
-					which gfortran-11 \n
-					gfortran --version \n
+					## cmake assumes 'gfortran' is the compiler (no '-11') \n
+					#mkdir -p \"$HOME/bin\" \n
+					#cp $(which gfortran-11) \"$HOME/bin/gfortran\" \n
+
+					#which gfortran \n
+					#which gfortran-11 \n
+					#gfortran --version \n
 				"
 			},
 			{

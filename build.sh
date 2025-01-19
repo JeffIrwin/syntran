@@ -33,6 +33,11 @@ if [[ "$machine" == "MinGw" ]]; then
 	generator=(-G 'MSYS Makefiles')
 fi
 
+if [[ "$machine" == "Linux" ]]; then
+	export FC=$(which gfortran-11)
+	echo "FC = $FC"
+fi
+
 if [[ "$machine" == "Mac" ]]; then
 
 	# If you don't have it:  brew install gcc@12
