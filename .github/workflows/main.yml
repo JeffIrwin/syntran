@@ -44,6 +44,31 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-latest'",
+				"name": "Test fpm debug",
+				"env": {
+					"FPM_FC": "gfortran-11"
+				},
+				"run":
+				"
+					set -exu \n
+					gfortran --version \n
+					gfortran-11 --version \n
+
+					# This is a quick debug build test.  Debug compiles faster \n
+					# than release optimization \n
+
+					fpm build
+					  --profile debug
+					  --link-flag '-static-libgcc -static-libgfortran' \n
+
+					# Short tests only.  Long tests are only done in release \n
+					fpm test test
+					  --profile debug
+					  --link-flag '-static-libgcc -static-libgfortran' \n
+				"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-latest'",
 				"name": "Test fpm default",
 
 				"env": {
