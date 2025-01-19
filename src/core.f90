@@ -30,6 +30,9 @@ module syntran__core_m
 		syntran_patch =  59
 
 	! TODO:
+	!  - try to get github actions runners working on ubuntu 2024. probably need
+	!    to install gfortran-11 and maybe copy the bin gfortran to gfortran-11
+	!    or modify workflow main.yml
 	!  - allow for loops that iterate on chars in a str
 	!  - minval, maxval fns
 	!    * until now, i had delayed these over confusion about whether

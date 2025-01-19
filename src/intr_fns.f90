@@ -28,6 +28,7 @@ subroutine declare_intr_fns(fns)
 		parse_f32_fn, min_f32_fn, max_f32_fn, &
 		char_fn, parse_f64_fn, min_f64_fn, max_f64_fn, &
 		sum_i32_fn, sum_f32_fn, sum_i64_fn, sum_f64_fn, &
+		minval_i32_fn, minval_f32_fn, minval_i64_fn, minval_f64_fn, &
 		product_i32_fn, product_f32_fn, product_i64_fn, product_f64_fn, &
 		norm2_f32_fn, norm2_f64_fn, &
 		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
@@ -1056,8 +1057,6 @@ subroutine declare_intr_fns(fns)
 	! like an arbitrary limitation.  Anyway we follow the Fortran convention
 	! here
 
-	! TODO: add an array version min(array) as opposed to Fortran's minval()
-	!
 	! In Fortran, min() is polymorphic and variadic, but all args must be the
 	! same type.  For example, min(1, 2) and min(1.1, 2.1) are allowed, but
 	! min(1, 2.1) does not compile.  I think that's a reasonable restriction
@@ -1477,6 +1476,70 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
+	minval_i32_fn%type%type = i32_type
+	allocate(minval_i32_fn%params(1))
+	allocate(minval_i32_fn%param_names%v(1))
+
+	minval_i32_fn%params(1)%type = array_type
+
+	allocate(minval_i32_fn%params(1)%array)
+	minval_i32_fn%params(1)%array%type = i32_type
+	minval_i32_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	minval_i32_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0minval_i32", minval_i32_fn, id_index)
+
+	!********
+
+	minval_i64_fn%type%type = i64_type
+	allocate(minval_i64_fn%params(1))
+	allocate(minval_i64_fn%param_names%v(1))
+
+	minval_i64_fn%params(1)%type = array_type
+
+	allocate(minval_i64_fn%params(1)%array)
+	minval_i64_fn%params(1)%array%type = i64_type
+	minval_i64_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	minval_i64_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0minval_i64", minval_i64_fn, id_index)
+
+	!********
+
+	minval_f32_fn%type%type = f32_type
+	allocate(minval_f32_fn%params(1))
+	allocate(minval_f32_fn%param_names%v(1))
+
+	minval_f32_fn%params(1)%type = array_type
+
+	allocate(minval_f32_fn%params(1)%array)
+	minval_f32_fn%params(1)%array%type = f32_type
+	minval_f32_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	minval_f32_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0minval_f32", minval_f32_fn, id_index)
+
+	!********
+
+	minval_f64_fn%type%type = f64_type
+	allocate(minval_f64_fn%params(1))
+	allocate(minval_f64_fn%param_names%v(1))
+
+	minval_f64_fn%params(1)%type = array_type
+
+	allocate(minval_f64_fn%params(1)%array)
+	minval_f64_fn%params(1)%array%type = f64_type
+	minval_f64_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	minval_f64_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0minval_f64", minval_f64_fn, id_index)
+
+	!********
+
 	sum_i32_fn%type%type = i32_type
 	allocate(sum_i32_fn%params(1))
 	allocate(sum_i32_fn%param_names%v(1))
@@ -1800,6 +1863,7 @@ subroutine declare_intr_fns(fns)
 			sin_f32_fn, sin_f64_fn, sin_f32_arr_fn, sin_f64_arr_fn, &
 			sind_f32_fn, sind_f64_fn, sind_f32_arr_fn, sind_f64_arr_fn, &
 			sum_i32_fn, sum_i64_fn, sum_f32_fn, sum_f64_fn, &
+			minval_i32_fn, minval_i64_fn, minval_f32_fn, minval_f64_fn, &
 			product_i32_fn, product_i64_fn, product_f32_fn, product_f64_fn, &
 			norm2_f32_fn, norm2_f64_fn, &
 			dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
@@ -2537,6 +2601,24 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0sum_i64"
 		case default
 			fn_call%identifier%text = "0sum_i32"
+		end select
+
+	case ("minval")
+
+		type_ = i32_type
+		if (args%len_ >= 1) then
+			if (args%v(1)%val%type == array_type) type_ = args%v(1)%val%array%type
+		end if
+
+		select case (type_)
+		case (f32_type)
+			fn_call%identifier%text = "0minval_f32"
+		case (f64_type)
+			fn_call%identifier%text = "0minval_f64"
+		case (i64_type)
+			fn_call%identifier%text = "0minval_i64"
+		case default
+			fn_call%identifier%text = "0minval_i32"
 		end select
 
 	case ("product")

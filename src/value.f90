@@ -36,6 +36,8 @@ module syntran__value_m
 
 		contains
 			procedure :: to_str => scalar_to_str
+			!procedure, pass(dst) :: copy => scalar_copy
+			!generic, public :: assignment(=) => copy
 
 	end type scalar_t
 
@@ -70,6 +72,7 @@ module syntran__value_m
 
 		contains
 			procedure :: push => push_array
+			procedure :: trim => trim_array
 
 	end type array_t
 
@@ -208,7 +211,12 @@ recursive subroutine value_copy(dst, src)
 	if (debug > 3) print *, 'starting value_copy()'
 
 	dst%type = src%type
+
 	dst%sca  = src%sca
+	!select case (src%type)
+	!	case (i32_type)
+	!		dst%sca%i32 = src%sca%i32
+	!end select
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
@@ -232,6 +240,51 @@ recursive subroutine value_copy(dst, src)
 	end if
 
 end subroutine value_copy
+
+!===============================================================================
+
+!recursive subroutine scalar_copy(dst, src)
+!
+!	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
+!	! correctly for my types, leaving dangling refs to src when it is
+!	! deallocated.
+!	!
+!	! Args have to be in the confusing dst, src order for overloading
+!
+!	class(scalar_t), intent(inout) :: dst
+!	class(scalar_t), intent(in)    :: src
+!
+!	!********
+!
+!	integer :: i
+!
+!	if (debug > 3) print *, 'starting scalar_copy()'
+!
+!	dst%type = src%type
+!	dst%sca  = src%sca
+!
+!	if (allocated(src%struct_name)) then
+!		dst%struct_name = src%struct_name
+!	end if
+!
+!	if (allocated(src%array)) then
+!		if (.not. allocated(dst%array)) allocate(dst%array)
+!		dst%array = src%array
+!	else if (allocated(dst%array)) then
+!		deallocate(dst%array)
+!	end if
+!
+!	if (allocated(src%struct)) then
+!		if (allocated(dst%struct)) deallocate(dst%struct)
+!		allocate(dst%struct( size(src%struct) ))
+!		do i = 1, size(src%struct)
+!			dst%struct(i) = src%struct(i)
+!		end do
+!	else if (allocated(dst%struct)) then
+!		deallocate(dst%struct)
+!	end if
+!
+!end subroutine scalar_copy
 
 !===============================================================================
 
@@ -360,6 +413,41 @@ subroutine push_array(vector, val)
 	end select
 
 end subroutine push_array
+
+!===============================================================================
+
+subroutine trim_array(vector)
+
+	class(array_t) :: vector
+
+	!********
+
+	select case (vector%type)
+	case (i32_type)
+		vector%i32 = vector%i32(1: vector%len_)
+
+	case (i64_type)
+		vector%i64 = vector%i64(1: vector%len_)
+
+	case (f32_type)
+		vector%f32 = vector%f32(1: vector%len_)
+
+	case (f64_type)
+		vector%f64 = vector%f64(1: vector%len_)
+
+	case (bool_type)
+		vector%bool = vector%bool(1: vector%len_)
+
+	case (str_type)
+		vector%str = vector%str(1: vector%len_)
+
+	! TODO: str case, bool case.  File?  Struct?  Other types?
+	case default
+		write(*,*) err_int_prefix//'trim_array() implemented for this type'//color_reset
+		call internal_error()
+	end select
+
+end subroutine trim_array
 
 !===============================================================================
 

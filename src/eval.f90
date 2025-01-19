@@ -1679,6 +1679,23 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%i64 = count(arg1%array%bool)
 
+	case ("0minval_i32")
+		call syntax_eval(node%args(1), state, arg1)
+		!print *, "array = ", arg1%array%i32
+		res%sca%i32 = minval(arg1%array%i32)
+
+	case ("0minval_i64")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%i64 = minval(arg1%array%i64)
+
+	case ("0minval_f32")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = minval(arg1%array%f32)
+
+	case ("0minval_f64")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = minval(arg1%array%f64)
+
 	case ("0sum_i32")
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%i32 = sum(arg1%array%i32)
@@ -2327,6 +2344,8 @@ recursive subroutine eval_array_expr(node, state, res)
 	integer :: i, j
 	integer(kind = 8) :: i8, j8, size_
 
+	logical :: is_cat
+
 	real(kind = 4) :: f, fstep
 	real(kind = 8) :: f64, fstep64
 
@@ -2734,6 +2753,7 @@ recursive subroutine eval_array_expr(node, state, res)
 		end if
 
 		res%array%len_ = 0
+		is_cat = .false.
 
 		do i = 1, size(node%elems)
 			call syntax_eval(node%elems(i), state, elem)
@@ -2743,6 +2763,7 @@ recursive subroutine eval_array_expr(node, state, res)
 				res%struct(i) = elem
 
 			else if (elem%type == array_type) then
+				is_cat = .true.
 				do j8 = 0, elem%array%len_ - 1
 					call get_array_val(elem%array, j8, tmp)
 					call res%array%push(tmp)
@@ -2754,7 +2775,12 @@ recursive subroutine eval_array_expr(node, state, res)
 
 		end do
 
-		! TODO: trim catted array?  It's a tradeoff
+		! Trim catted array.  There is a perf overhead here, but you will get
+		! the wrong answer for minval, sum, etc. on the untrimmed array unless
+		! you do extra work when calling those builtin fns
+		if (is_cat) then
+			call res%array%trim()
+		end if
 
 		if (res%array%type == struct_type) then
 			res%array%len_ = size(node%elems)

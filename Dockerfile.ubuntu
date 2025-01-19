@@ -1,7 +1,7 @@
 
 FROM ubuntu:latest
 
-WORKDIR workdir
+WORKDIR /workdir
 
 RUN apt-get update -y
 RUN apt-get install -y vim
@@ -22,7 +22,7 @@ RUN gfortran-${GFORT_VERS} --version
 
 RUN apt-get install -y git
 RUN git clone https://github.com/jeffirwin/syntran
-WORKDIR syntran
+WORKDIR /workdir/syntran
 
 #COPY src ./src
 #COPY fpm.toml .
@@ -44,14 +44,20 @@ RUN fpm build --compiler gfortran
 RUN fpm install --prefix .
 #RUN fpm test test --compiler gfortran
 
-##RUN fpm test long --compiler gfortran-${GFORT_VERS}
-#
-##ARG PROFILE release
+#RUN fpm test long --compiler gfortran-${GFORT_VERS}
+
+ARG PROFILE release
 #ARG PROFILE debug
-#
-##RUN fpm build --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -static-libquadmath"
-#
-#RUN fpm build --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"
-#
+
+#RUN fpm build --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -static-libquadmath"
+
+RUN fpm build --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"
+
 #RUN find ./build -wholename "*app/syntran" | xargs ls -ltrh
-#
+
+RUN fpm install --profile release --link-flag '-static-libgcc -static-libgfortran' '--prefix=$HOME'
+
+RUN fpm build --profile debug
+#RUN fpm test test --profile debug
+#RUN fpm test test --profile release --link-flag '-static-libgcc -static-libgfortran'
+
