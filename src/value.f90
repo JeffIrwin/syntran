@@ -36,8 +36,6 @@ module syntran__value_m
 
 		contains
 			procedure :: to_str => scalar_to_str
-			!procedure, pass(dst) :: copy => scalar_copy
-			!generic, public :: assignment(=) => copy
 
 	end type scalar_t
 
@@ -211,12 +209,7 @@ recursive subroutine value_copy(dst, src)
 	if (debug > 3) print *, 'starting value_copy()'
 
 	dst%type = src%type
-
 	dst%sca  = src%sca
-	!select case (src%type)
-	!	case (i32_type)
-	!		dst%sca%i32 = src%sca%i32
-	!end select
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
@@ -240,51 +233,6 @@ recursive subroutine value_copy(dst, src)
 	end if
 
 end subroutine value_copy
-
-!===============================================================================
-
-!recursive subroutine scalar_copy(dst, src)
-!
-!	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
-!	! correctly for my types, leaving dangling refs to src when it is
-!	! deallocated.
-!	!
-!	! Args have to be in the confusing dst, src order for overloading
-!
-!	class(scalar_t), intent(inout) :: dst
-!	class(scalar_t), intent(in)    :: src
-!
-!	!********
-!
-!	integer :: i
-!
-!	if (debug > 3) print *, 'starting scalar_copy()'
-!
-!	dst%type = src%type
-!	dst%sca  = src%sca
-!
-!	if (allocated(src%struct_name)) then
-!		dst%struct_name = src%struct_name
-!	end if
-!
-!	if (allocated(src%array)) then
-!		if (.not. allocated(dst%array)) allocate(dst%array)
-!		dst%array = src%array
-!	else if (allocated(dst%array)) then
-!		deallocate(dst%array)
-!	end if
-!
-!	if (allocated(src%struct)) then
-!		if (allocated(dst%struct)) deallocate(dst%struct)
-!		allocate(dst%struct( size(src%struct) ))
-!		do i = 1, size(src%struct)
-!			dst%struct(i) = src%struct(i)
-!		end do
-!	else if (allocated(dst%struct)) then
-!		deallocate(dst%struct)
-!	end if
-!
-!end subroutine scalar_copy
 
 !===============================================================================
 

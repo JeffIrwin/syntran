@@ -1681,7 +1681,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 	case ("0minval_i32")
 		call syntax_eval(node%args(1), state, arg1)
-		!print *, "array = ", arg1%array%i32
 		res%sca%i32 = minval(arg1%array%i32)
 
 	case ("0minval_i64")
@@ -1695,6 +1694,22 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 	case ("0minval_f64")
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%f64 = minval(arg1%array%f64)
+
+	case ("0maxval_i32")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%i32 = maxval(arg1%array%i32)
+
+	case ("0maxval_i64")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%i64 = maxval(arg1%array%i64)
+
+	case ("0maxval_f32")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f32 = maxval(arg1%array%f32)
+
+	case ("0maxval_f64")
+		call syntax_eval(node%args(1), state, arg1)
+		res%sca%f64 = maxval(arg1%array%f64)
 
 	case ("0sum_i32")
 		call syntax_eval(node%args(1), state, arg1)

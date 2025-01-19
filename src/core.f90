@@ -35,6 +35,7 @@ module syntran__core_m
 	!    or modify workflow main.yml
 	!  - allow for loops that iterate on chars in a str
 	!  - minval, maxval fns
+	!    * add tests.  otherwise done
 	!    * until now, i had delayed these over confusion about whether
 	!      min/minval should be different
 	!    * these *should* be different from min() and max() fns.  min and max

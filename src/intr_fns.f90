@@ -29,6 +29,7 @@ subroutine declare_intr_fns(fns)
 		char_fn, parse_f64_fn, min_f64_fn, max_f64_fn, &
 		sum_i32_fn, sum_f32_fn, sum_i64_fn, sum_f64_fn, &
 		minval_i32_fn, minval_f32_fn, minval_i64_fn, minval_f64_fn, &
+		maxval_i32_fn, maxval_f32_fn, maxval_i64_fn, maxval_f64_fn, &
 		product_i32_fn, product_f32_fn, product_i64_fn, product_f64_fn, &
 		norm2_f32_fn, norm2_f64_fn, &
 		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
@@ -1540,6 +1541,70 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
+	maxval_i32_fn%type%type = i32_type
+	allocate(maxval_i32_fn%params(1))
+	allocate(maxval_i32_fn%param_names%v(1))
+
+	maxval_i32_fn%params(1)%type = array_type
+
+	allocate(maxval_i32_fn%params(1)%array)
+	maxval_i32_fn%params(1)%array%type = i32_type
+	maxval_i32_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	maxval_i32_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0maxval_i32", maxval_i32_fn, id_index)
+
+	!********
+
+	maxval_i64_fn%type%type = i64_type
+	allocate(maxval_i64_fn%params(1))
+	allocate(maxval_i64_fn%param_names%v(1))
+
+	maxval_i64_fn%params(1)%type = array_type
+
+	allocate(maxval_i64_fn%params(1)%array)
+	maxval_i64_fn%params(1)%array%type = i64_type
+	maxval_i64_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	maxval_i64_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0maxval_i64", maxval_i64_fn, id_index)
+
+	!********
+
+	maxval_f32_fn%type%type = f32_type
+	allocate(maxval_f32_fn%params(1))
+	allocate(maxval_f32_fn%param_names%v(1))
+
+	maxval_f32_fn%params(1)%type = array_type
+
+	allocate(maxval_f32_fn%params(1)%array)
+	maxval_f32_fn%params(1)%array%type = f32_type
+	maxval_f32_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	maxval_f32_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0maxval_f32", maxval_f32_fn, id_index)
+
+	!********
+
+	maxval_f64_fn%type%type = f64_type
+	allocate(maxval_f64_fn%params(1))
+	allocate(maxval_f64_fn%param_names%v(1))
+
+	maxval_f64_fn%params(1)%type = array_type
+
+	allocate(maxval_f64_fn%params(1)%array)
+	maxval_f64_fn%params(1)%array%type = f64_type
+	maxval_f64_fn%params(1)%array%rank = -1  ! negative means any rank
+
+	maxval_f64_fn%param_names%v(1)%s =  "array"
+
+	call fns%insert("0maxval_f64", maxval_f64_fn, id_index)
+
+	!********
+
 	sum_i32_fn%type%type = i32_type
 	allocate(sum_i32_fn%params(1))
 	allocate(sum_i32_fn%param_names%v(1))
@@ -1864,6 +1929,7 @@ subroutine declare_intr_fns(fns)
 			sind_f32_fn, sind_f64_fn, sind_f32_arr_fn, sind_f64_arr_fn, &
 			sum_i32_fn, sum_i64_fn, sum_f32_fn, sum_f64_fn, &
 			minval_i32_fn, minval_i64_fn, minval_f32_fn, minval_f64_fn, &
+			maxval_i32_fn, maxval_i64_fn, maxval_f32_fn, maxval_f64_fn, &
 			product_i32_fn, product_i64_fn, product_f32_fn, product_f64_fn, &
 			norm2_f32_fn, norm2_f64_fn, &
 			dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
@@ -2619,6 +2685,24 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 			fn_call%identifier%text = "0minval_i64"
 		case default
 			fn_call%identifier%text = "0minval_i32"
+		end select
+
+	case ("maxval")
+
+		type_ = i32_type
+		if (args%len_ >= 1) then
+			if (args%v(1)%val%type == array_type) type_ = args%v(1)%val%array%type
+		end if
+
+		select case (type_)
+		case (f32_type)
+			fn_call%identifier%text = "0maxval_f32"
+		case (f64_type)
+			fn_call%identifier%text = "0maxval_f64"
+		case (i64_type)
+			fn_call%identifier%text = "0maxval_i64"
+		case default
+			fn_call%identifier%text = "0maxval_i32"
 		end select
 
 	case ("product")
