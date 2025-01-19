@@ -46,7 +46,7 @@
 
 					# cmake assumes 'gfortran' is the compiler (no '-11') \n
 					mkdir -p \"$HOME/bin\" \n
-					cp $(which gfortran-11) \"$HOME/bin\" \n
+					cp $(which gfortran-11) \"$HOME/bin/gfortran\" \n
 
 					which gfortran \n
 					which gfortran-11 \n
