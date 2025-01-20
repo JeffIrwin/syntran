@@ -122,10 +122,17 @@ recursive subroutine syntax_eval(node, state, res)
 		! Assign return value
 		call syntax_eval(node%right, state, res)
 
-		!print *, 'assigning identifier ', quote(node%identifier%text)
+		print *, 'assigning identifier ', quote(node%identifier%text)
+		print *, "is_loc = ", node%is_loc
 
-		id = state%ref_sub(node%id_index)
-		state%vars%vals(id) = res
+		if (node%is_loc) then
+			id = node%id_index  ! TODO: why id_index and not loc_index?
+			!id = node%loc_index  ! TODO: why id_index and not loc_index?
+			state%locs%vals(id) = res
+		else
+			id = state%ref_sub(node%id_index)
+			state%vars%vals(id) = res
+		end if
 
 		!print *, "res type = ", kind_name(res%type)
 		!print *, "allocated(struct) = ", allocated(res%struct)

@@ -226,6 +226,7 @@ recursive module function parse_for_statement(parser) result(statement)
 	else
 		parser%num_vars = parser%num_vars + 1
 		statement%id_index = parser%num_vars
+		statement%is_loc = .false.
 	end if
 
 	! Auto declare loop iterator in for statement (HolyC doesn't let you do

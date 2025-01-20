@@ -512,6 +512,7 @@ module function parse_fn_declaration(parser) result(decl)
 	!print *, "decl num_locs = ", decl%num_locs
 
 	call parser%vars%pop_scope()
+	print *, "popping is_loc = false"
 	parser%is_loc = .false.  ! no nested fn declarations
 
 	allocate(fn%node)

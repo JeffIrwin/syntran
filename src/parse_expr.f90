@@ -86,9 +86,11 @@ recursive module function parse_expr_statement(parser) result(expr)
 		if (parser%is_loc) then
 			parser%num_locs = parser%num_locs + 1
 			expr%id_index   = parser%num_locs
+			expr%is_loc = .true.
 		else
 			parser%num_vars = parser%num_vars + 1
 			expr%id_index   = parser%num_vars
+			expr%is_loc = .false.
 		end if
 
 		!if (expr%val%type == array_type) then
