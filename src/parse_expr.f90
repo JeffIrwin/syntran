@@ -107,8 +107,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		! Insert the identifier's type into the dict and check that it
 		! hasn't already been declared
-		print *, "inserting var"
-		print *, "parser is_loc = ", parser%is_loc
+		!print *, "inserting var"
+		!print *, "parser is_loc = ", parser%is_loc
 		if (parser%is_loc) then
 			call parser%locs%insert(identifier%text, expr%val, &
 				!expr%id_index, io, overwrite = overwrite)
@@ -120,7 +120,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		!print *, 'io = ', io
 		if (io /= exit_success .and. parser%ipass == 0) then
-			print *, "expr redeclare"
+			!print *, "expr redeclare"
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
 				err_redeclare_var(parser%context(), &

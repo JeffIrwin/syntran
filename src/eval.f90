@@ -364,8 +364,12 @@ recursive subroutine eval_name_expr(node, state, res)
 		case (scalar_sub)
 			i8 = subscript_eval(node, state)
 			!print *, 'i8 = ', i8
-			res%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
-			! TODO: locs array vars
+
+			if (node%is_loc) then
+				res%sca%str%s = state%locs%vals(id)%sca%str%s(i8+1: i8+1)
+			else
+				res%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
+			end if
 
 		case (range_sub)
 
@@ -381,10 +385,14 @@ recursive subroutine eval_name_expr(node, state, res)
 			!print *, 'identifier ', node%identifier%text
 			!print *, 'il = ', il
 			!print *, 'iu = ', iu
-			!print *, 'str = ', state%vars%vals(id)%sca%str%s
+			!print *, 'str = ', state%vars%vals(id)%sca%str%s  ! TODO: debug broken for is_loc
 
 			! Not inclusive of upper bound
-			res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
+			if (node%is_loc) then
+				res%sca%str%s = state%locs%vals(id)%sca%str%s(il: iu-1)
+			else
+				res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
+			end if
 
 		case default
 			write(*,*) err_int_prefix//'unexpected str subscript kind'//color_reset
@@ -1729,7 +1737,16 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		!if (io /= 0) then
 			!arg1%sca%file_%eof = .true.
 			!id = state%ref_sub(node%id_index)
-			state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
+
+			!print *, "node is_loc = ", node%is_loc
+			!print *, "arg  is_loc = ", node%args(1)%is_loc
+
+			if (node%args(1)%is_loc) then
+				state%locs%vals(node%args(1)%loc_index)%sca%file_%eof = .true.
+			else
+				state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
+			end if
+
 		end if
 		!print *, 'eof   = ', arg1%sca%file_%eof
 
