@@ -1,7 +1,6 @@
 
 fn get_pi(): f32
 {
-	println("get_pi()");
 	let pi = 0.0f;
 	for k in [0: 10]
 	{
@@ -18,7 +17,6 @@ fn get_pi(): f32
 
 fn my_sin(x: f32): f32
 {
-	println("my_sin()");
 	// Calculate sine(x) using Taylor series expansion
 	// around x = 0.0f
 	//
@@ -38,35 +36,23 @@ fn my_sin(x: f32): f32
 		frac *= x2 / (k2 * (k2 + 1));
 	}
 
-	println("s = ", s);
-
 	return s;
 }
 
 let pi = get_pi();
-println("pi = ", pi);
+//println("pi = ", pi);
 
 // Number of values to test
 let n = 13;
-println("n = ", n);
 
 let sin_array = [0.0f; n];
-println("sin_array = ", sin_array);
 for i in [0: n]
 {
-	println("i = ", i);
-
-	//// TODO: this breaks.  x gets conflated with the local var x from the fn
-	///above
-	//let x = i * pi / 6;
-
-	let xi = i * pi / 6;
-
-	println("xi = ", xi);
-	sin_array[i] = my_sin(xi);
+	let x = i * pi / 6;
+	sin_array[i] = my_sin(x);
 }
 
-println("sin_array = ", sin_array);
+//println("sin_array = ", sin_array);
 
 let expected = [0.000000E+00f, 4.999999E-01f,
 8.660253E-01f, 9.999999E-01f, 8.660255E-01f, 5.000002E-01f,

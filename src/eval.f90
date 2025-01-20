@@ -839,6 +839,7 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	!type(vars_t) :: locs0  ! TODO: this will be easier if it works. less allocation/deallocation
 	type(value_t), allocatable :: locs0(:)
+
 	type(value_t), allocatable :: locs_tmp(:)
 
 	! TODO: local node copy should be unnecessary
@@ -1019,7 +1020,7 @@ recursive subroutine eval_fn_call(node, state, res)
 	!state%locs = locs0
 	if (allocated(locs0)) then
 		state%locs%vals = locs0
-	!else
+	!else if (allocated(state%locs%vals)) then
 	!	deallocate(state%locs%vals)
 	end if
 
