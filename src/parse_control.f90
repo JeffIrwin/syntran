@@ -209,6 +209,7 @@ recursive module function parse_for_statement(parser) result(statement)
 	for_token  = parser%match(for_keyword)
 
 	call parser%vars%push_scope()
+	call parser%locs%push_scope()
 
 	identifier = parser%match(identifier_token)
 
@@ -291,6 +292,7 @@ recursive module function parse_for_statement(parser) result(statement)
 	statement%body       = body
 
 	call parser%vars%pop_scope()
+	call parser%locs%pop_scope()
 
 end function parse_for_statement
 
@@ -356,6 +358,7 @@ recursive module function parse_block_statement(parser) result(block)
 	left  = parser%match(lbrace_token)
 
 	call parser%vars%push_scope()
+	call parser%locs%push_scope()
 
 	do while ( &
 		parser%current_kind() /= eof_token .and. &
@@ -376,6 +379,7 @@ recursive module function parse_block_statement(parser) result(block)
 	end do
 
 	call parser%vars%pop_scope()
+	call parser%locs%pop_scope()
 
 	right = parser%match(rbrace_token)
 

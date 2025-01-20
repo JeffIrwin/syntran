@@ -2111,6 +2111,8 @@ recursive subroutine eval_for_statement(node, state, res)
 
 	! Push scope to make the loop iterator local
 	call state%vars%push_scope()
+	call state%locs%push_scope()
+
 	state%breaked = .false.
 	do i8 = 1, len8
 
@@ -2148,6 +2150,7 @@ recursive subroutine eval_for_statement(node, state, res)
 	state%continued = .false.
 
 	call state%vars%pop_scope()
+	call state%locs%pop_scope()
 
 end subroutine eval_for_statement
 
@@ -2477,11 +2480,6 @@ subroutine eval_translation_unit(node, state, res)
 
 	integer :: i
 
-	! TODO: do we want to globally push/pop scope for whole
-	! translation_unit?  Will this have impacts on interpretting multiple
-	! files, or allowing the user to override intrinsic fns?
-	!call vars%push_scope()
-
 	! The final statement of a unit returns the actual result.  Non-final
 	! members only change the (vars) state or define fns
 	do i = 1, size(node%members)
@@ -2508,8 +2506,6 @@ subroutine eval_translation_unit(node, state, res)
 		if (state%returned) exit
 
 	end do
-
-	!call state%vars%pop_scope()
 
 end subroutine eval_translation_unit
 
@@ -3109,6 +3105,7 @@ recursive subroutine eval_block_statement(node, state, res)
 	type(value_t) :: tmp
 
 	call state%vars%push_scope()
+	call state%locs%push_scope()
 
 	! The final statement of a block returns the actual result.  Non-final
 	! members only change the (vars) state.
@@ -3143,6 +3140,7 @@ recursive subroutine eval_block_statement(node, state, res)
 	end do
 
 	call state%vars%pop_scope()
+	call state%locs%pop_scope()
 
 end subroutine eval_block_statement
 

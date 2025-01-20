@@ -374,6 +374,7 @@ module function parse_unit(parser) result(unit)
 	!! interpreted statements like Immo does
 
 	!call parser%vars%push_scope()
+	!call parser%locs%push_scope()
 
 	!print *, "parser pos beg = ", parser%pos
 	!print *, "num fns = ", parser%num_fns
@@ -429,6 +430,7 @@ module function parse_unit(parser) result(unit)
 	!left  = parser%match(lbrace_token)
 
 	!call parser%vars%push_scope()
+	!call parser%locs%push_scope()
 
 	! TODO: dry?  Two passes are almost the same, but also there are only two of
 	! them
@@ -458,6 +460,7 @@ module function parse_unit(parser) result(unit)
 	!print *, "parser pos end = ", parser%pos
 
 	!call parser%vars%pop_scope()
+	!call parser%locs%pop_scope()
 
 	!right = parser%match(rbrace_token)
 

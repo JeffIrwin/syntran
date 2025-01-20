@@ -342,6 +342,7 @@ module function parse_fn_declaration(parser) result(decl)
 	! Like a for statement, a fn declaration has its own scope (for its
 	! parameters).  Its block body will have yet another scope
 	call parser%vars%push_scope()
+	call parser%locs%push_scope()
 	parser%is_loc = .true.
 	parser%num_locs = 0
 
@@ -511,9 +512,10 @@ module function parse_fn_declaration(parser) result(decl)
 	!print *, "decl num_locs = ", decl%num_locs
 
 	call parser%vars%pop_scope()
+	call parser%locs%pop_scope()
 
 	!deallocate(dict%dicts(i)%root)
-	if (allocated(parser%locs%dicts(1)%root)) deallocate(parser%locs%dicts(1)%root)
+	!if (allocated(parser%locs%dicts(1)%root)) deallocate(parser%locs%dicts(1)%root)
 
 	!print *, "popping is_loc = false"
 	parser%is_loc = .false.  ! no nested fn declarations
