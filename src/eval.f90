@@ -916,7 +916,7 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	end if
 
-	print *, "num_locs = ", node%num_locs
+	!print *, "num_locs = ", node%num_locs
 	allocate(loc_is_ref( node%num_locs ))
 	loc_is_ref = .false.  ! TODO: unused?
 
@@ -977,7 +977,7 @@ recursive subroutine eval_fn_call(node, state, res)
 
 		if (node%is_ref(i)) then
 
-			print *, "node param = ", node%params(i)
+			!print *, "node param = ", node%params(i)
 			!print *, "arg index  = ", node%args(i)%id_index
 			!print *, "arg type   = ", kind_name(node%args(i)%val%type)
 
@@ -996,7 +996,7 @@ recursive subroutine eval_fn_call(node, state, res)
 			! Copy-in.  TODO: move_alloc() with select case for array/struct.
 			! For primitive scalars, just actually copy
 
-			print *, "node arg is_loc = ", node%args(i)%is_loc
+			!print *, "node arg is_loc = ", node%args(i)%is_loc
 			if (node%args(i)%is_loc) then
 
 				!print *, "val = ", node%args(i)%val%to_str()
@@ -1033,7 +1033,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		!print *, 'done'
 		!print *, ''
 	end do
-	print *, "loc_is_ref = ", loc_is_ref
+	!print *, "loc_is_ref = ", loc_is_ref
 
 	! Push local var stack after evaluating args.  Arg evaluation can involve
 	! recursive fn calls, so a tmp array is needed here
@@ -1107,7 +1107,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		!params_tmp(i) = state%locs%vals( node%args(i)%loc_index )
 		!state%locs%vals( node%params(i) ) = params_tmp(i)
 
-		print *, "param val  = ", state%locs%vals( node%params(i) )%to_str()
+		!print *, "param val  = ", state%locs%vals( node%params(i) )%to_str()
 
 		! TODO: is_loc/not branch
 

@@ -2,7 +2,6 @@
 fn add_one(var_ref: &i32)
 {
 	var_ref += 1;
-	println("var_ref = ", var_ref);
 	return;
 }
 
