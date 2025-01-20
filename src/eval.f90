@@ -999,13 +999,14 @@ recursive subroutine eval_fn_call(node, state, res)
 			print *, "node arg is_loc = ", node%args(i)%is_loc
 			if (node%args(i)%is_loc) then
 
-				print *, "val = ", node%args(i)%val%to_str()
-				print *, "val = ", state%locs%vals( node%args(i)%loc_index )%to_str()
+				!print *, "val = ", node%args(i)%val%to_str()
+				!print *, "val = ", state%locs%vals( node%args(i)%loc_index )%to_str()
 
 				!params_tmp(i) = node%args(i)%val
 				params_tmp(i) = state%locs%vals( node%args(i)%loc_index )
 
 			else
+				! TODO: global ref
 			end if
 			! TODO: copy-out after fn body eval
 
@@ -1097,7 +1098,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		call internal_error()
 	end if
 
-	! Move out pass-by-ref args/params
+	! Move out pass-by-ref args/params into params_tmp
 	!
 	! TODO: does this have to be after pop locs0?
 	do i = 1, size(node%params)
@@ -1110,11 +1111,13 @@ recursive subroutine eval_fn_call(node, state, res)
 
 		! TODO: is_loc/not branch
 
-		!state%locs%vals( node%args(i)%loc_index ) = &
-		locs0( node%params(i) ) = &
-		!locs0(i) = &
-			!state%locs%vals( node%params(i) )
-			state%locs%vals(i)
+		params_tmp(i) = state%locs%vals( node%params(i) )
+
+		!!state%locs%vals( node%args(i)%loc_index ) = &
+		!locs0( node%params(i) ) = &
+		!!locs0(i) = &
+		!	!state%locs%vals( node%params(i) )
+		!	state%locs%vals(i)
 
 	end do
 
@@ -1152,6 +1155,17 @@ recursive subroutine eval_fn_call(node, state, res)
 		!print *, "done deallocating"
 
 	end if
+
+	do i = 1, size(node%params)
+		if (.not. node%is_ref(i)) cycle
+
+		! TODO: is_loc/not branch.  Are global refs not covered by any tests?
+
+		!params_tmp(i) = state%locs%vals( node%params(i) )
+		!params_tmp(i) = state%locs%vals( node%args(i)%loc_index )
+		state%locs%vals( node%args(i)%loc_index ) = params_tmp(i)
+
+	end do
 
 end subroutine eval_fn_call
 
