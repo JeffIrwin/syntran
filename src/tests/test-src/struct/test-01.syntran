@@ -5,6 +5,9 @@ struct Point
 	name: str,
 }
 
+let pt0 = Point{x = [20, 10], name = "my-pt0"};
+let pt1 = Point{x = [40, 50], name = "my-pt1"};
+
 struct Rect
 {
 	bottom_left: Point, 
@@ -12,9 +15,10 @@ struct Rect
 	name: str
 }
 
+let rect0 = Rect{bottom_left = pt0, upper_right = pt1, name = "my-rect"};
+
 fn area(rect: Rect): i32
 {
-	println("starting area()");
 	let width =
 		rect.upper_right.x[0] -
 		rect.bottom_left.x[0];
@@ -23,56 +27,27 @@ fn area(rect: Rect): i32
 		rect.bottom_left.x[1];
 
 	// Taking the absolute value is left as an exercise for the reader
-	println("ending area()");
 	return width * height;
 }
 
+//println("area = ", area(rect0));
+let a0 = area(rect0);
+// area = 800
+
 fn get_unit_rect(): Rect
 {
-	println("starting get_unit_rect()");
-	let r = Rect
+	return Rect
 	{
 		bottom_left = Point{x = [0, 0], name = "bl"},
+		//bottom_left = Point{x = [-1, -1], name = "bl"},
 		upper_right = Point{x = [1, 1], name = "ur"},
 		name = "unit-rect",
 	};
-	println("returning ...");
-	return r;
-	//return Rect
-	//{
-	//	bottom_left = Point{x = [0, 0], name = "bl"},
-	//	upper_right = Point{x = [1, 1], name = "ur"},
-	//	name = "unit-rect",
-	//};
 }
-
-fn main(): bool
-{
-
-let pt0 = Point{x = [20, 10], name = "my-pt0"};
-let pt1 = Point{x = [40, 50], name = "my-pt1"};
-
-let rect0 = Rect{bottom_left = pt0, upper_right = pt1, name = "my-rect"};
-
-println("rect0 = ", rect0);
-
-//println("area = ", area(rect0));
-let a0 = area(rect0);
-println("a0 = ", a0);
-// area = 800
-
 //println("unit area = ", area(get_unit_rect()));
 // unit area = 1
 
-let unit = get_unit_rect();
-let a1 = area(unit);
-//let a1 = area(get_unit_rect());
-
-println("a1 = ", a1);
+let a1 = area(get_unit_rect());
 
 return all([a0, a1] == [800, 1]);
-
-}
-
-return main();
 

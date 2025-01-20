@@ -857,6 +857,8 @@ recursive subroutine eval_fn_call(node, state, res)
 	type(value_t) :: tmp
 
 	!type(vars_t) :: locs0  ! this will be easier if it works. less allocation/deallocation, but it crashes
+
+	!type(value_t), allocatable, save :: locs0(:)
 	type(value_t), allocatable :: locs0(:)
 
 	type(value_t), allocatable :: params_tmp(:)
@@ -876,7 +878,32 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	! Push/pop a stack of local vars (loc_index), similar to returned0
 	! stack
-	if (allocated(state%locs%vals)) locs0 = state%locs%vals
+
+	!if (allocated(state%locs%vals)) locs0 = state%locs%vals
+	if (allocated(state%locs%vals)) then
+
+		!if (allocated(locs0)) then
+		!	deallocate(locs0)
+		!end if
+
+		! Somehow, fortran fails to invoke my value_copy() routine when I try to
+		! set the whole array of vals at once and creates corrupt memory that
+		! crashes later on automatic deallocation.  Intel gets it right but
+		! gfortran only works if I allocated manually and loop
+		!
+		! This is fine for primitives but crashes on struct vals, which require
+		! recursive copying (because each member of the top-level value_t is
+		! itself a value_t)
+
+		!locs0 = state%locs%vals
+		!locs0 = state%locs%vals(:)
+		allocate(locs0( size(state%locs%vals) ))
+		!locs0(:) = state%locs%vals(:)
+		do i = 1, size(state%locs%vals)
+			locs0(i) = state%locs%vals(i)
+		end do
+
+	end if
 
 	!print *, "num_locs = ", node%num_locs
 
@@ -1041,7 +1068,14 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	if (allocated(locs0)) then
 		!print *, "popping locs"
-		state%locs%vals = locs0
+
+		!state%locs%vals = locs0
+		if (allocated(state%locs%vals)) deallocate(state%locs%vals)
+		allocate(state%locs%vals( size(locs0) ))
+		do i = 1, size(locs0)
+			state%locs%vals(i) = locs0(i)
+		end do
+
 		!print *, "done popping"
 
 		!print *, "deallocating ..."
@@ -1049,12 +1083,13 @@ recursive subroutine eval_fn_call(node, state, res)
 
 		!do i = 1, size(locs0)
 		!	print *, "i = ", i
+		!	call free_value(locs0(i))
 		!	!deallocate(locs0%vals(i))
-		!	if (allocated(locs0(i)%array)) deallocate(locs0(i)%array)
-		!	if (allocated(locs0(i)%struct)) deallocate(locs0(i)%struct)
+		!	!if (allocated(locs0(i)%array)) deallocate(locs0(i)%array)
+		!	!if (allocated(locs0(i)%struct)) deallocate(locs0(i)%struct)
 		!end do
 
-		deallocate(locs0)
+		!deallocate(locs0)
 
 		!print *, "done deallocating"
 

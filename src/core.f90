@@ -36,6 +36,7 @@ module syntran__core_m
 	!      file exists
 	!      + this will be a compatibility break. it's a must-have for 1.0
 	!    * anything else? review the rest of this list
+	!    * review all TODO notes in the codebase (!)
 	!  - allow for loops that iterate on chars in a str
 	!  - minloc, maxloc, findloc fns
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,

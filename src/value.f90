@@ -191,6 +191,37 @@ end subroutine push_value
 
 !===============================================================================
 
+!recursive subroutine free_value(src)
+!
+!	type(value_t) :: src
+!
+!	!********
+!
+!	integer :: i
+!
+!	print *, "starting free_value()"
+!
+!	if (allocated(src%struct_name)) then
+!		deallocate(src%struct_name)
+!	end if
+!
+!	if (allocated(src%array)) then
+!		deallocate(src%array)
+!	end if
+!
+!	if (allocated(src%struct)) then
+!		do i = 1, size(src%struct)
+!			call free_value(src%struct(i))
+!		end do
+!		deallocate(src%struct)
+!	end if
+!
+!	print *, "ending free_value()"
+!
+!end subroutine free_value
+
+!===============================================================================
+
 recursive subroutine value_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
@@ -224,9 +255,11 @@ recursive subroutine value_copy(dst, src)
 
 	if (allocated(src%struct)) then
 		if (allocated(dst%struct)) deallocate(dst%struct)
+		!dst%struct = src%struct
 		allocate(dst%struct( size(src%struct) ))
 		do i = 1, size(src%struct)
-			dst%struct(i) = src%struct(i)
+			!dst%struct(i) = src%struct(i)
+			call value_copy(dst%struct(i), src%struct(i))
 		end do
 	else if (allocated(dst%struct)) then
 		deallocate(dst%struct)
