@@ -49,16 +49,26 @@ fn main(): bool
 	let by = false;
 	swap_bool_(&bx, &by);
 
-	return
-		ix == 1337 and
-		iy ==   42 and
-		abs(fx - 2.71828) < 1.e-9 and
-		abs(fy - 3.1416 ) < 1.e-9 and
-		sx == "world" and
-		sy == "hi" and
-		bx == false and
-		by == true
-	;
+	println("1", ix == 1337);
+	println("2", iy ==   42);
+	println("3", abs(fx - 2.71828) < 1.e-9);
+	println("4", abs(fy - 3.1416 ) < 1.e-9);
+	println("5", sx == "world");
+	println("6", sy == "hi");
+	println("7", bx == false);
+	println("8", by == true);
+
+	//return
+	//	ix == 1337 and
+	//	iy ==   42 and
+	//	abs(fx - 2.71828) < 1.e-9 and
+	//	abs(fy - 3.1416 ) < 1.e-9 and
+	//	sx == "world" and
+	//	sy == "hi" and
+	//	bx == false and
+	//	by == true
+	//;
+	return false;
 }
 
 return main();

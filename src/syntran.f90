@@ -341,6 +341,8 @@ end function syntran_eval_f64
 
 subroutine init_ref_sub(state)
 
+	! TODO: delete.  Does nothing
+
 	! TODO: move to eval.f90
 
 	type(state_t), intent(inout) :: state
@@ -349,9 +351,9 @@ subroutine init_ref_sub(state)
 
 	integer :: i
 
-	!print *, "size vars = ", size(state%vars%vals)
-	state%ref_sub = [(i, i = 1, size(state%vars%vals))]
-	!print *, "ref_sub = ", state%ref_sub
+	!!print *, "size vars = ", size(state%vars%vals)
+	!state%ref_sub = [(i, i = 1, size(state%vars%vals))]
+	!!print *, "ref_sub = ", state%ref_sub
 
 end subroutine init_ref_sub
 

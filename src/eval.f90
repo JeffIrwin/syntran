@@ -37,10 +37,10 @@ module syntran__eval_m
 		! nightmare if you grep for "break" and don't find "broke"
 		logical :: returned, breaked, continued
 
-		! This table is used to make substitutions in the vars array for passing
-		! by reference. For values which are not references, it is otherwise an
-		! identity mapping [1, 2, 3, ... ]
-		integer, allocatable :: ref_sub(:)
+		!! This table is used to make substitutions in the vars array for passing
+		!! by reference. For values which are not references, it is otherwise an
+		!! identity mapping [1, 2, 3, ... ]
+		!integer, allocatable :: ref_sub(:)
 
 	end type state_t
 
@@ -135,7 +135,7 @@ recursive subroutine syntax_eval(node, state, res)
 			id = node%loc_index
 			state%locs%vals(id) = res
 		else
-			id = state%ref_sub(node%id_index)
+			id = node%id_index
 			state%vars%vals(id) = res
 		end if
 
@@ -347,7 +347,7 @@ recursive subroutine eval_name_expr(node, state, res)
 		id = node%loc_index  ! TODO: pass by reference for local vars?
 		type_ = state%locs%vals(id)%type
 	else
-		id = state%ref_sub(node%id_index)
+		id = node%id_index
 		type_ = state%vars%vals(id)%type
 	end if
 	!print *, "id = ", id
@@ -531,7 +531,7 @@ subroutine eval_dot_expr(node, state, res)
 		id = node%loc_index
 		call get_val(node, state%locs%vals(id), state, res)
 	else
-		id = state%ref_sub(node%id_index)
+		id = node%id_index
 		!print *, "eval dot_expr"
 		!print *, "id_index = ", id
 		!print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
@@ -855,6 +855,7 @@ recursive subroutine eval_fn_call(node, state, res)
 	!integer, allocatable :: params(:)
 
 	logical :: returned0
+	logical, allocatable :: loc_is_ref(:)
 
 	type(fn_t) :: fn
 
@@ -915,7 +916,9 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	end if
 
-	!print *, "num_locs = ", node%num_locs
+	print *, "num_locs = ", node%num_locs
+	allocate(loc_is_ref( node%num_locs ))
+	loc_is_ref = .false.  ! TODO: unused?
 
 	if (.not. allocated(node%params)) then
 		write(*,*) err_int_prefix//'unexpected user fn'//color_reset
@@ -974,19 +977,37 @@ recursive subroutine eval_fn_call(node, state, res)
 
 		if (node%is_ref(i)) then
 
-			!print *, "node param = ", node%params(i)
+			print *, "node param = ", node%params(i)
 			!print *, "arg index  = ", node%args(i)%id_index
 			!print *, "arg type   = ", kind_name(node%args(i)%val%type)
+
+			loc_is_ref( node%params(i) ) = .true.
 
 			! TODO: backup and restore ref_sub later?  Does it matter? Maybe it will for recursion
 
 			! TODO: pass-by-ref local vars.  I don't think I can do a global ref
 			! to a local var or vice-versa, so maybe don't allow that
 
-			! Map ref_sub on RHS too, in case of nested refs (one fn calling
-			! another fn)
-			state    %ref_sub( node%params(i) ) = &
-				state%ref_sub( node%args(i)%id_index )
+			!! Map ref_sub on RHS too, in case of nested refs (one fn calling
+			!! another fn)
+			!state    %ref_sub( node%params(i) ) = &
+			!	state%ref_sub( node%args(i)%id_index
+
+			! Copy-in.  TODO: move_alloc() with select case for array/struct.
+			! For primitive scalars, just actually copy
+
+			print *, "node arg is_loc = ", node%args(i)%is_loc
+			if (node%args(i)%is_loc) then
+
+				print *, "val = ", node%args(i)%val%to_str()
+				print *, "val = ", state%locs%vals( node%args(i)%loc_index )%to_str()
+
+				!params_tmp(i) = node%args(i)%val
+				params_tmp(i) = state%locs%vals( node%args(i)%loc_index )
+
+			else
+			end if
+			! TODO: copy-out after fn body eval
 
 		else
 
@@ -1011,6 +1032,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		!print *, 'done'
 		!print *, ''
 	end do
+	print *, "loc_is_ref = ", loc_is_ref
 
 	! Push local var stack after evaluating args.  Arg evaluation can involve
 	! recursive fn calls, so a tmp array is needed here
@@ -1023,8 +1045,13 @@ recursive subroutine eval_fn_call(node, state, res)
 	
 		allocate(state%locs%vals( node%num_locs ))
 		do i = 1, size(node%params)
+			
+			! TODO: move instead of copy?  At least for pass-by-ref?  Maybe do it in
+			! the arg eval loop above for ref
+
 			!state%locs%vals( node%params(i) ) = params_tmp( node%params(i) )
 			state%locs%vals( node%params(i) ) = params_tmp(i)
+
 		end do
 	!end if
 
@@ -1069,6 +1096,27 @@ recursive subroutine eval_fn_call(node, state, res)
 			node%identifier%text, "` without a return statement"//color_reset
 		call internal_error()
 	end if
+
+	! Move out pass-by-ref args/params
+	!
+	! TODO: does this have to be after pop locs0?
+	do i = 1, size(node%params)
+		if (.not. node%is_ref(i)) cycle
+
+		!params_tmp(i) = state%locs%vals( node%args(i)%loc_index )
+		!state%locs%vals( node%params(i) ) = params_tmp(i)
+
+		print *, "param val  = ", state%locs%vals( node%params(i) )%to_str()
+
+		! TODO: is_loc/not branch
+
+		!state%locs%vals( node%args(i)%loc_index ) = &
+		locs0( node%params(i) ) = &
+		!locs0(i) = &
+			!state%locs%vals( node%params(i) )
+			state%locs%vals(i)
+
+	end do
 
 	state%returned = returned0  ! pop
 
@@ -1816,7 +1864,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		if (io == iostat_end) then
 		!if (io /= 0) then
 			!arg1%sca%file_%eof = .true.
-			!id = state%ref_sub(node%id_index)
+			!id = node%id_index
 
 			!print *, "node is_loc = ", node%is_loc
 			!print *, "arg  is_loc = ", node%args(1)%is_loc
@@ -2273,7 +2321,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 	!print *, "eval assignment_expr"
 	!print *, "node identifier = ", node%identifier%text
-	!id = state%ref_sub(node%id_index)
+	!id = node%id_index
 	!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 	!if (state%vars%vals(id)%type == struct_type) then
 	!if (allocated( node%member )) then
@@ -2298,7 +2346,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		else
 			! Get the initial value from the LHS, which could be nested like `a.b.c.d`
 			!id = node%member%id_index  ! was this doing anything? seems unused
-			id = state%ref_sub(node%id_index)
+			id = node%id_index
 			call get_val(node, state%vars%vals(id), state, res)
 
 			! Do the assignment or += or whatever and set res
@@ -2314,7 +2362,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		if (node%is_loc) then
 			id = node%loc_index
 		else
-			id = state%ref_sub(node%id_index)
+			id = node%id_index
 		end if
 
 		!! This deallocation will cause a crash when an array appears on both
@@ -2364,7 +2412,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 			id = node%loc_index
 			type_ = state%locs%vals(id)%type
 		else
-			id = state%ref_sub(node%id_index)
+			id = node%id_index
 			type_ = state%vars%vals(id)%type
 		end if
 
@@ -3482,7 +3530,7 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 		id = node%loc_index
 		rank_ = state%locs%vals(id)%array%rank
 	else
-		id = state%ref_sub(node%id_index)
+		id = node%id_index
 		rank_ = state%vars%vals(id)%array%rank
 	end if
 
@@ -3742,7 +3790,7 @@ recursive function subscript_eval(node, state) result(index_)
 		id = node%loc_index
 		type_ = state%locs%vals(id)%type
 	else
-		id = state%ref_sub(node%id_index)
+		id = node%id_index
 		type_ = state%vars%vals(id)%type
 	end if
 
