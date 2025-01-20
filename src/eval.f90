@@ -862,59 +862,13 @@ recursive subroutine eval_fn_call(node, state, res)
 	type(value_t) :: tmp
 
 	!type(vars_t) :: locs0  ! this will be easier if it works. less allocation/deallocation, but it crashes
-
-	!type(value_t), allocatable, save :: locs0(:)
 	type(value_t), allocatable :: locs0(:)
 
 	type(value_t), allocatable :: params_tmp(:)
 
 	!print *, ""
-	!print *, "========================================"
 	!print *, 'eval fn_call_expr ', node%identifier%text
 	!print *, 'fn id_index   = ', node%id_index
-
-	!if (node%id_index <= 0) then
-	!	fn = state%fns%search(node%identifier%text, node%id_index, io)
-	!	!print *, 'fn id_index   = ', node%id_index
-	!	!node%params = fn%params
-	!	node%params = [1]
-	!	node%is_ref = [.false.]
-	!end if
-
-	! Push/pop a stack of local vars (loc_index), similar to returned0
-	! stack
-
-	!if (allocated(state%locs%vals)) locs0 = state%locs%vals
-	if (allocated(state%locs%vals)) then
-
-		!if (allocated(locs0)) then
-		!	deallocate(locs0)
-		!end if
-
-		! Somehow, fortran fails to invoke my value_copy() routine when I try to
-		! set the whole array of vals at once and creates corrupt memory that
-		! crashes later on automatic deallocation.  Intel gets it right but
-		! gfortran only works if I allocated manually and loop
-		!
-		! This is fine for primitives but crashes on struct vals, which require
-		! recursive copying (because each member of the top-level value_t is
-		! itself a value_t)
-
-		! TODO: perf has degraded.  `fpm test test` runs in 2.3 s on main, but
-		! over 7 s with recursion.  Is this the cause?  Can we move_alloc() the
-		! whole vals/locs0 array?  Or at least move_alloc() on just the
-		! array/struct instances?  Also can the loc backup be moved to after the
-		! arg eval loop (but before the fn body eval)?
-
-		!locs0 = state%locs%vals
-		!locs0 = state%locs%vals(:)
-		allocate(locs0( size(state%locs%vals) ))
-		!locs0(:) = state%locs%vals(:)
-		do i = 1, size(state%locs%vals)
-			locs0(i) = state%locs%vals(i)
-		end do
-
-	end if
 
 	!print *, "num_locs = ", node%num_locs
 	allocate(loc_is_ref( node%num_locs ))
@@ -928,7 +882,6 @@ recursive subroutine eval_fn_call(node, state, res)
 	! Do we need a tmp val for every local var, or only for params?  Just params
 	! seems to suffice and it should perform better
 	allocate(params_tmp( size(node%params) ))
-	!allocate(params_tmp( node%num_locs ))
 
 	! i think this is technically not different than using an explicit array.
 	! we're just using fortran's call stack and recursive calls to
@@ -952,16 +905,13 @@ recursive subroutine eval_fn_call(node, state, res)
 	!print *, 'size params = ', size(node%params)
 	!print *, 'param ids = ', params
 
-	! Pass by value (for now, at least).  Arguments are evaluated and
-	! their values are copied to the fn parameters
+	! Pass by value by default.  Arguments are evaluated and their values are
+	! copied to the fn parameters
 
 	do i = 1, size(node%params)
 		!print *, 'copying param ', i
 
-		!call syntax_eval(node%args(i), state, &
-		!	state%vars%vals( node%params(i) ))
-
-		! deeply-nested fn calls can crash without the tmp value for the
+		! Deeply-nested fn calls can crash without the tmp value for the
 		! pass-by-value case.  idk why i can't just eval directly into the state
 		! var like commented above :(.  probably state var type is getting
 		! cleared by passing it to an intent(out) arg? more likely, nested fn
@@ -969,7 +919,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		! different copies of tmp.  if you try to store them all in the same
 		! state var at multiple stack levels it breaks?
 		!
-		! this also seems to have led to a dramatic perf improvement for intel
+		! This also seems to have led to a dramatic perf improvement for intel
 		! compilers in commit 324ad414, running full tests in ~25 minutes
 		! instead of 50.  gfortran perf remains good and unchanged
 
@@ -983,11 +933,6 @@ recursive subroutine eval_fn_call(node, state, res)
 
 			loc_is_ref( node%params(i) ) = .true.
 
-			! TODO: backup and restore ref_sub later?  Does it matter? Maybe it will for recursion
-
-			! TODO: pass-by-ref local vars.  I don't think I can do a global ref
-			! to a local var or vice-versa, so maybe don't allow that
-
 			!! Map ref_sub on RHS too, in case of nested refs (one fn calling
 			!! another fn)
 			!state    %ref_sub( node%params(i) ) = &
@@ -998,26 +943,15 @@ recursive subroutine eval_fn_call(node, state, res)
 
 			!print *, "node arg is_loc = ", node%args(i)%is_loc
 			if (node%args(i)%is_loc) then
-
-				!print *, "val = ", node%args(i)%val%to_str()
 				!print *, "val = ", state%locs%vals( node%args(i)%loc_index )%to_str()
-
-				!params_tmp(i) = node%args(i)%val
 				params_tmp(i) = state%locs%vals( node%args(i)%loc_index )
-
 			else
 				! TODO: global ref
 			end if
-			! TODO: copy-out after fn body eval
 
 		else
 
 			call syntax_eval(node%args(i), state, tmp)
-
-			!state%vars%vals( node%params(i) ) = tmp
-			!state%locs%vals( node%params(i) ) = tmp
-
-			!params_tmp( node%params(i) ) = tmp
 			params_tmp(i) = tmp
 
 			!print *, "******** node%params(i) = ", node%params(i), " ******** "
@@ -1035,30 +969,29 @@ recursive subroutine eval_fn_call(node, state, res)
 	end do
 	!print *, "loc_is_ref = ", loc_is_ref
 
+	! Push/pop a stack of local vars (loc_index), similar to returned0
+	! stack
+	!
+	! I used to do this before evaling args, but it works here too
+
+	!if (allocated(state%locs%vals)) locs0 = state%locs%vals
+	if (allocated(state%locs%vals)) call move_alloc(state%locs%vals, locs0)
+
 	! Push local var stack after evaluating args.  Arg evaluation can involve
 	! recursive fn calls, so a tmp array is needed here
-	!if (size(node%params) > 0) then
-		!print *, "deallocating ..."
-		!print *, "allocated = ", allocated(state%locs%vals)
-	
-		if (allocated(state%locs%vals)) deallocate(state%locs%vals)
-		!print *, "done"
-	
-		allocate(state%locs%vals( node%num_locs ))
-		do i = 1, size(node%params)
-			
-			! TODO: move instead of copy?  At least for pass-by-ref?  Maybe do it in
-			! the arg eval loop above for ref
 
-			!state%locs%vals( node%params(i) ) = params_tmp( node%params(i) )
-			state%locs%vals( node%params(i) ) = params_tmp(i)
+	!if (allocated(state%locs%vals)) deallocate(state%locs%vals)
 
-		end do
-	!end if
+	allocate(state%locs%vals( node%num_locs ))
+	do i = 1, size(node%params)
 
-	!node%body = fn%node%body
-	!node%body = state%fns%fns(id_index)%node%body
-	!node%body = state%fns%fns( node%id_index )%node%body
+		! TODO: move instead of copy?  At least for pass-by-ref?  Maybe do it in
+		! the arg eval loop above for ref
+
+		!state%locs%vals( node%params(i) ) = params_tmp( node%params(i) )
+		state%locs%vals( node%params(i) ) = params_tmp(i)
+
+	end do
 
 	!  TODO: only do this is node%id_index is < 0 or somehow invalid
 	!
@@ -1073,18 +1006,8 @@ recursive subroutine eval_fn_call(node, state, res)
 	! TODO: can we use a fn index instead of doing a ternary tree search? like
 	! with vars?
 	fn = state%fns%search(node%identifier%text, id_index, io)
-
-	!! node is intent(in) here and in the whole stack of fortran fns that call this
-	!node%body = fn%node%body
-
-	! TODO: need to copy the functions other (non-parameter) local vars into
-	! state%locs.  How?  I think I need to save this data in the fn node because
-	! currently I only have num_locs but not their type data
-	!
-	! Or maybe not, they seem to just get inserted at eval time
-
-	!call syntax_eval(node%body, state, res)
 	call syntax_eval(fn%node%body, state, res)
+	!call syntax_eval(node%body, state, res)
 
 	!print *, "res rank = ", res%array%rank
 	!print *, 'res = ', res%to_str()
@@ -1104,65 +1027,21 @@ recursive subroutine eval_fn_call(node, state, res)
 	do i = 1, size(node%params)
 		if (.not. node%is_ref(i)) cycle
 
-		!params_tmp(i) = state%locs%vals( node%args(i)%loc_index )
-		!state%locs%vals( node%params(i) ) = params_tmp(i)
-
 		!print *, "param val  = ", state%locs%vals( node%params(i) )%to_str()
 
 		! TODO: is_loc/not branch
-
 		params_tmp(i) = state%locs%vals( node%params(i) )
-
-		!!state%locs%vals( node%args(i)%loc_index ) = &
-		!locs0( node%params(i) ) = &
-		!!locs0(i) = &
-		!	!state%locs%vals( node%params(i) )
-		!	state%locs%vals(i)
-
 	end do
 
 	state%returned = returned0  ! pop
 
-	!print *, ""
 	!print *, "popping runtime state stack"
-	!print *, ""
-
-	if (allocated(locs0)) then
-		!print *, "popping locs"
-
-		!state%locs%vals = locs0
-		if (allocated(state%locs%vals)) deallocate(state%locs%vals)
-		allocate(state%locs%vals( size(locs0) ))
-		do i = 1, size(locs0)
-			state%locs%vals(i) = locs0(i)
-		end do
-
-		!print *, "done popping"
-
-		!print *, "deallocating ..."
-		!print *, "size = ", size(locs0)
-
-		!do i = 1, size(locs0)
-		!	print *, "i = ", i
-		!	call free_value(locs0(i))
-		!	!deallocate(locs0%vals(i))
-		!	!if (allocated(locs0(i)%array)) deallocate(locs0(i)%array)
-		!	!if (allocated(locs0(i)%struct)) deallocate(locs0(i)%struct)
-		!end do
-
-		!deallocate(locs0)
-
-		!print *, "done deallocating"
-
-	end if
+	if (allocated(locs0)) call move_alloc(locs0, state%locs%vals)
 
 	do i = 1, size(node%params)
 		if (.not. node%is_ref(i)) cycle
 
 		! TODO: is_loc/not branch.  Are global refs not covered by any tests?
-
-		!params_tmp(i) = state%locs%vals( node%params(i) )
-		!params_tmp(i) = state%locs%vals( node%args(i)%loc_index )
 		state%locs%vals( node%args(i)%loc_index ) = params_tmp(i)
 
 	end do
