@@ -123,11 +123,10 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	!print *, "fn id_index = ", id_index
 	if (io /= exit_success) then ! .and. parser%ipass > 0) then
 
-		if (parser%ipass > 0) stop
+		!if (parser%ipass > 0) stop
 		if (parser%ipass == 0) then
 			fn_call%id_index = 0
 			fn_call%kind = fn_call_expr
-			!stop
 			return
 		end if
 
@@ -166,8 +165,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	! Intrinsic fns don't have a syntax node: they are implemented
 	! in Fortran, not syntran
 
-	if (allocated(fn%node)) then
-	!if (.not. fn%is_intr) then
+	!if (allocated(fn%node)) then
+	if (.not. fn%is_intr) then
 
 		!print *, 'assigning fn node'
 

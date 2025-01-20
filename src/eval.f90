@@ -126,8 +126,9 @@ recursive subroutine syntax_eval(node, state, res)
 		!print *, "is_loc = ", node%is_loc
 
 		if (node%is_loc) then
-			id = node%id_index  ! TODO: why id_index and not loc_index?
-			!id = node%loc_index  ! TODO: why id_index and not loc_index?
+		!if (node%is_loc .and. node%loc_index > 0) then
+			!id = node%id_index  ! TODO: why id_index and not loc_index?
+			id = node%loc_index
 			state%locs%vals(id) = res
 		else
 			id = state%ref_sub(node%id_index)
@@ -341,23 +342,19 @@ recursive subroutine eval_name_expr(node, state, res)
 	if (node%is_loc) then
 		id = node%loc_index  ! TODO: pass by reference for local vars?
 		type_ = state%locs%vals(id)%type
-		! TODO: make sure to set state%locs first in eval_fn_call()
-
 	else
 		id = state%ref_sub(node%id_index)
 		type_ = state%vars%vals(id)%type
-
 	end if
 	!print *, "id = ", id
 	!print *, "type_ = ", kind_name(type_)
 
 	if (type_ == unknown_type) then
-		write(*,*) err_int_prefix//"unknown type name expr"
+		write(*,*) err_int_prefix//"unknown name expr type"
 		call internal_error()
 	end if
 
-	if (allocated(node%lsubscripts) .and. &
-		type_ == str_type) then
+	if (allocated(node%lsubscripts) .and. type_ == str_type) then
 		!print *, 'string subscript RHS name expr'
 
 		!print *, 'str type'
@@ -478,7 +475,6 @@ recursive subroutine eval_name_expr(node, state, res)
 		!print *, "size(vals) = ", size(state%vars%vals)
 
 		if (node%is_loc) then
-			!type_ = state%locs%vals(id)%type
 			res = state%locs%vals(id)
 		else
 			res = state%vars%vals(id)
@@ -827,58 +823,41 @@ recursive subroutine eval_fn_call(node, state, res)
 	!********
 
 	integer :: i, io, id_index
-	integer, allocatable :: params(:)
+	!integer, allocatable :: params(:)
 
 	logical :: returned0
 
 	type(fn_t) :: fn
 
-	type(syntax_node_t) :: nodel
-
 	type(value_t) :: tmp
 
-	!type(vars_t) :: locs0  ! TODO: this will be easier if it works. less allocation/deallocation
+	!type(vars_t) :: locs0  ! this will be easier if it works. less allocation/deallocation, but it crashes
 	type(value_t), allocatable :: locs0(:)
 
 	type(value_t), allocatable :: locs_tmp(:)
 
-	! TODO: local node copy should be unnecessary
-	nodel = node
-
 	!print *, ""
 	!print *, "========================================"
-	!print *, 'eval fn_call_expr ', nodel%identifier%text
-	!print *, 'fn id_index   = ', nodel%id_index
+	!print *, 'eval fn_call_expr ', node%identifier%text
+	!print *, 'fn id_index   = ', node%id_index
 
-	if (nodel%id_index <= 0) then
-		!nodel%id_index = 130
+	!if (node%id_index <= 0) then
+	!	fn = state%fns%search(node%identifier%text, node%id_index, io)
+	!	!print *, 'fn id_index   = ', node%id_index
+	!	!node%params = fn%params
+	!	node%params = [1]
+	!	node%is_ref = [.false.]
+	!end if
 
-		!fn = parser%fns%search(fn_call%identifier%text, id_index, io)
-		fn = state%fns%search(nodel%identifier%text, nodel%id_index, io)
-
-		!print *, 'fn id_index   = ', nodel%id_index
-
-		!nodel%params = fn%params
-		nodel%params = [1]
-		nodel%is_ref = [.false.]
-
-	end if
-
-	! TODO: push/pop a stack of local vars (loc_index), similar to returned0
+	! Push/pop a stack of local vars (loc_index), similar to returned0
 	! stack
-	!locs0 = state%locs  ! TODO: if allocated?
+	if (allocated(state%locs%vals)) locs0 = state%locs%vals
 
-	if (allocated(state%locs%vals)) then
-		locs0 = state%locs%vals
-		!deallocate(state%locs%vals)
-	end if
+	!print *, "num_locs = ", node%num_locs
 
-	!print *, "num_locs = ", nodel%num_locs
-
-	allocate(locs_tmp( nodel%num_locs ))
-
-	!if (allocated(state%locs%vals)) deallocate(state%locs%vals)
-	!allocate(state%locs%vals( nodel%num_locs ))
+	! TODO: do we need a tmp val for every local var, or only for params?  I
+	! think just params should suffice and improve perf
+	allocate(locs_tmp( node%num_locs ))
 
 	! i think this is technically not different than using an explicit array.
 	! we're just using fortran's call stack and recursive calls to
@@ -889,36 +868,33 @@ recursive subroutine eval_fn_call(node, state, res)
 	! i don't think we need a stack of "breaked" bools.  that's just loop local,
 	! right?
 
-	res%type = nodel%val%type
+	res%type = node%val%type
 
 	!print *, 'res type = ', res%type
 
 	! User-defined function
 
-	if (.not. allocated(nodel%params)) then
+	if (.not. allocated(node%params)) then
 		write(*,*) err_int_prefix//'unexpected user fn'//color_reset
 		call internal_error()
 	end if
-	params = nodel%params
+	!params = node%params
 
-	!print *, 'fn name = ', nodel%identifier%text
-	!print *, 'fn idx  = ', nodel%id_index
-	!print *, 'nodel type = ', kind_name(nodel%val%type)
+	!print *, 'fn name = ', node%identifier%text
+	!print *, 'fn idx  = ', node%id_index
+	!print *, 'node type = ', kind_name(node%val%type)
 	!print *, 'alloc params = ', allocated(params)
 	!print *, 'size params = ', size(params)
 	!print *, 'param ids = ', params
 
-	! TODO: Shared param scope is ok at first, but eventually target
-	! recursive fns with scoped stack frames
-
 	! Pass by value (for now, at least).  Arguments are evaluated and
 	! their values are copied to the fn parameters
 
-	do i = 1, size(params)
+	do i = 1, size(node%params)
 		!print *, 'copying param ', i
 
-		!call syntax_eval(nodel%args(i), state, &
-		!	state%vars%vals( params(i) ))
+		!call syntax_eval(node%args(i), state, &
+		!	state%vars%vals( node%params(i) ))
 
 		! deeply-nested fn calls can crash without the tmp value for the
 		! pass-by-value case.  idk why i can't just eval directly into the state
@@ -932,57 +908,59 @@ recursive subroutine eval_fn_call(node, state, res)
 		! compilers in commit 324ad414, running full tests in ~25 minutes
 		! instead of 50.  gfortran perf remains good and unchanged
 
-		!print *, "is_ref = ", nodel%is_ref(i)
+		!print *, "is_ref = ", node%is_ref(i)
 
-		if (nodel%is_ref(i)) then
+		if (node%is_ref(i)) then
 
-			!print *, "nodel param = ", params(i)
-			!print *, "arg index  = ", nodel%args(i)%id_index
-			!print *, "arg type   = ", kind_name(nodel%args(i)%val%type)
+			!print *, "node param = ", node%params(i)
+			!print *, "arg index  = ", node%args(i)%id_index
+			!print *, "arg type   = ", kind_name(node%args(i)%val%type)
 
 			! TODO: backup and restore ref_sub later?  Does it matter? Maybe it will for recursion
 
-			! TODO: pass-by-ref local vars
+			! TODO: pass-by-ref local vars.  I don't think I can do a global ref
+			! to a local var or vice-versa, so maybe don't allow that
 
 			! Map ref_sub on RHS too, in case of nested refs (one fn calling
 			! another fn)
-			state    %ref_sub( params(i) ) = &
-				state%ref_sub( nodel%args(i)%id_index )
+			state    %ref_sub( node%params(i) ) = &
+				state%ref_sub( node%args(i)%id_index )
 
 		else
 
-			call syntax_eval(nodel%args(i), state, tmp)
+			call syntax_eval(node%args(i), state, tmp)
 
-			!state%vars%vals( params(i) ) = tmp
-			!state%locs%vals( params(i) ) = tmp
-			locs_tmp( params(i) ) = tmp
+			!state%vars%vals( node%params(i) ) = tmp
+			!state%locs%vals( node%params(i) ) = tmp
+			locs_tmp( node%params(i) ) = tmp
 
-			!print *, "******** params(i) = ", params(i), " ******** "
+			!print *, "******** node%params(i) = ", node%params(i), " ******** "
 			!print *, "******** type = ", kind_name(tmp%type)
-			!print *, "******** type = ", kind_name( state%locs%vals( params(i) )%type )
+			!print *, "******** type = ", kind_name( state%locs%vals( node%params(i) )%type )
 
 		end if
 
-		!print *, "param type = ", kind_name(state%vars%vals( params(i) )%type)
-		!print *, "param rank = ", state%vars%vals( params(i) )%array%rank
-		!print *, "param size = ", state%vars%vals( params(i) )%array%size
+		!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
+		!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
+		!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
 
 		!print *, 'done'
 		!print *, ''
 	end do
 
-	! Push local var stack after evaluating args
+	! Push local var stack after evaluating args.  Arg evaluation can involve
+	! recursive fn calls, so a tmp array is needed here
 	if (allocated(state%locs%vals)) deallocate(state%locs%vals)
-	allocate(state%locs%vals( nodel%num_locs ))
-	do i = 1, size(params)
-		state%locs%vals( params(i) ) = locs_tmp( params(i) )
+	allocate(state%locs%vals( node%num_locs ))
+	do i = 1, size(node%params)
+		state%locs%vals( node%params(i) ) = locs_tmp( node%params(i) )
 	end do
 
-	!nodel%body = fn%node%body
-	!nodel%body = state%fns%fns(id_index)%node%body
-	!nodel%body = state%fns%fns( nodel%id_index )%node%body
+	!node%body = fn%node%body
+	!node%body = state%fns%fns(id_index)%node%body
+	!node%body = state%fns%fns( node%id_index )%node%body
 
-	!  TODO: only do this is nodel%id_index is < 0 or somehow invalid
+	!  TODO: only do this is node%id_index is < 0 or somehow invalid
 	!
 	!  This is required because the parser essentially inlines all functions by
 	!  pasting their body in every place that they are called.  With two passes
@@ -991,14 +969,23 @@ recursive subroutine eval_fn_call(node, state, res)
 	!
 	!  There is already an `if (id_index <+ 0)` check above where it might be
 	!  appropriate to move this body inlining
-	fn = state%fns%search(nodel%identifier%text, id_index, io)
-	nodel%body = fn%node%body
+	!
+	! TODO: can we use a fn index instead of doing a ternary tree search? like
+	! with vars?
+	fn = state%fns%search(node%identifier%text, id_index, io)
+
+	!! node is intent(in) here and in the whole stack of fortran fns that call this
+	!node%body = fn%node%body
 
 	! TODO: need to copy the functions other (non-parameter) local vars into
 	! state%locs.  How?  I think I need to save this data in the fn node because
 	! currently I only have num_locs but not their type data
+	!
+	! Or maybe not, they seem to just get inserted at eval time
 
-	call syntax_eval(nodel%body, state, res)
+	!call syntax_eval(node%body, state, res)
+	call syntax_eval(fn%node%body, state, res)
+
 	!print *, "res rank = ", res%array%rank
 	!print *, 'res = ', res%to_str()
 
@@ -1007,7 +994,7 @@ recursive subroutine eval_fn_call(node, state, res)
 	! statements after returns also seems hard
 	if (.not. state%returned) then
 		write(*,*) err_int_prefix//"reached end of function `", &
-			nodel%identifier%text, "` without a return statement"//color_reset
+			node%identifier%text, "` without a return statement"//color_reset
 		call internal_error()
 	end if
 
@@ -1017,11 +1004,8 @@ recursive subroutine eval_fn_call(node, state, res)
 	!print *, "popping runtime state stack"
 	!print *, ""
 
-	!state%locs = locs0
 	if (allocated(locs0)) then
 		state%locs%vals = locs0
-	!else if (allocated(state%locs%vals)) then
-	!	deallocate(state%locs%vals)
 	end if
 
 end subroutine eval_fn_call
@@ -1921,9 +1905,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		res%sca%bool = any(arg1%array%bool)
 
 	case default
-
-		! TODO: this change shouldn't be needed
-		!call eval_fn_call(node, state, res)
 
 		!print *, 'fn name = ', node%identifier%text
 		write(*,*) err_int_prefix//'unexpected intr fn'//color_reset

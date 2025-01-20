@@ -30,6 +30,12 @@ module syntran__core_m
 		syntran_patch =  59
 
 	! TODO:
+	!  - roadmap to version 1.0.0:
+	!    * finish recursion
+	!    * rethink open() fn.  add a read/write mode.  read mode should check if
+	!      file exists
+	!      + this will be a compatibility break. it's a must-have for 1.0
+	!    * anything else? review the rest of this list
 	!  - allow for loops that iterate on chars in a str
 	!  - minloc, maxloc, findloc fns
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
@@ -172,8 +178,6 @@ module syntran__core_m
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
 	!      unknown_type for that
-	!  - rethink open() fn.  add a mode.  read mode should check if file exists
-	!    * this will be a compatibility break. it's a must-have for 1.0
 	!  - array operations:
 	!    * done: element-wise add, sub, mul, div, pow, mod
 	!      + compound array assignment works but needs unit tests

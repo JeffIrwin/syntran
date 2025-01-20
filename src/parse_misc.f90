@@ -369,8 +369,6 @@ module function parse_unit(parser) result(unit)
 	members = new_syntax_node_vector()
 	i = 0
 
-	!left  = parser%match(lbrace_token)
-
 	!! Pushing scope breaks interactive interpretation, but we may want it later
 	!! for interpetting multiple files.  Another alternative would be chaining
 	!! interpreted statements like Immo does
@@ -380,7 +378,7 @@ module function parse_unit(parser) result(unit)
 	!print *, "parser pos beg = ", parser%pos
 	!print *, "num fns = ", parser%num_fns
 
-	num_fns0 = parser%num_fns  ! includes intrinsic fns. TODO: unused?
+	num_fns0 = parser%num_fns  ! includes intrinsic fns
 
 	do while (parser%current_kind() /= eof_token)
 
@@ -415,7 +413,7 @@ module function parse_unit(parser) result(unit)
 	!print *, ""
 
 	! TODO: if any errors, skip second pass.  Although be careful to still do
-	! stuff and end of routine
+	! stuff at end of routine
 
 	! Second pass
 	parser%pos = 1
@@ -423,18 +421,17 @@ module function parse_unit(parser) result(unit)
 	parser%num_vars = 0
 	parser%num_fns = num_fns0
 
-	! TODO: does num_fns need to be reset?  Anything else?  num_structs?
+	! TODO: does anything else need to be reset?  num_structs?
 
 	members = new_syntax_node_vector()
 	i = 0
 
 	!left  = parser%match(lbrace_token)
 
-	!! Pushing scope breaks interactive interpretation, but we may want it later
-	!! for interpetting multiple files.  Another alternative would be chaining
-	!! interpreted statements like Immo does
-
 	!call parser%vars%push_scope()
+
+	! TODO: dry?  Two passes are almost the same, but also there are only two of
+	! them
 
 	!print *, "parser pos beg = ", parser%pos
 	do while (parser%current_kind() /= eof_token)

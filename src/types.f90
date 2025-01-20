@@ -154,7 +154,7 @@ module syntran__types_m
 
 		type(syntax_token_t) :: op, identifier
 
-		integer :: id_index, loc_index, num_locs
+		integer :: id_index = 0, loc_index = 0, num_locs
 		logical :: is_loc = .false.
 
 		integer, allocatable :: params(:)
