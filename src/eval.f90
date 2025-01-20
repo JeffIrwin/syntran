@@ -837,11 +837,11 @@ recursive subroutine eval_fn_call(node, state, res)
 	! TODO: local node copy should be unnecessary
 	nodel = node
 
-	print *, ""
+	!print *, ""
 	!print *, "========================================"
-	print *, 'eval fn_call_expr'
-	print *, 'fn identifier = ', nodel%identifier%text
-	print *, 'fn id_index   = ', nodel%id_index
+	!print *, 'eval fn_call_expr'
+	!print *, 'fn identifier = ', nodel%identifier%text
+	!print *, 'fn id_index   = ', nodel%id_index
 
 	if (nodel%id_index <= 0) then
 		!nodel%id_index = 130
@@ -849,7 +849,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		!fn = parser%fns%search(fn_call%identifier%text, id_index, io)
 		fn = state%fns%search(nodel%identifier%text, nodel%id_index, io)
 
-		print *, 'fn id_index   = ', nodel%id_index
+		!print *, 'fn id_index   = ', nodel%id_index
 
 		!nodel%params = fn%params
 		nodel%params = [1]
@@ -866,7 +866,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		!deallocate(state%locs%vals)
 	end if
 
-	print *, "num_locs = ", nodel%num_locs
+	!print *, "num_locs = ", nodel%num_locs
 
 	allocate(locs_tmp( nodel%num_locs ))
 
@@ -898,8 +898,8 @@ recursive subroutine eval_fn_call(node, state, res)
 	!print *, 'fn idx  = ', nodel%id_index
 	!print *, 'nodel type = ', kind_name(nodel%val%type)
 	!print *, 'alloc params = ', allocated(params)
-	print *, 'size params = ', size(params)
-	print *, 'param ids = ', params
+	!print *, 'size params = ', size(params)
+	!print *, 'param ids = ', params
 
 	! TODO: Shared param scope is ok at first, but eventually target
 	! recursive fns with scoped stack frames
@@ -925,7 +925,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		! compilers in commit 324ad414, running full tests in ~25 minutes
 		! instead of 50.  gfortran perf remains good and unchanged
 
-		print *, "is_ref = ", nodel%is_ref(i)
+		!print *, "is_ref = ", nodel%is_ref(i)
 
 		if (nodel%is_ref(i)) then
 
@@ -951,7 +951,7 @@ recursive subroutine eval_fn_call(node, state, res)
 			locs_tmp( params(i) ) = tmp
 
 			!print *, "******** params(i) = ", params(i), " ******** "
-			print *, "******** type = ", kind_name(tmp%type)
+			!print *, "******** type = ", kind_name(tmp%type)
 			!print *, "******** type = ", kind_name( state%locs%vals( params(i) )%type )
 
 		end if
@@ -975,6 +975,15 @@ recursive subroutine eval_fn_call(node, state, res)
 	!nodel%body = state%fns%fns(id_index)%node%body
 	!nodel%body = state%fns%fns( nodel%id_index )%node%body
 
+	! TODO: only do this is nodel%id_index is < 0 or somehow invalid
+	!
+	! This is required because the parser essentially inlines all functions by
+	! pasting their body in every place that they are called.  With two passes
+	! it can handle the 1st recursion level ok, but deeper recursion otherwise
+	! fails.  Setting the body here does the inlining at runtime (eval time)
+	!
+	! There is already an `if (id_index <+ 0)` check above where it might be
+	! appropriate to move this body inlining
 	fn = state%fns%search(nodel%identifier%text, id_index, io)
 	nodel%body = fn%node%body
 

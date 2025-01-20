@@ -44,13 +44,13 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	type(value_t) :: param_val
 
-	print *, ''
-	print *, 'parse_fn_call'
+	!print *, ''
+	!print *, 'parse_fn_call'
 
 	! Function call expression
 	identifier = parser%match(identifier_token)
 
-	print *, "identifier = ", identifier%text
+	!print *, "identifier = ", identifier%text
 
 	args     = new_syntax_node_vector()
 	pos_args = new_integer_vector()
@@ -120,7 +120,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	! Might need to add separate internal/external fn names for
 	! overloaded cases
 	fn = parser%fns%search(fn_call%identifier%text, id_index, io)
-	print *, "fn id_index = ", id_index
+	!print *, "fn id_index = ", id_index
 	if (io /= exit_success) then ! .and. parser%ipass > 0) then
 
 		if (parser%ipass > 0) stop

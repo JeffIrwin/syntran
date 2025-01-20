@@ -2300,7 +2300,7 @@ recursive subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwri
 
 	iostat = exit_success
 
-	print *, 'inserting key ', quote(key)
+	!print *, 'inserting key ', quote(key)
 
 	! key == k//ey.  Get it? :)
 	k   = key(1:1)
@@ -2348,8 +2348,8 @@ recursive subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwri
 	node%val      = val
 	node%id_index = id_index
 
-	print *, "inserted index ", id_index
-	print *, 'done inserting'
+	!print *, "inserted index ", id_index
+	!print *, 'done inserting'
 	!print *, ''
 
 end subroutine fn_ternary_insert

@@ -28,7 +28,7 @@ module function parse_return_statement(parser) result(statement)
 	type(syntax_token_t) :: return_token, semi
 	type(text_span_t) :: span
 
-	print *, "starting parse_return_statement()"
+	!print *, "starting parse_return_statement()"
 
 	right_beg = parser%peek_pos(0)
 	return_token = parser%match(return_keyword)

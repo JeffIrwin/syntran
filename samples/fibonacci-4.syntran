@@ -1,0 +1,15 @@
+
+// This Fibonacci implementation is only a demo of recursion
+//
+// The array-caching version of fibonacci-3.syntran performs much better.  If
+// you crank the loop up to 20 this will struggle
+
+fn fib(a: i32): i32
+{
+	if (a <= 1) return 1;
+	return fib(a-2) + fib(a-1);
+}
+
+for i in [0: 10]
+	println("fib(", i, ") = ", fib(i));
+
