@@ -562,6 +562,8 @@ module function parse_struct_declaration(parser) result(decl)
 
 	integer :: itype, i, io, pos0
 
+	logical :: overwrite
+
 	type(struct_t) :: struct, dummy_struct
 
 	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
@@ -697,9 +699,12 @@ module function parse_struct_declaration(parser) result(decl)
 	parser%num_structs = parser%num_structs + 1
 	decl%id_index  = parser%num_structs
 
+	overwrite = .false.
+	if (parser%ipass > 0) overwrite = .true.
+
 	!print *, "inserting identifier ", identifier%text, " into parser structs"
 	call parser%structs%insert( &
-		identifier%text, struct, decl%id_index, io, overwrite = .false.)
+		identifier%text, struct, decl%id_index, io, overwrite = overwrite)
 	!print *, "io = ", io
 	if (io /= 0 .and. parser%ipass == 0) then
 		span = new_span(identifier%pos, len(identifier%text))

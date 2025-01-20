@@ -127,7 +127,7 @@ recursive subroutine syntax_eval(node, state, res)
 
 		if (node%is_loc) then
 		!if (node%is_loc .and. node%loc_index > 0) then
-			!id = node%id_index  ! TODO: why id_index and not loc_index?
+			!id = node%id_index
 			id = node%loc_index
 			state%locs%vals(id) = res
 		else
@@ -476,8 +476,14 @@ recursive subroutine eval_name_expr(node, state, res)
 			do i8 = 0, res%array%len_ - 1
 				!print *, 'subs = ', int(subs, 4)
 
-				index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
-				call get_array_val(state%vars%vals(id)%array, index_, tmp)
+				if (node%is_loc) then
+					index_ = subscript_i32_eval(subs, state%locs%vals(id)%array)
+					call get_array_val(state%locs%vals(id)%array, index_, tmp)
+				else
+					index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
+					call get_array_val(state%vars%vals(id)%array, index_, tmp)
+				end if
+
 				call set_array_val(res%array, i8, tmp)
 				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 			end do
@@ -514,15 +520,20 @@ subroutine eval_dot_expr(node, state, res)
 
 	integer :: id
 
-	id = state%ref_sub(node%id_index)
-	!print *, "eval dot_expr"
-	!print *, "id_index = ", id
-	!print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
-
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
-	call get_val(node, state%vars%vals(id), state, res)
+	if (node%is_loc) then
+		id = node%loc_index
+		call get_val(node, state%locs%vals(id), state, res)
+	else
+		id = state%ref_sub(node%id_index)
+		!print *, "eval dot_expr"
+		!print *, "id_index = ", id
+		!print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
+
+		call get_val(node, state%vars%vals(id), state, res)
+	end if
 
 end subroutine eval_dot_expr
 
@@ -898,7 +909,7 @@ recursive subroutine eval_fn_call(node, state, res)
 	!print *, 'fn idx  = ', node%id_index
 	!print *, 'node type = ', kind_name(node%val%type)
 	!print *, 'alloc params = ', allocated(params)
-	!print *, 'size params = ', size(params)
+	!print *, 'size params = ', size(node%params)
 	!print *, 'param ids = ', params
 
 	! Pass by value (for now, at least).  Arguments are evaluated and
@@ -966,12 +977,19 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	! Push local var stack after evaluating args.  Arg evaluation can involve
 	! recursive fn calls, so a tmp array is needed here
-	if (allocated(state%locs%vals)) deallocate(state%locs%vals)
-	allocate(state%locs%vals( node%num_locs ))
-	do i = 1, size(node%params)
-		!state%locs%vals( node%params(i) ) = params_tmp( node%params(i) )
-		state%locs%vals( node%params(i) ) = params_tmp(i)
-	end do
+	!if (size(node%params) > 0) then
+		!print *, "deallocating ..."
+		!print *, "allocated = ", allocated(state%locs%vals)
+	
+		if (allocated(state%locs%vals)) deallocate(state%locs%vals)
+		!print *, "done"
+	
+		allocate(state%locs%vals( node%num_locs ))
+		do i = 1, size(node%params)
+			!state%locs%vals( node%params(i) ) = params_tmp( node%params(i) )
+			state%locs%vals( node%params(i) ) = params_tmp(i)
+		end do
+	!end if
 
 	!node%body = fn%node%body
 	!node%body = state%fns%fns(id_index)%node%body
@@ -1022,7 +1040,24 @@ recursive subroutine eval_fn_call(node, state, res)
 	!print *, ""
 
 	if (allocated(locs0)) then
+		!print *, "popping locs"
 		state%locs%vals = locs0
+		!print *, "done popping"
+
+		!print *, "deallocating ..."
+		!print *, "size = ", size(locs0)
+
+		!do i = 1, size(locs0)
+		!	print *, "i = ", i
+		!	!deallocate(locs0%vals(i))
+		!	if (allocated(locs0(i)%array)) deallocate(locs0(i)%array)
+		!	if (allocated(locs0(i)%struct)) deallocate(locs0(i)%struct)
+		!end do
+
+		deallocate(locs0)
+
+		!print *, "done deallocating"
+
 	end if
 
 end subroutine eval_fn_call
@@ -2209,16 +2244,25 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		! Evaluate the RHS
 		call syntax_eval(node%right, state, rhs)
 
-		! Get the initial value from the LHS, which could be nested like `a.b.c.d`
-		!id = node%member%id_index  ! was this doing anything? seems unused
-		id = state%ref_sub(node%id_index)
-		call get_val(node, state%vars%vals(id), state, res)
+		if (node%is_loc) then
+			id = node%loc_index
+			call get_val(node, state%locs%vals(id), state, res)
+			call compound_assign(res, rhs, node%op)
+			call set_val(node, state%locs%vals(id), state, res)
 
-		! Do the assignment or += or whatever and set res
-		call compound_assign(res, rhs, node%op)
+		else
+			! Get the initial value from the LHS, which could be nested like `a.b.c.d`
+			!id = node%member%id_index  ! was this doing anything? seems unused
+			id = state%ref_sub(node%id_index)
+			call get_val(node, state%vars%vals(id), state, res)
 
-		! Save it back into the LHS var
-		call set_val(node, state%vars%vals(id), state, res)
+			! Do the assignment or += or whatever and set res
+			call compound_assign(res, rhs, node%op)
+
+			! Save it back into the LHS var
+			call set_val(node, state%vars%vals(id), state, res)
+
+		end if
 
 	else if (.not. allocated(node%lsubscripts)) then
 
@@ -3389,8 +3433,14 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 
 	type(value_t) :: asubval, lsubval, usubval, ssubval
 
-	id = state%ref_sub(node%id_index)
-	rank_ = state%vars%vals(id)%array%rank
+	if (node%is_loc) then
+		id = node%loc_index
+		rank_ = state%locs%vals(id)%array%rank
+	else
+		id = state%ref_sub(node%id_index)
+		rank_ = state%vars%vals(id)%array%rank
+	end if
+
 	allocate(asubs(rank_), lsubs(rank_), ssubs(rank_), usubs(rank_))
 	rank_res = 0
 	do i = 1, rank_
@@ -3428,7 +3478,11 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 		select case (node%lsubscripts(i)%sub_kind)
 		case (all_sub)
 			ssubs(i) = 1
-			usubs(i) = state%vars%vals(id)%array%size(i)
+			if (node%is_loc) then
+				usubs(i) = state%locs%vals(id)%array%size(i)
+			else
+				usubs(i) = state%vars%vals(id)%array%size(i)
+			end if
 			!print *, 'usubs(i) = ', usubs(i)
 
 			rank_res = rank_res + 1

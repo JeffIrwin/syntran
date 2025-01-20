@@ -357,7 +357,7 @@ module function parse_unit(parser) result(unit)
 	type(syntax_node_vector_t) :: members
 	type(syntax_token_t) :: dummy
 
-	integer :: i, pos0, num_fns0
+	integer :: i, pos0, num_fns0, num_structs0
 
 	!print *, 'starting parse_unit()'
 
@@ -380,6 +380,7 @@ module function parse_unit(parser) result(unit)
 	!print *, "num fns = ", parser%num_fns
 
 	num_fns0 = parser%num_fns  ! includes intrinsic fns
+	num_structs0 = parser%num_structs
 
 	do while (parser%current_kind() /= eof_token)
 
@@ -421,8 +422,9 @@ module function parse_unit(parser) result(unit)
 	parser%ipass = 1
 	parser%num_vars = 0
 	parser%num_fns = num_fns0
+	parser%num_structs = num_structs0
 
-	! TODO: does anything else need to be reset?  num_structs?
+	! TODO: Double check struct resetting.  Does anything else need to be reset?  
 
 	members = new_syntax_node_vector()
 	i = 0

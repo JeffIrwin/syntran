@@ -2629,7 +2629,7 @@ recursive subroutine struct_ternary_insert(node, key, val, id_index, iostat, ove
 		return
 	end if
 
-	allocate(node%val)
+	if (.not. allocated(node%val)) allocate(node%val)
 	node%val      = val
 	!node%val%vars = val%vars
 	node%id_index = id_index
