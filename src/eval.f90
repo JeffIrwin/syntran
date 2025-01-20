@@ -834,7 +834,7 @@ recursive subroutine eval_fn_call(node, state, res)
 	!type(vars_t) :: locs0  ! this will be easier if it works. less allocation/deallocation, but it crashes
 	type(value_t), allocatable :: locs0(:)
 
-	type(value_t), allocatable :: locs_tmp(:)
+	type(value_t), allocatable :: params_tmp(:)
 
 	!print *, ""
 	!print *, "========================================"
@@ -855,9 +855,15 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	!print *, "num_locs = ", node%num_locs
 
-	! TODO: do we need a tmp val for every local var, or only for params?  I
-	! think just params should suffice and improve perf
-	allocate(locs_tmp( node%num_locs ))
+	if (.not. allocated(node%params)) then
+		write(*,*) err_int_prefix//'unexpected user fn'//color_reset
+		call internal_error()
+	end if
+
+	! Do we need a tmp val for every local var, or only for params?  Just params
+	! seems to suffice and it should perform better
+	allocate(params_tmp( size(node%params) ))
+	!allocate(params_tmp( node%num_locs ))
 
 	! i think this is technically not different than using an explicit array.
 	! we're just using fortran's call stack and recursive calls to
@@ -873,12 +879,6 @@ recursive subroutine eval_fn_call(node, state, res)
 	!print *, 'res type = ', res%type
 
 	! User-defined function
-
-	if (.not. allocated(node%params)) then
-		write(*,*) err_int_prefix//'unexpected user fn'//color_reset
-		call internal_error()
-	end if
-	!params = node%params
 
 	!print *, 'fn name = ', node%identifier%text
 	!print *, 'fn idx  = ', node%id_index
@@ -932,7 +932,9 @@ recursive subroutine eval_fn_call(node, state, res)
 
 			!state%vars%vals( node%params(i) ) = tmp
 			!state%locs%vals( node%params(i) ) = tmp
-			locs_tmp( node%params(i) ) = tmp
+
+			!params_tmp( node%params(i) ) = tmp
+			params_tmp(i) = tmp
 
 			!print *, "******** node%params(i) = ", node%params(i), " ******** "
 			!print *, "******** type = ", kind_name(tmp%type)
@@ -953,7 +955,8 @@ recursive subroutine eval_fn_call(node, state, res)
 	if (allocated(state%locs%vals)) deallocate(state%locs%vals)
 	allocate(state%locs%vals( node%num_locs ))
 	do i = 1, size(node%params)
-		state%locs%vals( node%params(i) ) = locs_tmp( node%params(i) )
+		!state%locs%vals( node%params(i) ) = params_tmp( node%params(i) )
+		state%locs%vals( node%params(i) ) = params_tmp(i)
 	end do
 
 	!node%body = fn%node%body
