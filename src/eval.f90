@@ -837,10 +837,9 @@ recursive subroutine eval_fn_call(node, state, res)
 	! TODO: local node copy should be unnecessary
 	nodel = node
 
-	!print *, ""
+	print *, ""
 	!print *, "========================================"
-	!print *, 'eval fn_call_expr'
-	!print *, 'fn identifier = ', nodel%identifier%text
+	print *, 'eval fn_call_expr ', nodel%identifier%text
 	!print *, 'fn id_index   = ', nodel%id_index
 
 	if (nodel%id_index <= 0) then
@@ -866,7 +865,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		!deallocate(state%locs%vals)
 	end if
 
-	!print *, "num_locs = ", nodel%num_locs
+	print *, "num_locs = ", nodel%num_locs
 
 	allocate(locs_tmp( nodel%num_locs ))
 
@@ -975,17 +974,21 @@ recursive subroutine eval_fn_call(node, state, res)
 	!nodel%body = state%fns%fns(id_index)%node%body
 	!nodel%body = state%fns%fns( nodel%id_index )%node%body
 
-	! TODO: only do this is nodel%id_index is < 0 or somehow invalid
+	!  TODO: only do this is nodel%id_index is < 0 or somehow invalid
 	!
-	! This is required because the parser essentially inlines all functions by
-	! pasting their body in every place that they are called.  With two passes
-	! it can handle the 1st recursion level ok, but deeper recursion otherwise
-	! fails.  Setting the body here does the inlining at runtime (eval time)
+	!  This is required because the parser essentially inlines all functions by
+	!  pasting their body in every place that they are called.  With two passes
+	!  it can handle the 1st recursion level ok, but deeper recursion otherwise
+	!  fails.  Setting the body here does the inlining at runtime (eval time)
 	!
-	! There is already an `if (id_index <+ 0)` check above where it might be
-	! appropriate to move this body inlining
+	!  There is already an `if (id_index <+ 0)` check above where it might be
+	!  appropriate to move this body inlining
 	fn = state%fns%search(nodel%identifier%text, id_index, io)
 	nodel%body = fn%node%body
+
+	! TODO: need to copy the functions other (non-parameter) local vars into
+	! state%locs.  How?  I think I need to save this data in the fn node because
+	! currently I only have num_locs but not their type data
 
 	call syntax_eval(nodel%body, state, res)
 	!print *, "res rank = ", res%array%rank
@@ -2129,7 +2132,11 @@ recursive subroutine eval_for_statement(node, state, res)
 		! not know the entire list of variable identifiers ahead of time
 		!
 		! Loop iterator should never be a ref, so no need to use ref_sub here
-		state%vars%vals(node%id_index) = itr
+		if (node%is_loc) then
+			state%locs%vals(node%loc_index) = itr
+		else
+			state%vars%vals(node%id_index) = itr
+		end if
 
 		call syntax_eval(node%body, state, res)
 
@@ -2197,7 +2204,11 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 	else if (.not. allocated(node%lsubscripts)) then
 
-		id = state%ref_sub(node%id_index)
+		if (node%is_loc) then
+			id = node%loc_index
+		else
+			id = state%ref_sub(node%id_index)
+		end if
 
 		!! This deallocation will cause a crash when an array appears on both
 		!! the LHS and RHS of fn_call assignment, e.g. `dv = diff_(dv, i)` in
@@ -2219,12 +2230,19 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 
-		call compound_assign(state%vars%vals(id), res, node%op)
+		print *, "compound_assign is_loc = ", node%is_loc
+		if (node%is_loc) then
+			print *, "val type = ", kind_name( state%locs%vals(id)%type )
+			call compound_assign(state%locs%vals(id), res, node%op)
+			res = state%locs%vals(id)
+		else
+			call compound_assign(state%vars%vals(id), res, node%op)
 
-		! For compound assignment, ensure that the LHS is returned
-		!print *, 'setting res again'
-		res = state%vars%vals(id)
-		!print *, 'done'
+			! For compound assignment, ensure that the LHS is returned
+			!print *, 'setting res again'
+			res = state%vars%vals(id)
+			!print *, 'done'
+		end if
 
 		!print *, "node identifier = ", node%identifier%text
 

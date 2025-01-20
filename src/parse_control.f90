@@ -219,9 +219,14 @@ recursive module function parse_for_statement(parser) result(statement)
 	array      = parser%parse_primary_expr()
 	arr_end  = parser%peek_pos(0) - 1
 
-	! TODO: local if needed
-	parser%num_vars = parser%num_vars + 1
-	statement%id_index = parser%num_vars
+	if (parser%is_loc) then
+		parser%num_locs = parser%num_locs + 1
+		statement%loc_index = parser%num_locs
+		statement%is_loc = .true.
+	else
+		parser%num_vars = parser%num_vars + 1
+		statement%id_index = parser%num_vars
+	end if
 
 	! Auto declare loop iterator in for statement (HolyC doesn't let you do
 	! that!).  The 'let' keyword is not used:
@@ -246,14 +251,24 @@ recursive module function parse_for_statement(parser) result(statement)
 		! Array iterator type could be i32 or i64, and lbound type might not
 		! match ubound type!
 		dummy%type = array%val%array%type
-		call parser%vars%insert(identifier%text, dummy, &
-			statement%id_index)
+		if (parser%is_loc) then
+			call parser%locs%insert(identifier%text, dummy, &
+				statement%loc_index)
+		else
+			call parser%vars%insert(identifier%text, dummy, &
+				statement%id_index)
+		end if
 
 	else
 
 		dummy%type = array%val%type
-		call parser%vars%insert(identifier%text, dummy, &
-			statement%id_index)
+		if (parser%is_loc) then
+			call parser%locs%insert(identifier%text, dummy, &
+				statement%loc_index)
+		else
+			call parser%vars%insert(identifier%text, dummy, &
+				statement%id_index)
+		end if
 
 		! I guess we could allow a 1-loop iteration on a scalar if that's
 		! worthwhile.  Eval would need some work

@@ -1,6 +1,7 @@
 
 fn get_pi(): f32
 {
+	println("get_pi()");
 	let pi = 0.0f;
 	for k in [0: 10]
 	{
@@ -17,6 +18,7 @@ fn get_pi(): f32
 
 fn my_sin(x: f32): f32
 {
+	println("my_sin()");
 	// Calculate sine(x) using Taylor series expansion
 	// around x = 0.0f
 	//
