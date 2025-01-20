@@ -125,6 +125,10 @@ recursive subroutine syntax_eval(node, state, res)
 		!print *, 'assigning identifier ', quote(node%identifier%text)
 		!print *, "is_loc = ", node%is_loc
 
+		! TODO: can loc_index and id_index be combined?  I think they could be,
+		! and then only state%locs/state%vars would have to be inside the `if
+		! is_loc` branch
+
 		if (node%is_loc) then
 		!if (node%is_loc .and. node%loc_index > 0) then
 			!id = node%id_index
@@ -894,6 +898,12 @@ recursive subroutine eval_fn_call(node, state, res)
 		! This is fine for primitives but crashes on struct vals, which require
 		! recursive copying (because each member of the top-level value_t is
 		! itself a value_t)
+
+		! TODO: perf has degraded.  `fpm test test` runs in 2.3 s on main, but
+		! over 7 s with recursion.  Is this the cause?  Can we move_alloc() the
+		! whole vals/locs0 array?  Or at least move_alloc() on just the
+		! array/struct instances?  Also can the loc backup be moved to after the
+		! arg eval loop (but before the fn body eval)?
 
 		!locs0 = state%locs%vals
 		!locs0 = state%locs%vals(:)
