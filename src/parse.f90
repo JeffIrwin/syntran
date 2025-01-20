@@ -37,8 +37,11 @@ module syntran__parse_m
 		! performance diff
 		type(text_context_vector_t) :: contexts
 
-		type(vars_t) :: vars
+		logical :: is_loc = .false.
+
+		type(vars_t) :: vars, locs
 		integer :: num_vars = 0
+		integer :: num_locs = 0
 
 		type(fns_t) :: fns
 		integer :: num_fns = 0

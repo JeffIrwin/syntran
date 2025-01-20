@@ -357,7 +357,7 @@ module function parse_unit(parser) result(unit)
 	type(syntax_node_vector_t) :: members
 	type(syntax_token_t) :: dummy
 
-	integer :: i, pos0
+	integer :: i, pos0, num_fns0
 
 	!print *, 'starting parse_unit()'
 
@@ -378,6 +378,10 @@ module function parse_unit(parser) result(unit)
 	!call parser%vars%push_scope()
 
 	!print *, "parser pos beg = ", parser%pos
+	!print *, "num fns = ", parser%num_fns
+
+	num_fns0 = parser%num_fns  ! includes intrinsic fns. TODO: unused?
+
 	do while (parser%current_kind() /= eof_token)
 
 		!print *, "    parser pos = ", parser%pos
@@ -400,8 +404,15 @@ module function parse_unit(parser) result(unit)
 
 	end do
 	!print *, "parser pos end = ", parser%pos
+	!print *, "num fns = ", parser%num_fns
 
 	!****************
+
+	!print *, ""
+	!print *, ""
+	!print *, " ===========  PARSING PASS NUMBER 2 ========== "
+	!print *, ""
+	!print *, ""
 
 	! TODO: if any errors, skip second pass.  Although be careful to still do
 	! stuff and end of routine
@@ -410,6 +421,7 @@ module function parse_unit(parser) result(unit)
 	parser%pos = 1
 	parser%ipass = 1
 	parser%num_vars = 0
+	parser%num_fns = num_fns0
 
 	! TODO: does num_fns need to be reset?  Anything else?  num_structs?
 

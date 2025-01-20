@@ -428,6 +428,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	!print *, "parsing"
 	tree = syntax_parse(str_, state%vars, state%fns, src_filel)
 	!print *, "done"
+	print *, tree%str()
 	if (.not. state%quiet) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then

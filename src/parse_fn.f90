@@ -44,12 +44,13 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	type(value_t) :: param_val
 
-	if (debug > 1) print *, 'parse_fn_call'
+	print *, ''
+	print *, 'parse_fn_call'
 
 	! Function call expression
 	identifier = parser%match(identifier_token)
 
-	!print *, "identifier = ", identifier%text
+	print *, "identifier = ", identifier%text
 
 	args     = new_syntax_node_vector()
 	pos_args = new_integer_vector()
@@ -119,7 +120,16 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	! Might need to add separate internal/external fn names for
 	! overloaded cases
 	fn = parser%fns%search(fn_call%identifier%text, id_index, io)
-	if (io /= exit_success .and. parser%ipass > 0) then
+	print *, "fn id_index = ", id_index
+	if (io /= exit_success) then ! .and. parser%ipass > 0) then
+
+		if (parser%ipass > 0) stop
+		if (parser%ipass == 0) then
+			fn_call%id_index = 0
+			fn_call%kind = fn_call_expr
+			!stop
+			return
+		end if
 
 		span = new_span(identifier%pos, len(identifier%text))
 		call parser%diagnostics%push( &
@@ -131,6 +141,9 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		return
 
 	end if
+
+	!print *, "fn id_index = ", id_index
+	!print *, "is_intr = ", fn%is_intr
 
 	if (fn%is_intr) fn_call%kind = fn_call_intr_expr
 
@@ -152,7 +165,10 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	! Intrinsic fns don't have a syntax node: they are implemented
 	! in Fortran, not syntran
+
 	if (allocated(fn%node)) then
+	!if (.not. fn%is_intr) then
+
 		!print *, 'assigning fn node'
 
 		! If I understand my own code, this is inlining:  every fn
@@ -167,6 +183,11 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		allocate(fn_call%body)
 		fn_call%body = fn%node%body
 		fn_call%params = fn%node%params
+
+		fn_call%num_locs = fn%node%num_locs
+
+		!print *, 'fn params size = ', size(fn%params)
+		!print *, 'fn call params size = ', size(fn_call%params)
 
 	end if
 
@@ -302,6 +323,8 @@ module function parse_fn_declaration(parser) result(decl)
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end
 
+	logical :: overwrite
+
 	type(fn_t) :: fn
 
 	type( string_vector_t) :: names
@@ -320,6 +343,8 @@ module function parse_fn_declaration(parser) result(decl)
 	! Like a for statement, a fn declaration has its own scope (for its
 	! parameters).  Its block body will have yet another scope
 	call parser%vars%push_scope()
+	parser%is_loc = .true.
+	parser%num_locs = 0
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
@@ -424,14 +449,14 @@ module function parse_fn_declaration(parser) result(decl)
 		! Copy a value_t object to store the type
 		fn%params(i) = types%v(i)
 
-		! Declare the parameter variable
-		parser%num_vars = parser%num_vars + 1
+		! Declare the local parameter variable
+		parser%num_locs = parser%num_locs + 1
 
-		! Save parameters by id_index.  TODO: stack frames
-		decl%params(i) = parser%num_vars
+		! Save parameters by id_index
+		decl%params(i) = parser%num_locs
 		decl%is_ref(i) = is_ref%v(i)
 
-		call parser%vars%insert(fn%param_names%v(i)%s, fn%params(i), parser%num_vars)
+		call parser%locs%insert(fn%param_names%v(i)%s, fn%params(i), parser%num_locs)
 
 	end do
 
@@ -482,19 +507,30 @@ module function parse_fn_declaration(parser) result(decl)
 	decl%kind = fn_declaration
 
 	decl%identifier = identifier
+	decl%num_locs   = parser%num_locs
 	decl%body       = body
+	!print *, "decl num_locs = ", decl%num_locs
 
 	call parser%vars%pop_scope()
+	parser%is_loc = .false.  ! no nested fn declarations
 
 	allocate(fn%node)
 	fn%node = decl
 
-	call parser%fns%insert(identifier%text, fn, decl%id_index, io)
-	!print *, "fn insert io = ", io
+	!overwrite = .false.
+	!if (parser%ipass == 0) overwrite = .true.
+	overwrite = .true.
+	if (parser%ipass == 0) overwrite = .false.
+
+	io = 0
+	!if (parser%ipass == 0) then
+		call parser%fns%insert(identifier%text, fn, decl%id_index, io, overwrite = overwrite)
+		!print *, "fn insert io = ", io
+	!end if
 
 	! error if fn already declared. be careful in future if fn prototypes are
 	! added
-	if (io /= 0 .and. parser%ipass == 0) then
+	if (io /= 0) then ! .and. parser%ipass == 0) then
 		span = new_span(identifier%pos, len(identifier%text))
 		call parser%diagnostics%push( &
 			err_redeclare_fn(parser%context(), &

@@ -28,6 +28,8 @@ module function parse_return_statement(parser) result(statement)
 	type(syntax_token_t) :: return_token, semi
 	type(text_span_t) :: span
 
+	print *, "starting parse_return_statement()"
+
 	right_beg = parser%peek_pos(0)
 	return_token = parser%match(return_keyword)
 	parser%returned = .true.
@@ -217,6 +219,7 @@ recursive module function parse_for_statement(parser) result(statement)
 	array      = parser%parse_primary_expr()
 	arr_end  = parser%peek_pos(0) - 1
 
+	! TODO: local if needed
 	parser%num_vars = parser%num_vars + 1
 	statement%id_index = parser%num_vars
 

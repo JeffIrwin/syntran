@@ -153,7 +153,9 @@ module syntran__types_m
 		integer :: sub_kind
 
 		type(syntax_token_t) :: op, identifier
-		integer :: id_index
+
+		integer :: id_index, loc_index, num_locs
+		logical :: is_loc
 
 		integer, allocatable :: params(:)
 		logical, allocatable :: is_ref(:)  ! is param passed by reference?
@@ -528,9 +530,11 @@ subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 	logical :: overwritel
 
 	!print *, 'inserting ', quote(key)
-	id_index = id_index + 1
 
-	overwritel = .false.
+	!! num_fns is already incremented by caller
+	!id_index = id_index + 1
+
+	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
 	i = dict%scope
@@ -542,7 +546,7 @@ end subroutine fn_insert
 
 !===============================================================================
 
-recursive function syntax_node_str(node, indent) result(str)
+recursive function syntax_node_str(node, indent) result(str_)
 
 	! Convert tree to string in JSON-ish format.  Incomplete since I've added so
 	! many new members
@@ -551,7 +555,7 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	character(len = *), optional :: indent
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	!********
 
@@ -588,6 +592,15 @@ recursive function syntax_node_str(node, indent) result(str)
 		right = indentl//'    right = '//node%right%str(indentl//'    ') &
 				//line_feed
 
+	else if (node%kind == fn_declaration) then
+		val = indentl//'    body = '//node%body%str(indentl//'    ')//line_feed
+
+	else if (node%kind == fn_call_expr) then
+		val = indentl//'    id_index = '//str(node%id_index)//line_feed
+
+	else if (node%kind == return_statement) then
+		val = indentl//'    expr = '//node%right%str(indentl//'    ')//line_feed
+
 	else if (node%kind == block_statement) then
 
 		do i = 1, size(node%members)
@@ -623,7 +636,7 @@ recursive function syntax_node_str(node, indent) result(str)
 		val   = indentl//'    val   = '//node%val%to_str()//line_feed
 	end if
 
-	str = line_feed// &
+	str_ = line_feed// &
 		indentl//'{'//line_feed// &
 			kind       // &
 			type       // &
@@ -707,8 +720,11 @@ recursive subroutine syntax_node_copy(dst, src)
 	!dst%val%sca%file_     = src%val%sca%file_
 	!dst%val%sca%file_%eof = src%val%sca%file_%eof
 
-	dst%identifier  = src%identifier
-	dst%id_index    = src%id_index
+	dst%identifier = src%identifier
+	dst%id_index   = src%id_index
+	dst%loc_index  = src%loc_index
+	dst%num_locs   = src%num_locs
+	dst%is_loc     = src%is_loc
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
@@ -2284,7 +2300,7 @@ recursive subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwri
 
 	iostat = exit_success
 
-	!print *, 'inserting key ', quote(key)
+	print *, 'inserting key ', quote(key)
 
 	! key == k//ey.  Get it? :)
 	k   = key(1:1)
@@ -2325,11 +2341,15 @@ recursive subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwri
 		return
 	end if
 
+	!if (.not. allocated(node%val)) allocate(node%val)
+	if (allocated(node%val)) deallocate(node%val)
 	allocate(node%val)
+
 	node%val      = val
 	node%id_index = id_index
 
-	!print *, 'done inserting'
+	print *, "inserted index ", id_index
+	print *, 'done inserting'
 	!print *, ''
 
 end subroutine fn_ternary_insert

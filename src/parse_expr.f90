@@ -534,15 +534,28 @@ recursive module function parse_name_expr(parser) result(expr)
 
 	!print *, 'searching'
 
-	call parser%vars%search(identifier%text, id_index, io, var)
-	expr = new_name_expr(identifier, var)
-	expr%id_index = id_index
+	call parser%locs%search(identifier%text, id_index, io, var)
+	!print *, "locs io = ", io
+	if (io == 0) then
+	
+		expr = new_name_expr(identifier, var)
+		expr%loc_index = id_index
+		expr%is_loc = .true.
 
-	if (io /= exit_success) then
-		span = new_span(identifier%pos, len(identifier%text))
-		call parser%diagnostics%push( &
-			err_undeclare_var(parser%context(), &
-			span, identifier%text))
+	else
+		call parser%vars%search(identifier%text, id_index, io, var)
+		!print *, "vars io = ", io
+
+		expr = new_name_expr(identifier, var)
+		expr%id_index = id_index
+		expr%is_loc = .false.
+
+		if (io /= exit_success) then
+			span = new_span(identifier%pos, len(identifier%text))
+			call parser%diagnostics%push( &
+				err_undeclare_var(parser%context(), &
+				span, identifier%text))
+		end if
 	end if
 
 	!print *, 'type = ', kind_name(expr%val%type)
