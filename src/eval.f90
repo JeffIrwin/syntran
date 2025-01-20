@@ -122,8 +122,8 @@ recursive subroutine syntax_eval(node, state, res)
 		! Assign return value
 		call syntax_eval(node%right, state, res)
 
-		print *, 'assigning identifier ', quote(node%identifier%text)
-		print *, "is_loc = ", node%is_loc
+		!print *, 'assigning identifier ', quote(node%identifier%text)
+		!print *, "is_loc = ", node%is_loc
 
 		if (node%is_loc) then
 			id = node%id_index  ! TODO: why id_index and not loc_index?
@@ -845,9 +845,9 @@ recursive subroutine eval_fn_call(node, state, res)
 	! TODO: local node copy should be unnecessary
 	nodel = node
 
-	print *, ""
+	!print *, ""
 	!print *, "========================================"
-	print *, 'eval fn_call_expr ', nodel%identifier%text
+	!print *, 'eval fn_call_expr ', nodel%identifier%text
 	!print *, 'fn id_index   = ', nodel%id_index
 
 	if (nodel%id_index <= 0) then
@@ -873,7 +873,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		!deallocate(state%locs%vals)
 	end if
 
-	print *, "num_locs = ", nodel%num_locs
+	!print *, "num_locs = ", nodel%num_locs
 
 	allocate(locs_tmp( nodel%num_locs ))
 
@@ -2238,9 +2238,9 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 
-		print *, "compound_assign is_loc = ", node%is_loc
+		!print *, "compound_assign is_loc = ", node%is_loc
 		if (node%is_loc) then
-			print *, "val type = ", kind_name( state%locs%vals(id)%type )
+			!print *, "val type = ", kind_name( state%locs%vals(id)%type )
 			call compound_assign(state%locs%vals(id), res, node%op)
 			res = state%locs%vals(id)
 		else

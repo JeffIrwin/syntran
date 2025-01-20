@@ -106,8 +106,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		! Insert the identifier's type into the dict and check that it
 		! hasn't already been declared
-		print *, "inserting var"
-		print *, "parser is_loc = ", parser%is_loc
+		!print *, "inserting var"
+		!print *, "parser is_loc = ", parser%is_loc
 		if (parser%is_loc) then
 			call parser%locs%insert(identifier%text, expr%val, &
 				expr%id_index, io, overwrite = overwrite)
@@ -158,14 +158,16 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! TODO: make this a parser%search() fn to wrap loc and vars (global)
 		! searches?
 
-		! TODO: add an `if parser%is_loc` guard around this like below
-		print *, "searching identifier ", identifier%text
-		call parser%locs%search(identifier%text, expr%loc_index, search_io, expr%val)
-		print *, "locs io = ", search_io
+		!print *, "searching identifier ", identifier%text
 
-		if (search_io == 0) then
+		if (parser%is_loc) then
+			call parser%locs%search(identifier%text, expr%loc_index, search_io, expr%val)
+			!print *, "locs io = ", search_io
+		end if
+
+		if (parser%is_loc .and. search_io == 0) then
 			expr%is_loc = .true.
-			print *, "loc type = ", kind_name(expr%val%type)
+			!print *, "loc type = ", kind_name(expr%val%type)
 			!expr = new_name_expr(identifier, var)
 			!expr%loc_index = id_index
 			!expr%is_loc = .true.
@@ -176,7 +178,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		call parser%parse_subscripts(expr)
 
 		if (parser%peek_kind(0) == dot_token) then
-			print *, "dot token"
+			!print *, "dot token"
 
 			if (search_io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
@@ -231,8 +233,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 				call parser%diagnostics%push( &
 					err_undeclare_var(parser%context(), &
 					span, identifier%text))
-				print *, "undeclared var 2"
-				print *, "identifier = ", identifier%text
+				!print *, "undeclared var 2"
+				!print *, "identifier = ", identifier%text
 				!stop
 			end if
 		end if
@@ -564,15 +566,15 @@ recursive module function parse_name_expr(parser) result(expr)
 
 	identifier = parser%match(identifier_token)
 
-	print *, "RHS identifier = ", identifier%text
-	print *, "parser%is_loc = ", parser%is_loc
+	!print *, "RHS identifier = ", identifier%text
+	!print *, "parser%is_loc = ", parser%is_loc
 	!print *, '%current_kind() = ', kind_name(parser%current_kind())
 
 	!print *, 'searching'
 
 	if (parser%is_loc) then
 		call parser%locs%search(identifier%text, id_index, io, var)
-		print *, "locs io = ", io
+		!print *, "locs io = ", io
 	end if
 
 	if (parser%is_loc .and. io == 0) then
@@ -583,14 +585,14 @@ recursive module function parse_name_expr(parser) result(expr)
 
 	else
 		call parser%vars%search(identifier%text, id_index, io, var)
-		print *, "vars io = ", io
+		!print *, "vars io = ", io
 
 		expr = new_name_expr(identifier, var)
 		expr%id_index = id_index
 		expr%is_loc = .false.
 
 		if (io /= 0) then
-			print *, "undeclared var 3"
+			!print *, "undeclared var 3"
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
 				err_undeclare_var(parser%context(), &
