@@ -222,6 +222,55 @@ end subroutine push_value
 
 !===============================================================================
 
+recursive subroutine value_move(src, dst)
+	! Note the args are reversed wrt value_copy.  It is however consistent with
+	! build-in move_alloc() (and `mv file1 file2`)
+	!
+	! This is kind of a fake move.  Arrays and structs are moved, but primitive
+	! scalars are just copied
+
+	type(value_t), intent(inout) :: src
+	type(value_t), intent(out)   :: dst
+
+	!********
+
+	integer :: i
+
+	if (debug > 3) print *, 'starting value_move()'
+
+	dst%type = src%type
+	dst%sca  = src%sca  ! TODO: this could be skipped conditionally, might improve perf
+
+	if (allocated(src%struct_name)) then
+		call move_alloc(src%struct_name, dst%struct_name)
+	end if
+
+	if (allocated(src%array)) then
+		!if (.not. allocated(dst%array)) allocate(dst%array)
+		call move_alloc(src%array, dst%array)
+	!else if (allocated(dst%array)) then
+	!	deallocate(dst%array)
+	end if
+
+	if (allocated(src%struct)) then
+		!if (allocated(dst%struct)) deallocate(dst%struct)
+		!dst%struct = src%struct
+
+		call move_alloc(src%struct, dst%struct)
+
+		!allocate(dst%struct( size(src%struct) ))
+		!do i = 1, size(src%struct)
+		!	!dst%struct(i) = src%struct(i)
+		!	call value_copy(dst%struct(i), src%struct(i))
+		!end do
+	!else if (allocated(dst%struct)) then
+	!	deallocate(dst%struct)
+	end if
+
+end subroutine value_move
+
+!===============================================================================
+
 recursive subroutine value_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
