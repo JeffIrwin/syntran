@@ -3022,7 +3022,7 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-17.syntran', quiet) == '0', &
 			interpret_file(path//'test-18.syntran', quiet) == '0', &
 			interpret_file(path//'test-19.syntran', quiet) == '0', &
-			!interpret_file(path//'test-20.syntran', quiet) == '0', &  ! TODO: fix pass-by-ref for local vars.  this test will need modified
+			interpret_file(path//'test-20.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

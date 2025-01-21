@@ -946,13 +946,14 @@ recursive subroutine eval_fn_call(node, state, res)
 				!print *, "val = ", state%locs%vals( node%args(i)%loc_index )%to_str()
 				params_tmp(i) = state%locs%vals( node%args(i)%loc_index )
 			else
-				! TODO: global ref
+				params_tmp(i) = state%vars%vals( node%args(i)%id_index )
 			end if
 
 		else
 
-			call syntax_eval(node%args(i), state, tmp)
-			params_tmp(i) = tmp
+			call syntax_eval(node%args(i), state, params_tmp(i))
+			!call syntax_eval(node%args(i), state, tmp)
+			!params_tmp(i) = tmp
 
 			!print *, "******** node%params(i) = ", node%params(i), " ******** "
 			!print *, "******** type = ", kind_name(tmp%type)
@@ -1042,7 +1043,11 @@ recursive subroutine eval_fn_call(node, state, res)
 		if (.not. node%is_ref(i)) cycle
 
 		! TODO: is_loc/not branch.  Are global refs not covered by any tests?
-		state%locs%vals( node%args(i)%loc_index ) = params_tmp(i)
+		if (node%args(i)%is_loc) then
+			state%locs%vals( node%args(i)%loc_index ) = params_tmp(i)
+		else
+			state%vars%vals( node%args(i)%id_index ) = params_tmp(i)
+		end if
 
 	end do
 
