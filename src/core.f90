@@ -509,6 +509,12 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		!end do
 
 		!! With intrinsic fns, this is always allocated
+
+		! TODO: it might help to copy the fns array with an explicit loop.  You
+		! would think they would be the same, but in messing with vars copies
+		! while working on recursion I found it doesn't handle recursive data structs
+		! properly.  This might be related to gfortran 13+ issues
+
 		!if (allocated(fns%fns)) then
 			!print *, 'copy fns'
 			fns0%fns = fns%fns
@@ -587,6 +593,11 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	! TODO: if num_fns instead?
 	if (allocated(parser%fns%dicts(1)%root)) then
 		call move_alloc(parser%fns%dicts(1)%root, fns%dicts(1)%root)
+
+		!! I tried adding this while working on recursive fn lookup but it's not
+		!! the way
+		!call move_alloc(parser%fns%fns          , fns%fns)
+
 	end if
 
 	! When parsing is finished, we are done with the variable dictionary

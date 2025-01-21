@@ -999,11 +999,27 @@ recursive subroutine eval_fn_call(node, state, res)
 	! There is already an `if (id_index <+ 0)` check above where it might be
 	! appropriate to move this body inlining
 	!
-	! TODO: can we use a fn index instead of doing a ternary tree search? like
-	! with vars?  This search is actually the perf bottleneck
+	!  TODO: can we use a fn index instead of doing a ternary tree search? like
+	!  with vars?  This search is actually the perf bottleneck
 
-	fn = state%fns%search(node%identifier%text, id_index, io)
-	call syntax_eval(fn%node%body, state, res)
+	!fn = state%fns%search(node%identifier%text, id_index, io)
+	!fn = state%fns%fns( node%id_index )
+
+	!print *, "node fn id_index = ", node%id_index
+	!!print *, "eval fn id_index = ", id_index
+	!!print *, "allocated fn node = ", allocated(fn%node)
+	!print *, "allocated fn node = ", allocated(state%fns%fns( node%id_index )%node)
+
+	if (.not. allocated(state%fns%fns( node%id_index )%node)) then
+		fn = state%fns%search(node%identifier%text, id_index, io)
+		!state%fns%fns( node%id_index )%node = fn%node
+		state%fns%fns( node%id_index ) = fn
+	end if
+	!print *, "allocated fn node = ", allocated(state%fns%fns( node%id_index )%node)
+	!print *, ""
+
+	call syntax_eval(state%fns%fns( node%id_index )%node%body, state, res)  ! TODO: this should work
+	!call syntax_eval(fn%node%body, state, res)
 	!call syntax_eval(node%body, state, res)
 
 	!print *, "res rank = ", res%array%rank

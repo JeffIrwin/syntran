@@ -377,6 +377,8 @@ subroutine init_state(state)
 	state%breaked   = .false.
 	state%continued = .false.
 
+	!print *, "init size fns = ", size(state%fns%fns)
+
 end subroutine init_state
 
 !===============================================================================
@@ -430,6 +432,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	!print *, "parsing"
 	tree = syntax_parse(str_, state%vars, state%fns, src_filel)
 	!print *, "done"
+	!print *, "size fns = ", size(state%fns%fns)
 
 	!print *, tree%str()  ! `#tree` or `show_tree` equivalent for interpreting a file
 
