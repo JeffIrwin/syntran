@@ -377,6 +377,15 @@ subroutine init_state(state)
 	state%breaked   = .false.
 	state%continued = .false.
 
+	! Is it safe to initialize these arrays both here and in new_parser?  Test
+	! interactive interp
+
+	state%vars%scope_cap = SCOPE_CAP_INIT
+	allocate(state%vars%dicts( state%vars%scope_cap) )
+
+	state%locs%scope_cap = SCOPE_CAP_INIT
+	allocate(state%locs%dicts( state%locs%scope_cap) )
+
 	!print *, "init size fns = ", size(state%fns%fns)
 
 end subroutine init_state

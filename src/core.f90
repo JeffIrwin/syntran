@@ -42,6 +42,7 @@ module syntran__core_m
 	!      file exists
 	!      + this will be a compatibility break. it's a must-have for 1.0
 	!    * anything else? review the rest of this list
+	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)
 	!  - recursive data structs?
 	!    * recursive fns are available, but not structs
@@ -467,6 +468,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 			! The root type has an overloaded assignment op, but the vars
 			! type itself does not (and I don't want to expose or encourage
 			! copying)
+
 			allocate(vars0%dicts(1)%root)
 			vars0%dicts(1)%root = vars%dicts(1)%root
 
@@ -539,6 +541,9 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		if (allocated(fns%fns)) call move_alloc(fns%fns          , parser%fns%fns)
 
 	end if
+
+	print *, "allocated parser%vars%dicts = ", allocated( parser%vars%dicts )
+	print *, "size parser%vars%dicts = ", size( parser%vars%dicts )
 
 	!*******************************
 	! Parse the tokens

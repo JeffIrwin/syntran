@@ -529,6 +529,14 @@ recursive module function new_parser(str, src_file, contexts, unit_) result(pars
 
 	parser%contexts = contexts  ! copy.  could convert to standard array if needed
 
+	! Allocate scoped var dicts
+
+	parser%vars%scope_cap = SCOPE_CAP_INIT
+	allocate(parser%vars%dicts( parser%vars%scope_cap ))
+
+	parser%locs%scope_cap = SCOPE_CAP_INIT
+	allocate(parser%locs%dicts( parser%locs%scope_cap ))
+
 	!print *, 'tokens%len_ = ', tokens%len_
 	if (debug > 1) print *, parser%tokens_str()
 

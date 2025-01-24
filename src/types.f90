@@ -82,7 +82,8 @@ module syntran__types_m
 	!********
 
 	! Fixed-size limit to the scope level for now
-	integer, parameter :: scope_max = 64
+	!integer, parameter :: scope_max = 64
+	integer, parameter :: scope_max = 16  ! only for testing dynamic scope growth
 
 	type fns_t
 
@@ -225,7 +226,8 @@ module syntran__types_m
 
 		! A list of variable dictionaries for each scope level used during
 		! parsing
-		type(var_dict_t) :: dicts(scope_max)
+		type(var_dict_t), allocatable :: dicts(:)
+		integer :: scope_cap
 
 		! Flat array of variables from all scopes, used for efficient
 		! interpreted evaluation
@@ -348,15 +350,25 @@ recursive subroutine vars_copy(dst, src)
 	!print *, 'starting vars_copy()'
 
 	dst%scope = src%scope
+	dst%scope_cap = src%scope_cap
 
-	do i = 1, size(src%dicts)
-		if (allocated(src%dicts(i)%root)) then
-			if (.not. allocated(dst%dicts(i)%root)) allocate(dst%dicts(i)%root)
-			dst%dicts(i)%root = src%dicts(i)%root
-		else if (allocated(dst%dicts(i)%root)) then
-			deallocate(dst%dicts(i)%root)
-		end if
-	end do
+	if (allocated(src%dicts)) then
+
+		if (allocated(dst%dicts)) deallocate(dst%dicts)
+		allocate(dst%dicts( size(src%dicts) ))
+
+		do i = 1, size(src%dicts)
+			if (allocated(src%dicts(i)%root)) then
+				if (.not. allocated(dst%dicts(i)%root)) allocate(dst%dicts(i)%root)
+				dst%dicts(i)%root = src%dicts(i)%root
+			else if (allocated(dst%dicts(i)%root)) then
+				deallocate(dst%dicts(i)%root)
+			end if
+		end do
+
+	else if (allocated(dst%dicts)) then
+		deallocate(dst%dicts)
+	end if
 
 	if (allocated(src%vals)) then
 		if (allocated(dst%vals)) deallocate(dst%vals)
@@ -1036,6 +1048,44 @@ subroutine push_scope(dict)
 
 	class(vars_t) :: dict
 
+	!type vars_t
+	!	type(var_dict_t), allocatable :: dicts(:)
+	!	type(value_t), allocatable :: vals(:)
+	!	integer :: scope = 1
+	!end type vars_t
+
+	!********
+
+	integer :: i
+
+	type(var_dict_t), allocatable :: tmp(:)
+
+	!print *, "dict%scope = ", dict%scope
+
+	if (dict%scope >= dict%scope_cap) then
+	!if (dict%scope >= scope_max) then
+
+		! Grow dicts pointer array
+		print *, "Growing dict array"
+
+		call move_alloc(dict%dicts, tmp)
+
+		dict%scope_cap = dict%scope_cap * 2
+		allocate(dict%dicts( dict%scope_cap ))
+
+		do i = 1, dict%scope
+			! The `root` member is also allocatable.  Moving its pointer is
+			! inexpensive
+			call move_alloc(tmp(i)%root, dict%dicts(i)%root)
+		end do
+
+		deallocate(tmp)
+
+		!print *, "Error:  scope overflow!"
+		!stop
+
+	end if
+
 	dict%scope = dict%scope + 1
 
 	!  TODO: make a growable array of dicts for unlimited scope levels
@@ -1050,10 +1100,10 @@ subroutine push_scope(dict)
 	! (aoc 2024/19) might be a good test case, at least with real (not test)
 	! input
 
-	if (dict%scope > scope_max) then
-		write(*,*) 'Error: too many nested blocks > '//str(scope_max)
-		call internal_error()
-	end if
+	!if (dict%scope > scope_max) then
+	!	write(*,*) 'Error: too many nested blocks > '//str(scope_max)
+	!	call internal_error()
+	!end if
 
 end subroutine push_scope
 
