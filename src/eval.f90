@@ -1011,9 +1011,15 @@ recursive subroutine eval_fn_call(node, state, res)
 	!print *, "allocated fn node = ", allocated(state%fns%fns( node%id_index )%node)
 
 	if (.not. allocated(state%fns%fns( node%id_index )%node)) then
+
+		! TODO: this performs very well, but it should be done once at the end
+		! of syntax_parse() in core.f90 instead of on-the-fly here.  Iterate
+		! through list of functions and set them in the flat array.  Might need
+		! to build a str array of fn names to be able to iterate
 		fn = state%fns%search(node%identifier%text, id_index, io)
 		!state%fns%fns( node%id_index )%node = fn%node
 		state%fns%fns( node%id_index ) = fn
+
 	end if
 	!print *, "allocated fn node = ", allocated(state%fns%fns( node%id_index )%node)
 	!print *, ""

@@ -32,11 +32,19 @@ module syntran__core_m
 	! TODO:
 	!  - roadmap to version 1.0.0:
 	!    * finish recursion
+	!      + needs tests
+	!      + implementation is mostly (?) done
+	!      + i think include files can call fns from the includer.  this
+	!        probably isn't desireable, but i'm not sure how big of a deal it is
+	!        or how to fix it.  right now everything is one translation unit.
+	!        might want to rethink scoping
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
 	!      + this will be a compatibility break. it's a must-have for 1.0
 	!    * anything else? review the rest of this list
 	!    * review all TODO notes in the codebase (!)
+	!  - recursive data structs?
+	!    * recursive fns are available, but not structs
 	!  - allow for loops that iterate on chars in a str
 	!  - minloc, maxloc, findloc fns
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
@@ -623,6 +631,9 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	if (allocated(fns0%fns)) then
 		fns%fns( 1: size(fns0%fns) ) = fns0%fns
 	end if
+
+	! TODO: save flat fn array `fns%fns`.  There's not any actual fns%fns%node
+	! info in what is set above.  See eval_fn_call() which does this on the fly
 
 	!if (allocated(parser%structs)) then
 	!	! TODO: manually finalize recursively?

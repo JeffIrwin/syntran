@@ -1038,7 +1038,18 @@ subroutine push_scope(dict)
 
 	dict%scope = dict%scope + 1
 
-	! TODO: make a growable array of dicts for unlimited scope levels
+	!  TODO: make a growable array of dicts for unlimited scope levels
+	! 
+	! It's really time to do this.  64 (scope_max) levels can easily be consumed
+	! with recursion.  Make dicts allocatable, it's currently a constant size
+	! array.  Grow dicts array.  The `%root` child of each dicts(:) is already
+	! allocatable, so we can just move_alloc() each root into the new array
+	! efficiently.  Only "pointers" have to be copied when growing dyn array.
+	! Either find a test case or test by reducing (initial) scope_max to a very
+	! small value much less than 64 to force growth.  scratch/test66.syntran
+	! (aoc 2024/19) might be a good test case, at least with real (not test)
+	! input
+
 	if (dict%scope > scope_max) then
 		write(*,*) 'Error: too many nested blocks > '//str(scope_max)
 		call internal_error()
@@ -1072,7 +1083,7 @@ subroutine pop_scope(dict)
 
 	! The parser should catch an unexpected `}`
 	if (dict%scope < 1) then
-		write(*,*) 'Error: scope stack is empty'
+		write(*,*) err_int_prefix//'scope stack is empty'
 		call internal_error()
 	end if
 
