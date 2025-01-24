@@ -13,7 +13,7 @@ module syntran__consts_m
 	! pointers, so they take little memory to begin with, and then grow
 	! dynamically.  Hence, I have no idea what the default should be and it
 	! shouldn't really matter
-	integer, parameter :: SCOPE_CAP_INIT = 64
+	integer, parameter :: SCOPE_CAP_INIT = 8
 
 	! Must be larger than largest token enum below.  TODO: add an init check for
 	! this

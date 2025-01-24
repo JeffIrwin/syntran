@@ -379,10 +379,9 @@ module function parse_unit(parser) result(unit)
 	!print *, "parser pos beg = ", parser%pos
 	!print *, "num fns = ", parser%num_fns
 
+	num_vars0 = parser%num_vars  ! not necessarily 0 for the REPL
 	num_fns0 = parser%num_fns  ! includes intrinsic fns
 	num_structs0 = parser%num_structs
-
-	num_vars0 = parser%num_vars  ! not necessarily 0 for the REPL
 
 	do while (parser%current_kind() /= eof_token)
 
@@ -423,9 +422,7 @@ module function parse_unit(parser) result(unit)
 	parser%pos = 1
 	parser%ipass = 1
 
-	!parser%num_vars = 0
 	parser%num_vars = num_vars0
-
 	parser%num_fns = num_fns0
 	parser%num_structs = num_structs0
 

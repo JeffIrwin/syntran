@@ -1051,12 +1051,6 @@ subroutine push_scope(dict)
 
 	class(vars_t) :: dict
 
-	!type vars_t
-	!	type(var_dict_t), allocatable :: dicts(:)
-	!	type(value_t), allocatable :: vals(:)
-	!	integer :: scope = 1
-	!end type vars_t
-
 	!********
 
 	integer :: i
@@ -1066,13 +1060,11 @@ subroutine push_scope(dict)
 	!print *, "dict%scope = ", dict%scope
 
 	if (dict%scope >= dict%scope_cap) then
-
-		! Grow dicts pointer array
-		print *, "Growing dict array"
-
-		call move_alloc(dict%dicts, tmp)
+		!! Grow dicts pointer array
+		!print *, "Growing dict array"
 
 		dict%scope_cap = dict%scope_cap * 2
+		call move_alloc(dict%dicts, tmp)
 		allocate(dict%dicts( dict%scope_cap ))
 
 		do i = 1, dict%scope
@@ -1082,10 +1074,6 @@ subroutine push_scope(dict)
 		end do
 
 		deallocate(tmp)
-
-		!print *, "Error:  scope overflow!"
-		!stop
-
 	end if
 
 	dict%scope = dict%scope + 1

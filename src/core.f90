@@ -473,10 +473,10 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 			allocate(vars0%dicts(1)%root)
 			vars0%dicts(1)%root = vars%dicts(1)%root
 
-			print *, 'vars%vals = '
-			do i = 1, size(vars%vals)
-				print *, vars%vals(i)%to_str()
-			end do
+			!print *, 'vars%vals = '
+			!do i = 1, size(vars%vals)
+			!	print *, vars%vals(i)%to_str()
+			!end do
 
 			! Backup vals array and set num_vars in parser object
 			vars0%vals = vars%vals
@@ -621,7 +621,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	! dictionary lookups.  Indices in the array are already saved in each node's
 	! id_index member
 
-	print *, 'parser%num_vars = ', parser%num_vars
+	!print *, 'parser%num_vars = ', parser%num_vars
 	if (allocated(vars%vals)) deallocate(vars%vals)
 	allocate(vars%vals( parser%num_vars ))
 
