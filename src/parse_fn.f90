@@ -657,6 +657,7 @@ module function parse_struct_declaration(parser) result(decl)
 
 	struct%num_vars = 0
 	allocate(struct%member_names%v( names%len_ ))
+	allocate(struct%vars%dicts(1))
 
 	do i = 1, names%len_
 		!print *, "name = ", names%v(i)%s

@@ -384,7 +384,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	character(len = :), allocatable :: src_filel
 
-	integer :: unit_
+	integer :: i, unit_
 
 	logical :: allow_continuel
 
@@ -469,13 +469,14 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 			! type itself does not (and I don't want to expose or encourage
 			! copying)
 
+			allocate(vars0%dicts(1))
 			allocate(vars0%dicts(1)%root)
 			vars0%dicts(1)%root = vars%dicts(1)%root
 
-			!print *, 'vars%vals = '
-			!do i = 1, size(vars%vals)
-			!	print *, vars%vals(i)%to_str()
-			!end do
+			print *, 'vars%vals = '
+			do i = 1, size(vars%vals)
+				print *, vars%vals(i)%to_str()
+			end do
 
 			! Backup vals array and set num_vars in parser object
 			vars0%vals = vars%vals
@@ -542,8 +543,8 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	end if
 
-	print *, "allocated parser%vars%dicts = ", allocated( parser%vars%dicts )
-	print *, "size parser%vars%dicts = ", size( parser%vars%dicts )
+	!print *, "allocated parser%vars%dicts = ", allocated( parser%vars%dicts )
+	!print *, "size parser%vars%dicts = ", size( parser%vars%dicts )
 
 	!*******************************
 	! Parse the tokens
@@ -571,8 +572,10 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		! variable declarations, since they will be re-declared when we continue
 		! parsing the current stdin line from its start again.
 
-		if (allocated(vars0%dicts(1)%root)) then
-			call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
+		if (allocated(vars0%dicts)) then
+			if (allocated(vars0%dicts(1)%root)) then
+				call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
+			end if
 		end if
 
 		if (allocated(vars0%vals)) then
@@ -618,13 +621,18 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	! dictionary lookups.  Indices in the array are already saved in each node's
 	! id_index member
 
-	!print *, 'parser%num_vars = ', parser%num_vars
+	print *, 'parser%num_vars = ', parser%num_vars
 	if (allocated(vars%vals)) deallocate(vars%vals)
 	allocate(vars%vals( parser%num_vars ))
 
 	if (allocated(vars0%vals)) then
 		!print *, 'restoring vars%vals'
-		vars%vals( 1: size(vars0%vals) ) = vars0%vals
+
+		!vars%vals( 1: size(vars0%vals) ) = vars0%vals
+		do i = 1, size(vars0%vals)
+			vars%vals(i) = vars0%vals(i)
+		end do
+
 		!vars%vals = vars0%vals
 		!vars = vars0
 	end if
