@@ -26,15 +26,7 @@ fn bin_search(v: &[i32; :], val: i32, beg: i32, end: i32): i32
 let vec = [100: 200];
 let my_val = 171;
 
-//// TODO: size() call crashes here, probably &vec has moved the data for the
-//// first arg so then the last arg can't reference it
-////
-//// Could make two passes: eval non-refs into params_tmp in first pass, then
-//// move refs on second pass
-//let index_ = bin_search(&vec, my_val, 0, i32(size(vec,0) - 1));
-
-let nv = i32(size(vec, 0));
-let index_ = bin_search(&vec, my_val, 0, nv-1);
+let index_ = bin_search(&vec, my_val, 0, i32(size(vec,0) - 1));
 println("index_ = ", index_);
 
 return 0;

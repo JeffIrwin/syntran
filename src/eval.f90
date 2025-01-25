@@ -894,52 +894,40 @@ recursive subroutine eval_fn_call(node, state, res)
 	! Pass by value by default.  Arguments are evaluated and their values are
 	! copied to the fn parameters
 
+	! Deeply-nested fn calls can crash without the tmp value for the
+	! pass-by-value case.  idk why i can't just eval directly into the state var
+	! like commented above :(.  probably state var type is getting cleared by
+	! passing it to an intent(out) arg? more likely, nested fn calls basically
+	! create a stack in which we store each nested arg in different copies of
+	! tmp.  if you try to store them all in the same state var at multiple stack
+	! levels it breaks?
+	!
+	! This also seems to have led to a dramatic perf improvement for intel
+	! compilers in commit 324ad414, running full tests in ~25 minutes instead of
+	! 50.  gfortran perf remains good and unchanged
+
+	! Make two passes.  First eval values, then move references.  If a var shows
+	! up in two different args, both as a ref and a val, moving it first will
+	! crash in a single pass
+
 	do i = 1, size(node%params)
-		!print *, 'copying param ', i
+		if (.not. node%is_ref(i)) then
+			! Pass-by-value
+			call syntax_eval(node%args(i), state, params_tmp(i))
+		end if
+	end do
 
-		! Deeply-nested fn calls can crash without the tmp value for the
-		! pass-by-value case.  idk why i can't just eval directly into the state
-		! var like commented above :(.  probably state var type is getting
-		! cleared by passing it to an intent(out) arg? more likely, nested fn
-		! calls basically create a stack in which we store each nested arg in
-		! different copies of tmp.  if you try to store them all in the same
-		! state var at multiple stack levels it breaks?
-		!
-		! This also seems to have led to a dramatic perf improvement for intel
-		! compilers in commit 324ad414, running full tests in ~25 minutes
-		! instead of 50.  gfortran perf remains good and unchanged
-
-		!print *, "is_ref = ", node%is_ref(i)
-
+	do i = 1, size(node%params)
 		if (node%is_ref(i)) then
 
-			!print *, "node param = ", node%params(i)
-			!print *, "arg index  = ", node%args(i)%id_index
-			!print *, "arg type   = ", kind_name(node%args(i)%val%type)
-
 			! Move arg in for pass-by-reference
-
-			!print *, "node arg is_loc = ", node%args(i)%is_loc
 			if (node%args(i)%is_loc) then
-				!print *, "val = ", state%locs%vals( node%args(i)%id_index )%to_str()
 				call value_move(state%locs%vals( node%args(i)%id_index ), params_tmp(i))
 			else
 				call value_move(state%vars%vals( node%args(i)%id_index ), params_tmp(i))
 			end if
 
-		else
-
-			call syntax_eval(node%args(i), state, params_tmp(i))
-
-			!print *, "******** node%params(i) = ", node%params(i), " ******** "
-			!print *, "******** type = ", kind_name(tmp%type)
-			!print *, "******** type = ", kind_name( state%locs%vals( node%params(i) )%type )
-
 		end if
-
-		!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
-		!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
-		!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
 	end do
 
 	! Push/pop a stack of local vars, similar to returned0 stack
