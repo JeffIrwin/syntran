@@ -31,12 +31,9 @@ module syntran__core_m
 
 	! TODO:
 	!  - roadmap to version 1.0.0:
+	!    * maybe have a trial alpha release 0.1.0 for a bit before 1.0?
 	!    * ban expression statements.  notes below.  compat break
 	!    * finish recursion
-	!      + i think include files can call fns from the includer.  this
-	!        probably isn't desireable, but i'm not sure how big of a deal it is
-	!        or how to fix it.  right now everything is one translation unit.
-	!        might want to rethink scoping
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
 	!      + this will be a compatibility break. it's a must-have for 1.0
@@ -63,6 +60,10 @@ module syntran__core_m
 	!    * done
 	!    * could always use more tests.  recursive quicksort?  various aoc
 	!      problems?  minheap or heapsort or something tree/graph related?
+	!    * i think include files can call fns from the includer.  this
+	!      probably isn't desireable, but i'm not sure how big of a deal it is
+	!      or how to fix it.  right now everything is one translation unit.
+	!      might want to rethink scoping
 	!  - recursive data structs?
 	!    * recursive fns are available, but not structs
 	!  - allow for loops that iterate on chars in a str

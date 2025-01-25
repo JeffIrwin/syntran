@@ -1,0 +1,236 @@
+
+// This test contains a sudoku puzzle solver which uses the backtracking
+// algorithm
+//
+// It's based on some fortran code that I wrote eons ago, so some of the
+// variable names and argument conventions are crazy
+
+//==============================================================================
+
+// Square sudoku grid size
+let N = 9;
+
+//==============================================================================
+
+// TODO: rename fns with "sudoku_" prefix
+
+fn reject(igrid: &[i32; :, :]): bool
+{
+	let reject = false;
+
+	// Check columns
+	for i in [0: N]
+	for v in [1: N+1]
+	{
+		reject = count(igrid[:, i] == v) > 1;
+		if (reject) return reject;
+	}
+
+	// Check rows
+	for i in [0: N]
+	for v in [1: N+1]
+	{
+		reject = count(igrid[i, :] == v) > 1;
+		if (reject) return reject;
+	}
+
+	// Check 3x3 sub grids
+	for i in [0: 3: N]
+	for j in [0: 3: N]
+	{
+		//println("subgrid = ", igrid[i: i+3, j: j+3]);
+		for v in [1: N+1]
+		{
+			reject = count(igrid[i: i+3, j: j+3] == v) > 1;
+			if (reject) return reject;
+		}
+	}
+
+	return reject;
+}
+
+fn accept(igrid: &[i32; :, :]): bool
+{
+	if not any(igrid <= 0)
+	{
+		println("Solution = ", igrid);
+		//exit(0);
+		return true;
+	}
+	return false;
+}
+
+fn first
+(
+	igrid: &[i32; :, :],
+	ji: &[i32; :],
+	last: &bool
+): [i32; :, :]
+{
+	// This subroutine takes igrid and its set of indices as input,
+	// advances indices to the next square, and returns jgrid with a 1
+	// in that square.
+	last = false;
+
+	// Advance by one square
+	let jgrid = igrid;
+	ji[0] += 1;
+	if ji[0] >= N
+	{
+		ji[0] = 0;
+		ji[1] += 1;
+		if (ji[1] >= N) last = true;
+	}
+
+	// Then advance to the next empty square.
+	if (not last)
+	{
+		while igrid[ji[0], ji[1]] != 0 and not last
+		{
+			ji[0] += 1;
+			if ji[0] >= N
+			{
+				ji[0] = 0;
+				ji[1] += 1;
+				if ji[1] >= N
+				{
+					ji[1] = N-1;
+					last = true;
+				}
+			}
+		}
+	}
+	if (not last) jgrid[ji[0], ji[1]] = 1;
+
+	return jgrid;
+}
+
+fn next(igrid: &[i32; :, :], ii: &[i32; :], last: &bool)
+{
+	// Increment location `ii` in `igrid` by one.  TODO: output last as fn
+	// return val
+	last = false;
+	igrid[ii[0], ii[1]] += 1;
+	if igrid[ii[0], ii[1]] > N
+	{
+		igrid[ii[0], ii[1]] = N;
+		last = true;
+	}
+	return;
+}
+
+fn bt(igrid: &[i32; :, :], ii: [i32; :]): bool
+{
+	// Backtrack algorithm
+
+	if (reject(&igrid)) return false;
+	if (accept(&igrid)) return true;
+
+	let last = false;
+	let jgrid = first(&igrid, &ii, &last);
+	//println("jgrid = ", jgrid);
+
+	while not last
+	{
+		if bt(&jgrid, ii)
+		{
+			igrid = jgrid;
+			return true;
+		}
+		next(&jgrid, &ii, &last);
+	}
+	return false;
+}
+
+fn solve_sudoku(igrid: &[i32; :, :]): bool
+{
+	// Backtrack by filling in numbers at location `ii`.  As the first step of
+	// backtracking, increment the x coordinate of `ii`, so initialize this just
+	// before the first square
+	let ii = [-1, 0];
+
+	return bt(&igrid, ii);
+}
+
+//==============================================================================
+
+fn main(): i32
+{
+	// Reading the grid from a file is left as an exercise for the user.  Use
+	// 0's as placeholders for unknown empty squares
+
+	// Easy -- takes 0.2 s to run in debug profile
+	let my_grid = [
+		0, 0, 0,  4, 0, 0,  0, 8, 6,
+		0, 7, 0,  6, 5, 3,  0, 1, 2,
+		9, 5, 0,  0, 0, 0,  0, 0, 0,
+
+		0, 2, 0,  1, 3, 0,  0, 5, 0,
+		0, 0, 4,  0, 2, 0,  3, 0, 0,
+		0, 8, 0,  0, 9, 6,  0, 4, 0,
+
+		0, 0, 0,  0, 0, 0,  0, 3, 8,
+		8, 6, 0,  3, 4, 1,  0, 9, 0,
+		1, 3, 0,  0, 0, 7,  0, 0, 0
+		;
+		N, N
+	];
+	let expect = [
+		2, 1, 3,  4, 7, 9,  5, 8, 6,
+		4, 7, 8,  6, 5, 3,  9, 1, 2,
+		9, 5, 6,  8, 1, 2,  4, 7, 3,
+
+		6, 2, 7,  1, 3, 4,  8, 5, 9,
+		5, 9, 4,  7, 2, 8,  3, 6, 1,
+		3, 8, 1,  5, 9, 6,  2, 4, 7,
+
+		7, 4, 9,  2, 6, 5,  1, 3, 8,
+		8, 6, 2,  3, 4, 1,  7, 9, 5,
+		1, 3, 5,  9, 8, 7,  6, 2, 4
+		;
+		N, N
+	];
+
+	//// Hard -- takes 15 s to run in debug
+	//my_grid = [
+	//	0, 0, 9,   0, 1, 0,   0, 0, 2,
+	//	2, 5, 0,   0, 0, 4,   0, 0, 0,
+	//	0, 3, 4,   0, 0, 8,   5, 0, 0,
+
+	//	0, 0, 0,   0, 4, 9,   0, 0, 0,
+	//	0, 0, 0,   6, 5, 7,   0, 0, 0,
+	//	0, 0, 0,   8, 3, 0,   0, 0, 0,
+
+	//	0, 0, 6,   2, 0, 0,   4, 5, 0,
+	//	0, 0, 0,   9, 0, 0,   0, 1, 3,
+	//	1, 0, 0,   0, 8, 0,   2, 0, 0
+	//	;
+	//	N, N
+	//];
+	//expect = [
+	//	8, 7, 9,    5, 1, 6,    3, 4, 2,
+	//	2, 5, 1,    3, 9, 4,    6, 8, 7,
+	//	6, 3, 4,    7, 2, 8,    5, 9, 1,
+
+	//	5, 6, 3,    1, 4, 9,    7, 2, 8,
+	//	9, 2, 8,    6, 5, 7,    1, 3, 4,
+	//	4, 1, 7,    8, 3, 2,    9, 6, 5,
+
+	//	3, 8, 6,    2, 7, 1,    4, 5, 9,
+	//	7, 4, 2,    9, 6, 5,    8, 1, 3,
+	//	1, 9, 5,    4, 8, 3,    2, 7, 6
+	//	;
+	//	N, N
+	//];
+
+	println("my_grid = ", my_grid);
+
+	solve_sudoku(&my_grid);
+
+	println("my_grid = ", my_grid);
+
+	return sum(abs(my_grid - expect));
+}
+
+return main();
+
