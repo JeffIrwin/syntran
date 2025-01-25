@@ -239,33 +239,23 @@ recursive subroutine value_move(src, dst)
 	if (debug > 3) print *, 'starting value_move()'
 
 	dst%type = src%type
-	dst%sca  = src%sca  ! TODO: this could be skipped conditionally, might improve perf
 
-	if (allocated(src%struct_name)) then
-		call move_alloc(src%struct_name, dst%struct_name)
-	end if
-
-	if (allocated(src%array)) then
-		!if (.not. allocated(dst%array)) allocate(dst%array)
+	select case (src%type)
+	case (array_type)
 		call move_alloc(src%array, dst%array)
-	!else if (allocated(dst%array)) then
-	!	deallocate(dst%array)
-	end if
 
-	if (allocated(src%struct)) then
-		!if (allocated(dst%struct)) deallocate(dst%struct)
-		!dst%struct = src%struct
-
+	case (struct_type)
+		call move_alloc(src%struct_name, dst%struct_name)
 		call move_alloc(src%struct, dst%struct)
 
-		!allocate(dst%struct( size(src%struct) ))
-		!do i = 1, size(src%struct)
-		!	!dst%struct(i) = src%struct(i)
-		!	call value_copy(dst%struct(i), src%struct(i))
-		!end do
-	!else if (allocated(dst%struct)) then
-	!	deallocate(dst%struct)
-	end if
+	case default
+		! This copy (not move) could be inefficient for large string scalars.
+		! Might be worth making value%sca allocatable if it doesn't add too much
+		! complexity.  Otherwise, consider further selecting the case by each
+		! scalar type
+		dst%sca  = src%sca
+
+	end select
 
 end subroutine value_move
 
