@@ -97,6 +97,7 @@ module syntran__types_m
 		! Flat array of fns from all scopes, used for efficient interpreted
 		! evaluation
 		type(fn_t), allocatable :: fns(:)
+		integer :: num_intr_fns
 
 		! This is the scope level.  Each nested block statement that is entered
 		! pushes 1 to scope.  Popping out of a block decrements the scope.

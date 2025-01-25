@@ -380,8 +380,9 @@ module function parse_unit(parser) result(unit)
 	!print *, "num fns = ", parser%num_fns
 
 	num_vars0 = parser%num_vars  ! not necessarily 0 for the REPL
-	num_fns0 = parser%num_fns  ! includes intrinsic fns
+	num_fns0 = parser%num_fns    ! includes intrinsic fns
 	num_structs0 = parser%num_structs
+	parser%fn_names = new_string_vector()
 
 	do while (parser%current_kind() /= eof_token)
 

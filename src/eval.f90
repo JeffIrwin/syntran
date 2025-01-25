@@ -931,29 +931,19 @@ recursive subroutine eval_fn_call(node, state, res)
 			!print *, "arg index  = ", node%args(i)%id_index
 			!print *, "arg type   = ", kind_name(node%args(i)%val%type)
 
-			!! Map ref_sub on RHS too, in case of nested refs (one fn calling
-			!! another fn)
-			!state    %ref_sub( node%params(i) ) = &
-			!	state%ref_sub( node%args(i)%id_index
-
 			! Move arg in for pass-by-reference
 
 			!print *, "node arg is_loc = ", node%args(i)%is_loc
 			if (node%args(i)%is_loc) then
 				!print *, "val = ", state%locs%vals( node%args(i)%loc_index )%to_str()
-
-				!params_tmp(i) = state%locs%vals( node%args(i)%loc_index )
 				call value_move(state%locs%vals( node%args(i)%loc_index ), params_tmp(i))
 			else
-				!params_tmp(i) = state%vars%vals( node%args(i)%id_index )
 				call value_move(state%vars%vals( node%args(i)%id_index ), params_tmp(i))
 			end if
 
 		else
 
 			call syntax_eval(node%args(i), state, params_tmp(i))
-			!call syntax_eval(node%args(i), state, tmp)
-			!params_tmp(i) = tmp
 
 			!print *, "******** node%params(i) = ", node%params(i), " ******** "
 			!print *, "******** type = ", kind_name(tmp%type)
@@ -964,9 +954,6 @@ recursive subroutine eval_fn_call(node, state, res)
 		!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
 		!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
 		!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
-
-		!print *, 'done'
-		!print *, ''
 	end do
 
 	! Push/pop a stack of local vars (loc_index), similar to returned0
@@ -984,52 +971,10 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	allocate(state%locs%vals( node%num_locs ))
 	do i = 1, size(node%params)
-
-		!state%locs%vals( node%params(i) ) = params_tmp( node%params(i) )
-
-		!state%locs%vals( node%params(i) ) = params_tmp(i)
 		call value_move(params_tmp(i), state%locs%vals( node%params(i) ))
-
 	end do
 
-	! TODO: only do this is node%id_index is < 0 or somehow invalid
-	!
-	! This is required because the parser essentially inlines all functions by
-	! pasting their body in every place that they are called.  With two passes
-	! it can handle the 1st recursion level ok, but deeper recursion otherwise
-	! fails.  Setting the body here does the inlining at runtime (eval time)
-	!
-	! There is already an `if (id_index <+ 0)` check above where it might be
-	! appropriate to move this body inlining
-	!
-	!  TODO: can we use a fn index instead of doing a ternary tree search? like
-	!  with vars?  This search is actually the perf bottleneck
-
-	!fn = state%fns%search(node%identifier%text, id_index, io)
-	!fn = state%fns%fns( node%id_index )
-
-	!print *, "node fn id_index = ", node%id_index
-	!!print *, "eval fn id_index = ", id_index
-	!!print *, "allocated fn node = ", allocated(fn%node)
-	!print *, "allocated fn node = ", allocated(state%fns%fns( node%id_index )%node)
-
-	if (.not. allocated(state%fns%fns( node%id_index )%node)) then
-
-		! TODO: this performs very well, but it should be done once at the end
-		! of syntax_parse() in core.f90 instead of on-the-fly here.  Iterate
-		! through list of functions and set them in the flat array.  Might need
-		! to build a str array of fn names to be able to iterate
-		fn = state%fns%search(node%identifier%text, id_index, io)
-		!state%fns%fns( node%id_index )%node = fn%node
-		state%fns%fns( node%id_index ) = fn
-
-	end if
-	!print *, "allocated fn node = ", allocated(state%fns%fns( node%id_index )%node)
-	!print *, ""
-
-	call syntax_eval(state%fns%fns( node%id_index )%node%body, state, res)  ! TODO: this should work
-	!call syntax_eval(fn%node%body, state, res)
-	!call syntax_eval(node%body, state, res)
+	call syntax_eval(state%fns%fns( node%id_index )%node%body, state, res)
 
 	!print *, "res rank = ", res%array%rank
 	!print *, 'res = ', res%to_str()
@@ -1063,12 +1008,9 @@ recursive subroutine eval_fn_call(node, state, res)
 	do i = 1, size(node%params)
 		if (.not. node%is_ref(i)) cycle
 
-		! TODO: is_loc/not branch.  Are global refs not covered by any tests?
 		if (node%args(i)%is_loc) then
-			!state%locs%vals( node%args(i)%loc_index ) = params_tmp(i)
 			call value_move(params_tmp(i), state%locs%vals( node%args(i)%loc_index ))
 		else
-			!state%vars%vals( node%args(i)%id_index ) = params_tmp(i)
 			call value_move(params_tmp(i), state%vars%vals( node%args(i)%id_index ))
 		end if
 

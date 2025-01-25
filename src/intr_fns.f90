@@ -54,7 +54,10 @@ subroutine declare_intr_fns(fns)
 		atand_f32_fn, atand_f64_fn, atand_f32_arr_fn, atand_f64_arr_fn, &
 		repeat_fn
 
-	! Increment index for each fn and then set num_fns
+	! This used to get incremented automatically inside of fns%insert, but I
+	! changed it.  I don't think it matters for intrinsic fns anyway, because
+	! their index is not used during evaluation (there's just a big fortran
+	! select/case on the fn name)
 	id_index = 0
 
 	!********
@@ -1902,9 +1905,6 @@ subroutine declare_intr_fns(fns)
 	! FIXME: when adding new functions, remember to copy them into the
 	! fns%fns(:) array below
 
-	num_fns = id_index
-	allocate(fns%fns(num_fns))
-
 	fns%fns = &
 		[ &
 			abs_f32_fn, abs_f64_fn, abs_f32_arr_fn, abs_f64_arr_fn, &
@@ -1953,6 +1953,10 @@ subroutine declare_intr_fns(fns)
 			str_fn        , &
 			writeln_fn      &
 		]
+
+	num_fns = size(fns%fns)
+	fns%num_intr_fns = num_fns
+	!print *, "setting num_intr_fns = ", fns%num_intr_fns
 
 end subroutine declare_intr_fns
 

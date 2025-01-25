@@ -43,6 +43,13 @@ module syntran__core_m
 	!    * anything else? review the rest of this list
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)
+	!  - docker ci/cd stages should test current branch, not main
+	!    * after 1.0 i should be more strict about changing main branch
+	!    * should have a dev branch where work is done, main should only change
+	!      by merging *after* testing on dev branch
+	!    * hence, all tests should cover dev or whatever the current branch is
+	!    * could use `add` instead of `git clone` in docker.  make sure enough
+	!      files are added, but not large files like wave solver results
 	!  - recursive fns
 	!    * done
 	!    * could always use more tests.  recursive quicksort?  various aoc
@@ -380,14 +387,15 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	!********
 
-	character(len = :), allocatable :: src_filel
+	character(len = :), allocatable :: src_filel, fn_name
 
-	integer :: i, unit_
+	integer :: i, io, dummy, unit_
 
 	logical :: allow_continuel
 
 	type(text_context_vector_t) :: contexts
 
+	type(fn_t) :: fn
 	type(fns_t) :: fns0
 
 	! This no longer seems to make a difference.  Previously, without `save`,
@@ -643,8 +651,20 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		fns%fns( 1: size(fns0%fns) ) = fns0%fns
 	end if
 
-	! TODO: save flat fn array `fns%fns`.  There's not any actual fns%fns%node
-	! info in what is set above.  See eval_fn_call() which does this on the fly
+	! Save flat fn array `fns%fns` with a one-time dict lookup.  There's not any
+	! actual fns%fns%node info in what is set above
+
+	!print *, "num intr fns = ", fns%num_intr_fns
+	do i = 1, parser%fn_names%len_
+		fn_name = parser%fn_names%v(i)%s
+		!print *, "fn name = ", fn_names
+
+		! User-defined fns are in the table after all of the intrinsic fns, so
+		! shift its index by num_intr_fns
+		fn = fns%search(fn_name, dummy, io)
+		fns%fns( fns%num_intr_fns + i ) = fn
+
+	end do
 
 	!if (allocated(parser%structs)) then
 	!	! TODO: manually finalize recursively?

@@ -45,6 +45,7 @@ module syntran__parse_m
 
 		type(fns_t) :: fns
 		integer :: num_fns = 0
+		type(string_vector_t) :: fn_names
 
 		type(structs_t) :: structs
 		integer :: num_structs = 0

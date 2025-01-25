@@ -529,10 +529,9 @@ module function parse_fn_declaration(parser) result(decl)
 	if (parser%ipass == 0) overwrite = .false.
 
 	io = 0
-	!if (parser%ipass == 0) then
-		call parser%fns%insert(identifier%text, fn, decl%id_index, io, overwrite = overwrite)
-		!print *, "fn insert io = ", io
-	!end if
+	call parser%fns%insert(identifier%text, fn, decl%id_index, io, overwrite = overwrite)
+	!print *, "fn insert io = ", io
+	if (parser%ipass == 0) call parser%fn_names%push( identifier%text )
 
 	! error if fn already declared. be careful in future if fn prototypes are
 	! added
