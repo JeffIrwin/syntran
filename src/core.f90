@@ -527,14 +527,21 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 		!! With intrinsic fns, this is always allocated
 
-		! TODO: it might help to copy the fns array with an explicit loop.  You
-		! would think they would be the same, but in messing with vars copies
-		! while working on recursion I found it doesn't handle recursive data structs
-		! properly.  This might be related to gfortran 13+ issues
+		! TODO: test gfortran 13+.  it might help to copy the fns array with an
+		! explicit loop.  You would think they would be the same, but in messing
+		! with vars copies while working on recursion I found it doesn't handle
+		! recursive data structs properly.  This might be related to gfortran
+		! 13+ issues
 
 		!if (allocated(fns%fns)) then
 			!print *, 'copy fns'
-			fns0%fns = fns%fns
+
+			!fns0%fns = fns%fns
+			allocate(fns0%fns( size(fns%fns) ))
+			do i = 1, size(fns%fns)
+				fns0%fns(i) = fns%fns(i)
+			end do
+
 			parser%num_fns = size(fns%fns)
 		!else
 		!	parser%num_fns = 0
@@ -648,7 +655,12 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	allocate(fns%fns( parser%num_fns ))
 
 	if (allocated(fns0%fns)) then
-		fns%fns( 1: size(fns0%fns) ) = fns0%fns
+
+		!fns%fns( 1: size(fns0%fns) ) = fns0%fns
+		do i = 1, size(fns0%fns)
+			fns%fns(i) = fns0%fns(i)
+		end do
+
 	end if
 
 	! Save flat fn array `fns%fns` with a one-time dict lookup.  There's not any
@@ -657,7 +669,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	!print *, "num intr fns = ", fns%num_intr_fns
 	do i = 1, parser%fn_names%len_
 		fn_name = parser%fn_names%v(i)%s
-		!print *, "fn name = ", fn_names
+		!print *, "fn name = ", fn_name
 
 		! User-defined fns are in the table after all of the intrinsic fns, so
 		! shift its index by num_intr_fns
@@ -665,6 +677,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		fns%fns( fns%num_intr_fns + i ) = fn
 
 	end do
+	!print *, "done looking up fns"
 
 	!if (allocated(parser%structs)) then
 	!	! TODO: manually finalize recursively?

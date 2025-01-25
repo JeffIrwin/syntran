@@ -344,7 +344,7 @@ recursive subroutine eval_name_expr(node, state, res)
 	!print *, "node is_loc = ", node%is_loc
 
 	if (node%is_loc) then
-		id = node%loc_index  ! TODO: pass by reference for local vars?
+		id = node%loc_index
 		type_ = state%locs%vals(id)%type
 	else
 		id = node%id_index
@@ -389,7 +389,7 @@ recursive subroutine eval_name_expr(node, state, res)
 			!print *, 'identifier ', node%identifier%text
 			!print *, 'il = ', il
 			!print *, 'iu = ', iu
-			!print *, 'str = ', state%vars%vals(id)%sca%str%s  ! TODO: debug broken for is_loc
+			!print *, 'str = ', state%vars%vals(id)%sca%str%s  ! debug broken for is_loc
 
 			! Not inclusive of upper bound
 			if (node%is_loc) then
@@ -2304,7 +2304,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 			!print *, 'non str_type scalar subscript'
 			!print *, 'LHS array type = ', &
-			!	state%vars%vals(id)%array%type  ! TODO: this debug will break for is_loc
+			!	state%vars%vals(id)%array%type  ! this debug will break for is_loc
 			!print *, 'LHS array = ', state%vars%vals(id)%array%i32
 
 			!print *, "get_array_val a"
