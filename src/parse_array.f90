@@ -32,7 +32,7 @@ recursive module function parse_array_expr(parser) result(expr)
 
 	!********
 
-	integer :: i, span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end, rank_
+	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end, rank_
 
 	type(syntax_node_t)  :: lbound_, step, ubound_, len_, elem
 	type(syntax_node_vector_t) :: elems, size_
@@ -121,11 +121,6 @@ recursive module function parse_array_expr(parser) result(expr)
 		allocate(expr%lbound)
 
 		call syntax_nodes_copy(expr%size, size_%v( 1: size_%len_ ))
-                !print *, "size len = ", size_%len_
-                !allocate(expr%size( size_%len_ ))
-                !do i = 1, size_%len_
-                !  expr%size(i) = size_%v(i)
-                !end do
 
 		expr%kind           = array_expr
 

@@ -708,25 +708,25 @@ end subroutine log_diagnostics
 
 recursive subroutine syntax_node_vector_copy(dst, src)
 
-        class(syntax_node_vector_t), intent(inout) :: dst
-        class(syntax_node_vector_t), intent(in) :: src
+	class(syntax_node_vector_t), intent(inout) :: dst
+	class(syntax_node_vector_t), intent(in)    :: src
 
-	!type syntax_node_vector_t
-	!	type(syntax_node_t), allocatable :: v(:)
-	!	integer :: len_, cap
+	!********
 
-        integer :: i
+	integer :: i
 
 	dst%len_ = src%len_
 	dst%cap = src%cap
 
-        if (allocated(dst%v)) deallocate(dst%v)
-        allocate(dst%v( size(src%v) ))
-        do i = 1 , size(src%v)
-          dst%v(i) = src%v(i)
-        end do
+	if (allocated(dst%v)) deallocate(dst%v)
+	allocate(dst%v( size(src%v) ))
+	do i = 1 , size(src%v)
+		dst%v(i) = src%v(i)
+	end do
 
 end subroutine syntax_node_vector_copy
+
+!===============================================================================
 
 recursive subroutine syntax_node_copy(dst, src)
 

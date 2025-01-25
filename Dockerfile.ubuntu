@@ -6,22 +6,26 @@ WORKDIR /workdir
 RUN apt-get update -y
 RUN apt-get install -y vim
 
-## syntran crashes almost immediately with gfortran 13
-ARG GFORT_VERS="11"
+## syntran used to crash almost immediately with gfortran 13+
+#ARG GFORT_VERS="11"
 #ARG GFORT_VERS="12"
 #ARG GFORT_VERS="13"
+ARG GFORT_VERS="14"
+
+ARG FC="gfortran-${GFORT_VERS}"
 
 #RUN apt-get install -y gfortran
-RUN apt-get install -y gfortran-${GFORT_VERS}
+RUN apt-get install -y "$FC"
 
-RUN cp $(which "gfortran-${GFORT_VERS}") /usr/bin/gfortran
+RUN cp $(which "$FC") /usr/bin/gfortran
 
 #RUN apt-get install -y curl
 
-RUN gfortran-${GFORT_VERS} --version
+RUN $FC --version
 
 RUN apt-get install -y git
-RUN git clone https://github.com/jeffirwin/syntran
+ARG BRANCH="recursion"
+RUN git clone https://github.com/jeffirwin/syntran --branch "$BRANCH"
 WORKDIR /workdir/syntran
 
 #COPY src ./src
@@ -37,29 +41,27 @@ RUN mv fpm /usr/local/bin
 RUN fpm --version
 
 # Remove gcc >= 13 guard with sed
+#
+# TODO: gfortran 13 (and 14) work now, since this can be removed soon
 RUN sed -i 's/#error.*//g' src/compiler.F90
 
+ARG PROFILE="debug"
+ARG LINK_FLAG="-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"
+
 RUN yes | fpm clean
-RUN fpm build --compiler gfortran
-RUN fpm install --prefix .
-#RUN fpm test test --compiler gfortran
+RUN fpm build --compiler $FC --profile "$PROFILE" --link-flag "$LINK_FLAG"
+RUN fpm test test --compiler $FC --profile "$PROFILE" --link-flag "$LINK_FLAG"
 
-#RUN fpm test long --compiler gfortran-${GFORT_VERS}
+#RUN fpm test long --compiler $FC --profile "$PROFILE" --link-flag "$LINK_FLAG"
 
-#ARG PROFILE release
-ARG PROFILE debug
-
-#RUN fpm build --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -static-libquadmath"
-
-RUN fpm build --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"
-
-RUN fpm test test --compiler gfortran-${GFORT_VERS} --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"
+# ****************
+ARG PROFILE="release"
 
 #RUN find ./build -wholename "*app/syntran" | xargs ls -ltrh
 
-#RUN fpm install --profile release --link-flag '-static-libgcc -static-libgfortran' '--prefix=$HOME'
+RUN fpm build   --compiler $FC --profile "$PROFILE" --link-flag "$LINK_FLAG"
+RUN fpm install --compiler $FC --profile "$PROFILE" --link-flag "$LINK_FLAG" '--prefix=$HOME'
 
-#RUN fpm build --profile debug
-#RUN fpm test test --profile debug
-#RUN fpm test test --profile release --link-flag '-static-libgcc -static-libgfortran'
+RUN fpm test test --compiler $FC --profile "$PROFILE" --link-flag "$LINK_FLAG"
+RUN fpm test long --compiler $FC --profile "$PROFILE" --link-flag "$LINK_FLAG"
 

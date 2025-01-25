@@ -138,7 +138,8 @@ recursive module function parse_if_statement(parser) result(statement)
 	!
 	! TODO: fix similar while_statement check to only apply on 2nd pass too.
 	! Review code for other type checks that won't be knowable on 1st pass. Lots
-	! of different diagnostics could depend on a yet-unknown fn's return type
+	! of different diagnostics could depend on a yet-unknown fn's return type.
+	! Maybe never push diagnostics on first pass?
 	if (condition%val%type /= bool_type .and. parser%ipass > 0) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &

@@ -910,6 +910,12 @@ recursive subroutine eval_fn_call(node, state, res)
 	! up in two different args, both as a ref and a val, moving it first will
 	! crash in a single pass
 
+	! TODO: does this do what I think it does if you pass-by-ref for one arg and
+	! then increment that same var in a later arg?  Seems like a bad idea from
+	! the user's end no matter how I handle it.  For example:
+	!
+	!     let res = my_fn(&x, (x += 1));
+
 	do i = 1, size(node%params)
 		if (.not. node%is_ref(i)) then
 			! Pass-by-value
