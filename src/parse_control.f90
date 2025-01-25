@@ -137,7 +137,7 @@ recursive module function parse_if_statement(parser) result(statement)
 	! Check that condition type is bool.  If the condition depends on a fn which
 	! is declared below, it may be unknown on pass 0
 	type_ = condition%val%type
-	if (type_ /= bool_type .and. type_ /= unknown_type) then ! .and. parser%ipass > 0) then
+	if (type_ /= bool_type .and. type_ /= unknown_type) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
 			parser%context(), span, parser%text(cond_beg, cond_end), &

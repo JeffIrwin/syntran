@@ -98,8 +98,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!	print *, 'rank = ', expr%val%array%rank
 		!end if
 
-		! TODO: it seems like overwrite can be unconditionally false here.
-		! Check long tests
 		overwrite = .true.
 		if (parser%ipass == 0) overwrite = .false.
 
