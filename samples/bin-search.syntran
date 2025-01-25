@@ -1,0 +1,41 @@
+
+fn bin_search(v: &[i32; :], val: i32, beg: i32, end: i32): i32
+{
+	// Do a binary search to find `val` in `v`
+	//
+	// Vector `v` must be sorted in ascending order before calling this
+	//
+	// Like most simple recursive examples, this is easy to convert to an
+	// iterative implementation and it would perform better iteratively
+	//
+	// Could make a wrapper fn to call initially with beg == 0 and end ==
+	// size-1
+
+	println("beg, end = ", [beg, end]);
+	let mid = (beg + end) / 2;
+	if beg > end
+		return -1;  // not found
+	else if v[mid] == val
+		return mid;
+	else if v[mid] > val
+		return bin_search(&v, val, beg, mid - 1);
+	else
+		return bin_search(&v, val, mid + 1, end);
+}
+
+let vec = [100: 200];
+let my_val = 171;
+
+//// TODO: size() call crashes here, probably &vec has moved the data for the
+//// first arg so then the last arg can't reference it
+////
+//// Could make two passes: eval non-refs into params_tmp in first pass, then
+//// move refs on second pass
+//let index_ = bin_search(&vec, my_val, 0, i32(size(vec,0) - 1));
+
+let nv = i32(size(vec, 0));
+let index_ = bin_search(&vec, my_val, 0, nv-1);
+println("index_ = ", index_);
+
+return 0;
+

@@ -889,6 +889,9 @@ recursive subroutine eval_fn_call(node, state, res)
 	! i don't think we need a stack of "breaked" bools.  that's just loop local,
 	! right?
 
+	! TODO: for runtime error logging, push a stack of fn names, line numbers,
+	! etc.
+
 	res%type = node%val%type
 
 	!print *, 'res type = ', res%type

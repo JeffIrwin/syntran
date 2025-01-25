@@ -1,0 +1,23 @@
+
+// This Fibonacci implementation is only a demo of recursion
+//
+// The array-caching version of fibonacci-3.syntran performs much better.  If
+// you crank the loop up to 20 this will struggle
+
+fn fib(a: i32): i32
+{
+	if (a <= 1) return 1;
+	return fib(a-2) + fib(a-1);
+}
+
+let n = 10;
+let res = [0; n];
+
+for i in [0: n]
+	res[i] = fib(i);
+
+let expect = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55];
+let norm = sum(abs(res - expect));
+
+return norm;
+

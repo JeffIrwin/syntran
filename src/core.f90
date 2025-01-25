@@ -31,9 +31,8 @@ module syntran__core_m
 
 	! TODO:
 	!  - roadmap to version 1.0.0:
+	!    * ban expression statements.  notes below.  compat break
 	!    * finish recursion
-	!      + needs tests
-	!      + implementation is mostly (?) done
 	!      + i think include files can call fns from the includer.  this
 	!        probably isn't desireable, but i'm not sure how big of a deal it is
 	!        or how to fix it.  right now everything is one translation unit.
@@ -44,6 +43,10 @@ module syntran__core_m
 	!    * anything else? review the rest of this list
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)
+	!  - recursive fns
+	!    * done
+	!    * could always use more tests.  recursive quicksort?  various aoc
+	!      problems?
 	!  - recursive data structs?
 	!    * recursive fns are available, but not structs
 	!  - allow for loops that iterate on chars in a str
@@ -268,11 +271,6 @@ module syntran__core_m
 	!      + gamma, log_gamma?
 	!      + reshape
 	!      + system: multiple out args? iostat and stdout
-	!    * recursive user-defined fns
-	!      + before recursion, allow calling fns (non-recursively) before they
-	!        are defined.  definition order in source file should not matter.
-	!        the 2-pass parsing required to do that will also be needed for
-	!        recursion
 	!    * done:
 	!      + abs, sqrt
 	!      + exp
@@ -289,7 +287,7 @@ module syntran__core_m
 	!      + size (non-variadic but polymorphic)
 	!      + readln, writeln, println, open, close, str casting
 	!      + len (of str)
-	!      + non-recursive user-defined fns
+	!      + recursive and non-recursive user-defined fns
 	!  - use more submodules
 	!    * types.f90 is long and close to leaves of dependency tree.  value.f90
 	!      is also highly depended upon

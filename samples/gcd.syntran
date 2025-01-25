@@ -1,0 +1,22 @@
+
+fn gcd(x: i32, y: i32): i32
+{
+	// There's no reason this shouldn't be iterative.  See aoc utils
+	if (y == 0)
+		return x;
+	else
+		return gcd(y, x % y);
+}
+
+println("gcd(8, 12) = ", gcd(8, 12));
+println("gcd(12, 8) = ", gcd(12, 8));
+
+println("gcd(18, 12) = ", gcd(18, 12));
+println("gcd(12, 18) = ", gcd(12, 18));
+
+println("gcd(180, 120) = ", gcd(180, 120));
+println("gcd(120, 180) = ", gcd(120, 180));
+
+println("gcd(111, 259) = ", gcd(111, 259));
+println("gcd(259, 111) = ", gcd(259, 111));
+
