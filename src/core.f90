@@ -50,14 +50,25 @@ module syntran__core_m
 	!    * hence, all tests should cover dev or whatever the current branch is
 	!    * could use `add` instead of `git clone` in docker.  make sure enough
 	!      files are added, but not large files like wave solver results
+	!  - add tests that cover interactive interpreter REPL?
+	!    * i'm half thinking of just abandoning it, but i do like having a
+	!      desktop calculator
+	!    * cover taking standard input.  i frequently break things like swapping
+	!      vars and fns dicts around from paused execution on each new line.
+	!      structs have never worked in REPL IIRC
+	!    * could easily be tested, it will just be a pain to keep it working
+	!      reliably
+	!    * should also cover options like `-i` (startup include file)
 	!  - recursive fns
 	!    * done
 	!    * could always use more tests.  recursive quicksort?  various aoc
-	!      problems?
+	!      problems?  minheap or heapsort or something tree/graph related?
 	!  - recursive data structs?
 	!    * recursive fns are available, but not structs
 	!  - allow for loops that iterate on chars in a str
 	!  - minloc, maxloc, findloc fns
+	!  - remove "Hint" from REPL?  It's not wrong, but it's often noisy and not
+	!    helpful
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
 	!    * just use `reshape` and call the fortran built-in.  no need for any
@@ -368,8 +379,7 @@ contains
 
 function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
-	! TODO: take state struct instead of separate vars and fns members.  Then
-	! init_ref_sub() could be called at the end of this fn
+	! TODO: take state struct instead of separate vars and fns members
 
 	! TODO: take structs arg (like existing fns arg)
 
@@ -414,9 +424,9 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	!! "exp"
 	!print *, 'key = ', &
-	!	fns%dicts(1)%root%split_char, &
-	!	fns%dicts(1)%root%mid%split_char, &
-	!	fns%dicts(1)%root%mid%mid%split_char
+	!	fns%dict%root%split_char, &
+	!	fns%dict%root%mid%split_char, &
+	!	fns%dict%root%mid%mid%split_char
 
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
@@ -515,10 +525,10 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	end if
 
 	!print *, 'moving fns'
-	if (allocated(fns%dicts(1)%root)) then
+	if (allocated(fns%dict%root)) then
 
-		allocate(fns0%dicts(1)%root)
-		fns0%dicts(1)%root = fns%dicts(1)%root
+		allocate(fns0%dict%root)
+		fns0%dict%root = fns%dict%root
 
 		!print *, 'fns%fns = '
 		!do i = 1, size(fns%fns)
@@ -532,6 +542,11 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		! with vars copies while working on recursion I found it doesn't handle
 		! recursive data structs properly.  This might be related to gfortran
 		! 13+ issues
+		!
+		! Also review the whole codebase and check for values with a custom copy
+		! assignment overload where arrays of that value are also assigned.
+		! Apparently array copies do not invoke the custom scalar assigner
+		! correctly
 
 		!if (allocated(fns%fns)) then
 			!print *, 'copy fns'
@@ -551,7 +566,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished
-		call move_alloc(fns%dicts(1)%root, parser%fns%dicts(1)%root)
+		call move_alloc(fns%dict%root, parser%fns%dict%root)
 		if (allocated(fns%fns)) call move_alloc(fns%fns          , parser%fns%fns)
 
 	end if
@@ -596,8 +611,8 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 			call move_alloc(vars0%vals         , vars%vals)
 		end if
 
-		if (allocated(fns0%dicts(1)%root)) then
-			call move_alloc(fns0%dicts(1)%root, fns%dicts(1)%root)
+		if (allocated(fns0%dict%root)) then
+			call move_alloc(fns0%dict%root, fns%dict%root)
 			call move_alloc(fns0%fns          , fns%fns)
 		end if
 
@@ -620,8 +635,8 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	end if
 
 	! TODO: if num_fns instead?
-	if (allocated(parser%fns%dicts(1)%root)) then
-		call move_alloc(parser%fns%dicts(1)%root, fns%dicts(1)%root)
+	if (allocated(parser%fns%dict%root)) then
+		call move_alloc(parser%fns%dict%root, fns%dict%root)
 
 		!! I tried adding this while working on recursive fn lookup but it's not
 		!! the way

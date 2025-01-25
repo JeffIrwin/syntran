@@ -37,11 +37,6 @@ module syntran__eval_m
 		! nightmare if you grep for "break" and don't find "broke"
 		logical :: returned, breaked, continued
 
-		!! This table is used to make substitutions in the vars array for passing
-		!! by reference. For values which are not references, it is otherwise an
-		!! identity mapping [1, 2, 3, ... ]
-		!integer, allocatable :: ref_sub(:)
-
 	end type state_t
 
 !===============================================================================
@@ -2139,7 +2134,7 @@ recursive subroutine eval_for_statement(node, state, res)
 		! Parsing still needs to rely on dictionary lookups because it does
 		! not know the entire list of variable identifiers ahead of time
 		!
-		! Loop iterator should never be a ref, so no need to use ref_sub here
+		! Loop iterator should never be a ref
 		if (node%is_loc) then
 			state%locs%vals(node%loc_index) = itr
 		else

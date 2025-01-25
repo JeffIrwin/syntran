@@ -81,18 +81,11 @@ module syntran__types_m
 
 	!********
 
-	!! Fixed-size limit to the scope level for now
-	!!integer, parameter :: scope_max = 64
-	!integer, parameter :: scope_max = 16  ! only for testing dynamic scope growth
-
 	type fns_t
 
 		! A list of function dictionaries for each scope level used during
 		! parsing
-		!
-		! TODO: fn dicts size should suffice as 1. Even a scalar should work,
-		! this is how structs dicts is
-		type(fn_dict_t) :: dicts(1)
+		type(fn_dict_t) :: dict
 
 		! Flat array of fns from all scopes, used for efficient interpreted
 		! evaluation
@@ -513,12 +506,12 @@ function fn_search(dict, key, id_index, iostat) result(val)
 
 	i = dict%scope
 
-	val = fn_ternary_search(dict%dicts(i)%root, key, id_index, io)
+	val = fn_ternary_search(dict%dict%root, key, id_index, io)
 
 	! If not found in current scope, search parent scopes too
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		val = fn_ternary_search(dict%dicts(i)%root, key, id_index, io)
+		val = fn_ternary_search(dict%dict%root, key, id_index, io)
 	end do
 
 	if (present(iostat)) iostat = io
@@ -554,7 +547,7 @@ subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 	if (present(overwrite)) overwritel = overwrite
 
 	i = dict%scope
-	call fn_ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwritel)
+	call fn_ternary_insert(dict%dict%root, key, val, id_index, io, overwritel)
 
 	if (present(iostat)) iostat = io
 
