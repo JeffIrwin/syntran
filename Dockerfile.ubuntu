@@ -40,10 +40,8 @@ RUN chmod +x fpm
 RUN mv fpm /usr/local/bin
 RUN fpm --version
 
-# Remove gcc >= 13 guard with sed
-#
-# TODO: gfortran 13 (and 14) work now, since this can be removed soon
-RUN sed -i 's/#error.*//g' src/compiler.F90
+## Remove gcc >= 15 guard with sed
+#RUN sed -i 's/#error.*//g' src/compiler.F90
 
 ARG PROFILE="debug"
 ARG LINK_FLAG="-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"

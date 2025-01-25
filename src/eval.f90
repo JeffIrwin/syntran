@@ -845,11 +845,7 @@ recursive subroutine eval_fn_call(node, state, res)
 	type(fn_t) :: fn
 
 	type(value_t) :: tmp
-
-	!type(vars_t) :: locs0  ! this will be easier if it works. less allocation/deallocation, but it crashes
-	type(value_t), allocatable :: locs0(:)
-
-	type(value_t), allocatable :: params_tmp(:)
+	type(value_t), allocatable :: params_tmp(:), locs0(:)
 
 	!print *, ""
 	!print *, 'eval fn_call_expr ', node%identifier%text
@@ -862,8 +858,6 @@ recursive subroutine eval_fn_call(node, state, res)
 		call internal_error()
 	end if
 
-	! Do we need a tmp val for every local var, or only for params?  Just params
-	! seems to suffice and it should perform better
 	allocate(params_tmp( size(node%params) ))
 
 	! i think this is technically not different than using an explicit array.
@@ -937,22 +931,16 @@ recursive subroutine eval_fn_call(node, state, res)
 	end do
 
 	! Push/pop a stack of local vars, similar to returned0 stack
-	!
-	! I used to do this before evaling args, but it works here too
-
-	!if (allocated(state%locs%vals)) locs0 = state%locs%vals
 	if (allocated(state%locs%vals)) call move_alloc(state%locs%vals, locs0)
 
 	! Push local var stack after evaluating args.  Arg evaluation can involve
-	! recursive fn calls, so a tmp array is needed here
-
-	!if (allocated(state%locs%vals)) deallocate(state%locs%vals)
-
+	! recursive fn calls, so a tmp params array is needed here
 	allocate(state%locs%vals( node%num_locs ))
 	do i = 1, size(node%params)
 		call value_move(params_tmp(i), state%locs%vals( node%params(i) ))
 	end do
 
+	! Finally, evaluate the fn body
 	call syntax_eval(state%fns%fns( node%id_index )%node%body, state, res)
 
 	!print *, "res rank = ", res%array%rank
@@ -968,14 +956,8 @@ recursive subroutine eval_fn_call(node, state, res)
 	end if
 
 	! Move out pass-by-ref args/params into params_tmp
-	!
-	! TODO: does this have to be after pop locs0?
 	do i = 1, size(node%params)
 		if (.not. node%is_ref(i)) cycle
-
-		!print *, "param val  = ", state%locs%vals( node%params(i) )%to_str()
-
-		!params_tmp(i) = state%locs%vals( node%params(i) )
 		call value_move(state%locs%vals( node%params(i) ), params_tmp(i))
 	end do
 

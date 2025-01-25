@@ -537,17 +537,6 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 		!! With intrinsic fns, this is always allocated
 
-		! TODO: test gfortran 13+.  it might help to copy the fns array with an
-		! explicit loop.  You would think they would be the same, but in messing
-		! with vars copies while working on recursion I found it doesn't handle
-		! recursive data structs properly.  This might be related to gfortran
-		! 13+ issues
-		!
-		! Also review the whole codebase and check for values with a custom copy
-		! assignment overload where arrays of that value are also assigned.
-		! Apparently array copies do not invoke the custom scalar assigner
-		! correctly
-
 		!if (allocated(fns%fns)) then
 			!print *, 'copy fns'
 

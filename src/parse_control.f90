@@ -116,7 +116,7 @@ recursive module function parse_if_statement(parser) result(statement)
 
 	!********
 
-	integer :: cond_beg, cond_end
+	integer :: cond_beg, cond_end, type_
 
 	type(syntax_node_t)  :: condition, if_clause, else_clause
 	type(syntax_token_t) :: if_token, else_token
@@ -134,13 +134,10 @@ recursive module function parse_if_statement(parser) result(statement)
 
 	!print *, 'cond_beg, cond_end = ', cond_beg, cond_end
 
-	! Check that condition type is bool
-	!
-	! TODO: fix similar while_statement check to only apply on 2nd pass too.
-	! Review code for other type checks that won't be knowable on 1st pass. Lots
-	! of different diagnostics could depend on a yet-unknown fn's return type.
-	! Maybe never push diagnostics on first pass?
-	if (condition%val%type /= bool_type .and. parser%ipass > 0) then
+	! Check that condition type is bool.  If the condition depends on a fn which
+	! is declared below, it may be unknown on pass 0
+	type_ = condition%val%type
+	if (type_ /= bool_type .and. type_ /= unknown_type) then ! .and. parser%ipass > 0) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
 			parser%context(), span, parser%text(cond_beg, cond_end), &
@@ -307,7 +304,7 @@ recursive module function parse_while_statement(parser) result(statement)
 
 	!********
 
-	integer :: cond_beg, cond_end
+	integer :: cond_beg, cond_end, type_
 
 	type(syntax_node_t)  :: body, condition
 	type(syntax_token_t) :: while_token
@@ -320,7 +317,8 @@ recursive module function parse_while_statement(parser) result(statement)
 	cond_end  = parser%peek_pos(0) - 1
 
 	! Check that condition type is bool
-	if (condition%val%type /= bool_type) then
+	type_ = condition%val%type
+	if (type_ /= bool_type .and. type_ /= unknown_type) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
 			parser%context(), span, parser%text(cond_beg, cond_end), &

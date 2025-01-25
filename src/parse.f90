@@ -60,9 +60,9 @@ module syntran__parse_m
 		character(len = :), allocatable :: fn_name
 		logical :: returned
 
-		! Pass index.  0 on first pass while getting fn signatures, than 1 on
+		! Pass index.  0 on first pass while getting fn signatures, then 1 on
 		! final (second) pass
-		integer :: ipass != 0
+		integer :: ipass
 
 		contains
 			procedure :: &

@@ -121,9 +121,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	! overloaded cases
 	fn = parser%fns%search(fn_call%identifier%text, id_index, io)
 	!print *, "fn id_index = ", id_index
-	if (io /= exit_success) then ! .and. parser%ipass > 0) then
+	if (io /= exit_success) then
 
-		!if (parser%ipass > 0) stop
 		if (parser%ipass == 0) then
 			fn_call%id_index = 0
 			fn_call%kind = fn_call_expr
@@ -194,6 +193,8 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	! just look it up later by identifier/id_index like we do for
 	! variable value
 	!fn_call%fn = fn
+
+	! TODO: some of these ipass restrictions seem unnecessary
 
 	!print *, 'fn params size = ', size(fn%params)
 	!print *, 'fn param names size = ', size(fn%param_names%v)
@@ -522,10 +523,8 @@ module function parse_fn_declaration(parser) result(decl)
 	allocate(fn%node)
 	fn%node = decl
 
-	!overwrite = .false.
-	!if (parser%ipass == 0) overwrite = .true.
 	overwrite = .true.
-	if (parser%ipass == 0) overwrite = .false.
+	if (parser%ipass == 0) overwrite = .false.  ! this one is important
 
 	io = 0
 	call parser%fns%insert(identifier%text, fn, decl%id_index, io, overwrite = overwrite)
@@ -534,7 +533,7 @@ module function parse_fn_declaration(parser) result(decl)
 
 	! error if fn already declared. be careful in future if fn prototypes are
 	! added
-	if (io /= 0) then ! .and. parser%ipass == 0) then
+	if (io /= 0) then
 		span = new_span(identifier%pos, len(identifier%text))
 		call parser%diagnostics%push( &
 			err_redeclare_fn(parser%context(), &

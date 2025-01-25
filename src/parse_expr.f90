@@ -98,11 +98,10 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!	print *, 'rank = ', expr%val%array%rank
 		!end if
 
-		if (parser%ipass == 0) then
-			overwrite = .false.
-		else
-			overwrite = .true.
-		end if
+		! TODO: it seems like overwrite can be unconditionally false here.
+		! Check long tests
+		overwrite = .true.
+		if (parser%ipass == 0) overwrite = .false.
 
 		! Insert the identifier's type into the dict and check that it
 		! hasn't already been declared
@@ -117,7 +116,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		end if
 
 		!print *, 'io = ', io
-		if (io /= exit_success .and. parser%ipass == 0) then
+		if (io /= exit_success) then
 			!print *, "expr redeclare"
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &

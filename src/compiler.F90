@@ -32,7 +32,7 @@ module syntran__compiler_m
 #else
 #error Neither __GFORTRAN__ nor __INTEL__ are defined.  Please use a supported compiler and compile with pre-processing `-cpp` (gfortran) or `-fpp` (intel)
 
-	! TODO: gfortran 13 and 14 are allowed now.  Cover them in ci/cd
+	! TODO: 
 	!
 	! Follow up on github issue (already closed with gfort downgrade workaround,
 	! but now it's fixed for real)
