@@ -225,7 +225,7 @@ recursive module function parse_for_statement(parser) result(statement)
 
 	if (parser%is_loc) then
 		parser%num_locs = parser%num_locs + 1
-		statement%loc_index = parser%num_locs
+		statement%id_index = parser%num_locs
 		statement%is_loc = .true.
 	else
 		parser%num_vars = parser%num_vars + 1
@@ -257,22 +257,18 @@ recursive module function parse_for_statement(parser) result(statement)
 		! match ubound type!
 		dummy%type = array%val%array%type
 		if (parser%is_loc) then
-			call parser%locs%insert(identifier%text, dummy, &
-				statement%loc_index)
+			call parser%locs%insert(identifier%text, dummy, statement%id_index)
 		else
-			call parser%vars%insert(identifier%text, dummy, &
-				statement%id_index)
+			call parser%vars%insert(identifier%text, dummy, statement%id_index)
 		end if
 
 	else
 
 		dummy%type = array%val%type
 		if (parser%is_loc) then
-			call parser%locs%insert(identifier%text, dummy, &
-				statement%loc_index)
+			call parser%locs%insert(identifier%text, dummy, statement%id_index)
 		else
-			call parser%vars%insert(identifier%text, dummy, &
-				statement%id_index)
+			call parser%vars%insert(identifier%text, dummy, statement%id_index)
 		end if
 
 		! I guess we could allow a 1-loop iteration on a scalar if that's

@@ -120,17 +120,10 @@ recursive subroutine syntax_eval(node, state, res)
 		!print *, 'assigning identifier ', quote(node%identifier%text)
 		!print *, "is_loc = ", node%is_loc
 
-		! TODO: can loc_index and id_index be combined?  I think they could be,
-		! and then only state%locs/state%vars would have to be inside the `if
-		! is_loc` branch
-
+		id = node%id_index
 		if (node%is_loc) then
-		!if (node%is_loc .and. node%loc_index > 0) then
-			!id = node%id_index
-			id = node%loc_index
 			state%locs%vals(id) = res
 		else
-			id = node%id_index
 			state%vars%vals(id) = res
 		end if
 
@@ -338,11 +331,10 @@ recursive subroutine eval_name_expr(node, state, res)
 	!print *, 'searching identifier ', node%identifier%text
 	!print *, "node is_loc = ", node%is_loc
 
+	id = node%id_index
 	if (node%is_loc) then
-		id = node%loc_index
 		type_ = state%locs%vals(id)%type
 	else
-		id = node%id_index
 		type_ = state%vars%vals(id)%type
 	end if
 	!print *, "id = ", id
@@ -522,11 +514,10 @@ subroutine eval_dot_expr(node, state, res)
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
+	id = node%id_index
 	if (node%is_loc) then
-		id = node%loc_index
 		call get_val(node, state%locs%vals(id), state, res)
 	else
-		id = node%id_index
 		!print *, "eval dot_expr"
 		!print *, "id_index = ", id
 		!print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
@@ -930,8 +921,8 @@ recursive subroutine eval_fn_call(node, state, res)
 
 			!print *, "node arg is_loc = ", node%args(i)%is_loc
 			if (node%args(i)%is_loc) then
-				!print *, "val = ", state%locs%vals( node%args(i)%loc_index )%to_str()
-				call value_move(state%locs%vals( node%args(i)%loc_index ), params_tmp(i))
+				!print *, "val = ", state%locs%vals( node%args(i)%id_index )%to_str()
+				call value_move(state%locs%vals( node%args(i)%id_index ), params_tmp(i))
 			else
 				call value_move(state%vars%vals( node%args(i)%id_index ), params_tmp(i))
 			end if
@@ -951,8 +942,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
 	end do
 
-	! Push/pop a stack of local vars (loc_index), similar to returned0
-	! stack
+	! Push/pop a stack of local vars, similar to returned0 stack
 	!
 	! I used to do this before evaling args, but it works here too
 
@@ -1004,7 +994,7 @@ recursive subroutine eval_fn_call(node, state, res)
 		if (.not. node%is_ref(i)) cycle
 
 		if (node%args(i)%is_loc) then
-			call value_move(params_tmp(i), state%locs%vals( node%args(i)%loc_index ))
+			call value_move(params_tmp(i), state%locs%vals( node%args(i)%id_index ))
 		else
 			call value_move(params_tmp(i), state%vars%vals( node%args(i)%id_index ))
 		end if
@@ -1728,7 +1718,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			!print *, "arg  is_loc = ", node%args(1)%is_loc
 
 			if (node%args(1)%is_loc) then
-				state%locs%vals(node%args(1)%loc_index)%sca%file_%eof = .true.
+				state%locs%vals(node%args(1)%id_index)%sca%file_%eof = .true.
 			else
 				state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
 			end if
@@ -2136,7 +2126,7 @@ recursive subroutine eval_for_statement(node, state, res)
 		!
 		! Loop iterator should never be a ref
 		if (node%is_loc) then
-			state%locs%vals(node%loc_index) = itr
+			state%locs%vals(node%id_index) = itr
 		else
 			state%vars%vals(node%id_index) = itr
 		end if
@@ -2195,16 +2185,14 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		! Evaluate the RHS
 		call syntax_eval(node%right, state, rhs)
 
+		id = node%id_index
 		if (node%is_loc) then
-			id = node%loc_index
 			call get_val(node, state%locs%vals(id), state, res)
 			call compound_assign(res, rhs, node%op)
 			call set_val(node, state%locs%vals(id), state, res)
 
 		else
 			! Get the initial value from the LHS, which could be nested like `a.b.c.d`
-			!id = node%member%id_index  ! was this doing anything? seems unused
-			id = node%id_index
 			call get_val(node, state%vars%vals(id), state, res)
 
 			! Do the assignment or += or whatever and set res
@@ -2217,11 +2205,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 	else if (.not. allocated(node%lsubscripts)) then
 
-		if (node%is_loc) then
-			id = node%loc_index
-		else
-			id = node%id_index
-		end if
+		id = node%id_index
 
 		!! This deallocation will cause a crash when an array appears on both
 		!! the LHS and RHS of fn_call assignment, e.g. `dv = diff_(dv, i)` in
@@ -2266,11 +2250,10 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		! identifier at each scope level
 
 	else
+		id = node%id_index
 		if (node%is_loc) then
-			id = node%loc_index
 			type_ = state%locs%vals(id)%type
 		else
-			id = node%id_index
 			type_ = state%vars%vals(id)%type
 		end if
 
@@ -3384,11 +3367,10 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 
 	type(value_t) :: asubval, lsubval, usubval, ssubval
 
+	id = node%id_index
 	if (node%is_loc) then
-		id = node%loc_index
 		rank_ = state%locs%vals(id)%array%rank
 	else
-		id = node%id_index
 		rank_ = state%vars%vals(id)%array%rank
 	end if
 
@@ -3644,11 +3626,10 @@ recursive function subscript_eval(node, state) result(index_)
 	!print *, 'starting subscript_eval()'
 
 	!print *, "node is_loc = ", node%is_loc
+	id = node%id_index
 	if (node%is_loc) then
-		id = node%loc_index
 		type_ = state%locs%vals(id)%type
 	else
-		id = node%id_index
 		type_ = state%vars%vals(id)%type
 	end if
 

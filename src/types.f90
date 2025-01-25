@@ -152,7 +152,7 @@ module syntran__types_m
 
 		type(syntax_token_t) :: op, identifier
 
-		integer :: id_index = 0, loc_index = 0, num_locs
+		integer :: id_index = 0, num_locs
 		logical :: is_loc = .false.
 
 		integer, allocatable :: params(:)
@@ -731,7 +731,6 @@ recursive subroutine syntax_node_copy(dst, src)
 
 	dst%identifier = src%identifier
 	dst%id_index   = src%id_index
-	dst%loc_index  = src%loc_index
 	dst%num_locs   = src%num_locs
 	dst%is_loc     = src%is_loc
 

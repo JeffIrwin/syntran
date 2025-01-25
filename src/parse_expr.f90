@@ -85,8 +85,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		! TODO: make this a push_var fn?  parse_for_statement uses it too
 		if (parser%is_loc) then
 			parser%num_locs = parser%num_locs + 1
-			!expr%id_index   = parser%num_locs
-			expr%loc_index   = parser%num_locs
+			expr%id_index   = parser%num_locs
 			expr%is_loc = .true.
 		else
 			parser%num_vars = parser%num_vars + 1
@@ -111,8 +110,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!print *, "parser is_loc = ", parser%is_loc
 		if (parser%is_loc) then
 			call parser%locs%insert(identifier%text, expr%val, &
-				!expr%id_index, io, overwrite = overwrite)
-				expr%loc_index, io, overwrite = overwrite)
+				expr%id_index, io, overwrite = overwrite)
 		else
 			call parser%vars%insert(identifier%text, expr%val, &
 				expr%id_index, io, overwrite = overwrite)
@@ -165,16 +163,13 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!print *, "searching identifier ", identifier%text
 
 		if (parser%is_loc) then
-			call parser%locs%search(identifier%text, expr%loc_index, search_io, expr%val)
+			call parser%locs%search(identifier%text, expr%id_index, search_io, expr%val)
 			!print *, "locs io = ", search_io
 		end if
 
 		if (parser%is_loc .and. search_io == 0) then
 			expr%is_loc = .true.
 			!print *, "loc type = ", kind_name(expr%val%type)
-			!expr = new_name_expr(identifier, var)
-			!expr%loc_index = id_index
-			!expr%is_loc = .true.
 		else
 			call parser%vars%search(identifier%text, expr%id_index, search_io, expr%val)
 		end if
@@ -584,7 +579,7 @@ recursive module function parse_name_expr(parser) result(expr)
 	if (parser%is_loc .and. io == 0) then
 	
 		expr = new_name_expr(identifier, var)
-		expr%loc_index = id_index
+		expr%id_index = id_index
 		expr%is_loc = .true.
 
 	else
