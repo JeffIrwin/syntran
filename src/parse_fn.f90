@@ -303,6 +303,10 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	call syntax_nodes_copy(fn_call%args, &
 		args%v( 1: args%len_ ))
+        !allocate(fn_call%args( args%len_ ))
+        !do i = 1, args%len_
+        !  fn_call%args(i) = args%v(i)
+        !end do
 
 	!print *, 'done parsing fn_call'
 
