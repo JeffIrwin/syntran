@@ -542,7 +542,8 @@ subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 
 	!print *, 'inserting ', quote(key)
 
-	!! num_fns is already incremented by caller
+	!! num_fns is already incremented by caller *except* with intrinsic fns,
+	!! where their index doesn't really matter
 	!id_index = id_index + 1
 
 	overwritel = .true.

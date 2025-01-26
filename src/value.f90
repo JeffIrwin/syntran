@@ -193,6 +193,19 @@ end subroutine push_value
 
 !recursive subroutine free_value(src)
 !
+!   ! This is not necessary, although I experimented with it while working on
+!   ! memory corruption bugs.  Sometimes fortran crashes with a stack trace that
+!   ! points to deallocation, often with other non-sensical lines in the stack
+!   ! trace on "end subroutine" or "end function" or even "end module"
+!   !
+!   ! In every case that I can remember, these crashes are due to incorrect
+!   ! *initialization* of a recursive struct, and there is nothing wrong with
+!   ! its deallocator under normal circumstances when it is initialized
+!   ! correctly.  Specifically, I have seen issues when assigning whole built-in
+!   ! arrays of recursive structs (e.g. syntax_node_t(:)).  The array copier
+!   ! does not invoke my overloaded custom copy assignment operator, resulting
+!   ! in incorrect initialization
+!
 !	type(value_t) :: src
 !
 !	!********
@@ -294,10 +307,8 @@ recursive subroutine value_copy(dst, src)
 
 	if (allocated(src%struct)) then
 		if (allocated(dst%struct)) deallocate(dst%struct)
-		!dst%struct = src%struct
 		allocate(dst%struct( size(src%struct) ))
 		do i = 1, size(src%struct)
-			!dst%struct(i) = src%struct(i)
 			call value_copy(dst%struct(i), src%struct(i))
 		end do
 	else if (allocated(dst%struct)) then

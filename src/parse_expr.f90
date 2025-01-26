@@ -120,7 +120,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 			call parser%diagnostics%push( &
 				err_redeclare_var(parser%context(), &
 				span, identifier%text))
-			!stop
 		end if
 
 		return
@@ -231,7 +230,6 @@ recursive module function parse_expr_statement(parser) result(expr)
 					span, identifier%text))
 				!print *, "undeclared var 2"
 				!print *, "identifier = ", identifier%text
-				!stop
 			end if
 		end if
 
@@ -593,7 +591,6 @@ recursive module function parse_name_expr(parser) result(expr)
 			call parser%diagnostics%push( &
 				err_undeclare_var(parser%context(), &
 				span, identifier%text))
-			!stop
 		end if
 	end if
 

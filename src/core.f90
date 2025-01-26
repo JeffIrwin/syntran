@@ -36,6 +36,8 @@ module syntran__core_m
 	!    * finish recursion
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
+	!      + should readln() take a ref?  the file is technically an in/out arg
+	!        since it will set eof.  compat break
 	!      + this will be a compatibility break. it's a must-have for 1.0
 	!    * anything else? review the rest of this list
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat

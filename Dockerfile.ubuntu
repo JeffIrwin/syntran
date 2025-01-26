@@ -24,7 +24,11 @@ RUN cp $(which "$FC") /usr/bin/gfortran
 RUN $FC --version
 
 RUN apt-get install -y git
-ARG BRANCH="recursion"
+
+## TODO: caller should set the branch arg as a cmd arg
+#ARG BRANCH="recursion"
+ARG BRANCH="main"
+
 RUN git clone https://github.com/jeffirwin/syntran --branch "$BRANCH"
 WORKDIR /workdir/syntran
 

@@ -838,7 +838,6 @@ recursive subroutine eval_fn_call(node, state, res)
 	!********
 
 	integer :: i, io, id_index
-	!integer, allocatable :: params(:)
 
 	logical :: returned0
 
@@ -2099,8 +2098,6 @@ recursive subroutine eval_for_statement(node, state, res)
 		! evaluation now that we know all of the variable identifiers.
 		! Parsing still needs to rely on dictionary lookups because it does
 		! not know the entire list of variable identifiers ahead of time
-		!
-		! Loop iterator should never be a ref
 		if (node%is_loc) then
 			state%locs%vals(node%id_index) = itr
 		else
