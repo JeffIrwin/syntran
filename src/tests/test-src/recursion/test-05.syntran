@@ -12,9 +12,7 @@ let N = 9;
 
 //==============================================================================
 
-// TODO: rename fns with "sudoku_" prefix
-
-fn reject(igrid: &[i32; :, :]): bool
+fn reject_sudoku(igrid: &[i32; :, :]): bool
 {
 	let reject = false;
 
@@ -49,18 +47,17 @@ fn reject(igrid: &[i32; :, :]): bool
 	return reject;
 }
 
-fn accept(igrid: &[i32; :, :]): bool
+fn accept_sudoku(igrid: &[i32; :, :]): bool
 {
 	if not any(igrid <= 0)
 	{
-		println("Solution = ", igrid);
-		//exit(0);
+		//println("Solution = ", igrid);
 		return true;
 	}
 	return false;
 }
 
-fn first
+fn first_sudoku
 (
 	igrid: &[i32; :, :],
 	ji: &[i32; :],
@@ -105,39 +102,38 @@ fn first
 	return jgrid;
 }
 
-fn next(igrid: &[i32; :, :], ii: &[i32; :], last: &bool)
+fn next_sudoku(igrid: &[i32; :, :], ii: &[i32; :]): bool
 {
-	// Increment location `ii` in `igrid` by one.  TODO: output last as fn
-	// return val
-	last = false;
+	// Increment location `ii` in `igrid` by one
+	let last = false;
 	igrid[ii[0], ii[1]] += 1;
 	if igrid[ii[0], ii[1]] > N
 	{
 		igrid[ii[0], ii[1]] = N;
 		last = true;
 	}
-	return;
+	return last;
 }
 
-fn bt(igrid: &[i32; :, :], ii: [i32; :]): bool
+fn backtrack_sudoku(igrid: &[i32; :, :], ii: [i32; :]): bool
 {
 	// Backtrack algorithm
 
-	if (reject(&igrid)) return false;
-	if (accept(&igrid)) return true;
+	if (reject_sudoku(&igrid)) return false;
+	if (accept_sudoku(&igrid)) return true;
 
 	let last = false;
-	let jgrid = first(&igrid, &ii, &last);
+	let jgrid = first_sudoku(&igrid, &ii, &last);
 	//println("jgrid = ", jgrid);
 
 	while not last
 	{
-		if bt(&jgrid, ii)
+		if backtrack_sudoku(&jgrid, ii)
 		{
 			igrid = jgrid;
 			return true;
 		}
-		next(&jgrid, &ii, &last);
+		last = next_sudoku(&jgrid, &ii);
 	}
 	return false;
 }
@@ -149,7 +145,7 @@ fn solve_sudoku(igrid: &[i32; :, :]): bool
 	// before the first square
 	let ii = [-1, 0];
 
-	return bt(&igrid, ii);
+	return backtrack_sudoku(&igrid, ii);
 }
 
 //==============================================================================
@@ -223,11 +219,11 @@ fn main(): i32
 	//	N, N
 	//];
 
-	println("my_grid = ", my_grid);
+	//println("my_grid = ", my_grid);
 
 	solve_sudoku(&my_grid);
 
-	println("my_grid = ", my_grid);
+	//println("my_grid = ", my_grid);
 
 	return sum(abs(my_grid - expect));
 }
