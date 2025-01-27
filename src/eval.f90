@@ -902,6 +902,11 @@ recursive subroutine eval_fn_call(node, state, res)
 	! Make two passes.  First eval values, then move references.  If a var shows
 	! up in two different args, both as a ref and a val, moving it first will
 	! crash in a single pass
+	!
+	! I think this method of pass-by-reference will not work with
+	! multi-threading, not that I ever plan to multi-thread syntran.  The data
+	! is "moved", so multiple concurrent fns cannot have refs to the same data.
+	! Perhaps pointers could allow that but fortran pointers are risky
 
 	! TODO: does this do what I think it does if you pass-by-ref for one arg and
 	! then increment that same var in a later arg?  Seems like a bad idea from
