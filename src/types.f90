@@ -81,18 +81,16 @@ module syntran__types_m
 
 	!********
 
-	! Fixed-size limit to the scope level for now
-	integer, parameter :: scope_max = 64
-
 	type fns_t
 
 		! A list of function dictionaries for each scope level used during
 		! parsing
-		type(fn_dict_t) :: dicts(scope_max)
+		type(fn_dict_t) :: dict
 
 		! Flat array of fns from all scopes, used for efficient interpreted
 		! evaluation
 		type(fn_t), allocatable :: fns(:)
+		integer :: num_intr_fns
 
 		! This is the scope level.  Each nested block statement that is entered
 		! pushes 1 to scope.  Popping out of a block decrements the scope.
@@ -153,7 +151,9 @@ module syntran__types_m
 		integer :: sub_kind
 
 		type(syntax_token_t) :: op, identifier
-		integer :: id_index
+
+		integer :: id_index = 0, num_locs
+		logical :: is_loc = .false.
 
 		integer, allocatable :: params(:)
 		logical, allocatable :: is_ref(:)  ! is param passed by reference?
@@ -223,7 +223,8 @@ module syntran__types_m
 
 		! A list of variable dictionaries for each scope level used during
 		! parsing
-		type(var_dict_t) :: dicts(scope_max)
+		type(var_dict_t), allocatable :: dicts(:)
+		integer :: scope_cap
 
 		! Flat array of variables from all scopes, used for efficient
 		! interpreted evaluation
@@ -324,6 +325,8 @@ module syntran__types_m
 		integer :: len_, cap
 		contains
 			procedure :: push => push_node
+			procedure, pass(dst) :: copy => syntax_node_vector_copy
+			generic, public :: assignment(=) => copy
 	end type syntax_node_vector_t
 
 !===============================================================================
@@ -346,15 +349,25 @@ recursive subroutine vars_copy(dst, src)
 	!print *, 'starting vars_copy()'
 
 	dst%scope = src%scope
+	dst%scope_cap = src%scope_cap
 
-	do i = 1, size(src%dicts)
-		if (allocated(src%dicts(i)%root)) then
-			if (.not. allocated(dst%dicts(i)%root)) allocate(dst%dicts(i)%root)
-			dst%dicts(i)%root = src%dicts(i)%root
-		else if (allocated(dst%dicts(i)%root)) then
-			deallocate(dst%dicts(i)%root)
-		end if
-	end do
+	if (allocated(src%dicts)) then
+
+		if (allocated(dst%dicts)) deallocate(dst%dicts)
+		allocate(dst%dicts( size(src%dicts) ))
+
+		do i = 1, size(src%dicts)
+			if (allocated(src%dicts(i)%root)) then
+				if (.not. allocated(dst%dicts(i)%root)) allocate(dst%dicts(i)%root)
+				dst%dicts(i)%root = src%dicts(i)%root
+			else if (allocated(dst%dicts(i)%root)) then
+				deallocate(dst%dicts(i)%root)
+			end if
+		end do
+
+	else if (allocated(dst%dicts)) then
+		deallocate(dst%dicts)
+	end if
 
 	if (allocated(src%vals)) then
 		if (allocated(dst%vals)) deallocate(dst%vals)
@@ -495,12 +508,12 @@ function fn_search(dict, key, id_index, iostat) result(val)
 
 	i = dict%scope
 
-	val = fn_ternary_search(dict%dicts(i)%root, key, id_index, io)
+	val = fn_ternary_search(dict%dict%root, key, id_index, io)
 
 	! If not found in current scope, search parent scopes too
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		val = fn_ternary_search(dict%dicts(i)%root, key, id_index, io)
+		val = fn_ternary_search(dict%dict%root, key, id_index, io)
 	end do
 
 	if (present(iostat)) iostat = io
@@ -528,13 +541,16 @@ subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 	logical :: overwritel
 
 	!print *, 'inserting ', quote(key)
-	id_index = id_index + 1
 
-	overwritel = .false.
+	!! num_fns is already incremented by caller *except* with intrinsic fns,
+	!! where their index doesn't really matter
+	!id_index = id_index + 1
+
+	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
 	i = dict%scope
-	call fn_ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwritel)
+	call fn_ternary_insert(dict%dict%root, key, val, id_index, io, overwritel)
 
 	if (present(iostat)) iostat = io
 
@@ -542,7 +558,7 @@ end subroutine fn_insert
 
 !===============================================================================
 
-recursive function syntax_node_str(node, indent) result(str)
+recursive function syntax_node_str(node, indent) result(str_)
 
 	! Convert tree to string in JSON-ish format.  Incomplete since I've added so
 	! many new members
@@ -551,7 +567,7 @@ recursive function syntax_node_str(node, indent) result(str)
 
 	character(len = *), optional :: indent
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	!********
 
@@ -588,6 +604,15 @@ recursive function syntax_node_str(node, indent) result(str)
 		right = indentl//'    right = '//node%right%str(indentl//'    ') &
 				//line_feed
 
+	else if (node%kind == fn_declaration) then
+		val = indentl//'    body = '//node%body%str(indentl//'    ')//line_feed
+
+	else if (node%kind == fn_call_expr) then
+		val = indentl//'    id_index = '//str(node%id_index)//line_feed
+
+	else if (node%kind == return_statement) then
+		val = indentl//'    expr = '//node%right%str(indentl//'    ')//line_feed
+
 	else if (node%kind == block_statement) then
 
 		do i = 1, size(node%members)
@@ -623,7 +648,7 @@ recursive function syntax_node_str(node, indent) result(str)
 		val   = indentl//'    val   = '//node%val%to_str()//line_feed
 	end if
 
-	str = line_feed// &
+	str_ = line_feed// &
 		indentl//'{'//line_feed// &
 			kind       // &
 			type       // &
@@ -682,6 +707,28 @@ end subroutine log_diagnostics
 
 !===============================================================================
 
+recursive subroutine syntax_node_vector_copy(dst, src)
+
+	class(syntax_node_vector_t), intent(inout) :: dst
+	class(syntax_node_vector_t), intent(in)    :: src
+
+	!********
+
+	integer :: i
+
+	dst%len_ = src%len_
+	dst%cap = src%cap
+
+	if (allocated(dst%v)) deallocate(dst%v)
+	allocate(dst%v( size(src%v) ))
+	do i = 1 , size(src%v)
+		dst%v(i) = src%v(i)
+	end do
+
+end subroutine syntax_node_vector_copy
+
+!===============================================================================
+
 recursive subroutine syntax_node_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
@@ -707,8 +754,10 @@ recursive subroutine syntax_node_copy(dst, src)
 	!dst%val%sca%file_     = src%val%sca%file_
 	!dst%val%sca%file_%eof = src%val%sca%file_%eof
 
-	dst%identifier  = src%identifier
-	dst%id_index    = src%id_index
+	dst%identifier = src%identifier
+	dst%id_index   = src%id_index
+	dst%num_locs   = src%num_locs
+	dst%is_loc     = src%is_loc
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
@@ -1020,13 +1069,32 @@ subroutine push_scope(dict)
 
 	class(vars_t) :: dict
 
-	dict%scope = dict%scope + 1
+	!********
 
-	! TODO: make a growable array of dicts for unlimited scope levels
-	if (dict%scope > scope_max) then
-		write(*,*) 'Error: too many nested blocks > '//str(scope_max)
-		call internal_error()
+	integer :: i
+
+	type(var_dict_t), allocatable :: tmp(:)
+
+	!print *, "dict%scope = ", dict%scope
+
+	if (dict%scope >= dict%scope_cap) then
+		!! Grow dicts pointer array
+		!print *, "Growing dict array"
+
+		dict%scope_cap = dict%scope_cap * 2
+		call move_alloc(dict%dicts, tmp)
+		allocate(dict%dicts( dict%scope_cap ))
+
+		do i = 1, dict%scope
+			! The `root` member is also allocatable.  Moving its pointer is
+			! inexpensive
+			call move_alloc(tmp(i)%root, dict%dicts(i)%root)
+		end do
+
+		deallocate(tmp)
 	end if
+
+	dict%scope = dict%scope + 1
 
 end subroutine push_scope
 
@@ -1056,7 +1124,7 @@ subroutine pop_scope(dict)
 
 	! The parser should catch an unexpected `}`
 	if (dict%scope < 1) then
-		write(*,*) 'Error: scope stack is empty'
+		write(*,*) err_int_prefix//'scope stack is empty'
 		call internal_error()
 	end if
 
@@ -2325,10 +2393,14 @@ recursive subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwri
 		return
 	end if
 
+	!if (.not. allocated(node%val)) allocate(node%val)
+	if (allocated(node%val)) deallocate(node%val)
 	allocate(node%val)
+
 	node%val      = val
 	node%id_index = id_index
 
+	!print *, "inserted index ", id_index
 	!print *, 'done inserting'
 	!print *, ''
 
@@ -2402,7 +2474,7 @@ recursive subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
 		return
 	end if
 
-	allocate(node%val)
+	if (.not. allocated(node%val)) allocate(node%val)
 	node%val      = val
 	node%id_index = id_index
 
@@ -2609,7 +2681,7 @@ recursive subroutine struct_ternary_insert(node, key, val, id_index, iostat, ove
 		return
 	end if
 
-	allocate(node%val)
+	if (.not. allocated(node%val)) allocate(node%val)
 	node%val      = val
 	!node%val%vars = val%vars
 	node%id_index = id_index

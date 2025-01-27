@@ -30,8 +30,48 @@ module syntran__core_m
 		syntran_patch =  59
 
 	! TODO:
+	!  - roadmap to version 1.0.0:
+	!    * maybe have a trial alpha release 0.1.0 for a bit before 1.0?
+	!    * ban expression statements.  notes below.  compat break
+	!    * finish recursion
+	!    * rethink open() fn.  add a read/write mode.  read mode should check if
+	!      file exists
+	!      + should readln() take a ref?  the file is technically an in/out arg
+	!        since it will set eof.  compat break
+	!      + this will be a compatibility break. it's a must-have for 1.0
+	!    * anything else? review the rest of this list
+	!      + cmd args, env vars?  should be easy to add w/o breaking compat
+	!    * review all TODO notes in the codebase (!)
+	!  - docker ci/cd stages should test current branch, not main
+	!    * after 1.0 i should be more strict about changing main branch
+	!    * should have a dev branch where work is done, main should only change
+	!      by merging *after* testing on dev branch
+	!    * hence, all tests should cover dev or whatever the current branch is
+	!    * could use `add` instead of `git clone` in docker.  make sure enough
+	!      files are added, but not large files like wave solver results
+	!  - add tests that cover interactive interpreter REPL?
+	!    * i'm half thinking of just abandoning it, but i do like having a
+	!      desktop calculator
+	!    * cover taking standard input.  i frequently break things like swapping
+	!      vars and fns dicts around from paused execution on each new line.
+	!      structs have never worked in REPL IIRC
+	!    * could easily be tested, it will just be a pain to keep it working
+	!      reliably
+	!    * should also cover options like `-i` (startup include file)
+	!  - recursive fns
+	!    * done
+	!    * could always use more tests.  recursive quicksort?  various aoc
+	!      problems?  minheap or heapsort or something tree/graph related?
+	!    * i think include files can call fns from the includer.  this
+	!      probably isn't desireable, but i'm not sure how big of a deal it is
+	!      or how to fix it.  right now everything is one translation unit.
+	!      might want to rethink scoping
+	!  - recursive data structs?
+	!    * recursive fns are available, but not structs
 	!  - allow for loops that iterate on chars in a str
 	!  - minloc, maxloc, findloc fns
+	!  - remove "Hint" from REPL?  It's not wrong, but it's often noisy and not
+	!    helpful
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
 	!    * just use `reshape` and call the fortran built-in.  no need for any
@@ -172,8 +212,6 @@ module syntran__core_m
 	!    `let x = println();`
 	!    * did i allow this to stop cascading errors?  i think i used
 	!      unknown_type for that
-	!  - rethink open() fn.  add a mode.  read mode should check if file exists
-	!    * this will be a compatibility break. it's a must-have for 1.0
 	!  - array operations:
 	!    * done: element-wise add, sub, mul, div, pow, mod
 	!      + compound array assignment works but needs unit tests
@@ -254,11 +292,6 @@ module syntran__core_m
 	!      + gamma, log_gamma?
 	!      + reshape
 	!      + system: multiple out args? iostat and stdout
-	!    * recursive user-defined fns
-	!      + before recursion, allow calling fns (non-recursively) before they
-	!        are defined.  definition order in source file should not matter.
-	!        the 2-pass parsing required to do that will also be needed for
-	!        recursion
 	!    * done:
 	!      + abs, sqrt
 	!      + exp
@@ -275,7 +308,7 @@ module syntran__core_m
 	!      + size (non-variadic but polymorphic)
 	!      + readln, writeln, println, open, close, str casting
 	!      + len (of str)
-	!      + non-recursive user-defined fns
+	!      + recursive and non-recursive user-defined fns
 	!  - use more submodules
 	!    * types.f90 is long and close to leaves of dependency tree.  value.f90
 	!      is also highly depended upon
@@ -349,8 +382,7 @@ contains
 
 function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
-	! TODO: take state struct instead of separate vars and fns members.  Then
-	! init_ref_sub() could be called at the end of this fn
+	! TODO: take state struct instead of separate vars and fns members
 
 	! TODO: take structs arg (like existing fns arg)
 
@@ -368,14 +400,15 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	!********
 
-	character(len = :), allocatable :: src_filel
+	character(len = :), allocatable :: src_filel, fn_name
 
-	integer :: unit_
+	integer :: i, io, dummy, unit_
 
 	logical :: allow_continuel
 
 	type(text_context_vector_t) :: contexts
 
+	type(fn_t) :: fn
 	type(fns_t) :: fns0
 
 	! This no longer seems to make a difference.  Previously, without `save`,
@@ -394,9 +427,9 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	!! "exp"
 	!print *, 'key = ', &
-	!	fns%dicts(1)%root%split_char, &
-	!	fns%dicts(1)%root%mid%split_char, &
-	!	fns%dicts(1)%root%mid%mid%split_char
+	!	fns%dict%root%split_char, &
+	!	fns%dict%root%mid%split_char, &
+	!	fns%dict%root%mid%mid%split_char
 
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
@@ -454,6 +487,8 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 			! The root type has an overloaded assignment op, but the vars
 			! type itself does not (and I don't want to expose or encourage
 			! copying)
+
+			allocate(vars0%dicts(1))
 			allocate(vars0%dicts(1)%root)
 			vars0%dicts(1)%root = vars%dicts(1)%root
 
@@ -493,10 +528,10 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	end if
 
 	!print *, 'moving fns'
-	if (allocated(fns%dicts(1)%root)) then
+	if (allocated(fns%dict%root)) then
 
-		allocate(fns0%dicts(1)%root)
-		fns0%dicts(1)%root = fns%dicts(1)%root
+		allocate(fns0%dict%root)
+		fns0%dict%root = fns%dict%root
 
 		!print *, 'fns%fns = '
 		!do i = 1, size(fns%fns)
@@ -504,9 +539,16 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		!end do
 
 		!! With intrinsic fns, this is always allocated
+
 		!if (allocated(fns%fns)) then
 			!print *, 'copy fns'
-			fns0%fns = fns%fns
+
+			!fns0%fns = fns%fns
+			allocate(fns0%fns( size(fns%fns) ))
+			do i = 1, size(fns%fns)
+				fns0%fns(i) = fns%fns(i)
+			end do
+
 			parser%num_fns = size(fns%fns)
 		!else
 		!	parser%num_fns = 0
@@ -516,10 +558,13 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished
-		call move_alloc(fns%dicts(1)%root, parser%fns%dicts(1)%root)
+		call move_alloc(fns%dict%root, parser%fns%dict%root)
 		if (allocated(fns%fns)) call move_alloc(fns%fns          , parser%fns%fns)
 
 	end if
+
+	!print *, "allocated parser%vars%dicts = ", allocated( parser%vars%dicts )
+	!print *, "size parser%vars%dicts = ", size( parser%vars%dicts )
 
 	!*******************************
 	! Parse the tokens
@@ -547,8 +592,10 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 		! variable declarations, since they will be re-declared when we continue
 		! parsing the current stdin line from its start again.
 
-		if (allocated(vars0%dicts(1)%root)) then
-			call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
+		if (allocated(vars0%dicts)) then
+			if (allocated(vars0%dicts(1)%root)) then
+				call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
+			end if
 		end if
 
 		if (allocated(vars0%vals)) then
@@ -556,8 +603,8 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 			call move_alloc(vars0%vals         , vars%vals)
 		end if
 
-		if (allocated(fns0%dicts(1)%root)) then
-			call move_alloc(fns0%dicts(1)%root, fns%dicts(1)%root)
+		if (allocated(fns0%dict%root)) then
+			call move_alloc(fns0%dict%root, fns%dict%root)
 			call move_alloc(fns0%fns          , fns%fns)
 		end if
 
@@ -580,8 +627,13 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	end if
 
 	! TODO: if num_fns instead?
-	if (allocated(parser%fns%dicts(1)%root)) then
-		call move_alloc(parser%fns%dicts(1)%root, fns%dicts(1)%root)
+	if (allocated(parser%fns%dict%root)) then
+		call move_alloc(parser%fns%dict%root, fns%dict%root)
+
+		!! I tried adding this while working on recursive fn lookup but it's not
+		!! the way
+		!call move_alloc(parser%fns%fns          , fns%fns)
+
 	end if
 
 	! When parsing is finished, we are done with the variable dictionary
@@ -595,7 +647,12 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	if (allocated(vars0%vals)) then
 		!print *, 'restoring vars%vals'
-		vars%vals( 1: size(vars0%vals) ) = vars0%vals
+
+		!vars%vals( 1: size(vars0%vals) ) = vars0%vals
+		do i = 1, size(vars0%vals)
+			vars%vals(i) = vars0%vals(i)
+		end do
+
 		!vars%vals = vars0%vals
 		!vars = vars0
 	end if
@@ -605,8 +662,29 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	allocate(fns%fns( parser%num_fns ))
 
 	if (allocated(fns0%fns)) then
-		fns%fns( 1: size(fns0%fns) ) = fns0%fns
+
+		!fns%fns( 1: size(fns0%fns) ) = fns0%fns
+		do i = 1, size(fns0%fns)
+			fns%fns(i) = fns0%fns(i)
+		end do
+
 	end if
+
+	! Save flat fn array `fns%fns` with a one-time dict lookup.  There's not any
+	! actual fns%fns%node info in what is set above
+
+	!print *, "num intr fns = ", fns%num_intr_fns
+	do i = 1, parser%fn_names%len_
+		fn_name = parser%fn_names%v(i)%s
+		!print *, "fn name = ", fn_name
+
+		! User-defined fns are in the table after all of the intrinsic fns, so
+		! shift its index by num_intr_fns
+		fn = fns%search(fn_name, dummy, io)
+		fns%fns( fns%num_intr_fns + i ) = fn
+
+	end do
+	!print *, "done looking up fns"
 
 	!if (allocated(parser%structs)) then
 	!	! TODO: manually finalize recursively?

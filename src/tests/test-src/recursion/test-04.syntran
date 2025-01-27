@@ -1,0 +1,55 @@
+// AOC 2024 day 19
+
+// ****************
+
+// Find out if it is possible to build each sentence by concatenating the words
+// in some combination.  Repeating words are allowed
+let words = ["r", "wr", "b", "g", "bwu", "rb", "gb", "br"];
+
+let sentences = [
+	"brwrr",
+	"bggr",
+	"gbbr",
+	"rrbgbr",
+	"ubwu",
+	"bwurrg",
+	"brgr",
+	"bbrgwb"
+];
+
+fn starts_with_(str_: &str, prefix: &str): bool
+{
+	let ns = len(str_);
+	let np = len(prefix);
+	return str_[0: min(ns, np)] == prefix;
+}
+
+fn can_build_sentence(sentence: str, words: &[str; :]): bool
+{
+	for word in words
+		if starts_with_(&sentence, &word)
+		{
+			if sentence == word
+				return true;  // base case
+
+			// Else, check if the suffix is buildable
+			let nw = len(word);
+			let ns = len(sentence);
+			if can_build_sentence(sentence[nw: ns], &words)
+				return true;
+		}
+	return false;
+}
+
+let n = size(sentences, 0);
+let can_build = [false; n];
+
+for i in [0: n]
+	can_build[i] = can_build_sentence(sentences[i], &words);
+
+let expect = [true, true, true, true, false, true, true, false];
+
+if all(can_build == expect)
+	return 0;
+return 1;
+

@@ -28,6 +28,8 @@ module function parse_return_statement(parser) result(statement)
 	type(syntax_token_t) :: return_token, semi
 	type(text_span_t) :: span
 
+	!print *, "starting parse_return_statement()"
+
 	right_beg = parser%peek_pos(0)
 	return_token = parser%match(return_keyword)
 	parser%returned = .true.
@@ -114,7 +116,7 @@ recursive module function parse_if_statement(parser) result(statement)
 
 	!********
 
-	integer :: cond_beg, cond_end
+	integer :: cond_beg, cond_end, type_
 
 	type(syntax_node_t)  :: condition, if_clause, else_clause
 	type(syntax_token_t) :: if_token, else_token
@@ -132,8 +134,10 @@ recursive module function parse_if_statement(parser) result(statement)
 
 	!print *, 'cond_beg, cond_end = ', cond_beg, cond_end
 
-	! Check that condition type is bool
-	if (condition%val%type /= bool_type) then
+	! Check that condition type is bool.  If the condition depends on a fn which
+	! is declared below, it may be unknown on pass 0
+	type_ = condition%val%type
+	if (type_ /= bool_type .and. type_ /= unknown_type) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
 			parser%context(), span, parser%text(cond_beg, cond_end), &
@@ -207,6 +211,7 @@ recursive module function parse_for_statement(parser) result(statement)
 	for_token  = parser%match(for_keyword)
 
 	call parser%vars%push_scope()
+	call parser%locs%push_scope()
 
 	identifier = parser%match(identifier_token)
 
@@ -217,8 +222,15 @@ recursive module function parse_for_statement(parser) result(statement)
 	array      = parser%parse_primary_expr()
 	arr_end  = parser%peek_pos(0) - 1
 
-	parser%num_vars = parser%num_vars + 1
-	statement%id_index = parser%num_vars
+	if (parser%is_loc) then
+		parser%num_locs = parser%num_locs + 1
+		statement%id_index = parser%num_locs
+		statement%is_loc = .true.
+	else
+		parser%num_vars = parser%num_vars + 1
+		statement%id_index = parser%num_vars
+		statement%is_loc = .false.
+	end if
 
 	! Auto declare loop iterator in for statement (HolyC doesn't let you do
 	! that!).  The 'let' keyword is not used:
@@ -243,14 +255,20 @@ recursive module function parse_for_statement(parser) result(statement)
 		! Array iterator type could be i32 or i64, and lbound type might not
 		! match ubound type!
 		dummy%type = array%val%array%type
-		call parser%vars%insert(identifier%text, dummy, &
-			statement%id_index)
+		if (parser%is_loc) then
+			call parser%locs%insert(identifier%text, dummy, statement%id_index)
+		else
+			call parser%vars%insert(identifier%text, dummy, statement%id_index)
+		end if
 
 	else
 
 		dummy%type = array%val%type
-		call parser%vars%insert(identifier%text, dummy, &
-			statement%id_index)
+		if (parser%is_loc) then
+			call parser%locs%insert(identifier%text, dummy, statement%id_index)
+		else
+			call parser%vars%insert(identifier%text, dummy, statement%id_index)
+		end if
 
 		! I guess we could allow a 1-loop iteration on a scalar if that's
 		! worthwhile.  Eval would need some work
@@ -272,6 +290,7 @@ recursive module function parse_for_statement(parser) result(statement)
 	statement%body       = body
 
 	call parser%vars%pop_scope()
+	call parser%locs%pop_scope()
 
 end function parse_for_statement
 
@@ -285,7 +304,7 @@ recursive module function parse_while_statement(parser) result(statement)
 
 	!********
 
-	integer :: cond_beg, cond_end
+	integer :: cond_beg, cond_end, type_
 
 	type(syntax_node_t)  :: body, condition
 	type(syntax_token_t) :: while_token
@@ -298,7 +317,8 @@ recursive module function parse_while_statement(parser) result(statement)
 	cond_end  = parser%peek_pos(0) - 1
 
 	! Check that condition type is bool
-	if (condition%val%type /= bool_type) then
+	type_ = condition%val%type
+	if (type_ /= bool_type .and. type_ /= unknown_type) then
 		span = new_span(cond_beg, cond_end - cond_beg + 1)
 		call parser%diagnostics%push(err_non_bool_condition( &
 			parser%context(), span, parser%text(cond_beg, cond_end), &
@@ -337,6 +357,7 @@ recursive module function parse_block_statement(parser) result(block)
 	left  = parser%match(lbrace_token)
 
 	call parser%vars%push_scope()
+	call parser%locs%push_scope()
 
 	do while ( &
 		parser%current_kind() /= eof_token .and. &
@@ -357,6 +378,7 @@ recursive module function parse_block_statement(parser) result(block)
 	end do
 
 	call parser%vars%pop_scope()
+	call parser%locs%pop_scope()
 
 	right = parser%match(rbrace_token)
 

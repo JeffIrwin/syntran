@@ -1,0 +1,56 @@
+
+let NOT_FOUND_I32 = -1;
+
+fn bin_search(v: &[i32; :], val: i32, beg: i32, end: i32): i32
+{
+	// Do a binary search to find `val` in `v`
+	//
+	// Vector `v` must be sorted in ascending order before calling this
+	//
+	// Like most simple recursive examples, this is easy to convert to an
+	// iterative implementation and it would perform better iteratively
+	//
+	// Could make a wrapper fn to call initially with beg == 0 and end ==
+	// size-1
+
+	//println("beg, end = ", [beg, end]);
+	let mid = (beg + end) / 2;
+	if beg > end
+		return NOT_FOUND_I32;
+	else if v[mid] == val
+		return mid;
+	else if v[mid] > val
+		return bin_search(&v, val, beg, mid - 1);
+	else
+		return bin_search(&v, val, mid + 1, end);
+}
+
+fn assert_(p: bool): i32
+{
+	if (p) return 0;
+	return 1;
+}
+
+let sum_ = 0;
+
+let vec = [100: 200];
+
+sum_ += assert_(bin_search(&vec, 140, 0, i32(size(vec,0)) - 1) == 40);
+sum_ += assert_(bin_search(&vec, 141, 0, i32(size(vec,0)) - 1) == 41);
+sum_ += assert_(bin_search(&vec, 142, 0, i32(size(vec,0)) - 1) == 42);
+sum_ += assert_(bin_search(&vec, 143, 0, i32(size(vec,0)) - 1) == 43);
+sum_ += assert_(bin_search(&vec, 144, 0, i32(size(vec,0)) - 1) == 44);
+sum_ += assert_(bin_search(&vec, 145, 0, i32(size(vec,0)) - 1) == 45);
+sum_ += assert_(bin_search(&vec, 146, 0, i32(size(vec,0)) - 1) == 46);
+
+sum_ += assert_(bin_search(&vec, 169, 0, i32(size(vec,0)) - 1) == 69);
+sum_ += assert_(bin_search(&vec, 169, 0, i32(size(vec,0)) - 1) == 69);
+sum_ += assert_(bin_search(&vec, 171, 0, i32(size(vec,0)) - 1) == 71);
+sum_ += assert_(bin_search(&vec, 100, 0, i32(size(vec,0)) - 1) ==  0);
+sum_ += assert_(bin_search(&vec, 199, 0, i32(size(vec,0)) - 1) == 99);
+sum_ += assert_(bin_search(&vec,  99, 0, i32(size(vec,0)) - 1) == NOT_FOUND_I32);
+sum_ += assert_(bin_search(&vec, 200, 0, i32(size(vec,0)) - 1) == NOT_FOUND_I32);
+sum_ += assert_(bin_search(&vec, 201, 0, i32(size(vec,0)) - 1) == NOT_FOUND_I32);
+
+return sum_;
+

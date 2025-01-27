@@ -191,6 +191,89 @@ end subroutine push_value
 
 !===============================================================================
 
+!recursive subroutine free_value(src)
+!
+!   ! This is not necessary, although I experimented with it while working on
+!   ! memory corruption bugs.  Sometimes fortran crashes with a stack trace that
+!   ! points to deallocation, often with other non-sensical lines in the stack
+!   ! trace on "end subroutine" or "end function" or even "end module"
+!   !
+!   ! In every case that I can remember, these crashes are due to incorrect
+!   ! *initialization* of a recursive struct, and there is nothing wrong with
+!   ! its deallocator under normal circumstances when it is initialized
+!   ! correctly.  Specifically, I have seen issues when assigning whole built-in
+!   ! arrays of recursive structs (e.g. syntax_node_t(:)).  The array copier
+!   ! does not invoke my overloaded custom copy assignment operator, resulting
+!   ! in incorrect initialization
+!
+!	type(value_t) :: src
+!
+!	!********
+!
+!	integer :: i
+!
+!	print *, "starting free_value()"
+!
+!	if (allocated(src%struct_name)) then
+!		deallocate(src%struct_name)
+!	end if
+!
+!	if (allocated(src%array)) then
+!		deallocate(src%array)
+!	end if
+!
+!	if (allocated(src%struct)) then
+!		do i = 1, size(src%struct)
+!			call free_value(src%struct(i))
+!		end do
+!		deallocate(src%struct)
+!	end if
+!
+!	print *, "ending free_value()"
+!
+!end subroutine free_value
+
+!===============================================================================
+
+recursive subroutine value_move(src, dst)
+	! Note the args are reversed wrt value_copy.  It is however consistent with
+	! build-in move_alloc() (and `mv file1 file2`)
+	!
+	! This is kind of a fake move.  Arrays and structs are moved, but primitive
+	! scalars are just copied
+
+	type(value_t), intent(inout) :: src
+	type(value_t), intent(out)   :: dst
+
+	!********
+
+	integer :: i
+
+	if (debug > 3) print *, 'starting value_move()'
+
+	dst%type = src%type
+
+	select case (src%type)
+	case (array_type)
+		call move_alloc(src%array, dst%array)
+
+	case (struct_type)
+		call move_alloc(src%struct_name, dst%struct_name)
+		call move_alloc(src%struct, dst%struct)
+
+	case default
+		! This copy (not move) could be inefficient for large string scalars.
+		! Might be worth making value%sca allocatable if it doesn't add too much
+		! complexity.  Otherwise, consider further selecting the case by each
+		! scalar type
+		dst%sca  = src%sca
+
+	end select
+
+end subroutine value_move
+
+!===============================================================================
+
 recursive subroutine value_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
@@ -226,7 +309,7 @@ recursive subroutine value_copy(dst, src)
 		if (allocated(dst%struct)) deallocate(dst%struct)
 		allocate(dst%struct( size(src%struct) ))
 		do i = 1, size(src%struct)
-			dst%struct(i) = src%struct(i)
+			call value_copy(dst%struct(i), src%struct(i))
 		end do
 	else if (allocated(dst%struct)) then
 		deallocate(dst%struct)

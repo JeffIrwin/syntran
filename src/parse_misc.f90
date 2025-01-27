@@ -357,22 +357,36 @@ module function parse_unit(parser) result(unit)
 	type(syntax_node_vector_t) :: members
 	type(syntax_token_t) :: dummy
 
-	integer :: i, pos0
+	integer :: i, pos0, num_vars0, num_fns0, num_structs0
 
 	!print *, 'starting parse_unit()'
 
+	!****************
+
+	! First pass
+	parser%ipass = 0
+
 	members = new_syntax_node_vector()
 	i = 0
-
-	!left  = parser%match(lbrace_token)
 
 	!! Pushing scope breaks interactive interpretation, but we may want it later
 	!! for interpetting multiple files.  Another alternative would be chaining
 	!! interpreted statements like Immo does
 
 	!call parser%vars%push_scope()
+	!call parser%locs%push_scope()
+
+	!print *, "parser pos beg = ", parser%pos
+	!print *, "num fns = ", parser%num_fns
+
+	num_vars0 = parser%num_vars  ! not necessarily 0 for the REPL
+	num_fns0 = parser%num_fns    ! includes intrinsic fns
+	num_structs0 = parser%num_structs
+	parser%fn_names = new_string_vector()
 
 	do while (parser%current_kind() /= eof_token)
+
+		!print *, "    parser pos = ", parser%pos
 
 		pos0 = parser%pos
 		i = i + 1
@@ -391,10 +405,71 @@ module function parse_unit(parser) result(unit)
 		if (parser%pos == pos0) dummy = parser%next()
 
 	end do
+	!print *, "parser pos end = ", parser%pos
+	!print *, "num fns = ", parser%num_fns
+
+	!****************
+
+	!print *, ""
+	!print *, ""
+	!print *, " ===========  PARSING PASS NUMBER 2 ========== "
+	!print *, ""
+	!print *, ""
+
+	! TODO: if any errors, skip second pass.  Although be careful to still do
+	! stuff at end of routine
+
+	! Second pass
+	parser%pos = 1
+	parser%ipass = 1
+
+	parser%num_vars = num_vars0
+	parser%num_fns = num_fns0
+	parser%num_structs = num_structs0
+
+	! TODO: Double check struct resetting.  Does anything else need to be reset?  
+
+	members = new_syntax_node_vector()
+	i = 0
+
+	!left  = parser%match(lbrace_token)
+
+	!call parser%vars%push_scope()
+	!call parser%locs%push_scope()
+
+	! TODO: dry?  Two passes are almost the same, but also there are only two of
+	! them
+
+	!print *, "parser pos beg = ", parser%pos
+	do while (parser%current_kind() /= eof_token)
+
+		!print *, "    parser pos = ", parser%pos
+
+		pos0 = parser%pos
+		i = i + 1
+		!print *, '    statement ', i
+
+		select case (parser%current_kind())
+		case (fn_keyword)
+			call members%push(parser%parse_fn_declaration())
+		case (struct_keyword)
+			call members%push(parser%parse_struct_declaration())
+		case default
+			call members%push(parser%parse_statement())
+		end select
+
+		! Break infinite loops
+		if (parser%pos == pos0) dummy = parser%next()
+
+	end do
+	!print *, "parser pos end = ", parser%pos
 
 	!call parser%vars%pop_scope()
+	!call parser%locs%pop_scope()
 
 	!right = parser%match(rbrace_token)
+
+	!****************
 
 	unit%kind = translation_unit
 
@@ -456,6 +531,14 @@ recursive module function new_parser(str, src_file, contexts, unit_) result(pars
 	parser%pos = 1
 
 	parser%contexts = contexts  ! copy.  could convert to standard array if needed
+
+	! Allocate scoped var dicts
+
+	parser%vars%scope_cap = SCOPE_CAP_INIT
+	allocate(parser%vars%dicts( parser%vars%scope_cap ))
+
+	parser%locs%scope_cap = SCOPE_CAP_INIT
+	allocate(parser%locs%dicts( parser%locs%scope_cap ))
 
 	!print *, 'tokens%len_ = ', tokens%len_
 	if (debug > 1) print *, parser%tokens_str()

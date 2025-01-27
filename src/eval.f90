@@ -31,16 +31,11 @@ module syntran__eval_m
 
 		!type(structs_t) :: structs
 
-		type(vars_t) :: vars
+		type(vars_t) :: vars, locs
 
 		! Grammatically, "breaked" should be "broke", but it's going to be a
 		! nightmare if you grep for "break" and don't find "broke"
 		logical :: returned, breaked, continued
-
-		! This table is used to make substitutions in the vars array for passing
-		! by reference. For values which are not references, it is otherwise an
-		! identity mapping [1, 2, 3, ... ]
-		integer, allocatable :: ref_sub(:)
 
 	end type state_t
 
@@ -123,9 +118,14 @@ recursive subroutine syntax_eval(node, state, res)
 		call syntax_eval(node%right, state, res)
 
 		!print *, 'assigning identifier ', quote(node%identifier%text)
+		!print *, "is_loc = ", node%is_loc
 
-		id = state%ref_sub(node%id_index)
-		state%vars%vals(id) = res
+		id = node%id_index
+		if (node%is_loc) then
+			state%locs%vals(id) = res
+		else
+			state%vars%vals(id) = res
+		end if
 
 		!print *, "res type = ", kind_name(res%type)
 		!print *, "allocated(struct) = ", allocated(res%struct)
@@ -189,6 +189,7 @@ recursive subroutine eval_binary_expr(node, state, res)
 
 	!print *, 'left  type = ', kind_name(left%type)
 	!print *, 'right type = ', kind_name(right%type)
+	!print *, "op kind    = ", kind_name(node%op%kind)
 
 	larrtype = unknown_type
 	rarrtype = unknown_type
@@ -318,29 +319,48 @@ recursive subroutine eval_name_expr(node, state, res)
 
 	!********
 
-	integer :: id, rank_res, idim_, idim_res, sub_kind
+	integer :: id, rank_res, idim_, idim_res, sub_kind, type_
 	integer(kind = 8) :: il, iu, i8, index_, diff
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 
 	type(i64_vector_t), allocatable :: asubs(:)
 	type(value_t) :: right, tmp
 
+	!print *, ""
 	!print *, "starting eval_name_expr()"
 	!print *, 'searching identifier ', node%identifier%text
+	!print *, "node is_loc = ", node%is_loc
 
-	id = state%ref_sub(node%id_index)
-	if (allocated(node%lsubscripts) .and. &
-		state%vars%vals(id)%type == str_type) then
+	id = node%id_index
+	if (node%is_loc) then
+		type_ = state%locs%vals(id)%type
+	else
+		type_ = state%vars%vals(id)%type
+	end if
+	!print *, "id = ", id
+	!print *, "type_ = ", kind_name(type_)
+
+	if (type_ == unknown_type) then
+		write(*,*) err_int_prefix//"unknown name expr type"
+		call internal_error()
+	end if
+
+	if (allocated(node%lsubscripts) .and. type_ == str_type) then
 		!print *, 'string subscript RHS name expr'
 
 		!print *, 'str type'
-		res%type = state%vars%vals(id)%type
+		res%type = type_
 
 		select case (node%lsubscripts(1)%sub_kind)
 		case (scalar_sub)
 			i8 = subscript_eval(node, state)
 			!print *, 'i8 = ', i8
-			res%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
+
+			if (node%is_loc) then
+				res%sca%str%s = state%locs%vals(id)%sca%str%s(i8+1: i8+1)
+			else
+				res%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
+			end if
 
 		case (range_sub)
 
@@ -356,10 +376,14 @@ recursive subroutine eval_name_expr(node, state, res)
 			!print *, 'identifier ', node%identifier%text
 			!print *, 'il = ', il
 			!print *, 'iu = ', iu
-			!print *, 'str = ', state%vars%vals(id)%sca%str%s
+			!print *, 'str = ', state%vars%vals(id)%sca%str%s  ! debug broken for is_loc
 
 			! Not inclusive of upper bound
-			res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
+			if (node%is_loc) then
+				res%sca%str%s = state%locs%vals(id)%sca%str%s(il: iu-1)
+			else
+				res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
+			end if
 
 		case default
 			write(*,*) err_int_prefix//'unexpected str subscript kind'//color_reset
@@ -368,7 +392,7 @@ recursive subroutine eval_name_expr(node, state, res)
 
 	else if (allocated(node%lsubscripts)) then
 
-		if (state%vars%vals(id)%type /= array_type) then
+		if (type_ /= array_type) then
 			write(*,*) err_int_prefix//'bad type, expected array'//color_reset
 			call internal_error()
 		end if
@@ -379,7 +403,13 @@ recursive subroutine eval_name_expr(node, state, res)
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 			i8 = subscript_eval(node, state)
-			call get_val(node, state%vars%vals(id), state, res, index_ = i8)
+
+			if (node%is_loc) then
+				call get_val(node, state%locs%vals(id), state, res, index_ = i8)
+			else
+				call get_val(node, state%vars%vals(id), state, res, index_ = i8)
+			end if
+
 		else
 
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
@@ -437,8 +467,14 @@ recursive subroutine eval_name_expr(node, state, res)
 			do i8 = 0, res%array%len_ - 1
 				!print *, 'subs = ', int(subs, 4)
 
-				index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
-				call get_array_val(state%vars%vals(id)%array, index_, tmp)
+				if (node%is_loc) then
+					index_ = subscript_i32_eval(subs, state%locs%vals(id)%array)
+					call get_array_val(state%locs%vals(id)%array, index_, tmp)
+				else
+					index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
+					call get_array_val(state%vars%vals(id)%array, index_, tmp)
+				end if
+
 				call set_array_val(res%array, i8, tmp)
 				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 			end do
@@ -448,7 +484,12 @@ recursive subroutine eval_name_expr(node, state, res)
 		!print *, "name expr without subscripts"
 		!print *, "id = ", id
 		!print *, "size(vals) = ", size(state%vars%vals)
-		res = state%vars%vals(id)
+
+		if (node%is_loc) then
+			res = state%locs%vals(id)
+		else
+			res = state%vars%vals(id)
+		end if
 
 	end if
 
@@ -470,15 +511,19 @@ subroutine eval_dot_expr(node, state, res)
 
 	integer :: id
 
-	id = state%ref_sub(node%id_index)
-	!print *, "eval dot_expr"
-	!print *, "id_index = ", id
-	!print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
-
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
-	call get_val(node, state%vars%vals(id), state, res)
+	id = node%id_index
+	if (node%is_loc) then
+		call get_val(node, state%locs%vals(id), state, res)
+	else
+		!print *, "eval dot_expr"
+		!print *, "id_index = ", id
+		!print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
+
+		call get_val(node, state%vars%vals(id), state, res)
+	end if
 
 end subroutine eval_dot_expr
 
@@ -792,15 +837,27 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	!********
 
-	integer :: i, id_index
+	integer :: i, io, id_index
 
 	logical :: returned0
 
-	type(value_t) :: tmp
+	type(fn_t) :: fn
 
-	!print *, 'eval fn_call_expr'
-	!print *, 'fn identifier = ', node%identifier%text
+	type(value_t) :: tmp
+	type(value_t), allocatable :: params_tmp(:), locs0(:)
+
+	!print *, ""
+	!print *, 'eval fn_call_expr ', node%identifier%text
 	!print *, 'fn id_index   = ', node%id_index
+
+	!print *, "num_locs = ", node%num_locs
+
+	if (.not. allocated(node%params)) then
+		write(*,*) err_int_prefix//'unexpected user fn'//color_reset
+		call internal_error()
+	end if
+
+	allocate(params_tmp( size(node%params) ))
 
 	! i think this is technically not different than using an explicit array.
 	! we're just using fortran's call stack and recursive calls to
@@ -811,76 +868,80 @@ recursive subroutine eval_fn_call(node, state, res)
 	! i don't think we need a stack of "breaked" bools.  that's just loop local,
 	! right?
 
+	! TODO: for runtime error logging, push a stack of fn names, line numbers,
+	! etc.
+
 	res%type = node%val%type
 
 	!print *, 'res type = ', res%type
 
 	! User-defined function
 
-	if (.not. allocated(node%params)) then
-		write(*,*) err_int_prefix//'unexpected fn'//color_reset
-		call internal_error()
-	end if
-
 	!print *, 'fn name = ', node%identifier%text
 	!print *, 'fn idx  = ', node%id_index
-	!print *, 'node type = ', node%val%type
+	!print *, 'node type = ', kind_name(node%val%type)
+	!print *, 'alloc params = ', allocated(params)
 	!print *, 'size params = ', size(node%params)
-	!print *, 'param ids = ', node%params
+	!print *, 'param ids = ', params
 
-	! TODO: Shared param scope is ok at first, but eventually target
-	! recursive fns with scoped stack frames
+	! Pass by value by default.  Arguments are evaluated and their values are
+	! copied to the fn parameters
 
-	! Pass by value (for now, at least).  Arguments are evaluated and
-	! their values are copied to the fn parameters
+	! Deeply-nested fn calls can crash without the tmp value for the
+	! pass-by-value case.  idk why i can't just eval directly into the state var
+	! like commented above :(.  probably state var type is getting cleared by
+	! passing it to an intent(out) arg? more likely, nested fn calls basically
+	! create a stack in which we store each nested arg in different copies of
+	! tmp.  if you try to store them all in the same state var at multiple stack
+	! levels it breaks?
+	!
+	! This also seems to have led to a dramatic perf improvement for intel
+	! compilers in commit 324ad414, running full tests in ~25 minutes instead of
+	! 50.  gfortran perf remains good and unchanged
+
+	! Make two passes.  First eval values, then move references.  If a var shows
+	! up in two different args, both as a ref and a val, moving it first will
+	! crash in a single pass
+
+	! TODO: does this do what I think it does if you pass-by-ref for one arg and
+	! then increment that same var in a later arg?  Seems like a bad idea from
+	! the user's end no matter how I handle it.  For example:
+	!
+	!     let res = my_fn(&x, (x += 1));
 
 	do i = 1, size(node%params)
-		!print *, 'copying param ', i
-
-		!call syntax_eval(node%args(i), state, &
-		!	state%vars%vals( node%params(i) ))
-
-		! deeply-nested fn calls can crash without the tmp value for the
-		! pass-by-value case.  idk why i can't just eval directly into the state
-		! var like commented above :(.  probably state var type is getting
-		! cleared by passing it to an intent(out) arg? more likely, nested fn
-		! calls basically create a stack in which we store each nested arg in
-		! different copies of tmp.  if you try to store them all in the same
-		! state var at multiple stack levels it breaks?
-		!
-		! this also seems to have led to a dramatic perf improvement for intel
-		! compilers in commit 324ad414, running full tests in ~25 minutes
-		! instead of 50.  gfortran perf remains good and unchanged
-
-		!print *, "is_ref = ", node%is_ref(i)
-
-		if (node%is_ref(i)) then
-
-			!print *, "node param = ", node%params(i)
-			!print *, "arg index  = ", node%args(i)%id_index
-			!print *, "arg type   = ", kind_name(node%args(i)%val%type)
-
-			! TODO: backup and restore ref_sub later?  Does it matter? Maybe it will for recursion
-
-			! Map ref_sub on RHS too, in case of nested refs (one fn calling
-			! another fn)
-			state    %ref_sub( node%params(i) ) = &
-				state%ref_sub( node%args(i)%id_index )
-
-		else
-			call syntax_eval(node%args(i), state, tmp)
-			state%vars%vals( node%params(i) ) = tmp
+		if (.not. node%is_ref(i)) then
+			! Pass-by-value
+			call syntax_eval(node%args(i), state, params_tmp(i))
 		end if
-
-		!print *, "param type = ", kind_name(state%vars%vals( node%params(i) )%type)
-		!print *, "param rank = ", state%vars%vals( node%params(i) )%array%rank
-		!print *, "param size = ", state%vars%vals( node%params(i) )%array%size
-
-		!print *, 'done'
-		!print *, ''
 	end do
 
-	call syntax_eval(node%body, state, res)
+	do i = 1, size(node%params)
+		if (node%is_ref(i)) then
+
+			! Move arg in for pass-by-reference
+			if (node%args(i)%is_loc) then
+				call value_move(state%locs%vals( node%args(i)%id_index ), params_tmp(i))
+			else
+				call value_move(state%vars%vals( node%args(i)%id_index ), params_tmp(i))
+			end if
+
+		end if
+	end do
+
+	! Push/pop a stack of local vars, similar to returned0 stack
+	if (allocated(state%locs%vals)) call move_alloc(state%locs%vals, locs0)
+
+	! Push local var stack after evaluating args.  Arg evaluation can involve
+	! recursive fn calls, so a tmp params array is needed here
+	allocate(state%locs%vals( node%num_locs ))
+	do i = 1, size(node%params)
+		call value_move(params_tmp(i), state%locs%vals( node%params(i) ))
+	end do
+
+	! Finally, evaluate the fn body
+	call syntax_eval(state%fns%fns( node%id_index )%node%body, state, res)
+
 	!print *, "res rank = ", res%array%rank
 	!print *, 'res = ', res%to_str()
 
@@ -893,7 +954,27 @@ recursive subroutine eval_fn_call(node, state, res)
 		call internal_error()
 	end if
 
+	! Move out pass-by-ref args/params into params_tmp
+	do i = 1, size(node%params)
+		if (.not. node%is_ref(i)) cycle
+		call value_move(state%locs%vals( node%params(i) ), params_tmp(i))
+	end do
+
 	state%returned = returned0  ! pop
+
+	!print *, "popping runtime state stack"
+	if (allocated(locs0)) call move_alloc(locs0, state%locs%vals)
+
+	do i = 1, size(node%params)
+		if (.not. node%is_ref(i)) cycle
+
+		if (node%args(i)%is_loc) then
+			call value_move(params_tmp(i), state%locs%vals( node%args(i)%id_index ))
+		else
+			call value_move(params_tmp(i), state%vars%vals( node%args(i)%id_index ))
+		end if
+
+	end do
 
 end subroutine eval_fn_call
 
@@ -1606,8 +1687,17 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		if (io == iostat_end) then
 		!if (io /= 0) then
 			!arg1%sca%file_%eof = .true.
-			!id = state%ref_sub(node%id_index)
-			state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
+			!id = node%id_index
+
+			!print *, "node is_loc = ", node%is_loc
+			!print *, "arg  is_loc = ", node%args(1)%is_loc
+
+			if (node%args(1)%is_loc) then
+				state%locs%vals(node%args(1)%id_index)%sca%file_%eof = .true.
+			else
+				state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
+			end if
+
 		end if
 		!print *, 'eof   = ', arg1%sca%file_%eof
 
@@ -1792,10 +1882,11 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		res%sca%bool = any(arg1%array%bool)
 
 	case default
-		write(*,*) err_int_prefix//'unexpected fn'//color_reset
-		call internal_error()
 
 		!print *, 'fn name = ', node%identifier%text
+		write(*,*) err_int_prefix//'unexpected intr fn'//color_reset
+		call internal_error()
+
 		!print *, 'fn idx  = ', node%id_index
 		!print *, 'node type = ', node%val%type
 		!print *, 'size params = ', size(node%params)
@@ -1988,6 +2079,8 @@ recursive subroutine eval_for_statement(node, state, res)
 
 	! Push scope to make the loop iterator local
 	call state%vars%push_scope()
+	call state%locs%push_scope()
+
 	state%breaked = .false.
 	do i8 = 1, len8
 
@@ -2005,9 +2098,11 @@ recursive subroutine eval_for_statement(node, state, res)
 		! evaluation now that we know all of the variable identifiers.
 		! Parsing still needs to rely on dictionary lookups because it does
 		! not know the entire list of variable identifiers ahead of time
-		!
-		! Loop iterator should never be a ref, so no need to use ref_sub here
-		state%vars%vals(node%id_index) = itr
+		if (node%is_loc) then
+			state%locs%vals(node%id_index) = itr
+		else
+			state%vars%vals(node%id_index) = itr
+		end if
 
 		call syntax_eval(node%body, state, res)
 
@@ -2021,6 +2116,7 @@ recursive subroutine eval_for_statement(node, state, res)
 	state%continued = .false.
 
 	call state%vars%pop_scope()
+	call state%locs%pop_scope()
 
 end subroutine eval_for_statement
 
@@ -2036,7 +2132,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 	!********
 
-	integer :: rank_res, id
+	integer :: rank_res, id, type_
 	integer(kind = 8) :: i8, j8, index_, len8, size_i
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:), &
 		size_tmp(:)
@@ -2046,7 +2142,7 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 	!print *, "eval assignment_expr"
 	!print *, "node identifier = ", node%identifier%text
-	!id = state%ref_sub(node%id_index)
+	!id = node%id_index
 	!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 	!if (state%vars%vals(id)%type == struct_type) then
 	!if (allocated( node%member )) then
@@ -2062,20 +2158,27 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		! Evaluate the RHS
 		call syntax_eval(node%right, state, rhs)
 
-		! Get the initial value from the LHS, which could be nested like `a.b.c.d`
-		!id = node%member%id_index  ! was this doing anything? seems unused
-		id = state%ref_sub(node%id_index)
-		call get_val(node, state%vars%vals(id), state, res)
+		id = node%id_index
+		if (node%is_loc) then
+			call get_val(node, state%locs%vals(id), state, res)
+			call compound_assign(res, rhs, node%op)
+			call set_val(node, state%locs%vals(id), state, res)
 
-		! Do the assignment or += or whatever and set res
-		call compound_assign(res, rhs, node%op)
+		else
+			! Get the initial value from the LHS, which could be nested like `a.b.c.d`
+			call get_val(node, state%vars%vals(id), state, res)
 
-		! Save it back into the LHS var
-		call set_val(node, state%vars%vals(id), state, res)
+			! Do the assignment or += or whatever and set res
+			call compound_assign(res, rhs, node%op)
+
+			! Save it back into the LHS var
+			call set_val(node, state%vars%vals(id), state, res)
+
+		end if
 
 	else if (.not. allocated(node%lsubscripts)) then
 
-		id = state%ref_sub(node%id_index)
+		id = node%id_index
 
 		!! This deallocation will cause a crash when an array appears on both
 		!! the LHS and RHS of fn_call assignment, e.g. `dv = diff_(dv, i)` in
@@ -2097,12 +2200,19 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 
-		call compound_assign(state%vars%vals(id), res, node%op)
+		!print *, "compound_assign is_loc = ", node%is_loc
+		if (node%is_loc) then
+			!print *, "val type = ", kind_name( state%locs%vals(id)%type )
+			call compound_assign(state%locs%vals(id), res, node%op)
+			res = state%locs%vals(id)
+		else
+			call compound_assign(state%vars%vals(id), res, node%op)
 
-		! For compound assignment, ensure that the LHS is returned
-		!print *, 'setting res again'
-		res = state%vars%vals(id)
-		!print *, 'done'
+			! For compound assignment, ensure that the LHS is returned
+			!print *, 'setting res again'
+			res = state%vars%vals(id)
+			!print *, 'done'
+		end if
 
 		!print *, "node identifier = ", node%identifier%text
 
@@ -2113,10 +2223,15 @@ recursive subroutine eval_assignment_expr(node, state, res)
 		! identifier at each scope level
 
 	else
-		id = state%ref_sub(node%id_index)
+		id = node%id_index
+		if (node%is_loc) then
+			type_ = state%locs%vals(id)%type
+		else
+			type_ = state%vars%vals(id)%type
+		end if
 
 		!print *, 'LHS array subscript assignment'
-		!print *, 'LHS type = ', kind_name(state%vars%vals(id)%array%type)  ! not alloc for str
+		!print *, 'LHS type = ', kind_name(type_)
 
 		! Eval the RHS.  I should probably rename `res` to `rhs` here like I did
 		! with get_val() for dot exprs above, because it's not really the result
@@ -2125,18 +2240,22 @@ recursive subroutine eval_assignment_expr(node, state, res)
 
 		!print *, 'RHS = ', res%to_str()
 
-		if (state%vars%vals(id)%type == str_type) then
+		if (type_ == str_type) then
 			!print *, 'str_type'
 
 			! TODO: ban compound character substring assignment
 			i8 = subscript_eval(node, state)
-			state%vars%vals(id)%sca%str%s(i8+1: i8+1) = res%sca%str%s
+			if (node%is_loc) then
+				state%locs%vals(id)%sca%str%s(i8+1: i8+1) = res%sca%str%s
+			else
+				state%vars%vals(id)%sca%str%s(i8+1: i8+1) = res%sca%str%s
+			end if
 
 		else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 
 			!print *, 'non str_type scalar subscript'
 			!print *, 'LHS array type = ', &
-			!	state%vars%vals(id)%array%type
+			!	state%vars%vals(id)%array%type  ! this debug will break for is_loc
 			!print *, 'LHS array = ', state%vars%vals(id)%array%i32
 
 			!print *, "get_array_val a"
@@ -2146,9 +2265,17 @@ recursive subroutine eval_assignment_expr(node, state, res)
 			! 1)];`.  Maybe I should ban expression statements as indices, but
 			! src/tests/test-src/fns/test-19.syntran at least will need updated
 			i8 = subscript_eval(node, state)
-			call get_val(node, state%vars%vals(id), state, array_val, index_ = i8)
-			call compound_assign(array_val, res, node%op)
-			call set_val(node, state%vars%vals(id), state, array_val, index_ = i8)
+
+			if (node%is_loc) then
+				call get_val(node, state%locs%vals(id), state, array_val, index_ = i8)
+				call compound_assign(array_val, res, node%op)
+				call set_val(node, state%locs%vals(id), state, array_val, index_ = i8)
+			else
+				call get_val(node, state%vars%vals(id), state, array_val, index_ = i8)
+				call compound_assign(array_val, res, node%op)
+				call set_val(node, state%vars%vals(id), state, array_val, index_ = i8)
+			end if
+
 			res = array_val
 
 		else
@@ -2198,9 +2325,13 @@ recursive subroutine eval_assignment_expr(node, state, res)
 			tmp_array%type = array_type
 			tmp_array%array%len_ = len8
 			tmp_array%array%rank = rank_res
-			tmp_array%array%type = state%vars%vals(id)%array%type
 			tmp_array%array%kind = expl_array
 			tmp_array%array%size = size_tmp
+			if (node%is_loc) then
+				tmp_array%array%type = state%locs%vals(id)%array%type
+			else
+				tmp_array%array%type = state%vars%vals(id)%array%type
+			end if
 
 			! We cannot use mold here because the return value could be a lower
 			! rank than the LHS array being sliced, and the RHS may be a scalar.
@@ -2221,10 +2352,17 @@ recursive subroutine eval_assignment_expr(node, state, res)
 					call get_array_val(res%array, i8, array_val)
 				end if
 
-				index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
-				call get_array_val(state%vars%vals(id)%array, index_, tmp)
-				call compound_assign(tmp, array_val, node%op)
-				call set_array_val(state%vars%vals(id)%array, index_, tmp)
+				if (node%is_loc) then
+					index_ = subscript_i32_eval(subs, state%locs%vals(id)%array)
+					call get_array_val(state%locs%vals(id)%array, index_, tmp)
+					call compound_assign(tmp, array_val, node%op)
+					call set_array_val(state%locs%vals(id)%array, index_, tmp)
+				else
+					index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
+					call get_array_val(state%vars%vals(id)%array, index_, tmp)
+					call compound_assign(tmp, array_val, node%op)
+					call set_array_val(state%vars%vals(id)%array, index_, tmp)
+				end if
 
 				! Set the return val too
 				call set_array_val(tmp_array%array, i8, tmp)
@@ -2310,11 +2448,6 @@ subroutine eval_translation_unit(node, state, res)
 
 	integer :: i
 
-	! TODO: do we want to globally push/pop scope for whole
-	! translation_unit?  Will this have impacts on interpretting multiple
-	! files, or allowing the user to override intrinsic fns?
-	!call vars%push_scope()
-
 	! The final statement of a unit returns the actual result.  Non-final
 	! members only change the (vars) state or define fns
 	do i = 1, size(node%members)
@@ -2341,8 +2474,6 @@ subroutine eval_translation_unit(node, state, res)
 		if (state%returned) exit
 
 	end do
-
-	!call state%vars%pop_scope()
 
 end subroutine eval_translation_unit
 
@@ -2942,6 +3073,7 @@ recursive subroutine eval_block_statement(node, state, res)
 	type(value_t) :: tmp
 
 	call state%vars%push_scope()
+	call state%locs%push_scope()
 
 	! The final statement of a block returns the actual result.  Non-final
 	! members only change the (vars) state.
@@ -2976,6 +3108,7 @@ recursive subroutine eval_block_statement(node, state, res)
 	end do
 
 	call state%vars%pop_scope()
+	call state%locs%pop_scope()
 
 end subroutine eval_block_statement
 
@@ -3207,8 +3340,13 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 
 	type(value_t) :: asubval, lsubval, usubval, ssubval
 
-	id = state%ref_sub(node%id_index)
-	rank_ = state%vars%vals(id)%array%rank
+	id = node%id_index
+	if (node%is_loc) then
+		rank_ = state%locs%vals(id)%array%rank
+	else
+		rank_ = state%vars%vals(id)%array%rank
+	end if
+
 	allocate(asubs(rank_), lsubs(rank_), ssubs(rank_), usubs(rank_))
 	rank_res = 0
 	do i = 1, rank_
@@ -3246,7 +3384,11 @@ subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res
 		select case (node%lsubscripts(i)%sub_kind)
 		case (all_sub)
 			ssubs(i) = 1
-			usubs(i) = state%vars%vals(id)%array%size(i)
+			if (node%is_loc) then
+				usubs(i) = state%locs%vals(id)%array%size(i)
+			else
+				usubs(i) = state%vars%vals(id)%array%size(i)
+			end if
 			!print *, 'usubs(i) = ', usubs(i)
 
 			rank_res = rank_res + 1
@@ -3450,23 +3592,36 @@ recursive function subscript_eval(node, state) result(index_)
 
 	!******
 
-	integer :: i, id
+	integer :: i, id, type_, rank_
 	integer(kind = 8) :: prod
 	type(value_t) :: subscript
 
 	!print *, 'starting subscript_eval()'
 
+	!print *, "node is_loc = ", node%is_loc
+	id = node%id_index
+	if (node%is_loc) then
+		type_ = state%locs%vals(id)%type
+	else
+		type_ = state%vars%vals(id)%type
+	end if
+
 	! str scalar with single char subscript
-	id = state%ref_sub(node%id_index)
-	if (state%vars%vals(id)%type == str_type) then
+	if (type_ == str_type) then
 		call syntax_eval(node%lsubscripts(1), state, subscript)
 		index_ = subscript%to_i64()
 		return
 	end if
 
-	!if (state%vars%vals(id)%type /= array_type) then
+	!if (type_ /= array_type) then
 	!	! internal_error?
 	!end if
+
+	if (node%is_loc) then
+		rank_ = state%locs%vals(id)%array%rank
+	else
+		rank_ = state%vars%vals(id)%array%rank
+	end if
 
 	! This could be refactored to run syntax_eval() on each subscript first, and
 	! then call subscript_i32_eval() after the loop.  There would be a small
@@ -3474,7 +3629,7 @@ recursive function subscript_eval(node, state) result(index_)
 	! space perf difference
 	prod  = 1
 	index_ = 0
-	do i = 1, state%vars%vals(id)%array%rank
+	do i = 1, rank_
 		!print *, 'i = ', i
 
 		call syntax_eval(node%lsubscripts(i), state, subscript)
@@ -3486,7 +3641,12 @@ recursive function subscript_eval(node, state) result(index_)
 		! definition to enable it only in debug
 
 		index_ = index_ + prod * subscript%to_i64()
-		prod  = prod * state%vars%vals(id)%array%size(i)
+
+		if (node%is_loc) then
+			prod  = prod * state%locs%vals(id)%array%size(i)
+		else
+			prod  = prod * state%vars%vals(id)%array%size(i)
+		end if
 
 	end do
 

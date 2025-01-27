@@ -37,11 +37,15 @@ module syntran__parse_m
 		! performance diff
 		type(text_context_vector_t) :: contexts
 
-		type(vars_t) :: vars
+		logical :: is_loc = .false.
+
+		type(vars_t) :: vars, locs
 		integer :: num_vars = 0
+		integer :: num_locs = 0
 
 		type(fns_t) :: fns
 		integer :: num_fns = 0
+		type(string_vector_t) :: fn_names
 
 		type(structs_t) :: structs
 		integer :: num_structs = 0
@@ -55,6 +59,10 @@ module syntran__parse_m
 		type(value_t) :: fn_type
 		character(len = :), allocatable :: fn_name
 		logical :: returned
+
+		! Pass index.  0 on first pass while getting fn signatures, then 1 on
+		! final (second) pass
+		integer :: ipass
 
 		contains
 			procedure :: &

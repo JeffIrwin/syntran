@@ -1,0 +1,32 @@
+
+fn gcd(x: i32, y: i32): i32
+{
+	// There's no reason this shouldn't be iterative.  See aoc utils
+	if (y == 0)
+		return x;
+	else
+		return gcd(y, x % y);
+}
+
+fn assert_(p: bool): i32
+{
+	if (p) return 0;
+	return 1;
+}
+
+let sum_ = 0;
+
+sum_ += assert_(gcd(8, 12) == 4);
+sum_ += assert_(gcd(12, 8) == 4);
+
+sum_ += assert_(gcd(18, 12) == 6);
+sum_ += assert_(gcd(12, 18) == 6);
+
+sum_ += assert_(gcd(180, 120) == 60);
+sum_ += assert_(gcd(120, 180) == 60);
+
+sum_ += assert_(gcd(111, 259) == 37);
+sum_ += assert_(gcd(259, 111) == 37);
+
+return sum_;
+

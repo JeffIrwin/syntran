@@ -95,7 +95,6 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 		end if
 
 		! TODO: chdir option?
-		call init_ref_sub(state)
 		call syntax_eval(compilation, state, res)
 		res_str = res%to_str()
 		write(*,*) '    '//res_str
@@ -188,7 +187,6 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 		! Don't try to evaluate with errors
 		if (compilation%diagnostics%len_ > 0) cycle
 
-		call init_ref_sub(state)
 		call syntax_eval(compilation, state, res )
 
 		! Consider MATLAB-style "ans = " log?
@@ -225,7 +223,6 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 		return
 	end if
 
-	call init_ref_sub(state)
 	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
@@ -257,7 +254,6 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 		return
 	end if
 
-	call init_ref_sub(state)
 	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
@@ -292,7 +288,6 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 		return
 	end if
 
-	call init_ref_sub(state)
 	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
@@ -328,7 +323,6 @@ real(kind = 8) function syntran_eval_f64(str_, quiet) result(eval_f64)
 		return
 	end if
 
-	call init_ref_sub(state)
 	call syntax_eval(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
@@ -336,24 +330,6 @@ real(kind = 8) function syntran_eval_f64(str_, quiet) result(eval_f64)
 	!print *, 'eval_f64 = ', eval_f64
 
 end function syntran_eval_f64
-
-!===============================================================================
-
-subroutine init_ref_sub(state)
-
-	! TODO: move to eval.f90
-
-	type(state_t), intent(inout) :: state
-
-	!********
-
-	integer :: i
-
-	!print *, "size vars = ", size(state%vars%vals)
-	state%ref_sub = [(i, i = 1, size(state%vars%vals))]
-	!print *, "ref_sub = ", state%ref_sub
-
-end subroutine init_ref_sub
 
 !===============================================================================
 
@@ -374,6 +350,17 @@ subroutine init_state(state)
 	state%returned  = .false.
 	state%breaked   = .false.
 	state%continued = .false.
+
+	! Is it safe to initialize these arrays both here and in new_parser?  Test
+	! interactive interp
+
+	state%vars%scope_cap = SCOPE_CAP_INIT
+	allocate(state%vars%dicts( state%vars%scope_cap) )
+
+	state%locs%scope_cap = SCOPE_CAP_INIT
+	allocate(state%locs%dicts( state%locs%scope_cap) )
+
+	!print *, "init size fns = ", size(state%fns%fns)
 
 end subroutine init_state
 
@@ -428,6 +415,10 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	!print *, "parsing"
 	tree = syntax_parse(str_, state%vars, state%fns, src_filel)
 	!print *, "done"
+	!print *, "size fns = ", size(state%fns%fns)
+
+	!print *, tree%str()  ! `#tree` or `show_tree` equivalent for interpreting a file
+
 	if (.not. state%quiet) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -452,7 +443,6 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	end if
 
 	!print *, "evaling "
-	call init_ref_sub(state)
 	call syntax_eval(tree, state, val)
 	!print *, "done"
 	res = val%to_str()
