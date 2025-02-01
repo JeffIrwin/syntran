@@ -9,6 +9,43 @@ contains
 
 !===============================================================================
 
+subroutine unit_test_aoc_2017(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'aoc 2017'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: &
+		path = 'src/tests/long/aoc/2017/'
+
+	character(len = :), allocatable :: cwd
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! This one-off is included because it's the first AOC problem where I've used recursion
+	tests = &
+		[   &
+			interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '141:171', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_aoc_2017
+
+!===============================================================================
+
 subroutine unit_test_aoc_2023(npass, nfail)
 
 	implicit none
@@ -147,6 +184,7 @@ subroutine unit_tests_long(iostat)
 	npass = 0
 	nfail = 0
 
+	call unit_test_aoc_2017(npass, nfail)
 	call unit_test_aoc_2023(npass, nfail)
 	call unit_test_aoc_2024(npass, nfail)
 

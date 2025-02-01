@@ -33,7 +33,6 @@ module syntran__core_m
 	!  - roadmap to version 1.0.0:
 	!    * maybe have a trial alpha release 0.1.0 for a bit before 1.0?
 	!    * ban expression statements.  notes below.  compat break
-	!    * finish recursion
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
 	!      + should readln() take a ref?  the file is technically an in/out arg
@@ -43,7 +42,8 @@ module syntran__core_m
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)
 	!  - docker ci/cd stages should test current branch, not main
-	!    * after 1.0 i should be more strict about changing main branch
+	!    * after 1.0 i should be more strict about changing main branch.  add
+	!      branch protection and only change it via PRs
 	!    * should have a dev branch where work is done, main should only change
 	!      by merging *after* testing on dev branch
 	!    * hence, all tests should cover dev or whatever the current branch is
@@ -58,14 +58,6 @@ module syntran__core_m
 	!    * could easily be tested, it will just be a pain to keep it working
 	!      reliably
 	!    * should also cover options like `-i` (startup include file)
-	!  - recursive fns
-	!    * done
-	!    * could always use more tests.  recursive quicksort?  various aoc
-	!      problems?  minheap or heapsort or something tree/graph related?
-	!    * i think include files can call fns from the includer.  this
-	!      probably isn't desireable, but i'm not sure how big of a deal it is
-	!      or how to fix it.  right now everything is one translation unit.
-	!      might want to rethink scoping
 	!  - recursive data structs?
 	!    * recursive fns are available, but not structs
 	!  - allow for loops that iterate on chars in a str
@@ -367,6 +359,16 @@ module syntran__core_m
 	!    * maybe you could auto invoke minval when there is only 1 arg, but this
 	!      gets complicated with the opt dim/mask args.  you would have to very
 	!      carefully resolve the overload based on type/rank of several args
+	!  - recursive fns
+	!    * done
+	!    * could always use more tests.  recursive quicksort?  various aoc
+	!      problems?  minheap or heapsort or something tree/graph related?
+	!      + "src/tests/long/aoc/2017/12/" now covers recursive DFS, in addition
+	!      to everything in "src/tests/test-src/recursion/"
+	!    * i think include files can call fns from the includer.  this
+	!      probably isn't desireable, but i'm not sure how big of a deal it is
+	!      or how to fix it.  right now everything is one translation unit.
+	!      might want to rethink scoping
 	!
 	!****************************************
 

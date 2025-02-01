@@ -1,0 +1,149 @@
+
+#include("../../utils-2024.syntran");
+//#include("../../dict_i64.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): str
+{
+	let sum_ = 0'i64;
+
+	let n = countln_(filename);
+	let NADJ_CAP = 8;
+
+	let nadj = [ 0; n];
+	let adj  = [-1; NADJ_CAP, n];
+
+	let f = open(filename);
+	for i in [0: n]
+	{
+		let str_ = readln(f);
+		//println("str_ = ", str_);
+
+		let nums = read_i32s(str_);
+		//println("nums = ", nums);
+
+		if nums[0] != i
+		{
+			println("Error: unexpected non-sequential ID");
+			exit(-1);
+		}
+		if size(nums, 0) - 1 >= NADJ_CAP
+		{
+			println("Error: too many adjacencies");
+			exit(-2);
+		}
+
+		nadj[i] = size(nums, 0) - 1;
+		adj[0: nadj[i], i] = nums[1: size(nums,0)];
+	}
+	close(f);
+	//println("adj = ", adj);
+
+	let visited = [false; n];
+	dfs(0, &visited, &adj, &nadj);
+	sum_ = count(visited);
+
+	println("part 1 = ", sum_);
+	return str(sum_);
+}
+
+fn part2(): str
+{
+	let sum_ = 0'i64;
+
+	let n = countln_(filename);
+	let NADJ_CAP = 8;
+
+	let nadj = [ 0; n];
+	let adj  = [-1; NADJ_CAP, n];
+
+	let f = open(filename);
+	for i in [0: n]
+	{
+		let str_ = readln(f);
+		//println("str_ = ", str_);
+
+		let nums = read_i32s(str_);
+		//println("nums = ", nums);
+
+		if nums[0] != i
+		{
+			println("Error: unexpected non-sequential ID");
+			exit(-1);
+		}
+		if size(nums, 0) - 1 >= NADJ_CAP
+		{
+			println("Error: too many adjacencies");
+			exit(-2);
+		}
+
+		nadj[i] = size(nums, 0) - 1;
+		adj[0: nadj[i], i] = nums[1: size(nums,0)];
+	}
+	close(f);
+	//println("adj = ", adj);
+
+	let visited = [false; n];
+	//dfs(0, &visited, &adj, &nadj);
+	//sum_ = count(visited);
+	for i in [0: n]
+	{
+		if (visited[i]) continue;
+
+		sum_ += 1;
+		dfs(i, &visited, &adj, &nadj);
+	}
+
+	println("part 2 = ", sum_);
+	return str(sum_);
+}
+
+fn dfs(id: i32, visited: &[bool; :], adj: &[i32; :,:], nadj: &[i32; :])
+{
+	if (visited[id]) return;
+	visited[id] = true;
+
+	for neigbor in adj[0: nadj[id], id]
+		dfs(neigbor, &visited, &adj, &nadj);
+
+	return;
+}
+
+//==============================================================================
+
+fn main(): str
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2017/12");
+
+	let p1 = ""; let p2 = "";
+
+	p1 = part1();
+	p2 = part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return p1 + ":" + p2;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+
