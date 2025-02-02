@@ -11,7 +11,7 @@
 		"strategy": {
 			"matrix": {
 				"os": [
-					"ubuntu-latest",
+					"ubuntu-22.04",
 					"windows-latest",
 					"macOS-latest"
 				]
@@ -34,12 +34,12 @@
 			  "run": "bash gen-header.sh"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-latest'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"name": "Set ubuntu PATH",
 				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-latest'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"run":
 				"
 					sudo apt-get install gfortran-11 \n
@@ -57,7 +57,7 @@
 				"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-latest'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"name": "Test fpm debug",
 				"env": {
 					"FPM_FC": "gfortran-11"
@@ -93,7 +93,7 @@
 				"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-latest'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"name": "Test fpm default",
 
 				"env": {
@@ -293,7 +293,7 @@
 			},
 			{
 				"uses": "actions/upload-artifact@v4",
-				"if": "matrix.os == 'ubuntu-latest'",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"with": {
 					# unfortunately gfortran-12 does not support -static-libquadmath.  not until gfortran-14
 
