@@ -32,8 +32,6 @@ let eye3 =
 		3, 3
 	];
 
-eye3;
-
 // 90 degree x rotation.  Note that arrays are stored in row-major
 // order, so this appears transposed
 let rotx =

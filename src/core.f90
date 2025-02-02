@@ -386,7 +386,7 @@ contains
 
 !===============================================================================
 
-function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
+function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tree)
 
 	! TODO: take state struct instead of separate vars and fns members
 
@@ -402,7 +402,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	character(len = *), optional, intent(in)  :: src_file
 
-	logical, intent(in), optional :: allow_continue
+	logical, intent(in), optional :: allow_continue, repl
 
 	!********
 
@@ -410,7 +410,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	integer :: i, io, dummy, unit_
 
-	logical :: allow_continuel
+	logical :: allow_continuel, repll
 
 	type(text_context_vector_t) :: contexts
 
@@ -443,6 +443,9 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	allow_continuel = .false.
 	if (present(allow_continue)) allow_continuel = allow_continue
 
+	repll = .true.
+	if (present(repl)) repll = repl
+
 	! TODO: unit_ is just synonymous with contexts%len_ in many places, so it
 	! can be removed (but not in all places)
 	contexts = new_context_vector()
@@ -450,6 +453,8 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	parser = new_parser(str, src_filel, contexts, unit_)
 	!print *, 'units = ', parser%tokens(:)%unit_
+
+	parser%repl = repll
 
 	! The global scope can return any type.  This is initialized here and not
 	! inside new_parser() in case you have half of a function body inside an

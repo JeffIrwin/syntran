@@ -390,7 +390,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	character(len = 1024) :: buffer
 	character(len = :), allocatable :: src_filel, dir, cwd
 
-	logical :: chdirl
+	logical :: chdirl, repl
 
 	type(state_t) :: state
 	type(syntax_node_t) :: tree
@@ -404,7 +404,11 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	if (present(quiet)) state%quiet = quiet
 
 	src_filel = '<stdin>'
-	if (present(src_file)) src_filel = src_file
+	repl = .true.
+	if (present(src_file)) then
+		src_filel = src_file
+		repl = .false.
+	end if
 
 	!print * , "src_filel = """, src_filel, """"
 
@@ -417,7 +421,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	! TODO: make a helper fn that all the eval_* fns use
 
 	!print *, "parsing"
-	tree = syntax_parse(str_, state%vars, state%fns, src_filel)
+	tree = syntax_parse(str_, state%vars, state%fns, src_filel, repl = repl)
 	!print *, "done"
 	!print *, "size fns = ", size(state%fns%fns)
 

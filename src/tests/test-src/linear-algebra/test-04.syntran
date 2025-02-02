@@ -59,10 +59,7 @@ let a =
 		3, 4
 	];
 
-a;
-
 let b = mul_mat_vec(a, x);
-b;
 
 let expect = [-3.844404E+01f, 2.821099E+01f, -9.842391E+01f];
 

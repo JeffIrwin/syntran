@@ -393,13 +393,19 @@ end function parse_block_statement
 
 recursive module function parse_statement(parser) result(statement)
 
+	use syntran__errors_m
+
 	class(parser_t) :: parser
 
 	type(syntax_node_t) :: statement
 
 	!********
 
+	integer :: pos_beg, pos_end
+
 	type(syntax_token_t) :: semi
+
+	type(text_span_t) :: span
 
 	select case (parser%current_kind())
 
@@ -425,8 +431,40 @@ recursive module function parse_statement(parser) result(statement)
 			statement = parser%parse_continue_statement()
 
 		case default
+			pos_beg   = parser%peek_pos(0)
 			statement = parser%parse_expr_statement()
+			pos_end   = parser%peek_pos(0)
 			semi      = parser%match(semicolon_token)
+
+			if (.not. parser%repl .and. parser%ipass > 0) then
+				!print *, "statement kind = ", kind_name(statement%kind)
+
+				! Ban expression statements.  I tried for a while to put this
+				! logic inside of parse_expr_statement() but it is difficult to
+				! get the recursive descent parsing logic correct, especially
+				! considering that it is allowed in the REPL but not in script
+				! files.  It's much easier to parse it unconditionally and then
+				! check it afterwards here
+				!
+				! Many tests depend on the REPL style behavior where there is
+				! just one statement, and the value is returned implicitly
+				! without an explicit `return`
+
+				select case (statement%kind)
+				case (let_expr, assignment_expr, fn_call_expr, fn_call_intr_expr)
+					! Do nothing
+
+					! TODO: only allow void fn calls?  Don't allow discarding
+					! fn return value
+
+				case default
+					span = new_span(pos_beg, pos_end - pos_beg + 1)
+					call parser%diagnostics%push( &
+						err_bad_expr(parser%context(), &
+						span))
+				end select
+
+			end if
 
 	end select
 

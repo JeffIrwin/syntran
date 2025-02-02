@@ -46,8 +46,6 @@ while num_primes < n
 }
 
 // Final list of primes
-primes;
-
 let ans = primes;
 
 let expect =      [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
