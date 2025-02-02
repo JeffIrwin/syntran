@@ -1,8 +1,3 @@
-
- [95msyntran 0.0.60[0m
- [95mhttps://github.com/JeffIrwin/syntran[0m
-
- Interpreting file "src/tests/test-src/explorer//fn.syntran"
 add = 10
 mul_mat = [
 -1.000000000000000E+00, 0.000000000000000E+00, 0.000000000000000E+00, 
