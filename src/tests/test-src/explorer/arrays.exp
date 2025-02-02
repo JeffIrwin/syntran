@@ -1,0 +1,14 @@
+
+ [95msyntran 0.0.60[0m
+ [95mhttps://github.com/JeffIrwin/syntran[0m
+
+ Interpreting file "src/tests/test-src/explorer//arrays.syntran"
+x_slice = [0, 1, 2]
+y_slice = [1, 4, 7, 10]
+mat_slice = [
+3, 4, 
+6, 7, 
+9, 10
+]
+y_slice = [101, 104, 107, 110]
+     

@@ -1,0 +1,39 @@
+fn add(a1: i32, a2: i32): i32 {
+    return a1 + a2;
+}
+fn mul_mat(a: [f64; :,:], b: [f64; :,:]): [f64; :,:] {
+    // Multiply matrices \`a\` and \`b\`
+    let c = [0.0; size(a,0), size(b,1)];
+    for         k in [0: size(b,1)]
+        for     j in [0: size(a,1)]
+            for i in [0: size(a,0)]
+                c[i,k] += a[i,j] * b[j,k];
+    return c;
+}
+fn main(): i32 {
+    // \`main\` fns are optional, these statements
+    // could be moved to the global scope
+    let a = 3;
+    let b = 4;
+    println("add = ", add(a + 1, b + 2));
+
+    let rotx = [  // 90 degree x rotation
+        1.0,  0.0,  0.0,
+        0.0,  0.0,  1.0,
+        0.0, -1.0,  0.0 ;
+        3, 3
+    ];
+    let roty = [  // 90 degree y rotation
+        0.0,  0.0, -1.0,
+        0.0,  1.0,  0.0,
+        1.0,  0.0,  0.0 ;
+        3, 3
+    ];
+    // 180 degree x rot then 180 y rot is 180 z rot
+    println("mul_mat = ",
+        mul_mat(mul_mat(mul_mat(
+        rotx, rotx), roty), roty
+    ));
+    return 0;
+}
+main();

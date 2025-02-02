@@ -1,0 +1,17 @@
+let p = true;
+let q = false;
+
+let foo = 0;
+let bar = 0;
+if q and p {
+    foo = 1;
+    bar = 2;
+} else if p or not q {
+    foo = 3;
+    bar = 4;
+} else {
+    foo = 5;
+    bar = 6;
+}
+
+println("sum = ", foo + bar);

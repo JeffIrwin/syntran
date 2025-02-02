@@ -1,0 +1,20 @@
+let matrix = [
+    0,  1,  2,  // values
+    3,  4,  5,
+    6,  7,  8,
+    9, 10, 11 ;
+    3, 4        // size
+];
+
+let x_slice = matrix[:,0];
+println("x_slice = ", x_slice);
+
+let y_slice = matrix[1,:];
+println("y_slice = ", y_slice);
+
+let mat_slice = matrix[0: 2, 1: 4];
+println("mat_slice = ", mat_slice);
+
+matrix[1,:] += 100;
+y_slice = matrix[1,:];
+println("y_slice = ", y_slice);

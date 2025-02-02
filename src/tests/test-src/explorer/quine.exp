@@ -1,0 +1,29 @@
+
+ [95msyntran 0.0.60[0m
+ [95mhttps://github.com/JeffIrwin/syntran[0m
+
+ Interpreting file "src/tests/test-src/explorer//quine.syntran"
+fn quine(s: str) {
+    let lparen    = char(40);
+    let rparen    = char(41);
+    let quote     = char(34);
+    let semicolon = char(59);
+    println(
+        s + lparen + quote +
+        s + quote + rparen + semicolon
+    );
+    return;
+}
+quine("fn quine(s: str) {
+    let lparen    = char(40);
+    let rparen    = char(41);
+    let quote     = char(34);
+    let semicolon = char(59);
+    println(
+        s + lparen + quote +
+        s + quote + rparen + semicolon
+    );
+    return;
+}
+quine");
+     

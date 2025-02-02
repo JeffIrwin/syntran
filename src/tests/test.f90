@@ -4410,43 +4410,6 @@ end subroutine unit_test_ref
 
 !===============================================================================
 
-subroutine unit_test_recursion(npass, nfail)
-
-	implicit none
-
-	integer, intent(inout) :: npass, nfail
-
-	!********
-
-	character(len = *), parameter :: label = 'recursion'
-
-	! Path to syntran test files from root of repo
-	character(len = *), parameter :: path = 'src/tests/test-src/recursion/'
-
-	logical, parameter :: quiet = .true.
-	logical, allocatable :: tests(:)
-
-	write(*,*) 'Unit testing '//label//' ...'
-
-	tests = &
-		[   &
-			interpret_file(path//'test-01.syntran', quiet) == '0', &
-			interpret_file(path//'test-02.syntran', quiet) == '0', &
-			interpret_file(path//'test-03.syntran', quiet) == '0', &
-			interpret_file(path//'test-04.syntran', quiet) == '0', &
-			interpret_file(path//'test-05.syntran', quiet) == '0', &
-			.false.  & ! so I don't have to bother w/ trailing commas
-		]
-
-	! Trim dummy false element
-	tests = tests(1: size(tests) - 1)
-
-	call unit_test_coda(tests, label, npass, nfail)
-
-end subroutine unit_test_recursion
-
-!===============================================================================
-
 subroutine unit_test_array_bool(npass, nfail)
 
 	! More advanced tests on longer scripts
