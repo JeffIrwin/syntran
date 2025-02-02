@@ -1,6 +1,13 @@
 
 !===============================================================================
 
+#if defined(__GFORTRAN__)
+module ifport
+	! Unfortunately this is the only way i can get fpm to not complain about
+	! ifport with gfortran
+end module ifport
+#endif
+
 module syntran__app_m
 
 	use syntran
@@ -79,6 +86,10 @@ end subroutine get_next_arg
 !===============================================================================
 
 subroutine set_ansi_colors(is_color_in)
+
+#if defined(__INTEL_COMPILER)
+	use ifport  ! isatty() (otherwise it's a gnu extension)
+#endif
 
 	logical, intent(in), optional :: is_color_in
 	logical :: is_color
