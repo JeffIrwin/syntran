@@ -14,9 +14,6 @@
 			);
 	}
 
-	pi;
-	// 3.141593E+00
-
 	// x is 30 degrees (in radians)
 	let x = pi / 6;
 
@@ -37,14 +34,11 @@
 		sign = -sign;
 	}
 
-	sinx;
-	// 4.999999E-01
-
 	let ans = sinx;
 
 	let expect = 0.5;
 	let tol = 1.e-5;
 	let ratio = ans / expect;
-	1 - tol < ratio and ratio < 1 + tol;
+	return 1 - tol < ratio and ratio < 1 + tol;
 }
 

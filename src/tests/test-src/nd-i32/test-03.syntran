@@ -28,7 +28,6 @@ for i in [0: n]
 			a[k,j,i] = v[iv];
 			iv = iv + 1;
 		}
-a;
 
 // Sum rows, columns, and pillars
 
@@ -43,9 +42,6 @@ for j in [0: n]
 	csums[j,i] = sum(a[j,:,i]);
 	psums[j,i] = sum(a[j,i,:]);
 }
-rsums;
-csums;
-psums;
 
 // Verify all sums are the same
 let all_match = true;

@@ -22,8 +22,6 @@
 			k = k + 1;
 		}
 
-	a;
-
 	// Sum rows, columns, and (broken) diagonals
 
 	let rsums = [0; n];
@@ -43,10 +41,6 @@
 			dsums[j] = dsums[j] + a[i, ij];
 		}
 
-	rsums;
-	csums;
-	dsums;
-
 	// Verify all sums are the same
 	let all = true;
 	for i in [0: n]
@@ -56,6 +50,6 @@
 		all = all and dsums[i] == rsums[0];
 	}
 
-	all;
+	return all;
 }
 

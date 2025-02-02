@@ -32,8 +32,6 @@
 				iv = iv + 1;
 			}
 
-	a;
-
 	// Sum rows, columns, and pillars
 
 	let rsums = [0; n, n];
@@ -49,10 +47,6 @@
 				csums[i,k] = csums[i,k] + a[k,j,i];
 			}
 
-	rsums;
-	csums;
-	psums;
-
 	// Verify all sums are the same
 	let all = true;
 	for i in [0: n]
@@ -63,6 +57,6 @@
 			all = all and psums[i,j] == rsums[0,0];
 		}
 
-	all;
+	return all;
 }
 

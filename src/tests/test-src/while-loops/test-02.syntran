@@ -8,6 +8,6 @@
 		p = not p;
 	}
 
-	sum;
+	return sum;
 }
 

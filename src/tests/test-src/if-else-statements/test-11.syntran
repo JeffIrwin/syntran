@@ -34,8 +34,7 @@
 		b = 15;
 	}
 
-	// Final result
-	a + b;
+	return a + b;
 
 }
 

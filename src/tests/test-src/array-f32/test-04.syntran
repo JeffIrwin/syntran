@@ -3,6 +3,6 @@
 	let x = [10.0f: 15.0f; 6];
 	x[3] = -3.0f;
 	let a = x[3];
-	a;
+	return a;
 }
 

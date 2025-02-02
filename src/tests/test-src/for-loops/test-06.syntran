@@ -26,7 +26,6 @@
 			num_primes = num_primes + 1;
 	}
 
-	// Final result
-	num_primes;
+	return num_primes;
 }
 

@@ -13,6 +13,6 @@
 		c = a + b;
 	}
 
-	c;
+	return c;
 }
 

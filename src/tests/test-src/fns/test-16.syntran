@@ -44,18 +44,12 @@ let n = 3;
 let a = [0.0f: 1.0f * (n - 1); n];
 let b = [1.0f * (n+1): -1.0f: 1.5f];
 
-a;
-b;
-
 let ans = add_fn(a, b);
 //let ans = sub_fn(a, b);
-ans;
 
 let expect = [1.0f * (n+1); n];
-expect;
 
 let diff = sub_fn(ans, expect);
-diff;
 
 //let norm = norm_fn(diff);
 //norm;

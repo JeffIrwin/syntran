@@ -443,8 +443,9 @@ recursive module function parse_statement(parser) result(statement)
 				! logic inside of parse_expr_statement() but it is difficult to
 				! get the recursive descent parsing logic correct, especially
 				! considering that it is allowed in the REPL but not in script
-				! files.  It's much easier to parse it unconditionally and then
-				! check it afterwards here
+				! files, and moreso with edge cases like nested assignment.
+				! It's much easier to parse it unconditionally and then check it
+				! afterwards here
 				!
 				! Many tests depend on the REPL style behavior where there is
 				! just one statement, and the value is returned implicitly

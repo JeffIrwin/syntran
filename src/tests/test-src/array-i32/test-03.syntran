@@ -2,6 +2,6 @@
 {
 	let x = [10: 15];
 	let a = x[3];
-	a;
+	return a;
 }
 

@@ -36,6 +36,6 @@
 	}
 
 	// Final result
-	prime;
+	return prime;
 }
 

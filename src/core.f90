@@ -32,6 +32,10 @@ module syntran__core_m
 	! TODO:
 	!  - add recursive fibonacci sample to syntran-explorer
 	!  - roadmap to version 1.0.0:
+	!    * test assignment to void fn calls.  shouldn't be allowed
+	!      * e.g. `let x = println();`
+	!      * did i allow this to stop cascading errors?  i think i used
+	!        unknown_type for that
 	!    * maybe have a trial alpha/beta release 0.1.0 for a bit before 1.0?
 	!    * ban expression statements.  notes below.  compat break
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
@@ -43,6 +47,7 @@ module syntran__core_m
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)
 	!  - REPL styling
+	!    * color is always off in `fpm test test`.  that's not right
 	!    * make ">" like julia.  any other ideas from julia?
 	!    * also note on "Hint" below
 	!  - docker ci/cd stages should test current branch, not main
@@ -204,10 +209,6 @@ module syntran__core_m
 	!      control color options
 	!    * pass after a ` -- `?
 	!    * related: environment variables
-	!  - check assignment to void type? guard against things like
-	!    `let x = println();`
-	!    * did i allow this to stop cascading errors?  i think i used
-	!      unknown_type for that
 	!  - array operations:
 	!    * done: element-wise add, sub, mul, div, pow, mod
 	!      + compound array assignment works but needs unit tests

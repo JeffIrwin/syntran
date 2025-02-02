@@ -54,6 +54,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 	    parser%peek_kind(1) == identifier_token .and. &
 	    parser%peek_kind(2) == equals_token) then
 
+		! TODO: refactor this as parse_let_expr()
+
 		!print *, 'let expr'
 
 		! The if-statement above already verifies tokens, so we can use next()

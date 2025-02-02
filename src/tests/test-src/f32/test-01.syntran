@@ -29,6 +29,6 @@
 
 	let ratio = pi / expect;
 
-	1 - tol < ratio and ratio < 1 + tol;
+	return 1 - tol < ratio and ratio < 1 + tol;
 }
 
