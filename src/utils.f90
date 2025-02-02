@@ -28,6 +28,7 @@ module syntran__utils_m
 			FG_BRIGHT_RED_      = esc//'[91m', &
 			FG_BOLD_BRIGHT_RED_ = esc//'[91;1m', &
 			FG_BRIGHT_GREEN_    = esc//'[92m', &
+			FG_GREEN_           = esc//'[32m', &
 			FG_BRIGHT_BLUE_     = esc//'[94m', &
 			FG_BRIGHT_MAGENTA_  = esc//'[95m', &
 			FG_BRIGHT_CYAN_     = esc//'[96m', &
@@ -40,6 +41,7 @@ module syntran__utils_m
 			fg_bright_red, &
 			fg_bold_bright_red, &
 			fg_bright_green, &
+			fg_green, &
 			fg_bright_blue, &
 			fg_bright_magenta, &
 			fg_bright_cyan, &

@@ -97,6 +97,7 @@ subroutine set_ansi_colors(is_color_in)
 		fg_bright_red      = FG_BRIGHT_RED_
 		fg_bold_bright_red = FG_BOLD_BRIGHT_RED_
 		fg_bright_green    = FG_BRIGHT_GREEN_
+		fg_green           = FG_GREEN_
 		fg_bright_blue     = FG_BRIGHT_BLUE_
 		fg_bright_magenta  = FG_BRIGHT_MAGENTA_
 		fg_bright_cyan     = FG_BRIGHT_CYAN_
@@ -107,6 +108,7 @@ subroutine set_ansi_colors(is_color_in)
 		fg_bright_red      = ""
 		fg_bold_bright_red = ""
 		fg_bright_green    = ""
+		fg_green           = ""
 		fg_bright_blue     = ""
 		fg_bright_magenta  = ""
 		fg_bright_cyan     = ""
