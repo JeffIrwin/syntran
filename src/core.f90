@@ -30,8 +30,9 @@ module syntran__core_m
 		syntran_patch =  61
 
 	! TODO:
+	!  - add recursive fibonacci sample to syntran-explorer
 	!  - roadmap to version 1.0.0:
-	!    * maybe have a trial alpha release 0.1.0 for a bit before 1.0?
+	!    * maybe have a trial alpha/beta release 0.1.0 for a bit before 1.0?
 	!    * ban expression statements.  notes below.  compat break
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
@@ -41,6 +42,9 @@ module syntran__core_m
 	!    * anything else? review the rest of this list
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)
+	!  - REPL styling
+	!    * make ">" like julia.  any other ideas from julia?
+	!    * also note on "Hint" below
 	!  - docker ci/cd stages should test current branch, not main
 	!    * after 1.0 i should be more strict about changing main branch.  add
 	!      branch protection and only change it via PRs

@@ -10,9 +10,14 @@ module syntran__app_m
 
 	implicit none
 
+	character(len = *), parameter :: &
+		COLOR_AUTO = "auto", &
+		COLOR_ON   = "on", &
+		COLOR_OFF  = "off"
+
 	type args_t
 
-		character(len = :), allocatable :: syntran_file, command
+		character(len = :), allocatable :: syntran_file, command, color
 
 		integer :: maxerr
 
@@ -73,6 +78,52 @@ end subroutine get_next_arg
 
 !===============================================================================
 
+subroutine set_ansi_colors(is_color_in)
+
+	logical, intent(in), optional :: is_color_in
+	logical :: is_color
+
+	if (present(is_color_in)) then
+		is_color = is_color_in
+	else
+		! If stdout is a TTY, default to color on.  If stdout is redirected to a
+		! log (not TTY), default to color off because most text editors will not
+		! render ANSI escape sequences
+		is_color = isatty(output_unit)
+	end if
+
+	if (is_color) then
+		fg_bold            = FG_BOLD_
+		fg_bright_red      = FG_BRIGHT_RED_
+		fg_bold_bright_red = FG_BOLD_BRIGHT_RED_
+		fg_bright_green    = FG_BRIGHT_GREEN_
+		fg_bright_blue     = FG_BRIGHT_BLUE_
+		fg_bright_magenta  = FG_BRIGHT_MAGENTA_
+		fg_bright_cyan     = FG_BRIGHT_CYAN_
+		fg_bright_white    = FG_BRIGHT_WHITE_
+		color_reset        = COLOR_RESET_
+	else
+		fg_bold            = ""
+		fg_bright_red      = ""
+		fg_bold_bright_red = ""
+		fg_bright_green    = ""
+		fg_bright_blue     = ""
+		fg_bright_magenta  = ""
+		fg_bright_cyan     = ""
+		fg_bright_white    = ""
+		color_reset        = ""
+	end if
+
+	! These include fg_bold at the end, so the rest of the error message after
+	! the prefix must concatenate color_reset at its end
+	err_prefix     = fg_bold_bright_red//'Error'//fg_bold//': '
+	err_int_prefix = fg_bold_bright_red//'Internal syntran error'//fg_bold//': '
+	err_rt_prefix  = fg_bold_bright_red//'Runtime error'//fg_bold//': '
+
+end subroutine set_ansi_colors
+
+!===============================================================================
+
 function parse_args() result(args)
 
 	! This argument parser is based on http://docopt.org/
@@ -91,6 +142,7 @@ function parse_args() result(args)
 
 	! Defaults
 	args%maxerr = maxerr_def
+	args%color  = COLOR_AUTO
 
 	argc = command_argument_count()
 	!print *, "argc = ", argc
@@ -113,6 +165,25 @@ function parse_args() result(args)
 					//" is not a valid integer"
 				error = .true.
 			end if
+
+		case ("--color")
+			call get_next_arg(i, str_)
+			args%color = str_
+
+			select case (args%color)
+			case (COLOR_AUTO)
+				! Note that set_ansii_colors() is also called in main() to
+				! initially default to auto, in case of errors during
+				! parse_args()
+				call set_ansi_colors()
+
+			case (COLOR_ON, COLOR_OFF)
+				call set_ansi_colors(args%color == COLOR_ON)
+
+			case default
+				write(*,*) err_prefix//"bad --color argument"
+				error = .true.
+			end select
 
 		case ("-c", "--command")
 			args%command_arg = .true.
@@ -204,7 +275,7 @@ function parse_args() result(args)
 
 		write(*,*) fg_bold//"Usage:"//color_reset
 		write(*,*) "    syntran <file.syntran> [--fmax-errors <n>] " &
-			//"[-i | --interactive] [-q | --quiet]"
+			//"[-i | --interactive] [-q | --quiet] [--color (auto|off|on)]"
 		write(*,*) "    syntran"
 		write(*,*) "    syntran -c <cmd> | --command <cmd>"
 		write(*,*) "    syntran -h | --help"
@@ -214,6 +285,7 @@ function parse_args() result(args)
 		write(*,*) "    -h --help           Show this help"
 		write(*,*) "    --version           Show version and build details"
 		write(*,*) "    -c --command <cmd>  Run program passed in as string"
+		write(*,*) "    --color (off|on)    Set ANSI text color [default: auto]"
 		write(*,*) "    --fmax-errors <n>   Limit max " &
 			//"error messages to <n> [default: "//str(maxerr_def)//"]"
 		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"

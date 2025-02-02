@@ -7,14 +7,7 @@ module syntran__errors_m
 
 	implicit none
 
-	! This includes fg_bold at the end, so the rest of the error message after
-	! the prefix must concatenate color_reset at its end
-	character(len = *), parameter :: &
-		err_prefix = fg_bold_bright_red//'Error'//fg_bold//': ', &
-		err_int_prefix = fg_bold_bright_red//'Internal syntran error' &
-			//fg_bold//': ', &
-		err_rt_prefix = fg_bold_bright_red//'Runtime error' &
-			//fg_bold//': '
+	character(len = :), allocatable :: err_prefix, err_int_prefix, err_rt_prefix
 
 	! A text span indicates which characters to underline in a faulty line of
 	! code
