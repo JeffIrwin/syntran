@@ -27,7 +27,7 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  60
+		syntran_patch =  61
 
 	! TODO:
 	!  - roadmap to version 1.0.0:
