@@ -76,8 +76,7 @@
 					  	--link-flag '-static-libgcc -static-libgfortran' \n
 
 					# Test samples from syntran-explorer \n
-					# TODO: test this in release too, and maybe the release \n
-					# binary \n
+					# TODO: test this in the release binary \n
 					dir_='src/tests/test-src/explorer/' \n
 					for f in $dir_/*.syntran ; do
 						fpm run
@@ -128,7 +127,14 @@
 					#ls /lib/x86_64-linux-gnu/ \n
 					#ls /lib/ \n
 
-					#exit 0 \n
+					dir_='src/tests/test-src/explorer/' \n
+					for f in $dir_/*.syntran ; do
+						fpm run
+							--profile release
+							--link-flag '-static-libgcc -static-libgfortran'
+							-- -q $f > ${f%.syntran}.out \n
+						diff ${f%.syntran}.out ${f%.syntran}.exp \n
+					done
 
 					# Test 'shebang' usage with no 'syntran' cmd prefix \n
 					chmod +x ./samples/shebang.syntran \n
