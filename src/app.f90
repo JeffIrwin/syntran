@@ -87,6 +87,9 @@ end subroutine get_next_arg
 
 subroutine set_ansi_colors(is_color_in)
 
+	! Should this be in error.f90 or utils.f90?  This is the only reason
+	! test.f90 needs to use app.f90
+
 #if defined(__INTEL_COMPILER)
 	use ifport  ! isatty() (otherwise it's a gnu extension)
 #endif
