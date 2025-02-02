@@ -21,4 +21,3 @@ quine("fn quine(s: str) {
     return;
 }
 quine");
-     
