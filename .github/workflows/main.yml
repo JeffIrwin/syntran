@@ -76,11 +76,13 @@
 					  	--link-flag '-static-libgcc -static-libgfortran' \n
 
 					# Test samples from syntran-explorer \n
+					# TODO: test this in release too, and maybe the release \n
+					# binary \n
 					dir_='src/tests/test-src/explorer/' \n
 					fpm run
 						--profile debug
 					  	--link-flag '-static-libgcc -static-libgfortran'
-						-- $dir_/arrays.syntran > $dir_/arrays.out \n
+						-- -q $dir_/arrays.syntran > $dir_/arrays.out \n
 					diff $dir_/arrays.out $dir_/arrays.exp \n
 
 					# Short tests only.  Long tests are only done in release \n
