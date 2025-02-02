@@ -79,16 +79,18 @@
 					# TODO: test this in release too, and maybe the release \n
 					# binary \n
 					dir_='src/tests/test-src/explorer/' \n
-					fpm run
-						--profile debug
-					  	--link-flag '-static-libgcc -static-libgfortran'
-						-- -q $dir_/arrays.syntran > $dir_/arrays.out \n
-					diff $dir_/arrays.out $dir_/arrays.exp \n
+					for f in $dir_/*.syntran ; do
+						fpm run
+							--profile debug
+							--link-flag '-static-libgcc -static-libgfortran'
+							-- -q $f > ${f%.syntran}.out \n
+						diff ${f%.syntran}.out ${f%.syntran}.exp \n
+					done
 
 					# Short tests only.  Long tests are only done in release \n
 					fpm test test
-					  --profile debug
-					  --link-flag '-static-libgcc -static-libgfortran' \n
+						--profile debug
+						--link-flag '-static-libgcc -static-libgfortran' \n
 				"
 			},
 			{
