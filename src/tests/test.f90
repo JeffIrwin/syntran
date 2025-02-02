@@ -4697,11 +4697,13 @@ end module test_m
 
 program test
 
+	use syntran__app_m
 	use test_m
 	implicit none
 
 	integer :: io
 
+	call set_ansi_colors()
 	call unit_tests(io)
 	call exit(io)
 

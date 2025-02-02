@@ -204,11 +204,13 @@ program long
 
 	! Run with `fpm test long`
 
+	use syntran__app_m
 	use long_m
 	implicit none
 
 	integer :: io
 
+	call set_ansi_colors()
 	call unit_tests_long(io)
 	call exit(io)
 

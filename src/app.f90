@@ -94,13 +94,16 @@ subroutine set_ansi_colors(is_color_in)
 	logical, intent(in), optional :: is_color_in
 	logical :: is_color
 
+	!print *, "starting set_ansi_colors()"
 	if (present(is_color_in)) then
 		is_color = is_color_in
+		!print *, "is_color_in = ", is_color_in
 	else
 		! If stdout is a TTY, default to color on.  If stdout is redirected to a
 		! log (not TTY), default to color off because most text editors will not
 		! render ANSI escape sequences
 		is_color = isatty(output_unit)
+		!print *, "is_color_in not present"
 	end if
 
 	if (is_color) then
