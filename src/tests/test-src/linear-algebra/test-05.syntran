@@ -51,10 +51,6 @@ let roty =
 		3, 3
 	];
 
-// Apply identity transformation
-mul_mat_vec(eye3, vec);
-// [1.0f, 2.0f, 3.0f]
-
 // Apply 90 degree x rotation
 return mul_mat_vec(rotx, vec);
 // [1.0f, -3.0f, 2.0f]

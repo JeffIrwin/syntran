@@ -408,64 +408,73 @@ recursive module function parse_statement(parser) result(statement)
 	type(text_span_t) :: span
 
 	select case (parser%current_kind())
+	case (lbrace_token)
+		statement = parser%parse_block_statement()
 
-		case (lbrace_token)
-			statement = parser%parse_block_statement()
+	case (if_keyword)
+		statement = parser%parse_if_statement()
 
-		case (if_keyword)
-			statement = parser%parse_if_statement()
+	case (for_keyword)
+		statement = parser%parse_for_statement()
 
-		case (for_keyword)
-			statement = parser%parse_for_statement()
+	case (while_keyword)
+		statement = parser%parse_while_statement()
 
-		case (while_keyword)
-			statement = parser%parse_while_statement()
+	case (return_keyword)
+		statement = parser%parse_return_statement()
 
-		case (return_keyword)
-			statement = parser%parse_return_statement()
+	case (break_keyword)
+		statement = parser%parse_break_statement()
 
-		case (break_keyword)
-			statement = parser%parse_break_statement()
+	case (continue_keyword)
+		statement = parser%parse_continue_statement()
 
-		case (continue_keyword)
-			statement = parser%parse_continue_statement()
+	case default
+		pos_beg   = parser%peek_pos(0)
+		statement = parser%parse_expr_statement()
+		pos_end   = parser%peek_pos(0)
+		semi      = parser%match(semicolon_token)
 
-		case default
-			pos_beg   = parser%peek_pos(0)
-			statement = parser%parse_expr_statement()
-			pos_end   = parser%peek_pos(0)
-			semi      = parser%match(semicolon_token)
+		if (.not. parser%repl .and. parser%ipass > 0) then
+			!print *, "statement kind = ", kind_name(statement%kind)
 
-			if (.not. parser%repl .and. parser%ipass > 0) then
-				!print *, "statement kind = ", kind_name(statement%kind)
+			! Ban expression statements.  I tried for a while to put this
+			! logic inside of parse_expr_statement() but it is difficult to
+			! get the recursive descent parsing logic correct, especially
+			! considering that it is allowed in the REPL but not in script
+			! files, and moreso with edge cases like nested assignment.
+			! It's much easier to parse it unconditionally and then check it
+			! afterwards here
+			!
+			! Many tests depend on the REPL style behavior where there is
+			! just one statement, and the value is returned implicitly
+			! without an explicit `return`
 
-				! Ban expression statements.  I tried for a while to put this
-				! logic inside of parse_expr_statement() but it is difficult to
-				! get the recursive descent parsing logic correct, especially
-				! considering that it is allowed in the REPL but not in script
-				! files, and moreso with edge cases like nested assignment.
-				! It's much easier to parse it unconditionally and then check it
-				! afterwards here
-				!
-				! Many tests depend on the REPL style behavior where there is
-				! just one statement, and the value is returned implicitly
-				! without an explicit `return`
+			select case (statement%kind)
+			case (let_expr, assignment_expr)
+				! Do nothing
 
-				select case (statement%kind)
-				case (let_expr, assignment_expr, fn_call_expr, fn_call_intr_expr)
-					! Do nothing
+			case (fn_call_expr, fn_call_intr_expr)
+				! Only allow void fn call statements?  Don't allow
+				! discarding fn return value
 
-					! TODO: only allow void fn calls?  Don't allow discarding
-					! fn return value
+				!print *, "fn ret type = ", kind_name(statement%val%type)
 
-				case default
+				if (statement%val%type /= void_type) then
 					span = new_span(pos_beg, pos_end - pos_beg + 1)
 					call parser%diagnostics%push( &
 						err_bad_expr(parser%context(), &
 						span))
-				end select
+				end if
 
-			end if
+			case default
+				span = new_span(pos_beg, pos_end - pos_beg + 1)
+				call parser%diagnostics%push( &
+					err_bad_expr(parser%context(), &
+					span))
+			end select
+
+		end if
 
 	end select
 

@@ -49,7 +49,13 @@ module syntran__core_m
 	!  - REPL styling
 	!    * color is always off in `fpm test test`.  that's not right
 	!    * make ">" like julia.  any other ideas from julia?
-	!    * also note on "Hint" below
+	!    * remove "Hint" from REPL?  It's not wrong, but it's often noisy and not
+	!      helpful
+	!      + on the other hand, the semicolon requirement could be a major
+	!        stumbling block for new users coming from fortran, julia, matlab,
+	!        python, etc.  maybe enable hints only for semicolons.  could later
+	!        extend to hint levels (off, semicolon-only, or fully on) set by an
+	!        env var, but that isn't pressing
 	!  - docker ci/cd stages should test current branch, not main
 	!    * after 1.0 i should be more strict about changing main branch.  add
 	!      branch protection and only change it via PRs
@@ -71,8 +77,6 @@ module syntran__core_m
 	!    * recursive fns are available, but not structs
 	!  - allow for loops that iterate on chars in a str
 	!  - minloc, maxloc, findloc fns
-	!  - remove "Hint" from REPL?  It's not wrong, but it's often noisy and not
-	!    helpful
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
 	!    * just use `reshape` and call the fortran built-in.  no need for any

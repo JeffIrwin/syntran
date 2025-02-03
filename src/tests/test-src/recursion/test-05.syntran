@@ -221,7 +221,7 @@ fn main(): i32
 
 	//println("my_grid = ", my_grid);
 
-	solve_sudoku(&my_grid);
+	let can_solve = solve_sudoku(&my_grid);
 
 	//println("my_grid = ", my_grid);
 
