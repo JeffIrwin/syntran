@@ -210,7 +210,7 @@ program long
 
 	integer :: io
 
-	call set_ansi_colors()
+	call set_ansi_colors(.true.)
 	call unit_tests_long(io)
 	call exit(io)
 
