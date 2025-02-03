@@ -34,11 +34,8 @@ module syntran__compiler_m
 
 	! TODO: 
 	!
-	! Follow up on github issue (already closed with gfort downgrade workaround,
-	! but now it's fixed for real)
-	!
-	! Also re-test the Windows issue.  It's possible that some of these memory
-	! corruption bugs have helped there too
+	! Re-test the Windows issue.  It's possible that some of these memory
+	! corruption bugs have helped there too after getting gfortran 13+ fixed
 
 	character(len = *), parameter :: fort_compiler = "unknown"
 	integer, parameter :: fort_vers(*) = []

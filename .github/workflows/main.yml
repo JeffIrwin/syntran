@@ -88,6 +88,7 @@
 
 					# Short tests only.  Long tests are only done in release \n
 					fpm test test
+						--color on
 						--profile debug
 						--link-flag '-static-libgcc -static-libgfortran' \n
 				"

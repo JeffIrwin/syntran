@@ -30,6 +30,7 @@ module syntran__core_m
 		syntran_patch =  61
 
 	! TODO:
+	!  - fix colors in ci/cd.  might need to add "--color on" in yml
 	!  - add recursive fibonacci sample to syntran-explorer
 	!  - roadmap to version 1.0.0:
 	!    * test assignment to void fn calls.  shouldn't be allowed
@@ -177,12 +178,12 @@ module syntran__core_m
 	!          "main" returns
 	!  - consider using subroutines with out-args instead of fn return vals for
 	!    parse_*() fns?  i believe this is the source of segfaults for gfortran
-	!    8 and maybe 13.  subroutines allow passing-by-reference instead of
-	!    requiring a copy of a complex syntax_node_t type on return.  would this
-	!    eliminate all node copies?  it could be a lot of work, gfortran 8 might
-	!    still segfault, and code will be uglier with out-args instead of return
-	!    vals. is copying syntax_node_t a perf bottleneck? i suspect that eval
-	!    is bottleneck and not parsing, but i haven't actually benchmarked poor
+	!    8. subroutines allow passing-by-reference instead of requiring a copy
+	!    of a complex syntax_node_t type on return.  would this eliminate all
+	!    node copies?  it could be a lot of work, gfortran 8 might still
+	!    segfault, and code will be uglier with out-args instead of return vals.
+	!    is copying syntax_node_t a perf bottleneck? i suspect that eval is
+	!    bottleneck and not parsing, but i haven't actually benchmarked poor
 	!    perf of intel compilers for AOC solution tests
 	!  - hacker sdk:
 	!    * bitwise operations
