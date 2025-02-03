@@ -4703,7 +4703,7 @@ program test
 
 	integer :: io
 
-	call set_ansi_colors()
+	call set_ansi_colors(.true.)
 	call unit_tests(io)
 	call exit(io)
 
