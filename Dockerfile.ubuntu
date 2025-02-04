@@ -25,9 +25,13 @@ RUN $FC --version
 
 RUN apt-get install -y git
 
-## TODO: caller should set the branch arg as a cmd arg
-#ARG BRANCH="recursion"
+## Caller can set the branch as a cmd arg like this:
+##
+##     docker build . --file Dockerfile.ubuntu -t sy --build-arg BRANCH=dev
+##
+#ARG BRANCH="dev"
 ARG BRANCH="main"
+RUN echo "BRANCH = $BRANCH"
 
 RUN git clone https://github.com/jeffirwin/syntran --branch "$BRANCH"
 WORKDIR /workdir/syntran

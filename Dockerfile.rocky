@@ -2,23 +2,11 @@
 #FROM rockylinux:8  # can't figure out how to get gfortran 11 on rocky 8 :(
 FROM rockylinux:9
 
-WORKDIR workdir
+WORKDIR /workdir
 
 RUN dnf update -y
 RUN dnf install -y vim
-
-## syntran crashes almost immediately with gfortran 13
-ARG GFORT_VERS="11"
-#ARG GFORT_VERS="12"
-#ARG GFORT_VERS="13"
-
 RUN dnf install -y gcc-gfortran
-#RUN dnf install -y gcc-toolset-12-gcc-gfortran
-
-##RUN dnf install -y gfortran
-#RUN dnf install -y gfortran-${GFORT_VERS}
-#RUN cp $(which "gfortran-${GFORT_VERS}") /usr/bin/gfortran
-
 #RUN dnf install -y curl
 
 RUN gfortran --version
@@ -28,11 +16,6 @@ RUN gfortran --version
 # clone the whole repo
 
 RUN dnf install -y git
-#COPY src ./src
-#COPY fpm.toml .
-#COPY gen-header.sh .
-RUN git clone https://github.com/jeffirwin/syntran
-WORKDIR syntran
 
 ADD https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64 ./fpm
 #RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64
@@ -42,6 +25,16 @@ ADD https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_
 RUN chmod +x fpm
 RUN mv fpm /usr/local/bin
 RUN fpm --version
+
+#COPY src ./src
+#COPY fpm.toml .
+#COPY gen-header.sh .
+
+ARG BRANCH="main"
+RUN echo "BRANCH = $BRANCH"
+
+RUN git clone https://github.com/jeffirwin/syntran --branch "$BRANCH"
+WORKDIR /workdir/syntran
 
 RUN yes | fpm clean
 
