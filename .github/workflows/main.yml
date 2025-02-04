@@ -306,11 +306,15 @@
 			{
 				# Test the binary artifact that was uploaded by this branch's run
 				"uses": "actions/download-artifact@v4",
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"with": {"name": "syntran-linux"},
 			},
 			{
+				"if": "matrix.os == 'ubuntu-22.04'",
 				"run":
 				"
+					# TODO: still need to actually copy the bin into a docker
+					# container and test it\n
 					echo 'hello world' \n
 					ls -ltrh \n
 					ls -ltrh synt* \n
