@@ -14,7 +14,7 @@
 
 FROM rockylinux:9
 
-WORKDIR workdir
+WORKDIR /workdir
 
 RUN dnf update -y
 #RUN dnf install -y vim
@@ -28,17 +28,16 @@ RUN dnf install -y file
 RUN dnf install -y findutils  # needed?
 RUN dnf install -y which      # needed?
 
-# Relative to /workdir
 ARG SRC_DIR="gcc-src"
 
 RUN git clone \
 	https://github.com/gcc-mirror/gcc.git \
 	--depth 1 \
-	#--branch releases/gcc-12.2.0 \
-	--branch releases/gcc-12 \
+	##--branch releases/gcc-12.2.0 \
+	#--branch releases/gcc-12 \
 	$SRC_DIR
 
-WORKDIR $SRC_DIR
+WORKDIR /workdir/$SRC_DIR
 
 RUN ./contrib/download_prerequisites
 WORKDIR ../objdir
@@ -72,8 +71,12 @@ RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$BIN_DIR/lib64" >> ~/.bashrc
 # Build syntran
 
 WORKDIR /workdir
-RUN git clone https://github.com/jeffirwin/syntran
-WORKDIR syntran
+
+ARG BRANCH="main"
+RUN echo "BRANCH = $BRANCH"
+
+RUN git clone https://github.com/jeffirwin/syntran --branch "$BRANCH"
+WORKDIR /workdir/syntran
 
 # Install fpm from binary
 RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64

@@ -30,15 +30,18 @@ module syntran__core_m
 		syntran_patch =  61
 
 	! TODO:
-	!  - fix colors in ci/cd.  might need to add "--color on" in yml
 	!  - add recursive fibonacci sample to syntran-explorer
 	!  - roadmap to version 1.0.0:
+	!    * expression statements are gone except for REPL.  check for any
+	!      vestigial "HolyC" style prints.  just make sure removing them doesn't
+	!      break the REPL
+	!      + running `x;` after previously assigning x prints its val twice in
+	!        the REPL.  this can probably be fixed
 	!    * test assignment to void fn calls.  shouldn't be allowed
 	!      * e.g. `let x = println();`
 	!      * did i allow this to stop cascading errors?  i think i used
 	!        unknown_type for that
 	!    * maybe have a trial alpha/beta release 0.1.0 for a bit before 1.0?
-	!    * ban expression statements.  notes below.  compat break
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
 	!      + should readln() take a ref?  the file is technically an in/out arg
@@ -58,6 +61,8 @@ module syntran__core_m
 	!        extend to hint levels (off, semicolon-only, or fully on) set by an
 	!        env var, but that isn't pressing
 	!  - docker ci/cd stages should test current branch, not main
+	!    * i think this is fixed.  need to double confirm by bumping version
+	!      number or something obvious
 	!    * after 1.0 i should be more strict about changing main branch.  add
 	!      branch protection and only change it via PRs
 	!    * should have a dev branch where work is done, main should only change
@@ -122,19 +127,6 @@ module syntran__core_m
 	!      effectively using the struct identifier as a namespace
 	!    * inside member fns, you should be allowed to just write `var` instead
 	!      of `this.var`
-	!  - ban expression statements?
-	!    * these were needed before i had the return statement
-	!    * they were also used for HolyC-style implicit prints, which should
-	!      also probably be removed
-	!    * now it causes issues if i accidentally do a line like this:
-	!          x == y;
-	!      instead of:
-	!          x = y;
-	!      the first implicit bool expr line is currently allowed but never what
-	!      i meant!
-	!    * how can interactive interpretter still be used as a desktop
-	!      calculator tho? maybe have a "mode" flag which is set differently for
-	!      interactive runs (if there isn't already one)
 	!  - pass by reference for subscripted array name expressions and dot
 	!    expressions
 	!    * done for regular variable name expressions

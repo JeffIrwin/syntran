@@ -498,20 +498,42 @@
 			},
 		]
 	},
-	"test-linux-bin": {
+	"test-linux-release-bin": {
 		# Test binary syntran installations on dockerfiles from ./docker/
 		# dir.  These download the latest github "release", so there will be
 		# a lag between when you build the release and manually upload a
 		# binary package to github
-		"name": "Test linux bin",
+		"name": "Test linux release bin",
 		"runs-on": "ubuntu-latest",
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
-				"name": "Test linux bin",
+				"name": "Test linux release bin",
 				"run":
 				"
 					bash ./test-bin.sh \n
+				"
+			},
+		]
+	},
+	"test-linux-branch-bin": {
+		# Test the binary artifact that was uploaded by this branch's run
+		"name": "Test linux branch bin",
+		"runs-on": "ubuntu-latest",
+		"steps": [
+			{"uses": "actions/checkout@v1"},
+			{
+				"uses": "actions/download-artifact@v4",
+				"with": {"name": "syntran-linux"}
+			},
+			{
+				"name": "Test linux branch bin",
+				"run":
+				"
+					echo 'hello world' \n
+					ls -ltrh \n
+					ls -ltrh synt* \n
+					#bash ./test-bin.sh \n
 				"
 			},
 		]

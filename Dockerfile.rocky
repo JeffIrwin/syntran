@@ -46,12 +46,14 @@ RUN ./gen-header.sh
 #RUN fpm test test --compiler gfortran
 ##RUN fpm test long --compiler gfortran
 
-ARG PROFILE release
-#ARG PROFILE debug
+ARG PROFILE="release"
+#ARG PROFILE="debug"
 
 #RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -static-libquadmath"
 #RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"
 #RUN find ./build -wholename "*app/syntran" | xargs ls -ltrh
+
+RUN echo "PROFILE = $PROFILE"
 
 #RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran"
 RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
