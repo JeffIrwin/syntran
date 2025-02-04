@@ -303,6 +303,28 @@
 					"name": "syntran-linux"
 				}
 			},
+			"test-linux-branch-bin": {
+				# Test the binary artifact that was uploaded by this branch's run
+				"name": "Test linux branch bin",
+				"runs-on": "ubuntu-latest",
+				"steps": [
+					{"uses": "actions/checkout@v1"},
+					{
+						"uses": "actions/download-artifact@v4",
+						"with": {"name": "syntran-linux"}
+					},
+					{
+						"name": "Test linux branch bin",
+						"run":
+						"
+							echo 'hello world' \n
+							ls -ltrh \n
+							ls -ltrh synt* \n
+							#bash ./test-bin.sh \n
+						"
+					},
+				]
+			},
 			#{
 			#	# TODO: just remove conditional from other test stage.  This
 			#	# never used to work on Windows bc gfortran-compiled bins
@@ -512,28 +534,6 @@
 				"run":
 				"
 					bash ./test-bin.sh \n
-				"
-			},
-		]
-	},
-	"test-linux-branch-bin": {
-		# Test the binary artifact that was uploaded by this branch's run
-		"name": "Test linux branch bin",
-		"runs-on": "ubuntu-latest",
-		"steps": [
-			{"uses": "actions/checkout@v1"},
-			{
-				"uses": "actions/download-artifact@v4",
-				"with": {"name": "syntran-linux"}
-			},
-			{
-				"name": "Test linux branch bin",
-				"run":
-				"
-					echo 'hello world' \n
-					ls -ltrh \n
-					ls -ltrh synt* \n
-					#bash ./test-bin.sh \n
 				"
 			},
 		]
