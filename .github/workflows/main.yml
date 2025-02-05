@@ -388,7 +388,7 @@
 				"with":
 				{
 					"name": "syntran-rocky",
-					"path": "artifact-download",
+					"path": "docker/artifact-download",
 				},
 			},
 			{
