@@ -46,9 +46,8 @@ RUN ./gen-header.sh
 #RUN fpm test test --compiler gfortran
 ##RUN fpm test long --compiler gfortran
 
-## TODO: only using debug temporarily to speed up ci/cd testing
-#ARG PROFILE="release"
-ARG PROFILE="debug"
+ARG PROFILE="release"
+#ARG PROFILE="debug"
 
 #RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -static-libquadmath"
 #RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"

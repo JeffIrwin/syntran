@@ -267,10 +267,9 @@ function parse_args() result(args)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
 			if (args%version) then
-				write(*,*) fg_bright_magenta// &
-				               "git commit = "//git_commit
-				write(*,*)     "build date = "//build_date
-				write(*,*)     "fortran compiler = "//fort_compiler//" "// &
+				write(*,*) fg_bright_magenta//"git commit = "//git_commit//color_reset
+				write(*,*) fg_bright_magenta//"build date = "//build_date//color_reset
+				write(*,*) fg_bright_magenta//"fortran compiler = "//fort_compiler//" "// &
 					str(fort_vers)//color_reset
 			end if
 			write(*,*)
