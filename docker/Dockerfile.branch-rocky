@@ -1,0 +1,32 @@
+
+FROM rockylinux:9
+
+WORKDIR /workdir
+
+#RUN yum update -y
+##RUN yum install -y curl
+##RUN yum install -y unzip
+
+#ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-rocky.zip"
+#ADD "$SY_URL" ./syntran-rocky.zip
+#RUN unzip syntran-rocky*.zip
+#RUN rm syntran-rocky*.zip
+#RUN chmod +x ./syntran
+#
+##RUN mv syntran libquadmath.so.* libc.so.* /usr/local/bin
+#RUN mv syntran libquadmath.so.* libgfortran.so.* /usr/local/bin
+
+RUN ls -ltrh
+COPY artifact-download ./artifact-download
+RUN ls -ltrh
+RUN ls -ltrh artif*
+
+RUN mv artifact-download/* /usr/local/bin
+RUN chmod +x /usr/local/bin/syntran
+
+# Set LD_LIBRARY_PATH for dependent libs
+RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/bin" >> ~/.bashrc
+
+RUN source ~/.bashrc && syntran --version
+RUN source ~/.bashrc && syntran -c 'println("hello world");'
+

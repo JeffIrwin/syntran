@@ -313,9 +313,6 @@
 				"if": "matrix.os == 'ubuntu-22.04'",
 				"run":
 				"
-					# TODO: still need to actually copy the bin into a docker
-					# container and test it\n
-					echo 'hello world' \n
 					ls -ltrh \n
 					ls -ltrh synt* \n
 					#bash ./test-bin.sh \n
@@ -384,6 +381,26 @@
 					"path": "./bin/syntran\n./bin/libquadmath.so.0\n./bin/libgfortran.so.5",
 					"name": "syntran-rocky"
 				}
+			},
+			{
+				# Test the binary artifact that was uploaded by this branch's run
+				"uses": "actions/download-artifact@v4",
+				"with":
+				{
+					"name": "syntran-rocky",
+					"path": "artifact-download",
+				},
+			},
+			{
+				"run":
+				"
+					# TODO: still need to actually copy the bin into a docker
+					# container and test it \n
+					echo 'hello rocky world' \n
+					ls -ltrh \n
+					ls -ltrh artif* \n
+					#bash ./test-bin.sh \n
+				"
 			},
 		]
 	},

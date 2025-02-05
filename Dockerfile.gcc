@@ -88,12 +88,17 @@ RUN fpm --version
 #ARG LINK_FLAGS="-static-libgfortran"
 ARG LINK_FLAGS="-static-libgfortran -static-libgcc"
 
+# Remove gcc >= 15 guard with sed.  It works, but gfortran 15 is not released
+# yet AFAIK, so I would prefer to leave the guard in until it's official
+RUN sed -i 's/#error.*//g' src/compiler.F90
+
 #RUN . ~/.bashrc && fpm install --link-flag "-l/workdir/gcc/lib64/libgfortran.a" --prefix="/usr/"
 
 RUN echo 2
 RUN . ~/.bashrc && fpm build     --link-flag "$LINK_FLAGS"
 RUN . ~/.bashrc && fpm test test --link-flag "$LINK_FLAGS"
 RUN . ~/.bashrc && fpm install   --link-flag "$LINK_FLAGS" --prefix="/usr/"
+RUN . ~/.bashrc && fpm test long --link-flag "$LINK_FLAGS"
 
 ## TODO install release profile
 
