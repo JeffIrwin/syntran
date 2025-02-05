@@ -398,7 +398,7 @@
 					# container and test it \n
 					echo 'hello rocky world' \n
 					ls -ltrh \n
-					ls -ltrh artif* \n
+					ls -ltrh docker/artif* \n
 					#bash ./test-bin.sh \n
 					docker build ./docker/ --file ./docker/Dockerfile.branch-rocky \n
 				"
