@@ -30,6 +30,12 @@ module syntran__core_m
 		syntran_patch =  61
 
 	! TODO:
+	!  - appimage?  some kind of binary packaging improvement
+	!    * the current dependence on libquadmath.so (and sometimes
+	!      libgfortran.so) is not ideal, especially considering that rocky is
+	!      worse than ubuntu.  it would be nice if everything was truly
+	!      statically bundled into one file
+	!    * is appimage the standard tool for this?  how does fpm do it?
 	!  - add recursive fibonacci sample to syntran-explorer
 	!  - roadmap to version 1.0.0:
 	!    * expression statements are gone except for REPL.  check for any

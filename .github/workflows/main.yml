@@ -307,15 +307,17 @@
 				# Test the binary artifact that was uploaded by this branch's run
 				"uses": "actions/download-artifact@v4",
 				"if": "matrix.os == 'ubuntu-22.04'",
-				"with": {"name": "syntran-linux"},
+				"with":
+				{
+					"name": "syntran-linux",
+					"path": "docker/artifact-download",
+				},
 			},
 			{
 				"if": "matrix.os == 'ubuntu-22.04'",
 				"run":
 				"
-					ls -ltrh \n
-					ls -ltrh synt* \n
-					#bash ./test-bin.sh \n
+					docker build ./docker/ --file ./docker/Dockerfile.branch-ubuntu \n
 				"
 			},
 			#{
@@ -383,7 +385,7 @@
 				}
 			},
 			{
-				# Test the binary artifact that was uploaded by this branch's run
+				# Get the binary artifact that was uploaded by this branch's run
 				"uses": "actions/download-artifact@v4",
 				"with":
 				{
@@ -392,14 +394,13 @@
 				},
 			},
 			{
+				# Test the binary artifact that was uploaded by this branch's run
 				"run":
 				"
-					# TODO: still need to actually copy the bin into a docker
-					# container and test it \n
-					echo 'hello rocky world' \n
-					ls -ltrh \n
-					ls -ltrh docker/artif* \n
-					#bash ./test-bin.sh \n
+					# TODO: also test alma, kali, etc., everything that is
+					# covered by test-bin.sh.  Split appropriately based on
+					# rocky binary vs other distro binary \n
+
 					docker build ./docker/ --file ./docker/Dockerfile.branch-rocky \n
 				"
 			},

@@ -1,5 +1,5 @@
 
-FROM rockylinux:9
+FROM ubuntu:latest
 
 WORKDIR /workdir
 
