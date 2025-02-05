@@ -400,6 +400,7 @@
 					ls -ltrh \n
 					ls -ltrh artif* \n
 					#bash ./test-bin.sh \n
+					docker build ./docker/ --file ./docker/Dockerfile.branch-rocky \n
 				"
 			},
 		]
