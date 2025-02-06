@@ -55,6 +55,8 @@ ARG PROFILE="release"
 
 RUN echo "PROFILE = $PROFILE"
 
+# libgfortran.a does not exist on rocky so we cannot statically link it :(
+
 #RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran"
 RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
 RUN fpm test test --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"

@@ -30,6 +30,8 @@ module syntran__core_m
 		syntran_patch =  61
 
 	! TODO:
+	!  - test rocky 10 circa May 2025, that's when they're planning to release
+	!    it
 	!  - appimage?  some kind of binary packaging improvement
 	!    * the current dependence on libquadmath.so (and sometimes
 	!      libgfortran.so) is not ideal, especially considering that rocky is
@@ -43,10 +45,6 @@ module syntran__core_m
 	!      break the REPL
 	!      + running `x;` after previously assigning x prints its val twice in
 	!        the REPL.  this can probably be fixed
-	!    * test assignment to void fn calls.  shouldn't be allowed
-	!      * e.g. `let x = println();`
-	!      * did i allow this to stop cascading errors?  i think i used
-	!        unknown_type for that
 	!    * maybe have a trial alpha/beta release 0.1.0 for a bit before 1.0?
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
@@ -57,8 +55,7 @@ module syntran__core_m
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)
 	!  - REPL styling
-	!    * color is always off in `fpm test test`.  that's not right
-	!    * make ">" like julia.  any other ideas from julia?
+	!    * any other ideas from julia?  got their green prompt
 	!    * remove "Hint" from REPL?  It's not wrong, but it's often noisy and not
 	!      helpful
 	!      + on the other hand, the semicolon requirement could be a major
