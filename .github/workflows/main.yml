@@ -401,7 +401,12 @@
 					# covered by test-bin.sh.  Split appropriately based on
 					# rocky binary vs other distro binary \n
 
-					docker build ./docker/ --file ./docker/Dockerfile.branch-rocky \n
+					# Can rocky binary be the official linux binary?  Don't need
+					# to get rid of ubuntu binary, but rename them and test
+					# rocky on all distros \n
+
+					bash ./test-branch.sh \n
+					#docker build ./docker/ --file ./docker/Dockerfile.branch-rocky \n
 				"
 			},
 		]
