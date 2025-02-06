@@ -397,16 +397,15 @@
 				# Test the binary artifact that was uploaded by this branch's run
 				"run":
 				"
-					# TODO: also test alma, kali, etc., everything that is
-					# covered by test-bin.sh.  Split appropriately based on
-					# rocky binary vs other distro binary \n
-
-					# Can rocky binary be the official linux binary?  Don't need
-					# to get rid of ubuntu binary, but rename them and test
-					# rocky on all distros \n
+					# TODO:  can rocky binary be the official linux binary?
+					# Don't need to get rid of ubuntu binary, but rename them
+					# and test rocky on all distros \n
+					#
+					# I guess this is a compatibility break if anyone has
+					# scripted a curl of syntran-rocky.zip, which will be gone
+					# \n
 
 					bash ./test-branch.sh \n
-					#docker build ./docker/ --file ./docker/Dockerfile.branch-rocky \n
 				"
 			},
 		]
