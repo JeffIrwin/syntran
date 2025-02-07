@@ -85,6 +85,8 @@ module syntran__core_m
 	!  - recursive data structs?
 	!    * recursive fns are available, but not structs
 	!  - allow for loops that iterate on chars in a str
+	!    * done
+	!    * TODO: tests
 	!  - minloc, maxloc, findloc fns
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.

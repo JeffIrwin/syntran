@@ -272,9 +272,12 @@ recursive module function parse_for_statement(parser) result(statement)
 
 		! I guess we could allow a 1-loop iteration on a scalar if that's
 		! worthwhile.  Eval would need some work
-		span = new_span(arr_beg, arr_end - arr_beg + 1)
-		call parser%diagnostics%push(err_non_array_loop( &
-			parser%context(), span, parser%text(arr_beg, arr_end)))
+
+		if (array%val%type /= str_type) then
+			span = new_span(arr_beg, arr_end - arr_beg + 1)
+			call parser%diagnostics%push(err_non_array_loop( &
+				parser%context(), span, parser%text(arr_beg, arr_end)))
+		end if
 
 	end if
 

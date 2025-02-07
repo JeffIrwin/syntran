@@ -1917,8 +1917,7 @@ recursive subroutine eval_for_statement(node, state, res)
 	integer(kind = 8) :: i8, len8
 
 	type(array_t) :: array
-	type(value_t) :: lbound_, ubound_, itr, &
-		step, len_, tmp
+	type(value_t) :: lbound_, ubound_, itr, step, len_, tmp, str_
 
 	! Evaluate all of these ahead of loop, but only if they are allocated!
 	if (allocated(node%array%lbound)) call syntax_eval(node%array%lbound, state, lbound_)
@@ -1931,6 +1930,7 @@ recursive subroutine eval_for_statement(node, state, res)
 	!print *, 'lbound type = ', kind_name(lbound_%type)
 	!print *, 'ubound type = ', kind_name(ubound_%type)
 	!print *, 'node%array%type = ', kind_name(node%array%val%array%type)
+	!print *, 'node type = ', kind_name(node%array%val%type)
 
 	!print *, 'node array kind = ', kind_name(node%array%kind)
 	!print *, 'array kind      = ', kind_name(node%array%val%array%kind)
@@ -2065,18 +2065,34 @@ recursive subroutine eval_for_statement(node, state, res)
 	case default
 		!print *, 'non-primary array expression'
 
-		! Any non-primitive array needs to be evaluated before iterating
-		! over it.  Parser guarantees that this is an array
-		!
-		! Unlike step_array, itr%type does not need to be set here because
-		! it is set in array_at() (via get_array_val())
-		for_kind = array_expr
+		if (node%array%val%type == str_type) then
 
-		call syntax_eval(node%array, state, tmp)
-		array = tmp%array
+			! Allow iterating on chars in a str
 
-		len8 = array%len_
-		!print *, 'len8 = ', len8
+			for_kind = str_type
+			call syntax_eval(node%array, state, tmp)
+			call value_move(tmp, str_)
+			len8 = len(str_%sca%str%s, 8)
+			itr%type = str_type
+
+			!print *, "str_ = ", str_%sca%str%s
+
+		else
+
+			! Any non-primitive array needs to be evaluated before iterating
+			! over it.  Parser guarantees that this is an array
+			!
+			! Unlike step_array, itr%type does not need to be set here because
+			! it is set in array_at() (via get_array_val())
+			for_kind = array_expr
+
+			call syntax_eval(node%array, state, tmp)
+			array = tmp%array  ! TODO: move instead of copy?
+
+			len8 = array%len_
+			!print *, 'len8 = ', len8
+
+		end if
 
 	end select
 
@@ -2094,7 +2110,7 @@ recursive subroutine eval_for_statement(node, state, res)
 		state%continued = .false.
 
 		call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
-			len_, array, node%array%elems, state)
+			len_, array, node%array%elems, str_, state)
 
 		!print *, 'itr = ', itr%to_str()
 
@@ -3660,7 +3676,7 @@ end function subscript_eval
 !===============================================================================
 
 subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
-		elems, state)
+		elems, str_, state)
 
 	! This lazily gets an array value at an index i without expanding the whole
 	! implicit array in memory.  Used for for loops
@@ -3683,6 +3699,8 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 	type(array_t), intent(in) :: array
 
 	type(syntax_node_t), allocatable :: elems(:)
+
+	type(value_t), intent(in) :: str_
 
 	type(state_t), intent(inout) :: state
 
@@ -3736,6 +3754,11 @@ subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 	case (array_expr)
 		! Non-primary array expr
 		call get_array_val(array, i - 1, val)
+
+	case (str_type)
+		!val%type = str_type
+		val%sca%str%s = str_%sca%str%s(i:i)
+		!print *, "val s = ", val%sca%str%s
 
 	case default
 		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
