@@ -48,9 +48,10 @@ module syntran__core_m
 	!    * maybe have a trial alpha/beta release 0.1.0 for a bit before 1.0?
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
+	!      + this will be a compatibility break. it's a must-have for 1.0
+	!      + binary open mode?
 	!      + should readln() take a ref?  the file is technically an in/out arg
 	!        since it will set eof.  compat break
-	!      + this will be a compatibility break. it's a must-have for 1.0
 	!    * anything else? review the rest of this list
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)
