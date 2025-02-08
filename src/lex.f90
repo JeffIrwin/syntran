@@ -525,6 +525,7 @@ function lex(lexer) result(token)
 
 			end select
 
+			token%unit_ = lexer%unit_
 			return
 		end if
 
@@ -676,6 +677,7 @@ function lex(lexer) result(token)
 
 		text = lexer%text(start: lexer%pos-1)
 		token = new_token(whitespace_token, start, text)
+		token%unit_ = lexer%unit_
 		return
 
 	end if

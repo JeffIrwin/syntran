@@ -1290,6 +1290,7 @@ subroutine unit_test_for(npass, nfail)
 			interpret_file(path//'test-06.syntran', quiet) == '25', &
 			interpret_file(path//'test-07.syntran', quiet) == '1836311903', &
 			interpret_file(path//'test-08.syntran', quiet) == '0', &
+			interpret_file(path//'test-09.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4697,11 +4698,13 @@ end module test_m
 
 program test
 
+	use syntran__app_m
 	use test_m
 	implicit none
 
 	integer :: io
 
+	call set_ansi_colors(.true.)
 	call unit_tests(io)
 	call exit(io)
 

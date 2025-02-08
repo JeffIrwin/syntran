@@ -32,8 +32,6 @@ for i in [0: n]
 		k = k + 1;
 	}
 
-a;
-
 let ans = sum_fn(a) * 3 / 4;
 return ans;
 

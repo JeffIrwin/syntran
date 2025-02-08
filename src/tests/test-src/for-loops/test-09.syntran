@@ -1,0 +1,16 @@
+
+let len_ = 0;
+let first = "";
+let last = "";
+for c in "hello world"
+{
+	len_ += 1;
+	if (first == "") first = c;
+	last = c;
+}
+
+return
+	len_  == 11 and
+	first == "h" and
+	last  == "d";
+

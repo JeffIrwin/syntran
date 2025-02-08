@@ -300,8 +300,25 @@
 					#"path": "./syntran\n./libquadmath.so.0\n./libc.so.6",
 					"path": "./syntran\n./libquadmath.so.0",
 
-					"name": "syntran-linux"
+					"name": "syntran-ubuntu"
 				}
+			},
+			{
+				# Test the binary artifact that was uploaded by this branch's run
+				"uses": "actions/download-artifact@v4",
+				"if": "matrix.os == 'ubuntu-22.04'",
+				"with":
+				{
+					"name": "syntran-ubuntu",
+					"path": "docker/artifact-download",
+				},
+			},
+			{
+				"if": "matrix.os == 'ubuntu-22.04'",
+				"run":
+				"
+					docker build ./docker/ --file ./docker/Dockerfile.branch-ubuntu \n
+				"
 			},
 			#{
 			#	# TODO: just remove conditional from other test stage.  This
@@ -328,12 +345,10 @@
 				"run":
 				"
 					docker --version \n
-
-					# TODO: this always builds main branch. Pass branch as arg \n
-					# into docker. Same problem with Dockerfile.ubuntu.  Only \n
-					# alpine Dockerfile copies src folder instead of cloning, so
-					# it does not have this issue \n
-					docker build . --file Dockerfile.rocky -t sy \n
+					docker build .
+						--file Dockerfile.rocky
+						--build-arg BRANCH=${{ github.ref_name }}
+						-t sy \n
 
 					## Test run \n
 					#docker run --entrypoint syntran sy --version \n
@@ -343,12 +358,12 @@
 					sudo docker run --name sy-ctr -d -it sy \n
 
 					# Copy artifact from container \n
-					sudo docker cp sy-ctr:/workdir/syntran/bin/syntran-rocky.tgz . \n
+					sudo docker cp sy-ctr:/workdir/syntran/bin/syntran-linux.tgz . \n
 
 					# Extract to repackage as zip during upload \n
 					mkdir bin \n
 					cd bin \n
-					tar xvf ../syntran-rocky.tgz \n
+					tar xvf ../syntran-linux.tgz \n
 
 					#docker run sy --version # syntran is already the default entrypoint \n
 					#docker run sy -c \"1 + 2;\" \n
@@ -365,9 +380,25 @@
 			{
 				"uses": "actions/upload-artifact@v4",
 				"with": {
-					"path": "./bin/syntran\n./bin/libquadmath.so.0\n./bin/libgfortran.so.5",
-					"name": "syntran-rocky"
+					"path": "./bin/syntran\n./bin/libquadmath.so.0",
+					"name": "syntran-linux"
 				}
+			},
+			{
+				# Get the binary artifact that was uploaded by this branch's run
+				"uses": "actions/download-artifact@v4",
+				"with":
+				{
+					"name": "syntran-linux",
+					"path": "docker/artifact-download",
+				},
+			},
+			{
+				# Test the binary artifact that was uploaded by this branch's run
+				"run":
+				"
+					bash ./test-branch.sh \n
+				"
 			},
 		]
 	},
@@ -500,17 +531,17 @@
 			},
 		]
 	},
-	"test-linux-bin": {
+	"test-linux-release-bin": {
 		# Test binary syntran installations on dockerfiles from ./docker/
 		# dir.  These download the latest github "release", so there will be
 		# a lag between when you build the release and manually upload a
 		# binary package to github
-		"name": "Test linux bin",
+		"name": "Test linux release bin",
 		"runs-on": "ubuntu-latest",
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
-				"name": "Test linux bin",
+				"name": "Test linux release bin",
 				"run":
 				"
 					bash ./test-bin.sh \n

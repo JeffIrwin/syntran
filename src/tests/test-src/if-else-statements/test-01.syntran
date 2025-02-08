@@ -22,8 +22,6 @@
 		bar = 2;
 	}
 
-	foo + bar * baz;
-
 	let p = true;
 	{
 		// More shadows.  They can even vary in type
@@ -40,10 +38,8 @@
 	//// 35 |  let q = true;
 	////    |      ^ variable already declared
 
-	p or q;
-
 	// Final result
-	p and not q and foo + bar == baz;
+	return p and not q and foo + bar == baz;
 	// true
 
 }

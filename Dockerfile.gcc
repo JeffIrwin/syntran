@@ -14,7 +14,7 @@
 
 FROM rockylinux:9
 
-WORKDIR workdir
+WORKDIR /workdir
 
 RUN dnf update -y
 #RUN dnf install -y vim
@@ -28,17 +28,16 @@ RUN dnf install -y file
 RUN dnf install -y findutils  # needed?
 RUN dnf install -y which      # needed?
 
-# Relative to /workdir
 ARG SRC_DIR="gcc-src"
 
 RUN git clone \
 	https://github.com/gcc-mirror/gcc.git \
 	--depth 1 \
-	#--branch releases/gcc-12.2.0 \
-	--branch releases/gcc-12 \
+	##--branch releases/gcc-12.2.0 \
+	#--branch releases/gcc-12 \
 	$SRC_DIR
 
-WORKDIR $SRC_DIR
+WORKDIR /workdir/$SRC_DIR
 
 RUN ./contrib/download_prerequisites
 WORKDIR ../objdir
@@ -72,8 +71,12 @@ RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$BIN_DIR/lib64" >> ~/.bashrc
 # Build syntran
 
 WORKDIR /workdir
-RUN git clone https://github.com/jeffirwin/syntran
-WORKDIR syntran
+
+ARG BRANCH="main"
+RUN echo "BRANCH = $BRANCH"
+
+RUN git clone https://github.com/jeffirwin/syntran --branch "$BRANCH"
+WORKDIR /workdir/syntran
 
 # Install fpm from binary
 RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64
@@ -85,12 +88,17 @@ RUN fpm --version
 #ARG LINK_FLAGS="-static-libgfortran"
 ARG LINK_FLAGS="-static-libgfortran -static-libgcc"
 
+# Remove gcc >= 15 guard with sed.  It works, but gfortran 15 is not released
+# yet AFAIK, so I would prefer to leave the guard in until it's official
+RUN sed -i 's/#error.*//g' src/compiler.F90
+
 #RUN . ~/.bashrc && fpm install --link-flag "-l/workdir/gcc/lib64/libgfortran.a" --prefix="/usr/"
 
 RUN echo 2
 RUN . ~/.bashrc && fpm build     --link-flag "$LINK_FLAGS"
 RUN . ~/.bashrc && fpm test test --link-flag "$LINK_FLAGS"
 RUN . ~/.bashrc && fpm install   --link-flag "$LINK_FLAGS" --prefix="/usr/"
+RUN . ~/.bashrc && fpm test long --link-flag "$LINK_FLAGS"
 
 ## TODO install release profile
 

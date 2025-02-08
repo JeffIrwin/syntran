@@ -33,9 +33,6 @@
 		i = i + 1;
 	}
 
-	// Final list of primes
-	primes;
-
 	let ans = primes;
 
 	let expect =      [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
@@ -64,7 +61,7 @@
 		if (diff < 0) diff = -diff;
 		norm = norm + diff;
 	}
-	norm;
+	return norm;
 
 }
 

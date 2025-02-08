@@ -5,6 +5,6 @@
 	while p
 		sum = sum + 1;
 
-	sum;
+	return sum;
 }
 

@@ -63,7 +63,9 @@ homepage = "https://github.com/JeffIrwin/syntran"
 auto-executables = true
 auto-tests       = true
 auto-examples    = true
-module-naming    = true
+
+#module-naming    = true
+module-naming    = false
 
 [install]
 library = false

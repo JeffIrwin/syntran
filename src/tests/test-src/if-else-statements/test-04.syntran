@@ -15,8 +15,7 @@
 		b = 12;
 	}
 
-	// Final result
-	a + b;
+	return a + b;
 
 }
 

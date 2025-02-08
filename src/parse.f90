@@ -64,6 +64,8 @@ module syntran__parse_m
 		! final (second) pass
 		integer :: ipass
 
+		logical :: repl
+
 		contains
 			procedure :: &
 				context => current_context, &

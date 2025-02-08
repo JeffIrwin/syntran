@@ -54,6 +54,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 	    parser%peek_kind(1) == identifier_token .and. &
 	    parser%peek_kind(2) == equals_token) then
 
+		! TODO: refactor this as parse_let_expr()
+
 		!print *, 'let expr'
 
 		! The if-statement above already verifies tokens, so we can use next()
@@ -67,6 +69,13 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		right      = parser%parse_expr_statement()
 		!right      = parser%parse_expr()
+
+		if (right%val%type ==  void_type) then
+			span = new_span(let%pos, parser%current_pos() - let%pos)
+			call parser%diagnostics%push( &
+				err_void_assign(parser%context(), &
+				span, identifier%text))
+		end if
 
 		!! I think the way to get conditional initialization like rust is
 		!! something like this.  May need to peek current and check if it's

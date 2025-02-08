@@ -13,10 +13,10 @@ fn decrement()
 	return;
 }
 
-let dummy = increment();
-dummy = increment();
-dummy = increment();
-dummy = decrement();
+increment();
+increment();
+increment();
+decrement();
 
 return global;
 

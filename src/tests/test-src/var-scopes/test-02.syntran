@@ -16,7 +16,6 @@
 		i2 = i;
 	}
 
-	i == -1 and i1 == 4 and i2 == -2;
-	// true
+	return i == -1 and i1 == 4 and i2 == -2;
 }
 

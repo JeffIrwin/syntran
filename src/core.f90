@@ -27,21 +27,41 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  61
+		syntran_patch =  62
 
 	! TODO:
+	!  - test rocky 10 circa May 2025, that's when they're planning to release
+	!    it
+	!  - appimage?  some kind of binary packaging improvement
+	!    * the current dependence on libquadmath.so (and sometimes
+	!      libgfortran.so) is not ideal, especially considering that rocky is
+	!      worse than ubuntu.  it would be nice if everything was truly
+	!      statically bundled into one file
+	!    * is appimage the standard tool for this?  how does fpm do it?
+	!  - add recursive fibonacci sample to syntran-explorer
 	!  - roadmap to version 1.0.0:
-	!    * maybe have a trial alpha release 0.1.0 for a bit before 1.0?
-	!    * ban expression statements.  notes below.  compat break
+	!    * expression statements are gone except for REPL.  check for any
+	!      vestigial "HolyC" style prints.  just make sure removing them doesn't
+	!      break the REPL
+	!      + running `x;` after previously assigning x prints its val twice in
+	!        the REPL.  this can probably be fixed
+	!    * maybe have a trial alpha/beta release 0.1.0 for a bit before 1.0?
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
+	!      + this will be a compatibility break. it's a must-have for 1.0
+	!      + binary open mode?
 	!      + should readln() take a ref?  the file is technically an in/out arg
 	!        since it will set eof.  compat break
-	!      + this will be a compatibility break. it's a must-have for 1.0
 	!    * anything else? review the rest of this list
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)
+	!  - REPL styling
+	!    * any other ideas from julia?  got their green prompt
+	!    * could later extend with hint levels (off, semicolon-only, or fully on)
+	!      set by an env var, but that isn't pressing
 	!  - docker ci/cd stages should test current branch, not main
+	!    * i think this is fixed.  need to double confirm by bumping version
+	!      number or something obvious
 	!    * after 1.0 i should be more strict about changing main branch.  add
 	!      branch protection and only change it via PRs
 	!    * should have a dev branch where work is done, main should only change
@@ -60,10 +80,7 @@ module syntran__core_m
 	!    * should also cover options like `-i` (startup include file)
 	!  - recursive data structs?
 	!    * recursive fns are available, but not structs
-	!  - allow for loops that iterate on chars in a str
 	!  - minloc, maxloc, findloc fns
-	!  - remove "Hint" from REPL?  It's not wrong, but it's often noisy and not
-	!    helpful
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
 	!    * just use `reshape` and call the fortran built-in.  no need for any
@@ -84,6 +101,8 @@ module syntran__core_m
 	!    * bin/oct too
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
+	!    * add build os to `--version` output, to distinguish between rocky vs
+	!      ubuntu builds
 	!    * add version summary as a text file (major.minor.patch, git hash,
 	!      build date)
 	!    * doc. autogenerate pdf and/or html from markdown via pandoc or similar
@@ -108,19 +127,6 @@ module syntran__core_m
 	!      effectively using the struct identifier as a namespace
 	!    * inside member fns, you should be allowed to just write `var` instead
 	!      of `this.var`
-	!  - ban expression statements?
-	!    * these were needed before i had the return statement
-	!    * they were also used for HolyC-style implicit prints, which should
-	!      also probably be removed
-	!    * now it causes issues if i accidentally do a line like this:
-	!          x == y;
-	!      instead of:
-	!          x = y;
-	!      the first implicit bool expr line is currently allowed but never what
-	!      i meant!
-	!    * how can interactive interpretter still be used as a desktop
-	!      calculator tho? maybe have a "mode" flag which is set differently for
-	!      interactive runs (if there isn't already one)
 	!  - pass by reference for subscripted array name expressions and dot
 	!    expressions
 	!    * done for regular variable name expressions
@@ -164,12 +170,12 @@ module syntran__core_m
 	!          "main" returns
 	!  - consider using subroutines with out-args instead of fn return vals for
 	!    parse_*() fns?  i believe this is the source of segfaults for gfortran
-	!    8 and maybe 13.  subroutines allow passing-by-reference instead of
-	!    requiring a copy of a complex syntax_node_t type on return.  would this
-	!    eliminate all node copies?  it could be a lot of work, gfortran 8 might
-	!    still segfault, and code will be uglier with out-args instead of return
-	!    vals. is copying syntax_node_t a perf bottleneck? i suspect that eval
-	!    is bottleneck and not parsing, but i haven't actually benchmarked poor
+	!    8. subroutines allow passing-by-reference instead of requiring a copy
+	!    of a complex syntax_node_t type on return.  would this eliminate all
+	!    node copies?  it could be a lot of work, gfortran 8 might still
+	!    segfault, and code will be uglier with out-args instead of return vals.
+	!    is copying syntax_node_t a perf bottleneck? i suspect that eval is
+	!    bottleneck and not parsing, but i haven't actually benchmarked poor
 	!    perf of intel compilers for AOC solution tests
 	!  - hacker sdk:
 	!    * bitwise operations
@@ -200,10 +206,6 @@ module syntran__core_m
 	!      control color options
 	!    * pass after a ` -- `?
 	!    * related: environment variables
-	!  - check assignment to void type? guard against things like
-	!    `let x = println();`
-	!    * did i allow this to stop cascading errors?  i think i used
-	!      unknown_type for that
 	!  - array operations:
 	!    * done: element-wise add, sub, mul, div, pow, mod
 	!      + compound array assignment works but needs unit tests
@@ -382,7 +384,7 @@ contains
 
 !===============================================================================
 
-function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
+function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tree)
 
 	! TODO: take state struct instead of separate vars and fns members
 
@@ -398,7 +400,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	character(len = *), optional, intent(in)  :: src_file
 
-	logical, intent(in), optional :: allow_continue
+	logical, intent(in), optional :: allow_continue, repl
 
 	!********
 
@@ -406,7 +408,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	integer :: i, io, dummy, unit_
 
-	logical :: allow_continuel
+	logical :: allow_continuel, repll
 
 	type(text_context_vector_t) :: contexts
 
@@ -439,6 +441,9 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 	allow_continuel = .false.
 	if (present(allow_continue)) allow_continuel = allow_continue
 
+	repll = .true.
+	if (present(repl)) repll = repl
+
 	! TODO: unit_ is just synonymous with contexts%len_ in many places, so it
 	! can be removed (but not in all places)
 	contexts = new_context_vector()
@@ -446,6 +451,8 @@ function syntax_parse(str, vars, fns, src_file, allow_continue) result(tree)
 
 	parser = new_parser(str, src_filel, contexts, unit_)
 	!print *, 'units = ', parser%tokens(:)%unit_
+
+	parser%repl = repll
 
 	! The global scope can return any type.  This is initialized here and not
 	! inside new_parser() in case you have half of a function body inside an

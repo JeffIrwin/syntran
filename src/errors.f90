@@ -7,14 +7,7 @@ module syntran__errors_m
 
 	implicit none
 
-	! This includes fg_bold at the end, so the rest of the error message after
-	! the prefix must concatenate color_reset at its end
-	character(len = *), parameter :: &
-		err_prefix = fg_bold_bright_red//'Error'//fg_bold//': ', &
-		err_int_prefix = fg_bold_bright_red//'Internal syntran error' &
-			//fg_bold//': ', &
-		err_rt_prefix = fg_bold_bright_red//'Runtime error' &
-			//fg_bold//': '
+	character(len = :), allocatable :: err_prefix, err_int_prefix, err_rt_prefix
 
 	! A text span indicates which characters to underline in a faulty line of
 	! code
@@ -173,6 +166,21 @@ end function err_bad_bin64
 
 !===============================================================================
 
+function err_bad_expr(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_prefix//'bad expression.  ' &
+		//'Expression statements are only allowed in the REPL.  ' &
+		//'Use `println()` to log its value' &
+		//underline(context, span) &
+		//' bad expression statement'//color_reset
+
+end function err_bad_expr
+
+!===============================================================================
+
 function err_unterminated_str(context, span, str) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
@@ -317,6 +325,20 @@ function err_unexpected_token(context, span, got, kind, expect) result(err)
 		//" unexpected token"//color_reset
 
 end function err_unexpected_token
+
+!===============================================================================
+
+function err_void_assign(context, span, var) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: var
+	err = err_prefix &
+		//'variable `'//var//'` cannot be initialized to void type' &
+		//underline(context, span)//" void RHS type"//color_reset
+
+end function err_void_assign
 
 !===============================================================================
 

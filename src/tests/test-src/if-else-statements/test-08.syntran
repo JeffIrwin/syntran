@@ -18,8 +18,7 @@
 		a = 3;
 	b = 13;  // careful. this line evaluates unconditionally
 
-	// Final result
-	a + b;
+	return a + b;
 
 }
 

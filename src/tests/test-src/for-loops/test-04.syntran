@@ -32,7 +32,6 @@
 			prime = i;
 	}
 
-	// Final result
-	prime;
+	return prime;
 }
 

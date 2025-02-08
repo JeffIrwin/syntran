@@ -32,8 +32,6 @@ let eye3 =
 		3, 3
 	];
 
-eye3;
-
 // 90 degree x rotation.  Note that arrays are stored in row-major
 // order, so this appears transposed
 let rotx =
@@ -52,10 +50,6 @@ let roty =
 		1.0f,  0.0f,  0.0f ;
 		3, 3
 	];
-
-// Apply identity transformation
-mul_mat_vec(eye3, vec);
-// [1.0f, 2.0f, 3.0f]
 
 // Apply 90 degree x rotation
 return mul_mat_vec(rotx, vec);

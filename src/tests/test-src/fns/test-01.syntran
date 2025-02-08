@@ -7,9 +7,9 @@ fn increment()
 	return;
 }
 
-let dummy = increment();
-dummy = increment();
-dummy = increment();
+increment();
+increment();
+increment();
 
 return global;
 

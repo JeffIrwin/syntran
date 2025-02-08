@@ -42,8 +42,8 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 
 	!********
 
-	character(len = :), allocatable :: line, src_file, source_text
-	character(len = *), parameter :: prompt = lang_name//'$ '
+	character(len = :), allocatable :: line, src_file, source_text, prompt, &
+		prompt_color
 
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io
@@ -60,6 +60,9 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 	!print *, 'starting syntran_interpret()'
 	!print *, 'len(" ") = ', len(' ')
 	!print *, 'len(line_feed) = ', len(line_feed)
+
+	prompt_color = fg_bold//fg_green
+	prompt = prompt_color//lang_name//'$ '//color_reset
 
 	src_file = '<stdin>'
 	continue_ = .false.
@@ -125,10 +128,21 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 
 				! Bash uses `$` for the inital prompt and `>` for continued
 				! prompts.  So do we
-				write(ou, '(a)', advance = 'no') &
-					'[Hint `'//compilation%first_expected//'`]> '
 
-				!write(ou, '(a)', advance = 'no') '> '
+				if (compilation%first_expected == ";") then
+
+					! Other chars could be hinted, e.g. unmatched parens, but it
+					! is generally noisy, less helpful, and should be more
+					! obvious to the user
+					!
+					! I hint semicolons because it could be a stumbling block
+					! for users coming from python or similar languages
+					write(ou, '(a)', advance = 'no') prompt_color// &
+						'[Hint `'//compilation%first_expected//'`]> '//color_reset
+
+				else
+					write(ou, '(a)', advance = 'no') prompt_color//'> '//color_reset
+				end if
 
 				line = line//line_feed//read_line(iu, iostat = io)
 
@@ -386,7 +400,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	character(len = 1024) :: buffer
 	character(len = :), allocatable :: src_filel, dir, cwd
 
-	logical :: chdirl
+	logical :: chdirl, repl
 
 	type(state_t) :: state
 	type(syntax_node_t) :: tree
@@ -400,7 +414,11 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	if (present(quiet)) state%quiet = quiet
 
 	src_filel = '<stdin>'
-	if (present(src_file)) src_filel = src_file
+	repl = .true.
+	if (present(src_file)) then
+		src_filel = src_file
+		repl = .false.
+	end if
 
 	!print * , "src_filel = """, src_filel, """"
 
@@ -413,7 +431,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	! TODO: make a helper fn that all the eval_* fns use
 
 	!print *, "parsing"
-	tree = syntax_parse(str_, state%vars, state%fns, src_filel)
+	tree = syntax_parse(str_, state%vars, state%fns, src_filel, repl = repl)
 	!print *, "done"
 	!print *, "size fns = ", size(state%fns%fns)
 

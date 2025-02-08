@@ -8,6 +8,6 @@
 	let z = y;
 	z[3] = 42.0f;
 
-	x[3] == 14.5f and y[3] == 12.25f and z[3] == 42.0f;
+	return x[3] == 14.5f and y[3] == 12.25f and z[3] == 42.0f;
 }
 

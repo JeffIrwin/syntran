@@ -14,6 +14,11 @@ program main
 
 	!********
 
+	! What happens if there's an error while parsing args?  Here I initialize to
+	! --color auto, but maybe off should be the initial default
+	call set_ansi_colors()
+	!call set_ansi_colors(.true.)
+
 	args = parse_args()
 
 	if (args%version .or. args%help) then

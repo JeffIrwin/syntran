@@ -2,22 +2,15 @@
 #FROM rockylinux:8  # can't figure out how to get gfortran 11 on rocky 8 :(
 FROM rockylinux:9
 
-WORKDIR workdir
+WORKDIR /workdir
 
 RUN dnf update -y
 RUN dnf install -y vim
-
-## syntran crashes almost immediately with gfortran 13
-ARG GFORT_VERS="11"
-#ARG GFORT_VERS="12"
-#ARG GFORT_VERS="13"
-
 RUN dnf install -y gcc-gfortran
-#RUN dnf install -y gcc-toolset-12-gcc-gfortran
+RUN dnf --enablerepo=devel install -y libgfortran-static
 
-##RUN dnf install -y gfortran
-#RUN dnf install -y gfortran-${GFORT_VERS}
-#RUN cp $(which "gfortran-${GFORT_VERS}") /usr/bin/gfortran
+## consider gfort 13 for static libquadmath.  if it adds a dependency on a glibc that doesn't come on base distros though, it's not worth the tradeoff.  need to test
+#RUN dnf install -y gcc-toolset-13-gcc-gfortran
 
 #RUN dnf install -y curl
 
@@ -28,11 +21,6 @@ RUN gfortran --version
 # clone the whole repo
 
 RUN dnf install -y git
-#COPY src ./src
-#COPY fpm.toml .
-#COPY gen-header.sh .
-RUN git clone https://github.com/jeffirwin/syntran
-WORKDIR syntran
 
 ADD https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64 ./fpm
 #RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64
@@ -42,6 +30,16 @@ ADD https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_
 RUN chmod +x fpm
 RUN mv fpm /usr/local/bin
 RUN fpm --version
+
+#COPY src ./src
+#COPY fpm.toml .
+#COPY gen-header.sh .
+
+ARG BRANCH="main"
+RUN echo "BRANCH = $BRANCH"
+
+RUN git clone https://github.com/jeffirwin/syntran --branch "$BRANCH"
+WORKDIR /workdir/syntran
 
 RUN yes | fpm clean
 
@@ -53,19 +51,19 @@ RUN ./gen-header.sh
 #RUN fpm test test --compiler gfortran
 ##RUN fpm test long --compiler gfortran
 
-ARG PROFILE release
-#ARG PROFILE debug
+ARG PROFILE="release"
+#ARG PROFILE="debug"
 
-#RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -static-libquadmath"
-#RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran -Wl,-Bstatic -lquadmath -Wl,-Bdynamic"
-#RUN find ./build -wholename "*app/syntran" | xargs ls -ltrh
+RUN echo "PROFILE = $PROFILE"
 
-#RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc -static-libgfortran"
-RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
-RUN fpm test test --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
-#RUN echo 1
-#RUN fpm test long --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
-RUN fpm install --prefix . --compiler gfortran --profile "$PROFILE" --link-flag "-static-libgcc"
+#ARG LINK_FLAG="-static-libgcc"
+ARG LINK_FLAG="-static-libgcc -static-libgfortran"
+#ARG LINK_FLAG="-static-libgcc -static-libgfortran -static-libquadmath"
+
+RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
+RUN fpm test test --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
+#RUN fpm test long --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
+RUN fpm install --prefix . --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
 
 # Package other binary dependencies
 RUN cp /lib64/libquadmath.so.0 ./bin/
@@ -73,5 +71,5 @@ RUN cp /lib64/libgfortran.so.5 ./bin/
 #RUN cp /lib64/libc.so.6 ./bin/
 #RUN cp /lib64/libm.so.6 ./bin/
 
-RUN cd ./bin && tar czf syntran-rocky.tgz *
+RUN cd ./bin && tar czf syntran-linux.tgz *
 

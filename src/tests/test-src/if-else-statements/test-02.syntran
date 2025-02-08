@@ -11,8 +11,7 @@
 	if (p)
 		a = 2;
 
-	// Final result
-	a;
+	return a;
 
 }
 

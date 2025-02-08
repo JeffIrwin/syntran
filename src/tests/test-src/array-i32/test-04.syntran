@@ -3,6 +3,6 @@
 	let x = [10: 15];
 	x[3] = -3;
 	let a = x[3];
-	a;
+	return a;
 }
 

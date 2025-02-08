@@ -7,6 +7,6 @@
 	for i in [-10: 11]
 		sum = sum + i;
 
-	sum;
+	return sum;
 }
 

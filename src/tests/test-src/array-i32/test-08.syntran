@@ -9,6 +9,6 @@
 	let z = y;
 	z[3] = 42;
 
-	x[3] == 16 and y[3] == 13 and z[3] == 42;
+	return x[3] == 16 and y[3] == 13 and z[3] == 42;
 }
 

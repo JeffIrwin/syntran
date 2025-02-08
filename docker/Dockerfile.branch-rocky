@@ -1,0 +1,17 @@
+
+FROM rockylinux:9
+
+WORKDIR /workdir
+
+COPY artifact-download ./artifact-download
+
+RUN mv artifact-download/* /usr/local/bin
+RUN chmod +x /usr/local/bin/syntran
+
+# Set LD_LIBRARY_PATH for dependent libs
+RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/bin" >> ~/.bashrc
+
+RUN . ~/.bashrc && syntran --version
+RUN . ~/.bashrc && syntran --version --color on
+RUN . ~/.bashrc && syntran -c 'println("hello world");'
+
