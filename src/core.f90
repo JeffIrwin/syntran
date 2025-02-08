@@ -57,13 +57,8 @@ module syntran__core_m
 	!    * review all TODO notes in the codebase (!)
 	!  - REPL styling
 	!    * any other ideas from julia?  got their green prompt
-	!    * remove "Hint" from REPL?  It's not wrong, but it's often noisy and not
-	!      helpful
-	!      + on the other hand, the semicolon requirement could be a major
-	!        stumbling block for new users coming from fortran, julia, matlab,
-	!        python, etc.  maybe enable hints only for semicolons.  could later
-	!        extend to hint levels (off, semicolon-only, or fully on) set by an
-	!        env var, but that isn't pressing
+	!    * could later extend with hint levels (off, semicolon-only, or fully on)
+	!      set by an env var, but that isn't pressing
 	!  - docker ci/cd stages should test current branch, not main
 	!    * i think this is fixed.  need to double confirm by bumping version
 	!      number or something obvious

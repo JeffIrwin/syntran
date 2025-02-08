@@ -455,10 +455,10 @@ recursive module function parse_statement(parser) result(statement)
 
 			select case (statement%kind)
 			case (let_expr, assignment_expr)
-				! Do nothing
+				! Do nothing.  These kinds of expressions are allowed
 
 			case (fn_call_expr, fn_call_intr_expr)
-				! Only allow void fn call statements?  Don't allow
+				! Only allow void fn call statements.  Don't allow
 				! discarding fn return value
 
 				!print *, "fn ret type = ", kind_name(statement%val%type)

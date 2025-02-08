@@ -62,7 +62,6 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 	!print *, 'len(line_feed) = ', len(line_feed)
 
 	prompt_color = fg_bold//fg_green
-	!prompt = prompt_color//lang_name//'$ '//color_reset
 	prompt = prompt_color//lang_name//'$ '//color_reset
 
 	src_file = '<stdin>'
@@ -130,9 +129,20 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 				! Bash uses `$` for the inital prompt and `>` for continued
 				! prompts.  So do we
 
-				!write(ou, '(a)', advance = 'no') &
-				!	'[Hint `'//compilation%first_expected//'`]> '
-				write(ou, '(a)', advance = 'no') prompt_color//'> '//color_reset
+				if (compilation%first_expected == ";") then
+
+					! Other chars could be hinted, e.g. unmatched parens, but it
+					! is generally noisy, less helpful, and should be more
+					! obvious to the user
+					!
+					! I hint semicolons because it could be a stumbling block
+					! for users coming from python or similar languages
+					write(ou, '(a)', advance = 'no') prompt_color// &
+						'[Hint `'//compilation%first_expected//'`]> '//color_reset
+
+				else
+					write(ou, '(a)', advance = 'no') prompt_color//'> '//color_reset
+				end if
 
 				line = line//line_feed//read_line(iu, iostat = io)
 
