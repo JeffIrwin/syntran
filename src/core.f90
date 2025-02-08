@@ -27,7 +27,7 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  61
+		syntran_patch =  62
 
 	! TODO:
 	!  - test rocky 10 circa May 2025, that's when they're planning to release
@@ -101,6 +101,8 @@ module syntran__core_m
 	!    * bin/oct too
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
+	!    * add build os to `--version` output, to distinguish between rocky vs
+	!      ubuntu builds
 	!    * add version summary as a text file (major.minor.patch, git hash,
 	!      build date)
 	!    * doc. autogenerate pdf and/or html from markdown via pandoc or similar
