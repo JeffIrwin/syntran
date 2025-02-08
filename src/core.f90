@@ -105,6 +105,7 @@ module syntran__core_m
 	!      ubuntu builds
 	!    * add version summary as a text file (major.minor.patch, git hash,
 	!      build date)
+	!    * list sha256 checksums of binaries somewhere
 	!    * doc. autogenerate pdf and/or html from markdown via pandoc or similar
 	!      + see build-doc.sh
 	!    * readme?
