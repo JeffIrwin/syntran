@@ -16,6 +16,9 @@ RUN chmod +x ./syntran
 RUN rm syntran-linux*.zip
 RUN mv syntran libquadmath.so.0 /usr/local/bin
 
+# Set LD_LIBRARY_PATH for dependent libs
+ENV LD_LIBRARY_PATH="/usr/local/bin"
+
 RUN syntran --version
 RUN syntran -c 'println("hello world");'
 
