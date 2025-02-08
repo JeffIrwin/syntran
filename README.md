@@ -26,28 +26,40 @@ To run syntran, you can either install a binary or build it from the Fortran sou
 
 Download the binary from the latest github release for your operating system:
 
-### Linux (most* distros)
+### Linux
 ```
 curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux.zip"
 unzip syntran-linux.zip
 chmod +x ./syntran
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.
 ./syntran -h
 ```
 
-The binary asset `syntran-linux.zip` works on most distros:  arch, debian, ubuntu, fedora, kali, and ubuntu.  It does not work on rocky or alma due to glibc incompatibilities.
+The binary asset `syntran-linux.zip` works on most distros:  alma, arch, debian, fedora, kali, rocky, and ubuntu.  The environment variable `LD_LIBRARY_PATH` should be set, or else `libgfortran*.so` may not be found.
+
+<!--
+// The rocky binary is the official binary now.  It used to be ubuntu, but the
+// rocky binary works on ubuntu.  One downside of this is that rocky does not have
+// libgfortran.a and thus cannot statically link to it like ubuntu can, but we also
+// have the libquadmath.so too.  Could possibly get around this by building
+// gfortran from source on rocky, but I'm not going to spend the ci/cd on that (it
+// takes a couple hours locally, see Dockerfile.gcc)
+//
+// The ubuntu binary is still built and uploaded, but I probably won't bother
+// documenting it or copying it to the release assets
 
 ### Linux (rocky and alma)
 ```
 curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-rocky.zip"
 unzip syntran-rocky.zip
 chmod +x ./syntran
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.
 ./syntran -h
 ```
 
 Note that there is an extra step to set the `LD_LIBRARY_PATH` here, because the
 rocky build image cannot statically link libgfortran.  This works on ubuntu and
 probably other distros too, or you can just use the more universal asset above.
+-->
 
 ### Windows
 ```

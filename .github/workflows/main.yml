@@ -300,7 +300,7 @@
 					#"path": "./syntran\n./libquadmath.so.0\n./libc.so.6",
 					"path": "./syntran\n./libquadmath.so.0",
 
-					"name": "syntran-linux"
+					"name": "syntran-ubuntu"
 				}
 			},
 			{
@@ -309,7 +309,7 @@
 				"if": "matrix.os == 'ubuntu-22.04'",
 				"with":
 				{
-					"name": "syntran-linux",
+					"name": "syntran-ubuntu",
 					"path": "docker/artifact-download",
 				},
 			},
@@ -358,12 +358,12 @@
 					sudo docker run --name sy-ctr -d -it sy \n
 
 					# Copy artifact from container \n
-					sudo docker cp sy-ctr:/workdir/syntran/bin/syntran-rocky.tgz . \n
+					sudo docker cp sy-ctr:/workdir/syntran/bin/syntran-linux.tgz . \n
 
 					# Extract to repackage as zip during upload \n
 					mkdir bin \n
 					cd bin \n
-					tar xvf ../syntran-rocky.tgz \n
+					tar xvf ../syntran-linux.tgz \n
 
 					#docker run sy --version # syntran is already the default entrypoint \n
 					#docker run sy -c \"1 + 2;\" \n
@@ -380,8 +380,8 @@
 			{
 				"uses": "actions/upload-artifact@v4",
 				"with": {
-					"path": "./bin/syntran\n./bin/libquadmath.so.0\n./bin/libgfortran.so.5",
-					"name": "syntran-rocky"
+					"path": "./bin/syntran\n./bin/libquadmath.so.0",
+					"name": "syntran-linux"
 				}
 			},
 			{
@@ -389,7 +389,7 @@
 				"uses": "actions/download-artifact@v4",
 				"with":
 				{
-					"name": "syntran-rocky",
+					"name": "syntran-linux",
 					"path": "docker/artifact-download",
 				},
 			},
@@ -397,14 +397,6 @@
 				# Test the binary artifact that was uploaded by this branch's run
 				"run":
 				"
-					# TODO:  can rocky binary be the official linux binary?
-					# Don't need to get rid of ubuntu binary, but rename them
-					# and test rocky on all distros \n
-					#
-					# I guess this is a compatibility break if anyone has
-					# scripted a curl of syntran-rocky.zip, which will be gone
-					# \n
-
 					bash ./test-branch.sh \n
 				"
 			},

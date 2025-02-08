@@ -2087,7 +2087,7 @@ recursive subroutine eval_for_statement(node, state, res)
 			for_kind = array_expr
 
 			call syntax_eval(node%array, state, tmp)
-			array = tmp%array  ! TODO: move instead of copy?
+			array = tmp%array  ! TODO: move_alloc() (or value_move) instead of copy?
 
 			len8 = array%len_
 			!print *, 'len8 = ', len8
