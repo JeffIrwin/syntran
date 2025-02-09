@@ -19,6 +19,9 @@ ADD "$SY_URL" ./syntran-linux.zip
 RUN unzip syntran-linux*.zip
 RUN rm syntran-linux*.zip
 RUN chmod +x ./syntran
+
+## TODO: remove here and in other *bin* dockerfiles.  libquadmath is static
+## linked in next release
 #RUN mv syntran libquadmath.so.0 /usr/local/bin
 RUN mv syntran libquadmath.so.* /usr/local/bin
 

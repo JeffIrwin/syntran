@@ -6,21 +6,26 @@ WORKDIR /workdir
 
 RUN dnf update -y
 RUN dnf install -y vim
-RUN dnf install -y gcc-gfortran
-RUN dnf --enablerepo=devel install -y libgfortran-static
+RUN dnf install -y git
+#RUN dnf install -y gcc-gfortran
+#RUN dnf --enablerepo=devel install -y libgfortran-static
 
-## consider gfort 13 for static libquadmath.  if it adds a dependency on a glibc that doesn't come on base distros though, it's not worth the tradeoff.  need to test
-#RUN dnf install -y gcc-toolset-13-gcc-gfortran
+# TODO: consider gfort 13 for static libquadmath.  if it adds a dependency on a glibc that doesn't come on base distros though, it's not worth the tradeoff.  need to test
+RUN dnf install -y gcc-toolset-13-gcc-gfortran
+
+## Static libc.a and libm.a can also be installed, but it does not remove the dependency on libc.so etc. from syntran
+#dnf --enablerepo=crb install glibc-static -y
 
 #RUN dnf install -y curl
 
+RUN find /opt -name "gfortran"
+
+ENV PATH="$PATH:/opt/rh/gcc-toolset-13/root/usr/bin/"
 RUN gfortran --version
 
 # Copying just the src dir would usually be sufficient, but gen-header.sh needs
 # to know the git commit for `--version` output, so we have to install git and
 # clone the whole repo
-
-RUN dnf install -y git
 
 ADD https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64 ./fpm
 #RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64
@@ -57,19 +62,19 @@ ARG PROFILE="release"
 RUN echo "PROFILE = $PROFILE"
 
 #ARG LINK_FLAG="-static-libgcc"
-ARG LINK_FLAG="-static-libgcc -static-libgfortran"
-#ARG LINK_FLAG="-static-libgcc -static-libgfortran -static-libquadmath"
+#ARG LINK_FLAG="-static-libgcc -static-libgfortran"
+ARG LINK_FLAG="-static-libgcc -static-libgfortran -static-libquadmath"
 
 RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
 RUN fpm test test --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
 #RUN fpm test long --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
 RUN fpm install --prefix . --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
 
-# Package other binary dependencies
-RUN cp /lib64/libquadmath.so.0 ./bin/
-RUN cp /lib64/libgfortran.so.5 ./bin/
-#RUN cp /lib64/libc.so.6 ./bin/
-#RUN cp /lib64/libm.so.6 ./bin/
+## Package other binary dependencies
+#RUN cp /lib64/libquadmath.so.0 ./bin/
+#RUN cp /lib64/libgfortran.so.5 ./bin/
+##RUN cp /lib64/libc.so.6 ./bin/
+##RUN cp /lib64/libm.so.6 ./bin/
 
 RUN cd ./bin && tar czf syntran-linux.tgz *
 
