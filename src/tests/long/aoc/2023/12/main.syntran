@@ -28,7 +28,7 @@ fn part1(): i32
 
 	let sum_ = 0;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	let iline = 0;
 	while not eof(f)

@@ -36,7 +36,7 @@ fn part1(): i64
 	let sum_ = 0'i64;
 
 	let ny = countln_(filename);
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	let nx = i32(len(str_));
 	close(f);
@@ -44,7 +44,7 @@ fn part1(): i64
 	//println("nx, ny = ", [nx, ny]);
 	let chars = [" "; nx, ny];
 
-	f = open(filename);
+	f = open(filename, "r");
 	for iy in [0: ny]
 	{
 		let str_ = readln(f);
@@ -117,7 +117,7 @@ fn part2(): i64
 	let sum_ = 0'i64;
 
 	let ny = countln_(filename);
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	let nx = i32(len(str_));
 	close(f);
@@ -125,7 +125,7 @@ fn part2(): i64
 	//println("nx, ny = ", [nx, ny]);
 	let chars = [" "; nx, ny];
 
-	f = open(filename);
+	f = open(filename, "r");
 	for iy in [0: ny]
 	{
 		let str_ = readln(f);

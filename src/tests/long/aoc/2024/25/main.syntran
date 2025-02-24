@@ -44,7 +44,7 @@ fn part1(): i64
 	let keys  = [false; nx, ny, NCAP];
 	let locks = [false; nx, ny, NCAP];
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	for id in [0: ndiag]
 	{
 		let diag = [false; nx, ny];

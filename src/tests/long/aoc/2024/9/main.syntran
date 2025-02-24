@@ -21,7 +21,7 @@ fn part1(): i64
 {
 	let sum_ = 0'i64;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	close(f);
 
@@ -95,7 +95,7 @@ fn part2old(): i64
 	//println("starting part2old()");
 	let sum_ = 0'i64;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	close(f);
 
@@ -239,7 +239,7 @@ fn part2(): i64
 {
 	let sum_ = 0'i64;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	close(f);
 

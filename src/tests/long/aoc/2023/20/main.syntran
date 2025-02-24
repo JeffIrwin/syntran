@@ -95,7 +95,7 @@ fn part1(): i32
 	let rhs = [""; nmod];
 
 	// First pass:  load data
-	let f = open(filename);
+	let f = open(filename, "r");
 	for i in [0: nmod]
 	{
 		let str_ = readln(f);
@@ -326,7 +326,7 @@ fn part2(): i32
 	let rhs = [""; nmod];
 
 	// First pass:  load data
-	let f = open(filename);
+	let f = open(filename, "r");
 	for i in [0: nmod]
 	{
 		let str_ = readln(f);

@@ -255,7 +255,7 @@ fn part1(): i64
 
 	let dict = new_dict_i64();
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while str_ != ""
 	{
@@ -371,7 +371,7 @@ fn part2(): str
 	let sum_ = 0'i64;
 	let dict = new_dict_i64();
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while str_ != ""
 	{

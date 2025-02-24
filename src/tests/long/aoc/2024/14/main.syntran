@@ -40,7 +40,7 @@ fn part1(): i64
 	let ps = [-1; 2, np];
 	let vs = [-1; 2, np];
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	for i in [0: np]
 	{
 		let str_ = readln(f);
@@ -100,7 +100,7 @@ fn part2(): i64
 	let ps = [-1; 2, np];
 	let vs = [-1; 2, np];
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	for i in [0: np]
 	{
 		let str_ = readln(f);

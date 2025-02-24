@@ -42,7 +42,7 @@ fn part1(): i32
 	let n = [0, 0];
 	n[1] = countln_(filename);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 
 	n[0] = len(str_);
@@ -168,7 +168,7 @@ fn part2(): i32
 	let n = [0, 0];
 	n[1] = countln_(filename);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 
 	n[0] = len(str_);

@@ -26,7 +26,7 @@ fn part1(): str
 	let nadj = [ 0; n];
 	let adj  = [-1; NADJ_CAP, n];
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	for i in [0: n]
 	{
 		let str_ = readln(f);
@@ -70,7 +70,7 @@ fn part2(): str
 	let nadj = [ 0; n];
 	let adj  = [-1; NADJ_CAP, n];
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	for i in [0: n]
 	{
 		let str_ = readln(f);

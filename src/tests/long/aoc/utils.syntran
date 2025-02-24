@@ -10,7 +10,7 @@ fn countln_(filename: str): i32
 {
 	let nlines = 0;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while not eof(f)
 	{
