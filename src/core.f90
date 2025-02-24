@@ -49,6 +49,13 @@ module syntran__core_m
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
 	!      + this will be a compatibility break. it's a must-have for 1.0
+	!      + python style?  open("file.txt", "r"), open("file.txt", "w"),
+	!        open("file.txt", "rb"), etc.
+	!        * will parsing rwbt permutations be difficult? think carefully
+	!        * any better languages to imitate?
+	!        * default to read with an optional mode arg would be nice, but i
+	!          don't have opt args.  should be possible to add as a later
+	!          feature without breaking compat
 	!      + binary open mode?
 	!      + should readln() take a ref?  the file is technically an in/out arg
 	!        since it will set eof.  compat break
