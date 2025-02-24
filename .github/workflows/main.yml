@@ -500,8 +500,8 @@
 					## that fly with gfortran \n
 					#fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
 
-					fpm test test --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
-					fpm test long --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+					fpm test test --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast\" \n
+					fpm test long --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast\" \n
 				"
 			}
 		]

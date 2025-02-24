@@ -49,6 +49,7 @@ module syntran__core_m
 	!    * rethink open() fn.  add a read/write mode.  read mode should check if
 	!      file exists
 	!      + check samples and anything else not covered by tests
+	!        *     git ls-files *.syntran | xargs grep '\<open([^,]*)'
 	!      + this will be a compatibility break. it's a must-have for 1.0
 	!      + python style?  open("file.txt", "r"), open("file.txt", "w"),
 	!        open("file.txt", "rb"), etc.
