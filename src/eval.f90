@@ -995,7 +995,8 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 	!********
 
-	character(len = :), allocatable :: color
+	character :: char_
+	character(len = :), allocatable :: color, mode, status_
 
 	double precision, parameter :: LOG_E_2 = log(2.d0)
 	real, parameter :: LOG_E_2F = log(2.0)
@@ -1660,19 +1661,56 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 	case ("open")
 
-		call syntax_eval(node%args(1), state, arg)
+		call syntax_eval(node%args(1), state, arg1)
+		call syntax_eval(node%args(2), state, arg2)
 
-		! TODO: catch iostat, e.g. same file opened twice, folder doesn't
-		! exist, etc.
-		open(newunit = res%sca%file_%unit_, file = arg%sca%str%s)
+		mode = arg2%sca%str%s
+		!print *, "mode = ", mode
+
+		do i = 1, len(mode)
+			char_ = mode(i: i)
+			select case (char_)
+			case ("r")
+				res%sca%file_%mode_read = .true.
+
+			case ("w")
+				res%sca%file_%mode_write = .true.
+
+			case default
+				write(*,*) err_rt_prefix//"bad file mode character """// &
+					char_//""""//color_reset
+				call internal_error()
+
+			end select
+		end do
+		! TODO: should mode "wr" be allowed?
+
+		if (res%sca%file_%mode_read) then
+			status_ = "old"
+		else
+			status_ = "unknown"
+		end if
+
+		open(newunit = res%sca%file_%unit_, file = arg1%sca%str%s, &
+			status = status_, iostat = io)
+		!print *, "io = ", io
+
+		if (io /= 0) then
+			write(*,*) err_rt_prefix//"cannot open file """//arg1%sca%str%s//""""
+			write(*,*) "iostat = ", io
+			! TODO: decode fortran iostat codes in message
+			call internal_error()
+		end if
 
 		!print *, 'opened unit ', res%sca%file_%unit_
-		res%sca%file_%name_ = arg%sca%str%s
+		res%sca%file_%name_ = arg1%sca%str%s
 		res%sca%file_%eof = .false.
 
 	case ("readln")
 
 		call syntax_eval(node%args(1), state, arg1)
+
+		! TODO: check that file was opened with mode_read
 
 		!print *, "reading from unit", arg1%sca%file_%unit_
 		res%sca%str%s = read_line(arg1%sca%file_%unit_, io)
@@ -1710,6 +1748,8 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		call syntax_eval(node%args(1), state, arg1)
 
+		! TODO: check that file was opened with mode_write
+
 		!print *, 'writing to unit ', arg1%sca%file_%unit_
 		do i = 2, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
@@ -1721,6 +1761,8 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		call syntax_eval(node%args(1), state, arg1)
 
+		! TODO: check that file was opened with mode_read
+
 		!print *, "checking eof for unit", arg1%sca%file_%unit_
 		res%sca%bool = arg1%sca%file_%eof
 
@@ -1728,6 +1770,9 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 	case ("close")
 		call syntax_eval(node%args(1), state, arg)
+
+		! TODO: check that file was opened (period)
+
 		!print *, 'closing unit ', arg%sca%file_%unit_
 		close(arg%sca%file_%unit_)
 

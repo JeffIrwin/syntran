@@ -13,10 +13,21 @@ module syntran__value_m
 	!********
 
 	type file_t
+
 		character(len = :), allocatable :: name_
+
 		integer :: unit_  ! fortran file unit
+
+		! TODO: extend with more modes, e.g. binary, text, append (?)
+		!
+		! c.f. python open modes:  https://docs.python.org/3/library/functions.html#open
+		logical :: &
+			mode_read  = .false., &
+			mode_write = .false.
+
 		logical :: eof = .false.
 		! Do we need a separate iostat beyond eof?
+
 	end type file_t
 
 	!********

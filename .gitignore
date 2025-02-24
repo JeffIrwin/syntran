@@ -14,5 +14,7 @@ test.exe
 /scratch
 /build
 
+/docker/artifact-download/
+
 # C executable for multi-lang sample
 /samples/bridge/bridge
