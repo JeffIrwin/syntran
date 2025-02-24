@@ -3006,7 +3006,9 @@ recursive subroutine eval_array_expr(node, state, res)
 
 		res%type  = array_type
 
-		res%struct_name = node%val%struct_name
+		if (allocated(node%val%struct_name)) then
+			res%struct_name = node%val%struct_name
+		end if
 
 		!print *, "struct_name = ", res%struct_name
 
