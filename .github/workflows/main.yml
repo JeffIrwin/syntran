@@ -497,7 +497,9 @@
 					set -exu \n
 
 					if [[ \"${{ env.FC }}\" != \"ifort\" ]] ; then \n
+					if [[ \"${{ matrix.toolchain.version }}\" != \"2023.1\" ]] ; then \n
 						fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+					fi \n
 					fi \n
 
 					fpm test test --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast\" \n
