@@ -60,7 +60,11 @@ module syntran__core_m
 	!          feature without breaking compat
 	!      + binary open mode?
 	!      + should readln() take a ref?  the file is technically an in/out arg
-	!        since it will set eof.  compat break
+	!        since it will set eof.  compat break.  close() also modifies its
+	!        arg as an out arg, but not writeln().  on the other hand, i like
+	!        keeping it simple and not making users think about references for
+	!        built-in fns. in rust, writing surprisingly requires a mutable ref:
+	!        `writeln!(&mut f, "{i}")?;`
 	!    * anything else? review the rest of this list
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)

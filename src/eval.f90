@@ -1683,7 +1683,15 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 			end select
 		end do
-		! TODO: should mode "wr" be allowed?
+
+		if (res%sca%file_%mode_read .and. res%sca%file_%mode_write) then
+			! Maybe "rw" mode could be allowed in the future, but i'm not sure
+			! what a useful application would be.  Perhaps if I exposed a
+			! rewind() or seek() fn
+			write(*,*) err_rt_prefix//"cannot open file """//arg1%sca%str%s &
+				//""" in combined read/write mode """//mode//""""
+			call internal_error()
+		end if
 
 		if (res%sca%file_%mode_read) then
 			status_ = "old"
@@ -1696,21 +1704,33 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		!print *, "io = ", io
 
 		if (io /= 0) then
+			! Decode fortran iostat codes in message?  I just looked up the docs
+			! and there's not much about open iostat other than 0 is success.
+			! Read iostats are more descriptive
 			write(*,*) err_rt_prefix//"cannot open file """//arg1%sca%str%s//""""
-			write(*,*) "iostat = ", io
-			! TODO: decode fortran iostat codes in message
+			write(*,*) "iostat = ", str(io)
 			call internal_error()
 		end if
 
 		!print *, 'opened unit ', res%sca%file_%unit_
 		res%sca%file_%name_ = arg1%sca%str%s
 		res%sca%file_%eof = .false.
+		res%sca%file_%is_open = .true.
 
 	case ("readln")
 
 		call syntax_eval(node%args(1), state, arg1)
 
-		! TODO: check that file was opened with mode_read
+		if (.not. arg1%sca%file_%is_open) then
+			write(*,*) err_rt_prefix//"readln() was called for file """ &
+				//arg1%sca%file_%name_//""" which is not open"
+			call internal_error()
+		end if
+		if (.not. arg1%sca%file_%mode_read) then
+			write(*,*) err_rt_prefix//"readln() was called for file """ &
+				//arg1%sca%file_%name_//""" which was not opened in read mode ""r"""
+			call internal_error()
+		end if
 
 		!print *, "reading from unit", arg1%sca%file_%unit_
 		res%sca%str%s = read_line(arg1%sca%file_%unit_, io)
@@ -1726,7 +1746,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		!!print *, 'ident = ', node%args(1)%identifier%text
 		!!state%vars%vals(node%id_index) = res
 
-		! TODO:  set eof flag or crash for other non-zero io
+		!  TODO:   set eof flag or crash for other non-zero io 
 		if (io == iostat_end) then
 		!if (io /= 0) then
 			!arg1%sca%file_%eof = .true.
@@ -1748,7 +1768,16 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		call syntax_eval(node%args(1), state, arg1)
 
-		! TODO: check that file was opened with mode_write
+		if (.not. arg1%sca%file_%is_open) then
+			write(*,*) err_rt_prefix//"writeln() was called for file """ &
+				//arg1%sca%file_%name_//""" which is not open"
+			call internal_error()
+		end if
+		if (.not. arg1%sca%file_%mode_write) then
+			write(*,*) err_rt_prefix//"writeln() was called for file """ &
+				//arg1%sca%file_%name_//""" which was not opened in write mode ""w"""
+			call internal_error()
+		end if
 
 		!print *, 'writing to unit ', arg1%sca%file_%unit_
 		do i = 2, size(node%args)
@@ -1761,7 +1790,16 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		call syntax_eval(node%args(1), state, arg1)
 
-		! TODO: check that file was opened with mode_read
+		if (.not. arg1%sca%file_%is_open) then
+			write(*,*) err_rt_prefix//"eof() was called for file """ &
+				//arg1%sca%file_%name_//""" which is not open"
+			call internal_error()
+		end if
+		if (.not. arg1%sca%file_%mode_read) then
+			write(*,*) err_rt_prefix//"eof() was called for file """ &
+				//arg1%sca%file_%name_//""" which was not opened in read mode ""r"""
+			call internal_error()
+		end if
 
 		!print *, "checking eof for unit", arg1%sca%file_%unit_
 		res%sca%bool = arg1%sca%file_%eof
@@ -1769,12 +1807,21 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		!print *, 'eof fn = ', arg1%sca%file_%eof
 
 	case ("close")
-		call syntax_eval(node%args(1), state, arg)
+		call syntax_eval(node%args(1), state, arg1)
 
-		! TODO: check that file was opened (period)
+		if (.not. arg1%sca%file_%is_open) then
+			write(*,*) err_rt_prefix//"close() was called for file """ &
+				//arg1%sca%file_%name_//""" which is not open"
+			call internal_error()
+		end if
+		if (node%args(1)%is_loc) then
+			state%locs%vals(node%args(1)%id_index)%sca%file_%is_open = .false.
+		else
+			state%vars%vals(node%args(1)%id_index)%sca%file_%is_open = .false.
+		end if
 
-		!print *, 'closing unit ', arg%sca%file_%unit_
-		close(arg%sca%file_%unit_)
+		!print *, 'closing unit ', arg1%sca%file_%unit_
+		close(arg1%sca%file_%unit_)
 
 	case ("exit")
 

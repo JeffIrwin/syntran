@@ -25,6 +25,7 @@ module syntran__value_m
 			mode_read  = .false., &
 			mode_write = .false.
 
+		logical :: is_open = .false.
 		logical :: eof = .false.
 		! Do we need a separate iostat beyond eof?
 
