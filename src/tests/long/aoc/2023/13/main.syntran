@@ -129,7 +129,7 @@ fn part1(): i32
 
 		//println("pattern = ", pattern);
 		//println();
-		str_ = readln(f);
+		if (not eof(f)) str_ = readln(f);
 	}
 	close(f);
 
@@ -268,7 +268,7 @@ fn part2(): i32
 
 		//println("pattern = ", pattern);
 		//println();
-		str_ = readln(f);
+		if (not eof(f)) str_ = readln(f);
 	}
 	close(f);
 
