@@ -528,7 +528,6 @@
 					ans=$(docker run sy -c \"1 + 2;\") \n
 					if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
 						echo \"win\" \n
-						exit 0 \n
 					else \n
 						echo \"fail\" \n
 						exit 1 \n
@@ -541,7 +540,6 @@
 					ans=$(docker run sy -c \"1 + 2;\") \n
 					if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
 						echo \"win\" \n
-						exit 0 \n
 					else \n
 						echo \"fail\" \n
 						exit 1 \n
