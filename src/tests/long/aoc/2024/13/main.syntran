@@ -59,7 +59,7 @@ fn part1(): i64
 
 		str_ = readln(f); // skip blank line
 
-		str_ = readln(f);
+		if (not eof(f)) str_ = readln(f);
 	}
 	close(f);
 
@@ -131,7 +131,7 @@ fn part2(): i64
 
 		str_ = readln(f); // skip blank line
 
-		str_ = readln(f);
+		if (not eof(f)) str_ = readln(f);
 	}
 	close(f);
 
