@@ -1746,6 +1746,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		!!print *, 'ident = ', node%args(1)%identifier%text
 		!!state%vars%vals(node%id_index) = res
 
+
 		!  TODO:   set eof flag or crash for other non-zero io 
 		if (io == iostat_end) then
 		!if (io /= 0) then

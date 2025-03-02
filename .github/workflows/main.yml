@@ -508,18 +508,33 @@
 			}
 		]
 	},
-	"test-docker-build": {
+	"test-alpine-docker-build": {
 		# Build syntran from source in default top-level alpine Dockerfile
-		"name": "Test docker build",
+		"name": "Test alpine docker build",
 		"runs-on": "ubuntu-latest",
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
-				"name": "Test docker",
+				"name": "Test alpine docker",
 				"run":
 				"
 					docker --version \n
+
+					# Latest alpine version in default 'Dockerfile' \n
 					docker build . -t sy \n
+					docker run --entrypoint syntran sy --version \n
+					docker run sy --version # syntran is already the default entrypoint \n
+					docker run sy -c \"1 + 2;\" \n
+					ans=$(docker run sy -c \"1 + 2;\") \n
+					if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
+						echo \"win\" \n
+						exit 0 \n
+					else \n
+						echo \"fail\" \n
+						exit 1 \n
+					fi \n
+
+					docker build . --file Dockerfile.alpine.3.18 -t sy \n
 					docker run --entrypoint syntran sy --version \n
 					docker run sy --version # syntran is already the default entrypoint \n
 					docker run sy -c \"1 + 2;\" \n
