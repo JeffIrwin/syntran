@@ -41,11 +41,6 @@ fn main(): str
 
 	//println("stri = ", stri);
 
-	let eof_ = readln(fi);
-	//println("");
-	//println("eof syntran = " + str(eof(fi)));
-	//println("");
-
 	//println("stri0 = """ + stri0 + """");
 	//println("stri1 = """ + stri1 + """");
 	//println("stri2 = """ + stri2 + """");

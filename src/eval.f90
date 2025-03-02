@@ -1746,10 +1746,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		!!print *, 'ident = ', node%args(1)%identifier%text
 		!!state%vars%vals(node%id_index) = res
 
-
-		!  TODO:   set eof flag or crash for other non-zero io 
 		if (io == iostat_end) then
-		!if (io /= 0) then
 			!arg1%sca%file_%eof = .true.
 			!id = node%id_index
 
@@ -1761,6 +1758,17 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			else
 				state%vars%vals(node%args(1)%id_index)%sca%file_%eof = .true.
 			end if
+
+		else if (io == iostat_eor) then
+			! Do nothing
+
+		else if (io /= 0) then
+			! This can get thrown if you attempt to read past EOF.  Maybe add a
+			! more specific message ahead of read attempt in this case?
+			write(*,*) err_rt_prefix//"cannot readln() from file """ &
+				//arg1%sca%file_%name_//""""
+			write(*,*) "iostat = ", str(io)
+			call internal_error()
 
 		end if
 		!print *, 'eof   = ', arg1%sca%file_%eof
