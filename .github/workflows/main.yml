@@ -20,7 +20,7 @@
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
-				"uses": "fortran-lang/setup-fpm@v5",
+				"uses": "fortran-lang/setup-fpm@v7",
 				"with": {
 					"github-token": "${{ secrets.GITHUB_TOKEN }}"
 				}
@@ -418,7 +418,7 @@
 				"uses": "actions/checkout@v1"
 			},
 			{
-				"uses": "fortran-lang/setup-fpm@v5",
+				"uses": "fortran-lang/setup-fpm@v7",
 				"with": {
 					"github-token": "${{ secrets.GITHUB_TOKEN }}"
 				}
@@ -472,7 +472,7 @@
 
 			},
 			{
-				"uses": "fortran-lang/setup-fpm@v5",
+				"uses": "fortran-lang/setup-fpm@v7",
 				"with": {
 					"github-token": "${{ secrets.GITHUB_TOKEN }}"
 				}
