@@ -15,6 +15,7 @@ test.exe
 /build
 
 /docker/artifact-download/
+/docker/artifact-download-*/
 
 # C executable for multi-lang sample
 /samples/bridge/bridge
