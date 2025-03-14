@@ -2586,13 +2586,6 @@ subroutine eval_translation_unit(node, state, res)
 		!print *, i, ' res = ', res%to_str()
 		!print *, ''
 
-		! HolyC feature: implicitly print name expression members.  I may
-		! remove this after I implement an intrinsic print() fn.  May also
-		! need to suppress this for void fn calls later
-		if (node%members(i)%kind == name_expr .and. .not. state%quiet) then
-			write(*,*) res%to_str()
-		end if
-
 		if (state%returned) exit
 
 	end do
@@ -3210,20 +3203,7 @@ recursive subroutine eval_block_statement(node, state, res)
 		!print *, ''
 
 		! In case of no-op if statements and while loops
-		if (tmp%type /= unknown_type) then
-			res = tmp
-
-			!if (tmp%type == array_type) then
-			!	res%array = tmp%array
-			!end if
-		end if
-
-		! HolyC feature: implicitly print name expression members.  I may
-		! remove this after I implement an intrinsic print() fn.  May also
-		! need to suppress this for void fn calls later
-		if (node%members(i)%kind == name_expr .and. .not. state%quiet) then
-			write(*,*) tmp%to_str()
-		end if
+		if (tmp%type /= unknown_type) res = tmp
 
 		if (state%returned ) exit
 		if (state%breaked  ) exit

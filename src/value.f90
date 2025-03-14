@@ -429,7 +429,7 @@ subroutine push_array(vector, val)
 		else
 			! FIXME: when adding new types, implement it below too to set the
 			! last val
-			write(*,*) 'Error: push_array type not implemented'
+			write(*,*) err_int_prefix//'push_array type not implemented'
 			call internal_error()
 		end if
 
@@ -451,7 +451,7 @@ subroutine push_array(vector, val)
 	case (str_type)
 		vector%str ( vector%len_ ) = val%sca%str
 	case default
-		write(*,*) 'Error: push_array type not implemented'
+		write(*,*) err_int_prefix//'push_array type not implemented'
 		call internal_error()
 	end select
 

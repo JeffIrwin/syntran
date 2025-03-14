@@ -40,31 +40,7 @@ module syntran__core_m
 	!    * is appimage the standard tool for this?  how does fpm do it?
 	!  - add recursive fibonacci sample to syntran-explorer
 	!  - roadmap to version 1.0.0:
-	!    * expression statements are gone except for REPL.  check for any
-	!      vestigial "HolyC" style prints.  just make sure removing them doesn't
-	!      break the REPL
-	!      + running `x;` after previously assigning x prints its val twice in
-	!        the REPL.  this can probably be fixed
 	!    * maybe have a trial alpha/beta release 0.1.0 for a bit before 1.0?
-	!    * rethink open() fn.  add a read/write mode.  read mode should check if
-	!      file exists
-	!      + check samples and anything else not covered by tests
-	!        *     git ls-files *.syntran | xargs grep '\<open([^,]*)'
-	!      + this will be a compatibility break. it's a must-have for 1.0
-	!      + python style?  open("file.txt", "r"), open("file.txt", "w"),
-	!        open("file.txt", "rb"), etc.
-	!        * will parsing rwbt permutations be difficult? think carefully
-	!        * any better languages to imitate?
-	!        * default to read with an optional mode arg would be nice, but i
-	!          don't have opt args.  should be possible to add as a later
-	!          feature without breaking compat
-	!      + binary open mode?
-	!      + should readln() take a ref?  the file is technically an in/out arg
-	!        since it will set eof.  compat break.  close() also modifies its
-	!        arg as an out arg, but not writeln().  on the other hand, i like
-	!        keeping it simple and not making users think about references for
-	!        built-in fns. in rust, writing surprisingly requires a mutable ref:
-	!        `writeln!(&mut f, "{i}")?;`
 	!    * anything else? review the rest of this list
 	!      + cmd args, env vars?  should be easy to add w/o breaking compat
 	!    * review all TODO notes in the codebase (!)
@@ -72,16 +48,6 @@ module syntran__core_m
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)
 	!      set by an env var, but that isn't pressing
-	!  - docker ci/cd stages should test current branch, not main
-	!    * i think this is fixed.  need to double confirm by bumping version
-	!      number or something obvious
-	!    * after 1.0 i should be more strict about changing main branch.  add
-	!      branch protection and only change it via PRs
-	!    * should have a dev branch where work is done, main should only change
-	!      by merging *after* testing on dev branch
-	!    * hence, all tests should cover dev or whatever the current branch is
-	!    * could use `add` instead of `git clone` in docker.  make sure enough
-	!      files are added, but not large files like wave solver results
 	!  - add tests that cover interactive interpreter REPL?
 	!    * i'm half thinking of just abandoning it, but i do like having a
 	!      desktop calculator
@@ -93,6 +59,9 @@ module syntran__core_m
 	!    * should also cover options like `-i` (startup include file)
 	!  - recursive data structs?
 	!    * recursive fns are available, but not structs
+	!  - callbacks, fn pointers, i.e. passing one function as an argument to
+	!    another function
+	!    * this could be a big change to the type system
 	!  - minloc, maxloc, findloc fns
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
@@ -160,13 +129,24 @@ module syntran__core_m
 	!  - type() or typeof() fn to get type name as str?  could be useful for
 	!    debugging, but I don't want to encourage it's use for actual program
 	!    logic
+	!  - complex number type(s)
+	!    * basically required for FFT
 	!  - f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
 	!      multiply by 1.0
-	!  - add tests to cover syntran-explorer samples. might be a bit much to
-	!    automate cross-repo testing on the same source, but a little copy/paste
-	!    is better than nothing
+	!  - special `ans` variable for REPL only, like matlab, julia, etc?
+	!    * it would have to be dynamically typed, changing depending on whatever
+	!      the type of the last statement is
+	!    * it would also have to be reserved from overriding with a regular
+	!      variable with the same name `ans`, at least within the REPL and maybe
+	!      everywhere for compatibility of being able to paste code into the
+	!      REPL
+	!    * it would be very convenient.  you can always rlwrap and up arrow,
+	!      then assign to a var if you need to save the last ans.  but this is
+	!      inconvenient, and state changers are not always idempotent (meaning
+	!      up arrow could give a different answer on 2nd execution).  and if a
+	!      statement is expensive, you may not want to have to run it again
 	!  - structs
 	!    * post-merge TODO struct items:
 	!      + update struct sample.  include struct/array combos, nesting, etc.
@@ -385,6 +365,20 @@ module syntran__core_m
 	!      probably isn't desireable, but i'm not sure how big of a deal it is
 	!      or how to fix it.  right now everything is one translation unit.
 	!      might want to rethink scoping
+	!  - file open() modes
+	!    + done mvp
+	!    + add more modes, like "b" for binary and "a" for append
+	!    + python style.  open("file.txt", "r"), open("file.txt", "w"),
+	!      open("file.txt", "rb"), etc.
+	!      * default to read with an optional mode arg would be nice, but i
+	!        don't have opt args.  should be possible to add as a later
+	!        feature without breaking compat
+	!    + should readln() take a ref?  the file is technically an in/out arg
+	!      since it will set eof.  compat break.  close() also modifies its
+	!      arg as an out arg, but not writeln().  on the other hand, i like
+	!      keeping it simple and not making users think about references for
+	!      built-in fns. in rust, writing surprisingly requires a mutable ref:
+	!      `writeln!(&mut f, "{i}")?;`
 	!
 	!****************************************
 

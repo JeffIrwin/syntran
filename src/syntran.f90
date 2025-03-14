@@ -19,7 +19,7 @@ contains
 
 function syntran_interpret(str_, quiet, startup_file) result(res_str)
 
-	! This is the interactive interpreter shell
+	! This is the interactive interpreter shell REPL
 	!
 	! To interpret a whole file all at once, use syntran_interpret_file()
 	! instead
@@ -203,9 +203,10 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 
 		call syntax_eval(compilation, state, res )
 
-		! Consider MATLAB-style "ans = " log?
-		!
-		! TODO: suppress unknown value logging (e.g. after #include())
+		!print *, "res type = ", kind_name(res%type)
+		if (res%type == void_type   ) cycle
+		if (res%type == unknown_type) cycle
+
 		res_str = res%to_str()
 		if (.not. present(str_)) write(ou, '(a)') res_str
 
