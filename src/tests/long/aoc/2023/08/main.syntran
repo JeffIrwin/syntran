@@ -23,7 +23,7 @@ fn part1(): i32
 	let n = countln_(filename) - 2;
 	//println("n = ", n);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let instr = readln(f);
 
 	let str_ = readln(f);  // blank line
@@ -123,7 +123,7 @@ fn part2(): i64
 	let n = countln_(filename) - 2;
 	//println("n = ", n);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let instr = readln(f);
 
 	let str_ = readln(f);  // blank line

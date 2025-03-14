@@ -132,7 +132,7 @@ fn part1(): i32
 	let ymaxmax = -HUGE;
 	let zmaxmax = -HUGE;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	for i in [0: nb]
 	{
 		let str_ = readln(f);
@@ -297,7 +297,7 @@ fn part2(): i32
 	let ymaxmax = -HUGE;
 	let zmaxmax = -HUGE;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	for i in [0: nb]
 	{
 		let str_ = readln(f);

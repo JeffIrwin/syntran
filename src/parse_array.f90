@@ -125,7 +125,9 @@ recursive module function parse_array_expr(parser) result(expr)
 		expr%kind           = array_expr
 
 		expr%val%type        = array_type
-		expr%val%struct_name = lbound_%val%struct_name
+		if (allocated(lbound_%val%struct_name)) then
+			expr%val%struct_name = lbound_%val%struct_name
+		end if
 
 		if (lbound_%val%type == array_type) then
 			span = new_span(lb_beg, lb_end - lb_beg + 1)
@@ -455,7 +457,9 @@ recursive module function parse_array_expr(parser) result(expr)
 
 	!expr%val%type       = lbound_%val%type
 	expr%val%type        = array_type
-	expr%val%struct_name = lbound_%val%struct_name
+	if (allocated(lbound_%val%struct_name)) then
+		expr%val%struct_name = lbound_%val%struct_name
+	end if
 
 	!print *, "expr struct_name = ", expr%val%struct_name
 

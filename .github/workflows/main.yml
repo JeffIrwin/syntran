@@ -20,7 +20,7 @@
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
-				"uses": "fortran-lang/setup-fpm@v5",
+				"uses": "fortran-lang/setup-fpm@v7",
 				"with": {
 					"github-token": "${{ secrets.GITHUB_TOKEN }}"
 				}
@@ -153,8 +153,6 @@
 
 					# No significant difference between release and (default) debug profile. \n
 					# Maybe that will change after I copy the other half of AOC tests \n
-					#fpm test test \n
-					#fpm test long \n
 					fpm test test --profile release \n
 					fpm test long --profile release \n
 				"
@@ -420,7 +418,7 @@
 				"uses": "actions/checkout@v1"
 			},
 			{
-				"uses": "fortran-lang/setup-fpm@v5",
+				"uses": "fortran-lang/setup-fpm@v7",
 				"with": {
 					"github-token": "${{ secrets.GITHUB_TOKEN }}"
 				}
@@ -439,8 +437,6 @@
 				"run":
 				"
 					set -exu \n
-					#fpm test test --verbose --flag -Wno-tabs \n
-					#fpm test long \n
 					fpm test test --profile release --verbose --flag -Wno-tabs \n
 					fpm test long --profile release --flag -Wno-tabs \n
 				"
@@ -476,7 +472,7 @@
 
 			},
 			{
-				"uses": "fortran-lang/setup-fpm@v5",
+				"uses": "fortran-lang/setup-fpm@v7",
 				"with": {
 					"github-token": "${{ secrets.GITHUB_TOKEN }}"
 				}
@@ -499,23 +495,32 @@
 				"run":
 				"
 					set -exu \n
-					fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
-					fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+
+					if [[ \"${{ env.FC }}\" != \"ifort\" ]] ; then \n
+					if [[ \"${{ matrix.toolchain.version }}\" != \"2023.1\" ]] ; then \n
+						fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+					fi \n
+					fi \n
+
+					fpm test test --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast\" \n
+					fpm test long --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast\" \n
 				"
 			}
 		]
 	},
-	"test-docker-build": {
+	"test-alpine-docker-build": {
 		# Build syntran from source in default top-level alpine Dockerfile
-		"name": "Test docker build",
+		"name": "Test alpine docker build",
 		"runs-on": "ubuntu-latest",
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
-				"name": "Test docker",
+				"name": "Test alpine docker",
 				"run":
 				"
 					docker --version \n
+
+					# Latest alpine version in default 'Dockerfile' \n
 					docker build . -t sy \n
 					docker run --entrypoint syntran sy --version \n
 					docker run sy --version # syntran is already the default entrypoint \n
@@ -523,7 +528,18 @@
 					ans=$(docker run sy -c \"1 + 2;\") \n
 					if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
 						echo \"win\" \n
-						exit 0 \n
+					else \n
+						echo \"fail\" \n
+						exit 1 \n
+					fi \n
+
+					docker build . --file Dockerfile.alpine.3.18 -t sy \n
+					docker run --entrypoint syntran sy --version \n
+					docker run sy --version # syntran is already the default entrypoint \n
+					docker run sy -c \"1 + 2;\" \n
+					ans=$(docker run sy -c \"1 + 2;\") \n
+					if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
+						echo \"win\" \n
 					else \n
 						echo \"fail\" \n
 						exit 1 \n

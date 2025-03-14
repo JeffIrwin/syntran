@@ -1,7 +1,7 @@
 
 fn countlines(filename: str): i32
 {
-	let fi = open(filename);
+	let fi = open(filename, "r");
 	//println("fi = " + str(fi));
 
 	let nlines = 0;
@@ -40,7 +40,7 @@ fn main(): bool
 	let filename = "build/test-05.txt";
 
 	// write
-	let fo = open(filename);
+	let fo = open(filename, "w");
 	for i in [0: size(stro, 0)]
 		writeln(fo, stro[i]);
 	close(fo);
@@ -49,7 +49,7 @@ fn main(): bool
 	//println("n = ", n);
 
 	// read
-	let fi = open(filename);
+	let fi = open(filename, "r");
 	//println("fi = " + str(fi));
 
 	let stri = [""; n];

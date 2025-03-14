@@ -51,7 +51,7 @@ fn part1(): i64
 	// memory but incur more expensive lookups
 	let cons = [false; NIDS, NIDS];
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	for ip in [0: npairs]
 	{
@@ -196,7 +196,7 @@ fn part2(): str
 
 	let cons = [false; NIDS, NIDS];
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	for ip in [0: npairs]
 	{

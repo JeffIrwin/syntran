@@ -1374,10 +1374,14 @@ subroutine declare_intr_fns(fns)
 	!********
 
 	open_fn%type%type = file_type
-	allocate(open_fn%params(1))
-	allocate(open_fn%param_names%v(1))
+	allocate(open_fn%params(2))
+	allocate(open_fn%param_names%v(2))
+
 	open_fn%params(1)%type = str_type
 	open_fn%param_names%v(1)%s = "filename"
+
+	open_fn%params(2)%type = str_type
+	open_fn%param_names%v(2)%s = "mode"
 
 	call fns%insert("open", open_fn, id_index)
 

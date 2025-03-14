@@ -1,13 +1,12 @@
 
-FROM almalinux:latest
-#FROM almalinux:9.3
-#FROM almalinux:8
+FROM gentoo/stage3:latest
 
-WORKDIR workdir
+WORKDIR /workdir
 
-RUN yum update -y
-#RUN yum install -y curl
-RUN yum install -y unzip
+## Gentoo pack man is `emerge`
+#RUN yum update -y
+##RUN yum install -y curl
+#RUN yum install -y unzip
 
 ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux.zip"
 #ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/download/0.0.48/syntran-linux.zip"

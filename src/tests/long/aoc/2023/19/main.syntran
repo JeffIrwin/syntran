@@ -25,7 +25,7 @@ fn part1(): i32
 	// First pass: count fn and data lines
 	let nfn = 0;
 	let nda = 0;
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while not eof(f)
 	{
@@ -54,7 +54,7 @@ fn part1(): i32
 	// Second pass: save fns and data
 	nfn = 0;
 	nda = 0;
-	f = open(filename);
+	f = open(filename, "r");
 	str_ = readln(f);
 	while not eof(f)
 	{
@@ -249,7 +249,7 @@ fn part2(): i64
 	// instead determining *all possible* data that could be accepted, not
 	// individual data scalars
 	let nfn = 0;
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while not eof(f)
 	{
@@ -271,7 +271,7 @@ fn part2(): i64
 
 	// Second pass: save fns
 	nfn = 0;
-	f = open(filename);
+	f = open(filename, "r");
 	str_ = readln(f);
 	while not eof(f)
 	{

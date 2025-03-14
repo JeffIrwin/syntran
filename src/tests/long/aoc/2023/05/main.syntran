@@ -76,7 +76,7 @@ fn part1(): i64
 {
 	let sum_ = i64(0);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 
 	let strs = split_(str_, ":");
@@ -106,7 +106,7 @@ fn part1(): i64
 
 		// Rewind and read until the mapname that we left off at
 		close(f);
-		f = open(filename);
+		f = open(filename, "r");
 		str_ = readln(f);
 		while not (str_ == mapname)
 		{
@@ -159,7 +159,7 @@ fn part2(): i64
 {
 	let sum_ = i64(0);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 
 	let strs = split_(str_, ":");
@@ -232,7 +232,7 @@ fn part2(): i64
 
 		// Rewind and read until the mapname that we left off at
 		close(f);
-		f = open(filename);
+		f = open(filename, "r");
 		str_ = readln(f);
 		while not (str_ == mapname)
 		{

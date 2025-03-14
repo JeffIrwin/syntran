@@ -20,7 +20,7 @@ fn part1(): i32
 	//println("starting part1");
 	let sum_ = 0;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while not eof(f)
 	{
@@ -67,7 +67,7 @@ fn part2(): i32
 		"nine"
 	];
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while not eof(f)
 	{

@@ -31,7 +31,7 @@ fn part1(): str
 {
 	let sum_ = 0'i64;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 
 	let str_ = readln(f);
 	let reg_a = read_i32(str_);
@@ -270,7 +270,7 @@ fn part2(): str
 {
 	let sum_ = 0'i64;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 
 	let str_ = readln(f);
 	let reg_a = i64(read_i32(str_)); // this is ignored for part 2

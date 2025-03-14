@@ -22,7 +22,7 @@ fn part1(): i32
 
 	let maxset = Subset{red = 12, green = 13, blue = 14};
 
-	let fid = open(infile);
+	let fid = open(infile, "r");
 	let str_ = readln(fid);
 	let id = 0;
 	while (not eof(fid))
@@ -89,7 +89,7 @@ fn part2(): i32
 {
 	let sum = 0;
 
-	let fid = open(infile);
+	let fid = open(infile, "r");
 	let str_ = readln(fid);
 	let id = 0;
 	while (not eof(fid))

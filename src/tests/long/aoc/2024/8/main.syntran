@@ -21,7 +21,7 @@ fn part1(): i64
 
 	let ny = countln_(filename);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	let nx = i32(len(str_));
 
@@ -102,7 +102,7 @@ fn part2(): i64
 
 	let ny = countln_(filename);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	let nx = i32(len(str_));
 
