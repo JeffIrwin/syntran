@@ -516,9 +516,9 @@ function value_to_f32(val) result(ans)
 
 		case (str_type)
 
-			! TODO: suggest `parse_f32()`
+			! There is no user-facing `f32()` fn (or `f64()`) yet anyway, unlike `i32()`
 			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to f32 '//color_reset
+				//kind_name(val%type)//'` to f32.  Use `parse_f32()`'//color_reset
 			call internal_error()
 
 		case default
@@ -554,9 +554,8 @@ function value_to_f64(val) result(ans)
 
 		case (str_type)
 
-			! TODO: suggest `parse_f64()`
 			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to f64 '//color_reset
+				//kind_name(val%type)//'` to f64.  Use `parse_f64()`'//color_reset
 			call internal_error()
 
 		case default
