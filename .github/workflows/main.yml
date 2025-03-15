@@ -362,17 +362,6 @@
 					mkdir bin \n
 					cd bin \n
 					tar xvf ../syntran-linux.tgz \n
-
-					#docker run sy --version # syntran is already the default entrypoint \n
-					#docker run sy -c \"1 + 2;\" \n
-					#ans=$(docker run sy -c \"1 + 2;\") \n
-					#if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
-					#	echo \"win\" \n
-					#	exit 0 \n
-					#else \n
-					#	echo \"fail\" \n
-					#	exit 1 \n
-					#fi \n
 				"
 			},
 			{
@@ -525,8 +514,8 @@
 					docker run --entrypoint syntran sy --version \n
 					docker run sy --version # syntran is already the default entrypoint \n
 					docker run sy -c \"1 + 2;\" \n
-					ans=$(docker run sy -c \"1 + 2;\") \n
-					if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
+					ans=$(docker run sy -c \"1 + 2;\"  | tr -d '[:space:]') \n
+					if [[ \"$ans\" == \"3\" ]] ; then \n
 						echo \"win\" \n
 					else \n
 						echo \"fail\" \n
@@ -537,8 +526,8 @@
 					docker run --entrypoint syntran sy --version \n
 					docker run sy --version # syntran is already the default entrypoint \n
 					docker run sy -c \"1 + 2;\" \n
-					ans=$(docker run sy -c \"1 + 2;\") \n
-					if [[ \"$ans\" == \" ans = \\`3\\`\" ]] ; then \n
+					ans=$(docker run sy -c \"1 + 2;\"  | tr -d '[:space:]') \n
+					if [[ \"$ans\" == \"3\" ]] ; then \n
 						echo \"win\" \n
 					else \n
 						echo \"fail\" \n
