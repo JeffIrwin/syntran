@@ -80,7 +80,7 @@
 						< samples/arithmetic2.syntran
 						| grep -o \"{x = '.*'}\" | grep -o '[0-9]*'
 					) \n
-					[[ \"$ans\" != \"174\" ]] && exit 1 \n
+					[[ \"$ans\" != \"175\" ]] && exit 1 \n
 
 					# Test samples from syntran-explorer \n
 					# TODO: test this in the release binary \n
