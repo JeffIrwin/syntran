@@ -76,6 +76,12 @@
 					fpm build --profile debug --link-flag \"$lflags\" \n
 
 					# Run with `<` to test the REPL shell \n
+					#
+					# TODO: test REPL with more complex input, but come up with
+					# a way to filter-out 'syntran$ ' and '> ' prompts from
+					# output.  Maybe add a '-qq' option to make it even quieter?
+					# Or keep grepping with well-formatted printed output
+					# \n
 					ans=$(fpm run --profile debug --link-flag \"$lflags\"
 						< samples/arithmetic2.syntran
 						| grep -o \"{x = '.*'}\" | grep -o '[0-9]*'
