@@ -75,7 +75,7 @@
 
 					fpm build --profile debug --link-flag \"$lflags\" \n
 
-					# Run with `<` to test the REPL shell
+					# Run with `<` to test the REPL shell \n
 					ans=$(fpm run --profile debug --link-flag \"$lflags\"
 						< samples/arithmetic2.syntran
 						| grep -o \"{x = '.*'}\" | grep -o '[0-9]*'
