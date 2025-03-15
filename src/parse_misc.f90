@@ -410,64 +410,69 @@ module function parse_unit(parser) result(unit)
 
 	!****************
 
-	!print *, ""
-	!print *, ""
-	!print *, " ===========  PARSING PASS NUMBER 2 ========== "
-	!print *, ""
-	!print *, ""
+	! If any errors, skip second pass.  Although be careful to still do stuff at
+	! end of routine.  Otherwise users will get the same error message twice
+	! from the second pass, at least for simple errors.  Things like undefined
+	! fns won't be an error until the 2nd pass
+	if (parser%diagnostics%len_ == 0) then
 
-	! TODO: if any errors, skip second pass.  Although be careful to still do
-	! stuff at end of routine
+		!print *, ""
+		!print *, ""
+		!print *, " ===========  PARSING PASS NUMBER 2 ========== "
+		!print *, ""
+		!print *, ""
 
-	! Second pass
-	parser%pos = 1
-	parser%ipass = 1
+		! Second pass
+		parser%pos = 1
+		parser%ipass = 1
 
-	parser%num_vars = num_vars0
-	parser%num_fns = num_fns0
-	parser%num_structs = num_structs0
+		parser%num_vars = num_vars0
+		parser%num_fns = num_fns0
+		parser%num_structs = num_structs0
 
-	! TODO: Double check struct resetting.  Does anything else need to be reset?  
+		! TODO: Double check struct resetting.  Does anything else need to be reset?
 
-	members = new_syntax_node_vector()
-	i = 0
+		members = new_syntax_node_vector()
+		i = 0
 
-	!left  = parser%match(lbrace_token)
+		!left  = parser%match(lbrace_token)
 
-	!call parser%vars%push_scope()
-	!call parser%locs%push_scope()
+		!call parser%vars%push_scope()
+		!call parser%locs%push_scope()
 
-	! TODO: dry?  Two passes are almost the same, but also there are only two of
-	! them
+		! TODO: dry?  Two passes are almost the same, but also there are only two of
+		! them
 
-	!print *, "parser pos beg = ", parser%pos
-	do while (parser%current_kind() /= eof_token)
+		!print *, "parser pos beg = ", parser%pos
+		do while (parser%current_kind() /= eof_token)
 
-		!print *, "    parser pos = ", parser%pos
+			!print *, "    parser pos = ", parser%pos
 
-		pos0 = parser%pos
-		i = i + 1
-		!print *, '    statement ', i
+			pos0 = parser%pos
+			i = i + 1
+			!print *, '    statement ', i
 
-		select case (parser%current_kind())
-		case (fn_keyword)
-			call members%push(parser%parse_fn_declaration())
-		case (struct_keyword)
-			call members%push(parser%parse_struct_declaration())
-		case default
-			call members%push(parser%parse_statement())
-		end select
+			select case (parser%current_kind())
+			case (fn_keyword)
+				call members%push(parser%parse_fn_declaration())
+			case (struct_keyword)
+				call members%push(parser%parse_struct_declaration())
+			case default
+				call members%push(parser%parse_statement())
+			end select
 
-		! Break infinite loops
-		if (parser%pos == pos0) dummy = parser%next()
+			! Break infinite loops
+			if (parser%pos == pos0) dummy = parser%next()
 
-	end do
-	!print *, "parser pos end = ", parser%pos
+		end do
+		!print *, "parser pos end = ", parser%pos
 
-	!call parser%vars%pop_scope()
-	!call parser%locs%pop_scope()
+		!call parser%vars%pop_scope()
+		!call parser%locs%pop_scope()
 
-	!right = parser%match(rbrace_token)
+		!right = parser%match(rbrace_token)
+
+	end if  ! no diagnostics from 1st pass
 
 	!****************
 

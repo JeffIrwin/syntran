@@ -13,10 +13,22 @@ module syntran__value_m
 	!********
 
 	type file_t
+
 		character(len = :), allocatable :: name_
+
 		integer :: unit_  ! fortran file unit
+
+		! TODO: extend with more modes, e.g. binary, text, append (?)
+		!
+		! c.f. python open modes:  https://docs.python.org/3/library/functions.html#open
+		logical :: &
+			mode_read  = .false., &
+			mode_write = .false.
+
+		logical :: is_open = .false.
 		logical :: eof = .false.
 		! Do we need a separate iostat beyond eof?
+
 	end type file_t
 
 	!********
@@ -417,7 +429,7 @@ subroutine push_array(vector, val)
 		else
 			! FIXME: when adding new types, implement it below too to set the
 			! last val
-			write(*,*) 'Error: push_array type not implemented'
+			write(*,*) err_int_prefix//'push_array type not implemented'
 			call internal_error()
 		end if
 
@@ -439,7 +451,7 @@ subroutine push_array(vector, val)
 	case (str_type)
 		vector%str ( vector%len_ ) = val%sca%str
 	case default
-		write(*,*) 'Error: push_array type not implemented'
+		write(*,*) err_int_prefix//'push_array type not implemented'
 		call internal_error()
 	end select
 
@@ -504,15 +516,10 @@ function value_to_f32(val) result(ans)
 
 		case (str_type)
 
-			if (len(val%sca%str%s) == 1) then
-				! TODO: ban this.  I must've accidentlly copied it from i32
-				ans = iachar(val%sca%str%s)
-			else
-				! TODO: suggest `parse_i32()` when that exists
-				write(*,*) err_int_prefix//'cannot convert from type `' &
-					//kind_name(val%type)//'` to f32 '//color_reset
-				call internal_error()
-			end if
+			! There is no user-facing `f32()` fn (or `f64()`) yet anyway, unlike `i32()`
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to f32.  Use `parse_f32()`'//color_reset
+			call internal_error()
 
 		case default
 			write(*,*) err_int_prefix//'cannot convert from type `' &
@@ -547,15 +554,9 @@ function value_to_f64(val) result(ans)
 
 		case (str_type)
 
-			if (len(val%sca%str%s) == 1) then
-				! TODO: ban this.  I must've accidentlly copied it from i32
-				ans = iachar(val%sca%str%s)
-			else
-				! TODO: suggest `parse_i32()` when that exists
-				write(*,*) err_int_prefix//'cannot convert from type `' &
-					//kind_name(val%type)//'` to f64 '//color_reset
-				call internal_error()
-			end if
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to f64.  Use `parse_f64()`'//color_reset
+			call internal_error()
 
 		case default
 			write(*,*) err_int_prefix//'cannot convert from type `' &
@@ -999,7 +1000,7 @@ recursive function scalar_to_str(val, type) result(ans)
 
 		case (str_type)
 			! TODO: wrap str in quotes for clarity, both scalars and str array
-			! elements.  Update tests.
+			! elements?  This would be a breaking change.  Update tests.
 			ans = val%str%s
 
 		case (file_type)

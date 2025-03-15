@@ -16,8 +16,7 @@ RUN unzip syntran-linux*.zip
 RUN rm syntran-linux*.zip
 RUN chmod +x ./syntran
 
-#RUN mv syntran libquadmath.so.* libc.so.* /usr/local/bin
-RUN mv syntran libquadmath.so.* /usr/local/bin
+RUN mv * /usr/local/bin
 
 # Set LD_LIBRARY_PATH for dependent libs
 RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/bin" >> ~/.bashrc

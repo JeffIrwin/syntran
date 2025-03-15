@@ -27,7 +27,7 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  62
+		syntran_patch =  63
 
 	! TODO:
 	!  - test rocky 10 circa May 2025, that's when they're planning to release
@@ -40,46 +40,20 @@ module syntran__core_m
 	!    * is appimage the standard tool for this?  how does fpm do it?
 	!  - add recursive fibonacci sample to syntran-explorer
 	!  - roadmap to version 1.0.0:
-	!    * expression statements are gone except for REPL.  check for any
-	!      vestigial "HolyC" style prints.  just make sure removing them doesn't
-	!      break the REPL
-	!      + running `x;` after previously assigning x prints its val twice in
-	!        the REPL.  this can probably be fixed
 	!    * maybe have a trial alpha/beta release 0.1.0 for a bit before 1.0?
-	!    * rethink open() fn.  add a read/write mode.  read mode should check if
-	!      file exists
-	!      + this will be a compatibility break. it's a must-have for 1.0
-	!      + binary open mode?
-	!      + should readln() take a ref?  the file is technically an in/out arg
-	!        since it will set eof.  compat break
-	!    * anything else? review the rest of this list
-	!      + cmd args, env vars?  should be easy to add w/o breaking compat
-	!    * review all TODO notes in the codebase (!)
 	!  - REPL styling
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)
 	!      set by an env var, but that isn't pressing
-	!  - docker ci/cd stages should test current branch, not main
-	!    * i think this is fixed.  need to double confirm by bumping version
-	!      number or something obvious
-	!    * after 1.0 i should be more strict about changing main branch.  add
-	!      branch protection and only change it via PRs
-	!    * should have a dev branch where work is done, main should only change
-	!      by merging *after* testing on dev branch
-	!    * hence, all tests should cover dev or whatever the current branch is
-	!    * could use `add` instead of `git clone` in docker.  make sure enough
-	!      files are added, but not large files like wave solver results
-	!  - add tests that cover interactive interpreter REPL?
-	!    * i'm half thinking of just abandoning it, but i do like having a
-	!      desktop calculator
-	!    * cover taking standard input.  i frequently break things like swapping
-	!      vars and fns dicts around from paused execution on each new line.
-	!      structs have never worked in REPL IIRC
-	!    * could easily be tested, it will just be a pain to keep it working
-	!      reliably
+	!  - add tests that cover interactive interpreter REPL
+	!    * added a couple basic tests in main.yml
+	!    * fns should also be covered
 	!    * should also cover options like `-i` (startup include file)
 	!  - recursive data structs?
 	!    * recursive fns are available, but not structs
+	!  - callbacks, fn pointers, i.e. passing one function as an argument to
+	!    another function
+	!    * this could be a big change to the type system
 	!  - minloc, maxloc, findloc fns
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
@@ -105,6 +79,7 @@ module syntran__core_m
 	!      ubuntu builds
 	!    * add version summary as a text file (major.minor.patch, git hash,
 	!      build date)
+	!    * list sha256 checksums of binaries somewhere
 	!    * doc. autogenerate pdf and/or html from markdown via pandoc or similar
 	!      + see build-doc.sh
 	!    * readme?
@@ -144,15 +119,26 @@ module syntran__core_m
 	!  - size() fn should optionally not need a 2nd argument for dim. in this
 	!    case, return product of extents of all dims (useful especially for vecs)
 	!  - type() or typeof() fn to get type name as str?  could be useful for
-	!    debugging, but I don't want to encourage it's use for actual program
+	!    debugging, but I don't want to encourage its use for actual program
 	!    logic
+	!  - complex number type(s)
+	!    * basically required for FFT
 	!  - f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
 	!      multiply by 1.0
-	!  - add tests to cover syntran-explorer samples. might be a bit much to
-	!    automate cross-repo testing on the same source, but a little copy/paste
-	!    is better than nothing
+	!  - special `ans` variable for REPL only, like matlab, julia, etc?
+	!    * it would have to be dynamically typed, changing depending on whatever
+	!      the type of the last statement is
+	!    * it would also have to be reserved from overriding with a regular
+	!      variable with the same name `ans`, at least within the REPL and maybe
+	!      everywhere for compatibility of being able to paste code into the
+	!      REPL
+	!    * it would be very convenient.  you can always rlwrap and up arrow,
+	!      then assign to a var if you need to save the last ans.  but this is
+	!      inconvenient, and state changers are not always idempotent (meaning
+	!      up arrow could give a different answer on 2nd execution).  and if a
+	!      statement is expensive, you may not want to have to run it again
 	!  - structs
 	!    * post-merge TODO struct items:
 	!      + update struct sample.  include struct/array combos, nesting, etc.
@@ -167,7 +153,7 @@ module syntran__core_m
 	!      > (sys) exit done
 	!        + should final return value be used as an implicit sys exit value?
 	!          currently, default exit stat is 0, regardless of what syntran
-	!          "main" returns
+	!          "main" returns.  what about non-int return vals?
 	!  - consider using subroutines with out-args instead of fn return vals for
 	!    parse_*() fns?  i believe this is the source of segfaults for gfortran
 	!    8. subroutines allow passing-by-reference instead of requiring a copy
@@ -179,7 +165,7 @@ module syntran__core_m
 	!    perf of intel compilers for AOC solution tests
 	!  - hacker sdk:
 	!    * bitwise operations
-	!      > compound assignment for all ops
+	!      > done
 	!      > according to c (and fortran), right operand of shift should be
 	!        non-negative.  c says it's undefined behavior to shift negative.
 	!        is there anything i should catch?  it would have to be a runtime
@@ -223,10 +209,6 @@ module syntran__core_m
 	!    * array comparison
 	!    * array arithmetic and boolean operations, test and doc array compound
 	!      assignment
-	!    * caveat about return val from nested slice compound assignemnt:
-	!          `let u = (v[3: 7] += 7);`
-	!      + i think i did this?  search "illegal in python". or is it something
-	!        else?
 	!    * new generalized for loops
 	!    * compound `**=` assignment, %=
 	!    * -c arg, shebang
@@ -234,13 +216,6 @@ module syntran__core_m
 	!        explained
 	!    * --fmax-errors arg
 	!    * ifx/ifort pass tests but perform order of magnitude slower
-	!  - add a workflow that tests gfortran version 8 (and/or older?).  older
-	!    versions don't allow a user-defined type that references another type
-	!    which is defined below it
-	!    * added a matrix for gfortran 9 through 12
-	!    * 8 isn't installed.  maybe i can install it in workflow?
-	!    * tried "setup-fortran" marketplace action but it can't install 8
-	!      either
 	!  - #(pragma)once  directive. #let var=val directive?
 	!    * maybe have an `const` qualifier instead of #let or #define
 	!    * for #once include guards, insert filename path as key into a ternary
@@ -309,10 +284,6 @@ module syntran__core_m
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!    * using rust syntrax highlighting in neovim is not bad (except for "\" string)
 	!  - enums
-	!  - file reading
-	!    * file_stat() fn: checks IO of previous file operation. this way I
-	!      don't need to add structs, multiple return vals, or out args yet
-	!    * readln(), eof() done
 	!  - casting fns should work with array args
 	!    * f32() doesn't exist (you can mul by 1.0 as a workaround)
 	!    * i32(), i64() done
@@ -338,11 +309,6 @@ module syntran__core_m
 	!    * could have syntactic sugar like `dict["key"] = val`
 	!    * would perform better than syntran-implemented dicts
 	!    * how to handle many permutations of key/val types? templates?
-	!  - logical xor, xnor
-	!    * xor (bool1, bool2) is just (bool1 != bool2)
-	!    * xnor(bool1, bool2) is just (bool1 == bool2)
-	!    * is there any value to having plain language versions of these
-	!      operators, like `and` or `not` in syntran?
 	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
 	!    include quick-start and links in top-level README?
 	!    * github automatically includes a Table of Contents in a menu, so maybe
@@ -371,6 +337,20 @@ module syntran__core_m
 	!      probably isn't desireable, but i'm not sure how big of a deal it is
 	!      or how to fix it.  right now everything is one translation unit.
 	!      might want to rethink scoping
+	!  - file open() modes
+	!    + done mvp
+	!    + add more modes, like "b" for binary and "a" for append
+	!    + python style.  open("file.txt", "r"), open("file.txt", "w"),
+	!      open("file.txt", "rb"), etc.
+	!      * default to read with an optional mode arg would be nice, but i
+	!        don't have opt args.  should be possible to add as a later
+	!        feature without breaking compat
+	!    + should readln() take a ref?  the file is technically an in/out arg
+	!      since it will set eof.  compat break.  close() also modifies its
+	!      arg as an out arg, but not writeln().  on the other hand, i like
+	!      keeping it simple and not making users think about references for
+	!      built-in fns. in rust, writing surprisingly requires a mutable ref:
+	!      `writeln!(&mut f, "{i}")?;`
 	!
 	!****************************************
 

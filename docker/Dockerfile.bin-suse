@@ -1,20 +1,23 @@
 
-FROM archlinux:latest
+FROM opensuse/leap:latest
 
-WORKDIR workdir
+WORKDIR /workdir
 
-RUN pacman -Sy
-#RUN yes | pacman install curl
-RUN yes | pacman -S unzip
+RUN zypper update -y
+#RUN zypper install -y curl
+RUN zypper install -y unzip
 
 ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux.zip"
 #ARG SY_URL="https://github.com/JeffIrwin/syntran/releases/download/0.0.48/syntran-linux.zip"
 
 ADD "$SY_URL" ./syntran-linux.zip
 RUN unzip syntran-linux*.zip
-RUN rm syntran-linux*.zip
 RUN chmod +x ./syntran
+RUN rm syntran-linux*.zip
 RUN mv * /usr/local/bin
+
+# Set LD_LIBRARY_PATH for dependent libs
+ENV LD_LIBRARY_PATH="/usr/local/bin"
 
 RUN syntran --version
 RUN syntran -c 'println("hello world");'

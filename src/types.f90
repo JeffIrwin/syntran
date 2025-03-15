@@ -181,8 +181,6 @@ module syntran__types_m
 			! For gfortran, use a hand-written copy constructor.  For ifx, use
 			! the intrinsic copy constructor.  If you try anything else, both
 			! compilers will crash :(
-			!
-			! TODO: try gfortran 13.  Maybe it also needs the intrinsic like ifx
 #ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => syntax_node_copy
 			generic, public :: assignment(=) => copy

@@ -16,13 +16,13 @@ fn main(): bool
 	let filename = "build/test-03.txt";
 
 	// write
-	let fo = open(filename);
+	let fo = open(filename, "w");
 	for i in [0: size(stro, 0)]
 		writeln(fo, stro[i]);
 	close(fo);
 
 	// read
-	let fi = open(filename);
+	let fi = open(filename, "r");
 	//println("fi = " + str(fi));
 
 	let str = "";

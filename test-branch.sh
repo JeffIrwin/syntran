@@ -9,6 +9,8 @@
 #     unzip syntran-linux.zip
 #
 # It github actions, the "download-artifact" action does this
+#
+# TODO: add a `--local` option to this script to automatically download/unzip the release (not the current commit, but at least the Dockerfiles can be tested more easily)
 
 set -uxe
 GREEN="\033[1;32m"

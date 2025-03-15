@@ -19,7 +19,7 @@ fn part1(): i64
 {
 	let sum_ = 0'i64;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 
 	let a = split_(str_, ", ");
@@ -94,7 +94,7 @@ fn part2(): i64
 {
 	let sum_ = 0'i64;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 
 	// Array of smaller strings that we use to build a larger string

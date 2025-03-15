@@ -21,7 +21,7 @@ fn part1(): i32
 	let ny = countln_(filename);
 	//println("ny = ", ny);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 
 	let nx = i32(len(str_));
@@ -48,7 +48,7 @@ fn part1(): i32
 	//println(grid);
 
 	// Read numbers
-	f = open(filename);
+	f = open(filename, "r");
 	str_ = readln(f);
 	for iy in [0: ny]
 	{
@@ -109,7 +109,7 @@ fn part2(): i32
 	let ny = countln_(filename);
 	//println("ny = ", ny);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 
 	let nx = i32(len(str_));

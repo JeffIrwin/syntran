@@ -33,8 +33,8 @@ program main
 	! input files
 
 	if (args%interactive) then
-		! "Interactive" keeps running with the same vars and fns workspace after
-		! running a startup file
+		! "Interactive" keeps running in the REPL with the same vars and fns
+		! workspace after running a startup file
 		!
 		! TODO: add a test that covers a "-i" interactive run
 		res = syntran_interpret(startup_file = args%syntran_file)
@@ -47,13 +47,13 @@ program main
 	else if (args%command_arg) then
 		! Interpret a cmd arg string
 		res = syntran_eval(args%command)
-		if (.not. args%quiet) write(*,*) "ans = `", res, "`"  ! format subject to change
+		if (.not. args%quiet) write(*,*) '    '//res
 
 		! python -c command doesn't print anything unless you call print()
 		! inside it
 
 	else
-		! Start a clean interactive shell (without any startup file)
+		! Start a clean interactive REPL shell (without any startup file)
 		res = syntran_interpret()
 
 	end if

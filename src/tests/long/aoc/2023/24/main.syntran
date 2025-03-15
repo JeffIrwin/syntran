@@ -218,7 +218,7 @@ fn part1(): i32
 	let p = [i64(0); N3D, n];
 	let v = [i64(0); N3D, n];
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	for i in [0: n]
 	{
 		let str_ = readln(f);

@@ -1,6 +1,4 @@
 
-# Tested with fpm 0.9.0
-#
 # Drive fpm with commands like this:
 #
 #     fpm clean --all

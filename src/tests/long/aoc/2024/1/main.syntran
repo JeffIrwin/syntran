@@ -24,7 +24,7 @@ fn part1(): i64
 	// This is a backwards hack to start with an INPUT_STR of the whole file,
 	// for similarity to the web implementation
 	let INPUT_STR = "";
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while not eof(f)
 	{
@@ -81,7 +81,7 @@ fn part2(): i64
 	// This is a backwards hack to start with an INPUT_STR of the whole file,
 	// for similarity to the web implementation
 	let INPUT_STR = "";
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while not eof(f)
 	{

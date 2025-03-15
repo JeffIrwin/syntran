@@ -53,7 +53,7 @@ fn part1(): i32
 {
 	let prod_ = 1;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 
 	let str_ = readln(f);
 	//println("str_ = ", str_);
@@ -120,7 +120,7 @@ fn part2(): i64
 {
 	let prod_ = i64(1);
 
-	let f = open(filename);
+	let f = open(filename, "r");
 
 	let str_ = readln(f);
 	//println("str_ = ", str_);

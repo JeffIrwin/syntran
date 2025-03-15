@@ -19,7 +19,7 @@ fn part1(): i64
 {
 	let sum_ = 0'i64;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while not eof(f)
 	{
@@ -49,7 +49,7 @@ fn part2(): i64
 {
 	let sum_ = 0'i64;
 
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while not eof(f)
 	{
