@@ -71,25 +71,28 @@
 					# This is a quick debug build test.  Debug compiles faster \n
 					# than release optimization \n
 
-					fpm build
-						--profile debug
-					  	--link-flag '-static-libgcc -static-libgfortran' \n
+					lflags=\"-static-libgcc -static-libgfortran\" \n
+
+					fpm build --profile debug --link-flag \"$lflags\" \n
+
+					# Run with `<` to test the REPL shell
+					ans=$(fpm run --profile debug --link-flag \"$lflags\"
+						< samples/arithmetic2.syntran
+						| grep -o \"{x = '.*'}\" | grep -o '[0-9]*'
+					)
+					if [[ \"$ans\" != \"175\" ]] && exit 1 \n
 
 					# Test samples from syntran-explorer \n
 					# TODO: test this in the release binary \n
 					dir_='src/tests/test-src/explorer/' \n
 					for f in $dir_/*.syntran ; do
-						fpm run
-							--profile debug
-							--link-flag '-static-libgcc -static-libgfortran'
+						fpm run --profile debug --link-flag \"$lflags\"
 							-- -q $f > ${f%.syntran}.out \n
 						diff ${f%.syntran}.out ${f%.syntran}.exp \n
 					done
 
 					# Short tests only.  Long tests are only done in release \n
-					fpm test test
-						--profile debug
-						--link-flag '-static-libgcc -static-libgfortran' \n
+					fpm test test --profile debug --link-flag \"$lflags\" \n
 				"
 			},
 			{
