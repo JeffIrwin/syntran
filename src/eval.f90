@@ -2575,8 +2575,6 @@ subroutine eval_translation_unit(node, state, res)
 	do i = 1, size(node%members)
 
 		! Only eval statements, not fn or struct declarations
-		!
-		! TODO: is this where we should copy fn dict to array?
 		if (node%members(i)%kind == fn_declaration    ) cycle
 		if (node%members(i)%kind == struct_declaration) cycle
 

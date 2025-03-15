@@ -1207,7 +1207,7 @@ subroutine declare_intr_fns(fns)
 
 	! TODO: update docs to use println() instead of old holyc implicit prints
 
-	println_fn%type%type = void_type ! TODO?
+	println_fn%type%type = void_type
 
 	allocate(println_fn%params(0))
 	allocate(println_fn%param_names%v(0))

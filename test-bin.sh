@@ -21,6 +21,8 @@ retry()
 	# Source:
 	#
 	#     https://stackoverflow.com/a/35977896/4347028
+	#
+	# TODO: might need to add this to test-branch.sh too
 
 	local -r -i max_attempts="$1"; shift
 	local -r cmd="$@"

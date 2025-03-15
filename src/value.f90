@@ -516,15 +516,10 @@ function value_to_f32(val) result(ans)
 
 		case (str_type)
 
-			if (len(val%sca%str%s) == 1) then
-				! TODO: ban this.  I must've accidentlly copied it from i32
-				ans = iachar(val%sca%str%s)
-			else
-				! TODO: suggest `parse_i32()` when that exists
-				write(*,*) err_int_prefix//'cannot convert from type `' &
-					//kind_name(val%type)//'` to f32 '//color_reset
-				call internal_error()
-			end if
+			! TODO: suggest `parse_f32()`
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to f32 '//color_reset
+			call internal_error()
 
 		case default
 			write(*,*) err_int_prefix//'cannot convert from type `' &
@@ -559,15 +554,10 @@ function value_to_f64(val) result(ans)
 
 		case (str_type)
 
-			if (len(val%sca%str%s) == 1) then
-				! TODO: ban this.  I must've accidentlly copied it from i32
-				ans = iachar(val%sca%str%s)
-			else
-				! TODO: suggest `parse_i32()` when that exists
-				write(*,*) err_int_prefix//'cannot convert from type `' &
-					//kind_name(val%type)//'` to f64 '//color_reset
-				call internal_error()
-			end if
+			! TODO: suggest `parse_f64()`
+			write(*,*) err_int_prefix//'cannot convert from type `' &
+				//kind_name(val%type)//'` to f64 '//color_reset
+			call internal_error()
 
 		case default
 			write(*,*) err_int_prefix//'cannot convert from type `' &
@@ -1011,7 +1001,7 @@ recursive function scalar_to_str(val, type) result(ans)
 
 		case (str_type)
 			! TODO: wrap str in quotes for clarity, both scalars and str array
-			! elements.  Update tests.
+			! elements?  This would be a breaking change.  Update tests.
 			ans = val%str%s
 
 		case (file_type)
