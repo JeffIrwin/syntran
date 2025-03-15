@@ -27,7 +27,7 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  0, &
 		syntran_minor =  0, &
-		syntran_patch =  62
+		syntran_patch =  63
 
 	! TODO:
 	!  - test rocky 10 circa May 2025, that's when they're planning to release
