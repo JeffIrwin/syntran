@@ -79,7 +79,7 @@
 					ans=$(fpm run --profile debug --link-flag \"$lflags\"
 						< samples/arithmetic2.syntran
 						| grep -o \"{x = '.*'}\" | grep -o '[0-9]*'
-					)
+					) \n
 					[[ \"$ans\" != \"174\" ]] && exit 1 \n
 
 					# Test samples from syntran-explorer \n
