@@ -3,9 +3,11 @@ fn mul_mat_vec(mat: [f64; :,:], vec: [f64; :]): [f64; :]
 {
 	// Matrix-vector multiplication.  Return mat * vec
 	println("starting mul_mat_vec()");
-	let ans =  [0.0; size(mat,0)];
-	for     j in [0: size(mat,1)]
-		for i in [0: size(mat,0)]
+	let n0 = size(mat, 0);
+	let n1 = size(mat, 1);
+	let ans =  [0.0; n0];
+	for     j in [0: n1]
+		for i in [0: n0]
 			ans[i] = ans[i] + mat[i,j] * vec[j];
 	return ans;
 }
@@ -36,8 +38,6 @@ let eye3 =
 		3, 3
 	];
 
-eye3;
-
 // 90 degree x rotation.  Note that arrays are stored
 // in row-major order, so this appears transposed
 let rotx =
@@ -60,10 +60,12 @@ let roty =
 // Apply identity transformation
 //********************
 // TODO
+println("calling a");
 println(mul_mat_vec(eye3, vec));
 // [1.0, 2.0, 3.0]
 
 // Apply 90 degree x rotation
+println("calling b");
 println(mul_mat_vec(rotx, vec));
 // [1.0, -3.0, 2.0]
 

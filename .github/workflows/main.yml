@@ -84,9 +84,15 @@
 					# \n
 					ans=$(fpm run --profile debug --link-flag \"$lflags\"
 						< samples/arithmetic2.syntran
-						| grep -o \"{x = '.*'}\" | grep -o '[0-9]*'
+						| grep -o \"{ans = '.*'}\" | grep -o '[0-9]*'
 					) \n
 					[[ \"$ans\" != \"175\" ]] && exit 1 \n
+
+					ans=$(fpm run --profile debug --link-flag \"$lflags\"
+						< samples/arrays.syntran
+						| grep -o \"{ans = '.*'}\" | grep -o \"'.*'\"  | grep -o \"[^']*\"
+					) \n
+					[[ \"$ans\" != \"[101, 104, 107, 110]\" ]] && exit 1 \n
 
 					# Test samples from syntran-explorer \n
 					# TODO: test this in the release binary \n

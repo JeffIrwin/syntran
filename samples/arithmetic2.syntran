@@ -1,2 +1,2 @@
 let x = 123 - 4 + 56;
-println("{x = '", x, "'}");
+println("{ans = '", x, "'}");
