@@ -32,11 +32,6 @@ module syntran__compiler_m
 #else
 #error Neither __GFORTRAN__ nor __INTEL__ are defined.  Please use a supported compiler and compile with pre-processing `-cpp` (gfortran) or `-fpp` (intel)
 
-	! TODO: 
-	!
-	! Re-test the Windows issue.  It's possible that some of these memory
-	! corruption bugs have helped there too after getting gfortran 13+ fixed
-
 	character(len = *), parameter :: fort_compiler = "unknown"
 	integer, parameter :: fort_vers(*) = []
 

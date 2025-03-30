@@ -1683,7 +1683,9 @@ logical function is_binary_op_allowed(left, op, right, left_arr, right_arr) &
 				return
 			end if
 
-			! TODO: allow and then implement comparisons on mixed float types
+			! Allow and then implement comparisons on mixed float types? Might
+			! be a bad idea like float to int equality, noted below
+
 			if (left == array_type .and. right == array_type) then
 				allowed = &
 					(is_int_type(left_arr) .and. is_int_type(right_arr)) .or. &
