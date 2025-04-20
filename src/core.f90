@@ -43,15 +43,6 @@ module syntran__core_m
 	!  - document recommendation of `ulimit -s unlimited`
 	!    * aoc 2018 day 17 crashed without this. helps with large (~hundreds)
 	!      recursion depth
-	!  - roadmap to version 1.0.0:
-	!    * update docs to not mention libgfortran or libquadmath.  these are
-	!      statically linked now in linux ci/cd builds
-	!    * more tests?
-	!      + aoc 2018/8 is a good recursion example and runs fast (1.5 s)
-	!      + i said i would do a code freeze, but i think adding tests is
-	!        allowed
-	!    * have a trial alpha/beta release 0.1.0 for a bit before 1.0
-	!      + targetting 1.0 release circa April 15, 2025
 	!  - built-in syntran update:
 	!    * add checksum verification
 	!    * currently ./syup.sh can do it

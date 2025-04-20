@@ -35,7 +35,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.
 ./syntran -h
 ```
 
-The binary asset `syntran-linux.zip` works on most distros:  alma, arch, debian, fedora, kali, rocky, and ubuntu.  The environment variable `LD_LIBRARY_PATH` should be set, or else `libgfortran*.so` may not be found.
+The binary asset `syntran-linux.zip` works on most distros:  alma, arch, debian, fedora, kali, rocky, and ubuntu.
 
 <!--
 // The rocky binary is the official binary now.  It used to be ubuntu, but the
