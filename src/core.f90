@@ -25,9 +25,9 @@ module syntran__core_m
 	character(len = *), parameter :: lang_name = "syntran"
 
 	integer, parameter ::   &
-		syntran_major =  0, &
+		syntran_major =  1, &
 		syntran_minor =  0, &
-		syntran_patch =  63
+		syntran_patch =  0
 
 	! TODO:
 	!  - fn type checking bug:
