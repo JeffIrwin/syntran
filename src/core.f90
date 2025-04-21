@@ -25,11 +25,49 @@ module syntran__core_m
 	character(len = *), parameter :: lang_name = "syntran"
 
 	integer, parameter ::   &
-		syntran_major =  0, &
+		syntran_major =  1, &
 		syntran_minor =  0, &
-		syntran_patch =  63
+		syntran_patch =  0
 
 	! TODO:
+	!  - fn type checking bug:
+	!
+	!      // TODO:  something about myfn() being defined below and maybe abs()
+	!      // being overloaded makes this fail the type checker:
+	!      println(abs(myfn(7)));
+	!      fn myfn(a: i32): i32
+	!      {
+	!      	return a + 1;
+	!      }
+	!
+	!  - document recommendation of `ulimit -s unlimited`
+	!    * aoc 2018 day 17 crashed without this. helps with large (~hundreds)
+	!      recursion depth
+	!  - built-in syntran update:
+	!    * add checksum verification
+	!    * currently ./syup.sh can do it
+	!    * make this built-in to syntran binary, maybe invoke like
+	!      `syntran --update`.  think carefully. don't want to break this by
+	!      changing the name of the script or arg
+	!    * this would only work on linux, since windows can't overwrite a
+	!      running exe
+	!    * apparently it's possible on windows too.  til:  https://stackoverflow.com/a/459860/4347028
+	!  - post 1.0:
+	!    * need to think about namespaces, at least for std fns so i can add
+	!      intrinsic fns without breaking anyone's code who happened to already
+	!      define a fn with the same name
+	!      + example: define a `println` fn.  it won't parse
+	!      + note that you *are* allowed to define a `sum` fn because the
+	!        intrinsic sum fn is overloaded.  all of the actual intrinsic sums
+	!        are named like `0sum_i32` or `0sum_f64`
+	!        > could this be abused to add new secret fns starting with "0"
+	!          without breaking compat? seems like a bad idea
+	!        > it also seems bad that users can shadow define `sum` or any other
+	!          overloaded intrinsic
+	!  - enable plugging in to nvim linting.  doesn't seem hard from the way
+	!    that gfortran nvim linting works.  just need to add a cmd arg like
+	!    `--syntax-only` and print errors in 1 line per error, with filename,
+	!    line, and column indices
 	!  - test rocky 10 circa May 2025, that's when they're planning to release
 	!    it
 	!  - appimage?  some kind of binary packaging improvement
@@ -39,8 +77,6 @@ module syntran__core_m
 	!      statically bundled into one file
 	!    * is appimage the standard tool for this?  how does fpm do it?
 	!  - add recursive fibonacci sample to syntran-explorer
-	!  - roadmap to version 1.0.0:
-	!    * maybe have a trial alpha/beta release 0.1.0 for a bit before 1.0?
 	!  - REPL styling
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)

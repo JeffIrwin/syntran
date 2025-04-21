@@ -5,6 +5,9 @@
 module ifport
 	! Unfortunately this is the only way i can get fpm to not complain about
 	! ifport with gfortran
+	!
+	! TODO: try using "external-modules" in fpm.toml, I think this is what it's
+	! for
 end module ifport
 #endif
 

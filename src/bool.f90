@@ -84,15 +84,17 @@ subroutine is_eq_value_t(left, right, res, op_text)
 	case        (magic * i64_type + i32_type)
 		res%sca%bool = left%sca%i64 == right%sca%i32
 
-	! TODO: mixed f32 <compare_op> f64 operators
+	! Mixed f32 to f64 `==` and `!=` operators? Probably not, see comments in
+	! is_binary_op_allowed()
 
 	case        (magic * f32_type + f32_type)
 		res%sca%bool = left%sca%f32 == right%sca%f32
 
 	case        (magic * f32_type + i32_type)
 		res%sca%bool = left%sca%f32 == right%sca%i32
-		! TODO: is this even possible or should I ban comparing ints and
-		! floats?  Similarly for other comparisons
+		! Is this even possible or should I ban comparing ints and floats?
+		! Similarly for other comparisons.  Currently this is banned in
+		! is_binary_op_allowed()
 		!
 		! GNU says Warning: Equality comparison for REAL(4) at (1)
 		! [-Wcompare-reals]
