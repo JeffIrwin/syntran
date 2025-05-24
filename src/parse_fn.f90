@@ -29,7 +29,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	integer :: i, io, id_index, pos0, rank
 
-	logical :: has_rank, param_is_ref, arg_is_ref
+	logical :: has_rank, param_is_ref, arg_is_ref, is_ok
 
 	type(fn_t) :: fn
 
@@ -271,10 +271,17 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 		end if
 
-		if (types_match(param_val, args%v(i)%val) /= TYPE_MATCH) then
+		is_ok = .true.
+		is_ok = is_ok .and. types_match(param_val, args%v(i)%val) == TYPE_MATCH
+		is_ok = is_ok .or. (parser%ipass == 0 .and. args%v(i)%val%type == unknown_type)
+
+		if (.not. is_ok) then
 
 			exp_type = type_name(param_val)
 			act_type = type_name(args%v(i)%val)
+			!print *, "ipass = ", parser%ipass
+			!print *, "exp type = ", exp_type
+			!print *, "act type = ", act_type
 
 			! This used to call a different diagnostic fn depending on whether
 			! it was a top-level type mismatch, array mismatch, or rank
