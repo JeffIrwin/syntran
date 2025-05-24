@@ -40,9 +40,6 @@ module syntran__core_m
 	!      	return a + 1;
 	!      }
 	!
-	!  - document recommendation of `ulimit -s unlimited`
-	!    * aoc 2018 day 17 crashed without this. helps with large (~hundreds)
-	!      recursion depth
 	!  - built-in syntran update:
 	!    * add checksum verification
 	!    * currently ./syup.sh can do it
