@@ -30,16 +30,9 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - fn type checking bug:
-	!
-	!      // TODO:  something about myfn() being defined below and maybe abs()
-	!      // being overloaded makes this fail the type checker:
-	!      println(abs(myfn(7)));
-	!      fn myfn(a: i32): i32
-	!      {
-	!      	return a + 1;
-	!      }
-	!
+	!  - many of my Dockerfiles install fpm from the "current" github release,
+	!    but their "current" release is a stale 3 year old release.  try the
+	!    latest release, or just version pin 0.12.0
 	!  - built-in syntran update:
 	!    * add checksum verification
 	!    * currently ./syup.sh can do it
@@ -73,7 +66,6 @@ module syntran__core_m
 	!      worse than ubuntu.  it would be nice if everything was truly
 	!      statically bundled into one file
 	!    * is appimage the standard tool for this?  how does fpm do it?
-	!  - add recursive fibonacci sample to syntran-explorer
 	!  - REPL styling
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)
