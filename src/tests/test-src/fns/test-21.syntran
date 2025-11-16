@@ -1,0 +1,17 @@
+
+// This didn't work before commit 95ebc2e
+//
+// The bug happened with nested fn calls, where the outer fn was a built-in
+// overloaded fn, e.g. `abs`, which can take both ints and floats, and the inner
+// fn is a user-defined fn being called ahead of its definition
+
+let ans = abs(myfn(7));
+let expect = 8;
+
+return ans - expect;
+
+fn myfn(a: i32): i32
+{
+	return a + 1;
+}
+

@@ -35,6 +35,7 @@ RUN git clone \
 	--depth 1 \
 	##--branch releases/gcc-12.2.0 \
 	#--branch releases/gcc-12 \
+	--branch releases/gcc-15 \
 	$SRC_DIR
 
 WORKDIR /workdir/$SRC_DIR

@@ -6,7 +6,7 @@
 <!-- [![](doc/imgs/logo-syntran-128p.png)](https://github.com/JeffIrwin/syntran/blob/main/samples/logo.syntran) -->
 [![](doc/imgs/logo-syntran-128p.png)](samples/logo.syntran)
 
-⚠️ Syntran is alpha and I don't recommend using it for anything serious.  You will discover bugs, missing features, many pain points in general; and later updates will be incompatible.
+⚠️ Syntran is beta and I don't recommend using it for anything serious.  You may discover bugs, missing features, general pain points; and later updates may be incompatible.
 
 ## [Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
 
@@ -73,11 +73,20 @@ More or less any terminal on Windows should work, but [Windows Terminal](https:/
 
 <!-- mac works too but i don't want to encourage apple usery -->
 
-### Path
+### Path and environment settings
 
-Feel free to add the directory to your PATH environment variable, or type the full path.
+Feel free to add the directory to your PATH environment variable, or type the
+full path.
 
-Whenever you see something like `./build/Debug/syntran` or `fpm run` in the rest of this documentation, replace that with `/path/to/syntran` or `C:\path\to\syntran.exe` appropriately, depending on your operating system and where you downloaded the binary.
+Whenever you see something like `./build/Debug/syntran` or `fpm run` in the rest
+of this documentation, replace that with `/path/to/syntran` or
+`C:\path\to\syntran.exe` appropriately, depending on your operating system and
+where you downloaded the binary.
+
+I recommend running `ulimit -s unlimited` in `~/.bashrc` or at least in your
+current shell to remove the stack limit.  Otherwise, syntran can crash with
+large recursion depths of recursive function calls (see issue
+https://github.com/JeffIrwin/syntran/issues/28).
 
 ## Build the interpreter from source
 

@@ -27,22 +27,15 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  1, &
 		syntran_minor =  0, &
-		syntran_patch =  0
+		syntran_patch =  1
 
 	! TODO:
-	!  - fn type checking bug:
-	!
-	!      // TODO:  something about myfn() being defined below and maybe abs()
-	!      // being overloaded makes this fail the type checker:
-	!      println(abs(myfn(7)));
-	!      fn myfn(a: i32): i32
-	!      {
-	!      	return a + 1;
-	!      }
-	!
-	!  - document recommendation of `ulimit -s unlimited`
-	!    * aoc 2018 day 17 crashed without this. helps with large (~hundreds)
-	!      recursion depth
+	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
+	!    compute usage
+	!    * gfortran 15 is now the default for Windows github actions
+	!  - many of my Dockerfiles install fpm from the "current" github release,
+	!    but their "current" release is a stale 3 year old release.  try the
+	!    latest release, or just version pin 0.12.0
 	!  - built-in syntran update:
 	!    * add checksum verification
 	!    * currently ./syup.sh can do it
@@ -76,7 +69,6 @@ module syntran__core_m
 	!      worse than ubuntu.  it would be nice if everything was truly
 	!      statically bundled into one file
 	!    * is appimage the standard tool for this?  how does fpm do it?
-	!  - add recursive fibonacci sample to syntran-explorer
 	!  - REPL styling
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)

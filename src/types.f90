@@ -2911,6 +2911,10 @@ integer function types_match(a, b) result(io)
 
 	io = TYPE_MATCH
 
+	! Note that is_binary_op_allowed() specifically allows operations on unknown
+	! types.  Maybe we should allow unknowns here too.  Test cases such as
+	! instantiating a struct with a fn that hasn't been defined above
+
 	if (.not. (a%type == any_type .or. a%type == b%type)) then
 		! Top-level type mismatch (e.g. f32 vs str)
 		io = TYPE_MISMATCH
