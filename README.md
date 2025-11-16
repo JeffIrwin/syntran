@@ -6,7 +6,7 @@
 <!-- [![](doc/imgs/logo-syntran-128p.png)](https://github.com/JeffIrwin/syntran/blob/main/samples/logo.syntran) -->
 [![](doc/imgs/logo-syntran-128p.png)](samples/logo.syntran)
 
-⚠️ Syntran is alpha and I don't recommend using it for anything serious.  You will discover bugs, missing features, many pain points in general; and later updates will be incompatible.
+⚠️ Syntran is beta and I don't recommend using it for anything serious.  You may discover bugs, missing features, general pain points; and later updates may be incompatible.
 
 ## [Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
 

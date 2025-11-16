@@ -30,6 +30,9 @@ module syntran__core_m
 		syntran_patch =  1
 
 	! TODO:
+	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
+	!    compute usage
+	!    * gfortran 15 is now the default for Windows github actions
 	!  - many of my Dockerfiles install fpm from the "current" github release,
 	!    but their "current" release is a stale 3 year old release.  try the
 	!    latest release, or just version pin 0.12.0
