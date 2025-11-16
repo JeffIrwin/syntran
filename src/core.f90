@@ -27,7 +27,7 @@ module syntran__core_m
 	integer, parameter ::   &
 		syntran_major =  1, &
 		syntran_minor =  0, &
-		syntran_patch =  0
+		syntran_patch =  1
 
 	! TODO:
 	!  - many of my Dockerfiles install fpm from the "current" github release,
