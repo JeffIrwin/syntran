@@ -252,9 +252,9 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_misc.f90
 
-		module function tokens_str(parser) result(str)
+		module function tokens_str(parser) result(str_)
 			class(parser_t) :: parser
-			character(len = :), allocatable :: str
+			character(len = :), allocatable :: str_
 		end function tokens_str
 
 		module function match(parser, kind) result(token)
@@ -285,8 +285,8 @@ module syntran__parse_m
 			type(syntax_node_t) :: unit
 		end function parse_unit
 
-		recursive module function new_parser(str, src_file, contexts, unit_) result(parser)
-			character(len = *), intent(in) :: str, src_file
+		recursive module function new_parser(str_, src_file, contexts, unit_) result(parser)
+			character(len = *), intent(in) :: str_, src_file
 			type(text_context_vector_t) :: contexts
 			integer, intent(inout) :: unit_
 			type(parser_t) :: parser

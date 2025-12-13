@@ -1336,7 +1336,7 @@ end function new_syntax_token_vector
 
 !===============================================================================
 
-function new_literal_value(type, bool, i32, i64, f32, f64, str) result(val)
+function new_literal_value(type, bool, i32, i64, f32, f64, str_) result(val)
 
 	integer, intent(in) :: type
 
@@ -1345,7 +1345,7 @@ function new_literal_value(type, bool, i32, i64, f32, f64, str) result(val)
 	real   (kind = 4), intent(in), optional :: f32
 	real   (kind = 8), intent(in), optional :: f64
 	logical          , intent(in), optional :: bool
-	character(len=*) , intent(in), optional :: str
+	character(len=*) , intent(in), optional :: str_
 
 	type(value_t) :: val
 
@@ -1355,7 +1355,7 @@ function new_literal_value(type, bool, i32, i64, f32, f64, str) result(val)
 	if (present(f64 )) val%sca%f64   = f64
 	if (present(i32 )) val%sca%i32   = i32
 	if (present(i64 )) val%sca%i64   = i64
-	if (present(str )) val%sca%str%s = str
+	if (present(str_)) val%sca%str%s = str_
 
 end function new_literal_value
 
@@ -2266,13 +2266,13 @@ end function new_i64
 
 !********
 
-function new_str(str) result(expr)
+function new_str(str_) result(expr)
 
-	character(len = *), intent(in) :: str
+	character(len = *), intent(in) :: str_
 	type(syntax_node_t) :: expr
 
 	expr%kind = literal_expr
-	expr%val  = new_literal_value(str_type, str = str)
+	expr%val  = new_literal_value(str_type, str_ = str_)
 
 end function new_str
 

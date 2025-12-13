@@ -181,13 +181,13 @@ end function err_bad_expr
 
 !===============================================================================
 
-function err_unterminated_str(context, span, str) result(err)
+function err_unterminated_str(context, span, str_) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
-	character(len = *), intent(in) :: str
-	err = err_prefix//'unterminated str literal `'//str &
+	character(len = *), intent(in) :: str_
+	err = err_prefix//'unterminated str literal `'//str_ &
 		//'`' &
 		//underline(context, span) &
 		//' unterminated str'//color_reset

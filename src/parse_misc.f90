@@ -15,11 +15,11 @@ contains
 
 !===============================================================================
 
-module function tokens_str(parser) result(str)
+module function tokens_str(parser) result(str_)
 
 	class(parser_t) :: parser
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	!********
 
@@ -28,14 +28,14 @@ module function tokens_str(parser) result(str)
 	! This will crash for very long token lists, but it should suffice for basic
 	! debugging
 
-	str = 'tokens = '//line_feed//'['//line_feed
+	str_ = 'tokens = '//line_feed//'['//line_feed
 	do i = 1, size(parser%tokens)
-		str = str//tab &
+		str_ = str_//tab &
 				//'<'//           parser%tokens(i)%text  //'> ' &
 				//'<'//kind_name( parser%tokens(i)%kind )//'>'  &
 				//line_feed
 	end do
-	str = str//']'//line_feed
+	str_ = str_//']'//line_feed
 
 end function tokens_str
 
@@ -488,9 +488,9 @@ end function parse_unit
 
 !===============================================================================
 
-recursive module function new_parser(str, src_file, contexts, unit_) result(parser)
+recursive module function new_parser(str_, src_file, contexts, unit_) result(parser)
 
-	character(len = *), intent(in) :: str, src_file
+	character(len = *), intent(in) :: str_, src_file
 
 	type(text_context_vector_t) :: contexts
 
@@ -507,7 +507,7 @@ recursive module function new_parser(str, src_file, contexts, unit_) result(pars
 
 	! Lex and get an array of tokens
 	tokens = new_syntax_token_vector()
-	lexer = new_lexer(str, src_file, unit_)
+	lexer = new_lexer(str_, src_file, unit_)
 	do
 		token = lexer%lex()
 		!print *, 'token%unit_ = ', token%unit_

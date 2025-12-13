@@ -629,7 +629,7 @@ function lex(lexer) result(token)
 			return
 		end if
 
-		val   = new_literal_value(str_type, str = char_vec%v( 1: char_vec%len_ ))
+		val   = new_literal_value(str_type, str_ = char_vec%v( 1: char_vec%len_ ))
 		token = new_token(str_token, start, text, val)
 
 		token%unit_ = lexer%unit_
