@@ -30,6 +30,17 @@ module syntran__core_m
 		syntran_patch =  1
 
 	! TODO:
+	!  - cmd args
+	!    * useful for aoc
+	!      + switching test/real input is annoying without cmd args. must resort
+	!        to commenting/uncommenting line(s) in code
+	!    * args would be useful for logo sample, e.g. image size and some
+	!      control color options
+	!    * pass after a ` -- `?
+	!    * related: environment variables
+	!  - minloc, maxloc, findloc fns
+	!    * useful for aoc
+	!    * i'm leaning towards 2.0 instead of namespaces
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
 	!    compute usage
 	!    * gfortran 15 is now the default for Windows github actions
@@ -82,7 +93,6 @@ module syntran__core_m
 	!  - callbacks, fn pointers, i.e. passing one function as an argument to
 	!    another function
 	!    * this could be a big change to the type system
-	!  - minloc, maxloc, findloc fns
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
 	!    * just use `reshape` and call the fortran built-in.  no need for any
@@ -91,6 +101,7 @@ module syntran__core_m
 	!       are present, call fortran build-in with reshape to the appropriate
 	!       size, and then set the result data along with size/rank meta-data
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
+	!    * when? check blame for this comment. can't repro in 1.0.1
 	!  - mention syntran explorer in readme
 	!    * note it may not exist in ~6 months
 	!  - print improvements:
@@ -215,11 +226,6 @@ module syntran__core_m
 	!      hashing, utf, base64, and rng algorithms
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
-	!  - cmd args
-	!    * args would be useful for logo sample, e.g. image size and some
-	!      control color options
-	!    * pass after a ` -- `?
-	!    * related: environment variables
 	!  - array operations:
 	!    * done: element-wise add, sub, mul, div, pow, mod
 	!      + compound array assignment works but needs unit tests
@@ -279,6 +285,7 @@ module syntran__core_m
 	!      this way I don't need to add structs, multiple return vals, or out
 	!      args yet
 	!  - compound assignment: logical &=, |=, etc.
+	!    * maybe make &&= to avoid confusion with bitwise compound assignment &=
 	!    * +=, -=, *=, /=, %=, **= done
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
@@ -392,13 +399,13 @@ contains
 
 !===============================================================================
 
-function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tree)
+function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tree)
 
 	! TODO: take state struct instead of separate vars and fns members
 
 	! TODO: take structs arg (like existing fns arg)
 
-	character(len = *) :: str
+	character(len = *) :: str_
 
 	type(vars_t), intent(inout) :: vars
 
@@ -435,7 +442,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tre
 	type(vars_t) :: vars0
 
 	if (debug > 0) print *, 'syntax_parse'
-	if (debug > 1) print *, 'str = ', str
+	if (debug > 1) print *, 'str_ = ', str_
 
 	!! "exp"
 	!print *, 'key = ', &
@@ -457,7 +464,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tre
 	contexts = new_context_vector()
 	unit_ = 0
 
-	parser = new_parser(str, src_filel, contexts, unit_)
+	parser = new_parser(str_, src_filel, contexts, unit_)
 	!print *, 'units = ', parser%tokens(:)%unit_
 
 	parser%repl = repll
