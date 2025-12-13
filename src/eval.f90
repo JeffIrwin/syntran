@@ -1872,7 +1872,6 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 			!print *, "allocated(size) = ", allocated(arg1%array%size)
 			res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
 		else
-			!res%sca%i64 = int(product(arg1%array%size))  ! same thing but more math
 			res%sca%i64 = int(arg1%array%len_)
 		end if
 
