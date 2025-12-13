@@ -37,12 +37,8 @@ module syntran__types_m
 		type(string_vector_t) :: param_names
 
 		! Min number of variadic params.  Default < 0 means fn is not variadic
-		!
-		! This works for fns like max() or print() which have a min limit but an
-		! unlimited upper bound of parameters.  For functions with a fixed
-		! number of optional parameters, there should be a different mechanism
-
-		integer :: variadic_min = -1, variadic_type
+		integer :: variadic_min = -1, variadic_max = -1, variadic_type
+		character(len = :), allocatable :: variadic_name
 
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
@@ -415,7 +411,9 @@ recursive subroutine fn_copy(dst, src)
 
 	dst%type          = src%type
 	dst%variadic_min  = src%variadic_min
+	dst%variadic_max  = src%variadic_max
 	dst%variadic_type = src%variadic_type
+	dst%variadic_name = src%variadic_name
 	dst%param_names   = src%param_names
 	dst%is_intr       = src%is_intr
 

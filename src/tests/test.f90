@@ -876,6 +876,9 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i64('size([0.0; 6, 7], 0);')  == 6,  &
 			eval_i64('size([0.0; 6, 7], 1);')  == 7,  &
 			eval_i64('size([0.0; 6, 7, 8], 2);')  == 8,  &
+			eval_i64('size([0; 5]);')  == 5,  &  ! size() without dim arg
+			eval_i64('size([0; 2, 3]);')  == 6,  &
+			eval_i64('size([0; 3, 2]);')  == 6,  &
 			eval_i32('parse_i32(    "0");')  ==     0,  &
 			eval_i32('parse_i32(    "1");')  ==     1,  &
 			eval_i32('parse_i32(    "2");')  ==     2,  &

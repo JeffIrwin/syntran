@@ -500,6 +500,29 @@ end function err_too_few_args
 
 !===============================================================================
 
+function err_too_many_args(context, span, fn, expect, actual) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err, argument_s
+	integer, intent(in):: expect, actual
+
+	character(len = *), intent(in) :: fn
+
+	if (expect == 1) then
+		argument_s = 'argument'
+	else
+		argument_s = 'arguments'
+	end if
+
+	err = err_prefix &
+		//'variadic function `'//fn//'` requires at most '//str(expect) &
+		//' '//argument_s//' but was given '//str(actual) &
+		//underline(context, span)//" too many arguments"//color_reset
+
+end function err_too_many_args
+
+!===============================================================================
+
 function err_bad_sub_count(context, span, array, expect, actual) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

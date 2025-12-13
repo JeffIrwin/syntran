@@ -1077,6 +1077,7 @@ subroutine declare_intr_fns(fns)
 
 	min_i32_fn%variadic_min  = 0
 	min_i32_fn%variadic_type = i32_type
+	min_i32_fn%variadic_name = "ai"
 
 	! Internal overloaded name starts with a "0" because this would be illegal
 	! for user-defined fn's, so there can never be a clash
@@ -1096,6 +1097,7 @@ subroutine declare_intr_fns(fns)
 
 	min_i64_fn%variadic_min  = 0
 	min_i64_fn%variadic_type = i64_type
+	min_i64_fn%variadic_name = "ai"
 
 	call fns%insert("0min_i64", min_i64_fn, id_index)
 
@@ -1113,6 +1115,7 @@ subroutine declare_intr_fns(fns)
 
 	min_f32_fn%variadic_min  = 0
 	min_f32_fn%variadic_type = f32_type
+	min_f32_fn%variadic_name = "ai"
 
 	call fns%insert("0min_f32", min_f32_fn, id_index)
 
@@ -1130,6 +1133,7 @@ subroutine declare_intr_fns(fns)
 
 	min_f64_fn%variadic_min  = 0
 	min_f64_fn%variadic_type = f64_type
+	min_f64_fn%variadic_name = "ai"
 
 	call fns%insert("0min_f64", min_f64_fn, id_index)
 
@@ -1147,6 +1151,7 @@ subroutine declare_intr_fns(fns)
 
 	max_i32_fn%variadic_min  = 0
 	max_i32_fn%variadic_type = i32_type
+	max_i32_fn%variadic_name = "ai"
 
 	! Internal overloaded name starts with a "0" because this would be illegal
 	! for user-defined fn's, so there can never be a clash
@@ -1166,6 +1171,7 @@ subroutine declare_intr_fns(fns)
 
 	max_i64_fn%variadic_min  = 0
 	max_i64_fn%variadic_type = i64_type
+	max_i64_fn%variadic_name = "ai"
 
 	call fns%insert("0max_i64", max_i64_fn, id_index)
 
@@ -1183,6 +1189,7 @@ subroutine declare_intr_fns(fns)
 
 	max_f32_fn%variadic_min  = 0
 	max_f32_fn%variadic_type = f32_type
+	max_f32_fn%variadic_name = "ai"
 
 	call fns%insert("0max_f32", max_f32_fn, id_index)
 
@@ -1200,6 +1207,7 @@ subroutine declare_intr_fns(fns)
 
 	max_f64_fn%variadic_min  = 0
 	max_f64_fn%variadic_type = f64_type
+	max_f64_fn%variadic_name = "ai"
 
 	call fns%insert("0max_f64", max_f64_fn, id_index)
 
@@ -1215,6 +1223,7 @@ subroutine declare_intr_fns(fns)
 
 	println_fn%variadic_min  = 0
 	println_fn%variadic_type = any_type
+	println_fn%variadic_name = "value"
 
 	call fns%insert("println", println_fn, id_index)
 
@@ -1228,6 +1237,7 @@ subroutine declare_intr_fns(fns)
 
 	str_fn%variadic_min  = 0
 	str_fn%variadic_type = any_type
+	str_fn%variadic_name = "value"
 
 	call fns%insert("str", str_fn, id_index)
 
@@ -1406,6 +1416,7 @@ subroutine declare_intr_fns(fns)
 	writeln_fn%variadic_min  = 0
 	!writeln_fn%variadic_min = 1
 	writeln_fn%variadic_type = any_type
+	writeln_fn%variadic_name = "value"
 
 	call fns%insert("writeln", writeln_fn, id_index)
 
@@ -1442,8 +1453,8 @@ subroutine declare_intr_fns(fns)
 	!********
 
 	size_fn%type%type = i64_type
-	allocate(size_fn%params(2))
-	allocate(size_fn%param_names%v(2))
+	allocate(size_fn%params(1))
+	allocate(size_fn%param_names%v(1))
 
 	size_fn%params(1)%type = array_type
 
@@ -1453,14 +1464,12 @@ subroutine declare_intr_fns(fns)
 
 	size_fn%param_names%v(1)%s = "array"
 
-	size_fn%params(2)%type = i32_type
-	size_fn%param_names%v(2)%s = "dim"
+	size_fn%variadic_min = 0
+	size_fn%variadic_max = 1
+	size_fn%variadic_type = i32_type
+	size_fn%variadic_name = "dim"
 
 	call fns%insert("size", size_fn, id_index)
-
-	! It might also be useful to make size() variadic and have size(array)
-	! return the product of each dimension's size.  It should just have a single
-	! optional param though, not unlimited arity like min/max.
 
 	!********
 

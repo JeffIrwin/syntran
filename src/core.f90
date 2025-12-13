@@ -41,6 +41,7 @@ module syntran__core_m
 	!  - minloc, maxloc, findloc fns
 	!    * useful for aoc
 	!    * i'm leaning towards 2.0 instead of namespaces
+	!  - const.  e.g. `const N = 5` instead of `let N = 5`. then ban reassigning
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
 	!    compute usage
 	!    * gfortran 15 is now the default for Windows github actions
@@ -74,6 +75,7 @@ module syntran__core_m
 	!    line, and column indices
 	!  - test rocky 10 circa May 2025, that's when they're planning to release
 	!    it
+	!    * rocky 10 is out, but there's no docker image as of 2025-12-13
 	!  - appimage?  some kind of binary packaging improvement
 	!    * the current dependence on libquadmath.so (and sometimes
 	!      libgfortran.so) is not ideal, especially considering that rocky is
@@ -155,8 +157,6 @@ module syntran__core_m
 	!      + let str2 = r##" my raw str with "#quotes"# "##;
 	!      + number of hashes at start matches end
 	!      + any use for zero hashes?  r"raw str"
-	!  - size() fn should optionally not need a 2nd argument for dim. in this
-	!    case, return product of extents of all dims (useful especially for vecs)
 	!  - type() or typeof() fn to get type name as str?  could be useful for
 	!    debugging, but I don't want to encourage its use for actual program
 	!    logic
@@ -186,7 +186,8 @@ module syntran__core_m
 	!      + improved to_str() conversion with labels of struct name and member names
 	!  - jumping control flow:
 	!    * break and continue need documentation
-	!    * goto: useful to break nested loops? or add break with loop label
+	!    * goto: useful to break nested loops? or add break with loop label or
+	!      number like bash, e.g. `break 2`
 	!    * done:
 	!      > return, break, continue
 	!      > (sys) exit done

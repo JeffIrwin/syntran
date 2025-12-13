@@ -1849,25 +1849,32 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		!print *, "evaluating size fn"
 		call syntax_eval(node%args(1), state, arg1)
-		call syntax_eval(node%args(2), state, arg2)
 
-		!print *, "arg 1 type = ", kind_name(node%args(1)%kind)
-		!print *, "allocated = ", allocated(arg1%array)
-		!print *, "arg2 = ", arg2%sca%i32
-		!print *, "arg1 type = ", kind_name(arg1%type)
+		! Is the `dim` arg present?
+		if (size(node%args) == 2) then
+			call syntax_eval(node%args(2), state, arg2)
 
-		if (arg2%sca%i32 < 0 .or. arg2%sca%i32 >= arg1%array%rank) then
-			! TODO: re-think runtime errors.  A different prefix here
-			! besides err_int_prefix helps, but context should be given if
-			! possible like for parser/lexer error diagnostics
-			write(*,*) err_rt_prefix//"rank mismatch in size() call"//color_reset
-			!print *, "rank     = ", arg1%array%rank
-			!print *, "size arg = ", arg2%sca%i32
-			call internal_error()
+			!print *, "arg 1 type = ", kind_name(node%args(1)%kind)
+			!print *, "allocated = ", allocated(arg1%array)
+			!print *, "arg2 = ", arg2%sca%i32
+			!print *, "arg1 type = ", kind_name(arg1%type)
+
+			if (arg2%sca%i32 < 0 .or. arg2%sca%i32 >= arg1%array%rank) then
+				! TODO: re-think runtime errors.  A different prefix here
+				! besides err_int_prefix helps, but context should be given if
+				! possible like for parser/lexer error diagnostics
+				write(*,*) err_rt_prefix//"rank mismatch in size() call"//color_reset
+				!print *, "rank     = ", arg1%array%rank
+				!print *, "size arg = ", arg2%sca%i32
+				call internal_error()
+			end if
+
+			!print *, "allocated(size) = ", allocated(arg1%array%size)
+			res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
+		else
+			!res%sca%i64 = int(product(arg1%array%size))  ! same thing but more math
+			res%sca%i64 = int(arg1%array%len_)
 		end if
-
-		!print *, "allocated(size) = ", allocated(arg1%array%size)
-		res%sca%i64 = int(arg1%array%size( arg2%sca%i32 + 1 ))
 
 	case ("count")
 

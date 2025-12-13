@@ -196,8 +196,10 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	!print *, 'fn params size = ', size(fn%params)
 	!print *, 'fn param names size = ', size(fn%param_names%v)
+
 	if (fn%variadic_min < 0 .and. size(fn%params) /= args%len_) then
 
+		! Bad arg count (non-variadic)
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call parser%diagnostics%push( &
 			err_bad_arg_count(parser%context(), &
@@ -206,11 +208,23 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	else if (args%len_ < size(fn%params) + fn%variadic_min) then
 
+		! Too few args
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call parser%diagnostics%push( &
 			err_too_few_args(parser%context(), &
 			span, identifier%text, &
 			size(fn%params) + fn%variadic_min, args%len_))
+		return
+
+	else if (fn%variadic_max >= 0 .and. &
+		args%len_ > size(fn%params) + fn%variadic_max) then
+
+		! Too many args
+		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+		call parser%diagnostics%push( &
+			err_too_many_args(parser%context(), &
+			span, identifier%text, &
+			size(fn%params) + fn%variadic_max, args%len_))
 		return
 
 	end if
@@ -236,12 +250,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			param_name = fn%param_names%v(i)%s
 		else
 			param_val%type = fn%variadic_type
-
-			if (size(fn%params) > 0) then
-				param_name = fn%param_names%v( size(fn%params) )%s
-			else
-				param_name = ""
-			end if
+			param_name = fn%variadic_name
 		end if
 
 		param_is_ref = .false.
