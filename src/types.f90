@@ -413,9 +413,15 @@ recursive subroutine fn_copy(dst, src)
 	dst%variadic_min  = src%variadic_min
 	dst%variadic_max  = src%variadic_max
 	dst%variadic_type = src%variadic_type
-	dst%variadic_name = src%variadic_name
 	dst%param_names   = src%param_names
 	dst%is_intr       = src%is_intr
+
+	if (allocated(src%variadic_name)) then
+		if (allocated(dst%variadic_name)) deallocate(dst%variadic_name)
+		dst%variadic_name = src%variadic_name
+	else if (allocated(dst%variadic_name)) then
+		deallocate(dst%variadic_name)
+	end if
 
 	if (allocated(src%params)) then
 		if (allocated(dst%params)) deallocate(dst%params)
