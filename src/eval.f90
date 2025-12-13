@@ -837,13 +837,10 @@ recursive subroutine eval_fn_call(node, state, res)
 
 	!********
 
-	integer :: i, io, id_index
+	integer :: i
 
 	logical :: returned0
 
-	type(fn_t) :: fn
-
-	type(value_t) :: tmp
 	type(value_t), allocatable :: params_tmp(:), locs0(:)
 
 	!print *, ""
@@ -2603,7 +2600,7 @@ recursive subroutine eval_array_expr(node, state, res)
 	!********
 
 	integer :: i, j
-	integer(kind = 8) :: i8, j8, size_
+	integer(kind = 8) :: i8, j8
 
 	logical :: is_cat
 
@@ -2997,21 +2994,7 @@ recursive subroutine eval_array_expr(node, state, res)
 
 		!print *, "elem 1 type = ", kind_name(node%elems(1)%val%type)
 
-		if (node%elems(1)%val%type == array_type) then
-
-			!! I don't know if there's a good way to sum size ahead of time
-			!! without evaluating all children elems, which would probably have
-			!! some overhead
-			!size_ = 0
-			!do i = 1, size(node%elems)
-			!end do
-
-			! Lower-bound capacity.  Grow later as needed in %push()
-			call allocate_array(res, size(node%elems, kind = 8))
-
-		else
-			call allocate_array(res, size(node%elems, kind = 8))
-		end if
+		call allocate_array(res, size(node%elems, kind = 8))
 
 		res%array%len_ = 0
 		is_cat = .false.

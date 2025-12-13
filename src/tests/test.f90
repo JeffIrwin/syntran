@@ -847,7 +847,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f32('min(3.0f, 2.0f);') - 2.0) < tol, &
 			abs(eval_f32('min(2.0f, 3.0f);') - 2.0) < tol, &
 			abs(eval_f32('min(4.0f, 3.0f, 5.0f);') - 3.0) < tol, &
-			abs(eval_f32('min(4.0f, 3.0f, -5.0f);') - -5.0) < tol, &
+			abs(eval_f32('min(4.0f, 3.0f, -5.0f);') - (-5.0)) < tol, &
 			abs(eval_f32('max(3.0f, 2.0f);') - 3.0) < tol, &
 			abs(eval_f32('max(2.0f, 3.0f);') - 3.0) < tol, &
 			abs(eval_f32('max(4.0f, 3.0f, 5.0f);') - 5.0) < tol, &

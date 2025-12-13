@@ -259,8 +259,6 @@ recursive subroutine value_move(src, dst)
 
 	!********
 
-	integer :: i
-
 	if (debug > 3) print *, 'starting value_move()'
 
 	dst%type = src%type
