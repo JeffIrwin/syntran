@@ -1,0 +1,19 @@
+// Test script for argv() function
+//
+// Usage: syntran argv.syntran -- arg1 arg2 ...
+
+let args = argv();
+println("Number of arguments: ", size(args));
+
+if size(args) > 0
+{
+    println("Arguments:");
+    for arg in args
+    {
+        println("  ", arg);
+    }
+}
+else
+{
+    println("No arguments provided (pass args after `--`)");
+}

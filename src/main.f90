@@ -37,16 +37,18 @@ program main
 		! workspace after running a startup file
 		!
 		! TODO: add a test that covers a "-i" interactive run
-		res = syntran_interpret(startup_file = args%syntran_file)
+		res = syntran_interpret(startup_file = args%syntran_file, &
+			script_args = args%script_args)
 
 	else if (args%syntran_file_arg) then
 		! Interpret a file and exit
-		res = syntran_interpret_file(args%syntran_file, quiet_info = args%quiet)
+		res = syntran_interpret_file(args%syntran_file, quiet_info = args%quiet, &
+			script_args = args%script_args)
 		if (.not. args%quiet) write(*,*) '    '//res
 
 	else if (args%command_arg) then
 		! Interpret a cmd arg string
-		res = syntran_eval(args%command)
+		res = syntran_eval(args%command, script_args = args%script_args)
 		if (.not. args%quiet) write(*,*) '    '//res
 
 		! python -c command doesn't print anything unless you call print()
@@ -54,7 +56,7 @@ program main
 
 	else
 		! Start a clean interactive REPL shell (without any startup file)
-		res = syntran_interpret()
+		res = syntran_interpret(script_args = args%script_args)
 
 	end if
 

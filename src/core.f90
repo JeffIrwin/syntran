@@ -30,14 +30,6 @@ module syntran__core_m
 		syntran_patch =  1
 
 	! TODO:
-	!  - cmd args
-	!    * useful for aoc
-	!      + switching test/real input is annoying without cmd args. must resort
-	!        to commenting/uncommenting line(s) in code
-	!    * args would be useful for logo sample, e.g. image size and some
-	!      control color options
-	!    * pass after a ` -- `?
-	!    * related: environment variables
 	!  - minloc, maxloc, findloc fns
 	!    * useful for aoc
 	!    * i'm leaning towards 2.0 instead of namespaces
