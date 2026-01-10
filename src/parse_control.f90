@@ -108,6 +108,56 @@ end function parse_continue_statement
 
 !===============================================================================
 
+module function parse_use_statement(parser) result(statement)
+
+	! Parse `use module::name;` or `use module::*;`
+
+	class(parser_t) :: parser
+	type(syntax_node_t) :: statement
+	!********
+	character(len = :), allocatable :: module_name, import_name
+	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
+		name_identifier, semi, star
+	type(text_span_t) :: span
+
+	use_token = parser%match(use_keyword)
+
+	mod_identifier = parser%match(identifier_token)
+	module_name = mod_identifier%text
+
+	double_colon = parser%match(double_colon_token)
+
+	! Check for glob import (use module::*)
+	if (parser%current_kind() == star_token) then
+		star = parser%match(star_token)
+		import_name = "*"
+	else
+		name_identifier = parser%match(identifier_token)
+		import_name = name_identifier%text
+	end if
+
+	semi = parser%match(semicolon_token)
+
+	! Return an empty statement (no-op)
+	statement%kind = expr_statement
+	statement%is_empty = .true.
+
+	! For std::, all intrinsics are already globally available
+	if (module_name == "std") return
+
+	! User-defined modules are not yet fully implemented.
+	! The syntax is recognized but module loading is not complete.
+	! For now, report an error for non-std modules.
+	span = new_span(mod_identifier%pos, len(mod_identifier%text))
+	call parser%diagnostics%push( &
+		"Error: user-defined modules are not yet implemented. " // &
+		"Module `" // module_name // "` cannot be loaded." // &
+		" Only `use std::*` is currently supported.")
+
+end function parse_use_statement
+
+!===============================================================================
+
 recursive module function parse_if_statement(parser) result(statement)
 
 	class(parser_t) :: parser
@@ -431,6 +481,9 @@ recursive module function parse_statement(parser) result(statement)
 
 	case (continue_keyword)
 		statement = parser%parse_continue_statement()
+
+	case (use_keyword)
+		statement = parser%parse_use_statement()
 
 	case default
 		pos_beg   = parser%peek_pos(0)
