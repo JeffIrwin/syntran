@@ -1268,7 +1268,7 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
-	! argv() returns an array of strings containing command-line arguments
+	! args() returns an array of strings containing command-line arguments
 	! passed after `--`
 	args_fn%type%type = array_type
 	allocate(args_fn%type%array)
