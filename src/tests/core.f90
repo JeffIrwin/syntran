@@ -14,11 +14,26 @@ module syntran__test_core_m
 		eval_f64  => syntran_eval_f64
 
 	use syntran__utils_m, only: fg_bright_red, fg_bright_green, line_feed, &
-		findlocl1, console_color, console_color_reset
+		findlocl1, console_color, console_color_reset, &
+		string_vector_t, new_string_vector
 
 	implicit none
 
 contains
+
+!===============================================================================
+
+function eval_with_args(str_, script_args) result(res)
+
+	! Evaluate a syntran string with script arguments (for testing args())
+
+	character(len = *), intent(in) :: str_
+	type(string_vector_t), intent(in) :: script_args
+	character(len = :), allocatable :: res
+
+	res = eval(str_, script_args = script_args)
+
+end function eval_with_args
 
 !===============================================================================
 
