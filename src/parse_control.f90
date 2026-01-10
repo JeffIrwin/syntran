@@ -130,9 +130,10 @@ module function parse_use_statement(parser) result(statement)
 	type(parser_t) :: mod_parser
 	type(syntax_node_t) :: mod_unit
 	type(text_context_vector_t) :: mod_contexts
-	type(fn_t) :: fn
-	integer :: i, io, iostat, mod_unit_
+	type(fn_t) :: fn, dummy_fn
+	integer :: i, io, iostat, iostat2, mod_unit_, id_index, slash_pos
 	logical :: qualified_import
+	character(len = :), allocatable :: qualified_prefix
 
 	use_token = parser%match(use_keyword)
 
@@ -229,10 +230,37 @@ module function parse_use_statement(parser) result(statement)
 		if (iostat /= exit_success) cycle
 
 		! Determine the name to insert: qualified (module::fn) or unqualified (fn)
+		! For qualified imports, convert path separators to namespace separators
+		! e.g., "math/vectors" -> "math::vectors::fn"
 		if (qualified_import) then
-			insert_name = module_name // "::" // fn_name
+			! Replace "/" with "::" in module_name for qualified prefix
+			qualified_prefix = module_name
+			slash_pos = index(qualified_prefix, "/")
+			do while (slash_pos > 0)
+				qualified_prefix = qualified_prefix(1:slash_pos-1) // "::" &
+					// qualified_prefix(slash_pos+1:)
+				slash_pos = index(qualified_prefix, "/")
+			end do
+			insert_name = qualified_prefix // "::" // fn_name
 		else
 			insert_name = fn_name
+
+			! Check if this would shadow an intrinsic function.
+			! First check for exact name match
+			dummy_fn = parser%fns%search(fn_name, id_index, iostat2)
+			if (iostat2 == exit_success .and. id_index <= parser%fns%num_intr_fns) then
+				span = new_span(mod_identifier%pos, len(mod_identifier%text))
+				call parser%diagnostics%push( &
+					err_shadow_intr(parser%context(), span, fn_name))
+				cycle
+			end if
+			! Check for overloaded intrinsics (e.g., dot, abs, sum, etc.)
+			if (is_overloaded_intr(fn_name)) then
+				span = new_span(mod_identifier%pos, len(mod_identifier%text))
+				call parser%diagnostics%push( &
+					err_shadow_intr(parser%context(), span, fn_name))
+				cycle
+			end if
 		end if
 
 		! Insert into current parser with new id_index

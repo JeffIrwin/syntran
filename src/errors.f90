@@ -1155,6 +1155,21 @@ end function err_mod_read
 
 !===============================================================================
 
+function err_shadow_intr(context, span, fn_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn_name
+	err = err_prefix &
+		//'module function `'//fn_name//'` shadows intrinsic function' &
+		//underline(context, span) &
+		//" cannot shadow intrinsic"//color_reset
+
+end function err_shadow_intr
+
+!===============================================================================
+
 function err_404(filename) result(err)
 	character(len = *), intent(in) :: filename
 	character(len = :), allocatable :: err

@@ -1,9 +1,9 @@
 // Vector math module in a subdirectory
 
-fn dot(a: [i32; :], b: [i32; :]): i32
+fn vdot(a: [i32; :], b: [i32; :]): i32
 {
 	// Off-by-one from std::dot fn so we can tell which one is getting
-	// called
+	// called.  Named 'vdot' to avoid shadowing the 'dot' intrinsic.
 	return sum(a * b) + 1;
 }
 

@@ -323,7 +323,8 @@ end function parse_fn_call
 
 recursive module function parse_qualified_expr(parser) result(expr)
 
-	! Parse qualified names like `std::println()` or `mod::name`
+	! Parse qualified names like `std::println()`, `mod::name`,
+	! or nested namespaces like `math::vectors::fn()`
 
 	class(parser_t) :: parser
 
@@ -335,19 +336,29 @@ recursive module function parse_qualified_expr(parser) result(expr)
 
 	type(syntax_token_t) :: mod_identifier, double_colon, fn_identifier
 
-	! Get module name
+	! Get first part of module name
 	mod_identifier = parser%match(identifier_token)
 	module_name = mod_identifier%text
 
 	! Consume ::
 	double_colon = parser%match(double_colon_token)
 
-	! Get the function/variable name
+	! Get the next identifier (could be another namespace or the fn/var name)
 	fn_identifier = parser%match(identifier_token)
 	fn_name = fn_identifier%text
 
+	! Handle nested namespaces: math::vectors::fn()
+	! Keep consuming ::identifier pairs while we see more :: tokens
+	do while (parser%current_kind() == double_colon_token)
+		! The current fn_name is actually part of the module path
+		module_name = module_name // "::" // fn_name
+		double_colon = parser%match(double_colon_token)
+		fn_identifier = parser%match(identifier_token)
+		fn_name = fn_identifier%text
+	end do
+
 	if (parser%current_kind() == lparen_token) then
-		! Qualified function call: std::println(...)
+		! Qualified function call: std::println(...) or math::vectors::fn(...)
 		! Create a modified identifier for function lookup
 		fn_identifier%text = fn_name
 

@@ -5,14 +5,13 @@ use math/vectors::*;
 let a = [1, 2, 3];
 let b = [4, 5, 6];
 
-let d = dot(a, b) - 1;
-//let d = math::vectors::dot(a, b) - 1;
-
+let d = vdot(a, b);
 let m = magnitude_squared(a);
 let c = add_vectors(a, b);
 
-//println("dot([1,2,3], [4,5,6]) = ", d);
+//println("vdot([1,2,3], [4,5,6]) = ", d);
 //println("magnitude_squared([1,2,3]) = ", m);
 //println("add_vectors result = ", c);
 
-return d == std::dot(a,b) and m == 14 and c[0] == 5 and c[1] == 7 and c[2] == 9;
+// vdot returns sum(a*b) + 1 = 32 + 1 = 33
+return d == 33 and m == 14 and c[0] == 5 and c[1] == 7 and c[2] == 9;
