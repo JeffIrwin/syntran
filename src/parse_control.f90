@@ -121,7 +121,7 @@ module function parse_use_statement(parser) result(statement)
 	class(parser_t) :: parser
 	type(syntax_node_t) :: statement
 	!********
-	character(len = :), allocatable :: module_name, import_name
+	character(len = :), allocatable :: module_name, import_name, module_path
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
 	character(len = :), allocatable :: insert_name
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
@@ -137,14 +137,29 @@ module function parse_use_statement(parser) result(statement)
 
 	use_token = parser%match(use_keyword)
 
+	! Handle parent directory references (e.g., `use ../module;` or `use ../../module;`)
+	! module_path includes "../" for file resolution, module_name is for namespacing
+	module_path = ""
+	do while (parser%current_kind() == dot_token .and. &
+	          parser%peek_kind(1) == dot_token .and. &
+	          parser%peek_kind(2) == slash_token)
+		! Match ".." and "/"
+		star = parser%match(dot_token)    ! reuse star token variable
+		star = parser%match(dot_token)
+		star = parser%match(slash_token)
+		module_path = module_path // "../"
+	end do
+
 	mod_identifier = parser%match(identifier_token)
 	module_name = mod_identifier%text
+	module_path = module_path // module_name
 
 	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
 	do while (parser%current_kind() == slash_token)
 		star = parser%match(slash_token)  ! reuse star token variable
 		name_identifier = parser%match(identifier_token)
 		module_name = module_name // "/" // name_identifier%text
+		module_path = module_path // "/" // name_identifier%text
 	end do
 
 	! Check for `use module;` (qualified import) vs `use module::*;` (glob import)
@@ -177,7 +192,7 @@ module function parse_use_statement(parser) result(statement)
 
 	! Get the directory of the current source file
 	src_dir = get_dir(parser%contexts%v(parser%current_unit())%src_file)
-	mod_filename = src_dir // module_name // ".syntran"
+	mod_filename = src_dir // module_path // ".syntran"
 
 	! Check if module file exists
 	if (.not. exists(mod_filename)) then
