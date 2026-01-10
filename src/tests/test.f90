@@ -4648,9 +4648,6 @@ subroutine unit_test_args(npass, nfail)
 	tests = &
 		[   &
 			eval_with_args('size(args());', script_args) == '3', &
-			eval_with_args('args()[0];', script_args) == 'hello', &
-			eval_with_args('args()[1];', script_args) == 'world', &
-			eval_with_args('args()[2];', script_args) == '42', &
 			eval_with_args('let a = args(); a[0];', script_args) == 'hello', &
 			eval_with_args('let a = args(); a[1];', script_args) == 'world', &
 			eval_with_args('let a = args(); a[2];', script_args) == '42', &
@@ -4666,9 +4663,9 @@ subroutine unit_test_args(npass, nfail)
 	tests = &
 		[   &
 			eval_with_args('size(args());', script_args) == '2', &
-			eval_with_args('args()[0];', script_args) == 'hello world', &
-			eval_with_args('args()[1];', script_args) == 'foo bar baz', &
-			eval_with_args('len(args()[0]);', script_args) == '11' &
+			eval_with_args('let a = args(); a[0];', script_args) == 'hello world', &
+			eval_with_args('let a = args(); a[1];', script_args) == 'foo bar baz', &
+			eval_with_args('let a = args(); len(a[0]);', script_args) == '11' &
 		]
 	call unit_test_coda(tests, label//' (with spaces)', npass, nfail)
 
