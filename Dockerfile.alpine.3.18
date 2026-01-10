@@ -5,12 +5,17 @@ WORKDIR /workdir
 
 # Alpine 3.18 has gfortran 12.  3.19 has gfortran 13 which didn't work with
 # syntran until syntran 0.0.61, released 2025 Feb 1
+RUN apk add --no-cache \
+	gfortran \
+	musl-dev \
+	libc6-compat \
+	rlwrap \
+	curl
+# - libc6-compat:  syntran needs glibc compatibility, not alpine's musl libc
+# - rlwrap:  nice to have
 
-RUN apk add gfortran musl-dev
-RUN apk add libc6-compat  # syntran needs glibc compatibility, not alpine's musl libc
-RUN apk add rlwrap        # nice to have
-RUN apk add curl
-
+# Beware, this does not run gen-header.sh like rocky docker. Maybe that's
+# actually a good test that I have the generated source existing locally
 COPY src src
 COPY CMakeLists.txt .
 COPY fpm.toml .
@@ -51,4 +56,21 @@ RUN fpm test test
 ##************
 
 ENTRYPOINT ["rlwrap", "syntran"]
+
+#===========================================================
+# Tests
+#
+# This container is kinda bulky.  Maybe I should move tests to a separate
+# dockerfile (debug build only?) for efficiency
+
+RUN [[ "$(syntran -c '1+2;' | tr -d '[:space:]')" == "3" ]]
+RUN [[ "$(syntran -c 'sum([0:101]);' | tr -d '[:space:]')" == "5050" ]]
+RUN [[ "$(syntran -c 'sum([0:10]**2);' | tr -d '[:space:]')" == "285" ]]
+
+RUN [[ "$(syntran -c 'let a = args(); size(a);' -- foo bar hello world | tr -d '[:space:]')" == "4" ]]
+RUN [[ "$(syntran -c 'let a = args(); size(a);' -- foo bar 'hello world' | tr -d '[:space:]')" == "3" ]]
+
+# `tr` deletes all spaces, while this `sed` only removes *leading* spaces
+RUN [[ "$(syntran -c 'let a = args(); a[0];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "foo" ]]
+RUN [[ "$(syntran -c 'let a = args(); a[2];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "hello world" ]]
 

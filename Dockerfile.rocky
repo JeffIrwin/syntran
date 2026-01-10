@@ -4,10 +4,10 @@ FROM rockylinux:9
 WORKDIR /workdir
 
 # TODO: update and install all in one line because docker can break otherwise
-RUN dnf update -y
-RUN dnf install -y vim
-RUN dnf install -y git
-RUN dnf install -y gcc-toolset-13-gcc-gfortran
+RUN dnf update -y && dnf install -y \
+	vim \
+	git \
+	gcc-toolset-13-gcc-gfortran
 
 ## Static libc.a and libm.a can also be installed, but it does not remove the dependency on libc.so etc. from syntran
 #dnf --enablerepo=crb install glibc-static -y
