@@ -139,6 +139,13 @@ module function parse_use_statement(parser) result(statement)
 	mod_identifier = parser%match(identifier_token)
 	module_name = mod_identifier%text
 
+	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
+	do while (parser%current_kind() == slash_token)
+		star = parser%match(slash_token)  ! reuse star token variable
+		name_identifier = parser%match(identifier_token)
+		module_name = module_name // "/" // name_identifier%text
+	end do
+
 	! Check for `use module;` (qualified import) vs `use module::*;` (glob import)
 	if (parser%current_kind() == double_colon_token) then
 		double_colon = parser%match(double_colon_token)

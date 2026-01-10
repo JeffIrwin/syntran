@@ -8,9 +8,9 @@ let b = mul(4, 5);
 let c = square(6);
 let d = max_val(a, b);
 
-println("add(2, 3) = ", a);
-println("mul(4, 5) = ", b);
-println("square(6) = ", c);
-println("max_val(5, 20) = ", d);
+//println("add(2, 3) = ", a);
+//println("mul(4, 5) = ", b);
+//println("square(6) = ", c);
+//println("max_val(5, 20) = ", d);
 
 return a == 5 and b == 20 and c == 36 and d == 20;

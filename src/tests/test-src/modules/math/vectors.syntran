@@ -1,0 +1,16 @@
+// Vector math module in a subdirectory
+
+fn dot(a: [i32; :], b: [i32; :]): i32
+{
+	return sum(a * b);
+}
+
+fn magnitude_squared(v: [i32; :]): i32
+{
+	return sum(v * v);
+}
+
+fn add_vectors(a: [i32; :], b: [i32; :]): [i32; :]
+{
+	return a + b;
+}
