@@ -150,6 +150,14 @@ module function parse_use_statement(parser) result(statement)
 		module_path = module_path // "../"
 	end do
 
+	! Handle current directory reference (e.g., `use ./module;`)
+	if (parser%current_kind() == dot_token .and. &
+	    parser%peek_kind(1) == slash_token) then
+		star = parser%match(dot_token)
+		star = parser%match(slash_token)
+		module_path = module_path // "./"
+	end if
+
 	mod_identifier = parser%match(identifier_token)
 	module_name = mod_identifier%text
 	module_path = module_path // module_name

@@ -4479,9 +4479,12 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-05.syntran', quiet) == 'true', &
 			interpret_file(path//'test-06.syntran', quiet) == 'true', &
 			interpret_file(path//'test-07.syntran', quiet) == 'true', &
+			interpret_file(path//'test-cwd.syntran', quiet) == 'true', &
+			interpret_file(path//'test-cwd-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'subdir/test-parent-import.syntran', quiet) == 'true', &
 			interpret_file(path//'subdir/test-parent-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'subdir/deep/test-grandparent.syntran', quiet) == 'true', &
+			interpret_file(path//'subdir/deep/test-grandparent-qualified.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
