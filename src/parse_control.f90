@@ -125,13 +125,13 @@ module function parse_use_statement(parser) result(statement)
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
 	character(len = :), allocatable :: insert_name
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
-		name_identifier, semi, star
+		name_identifier, semi, star, dummy
 	type(text_span_t) :: span
 	type(parser_t) :: mod_parser
 	type(syntax_node_t) :: mod_unit
 	type(text_context_vector_t) :: mod_contexts
 	type(fn_t) :: fn
-	integer :: i, io, iostat, mod_unit_, slash_pos
+	integer :: i, io, iostat, mod_unit_
 	logical :: qualified_import
 	character(len = :), allocatable :: qualified_prefix
 
@@ -144,17 +144,17 @@ module function parse_use_statement(parser) result(statement)
 	          parser%peek_kind(1) == dot_token .and. &
 	          parser%peek_kind(2) == slash_token)
 		! Match ".." and "/"
-		star = parser%match(dot_token)    ! reuse star token variable
-		star = parser%match(dot_token)
-		star = parser%match(slash_token)
+		dummy = parser%match(dot_token)
+		dummy = parser%match(dot_token)
+		dummy = parser%match(slash_token)
 		module_path = module_path // "../"
 	end do
 
 	! Handle current directory reference (e.g., `use ./module;`)
 	if (parser%current_kind() == dot_token .and. &
 	    parser%peek_kind(1) == slash_token) then
-		star = parser%match(dot_token)
-		star = parser%match(slash_token)
+		dummy = parser%match(dot_token)
+		dummy = parser%match(slash_token)
 		module_path = module_path // "./"
 	end if
 
@@ -164,7 +164,7 @@ module function parse_use_statement(parser) result(statement)
 
 	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
 	do while (parser%current_kind() == slash_token)
-		star = parser%match(slash_token)  ! reuse star token variable
+		dummy = parser%match(slash_token)
 		name_identifier = parser%match(identifier_token)
 		module_name = module_name // "/" // name_identifier%text
 		module_path = module_path // "/" // name_identifier%text
@@ -257,13 +257,7 @@ module function parse_use_statement(parser) result(statement)
 		! e.g., "math/vectors" -> "math::vectors::fn"
 		if (qualified_import) then
 			! Replace "/" with "::" in module_name for qualified prefix
-			qualified_prefix = module_name
-			slash_pos = index(qualified_prefix, "/")
-			do while (slash_pos > 0)
-				qualified_prefix = qualified_prefix(1:slash_pos-1) // "::" &
-					// qualified_prefix(slash_pos+1:)
-				slash_pos = index(qualified_prefix, "/")
-			end do
+			qualified_prefix = replace_all(module_name, "/", "::")
 			insert_name = qualified_prefix // "::" // fn_name
 		else
 			insert_name = fn_name

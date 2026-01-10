@@ -122,8 +122,10 @@ module syntran__parse_m
 			type(syntax_node_t) :: decl
 		end function parse_fn_declaration
 
-		recursive module function parse_fn_call(parser) result(fn_call)
+		recursive module function parse_fn_call(parser, module_prefix, identifier) result(fn_call)
 			class(parser_t) :: parser
+			character(len = *), intent(in), optional :: module_prefix
+			type(syntax_token_t), intent(in), optional :: identifier
 			type(syntax_node_t) :: fn_call
 		end function parse_fn_call
 

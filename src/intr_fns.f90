@@ -1980,6 +1980,9 @@ logical function is_overloaded_intr(fn_name)
 	! Check if a function name is an overloaded intrinsic function.
 	! These are intrinsics that have type-specific implementations
 	! (e.g., "dot" -> "0dot_i32", "0dot_f32", etc.)
+	!
+	! This list must be kept in sync with the cases in resolve_overload() below.
+	! If a new overloaded intrinsic is added there, add it here too.
 
 	character(len = *), intent(in) :: fn_name
 

@@ -17,15 +17,18 @@ contains
 
 !===============================================================================
 
-recursive module function parse_fn_call(parser) result(fn_call)
+recursive module function parse_fn_call(parser, module_prefix, identifier) result(fn_call)
 
 	class(parser_t) :: parser
+	character(len = *), intent(in), optional :: module_prefix
+	type(syntax_token_t), intent(in), optional :: identifier
 
 	type(syntax_node_t) :: fn_call
 
 	!********
 
-	character(len = :), allocatable :: exp_type, act_type, param_name
+	character(len = :), allocatable :: exp_type, act_type, param_name, &
+		lookup_name, display_name
 
 	integer :: i, io, id_index, pos0, rank
 
@@ -38,7 +41,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	type(syntax_node_t) :: arg
 	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: identifier, comma, lparen, rparen, dummy, amp
+	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp
 
 	type(text_span_t) :: span
 
@@ -48,9 +51,13 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	!print *, 'parse_fn_call'
 
 	! Function call expression
-	identifier = parser%match(identifier_token)
+	if (present(identifier)) then
+		identifier_ = identifier
+	else
+		identifier_ = parser%match(identifier_token)
+	end if
 
-	!print *, "identifier = ", identifier%text
+	!print *, "identifier_ = ", identifier_%text
 
 	args     = new_syntax_node_vector()
 	pos_args = new_integer_vector()
@@ -109,17 +116,38 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	rparen  = parser%match(rparen_token)
 
 	fn_call%kind = fn_call_expr
-	fn_call%identifier = identifier
+	fn_call%identifier = identifier_
+
+	! Set module prefix if provided (for qualified calls like std::println)
+	if (present(module_prefix)) then
+		fn_call%module_prefix = module_prefix
+	end if
 
 	call resolve_overload(args, fn_call, has_rank)
 	if (has_rank) rank = fn_call%val%array%rank
 
 	! Lookup by fn_call%identifier%text (e.g. "0min_i32"), but log
-	! diagnostics based on identifier%text (e.g. "min")
+	! diagnostics based on identifier_%text (e.g. "min")
 	!
 	! Might need to add separate internal/external fn names for
 	! overloaded cases
-	fn = parser%fns%search(fn_call%identifier%text, id_index, io)
+	!
+	! For qualified calls, determine lookup name based on module prefix
+	if (present(module_prefix)) then
+		if (module_prefix == "std") then
+			! For std::, look up intrinsic without prefix
+			lookup_name = fn_call%identifier%text
+		else
+			! For user modules, look up with qualified name
+			lookup_name = module_prefix // "::" // fn_call%identifier%text
+		end if
+		display_name = module_prefix // "::" // identifier_%text
+	else
+		lookup_name = fn_call%identifier%text
+		display_name = identifier_%text
+	end if
+
+	fn = parser%fns%search(lookup_name, id_index, io)
 	!print *, "fn id_index = ", id_index
 	if (io /= exit_success) then
 
@@ -129,10 +157,10 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			return
 		end if
 
-		span = new_span(identifier%pos, len(identifier%text))
+		span = new_span(identifier_%pos, len(identifier_%text))
 		call parser%diagnostics%push( &
 			err_undeclare_fn(parser%context(), &
-			span, identifier%text))
+			span, display_name))
 
 		! No more tokens are consumed below, so we can just return
 		! to skip cascading fn arg count/type errors
@@ -203,7 +231,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call parser%diagnostics%push( &
 			err_bad_arg_count(parser%context(), &
-			span, identifier%text, size(fn%params), args%len_))
+			span, identifier_%text, size(fn%params), args%len_))
 		return
 
 	else if (args%len_ < size(fn%params) + fn%variadic_min) then
@@ -212,7 +240,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call parser%diagnostics%push( &
 			err_too_few_args(parser%context(), &
-			span, identifier%text, &
+			span, identifier_%text, &
 			size(fn%params) + fn%variadic_min, args%len_))
 		return
 
@@ -223,7 +251,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call parser%diagnostics%push( &
 			err_too_many_args(parser%context(), &
-			span, identifier%text, &
+			span, identifier_%text, &
 			size(fn%params) + fn%variadic_max, args%len_))
 		return
 
@@ -264,7 +292,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 				call parser%diagnostics%push(err_bad_arg_val( &
 					parser%context(), &
 					span, &
-					identifier%text, &
+					identifier_%text, &
 					i - 1, &  ! 0-based index in err msg
 					param_name &
 				))
@@ -272,7 +300,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 				call parser%diagnostics%push(err_bad_arg_ref( &
 					parser%context(), &
 					span, &
-					identifier%text, &
+					identifier_%text, &
 					i - 1, &
 					param_name &
 				))
@@ -302,7 +330,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			call parser%diagnostics%push(err_bad_arg_type( &
 				parser%context(), &
 				span, &
-				identifier%text, &
+				identifier_%text, &
 				i - 1, &  ! 0-based index in err msg
 				param_name, &
 				exp_type, &
@@ -359,13 +387,7 @@ recursive module function parse_qualified_expr(parser) result(expr)
 
 	if (parser%current_kind() == lparen_token) then
 		! Qualified function call: std::println(...) or math::vectors::fn(...)
-		! Create a modified identifier for function lookup
-		fn_identifier%text = fn_name
-
-		! Temporarily set parser position back to parse the function call
-		! Actually, we need to handle this differently - parse the args here
-
-		expr = parse_qualified_fn_call(parser, module_name, fn_identifier)
+		expr = parser%parse_fn_call(module_name, fn_identifier)
 	else
 		! Qualified variable access (future: for user modules)
 		! For now, just report an error since std:: variables don't exist
@@ -376,228 +398,6 @@ recursive module function parse_qualified_expr(parser) result(expr)
 	end if
 
 end function parse_qualified_expr
-
-!===============================================================================
-
-recursive function parse_qualified_fn_call(parser, module_name, identifier) result(fn_call)
-
-	! Parse a qualified function call like std::println(...) or mod::fn(...)
-	! The module name and identifier have already been consumed
-
-	class(parser_t) :: parser
-	character(len = *), intent(in) :: module_name
-	type(syntax_token_t), intent(in) :: identifier
-
-	type(syntax_node_t) :: fn_call
-
-	!********
-
-	character(len = :), allocatable :: exp_type, act_type, param_name
-
-	integer :: i, io, id_index, pos0, rank
-
-	logical :: has_rank, param_is_ref, is_ok
-
-	type(fn_t) :: fn
-
-	type(integer_vector_t) :: pos_args
-	type(logical_vector_t) :: is_ref
-
-	type(syntax_node_t) :: arg
-	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: comma, lparen, rparen, dummy, amp
-
-	type(text_span_t) :: span
-
-	type(value_t) :: param_val
-
-	args     = new_syntax_node_vector()
-	pos_args = new_integer_vector()
-	is_ref   = new_logical_vector()
-
-	lparen  = parser%match(lparen_token)
-
-	do while ( &
-		parser%current_kind() /= rparen_token .and. &
-		parser%current_kind() /= eof_token)
-
-		pos0 = parser%pos
-		call pos_args%push(parser%current_pos())
-
-		if (parser%current_kind() == amp_token) then
-			amp = parser%match(amp_token)
-			call is_ref%push(.true.)
-
-			arg = parser%parse_expr()
-
-			if (arg%kind /= name_expr) then
-				span = new_span(amp%pos, parser%current_pos() - amp%pos + 1)
-				call parser%diagnostics%push(err_non_name_ref( &
-					parser%context(), span))
-			end if
-
-			if (allocated(arg%lsubscripts)) then
-				span = new_span(amp%pos, parser%current_pos() - amp%pos + 1)
-				call parser%diagnostics%push(err_sub_ref( &
-					parser%context(), span))
-			end if
-		else
-			call is_ref%push(.false.)
-			arg = parser%parse_expr()
-		end if
-
-		call args%push(arg)
-
-		if (parser%current_kind() /= rparen_token) then
-			comma = parser%match(comma_token)
-		end if
-
-		if (parser%pos == pos0) dummy = parser%next()
-
-	end do
-	call pos_args%push(parser%current_pos() + 1)
-
-	rparen  = parser%match(rparen_token)
-
-	fn_call%kind = fn_call_expr
-	fn_call%identifier = identifier
-	fn_call%module_prefix = module_name
-
-	call resolve_overload(args, fn_call, has_rank)
-	if (has_rank) rank = fn_call%val%array%rank
-
-	! For std:: module, look up function in intrinsics without the prefix
-	if (module_name == "std") then
-		fn = parser%fns%search(fn_call%identifier%text, id_index, io)
-	else
-		! For user modules, look up with full qualified name (future implementation)
-		fn = parser%fns%search(module_name // "::" // fn_call%identifier%text, id_index, io)
-	end if
-
-	if (io /= exit_success) then
-
-		if (parser%ipass == 0) then
-			fn_call%id_index = 0
-			fn_call%kind = fn_call_expr
-			return
-		end if
-
-		span = new_span(identifier%pos, len(identifier%text))
-		call parser%diagnostics%push( &
-			err_undeclare_fn(parser%context(), &
-			span, module_name // "::" // identifier%text))
-
-		return
-
-	end if
-
-	if (fn%is_intr) fn_call%kind = fn_call_intr_expr
-
-	fn_call%val = fn%type
-	if (has_rank) then
-		if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
-		fn_call%val%array%rank = rank
-
-		if (.not. allocated(fn%type%array)) allocate(fn%type%array)
-		fn%type%array%rank = rank
-
-	end if
-
-	if (.not. fn%is_intr) then
-		allocate(fn_call%body)
-		fn_call%body = fn%node%body
-		fn_call%params = fn%node%params
-		fn_call%num_locs = fn%node%num_locs
-	end if
-
-	! Verify argument count (non-variadic)
-	if (fn%variadic_min < 0 .and. size(fn%params) /= args%len_) then
-		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-		call parser%diagnostics%push( &
-			err_bad_arg_count(parser%context(), &
-			span, identifier%text, size(fn%params), args%len_))
-		return
-
-	else if (args%len_ < size(fn%params) + fn%variadic_min) then
-		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-		call parser%diagnostics%push( &
-			err_too_few_args(parser%context(), &
-			span, identifier%text, &
-			size(fn%params) + fn%variadic_min, args%len_))
-		return
-
-	else if (fn%variadic_max >= 0 .and. &
-		args%len_ > size(fn%params) + fn%variadic_max) then
-		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-		call parser%diagnostics%push( &
-			err_too_many_args(parser%context(), &
-			span, identifier%text, &
-			size(fn%params) + fn%variadic_max, args%len_))
-		return
-	end if
-
-	fn_call%is_ref = is_ref%v(1: is_ref%len_)
-
-	allocate(param_val%array)
-	do i = 1, args%len_
-
-		if (i <= size(fn%params)) then
-			param_val  = fn%params(i)
-			param_name = fn%param_names%v(i)%s
-		else
-			param_val%type = fn%variadic_type
-			param_name = fn%variadic_name
-		end if
-
-		param_is_ref = .false.
-		if (allocated(fn%node)) param_is_ref = fn%node%is_ref(i)
-
-		if (param_is_ref .neqv. is_ref%v(i)) then
-			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-			if (param_is_ref) then
-				call parser%diagnostics%push(err_bad_arg_val( &
-					parser%context(), &
-					span, &
-					identifier%text, &
-					i - 1, &
-					param_name &
-				))
-			else
-				call parser%diagnostics%push(err_bad_arg_ref( &
-					parser%context(), &
-					span, &
-					identifier%text, &
-					i - 1, &
-					param_name &
-				))
-			end if
-		end if
-
-		is_ok = .true.
-		is_ok = is_ok .and. types_match(param_val, args%v(i)%val) == TYPE_MATCH
-		is_ok = is_ok .or. (parser%ipass == 0 .and. args%v(i)%val%type == unknown_type)
-
-		if (.not. is_ok) then
-			exp_type = type_name(param_val)
-			act_type = type_name(args%v(i)%val)
-
-			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-			call parser%diagnostics%push(err_bad_arg_type( &
-				parser%context(), &
-				span, &
-				identifier%text, &
-				i - 1, &
-				param_name, &
-				exp_type, &
-				act_type))
-		end if
-	end do
-
-	fn_call%id_index = id_index
-
-	call syntax_nodes_copy(fn_call%args, args%v( 1: args%len_ ))
-
-end function parse_qualified_fn_call
 
 !===============================================================================
 
