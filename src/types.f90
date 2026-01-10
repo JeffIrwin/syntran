@@ -159,6 +159,9 @@ module syntran__types_m
 		!type(struct_t), allocatable :: struct
 		character(len = :), allocatable :: struct_name
 
+		! Module prefix for qualified names (e.g., "std" in "std::println")
+		character(len = :), allocatable :: module_prefix
+
 		type(string_vector_t) :: diagnostics
 
 		! Only used to handle comment/whitespace lines for now
@@ -765,6 +768,12 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%struct_name = src%struct_name
 	else if (allocated(dst%struct_name)) then
 		deallocate(dst%struct_name)
+	end if
+
+	if (allocated(src%module_prefix)) then
+		dst%module_prefix = src%module_prefix
+	else if (allocated(dst%module_prefix)) then
+		deallocate(dst%module_prefix)
 	end if
 
 	dst%expecting       = src%expecting
@@ -1422,6 +1431,9 @@ integer function get_keyword_kind(text) result(kind)
 
 		case ("continue")
 			kind = continue_keyword
+
+		case ("use")
+			kind = use_keyword
 
 		case default
 			kind = identifier_token

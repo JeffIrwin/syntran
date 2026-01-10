@@ -82,6 +82,7 @@ module syntran__parse_m
 				parse_expr_statement, &
 				parse_fn_declaration, &
 				parse_fn_call, &
+				parse_qualified_expr, &
 				parse_struct_declaration, &
 				parse_struct_instance, &
 				parse_for_statement, &
@@ -124,6 +125,11 @@ module syntran__parse_m
 			class(parser_t) :: parser
 			type(syntax_node_t) :: fn_call
 		end function parse_fn_call
+
+		recursive module function parse_qualified_expr(parser) result(expr)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: expr
+		end function parse_qualified_expr
 
 		module subroutine parse_type(parser, type_text, type)
 			class(parser_t) :: parser

@@ -467,7 +467,10 @@ recursive module function parse_primary_expr(parser) result(expr)
 
 			!print *, "parser%peek_kind(1) = ", kind_name(parser%peek_kind(1))
 
-			if (parser%peek_kind(1) == lparen_token) then
+			if (parser%peek_kind(1) == double_colon_token) then
+				! Qualified name like `std::println()` or `mod::fn()`
+				expr = parser%parse_qualified_expr()
+			else if (parser%peek_kind(1) == lparen_token) then
 				expr = parser%parse_fn_call()
 			else if (parser%peek_kind(1) == lbrace_token) then
 
