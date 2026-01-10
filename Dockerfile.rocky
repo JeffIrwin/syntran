@@ -79,8 +79,11 @@ RUN cd ./bin && tar czf syntran-linux.tgz *
 #===========================================================
 # Tests
 #
-# This container is kinda bulky.  Maybe I should move tests to a separate
-# dockerfile (debug build only?) for efficiency
+# This container is kinda bulky.  Since this makes the shipped syntran binary,
+# it's good to do a little extra testing here.  However, the alpine dockerfile
+# runs twice as fast (~4 s cached no changes as opposed to 8 s for rocky).  For
+# efficient development/debugging, these binary syntran command tests are in the
+# alpine dockerfile too
 
 RUN [[ "$(./bin/syntran -c '1+2;' | tr -d '[:space:]')" == "3" ]]
 RUN [[ "$(./bin/syntran -c 'sum([0:101]);' | tr -d '[:space:]')" == "5050" ]]
