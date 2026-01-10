@@ -1,0 +1,24 @@
+// A utility module that uses intrinsic functions
+
+fn square(x: i32): i32
+{
+	return x * x;
+}
+
+fn cube(x: i32): i32
+{
+	return x * x * x;
+}
+
+fn sum_array(arr: [i32; :]): i32
+{
+	// Uses intrinsic sum function
+	return sum(arr);
+}
+
+fn max_val(a: i32, b: i32): i32
+{
+	if (a > b)
+		return a;
+	return b;
+}

@@ -1125,6 +1125,36 @@ end function err_inc_read
 
 !===============================================================================
 
+function err_mod_404(context, span, filename) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: filename
+	err = err_prefix &
+		//'module file `'//filename//'` not found' &
+		//underline(context, span) &
+		//" file not found"//color_reset
+
+end function err_mod_404
+
+!===============================================================================
+
+function err_mod_read(context, span, filename) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: filename
+	err = err_prefix &
+		//'module file `'//filename//'` cannot be read' &
+		//underline(context, span) &
+		//" cannot read file"//color_reset
+
+end function err_mod_read
+
+!===============================================================================
+
 function err_404(filename) result(err)
 	character(len = *), intent(in) :: filename
 	character(len = :), allocatable :: err

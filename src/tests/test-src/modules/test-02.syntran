@@ -1,0 +1,16 @@
+// Test module with intrinsic function usage
+
+use utils::*;
+
+let a = square(5);
+let b = cube(3);
+let arr = [1, 2, 3, 4, 5];
+let s = sum_array(arr);
+let m = max_val(10, 7);
+
+println("square(5) = ", a);
+println("cube(3) = ", b);
+println("sum_array([1,2,3,4,5]) = ", s);
+println("max_val(10, 7) = ", m);
+
+return a == 25 and b == 27 and s == 15 and m == 10;

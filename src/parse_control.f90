@@ -3,6 +3,8 @@
 
 submodule (syntran__parse_m) syntran__parse_control
 
+	use syntran__intr_fns_m
+
 	implicit none
 
 	! FIXME: remember to prepend routines like `module function` or `module
@@ -116,9 +118,15 @@ module function parse_use_statement(parser) result(statement)
 	type(syntax_node_t) :: statement
 	!********
 	character(len = :), allocatable :: module_name, import_name
+	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star
 	type(text_span_t) :: span
+	type(parser_t) :: mod_parser
+	type(syntax_node_t) :: mod_unit
+	type(text_context_vector_t) :: mod_contexts
+	type(fn_t) :: fn
+	integer :: i, io, iostat, mod_unit_
 
 	use_token = parser%match(use_keyword)
 
@@ -145,14 +153,67 @@ module function parse_use_statement(parser) result(statement)
 	! For std::, all intrinsics are already globally available
 	if (module_name == "std") return
 
-	! User-defined modules are not yet fully implemented.
-	! The syntax is recognized but module loading is not complete.
-	! For now, report an error for non-std modules.
-	span = new_span(mod_identifier%pos, len(mod_identifier%text))
-	call parser%diagnostics%push( &
-		"Error: user-defined modules are not yet implemented. " // &
-		"Module `" // module_name // "` cannot be loaded." // &
-		" Only `use std::*` is currently supported.")
+	! Get the directory of the current source file
+	src_dir = get_dir(parser%contexts%v(parser%current_unit())%src_file)
+	mod_filename = src_dir // module_name // ".syntran"
+
+	! Check if module file exists
+	if (.not. exists(mod_filename)) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_404(parser%context(), span, mod_filename))
+		return
+	end if
+
+	! Read the module file
+	mod_text = read_file(mod_filename, iostat)
+	if (iostat /= exit_success) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_read(parser%context(), span, mod_filename))
+		return
+	end if
+
+	! Create a new parser for the module
+	mod_contexts = new_context_vector()
+	mod_unit_ = 0
+	mod_parser = new_parser(mod_text, mod_filename, mod_contexts, mod_unit_)
+
+	! Initialize intrinsic functions for the module parser.
+	! We use declare_intr_fns instead of copying from the main parser's dict
+	! to avoid copying previously imported module functions which would cause
+	! redeclaration errors in pass 1.
+	call declare_intr_fns(mod_parser%fns)
+	mod_parser%num_fns = mod_parser%fns%num_intr_fns
+
+	! Parse the module
+	mod_unit = mod_parser%parse_unit()
+
+	! Check for parsing errors in the module (only in first pass)
+	if (parser%ipass == 0 .and. mod_parser%diagnostics%len_ > 0) then
+		call parser%diagnostics%push( &
+			"Error: failed to parse module `" // module_name // "`:")
+		do i = 1, mod_parser%diagnostics%len_
+			call parser%diagnostics%push(mod_parser%diagnostics%v(i)%s)
+		end do
+		return
+	end if
+
+	! Copy parsed functions from module parser to current parser
+	do i = 1, mod_parser%fn_names%len_
+		fn_name = mod_parser%fn_names%v(i)%s
+
+		! Look up the function in the module parser
+		fn = mod_parser%fns%search(fn_name, io, iostat)
+		if (iostat /= exit_success) cycle
+
+		! Insert into current parser with new id_index
+		parser%num_fns = parser%num_fns + 1
+		call parser%fns%insert(fn_name, fn, parser%num_fns, io)
+
+		! Only push to fn_names in the first pass (like parse_fn_declaration)
+		if (parser%ipass == 0) call parser%fn_names%push(fn_name)
+	end do
 
 end function parse_use_statement
 

@@ -1,0 +1,11 @@
+// Test module import
+
+use mymath::*;
+
+let a = add(2, 3);
+let b = mul(4, 5);
+
+println("add(2, 3) = ", a);
+println("mul(4, 5) = ", b);
+
+return a == 5 and b == 20;
