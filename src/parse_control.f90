@@ -112,13 +112,18 @@ end function parse_continue_statement
 
 module function parse_use_statement(parser) result(statement)
 
-	! Parse `use module::name;` or `use module::*;`
+	! Parse `use module;` or `use module::*;` or `use module::name;`
+	!
+	! - `use module;`       imports functions as module::fn (qualified access)
+	! - `use module::*;`    imports all functions as fn (unqualified access)
+	! - `use module::name;` imports specific function as name (unqualified)
 
 	class(parser_t) :: parser
 	type(syntax_node_t) :: statement
 	!********
 	character(len = :), allocatable :: module_name, import_name
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
+	character(len = :), allocatable :: insert_name
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star
 	type(text_span_t) :: span
@@ -127,21 +132,30 @@ module function parse_use_statement(parser) result(statement)
 	type(text_context_vector_t) :: mod_contexts
 	type(fn_t) :: fn
 	integer :: i, io, iostat, mod_unit_
+	logical :: qualified_import
 
 	use_token = parser%match(use_keyword)
 
 	mod_identifier = parser%match(identifier_token)
 	module_name = mod_identifier%text
 
-	double_colon = parser%match(double_colon_token)
+	! Check for `use module;` (qualified import) vs `use module::*;` (glob import)
+	if (parser%current_kind() == double_colon_token) then
+		double_colon = parser%match(double_colon_token)
 
-	! Check for glob import (use module::*)
-	if (parser%current_kind() == star_token) then
-		star = parser%match(star_token)
-		import_name = "*"
+		! Check for glob import (use module::*)
+		if (parser%current_kind() == star_token) then
+			star = parser%match(star_token)
+			import_name = "*"
+		else
+			name_identifier = parser%match(identifier_token)
+			import_name = name_identifier%text
+		end if
+		qualified_import = .false.
 	else
-		name_identifier = parser%match(identifier_token)
-		import_name = name_identifier%text
+		! `use module;` - qualified import
+		import_name = ""
+		qualified_import = .true.
 	end if
 
 	semi = parser%match(semicolon_token)
@@ -207,12 +221,19 @@ module function parse_use_statement(parser) result(statement)
 		fn = mod_parser%fns%search(fn_name, io, iostat)
 		if (iostat /= exit_success) cycle
 
+		! Determine the name to insert: qualified (module::fn) or unqualified (fn)
+		if (qualified_import) then
+			insert_name = module_name // "::" // fn_name
+		else
+			insert_name = fn_name
+		end if
+
 		! Insert into current parser with new id_index
 		parser%num_fns = parser%num_fns + 1
-		call parser%fns%insert(fn_name, fn, parser%num_fns, io)
+		call parser%fns%insert(insert_name, fn, parser%num_fns, io)
 
 		! Only push to fn_names in the first pass (like parse_fn_declaration)
-		if (parser%ipass == 0) call parser%fn_names%push(fn_name)
+		if (parser%ipass == 0) call parser%fn_names%push(insert_name)
 	end do
 
 end function parse_use_statement

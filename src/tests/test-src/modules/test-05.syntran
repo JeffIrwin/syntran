@@ -1,0 +1,11 @@
+// Test qualified module import (use module; instead of use module::*)
+
+use mymath;
+
+let a = mymath::add(2, 3);
+let b = mymath::mul(4, 5);
+
+println("mymath::add(2, 3) = ", a);
+println("mymath::mul(4, 5) = ", b);
+
+return a == 5 and b == 20;
