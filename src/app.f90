@@ -322,7 +322,7 @@ function parse_args() result(args)
 			//"error messages to <n> [default: "//str(maxerr_def)//"]"
 		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
 		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
-		write(*,*) "    -- <args>...        Pass remaining arguments to the script via argv()"
+		write(*,*) "    -- <args>...        Pass remaining arguments to the script via args()"
 		write(*,*)
 
 		if (.not. args%help) call exit(EXIT_FAILURE)

@@ -1993,7 +1993,7 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%bool = any(arg1%array%bool)
 
-	case ("argv")
+	case ("args")
 
 		! Return script arguments passed after `--` as a string array
 		res%type = array_type

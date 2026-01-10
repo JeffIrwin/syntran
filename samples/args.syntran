@@ -1,8 +1,8 @@
-// Test script for argv() function
+// Test script for args() function
 //
-// Usage: syntran argv.syntran -- arg1 arg2 ...
+// Usage: syntran args.syntran -- arg1 arg2 ...
 
-let args = argv();
+let args = args();
 println("Number of arguments: ", size(args));
 
 if size(args) > 0

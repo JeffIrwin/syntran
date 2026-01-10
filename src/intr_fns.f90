@@ -52,7 +52,7 @@ subroutine declare_intr_fns(fns)
 		acosd_f32_fn, acosd_f64_fn, acosd_f32_arr_fn, acosd_f64_arr_fn, &
 		asind_f32_fn, asind_f64_fn, asind_f32_arr_fn, asind_f64_arr_fn, &
 		atand_f32_fn, atand_f64_fn, atand_f32_arr_fn, atand_f64_arr_fn, &
-		repeat_fn, argv_fn
+		repeat_fn, args_fn
 
 	! This used to get incremented automatically inside of fns%insert, but I
 	! changed it.  I don't think it matters for intrinsic fns anyway, because
@@ -1270,15 +1270,15 @@ subroutine declare_intr_fns(fns)
 
 	! argv() returns an array of strings containing command-line arguments
 	! passed after `--`
-	argv_fn%type%type = array_type
-	allocate(argv_fn%type%array)
-	argv_fn%type%array%type = str_type
-	argv_fn%type%array%rank = 1
+	args_fn%type%type = array_type
+	allocate(args_fn%type%array)
+	args_fn%type%array%type = str_type
+	args_fn%type%array%rank = 1
 
-	allocate(argv_fn%params(0))
-	allocate(argv_fn%param_names%v(0))
+	allocate(args_fn%params(0))
+	allocate(args_fn%param_names%v(0))
 
-	call fns%insert("argv", argv_fn, id_index)
+	call fns%insert("args", args_fn, id_index)
 
 	!********
 
@@ -1979,7 +1979,7 @@ subroutine declare_intr_fns(fns)
 			size_fn       , &
 			str_fn        , &
 			writeln_fn    , &
-			argv_fn         &
+			args_fn         &
 		]
 
 	num_fns = size(fns%fns)
