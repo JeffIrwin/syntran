@@ -36,7 +36,7 @@ fpm run --profile debug -- src/tests/test-src/modules/test-01.syntran
 ```
 
 ### Evaluating a script as a command-line string
-To run a syntran script without having it saved as a file:
+To run a syntran script without saving it as a file:
 ```bash
 fpm run -- -c 'println(\"hello world\");'
 ```
@@ -58,6 +58,8 @@ The interpreter follows a classic lexer → parser → evaluator pipeline, imple
 - `src/eval.f90` - AST evaluation/interpretation
 - `src/types.f90` - Fortran type definitions
 - `src/value.f90` - Runtime value representation
+- `src/errors.f90` - Syntran error messages
+- `src/intr_fns.f90` - Intrinsic (built-in) function interfaces
 
 ### Math Operations (auto-generated)
 Binary arithmetic operations are generated from `src/math_bin_template.f90` via `src/gen_math.sh`:
@@ -82,7 +84,12 @@ Module paths in `use` statements are resolved relative to the current source fil
 
 ## Key Source Locations
 
-- `src/tests/test-src/` - Syntran script test files by category
+- `src/tests/test.f90` - Unit test orchestrator
+- `src/tests/test-src/` - Syntran script unit test files by category
 - `src/tests/long/aoc/` - Longer integration tests
 - `samples/` - Example syntran programs (not tested in CI)
 - `doc/README.md` - Intrinsic function documentation
+
+New features and bug fixes should have unit tests.
+Short syntran program strings can be evaluated directly in `test.f90`.
+Anything longer than a few lines can go in a `*.syntran` file under `test-src`, but it needs to be called using `interpret_file()` in `test.f90`.
