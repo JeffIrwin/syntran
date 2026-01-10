@@ -246,13 +246,16 @@ module function parse_use_statement(parser) result(statement)
 			insert_name = fn_name
 
 			! Check if this would shadow an intrinsic function.
-			! First check for exact name match
+			! First check for exact name match (use nested if since Fortran
+			! does not short-circuit .and. and id_index may be undefined)
 			dummy_fn = parser%fns%search(fn_name, id_index, iostat2)
-			if (iostat2 == exit_success .and. id_index <= parser%fns%num_intr_fns) then
-				span = new_span(mod_identifier%pos, len(mod_identifier%text))
-				call parser%diagnostics%push( &
-					err_shadow_intr(parser%context(), span, fn_name))
-				cycle
+			if (iostat2 == exit_success) then
+				if (id_index <= parser%fns%num_intr_fns) then
+					span = new_span(mod_identifier%pos, len(mod_identifier%text))
+					call parser%diagnostics%push( &
+						err_shadow_intr(parser%context(), span, fn_name))
+					cycle
+				end if
 			end if
 			! Check for overloaded intrinsics (e.g., dot, abs, sum, etc.)
 			if (is_overloaded_intr(fn_name)) then
