@@ -1,0 +1,18 @@
+// A geometry module that uses the mymath module
+
+use mymath::*;
+
+fn rectangle_area(width: i32, height: i32): i32
+{
+	return mul(width, height);
+}
+
+fn square_area(side: i32): i32
+{
+	return mul(side, side);
+}
+
+fn sum_of_squares(a: i32, b: i32): i32
+{
+	return add(mul(a, a), mul(b, b));
+}

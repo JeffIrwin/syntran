@@ -382,6 +382,18 @@ function err_redeclare_fn(context, span, fn) result(err)
 
 end function err_redeclare_fn
 
+function err_redeclare_intr_fn(context, span, fn) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn
+	err = err_prefix &
+		//'function `'//fn//'` is already a built-in function' &
+		//underline(context, span)//" function already exists"//color_reset
+
+end function err_redeclare_intr_fn
+
 !===============================================================================
 
 function err_redeclare_struct(context, span, struct) result(err)
@@ -437,6 +449,20 @@ function err_undeclare_fn(context, span, fn) result(err)
 		//underline(context, span)//" undefined function"//color_reset
 
 end function err_undeclare_fn
+
+!===============================================================================
+
+function err_std_only_fn(context, span, fn) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn
+	err = err_prefix &
+		//'function `'//fn//'` must be called with std:: prefix (use `std::'//fn//'()`)' &
+		//underline(context, span)//" requires std:: prefix"//color_reset
+
+end function err_std_only_fn
 
 !===============================================================================
 
@@ -1122,6 +1148,36 @@ function err_inc_read(context, span, filename) result(err)
 		//" cannot read file"//color_reset
 
 end function err_inc_read
+
+!===============================================================================
+
+function err_mod_404(context, span, filename) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: filename
+	err = err_prefix &
+		//'module file `'//filename//'` not found' &
+		//underline(context, span) &
+		//" file not found"//color_reset
+
+end function err_mod_404
+
+!===============================================================================
+
+function err_mod_read(context, span, filename) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: filename
+	err = err_prefix &
+		//'module file `'//filename//'` cannot be read' &
+		//underline(context, span) &
+		//" cannot read file"//color_reset
+
+end function err_mod_read
 
 !===============================================================================
 

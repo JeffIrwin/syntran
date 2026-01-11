@@ -1,0 +1,7 @@
+// Test glob import from parent directory
+use ../mymath::*;
+
+let a = add(1, 2);
+let b = mul(3, 4);
+
+return a == 3 and b == 12;

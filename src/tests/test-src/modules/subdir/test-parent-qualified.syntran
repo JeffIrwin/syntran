@@ -1,0 +1,7 @@
+// Test qualified import from parent directory
+use ../mymath;
+
+let a = mymath::add(1, 2);
+let b = mymath::mul(3, 4);
+
+return a == 3 and b == 12;

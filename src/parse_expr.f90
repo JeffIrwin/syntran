@@ -120,6 +120,9 @@ recursive module function parse_expr_statement(parser) result(expr)
 		else
 			call parser%vars%insert(identifier%text, expr%val, &
 				expr%id_index, io, overwrite = overwrite)
+
+			! Track module-level variable names (like fn_names for functions)
+			if (parser%ipass == 0) call parser%var_names%push(identifier%text)
 		end if
 
 		!print *, 'io = ', io
@@ -133,6 +136,89 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		return
 
+	end if
+
+	! Handle qualified assignment: mod::var = value
+	if (parser%peek_kind(0) == identifier_token .and. &
+	    parser%peek_kind(1) == double_colon_token) then
+
+		pos0 = parser%pos
+
+		! Parse the qualified name (mod::var or mod1::mod2::var)
+		identifier = parser%match(identifier_token)
+		expr%module_prefix = identifier%text
+
+		op = parser%match(double_colon_token)
+
+		identifier = parser%match(identifier_token)
+
+		! Handle nested namespaces: mod1::mod2::var
+		do while (parser%current_kind() == double_colon_token)
+			expr%module_prefix = expr%module_prefix // "::" // identifier%text
+			op = parser%match(double_colon_token)
+			identifier = parser%match(identifier_token)
+		end do
+
+		if (.not. is_assignment_op(parser%current_kind())) then
+			! Not an assignment, rewind and let parse_expr handle it
+			parser%pos = pos0
+		else
+			! It's a qualified assignment
+			expr%identifier = identifier
+
+			call parser%vars%search(expr%module_prefix // "::" // identifier%text, &
+				expr%id_index, search_io, expr%val)
+
+			if (search_io /= exit_success) then
+				span = new_span(identifier%pos, len(identifier%text))
+				call parser%diagnostics%push( &
+					err_undeclare_var(parser%context(), span, identifier%text))
+			end if
+
+			expr%is_loc = .false.
+
+			op    = parser%next()
+			right = parser%parse_expr_statement()
+
+			expr%kind = assignment_expr
+
+			if (.not. allocated(expr%right)) allocate(expr%right)
+			expr%op    = op
+			expr%right = right
+
+			ltype = expr%val%type
+			rtype = expr%right%val%type
+
+			larrtype = unknown_type
+			rarrtype = unknown_type
+			if (ltype == array_type) larrtype = expr%val%array%type
+			if (rtype == array_type) rarrtype = expr%right%val%array%type
+
+			is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
+
+			if (.not. is_op_allowed) then
+				span = new_span(op%pos, len(op%text))
+				call parser%diagnostics%push( &
+					err_binary_types(parser%context(), &
+					span, op%text, &
+					type_name(expr%val), &
+					type_name(expr%right%val)))
+			end if
+
+			if (ltype == array_type .and. rtype == array_type) then
+				lrank = expr%val%array%rank
+				rrank = expr%right%val%array%rank
+
+				if (lrank /= rrank) then
+					span = new_span(op%pos, len(op%text))
+					call parser%diagnostics%push( &
+						err_binary_ranks(parser%context(), &
+						span, op%text, lrank, rrank))
+				end if
+			end if
+
+			return
+		end if
 	end if
 
 	if (parser%peek_kind(0) == identifier_token) then
@@ -467,7 +553,10 @@ recursive module function parse_primary_expr(parser) result(expr)
 
 			!print *, "parser%peek_kind(1) = ", kind_name(parser%peek_kind(1))
 
-			if (parser%peek_kind(1) == lparen_token) then
+			if (parser%peek_kind(1) == double_colon_token) then
+				! Qualified name like `std::println()` or `mod::fn()`
+				expr = parser%parse_qualified_expr()
+			else if (parser%peek_kind(1) == lparen_token) then
 				expr = parser%parse_fn_call()
 			else if (parser%peek_kind(1) == lbrace_token) then
 

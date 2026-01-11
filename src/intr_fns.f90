@@ -1268,8 +1268,9 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
-	! args() returns an array of strings containing command-line arguments
-	! passed after `--`
+	! std::args() returns an array of strings containing command-line arguments
+	! passed after `--`.  This is a std-only function: it must be called as
+	! std::args(), not just args()
 	args_fn%type%type = array_type
 	allocate(args_fn%type%array)
 	args_fn%type%array%type = str_type
@@ -1278,7 +1279,7 @@ subroutine declare_intr_fns(fns)
 	allocate(args_fn%params(0))
 	allocate(args_fn%param_names%v(0))
 
-	call fns%insert("args", args_fn, id_index)
+	call fns%insert("std::args", args_fn, id_index)
 
 	!********
 
@@ -1987,6 +1988,32 @@ subroutine declare_intr_fns(fns)
 	!print *, "setting num_intr_fns = ", fns%num_intr_fns
 
 end subroutine declare_intr_fns
+
+!===============================================================================
+
+logical function is_overloaded_intr(fn_name)
+
+	! Check if a function name is an overloaded intrinsic function.
+	! These are intrinsics that have type-specific implementations
+	! (e.g., "dot" -> "0dot_i32", "0dot_f32", etc.)
+	!
+	! This list must be kept in sync with the cases in resolve_overload() below.
+	! If a new overloaded intrinsic is added there, add it here too.
+
+	character(len = *), intent(in) :: fn_name
+
+	select case (fn_name)
+	case ("exp", "log", "log10", "log2", "sqrt", "abs", &
+		"cos", "sin", "tan", "cosd", "sind", "tand", &
+		"acos", "asin", "atan", "acosd", "asind", "atand", &
+		"min", "max", "i32", "i64", &
+		"sum", "minval", "maxval", "product", "norm2", "dot")
+		is_overloaded_intr = .true.
+	case default
+		is_overloaded_intr = .false.
+	end select
+
+end function is_overloaded_intr
 
 !===============================================================================
 

@@ -1,0 +1,26 @@
+// Test module variables with qualified import (use module;)
+
+use counter;
+
+// Test initial value via qualified access
+let ok1 = counter::count == 0;
+
+// Test reading via qualified function
+let ok2 = counter::get_count() == 0;
+
+// Test increment function modifying module variable
+let c1 = counter::increment();
+let ok3 = c1 == 1;
+let ok4 = counter::count == 1;
+
+// Test direct qualified assignment
+counter::count = 50;
+let ok5 = counter::count == 50;
+let ok6 = counter::get_count() == 50;
+
+// Test set function still works
+counter::set_count(100);
+let ok7 = counter::count == 100;
+let ok8 = counter::get_count() == 100;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8;

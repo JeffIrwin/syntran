@@ -30,6 +30,23 @@ module syntran__core_m
 		syntran_patch =  1
 
 	! TODO:
+	!  - module arrays don't work, structs probably don't work either
+	!    * scope is creeping well beyond the immediate need of avoiding std fn
+	!      clashes. maybe hold off on this
+	!    * module let statements are not evaluated, only parsed. could this
+	!      cause evaluation problems? maybe just handle it like includes
+	!  - what happens if you use the same module twice? same form both times or
+	!    mix qualified and unqualified?
+	!  - i like claude's "double_colon_token" name. i should change things like
+	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
+	!  - if you try to return something (e.g. i32) from a void/null fn, the
+	!    error says the fn should return "unknown" but it should say void (or
+	!    null?)
+	!  - "use module as alias;"
+	!    * potentially important for resolving name clashes when you're using
+	!      someone else's library, but you don't want to change the names they
+	!      chose
+	!  - document modules in readme, recommend over #include
 	!  - minloc, maxloc, findloc fns
 	!    * useful for aoc
 	!    * i'm leaning towards 2.0 instead of namespaces
@@ -412,7 +429,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	!********
 
-	character(len = :), allocatable :: src_filel, fn_name
+	character(len = :), allocatable :: src_filel, fn_name, var_name
 
 	integer :: i, io, dummy, unit_
 
@@ -422,6 +439,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	type(fn_t) :: fn
 	type(fns_t) :: fns0
+	type(value_t) :: var_val
 
 	! This no longer seems to make a difference.  Previously, without `save`,
 	! gfortran crashes when this goes out of scope.  Maybe I need to work on a
@@ -702,6 +720,16 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	end do
 	!print *, "done looking up fns"
+
+	! Initialize module variables in vars%vals with their types from the dict.
+	! This is needed because module let statements are not evaluated (only parsed).
+	do i = 1, parser%var_names%len_
+		var_name = parser%var_names%v(i)%s
+		call vars%search(var_name, dummy, io, var_val)
+		if (io == exit_success .and. dummy >= 1 .and. dummy <= size(vars%vals)) then
+			vars%vals(dummy) = var_val
+		end if
+	end do
 
 	!if (allocated(parser%structs)) then
 	!	! TODO: manually finalize recursively?

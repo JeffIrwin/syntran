@@ -383,6 +383,7 @@ module function parse_unit(parser) result(unit)
 	num_fns0 = parser%num_fns    ! includes intrinsic fns
 	num_structs0 = parser%num_structs
 	parser%fn_names = new_string_vector()
+	parser%var_names = new_string_vector()
 
 	do while (parser%current_kind() /= eof_token)
 
