@@ -303,7 +303,7 @@ function parse_args() result(args)
 
 	if (error .or. args%help) then
 
-		! TODO: first <file> line is long enough that I should probbaly just say
+		! TODO: first <file> line is long enough that I should probably just say
 		! `[options]`
 
 		write(*,*) fg_bold//"Usage:"//color_reset

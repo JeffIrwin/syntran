@@ -3,7 +3,6 @@
 
 module syntran__lex_m
 
-	!use syntran__errors_m
 	use syntran__types_m
 	use syntran__utils_m
 

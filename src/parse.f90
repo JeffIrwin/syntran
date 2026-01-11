@@ -8,13 +8,7 @@ module syntran__parse_m
 	! so short that defining interfaces for them would add significantly more
 	! lines of code
 
-	!use syntran__errors_m
 	use syntran__lex_m
-
-	!! types and utils are used indirectly through lexer, so it doesn't matter
-	!! much if they're explicitly included here
-	!use syntran__types_m
-	!use syntran__utils_m
 
 	implicit none
 
