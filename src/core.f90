@@ -31,7 +31,6 @@ module syntran__core_m
 
 	! TODO:
 	!  - claude tasks:
-	!    * general review for low-hanging fruit
 	!    * fortran compile time optimization -- at least break out long sources,
 	!      maybe see if pain points like intr_fns.f90, lex.f90, or math*.f90 can
 	!      be actually improved
