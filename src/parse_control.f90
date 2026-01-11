@@ -112,6 +112,8 @@ end function parse_continue_statement
 
 module function parse_use_statement(parser) result(statement)
 
+	use syntran__errors_m
+
 	! Parse `use module;` or `use module::*;` or `use module::name;`
 	!
 	! - `use module;`       imports functions as module::fn (qualified access)
@@ -237,7 +239,7 @@ module function parse_use_statement(parser) result(statement)
 	! Check for parsing errors in the module (only in first pass)
 	if (parser%ipass == 0 .and. mod_parser%diagnostics%len_ > 0) then
 		call parser%diagnostics%push( &
-			"Error: failed to parse module `" // module_name // "`:")
+			err_prefix // "failed to parse module `" // module_name // "`:" // color_reset)
 		do i = 1, mod_parser%diagnostics%len_
 			call parser%diagnostics%push(mod_parser%diagnostics%v(i)%s)
 		end do
