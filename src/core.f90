@@ -30,9 +30,13 @@ module syntran__core_m
 		syntran_patch =  1
 
 	! TODO:
+	!  - module arrays don't work, structs probably don't work either
+	!    * scope is creeping well beyond the immediate need of avoiding std fn
+	!      clashes. maybe hold off on this
+	!    * module let statements are not evaluated, only parsed. could this
+	!      cause evaluation problems? maybe just handle it like includes
 	!  - what happens if you use the same module twice? same form both times or
 	!    mix qualified and unqualified?
-	!  - module variables don't work -- it segfaults
 	!  - i like claude's "double_colon_token" name. i should change things like
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - if you try to return something (e.g. i32) from a void/null fn, the
