@@ -120,6 +120,9 @@ recursive module function parse_expr_statement(parser) result(expr)
 		else
 			call parser%vars%insert(identifier%text, expr%val, &
 				expr%id_index, io, overwrite = overwrite)
+
+			! Track module-level variable names (like fn_names for functions)
+			if (parser%ipass == 0) call parser%var_names%push(identifier%text)
 		end if
 
 		!print *, 'io = ', io

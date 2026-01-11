@@ -433,7 +433,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	!********
 
-	character(len = :), allocatable :: src_filel, fn_name
+	character(len = :), allocatable :: src_filel, fn_name, var_name
 
 	integer :: i, io, dummy, unit_
 
@@ -443,6 +443,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	type(fn_t) :: fn
 	type(fns_t) :: fns0
+	type(value_t) :: var_val
 
 	! This no longer seems to make a difference.  Previously, without `save`,
 	! gfortran crashes when this goes out of scope.  Maybe I need to work on a
@@ -723,6 +724,16 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	end do
 	!print *, "done looking up fns"
+
+	! Initialize module variables in vars%vals with their types from the dict.
+	! This is needed because module let statements are not evaluated (only parsed).
+	do i = 1, parser%var_names%len_
+		var_name = parser%var_names%v(i)%s
+		call vars%search(var_name, dummy, io, var_val)
+		if (io == exit_success .and. dummy >= 1 .and. dummy <= size(vars%vals)) then
+			vars%vals(dummy) = var_val
+		end if
+	end do
 
 	!if (allocated(parser%structs)) then
 	!	! TODO: manually finalize recursively?

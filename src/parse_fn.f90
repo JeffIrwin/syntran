@@ -360,9 +360,12 @@ recursive module function parse_qualified_expr(parser) result(expr)
 
 	!********
 
-	character(len = :), allocatable :: module_name, fn_name
+	character(len = :), allocatable :: module_name, fn_name, lookup_name
 
 	type(syntax_token_t) :: mod_identifier, double_colon, fn_identifier
+	type(value_t) :: var_val
+	type(text_span_t) :: span
+	integer :: id_index, iostat
 
 	! Get first part of module name
 	mod_identifier = parser%match(identifier_token)
@@ -389,12 +392,20 @@ recursive module function parse_qualified_expr(parser) result(expr)
 		! Qualified function call: std::println(...) or math::vectors::fn(...)
 		expr = parser%parse_fn_call(module_name, fn_identifier)
 	else
-		! Qualified variable access (future: for user modules)
-		! For now, just report an error since std:: variables don't exist
-		expr%kind = name_expr
-		expr%identifier = fn_identifier
+		! Qualified variable access: mod::var
+		lookup_name = module_name // "::" // fn_name
+		call parser%vars%search(lookup_name, id_index, iostat, var_val)
+
+		if (iostat /= exit_success) then
+			span = new_span(fn_identifier%pos, len(fn_identifier%text))
+			call parser%diagnostics%push( &
+				err_undeclare_var(parser%context(), span, fn_name))
+			return
+		end if
+
+		expr = new_name_expr(fn_identifier, var_val)
+		expr%id_index = id_index
 		expr%module_prefix = module_name
-		! TODO: implement module variable lookup
 	end if
 
 end function parse_qualified_expr

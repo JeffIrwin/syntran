@@ -126,7 +126,7 @@ module function parse_use_statement(parser) result(statement)
 	!********
 	character(len = :), allocatable :: module_name, import_name, module_path
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
-	character(len = :), allocatable :: insert_name
+	character(len = :), allocatable :: insert_name, var_name
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy
 	type(text_span_t) :: span
@@ -134,7 +134,8 @@ module function parse_use_statement(parser) result(statement)
 	type(syntax_node_t) :: mod_unit
 	type(text_context_vector_t) :: mod_contexts
 	type(fn_t) :: fn
-	integer :: i, io, iostat, mod_unit_
+	type(value_t) :: var_val
+	integer :: i, io, iostat, mod_unit_, id_index
 	logical :: qualified_import
 	character(len = :), allocatable :: qualified_prefix
 
@@ -234,8 +235,16 @@ module function parse_use_statement(parser) result(statement)
 	call declare_intr_fns(mod_parser%fns)
 	mod_parser%num_fns = mod_parser%fns%num_intr_fns
 
+	! Share variable numbering with parent parser. Module variables will get
+	! indices continuing from parent's count, avoiding the need for remapping.
+	! This is similar to how #include works.
+	mod_parser%num_vars = parser%num_vars
+
 	! Parse the module
 	mod_unit = mod_parser%parse_unit()
+
+	! Update parent's variable count to include module variables
+	parser%num_vars = mod_parser%num_vars
 
 	! Check for parsing errors in the module (only in first pass)
 	if (parser%ipass == 0 .and. mod_parser%diagnostics%len_ > 0) then
@@ -285,6 +294,28 @@ module function parse_use_statement(parser) result(statement)
 
 		! Only push to fn_names in the first pass (like parse_fn_declaration)
 		if (parser%ipass == 0) call parser%fn_names%push(insert_name)
+	end do
+
+	! Copy parsed module variables to current parser.
+	! Since we shared num_vars before parsing, indices already match - no remapping needed.
+	do i = 1, mod_parser%var_names%len_
+		var_name = mod_parser%var_names%v(i)%s
+
+		! Look up the variable in the module parser
+		call mod_parser%vars%search(var_name, id_index, iostat, var_val)
+		if (iostat /= exit_success) cycle
+
+		! Determine insert name (qualified or unqualified)
+		if (qualified_import) then
+			qualified_prefix = replace_all(module_name, "/", "::")
+			insert_name = qualified_prefix // "::" // var_name
+		else
+			insert_name = var_name
+		end if
+
+		! Insert with same id_index (no remapping needed)
+		call parser%vars%insert(insert_name, var_val, id_index, io)
+		if (parser%ipass == 0) call parser%var_names%push(insert_name)
 	end do
 
 end function parse_use_statement
