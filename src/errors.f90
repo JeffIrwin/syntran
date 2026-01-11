@@ -452,6 +452,20 @@ end function err_undeclare_fn
 
 !===============================================================================
 
+function err_std_only_fn(context, span, fn) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn
+	err = err_prefix &
+		//'function `'//fn//'` must be called with std:: prefix (use `std::'//fn//'()`)' &
+		//underline(context, span)//" requires std:: prefix"//color_reset
+
+end function err_std_only_fn
+
+!===============================================================================
+
 function err_no_return(context, span, fn) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

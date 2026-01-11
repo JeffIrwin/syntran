@@ -37,6 +37,9 @@ module syntran__eval_m
 		! nightmare if you grep for "break" and don't find "broke"
 		logical :: returned, breaked, continued
 
+		! Script arguments passed after `--` on the command line
+		type(string_vector_t) :: script_args
+
 	end type state_t
 
 !===============================================================================
@@ -1989,6 +1992,22 @@ recursive subroutine eval_fn_call_intr(node, state, res)
 
 		call syntax_eval(node%args(1), state, arg1)
 		res%sca%bool = any(arg1%array%bool)
+
+	case ("args")
+
+		! Return script arguments passed after `--` as a string array
+		res%type = array_type
+		allocate(res%array)
+		res%array%type = str_type
+		res%array%rank = 1
+		res%array%len_ = state%script_args%len_
+		allocate(res%array%size(1))
+		res%array%size(1) = res%array%len_
+
+		allocate(res%array%str(res%array%len_))
+		do i = 1, state%script_args%len_
+			res%array%str(i) = state%script_args%v(i)
+		end do
 
 	case default
 

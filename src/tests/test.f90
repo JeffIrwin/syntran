@@ -4660,6 +4660,85 @@ end subroutine unit_test_bad_syntax
 
 !===============================================================================
 
+subroutine unit_test_args(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::args() intrinsic function'
+
+	logical, allocatable :: tests(:)
+	type(string_vector_t) :: script_args
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! Test with no arguments
+	script_args = new_string_vector()
+	tests = &
+		[   &
+			eval_with_args('size(std::args());', script_args) == '0', &
+			eval_with_args('let a = std::args(); size(a);', script_args) == '0' &
+		]
+	call unit_test_coda(tests, label//' (empty)', npass, nfail)
+
+	! Test with arguments
+	script_args = new_string_vector()
+	call script_args%push('hello')
+	call script_args%push('world')
+	call script_args%push('42')
+
+	tests = &
+		[   &
+			eval_with_args('size(std::args());', script_args) == '3', &
+			eval_with_args('let a = std::args(); a[0];', script_args) == 'hello', &
+			eval_with_args('let a = std::args(); a[1];', script_args) == 'world', &
+			eval_with_args('let a = std::args(); a[2];', script_args) == '42', &
+			eval_with_args('let a = std::args(); size(a);', script_args) == '3' &
+		]
+	call unit_test_coda(tests, label//' (with args)', npass, nfail)
+
+	! Test with string containing spaces
+	script_args = new_string_vector()
+	call script_args%push('hello world')
+	call script_args%push('foo bar baz')
+
+	tests = &
+		[   &
+			eval_with_args('size(std::args());', script_args) == '2', &
+			eval_with_args('let a = std::args(); a[0];', script_args) == 'hello world', &
+			eval_with_args('let a = std::args(); a[1];', script_args) == 'foo bar baz', &
+			eval_with_args('let a = std::args(); len(a[0]);', script_args) == '11' &
+		]
+	call unit_test_coda(tests, label//' (with spaces)', npass, nfail)
+
+	! Test that user can define their own args() function
+	tests = &
+		[   &
+			eval('fn args(): i32 { return 42; } args();') == '42' &
+		]
+	call unit_test_coda(tests, label//' (user-defined args)', npass, nfail)
+
+	! Test coexistence of std::args() and user-defined args() in the same program
+	script_args = new_string_vector()
+	call script_args%push('foo')
+	call script_args%push('bar')
+
+	tests = &
+		[   &
+			eval_with_args('fn args(): i32 { return 42; } args() + size(std::args());', &
+				script_args) == '44', &
+			eval_with_args('fn args(): str { return "hello"; } let a = std::args(); args() + a[0];', &
+				script_args) == 'hellofoo' &
+		]
+	call unit_test_coda(tests, label//' (coexistence)', npass, nfail)
+
+end subroutine unit_test_args
+
+!===============================================================================
+
 subroutine unit_tests(iostat)
 
 	implicit none
@@ -4730,6 +4809,7 @@ subroutine unit_tests(iostat)
 	call unit_test_bitwise_2  (npass, nfail)
 	call unit_test_ref        (npass, nfail)
 	call unit_test_recursion  (npass, nfail)
+	call unit_test_args       (npass, nfail)
 	call unit_test_modules    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to

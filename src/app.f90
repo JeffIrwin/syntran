@@ -39,6 +39,9 @@ module syntran__app_m
 			version          = .false., &
 			help             = .false.
 
+		! Script arguments passed after `--`
+		type(string_vector_t) :: script_args
+
 	end type args_t
 
 contains
@@ -165,6 +168,7 @@ function parse_args() result(args)
 	! Defaults
 	args%maxerr = maxerr_def
 	args%color  = COLOR_AUTO
+	args%script_args = new_string_vector()
 
 	argc = command_argument_count()
 	!print *, "argc = ", argc
@@ -219,6 +223,14 @@ function parse_args() result(args)
 
 		case ("--version")
 			args%version = .true.
+
+		case ("--")
+			! Capture all remaining arguments as script arguments
+			do while (i < argc)
+				call get_next_arg(i, str_)
+				call args%script_args%push(str_)
+			end do
+			exit
 
 		case default
 
@@ -295,8 +307,7 @@ function parse_args() result(args)
 		! `[options]`
 
 		write(*,*) fg_bold//"Usage:"//color_reset
-		write(*,*) "    syntran <file.syntran> [--fmax-errors <n>] " &
-			//"[-i | --interactive] [-q | --quiet] [--color (auto|off|on)]"
+		write(*,*) "    syntran <file.syntran> [options] [-- <script args>...]"
 		write(*,*) "    syntran"
 		write(*,*) "    syntran -c <cmd> | --command <cmd>"
 		write(*,*) "    syntran -h | --help"
@@ -311,6 +322,7 @@ function parse_args() result(args)
 			//"error messages to <n> [default: "//str(maxerr_def)//"]"
 		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
 		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
+		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 
 		if (.not. args%help) call exit(EXIT_FAILURE)

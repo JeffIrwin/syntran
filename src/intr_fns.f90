@@ -52,7 +52,7 @@ subroutine declare_intr_fns(fns)
 		acosd_f32_fn, acosd_f64_fn, acosd_f32_arr_fn, acosd_f64_arr_fn, &
 		asind_f32_fn, asind_f64_fn, asind_f32_arr_fn, asind_f64_arr_fn, &
 		atand_f32_fn, atand_f64_fn, atand_f32_arr_fn, atand_f64_arr_fn, &
-		repeat_fn
+		repeat_fn, args_fn
 
 	! This used to get incremented automatically inside of fns%insert, but I
 	! changed it.  I don't think it matters for intrinsic fns anyway, because
@@ -1268,6 +1268,21 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
+	! std::args() returns an array of strings containing command-line arguments
+	! passed after `--`.  This is an std-only function: it must be called as
+	! std::args(), not just args()
+	args_fn%type%type = array_type
+	allocate(args_fn%type%array)
+	args_fn%type%array%type = str_type
+	args_fn%type%array%rank = 1
+
+	allocate(args_fn%params(0))
+	allocate(args_fn%param_names%v(0))
+
+	call fns%insert("std::args", args_fn, id_index)
+
+	!********
+
 	! TODO: add fns for parsing str to other types (bool, etc.)
 
 	! Should this accept any type?  f32 can be converted implicitly so there
@@ -1964,7 +1979,8 @@ subroutine declare_intr_fns(fns)
 			readln_fn     , &
 			size_fn       , &
 			str_fn        , &
-			writeln_fn      &
+			writeln_fn    , &
+			args_fn         &
 		]
 
 	num_fns = size(fns%fns)
