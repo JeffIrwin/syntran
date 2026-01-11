@@ -89,10 +89,10 @@ RUN [[ "$(./bin/syntran -c '1+2;' | tr -d '[:space:]')" == "3" ]]
 RUN [[ "$(./bin/syntran -c 'sum([0:101]);' | tr -d '[:space:]')" == "5050" ]]
 RUN [[ "$(./bin/syntran -c 'sum([0:10]**2);' | tr -d '[:space:]')" == "285" ]]
 
-RUN [[ "$(./bin/syntran -c 'let a = args(); size(a);' -- foo bar hello world | tr -d '[:space:]')" == "4" ]]
-RUN [[ "$(./bin/syntran -c 'let a = args(); size(a);' -- foo bar 'hello world' | tr -d '[:space:]')" == "3" ]]
+RUN [[ "$(./bin/syntran -c 'let a = std::args(); size(a);' -- foo bar hello world | tr -d '[:space:]')" == "4" ]]
+RUN [[ "$(./bin/syntran -c 'let a = std::args(); size(a);' -- foo bar 'hello world' | tr -d '[:space:]')" == "3" ]]
 
 # `tr` deletes all spaces, while this `sed` only removes *leading* spaces
-RUN [[ "$(./bin/syntran -c 'let a = args(); a[0];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "foo" ]]
-RUN [[ "$(./bin/syntran -c 'let a = args(); a[2];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "hello world" ]]
+RUN [[ "$(./bin/syntran -c 'let a = std::args(); a[0];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "foo" ]]
+RUN [[ "$(./bin/syntran -c 'let a = std::args(); a[2];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "hello world" ]]
 
