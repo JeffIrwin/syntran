@@ -158,22 +158,32 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 	!print *, "fn id_index = ", id_index
 	if (io /= exit_success) then
 
+		! Check if this is a std-only function that requires the std:: prefix.
+		! Do this before the ipass==0 early return so the type is set correctly
+		! in both passes, preventing cascading errors.
+		if (.not. present(module_prefix)) then
+			fn = parser%fns%search("std::" // fn_call%identifier%text, id_index, io_std)
+			if (io_std == exit_success) then
+				! Set the return type from the found function to prevent
+				! cascading errors from the untyped result
+				fn_call%val = fn%type
+				fn_call%kind = fn_call_intr_expr
+
+				! Only push the error in pass 1
+				if (parser%ipass /= 0) then
+					span = new_span(identifier_%pos, len(identifier_%text))
+					call parser%diagnostics%push( &
+						err_std_only_fn(parser%context(), &
+						span, identifier_%text))
+				end if
+				return
+			end if
+		end if
+
 		if (parser%ipass == 0) then
 			fn_call%id_index = 0
 			fn_call%kind = fn_call_expr
 			return
-		end if
-
-		! Check if this is a std-only function that requires the std:: prefix
-		if (.not. present(module_prefix)) then
-			fn = parser%fns%search("std::" // fn_call%identifier%text, id_index, io_std)
-			if (io_std == exit_success) then
-				span = new_span(identifier_%pos, len(identifier_%text))
-				call parser%diagnostics%push( &
-					err_std_only_fn(parser%context(), &
-					span, identifier_%text))
-				return
-			end if
 		end if
 
 		span = new_span(identifier_%pos, len(identifier_%text))
