@@ -116,9 +116,10 @@ module function parse_use_statement(parser) result(statement)
 
 	! Parse `use module;` or `use module::*;` or `use module::name;`
 	!
-	! - `use module;`       imports functions as module::fn (qualified access)
-	! - `use module::*;`    imports all functions as fn (unqualified access)
-	! - `use module::name;` imports specific function as name (unqualified)
+	! - `use module;`         imports functions as module::fn (qualified access)
+	! - `use module::*;`      imports all functions (unqualified access)
+	! - `use module::name;`   imports specific function name (unqualified)
+	! - `use path/to/module;  imports path/to/module.syntran, can be combined with qualified or unqualified forms above
 
 	class(parser_t) :: parser
 	type(syntax_node_t) :: statement
@@ -264,13 +265,16 @@ module function parse_use_statement(parser) result(statement)
 		else
 			insert_name = fn_name
 
-			! Check if this would shadow an overloaded intrinsic function.
-			! Note: we only check overloaded intrinsics here because non-overloaded
-			! intrinsics have unique internal names (not user-visible names).
+			! Check if this would shadow an overloaded intrinsic function. Note:
+			! we only check overloaded intrinsics here because non-overloaded
+			! intrinsics are handled mostly like normal user-defined fns
+			!
+			! TODO: is this still needed since we already handle
+			! err_redeclare_intr_fn() elsewhere?
 			if (is_overloaded_intr(fn_name)) then
 				span = new_span(mod_identifier%pos, len(mod_identifier%text))
 				call parser%diagnostics%push( &
-					err_shadow_intr(parser%context(), span, fn_name))
+					err_redeclare_intr_fn(parser%context(), span, fn_name))
 				cycle
 			end if
 		end if

@@ -631,6 +631,15 @@ module function parse_fn_declaration(parser) result(decl)
 			span, identifier%text))
 	end if
 
+	! Check if this would shadow an overloaded intrinsic function.
+	! Non-overloaded intrinsics are handled by the err_redeclare_fn() check
+	! above
+	if (is_overloaded_intr(identifier%text)) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push( &
+			err_redeclare_intr_fn(parser%context(), span, identifier%text))
+	end if
+
 	!print *, 'size(decl%params) = ', size(decl%params)
 	!print *, 'decl%params = ', decl%params
 
