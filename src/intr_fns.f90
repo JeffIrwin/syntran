@@ -1269,7 +1269,7 @@ subroutine declare_intr_fns(fns)
 	!********
 
 	! std::args() returns an array of strings containing command-line arguments
-	! passed after `--`.  This is a std-only function: it must be called as
+	! passed after `--`.  This is an std-only function: it must be called as
 	! std::args(), not just args()
 	args_fn%type%type = array_type
 	allocate(args_fn%type%array)

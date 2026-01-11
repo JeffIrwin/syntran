@@ -3,7 +3,6 @@ FROM rockylinux:9
 
 WORKDIR /workdir
 
-# TODO: update and install all in one line because docker can break otherwise
 RUN dnf update -y && dnf install -y \
 	vim \
 	git \

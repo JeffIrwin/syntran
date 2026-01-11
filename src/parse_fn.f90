@@ -158,7 +158,7 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 	!print *, "fn id_index = ", id_index
 	if (io /= exit_success) then
 
-		! Check if this is a std-only function that requires the std:: prefix.
+		! Check if this is an std-only function that requires the std:: prefix.
 		! Do this before the ipass==0 early return so the type is set correctly
 		! in both passes, preventing cascading errors.
 		if (.not. present(module_prefix)) then
