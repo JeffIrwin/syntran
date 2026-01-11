@@ -879,6 +879,45 @@ end function rm_char
 
 !===============================================================================
 
+function replace_all(str_, old, new) result(str_out)
+
+	! Replace all occurrences of substring `old` with `new` in `str_`
+
+	character(len = *), intent(in) :: str_, old, new
+
+	character(len = :), allocatable :: str_out
+
+	!********
+
+	integer :: pos, start
+	type(char_vector_t) :: sb  ! string builder
+
+	if (len(old) == 0) then
+		str_out = str_
+		return
+	end if
+
+	sb = new_char_vector()
+	start = 1
+	pos = index(str_(start:), old)
+	do while (pos > 0)
+		! Push everything before the match
+		call sb%push(str_(start: start + pos - 2))
+		! Push the replacement
+		call sb%push(new)
+		! Move past the matched substring
+		start = start + pos - 1 + len(old)
+		! Find next match
+		pos = index(str_(start:), old)
+	end do
+	! Push the remaining part
+	call sb%push(str_(start:))
+	str_out = sb%trim()
+
+end function replace_all
+
+!===============================================================================
+
 function tabs2spaces(str_) result(str_out)
 
 	! Replace each tab with a *single* space.  This is useful for alignment and

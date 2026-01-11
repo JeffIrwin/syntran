@@ -1975,6 +1975,32 @@ end subroutine declare_intr_fns
 
 !===============================================================================
 
+logical function is_overloaded_intr(fn_name)
+
+	! Check if a function name is an overloaded intrinsic function.
+	! These are intrinsics that have type-specific implementations
+	! (e.g., "dot" -> "0dot_i32", "0dot_f32", etc.)
+	!
+	! This list must be kept in sync with the cases in resolve_overload() below.
+	! If a new overloaded intrinsic is added there, add it here too.
+
+	character(len = *), intent(in) :: fn_name
+
+	select case (fn_name)
+	case ("exp", "log", "log10", "log2", "sqrt", "abs", &
+		"cos", "sin", "tan", "cosd", "sind", "tand", &
+		"acos", "asin", "atan", "acosd", "asind", "atand", &
+		"min", "max", "i32", "i64", &
+		"sum", "minval", "maxval", "product", "norm2", "dot")
+		is_overloaded_intr = .true.
+	case default
+		is_overloaded_intr = .false.
+	end select
+
+end function is_overloaded_intr
+
+!===============================================================================
+
 recursive subroutine resolve_overload(args, fn_call, has_rank)
 
 	! Resolve special overloaded intrinsic fns

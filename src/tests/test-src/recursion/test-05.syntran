@@ -5,6 +5,18 @@
 // It's based on some fortran code that I wrote eons ago, so some of the
 // variable names and argument conventions are crazy
 
+// TODO: re-write this with an algorithm like I tried for AOC 2025 day 12
+// (packing shapes into a grid)
+//
+// The algorithm here is weird and it feels unnatural.  I wouldn't really be
+// able to explain this algo or write it without references.  On the other
+// hand, the recursive backtrack algo I used for AOC feels more natural and I
+// came up with it from memory and first-principles.  Unfortunately, it didn't
+// work very well because it could only pack two lines from the test input and
+// then the permutations exploded.  If I can get it working here for sudoku,
+// that will be a better test for it.  If successful, maybe break out into a
+// separate syntran unit test
+
 //==============================================================================
 
 // Square sudoku grid size

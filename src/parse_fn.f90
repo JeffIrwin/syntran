@@ -17,15 +17,18 @@ contains
 
 !===============================================================================
 
-recursive module function parse_fn_call(parser) result(fn_call)
+recursive module function parse_fn_call(parser, module_prefix, identifier) result(fn_call)
 
 	class(parser_t) :: parser
+	character(len = *), intent(in), optional :: module_prefix
+	type(syntax_token_t), intent(in), optional :: identifier
 
 	type(syntax_node_t) :: fn_call
 
 	!********
 
-	character(len = :), allocatable :: exp_type, act_type, param_name
+	character(len = :), allocatable :: exp_type, act_type, param_name, &
+		lookup_name, display_name
 
 	integer :: i, io, id_index, pos0, rank
 
@@ -38,7 +41,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 
 	type(syntax_node_t) :: arg
 	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: identifier, comma, lparen, rparen, dummy, amp
+	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp
 
 	type(text_span_t) :: span
 
@@ -48,9 +51,13 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	!print *, 'parse_fn_call'
 
 	! Function call expression
-	identifier = parser%match(identifier_token)
+	if (present(identifier)) then
+		identifier_ = identifier
+	else
+		identifier_ = parser%match(identifier_token)
+	end if
 
-	!print *, "identifier = ", identifier%text
+	!print *, "identifier_ = ", identifier_%text
 
 	args     = new_syntax_node_vector()
 	pos_args = new_integer_vector()
@@ -109,17 +116,38 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	rparen  = parser%match(rparen_token)
 
 	fn_call%kind = fn_call_expr
-	fn_call%identifier = identifier
+	fn_call%identifier = identifier_
+
+	! Set module prefix if provided (for qualified calls like std::println)
+	if (present(module_prefix)) then
+		fn_call%module_prefix = module_prefix
+	end if
 
 	call resolve_overload(args, fn_call, has_rank)
 	if (has_rank) rank = fn_call%val%array%rank
 
 	! Lookup by fn_call%identifier%text (e.g. "0min_i32"), but log
-	! diagnostics based on identifier%text (e.g. "min")
+	! diagnostics based on identifier_%text (e.g. "min")
 	!
 	! Might need to add separate internal/external fn names for
 	! overloaded cases
-	fn = parser%fns%search(fn_call%identifier%text, id_index, io)
+	!
+	! For qualified calls, determine lookup name based on module prefix
+	if (present(module_prefix)) then
+		if (module_prefix == "std") then
+			! For std::, look up intrinsic without prefix
+			lookup_name = fn_call%identifier%text
+		else
+			! For user modules, look up with qualified name
+			lookup_name = module_prefix // "::" // fn_call%identifier%text
+		end if
+		display_name = module_prefix // "::" // identifier_%text
+	else
+		lookup_name = fn_call%identifier%text
+		display_name = identifier_%text
+	end if
+
+	fn = parser%fns%search(lookup_name, id_index, io)
 	!print *, "fn id_index = ", id_index
 	if (io /= exit_success) then
 
@@ -129,10 +157,10 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			return
 		end if
 
-		span = new_span(identifier%pos, len(identifier%text))
+		span = new_span(identifier_%pos, len(identifier_%text))
 		call parser%diagnostics%push( &
 			err_undeclare_fn(parser%context(), &
-			span, identifier%text))
+			span, display_name))
 
 		! No more tokens are consumed below, so we can just return
 		! to skip cascading fn arg count/type errors
@@ -203,7 +231,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call parser%diagnostics%push( &
 			err_bad_arg_count(parser%context(), &
-			span, identifier%text, size(fn%params), args%len_))
+			span, identifier_%text, size(fn%params), args%len_))
 		return
 
 	else if (args%len_ < size(fn%params) + fn%variadic_min) then
@@ -212,7 +240,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call parser%diagnostics%push( &
 			err_too_few_args(parser%context(), &
-			span, identifier%text, &
+			span, identifier_%text, &
 			size(fn%params) + fn%variadic_min, args%len_))
 		return
 
@@ -223,7 +251,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call parser%diagnostics%push( &
 			err_too_many_args(parser%context(), &
-			span, identifier%text, &
+			span, identifier_%text, &
 			size(fn%params) + fn%variadic_max, args%len_))
 		return
 
@@ -264,7 +292,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 				call parser%diagnostics%push(err_bad_arg_val( &
 					parser%context(), &
 					span, &
-					identifier%text, &
+					identifier_%text, &
 					i - 1, &  ! 0-based index in err msg
 					param_name &
 				))
@@ -272,7 +300,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 				call parser%diagnostics%push(err_bad_arg_ref( &
 					parser%context(), &
 					span, &
-					identifier%text, &
+					identifier_%text, &
 					i - 1, &
 					param_name &
 				))
@@ -302,7 +330,7 @@ recursive module function parse_fn_call(parser) result(fn_call)
 			call parser%diagnostics%push(err_bad_arg_type( &
 				parser%context(), &
 				span, &
-				identifier%text, &
+				identifier_%text, &
 				i - 1, &  ! 0-based index in err msg
 				param_name, &
 				exp_type, &
@@ -318,6 +346,69 @@ recursive module function parse_fn_call(parser) result(fn_call)
 	!print *, 'done parsing fn_call'
 
 end function parse_fn_call
+
+!===============================================================================
+
+recursive module function parse_qualified_expr(parser) result(expr)
+
+	! Parse qualified names like `std::println()`, `mod::name`,
+	! or nested namespaces like `math::vectors::fn()`
+
+	class(parser_t) :: parser
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	character(len = :), allocatable :: module_name, fn_name, lookup_name
+
+	type(syntax_token_t) :: mod_identifier, double_colon, fn_identifier
+	type(value_t) :: var_val
+	type(text_span_t) :: span
+	integer :: id_index, iostat
+
+	! Get first part of module name
+	mod_identifier = parser%match(identifier_token)
+	module_name = mod_identifier%text
+
+	! Consume ::
+	double_colon = parser%match(double_colon_token)
+
+	! Get the next identifier (could be another namespace or the fn/var name)
+	fn_identifier = parser%match(identifier_token)
+	fn_name = fn_identifier%text
+
+	! Handle nested namespaces: math::vectors::fn()
+	! Keep consuming ::identifier pairs while we see more :: tokens
+	do while (parser%current_kind() == double_colon_token)
+		! The current fn_name is actually part of the module path
+		module_name = module_name // "::" // fn_name
+		double_colon = parser%match(double_colon_token)
+		fn_identifier = parser%match(identifier_token)
+		fn_name = fn_identifier%text
+	end do
+
+	if (parser%current_kind() == lparen_token) then
+		! Qualified function call: std::println(...) or math::vectors::fn(...)
+		expr = parser%parse_fn_call(module_name, fn_identifier)
+	else
+		! Qualified variable access: mod::var
+		lookup_name = module_name // "::" // fn_name
+		call parser%vars%search(lookup_name, id_index, iostat, var_val)
+
+		if (iostat /= exit_success) then
+			span = new_span(fn_identifier%pos, len(fn_identifier%text))
+			call parser%diagnostics%push( &
+				err_undeclare_var(parser%context(), span, fn_name))
+			return
+		end if
+
+		expr = new_name_expr(fn_identifier, var_val)
+		expr%id_index = id_index
+		expr%module_prefix = module_name
+	end if
+
+end function parse_qualified_expr
 
 !===============================================================================
 
@@ -549,6 +640,15 @@ module function parse_fn_declaration(parser) result(decl)
 		call parser%diagnostics%push( &
 			err_redeclare_fn(parser%context(), &
 			span, identifier%text))
+	end if
+
+	! Check if this would shadow an overloaded intrinsic function.
+	! Non-overloaded intrinsics are handled by the err_redeclare_fn() check
+	! above
+	if (is_overloaded_intr(identifier%text)) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push( &
+			err_redeclare_intr_fn(parser%context(), span, identifier%text))
 	end if
 
 	!print *, 'size(decl%params) = ', size(decl%params)

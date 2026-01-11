@@ -771,7 +771,12 @@ function lex(lexer) result(token)
 			token = new_token(rbracket_token, lexer%pos, lexer%current())
 
 		case (":")
-			token = new_token(colon_token, lexer%pos, lexer%current())
+			if (lexer%lookahead() == ":") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(double_colon_token, lexer%pos, "::")
+			else
+				token = new_token(colon_token, lexer%pos, lexer%current())
+			end if
 
 		case (";")
 			token = new_token(semicolon_token, lexer%pos, lexer%current())

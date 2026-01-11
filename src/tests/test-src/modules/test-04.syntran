@@ -1,0 +1,13 @@
+// Test nested module imports (geometry uses mymath)
+
+use geometry::*;
+
+let a = rectangle_area(4, 5);
+let b = square_area(7);
+let c = sum_of_squares(3, 4);
+
+//println("rectangle_area(4, 5) = ", a);
+//println("square_area(7) = ", b);
+//println("sum_of_squares(3, 4) = ", c);
+
+return a == 20 and b == 49 and c == 25;

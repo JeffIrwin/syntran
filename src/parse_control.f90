@@ -3,6 +3,8 @@
 
 submodule (syntran__parse_m) syntran__parse_control
 
+	use syntran__intr_fns_m
+
 	implicit none
 
 	! FIXME: remember to prepend routines like `module function` or `module
@@ -105,6 +107,218 @@ module function parse_continue_statement(parser) result(statement)
 	semi = parser%match(semicolon_token)
 
 end function parse_continue_statement
+
+!===============================================================================
+
+module function parse_use_statement(parser) result(statement)
+
+	use syntran__errors_m
+
+	! Parse `use module;` or `use module::*;` or `use module::name;`
+	!
+	! - `use module;`         imports functions as module::fn (qualified access)
+	! - `use module::*;`      imports all functions (unqualified access)
+	! - `use module::name;`   imports specific function name (unqualified)
+	! - `use path/to/module;  imports path/to/module.syntran, can be combined with qualified or unqualified forms above
+
+	class(parser_t) :: parser
+	type(syntax_node_t) :: statement
+	!********
+	character(len = :), allocatable :: module_name, import_name, module_path
+	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
+	character(len = :), allocatable :: insert_name, var_name
+	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
+		name_identifier, semi, star, dummy
+	type(text_span_t) :: span
+	type(parser_t) :: mod_parser
+	type(syntax_node_t) :: mod_unit
+	type(text_context_vector_t) :: mod_contexts
+	type(fn_t) :: fn
+	type(value_t) :: var_val
+	integer :: i, io, iostat, mod_unit_, id_index
+	logical :: qualified_import
+	character(len = :), allocatable :: qualified_prefix
+
+	use_token = parser%match(use_keyword)
+
+	! Handle parent directory references (e.g., `use ../module;` or `use ../../module;`)
+	! module_path includes "../" for file resolution, module_name is for namespacing
+	module_path = ""
+	do while (parser%current_kind() == dot_token .and. &
+	          parser%peek_kind(1) == dot_token .and. &
+	          parser%peek_kind(2) == slash_token)
+		! Match ".." and "/"
+		dummy = parser%match(dot_token)
+		dummy = parser%match(dot_token)
+		dummy = parser%match(slash_token)
+		module_path = module_path // "../"
+	end do
+
+	! Handle current directory reference (e.g., `use ./module;`)
+	if (parser%current_kind() == dot_token .and. &
+	    parser%peek_kind(1) == slash_token) then
+		dummy = parser%match(dot_token)
+		dummy = parser%match(slash_token)
+		module_path = module_path // "./"
+	end if
+
+	mod_identifier = parser%match(identifier_token)
+	module_name = mod_identifier%text
+	module_path = module_path // module_name
+
+	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
+	do while (parser%current_kind() == slash_token)
+		dummy = parser%match(slash_token)
+		name_identifier = parser%match(identifier_token)
+		module_name = module_name // "/" // name_identifier%text
+		module_path = module_path // "/" // name_identifier%text
+	end do
+
+	! Check for `use module;` (qualified import) vs `use module::*;` (glob import)
+	if (parser%current_kind() == double_colon_token) then
+		double_colon = parser%match(double_colon_token)
+
+		! Check for glob import (use module::*)
+		if (parser%current_kind() == star_token) then
+			star = parser%match(star_token)
+			import_name = "*"
+		else
+			name_identifier = parser%match(identifier_token)
+			import_name = name_identifier%text
+		end if
+		qualified_import = .false.
+	else
+		! `use module;` - qualified import
+		import_name = ""
+		qualified_import = .true.
+	end if
+
+	semi = parser%match(semicolon_token)
+
+	! Return an empty statement (no-op)
+	statement%kind = expr_statement
+	statement%is_empty = .true.
+
+	! For std::, all intrinsics are already globally available
+	if (module_name == "std") return
+
+	! Get the directory of the current source file
+	src_dir = get_dir(parser%contexts%v(parser%current_unit())%src_file)
+	mod_filename = src_dir // module_path // ".syntran"
+
+	! Check if module file exists
+	if (.not. exists(mod_filename)) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_404(parser%context(), span, mod_filename))
+		return
+	end if
+
+	! Read the module file
+	mod_text = read_file(mod_filename, iostat)
+	if (iostat /= exit_success) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_read(parser%context(), span, mod_filename))
+		return
+	end if
+
+	! Create a new parser for the module
+	mod_contexts = new_context_vector()
+	mod_unit_ = 0
+	mod_parser = new_parser(mod_text, mod_filename, mod_contexts, mod_unit_)
+
+	! Initialize intrinsic functions for the module parser.
+	! We use declare_intr_fns instead of copying from the main parser's dict
+	! to avoid copying previously imported module functions which would cause
+	! redeclaration errors in pass 1.
+	call declare_intr_fns(mod_parser%fns)
+	mod_parser%num_fns = mod_parser%fns%num_intr_fns
+
+	! Share variable numbering with parent parser. Module variables will get
+	! indices continuing from parent's count, avoiding the need for remapping.
+	! This is similar to how #include works.
+	mod_parser%num_vars = parser%num_vars
+
+	! Parse the module
+	mod_unit = mod_parser%parse_unit()
+
+	! Update parent's variable count to include module variables
+	parser%num_vars = mod_parser%num_vars
+
+	! Check for parsing errors in the module (only in first pass)
+	if (parser%ipass == 0 .and. mod_parser%diagnostics%len_ > 0) then
+		call parser%diagnostics%push( &
+			err_prefix // "failed to parse module `" // module_name // "`:" // color_reset)
+		do i = 1, mod_parser%diagnostics%len_
+			call parser%diagnostics%push(mod_parser%diagnostics%v(i)%s)
+		end do
+		return
+	end if
+
+	! Copy parsed functions from module parser to current parser
+	do i = 1, mod_parser%fn_names%len_
+		fn_name = mod_parser%fn_names%v(i)%s
+
+		! Look up the function in the module parser
+		fn = mod_parser%fns%search(fn_name, io, iostat)
+		if (iostat /= exit_success) cycle
+
+		! Determine the name to insert: qualified (module::fn) or unqualified (fn)
+		! For qualified imports, convert path separators to namespace separators
+		! e.g., "math/vectors" -> "math::vectors::fn"
+		if (qualified_import) then
+			! Replace "/" with "::" in module_name for qualified prefix
+			qualified_prefix = replace_all(module_name, "/", "::")
+			insert_name = qualified_prefix // "::" // fn_name
+		else
+			insert_name = fn_name
+
+			! Check if this would shadow an overloaded intrinsic function. Note:
+			! we only check overloaded intrinsics here because non-overloaded
+			! intrinsics are handled mostly like normal user-defined fns
+			!
+			! TODO: is this still needed since we already handle
+			! err_redeclare_intr_fn() elsewhere?
+			if (is_overloaded_intr(fn_name)) then
+				span = new_span(mod_identifier%pos, len(mod_identifier%text))
+				call parser%diagnostics%push( &
+					err_redeclare_intr_fn(parser%context(), span, fn_name))
+				cycle
+			end if
+		end if
+
+		! Insert into current parser with new id_index
+		parser%num_fns = parser%num_fns + 1
+		call parser%fns%insert(insert_name, fn, parser%num_fns, io)
+
+		! Only push to fn_names in the first pass (like parse_fn_declaration)
+		if (parser%ipass == 0) call parser%fn_names%push(insert_name)
+	end do
+
+	! Copy parsed module variables to current parser.
+	! Since we shared num_vars before parsing, indices already match - no remapping needed.
+	do i = 1, mod_parser%var_names%len_
+		var_name = mod_parser%var_names%v(i)%s
+
+		! Look up the variable in the module parser
+		call mod_parser%vars%search(var_name, id_index, iostat, var_val)
+		if (iostat /= exit_success) cycle
+
+		! Determine insert name (qualified or unqualified)
+		if (qualified_import) then
+			qualified_prefix = replace_all(module_name, "/", "::")
+			insert_name = qualified_prefix // "::" // var_name
+		else
+			insert_name = var_name
+		end if
+
+		! Insert with same id_index (no remapping needed)
+		call parser%vars%insert(insert_name, var_val, id_index, io)
+		if (parser%ipass == 0) call parser%var_names%push(insert_name)
+	end do
+
+end function parse_use_statement
 
 !===============================================================================
 
@@ -431,6 +645,9 @@ recursive module function parse_statement(parser) result(statement)
 
 	case (continue_keyword)
 		statement = parser%parse_continue_statement()
+
+	case (use_keyword)
+		statement = parser%parse_use_statement()
 
 	case default
 		pos_beg   = parser%peek_pos(0)

@@ -1,0 +1,18 @@
+// Vector math module in a subdirectory
+
+fn vdot(a: [i32; :], b: [i32; :]): i32
+{
+	// Off-by-one from std::dot fn so we can tell which one is getting
+	// called.  Named 'vdot' to avoid shadowing the 'dot' intrinsic.
+	return sum(a * b) + 1;
+}
+
+fn magnitude_squared(v: [i32; :]): i32
+{
+	return sum(v * v);
+}
+
+fn add_vectors(a: [i32; :], b: [i32; :]): [i32; :]
+{
+	return a + b;
+}
