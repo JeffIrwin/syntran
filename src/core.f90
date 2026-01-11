@@ -30,6 +30,16 @@ module syntran__core_m
 		syntran_patch =  1
 
 	! TODO:
+	!  - claude tasks:
+	!    * general review for low-hanging fruit
+	!    * fortran compile time optimization -- at least break out long sources,
+	!      maybe see if pain points like intr_fns.f90, lex.f90, or math*.f90 can
+	!      be actually improved
+	!    * docs -- see several notes below
+	!    * bytecode-based evaluation
+	!    * git(hub) cleanup. no need to delete branches, but rename existing
+	!      branches (except for main and dev) to start with feature/ or
+	!      jeffirwin/, e.g. vec-slice -> feature/vec-slice
 	!  - module arrays don't work, structs probably don't work either
 	!    * scope is creeping well beyond the immediate need of avoiding std fn
 	!      clashes. maybe hold off on this
@@ -46,10 +56,10 @@ module syntran__core_m
 	!    * potentially important for resolving name clashes when you're using
 	!      someone else's library, but you don't want to change the names they
 	!      chose
-	!  - document modules in readme, recommend over #include
-	!  - minloc, maxloc, findloc fns
+	!  - document modules in readme, recommend over #include after it's in a
+	!    state where a few aoc tests can work with utils.syntran as a module
+	!  - minloc, maxloc, findloc std:: fns
 	!    * useful for aoc
-	!    * i'm leaning towards 2.0 instead of namespaces
 	!  - const.  e.g. `const N = 5` instead of `let N = 5`. then ban reassigning
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
 	!    compute usage
@@ -66,18 +76,6 @@ module syntran__core_m
 	!    * this would only work on linux, since windows can't overwrite a
 	!      running exe
 	!    * apparently it's possible on windows too.  til:  https://stackoverflow.com/a/459860/4347028
-	!  - post 1.0:
-	!    * need to think about namespaces, at least for std fns so i can add
-	!      intrinsic fns without breaking anyone's code who happened to already
-	!      define a fn with the same name
-	!      + example: define a `println` fn.  it won't parse
-	!      + note that you *are* allowed to define a `sum` fn because the
-	!        intrinsic sum fn is overloaded.  all of the actual intrinsic sums
-	!        are named like `0sum_i32` or `0sum_f64`
-	!        > could this be abused to add new secret fns starting with "0"
-	!          without breaking compat? seems like a bad idea
-	!        > it also seems bad that users can shadow define `sum` or any other
-	!          overloaded intrinsic
 	!  - enable plugging in to nvim linting.  doesn't seem hard from the way
 	!    that gfortran nvim linting works.  just need to add a cmd arg like
 	!    `--syntax-only` and print errors in 1 line per error, with filename,
