@@ -241,10 +241,6 @@ function parse_args() result(args)
 				args%syntran_file_arg = .true.
 				args%syntran_file = argv
 
-			!else if (ipos == 2) then
-			!	args%lout_file = .true.
-			!	args%out_file  = argv
-
 			else
 				write(*,*) err_prefix//"unknown argument `"//argv//"`"
 				error = .true.
@@ -254,11 +250,6 @@ function parse_args() result(args)
 		end select
 
 	end do
-
-	!if (ipos < 1 .and. .not. (args%help .or. args%version)) then
-	!	write(*,*) err_prefix//"syntran file not defined"
-	!	error = .true.
-	!end if
 
 	url = 'https://github.com/JeffIrwin/syntran'
 
@@ -303,9 +294,6 @@ function parse_args() result(args)
 
 	if (error .or. args%help) then
 
-		! TODO: first <file> line is long enough that I should probably just say
-		! `[options]`
-
 		write(*,*) fg_bold//"Usage:"//color_reset
 		write(*,*) "    syntran <file.syntran> [options] [-- <script args>...]"
 		write(*,*) "    syntran"
@@ -327,14 +315,6 @@ function parse_args() result(args)
 
 		if (.not. args%help) call exit(EXIT_FAILURE)
 	end if
-
-	!if (.not. args%lout_file) then
-	!	if (args%waterfall) then
-	!		args%out_file = "./build/waterfall-"//basename(args%ttf_file)//".ppm"
-	!	else
-	!		args%out_file = "./build/"//basename(args%ttf_file)//".ppm"
-	!	end if
-	!end if
 
 end function parse_args
 
