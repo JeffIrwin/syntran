@@ -30,6 +30,13 @@ module syntran__core_m
 		syntran_patch =  1
 
 	! TODO:
+	!  - if you try to return something (e.g. i32) from a void/null fn, the
+	!    error says the fn should return "unknown" but it should say void (or
+	!    null?)
+	!  - "use module as alias;"
+	!    * potentially important for resolving name clashes when you're using
+	!      someone else's library, but you don't want to change the names they
+	!      chose
 	!  - cmd args
 	!    * useful for aoc
 	!      + switching test/real input is annoying without cmd args. must resort
