@@ -456,11 +456,9 @@
 					"ubuntu-latest"
 				],
 				"toolchain": [
-					{"compiler": "intel", "version": "2024.2"},
-					#{"compiler": "intel", "version": "2024.1"}, # works
-					#{"compiler": "intel", "version": "2024.0"}, # works
-					#{"compiler": "intel", "version": "2023.2"}, # works
-					{"compiler": "intel", "version": "2023.1"},
+					{"compiler": "intel", "version": "2025.1"},
+					#{"compiler": "intel", "version": "2024.2"},  # internal compiler error on fn array cat in declare_intr_fns()
+					#{"compiler": "intel", "version": "2023.1"},
 
 					##{"compiler": "intel", "version": "2023.0"},  # crashes on ` 	do while (is_whitespace(context%text(j:j)))`
 					##{"compiler": "intel", "version": "2022.2"},  # ifx 2022.2 doesn't have `do while ()` :(
