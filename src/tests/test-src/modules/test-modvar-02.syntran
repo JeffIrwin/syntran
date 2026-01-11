@@ -13,9 +13,14 @@ let c1 = counter::increment();
 let ok3 = c1 == 1;
 let ok4 = counter::count == 1;
 
-// Test set function (workaround for qualified assignment)
-counter::set_count(100);
-let ok5 = counter::count == 100;
-let ok6 = counter::get_count() == 100;
+// Test direct qualified assignment
+counter::count = 50;
+let ok5 = counter::count == 50;
+let ok6 = counter::get_count() == 50;
 
-return ok1 and ok2 and ok3 and ok4 and ok5 and ok6;
+// Test set function still works
+counter::set_count(100);
+let ok7 = counter::count == 100;
+let ok8 = counter::get_count() == 100;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8;
