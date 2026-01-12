@@ -67,7 +67,8 @@ fi
 
 #build=build
 build="build/$config"
+mkdir -p "$build"
 
 cmake -S . -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC
-cmake --build "$build" --config $config
+cmake --build "$build" --config $config --parallel
 

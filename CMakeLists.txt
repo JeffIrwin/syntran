@@ -48,6 +48,7 @@ else()
 	add_compile_options("-Wno-compare-reals")
 
 endif()
+#add_compile_options("-J ${CMAKE_CURRENT_SOURCE_DIR}/build/")
 
 set(CMAKE_Fortran_FLAGS_DEBUG "-pedantic -fbounds-check -fbacktrace")
 set(CMAKE_Fortran_FLAGS_RELEASE "-O3")
@@ -91,45 +92,45 @@ set(SRC_DIR "src")
 # Core library, used by main interpreter and unit tests
 set(LIB "${PROJECT}")
 set(LIB_SRC
+	${SRC_DIR}/bool.f90
 	${SRC_DIR}/compiler.F90
 	${SRC_DIR}/consts.f90
-	${SRC_DIR}/utils.f90
+	${SRC_DIR}/core.f90
 	${SRC_DIR}/errors.f90
-	${SRC_DIR}/value.f90
-	${SRC_DIR}/bool.f90
-	${SRC_DIR}/math_bin_add.f90
-	${SRC_DIR}/math_bin_subtract.f90
-	${SRC_DIR}/math_bin_mul.f90
-	${SRC_DIR}/math_bin_div.f90
-	${SRC_DIR}/math_bin_pow.f90
-	${SRC_DIR}/math_bit_left_shift.f90
-	${SRC_DIR}/math_bit_right_shift.f90
-	${SRC_DIR}/math_bit_xor.f90
-	${SRC_DIR}/math_bit_or.f90
-	${SRC_DIR}/math_bit_and.f90
-	${SRC_DIR}/math_bit_not.f90
-	${SRC_DIR}/math.f90
-	${SRC_DIR}/types.f90
-	${SRC_DIR}/lex.f90
-	${SRC_DIR}/parse_array.f90
-	${SRC_DIR}/parse_control.f90
-	${SRC_DIR}/parse_expr.f90
-	${SRC_DIR}/intr_fns_array.f90
-	${SRC_DIR}/intr_fns_io.f90
-	${SRC_DIR}/intr_fns_math.f90
-	${SRC_DIR}/intr_fns_trig.f90
-	${SRC_DIR}/intr_fns_minmax.f90
-	${SRC_DIR}/intr_fns.f90
-	${SRC_DIR}/parse_fn.f90
-	${SRC_DIR}/parse_misc.f90
-	${SRC_DIR}/parse.f90
 	${SRC_DIR}/eval.f90
 	${SRC_DIR}/eval_array.f90
 	${SRC_DIR}/eval_control.f90
 	${SRC_DIR}/eval_expr.f90
 	${SRC_DIR}/eval_fn.f90
-	${SRC_DIR}/core.f90
+	${SRC_DIR}/intr_fns.f90
+	${SRC_DIR}/intr_fns_array.f90
+	${SRC_DIR}/intr_fns_io.f90
+	${SRC_DIR}/intr_fns_math.f90
+	${SRC_DIR}/intr_fns_minmax.f90
+	${SRC_DIR}/intr_fns_trig.f90
+	${SRC_DIR}/lex.f90
+	${SRC_DIR}/math.f90
+	${SRC_DIR}/math_bin_add.f90
+	${SRC_DIR}/math_bin_div.f90
+	${SRC_DIR}/math_bin_mul.f90
+	${SRC_DIR}/math_bin_pow.f90
+	${SRC_DIR}/math_bin_subtract.f90
+	${SRC_DIR}/math_bit_and.f90
+	${SRC_DIR}/math_bit_left_shift.f90
+	${SRC_DIR}/math_bit_not.f90
+	${SRC_DIR}/math_bit_or.f90
+	${SRC_DIR}/math_bit_right_shift.f90
+	${SRC_DIR}/math_bit_xor.f90
+	${SRC_DIR}/parse.f90
+	${SRC_DIR}/parse_array.f90
+	${SRC_DIR}/parse_control.f90
+	${SRC_DIR}/parse_expr.f90
+	${SRC_DIR}/parse_fn.f90
+	${SRC_DIR}/parse_misc.f90
 	${SRC_DIR}/syntran.f90
+	${SRC_DIR}/types.f90
+	${SRC_DIR}/utils.f90
+	${SRC_DIR}/value.f90
 )
 
 #add_library(${LIB} SHARED ${LIB_SRC}) # dll
@@ -152,6 +153,15 @@ add_executable("${EXE_BIN}"
 )
 target_link_libraries(${EXE_BIN} ${LINK_LIBS})
 
+# Explicitly set module output dir per target because parallel cmake will bug
+# out if multiple threads are reading/writing to the same *.mod file in the same
+# dir
+set_target_properties("${EXE_BIN}" PROPERTIES
+	Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod/${EXE_BIN}
+)
+# TODO: need post-build command or something to copy mods where nvim linter
+# expects them
+
 # Workaround exe and lib w/ same name:
 #
 #     https://gist.github.com/jlgerber/eafc4ee2b9954e27dd2bb009496b1b03
@@ -172,6 +182,10 @@ add_executable(${TEST_EXE}
 	${TEST_SRC}
 )
 target_link_libraries(${TEST_EXE} ${LINK_LIBS})
+
+set_target_properties("${TEST_EXE}" PROPERTIES
+	Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod/${TEST_EXE}
+)
 
 # Thanks gfort, I'm aware of integer division
 target_compile_options(${TEST_EXE} PRIVATE "-Wno-integer-division")
