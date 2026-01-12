@@ -117,6 +117,7 @@ set(LIB_SRC
 	${SRC_DIR}/intr_fns_array.f90
 	${SRC_DIR}/intr_fns_io.f90
 	${SRC_DIR}/intr_fns_math.f90
+	${SRC_DIR}/intr_fns_trig.f90
 	${SRC_DIR}/intr_fns_minmax.f90
 	${SRC_DIR}/intr_fns.f90
 	${SRC_DIR}/parse_fn.f90
