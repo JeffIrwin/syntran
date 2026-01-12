@@ -5,6 +5,7 @@ module syntran__intr_fns_m
 
 	use syntran__types_m
 	use syntran__intr_fns_math_m
+	use syntran__intr_fns_trig_m
 	use syntran__intr_fns_minmax_m
 	use syntran__intr_fns_array_m
 	use syntran__intr_fns_io_m
@@ -25,7 +26,7 @@ subroutine declare_intr_fns(fns)
 
 	integer :: id_index, num_fns
 
-	type(fn_t), allocatable :: math_fns(:), minmax_fns(:), array_fns(:), io_fns(:)
+	type(fn_t), allocatable :: math_fns(:), trig_fns(:), minmax_fns(:), array_fns(:), io_fns(:)
 
 	! This used to get incremented automatically inside of fns%insert, but I
 	! changed it.  I don't think it matters for intrinsic fns anyway, because
@@ -35,12 +36,13 @@ subroutine declare_intr_fns(fns)
 
 	! Call each category's declare function to get arrays of fn_t
 	call declare_math_fns(fns, id_index, math_fns)
+	call declare_trig_fns(fns, id_index, trig_fns)
 	call declare_minmax_fns(fns, id_index, minmax_fns)
 	call declare_array_fns(fns, id_index, array_fns)
 	call declare_io_fns(fns, id_index, io_fns)
 
 	! Concatenate all function arrays together
-	fns%fns = [math_fns, minmax_fns, array_fns, io_fns]
+	fns%fns = [math_fns, trig_fns, minmax_fns, array_fns, io_fns]
 
 	num_fns = size(fns%fns)
 	fns%num_intr_fns = num_fns
