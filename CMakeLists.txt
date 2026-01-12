@@ -124,9 +124,13 @@ set(LIB_SRC
 	${SRC_DIR}/parse_misc.f90
 	${SRC_DIR}/parse.f90
 	${SRC_DIR}/eval.f90
+	${SRC_DIR}/eval_array.f90
+	${SRC_DIR}/eval_control.f90
+	${SRC_DIR}/eval_expr.f90
+	${SRC_DIR}/eval_fn.f90
 	${SRC_DIR}/core.f90
 	${SRC_DIR}/syntran.f90
-	)
+)
 
 #add_library(${LIB} SHARED ${LIB_SRC}) # dll
 add_library(${LIB} STATIC ${LIB_SRC}) # static lib
@@ -141,11 +145,11 @@ set(EXE_BIN "${EXE}-bin")
 set(EXE_SRC
 	${SRC_DIR}/app.f90
 	${SRC_DIR}/main.f90
-	)
+)
 
 add_executable("${EXE_BIN}"
 	${EXE_SRC}
-	)
+)
 target_link_libraries(${EXE_BIN} ${LINK_LIBS})
 
 # Workaround exe and lib w/ same name:
@@ -162,11 +166,11 @@ set(TEST_SRC
 	${SRC_DIR}/app.f90
 	${SRC_DIR}/tests/core.f90
 	${SRC_DIR}/tests/test.f90
-	)
+)
 
 add_executable(${TEST_EXE}
 	${TEST_SRC}
-	)
+)
 target_link_libraries(${TEST_EXE} ${LINK_LIBS})
 
 # Thanks gfort, I'm aware of integer division
