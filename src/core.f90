@@ -31,9 +31,13 @@ module syntran__core_m
 
 	! TODO:
 	!  - claude tasks:
-	!    * fortran compile time optimization -- at least break out long sources,
-	!      maybe see if pain points like intr_fns.f90, lex.f90, or math*.f90 can
-	!      be actually improved
+	!    * fortran compile time optimization -- see if pain points like
+	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
+	!      + intr_fns.f90 now broken up
+	!      + eval, types, etc. might be splittable
+	!      + it's better for parallel builds, but we don't actually have a
+	!        parallel build system. get cmake ninja generator working. afaik fpm
+	!        is not parallel
 	!    * docs -- see several notes below
 	!    * bytecode-based evaluation
 	!    * git(hub) cleanup. no need to delete branches, but rename existing
