@@ -4,7 +4,6 @@
 module syntran__utils_m
 
 	use iso_fortran_env
-	!use iso_c_binding
 
 	implicit none
 
@@ -390,12 +389,12 @@ end subroutine push_char
 
 !===============================================================================
 
-function trim_char_vector(sb) result(str)
+function trim_char_vector(sb) result(str_)
 
 	class(char_vector_t), intent(in) :: sb
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
-	str = sb%v(1: sb%len_)
+	str_ = sb%v(1: sb%len_)
 
 end function trim_char_vector
 
@@ -424,12 +423,12 @@ end subroutine push_all_string
 
 !===============================================================================
 
-function new_string_view(str) result(view)
+function new_string_view(str_) result(view)
 
-	character(len = *), intent(in) :: str
+	character(len = *), intent(in) :: str_
 	type(string_view_t) :: view
 
-	view%s = str
+	view%s = str_
 	view%pos = 1
 
 end function new_string_view
@@ -464,7 +463,7 @@ end function string_view_get_line
 
 !===============================================================================
 
-function read_line(iu, iostat) result(str)
+function read_line(iu, iostat) result(str_)
 
 	! c.f. aoc-2022/utils.f90
 	!
@@ -473,7 +472,7 @@ function read_line(iu, iostat) result(str)
 	integer, intent(in) :: iu
 	integer, optional, intent(out) :: iostat
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	!********
 
@@ -503,7 +502,7 @@ function read_line(iu, iostat) result(str)
 		call sb%push(c)
 
 	end do
-	str = sb%trim()
+	str_ = sb%trim()
 
 	if (present(iostat)) iostat = io
 
@@ -518,15 +517,15 @@ end function exists
 
 !===============================================================================
 
-function read_file(file, iostat) result(str)
+function read_file(file, iostat) result(str_)
 
-	! Read all lines of a file into str
+	! Read all lines of a file into str_
 
 	character(len = *), intent(in) :: file
 
 	integer, optional, intent(out) :: iostat
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	!********
 
@@ -558,7 +557,7 @@ function read_file(file, iostat) result(str)
 
 	end do
 	close(iu)
-	str = sb%trim()
+	str_ = sb%trim()
 
 	!print *, 'str = '
 	!print *, str
@@ -855,11 +854,11 @@ end function is_whitespace
 
 !===============================================================================
 
-function rm_char(str, char) result(str_out)
+function rm_char(str_, char) result(str_out)
 
-	! Remove all occurences of character `char` from `str`
+	! Remove all occurences of character `char` from `str_`
 
-	character(len = *), intent(in) :: str
+	character(len = *), intent(in) :: str_
 	character, intent(in) :: char
 
 	character(len = :), allocatable :: str_out
@@ -870,8 +869,8 @@ function rm_char(str, char) result(str_out)
 	type(char_vector_t) :: sb  ! string builder
 
 	sb = new_char_vector()
-	do i = 1, len(str)
-		if (str(i:i) /= char) call sb%push(str(i:i))
+	do i = 1, len(str_)
+		if (str_(i:i) /= char) call sb%push(str_(i:i))
 	end do
 	str_out = sb%trim()
 
@@ -879,22 +878,61 @@ end function rm_char
 
 !===============================================================================
 
-function tabs2spaces(str) result(str_out)
+function replace_all(str_, old, new) result(str_out)
+
+	! Replace all occurrences of substring `old` with `new` in `str_`
+
+	character(len = *), intent(in) :: str_, old, new
+
+	character(len = :), allocatable :: str_out
+
+	!********
+
+	integer :: pos, start
+	type(char_vector_t) :: sb  ! string builder
+
+	if (len(old) == 0) then
+		str_out = str_
+		return
+	end if
+
+	sb = new_char_vector()
+	start = 1
+	pos = index(str_(start:), old)
+	do while (pos > 0)
+		! Push everything before the match
+		call sb%push(str_(start: start + pos - 2))
+		! Push the replacement
+		call sb%push(new)
+		! Move past the matched substring
+		start = start + pos - 1 + len(old)
+		! Find next match
+		pos = index(str_(start:), old)
+	end do
+	! Push the remaining part
+	call sb%push(str_(start:))
+	str_out = sb%trim()
+
+end function replace_all
+
+!===============================================================================
+
+function tabs2spaces(str_) result(str_out)
 
 	! Replace each tab with a *single* space.  This is useful for alignment and
 	! it makes allocation easy
 
-	character(len = *), intent(in)  :: str
+	character(len = *), intent(in)  :: str_
 	character(len = :), allocatable :: str_out
 
 	integer :: i
 
-	allocate(character(len = len(str)) :: str_out)
-	do i = 1, len(str)
-		if (str(i:i) == tab) then
+	allocate(character(len = len(str_)) :: str_out)
+	do i = 1, len(str_)
+		if (str_(i:i) == tab) then
 			str_out(i:i) = ' '
 		else
-			str_out(i:i) = str(i:i)
+			str_out(i:i) = str_(i:i)
 		end if
 	end do
 
@@ -902,45 +940,45 @@ end function tabs2spaces
 
 !===============================================================================
 
-function trimw(str)
+function trimw(str_)
 
 	! Trim whitespace, because the intrinsic trim() fn apparently doesn't trim
 	! line breaks!?
 
-	character(len = *), intent(in)  :: str
+	character(len = *), intent(in)  :: str_
 	character(len = :), allocatable :: trimw
 
 	integer :: first, last
 
 	first = 1
 	do
-		if (first > len(str)) exit
-		if (.not. is_whitespace(str(first: first))) exit
+		if (first > len(str_)) exit
+		if (.not. is_whitespace(str_(first: first))) exit
 		first = first + 1
 	end do
 
-	last = len(str)
+	last = len(str_)
 	do
 		if (last < first) exit
-		if (.not. is_whitespace(str(last: last))) exit
+		if (.not. is_whitespace(str_(last: last))) exit
 		last = last - 1
 	end do
 
-	trimw = str(first: last)
+	trimw = str_(first: last)
 
 end function trimw
 
 !===============================================================================
 
-function quote(str) result(wrapped)
+function quote(str_) result(wrapped)
 
-	! Wrap a str in "double quotes".  Any quotes already contained are not
+	! Wrap a str_ in "double quotes".  Any quotes already contained are not
 	! escaped
 
-	character(len = *), intent(in)  :: str
+	character(len = *), intent(in)  :: str_
 	character(len = :), allocatable :: wrapped
 
-	wrapped = '"'//str//'"'
+	wrapped = '"'//str_//'"'
 
 end function quote
 
@@ -1000,98 +1038,98 @@ end subroutine console_color_reset
 
 !===============================================================================
 
-function i32_str(x) result(str)
+function i32_str(x) result(str_)
 
 	integer(kind = 4), intent(in) :: x
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	! Fine for default 4-byte ints.  May need more chars for bigger ints
 	character(len = 16) :: buffer
 
 	write(buffer, '(i0)') x
-	str = trim(buffer)
+	str_ = trim(buffer)
 
 end function i32_str
 
 !===============================================================================
 
-function i32_vec_str(x) result(str)
+function i32_vec_str(x) result(str_)
 
 	integer(kind = 4), intent(in) :: x(:)
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	integer :: i
-	str = "["
+	str_ = "["
 	do i = 1, size(x)
-		str = str//i32_str(x(i))
-		if (i < size(x)) str = str//", "
+		str_ = str_//i32_str(x(i))
+		if (i < size(x)) str_ = str_//", "
 	end do
-	str = str//"]"
+	str_ = str_//"]"
 
 end function i32_vec_str
 
 !===============================================================================
 
-function i64_str(x) result(str)
+function i64_str(x) result(str_)
 
 	integer(kind = 8), intent(in) :: x
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	! I think ~20 chars is the max actually, but let's round up to the next
 	! multiple of 8
 	character(len = 24) :: buffer
 
 	write(buffer, '(i0)') x
-	str = trim(buffer)
+	str_ = trim(buffer)
 
 end function i64_str
 
 !===============================================================================
 
-function f32_str(x) result(str)
+function f32_str(x) result(str_)
 
 	real, intent(in) :: x
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	! Fine for default 4-byte type
 	character(len = 16) :: buffer
 
 	write(buffer, '(es16.6)') x
-	str = trim(adjustl(buffer))
+	str_ = trim(adjustl(buffer))
 
 end function f32_str
 
 !===============================================================================
 
-function f64_str(x) result(str)
+function f64_str(x) result(str_)
 
 	real(kind = 8), intent(in) :: x
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	character(len = 28) :: buffer
 
 	write(buffer, '(es25.15)') x
-	str = trim(adjustl(buffer))
+	str_ = trim(adjustl(buffer))
 
 end function f64_str
 
 !===============================================================================
 
-function bool1_str(x) result(str)
+function bool1_str(x) result(str_)
 
 	logical(kind = 1), intent(in) :: x
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str_
 
 	if (x) then
-		str = 'true'
+		str_ = 'true'
 	else
-		str = 'false'
+		str_ = 'false'
 	end if
 
 end function bool1_str

@@ -1,0 +1,7 @@
+// Test glob import from grandparent directory
+use ../../mymath::*;
+
+let a = add(10, 20);
+let b = mul(5, 6);
+
+return a == 30 and b == 30;

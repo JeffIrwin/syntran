@@ -3,9 +3,6 @@
 
 module syntran__types_m
 
-	!use syntran__consts_m
-	!use syntran__errors_m
-	!use syntran__utils_m
 	use syntran__value_m
 
 	implicit none
@@ -37,12 +34,8 @@ module syntran__types_m
 		type(string_vector_t) :: param_names
 
 		! Min number of variadic params.  Default < 0 means fn is not variadic
-		!
-		! This works for fns like max() or print() which have a min limit but an
-		! unlimited upper bound of parameters.  For functions with a fixed
-		! number of optional parameters, there should be a different mechanism
-
-		integer :: variadic_min = -1, variadic_type
+		integer :: variadic_min = -1, variadic_max = -1, variadic_type
+		character(len = :), allocatable :: variadic_name
 
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
@@ -162,6 +155,9 @@ module syntran__types_m
 
 		!type(struct_t), allocatable :: struct
 		character(len = :), allocatable :: struct_name
+
+		! Module prefix for qualified names (e.g., "std" in "std::println")
+		character(len = :), allocatable :: module_prefix
 
 		type(string_vector_t) :: diagnostics
 
@@ -415,9 +411,17 @@ recursive subroutine fn_copy(dst, src)
 
 	dst%type          = src%type
 	dst%variadic_min  = src%variadic_min
+	dst%variadic_max  = src%variadic_max
 	dst%variadic_type = src%variadic_type
 	dst%param_names   = src%param_names
 	dst%is_intr       = src%is_intr
+
+	if (allocated(src%variadic_name)) then
+		if (allocated(dst%variadic_name)) deallocate(dst%variadic_name)
+		dst%variadic_name = src%variadic_name
+	else if (allocated(dst%variadic_name)) then
+		deallocate(dst%variadic_name)
+	end if
 
 	if (allocated(src%params)) then
 		if (allocated(dst%params)) deallocate(dst%params)
@@ -761,6 +765,12 @@ recursive subroutine syntax_node_copy(dst, src)
 		dst%struct_name = src%struct_name
 	else if (allocated(dst%struct_name)) then
 		deallocate(dst%struct_name)
+	end if
+
+	if (allocated(src%module_prefix)) then
+		dst%module_prefix = src%module_prefix
+	else if (allocated(dst%module_prefix)) then
+		deallocate(dst%module_prefix)
 	end if
 
 	dst%expecting       = src%expecting
@@ -1336,7 +1346,7 @@ end function new_syntax_token_vector
 
 !===============================================================================
 
-function new_literal_value(type, bool, i32, i64, f32, f64, str) result(val)
+function new_literal_value(type, bool, i32, i64, f32, f64, str_) result(val)
 
 	integer, intent(in) :: type
 
@@ -1345,7 +1355,7 @@ function new_literal_value(type, bool, i32, i64, f32, f64, str) result(val)
 	real   (kind = 4), intent(in), optional :: f32
 	real   (kind = 8), intent(in), optional :: f64
 	logical          , intent(in), optional :: bool
-	character(len=*) , intent(in), optional :: str
+	character(len=*) , intent(in), optional :: str_
 
 	type(value_t) :: val
 
@@ -1355,7 +1365,7 @@ function new_literal_value(type, bool, i32, i64, f32, f64, str) result(val)
 	if (present(f64 )) val%sca%f64   = f64
 	if (present(i32 )) val%sca%i32   = i32
 	if (present(i64 )) val%sca%i64   = i64
-	if (present(str )) val%sca%str%s = str
+	if (present(str_)) val%sca%str%s = str_
 
 end function new_literal_value
 
@@ -1418,6 +1428,9 @@ integer function get_keyword_kind(text) result(kind)
 
 		case ("continue")
 			kind = continue_keyword
+
+		case ("use")
+			kind = use_keyword
 
 		case default
 			kind = identifier_token
@@ -2266,13 +2279,13 @@ end function new_i64
 
 !********
 
-function new_str(str) result(expr)
+function new_str(str_) result(expr)
 
-	character(len = *), intent(in) :: str
+	character(len = *), intent(in) :: str_
 	type(syntax_node_t) :: expr
 
 	expr%kind = literal_expr
-	expr%val  = new_literal_value(str_type, str = str)
+	expr%val  = new_literal_value(str_type, str_ = str_)
 
 end function new_str
 

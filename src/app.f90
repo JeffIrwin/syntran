@@ -39,6 +39,9 @@ module syntran__app_m
 			version          = .false., &
 			help             = .false.
 
+		! Script arguments passed after `--`
+		type(string_vector_t) :: script_args
+
 	end type args_t
 
 contains
@@ -165,6 +168,7 @@ function parse_args() result(args)
 	! Defaults
 	args%maxerr = maxerr_def
 	args%color  = COLOR_AUTO
+	args%script_args = new_string_vector()
 
 	argc = command_argument_count()
 	!print *, "argc = ", argc
@@ -220,6 +224,14 @@ function parse_args() result(args)
 		case ("--version")
 			args%version = .true.
 
+		case ("--")
+			! Capture all remaining arguments as script arguments
+			do while (i < argc)
+				call get_next_arg(i, str_)
+				call args%script_args%push(str_)
+			end do
+			exit
+
 		case default
 
 			! Positional arg
@@ -228,10 +240,6 @@ function parse_args() result(args)
 			if (ipos == 1) then
 				args%syntran_file_arg = .true.
 				args%syntran_file = argv
-
-			!else if (ipos == 2) then
-			!	args%lout_file = .true.
-			!	args%out_file  = argv
 
 			else
 				write(*,*) err_prefix//"unknown argument `"//argv//"`"
@@ -242,11 +250,6 @@ function parse_args() result(args)
 		end select
 
 	end do
-
-	!if (ipos < 1 .and. .not. (args%help .or. args%version)) then
-	!	write(*,*) err_prefix//"syntran file not defined"
-	!	error = .true.
-	!end if
 
 	url = 'https://github.com/JeffIrwin/syntran'
 
@@ -291,12 +294,8 @@ function parse_args() result(args)
 
 	if (error .or. args%help) then
 
-		! TODO: first <file> line is long enough that I should probbaly just say
-		! `[options]`
-
 		write(*,*) fg_bold//"Usage:"//color_reset
-		write(*,*) "    syntran <file.syntran> [--fmax-errors <n>] " &
-			//"[-i | --interactive] [-q | --quiet] [--color (auto|off|on)]"
+		write(*,*) "    syntran <file.syntran> [options] [-- <script args>...]"
 		write(*,*) "    syntran"
 		write(*,*) "    syntran -c <cmd> | --command <cmd>"
 		write(*,*) "    syntran -h | --help"
@@ -311,18 +310,11 @@ function parse_args() result(args)
 			//"error messages to <n> [default: "//str(maxerr_def)//"]"
 		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
 		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
+		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 
 		if (.not. args%help) call exit(EXIT_FAILURE)
 	end if
-
-	!if (.not. args%lout_file) then
-	!	if (args%waterfall) then
-	!		args%out_file = "./build/waterfall-"//basename(args%ttf_file)//".ppm"
-	!	else
-	!		args%out_file = "./build/"//basename(args%ttf_file)//".ppm"
-	!	end if
-	!end if
 
 end function parse_args
 

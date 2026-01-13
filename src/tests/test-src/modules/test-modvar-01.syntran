@@ -1,0 +1,30 @@
+// Test module variables with unqualified import (use module::*)
+
+use counter::*;
+
+// Test initial value
+let ok1 = count == 0;
+
+// Test reading via function
+let ok2 = get_count() == 0;
+
+// Test increment function modifying module variable
+let c1 = increment();
+let ok3 = c1 == 1;
+let ok4 = count == 1;
+
+// Test another increment
+let c2 = increment();
+let ok5 = c2 == 2;
+let ok6 = get_count() == 2;
+
+// Test direct assignment to module variable
+count = 10;
+let ok7 = count == 10;
+let ok8 = get_count() == 10;
+
+// Test set function
+set_count(42);
+let ok9 = count == 42;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8 and ok9;

@@ -1,6 +1,7 @@
 #!/bin/bash
 
-set -x
+set -exu
+set +u
 
 config=Debug
 
@@ -14,8 +15,9 @@ elif [[ $# -gt 0 ]]; then
 	echo "Error: unrecognized cmd arg \"$1\""
 	exit -1
 fi
+set -u
 
-## Uncomment to tell cmake to use ifort instead of gfortran (untested)
+## Uncomment to tell cmake to use ifort instead of gfortran
 #export SYNTRAN_INTEL=true
 
 unameOut="$(uname -s)"
@@ -36,6 +38,7 @@ if [[ "$machine" == "MinGw" ]]; then
 fi
 
 if [[ "$machine" == "Linux" ]]; then
+	#generator=(-G 'Ninja')
 	export FC=$(which gfortran-11)
 	echo "FC = $FC"
 fi
@@ -66,5 +69,5 @@ fi
 build="build/$config"
 
 cmake -S . -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC
-cmake --build "$build" --config $config
+cmake --build "$build" --config $config --parallel
 

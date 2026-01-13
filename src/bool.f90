@@ -463,7 +463,6 @@ subroutine is_eq_value_t(left, right, res, op_text)
 		end select
 
 	case default
-		! FIXME: other numeric types (f64, etc.)
 		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
 	end select
@@ -817,7 +816,6 @@ subroutine is_lt_value_t(left, right, res, op_text)
 		end select
 
 	case default
-		! FIXME: other numeric types (f64, etc.)
 		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
 	end select
@@ -1177,7 +1175,6 @@ subroutine is_le_value_t(left, right, res, op_text)
 		end select
 
 	case default
-		! FIXME: other numeric types (f64, etc.)
 		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
 	end select
@@ -1257,7 +1254,6 @@ subroutine and_(left, right, res, op_text)
 		end select
 
 	case default
-		! FIXME: other numeric types (f64, etc.)
 		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
 	end select
@@ -1317,7 +1313,6 @@ subroutine or_(left, right, res, op_text)
 		end select
 
 	case default
-		! FIXME: other numeric types (f64, etc.)
 		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
 	end select
@@ -1353,7 +1348,6 @@ subroutine not_(right, res, op_text)
 		end select
 
 	case default
-		! FIXME: other numeric types (f64, etc.)
 		write(*,*) err_eval_unary_type(op_text)
 		call internal_error()
 	end select

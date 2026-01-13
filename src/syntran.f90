@@ -17,7 +17,7 @@ contains
 
 !===============================================================================
 
-function syntran_interpret(str_, quiet, startup_file) result(res_str)
+function syntran_interpret(str_, quiet, startup_file, script_args) result(res_str)
 
 	! This is the interactive interpreter shell REPL
 	!
@@ -37,6 +37,7 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 	character(len = *), intent(in), optional :: str_
 	logical, intent(in), optional :: quiet
 	character(len = *), intent(in), optional :: startup_file
+	type(string_vector_t), optional, intent(in) :: script_args
 
 	character(len = :), allocatable :: res_str
 
@@ -75,7 +76,7 @@ function syntran_interpret(str_, quiet, startup_file) result(res_str)
 	end if
 	!print *, "src_file = ", src_file
 
-	call init_state(state)
+	call init_state(state, script_args)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
@@ -348,7 +349,7 @@ end function syntran_eval_f64
 
 !===============================================================================
 
-subroutine init_state(state)
+subroutine init_state(state, script_args)
 
 	! TODO: move to eval.f90
 
@@ -359,6 +360,7 @@ subroutine init_state(state)
 	! could be a class-bound procedure
 
 	type(state_t), intent(inout) :: state
+	type(string_vector_t), intent(in), optional :: script_args
 
 	call declare_intr_fns(state%fns)
 
@@ -375,13 +377,20 @@ subroutine init_state(state)
 	state%locs%scope_cap = SCOPE_CAP_INIT
 	allocate(state%locs%dicts( state%locs%scope_cap) )
 
+	! Script arguments passed after `--`
+	if (present(script_args)) then
+		state%script_args = script_args
+	else
+		state%script_args = new_string_vector()
+	end if
+
 	!print *, "init size fns = ", size(state%fns%fns)
 
 end subroutine init_state
 
 !===============================================================================
 
-function syntran_eval(str_, quiet, src_file, chdir_) result(res)
+function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 
 	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
 	! for syntran_interpret_file() is boolean
@@ -395,6 +404,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	logical, optional, intent(in) :: quiet
 	character(len = *), optional, intent(in) :: src_file
 	character(len = *), optional, intent(in) :: chdir_
+	type(string_vector_t), optional, intent(in) :: script_args
 
 	!********
 
@@ -410,7 +420,7 @@ function syntran_eval(str_, quiet, src_file, chdir_) result(res)
 	!print *, ''
 	!print *, 'str_ = ', str_
 
-	call init_state(state)
+	call init_state(state, script_args)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
@@ -475,7 +485,7 @@ end function syntran_eval
 
 !===============================================================================
 
-function syntran_interpret_file(filename, quiet, quiet_info, chdir_) result(res)
+function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args) result(res)
 
 	! TODO:
 	!   - enable input echo for file input (not for stdin)
@@ -500,6 +510,8 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_) result(res)
 	logical, optional, intent(in) :: quiet, quiet_info
 
 	logical, optional, intent(in) :: chdir_
+
+	type(string_vector_t), optional, intent(in) :: script_args
 
 	!********
 
@@ -533,9 +545,10 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_) result(res)
 
 	if (chdirl) then
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
-			chdir_ = get_dir(filename))))
+			chdir_ = get_dir(filename), script_args = script_args)))
 	else
-		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename)))
+		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
+			script_args = script_args)))
 	end if
 
 end function syntran_interpret_file

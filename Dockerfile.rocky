@@ -1,50 +1,44 @@
 
-#FROM rockylinux:8  # can't figure out how to get gfortran 11 on rocky 8 :(
 FROM rockylinux:9
 
 WORKDIR /workdir
 
-RUN dnf update -y
-RUN dnf install -y vim
-RUN dnf install -y git
-#RUN dnf install -y gcc-gfortran
-#RUN dnf --enablerepo=devel install -y libgfortran-static
-
-# TODO: consider gfort 13 for static libquadmath.  if it adds a dependency on a glibc that doesn't come on base distros though, it's not worth the tradeoff.  need to test
-RUN dnf install -y gcc-toolset-13-gcc-gfortran
+RUN dnf update -y && dnf install -y \
+	vim \
+	git \
+	gcc-toolset-13-gcc-gfortran
 
 ## Static libc.a and libm.a can also be installed, but it does not remove the dependency on libc.so etc. from syntran
 #dnf --enablerepo=crb install glibc-static -y
-
-#RUN dnf install -y curl
 
 RUN find /opt -name "gfortran"
 
 ENV PATH="$PATH:/opt/rh/gcc-toolset-13/root/usr/bin/"
 RUN gfortran --version
 
-# Copying just the src dir would usually be sufficient, but gen-header.sh needs
-# to know the git commit for `--version` output, so we have to install git and
-# clone the whole repo
-
 ADD https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64 ./fpm
-#RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64
-#RUN curl -LO https://github.com/fortran-lang/fpm/releases/download/v0.10.1/fpm-0.10.1-linux-x86_64
-#RUN mv fpm-*linux-x86_64 fpm
 
 RUN chmod +x fpm
 RUN mv fpm /usr/local/bin
 RUN fpm --version
 
-#COPY src ./src
-#COPY fpm.toml .
-#COPY gen-header.sh .
-
 ARG BRANCH="main"
 RUN echo "BRANCH = $BRANCH"
 
-RUN git clone https://github.com/jeffirwin/syntran --branch "$BRANCH"
+#RUN git clone https://github.com/jeffirwin/syntran --branch "$BRANCH"
 WORKDIR /workdir/syntran
+
+# Copying just the src dir would usually be sufficient, but gen-header.sh needs
+# to know the git commit for `--version` output, so we have to install git and
+# clone the whole repo
+ADD src ./src
+ADD .git ./.git
+ADD fpm.toml .
+ADD gen-header.sh .
+
+#COPY src ./src
+#COPY fpm.toml .
+#COPY gen-header.sh .
 
 RUN yes | fpm clean
 
@@ -70,11 +64,34 @@ RUN fpm test test --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FL
 #RUN fpm test long --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
 RUN fpm install --prefix . --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
 
-## Package other binary dependencies
+## Package other binary dependencies, if any
 #RUN cp /lib64/libquadmath.so.0 ./bin/
 #RUN cp /lib64/libgfortran.so.5 ./bin/
 ##RUN cp /lib64/libc.so.6 ./bin/
 ##RUN cp /lib64/libm.so.6 ./bin/
 
 RUN cd ./bin && tar czf syntran-linux.tgz *
+
+#****************
+# End installer packaging
+
+#===========================================================
+# Tests
+#
+# This container is kinda bulky.  Since this makes the shipped syntran binary,
+# it's good to do a little extra testing here.  However, the alpine dockerfile
+# runs twice as fast (~4 s cached no changes as opposed to 8 s for rocky).  For
+# efficient development/debugging, these binary syntran command tests are in the
+# alpine dockerfile too
+
+RUN [[ "$(./bin/syntran -c '1+2;' | tr -d '[:space:]')" == "3" ]]
+RUN [[ "$(./bin/syntran -c 'sum([0:101]);' | tr -d '[:space:]')" == "5050" ]]
+RUN [[ "$(./bin/syntran -c 'sum([0:10]**2);' | tr -d '[:space:]')" == "285" ]]
+
+RUN [[ "$(./bin/syntran -c 'let a = std::args(); size(a);' -- foo bar hello world | tr -d '[:space:]')" == "4" ]]
+RUN [[ "$(./bin/syntran -c 'let a = std::args(); size(a);' -- foo bar 'hello world' | tr -d '[:space:]')" == "3" ]]
+
+# `tr` deletes all spaces, while this `sed` only removes *leading* spaces
+RUN [[ "$(./bin/syntran -c 'let a = std::args(); a[0];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "foo" ]]
+RUN [[ "$(./bin/syntran -c 'let a = std::args(); a[2];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "hello world" ]]
 

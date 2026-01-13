@@ -1,0 +1,26 @@
+// Test script for std::args() function
+//
+// Usage:
+//     syntran args.syntran -- arg1 arg2 ...
+//
+// Examples:
+//     syntran args.syntran -- foo bar baz
+//     syntran args.syntran -- "hello world" test
+//
+// Arguments after `--` are passed to the script. Use quotes for args with spaces.
+
+let args = std::args();
+println("Number of arguments: ", size(args));
+
+if size(args) > 0
+{
+    println("Arguments:");
+    for arg in args
+    {
+        println("  ", arg);
+    }
+}
+else
+{
+    println("No arguments provided (pass args after `--`)");
+}

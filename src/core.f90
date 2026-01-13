@@ -26,10 +26,43 @@ module syntran__core_m
 
 	integer, parameter ::   &
 		syntran_major =  1, &
-		syntran_minor =  0, &
-		syntran_patch =  1
+		syntran_minor =  1, &
+		syntran_patch =  0
 
 	! TODO:
+	!  - claude tasks:
+	!    * fortran compile time optimization -- see if pain points like
+	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
+	!      + intr_fns.f90 now broken up
+	!      + eval, types, etc. might be splittable
+	!      + build.sh (cmake) uses parallel gnu make builds. fpm still builds
+	!        serially
+	!    * docs -- see several notes below
+	!    * bytecode-based evaluation
+	!    * git(hub) cleanup. no need to delete branches, but rename existing
+	!      branches (except for main and dev) to start with feature/ or
+	!      jeffirwin/, e.g. vec-slice -> feature/vec-slice
+	!  - module arrays don't work, structs probably don't work either
+	!    * scope is creeping well beyond the immediate need of avoiding std fn
+	!      clashes. maybe hold off on this
+	!    * module let statements are not evaluated, only parsed. could this
+	!      cause evaluation problems? maybe just handle it like includes
+	!  - what happens if you use the same module twice? same form both times or
+	!    mix qualified and unqualified?
+	!  - i like claude's "double_colon_token" name. i should change things like
+	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
+	!  - if you try to return something (e.g. i32) from a void/null fn, the
+	!    error says the fn should return "unknown" but it should say void (or
+	!    null?)
+	!  - "use module as alias;"
+	!    * potentially important for resolving name clashes when you're using
+	!      someone else's library, but you don't want to change the names they
+	!      chose
+	!  - document modules in readme, recommend over #include after it's in a
+	!    state where a few aoc tests can work with utils.syntran as a module
+	!  - minloc, maxloc, findloc std:: fns
+	!    * useful for aoc
+	!  - const.  e.g. `const N = 5` instead of `let N = 5`. then ban reassigning
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
 	!    compute usage
 	!    * gfortran 15 is now the default for Windows github actions
@@ -45,24 +78,13 @@ module syntran__core_m
 	!    * this would only work on linux, since windows can't overwrite a
 	!      running exe
 	!    * apparently it's possible on windows too.  til:  https://stackoverflow.com/a/459860/4347028
-	!  - post 1.0:
-	!    * need to think about namespaces, at least for std fns so i can add
-	!      intrinsic fns without breaking anyone's code who happened to already
-	!      define a fn with the same name
-	!      + example: define a `println` fn.  it won't parse
-	!      + note that you *are* allowed to define a `sum` fn because the
-	!        intrinsic sum fn is overloaded.  all of the actual intrinsic sums
-	!        are named like `0sum_i32` or `0sum_f64`
-	!        > could this be abused to add new secret fns starting with "0"
-	!          without breaking compat? seems like a bad idea
-	!        > it also seems bad that users can shadow define `sum` or any other
-	!          overloaded intrinsic
 	!  - enable plugging in to nvim linting.  doesn't seem hard from the way
 	!    that gfortran nvim linting works.  just need to add a cmd arg like
 	!    `--syntax-only` and print errors in 1 line per error, with filename,
 	!    line, and column indices
 	!  - test rocky 10 circa May 2025, that's when they're planning to release
 	!    it
+	!    * rocky 10 is out, but there's no docker image as of 2025-12-13
 	!  - appimage?  some kind of binary packaging improvement
 	!    * the current dependence on libquadmath.so (and sometimes
 	!      libgfortran.so) is not ideal, especially considering that rocky is
@@ -82,7 +104,6 @@ module syntran__core_m
 	!  - callbacks, fn pointers, i.e. passing one function as an argument to
 	!    another function
 	!    * this could be a big change to the type system
-	!  - minloc, maxloc, findloc fns
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
 	!    * just use `reshape` and call the fortran built-in.  no need for any
@@ -91,6 +112,7 @@ module syntran__core_m
 	!       are present, call fortran build-in with reshape to the appropriate
 	!       size, and then set the result data along with size/rank meta-data
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
+	!    * when? check blame for this comment. can't repro in 1.0.1
 	!  - mention syntran explorer in readme
 	!    * note it may not exist in ~6 months
 	!  - print improvements:
@@ -144,8 +166,6 @@ module syntran__core_m
 	!      + let str2 = r##" my raw str with "#quotes"# "##;
 	!      + number of hashes at start matches end
 	!      + any use for zero hashes?  r"raw str"
-	!  - size() fn should optionally not need a 2nd argument for dim. in this
-	!    case, return product of extents of all dims (useful especially for vecs)
 	!  - type() or typeof() fn to get type name as str?  could be useful for
 	!    debugging, but I don't want to encourage its use for actual program
 	!    logic
@@ -175,7 +195,8 @@ module syntran__core_m
 	!      + improved to_str() conversion with labels of struct name and member names
 	!  - jumping control flow:
 	!    * break and continue need documentation
-	!    * goto: useful to break nested loops? or add break with loop label
+	!    * goto: useful to break nested loops? or add break with loop label or
+	!      number like bash, e.g. `break 2`
 	!    * done:
 	!      > return, break, continue
 	!      > (sys) exit done
@@ -215,11 +236,6 @@ module syntran__core_m
 	!      hashing, utf, base64, and rng algorithms
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
-	!  - cmd args
-	!    * args would be useful for logo sample, e.g. image size and some
-	!      control color options
-	!    * pass after a ` -- `?
-	!    * related: environment variables
 	!  - array operations:
 	!    * done: element-wise add, sub, mul, div, pow, mod
 	!      + compound array assignment works but needs unit tests
@@ -279,6 +295,7 @@ module syntran__core_m
 	!      this way I don't need to add structs, multiple return vals, or out
 	!      args yet
 	!  - compound assignment: logical &=, |=, etc.
+	!    * maybe make &&= to avoid confusion with bitwise compound assignment &=
 	!    * +=, -=, *=, /=, %=, **= done
 	!  - ++, --
 	!  - tetration operator ***? ints only? just for fun
@@ -392,13 +409,13 @@ contains
 
 !===============================================================================
 
-function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tree)
+function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tree)
 
 	! TODO: take state struct instead of separate vars and fns members
 
 	! TODO: take structs arg (like existing fns arg)
 
-	character(len = *) :: str
+	character(len = *) :: str_
 
 	type(vars_t), intent(inout) :: vars
 
@@ -412,7 +429,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tre
 
 	!********
 
-	character(len = :), allocatable :: src_filel, fn_name
+	character(len = :), allocatable :: src_filel, fn_name, var_name
 
 	integer :: i, io, dummy, unit_
 
@@ -422,6 +439,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tre
 
 	type(fn_t) :: fn
 	type(fns_t) :: fns0
+	type(value_t) :: var_val
 
 	! This no longer seems to make a difference.  Previously, without `save`,
 	! gfortran crashes when this goes out of scope.  Maybe I need to work on a
@@ -435,7 +453,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tre
 	type(vars_t) :: vars0
 
 	if (debug > 0) print *, 'syntax_parse'
-	if (debug > 1) print *, 'str = ', str
+	if (debug > 1) print *, 'str_ = ', str_
 
 	!! "exp"
 	!print *, 'key = ', &
@@ -457,7 +475,7 @@ function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tre
 	contexts = new_context_vector()
 	unit_ = 0
 
-	parser = new_parser(str, src_filel, contexts, unit_)
+	parser = new_parser(str_, src_filel, contexts, unit_)
 	!print *, 'units = ', parser%tokens(:)%unit_
 
 	parser%repl = repll
@@ -702,6 +720,16 @@ function syntax_parse(str, vars, fns, src_file, allow_continue, repl) result(tre
 
 	end do
 	!print *, "done looking up fns"
+
+	! Initialize module variables in vars%vals with their types from the dict.
+	! This is needed because module let statements are not evaluated (only parsed).
+	do i = 1, parser%var_names%len_
+		var_name = parser%var_names%v(i)%s
+		call vars%search(var_name, dummy, io, var_val)
+		if (io == exit_success .and. dummy >= 1 .and. dummy <= size(vars%vals)) then
+			vars%vals(dummy) = var_val
+		end if
+	end do
 
 	!if (allocated(parser%structs)) then
 	!	! TODO: manually finalize recursively?

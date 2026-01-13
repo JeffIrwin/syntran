@@ -1,0 +1,403 @@
+
+!===============================================================================
+
+submodule (syntran__eval_m) syntran__eval_expr
+
+	implicit none
+
+!===============================================================================
+
+contains
+
+!===============================================================================
+
+recursive module subroutine eval_binary_expr(node, state, res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	integer :: larrtype, rarrtype
+
+	type(value_t) :: left, right
+
+	call syntax_eval(node%left , state, left )
+	call syntax_eval(node%right, state, right)
+
+	!print *, 'left  type = ', kind_name(left%type)
+	!print *, 'right type = ', kind_name(right%type)
+	!print *, "op kind    = ", kind_name(node%op%kind)
+
+	larrtype = unknown_type
+	rarrtype = unknown_type
+	if (left %type == array_type) larrtype = left %array%type
+	if (right%type == array_type) rarrtype = right%array%type
+
+	res%type = get_binary_op_kind(left%type, node%op%kind, right%type, &
+		larrtype, rarrtype)
+	select case (res%type)
+	case (bool_array_type, f32_array_type, f64_array_type, &
+		i32_array_type, i64_array_type, str_array_type)
+
+		res%type = array_type
+	end select
+
+	if (res%type == unknown_type) then
+		write(*,*) err_eval_binary_types(node%op%text)
+		call internal_error()
+	end if
+
+	!print *, 'op = ', node%op%text
+
+	select case (node%op%kind)
+	case (plus_token)
+		call add(left, right, res, node%op%text)
+
+	case (minus_token)
+		call subtract(left, right, res, node%op%text)
+
+	case (star_token)
+		call mul(left, right, res, node%op%text)
+
+	case (sstar_token)
+		call pow(left, right, res, node%op%text)
+
+	case (slash_token)
+		call div(left, right, res, node%op%text)
+
+	case (percent_token)
+		call mod_(left, right, res, node%op%text)
+
+	case (and_keyword)
+		call and_(left, right, res, node%op%text)
+
+	case (or_keyword)
+		call or_(left, right, res, node%op%text)
+
+	case (eequals_token)
+		call is_eq(left, right, res, node%op%text)
+
+	case (bang_equals_token)
+		call is_ne(left, right, res, node%op%text)
+
+	case (less_token)
+		call is_lt(left, right, res, node%op%text)
+
+	case (less_equals_token)
+		call is_le(left, right, res, node%op%text)
+
+	case (greater_token)
+		call is_gt(left, right, res, node%op%text)
+
+	case (greater_equals_token)
+		call is_ge(left, right, res, node%op%text)
+
+	case (lless_token)
+		call left_shift(left, right, res, node%op%text)
+
+	case (ggreater_token)
+		call right_shift(left, right, res, node%op%text)
+
+	case (caret_token)
+		call bit_xor(left, right, res, node%op%text)
+
+	case (pipe_token)
+		call bit_or(left, right, res, node%op%text)
+
+	case (amp_token)
+		call bit_and(left, right, res, node%op%text)
+
+	case default
+		write(*,*) err_eval_binary_op(node%op%text)
+		call internal_error()
+
+	end select
+
+end subroutine eval_binary_expr
+
+!===============================================================================
+
+recursive module subroutine eval_name_expr(node, state, res)
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	integer :: id, rank_res, idim_, idim_res, sub_kind, type_
+	integer(kind = 8) :: il, iu, i8, index_, diff
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+
+	type(i64_vector_t), allocatable :: asubs(:)
+	type(value_t) :: right, tmp
+
+	!print *, ""
+	!print *, "starting eval_name_expr()"
+	!print *, 'searching identifier ', node%identifier%text
+	!print *, "node is_loc = ", node%is_loc
+
+	id = node%id_index
+	if (node%is_loc) then
+		type_ = state%locs%vals(id)%type
+	else
+		type_ = state%vars%vals(id)%type
+	end if
+	!print *, "id = ", id
+	!print *, "type_ = ", kind_name(type_)
+
+	if (type_ == unknown_type) then
+		write(*,*) err_int_prefix//"unknown name expr type"
+		call internal_error()
+	end if
+
+	if (allocated(node%lsubscripts) .and. type_ == str_type) then
+		!print *, 'string subscript RHS name expr'
+
+		!print *, 'str type'
+		res%type = type_
+
+		select case (node%lsubscripts(1)%sub_kind)
+		case (scalar_sub)
+			i8 = subscript_eval(node, state)
+			!print *, 'i8 = ', i8
+
+			if (node%is_loc) then
+				res%sca%str%s = state%locs%vals(id)%sca%str%s(i8+1: i8+1)
+			else
+				res%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
+			end if
+
+		case (range_sub)
+
+			! TODO: str all_sub, step_sub
+
+			il = subscript_eval(node, state) + 1
+
+			! This feels inconsistent and not easy to extend to higher ranks
+			call syntax_eval(node%usubscripts(1), state, right)
+			iu = right%to_i64() + 1
+
+			!print *, ''
+			!print *, 'identifier ', node%identifier%text
+			!print *, 'il = ', il
+			!print *, 'iu = ', iu
+			!print *, 'str = ', state%vars%vals(id)%sca%str%s  ! debug broken for is_loc
+
+			! Not inclusive of upper bound
+			if (node%is_loc) then
+				res%sca%str%s = state%locs%vals(id)%sca%str%s(il: iu-1)
+			else
+				res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
+			end if
+
+		case default
+			write(*,*) err_int_prefix//'unexpected str subscript kind'//color_reset
+			call internal_error()
+		end select
+
+	else if (allocated(node%lsubscripts)) then
+
+		if (type_ /= array_type) then
+			write(*,*) err_int_prefix//'bad type, expected array'//color_reset
+			call internal_error()
+		end if
+
+		!print *, ""
+		!print *, "sub kind 1 = ", kind_name(node%lsubscripts(1)%sub_kind)
+		!print *, "rank = ", node%val%array%rank
+
+		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+			i8 = subscript_eval(node, state)
+
+			if (node%is_loc) then
+				call get_val(node, state%locs%vals(id), state, res, index_ = i8)
+			else
+				call get_val(node, state%vars%vals(id), state, res, index_ = i8)
+			end if
+
+		else
+
+			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+
+			!print *, "type = ", kind_name( node%val%array%type )
+
+			!print *, "type  = ", node%val%array%type
+			!print *, "rank  = ", node%val%array%rank
+			!print *, "size  = ", node%val%array%size
+			!print *, "len_  = ", node%val%array%len_
+			!print *, "cap   = ", node%val%array%cap
+
+			allocate(res%array)
+			res%type = array_type
+			res%array%kind = expl_array
+			res%array%type = node%val%array%type
+			res%array%rank = rank_res
+
+			allocate(res%array%size( rank_res ))
+			idim_res = 1
+			do idim_ = 1, size(lsubs)
+				sub_kind = node%lsubscripts(idim_)%sub_kind
+				select case (sub_kind)
+				case (step_sub, range_sub, all_sub)
+
+					diff = usubs(idim_) - lsubs(idim_)
+					res%array%size(idim_res) = divceil(diff, ssubs(idim_))
+					idim_res = idim_res + 1
+
+				case (arr_sub)
+					res%array%size(idim_res) = size(asubs(idim_)%v)
+					idim_res = idim_res + 1
+
+				case (scalar_sub)
+					! noop
+				case default
+					write(*,*) err_rt_prefix//"bad subscript kind `"// &
+						kind_name(sub_kind)//"`"//color_reset
+					call internal_error()
+				end select
+			end do
+			res%array%len_ = product(res%array%size)
+
+			!print *, "res len = ", res%array%len_
+			!print *, "lsubs = ", lsubs
+			!print *, "ssubs = ", ssubs
+			!print *, "usubs = ", usubs
+			!print *, "size  = ", res%array%size
+
+			call allocate_array(res, res%array%len_)
+
+			! Iterate through all subscripts in range and copy to result
+			! array
+			subs = lsubs
+			do i8 = 0, res%array%len_ - 1
+				!print *, 'subs = ', int(subs, 4)
+
+				if (node%is_loc) then
+					index_ = subscript_i32_eval(subs, state%locs%vals(id)%array)
+					call get_array_val(state%locs%vals(id)%array, index_, tmp)
+				else
+					index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
+					call get_array_val(state%vars%vals(id)%array, index_, tmp)
+				end if
+
+				call set_array_val(res%array, i8, tmp)
+				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+			end do
+		end if
+
+	else
+		!print *, "name expr without subscripts"
+		!print *, "id = ", id
+		!print *, "size(vals) = ", size(state%vars%vals)
+
+		if (node%is_loc) then
+			res = state%locs%vals(id)
+		else
+			res = state%vars%vals(id)
+		end if
+
+	end if
+
+end subroutine eval_name_expr
+
+!===============================================================================
+
+module subroutine eval_dot_expr(node, state, res)
+
+	! This is an RHS dot expr.  LHS dots are handled in eval_assignment_expr().
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	integer :: id
+
+	! This won't work for struct literal member access.  It only works for
+	! `identifier.member`
+
+	id = node%id_index
+	if (node%is_loc) then
+		call get_val(node, state%locs%vals(id), state, res)
+	else
+		!print *, "eval dot_expr"
+		!print *, "id_index = ", id
+		!print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
+
+		call get_val(node, state%vars%vals(id), state, res)
+	end if
+
+end subroutine eval_dot_expr
+
+!===============================================================================
+
+recursive module subroutine eval_unary_expr(node, state, res)
+
+	type(syntax_node_t), intent(in) :: node
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	type(value_t) :: right
+
+	call syntax_eval(node%right, state, right)
+	!print *, 'right = ', right
+
+	res%type = right%type
+
+	select case (node%op%kind)
+	case (plus_token)
+		res = right
+
+	case (minus_token)
+		call negate(right, res, node%op%text)
+
+	case (not_keyword)
+		call not_(right, res, node%op%text)
+
+	case (bang_token)
+		call bit_not(right, res, node%op%text)
+
+	case default
+		write(*,*) err_eval_unary_op(node%op%text)
+		call internal_error()
+	end select
+
+end subroutine eval_unary_expr
+
+!===============================================================================
+
+module subroutine promote_i32_i64(val)
+
+	! If val is i32 type, change it to i64 and copy the values
+	!
+	! TODO: consider refactoring with to_i64()? at least add internal error.
+	! to_i64() is a fn which returns a new val, whereas this is a subroutine
+	! that changes the type of a given value
+
+	type(value_t), intent(inout) :: val
+
+	if (val%type == i32_type) then
+		val%type = i64_type
+		val%sca%i64 = val%sca%i32
+	end if
+
+end subroutine promote_i32_i64
+
+!===============================================================================
+
+end submodule syntran__eval_expr
+
+!===============================================================================

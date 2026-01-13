@@ -3,7 +3,6 @@
 
 module syntran__lex_m
 
-	!use syntran__errors_m
 	use syntran__types_m
 	use syntran__utils_m
 
@@ -629,7 +628,7 @@ function lex(lexer) result(token)
 			return
 		end if
 
-		val   = new_literal_value(str_type, str = char_vec%v( 1: char_vec%len_ ))
+		val   = new_literal_value(str_type, str_ = char_vec%v( 1: char_vec%len_ ))
 		token = new_token(str_token, start, text, val)
 
 		token%unit_ = lexer%unit_
@@ -771,7 +770,12 @@ function lex(lexer) result(token)
 			token = new_token(rbracket_token, lexer%pos, lexer%current())
 
 		case (":")
-			token = new_token(colon_token, lexer%pos, lexer%current())
+			if (lexer%lookahead() == ":") then
+				lexer%pos = lexer%pos + 1
+				token = new_token(double_colon_token, lexer%pos, "::")
+			else
+				token = new_token(colon_token, lexer%pos, lexer%current())
+			end if
 
 		case (";")
 			token = new_token(semicolon_token, lexer%pos, lexer%current())

@@ -8,13 +8,7 @@ module syntran__parse_m
 	! so short that defining interfaces for them would add significantly more
 	! lines of code
 
-	!use syntran__errors_m
 	use syntran__lex_m
-
-	!! types and utils are used indirectly through lexer, so it doesn't matter
-	!! much if they're explicitly included here
-	!use syntran__types_m
-	!use syntran__utils_m
 
 	implicit none
 
@@ -46,6 +40,7 @@ module syntran__parse_m
 		type(fns_t) :: fns
 		integer :: num_fns = 0
 		type(string_vector_t) :: fn_names
+		type(string_vector_t) :: var_names  ! track module-level variable names
 
 		type(structs_t) :: structs
 		integer :: num_structs = 0
@@ -82,6 +77,7 @@ module syntran__parse_m
 				parse_expr_statement, &
 				parse_fn_declaration, &
 				parse_fn_call, &
+				parse_qualified_expr, &
 				parse_struct_declaration, &
 				parse_struct_instance, &
 				parse_for_statement, &
@@ -89,6 +85,7 @@ module syntran__parse_m
 				parse_return_statement, &
 				parse_break_statement, &
 				parse_continue_statement, &
+				parse_use_statement, &
 				parse_name_expr, &
 				parse_primary_expr, &
 				parse_size, &
@@ -120,10 +117,17 @@ module syntran__parse_m
 			type(syntax_node_t) :: decl
 		end function parse_fn_declaration
 
-		recursive module function parse_fn_call(parser) result(fn_call)
+		recursive module function parse_fn_call(parser, module_prefix, identifier) result(fn_call)
 			class(parser_t) :: parser
+			character(len = *), intent(in), optional :: module_prefix
+			type(syntax_token_t), intent(in), optional :: identifier
 			type(syntax_node_t) :: fn_call
 		end function parse_fn_call
+
+		recursive module function parse_qualified_expr(parser) result(expr)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: expr
+		end function parse_qualified_expr
 
 		module subroutine parse_type(parser, type_text, type)
 			class(parser_t) :: parser
@@ -192,6 +196,11 @@ module syntran__parse_m
 			type(syntax_node_t) :: statement
 		end function parse_continue_statement
 
+		module function parse_use_statement(parser) result(statement)
+			class(parser_t) :: parser
+			type(syntax_node_t) :: statement
+		end function parse_use_statement
+
 		recursive module function parse_for_statement(parser) result(statement)
 			class(parser_t) :: parser
 			type(syntax_node_t) :: statement
@@ -252,9 +261,9 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_misc.f90
 
-		module function tokens_str(parser) result(str)
+		module function tokens_str(parser) result(str_)
 			class(parser_t) :: parser
-			character(len = :), allocatable :: str
+			character(len = :), allocatable :: str_
 		end function tokens_str
 
 		module function match(parser, kind) result(token)
@@ -285,8 +294,8 @@ module syntran__parse_m
 			type(syntax_node_t) :: unit
 		end function parse_unit
 
-		recursive module function new_parser(str, src_file, contexts, unit_) result(parser)
-			character(len = *), intent(in) :: str, src_file
+		recursive module function new_parser(str_, src_file, contexts, unit_) result(parser)
+			character(len = *), intent(in) :: str_, src_file
 			type(text_context_vector_t) :: contexts
 			integer, intent(inout) :: unit_
 			type(parser_t) :: parser

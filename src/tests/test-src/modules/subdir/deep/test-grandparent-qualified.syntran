@@ -1,0 +1,7 @@
+// Test qualified import from grandparent directory
+use ../../mymath;
+
+let a = mymath::add(10, 20);
+let b = mymath::mul(5, 6);
+
+return a == 30 and b == 30;

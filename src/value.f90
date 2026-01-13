@@ -5,8 +5,6 @@ module syntran__value_m
 
 	use syntran__consts_m
 	use syntran__errors_m
-	!use syntran__types_m
-	!use syntran__utils_m
 
 	implicit none
 
@@ -258,8 +256,6 @@ recursive subroutine value_move(src, dst)
 	type(value_t), intent(out)   :: dst
 
 	!********
-
-	integer :: i
 
 	if (debug > 3) print *, 'starting value_move()'
 
