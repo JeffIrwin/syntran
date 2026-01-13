@@ -26,8 +26,8 @@ module syntran__core_m
 
 	integer, parameter ::   &
 		syntran_major =  1, &
-		syntran_minor =  0, &
-		syntran_patch =  1
+		syntran_minor =  1, &
+		syntran_patch =  0
 
 	! TODO:
 	!  - claude tasks:
@@ -35,9 +35,8 @@ module syntran__core_m
 	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
 	!      + intr_fns.f90 now broken up
 	!      + eval, types, etc. might be splittable
-	!      + it's better for parallel builds, but we don't actually have a
-	!        parallel build system. get cmake ninja generator working. afaik fpm
-	!        is not parallel
+	!      + build.sh (cmake) uses parallel gnu make builds. fpm still builds
+	!        serially
 	!    * docs -- see several notes below
 	!    * bytecode-based evaluation
 	!    * git(hub) cleanup. no need to delete branches, but rename existing

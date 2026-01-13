@@ -17,7 +17,7 @@ elif [[ $# -gt 0 ]]; then
 fi
 set -u
 
-## Uncomment to tell cmake to use ifort instead of gfortran (untested)
+## Uncomment to tell cmake to use ifort instead of gfortran
 #export SYNTRAN_INTEL=true
 
 unameOut="$(uname -s)"
@@ -67,7 +67,6 @@ fi
 
 #build=build
 build="build/$config"
-mkdir -p "$build"
 
 cmake -S . -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC
 cmake --build "$build" --config $config --parallel
