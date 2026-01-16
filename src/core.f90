@@ -33,8 +33,8 @@ module syntran__core_m
 	!  - claude tasks:
 	!    * fortran compile time optimization -- see if pain points like
 	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
-	!      + intr_fns.f90 now broken up
-	!      + eval, types, etc. might be splittable
+	!      + intr_fns.f90, eval.f90 now broken up
+	!      + types, etc. might be splittable
 	!      + build.sh (cmake) uses parallel gnu make builds. fpm still builds
 	!        serially
 	!    * docs -- see several notes below
