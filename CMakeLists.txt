@@ -129,6 +129,10 @@ set(LIB_SRC
 	${SRC_DIR}/parse_misc.f90
 	${SRC_DIR}/syntran.f90
 	${SRC_DIR}/types.f90
+	${SRC_DIR}/types_copy.f90
+	${SRC_DIR}/types_dict.f90
+	${SRC_DIR}/types_node.f90
+	${SRC_DIR}/types_ops.f90
 	${SRC_DIR}/utils.f90
 	${SRC_DIR}/value.f90
 )

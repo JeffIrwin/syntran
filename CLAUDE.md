@@ -62,6 +62,11 @@ The interpreter follows a classic lexer → parser → evaluator pipeline, imple
   - `eval_expr.f90` - Expression evaluation
   - `eval_fn.f90` - Function evaluation
 - `src/types.f90` - Fortran type definitions
+- `src/types_*.f90` - Types submodules:
+  - `types_copy.f90` - Deep copy procedures for types
+  - `types_dict.f90` - Dictionary/ternary tree operations
+  - `types_node.f90` - Syntax node/expression builders
+  - `types_ops.f90` - Type checking and operator utilities
 - `src/value.f90` - Runtime value representation
 - `src/errors.f90` - Syntran error messages
 - `src/intr_fns.f90` - Intrinsic (built-in) function interfaces

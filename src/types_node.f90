@@ -1,0 +1,325 @@
+
+!===============================================================================
+
+submodule (syntran__types_m) syntran__types_node
+
+	implicit none
+
+!===============================================================================
+
+contains
+
+!===============================================================================
+
+module function new_token(kind, pos, text, val) result(token)
+
+	integer :: kind, pos
+
+	character(len = *) :: text
+
+	type(value_t), optional :: val
+
+	type(syntax_token_t) :: token
+
+	token%kind = kind
+	token%pos  = pos
+	token%text = text
+
+	if (present(val)) token%val  = val
+
+end function new_token
+
+!===============================================================================
+
+module function new_syntax_node_vector() result(vector)
+
+	type(syntax_node_vector_t) :: vector
+
+	vector%len_ = 0
+	vector%cap = 2  ! I think a small default makes sense here
+
+	allocate(vector%v( vector%cap ))
+
+end function new_syntax_node_vector
+
+!===============================================================================
+
+module function new_syntax_token_vector() result(vector)
+
+	type(syntax_token_vector_t) :: vector
+
+	vector%len_ = 0
+	vector%cap = 2  ! I think a small default makes sense here
+
+	allocate(vector%v( vector%cap ))
+
+end function new_syntax_token_vector
+
+!===============================================================================
+
+module function new_literal_value(type, bool, i32, i64, f32, f64, str_) result(val)
+
+	integer, intent(in) :: type
+
+	integer(kind = 4), intent(in), optional :: i32
+	integer(kind = 8), intent(in), optional :: i64
+	real   (kind = 4), intent(in), optional :: f32
+	real   (kind = 8), intent(in), optional :: f64
+	logical          , intent(in), optional :: bool
+	character(len=*) , intent(in), optional :: str_
+
+	type(value_t) :: val
+
+	val%type = type
+	if (present(bool)) val%sca%bool  = bool
+	if (present(f32 )) val%sca%f32   = f32
+	if (present(f64 )) val%sca%f64   = f64
+	if (present(i32 )) val%sca%i32   = i32
+	if (present(i64 )) val%sca%i64   = i64
+	if (present(str_)) val%sca%str%s = str_
+
+end function new_literal_value
+
+!===============================================================================
+
+module function new_declaration_expr(identifier, op, right) result(expr)
+
+	! TODO: IMO this fn is overly abstracted.  It's only used once, so
+	! just paste it their and delete the fn.  That will make it easier to
+	! refactor and consolidate declaration_expr and assignment_expr parsing
+
+	type(syntax_token_t), intent(in) :: identifier, op
+	type(syntax_node_t) , intent(in) :: right
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	expr%kind = let_expr
+
+	allocate(expr%right)
+
+	expr%identifier = identifier
+
+	expr%op    = op
+	expr%right = right
+
+	! Pass the result value type up the tree for type checking in parent
+	expr%val = right%val
+
+	!expr%val%type = right%val%type
+	!if (expr%val%type == array_type) then
+	!	!print *, 'new_declaration_expr array_type'
+	!	allocate(expr%val%array)
+	!	expr%val%array = right%val%array
+	!end if
+
+end function new_declaration_expr
+
+!===============================================================================
+
+module function new_name_expr(identifier, val) result(expr)
+
+	type(syntax_token_t), intent(in) :: identifier
+	type(syntax_node_t) :: expr
+	type(value_t) :: val
+
+	expr%kind = name_expr
+	expr%identifier = identifier
+	expr%val = val
+
+	!if (expr%val%type == array_type) then
+	!	!if (.not. allocated(expr%val%array)) allocate(expr%val%array)
+	!	allocate(expr%val%array)
+	!	!expr%val%array = right%val%array
+	!	expr%val%array = val%array
+	!end if
+
+end function new_name_expr
+
+!===============================================================================
+
+module function new_binary_expr(left, op, right) result(expr)
+
+	type(syntax_node_t) , intent(in) :: left, right
+	type(syntax_token_t), intent(in) :: op
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	integer :: larrtype, rarrtype, type_, ltype, rtype
+
+	if (debug > 1) print *, 'new_binary_expr'
+	if (debug > 1) print *, 'left  = ', left %str()
+	if (debug > 1) print *, 'op    = ', op%text
+	if (debug > 1) print *, 'right = ', right%str()
+
+	expr%kind = binary_expr
+
+	allocate(expr%left)
+	allocate(expr%right)
+
+	expr%left  = left
+	expr%op    = op
+	expr%right = right
+
+	!print *, 'left type  = ', kind_name(left%val%type)
+
+	larrtype = unknown_type
+	rarrtype = unknown_type
+	if (left %val%type == array_type) larrtype = left %val%array%type
+	if (right%val%type == array_type) rarrtype = right%val%array%type
+
+	!print *, 'larrtype = ', kind_name(larrtype)
+
+	ltype = left%val%type
+	rtype = right%val%type
+
+	! Pass the result value type up the tree for type checking in parent
+	type_ = get_binary_op_kind(ltype, op%kind, rtype, &
+		larrtype, rarrtype)
+	!print *, 'type_ = ', kind_name(type_)
+
+	if (any(type_ == [bool_array_type, f32_array_type, f64_array_type, &
+		i32_array_type, i64_array_type, str_array_type])) then
+
+		allocate(expr%val%array)
+
+		expr%val%array%type = array_to_scalar_type(type_)
+		if (left%val%type == array_type) then
+			expr%val%array%rank = left %val%array%rank
+		else
+			expr%val%array%rank = right%val%array%rank
+		end if
+
+		expr%val%type = array_type
+
+	! TODO: other array sub types.  Maybe make a mold_val() helper fn similar to
+	! mold() (for arrays)
+
+	else
+		expr%val%type = type_
+
+	end if
+
+	! TODO: array subtype if subscripted?  I think parse_primary_expr should
+	! already set the subtype when subscripts are present
+
+	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
+	if (debug > 1) print *, 'done new_binary_expr'
+
+end function new_binary_expr
+
+!===============================================================================
+
+module function new_unary_expr(op, right) result(expr)
+
+	type(syntax_node_t) , intent(in) :: right
+	type(syntax_token_t), intent(in) :: op
+
+	type(syntax_node_t) :: expr
+
+	!********
+
+	if (debug > 1) print *, 'new_unary_expr'
+
+	expr%kind = unary_expr
+
+	allocate(expr%right)
+
+	expr%op    = op
+	expr%right = right
+
+	! Pass the result value type up the tree for type checking in parent.  IIRC
+	! all unary operators result in the same type as their operand, hence there
+	! is a get_binary_op_kind() fn but no get_unary_op_kind() fn
+
+	expr%val = right%val
+	!expr%val%type = right%val%type
+
+	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
+	if (debug > 1) print *, 'done new_unary_expr'
+
+end function new_unary_expr
+
+!===============================================================================
+
+module function new_bool(bool) result(expr)
+
+	logical, intent(in) :: bool
+	type(syntax_node_t) :: expr
+
+	! The expression node is a generic literal expression, while its child val
+	! member indicates the specific type (e.g. bool_type or i32_type)
+	expr%kind = literal_expr
+	expr%val = new_literal_value(bool_type, bool = bool)
+
+end function new_bool
+
+!********
+
+module function new_f32(f32) result(expr)
+
+	real(kind = 4), intent(in) :: f32
+	type(syntax_node_t) :: expr
+
+	expr%kind = literal_expr
+	expr%val  = new_literal_value(f32_type, f32 = f32)
+
+end function new_f32
+
+!********
+
+module function new_f64(f64) result(expr)
+
+	real(kind = 8), intent(in) :: f64
+	type(syntax_node_t) :: expr
+
+	expr%kind = literal_expr
+	expr%val  = new_literal_value(f64_type, f64 = f64)
+
+end function new_f64
+
+!********
+
+module function new_i32(i32) result(expr)
+
+	integer(kind = 4), intent(in) :: i32
+	type(syntax_node_t) :: expr
+
+	expr%kind = literal_expr
+	expr%val  = new_literal_value(i32_type, i32 = i32)
+
+end function new_i32
+
+!********
+
+module function new_i64(i64) result(expr)
+
+	integer(kind = 8), intent(in) :: i64
+	type(syntax_node_t) :: expr
+
+	expr%kind = literal_expr
+	expr%val  = new_literal_value(i64_type, i64 = i64)
+
+end function new_i64
+
+!********
+
+module function new_str(str_) result(expr)
+
+	character(len = *), intent(in) :: str_
+	type(syntax_node_t) :: expr
+
+	expr%kind = literal_expr
+	expr%val  = new_literal_value(str_type, str_ = str_)
+
+end function new_str
+
+!===============================================================================
+
+end submodule syntran__types_node
+
+!===============================================================================
+

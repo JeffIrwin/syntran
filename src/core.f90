@@ -31,12 +31,19 @@ module syntran__core_m
 
 	! TODO:
 	!  - claude tasks:
+	!    * update CLAUDE.md to recommend cmake as primary build tool. cmake
+	!      (driving gnu make) is parallel but fpm is not. might need to update
+	!      test.sh is well and/or make test-long.sh as opposed to unit tests,
+	!      add debug/release option, etc.
 	!    * fortran compile time optimization -- see if pain points like
 	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
-	!      + intr_fns.f90, eval.f90 now broken up
-	!      + types, etc. might be splittable
+	!      + intr_fns.f90, eval.f90, types.f90 now broken up
+	!      + anything else?
 	!      + build.sh (cmake) uses parallel gnu make builds. fpm still builds
 	!        serially
+	!      + ninja takes just as long as gnu make, but apparently it has
+	!        profiling output options. maybe try that just to find the
+	!        bottlenecks
 	!    * docs -- see several notes below
 	!    * bytecode-based evaluation
 	!    * git(hub) cleanup. no need to delete branches, but rename existing
