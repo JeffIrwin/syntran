@@ -30,6 +30,8 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - check for indirect recursive `use` (and #include). self use is checked
+	!    currently, but not A use B and B use A for example afaik
 	!  - module arrays don't work, structs probably don't work either
 	!    * wip
 	!    * hyphens in module names are allowed for globbed import only
@@ -731,8 +733,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	! parser%vars%dicts.  Allocate a flat array for efficient evaluation without
 	! dictionary lookups.  Indices in the array are already saved in each node's
 	! id_index member
-
-	!print *, 'parser%num_vars = ', parser%num_vars
 	if (allocated(vars%vals)) deallocate(vars%vals)
 	allocate(vars%vals( parser%num_vars ))
 

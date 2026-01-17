@@ -261,18 +261,19 @@ module function parse_use_statement(parser) result(statement)
 	! to avoid copying previously imported module functions which would cause
 	! redeclaration errors in pass 1.
 	call declare_intr_fns(mod_parser%fns)
-	mod_parser%num_fns = mod_parser%fns%num_intr_fns
 
-	! Share variable numbering with parent parser. Module variables will get
-	! indices continuing from parent's count, avoiding the need for remapping.
-	! This is similar to how #include works.
+	! Share variable AND function numbering with parent parser. Module variables
+	! and functions will get indices continuing from parent's count, avoiding
+	! the need for remapping. This is similar to how #include works.
 	mod_parser%num_vars = parser%num_vars
+	mod_parser%num_fns = parser%num_fns
 
 	! Parse the module
 	mod_unit = mod_parser%parse_unit()
 
-	! Update parent's variable count to include module variables
+	! Update parent's variable and function counts to include module definitions
 	parser%num_vars = mod_parser%num_vars
+	parser%num_fns = mod_parser%num_fns
 
 	! Check for parsing errors in the module (only in first pass)
 	if (parser%ipass == 0 .and. mod_parser%diagnostics%len_ > 0) then
@@ -320,9 +321,10 @@ module function parse_use_statement(parser) result(statement)
 			end if
 		end if
 
-		! Insert into current parser with new id_index
-		parser%num_fns = parser%num_fns + 1
-		call parser%fns%insert(insert_name, fn, parser%num_fns, io)
+		! Insert into current parser with the SAME id_index from module parser.
+		! This is critical: function calls inside module code have id_indices
+		! that were assigned during module parsing, so we must preserve them.
+		call parser%fns%insert(insert_name, fn, io)
 
 		! Only push to fn_names in the first pass (like parse_fn_declaration)
 		if (parser%ipass == 0) call parser%fn_names%push(insert_name)

@@ -273,14 +273,21 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		if (parser%is_loc) then
 			call parser%locs%search(identifier%text, expr%id_index, search_io, expr%val)
-			!print *, "locs io = ", search_io
+			if (trim(identifier%text) == "filename") then
+				print *, "PARSEDEBUG: `filename` locs search io=", search_io, " id=", expr%id_index
+			end if
 		end if
 
 		if (parser%is_loc .and. search_io == 0) then
 			expr%is_loc = .true.
-			!print *, "loc type = ", kind_name(expr%val%type)
+			if (trim(identifier%text) == "filename") then
+				print *, "PARSEDEBUG: `filename` found in LOCS, is_loc=T id=", expr%id_index
+			end if
 		else
 			call parser%vars%search(identifier%text, expr%id_index, search_io, expr%val)
+			if (trim(identifier%text) == "filename") then
+				print *, "PARSEDEBUG: `filename` vars search io=", search_io, " id=", expr%id_index
+			end if
 		end if
 
 		call parser%parse_subscripts(expr)
@@ -684,19 +691,14 @@ recursive module function parse_name_expr(parser) result(expr)
 
 	if (parser%is_loc) then
 		call parser%locs%search(identifier%text, id_index, io, var)
-		!print *, "locs io = ", io
 	end if
 
 	if (parser%is_loc .and. io == 0) then
-	
 		expr = new_name_expr(identifier, var)
 		expr%id_index = id_index
 		expr%is_loc = .true.
-
 	else
 		call parser%vars%search(identifier%text, id_index, io, var)
-		!print *, "vars io = ", io
-
 		expr = new_name_expr(identifier, var)
 		expr%id_index = id_index
 		expr%is_loc = .false.
