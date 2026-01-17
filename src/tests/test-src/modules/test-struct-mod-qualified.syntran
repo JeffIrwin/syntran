@@ -13,4 +13,14 @@ let y_val = p1.y;
 let r1 = shapes::Rectangle{width = 3, height = 4};
 let area = r1.width * r1.height;
 
-return x_val == 5 and y_val == 7 and area == 12;
+// Test function that returns the exported struct (qualified call)
+let p2 = shapes::make_point(10, 20);
+
+// Test function that takes the exported struct as parameter
+let sum1 = shapes::point_sum(p1);
+let sum2 = shapes::point_sum(p2);
+let rect_area = shapes::rect_area(r1);
+
+return x_val == 5 and y_val == 7 and area == 12 and
+       p2.x == 10 and p2.y == 20 and
+       sum1 == 12 and sum2 == 30 and rect_area == 12;

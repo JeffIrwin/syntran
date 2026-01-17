@@ -299,6 +299,10 @@ module function parse_use_statement(parser) result(statement)
 			! Replace "/" with "::" in module_name for qualified prefix
 			qualified_prefix = replace_all(module_name, "/", "::")
 			insert_name = qualified_prefix // "::" // fn_name
+
+			! Update struct_name references in return type and parameters
+			! to use qualified names
+			call qualify_fn_struct_names(fn, qualified_prefix)
 		else
 			insert_name = fn_name
 
@@ -377,6 +381,56 @@ module function parse_use_statement(parser) result(statement)
 	statement%member = mod_unit
 
 end function parse_use_statement
+
+!===============================================================================
+
+subroutine qualify_fn_struct_names(fn, prefix)
+
+	! Update struct_name references in a function's return type and parameters
+	! to use qualified names when importing from a module
+
+	type(fn_t), intent(inout) :: fn
+	character(len = *), intent(in) :: prefix
+
+	integer :: j
+
+	! Qualify return type struct_name
+	call qualify_value_struct_name(fn%type, prefix)
+
+	! Qualify parameter struct_names
+	if (allocated(fn%params)) then
+		do j = 1, size(fn%params)
+			call qualify_value_struct_name(fn%params(j), prefix)
+		end do
+	end if
+
+end subroutine qualify_fn_struct_names
+
+!===============================================================================
+
+subroutine qualify_value_struct_name(val, prefix)
+
+	! Update struct_name in a value_t to use qualified name
+
+	type(value_t), intent(inout) :: val
+	character(len = *), intent(in) :: prefix
+
+	if (val%type == struct_type) then
+		if (allocated(val%struct_name)) then
+			val%struct_name = prefix // "::" // val%struct_name
+		end if
+	else if (val%type == array_type) then
+		! Handle arrays of structs
+		if (allocated(val%array)) then
+			if (val%array%type == struct_type) then
+				if (allocated(val%struct_name)) then
+					val%struct_name = prefix // "::" // val%struct_name
+				end if
+			end if
+		end if
+	end if
+
+end subroutine qualify_value_struct_name
 
 !===============================================================================
 
