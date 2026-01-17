@@ -1,5 +1,5 @@
 
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.13)
 
 # TODO: use FC env var or -D cmake arg to define this consistently on all
 # platforms
@@ -18,12 +18,7 @@ set(PROJECT syntran)
 
 project(${PROJECT} Fortran)
 
-if(WINDOWS)
-
-	# TODO: test on actual Windows or remove if not needed for realpath/
-	# fullpath.  Either way, get github actions building.  This branch seems not
-	# to be triggered in msys, need bare metal to test
-
+if(WIN32 OR CMAKE_GENERATOR MATCHES "MSYS" OR CMAKE_GENERATOR MATCHES "MinGW")
 	message("defining _WIN32 in cmake")
 	add_compile_definitions(_WIN32)
 else()
@@ -31,63 +26,48 @@ else()
 endif()
 
 if(DEFINED ENV{SYNTRAN_INTEL})
-	set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC -fpp")
+	add_compile_options(-W1 -qopenmp -qmkl -fPIC -fpp)
 	add_compile_definitions(SYNTRAN_INTEL)
 else()
 
-	set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp -cpp")
+	add_compile_options(-Wall -Wextra -fopenmp -cpp)
 
 	# Why would you warn about tabs in free-form Fortran?
-	add_compile_options("-Wno-tabs")
+	add_compile_options(-Wno-tabs)
 
 	# More false alarms than anything
-	add_compile_options("-Wno-maybe-uninitialized")
+	add_compile_options(-Wno-maybe-uninitialized)
 
 	# I need to compare reals because syntran users need to be able to compare
 	# reals if they want to
-	add_compile_options("-Wno-compare-reals")
+	add_compile_options(-Wno-compare-reals)
 
 	# Suppress preprocessor warnings about apostrophes in comments (e.g. "There's")
-	add_compile_options("-Wno-cpp")
-	add_compile_options("-Wp,-w")
+	add_compile_options(-Wno-cpp "-Wp,-w")
 
 endif()
 #add_compile_options("-J ${CMAKE_CURRENT_SOURCE_DIR}/build/")
 
-set(CMAKE_Fortran_FLAGS_DEBUG "-pedantic -fbounds-check -fbacktrace")
-set(CMAKE_Fortran_FLAGS_RELEASE "-O3")
-
 message("")
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 	message("Debug")
-	set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${CMAKE_Fortran_FLAGS_DEBUG}")
+	add_compile_options(-pedantic -fbounds-check -fbacktrace)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	message("Release")
-	set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${CMAKE_Fortran_FLAGS_RELEASE}")
+	add_compile_options(-O3)
 else()
 	message("Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
 message("CMAKE_Fortran_COMPILER = ${CMAKE_Fortran_COMPILER}")
-message("CMAKE_Fortran_FLAGS = ${CMAKE_Fortran_FLAGS}")
 message("")
 
 if(APPLE)
-
-	set(CMAKE_EXE_LINKER_FLAGS "-openmp")
-
+	add_link_options(-openmp)
+elseif(DEFINED ENV{SYNTRAN_INTEL})
+	add_link_options(-fopenmp -qmkl)
 else()
-
-	if(DEFINED ENV{SYNTRAN_INTEL})
-		set(CMAKE_EXE_LINKER_FLAGS "-fopenmp -qmkl")
-	else()
-		set(CMAKE_EXE_LINKER_FLAGS "-fopenmp")
-	endif()
-
+	add_link_options(-fopenmp)
 endif()
-
-message("")
-message("CMAKE_EXE_LINKER_FLAGS = ${CMAKE_EXE_LINKER_FLAGS}")
-message("")
 
 set(SRC_DIR "src")
 
