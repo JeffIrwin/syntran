@@ -843,6 +843,7 @@ module function parse_struct_declaration(parser) result(decl)
 	!print *, "inserting identifier ", identifier%text, " into parser structs"
 	call parser%structs%insert( &
 		identifier%text, struct, decl%id_index, io, overwrite = overwrite)
+	if (parser%ipass == 0) call parser%struct_names%push(identifier%text)
 	!print *, "io = ", io
 	if (io /= 0) then
 		span = new_span(identifier%pos, len(identifier%text))

@@ -284,6 +284,38 @@ end function get_keyword_kind
 
 !===============================================================================
 
+module logical function is_identifier_or_keyword(kind)
+
+	! Check if a token kind is an identifier or a keyword. This is used when
+	! parsing module names in `use` statements, where keywords like `struct` can
+	! be part of a hyphenated module name (e.g., `use struct-mod;`)
+
+	integer, intent(in) :: kind
+
+	is_identifier_or_keyword = kind == identifier_token .or. &
+		kind == true_keyword .or. &
+		kind == false_keyword .or. &
+		kind == not_keyword .or. &
+		kind == and_keyword .or. &
+		kind == or_keyword .or. &
+		kind == let_keyword .or. &
+		kind == if_keyword .or. &
+		kind == else_keyword .or. &
+		kind == for_keyword .or. &
+		kind == in_keyword .or. &
+		kind == while_keyword .or. &
+		kind == fn_keyword .or. &
+		kind == struct_keyword .or. &
+		kind == include_keyword .or. &
+		kind == return_keyword .or. &
+		kind == break_keyword .or. &
+		kind == continue_keyword .or. &
+		kind == use_keyword
+
+end function is_identifier_or_keyword
+
+!===============================================================================
+
 module logical function is_assignment_op(op)
 
 	! Is the operator some type of assignment operator, either regular or

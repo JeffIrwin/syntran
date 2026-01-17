@@ -126,7 +126,7 @@ module function parse_use_statement(parser) result(statement)
 	!********
 	character(len = :), allocatable :: module_name, import_name, module_path
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
-	character(len = :), allocatable :: insert_name, var_name
+	character(len = :), allocatable :: insert_name, var_name, struct_name
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy
 	type(text_span_t) :: span
@@ -135,6 +135,7 @@ module function parse_use_statement(parser) result(statement)
 	type(text_context_vector_t) :: mod_contexts
 	type(fn_t) :: fn
 	type(value_t) :: var_val
+	type(struct_t) :: struct_val
 	integer :: i, io, iostat, mod_unit_, id_index
 	logical :: qualified_import
 	character(len = :), allocatable :: qualified_prefix
@@ -162,15 +163,21 @@ module function parse_use_statement(parser) result(statement)
 		module_path = module_path // "./"
 	end if
 
-	mod_identifier = parser%match(identifier_token)
+	! Match identifier or keyword as module name. Keywords like `struct` can
+	! appear as module names (e.g., `use struct-mod;`)
+	if (is_identifier_or_keyword(parser%current_kind())) then
+		mod_identifier = parser%next()
+	else
+		mod_identifier = parser%match(identifier_token)
+	end if
 	module_name = mod_identifier%text
 	module_path = module_path // module_name
 
 	! Handle hyphens in module names (e.g., `use array-mod;`)
 	do while (parser%current_kind() == minus_token .and. &
-	          parser%peek_kind(1) == identifier_token)
+	          is_identifier_or_keyword(parser%peek_kind(1)))
 		dummy = parser%match(minus_token)
-		name_identifier = parser%match(identifier_token)
+		name_identifier = parser%next()
 		module_name = module_name // "-" // name_identifier%text
 		module_path = module_path // "-" // name_identifier%text
 	end do
@@ -178,7 +185,11 @@ module function parse_use_statement(parser) result(statement)
 	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
 	do while (parser%current_kind() == slash_token)
 		dummy = parser%match(slash_token)
-		name_identifier = parser%match(identifier_token)
+		if (is_identifier_or_keyword(parser%current_kind())) then
+			name_identifier = parser%next()
+		else
+			name_identifier = parser%match(identifier_token)
+		end if
 		module_name = module_name // "/" // name_identifier%text
 		module_path = module_path // "/" // name_identifier%text
 	end do
@@ -333,6 +344,28 @@ module function parse_use_statement(parser) result(statement)
 		! Insert with same id_index (no remapping needed)
 		call parser%vars%insert(insert_name, var_val, id_index, io)
 		if (parser%ipass == 0) call parser%var_names%push(insert_name)
+	end do
+
+	! Copy parsed module structs to current parser.
+	do i = 1, mod_parser%struct_names%len_
+		struct_name = mod_parser%struct_names%v(i)%s
+
+		! Look up the struct in the module parser
+		call mod_parser%structs%search(struct_name, id_index, iostat, struct_val)
+		if (iostat /= exit_success) cycle
+
+		! Determine insert name (qualified or unqualified)
+		if (qualified_import) then
+			qualified_prefix = replace_all(module_name, "/", "::")
+			insert_name = qualified_prefix // "::" // struct_name
+		else
+			insert_name = struct_name
+		end if
+
+		! Insert struct into current parser
+		parser%num_structs = parser%num_structs + 1
+		call parser%structs%insert(insert_name, struct_val, parser%num_structs, io)
+		if (parser%ipass == 0) call parser%struct_names%push(insert_name)
 	end do
 
 	! Store the module's translation unit for later evaluation. This ensures
