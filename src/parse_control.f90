@@ -166,6 +166,15 @@ module function parse_use_statement(parser) result(statement)
 	module_name = mod_identifier%text
 	module_path = module_path // module_name
 
+	! Handle hyphens in module names (e.g., `use array-mod;`)
+	do while (parser%current_kind() == minus_token .and. &
+	          parser%peek_kind(1) == identifier_token)
+		dummy = parser%match(minus_token)
+		name_identifier = parser%match(identifier_token)
+		module_name = module_name // "-" // name_identifier%text
+		module_path = module_path // "-" // name_identifier%text
+	end do
+
 	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
 	do while (parser%current_kind() == slash_token)
 		dummy = parser%match(slash_token)
@@ -211,6 +220,14 @@ module function parse_use_statement(parser) result(statement)
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
 			err_mod_404(parser%context(), span, mod_filename))
+		return
+	end if
+
+	! Check for self-import (circular dependency)
+	if (mod_filename == parser%contexts%v(parser%current_unit())%src_file) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_prefix // "module `" // module_name // "` cannot import itself" // color_reset)
 		return
 	end if
 
