@@ -33,6 +33,9 @@ module syntran__core_m
 	!  - module arrays don't work, structs probably don't work either
 	!    * wip
 	!    * hyphens in module names are allowed for globbed import only
+	!    * rust does not allow hyphens. maybe we should revert and ban them
+	!    * ban "std" as a user-defined module
+	!    * rust bans keywords as module names. revert and ban?
 	!    * any other special characters need handling? spaces should be banned
 	!      but check for a helpful error message at least
 	!    * "use my-mod as alias" could be a good workaround for qualified
@@ -41,6 +44,7 @@ module syntran__core_m
 	!    * potentially important for resolving name clashes when you're using
 	!      someone else's library, but you don't want to change the names they
 	!      chose
+	!  - check every execution path of a fn returns
 	!  - claude tasks:
 	!    * update CLAUDE.md to recommend cmake as primary build tool. cmake
 	!      (driving gnu make) is parallel but fpm is not. might need to update

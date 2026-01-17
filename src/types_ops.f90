@@ -701,6 +701,13 @@ recursive module integer function get_binary_op_kind( &
 	integer, intent(in) :: left, op, right
 	integer, intent(in) :: left_arr, right_arr
 
+	! Propagate unknown_type to prevent cascading errors (matches
+	! is_binary_op_allowed behavior)
+	if (left == unknown_type .or. right == unknown_type) then
+		kind_ = unknown_type
+		return
+	end if
+
 	select case (op)
 	case ( &
 			eequals_token, bang_equals_token, less_token, less_equals_token, &

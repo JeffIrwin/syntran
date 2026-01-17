@@ -126,6 +126,15 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 	call resolve_overload(args, fn_call, has_rank)
 	if (has_rank) rank = fn_call%val%array%rank
 
+	! If any argument has unknown_type, return early to prevent cascading errors.
+	! The actual error (e.g. undefined function) was already pushed earlier.
+	do i = 1, args%len_
+		if (args%v(i)%val%type == unknown_type) then
+			fn_call%val%type = unknown_type
+			return
+		end if
+	end do
+
 	! Lookup by fn_call%identifier%text (e.g. "0min_i32"), but log
 	! diagnostics based on identifier_%text (e.g. "min")
 	!
@@ -339,7 +348,7 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 
 		is_ok = .true.
 		is_ok = is_ok .and. types_match(param_val, args%v(i)%val) == TYPE_MATCH
-		is_ok = is_ok .or. (parser%ipass == 0 .and. args%v(i)%val%type == unknown_type)
+		is_ok = is_ok .or. args%v(i)%val%type == unknown_type
 
 		if (.not. is_ok) then
 
