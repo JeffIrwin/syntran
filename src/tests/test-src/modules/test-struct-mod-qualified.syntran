@@ -1,0 +1,16 @@
+// Test qualified struct instantiation from module (module::Struct{...} syntax)
+
+use shapes;
+
+// Test qualified struct instantiation
+let p1 = shapes::Point{x = 5, y = 7};
+
+// Access members
+let x_val = p1.x;
+let y_val = p1.y;
+
+// Test Rectangle struct too
+let r1 = shapes::Rectangle{width = 3, height = 4};
+let area = r1.width * r1.height;
+
+return x_val == 5 and y_val == 7 and area == 12;

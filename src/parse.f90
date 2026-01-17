@@ -143,8 +143,9 @@ module syntran__parse_m
 			type(syntax_node_t) :: decl
 		end function parse_struct_declaration
 
-		recursive module function parse_struct_instance(parser) result(instance)
+		recursive module function parse_struct_instance(parser, struct_name) result(instance)
 			class(parser_t) :: parser
+			character(len = *), intent(in), optional :: struct_name
 			type(syntax_node_t) :: instance
 		end function parse_struct_instance
 
