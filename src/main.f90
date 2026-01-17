@@ -28,10 +28,6 @@ program main
 	! TODO: move into settings constructor?
 	maxerr = args%maxerr
 
-	! TODO: add a chdir cmd arg to pass to syntran_interpret_file(), for
-	! convenience of debugging AOC solutions which need to chdir to load their
-	! input files
-
 	if (args%interactive) then
 		! "Interactive" keeps running in the REPL with the same vars and fns
 		! workspace after running a startup file
@@ -43,7 +39,7 @@ program main
 	else if (args%syntran_file_arg) then
 		! Interpret a file and exit
 		res = syntran_interpret_file(args%syntran_file, quiet_info = args%quiet, &
-			script_args = args%script_args)
+			chdir_ = args%chdir, script_args = args%script_args)
 		if (.not. args%quiet) write(*,*) '    '//res
 
 	else if (args%command_arg) then
