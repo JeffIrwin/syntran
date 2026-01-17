@@ -47,6 +47,10 @@ else()
 	# reals if they want to
 	add_compile_options("-Wno-compare-reals")
 
+	# Suppress preprocessor warnings about apostrophes in comments (e.g. "There's")
+	add_compile_options("-Wno-cpp")
+	add_compile_options("-Wp,-w")
+
 endif()
 #add_compile_options("-J ${CMAKE_CURRENT_SOURCE_DIR}/build/")
 

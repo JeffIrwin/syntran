@@ -43,7 +43,46 @@ module syntran__core_m
 	!        serially
 	!      + ninja takes just as long as gnu make, but apparently it has
 	!        profiling output options. maybe try that just to find the
-	!        bottlenecks
+	!        bottlenecks:
+	!
+	!        ❯ check build/Release/.ninja_log. which files take the longest to
+	!          compile?
+	!        ● Based on the ninja log, here are the files that take the longest
+	!          to compile (duration = end_time - start_time in milliseconds):
+	!          ┌────────────────────────┬──────────┐
+	!          │          File          │ Duration │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/core.f90           │ 95.6 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/parse_misc.f90     │ 75.3 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/parse_control.f90  │ 73.2 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/lex.f90            │ 60.3 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/parse_fn.f90       │ 50.2 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/intr_fns_trig.f90  │ 39.7 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/parse_expr.f90     │ 31.2 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/parse_array.f90    │ 29.1 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/intr_fns_array.f90 │ 25.7 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/intr_fns_math.f90  │ 22.5 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/intr_fns_io.f90    │ 18.8 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/types_copy.f90     │ 12.4 s   │
+	!          ├────────────────────────┼──────────┤
+	!          │ src/types.f90          │ 11.5 s   │
+	!          └────────────────────────┴──────────┘
+	!          The parser submodules (parse_*.f90) and core.f90 dominate
+	!          compilation time. The intrinsic function files (intr_fns_*.f90)
+	!          are also quite slow, likely due to heavy use of
+	!          generated/templated code for multiple type combinations.
+	!
 	!    * docs -- see several notes below
 	!    * bytecode-based evaluation
 	!    * git(hub) cleanup. no need to delete branches, but rename existing
