@@ -1,0 +1,24 @@
+// Test module array variable with computed range expression
+
+use array-mod::*;
+
+// Test that array was properly initialized with [0: 10]
+let ok1 = size(arr, 0) == 10;
+
+// Test array elements
+let ok2 = arr[0] == 0;
+let ok3 = arr[5] == 5;
+let ok4 = arr[9] == 9;
+
+// Test function that uses the module array
+let ok5 = get_sum() == 45;  // 0+1+2+3+4+5+6+7+8+9 = 45
+
+// Test element access via function
+let ok6 = get_element(3) == 3;
+
+// Test array modification
+arr[0] = 100;
+let ok7 = arr[0] == 100;
+let ok8 = get_element(0) == 100;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8;

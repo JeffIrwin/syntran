@@ -4485,6 +4485,7 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'subdir/test-parent-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'subdir/deep/test-grandparent.syntran', quiet) == 'true', &
 			interpret_file(path//'subdir/deep/test-grandparent-qualified.syntran', quiet) == 'true', &
+			interpret_file(path//'test-modvar-array.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
