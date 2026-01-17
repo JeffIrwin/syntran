@@ -335,6 +335,14 @@ module function parse_use_statement(parser) result(statement)
 		if (parser%ipass == 0) call parser%var_names%push(insert_name)
 	end do
 
+	! Store the module's translation unit for later evaluation. This ensures
+	! that module-level statements (like `let a = [0: 10];`) are evaluated,
+	! not just parsed.
+	statement%kind = use_statement
+	statement%is_empty = .false.
+	allocate(statement%member)
+	statement%member = mod_unit
+
 end function parse_use_statement
 
 !===============================================================================

@@ -767,16 +767,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	end do
 	!print *, "done looking up fns"
 
-	! Initialize module variables in vars%vals with their types from the dict.
-	! This is needed because module let statements are not evaluated (only parsed).
-	do i = 1, parser%var_names%len_
-		var_name = parser%var_names%v(i)%s
-		call vars%search(var_name, dummy, io, var_val)
-		if (io == exit_success .and. dummy >= 1 .and. dummy <= size(vars%vals)) then
-			vars%vals(dummy) = var_val
-		end if
-	end do
-
 	!if (allocated(parser%structs)) then
 	!	! TODO: manually finalize recursively?
 	!	deallocate(parser%structs)

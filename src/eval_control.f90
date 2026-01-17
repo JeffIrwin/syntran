@@ -599,6 +599,25 @@ end subroutine eval_translation_unit
 
 !===============================================================================
 
+module subroutine eval_use_statement(node, state, res)
+
+	! Evaluate a module's translation unit. This ensures that module-level
+	! statements (like `let a = [0: 10];`) are evaluated, not just parsed.
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	if (allocated(node%member)) then
+		call eval_translation_unit(node%member, state, res)
+	end if
+
+end subroutine eval_use_statement
+
+!===============================================================================
+
 recursive module subroutine eval_array_expr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
