@@ -341,6 +341,10 @@ module function parse_use_statement(parser) result(statement)
 		if (qualified_import) then
 			qualified_prefix = replace_all(module_name, "/", "::")
 			insert_name = qualified_prefix // "::" // var_name
+
+			! Update struct_name references in the variable value to use
+			! qualified names (e.g., Point -> pointmod::Point)
+			call qualify_value_struct_name(var_val, qualified_prefix)
 		else
 			insert_name = var_name
 		end if

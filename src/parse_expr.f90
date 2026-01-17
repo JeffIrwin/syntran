@@ -138,7 +138,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 	end if
 
-	! Handle qualified assignment: mod::var = value
+	! Handle qualified assignment: mod::var = value, mod::arr[i] = value,
+	! or mod::struct.field = value
 	if (parser%peek_kind(0) == identifier_token .and. &
 	    parser%peek_kind(1) == double_colon_token) then
 
@@ -159,17 +160,34 @@ recursive module function parse_expr_statement(parser) result(expr)
 			identifier = parser%match(identifier_token)
 		end do
 
+		! Look up the qualified variable
+		expr%identifier = identifier
+		call parser%vars%search(expr%module_prefix // "::" // identifier%text, &
+			expr%id_index, search_io, expr%val)
+
+		! Parse subscripts and dot access for qualified names
+		call parser%parse_subscripts(expr)
+
+		if (parser%peek_kind(0) == dot_token) then
+			if (search_io /= exit_success) then
+				span = new_span(identifier%pos, len(identifier%text))
+				call parser%diagnostics%push( &
+					err_undeclare_var(parser%context(), span, identifier%text))
+			end if
+
+			call parser%parse_dot(expr)
+			if (.not. allocated(expr%member)) then
+				return
+			end if
+		end if
+
 		if (.not. is_assignment_op(parser%current_kind())) then
 			! Not an assignment, rewind and let parse_expr handle it
 			parser%pos = pos0
 		else
 			! It's a qualified assignment
-			expr%identifier = identifier
 
-			call parser%vars%search(expr%module_prefix // "::" // identifier%text, &
-				expr%id_index, search_io, expr%val)
-
-			if (search_io /= exit_success) then
+			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
 					err_undeclare_var(parser%context(), span, identifier%text))

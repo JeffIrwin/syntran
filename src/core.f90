@@ -30,11 +30,26 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - module arrays don't work, structs probably don't work either
+	!    * wip
+	!    * hyphens in module names are allowed for globbed import only
+	!    * any other special characters need handling? spaces should be banned
+	!      but check for a helpful error message at least
+	!    * "use my-mod as alias" could be a good workaround for qualified
+	!       hyphens
+	!  - "use module as alias;"
+	!    * potentially important for resolving name clashes when you're using
+	!      someone else's library, but you don't want to change the names they
+	!      chose
 	!  - claude tasks:
 	!    * update CLAUDE.md to recommend cmake as primary build tool. cmake
 	!      (driving gnu make) is parallel but fpm is not. might need to update
 	!      test.sh is well and/or make test-long.sh as opposed to unit tests,
 	!      add debug/release option, etc.
+	!      + also need a run.sh script, e.g. to run a single syntran file (or
+	!        the interpretter) based on whatever args are passed along
+	!      + clean.sh exists
+	!      + basically every fpm command needs a cmake driver script replacement
 	!    * fortran compile time optimization -- see if pain points like
 	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
 	!      + intr_fns.f90, eval.f90, types.f90 now broken up
@@ -88,11 +103,6 @@ module syntran__core_m
 	!    * git(hub) cleanup. no need to delete branches, but rename existing
 	!      branches (except for main and dev) to start with feature/ or
 	!      jeffirwin/, e.g. vec-slice -> feature/vec-slice
-	!  - module arrays don't work, structs probably don't work either
-	!    * scope is creeping well beyond the immediate need of avoiding std fn
-	!      clashes. maybe hold off on this
-	!    * module let statements are not evaluated, only parsed. could this
-	!      cause evaluation problems? maybe just handle it like includes
 	!  - what happens if you use the same module twice? same form both times or
 	!    mix qualified and unqualified?
 	!  - i like claude's "double_colon_token" name. i should change things like
@@ -100,10 +110,6 @@ module syntran__core_m
 	!  - if you try to return something (e.g. i32) from a void/null fn, the
 	!    error says the fn should return "unknown" but it should say void (or
 	!    null?)
-	!  - "use module as alias;"
-	!    * potentially important for resolving name clashes when you're using
-	!      someone else's library, but you don't want to change the names they
-	!      chose
 	!  - document modules in readme, recommend over #include after it's in a
 	!    state where a few aoc tests can work with utils.syntran as a module
 	!  - minloc, maxloc, findloc std:: fns

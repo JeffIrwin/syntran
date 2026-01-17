@@ -448,6 +448,9 @@ recursive module function parse_qualified_expr(parser) result(expr)
 		expr = new_name_expr(fn_identifier, var_val)
 		expr%id_index = id_index
 		expr%module_prefix = module_name
+
+		call parser%parse_subscripts(expr)
+		call parser%parse_dot(expr)
 	end if
 
 end function parse_qualified_expr

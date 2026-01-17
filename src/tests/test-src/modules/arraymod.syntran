@@ -1,0 +1,16 @@
+// Module with an array variable for testing qualified array subscripting
+
+let arr = [0: 10];
+
+fn get_sum(): i32
+{
+	let s = 0;
+	for i in [0: size(arr, 0)]
+		s = s + arr[i];
+	return s;
+}
+
+fn get_element(i: i32): i32
+{
+	return arr[i];
+}
