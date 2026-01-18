@@ -146,6 +146,7 @@
 					for f in $dir_/*.syntran ; do
 						fpm run
 							--profile release
+							--flag '-fopenmp'
 							--link-flag '-static-libgcc -static-libgfortran'
 							-- -q $f > ${f%.syntran}.out \n
 						diff ${f%.syntran}.out ${f%.syntran}.exp \n
@@ -168,8 +169,8 @@
 
 					# No significant difference between release and (default) debug profile. \n
 					# Maybe that will change after I copy the other half of AOC tests \n
-					fpm test test --profile release \n
-					fpm test long --profile release \n
+					fpm test test --profile release --flag '-fopenmp' \n
+					fpm test long --profile release --flag '-fopenmp' \n
 				"
 			},
 			{
@@ -441,8 +442,8 @@
 				"run":
 				"
 					set -exu \n
-					fpm test test --profile release --verbose --flag -Wno-tabs \n
-					fpm test long --profile release --flag -Wno-tabs \n
+					fpm test test --profile release --verbose --flag '-fopenmp -Wno-tabs' \n
+					fpm test long --profile release --flag '-fopenmp -Wno-tabs' \n
 				"
 			}
 		]
@@ -504,8 +505,8 @@
 					fi \n
 					fi \n
 
-					fpm test test --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast\" \n
-					fpm test long --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast\" \n
+					fpm test test --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -fopenmp\" \n
+					fpm test long --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -fopenmp\" \n
 				"
 			}
 		]
