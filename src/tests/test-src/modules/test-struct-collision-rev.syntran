@@ -1,0 +1,15 @@
+// Test import first, then local struct definition
+// Verifies no index collision in reverse order
+
+use struct-mod::*;  // Imports Point struct first
+
+struct LocalPoint
+{
+	x: i32,
+	y: i32,
+}
+
+let imported = Point{x = 3, y = 4};
+let local = LocalPoint{x = 1, y = 2};
+
+return local.x + imported.x == 4 and point_sum(imported) == 7;

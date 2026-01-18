@@ -262,19 +262,20 @@ module function parse_use_statement(parser) result(statement)
 	! redeclaration errors in pass 1.
 	call declare_intr_fns(mod_parser%fns)
 
-	! Share variable AND function numbering with parent parser. Module variables
-	! and functions will get indices continuing from parent's count, avoiding
-	! the need for remapping. This is similar to how #include works.
+	! Share variable, function, AND struct numbering with parent parser. Module
+	! variables, functions, and structs will get indices continuing from parent's
+	! count, avoiding the need for remapping. This is similar to how #include works.
 	mod_parser%num_vars = parser%num_vars
 	mod_parser%num_fns = parser%num_fns
-	! TODO: num_structs should probably also be set here
+	mod_parser%num_structs = parser%num_structs
 
 	! Parse the module
 	mod_unit = mod_parser%parse_unit()
 
-	! Update parent's variable and function counts to include module definitions
+	! Update parent's variable, function, and struct counts to include module definitions
 	parser%num_vars = mod_parser%num_vars
 	parser%num_fns = mod_parser%num_fns
+	parser%num_structs = mod_parser%num_structs
 
 	! Check for parsing errors in the module (only in first pass)
 	if (parser%ipass == 0 .and. mod_parser%diagnostics%len_ > 0) then
@@ -373,9 +374,10 @@ module function parse_use_statement(parser) result(statement)
 			insert_name = struct_name
 		end if
 
-		! Insert struct into current parser
-		parser%num_structs = parser%num_structs + 1
-		call parser%structs%insert(insert_name, struct_val, parser%num_structs, io)
+		! Insert into current parser with the SAME id_index from module parser.
+		! This is critical: since we shared num_structs before parsing, indices
+		! already match - no remapping needed (same pattern as functions/variables).
+		call parser%structs%insert(insert_name, struct_val, id_index, io)
 		if (parser%ipass == 0) call parser%struct_names%push(insert_name)
 	end do
 

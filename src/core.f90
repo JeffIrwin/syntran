@@ -30,9 +30,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - see TODO note in parse_control about num_structs. the num_fns bug took
-	!    a lot of tokens, maybe i can guide claude better for structs since i
-	!    can foresee an issue
 	!  - check for indirect recursive `use` (and #include). self use is checked
 	!    currently, but not A use B and B use A for example afaik
 	!  - module arrays don't work, structs probably don't work either
