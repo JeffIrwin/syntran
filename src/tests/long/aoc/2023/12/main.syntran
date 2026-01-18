@@ -1,5 +1,5 @@
 
-#include("../../utils.syntran");
+use ../../utils;
 
 //==============================================================================
 
@@ -62,7 +62,7 @@ fn part1(): i32
 
 		//println("iqs = ", iqs);
 
-		let groups = parse_i32_delim(str_, ".#? ,");
+		let groups = utils::parse_i32_delim(str_, ".#? ,");
 		let ng = size(groups,0);
 		//println("groups = ", groups);
 
@@ -104,7 +104,7 @@ fn part1(): i32
 			//println("a = ", a);
 
 			// Check if the combo str meets the grouping criteria
-			let g = split_(combo, ".?, " + digit_chars);
+			let g = utils::split_(combo, ".?, " + utils::digit_chars);
 			//println("combo = ", combo);
 			//println("g = ", g);
 			if (size(g,0) == ng)
@@ -157,10 +157,10 @@ fn part1(): i32
 	}
 	close(f);
 
-	//// Paranoid unit test for split_()
+	//// Paranoid unit test for utils::split_()
 	//str_ = "##?.###";
-	//let g = split_(str_, ".?");
-	//println("split_(" + str_ + ") = ", g);
+	//let g = utils::split_(str_, ".?");
+	//println("utils::split_(" + str_ + ") = ", g);
 
 	println("part 1 = ", sum_);
 	return sum_;

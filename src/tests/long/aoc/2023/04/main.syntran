@@ -1,5 +1,5 @@
 
-#include("../../utils.syntran");
+use ../../utils;
 
 //==============================================================================
 
@@ -24,10 +24,10 @@ fn part1(): i32
 	{
 		//println("str_ = ", str_);
 
-		let strs = split_(str_, ":|");
+		let strs = utils::split_(str_, ":|");
 
-		let wn_nums_str = split_(strs[1], " ");
-		let my_nums_str = split_(strs[2], " ");
+		let wn_nums_str = utils::split_(strs[1], " ");
+		let my_nums_str = utils::split_(strs[2], " ");
 
 		//println("wn_nums_str = ", wn_nums_str);
 		//println("my_nums_str = ", my_nums_str);
@@ -38,7 +38,7 @@ fn part1(): i32
 			let my_num = my_nums_str[i];
 			//println("my_num = ", my_num);
 
-			if (any_str_eq(my_num, wn_nums_str))
+			if (utils::any_str_eq(my_num, wn_nums_str))
 				nwin += 1;
 		}
 		//println("nwin = ", nwin);
@@ -51,12 +51,12 @@ fn part1(): i32
 	close(f);
 
 	//let strs = [""];
-	//strs = split_(" 1 21 53 59 44 ", " ");
-	//strs = split_("1 21 53 59 44", " ");
-	//strs = split_(" 1 21 53 59 44", " ");
-	//strs = split_("1 21 53 59 44 ", " ");
-	//strs = split_("   1   21     53    59    44     ", " ");
-	//strs = split_(" 69 82 63 72 16 21 14  1", " ");
+	//strs = utils::split_(" 1 21 53 59 44 ", " ");
+	//strs = utils::split_("1 21 53 59 44", " ");
+	//strs = utils::split_(" 1 21 53 59 44", " ");
+	//strs = utils::split_("1 21 53 59 44 ", " ");
+	//strs = utils::split_("   1   21     53    59    44     ", " ");
+	//strs = utils::split_(" 69 82 63 72 16 21 14  1", " ");
 
 	println("part 1 = ", sum_);
 	return sum_;
@@ -66,7 +66,7 @@ fn part1(): i32
 
 fn part2(): i32
 {
-	let n = countln_(filename);
+	let n = utils::countln_(filename);
 	//println("n = ", n);
 
 	let ncopies = [1; n];
@@ -75,10 +75,10 @@ fn part2(): i32
 	let f = open(filename, "r");
 	for icard in [0: n]
 	{
-		let strs = split_(readln(f), ":|");
+		let strs = utils::split_(readln(f), ":|");
 
-		let wn_nums_str = split_(strs[1], " ");
-		let my_nums_str = split_(strs[2], " ");
+		let wn_nums_str = utils::split_(strs[1], " ");
+		let my_nums_str = utils::split_(strs[2], " ");
 
 		//println("wn_nums_str = ", wn_nums_str);
 		//println("my_nums_str = ", my_nums_str);
@@ -89,7 +89,7 @@ fn part2(): i32
 			let my_num = my_nums_str[i];
 			//println("my_num = ", my_num);
 
-			if (any_str_eq(my_num, wn_nums_str))
+			if (utils::any_str_eq(my_num, wn_nums_str))
 				nwin += 1;
 		}
 		//println("nwin = ", nwin);

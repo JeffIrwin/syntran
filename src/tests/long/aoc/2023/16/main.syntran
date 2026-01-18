@@ -1,5 +1,5 @@
 
-#include("../../utils.syntran");
+use ../../utils;
 
 //==============================================================================
 
@@ -91,7 +91,7 @@ fn beams_empty(): bool
 
 fn part1(): i32
 {
-	let ny = countln_(filename);
+	let ny = utils::countln_(filename);
 
 	let f = open(filename, "r");
 	let str_ = readln(f);
@@ -314,7 +314,7 @@ fn count_energized_tiles(dir: i32, x: i32, y: i32, nx: i32, ny: i32): i32
 
 fn part2(): i32
 {
-	let ny = countln_(filename);
+	let ny = utils::countln_(filename);
 
 	let f = open(filename, "r");
 	let str_ = readln(f);
