@@ -30,6 +30,10 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - are there any opportunities to "move" things (e.g. fns, vars, vals)
+	!    instead of doing expensive "copy" operations? usually hidden as an
+	!    overridden assignment= operator. in jsonf repo almost everything is
+	!    moved instead of copied
 	!  - check for indirect recursive `use` (and #include). self use is checked
 	!    currently, but not A use B and B use A for example afaik
 	!  - module arrays don't work, structs probably don't work either
