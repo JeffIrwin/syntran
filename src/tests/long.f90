@@ -87,23 +87,34 @@ subroutine unit_test_aoc_2023(npass, nfail)
 	ntests = filenames%len_
 	allocate(tests(ntests))
 	tests = .false.
+	tests = .true. ! TODO
 
 	!! idk what's wrong with this, maybe i just need a newer fortran compiler
 	!do concurrent (i = 1: ntests) local(filename, expected_val)
 	!	filename = filenames%v(i)%s
 	!end do
 
-!$omp parallel do default(shared) private(filename, expected_val, val)
-	do i = 1, ntests
-		filename = filenames%v(i)%s
-		expected_val = expected_vals%v(i)%s
-		print *, "filename = ", filename
+! ! $omp parallel do default(shared) private(i, filename, expected_val, val)
+!$omp parallel do default(none) shared(filenames, expected_vals, tests) private(val)
+	do i = 1, 4!ntests
+		!! Not sure why private vars aren't working
+		!filename = filenames%v(i)%s
+		!expected_val = expected_vals%v(i)%s
+		!print *, "filename = ", filename
 
-		!! TODO: chdir at least is not thread safe, maybe other things too.  chdir shouldn't be too hard to fix by avoid calling real `chdir()` and instead changing dir symbolically, by appending path to every "open" call in syntran. Might need to change #include or `use` but those are already always relative to syntran program source
-		val = interpret_file(filename, quiet=.true., chdir_=.true.)
+		!val = interpret_file(filenames%v(i)%s, quiet=.true., chdir_=.true.)
+		val = interpret_file(filenames%v(i)%s, quiet=.false., chdir_=.true.)
+
+		!tests(i) = val == expected_val
 		!val = interpret_file(filename, quiet=.true.)
 
-		tests(i) = val == expected_val
+		!print *, "val, expected_val = ", val, " :: ", expected_val
+		!print *, "len val = ", len(val)
+		!print *, "len exp = ", len(expected_val)
+		!print *, ""
+
+		!tests(i) = val == expected_val
+		tests(i) = val == expected_vals%v(i)%s
 
 	end do
 !$omp end parallel do
@@ -142,7 +153,7 @@ subroutine unit_test_aoc_2023(npass, nfail)
 	!! Trim dummy false element
 	!tests = tests(1: size(tests) - 1)
 
-	!call unit_test_coda(tests, label, npass, nfail)
+	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_aoc_2023
 

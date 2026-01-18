@@ -3,6 +3,7 @@
 
 module syntran__lex_m
 
+	use syntran__c_parse_m
 	use syntran__types_m
 	use syntran__utils_m
 
@@ -61,6 +62,8 @@ function lex(lexer) result(token)
 	type(char_vector_t) :: char_vec
 	type(text_span_t) :: span
 	type(value_t) :: val
+
+! ! $omp threadprivate(text_strip, io)
 
 	!print *, 'lexer%unit_ = ', lexer%unit_
 
@@ -128,7 +131,7 @@ function lex(lexer) result(token)
 
 		if (type == i32_type) then
 
-			read(text_strip, "(z12)", iostat = io) i32
+			call parse_i32_hex(text_strip, i32, io)
 			if (io == exit_success) then
 				val   = new_literal_value(i32_type, i32 = i32)
 				token = new_token(i32_token, start, text, val)
@@ -141,7 +144,7 @@ function lex(lexer) result(token)
 
 		else if (type == i64_type) then
 
-			read(text_strip, "(z20)", iostat = io) i64
+			call parse_i64_hex(text_strip, i64, io)
 			if (io == exit_success) then
 				val   = new_literal_value(i64_type, i64 = i64)
 				token = new_token(i64_token, start, text, val)
@@ -155,7 +158,7 @@ function lex(lexer) result(token)
 		else
 
 			! 8 chars should be sufficient. pad by an extra 4 for safety
-			read(text_strip, "(z12)", iostat = io) i32
+			call parse_i32_hex(text_strip, i32, io)
 			if (io == exit_success) then
 
 				val   = new_literal_value(i32_type, i32 = i32)
@@ -163,7 +166,7 @@ function lex(lexer) result(token)
 
 			else
 
-				read(text_strip, "(z20)", iostat = io) i64  ! 16 chars should suffice
+				call parse_i64_hex(text_strip, i64, io)  ! 16 chars should suffice
 				if (io == exit_success) then
 
 					!print *, "i64 = ", i64
@@ -234,7 +237,7 @@ function lex(lexer) result(token)
 
 		if (type == i32_type) then
 
-			read(text_strip, "(o20)", iostat = io) i32
+			call parse_i32_oct(text_strip, i32, io)
 			if (io == exit_success) then
 				val   = new_literal_value(i32_type, i32 = i32)
 				token = new_token(i32_token, start, text, val)
@@ -247,7 +250,7 @@ function lex(lexer) result(token)
 
 		else if (type == i64_type) then
 
-			read(text_strip, "(o36)", iostat = io) i64
+			call parse_i64_oct(text_strip, i64, io)
 			if (io == exit_success) then
 				val   = new_literal_value(i64_type, i64 = i64)
 				token = new_token(i64_token, start, text, val)
@@ -266,7 +269,7 @@ function lex(lexer) result(token)
 			! "(z8)" is the max for hex, but it's actually less then double that
 			! width for octal.  See the test on 0o377_7777_7777 which is -1 in
 			! octal, which is only 11 chars
-			read(text_strip, "(o20)", iostat = io) i32
+			call parse_i32_oct(text_strip, i32, io)
 			if (io == exit_success) then
 
 				val   = new_literal_value(i32_type, i32 = i32)
@@ -274,7 +277,7 @@ function lex(lexer) result(token)
 
 			else
 
-				read(text_strip, "(o36)", iostat = io) i64  ! 32 chars should suffice
+				call parse_i64_oct(text_strip, i64, io)  ! 32 chars should suffice
 				if (io == exit_success) then
 
 					val   = new_literal_value(i64_type, i64 = i64)
@@ -344,7 +347,7 @@ function lex(lexer) result(token)
 
 		if (type == i32_type) then
 
-			read(text_strip, "(b36)", iostat = io) i32
+			call parse_i32_bin(text_strip, i32, io)
 			if (io == exit_success) then
 				val   = new_literal_value(i32_type, i32 = i32)
 				token = new_token(i32_token, start, text, val)
@@ -357,7 +360,7 @@ function lex(lexer) result(token)
 
 		else if (type == i64_type) then
 
-			read(text_strip, "(b68)", iostat = io) i64
+			call parse_i64_bin(text_strip, i64, io)
 			if (io == exit_success) then
 				val   = new_literal_value(i64_type, i64 = i64)
 				token = new_token(i64_token, start, text, val)
@@ -371,7 +374,7 @@ function lex(lexer) result(token)
 		else
 
 			! 32 chars should be sufficient. pad by an extra 4 for safety
-			read(text_strip, "(b36)", iostat = io) i32
+			call parse_i32_bin(text_strip, i32, io)
 			if (io == exit_success) then
 
 				val   = new_literal_value(i32_type, i32 = i32)
@@ -379,7 +382,7 @@ function lex(lexer) result(token)
 
 			else
 
-				read(text_strip, "(b68)", iostat = io) i64  ! 64 chars should suffice
+				call parse_i64_bin(text_strip, i64, io)  ! 64 chars should suffice
 				if (io == exit_success) then
 
 					val   = new_literal_value(i64_type, i64 = i64)
@@ -471,7 +474,7 @@ function lex(lexer) result(token)
 			select case (type)
 			case (f32_type)
 
-				read(text_strip, *, iostat = io) f32
+				call parse_f32(text_strip, f32, io)
 				if (io == exit_success) then
 					val   = new_literal_value(f32_type, f32 = f32)
 					token = new_token(f32_token, start, text, val)
@@ -484,7 +487,7 @@ function lex(lexer) result(token)
 
 			case (f64_type)
 
-				read(text_strip, *, iostat = io) f64
+				call parse_f64(text_strip, f64, io)
 				if (io == exit_success) then
 					val   = new_literal_value(f64_type, f64 = f64)
 					token = new_token(f64_token, start, text, val)
@@ -497,7 +500,8 @@ function lex(lexer) result(token)
 
 			case (i32_type)
 
-				read(text_strip, *, iostat = io) i32
+				call parse_i32_dec(text_strip, i32, io)
+
 				if (io == exit_success) then
 					val   = new_literal_value(i32_type, i32 = i32)
 					token = new_token(i32_token, start, text, val)
@@ -511,7 +515,7 @@ function lex(lexer) result(token)
 
 			case (i64_type)
 
-				read(text_strip, *, iostat = io) i64
+				call parse_i64_dec(text_strip, i64, io)
 				if (io == exit_success) then
 					val   = new_literal_value(i64_type, i64 = i64)
 					token = new_token(i64_token, start, text, val)
@@ -536,7 +540,7 @@ function lex(lexer) result(token)
 
 			! This io check can catch problems like `1.234e+1e+2` which look
 			! like a float but aren't correctly formatted
-			read(text_strip, *, iostat = io) f32
+			call parse_f32(text_strip, f32, io)
 			if (io /= exit_success) then
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_f32( &
@@ -550,7 +554,7 @@ function lex(lexer) result(token)
 
 			! This io check can catch problems like `1.234e+1e+2` which look
 			! like a float but aren't correctly formatted
-			read(text_strip, *, iostat = io) f64
+			call parse_f64(text_strip, f64, io)
 			if (io /= exit_success) then
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_f64( &
@@ -562,7 +566,7 @@ function lex(lexer) result(token)
 
 		else
 
-			read(text_strip, *, iostat = io) i32
+			call parse_i32_dec(text_strip, i32, io)
 
 			if (io == exit_success) then
 
@@ -571,7 +575,7 @@ function lex(lexer) result(token)
 
 			else
 
-				read(text_strip, *, iostat = io) i64
+				call parse_i64_dec(text_strip, i64, io)
 
 				if (io == exit_success) then
 
