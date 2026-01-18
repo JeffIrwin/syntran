@@ -5,7 +5,7 @@ module syntran__lex_m
 
 	use syntran__c_parse_m
 	use syntran__types_m
-	use syntran__utils_m
+	use syntran__utils_m, only: exit_success, exit_failure
 
 	implicit none
 

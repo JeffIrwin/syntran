@@ -15,8 +15,11 @@ module syntran__c_parse_m
 	!     https://fortran-lang.discourse.group/t/openmp-and-thread-safety-of-i-os-write-read/4567/19
 
 	use iso_c_binding
-	use syntran__utils_m, only: exit_success, exit_failure
 	implicit none
+
+	! TODO: move to consts? Otherwise, these are defined in multiple places or
+	! there are circular dependencies between this and utils
+	integer, parameter :: exit_success_ = 0, exit_failure_ = -1
 
 	interface
 
@@ -86,6 +89,46 @@ module syntran__c_parse_m
 			integer(c_int) :: c_isnan
 		end function
 
+		! int snprintf(char *str, size_t size, const char *format, int val)
+		function c_snprintf_i32(str, size, format, val) bind(c, name='snprintf')
+			import :: c_ptr, c_char, c_int, c_size_t
+			type(c_ptr), value :: str
+			integer(c_size_t), value :: size
+			character(kind=c_char), intent(in) :: format(*)
+			integer(c_int), value :: val
+			integer(c_int) :: c_snprintf_i32
+		end function
+
+		! int snprintf(char *str, size_t size, const char *format, long long val)
+		function c_snprintf_i64(str, size, format, val) bind(c, name='snprintf')
+			import :: c_ptr, c_char, c_int, c_size_t, c_long_long
+			type(c_ptr), value :: str
+			integer(c_size_t), value :: size
+			character(kind=c_char), intent(in) :: format(*)
+			integer(c_long_long), value :: val
+			integer(c_int) :: c_snprintf_i64
+		end function
+
+		! int snprintf(char *str, size_t size, const char *format, double val)
+		function c_snprintf_f32(str, size, format, val) bind(c, name='snprintf')
+			import :: c_ptr, c_char, c_int, c_size_t, c_double
+			type(c_ptr), value :: str
+			integer(c_size_t), value :: size
+			character(kind=c_char), intent(in) :: format(*)
+			real(c_double), value :: val
+			integer(c_int) :: c_snprintf_f32
+		end function
+
+		! int snprintf(char *str, size_t size, const char *format, double val)
+		function c_snprintf_f64(str, size, format, val) bind(c, name='snprintf')
+			import :: c_ptr, c_char, c_int, c_size_t, c_double
+			type(c_ptr), value :: str
+			integer(c_size_t), value :: size
+			character(kind=c_char), intent(in) :: format(*)
+			real(c_double), value :: val
+			integer(c_int) :: c_snprintf_f64
+		end function
+
 	end interface
 
 contains
@@ -108,10 +151,10 @@ subroutine parse_i32_base(str, val, iostat, base)
 
 	! Check for overflow (c_long may be 64-bit, we want 32-bit)
 	if (result > huge(val) .or. result < -huge(val)-1) then
-		iostat = exit_failure
+		iostat = exit_failure_
 		val = 0
 	else
-		iostat = exit_success
+		iostat = exit_success_
 		val = int(result, kind=4)
 	end if
 
@@ -135,10 +178,10 @@ subroutine parse_i64_base(str, val, iostat, base)
 
 	! Check for overflow
 	if (result > huge(val) .or. result < -huge(val)-1_8) then
-		iostat = exit_failure
+		iostat = exit_failure_
 		val = 0_8
 	else
-		iostat = exit_success
+		iostat = exit_success_
 		val = int(result, kind=8)
 	end if
 
@@ -162,10 +205,10 @@ subroutine parse_f32(str, val, iostat)
 	! Check for inf/nan (these indicate parse failure or overflow)
 	if (c_isinf(real(result, c_double)) /= 0 .or. &
 	    c_isnan(real(result, c_double)) /= 0) then
-		iostat = exit_failure
+		iostat = exit_failure_
 		val = 0.0
 	else
-		iostat = exit_success
+		iostat = exit_success_
 		val = real(result, kind=4)
 	end if
 
@@ -188,10 +231,10 @@ subroutine parse_f64(str, val, iostat)
 
 	! Check for inf/nan (these indicate parse failure or overflow)
 	if (c_isinf(result) /= 0 .or. c_isnan(result) /= 0) then
-		iostat = exit_failure
+		iostat = exit_failure_
 		val = 0.0d0
 	else
-		iostat = exit_success
+		iostat = exit_success_
 		val = real(result, kind=8)
 	end if
 
@@ -217,10 +260,10 @@ subroutine parse_i32_hex(str, val, iostat)
 
 	! Check for overflow (result is unsigned, must fit in 32 bits)
 	if (result > max_u32) then
-		iostat = exit_failure
+		iostat = exit_failure_
 		val = 0
 	else
-		iostat = exit_success
+		iostat = exit_success_
 		! Reinterpret bits as signed
 		val = int(result, kind=4)
 	end if
@@ -237,7 +280,7 @@ subroutine parse_i64_hex(str, val, iostat)
 	cstr = trim(str) // c_null_char
 	result = c_strtoull(cstr, c_null_ptr, 16_c_int)
 
-	iostat = exit_success
+	iostat = exit_success_
 	! Reinterpret bits as signed
 	val = int(result, kind=8)
 end subroutine parse_i64_hex
@@ -256,10 +299,10 @@ subroutine parse_i32_oct(str, val, iostat)
 	result = c_strtoull(cstr, c_null_ptr, 8_c_int)
 
 	if (result > max_u32) then
-		iostat = exit_failure
+		iostat = exit_failure_
 		val = 0
 	else
-		iostat = exit_success
+		iostat = exit_success_
 		val = int(result, kind=4)
 	end if
 end subroutine parse_i32_oct
@@ -275,7 +318,7 @@ subroutine parse_i64_oct(str, val, iostat)
 	cstr = trim(str) // c_null_char
 	result = c_strtoull(cstr, c_null_ptr, 8_c_int)
 
-	iostat = exit_success
+	iostat = exit_success_
 	val = int(result, kind=8)
 end subroutine parse_i64_oct
 
@@ -293,10 +336,10 @@ subroutine parse_i32_bin(str, val, iostat)
 	result = c_strtoull(cstr, c_null_ptr, 2_c_int)
 
 	if (result > max_u32) then
-		iostat = exit_failure
+		iostat = exit_failure_
 		val = 0
 	else
-		iostat = exit_success
+		iostat = exit_success_
 		val = int(result, kind=4)
 	end if
 end subroutine parse_i32_bin
@@ -312,7 +355,7 @@ subroutine parse_i64_bin(str, val, iostat)
 	cstr = trim(str) // c_null_char
 	result = c_strtoull(cstr, c_null_ptr, 2_c_int)
 
-	iostat = exit_success
+	iostat = exit_success_
 	val = int(result, kind=8)
 end subroutine parse_i64_bin
 
@@ -329,6 +372,70 @@ subroutine parse_i64_dec(str, val, iostat)
 	integer, intent(out) :: iostat
 	call parse_i64_base(str, val, iostat, 10)
 end subroutine parse_i64_dec
+
+!===============================================================================
+
+subroutine format_i32(val, str)
+	! Format 32-bit integer to string
+	integer(4), intent(in) :: val
+	character(len=:), allocatable, intent(out) :: str
+
+	character(len=16, kind=c_char), target :: buf
+	integer(c_int) :: n
+
+	buf = ''
+	n = c_snprintf_i32(c_loc(buf), int(len(buf), c_size_t), &
+	    '%d'//c_null_char, int(val, c_int))
+	str = trim(buf(1:n))
+end subroutine format_i32
+
+!===============================================================================
+
+subroutine format_i64(val, str)
+	! Format 64-bit integer to string
+	integer(8), intent(in) :: val
+	character(len=:), allocatable, intent(out) :: str
+
+	character(len=24, kind=c_char), target :: buf
+	integer(c_int) :: n
+
+	buf = ''
+	n = c_snprintf_i64(c_loc(buf), int(len(buf), c_size_t), &
+	    '%lld'//c_null_char, int(val, c_long_long))
+	str = trim(buf(1:n))
+end subroutine format_i64
+
+!===============================================================================
+
+subroutine format_f32(val, str)
+	! Format 32-bit float to string
+	real(4), intent(in) :: val
+	character(len=:), allocatable, intent(out) :: str
+
+	character(len=16, kind=c_char), target :: buf
+	integer(c_int) :: n
+
+	buf = ''
+	n = c_snprintf_f32(c_loc(buf), int(len(buf), c_size_t), &
+	    '%.6E'//c_null_char, real(val, c_double))
+	str = trim(buf(1:n))
+end subroutine format_f32
+
+!===============================================================================
+
+subroutine format_f64(val, str)
+	! Format 64-bit float to string
+	real(8), intent(in) :: val
+	character(len=:), allocatable, intent(out) :: str
+
+	character(len=28, kind=c_char), target :: buf
+	integer(c_int) :: n
+
+	buf = ''
+	n = c_snprintf_f64(c_loc(buf), int(len(buf), c_size_t), &
+	    '%.15E'//c_null_char, real(val, c_double))
+	str = trim(buf(1:n))
+end subroutine format_f64
 
 !===============================================================================
 

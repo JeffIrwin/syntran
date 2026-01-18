@@ -4,6 +4,7 @@
 module syntran__utils_m
 
 	use iso_fortran_env
+	use syntran__c_parse_m, only: format_i32, format_i64, format_f32, format_f64
 
 	implicit none
 
@@ -1101,11 +1102,7 @@ function i32_str(x) result(str_)
 
 	character(len = :), allocatable :: str_
 
-	! Fine for default 4-byte ints.  May need more chars for bigger ints
-	character(len = 16) :: buffer
-
-	write(buffer, '(i0)') x
-	str_ = trim(buffer)
+	call format_i32(x, str_)
 
 end function i32_str
 
@@ -1135,12 +1132,7 @@ function i64_str(x) result(str_)
 
 	character(len = :), allocatable :: str_
 
-	! I think ~20 chars is the max actually, but let's round up to the next
-	! multiple of 8
-	character(len = 24) :: buffer
-
-	write(buffer, '(i0)') x
-	str_ = trim(buffer)
+	call format_i64(x, str_)
 
 end function i64_str
 
@@ -1152,11 +1144,7 @@ function f32_str(x) result(str_)
 
 	character(len = :), allocatable :: str_
 
-	! Fine for default 4-byte type
-	character(len = 16) :: buffer
-
-	write(buffer, '(es16.6)') x
-	str_ = trim(adjustl(buffer))
+	call format_f32(x, str_)
 
 end function f32_str
 
@@ -1168,10 +1156,7 @@ function f64_str(x) result(str_)
 
 	character(len = :), allocatable :: str_
 
-	character(len = 28) :: buffer
-
-	write(buffer, '(es25.15)') x
-	str_ = trim(adjustl(buffer))
+	call format_f64(x, str_)
 
 end function f64_str
 

@@ -5,6 +5,7 @@ module syntran__value_m
 
 	use syntran__consts_m
 	use syntran__errors_m
+	use syntran__c_parse_m, only: format_f32, format_f64
 
 	implicit none
 
@@ -962,9 +963,6 @@ recursive function scalar_to_str(val, type) result(ans)
 
 	!********
 
-	character(len = 16) :: buf16
-	character(len = 28) :: buf28
-
 	select case (type)
 
 		case (void_type)
@@ -979,14 +977,10 @@ recursive function scalar_to_str(val, type) result(ans)
 			end if
 
 		case (f32_type)
-			write(buf16, '(es16.6)') val%f32
-			!ans = trim(buf16)
-			ans = buf16  ! no trim for alignment
+			call format_f32(val%f32, ans)
 
 		case (f64_type)
-			write(buf28, '(es25.15)') val%f64
-			!ans = trim(buf28)
-			ans = buf28  ! no trim for alignment
+			call format_f64(val%f64, ans)
 
 		case (i32_type)
 			ans = i32_str(val%i32)

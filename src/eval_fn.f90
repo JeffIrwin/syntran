@@ -770,12 +770,8 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 
 	case ("parse_i32")
 
-		! TODO: use threadsafe c interfaces here, critical is in the wrong place
-		! anyway
-!$omp critical
 		call syntax_eval(node%args(1), state, arg)
-!$omp end critical
-		read(arg%sca%str%s, *, iostat = io) res%sca%i32
+		call parse_i32_dec(arg%sca%str%s, res%sca%i32, io)
 		if (io /= 0) then
 			write(*,*) err_rt_prefix//" cannot parse_i32() for argument `"// &
 				arg%sca%str%s//"`"//color_reset
@@ -785,9 +781,7 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 	case ("parse_i64")
 
 		call syntax_eval(node%args(1), state, arg)
-!$omp critical
-		read(arg%sca%str%s, *, iostat = io) res%sca%i64
-!$omp end critical
+		call parse_i64_dec(arg%sca%str%s, res%sca%i64, io)
 		if (io /= 0) then
 			write(*,*) err_rt_prefix//" cannot parse_i64() for argument `"// &
 				arg%sca%str%s//"`"//color_reset
@@ -799,9 +793,7 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		! TODO: trim "f" literal suffix if present
 
 		call syntax_eval(node%args(1), state, arg)
-!$omp critical
-		read(arg%sca%str%s, *, iostat = io) res%sca%f32
-!$omp end critical
+		call parse_f32(arg%sca%str%s, res%sca%f32, io)
 		if (io /= 0) then
 			write(*,*) err_rt_prefix//" cannot parse_f32() for argument `"// &
 				arg%sca%str%s//"`"//color_reset
@@ -811,9 +803,7 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 	case ("parse_f64")
 
 		call syntax_eval(node%args(1), state, arg)
-!$omp critical
-		read(arg%sca%str%s, *, iostat = io) res%sca%f64
-!$omp end critical
+		call parse_f64(arg%sca%str%s, res%sca%f64, io)
 		if (io /= 0) then
 			write(*,*) err_rt_prefix//" cannot parse_f64() for argument `"// &
 				arg%sca%str%s//"`"//color_reset
