@@ -177,7 +177,7 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 	!********
 
 	character :: char_
-	character(len = :), allocatable :: color, mode, status_
+	character(len = :), allocatable :: color, mode, status_, resolved_path
 
 	double precision, parameter :: LOG_E_2 = log(2.d0)
 	real, parameter :: LOG_E_2F = log(2.0)
@@ -880,7 +880,11 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 			status_ = "unknown"
 		end if
 
-		open(newunit = res%sca%file_%unit_, file = arg1%sca%str%s, &
+		! Resolve relative paths using src_dir from state
+		! This is the key change for thread-safety
+		resolved_path = resolve_path(state%src_dir, arg1%sca%str%s)
+
+		open(newunit = res%sca%file_%unit_, file = resolved_path, &
 			status = status_, iostat = io)
 		!print *, "io = ", io
 
@@ -888,13 +892,13 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 			! Decode fortran iostat codes in message?  I just looked up the docs
 			! and there's not much about open iostat other than 0 is success.
 			! Read iostats are more descriptive
-			write(*,*) err_rt_prefix//"cannot open file """//arg1%sca%str%s//""""
+			write(*,*) err_rt_prefix//"cannot open file """//resolved_path//""""
 			write(*,*) "iostat = ", str(io)
 			call internal_error()
 		end if
 
 		!print *, 'opened unit ', res%sca%file_%unit_
-		res%sca%file_%name_ = arg1%sca%str%s
+		res%sca%file_%name_ = arg1%sca%str%s  ! Keep original name for error messages
 		res%sca%file_%eof = .false.
 		res%sca%file_%is_open = .true.
 

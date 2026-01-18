@@ -40,6 +40,10 @@ module syntran__eval_m
 		! Script arguments passed after `--` on the command line
 		type(string_vector_t) :: script_args
 
+		! Source directory for resolving relative file paths in open()
+		! This is the directory containing the main script being evaluated
+		character(len = :), allocatable :: src_dir
+
 	end type state_t
 
 	!********
