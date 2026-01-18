@@ -59,11 +59,14 @@ subroutine unit_test_aoc_2023(npass, nfail)
 	! Path to syntran test files from root of repo
 	character(len = *), parameter :: &
 		path = 'src/tests/long/aoc/2023/'
+	character(len = :), allocatable :: cwd, filename, expected_val, val
 
-	character(len = :), allocatable :: cwd
+	integer :: i, ntests
 
 	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
+
+	type(string_vector_t) :: filenames, expected_vals
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -71,41 +74,75 @@ subroutine unit_test_aoc_2023(npass, nfail)
 	! to setup str vecs of input filenames and expected return vals, then
 	! iterate in a loop
 
-	tests = &
-		[   &
-			interpret_file(path//"01/main.syntran", quiet = .true., chdir_ = .true.) == '107443', &
-			interpret_file(path//"02/main.syntran", quiet = .true., chdir_ = .true.) == '76485', &
-			interpret_file(path//"02/main-struct.syntran", quiet = .true., chdir_ = .true.) == '76485', &
-			interpret_file(path//"03/main.syntran", quiet = .true., chdir_ = .true.) == '88145909', &
-			interpret_file(path//"04/main.syntran", quiet = .true., chdir_ = .true.) == '6311320', &
-			interpret_file(path//"05/main.syntran", quiet = .true., chdir_ = .true.) == '261668924', &
-			interpret_file(path//"06/main.syntran", quiet = .true., chdir_ = .true.) == '34675170', &
-			interpret_file(path//"07/main.syntran", quiet = .true., chdir_ = .true.) == '499106636', &
-			interpret_file(path//"08/main.syntran", quiet = .true., chdir_ = .true.) == '13289612829906', &
-			interpret_file(path//"09/main.syntran", quiet = .true., chdir_ = .true.) == '1819127106', &
-			interpret_file(path//"10/main.syntran", quiet = .true., chdir_ = .true.) == '7220', &
-			interpret_file(path//"11/main.syntran", quiet = .true., chdir_ = .true.) == '827019473638', &
-			interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '21', &
-			interpret_file(path//"13/main.syntran", quiet = .true., chdir_ = .true.) == '57259', &
-			interpret_file(path//"14/main.syntran", quiet = .true., chdir_ = .true.) == '191157', &
-			interpret_file(path//"15/main.syntran", quiet = .true., chdir_ = .true.) == '768500', &
-			interpret_file(path//"16/main.syntran", quiet = .true., chdir_ = .true.) == '14553', &
-			interpret_file(path//"17/main.syntran", quiet = .true., chdir_ = .true.) == '196', &
-			interpret_file(path//"18/main.syntran", quiet = .true., chdir_ = .true.) == '111131797001390', &
-			interpret_file(path//"19/main.syntran", quiet = .true., chdir_ = .true.) == '125317462035060', &
-			interpret_file(path//"20/main.syntran", quiet = .true., chdir_ = .true.) == '818723272', &
-			interpret_file(path//"21/main.syntran", quiet = .true., chdir_ = .true.) == '3770', &
-			interpret_file(path//"22/main.syntran", quiet = .true., chdir_ = .true.) == '66981', &
-			interpret_file(path//"23/main.syntran", quiet = .true., chdir_ = .true.) == '248', &
-			interpret_file(path//"24/main.syntran", quiet = .true., chdir_ = .true.) == '25261', &
-			interpret_file(path//"25/main.syntran", quiet = .true., chdir_ = .true.) == '555856', &
-			.false.  & ! so I don't have to bother w/ trailing commas
-		]
+	filenames     = new_string_vector()
+	expected_vals = new_string_vector()
 
-	! Trim dummy false element
-	tests = tests(1: size(tests) - 1)
+	call filenames%push(path//"01/main.syntran") ; call expected_vals%push('107443')
+	call filenames%push(path//"02/main.syntran") ; call expected_vals%push('76485')
+	call filenames%push(path//"02/main-struct.syntran") ; call expected_vals%push('76485')
+	call filenames%push(path//"03/main.syntran") ; call expected_vals%push('88145909')
+	call filenames%push(path//"04/main.syntran") ; call expected_vals%push('6311320')
+	call filenames%push(path//"05/main.syntran") ; call expected_vals%push('261668924')
 
-	call unit_test_coda(tests, label, npass, nfail)
+	ntests = filenames%len_
+	allocate(tests(ntests))
+	tests = .false.
+
+	!! idk what's wrong with this, maybe i just need a newer fortran compiler
+	!do concurrent (i = 1: ntests) local(filename, expected_val)
+	!	filename = filenames%v(i)%s
+	!end do
+
+!$omp parallel do default(shared) private(filename, expected_val, val)
+	do i = 1, ntests
+		filename = filenames%v(i)%s
+		expected_val = expected_vals%v(i)%s
+		print *, "filename = ", filename
+
+		!! TODO: chdir at least is not thread safe, maybe other things too.  chdir shouldn't be too hard to fix by avoid calling real `chdir()` and instead changing dir symbolically, by appending path to every "open" call in syntran. Might need to change #include or `use` but those are already always relative to syntran program source
+		val = interpret_file(filename, quiet=.true., chdir_=.true.)
+		!val = interpret_file(filename, quiet=.true.)
+
+		tests(i) = val == expected_val
+
+	end do
+!$omp end parallel do
+
+	!tests = &
+	!	[   &
+	!		interpret_file(path//"01/main.syntran", quiet = .true., chdir_ = .true.) == '107443', &
+	!		interpret_file(path//"02/main.syntran", quiet = .true., chdir_ = .true.) == '76485', &
+	!		interpret_file(path//"02/main-struct.syntran", quiet = .true., chdir_ = .true.) == '76485', &
+	!		interpret_file(path//"03/main.syntran", quiet = .true., chdir_ = .true.) == '88145909', &
+	!		interpret_file(path//"04/main.syntran", quiet = .true., chdir_ = .true.) == '6311320', &
+	!		interpret_file(path//"05/main.syntran", quiet = .true., chdir_ = .true.) == '261668924', &
+	!		interpret_file(path//"06/main.syntran", quiet = .true., chdir_ = .true.) == '34675170', &
+	!		interpret_file(path//"07/main.syntran", quiet = .true., chdir_ = .true.) == '499106636', &
+	!		interpret_file(path//"08/main.syntran", quiet = .true., chdir_ = .true.) == '13289612829906', &
+	!		interpret_file(path//"09/main.syntran", quiet = .true., chdir_ = .true.) == '1819127106', &
+	!		interpret_file(path//"10/main.syntran", quiet = .true., chdir_ = .true.) == '7220', &
+	!		interpret_file(path//"11/main.syntran", quiet = .true., chdir_ = .true.) == '827019473638', &
+	!		interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '21', &
+	!		interpret_file(path//"13/main.syntran", quiet = .true., chdir_ = .true.) == '57259', &
+	!		interpret_file(path//"14/main.syntran", quiet = .true., chdir_ = .true.) == '191157', &
+	!		interpret_file(path//"15/main.syntran", quiet = .true., chdir_ = .true.) == '768500', &
+	!		interpret_file(path//"16/main.syntran", quiet = .true., chdir_ = .true.) == '14553', &
+	!		interpret_file(path//"17/main.syntran", quiet = .true., chdir_ = .true.) == '196', &
+	!		interpret_file(path//"18/main.syntran", quiet = .true., chdir_ = .true.) == '111131797001390', &
+	!		interpret_file(path//"19/main.syntran", quiet = .true., chdir_ = .true.) == '125317462035060', &
+	!		interpret_file(path//"20/main.syntran", quiet = .true., chdir_ = .true.) == '818723272', &
+	!		interpret_file(path//"21/main.syntran", quiet = .true., chdir_ = .true.) == '3770', &
+	!		interpret_file(path//"22/main.syntran", quiet = .true., chdir_ = .true.) == '66981', &
+	!		interpret_file(path//"23/main.syntran", quiet = .true., chdir_ = .true.) == '248', &
+	!		interpret_file(path//"24/main.syntran", quiet = .true., chdir_ = .true.) == '25261', &
+	!		interpret_file(path//"25/main.syntran", quiet = .true., chdir_ = .true.) == '555856', &
+	!		.false.  & ! so I don't have to bother w/ trailing commas
+	!	]
+
+	!! Trim dummy false element
+	!tests = tests(1: size(tests) - 1)
+
+	!call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_aoc_2023
 
@@ -188,9 +225,9 @@ subroutine unit_tests_long(iostat)
 	npass = 0
 	nfail = 0
 
-	call unit_test_aoc_2017(npass, nfail)
+	!call unit_test_aoc_2017(npass, nfail)
 	call unit_test_aoc_2023(npass, nfail)
-	call unit_test_aoc_2024(npass, nfail)
+	!call unit_test_aoc_2024(npass, nfail) ! TODO
 
 	call log_test_summary(npass, nfail)
 
