@@ -267,6 +267,7 @@ module function parse_use_statement(parser) result(statement)
 	! the need for remapping. This is similar to how #include works.
 	mod_parser%num_vars = parser%num_vars
 	mod_parser%num_fns = parser%num_fns
+	! TODO: num_structs should probably also be set here
 
 	! Parse the module
 	mod_unit = mod_parser%parse_unit()
@@ -290,7 +291,7 @@ module function parse_use_statement(parser) result(statement)
 		fn_name = mod_parser%fn_names%v(i)%s
 
 		! Look up the function in the module parser
-		fn = mod_parser%fns%search(fn_name, io, iostat)
+		fn = mod_parser%fns%search(fn_name, id_index, iostat)
 		if (iostat /= exit_success) cycle
 
 		! Determine the name to insert: qualified (module::fn) or unqualified (fn)
@@ -324,7 +325,7 @@ module function parse_use_statement(parser) result(statement)
 		! Insert into current parser with the SAME id_index from module parser.
 		! This is critical: function calls inside module code have id_indices
 		! that were assigned during module parsing, so we must preserve them.
-		call parser%fns%insert(insert_name, fn, io)
+		call parser%fns%insert(insert_name, fn, id_index)
 
 		! Only push to fn_names in the first pass (like parse_fn_declaration)
 		if (parser%ipass == 0) call parser%fn_names%push(insert_name)
