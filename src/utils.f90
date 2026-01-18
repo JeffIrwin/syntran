@@ -670,6 +670,63 @@ end function get_dir
 
 !===============================================================================
 
+logical function is_abs_path(path)
+	! Check if a path is absolute (starts with / on Unix or drive letter on Windows)
+	!
+	! TODO: wrong for Windows abs paths starting with "\" on current drive
+
+	character(len = *), intent(in) :: path
+
+	is_abs_path = .false.
+	if (len(path) == 0) return
+
+	! Unix absolute path
+	if (path(1:1) == '/') then
+		is_abs_path = .true.
+		return
+	end if
+
+	! Windows absolute path (e.g., C:\, D:\)
+	if (len(path) >= 2) then
+		if (path(2:2) == ':') then
+			is_abs_path = .true.
+			return
+		end if
+	end if
+
+	! Windows UNC path (e.g., \\server\share)
+	if (len(path) >= 2) then
+		if (path(1:2) == '\\') then
+			is_abs_path = .true.
+			return
+		end if
+	end if
+
+end function is_abs_path
+
+!===============================================================================
+
+function resolve_path(src_dir, path) result(resolved)
+
+	! Resolve a path relative to src_dir
+	! If path is absolute, return it as-is
+	! If path is relative and src_dir is non-empty, prepend src_dir
+
+	character(len = *), intent(in) :: src_dir, path
+	character(len = :), allocatable :: resolved
+
+	if (is_abs_path(path)) then
+		resolved = path
+	else if (len(src_dir) > 0) then
+		resolved = src_dir // path
+	else
+		resolved = path
+	end if
+
+end function resolve_path
+
+!===============================================================================
+
 logical function is_digit(c)
 
 	character, intent(in) :: c
