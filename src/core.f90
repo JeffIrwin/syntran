@@ -30,6 +30,32 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - log a known issue that syntran is not threadsafe
+	!    * did some work on feature/parallel branch to try running long tests in
+	!      parallel but it's a deep rabbit hole of issues. fix most (?)
+	!      str-to-num and num-to-str conversion, even tried gfortran 13 in
+	!      rocky, but there are still issues:
+	!
+	!          Starting AOC syntran main-struct 2023/02
+	!          part 2 = 54249
+	!          Ending AOC syntran main
+	!          
+	!          part 1 = 540212
+	!          At line 918 of file ././src/eval_array.f90
+	!          Fortran runtime error: Index '2' of dimension 1 of array 'array%str' above upper bound of 1
+	!          
+	!          Error termination. Backtrace:
+	!          #0  0x7f02914288a0 in ???
+	!          #1  0x7f02914293f9 in ???
+	!          #2  0x7f0291429a6d in ???
+	!          #3  0x14d7eb9 in __syntran__eval_m_MOD_get_array_val
+	!                  at ././src/eval_array.f90:918
+	!          #4  0x14ed0f5 in __syntran__eval_m_MOD_get_val
+	!                  at ././src/eval_array.f90:214
+	!          #5  0x11c8f65 in __syntran__eval_m_MOD_eval_name_expr
+	!                  at ././src/eval_expr.f90:219
+	!          #6  0xed7311 in __syntran__eval_m_MOD_syntax_eval
+	!
 	!  - are there any opportunities to "move" things (e.g. fns, vars, vals)
 	!    instead of doing expensive "copy" operations? usually hidden as an
 	!    overridden assignment= operator. in jsonf repo almost everything is
