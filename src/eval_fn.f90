@@ -740,11 +740,16 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		! eventually anyway for interactive runs with structs.  I can see why
 		! rust requires #derive[debug] to allow printing a whole struct
 
+		! Build the output string first, then write it all at once
+		str_ = new_char_vector()
 		do i = 1, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
-			write(output_unit, '(a)', advance = 'no') arg%to_str()
+			call str_%push(arg%to_str())
 		end do
-		write(output_unit, *)
+
+		!$omp critical(stdout_write)
+		write(output_unit, '(a)') str_%trim()
+		!$omp end critical(stdout_write)
 
 		!res%sca%i32 = 0
 
@@ -884,8 +889,10 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		! This is the key change for thread-safety
 		resolved_path = resolve_path(state%src_dir, arg1%sca%str%s)
 
+		!$omp critical(file_open)
 		open(newunit = res%sca%file_%unit_, file = resolved_path, &
 			status = status_, iostat = io)
+		!$omp end critical(file_open)
 		!print *, "io = ", io
 
 		if (io /= 0) then

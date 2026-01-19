@@ -227,11 +227,13 @@ recursive module subroutine eval_for_statement(node, state, res)
 		! evaluation now that we know all of the variable identifiers.
 		! Parsing still needs to rely on dictionary lookups because it does
 		! not know the entire list of variable identifiers ahead of time
+		!$omp critical(value_copy)
 		if (node%is_loc) then
 			state%locs%vals(node%id_index) = itr
 		else
 			state%vars%vals(node%id_index) = itr
 		end if
+		!$omp end critical(value_copy)
 
 		call syntax_eval(node%body, state, res)
 
@@ -374,11 +376,13 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 
 			! TODO: ban compound character substring assignment
 			i8 = subscript_eval(node, state)
+			!$omp critical(str_access)
 			if (node%is_loc) then
 				state%locs%vals(id)%sca%str%s(i8+1: i8+1) = res%sca%str%s
 			else
 				state%vars%vals(id)%sca%str%s(i8+1: i8+1) = res%sca%str%s
 			end if
+			!$omp end critical(str_access)
 
 		else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 
@@ -393,6 +397,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			! expression which changes the state!  For example, `array[(index +=
 			! 1)];`.  Maybe I should ban expression statements as indices, but
 			! src/tests/test-src/fns/test-19.syntran at least will need updated
+			!$omp critical(array_access)
 			i8 = subscript_eval(node, state)
 
 			if (node%is_loc) then
@@ -404,6 +409,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 				call compound_assign(array_val, res, node%op)
 				call set_val(node, state%vars%vals(id), state, array_val, index_ = i8)
 			end if
+			!$omp end critical(array_access)
 
 			res = array_val
 

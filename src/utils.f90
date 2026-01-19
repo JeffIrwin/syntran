@@ -536,7 +536,9 @@ function read_file(file, iostat) result(str_)
 
 	type(char_vector_t) :: sb  ! string builder
 
+	!$omp critical(file_open)
 	open(file = file, newunit = iu, status = 'old', iostat = io)
+	!$omp end critical(file_open)
 	if (io /= exit_success) then
 		if (present(iostat)) iostat = io
 		return

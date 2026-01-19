@@ -109,7 +109,9 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	end if
 
 	if (var%struct(id)%type == str_type) then
+		!$omp critical(str_access)
 		var%struct(id)%sca%str%s(i8+1: i8+1) = val%sca%str%s
+		!$omp end critical(str_access)
 		return
 	end if
 
@@ -258,7 +260,9 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	end if
 
 	if (var%struct(id)%type == str_type) then
+		!$omp critical(str_access)
 		res%sca%str%s = var%struct(id)%sca%str%s(i8+1: i8+1)
+		!$omp end critical(str_access)
 		res%type = str_type
 		return
 	end if
@@ -874,7 +878,9 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	case (str_type)
 		!val%type = str_type
+		!$omp critical(str_access)
 		val%sca%str%s = str_%sca%str%s(i:i)
+		!$omp end critical(str_access)
 		!print *, "val s = ", val%sca%str%s
 
 	case default

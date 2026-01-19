@@ -373,11 +373,13 @@ recursive subroutine syntax_eval(node, state, res)
 		!print *, "is_loc = ", node%is_loc
 
 		id = node%id_index
+		!$omp critical(value_copy)
 		if (node%is_loc) then
 			state%locs%vals(id) = res
 		else
 			state%vars%vals(id) = res
 		end if
+		!$omp end critical(value_copy)
 
 		!print *, "res type = ", kind_name(res%type)
 		!print *, "allocated(struct) = ", allocated(res%struct)

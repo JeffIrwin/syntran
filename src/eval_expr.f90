@@ -168,11 +168,13 @@ recursive module subroutine eval_name_expr(node, state, res)
 			i8 = subscript_eval(node, state)
 			!print *, 'i8 = ', i8
 
+			!$omp critical(str_access)
 			if (node%is_loc) then
 				res%sca%str%s = state%locs%vals(id)%sca%str%s(i8+1: i8+1)
 			else
 				res%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
 			end if
+			!$omp end critical(str_access)
 
 		case (range_sub)
 
@@ -191,11 +193,13 @@ recursive module subroutine eval_name_expr(node, state, res)
 			!print *, 'str = ', state%vars%vals(id)%sca%str%s  ! debug broken for is_loc
 
 			! Not inclusive of upper bound
+			!$omp critical(str_access)
 			if (node%is_loc) then
 				res%sca%str%s = state%locs%vals(id)%sca%str%s(il: iu-1)
 			else
 				res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
 			end if
+			!$omp end critical(str_access)
 
 		case default
 			write(*,*) err_int_prefix//'unexpected str subscript kind'//color_reset
@@ -214,6 +218,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 		!print *, "rank = ", node%val%array%rank
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+			!$omp critical(array_access)
 			i8 = subscript_eval(node, state)
 
 			if (node%is_loc) then
@@ -221,6 +226,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 			else
 				call get_val(node, state%vars%vals(id), state, res, index_ = i8)
 			end if
+			!$omp end critical(array_access)
 
 		else
 
@@ -297,11 +303,13 @@ recursive module subroutine eval_name_expr(node, state, res)
 		!print *, "id = ", id
 		!print *, "size(vals) = ", size(state%vars%vals)
 
+		!$omp critical(value_copy)
 		if (node%is_loc) then
 			res = state%locs%vals(id)
 		else
 			res = state%vars%vals(id)
 		end if
+		!$omp end critical(value_copy)
 
 	end if
 

@@ -524,7 +524,9 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	if (present(chdir_)) chdirl = chdir_
 
 	if (.not. state%quiet .and. .not. quiet_infol) then
+		!$omp critical(stdout_write)
 		write(*,*) 'Interpreting file "'//filename//'"'
+		!$omp end critical(stdout_write)
 	end if
 	!if (.true. .or. .not. state%quiet) write(*,*) 'Interpreting file "'//filename//'"'
 
