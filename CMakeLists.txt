@@ -158,7 +158,7 @@ set_target_properties("${EXE_BIN}" PROPERTIES OUTPUT_NAME "${EXE}")
 
 #===============================================================================
 
-# Unit tests exe
+# Unit test exe
 set(TEST_EXE "test")
 set(TEST_SRC
 	${SRC_DIR}/app.f90
@@ -177,6 +177,28 @@ set_target_properties("${TEST_EXE}" PROPERTIES
 
 # Thanks gfort, I'm aware of integer division
 target_compile_options(${TEST_EXE} PRIVATE "-Wno-integer-division")
+
+#===============================================================================
+
+# Long test exe
+set(LONG_EXE "long")
+set(LONG_SRC
+	${SRC_DIR}/app.f90
+	${SRC_DIR}/tests/core.f90
+	${SRC_DIR}/tests/long.f90
+)
+
+add_executable(${LONG_EXE}
+	${LONG_SRC}
+)
+target_link_libraries(${LONG_EXE} ${LINK_LIBS})
+
+set_target_properties("${LONG_EXE}" PROPERTIES
+	Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod/${LONG_EXE}
+)
+
+# Thanks gfort, I'm aware of integer division
+target_compile_options(${LONG_EXE} PRIVATE "-Wno-integer-division")
 
 #===============================================================================
 

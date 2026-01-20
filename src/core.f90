@@ -78,14 +78,8 @@ module syntran__core_m
 	!      chose
 	!  - check every execution path of a fn returns
 	!  - claude tasks:
-	!    * update CLAUDE.md to recommend cmake as primary build tool. cmake
-	!      (driving gnu make) is parallel but fpm is not. might need to update
-	!      test.sh is well and/or make test-long.sh as opposed to unit tests,
-	!      add debug/release option, etc.
-	!      + also need a run.sh script, e.g. to run a single syntran file (or
-	!        the interpretter) based on whatever args are passed along
-	!      + clean.sh exists
-	!      + basically every fpm command needs a cmake driver script replacement
+	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable
+	!      it. duh!
 	!    * fortran compile time optimization -- see if pain points like
 	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
 	!      + intr_fns.f90, eval.f90, types.f90 now broken up
