@@ -89,7 +89,7 @@ module syntran__utils_m
 			procedure :: set       => map_i32_set
 			procedure :: get       => map_i32_get
 			procedure :: contains  => map_i32_contains
-			procedure :: increment => map_i32_increment
+			!procedure :: increment => map_i32_increment
 			procedure :: destroy   => map_i32_destroy
 			procedure, private :: resize => map_i32_resize
 	end type map_i32_t
@@ -1263,6 +1263,8 @@ end function fnv_1a
 !===============================================================================
 
 subroutine map_i32_init(self, capacity)
+	! Consider making a `new_map_i32()` fn instead of init subroutine,
+	! consistent with syntran src style
 	class(map_i32_t), intent(inout) :: self
 	integer, intent(in) :: capacity
 
@@ -1317,6 +1319,7 @@ end subroutine map_i32_set
 !===============================================================================
 
 function map_i32_get(self, key, value) result(found)
+	! Consider making this fn return `value` instead of `found`
 	class(map_i32_t), intent(in) :: self
 	character(len=*), intent(in) :: key
 	integer, intent(out) :: value
@@ -1368,17 +1371,18 @@ end function map_i32_contains
 
 !===============================================================================
 
-subroutine map_i32_increment(self, key)
-	class(map_i32_t), intent(inout) :: self
-	character(len=*), intent(in) :: key
-	integer :: current_value
-
-	if (self%get(key, current_value)) then
-		call self%set(key, current_value + 1)
-	else
-		call self%set(key, 1)
-	end if
-end subroutine map_i32_increment
+!! Unused
+!subroutine map_i32_increment(self, key)
+!	class(map_i32_t), intent(inout) :: self
+!	character(len=*), intent(in) :: key
+!	integer :: current_value
+!
+!	if (self%get(key, current_value)) then
+!		call self%set(key, current_value + 1)
+!	else
+!		call self%set(key, 1)
+!	end if
+!end subroutine map_i32_increment
 
 !===============================================================================
 
