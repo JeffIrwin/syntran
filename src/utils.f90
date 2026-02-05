@@ -77,7 +77,6 @@ module syntran__utils_m
 	type :: map_i32_entry_t
 		character(:), allocatable :: key
 		integer :: value
-		logical :: occupied = .false.
 	end type map_i32_entry_t
 
 	type :: map_i32_t
@@ -1064,6 +1063,28 @@ end function quote
 
 !===============================================================================
 
+logical function is_str_eq(a, b)
+	! Fortran considers spaces as insignificant in str comparisons, but no sane
+	! language would allow that
+	!
+	! I guess this is an artifact of fixed-length strings being common in older
+	! fortran code
+	!
+	! Note that `is_ne()` is implemented as `.not. is_eq()`, which calls this
+	! fn, so there is no need for a separate is_str_ne()
+
+	character(len = *), intent(in) :: a, b
+
+	!is_str_eq = a == b  ! not what you expect!
+
+	is_str_eq = &
+		len(a) == len(b) .and. &
+		    a  ==     b
+
+end function is_str_eq
+
+!===============================================================================
+
 function findlocl1(arr, val) result(loc)
 
 	! findloc() is standard in Fortran 2008, but gfortran 8.1.0 doesn't have it
@@ -1252,7 +1273,6 @@ subroutine map_i32_init(self, capacity)
 	self%capacity = capacity
 	self%count = 0
 	allocate(self%table(capacity))
-	self%table(:)%occupied = .false.
 end subroutine map_i32_init
 
 !===============================================================================
@@ -1277,14 +1297,13 @@ subroutine map_i32_set(self, key, value)
 	do probe = 0, self%capacity - 1
 		idx = modulo(hash_idx + probe - 1, self%capacity) + 1
 
-		if (.not. self%table(idx)%occupied) then
+		if (.not. allocated(self%table(idx)%key)) then
 			! Empty slot - insert new entry
-			self%table(idx)%key = trim(key)
+			self%table(idx)%key = key
 			self%table(idx)%value = value
-			self%table(idx)%occupied = .true.
 			self%count = self%count + 1
 			return
-		else if (trim(self%table(idx)%key) == trim(key)) then
+		else if (is_str_eq(self%table(idx)%key, key)) then
 			! Key exists - update value
 			self%table(idx)%value = value
 			return
@@ -1312,9 +1331,9 @@ function map_i32_get(self, key, value) result(found)
 	do probe = 0, self%capacity - 1
 		idx = modulo(hash_idx + probe - 1, self%capacity) + 1
 
-		if (.not. self%table(idx)%occupied) then
+		if (.not. allocated(self%table(idx)%key)) then
 			return  ! Not found
-		else if (trim(self%table(idx)%key) == trim(key)) then
+		else if (is_str_eq(self%table(idx)%key, key)) then
 			value = self%table(idx)%value
 			found = .true.
 			return
@@ -1338,9 +1357,9 @@ function map_i32_contains(self, key) result(found)
 	do probe = 0, self%capacity - 1
 		idx = modulo(hash_idx + probe - 1, self%capacity) + 1
 
-		if (.not. self%table(idx)%occupied) then
+		if (.not. allocated(self%table(idx)%key)) then
 			return  ! Not found
-		else if (trim(self%table(idx)%key) == trim(key)) then
+		else if (is_str_eq(self%table(idx)%key, key)) then
 			found = .true.
 			return
 		end if
@@ -1386,11 +1405,10 @@ subroutine map_i32_resize(self)
 	self%capacity = new_capacity
 	self%count = 0
 	allocate(self%table(new_capacity))
-	self%table(:)%occupied = .false.
 
 	! Rehash all entries from old table
 	do i = 1, old_capacity
-		if (old_table(i)%occupied) then
+		if (allocated(old_table(i)%key)) then
 			call self%set(old_table(i)%key, old_table(i)%value)
 		end if
 	end do
