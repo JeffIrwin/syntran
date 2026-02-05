@@ -164,7 +164,7 @@ module function parse_use_statement(parser) result(statement)
 	end if
 
 	! Match identifier or keyword as module name. Keywords like `struct` can
-	! appear as module names (e.g., `use struct-mod;`)
+	! appear as module names (e.g., `use struct;`)
 	if (is_identifier_or_keyword(parser%current_kind())) then
 		mod_identifier = parser%next()
 	else
@@ -173,14 +173,13 @@ module function parse_use_statement(parser) result(statement)
 	module_name = mod_identifier%text
 	module_path = module_path // module_name
 
-	! Handle hyphens in module names (e.g., `use array-mod;`)
-	do while (parser%current_kind() == minus_token .and. &
-	          is_identifier_or_keyword(parser%peek_kind(1)))
-		dummy = parser%match(minus_token)
-		name_identifier = parser%next()
-		module_name = module_name // "-" // name_identifier%text
-		module_path = module_path // "-" // name_identifier%text
-	end do
+	! Hyphens are not allowed in module names
+	if (parser%current_kind() == minus_token) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_hyphen(parser%context(), span))
+		return
+	end if
 
 	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
 	do while (parser%current_kind() == slash_token)

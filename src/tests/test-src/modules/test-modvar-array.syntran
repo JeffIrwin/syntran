@@ -1,6 +1,6 @@
 // Test module array variable with computed range expression
 
-use array-mod::*;
+use array_mod::*;
 
 // Test that array was properly initialized with [0: 10]
 let ok1 = size(arr, 0) == 10;

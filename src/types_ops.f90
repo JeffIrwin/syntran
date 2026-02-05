@@ -288,7 +288,7 @@ module logical function is_identifier_or_keyword(kind)
 
 	! Check if a token kind is an identifier or a keyword. This is used when
 	! parsing module names in `use` statements, where keywords like `struct` can
-	! be part of a hyphenated module name (e.g., `use struct-mod;`)
+	! be used as module names or path segments (e.g., `use struct;`, `use path/struct;`)
 
 	integer, intent(in) :: kind
 

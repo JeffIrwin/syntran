@@ -16,7 +16,8 @@ RUN find /opt -name "gfortran"
 ENV PATH="$PATH:/opt/rh/gcc-toolset-13/root/usr/bin/"
 RUN gfortran --version
 
-ADD https://github.com/fortran-lang/fpm/releases/download/current/fpm-linux-x86_64 ./fpm
+ARG FPM_URL="https://github.com/fortran-lang/fpm/releases/download/v0.12.0/fpm-0.12.0-linux-x86_64-gcc-12"
+ADD $FPM_URL ./fpm
 
 RUN chmod +x fpm
 RUN mv fpm /usr/local/bin

@@ -1194,6 +1194,18 @@ end function err_circular_import
 
 !===============================================================================
 
+function err_mod_hyphen(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'hyphens are not allowed in module names, use underscores instead' &
+		//underline(context, span) &
+		//" bad module name"//color_reset
+end function err_mod_hyphen
+
+!===============================================================================
+
 function err_404(filename) result(err)
 	character(len = *), intent(in) :: filename
 	character(len = :), allocatable :: err

@@ -1,7 +1,7 @@
 // Test import first, then local struct definition
 // Verifies no index collision in reverse order
 
-use struct-mod::*;  // Imports Point struct first
+use struct_mod::*;  // Imports Point struct first
 
 struct LocalPoint
 {

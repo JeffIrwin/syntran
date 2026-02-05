@@ -1,6 +1,6 @@
 // Test struct export from module (also tests module name starting with keyword)
 
-use struct-mod::*;
+use struct_mod::*;
 
 // Test struct instantiation using exported struct
 let p1 = Point{x = 3, y = 4};

@@ -7,7 +7,7 @@ struct LocalPoint
 	y: i32,
 }
 
-use struct-mod::*;  // Imports Point struct
+use struct_mod::*;  // Imports Point struct
 
 let local = LocalPoint{x = 1, y = 2};
 let imported = Point{x = 3, y = 4};
