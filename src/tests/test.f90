@@ -4491,6 +4491,7 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-struct-mod-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
+			interpret_file(path//'test-circular.syntran', quiet) == '', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

@@ -547,6 +547,8 @@ recursive module function new_parser(str_, src_file, contexts, unit_) result(par
 	parser%locs%scope_cap = SCOPE_CAP_INIT
 	allocate(parser%locs%dicts( parser%locs%scope_cap ))
 
+	call parser%import_stack%init(16)
+
 	!print *, 'tokens%len_ = ', tokens%len_
 	if (debug > 1) print *, parser%tokens_str()
 

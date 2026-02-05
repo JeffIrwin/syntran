@@ -1181,6 +1181,19 @@ end function err_mod_read
 
 !===============================================================================
 
+function err_circular_import(context, span, module_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = *), intent(in) :: module_name
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'circular module dependency on `'//module_name//'`' &
+		//underline(context, span) &
+		//" circular import"//color_reset
+end function err_circular_import
+
+!===============================================================================
+
 function err_404(filename) result(err)
 	character(len = *), intent(in) :: filename
 	character(len = :), allocatable :: err

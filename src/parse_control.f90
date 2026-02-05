@@ -234,11 +234,11 @@ module function parse_use_statement(parser) result(statement)
 		return
 	end if
 
-	! Check for self-import (circular dependency)
-	if (mod_filename == parser%contexts%v(parser%current_unit())%src_file) then
+	! Check for circular module dependency
+	if (parser%import_stack%contains(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_prefix // "module `" // module_name // "` cannot import itself" // color_reset)
+			err_circular_import(parser%context(), span, module_name))
 		return
 	end if
 
@@ -255,6 +255,10 @@ module function parse_use_statement(parser) result(statement)
 	mod_contexts = new_context_vector()
 	mod_unit_ = 0
 	mod_parser = new_parser(mod_text, mod_filename, mod_contexts, mod_unit_)
+
+	! Propagate import chain into child parser for cycle detection
+	mod_parser%import_stack = parser%import_stack
+	call mod_parser%import_stack%set(mod_filename, 0)
 
 	! Initialize intrinsic functions for the module parser.
 	! We use declare_intr_fns instead of copying from the main parser's dict

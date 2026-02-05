@@ -72,6 +72,29 @@ module syntran__utils_m
 			procedure :: push_all => push_all_string
 	end type string_vector_t
 
+	!****
+
+	type :: map_i32_entry_t
+		character(:), allocatable :: key
+		integer :: value
+		logical :: occupied = .false.
+	end type map_i32_entry_t
+
+	type :: map_i32_t
+		type(map_i32_entry_t), allocatable :: table(:)
+		integer :: capacity = 0
+		integer :: count = 0
+		real :: load_factor_threshold = 0.75
+		contains
+			procedure :: init      => map_i32_init
+			procedure :: set       => map_i32_set
+			procedure :: get       => map_i32_get
+			procedure :: contains  => map_i32_contains
+			procedure :: increment => map_i32_increment
+			procedure :: destroy   => map_i32_destroy
+			procedure, private :: resize => map_i32_resize
+	end type map_i32_t
+
 	!********
 
 	type char_vector_t
@@ -1190,6 +1213,190 @@ function bool1_str(x) result(str_)
 	end if
 
 end function bool1_str
+
+!===============================================================================
+
+!===============================================================================
+
+pure function fnv_1a(input, seed) result(hash)
+	character(*), intent(in) :: input
+	integer(int64), intent(in), optional :: seed
+	integer(int64) :: hash
+
+	integer :: i
+	integer(int64), parameter :: FNV_OFFSET_32 = 2166136261_int64
+	integer(int64), parameter :: FNV_PRIME_32  = 16777619_int64
+
+	if (present(seed)) then
+		hash = seed
+	else
+		hash = FNV_OFFSET_32
+	end if
+
+	do i = 1, len(input)
+		hash = ieor(hash, iachar(input(i:i), int64)) * FNV_PRIME_32
+	end do
+
+end function fnv_1a
+
+!===============================================================================
+
+subroutine map_i32_init(self, capacity)
+	class(map_i32_t), intent(inout) :: self
+	integer, intent(in) :: capacity
+
+	if (capacity <= 0) then
+		error stop "map_i32_init: capacity must be positive"
+	end if
+
+	self%capacity = capacity
+	self%count = 0
+	allocate(self%table(capacity))
+	self%table(:)%occupied = .false.
+end subroutine map_i32_init
+
+!===============================================================================
+
+subroutine map_i32_set(self, key, value)
+	class(map_i32_t), intent(inout) :: self
+	character(len=*), intent(in) :: key
+	integer, intent(in) :: value
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	! Auto-resize if load factor exceeds threshold
+	if (real(self%count) / real(self%capacity) >= self%load_factor_threshold) then
+		call self%resize()
+	end if
+
+	! FNV-1a hash
+	hash_val = fnv_1a(key)
+	hash_idx = modulo(abs(hash_val), self%capacity) + 1
+
+	! Linear probing
+	do probe = 0, self%capacity - 1
+		idx = modulo(hash_idx + probe - 1, self%capacity) + 1
+
+		if (.not. self%table(idx)%occupied) then
+			! Empty slot - insert new entry
+			self%table(idx)%key = trim(key)
+			self%table(idx)%value = value
+			self%table(idx)%occupied = .true.
+			self%count = self%count + 1
+			return
+		else if (trim(self%table(idx)%key) == trim(key)) then
+			! Key exists - update value
+			self%table(idx)%value = value
+			return
+		end if
+	end do
+
+	! Should never reach here if resize works correctly
+	error stop "map_i32_set: table full despite resize"
+end subroutine map_i32_set
+
+!===============================================================================
+
+function map_i32_get(self, key, value) result(found)
+	class(map_i32_t), intent(in) :: self
+	character(len=*), intent(in) :: key
+	integer, intent(out) :: value
+	logical :: found
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	found = .false.
+	hash_val = fnv_1a(key)
+	hash_idx = modulo(abs(hash_val), self%capacity) + 1
+
+	do probe = 0, self%capacity - 1
+		idx = modulo(hash_idx + probe - 1, self%capacity) + 1
+
+		if (.not. self%table(idx)%occupied) then
+			return  ! Not found
+		else if (trim(self%table(idx)%key) == trim(key)) then
+			value = self%table(idx)%value
+			found = .true.
+			return
+		end if
+	end do
+end function map_i32_get
+
+!===============================================================================
+
+function map_i32_contains(self, key) result(found)
+	class(map_i32_t), intent(in) :: self
+	character(len=*), intent(in) :: key
+	logical :: found
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	found = .false.
+	hash_val = fnv_1a(key)
+	hash_idx = modulo(abs(hash_val), self%capacity) + 1
+
+	do probe = 0, self%capacity - 1
+		idx = modulo(hash_idx + probe - 1, self%capacity) + 1
+
+		if (.not. self%table(idx)%occupied) then
+			return  ! Not found
+		else if (trim(self%table(idx)%key) == trim(key)) then
+			found = .true.
+			return
+		end if
+	end do
+end function map_i32_contains
+
+!===============================================================================
+
+subroutine map_i32_increment(self, key)
+	class(map_i32_t), intent(inout) :: self
+	character(len=*), intent(in) :: key
+	integer :: current_value
+
+	if (self%get(key, current_value)) then
+		call self%set(key, current_value + 1)
+	else
+		call self%set(key, 1)
+	end if
+end subroutine map_i32_increment
+
+!===============================================================================
+
+subroutine map_i32_destroy(self)
+	class(map_i32_t), intent(inout) :: self
+	if (allocated(self%table)) deallocate(self%table)
+	self%capacity = 0
+	self%count = 0
+end subroutine map_i32_destroy
+
+!===============================================================================
+
+subroutine map_i32_resize(self)
+	class(map_i32_t), intent(inout) :: self
+	type(map_i32_entry_t), allocatable :: old_table(:)
+	integer :: old_capacity, i, new_capacity
+
+	! Save old table
+	old_capacity = self%capacity
+	call move_alloc(self%table, old_table)
+
+	! Allocate new table with double capacity
+	new_capacity = old_capacity * 2
+	self%capacity = new_capacity
+	self%count = 0
+	allocate(self%table(new_capacity))
+	self%table(:)%occupied = .false.
+
+	! Rehash all entries from old table
+	do i = 1, old_capacity
+		if (old_table(i)%occupied) then
+			call self%set(old_table(i)%key, old_table(i)%value)
+		end if
+	end do
+
+	! Old table automatically deallocated
+end subroutine map_i32_resize
 
 !===============================================================================
 

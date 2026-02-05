@@ -560,6 +560,8 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	parser = new_parser(str_, src_filel, contexts, unit_)
 	!print *, 'units = ', parser%tokens(:)%unit_
 
+	call parser%import_stack%set(src_filel, 0)
+
 	parser%repl = repll
 
 	! The global scope can return any type.  This is initialized here and not

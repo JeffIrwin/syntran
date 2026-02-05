@@ -62,6 +62,8 @@ module syntran__parse_m
 
 		logical :: repl
 
+		type(map_i32_t) :: import_stack
+
 		contains
 			procedure :: &
 				context => current_context, &
