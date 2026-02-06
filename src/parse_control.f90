@@ -173,6 +173,14 @@ module function parse_use_statement(parser) result(statement)
 	module_name = mod_identifier%text
 	module_path = module_path // module_name
 
+	! Ban "std" as a user-defined module name (reserved for standard library)
+	if (module_name == "std") then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_reserved_std(parser%context(), span))
+		return
+	end if
+
 	! Hyphens are not allowed in module names
 	if (parser%current_kind() == minus_token) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))

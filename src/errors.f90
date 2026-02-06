@@ -1206,6 +1206,18 @@ end function err_mod_hyphen
 
 !===============================================================================
 
+function err_mod_reserved_std(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'module name `std` is reserved for the standard library' &
+		//underline(context, span) &
+		//" reserved name"//color_reset
+end function err_mod_reserved_std
+
+!===============================================================================
+
 function err_404(filename) result(err)
 	character(len = *), intent(in) :: filename
 	character(len = :), allocatable :: err

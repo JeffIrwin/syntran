@@ -64,7 +64,6 @@ module syntran__core_m
 	!    currently, but not A use B and B use A for example afaik
 	!  - module arrays don't work, structs probably don't work either
 	!    * wip
-	!    * ban "std" as a user-defined module
 	!    * rust bans keywords as module names. revert and ban?
 	!    * any other special characters need handling? spaces should be banned
 	!      but check for a helpful error message at least
