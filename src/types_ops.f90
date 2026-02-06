@@ -284,6 +284,18 @@ end function get_keyword_kind
 
 !===============================================================================
 
+module logical function is_keyword(text) result(is_kw)
+
+	! Returns true if text is a keyword
+
+	character(len = *), intent(in) :: text
+
+	is_kw = get_keyword_kind(text) /= identifier_token
+
+end function is_keyword
+
+!===============================================================================
+
 module logical function is_identifier_or_keyword(kind)
 
 	! Check if a token kind is an identifier or a keyword. This is used when

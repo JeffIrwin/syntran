@@ -4496,6 +4496,7 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-std-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-std-ban-glob.syntran', quiet) == '', &
 			interpret_file(path//'test-std-ban-path.syntran', quiet) == '', &
+			interpret_file(path//'test-keyword-ban.syntran', quiet) == '', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

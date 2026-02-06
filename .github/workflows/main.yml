@@ -450,6 +450,7 @@
 	"test-compilers": {
 		"name": "Test with ${{ matrix.toolchain.compiler }}-${{ matrix.toolchain.version }}",
 		"timeout-minutes": 120,
+		"fail-fast": false,
 		"runs-on": "${{ matrix.os }}",
 		"strategy": {
 			"matrix": {

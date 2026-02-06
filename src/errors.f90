@@ -1206,6 +1206,19 @@ end function err_mod_hyphen
 
 !===============================================================================
 
+function err_mod_keyword(context, span, keyword) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = *), intent(in) :: keyword
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'module name `'//keyword//'` is a reserved keyword' &
+		//underline(context, span) &
+		//" keyword as module name"//color_reset
+end function err_mod_keyword
+
+!===============================================================================
+
 function err_mod_reserved_std(context, span) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

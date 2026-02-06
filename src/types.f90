@@ -539,6 +539,10 @@ module syntran__types_m
 			character(len = *), intent(in) :: text
 		end function get_keyword_kind
 
+		module logical function is_keyword(text)
+			character(len = *), intent(in) :: text
+		end function is_keyword
+
 		module logical function is_identifier_or_keyword(kind)
 			integer, intent(in) :: kind
 		end function is_identifier_or_keyword

@@ -173,6 +173,14 @@ module function parse_use_statement(parser) result(statement)
 	module_name = mod_identifier%text
 	module_path = module_path // module_name
 
+	! Ban keywords as module names
+	if (is_keyword(module_name)) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_keyword(parser%context(), span, module_name))
+		return
+	end if
+
 	! Ban "std" as a user-defined module name (reserved for standard library)
 	if (module_name == "std") then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
@@ -197,6 +205,15 @@ module function parse_use_statement(parser) result(statement)
 		else
 			name_identifier = parser%match(identifier_token)
 		end if
+
+		! Ban keywords in path segments
+		if (is_keyword(name_identifier%text)) then
+			span = new_span(name_identifier%pos, len(name_identifier%text))
+			call parser%diagnostics%push( &
+				err_mod_keyword(parser%context(), span, name_identifier%text))
+			return
+		end if
+
 		module_name = module_name // "/" // name_identifier%text
 		module_path = module_path // "/" // name_identifier%text
 	end do
