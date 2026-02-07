@@ -493,6 +493,7 @@
 			{
 				"if": "matrix.os == 'ubuntu-latest'",
 				"name": "Test ${{ matrix.toolchain.compiler }} ${{ matrix.toolchain.version }}",
+				"timeout-minutes": 90,
 				"env": {
 					"FPM_FC": "${{ env.FC }}"
 				},
