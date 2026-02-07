@@ -64,6 +64,8 @@ module syntran__core_m
 	!    instead of doing expensive "copy" operations? usually hidden as an
 	!    overridden assignment= operator. in jsonf repo almost everything is
 	!    moved instead of copied
+	!  - migrate ci from ubuntu 22 to 24. rocky should stay on version 9 for the
+	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
 	!    might be zero perf benefit because the dicts are only used at parse
 	!    time, then mapped to efficient arrays at eval time
@@ -124,8 +126,6 @@ module syntran__core_m
 	!    * git(hub) cleanup. no need to delete branches, but rename existing
 	!      branches (except for main and dev) to start with feature/ or
 	!      jeffirwin/, e.g. vec-slice -> feature/vec-slice
-	!  - what happens if you use the same module twice? same form both times or
-	!    mix qualified and unqualified?
 	!  - i like claude's "double_colon_token" name. i should change things like
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - if you try to return something (e.g. i32) from a void/null fn, the
