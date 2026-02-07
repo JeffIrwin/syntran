@@ -1292,7 +1292,7 @@ subroutine map_i32_set(self, key, value)
 
 	! FNV-1a hash
 	hash_val = fnv_1a(key)
-	hash_idx = int(modulo(abs(hash_val), self%capacity) + 1)
+	hash_idx = int(modulo(hash_val, int(self%capacity, int64)) + 1)
 
 	! Linear probing
 	do probe = 0, self%capacity - 1
@@ -1329,7 +1329,7 @@ function map_i32_get(self, key, value) result(found)
 
 	found = .false.
 	hash_val = fnv_1a(key)
-	hash_idx = int(modulo(abs(hash_val), self%capacity) + 1)
+	hash_idx = int(modulo(hash_val, int(self%capacity, int64)) + 1)
 
 	do probe = 0, self%capacity - 1
 		idx = modulo(hash_idx + probe - 1, self%capacity) + 1
@@ -1355,7 +1355,7 @@ function map_i32_contains(self, key) result(found)
 
 	found = .false.
 	hash_val = fnv_1a(key)
-	hash_idx = int(modulo(abs(hash_val), self%capacity) + 1)
+	hash_idx = int(modulo(hash_val, int(self%capacity, int64)) + 1)
 
 	do probe = 0, self%capacity - 1
 		idx = modulo(hash_idx + probe - 1, self%capacity) + 1

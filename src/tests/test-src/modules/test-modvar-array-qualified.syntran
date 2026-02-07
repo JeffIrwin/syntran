@@ -1,22 +1,22 @@
 // Test qualified array subscripting (mod::arr[i]) and struct member access (mod::struct.field)
 
-use arraymod;
+use array_mod;
 use pointmod;
 
 // Test qualified array subscript access
-let ok1 = arraymod::arr[0] == 0;
-let ok2 = arraymod::arr[5] == 5;
-let ok3 = arraymod::arr[9] == 9;
+let ok1 = array_mod::arr[0] == 0;
+let ok2 = array_mod::arr[5] == 5;
+let ok3 = array_mod::arr[9] == 9;
 
 // Test qualified array size
-let ok4 = size(arraymod::arr, 0) == 10;
+let ok4 = size(array_mod::arr, 0) == 10;
 
 // Test qualified function call still works
-let ok5 = arraymod::get_element(3) == 3;
+let ok5 = array_mod::get_element(3) == 3;
 
 // Test qualified array assignment
-arraymod::arr[0] = 100;
-let ok6 = arraymod::arr[0] == 100;
+array_mod::arr[0] = 100;
+let ok6 = array_mod::arr[0] == 100;
 
 // Test qualified struct member access (mod::struct.field)
 let ok7 = pointmod::origin.x == 0;

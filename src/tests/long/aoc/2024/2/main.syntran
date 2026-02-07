@@ -26,7 +26,6 @@ fn part1(): i64
 		//println("str_ = ", str_);
 
 		let v = utils_2024::parse_i32_delim(str_, " ");
-		//let v = parse_i32_delim(str_, " ");
 		let nv = size(v, 0);
 
 		let dv = v[1: nv] - v[0: nv-1];
@@ -56,7 +55,6 @@ fn part2(): i64
 	{
 		//println("str_ = ", str_);
 
-		//let vlong = parse_i32_delim(str_, " ");
 		let vlong = utils_2024::parse_i32_delim(str_, " ");
 
 		// There was a cursed syntran bug where this only worked if i
