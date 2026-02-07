@@ -197,6 +197,14 @@ module function parse_use_statement(parser) result(statement)
 		return
 	end if
 
+	! Spaces are not allowed in module names (detected by unexpected identifier)
+	if (parser%current_kind() == identifier_token) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_space(parser%context(), span))
+		return
+	end if
+
 	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
 	do while (parser%current_kind() == slash_token)
 		dummy = parser%match(slash_token)
