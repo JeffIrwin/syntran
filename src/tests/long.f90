@@ -67,10 +67,6 @@ subroutine unit_test_aoc_2023(npass, nfail)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! TODO: `do concurrent` (or openmp parallelize) all long tests.  Just need
-	! to setup str vecs of input filenames and expected return vals, then
-	! iterate in a loop
-
 	tests = &
 		[   &
 			interpret_file(path//"01/main.syntran", quiet = .true., chdir_ = .true.) == '107443', &

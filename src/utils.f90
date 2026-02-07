@@ -1237,8 +1237,6 @@ end function bool1_str
 
 !===============================================================================
 
-!===============================================================================
-
 pure function fnv_1a(input, seed) result(hash)
 	character(*), intent(in) :: input
 	integer(int64), intent(in), optional :: seed
@@ -1269,6 +1267,7 @@ subroutine map_i32_init(self, capacity)
 	integer, intent(in) :: capacity
 
 	if (capacity <= 0) then
+		! TODO: internal syntran error
 		error stop "map_i32_init: capacity must be positive"
 	end if
 
@@ -1313,6 +1312,7 @@ subroutine map_i32_set(self, key, value)
 	end do
 
 	! Should never reach here if resize works correctly
+	! TODO: internal syntran error
 	error stop "map_i32_set: table full despite resize"
 end subroutine map_i32_set
 
