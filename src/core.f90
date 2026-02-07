@@ -64,6 +64,9 @@ module syntran__core_m
 	!    instead of doing expensive "copy" operations? usually hidden as an
 	!    overridden assignment= operator. in jsonf repo almost everything is
 	!    moved instead of copied
+	!  - replace ternary tree dicts with hash maps? might be simpler, but there
+	!    might be zero perf benefit because the dicts are only used at parse
+	!    time, then mapped to efficient arrays at eval time
 	!  - check every execution path of a fn returns
 	!  - claude tasks:
 	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable

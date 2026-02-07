@@ -63,6 +63,7 @@ module syntran__parse_m
 		logical :: repl
 
 		type(map_i32_t) :: import_stack
+		type(map_i32_t) :: imported_modules
 
 		contains
 			procedure :: &

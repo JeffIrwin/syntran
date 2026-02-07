@@ -1194,6 +1194,19 @@ end function err_circular_import
 
 !===============================================================================
 
+function err_duplicate_import(context, span, module_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = *), intent(in) :: module_name
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'duplicate import of module `'//module_name//'`' &
+		//underline(context, span) &
+		//" duplicate import"//color_reset
+end function err_duplicate_import
+
+!===============================================================================
+
 function err_mod_hyphen(context, span) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

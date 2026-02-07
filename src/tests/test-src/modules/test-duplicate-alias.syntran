@@ -1,0 +1,7 @@
+// Test that importing with the same alias twice is caught as a duplicate
+
+use mymath as mm;
+use mymath as mm;  // This should error - same alias
+
+let a = mm::add(2, 3);
+return a == 5;

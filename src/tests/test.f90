@@ -4492,6 +4492,8 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-struct-collision.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
 			interpret_file(path//'test-circular.syntran', quiet) == '', &
+			interpret_file(path//'test-duplicate-import.syntran', quiet) == '', &
+			interpret_file(path//'test-duplicate-alias.syntran', quiet) == '', &
 			interpret_file(path//'test-hyphen-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-std-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-std-ban-glob.syntran', quiet) == '', &
