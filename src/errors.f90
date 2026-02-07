@@ -1243,6 +1243,67 @@ end function err_mod_space
 
 !===============================================================================
 
+function err_alias_keyword(context, span, alias_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = *), intent(in) :: alias_name
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'keyword `'//alias_name//'` cannot be used as module alias' &
+		//underline(context, span) &
+		//" bad alias name"//color_reset
+end function err_alias_keyword
+
+!===============================================================================
+
+function err_alias_reserved_std(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'`std` is reserved and cannot be used as module alias' &
+		//underline(context, span) &
+		//" bad alias name"//color_reset
+end function err_alias_reserved_std
+
+!===============================================================================
+
+function err_alias_hyphen(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'hyphens are not allowed in module aliases' &
+		//underline(context, span) &
+		//" bad alias name"//color_reset
+end function err_alias_hyphen
+
+!===============================================================================
+
+function err_alias_space(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'spaces are not allowed in module aliases' &
+		//underline(context, span) &
+		//" bad alias name"//color_reset
+end function err_alias_space
+
+!===============================================================================
+
+function err_alias_with_doublecolon(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'cannot combine alias with `::` syntax' &
+		//underline(context, span) &
+		//" use `use module as alias;` without `::`"//color_reset
+end function err_alias_with_doublecolon
+
+!===============================================================================
+
 function err_404(filename) result(err)
 	character(len = *), intent(in) :: filename
 	character(len = :), allocatable :: err

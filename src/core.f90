@@ -56,20 +56,14 @@ module syntran__core_m
 	!                  at ././src/eval_expr.f90:219
 	!          #6  0xed7311 in __syntran__eval_m_MOD_syntax_eval
 	!
+	!  - maybe add unit test threading at a higher level. i.e. if we can't have
+	!    threads within one syntran exe, maybe add cmd args to specify which
+	!    sets of tests to run, then have a bash script spawning independent
+	!    syntran test runners in parallel as separate exe's
 	!  - are there any opportunities to "move" things (e.g. fns, vars, vals)
 	!    instead of doing expensive "copy" operations? usually hidden as an
 	!    overridden assignment= operator. in jsonf repo almost everything is
 	!    moved instead of copied
-	!  - check for indirect recursive `use` (and #include). self use is checked
-	!    currently, but not A use B and B use A for example afaik
-	!  - module arrays don't work, structs probably don't work either
-	!    * wip
-	!    * any other special characters need handling? spaces should be banned
-	!      but check for a helpful error message at least
-	!  - "use module as alias;"
-	!    * potentially important for resolving name clashes when you're using
-	!      someone else's library, but you don't want to change the names they
-	!      chose
 	!  - check every execution path of a fn returns
 	!  - claude tasks:
 	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable

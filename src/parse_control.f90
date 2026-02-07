@@ -127,8 +127,9 @@ module function parse_use_statement(parser) result(statement)
 	character(len = :), allocatable :: module_name, import_name, module_path
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
 	character(len = :), allocatable :: insert_name, var_name, struct_name
+	character(len = :), allocatable :: alias_name
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
-		name_identifier, semi, star, dummy
+		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
 	type(parser_t) :: mod_parser
 	type(syntax_node_t) :: mod_unit
@@ -198,11 +199,15 @@ module function parse_use_statement(parser) result(statement)
 	end if
 
 	! Spaces are not allowed in module names (detected by unexpected identifier)
+	! Exception: "as" is allowed for aliasing (checked later)
 	if (parser%current_kind() == identifier_token) then
-		span = new_span(mod_identifier%pos, len(mod_identifier%text))
-		call parser%diagnostics%push( &
-			err_mod_space(parser%context(), span))
-		return
+		as_identifier = parser%peek(0)
+		if (as_identifier%text /= "as") then
+			span = new_span(mod_identifier%pos, len(mod_identifier%text))
+			call parser%diagnostics%push( &
+				err_mod_space(parser%context(), span))
+			return
+		end if
 	end if
 
 	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
@@ -226,8 +231,71 @@ module function parse_use_statement(parser) result(statement)
 		module_path = module_path // "/" // name_identifier%text
 	end do
 
+	! Initialize
+	alias_name = ""
+
+	! Check for "as alias" syntax (contextual keyword)
+	if (parser%current_kind() == identifier_token) then
+		! Peek at the token to check if it's "as"
+		as_identifier = parser%peek(0)
+		if (as_identifier%text == "as") then
+			! Consume "as" token
+			as_identifier = parser%match(identifier_token)
+
+			! Parse alias identifier
+			if (is_identifier_or_keyword(parser%current_kind())) then
+				alias_identifier = parser%next()
+			else
+				alias_identifier = parser%match(identifier_token)
+			end if
+
+			alias_name = alias_identifier%text
+
+			! Validate: ban keywords
+			if (is_keyword(alias_name)) then
+				span = new_span(alias_identifier%pos, len(alias_identifier%text))
+				call parser%diagnostics%push( &
+					err_alias_keyword(parser%context(), span, alias_name))
+				return
+			end if
+
+			! Ban "std"
+			if (alias_name == "std") then
+				span = new_span(alias_identifier%pos, len(alias_identifier%text))
+				call parser%diagnostics%push( &
+					err_alias_reserved_std(parser%context(), span))
+				return
+			end if
+
+			! Ban hyphens
+			if (parser%current_kind() == minus_token) then
+				span = new_span(alias_identifier%pos, len(alias_identifier%text))
+				call parser%diagnostics%push( &
+					err_alias_hyphen(parser%context(), span))
+				return
+			end if
+
+			! Ban spaces
+			if (parser%current_kind() == identifier_token) then
+				span = new_span(alias_identifier%pos, len(alias_identifier%text))
+				call parser%diagnostics%push( &
+					err_alias_space(parser%context(), span))
+				return
+			end if
+		end if
+	end if
+
 	! Check for `use module;` (qualified import) vs `use module::*;` (glob import)
 	if (parser%current_kind() == double_colon_token) then
+
+		! If we have an alias, reject ::* or ::name syntax
+		if (alias_name /= "") then
+			span = new_span(mod_identifier%pos, len(mod_identifier%text))
+			call parser%diagnostics%push( &
+				err_alias_with_doublecolon(parser%context(), span))
+			return
+		end if
+
 		double_colon = parser%match(double_colon_token)
 
 		! Check for glob import (use module::*)
@@ -246,6 +314,16 @@ module function parse_use_statement(parser) result(statement)
 	end if
 
 	semi = parser%match(semicolon_token)
+
+	! Compute qualified_prefix once for qualified imports
+	! Use alias if provided, otherwise convert module_name (with "/" -> "::")
+	if (qualified_import) then
+		if (alias_name /= "") then
+			qualified_prefix = alias_name
+		else
+			qualified_prefix = replace_all(module_name, "/", "::")
+		end if
+	end if
 
 	! Return an empty statement (no-op)
 	statement%kind = expr_statement
@@ -335,8 +413,6 @@ module function parse_use_statement(parser) result(statement)
 		! For qualified imports, convert path separators to namespace separators
 		! e.g., "math/vectors" -> "math::vectors::fn"
 		if (qualified_import) then
-			! Replace "/" with "::" in module_name for qualified prefix
-			qualified_prefix = replace_all(module_name, "/", "::")
 			insert_name = qualified_prefix // "::" // fn_name
 
 			! Update struct_name references in return type and parameters
@@ -379,7 +455,6 @@ module function parse_use_statement(parser) result(statement)
 
 		! Determine insert name (qualified or unqualified)
 		if (qualified_import) then
-			qualified_prefix = replace_all(module_name, "/", "::")
 			insert_name = qualified_prefix // "::" // var_name
 
 			! Update struct_name references in the variable value to use
@@ -404,7 +479,6 @@ module function parse_use_statement(parser) result(statement)
 
 		! Determine insert name (qualified or unqualified)
 		if (qualified_import) then
-			qualified_prefix = replace_all(module_name, "/", "::")
 			insert_name = qualified_prefix // "::" // struct_name
 		else
 			insert_name = struct_name

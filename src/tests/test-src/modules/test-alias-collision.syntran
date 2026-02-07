@@ -1,0 +1,9 @@
+// Test different aliases, no collision
+
+use mymath as mm;
+use mymath as m;
+
+let a = mm::add(2, 3);
+let b = m::add(4, 5);
+
+return a == 5 and b == 9;

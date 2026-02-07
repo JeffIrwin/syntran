@@ -4497,6 +4497,15 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-std-ban-glob.syntran', quiet) == '', &
 			interpret_file(path//'test-std-ban-path.syntran', quiet) == '', &
 			interpret_file(path//'test-keyword-ban.syntran', quiet) == '', &
+			interpret_file(path//'test-alias-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-alias-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-alias-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-alias-04.syntran', quiet) == 'true', &
+			interpret_file(path//'test-alias-collision.syntran', quiet) == 'true', &
+			interpret_file(path//'test-alias-keyword-ban.syntran', quiet) == '', &
+			interpret_file(path//'test-alias-std-ban.syntran', quiet) == '', &
+			interpret_file(path//'test-alias-with-glob.syntran', quiet) == '', &
+			interpret_file(path//'test-alias-hyphen.syntran', quiet) == '', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

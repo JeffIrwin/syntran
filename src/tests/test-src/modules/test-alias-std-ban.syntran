@@ -1,0 +1,3 @@
+// Test that "std" cannot be used as alias
+
+use mymath as std;
