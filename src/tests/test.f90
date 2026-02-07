@@ -4494,6 +4494,7 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-circular.syntran', quiet) == '', &
 			interpret_file(path//'test-duplicate-import.syntran', quiet) == '', &
 			interpret_file(path//'test-duplicate-alias.syntran', quiet) == '', &
+			interpret_file(path//'test-duplicate-mixed.syntran', quiet) == '', &
 			interpret_file(path//'test-hyphen-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-std-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-std-ban-glob.syntran', quiet) == '', &
@@ -4503,7 +4504,7 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-alias-02.syntran', quiet) == 'true', &
 			interpret_file(path//'test-alias-03.syntran', quiet) == 'true', &
 			interpret_file(path//'test-alias-04.syntran', quiet) == 'true', &
-			interpret_file(path//'test-alias-collision.syntran', quiet) == 'true', &
+			interpret_file(path//'test-alias-collision.syntran', quiet) == '', &
 			interpret_file(path//'test-alias-keyword-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-alias-std-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-alias-with-glob.syntran', quiet) == '', &

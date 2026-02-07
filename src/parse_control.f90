@@ -127,7 +127,7 @@ module function parse_use_statement(parser) result(statement)
 	character(len = :), allocatable :: module_name, import_name, module_path
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
 	character(len = :), allocatable :: insert_name, var_name, struct_name
-	character(len = :), allocatable :: alias_name, import_key
+	character(len = :), allocatable :: alias_name
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
@@ -355,32 +355,23 @@ module function parse_use_statement(parser) result(statement)
 	! Check for duplicate import (only in first pass to avoid flagging the same
 	! import twice when parse_unit does two passes)
 	!
-	! We create a composite key that includes the import style and prefix/alias.
-	! This allows the same module to be imported with different aliases (which
-	! create different namespaces) while preventing truly duplicate imports.
+	! Ban importing the same module file multiple times regardless of alias or
+	! import style. This prevents confusing code and redundant parsing.
 	!
-	! Examples:
-	!   - `use mymath; use mymath;` - duplicate (same key "Q:mymath")
-	!   - `use mymath as mm; use mymath as m;` - NOT duplicate (keys "Q:mm" vs "Q:m")
-	!   - `use mymath::*; use mymath::*;` - duplicate (same key "U:<file>")
+	! Examples (all banned):
+	!   - `use mymath; use mymath;`
+	!   - `use mymath as mm; use mymath as m;`
+	!   - `use mymath; use mymath::*;`
 	if (parser%ipass == 0) then
-		if (qualified_import) then
-			! Key is "Q:" + the prefix/alias that will be used
-			import_key = "Q:" // qualified_prefix
-		else
-			! Key is "U:" + module filename (for unqualified imports)
-			import_key = "U:" // mod_filename
-		end if
-
-		if (parser%imported_modules%contains(import_key)) then
+		if (parser%imported_modules%contains(mod_filename)) then
 			span = new_span(mod_identifier%pos, len(mod_identifier%text))
 			call parser%diagnostics%push( &
 				err_duplicate_import(parser%context(), span, module_name))
 			return
 		end if
 
-		! Mark this import specification as used
-		call parser%imported_modules%set(import_key, 1)
+		! Mark module file as imported
+		call parser%imported_modules%set(mod_filename, 1)
 	end if
 
 	! Read the module file

@@ -1,7 +1,7 @@
-// Test different aliases, no collision
+// Test that importing the same module with different aliases is banned
 
 use mymath as mm;
-use mymath as m;
+use mymath as m;  // Should error - duplicate import
 
 let a = mm::add(2, 3);
 let b = m::add(4, 5);
