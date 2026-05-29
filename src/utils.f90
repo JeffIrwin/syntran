@@ -89,7 +89,6 @@ module syntran__utils_m
 			procedure :: set       => map_i32_set
 			procedure :: get       => map_i32_get
 			procedure :: contains  => map_i32_contains
-			!procedure :: increment => map_i32_increment
 			procedure :: destroy   => map_i32_destroy
 			procedure, private :: resize => map_i32_resize
 	end type map_i32_t
@@ -1253,7 +1252,8 @@ pure function fnv_1a(input, seed) result(hash)
 	end if
 
 	do i = 1, len(input)
-		hash = ieor(hash, iachar(input(i:i), int64)) * FNV_PRIME_32
+		hash = iand( ieor(hash, iachar(input(i:i), int64)) * FNV_PRIME_32, &
+		             int(z'FFFFFFFF', int64) )
 	end do
 
 end function fnv_1a
@@ -1370,19 +1370,6 @@ function map_i32_contains(self, key) result(found)
 end function map_i32_contains
 
 !===============================================================================
-
-!! Unused
-!subroutine map_i32_increment(self, key)
-!	class(map_i32_t), intent(inout) :: self
-!	character(len=*), intent(in) :: key
-!	integer :: current_value
-!
-!	if (self%get(key, current_value)) then
-!		call self%set(key, current_value + 1)
-!	else
-!		call self%set(key, 1)
-!	end if
-!end subroutine map_i32_increment
 
 !===============================================================================
 

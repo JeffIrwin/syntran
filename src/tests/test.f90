@@ -4487,6 +4487,7 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'subdir/deep/test-grandparent-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'test-modvar-array.syntran', quiet) == 'true', &
 			interpret_file(path//'test-modvar-array-qualified.syntran', quiet) == 'true', &
+			interpret_file(path//'test-modvar-arrstruct.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-mod.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-mod-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision.syntran', quiet) == 'true', &

@@ -314,7 +314,7 @@ function parse_args() result(args)
 			//"error messages to <n> [default: "//str(maxerr_def)//"]"
 		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
 		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
-		write(*,*) "    --cd                Change to the script's directory before running"
+		write(*,*) "    --cd                Resolve the script's relative file paths against its own directory"
 		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 

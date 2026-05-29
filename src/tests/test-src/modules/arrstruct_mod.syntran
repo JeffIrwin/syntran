@@ -1,0 +1,24 @@
+// Module exporting a struct and module-level arrays of that struct,
+// for testing qualify_value_struct_name's array-of-structs branch
+
+struct Vec2
+{
+	x: i32,
+	y: i32,
+}
+
+// Module-level scalar struct
+let origin = Vec2{x = 0, y = 0};
+
+// Module-level array of structs (two elements)
+let pts = [Vec2{x = 1, y = 2}, Vec2{x = 3, y = 4}];
+
+fn make_vec2(x: i32, y: i32): Vec2
+{
+	return Vec2{x = x, y = y};
+}
+
+fn sum_x(a: Vec2, b: Vec2): i32
+{
+	return a.x + b.x;
+}
