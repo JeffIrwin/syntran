@@ -284,6 +284,40 @@ end function get_keyword_kind
 
 !===============================================================================
 
+module logical function is_keyword(text) result(is_kw)
+
+	! Returns true if text is a keyword
+
+	character(len = *), intent(in) :: text
+
+	is_kw = get_keyword_kind(text) /= identifier_token
+
+end function is_keyword
+
+!===============================================================================
+
+module logical function is_identifier_or_keyword(kind)
+
+	! Check if a token kind is an identifier or a keyword. This is used when
+	! parsing module names in `use` statements, where keywords like `struct` can
+	! be used as module names or path segments (e.g., `use struct;`, `use path/struct;`)
+	!
+	! IMPORTANT: This array must be kept in sync with get_keyword_kind(). If you
+	! add a new keyword to get_keyword_kind(), add it here as well.
+
+	integer, intent(in) :: kind
+
+	is_identifier_or_keyword = kind == identifier_token .or. any(kind == [ &
+		true_keyword, false_keyword, not_keyword, and_keyword, or_keyword, &
+		let_keyword, if_keyword, else_keyword, for_keyword, in_keyword, &
+		while_keyword, fn_keyword, struct_keyword, include_keyword, &
+		return_keyword, break_keyword, continue_keyword, use_keyword &
+	])
+
+end function is_identifier_or_keyword
+
+!===============================================================================
+
 module logical function is_assignment_op(op)
 
 	! Is the operator some type of assignment operator, either regular or
@@ -668,6 +702,13 @@ recursive module integer function get_binary_op_kind( &
 
 	integer, intent(in) :: left, op, right
 	integer, intent(in) :: left_arr, right_arr
+
+	! Propagate unknown_type to prevent cascading errors (matches
+	! is_binary_op_allowed behavior)
+	if (left == unknown_type .or. right == unknown_type) then
+		kind_ = unknown_type
+		return
+	end if
 
 	select case (op)
 	case ( &

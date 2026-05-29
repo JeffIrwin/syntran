@@ -8,8 +8,8 @@ config="Debug"
 ./build.sh $config
 
 if [[ -x "$(command -v rlwrap)" ]]; then
-	time rlwrap ./build/$config/syntran $*
+	time rlwrap ./build/$config/syntran "$@"
 else
-	time ./build/$config/syntran $*
+	time ./build/$config/syntran "$@"
 fi
 

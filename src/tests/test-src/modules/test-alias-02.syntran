@@ -1,0 +1,9 @@
+// Test path aliasing (use math/vectors as vec;)
+
+use math/vectors as vec;
+
+let v = [1, 2, 3];
+let m = vec::magnitude_squared(v);
+
+// magnitude_squared of [1, 2, 3] = 1 + 4 + 9 = 14
+return m == 14;

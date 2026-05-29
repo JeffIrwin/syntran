@@ -1181,6 +1181,142 @@ end function err_mod_read
 
 !===============================================================================
 
+function err_circular_import(context, span, module_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = *), intent(in) :: module_name
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'circular module dependency on `'//module_name//'`' &
+		//underline(context, span) &
+		//" circular import"//color_reset
+end function err_circular_import
+
+!===============================================================================
+
+function err_duplicate_import(context, span, module_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = *), intent(in) :: module_name
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'duplicate import of module `'//module_name//'`' &
+		//underline(context, span) &
+		//" duplicate import"//color_reset
+end function err_duplicate_import
+
+!===============================================================================
+
+function err_mod_hyphen(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'hyphens are not allowed in module names, use underscores instead' &
+		//underline(context, span) &
+		//" bad module name"//color_reset
+end function err_mod_hyphen
+
+!===============================================================================
+
+function err_mod_keyword(context, span, keyword) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = *), intent(in) :: keyword
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'module name `'//keyword//'` is a reserved keyword' &
+		//underline(context, span) &
+		//" keyword as module name"//color_reset
+end function err_mod_keyword
+
+!===============================================================================
+
+function err_mod_reserved_std(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'module name `std` is reserved for the standard library' &
+		//underline(context, span) &
+		//" reserved name"//color_reset
+end function err_mod_reserved_std
+
+!===============================================================================
+
+function err_mod_space(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'spaces are not allowed in module names' &
+		//underline(context, span) &
+		//" bad module name"//color_reset
+end function err_mod_space
+
+!===============================================================================
+
+function err_alias_keyword(context, span, alias_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = *), intent(in) :: alias_name
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'keyword `'//alias_name//'` cannot be used as module alias' &
+		//underline(context, span) &
+		//" bad alias name"//color_reset
+end function err_alias_keyword
+
+!===============================================================================
+
+function err_alias_reserved_std(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'`std` is reserved and cannot be used as module alias' &
+		//underline(context, span) &
+		//" bad alias name"//color_reset
+end function err_alias_reserved_std
+
+!===============================================================================
+
+function err_alias_hyphen(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'hyphens are not allowed in module aliases' &
+		//underline(context, span) &
+		//" bad alias name"//color_reset
+end function err_alias_hyphen
+
+!===============================================================================
+
+function err_alias_space(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'spaces are not allowed in module aliases' &
+		//underline(context, span) &
+		//" bad alias name"//color_reset
+end function err_alias_space
+
+!===============================================================================
+
+function err_alias_with_doublecolon(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	err = err_prefix &
+		//'cannot combine alias with `::` syntax' &
+		//underline(context, span) &
+		//" use `use module as alias;` without `::`"//color_reset
+end function err_alias_with_doublecolon
+
+!===============================================================================
+
 function err_404(filename) result(err)
 	character(len = *), intent(in) :: filename
 	character(len = :), allocatable :: err

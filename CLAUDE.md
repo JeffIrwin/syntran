@@ -6,6 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Syntran is an array-oriented programming language with an interpreter written in Fortran. It's similar to MATLAB but with curly braces, type checking, and zero-indexed arrays.
 
+## CRITICAL: Tab Handling
+
+**This codebase uses TABS for indentation, not spaces.**
+
+When using the Edit tool:
+1. ALWAYS read the file first to see the exact indentation
+2. When extracting `old_string` from Read tool output, remember that the line number prefix format is: `spaces + line_number + tab`
+3. Everything AFTER the tab following the line number is the actual file content (which uses tabs for indentation)
+4. NEVER convert tabs to spaces in your `old_string` or `new_string` - preserve the exact tab characters
+5. If Edit fails with "String to replace not found", the most common cause is tab/space mismatch - check the raw file content
+
 ## Build Commands
 
 Two build systems are supported: FPM (Fortran Package Manager) and CMake.

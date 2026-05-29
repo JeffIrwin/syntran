@@ -4485,6 +4485,31 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'subdir/test-parent-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'subdir/deep/test-grandparent.syntran', quiet) == 'true', &
 			interpret_file(path//'subdir/deep/test-grandparent-qualified.syntran', quiet) == 'true', &
+			interpret_file(path//'test-modvar-array.syntran', quiet) == 'true', &
+			interpret_file(path//'test-modvar-array-qualified.syntran', quiet) == 'true', &
+			interpret_file(path//'test-modvar-arrstruct.syntran', quiet) == 'true', &
+			interpret_file(path//'test-struct-mod.syntran', quiet) == 'true', &
+			interpret_file(path//'test-struct-mod-qualified.syntran', quiet) == 'true', &
+			interpret_file(path//'test-struct-collision.syntran', quiet) == 'true', &
+			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
+			interpret_file(path//'test-circular.syntran', quiet) == '', &
+			interpret_file(path//'test-duplicate-import.syntran', quiet) == '', &
+			interpret_file(path//'test-duplicate-alias.syntran', quiet) == '', &
+			interpret_file(path//'test-duplicate-mixed.syntran', quiet) == '', &
+			interpret_file(path//'test-hyphen-ban.syntran', quiet) == '', &
+			interpret_file(path//'test-std-ban.syntran', quiet) == '', &
+			interpret_file(path//'test-std-ban-glob.syntran', quiet) == '', &
+			interpret_file(path//'test-std-ban-path.syntran', quiet) == '', &
+			interpret_file(path//'test-keyword-ban.syntran', quiet) == '', &
+			interpret_file(path//'test-alias-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-alias-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-alias-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-alias-04.syntran', quiet) == 'true', &
+			interpret_file(path//'test-alias-collision.syntran', quiet) == '', &
+			interpret_file(path//'test-alias-keyword-ban.syntran', quiet) == '', &
+			interpret_file(path//'test-alias-std-ban.syntran', quiet) == '', &
+			interpret_file(path//'test-alias-with-glob.syntran', quiet) == '', &
+			interpret_file(path//'test-alias-hyphen.syntran', quiet) == '', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

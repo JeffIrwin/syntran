@@ -1,0 +1,9 @@
+// Test that importing the same module with different aliases is banned
+
+use mymath as mm;
+use mymath as m;  // Should error - duplicate import
+
+let a = mm::add(2, 3);
+let b = m::add(4, 5);
+
+return a == 5 and b == 9;

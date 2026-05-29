@@ -1,0 +1,3 @@
+// Test that alias cannot be combined with :: syntax
+
+use mymath as mm::*;

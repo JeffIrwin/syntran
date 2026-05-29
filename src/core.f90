@@ -30,11 +30,49 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - log a known issue that syntran is not threadsafe
+	!    * did some work on feature/parallel branch to try running long tests in
+	!      parallel but it's a deep rabbit hole of issues. fix most (?)
+	!      str-to-num and num-to-str conversion, even tried gfortran 13 in
+	!      rocky, but there are still issues:
+	!
+	!          Starting AOC syntran main-struct 2023/02
+	!          part 2 = 54249
+	!          Ending AOC syntran main
+	!          
+	!          part 1 = 540212
+	!          At line 918 of file ././src/eval_array.f90
+	!          Fortran runtime error: Index '2' of dimension 1 of array 'array%str' above upper bound of 1
+	!          
+	!          Error termination. Backtrace:
+	!          #0  0x7f02914288a0 in ???
+	!          #1  0x7f02914293f9 in ???
+	!          #2  0x7f0291429a6d in ???
+	!          #3  0x14d7eb9 in __syntran__eval_m_MOD_get_array_val
+	!                  at ././src/eval_array.f90:918
+	!          #4  0x14ed0f5 in __syntran__eval_m_MOD_get_val
+	!                  at ././src/eval_array.f90:214
+	!          #5  0x11c8f65 in __syntran__eval_m_MOD_eval_name_expr
+	!                  at ././src/eval_expr.f90:219
+	!          #6  0xed7311 in __syntran__eval_m_MOD_syntax_eval
+	!
+	!  - maybe add unit test threading at a higher level. i.e. if we can't have
+	!    threads within one syntran exe, maybe add cmd args to specify which
+	!    sets of tests to run, then have a bash script spawning independent
+	!    syntran test runners in parallel as separate exe's
+	!  - are there any opportunities to "move" things (e.g. fns, vars, vals)
+	!    instead of doing expensive "copy" operations? usually hidden as an
+	!    overridden assignment= operator. in jsonf repo almost everything is
+	!    moved instead of copied
+	!  - migrate ci from ubuntu 22 to 24. rocky should stay on version 9 for the
+	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
+	!  - replace ternary tree dicts with hash maps? might be simpler, but there
+	!    might be zero perf benefit because the dicts are only used at parse
+	!    time, then mapped to efficient arrays at eval time
+	!  - check every execution path of a fn returns
 	!  - claude tasks:
-	!    * update CLAUDE.md to recommend cmake as primary build tool. cmake
-	!      (driving gnu make) is parallel but fpm is not. might need to update
-	!      test.sh is well and/or make test-long.sh as opposed to unit tests,
-	!      add debug/release option, etc.
+	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable
+	!      it. duh!
 	!    * fortran compile time optimization -- see if pain points like
 	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
 	!      + intr_fns.f90, eval.f90, types.f90 now broken up
@@ -88,22 +126,11 @@ module syntran__core_m
 	!    * git(hub) cleanup. no need to delete branches, but rename existing
 	!      branches (except for main and dev) to start with feature/ or
 	!      jeffirwin/, e.g. vec-slice -> feature/vec-slice
-	!  - module arrays don't work, structs probably don't work either
-	!    * scope is creeping well beyond the immediate need of avoiding std fn
-	!      clashes. maybe hold off on this
-	!    * module let statements are not evaluated, only parsed. could this
-	!      cause evaluation problems? maybe just handle it like includes
-	!  - what happens if you use the same module twice? same form both times or
-	!    mix qualified and unqualified?
 	!  - i like claude's "double_colon_token" name. i should change things like
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - if you try to return something (e.g. i32) from a void/null fn, the
 	!    error says the fn should return "unknown" but it should say void (or
 	!    null?)
-	!  - "use module as alias;"
-	!    * potentially important for resolving name clashes when you're using
-	!      someone else's library, but you don't want to change the names they
-	!      chose
 	!  - document modules in readme, recommend over #include after it's in a
 	!    state where a few aoc tests can work with utils.syntran as a module
 	!  - minloc, maxloc, findloc std:: fns
@@ -524,6 +551,8 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	parser = new_parser(str_, src_filel, contexts, unit_)
 	!print *, 'units = ', parser%tokens(:)%unit_
 
+	call parser%import_stack%set(src_filel, 0)
+
 	parser%repl = repll
 
 	! The global scope can return any type.  This is initialized here and not
@@ -721,8 +750,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	! parser%vars%dicts.  Allocate a flat array for efficient evaluation without
 	! dictionary lookups.  Indices in the array are already saved in each node's
 	! id_index member
-
-	!print *, 'parser%num_vars = ', parser%num_vars
 	if (allocated(vars%vals)) deallocate(vars%vals)
 	allocate(vars%vals( parser%num_vars ))
 

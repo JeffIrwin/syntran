@@ -72,6 +72,27 @@ module syntran__utils_m
 			procedure :: push_all => push_all_string
 	end type string_vector_t
 
+	!****
+
+	type :: map_i32_entry_t
+		character(:), allocatable :: key
+		integer :: value
+	end type map_i32_entry_t
+
+	type :: map_i32_t
+		type(map_i32_entry_t), allocatable :: table(:)
+		integer :: capacity = 0
+		integer :: count = 0
+		real :: load_factor_threshold = 0.75
+		contains
+			procedure :: init      => map_i32_init
+			procedure :: set       => map_i32_set
+			procedure :: get       => map_i32_get
+			procedure :: contains  => map_i32_contains
+			procedure :: destroy   => map_i32_destroy
+			procedure, private :: resize => map_i32_resize
+	end type map_i32_t
+
 	!********
 
 	type char_vector_t
@@ -670,6 +691,59 @@ end function get_dir
 
 !===============================================================================
 
+logical function is_abs_path(path)
+	! Check if a path is absolute (starts with / on Unix or drive letter on Windows)
+
+	character(len = *), intent(in) :: path
+
+	is_abs_path = .false.
+	if (len(path) == 0) return
+
+	! Unix absolute path
+	if (path(1:1) == '/') then
+		is_abs_path = .true.
+		return
+	end if
+
+	! Windows absolute path on current drive (e.g., \foo\bar)
+	if (path(1:1) == '\') then
+		is_abs_path = .true.
+		return
+	end if
+
+	! Windows absolute path with drive letter (e.g., C:\, D:\)
+	if (len(path) >= 2) then
+		if (path(2:2) == ':') then
+			is_abs_path = .true.
+			return
+		end if
+	end if
+
+end function is_abs_path
+
+!===============================================================================
+
+function resolve_path(src_dir, path) result(resolved)
+
+	! Resolve a path relative to src_dir
+	! If path is absolute, return it as-is
+	! If path is relative and src_dir is non-empty, prepend src_dir
+
+	character(len = *), intent(in) :: src_dir, path
+	character(len = :), allocatable :: resolved
+
+	if (is_abs_path(path)) then
+		resolved = path
+	else if (len(src_dir) > 0) then
+		resolved = src_dir // path
+	else
+		resolved = path
+	end if
+
+end function resolve_path
+
+!===============================================================================
+
 logical function is_digit(c)
 
 	character, intent(in) :: c
@@ -984,6 +1058,28 @@ end function quote
 
 !===============================================================================
 
+logical function is_str_eq(a, b)
+	! Fortran considers spaces as insignificant in str comparisons, but no sane
+	! language would allow that
+	!
+	! I guess this is an artifact of fixed-length strings being common in older
+	! fortran code
+	!
+	! Note that `is_ne()` is implemented as `.not. is_eq()`, which calls this
+	! fn, so there is no need for a separate is_str_ne()
+
+	character(len = *), intent(in) :: a, b
+
+	!is_str_eq = a == b  ! not what you expect!
+
+	is_str_eq = &
+		len(a) == len(b) .and. &
+		    a  ==     b
+
+end function is_str_eq
+
+!===============================================================================
+
 function findlocl1(arr, val) result(loc)
 
 	! findloc() is standard in Fortran 2008, but gfortran 8.1.0 doesn't have it
@@ -1133,6 +1229,177 @@ function bool1_str(x) result(str_)
 	end if
 
 end function bool1_str
+
+!===============================================================================
+
+pure function fnv_1a(input, seed) result(hash)
+	character(*), intent(in) :: input
+	integer(int64), intent(in), optional :: seed
+	integer(int64) :: hash
+
+	integer :: i
+	integer(int64), parameter :: FNV_OFFSET_32 = 2166136261_int64
+	integer(int64), parameter :: FNV_PRIME_32  = 16777619_int64
+
+	if (present(seed)) then
+		hash = seed
+	else
+		hash = FNV_OFFSET_32
+	end if
+
+	do i = 1, len(input)
+		hash = iand( ieor(hash, iachar(input(i:i), int64)) * FNV_PRIME_32, &
+		             int(z'FFFFFFFF', int64) )
+	end do
+
+end function fnv_1a
+
+!===============================================================================
+
+subroutine map_i32_init(self, capacity)
+	! Consider making a `new_map_i32()` fn instead of init subroutine,
+	! consistent with syntran src style
+	class(map_i32_t), intent(inout) :: self
+	integer, intent(in) :: capacity
+
+	if (capacity <= 0) then
+		error stop "map_i32_init: capacity must be positive"
+	end if
+
+	self%capacity = capacity
+	self%count = 0
+	allocate(self%table(capacity))
+end subroutine map_i32_init
+
+!===============================================================================
+
+subroutine map_i32_set(self, key, value)
+	class(map_i32_t), intent(inout) :: self
+	character(len=*), intent(in) :: key
+	integer, intent(in) :: value
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	! Auto-resize if load factor exceeds threshold
+	if (real(self%count) / real(self%capacity) >= self%load_factor_threshold) then
+		call self%resize()
+	end if
+
+	! FNV-1a hash
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(self%capacity, int64)) + 1)
+
+	! Linear probing
+	do probe = 0, self%capacity - 1
+		idx = modulo(hash_idx + probe - 1, self%capacity) + 1
+
+		if (.not. allocated(self%table(idx)%key)) then
+			! Empty slot - insert new entry
+			self%table(idx)%key = key
+			self%table(idx)%value = value
+			self%count = self%count + 1
+			return
+		else if (is_str_eq(self%table(idx)%key, key)) then
+			! Key exists - update value
+			self%table(idx)%value = value
+			return
+		end if
+	end do
+
+	! Should never reach here if resize works correctly
+	error stop "map_i32_set: table full despite resize"
+end subroutine map_i32_set
+
+!===============================================================================
+
+function map_i32_get(self, key, value) result(found)
+	! Consider making this fn return `value` instead of `found`
+	class(map_i32_t), intent(in) :: self
+	character(len=*), intent(in) :: key
+	integer, intent(out) :: value
+	logical :: found
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	found = .false.
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(self%capacity, int64)) + 1)
+
+	do probe = 0, self%capacity - 1
+		idx = modulo(hash_idx + probe - 1, self%capacity) + 1
+
+		if (.not. allocated(self%table(idx)%key)) then
+			return  ! Not found
+		else if (is_str_eq(self%table(idx)%key, key)) then
+			value = self%table(idx)%value
+			found = .true.
+			return
+		end if
+	end do
+end function map_i32_get
+
+!===============================================================================
+
+function map_i32_contains(self, key) result(found)
+	class(map_i32_t), intent(in) :: self
+	character(len=*), intent(in) :: key
+	logical :: found
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	found = .false.
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(self%capacity, int64)) + 1)
+
+	do probe = 0, self%capacity - 1
+		idx = modulo(hash_idx + probe - 1, self%capacity) + 1
+
+		if (.not. allocated(self%table(idx)%key)) then
+			return  ! Not found
+		else if (is_str_eq(self%table(idx)%key, key)) then
+			found = .true.
+			return
+		end if
+	end do
+end function map_i32_contains
+
+!===============================================================================
+
+!===============================================================================
+
+subroutine map_i32_destroy(self)
+	class(map_i32_t), intent(inout) :: self
+	if (allocated(self%table)) deallocate(self%table)
+	self%capacity = 0
+	self%count = 0
+end subroutine map_i32_destroy
+
+!===============================================================================
+
+subroutine map_i32_resize(self)
+	class(map_i32_t), intent(inout) :: self
+	type(map_i32_entry_t), allocatable :: old_table(:)
+	integer :: old_capacity, i, new_capacity
+
+	! Save old table
+	old_capacity = self%capacity
+	call move_alloc(self%table, old_table)
+
+	! Allocate new table with double capacity
+	new_capacity = old_capacity * 2
+	self%capacity = new_capacity
+	self%count = 0
+	allocate(self%table(new_capacity))
+
+	! Rehash all entries from old table
+	do i = 1, old_capacity
+		if (allocated(old_table(i)%key)) then
+			call self%set(old_table(i)%key, old_table(i)%value)
+		end if
+	end do
+
+	! Old table automatically deallocated
+end subroutine map_i32_resize
 
 !===============================================================================
 

@@ -1,0 +1,15 @@
+// Test struct export from module (also tests module name starting with keyword)
+
+use struct_mod::*;
+
+// Test struct instantiation using exported struct
+let p1 = Point{x = 3, y = 4};
+
+// Test function that returns the exported struct
+let p2 = make_point(10, 20);
+
+// Test function that takes the exported struct as parameter
+let sum1 = point_sum(p1);
+let sum2 = point_sum(p2);
+
+return sum1 == 7 and sum2 == 30 and p1.x == 3 and p2.y == 20;

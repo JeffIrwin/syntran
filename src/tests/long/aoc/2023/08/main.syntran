@@ -1,5 +1,5 @@
 
-#include("../../utils.syntran");
+use ../../utils;
 
 //==============================================================================
 
@@ -20,7 +20,7 @@ fn part1(): i32
 {
 	let sum_ = 0;
 
-	let n = countln_(filename) - 2;
+	let n = utils::countln_(filename) - 2;
 	//println("n = ", n);
 
 	let f = open(filename, "r");
@@ -37,7 +37,7 @@ fn part1(): i32
 		str_ = readln(f);
 		//println("str_ = ", str_);
 
-		let strs = split_(str_, "= (),");
+		let strs = utils::split_(str_, "= (),");
 
 		nodes [i] = strs[0];
 		lefts [i] = strs[1];
@@ -120,7 +120,7 @@ fn part2(): i64
 {
 	//println("starting part2()");
 
-	let n = countln_(filename) - 2;
+	let n = utils::countln_(filename) - 2;
 	//println("n = ", n);
 
 	let f = open(filename, "r");
@@ -137,7 +137,7 @@ fn part2(): i64
 		str_ = readln(f);
 		//println("str_ = ", str_);
 
-		let strs = split_(str_, "= (),");
+		let strs = utils::split_(str_, "= (),");
 
 		nodes [i] = strs[0];
 		lefts [i] = strs[1];
@@ -189,7 +189,7 @@ fn part2(): i64
 	// Number of nodes that end with "A"
 	let na = 0;
 	for i in [0: n]
-		if (ends_with_(nodes[i], "A")) na += 1;
+		if (utils::ends_with_(nodes[i], "A")) na += 1;
 	//println("na = ", na);
 
 	// Lookup location of "..A"
@@ -197,7 +197,7 @@ fn part2(): i64
 
 	let k = 0;
 	for i in [0: n]
-		if (ends_with_(nodes[i], "A"))
+		if (utils::ends_with_(nodes[i], "A"))
 		{
 			j[k] = i;
 			k += 1;
@@ -207,7 +207,7 @@ fn part2(): i64
 	// Which nodes end with "Z"?
 	let end_z = [false; n];
 	for i in [0: n]
-		end_z[i] = ends_with_(nodes[i], "Z");
+		end_z[i] = utils::ends_with_(nodes[i], "Z");
 
 	// Find cycle len for each thread.  Then multiply them all together to find
 	// the part2 answer.  Might need LCM instead of actual product.  I think
@@ -231,12 +231,12 @@ fn part2(): i64
 		}
 		//println("cycle len [", k, "] = ", i);
 		prod_ *= i;
-		lcm_ = lcm64(lcm_, i64(i));
+		lcm_ = utils::lcm64(lcm_, i64(i));
 	}
 
 	//// unit tests :)
-	//println("gcd64(6,9) = ", gcd64(i64(6), i64(9)));
-	//println("lcm64(13939, 11309) = ", lcm64(i64(13939), i64(11309)));
+	//println("utils::gcd64(6,9) = ", utils::gcd64(i64(6), i64(9)));
+	//println("utils::lcm64(13939, 11309) = ", utils::lcm64(i64(13939), i64(11309)));
 
 	//println("ans_str = ", ans_str);
 	println("part 2 = ", lcm_);

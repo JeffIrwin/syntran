@@ -1,6 +1,6 @@
 
-#include("../../utils-2024.syntran");
-#include("../../dict_i64.syntran");
+use ../../utils_2024;
+use ../../dict_i64;
 
 //==============================================================================
 
@@ -41,7 +41,7 @@ fn part1(): i64
 {
 	let sum_ = 0'i64;
 
-	let npairs = countln_(filename);
+	let npairs = utils_2024::countln_(filename);
 	let pairs = [-1; 2, npairs];
 
 	// Max number of 2-char alphabetical names.  Some may not be present
@@ -104,7 +104,7 @@ fn part1(): i64
 
 	// Find the LAN parties.  This algo is fast but it may visit a party
 	// multiple times.  Use a dict to equivalence the set of parties
-	let parties = new_dict_i64();
+	let parties = dict_i64::new_dict_i64();
 
 	let NCAP = 32;  // 8 is too small but 16 is safe for me
 	let STACK_CAP = 32;
@@ -176,12 +176,12 @@ fn part1(): i64
 			//if (not (i0 < i1 and i1 < i2)) continue; // dict and sorting takes care of this
 			if (not (starts_t(i0) or starts_t(i1) or starts_t(i2))) continue;
 
-			let key = str(sort_inplace([i0, i1, i2]));
+			let key = str(utils_2024::sort_inplace([i0, i1, i2]));
 			//println("key = ", key);
-			set_dict_i64(&parties, key, 1'i64);
+			dict_i64::set_dict_i64(&parties, key, 1'i64);
 		}
 	}
-	sum_ = len_dict_i64(&parties);
+	sum_ = dict_i64::len_dict_i64(&parties);
 
 	println("part 1 = ", sum_);
 	return sum_;
@@ -189,7 +189,7 @@ fn part1(): i64
 
 fn part2(): str
 {
-	let npairs = countln_(filename);
+	let npairs = utils_2024::countln_(filename);
 	let pairs = [-1; 2, npairs];
 
 	let NIDS = 26 ** 2; // number of 2-char alphabetical names
@@ -323,7 +323,7 @@ fn part2(): str
 
 	// With my name_to_id() endianness convention, sorting numerically *is*
 	// sorting alphabetically
-	subgraph_big = sort_inplace(subgraph_big);
+	subgraph_big = utils_2024::sort_inplace(subgraph_big);
 
 	// compact csv single str
 	let names = "";

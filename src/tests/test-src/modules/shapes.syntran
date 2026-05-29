@@ -1,0 +1,28 @@
+// Module that exports struct definitions for qualified import testing
+
+struct Point
+{
+	x: i32,
+	y: i32,
+}
+
+struct Rectangle
+{
+	width: i32,
+	height: i32,
+}
+
+fn make_point(x: i32, y: i32): Point
+{
+	return Point{x = x, y = y};
+}
+
+fn point_sum(p: Point): i32
+{
+	return p.x + p.y;
+}
+
+fn rect_area(r: Rectangle): i32
+{
+	return r.width * r.height;
+}

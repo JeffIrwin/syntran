@@ -126,15 +126,17 @@ module function parse_use_statement(parser) result(statement)
 	!********
 	character(len = :), allocatable :: module_name, import_name, module_path
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
-	character(len = :), allocatable :: insert_name, var_name
+	character(len = :), allocatable :: insert_name, var_name, struct_name
+	character(len = :), allocatable :: alias_name
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
-		name_identifier, semi, star, dummy
+		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
 	type(parser_t) :: mod_parser
 	type(syntax_node_t) :: mod_unit
 	type(text_context_vector_t) :: mod_contexts
 	type(fn_t) :: fn
 	type(value_t) :: var_val
+	type(struct_t) :: struct_val
 	integer :: i, io, iostat, mod_unit_, id_index
 	logical :: qualified_import
 	character(len = :), allocatable :: qualified_prefix
@@ -162,29 +164,138 @@ module function parse_use_statement(parser) result(statement)
 		module_path = module_path // "./"
 	end if
 
-	mod_identifier = parser%match(identifier_token)
+	! Match identifier or keyword as module name. Keywords like `struct` can
+	! appear as module names (e.g., `use struct;`)
+	if (is_identifier_or_keyword(parser%current_kind())) then
+		mod_identifier = parser%next()
+	else
+		mod_identifier = parser%match(identifier_token)
+	end if
 	module_name = mod_identifier%text
 	module_path = module_path // module_name
 
-	! Handle hyphens in module names (e.g., `use array-mod;`)
-	do while (parser%current_kind() == minus_token .and. &
-	          parser%peek_kind(1) == identifier_token)
-		dummy = parser%match(minus_token)
-		name_identifier = parser%match(identifier_token)
-		module_name = module_name // "-" // name_identifier%text
-		module_path = module_path // "-" // name_identifier%text
-	end do
+	! Ban keywords as module names
+	if (is_keyword(module_name)) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_keyword(parser%context(), span, module_name))
+		return
+	end if
+
+	! Ban "std" as a user-defined module name (reserved for standard library)
+	if (module_name == "std") then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_reserved_std(parser%context(), span))
+		return
+	end if
+
+	! Hyphens are not allowed in module names
+	if (parser%current_kind() == minus_token) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_hyphen(parser%context(), span))
+		return
+	end if
+
+	! Spaces are not allowed in module names (detected by unexpected identifier)
+	! Exception: "as" is allowed for aliasing (checked later)
+	if (parser%current_kind() == identifier_token) then
+		as_identifier = parser%peek(0)
+		if (as_identifier%text /= "as") then
+			span = new_span(mod_identifier%pos, len(mod_identifier%text))
+			call parser%diagnostics%push( &
+				err_mod_space(parser%context(), span))
+			return
+		end if
+	end if
 
 	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
 	do while (parser%current_kind() == slash_token)
 		dummy = parser%match(slash_token)
-		name_identifier = parser%match(identifier_token)
+		if (is_identifier_or_keyword(parser%current_kind())) then
+			name_identifier = parser%next()
+		else
+			name_identifier = parser%match(identifier_token)
+		end if
+
+		! Ban keywords in path segments
+		if (is_keyword(name_identifier%text)) then
+			span = new_span(name_identifier%pos, len(name_identifier%text))
+			call parser%diagnostics%push( &
+				err_mod_keyword(parser%context(), span, name_identifier%text))
+			return
+		end if
+
 		module_name = module_name // "/" // name_identifier%text
 		module_path = module_path // "/" // name_identifier%text
 	end do
 
+	! Initialize
+	alias_name = ""
+
+	! Check for "as alias" syntax (contextual keyword)
+	if (parser%current_kind() == identifier_token) then
+		! Peek at the token to check if it's "as"
+		as_identifier = parser%peek(0)
+		if (as_identifier%text == "as") then
+			! Consume "as" token
+			as_identifier = parser%match(identifier_token)
+
+			! Parse alias identifier
+			if (is_identifier_or_keyword(parser%current_kind())) then
+				alias_identifier = parser%next()
+			else
+				alias_identifier = parser%match(identifier_token)
+			end if
+
+			alias_name = alias_identifier%text
+
+			! Validate: ban keywords
+			if (is_keyword(alias_name)) then
+				span = new_span(alias_identifier%pos, len(alias_identifier%text))
+				call parser%diagnostics%push( &
+					err_alias_keyword(parser%context(), span, alias_name))
+				return
+			end if
+
+			! Ban "std"
+			if (alias_name == "std") then
+				span = new_span(alias_identifier%pos, len(alias_identifier%text))
+				call parser%diagnostics%push( &
+					err_alias_reserved_std(parser%context(), span))
+				return
+			end if
+
+			! Ban hyphens
+			if (parser%current_kind() == minus_token) then
+				span = new_span(alias_identifier%pos, len(alias_identifier%text))
+				call parser%diagnostics%push( &
+					err_alias_hyphen(parser%context(), span))
+				return
+			end if
+
+			! Ban spaces
+			if (parser%current_kind() == identifier_token) then
+				span = new_span(alias_identifier%pos, len(alias_identifier%text))
+				call parser%diagnostics%push( &
+					err_alias_space(parser%context(), span))
+				return
+			end if
+		end if
+	end if
+
 	! Check for `use module;` (qualified import) vs `use module::*;` (glob import)
 	if (parser%current_kind() == double_colon_token) then
+
+		! If we have an alias, reject ::* or ::name syntax
+		if (alias_name /= "") then
+			span = new_span(mod_identifier%pos, len(mod_identifier%text))
+			call parser%diagnostics%push( &
+				err_alias_with_doublecolon(parser%context(), span))
+			return
+		end if
+
 		double_colon = parser%match(double_colon_token)
 
 		! Check for glob import (use module::*)
@@ -203,6 +314,16 @@ module function parse_use_statement(parser) result(statement)
 	end if
 
 	semi = parser%match(semicolon_token)
+
+	! Compute qualified_prefix once for qualified imports
+	! Use alias if provided, otherwise convert module_name (with "/" -> "::")
+	if (qualified_import) then
+		if (alias_name /= "") then
+			qualified_prefix = alias_name
+		else
+			qualified_prefix = replace_all(module_name, "/", "::")
+		end if
+	end if
 
 	! Return an empty statement (no-op)
 	statement%kind = expr_statement
@@ -223,12 +344,34 @@ module function parse_use_statement(parser) result(statement)
 		return
 	end if
 
-	! Check for self-import (circular dependency)
-	if (mod_filename == parser%contexts%v(parser%current_unit())%src_file) then
+	! Check for circular module dependency
+	if (parser%import_stack%contains(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_prefix // "module `" // module_name // "` cannot import itself" // color_reset)
+			err_circular_import(parser%context(), span, module_name))
 		return
+	end if
+
+	! Check for duplicate import (only in first pass to avoid flagging the same
+	! import twice when parse_unit does two passes)
+	!
+	! Ban importing the same module file multiple times regardless of alias or
+	! import style. This prevents confusing code and redundant parsing.
+	!
+	! Examples (all banned):
+	!   - `use mymath; use mymath;`
+	!   - `use mymath as mm; use mymath as m;`
+	!   - `use mymath; use mymath::*;`
+	if (parser%ipass == 0) then
+		if (parser%imported_modules%contains(mod_filename)) then
+			span = new_span(mod_identifier%pos, len(mod_identifier%text))
+			call parser%diagnostics%push( &
+				err_duplicate_import(parser%context(), span, module_name))
+			return
+		end if
+
+		! Mark module file as imported
+		call parser%imported_modules%set(mod_filename, 1)
 	end if
 
 	! Read the module file
@@ -245,23 +388,30 @@ module function parse_use_statement(parser) result(statement)
 	mod_unit_ = 0
 	mod_parser = new_parser(mod_text, mod_filename, mod_contexts, mod_unit_)
 
+	! Propagate import chain into child parser for cycle detection
+	mod_parser%import_stack = parser%import_stack
+	call mod_parser%import_stack%set(mod_filename, 0)
+
 	! Initialize intrinsic functions for the module parser.
 	! We use declare_intr_fns instead of copying from the main parser's dict
 	! to avoid copying previously imported module functions which would cause
 	! redeclaration errors in pass 1.
 	call declare_intr_fns(mod_parser%fns)
-	mod_parser%num_fns = mod_parser%fns%num_intr_fns
 
-	! Share variable numbering with parent parser. Module variables will get
-	! indices continuing from parent's count, avoiding the need for remapping.
-	! This is similar to how #include works.
+	! Share variable, function, AND struct numbering with parent parser. Module
+	! variables, functions, and structs will get indices continuing from parent's
+	! count, avoiding the need for remapping. This is similar to how #include works.
 	mod_parser%num_vars = parser%num_vars
+	mod_parser%num_fns = parser%num_fns
+	mod_parser%num_structs = parser%num_structs
 
 	! Parse the module
 	mod_unit = mod_parser%parse_unit()
 
-	! Update parent's variable count to include module variables
+	! Update parent's variable, function, and struct counts to include module definitions
 	parser%num_vars = mod_parser%num_vars
+	parser%num_fns = mod_parser%num_fns
+	parser%num_structs = mod_parser%num_structs
 
 	! Check for parsing errors in the module (only in first pass)
 	if (parser%ipass == 0 .and. mod_parser%diagnostics%len_ > 0) then
@@ -278,16 +428,18 @@ module function parse_use_statement(parser) result(statement)
 		fn_name = mod_parser%fn_names%v(i)%s
 
 		! Look up the function in the module parser
-		fn = mod_parser%fns%search(fn_name, io, iostat)
+		fn = mod_parser%fns%search(fn_name, id_index, iostat)
 		if (iostat /= exit_success) cycle
 
 		! Determine the name to insert: qualified (module::fn) or unqualified (fn)
 		! For qualified imports, convert path separators to namespace separators
 		! e.g., "math/vectors" -> "math::vectors::fn"
 		if (qualified_import) then
-			! Replace "/" with "::" in module_name for qualified prefix
-			qualified_prefix = replace_all(module_name, "/", "::")
 			insert_name = qualified_prefix // "::" // fn_name
+
+			! Update struct_name references in return type and parameters
+			! to use qualified names
+			call qualify_fn_struct_names(fn, qualified_prefix)
 		else
 			insert_name = fn_name
 
@@ -305,9 +457,10 @@ module function parse_use_statement(parser) result(statement)
 			end if
 		end if
 
-		! Insert into current parser with new id_index
-		parser%num_fns = parser%num_fns + 1
-		call parser%fns%insert(insert_name, fn, parser%num_fns, io)
+		! Insert into current parser with the SAME id_index from module parser.
+		! This is critical: function calls inside module code have id_indices
+		! that were assigned during module parsing, so we must preserve them.
+		call parser%fns%insert(insert_name, fn, id_index)
 
 		! Only push to fn_names in the first pass (like parse_fn_declaration)
 		if (parser%ipass == 0) call parser%fn_names%push(insert_name)
@@ -324,8 +477,11 @@ module function parse_use_statement(parser) result(statement)
 
 		! Determine insert name (qualified or unqualified)
 		if (qualified_import) then
-			qualified_prefix = replace_all(module_name, "/", "::")
 			insert_name = qualified_prefix // "::" // var_name
+
+			! Update struct_name references in the variable value to use
+			! qualified names (e.g., Point -> pointmod::Point)
+			call qualify_value_struct_name(var_val, qualified_prefix)
 		else
 			insert_name = var_name
 		end if
@@ -333,6 +489,28 @@ module function parse_use_statement(parser) result(statement)
 		! Insert with same id_index (no remapping needed)
 		call parser%vars%insert(insert_name, var_val, id_index, io)
 		if (parser%ipass == 0) call parser%var_names%push(insert_name)
+	end do
+
+	! Copy parsed module structs to current parser.
+	do i = 1, mod_parser%struct_names%len_
+		struct_name = mod_parser%struct_names%v(i)%s
+
+		! Look up the struct in the module parser
+		call mod_parser%structs%search(struct_name, id_index, iostat, struct_val)
+		if (iostat /= exit_success) cycle
+
+		! Determine insert name (qualified or unqualified)
+		if (qualified_import) then
+			insert_name = qualified_prefix // "::" // struct_name
+		else
+			insert_name = struct_name
+		end if
+
+		! Insert into current parser with the SAME id_index from module parser.
+		! This is critical: since we shared num_structs before parsing, indices
+		! already match - no remapping needed (same pattern as functions/variables).
+		call parser%structs%insert(insert_name, struct_val, id_index, io)
+		if (parser%ipass == 0) call parser%struct_names%push(insert_name)
 	end do
 
 	! Store the module's translation unit for later evaluation. This ensures
@@ -344,6 +522,56 @@ module function parse_use_statement(parser) result(statement)
 	statement%member = mod_unit
 
 end function parse_use_statement
+
+!===============================================================================
+
+subroutine qualify_fn_struct_names(fn, prefix)
+
+	! Update struct_name references in a function's return type and parameters
+	! to use qualified names when importing from a module
+
+	type(fn_t), intent(inout) :: fn
+	character(len = *), intent(in) :: prefix
+
+	integer :: j
+
+	! Qualify return type struct_name
+	call qualify_value_struct_name(fn%type, prefix)
+
+	! Qualify parameter struct_names
+	if (allocated(fn%params)) then
+		do j = 1, size(fn%params)
+			call qualify_value_struct_name(fn%params(j), prefix)
+		end do
+	end if
+
+end subroutine qualify_fn_struct_names
+
+!===============================================================================
+
+subroutine qualify_value_struct_name(val, prefix)
+
+	! Update struct_name in a value_t to use qualified name
+
+	type(value_t), intent(inout) :: val
+	character(len = *), intent(in) :: prefix
+
+	if (val%type == struct_type) then
+		if (allocated(val%struct_name)) then
+			val%struct_name = prefix // "::" // val%struct_name
+		end if
+	else if (val%type == array_type) then
+		! Handle arrays of structs
+		if (allocated(val%array)) then
+			if (val%array%type == struct_type) then
+				if (allocated(val%struct_name)) then
+					val%struct_name = prefix // "::" // val%struct_name
+				end if
+			end if
+		end if
+	end if
+
+end subroutine qualify_value_struct_name
 
 !===============================================================================
 

@@ -5,6 +5,7 @@ module syntran__bool_m
 
 	! TODO: consider auto-generating from template like math_bin_*.f90
 
+	use syntran__utils_m
 	use syntran__value_m
 
 	implicit none
@@ -37,26 +38,6 @@ module syntran__bool_m
 
 contains
 
-!===============================================================================
-logical function is_str_eq(a, b)
-	! Fortran considers spaces as insignificant in str comparisons, but no sane
-	! language would allow that
-	!
-	! I guess this is an artifact of fixed-length strings being common in older
-	! fortran code
-	!
-	! Note that `is_ne()` is implemented as `.not. is_eq()`, which calls this
-	! fn, so there is no need for a separate is_str_ne()
-
-	character(len = *), intent(in) :: a, b
-
-	!is_str_eq = a == b  ! not what you expect!
-
-	is_str_eq = &
-		len(a) == len(b) .and. &
-		    a  ==     b
-
-end function is_str_eq
 !===============================================================================
 
 subroutine is_eq_value_t(left, right, res, op_text)

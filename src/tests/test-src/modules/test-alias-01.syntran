@@ -1,0 +1,8 @@
+// Test basic module aliasing
+
+use mymath as mm;
+
+let a = mm::add(2, 3);
+let b = mm::mul(4, 5);
+
+return a == 5 and b == 20;

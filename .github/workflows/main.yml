@@ -449,8 +449,10 @@
 	},
 	"test-compilers": {
 		"name": "Test with ${{ matrix.toolchain.compiler }}-${{ matrix.toolchain.version }}",
+		"timeout-minutes": 120,
 		"runs-on": "${{ matrix.os }}",
 		"strategy": {
+			"fail-fast": false,
 			"matrix": {
 				"os": [
 					"ubuntu-latest"
@@ -491,6 +493,7 @@
 			{
 				"if": "matrix.os == 'ubuntu-latest'",
 				"name": "Test ${{ matrix.toolchain.compiler }} ${{ matrix.toolchain.version }}",
+				"timeout-minutes": 90,
 				"env": {
 					"FPM_FC": "${{ env.FC }}"
 				},
@@ -585,6 +588,9 @@
 					mv /opt/homebrew/opt /opt/homebrew/opt-BACKUP || true \n
 					mv /opt/homebrew/Cellar /opt/homebrew/Cellar-BACKUP || true \n
 					#ls /opt/homebrew/ \n
+
+					# TODO: put curl+unzip in a retry loop. Download can flake
+					# out sometimes but curl doesn't really return an exit code \n
 
 					curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos.zip\" \n
 					unzip syntran-macos*.zip \n

@@ -1,5 +1,5 @@
 
-#include("../../utils.syntran");
+use ../../utils;
 
 //==============================================================================
 
@@ -213,7 +213,7 @@ fn int_ray_ray_2d(p0: [i64; :], v0: [i64; :], p1: [i64; :], v1: [i64; :]): i64
 
 fn part1(): i32
 {
-	let n = countln_(filename);
+	let n = utils::countln_(filename);
 
 	let p = [i64(0); N3D, n];
 	let v = [i64(0); N3D, n];
@@ -224,7 +224,7 @@ fn part1(): i32
 		let str_ = readln(f);
 		//println("str_ = ", str_);
 
-		let vec = parse_i64_delim(str_, ",@ ");
+		let vec = utils::parse_i64_delim(str_, ",@ ");
 
 		// Unpack
 		p[0,i] = vec[0];

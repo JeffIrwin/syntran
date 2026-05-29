@@ -1,0 +1,7 @@
+// Test alias with struct (use pointmod as pm;)
+
+use pointmod as pm;
+
+let p = pm::Point{x = 1, y = 2};
+
+return p.x == 1 and p.y == 2;

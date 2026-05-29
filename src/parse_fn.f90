@@ -126,6 +126,15 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 	call resolve_overload(args, fn_call, has_rank)
 	if (has_rank) rank = fn_call%val%array%rank
 
+	! If any argument has unknown_type, return early to prevent cascading errors.
+	! The actual error (e.g. undefined function) was already pushed earlier.
+	do i = 1, args%len_
+		if (args%v(i)%val%type == unknown_type) then
+			fn_call%val%type = unknown_type
+			return
+		end if
+	end do
+
 	! Lookup by fn_call%identifier%text (e.g. "0min_i32"), but log
 	! diagnostics based on identifier_%text (e.g. "min")
 	!
@@ -339,7 +348,7 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 
 		is_ok = .true.
 		is_ok = is_ok .and. types_match(param_val, args%v(i)%val) == TYPE_MATCH
-		is_ok = is_ok .or. (parser%ipass == 0 .and. args%v(i)%val%type == unknown_type)
+		is_ok = is_ok .or. args%v(i)%val%type == unknown_type
 
 		if (.not. is_ok) then
 
@@ -420,6 +429,19 @@ recursive module function parse_qualified_expr(parser) result(expr)
 	if (parser%current_kind() == lparen_token) then
 		! Qualified function call: std::println(...) or math::vectors::fn(...)
 		expr = parser%parse_fn_call(module_name, fn_identifier)
+
+	else if (parser%current_kind() == lbrace_token) then
+		! Qualified struct instance: mod::Struct{...}
+		lookup_name = module_name // "::" // fn_name
+		if (parser%structs%exists(lookup_name)) then
+			expr = parser%parse_struct_instance(lookup_name)
+		else
+			! Struct not found
+			span = new_span(fn_identifier%pos, len(fn_identifier%text))
+			call parser%diagnostics%push( &
+				err_undeclare_var(parser%context(), span, fn_name))
+		end if
+
 	else
 		! Qualified variable access: mod::var
 		lookup_name = module_name // "::" // fn_name
@@ -435,6 +457,9 @@ recursive module function parse_qualified_expr(parser) result(expr)
 		expr = new_name_expr(fn_identifier, var_val)
 		expr%id_index = id_index
 		expr%module_prefix = module_name
+
+		call parser%parse_subscripts(expr)
+		call parser%parse_dot(expr)
 	end if
 
 end function parse_qualified_expr
@@ -843,6 +868,7 @@ module function parse_struct_declaration(parser) result(decl)
 	!print *, "inserting identifier ", identifier%text, " into parser structs"
 	call parser%structs%insert( &
 		identifier%text, struct, decl%id_index, io, overwrite = overwrite)
+	if (parser%ipass == 0) call parser%struct_names%push(identifier%text)
 	!print *, "io = ", io
 	if (io /= 0) then
 		span = new_span(identifier%pos, len(identifier%text))
@@ -864,18 +890,20 @@ end function parse_struct_declaration
 
 !===============================================================================
 
-recursive module function parse_struct_instance(parser) result(inst)
+recursive module function parse_struct_instance(parser, struct_name) result(inst)
 
 	! A struct instantiator initializes all the members of an instance of a
 	! struct
 
 	class(parser_t) :: parser
 
+	character(len = *), intent(in), optional :: struct_name
+
 	type(syntax_node_t) :: inst
 
 	!********
 
-	character(len = :), allocatable :: unset_name, exp_type, act_type
+	character(len = :), allocatable :: unset_name, exp_type, act_type, lookup_name
 
 	integer :: io, pos0, pos1, struct_id, member_id, id1(1), num_mems
 
@@ -894,16 +922,23 @@ recursive module function parse_struct_instance(parser) result(inst)
 
 	!print *, "starting parse_struct_instance()"
 
-	identifier = parser%match(identifier_token)
+	if (present(struct_name)) then
+		! Called from parse_qualified_expr with pre-parsed qualified name
+		lookup_name = struct_name
+	else
+		! Original path: parse identifier from current position
+		identifier = parser%match(identifier_token)
+		lookup_name = identifier%text
+	end if
 
-	!print *, "parsing struct instance of identifier = ", identifier%text
+	!print *, "parsing struct instance of lookup_name = ", lookup_name
 
 	!print *, ""
 	!print *, "in parse_struct_instance():"
 	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
 	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
 
-	call parser%structs%search(identifier%text, struct_id, io, struct)
+	call parser%structs%search(lookup_name, struct_id, io, struct)
 	!print *, "struct io = ", io
 
 	num_mems = 0
@@ -920,8 +955,8 @@ recursive module function parse_struct_instance(parser) result(inst)
 
 	member_set = spread(.false., 1, struct%num_vars)
 
-	inst%struct_name = identifier%text
-	inst%val%struct_name = identifier%text
+	inst%struct_name = lookup_name
+	inst%val%struct_name = lookup_name
 
 	!print *, "struct name = ", inst%struct_name
 
@@ -957,7 +992,7 @@ recursive module function parse_struct_instance(parser) result(inst)
 				parser%context(), &
 				span, &
 				name%text, &
-				identifier%text))
+				lookup_name))
 			!return
 		end if
 
@@ -975,7 +1010,7 @@ recursive module function parse_struct_instance(parser) result(inst)
 				parser%context(), &
 				span, &
 				name%text, &
-				identifier%text, &
+				lookup_name, &
 				act_type, &
 				exp_type))
 
@@ -995,7 +1030,7 @@ recursive module function parse_struct_instance(parser) result(inst)
 					parser%context(), &
 					span, &
 					name%text, &
-					identifier%text))
+					lookup_name))
 			end if
 
 			! Members can be instantiated out of order.  Insert by id, not loop iterator
@@ -1030,12 +1065,17 @@ recursive module function parse_struct_instance(parser) result(inst)
 		!print *, "id1 = ", id1
 		!print *, "name = ", unset_name
 
-		span = new_span(identifier%pos, len(identifier%text))
+		if (present(struct_name)) then
+			! Use lbrace position for qualified struct instances
+			span = new_span(lbrace%pos, len(lookup_name))
+		else
+			span = new_span(identifier%pos, len(identifier%text))
+		end if
 		call parser%diagnostics%push(err_unset_member( &
 			parser%context(), &
 			span, &
 			unset_name, &
-			identifier%text))
+			lookup_name))
 	end if
 
 	!print *, "size = ", struct%num_vars
