@@ -693,8 +693,6 @@ end function get_dir
 
 logical function is_abs_path(path)
 	! Check if a path is absolute (starts with / on Unix or drive letter on Windows)
-	!
-	! TODO: wrong for Windows abs paths starting with "\" on current drive
 
 	character(len = *), intent(in) :: path
 
@@ -707,17 +705,15 @@ logical function is_abs_path(path)
 		return
 	end if
 
-	! Windows absolute path (e.g., C:\, D:\)
-	if (len(path) >= 2) then
-		if (path(2:2) == ':') then
-			is_abs_path = .true.
-			return
-		end if
+	! Windows absolute path on current drive (e.g., \foo\bar)
+	if (path(1:1) == '\') then
+		is_abs_path = .true.
+		return
 	end if
 
-	! Windows UNC path (e.g., \\server\share)
+	! Windows absolute path with drive letter (e.g., C:\, D:\)
 	if (len(path) >= 2) then
-		if (path(1:2) == '\\') then
+		if (path(2:2) == ':') then
 			is_abs_path = .true.
 			return
 		end if
@@ -1267,7 +1263,6 @@ subroutine map_i32_init(self, capacity)
 	integer, intent(in) :: capacity
 
 	if (capacity <= 0) then
-		! TODO: internal syntran error
 		error stop "map_i32_init: capacity must be positive"
 	end if
 
@@ -1312,7 +1307,6 @@ subroutine map_i32_set(self, key, value)
 	end do
 
 	! Should never reach here if resize works correctly
-	! TODO: internal syntran error
 	error stop "map_i32_set: table full despite resize"
 end subroutine map_i32_set
 
