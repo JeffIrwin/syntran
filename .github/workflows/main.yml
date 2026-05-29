@@ -589,6 +589,9 @@
 					mv /opt/homebrew/Cellar /opt/homebrew/Cellar-BACKUP || true \n
 					#ls /opt/homebrew/ \n
 
+					# TODO: put curl+unzip in a retry loop. Download can flake
+					# out sometimes but curl doesn't really return an exit code \n
+
 					curl -LO \"https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-macos.zip\" \n
 					unzip syntran-macos*.zip \n
 					chmod +x ./syntran \n
