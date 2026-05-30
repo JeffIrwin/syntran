@@ -1,0 +1,172 @@
+
+!===============================================================================
+
+module syntran__bytecode_m
+
+	use syntran__types_m
+
+	implicit none
+
+	!********
+
+	! Opcode enum.  Uses a separate numbering space from the token/type/node-kind
+	! enum in consts.f90 (which tops out at 121) to prevent accidental aliasing.
+
+	integer, parameter :: &
+		OP_EVAL_NODE = 1001	! fallback: run one AST node through syntax_eval
+
+	!********
+
+	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
+	! members) so that arrays of instr_t can be grown with plain array assignment
+	! or move_alloc without triggering the deep-copy machinery.
+	!
+	! Fields:
+	!   op  - opcode
+	!   a,b - integer operands (slot index, const index, jump target, etc.)
+	!   c   - wide integer operand (e.g. element count)
+
+	type instr_t
+		integer :: op
+		integer :: a = 0, b = 0
+		integer(kind = 8) :: c = 0
+	end type instr_t
+
+	!********
+
+	! A compiled program.  All function bodies and the top-level code are
+	! concatenated into a single flat code(:) array; per-function entry offsets
+	! are stored in fn_entry(:).
+	!
+	! The constant pool consts(:) holds literal values referenced by LOAD_CONST.
+	!
+	! The node pool nodes(:) holds AST subtrees referenced by OP_EVAL_NODE.
+	! This is only used for the M0 fallback and will be removed once all node
+	! kinds have been lowered to real opcodes.
+
+	type program_t
+
+		type(instr_t), allocatable :: code(:)
+		integer :: len_ = 0, cap = 0
+
+		type(value_t), allocatable :: consts(:)
+		integer :: nconsts = 0
+
+		! AST node pool for the OP_EVAL_NODE fallback
+		type(syntax_node_t), allocatable :: nodes(:)
+		integer :: nnodes = 0
+
+		integer, allocatable :: fn_entry(:)
+		integer, allocatable :: fn_num_locs(:)
+		integer :: entry_main = 1
+
+	end type program_t
+
+!===============================================================================
+
+contains
+
+!===============================================================================
+
+function new_program() result(prog)
+
+	type(program_t) :: prog
+
+	!*******
+
+	integer, parameter :: INIT_CAP = 16
+
+	prog%cap     = INIT_CAP
+	prog%len_    = 0
+	prog%nconsts = 0
+	prog%nnodes  = 0
+	prog%entry_main = 1
+
+	allocate(prog%code(INIT_CAP))
+
+end function new_program
+
+!===============================================================================
+
+subroutine emit(prog, op, a, b, c)
+
+	! Append one instruction to prog%code, growing the array if needed.
+	! instr_t has no allocatable members so a simple array-section copy + move_alloc
+	! is safe.
+
+	type(program_t), intent(inout) :: prog
+	integer, intent(in) :: op
+	integer, intent(in), optional :: a, b
+	integer(kind = 8), intent(in), optional :: c
+
+	!*******
+
+	type(instr_t), allocatable :: tmp(:)
+
+	prog%len_ = prog%len_ + 1
+
+	if (prog%len_ > prog%cap) then
+		prog%cap = 2 * prog%len_
+		allocate(tmp(prog%cap))
+		tmp(1 : prog%len_ - 1) = prog%code(1 : prog%len_ - 1)
+		call move_alloc(tmp, prog%code)
+	end if
+
+	prog%code(prog%len_)%op = op
+	prog%code(prog%len_)%a  = 0
+	prog%code(prog%len_)%b  = 0
+	prog%code(prog%len_)%c  = 0_8
+	if (present(a)) prog%code(prog%len_)%a = a
+	if (present(b)) prog%code(prog%len_)%b = b
+	if (present(c)) prog%code(prog%len_)%c = c
+
+end subroutine emit
+
+!===============================================================================
+
+function add_node(prog, node) result(idx)
+
+	! Store an AST node in the program's node pool and return its index.
+	!
+	! Growth uses the copy-to-tmp-and-back pattern required for types with
+	! allocatable members (same rationale as push_value in value.f90).
+
+	type(program_t), intent(inout) :: prog
+	type(syntax_node_t), intent(in) :: node
+	integer :: idx
+
+	!*******
+
+	type(syntax_node_t), allocatable :: tmp(:)
+	integer :: i, new_cap
+
+	integer, parameter :: INIT_NODE_CAP = 8
+
+	prog%nnodes = prog%nnodes + 1
+	idx = prog%nnodes
+
+	if (.not. allocated(prog%nodes)) then
+		allocate(prog%nodes(INIT_NODE_CAP))
+
+	else if (prog%nnodes > size(prog%nodes)) then
+		new_cap = 2 * prog%nnodes
+		allocate(tmp(new_cap))
+		do i = 1, prog%nnodes - 1
+			tmp(i) = prog%nodes(i)
+		end do
+		deallocate(prog%nodes)
+		allocate(prog%nodes(new_cap))
+		do i = 1, prog%nnodes - 1
+			prog%nodes(i) = tmp(i)
+		end do
+	end if
+
+	prog%nodes(idx) = node
+
+end function add_node
+
+!===============================================================================
+
+end module syntran__bytecode_m
+
+!===============================================================================

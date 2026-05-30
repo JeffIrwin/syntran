@@ -8,12 +8,37 @@ module syntran
 	! syntran library as an API (as opposed to using the syntran CLI)
 
 	use syntran__core_m
+	use syntran__compile_m
+	use syntran__vm_m
 
 	implicit none
 
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+subroutine eval_dispatch(tree, state, res)
+
+	! Dispatch to the bytecode VM or the AST walker based on state%bytecode.
+
+	type(syntax_node_t), intent(in) :: tree
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: res
+
+	!*******
+
+	type(program_t) :: prog
+
+	if (state%bytecode) then
+		call compile_tree(tree, prog)
+		call vm_run(prog, state, res)
+	else
+		call syntax_eval(tree, state, res)
+	end if
+
+end subroutine eval_dispatch
 
 !===============================================================================
 
@@ -99,7 +124,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 		end if
 
 		! TODO: chdir option?
-		call syntax_eval(compilation, state, res)
+		call eval_dispatch(compilation, state, res)
 		res_str = res%to_str()
 		write(*,*) '    '//res_str
 
@@ -202,7 +227,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 		! Don't try to evaluate with errors
 		if (compilation%diagnostics%len_ > 0) cycle
 
-		call syntax_eval(compilation, state, res )
+		call eval_dispatch(compilation, state, res)
 
 		!print *, "res type = ", kind_name(res%type)
 		if (res%type == void_type   ) cycle
@@ -239,7 +264,7 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 		return
 	end if
 
-	call syntax_eval(tree, state, val)
+	call eval_dispatch(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
 	eval_i32 = val%sca%i32
@@ -270,7 +295,7 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 		return
 	end if
 
-	call syntax_eval(tree, state, val)
+	call eval_dispatch(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
 	val_ = val%sca%i64
@@ -304,7 +329,7 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 		return
 	end if
 
-	call syntax_eval(tree, state, val)
+	call eval_dispatch(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
 	eval_f32 = val%sca%f32
@@ -339,7 +364,7 @@ real(kind = 8) function syntran_eval_f64(str_, quiet) result(eval_f64)
 		return
 	end if
 
-	call syntax_eval(tree, state, val)
+	call eval_dispatch(tree, state, val)
 
 	! TODO: check kind, add optional iostat arg
 	eval_f64 = val%sca%f64
@@ -363,11 +388,24 @@ subroutine init_state(state, script_args, src_dir)
 	type(string_vector_t), intent(in), optional :: script_args
 	character(len = *), intent(in), optional :: src_dir
 
+	!*******
+
+	character(len = 64) :: backend_env
+	integer :: backend_status
+
 	call declare_intr_fns(state%fns)
 
 	state%returned  = .false.
 	state%breaked   = .false.
 	state%continued = .false.
+
+	! Select evaluation backend via SYNTRAN_BACKEND env var.
+	! SYNTRAN_BACKEND=bytecode  -> use the bytecode VM
+	! (anything else)           -> use the AST walker (default)
+	call get_environment_variable('SYNTRAN_BACKEND', backend_env, &
+		status = backend_status)
+	state%bytecode = (backend_status == 0 .and. &
+		trim(backend_env) == 'bytecode')
 
 	! Is it safe to initialize these arrays both here and in new_parser?  Test
 	! interactive interp
@@ -466,7 +504,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 	! No chdir() needed - src_dir is now in state and will be used by open()
 
 	!print *, "evaling "
-	call syntax_eval(tree, state, val)
+	call eval_dispatch(tree, state, val)
 	!print *, "done"
 	res = val%to_str()
 	!print *, 'res = ', res
