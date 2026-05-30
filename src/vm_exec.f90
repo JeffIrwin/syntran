@@ -7,6 +7,7 @@ submodule (syntran__vm_m) syntran__vm_exec
 	!
 	! M0: OP_EVAL_NODE fallback (delegates to syntax_eval).
 	! M1: native handlers for scalars, loads/stores, binop, unop.
+	! M2: OP_JUMP / OP_JUMP_IF_FALSE for if/while/block/break/continue.
 
 	implicit none
 
@@ -166,11 +167,15 @@ module subroutine vm_run(prog, state, res)
 
 	type(value_vector_t) :: stack
 	type(value_t) :: left, right, val
-	integer :: ip
+	integer :: ip, next_ip
 
 	stack = new_value_vector()
 
-	do ip = prog%entry_main, prog%len_
+	ip = prog%entry_main
+	do while (ip <= prog%len_)
+
+		! Default: advance to next instruction.  Jump handlers override this.
+		next_ip = ip + 1
 
 		associate(instr => prog%code(ip))
 
@@ -180,6 +185,9 @@ module subroutine vm_run(prog, state, res)
 		case (OP_EVAL_NODE)
 			call syntax_eval(prog%nodes(instr%a), state, val)
 			call vm_push_copy(stack, val)
+			! If the node executed a `return` statement, stop the VM loop so
+			! that the return value (now on TOS) is the final result.
+			if (state%returned) next_ip = prog%len_ + 1
 
 		! --- constants and variable loads ---
 		case (OP_LOAD_CONST)
@@ -215,12 +223,23 @@ module subroutine vm_run(prog, state, res)
 		case (OP_POP)
 			call vm_pop_discard(stack)
 
+		! --- control flow: unconditional jump ---
+		case (OP_JUMP)
+			next_ip = instr%a
+
+		! --- control flow: conditional jump ---
+		case (OP_JUMP_IF_FALSE)
+			call vm_pop_copy(stack, val)
+			if (.not. val%sca%bool) next_ip = instr%a
+
 		case default
 			write(*,*) 'VM: unknown opcode ', instr%op
 
 		end select
 
 		end associate
+
+		ip = next_ip
 
 	end do
 

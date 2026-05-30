@@ -9,12 +9,76 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 	! M1: natively compiles literal_expr, simple name_expr, binary_expr,
 	!     unary_expr, let_expr, simple assignment_expr, and translation_unit.
 	!     Everything else still falls back to OP_EVAL_NODE.
+	! M2: adds block_statement, if_statement, while_statement,
+	!     break_statement, continue_statement via JUMP/JUMP_IF_FALSE opcodes.
+	!     for_statement still falls back to OP_EVAL_NODE.
 
 	implicit none
+
+	! --- Loop context for break/continue backpatching ---
+	!
+	! loop_depth is incremented when entering a natively-compiled while/for loop
+	! and decremented on exit.  continue_target(d) is the instruction index to
+	! jump to for a `continue` inside loop depth d.  break fixups inside loops
+	! are collected and backpatched after the loop body is fully compiled.
+
+	integer, parameter :: MAX_LOOP_DEPTH   = 64
+	integer, parameter :: MAX_BREAK_FIXUPS = 4096
+
+	integer :: loop_depth = 0
+	integer :: continue_target(MAX_LOOP_DEPTH) = 0
+
+	integer :: break_fixup_ips(MAX_BREAK_FIXUPS)    = 0
+	integer :: break_fixup_depths(MAX_BREAK_FIXUPS)  = 0
+	integer :: nbreak_fixups = 0
+
+	! --- Block-level break context ---
+	!
+	! In Syntran, `break` can exit a plain block statement (not just loops).
+	! The AST walker propagates state%breaked through all enclosing blocks until
+	! it reaches a for/while loop or the translation unit.
+	!
+	! In the VM, we replicate this by tracking whether we are inside the
+	! outermost natively-compiled block (with no enclosing native loop).  If so,
+	! `break` records a fixup that gets patched to the block's end when the
+	! outermost block finishes compilation.  Inner blocks nested inside the
+	! outermost block share the same target, so one JUMP exits all of them.
+
+	logical :: in_block_break_ctx = .false.
+	integer :: block_break_ips(MAX_BREAK_FIXUPS) = 0
+	integer :: nblock_break_fixups = 0
 
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+subroutine backpatch_breaks(prog, depth, target)
+
+	! Patch all pending loop-break fixups at the given loop depth to target,
+	! then remove them from the fixup list.
+
+	type(program_t), intent(inout) :: prog
+	integer, intent(in) :: depth, target
+
+	!*******
+
+	integer :: i, j
+
+	j = 0
+	do i = 1, nbreak_fixups
+		if (break_fixup_depths(i) == depth) then
+			call patch_jump(prog, break_fixup_ips(i), target)
+		else
+			j = j + 1
+			break_fixup_ips(j)    = break_fixup_ips(i)
+			break_fixup_depths(j) = break_fixup_depths(i)
+		end if
+	end do
+	nbreak_fixups = j
+
+end subroutine backpatch_breaks
 
 !===============================================================================
 
@@ -23,6 +87,10 @@ recursive subroutine compile_node(prog, node)
 	! Lower one AST node to opcodes.  The contract is that this subroutine
 	! always leaves exactly one value on the operand stack after the emitted
 	! opcodes execute — even for the OP_EVAL_NODE fallback.
+	!
+	! Exception: break_statement and continue_statement emit an unconditional
+	! JUMP so the instructions after them are unreachable.  Stack discipline is
+	! only required on live paths.
 
 	type(program_t), intent(inout) :: prog
 	type(syntax_node_t), intent(in) :: node
@@ -30,7 +98,9 @@ recursive subroutine compile_node(prog, node)
 	!*******
 
 	integer :: idx, i, const_idx
-	logical :: first
+	integer :: jf_ip, j_ip, l_top, l_else, l_end, l_pad
+	integer :: nblock_saved
+	logical :: first, entering_ctx
 
 	select case (node%kind)
 
@@ -91,6 +161,199 @@ recursive subroutine compile_node(prog, node)
 			call emit(prog, OP_EVAL_NODE, a = idx)
 		end if
 
+	! ---- block statement -------------------------------------------------------
+	!
+	! Compiles all members sequentially; the last one leaves its result on the
+	! stack.  When loop_depth == 0 and this is the outermost natively-compiled
+	! block, `break` inside emits a JUMP that is patched to a pad at the block's
+	! end.  The pad pushes unknown_type so the stack is D+1 on both the normal
+	! and break-taken paths.
+	!
+	! Normal path:   [body, last result on stack] JUMP L_skip_pad
+	!                L_pad: LOAD_CONST unknown    <- not reached on normal path
+	!                L_skip_pad:
+	!
+	! Break path:    [body...] JUMP L_pad         <- from break_statement
+	!                [unreachable body tail]
+	!                JUMP L_skip_pad
+	!                L_pad: LOAD_CONST unknown
+	!                L_skip_pad:
+	case (block_statement)
+		! Enter the outermost block-break context if not already in one and
+		! there is no enclosing native while/for loop.
+		if (loop_depth == 0 .and. .not. in_block_break_ctx) then
+			in_block_break_ctx = .true.
+			entering_ctx = .true.
+			nblock_saved = nblock_break_fixups
+		else
+			entering_ctx = .false.
+			nblock_saved = 0		! unused, but avoids uninitialized warning
+		end if
+
+		! Compile members: pop between them, leave last result on stack
+		first = .true.
+		do i = 1, size(node%members)
+			if (.not. first) call emit(prog, OP_POP)
+			first = .false.
+			call compile_node(prog, node%members(i))
+		end do
+		! Empty block: push unknown_type sentinel
+		if (first) then
+			const_idx = add_const(prog, unknown_val())
+			call emit(prog, OP_LOAD_CONST, a = const_idx)
+		end if
+
+		! After the outermost block body: emit the break-taken sentinel pad
+		! if any block-level break fixups were collected.
+		if (entering_ctx) then
+			if (nblock_break_fixups > nblock_saved) then
+				! Normal path: skip the pad
+				j_ip = prog%len_ + 1
+				call emit(prog, OP_JUMP, a = 0)
+
+				! Break path: push unknown_type as the block's result
+				l_pad = prog%len_ + 1
+				do i = nblock_saved + 1, nblock_break_fixups
+					call patch_jump(prog, block_break_ips(i), l_pad)
+				end do
+				const_idx = add_const(prog, unknown_val())
+				call emit(prog, OP_LOAD_CONST, a = const_idx)
+
+				! Both paths converge here
+				l_end = prog%len_ + 1
+				call patch_jump(prog, j_ip, l_end)
+			end if
+
+			! Restore the block-break context for the enclosing scope
+			nblock_break_fixups = nblock_saved
+			in_block_break_ctx  = .false.
+		end if
+
+	! ---- if statement ----------------------------------------------------------
+	! Bytecode pattern (no else):
+	!   [condition]
+	!   JUMP_IF_FALSE L_else
+	!   [if-clause]          -> leaves result on stack
+	!   JUMP L_end
+	!   L_else: LOAD_CONST unknown_type
+	!   L_end:
+	!
+	! Pattern (with else):
+	!   [condition]
+	!   JUMP_IF_FALSE L_else
+	!   [if-clause]          -> leaves result on stack
+	!   JUMP L_end
+	!   L_else: [else-clause] -> leaves result on stack
+	!   L_end:
+	case (if_statement)
+		! Compile condition; leaves bool on stack
+		call compile_node(prog, node%condition)
+
+		! JUMP_IF_FALSE — target patched below
+		jf_ip = prog%len_ + 1
+		call emit(prog, OP_JUMP_IF_FALSE, a = 0)
+
+		! Compile the if-clause
+		call compile_node(prog, node%if_clause)
+
+		if (allocated(node%else_clause)) then
+			! JUMP past else — target patched below
+			j_ip = prog%len_ + 1
+			call emit(prog, OP_JUMP, a = 0)
+
+			l_else = prog%len_ + 1
+			call patch_jump(prog, jf_ip, l_else)
+
+			! Compile the else-clause (may itself be another if_statement)
+			call compile_node(prog, node%else_clause)
+
+			l_end = prog%len_ + 1
+			call patch_jump(prog, j_ip, l_end)
+		else
+			! No else: jump past the unknown_type push
+			j_ip = prog%len_ + 1
+			call emit(prog, OP_JUMP, a = 0)
+
+			l_else = prog%len_ + 1
+			call patch_jump(prog, jf_ip, l_else)
+
+			! Condition was false and no else: push unknown_type
+			const_idx = add_const(prog, unknown_val())
+			call emit(prog, OP_LOAD_CONST, a = const_idx)
+
+			l_end = prog%len_ + 1
+			call patch_jump(prog, j_ip, l_end)
+		end if
+
+	! ---- while statement -------------------------------------------------------
+	! Bytecode pattern:
+	!   L_top: [condition]
+	!          JUMP_IF_FALSE L_end
+	!          [body]         -> result discarded with POP
+	!          POP
+	!          JUMP L_top
+	!   L_end: LOAD_CONST unknown_type  (while-statement result)
+	!
+	! break  -> JUMP L_end  (backpatched after loop)
+	! continue -> JUMP L_top (target known when continue is emitted)
+	case (while_statement)
+		loop_depth = loop_depth + 1
+		l_top = prog%len_ + 1
+		continue_target(loop_depth) = l_top
+
+		! Compile condition
+		call compile_node(prog, node%condition)
+
+		! JUMP_IF_FALSE — patched to L_end below
+		jf_ip = prog%len_ + 1
+		call emit(prog, OP_JUMP_IF_FALSE, a = 0)
+
+		! Compile body; its result is discarded before looping
+		call compile_node(prog, node%body)
+		call emit(prog, OP_POP)
+		call emit(prog, OP_JUMP, a = l_top)
+
+		! L_end: backpatch the conditional exit and all break fixups
+		l_end = prog%len_ + 1
+		call patch_jump(prog, jf_ip, l_end)
+		call backpatch_breaks(prog, loop_depth, l_end)
+		loop_depth = loop_depth - 1
+
+		! Push unknown_type as the while-statement's result value
+		const_idx = add_const(prog, unknown_val())
+		call emit(prog, OP_LOAD_CONST, a = const_idx)
+
+	! ---- break -----------------------------------------------------------------
+	case (break_statement)
+		if (loop_depth > 0) then
+			! Inside a native while/for: jump to the loop's end (backpatched)
+			nbreak_fixups = nbreak_fixups + 1
+			break_fixup_ips(nbreak_fixups)    = prog%len_ + 1
+			break_fixup_depths(nbreak_fixups) = loop_depth
+			call emit(prog, OP_JUMP, a = 0)
+
+		else if (in_block_break_ctx) then
+			! Inside the outermost native block (no enclosing loop): jump to
+			! the block's end pad (backpatched when the block finishes)
+			nblock_break_fixups = nblock_break_fixups + 1
+			block_break_ips(nblock_break_fixups) = prog%len_ + 1
+			call emit(prog, OP_JUMP, a = 0)
+
+		else
+			! No breakable context (top-level break): fall back to AST walker
+			idx = add_node(prog, node)
+			call emit(prog, OP_EVAL_NODE, a = idx)
+		end if
+
+	! ---- continue --------------------------------------------------------------
+	case (continue_statement)
+		if (loop_depth > 0) then
+			call emit(prog, OP_JUMP, a = continue_target(loop_depth))
+		else
+			idx = add_node(prog, node)
+			call emit(prog, OP_EVAL_NODE, a = idx)
+		end if
+
 	! ---- top-level translation unit -------------------------------------------
 	case (translation_unit)
 		! Fn and struct declarations are registered at parse time; skip them here.
@@ -137,6 +400,12 @@ module subroutine compile_tree(tree, prog)
 
 	type(syntax_node_t), intent(in) :: tree
 	type(program_t), intent(out) :: prog
+
+	! Reset all compiler state for each fresh compilation
+	loop_depth          = 0
+	nbreak_fixups       = 0
+	in_block_break_ctx  = .false.
+	nblock_break_fixups = 0
 
 	prog = new_program()
 	call compile_node(prog, tree)

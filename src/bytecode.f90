@@ -21,7 +21,9 @@ module syntran__bytecode_m
 		OP_STORE_LOCAL = 1006, &	! copy TOS into state%locs%vals(a), keep TOS
 		OP_BINOP       = 1007, &	! pop right+left, compute with op-token a, push result
 		OP_UNOP        = 1008, &	! pop operand, compute with op-token a, push result
-		OP_POP         = 1009   	! discard TOS
+		OP_POP         = 1009, &	! discard TOS
+		OP_JUMP          = 1010, &	! unconditional jump: ip = a
+		OP_JUMP_IF_FALSE = 1011  	! pop bool TOS; if false: ip = a, else continue
 
 	!********
 
@@ -214,6 +216,20 @@ function add_node(prog, node) result(idx)
 	prog%nodes(idx) = node
 
 end function add_node
+
+!===============================================================================
+
+subroutine patch_jump(prog, ip, target)
+
+	! Backpatch the jump target (field `a`) of a previously emitted
+	! OP_JUMP or OP_JUMP_IF_FALSE instruction at position ip.
+
+	type(program_t), intent(inout) :: prog
+	integer, intent(in) :: ip, target
+
+	prog%code(ip)%a = target
+
+end subroutine patch_jump
 
 !===============================================================================
 
