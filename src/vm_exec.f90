@@ -5,10 +5,12 @@ submodule (syntran__vm_m) syntran__vm_exec
 
 	! Stack-based bytecode VM execution loop.
 	!
-	! M0: OP_EVAL_NODE fallback (delegates to syntax_eval).
+	! M0: OP_EVAL_NODE fallback (delegates to syntax_eval; kept as debug opcode).
 	! M1: native handlers for scalars, loads/stores, binop, unop.
 	! M2: OP_JUMP / OP_JUMP_IF_FALSE for if/while/block/break/continue.
 	! M3: OP_CALL / OP_RET / OP_LOAD_REF_* for user-defined function frames.
+	! M8: OP_FOR_SETUP / OP_FOR_NEXT (for loops), OP_NEW_ARRAY, OP_STORE_SLICE,
+	!     OP_HALT; readln/close handled inline in OP_CALL_INTR.
 
 	implicit none
 
@@ -19,10 +21,33 @@ submodule (syntran__vm_m) syntran__vm_exec
 	!------------------------------------------------------------------------
 
 	type :: frame_t
-		integer :: return_ip = 0
-		integer :: node_idx  = 0   ! index into prog%nodes for the fn_call_expr node
+		integer :: return_ip  = 0
+		integer :: node_idx   = 0   ! index into prog%nodes for the fn_call_expr node
+		integer :: nfor_saved = 0   ! for-iter stack depth on function entry (restore at RET)
 		type(value_t), allocatable :: caller_locs(:)
 	end type frame_t
+
+	!------------------------------------------------------------------------
+	! For-loop iterator frame: one entry per active native for loop.
+	! Mirrors the local variables in eval_for_statement (eval_control.f90:14).
+	! for_kind uses the same constants as eval_for_statement: bound_array,
+	! step_array, len_array, expl_array, size_array, unif_array, array_expr,
+	! or str_type for string iteration.
+	!------------------------------------------------------------------------
+
+	type :: for_iter_t
+		integer :: for_kind = 0           ! array kind or str_type
+		integer :: itr_type = 0           ! element type (i32/i64/f32/f64/str)
+		integer(kind = 8) :: len8  = 0    ! total iteration count
+		integer(kind = 8) :: counter = 0  ! current 1-based counter (0 = before first)
+		integer :: node_idx = 0           ! prog%nodes index of the for_statement node
+		type(value_t) :: lbound_          ! loop lower bound / uniform value
+		type(value_t) :: step             ! loop step
+		type(value_t) :: ubound_          ! loop upper bound
+		type(value_t) :: len_             ! loop length (len_array kind)
+		type(array_t) :: array            ! materialized array (non-primary array exprs)
+		type(value_t) :: str_             ! string to iterate over (str_type)
+	end type for_iter_t
 
 !===============================================================================
 
@@ -200,6 +225,7 @@ module subroutine vm_run(prog, state, res)
 	!*******
 
 	integer, parameter :: MAX_FRAMES = 256
+	integer, parameter :: MAX_FORS   = 64
 
 	type(value_vector_t) :: stack
 	type(value_t) :: left, right, val
@@ -217,7 +243,12 @@ module subroutine vm_run(prog, state, res)
 	type(frame_t) :: frames(MAX_FRAMES)
 	integer :: nframes
 
+	! For-loop iterator stack (M8)
+	type(for_iter_t) :: for_iters(MAX_FORS)
+	integer :: nfor
+
 	nframes = 0
+	nfor    = 0
 	stack   = new_value_vector()
 
 	ip = prog%entry_main
@@ -356,9 +387,10 @@ module subroutine vm_run(prog, state, res)
 				if (.not. cn%is_ref(i)) call vm_pop_copy(stack, params_tmp(i))
 			end do
 
-			! Push a new call frame; save caller's local vars.
+			! Push a new call frame; save caller's local vars and for-iter depth.
 			nframes = nframes + 1
-			frames(nframes)%return_ip = ip + 1
+			frames(nframes)%return_ip  = ip + 1
+			frames(nframes)%nfor_saved = nfor
 			frames(nframes)%node_idx  = node_idx_call
 			if (allocated(state%locs%vals)) then
 				call move_alloc(state%locs%vals, frames(nframes)%caller_locs)
@@ -416,6 +448,7 @@ module subroutine vm_run(prog, state, res)
 			end do
 
 			next_ip = fr%return_ip
+			nfor    = fr%nfor_saved   ! clean up any for-iters the callee leaked (e.g. via return)
 			end associate
 			nframes = nframes - 1
 			deallocate(params_tmp)
@@ -552,22 +585,282 @@ module subroutine vm_run(prog, state, res)
 			end associate
 
 		! --- M6: intrinsic function call -----------------------------------------
-		! Native mode (b >= 0): args are on the stack; pop them, dispatch by intr_id.
-		! Fallback mode (b < 0): node is in pool at c; call eval_fn_call_intr.
+		! Native mode: pop args from stack, dispatch by intr_id.
+		! readln/close: inline handling with slot writeback via instr%c.
 		case (OP_CALL_INTR)
-			if (instr%b < 0) then
-				! CALL_INTR_NODE fallback (readln, close)
-				call eval_fn_call_intr(prog%nodes(int(instr%c)), state, val)
+			nintr = instr%b
+			allocate(iargs(nintr))
+			do i = nintr, 1, -1
+				call vm_pop_copy(stack, iargs(i))
+			end do
+
+			if (instr%a == INTR_READLN) then
+				! readln: read a line from the file; set eof flag on the orig slot.
+				block
+				integer :: slot_id_, io_
+				logical :: is_loc_
+				slot_id_ = int(instr%c / 2)
+				is_loc_  = (mod(instr%c, 2_8) == 1_8)
+				if (.not. iargs(1)%sca%file_%is_open) then
+					write(*,*) err_rt_prefix//'readln() was called for file "' &
+						//iargs(1)%sca%file_%name_//'" which is not open'
+					call internal_error()
+				end if
+				if (.not. iargs(1)%sca%file_%mode_read) then
+					write(*,*) err_rt_prefix//'readln() was called for file "' &
+						//iargs(1)%sca%file_%name_//'" which was not opened in read mode "r"'
+					call internal_error()
+				end if
+				val%type = str_type
+				val%sca%str%s = read_line(iargs(1)%sca%file_%unit_, io_)
+				if (io_ == iostat_end) then
+					if (is_loc_) then
+						state%locs%vals(slot_id_)%sca%file_%eof = .true.
+					else
+						state%vars%vals(slot_id_)%sca%file_%eof = .true.
+					end if
+				else if (io_ /= 0 .and. io_ /= iostat_eor) then
+					write(*,*) err_rt_prefix//'cannot readln() from file "' &
+						//iargs(1)%sca%file_%name_//'"'
+					call internal_error()
+				end if
+				end block
+
+			else if (instr%a == INTR_CLOSE) then
+				! close: close the file unit; set is_open=false on the orig slot.
+				block
+				integer :: slot_id_
+				logical :: is_loc_
+				slot_id_ = int(instr%c / 2)
+				is_loc_  = (mod(instr%c, 2_8) == 1_8)
+				if (.not. iargs(1)%sca%file_%is_open) then
+					write(*,*) err_rt_prefix//'close() was called for file "' &
+						//iargs(1)%sca%file_%name_//'" which is not open'
+					call internal_error()
+				end if
+				if (is_loc_) then
+					state%locs%vals(slot_id_)%sca%file_%is_open = .false.
+				else
+					state%vars%vals(slot_id_)%sca%file_%is_open = .false.
+				end if
+				close(iargs(1)%sca%file_%unit_)
+				val%type = unknown_type
+				end block
+
 			else
-				nintr = instr%b
-				allocate(iargs(nintr))
-				do i = nintr, 1, -1
-					call vm_pop_copy(stack, iargs(i))
-				end do
 				call vm_call_intr(instr%a, nintr, iargs, state, val)
-				deallocate(iargs)
 			end if
+
+			deallocate(iargs)
 			call vm_push_copy(stack, val)
+
+		! --- M8: for-loop setup ---------------------------------------------------
+		! Evaluates loop bounds / computes len8; pushes a for_iter_t onto the
+		! for-iterator stack.  Mirrors eval_for_statement setup (eval_control.f90:31-205).
+		case (OP_FOR_SETUP)
+			block
+			integer :: fi, rk_
+			type(value_t) :: tmp_
+
+			nfor = nfor + 1
+			fi = nfor
+			for_iters(fi)%node_idx = instr%a
+			for_iters(fi)%counter  = 0
+			for_iters(fi)%len8     = 0
+			for_iters(fi)%itr_type = unknown_type
+
+			associate(nd => prog%nodes(instr%a))
+
+			if (allocated(nd%array%lbound)) &
+				call syntax_eval(nd%array%lbound, state, for_iters(fi)%lbound_)
+			if (allocated(nd%array%step  )) &
+				call syntax_eval(nd%array%step,   state, for_iters(fi)%step   )
+			if (allocated(nd%array%ubound)) &
+				call syntax_eval(nd%array%ubound, state, for_iters(fi)%ubound_)
+			if (allocated(nd%array%len_  )) &
+				call syntax_eval(nd%array%len_,   state, for_iters(fi)%len_   )
+
+			select case (nd%array%kind)
+			case (array_expr)
+				for_iters(fi)%for_kind = nd%array%val%array%kind
+
+				select case (nd%array%val%array%kind)
+				case (bound_array)
+					! Promote bounds to i64 if either is i64
+					if (any(i64_type == [for_iters(fi)%lbound_%type, &
+					                      for_iters(fi)%ubound_%type])) then
+						call promote_i32_i64(for_iters(fi)%lbound_)
+						call promote_i32_i64(for_iters(fi)%ubound_)
+						for_iters(fi)%itr_type = i64_type
+					else
+						for_iters(fi)%itr_type = i32_type
+					end if
+					if (.not. any(for_iters(fi)%itr_type == [i32_type, i64_type])) then
+						write(*,*) err_int_prefix//'unit step array type not implemented'//color_reset
+						call internal_error()
+					end if
+					for_iters(fi)%len8 = for_iters(fi)%ubound_%to_i64() &
+					                   - for_iters(fi)%lbound_%to_i64()
+
+				case (step_array)
+					! Promote all to i64 if any is i64
+					if (any(i64_type == [for_iters(fi)%lbound_%type, &
+					                      for_iters(fi)%step%type, &
+					                      for_iters(fi)%ubound_%type])) then
+						call promote_i32_i64(for_iters(fi)%lbound_)
+						call promote_i32_i64(for_iters(fi)%step)
+						call promote_i32_i64(for_iters(fi)%ubound_)
+						for_iters(fi)%itr_type = i64_type
+					else
+						for_iters(fi)%itr_type = for_iters(fi)%lbound_%type
+					end if
+					select case (for_iters(fi)%itr_type)
+					case (i32_type)
+						if (for_iters(fi)%step%sca%i32 == 0) then
+							write(*,*) err_rt_prefix//'for loop step is 0'//color_reset
+							call internal_error()
+						end if
+						for_iters(fi)%len8 = ( &
+							for_iters(fi)%ubound_%sca%i32 - for_iters(fi)%lbound_%sca%i32 &
+							+ for_iters(fi)%step%sca%i32  &
+							- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
+					case (i64_type)
+						if (for_iters(fi)%step%sca%i64 == 0) then
+							write(*,*) err_rt_prefix//'for loop step is 0'//color_reset
+							call internal_error()
+						end if
+						for_iters(fi)%len8 = ( &
+							for_iters(fi)%ubound_%sca%i64 - for_iters(fi)%lbound_%sca%i64 &
+							+ for_iters(fi)%step%sca%i64  &
+							- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
+					case (f32_type)
+						if (for_iters(fi)%step%sca%f32 == 0.0) then
+							write(*,*) err_rt_prefix//'for loop step is 0.0'//color_reset
+							call internal_error()
+						end if
+						for_iters(fi)%len8 = ceiling( &
+							(for_iters(fi)%ubound_%sca%f32 - for_iters(fi)%lbound_%sca%f32) &
+							/ for_iters(fi)%step%sca%f32)
+					case (f64_type)
+						if (for_iters(fi)%step%sca%f64 == 0.0d0) then
+							write(*,*) err_rt_prefix//'for loop step is 0.0'//color_reset
+							call internal_error()
+						end if
+						for_iters(fi)%len8 = ceiling( &
+							(for_iters(fi)%ubound_%sca%f64 - for_iters(fi)%lbound_%sca%f64) &
+							/ for_iters(fi)%step%sca%f64)
+					case default
+						write(*,*) err_int_prefix//'step array type not implemented'//color_reset
+						call internal_error()
+					end select
+
+				case (len_array)
+					for_iters(fi)%itr_type = nd%array%val%array%type
+					select case (for_iters(fi)%itr_type)
+					case (f32_type, f64_type)
+						for_iters(fi)%len8 = for_iters(fi)%len_%to_i64()
+					case default
+						write(*,*) err_int_prefix//'bound/len array type not implemented'//color_reset
+						call internal_error()
+					end select
+
+				case (expl_array)
+					for_iters(fi)%len8 = nd%array%val%array%len_
+
+				case (size_array)
+					rk_ = size(nd%array%size)
+					for_iters(fi)%len8 = 1
+					do i = 1, rk_
+						call syntax_eval(nd%array%size(i), state, tmp_)
+						for_iters(fi)%len8 = for_iters(fi)%len8 * tmp_%to_i64()
+					end do
+
+				case (unif_array)
+					rk_ = size(nd%array%size)
+					for_iters(fi)%len8 = 1
+					do i = 1, rk_
+						call syntax_eval(nd%array%size(i), state, tmp_)
+						for_iters(fi)%len8 = for_iters(fi)%len8 * tmp_%to_i64()
+					end do
+
+				case default
+					write(*,*) err_int_prefix//'for loop: unknown array kind'//color_reset
+					call internal_error()
+				end select
+
+			case default
+				! Non-primary array expression
+				if (nd%array%val%type == str_type) then
+					for_iters(fi)%for_kind = str_type
+					for_iters(fi)%itr_type = str_type
+					call syntax_eval(nd%array, state, tmp_)
+					call value_move(tmp_, for_iters(fi)%str_)
+					for_iters(fi)%len8 = len(for_iters(fi)%str_%sca%str%s, 8)
+				else
+					for_iters(fi)%for_kind = array_expr
+					call syntax_eval(nd%array, state, tmp_)
+					for_iters(fi)%array = tmp_%array
+					for_iters(fi)%len8  = for_iters(fi)%array%len_
+				end if
+			end select
+
+			end associate
+			end block
+
+		! --- M8: for-loop advance --------------------------------------------------
+		! Increments counter; if exhausted: pop iter stack and jump to loop end.
+		! Otherwise: call array_at to produce the next iterator value and write
+		! it to the loop variable slot, then fall through to the body.
+		case (OP_FOR_NEXT)
+			! Advance counter; if exhausted: jump to L_pop (does NOT pop nfor here —
+			! OP_FOR_POP does that for both exhaustion and break).
+			block
+			integer :: fi
+			fi = nfor
+			for_iters(fi)%counter = for_iters(fi)%counter + 1
+			if (for_iters(fi)%counter > for_iters(fi)%len8) then
+				next_ip = instr%a   ! jump to FOR_POP; no nfor decrement here
+			else
+				val%type = for_iters(fi)%itr_type
+				call array_at(val, for_iters(fi)%for_kind, for_iters(fi)%counter, &
+					for_iters(fi)%lbound_, for_iters(fi)%step, for_iters(fi)%ubound_, &
+					for_iters(fi)%len_, for_iters(fi)%array, &
+					prog%nodes(for_iters(fi)%node_idx)%array%elems, for_iters(fi)%str_, &
+					state)
+				associate(nd => prog%nodes(for_iters(fi)%node_idx))
+				if (nd%is_loc) then
+					state%locs%vals(nd%id_index) = val
+				else
+					state%vars%vals(nd%id_index) = val
+				end if
+				end associate
+			end if
+			end block
+
+		! --- M8: for-loop exit (all paths: exhaustion and break) -------------------
+		! Emitted once at L_pop, after the loop's back-edge JUMP.
+		! Both FOR_NEXT's exhaustion jump and break-statement jumps target here.
+		case (OP_FOR_POP)
+			nfor = nfor - 1
+
+		! --- M8: array construction -----------------------------------------------
+		! Delegates to eval_array_expr for all array kinds (bound, step, len,
+		! expl, size, unif).  Rank-1 native specialization is a future perf pass.
+		case (OP_NEW_ARRAY)
+			call eval_array_expr(prog%nodes(instr%a), state, val)
+			call vm_push_copy(stack, val)
+
+		! --- M8: slice/complex LHS assignment ------------------------------------
+		! Handles slice-range LHS (a[1:3] = x) and subscript-less compound
+		! assignments by delegating to eval_assignment_expr.
+		case (OP_STORE_SLICE)
+			call eval_assignment_expr(prog%nodes(instr%a), state, val)
+			call vm_push_copy(stack, val)
+
+		! --- M8: top-level return (halt) ------------------------------------------
+		! Exits the VM loop immediately; TOS is the return value.
+		case (OP_HALT)
+			next_ip = prog%len_ + 1
 
 		case default
 			write(*,*) 'VM: unknown opcode ', instr%op

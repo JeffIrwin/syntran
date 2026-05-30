@@ -13,7 +13,7 @@ module syntran__bytecode_m
 	! enum in consts.f90 (which tops out at 121) to prevent accidental aliasing.
 
 	integer, parameter :: &
-		OP_EVAL_NODE        = 1001, &	! fallback: run one AST node through syntax_eval
+		OP_EVAL_NODE        = 1001, &	! debug fallback: run one AST node through syntax_eval (no compiler emit)
 		OP_LOAD_CONST       = 1002, &	! push consts(a) onto the operand stack (deep copy)
 		OP_LOAD_GLOBAL      = 1003, &	! push state%vars%vals(a) (deep copy)
 		OP_LOAD_LOCAL       = 1004, &	! push state%locs%vals(a) (deep copy)
@@ -34,8 +34,14 @@ module syntran__bytecode_m
 		OP_MAKE_STRUCT      = 1019, &	! M5: struct instance: a=node_idx (for struct_name+nmembers), members on stack
 		OP_LOAD_MEMBER      = 1020, &	! M5: dot_expr read: a=node_idx; uses get_val
 		OP_STORE_MEMBER     = 1021, &	! M5: dot member write: a=node_idx, b=op_kind; TOS=RHS; uses get_val+set_val
-		OP_CALL_INTR        = 1022  	! M6: intrinsic call; native: a=intr_id b=argc (args on stack);
-		                            	!   fallback: a=intr_id b=-1 c=node_pool_idx (no args on stack)
+		OP_CALL_INTR        = 1022, &	! M6: intrinsic call; native: a=intr_id b=argc (args on stack);
+		                            	!   readln/close: a=intr_id b=1 c=(id_index*2+is_loc) for slot writeback
+		OP_FOR_SETUP        = 1023, &	! M8: for-loop setup: a=node_idx; pushes iter onto for_iter stack
+		OP_FOR_NEXT         = 1024, &	! M8: for-loop advance: a=L_pop; exhausted->jump (no pop), else write loop var
+		OP_FOR_POP          = 1025, &	! M8: for-loop exit: pop for_iter stack (emitted at all loop exits)
+		OP_NEW_ARRAY        = 1026, &	! M8: array construction: a=node_idx; calls eval_array_expr, pushes result
+		OP_STORE_SLICE      = 1027, &	! M8: slice/complex LHS assign: a=node_idx; calls eval_assignment_expr
+		OP_HALT             = 1028  	! M8: top-level return: exit VM loop, TOS is result
 
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 

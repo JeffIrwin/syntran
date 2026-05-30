@@ -11,11 +11,13 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 	!     Everything else still falls back to OP_EVAL_NODE.
 	! M2: adds block_statement, if_statement, while_statement,
 	!     break_statement, continue_statement via JUMP/JUMP_IF_FALSE opcodes.
-	!     for_statement still falls back to OP_EVAL_NODE.
-	! M6: fn_call_intr_expr emits OP_CALL_INTR with integer intr_id dispatch
-	!     (readln/close use CALL_INTR_NODE fallback for variable-slot writeback).
+	! M6: fn_call_intr_expr emits OP_CALL_INTR with integer intr_id dispatch.
 	! M7: use_statement: module fn bodies compiled into prog before entry_main;
 	!     module init code emitted inline at the use_statement site.
+	! M8: for_statement (native FOR_SETUP/FOR_NEXT), array_expr (OP_NEW_ARRAY),
+	!     slice/complex LHS assign (OP_STORE_SLICE), top-level return (OP_HALT),
+	!     readln/close native dispatch with slot writeback; OP_EVAL_NODE fallback
+	!     removed from compiler (kept as debug opcode in the VM handler).
 
 	implicit none
 
@@ -259,9 +261,9 @@ recursive subroutine compile_node(prog, node)
 				idx = add_node(prog, node)
 				call emit(prog, OP_STORE_IDX, a = idx, b = node%op%kind)
 			else
-				! Slice LHS or compound assignment without subscripts — fall back
+				! Slice LHS or subscript-less compound: delegate to eval_assignment_expr
 				idx = add_node(prog, node)
-				call emit(prog, OP_EVAL_NODE, a = idx)
+				call emit(prog, OP_STORE_SLICE, a = idx)
 			end if
 		end if
 
@@ -444,9 +446,9 @@ recursive subroutine compile_node(prog, node)
 			call emit(prog, OP_JUMP, a = 0)
 
 		else
-			! No breakable context (top-level break): fall back to AST walker
-			idx = add_node(prog, node)
-			call emit(prog, OP_EVAL_NODE, a = idx)
+			! No breakable context: top-level break is a no-op in translation_unit
+			const_idx = add_const(prog, unknown_val())
+			call emit(prog, OP_LOAD_CONST, a = const_idx)
 		end if
 
 	! ---- continue --------------------------------------------------------------
@@ -454,8 +456,9 @@ recursive subroutine compile_node(prog, node)
 		if (loop_depth > 0) then
 			call emit(prog, OP_JUMP, a = continue_target(loop_depth))
 		else
-			idx = add_node(prog, node)
-			call emit(prog, OP_EVAL_NODE, a = idx)
+			! No loop context: top-level continue is a no-op in translation_unit
+			const_idx = add_const(prog, unknown_val())
+			call emit(prog, OP_LOAD_CONST, a = const_idx)
 		end if
 
 	! ---- top-level translation unit -------------------------------------------
@@ -512,6 +515,56 @@ recursive subroutine compile_node(prog, node)
 			const_idx = add_const(prog, unknown_val())
 			call emit(prog, OP_LOAD_CONST, a = const_idx)
 		end if
+
+	! ---- for statement --------------------------------------------------------
+	! M8: for_statement lowering:
+	!
+	!   OP_FOR_SETUP a=node_idx    ! eval bounds once, push onto for-iter stack
+	!   L_top:
+	!   OP_FOR_NEXT  a=L_pop       ! counter++; if exhausted: jump L_pop; else write loop var
+	!   [body]
+	!   OP_POP                     ! discard body result before next iteration
+	!   OP_JUMP a=L_top
+	!   L_pop:
+	!   OP_FOR_POP                 ! pop for-iter stack (all exits: exhaustion + break)
+	!   LOAD_CONST unknown_type    ! for-statement result
+	!
+	! break    -> JUMP L_pop (backpatched; FOR_POP then LOAD_CONST execute)
+	! continue -> JUMP L_top (continue_target; FOR_NEXT re-evaluates)
+	case (for_statement)
+		idx = add_node(prog, node)
+		call emit(prog, OP_FOR_SETUP, a = idx)
+
+		loop_depth = loop_depth + 1
+		l_top = prog%len_ + 1
+		continue_target(loop_depth) = l_top
+
+		! FOR_NEXT — patched to L_pop below
+		jf_ip = prog%len_ + 1
+		call emit(prog, OP_FOR_NEXT, a = 0)
+
+		! Compile body; its result is discarded before the back edge
+		call compile_node(prog, node%body)
+		call emit(prog, OP_POP)
+		call emit(prog, OP_JUMP, a = l_top)
+
+		! L_pop: backpatch FOR_NEXT and all break fixups here, then pop + result
+		l_end = prog%len_ + 1
+		call patch_jump(prog, jf_ip, l_end)
+		call backpatch_breaks(prog, loop_depth, l_end)
+		loop_depth = loop_depth - 1
+		call emit(prog, OP_FOR_POP)
+
+		! Push unknown_type as the for-statement's result value
+		const_idx = add_const(prog, unknown_val())
+		call emit(prog, OP_LOAD_CONST, a = const_idx)
+
+	! ---- array expression construction ----------------------------------------
+	! M8: Store the array_expr node in the pool and emit OP_NEW_ARRAY.
+	! The VM handler calls eval_array_expr to build the value.
+	case (array_expr)
+		idx = add_node(prog, node)
+		call emit(prog, OP_NEW_ARRAY, a = idx)
 
 	! ---- struct instance construction -----------------------------------------
 	! M5: Compile each member-initialiser expression in order, then emit
@@ -571,9 +624,10 @@ recursive subroutine compile_node(prog, node)
 		end if
 
 		if (.not. first) then
-			! Not a locally-compiled fn: fall back to the AST walker.
-			idx = add_node(prog, node)
-			call emit(prog, OP_EVAL_NODE, a = idx)
+			! fn_entry not yet populated — compile_module_fns should have covered all
+			! reachable fns; reaching here means a compiler bug.
+			write(*,*) 'compile: fn_call_expr: fn_entry not found for id', node%id_index
+			call internal_error()
 		else
 			! Locally-compiled fn: two-pass arg push + OP_CALL.
 			! Store the call node so OP_CALL/OP_RET can access params/is_ref.
@@ -601,19 +655,22 @@ recursive subroutine compile_node(prog, node)
 		end if
 
 	! ---- intrinsic function call -----------------------------------------------
-	! M6: emit OP_CALL_INTR.  For most intrinsics, push all args first then emit
-	! with b=argc for native dispatch in vm_call_intr.  For intrinsics that need
-	! writeback to a variable slot (readln, close), store the node in the pool
-	! and use the CALL_INTR_NODE fallback (b=-1, c=node_pool_idx).
+	! M6/M8: emit OP_CALL_INTR.  For most intrinsics: push all args, then emit
+	! with b=argc for native dispatch in vm_call_intr.
+	! For readln/close (slot writeback needed): push the arg, encode the file
+	! variable's slot in c = (id_index*2 + is_loc), dispatch inline in vm_exec.
 	case (fn_call_intr_expr)
 		block
 			integer :: intr_id_, nargs_
+			integer(kind = 8) :: slot_c
 			intr_id_ = intr_id_from_name(node%identifier%text)
 			select case (intr_id_)
 			case (INTR_READLN, INTR_CLOSE)
-				! Writeback required: store node and fall back to eval_fn_call_intr.
-				idx = add_node(prog, node)
-				call emit(prog, OP_CALL_INTR, a = intr_id_, b = -1, c = int(idx, 8))
+				! Push the file argument, encode its slot for writeback in c.
+				call compile_node(prog, node%args(1))
+				slot_c = int(node%args(1)%id_index, 8) * 2 + &
+				         merge(1_8, 0_8, node%args(1)%is_loc)
+				call emit(prog, OP_CALL_INTR, a = intr_id_, b = 1, c = slot_c)
 			case default
 				! Native dispatch: push all args, then emit OP_CALL_INTR.
 				nargs_ = 0
@@ -629,28 +686,26 @@ recursive subroutine compile_node(prog, node)
 
 	! ---- return statement ------------------------------------------------------
 	! Inside a compiled function body: push return value (or unknown sentinel for
-	! void) then emit OP_RET.  At top level: fall back to OP_EVAL_NODE (which
-	! sets state%returned so the VM exits its main loop).
+	! void) then emit OP_RET.  At top level: push return value then OP_HALT.
 	case (return_statement)
+		if (node%right%val%type == void_type) then
+			! Void return: push unknown_type as a dummy return slot.
+			const_idx = add_const(prog, unknown_val())
+			call emit(prog, OP_LOAD_CONST, a = const_idx)
+		else
+			call compile_node(prog, node%right)
+		end if
 		if (in_fn_body) then
-			if (node%right%val%type == void_type) then
-				! Void return: push unknown_type as a dummy return slot.
-				const_idx = add_const(prog, unknown_val())
-				call emit(prog, OP_LOAD_CONST, a = const_idx)
-			else
-				call compile_node(prog, node%right)
-			end if
 			call emit(prog, OP_RET)
 		else
-			! Top-level return: fall back to OP_EVAL_NODE which sets state%returned.
-			idx = add_node(prog, node)
-			call emit(prog, OP_EVAL_NODE, a = idx)
+			! Top-level return: OP_HALT exits the VM loop; TOS is the result.
+			call emit(prog, OP_HALT)
 		end if
 
-	! ---- fallback: delegate to the AST walker ---------------------------------
+	! ---- no unhandled node kinds should reach here ----------------------------
 	case default
-		idx = add_node(prog, node)
-		call emit(prog, OP_EVAL_NODE, a = idx)
+		write(*,*) 'compile: unhandled node kind ', node%kind
+		call internal_error()
 
 	end select
 
