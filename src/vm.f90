@@ -26,6 +26,14 @@ module syntran__vm_m
 			type(value_t), intent(out) :: res
 		end subroutine
 
+		! Implemented in vm_intr.f90
+		module subroutine vm_call_intr(intr_id, nargs, args, state, res)
+			integer, intent(in) :: intr_id, nargs
+			type(value_t), intent(in) :: args(:)
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: res
+		end subroutine
+
 	end interface
 
 !===============================================================================

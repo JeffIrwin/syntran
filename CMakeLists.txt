@@ -91,6 +91,7 @@ set(LIB_SRC
 	${SRC_DIR}/eval_fn.f90
 	${SRC_DIR}/vm.f90
 	${SRC_DIR}/vm_exec.f90
+	${SRC_DIR}/vm_intr.f90
 	${SRC_DIR}/intr_fns.f90
 	${SRC_DIR}/intr_fns_array.f90
 	${SRC_DIR}/intr_fns_io.f90

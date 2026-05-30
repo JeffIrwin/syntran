@@ -12,6 +12,8 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 	! M2: adds block_statement, if_statement, while_statement,
 	!     break_statement, continue_statement via JUMP/JUMP_IF_FALSE opcodes.
 	!     for_statement still falls back to OP_EVAL_NODE.
+	! M6: fn_call_intr_expr emits OP_CALL_INTR with integer intr_id dispatch
+	!     (readln/close use CALL_INTR_NODE fallback for variable-slot writeback).
 
 	implicit none
 
@@ -518,12 +520,31 @@ recursive subroutine compile_node(prog, node)
 		end if
 
 	! ---- intrinsic function call -----------------------------------------------
-	! Delegate the entire call to the AST walker via OP_EVAL_NODE.  The walker
-	! evaluates args using the current state (which has the callee's locs when
-	! inside a compiled frame).  Migration to native integer dispatch is M6.
+	! M6: emit OP_CALL_INTR.  For most intrinsics, push all args first then emit
+	! with b=argc for native dispatch in vm_call_intr.  For intrinsics that need
+	! writeback to a variable slot (readln, close), store the node in the pool
+	! and use the CALL_INTR_NODE fallback (b=-1, c=node_pool_idx).
 	case (fn_call_intr_expr)
-		idx = add_node(prog, node)
-		call emit(prog, OP_EVAL_NODE, a = idx)
+		block
+			integer :: intr_id_, nargs_
+			intr_id_ = intr_id_from_name(node%identifier%text)
+			select case (intr_id_)
+			case (INTR_READLN, INTR_CLOSE)
+				! Writeback required: store node and fall back to eval_fn_call_intr.
+				idx = add_node(prog, node)
+				call emit(prog, OP_CALL_INTR, a = intr_id_, b = -1, c = int(idx, 8))
+			case default
+				! Native dispatch: push all args, then emit OP_CALL_INTR.
+				nargs_ = 0
+				if (allocated(node%args)) then
+					do i = 1, size(node%args)
+						call compile_node(prog, node%args(i))
+					end do
+					nargs_ = size(node%args)
+				end if
+				call emit(prog, OP_CALL_INTR, a = intr_id_, b = nargs_)
+			end select
+		end block
 
 	! ---- return statement ------------------------------------------------------
 	! Inside a compiled function body: push return value (or unknown sentinel for

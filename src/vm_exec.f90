@@ -209,6 +209,10 @@ module subroutine vm_run(prog, state, res)
 	integer :: id, type_, n_mem
 	integer(kind = 8) :: i8
 
+	! M6: temporary arg array for OP_CALL_INTR native dispatch
+	type(value_t), allocatable :: iargs(:)
+	integer :: nintr
+
 	! Call-frame stack
 	type(frame_t) :: frames(MAX_FRAMES)
 	integer :: nframes
@@ -546,6 +550,24 @@ module subroutine vm_run(prog, state, res)
 			end if
 			call vm_push_copy(stack, val)
 			end associate
+
+		! --- M6: intrinsic function call -----------------------------------------
+		! Native mode (b >= 0): args are on the stack; pop them, dispatch by intr_id.
+		! Fallback mode (b < 0): node is in pool at c; call eval_fn_call_intr.
+		case (OP_CALL_INTR)
+			if (instr%b < 0) then
+				! CALL_INTR_NODE fallback (readln, close)
+				call eval_fn_call_intr(prog%nodes(int(instr%c)), state, val)
+			else
+				nintr = instr%b
+				allocate(iargs(nintr))
+				do i = nintr, 1, -1
+					call vm_pop_copy(stack, iargs(i))
+				end do
+				call vm_call_intr(instr%a, nintr, iargs, state, val)
+				deallocate(iargs)
+			end if
+			call vm_push_copy(stack, val)
 
 		case default
 			write(*,*) 'VM: unknown opcode ', instr%op

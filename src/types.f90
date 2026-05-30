@@ -43,6 +43,9 @@ module syntran__types_m
 
 		logical :: is_intr = .true.
 
+		! M6: integer dispatch id for intrinsic fns (0 = unassigned / user fn)
+		integer :: intr_id = 0
+
 		contains
 			procedure, pass(dst) :: copy => fn_copy
 			generic, public :: assignment(=) => copy
