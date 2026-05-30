@@ -14,6 +14,8 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 	!     for_statement still falls back to OP_EVAL_NODE.
 	! M6: fn_call_intr_expr emits OP_CALL_INTR with integer intr_id dispatch
 	!     (readln/close use CALL_INTR_NODE fallback for variable-slot writeback).
+	! M7: use_statement: module fn bodies compiled into prog before entry_main;
+	!     module init code emitted inline at the use_statement site.
 
 	implicit none
 
@@ -58,6 +60,78 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+subroutine ensure_fn_entry(prog, fn_id)
+
+	! Grow prog%fn_entry / prog%fn_num_locs so that index fn_id is valid.
+	! New slots are zeroed.  No-op if the tables are already large enough.
+
+	type(program_t), intent(inout) :: prog
+	integer, intent(in) :: fn_id
+
+	!*******
+
+	integer, allocatable :: tmp_entry(:), tmp_locs(:)
+
+	if (.not. allocated(prog%fn_entry)) then
+		allocate(prog%fn_entry(fn_id))
+		allocate(prog%fn_num_locs(fn_id))
+		prog%fn_entry    = 0
+		prog%fn_num_locs = 0
+	else if (fn_id > size(prog%fn_entry)) then
+		call move_alloc(prog%fn_entry,    tmp_entry)
+		call move_alloc(prog%fn_num_locs, tmp_locs)
+		allocate(prog%fn_entry(fn_id))
+		allocate(prog%fn_num_locs(fn_id))
+		prog%fn_entry    = 0
+		prog%fn_num_locs = 0
+		prog%fn_entry(1: size(tmp_entry))    = tmp_entry
+		prog%fn_num_locs(1: size(tmp_locs))  = tmp_locs
+	end if
+
+end subroutine ensure_fn_entry
+
+!===============================================================================
+
+recursive subroutine compile_module_fns(prog, module_node)
+
+	! Compile all fn bodies from a module's translation_unit node into prog,
+	! recording their entry points in prog%fn_entry.  Recursively handles any
+	! nested use_statement members so that transitively-imported module fns are
+	! also compiled.  Skips any fn whose fn_entry is already non-zero to guard
+	! against diamond-dependency double-compilation.
+
+	type(program_t),     intent(inout) :: prog
+	type(syntax_node_t), intent(in)    :: module_node   ! translation_unit
+
+	!*******
+
+	integer :: i, fn_id
+
+	! Recurse into nested use_statements first so that their fns are available
+	! to any bodies compiled below that call them.
+	do i = 1, size(module_node%members)
+		if (module_node%members(i)%kind /= use_statement) cycle
+		if (.not. allocated(module_node%members(i)%member)) cycle
+		call compile_module_fns(prog, module_node%members(i)%member)
+	end do
+
+	! Compile each fn_declaration body (guarded against double-compilation).
+	do i = 1, size(module_node%members)
+		if (module_node%members(i)%kind /= fn_declaration) cycle
+		fn_id = module_node%members(i)%id_index
+		call ensure_fn_entry(prog, fn_id)
+		if (prog%fn_entry(fn_id) /= 0) cycle   ! already compiled (diamond dep)
+		prog%fn_num_locs(fn_id) = module_node%members(i)%num_locs
+		prog%fn_entry(fn_id)    = prog%len_ + 1
+		in_fn_body = .true.
+		call compile_node(prog, module_node%members(i)%body)
+		in_fn_body = .false.
+	end do
+
+end subroutine compile_module_fns
 
 !===============================================================================
 
@@ -386,36 +460,25 @@ recursive subroutine compile_node(prog, node)
 
 	! ---- top-level translation unit -------------------------------------------
 	case (translation_unit)
-		! M3: compile all user fn bodies first into prog%code so that fn_entry
-		! offsets are known before any call-site OP_CALL is emitted.  The VM
-		! starts at prog%entry_main which is set after all fn bodies.
+		! All fn bodies (local + transitively-imported modules) are compiled
+		! before entry_main so that call-site OP_CALL can reference fn_entry.
+		! The VM starts at prog%entry_main.
 
-		! Pass 0: determine max fn id to size the entry/num_locs tables.
+		! Pass 0: grow fn_entry / fn_num_locs for locally-declared fns.
 		do i = 1, size(node%members)
 			if (node%members(i)%kind /= fn_declaration) cycle
-			const_idx = node%members(i)%id_index   ! reusing const_idx as scratch
-			if (.not. allocated(prog%fn_entry)) then
-				allocate(prog%fn_entry(const_idx))
-				allocate(prog%fn_num_locs(const_idx))
-				prog%fn_entry    = 0
-				prog%fn_num_locs = 0
-			else if (const_idx > size(prog%fn_entry)) then
-				! Grow tables (rare: fns are declared in order by the parser).
-				block
-					integer, allocatable :: tmp_entry(:), tmp_locs(:)
-					call move_alloc(prog%fn_entry,    tmp_entry)
-					call move_alloc(prog%fn_num_locs, tmp_locs)
-					allocate(prog%fn_entry(const_idx))
-					allocate(prog%fn_num_locs(const_idx))
-					prog%fn_entry    = 0
-					prog%fn_num_locs = 0
-					prog%fn_entry(1: size(tmp_entry))    = tmp_entry
-					prog%fn_num_locs(1: size(tmp_locs))  = tmp_locs
-				end block
-			end if
+			call ensure_fn_entry(prog, node%members(i)%id_index)
 		end do
 
-		! Pass 1: compile each fn declaration body.
+		! M7 pre-pass: compile fn bodies from all transitively-imported modules.
+		! Must run before Pass 1 (local fns) so that cross-module calls resolve.
+		do i = 1, size(node%members)
+			if (node%members(i)%kind /= use_statement) cycle
+			if (.not. allocated(node%members(i)%member)) cycle
+			call compile_module_fns(prog, node%members(i)%member)
+		end do
+
+		! Pass 1: compile each locally-declared fn body.
 		do i = 1, size(node%members)
 			if (node%members(i)%kind /= fn_declaration) cycle
 			l_top = node%members(i)%id_index   ! fn_id (reuse l_top as scratch)
@@ -473,6 +536,24 @@ recursive subroutine compile_node(prog, node)
 	! case before the top-level statements.
 	case (fn_declaration)
 		! Nothing to emit: fn bodies are pre-compiled by the translation_unit handler.
+
+	! ---- use_statement (M7) ---------------------------------------------------
+	! Module fn bodies were already compiled into prog%fn_entry by the
+	! translate_unit pre-pass (compile_module_fns).  Here we only emit the
+	! module's top-level initialisation code (e.g. `let count = 0;`).
+	! Each init statement leaves one value on the stack; we discard all of them
+	! with OP_POP, then push unknown_type as the use_statement's own result.
+	case (use_statement)
+		if (allocated(node%member)) then
+			do i = 1, size(node%member%members)
+				if (node%member%members(i)%kind == fn_declaration    ) cycle
+				if (node%member%members(i)%kind == struct_declaration) cycle
+				call compile_node(prog, node%member%members(i))
+				call emit(prog, OP_POP)
+			end do
+		end if
+		const_idx = add_const(prog, unknown_val())
+		call emit(prog, OP_LOAD_CONST, a = const_idx)
 
 	! ---- user-defined function call -------------------------------------------
 	! Only emit OP_CALL for functions compiled into this program_t (i.e. locally
