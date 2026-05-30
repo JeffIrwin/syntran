@@ -321,11 +321,22 @@ module subroutine vm_run(prog, state, res)
 			call vm_push_copy(stack, state%locs%vals(instr%a))
 
 		! --- variable stores (keep TOS on stack, copy into slot) ---
+		! Use assign_() when the slot already has a type (i.e. post-let assignment)
+		! to preserve the lhs type and cast the rhs. Raw copy for let_expr init
+		! (slot starts as unknown_type).
 		case (OP_STORE_GLOBAL)
-			state%vars%vals(instr%a) = stack%v(stack%len_)
+			if (state%vars%vals(instr%a)%type == unknown_type) then
+				state%vars%vals(instr%a) = stack%v(stack%len_)
+			else
+				call assign_(state%vars%vals(instr%a), stack%v(stack%len_), '=')
+			end if
 
 		case (OP_STORE_LOCAL)
-			state%locs%vals(instr%a) = stack%v(stack%len_)
+			if (state%locs%vals(instr%a)%type == unknown_type) then
+				state%locs%vals(instr%a) = stack%v(stack%len_)
+			else
+				call assign_(state%locs%vals(instr%a), stack%v(stack%len_), '=')
+			end if
 
 		! --- binary operation ---
 		case (OP_BINOP)
