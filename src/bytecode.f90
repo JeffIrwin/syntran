@@ -30,7 +30,10 @@ module syntran__bytecode_m
 		OP_LOAD_REF_LOCAL   = 1015, &	! move state%locs%vals(a) to stack (by-ref arg, pass 2)
 		OP_INDEX            = 1016, &	! scalar subscript read: a=node_idx (name_expr w/ scalar subs)
 		OP_SLICE            = 1017, &	! non-scalar subscript/slice read: a=node_idx
-		OP_STORE_IDX        = 1018 	! scalar subscript write: a=node_idx, b=op_kind; TOS=RHS
+		OP_STORE_IDX        = 1018, &	! scalar subscript write: a=node_idx, b=op_kind; TOS=RHS
+		OP_MAKE_STRUCT      = 1019, &	! M5: struct instance: a=node_idx (for struct_name+nmembers), members on stack
+		OP_LOAD_MEMBER      = 1020, &	! M5: dot_expr read: a=node_idx; uses get_val
+		OP_STORE_MEMBER     = 1021  	! M5: dot member write: a=node_idx, b=op_kind; TOS=RHS; uses get_val+set_val
 
 	!********
 

@@ -151,12 +151,16 @@ recursive subroutine compile_node(prog, node)
 			call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
 		end if
 
-	! ---- assignment (no dot members): scalar, compound, or subscript ----------
+	! ---- assignment: dot member, scalar subscript, simple, or compound -------
 	case (assignment_expr)
-		if (.not. allocated(node%member) .and. &
-		    .not. allocated(node%lsubscripts) .and. &
-		    node%op%kind == equals_token) then
+		if (allocated(node%member)) then
+			! M5: dot member assignment: a.b = expr  or  a.b += expr
+			call compile_node(prog, node%right)
+			idx = add_node(prog, node)
+			call emit(prog, OP_STORE_MEMBER, a = idx, b = node%op%kind)
 
+		else if (.not. allocated(node%lsubscripts) .and. &
+		         node%op%kind == equals_token) then
 			! Simple plain assignment: a = expr
 			call compile_node(prog, node%right)
 			if (node%is_loc) then
@@ -169,10 +173,8 @@ recursive subroutine compile_node(prog, node)
 			! Fortran .and. is NOT short-circuit; use nested ifs to guard the
 			! all(lsubscripts%sub_kind) access from unallocated lsubscripts.
 			first = .false.   ! reuse `first` as "use native subscript store"
-			if (.not. allocated(node%member)) then
-				if (allocated(node%lsubscripts)) then
-					if (all(node%lsubscripts%sub_kind == scalar_sub)) first = .true.
-				end if
+			if (allocated(node%lsubscripts)) then
+				if (all(node%lsubscripts%sub_kind == scalar_sub)) first = .true.
 			end if
 
 			if (first) then
@@ -181,7 +183,7 @@ recursive subroutine compile_node(prog, node)
 				idx = add_node(prog, node)
 				call emit(prog, OP_STORE_IDX, a = idx, b = node%op%kind)
 			else
-				! Dot member, slice LHS, or compound without subscripts — fall back
+				! Slice LHS or compound assignment without subscripts — fall back
 				idx = add_node(prog, node)
 				call emit(prog, OP_EVAL_NODE, a = idx)
 			end if
@@ -445,6 +447,24 @@ recursive subroutine compile_node(prog, node)
 			const_idx = add_const(prog, unknown_val())
 			call emit(prog, OP_LOAD_CONST, a = const_idx)
 		end if
+
+	! ---- struct instance construction -----------------------------------------
+	! M5: Compile each member-initialiser expression in order, then emit
+	! OP_MAKE_STRUCT.  The node is stored in the pool so the VM can recover
+	! struct_name and nmembers; the member expressions themselves are bytecode.
+	case (struct_instance_expr)
+		do i = 1, size(node%members)
+			call compile_node(prog, node%members(i))
+		end do
+		idx = add_node(prog, node)
+		call emit(prog, OP_MAKE_STRUCT, a = idx)
+
+	! ---- dot-expression (struct member read) -----------------------------------
+	! M5: Store the dot_expr node in the pool so the VM can call get_val with
+	! full chain information (nested dots, subscripted members, etc.).
+	case (dot_expr)
+		idx = add_node(prog, node)
+		call emit(prog, OP_LOAD_MEMBER, a = idx)
 
 	! ---- fn_declaration: bodies are compiled separately in translation_unit -----
 	! Skip silently here; compilation of the body happens in the translation_unit

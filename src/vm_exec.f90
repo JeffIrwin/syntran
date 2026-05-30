@@ -206,7 +206,7 @@ module subroutine vm_run(prog, state, res)
 	type(value_t), allocatable :: params_tmp(:)
 	integer :: ip, next_ip
 	integer :: i, fn_id, nparams, node_idx_call
-	integer :: id, type_
+	integer :: id, type_, n_mem
 	integer(kind = 8) :: i8
 
 	! Call-frame stack
@@ -496,6 +496,55 @@ module subroutine vm_run(prog, state, res)
 				end if
 				call vm_push_copy(stack, val)
 			end if
+			end associate
+
+		! --- struct instance construction -----------------------------------------
+		! M5: pops nmembers values from stack in reverse order, builds a struct
+		! value_t (struct_name from the stored node), and pushes the result.
+		case (OP_MAKE_STRUCT)
+			associate(sn => prog%nodes(instr%a))
+			n_mem = size(sn%members)
+			val%type = struct_type
+			if (allocated(sn%struct_name)) val%struct_name = sn%struct_name
+			if (allocated(val%struct)) deallocate(val%struct)
+			allocate(val%struct(n_mem))
+			do i = n_mem, 1, -1
+				call vm_pop_copy(stack, val%struct(i))
+			end do
+			call vm_push_copy(stack, val)
+			end associate
+
+		! --- dot member read ------------------------------------------------------
+		! M5: calls get_val with the stored dot_expr node to handle simple,
+		! nested, and subscripted member access chains.
+		case (OP_LOAD_MEMBER)
+			associate(n => prog%nodes(instr%a))
+			id = n%id_index
+			if (n%is_loc) then
+				call get_val(n, state%locs%vals(id), state, val)
+			else
+				call get_val(n, state%vars%vals(id), state, val)
+			end if
+			call vm_push_copy(stack, val)
+			end associate
+
+		! --- dot member write -----------------------------------------------------
+		! M5: pops RHS from stack, reads current member via get_val, applies the
+		! compound op, writes back via set_val, and pushes the new member value.
+		case (OP_STORE_MEMBER)
+			call vm_pop_copy(stack, right)
+			associate(n => prog%nodes(instr%a))
+			id = n%id_index
+			if (n%is_loc) then
+				call get_val(n, state%locs%vals(id), state, val)
+				call do_compound(val, right, instr%b)
+				call set_val(n, state%locs%vals(id), state, val)
+			else
+				call get_val(n, state%vars%vals(id), state, val)
+				call do_compound(val, right, instr%b)
+				call set_val(n, state%vars%vals(id), state, val)
+			end if
+			call vm_push_copy(stack, val)
 			end associate
 
 		case default
