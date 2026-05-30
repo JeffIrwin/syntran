@@ -118,7 +118,7 @@ subroutine is_eq_value_t(left, right, res, op_text)
 	case        (magic * bool_type + bool_type)
 		res%sca%bool = left%sca%bool .eqv. right%sca%bool
 	case        (magic * str_type + str_type)
-		res%sca%bool = is_str_eq(left%sca%str%s, right%sca%str%s)
+		res%sca%bool = is_str_eq(left%str%s, right%str%s)
 
 	case        (magic * array_type + i32_type)
 
@@ -233,7 +233,7 @@ subroutine is_eq_value_t(left, right, res, op_text)
 			do i8 = 1, res%array%len_
 				res%array%bool(i8) = is_str_eq( &
 					left%array%str(i8)%s, &
-					right%sca%str%s &
+					right%str%s &
 				)
 			end do
 
@@ -351,7 +351,7 @@ subroutine is_eq_value_t(left, right, res, op_text)
 			allocate(res%array%bool( res%array%len_ ))
 			do i8 = 1, res%array%len_
 				res%array%bool(i8) = is_str_eq( &
-					left%sca%str%s, &
+					left%str%s, &
 					right%array%str(i8)%s &
 				)
 			end do

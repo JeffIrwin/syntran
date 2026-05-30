@@ -185,8 +185,8 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			!print *, 'get_dir(src_file) = ', get_dir(src_file)
 
 			i = i + 1
-			filename = get_dir(src_file)//tokens_in(i)%val%sca%str%s  ! relative to src file
-			!filename = tokens_in(i)%val%sca%str%s                    ! relative to runtime pwd
+			filename = get_dir(src_file)//tokens_in(i)%val%str%s  ! relative to src file
+			!filename = tokens_in(i)%val%str%s                    ! relative to runtime pwd
 
 			!print *, 'include filename = ', quote(filename)
 

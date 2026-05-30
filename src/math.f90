@@ -78,7 +78,7 @@ subroutine assign_value_t(left, right, op_text)
 			left%sca%i64 = right%to_i64()
 
 		case (str_type)
-			left%sca%str = right%sca%str
+			left%str = right%str
 
 		case (struct_type)
 			left = right
@@ -104,7 +104,7 @@ subroutine assign_value_t(left, right, op_text)
 	case (i64_type)
 		left%array%i64 = right%sca%i64
 	case (str_type)
-		left%array%str = right%sca%str
+		left%array%str = right%str
 	case default
 		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()

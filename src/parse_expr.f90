@@ -635,7 +635,7 @@ recursive module function parse_primary_expr(parser) result(expr)
 		case (str_token)
 
 			token = parser%match(str_token)
-			expr  = new_str(token%val%sca%str%s)
+			expr  = new_str(token%val%str%s)
 
 		case (i64_token)
 

@@ -76,7 +76,10 @@ module function new_literal_value(type, bool, i32, i64, f32, f64, str_) result(v
 	if (present(f64 )) val%sca%f64   = f64
 	if (present(i32 )) val%sca%i32   = i32
 	if (present(i64 )) val%sca%i64   = i64
-	if (present(str_)) val%sca%str%s = str_
+	if (present(str_)) then
+		allocate(val%str)
+		val%str%s = str_
+	end if
 
 end function new_literal_value
 

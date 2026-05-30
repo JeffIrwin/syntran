@@ -168,10 +168,11 @@ recursive module subroutine eval_name_expr(node, state, res)
 			i8 = subscript_eval(node, state)
 			!print *, 'i8 = ', i8
 
+			if (.not. allocated(res%str)) allocate(res%str)
 			if (node%is_loc) then
-				res%sca%str%s = state%locs%vals(id)%sca%str%s(i8+1: i8+1)
+				res%str%s = state%locs%vals(id)%str%s(i8+1: i8+1)
 			else
-				res%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
+				res%str%s = state%vars%vals(id)%str%s(i8+1: i8+1)
 			end if
 
 		case (range_sub)
@@ -188,13 +189,14 @@ recursive module subroutine eval_name_expr(node, state, res)
 			!print *, 'identifier ', node%identifier%text
 			!print *, 'il = ', il
 			!print *, 'iu = ', iu
-			!print *, 'str = ', state%vars%vals(id)%sca%str%s  ! debug broken for is_loc
+			!print *, 'str = ', state%vars%vals(id)%str%s  ! debug broken for is_loc
 
 			! Not inclusive of upper bound
+			if (.not. allocated(res%str)) allocate(res%str)
 			if (node%is_loc) then
-				res%sca%str%s = state%locs%vals(id)%sca%str%s(il: iu-1)
+				res%str%s = state%locs%vals(id)%str%s(il: iu-1)
 			else
-				res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
+				res%str%s = state%vars%vals(id)%str%s(il: iu-1)
 			end if
 
 		case default

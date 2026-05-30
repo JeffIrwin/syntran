@@ -442,55 +442,58 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		do i = 1, nargs
 			call str_%push(args(i)%to_str())
 		end do
-		res%sca%str%s = str_%trim()
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = str_%trim()
 
 	case (INTR_LEN)
 		res%type = i64_type
-		res%sca%i64 = len(args(1)%sca%str%s, 8)
+		res%sca%i64 = len(args(1)%str%s, 8)
 
 	case (INTR_REPEAT)
 		res%type = str_type
-		res%sca%str%s = repeat(args(1)%sca%str%s, args(2)%sca%i32)
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = repeat(args(1)%str%s, args(2)%sca%i32)
 
 	case (INTR_PARSE_I32)
 		res%type = i32_type
-		read(args(1)%sca%str%s, *, iostat = io) res%sca%i32
+		read(args(1)%str%s, *, iostat = io) res%sca%i32
 		if (io /= 0) then
 			write(*,*) err_rt_prefix//" cannot parse_i32() for argument `"// &
-				args(1)%sca%str%s//"`"//color_reset
+				args(1)%str%s//"`"//color_reset
 			call internal_error()
 		end if
 
 	case (INTR_PARSE_I64)
 		res%type = i64_type
-		read(args(1)%sca%str%s, *, iostat = io) res%sca%i64
+		read(args(1)%str%s, *, iostat = io) res%sca%i64
 		if (io /= 0) then
 			write(*,*) err_rt_prefix//" cannot parse_i64() for argument `"// &
-				args(1)%sca%str%s//"`"//color_reset
+				args(1)%str%s//"`"//color_reset
 			call internal_error()
 		end if
 
 	case (INTR_PARSE_F32)
 		res%type = f32_type
-		read(args(1)%sca%str%s, *, iostat = io) res%sca%f32
+		read(args(1)%str%s, *, iostat = io) res%sca%f32
 		if (io /= 0) then
 			write(*,*) err_rt_prefix//" cannot parse_f32() for argument `"// &
-				args(1)%sca%str%s//"`"//color_reset
+				args(1)%str%s//"`"//color_reset
 			call internal_error()
 		end if
 
 	case (INTR_PARSE_F64)
 		res%type = f64_type
-		read(args(1)%sca%str%s, *, iostat = io) res%sca%f64
+		read(args(1)%str%s, *, iostat = io) res%sca%f64
 		if (io /= 0) then
 			write(*,*) err_rt_prefix//" cannot parse_f64() for argument `"// &
-				args(1)%sca%str%s//"`"//color_reset
+				args(1)%str%s//"`"//color_reset
 			call internal_error()
 		end if
 
 	case (INTR_CHAR)
 		res%type = str_type
-		res%sca%str%s = achar(args(1)%sca%i32)
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = achar(args(1)%sca%i32)
 
 	case (INTR_I32_SCA)
 		res%type = i32_type
@@ -513,76 +516,77 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	case (INTR_OPEN)
 		! args(1) = filename (str), args(2) = mode (str)
 		res%type = file_type
-		res%sca%file_%mode_read  = .false.
-		res%sca%file_%mode_write = .false.
-		mode_ = args(2)%sca%str%s
+		if (.not. allocated(res%file_)) allocate(res%file_)
+		res%file_%mode_read  = .false.
+		res%file_%mode_write = .false.
+		mode_ = args(2)%str%s
 		do i = 1, len(mode_)
 			char_ = mode_(i: i)
 			select case (char_)
 			case ("r")
-				res%sca%file_%mode_read = .true.
+				res%file_%mode_read = .true.
 			case ("w")
-				res%sca%file_%mode_write = .true.
+				res%file_%mode_write = .true.
 			case default
 				write(*,*) err_rt_prefix//"bad file mode character """// &
 					char_//""""//color_reset
 				call internal_error()
 			end select
 		end do
-		if (res%sca%file_%mode_read .and. res%sca%file_%mode_write) then
-			write(*,*) err_rt_prefix//"cannot open file """//args(1)%sca%str%s// &
+		if (res%file_%mode_read .and. res%file_%mode_write) then
+			write(*,*) err_rt_prefix//"cannot open file """//args(1)%str%s// &
 				""" in combined read/write mode """//mode_//""""
 			call internal_error()
 		end if
-		if (res%sca%file_%mode_read) then
+		if (res%file_%mode_read) then
 			status_ = "old"
 		else
 			status_ = "unknown"
 		end if
-		resolved_path_ = resolve_path(state%src_dir, args(1)%sca%str%s)
-		open(newunit = res%sca%file_%unit_, file = resolved_path_, &
+		resolved_path_ = resolve_path(state%src_dir, args(1)%str%s)
+		open(newunit = res%file_%unit_, file = resolved_path_, &
 			status = status_, iostat = io)
 		if (io /= 0) then
 			write(*,*) err_rt_prefix//"cannot open file """//resolved_path_//""""
 			write(*,*) "iostat = ", str(io)
 			call internal_error()
 		end if
-		res%sca%file_%name_ = args(1)%sca%str%s
-		res%sca%file_%eof   = .false.
-		res%sca%file_%is_open = .true.
+		res%file_%name_ = args(1)%str%s
+		res%file_%eof   = .false.
+		res%file_%is_open = .true.
 
 	case (INTR_WRITELN)
 		! args(1) = file handle, args(2:) = values to write
 		res%type = void_type
-		if (.not. args(1)%sca%file_%is_open) then
+		if (.not. args(1)%file_%is_open) then
 			write(*,*) err_rt_prefix//"writeln() was called for file """// &
-				args(1)%sca%file_%name_//""" which is not open"
+				args(1)%file_%name_//""" which is not open"
 			call internal_error()
 		end if
-		if (.not. args(1)%sca%file_%mode_write) then
+		if (.not. args(1)%file_%mode_write) then
 			write(*,*) err_rt_prefix//"writeln() was called for file """// &
-				args(1)%sca%file_%name_//""" which was not opened in write mode ""w"""
+				args(1)%file_%name_//""" which was not opened in write mode ""w"""
 			call internal_error()
 		end if
 		do i = 2, nargs
-			write(args(1)%sca%file_%unit_, '(a)', advance = 'no') args(i)%to_str()
+			write(args(1)%file_%unit_, '(a)', advance = 'no') args(i)%to_str()
 		end do
-		write(args(1)%sca%file_%unit_, *)
+		write(args(1)%file_%unit_, *)
 
 	case (INTR_EOF)
 		! args(1) = file handle (read only — no writeback needed)
 		res%type = bool_type
-		if (.not. args(1)%sca%file_%is_open) then
+		if (.not. args(1)%file_%is_open) then
 			write(*,*) err_rt_prefix//"eof() was called for file """// &
-				args(1)%sca%file_%name_//""" which is not open"
+				args(1)%file_%name_//""" which is not open"
 			call internal_error()
 		end if
-		if (.not. args(1)%sca%file_%mode_read) then
+		if (.not. args(1)%file_%mode_read) then
 			write(*,*) err_rt_prefix//"eof() was called for file """// &
-				args(1)%sca%file_%name_//""" which was not opened in read mode ""r"""
+				args(1)%file_%name_//""" which was not opened in read mode ""r"""
 			call internal_error()
 		end if
-		res%sca%bool = args(1)%sca%file_%eof
+		res%sca%bool = args(1)%file_%eof
 
 	!==== Misc ==================================================================
 

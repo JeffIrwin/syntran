@@ -57,24 +57,37 @@ contains
 
 ! --- operand-stack helpers ----------------------------------------------------
 !
-! The operand stack is a value_vector_t.  For scalars (M1) both push_copy and
-! the pop pattern are equivalent, but the names signal intent for future moves.
+! vm_push_copy: push a deep copy; source remains live (LOAD_CONST, LOAD_GLOBAL,
+!   LOAD_LOCAL — the variable slot / constant pool entry must not be cleared).
+! vm_push_move: push by move; source is a temporary that dies here (binop
+!   result, intrinsic return value, etc.).  O(1) for array/struct values.
+! vm_pop_copy:  pop TOS via move (the slot is dead after decrement; "copy" in
+!   the name is historical).  Callers always pop into a local variable.
 
 subroutine vm_push_copy(stack, val)
-	! Push a deep copy of val onto the stack.  Used when the source must remain
-	! live (LOAD_GLOBAL, LOAD_LOCAL, LOAD_CONST).
+	! Push a deep copy of val.  Source must remain live after this call.
 	type(value_vector_t), intent(inout) :: stack
 	type(value_t), intent(in) :: val
-	call stack%push(val)		! push_value does deep copy + growth
+	call stack%push(val)		! push_value: deep copy + growth
 end subroutine vm_push_copy
 
 !===============================================================================
 
+subroutine vm_push_move(stack, val)
+	! Push val by moving it (consuming val).  Val must be a temporary with no
+	! other live references.  For array/struct values this avoids an O(n) copy.
+	type(value_vector_t), intent(inout) :: stack
+	type(value_t), intent(inout) :: val
+	call stack%push_move(val)	! push_value_move: move + growth
+end subroutine vm_push_move
+
+!===============================================================================
+
 subroutine vm_pop_copy(stack, val)
-	! Pop the top of stack into val via deep copy, decrement len_.
+	! Pop TOS into val via move (slot becomes dead; name kept for stability).
 	type(value_vector_t), intent(inout) :: stack
 	type(value_t), intent(out) :: val
-	val = stack%v(stack%len_)	! deep copy via value_copy
+	call value_move(stack%v(stack%len_), val)
 	stack%len_ = stack%len_ - 1
 end subroutine vm_pop_copy
 
@@ -264,7 +277,7 @@ module subroutine vm_run(prog, state, res)
 		! --- fallback: AST walker ---
 		case (OP_EVAL_NODE)
 			call syntax_eval(prog%nodes(instr%a), state, val)
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 			if (state%returned) then
 				if (nframes > 0) then
 					! A return_statement executed inside an AST-walker fallback
@@ -303,7 +316,7 @@ module subroutine vm_run(prog, state, res)
 					nframes = nframes - 1
 					deallocate(params_tmp)
 					state%returned = .false.
-					call vm_push_copy(stack, val)
+					call vm_push_move(stack, val)
 				else
 					! Top-level return: exit the main VM loop.
 					next_ip = prog%len_ + 1
@@ -343,13 +356,13 @@ module subroutine vm_run(prog, state, res)
 			call vm_pop_copy(stack, right)
 			call vm_pop_copy(stack, left)
 			call do_binop(left, right, instr%a, val)
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 
 		! --- unary operation ---
 		case (OP_UNOP)
 			call vm_pop_copy(stack, right)
 			call do_unop(right, instr%a, val)
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 
 		! --- discard ---
 		case (OP_POP)
@@ -369,11 +382,11 @@ module subroutine vm_run(prog, state, res)
 		! written back from the callee's frame at OP_RET time.
 		case (OP_LOAD_REF_GLOBAL)
 			call value_move(state%vars%vals(instr%a), val)
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 
 		case (OP_LOAD_REF_LOCAL)
 			call value_move(state%locs%vals(instr%a), val)
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 
 		! --- user function call -----------------------------------------------
 		! Stack layout on entry (bottom to top):
@@ -465,7 +478,7 @@ module subroutine vm_run(prog, state, res)
 			deallocate(params_tmp)
 
 			! Push the return value onto the caller's operand stack.
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 
 		! --- scalar subscript read: a[i] or s[i] -----------------------------------
 		! Evaluates subscript indices via subscript_eval (which calls syntax_eval
@@ -484,10 +497,11 @@ module subroutine vm_run(prog, state, res)
 
 			if (type_ == str_type) then
 				val%type = str_type
+				if (.not. allocated(val%str)) allocate(val%str)
 				if (n%is_loc) then
-					val%sca%str%s = state%locs%vals(id)%sca%str%s(i8+1: i8+1)
+					val%str%s = state%locs%vals(id)%str%s(i8+1: i8+1)
 				else
-					val%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
+					val%str%s = state%vars%vals(id)%str%s(i8+1: i8+1)
 				end if
 			else
 				if (n%is_loc) then
@@ -497,7 +511,7 @@ module subroutine vm_run(prog, state, res)
 				end if
 			end if
 
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 			end associate
 
 		! --- slice / non-scalar subscript read: a[i:j], a[:], a[[0,2,4]] ---------
@@ -505,7 +519,7 @@ module subroutine vm_run(prog, state, res)
 		! subscripts, step subscripts, and multi-rank combinations.
 		case (OP_SLICE)
 			call eval_name_expr(prog%nodes(instr%a), state, val)
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 
 		! --- scalar subscript write: a[i] = x  or  a[i] += x -------------------
 		! TOS holds the already-evaluated RHS.  Uses subscript_eval to find the
@@ -526,11 +540,11 @@ module subroutine vm_run(prog, state, res)
 			if (type_ == str_type) then
 				! String character assignment: s[i] = char_expr
 				if (n%is_loc) then
-					state%locs%vals(id)%sca%str%s(i8+1: i8+1) = right%sca%str%s
+					state%locs%vals(id)%str%s(i8+1: i8+1) = right%str%s
 				else
-					state%vars%vals(id)%sca%str%s(i8+1: i8+1) = right%sca%str%s
+					state%vars%vals(id)%str%s(i8+1: i8+1) = right%str%s
 				end if
-				call vm_push_copy(stack, right)
+				call vm_push_move(stack, right)
 			else
 				! Array element assignment (including compound ops)
 				if (n%is_loc) then
@@ -542,7 +556,7 @@ module subroutine vm_run(prog, state, res)
 					call do_compound(val, right, instr%b)
 					call set_val(n, state%vars%vals(id), state, val, index_ = i8)
 				end if
-				call vm_push_copy(stack, val)
+				call vm_push_move(stack, val)
 			end if
 			end associate
 
@@ -559,7 +573,7 @@ module subroutine vm_run(prog, state, res)
 			do i = n_mem, 1, -1
 				call vm_pop_copy(stack, val%struct(i))
 			end do
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 			end associate
 
 		! --- dot member read ------------------------------------------------------
@@ -573,7 +587,7 @@ module subroutine vm_run(prog, state, res)
 			else
 				call get_val(n, state%vars%vals(id), state, val)
 			end if
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 			end associate
 
 		! --- dot member write -----------------------------------------------------
@@ -592,7 +606,7 @@ module subroutine vm_run(prog, state, res)
 				call do_compound(val, right, instr%b)
 				call set_val(n, state%vars%vals(id), state, val)
 			end if
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 			end associate
 
 		! --- M6: intrinsic function call -----------------------------------------
@@ -612,27 +626,28 @@ module subroutine vm_run(prog, state, res)
 				logical :: is_loc_
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
-				if (.not. iargs(1)%sca%file_%is_open) then
+				if (.not. iargs(1)%file_%is_open) then
 					write(*,*) err_rt_prefix//'readln() was called for file "' &
-						//iargs(1)%sca%file_%name_//'" which is not open'
+						//iargs(1)%file_%name_//'" which is not open'
 					call internal_error()
 				end if
-				if (.not. iargs(1)%sca%file_%mode_read) then
+				if (.not. iargs(1)%file_%mode_read) then
 					write(*,*) err_rt_prefix//'readln() was called for file "' &
-						//iargs(1)%sca%file_%name_//'" which was not opened in read mode "r"'
+						//iargs(1)%file_%name_//'" which was not opened in read mode "r"'
 					call internal_error()
 				end if
 				val%type = str_type
-				val%sca%str%s = read_line(iargs(1)%sca%file_%unit_, io_)
+				if (.not. allocated(val%str)) allocate(val%str)
+				val%str%s = read_line(iargs(1)%file_%unit_, io_)
 				if (io_ == iostat_end) then
 					if (is_loc_) then
-						state%locs%vals(slot_id_)%sca%file_%eof = .true.
+						state%locs%vals(slot_id_)%file_%eof = .true.
 					else
-						state%vars%vals(slot_id_)%sca%file_%eof = .true.
+						state%vars%vals(slot_id_)%file_%eof = .true.
 					end if
 				else if (io_ /= 0 .and. io_ /= iostat_eor) then
 					write(*,*) err_rt_prefix//'cannot readln() from file "' &
-						//iargs(1)%sca%file_%name_//'"'
+						//iargs(1)%file_%name_//'"'
 					call internal_error()
 				end if
 				end block
@@ -644,17 +659,17 @@ module subroutine vm_run(prog, state, res)
 				logical :: is_loc_
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
-				if (.not. iargs(1)%sca%file_%is_open) then
+				if (.not. iargs(1)%file_%is_open) then
 					write(*,*) err_rt_prefix//'close() was called for file "' &
-						//iargs(1)%sca%file_%name_//'" which is not open'
+						//iargs(1)%file_%name_//'" which is not open'
 					call internal_error()
 				end if
 				if (is_loc_) then
-					state%locs%vals(slot_id_)%sca%file_%is_open = .false.
+					state%locs%vals(slot_id_)%file_%is_open = .false.
 				else
-					state%vars%vals(slot_id_)%sca%file_%is_open = .false.
+					state%vars%vals(slot_id_)%file_%is_open = .false.
 				end if
-				close(iargs(1)%sca%file_%unit_)
+				close(iargs(1)%file_%unit_)
 				val%type = unknown_type
 				end block
 
@@ -663,7 +678,7 @@ module subroutine vm_run(prog, state, res)
 			end if
 
 			deallocate(iargs)
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 
 		! --- M8: for-loop setup ---------------------------------------------------
 		! Evaluates loop bounds / computes len8; pushes a for_iter_t onto the
@@ -806,7 +821,7 @@ module subroutine vm_run(prog, state, res)
 					for_iters(fi)%itr_type = str_type
 					call syntax_eval(nd%array, state, tmp_)
 					call value_move(tmp_, for_iters(fi)%str_)
-					for_iters(fi)%len8 = len(for_iters(fi)%str_%sca%str%s, 8)
+					for_iters(fi)%len8 = len(for_iters(fi)%str_%str%s, 8)
 				else
 					for_iters(fi)%for_kind = array_expr
 					call syntax_eval(nd%array, state, tmp_)
@@ -840,9 +855,9 @@ module subroutine vm_run(prog, state, res)
 					state)
 				associate(nd => prog%nodes(for_iters(fi)%node_idx))
 				if (nd%is_loc) then
-					state%locs%vals(nd%id_index) = val
+					call value_move(val, state%locs%vals(nd%id_index))
 				else
-					state%vars%vals(nd%id_index) = val
+					call value_move(val, state%vars%vals(nd%id_index))
 				end if
 				end associate
 			end if
@@ -859,14 +874,14 @@ module subroutine vm_run(prog, state, res)
 		! expl, size, unif).  Rank-1 native specialization is a future perf pass.
 		case (OP_NEW_ARRAY)
 			call eval_array_expr(prog%nodes(instr%a), state, val)
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 
 		! --- M8: slice/complex LHS assignment ------------------------------------
 		! Handles slice-range LHS (a[1:3] = x) and subscript-less compound
 		! assignments by delegating to eval_assignment_expr.
 		case (OP_STORE_SLICE)
 			call eval_assignment_expr(prog%nodes(instr%a), state, val)
-			call vm_push_copy(stack, val)
+			call vm_push_move(stack, val)
 
 		! --- M8: top-level return (halt) ------------------------------------------
 		! Exits the VM loop immediately; TOS is the return value.
