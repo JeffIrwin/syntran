@@ -13,17 +13,21 @@ module syntran__bytecode_m
 	! enum in consts.f90 (which tops out at 121) to prevent accidental aliasing.
 
 	integer, parameter :: &
-		OP_EVAL_NODE   = 1001, &	! fallback: run one AST node through syntax_eval
-		OP_LOAD_CONST  = 1002, &	! push consts(a) onto the operand stack (deep copy)
-		OP_LOAD_GLOBAL = 1003, &	! push state%vars%vals(a) (deep copy)
-		OP_LOAD_LOCAL  = 1004, &	! push state%locs%vals(a) (deep copy)
-		OP_STORE_GLOBAL= 1005, &	! copy TOS into state%vars%vals(a), keep TOS
-		OP_STORE_LOCAL = 1006, &	! copy TOS into state%locs%vals(a), keep TOS
-		OP_BINOP       = 1007, &	! pop right+left, compute with op-token a, push result
-		OP_UNOP        = 1008, &	! pop operand, compute with op-token a, push result
-		OP_POP         = 1009, &	! discard TOS
-		OP_JUMP          = 1010, &	! unconditional jump: ip = a
-		OP_JUMP_IF_FALSE = 1011  	! pop bool TOS; if false: ip = a, else continue
+		OP_EVAL_NODE        = 1001, &	! fallback: run one AST node through syntax_eval
+		OP_LOAD_CONST       = 1002, &	! push consts(a) onto the operand stack (deep copy)
+		OP_LOAD_GLOBAL      = 1003, &	! push state%vars%vals(a) (deep copy)
+		OP_LOAD_LOCAL       = 1004, &	! push state%locs%vals(a) (deep copy)
+		OP_STORE_GLOBAL     = 1005, &	! copy TOS into state%vars%vals(a), keep TOS
+		OP_STORE_LOCAL      = 1006, &	! copy TOS into state%locs%vals(a), keep TOS
+		OP_BINOP            = 1007, &	! pop right+left, compute with op-token a, push result
+		OP_UNOP             = 1008, &	! pop operand, compute with op-token a, push result
+		OP_POP              = 1009, &	! discard TOS
+		OP_JUMP             = 1010, &	! unconditional jump: ip = a
+		OP_JUMP_IF_FALSE    = 1011, &	! pop bool TOS; if false: ip = a, else continue
+		OP_CALL             = 1012, &	! call user fn: a=fn_id, b=node_pool_idx (fn_call node)
+		OP_RET              = 1013, &	! return from fn: TOS is return value
+		OP_LOAD_REF_GLOBAL  = 1014, &	! move state%vars%vals(a) to stack (by-ref arg, pass 2)
+		OP_LOAD_REF_LOCAL   = 1015 	! move state%locs%vals(a) to stack (by-ref arg, pass 2)
 
 	!********
 

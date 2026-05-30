@@ -8,8 +8,21 @@ submodule (syntran__vm_m) syntran__vm_exec
 	! M0: OP_EVAL_NODE fallback (delegates to syntax_eval).
 	! M1: native handlers for scalars, loads/stores, binop, unop.
 	! M2: OP_JUMP / OP_JUMP_IF_FALSE for if/while/block/break/continue.
+	! M3: OP_CALL / OP_RET / OP_LOAD_REF_* for user-defined function frames.
 
 	implicit none
+
+	!------------------------------------------------------------------------
+	! Call frame: one entry per active function invocation.
+	! caller_locs holds state%locs%vals saved via move_alloc at CALL time,
+	! restored via move_alloc at RET time — mirrors eval_fn_call's locs0 pattern.
+	!------------------------------------------------------------------------
+
+	type :: frame_t
+		integer :: return_ip = 0
+		integer :: node_idx  = 0   ! index into prog%nodes for the fn_call_expr node
+		type(value_t), allocatable :: caller_locs(:)
+	end type frame_t
 
 !===============================================================================
 
@@ -165,11 +178,20 @@ module subroutine vm_run(prog, state, res)
 
 	!*******
 
+	integer, parameter :: MAX_FRAMES = 256
+
 	type(value_vector_t) :: stack
 	type(value_t) :: left, right, val
+	type(value_t), allocatable :: params_tmp(:)
 	integer :: ip, next_ip
+	integer :: i, fn_id, nparams, node_idx_call
 
-	stack = new_value_vector()
+	! Call-frame stack
+	type(frame_t) :: frames(MAX_FRAMES)
+	integer :: nframes
+
+	nframes = 0
+	stack   = new_value_vector()
 
 	ip = prog%entry_main
 	do while (ip <= prog%len_)
@@ -185,9 +207,50 @@ module subroutine vm_run(prog, state, res)
 		case (OP_EVAL_NODE)
 			call syntax_eval(prog%nodes(instr%a), state, val)
 			call vm_push_copy(stack, val)
-			! If the node executed a `return` statement, stop the VM loop so
-			! that the return value (now on TOS) is the final result.
-			if (state%returned) next_ip = prog%len_ + 1
+			if (state%returned) then
+				if (nframes > 0) then
+					! A return_statement executed inside an AST-walker fallback
+					! (e.g. a for loop) while we're inside a compiled function
+					! frame.  Perform the OP_RET cleanup inline so the frame is
+					! correctly unwound.
+					call vm_pop_copy(stack, val)   ! TOS = return value
+
+					! Move by-ref params back and restore caller locs
+					associate(fr => frames(nframes), &
+					          cn => prog%nodes(frames(nframes)%node_idx))
+					nparams = size(cn%params)
+					allocate(params_tmp(nparams))
+					do i = 1, nparams
+						if (cn%is_ref(i)) then
+							call value_move(state%locs%vals(cn%params(i)), params_tmp(i))
+						end if
+					end do
+					if (allocated(fr%caller_locs)) then
+						call move_alloc(fr%caller_locs, state%locs%vals)
+					else if (allocated(state%locs%vals)) then
+						deallocate(state%locs%vals)
+					end if
+					do i = 1, nparams
+						if (.not. cn%is_ref(i)) cycle
+						if (cn%args(i)%is_loc) then
+							call value_move(params_tmp(i), &
+								state%locs%vals(cn%args(i)%id_index))
+						else
+							call value_move(params_tmp(i), &
+								state%vars%vals(cn%args(i)%id_index))
+						end if
+					end do
+					next_ip = fr%return_ip
+					end associate
+					nframes = nframes - 1
+					deallocate(params_tmp)
+					state%returned = .false.
+					call vm_push_copy(stack, val)
+				else
+					! Top-level return: exit the main VM loop.
+					next_ip = prog%len_ + 1
+				end if
+			end if
 
 		! --- constants and variable loads ---
 		case (OP_LOAD_CONST)
@@ -231,6 +294,107 @@ module subroutine vm_run(prog, state, res)
 		case (OP_JUMP_IF_FALSE)
 			call vm_pop_copy(stack, val)
 			if (.not. val%sca%bool) next_ip = instr%a
+
+		! --- by-ref arg loading: move value from variable slot onto stack -----
+		! The original slot is left in a valid-but-empty state; the value is
+		! written back from the callee's frame at OP_RET time.
+		case (OP_LOAD_REF_GLOBAL)
+			call value_move(state%vars%vals(instr%a), val)
+			call vm_push_copy(stack, val)
+
+		case (OP_LOAD_REF_LOCAL)
+			call value_move(state%locs%vals(instr%a), val)
+			call vm_push_copy(stack, val)
+
+		! --- user function call -----------------------------------------------
+		! Stack layout on entry (bottom to top):
+		!   [by-value args in param index order] [by-ref args in param index order]
+		! Both groups in ascending param-index order.
+		! We pop by-ref first (they're on top) in reverse index order, then by-val.
+		case (OP_CALL)
+			fn_id        = instr%a
+			node_idx_call = instr%b
+			associate(cn => prog%nodes(node_idx_call))
+			nparams = 0
+			if (allocated(cn%params)) nparams = size(cn%params)
+			allocate(params_tmp(nparams))
+
+			! Pop by-ref args in reverse param-index order.
+			do i = nparams, 1, -1
+				if (cn%is_ref(i)) call vm_pop_copy(stack, params_tmp(i))
+			end do
+
+			! Pop by-val args in reverse param-index order.
+			do i = nparams, 1, -1
+				if (.not. cn%is_ref(i)) call vm_pop_copy(stack, params_tmp(i))
+			end do
+
+			! Push a new call frame; save caller's local vars.
+			nframes = nframes + 1
+			frames(nframes)%return_ip = ip + 1
+			frames(nframes)%node_idx  = node_idx_call
+			if (allocated(state%locs%vals)) then
+				call move_alloc(state%locs%vals, frames(nframes)%caller_locs)
+			end if
+
+			! Allocate the callee's local variable array.
+			allocate(state%locs%vals(cn%num_locs))
+
+			! Move params into the callee's local slots.
+			do i = 1, nparams
+				call value_move(params_tmp(i), state%locs%vals(cn%params(i)))
+			end do
+
+			deallocate(params_tmp)
+			end associate
+
+			next_ip = prog%fn_entry(fn_id)
+
+		! --- return from user function ----------------------------------------
+		! TOS is the return value (or an unknown sentinel for void functions).
+		! Write back by-ref params, restore caller locs, jump to return_ip.
+		case (OP_RET)
+			call vm_pop_copy(stack, val)   ! pop return value
+
+			associate(fr => frames(nframes), &
+			          cn => prog%nodes(frames(nframes)%node_idx))
+			nparams = 0
+			if (allocated(cn%params)) nparams = size(cn%params)
+			allocate(params_tmp(nparams))
+
+			! Move by-ref params from callee locs into params_tmp for writeback.
+			do i = 1, nparams
+				if (cn%is_ref(i)) then
+					call value_move(state%locs%vals(cn%params(i)), params_tmp(i))
+				end if
+			end do
+
+			! Restore caller's local variable array.
+			if (allocated(fr%caller_locs)) then
+				call move_alloc(fr%caller_locs, state%locs%vals)
+			else if (allocated(state%locs%vals)) then
+				deallocate(state%locs%vals)
+			end if
+
+			! Write by-ref modified values back to caller's variable slots.
+			do i = 1, nparams
+				if (.not. cn%is_ref(i)) cycle
+				if (cn%args(i)%is_loc) then
+					call value_move(params_tmp(i), &
+						state%locs%vals(cn%args(i)%id_index))
+				else
+					call value_move(params_tmp(i), &
+						state%vars%vals(cn%args(i)%id_index))
+				end if
+			end do
+
+			next_ip = fr%return_ip
+			end associate
+			nframes = nframes - 1
+			deallocate(params_tmp)
+
+			! Push the return value onto the caller's operand stack.
+			call vm_push_copy(stack, val)
 
 		case default
 			write(*,*) 'VM: unknown opcode ', instr%op

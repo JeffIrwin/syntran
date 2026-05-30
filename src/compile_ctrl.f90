@@ -48,6 +48,11 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 	integer :: block_break_ips(MAX_BREAK_FIXUPS) = 0
 	integer :: nblock_break_fixups = 0
 
+	! Set to true while compiling a user function body; used to distinguish
+	! a function-level return_statement (emit OP_RET) from a top-level one
+	! (fall back to OP_EVAL_NODE).
+	logical :: in_fn_body = .false.
+
 !===============================================================================
 
 contains
@@ -356,10 +361,53 @@ recursive subroutine compile_node(prog, node)
 
 	! ---- top-level translation unit -------------------------------------------
 	case (translation_unit)
-		! Fn and struct declarations are registered at parse time; skip them here.
-		! Each statement contributes to the result: the last one leaves its value
-		! on the stack; preceding ones are discarded with OP_POP.
-		! This matches eval_translation_unit which takes the last member's result.
+		! M3: compile all user fn bodies first into prog%code so that fn_entry
+		! offsets are known before any call-site OP_CALL is emitted.  The VM
+		! starts at prog%entry_main which is set after all fn bodies.
+
+		! Pass 0: determine max fn id to size the entry/num_locs tables.
+		do i = 1, size(node%members)
+			if (node%members(i)%kind /= fn_declaration) cycle
+			const_idx = node%members(i)%id_index   ! reusing const_idx as scratch
+			if (.not. allocated(prog%fn_entry)) then
+				allocate(prog%fn_entry(const_idx))
+				allocate(prog%fn_num_locs(const_idx))
+				prog%fn_entry    = 0
+				prog%fn_num_locs = 0
+			else if (const_idx > size(prog%fn_entry)) then
+				! Grow tables (rare: fns are declared in order by the parser).
+				block
+					integer, allocatable :: tmp_entry(:), tmp_locs(:)
+					call move_alloc(prog%fn_entry,    tmp_entry)
+					call move_alloc(prog%fn_num_locs, tmp_locs)
+					allocate(prog%fn_entry(const_idx))
+					allocate(prog%fn_num_locs(const_idx))
+					prog%fn_entry    = 0
+					prog%fn_num_locs = 0
+					prog%fn_entry(1: size(tmp_entry))    = tmp_entry
+					prog%fn_num_locs(1: size(tmp_locs))  = tmp_locs
+				end block
+			end if
+		end do
+
+		! Pass 1: compile each fn declaration body.
+		do i = 1, size(node%members)
+			if (node%members(i)%kind /= fn_declaration) cycle
+			l_top = node%members(i)%id_index   ! fn_id (reuse l_top as scratch)
+			prog%fn_num_locs(l_top) = node%members(i)%num_locs
+			prog%fn_entry(l_top)    = prog%len_ + 1
+
+			in_fn_body = .true.
+			call compile_node(prog, node%members(i)%body)
+			in_fn_body = .false.
+		end do
+
+		! Top-level statements start here.
+		prog%entry_main = prog%len_ + 1
+
+		! Pass 2: compile top-level (non-fn, non-struct) statements.
+		! Each contributes to the result: the last one leaves its value on the
+		! stack; preceding ones are discarded with OP_POP.
 		first = .true.
 		do i = 1, size(node%members)
 			if (node%members(i)%kind == fn_declaration    ) cycle
@@ -375,6 +423,69 @@ recursive subroutine compile_node(prog, node)
 		if (first) then
 			const_idx = add_const(prog, unknown_val())
 			call emit(prog, OP_LOAD_CONST, a = const_idx)
+		end if
+
+	! ---- fn_declaration: bodies are compiled separately in translation_unit -----
+	! Skip silently here; compilation of the body happens in the translation_unit
+	! case before the top-level statements.
+	case (fn_declaration)
+		! Nothing to emit: fn bodies are pre-compiled by the translation_unit handler.
+
+	! ---- user-defined function call -------------------------------------------
+	! Two-pass arg push to avoid by-ref aliasing (mirrors eval_fn_call):
+	!   Pass 1: compile all by-value args (push evaluated values).
+	!   Pass 2: emit OP_LOAD_REF_* for each by-ref arg (moves value from slot).
+	! Then emit OP_CALL with the fn id and a node-pool index carrying ref metadata.
+	case (fn_call_expr)
+		! Store the call node so OP_CALL/OP_RET can access params/is_ref.
+		idx = add_node(prog, node)
+
+		! Pass 1: push by-value args onto stack.
+		if (allocated(node%is_ref)) then
+			do i = 1, size(node%is_ref)
+				if (.not. node%is_ref(i)) call compile_node(prog, node%args(i))
+			end do
+
+			! Pass 2: move by-ref args from their variable slots onto stack.
+			do i = 1, size(node%is_ref)
+				if (node%is_ref(i)) then
+					if (node%args(i)%is_loc) then
+						call emit(prog, OP_LOAD_REF_LOCAL,  a = node%args(i)%id_index)
+					else
+						call emit(prog, OP_LOAD_REF_GLOBAL, a = node%args(i)%id_index)
+					end if
+				end if
+			end do
+		end if
+
+		call emit(prog, OP_CALL, a = node%id_index, b = idx)
+
+	! ---- intrinsic function call -----------------------------------------------
+	! Delegate the entire call to the AST walker via OP_EVAL_NODE.  The walker
+	! evaluates args using the current state (which has the callee's locs when
+	! inside a compiled frame).  Migration to native integer dispatch is M6.
+	case (fn_call_intr_expr)
+		idx = add_node(prog, node)
+		call emit(prog, OP_EVAL_NODE, a = idx)
+
+	! ---- return statement ------------------------------------------------------
+	! Inside a compiled function body: push return value (or unknown sentinel for
+	! void) then emit OP_RET.  At top level: fall back to OP_EVAL_NODE (which
+	! sets state%returned so the VM exits its main loop).
+	case (return_statement)
+		if (in_fn_body) then
+			if (node%right%val%type == void_type) then
+				! Void return: push unknown_type as a dummy return slot.
+				const_idx = add_const(prog, unknown_val())
+				call emit(prog, OP_LOAD_CONST, a = const_idx)
+			else
+				call compile_node(prog, node%right)
+			end if
+			call emit(prog, OP_RET)
+		else
+			! Top-level return: fall back to OP_EVAL_NODE which sets state%returned.
+			idx = add_node(prog, node)
+			call emit(prog, OP_EVAL_NODE, a = idx)
 		end if
 
 	! ---- fallback: delegate to the AST walker ---------------------------------
@@ -406,6 +517,7 @@ module subroutine compile_tree(tree, prog)
 	nbreak_fixups       = 0
 	in_block_break_ctx  = .false.
 	nblock_break_fixups = 0
+	in_fn_body          = .false.
 
 	prog = new_program()
 	call compile_node(prog, tree)
