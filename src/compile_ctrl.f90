@@ -104,6 +104,12 @@ recursive subroutine compile_module_fns(prog, module_node)
 	! nested use_statement members so that transitively-imported module fns are
 	! also compiled.  Skips any fn whose fn_entry is already non-zero to guard
 	! against diamond-dependency double-compilation.
+	!
+	! Two-sub-pass design so that forward references within the module resolve:
+	!   Sub-pass A: register (ensure_fn_entry) ALL fns in this module first.
+	!   Sub-pass B: compile each body; any call to a forward-declared sibling
+	!               finds the id registered (in range) even if fn_entry == 0,
+	!               and OP_CALL is emitted safely (entry will be filled before VM runs).
 
 	type(program_t),     intent(inout) :: prog
 	type(syntax_node_t), intent(in)    :: module_node   ! translation_unit
@@ -120,11 +126,16 @@ recursive subroutine compile_module_fns(prog, module_node)
 		call compile_module_fns(prog, module_node%members(i)%member)
 	end do
 
-	! Compile each fn_declaration body (guarded against double-compilation).
+	! Sub-pass A: register all local fn ids before compiling any body.
+	do i = 1, size(module_node%members)
+		if (module_node%members(i)%kind /= fn_declaration) cycle
+		call ensure_fn_entry(prog, module_node%members(i)%id_index)
+	end do
+
+	! Sub-pass B: compile each fn_declaration body.
 	do i = 1, size(module_node%members)
 		if (module_node%members(i)%kind /= fn_declaration) cycle
 		fn_id = module_node%members(i)%id_index
-		call ensure_fn_entry(prog, fn_id)
 		if (prog%fn_entry(fn_id) /= 0) cycle   ! already compiled (diamond dep)
 		prog%fn_num_locs(fn_id) = module_node%members(i)%num_locs
 		prog%fn_entry(fn_id)    = prog%len_ + 1
@@ -614,19 +625,21 @@ recursive subroutine compile_node(prog, node)
 	! any call whose fn_id lies outside the compiled range fall back to OP_EVAL_NODE
 	! so the AST walker handles them via eval_fn_call.
 	case (fn_call_expr)
-		! Fortran .or./.and. are NOT short-circuit; use nested ifs to avoid
-		! an out-of-bounds access on prog%fn_entry(node%id_index).
-		first = .false.   ! reuse `first` as a "use_native" scratch bool
+		! Check registration only: fn_entry[id] may be 0 for a forward reference
+		! (the fn is declared after this call site in the source).  That is fine —
+		! fn_entry[id] will be non-zero by the time the VM executes because all
+		! fn bodies are compiled before execution begins.  What matters at compile
+		! time is whether the fn_id was registered (id is in range of fn_entry).
+		! Fortran .or./.and. are NOT short-circuit; use nested ifs.
+		first = .false.   ! reuse `first` as "fn_id is registered"
 		if (allocated(prog%fn_entry)) then
-			if (node%id_index <= size(prog%fn_entry)) then
-				if (prog%fn_entry(node%id_index) /= 0) first = .true.
-			end if
+			if (node%id_index <= size(prog%fn_entry)) first = .true.
 		end if
 
 		if (.not. first) then
-			! fn_entry not yet populated — compile_module_fns should have covered all
-			! reachable fns; reaching here means a compiler bug.
-			write(*,*) 'compile: fn_call_expr: fn_entry not found for id', node%id_index
+			! fn_id not registered — neither the translation_unit pre-pass nor
+			! compile_module_fns saw this fn.  Compiler bug.
+			write(*,*) 'compile: fn_call_expr: fn_entry not registered for id', node%id_index
 			call internal_error()
 		else
 			! Locally-compiled fn: two-pass arg push + OP_CALL.
