@@ -27,7 +27,10 @@ module syntran__bytecode_m
 		OP_CALL             = 1012, &	! call user fn: a=fn_id, b=node_pool_idx (fn_call node)
 		OP_RET              = 1013, &	! return from fn: TOS is return value
 		OP_LOAD_REF_GLOBAL  = 1014, &	! move state%vars%vals(a) to stack (by-ref arg, pass 2)
-		OP_LOAD_REF_LOCAL   = 1015 	! move state%locs%vals(a) to stack (by-ref arg, pass 2)
+		OP_LOAD_REF_LOCAL   = 1015, &	! move state%locs%vals(a) to stack (by-ref arg, pass 2)
+		OP_INDEX            = 1016, &	! scalar subscript read: a=node_idx (name_expr w/ scalar subs)
+		OP_SLICE            = 1017, &	! non-scalar subscript/slice read: a=node_idx
+		OP_STORE_IDX        = 1018 	! scalar subscript write: a=node_idx, b=op_kind; TOS=RHS
 
 	!********
 

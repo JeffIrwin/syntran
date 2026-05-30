@@ -65,6 +65,27 @@ end subroutine vm_pop_discard
 
 !===============================================================================
 
+subroutine do_compound(lhs, rhs, op_kind)
+
+	! Call compound_assign with just an integer op_kind (no full token needed).
+	! op%text is only used for error messages, so an empty string is safe.
+
+	type(value_t), intent(inout) :: lhs
+	type(value_t), intent(in)    :: rhs
+	integer, intent(in)          :: op_kind
+
+	!*******
+
+	type(syntax_token_t) :: op_tok
+
+	op_tok%kind = op_kind
+	op_tok%text = ''
+	call compound_assign(lhs, rhs, op_tok)
+
+end subroutine do_compound
+
+!===============================================================================
+
 subroutine do_binop(left, right, op_kind, res)
 
 	! Compute a binary operation on two values, mirroring eval_binary_expr.
@@ -185,6 +206,8 @@ module subroutine vm_run(prog, state, res)
 	type(value_t), allocatable :: params_tmp(:)
 	integer :: ip, next_ip
 	integer :: i, fn_id, nparams, node_idx_call
+	integer :: id, type_
+	integer(kind = 8) :: i8
 
 	! Call-frame stack
 	type(frame_t) :: frames(MAX_FRAMES)
@@ -395,6 +418,85 @@ module subroutine vm_run(prog, state, res)
 
 			! Push the return value onto the caller's operand stack.
 			call vm_push_copy(stack, val)
+
+		! --- scalar subscript read: a[i] or s[i] -----------------------------------
+		! Evaluates subscript indices via subscript_eval (which calls syntax_eval
+		! on each index expression), then reads the element with get_val.
+		! For strings: extracts a single character.
+		case (OP_INDEX)
+			associate(n => prog%nodes(instr%a))
+			id = n%id_index
+			if (n%is_loc) then
+				type_ = state%locs%vals(id)%type
+			else
+				type_ = state%vars%vals(id)%type
+			end if
+
+			i8 = subscript_eval(n, state)
+
+			if (type_ == str_type) then
+				val%type = str_type
+				if (n%is_loc) then
+					val%sca%str%s = state%locs%vals(id)%sca%str%s(i8+1: i8+1)
+				else
+					val%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
+				end if
+			else
+				if (n%is_loc) then
+					call get_val(n, state%locs%vals(id), state, val, index_ = i8)
+				else
+					call get_val(n, state%vars%vals(id), state, val, index_ = i8)
+				end if
+			end if
+
+			call vm_push_copy(stack, val)
+			end associate
+
+		! --- slice / non-scalar subscript read: a[i:j], a[:], a[[0,2,4]] ---------
+		! Delegates to eval_name_expr which handles all slice kinds, array
+		! subscripts, step subscripts, and multi-rank combinations.
+		case (OP_SLICE)
+			call eval_name_expr(prog%nodes(instr%a), state, val)
+			call vm_push_copy(stack, val)
+
+		! --- scalar subscript write: a[i] = x  or  a[i] += x -------------------
+		! TOS holds the already-evaluated RHS.  Uses subscript_eval to find the
+		! linear index, reads the current element, applies the compound op, stores
+		! back.  For strings: direct character replacement (only plain = is valid).
+		case (OP_STORE_IDX)
+			call vm_pop_copy(stack, right)   ! RHS (already evaluated by compiler)
+			associate(n => prog%nodes(instr%a))
+			id = n%id_index
+			if (n%is_loc) then
+				type_ = state%locs%vals(id)%type
+			else
+				type_ = state%vars%vals(id)%type
+			end if
+
+			i8 = subscript_eval(n, state)
+
+			if (type_ == str_type) then
+				! String character assignment: s[i] = char_expr
+				if (n%is_loc) then
+					state%locs%vals(id)%sca%str%s(i8+1: i8+1) = right%sca%str%s
+				else
+					state%vars%vals(id)%sca%str%s(i8+1: i8+1) = right%sca%str%s
+				end if
+				call vm_push_copy(stack, right)
+			else
+				! Array element assignment (including compound ops)
+				if (n%is_loc) then
+					call get_val(n, state%locs%vals(id), state, val, index_ = i8)
+					call do_compound(val, right, instr%b)
+					call set_val(n, state%locs%vals(id), state, val, index_ = i8)
+				else
+					call get_val(n, state%vars%vals(id), state, val, index_ = i8)
+					call do_compound(val, right, instr%b)
+					call set_val(n, state%vars%vals(id), state, val, index_ = i8)
+				end if
+				call vm_push_copy(stack, val)
+			end if
+			end associate
 
 		case default
 			write(*,*) 'VM: unknown opcode ', instr%op

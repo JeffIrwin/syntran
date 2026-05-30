@@ -117,9 +117,13 @@ recursive subroutine compile_node(prog, node)
 	! ---- variable reads --------------------------------------------------------
 	case (name_expr)
 		if (allocated(node%lsubscripts)) then
-			! Subscripted access — fall back to the AST walker for now
+			! Subscripted access: all-scalar → OP_INDEX, any range/step/all → OP_SLICE
 			idx = add_node(prog, node)
-			call emit(prog, OP_EVAL_NODE, a = idx)
+			if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+				call emit(prog, OP_INDEX, a = idx)
+			else
+				call emit(prog, OP_SLICE, a = idx)
+			end if
 		else
 			if (node%is_loc) then
 				call emit(prog, OP_LOAD_LOCAL, a = node%id_index)
@@ -147,12 +151,13 @@ recursive subroutine compile_node(prog, node)
 			call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
 		end if
 
-	! ---- simple scalar assignment (no subscripts, no dot members, plain =) ----
+	! ---- assignment (no dot members): scalar, compound, or subscript ----------
 	case (assignment_expr)
-		if (.not. allocated(node%member)      .and. &
+		if (.not. allocated(node%member) .and. &
 		    .not. allocated(node%lsubscripts) .and. &
 		    node%op%kind == equals_token) then
 
+			! Simple plain assignment: a = expr
 			call compile_node(prog, node%right)
 			if (node%is_loc) then
 				call emit(prog, OP_STORE_LOCAL,  a = node%id_index)
@@ -161,9 +166,25 @@ recursive subroutine compile_node(prog, node)
 			end if
 
 		else
-			! Compound assignment or subscript / dot LHS — fall back
-			idx = add_node(prog, node)
-			call emit(prog, OP_EVAL_NODE, a = idx)
+			! Fortran .and. is NOT short-circuit; use nested ifs to guard the
+			! all(lsubscripts%sub_kind) access from unallocated lsubscripts.
+			first = .false.   ! reuse `first` as "use native subscript store"
+			if (.not. allocated(node%member)) then
+				if (allocated(node%lsubscripts)) then
+					if (all(node%lsubscripts%sub_kind == scalar_sub)) first = .true.
+				end if
+			end if
+
+			if (first) then
+				! Scalar subscript write (any op): a[i] = x  or  a[i] += x
+				call compile_node(prog, node%right)
+				idx = add_node(prog, node)
+				call emit(prog, OP_STORE_IDX, a = idx, b = node%op%kind)
+			else
+				! Dot member, slice LHS, or compound without subscripts — fall back
+				idx = add_node(prog, node)
+				call emit(prog, OP_EVAL_NODE, a = idx)
+			end if
 		end if
 
 	! ---- block statement -------------------------------------------------------
