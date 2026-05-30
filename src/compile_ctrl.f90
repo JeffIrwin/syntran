@@ -432,33 +432,49 @@ recursive subroutine compile_node(prog, node)
 		! Nothing to emit: fn bodies are pre-compiled by the translation_unit handler.
 
 	! ---- user-defined function call -------------------------------------------
-	! Two-pass arg push to avoid by-ref aliasing (mirrors eval_fn_call):
-	!   Pass 1: compile all by-value args (push evaluated values).
-	!   Pass 2: emit OP_LOAD_REF_* for each by-ref arg (moves value from slot).
-	! Then emit OP_CALL with the fn id and a node-pool index carrying ref metadata.
+	! Only emit OP_CALL for functions compiled into this program_t (i.e. locally
+	! declared functions whose fn_entry is known).  Module-imported functions and
+	! any call whose fn_id lies outside the compiled range fall back to OP_EVAL_NODE
+	! so the AST walker handles them via eval_fn_call.
 	case (fn_call_expr)
-		! Store the call node so OP_CALL/OP_RET can access params/is_ref.
-		idx = add_node(prog, node)
-
-		! Pass 1: push by-value args onto stack.
-		if (allocated(node%is_ref)) then
-			do i = 1, size(node%is_ref)
-				if (.not. node%is_ref(i)) call compile_node(prog, node%args(i))
-			end do
-
-			! Pass 2: move by-ref args from their variable slots onto stack.
-			do i = 1, size(node%is_ref)
-				if (node%is_ref(i)) then
-					if (node%args(i)%is_loc) then
-						call emit(prog, OP_LOAD_REF_LOCAL,  a = node%args(i)%id_index)
-					else
-						call emit(prog, OP_LOAD_REF_GLOBAL, a = node%args(i)%id_index)
-					end if
-				end if
-			end do
+		! Fortran .or./.and. are NOT short-circuit; use nested ifs to avoid
+		! an out-of-bounds access on prog%fn_entry(node%id_index).
+		first = .false.   ! reuse `first` as a "use_native" scratch bool
+		if (allocated(prog%fn_entry)) then
+			if (node%id_index <= size(prog%fn_entry)) then
+				if (prog%fn_entry(node%id_index) /= 0) first = .true.
+			end if
 		end if
 
-		call emit(prog, OP_CALL, a = node%id_index, b = idx)
+		if (.not. first) then
+			! Not a locally-compiled fn: fall back to the AST walker.
+			idx = add_node(prog, node)
+			call emit(prog, OP_EVAL_NODE, a = idx)
+		else
+			! Locally-compiled fn: two-pass arg push + OP_CALL.
+			! Store the call node so OP_CALL/OP_RET can access params/is_ref.
+			idx = add_node(prog, node)
+
+			! Pass 1: push by-value args onto stack.
+			if (allocated(node%is_ref)) then
+				do i = 1, size(node%is_ref)
+					if (.not. node%is_ref(i)) call compile_node(prog, node%args(i))
+				end do
+
+				! Pass 2: move by-ref args from their variable slots onto stack.
+				do i = 1, size(node%is_ref)
+					if (node%is_ref(i)) then
+						if (node%args(i)%is_loc) then
+							call emit(prog, OP_LOAD_REF_LOCAL,  a = node%args(i)%id_index)
+						else
+							call emit(prog, OP_LOAD_REF_GLOBAL, a = node%args(i)%id_index)
+						end if
+					end if
+				end do
+			end if
+
+			call emit(prog, OP_CALL, a = node%id_index, b = idx)
+		end if
 
 	! ---- intrinsic function call -----------------------------------------------
 	! Delegate the entire call to the AST walker via OP_EVAL_NODE.  The walker
