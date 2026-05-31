@@ -333,7 +333,8 @@ module syntran__types_m
 		type(syntax_node_t), allocatable :: v(:)
 		integer :: len_, cap
 		contains
-			procedure :: push => push_node
+			procedure :: push      => push_node
+			procedure :: push_move => push_node_move
 #ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => syntax_node_vector_copy
 			generic, public :: assignment(=) => copy
@@ -379,6 +380,15 @@ module syntran__types_m
 			class(syntax_node_t), intent(inout) :: dst
 			class(syntax_node_t), intent(in)    :: src
 		end subroutine syntax_node_copy
+
+		recursive module subroutine syntax_node_move(src, dst)
+			type(syntax_node_t), intent(inout)            :: src
+			type(syntax_node_t), allocatable, intent(out) :: dst
+		end subroutine syntax_node_move
+
+		recursive module subroutine syntax_node_move_into(src, dst)
+			type(syntax_node_t), intent(inout) :: src, dst
+		end subroutine syntax_node_move_into
 
 		recursive module subroutine ternary_tree_copy(dst, src)
 			class(ternary_tree_node_t), intent(inout) :: dst
@@ -450,6 +460,11 @@ module syntran__types_m
 			class(syntax_node_vector_t) :: vector
 			type(syntax_node_t) :: val
 		end subroutine push_node
+
+		module subroutine push_node_move(vector, val)
+			class(syntax_node_vector_t) :: vector
+			type(syntax_node_t), intent(inout) :: val
+		end subroutine push_node_move
 
 		recursive module subroutine ternary_search(node, key, id_index, iostat, val)
 			type(ternary_tree_node_t), intent(in), allocatable :: node
@@ -658,11 +673,11 @@ module syntran__types_m
 			type(value_t) :: val
 		end function new_literal_value
 
-		module function new_declaration_expr(identifier, op, right) result(expr)
+		module subroutine new_declaration_expr(identifier, op, right, expr)
 			type(syntax_token_t), intent(in) :: identifier, op
-			type(syntax_node_t), intent(in) :: right
-			type(syntax_node_t) :: expr
-		end function new_declaration_expr
+			type(syntax_node_t) , intent(in) :: right
+			type(syntax_node_t) , intent(out) :: expr
+		end subroutine new_declaration_expr
 
 		module function new_name_expr(identifier, val) result(expr)
 			type(syntax_token_t), intent(in) :: identifier
@@ -670,17 +685,17 @@ module syntran__types_m
 			type(syntax_node_t) :: expr
 		end function new_name_expr
 
-		module function new_binary_expr(left, op, right) result(expr)
-			type(syntax_node_t), intent(in) :: left, right
-			type(syntax_token_t), intent(in) :: op
-			type(syntax_node_t) :: expr
-		end function new_binary_expr
+		module subroutine new_binary_expr(left, op, right, expr)
+			type(syntax_node_t) , intent(inout) :: left, right
+			type(syntax_token_t), intent(in)    :: op
+			type(syntax_node_t) , intent(out)   :: expr
+		end subroutine new_binary_expr
 
-		module function new_unary_expr(op, right) result(expr)
-			type(syntax_node_t), intent(in) :: right
-			type(syntax_token_t), intent(in) :: op
-			type(syntax_node_t) :: expr
-		end function new_unary_expr
+		module subroutine new_unary_expr(op, right, expr)
+			type(syntax_node_t) , intent(inout) :: right
+			type(syntax_token_t), intent(in)    :: op
+			type(syntax_node_t) , intent(out)   :: expr
+		end subroutine new_unary_expr
 
 		module function new_bool(bool) result(expr)
 			logical, intent(in) :: bool

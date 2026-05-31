@@ -89,7 +89,7 @@ end function new_literal_value
 
 !===============================================================================
 
-module function new_declaration_expr(identifier, op, right) result(expr)
+module subroutine new_declaration_expr(identifier, op, right, expr)
 
 	! TODO: IMO this fn is overly abstracted.  It's only used once, so
 	! just paste it their and delete the fn.  That will make it easier to
@@ -97,8 +97,7 @@ module function new_declaration_expr(identifier, op, right) result(expr)
 
 	type(syntax_token_t), intent(in) :: identifier, op
 	type(syntax_node_t) , intent(in) :: right
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t) , intent(out) :: expr
 
 	!********
 
@@ -114,14 +113,7 @@ module function new_declaration_expr(identifier, op, right) result(expr)
 	! Pass the result value type up the tree for type checking in parent
 	expr%val = right%val
 
-	!expr%val%type = right%val%type
-	!if (expr%val%type == array_type) then
-	!	!print *, 'new_declaration_expr array_type'
-	!	allocate(expr%val%array)
-	!	expr%val%array = right%val%array
-	!end if
-
-end function new_declaration_expr
+end subroutine new_declaration_expr
 
 !===============================================================================
 
@@ -146,12 +138,11 @@ end function new_name_expr
 
 !===============================================================================
 
-module function new_binary_expr(left, op, right) result(expr)
+module subroutine new_binary_expr(left, op, right, expr)
 
-	type(syntax_node_t) , intent(in) :: left, right
-	type(syntax_token_t), intent(in) :: op
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t) , intent(inout) :: left, right  ! consumed by move
+	type(syntax_token_t), intent(in)    :: op
+	type(syntax_node_t) , intent(out)   :: expr
 
 	!********
 
@@ -162,26 +153,19 @@ module function new_binary_expr(left, op, right) result(expr)
 	if (debug > 1) print *, 'op    = ', op%text
 	if (debug > 1) print *, 'right = ', right%str()
 
-	expr%kind = binary_expr
-
-	allocate(expr%left)
-	allocate(expr%right)
-
-	expr%left  = left
-	expr%op    = op
-	expr%right = right
-
-	!print *, 'left type  = ', kind_name(left%val%type)
-
+	! Read type info before moves (left/right val%array may be moved)
 	larrtype = unknown_type
 	rarrtype = unknown_type
 	if (left %val%type == array_type) larrtype = left %val%array%type
 	if (right%val%type == array_type) rarrtype = right%val%array%type
-
-	!print *, 'larrtype = ', kind_name(larrtype)
-
 	ltype = left%val%type
 	rtype = right%val%type
+
+	expr%kind = binary_expr
+	expr%op   = op
+
+	call syntax_node_move(left,  expr%left)
+	call syntax_node_move(right, expr%right)
 
 	! Pass the result value type up the tree for type checking in parent
 	type_ = get_binary_op_kind(ltype, op%kind, rtype, &
@@ -194,10 +178,10 @@ module function new_binary_expr(left, op, right) result(expr)
 		allocate(expr%val%array)
 
 		expr%val%array%type = array_to_scalar_type(type_)
-		if (left%val%type == array_type) then
-			expr%val%array%rank = left %val%array%rank
+		if (ltype == array_type) then
+			expr%val%array%rank = expr%left%val%array%rank
 		else
-			expr%val%array%rank = right%val%array%rank
+			expr%val%array%rank = expr%right%val%array%rank
 		end if
 
 		expr%val%type = array_type
@@ -216,39 +200,35 @@ module function new_binary_expr(left, op, right) result(expr)
 	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_binary_expr'
 
-end function new_binary_expr
+end subroutine new_binary_expr
 
 !===============================================================================
 
-module function new_unary_expr(op, right) result(expr)
+module subroutine new_unary_expr(op, right, expr)
 
-	type(syntax_node_t) , intent(in) :: right
-	type(syntax_token_t), intent(in) :: op
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t) , intent(inout) :: right   ! consumed by move
+	type(syntax_token_t), intent(in)    :: op
+	type(syntax_node_t) , intent(out)   :: expr
 
 	!********
 
 	if (debug > 1) print *, 'new_unary_expr'
 
 	expr%kind = unary_expr
+	expr%op   = op
 
-	allocate(expr%right)
-
-	expr%op    = op
-	expr%right = right
+	call syntax_node_move(right, expr%right)
 
 	! Pass the result value type up the tree for type checking in parent.  IIRC
 	! all unary operators result in the same type as their operand, hence there
 	! is a get_binary_op_kind() fn but no get_unary_op_kind() fn
 
-	expr%val = right%val
-	!expr%val%type = right%val%type
+	expr%val = expr%right%val
 
 	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_unary_expr'
 
-end function new_unary_expr
+end subroutine new_unary_expr
 
 !===============================================================================
 

@@ -355,6 +355,7 @@ module function parse_unit(parser) result(unit)
 	!********
 
 	type(syntax_node_vector_t) :: members
+	type(syntax_node_t)  :: stmt_tmp
 	type(syntax_token_t) :: dummy
 
 	integer :: i, pos0, num_vars0, num_fns0, num_structs0
@@ -396,11 +397,14 @@ module function parse_unit(parser) result(unit)
 
 		select case (parser%current_kind())
 		case (fn_keyword)
-			call members%push(parser%parse_fn_declaration())
+			call parser%parse_fn_declaration(stmt_tmp)
+			call members%push_move(stmt_tmp)
 		case (struct_keyword)
-			call members%push(parser%parse_struct_declaration())
+			call parser%parse_struct_declaration(stmt_tmp)
+			call members%push_move(stmt_tmp)
 		case default
-			call members%push(parser%parse_statement())
+			call parser%parse_statement(stmt_tmp)
+			call members%push_move(stmt_tmp)
 		end select
 
 		! Break infinite loops
@@ -456,11 +460,14 @@ module function parse_unit(parser) result(unit)
 
 			select case (parser%current_kind())
 			case (fn_keyword)
-				call members%push(parser%parse_fn_declaration())
+				call parser%parse_fn_declaration(stmt_tmp)
+				call members%push_move(stmt_tmp)
 			case (struct_keyword)
-				call members%push(parser%parse_struct_declaration())
+				call parser%parse_struct_declaration(stmt_tmp)
+				call members%push_move(stmt_tmp)
 			case default
-				call members%push(parser%parse_statement())
+				call parser%parse_statement(stmt_tmp)
+				call members%push_move(stmt_tmp)
 			end select
 
 			! Break infinite loops
@@ -480,8 +487,11 @@ module function parse_unit(parser) result(unit)
 
 	unit%kind = translation_unit
 
-	! Convert to standard array
-	call syntax_nodes_copy(unit%members, members%v( 1: members%len_ ))
+	! Move members from vector directly (avoids deep copy)
+	allocate(unit%members(members%len_))
+	do i = 1, members%len_
+		call syntax_node_move_into(members%v(i), unit%members(i))
+	end do
 
 	! Eof is matched in the caller syntax_parse() to deal with broken stdin
 	! lines with interactive interpretation

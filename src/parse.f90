@@ -116,22 +116,22 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_fn.f90
 
-		module function parse_fn_declaration(parser) result(decl)
+		module subroutine parse_fn_declaration(parser, decl)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: decl
-		end function parse_fn_declaration
+			type(syntax_node_t), intent(out) :: decl
+		end subroutine parse_fn_declaration
 
-		recursive module function parse_fn_call(parser, module_prefix, identifier) result(fn_call)
+		recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_call)
 			class(parser_t) :: parser
 			character(len = *), intent(in), optional :: module_prefix
 			type(syntax_token_t), intent(in), optional :: identifier
-			type(syntax_node_t) :: fn_call
-		end function parse_fn_call
+			type(syntax_node_t), intent(out) :: fn_call
+		end subroutine parse_fn_call
 
-		recursive module function parse_qualified_expr(parser) result(expr)
+		recursive module subroutine parse_qualified_expr(parser, expr)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: expr
-		end function parse_qualified_expr
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine parse_qualified_expr
 
 		module subroutine parse_type(parser, type_text, type)
 			class(parser_t) :: parser
@@ -141,16 +141,16 @@ module syntran__parse_m
 
 		! TODO: move struct stuff to another translation unit? parse_fn.f90 is a
 		! very manageable ~1100 lines rn, so not much benefit to splitting
-		module function parse_struct_declaration(parser) result(decl)
+		module subroutine parse_struct_declaration(parser, decl)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: decl
-		end function parse_struct_declaration
+			type(syntax_node_t), intent(out) :: decl
+		end subroutine parse_struct_declaration
 
-		recursive module function parse_struct_instance(parser, struct_name) result(instance)
+		recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: inst
 			character(len = *), intent(in), optional :: struct_name
-			type(syntax_node_t) :: instance
-		end function parse_struct_instance
+		end subroutine parse_struct_instance
 
 	end interface
 
@@ -159,10 +159,10 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_array.f90
 
-		recursive module function parse_array_expr(parser) result(expr)
+		recursive module subroutine parse_array_expr(parser, expr)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: expr
-		end function
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine parse_array_expr
 
 		module function parse_size(parser) result(size)
 			class(parser_t) :: parser
@@ -181,50 +181,50 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_control.f90
 
-		recursive module function parse_if_statement(parser) result(statement)
+		recursive module subroutine parse_if_statement(parser, statement)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: statement
-		end function parse_if_statement
+			type(syntax_node_t), intent(out) :: statement
+		end subroutine parse_if_statement
 
-		module function parse_return_statement(parser) result(statement)
+		module subroutine parse_return_statement(parser, statement)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: statement
-		end function parse_return_statement
+			type(syntax_node_t), intent(out) :: statement
+		end subroutine parse_return_statement
 
-		module function parse_break_statement(parser) result(statement)
+		module subroutine parse_break_statement(parser, statement)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: statement
-		end function parse_break_statement
+			type(syntax_node_t), intent(out) :: statement
+		end subroutine parse_break_statement
 
-		module function parse_continue_statement(parser) result(statement)
+		module subroutine parse_continue_statement(parser, statement)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: statement
-		end function parse_continue_statement
+			type(syntax_node_t), intent(out) :: statement
+		end subroutine parse_continue_statement
 
-		module function parse_use_statement(parser) result(statement)
+		module subroutine parse_use_statement(parser, statement)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: statement
-		end function parse_use_statement
+			type(syntax_node_t), intent(out) :: statement
+		end subroutine parse_use_statement
 
-		recursive module function parse_for_statement(parser) result(statement)
+		recursive module subroutine parse_for_statement(parser, statement)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: statement
-		end function parse_for_statement
+			type(syntax_node_t), intent(out) :: statement
+		end subroutine parse_for_statement
 
-		recursive module function parse_while_statement(parser) result(statement)
+		recursive module subroutine parse_while_statement(parser, statement)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: statement
-		end function parse_while_statement
+			type(syntax_node_t), intent(out) :: statement
+		end subroutine parse_while_statement
 
-		recursive module function parse_block_statement(parser) result(block)
+		recursive module subroutine parse_block_statement(parser, block)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: block
-		end function parse_block_statement
+			type(syntax_node_t), intent(out) :: block
+		end subroutine parse_block_statement
 
-		recursive module function parse_statement(parser) result(statement)
+		recursive module subroutine parse_statement(parser, statement)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: statement
-		end function parse_statement
+			type(syntax_node_t), intent(out) :: statement
+		end subroutine parse_statement
 
 	end interface
 
@@ -233,26 +233,26 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_expr.f90
 
-		recursive module function parse_expr_statement(parser) result(expr)
+		recursive module subroutine parse_expr_statement(parser, expr)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: expr
-		end function parse_expr_statement
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine parse_expr_statement
 
-		recursive module function parse_expr(parser, parent_prec) result(expr)
+		recursive module subroutine parse_expr(parser, parent_prec, expr)
 			class(parser_t) :: parser
 			integer, optional, intent(in) :: parent_prec
-			type(syntax_node_t) :: expr
-		end function parse_expr
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine parse_expr
 
-		recursive module function parse_primary_expr(parser) result(expr)
+		recursive module subroutine parse_primary_expr(parser, expr)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: expr
-		end function parse_primary_expr
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine parse_primary_expr
 
-		recursive module function parse_name_expr(parser) result(expr)
+		recursive module subroutine parse_name_expr(parser, expr)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: expr
-		end function parse_name_expr
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine parse_name_expr
 
 		recursive module subroutine parse_dot(parser, expr)
 			class(parser_t) :: parser

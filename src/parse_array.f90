@@ -15,7 +15,7 @@ contains
 
 !===============================================================================
 
-recursive module function parse_array_expr(parser) result(expr)
+recursive module subroutine parse_array_expr(parser, expr)
 
 	! These are the possible kinds of array literals:
 	!
@@ -27,12 +27,11 @@ recursive module function parse_array_expr(parser) result(expr)
 	!     size_array :  [0,1,2,3,4,5 ; 2,3]           explicit csv multi-rank array
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), intent(out) :: expr
 
 	!********
 
-	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end, rank_
+	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end, rank_, i
 
 	type(syntax_node_t)  :: lbound_, step, ubound_, len_, elem
 	type(syntax_node_vector_t) :: elems, size_
@@ -78,7 +77,7 @@ recursive module function parse_array_expr(parser) result(expr)
 
 	span_beg = parser%peek_pos(0)
 	lb_beg   = span_beg
-	lbound_  = parser%parse_expr()
+	call parser%parse_expr(expr=lbound_)
 	span_end = parser%peek_pos(0) - 1
 	lb_end   = span_end
 
@@ -118,12 +117,8 @@ recursive module function parse_array_expr(parser) result(expr)
 		rbracket = parser%match(rbracket_token)
 
 		allocate(expr%val%array)
-		allocate(expr%lbound)
-
-		call syntax_nodes_copy(expr%size, size_%v( 1: size_%len_ ))
 
 		expr%kind           = array_expr
-
 		expr%val%type        = array_type
 		if (allocated(lbound_%val%struct_name)) then
 			expr%val%struct_name = lbound_%val%struct_name
@@ -139,15 +134,12 @@ recursive module function parse_array_expr(parser) result(expr)
 		expr%val%array%kind = unif_array
 		expr%val%array%rank = size_%len_
 
-		!print *, 'expr%val%type       = ', expr%val%type
-		!print *, 'expr%val%array%type = ', expr%val%array%type
-
-		! Does this syntax node need to own these members, or can we just save
-		! them in the array_t?  I think they do need to be duplicated, as they
-		! may be an expression and not just a literal.  So, sizes have to be
-		! allocated dynamically during evaluation, not during parsing
-
-		expr%lbound = lbound_
+		! Move children (avoids deep copies)
+		call syntax_node_move(lbound_, expr%lbound)
+		allocate(expr%size(size_%len_))
+		do i = 1, size_%len_
+			call syntax_node_move_into(size_%v(i), expr%size(i))
+		end do
 
 		return
 
@@ -160,7 +152,7 @@ recursive module function parse_array_expr(parser) result(expr)
 
 		span_beg = parser%peek_pos(0)
 		ub_beg   = span_beg
-		ubound_  = parser%parse_expr()
+		call parser%parse_expr(expr=ubound_)
 		span_end = parser%peek_pos(0) - 1
 		ub_end   = span_end
 
@@ -187,7 +179,7 @@ recursive module function parse_array_expr(parser) result(expr)
 			colon    = parser%match(colon_token)
 
 			span_beg = parser%peek_pos(0)
-			ubound_  = parser%parse_expr()
+			call parser%parse_expr(expr=ubound_)
 			span_end = parser%peek_pos(0) - 1
 
 			if (.not. is_num_type(ubound_%val%type)) then
@@ -203,9 +195,6 @@ recursive module function parse_array_expr(parser) result(expr)
 			rbracket = parser%match(rbracket_token)
 
 			allocate(expr%val%array)
-			allocate(expr%lbound)
-			allocate(expr%step)
-			allocate(expr%ubound)
 
 			expr%kind           = array_expr
 			expr%val%type       = array_type
@@ -238,9 +227,9 @@ recursive module function parse_array_expr(parser) result(expr)
 			expr%val%array%kind = step_array
 			expr%val%array%rank = 1
 
-			expr%lbound = lbound_
-			expr%step   = step
-			expr%ubound = ubound_
+			call syntax_node_move(lbound_, expr%lbound)
+			call syntax_node_move(step,    expr%step)
+			call syntax_node_move(ubound_, expr%ubound)
 
 			return
 
@@ -253,7 +242,7 @@ recursive module function parse_array_expr(parser) result(expr)
 			semicolon    = parser%match(semicolon_token)
 
 			span_beg = parser%peek_pos(0)
-			len_     = parser%parse_expr()
+			call parser%parse_expr(expr=len_)
 			span_end = parser%peek_pos(0) - 1
 
 			!print *, 'len_ = ', parser%text(span_beg, span_end)
@@ -285,9 +274,6 @@ recursive module function parse_array_expr(parser) result(expr)
 			rbracket = parser%match(rbracket_token)
 
 			allocate(expr%val%array)
-			allocate(expr%lbound)
-			allocate(expr%ubound)
-			allocate(expr%len_)
 
 			expr%kind           = array_expr
 			expr%val%type       = array_type
@@ -295,9 +281,9 @@ recursive module function parse_array_expr(parser) result(expr)
 			expr%val%array%kind = len_array
 			expr%val%array%rank = 1
 
-			expr%lbound = lbound_
-			expr%ubound = ubound_
-			expr%len_   = len_
+			call syntax_node_move(lbound_, expr%lbound)
+			call syntax_node_move(ubound_, expr%ubound)
+			call syntax_node_move(len_,    expr%len_)
 
 			return
 
@@ -311,32 +297,27 @@ recursive module function parse_array_expr(parser) result(expr)
 		!print *, 'ubound_ = ', ubound_%str()
 
 		allocate(expr%val%array)
-		allocate(expr%lbound)
-		allocate(expr%ubound)
 
 		expr%kind = array_expr
-
 		expr%val%type = array_type
-
 		expr%val%array%kind = bound_array
 		expr%val%array%rank = 1
 
-		expr%lbound = lbound_
-		expr%ubound = ubound_
+		call syntax_node_move(lbound_, expr%lbound)
+		call syntax_node_move(ubound_, expr%ubound)
 
+		! Read type info from moved children (not from consumed locals)
 		if (all(i32_type == &
-			[lbound_%val%type, ubound_%val%type]) &! .or. &
+			[expr%lbound%val%type, expr%ubound%val%type]) &! .or. &
 			) then
 
-			!print *, 'setting lbound_ type'
-			expr%val%array%type = lbound_%val%type
+			expr%val%array%type = expr%lbound%val%type
 
 		! TODO: make is_int_type() elemental, then we can sugar up this syntax
 		else if (all([ &
-			is_int_type(lbound_%val%type), &
-			is_int_type(ubound_%val%type)])) then
+			is_int_type(expr%lbound%val%type), &
+			is_int_type(expr%ubound%val%type)])) then
 
-			!print *, 'setting i64_type'
 			expr%val%array%type = i64_type
 
 		else
@@ -384,7 +365,7 @@ recursive module function parse_array_expr(parser) result(expr)
 		comma    = parser%match(comma_token)
 
 		span_beg = parser%peek_pos(0)
-		elem     = parser%parse_expr()
+		call parser%parse_expr(expr=elem)
 		span_end = parser%peek_pos(0) - 1
 
 		!print *, 'elem ', elem%val%str()
@@ -432,17 +413,20 @@ recursive module function parse_array_expr(parser) result(expr)
 
 		allocate(expr%val%array)
 
-		call syntax_nodes_copy(expr%size, size_%v( 1: size_%len_ ))
-
 		expr%kind           = array_expr
-
 		expr%val%type       = array_type
-
 		expr%val%array%type = lbound_%val%type
 		expr%val%array%kind = size_array
 		expr%val%array%rank = size_%len_
 
-		call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len_ ))
+		allocate(expr%size(size_%len_))
+		do i = 1, size_%len_
+			call syntax_node_move_into(size_%v(i), expr%size(i))
+		end do
+		allocate(expr%elems(elems%len_))
+		do i = 1, elems%len_
+			call syntax_node_move_into(elems%v(i), expr%elems(i))
+		end do
 
 		return
 
@@ -453,30 +437,27 @@ recursive module function parse_array_expr(parser) result(expr)
 	rbracket = parser%match(rbracket_token)
 
 	allocate(expr%val%array)
-	expr%kind           = array_expr
-
-	!expr%val%type       = lbound_%val%type
+	expr%kind            = array_expr
 	expr%val%type        = array_type
 	if (allocated(lbound_%val%struct_name)) then
 		expr%val%struct_name = lbound_%val%struct_name
 	end if
 
-	!print *, "expr struct_name = ", expr%val%struct_name
-
 	expr%val%array%type = lbound_%val%type
 	if (lbound_%val%type == array_type) then
-		! If lbound is another array, get its subtype here instead
 		expr%val%array%type = lbound_%val%array%type
 	end if
 
 	expr%val%array%kind = expl_array
 	expr%val%array%rank = 1
 	expr%val%array%len_ = elems%len_
-	!print*, "expl_array"
 
-	call syntax_nodes_copy(expr%elems, elems%v( 1: elems%len_ ))
+	allocate(expr%elems(elems%len_))
+	do i = 1, elems%len_
+		call syntax_node_move_into(elems%v(i), expr%elems(i))
+	end do
 
-end function parse_array_expr
+end subroutine parse_array_expr
 
 !===============================================================================
 
@@ -522,7 +503,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 		else
 
 			ls_beg = parser%current_pos()
-			lsubscript = parser%parse_expr()
+			call parser%parse_expr(expr=lsubscript)
 			ls_end = parser%current_pos()
 
 			!print *, 'lsubscript = ', lsubscript%str()
@@ -565,7 +546,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 					lsubscript%sub_kind = range_sub
 
 					us_beg = parser%current_pos()
-					usubscript = parser%parse_expr()
+					call parser%parse_expr(expr=usubscript)
 					us_end = parser%current_pos()
 
 					if (.not. any(usubscript%val%type == [i32_type, i64_type, unknown_type])) then
@@ -583,7 +564,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 						ssubscript = usubscript
 
 						us_beg = parser%current_pos()
-						usubscript = parser%parse_expr()
+						call parser%parse_expr(expr=usubscript)
 						us_end = parser%current_pos()
 						if (.not. any(usubscript%val%type == [i32_type, i64_type, unknown_type])) then
 							span = new_span(us_beg, us_end - us_beg + 1)
@@ -709,7 +690,7 @@ module function parse_size(parser) result(size)
 		pos0 = parser%pos
 
 		span_beg = parser%peek_pos(0)
-		len      = parser%parse_expr()
+		call parser%parse_expr(expr=len)
 		span_end = parser%peek_pos(0) - 1
 
 		!print *, 'len = ', parser%text(span_beg, span_end)
