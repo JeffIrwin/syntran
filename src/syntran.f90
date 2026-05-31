@@ -404,8 +404,15 @@ subroutine init_state(state, script_args, src_dir)
 	! (anything else)           -> use the AST walker (default)
 	call get_environment_variable('SYNTRAN_BACKEND', backend_env, &
 		status = backend_status)
-	state%bytecode = (backend_status == 0 .and. &
-		trim(backend_env) == 'bytecode')
+
+	state%bytecode = .true.
+	if (backend_status == 0) then
+		if (trim(backend_env) == "ast") then
+			state%bytecode = .false.
+		end if
+	end if
+	!state%bytecode = (backend_status == 0 .and. &
+	!	trim(backend_env) == 'bytecode')
 
 	! Is it safe to initialize these arrays both here and in new_parser?  Test
 	! interactive interp

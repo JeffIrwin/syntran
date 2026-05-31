@@ -44,9 +44,9 @@ module syntran__eval_m
 		! This is the directory containing the main script being evaluated
 		character(len = :), allocatable :: src_dir
 
-		! Use the bytecode VM backend instead of the AST walker.
-		! Set via SYNTRAN_BACKEND=bytecode env var or the --bytecode CLI flag.
-		logical :: bytecode = .false.
+		! Use the bytecode VM backend instead of the AST walker. True by
+		! default, or set SYNTRAN_BACKEND=ast env var for AST walking
+		logical :: bytecode
 
 	end type state_t
 

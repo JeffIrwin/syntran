@@ -260,6 +260,8 @@ module subroutine vm_run(prog, state, res)
 	type(for_iter_t) :: for_iters(MAX_FORS)
 	integer :: nfor
 
+	!print *, "starting vm_run()"
+
 	nframes = 0
 	nfor    = 0
 	stack   = new_value_vector()

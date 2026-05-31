@@ -739,6 +739,8 @@ module subroutine compile_tree(tree, prog)
 	type(syntax_node_t), intent(in) :: tree
 	type(program_t), intent(out) :: prog
 
+	!print *, 'starting compile_tree()'
+
 	! Reset all compiler state for each fresh compilation
 	loop_depth          = 0
 	nbreak_fixups       = 0
