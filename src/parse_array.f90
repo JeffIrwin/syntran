@@ -540,7 +540,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 						err_bad_sub_rank(parser%context(), span, rank_) &
 					)
 				end if
-				if (.not. any(lsubscript%val%array%type == [i32_type, i64_type])) then
+				if (.not. any(lsubscript%val%array%type == [i32_type, i64_type, unknown_type])) then
 					call parser%diagnostics%push( &
 						err_non_int_subscript(parser%context(), span, &
 						parser%text(span0, parser%current_pos()-1)))
@@ -553,7 +553,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 				! cycle here bc there's important stuff at at end of loop.  Goto
 				! could work but fn might be better
 
-				if (.not. any(lsubscript%val%type == [i32_type, i64_type])) then
+				if (.not. any(lsubscript%val%type == [i32_type, i64_type, unknown_type])) then
 					span = new_span(span0, parser%current_pos() - span0)
 					call parser%diagnostics%push( &
 						err_non_int_subscript(parser%context(), span, &
@@ -568,7 +568,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 					usubscript = parser%parse_expr()
 					us_end = parser%current_pos()
 
-					if (.not. any(usubscript%val%type == [i32_type, i64_type])) then
+					if (.not. any(usubscript%val%type == [i32_type, i64_type, unknown_type])) then
 						span = new_span(us_beg, us_end - us_beg + 1)
 						call parser%diagnostics%push( &
 							err_non_int_subscript(parser%context(), span, &
@@ -585,7 +585,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 						us_beg = parser%current_pos()
 						usubscript = parser%parse_expr()
 						us_end = parser%current_pos()
-						if (.not. any(usubscript%val%type == [i32_type, i64_type])) then
+						if (.not. any(usubscript%val%type == [i32_type, i64_type, unknown_type])) then
 							span = new_span(us_beg, us_end - us_beg + 1)
 							call parser%diagnostics%push( &
 								err_non_int_subscript(parser%context(), span, &
@@ -675,7 +675,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 				expect_rank, size(expr%lsubscripts)))
 		end if
 
-	else
+	else if (expr%val%type /= unknown_type) then
 		span = new_span(span0, span1 - span0 + 1)
 		!print *, "err_scalar_subscript 1"
 		call parser%diagnostics%push( &

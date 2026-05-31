@@ -1,0 +1,3 @@
+// Test that hyphens are not allowed in aliases
+
+use mymath as my-math;

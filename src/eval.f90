@@ -40,6 +40,10 @@ module syntran__eval_m
 		! Script arguments passed after `--` on the command line
 		type(string_vector_t) :: script_args
 
+		! Source directory for resolving relative file paths in open()
+		! This is the directory containing the main script being evaluated
+		character(len = :), allocatable :: src_dir
+
 	end type state_t
 
 	!********
@@ -246,6 +250,12 @@ module syntran__eval_m
 			type(value_t), intent(out) :: res
 		end subroutine
 
+		module subroutine eval_use_statement(node, state, res)
+			type(syntax_node_t), intent(in) :: node
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: res
+		end subroutine
+
 	end interface
 
 !===============================================================================
@@ -343,6 +353,9 @@ recursive subroutine syntax_eval(node, state, res)
 
 	case (translation_unit)
 		call eval_translation_unit(node, state, res)
+
+	case (use_statement)
+		call eval_use_statement(node, state, res)
 
 	case (block_statement)
 		call eval_block_statement(node, state, res)

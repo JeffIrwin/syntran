@@ -6,6 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Syntran is an array-oriented programming language with an interpreter written in Fortran. It's similar to MATLAB but with curly braces, type checking, and zero-indexed arrays.
 
+## CRITICAL: Tab Handling
+
+**This codebase uses TABS for indentation, not spaces.**
+
+When using the Edit tool:
+1. ALWAYS read the file first to see the exact indentation
+2. When extracting `old_string` from Read tool output, remember that the line number prefix format is: `spaces + line_number + tab`
+3. Everything AFTER the tab following the line number is the actual file content (which uses tabs for indentation)
+4. NEVER convert tabs to spaces in your `old_string` or `new_string` - preserve the exact tab characters
+5. If Edit fails with "String to replace not found", the most common cause is tab/space mismatch - check the raw file content
+
 ## Build Commands
 
 Two build systems are supported: FPM (Fortran Package Manager) and CMake.
@@ -56,16 +67,38 @@ The interpreter follows a classic lexer → parser → evaluator pipeline, imple
   - `parse_array.f90` - Array syntax
   - `parse_misc.f90` - Preprocessing (`#include`) and other misc parsing
 - `src/eval.f90` - AST evaluation/interpretation
+- `src/eval_*.f90` - Evaluator submodules:
+  - `eval_array.f90` - Array evaluation
+  - `eval_control.f90` - Control flow evaluation
+  - `eval_expr.f90` - Expression evaluation
+  - `eval_fn.f90` - Function evaluation
 - `src/types.f90` - Fortran type definitions
+- `src/types_*.f90` - Types submodules:
+  - `types_copy.f90` - Deep copy procedures for types
+  - `types_dict.f90` - Dictionary/ternary tree operations
+  - `types_node.f90` - Syntax node/expression builders
+  - `types_ops.f90` - Type checking and operator utilities
 - `src/value.f90` - Runtime value representation
 - `src/errors.f90` - Syntran error messages
 - `src/intr_fns.f90` - Intrinsic (built-in) function interfaces
+- `src/intr_fns_*.f90` - Intrinsic function submodules:
+  - `intr_fns_array.f90` - Array functions (size, len, etc.)
+  - `intr_fns_io.f90` - I/O functions (open, read, write, etc.)
+  - `intr_fns_math.f90` - Math functions (abs, exp, log, etc.)
+  - `intr_fns_minmax.f90` - Min/max functions
+  - `intr_fns_trig.f90` - Trigonometric functions (sin, cos, etc.)
 
 ### Math Operations (auto-generated)
 Binary arithmetic operations are generated from `src/math_bin_template.f90` via `src/gen_math.sh`:
 - `src/math_bin_add.f90`, `math_bin_subtract.f90`, `math_bin_mul.f90`, `math_bin_div.f90`, `math_bin_pow.f90`
 
 Bitwise operations follow the same pattern in `src/math_bit_*.f90`.
+
+### Utilities
+- `src/bool.f90` - Boolean operations
+- `src/consts.f90` - Constants
+- `src/math.f90` - Math module (coordinates generated math files)
+- `src/utils.f90` - Utility functions
 
 ### Public API
 - `src/syntran.f90` - Public API module (REPL, file interpretation)
@@ -85,6 +118,8 @@ Module paths in `use` statements are resolved relative to the current source fil
 ## Key Source Locations
 
 - `src/tests/test.f90` - Unit test orchestrator
+- `src/tests/long.f90` - Long/integration tests
+- `src/tests/core.f90` - Test core module
 - `src/tests/test-src/` - Syntran script unit test files by category
 - `src/tests/long/aoc/` - Longer integration tests
 - `samples/` - Example syntran programs (not tested in CI)

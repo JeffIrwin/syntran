@@ -1,0 +1,8 @@
+// Test that mixing qualified and unqualified imports is banned
+
+use mymath;     // Qualified import
+use mymath::*;  // Unqualified import - should error
+
+let a = mymath::add(2, 3);
+let b = add(4, 5);
+return a == 5 and b == 9;

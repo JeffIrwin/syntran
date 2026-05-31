@@ -1,0 +1,10 @@
+// Test multiple aliased imports
+
+use mymath as mm;
+use math/vectors as vec;
+
+let a = mm::add(2, 3);
+let v = [1, 0, 0];
+let m = vec::magnitude_squared(v);
+
+return a == 5 and m == 1;

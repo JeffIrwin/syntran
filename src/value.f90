@@ -117,8 +117,10 @@ module syntran__value_m
 			procedure :: to_i64 => value_to_i64
 			procedure :: to_i32_array => value_to_i32_array  ! for user-facing casting fn
 			procedure :: to_i64_array => value_to_i64_array
+#ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => value_copy
 			generic, public :: assignment(=) => copy
+#endif
 
 	end type value_t
 
@@ -291,7 +293,7 @@ recursive subroutine value_copy(dst, src)
 	! Args have to be in the confusing dst, src order for overloading
 
 	class(value_t), intent(inout) :: dst
-	class(value_t), intent(in)    :: src
+	type(value_t),  intent(in)    :: src
 
 	!********
 

@@ -349,7 +349,7 @@ end function syntran_eval_f64
 
 !===============================================================================
 
-subroutine init_state(state, script_args)
+subroutine init_state(state, script_args, src_dir)
 
 	! TODO: move to eval.f90
 
@@ -361,6 +361,7 @@ subroutine init_state(state, script_args)
 
 	type(state_t), intent(inout) :: state
 	type(string_vector_t), intent(in), optional :: script_args
+	character(len = *), intent(in), optional :: src_dir
 
 	call declare_intr_fns(state%fns)
 
@@ -382,6 +383,13 @@ subroutine init_state(state, script_args)
 		state%script_args = script_args
 	else
 		state%script_args = new_string_vector()
+	end if
+
+	! Source directory for resolving relative file paths
+	if (present(src_dir)) then
+		state%src_dir = src_dir
+	else
+		state%src_dir = ''
 	end if
 
 	!print *, "init size fns = ", size(state%fns%fns)
@@ -408,10 +416,9 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 
 	!********
 
-	character(len = 1024) :: buffer
-	character(len = :), allocatable :: src_filel, dir, cwd
+	character(len = :), allocatable :: src_filel, dir
 
-	logical :: chdirl, repl
+	logical :: repl
 
 	type(state_t) :: state
 	type(syntax_node_t) :: tree
@@ -420,7 +427,13 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 	!print *, ''
 	!print *, 'str_ = ', str_
 
-	call init_state(state, script_args)
+	! Determine source directory first
+	dir = ''
+	if (present(chdir_)) then
+		dir = chdir_
+	end if
+
+	call init_state(state, script_args, dir)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
@@ -432,12 +445,6 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 	end if
 
 	!print * , "src_filel = """, src_filel, """"
-
-	chdirl = .false.
-	if (present(chdir_)) then
-		chdirl = .true.
-		dir = chdir_
-	end if
 
 	! TODO: make a helper fn that all the eval_* fns use
 
@@ -456,20 +463,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 		return
 	end if
 
-	if (chdirl) then
-
-		! chdir *after* syntax_parse() so that #include paths are correct, but
-		! *before* syntax_eval() so that runtime open() paths are correct
-		!
-		! I've only implemented this chdir option so that I can copy/paste my
-		! AOC solutions to unit tests in subdirs with minimal changes
-
-		! pushd
-		call getcwd(buffer)
-		cwd = trim(buffer)
-		call chdir(dir)
-
-	end if
+	! No chdir() needed - src_dir is now in state and will be used by open()
 
 	!print *, "evaling "
 	call syntax_eval(tree, state, val)
@@ -477,8 +471,6 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 	res = val%to_str()
 	!print *, 'res = ', res
 
-	! popd
-	if (chdirl) call chdir(cwd)
 	!print *, "done syntran_eval()"
 
 end function syntran_eval

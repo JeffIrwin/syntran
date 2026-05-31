@@ -1,0 +1,17 @@
+// Module that exports a struct definition
+
+struct Point
+{
+	x: i32,
+	y: i32,
+}
+
+fn make_point(x: i32, y: i32): Point
+{
+	return Point{x = x, y = y};
+}
+
+fn point_sum(p: Point): i32
+{
+	return p.x + p.y;
+}

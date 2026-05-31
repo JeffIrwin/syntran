@@ -1,0 +1,26 @@
+// Test qualified import of a module that exports arrays of structs.
+// This exercises qualify_value_struct_name's array-of-structs branch.
+
+use arrstruct_mod;
+
+// Qualified scalar struct member access
+let ok1 = arrstruct_mod::origin.x == 0 and arrstruct_mod::origin.y == 0;
+
+// Qualified array-of-structs element access
+let ok2 = arrstruct_mod::pts[0].x == 1;
+let ok3 = arrstruct_mod::pts[0].y == 2;
+let ok4 = arrstruct_mod::pts[1].x == 3;
+let ok5 = arrstruct_mod::pts[1].y == 4;
+
+// Qualified function call returning the struct
+let p = arrstruct_mod::make_vec2(10, 20);
+let ok6 = p.x == 10 and p.y == 20;
+
+// Qualified function taking struct params
+let ok7 = arrstruct_mod::sum_x(arrstruct_mod::pts[0], arrstruct_mod::pts[1]) == 4;
+
+// Instantiate the struct locally using the qualified name
+let q = arrstruct_mod::Vec2{x = 5, y = 6};
+let ok8 = q.x == 5 and q.y == 6;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8;

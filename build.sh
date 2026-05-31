@@ -38,7 +38,10 @@ if [[ "$machine" == "MinGw" ]]; then
 fi
 
 if [[ "$machine" == "Linux" ]]; then
+
+	## ninja works, similar performance as gnu make
 	#generator=(-G 'Ninja')
+
 	export FC=$(which gfortran-11)
 	echo "FC = $FC"
 fi

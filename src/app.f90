@@ -32,6 +32,7 @@ module syntran__app_m
 		integer :: maxerr
 
 		logical :: &
+			chdir            = .false., &
 			command_arg      = .false., &
 			interactive      = .false., &
 			quiet            = .false., &
@@ -221,6 +222,9 @@ function parse_args() result(args)
 		case ("-i", "--interactive")
 			args%interactive = .true.
 
+		case ("--cd")
+			args%chdir = .true.
+
 		case ("--version")
 			args%version = .true.
 
@@ -310,6 +314,7 @@ function parse_args() result(args)
 			//"error messages to <n> [default: "//str(maxerr_def)//"]"
 		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
 		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
+		write(*,*) "    --cd                Resolve the script's relative file paths against its own directory"
 		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 

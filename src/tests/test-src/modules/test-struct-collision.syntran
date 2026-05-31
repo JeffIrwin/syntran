@@ -1,0 +1,18 @@
+// Test combining local struct with imported module struct
+// Verifies no index collision after num_structs fix
+
+struct LocalPoint
+{
+	x: i32,
+	y: i32,
+}
+
+use struct_mod::*;  // Imports Point struct
+
+let local = LocalPoint{x = 1, y = 2};
+let imported = Point{x = 3, y = 4};
+
+// Also test using module functions with local struct
+let p3 = make_point(5, 6);
+
+return local.x + imported.x + p3.x == 9 and local.y == 2 and point_sum(imported) == 7;

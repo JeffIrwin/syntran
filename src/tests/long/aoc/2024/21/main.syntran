@@ -1,7 +1,7 @@
 
-#include("../../utils-2024.syntran");
-#include("../../dict_str.syntran");
-#include("../../dict_i64.syntran");
+use ../../utils_2024::*;
+use ../../dict_str::*;
+use ../../dict_i64::*;
 
 //==============================================================================
 

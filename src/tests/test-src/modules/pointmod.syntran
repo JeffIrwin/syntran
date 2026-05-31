@@ -1,0 +1,10 @@
+// Module with a struct instance variable for testing qualified member access
+
+struct Point
+{
+	x: i32,
+	y: i32,
+}
+
+let origin = Point{x = 0, y = 0};
+let p1 = Point{x = 10, y = 20};

@@ -1,6 +1,6 @@
 
-#include("../../utils-2024.syntran");
-#include("../../dict_i64.syntran");
+use ../../utils_2024;
+
 //HASH_MAX_DICT_I64 = 2048;
 
 //==============================================================================
@@ -171,7 +171,7 @@ fn part2(): i64
 {
 	let sum_ = 0'i64;
 
-	let nmonkey = countln_(filename);
+	let nmonkey = utils_2024::countln_(filename);
 	let prices = [-1; NCHANGES, nmonkey];
 	let diffs  = [-1; NCHANGES, nmonkey];
 

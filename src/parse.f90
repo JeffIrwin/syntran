@@ -40,7 +40,8 @@ module syntran__parse_m
 		type(fns_t) :: fns
 		integer :: num_fns = 0
 		type(string_vector_t) :: fn_names
-		type(string_vector_t) :: var_names  ! track module-level variable names
+		type(string_vector_t) :: var_names    ! track module-level variable names
+		type(string_vector_t) :: struct_names ! track module-level struct names
 
 		type(structs_t) :: structs
 		integer :: num_structs = 0
@@ -60,6 +61,9 @@ module syntran__parse_m
 		integer :: ipass
 
 		logical :: repl
+
+		type(map_i32_t) :: import_stack
+		type(map_i32_t) :: imported_modules
 
 		contains
 			procedure :: &
@@ -142,8 +146,9 @@ module syntran__parse_m
 			type(syntax_node_t) :: decl
 		end function parse_struct_declaration
 
-		recursive module function parse_struct_instance(parser) result(instance)
+		recursive module function parse_struct_instance(parser, struct_name) result(instance)
 			class(parser_t) :: parser
+			character(len = *), intent(in), optional :: struct_name
 			type(syntax_node_t) :: instance
 		end function parse_struct_instance
 

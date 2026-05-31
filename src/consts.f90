@@ -17,11 +17,12 @@ module syntran__consts_m
 
 	! Must be larger than largest token enum below.  TODO: add an init check for
 	! this
-	integer, parameter :: magic = 128
+	integer, parameter :: magic = 256
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			use_statement         = 121, &
 			use_keyword           = 120, &
 			double_colon_token    = 119, &
 			arr_sub               = 118, &
@@ -417,6 +418,7 @@ function kind_name(kind)
 			"arr_sub              ", & ! 118
 			"double_colon_token   ", & ! 119
 			"use_keyword          ", & ! 120
+			"use_statement        ", & ! 121
 			"unknown              "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too

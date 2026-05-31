@@ -1,0 +1,3 @@
+// Test that keywords cannot be used as aliases
+
+use mymath as fn;

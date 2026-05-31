@@ -1,5 +1,5 @@
 
-#include("../../utils-2024.syntran");
+use ../../utils_2024;
 
 //==============================================================================
 
@@ -25,7 +25,7 @@ let DIRS =
 	 ;
 	 2, NDIRS
 ];
-let INSTRS = "<>^v"; // same order as DIRS, crucially for scan() call
+let INSTRS = "<>^v"; // same order as DIRS, crucially for utils_2024::scan() call
 
 fn part1(): i64
 {
@@ -97,7 +97,7 @@ fn part1(): i64
 		let chars0 = chars;
 
 		// Get direction
-		let id = scan(INSTRS, instr);
+		let id = utils_2024::scan(INSTRS, instr);
 		//println("id = ", id);
 
 		let d = DIRS[:,id];
@@ -160,7 +160,7 @@ fn part1(): i64
 fn print_chars(chars: [str; :,:])
 {
 	for y in [0: size(chars, 1)]
-		println(cat_strs(chars[:,y]));
+		println(utils_2024::cat_strs(chars[:,y]));
 	return;
 }
 
@@ -288,7 +288,7 @@ fn part2(): i64
 		//println("instrs[", ii, "]= ", instr);
 
 		// Get direction
-		let id = scan(INSTRS, instr);
+		let id = utils_2024::scan(INSTRS, instr);
 		let d = DIRS[:,id];
 		//println("id = ", id);
 
