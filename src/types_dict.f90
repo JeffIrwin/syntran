@@ -244,7 +244,7 @@ module subroutine push_token(vector, val)
 
 		tmp_cap = 2 * vector%len_
 		allocate(tmp( tmp_cap ))
-		tmp(1: vector%cap) = vector%v
+		if (vector%cap > 0) tmp(1: vector%cap) = vector%v
 
 		call move_alloc(tmp, vector%v)
 		vector%cap = tmp_cap

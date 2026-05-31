@@ -48,10 +48,14 @@ module function new_syntax_token_vector() result(vector)
 
 	type(syntax_token_vector_t) :: vector
 
+	! cap=0 / no pre-allocation: ifort (following the standard) calls value_copy
+	! via defined assignment when copying the vector result, passing uninitialized
+	! v(:)%val as class(value_t) src — which ifort rejects.  gfortran uses a
+	! bitwise copy and never invokes the defined assignment for array components,
+	! so the bug is ifort-only.  Starting unallocated means there is nothing to
+	! copy and value_copy is never called with uninitialized data.
 	vector%len_ = 0
-	vector%cap = 2  ! I think a small default makes sense here
-
-	allocate(vector%v( vector%cap ))
+	vector%cap = 0
 
 end function new_syntax_token_vector
 
