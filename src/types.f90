@@ -47,8 +47,10 @@ module syntran__types_m
 		integer :: intr_id = 0
 
 		contains
+#ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => fn_copy
 			generic, public :: assignment(=) => copy
+#endif
 
 	end type fn_t
 
@@ -63,8 +65,10 @@ module syntran__types_m
 		integer :: id_index
 
 		contains
+#ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => fn_ternary_tree_copy
 			generic, public :: assignment(=) => copy
+#endif
 
 	end type fn_ternary_tree_node_t
 
@@ -202,8 +206,10 @@ module syntran__types_m
 
 		contains
 			!procedure :: print => ternary_node_print
+#ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => ternary_tree_copy
 			generic, public :: assignment(=) => copy
+#endif
 
 	end type ternary_tree_node_t
 
@@ -239,8 +245,10 @@ module syntran__types_m
 				push_scope, pop_scope
 
 			! This is required unfortunately
+#ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => vars_copy
 			generic, public :: assignment(=) => copy
+#endif
 
 	end type vars_t
 
@@ -257,8 +265,10 @@ module syntran__types_m
 
 		contains
 			! This is also required unfortunately
+#ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => struct_copy
 			generic, public :: assignment(=) => copy
+#endif
 
 	end type struct_t
 
@@ -274,8 +284,10 @@ module syntran__types_m
 
 		contains
 			! This is also required unfortunately too
+#ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => struct_ternary_tree_copy
 			generic, public :: assignment(=) => copy
+#endif
 			!final :: struct_ternary_tree_final
 
 	end type struct_ternary_tree_node_t
@@ -322,8 +334,10 @@ module syntran__types_m
 		integer :: len_, cap
 		contains
 			procedure :: push => push_node
+#ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => syntax_node_vector_copy
 			generic, public :: assignment(=) => copy
+#endif
 	end type syntax_node_vector_t
 
 !===============================================================================
