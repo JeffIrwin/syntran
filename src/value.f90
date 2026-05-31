@@ -323,7 +323,7 @@ recursive subroutine value_copy(dst, src)
 	! Args have to be in the confusing dst, src order for overloading
 
 	class(value_t), intent(inout) :: dst
-	class(value_t), intent(in)    :: src
+	type(value_t),  intent(in)    :: src
 
 	!********
 
