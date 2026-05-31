@@ -679,11 +679,11 @@ module syntran__types_m
 			type(syntax_node_t) , intent(out) :: expr
 		end subroutine new_declaration_expr
 
-		module function new_name_expr(identifier, val) result(expr)
+		module subroutine new_name_expr(identifier, val, expr)
 			type(syntax_token_t), intent(in) :: identifier
-			type(value_t) :: val
-			type(syntax_node_t) :: expr
-		end function new_name_expr
+			type(value_t)                    :: val
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_name_expr
 
 		module subroutine new_binary_expr(left, op, right, expr)
 			type(syntax_node_t) , intent(inout) :: left, right
@@ -697,35 +697,35 @@ module syntran__types_m
 			type(syntax_node_t) , intent(out)   :: expr
 		end subroutine new_unary_expr
 
-		module function new_bool(bool) result(expr)
-			logical, intent(in) :: bool
-			type(syntax_node_t) :: expr
-		end function new_bool
+		module subroutine new_bool(bool, expr)
+			logical            , intent(in)  :: bool
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_bool
 
-		module function new_f32(f32) result(expr)
-			real(kind = 4), intent(in) :: f32
-			type(syntax_node_t) :: expr
-		end function new_f32
+		module subroutine new_f32(f32, expr)
+			real(kind = 4)     , intent(in)  :: f32
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_f32
 
-		module function new_f64(f64) result(expr)
-			real(kind = 8), intent(in) :: f64
-			type(syntax_node_t) :: expr
-		end function new_f64
+		module subroutine new_f64(f64, expr)
+			real(kind = 8)     , intent(in)  :: f64
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_f64
 
-		module function new_i32(i32) result(expr)
-			integer(kind = 4), intent(in) :: i32
-			type(syntax_node_t) :: expr
-		end function new_i32
+		module subroutine new_i32(i32, expr)
+			integer(kind = 4)  , intent(in)  :: i32
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_i32
 
-		module function new_i64(i64) result(expr)
-			integer(kind = 8), intent(in) :: i64
-			type(syntax_node_t) :: expr
-		end function new_i64
+		module subroutine new_i64(i64, expr)
+			integer(kind = 8)  , intent(in)  :: i64
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_i64
 
-		module function new_str(str_) result(expr)
-			character(len = *), intent(in) :: str_
-			type(syntax_node_t) :: expr
-		end function new_str
+		module subroutine new_str(str_, expr)
+			character(len = *) , intent(in)  :: str_
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_str
 
 	end interface
 

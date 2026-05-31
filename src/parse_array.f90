@@ -112,7 +112,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 		! [lbound; rows, cols]
 		! [lbound; rows, cols, sheets, ...]
 
-		size_ = parser%parse_size()
+		call parser%parse_size(size_)
 
 		rbracket = parser%match(rbracket_token)
 
@@ -407,7 +407,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 				parser%context(), span, parser%text(lb_beg, lb_end)))
 		end if
 
-		size_ = parser%parse_size()
+		call parser%parse_size(size_)
 
 		rbracket = parser%match(rbracket_token)
 
@@ -668,11 +668,11 @@ end subroutine parse_subscripts
 
 !===============================================================================
 
-module function parse_size(parser) result(size)
+module subroutine parse_size(parser, size)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_vector_t) :: size
+	type(syntax_node_vector_t), intent(out) :: size
 
 	!********
 
@@ -714,7 +714,7 @@ module function parse_size(parser) result(size)
 
 	end do
 
-end function parse_size
+end subroutine parse_size
 
 !===============================================================================
 

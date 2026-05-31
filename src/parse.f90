@@ -164,10 +164,10 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: expr
 		end subroutine parse_array_expr
 
-		module function parse_size(parser) result(size)
+		module subroutine parse_size(parser, size)
 			class(parser_t) :: parser
-			type(syntax_node_vector_t) :: size
-		end function parse_size
+			type(syntax_node_vector_t), intent(out) :: size
+		end subroutine parse_size
 
 		recursive module subroutine parse_subscripts(parser, expr)
 			class(parser_t) :: parser
@@ -294,10 +294,10 @@ module syntran__parse_m
 			type(syntax_token_t) :: token
 		end function match_pre
 
-		module function parse_unit(parser) result(unit)
+		module subroutine parse_unit(parser, unit)
 			class(parser_t) :: parser
-			type(syntax_node_t) :: unit
-		end function parse_unit
+			type(syntax_node_t), intent(out) :: unit
+		end subroutine parse_unit
 
 		recursive module function new_parser(str_, src_file, contexts, unit_) result(parser)
 			character(len = *), intent(in) :: str_, src_file

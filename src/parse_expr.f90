@@ -554,7 +554,7 @@ recursive module subroutine parse_primary_expr(parser, expr)
 
 			keyword = parser%next()
 			bool = keyword%kind == true_keyword
-			expr = new_bool(bool)
+			call new_bool(bool, expr)
 
 			!print *, 'expr%val%sca%bool = ', expr%val%sca%bool
 
@@ -618,27 +618,27 @@ recursive module subroutine parse_primary_expr(parser, expr)
 		case (f32_token)
 
 			token = parser%match(f32_token)
-			expr  = new_f32(token%val%sca%f32)
+			call new_f32(token%val%sca%f32, expr)
 
 		case (f64_token)
 
 			token = parser%match(f64_token)
-			expr  = new_f64(token%val%sca%f64)
+			call new_f64(token%val%sca%f64, expr)
 
 		case (str_token)
 
 			token = parser%match(str_token)
-			expr  = new_str(token%val%str%s)
+			call new_str(token%val%str%s, expr)
 
 		case (i64_token)
 
 			token = parser%match(i64_token)
-			expr  = new_i64(token%val%sca%i64)
+			call new_i64(token%val%sca%i64, expr)
 
 		case default
 
 			token = parser%match(i32_token)
-			expr  = new_i32(token%val%sca%i32)
+			call new_i32(token%val%sca%i32, expr)
 
 			if (debug > 1) print *, 'token = ', expr%val%to_str()
 
@@ -677,12 +677,12 @@ recursive module subroutine parse_name_expr(parser, expr)
 	end if
 
 	if (parser%is_loc .and. io == 0) then
-		expr = new_name_expr(identifier, var)
+		call new_name_expr(identifier, var, expr)
 		expr%id_index = id_index
 		expr%is_loc = .true.
 	else
 		call parser%vars%search(identifier%text, id_index, io, var)
-		expr = new_name_expr(identifier, var)
+		call new_name_expr(identifier, var, expr)
 		expr%id_index = id_index
 		expr%is_loc = .false.
 

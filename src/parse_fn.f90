@@ -456,7 +456,7 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 			return
 		end if
 
-		expr = new_name_expr(fn_identifier, var_val)
+		call new_name_expr(fn_identifier, var_val, expr)
 		expr%id_index = id_index
 		expr%module_prefix = module_name
 

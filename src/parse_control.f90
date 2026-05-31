@@ -397,7 +397,7 @@ module subroutine parse_use_statement(parser, statement)
 	mod_parser%num_structs = parser%num_structs
 
 	! Parse the module
-	mod_unit = mod_parser%parse_unit()
+	call mod_parser%parse_unit(mod_unit)
 
 	! Update parent's variable, function, and struct counts to include module definitions
 	parser%num_vars = mod_parser%num_vars

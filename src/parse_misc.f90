@@ -346,11 +346,11 @@ end function match_pre
 
 !===============================================================================
 
-module function parse_unit(parser) result(unit)
+module subroutine parse_unit(parser, unit)
 
 	class(parser_t) :: parser
 
-	type(syntax_node_t) :: unit
+	type(syntax_node_t), intent(out) :: unit
 
 	!********
 
@@ -496,7 +496,7 @@ module function parse_unit(parser) result(unit)
 	! Eof is matched in the caller syntax_parse() to deal with broken stdin
 	! lines with interactive interpretation
 
-end function parse_unit
+end subroutine parse_unit
 
 !===============================================================================
 
