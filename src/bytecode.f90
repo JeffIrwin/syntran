@@ -109,6 +109,40 @@ module syntran__bytecode_m
 		OP_STORE_GLOBAL_I32  = 1105, OP_STORE_GLOBAL_I64 = 1106, &
 		OP_STORE_GLOBAL_F32  = 1107, OP_STORE_GLOBAL_F64 = 1108
 
+	!**** Typed scalar opcodes (Stage 3) -------------------------------------------
+
+	! Power: same as arithmetic opcodes — left=TOS-1, right=TOS; result=TOS-1, len_--.
+	! Semantics match math_bin_pow.f90 same-type scalar cases.
+	integer, parameter :: &
+		OP_POW_I32 = 1109, OP_POW_I64 = 1110, &
+		OP_POW_F32 = 1111, OP_POW_F64 = 1112
+
+	! Mixed i32/i64 scalar arithmetic: result type is i64.
+	! Naming: OP_<OP>_<LTYPE>_<RTYPE>.  TOS-1 type updated to i64_type.
+	integer, parameter :: &
+		OP_ADD_I32_I64 = 1113, OP_ADD_I64_I32 = 1114, &
+		OP_SUB_I32_I64 = 1115, OP_SUB_I64_I32 = 1116, &
+		OP_MUL_I32_I64 = 1117, OP_MUL_I64_I32 = 1118, &
+		OP_DIV_I32_I64 = 1119, OP_DIV_I64_I32 = 1120, &
+		OP_MOD_I32_I64 = 1121, OP_MOD_I64_I32 = 1122
+
+	! Mixed i32/i64 scalar comparisons: result type is bool.
+	! TOS-1 type updated to bool_type, len_--.
+	integer, parameter :: &
+		OP_LT_I32_I64  = 1123, OP_LT_I64_I32  = 1124, &
+		OP_LE_I32_I64  = 1125, OP_LE_I64_I32  = 1126, &
+		OP_GT_I32_I64  = 1127, OP_GT_I64_I32  = 1128, &
+		OP_GE_I32_I64  = 1129, OP_GE_I64_I32  = 1130, &
+		OP_EQ_I32_I64  = 1131, OP_EQ_I64_I32  = 1132, &
+		OP_NE_I32_I64  = 1133, OP_NE_I64_I32  = 1134
+
+	! Same-type array binop: a = op_kind (token), b = element type.
+	! Dispatches to do_array_binop_typed for i32/i64/f32/f64 arrays.
+	! Arithmetic: result type is array of same elem type.
+	! Comparisons: result type is bool array.
+	integer, parameter :: &
+		OP_ARR_BINOP = 1135
+
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
 	! Math
@@ -565,92 +599,142 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 	integer, intent(in) :: op_kind, ltype, rtype
 
 	op = 0
-	if (ltype /= rtype) return
+
+	! --- Fast path: same-type scalars ---
+	if (ltype == rtype) then
+		select case (op_kind)
+		case (plus_token)
+			select case (ltype)
+			case (i32_type); op = OP_ADD_I32
+			case (i64_type); op = OP_ADD_I64
+			case (f32_type); op = OP_ADD_F32
+			case (f64_type); op = OP_ADD_F64
+			end select
+		case (minus_token)
+			select case (ltype)
+			case (i32_type); op = OP_SUB_I32
+			case (i64_type); op = OP_SUB_I64
+			case (f32_type); op = OP_SUB_F32
+			case (f64_type); op = OP_SUB_F64
+			end select
+		case (star_token)
+			select case (ltype)
+			case (i32_type); op = OP_MUL_I32
+			case (i64_type); op = OP_MUL_I64
+			case (f32_type); op = OP_MUL_F32
+			case (f64_type); op = OP_MUL_F64
+			end select
+		case (slash_token)
+			select case (ltype)
+			case (i32_type); op = OP_DIV_I32
+			case (i64_type); op = OP_DIV_I64
+			case (f32_type); op = OP_DIV_F32
+			case (f64_type); op = OP_DIV_F64
+			end select
+		case (percent_token)
+			select case (ltype)
+			case (i32_type); op = OP_MOD_I32
+			case (i64_type); op = OP_MOD_I64
+			case (f32_type); op = OP_MOD_F32
+			case (f64_type); op = OP_MOD_F64
+			end select
+		case (sstar_token)
+			select case (ltype)
+			case (i32_type); op = OP_POW_I32
+			case (i64_type); op = OP_POW_I64
+			case (f32_type); op = OP_POW_F32
+			case (f64_type); op = OP_POW_F64
+			end select
+		case (less_token)
+			select case (ltype)
+			case (i32_type); op = OP_LT_I32
+			case (i64_type); op = OP_LT_I64
+			case (f32_type); op = OP_LT_F32
+			case (f64_type); op = OP_LT_F64
+			end select
+		case (less_equals_token)
+			select case (ltype)
+			case (i32_type); op = OP_LE_I32
+			case (i64_type); op = OP_LE_I64
+			case (f32_type); op = OP_LE_F32
+			case (f64_type); op = OP_LE_F64
+			end select
+		case (greater_token)
+			select case (ltype)
+			case (i32_type); op = OP_GT_I32
+			case (i64_type); op = OP_GT_I64
+			case (f32_type); op = OP_GT_F32
+			case (f64_type); op = OP_GT_F64
+			end select
+		case (greater_equals_token)
+			select case (ltype)
+			case (i32_type); op = OP_GE_I32
+			case (i64_type); op = OP_GE_I64
+			case (f32_type); op = OP_GE_F32
+			case (f64_type); op = OP_GE_F64
+			end select
+		case (eequals_token)
+			select case (ltype)
+			case (i32_type); op = OP_EQ_I32
+			case (i64_type); op = OP_EQ_I64
+			case (f32_type); op = OP_EQ_F32
+			case (f64_type); op = OP_EQ_F64
+			case (bool_type); op = OP_EQ_BOOL
+			end select
+		case (bang_equals_token)
+			select case (ltype)
+			case (i32_type); op = OP_NE_I32
+			case (i64_type); op = OP_NE_I64
+			case (f32_type); op = OP_NE_F32
+			case (f64_type); op = OP_NE_F64
+			case (bool_type); op = OP_NE_BOOL
+			end select
+		case (and_keyword)
+			if (ltype == bool_type) op = OP_AND_BOOL
+		case (or_keyword)
+			if (ltype == bool_type) op = OP_OR_BOOL
+		end select
+		return
+	end if
+
+	! --- Mixed i32/i64: result is i64 (arithmetic) or bool (comparisons) ---
+	if (.not. ((ltype == i32_type .and. rtype == i64_type) .or. &
+	           (ltype == i64_type .and. rtype == i32_type))) return
 
 	select case (op_kind)
 	case (plus_token)
-		select case (ltype)
-		case (i32_type); op = OP_ADD_I32
-		case (i64_type); op = OP_ADD_I64
-		case (f32_type); op = OP_ADD_F32
-		case (f64_type); op = OP_ADD_F64
-		end select
+		if (ltype == i32_type) then; op = OP_ADD_I32_I64
+		else;                         op = OP_ADD_I64_I32; end if
 	case (minus_token)
-		select case (ltype)
-		case (i32_type); op = OP_SUB_I32
-		case (i64_type); op = OP_SUB_I64
-		case (f32_type); op = OP_SUB_F32
-		case (f64_type); op = OP_SUB_F64
-		end select
+		if (ltype == i32_type) then; op = OP_SUB_I32_I64
+		else;                         op = OP_SUB_I64_I32; end if
 	case (star_token)
-		select case (ltype)
-		case (i32_type); op = OP_MUL_I32
-		case (i64_type); op = OP_MUL_I64
-		case (f32_type); op = OP_MUL_F32
-		case (f64_type); op = OP_MUL_F64
-		end select
+		if (ltype == i32_type) then; op = OP_MUL_I32_I64
+		else;                         op = OP_MUL_I64_I32; end if
 	case (slash_token)
-		select case (ltype)
-		case (i32_type); op = OP_DIV_I32
-		case (i64_type); op = OP_DIV_I64
-		case (f32_type); op = OP_DIV_F32
-		case (f64_type); op = OP_DIV_F64
-		end select
+		if (ltype == i32_type) then; op = OP_DIV_I32_I64
+		else;                         op = OP_DIV_I64_I32; end if
 	case (percent_token)
-		select case (ltype)
-		case (i32_type); op = OP_MOD_I32
-		case (i64_type); op = OP_MOD_I64
-		case (f32_type); op = OP_MOD_F32
-		case (f64_type); op = OP_MOD_F64
-		end select
+		if (ltype == i32_type) then; op = OP_MOD_I32_I64
+		else;                         op = OP_MOD_I64_I32; end if
 	case (less_token)
-		select case (ltype)
-		case (i32_type); op = OP_LT_I32
-		case (i64_type); op = OP_LT_I64
-		case (f32_type); op = OP_LT_F32
-		case (f64_type); op = OP_LT_F64
-		end select
+		if (ltype == i32_type) then; op = OP_LT_I32_I64
+		else;                         op = OP_LT_I64_I32; end if
 	case (less_equals_token)
-		select case (ltype)
-		case (i32_type); op = OP_LE_I32
-		case (i64_type); op = OP_LE_I64
-		case (f32_type); op = OP_LE_F32
-		case (f64_type); op = OP_LE_F64
-		end select
+		if (ltype == i32_type) then; op = OP_LE_I32_I64
+		else;                         op = OP_LE_I64_I32; end if
 	case (greater_token)
-		select case (ltype)
-		case (i32_type); op = OP_GT_I32
-		case (i64_type); op = OP_GT_I64
-		case (f32_type); op = OP_GT_F32
-		case (f64_type); op = OP_GT_F64
-		end select
+		if (ltype == i32_type) then; op = OP_GT_I32_I64
+		else;                         op = OP_GT_I64_I32; end if
 	case (greater_equals_token)
-		select case (ltype)
-		case (i32_type); op = OP_GE_I32
-		case (i64_type); op = OP_GE_I64
-		case (f32_type); op = OP_GE_F32
-		case (f64_type); op = OP_GE_F64
-		end select
+		if (ltype == i32_type) then; op = OP_GE_I32_I64
+		else;                         op = OP_GE_I64_I32; end if
 	case (eequals_token)
-		select case (ltype)
-		case (i32_type); op = OP_EQ_I32
-		case (i64_type); op = OP_EQ_I64
-		case (f32_type); op = OP_EQ_F32
-		case (f64_type); op = OP_EQ_F64
-		case (bool_type); op = OP_EQ_BOOL
-		end select
+		if (ltype == i32_type) then; op = OP_EQ_I32_I64
+		else;                         op = OP_EQ_I64_I32; end if
 	case (bang_equals_token)
-		select case (ltype)
-		case (i32_type); op = OP_NE_I32
-		case (i64_type); op = OP_NE_I64
-		case (f32_type); op = OP_NE_F32
-		case (f64_type); op = OP_NE_F64
-		case (bool_type); op = OP_NE_BOOL
-		end select
-	case (and_keyword)
-		if (ltype == bool_type) op = OP_AND_BOOL
-	case (or_keyword)
-		if (ltype == bool_type) op = OP_OR_BOOL
+		if (ltype == i32_type) then; op = OP_NE_I32_I64
+		else;                         op = OP_NE_I64_I32; end if
 	end select
 
 end function binop_typed_opcode
@@ -683,6 +767,35 @@ pure integer function unop_typed_opcode(op_kind, type_) result(op)
 	end select
 
 end function unop_typed_opcode
+
+!===============================================================================
+
+pure integer function arr_binop_typed_opcode(op_kind, elem_type) result(op)
+
+	! Return OP_ARR_BINOP when op_kind is a supported binary operation on
+	! same-type numeric arrays (i32/i64/f32/f64), or 0 to fall back to OP_BINOP.
+	! The caller is responsible for checking that both operands are array_type
+	! and that their element types are equal.
+
+	integer, intent(in) :: op_kind, elem_type
+
+	op = 0
+
+	! Only numeric element types
+	select case (elem_type)
+	case (i32_type, i64_type, f32_type, f64_type); continue
+	case default; return
+	end select
+
+	! Only the operators handled by do_array_binop_typed in the VM
+	select case (op_kind)
+	case (plus_token, minus_token, star_token, slash_token, percent_token, &
+	      less_token, less_equals_token, greater_token, greater_equals_token, &
+	      eequals_token, bang_equals_token)
+		op = OP_ARR_BINOP
+	end select
+
+end function arr_binop_typed_opcode
 
 !===============================================================================
 

@@ -244,7 +244,8 @@ recursive subroutine compile_node(prog, node)
 	case (binary_expr)
 		call compile_node(prog, node%left )
 		call compile_node(prog, node%right)
-		! Same-type scalar: emit typed opcode (no value_move / get_binary_op_kind).
+		! Same-type scalar or mixed i32/i64: emit typed opcode.
+		! Same-type numeric arrays: emit OP_ARR_BINOP (a=op_kind, b=elem_type).
 		! Otherwise emit generic OP_BINOP with pre-computed result type in instr%b
 		! so the VM can skip get_binary_op_kind at runtime.
 		typed_op = binop_typed_opcode(node%op%kind, &
@@ -252,7 +253,24 @@ recursive subroutine compile_node(prog, node)
 		if (typed_op /= 0) then
 			call emit(prog, typed_op)
 		else
-			call emit(prog, OP_BINOP, a = node%op%kind, b = node%val%type)
+			! Check for same-type numeric array ⊕ array.  Use nested ifs so the
+			! %array%type access is guarded by the allocated() checks — gfortran
+			! at -O0 does not short-circuit .and. chains in else-if conditions.
+			if (node%left%val%type == array_type .and. &
+			    node%right%val%type == array_type) then
+				if (allocated(node%left%val%array) .and. &
+				    allocated(node%right%val%array)) then
+					if (node%left%val%array%type == node%right%val%array%type) then
+						typed_op = arr_binop_typed_opcode(node%op%kind, &
+							node%left%val%array%type)
+						if (typed_op /= 0) &
+							call emit(prog, typed_op, &
+								a = node%op%kind, b = node%left%val%array%type)
+					end if
+				end if
+			end if
+			if (typed_op == 0) &
+				call emit(prog, OP_BINOP, a = node%op%kind, b = node%val%type)
 		end if
 
 	case (unary_expr)

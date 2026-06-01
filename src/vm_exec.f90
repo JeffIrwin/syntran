@@ -228,6 +228,121 @@ end subroutine do_binop
 
 !===============================================================================
 
+subroutine do_array_binop_typed(left, right, op_kind, elem_type, res)
+
+	! Fast-path for same-type numeric array ⊕ array operations emitted as
+	! OP_ARR_BINOP.  Inlines the array kernels from the math/bool routines,
+	! avoiding the magic-dispatch and subroutine-call overhead of do_binop.
+	!
+	! op_kind : token kind (plus_token, minus_token, …, bang_equals_token)
+	! elem_type: i32_type | i64_type | f32_type | f64_type  (same for both operands)
+
+	type(value_t), intent(inout) :: left, right
+	integer, intent(in) :: op_kind, elem_type
+	type(value_t), intent(out) :: res
+
+	res%type = array_type
+
+	select case (op_kind)
+
+	! --- Arithmetic: result element type == operand element type ---
+	case (plus_token)
+		res%array = mold(left%array, elem_type)
+		select case (elem_type)
+		case (i32_type); res%array%i32 = left%array%i32 + right%array%i32
+		case (i64_type); res%array%i64 = left%array%i64 + right%array%i64
+		case (f32_type); res%array%f32 = left%array%f32 + right%array%f32
+		case (f64_type); res%array%f64 = left%array%f64 + right%array%f64
+		end select
+	case (minus_token)
+		res%array = mold(left%array, elem_type)
+		select case (elem_type)
+		case (i32_type); res%array%i32 = left%array%i32 - right%array%i32
+		case (i64_type); res%array%i64 = left%array%i64 - right%array%i64
+		case (f32_type); res%array%f32 = left%array%f32 - right%array%f32
+		case (f64_type); res%array%f64 = left%array%f64 - right%array%f64
+		end select
+	case (star_token)
+		res%array = mold(left%array, elem_type)
+		select case (elem_type)
+		case (i32_type); res%array%i32 = left%array%i32 * right%array%i32
+		case (i64_type); res%array%i64 = left%array%i64 * right%array%i64
+		case (f32_type); res%array%f32 = left%array%f32 * right%array%f32
+		case (f64_type); res%array%f64 = left%array%f64 * right%array%f64
+		end select
+	case (slash_token)
+		res%array = mold(left%array, elem_type)
+		select case (elem_type)
+		case (i32_type); res%array%i32 = left%array%i32 / right%array%i32
+		case (i64_type); res%array%i64 = left%array%i64 / right%array%i64
+		case (f32_type); res%array%f32 = left%array%f32 / right%array%f32
+		case (f64_type); res%array%f64 = left%array%f64 / right%array%f64
+		end select
+	case (percent_token)
+		res%array = mold(left%array, elem_type)
+		select case (elem_type)
+		case (i32_type); res%array%i32 = mod(left%array%i32, right%array%i32)
+		case (i64_type); res%array%i64 = mod(left%array%i64, right%array%i64)
+		case (f32_type); res%array%f32 = mod(left%array%f32, right%array%f32)
+		case (f64_type); res%array%f64 = mod(left%array%f64, right%array%f64)
+		end select
+
+	! --- Comparisons: result is a bool array ---
+	case (less_token)
+		res%array = mold(left%array, bool_type)
+		select case (elem_type)
+		case (i32_type); res%array%bool = left%array%i32 < right%array%i32
+		case (i64_type); res%array%bool = left%array%i64 < right%array%i64
+		case (f32_type); res%array%bool = left%array%f32 < right%array%f32
+		case (f64_type); res%array%bool = left%array%f64 < right%array%f64
+		end select
+	case (less_equals_token)
+		res%array = mold(left%array, bool_type)
+		select case (elem_type)
+		case (i32_type); res%array%bool = left%array%i32 <= right%array%i32
+		case (i64_type); res%array%bool = left%array%i64 <= right%array%i64
+		case (f32_type); res%array%bool = left%array%f32 <= right%array%f32
+		case (f64_type); res%array%bool = left%array%f64 <= right%array%f64
+		end select
+	case (greater_token)
+		res%array = mold(left%array, bool_type)
+		select case (elem_type)
+		case (i32_type); res%array%bool = left%array%i32 > right%array%i32
+		case (i64_type); res%array%bool = left%array%i64 > right%array%i64
+		case (f32_type); res%array%bool = left%array%f32 > right%array%f32
+		case (f64_type); res%array%bool = left%array%f64 > right%array%f64
+		end select
+	case (greater_equals_token)
+		res%array = mold(left%array, bool_type)
+		select case (elem_type)
+		case (i32_type); res%array%bool = left%array%i32 >= right%array%i32
+		case (i64_type); res%array%bool = left%array%i64 >= right%array%i64
+		case (f32_type); res%array%bool = left%array%f32 >= right%array%f32
+		case (f64_type); res%array%bool = left%array%f64 >= right%array%f64
+		end select
+	case (eequals_token)
+		res%array = mold(left%array, bool_type)
+		select case (elem_type)
+		case (i32_type); res%array%bool = left%array%i32 == right%array%i32
+		case (i64_type); res%array%bool = left%array%i64 == right%array%i64
+		case (f32_type); res%array%bool = left%array%f32 == right%array%f32
+		case (f64_type); res%array%bool = left%array%f64 == right%array%f64
+		end select
+	case (bang_equals_token)
+		res%array = mold(left%array, bool_type)
+		select case (elem_type)
+		case (i32_type); res%array%bool = left%array%i32 /= right%array%i32
+		case (i64_type); res%array%bool = left%array%i64 /= right%array%i64
+		case (f32_type); res%array%bool = left%array%f32 /= right%array%f32
+		case (f64_type); res%array%bool = left%array%f64 /= right%array%f64
+		end select
+
+	end select
+
+end subroutine do_array_binop_typed
+
+!===============================================================================
+
 subroutine do_unop(right, op_kind, res)
 
 	! Compute a unary operation, mirroring eval_unary_expr.
@@ -1031,6 +1146,144 @@ module subroutine vm_run(prog, state, res)
 			stack%v(stack%len_-1)%sca%f64 = mod(stack%v(stack%len_-1)%sca%f64, &
 			                                     stack%v(stack%len_  )%sca%f64)
 			stack%len_ = stack%len_ - 1
+
+		! Power: same layout as arithmetic (result same type, left=TOS-1, right=TOS).
+		! Semantics match math_bin_pow.f90 same-type scalar cases.
+		case (OP_POW_I32)
+			stack%v(stack%len_-1)%sca%i32 = stack%v(stack%len_-1)%sca%i32 &
+			                              ** stack%v(stack%len_  )%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_POW_I64)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i64 &
+			                              ** stack%v(stack%len_  )%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_POW_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 &
+			                              ** stack%v(stack%len_  )%sca%f32
+			stack%len_ = stack%len_ - 1
+		case (OP_POW_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 &
+			                              ** stack%v(stack%len_  )%sca%f64
+			stack%len_ = stack%len_ - 1
+
+		! Mixed i32/i64 arithmetic: result is i64. TOS-1 type updated to i64_type.
+		! OP_<OP>_I32_I64: left=i32 (TOS-1), right=i64 (TOS).
+		! OP_<OP>_I64_I32: left=i64 (TOS-1), right=i32 (TOS).
+		case (OP_ADD_I32_I64)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i32 &
+			                              + stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = i64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_ADD_I64_I32)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i64 &
+			                              + stack%v(stack%len_  )%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_I32_I64)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i32 &
+			                              - stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = i64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_I64_I32)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i64 &
+			                              - stack%v(stack%len_  )%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_I32_I64)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i32 &
+			                              * stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = i64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_I64_I32)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i64 &
+			                              * stack%v(stack%len_  )%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_I32_I64)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i32 &
+			                              / stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = i64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_I64_I32)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i64 &
+			                              / stack%v(stack%len_  )%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_I32_I64)
+			stack%v(stack%len_-1)%sca%i64 = mod(int(stack%v(stack%len_-1)%sca%i32, 8), &
+			                                     stack%v(stack%len_  )%sca%i64)
+			stack%v(stack%len_-1)%type = i64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_I64_I32)
+			stack%v(stack%len_-1)%sca%i64 = mod(stack%v(stack%len_-1)%sca%i64, &
+			                                     int(stack%v(stack%len_  )%sca%i32, 8))
+			stack%len_ = stack%len_ - 1
+
+		! Mixed i32/i64 comparisons: result is bool. TOS-1 type updated to bool_type.
+		case (OP_LT_I32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                               < stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LT_I64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                               < stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LE_I32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                              <= stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LE_I64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                              <= stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_GT_I32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                               > stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_GT_I64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                               > stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_GE_I32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                              >= stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_GE_I64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                              >= stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_EQ_I32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                              == stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_EQ_I64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                              == stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_NE_I32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                              /= stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_NE_I64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                              /= stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+
+		! Same-type numeric array binop: a=op_kind (token), b=element type.
+		! Dispatches to do_array_binop_typed (inlined array kernels).
+		case (OP_ARR_BINOP)
+			call vm_pop_copy(stack, right)
+			call vm_pop_copy(stack, left)
+			call do_array_binop_typed(left, right, instr%a, instr%b, val)
+			call vm_push_move(stack, val)
 
 		! Comparisons: result type is bool; TOS-1 type updated to bool_type.
 		case (OP_LT_I32)
