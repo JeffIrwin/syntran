@@ -43,6 +43,72 @@ module syntran__bytecode_m
 		OP_STORE_SLICE      = 1027, &	! M8: slice/complex LHS assign: a=node_idx; calls eval_assignment_expr
 		OP_HALT             = 1028  	! M8: top-level return: exit VM loop, TOS is result
 
+	!**** Typed scalar opcodes (Stage 2) -------------------------------------------
+	! Each typed opcode operates in-place on TOS / TOS-1, avoiding value_move and
+	! get_binary_op_kind overhead.  Only same-type scalar combinations are covered;
+	! mixed types and array/string ops fall back to the generic OP_BINOP/UNOP.
+	!
+	! Arithmetic (arith): left=TOS-1, right=TOS; result written to TOS-1, len_--.
+	! Same result type as both operands.
+	integer, parameter :: &
+		OP_ADD_I32 = 1029, OP_ADD_I64 = 1030, OP_ADD_F32 = 1031, OP_ADD_F64 = 1032, &
+		OP_SUB_I32 = 1033, OP_SUB_I64 = 1034, OP_SUB_F32 = 1035, OP_SUB_F64 = 1036, &
+		OP_MUL_I32 = 1037, OP_MUL_I64 = 1038, OP_MUL_F32 = 1039, OP_MUL_F64 = 1040, &
+		OP_DIV_I32 = 1041, OP_DIV_I64 = 1042, OP_DIV_F32 = 1043, OP_DIV_F64 = 1044, &
+		OP_MOD_I32 = 1045, OP_MOD_I64 = 1046, OP_MOD_F32 = 1047, OP_MOD_F64 = 1048
+
+	! Comparisons: result type is bool_type; updates TOS-1%type = bool_type.
+	integer, parameter :: &
+		OP_LT_I32  = 1049, OP_LT_I64  = 1050, OP_LT_F32  = 1051, OP_LT_F64  = 1052, &
+		OP_LE_I32  = 1053, OP_LE_I64  = 1054, OP_LE_F32  = 1055, OP_LE_F64  = 1056, &
+		OP_GT_I32  = 1057, OP_GT_I64  = 1058, OP_GT_F32  = 1059, OP_GT_F64  = 1060, &
+		OP_GE_I32  = 1061, OP_GE_I64  = 1062, OP_GE_F32  = 1063, OP_GE_F64  = 1064, &
+		OP_EQ_I32  = 1065, OP_EQ_I64  = 1066, OP_EQ_F32  = 1067, OP_EQ_F64  = 1068, &
+		OP_EQ_BOOL = 1069, &
+		OP_NE_I32  = 1070, OP_NE_I64  = 1071, OP_NE_F32  = 1072, OP_NE_F64  = 1073, &
+		OP_NE_BOOL = 1074
+
+	! Bool binary: left=TOS-1, right=TOS; result written to TOS-1 (bool), len_--.
+	integer, parameter :: &
+		OP_AND_BOOL = 1075, &
+		OP_OR_BOOL  = 1076
+
+	! Unary: operand=TOS; result written to TOS in-place (no pop).
+	integer, parameter :: &
+		OP_NEG_I32  = 1077, OP_NEG_I64  = 1078, OP_NEG_F32 = 1079, OP_NEG_F64 = 1080, &
+		OP_NOT_BOOL = 1081, &
+		OP_BNOT_I32 = 1082, OP_BNOT_I64 = 1083
+
+	! Typed scalar loads: push a scalar onto the stack without value_copy overhead.
+	!   LOAD_CONST_BOOL:  a = 0 (false) or 1 (true)
+	!   LOAD_CONST_I32:   a = i32 value directly (no const pool)
+	!   LOAD_CONST_I64:   c = i64 value directly (no const pool)
+	!   LOAD_CONST_F32:   a = transfer(f32, 0) — bit pattern as integer
+	!   LOAD_CONST_F64:   c = transfer(f64, 0_8) — bit pattern as integer(8)
+	!   LOAD_LOCAL/GLOBAL_*: a = slot index (same as generic LOAD_LOCAL/GLOBAL)
+	integer, parameter :: &
+		OP_LOAD_CONST_BOOL  = 1084, &
+		OP_LOAD_CONST_I32   = 1085, OP_LOAD_CONST_I64  = 1086, &
+		OP_LOAD_CONST_F32   = 1087, OP_LOAD_CONST_F64  = 1088, &
+		OP_LOAD_LOCAL_BOOL  = 1089, &
+		OP_LOAD_LOCAL_I32   = 1090, OP_LOAD_LOCAL_I64  = 1091, &
+		OP_LOAD_LOCAL_F32   = 1092, OP_LOAD_LOCAL_F64  = 1093, &
+		OP_LOAD_GLOBAL_BOOL = 1094, &
+		OP_LOAD_GLOBAL_I32  = 1095, OP_LOAD_GLOBAL_I64 = 1096, &
+		OP_LOAD_GLOBAL_F32  = 1097, OP_LOAD_GLOBAL_F64 = 1098
+
+	! Typed scalar stores: write TOS into variable slot without assign_ overhead.
+	! Keep TOS (consistent with generic OP_STORE_LOCAL/GLOBAL).
+	! Sets both %type and %sca%*.  Safe because the compiler only emits these when
+	! the static RHS type matches the variable type.
+	integer, parameter :: &
+		OP_STORE_LOCAL_BOOL  = 1099, &
+		OP_STORE_LOCAL_I32   = 1100, OP_STORE_LOCAL_I64  = 1101, &
+		OP_STORE_LOCAL_F32   = 1102, OP_STORE_LOCAL_F64  = 1103, &
+		OP_STORE_GLOBAL_BOOL = 1104, &
+		OP_STORE_GLOBAL_I32  = 1105, OP_STORE_GLOBAL_I64 = 1106, &
+		OP_STORE_GLOBAL_F32  = 1107, OP_STORE_GLOBAL_F64 = 1108
+
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
 	! Math
@@ -488,6 +554,200 @@ pure integer function intr_id_from_name(name) result(id)
 	end select
 
 end function intr_id_from_name
+
+!===============================================================================
+
+pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
+
+	! Return the typed scalar opcode for a binary operation on two same-type
+	! scalar operands, or 0 if not specializable (mixed types, arrays, etc.).
+
+	integer, intent(in) :: op_kind, ltype, rtype
+
+	op = 0
+	if (ltype /= rtype) return
+
+	select case (op_kind)
+	case (plus_token)
+		select case (ltype)
+		case (i32_type); op = OP_ADD_I32
+		case (i64_type); op = OP_ADD_I64
+		case (f32_type); op = OP_ADD_F32
+		case (f64_type); op = OP_ADD_F64
+		end select
+	case (minus_token)
+		select case (ltype)
+		case (i32_type); op = OP_SUB_I32
+		case (i64_type); op = OP_SUB_I64
+		case (f32_type); op = OP_SUB_F32
+		case (f64_type); op = OP_SUB_F64
+		end select
+	case (star_token)
+		select case (ltype)
+		case (i32_type); op = OP_MUL_I32
+		case (i64_type); op = OP_MUL_I64
+		case (f32_type); op = OP_MUL_F32
+		case (f64_type); op = OP_MUL_F64
+		end select
+	case (slash_token)
+		select case (ltype)
+		case (i32_type); op = OP_DIV_I32
+		case (i64_type); op = OP_DIV_I64
+		case (f32_type); op = OP_DIV_F32
+		case (f64_type); op = OP_DIV_F64
+		end select
+	case (percent_token)
+		select case (ltype)
+		case (i32_type); op = OP_MOD_I32
+		case (i64_type); op = OP_MOD_I64
+		case (f32_type); op = OP_MOD_F32
+		case (f64_type); op = OP_MOD_F64
+		end select
+	case (less_token)
+		select case (ltype)
+		case (i32_type); op = OP_LT_I32
+		case (i64_type); op = OP_LT_I64
+		case (f32_type); op = OP_LT_F32
+		case (f64_type); op = OP_LT_F64
+		end select
+	case (less_equals_token)
+		select case (ltype)
+		case (i32_type); op = OP_LE_I32
+		case (i64_type); op = OP_LE_I64
+		case (f32_type); op = OP_LE_F32
+		case (f64_type); op = OP_LE_F64
+		end select
+	case (greater_token)
+		select case (ltype)
+		case (i32_type); op = OP_GT_I32
+		case (i64_type); op = OP_GT_I64
+		case (f32_type); op = OP_GT_F32
+		case (f64_type); op = OP_GT_F64
+		end select
+	case (greater_equals_token)
+		select case (ltype)
+		case (i32_type); op = OP_GE_I32
+		case (i64_type); op = OP_GE_I64
+		case (f32_type); op = OP_GE_F32
+		case (f64_type); op = OP_GE_F64
+		end select
+	case (eequals_token)
+		select case (ltype)
+		case (i32_type); op = OP_EQ_I32
+		case (i64_type); op = OP_EQ_I64
+		case (f32_type); op = OP_EQ_F32
+		case (f64_type); op = OP_EQ_F64
+		case (bool_type); op = OP_EQ_BOOL
+		end select
+	case (bang_equals_token)
+		select case (ltype)
+		case (i32_type); op = OP_NE_I32
+		case (i64_type); op = OP_NE_I64
+		case (f32_type); op = OP_NE_F32
+		case (f64_type); op = OP_NE_F64
+		case (bool_type); op = OP_NE_BOOL
+		end select
+	case (and_keyword)
+		if (ltype == bool_type) op = OP_AND_BOOL
+	case (or_keyword)
+		if (ltype == bool_type) op = OP_OR_BOOL
+	end select
+
+end function binop_typed_opcode
+
+!===============================================================================
+
+pure integer function unop_typed_opcode(op_kind, type_) result(op)
+
+	! Return the typed scalar opcode for a unary operation, or 0 if not
+	! specializable.
+
+	integer, intent(in) :: op_kind, type_
+
+	op = 0
+	select case (op_kind)
+	case (minus_token)
+		select case (type_)
+		case (i32_type); op = OP_NEG_I32
+		case (i64_type); op = OP_NEG_I64
+		case (f32_type); op = OP_NEG_F32
+		case (f64_type); op = OP_NEG_F64
+		end select
+	case (not_keyword)
+		if (type_ == bool_type) op = OP_NOT_BOOL
+	case (bang_token)
+		select case (type_)
+		case (i32_type); op = OP_BNOT_I32
+		case (i64_type); op = OP_BNOT_I64
+		end select
+	end select
+
+end function unop_typed_opcode
+
+!===============================================================================
+
+pure integer function typed_load_op(type_, is_const, is_local) result(op)
+
+	! Return the typed scalar load opcode, or 0 for non-scalar types.
+
+	integer, intent(in) :: type_
+	logical, intent(in) :: is_const, is_local
+
+	op = 0
+	select case (type_)
+	case (bool_type)
+		if (is_const) then; op = OP_LOAD_CONST_BOOL
+		else if (is_local) then; op = OP_LOAD_LOCAL_BOOL
+		else; op = OP_LOAD_GLOBAL_BOOL; end if
+	case (i32_type)
+		if (is_const) then; op = OP_LOAD_CONST_I32
+		else if (is_local) then; op = OP_LOAD_LOCAL_I32
+		else; op = OP_LOAD_GLOBAL_I32; end if
+	case (i64_type)
+		if (is_const) then; op = OP_LOAD_CONST_I64
+		else if (is_local) then; op = OP_LOAD_LOCAL_I64
+		else; op = OP_LOAD_GLOBAL_I64; end if
+	case (f32_type)
+		if (is_const) then; op = OP_LOAD_CONST_F32
+		else if (is_local) then; op = OP_LOAD_LOCAL_F32
+		else; op = OP_LOAD_GLOBAL_F32; end if
+	case (f64_type)
+		if (is_const) then; op = OP_LOAD_CONST_F64
+		else if (is_local) then; op = OP_LOAD_LOCAL_F64
+		else; op = OP_LOAD_GLOBAL_F64; end if
+	end select
+
+end function typed_load_op
+
+!===============================================================================
+
+pure integer function typed_store_op(type_, is_local) result(op)
+
+	! Return the typed scalar store opcode, or 0 for non-scalar types.
+
+	integer, intent(in) :: type_
+	logical, intent(in) :: is_local
+
+	op = 0
+	select case (type_)
+	case (bool_type)
+		if (is_local) then; op = OP_STORE_LOCAL_BOOL
+		else; op = OP_STORE_GLOBAL_BOOL; end if
+	case (i32_type)
+		if (is_local) then; op = OP_STORE_LOCAL_I32
+		else; op = OP_STORE_GLOBAL_I32; end if
+	case (i64_type)
+		if (is_local) then; op = OP_STORE_LOCAL_I64
+		else; op = OP_STORE_GLOBAL_I64; end if
+	case (f32_type)
+		if (is_local) then; op = OP_STORE_LOCAL_F32
+		else; op = OP_STORE_GLOBAL_F32; end if
+	case (f64_type)
+		if (is_local) then; op = OP_STORE_LOCAL_F64
+		else; op = OP_STORE_GLOBAL_F64; end if
+	end select
+
+end function typed_store_op
 
 !===============================================================================
 

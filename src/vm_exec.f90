@@ -25,6 +25,10 @@ submodule (syntran__vm_m) syntran__vm_exec
 		integer :: node_idx   = 0   ! index into prog%nodes for the fn_call_expr node
 		integer :: nfor_saved = 0   ! for-iter stack depth on function entry (restore at RET)
 		type(value_t), allocatable :: caller_locs(:)
+		! Locals pool buffer: retained across RET so the NEXT OP_CALL at this
+		! frame depth can reuse the allocation.  Avoids allocate/deallocate on
+		! every recursive call.  Reset with value_reset() before reuse.
+		type(value_t), allocatable :: locs_buf(:)
 	end type frame_t
 
 	!------------------------------------------------------------------------
@@ -103,6 +107,22 @@ end subroutine vm_pop_discard
 
 !===============================================================================
 
+subroutine vm_stack_grow(stack)
+	! Grow the operand stack when len_ > cap.  Called from the typed-load fast
+	! path which increments len_ before checking capacity.
+	type(value_vector_t), intent(inout) :: stack
+	type(value_t), allocatable :: tmp(:)
+	integer :: i
+	stack%cap = 2 * stack%len_
+	allocate(tmp(stack%cap))
+	do i = 1, stack%len_ - 1
+		call value_move(stack%v(i), tmp(i))
+	end do
+	call move_alloc(tmp, stack%v)
+end subroutine vm_stack_grow
+
+!===============================================================================
+
 subroutine do_compound(lhs, rhs, op_kind)
 
 	! Call compound_assign with just an integer op_kind (no full token needed).
@@ -124,34 +144,41 @@ end subroutine do_compound
 
 !===============================================================================
 
-subroutine do_binop(left, right, op_kind, res)
+subroutine do_binop(left, right, op_kind, restype, res)
 
 	! Compute a binary operation on two values, mirroring eval_binary_expr.
+	! restype: pre-computed result type from the compiler (node%val%type).
+	!   When restype /= unknown_type the expensive get_binary_op_kind call is
+	!   skipped.  The compiler always supplies this for OP_BINOP (instr%b).
 	! The math routines (add, subtract, etc.) are available because
 	! syntran__vm_m uses syntran__eval_m which uses syntran__math_m and
 	! syntran__bool_m.
 
 	type(value_t), intent(in) :: left, right
-	integer, intent(in) :: op_kind
+	integer, intent(in) :: op_kind, restype
 	type(value_t), intent(out) :: res
 
 	!*******
 
 	integer :: larrtype, rarrtype
 
-	larrtype = unknown_type
-	rarrtype = unknown_type
-	if (left %type == array_type) larrtype = left %array%type
-	if (right%type == array_type) rarrtype = right%array%type
+	if (restype /= unknown_type) then
+		res%type = restype
+	else
+		larrtype = unknown_type
+		rarrtype = unknown_type
+		if (left %type == array_type) larrtype = left %array%type
+		if (right%type == array_type) rarrtype = right%array%type
 
-	res%type = get_binary_op_kind(left%type, op_kind, right%type, &
-		larrtype, rarrtype)
+		res%type = get_binary_op_kind(left%type, op_kind, right%type, &
+			larrtype, rarrtype)
 
-	select case (res%type)
-	case (bool_array_type, f32_array_type, f64_array_type, &
-		i32_array_type, i64_array_type, str_array_type)
-		res%type = array_type
-	end select
+		select case (res%type)
+		case (bool_array_type, f32_array_type, f64_array_type, &
+			i32_array_type, i64_array_type, str_array_type)
+			res%type = array_type
+		end select
+	end if
 
 	select case (op_kind)
 	case (plus_token)
@@ -298,10 +325,12 @@ module subroutine vm_run(prog, state, res)
 							call value_move(state%locs%vals(cn%params(i)), params_tmp(i))
 						end if
 					end do
+					! Save callee locs to pool, then restore caller locs.
+					if (allocated(state%locs%vals)) then
+						call move_alloc(state%locs%vals, frames(nframes)%locs_buf)
+					end if
 					if (allocated(fr%caller_locs)) then
 						call move_alloc(fr%caller_locs, state%locs%vals)
-					else if (allocated(state%locs%vals)) then
-						deallocate(state%locs%vals)
 					end if
 					do i = 1, nparams
 						if (.not. cn%is_ref(i)) cycle
@@ -357,7 +386,7 @@ module subroutine vm_run(prog, state, res)
 		case (OP_BINOP)
 			call vm_pop_copy(stack, right)
 			call vm_pop_copy(stack, left)
-			call do_binop(left, right, instr%a, val)
+			call do_binop(left, right, instr%a, instr%b, val)
 			call vm_push_move(stack, val)
 
 		! --- unary operation ---
@@ -375,9 +404,11 @@ module subroutine vm_run(prog, state, res)
 			next_ip = instr%a
 
 		! --- control flow: conditional jump ---
+		! Bool is a scalar (no allocatables), so read sca%bool directly and
+		! decrement len_ without going through value_move.
 		case (OP_JUMP_IF_FALSE)
-			call vm_pop_copy(stack, val)
-			if (.not. val%sca%bool) next_ip = instr%a
+			if (.not. stack%v(stack%len_)%sca%bool) next_ip = instr%a
+			stack%len_ = stack%len_ - 1
 
 		! --- by-ref arg loading: move value from variable slot onto stack -----
 		! The original slot is left in a valid-but-empty state; the value is
@@ -422,8 +453,24 @@ module subroutine vm_run(prog, state, res)
 				call move_alloc(state%locs%vals, frames(nframes)%caller_locs)
 			end if
 
-			! Allocate the callee's local variable array.
-			allocate(state%locs%vals(cn%num_locs))
+			! Locals-pool: reuse the saved buffer from the previous call at this
+			! frame depth if it is large enough; otherwise allocate fresh.
+			if (allocated(frames(nframes)%locs_buf)) then
+				if (size(frames(nframes)%locs_buf) >= cn%num_locs) then
+					! Reuse: reset all used slots to unknown_type.
+					do i = 1, cn%num_locs
+						call value_reset(frames(nframes)%locs_buf(i))
+					end do
+					call move_alloc(frames(nframes)%locs_buf, state%locs%vals)
+				else
+					! Buffer too small (function changed num_locs? shouldn't happen).
+					deallocate(frames(nframes)%locs_buf)
+					allocate(state%locs%vals(cn%num_locs))
+				end if
+			else
+				! First call at this depth: allocate fresh (default-init = unknown_type).
+				allocate(state%locs%vals(cn%num_locs))
+			end if
 
 			! Move params into the callee's local slots.
 			do i = 1, nparams
@@ -454,12 +501,16 @@ module subroutine vm_run(prog, state, res)
 				end if
 			end do
 
+			! Save callee locs to pool for reuse by the next call at this depth.
+			if (allocated(state%locs%vals)) then
+				call move_alloc(state%locs%vals, frames(nframes)%locs_buf)
+			end if
+
 			! Restore caller's local variable array.
 			if (allocated(fr%caller_locs)) then
 				call move_alloc(fr%caller_locs, state%locs%vals)
-			else if (allocated(state%locs%vals)) then
-				deallocate(state%locs%vals)
 			end if
+			! (state%locs%vals stays unallocated if the caller had none — correct.)
 
 			! Write by-ref modified values back to caller's variable slots.
 			do i = 1, nparams
@@ -889,6 +940,373 @@ module subroutine vm_run(prog, state, res)
 		! Exits the VM loop immediately; TOS is the return value.
 		case (OP_HALT)
 			next_ip = prog%len_ + 1
+
+		! --- typed scalar opcodes (Stage 2) --------------------------------------
+		! Each operates on the raw sca fields of TOS / TOS-1 with no subroutine
+		! calls, no value_move, and no get_binary_op_kind.  The compiler only
+		! emits these for same-type scalar operands.
+
+		! Arithmetic (result same type as operands, left = TOS-1, right = TOS)
+		case (OP_ADD_I32)
+			stack%v(stack%len_-1)%sca%i32 = stack%v(stack%len_-1)%sca%i32 &
+			                              + stack%v(stack%len_  )%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_ADD_I64)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i64 &
+			                              + stack%v(stack%len_  )%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_ADD_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 &
+			                              + stack%v(stack%len_  )%sca%f32
+			stack%len_ = stack%len_ - 1
+		case (OP_ADD_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 &
+			                              + stack%v(stack%len_  )%sca%f64
+			stack%len_ = stack%len_ - 1
+
+		case (OP_SUB_I32)
+			stack%v(stack%len_-1)%sca%i32 = stack%v(stack%len_-1)%sca%i32 &
+			                              - stack%v(stack%len_  )%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_I64)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i64 &
+			                              - stack%v(stack%len_  )%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 &
+			                              - stack%v(stack%len_  )%sca%f32
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 &
+			                              - stack%v(stack%len_  )%sca%f64
+			stack%len_ = stack%len_ - 1
+
+		case (OP_MUL_I32)
+			stack%v(stack%len_-1)%sca%i32 = stack%v(stack%len_-1)%sca%i32 &
+			                              * stack%v(stack%len_  )%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_I64)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i64 &
+			                              * stack%v(stack%len_  )%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 &
+			                              * stack%v(stack%len_  )%sca%f32
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 &
+			                              * stack%v(stack%len_  )%sca%f64
+			stack%len_ = stack%len_ - 1
+
+		case (OP_DIV_I32)
+			stack%v(stack%len_-1)%sca%i32 = stack%v(stack%len_-1)%sca%i32 &
+			                              / stack%v(stack%len_  )%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_I64)
+			stack%v(stack%len_-1)%sca%i64 = stack%v(stack%len_-1)%sca%i64 &
+			                              / stack%v(stack%len_  )%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 &
+			                              / stack%v(stack%len_  )%sca%f32
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 &
+			                              / stack%v(stack%len_  )%sca%f64
+			stack%len_ = stack%len_ - 1
+
+		case (OP_MOD_I32)
+			stack%v(stack%len_-1)%sca%i32 = mod(stack%v(stack%len_-1)%sca%i32, &
+			                                     stack%v(stack%len_  )%sca%i32)
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_I64)
+			stack%v(stack%len_-1)%sca%i64 = mod(stack%v(stack%len_-1)%sca%i64, &
+			                                     stack%v(stack%len_  )%sca%i64)
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_F32)
+			stack%v(stack%len_-1)%sca%f32 = mod(stack%v(stack%len_-1)%sca%f32, &
+			                                     stack%v(stack%len_  )%sca%f32)
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_F64)
+			stack%v(stack%len_-1)%sca%f64 = mod(stack%v(stack%len_-1)%sca%f64, &
+			                                     stack%v(stack%len_  )%sca%f64)
+			stack%len_ = stack%len_ - 1
+
+		! Comparisons: result type is bool; TOS-1 type updated to bool_type.
+		case (OP_LT_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                               < stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LT_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                               < stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LT_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 &
+			                               < stack%v(stack%len_  )%sca%f32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LT_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 &
+			                               < stack%v(stack%len_  )%sca%f64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+
+		case (OP_LE_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                              <= stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LE_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                              <= stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LE_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 &
+			                              <= stack%v(stack%len_  )%sca%f32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LE_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 &
+			                              <= stack%v(stack%len_  )%sca%f64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+
+		case (OP_GT_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                               > stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_GT_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                               > stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_GT_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 &
+			                               > stack%v(stack%len_  )%sca%f32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_GT_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 &
+			                               > stack%v(stack%len_  )%sca%f64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+
+		case (OP_GE_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                              >= stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_GE_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                              >= stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_GE_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 &
+			                              >= stack%v(stack%len_  )%sca%f32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_GE_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 &
+			                              >= stack%v(stack%len_  )%sca%f64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+
+		case (OP_EQ_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                              == stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_EQ_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                              == stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_EQ_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 &
+			                              == stack%v(stack%len_  )%sca%f32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_EQ_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 &
+			                              == stack%v(stack%len_  )%sca%f64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_EQ_BOOL)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%bool &
+			                             .eqv. stack%v(stack%len_  )%sca%bool
+			stack%len_ = stack%len_ - 1
+
+		case (OP_NE_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
+			                              /= stack%v(stack%len_  )%sca%i32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_NE_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 &
+			                              /= stack%v(stack%len_  )%sca%i64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_NE_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 &
+			                              /= stack%v(stack%len_  )%sca%f32
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_NE_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 &
+			                              /= stack%v(stack%len_  )%sca%f64
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+		case (OP_NE_BOOL)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%bool &
+			                             .neqv. stack%v(stack%len_  )%sca%bool
+			stack%len_ = stack%len_ - 1
+
+		! Bool binary
+		case (OP_AND_BOOL)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%bool &
+			                           .and. stack%v(stack%len_  )%sca%bool
+			stack%len_ = stack%len_ - 1
+		case (OP_OR_BOOL)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%bool &
+			                            .or. stack%v(stack%len_  )%sca%bool
+			stack%len_ = stack%len_ - 1
+
+		! Unary: operand = TOS; result replaces TOS in-place.
+		case (OP_NEG_I32)
+			stack%v(stack%len_)%sca%i32 = -stack%v(stack%len_)%sca%i32
+		case (OP_NEG_I64)
+			stack%v(stack%len_)%sca%i64 = -stack%v(stack%len_)%sca%i64
+		case (OP_NEG_F32)
+			stack%v(stack%len_)%sca%f32 = -stack%v(stack%len_)%sca%f32
+		case (OP_NEG_F64)
+			stack%v(stack%len_)%sca%f64 = -stack%v(stack%len_)%sca%f64
+		case (OP_NOT_BOOL)
+			stack%v(stack%len_)%sca%bool = .not. stack%v(stack%len_)%sca%bool
+		case (OP_BNOT_I32)
+			stack%v(stack%len_)%sca%i32 = not(stack%v(stack%len_)%sca%i32)
+		case (OP_BNOT_I64)
+			stack%v(stack%len_)%sca%i64 = not(stack%v(stack%len_)%sca%i64)
+
+		! Typed scalar loads: push without value_copy overhead.
+		! For LOAD_CONST_*: value embedded in instruction (no const pool lookup).
+		! For LOAD_LOCAL/GLOBAL_*: slot index in instr%a, direct field read.
+		case (OP_LOAD_CONST_BOOL)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = bool_type
+			stack%v(stack%len_)%sca%bool = (instr%a /= 0)
+		case (OP_LOAD_CONST_I32)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = i32_type
+			stack%v(stack%len_)%sca%i32 = instr%a
+		case (OP_LOAD_CONST_I64)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = i64_type
+			stack%v(stack%len_)%sca%i64 = instr%c
+		case (OP_LOAD_CONST_F32)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = f32_type
+			stack%v(stack%len_)%sca%f32 = transfer(instr%a, 0.0_4)
+		case (OP_LOAD_CONST_F64)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = f64_type
+			stack%v(stack%len_)%sca%f64 = transfer(instr%c, 0.0d0)
+
+		case (OP_LOAD_LOCAL_BOOL)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type     = bool_type
+			stack%v(stack%len_)%sca%bool = state%locs%vals(instr%a)%sca%bool
+		case (OP_LOAD_LOCAL_I32)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = i32_type
+			stack%v(stack%len_)%sca%i32 = state%locs%vals(instr%a)%sca%i32
+		case (OP_LOAD_LOCAL_I64)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = i64_type
+			stack%v(stack%len_)%sca%i64 = state%locs%vals(instr%a)%sca%i64
+		case (OP_LOAD_LOCAL_F32)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = f32_type
+			stack%v(stack%len_)%sca%f32 = state%locs%vals(instr%a)%sca%f32
+		case (OP_LOAD_LOCAL_F64)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = f64_type
+			stack%v(stack%len_)%sca%f64 = state%locs%vals(instr%a)%sca%f64
+
+		case (OP_LOAD_GLOBAL_BOOL)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type     = bool_type
+			stack%v(stack%len_)%sca%bool = state%vars%vals(instr%a)%sca%bool
+		case (OP_LOAD_GLOBAL_I32)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = i32_type
+			stack%v(stack%len_)%sca%i32 = state%vars%vals(instr%a)%sca%i32
+		case (OP_LOAD_GLOBAL_I64)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = i64_type
+			stack%v(stack%len_)%sca%i64 = state%vars%vals(instr%a)%sca%i64
+		case (OP_LOAD_GLOBAL_F32)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = f32_type
+			stack%v(stack%len_)%sca%f32 = state%vars%vals(instr%a)%sca%f32
+		case (OP_LOAD_GLOBAL_F64)
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type    = f64_type
+			stack%v(stack%len_)%sca%f64 = state%vars%vals(instr%a)%sca%f64
+
+		! Typed scalar stores: write TOS into slot, keep TOS.
+		! Always write %type too (slot may be freshly allocated = unknown_type).
+		case (OP_STORE_LOCAL_BOOL)
+			state%locs%vals(instr%a)%type     = bool_type
+			state%locs%vals(instr%a)%sca%bool = stack%v(stack%len_)%sca%bool
+		case (OP_STORE_LOCAL_I32)
+			state%locs%vals(instr%a)%type    = i32_type
+			state%locs%vals(instr%a)%sca%i32 = stack%v(stack%len_)%sca%i32
+		case (OP_STORE_LOCAL_I64)
+			state%locs%vals(instr%a)%type    = i64_type
+			state%locs%vals(instr%a)%sca%i64 = stack%v(stack%len_)%sca%i64
+		case (OP_STORE_LOCAL_F32)
+			state%locs%vals(instr%a)%type    = f32_type
+			state%locs%vals(instr%a)%sca%f32 = stack%v(stack%len_)%sca%f32
+		case (OP_STORE_LOCAL_F64)
+			state%locs%vals(instr%a)%type    = f64_type
+			state%locs%vals(instr%a)%sca%f64 = stack%v(stack%len_)%sca%f64
+
+		case (OP_STORE_GLOBAL_BOOL)
+			state%vars%vals(instr%a)%type     = bool_type
+			state%vars%vals(instr%a)%sca%bool = stack%v(stack%len_)%sca%bool
+		case (OP_STORE_GLOBAL_I32)
+			state%vars%vals(instr%a)%type    = i32_type
+			state%vars%vals(instr%a)%sca%i32 = stack%v(stack%len_)%sca%i32
+		case (OP_STORE_GLOBAL_I64)
+			state%vars%vals(instr%a)%type    = i64_type
+			state%vars%vals(instr%a)%sca%i64 = stack%v(stack%len_)%sca%i64
+		case (OP_STORE_GLOBAL_F32)
+			state%vars%vals(instr%a)%type    = f32_type
+			state%vars%vals(instr%a)%sca%f32 = stack%v(stack%len_)%sca%f32
+		case (OP_STORE_GLOBAL_F64)
+			state%vars%vals(instr%a)%type    = f64_type
+			state%vars%vals(instr%a)%sca%f64 = stack%v(stack%len_)%sca%f64
 
 		case default
 			write(*,*) 'VM: unknown opcode ', instr%op

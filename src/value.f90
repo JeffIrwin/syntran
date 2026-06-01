@@ -273,6 +273,31 @@ end subroutine push_value_move
 
 !===============================================================================
 
+subroutine value_reset(val)
+
+	! Reset val to unknown_type, freeing any allocatable components.
+	! Used by the VM call-frame locals pool to clean up a reused slot.
+	! Fast path for primitive scalars (no allocatables to free).
+
+	type(value_t), intent(inout) :: val
+
+	select case (val%type)
+	case (bool_type, i32_type, i64_type, f32_type, f64_type)
+		! Scalar: nothing allocated, just clear the type tag.
+		val%type = unknown_type
+	case default
+		if (allocated(val%array     )) deallocate(val%array     )
+		if (allocated(val%str       )) deallocate(val%str       )
+		if (allocated(val%file_     )) deallocate(val%file_     )
+		if (allocated(val%struct    )) deallocate(val%struct    )
+		if (allocated(val%struct_name)) deallocate(val%struct_name)
+		val%type = unknown_type
+	end select
+
+end subroutine value_reset
+
+!===============================================================================
+
 recursive subroutine value_move(src, dst)
 	! Note the args are reversed wrt value_copy.  It is however consistent with
 	! build-in move_alloc() (and `mv file1 file2`)

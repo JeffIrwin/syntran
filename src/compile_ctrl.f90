@@ -191,7 +191,7 @@ recursive subroutine compile_node(prog, node)
 
 	!*******
 
-	integer :: idx, i, const_idx
+	integer :: idx, i, const_idx, typed_op
 	integer :: jf_ip, j_ip, l_top, l_else, l_end, l_pad
 	integer :: nblock_saved
 	logical :: first, entering_ctx
@@ -200,8 +200,23 @@ recursive subroutine compile_node(prog, node)
 
 	! ---- literals --------------------------------------------------------------
 	case (literal_expr)
-		const_idx = add_const(prog, node%val)
-		call emit(prog, OP_LOAD_CONST, a = const_idx)
+		! Scalar types: embed value directly in the instruction (no const pool).
+		! Non-scalar (strings, arrays): still use const pool.
+		select case (node%val%type)
+		case (bool_type)
+			call emit(prog, OP_LOAD_CONST_BOOL, a = merge(1, 0, node%val%sca%bool))
+		case (i32_type)
+			call emit(prog, OP_LOAD_CONST_I32, a = node%val%sca%i32)
+		case (i64_type)
+			call emit(prog, OP_LOAD_CONST_I64, c = node%val%sca%i64)
+		case (f32_type)
+			call emit(prog, OP_LOAD_CONST_F32, a = transfer(node%val%sca%f32, 0))
+		case (f64_type)
+			call emit(prog, OP_LOAD_CONST_F64, c = transfer(node%val%sca%f64, 0_8))
+		case default
+			const_idx = add_const(prog, node%val)
+			call emit(prog, OP_LOAD_CONST, a = const_idx)
+		end select
 
 	! ---- variable reads --------------------------------------------------------
 	case (name_expr)
@@ -214,7 +229,11 @@ recursive subroutine compile_node(prog, node)
 				call emit(prog, OP_SLICE, a = idx)
 			end if
 		else
-			if (node%is_loc) then
+			! Scalar type: emit typed load (avoids value_copy overhead).
+			typed_op = typed_load_op(node%val%type, .false., node%is_loc)
+			if (typed_op /= 0) then
+				call emit(prog, typed_op, a = node%id_index)
+			else if (node%is_loc) then
 				call emit(prog, OP_LOAD_LOCAL, a = node%id_index)
 			else
 				call emit(prog, OP_LOAD_GLOBAL, a = node%id_index)
@@ -225,16 +244,34 @@ recursive subroutine compile_node(prog, node)
 	case (binary_expr)
 		call compile_node(prog, node%left )
 		call compile_node(prog, node%right)
-		call emit(prog, OP_BINOP, a = node%op%kind)
+		! Same-type scalar: emit typed opcode (no value_move / get_binary_op_kind).
+		! Otherwise emit generic OP_BINOP with pre-computed result type in instr%b
+		! so the VM can skip get_binary_op_kind at runtime.
+		typed_op = binop_typed_opcode(node%op%kind, &
+			node%left%val%type, node%right%val%type)
+		if (typed_op /= 0) then
+			call emit(prog, typed_op)
+		else
+			call emit(prog, OP_BINOP, a = node%op%kind, b = node%val%type)
+		end if
 
 	case (unary_expr)
 		call compile_node(prog, node%right)
-		call emit(prog, OP_UNOP, a = node%op%kind)
+		typed_op = unop_typed_opcode(node%op%kind, node%right%val%type)
+		if (typed_op /= 0) then
+			call emit(prog, typed_op)
+		else
+			call emit(prog, OP_UNOP, a = node%op%kind)
+		end if
 
 	! ---- variable declarations ------------------------------------------------
 	case (let_expr)
 		call compile_node(prog, node%right)
-		if (node%is_loc) then
+		! Scalar type: emit typed store (avoids assign_ overhead).
+		typed_op = typed_store_op(node%val%type, node%is_loc)
+		if (typed_op /= 0) then
+			call emit(prog, typed_op, a = node%id_index)
+		else if (node%is_loc) then
 			call emit(prog, OP_STORE_LOCAL,  a = node%id_index)
 		else
 			call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
@@ -252,7 +289,13 @@ recursive subroutine compile_node(prog, node)
 		         node%op%kind == equals_token) then
 			! Simple plain assignment: a = expr
 			call compile_node(prog, node%right)
-			if (node%is_loc) then
+			! Scalar type (LHS and RHS agree — parser guarantees): typed store.
+			typed_op = 0
+			if (node%val%type == node%right%val%type) &
+				typed_op = typed_store_op(node%val%type, node%is_loc)
+			if (typed_op /= 0) then
+				call emit(prog, typed_op, a = node%id_index)
+			else if (node%is_loc) then
 				call emit(prog, OP_STORE_LOCAL,  a = node%id_index)
 			else
 				call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
