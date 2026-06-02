@@ -1,0 +1,33 @@
+// Test native scalar array index read/write (OP_INDEX_NAT, OP_STORE_IDX_NAT)
+
+// Basic read
+let a = [4, 3, 5, 2, 1];
+let i = 2;
+let v = a[i];
+
+// Basic write (plain '=')
+a[0] = 99;
+a[i] = 7;
+
+// Read via compound index expr
+let j = i + 1;
+let w = a[j];
+
+// Swap via native read/write
+let tmp = a[0];
+a[0] = a[1];
+a[1] = tmp;
+
+// Size-based subscript (i64 subscript → i32 array, tests type-mismatch coercion)
+let n = size(a, 0);   // i64
+a[n - 1] = 42;        // i64 subscript, i32 rhs → OP_STORE_IDX_NAT fallback or native
+
+let norm = 0;
+let expect = [3, 99, 7, 2, 42];
+for ii in [0: size(expect, 0)]
+{
+    let diff = a[ii] - expect[ii];
+    if (diff < 0) diff = -diff;
+    norm = norm + diff;
+}
+return norm;

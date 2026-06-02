@@ -143,6 +143,36 @@ module syntran__bytecode_m
 	integer, parameter :: &
 		OP_ARR_BINOP = 1135
 
+	!**** M9: native scalar array indexing ----------------------------------------
+	!
+	! OP_INDEX_NAT: fast array element read without syntax_eval per subscript.
+	!   Compiler emits one typed compile_node per subscript (pushing each index
+	!   onto the operand stack), then emits this opcode.
+	!   Instruction fields:
+	!     a = id_index (slot index of the array variable)
+	!     b = nsub     (number of subscripts = array rank for this access)
+	!     c = is_local (0 = global, 1 = local)
+	!   Stack before:  [sub_1][sub_2]...[sub_nsub]
+	!   Stack after:   [element_value]
+	!   Only emitted when the result type is a numeric/bool scalar (guard in
+	!   index_native_ok).  String, struct, and slice accesses fall back to
+	!   OP_INDEX / OP_SLICE.
+	!
+	! OP_STORE_IDX_NAT: fast array element write (plain '=' only).
+	!   Compiler emits one compile_node per subscript then the RHS.
+	!   Instruction fields:
+	!     a = id_index
+	!     b = nsub
+	!     c = is_local (0 = global, 1 = local)
+	!   Stack before:  [sub_1]...[sub_nsub][rhs]
+	!   Stack after:   [rhs]   (leaves the stored value on top, matching OP_STORE_IDX)
+	!   Only emitted when rhs is a numeric/bool scalar and op is '='
+	!   (guard in store_idx_native_ok).  String/struct writes and compound ops
+	!   (a[i]+=x) fall back to OP_STORE_IDX.
+	integer, parameter :: &
+		OP_INDEX_NAT     = 1136, &
+		OP_STORE_IDX_NAT = 1137
+
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
 	! Math
@@ -799,6 +829,56 @@ end function arr_binop_typed_opcode
 
 !===============================================================================
 
+pure logical function index_native_ok(node) result(ok)
+
+	! Return .true. when a name_expr node with all-scalar subscripts can be
+	! lowered to OP_INDEX_NAT (fast inline element read) instead of OP_INDEX.
+	! Requires:
+	!   - subscripts are allocated and all scalar_sub
+	!   - result element type is a numeric/bool scalar (not str, struct, array)
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (.not. all(node%lsubscripts%sub_kind == scalar_sub)) return
+
+	select case (node%val%type)
+	case (bool_type, i32_type, i64_type, f32_type, f64_type)
+		ok = .true.
+	end select
+
+end function index_native_ok
+
+!===============================================================================
+
+pure logical function store_idx_native_ok(node) result(ok)
+
+	! Return .true. when an assignment_expr node with all-scalar subscripts and
+	! a plain '=' op can be lowered to OP_STORE_IDX_NAT (fast inline element
+	! write) instead of OP_STORE_IDX.
+	! Requires:
+	!   - subscripts are allocated and all scalar_sub   (caller guarantees this)
+	!   - op is plain '=' (not +=, -=, etc.)
+	!   - RHS element type is a numeric/bool scalar
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (.not. all(node%lsubscripts%sub_kind == scalar_sub)) return
+	if (node%op%kind /= equals_token) return
+	if (.not. allocated(node%right)) return
+
+	select case (node%right%val%type)
+	case (bool_type, i32_type, i64_type, f32_type, f64_type)
+		ok = .true.
+	end select
+
+end function store_idx_native_ok
+
+!===============================================================================
+
 pure integer function typed_load_op(type_, is_const, is_local) result(op)
 
 	! Return the typed scalar load opcode, or 0 for non-scalar types.
@@ -861,6 +941,28 @@ pure integer function typed_store_op(type_, is_local) result(op)
 	end select
 
 end function typed_store_op
+
+!===============================================================================
+
+pure integer function compound_to_arith_token(op_kind) result(tok)
+
+	! Map a compound-assignment operator token to its arithmetic counterpart,
+	! or 0 if the compound op is not a standard arithmetic op.
+	! Used to select the typed binop opcode for native compound scalar assignment.
+
+	integer, intent(in) :: op_kind
+
+	select case (op_kind)
+	case (plus_equals_token);    tok = plus_token
+	case (minus_equals_token);   tok = minus_token
+	case (star_equals_token);    tok = star_token
+	case (slash_equals_token);   tok = slash_token
+	case (percent_equals_token); tok = percent_token
+	case (sstar_equals_token);   tok = sstar_token
+	case default;                tok = 0
+	end select
+
+end function compound_to_arith_token
 
 !===============================================================================
 

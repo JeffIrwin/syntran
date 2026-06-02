@@ -221,11 +221,25 @@ recursive subroutine compile_node(prog, node)
 	! ---- variable reads --------------------------------------------------------
 	case (name_expr)
 		if (allocated(node%lsubscripts)) then
-			! Subscripted access: all-scalar → OP_INDEX, any range/step/all → OP_SLICE
-			idx = add_node(prog, node)
-			if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+			! Subscripted access.
+			! Fast path: all-scalar subscripts + numeric result → OP_INDEX_NAT.
+			!   Compile each subscript expression onto the operand stack so the VM
+			!   can compute the linear index inline without calling syntax_eval.
+			! Fallback A: all-scalar but non-numeric (str char, struct) → OP_INDEX.
+			! Fallback B: any range/step/all subscript → OP_SLICE.
+			if (index_native_ok(node)) then
+				do i = 1, size(node%lsubscripts)
+					call compile_node(prog, node%lsubscripts(i))
+				end do
+				call emit(prog, OP_INDEX_NAT, &
+					a = node%id_index, &
+					b = int(size(node%lsubscripts)), &
+					c = merge(1_8, 0_8, node%is_loc))
+			else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+				idx = add_node(prog, node)
 				call emit(prog, OP_INDEX, a = idx)
 			else
+				idx = add_node(prog, node)
 				call emit(prog, OP_SLICE, a = idx)
 			end if
 		else
@@ -319,6 +333,36 @@ recursive subroutine compile_node(prog, node)
 				call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
 			end if
 
+		else if (.not. allocated(node%lsubscripts) .and. &
+		         .not. allocated(node%member) .and. &
+		         compound_to_arith_token(node%op%kind) /= 0) then
+			! Compound scalar assignment: a += expr, a -= expr, etc.
+			! Native: load a, compile RHS, emit typed binop, store a.
+			! Guard: a must be a numeric scalar with typed load/store/binop available.
+			! Requires same LHS and RHS type so the binop result type == LHS type.
+			block
+			integer :: arith_tok_, binop_op_
+			arith_tok_ = compound_to_arith_token(node%op%kind)
+			typed_op = typed_load_op(node%val%type, .false., node%is_loc)
+			binop_op_ = 0
+			if (typed_op /= 0 .and. allocated(node%right)) then
+				if (node%val%type == node%right%val%type) &
+					binop_op_ = binop_typed_opcode(arith_tok_, node%val%type, node%right%val%type)
+			end if
+			if (binop_op_ /= 0) then
+				! Load current value, compile RHS, apply op, store result.
+				call emit(prog, typed_op, a = node%id_index)
+				call compile_node(prog, node%right)
+				call emit(prog, binop_op_)
+				typed_op = typed_store_op(node%val%type, node%is_loc)
+				call emit(prog, typed_op, a = node%id_index)
+			else
+				! Fallback: AST-walker handles mixed types, bitwise ops, etc.
+				idx = add_node(prog, node)
+				call emit(prog, OP_STORE_SLICE, a = idx)
+			end if
+			end block
+
 		else
 			! Fortran .and. is NOT short-circuit; use nested ifs to guard the
 			! all(lsubscripts%sub_kind) access from unallocated lsubscripts.
@@ -328,10 +372,25 @@ recursive subroutine compile_node(prog, node)
 			end if
 
 			if (first) then
-				! Scalar subscript write (any op): a[i] = x  or  a[i] += x
-				call compile_node(prog, node%right)
-				idx = add_node(prog, node)
-				call emit(prog, OP_STORE_IDX, a = idx, b = node%op%kind)
+				! Scalar subscript write.
+				! Fast path: plain '=' with numeric RHS → OP_STORE_IDX_NAT.
+				!   Compile subscripts then RHS; VM writes element inline.
+				! Fallback: compound ops, str/struct elements → OP_STORE_IDX.
+				if (store_idx_native_ok(node)) then
+					do i = 1, size(node%lsubscripts)
+						call compile_node(prog, node%lsubscripts(i))
+					end do
+					call compile_node(prog, node%right)
+					call emit(prog, OP_STORE_IDX_NAT, &
+						a = node%id_index, &
+						b = int(size(node%lsubscripts)), &
+						c = merge(1_8, 0_8, node%is_loc))
+				else
+					! Fallback: compound ops, str chars, struct elements, casts
+					call compile_node(prog, node%right)
+					idx = add_node(prog, node)
+					call emit(prog, OP_STORE_IDX, a = idx, b = node%op%kind)
+				end if
 			else
 				! Slice LHS or subscript-less compound: delegate to eval_assignment_expr
 				idx = add_node(prog, node)

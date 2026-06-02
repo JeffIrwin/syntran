@@ -126,7 +126,10 @@ end subroutine vm_stack_grow
 subroutine do_compound(lhs, rhs, op_kind)
 
 	! Call compound_assign with just an integer op_kind (no full token needed).
-	! op%text is only used for error messages, so an empty string is safe.
+	! op%text is only used for error messages, so an empty string is fine.
+	!
+	! The token is declared save so %text is allocated exactly once (on the first
+	! call) instead of on every call — avoids a per-operation heap alloc/free.
 
 	type(value_t), intent(inout) :: lhs
 	type(value_t), intent(in)    :: rhs
@@ -134,10 +137,14 @@ subroutine do_compound(lhs, rhs, op_kind)
 
 	!*******
 
-	type(syntax_token_t) :: op_tok
+	type(syntax_token_t), save :: op_tok
+	logical,              save :: first_call = .true.
 
+	if (first_call) then
+		op_tok%text = ''   ! single heap allocation; persists via save
+		first_call  = .false.
+	end if
 	op_tok%kind = op_kind
-	op_tok%text = ''
 	call compound_assign(lhs, rhs, op_tok)
 
 end subroutine do_compound
@@ -384,7 +391,10 @@ module subroutine vm_run(prog, state, res)
 
 	type(value_vector_t) :: stack
 	type(value_t) :: left, right, val
-	type(value_t), allocatable :: params_tmp(:)
+	! params_pool: reusable buffer for fn-call / return parameter passing.
+	! Grows on demand; avoids allocate/deallocate on every OP_CALL / OP_RET.
+	type(value_t), allocatable :: params_pool(:)
+	integer :: params_pool_cap
 	integer :: ip, next_ip
 	integer :: i, fn_id, nparams, node_idx_call
 	integer :: id, type_, n_mem
@@ -404,9 +414,10 @@ module subroutine vm_run(prog, state, res)
 
 	!print *, "starting vm_run()"
 
-	nframes = 0
-	nfor    = 0
-	stack   = new_value_vector()
+	nframes         = 0
+	nfor            = 0
+	params_pool_cap = 0
+	stack           = new_value_vector()
 
 	ip = prog%entry_main
 	do while (ip <= prog%len_)
@@ -434,10 +445,14 @@ module subroutine vm_run(prog, state, res)
 					associate(fr => frames(nframes), &
 					          cn => prog%nodes(frames(nframes)%node_idx))
 					nparams = size(cn%params)
-					allocate(params_tmp(nparams))
+					if (nparams > params_pool_cap) then
+						if (allocated(params_pool)) deallocate(params_pool)
+						allocate(params_pool(nparams))
+						params_pool_cap = nparams
+					end if
 					do i = 1, nparams
 						if (cn%is_ref(i)) then
-							call value_move(state%locs%vals(cn%params(i)), params_tmp(i))
+							call value_move(state%locs%vals(cn%params(i)), params_pool(i))
 						end if
 					end do
 					! Save callee locs to pool, then restore caller locs.
@@ -450,17 +465,16 @@ module subroutine vm_run(prog, state, res)
 					do i = 1, nparams
 						if (.not. cn%is_ref(i)) cycle
 						if (cn%args(i)%is_loc) then
-							call value_move(params_tmp(i), &
+							call value_move(params_pool(i), &
 								state%locs%vals(cn%args(i)%id_index))
 						else
-							call value_move(params_tmp(i), &
+							call value_move(params_pool(i), &
 								state%vars%vals(cn%args(i)%id_index))
 						end if
 					end do
 					next_ip = fr%return_ip
 					end associate
 					nframes = nframes - 1
-					deallocate(params_tmp)
 					state%returned = .false.
 					call vm_push_move(stack, val)
 				else
@@ -547,16 +561,21 @@ module subroutine vm_run(prog, state, res)
 			associate(cn => prog%nodes(node_idx_call))
 			nparams = 0
 			if (allocated(cn%params)) nparams = size(cn%params)
-			allocate(params_tmp(nparams))
+			! Grow params_pool if needed (amortised; avoids alloc/dealloc per call).
+			if (nparams > params_pool_cap) then
+				if (allocated(params_pool)) deallocate(params_pool)
+				allocate(params_pool(nparams))
+				params_pool_cap = nparams
+			end if
 
 			! Pop by-ref args in reverse param-index order.
 			do i = nparams, 1, -1
-				if (cn%is_ref(i)) call vm_pop_copy(stack, params_tmp(i))
+				if (cn%is_ref(i)) call vm_pop_copy(stack, params_pool(i))
 			end do
 
 			! Pop by-val args in reverse param-index order.
 			do i = nparams, 1, -1
-				if (.not. cn%is_ref(i)) call vm_pop_copy(stack, params_tmp(i))
+				if (.not. cn%is_ref(i)) call vm_pop_copy(stack, params_pool(i))
 			end do
 
 			! Push a new call frame; save caller's local vars and for-iter depth.
@@ -589,10 +608,9 @@ module subroutine vm_run(prog, state, res)
 
 			! Move params into the callee's local slots.
 			do i = 1, nparams
-				call value_move(params_tmp(i), state%locs%vals(cn%params(i)))
+				call value_move(params_pool(i), state%locs%vals(cn%params(i)))
 			end do
 
-			deallocate(params_tmp)
 			end associate
 
 			next_ip = prog%fn_entry(fn_id)
@@ -607,12 +625,17 @@ module subroutine vm_run(prog, state, res)
 			          cn => prog%nodes(frames(nframes)%node_idx))
 			nparams = 0
 			if (allocated(cn%params)) nparams = size(cn%params)
-			allocate(params_tmp(nparams))
+			! Grow params_pool if needed (amortised; avoids alloc/dealloc per return).
+			if (nparams > params_pool_cap) then
+				if (allocated(params_pool)) deallocate(params_pool)
+				allocate(params_pool(nparams))
+				params_pool_cap = nparams
+			end if
 
-			! Move by-ref params from callee locs into params_tmp for writeback.
+			! Move by-ref params from callee locs into params_pool for writeback.
 			do i = 1, nparams
 				if (cn%is_ref(i)) then
-					call value_move(state%locs%vals(cn%params(i)), params_tmp(i))
+					call value_move(state%locs%vals(cn%params(i)), params_pool(i))
 				end if
 			end do
 
@@ -631,10 +654,10 @@ module subroutine vm_run(prog, state, res)
 			do i = 1, nparams
 				if (.not. cn%is_ref(i)) cycle
 				if (cn%args(i)%is_loc) then
-					call value_move(params_tmp(i), &
+					call value_move(params_pool(i), &
 						state%locs%vals(cn%args(i)%id_index))
 				else
-					call value_move(params_tmp(i), &
+					call value_move(params_pool(i), &
 						state%vars%vals(cn%args(i)%id_index))
 				end if
 			end do
@@ -643,7 +666,6 @@ module subroutine vm_run(prog, state, res)
 			nfor    = fr%nfor_saved   ! clean up any for-iters the callee leaked (e.g. via return)
 			end associate
 			nframes = nframes - 1
-			deallocate(params_tmp)
 
 			! Push the return value onto the caller's operand stack.
 			call vm_push_move(stack, val)
@@ -1284,6 +1306,128 @@ module subroutine vm_run(prog, state, res)
 			call vm_pop_copy(stack, left)
 			call do_array_binop_typed(left, right, instr%a, instr%b, val)
 			call vm_push_move(stack, val)
+
+		! --- M9: native scalar array element read ------------------------------------
+		! Stack before: [sub_1][sub_2]...[sub_nsub]
+		! Stack after:  [element_value]
+		! a=id_index, b=nsub, c=is_local (0=global, 1=local).
+		! Computes the linear index inline — no syntax_eval call per subscript.
+		case (OP_INDEX_NAT)
+			block
+			integer :: nsub_, k_, base_
+			integer(kind=8) :: lin_, prod_
+
+			nsub_ = instr%b
+			base_ = stack%len_ - nsub_   ! subs at base_+1..base_+nsub_; result → base_+1
+			lin_  = 0_8
+			prod_ = 1_8
+
+			if (instr%c == 1_8) then
+				associate(arr => state%locs%vals(instr%a)%array)
+				do k_ = 1, nsub_
+					select case (stack%v(base_+k_)%type)
+					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
+					case (i64_type); lin_ = lin_ + prod_ * stack%v(base_+k_)%sca%i64
+					end select
+					prod_ = prod_ * arr%size(k_)
+				end do
+				stack%v(base_+1)%type = arr%type
+				select case (arr%type)
+				case (bool_type); stack%v(base_+1)%sca%bool = arr%bool(lin_+1)
+				case (i32_type);  stack%v(base_+1)%sca%i32  = arr%i32(lin_+1)
+				case (i64_type);  stack%v(base_+1)%sca%i64  = arr%i64(lin_+1)
+				case (f32_type);  stack%v(base_+1)%sca%f32  = arr%f32(lin_+1)
+				case (f64_type);  stack%v(base_+1)%sca%f64  = arr%f64(lin_+1)
+				end select
+				end associate
+			else
+				associate(arr => state%vars%vals(instr%a)%array)
+				do k_ = 1, nsub_
+					select case (stack%v(base_+k_)%type)
+					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
+					case (i64_type); lin_ = lin_ + prod_ * stack%v(base_+k_)%sca%i64
+					end select
+					prod_ = prod_ * arr%size(k_)
+				end do
+				stack%v(base_+1)%type = arr%type
+				select case (arr%type)
+				case (bool_type); stack%v(base_+1)%sca%bool = arr%bool(lin_+1)
+				case (i32_type);  stack%v(base_+1)%sca%i32  = arr%i32(lin_+1)
+				case (i64_type);  stack%v(base_+1)%sca%i64  = arr%i64(lin_+1)
+				case (f32_type);  stack%v(base_+1)%sca%f32  = arr%f32(lin_+1)
+				case (f64_type);  stack%v(base_+1)%sca%f64  = arr%f64(lin_+1)
+				end select
+				end associate
+			end if
+
+			stack%len_ = base_ + 1
+			end block
+
+		! --- M9: native scalar array element write (plain '=' only) ------------------
+		! Stack before: [sub_1]...[sub_nsub][rhs]
+		! Stack after:  [rhs]   (leaves stored value on top, matching OP_STORE_IDX)
+		! a=id_index, b=nsub, c=is_local (0=global, 1=local).
+		! Only emitted for numeric/bool element types and op == '='.
+		case (OP_STORE_IDX_NAT)
+			block
+			integer :: nsub_, k_, base_
+			integer(kind=8) :: lin_, prod_
+
+			nsub_ = instr%b
+			! Stack layout: subs at len_-nsub_-1+1..len_-1, RHS at len_
+			base_ = stack%len_ - nsub_ - 1   ! base_+1..base_+nsub_ are subs; base_+nsub_+1 is RHS
+			lin_  = 0_8
+			prod_ = 1_8
+
+			if (instr%c == 1_8) then
+				do k_ = 1, nsub_
+					select case (stack%v(base_+k_)%type)
+					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
+					case (i64_type); lin_ = lin_ + prod_ * stack%v(base_+k_)%sca%i64
+					end select
+					prod_ = prod_ * state%locs%vals(instr%a)%array%size(k_)
+				end do
+				! Use to_*() for type-safe reads — handles RHS type != array element type
+			! (e.g. h is i64 from size(), but s is an i32 array).
+			select case (state%locs%vals(instr%a)%array%type)
+				case (bool_type)
+					state%locs%vals(instr%a)%array%bool(lin_+1) = stack%v(base_+nsub_+1)%sca%bool
+				case (i32_type)
+					state%locs%vals(instr%a)%array%i32(lin_+1) = stack%v(base_+nsub_+1)%to_i32()
+				case (i64_type)
+					state%locs%vals(instr%a)%array%i64(lin_+1) = stack%v(base_+nsub_+1)%to_i64()
+				case (f32_type)
+					state%locs%vals(instr%a)%array%f32(lin_+1) = stack%v(base_+nsub_+1)%to_f32()
+				case (f64_type)
+					state%locs%vals(instr%a)%array%f64(lin_+1) = stack%v(base_+nsub_+1)%to_f64()
+				end select
+			else
+				do k_ = 1, nsub_
+					select case (stack%v(base_+k_)%type)
+					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
+					case (i64_type); lin_ = lin_ + prod_ * stack%v(base_+k_)%sca%i64
+					end select
+					prod_ = prod_ * state%vars%vals(instr%a)%array%size(k_)
+				end do
+				select case (state%vars%vals(instr%a)%array%type)
+				case (bool_type)
+					state%vars%vals(instr%a)%array%bool(lin_+1) = stack%v(base_+nsub_+1)%sca%bool
+				case (i32_type)
+					state%vars%vals(instr%a)%array%i32(lin_+1) = stack%v(base_+nsub_+1)%to_i32()
+				case (i64_type)
+					state%vars%vals(instr%a)%array%i64(lin_+1) = stack%v(base_+nsub_+1)%to_i64()
+				case (f32_type)
+					state%vars%vals(instr%a)%array%f32(lin_+1) = stack%v(base_+nsub_+1)%to_f32()
+				case (f64_type)
+					state%vars%vals(instr%a)%array%f64(lin_+1) = stack%v(base_+nsub_+1)%to_f64()
+				end select
+			end if
+
+			! Leave stored value (RHS) on top: copy POD fields from RHS slot → base_+1
+			stack%v(base_+1)%type = stack%v(base_+nsub_+1)%type
+			stack%v(base_+1)%sca  = stack%v(base_+nsub_+1)%sca
+			stack%len_ = base_ + 1
+			end block
 
 		! Comparisons: result type is bool; TOS-1 type updated to bool_type.
 		case (OP_LT_I32)
