@@ -32,6 +32,7 @@ module syntran__utils_m
 			FG_BRIGHT_MAGENTA_  = esc//'[95m', &
 			FG_BRIGHT_CYAN_     = esc//'[96m', &
 			FG_BRIGHT_WHITE_    = esc//'[97m', &
+			FG_BOLD_YELLOW_     = esc//'[1;33m', &
 			COLOR_RESET_        = esc//'[0m'
 
 	! Either copies of the above or empty strings, depending on `--color` arg
@@ -45,6 +46,7 @@ module syntran__utils_m
 			fg_bright_magenta, &
 			fg_bright_cyan, &
 			fg_bright_white, &
+			fg_bold_yellow, &
 			color_reset
 
 	!********
