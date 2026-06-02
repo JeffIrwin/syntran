@@ -22,12 +22,7 @@ a[1] = tmp;
 let n = size(a, 0);   // i64
 a[n - 1] = 42;        // i64 subscript, i32 rhs → OP_STORE_IDX_NAT fallback or native
 
-let norm = 0;
 let expect = [3, 99, 7, 2, 42];
-for ii in [0: size(expect, 0)]
-{
-    let diff = a[ii] - expect[ii];
-    if (diff < 0) diff = -diff;
-    norm = norm + diff;
-}
+let norm = sum(abs(a - expect));
 return norm;
+
