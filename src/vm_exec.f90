@@ -59,6 +59,55 @@ contains
 
 !===============================================================================
 
+! --- call-frame and for-iterator grow helpers ---------------------------------
+!
+! Both frames(:) and for_iters(:) start at a small initial capacity and double
+! on demand (move-on-grow).  This gives the VM unbounded recursion / loop depth,
+! matching the AST walker which is bounded only by OS stack / memory.
+
+subroutine grow_frames(frames)
+	! Double the call-frame stack.  Allocatable components (caller_locs,
+	! locs_buf) are moved cheaply; scalar fields are plain assigned.
+	type(frame_t), allocatable, intent(inout) :: frames(:)
+	type(frame_t), allocatable :: tmp(:)
+	integer :: i, n
+	n = size(frames)
+	allocate(tmp(2 * n))
+	do i = 1, n
+		tmp(i)%return_ip  = frames(i)%return_ip
+		tmp(i)%node_idx   = frames(i)%node_idx
+		tmp(i)%nfor_saved = frames(i)%nfor_saved
+		if (allocated(frames(i)%caller_locs)) &
+			call move_alloc(frames(i)%caller_locs, tmp(i)%caller_locs)
+		if (allocated(frames(i)%locs_buf)) &
+			call move_alloc(frames(i)%locs_buf, tmp(i)%locs_buf)
+	end do
+	call move_alloc(tmp, frames)
+end subroutine grow_frames
+
+!===============================================================================
+
+subroutine grow_fors(for_iters)
+	! Double the for-iterator stack.  for_iter_t has no allocatable components
+	! at the top level (its value_t/array_t members have allocatables inside),
+	! so we use elementwise deep copy via the project's standard copy pattern.
+	type(for_iter_t), allocatable, intent(inout) :: for_iters(:)
+	type(for_iter_t), allocatable :: tmp(:)
+	integer :: i, n
+	n = size(for_iters)
+	allocate(tmp(n))		! stage into a same-sized tmp first
+	do i = 1, n
+		tmp(i) = for_iters(i)
+	end do
+	deallocate(for_iters)
+	allocate(for_iters(2 * n))
+	do i = 1, n
+		for_iters(i) = tmp(i)
+	end do
+end subroutine grow_fors
+
+!===============================================================================
+
 ! --- operand-stack helpers ----------------------------------------------------
 !
 ! vm_push_copy: push a deep copy; source remains live (LOAD_CONST, LOAD_GLOBAL,
@@ -127,9 +176,8 @@ subroutine do_compound(lhs, rhs, op_kind)
 
 	! Call compound_assign with just an integer op_kind (no full token needed).
 	! op%text is only used for error messages, so an empty string is fine.
-	!
-	! The token is declared save so %text is allocated exactly once (on the first
-	! call) instead of on every call — avoids a per-operation heap alloc/free.
+	! Note: the VM dispatch loop is single-threaded; module-level compiler state
+	! in compile_ctrl.f90 is similarly non-reentrant by design.
 
 	type(value_t), intent(inout) :: lhs
 	type(value_t), intent(in)    :: rhs
@@ -137,13 +185,9 @@ subroutine do_compound(lhs, rhs, op_kind)
 
 	!*******
 
-	type(syntax_token_t), save :: op_tok
-	logical,              save :: first_call = .true.
+	type(syntax_token_t) :: op_tok
 
-	if (first_call) then
-		op_tok%text = ''   ! single heap allocation; persists via save
-		first_call  = .false.
-	end if
+	op_tok%text = ''
 	op_tok%kind = op_kind
 	call compound_assign(lhs, rhs, op_tok)
 
@@ -386,8 +430,10 @@ module subroutine vm_run(prog, state, res)
 
 	!*******
 
-	integer, parameter :: MAX_FRAMES = 256
-	integer, parameter :: MAX_FORS   = 64
+	! Initial capacities for the growable stacks.  Both double on demand so
+	! there is no hard recursion or loop-nesting limit (parity with AST walker).
+	integer, parameter :: INIT_FRAMES_CAP = 64
+	integer, parameter :: INIT_FORS_CAP   = 16
 
 	type(value_vector_t) :: stack
 	type(value_t) :: left, right, val
@@ -404,12 +450,12 @@ module subroutine vm_run(prog, state, res)
 	type(value_t), allocatable :: iargs(:)
 	integer :: nintr
 
-	! Call-frame stack
-	type(frame_t) :: frames(MAX_FRAMES)
+	! Call-frame stack (growable; no hard recursion limit)
+	type(frame_t), allocatable :: frames(:)
 	integer :: nframes
 
-	! For-loop iterator stack (M8)
-	type(for_iter_t) :: for_iters(MAX_FORS)
+	! For-loop iterator stack (growable; no hard loop-nesting limit)
+	type(for_iter_t), allocatable :: for_iters(:)
 	integer :: nfor
 
 	!print *, "starting vm_run()"
@@ -418,6 +464,8 @@ module subroutine vm_run(prog, state, res)
 	nfor            = 0
 	params_pool_cap = 0
 	stack           = new_value_vector()
+	allocate(frames(INIT_FRAMES_CAP))
+	allocate(for_iters(INIT_FORS_CAP))
 
 	ip = prog%entry_main
 	do while (ip <= prog%len_)
@@ -579,6 +627,8 @@ module subroutine vm_run(prog, state, res)
 			end do
 
 			! Push a new call frame; save caller's local vars and for-iter depth.
+			! Grow the frame stack if needed (no hard recursion limit).
+			if (nframes + 1 > size(frames)) call grow_frames(frames)
 			nframes = nframes + 1
 			frames(nframes)%return_ip  = ip + 1
 			frames(nframes)%nfor_saved = nfor
@@ -878,6 +928,8 @@ module subroutine vm_run(prog, state, res)
 			integer :: fi, rk_
 			type(value_t) :: tmp_
 
+			! Grow the for-iterator stack if needed (no hard loop-nesting limit).
+			if (nfor + 1 > size(for_iters)) call grow_fors(for_iters)
 			nfor = nfor + 1
 			fi = nfor
 			for_iters(fi)%node_idx = instr%a
@@ -1707,6 +1759,7 @@ module subroutine vm_run(prog, state, res)
 
 		case default
 			write(*,*) 'VM: unknown opcode ', instr%op
+			call internal_error()
 
 		end select
 

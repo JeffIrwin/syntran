@@ -415,8 +415,6 @@ subroutine init_state(state, script_args, src_dir)
 				'bugs, please report them at https://github.com/JeffIrwin/syntran/issues'
 		end if
 	end if
-	!state%bytecode = (backend_status == 0 .and. &
-	!	trim(backend_env) == 'bytecode')
 
 	! Is it safe to initialize these arrays both here and in new_parser?  Test
 	! interactive interp

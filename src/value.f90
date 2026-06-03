@@ -303,7 +303,13 @@ recursive subroutine value_move(src, dst)
 	! build-in move_alloc() (and `mv file1 file2`)
 	!
 	! This is kind of a fake move.  Arrays and structs are moved, but primitive
-	! scalars are just copied
+	! scalars are just copied.
+	!
+	! Note: dst%type = src%type is set unconditionally first.  Callers (e.g.
+	! parse_expr.f90) may read src's type tag AFTER a move to this subroutine
+	! returns; that is safe because this routine does not clear src%type.
+	! src's allocatables are, however, cleared (moved to dst) for array/struct/
+	! str/file types.
 
 	type(value_t), intent(inout) :: src
 	type(value_t), intent(out)   :: dst
@@ -361,13 +367,16 @@ recursive subroutine value_copy(dst, src)
 	dst%type = src%type
 	dst%sca  = src%sca   ! POD copy: bool/i32/i64/f32/f64 only — cheap
 
-	if (allocated(src%str)) then
+	! Guard str/file_ copies on type, not just on allocated().  A reused stack
+	! slot may carry a stale allocatable from a prior value (different type); we
+	! must not propagate it to dst when the current type no longer uses it.
+	if (src%type == str_type .and. allocated(src%str)) then
 		dst%str = src%str   ! intrinsic assignment handles allocatable char
 	else if (allocated(dst%str)) then
 		deallocate(dst%str)
 	end if
 
-	if (allocated(src%file_)) then
+	if (src%type == file_type .and. allocated(src%file_)) then
 		if (.not. allocated(dst%file_)) allocate(dst%file_)
 		dst%file_ = src%file_   ! copies all fields including name_ (alloc char)
 	else if (allocated(dst%file_)) then

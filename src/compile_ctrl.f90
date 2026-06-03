@@ -27,15 +27,18 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 	! and decremented on exit.  continue_target(d) is the instruction index to
 	! jump to for a `continue` inside loop depth d.  break fixups inside loops
 	! are collected and backpatched after the loop body is fully compiled.
+	!
+	! All arrays are growable (no hard limit) for parity with the AST walker.
+	! INIT_* constants are starting capacities only; arrays double on demand.
 
-	integer, parameter :: MAX_LOOP_DEPTH   = 64
-	integer, parameter :: MAX_BREAK_FIXUPS = 4096
+	integer, parameter :: INIT_LOOP_DEPTH   = 64
+	integer, parameter :: INIT_BREAK_FIXUPS = 256
 
 	integer :: loop_depth = 0
-	integer :: continue_target(MAX_LOOP_DEPTH) = 0
+	integer, allocatable :: continue_target(:)
 
-	integer :: break_fixup_ips(MAX_BREAK_FIXUPS)    = 0
-	integer :: break_fixup_depths(MAX_BREAK_FIXUPS)  = 0
+	integer, allocatable :: break_fixup_ips(:)
+	integer, allocatable :: break_fixup_depths(:)
 	integer :: nbreak_fixups = 0
 
 	! --- Block-level break context ---
@@ -51,7 +54,7 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 	! outermost block share the same target, so one JUMP exits all of them.
 
 	logical :: in_block_break_ctx = .false.
-	integer :: block_break_ips(MAX_BREAK_FIXUPS) = 0
+	integer, allocatable :: block_break_ips(:)
 	integer :: nblock_break_fixups = 0
 
 	! Set to true while compiling a user function body; used to distinguish
@@ -62,6 +65,24 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+subroutine grow_int(arr)
+
+	! Double the capacity of an allocatable integer array, preserving contents.
+	! Used to grow continue_target, break_fixup_*, and block_break_ips on demand.
+
+	integer, allocatable, intent(inout) :: arr(:)
+	integer, allocatable :: tmp(:)
+	integer :: n
+
+	n = size(arr)
+	allocate(tmp(2 * n))
+	tmp(1:n) = arr
+	call move_alloc(tmp, arr)
+
+end subroutine grow_int
 
 !===============================================================================
 
@@ -534,6 +555,7 @@ recursive subroutine compile_node(prog, node)
 	! break  -> JUMP L_end  (backpatched after loop)
 	! continue -> JUMP L_top (target known when continue is emitted)
 	case (while_statement)
+		if (loop_depth + 1 > size(continue_target)) call grow_int(continue_target)
 		loop_depth = loop_depth + 1
 		l_top = prog%len_ + 1
 		continue_target(loop_depth) = l_top
@@ -564,6 +586,10 @@ recursive subroutine compile_node(prog, node)
 	case (break_statement)
 		if (loop_depth > 0) then
 			! Inside a native while/for: jump to the loop's end (backpatched)
+			if (nbreak_fixups + 1 > size(break_fixup_ips)) then
+				call grow_int(break_fixup_ips)
+				call grow_int(break_fixup_depths)
+			end if
 			nbreak_fixups = nbreak_fixups + 1
 			break_fixup_ips(nbreak_fixups)    = prog%len_ + 1
 			break_fixup_depths(nbreak_fixups) = loop_depth
@@ -572,6 +598,8 @@ recursive subroutine compile_node(prog, node)
 		else if (in_block_break_ctx) then
 			! Inside the outermost native block (no enclosing loop): jump to
 			! the block's end pad (backpatched when the block finishes)
+			if (nblock_break_fixups + 1 > size(block_break_ips)) &
+				call grow_int(block_break_ips)
 			nblock_break_fixups = nblock_break_fixups + 1
 			block_break_ips(nblock_break_fixups) = prog%len_ + 1
 			call emit(prog, OP_JUMP, a = 0)
@@ -666,6 +694,7 @@ recursive subroutine compile_node(prog, node)
 		idx = add_node(prog, node)
 		call emit(prog, OP_FOR_SETUP, a = idx)
 
+		if (loop_depth + 1 > size(continue_target)) call grow_int(continue_target)
 		loop_depth = loop_depth + 1
 		l_top = prog%len_ + 1
 		continue_target(loop_depth) = l_top
@@ -740,10 +769,10 @@ recursive subroutine compile_node(prog, node)
 		call emit(prog, OP_LOAD_CONST, a = const_idx)
 
 	! ---- user-defined function call -------------------------------------------
-	! Only emit OP_CALL for functions compiled into this program_t (i.e. locally
-	! declared functions whose fn_entry is known).  Module-imported functions and
-	! any call whose fn_id lies outside the compiled range fall back to OP_EVAL_NODE
-	! so the AST walker handles them via eval_fn_call.
+	! All user-defined functions (local and module-imported) are compiled into
+	! this program_t by the translation_unit pre-pass / compile_module_fns (M7).
+	! fn_entry[id] must be registered before execution; a missing registration is
+	! a compiler bug, not a fallback.
 	case (fn_call_expr)
 		! Check registration only: fn_entry[id] may be 0 for a forward reference
 		! (the fn is declared after this call site in the source).  That is fine —
@@ -861,12 +890,21 @@ module subroutine compile_tree(tree, prog)
 
 	!print *, 'starting compile_tree()'
 
-	! Reset all compiler state for each fresh compilation
+	! Reset all compiler state for each fresh compilation.
+	! Growable arrays are allocated here (or reallocated to initial cap if already
+	! allocated from a previous compile_tree call on the same module instance).
 	loop_depth          = 0
 	nbreak_fixups       = 0
 	in_block_break_ctx  = .false.
 	nblock_break_fixups = 0
 	in_fn_body          = .false.
+
+	if (.not. allocated(continue_target)) allocate(continue_target(INIT_LOOP_DEPTH))
+	if (.not. allocated(break_fixup_ips)) then
+		allocate(break_fixup_ips(INIT_BREAK_FIXUPS))
+		allocate(break_fixup_depths(INIT_BREAK_FIXUPS))
+	end if
+	if (.not. allocated(block_break_ips)) allocate(block_break_ips(INIT_BREAK_FIXUPS))
 
 	prog = new_program()
 	call compile_node(prog, tree)

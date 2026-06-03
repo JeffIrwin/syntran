@@ -4844,6 +4844,7 @@ subroutine unit_tests(iostat)
 	call unit_test_pow_scalar  (npass, nfail)
 	call unit_test_mixed_i32i64(npass, nfail)
 	call unit_test_arr_binop   (npass, nfail)
+	call unit_test_deep_recursion(npass, nfail)
 
 	call log_test_summary(npass, nfail)
 	iostat = nfail
@@ -4999,6 +5000,51 @@ subroutine unit_test_arr_binop(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_arr_binop
+
+!===============================================================================
+
+subroutine unit_test_deep_recursion(npass, nfail)
+
+	! Test that the VM's growable call-frame / for-iterator / loop-context stacks
+	! handle recursion and loop nesting well past their initial capacities.
+	! The initial caps are INIT_FRAMES_CAP=64 and INIT_FORS_CAP=16; these tests
+	! use depths large enough to trigger at least one doubling pass.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'deep recursion / loop nesting (growable VM stacks)'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Recursion past INIT_FRAMES_CAP (64): sum_to(400) = 400*401/2 = 80200
+			eval('fn sum_to(n: i32): i32 { if n <= 0 { return 0; } return n + sum_to(n - 1); } sum_to(400);') == '80200', &
+			! Deeply nested for loops past INIT_FORS_CAP (16): 20 nested for loops,
+			! each iterating once ([0:1] = one iteration in Syntran bound_array).
+			! Body increments s; expect s == 1.
+			eval('let s = 0;' // &
+			     'for i0 in [0:1] { for i1 in [0:1] { for i2 in [0:1] { for i3 in [0:1] {' // &
+			     'for i4 in [0:1] { for i5 in [0:1] { for i6 in [0:1] { for i7 in [0:1] {' // &
+			     'for i8 in [0:1] { for i9 in [0:1] { for i10 in [0:1] { for i11 in [0:1] {' // &
+			     'for i12 in [0:1] { for i13 in [0:1] { for i14 in [0:1] { for i15 in [0:1] {' // &
+			     'for i16 in [0:1] { for i17 in [0:1] { for i18 in [0:1] { for i19 in [0:1] {' // &
+			     's = s + 1; }}}}}}}}}}}}}}}}}}}}' // &
+			     's;') == '1', &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_deep_recursion
 
 !===============================================================================
 
