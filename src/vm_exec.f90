@@ -465,6 +465,7 @@ module subroutine vm_run(prog, state, res)
 	stack           = new_value_vector()
 	allocate(frames(INIT_FRAMES_CAP))
 	allocate(for_iters(INIT_FORS_CAP))
+	allocate(iargs_pool(0))   ! pre-allocate so iargs_pool(1:0) is valid for nullary intrinsics
 
 	ip = prog%entry_main
 	do while (ip <= prog%len_)
