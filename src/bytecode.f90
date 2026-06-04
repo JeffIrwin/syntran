@@ -13,7 +13,6 @@ module syntran__bytecode_m
 	! enum in consts.f90 (which tops out at 121) to prevent accidental aliasing.
 
 	integer, parameter :: &
-		OP_EVAL_NODE        = 1001, &	! debug fallback: run one AST node through syntax_eval (no compiler emit)
 		OP_LOAD_CONST       = 1002, &	! push consts(a) onto the operand stack (deep copy)
 		OP_LOAD_GLOBAL      = 1003, &	! push state%vars%vals(a) (deep copy)
 		OP_LOAD_LOCAL       = 1004, &	! push state%locs%vals(a) (deep copy)
@@ -287,9 +286,10 @@ module syntran__bytecode_m
 	!
 	! The constant pool consts(:) holds literal values referenced by LOAD_CONST.
 	!
-	! The node pool nodes(:) holds AST subtrees referenced by OP_EVAL_NODE.
-	! This is only used for the M0 fallback and will be removed once all node
-	! kinds have been lowered to real opcodes.
+	! The node pool nodes(:) holds AST subtrees referenced by opcodes that still
+	! delegate partial evaluation to the AST layer: OP_INDEX, OP_SLICE,
+	! OP_STORE_IDX, OP_MAKE_STRUCT, OP_LOAD_MEMBER, OP_STORE_MEMBER,
+	! OP_FOR_SETUP, OP_NEW_ARRAY, OP_STORE_SLICE, and OP_CALL.
 
 	type program_t
 
@@ -299,7 +299,7 @@ module syntran__bytecode_m
 		type(value_t), allocatable :: consts(:)
 		integer :: nconsts = 0
 
-		! AST node pool for the OP_EVAL_NODE fallback
+		! AST node pool for opcodes that delegate to the AST layer
 		type(syntax_node_t), allocatable :: nodes(:)
 		integer :: nnodes = 0
 
@@ -309,9 +309,80 @@ module syntran__bytecode_m
 
 	end type program_t
 
+	!********
+
+	! Per-compilation state threaded through the recursive compiler.
+	! Using a derived type (rather than module variables) makes the compiler
+	! reentrant: each compile_tree() call constructs its own compiler_state_t
+	! and passes it explicitly through compile_node/compile_module_fns.
+
+	type compiler_state_t
+
+		! --- loop break/continue backpatching ---
+		!
+		! loop_depth is incremented when entering a natively-compiled while/for
+		! loop and decremented on exit.  continue_target(d) is the instruction
+		! index to jump to for a `continue` inside loop depth d.  break fixups
+		! inside loops are collected and backpatched after the loop body.
+		!
+		! All arrays are growable (no hard limit) for parity with the AST walker.
+		! INIT_LOOP_DEPTH / INIT_BREAK_FIXUPS are starting capacities only;
+		! arrays double on demand.
+
+		integer :: loop_depth = 0
+		integer, allocatable :: continue_target(:)
+
+		integer, allocatable :: break_fixup_ips(:)
+		integer, allocatable :: break_fixup_depths(:)
+		integer :: nbreak_fixups = 0
+
+		! --- Block-level break context ---
+		!
+		! In Syntran, `break` can exit a plain block statement (not just loops).
+		! When loop_depth == 0 and this is the outermost natively-compiled block,
+		! `break` records a fixup that gets patched to the block's end.
+
+		logical :: in_block_break_ctx = .false.
+		integer, allocatable :: block_break_ips(:)
+		integer :: nblock_break_fixups = 0
+
+		! Set to true while compiling a user function body; used to distinguish
+		! a function-level return_statement (emit OP_RET) from a top-level one
+		! (emit OP_HALT).
+		logical :: in_fn_body = .false.
+
+	end type compiler_state_t
+
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+function new_compiler_state() result(cs)
+
+	! Construct a freshly-initialised compiler_state_t for one compile_tree()
+	! call.  All growable arrays are allocated at their initial capacities.
+
+	type(compiler_state_t) :: cs
+
+	!*******
+
+	integer, parameter :: INIT_LOOP_DEPTH   = 64
+	integer, parameter :: INIT_BREAK_FIXUPS = 256
+
+	cs%loop_depth          = 0
+	cs%nbreak_fixups       = 0
+	cs%in_block_break_ctx  = .false.
+	cs%nblock_break_fixups = 0
+	cs%in_fn_body          = .false.
+
+	allocate(cs%continue_target(INIT_LOOP_DEPTH))
+	allocate(cs%break_fixup_ips(INIT_BREAK_FIXUPS))
+	allocate(cs%break_fixup_depths(INIT_BREAK_FIXUPS))
+	allocate(cs%block_break_ips(INIT_BREAK_FIXUPS))
+
+end function new_compiler_state
 
 !===============================================================================
 

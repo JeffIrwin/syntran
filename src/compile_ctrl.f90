@@ -5,10 +5,8 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 
 	! Bytecode compiler: AST -> bytecode lowering.
 	!
-	! M0: single OP_EVAL_NODE fallback for any unsupported node.
 	! M1: natively compiles literal_expr, simple name_expr, binary_expr,
 	!     unary_expr, let_expr, simple assignment_expr, and translation_unit.
-	!     Everything else still falls back to OP_EVAL_NODE.
 	! M2: adds block_statement, if_statement, while_statement,
 	!     break_statement, continue_statement via JUMP/JUMP_IF_FALSE opcodes.
 	! M6: fn_call_intr_expr emits OP_CALL_INTR with integer intr_id dispatch.
@@ -16,51 +14,11 @@ submodule (syntran__compile_m) syntran__compile_ctrl
 	!     module init code emitted inline at the use_statement site.
 	! M8: for_statement (native FOR_SETUP/FOR_NEXT), array_expr (OP_NEW_ARRAY),
 	!     slice/complex LHS assign (OP_STORE_SLICE), top-level return (OP_HALT),
-	!     readln/close native dispatch with slot writeback; OP_EVAL_NODE fallback
-	!     removed from compiler (kept as debug opcode in the VM handler).
+	!     readln/close native dispatch with slot writeback.
+	! All node kinds are now natively compiled; the case default traps unhandled
+	! nodes via internal_error().
 
 	implicit none
-
-	! --- Loop context for break/continue backpatching ---
-	!
-	! loop_depth is incremented when entering a natively-compiled while/for loop
-	! and decremented on exit.  continue_target(d) is the instruction index to
-	! jump to for a `continue` inside loop depth d.  break fixups inside loops
-	! are collected and backpatched after the loop body is fully compiled.
-	!
-	! All arrays are growable (no hard limit) for parity with the AST walker.
-	! INIT_* constants are starting capacities only; arrays double on demand.
-
-	integer, parameter :: INIT_LOOP_DEPTH   = 64
-	integer, parameter :: INIT_BREAK_FIXUPS = 256
-
-	integer :: loop_depth = 0
-	integer, allocatable :: continue_target(:)
-
-	integer, allocatable :: break_fixup_ips(:)
-	integer, allocatable :: break_fixup_depths(:)
-	integer :: nbreak_fixups = 0
-
-	! --- Block-level break context ---
-	!
-	! In Syntran, `break` can exit a plain block statement (not just loops).
-	! The AST walker propagates state%breaked through all enclosing blocks until
-	! it reaches a for/while loop or the translation unit.
-	!
-	! In the VM, we replicate this by tracking whether we are inside the
-	! outermost natively-compiled block (with no enclosing native loop).  If so,
-	! `break` records a fixup that gets patched to the block's end when the
-	! outermost block finishes compilation.  Inner blocks nested inside the
-	! outermost block share the same target, so one JUMP exits all of them.
-
-	logical :: in_block_break_ctx = .false.
-	integer, allocatable :: block_break_ips(:)
-	integer :: nblock_break_fixups = 0
-
-	! Set to true while compiling a user function body; used to distinguish
-	! a function-level return_statement (emit OP_RET) from a top-level one
-	! (fall back to OP_EVAL_NODE).
-	logical :: in_fn_body = .false.
 
 !===============================================================================
 
@@ -118,7 +76,7 @@ end subroutine ensure_fn_entry
 
 !===============================================================================
 
-recursive subroutine compile_module_fns(prog, module_node)
+recursive subroutine compile_module_fns(prog, cs, module_node)
 
 	! Compile all fn bodies from a module's translation_unit node into prog,
 	! recording their entry points in prog%fn_entry.  Recursively handles any
@@ -132,8 +90,9 @@ recursive subroutine compile_module_fns(prog, module_node)
 	!               finds the id registered (in range) even if fn_entry == 0,
 	!               and OP_CALL is emitted safely (entry will be filled before VM runs).
 
-	type(program_t),     intent(inout) :: prog
-	type(syntax_node_t), intent(in)    :: module_node   ! translation_unit
+	type(program_t),        intent(inout) :: prog
+	type(compiler_state_t), intent(inout) :: cs
+	type(syntax_node_t),    intent(in)    :: module_node   ! translation_unit
 
 	!*******
 
@@ -144,7 +103,7 @@ recursive subroutine compile_module_fns(prog, module_node)
 	do i = 1, size(module_node%members)
 		if (module_node%members(i)%kind /= use_statement) cycle
 		if (.not. allocated(module_node%members(i)%member)) cycle
-		call compile_module_fns(prog, module_node%members(i)%member)
+		call compile_module_fns(prog, cs, module_node%members(i)%member)
 	end do
 
 	! Sub-pass A: register all local fn ids before compiling any body.
@@ -160,55 +119,57 @@ recursive subroutine compile_module_fns(prog, module_node)
 		if (prog%fn_entry(fn_id) /= 0) cycle   ! already compiled (diamond dep)
 		prog%fn_num_locs(fn_id) = module_node%members(i)%num_locs
 		prog%fn_entry(fn_id)    = prog%len_ + 1
-		in_fn_body = .true.
-		call compile_node(prog, module_node%members(i)%body)
-		in_fn_body = .false.
+		cs%in_fn_body = .true.
+		call compile_node(prog, cs, module_node%members(i)%body)
+		cs%in_fn_body = .false.
 	end do
 
 end subroutine compile_module_fns
 
 !===============================================================================
 
-subroutine backpatch_breaks(prog, depth, target)
+subroutine backpatch_breaks(prog, cs, depth, target)
 
 	! Patch all pending loop-break fixups at the given loop depth to target,
 	! then remove them from the fixup list.
 
-	type(program_t), intent(inout) :: prog
-	integer, intent(in) :: depth, target
+	type(program_t),        intent(inout) :: prog
+	type(compiler_state_t), intent(inout) :: cs
+	integer,                intent(in)    :: depth, target
 
 	!*******
 
 	integer :: i, j
 
 	j = 0
-	do i = 1, nbreak_fixups
-		if (break_fixup_depths(i) == depth) then
-			call patch_jump(prog, break_fixup_ips(i), target)
+	do i = 1, cs%nbreak_fixups
+		if (cs%break_fixup_depths(i) == depth) then
+			call patch_jump(prog, cs%break_fixup_ips(i), target)
 		else
 			j = j + 1
-			break_fixup_ips(j)    = break_fixup_ips(i)
-			break_fixup_depths(j) = break_fixup_depths(i)
+			cs%break_fixup_ips(j)    = cs%break_fixup_ips(i)
+			cs%break_fixup_depths(j) = cs%break_fixup_depths(i)
 		end if
 	end do
-	nbreak_fixups = j
+	cs%nbreak_fixups = j
 
 end subroutine backpatch_breaks
 
 !===============================================================================
 
-recursive subroutine compile_node(prog, node)
+recursive subroutine compile_node(prog, cs, node)
 
 	! Lower one AST node to opcodes.  The contract is that this subroutine
 	! always leaves exactly one value on the operand stack after the emitted
-	! opcodes execute — even for the OP_EVAL_NODE fallback.
+	! opcodes execute.
 	!
 	! Exception: break_statement and continue_statement emit an unconditional
 	! JUMP so the instructions after them are unreachable.  Stack discipline is
 	! only required on live paths.
 
-	type(program_t), intent(inout) :: prog
-	type(syntax_node_t), intent(in) :: node
+	type(program_t),        intent(inout) :: prog
+	type(compiler_state_t), intent(inout) :: cs
+	type(syntax_node_t),    intent(in)    :: node
 
 	!*******
 
@@ -250,7 +211,7 @@ recursive subroutine compile_node(prog, node)
 			! Fallback B: any range/step/all subscript → OP_SLICE.
 			if (index_native_ok(node)) then
 				do i = 1, size(node%lsubscripts)
-					call compile_node(prog, node%lsubscripts(i))
+					call compile_node(prog, cs, node%lsubscripts(i))
 				end do
 				call emit(prog, OP_INDEX_NAT, &
 					a = node%id_index, &
@@ -277,8 +238,8 @@ recursive subroutine compile_node(prog, node)
 
 	! ---- arithmetic / comparison / logic / bitwise ----------------------------
 	case (binary_expr)
-		call compile_node(prog, node%left )
-		call compile_node(prog, node%right)
+		call compile_node(prog, cs, node%left )
+		call compile_node(prog, cs, node%right)
 		! Same-type scalar or mixed i32/i64: emit typed opcode.
 		! Same-type numeric arrays: emit OP_ARR_BINOP (a=op_kind, b=elem_type).
 		! Otherwise emit generic OP_BINOP with pre-computed result type in instr%b
@@ -309,7 +270,7 @@ recursive subroutine compile_node(prog, node)
 		end if
 
 	case (unary_expr)
-		call compile_node(prog, node%right)
+		call compile_node(prog, cs, node%right)
 		typed_op = unop_typed_opcode(node%op%kind, node%right%val%type)
 		if (typed_op /= 0) then
 			call emit(prog, typed_op)
@@ -319,7 +280,7 @@ recursive subroutine compile_node(prog, node)
 
 	! ---- variable declarations ------------------------------------------------
 	case (let_expr)
-		call compile_node(prog, node%right)
+		call compile_node(prog, cs, node%right)
 		! Scalar type: emit typed store (avoids assign_ overhead).
 		typed_op = typed_store_op(node%val%type, node%is_loc)
 		if (typed_op /= 0) then
@@ -334,14 +295,14 @@ recursive subroutine compile_node(prog, node)
 	case (assignment_expr)
 		if (allocated(node%member)) then
 			! M5: dot member assignment: a.b = expr  or  a.b += expr
-			call compile_node(prog, node%right)
+			call compile_node(prog, cs, node%right)
 			idx = add_node(prog, node)
 			call emit(prog, OP_STORE_MEMBER, a = idx, b = node%op%kind)
 
 		else if (.not. allocated(node%lsubscripts) .and. &
 		         node%op%kind == equals_token) then
 			! Simple plain assignment: a = expr
-			call compile_node(prog, node%right)
+			call compile_node(prog, cs, node%right)
 			! Scalar type (LHS and RHS agree — parser guarantees): typed store.
 			typed_op = 0
 			if (node%val%type == node%right%val%type) &
@@ -373,7 +334,7 @@ recursive subroutine compile_node(prog, node)
 			if (binop_op_ /= 0) then
 				! Load current value, compile RHS, apply op, store result.
 				call emit(prog, typed_op, a = node%id_index)
-				call compile_node(prog, node%right)
+				call compile_node(prog, cs, node%right)
 				call emit(prog, binop_op_)
 				typed_op = typed_store_op(node%val%type, node%is_loc)
 				call emit(prog, typed_op, a = node%id_index)
@@ -399,16 +360,16 @@ recursive subroutine compile_node(prog, node)
 				! Fallback: compound ops, str/struct elements → OP_STORE_IDX.
 				if (store_idx_native_ok(node)) then
 					do i = 1, size(node%lsubscripts)
-						call compile_node(prog, node%lsubscripts(i))
+						call compile_node(prog, cs, node%lsubscripts(i))
 					end do
-					call compile_node(prog, node%right)
+					call compile_node(prog, cs, node%right)
 					call emit(prog, OP_STORE_IDX_NAT, &
 						a = node%id_index, &
 						b = int(size(node%lsubscripts)), &
 						c = merge(1_8, 0_8, node%is_loc))
 				else
 					! Fallback: compound ops, str chars, struct elements, casts
-					call compile_node(prog, node%right)
+					call compile_node(prog, cs, node%right)
 					idx = add_node(prog, node)
 					call emit(prog, OP_STORE_IDX, a = idx, b = node%op%kind)
 				end if
@@ -439,10 +400,10 @@ recursive subroutine compile_node(prog, node)
 	case (block_statement)
 		! Enter the outermost block-break context if not already in one and
 		! there is no enclosing native while/for loop.
-		if (loop_depth == 0 .and. .not. in_block_break_ctx) then
-			in_block_break_ctx = .true.
+		if (cs%loop_depth == 0 .and. .not. cs%in_block_break_ctx) then
+			cs%in_block_break_ctx = .true.
 			entering_ctx = .true.
-			nblock_saved = nblock_break_fixups
+			nblock_saved = cs%nblock_break_fixups
 		else
 			entering_ctx = .false.
 			nblock_saved = 0		! unused, but avoids uninitialized warning
@@ -453,7 +414,7 @@ recursive subroutine compile_node(prog, node)
 		do i = 1, size(node%members)
 			if (.not. first) call emit(prog, OP_POP)
 			first = .false.
-			call compile_node(prog, node%members(i))
+			call compile_node(prog, cs, node%members(i))
 		end do
 		! Empty block: push unknown_type sentinel
 		if (first) then
@@ -464,15 +425,15 @@ recursive subroutine compile_node(prog, node)
 		! After the outermost block body: emit the break-taken sentinel pad
 		! if any block-level break fixups were collected.
 		if (entering_ctx) then
-			if (nblock_break_fixups > nblock_saved) then
+			if (cs%nblock_break_fixups > nblock_saved) then
 				! Normal path: skip the pad
 				j_ip = prog%len_ + 1
 				call emit(prog, OP_JUMP, a = 0)
 
 				! Break path: push unknown_type as the block's result
 				l_pad = prog%len_ + 1
-				do i = nblock_saved + 1, nblock_break_fixups
-					call patch_jump(prog, block_break_ips(i), l_pad)
+				do i = nblock_saved + 1, cs%nblock_break_fixups
+					call patch_jump(prog, cs%block_break_ips(i), l_pad)
 				end do
 				const_idx = add_const(prog, unknown_val())
 				call emit(prog, OP_LOAD_CONST, a = const_idx)
@@ -483,8 +444,8 @@ recursive subroutine compile_node(prog, node)
 			end if
 
 			! Restore the block-break context for the enclosing scope
-			nblock_break_fixups = nblock_saved
-			in_block_break_ctx  = .false.
+			cs%nblock_break_fixups = nblock_saved
+			cs%in_block_break_ctx  = .false.
 		end if
 
 	! ---- if statement ----------------------------------------------------------
@@ -505,14 +466,14 @@ recursive subroutine compile_node(prog, node)
 	!   L_end:
 	case (if_statement)
 		! Compile condition; leaves bool on stack
-		call compile_node(prog, node%condition)
+		call compile_node(prog, cs, node%condition)
 
 		! JUMP_IF_FALSE — target patched below
 		jf_ip = prog%len_ + 1
 		call emit(prog, OP_JUMP_IF_FALSE, a = 0)
 
 		! Compile the if-clause
-		call compile_node(prog, node%if_clause)
+		call compile_node(prog, cs, node%if_clause)
 
 		if (allocated(node%else_clause)) then
 			! JUMP past else — target patched below
@@ -523,7 +484,7 @@ recursive subroutine compile_node(prog, node)
 			call patch_jump(prog, jf_ip, l_else)
 
 			! Compile the else-clause (may itself be another if_statement)
-			call compile_node(prog, node%else_clause)
+			call compile_node(prog, cs, node%else_clause)
 
 			l_end = prog%len_ + 1
 			call patch_jump(prog, j_ip, l_end)
@@ -555,28 +516,28 @@ recursive subroutine compile_node(prog, node)
 	! break  -> JUMP L_end  (backpatched after loop)
 	! continue -> JUMP L_top (target known when continue is emitted)
 	case (while_statement)
-		if (loop_depth + 1 > size(continue_target)) call grow_int(continue_target)
-		loop_depth = loop_depth + 1
+		if (cs%loop_depth + 1 > size(cs%continue_target)) call grow_int(cs%continue_target)
+		cs%loop_depth = cs%loop_depth + 1
 		l_top = prog%len_ + 1
-		continue_target(loop_depth) = l_top
+		cs%continue_target(cs%loop_depth) = l_top
 
 		! Compile condition
-		call compile_node(prog, node%condition)
+		call compile_node(prog, cs, node%condition)
 
 		! JUMP_IF_FALSE — patched to L_end below
 		jf_ip = prog%len_ + 1
 		call emit(prog, OP_JUMP_IF_FALSE, a = 0)
 
 		! Compile body; its result is discarded before looping
-		call compile_node(prog, node%body)
+		call compile_node(prog, cs, node%body)
 		call emit(prog, OP_POP)
 		call emit(prog, OP_JUMP, a = l_top)
 
 		! L_end: backpatch the conditional exit and all break fixups
 		l_end = prog%len_ + 1
 		call patch_jump(prog, jf_ip, l_end)
-		call backpatch_breaks(prog, loop_depth, l_end)
-		loop_depth = loop_depth - 1
+		call backpatch_breaks(prog, cs, cs%loop_depth, l_end)
+		cs%loop_depth = cs%loop_depth - 1
 
 		! Push unknown_type as the while-statement's result value
 		const_idx = add_const(prog, unknown_val())
@@ -584,24 +545,24 @@ recursive subroutine compile_node(prog, node)
 
 	! ---- break -----------------------------------------------------------------
 	case (break_statement)
-		if (loop_depth > 0) then
+		if (cs%loop_depth > 0) then
 			! Inside a native while/for: jump to the loop's end (backpatched)
-			if (nbreak_fixups + 1 > size(break_fixup_ips)) then
-				call grow_int(break_fixup_ips)
-				call grow_int(break_fixup_depths)
+			if (cs%nbreak_fixups + 1 > size(cs%break_fixup_ips)) then
+				call grow_int(cs%break_fixup_ips)
+				call grow_int(cs%break_fixup_depths)
 			end if
-			nbreak_fixups = nbreak_fixups + 1
-			break_fixup_ips(nbreak_fixups)    = prog%len_ + 1
-			break_fixup_depths(nbreak_fixups) = loop_depth
+			cs%nbreak_fixups = cs%nbreak_fixups + 1
+			cs%break_fixup_ips(cs%nbreak_fixups)    = prog%len_ + 1
+			cs%break_fixup_depths(cs%nbreak_fixups) = cs%loop_depth
 			call emit(prog, OP_JUMP, a = 0)
 
-		else if (in_block_break_ctx) then
+		else if (cs%in_block_break_ctx) then
 			! Inside the outermost native block (no enclosing loop): jump to
 			! the block's end pad (backpatched when the block finishes)
-			if (nblock_break_fixups + 1 > size(block_break_ips)) &
-				call grow_int(block_break_ips)
-			nblock_break_fixups = nblock_break_fixups + 1
-			block_break_ips(nblock_break_fixups) = prog%len_ + 1
+			if (cs%nblock_break_fixups + 1 > size(cs%block_break_ips)) &
+				call grow_int(cs%block_break_ips)
+			cs%nblock_break_fixups = cs%nblock_break_fixups + 1
+			cs%block_break_ips(cs%nblock_break_fixups) = prog%len_ + 1
 			call emit(prog, OP_JUMP, a = 0)
 
 		else
@@ -612,8 +573,8 @@ recursive subroutine compile_node(prog, node)
 
 	! ---- continue --------------------------------------------------------------
 	case (continue_statement)
-		if (loop_depth > 0) then
-			call emit(prog, OP_JUMP, a = continue_target(loop_depth))
+		if (cs%loop_depth > 0) then
+			call emit(prog, OP_JUMP, a = cs%continue_target(cs%loop_depth))
 		else
 			! No loop context: top-level continue is a no-op in translation_unit
 			const_idx = add_const(prog, unknown_val())
@@ -637,7 +598,7 @@ recursive subroutine compile_node(prog, node)
 		do i = 1, size(node%members)
 			if (node%members(i)%kind /= use_statement) cycle
 			if (.not. allocated(node%members(i)%member)) cycle
-			call compile_module_fns(prog, node%members(i)%member)
+			call compile_module_fns(prog, cs, node%members(i)%member)
 		end do
 
 		! Pass 1: compile each locally-declared fn body.
@@ -647,9 +608,9 @@ recursive subroutine compile_node(prog, node)
 			prog%fn_num_locs(l_top) = node%members(i)%num_locs
 			prog%fn_entry(l_top)    = prog%len_ + 1
 
-			in_fn_body = .true.
-			call compile_node(prog, node%members(i)%body)
-			in_fn_body = .false.
+			cs%in_fn_body = .true.
+			call compile_node(prog, cs, node%members(i)%body)
+			cs%in_fn_body = .false.
 		end do
 
 		! Top-level statements start here.
@@ -664,7 +625,7 @@ recursive subroutine compile_node(prog, node)
 			if (node%members(i)%kind == struct_declaration) cycle
 			if (.not. first) call emit(prog, OP_POP)
 			first = .false.
-			call compile_node(prog, node%members(i))
+			call compile_node(prog, cs, node%members(i))
 		end do
 
 		! If all members were fn/struct declarations, nothing was emitted and
@@ -694,25 +655,25 @@ recursive subroutine compile_node(prog, node)
 		idx = add_node(prog, node)
 		call emit(prog, OP_FOR_SETUP, a = idx)
 
-		if (loop_depth + 1 > size(continue_target)) call grow_int(continue_target)
-		loop_depth = loop_depth + 1
+		if (cs%loop_depth + 1 > size(cs%continue_target)) call grow_int(cs%continue_target)
+		cs%loop_depth = cs%loop_depth + 1
 		l_top = prog%len_ + 1
-		continue_target(loop_depth) = l_top
+		cs%continue_target(cs%loop_depth) = l_top
 
 		! FOR_NEXT — patched to L_pop below
 		jf_ip = prog%len_ + 1
 		call emit(prog, OP_FOR_NEXT, a = 0)
 
 		! Compile body; its result is discarded before the back edge
-		call compile_node(prog, node%body)
+		call compile_node(prog, cs, node%body)
 		call emit(prog, OP_POP)
 		call emit(prog, OP_JUMP, a = l_top)
 
 		! L_pop: backpatch FOR_NEXT and all break fixups here, then pop + result
 		l_end = prog%len_ + 1
 		call patch_jump(prog, jf_ip, l_end)
-		call backpatch_breaks(prog, loop_depth, l_end)
-		loop_depth = loop_depth - 1
+		call backpatch_breaks(prog, cs, cs%loop_depth, l_end)
+		cs%loop_depth = cs%loop_depth - 1
 		call emit(prog, OP_FOR_POP)
 
 		! Push unknown_type as the for-statement's result value
@@ -732,7 +693,7 @@ recursive subroutine compile_node(prog, node)
 	! struct_name and nmembers; the member expressions themselves are bytecode.
 	case (struct_instance_expr)
 		do i = 1, size(node%members)
-			call compile_node(prog, node%members(i))
+			call compile_node(prog, cs, node%members(i))
 		end do
 		idx = add_node(prog, node)
 		call emit(prog, OP_MAKE_STRUCT, a = idx)
@@ -761,7 +722,7 @@ recursive subroutine compile_node(prog, node)
 			do i = 1, size(node%member%members)
 				if (node%member%members(i)%kind == fn_declaration    ) cycle
 				if (node%member%members(i)%kind == struct_declaration) cycle
-				call compile_node(prog, node%member%members(i))
+				call compile_node(prog, cs, node%member%members(i))
 				call emit(prog, OP_POP)
 			end do
 		end if
@@ -798,7 +759,7 @@ recursive subroutine compile_node(prog, node)
 			! Pass 1: push by-value args onto stack.
 			if (allocated(node%is_ref)) then
 				do i = 1, size(node%is_ref)
-					if (.not. node%is_ref(i)) call compile_node(prog, node%args(i))
+					if (.not. node%is_ref(i)) call compile_node(prog, cs, node%args(i))
 				end do
 
 				! Pass 2: move by-ref args from their variable slots onto stack.
@@ -829,7 +790,24 @@ recursive subroutine compile_node(prog, node)
 			select case (intr_id_)
 			case (INTR_READLN, INTR_CLOSE)
 				! Push the file argument, encode its slot for writeback in c.
-				call compile_node(prog, node%args(1))
+				! Guard: the file arg must be a plain variable (no subscripts, no
+				! member access).  If the grammar ever permits readln(arr[i]) or
+				! a struct-member file, the slot encoding would be wrong; fail
+				! loudly here rather than silently writing to the wrong slot.
+				if (node%args(1)%kind /= name_expr) then
+					write(*,*) 'compile: readln/close: file argument must be a ' // &
+						'plain variable (subscripted/member file not supported)'
+					call internal_error()
+				end if
+				if (allocated(node%args(1)%lsubscripts)) then
+					write(*,*) 'compile: readln/close: subscripted file argument not supported'
+					call internal_error()
+				end if
+				if (allocated(node%args(1)%member)) then
+					write(*,*) 'compile: readln/close: member file argument not supported'
+					call internal_error()
+				end if
+				call compile_node(prog, cs, node%args(1))
 				slot_c = int(node%args(1)%id_index, 8) * 2 + &
 				         merge(1_8, 0_8, node%args(1)%is_loc)
 				call emit(prog, OP_CALL_INTR, a = intr_id_, b = 1, c = slot_c)
@@ -838,7 +816,7 @@ recursive subroutine compile_node(prog, node)
 				nargs_ = 0
 				if (allocated(node%args)) then
 					do i = 1, size(node%args)
-						call compile_node(prog, node%args(i))
+						call compile_node(prog, cs, node%args(i))
 					end do
 					nargs_ = size(node%args)
 				end if
@@ -855,9 +833,9 @@ recursive subroutine compile_node(prog, node)
 			const_idx = add_const(prog, unknown_val())
 			call emit(prog, OP_LOAD_CONST, a = const_idx)
 		else
-			call compile_node(prog, node%right)
+			call compile_node(prog, cs, node%right)
 		end if
-		if (in_fn_body) then
+		if (cs%in_fn_body) then
 			call emit(prog, OP_RET)
 		else
 			! Top-level return: OP_HALT exits the VM loop; TOS is the result.
@@ -888,26 +866,15 @@ module subroutine compile_tree(tree, prog)
 	type(syntax_node_t), intent(in) :: tree
 	type(program_t), intent(out) :: prog
 
+	!*******
+
+	type(compiler_state_t) :: cs
+
 	!print *, 'starting compile_tree()'
 
-	! Reset all compiler state for each fresh compilation.
-	! Growable arrays are allocated here (or reallocated to initial cap if already
-	! allocated from a previous compile_tree call on the same module instance).
-	loop_depth          = 0
-	nbreak_fixups       = 0
-	in_block_break_ctx  = .false.
-	nblock_break_fixups = 0
-	in_fn_body          = .false.
-
-	if (.not. allocated(continue_target)) allocate(continue_target(INIT_LOOP_DEPTH))
-	if (.not. allocated(break_fixup_ips)) then
-		allocate(break_fixup_ips(INIT_BREAK_FIXUPS))
-		allocate(break_fixup_depths(INIT_BREAK_FIXUPS))
-	end if
-	if (.not. allocated(block_break_ips)) allocate(block_break_ips(INIT_BREAK_FIXUPS))
-
+	cs = new_compiler_state()
 	prog = new_program()
-	call compile_node(prog, tree)
+	call compile_node(prog, cs, tree)
 
 end subroutine compile_tree
 

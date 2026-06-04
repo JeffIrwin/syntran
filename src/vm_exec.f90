@@ -5,7 +5,6 @@ submodule (syntran__vm_m) syntran__vm_exec
 
 	! Stack-based bytecode VM execution loop.
 	!
-	! M0: OP_EVAL_NODE fallback (delegates to syntax_eval; kept as debug opcode).
 	! M1: native handlers for scalars, loads/stores, binop, unop.
 	! M2: OP_JUMP / OP_JUMP_IF_FALSE for if/while/block/break/continue.
 	! M3: OP_CALL / OP_RET / OP_LOAD_REF_* for user-defined function frames.
@@ -90,20 +89,17 @@ end subroutine grow_frames
 subroutine grow_fors(for_iters)
 	! Double the for-iterator stack.  for_iter_t has no allocatable components
 	! at the top level (its value_t/array_t members have allocatables inside),
-	! so we use elementwise deep copy via the project's standard copy pattern.
+	! so assignment is used for each element.  Copies into the doubled buffer
+	! directly to avoid the extra round-trip through a same-sized tmp.
 	type(for_iter_t), allocatable, intent(inout) :: for_iters(:)
 	type(for_iter_t), allocatable :: tmp(:)
 	integer :: i, n
 	n = size(for_iters)
-	allocate(tmp(n))		! stage into a same-sized tmp first
+	allocate(tmp(2 * n))
 	do i = 1, n
 		tmp(i) = for_iters(i)
 	end do
-	deallocate(for_iters)
-	allocate(for_iters(2 * n))
-	do i = 1, n
-		for_iters(i) = tmp(i)
-	end do
+	call move_alloc(tmp, for_iters)
 end subroutine grow_fors
 
 !===============================================================================
@@ -446,9 +442,11 @@ module subroutine vm_run(prog, state, res)
 	integer :: id, type_, n_mem
 	integer(kind = 8) :: i8
 
-	! M6: temporary arg array for OP_CALL_INTR native dispatch
-	type(value_t), allocatable :: iargs(:)
-	integer :: nintr
+	! M6: reusable arg pool for OP_CALL_INTR native dispatch.
+	! Mirrors the params_pool/params_pool_cap pattern for OP_CALL; avoids
+	! allocate/deallocate on every intrinsic call.
+	type(value_t), allocatable :: iargs_pool(:)
+	integer :: iargs_pool_cap, nintr
 
 	! Call-frame stack (growable; no hard recursion limit)
 	type(frame_t), allocatable :: frames(:)
@@ -463,6 +461,7 @@ module subroutine vm_run(prog, state, res)
 	nframes         = 0
 	nfor            = 0
 	params_pool_cap = 0
+	iargs_pool_cap  = 0
 	stack           = new_value_vector()
 	allocate(frames(INIT_FRAMES_CAP))
 	allocate(for_iters(INIT_FORS_CAP))
@@ -476,60 +475,6 @@ module subroutine vm_run(prog, state, res)
 		associate(instr => prog%code(ip))
 
 		select case (instr%op)
-
-		! --- fallback: AST walker ---
-		case (OP_EVAL_NODE)
-			call syntax_eval(prog%nodes(instr%a), state, val)
-			call vm_push_move(stack, val)
-			if (state%returned) then
-				if (nframes > 0) then
-					! A return_statement executed inside an AST-walker fallback
-					! (e.g. a for loop) while we're inside a compiled function
-					! frame.  Perform the OP_RET cleanup inline so the frame is
-					! correctly unwound.
-					call vm_pop_copy(stack, val)   ! TOS = return value
-
-					! Move by-ref params back and restore caller locs
-					associate(fr => frames(nframes), &
-					          cn => prog%nodes(frames(nframes)%node_idx))
-					nparams = size(cn%params)
-					if (nparams > params_pool_cap) then
-						if (allocated(params_pool)) deallocate(params_pool)
-						allocate(params_pool(nparams))
-						params_pool_cap = nparams
-					end if
-					do i = 1, nparams
-						if (cn%is_ref(i)) then
-							call value_move(state%locs%vals(cn%params(i)), params_pool(i))
-						end if
-					end do
-					! Save callee locs to pool, then restore caller locs.
-					if (allocated(state%locs%vals)) then
-						call move_alloc(state%locs%vals, frames(nframes)%locs_buf)
-					end if
-					if (allocated(fr%caller_locs)) then
-						call move_alloc(fr%caller_locs, state%locs%vals)
-					end if
-					do i = 1, nparams
-						if (.not. cn%is_ref(i)) cycle
-						if (cn%args(i)%is_loc) then
-							call value_move(params_pool(i), &
-								state%locs%vals(cn%args(i)%id_index))
-						else
-							call value_move(params_pool(i), &
-								state%vars%vals(cn%args(i)%id_index))
-						end if
-					end do
-					next_ip = fr%return_ip
-					end associate
-					nframes = nframes - 1
-					state%returned = .false.
-					call vm_push_move(stack, val)
-				else
-					! Top-level return: exit the main VM loop.
-					next_ip = prog%len_ + 1
-				end if
-			end if
 
 		! --- constants and variable loads ---
 		case (OP_LOAD_CONST)
@@ -854,9 +799,15 @@ module subroutine vm_run(prog, state, res)
 		! readln/close: inline handling with slot writeback via instr%c.
 		case (OP_CALL_INTR)
 			nintr = instr%b
-			allocate(iargs(nintr))
+			! Grow the reusable iargs pool if needed (amortised; avoids
+			! allocate/deallocate on every intrinsic call).
+			if (nintr > iargs_pool_cap) then
+				if (allocated(iargs_pool)) deallocate(iargs_pool)
+				allocate(iargs_pool(nintr))
+				iargs_pool_cap = nintr
+			end if
 			do i = nintr, 1, -1
-				call vm_pop_copy(stack, iargs(i))
+				call vm_pop_copy(stack, iargs_pool(i))
 			end do
 
 			if (instr%a == INTR_READLN) then
@@ -866,19 +817,19 @@ module subroutine vm_run(prog, state, res)
 				logical :: is_loc_
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
-				if (.not. iargs(1)%file_%is_open) then
+				if (.not. iargs_pool(1)%file_%is_open) then
 					write(*,*) err_rt_prefix//'readln() was called for file "' &
-						//iargs(1)%file_%name_//'" which is not open'
+						//iargs_pool(1)%file_%name_//'" which is not open'
 					call internal_error()
 				end if
-				if (.not. iargs(1)%file_%mode_read) then
+				if (.not. iargs_pool(1)%file_%mode_read) then
 					write(*,*) err_rt_prefix//'readln() was called for file "' &
-						//iargs(1)%file_%name_//'" which was not opened in read mode "r"'
+						//iargs_pool(1)%file_%name_//'" which was not opened in read mode "r"'
 					call internal_error()
 				end if
 				val%type = str_type
 				if (.not. allocated(val%str)) allocate(val%str)
-				val%str%s = read_line(iargs(1)%file_%unit_, io_)
+				val%str%s = read_line(iargs_pool(1)%file_%unit_, io_)
 				if (io_ == iostat_end) then
 					if (is_loc_) then
 						state%locs%vals(slot_id_)%file_%eof = .true.
@@ -887,7 +838,7 @@ module subroutine vm_run(prog, state, res)
 					end if
 				else if (io_ /= 0 .and. io_ /= iostat_eor) then
 					write(*,*) err_rt_prefix//'cannot readln() from file "' &
-						//iargs(1)%file_%name_//'"'
+						//iargs_pool(1)%file_%name_//'"'
 					call internal_error()
 				end if
 				end block
@@ -899,9 +850,9 @@ module subroutine vm_run(prog, state, res)
 				logical :: is_loc_
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
-				if (.not. iargs(1)%file_%is_open) then
+				if (.not. iargs_pool(1)%file_%is_open) then
 					write(*,*) err_rt_prefix//'close() was called for file "' &
-						//iargs(1)%file_%name_//'" which is not open'
+						//iargs_pool(1)%file_%name_//'" which is not open'
 					call internal_error()
 				end if
 				if (is_loc_) then
@@ -909,15 +860,14 @@ module subroutine vm_run(prog, state, res)
 				else
 					state%vars%vals(slot_id_)%file_%is_open = .false.
 				end if
-				close(iargs(1)%file_%unit_)
+				close(iargs_pool(1)%file_%unit_)
 				val%type = unknown_type
 				end block
 
 			else
-				call vm_call_intr(instr%a, nintr, iargs, state, val)
+				call vm_call_intr(instr%a, nintr, iargs_pool(1:nintr), state, val)
 			end if
 
-			deallocate(iargs)
 			call vm_push_move(stack, val)
 
 		! --- M8: for-loop setup ---------------------------------------------------
@@ -1440,8 +1390,8 @@ module subroutine vm_run(prog, state, res)
 					prod_ = prod_ * state%locs%vals(instr%a)%array%size(k_)
 				end do
 				! Use to_*() for type-safe reads — handles RHS type != array element type
-			! (e.g. h is i64 from size(), but s is an i32 array).
-			select case (state%locs%vals(instr%a)%array%type)
+				! (e.g. h is i64 from size(), but s is an i32 array).
+				select case (state%locs%vals(instr%a)%array%type)
 				case (bool_type)
 					state%locs%vals(instr%a)%array%bool(lin_+1) = stack%v(base_+nsub_+1)%sca%bool
 				case (i32_type)
@@ -1770,7 +1720,8 @@ module subroutine vm_run(prog, state, res)
 	end do
 
 	! The final result is whatever is left on top of the stack.
-	if (stack%len_ > 0) res = stack%v(stack%len_)
+	! Move rather than copy — the stack is local and discarded immediately.
+	if (stack%len_ > 0) call value_move(stack%v(stack%len_), res)
 
 end subroutine vm_run
 
