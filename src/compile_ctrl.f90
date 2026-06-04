@@ -128,14 +128,14 @@ end subroutine compile_module_fns
 
 !===============================================================================
 
-subroutine backpatch_breaks(prog, cs, depth, target)
+subroutine backpatch_breaks(prog, cs, depth, tgt)
 
-	! Patch all pending loop-break fixups at the given loop depth to target,
+	! Patch all pending loop-break fixups at the given loop depth to tgt,
 	! then remove them from the fixup list.
 
 	type(program_t),        intent(inout) :: prog
 	type(compiler_state_t), intent(inout) :: cs
-	integer,                intent(in)    :: depth, target
+	integer,                intent(in)    :: depth, tgt
 
 	!*******
 
@@ -144,7 +144,7 @@ subroutine backpatch_breaks(prog, cs, depth, target)
 	j = 0
 	do i = 1, cs%nbreak_fixups
 		if (cs%break_fixup_depths(i) == depth) then
-			call patch_jump(prog, cs%break_fixup_ips(i), target)
+			call patch_jump(prog, cs%break_fixup_ips(i), tgt)
 		else
 			j = j + 1
 			cs%break_fixup_ips(j)    = cs%break_fixup_ips(i)

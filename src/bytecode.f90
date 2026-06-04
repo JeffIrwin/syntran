@@ -389,8 +389,9 @@ end function new_compiler_state
 function add_const(prog, val) result(idx)
 
 	! Add a value to the constant pool and return its 1-based index.
-	! Uses the copy-to-tmp-and-back growth pattern required for types with
-	! allocatable members (same rationale as push_value in value.f90).
+	! Grows the pool using a single copy into tmp + move_alloc (one deep-copy
+	! pass instead of two).  move_alloc is safe here: it transfers the outer
+	! array descriptor; the elements' allocatable members stay in place.
 
 	type(program_t), intent(inout) :: prog
 	type(value_t), intent(in) :: val
@@ -415,11 +416,7 @@ function add_const(prog, val) result(idx)
 		do i = 1, prog%nconsts - 1
 			tmp(i) = prog%consts(i)
 		end do
-		deallocate(prog%consts)
-		allocate(prog%consts(new_cap))
-		do i = 1, prog%nconsts - 1
-			prog%consts(i) = tmp(i)
-		end do
+		call move_alloc(tmp, prog%consts)
 	end if
 
 	prog%consts(idx) = val
@@ -488,8 +485,9 @@ function add_node(prog, node) result(idx)
 
 	! Store an AST node in the program's node pool and return its index.
 	!
-	! Growth uses the copy-to-tmp-and-back pattern required for types with
-	! allocatable members (same rationale as push_value in value.f90).
+	! Grows the pool using a single copy into tmp + move_alloc (one deep-copy
+	! pass instead of two).  move_alloc is safe here: it transfers the outer
+	! array descriptor; the elements' allocatable members stay in place.
 
 	type(program_t), intent(inout) :: prog
 	type(syntax_node_t), intent(in) :: node
@@ -514,11 +512,7 @@ function add_node(prog, node) result(idx)
 		do i = 1, prog%nnodes - 1
 			tmp(i) = prog%nodes(i)
 		end do
-		deallocate(prog%nodes)
-		allocate(prog%nodes(new_cap))
-		do i = 1, prog%nnodes - 1
-			prog%nodes(i) = tmp(i)
-		end do
+		call move_alloc(tmp, prog%nodes)
 	end if
 
 	prog%nodes(idx) = node
@@ -527,15 +521,15 @@ end function add_node
 
 !===============================================================================
 
-subroutine patch_jump(prog, ip, target)
+subroutine patch_jump(prog, ip, tgt)
 
 	! Backpatch the jump target (field `a`) of a previously emitted
 	! OP_JUMP or OP_JUMP_IF_FALSE instruction at position ip.
 
 	type(program_t), intent(inout) :: prog
-	integer, intent(in) :: ip, target
+	integer, intent(in) :: ip, tgt
 
-	prog%code(ip)%a = target
+	prog%code(ip)%a = tgt
 
 end subroutine patch_jump
 
