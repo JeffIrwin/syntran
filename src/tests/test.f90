@@ -4686,6 +4686,153 @@ end subroutine unit_test_bad_syntax
 
 !===============================================================================
 
+subroutine unit_test_return_paths(npass, nfail)
+
+	! Tests for the parse-time all-paths-return check.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'all-paths return check'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! --- Negative cases: each should produce a diagnostic, eval to '' ---
+
+	! if without else: the else path falls off the end
+	tests = &
+		[   &
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; }'// &
+				'}'// &
+				'f(1);', quiet) == '',       &
+
+			! if/else where only the then-branch returns
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; } else { let y = 2; }'// &
+				'}'// &
+				'f(1);', quiet) == '',       &
+
+			! return only inside a for loop, no trailing return
+			interpret( &
+				'fn f(): i32 {'// &
+				'  for i in [0: 3] { return i; }'// &
+				'}'// &
+				'f();', quiet) == '',        &
+
+			! return only inside a while loop, no trailing return
+			interpret( &
+				'fn f(): i32 {'// &
+				'  let i = 0;'// &
+				'  while i < 3 { return i; }'// &
+				'}'// &
+				'f();', quiet) == '',        &
+
+			! nested if: outer has else but inner if lacks else
+			interpret( &
+				'fn f(x: i32, y: i32): i32 {'// &
+				'  if x > 0 {'// &
+				'    if y > 0 { return 1; }'// &
+				'  } else {'// &
+				'    return 2;'// &
+				'  }'// &
+				'}'// &
+				'f(1,1);', quiet) == '',     &
+
+			! void function: if without else, no return on else path
+			interpret( &
+				'fn g(x: i32) {'// &
+				'  if x > 0 { return; }'// &
+				'}'// &
+				'g(1);', quiet) == '',       &
+
+			.false.   & ! avoid trailing comma
+		]
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label//' (negative)', npass, nfail)
+
+	! --- Positive cases: these must still evaluate successfully ---
+
+	tests = &
+		[   &
+			! if/else both return
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; } else { return 2; }'// &
+				'}'// &
+				'f(5);') == '1',            &
+
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; } else { return 2; }'// &
+				'}'// &
+				'f(-1);') == '2',           &
+
+			! if-return then unconditional trailing return
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; }'// &
+				'  return 2;'// &
+				'}'// &
+				'f(5);') == '1',            &
+
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; }'// &
+				'  return 2;'// &
+				'}'// &
+				'f(-1);') == '2',           &
+
+			! else-if chain ending with a final else, all branches return
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 2 { return 3; }'// &
+				'  else if x > 1 { return 2; }'// &
+				'  else { return 1; }'// &
+				'}'// &
+				'f(5);') == '3',            &
+
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 2 { return 3; }'// &
+				'  else if x > 1 { return 2; }'// &
+				'  else { return 1; }'// &
+				'}'// &
+				'f(0);') == '1',            &
+
+			! loop followed by trailing return (the common codebase style)
+			interpret( &
+				'fn f(): i32 {'// &
+				'  let s = 0;'// &
+				'  for i in [0: 3] { s = s + i; }'// &
+				'  return s;'// &
+				'}'// &
+				'f();') == '3',             &
+
+			! void function with bare return; on all paths
+			interpret( &
+				'fn g(x: i32) {'// &
+				'  if x > 0 { return; } else { return; }'// &
+				'}'// &
+				'g(1); 0;') == '0',         &
+
+			.false.   & ! avoid trailing comma
+		]
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label//' (positive)', npass, nfail)
+
+end subroutine unit_test_return_paths
+
+!===============================================================================
+
 subroutine unit_test_args(npass, nfail)
 
 	implicit none
@@ -4789,7 +4936,8 @@ subroutine unit_tests(iostat)
 	call unit_test_comparisons(npass, nfail)
 	call unit_test_comp_f32   (npass, nfail)
 	call unit_test_comp_f64   (npass, nfail)
-	call unit_test_bad_syntax (npass, nfail)
+	call unit_test_bad_syntax    (npass, nfail)
+	call unit_test_return_paths  (npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)

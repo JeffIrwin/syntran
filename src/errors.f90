@@ -7,7 +7,7 @@ module syntran__errors_m
 
 	implicit none
 
-	character(len = :), allocatable :: err_prefix, err_int_prefix, err_rt_prefix
+	character(len = :), allocatable :: err_prefix, err_int_prefix, err_rt_prefix, warn_prefix
 
 	! A text span indicates which characters to underline in a faulty line of
 	! code
@@ -477,6 +477,36 @@ function err_no_return(context, span, fn) result(err)
 		//underline(context, span)//" function without returns"//color_reset
 
 end function err_no_return
+
+!===============================================================================
+
+function err_missing_return(context, span, fn) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn
+	err = err_prefix &
+		//'not all code paths in function `'//fn//'` return' &
+		//underline(context, span)//" function may not return on all paths" &
+		//color_reset
+
+end function err_missing_return
+
+!===============================================================================
+
+function warn_missing_return(context, span, fn) result(warn)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: warn
+
+	character(len = *), intent(in) :: fn
+	warn = warn_prefix &
+		//'not all code paths in function `'//fn//'` return' &
+		//underline(context, span)//" function may not return on all paths" &
+		//color_reset
+
+end function warn_missing_return
 
 !===============================================================================
 

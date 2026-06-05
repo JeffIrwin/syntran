@@ -649,6 +649,16 @@ module subroutine parse_fn_declaration(parser, decl)
 		call parser%diagnostics%push( &
 			err_no_return(parser%context(), &
 			span, identifier%text))
+	else if (.not. all_paths_return(body)) then
+		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
+		if (permissive_return) then
+			if (parser%ipass /= 0) write(error_unit, '(a)') warn_missing_return(parser%context(), &
+				span, identifier%text)
+		else
+			call parser%diagnostics%push( &
+				err_missing_return(parser%context(), &
+				span, identifier%text))
+		end if
 	end if
 
 	! Reset to allow the global scope to return anything
@@ -1170,6 +1180,67 @@ module subroutine parse_type(parser, type_text, type)
 	if (itype == struct_type) type%struct_name = type_text
 
 end subroutine parse_type
+
+!===============================================================================
+
+!===============================================================================
+
+recursive function all_paths_return(node) result(returns)
+
+	! Determine whether the given AST node guarantees a return on every
+	! execution path.  Used at parse-time to diagnose functions that may
+	! fall off the end without returning.
+	!
+	! Rules (conservative):
+	!   return_statement  -> always returns.
+	!   block_statement   -> returns iff any member returns on all paths
+	!                        (statements after an unconditional return are
+	!                        unreachable).
+	!   if_statement      -> returns iff else_clause is present AND both
+	!                        if_clause and else_clause return on all paths.
+	!                        else-if chains recurse through else_clause.
+	!   while/for         -> never guaranteed (loop may execute zero times).
+	!   everything else   -> does not return.
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: returns
+
+	!********
+
+	integer :: i
+
+	returns = .false.
+	select case (node%kind)
+
+	case (return_statement)
+		returns = .true.
+
+	case (block_statement)
+		! The block returns as soon as any member is guaranteed to return.
+		if (allocated(node%members)) then
+			do i = 1, size(node%members)
+				if (all_paths_return(node%members(i))) then
+					returns = .true.
+					exit
+				end if
+			end do
+		end if
+
+	case (if_statement)
+		! Requires both a then-branch and an else-branch that both return.
+		! else-if chains are an else_clause that is itself an if_statement,
+		! so recursion handles them naturally.
+		if (allocated(node%else_clause) .and. allocated(node%if_clause)) then
+			returns = all_paths_return(node%if_clause) .and. &
+			          all_paths_return(node%else_clause)
+		end if
+
+	! while_statement / for_statement: body may run zero times -> no guarantee.
+	! All other kinds: not a return.
+
+	end select
+
+end function all_paths_return
 
 !===============================================================================
 

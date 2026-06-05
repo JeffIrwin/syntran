@@ -32,13 +32,14 @@ module syntran__app_m
 		integer :: maxerr
 
 		logical :: &
-			chdir            = .false., &
-			command_arg      = .false., &
-			interactive      = .false., &
-			quiet            = .false., &
-			syntran_file_arg = .false., &
-			version          = .false., &
-			help             = .false.
+			chdir              = .false., &
+			command_arg        = .false., &
+			interactive        = .false., &
+			permissive_return  = .false., &
+			quiet              = .false., &
+			syntran_file_arg   = .false., &
+			version            = .false., &
+			help               = .false.
 
 		! Script arguments passed after `--`
 		type(string_vector_t) :: script_args
@@ -147,6 +148,7 @@ subroutine set_ansi_colors(is_color_in)
 	err_prefix     = fg_bold_bright_red//'Error'//fg_bold//': '
 	err_int_prefix = fg_bold_bright_red//'Internal syntran error'//fg_bold//': '
 	err_rt_prefix  = fg_bold_bright_red//'Runtime error'//fg_bold//': '
+	warn_prefix    = fg_bold_yellow//'Warning'//fg_bold//': '
 
 end subroutine set_ansi_colors
 
@@ -217,6 +219,9 @@ function parse_args() result(args)
 		case ("-c", "--command")
 			args%command_arg = .true.
 			call get_next_arg(i, args%command)
+
+		case ("--permissive-return")
+			args%permissive_return = .true.
 
 		case ("-q", "--quiet")
 			args%quiet = .true.
@@ -316,6 +321,7 @@ function parse_args() result(args)
 			//"error messages to <n> [default: "//str(maxerr_def)//"]"
 		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
 		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
+		write(*,*) "    --permissive-return Downgrade missing-return errors to warnings"
 		write(*,*) "    --cd                Resolve the script's relative file paths against its own directory"
 		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)

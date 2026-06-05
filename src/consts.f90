@@ -9,6 +9,8 @@ module syntran__consts_m
 	integer :: maxerr  ! TODO: move this (not default) into a settings struct that gets passed around
 	integer, parameter :: maxerr_def = 4
 
+	logical :: permissive_return = .false.
+
 	! Initial capacity of scope dict pointer arrays.  They are dynamic arrays of
 	! pointers, so they take little memory to begin with, and then grow
 	! dynamically.  Hence, I have no idea what the default should be and it

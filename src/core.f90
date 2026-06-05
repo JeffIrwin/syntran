@@ -30,6 +30,7 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - update ci/cd to intel 2026
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
 	!      parallel but it's a deep rabbit hole of issues. fix most (?)
@@ -60,6 +61,8 @@ module syntran__core_m
 	!    threads within one syntran exe, maybe add cmd args to specify which
 	!    sets of tests to run, then have a bash script spawning independent
 	!    syntran test runners in parallel as separate exe's
+	!    * not really a need for this currently with bytecode and other
+	!      optimizations. ci/cd takes ~14 minutes
 	!  - are there any opportunities to "move" things (e.g. fns, vars, vals)
 	!    instead of doing expensive "copy" operations? usually hidden as an
 	!    overridden assignment= operator. in jsonf repo almost everything is
@@ -69,7 +72,8 @@ module syntran__core_m
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
 	!    might be zero perf benefit because the dicts are only used at parse
 	!    time, then mapped to efficient arrays at eval time
-	!  - check every execution path of a fn returns
+	!  - unit tests for contents of error messages. need new api to get error
+	!    msg. maybe add error codes too
 	!  - claude tasks:
 	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable
 	!      it. duh!
