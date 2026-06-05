@@ -126,7 +126,6 @@ module syntran__core_m
 	!          generated/templated code for multiple type combinations.
 	!
 	!    * docs -- see several notes below
-	!    * bytecode-based evaluation
 	!    * git(hub) cleanup. no need to delete branches, but rename existing
 	!      branches (except for main and dev) to start with feature/ or
 	!      jeffirwin/, e.g. vec-slice -> feature/vec-slice
@@ -135,8 +134,6 @@ module syntran__core_m
 	!  - if you try to return something (e.g. i32) from a void/null fn, the
 	!    error says the fn should return "unknown" but it should say void (or
 	!    null?)
-	!  - document modules in readme, recommend over #include after it's in a
-	!    state where a few aoc tests can work with utils.syntran as a module
 	!  - minloc, maxloc, findloc std:: fns
 	!    * useful for aoc
 	!  - const.  e.g. `const N = 5` instead of `let N = 5`. then ban reassigning
@@ -172,6 +169,8 @@ module syntran__core_m
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)
 	!      set by an env var, but that isn't pressing
+	!    * "Exiting syntran" is a different shade of green than "syntran$"
+	!       prompt
 	!  - add tests that cover interactive interpreter REPL
 	!    * added a couple basic tests in main.yml
 	!    * fns should also be covered
@@ -280,15 +279,6 @@ module syntran__core_m
 	!        + should final return value be used as an implicit sys exit value?
 	!          currently, default exit stat is 0, regardless of what syntran
 	!          "main" returns.  what about non-int return vals?
-	!  - consider using subroutines with out-args instead of fn return vals for
-	!    parse_*() fns?  i believe this is the source of segfaults for gfortran
-	!    8. subroutines allow passing-by-reference instead of requiring a copy
-	!    of a complex syntax_node_t type on return.  would this eliminate all
-	!    node copies?  it could be a lot of work, gfortran 8 might still
-	!    segfault, and code will be uglier with out-args instead of return vals.
-	!    is copying syntax_node_t a perf bottleneck? i suspect that eval is
-	!    bottleneck and not parsing, but i haven't actually benchmarked poor
-	!    perf of intel compilers for AOC solution tests
 	!  - hacker sdk:
 	!    * bitwise operations
 	!      > done
