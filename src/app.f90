@@ -126,6 +126,7 @@ subroutine set_ansi_colors(is_color_in)
 		fg_bright_magenta  = FG_BRIGHT_MAGENTA_
 		fg_bright_cyan     = FG_BRIGHT_CYAN_
 		fg_bright_white    = FG_BRIGHT_WHITE_
+		fg_bold_yellow     = FG_BOLD_YELLOW_
 		color_reset        = COLOR_RESET_
 	else
 		fg_bold            = ""
@@ -137,6 +138,7 @@ subroutine set_ansi_colors(is_color_in)
 		fg_bright_magenta  = ""
 		fg_bright_cyan     = ""
 		fg_bright_white    = ""
+		fg_bold_yellow     = ""
 		color_reset        = ""
 	end if
 

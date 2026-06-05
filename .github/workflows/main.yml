@@ -105,6 +105,9 @@
 
 					# Short tests only.  Long tests are only done in release \n
 					fpm test test --profile debug --link-flag \"$lflags\" \n
+
+					# Also test the legacy AST backend so both paths are exercised \n
+					SYNTRAN_BACKEND=ast fpm test test --profile debug --link-flag \"$lflags\" \n
 				"
 			},
 			{

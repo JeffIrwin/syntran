@@ -1,5 +1,5 @@
 
-n = 30000
+n = 60000
 #n = 100
 
 prime = 0
@@ -12,6 +12,7 @@ for i in range(0, n):
     for j in range(2, i//2 + 1):
         divisible = j * (i // j) == i
         is_composite = is_composite or divisible
+        if (is_composite): break
 
     if not is_composite:
         prime = i

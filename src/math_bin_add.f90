@@ -375,7 +375,8 @@ subroutine add_value_t(left, right, res, op_text)
 
 
 	case        (magic**2 * str_type + magic * str_type + str_type)
-		res%sca%str%s = left%sca%str%s // right%sca%str%s
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = left%str%s // right%str%s
 
 
 	case default

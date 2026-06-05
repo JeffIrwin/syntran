@@ -17,13 +17,12 @@ contains
 
 !===============================================================================
 
-recursive module function parse_fn_call(parser, module_prefix, identifier) result(fn_call)
+recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_call)
 
 	class(parser_t) :: parser
 	character(len = *), intent(in), optional :: module_prefix
 	type(syntax_token_t), intent(in), optional :: identifier
-
-	type(syntax_node_t) :: fn_call
+	type(syntax_node_t), intent(out) :: fn_call
 
 	!********
 
@@ -79,7 +78,7 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 		end if
 		call is_ref%push(arg_is_ref)
 
-		arg = parser%parse_expr()
+		call parser%parse_expr(expr=arg)
 
 		! Check that arg expr is name_expr.  Maybe it can be extended later to
 		! subscript exprs, but for now only names work
@@ -379,22 +378,25 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 
 	fn_call%id_index = id_index
 
-	call syntax_nodes_copy(fn_call%args, args%v( 1: args%len_ ))
+	! Move args from vector (avoids deep copy)
+	allocate(fn_call%args(args%len_))
+	do i = 1, args%len_
+		call syntax_node_move_into(args%v(i), fn_call%args(i))
+	end do
 
 	!print *, 'done parsing fn_call'
 
-end function parse_fn_call
+end subroutine parse_fn_call
 
 !===============================================================================
 
-recursive module function parse_qualified_expr(parser) result(expr)
+recursive module subroutine parse_qualified_expr(parser, expr)
 
 	! Parse qualified names like `std::println()`, `mod::name`,
 	! or nested namespaces like `math::vectors::fn()`
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), intent(out) :: expr
 
 	!********
 
@@ -428,13 +430,13 @@ recursive module function parse_qualified_expr(parser) result(expr)
 
 	if (parser%current_kind() == lparen_token) then
 		! Qualified function call: std::println(...) or math::vectors::fn(...)
-		expr = parser%parse_fn_call(module_name, fn_identifier)
+		call parser%parse_fn_call(module_name, fn_identifier, expr)
 
 	else if (parser%current_kind() == lbrace_token) then
 		! Qualified struct instance: mod::Struct{...}
 		lookup_name = module_name // "::" // fn_name
 		if (parser%structs%exists(lookup_name)) then
-			expr = parser%parse_struct_instance(lookup_name)
+			call parser%parse_struct_instance(expr, lookup_name)
 		else
 			! Struct not found
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
@@ -454,7 +456,7 @@ recursive module function parse_qualified_expr(parser) result(expr)
 			return
 		end if
 
-		expr = new_name_expr(fn_identifier, var_val)
+		call new_name_expr(fn_identifier, var_val, expr)
 		expr%id_index = id_index
 		expr%module_prefix = module_name
 
@@ -462,15 +464,14 @@ recursive module function parse_qualified_expr(parser) result(expr)
 		call parser%parse_dot(expr)
 	end if
 
-end function parse_qualified_expr
+end subroutine parse_qualified_expr
 
 !===============================================================================
 
-module function parse_fn_declaration(parser) result(decl)
+module subroutine parse_fn_declaration(parser, decl)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: decl
+	type(syntax_node_t), intent(out) :: decl
 
 	!********
 
@@ -641,7 +642,7 @@ module function parse_fn_declaration(parser) result(decl)
 	parser%fn_name = identifier%text
 	parser%fn_type = fn%type
 
-	body = parser%parse_statement()
+	call parser%parse_statement(body)
 
 	if (.not. parser%returned) then
 		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
@@ -658,13 +659,10 @@ module function parse_fn_declaration(parser) result(decl)
 	parser%num_fns = parser%num_fns + 1
 	decl%id_index  = parser%num_fns
 
-	allocate(decl%body)
-
-	decl%kind = fn_declaration
-
+	decl%kind       = fn_declaration
 	decl%identifier = identifier
 	decl%num_locs   = parser%num_locs
-	decl%body       = body
+	call syntax_node_move(body, decl%body)
 	!print *, "decl num_locs = ", decl%num_locs
 
 	call parser%vars%pop_scope()
@@ -708,15 +706,14 @@ module function parse_fn_declaration(parser) result(decl)
 	!print *, 'size(decl%params) = ', size(decl%params)
 	!print *, 'decl%params = ', decl%params
 
-end function parse_fn_declaration
+end subroutine parse_fn_declaration
 
 !===============================================================================
 
-module function parse_struct_declaration(parser) result(decl)
+module subroutine parse_struct_declaration(parser, decl)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: decl
+	type(syntax_node_t), intent(out) :: decl
 
 	!********
 
@@ -886,20 +883,19 @@ module function parse_struct_declaration(parser) result(decl)
 
 	!print *, "done parsing struct"
 
-end function parse_struct_declaration
+end subroutine parse_struct_declaration
 
 !===============================================================================
 
-recursive module function parse_struct_instance(parser, struct_name) result(inst)
+recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 	! A struct instantiator initializes all the members of an instance of a
 	! struct
 
 	class(parser_t) :: parser
 
+	type(syntax_node_t), intent(out) :: inst
 	character(len = *), intent(in), optional :: struct_name
-
-	type(syntax_node_t) :: inst
 
 	!********
 
@@ -974,7 +970,7 @@ recursive module function parse_struct_instance(parser, struct_name) result(inst
 		name   = parser%match(identifier_token)
 		equals = parser%match(equals_token)
 		pos1   = parser%current_pos()
-		mem    = parser%parse_expr()
+		call parser%parse_expr(expr=mem)
 
 		!print *, "name%text = ", name%text
 
@@ -1092,7 +1088,7 @@ recursive module function parse_struct_instance(parser, struct_name) result(inst
 
 	!print *, "ending parse_struct_instance()"
 
-end function parse_struct_instance
+end subroutine parse_struct_instance
 
 !===============================================================================
 

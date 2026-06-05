@@ -678,7 +678,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	!*******************************
 	! Parse the tokens
-	tree = parser%parse_unit()
+	call parser%parse_unit(tree)
 
 	!print *, ""
 	!print *, "in core.f90:"

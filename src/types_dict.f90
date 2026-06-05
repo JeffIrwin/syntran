@@ -271,42 +271,51 @@ module subroutine push_node(vector, val)
 	vector%len_ = vector%len_ + 1
 
 	if (vector%len_ > vector%cap) then
-		!print *, 'growing vector ====================================='
-
 		tmp_cap = 2 * vector%len_
-		allocate(tmp( tmp_cap ))
-
-		!print *, 'copy 1'
-		!!tmp(1: vector%cap) = vector%v
+		allocate(tmp(tmp_cap))
 		do i = 1, vector%cap
 			tmp(i) = vector%v(i)
 		end do
-
-		!print *, 'move'
-		!!call move_alloc(tmp, vector%v)
-
 		deallocate(vector%v)
-		allocate(vector%v( tmp_cap ))
-
-		! Unfortunately we have to copy TO tmp AND back FROM tmp.  I guess the
-		! fact that each node itself has allocatable members creates invalid
-		! references otherwise.
-
-		!print *, 'copy 2'
-		!!vector%v(1: vector%cap) = tmp(1: vector%cap)
+		allocate(vector%v(tmp_cap))
 		do i = 1, vector%cap
 			vector%v(i) = tmp(i)
 		end do
-
 		vector%cap = tmp_cap
-
 	end if
 
-	!print *, 'set val'
-	vector%v( vector%len_ ) = val
-	!print *, 'done push_node'
+	vector%v(vector%len_) = val
 
 end subroutine push_node
+
+!===============================================================================
+
+module subroutine push_node_move(vector, val)
+
+	class(syntax_node_vector_t) :: vector
+	type(syntax_node_t), intent(inout) :: val
+
+	!********
+
+	type(syntax_node_t), allocatable :: tmp(:)
+
+	integer :: tmp_cap, i
+
+	vector%len_ = vector%len_ + 1
+
+	if (vector%len_ > vector%cap) then
+		tmp_cap = 2 * vector%len_
+		allocate(tmp(tmp_cap))
+		do i = 1, vector%cap
+			call syntax_node_move_into(vector%v(i), tmp(i))
+		end do
+		call move_alloc(tmp, vector%v)
+		vector%cap = tmp_cap
+	end if
+
+	call syntax_node_move_into(val, vector%v(vector%len_))
+
+end subroutine push_node_move
 
 !===============================================================================
 

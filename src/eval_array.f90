@@ -109,7 +109,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	end if
 
 	if (var%struct(id)%type == str_type) then
-		var%struct(id)%sca%str%s(i8+1: i8+1) = val%sca%str%s
+		var%struct(id)%str%s(i8+1: i8+1) = val%str%s
 		return
 	end if
 
@@ -258,7 +258,8 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	end if
 
 	if (var%struct(id)%type == str_type) then
-		res%sca%str%s = var%struct(id)%sca%str%s(i8+1: i8+1)
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = var%struct(id)%str%s(i8+1: i8+1)
 		res%type = str_type
 		return
 	end if
@@ -874,8 +875,9 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	case (str_type)
 		!val%type = str_type
-		val%sca%str%s = str_%sca%str%s(i:i)
-		!print *, "val s = ", val%sca%str%s
+		if (.not. allocated(val%str)) allocate(val%str)
+		val%str%s = str_%str%s(i:i)
+		!print *, "val s = ", val%str%s
 
 	case default
 		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
@@ -915,7 +917,7 @@ module subroutine get_array_val(array, i, val)
 			val%sca%f64 = array%f64(i + 1)
 
 		case (str_type)
-			val%sca%str = array%str(i + 1)
+			val%str = array%str(i + 1)
 
 		case default
 			write(*,*) err_int_prefix//"bad type in get_array_val"//color_reset
@@ -957,7 +959,7 @@ module subroutine set_array_val(array, i, val)
 			array%f64(i + 1) = val%to_f64()
 
 		case (str_type)
-			array%str(i + 1) = val%sca%str
+			array%str(i + 1) = val%str
 
 	end select
 

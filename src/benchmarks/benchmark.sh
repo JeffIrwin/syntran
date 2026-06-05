@@ -11,7 +11,11 @@ echo "=============================================================="
 echo "    SYNTRAN:"
 
 for ((i=1; i<=$n; i++)) ; do
+	# Locally-built version
 	time ./build/Release/syntran src/benchmarks/primes-1.syntran
+
+	### Installed version
+	#time syntran src/benchmarks/primes-1.syntran
 done
 
 echo "=============================================================="

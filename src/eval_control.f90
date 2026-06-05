@@ -180,10 +180,10 @@ recursive module subroutine eval_for_statement(node, state, res)
 			for_kind = str_type
 			call syntax_eval(node%array, state, tmp)
 			call value_move(tmp, str_)
-			len8 = len(str_%sca%str%s, 8)
+			len8 = len(str_%str%s, 8)
 			itr%type = str_type
 
-			!print *, "str_ = ", str_%sca%str%s
+			!print *, "str_ = ", str_%str%s
 
 		else
 
@@ -375,9 +375,9 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			! TODO: ban compound character substring assignment
 			i8 = subscript_eval(node, state)
 			if (node%is_loc) then
-				state%locs%vals(id)%sca%str%s(i8+1: i8+1) = res%sca%str%s
+				state%locs%vals(id)%str%s(i8+1: i8+1) = res%str%s
 			else
-				state%vars%vals(id)%sca%str%s(i8+1: i8+1) = res%sca%str%s
+				state%vars%vals(id)%str%s(i8+1: i8+1) = res%str%s
 			end if
 
 		else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
@@ -895,7 +895,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 			res%array%bool = lbound_%sca%bool
 
 		case (str_type)
-			res%array%str = lbound_%sca%str
+			res%array%str = lbound_%str
 
 		case (struct_type)
 

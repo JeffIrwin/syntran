@@ -27,7 +27,8 @@ nrows=$(( ${#table[@]} / $ncols ))
 
 bin_str_case="
 	case        (magic**2 * str_type + magic * str_type + str_type)
-		res%sca%str%s = left%sca%str%s // right%sca%str%s
+		allocate(res%str)
+		res%str%s = left%str%s // right%str%s
 "
 
 for i in $(seq 0 $(( $nrows - 1 )) ) ; do

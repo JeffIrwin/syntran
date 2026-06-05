@@ -77,7 +77,10 @@ set(SRC_DIR "src")
 set(LIB "${PROJECT}")
 set(LIB_SRC
 	${SRC_DIR}/bool.f90
+	${SRC_DIR}/bytecode.f90
 	${SRC_DIR}/compiler.F90
+	${SRC_DIR}/compile.f90
+	${SRC_DIR}/compile_ctrl.f90
 	${SRC_DIR}/consts.f90
 	${SRC_DIR}/core.f90
 	${SRC_DIR}/errors.f90
@@ -86,6 +89,9 @@ set(LIB_SRC
 	${SRC_DIR}/eval_control.f90
 	${SRC_DIR}/eval_expr.f90
 	${SRC_DIR}/eval_fn.f90
+	${SRC_DIR}/vm.f90
+	${SRC_DIR}/vm_exec.f90
+	${SRC_DIR}/vm_intr.f90
 	${SRC_DIR}/intr_fns.f90
 	${SRC_DIR}/intr_fns_array.f90
 	${SRC_DIR}/intr_fns_io.f90
