@@ -1044,94 +1044,142 @@ string6[2];
 // mojibake
 ```
 
-## Include files
+## Modules
 
-Like the C language, the contents of one source file can be included in a higher-level source using the `#include` preprocessing directive.
+A module is any `.syntran` file containing functions, structs, or module-level
+variables.  Modules are the recommended way to share code across syntran files.
 
-Let's say you have a file named `header.syntran` which defines a global variable and a string helper function:
+### Defining a module
+
+Here's a simple math module saved as `mymath.syntran`:
 
 ```rust
-// header.syntran
+// mymath.syntran
 
-let my_global = 42;
-
-fn my_scan(str_: str, set: str): i32
+fn add(a: i32, b: i32): i32
 {
-    // Return the first substring index i of `str_` which matches any character
-    // from the string `set`.
-    //
-    // c.f. Fortran intrinsic scan()
+    return a + b;
+}
 
-    let found = false;
-    let i = 0;
-    while not found and i < len(str_)
-    {
-        let j = 0;
-        while not found and j < len(set)
-        {
-            found = str_[i] == set[j];
-            j += 1;
-        }
-        i += 1;
-    }
-
-    if (found)
-        i -= 1;
-    else
-        i = -1;
-    return i;
+fn mul(a: i32, b: i32): i32
+{
+    return a * b;
 }
 ```
 
-This can be included in a main program, assuming `main.syntran` and `header.syntran` are in the same folder:
+### Importing a module
+
+There are three import styles.
+
+**Qualified import** — functions are called with the module name as a prefix:
 
 ```rust
-// main.syntran
+use mymath;
 
-#include("header.syntran");
+println(mymath::add(2, 3));  // 5
+println(mymath::mul(4, 5));  // 20
+```
 
-fn main()
+**Unqualified (glob) import** — all exported names are brought into scope
+directly:
+
+```rust
+use mymath::*;
+
+println(add(2, 3));  // 5
+println(mul(4, 5));  // 20
+```
+
+**Aliased import** — import the module under a shorter name:
+
+```rust
+use mymath as mm;
+
+println(mm::add(2, 3));  // 5
+println(mm::mul(4, 5));  // 20
+```
+
+### Path resolution
+
+Module paths are resolved relative to the **current source file's directory**.
+
+```rust
+use ./mymath;            // explicit current directory
+use ../mymath;           // parent directory
+use math/vectors;        // subdirectory — qualified as math::vectors::fn_name
+use math/vectors as vec; // subdirectory with alias — qualified as vec::fn_name
+use math/vectors::*;     // subdirectory with glob
+```
+
+### Module variables
+
+A module may declare top-level variables with `let`.  These are shared across
+all imports of that module and can be read or reassigned by the importer.
+
+```rust
+// counter.syntran
+
+let count = 0;
+
+fn increment(): i32
 {
-    println(my_global);
-    // 42
-
-    println(my_scan("012345", "2"));
-    // 2
-
-    println(my_scan("012345", "3"));
-    // 3
-
-    return;
+    count = count + 1;
+    return count;
 }
 
-main();
+fn get_count(): i32
+{
+    return count;
+}
 ```
-
-As in C, the effect of `#include` is as if the contents of the header are pasted into the *including* file.  The difference is that any error messages will still reference the correct line number and filename where they occur.
-
-If included files are in a separate folder, the included filename is a path relative to the parent including file.
-
-Note that the syntax of the `#include` directive looks like a function call, i.e. it has parentheses around the filename argument and a semicolon at the end.  This gives syntran a consistent feel throughout its features, unlike C.  However, be careful noting that `#include` is *not* a real function!  It is a preprocessing directive, indicated by the hash `#`, so the full evaluation facilities of syntran are not available at the time that the directive is processed.
-
-For example, it is *not* possible to concatenate strings together into the include filename:
 
 ```rust
-#include("header." + "syntran");
-// Error: #include file `"header."` not found
-//   --> main.syntran:3:10
-//    |
-//  3 | #include("header." + "syntran");
-//    |          ^^^^^^^^^ file not found
-//
-// Error: unexpected token `+` of kind `plus_token`, expected `rparen_token`
-//   --> main.syntran:3:20
-//    |
-//  3 | #include("header." + "syntran");
-//    |                    ^ unexpected token
-// ...
+// main program
+use counter::*;
+
+println(count);         // 0
+increment();
+println(count);         // 1
+count = 10;
+println(get_count());   // 10
 ```
 
-The argument must be a single static lex-time constant string.
+### Exported structs
+
+Structs defined in a module are exported along with functions:
+
+```rust
+// struct_mod.syntran
+
+struct Point
+{
+    x: i32,
+    y: i32,
+}
+
+fn make_point(x: i32, y: i32): Point
+{
+    return Point{x = x, y = y};
+}
+```
+
+```rust
+use struct_mod::*;
+
+let p = make_point(3, 4);
+println(p.x);  // 3
+println(p.y);  // 4
+```
+
+### Reserved name
+
+The name `std` is reserved for the syntran standard library and cannot be used
+as a module name or alias.
+
+---
+
+For the older `#include` preprocessing directive (still supported but
+superseded by modules), see [doc/include-files.md](doc/include-files.md).
 
 ## Structs
 
