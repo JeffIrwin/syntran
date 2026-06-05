@@ -1171,10 +1171,19 @@ println(p.x);  // 3
 println(p.y);  // 4
 ```
 
-### Reserved name
+### Valid module names
 
-The name `std` is reserved for the syntran standard library and cannot be used
-as a module name or alias.
+Module names follow the same rules as identifiers: they may contain letters,
+digits, and underscores, but must not start with a digit.  Hyphens, spaces, and
+language keywords are not allowed as module names or aliases.  The name `std` is
+additionally reserved for the syntran standard library.
+
+```rust
+use my_math;      // ok
+use my-math;      // Error: hyphens not allowed in module names
+use fn;           // Error: `fn` is a keyword
+use std;          // Error: `std` is reserved
+```
 
 ---
 
