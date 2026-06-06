@@ -507,6 +507,14 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 
 			end if
 
+		case (matmul_token)
+			! matmul requires both operands to be arrays of numeric type
+			if (left == array_type .and. right == array_type) then
+				allowed = is_num_type(left_arr) .and. is_num_type(right_arr)
+			else
+				allowed = .false.
+			end if
+
 	end select
 
 end function is_binary_op_allowed
@@ -620,7 +628,7 @@ module integer function get_binary_op_prec(kind) result(prec)
 		case (sstar_token)
 			prec = 11
 
-		case (star_token, slash_token, percent_token)
+		case (star_token, slash_token, percent_token, matmul_token)
 			prec = 10
 
 		case (plus_token, minus_token)
@@ -994,6 +1002,29 @@ module integer function types_match(a, b) result(io)
 	end if
 
 end function types_match
+
+!===============================================================================
+
+module integer function matmul_out_rank(lrank, rrank) result(out_rank)
+
+	! Compute the output rank of a matmul/@-operator expression given the
+	! ranks of its operands:
+	!   (2,2) -> 2   matrix @ matrix -> matrix
+	!   (2,1) -> 1   matrix @ vector -> vector
+	!   (1,2) -> 1   vector @ matrix -> vector
+	!   (1,1) -> 0   vector @ vector -> scalar (dot product)
+
+	integer, intent(in) :: lrank, rrank
+
+	if (lrank == 1 .and. rrank == 1) then
+		out_rank = 0
+	else if (lrank == 2 .and. rrank == 2) then
+		out_rank = 2
+	else
+		out_rank = 1
+	end if
+
+end function matmul_out_rank
 
 !===============================================================================
 

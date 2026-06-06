@@ -487,7 +487,8 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 
 		end if
 
-		if (ltype == array_type .and. rtype == array_type) then
+		if (ltype == array_type .and. rtype == array_type &
+				.and. op%kind /= matmul_token) then
 			!print *, 'double array operation'
 
 			lrank = expr%left %val%array%rank

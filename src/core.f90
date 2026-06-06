@@ -299,10 +299,8 @@ module syntran__core_m
 	!  - array operations:
 	!    * done: element-wise add, sub, mul, div, pow, mod
 	!      + compound array assignment works but needs unit tests
-	!    * vector dot product, matrix mul, ...
-	!      + new operator tokens, something like `.*`?
-	!      + maybe `:*`. I like that I can just hold shift while typing it
-	!        unlike MATLAB's `.*` and it's shorter than R's `%*%`
+	!    * done: vector dot product and matrix mul via `@` operator
+	!      + v@v -> scalar, m@v -> vector, v@m -> vector, m@m -> matrix
 	!    * optional `dim` argument for any() and all(). 1 arg versions done
 	!    * comparisons done
 	!    * array and, or, not, done

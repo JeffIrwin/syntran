@@ -63,6 +63,9 @@ recursive module subroutine eval_binary_expr(node, state, res)
 	case (star_token)
 		call mul(left, right, res, node%op%text)
 
+	case (matmul_token)
+		call matmul_(left, right, res, node%op%text)
+
 	case (sstar_token)
 		call pow(left, right, res, node%op%text)
 

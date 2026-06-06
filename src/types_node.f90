@@ -139,7 +139,7 @@ module subroutine new_binary_expr(left, op, right, expr)
 
 	!********
 
-	integer :: larrtype, rarrtype, type_, ltype, rtype
+	integer :: larrtype, rarrtype, type_, ltype, rtype, lrank, rrank, out_rank, elem_type
 
 	if (debug > 1) print *, 'new_binary_expr'
 	if (debug > 1) print *, 'left  = ', left %str()
@@ -149,8 +149,16 @@ module subroutine new_binary_expr(left, op, right, expr)
 	! Read type info before moves (left/right val%array may be moved)
 	larrtype = unknown_type
 	rarrtype = unknown_type
-	if (left %val%type == array_type) larrtype = left %val%array%type
-	if (right%val%type == array_type) rarrtype = right%val%array%type
+	lrank    = -1
+	rrank    = -1
+	if (left %val%type == array_type) then
+		larrtype = left %val%array%type
+		lrank    = left %val%array%rank
+	end if
+	if (right%val%type == array_type) then
+		rarrtype = right%val%array%type
+		rrank    = right%val%array%rank
+	end if
 	ltype = left%val%type
 	rtype = right%val%type
 
@@ -159,6 +167,31 @@ module subroutine new_binary_expr(left, op, right, expr)
 
 	call syntax_node_move(left,  expr%left)
 	call syntax_node_move(right, expr%right)
+
+	! Special handling for matmul: result rank depends on operand ranks
+	if (op%kind == matmul_token) then
+
+		! Promote element type using the same rules as *
+		elem_type = get_binary_op_kind(larrtype, star_token, rarrtype, &
+			unknown_type, unknown_type)
+
+		out_rank = matmul_out_rank(lrank, rrank)
+
+		if (out_rank == 0) then
+			! vector @ vector -> scalar
+			expr%val%type = elem_type
+		else
+			allocate(expr%val%array)
+			expr%val%array%type = elem_type
+			expr%val%array%rank = out_rank
+			expr%val%type = array_type
+		end if
+
+		if (debug > 1) print *, 'new_binary_expr = ', expr%str()
+		if (debug > 1) print *, 'done new_binary_expr'
+		return
+
+	end if
 
 	! Pass the result value type up the tree for type checking in parent
 	type_ = get_binary_op_kind(ltype, op%kind, rtype, &

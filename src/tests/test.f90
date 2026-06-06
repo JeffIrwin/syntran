@@ -3116,6 +3116,7 @@ subroutine unit_test_linalg_fns(npass, nfail)
 			interpret_file(path//'test-05.syntran', quiet) == '[1.000000E+00, -3.000000E+00, 2.000000E+00]', &
 			interpret_file(path//'test-06.syntran', quiet) == '[-1.000000E+00, -2.000000E+00, 3.000000E+00]', &
 			interpret_file(path//'test-07.syntran', quiet) == '[-1.000000E+00, -2.000000E+00, 3.000000E+00]', &
+			interpret_file(path//'test-08.syntran', quiet) == '2.000000000000000E+01', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5040,6 +5041,7 @@ subroutine unit_tests(iostat)
 	call unit_test_mixed_i32i64(npass, nfail)
 	call unit_test_arr_binop   (npass, nfail)
 	call unit_test_deep_recursion(npass, nfail)
+	call unit_test_matmul      (npass, nfail)
 
 	call log_test_summary(npass, nfail)
 	iostat = nfail
@@ -5240,6 +5242,88 @@ subroutine unit_test_deep_recursion(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_deep_recursion
+
+!===============================================================================
+
+subroutine unit_test_matmul(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'matmul @ operator'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! ---- vector @ vector (dot product) -> scalar ----
+			eval_i32('[1, 2, 3] @ [4, 5, 6];') == 1*4 + 2*5 + 3*6, &
+			eval_i32('[0, 0, 0] @ [1, 2, 3];') == 0, &
+			eval_i32('[3, 3] @ [3, 3];') == 18, &
+			eval_i64('[i64(2), i64(3)] @ [i64(4), i64(5)];') == int(2*4 + 3*5, 8), &
+			abs(eval_f32('[1.0f, 2.0f] @ [3.0f, 4.0f];') - (1.0*3.0 + 2.0*4.0)) < 1.0e-6, &
+			abs(eval_f64('[1.0, 2.0] @ [3.0, 4.0];') - (1.0d0*3.0d0 + 2.0d0*4.0d0)) < 1.0d-12, &
+
+			! ---- matrix @ vector -> vector ----
+			eval('[1, 2, 3, 4; 2, 2] @ [1, 0];') == '[1, 2]', &
+			eval('[1, 2, 3, 4; 2, 2] @ [0, 1];') == '[3, 4]', &
+			eval('[1, 2, 3, 4; 2, 2] @ [1, 1];') == '[4, 6]', &
+			eval('[1, 0, 0, 1; 2, 2] @ [5, 7];') == '[5, 7]',  &   ! identity
+
+			! ---- vector @ matrix -> vector ----
+			eval('[1, 0] @ [1, 2, 3, 4; 2, 2];') == '[1, 3]', &
+			eval('[0, 1] @ [1, 2, 3, 4; 2, 2];') == '[2, 4]', &
+
+			! ---- matrix @ matrix -> matrix (check element-by-element) ----
+			! A = [[1,3],[2,4]], B = [[1,3],[2,4]], C = A*B = [[7,15],[10,22]]
+			eval_i32('let c = [1, 2, 3, 4; 2, 2] @ [1, 2, 3, 4; 2, 2]; c[0,0];') == 7, &
+			eval_i32('let c = [1, 2, 3, 4; 2, 2] @ [1, 2, 3, 4; 2, 2]; c[1,0];') == 10, &
+			eval_i32('let c = [1, 2, 3, 4; 2, 2] @ [1, 2, 3, 4; 2, 2]; c[0,1];') == 15, &
+			eval_i32('let c = [1, 2, 3, 4; 2, 2] @ [1, 2, 3, 4; 2, 2]; c[1,1];') == 22, &
+
+			! identity: A @ I2 = A
+			eval_i32('let a = [1, 2, 3, 4; 2, 2]; let b = [1, 0, 0, 1; 2, 2]; let c = a @ b; c[0,0];') == 1, &
+			eval_i32('let a = [1, 2, 3, 4; 2, 2]; let b = [1, 0, 0, 1; 2, 2]; let c = a @ b; c[1,0];') == 2, &
+			eval_i32('let a = [1, 2, 3, 4; 2, 2]; let b = [1, 0, 0, 1; 2, 2]; let c = a @ b; c[0,1];') == 3, &
+			eval_i32('let a = [1, 2, 3, 4; 2, 2]; let b = [1, 0, 0, 1; 2, 2]; let c = a @ b; c[1,1];') == 4, &
+
+			! ---- non-square matrices ----
+			! A is 2x3 (col-major flat [1,2,3,4,5,6] = [[1,3,5],[2,4,6]])
+			! B is 3x2 (col-major flat [7,8,9,10,11,12] = [[7,10],[8,11],[9,12]])
+			! C = A @ B is 2x2: C[0,0]=1*7+3*8+5*9=76, C[1,0]=2*7+4*8+6*9=100
+			!                    C[0,1]=1*10+3*11+5*12=103, C[1,1]=2*10+4*11+6*12=136
+			eval_i32('let a = [1,2,3,4,5,6; 2,3]; let b = [7,8,9,10,11,12; 3,2]; let c = a @ b; c[0,0];') &
+				== 1*7 + 3*8 + 5*9, &
+			eval_i32('let a = [1,2,3,4,5,6; 2,3]; let b = [7,8,9,10,11,12; 3,2]; let c = a @ b; c[1,0];') &
+				== 2*7 + 4*8 + 6*9, &
+			eval_i32('let a = [1,2,3,4,5,6; 2,3]; let b = [7,8,9,10,11,12; 3,2]; let c = a @ b; c[0,1];') &
+				== 1*10 + 3*11 + 5*12, &
+			eval_i32('let a = [1,2,3,4,5,6; 2,3]; let b = [7,8,9,10,11,12; 3,2]; let c = a @ b; c[1,1];') &
+				== 2*10 + 4*11 + 6*12, &
+
+			! ---- chained @ ----
+			eval_i32('[1, 2] @ ([2, 0, 0, 3; 2, 2] @ [1, 1]);') == 1*(2+0) + 2*(0+3), &
+
+			! ---- precedence: @ binds like *, so a + b @ c = a + (b @ c) ----
+			eval_i32('1 + [1, 0] @ [2, 3];') == 1 + 2, &
+
+			! ---- float matrix @ vector ----
+			eval('[1.0f, 0.0f, 0.0f, 1.0f; 2, 2] @ [3.0f, 5.0f];') &
+				== '[3.000000E+00, 5.000000E+00]', &
+
+			.false.  & ! no trailing comma needed
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_matmul
 
 !===============================================================================
 

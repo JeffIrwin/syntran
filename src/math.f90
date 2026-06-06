@@ -10,6 +10,7 @@ module syntran__math_m
 	use syntran__math_mul_m
 	use syntran__math_div_m
 	use syntran__math_pow_m
+	use syntran__math_matmul_m
 
 	implicit none
 

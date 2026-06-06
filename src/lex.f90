@@ -817,6 +817,9 @@ function lex(lexer) result(token)
 				token = new_token(percent_token, lexer%pos, lexer%current())
 			end if
 
+		case ("@")
+			token = new_token(matmul_token, lexer%pos, lexer%current())
+
 		case ("(")
 			token = new_token(lparen_token, lexer%pos, lexer%current())
 

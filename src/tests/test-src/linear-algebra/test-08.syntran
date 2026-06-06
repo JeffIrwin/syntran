@@ -1,0 +1,33 @@
+// Test all four matmul @ operator shape cases and chaining
+//
+// Storage is column-major: [1,2,3,4; 2,2] = [[1,3],[2,4]]
+
+// 1. matrix @ vector -> vector
+let A = [1.0, 2.0, 3.0, 4.0; 2, 2];   // [[1,3],[2,4]]
+let v = [1.0, 0.0];
+let mv = A @ v;   // [1.0, 2.0]
+
+// 2. vector @ matrix -> vector
+let vm = v @ A;   // [1.0, 3.0]
+
+// 3. matrix @ matrix -> matrix
+let B = [0.0, 0.0, 0.0, 1.0; 2, 2];   // [[0,0],[0,1]] (project onto y-col)
+let C = A @ B;   // [[0,0],[0,4]]... actually [[0,3],[0,4]]
+// C[i,j] = sum_k A[i,k]*B[k,j]
+// C[0,0] = A[0,0]*B[0,0]+A[0,1]*B[1,0] = 1*0+3*0 = 0
+// C[1,0] = A[1,0]*B[0,0]+A[1,1]*B[1,0] = 2*0+4*0 = 0
+// C[0,1] = A[0,0]*B[0,1]+A[0,1]*B[1,1] = 1*0+3*1 = 3
+// C[1,1] = A[1,0]*B[0,1]+A[1,1]*B[1,1] = 2*0+4*1 = 4
+
+// 4. vector @ vector -> scalar (dot product)
+let w = [3.0, 5.0];
+let d = v @ w;   // 1*3 + 0*5 = 3.0
+
+// 5. chained matmul: (A @ I) @ v = A @ v
+let I2 = [1.0, 0.0, 0.0, 1.0; 2, 2];
+let chained = (A @ I2) @ v;   // should equal mv = [1, 2]
+
+// Sum all results into one scalar for easy testing
+let s = mv[0] + mv[1] + vm[0] + vm[1] + C[0,1] + C[1,1] + d + chained[0] + chained[1];
+// 1 + 2 + 1 + 3 + 3 + 4 + 3 + 1 + 2 = 20
+return s;

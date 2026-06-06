@@ -102,6 +102,7 @@ set(LIB_SRC
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/math_bin_add.f90
 	${SRC_DIR}/math_bin_div.f90
+	${SRC_DIR}/math_bin_matmul.f90
 	${SRC_DIR}/math_bin_mul.f90
 	${SRC_DIR}/math_bin_pow.f90
 	${SRC_DIR}/math_bin_subtract.f90

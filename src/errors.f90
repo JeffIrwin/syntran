@@ -1394,6 +1394,20 @@ end function err_eval_binary_types
 
 !===============================================================================
 
+function err_matmul_dim(lsize, rsize) result(err)
+	integer(kind = 8), intent(in) :: lsize, rsize
+	character(len = :), allocatable :: err
+
+	err = err_rt_prefix &
+		//'matmul `@` dimension mismatch: left inner dim ' &
+		//str(int(lsize))// &
+		' does not match right outer dim ' &
+		//str(int(rsize))//color_reset
+
+end function err_matmul_dim
+
+!===============================================================================
+
 function err_eval_len_array(type_name) result(err)
 	character(len = *), intent(in) :: type_name
 	character(len = :), allocatable :: err

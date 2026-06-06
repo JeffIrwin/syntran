@@ -643,6 +643,10 @@ module syntran__types_m
 			type(value_t), intent(in) :: a, b
 		end function types_match
 
+		module integer function matmul_out_rank(lrank, rrank) result(out_rank)
+			integer, intent(in) :: lrank, rrank
+		end function matmul_out_rank
+
 		!***************************************
 		! types_node.f90 procedures
 		!***************************************
