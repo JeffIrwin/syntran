@@ -1399,10 +1399,9 @@ function err_matmul_dim(lsize, rsize) result(err)
 	character(len = :), allocatable :: err
 
 	err = err_rt_prefix &
-		//'matmul `@` dimension mismatch: left inner dim ' &
-		//str(int(lsize))// &
-		' does not match right outer dim ' &
-		//str(int(rsize))//color_reset
+		//'matmul `@` dimension mismatch: inner dimensions ' &
+		//str(int(lsize))//' and ' &
+		//str(int(rsize))//' do not agree'//color_reset
 
 end function err_matmul_dim
 
