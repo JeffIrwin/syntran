@@ -937,6 +937,8 @@ module function type_name_primitive(itype) result(str_)
 		str_ = "bool"
 	case (any_type)
 		str_ = "any"
+	case (void_type)
+		str_ = "void"
 	case default
 		str_ = "unknown"
 	end select

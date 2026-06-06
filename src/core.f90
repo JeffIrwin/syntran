@@ -66,11 +66,7 @@ module syntran__core_m
 	!    syntran test runners in parallel as separate exe's
 	!    * not really a need for this currently with bytecode and other
 	!      optimizations. ci/cd takes ~14 minutes
-	!  - are there any opportunities to "move" things (e.g. fns, vars, vals)
-	!    instead of doing expensive "copy" operations? usually hidden as an
-	!    overridden assignment= operator. in jsonf repo almost everything is
-	!    moved instead of copied
-	!  - migrate ci from ubuntu 22 to 24. rocky should stay on version 9 for the
+	!  - migrate ci from ubuntu 22 to 24 or 26. rocky should stay on version 9 for the
 	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
 	!    might be zero perf benefit because the dicts are only used at parse
@@ -134,9 +130,6 @@ module syntran__core_m
 	!      jeffirwin/, e.g. vec-slice -> feature/vec-slice
 	!  - i like claude's "double_colon_token" name. i should change things like
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
-	!  - if you try to return something (e.g. i32) from a void/null fn, the
-	!    error says the fn should return "unknown" but it should say void (or
-	!    null?)
 	!  - minloc, maxloc, findloc std:: fns
 	!    * useful for aoc
 	!  - const.  e.g. `const N = 5` instead of `let N = 5`. then ban reassigning
