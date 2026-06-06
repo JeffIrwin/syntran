@@ -655,6 +655,19 @@ end function err_bad_sub_rank
 
 !===============================================================================
 
+function err_empty_step(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_prefix &
+		//'slice step cannot be omitted between two colons' &
+		//underline(context, span)//" write the step explicitly"//color_reset
+
+end function err_empty_step
+
+!===============================================================================
+
 function err_scalar_subscript(context, span, scalar) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

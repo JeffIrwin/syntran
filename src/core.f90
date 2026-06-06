@@ -30,7 +30,9 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - update ci/cd to intel 2026
+	!  - spellcheck on undeclared id's. i have this is jsonf
+	!  - remove AST-walking interpreter. bytecode is better. wait 2 or 3
+	!    releases
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
 	!      parallel but it's a deep rabbit hole of issues. fix most (?)
@@ -212,14 +214,6 @@ module syntran__core_m
 	!    * samples?
 	!    * libsyntran.a and fortran sample?
 	!    * try -static-libgcc etc. on win/mac to ease packaging
-	!  - implicit upper bound slicing:
-	!    * vec[3:] is equivalent to vec[3: size(vec,0)]
-	!    * step sub too:  vec[3: 2: ] or vec[:-1 : -1] (reverse whole vec).
-	!      lbound is implicit for negative step
-	!    * negative bound indices to count from end, like python? imo this is
-	!      bad for bounds checking (which doesn't exist yet outside of debug
-	!      builds) and it could let bugs return garbage instead of crashing.  i
-	!      think crashing is the correct behavior for index bugs
 	!  - struct array slicing:
 	!    * can't do my_struct.arr[1:4], currently have to loop with scalar index
 	!  - struct member fns

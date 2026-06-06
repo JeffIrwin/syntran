@@ -150,6 +150,10 @@ module syntran__types_m
 		! step_sub ([0: 2: 8])
 		integer :: sub_kind
 
+		! Flags for omitted lower/upper bounds in range/step subscripts, e.g.
+		! vec[3:] (usub_omit), vec[:5] (lsub_omit), vec[:-1:] (both with step)
+		logical :: lsub_omit = .false., usub_omit = .false.
+
 		type(syntax_token_t) :: op, identifier
 
 		integer :: id_index = 0, num_locs

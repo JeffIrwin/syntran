@@ -477,7 +477,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 	type(syntax_node_vector_t) :: lsubscripts_vec, usubscripts_vec, &
 		ssubscripts_vec
 	type(syntax_token_t) :: lbracket, rbracket, comma, &
-		dummy, colon
+		dummy, colon, dcolon
 
 	type(text_span_t) :: span
 
@@ -498,8 +498,83 @@ recursive module subroutine parse_subscripts(parser, expr)
 		pos0  = parser%pos
 		span0 = parser%current_pos()
 
-		if (parser%current_kind() == colon_token) then
-			lsubscript%sub_kind = all_sub
+		! Reset omit flags for this dimension (lsubscript is reused across
+		! loop iterations, so stale flags from prior dims must be cleared)
+		lsubscript%lsub_omit = .false.
+		lsubscript%usub_omit = .false.
+
+		if (parser%current_kind() == double_colon_token) then
+			! [::...] at start — empty step between two colons: error
+			span = new_span(span0, parser%current_pos() - span0)
+			call parser%diagnostics%push( &
+				err_empty_step(parser%context(), span))
+			dcolon = parser%match(double_colon_token)  ! consume :: for recovery
+			lsubscript%sub_kind = range_sub
+			lsubscript%lsub_omit = .true.
+			if (parser%current_kind() == rbracket_token .or. &
+				parser%current_kind() == comma_token .or. &
+				parser%current_kind() == eof_token) then
+				lsubscript%usub_omit = .true.
+			else
+				us_beg = parser%current_pos()
+				call parser%parse_expr(expr=usubscript)
+				us_end = parser%current_pos()
+			end if
+
+		else if (parser%current_kind() == colon_token) then
+			! Lower bound is absent (or bare all_sub)
+			colon = parser%match(colon_token)
+			lsubscript%lsub_omit = .true.
+
+			if (parser%current_kind() == rbracket_token .or. &
+				parser%current_kind() == comma_token) then
+				! Bare [:] — whole dimension, keep existing all_sub semantics
+				lsubscript%sub_kind = all_sub
+				lsubscript%lsub_omit = .false.
+
+			else
+
+				! Parse the first expr after the leading colon.  For one-colon
+				! form this is the upper bound; for two-colon (step) form it
+				! turns out to be the step (same rearrangement as below).
+				us_beg = parser%current_pos()
+				call parser%parse_expr(expr=usubscript)
+				us_end = parser%current_pos()
+
+				if (.not. any(usubscript%val%type == [i32_type, i64_type, unknown_type])) then
+					span = new_span(us_beg, us_end - us_beg + 1)
+					call parser%diagnostics%push( &
+						err_non_int_subscript(parser%context(), span, &
+						parser%text(span0, parser%current_pos()-1)))
+				end if
+
+				if (parser%current_kind() == colon_token) then
+					! Two colons: step_sub.  The expr we parsed was the step.
+					colon = parser%match(colon_token)
+					lsubscript%sub_kind = step_sub
+					ssubscript = usubscript
+
+					if (parser%current_kind() == rbracket_token .or. &
+						parser%current_kind() == comma_token) then
+						! [:step:] — upper omitted
+						lsubscript%usub_omit = .true.
+					else
+						us_beg = parser%current_pos()
+						call parser%parse_expr(expr=usubscript)
+						us_end = parser%current_pos()
+						if (.not. any(usubscript%val%type == [i32_type, i64_type, unknown_type])) then
+							span = new_span(us_beg, us_end - us_beg + 1)
+							call parser%diagnostics%push( &
+								err_non_int_subscript(parser%context(), span, &
+								parser%text(span0, parser%current_pos()-1)))
+						end if
+					end if
+				else
+					! One colon, lower omitted: [:upper]
+					lsubscript%sub_kind = range_sub
+				end if
+			end if
+
 		else
 
 			ls_beg = parser%current_pos()
@@ -529,11 +604,6 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 			else
 
-				! TODO: this is some nasty nested logic.  Can we refactor as a
-				! fn, invert conditions, never nest, and return early?  I can't
-				! cycle here bc there's important stuff at at end of loop.  Goto
-				! could work but fn might be better
-
 				if (.not. any(lsubscript%val%type == [i32_type, i64_type, unknown_type])) then
 					span = new_span(span0, parser%current_pos() - span0)
 					call parser%diagnostics%push( &
@@ -545,27 +615,24 @@ recursive module subroutine parse_subscripts(parser, expr)
 					colon = parser%match(colon_token)
 					lsubscript%sub_kind = range_sub
 
-					us_beg = parser%current_pos()
-					call parser%parse_expr(expr=usubscript)
-					us_end = parser%current_pos()
-
-					if (.not. any(usubscript%val%type == [i32_type, i64_type, unknown_type])) then
-						span = new_span(us_beg, us_end - us_beg + 1)
-						call parser%diagnostics%push( &
-							err_non_int_subscript(parser%context(), span, &
-							parser%text(span0, parser%current_pos()-1)))
-					end if
-
 					if (parser%current_kind() == colon_token) then
-						colon = parser%match(colon_token)
-						lsubscript%sub_kind = step_sub
+						! [lower: :...] (space-separated) — empty step: error
+						span = new_span(span0, parser%current_pos() - span0)
+						call parser%diagnostics%push( &
+							err_empty_step(parser%context(), span))
+						! best-effort recovery: treat upper as omitted
+						lsubscript%usub_omit = .true.
 
-						! The last one that we parsed above was actually step, not ubound
-						ssubscript = usubscript
+					else if (parser%current_kind() == rbracket_token .or. &
+						parser%current_kind() == comma_token) then
+						! [lower:] — upper omitted
+						lsubscript%usub_omit = .true.
 
+					else
 						us_beg = parser%current_pos()
 						call parser%parse_expr(expr=usubscript)
 						us_end = parser%current_pos()
+
 						if (.not. any(usubscript%val%type == [i32_type, i64_type, unknown_type])) then
 							span = new_span(us_beg, us_end - us_beg + 1)
 							call parser%diagnostics%push( &
@@ -573,6 +640,47 @@ recursive module subroutine parse_subscripts(parser, expr)
 								parser%text(span0, parser%current_pos()-1)))
 						end if
 
+						if (parser%current_kind() == colon_token) then
+							colon = parser%match(colon_token)
+							lsubscript%sub_kind = step_sub
+
+							! The last expr was step, not upper (same swap as before)
+							ssubscript = usubscript
+
+							if (parser%current_kind() == rbracket_token .or. &
+								parser%current_kind() == comma_token) then
+								! [lower:step:] — upper omitted
+								lsubscript%usub_omit = .true.
+							else
+								us_beg = parser%current_pos()
+								call parser%parse_expr(expr=usubscript)
+								us_end = parser%current_pos()
+								if (.not. any(usubscript%val%type == [i32_type, i64_type, unknown_type])) then
+									span = new_span(us_beg, us_end - us_beg + 1)
+									call parser%diagnostics%push( &
+										err_non_int_subscript(parser%context(), span, &
+										parser%text(span0, parser%current_pos()-1)))
+								end if
+							end if
+
+						end if
+					end if
+
+				else if (parser%current_kind() == double_colon_token) then
+					! [lower::upper] — empty step (no space, lexed as ::): error
+					span = new_span(span0, parser%current_pos() - span0)
+					call parser%diagnostics%push( &
+						err_empty_step(parser%context(), span))
+					dcolon = parser%match(double_colon_token)  ! consume :: for recovery
+					lsubscript%sub_kind = range_sub
+					if (parser%current_kind() == rbracket_token .or. &
+						parser%current_kind() == comma_token .or. &
+						parser%current_kind() == eof_token) then
+						lsubscript%usub_omit = .true.
+					else
+						us_beg = parser%current_pos()
+						call parser%parse_expr(expr=usubscript)
+						us_end = parser%current_pos()
 					end if
 
 				else

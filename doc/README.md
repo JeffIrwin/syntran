@@ -1,4 +1,67 @@
 
+# Array slicing
+
+Syntran arrays are zero-indexed.  The slice syntax uses colons inside square
+brackets.
+
+## Single-colon range
+
+```
+arr[lower : upper]
+```
+
+Returns elements from `lower` (inclusive) to `upper` (exclusive), with step 1.
+
+Either bound may be omitted to use the natural default:
+
+| Syntax       | Equivalent              | Meaning                          |
+|--------------|-------------------------|----------------------------------|
+| `arr[3:]`    | `arr[3 : size(arr, 0)]` | from index 3 to the end          |
+| `arr[:5]`    | `arr[0 : 5]`            | from the start up to index 5     |
+| `arr[:]`     | whole dimension         | all elements (also used as `[:,:]` etc.) |
+
+## Two-colon step range
+
+```
+arr[lower : step : upper]
+```
+
+Note: Syntran's step comes **second** (between the two colons), unlike
+Python's `lower:upper:step`.
+
+Either bound may be omitted; the default depends on the **sign of the step**:
+
+| Omitted   | Step > 0      | Step < 0     |
+|-----------|---------------|--------------|
+| `lower`   | `0`           | `size - 1`   |
+| `upper`   | `size`        | `-1`         |
+
+Examples:
+
+```
+v[3:2:]      // lower=3, step=2, upper=size  → every 2nd element from index 3
+v[:2:6]      // lower=0, step=2, upper=6
+v[:-1:]      // lower=size-1, step=-1, upper=-1  → full reverse
+v[3:-1:]     // lower=3, step=-1, upper=-1  → reverse from index 3 to start
+```
+
+The step value must be written explicitly when two colons are present.
+An empty step slot (`arr[1::4]`) is a **parse error**.
+
+Negative-index-from-end semantics (Python's `arr[-1]`) are deliberately **not**
+supported; out-of-bounds indices produce a crash in debug builds rather than
+silently returning garbage.
+
+## Strings
+
+The single-colon range form with omitted bounds also works on strings:
+
+```
+let s = "hello";
+s[3:]   // "lo"
+s[:3]   // "hel"
+```
+
 <!-- # Variadic and polymorphic functions -->
 # Special functions
 

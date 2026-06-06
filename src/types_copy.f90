@@ -252,6 +252,8 @@ recursive module subroutine syntax_node_copy(dst, src)
 	dst%is_empty    = src%is_empty
 
 	dst%sub_kind = src%sub_kind
+	dst%lsub_omit = src%lsub_omit
+	dst%usub_omit = src%usub_omit
 
 	!if (allocated(src%val)) then
 	!	if (.not. allocated(dst%val)) allocate(dst%val)
@@ -442,6 +444,8 @@ recursive module subroutine syntax_node_move(src, dst)
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
 	dst%sub_kind        = src%sub_kind
+	dst%lsub_omit       = src%lsub_omit
+	dst%usub_omit       = src%usub_omit
 	dst%is_empty        = src%is_empty
 	dst%expecting       = src%expecting
 	dst%first_expecting = src%first_expecting
@@ -512,6 +516,8 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
 	dst%sub_kind        = src%sub_kind
+	dst%lsub_omit       = src%lsub_omit
+	dst%usub_omit       = src%usub_omit
 	dst%is_empty        = src%is_empty
 	dst%expecting       = src%expecting
 	dst%first_expecting = src%first_expecting

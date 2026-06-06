@@ -2797,6 +2797,20 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[:,:,:]);', quiet) == '28', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[0,:,:]);', quiet) == '12', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[:,0,:]);', quiet) == '10', &
+			! Omitted lower/upper bounds
+			eval('let v = [0: 10]; v[3:];',         quiet) == '[3, 4, 5, 6, 7, 8, 9]',  &
+			eval('let v = [0: 10]; v[:4];',         quiet) == '[0, 1, 2, 3]',            &
+			eval('let v = [0: 10]; v[3:2:];',       quiet) == '[3, 5, 7, 9]',            &
+			eval('let v = [0: 10]; v[:2:6];',       quiet) == '[0, 2, 4]',               &
+			eval('let v = [0: 5];  v[:-1:];',       quiet) == '[4, 3, 2, 1, 0]',        &
+			eval('let v = [0: 5];  v[:-1:-1];',     quiet) == '[4, 3, 2, 1, 0]',        &
+			eval('let v = [0: 5];  v[3:-1:];',      quiet) == '[3, 2, 1, 0]',           &
+			eval('let v = [0: 6];  v[:2:];',        quiet) == '[0, 2, 4]',              &
+			! Omitted bounds: string (range form)
+			eval('let s = "hello"; s[3:];',         quiet) == 'lo',                     &
+			eval('let s = "hello"; s[:3];',         quiet) == 'hel',                    &
+			! Multi-dim with omitted upper alongside bare colon
+			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; m[0, 1:];', quiet) == '[3, 6]',   &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2875,6 +2889,9 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 			eval('let v = [0: 4]; v[[0,3]]   = 9; v;', quiet) == '[9, 1, 2, 9]', &
 			eval('let v = [0: 4]; v[[1,3]]   = 9; v;', quiet) == '[0, 9, 2, 9]', &
 			eval('let v = [0: 4]; v[[0,1,3]]   = 9; v;', quiet) == '[9, 9, 2, 9]', &
+			! Omitted lower/upper bounds on LHS
+			eval('let v = [0: 5]; v[2:] = 9; v;',       quiet) == '[0, 1, 9, 9, 9]',   &
+			eval('let v = [0: 5]; v[:3] += 10; v;',     quiet) == '[10, 11, 12, 3, 4]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4724,7 +4741,9 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('let a = 2 3;', quiet) == '', &
 			eval('max(2);', quiet)  == '',  & ! arguable.  see comments in core.f90
 			eval('size([0; 6, 7, 8], 2, 3);', quiet)  == '',  &
-			eval('7 * false;', quiet) == '' &
+			eval('7 * false;', quiet) == '', &
+			eval('let v = [0: 5]; v[1::4];', quiet) == '', &  ! empty step between two colons is a parse error
+			eval('let v = [0: 5]; v[1: :4];', quiet) == '' &  ! empty step between two colons is a parse error
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

@@ -476,6 +476,7 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 	!********
 
 	integer :: i, id, rank_
+	integer(kind = 8) :: sz
 
 	type(value_t) :: asubval, lsubval, usubval, ssubval
 
@@ -490,13 +491,93 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 	rank_res = 0
 	do i = 1, rank_
 
-		if (node%lsubscripts(i)%sub_kind == all_sub) then
+		select case (node%lsubscripts(i)%sub_kind)
+		case (all_sub)
 			lsubs(i) = 0
-			!print *, 'lsubs(i) = ', lsubs(i)
-		else if (node%lsubscripts(i)%sub_kind == arr_sub) then
+			ssubs(i) = 1
+			if (node%is_loc) then
+				usubs(i) = state%locs%vals(id)%array%size(i)
+			else
+				usubs(i) = state%vars%vals(id)%array%size(i)
+			end if
+			!print *, 'usubs(i) = ', usubs(i)
 
+			rank_res = rank_res + 1
+
+		case (range_sub)
+			! Step is always 1 for range_sub
+			ssubs(i) = 1
+
+			if (node%lsubscripts(i)%lsub_omit) then
+				! Omitted lower with positive step: start at 0
+				lsubs(i) = 0
+			else
+				call syntax_eval(node%lsubscripts(i), state, lsubval)
+				lsubs(i) = lsubval%to_i64()
+			end if
+
+			if (node%lsubscripts(i)%usub_omit) then
+				! Omitted upper with positive step: end at size
+				if (node%is_loc) then
+					usubs(i) = state%locs%vals(id)%array%size(i)
+				else
+					usubs(i) = state%vars%vals(id)%array%size(i)
+				end if
+			else
+				call syntax_eval(node%usubscripts(i), state, usubval)
+				usubs(i) = usubval%to_i64()
+			end if
+
+			rank_res = rank_res + 1
+
+		case (step_sub)
+			! Evaluate step FIRST so its sign determines default bounds
+			call syntax_eval(node%ssubscripts(i), state, ssubval)
+			ssubs(i) = ssubval%to_i64()
+
+			if (ssubs(i) == 0) then
+				write(*,*) err_int_prefix//'subscript step is 0'//color_reset
+				call internal_error()
+			end if
+
+			if (node%lsubscripts(i)%lsub_omit .or. &
+				node%lsubscripts(i)%usub_omit) then
+				! Need the dimension size for implicit bounds
+				if (node%is_loc) then
+					sz = state%locs%vals(id)%array%size(i)
+				else
+					sz = state%vars%vals(id)%array%size(i)
+				end if
+			end if
+
+			if (node%lsubscripts(i)%lsub_omit) then
+				! Omitted lower: 0 for positive step, size-1 for negative
+				lsubs(i) = merge(sz - 1_8, 0_8, ssubs(i) < 0)
+			else
+				call syntax_eval(node%lsubscripts(i), state, lsubval)
+				lsubs(i) = lsubval%to_i64()
+			end if
+
+			if (node%lsubscripts(i)%usub_omit) then
+				! Omitted upper: size for positive step, -1 for negative
+				usubs(i) = merge(-1_8, sz, ssubs(i) < 0)
+			else
+				call syntax_eval(node%usubscripts(i), state, usubval)
+				usubs(i) = usubval%to_i64()
+			end if
+
+			rank_res = rank_res + 1
+
+		case (scalar_sub)
+			! Scalar subs are converted to a range-1 sub so we can
+			! iterate later without further case logic
+			call syntax_eval(node%lsubscripts(i), state, lsubval)
+			lsubs(i) = lsubval%to_i64()
+			usubs(i) = lsubs(i) + 1
+			ssubs(i) = 1
+
+		case (arr_sub)
 			!print *, "arr_sub"
-
 			call syntax_eval(node%lsubscripts(i), state, asubval)
 
 			! TODO: refactor `if` to select/case. There is a fn
@@ -513,54 +594,6 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 
 			!print *, "asubs = ", asubs(i)%v
 
-		else
-			call syntax_eval(node%lsubscripts(i), state, lsubval)
-			lsubs(i) = lsubval%to_i64()
-		end if
-
-		!********
-
-		select case (node%lsubscripts(i)%sub_kind)
-		case (all_sub)
-			ssubs(i) = 1
-			if (node%is_loc) then
-				usubs(i) = state%locs%vals(id)%array%size(i)
-			else
-				usubs(i) = state%vars%vals(id)%array%size(i)
-			end if
-			!print *, 'usubs(i) = ', usubs(i)
-
-			rank_res = rank_res + 1
-
-		case (range_sub)
-			! Range subs are basically handled as a step sub with step == 1
-			ssubs(i) = 1
-
-			call syntax_eval(node%usubscripts(i), state, usubval)
-			usubs(i) = usubval%to_i64()
-
-			rank_res = rank_res + 1
-
-		case (step_sub)
-			call syntax_eval(node%ssubscripts(i), state, ssubval)
-			call syntax_eval(node%usubscripts(i), state, usubval)
-			ssubs(i) = ssubval%to_i64()
-			usubs(i) = usubval%to_i64()
-
-			if (ssubs(i) == 0) then
-				write(*,*) err_int_prefix//'subscript step is 0'//color_reset
-				call internal_error()
-			end if
-
-			rank_res = rank_res + 1
-
-		case (scalar_sub)
-			! Scalar subs are converted to a range-1 sub so we can
-			! iterate later without further case logic
-			usubs(i) = lsubs(i) + 1
-			ssubs(i) = 1
-
-		case (arr_sub)
 			lsubs(i) = asubs(i)%v(1)  ! reset to this after carrying
 			usubs(i) = 1              ! use this as an index to increment and get the next asub
 			rank_res = rank_res + 1

@@ -182,11 +182,23 @@ recursive module subroutine eval_name_expr(node, state, res)
 
 			! TODO: str all_sub, step_sub
 
-			il = subscript_eval(node, state) + 1
+			if (node%lsubscripts(1)%lsub_omit) then
+				il = 1  ! omitted lower → start of string (1-indexed)
+			else
+				il = subscript_eval(node, state) + 1
+			end if
 
-			! This feels inconsistent and not easy to extend to higher ranks
-			call syntax_eval(node%usubscripts(1), state, right)
-			iu = right%to_i64() + 1
+			if (node%lsubscripts(1)%usub_omit) then
+				! This feels inconsistent and not easy to extend to higher ranks
+				if (node%is_loc) then
+					iu = len(state%locs%vals(id)%str%s) + 1
+				else
+					iu = len(state%vars%vals(id)%str%s) + 1
+				end if
+			else
+				call syntax_eval(node%usubscripts(1), state, right)
+				iu = right%to_i64() + 1
+			end if
 
 			!print *, ''
 			!print *, 'identifier ', node%identifier%text
