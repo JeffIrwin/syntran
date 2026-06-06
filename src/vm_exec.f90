@@ -441,7 +441,7 @@ module subroutine vm_run(prog, state, res)
 	integer :: params_pool_cap
 	integer :: ip, next_ip
 	integer :: i, fn_id, nparams, node_idx_call
-	integer :: id, type_, n_mem
+	integer :: id, type_, n_mem, nelem
 	integer(kind = 8) :: i8
 
 	! M6: reusable arg pool for OP_CALL_INTR native dispatch.
@@ -681,15 +681,53 @@ module subroutine vm_run(prog, state, res)
 				type_ = state%vars%vals(id)%type
 			end if
 
+			! subscript_eval loops to the variable's element rank_, so a trailing
+			! char subscript (index rank+1) is naturally ignored — it gives the
+			! flat element index for both scalar-string and string-array cases.
 			i8 = subscript_eval(n, state)
 
 			if (type_ == str_type) then
+				! Scalar string: use str_char_slice helper (handles scalar/range).
 				val%type = str_type
 				if (.not. allocated(val%str)) allocate(val%str)
 				if (n%is_loc) then
-					val%str%s = state%locs%vals(id)%str%s(i8+1: i8+1)
+					val%str%s = str_char_slice(state%locs%vals(id)%str%s, n, state, 1)
 				else
-					val%str%s = state%vars%vals(id)%str%s(i8+1: i8+1)
+					val%str%s = str_char_slice(state%vars%vals(id)%str%s, n, state, 1)
+				end if
+			else if (type_ == array_type) then
+				! Check for string array with optional char subscript.
+				! Use nested ifs to guard the %array%type access (Fortran does not
+				! guarantee short-circuit evaluation of .and. chains).
+				nelem = 0
+				if (n%is_loc) then
+					if (state%locs%vals(id)%array%type == str_type) then
+						nelem = state%locs%vals(id)%array%rank
+					end if
+				else
+					if (state%vars%vals(id)%array%type == str_type) then
+						nelem = state%vars%vals(id)%array%rank
+					end if
+				end if
+
+				if (nelem > 0 .and. size(n%lsubscripts) == nelem + 1) then
+					! String array with scalar element + char subscript.
+					! i8 is the flat element index (char sub was ignored by subscript_eval).
+					val%type = str_type
+					if (.not. allocated(val%str)) allocate(val%str)
+					if (n%is_loc) then
+						val%str%s = str_char_slice( &
+							state%locs%vals(id)%array%str(i8+1)%s, n, state, nelem+1)
+					else
+						val%str%s = str_char_slice( &
+							state%vars%vals(id)%array%str(i8+1)%s, n, state, nelem+1)
+					end if
+				else
+					if (n%is_loc) then
+						call get_val(n, state%locs%vals(id), state, val, index_ = i8)
+					else
+						call get_val(n, state%vars%vals(id), state, val, index_ = i8)
+					end if
 				end if
 			else
 				if (n%is_loc) then
@@ -726,15 +764,58 @@ module subroutine vm_run(prog, state, res)
 			i8 = subscript_eval(n, state)
 
 			if (type_ == str_type) then
-				! String character assignment: s[i] = char_expr
+				! Scalar string character assignment: s[i] = char_expr
 				if (n%is_loc) then
 					state%locs%vals(id)%str%s(i8+1: i8+1) = right%str%s
 				else
 					state%vars%vals(id)%str%s(i8+1: i8+1) = right%str%s
 				end if
 				call vm_push_move(stack, right)
+			else if (type_ == array_type) then
+				! Check for string array with trailing char subscript.
+				! Use nested ifs to guard %array%type (no short-circuit guarantee).
+				nelem = 0
+				if (n%is_loc) then
+					if (state%locs%vals(id)%array%type == str_type) then
+						nelem = state%locs%vals(id)%array%rank
+					end if
+				else
+					if (state%vars%vals(id)%array%type == str_type) then
+						nelem = state%vars%vals(id)%array%rank
+					end if
+				end if
+
+				if (nelem > 0 .and. size(n%lsubscripts) == nelem + 1) then
+					! String array single-element char assignment: v[i,j] = char_expr
+					! i8 is the flat element index; evaluate char sub at lsubscripts(nelem+1).
+					block
+						integer(kind=8) :: char_pos
+						call syntax_eval(n%lsubscripts(nelem+1), state, val)
+						char_pos = val%to_i64()
+						if (n%is_loc) then
+							state%locs%vals(id)%array%str(i8+1)%s( &
+								char_pos+1 : char_pos+1) = right%str%s
+						else
+							state%vars%vals(id)%array%str(i8+1)%s( &
+								char_pos+1 : char_pos+1) = right%str%s
+						end if
+					end block
+					call vm_push_move(stack, right)
+				else
+					! Array element assignment (including compound ops)
+					if (n%is_loc) then
+						call get_val(n, state%locs%vals(id), state, val, index_ = i8)
+						call do_compound(val, right, instr%b)
+						call set_val(n, state%locs%vals(id), state, val, index_ = i8)
+					else
+						call get_val(n, state%vars%vals(id), state, val, index_ = i8)
+						call do_compound(val, right, instr%b)
+						call set_val(n, state%vars%vals(id), state, val, index_ = i8)
+					end if
+					call vm_push_move(stack, val)
+				end if
 			else
-				! Array element assignment (including compound ops)
+				! Array element assignment (struct or other non-array non-str type)
 				if (n%is_loc) then
 					call get_val(n, state%locs%vals(id), state, val, index_ = i8)
 					call do_compound(val, right, instr%b)

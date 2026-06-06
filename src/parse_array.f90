@@ -471,7 +471,9 @@ recursive module subroutine parse_subscripts(parser, expr)
 	!********
 
 	integer :: pos0, span0, span1, expect_rank, rank_, ls_beg, ls_end, &
-		us_beg, us_end
+		us_beg, us_end, nelem_subs
+
+	logical :: has_char_sub
 
 	type(syntax_node_t) :: lsubscript, usubscript, ssubscript
 	type(syntax_node_vector_t) :: lsubscripts_vec, usubscripts_vec, &
@@ -726,7 +728,14 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 		!print *, 'sub kind = ', kind_name(expr%lsubscripts(1)%sub_kind)
 
-		if (all(expr%lsubscripts%sub_kind == scalar_sub)) then
+		! Capture element rank before we overwrite it.  For string arrays we
+		! allow an optional extra (rank+1-th) subscript that indexes into the
+		! characters of each selected element.
+		nelem_subs = expr%val%array%rank
+		has_char_sub = (expr%val%array%type == str_type) .and. &
+			(size(expr%lsubscripts) == nelem_subs + 1)
+
+		if (all(expr%lsubscripts(1:nelem_subs)%sub_kind == scalar_sub)) then
 			! this is not necessarily true for strings
 			expr%val%type = expr%val%array%type
 		else if (expr%val%array%type == struct_type) then
@@ -737,8 +746,8 @@ recursive module subroutine parse_subscripts(parser, expr)
 				expr%identifier%text))
 		end if
 
-		! TODO: allow rank+1 for str arrays
-		if (expr%val%array%rank /= size(expr%lsubscripts)) then
+		! Allow rank or (for str arrays) rank+1 subscripts
+		if (size(expr%lsubscripts) /= nelem_subs .and. .not. has_char_sub) then
 			span = new_span(span0, span1 - span0 + 1)
 			call parser%diagnostics%push( &
 				err_bad_sub_count(parser%context(), span, &
@@ -746,10 +755,10 @@ recursive module subroutine parse_subscripts(parser, expr)
 				expr%val%array%rank, size(expr%lsubscripts)))
 		end if
 
-		! A slice operation can change the result rank
-
+		! A slice operation can change the result rank.  The char sub (if any)
+		! is NOT counted — it never adds array rank.
 		!print *, 'rank in  = ', expr%val%array%rank
-		expr%val%array%rank = count(expr%lsubscripts%sub_kind /= scalar_sub)
+		expr%val%array%rank = count(expr%lsubscripts(1:nelem_subs)%sub_kind /= scalar_sub)
 		!print *, 'rank out = ', expr%val%array%rank
 
 	else if (expr%val%type == str_type) then

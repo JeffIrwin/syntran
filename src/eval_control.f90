@@ -261,10 +261,12 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 
 	!********
 
-	integer :: rank_res, id, type_
+	integer :: rank_res, id, type_, nelem
 	integer(kind = 8) :: i8, j8, index_, len8, size_i
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:), &
 		size_tmp(:)
+
+	logical :: has_char_sub
 
 	type(i64_vector_t), allocatable :: asubs(:)
 	type(value_t) :: array_val, rhs, tmp, tmp_array
@@ -362,6 +364,24 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 		!print *, 'LHS array subscript assignment'
 		!print *, 'LHS type = ', kind_name(type_)
 
+		! Detect optional char-rank subscript on a string array.
+		! Use nested ifs to guard %array%type (no short-circuit guarantee).
+		nelem = 0
+		has_char_sub = .false.
+		if (allocated(node%lsubscripts) .and. type_ == array_type) then
+			if (node%is_loc) then
+				if (state%locs%vals(id)%array%type == str_type) then
+					nelem = state%locs%vals(id)%array%rank
+					has_char_sub = size(node%lsubscripts) == nelem + 1
+				end if
+			else
+				if (state%vars%vals(id)%array%type == str_type) then
+					nelem = state%vars%vals(id)%array%rank
+					has_char_sub = size(node%lsubscripts) == nelem + 1
+				end if
+			end if
+		end if
+
 		! Eval the RHS.  I should probably rename `res` to `rhs` here like I did
 		! with get_val() for dot exprs above, because it's not really the result
 		! yet in cases of compound assignment
@@ -378,6 +398,45 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 				state%locs%vals(id)%str%s(i8+1: i8+1) = res%str%s
 			else
 				state%vars%vals(id)%str%s(i8+1: i8+1) = res%str%s
+			end if
+
+		else if (has_char_sub) then
+
+			! String array with char subscript assignment.  Apply the char sub
+			! to every element selected by the element subscripts.
+			if (all(node%lsubscripts(1:nelem)%sub_kind == scalar_sub)) then
+
+				! All element subs scalar: single element
+				i8 = subscript_eval(node, state)   ! element flat index
+				call str_arr_char_assign(node, state, res, id, i8, nelem)
+
+			else
+
+				! Slice element selection: iterate over selected elements
+				call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+				len8 = 1_8
+				do j8 = 1, nelem
+					if (allocated(asubs(j8)%v)) then
+						size_i = size(asubs(j8)%v)
+					else
+						size_i = divceil(usubs(j8) - lsubs(j8), ssubs(j8))
+						if (lsubs(j8) > usubs(j8) .and. ssubs(j8) > 0) size_i = 0
+						if (lsubs(j8) < usubs(j8) .and. ssubs(j8) < 0) size_i = 0
+					end if
+					len8 = len8 * size_i
+				end do
+
+				subs = lsubs
+				do j8 = 0, len8 - 1
+					if (node%is_loc) then
+						index_ = subscript_i32_eval(subs, state%locs%vals(id)%array)
+					else
+						index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
+					end if
+					call str_arr_char_assign(node, state, res, id, index_, nelem)
+					call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+				end do
+
 			end if
 
 		else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
@@ -560,6 +619,71 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 
 		end if
 	end if
+
+contains
+
+	subroutine str_arr_char_assign(node, state, rhs, id, elem_idx, nelem_)
+
+		! Apply the char-rank subscript at lsubscripts(nelem_+1) to the
+		! element string at state%{locs|vars}%vals(id)%array%str(elem_idx+1)%s.
+		! Handles both scalar_sub (single char) and range_sub (substring).
+
+		type(syntax_node_t), intent(in)    :: node
+		type(state_t),       intent(inout) :: state
+		type(value_t),       intent(in)    :: rhs
+		integer,             intent(in)    :: id, nelem_
+		integer(kind = 8),   intent(in)    :: elem_idx
+
+		!********
+
+		integer :: isub
+		integer(kind = 8) :: il, iu, char_pos
+		type(value_t) :: tmp_
+
+		isub = nelem_ + 1
+
+		select case (node%lsubscripts(isub)%sub_kind)
+		case (scalar_sub)
+			call syntax_eval(node%lsubscripts(isub), state, tmp_)
+			char_pos = tmp_%to_i64()
+			if (node%is_loc) then
+				state%locs%vals(id)%array%str(elem_idx+1)%s( &
+					char_pos+1 : char_pos+1) = rhs%str%s
+			else
+				state%vars%vals(id)%array%str(elem_idx+1)%s( &
+					char_pos+1 : char_pos+1) = rhs%str%s
+			end if
+
+		case (range_sub)
+			if (node%lsubscripts(isub)%lsub_omit) then
+				il = 1
+			else
+				call syntax_eval(node%lsubscripts(isub), state, tmp_)
+				il = tmp_%to_i64() + 1
+			end if
+			if (node%lsubscripts(isub)%usub_omit) then
+				if (node%is_loc) then
+					iu = len(state%locs%vals(id)%array%str(elem_idx+1)%s) + 1
+				else
+					iu = len(state%vars%vals(id)%array%str(elem_idx+1)%s) + 1
+				end if
+			else
+				call syntax_eval(node%usubscripts(isub), state, tmp_)
+				iu = tmp_%to_i64() + 1
+			end if
+			if (node%is_loc) then
+				state%locs%vals(id)%array%str(elem_idx+1)%s(il : iu-1) = rhs%str%s
+			else
+				state%vars%vals(id)%array%str(elem_idx+1)%s(il : iu-1) = rhs%str%s
+			end if
+
+		case default
+			write(*,*) err_int_prefix//'unexpected str char subscript kind'//color_reset
+			call internal_error()
+
+		end select
+
+	end subroutine str_arr_char_assign
 
 end subroutine eval_assignment_expr
 

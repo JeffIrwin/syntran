@@ -31,6 +31,7 @@ module syntran__core_m
 
 	! TODO:
 	!  - spellcheck on undeclared id's. i have this is jsonf
+	!  - matrix inverse? link gfortran to mkl?
 	!  - remove AST-walking interpreter. bytecode is better. wait 2 or 3
 	!    releases
 	!  - log a known issue that syntran is not threadsafe

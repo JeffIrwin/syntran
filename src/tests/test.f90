@@ -3212,6 +3212,22 @@ subroutine unit_test_array_str(npass, nfail)
 		[   &
 			eval('let sv = ["hello"; 3];', quiet) == '[hello, hello, hello]', &
 			interpret_file(path//'test-01.syntran', quiet) == 'hello world', &
+			interpret_file(path//'test-02.syntran', quiet) == 'hpelhelrldXXwhELlo', &
+			eval('let v=["hello","world","wassup"]; v[0,0];', quiet) == 'h', &  ! Inline: char-rank reads
+			eval('let v=["hello","world","wassup"]; v[2,5];', quiet) == 'p', &
+			eval('let v=["hello","world","wassup"]; v[0,1:3];', quiet) == 'el', &
+			eval('let v=["hello","world","wassup"]; v[0,:3];', quiet) == 'hel', &
+			eval('let v=["hello","world","wassup"]; v[1,2:];', quiet) == 'rld', &
+			eval('let v=["hello","world","wassup"]; v[0:2,0];', quiet) == '[h, w]', &
+			eval('let v=["hello","world","wassup"]; v[:,0];', quiet) == '[h, w, w]', &
+			eval('let v=["hello","world","wassup"]; v[:,1:3];', quiet) == '[el, or, as]', &
+			eval('let v=["hello","world","wassup"]; v[0:2,1:3];', quiet) == '[el, or]', &
+			eval('let v=["hello","world","wassup"]; v[[2,0],0];', quiet) == '[w, h]', &
+			eval('let v=["hello","world","wassup"]; v[0,0]="H"; v[0];', quiet) == 'Hello', &  ! Inline: char-rank assignment
+			eval('let v=["hello","world","wassup"]; v[0:2,0]="X"; v;', quiet) == '[Xello, Xorld, wassup]', &
+			eval('let v=["hello","world","wassup"]; v[:,1:3]="EL"; v;', quiet) == '[hELlo, wELld, wELsup]', &
+			eval('let v=["hello","world","wassup"]; v[0,1:3]="EL"; v[0];', quiet) == 'hELlo', &
+			eval('let v=["hello","world","wassup"]; v[1];', quiet) == 'world', &  ! Inline: regression - whole element still works
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

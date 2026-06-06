@@ -83,6 +83,14 @@ module syntran__eval_m
 			type(value_t), intent(inout) :: val
 		end subroutine
 
+		module function str_char_slice(s, node, state, isub) result(out)
+			character(len = *), intent(in) :: s
+			type(syntax_node_t), intent(in) :: node
+			type(state_t), intent(inout) :: state
+			integer, intent(in) :: isub
+			character(len = :), allocatable :: out
+		end function
+
 	end interface
 
 	interface
