@@ -461,7 +461,8 @@
 					"ubuntu-latest"
 				],
 				"toolchain": [
-					{"compiler": "intel", "version": "2026.0"},
+					#{"compiler": "intel", "version": "2026.0"},   # not supported yet by setup-fortran as of 2026-06-06
+					{"compiler": "intel", "version": "2025.2"},
 					#{"compiler": "intel", "version": "2025.1"},  # works
 					#{"compiler": "intel", "version": "2024.2"},  # internal compiler error on fn array cat in declare_intr_fns()
 					#{"compiler": "intel", "version": "2023.1"},
