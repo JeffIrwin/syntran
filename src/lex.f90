@@ -53,7 +53,9 @@ function lex(lexer) result(token)
 	integer(kind = 4) :: i32
 	integer(kind = 8) :: i64
 
-	logical :: float, float32, float64
+	integer :: n_hashes, j
+
+	logical :: float, float32, float64, terminated
 
 	real(kind = 4) :: f32
 	real(kind = 8) :: f64
@@ -590,6 +592,70 @@ function lex(lexer) result(token)
 
 		token%unit_ = lexer%unit_
 		return
+
+	end if
+
+	! Raw string literal: r"...", r#"..."#, r##"..."##, etc.
+	! Count the '#' chars after 'r'; the same count must precede the closing '"'.
+	! Content is taken verbatim — no doubled-quote escape processing.
+	if (lexer%current() == 'r') then
+
+		n_hashes = 0
+		do while (lexer%peek(1 + n_hashes) == '#')
+			n_hashes = n_hashes + 1
+		end do
+
+		if (lexer%peek(1 + n_hashes) == '"') then
+
+			! Advance past 'r', the n_hashes '#' chars, and the opening '"'
+			lexer%pos = lexer%pos + n_hashes + 2
+
+			char_vec = new_char_vector()
+			terminated = .false.
+			do
+
+				if (lexer%pos > len(lexer%text)) exit
+
+				if (lexer%current() == '"') then
+					! Check whether the next n_hashes chars are all '#'
+					terminated = .true.
+					do j = 1, n_hashes
+						if (lexer%peek(j) /= '#') then
+							terminated = .false.
+							exit
+						end if
+					end do
+					if (terminated) then
+						! Advance past the closing '"' and its n_hashes '#' chars
+						lexer%pos = lexer%pos + n_hashes + 1
+						exit
+					end if
+				end if
+
+				call char_vec%push(lexer%current())
+				lexer%pos = lexer%pos + 1
+
+			end do
+
+			text = lexer%text(start: lexer%pos-1)
+
+			if (.not. terminated) then
+				token = new_token(bad_token, lexer%pos, text)
+				span = new_span(start, len(text))
+				call lexer%diagnostics%push( &
+					err_unterminated_raw_str(lexer%context, &
+					span, text))
+				token%unit_ = lexer%unit_
+				return
+			end if
+
+			val   = new_literal_value(str_type, str_ = char_vec%v( 1: char_vec%len_ ))
+			token = new_token(str_token, start, text, val)
+
+			token%unit_ = lexer%unit_
+			return
+
+		end if
 
 	end if
 

@@ -235,13 +235,6 @@ module syntran__core_m
 	!    * samples could be updated, e.g. sorting in place would be a lot more
 	!      efficient without copying large array vals in and out.  don't update
 	!      tests though.  if anything, add tests, but don't remove coverage
-	!  - raw string literals
-	!    * easier to include quotes without doubling
-	!    * follow rust style:
-	!      + let str1 = r#" my raw str with "quotes" "#;
-	!      + let str2 = r##" my raw str with "#quotes"# "##;
-	!      + number of hashes at start matches end
-	!      + any use for zero hashes?  r"raw str"
 	!  - type() or typeof() fn to get type name as str?  could be useful for
 	!    debugging, but I don't want to encourage its use for actual program
 	!    logic

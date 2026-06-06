@@ -196,6 +196,21 @@ end function err_unterminated_str
 
 !===============================================================================
 
+function err_unterminated_raw_str(context, span, str_) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: str_
+	err = err_prefix//'unterminated raw str literal `'//str_ &
+		//'`' &
+		//underline(context, span) &
+		//' unterminated raw str'//color_reset
+
+end function err_unterminated_raw_str
+
+!===============================================================================
+
 function err_array_struct_slice(context, span, array) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

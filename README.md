@@ -966,6 +966,38 @@ let string1 = "syntran is a ""programming language""";
 // syntran is a "programming language"
 ```
 
+Alternatively, use a **raw string literal** (Rust-style) when a string contains
+many quotes.  A raw string begins with `r` followed by zero or more `#` characters
+and a `"`, and ends with a `"` followed by the same number of `#` characters.
+Content is taken verbatim — no escape processing:
+
+```rust
+let string1r = r#"syntran is a "programming language""#;
+// syntran is a "programming language"
+```
+
+Choose a hash count that does not appear in the string content:
+
+```rust
+let json = r##"{"key": "#value"}"##;
+// {"key": "#value"}
+```
+
+The zero-hash form `r"..."` is also valid and ends at the first `"`:
+
+```rust
+let raw0 = r"no hashes needed here";
+// no hashes needed here
+```
+
+Raw strings may span multiple lines; the newline characters become part of the
+value:
+
+```rust
+let multi = r#"line one
+line two"#;
+```
+
 Strings are concatenated with the `+` operator:
 
 ```rust

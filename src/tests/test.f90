@@ -2024,12 +2024,58 @@ subroutine unit_test_str(npass, nfail)
 			eval('" " == ["", " ", "  "];')  == '[false, true, false]', &
 			eval('["", " ", "  "] == " ";')  == '[false, true, false]', &
 			eval('["", " ", "  "] == [" ", " ", " "];')  == '[false, true, false]', &
-			eval('"hello world";') == 'hello world'  &
+			eval('"hello world";') == 'hello world', &
+
+			! Raw string literals: r"...", r#"..."#, r##"..."##, etc.
+			! Content is taken verbatim -- no doubled-quote escape processing.
+			eval('r#"abc"#;') == 'abc', &
+			eval('r#" "quotes" "#;') == ' "quotes" ', &
+			eval('r##" "#quotes"# "##;') == ' "#quotes"# ', &
+			eval('r"raw str";') == 'raw str', &
+			eval('r#""#;') == '', &
+			eval('r#"a"b"# == "a""b";') == 'true', &
+			eval('r#"x"# + "y";') == 'xy', &
+			eval('r#"a""b"# == "a""""b";') == 'true'  & ! "" is verbatim in raw strs
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_str
+
+!===============================================================================
+
+subroutine unit_test_raw_str(npass, nfail)
+
+	! File-based tests for raw string literals, covering multi-line content
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'raw str scripts'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/str/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_raw_str
 
 !===============================================================================
 
@@ -4944,6 +4990,7 @@ subroutine unit_tests(iostat)
 	call unit_test_f32_1      (npass, nfail)
 	call unit_test_f64_1      (npass, nfail)
 	call unit_test_str        (npass, nfail)
+	call unit_test_raw_str    (npass, nfail)
 	call unit_test_substr     (npass, nfail)
 	call unit_test_if_else    (npass, nfail)
 	call unit_test_for_1      (npass, nfail)
