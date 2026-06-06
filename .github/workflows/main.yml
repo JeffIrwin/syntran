@@ -417,7 +417,7 @@
 					"ubuntu-latest"
 				],
 				#"gfortran": [9, 10, 11, 12]  # gfort 9 started segfaulting with the introduction of fortran submodules circa 9ae38b9d
-				"gfortran": [10, 11, 12, 13, 14]  # gfort <= 8 not available by default on github ci workers
+				"gfortran": [10, 11, 12, 13, 14, 15]  # gfort <= 8 not available by default on github ci workers
 			}
 		},
 		"steps": [
