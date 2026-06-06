@@ -64,6 +64,31 @@ let roty =
 //println(rotx);
 //println(roty);
 
-return mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty), vec);
-// [-1.0f, -2.0f, 3.0f]
+//println("       vec = ", vec);
+//println("vec @ rotx = ", vec @ rotx);
+//println("rotx @ vec = ", rotx @ vec);
+//println("rotx @ vec = ", mul_mat_vec(rotx, vec));
+
+let vecx1 = rotx @ vec;
+let vecx2 = mul_mat_vec(rotx, vec);
+let evx   = [1.f, -3.f, 2.f];
+
+let vecy1 = roty @ vec;
+let vecy2 = mul_mat_vec(roty, vec);
+let evy   = [3.f, 2.f, -1.f];
+//println("vecy1 = ", vecy1);
+
+let expect = [-1.f, -2.f, 3.f];
+let ans1 = mul_mat_vec(mul_mat(mul_mat(mul_mat(rotx, rotx), roty), roty), vec);
+let ans2 = rotx @ rotx @ roty @ roty @ vec;
+
+let tol = 1.e-4f;
+
+return
+	sum(abs(evx - vecx1)) < tol and
+	sum(abs(evx - vecx2)) < tol and
+	sum(abs(evy - vecy1)) < tol and
+	sum(abs(evy - vecy2)) < tol and
+	sum(abs(expect - ans1)) < tol and
+	sum(abs(expect - ans2)) < tol;
 
