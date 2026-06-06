@@ -4,10 +4,15 @@ FROM ubuntu:latest
 WORKDIR /workdir
 
 ## syntran used to crash almost immediately with gfortran 13+
+##
+## fixed:  https://github.com/JeffIrwin/syntran/commit/e4d6a065c123bfaa6bde757aece9a9adcd59f851
+##
+
 #ARG GFORT_VERS="11"
 #ARG GFORT_VERS="12"
 #ARG GFORT_VERS="13"
-ARG GFORT_VERS="14"
+#ARG GFORT_VERS="14"
+ARG GFORT_VERS="15"
 ARG FC="gfortran-${GFORT_VERS}"
 
 RUN apt-get update -y && apt-get install -y \
