@@ -29,11 +29,16 @@ module syntran__core_m
 		syntran_minor =  2, &
 		syntran_patch =  0
 
+	! Warning: Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: fortran-lang/setup-fpm@v7. Actions will be forced to run with Node.js 24 by default starting June 16th, 2026. Node.js 20 will be removed from the runner on September 16th, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+
 	! TODO:
 	!  - spellcheck on undeclared id's. i have this is jsonf
 	!  - matrix inverse? link gfortran to mkl?
 	!  - remove AST-walking interpreter. bytecode is better. wait 2 or 3
 	!    releases
+	!  - test/sample with user-defined dynamic vector struct. should be possible
+	!    now with structs and pass-by-reference
+	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
 	!      parallel but it's a deep rabbit hole of issues. fix most (?)
