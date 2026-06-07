@@ -287,6 +287,12 @@ recursive module subroutine eval_name_expr(node, state, res)
 				call get_val(node, state%vars%vals(id), state, res, index_ = i8)
 			end if
 
+		else if (size(node%lsubscripts) == 1 .and. &
+		         node%lsubscripts(1)%sub_kind /= arr_sub) then
+
+			! Rank-1 slice fast path: avoids allocating lsubs/ssubs/usubs/asubs.
+			call eval_slice_rank1(node, state, res)
+
 		else
 
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)

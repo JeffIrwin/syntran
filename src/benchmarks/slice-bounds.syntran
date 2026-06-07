@@ -1,0 +1,31 @@
+// Benchmark: optional lower/upper bounds (commit 15bcb866).
+//
+// Exercises all four new omitted-bound forms added in that commit:
+//   a[:k]    — omitted lower, positive step (range_sub path)
+//   a[k:]    — omitted upper, positive step
+//   a[:s:]   — omitted both, explicit step > 0 (step_sub path)
+//   a[k:-1:] — omitted upper, negative step
+//
+// Each form takes a 2-4 element result to keep slices small and
+// overhead-dominated (same rationale as slice-small).  The step_sub
+// path reads array%size to compute the default bound, which is an
+// extra field access vs. range_sub — worth checking separately.
+//
+// All four forms currently compile to OP_SLICE and delegate to
+// eval_name_expr → get_subscript_range.
+
+let n   = 100;
+let m   = 500000;
+let a   = [0: n];
+let acc = 0;
+
+for iter in [0: m]
+{
+	let s1 = a[:3];       // omitted lower  → [0,1,2]
+	let s2 = a[97:];      // omitted upper  → [97,98,99]
+	let s3 = a[:2:];      // step=2, both omitted → [0,2,4,...,98]
+	let s4 = a[3:-1:];    // step=-1, omitted upper → [3,2,1,0]
+	acc += s1[0] + s2[0] + s3[0] + s4[0];
+}
+
+println(acc);

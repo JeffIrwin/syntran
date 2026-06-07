@@ -470,6 +470,12 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 
 			!print *, "lhs slice assignment"
 
+			if (size(node%lsubscripts) == 1 .and. &
+			    node%lsubscripts(1)%sub_kind /= arr_sub) then
+				! Rank-1 slice fast path: avoids allocating lsubs/ssubs/usubs/asubs.
+				call eval_assign_slice_rank1(node, state, id, res)
+			else
+
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
 			allocate(size_tmp(rank_res))
 
@@ -616,6 +622,8 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			!! behaviour is in contrast to non-nested assignment:"
 			!res = state%vars%vals(id)  ! big copy for returing the whole array
 			res = tmp_array  ! only return the modified slice
+
+			end if   ! rank-1 fast path / general path
 
 		end if
 	end if

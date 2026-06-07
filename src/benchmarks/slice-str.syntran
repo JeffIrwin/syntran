@@ -1,0 +1,44 @@
+// Benchmark: string char-slice and string-array char-indexing (commit 9c0740bf).
+//
+// Three workloads from that commit, each in its own loop:
+//
+//   1. Scalar string char-slice  s[i:j]  — goes through OP_SLICE →
+//      eval_name_expr (str_type branch) → str_char_slice.
+//
+//   2. String-array scalar element + char index  v[i, j]  — goes
+//      through OP_INDEX → vm_exec inline handler (str_char_slice).
+//      This path already has some VM-native handling; loop shows
+//      residual cost.
+//
+//   3. String-array scalar element + char-slice  v[i, j:k]  — goes
+//      through OP_SLICE → eval_name_expr (has_char_sub branch, all-
+//      scalar element subs) → str_char_slice.  Most overhead-prone
+//      of the three because it hits both OP_SLICE dispatch and
+//      str_char_slice per iteration.
+//
+// acc is a string (last result); println prevents dead-code removal.
+
+let s    = "abcdefghijklmnopqrstuvwxyz";
+let v    = ["hello", "world", "wassup", "syntran", "language"];
+let acc  = "";
+
+// 1. Scalar string char-slice
+for iter in [0: 200000]
+{
+	acc = s[3: 6];   // "def"
+}
+println(acc);
+
+// 2. String-array scalar element + char index
+for iter in [0: 500000]
+{
+	acc = v[2, 3];   // "s" (fourth char of "wassup")
+}
+println(acc);
+
+// 3. String-array scalar element + char-slice
+for iter in [0: 200000]
+{
+	acc = v[4, 1: 4];   // "ang" (chars 1-3 of "language")
+}
+println(acc);

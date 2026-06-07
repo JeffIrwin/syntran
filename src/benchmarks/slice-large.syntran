@@ -1,0 +1,22 @@
+// Benchmark: large slices — copy-dominated negative control.
+//
+// Takes a 5000-element slice on every iteration.  The O(N) copy work
+// dominates; per-call dispatch overhead is amortized to near zero.
+// Expected result: VM ≈ AST, confirming that a native opcode cannot
+// improve copy-bound workloads.
+//
+// Total element copies ≈ 5 000 000 — similar order of magnitude to
+// slice-small, but spent entirely on copies rather than dispatch.
+
+let n   = 5000;
+let m   = 1000;
+let a   = [0: n];
+let acc = 0;
+
+for iter in [0: m]
+{
+	let s = a[0: n];
+	acc  += s[0];
+}
+
+println(acc);

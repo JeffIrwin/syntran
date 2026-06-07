@@ -135,6 +135,28 @@ module syntran__eval_m
 			type(syntax_token_t), intent(in) :: op
 		end subroutine
 
+		module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, contributes_rank)
+			type(syntax_node_t), intent(in)    :: node
+			type(state_t),       intent(inout) :: state
+			integer,             intent(in)    :: i
+			integer(kind = 8),   intent(out)   :: lsub, ssub, usub
+			type(i64_vector_t),  intent(inout) :: asub
+			logical,             intent(out)   :: contributes_rank
+		end subroutine
+
+		module subroutine eval_slice_rank1(node, state, res)
+			type(syntax_node_t), intent(in)    :: node
+			type(state_t),       intent(inout) :: state
+			type(value_t),       intent(out)   :: res
+		end subroutine
+
+		module subroutine eval_assign_slice_rank1(node, state, id, res)
+			type(syntax_node_t), intent(in)    :: node
+			type(state_t),       intent(inout) :: state
+			integer,             intent(in)    :: id
+			type(value_t),       intent(inout) :: res
+		end subroutine
+
 		module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
 			type(syntax_node_t), intent(in) :: node
 			type(state_t), intent(inout) :: state
