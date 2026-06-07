@@ -25,7 +25,7 @@ COPY fpm.toml .
 #************
 
 # Install fpm from binary
-ARG FPM_URL="https://github.com/fortran-lang/fpm/releases/download/v0.12.0/fpm-0.12.0-linux-x86_64-gcc-12"
+ARG FPM_URL="https://github.com/fortran-lang/fpm/releases/download/v0.13.0/fpm-0.13.0-linux-x86_64-gcc-12"
 RUN curl -L $FPM_URL -o fpm
 RUN chmod +x fpm
 RUN mv fpm /usr/local/bin

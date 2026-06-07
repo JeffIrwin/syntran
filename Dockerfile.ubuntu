@@ -38,7 +38,7 @@ WORKDIR /workdir/syntran
 #COPY src ./src
 #COPY fpm.toml .
 
-ARG FPM_URL="https://github.com/fortran-lang/fpm/releases/download/v0.12.0/fpm-0.12.0-linux-x86_64-gcc-12"
+ARG FPM_URL="https://github.com/fortran-lang/fpm/releases/download/v0.13.0/fpm-0.13.0-linux-x86_64-gcc-12"
 ADD $FPM_URL ./fpm
 
 RUN chmod +x fpm

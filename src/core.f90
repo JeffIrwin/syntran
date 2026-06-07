@@ -141,9 +141,6 @@ module syntran__core_m
 	!    * gfortran 15 is now the default for Windows github actions
 	!    * available in recent docker images, but gfortran 15 is not available
 	!      in github ubuntu runners as of 2026-06-06
-	!  - many of my Dockerfiles install fpm from the "current" github release,
-	!    but their "current" release is a stale 3 year old release.  try the
-	!    latest release, or just version pin 0.12.0
 	!  - built-in syntran update:
 	!    * add checksum verification
 	!    * currently ./syup.sh can do it
