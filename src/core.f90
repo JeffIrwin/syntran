@@ -68,6 +68,8 @@ module syntran__core_m
 	!      optimizations. ci/cd takes ~14 minutes
 	!  - migrate ci from ubuntu 22 to 24 or 26. rocky should stay on version 9 for the
 	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
+	!    * related, update wsl ubuntu version. consider updating gfortran
+	!      versions in some places
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
 	!    might be zero perf benefit because the dicts are only used at parse
 	!    time, then mapped to efficient arrays at eval time
