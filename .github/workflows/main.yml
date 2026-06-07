@@ -545,7 +545,7 @@
 						exit 1 \n
 					fi \n
 
-					docker build . --file Dockerfile.alpine.3.18 -t sy \n
+					docker build . --file Dockerfile.alpine -t sy \n
 					docker run --entrypoint syntran sy --version \n
 					docker run sy --version # syntran is already the default entrypoint \n
 					docker run sy -c \"1 + 2;\" \n

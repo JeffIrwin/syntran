@@ -66,8 +66,9 @@ module syntran__core_m
 	!    syntran test runners in parallel as separate exe's
 	!    * not really a need for this currently with bytecode and other
 	!      optimizations. ci/cd takes ~14 minutes
-	!  - migrate ci from ubuntu 22 to 24 or 26. rocky should stay on version 9 for the
+	!  - migrate ci from ubuntu 24 to 26. rocky should stay on version 9 for the
 	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
+	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet
 	!    * related, update wsl ubuntu version. consider updating gfortran
 	!      versions in some places
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
