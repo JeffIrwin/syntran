@@ -100,8 +100,9 @@ module syntran__types_m
 		! TODO: scoping for nested fns?
 		contains
 			procedure :: &
-				insert => fn_insert, &
-				search => fn_search
+				insert  => fn_insert, &
+				search  => fn_search, &
+				closest => fn_closest
 		!		push_scope, pop_scope
 
 	end type fns_t
@@ -244,8 +245,9 @@ module syntran__types_m
 
 		contains
 			procedure :: &
-				insert => var_insert, &
-				search => var_search, &
+				insert  => var_insert, &
+				search  => var_search, &
+				closest => var_closest, &
 				push_scope, pop_scope
 
 			! This is required unfortunately
@@ -447,6 +449,18 @@ module syntran__types_m
 			integer, intent(out), optional :: iostat
 		end subroutine var_search
 
+		module function var_closest(dict, key) result(closest)
+			class(vars_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			character(len = :), allocatable :: closest
+		end function var_closest
+
+		module function fn_closest(dict, key) result(closest)
+			class(fns_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			character(len = :), allocatable :: closest
+		end function fn_closest
+
 		module subroutine push_scope(dict)
 			class(vars_t) :: dict
 		end subroutine push_scope
@@ -477,6 +491,20 @@ module syntran__types_m
 			integer, intent(out) :: iostat
 			type(value_t), intent(out) :: val
 		end subroutine ternary_search
+
+		recursive module subroutine ternary_closest(node, prefix, target_low, min_dist, closest)
+			type(ternary_tree_node_t), intent(in), allocatable :: node
+			character(len = *), intent(in) :: prefix, target_low
+			integer, intent(inout) :: min_dist
+			character(len = :), allocatable, intent(inout) :: closest
+		end subroutine ternary_closest
+
+		recursive module subroutine fn_ternary_closest(node, prefix, target_low, min_dist, closest)
+			type(fn_ternary_tree_node_t), intent(in), allocatable :: node
+			character(len = *), intent(in) :: prefix, target_low
+			integer, intent(inout) :: min_dist
+			character(len = :), allocatable, intent(inout) :: closest
+		end subroutine fn_ternary_closest
 
 		recursive module subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
 			type(ternary_tree_node_t), intent(inout), allocatable :: node

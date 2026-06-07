@@ -1405,6 +1405,76 @@ end subroutine map_i32_resize
 
 !===============================================================================
 
+function to_lower(s) result(lower)
+
+	! Return a copy of string `s` with ASCII upper-case letters converted to
+	! lower-case.  Used for case-insensitive Levenshtein matching.
+
+	character(len = *), intent(in) :: s
+	character(len = :), allocatable :: lower
+
+	!********
+
+	integer :: i, ic
+
+	lower = s
+	do i = 1, len(lower)
+		ic = iachar(lower(i:i))
+		if (ic >= iachar('A') .and. ic <= iachar('Z')) then
+			lower(i:i) = achar(ic + 32)
+		end if
+	end do
+
+end function to_lower
+
+!===============================================================================
+
+integer function levenshtein(s, t)
+
+	! Get the Levenshtein edit distance between strings `s` and `t`.
+	! Adapted from the two-row DP implementation in ~/git/jsonf/src/jsonf.F90.
+
+	character(len = *), intent(in) :: s, t
+
+	!********
+
+	integer :: m, n, i, j, deletion_cost, insertion_cost, substitution_cost
+	integer, allocatable :: v0(:), v1(:), tmp(:)
+
+	m = len(s)
+	n = len(t)
+
+	allocate(v0(n + 1))
+	allocate(v1(n + 1))
+	do j = 0, n
+		v0(j + 1) = j
+	end do
+
+	do i = 1, m
+		v1(1) = i
+		do j = 1, n
+			deletion_cost     = v0(j + 1) + 1
+			insertion_cost    = v1(j) + 1
+			if (s(i:i) == t(j:j)) then
+				substitution_cost = v0(j)
+			else
+				substitution_cost = v0(j) + 1
+			end if
+			v1(j + 1) = min(deletion_cost, insertion_cost, substitution_cost)
+		end do
+
+		! Swap v0 and v1
+		call move_alloc(v0, tmp)
+		call move_alloc(v1, v0)
+		call move_alloc(tmp, v1)
+	end do
+
+	levenshtein = v0(n + 1)
+
+end function levenshtein
+
+!===============================================================================
+
 end module syntran__utils_m
 
 !===============================================================================

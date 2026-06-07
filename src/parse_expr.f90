@@ -171,7 +171,8 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), span, identifier%text))
+					err_undeclare_var(parser%context(), span, identifier%text, &
+					parser%vars%closest(identifier%text)))
 			end if
 
 			call parser%parse_dot(expr)
@@ -189,7 +190,8 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), span, identifier%text))
+					err_undeclare_var(parser%context(), span, identifier%text, &
+					parser%vars%closest(identifier%text)))
 			end if
 
 			expr%is_loc = .false.
@@ -287,7 +289,8 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
 					err_undeclare_var(parser%context(), &
-					span, identifier%text))
+					span, identifier%text, &
+					parser%vars%closest(identifier%text)))
 			end if
 
 			call parser%parse_dot(expr)
@@ -332,7 +335,8 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
 					err_undeclare_var(parser%context(), &
-					span, identifier%text))
+					span, identifier%text, &
+					parser%vars%closest(identifier%text)))
 				!print *, "undeclared var 2"
 				!print *, "identifier = ", identifier%text
 			end if
@@ -692,7 +696,8 @@ recursive module subroutine parse_name_expr(parser, expr)
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
 				err_undeclare_var(parser%context(), &
-				span, identifier%text))
+				span, identifier%text, &
+				parser%vars%closest(identifier%text)))
 		end if
 	end if
 

@@ -9,6 +9,30 @@ contains
 
 !===============================================================================
 
+subroutine unit_test_levenshtein(npass, nfail)
+
+	! Test the Levenshtein edit-distance utility used for "did you mean?"
+	! spellcheck suggestions on undefined variable/function errors.
+
+	integer, intent(inout) :: npass, nfail
+
+	logical, parameter :: quiet = .true.
+
+	call unit_test_coda( [ &
+		levenshtein("kitten"  , "sitting") == 3, &
+		levenshtein("abc"     , "abc"    ) == 0, &
+		levenshtein(""        , "abc"    ) == 3, &
+		levenshtein("abc"     , ""       ) == 3, &
+		levenshtein(""        , ""       ) == 0, &
+		levenshtein("println" , "prntln" ) == 1, &
+		levenshtein("xvalue"  , "xvaluw" ) == 1, &
+		levenshtein("a"       , "b"      ) == 1  &
+		], "Levenshtein distance", npass, nfail)
+
+end subroutine unit_test_levenshtein
+
+!===============================================================================
+
 subroutine unit_test_bin_arith(npass, nfail)
 
 	implicit none
@@ -5011,6 +5035,7 @@ subroutine unit_tests(iostat)
 	npass = 0
 	nfail = 0
 
+	call unit_test_levenshtein(npass, nfail)
 	call unit_test_bin_arith  (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)

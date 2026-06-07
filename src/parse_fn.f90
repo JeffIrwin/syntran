@@ -197,7 +197,8 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		span = new_span(identifier_%pos, len(identifier_%text))
 		call parser%diagnostics%push( &
 			err_undeclare_fn(parser%context(), &
-			span, display_name))
+			span, display_name, &
+			parser%fns%closest(display_name)))
 
 		! No more tokens are consumed below, so we can just return
 		! to skip cascading fn arg count/type errors
@@ -441,7 +442,8 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 			! Struct not found
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), span, fn_name))
+				err_undeclare_var(parser%context(), span, fn_name, &
+				parser%vars%closest(fn_name)))
 		end if
 
 	else
@@ -452,7 +454,8 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 		if (iostat /= exit_success) then
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), span, fn_name))
+				err_undeclare_var(parser%context(), span, fn_name, &
+				parser%vars%closest(fn_name)))
 			return
 		end if
 

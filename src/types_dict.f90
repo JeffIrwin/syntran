@@ -839,6 +839,137 @@ end subroutine struct_search
 
 !===============================================================================
 
+recursive module subroutine ternary_closest(node, prefix, target_low, min_dist, closest)
+
+	! Walk a ternary tree accumulating the key character-by-character and
+	! track the terminal key with the lowest Levenshtein distance from
+	! `target_low` (already lower-cased by the caller).
+
+	type(ternary_tree_node_t), intent(in), allocatable :: node
+	character(len = *), intent(in) :: prefix, target_low
+	integer, intent(inout) :: min_dist
+	character(len = :), allocatable, intent(inout) :: closest
+
+	!********
+
+	character(len = :), allocatable :: key
+	integer :: dist
+
+	if (.not. allocated(node)) return
+
+	key = prefix//node%split_char
+
+	! Terminal node: a value is stored here
+	if (allocated(node%val)) then
+		dist = levenshtein(target_low, to_lower(key))
+		if (dist > 0 .and. dist < min_dist) then
+			min_dist = dist
+			closest  = key
+		end if
+	end if
+
+	! Explore all three branches
+	call ternary_closest(node%left , prefix, target_low, min_dist, closest)
+	call ternary_closest(node%right, prefix, target_low, min_dist, closest)
+	call ternary_closest(node%mid  , key   , target_low, min_dist, closest)
+
+end subroutine ternary_closest
+
+!===============================================================================
+
+recursive module subroutine fn_ternary_closest(node, prefix, target_low, min_dist, closest)
+
+	! Like ternary_closest but for fn_ternary_tree_node_t.
+
+	type(fn_ternary_tree_node_t), intent(in), allocatable :: node
+	character(len = *), intent(in) :: prefix, target_low
+	integer, intent(inout) :: min_dist
+	character(len = :), allocatable, intent(inout) :: closest
+
+	!********
+
+	character(len = :), allocatable :: key
+	integer :: dist
+
+	if (.not. allocated(node)) return
+
+	key = prefix//node%split_char
+
+	if (allocated(node%val)) then
+		dist = levenshtein(target_low, to_lower(key))
+		if (dist > 0 .and. dist < min_dist) then
+			min_dist = dist
+			closest  = key
+		end if
+	end if
+
+	call fn_ternary_closest(node%left , prefix, target_low, min_dist, closest)
+	call fn_ternary_closest(node%right, prefix, target_low, min_dist, closest)
+	call fn_ternary_closest(node%mid  , key   , target_low, min_dist, closest)
+
+end subroutine fn_ternary_closest
+
+!===============================================================================
+
+module function var_closest(dict, key) result(closest)
+
+	! Return the closest declared variable name to `key` across all current
+	! scopes, or "" when no name is close enough (threshold: edit distance <=
+	! max(2, len(key)/3)).
+
+	class(vars_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+	character(len = :), allocatable :: closest
+
+	!********
+
+	integer :: i, min_dist, threshold
+	character(len = :), allocatable :: target_low
+
+	closest    = ""
+	min_dist   = huge(min_dist)
+	target_low = to_lower(key)
+
+	do i = 1, dict%scope
+		if (.not. allocated(dict%dicts(i)%root)) cycle
+		call ternary_closest(dict%dicts(i)%root, "", target_low, min_dist, closest)
+	end do
+
+	! Only keep the suggestion when it is close enough
+	threshold = max(2, len(key) / 3)
+	if (min_dist > threshold) closest = ""
+
+end function var_closest
+
+!===============================================================================
+
+module function fn_closest(dict, key) result(closest)
+
+	! Return the closest declared function name to `key`, or "" when none is
+	! close enough.
+
+	class(fns_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+	character(len = :), allocatable :: closest
+
+	!********
+
+	integer :: min_dist, threshold
+	character(len = :), allocatable :: target_low
+
+	closest    = ""
+	min_dist   = huge(min_dist)
+	target_low = to_lower(key)
+
+	call fn_ternary_closest(dict%dict%root, "", target_low, min_dist, closest)
+
+	threshold = max(2, len(key) / 3)
+	if (min_dist > threshold) closest = ""
+
+end function fn_closest
+
+!===============================================================================
+
 end submodule syntran__types_dict
 
 !===============================================================================
