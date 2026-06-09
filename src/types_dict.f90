@@ -888,7 +888,7 @@ recursive module subroutine fn_ternary_closest(node, prefix, target_low, min_dis
 
 	!********
 
-	character(len = :), allocatable :: key
+	character(len = :), allocatable :: key, display
 	integer :: dist
 
 	if (.not. allocated(node)) return
@@ -896,10 +896,15 @@ recursive module subroutine fn_ternary_closest(node, prefix, target_low, min_dis
 	key = prefix//node%split_char
 
 	if (allocated(node%val)) then
+		! De-mangle internal overload keys (e.g. "0tan_f32" -> "tan") so we
+		! never surface a "0"-prefixed name in a suggestion.
+		display = overload_display_name(key)
 		dist = levenshtein(target_low, to_lower(key))
+		if (display /= key) &
+			dist = min(dist, levenshtein(target_low, to_lower(display)))
 		if (dist > 0 .and. dist < min_dist) then
 			min_dist = dist
-			closest  = key
+			closest  = display
 		end if
 	end if
 

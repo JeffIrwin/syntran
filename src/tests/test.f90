@@ -33,6 +33,33 @@ end subroutine unit_test_levenshtein
 
 !===============================================================================
 
+subroutine unit_test_overload_display_name(npass, nfail)
+
+	! Test the overload_display_name() helper that de-mangles internal
+	! "0"-prefixed overloaded intrinsic keys into user-facing names for the
+	! "did you mean?" spellcheck suggestion.
+
+	integer, intent(inout) :: npass, nfail
+
+	logical, parameter :: quiet = .true.
+
+	call unit_test_coda( [ &
+		overload_display_name("0tan_f32"    ) == "tan"    , &
+		overload_display_name("0abs_f64_arr") == "abs"    , &
+		overload_display_name("0i32_sca"    ) == "i32"    , &
+		overload_display_name("0i32_arr"    ) == "i32"    , &
+		overload_display_name("0minval_i32" ) == "minval" , &
+		overload_display_name("0log2_f32"   ) == "log2"   , &
+		overload_display_name("0dot_f64"    ) == "dot"    , &
+		overload_display_name("0norm2_f32"  ) == "norm2"  , &
+		overload_display_name("println"     ) == "println", &
+		overload_display_name("my_fn"       ) == "my_fn"   &
+		], "overload_display_name", npass, nfail)
+
+end subroutine unit_test_overload_display_name
+
+!===============================================================================
+
 subroutine unit_test_bin_arith(npass, nfail)
 
 	implicit none
@@ -5035,8 +5062,9 @@ subroutine unit_tests(iostat)
 	npass = 0
 	nfail = 0
 
-	call unit_test_levenshtein(npass, nfail)
-	call unit_test_bin_arith  (npass, nfail)
+	call unit_test_levenshtein          (npass, nfail)
+	call unit_test_overload_display_name(npass, nfail)
+	call unit_test_bin_arith            (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)
 	call unit_test_bool       (npass, nfail)

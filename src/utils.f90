@@ -1429,6 +1429,57 @@ end function to_lower
 
 !===============================================================================
 
+function overload_display_name(name) result(display)
+
+	! Translate an internal overloaded-intrinsic key (starts with "0") to its
+	! user-facing name for spellcheck suggestions.  Names not starting with "0"
+	! are returned unchanged.
+	!
+	! Internal names follow the pattern:  0<base>[_<kind>][_<rank>]
+	! where <kind> is one of: i32, i64, f32, f64
+	! and  <rank>  is one of: arr, sca
+	!
+	! Examples:
+	!   "0tan_f32"     -> "tan"
+	!   "0abs_f64_arr" -> "abs"
+	!   "0i32_sca"     -> "i32"
+	!   "0log2_f32"    -> "log2"
+	!   "println"      -> "println"  (pass-through)
+
+	character(len = *), intent(in) :: name
+	character(len = :), allocatable :: display
+
+	!********
+
+	integer :: n
+
+	if (len(name) < 1 .or. name(1:1) /= "0") then
+		display = name
+		return
+	end if
+
+	! Strip the leading "0"
+	display = name(2:)
+
+	! Strip trailing rank tag: _arr, _sca
+	n = len(display)
+	if (n > 4 .and. display(n-3:n) == "_arr") then
+		display = display(1:n-4)
+	else if (n > 4 .and. display(n-3:n) == "_sca") then
+		display = display(1:n-4)
+	end if
+
+	! Strip trailing kind tag: _i32, _i64, _f32, _f64
+	n = len(display)
+	if (n > 4 .and. (display(n-3:n) == "_i32" .or. display(n-3:n) == "_i64" .or. &
+	                 display(n-3:n) == "_f32" .or. display(n-3:n) == "_f64")) then
+		display = display(1:n-4)
+	end if
+
+end function overload_display_name
+
+!===============================================================================
+
 integer function levenshtein(s, t)
 
 	! Get the Levenshtein edit distance between strings `s` and `t`.
