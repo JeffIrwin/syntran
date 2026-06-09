@@ -1462,18 +1462,22 @@ function overload_display_name(name) result(display)
 	display = name(2:)
 
 	! Strip trailing rank tag: _arr, _sca
+	! Nested if (not compound .and.) so the substring access is never evaluated
+	! when n < 4, regardless of short-circuit behaviour.
 	n = len(display)
-	if (n > 4 .and. display(n-3:n) == "_arr") then
-		display = display(1:n-4)
-	else if (n > 4 .and. display(n-3:n) == "_sca") then
-		display = display(1:n-4)
+	if (n >= 4) then
+		if (display(n-3:n) == "_arr" .or. display(n-3:n) == "_sca") then
+			display = display(1:n-4)
+		end if
 	end if
 
 	! Strip trailing kind tag: _i32, _i64, _f32, _f64
 	n = len(display)
-	if (n > 4 .and. (display(n-3:n) == "_i32" .or. display(n-3:n) == "_i64" .or. &
-	                 display(n-3:n) == "_f32" .or. display(n-3:n) == "_f64")) then
-		display = display(1:n-4)
+	if (n >= 4) then
+		if (display(n-3:n) == "_i32" .or. display(n-3:n) == "_i64" .or. &
+		    display(n-3:n) == "_f32" .or. display(n-3:n) == "_f64") then
+			display = display(1:n-4)
+		end if
 	end if
 
 end function overload_display_name
