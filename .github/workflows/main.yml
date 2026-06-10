@@ -167,8 +167,8 @@
 			{
 				"if": "matrix.os == 'macOS-latest'",
 				"run": "
-					brew install gcc@12 &&
-					brew reinstall gcc@12"
+					brew install gcc@14 &&
+					brew reinstall gcc@14"
 			},
 			{
 				"name": "Build",
@@ -231,8 +231,8 @@
 					set -exu \n
 					#set -x \n
 
-					gfortran-12 --version \n
-					which gfortran-12 \n
+					gfortran-14 --version \n
+					which gfortran-14 \n
 
 					bash ./build.sh release \n
 
@@ -242,7 +242,7 @@
 
 					otool -L ./syntran \n
 
-					GCC_LIB_DIR=/opt/homebrew/opt/gcc@12/lib/gcc/12 \n
+					GCC_LIB_DIR=/opt/homebrew/opt/gcc@14/lib/gcc/14 \n
 
 					#ls ${GCC_LIB_DIR} \n
 
@@ -579,7 +579,7 @@
 					set -exu \n
 
 					# Test this to run syntran without homebrew gcc lib paths \n
-					brew remove gcc@12 || true \n
+					brew remove gcc@14 || true \n
 
 					mv /opt/homebrew/bin /opt/homebrew/bin-BACKUP || true \n
 					mv /opt/homebrew/opt /opt/homebrew/opt-BACKUP || true \n
