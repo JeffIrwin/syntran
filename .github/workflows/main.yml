@@ -42,31 +42,20 @@
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"run":
 				"
-					sudo apt-get install gfortran-11 \n
-
-					## c.f. build.sh \n
-					#export FC=$(which gfortran-11) \n
-
-					## cmake assumes 'gfortran' is the compiler (no '-11') \n
-					#mkdir -p \"$HOME/bin\" \n
-					#cp $(which gfortran-11) \"$HOME/bin/gfortran\" \n
-
-					#which gfortran \n
-					#which gfortran-11 \n
-					#gfortran --version \n
+					sudo apt-get install gfortran-13 \n
 				"
 			},
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Test fpm debug",
 				"env": {
-					"FPM_FC": "gfortran-11"
+					"FPM_FC": "gfortran-13"
 				},
 				"run":
 				"
 					set -exu \n
 					gfortran --version \n
-					gfortran-11 --version \n
+					gfortran-13 --version \n
 
 					# This is a quick debug build test.  Debug compiles faster \n
 					# than release optimization \n
@@ -115,13 +104,13 @@
 				"name": "Test fpm default",
 
 				"env": {
-					"FPM_FC": "gfortran-11"
+					"FPM_FC": "gfortran-13"
 				},
 				"run":
 				"
 					set -exu \n
 					gfortran --version \n
-					gfortran-11 --version \n
+					gfortran-13 --version \n
 
 					# This is the pack linux stage, but it also does some \n
 					# testing.  CI/CD could use some disentangling \n
@@ -311,7 +300,8 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"with": {
-					# unfortunately gfortran-12 does not support -static-libquadmath.  not until gfortran-13
+					# TODO: try static libquadmath. should be possible now with
+					# gfortran-13
 
 					#"path": "./syntran\n./libquadmath.so.0\n./libc.so.6",
 					"path": "./syntran\n./libquadmath.so.0",

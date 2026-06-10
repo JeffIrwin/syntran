@@ -14,7 +14,7 @@ module syntran__compiler_m
 	integer, parameter :: fort_vers(*) = [__GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__]
 
 #if (__GNUC__ <= 9)
-#error syntran is not compatible with gfortran <= 9. upgrade to gfortran 10, 11, or 12
+#error syntran is not compatible with gfortran <= 9. upgrade to gfortran 10 through 15
 #endif
 
 #if (__GNUC__ >= 16)
