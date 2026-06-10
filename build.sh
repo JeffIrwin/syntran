@@ -48,22 +48,22 @@ fi
 
 if [[ "$machine" == "Mac" ]]; then
 
-	# If you don't have it:  brew install gcc@12
+	# If you don't have it:  brew install gcc@14
 	#
 	# The gfortran included with gcc 13.2.0 seems to have a bug on macos.  Might
 	# be worth trying a later 13 version when it's available
 
 	#which gcc
 	#which gfortran
-	which gfortran-12
+	which gfortran-14
 
 	## CMake doesn't like this hack, renamed gfortran won't pass its tests
 	#mkdir ~/bin/
-	#cp $(which gfortran-12) /usr/local/bin/gfortran
+	#cp $(which gfortran-14) /usr/local/bin/gfortran
 	#export PATH=$PATH:~/bin/
 	#which gfortran
 
-	export FC=$(which gfortran-12)
+	export FC=$(which gfortran-14)
 	echo "FC = $FC"
 
 fi
