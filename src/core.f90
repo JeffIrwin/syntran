@@ -30,11 +30,13 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
+	!    avoid a copy in many cases, e.g. dynamic vector example
+	!    src/tests/test-src/struct/test-03.syntran
+	!  - switch/match/case
 	!  - matrix inverse? link gfortran to mkl?
 	!  - remove AST-walking interpreter. bytecode is better. wait 2 or 3
 	!    releases
-	!  - test/sample with user-defined dynamic vector struct. should be possible
-	!    now with structs and pass-by-reference
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
