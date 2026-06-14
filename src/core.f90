@@ -158,9 +158,6 @@ module syntran__core_m
 	!    that gfortran nvim linting works.  just need to add a cmd arg like
 	!    `--syntax-only` and print errors in 1 line per error, with filename,
 	!    line, and column indices
-	!  - test rocky 10 circa May 2025, that's when they're planning to release
-	!    it
-	!    * rocky 10 is out, but there's no docker image as of 2025-12-13
 	!  - appimage?  some kind of binary packaging improvement
 	!    * the current dependence on libquadmath.so (and sometimes
 	!      libgfortran.so) is not ideal, especially considering that rocky is
