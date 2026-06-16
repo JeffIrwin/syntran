@@ -30,7 +30,7 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 		product_i32_fn, product_i64_fn, product_f32_fn, product_f64_fn, &
 		norm2_f32_fn, norm2_f64_fn, &
 		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
-		reshape_fn, transpose_fn
+		reshape_fn, transpose_fn, shape_fn
 
 	!********
 
@@ -557,6 +557,31 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::shape(source) -- return the extents of source as a rank-1 i64 array.
+	! The result length equals the rank of source; result[i] is the size along
+	! dimension i.  Return type is i64 for consistency with the size() intrinsic.
+	! Registered under "std::" so users may still define their own shape().
+
+	shape_fn%type%type = array_type
+	allocate(shape_fn%type%array)
+	shape_fn%type%array%type = i64_type
+	shape_fn%type%array%rank = 1  ! always rank-1
+
+	allocate(shape_fn%params(1))
+	allocate(shape_fn%param_names%v(1))
+
+	! param 1: source -- array of any element type and rank
+	shape_fn%params(1)%type = array_type
+	allocate(shape_fn%params(1)%array)
+	shape_fn%params(1)%array%type = any_type
+	shape_fn%params(1)%array%rank = -1  ! any rank
+
+	shape_fn%param_names%v(1)%s = "source"
+
+	call fns%insert("std::shape", shape_fn, id_index)
+
+	!********
+
 	! Return array of all functions declared in this module
 	fn_array = &
 		[ &
@@ -569,7 +594,8 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 			dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
 			all_fn, any_fn, &
 			reshape_fn, &
-			transpose_fn &
+			transpose_fn, &
+			shape_fn &
 		]
 
 end subroutine declare_array_fns

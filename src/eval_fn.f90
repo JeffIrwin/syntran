@@ -1199,6 +1199,24 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 			res%array%str(i) = state%script_args%v(i)
 		end do
 
+	case ("shape")
+
+		! std::shape(source) -- return the extents of source as a rank-1 i64 array.
+		! Result length == source rank; result[i] is the size along dimension i.
+		call syntax_eval(node%args(1), state, arg1)  ! source array
+
+		res%type = array_type
+		allocate(res%array)
+		res%array%type = i64_type
+		res%array%rank = 1
+		res%array%len_ = arg1%array%rank
+		allocate(res%array%size(1))
+		res%array%size(1) = res%array%len_
+
+		! %array%size is already i64, so direct assignment works.
+		allocate(res%array%i64(res%array%len_))
+		res%array%i64 = arg1%array%size(1:arg1%array%rank)
+
 	case ("transpose")
 
 		! std::transpose(source) -- transpose a rank-2 array.

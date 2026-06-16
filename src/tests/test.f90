@@ -5123,6 +5123,7 @@ subroutine unit_tests(iostat)
 	call unit_test_args       (npass, nfail)
 	call unit_test_reshape    (npass, nfail)
 	call unit_test_transpose  (npass, nfail)
+	call unit_test_shape      (npass, nfail)
 	call unit_test_modules    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
@@ -5534,6 +5535,56 @@ subroutine unit_test_transpose(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_transpose
+
+!===============================================================================
+
+subroutine unit_test_shape(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::shape() intrinsic function'
+
+	logical, allocatable :: tests(:)
+	logical, parameter :: quiet = .true.
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Result is a rank-1 array whose length == the source rank (1-D source → length 1)
+			eval('size(std::shape([0,1,2]), 0);', quiet) == '1', &
+
+			! 1-D source: shape returns [n]
+			eval('let s = std::shape([0,1,2,3,4]); s[0];', quiet) == '5', &
+
+			! 2-D source via reshape: shape returns [rows, cols]
+			eval('let s = std::shape(std::reshape([0:6], [2,3])); s[0];', quiet) == '2', &
+			eval('let s = std::shape(std::reshape([0:6], [2,3])); s[1];', quiet) == '3', &
+
+			! 3-D source
+			eval('let s = std::shape(std::reshape([0:8], [2,2,2])); s[0];', quiet) == '2', &
+			eval('let s = std::shape(std::reshape([0:8], [2,2,2])); s[2];', quiet) == '2', &
+
+			! Return type is i64 (consistent with size())
+			eval('let s = std::shape([0,1,2]); i64(s[0]);', quiet) == '3', &
+
+			! shape elements sum: 3+4 == 7 for a [3,4] array
+			eval('let s = std::shape(std::reshape([0:12],[3,4])); s[0]+s[1];', quiet) == '7', &
+
+			! User can still define their own shape() without std::
+			eval('fn shape(): i32 { return 7; } shape();', quiet) == '7', &
+
+			.false.  &  ! no trailing comma needed
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_shape
 
 !===============================================================================
 

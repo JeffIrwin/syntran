@@ -782,6 +782,20 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			res%array%size(i) = int(args(2)%array%i32(i), 8)
 		end do
 
+	case (INTR_SHAPE)
+		! std::shape(source) -- extents of source as a rank-1 i64 array.
+		! Result length == source rank; result[i] is the size along dimension i.
+		res%type = array_type
+		allocate(res%array)
+		res%array%type = i64_type
+		res%array%rank = 1
+		res%array%len_ = args(1)%array%rank
+		allocate(res%array%size(1))
+		res%array%size(1) = res%array%len_
+		! %array%size is already i64, so direct assignment works.
+		allocate(res%array%i64(res%array%len_))
+		res%array%i64 = args(1)%array%size(1:args(1)%array%rank)
+
 	case default
 		write(*,*) 'VM: unknown intr_id in vm_call_intr: ', intr_id
 		call internal_error()
