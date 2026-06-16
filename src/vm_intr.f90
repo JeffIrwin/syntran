@@ -708,6 +708,27 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			res%array%str(i) = state%script_args%v(i)
 		end do
 
+	case (INTR_RESHAPE)
+		! std::reshape(source, shape) -- copy flat buffer, overwrite shape metadata.
+		! args(1) = source array, args(2) = shape (i32, rank-1)
+
+		! Runtime guard: product of new shape must equal source element count
+		if (product(int(args(2)%array%i32(1:args(2)%array%len_), 8)) /= args(1)%array%len_) then
+			write(*,*) err_rt_prefix//"reshape size mismatch"//color_reset
+			call internal_error()
+		end if
+
+		! Copy source (deep copies flat buffer, type, kind, len_)
+		res = args(1)
+
+		! Overwrite shape metadata
+		res%array%rank = int(args(2)%array%len_)
+		if (allocated(res%array%size)) deallocate(res%array%size)
+		allocate(res%array%size(res%array%rank))
+		do i = 1, res%array%rank
+			res%array%size(i) = int(args(2)%array%i32(i), 8)
+		end do
+
 	case default
 		write(*,*) 'VM: unknown intr_id in vm_call_intr: ', intr_id
 		call internal_error()

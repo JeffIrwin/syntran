@@ -29,9 +29,9 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	character(len = :), allocatable :: exp_type, act_type, param_name, &
 		lookup_name, display_name
 
-	integer :: i, io, io_std, id_index, pos0, rank
+	integer :: i, io, io_std, id_index, pos0, rank, arr_type_result
 
-	logical :: has_rank, param_is_ref, arg_is_ref, is_ok
+	logical :: has_rank, has_arr_type, param_is_ref, arg_is_ref, is_ok
 
 	type(fn_t) :: fn
 
@@ -122,7 +122,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		fn_call%module_prefix = module_prefix
 	end if
 
-	call resolve_overload(args, fn_call, has_rank)
+	call resolve_overload(args, fn_call, has_rank, has_arr_type, arr_type_result)
 	if (has_rank) rank = fn_call%val%array%rank
 
 	! If any argument has unknown_type, return early to prevent cascading errors.
@@ -223,6 +223,13 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! apply to intrinsics fns, but it might be safer to copy anyway
 		if (.not. allocated(fn%type%array)) allocate(fn%type%array)
 		fn%type%array%rank = rank
+
+		! For functions like std::reshape whose element type depends on their
+		! arguments, restore the element type that resolve_overload determined.
+		! fn_call%val = fn%type above would otherwise overwrite it with any_type.
+		if (has_arr_type) then
+			fn_call%val%array%type = arr_type_result
+		end if
 
 	end if
 	!print *, "rank = ", fn_call%val%array%rank

@@ -29,7 +29,8 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 		sum_i32_fn, sum_i64_fn, sum_f32_fn, sum_f64_fn, &
 		product_i32_fn, product_i64_fn, product_f32_fn, product_f64_fn, &
 		norm2_f32_fn, norm2_f64_fn, &
-		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn
+		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
+		reshape_fn
 
 	!********
 
@@ -496,6 +497,39 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::reshape(source, shape) -- reshape an array to new dimensions.
+	! Returns a new array with the same flat buffer but different rank/size.
+	! Registered under the "std::" prefix so it must be called as std::reshape().
+	! Element type and result rank are resolved per-call in resolve_overload().
+
+	reshape_fn%type%type = array_type
+	allocate(reshape_fn%type%array)
+	reshape_fn%type%array%type = any_type
+	reshape_fn%type%array%rank = -1  ! resolved per-call in resolve_overload
+
+	allocate(reshape_fn%params(2))
+	allocate(reshape_fn%param_names%v(2))
+
+	! param 1: source -- array of any element type and rank
+	reshape_fn%params(1)%type = array_type
+	allocate(reshape_fn%params(1)%array)
+	reshape_fn%params(1)%array%type = any_type
+	reshape_fn%params(1)%array%rank = -1  ! any rank
+
+	reshape_fn%param_names%v(1)%s = "source"
+
+	! param 2: shape -- rank-1 i32 array giving the target extents
+	reshape_fn%params(2)%type = array_type
+	allocate(reshape_fn%params(2)%array)
+	reshape_fn%params(2)%array%type = i32_type
+	reshape_fn%params(2)%array%rank = 1
+
+	reshape_fn%param_names%v(2)%s = "shape"
+
+	call fns%insert("std::reshape", reshape_fn, id_index)
+
+	!********
+
 	! Return array of all functions declared in this module
 	fn_array = &
 		[ &
@@ -506,7 +540,8 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 			product_i32_fn, product_i64_fn, product_f32_fn, product_f64_fn, &
 			norm2_f32_fn, norm2_f64_fn, &
 			dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
-			all_fn, any_fn &
+			all_fn, any_fn, &
+			reshape_fn &
 		]
 
 end subroutine declare_array_fns

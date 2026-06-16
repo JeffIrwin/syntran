@@ -222,7 +222,6 @@ module syntran__core_m
 	!  - pass by reference for subscripted array name expressions and dot
 	!    expressions
 	!    * done for regular variable name expressions
-	!    * needs documentation
 	!    * samples could be updated, e.g. sorting in place would be a lot more
 	!      efficient without copying large array vals in and out.  don't update
 	!      tests though.  if anything, add tests, but don't remove coverage
@@ -324,16 +323,6 @@ module syntran__core_m
 	!      because that's how fortran works :(
 	!    * ==, !=:  done
 	!  - fuzz testing
-	!  - substring indexing and slicing:
-	!    * string arrays get an optional extra rank.  omitting the extra rank
-	!      refers to the whole string at that position in the array:
-	!      + str_vec[0] == str_vec[:,0]
-	!      + str_mat[0,0] == str_mat[:,0,0]
-	!      + etc.
-	!    * first, single-character indexing
-	!      + done
-	!    * then, range-based slicing
-	!      + done
 	!  - file reading/writing
 	!    * binary file i/o
 	!    * vectorized writes (and reads) for arrays without syntran loops. c.f.
@@ -350,12 +339,13 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      + trig: atan2, (sec, cos, hyperbolic, ... ?)
+	!      + transpose
+	!      + trig: atan2, (sec, cosecant, hyperbolic, ... ?)
 	!      + bessel_jn
 	!      + gamma, log_gamma?
-	!      + reshape
 	!      + system: multiple out args? iostat and stdout
 	!    * done:
+	!      + reshape
 	!      + abs, sqrt
 	!      + exp
 	!        > need documentation for elemental array overloading

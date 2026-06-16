@@ -259,7 +259,8 @@ module syntran__bytecode_m
 		INTR_DOT_F32      = 124, INTR_DOT_F64      = 125, &
 		INTR_DOT_I32      = 126, INTR_DOT_I64      = 127, &
 		INTR_ALL          = 128, INTR_ANY          = 129, &
-		INTR_ARGS         = 130
+		INTR_ARGS         = 130, &
+		INTR_RESHAPE      = 131
 
 	!********
 
@@ -679,6 +680,7 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("all");            id = INTR_ALL
 	case ("any");            id = INTR_ANY
 	case ("args");           id = INTR_ARGS
+	case ("reshape");        id = INTR_RESHAPE
 	case default;            id = 0
 	end select
 

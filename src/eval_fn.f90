@@ -1199,6 +1199,30 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 			res%array%str(i) = state%script_args%v(i)
 		end do
 
+	case ("reshape")
+
+		! std::reshape(source, shape) -- return source with new rank/size.
+		! The flat buffer is copied unchanged; only the shape metadata changes.
+		call syntax_eval(node%args(1), state, arg1)  ! source array
+		call syntax_eval(node%args(2), state, arg2)  ! shape (i32, rank-1)
+
+		! Runtime guard: product of new shape must equal total element count
+		if (product(int(arg2%array%i32(1:arg2%array%len_), 8)) /= arg1%array%len_) then
+			write(*,*) err_rt_prefix//"reshape size mismatch"//color_reset
+			call internal_error()
+		end if
+
+		! Copy the source value (deep copies flat buffer, type, kind, len_)
+		res = arg1
+
+		! Overwrite shape metadata with the requested shape
+		res%array%rank = int(arg2%array%len_)
+		if (allocated(res%array%size)) deallocate(res%array%size)
+		allocate(res%array%size(res%array%rank))
+		do i = 1, res%array%rank
+			res%array%size(i) = int(arg2%array%i32(i), 8)
+		end do
+
 	case default
 
 		!print *, 'fn name = ', node%identifier%text

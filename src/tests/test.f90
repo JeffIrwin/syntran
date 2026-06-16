@@ -5121,6 +5121,7 @@ subroutine unit_tests(iostat)
 	call unit_test_ref        (npass, nfail)
 	call unit_test_recursion  (npass, nfail)
 	call unit_test_args       (npass, nfail)
+	call unit_test_reshape    (npass, nfail)
 	call unit_test_modules    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
@@ -5413,6 +5414,66 @@ subroutine unit_test_matmul(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_matmul
+
+!===============================================================================
+
+subroutine unit_test_reshape(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::reshape() intrinsic function'
+
+	logical, allocatable :: tests(:)
+	logical, parameter :: quiet = .true.
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Basic 1-D -> 2-D reshape: shape metadata
+			eval('size(std::reshape([0,1,2,3,4,5], [2,3]), 0);', quiet) == '2', &
+			eval('size(std::reshape([0,1,2,3,4,5], [2,3]), 1);', quiet) == '3', &
+
+			! Element access -- column-major: m[r,c] = flat_index r + size(0)*c.
+			! Must use a let binding; direct subscript of fn-call result not supported.
+			eval('let m = std::reshape([0,1,2,3,4,5], [2,3]); m[0,0];', quiet) == '0', &
+			eval('let m = std::reshape([0,1,2,3,4,5], [2,3]); m[1,0];', quiet) == '1', &
+			eval('let m = std::reshape([0,1,2,3,4,5], [2,3]); m[0,1];', quiet) == '2', &
+			eval('let m = std::reshape([0,1,2,3,4,5], [2,3]); m[1,2];', quiet) == '5', &
+
+			! Identity reshape (1-D to 1-D, same length)
+			eval('let v = std::reshape([0,1,2,3,4,5], [6]); v[5];', quiet) == '5', &
+			eval('size(std::reshape([0,1,2,3,4,5], [6]), 0);', quiet) == '6', &
+
+			! sum() of reshaped array (sum works on a temporary directly)
+			eval('sum(std::reshape([0,1,2,3,4,5], [3,2]));', quiet) == '15', &
+
+			! 3-D reshape: size queries
+			eval('size(std::reshape([0,1,2,3,4,5,6,7], [2,2,2]), 0);', quiet) == '2', &
+			eval('size(std::reshape([0,1,2,3,4,5,6,7], [2,2,2]), 1);', quiet) == '2', &
+			eval('size(std::reshape([0,1,2,3,4,5,6,7], [2,2,2]), 2);', quiet) == '2', &
+
+			! f32 element type preserved
+			eval('let m = std::reshape([1.0f, 2.0f, 3.0f, 4.0f], [2, 2]); i32(m[0, 1]);', quiet) == '3', &
+
+			! Reshape of a range array (upper bound is exclusive, so [0:6] = 6 elements)
+			eval('size(std::reshape([0:6], [2,3]), 0);', quiet) == '2', &
+			eval('let m = std::reshape([0:6], [2,3]); m[1,2];', quiet) == '5', &
+
+			! User can still define their own reshape() function without std::
+			eval('fn reshape(): i32 { return 99; } reshape();', quiet) == '99', &
+
+			.false.  &  ! no trailing comma needed
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_reshape
 
 !===============================================================================
 
