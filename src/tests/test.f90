@@ -5122,6 +5122,7 @@ subroutine unit_tests(iostat)
 	call unit_test_recursion  (npass, nfail)
 	call unit_test_args       (npass, nfail)
 	call unit_test_reshape    (npass, nfail)
+	call unit_test_transpose  (npass, nfail)
 	call unit_test_modules    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
@@ -5474,6 +5475,65 @@ subroutine unit_test_reshape(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_reshape
+
+!===============================================================================
+
+subroutine unit_test_transpose(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::transpose() intrinsic function'
+
+	logical, allocatable :: tests(:)
+	logical, parameter :: quiet = .true.
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Shape swap: transpose of 2x3 is 3x2
+			eval('size(std::transpose(std::reshape([0,1,2,3,4,5],[2,3])),0);', quiet) == '3', &
+			eval('size(std::transpose(std::reshape([0,1,2,3,4,5],[2,3])),1);', quiet) == '2', &
+
+			! Element permutation (column-major).
+			! m = [0,1,2; 3,4,5] (2x3): m[1,0]=1, m[0,1]=2, m[1,2]=5
+			! t = transpose(m) (3x2): t[0,1]=m[1,0]=1, t[1,0]=m[0,1]=2, t[2,1]=m[1,2]=5
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(m); t[0,0];', quiet) == '0', &
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(m); t[0,1];', quiet) == '1', &
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(m); t[1,0];', quiet) == '2', &
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(m); t[2,1];', quiet) == '5', &
+
+			! Square matrix: transpose of 2x2 [0,1;2,3] swaps off-diagonals.
+			! m[0,1]=2, m[1,0]=1 so t[0,1]=m[1,0]=1, t[1,0]=m[0,1]=2
+			eval('let t = std::transpose(std::reshape([0,1,2,3],[2,2])); t[0,1];', quiet) == '1', &
+			eval('let t = std::transpose(std::reshape([0,1,2,3],[2,2])); t[1,0];', quiet) == '2', &
+
+			! sum() of transposed array (works on temporary directly)
+			eval('sum(std::transpose(std::reshape([0,1,2,3,4,5],[2,3])));', quiet) == '15', &
+
+			! f32 element type preserved through transpose.
+			! m[0,1]=3.0f so t[1,0]=m[0,1]=3
+			eval('let t = std::transpose(std::reshape([1.0f,2.0f,3.0f,4.0f],[2,2])); i32(t[1,0]);', quiet) == '3', &
+
+			! Double transpose is identity
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(std::transpose(m)); t[1,0];', quiet) == '1', &
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(std::transpose(m)); size(t,0);', quiet) == '2', &
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(std::transpose(m)); size(t,1);', quiet) == '3', &
+
+			! User can still define their own transpose() without std::
+			eval('fn transpose(): i32 { return 7; } transpose();', quiet) == '7', &
+
+			.false.  &  ! no trailing comma needed
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_transpose
 
 !===============================================================================
 

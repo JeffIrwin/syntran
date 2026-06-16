@@ -339,13 +339,13 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      + transpose
+	!      + shape (not size and reshape already exist)
 	!      + trig: atan2, (sec, cosecant, hyperbolic, ... ?)
 	!      + bessel_jn
 	!      + gamma, log_gamma?
 	!      + system: multiple out args? iostat and stdout
 	!    * done:
-	!      + reshape
+	!      + reshape, transpose
 	!      + abs, sqrt
 	!      + exp
 	!        > need documentation for elemental array overloading

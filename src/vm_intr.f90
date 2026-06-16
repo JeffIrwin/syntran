@@ -708,6 +708,59 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			res%array%str(i) = state%script_args%v(i)
 		end do
 
+	case (INTR_TRANSPOSE)
+		! std::transpose(source) -- transpose a rank-2 array.
+		! Physically permutes the column-major flat buffer; result is C x R.
+		! args(1) = source array (must be rank-2)
+
+		! Runtime guard: source must be rank-2
+		if (args(1)%array%rank /= 2) then
+			write(*,*) err_rt_prefix//"transpose requires a rank-2 array"//color_reset
+			call internal_error()
+		end if
+
+		! Build result metadata without copying any buffers.
+		res%type   = array_type
+		res%array  = mold(args(1)%array, args(1)%array%type)
+
+		! Swap extents: R x C -> C x R (mold copied them as-is)
+		res%array%size(1) = args(1)%array%size(2)
+		res%array%size(2) = args(1)%array%size(1)
+
+		! Allocate and fill only the relevant buffer via assign-on-allocate.
+		select case (args(1)%array%type)
+		case (i32_type)
+			res%array%i32 = reshape(transpose(reshape( &
+				args(1)%array%i32(1:args(1)%array%len_), &
+				[int(args(1)%array%size(1)), int(args(1)%array%size(2))])), &
+				[int(res%array%len_)])
+		case (i64_type)
+			res%array%i64 = reshape(transpose(reshape( &
+				args(1)%array%i64(1:args(1)%array%len_), &
+				[int(args(1)%array%size(1)), int(args(1)%array%size(2))])), &
+				[int(res%array%len_)])
+		case (f32_type)
+			res%array%f32 = reshape(transpose(reshape( &
+				args(1)%array%f32(1:args(1)%array%len_), &
+				[int(args(1)%array%size(1)), int(args(1)%array%size(2))])), &
+				[int(res%array%len_)])
+		case (f64_type)
+			res%array%f64 = reshape(transpose(reshape( &
+				args(1)%array%f64(1:args(1)%array%len_), &
+				[int(args(1)%array%size(1)), int(args(1)%array%size(2))])), &
+				[int(res%array%len_)])
+		case (bool_type)
+			res%array%bool = reshape(transpose(reshape( &
+				args(1)%array%bool(1:args(1)%array%len_), &
+				[int(args(1)%array%size(1)), int(args(1)%array%size(2))])), &
+				[int(res%array%len_)])
+		case (str_type)
+			res%array%str = reshape(transpose(reshape( &
+				args(1)%array%str(1:args(1)%array%len_), &
+				[int(args(1)%array%size(1)), int(args(1)%array%size(2))])), &
+				[int(res%array%len_)])
+		end select
+
 	case (INTR_RESHAPE)
 		! std::reshape(source, shape) -- copy flat buffer, overwrite shape metadata.
 		! args(1) = source array, args(2) = shape (i32, rank-1)

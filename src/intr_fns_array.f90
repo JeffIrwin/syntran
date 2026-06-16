@@ -30,7 +30,7 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 		product_i32_fn, product_i64_fn, product_f32_fn, product_f64_fn, &
 		norm2_f32_fn, norm2_f64_fn, &
 		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
-		reshape_fn
+		reshape_fn, transpose_fn
 
 	!********
 
@@ -530,6 +530,33 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::transpose(source) -- transpose a rank-2 array.
+	! Returns the source with rows and columns exchanged; the flat buffer is
+	! physically permuted (column-major).  Element type is preserved and the
+	! result is always rank-2.  Registered under "std::" so users may still
+	! define their own transpose() without conflict.
+	! Element type is resolved per-call in resolve_overload().
+
+	transpose_fn%type%type = array_type
+	allocate(transpose_fn%type%array)
+	transpose_fn%type%array%type = any_type
+	transpose_fn%type%array%rank = 2  ! always rank-2
+
+	allocate(transpose_fn%params(1))
+	allocate(transpose_fn%param_names%v(1))
+
+	! param 1: source -- rank-2 array of any element type
+	transpose_fn%params(1)%type = array_type
+	allocate(transpose_fn%params(1)%array)
+	transpose_fn%params(1)%array%type = any_type
+	transpose_fn%params(1)%array%rank = 2  ! must be rank-2
+
+	transpose_fn%param_names%v(1)%s = "source"
+
+	call fns%insert("std::transpose", transpose_fn, id_index)
+
+	!********
+
 	! Return array of all functions declared in this module
 	fn_array = &
 		[ &
@@ -541,7 +568,8 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 			norm2_f32_fn, norm2_f64_fn, &
 			dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
 			all_fn, any_fn, &
-			reshape_fn &
+			reshape_fn, &
+			transpose_fn &
 		]
 
 end subroutine declare_array_fns

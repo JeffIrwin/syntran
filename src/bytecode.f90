@@ -260,7 +260,8 @@ module syntran__bytecode_m
 		INTR_DOT_I32      = 126, INTR_DOT_I64      = 127, &
 		INTR_ALL          = 128, INTR_ANY          = 129, &
 		INTR_ARGS         = 130, &
-		INTR_RESHAPE      = 131
+		INTR_RESHAPE      = 131, &
+		INTR_TRANSPOSE    = 132
 
 	!********
 
@@ -681,6 +682,7 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("any");            id = INTR_ANY
 	case ("args");           id = INTR_ARGS
 	case ("reshape");        id = INTR_RESHAPE
+	case ("transpose");      id = INTR_TRANSPOSE
 	case default;            id = 0
 	end select
 

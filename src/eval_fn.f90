@@ -1199,6 +1199,60 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 			res%array%str(i) = state%script_args%v(i)
 		end do
 
+	case ("transpose")
+
+		! std::transpose(source) -- transpose a rank-2 array.
+		! Physically permutes the column-major flat buffer; result is C x R.
+		call syntax_eval(node%args(1), state, arg1)  ! source array
+
+		! Runtime guard: source must be rank-2
+		if (arg1%array%rank /= 2) then
+			write(*,*) err_rt_prefix//"transpose requires a rank-2 array"//color_reset
+			call internal_error()
+		end if
+
+		! Build result metadata without copying any buffers.
+		res%type  = array_type
+		res%array = mold(arg1%array, arg1%array%type)
+
+		! Swap extents: R x C -> C x R (mold copied them as-is)
+		res%array%size(1) = arg1%array%size(2)
+		res%array%size(2) = arg1%array%size(1)
+
+		! Allocate and fill only the relevant buffer via assign-on-allocate.
+		select case (arg1%array%type)
+		case (i32_type)
+			res%array%i32 = reshape(transpose(reshape( &
+				arg1%array%i32(1:arg1%array%len_), &
+				[int(arg1%array%size(1)), int(arg1%array%size(2))])), &
+				[int(res%array%len_)])
+		case (i64_type)
+			res%array%i64 = reshape(transpose(reshape( &
+				arg1%array%i64(1:arg1%array%len_), &
+				[int(arg1%array%size(1)), int(arg1%array%size(2))])), &
+				[int(res%array%len_)])
+		case (f32_type)
+			res%array%f32 = reshape(transpose(reshape( &
+				arg1%array%f32(1:arg1%array%len_), &
+				[int(arg1%array%size(1)), int(arg1%array%size(2))])), &
+				[int(res%array%len_)])
+		case (f64_type)
+			res%array%f64 = reshape(transpose(reshape( &
+				arg1%array%f64(1:arg1%array%len_), &
+				[int(arg1%array%size(1)), int(arg1%array%size(2))])), &
+				[int(res%array%len_)])
+		case (bool_type)
+			res%array%bool = reshape(transpose(reshape( &
+				arg1%array%bool(1:arg1%array%len_), &
+				[int(arg1%array%size(1)), int(arg1%array%size(2))])), &
+				[int(res%array%len_)])
+		case (str_type)
+			res%array%str = reshape(transpose(reshape( &
+				arg1%array%str(1:arg1%array%len_), &
+				[int(arg1%array%size(1)), int(arg1%array%size(2))])), &
+				[int(res%array%len_)])
+		end select
+
 	case ("reshape")
 
 		! std::reshape(source, shape) -- return source with new rank/size.
