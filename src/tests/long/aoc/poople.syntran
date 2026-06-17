@@ -1,0 +1,214 @@
+//==============================================================================
+//
+// This is a poople solver
+//
+// Poople is a word game with some similarities to wordle:
+//
+//     https://poople.io/
+//
+// Given a starting 4 letter word, the goal is to transform that word into
+// "POOP" one by changing one letter at a time, with each intermediate 4 letter
+// word being a real word
+//
+// For example:
+//
+// TEAR
+// BEAR
+// BOAR
+// BOOR
+// POOR
+// POOP
+//
+//==============================================================================
+
+use dict_i64::*;
+use dict_str::*;
+
+let N  =  4;  // 4 letter words
+let NA = 26;  // alphabet size
+
+let POOP = "poop";  // goal word. use lowercase internally, uppercase for output
+
+// Ignore these words from the system dictionary
+let BLOCKLIST = [
+	//"ARES",  // not sure if this is valid per poople but i suspect it isn't
+	//"ORCS",
+	""
+];
+
+fn main(): i32
+{
+	println("Starting poople");
+
+	let args = std::args();
+	let nargs = size(args);
+	if nargs != 1
+	{
+		println("Error: missing cmd arg");
+		println("Usage:");
+		println("    syntran poople.syntran WORD");
+		println();
+		exit(1);
+	}
+	let init_word = to_lower(args[0]);
+	if len(init_word) != N
+	{
+		println("Error: given initial word `", to_upper(init_word), "' is not 4 letters long");
+		println();
+		exit(2);
+	}
+
+	let blocklist = setup_blocklist();
+	let dict = setup_dict(&blocklist);
+
+	// BFS (breadth-first search)
+
+	let QCAP = 1024 * 64;
+	let q = [""; QCAP];
+	let qs = 0;  let qe = 0;
+
+	// Push
+	q[qe] = init_word;  qe += 1;
+
+	// `seen` may be redundant? maybe we can only use prev?
+	let seen = new_dict_i64();
+	let prev = new_dict_str();
+
+	while qs != qe
+	{
+		// Pop
+		let u = q[qs];  qs = (qs+1) % QCAP;
+		//println("u = ", u);
+		if (u == POOP) break;
+
+		//if (get_dict_i64(&seen, u) == 1'i64) continue;
+		//set_dict_i64(&seen, u, 1'i64);
+
+		// Search neighboring words, i.e. those that differ from `u` by one
+		// letter
+		for ii in [0: N]
+		for ia in [0: NA]
+		{
+			let v = u;
+			v[ii] = char(i32("a") + ia);
+			if (v == u) continue;
+			if (get_dict_i64(&dict, v) != 1) continue;
+
+			if (get_dict_i64(&seen, v) == 1'i64) continue;
+			set_dict_i64(&seen, v, 1'i64);
+			//println("v = ", v);
+
+			set_dict_str(&prev, v, u);
+			//set_dict_str(&prev, u, v);
+
+			// Push
+			q[qe] = v;  qe = (qe+1) % QCAP;
+			if qe == qs
+			{
+				println("Error: queue overflow!");
+				exit(3);
+			}
+		}
+	}
+	println();
+	//exit(0);
+
+	// End BFS. Now backtrack from poop via previous linked words
+	let word = POOP;
+	let n = 0;
+	while true
+	{
+		//println(word);
+		q[n] = word;
+		n += 1;
+		word = get_dict_str(&prev, word);
+		if (word == init_word) break;
+		if (word == "") break;
+	}
+	q[n] = word;
+	n += 1;
+
+	let steps = q[n-1: -1: -1];
+	println("steps = ");
+	//println(steps);
+	for i in [0: n]
+		println("    ", to_upper(steps[i]));
+	println();
+
+	println("Ending poople");
+	return 0;
+}
+
+fn setup_dict(blocklist: &dict_i64): dict_i64
+{
+	// Load a dictionary of valid words. Only save 4-letter ones
+	let dict = new_dict_i64();
+	let n = 0;
+
+	// sudo apt install wamerican
+	let fdict = open("/usr/share/dict/american-english", "r");
+
+	while not eof(fdict)
+	{
+		let line = readln(fdict);
+		if len(line) != N continue;
+		let is_lower = true;
+		for c in line
+		{
+			is_lower = is_lower(c);
+			if (not is_lower) break;
+		}
+		if (not is_lower) continue;
+		if (get_dict_i64(&blocklist, line) == 1'i64) continue;
+
+		set_dict_i64(&dict, line, 1'i64);
+		n += 1;
+		//println("line = ", line);
+		//if (n == 10) break;
+	}
+	//println("keys = ", keys_dict_i64(&dict));
+	println("Loaded ", n, " 4-letter words from system dictionary");
+	return dict;
+}
+
+fn setup_blocklist(): dict_i64
+{
+	// Initialize a blocklist dictionary from the global BLOCKLIST array
+	let blocklist = new_dict_i64();
+	for word in BLOCKLIST
+		set_dict_i64(&blocklist, to_lower(word), 1'i64);
+	return blocklist;
+}
+
+// TODO: utils
+fn is_lower(char_: str): bool
+{
+	return i32("a") <= i32(char_) and i32(char_) <= i32("z");
+}
+fn is_upper(char_: str): bool
+{
+	return i32("A") <= i32(char_) and i32(char_) <= i32("Z");
+}
+fn to_lower(word: str): str
+{
+	let upper = word;
+	for i in [0: len(word)]
+	{
+		if not is_upper(word[i]) continue;
+		upper[i] = char(i32(word[i]) + i32("a") - i32("A"));
+	}
+	return upper;
+}
+fn to_upper(word: str): str
+{
+	let upper = word;
+	for i in [0: len(word)]
+	{
+		if not is_lower(word[i]) continue;
+		upper[i] = char(i32(word[i]) + i32("A") - i32("a"));
+	}
+	return upper;
+}
+
+return main();
+
