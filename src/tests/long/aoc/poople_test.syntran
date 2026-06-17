@@ -1,0 +1,23 @@
+
+use poople_lib::*;
+
+println("Starting poople test");
+
+let blocklist = setup_blocklist();
+let dict      = setup_dict(&blocklist);
+
+let steps_tear = poople_solve(&dict, "tear");
+//log_poople_steps(&steps_tear);
+let ok_tear = all(steps_tear == [
+	"tear",
+	"bear",
+	"boar",
+	"boor",
+	"poor",
+	"poop"
+]);
+println("tear steps, ok = ", steps_tear, ", ", ok_tear);
+
+println("Ending poople test");
+return ok_tear;
+

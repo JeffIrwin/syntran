@@ -36,21 +36,9 @@ let BLOCKLIST = [
 	""
 ];
 
-fn main(): i32
+fn poople_solve(dict: &dict_i64, init_word_cased: str): [str; :]
 {
-	println("Starting poople");
-
-	let args = std::args();
-	let nargs = size(args);
-	if nargs != 1
-	{
-		println("Error: missing cmd arg");
-		println("Usage:");
-		println("    syntran poople.syntran WORD");
-		println();
-		exit(1);
-	}
-	let init_word = to_lower(args[0]);
+	let init_word = to_lower(init_word_cased);
 	if len(init_word) != N
 	{
 		println("Error: given initial word `", to_upper(init_word), "' is not 4 letters long");
@@ -58,11 +46,7 @@ fn main(): i32
 		exit(2);
 	}
 
-	let blocklist = setup_blocklist();
-	let dict = setup_dict(&blocklist);
-
 	// BFS (breadth-first search)
-
 	let QCAP = 1024 * 64;
 	let q = [""; QCAP];
 	let qs = 0;  let qe = 0;
@@ -78,11 +62,7 @@ fn main(): i32
 	{
 		// Pop
 		let u = q[qs];  qs = (qs+1) % QCAP;
-		//println("u = ", u);
 		if (u == POOP) break;
-
-		//if (get_dict_i64(&seen, u) == 1'i64) continue;
-		//set_dict_i64(&seen, u, 1'i64);
 
 		// Search neighboring words, i.e. those that differ from `u` by one
 		// letter
@@ -92,14 +72,10 @@ fn main(): i32
 			let v = u;
 			v[ii] = char(i32("a") + ia);
 			if (v == u) continue;
-			if (get_dict_i64(&dict, v) != 1) continue;
-
+			if (get_dict_i64(&dict, v) != 1'i64) continue;
 			if (get_dict_i64(&seen, v) == 1'i64) continue;
 			set_dict_i64(&seen, v, 1'i64);
-			//println("v = ", v);
-
 			set_dict_str(&prev, v, u);
-			//set_dict_str(&prev, u, v);
 
 			// Push
 			q[qe] = v;  qe = (qe+1) % QCAP;
@@ -111,14 +87,12 @@ fn main(): i32
 		}
 	}
 	println();
-	//exit(0);
 
 	// End BFS. Now backtrack from poop via previous linked words
 	let word = POOP;
 	let n = 0;
 	while true
 	{
-		//println(word);
 		q[n] = word;
 		n += 1;
 		word = get_dict_str(&prev, word);
@@ -129,14 +103,18 @@ fn main(): i32
 	n += 1;
 
 	let steps = q[n-1: -1: -1];
-	println("steps = ");
-	//println(steps);
-	for i in [0: n]
-		println("    ", to_upper(steps[i]));
-	println();
 
-	println("Ending poople");
-	return 0;
+	println("Ending poople_solve");
+	return steps;
+}
+
+fn log_poople_steps(steps: &[str; :])
+{
+	println("steps = ");
+	for step in steps
+		println("    ", to_upper(step));
+	println();
+	return;
 }
 
 fn setup_dict(blocklist: &dict_i64): dict_i64
@@ -163,11 +141,7 @@ fn setup_dict(blocklist: &dict_i64): dict_i64
 
 		set_dict_i64(&dict, line, 1'i64);
 		n += 1;
-		//println("line = ", line);
-		//if (n == 10) break;
 	}
-	//println("keys = ", keys_dict_i64(&dict));
-	println("Loaded ", n, " 4-letter words from system dictionary");
 	return dict;
 }
 
@@ -180,7 +154,6 @@ fn setup_blocklist(): dict_i64
 	return blocklist;
 }
 
-// TODO: utils
 fn is_lower(char_: str): bool
 {
 	return i32("a") <= i32(char_) and i32(char_) <= i32("z");
@@ -209,6 +182,4 @@ fn to_upper(word: str): str
 	}
 	return upper;
 }
-
-return main();
 

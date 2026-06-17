@@ -1,0 +1,28 @@
+
+use ../src/tests/long/aoc/poople_lib::*;
+
+let args = std::args();
+let nargs = size(args);
+if nargs != 1
+{
+	println("Error: missing cmd arg");
+	println("Usage:");
+	println("    syntran poople.syntran WORD");
+	println();
+	exit(1);
+}
+
+println("Starting poople solver");
+
+let blocklist = setup_blocklist();
+let dict      = setup_dict(&blocklist);
+println("Loaded ", len_dict_i64(&dict),
+	" 4-letter words from system dictionary");
+
+let steps = poople_solve(&dict, args[0]);
+log_poople_steps(&steps);
+
+println("Ending poople solver");
+
+return 0;
+
