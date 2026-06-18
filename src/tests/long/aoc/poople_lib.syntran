@@ -83,7 +83,10 @@ fn poople_solve(dict: &dict_i64, init_word_cased: str): [str; :]
 			}
 		}
 	}
-	println();
+
+	// TODO: check what happens with an unreachable state, e.g. starting with
+	// some crazy non-word like "zzzz". I think above loop will exhaust queue
+	// and exit, then next loop will return an empty array
 
 	// End BFS. Now backtrack from poop via previous linked words
 	let word = POOP;
@@ -99,10 +102,7 @@ fn poople_solve(dict: &dict_i64, init_word_cased: str): [str; :]
 	q[n] = word;
 	n += 1;
 
-	let steps = q[n-1: -1: -1];
-
-	println("Ending poople_solve");
-	return steps;
+	return q[n-1: -1: -1];
 }
 
 fn log_poople_steps(steps: &[str; :])

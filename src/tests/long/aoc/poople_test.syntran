@@ -38,7 +38,22 @@ let ok_pace = all(steps_pace == [
 ]);
 println("pace steps, ok = ", steps_pace, ", ", ok_pace);
 
+//****************
+
+let steps_quiz = poople_solve(&dict, "quiz");
+let ok_quiz = all(steps_quiz == [
+	"quiz",
+	"quit",
+	"suit",
+	"slit",
+	"slot",
+	"plot",
+	"plop",
+	"poop"
+]);
+println("quiz steps, ok = ", steps_quiz, ", ", ok_quiz);
+
 //----------------------------------------------
 println("Ending poople test");
-return all([ok_tear, ok_pace]);
+return all([ok_tear, ok_pace, ok_quiz]);
 
