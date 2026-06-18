@@ -54,8 +54,6 @@ fn poople_solve(dict: &dict_i64, init_word_cased: str): [str; :]
 	// Push
 	q[qe] = init_word;  qe += 1;
 
-	// `seen` may be redundant? maybe we can only use prev?
-	let seen = new_dict_i64();
 	let prev = new_dict_str();
 
 	while qs != qe
@@ -73,8 +71,7 @@ fn poople_solve(dict: &dict_i64, init_word_cased: str): [str; :]
 			v[ii] = char(i32("a") + ia);
 			if (v == u) continue;
 			if (get_dict_i64(&dict, v) != 1'i64) continue;
-			if (get_dict_i64(&seen, v) == 1'i64) continue;
-			set_dict_i64(&seen, v, 1'i64);
+			if (get_dict_str(&prev, v) != ""   ) continue;
 			set_dict_str(&prev, v, u);
 
 			// Push
@@ -117,14 +114,18 @@ fn log_poople_steps(steps: &[str; :])
 	return;
 }
 
-fn setup_dict(blocklist: &dict_i64): dict_i64
+fn setup_dict(dict_filename: str, blocklist: &dict_i64): dict_i64
 {
 	// Load a dictionary of valid words. Only save 4-letter ones
 	let dict = new_dict_i64();
 	let n = 0;
 
 	// sudo apt install wamerican
-	let fdict = open("/usr/share/dict/american-english", "r");
+	//
+	// TODO: harden against file not existing. Add helpful error about how to
+	// install
+	let fdict = open(dict_filename, "r");
+	//let fdict = open("/usr/share/dict/american-english", "r");
 
 	while not eof(fdict)
 	{

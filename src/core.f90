@@ -30,6 +30,11 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - need an exists() built-in to check files, or some equivalent way to
+	!    check a file post-open. maybe rethink the way syntran immediately
+	!    runtime error aborts if you try to open for reading a file that doesn't
+	!    exist. check other immediate runtime errors too. there's also an idea
+	!    about "file_stat" below
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran

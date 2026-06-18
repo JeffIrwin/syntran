@@ -14,8 +14,11 @@ if nargs != 1
 
 println("Starting poople solver");
 
+// sudo apt install wamerican
+let dict_filename = "/usr/share/dict/american-english";
+
 let blocklist = setup_blocklist();
-let dict      = setup_dict(&blocklist);
+let dict      = setup_dict(dict_filename, &blocklist);
 println("Loaded ", len_dict_i64(&dict),
 	" 4-letter words from system dictionary");
 

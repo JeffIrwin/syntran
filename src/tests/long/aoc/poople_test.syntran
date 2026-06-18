@@ -3,8 +3,15 @@ use poople_lib::*;
 
 println("Starting poople test");
 
+// Use a small test dictionary for unit tests because not all test machines
+// (especially windows) have a standard system dict
+let dict_filename = "./poople_test_dict.txt";
+//let dict_filename = "/usr/share/dict/american-english";
+
 let blocklist = setup_blocklist();
-let dict      = setup_dict(&blocklist);
+let dict      = setup_dict(dict_filename, &blocklist);
+
+//----------------------------------------------
 
 let steps_tear = poople_solve(&dict, "tear");
 //log_poople_steps(&steps_tear);
@@ -18,6 +25,20 @@ let ok_tear = all(steps_tear == [
 ]);
 println("tear steps, ok = ", steps_tear, ", ", ok_tear);
 
+//****************
+
+let steps_pace = poople_solve(&dict, "pace");
+let ok_pace = all(steps_pace == [
+	"pace",
+	"pale",
+	"pole",
+	"poll",
+	"pool",
+	"poop"
+]);
+println("pace steps, ok = ", steps_pace, ", ", ok_pace);
+
+//----------------------------------------------
 println("Ending poople test");
-return ok_tear;
+return all([ok_tear, ok_pace]);
 
