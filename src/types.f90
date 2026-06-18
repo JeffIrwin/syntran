@@ -269,6 +269,10 @@ module syntran__types_m
 		!type(vars_t), allocatable :: vars
 		integer :: num_vars = 0
 
+		! Canonical, alias-independent identity: "<defining src file>::<local
+		! struct name>", set once at declaration time. c.f. value_t%struct_cookie
+		character(len = :), allocatable :: cookie
+
 		contains
 			! This is also required unfortunately
 #ifndef SYNTRAN_INTEL

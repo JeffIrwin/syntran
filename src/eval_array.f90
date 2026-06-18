@@ -218,6 +218,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 		res = var%struct(i8+1)
 		res%type = struct_type
 		res%struct_name = var%struct_name
+		res%struct_cookie = var%struct_cookie
 		return
 
 	end if
@@ -294,6 +295,7 @@ recursive module subroutine eval_struct_instance(node, state, res)
 
 	res%type = node%val%type
 	res%struct_name = node%struct_name
+	res%struct_cookie = node%val%struct_cookie
 
 	if (allocated(res%struct)) deallocate(res%struct)
 	allocate(res%struct( size(node%members) ))

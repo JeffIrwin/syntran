@@ -972,7 +972,7 @@ module integer function types_match(a, b) result(io)
 	end if
 
 	if (a%type == struct_type) then
-		if (a%struct_name /= b%struct_name) then
+		if (struct_kind_mismatch(a, b)) then
 			! Both are structs but different kinds of structs
 			io = TYPE_STRUCT_MISMATCH
 			return
@@ -994,7 +994,7 @@ module integer function types_match(a, b) result(io)
 		end if
 
 		if (a%array%type == struct_type) then
-			if (a%struct_name /= b%struct_name) then
+			if (struct_kind_mismatch(a, b)) then
 				! Both are arrays of structs but different kinds of structs
 				io = TYPE_ARRAY_STRUCT_MISMATCH
 				return
@@ -1004,6 +1004,28 @@ module integer function types_match(a, b) result(io)
 	end if
 
 end function types_match
+
+!===============================================================================
+
+logical function struct_kind_mismatch(a, b) result(mismatch)
+
+	! Check whether two struct (or struct-array) values are different kinds of
+	! structs.  Prefer the alias-independent struct_cookie (set once at struct
+	! declaration time from "<defining src file>::<local struct name>") so the
+	! same struct reached via two different module aliases/import paths is
+	! still recognized as the same type.  Fall back to struct_name (which can
+	! be re-qualified per import path, c.f. qualify_value_struct_name()) if
+	! either side lacks a cookie
+
+	type(value_t), intent(in) :: a, b
+
+	if (allocated(a%struct_cookie) .and. allocated(b%struct_cookie)) then
+		mismatch = a%struct_cookie /= b%struct_cookie
+	else
+		mismatch = a%struct_name /= b%struct_name
+	end if
+
+end function struct_kind_mismatch
 
 !===============================================================================
 

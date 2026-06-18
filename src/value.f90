@@ -118,6 +118,13 @@ module syntran__value_m
 		type(value_t), allocatable :: struct(:)
 		character(len = :), allocatable :: struct_name
 
+		! Canonical, alias-independent struct identity: "<defining src file>::<local
+		! struct name>".  Used for type matching so the same struct reached via
+		! different module aliases/import paths is recognized as the same type.
+		! struct_name above remains the display name and may be re-qualified per
+		! import path
+		character(len = :), allocatable :: struct_cookie
+
 		contains
 			procedure :: to_str => value_to_str
 			procedure :: to_f32 => value_to_f32
@@ -291,6 +298,7 @@ subroutine value_reset(val)
 		if (allocated(val%file_     )) deallocate(val%file_     )
 		if (allocated(val%struct    )) deallocate(val%struct    )
 		if (allocated(val%struct_name)) deallocate(val%struct_name)
+		if (allocated(val%struct_cookie)) deallocate(val%struct_cookie)
 		val%type = unknown_type
 	end select
 
@@ -326,9 +334,11 @@ recursive subroutine value_move(src, dst)
 		! Struct arrays also use struct(:) for elements and struct_name for type tag.
 		if (allocated(src%struct)) call move_alloc(src%struct, dst%struct)
 		if (allocated(src%struct_name)) call move_alloc(src%struct_name, dst%struct_name)
+		if (allocated(src%struct_cookie)) call move_alloc(src%struct_cookie, dst%struct_cookie)
 
 	case (struct_type)
 		call move_alloc(src%struct_name, dst%struct_name)
+		if (allocated(src%struct_cookie)) call move_alloc(src%struct_cookie, dst%struct_cookie)
 		call move_alloc(src%struct, dst%struct)
 
 	case (str_type)
@@ -385,6 +395,10 @@ recursive subroutine value_copy(dst, src)
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
+	end if
+
+	if (allocated(src%struct_cookie)) then
+		dst%struct_cookie = src%struct_cookie
 	end if
 
 	if (allocated(src%array)) then

@@ -1,0 +1,19 @@
+// Module that defines a struct and a fn taking that struct by value.  Used
+// together with boxuser.syntran (which imports this module's struct
+// unqualified) to test that the same struct, reached via two different
+// module aliases/import paths, is still recognized as the same type
+
+struct Box
+{
+	v: i32,
+}
+
+fn new_box(v: i32): Box
+{
+	return Box{v = v};
+}
+
+fn box_sum(b: Box): i32
+{
+	return b.v;
+}

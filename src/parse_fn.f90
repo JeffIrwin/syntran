@@ -838,6 +838,13 @@ module subroutine parse_struct_declaration(parser, decl)
 	allocate(struct%member_names%v( names%len_ ))
 	allocate(struct%vars%dicts(1))
 
+	! Canonical alias-independent identity, set once at declaration time.  This
+	! is invariant to the module alias/import path used to reach the struct, so
+	! it lets type_match() recognize the same struct imported two different ways
+	! as the same type (c.f. struct_cookie in types_ops.f90)
+	struct%cookie = parser%contexts%v(parser%current_unit())%src_file &
+		// "::" // identifier%text
+
 	do i = 1, names%len_
 		!print *, "name = ", names%v(i)%s
 
@@ -973,6 +980,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 	inst%struct_name = lookup_name
 	inst%val%struct_name = lookup_name
+	inst%val%struct_cookie = struct%cookie
 
 	!print *, "struct name = ", inst%struct_name
 
@@ -1187,7 +1195,10 @@ module subroutine parse_type(parser, type_text, type)
 		!if (allocated(type%array)) deallocate(type%array)
 	end if
 
-	if (itype == struct_type) type%struct_name = type_text
+	if (itype == struct_type) then
+		type%struct_name = type_text
+		type%struct_cookie = struct%cookie
+	end if
 
 end subroutine parse_type
 

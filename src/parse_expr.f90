@@ -360,7 +360,15 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
 		if (ltype == struct_type .and. is_op_allowed) then
-			if (expr%val%struct_name /= expr%right%val%struct_name) then
+			! Prefer the alias-independent struct_cookie (set at struct
+			! declaration time) so the same struct reached via two different
+			! module aliases/import paths is still recognized as the same
+			! type.  Fall back to struct_name if either side lacks a cookie
+			if (allocated(expr%val%struct_cookie) .and. &
+				allocated(expr%right%val%struct_cookie)) then
+				if (expr%val%struct_cookie /= expr%right%val%struct_cookie) &
+					is_op_allowed = .false.
+			else if (expr%val%struct_name /= expr%right%val%struct_name) then
 				! TODO: this is a one-off check for assignment of one struct to
 				! another. It should really be inside of is_binary_op_allowed(),
 				! but I should change is_binary_op_allowed() to take 2 value_t

@@ -74,6 +74,12 @@ recursive module subroutine struct_copy(dst, src)
 	dst%num_vars = src%num_vars
 	dst%vars = src%vars
 
+	if (allocated(src%cookie)) then
+		dst%cookie = src%cookie
+	else if (allocated(dst%cookie)) then
+		deallocate(dst%cookie)
+	end if
+
 	!print *, 'done struct_copy()'
 
 end subroutine struct_copy
