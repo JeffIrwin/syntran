@@ -1,5 +1,6 @@
 
-use ../src/tests/long/aoc/poople_lib::*;
+//use ../src/tests/long/aoc/dict_i64::*;
+use ../src/tests/long/aoc/poople as poople;
 
 let args = std::args();
 let nargs = size(args);
@@ -17,13 +18,13 @@ println("Starting poople solver");
 // sudo apt install wamerican
 let dict_filename = "/usr/share/dict/american-english";
 
-let blocklist = setup_blocklist();
-let dict      = setup_dict(dict_filename, &blocklist);
-println("Loaded ", len_dict_i64(&dict),
+let blocklist = poople::setup_blocklist();
+let dict      = poople::setup_dict(dict_filename, &blocklist);
+println("Loaded ", poople::len_dict_i64(&dict),
 	" 4-letter words from system dictionary");
 
-let steps = poople_solve(&dict, args[0]);
-log_poople_steps(&steps);
+let steps = poople::poople_solve(&dict, args[0]);
+poople::log_poople_steps(&steps);
 
 println("Ending poople solver");
 
