@@ -400,8 +400,8 @@ subroutine init_state(state, script_args, src_dir)
 	state%continued = .false.
 
 	! Select evaluation backend via SYNTRAN_BACKEND env var.
-	! SYNTRAN_BACKEND=bytecode  -> use the bytecode VM
-	! (anything else)           -> use the AST walker (default)
+	! SYNTRAN_BACKEND=ast  -> use the (deprecated) AST walker
+	! (anything else)      -> use the bytecode VM (default)
 	call get_environment_variable('SYNTRAN_BACKEND', backend_env, &
 		status = backend_status)
 
