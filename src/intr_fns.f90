@@ -78,7 +78,7 @@ end function is_overloaded_intr
 
 !===============================================================================
 
-recursive subroutine resolve_overload(args, fn_call, has_rank)
+recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr_type_result)
 
 	! Resolve special overloaded intrinsic fns
 
@@ -90,11 +90,19 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 	! if fn_call%val%array is allocated, but it might be cleaner this way
 	logical, intent(out) :: has_rank
 
+	! Optional outputs for functions that also need to propagate element type
+	! (e.g. std::reshape, whose result type depends on the source argument).
+	! parse_fn_call restores arr_type_result into fn_call%val%array%type after
+	! fn_call%val = fn%type overwrites it.
+	logical, intent(out), optional :: has_arr_type
+	integer, intent(out), optional :: arr_type_result
+
 	!********
 
 	integer :: type_, arr_type
 
 	has_rank = .false.
+	if (present(has_arr_type)) has_arr_type = .false.
 	select case (fn_call%identifier%text)
 	case ("exp")
 
@@ -879,6 +887,56 @@ recursive subroutine resolve_overload(args, fn_call, has_rank)
 		case default
 			fn_call%identifier%text = "0dot_f64"
 		end select
+
+	case ("reshape")
+
+		! std::reshape(source, shape) -- only fires for std::reshape, not a
+		! user-defined reshape(), because module_prefix is set before this call.
+		if (allocated(fn_call%module_prefix)) then
+			if (fn_call%module_prefix == "std") then
+				has_rank = .true.
+				if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
+
+				! Result rank = number of elements in the shape array (second argument)
+				if (args%len_ >= 2 .and. args%v(2)%val%type == array_type) then
+					fn_call%val%array%rank = int(args%v(2)%val%array%len_)
+				else
+					fn_call%val%array%rank = -1  ! unknown at parse time
+				end if
+
+				! Element type follows the source array (first argument).
+				! This is passed back via has_arr_type / arr_type_result so that
+				! parse_fn_call can restore it after `fn_call%val = fn%type` overwrites it.
+				if (present(has_arr_type) .and. present(arr_type_result)) then
+					if (args%len_ >= 1 .and. args%v(1)%val%type == array_type) then
+						has_arr_type = .true.
+						arr_type_result = args%v(1)%val%array%type
+					end if
+				end if
+			end if
+		end if
+
+	case ("transpose")
+
+		! std::transpose(source) -- only fires for std::transpose, not a
+		! user-defined transpose(), because module_prefix is set before this call.
+		if (allocated(fn_call%module_prefix)) then
+			if (fn_call%module_prefix == "std") then
+				has_rank = .true.
+				if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
+
+				! Result is always rank-2 (transpose of a rank-2 is rank-2)
+				fn_call%val%array%rank = 2
+
+				! Element type follows the source array (first argument).
+				if (present(has_arr_type) .and. present(arr_type_result)) then
+					if (args%len_ >= 1 .and. args%v(1)%val%type == array_type) then
+						has_arr_type = .true.
+						arr_type_result = args%v(1)%val%array%type
+					end if
+				end if
+			end if
+		end if
 
 	end select
 

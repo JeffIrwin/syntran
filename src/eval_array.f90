@@ -109,7 +109,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	end if
 
 	if (var%struct(id)%type == str_type) then
-		var%struct(id)%sca%str%s(i8+1: i8+1) = val%sca%str%s
+		var%struct(id)%str%s(i8+1: i8+1) = val%str%s
 		return
 	end if
 
@@ -218,6 +218,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 		res = var%struct(i8+1)
 		res%type = struct_type
 		res%struct_name = var%struct_name
+		if (allocated(var%struct_cookie)) res%struct_cookie = var%struct_cookie
 		return
 
 	end if
@@ -258,7 +259,8 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	end if
 
 	if (var%struct(id)%type == str_type) then
-		res%sca%str%s = var%struct(id)%sca%str%s(i8+1: i8+1)
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = var%struct(id)%str%s(i8+1: i8+1)
 		res%type = str_type
 		return
 	end if
@@ -293,6 +295,7 @@ recursive module subroutine eval_struct_instance(node, state, res)
 
 	res%type = node%val%type
 	res%struct_name = node%struct_name
+	if (allocated(node%val%struct_cookie)) res%struct_cookie = node%val%struct_cookie
 
 	if (allocated(res%struct)) deallocate(res%struct)
 	allocate(res%struct( size(node%members) ))
@@ -457,6 +460,138 @@ end subroutine compound_assign
 
 !===============================================================================
 
+module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, contributes_rank)
+
+	! Evaluate the lower bound, step, and upper bound for one dimension of a
+	! subscripted array slice.  Extracted from get_subscript_range so that the
+	! rank-1 fast paths (eval_slice_rank1 / eval_assign_slice_rank1) can obtain
+	! scalar bounds without allocating the full lsubs/ssubs/usubs arrays.
+
+	type(syntax_node_t), intent(in)    :: node
+	type(state_t),       intent(inout) :: state
+	integer,             intent(in)    :: i            ! 1-based dimension index
+	integer(kind = 8),   intent(out)   :: lsub, ssub, usub
+	type(i64_vector_t),  intent(inout) :: asub         ! populated for arr_sub only
+	logical,             intent(out)   :: contributes_rank
+
+	!********
+
+	integer :: id
+	integer(kind = 8) :: sz
+	type(value_t) :: asubval, lsubval, usubval, ssubval
+
+	id = node%id_index
+	contributes_rank = .false.
+	lsub = 0
+	ssub = 1
+	usub = 0
+
+	select case (node%lsubscripts(i)%sub_kind)
+	case (all_sub)
+		lsub = 0
+		ssub = 1
+		if (node%is_loc) then
+			usub = state%locs%vals(id)%array%size(i)
+		else
+			usub = state%vars%vals(id)%array%size(i)
+		end if
+		contributes_rank = .true.
+
+	case (range_sub)
+		ssub = 1
+
+		if (node%lsubscripts(i)%lsub_omit) then
+			lsub = 0
+		else
+			call syntax_eval(node%lsubscripts(i), state, lsubval)
+			lsub = lsubval%to_i64()
+		end if
+
+		if (node%lsubscripts(i)%usub_omit) then
+			if (node%is_loc) then
+				usub = state%locs%vals(id)%array%size(i)
+			else
+				usub = state%vars%vals(id)%array%size(i)
+			end if
+		else
+			call syntax_eval(node%usubscripts(i), state, usubval)
+			usub = usubval%to_i64()
+		end if
+
+		contributes_rank = .true.
+
+	case (step_sub)
+		! Evaluate step FIRST so its sign determines default bounds
+		call syntax_eval(node%ssubscripts(i), state, ssubval)
+		ssub = ssubval%to_i64()
+
+		if (ssub == 0) then
+			write(*,*) err_int_prefix//'subscript step is 0'//color_reset
+			call internal_error()
+		end if
+
+		if (node%lsubscripts(i)%lsub_omit .or. node%lsubscripts(i)%usub_omit) then
+			if (node%is_loc) then
+				sz = state%locs%vals(id)%array%size(i)
+			else
+				sz = state%vars%vals(id)%array%size(i)
+			end if
+		end if
+
+		if (node%lsubscripts(i)%lsub_omit) then
+			lsub = merge(sz - 1_8, 0_8, ssub < 0)
+		else
+			call syntax_eval(node%lsubscripts(i), state, lsubval)
+			lsub = lsubval%to_i64()
+		end if
+
+		if (node%lsubscripts(i)%usub_omit) then
+			usub = merge(-1_8, sz, ssub < 0)
+		else
+			call syntax_eval(node%usubscripts(i), state, usubval)
+			usub = usubval%to_i64()
+		end if
+
+		contributes_rank = .true.
+
+	case (scalar_sub)
+		! Scalar subs are converted to a range-1 sub so we can
+		! iterate later without further case logic
+		call syntax_eval(node%lsubscripts(i), state, lsubval)
+		lsub = lsubval%to_i64()
+		usub = lsub + 1
+		ssub = 1
+		! contributes_rank stays .false.
+
+	case (arr_sub)
+		call syntax_eval(node%lsubscripts(i), state, asubval)
+
+		! TODO: refactor `if` to select/case. There is a fn
+		! value_to_i64_array() but it returns an array_t
+
+		if      (asubval%array%type == i32_type) then
+			asub%v = asubval%array%i32
+		else if (asubval%array%type == i64_type) then
+			asub%v = asubval%array%i64
+		else
+			write(*,*) err_int_prefix//'bad array subscript type'//color_reset
+			call internal_error()
+		end if
+
+		lsub = asub%v(1)
+		usub = 1
+		contributes_rank = .true.
+
+	case default
+		write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
+		call internal_error()
+
+	end select
+
+end subroutine eval_subscript_1d
+
+!===============================================================================
+
 module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
 
 	! Evaluate the lower- and upper-bounds of each range of a subscripted array
@@ -475,8 +610,7 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 	!********
 
 	integer :: i, id, rank_
-
-	type(value_t) :: asubval, lsubval, usubval, ssubval
+	logical :: cr
 
 	id = node%id_index
 	if (node%is_loc) then
@@ -488,88 +622,8 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 	allocate(asubs(rank_), lsubs(rank_), ssubs(rank_), usubs(rank_))
 	rank_res = 0
 	do i = 1, rank_
-
-		if (node%lsubscripts(i)%sub_kind == all_sub) then
-			lsubs(i) = 0
-			!print *, 'lsubs(i) = ', lsubs(i)
-		else if (node%lsubscripts(i)%sub_kind == arr_sub) then
-
-			!print *, "arr_sub"
-
-			call syntax_eval(node%lsubscripts(i), state, asubval)
-
-			! TODO: refactor `if` to select/case. There is a fn
-			! value_to_i64_array() but it returns an array_t
-
-			if      (asubval%array%type == i32_type) then
-				asubs(i)%v = asubval%array%i32
-			else if (asubval%array%type == i64_type) then
-				asubs(i)%v = asubval%array%i64
-			else
-				write(*,*) err_int_prefix//'bad array subscript type'//color_reset
-				call internal_error()
-			end if
-
-			!print *, "asubs = ", asubs(i)%v
-
-		else
-			call syntax_eval(node%lsubscripts(i), state, lsubval)
-			lsubs(i) = lsubval%to_i64()
-		end if
-
-		!********
-
-		select case (node%lsubscripts(i)%sub_kind)
-		case (all_sub)
-			ssubs(i) = 1
-			if (node%is_loc) then
-				usubs(i) = state%locs%vals(id)%array%size(i)
-			else
-				usubs(i) = state%vars%vals(id)%array%size(i)
-			end if
-			!print *, 'usubs(i) = ', usubs(i)
-
-			rank_res = rank_res + 1
-
-		case (range_sub)
-			! Range subs are basically handled as a step sub with step == 1
-			ssubs(i) = 1
-
-			call syntax_eval(node%usubscripts(i), state, usubval)
-			usubs(i) = usubval%to_i64()
-
-			rank_res = rank_res + 1
-
-		case (step_sub)
-			call syntax_eval(node%ssubscripts(i), state, ssubval)
-			call syntax_eval(node%usubscripts(i), state, usubval)
-			ssubs(i) = ssubval%to_i64()
-			usubs(i) = usubval%to_i64()
-
-			if (ssubs(i) == 0) then
-				write(*,*) err_int_prefix//'subscript step is 0'//color_reset
-				call internal_error()
-			end if
-
-			rank_res = rank_res + 1
-
-		case (scalar_sub)
-			! Scalar subs are converted to a range-1 sub so we can
-			! iterate later without further case logic
-			usubs(i) = lsubs(i) + 1
-			ssubs(i) = 1
-
-		case (arr_sub)
-			lsubs(i) = asubs(i)%v(1)  ! reset to this after carrying
-			usubs(i) = 1              ! use this as an index to increment and get the next asub
-			rank_res = rank_res + 1
-
-		case default
-			write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
-			call internal_error()
-
-		end select
-
+		call eval_subscript_1d(node, state, i, lsubs(i), ssubs(i), usubs(i), asubs(i), cr)
+		if (cr) rank_res = rank_res + 1
 	end do
 	!print *, 'lsubs = ', lsubs
 	!print *, 'ssubs = ', ssubs
@@ -874,8 +928,9 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	case (str_type)
 		!val%type = str_type
-		val%sca%str%s = str_%sca%str%s(i:i)
-		!print *, "val s = ", val%sca%str%s
+		if (.not. allocated(val%str)) allocate(val%str)
+		val%str%s = str_%str%s(i:i)
+		!print *, "val s = ", val%str%s
 
 	case default
 		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
@@ -915,7 +970,7 @@ module subroutine get_array_val(array, i, val)
 			val%sca%f64 = array%f64(i + 1)
 
 		case (str_type)
-			val%sca%str = array%str(i + 1)
+			val%str = array%str(i + 1)
 
 		case default
 			write(*,*) err_int_prefix//"bad type in get_array_val"//color_reset
@@ -957,11 +1012,147 @@ module subroutine set_array_val(array, i, val)
 			array%f64(i + 1) = val%to_f64()
 
 		case (str_type)
-			array%str(i + 1) = val%sca%str
+			array%str(i + 1) = val%str
 
 	end select
 
 end subroutine set_array_val
+
+!===============================================================================
+
+module subroutine eval_slice_rank1(node, state, res)
+
+	! Allocation-free fast path for rank-1 array read slices:
+	!   a[i:j], a[:j], a[i:], a[i:j:k], a[:k:], a[:]
+	! where a is a 1-D array and the single subscript is NOT arr_sub.
+	!
+	! Uses scalar lsub/ssub/usub on the stack instead of allocating
+	! lsubs/ssubs/usubs/asubs/subs arrays as get_subscript_range does.
+
+	type(syntax_node_t), intent(in)  :: node
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(out) :: res
+
+	!********
+
+	integer :: id
+	integer(kind = 8) :: lsub, ssub, usub, len_, idx, i8
+	type(i64_vector_t) :: asub_unused
+	logical :: cr_unused
+	type(value_t) :: tmp
+
+	id = node%id_index
+
+	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused)
+
+	len_ = divceil(usub - lsub, ssub)
+	if (lsub > usub .and. ssub > 0) len_ = 0_8
+	if (lsub < usub .and. ssub < 0) len_ = 0_8
+
+	allocate(res%array)
+	res%type = array_type
+	res%array%kind = expl_array
+	if (node%is_loc) then
+		res%array%type = state%locs%vals(id)%array%type
+	else
+		res%array%type = state%vars%vals(id)%array%type
+	end if
+	res%array%rank = 1
+	allocate(res%array%size(1))
+	res%array%size(1) = len_
+	res%array%len_ = len_
+
+	call allocate_array(res, len_)
+
+	idx = lsub
+	if (node%is_loc) then
+		do i8 = 0, len_ - 1
+			call get_array_val(state%locs%vals(id)%array, idx, tmp)
+			call set_array_val(res%array, i8, tmp)
+			idx = idx + ssub
+		end do
+	else
+		do i8 = 0, len_ - 1
+			call get_array_val(state%vars%vals(id)%array, idx, tmp)
+			call set_array_val(res%array, i8, tmp)
+			idx = idx + ssub
+		end do
+	end if
+
+end subroutine eval_slice_rank1
+
+!===============================================================================
+
+module subroutine eval_assign_slice_rank1(node, state, id, res)
+
+	! Fast path for rank-1 array write slices: a[i:j] = rhs, a[i:j] += rhs, etc.
+	! On entry res holds the already-evaluated RHS.
+	! On return res holds the modified slice (matching the old tmp_array return).
+
+	type(syntax_node_t), intent(in)    :: node
+	type(state_t),       intent(inout) :: state
+	integer,             intent(in)    :: id    ! node%id_index, already extracted
+	type(value_t),       intent(inout) :: res   ! RHS in, modified slice out
+
+	!********
+
+	integer(kind = 8) :: lsub, ssub, usub, len_, idx, i8
+	integer :: arr_type
+	type(i64_vector_t) :: asub_unused
+	logical :: cr_unused
+	type(value_t) :: rhs_elem, elem_val, result_val
+
+	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused)
+
+	len_ = divceil(usub - lsub, ssub)
+	if (lsub > usub .and. ssub > 0) len_ = 0_8
+	if (lsub < usub .and. ssub < 0) len_ = 0_8
+
+	! For scalar RHS, capture it now before building result_val.
+	if (res%type /= array_type) rhs_elem = res
+
+	if (node%is_loc) then
+		arr_type = state%locs%vals(id)%array%type
+	else
+		arr_type = state%vars%vals(id)%array%type
+	end if
+
+	! Build the result array (the modified slice) into a separate local so we
+	! don't conflict with res%array, which may already be allocated (array RHS).
+	allocate(result_val%array)
+	result_val%type = array_type
+	result_val%array%kind = expl_array
+	result_val%array%type = arr_type
+	result_val%array%rank = 1
+	allocate(result_val%array%size(1))
+	result_val%array%size(1) = len_
+	result_val%array%len_ = len_
+	call allocate_array(result_val, len_)
+
+	idx = lsub
+	if (node%is_loc) then
+		do i8 = 0, len_ - 1
+			if (res%type == array_type) call get_array_val(res%array, i8, rhs_elem)
+			call get_array_val(state%locs%vals(id)%array, idx, elem_val)
+			call compound_assign(elem_val, rhs_elem, node%op)
+			call set_array_val(state%locs%vals(id)%array, idx, elem_val)
+			call set_array_val(result_val%array, i8, elem_val)
+			idx = idx + ssub
+		end do
+	else
+		do i8 = 0, len_ - 1
+			if (res%type == array_type) call get_array_val(res%array, i8, rhs_elem)
+			call get_array_val(state%vars%vals(id)%array, idx, elem_val)
+			call compound_assign(elem_val, rhs_elem, node%op)
+			call set_array_val(state%vars%vals(id)%array, idx, elem_val)
+			call set_array_val(result_val%array, i8, elem_val)
+			idx = idx + ssub
+		end do
+	end if
+
+	res = result_val   ! return the modified slice, as the general path does
+
+end subroutine eval_assign_slice_rank1
 
 !===============================================================================
 

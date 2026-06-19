@@ -26,7 +26,8 @@ program main
 	end if
 
 	! TODO: move into settings constructor?
-	maxerr = args%maxerr
+	maxerr           = args%maxerr
+	permissive_return = args%permissive_return
 
 	if (args%interactive) then
 		! "Interactive" keeps running in the REPL with the same vars and fns

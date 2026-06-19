@@ -17,16 +17,16 @@ contains
 
 !===============================================================================
 
-module function parse_return_statement(parser) result(statement)
+module subroutine parse_return_statement(parser, statement)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: statement
+	type(syntax_node_t), intent(out) :: statement
 
 	!********
 
 	integer :: right_beg, right_end
 
+	type(syntax_node_t)  :: right_tmp
 	type(syntax_token_t) :: return_token, semi
 	type(text_span_t) :: span
 
@@ -38,25 +38,16 @@ module function parse_return_statement(parser) result(statement)
 
 	statement%kind = return_statement
 
-	allocate(statement%right)
-
 	if (parser%current_kind() == semicolon_token) then
 		! Void return statement
-
-		!! already matched below
-		!semi = parser%match(semicolon_token)
-
-		!right_end = parser%peek_pos(0) - 1
 		right_end = parser%peek_pos(0)
-
+		allocate(statement%right)
 		statement%right%val%type = void_type
-
 	else
-		! expr or statement?
 		right_beg = parser%peek_pos(0)
-		statement%right = parser%parse_expr()
+		call parser%parse_expr(expr=right_tmp)
+		call syntax_node_move(right_tmp, statement%right)
 		right_end = parser%peek_pos(0) - 1
-
 	end if
 	semi = parser%match(semicolon_token)
 
@@ -76,14 +67,14 @@ module function parse_return_statement(parser) result(statement)
 	end if
 	end if
 
-end function parse_return_statement
+end subroutine parse_return_statement
 
 !===============================================================================
 
-module function parse_break_statement(parser) result(statement)
+module subroutine parse_break_statement(parser, statement)
 
 	class(parser_t) :: parser
-	type(syntax_node_t) :: statement
+	type(syntax_node_t), intent(out) :: statement
 	!********
 	type(syntax_token_t) :: break_token, semi
 
@@ -91,14 +82,14 @@ module function parse_break_statement(parser) result(statement)
 	statement%kind = break_statement
 	semi = parser%match(semicolon_token)
 
-end function parse_break_statement
+end subroutine parse_break_statement
 
 !===============================================================================
 
-module function parse_continue_statement(parser) result(statement)
+module subroutine parse_continue_statement(parser, statement)
 
 	class(parser_t) :: parser
-	type(syntax_node_t) :: statement
+	type(syntax_node_t), intent(out) :: statement
 	!********
 	type(syntax_token_t) :: continue_token, semi
 
@@ -106,11 +97,11 @@ module function parse_continue_statement(parser) result(statement)
 	statement%kind = continue_statement
 	semi = parser%match(semicolon_token)
 
-end function parse_continue_statement
+end subroutine parse_continue_statement
 
 !===============================================================================
 
-module function parse_use_statement(parser) result(statement)
+module subroutine parse_use_statement(parser, statement)
 
 	use syntran__errors_m
 
@@ -122,7 +113,7 @@ module function parse_use_statement(parser) result(statement)
 	! - `use path/to/module;  imports path/to/module.syntran, can be combined with qualified or unqualified forms above
 
 	class(parser_t) :: parser
-	type(syntax_node_t) :: statement
+	type(syntax_node_t), intent(out) :: statement
 	!********
 	character(len = :), allocatable :: module_name, import_name, module_path
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
@@ -406,7 +397,7 @@ module function parse_use_statement(parser) result(statement)
 	mod_parser%num_structs = parser%num_structs
 
 	! Parse the module
-	mod_unit = mod_parser%parse_unit()
+	call mod_parser%parse_unit(mod_unit)
 
 	! Update parent's variable, function, and struct counts to include module definitions
 	parser%num_vars = mod_parser%num_vars
@@ -518,10 +509,9 @@ module function parse_use_statement(parser) result(statement)
 	! not just parsed.
 	statement%kind = use_statement
 	statement%is_empty = .false.
-	allocate(statement%member)
-	statement%member = mod_unit
+	call syntax_node_move(mod_unit, statement%member)
 
-end function parse_use_statement
+end subroutine parse_use_statement
 
 !===============================================================================
 
@@ -575,11 +565,10 @@ end subroutine qualify_value_struct_name
 
 !===============================================================================
 
-recursive module function parse_if_statement(parser) result(statement)
+recursive module subroutine parse_if_statement(parser, statement)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: statement
+	type(syntax_node_t), intent(out) :: statement
 
 	!********
 
@@ -594,12 +583,8 @@ recursive module function parse_if_statement(parser) result(statement)
 	if_token  = parser%match(if_keyword)
 
 	cond_beg  = parser%peek_pos(0)
-	condition = parser%parse_expr()
-
-	!cond_end  = parser%peek_pos(-1)
+	call parser%parse_expr(expr=condition)
 	cond_end  = parser%peek_pos(0) - 1
-
-	!print *, 'cond_beg, cond_end = ', cond_beg, cond_end
 
 	! Check that condition type is bool.  If the condition depends on a fn which
 	! is declared below, it may be unknown on pass 0
@@ -611,41 +596,29 @@ recursive module function parse_if_statement(parser) result(statement)
 			"if-statement"))
 	end if
 
-	if_clause = parser%parse_statement()  ! Immo calls this "then statement"
-
-	allocate(statement%condition, statement%if_clause)
+	call parser%parse_statement(if_clause)
 
 	statement%kind = if_statement
-	statement%condition = condition
-	statement%if_clause = if_clause
+	call syntax_node_move(condition, statement%condition)
+	call syntax_node_move(if_clause, statement%if_clause)
 
 	if (parser%current_kind() == else_keyword) then
-		!print *, 'parsing else clause'
-
 		else_token = parser%match(else_keyword)
-		else_clause = parser%parse_statement()
-
-		allocate(statement%else_clause)
-		statement%else_clause = else_clause
-
-	!else
-	!	print *, 'no else clause'
+		call parser%parse_statement(else_clause)
+		call syntax_node_move(else_clause, statement%else_clause)
 	end if
 
 	! No additional parsing work is required to handle "else if".  That's just
 	! an else clause which contains another if statement
 
-	!print *, 'done parse_if_statement'
-
-end function parse_if_statement
+end subroutine parse_if_statement
 
 !===============================================================================
 
-recursive module function parse_for_statement(parser) result(statement)
+recursive module subroutine parse_for_statement(parser, statement)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: statement
+	type(syntax_node_t), intent(out) :: statement
 
 	!********
 
@@ -686,7 +659,7 @@ recursive module function parse_for_statement(parser) result(statement)
 
 	arr_beg  = parser%peek_pos(0)
 	!array      = parser%parse_array_expr()
-	array      = parser%parse_primary_expr()
+	call parser%parse_primary_expr(array)
 	arr_end  = parser%peek_pos(0) - 1
 
 	if (parser%is_loc) then
@@ -748,29 +721,24 @@ recursive module function parse_for_statement(parser) result(statement)
 
 	end if
 
-	body = parser%parse_statement()
+	call parser%parse_statement(body)
 
-	allocate(statement%array)
-	allocate(statement%body)
-
-	statement%kind = for_statement
-
+	statement%kind       = for_statement
 	statement%identifier = identifier
-	statement%array      = array
-	statement%body       = body
+	call syntax_node_move(array, statement%array)
+	call syntax_node_move(body,  statement%body)
 
 	call parser%vars%pop_scope()
 	call parser%locs%pop_scope()
 
-end function parse_for_statement
+end subroutine parse_for_statement
 
 !===============================================================================
 
-recursive module function parse_while_statement(parser) result(statement)
+recursive module subroutine parse_while_statement(parser, statement)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: statement
+	type(syntax_node_t), intent(out) :: statement
 
 	!********
 
@@ -783,7 +751,7 @@ recursive module function parse_while_statement(parser) result(statement)
 	while_token  = parser%match(while_keyword)
 
 	cond_beg  = parser%peek_pos(0)
-	condition = parser%parse_expr()
+	call parser%parse_expr(expr=condition)
 	cond_end  = parser%peek_pos(0) - 1
 
 	! Check that condition type is bool
@@ -795,29 +763,26 @@ recursive module function parse_while_statement(parser) result(statement)
 			"while-loop"))
 	end if
 
-	body = parser%parse_statement()
-
-	allocate(statement%condition, statement%body)
+	call parser%parse_statement(body)
 
 	statement%kind = while_statement
+	call syntax_node_move(condition, statement%condition)
+	call syntax_node_move(body,      statement%body)
 
-	statement%condition = condition
-	statement%body      = body
-
-end function parse_while_statement
+end subroutine parse_while_statement
 
 !===============================================================================
 
-recursive module function parse_block_statement(parser) result(block)
+recursive module subroutine parse_block_statement(parser, block)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: block
+	type(syntax_node_t), intent(out) :: block
 
 	!********
 
 	type(syntax_node_vector_t) :: members
 	type(syntax_token_t) :: left, right, dummy
+	type(syntax_node_t)  :: stmt_tmp
 
 	integer :: i, pos0
 
@@ -835,14 +800,11 @@ recursive module function parse_block_statement(parser) result(block)
 
 		pos0 = parser%pos
 		i = i + 1
-		!print *, '    statement ', i
 
-		call members%push(parser%parse_statement())
+		call parser%parse_statement(stmt_tmp)
+		call members%push_move(stmt_tmp)
 
-		! Avoid infinite loops on malformed blocks like this:
-		!   {
-		!     4) + 5;
-		!   }
+		! Avoid infinite loops on malformed blocks
 		if (parser%pos == pos0) dummy = parser%next()
 
 	end do
@@ -854,20 +816,22 @@ recursive module function parse_block_statement(parser) result(block)
 
 	block%kind = block_statement
 
-	! Convert to standard array
-	call syntax_nodes_copy(block%members, members%v( 1: members%len_ ))
+	! Move members from vector directly (avoids deep copy)
+	allocate(block%members(members%len_))
+	do i = 1, members%len_
+		call syntax_node_move_into(members%v(i), block%members(i))
+	end do
 
-end function parse_block_statement
+end subroutine parse_block_statement
 
 !===============================================================================
 
-recursive module function parse_statement(parser) result(statement)
+recursive module subroutine parse_statement(parser, statement)
 
 	use syntran__errors_m
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: statement
+	type(syntax_node_t), intent(out) :: statement
 
 	!********
 
@@ -879,32 +843,32 @@ recursive module function parse_statement(parser) result(statement)
 
 	select case (parser%current_kind())
 	case (lbrace_token)
-		statement = parser%parse_block_statement()
+		call parser%parse_block_statement(statement)
 
 	case (if_keyword)
-		statement = parser%parse_if_statement()
+		call parser%parse_if_statement(statement)
 
 	case (for_keyword)
-		statement = parser%parse_for_statement()
+		call parser%parse_for_statement(statement)
 
 	case (while_keyword)
-		statement = parser%parse_while_statement()
+		call parser%parse_while_statement(statement)
 
 	case (return_keyword)
-		statement = parser%parse_return_statement()
+		call parser%parse_return_statement(statement)
 
 	case (break_keyword)
-		statement = parser%parse_break_statement()
+		call parser%parse_break_statement(statement)
 
 	case (continue_keyword)
-		statement = parser%parse_continue_statement()
+		call parser%parse_continue_statement(statement)
 
 	case (use_keyword)
-		statement = parser%parse_use_statement()
+		call parser%parse_use_statement(statement)
 
 	case default
 		pos_beg   = parser%peek_pos(0)
-		statement = parser%parse_expr_statement()
+		call parser%parse_expr_statement(statement)
 		pos_end   = parser%peek_pos(0)
 		semi      = parser%match(semicolon_token)
 
@@ -951,7 +915,7 @@ recursive module function parse_statement(parser) result(statement)
 
 	end select
 
-end function parse_statement
+end subroutine parse_statement
 
 !===============================================================================
 

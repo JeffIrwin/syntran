@@ -1,0 +1,24 @@
+// Benchmark: tiny slices in a tight loop.
+//
+// Takes a 2-element slice of a 100-element array on every iteration.
+// The real work per iteration is O(1) (copy 2 elements), so the
+// fixed per-call dispatch overhead (entering eval_name_expr /
+// get_subscript_range, allocating asubs/lsubs/ssubs/usubs) is a
+// large fraction of total cost.  This is the *best case* for a
+// native OP_SLICE_NAT opcode — if the VM-vs-AST gap is small here,
+// specialized opcodes are unlikely to help for any slice workload.
+//
+// Expected output: a non-zero accumulator (prevents dead-code elim).
+
+let n   = 100;
+let m   = 1000000;
+let a   = [0: n];
+let acc = 0;
+
+for iter in [0: m]
+{
+	let s = a[1: 3];
+	acc  += s[0];
+}
+
+println(acc);

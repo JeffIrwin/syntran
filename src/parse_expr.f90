@@ -15,11 +15,10 @@ contains
 
 !===============================================================================
 
-recursive module function parse_expr_statement(parser) result(expr)
+recursive module subroutine parse_expr_statement(parser, expr)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), intent(out) :: expr
 
 	!********
 
@@ -67,7 +66,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		op         = parser%next()
 
-		right      = parser%parse_expr_statement()
+		call parser%parse_expr_statement(right)
 		!right      = parser%parse_expr()
 
 		if (right%val%type ==  void_type) then
@@ -83,7 +82,7 @@ recursive module function parse_expr_statement(parser) result(expr)
 		!right      = parser%parse_statement()
 		!!semi       = parser%match(semicolon_token)
 
-		expr = new_declaration_expr(identifier, op, right)
+		call new_declaration_expr(identifier, op, right, expr)
 
 		!print *, "right type = ", kind_name(right%val%type)
 		!print *, "expr  type = ", kind_name(expr %val%type)
@@ -172,7 +171,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 			if (search_io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), span, identifier%text))
+					err_undeclare_var(parser%context(), span, identifier%text, &
+					parser%vars%closest(identifier%text)))
 			end if
 
 			call parser%parse_dot(expr)
@@ -190,19 +190,18 @@ recursive module function parse_expr_statement(parser) result(expr)
 			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), span, identifier%text))
+					err_undeclare_var(parser%context(), span, identifier%text, &
+					parser%vars%closest(identifier%text)))
 			end if
 
 			expr%is_loc = .false.
 
 			op    = parser%next()
-			right = parser%parse_expr_statement()
+			call parser%parse_expr_statement(right)
 
 			expr%kind = assignment_expr
-
-			if (.not. allocated(expr%right)) allocate(expr%right)
-			expr%op    = op
-			expr%right = right
+			expr%op   = op
+			call syntax_node_move(right, expr%right)
 
 			ltype = expr%val%type
 			rtype = expr%right%val%type
@@ -290,7 +289,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
 					err_undeclare_var(parser%context(), &
-					span, identifier%text))
+					span, identifier%text, &
+					parser%vars%closest(identifier%text)))
 			end if
 
 			call parser%parse_dot(expr)
@@ -307,25 +307,22 @@ recursive module function parse_expr_statement(parser) result(expr)
 			parser%pos = pos0
 			!print *, "rewinding ********"
 			!print *, 'pos0 = ', pos0
-			expr = parser%parse_expr()
+			call parser%parse_expr(expr=expr)
 			return
 		end if
 		!print *, 'parsing assignment'
 
 		op    = parser%next()
-		right = parser%parse_expr_statement()
+		call parser%parse_expr_statement(right)
 		!print *, "1a right index = ", right%right%id_index
 
 		! regular vs compound assignment exprs are denoted by the op.  all of
 		! them are the same kind
 		expr%kind = assignment_expr
 
-		if (.not. allocated(expr%right)) allocate(expr%right)
-
 		expr%identifier = identifier
-
-		expr%op    = op
-		expr%right = right
+		expr%op         = op
+		call syntax_node_move(right, expr%right)
 
 		!print *, 'expr ident text = ', expr%identifier%text
 		!print *, 'op = ', op%text
@@ -338,7 +335,8 @@ recursive module function parse_expr_statement(parser) result(expr)
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
 					err_undeclare_var(parser%context(), &
-					span, identifier%text))
+					span, identifier%text, &
+					parser%vars%closest(identifier%text)))
 				!print *, "undeclared var 2"
 				!print *, "identifier = ", identifier%text
 			end if
@@ -362,7 +360,15 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 		is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
 		if (ltype == struct_type .and. is_op_allowed) then
-			if (expr%val%struct_name /= expr%right%val%struct_name) then
+			! Prefer the alias-independent struct_cookie (set at struct
+			! declaration time) so the same struct reached via two different
+			! module aliases/import paths is still recognized as the same
+			! type.  Fall back to struct_name if either side lacks a cookie
+			if (allocated(expr%val%struct_cookie) .and. &
+				allocated(expr%right%val%struct_cookie)) then
+				if (expr%val%struct_cookie /= expr%right%val%struct_cookie) &
+					is_op_allowed = .false.
+			else if (expr%val%struct_name /= expr%right%val%struct_name) then
 				! TODO: this is a one-off check for assignment of one struct to
 				! another. It should really be inside of is_binary_op_allowed(),
 				! but I should change is_binary_op_allowed() to take 2 value_t
@@ -402,14 +408,14 @@ recursive module function parse_expr_statement(parser) result(expr)
 
 	end if
 
-	expr = parser%parse_expr()
+	call parser%parse_expr(expr=expr)
 	!semi       = parser%match(semicolon_token)
 
-end function parse_expr_statement
+end subroutine parse_expr_statement
 
 !===============================================================================
 
-recursive module function parse_expr(parser, parent_prec) result(expr)
+recursive module subroutine parse_expr(parser, parent_prec, expr)
 
 	! In episode 3, Immo renamed this fn to "ParseBinaryExpression()", but
 	! I consider that confusing because the result could be either unary or
@@ -418,15 +424,14 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 	class(parser_t) :: parser
 
 	integer, optional, intent(in) :: parent_prec
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), intent(out) :: expr
 
 	!********
 
 	integer :: parent_precl, prec, ltype, rtype, larrtype, rarrtype, &
 		lrank, rrank
 
-	type(syntax_node_t) :: right
+	type(syntax_node_t) :: right, bin_tmp
 	type(syntax_token_t) :: op
 	type(text_span_t) :: span
 
@@ -440,8 +445,8 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 	if (prec /= 0 .and. prec >= parent_precl) then
 
 		op    = parser%next()
-		right = parser%parse_expr(prec)
-		expr  = new_unary_expr(op, right)
+		call parser%parse_expr(prec, right)
+		call new_unary_expr(op, right, expr)
 
 		rtype = right%val%type
 		if (rtype == array_type) rarrtype = expr%right%val%array%type
@@ -456,7 +461,7 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 		end if
 
 	else
-		expr = parser%parse_primary_expr()
+		call parser%parse_primary_expr(expr)
 	end if
 
 	do
@@ -464,8 +469,9 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 		if (prec == 0 .or. prec <= parent_precl) exit
 
 		op    = parser%next()
-		right = parser%parse_expr(prec)
-		expr  = new_binary_expr(expr, op, right)
+		call parser%parse_expr(prec, right)
+		call new_binary_expr(expr, op, right, bin_tmp)
+		call syntax_node_move_into(bin_tmp, expr)
 
 		ltype = expr%left %val%type
 		rtype = expr%right%val%type
@@ -493,7 +499,8 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 
 		end if
 
-		if (ltype == array_type .and. rtype == array_type) then
+		if (ltype == array_type .and. rtype == array_type &
+				.and. op%kind /= matmul_token) then
 			!print *, 'double array operation'
 
 			lrank = expr%left %val%array%rank
@@ -514,15 +521,14 @@ recursive module function parse_expr(parser, parent_prec) result(expr)
 
 	end do
 
-end function parse_expr
+end subroutine parse_expr
 
 !===============================================================================
 
-recursive module function parse_primary_expr(parser) result(expr)
+recursive module subroutine parse_primary_expr(parser, expr)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), intent(out) :: expr
 
 	!********
 
@@ -545,14 +551,14 @@ recursive module function parse_primary_expr(parser) result(expr)
 			! "a = (b = 1)" or not.  Note that "a = b = 1" is allowed either way
 
 			!expr  = parser%parse_expr()
-			expr  = parser%parse_expr_statement()
+			call parser%parse_expr_statement(expr)
 
 			right = parser%match(rparen_token)
 
 		case (lbracket_token)
 
 			! Brackets are matched within parse_array_expr
-			expr = parser%parse_array_expr()
+			call parser%parse_array_expr(expr)
 
 			!print *, '2 expr%val%type = ', expr%val%type
 			!print *, '2 expr%val%array%type = ', expr%val%array%type
@@ -561,7 +567,7 @@ recursive module function parse_primary_expr(parser) result(expr)
 
 			keyword = parser%next()
 			bool = keyword%kind == true_keyword
-			expr = new_bool(bool)
+			call new_bool(bool, expr)
 
 			!print *, 'expr%val%sca%bool = ', expr%val%sca%bool
 
@@ -571,9 +577,9 @@ recursive module function parse_primary_expr(parser) result(expr)
 
 			if (parser%peek_kind(1) == double_colon_token) then
 				! Qualified name like `std::println()` or `mod::fn()`
-				expr = parser%parse_qualified_expr()
+				call parser%parse_qualified_expr(expr)
 			else if (parser%peek_kind(1) == lparen_token) then
-				expr = parser%parse_fn_call()
+				call parser%parse_fn_call(fn_call=expr)
 			else if (parser%peek_kind(1) == lbrace_token) then
 
 				! There is an ambiguity here because struct instantiators and
@@ -611,55 +617,54 @@ recursive module function parse_primary_expr(parser) result(expr)
 
 				!if (io == 0) then
 				if (exists) then
-					expr = parser%parse_struct_instance()
+					call parser%parse_struct_instance(expr)
 					!print *, "back in parse_expr.f90"
 				else
 					! Same as default case below
-					expr = parser%parse_name_expr()
+					call parser%parse_name_expr(expr)
 				end if
 
 			else
-				expr = parser%parse_name_expr()
+				call parser%parse_name_expr(expr)
 			end if
 
 		case (f32_token)
 
 			token = parser%match(f32_token)
-			expr  = new_f32(token%val%sca%f32)
+			call new_f32(token%val%sca%f32, expr)
 
 		case (f64_token)
 
 			token = parser%match(f64_token)
-			expr  = new_f64(token%val%sca%f64)
+			call new_f64(token%val%sca%f64, expr)
 
 		case (str_token)
 
 			token = parser%match(str_token)
-			expr  = new_str(token%val%sca%str%s)
+			call new_str(token%val%str%s, expr)
 
 		case (i64_token)
 
 			token = parser%match(i64_token)
-			expr  = new_i64(token%val%sca%i64)
+			call new_i64(token%val%sca%i64, expr)
 
 		case default
 
 			token = parser%match(i32_token)
-			expr  = new_i32(token%val%sca%i32)
+			call new_i32(token%val%sca%i32, expr)
 
 			if (debug > 1) print *, 'token = ', expr%val%to_str()
 
 	end select
 
-end function parse_primary_expr
+end subroutine parse_primary_expr
 
 !===============================================================================
 
-recursive module function parse_name_expr(parser) result(expr)
+recursive module subroutine parse_name_expr(parser, expr)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), intent(out) :: expr
 
 	!********
 
@@ -685,12 +690,12 @@ recursive module function parse_name_expr(parser) result(expr)
 	end if
 
 	if (parser%is_loc .and. io == 0) then
-		expr = new_name_expr(identifier, var)
+		call new_name_expr(identifier, var, expr)
 		expr%id_index = id_index
 		expr%is_loc = .true.
 	else
 		call parser%vars%search(identifier%text, id_index, io, var)
-		expr = new_name_expr(identifier, var)
+		call new_name_expr(identifier, var, expr)
 		expr%id_index = id_index
 		expr%is_loc = .false.
 
@@ -699,7 +704,8 @@ recursive module function parse_name_expr(parser) result(expr)
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
 				err_undeclare_var(parser%context(), &
-				span, identifier%text))
+				span, identifier%text, &
+				parser%vars%closest(identifier%text)))
 		end if
 	end if
 
@@ -715,7 +721,7 @@ recursive module function parse_name_expr(parser) result(expr)
 	!print *, "tail parse_dot"
 	call parser%parse_dot(expr)
 
-end function parse_name_expr
+end subroutine parse_name_expr
 
 !===============================================================================
 

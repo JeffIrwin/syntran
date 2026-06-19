@@ -1,0 +1,9 @@
+// Module that re-exports box.syntran's Box struct via an unqualified glob
+// import, similar to how poople.syntran re-exports dict_i64.syntran's struct
+
+use box::*;
+
+fn make_box(v: i32): Box
+{
+	return new_box(v);
+}

@@ -26,10 +26,23 @@ module syntran__core_m
 
 	integer, parameter ::   &
 		syntran_major =  1, &
-		syntran_minor =  2, &
+		syntran_minor =  3, &
 		syntran_patch =  0
 
 	! TODO:
+	!  - need an exists() built-in to check files, or some equivalent way to
+	!    check a file post-open. maybe rethink the way syntran immediately
+	!    runtime error aborts if you try to open for reading a file that doesn't
+	!    exist. check other immediate runtime errors too. there's also an idea
+	!    about "file_stat" below
+	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
+	!    avoid a copy in many cases, e.g. dynamic vector example
+	!    src/tests/test-src/struct/test-03.syntran
+	!  - switch/match/case
+	!  - matrix inverse? link gfortran to mkl?
+	!  - remove AST-walking interpreter. bytecode is better. wait 2 or 3
+	!    releases
+	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
 	!      parallel but it's a deep rabbit hole of issues. fix most (?)
@@ -60,16 +73,18 @@ module syntran__core_m
 	!    threads within one syntran exe, maybe add cmd args to specify which
 	!    sets of tests to run, then have a bash script spawning independent
 	!    syntran test runners in parallel as separate exe's
-	!  - are there any opportunities to "move" things (e.g. fns, vars, vals)
-	!    instead of doing expensive "copy" operations? usually hidden as an
-	!    overridden assignment= operator. in jsonf repo almost everything is
-	!    moved instead of copied
-	!  - migrate ci from ubuntu 22 to 24. rocky should stay on version 9 for the
+	!    * not really a need for this currently with bytecode and other
+	!      optimizations. ci/cd takes ~14 minutes
+	!  - migrate ci from ubuntu 24 to 26. rocky should stay on version 9 for the
 	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
+	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet
+	!    * related, update wsl ubuntu version. consider updating gfortran
+	!      versions in some places
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
 	!    might be zero perf benefit because the dicts are only used at parse
 	!    time, then mapped to efficient arrays at eval time
-	!  - check every execution path of a fn returns
+	!  - unit tests for contents of error messages. need new api to get error
+	!    msg. maybe add error codes too
 	!  - claude tasks:
 	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable
 	!      it. duh!
@@ -122,26 +137,19 @@ module syntran__core_m
 	!          generated/templated code for multiple type combinations.
 	!
 	!    * docs -- see several notes below
-	!    * bytecode-based evaluation
 	!    * git(hub) cleanup. no need to delete branches, but rename existing
 	!      branches (except for main and dev) to start with feature/ or
 	!      jeffirwin/, e.g. vec-slice -> feature/vec-slice
 	!  - i like claude's "double_colon_token" name. i should change things like
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
-	!  - if you try to return something (e.g. i32) from a void/null fn, the
-	!    error says the fn should return "unknown" but it should say void (or
-	!    null?)
-	!  - document modules in readme, recommend over #include after it's in a
-	!    state where a few aoc tests can work with utils.syntran as a module
 	!  - minloc, maxloc, findloc std:: fns
 	!    * useful for aoc
 	!  - const.  e.g. `const N = 5` instead of `let N = 5`. then ban reassigning
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
 	!    compute usage
 	!    * gfortran 15 is now the default for Windows github actions
-	!  - many of my Dockerfiles install fpm from the "current" github release,
-	!    but their "current" release is a stale 3 year old release.  try the
-	!    latest release, or just version pin 0.12.0
+	!    * available in recent docker images, but gfortran 15 is not available
+	!      in github ubuntu runners as of 2026-06-06
 	!  - built-in syntran update:
 	!    * add checksum verification
 	!    * currently ./syup.sh can do it
@@ -155,9 +163,6 @@ module syntran__core_m
 	!    that gfortran nvim linting works.  just need to add a cmd arg like
 	!    `--syntax-only` and print errors in 1 line per error, with filename,
 	!    line, and column indices
-	!  - test rocky 10 circa May 2025, that's when they're planning to release
-	!    it
-	!    * rocky 10 is out, but there's no docker image as of 2025-12-13
 	!  - appimage?  some kind of binary packaging improvement
 	!    * the current dependence on libquadmath.so (and sometimes
 	!      libgfortran.so) is not ideal, especially considering that rocky is
@@ -168,6 +173,8 @@ module syntran__core_m
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)
 	!      set by an env var, but that isn't pressing
+	!    * "Exiting syntran" is a different shade of green than "syntran$"
+	!       prompt
 	!  - add tests that cover interactive interpreter REPL
 	!    * added a couple basic tests in main.yml
 	!    * fns should also be covered
@@ -209,14 +216,6 @@ module syntran__core_m
 	!    * samples?
 	!    * libsyntran.a and fortran sample?
 	!    * try -static-libgcc etc. on win/mac to ease packaging
-	!  - implicit upper bound slicing:
-	!    * vec[3:] is equivalent to vec[3: size(vec,0)]
-	!    * step sub too:  vec[3: 2: ] or vec[:-1 : -1] (reverse whole vec).
-	!      lbound is implicit for negative step
-	!    * negative bound indices to count from end, like python? imo this is
-	!      bad for bounds checking (which doesn't exist yet outside of debug
-	!      builds) and it could let bugs return garbage instead of crashing.  i
-	!      think crashing is the correct behavior for index bugs
 	!  - struct array slicing:
 	!    * can't do my_struct.arr[1:4], currently have to loop with scalar index
 	!  - struct member fns
@@ -228,17 +227,9 @@ module syntran__core_m
 	!  - pass by reference for subscripted array name expressions and dot
 	!    expressions
 	!    * done for regular variable name expressions
-	!    * needs documentation
 	!    * samples could be updated, e.g. sorting in place would be a lot more
 	!      efficient without copying large array vals in and out.  don't update
 	!      tests though.  if anything, add tests, but don't remove coverage
-	!  - raw string literals
-	!    * easier to include quotes without doubling
-	!    * follow rust style:
-	!      + let str1 = r#" my raw str with "quotes" "#;
-	!      + let str2 = r##" my raw str with "#quotes"# "##;
-	!      + number of hashes at start matches end
-	!      + any use for zero hashes?  r"raw str"
 	!  - type() or typeof() fn to get type name as str?  could be useful for
 	!    debugging, but I don't want to encourage its use for actual program
 	!    logic
@@ -276,15 +267,6 @@ module syntran__core_m
 	!        + should final return value be used as an implicit sys exit value?
 	!          currently, default exit stat is 0, regardless of what syntran
 	!          "main" returns.  what about non-int return vals?
-	!  - consider using subroutines with out-args instead of fn return vals for
-	!    parse_*() fns?  i believe this is the source of segfaults for gfortran
-	!    8. subroutines allow passing-by-reference instead of requiring a copy
-	!    of a complex syntax_node_t type on return.  would this eliminate all
-	!    node copies?  it could be a lot of work, gfortran 8 might still
-	!    segfault, and code will be uglier with out-args instead of return vals.
-	!    is copying syntax_node_t a perf bottleneck? i suspect that eval is
-	!    bottleneck and not parsing, but i haven't actually benchmarked poor
-	!    perf of intel compilers for AOC solution tests
 	!  - hacker sdk:
 	!    * bitwise operations
 	!      > done
@@ -312,10 +294,8 @@ module syntran__core_m
 	!  - array operations:
 	!    * done: element-wise add, sub, mul, div, pow, mod
 	!      + compound array assignment works but needs unit tests
-	!    * vector dot product, matrix mul, ...
-	!      + new operator tokens, something like `.*`?
-	!      + maybe `:*`. I like that I can just hold shift while typing it
-	!        unlike MATLAB's `.*` and it's shorter than R's `%*%`
+	!    * done: vector dot product and matrix mul via `@` operator
+	!      + v@v -> scalar, m@v -> vector, v@m -> vector, m@m -> matrix
 	!    * optional `dim` argument for any() and all(). 1 arg versions done
 	!    * comparisons done
 	!    * array and, or, not, done
@@ -348,16 +328,6 @@ module syntran__core_m
 	!      because that's how fortran works :(
 	!    * ==, !=:  done
 	!  - fuzz testing
-	!  - substring indexing and slicing:
-	!    * string arrays get an optional extra rank.  omitting the extra rank
-	!      refers to the whole string at that position in the array:
-	!      + str_vec[0] == str_vec[:,0]
-	!      + str_mat[0,0] == str_mat[:,0,0]
-	!      + etc.
-	!    * first, single-character indexing
-	!      + done
-	!    * then, range-based slicing
-	!      + done
 	!  - file reading/writing
 	!    * binary file i/o
 	!    * vectorized writes (and reads) for arrays without syntran loops. c.f.
@@ -374,12 +344,12 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      + trig: atan2, (sec, cos, hyperbolic, ... ?)
+	!      + trig: atan2, (sec, cosecant, hyperbolic, ... ?)
 	!      + bessel_jn
 	!      + gamma, log_gamma?
-	!      + reshape
 	!      + system: multiple out args? iostat and stdout
 	!    * done:
+	!      + reshape, transpose, shape
 	!      + abs, sqrt
 	!      + exp
 	!        > need documentation for elemental array overloading
@@ -678,7 +648,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	!*******************************
 	! Parse the tokens
-	tree = parser%parse_unit()
+	call parser%parse_unit(tree)
 
 	!print *, ""
 	!print *, "in core.f90:"

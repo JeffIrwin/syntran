@@ -1,0 +1,161 @@
+//==============================================================================
+//
+// This is a poople solver
+//
+// Poople is a word game with some similarities to wordle:
+//
+//     https://poople.io/
+//
+// Given a starting 4 letter word, the goal is to transform that word into
+// "POOP" one by changing one letter at a time, with each intermediate 4 letter
+// word being a real word
+//
+// For example:
+//
+// TEAR
+// BEAR
+// BOAR
+// BOOR
+// POOR
+// POOP
+//
+//==============================================================================
+
+use dict_i64;
+use dict_str;
+use utils_2024 as utils;
+
+let N  =  4;  // 4 letter words
+let NA = 26;  // alphabet size
+let POOP = "poop";  // goal word. use lowercase internally, uppercase for output
+
+// Ignore these words from the system dictionary
+let BLOCKLIST = [
+	//"ARES",  // not sure if this is valid per poople but i suspect it isn't
+	//"ORCS",
+	""
+];
+
+fn solve(dict: &dict_i64::dict_i64, init_word: str): [str; :]
+{
+	let init = utils::to_lower(init_word);
+	if len(init) != N
+	{
+		println("Error: given initial word `", utils::to_upper(init), 
+			"' is not 4 letters long");
+		return [""];
+	}
+
+	// BFS (breadth-first search)
+	let QCAP = 1024 * 64;
+	let q = [""; QCAP];
+	let qs = 0;  let qe = 0;
+
+	// Push
+	q[qe] = init;  qe += 1;
+
+	// Obviously all of these dict usages look redundantly named now with
+	// modules. I would rename new_dict_str so we could just do
+	// "dict_str::new()" but this is an invasive change in lots of places. Soon
+	// I would like to have struct methods anyway which would also give nicer
+	// syntax. Finally, I eventually want built-in dicts/maps in syntran
+	let prev = dict_str::new_dict_str();
+
+	while true
+	{
+		if qs == qe
+		{
+			// The queue is empty
+			println("Solution not found");
+			return [""];
+		}
+
+		// Pop
+		let u = q[qs];  qs = (qs+1) % QCAP;
+		if (u == POOP) break;
+
+		// Search neighboring words, i.e. those that differ from `u` by one
+		// letter
+		for ii in [0: N]
+		for ia in [0: NA]
+		{
+			let v = u;
+			v[ii] = char(i32("a") + ia);
+			if (v == u) continue;
+			if (dict_i64::get_dict_i64(&dict, v) != 1'i64) continue;
+			if (dict_str::get_dict_str(&prev, v) != ""   ) continue;
+			dict_str::set_dict_str(&prev, v, u);
+
+			// Push
+			q[qe] = v;  qe = (qe+1) % QCAP;
+			if qe == qs
+			{
+				println("Error: queue overflow! Edit QCAP and re-run");
+				exit(1);
+			}
+		}
+	}
+
+	// End BFS. Now backtrack from poop via previous linked words
+	let word = POOP;
+	let n = 0;
+	while true
+	{
+		q[n] = word;
+		n += 1;
+		word = dict_str::get_dict_str(&prev, word);
+		if (word == init) break;
+		if (word == ""  ) break;
+	}
+	q[n] = word;
+	n += 1;
+
+	return q[n-1: -1: -1];
+}
+
+fn log_steps(steps: &[str; :])
+{
+	println("steps = ");
+	for step in steps
+		println("    ", utils::to_upper(step));
+	println();
+	return;
+}
+
+fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64::dict_i64
+{
+	// Load a dictionary of valid words. Only save 4-letter ones
+	let dict = dict_i64::new_dict_i64();
+	let n = 0;
+
+	// sudo apt install wamerican
+	//
+	// TODO: harden against file not existing. Add helpful error about how to
+	// install. Syntran needs file existence checks
+	let fdict = open(dict_filename, "r");
+	//let fdict = open("/usr/share/dict/american-english", "r");
+
+	// Initialize the blocklist dictionary from the given string array
+	let block_dict = dict_i64::new_dict_i64();
+	for word in blocklist
+		dict_i64::set_dict_i64(&block_dict, utils::to_lower(word), 1'i64);
+
+	while not eof(fdict)
+	{
+		let line = readln(fdict);
+		if (len(line) != N) continue;
+		let is_lower = true;
+		for c in line
+		{
+			is_lower = utils::is_lower(c);
+			if (not is_lower) break;
+		}
+		if (not is_lower) continue;
+		if (dict_i64::get_dict_i64(&block_dict, line) == 1'i64) continue;
+
+		dict_i64::set_dict_i64(&dict, line, 1'i64);
+		n += 1;
+	}
+	return dict;
+}
+

@@ -1,0 +1,72 @@
+
+use poople;
+
+println("Starting poople test");
+
+// Use a small test dictionary for unit tests because not all test machines
+// (especially windows) have a standard system dict
+let dict_filename = "./poople_test_dict.txt";
+//let dict_filename = "/usr/share/dict/american-english";
+
+let blocklist = poople::BLOCKLIST;
+let dict      = poople::read_dict(dict_filename, &blocklist);
+
+//----------------------------------------------
+
+let steps_tear = poople::solve(&dict, "tear");
+//poople::log_steps(&steps_tear);
+let ok_tear = all(steps_tear == [
+	"tear",
+	"bear",
+	"boar",
+	"boor",
+	"poor",
+	"poop"
+]);
+println("tear steps, ok = ", steps_tear, ", ", ok_tear);
+
+//****************
+
+let steps_pace = poople::solve(&dict, "pace");
+let ok_pace = all(steps_pace == [
+	"pace",
+	"pale",
+	"pole",
+	"poll",
+	"pool",
+	"poop"
+]);
+println("pace steps, ok = ", steps_pace, ", ", ok_pace);
+
+//****************
+
+let steps_quiz = poople::solve(&dict, "quiz");
+let ok_quiz = all(steps_quiz == [
+	"quiz",
+	"quit",
+	"suit",
+	"slit",
+	"slot",
+	"plot",
+	"plop",
+	"poop"
+]);
+println("quiz steps, ok = ", steps_quiz, ", ", ok_quiz);
+
+//****************
+
+let steps_calf = poople::solve(&dict, "calf");
+let ok_calf = all(steps_calf == [
+	"calf",
+	"call",
+	"pall",
+	"poll",
+	"pool",
+	"poop"
+]);
+println("calf steps, ok = ", steps_calf, ", ", ok_calf);
+
+//----------------------------------------------
+println("Ending poople test");
+return all([ok_tear, ok_pace, ok_quiz, ok_calf]);
+

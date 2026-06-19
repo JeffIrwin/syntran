@@ -74,6 +74,12 @@ recursive module subroutine struct_copy(dst, src)
 	dst%num_vars = src%num_vars
 	dst%vars = src%vars
 
+	if (allocated(src%cookie)) then
+		dst%cookie = src%cookie
+	else if (allocated(dst%cookie)) then
+		deallocate(dst%cookie)
+	end if
+
 	!print *, 'done struct_copy()'
 
 end subroutine struct_copy
@@ -252,6 +258,8 @@ recursive module subroutine syntax_node_copy(dst, src)
 	dst%is_empty    = src%is_empty
 
 	dst%sub_kind = src%sub_kind
+	dst%lsub_omit = src%lsub_omit
+	dst%usub_omit = src%usub_omit
 
 	!if (allocated(src%val)) then
 	!	if (.not. allocated(dst%val)) allocate(dst%val)
@@ -414,6 +422,154 @@ recursive module subroutine syntax_node_copy(dst, src)
 	if (debug > 3) print *, 'done syntax_node_copy()'
 
 end subroutine syntax_node_copy
+
+!===============================================================================
+
+recursive module subroutine syntax_node_move(src, dst)
+
+	! Move src into dst (freshly allocated).  Transfers all allocatable
+	! components from src to dst via move_alloc (O(1) for node arrays/strings)
+	! and value_move for the val member.  After return, src's allocatables are
+	! unallocated; scalars are undefined.  Mirrors value_move() in value.f90.
+	!
+	! dst is allocatable so callers can pass unallocated allocatable components
+	! (e.g. expr%right) without pre-allocating.
+
+	type(syntax_node_t), intent(inout)            :: src
+	type(syntax_node_t), allocatable, intent(out) :: dst
+
+	!********
+
+	allocate(dst)
+
+	! POD scalars
+	dst%kind            = src%kind
+	dst%op              = src%op
+	dst%identifier      = src%identifier
+	dst%id_index        = src%id_index
+	dst%num_locs        = src%num_locs
+	dst%is_loc          = src%is_loc
+	dst%sub_kind        = src%sub_kind
+	dst%lsub_omit       = src%lsub_omit
+	dst%usub_omit       = src%usub_omit
+	dst%is_empty        = src%is_empty
+	dst%expecting       = src%expecting
+	dst%first_expecting = src%first_expecting
+
+	! diagnostics: move the internal array, copy scalars
+	call move_alloc(src%diagnostics%v, dst%diagnostics%v)
+	dst%diagnostics%len_ = src%diagnostics%len_
+	dst%diagnostics%cap  = src%diagnostics%cap
+
+	! value_t member
+	call value_move(src%val, dst%val)
+
+	! Allocatable strings
+	call move_alloc(src%struct_name,    dst%struct_name)
+	call move_alloc(src%module_prefix,  dst%module_prefix)
+	call move_alloc(src%first_expected, dst%first_expected)
+
+	! Allocatable primitive arrays
+	call move_alloc(src%params, dst%params)
+	call move_alloc(src%is_ref, dst%is_ref)
+
+	! Scalar allocatable node children
+	call move_alloc(src%left,        dst%left)
+	call move_alloc(src%right,       dst%right)
+	call move_alloc(src%condition,   dst%condition)
+	call move_alloc(src%if_clause,   dst%if_clause)
+	call move_alloc(src%else_clause, dst%else_clause)
+	call move_alloc(src%body,        dst%body)
+	call move_alloc(src%array,       dst%array)
+	call move_alloc(src%member,      dst%member)
+	call move_alloc(src%lbound,      dst%lbound)
+	call move_alloc(src%step,        dst%step)
+	call move_alloc(src%ubound,      dst%ubound)
+	call move_alloc(src%len_,        dst%len_)
+	call move_alloc(src%rank,        dst%rank)
+
+	! Array allocatable node children
+	call move_alloc(src%members,     dst%members)
+	call move_alloc(src%elems,       dst%elems)
+	call move_alloc(src%lsubscripts, dst%lsubscripts)
+	call move_alloc(src%usubscripts, dst%usubscripts)
+	call move_alloc(src%ssubscripts, dst%ssubscripts)
+	call move_alloc(src%args,        dst%args)
+	call move_alloc(src%size,        dst%size)
+
+end subroutine syntax_node_move
+
+!===============================================================================
+
+recursive module subroutine syntax_node_move_into(src, dst)
+
+	! Like syntax_node_move but dst is non-allocatable (already associated with
+	! storage).  Overwrites dst's scalar fields and move_allocs all allocatable
+	! components (move_alloc handles deallocation of dst's existing allocatables
+	! before the transfer).  Used where dst is a non-allocatable variable that
+	! needs to receive a new value without a deep copy, e.g. the accumulator in
+	! the binary operator loop in parse_expr.
+
+	type(syntax_node_t), intent(inout) :: src, dst
+
+	!********
+
+	! POD scalars
+	dst%kind            = src%kind
+	dst%op              = src%op
+	dst%identifier      = src%identifier
+	dst%id_index        = src%id_index
+	dst%num_locs        = src%num_locs
+	dst%is_loc          = src%is_loc
+	dst%sub_kind        = src%sub_kind
+	dst%lsub_omit       = src%lsub_omit
+	dst%usub_omit       = src%usub_omit
+	dst%is_empty        = src%is_empty
+	dst%expecting       = src%expecting
+	dst%first_expecting = src%first_expecting
+
+	! diagnostics: move the internal array, copy scalars
+	call move_alloc(src%diagnostics%v, dst%diagnostics%v)
+	dst%diagnostics%len_ = src%diagnostics%len_
+	dst%diagnostics%cap  = src%diagnostics%cap
+
+	! value_t member
+	call value_move(src%val, dst%val)
+
+	! Allocatable strings
+	call move_alloc(src%struct_name,    dst%struct_name)
+	call move_alloc(src%module_prefix,  dst%module_prefix)
+	call move_alloc(src%first_expected, dst%first_expected)
+
+	! Allocatable primitive arrays
+	call move_alloc(src%params, dst%params)
+	call move_alloc(src%is_ref, dst%is_ref)
+
+	! Scalar allocatable node children
+	call move_alloc(src%left,        dst%left)
+	call move_alloc(src%right,       dst%right)
+	call move_alloc(src%condition,   dst%condition)
+	call move_alloc(src%if_clause,   dst%if_clause)
+	call move_alloc(src%else_clause, dst%else_clause)
+	call move_alloc(src%body,        dst%body)
+	call move_alloc(src%array,       dst%array)
+	call move_alloc(src%member,      dst%member)
+	call move_alloc(src%lbound,      dst%lbound)
+	call move_alloc(src%step,        dst%step)
+	call move_alloc(src%ubound,      dst%ubound)
+	call move_alloc(src%len_,        dst%len_)
+	call move_alloc(src%rank,        dst%rank)
+
+	! Array allocatable node children
+	call move_alloc(src%members,     dst%members)
+	call move_alloc(src%elems,       dst%elems)
+	call move_alloc(src%lsubscripts, dst%lsubscripts)
+	call move_alloc(src%usubscripts, dst%usubscripts)
+	call move_alloc(src%ssubscripts, dst%ssubscripts)
+	call move_alloc(src%args,        dst%args)
+	call move_alloc(src%size,        dst%size)
+
+end subroutine syntax_node_move_into
 
 !===============================================================================
 

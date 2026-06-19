@@ -75,6 +75,7 @@ fn f3(i: i32): i32 {
 		if (k == 9)
 			return sum_ + 30;
 	}
+	return 0;  // unreachable: while true always returns above
 }
 
 let ans = [ f3(-10), f3(0), f3(15),

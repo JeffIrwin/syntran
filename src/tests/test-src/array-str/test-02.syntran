@@ -1,0 +1,29 @@
+
+// char-rank subscript: build a result by concatenating char slices from a
+// string array, then verify a char assignment.  Return value is compared in
+// the Fortran test suite.
+
+let v = ["hello", "world", "wassup"];
+
+// Reads: char-rank indexing
+let r = "";
+r += v[0,0];        // h
+r += v[2,5];        // p
+r += v[0,1:3];      // el
+r += v[0,:3];       // hel (omitted lower)
+r += v[1,2:];       // rld (omitted upper)
+
+// Assignment: modify first char of first two elements
+let u = ["hello", "world", "wassup"];
+u[0:2,0] = "X";
+r += u[0,0];        // X
+r += u[1,0];        // X
+r += u[2,0];        // w  (third element untouched)
+
+// Range char assignment on a scalar element
+let q = ["hello", "world"];
+q[0,1:3] = "EL";
+r += q[0];          // hELlo
+
+return r;
+

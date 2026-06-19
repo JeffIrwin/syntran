@@ -80,13 +80,16 @@ module function new_literal_value(type, bool, i32, i64, f32, f64, str_) result(v
 	if (present(f64 )) val%sca%f64   = f64
 	if (present(i32 )) val%sca%i32   = i32
 	if (present(i64 )) val%sca%i64   = i64
-	if (present(str_)) val%sca%str%s = str_
+	if (present(str_)) then
+		allocate(val%str)
+		val%str%s = str_
+	end if
 
 end function new_literal_value
 
 !===============================================================================
 
-module function new_declaration_expr(identifier, op, right) result(expr)
+module subroutine new_declaration_expr(identifier, op, right, expr)
 
 	! TODO: IMO this fn is overly abstracted.  It's only used once, so
 	! just paste it their and delete the fn.  That will make it easier to
@@ -94,8 +97,7 @@ module function new_declaration_expr(identifier, op, right) result(expr)
 
 	type(syntax_token_t), intent(in) :: identifier, op
 	type(syntax_node_t) , intent(in) :: right
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t) , intent(out) :: expr
 
 	!********
 
@@ -111,74 +113,85 @@ module function new_declaration_expr(identifier, op, right) result(expr)
 	! Pass the result value type up the tree for type checking in parent
 	expr%val = right%val
 
-	!expr%val%type = right%val%type
-	!if (expr%val%type == array_type) then
-	!	!print *, 'new_declaration_expr array_type'
-	!	allocate(expr%val%array)
-	!	expr%val%array = right%val%array
-	!end if
-
-end function new_declaration_expr
+end subroutine new_declaration_expr
 
 !===============================================================================
 
-module function new_name_expr(identifier, val) result(expr)
+module subroutine new_name_expr(identifier, val, expr)
 
-	type(syntax_token_t), intent(in) :: identifier
-	type(syntax_node_t) :: expr
-	type(value_t) :: val
+	type(syntax_token_t), intent(in)  :: identifier
+	type(value_t)                     :: val
+	type(syntax_node_t), intent(out)  :: expr
 
 	expr%kind = name_expr
 	expr%identifier = identifier
 	expr%val = val
 
-	!if (expr%val%type == array_type) then
-	!	!if (.not. allocated(expr%val%array)) allocate(expr%val%array)
-	!	allocate(expr%val%array)
-	!	!expr%val%array = right%val%array
-	!	expr%val%array = val%array
-	!end if
-
-end function new_name_expr
+end subroutine new_name_expr
 
 !===============================================================================
 
-module function new_binary_expr(left, op, right) result(expr)
+module subroutine new_binary_expr(left, op, right, expr)
 
-	type(syntax_node_t) , intent(in) :: left, right
-	type(syntax_token_t), intent(in) :: op
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t) , intent(inout) :: left, right  ! consumed by move
+	type(syntax_token_t), intent(in)    :: op
+	type(syntax_node_t) , intent(out)   :: expr
 
 	!********
 
-	integer :: larrtype, rarrtype, type_, ltype, rtype
+	integer :: larrtype, rarrtype, type_, ltype, rtype, lrank, rrank, out_rank, elem_type
 
 	if (debug > 1) print *, 'new_binary_expr'
 	if (debug > 1) print *, 'left  = ', left %str()
 	if (debug > 1) print *, 'op    = ', op%text
 	if (debug > 1) print *, 'right = ', right%str()
 
-	expr%kind = binary_expr
-
-	allocate(expr%left)
-	allocate(expr%right)
-
-	expr%left  = left
-	expr%op    = op
-	expr%right = right
-
-	!print *, 'left type  = ', kind_name(left%val%type)
-
+	! Read type info before moves (left/right val%array may be moved)
 	larrtype = unknown_type
 	rarrtype = unknown_type
-	if (left %val%type == array_type) larrtype = left %val%array%type
-	if (right%val%type == array_type) rarrtype = right%val%array%type
-
-	!print *, 'larrtype = ', kind_name(larrtype)
-
+	lrank    = -1
+	rrank    = -1
+	if (left %val%type == array_type) then
+		larrtype = left %val%array%type
+		lrank    = left %val%array%rank
+	end if
+	if (right%val%type == array_type) then
+		rarrtype = right%val%array%type
+		rrank    = right%val%array%rank
+	end if
 	ltype = left%val%type
 	rtype = right%val%type
+
+	expr%kind = binary_expr
+	expr%op   = op
+
+	call syntax_node_move(left,  expr%left)
+	call syntax_node_move(right, expr%right)
+
+	! Special handling for matmul: result rank depends on operand ranks
+	if (op%kind == matmul_token) then
+
+		! Promote element type using the same rules as *
+		elem_type = get_binary_op_kind(larrtype, star_token, rarrtype, &
+			unknown_type, unknown_type)
+
+		out_rank = matmul_out_rank(lrank, rrank)
+
+		if (out_rank == 0) then
+			! vector @ vector -> scalar
+			expr%val%type = elem_type
+		else
+			allocate(expr%val%array)
+			expr%val%array%type = elem_type
+			expr%val%array%rank = out_rank
+			expr%val%type = array_type
+		end if
+
+		if (debug > 1) print *, 'new_binary_expr = ', expr%str()
+		if (debug > 1) print *, 'done new_binary_expr'
+		return
+
+	end if
 
 	! Pass the result value type up the tree for type checking in parent
 	type_ = get_binary_op_kind(ltype, op%kind, rtype, &
@@ -191,10 +204,10 @@ module function new_binary_expr(left, op, right) result(expr)
 		allocate(expr%val%array)
 
 		expr%val%array%type = array_to_scalar_type(type_)
-		if (left%val%type == array_type) then
-			expr%val%array%rank = left %val%array%rank
+		if (ltype == array_type) then
+			expr%val%array%rank = expr%left%val%array%rank
 		else
-			expr%val%array%rank = right%val%array%rank
+			expr%val%array%rank = expr%right%val%array%rank
 		end if
 
 		expr%val%type = array_type
@@ -213,113 +226,107 @@ module function new_binary_expr(left, op, right) result(expr)
 	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_binary_expr'
 
-end function new_binary_expr
+end subroutine new_binary_expr
 
 !===============================================================================
 
-module function new_unary_expr(op, right) result(expr)
+module subroutine new_unary_expr(op, right, expr)
 
-	type(syntax_node_t) , intent(in) :: right
-	type(syntax_token_t), intent(in) :: op
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t) , intent(inout) :: right   ! consumed by move
+	type(syntax_token_t), intent(in)    :: op
+	type(syntax_node_t) , intent(out)   :: expr
 
 	!********
 
 	if (debug > 1) print *, 'new_unary_expr'
 
 	expr%kind = unary_expr
+	expr%op   = op
 
-	allocate(expr%right)
-
-	expr%op    = op
-	expr%right = right
+	call syntax_node_move(right, expr%right)
 
 	! Pass the result value type up the tree for type checking in parent.  IIRC
 	! all unary operators result in the same type as their operand, hence there
 	! is a get_binary_op_kind() fn but no get_unary_op_kind() fn
 
-	expr%val = right%val
-	!expr%val%type = right%val%type
+	expr%val = expr%right%val
 
 	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_unary_expr'
 
-end function new_unary_expr
+end subroutine new_unary_expr
 
 !===============================================================================
 
-module function new_bool(bool) result(expr)
+module subroutine new_bool(bool, expr)
 
-	logical, intent(in) :: bool
-	type(syntax_node_t) :: expr
+	logical            , intent(in)  :: bool
+	type(syntax_node_t), intent(out) :: expr
 
-	! The expression node is a generic literal expression, while its child val
-	! member indicates the specific type (e.g. bool_type or i32_type)
 	expr%kind = literal_expr
 	expr%val = new_literal_value(bool_type, bool = bool)
 
-end function new_bool
+end subroutine new_bool
 
 !********
 
-module function new_f32(f32) result(expr)
+module subroutine new_f32(f32, expr)
 
-	real(kind = 4), intent(in) :: f32
-	type(syntax_node_t) :: expr
+	real(kind = 4)     , intent(in)  :: f32
+	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
 	expr%val  = new_literal_value(f32_type, f32 = f32)
 
-end function new_f32
+end subroutine new_f32
 
 !********
 
-module function new_f64(f64) result(expr)
+module subroutine new_f64(f64, expr)
 
-	real(kind = 8), intent(in) :: f64
-	type(syntax_node_t) :: expr
+	real(kind = 8)     , intent(in)  :: f64
+	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
 	expr%val  = new_literal_value(f64_type, f64 = f64)
 
-end function new_f64
+end subroutine new_f64
 
 !********
 
-module function new_i32(i32) result(expr)
+module subroutine new_i32(i32, expr)
 
-	integer(kind = 4), intent(in) :: i32
-	type(syntax_node_t) :: expr
+	integer(kind = 4)  , intent(in)  :: i32
+	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
 	expr%val  = new_literal_value(i32_type, i32 = i32)
 
-end function new_i32
+end subroutine new_i32
 
 !********
 
-module function new_i64(i64) result(expr)
+module subroutine new_i64(i64, expr)
 
-	integer(kind = 8), intent(in) :: i64
-	type(syntax_node_t) :: expr
+	integer(kind = 8)  , intent(in)  :: i64
+	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
 	expr%val  = new_literal_value(i64_type, i64 = i64)
 
-end function new_i64
+end subroutine new_i64
 
 !********
 
-module function new_str(str_) result(expr)
+module subroutine new_str(str_, expr)
 
-	character(len = *), intent(in) :: str_
-	type(syntax_node_t) :: expr
+	character(len = *) , intent(in)  :: str_
+	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
 	expr%val  = new_literal_value(str_type, str_ = str_)
 
-end function new_str
+end subroutine new_str
 
 !===============================================================================
 

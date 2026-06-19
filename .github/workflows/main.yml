@@ -11,7 +11,7 @@
 		"strategy": {
 			"matrix": {
 				"os": [
-					"ubuntu-22.04",
+					"ubuntu-24.04",
 					"windows-latest",
 					"macOS-latest"
 				]
@@ -20,7 +20,7 @@
 		"steps": [
 			{"uses": "actions/checkout@v1"},
 			{
-				"uses": "fortran-lang/setup-fpm@v7",
+				"uses": "fortran-lang/setup-fpm@v10",
 				"with": {
 					"github-token": "${{ secrets.GITHUB_TOKEN }}"
 				}
@@ -34,39 +34,28 @@
 			  "run": "bash gen-header.sh"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Set ubuntu PATH",
 				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"run":
 				"
-					sudo apt-get install gfortran-11 \n
-
-					## c.f. build.sh \n
-					#export FC=$(which gfortran-11) \n
-
-					## cmake assumes 'gfortran' is the compiler (no '-11') \n
-					#mkdir -p \"$HOME/bin\" \n
-					#cp $(which gfortran-11) \"$HOME/bin/gfortran\" \n
-
-					#which gfortran \n
-					#which gfortran-11 \n
-					#gfortran --version \n
+					sudo apt-get install gfortran-13 \n
 				"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Test fpm debug",
 				"env": {
-					"FPM_FC": "gfortran-11"
+					"FPM_FC": "gfortran-13"
 				},
 				"run":
 				"
 					set -exu \n
 					gfortran --version \n
-					gfortran-11 --version \n
+					gfortran-13 --version \n
 
 					# This is a quick debug build test.  Debug compiles faster \n
 					# than release optimization \n
@@ -105,20 +94,23 @@
 
 					# Short tests only.  Long tests are only done in release \n
 					fpm test test --profile debug --link-flag \"$lflags\" \n
+
+					# Also test the legacy AST backend so both paths are exercised \n
+					SYNTRAN_BACKEND=ast fpm test test --profile debug --link-flag \"$lflags\" \n
 				"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Test fpm default",
 
 				"env": {
-					"FPM_FC": "gfortran-11"
+					"FPM_FC": "gfortran-13"
 				},
 				"run":
 				"
 					set -exu \n
 					gfortran --version \n
-					gfortran-11 --version \n
+					gfortran-13 --version \n
 
 					# This is the pack linux stage, but it also does some \n
 					# testing.  CI/CD could use some disentangling \n
@@ -175,8 +167,8 @@
 			{
 				"if": "matrix.os == 'macOS-latest'",
 				"run": "
-					brew install gcc@12 &&
-					brew reinstall gcc@12"
+					brew install gcc@14 &&
+					brew reinstall gcc@14"
 			},
 			{
 				"name": "Build",
@@ -239,8 +231,8 @@
 					set -exu \n
 					#set -x \n
 
-					gfortran-12 --version \n
-					which gfortran-12 \n
+					gfortran-14 --version \n
+					which gfortran-14 \n
 
 					bash ./build.sh release \n
 
@@ -250,7 +242,7 @@
 
 					otool -L ./syntran \n
 
-					GCC_LIB_DIR=/opt/homebrew/opt/gcc@12/lib/gcc/12 \n
+					GCC_LIB_DIR=/opt/homebrew/opt/gcc@14/lib/gcc/14 \n
 
 					#ls ${GCC_LIB_DIR} \n
 
@@ -289,7 +281,7 @@
 				"
 			},
 			{
-				"uses": "actions/upload-artifact@v4",
+				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'macOS-latest'",
 				"with": {
 					"path": "./syntran\n./libgfortran.5.dylib\n./libgcc_s.1.1.dylib\n./libgomp.1.dylib\n./libquadmath.0.dylib",
@@ -297,7 +289,7 @@
 				}
 			},
 			{
-				"uses": "actions/upload-artifact@v4",
+				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'windows-latest'",
 				"with": {
 					"path": "./syntran.exe\n./libgfortran-5.dll\n./libquadmath-0.dll\n./libgcc_s_seh-1.dll\n./libwinpthread-1.dll",
@@ -305,10 +297,11 @@
 				}
 			},
 			{
-				"uses": "actions/upload-artifact@v4",
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"uses": "actions/upload-artifact@v7",
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"with": {
-					# unfortunately gfortran-12 does not support -static-libquadmath.  not until gfortran-13
+					# TODO: try static libquadmath. should be possible now with
+					# gfortran-13
 
 					#"path": "./syntran\n./libquadmath.so.0\n./libc.so.6",
 					"path": "./syntran\n./libquadmath.so.0",
@@ -318,8 +311,8 @@
 			},
 			{
 				# Test the binary artifact that was uploaded by this branch's run
-				"uses": "actions/download-artifact@v4",
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"uses": "actions/download-artifact@v7",
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"with":
 				{
 					"name": "syntran-ubuntu",
@@ -327,7 +320,7 @@
 				},
 			},
 			{
-				"if": "matrix.os == 'ubuntu-22.04'",
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"run":
 				"
 					docker build ./docker/ --file ./docker/Dockerfile.branch-ubuntu \n
@@ -380,7 +373,7 @@
 				"
 			},
 			{
-				"uses": "actions/upload-artifact@v4",
+				"uses": "actions/upload-artifact@v7",
 				"with": {
 					#"path": "./bin/syntran\n./bin/libquadmath.so.0",
 					"path": "./bin/syntran",
@@ -389,7 +382,7 @@
 			},
 			{
 				# Get the binary artifact that was uploaded by this branch's run
-				"uses": "actions/download-artifact@v4",
+				"uses": "actions/download-artifact@v7",
 				"with":
 				{
 					"name": "syntran-linux",
@@ -422,7 +415,7 @@
 				"uses": "actions/checkout@v1"
 			},
 			{
-				"uses": "fortran-lang/setup-fpm@v7",
+				"uses": "fortran-lang/setup-fpm@v10",
 				"with": {
 					"github-token": "${{ secrets.GITHUB_TOKEN }}"
 				}
@@ -458,7 +451,9 @@
 					"ubuntu-latest"
 				],
 				"toolchain": [
-					{"compiler": "intel", "version": "2025.1"},
+					#{"compiler": "intel", "version": "2026.0"},   # not supported yet by setup-fortran as of 2026-06-06
+					{"compiler": "intel", "version": "2025.2"},
+					#{"compiler": "intel", "version": "2025.1"},  # works
 					#{"compiler": "intel", "version": "2024.2"},  # internal compiler error on fn array cat in declare_intr_fns()
 					#{"compiler": "intel", "version": "2023.1"},
 
@@ -476,7 +471,7 @@
 
 			},
 			{
-				"uses": "fortran-lang/setup-fpm@v7",
+				"uses": "fortran-lang/setup-fpm@v10",
 				"with": {
 					"github-token": "${{ secrets.GITHUB_TOKEN }}"
 				}
@@ -540,7 +535,7 @@
 						exit 1 \n
 					fi \n
 
-					docker build . --file Dockerfile.alpine.3.18 -t sy \n
+					docker build . --file Dockerfile.alpine -t sy \n
 					docker run --entrypoint syntran sy --version \n
 					docker run sy --version # syntran is already the default entrypoint \n
 					docker run sy -c \"1 + 2;\" \n
@@ -584,7 +579,7 @@
 					set -exu \n
 
 					# Test this to run syntran without homebrew gcc lib paths \n
-					brew remove gcc@12 || true \n
+					brew remove gcc@14 || true \n
 
 					mv /opt/homebrew/bin /opt/homebrew/bin-BACKUP || true \n
 					mv /opt/homebrew/opt /opt/homebrew/opt-BACKUP || true \n

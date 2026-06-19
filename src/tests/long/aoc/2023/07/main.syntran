@@ -386,26 +386,35 @@ fn quick_sort_hands(v: [str; :]): [i32; :]
 
 			// Median-of-three pivot.  40x faster for AOC day 21!
 			let m = (l + h) / 2;
-			//if v[ix[m]] < v[ix[l]]
-			if is_hand_gt(v[ix[l]], v[ix[m]])
+
+			// When the subrange has only 2 elements (h == l + 1), m
+			// truncates down to l, which would compare ix[l] against
+			// itself below and walk is_hand_gt()'s tie-break loop past
+			// the end of the (identical) hand strings.  Median-of-three
+			// only makes sense for 3+ elements anyway, so skip it here
+			if h - l >= 2
 			{
-				let tmp = ix[m];
-				ix[m]   = ix[l];
-				ix[l]   = tmp;
-			}
-			//if v[ix[h]] < v[ix[l]]
-			if is_hand_gt(v[ix[l]], v[ix[h]])
-			{
-				let tmp = ix[h];
-				ix[h]   = ix[l];
-				ix[l]   = tmp;
-			}
-			//if v[ix[m]] < v[ix[h]]
-			if is_hand_gt(v[ix[h]], v[ix[m]])
-			{
-				let tmp = ix[m];
-				ix[m]   = ix[h];
-				ix[h]   = tmp;
+				//if v[ix[m]] < v[ix[l]]
+				if is_hand_gt(v[ix[l]], v[ix[m]])
+				{
+					let tmp = ix[m];
+					ix[m]   = ix[l];
+					ix[l]   = tmp;
+				}
+				//if v[ix[h]] < v[ix[l]]
+				if is_hand_gt(v[ix[l]], v[ix[h]])
+				{
+					let tmp = ix[h];
+					ix[h]   = ix[l];
+					ix[l]   = tmp;
+				}
+				//if v[ix[m]] < v[ix[h]]
+				if is_hand_gt(v[ix[h]], v[ix[m]])
+				{
+					let tmp = ix[m];
+					ix[m]   = ix[h];
+					ix[h]   = tmp;
+				}
 			}
 			let x = v[ix[h]];
 
@@ -486,26 +495,35 @@ fn quick_sort_hands2(v: [str; :]): [i32; :]
 
 			// Median-of-three pivot.  40x faster for AOC day 21!
 			let m = (l + h) / 2;
-			//if v[ix[m]] < v[ix[l]]
-			if is_hand_gt2(v[ix[l]], v[ix[m]])
+
+			// When the subrange has only 2 elements (h == l + 1), m
+			// truncates down to l, which would compare ix[l] against
+			// itself below and walk is_hand_gt2()'s tie-break loop past
+			// the end of the (identical) hand strings.  Median-of-three
+			// only makes sense for 3+ elements anyway, so skip it here
+			if h - l >= 2
 			{
-				let tmp = ix[m];
-				ix[m]   = ix[l];
-				ix[l]   = tmp;
-			}
-			//if v[ix[h]] < v[ix[l]]
-			if is_hand_gt2(v[ix[l]], v[ix[h]])
-			{
-				let tmp = ix[h];
-				ix[h]   = ix[l];
-				ix[l]   = tmp;
-			}
-			//if v[ix[m]] < v[ix[h]]
-			if is_hand_gt2(v[ix[h]], v[ix[m]])
-			{
-				let tmp = ix[m];
-				ix[m]   = ix[h];
-				ix[h]   = tmp;
+				//if v[ix[m]] < v[ix[l]]
+				if is_hand_gt2(v[ix[l]], v[ix[m]])
+				{
+					let tmp = ix[m];
+					ix[m]   = ix[l];
+					ix[l]   = tmp;
+				}
+				//if v[ix[h]] < v[ix[l]]
+				if is_hand_gt2(v[ix[l]], v[ix[h]])
+				{
+					let tmp = ix[h];
+					ix[h]   = ix[l];
+					ix[l]   = tmp;
+				}
+				//if v[ix[m]] < v[ix[h]]
+				if is_hand_gt2(v[ix[h]], v[ix[m]])
+				{
+					let tmp = ix[m];
+					ix[m]   = ix[h];
+					ix[h]   = tmp;
+				}
 			}
 			let x = v[ix[h]];
 

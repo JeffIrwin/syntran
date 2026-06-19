@@ -17,22 +17,21 @@ contains
 
 !===============================================================================
 
-recursive module function parse_fn_call(parser, module_prefix, identifier) result(fn_call)
+recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_call)
 
 	class(parser_t) :: parser
 	character(len = *), intent(in), optional :: module_prefix
 	type(syntax_token_t), intent(in), optional :: identifier
-
-	type(syntax_node_t) :: fn_call
+	type(syntax_node_t), intent(out) :: fn_call
 
 	!********
 
 	character(len = :), allocatable :: exp_type, act_type, param_name, &
 		lookup_name, display_name
 
-	integer :: i, io, io_std, id_index, pos0, rank
+	integer :: i, io, io_std, id_index, pos0, rank, arr_type_result
 
-	logical :: has_rank, param_is_ref, arg_is_ref, is_ok
+	logical :: has_rank, has_arr_type, param_is_ref, arg_is_ref, is_ok
 
 	type(fn_t) :: fn
 
@@ -79,7 +78,7 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 		end if
 		call is_ref%push(arg_is_ref)
 
-		arg = parser%parse_expr()
+		call parser%parse_expr(expr=arg)
 
 		! Check that arg expr is name_expr.  Maybe it can be extended later to
 		! subscript exprs, but for now only names work
@@ -123,7 +122,7 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 		fn_call%module_prefix = module_prefix
 	end if
 
-	call resolve_overload(args, fn_call, has_rank)
+	call resolve_overload(args, fn_call, has_rank, has_arr_type, arr_type_result)
 	if (has_rank) rank = fn_call%val%array%rank
 
 	! If any argument has unknown_type, return early to prevent cascading errors.
@@ -198,7 +197,8 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 		span = new_span(identifier_%pos, len(identifier_%text))
 		call parser%diagnostics%push( &
 			err_undeclare_fn(parser%context(), &
-			span, display_name))
+			span, display_name, &
+			parser%fns%closest(display_name)))
 
 		! No more tokens are consumed below, so we can just return
 		! to skip cascading fn arg count/type errors
@@ -223,6 +223,13 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 		! apply to intrinsics fns, but it might be safer to copy anyway
 		if (.not. allocated(fn%type%array)) allocate(fn%type%array)
 		fn%type%array%rank = rank
+
+		! For functions like std::reshape whose element type depends on their
+		! arguments, restore the element type that resolve_overload determined.
+		! fn_call%val = fn%type above would otherwise overwrite it with any_type.
+		if (has_arr_type) then
+			fn_call%val%array%type = arr_type_result
+		end if
 
 	end if
 	!print *, "rank = ", fn_call%val%array%rank
@@ -379,22 +386,25 @@ recursive module function parse_fn_call(parser, module_prefix, identifier) resul
 
 	fn_call%id_index = id_index
 
-	call syntax_nodes_copy(fn_call%args, args%v( 1: args%len_ ))
+	! Move args from vector (avoids deep copy)
+	allocate(fn_call%args(args%len_))
+	do i = 1, args%len_
+		call syntax_node_move_into(args%v(i), fn_call%args(i))
+	end do
 
 	!print *, 'done parsing fn_call'
 
-end function parse_fn_call
+end subroutine parse_fn_call
 
 !===============================================================================
 
-recursive module function parse_qualified_expr(parser) result(expr)
+recursive module subroutine parse_qualified_expr(parser, expr)
 
 	! Parse qualified names like `std::println()`, `mod::name`,
 	! or nested namespaces like `math::vectors::fn()`
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: expr
+	type(syntax_node_t), intent(out) :: expr
 
 	!********
 
@@ -428,18 +438,19 @@ recursive module function parse_qualified_expr(parser) result(expr)
 
 	if (parser%current_kind() == lparen_token) then
 		! Qualified function call: std::println(...) or math::vectors::fn(...)
-		expr = parser%parse_fn_call(module_name, fn_identifier)
+		call parser%parse_fn_call(module_name, fn_identifier, expr)
 
 	else if (parser%current_kind() == lbrace_token) then
 		! Qualified struct instance: mod::Struct{...}
 		lookup_name = module_name // "::" // fn_name
 		if (parser%structs%exists(lookup_name)) then
-			expr = parser%parse_struct_instance(lookup_name)
+			call parser%parse_struct_instance(expr, lookup_name)
 		else
 			! Struct not found
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), span, fn_name))
+				err_undeclare_var(parser%context(), span, fn_name, &
+				parser%vars%closest(fn_name)))
 		end if
 
 	else
@@ -450,11 +461,12 @@ recursive module function parse_qualified_expr(parser) result(expr)
 		if (iostat /= exit_success) then
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), span, fn_name))
+				err_undeclare_var(parser%context(), span, fn_name, &
+				parser%vars%closest(fn_name)))
 			return
 		end if
 
-		expr = new_name_expr(fn_identifier, var_val)
+		call new_name_expr(fn_identifier, var_val, expr)
 		expr%id_index = id_index
 		expr%module_prefix = module_name
 
@@ -462,15 +474,14 @@ recursive module function parse_qualified_expr(parser) result(expr)
 		call parser%parse_dot(expr)
 	end if
 
-end function parse_qualified_expr
+end subroutine parse_qualified_expr
 
 !===============================================================================
 
-module function parse_fn_declaration(parser) result(decl)
+module subroutine parse_fn_declaration(parser, decl)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: decl
+	type(syntax_node_t), intent(out) :: decl
 
 	!********
 
@@ -641,13 +652,23 @@ module function parse_fn_declaration(parser) result(decl)
 	parser%fn_name = identifier%text
 	parser%fn_type = fn%type
 
-	body = parser%parse_statement()
+	call parser%parse_statement(body)
 
 	if (.not. parser%returned) then
 		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
 		call parser%diagnostics%push( &
 			err_no_return(parser%context(), &
 			span, identifier%text))
+	else if (.not. all_paths_return(body)) then
+		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
+		if (permissive_return) then
+			if (parser%ipass /= 0) write(error_unit, '(a)') warn_missing_return(parser%context(), &
+				span, identifier%text)
+		else
+			call parser%diagnostics%push( &
+				err_missing_return(parser%context(), &
+				span, identifier%text))
+		end if
 	end if
 
 	! Reset to allow the global scope to return anything
@@ -658,13 +679,10 @@ module function parse_fn_declaration(parser) result(decl)
 	parser%num_fns = parser%num_fns + 1
 	decl%id_index  = parser%num_fns
 
-	allocate(decl%body)
-
-	decl%kind = fn_declaration
-
+	decl%kind       = fn_declaration
 	decl%identifier = identifier
 	decl%num_locs   = parser%num_locs
-	decl%body       = body
+	call syntax_node_move(body, decl%body)
 	!print *, "decl num_locs = ", decl%num_locs
 
 	call parser%vars%pop_scope()
@@ -708,15 +726,14 @@ module function parse_fn_declaration(parser) result(decl)
 	!print *, 'size(decl%params) = ', size(decl%params)
 	!print *, 'decl%params = ', decl%params
 
-end function parse_fn_declaration
+end subroutine parse_fn_declaration
 
 !===============================================================================
 
-module function parse_struct_declaration(parser) result(decl)
+module subroutine parse_struct_declaration(parser, decl)
 
 	class(parser_t) :: parser
-
-	type(syntax_node_t) :: decl
+	type(syntax_node_t), intent(out) :: decl
 
 	!********
 
@@ -821,6 +838,13 @@ module function parse_struct_declaration(parser) result(decl)
 	allocate(struct%member_names%v( names%len_ ))
 	allocate(struct%vars%dicts(1))
 
+	! Canonical alias-independent identity, set once at declaration time.  This
+	! is invariant to the module alias/import path used to reach the struct, so
+	! it lets type_match() recognize the same struct imported two different ways
+	! as the same type (c.f. struct_cookie in types_ops.f90)
+	struct%cookie = parser%contexts%v(parser%current_unit())%src_file &
+		// "::" // identifier%text
+
 	do i = 1, names%len_
 		!print *, "name = ", names%v(i)%s
 
@@ -886,20 +910,19 @@ module function parse_struct_declaration(parser) result(decl)
 
 	!print *, "done parsing struct"
 
-end function parse_struct_declaration
+end subroutine parse_struct_declaration
 
 !===============================================================================
 
-recursive module function parse_struct_instance(parser, struct_name) result(inst)
+recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 	! A struct instantiator initializes all the members of an instance of a
 	! struct
 
 	class(parser_t) :: parser
 
+	type(syntax_node_t), intent(out) :: inst
 	character(len = *), intent(in), optional :: struct_name
-
-	type(syntax_node_t) :: inst
 
 	!********
 
@@ -957,6 +980,7 @@ recursive module function parse_struct_instance(parser, struct_name) result(inst
 
 	inst%struct_name = lookup_name
 	inst%val%struct_name = lookup_name
+	inst%val%struct_cookie = struct%cookie
 
 	!print *, "struct name = ", inst%struct_name
 
@@ -974,7 +998,7 @@ recursive module function parse_struct_instance(parser, struct_name) result(inst
 		name   = parser%match(identifier_token)
 		equals = parser%match(equals_token)
 		pos1   = parser%current_pos()
-		mem    = parser%parse_expr()
+		call parser%parse_expr(expr=mem)
 
 		!print *, "name%text = ", name%text
 
@@ -1092,7 +1116,7 @@ recursive module function parse_struct_instance(parser, struct_name) result(inst
 
 	!print *, "ending parse_struct_instance()"
 
-end function parse_struct_instance
+end subroutine parse_struct_instance
 
 !===============================================================================
 
@@ -1111,7 +1135,8 @@ module subroutine parse_type(parser, type_text, type)
 
 	type(struct_t) :: struct
 
-	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy
+	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
+		double_colon
 
 	type(text_span_t) :: span
 
@@ -1121,6 +1146,13 @@ module subroutine parse_type(parser, type_text, type)
 		! Array param
 		lbracket = parser%match(lbracket_token)
 		ident    = parser%match(identifier_token)
+		type_text = ident%text
+		do while (parser%current_kind() == double_colon_token)
+			! Qualified element type, e.g. [mod::Struct; :]
+			double_colon = parser%match(double_colon_token)
+			ident = parser%match(identifier_token)
+			type_text = type_text//"::"//ident%text
+		end do
 		semi     = parser%match(semicolon_token)
 
 		rank  = 0
@@ -1147,11 +1179,16 @@ module subroutine parse_type(parser, type_text, type)
 	else
 		! Scalar param
 		ident = parser%match(identifier_token)
+		type_text = ident%text
+		do while (parser%current_kind() == double_colon_token)
+			! Qualified type, e.g. mod::Struct
+			double_colon = parser%match(double_colon_token)
+			ident = parser%match(identifier_token)
+			type_text = type_text//"::"//ident%text
+		end do
 		rank = -1
 	end if
 	pos2 = parser%current_pos()
-
-	type_text = ident%text
 
 	itype = lookup_type(type_text, parser%structs, struct)
 
@@ -1171,9 +1208,73 @@ module subroutine parse_type(parser, type_text, type)
 		!if (allocated(type%array)) deallocate(type%array)
 	end if
 
-	if (itype == struct_type) type%struct_name = type_text
+	if (itype == struct_type) then
+		type%struct_name = type_text
+		type%struct_cookie = struct%cookie
+	end if
 
 end subroutine parse_type
+
+!===============================================================================
+
+!===============================================================================
+
+recursive function all_paths_return(node) result(returns)
+
+	! Determine whether the given AST node guarantees a return on every
+	! execution path.  Used at parse-time to diagnose functions that may
+	! fall off the end without returning.
+	!
+	! Rules (conservative):
+	!   return_statement  -> always returns.
+	!   block_statement   -> returns iff any member returns on all paths
+	!                        (statements after an unconditional return are
+	!                        unreachable).
+	!   if_statement      -> returns iff else_clause is present AND both
+	!                        if_clause and else_clause return on all paths.
+	!                        else-if chains recurse through else_clause.
+	!   while/for         -> never guaranteed (loop may execute zero times).
+	!   everything else   -> does not return.
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: returns
+
+	!********
+
+	integer :: i
+
+	returns = .false.
+	select case (node%kind)
+
+	case (return_statement)
+		returns = .true.
+
+	case (block_statement)
+		! The block returns as soon as any member is guaranteed to return.
+		if (allocated(node%members)) then
+			do i = 1, size(node%members)
+				if (all_paths_return(node%members(i))) then
+					returns = .true.
+					exit
+				end if
+			end do
+		end if
+
+	case (if_statement)
+		! Requires both a then-branch and an else-branch that both return.
+		! else-if chains are an else_clause that is itself an if_statement,
+		! so recursion handles them naturally.
+		if (allocated(node%else_clause) .and. allocated(node%if_clause)) then
+			returns = all_paths_return(node%if_clause) .and. &
+			          all_paths_return(node%else_clause)
+		end if
+
+	! while_statement / for_statement: body may run zero times -> no guarantee.
+	! All other kinds: not a return.
+
+	end select
+
+end function all_paths_return
 
 !===============================================================================
 

@@ -33,10 +33,10 @@ module syntran__value_m
 
 	type scalar_t
 
-		! Scalar value type.  Cannot be an array!
-
-		type(file_t)      :: file_
-		type(string_t)    :: str
+		! Scalar value type for numeric/bool values.  Cannot be an array!
+		! String and file values are stored in value_t%str / value_t%file_
+		! so that this type is a plain POD — copies are cheap (no allocatable
+		! components).
 
 		logical           :: bool
 		integer(kind = 4) :: i32
@@ -89,7 +89,16 @@ module syntran__value_m
 	type value_t
 		integer :: type = unknown_type
 
+		! Numeric/bool scalars.  scalar_t is a plain POD (no allocatable
+		! components) so copying it is cheap.  str_ and file types are
+		! handled by the allocatable components below.
 		type(scalar_t) :: sca
+
+		! String and file values — moved out of scalar_t so that scalar_t
+		! (and therefore sca copies) are POD-cheap.  Only allocated when
+		! value%type == str_type or file_type respectively.
+		type(string_t), allocatable :: str
+		type(file_t  ), allocatable :: file_
 
 		! Back when array_t could contain value_t's, gfortran would use up infinite
 		! RAM trying to parse the circular type dependencies unless this was a
@@ -108,6 +117,13 @@ module syntran__value_m
 		! `value_t`'s here instead
 		type(value_t), allocatable :: struct(:)
 		character(len = :), allocatable :: struct_name
+
+		! Canonical, alias-independent struct identity: "<defining src file>::<local
+		! struct name>".  Used for type matching so the same struct reached via
+		! different module aliases/import paths is recognized as the same type.
+		! struct_name above remains the display name and may be re-qualified per
+		! import path
+		character(len = :), allocatable :: struct_cookie
 
 		contains
 			procedure :: to_str => value_to_str
@@ -128,7 +144,8 @@ module syntran__value_m
 		type(value_t), allocatable :: v(:)
 		integer :: len_, cap
 		contains
-			procedure :: push => push_value
+			procedure :: push      => push_value
+			procedure :: push_move => push_value_move
 	end type value_vector_t
 
 !===============================================================================
@@ -142,7 +159,7 @@ function new_value_vector() result(vector)
 	type(value_vector_t) :: vector
 
 	vector%len_ = 0
-	vector%cap = 2  ! I think a small default makes sense here
+	vector%cap = 64  ! Large enough to avoid growth churn in hot loops
 
 	allocate(vector%v( vector%cap ))
 
@@ -151,6 +168,8 @@ end function new_value_vector
 !===============================================================================
 
 subroutine push_value(vector, val)
+
+	! Push a deep copy of val onto the stack.
 
 	class(value_vector_t) :: vector
 	type(value_t) :: val
@@ -164,42 +183,56 @@ subroutine push_value(vector, val)
 	vector%len_ = vector%len_ + 1
 
 	if (vector%len_ > vector%cap) then
-		!print *, 'growing vector ====================================='
-
 		tmp_cap = 2 * vector%len_
 		allocate(tmp( tmp_cap ))
-
-		!print *, 'copy 1'
-		!!tmp(1: vector%cap) = vector%v
+		! Move existing elements into tmp (cheap: move_alloc for arrays/structs).
+		! After each value_move, vector%v(i) has its allocatable components cleared,
+		! making the subsequent move_alloc safe.
 		do i = 1, vector%cap
-			tmp(i) = vector%v(i)
+			call value_move(vector%v(i), tmp(i))
 		end do
-
-		!print *, 'move'
-		!!call move_alloc(tmp, vector%v)
-
-		deallocate(vector%v)
-		allocate(vector%v( tmp_cap ))
-
-		! Unfortunately we have to copy TO tmp AND back FROM tmp.  I guess the
-		! fact that each node itself has allocatable members creates invalid
-		! references otherwise.
-
-		!print *, 'copy 2'
-		!!vector%v(1: vector%cap) = tmp(1: vector%cap)
-		do i = 1, vector%cap
-			vector%v(i) = tmp(i)
-		end do
-
+		! Replace vector%v with the new larger allocation in one descriptor swap.
+		call move_alloc(tmp, vector%v)
 		vector%cap = tmp_cap
-
 	end if
 
-	!print *, 'set val'
-	vector%v( vector%len_ ) = val
-	!print *, 'done push_value'
+	vector%v( vector%len_ ) = val   ! deep copy: source (val) must stay live
 
 end subroutine push_value
+
+!===============================================================================
+
+subroutine push_value_move(vector, val)
+
+	! Push val onto the stack by moving it (consuming val).
+	! Used for freshly computed temporaries that have no other live references
+	! (e.g. binop results, intrinsic return values).  Avoids the deep copy in
+	! push_value; for array/struct values this is O(1) instead of O(n).
+
+	class(value_vector_t) :: vector
+	type(value_t), intent(inout) :: val   ! consumed; undefined after return
+
+	!********
+
+	type(value_t), allocatable :: tmp(:)
+
+	integer :: tmp_cap, i
+
+	vector%len_ = vector%len_ + 1
+
+	if (vector%len_ > vector%cap) then
+		tmp_cap = 2 * vector%len_
+		allocate(tmp( tmp_cap ))
+		do i = 1, vector%cap
+			call value_move(vector%v(i), tmp(i))
+		end do
+		call move_alloc(tmp, vector%v)
+		vector%cap = tmp_cap
+	end if
+
+	call value_move(val, vector%v( vector%len_ ))
+
+end subroutine push_value_move
 
 !===============================================================================
 
@@ -247,12 +280,44 @@ end subroutine push_value
 
 !===============================================================================
 
+subroutine value_reset(val)
+
+	! Reset val to unknown_type, freeing any allocatable components.
+	! Used by the VM call-frame locals pool to clean up a reused slot.
+	! Fast path for primitive scalars (no allocatables to free).
+
+	type(value_t), intent(inout) :: val
+
+	select case (val%type)
+	case (bool_type, i32_type, i64_type, f32_type, f64_type)
+		! Scalar: nothing allocated, just clear the type tag.
+		val%type = unknown_type
+	case default
+		if (allocated(val%array     )) deallocate(val%array     )
+		if (allocated(val%str       )) deallocate(val%str       )
+		if (allocated(val%file_     )) deallocate(val%file_     )
+		if (allocated(val%struct    )) deallocate(val%struct    )
+		if (allocated(val%struct_name)) deallocate(val%struct_name)
+		if (allocated(val%struct_cookie)) deallocate(val%struct_cookie)
+		val%type = unknown_type
+	end select
+
+end subroutine value_reset
+
+!===============================================================================
+
 recursive subroutine value_move(src, dst)
 	! Note the args are reversed wrt value_copy.  It is however consistent with
 	! build-in move_alloc() (and `mv file1 file2`)
 	!
 	! This is kind of a fake move.  Arrays and structs are moved, but primitive
-	! scalars are just copied
+	! scalars are just copied.
+	!
+	! Note: dst%type = src%type is set unconditionally first.  Callers (e.g.
+	! parse_expr.f90) may read src's type tag AFTER a move to this subroutine
+	! returns; that is safe because this routine does not clear src%type.
+	! src's allocatables are, however, cleared (moved to dst) for array/struct/
+	! str/file types.
 
 	type(value_t), intent(inout) :: src
 	type(value_t), intent(out)   :: dst
@@ -266,17 +331,25 @@ recursive subroutine value_move(src, dst)
 	select case (src%type)
 	case (array_type)
 		call move_alloc(src%array, dst%array)
+		! Struct arrays also use struct(:) for elements and struct_name for type tag.
+		if (allocated(src%struct)) call move_alloc(src%struct, dst%struct)
+		if (allocated(src%struct_name)) call move_alloc(src%struct_name, dst%struct_name)
+		if (allocated(src%struct_cookie)) call move_alloc(src%struct_cookie, dst%struct_cookie)
 
 	case (struct_type)
 		call move_alloc(src%struct_name, dst%struct_name)
+		if (allocated(src%struct_cookie)) call move_alloc(src%struct_cookie, dst%struct_cookie)
 		call move_alloc(src%struct, dst%struct)
 
+	case (str_type)
+		call move_alloc(src%str, dst%str)
+
+	case (file_type)
+		call move_alloc(src%file_, dst%file_)
+
 	case default
-		! This copy (not move) could be inefficient for large string scalars.
-		! Might be worth making value%sca allocatable if it doesn't add too much
-		! complexity.  Otherwise, consider further selecting the case by each
-		! scalar type
-		dst%sca  = src%sca
+		! POD copy: scalar_t now contains only bool/i32/i64/f32/f64 — cheap.
+		dst%sca = src%sca
 
 	end select
 
@@ -302,10 +375,30 @@ recursive subroutine value_copy(dst, src)
 	if (debug > 3) print *, 'starting value_copy()'
 
 	dst%type = src%type
-	dst%sca  = src%sca
+	dst%sca  = src%sca   ! POD copy: bool/i32/i64/f32/f64 only — cheap
+
+	! Guard str/file_ copies on type, not just on allocated().  A reused stack
+	! slot may carry a stale allocatable from a prior value (different type); we
+	! must not propagate it to dst when the current type no longer uses it.
+	if (src%type == str_type .and. allocated(src%str)) then
+		dst%str = src%str   ! intrinsic assignment handles allocatable char
+	else if (allocated(dst%str)) then
+		deallocate(dst%str)
+	end if
+
+	if (src%type == file_type .and. allocated(src%file_)) then
+		if (.not. allocated(dst%file_)) allocate(dst%file_)
+		dst%file_ = src%file_   ! copies all fields including name_ (alloc char)
+	else if (allocated(dst%file_)) then
+		deallocate(dst%file_)
+	end if
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
+	end if
+
+	if (allocated(src%struct_cookie)) then
+		dst%struct_cookie = src%struct_cookie
 	end if
 
 	if (allocated(src%array)) then
@@ -447,7 +540,7 @@ subroutine push_array(vector, val)
 	case (bool_type)
 		vector%bool( vector%len_ ) = val%sca%bool
 	case (str_type)
-		vector%str ( vector%len_ ) = val%sca%str
+		vector%str ( vector%len_ ) = val%str
 	case default
 		write(*,*) err_int_prefix//'push_array type not implemented'
 		call internal_error()
@@ -589,8 +682,8 @@ function value_to_i32(val) result(ans)
 
 		case (str_type)
 
-			if (len(val%sca%str%s) == 1) then
-				ans = iachar(val%sca%str%s)
+			if (allocated(val%str) .and. len(val%str%s) == 1) then
+				ans = iachar(val%str%s)
 			else
 				write(*,*) err_int_prefix//'cannot convert from type `' &
 					//kind_name(val%type)//'` to i32.  Use `parse_i32()`'//color_reset
@@ -945,6 +1038,22 @@ recursive function value_to_str(val) result(ans)
 
 			ans = str_vec%v( 1: str_vec%len_ )
 
+		case (str_type)
+			! TODO: wrap in quotes for clarity?  Would be a breaking change.
+			if (allocated(val%str)) then
+				ans = val%str%s
+			else
+				ans = ''
+			end if
+
+		case (file_type)
+			if (allocated(val%file_)) then
+				ans = "{file_unit: "//str(val%file_%unit_)//", filename: """// &
+					val%file_%name_//"""}"
+			else
+				ans = "{file_unit: <unset>}"
+			end if
+
 		case default
 			ans = val%sca%to_str(val%type)
 
@@ -995,15 +1104,6 @@ recursive function scalar_to_str(val, type) result(ans)
 
 		case (i64_type)
 			ans = i64_str(val%i64)
-
-		case (str_type)
-			! TODO: wrap str in quotes for clarity, both scalars and str array
-			! elements?  This would be a breaking change.  Update tests.
-			ans = val%str%s
-
-		case (file_type)
-			ans = "{file_unit: "//str(val%file_%unit_)//", filename: """// &
-				val%file_%name_//"""}"
 
 		case default
 			ans = err_prefix//"<invalid_value>"//color_reset

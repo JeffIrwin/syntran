@@ -44,6 +44,10 @@ module syntran__eval_m
 		! This is the directory containing the main script being evaluated
 		character(len = :), allocatable :: src_dir
 
+		! Use the bytecode VM backend instead of the AST walker. True by
+		! default, or set SYNTRAN_BACKEND=ast env var for AST walking
+		logical :: bytecode
+
 	end type state_t
 
 	!********
@@ -78,6 +82,14 @@ module syntran__eval_m
 		module subroutine promote_i32_i64(val)
 			type(value_t), intent(inout) :: val
 		end subroutine
+
+		module function str_char_slice(s, node, state, isub) result(out)
+			character(len = *), intent(in) :: s
+			type(syntax_node_t), intent(in) :: node
+			type(state_t), intent(inout) :: state
+			integer, intent(in) :: isub
+			character(len = :), allocatable :: out
+		end function
 
 	end interface
 
@@ -121,6 +133,28 @@ module syntran__eval_m
 			type(value_t), intent(inout) :: lhs
 			type(value_t), intent(in) :: rhs
 			type(syntax_token_t), intent(in) :: op
+		end subroutine
+
+		module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, contributes_rank)
+			type(syntax_node_t), intent(in)    :: node
+			type(state_t),       intent(inout) :: state
+			integer,             intent(in)    :: i
+			integer(kind = 8),   intent(out)   :: lsub, ssub, usub
+			type(i64_vector_t),  intent(inout) :: asub
+			logical,             intent(out)   :: contributes_rank
+		end subroutine
+
+		module subroutine eval_slice_rank1(node, state, res)
+			type(syntax_node_t), intent(in)    :: node
+			type(state_t),       intent(inout) :: state
+			type(value_t),       intent(out)   :: res
+		end subroutine
+
+		module subroutine eval_assign_slice_rank1(node, state, id, res)
+			type(syntax_node_t), intent(in)    :: node
+			type(state_t),       intent(inout) :: state
+			integer,             intent(in)    :: id
+			type(value_t),       intent(inout) :: res
 		end subroutine
 
 		module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)

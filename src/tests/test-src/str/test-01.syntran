@@ -1,0 +1,10 @@
+// Multi-line raw string literal test.
+// A raw string may span multiple lines; its content includes the newline
+// characters verbatim.
+
+let s = r#"line one
+line two"#;
+
+let expected = "line one" + char(10) + "line two";
+
+return s == expected;

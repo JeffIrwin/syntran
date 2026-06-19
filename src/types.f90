@@ -43,6 +43,9 @@ module syntran__types_m
 
 		logical :: is_intr = .true.
 
+		! M6: integer dispatch id for intrinsic fns (0 = unassigned / user fn)
+		integer :: intr_id = 0
+
 		contains
 #ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => fn_copy
@@ -97,8 +100,9 @@ module syntran__types_m
 		! TODO: scoping for nested fns?
 		contains
 			procedure :: &
-				insert => fn_insert, &
-				search => fn_search
+				insert  => fn_insert, &
+				search  => fn_search, &
+				closest => fn_closest
 		!		push_scope, pop_scope
 
 	end type fns_t
@@ -146,6 +150,10 @@ module syntran__types_m
 		! Either scalar_sub, range_sub (unit step [0:2]), all_sub ([:]), or
 		! step_sub ([0: 2: 8])
 		integer :: sub_kind
+
+		! Flags for omitted lower/upper bounds in range/step subscripts, e.g.
+		! vec[3:] (usub_omit), vec[:5] (lsub_omit), vec[:-1:] (both with step)
+		logical :: lsub_omit = .false., usub_omit = .false.
 
 		type(syntax_token_t) :: op, identifier
 
@@ -237,8 +245,9 @@ module syntran__types_m
 
 		contains
 			procedure :: &
-				insert => var_insert, &
-				search => var_search, &
+				insert  => var_insert, &
+				search  => var_search, &
+				closest => var_closest, &
 				push_scope, pop_scope
 
 			! This is required unfortunately
@@ -259,6 +268,10 @@ module syntran__types_m
 		type(vars_t) :: vars  ! can't compile w/o allocatable if vars_t is defined below
 		!type(vars_t), allocatable :: vars
 		integer :: num_vars = 0
+
+		! Canonical, alias-independent identity: "<defining src file>::<local
+		! struct name>", set once at declaration time. c.f. value_t%struct_cookie
+		character(len = :), allocatable :: cookie
 
 		contains
 			! This is also required unfortunately
@@ -330,7 +343,8 @@ module syntran__types_m
 		type(syntax_node_t), allocatable :: v(:)
 		integer :: len_, cap
 		contains
-			procedure :: push => push_node
+			procedure :: push      => push_node
+			procedure :: push_move => push_node_move
 #ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => syntax_node_vector_copy
 			generic, public :: assignment(=) => copy
@@ -376,6 +390,15 @@ module syntran__types_m
 			class(syntax_node_t), intent(inout) :: dst
 			class(syntax_node_t), intent(in)    :: src
 		end subroutine syntax_node_copy
+
+		recursive module subroutine syntax_node_move(src, dst)
+			type(syntax_node_t), intent(inout)            :: src
+			type(syntax_node_t), allocatable, intent(out) :: dst
+		end subroutine syntax_node_move
+
+		recursive module subroutine syntax_node_move_into(src, dst)
+			type(syntax_node_t), intent(inout) :: src, dst
+		end subroutine syntax_node_move_into
 
 		recursive module subroutine ternary_tree_copy(dst, src)
 			class(ternary_tree_node_t), intent(inout) :: dst
@@ -430,6 +453,18 @@ module syntran__types_m
 			integer, intent(out), optional :: iostat
 		end subroutine var_search
 
+		module function var_closest(dict, key) result(closest)
+			class(vars_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			character(len = :), allocatable :: closest
+		end function var_closest
+
+		module function fn_closest(dict, key) result(closest)
+			class(fns_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			character(len = :), allocatable :: closest
+		end function fn_closest
+
 		module subroutine push_scope(dict)
 			class(vars_t) :: dict
 		end subroutine push_scope
@@ -448,6 +483,11 @@ module syntran__types_m
 			type(syntax_node_t) :: val
 		end subroutine push_node
 
+		module subroutine push_node_move(vector, val)
+			class(syntax_node_vector_t) :: vector
+			type(syntax_node_t), intent(inout) :: val
+		end subroutine push_node_move
+
 		recursive module subroutine ternary_search(node, key, id_index, iostat, val)
 			type(ternary_tree_node_t), intent(in), allocatable :: node
 			character(len = *), intent(in) :: key
@@ -455,6 +495,22 @@ module syntran__types_m
 			integer, intent(out) :: iostat
 			type(value_t), intent(out) :: val
 		end subroutine ternary_search
+
+		recursive module subroutine ternary_closest(node, prefix, target_low, &
+				target_unqual_low, min_dist, min_qdist, closest)
+			type(ternary_tree_node_t), intent(in), allocatable :: node
+			character(len = *), intent(in) :: prefix, target_low, target_unqual_low
+			integer, intent(inout) :: min_dist, min_qdist
+			character(len = :), allocatable, intent(inout) :: closest
+		end subroutine ternary_closest
+
+		recursive module subroutine fn_ternary_closest(node, prefix, target_low, &
+				target_unqual_low, min_dist, min_qdist, closest)
+			type(fn_ternary_tree_node_t), intent(in), allocatable :: node
+			character(len = *), intent(in) :: prefix, target_low, target_unqual_low
+			integer, intent(inout) :: min_dist, min_qdist
+			character(len = :), allocatable, intent(inout) :: closest
+		end subroutine fn_ternary_closest
 
 		recursive module subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
 			type(ternary_tree_node_t), intent(inout), allocatable :: node
@@ -625,6 +681,10 @@ module syntran__types_m
 			type(value_t), intent(in) :: a, b
 		end function types_match
 
+		module integer function matmul_out_rank(lrank, rrank) result(out_rank)
+			integer, intent(in) :: lrank, rrank
+		end function matmul_out_rank
+
 		!***************************************
 		! types_node.f90 procedures
 		!***************************************
@@ -655,59 +715,59 @@ module syntran__types_m
 			type(value_t) :: val
 		end function new_literal_value
 
-		module function new_declaration_expr(identifier, op, right) result(expr)
+		module subroutine new_declaration_expr(identifier, op, right, expr)
 			type(syntax_token_t), intent(in) :: identifier, op
-			type(syntax_node_t), intent(in) :: right
-			type(syntax_node_t) :: expr
-		end function new_declaration_expr
+			type(syntax_node_t) , intent(in) :: right
+			type(syntax_node_t) , intent(out) :: expr
+		end subroutine new_declaration_expr
 
-		module function new_name_expr(identifier, val) result(expr)
+		module subroutine new_name_expr(identifier, val, expr)
 			type(syntax_token_t), intent(in) :: identifier
-			type(value_t) :: val
-			type(syntax_node_t) :: expr
-		end function new_name_expr
+			type(value_t)                    :: val
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_name_expr
 
-		module function new_binary_expr(left, op, right) result(expr)
-			type(syntax_node_t), intent(in) :: left, right
-			type(syntax_token_t), intent(in) :: op
-			type(syntax_node_t) :: expr
-		end function new_binary_expr
+		module subroutine new_binary_expr(left, op, right, expr)
+			type(syntax_node_t) , intent(inout) :: left, right
+			type(syntax_token_t), intent(in)    :: op
+			type(syntax_node_t) , intent(out)   :: expr
+		end subroutine new_binary_expr
 
-		module function new_unary_expr(op, right) result(expr)
-			type(syntax_node_t), intent(in) :: right
-			type(syntax_token_t), intent(in) :: op
-			type(syntax_node_t) :: expr
-		end function new_unary_expr
+		module subroutine new_unary_expr(op, right, expr)
+			type(syntax_node_t) , intent(inout) :: right
+			type(syntax_token_t), intent(in)    :: op
+			type(syntax_node_t) , intent(out)   :: expr
+		end subroutine new_unary_expr
 
-		module function new_bool(bool) result(expr)
-			logical, intent(in) :: bool
-			type(syntax_node_t) :: expr
-		end function new_bool
+		module subroutine new_bool(bool, expr)
+			logical            , intent(in)  :: bool
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_bool
 
-		module function new_f32(f32) result(expr)
-			real(kind = 4), intent(in) :: f32
-			type(syntax_node_t) :: expr
-		end function new_f32
+		module subroutine new_f32(f32, expr)
+			real(kind = 4)     , intent(in)  :: f32
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_f32
 
-		module function new_f64(f64) result(expr)
-			real(kind = 8), intent(in) :: f64
-			type(syntax_node_t) :: expr
-		end function new_f64
+		module subroutine new_f64(f64, expr)
+			real(kind = 8)     , intent(in)  :: f64
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_f64
 
-		module function new_i32(i32) result(expr)
-			integer(kind = 4), intent(in) :: i32
-			type(syntax_node_t) :: expr
-		end function new_i32
+		module subroutine new_i32(i32, expr)
+			integer(kind = 4)  , intent(in)  :: i32
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_i32
 
-		module function new_i64(i64) result(expr)
-			integer(kind = 8), intent(in) :: i64
-			type(syntax_node_t) :: expr
-		end function new_i64
+		module subroutine new_i64(i64, expr)
+			integer(kind = 8)  , intent(in)  :: i64
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_i64
 
-		module function new_str(str_) result(expr)
-			character(len = *), intent(in) :: str_
-			type(syntax_node_t) :: expr
-		end function new_str
+		module subroutine new_str(str_, expr)
+			character(len = *) , intent(in)  :: str_
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine new_str
 
 	end interface
 

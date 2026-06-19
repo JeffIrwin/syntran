@@ -1,0 +1,32 @@
+// Test module-qualified struct types used as type annotations (mod::Struct),
+// not just as instantiation/call-site expressions.  Regression test for the
+// bug where `fn f(p: &mod::Struct): mod::Struct` failed to parse with
+// "bad type annotation".
+
+use shapes;
+
+// Local function with a by-reference, qualified struct parameter type and a
+// qualified struct return type
+fn shift_point(p: &shapes::Point, dx: i32, dy: i32): shapes::Point
+{
+	return shapes::Point{x = p.x + dx, y = p.y + dy};
+}
+
+// Local function with a qualified struct array parameter type
+fn sum_points(pts: &[shapes::Point; :]): i32
+{
+	let total = 0;
+	for i in [0: size(pts, 0)]
+	{
+		total += pts[i].x + pts[i].y;
+	}
+	return total;
+}
+
+let p1 = shapes::Point{x = 5, y = 7};
+let p2 = shift_point(&p1, 1, 2);
+
+let pts = [shapes::Point{x = 1, y = 1}, shapes::Point{x = 2, y = 3}];
+let total = sum_points(&pts);
+
+return p2.x == 6 and p2.y == 9 and total == 7;

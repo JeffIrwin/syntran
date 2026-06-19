@@ -1,0 +1,35 @@
+// Poople is a word game with some similarities to wordle:
+//
+//     https://poople.io/
+
+use ../src/tests/long/aoc/dict_i64::*;
+use ../src/tests/long/aoc/poople as poople;
+
+let args = std::args();
+let nargs = size(args);
+if nargs != 1
+{
+	println("Error: missing cmd arg");
+	println("Usage:");
+	println("    syntran poople.syntran WORD");
+	println();
+	exit(1);
+}
+
+println("Starting poople solver");
+
+// sudo apt install wamerican
+let dict_filename = "/usr/share/dict/american-english";
+
+let blocklist = poople::BLOCKLIST;
+let dict      = poople::read_dict(dict_filename, &blocklist);
+println("Loaded ", len_dict_i64(&dict),
+	" 4-letter words from system dictionary");
+
+let steps = poople::solve(&dict, args[0]);
+poople::log_steps(&steps);
+
+println("Ending poople solver");
+
+return 0;
+

@@ -9,6 +9,78 @@ contains
 
 !===============================================================================
 
+subroutine unit_test_levenshtein(npass, nfail)
+
+	! Test the Levenshtein edit-distance utility used for "did you mean?"
+	! spellcheck suggestions on undefined variable/function errors.
+
+	integer, intent(inout) :: npass, nfail
+
+	logical, parameter :: quiet = .true.
+
+	call unit_test_coda( [ &
+		levenshtein("kitten"  , "sitting") == 3, &
+		levenshtein("abc"     , "abc"    ) == 0, &
+		levenshtein(""        , "abc"    ) == 3, &
+		levenshtein("abc"     , ""       ) == 3, &
+		levenshtein(""        , ""       ) == 0, &
+		levenshtein("println" , "prntln" ) == 1, &
+		levenshtein("xvalue"  , "xvaluw" ) == 1, &
+		levenshtein("a"       , "b"      ) == 1  &
+		], "Levenshtein distance", npass, nfail)
+
+end subroutine unit_test_levenshtein
+
+!===============================================================================
+
+subroutine unit_test_overload_display_name(npass, nfail)
+
+	! Test the overload_display_name() helper that de-mangles internal
+	! "0"-prefixed overloaded intrinsic keys into user-facing names for the
+	! "did you mean?" spellcheck suggestion.
+
+	integer, intent(inout) :: npass, nfail
+
+	logical, parameter :: quiet = .true.
+
+	call unit_test_coda( [ &
+		overload_display_name("0tan_f32"    ) == "tan"    , &
+		overload_display_name("0abs_f64_arr") == "abs"    , &
+		overload_display_name("0i32_sca"    ) == "i32"    , &
+		overload_display_name("0i32_arr"    ) == "i32"    , &
+		overload_display_name("0minval_i32" ) == "minval" , &
+		overload_display_name("0log2_f32"   ) == "log2"   , &
+		overload_display_name("0dot_f64"    ) == "dot"    , &
+		overload_display_name("0norm2_f32"  ) == "norm2"  , &
+		overload_display_name("println"     ) == "println", &
+		overload_display_name("my_fn"       ) == "my_fn"   &
+		], "overload_display_name", npass, nfail)
+
+end subroutine unit_test_overload_display_name
+
+!===============================================================================
+
+subroutine unit_test_unqualified_name(npass, nfail)
+
+	! Test the unqualified_name() helper that strips a module "::" prefix off
+	! a qualified name, used to rank "did you mean?" spellcheck suggestions by
+	! their unqualified form first and their qualified form as a tie-breaker.
+
+	integer, intent(inout) :: npass, nfail
+
+	logical, parameter :: quiet = .true.
+
+	call unit_test_coda( [ &
+		unqualified_name("poople::read_dict") == "read_dict", &
+		unqualified_name("math::vectors::fn") == "fn"       , &
+		unqualified_name("plain"             ) == "plain"    , &
+		unqualified_name(""                  ) == ""          &
+		], "unqualified_name", npass, nfail)
+
+end subroutine unit_test_unqualified_name
+
+!===============================================================================
+
 subroutine unit_test_bin_arith(npass, nfail)
 
 	implicit none
@@ -2024,12 +2096,58 @@ subroutine unit_test_str(npass, nfail)
 			eval('" " == ["", " ", "  "];')  == '[false, true, false]', &
 			eval('["", " ", "  "] == " ";')  == '[false, true, false]', &
 			eval('["", " ", "  "] == [" ", " ", " "];')  == '[false, true, false]', &
-			eval('"hello world";') == 'hello world'  &
+			eval('"hello world";') == 'hello world', &
+
+			! Raw string literals: r"...", r#"..."#, r##"..."##, etc.
+			! Content is taken verbatim -- no doubled-quote escape processing.
+			eval('r#"abc"#;') == 'abc', &
+			eval('r#" "quotes" "#;') == ' "quotes" ', &
+			eval('r##" "#quotes"# "##;') == ' "#quotes"# ', &
+			eval('r"raw str";') == 'raw str', &
+			eval('r#""#;') == '', &
+			eval('r#"a"b"# == "a""b";') == 'true', &
+			eval('r#"x"# + "y";') == 'xy', &
+			eval('r#"a""b"# == "a""""b";') == 'true'  & ! "" is verbatim in raw strs
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_str
+
+!===============================================================================
+
+subroutine unit_test_raw_str(npass, nfail)
+
+	! File-based tests for raw string literals, covering multi-line content
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'raw str scripts'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/str/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_raw_str
 
 !===============================================================================
 
@@ -2751,6 +2869,20 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[:,:,:]);', quiet) == '28', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[0,:,:]);', quiet) == '12', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[:,0,:]);', quiet) == '10', &
+			! Omitted lower/upper bounds
+			eval('let v = [0: 10]; v[3:];',         quiet) == '[3, 4, 5, 6, 7, 8, 9]',  &
+			eval('let v = [0: 10]; v[:4];',         quiet) == '[0, 1, 2, 3]',            &
+			eval('let v = [0: 10]; v[3:2:];',       quiet) == '[3, 5, 7, 9]',            &
+			eval('let v = [0: 10]; v[:2:6];',       quiet) == '[0, 2, 4]',               &
+			eval('let v = [0: 5];  v[:-1:];',       quiet) == '[4, 3, 2, 1, 0]',        &
+			eval('let v = [0: 5];  v[:-1:-1];',     quiet) == '[4, 3, 2, 1, 0]',        &
+			eval('let v = [0: 5];  v[3:-1:];',      quiet) == '[3, 2, 1, 0]',           &
+			eval('let v = [0: 6];  v[:2:];',        quiet) == '[0, 2, 4]',              &
+			! Omitted bounds: string (range form)
+			eval('let s = "hello"; s[3:];',         quiet) == 'lo',                     &
+			eval('let s = "hello"; s[:3];',         quiet) == 'hel',                    &
+			! Multi-dim with omitted upper alongside bare colon
+			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; m[0, 1:];', quiet) == '[3, 6]',   &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2829,6 +2961,9 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 			eval('let v = [0: 4]; v[[0,3]]   = 9; v;', quiet) == '[9, 1, 2, 9]', &
 			eval('let v = [0: 4]; v[[1,3]]   = 9; v;', quiet) == '[0, 9, 2, 9]', &
 			eval('let v = [0: 4]; v[[0,1,3]]   = 9; v;', quiet) == '[9, 9, 2, 9]', &
+			! Omitted lower/upper bounds on LHS
+			eval('let v = [0: 5]; v[2:] = 9; v;',       quiet) == '[0, 1, 9, 9, 9]',   &
+			eval('let v = [0: 5]; v[:3] += 10; v;',     quiet) == '[10, 11, 12, 3, 4]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2936,6 +3071,7 @@ subroutine unit_test_array_i32_2(npass, nfail)
 			interpret_file(path//'test-06.syntran', quiet) == '16', &
 			interpret_file(path//'test-07.syntran', quiet) == '13', &
 			interpret_file(path//'test-08.syntran', quiet) == 'true', &
+			interpret_file(path//'test-09.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -3068,7 +3204,8 @@ subroutine unit_test_linalg_fns(npass, nfail)
 			interpret_file(path//'test-04.syntran', quiet) == 'true', &
 			interpret_file(path//'test-05.syntran', quiet) == '[1.000000E+00, -3.000000E+00, 2.000000E+00]', &
 			interpret_file(path//'test-06.syntran', quiet) == '[-1.000000E+00, -2.000000E+00, 3.000000E+00]', &
-			interpret_file(path//'test-07.syntran', quiet) == '[-1.000000E+00, -2.000000E+00, 3.000000E+00]', &
+			interpret_file(path//'test-07.syntran', quiet) == 'true', &
+			interpret_file(path//'test-08.syntran', quiet) == '2.000000000000000E+01', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -3147,6 +3284,22 @@ subroutine unit_test_array_str(npass, nfail)
 		[   &
 			eval('let sv = ["hello"; 3];', quiet) == '[hello, hello, hello]', &
 			interpret_file(path//'test-01.syntran', quiet) == 'hello world', &
+			interpret_file(path//'test-02.syntran', quiet) == 'hpelhelrldXXwhELlo', &
+			eval('let v=["hello","world","wassup"]; v[0,0];', quiet) == 'h', &  ! Inline: char-rank reads
+			eval('let v=["hello","world","wassup"]; v[2,5];', quiet) == 'p', &
+			eval('let v=["hello","world","wassup"]; v[0,1:3];', quiet) == 'el', &
+			eval('let v=["hello","world","wassup"]; v[0,:3];', quiet) == 'hel', &
+			eval('let v=["hello","world","wassup"]; v[1,2:];', quiet) == 'rld', &
+			eval('let v=["hello","world","wassup"]; v[0:2,0];', quiet) == '[h, w]', &
+			eval('let v=["hello","world","wassup"]; v[:,0];', quiet) == '[h, w, w]', &
+			eval('let v=["hello","world","wassup"]; v[:,1:3];', quiet) == '[el, or, as]', &
+			eval('let v=["hello","world","wassup"]; v[0:2,1:3];', quiet) == '[el, or]', &
+			eval('let v=["hello","world","wassup"]; v[[2,0],0];', quiet) == '[w, h]', &
+			eval('let v=["hello","world","wassup"]; v[0,0]="H"; v[0];', quiet) == 'Hello', &  ! Inline: char-rank assignment
+			eval('let v=["hello","world","wassup"]; v[0:2,0]="X"; v;', quiet) == '[Xello, Xorld, wassup]', &
+			eval('let v=["hello","world","wassup"]; v[:,1:3]="EL"; v;', quiet) == '[hELlo, wELld, wELsup]', &
+			eval('let v=["hello","world","wassup"]; v[0,1:3]="EL"; v[0];', quiet) == 'hELlo', &
+			eval('let v=["hello","world","wassup"]; v[1];', quiet) == 'world', &  ! Inline: regression - whole element still works
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4328,6 +4481,7 @@ subroutine unit_test_struct_long(npass, nfail)
 		[   &
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-03.syntran', quiet) == '0'   , &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4490,8 +4644,10 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-modvar-arrstruct.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-mod.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-mod-qualified.syntran', quiet) == 'true', &
+			interpret_file(path//'test-struct-mod-qualified-annot.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
+			interpret_file(path//'test-struct-transitive.syntran', quiet) == 'true', &
 			interpret_file(path//'test-circular.syntran', quiet) == '', &
 			interpret_file(path//'test-duplicate-import.syntran', quiet) == '', &
 			interpret_file(path//'test-duplicate-alias.syntran', quiet) == '', &
@@ -4676,12 +4832,161 @@ subroutine unit_test_bad_syntax(npass, nfail)
 			eval('let a = 2 3;', quiet) == '', &
 			eval('max(2);', quiet)  == '',  & ! arguable.  see comments in core.f90
 			eval('size([0; 6, 7, 8], 2, 3);', quiet)  == '',  &
-			eval('7 * false;', quiet) == '' &
+			eval('7 * false;', quiet) == '', &
+			eval('let v = [0: 5]; v[1::4];', quiet) == '', &  ! empty step between two colons is a parse error
+			eval('let v = [0: 5]; v[1: :4];', quiet) == '' &  ! empty step between two colons is a parse error
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_bad_syntax
+
+!===============================================================================
+
+subroutine unit_test_return_paths(npass, nfail)
+
+	! Tests for the parse-time all-paths-return check.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'all-paths return check'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! --- Negative cases: each should produce a diagnostic, eval to '' ---
+
+	! if without else: the else path falls off the end
+	tests = &
+		[   &
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; }'// &
+				'}'// &
+				'f(1);', quiet) == '',       &
+
+			! if/else where only the then-branch returns
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; } else { let y = 2; }'// &
+				'}'// &
+				'f(1);', quiet) == '',       &
+
+			! return only inside a for loop, no trailing return
+			interpret( &
+				'fn f(): i32 {'// &
+				'  for i in [0: 3] { return i; }'// &
+				'}'// &
+				'f();', quiet) == '',        &
+
+			! return only inside a while loop, no trailing return
+			interpret( &
+				'fn f(): i32 {'// &
+				'  let i = 0;'// &
+				'  while i < 3 { return i; }'// &
+				'}'// &
+				'f();', quiet) == '',        &
+
+			! nested if: outer has else but inner if lacks else
+			interpret( &
+				'fn f(x: i32, y: i32): i32 {'// &
+				'  if x > 0 {'// &
+				'    if y > 0 { return 1; }'// &
+				'  } else {'// &
+				'    return 2;'// &
+				'  }'// &
+				'}'// &
+				'f(1,1);', quiet) == '',     &
+
+			! void function: if without else, no return on else path
+			interpret( &
+				'fn g(x: i32) {'// &
+				'  if x > 0 { return; }'// &
+				'}'// &
+				'g(1);', quiet) == '',       &
+
+			.false.   & ! avoid trailing comma
+		]
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label//' (negative)', npass, nfail)
+
+	! --- Positive cases: these must still evaluate successfully ---
+
+	tests = &
+		[   &
+			! if/else both return
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; } else { return 2; }'// &
+				'}'// &
+				'f(5);') == '1',            &
+
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; } else { return 2; }'// &
+				'}'// &
+				'f(-1);') == '2',           &
+
+			! if-return then unconditional trailing return
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; }'// &
+				'  return 2;'// &
+				'}'// &
+				'f(5);') == '1',            &
+
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 0 { return 1; }'// &
+				'  return 2;'// &
+				'}'// &
+				'f(-1);') == '2',           &
+
+			! else-if chain ending with a final else, all branches return
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 2 { return 3; }'// &
+				'  else if x > 1 { return 2; }'// &
+				'  else { return 1; }'// &
+				'}'// &
+				'f(5);') == '3',            &
+
+			interpret( &
+				'fn f(x: i32): i32 {'// &
+				'  if x > 2 { return 3; }'// &
+				'  else if x > 1 { return 2; }'// &
+				'  else { return 1; }'// &
+				'}'// &
+				'f(0);') == '1',            &
+
+			! loop followed by trailing return (the common codebase style)
+			interpret( &
+				'fn f(): i32 {'// &
+				'  let s = 0;'// &
+				'  for i in [0: 3] { s = s + i; }'// &
+				'  return s;'// &
+				'}'// &
+				'f();') == '3',             &
+
+			! void function with bare return; on all paths
+			interpret( &
+				'fn g(x: i32) {'// &
+				'  if x > 0 { return; } else { return; }'// &
+				'}'// &
+				'g(1); 0;') == '0',         &
+
+			.false.   & ! avoid trailing comma
+		]
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label//' (positive)', npass, nfail)
+
+end subroutine unit_test_return_paths
 
 !===============================================================================
 
@@ -4781,20 +5086,25 @@ subroutine unit_tests(iostat)
 	npass = 0
 	nfail = 0
 
-	call unit_test_bin_arith  (npass, nfail)
+	call unit_test_levenshtein          (npass, nfail)
+	call unit_test_overload_display_name(npass, nfail)
+	call unit_test_unqualified_name     (npass, nfail)
+	call unit_test_bin_arith            (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)
 	call unit_test_bool       (npass, nfail)
 	call unit_test_comparisons(npass, nfail)
 	call unit_test_comp_f32   (npass, nfail)
 	call unit_test_comp_f64   (npass, nfail)
-	call unit_test_bad_syntax (npass, nfail)
+	call unit_test_bad_syntax    (npass, nfail)
+	call unit_test_return_paths  (npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)
 	call unit_test_f32_1      (npass, nfail)
 	call unit_test_f64_1      (npass, nfail)
 	call unit_test_str        (npass, nfail)
+	call unit_test_raw_str    (npass, nfail)
 	call unit_test_substr     (npass, nfail)
 	call unit_test_if_else    (npass, nfail)
 	call unit_test_for_1      (npass, nfail)
@@ -4835,15 +5145,470 @@ subroutine unit_tests(iostat)
 	call unit_test_ref        (npass, nfail)
 	call unit_test_recursion  (npass, nfail)
 	call unit_test_args       (npass, nfail)
+	call unit_test_reshape    (npass, nfail)
+	call unit_test_transpose  (npass, nfail)
+	call unit_test_shape      (npass, nfail)
 	call unit_test_modules    (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
 
+	call unit_test_pow_scalar  (npass, nfail)
+	call unit_test_mixed_i32i64(npass, nfail)
+	call unit_test_arr_binop   (npass, nfail)
+	call unit_test_deep_recursion(npass, nfail)
+	call unit_test_matmul      (npass, nfail)
+
 	call log_test_summary(npass, nfail)
 	iostat = nfail
 
 end subroutine unit_tests
+
+!===============================================================================
+
+!===============================================================================
+
+subroutine unit_test_pow_scalar(npass, nfail)
+
+	! Same-type scalar ** tests (exercises OP_POW_* specialized opcodes).
+	! Existing tests cover mixed-type power (i64**i32, etc.) and array power;
+	! these add same-type scalar cases not previously tested.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'scalar power (specialized opcodes)'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! i32 ** i32 (existing tests only have compound **= or mixed types)
+			eval('2 ** 10;')  == '1024', &
+			eval('3 ** 3;')   == '27',   &
+			eval('2 ** 0;')   == '1',    &
+			! i64 ** i64 (existing tests have i64**i32 mixed, not same-type)
+			eval('i64(200000) ** i64(2);') == '40000000000', &
+			eval('i64(3) ** i64(10);')     == '59049',       &
+			! f32 ** f32 (4.0f is f32, 0.5f is f32)
+			eval('abs(4.0f ** 0.5f - 2.0f) < 1.0e-5f;') == 'true', &
+			! f64 ** f64 (undecorated 2.0 is f64 in Syntran)
+			eval('abs(4.0 ** 0.5 - 2.0) < 1.0e-12;') == 'true', &
+			eval('abs(9.0 ** 0.5 - 3.0) < 1.0e-12;') == 'true', &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_pow_scalar
+
+!===============================================================================
+
+subroutine unit_test_mixed_i32i64(npass, nfail)
+
+	! Mixed i32/i64 scalar arithmetic and comparisons (exercises OP_*_I32_I64
+	! and OP_*_I64_I32 specialized opcodes).
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'mixed i32/i64 (specialized opcodes)'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Arithmetic: i32 op i64 -> i64
+			eval('let a = i32(3); let b = i64(5); a + b;') == '8', &
+			eval('let a = i32(3); let b = i64(5); a - b;') == '-2', &
+			eval('let a = i32(3); let b = i64(5); a * b;') == '15', &
+			eval('let a = i32(10); let b = i64(3); a / b;') == '3', &
+			eval('let a = i32(10); let b = i64(3); a % b;') == '1', &
+			! Arithmetic: i64 op i32 -> i64
+			eval('let a = i64(8123123123); let b = i32(3); a + b;') == '8123123126', &
+			eval('let a = i64(8123123123); let b = i32(3); a - b;') == '8123123120', &
+			eval('let a = i64(8123123123); let b = i32(2); a * b;') == '16246246246', &
+			eval('let a = i64(8123123123); let b = i32(3); a / b;') == '2707707707', &
+			eval('let a = i64(8123123123); let b = i32(3); a % b;') == '2', &
+			! Comparisons: i32 op i64
+			eval('let a = i32(3); let b = i64(5); a < b;')  == 'true',  &
+			eval('let a = i32(5); let b = i64(3); a < b;')  == 'false', &
+			eval('let a = i32(3); let b = i64(5); a <= b;') == 'true',  &
+			eval('let a = i32(3); let b = i64(3); a <= b;') == 'true',  &
+			eval('let a = i32(5); let b = i64(3); a > b;')  == 'true',  &
+			eval('let a = i32(3); let b = i64(5); a > b;')  == 'false', &
+			eval('let a = i32(5); let b = i64(3); a >= b;') == 'true',  &
+			eval('let a = i32(3); let b = i64(3); a >= b;') == 'true',  &
+			eval('let a = i32(3); let b = i64(3); a == b;') == 'true',  &
+			eval('let a = i32(3); let b = i64(4); a == b;') == 'false', &
+			eval('let a = i32(3); let b = i64(4); a != b;') == 'true',  &
+			eval('let a = i32(3); let b = i64(3); a != b;') == 'false', &
+			! Comparisons: i64 op i32
+			eval('let a = i64(5); let b = i32(3); a < b;')  == 'false', &
+			eval('let a = i64(3); let b = i32(5); a < b;')  == 'true',  &
+			eval('let a = i64(3); let b = i32(3); a <= b;') == 'true',  &
+			eval('let a = i64(5); let b = i32(3); a > b;')  == 'true',  &
+			eval('let a = i64(3); let b = i32(3); a >= b;') == 'true',  &
+			eval('let a = i64(3); let b = i32(3); a == b;') == 'true',  &
+			eval('let a = i64(3); let b = i32(4); a != b;') == 'true',  &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_mixed_i32i64
+
+!===============================================================================
+
+subroutine unit_test_arr_binop(npass, nfail)
+
+	! Same-type f64 array binop tests that aren't covered elsewhere.
+	! (i32/f32/i64 array arithmetic and comparisons are tested in
+	! unit_test_arr_op and unit_test_arr_comp; f64 array +, <, > are also
+	! there.  Only the remaining f64 array ops are genuinely new.)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'f64 array binops (specialized opcodes)'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! f64 array arithmetic (undecorated 2.0 is f64 in Syntran)
+			eval('all([4.0, 9.0] - [1.0, 4.0] == [3.0, 5.0]);') == 'true', &
+			eval('all([2.0, 3.0] * [4.0, 5.0] == [8.0, 15.0]);') == 'true', &
+			eval('all([9.0, 6.0] / [3.0, 2.0] == [3.0, 3.0]);')  == 'true', &
+			eval('all([7.0, 5.0] % [3.0, 2.0] == [1.0, 1.0]);')  == 'true', &
+			! f64 array comparisons not covered by existing tests (<=, >=, ==, !=)
+			eval('[1.0, 2.0] <= [1.0, 1.0];') == '[true, false]', &
+			eval('[2.0, 1.0] >= [1.0, 2.0];') == '[true, false]', &
+			eval('[1.0, 2.0] == [1.0, 3.0];') == '[true, false]', &
+			eval('[1.0, 2.0] != [1.0, 3.0];') == '[false, true]', &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_arr_binop
+
+!===============================================================================
+
+subroutine unit_test_deep_recursion(npass, nfail)
+
+	! Test that the VM's growable call-frame / for-iterator / loop-context stacks
+	! handle recursion and loop nesting well past their initial capacities.
+	! The initial caps are INIT_FRAMES_CAP=64 and INIT_FORS_CAP=16; these tests
+	! use depths large enough to trigger at least one doubling pass.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'deep recursion / loop nesting (growable VM stacks)'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Recursion past INIT_FRAMES_CAP (64): sum_to(400) = 400*401/2 = 80200
+			eval('fn sum_to(n: i32): i32 { if n <= 0 { return 0; } return n + sum_to(n - 1); } sum_to(400);') == '80200', &
+			! Deeply nested for loops past INIT_FORS_CAP (16): 20 nested for loops,
+			! each iterating once ([0:1] = one iteration in Syntran bound_array).
+			! Body increments s; expect s == 1.
+			eval('let s = 0;' // &
+			     'for i0 in [0:1] { for i1 in [0:1] { for i2 in [0:1] { for i3 in [0:1] {' // &
+			     'for i4 in [0:1] { for i5 in [0:1] { for i6 in [0:1] { for i7 in [0:1] {' // &
+			     'for i8 in [0:1] { for i9 in [0:1] { for i10 in [0:1] { for i11 in [0:1] {' // &
+			     'for i12 in [0:1] { for i13 in [0:1] { for i14 in [0:1] { for i15 in [0:1] {' // &
+			     'for i16 in [0:1] { for i17 in [0:1] { for i18 in [0:1] { for i19 in [0:1] {' // &
+			     's = s + 1; }}}}}}}}}}}}}}}}}}}}' // &
+			     's;') == '1', &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_deep_recursion
+
+!===============================================================================
+
+subroutine unit_test_matmul(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'matmul @ operator'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! ---- vector @ vector (dot product) -> scalar ----
+			eval_i32('[1, 2, 3] @ [4, 5, 6];') == 1*4 + 2*5 + 3*6, &
+			eval_i32('[0, 0, 0] @ [1, 2, 3];') == 0, &
+			eval_i32('[3, 3] @ [3, 3];') == 18, &
+			eval_i64('[i64(2), i64(3)] @ [i64(4), i64(5)];') == int(2*4 + 3*5, 8), &
+			abs(eval_f32('[1.0f, 2.0f] @ [3.0f, 4.0f];') - (1.0*3.0 + 2.0*4.0)) < 1.0e-6, &
+			abs(eval_f64('[1.0, 2.0] @ [3.0, 4.0];') - (1.0d0*3.0d0 + 2.0d0*4.0d0)) < 1.0d-12, &
+
+			! ---- matrix @ vector -> vector ----
+			eval('[1, 2, 3, 4; 2, 2] @ [1, 0];') == '[1, 2]', &
+			eval('[1, 2, 3, 4; 2, 2] @ [0, 1];') == '[3, 4]', &
+			eval('[1, 2, 3, 4; 2, 2] @ [1, 1];') == '[4, 6]', &
+			eval('[1, 0, 0, 1; 2, 2] @ [5, 7];') == '[5, 7]',  &   ! identity
+
+			! ---- vector @ matrix -> vector ----
+			eval('[1, 0] @ [1, 2, 3, 4; 2, 2];') == '[1, 3]', &
+			eval('[0, 1] @ [1, 2, 3, 4; 2, 2];') == '[2, 4]', &
+
+			! ---- matrix @ matrix -> matrix (check element-by-element) ----
+			! A = [[1,3],[2,4]], B = [[1,3],[2,4]], C = A*B = [[7,15],[10,22]]
+			eval_i32('let c = [1, 2, 3, 4; 2, 2] @ [1, 2, 3, 4; 2, 2]; c[0,0];') == 7, &
+			eval_i32('let c = [1, 2, 3, 4; 2, 2] @ [1, 2, 3, 4; 2, 2]; c[1,0];') == 10, &
+			eval_i32('let c = [1, 2, 3, 4; 2, 2] @ [1, 2, 3, 4; 2, 2]; c[0,1];') == 15, &
+			eval_i32('let c = [1, 2, 3, 4; 2, 2] @ [1, 2, 3, 4; 2, 2]; c[1,1];') == 22, &
+
+			! identity: A @ I2 = A
+			eval_i32('let a = [1, 2, 3, 4; 2, 2]; let b = [1, 0, 0, 1; 2, 2]; let c = a @ b; c[0,0];') == 1, &
+			eval_i32('let a = [1, 2, 3, 4; 2, 2]; let b = [1, 0, 0, 1; 2, 2]; let c = a @ b; c[1,0];') == 2, &
+			eval_i32('let a = [1, 2, 3, 4; 2, 2]; let b = [1, 0, 0, 1; 2, 2]; let c = a @ b; c[0,1];') == 3, &
+			eval_i32('let a = [1, 2, 3, 4; 2, 2]; let b = [1, 0, 0, 1; 2, 2]; let c = a @ b; c[1,1];') == 4, &
+
+			! ---- non-square matrices ----
+			! A is 2x3 (col-major flat [1,2,3,4,5,6] = [[1,3,5],[2,4,6]])
+			! B is 3x2 (col-major flat [7,8,9,10,11,12] = [[7,10],[8,11],[9,12]])
+			! C = A @ B is 2x2: C[0,0]=1*7+3*8+5*9=76, C[1,0]=2*7+4*8+6*9=100
+			!                    C[0,1]=1*10+3*11+5*12=103, C[1,1]=2*10+4*11+6*12=136
+			eval_i32('let a = [1,2,3,4,5,6; 2,3]; let b = [7,8,9,10,11,12; 3,2]; let c = a @ b; c[0,0];') &
+				== 1*7 + 3*8 + 5*9, &
+			eval_i32('let a = [1,2,3,4,5,6; 2,3]; let b = [7,8,9,10,11,12; 3,2]; let c = a @ b; c[1,0];') &
+				== 2*7 + 4*8 + 6*9, &
+			eval_i32('let a = [1,2,3,4,5,6; 2,3]; let b = [7,8,9,10,11,12; 3,2]; let c = a @ b; c[0,1];') &
+				== 1*10 + 3*11 + 5*12, &
+			eval_i32('let a = [1,2,3,4,5,6; 2,3]; let b = [7,8,9,10,11,12; 3,2]; let c = a @ b; c[1,1];') &
+				== 2*10 + 4*11 + 6*12, &
+
+			! ---- chained @ ----
+			eval_i32('[1, 2] @ ([2, 0, 0, 3; 2, 2] @ [1, 1]);') == 1*(2+0) + 2*(0+3), &
+
+			! ---- precedence: @ binds like *, so a + b @ c = a + (b @ c) ----
+			eval_i32('1 + [1, 0] @ [2, 3];') == 1 + 2, &
+
+			! ---- float matrix @ vector ----
+			eval('[1.0f, 0.0f, 0.0f, 1.0f; 2, 2] @ [3.0f, 5.0f];') &
+				== '[3.000000E+00, 5.000000E+00]', &
+
+			.false.  & ! no trailing comma needed
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_matmul
+
+!===============================================================================
+
+subroutine unit_test_reshape(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::reshape() intrinsic function'
+
+	logical, allocatable :: tests(:)
+	logical, parameter :: quiet = .true.
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Basic 1-D -> 2-D reshape: shape metadata
+			eval('size(std::reshape([0,1,2,3,4,5], [2,3]), 0);', quiet) == '2', &
+			eval('size(std::reshape([0,1,2,3,4,5], [2,3]), 1);', quiet) == '3', &
+
+			! Element access -- column-major: m[r,c] = flat_index r + size(0)*c.
+			! Must use a let binding; direct subscript of fn-call result not supported.
+			eval('let m = std::reshape([0,1,2,3,4,5], [2,3]); m[0,0];', quiet) == '0', &
+			eval('let m = std::reshape([0,1,2,3,4,5], [2,3]); m[1,0];', quiet) == '1', &
+			eval('let m = std::reshape([0,1,2,3,4,5], [2,3]); m[0,1];', quiet) == '2', &
+			eval('let m = std::reshape([0,1,2,3,4,5], [2,3]); m[1,2];', quiet) == '5', &
+
+			! Identity reshape (1-D to 1-D, same length)
+			eval('let v = std::reshape([0,1,2,3,4,5], [6]); v[5];', quiet) == '5', &
+			eval('size(std::reshape([0,1,2,3,4,5], [6]), 0);', quiet) == '6', &
+
+			! sum() of reshaped array (sum works on a temporary directly)
+			eval('sum(std::reshape([0,1,2,3,4,5], [3,2]));', quiet) == '15', &
+
+			! 3-D reshape: size queries
+			eval('size(std::reshape([0,1,2,3,4,5,6,7], [2,2,2]), 0);', quiet) == '2', &
+			eval('size(std::reshape([0,1,2,3,4,5,6,7], [2,2,2]), 1);', quiet) == '2', &
+			eval('size(std::reshape([0,1,2,3,4,5,6,7], [2,2,2]), 2);', quiet) == '2', &
+
+			! f32 element type preserved
+			eval('let m = std::reshape([1.0f, 2.0f, 3.0f, 4.0f], [2, 2]); i32(m[0, 1]);', quiet) == '3', &
+
+			! Reshape of a range array (upper bound is exclusive, so [0:6] = 6 elements)
+			eval('size(std::reshape([0:6], [2,3]), 0);', quiet) == '2', &
+			eval('let m = std::reshape([0:6], [2,3]); m[1,2];', quiet) == '5', &
+
+			! User can still define their own reshape() function without std::
+			eval('fn reshape(): i32 { return 99; } reshape();', quiet) == '99', &
+
+			.false.  &  ! no trailing comma needed
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_reshape
+
+!===============================================================================
+
+subroutine unit_test_transpose(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::transpose() intrinsic function'
+
+	logical, allocatable :: tests(:)
+	logical, parameter :: quiet = .true.
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Shape swap: transpose of 2x3 is 3x2
+			eval('size(std::transpose(std::reshape([0,1,2,3,4,5],[2,3])),0);', quiet) == '3', &
+			eval('size(std::transpose(std::reshape([0,1,2,3,4,5],[2,3])),1);', quiet) == '2', &
+
+			! Element permutation (column-major).
+			! m = [0,1,2; 3,4,5] (2x3): m[1,0]=1, m[0,1]=2, m[1,2]=5
+			! t = transpose(m) (3x2): t[0,1]=m[1,0]=1, t[1,0]=m[0,1]=2, t[2,1]=m[1,2]=5
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(m); t[0,0];', quiet) == '0', &
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(m); t[0,1];', quiet) == '1', &
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(m); t[1,0];', quiet) == '2', &
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(m); t[2,1];', quiet) == '5', &
+
+			! Square matrix: transpose of 2x2 [0,1;2,3] swaps off-diagonals.
+			! m[0,1]=2, m[1,0]=1 so t[0,1]=m[1,0]=1, t[1,0]=m[0,1]=2
+			eval('let t = std::transpose(std::reshape([0,1,2,3],[2,2])); t[0,1];', quiet) == '1', &
+			eval('let t = std::transpose(std::reshape([0,1,2,3],[2,2])); t[1,0];', quiet) == '2', &
+
+			! sum() of transposed array (works on temporary directly)
+			eval('sum(std::transpose(std::reshape([0,1,2,3,4,5],[2,3])));', quiet) == '15', &
+
+			! f32 element type preserved through transpose.
+			! m[0,1]=3.0f so t[1,0]=m[0,1]=3
+			eval('let t = std::transpose(std::reshape([1.0f,2.0f,3.0f,4.0f],[2,2])); i32(t[1,0]);', quiet) == '3', &
+
+			! Double transpose is identity
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(std::transpose(m)); t[1,0];', quiet) == '1', &
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(std::transpose(m)); size(t,0);', quiet) == '2', &
+			eval('let m = std::reshape([0,1,2,3,4,5],[2,3]); let t = std::transpose(std::transpose(m)); size(t,1);', quiet) == '3', &
+
+			! User can still define their own transpose() without std::
+			eval('fn transpose(): i32 { return 7; } transpose();', quiet) == '7', &
+
+			.false.  &  ! no trailing comma needed
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_transpose
+
+!===============================================================================
+
+subroutine unit_test_shape(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::shape() intrinsic function'
+
+	logical, allocatable :: tests(:)
+	logical, parameter :: quiet = .true.
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Result is a rank-1 array whose length == the source rank (1-D source → length 1)
+			eval('size(std::shape([0,1,2]), 0);', quiet) == '1', &
+
+			! 1-D source: shape returns [n]
+			eval('let s = std::shape([0,1,2,3,4]); s[0];', quiet) == '5', &
+
+			! 2-D source via reshape: shape returns [rows, cols]
+			eval('let s = std::shape(std::reshape([0:6], [2,3])); s[0];', quiet) == '2', &
+			eval('let s = std::shape(std::reshape([0:6], [2,3])); s[1];', quiet) == '3', &
+
+			! 3-D source
+			eval('let s = std::shape(std::reshape([0:8], [2,2,2])); s[0];', quiet) == '2', &
+			eval('let s = std::shape(std::reshape([0:8], [2,2,2])); s[2];', quiet) == '2', &
+
+			! Return type is i64 (consistent with size())
+			eval('let s = std::shape([0,1,2]); i64(s[0]);', quiet) == '3', &
+
+			! shape elements sum: 3+4 == 7 for a [3,4] array
+			eval('let s = std::shape(std::reshape([0:12],[3,4])); s[0]+s[1];', quiet) == '7', &
+
+			! User can still define their own shape() without std::
+			eval('fn shape(): i32 { return 7; } shape();', quiet) == '7', &
+
+			.false.  &  ! no trailing comma needed
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_shape
 
 !===============================================================================
 

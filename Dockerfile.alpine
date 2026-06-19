@@ -1,10 +1,8 @@
 
-FROM alpine:3.18
+FROM alpine:3.23
 
 WORKDIR /workdir
 
-# Alpine 3.18 has gfortran 12.  3.19 has gfortran 13 which didn't work with
-# syntran until syntran 0.0.61, released 2025 Feb 1
 RUN apk add --no-cache \
 	gfortran \
 	musl-dev \
@@ -31,7 +29,7 @@ COPY fpm.toml .
 #************
 
 # Install fpm from binary
-ARG FPM_URL="https://github.com/fortran-lang/fpm/releases/download/v0.12.0/fpm-0.12.0-linux-x86_64-gcc-12"
+ARG FPM_URL="https://github.com/fortran-lang/fpm/releases/download/v0.13.0/fpm-0.13.0-linux-x86_64-gcc-12"
 RUN curl -L $FPM_URL -o fpm
 RUN chmod +x fpm
 RUN mv fpm /usr/local/bin

@@ -9,6 +9,8 @@ module syntran__consts_m
 	integer :: maxerr  ! TODO: move this (not default) into a settings struct that gets passed around
 	integer, parameter :: maxerr_def = 4
 
+	logical :: permissive_return = .false.
+
 	! Initial capacity of scope dict pointer arrays.  They are dynamic arrays of
 	! pointers, so they take little memory to begin with, and then grow
 	! dynamically.  Hence, I have no idea what the default should be and it
@@ -22,6 +24,7 @@ module syntran__consts_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			matmul_token          = 122, &
 			use_statement         = 121, &
 			use_keyword           = 120, &
 			double_colon_token    = 119, &
@@ -277,6 +280,8 @@ function kind_token(kind)
 			"arr_sub              ", & ! 118
 			"::                   ", & ! 119
 			"use                  ", & ! 120
+			"use statement        ", & ! 121
+			"@                    ", & ! 122
 			"unknown              "  & ! inf
 		]
 
@@ -419,6 +424,7 @@ function kind_name(kind)
 			"double_colon_token   ", & ! 119
 			"use_keyword          ", & ! 120
 			"use_statement        ", & ! 121
+			"matmul_token         ", & ! 122
 			"unknown              "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too

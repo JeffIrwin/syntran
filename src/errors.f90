@@ -7,7 +7,7 @@ module syntran__errors_m
 
 	implicit none
 
-	character(len = :), allocatable :: err_prefix, err_int_prefix, err_rt_prefix
+	character(len = :), allocatable :: err_prefix, err_int_prefix, err_rt_prefix, warn_prefix
 
 	! A text span indicates which characters to underline in a faulty line of
 	! code
@@ -193,6 +193,21 @@ function err_unterminated_str(context, span, str_) result(err)
 		//' unterminated str'//color_reset
 
 end function err_unterminated_str
+
+!===============================================================================
+
+function err_unterminated_raw_str(context, span, str_) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: str_
+	err = err_prefix//'unterminated raw str literal `'//str_ &
+		//'`' &
+		//underline(context, span) &
+		//' unterminated raw str'//color_reset
+
+end function err_unterminated_raw_str
 
 !===============================================================================
 
@@ -424,29 +439,51 @@ end function err_redeclare_primitive
 
 !===============================================================================
 
-function err_undeclare_var(context, span, var) result(err)
+function err_undeclare_var(context, span, var, suggest) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: var
+	character(len = *), intent(in), optional :: suggest
+
 	err = err_prefix &
 		//'variable `'//var//'` has not been declared in this scope' &
 		//underline(context, span)//" variable undeclared"//color_reset
+
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
 
 end function err_undeclare_var
 
 !===============================================================================
 
-function err_undeclare_fn(context, span, fn) result(err)
+function err_undeclare_fn(context, span, fn, suggest) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: fn
+	character(len = *), intent(in), optional :: suggest
+
 	err = err_prefix &
 		//'function `'//fn//'` has not been defined' &
 		//underline(context, span)//" undefined function"//color_reset
+
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
 
 end function err_undeclare_fn
 
@@ -477,6 +514,36 @@ function err_no_return(context, span, fn) result(err)
 		//underline(context, span)//" function without returns"//color_reset
 
 end function err_no_return
+
+!===============================================================================
+
+function err_missing_return(context, span, fn) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn
+	err = err_prefix &
+		//'not all code paths in function `'//fn//'` return' &
+		//underline(context, span)//" function may not return on all paths" &
+		//color_reset
+
+end function err_missing_return
+
+!===============================================================================
+
+function warn_missing_return(context, span, fn) result(warn)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: warn
+
+	character(len = *), intent(in) :: fn
+	warn = warn_prefix &
+		//'not all code paths in function `'//fn//'` return' &
+		//underline(context, span)//" function may not return on all paths" &
+		//color_reset
+
+end function warn_missing_return
 
 !===============================================================================
 
@@ -607,6 +674,19 @@ function err_bad_sub_rank(context, span, rank_) &
 		//underline(context, span)//" non-vector subscript"//color_reset
 
 end function err_bad_sub_rank
+
+!===============================================================================
+
+function err_empty_step(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_prefix &
+		//'slice step cannot be omitted between two colons' &
+		//underline(context, span)//" write the step explicitly"//color_reset
+
+end function err_empty_step
 
 !===============================================================================
 
@@ -1346,6 +1426,19 @@ function err_eval_binary_types(op) result(err)
 		//color_reset
 
 end function err_eval_binary_types
+
+!===============================================================================
+
+function err_matmul_dim(lsize, rsize) result(err)
+	integer(kind = 8), intent(in) :: lsize, rsize
+	character(len = :), allocatable :: err
+
+	err = err_rt_prefix &
+		//'matmul `@` dimension mismatch: inner dimensions ' &
+		//str(int(lsize))//' and ' &
+		//str(int(rsize))//' do not agree'//color_reset
+
+end function err_matmul_dim
 
 !===============================================================================
 

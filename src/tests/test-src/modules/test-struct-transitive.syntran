@@ -1,0 +1,14 @@
+// Regression test for transitive cross-module struct identity.
+//
+// boxuser.syntran imports box.syntran's Box struct unqualified (`use
+// box::*;`), so a Box value created via boxuser::make_box() is reached
+// through the "boxuser" alias.  box::box_sum() expects a Box reached through
+// the "box" alias.  Both must be recognized as the same struct type, even
+// though their qualified display names differ ("boxuser::Box" vs "box::Box").
+
+use box as box;
+use boxuser as boxuser;
+
+let b = boxuser::make_box(42);
+
+return box::box_sum(b) == 42;

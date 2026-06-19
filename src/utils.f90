@@ -32,6 +32,7 @@ module syntran__utils_m
 			FG_BRIGHT_MAGENTA_  = esc//'[95m', &
 			FG_BRIGHT_CYAN_     = esc//'[96m', &
 			FG_BRIGHT_WHITE_    = esc//'[97m', &
+			FG_BOLD_YELLOW_     = esc//'[1;33m', &
 			COLOR_RESET_        = esc//'[0m'
 
 	! Either copies of the above or empty strings, depending on `--color` arg
@@ -45,6 +46,7 @@ module syntran__utils_m
 			fg_bright_magenta, &
 			fg_bright_cyan, &
 			fg_bright_white, &
+			fg_bold_yellow, &
 			color_reset
 
 	!********
@@ -1400,6 +1402,156 @@ subroutine map_i32_resize(self)
 
 	! Old table automatically deallocated
 end subroutine map_i32_resize
+
+!===============================================================================
+
+function to_lower(s) result(lower)
+
+	! Return a copy of string `s` with ASCII upper-case letters converted to
+	! lower-case.  Used for case-insensitive Levenshtein matching.
+
+	character(len = *), intent(in) :: s
+	character(len = :), allocatable :: lower
+
+	!********
+
+	integer :: i, ic
+
+	lower = s
+	do i = 1, len(lower)
+		ic = iachar(lower(i:i))
+		if (ic >= iachar('A') .and. ic <= iachar('Z')) then
+			lower(i:i) = achar(ic + 32)
+		end if
+	end do
+
+end function to_lower
+
+!===============================================================================
+
+function unqualified_name(name) result(unqual)
+
+	! Return the portion of `name` after the last "::" module separator, or
+	! the whole name when it contains no "::".  Used so spellcheck suggestions
+	! can rank module-qualified names (e.g. "poople::read_dict") by how close
+	! their unqualified tail is to the typed identifier.
+
+	character(len = *), intent(in) :: name
+	character(len = :), allocatable :: unqual
+
+	!********
+
+	integer :: p
+
+	p = index(name, "::", back = .true.)
+	if (p > 0) then
+		unqual = name(p+2:)
+	else
+		unqual = name
+	end if
+
+end function unqualified_name
+
+!===============================================================================
+
+function overload_display_name(name) result(display)
+
+	! Translate an internal overloaded-intrinsic key (starts with "0") to its
+	! user-facing name for spellcheck suggestions.  Names not starting with "0"
+	! are returned unchanged.
+	!
+	! Internal names follow the pattern:  0<base>[_<kind>][_<rank>]
+	! where <kind> is one of: i32, i64, f32, f64
+	! and  <rank>  is one of: arr, sca
+	!
+	! Examples:
+	!   "0tan_f32"     -> "tan"
+	!   "0abs_f64_arr" -> "abs"
+	!   "0i32_sca"     -> "i32"
+	!   "0log2_f32"    -> "log2"
+	!   "println"      -> "println"  (pass-through)
+
+	character(len = *), intent(in) :: name
+	character(len = :), allocatable :: display
+
+	!********
+
+	integer :: n
+
+	if (len(name) < 1 .or. name(1:1) /= "0") then
+		display = name
+		return
+	end if
+
+	! Strip the leading "0"
+	display = name(2:)
+
+	! Strip trailing rank tag: _arr, _sca
+	! Nested if (not compound .and.) so the substring access is never evaluated
+	! when n < 4, regardless of short-circuit behaviour.
+	n = len(display)
+	if (n >= 4) then
+		if (display(n-3:n) == "_arr" .or. display(n-3:n) == "_sca") then
+			display = display(1:n-4)
+		end if
+	end if
+
+	! Strip trailing kind tag: _i32, _i64, _f32, _f64
+	n = len(display)
+	if (n >= 4) then
+		if (display(n-3:n) == "_i32" .or. display(n-3:n) == "_i64" .or. &
+		    display(n-3:n) == "_f32" .or. display(n-3:n) == "_f64") then
+			display = display(1:n-4)
+		end if
+	end if
+
+end function overload_display_name
+
+!===============================================================================
+
+integer function levenshtein(s, t)
+
+	! Get the Levenshtein edit distance between strings `s` and `t`.
+	! Adapted from the two-row DP implementation in ~/git/jsonf/src/jsonf.F90.
+
+	character(len = *), intent(in) :: s, t
+
+	!********
+
+	integer :: m, n, i, j, deletion_cost, insertion_cost, substitution_cost
+	integer, allocatable :: v0(:), v1(:), tmp(:)
+
+	m = len(s)
+	n = len(t)
+
+	allocate(v0(n + 1))
+	allocate(v1(n + 1))
+	do j = 0, n
+		v0(j + 1) = j
+	end do
+
+	do i = 1, m
+		v1(1) = i
+		do j = 1, n
+			deletion_cost     = v0(j + 1) + 1
+			insertion_cost    = v1(j) + 1
+			if (s(i:i) == t(j:j)) then
+				substitution_cost = v0(j)
+			else
+				substitution_cost = v0(j) + 1
+			end if
+			v1(j + 1) = min(deletion_cost, insertion_cost, substitution_cost)
+		end do
+
+		! Swap v0 and v1
+		call move_alloc(v0, tmp)
+		call move_alloc(v1, v0)
+		call move_alloc(tmp, v1)
+	end do
+
+	levenshtein = v0(n + 1)
+
+end function levenshtein
 
 !===============================================================================
 

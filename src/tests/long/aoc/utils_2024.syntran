@@ -1094,3 +1094,34 @@ fn base_n(a: i64, n: i64): [i32; :]
 
 //==============================================================================
 
+fn is_lower(char_: str): bool
+{
+	return i32("a") <= i32(char_) and i32(char_) <= i32("z");
+}
+fn is_upper(char_: str): bool
+{
+	return i32("A") <= i32(char_) and i32(char_) <= i32("Z");
+}
+fn to_lower(word: str): str
+{
+	let upper = word;
+	for i in [0: len(word)]
+	{
+		if not is_upper(word[i]) continue;
+		upper[i] = char(i32(word[i]) + i32("a") - i32("A"));
+	}
+	return upper;
+}
+fn to_upper(word: str): str
+{
+	let upper = word;
+	for i in [0: len(word)]
+	{
+		if not is_lower(word[i]) continue;
+		upper[i] = char(i32(word[i]) + i32("A") - i32("a"));
+	}
+	return upper;
+}
+
+//==============================================================================
+

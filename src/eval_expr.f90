@@ -63,6 +63,9 @@ recursive module subroutine eval_binary_expr(node, state, res)
 	case (star_token)
 		call mul(left, right, res, node%op%text)
 
+	case (matmul_token)
+		call matmul_(left, right, res, node%op%text)
+
 	case (sstar_token)
 		call pow(left, right, res, node%op%text)
 
@@ -131,9 +134,11 @@ recursive module subroutine eval_name_expr(node, state, res)
 
 	!********
 
-	integer :: id, rank_res, idim_, idim_res, sub_kind, type_
-	integer(kind = 8) :: il, iu, i8, index_, diff
+	integer :: id, rank_res, idim_, idim_res, sub_kind, type_, nelem
+	integer(kind = 8) :: i8, index_, diff
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+
+	logical :: has_char_sub
 
 	type(i64_vector_t), allocatable :: asubs(:)
 	type(value_t) :: right, tmp
@@ -157,50 +162,110 @@ recursive module subroutine eval_name_expr(node, state, res)
 		call internal_error()
 	end if
 
+	! Detect optional char-rank subscript on a string array.  Both
+	! subscript_eval() and get_subscript_range() loop to rank_ (the element
+	! rank), so the trailing char sub is naturally ignored by them.
+	nelem = 0
+	has_char_sub = .false.
+	if (allocated(node%lsubscripts) .and. type_ == array_type) then
+		if (node%is_loc) then
+			if (state%locs%vals(id)%array%type == str_type) then
+				nelem = state%locs%vals(id)%array%rank
+				has_char_sub = size(node%lsubscripts) == nelem + 1
+			end if
+		else
+			if (state%vars%vals(id)%array%type == str_type) then
+				nelem = state%vars%vals(id)%array%rank
+				has_char_sub = size(node%lsubscripts) == nelem + 1
+			end if
+		end if
+	end if
+
 	if (allocated(node%lsubscripts) .and. type_ == str_type) then
 		!print *, 'string subscript RHS name expr'
 
-		!print *, 'str type'
-		res%type = type_
+		! Use str_char_slice() helper (isub=1 for scalar strings) which
+		! handles scalar_sub and range_sub with omitted bounds.
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		if (node%is_loc) then
+			res%str%s = str_char_slice(state%locs%vals(id)%str%s, node, state, 1)
+		else
+			res%str%s = str_char_slice(state%vars%vals(id)%str%s, node, state, 1)
+		end if
 
-		select case (node%lsubscripts(1)%sub_kind)
-		case (scalar_sub)
-			i8 = subscript_eval(node, state)
-			!print *, 'i8 = ', i8
+	else if (has_char_sub) then
 
+		! String array with optional char subscript at index nelem+1.
+		! The first nelem subscripts select element(s); the last one indexes
+		! into the characters of each selected element.
+
+		if (all(node%lsubscripts(1:nelem)%sub_kind == scalar_sub)) then
+
+			! All element subscripts scalar → scalar string result
+			i8 = subscript_eval(node, state)   ! element flat index (char sub ignored)
+			res%type = str_type
+			if (.not. allocated(res%str)) allocate(res%str)
 			if (node%is_loc) then
-				res%sca%str%s = state%locs%vals(id)%sca%str%s(i8+1: i8+1)
+				res%str%s = str_char_slice( &
+					state%locs%vals(id)%array%str(i8+1)%s, node, state, nelem+1)
 			else
-				res%sca%str%s = state%vars%vals(id)%sca%str%s(i8+1: i8+1)
+				res%str%s = str_char_slice( &
+					state%vars%vals(id)%array%str(i8+1)%s, node, state, nelem+1)
 			end if
 
-		case (range_sub)
+		else
 
-			! TODO: str all_sub, step_sub
+			! Element range/slice → string array result.  Reuse the standard
+			! slice machinery; get_subscript_range ignores the trailing char sub.
+			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
 
-			il = subscript_eval(node, state) + 1
+			allocate(res%array)
+			res%type = array_type
+			res%array%kind = expl_array
+			res%array%type = str_type
+			res%array%rank = rank_res
 
-			! This feels inconsistent and not easy to extend to higher ranks
-			call syntax_eval(node%usubscripts(1), state, right)
-			iu = right%to_i64() + 1
+			allocate(res%array%size(rank_res))
+			idim_res = 1
+			do idim_ = 1, nelem
+				sub_kind = node%lsubscripts(idim_)%sub_kind
+				select case (sub_kind)
+				case (step_sub, range_sub, all_sub)
+					diff = usubs(idim_) - lsubs(idim_)
+					res%array%size(idim_res) = divceil(diff, ssubs(idim_))
+					idim_res = idim_res + 1
+				case (arr_sub)
+					res%array%size(idim_res) = size(asubs(idim_)%v)
+					idim_res = idim_res + 1
+				case (scalar_sub)
+					! noop
+				case default
+					write(*,*) err_rt_prefix//"bad subscript kind `"// &
+						kind_name(sub_kind)//"`"//color_reset
+					call internal_error()
+				end select
+			end do
+			res%array%len_ = product(res%array%size)
+			call allocate_array(res, res%array%len_)
 
-			!print *, ''
-			!print *, 'identifier ', node%identifier%text
-			!print *, 'il = ', il
-			!print *, 'iu = ', iu
-			!print *, 'str = ', state%vars%vals(id)%sca%str%s  ! debug broken for is_loc
+			! Iterate through all element subscripts; for each selected element
+			! apply the char subscript and store the result string.
+			subs = lsubs
+			do i8 = 0, res%array%len_ - 1
+				if (node%is_loc) then
+					index_ = subscript_i32_eval(subs, state%locs%vals(id)%array)
+					res%array%str(i8+1)%s = str_char_slice( &
+						state%locs%vals(id)%array%str(index_+1)%s, node, state, nelem+1)
+				else
+					index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
+					res%array%str(i8+1)%s = str_char_slice( &
+						state%vars%vals(id)%array%str(index_+1)%s, node, state, nelem+1)
+				end if
+				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+			end do
 
-			! Not inclusive of upper bound
-			if (node%is_loc) then
-				res%sca%str%s = state%locs%vals(id)%sca%str%s(il: iu-1)
-			else
-				res%sca%str%s = state%vars%vals(id)%sca%str%s(il: iu-1)
-			end if
-
-		case default
-			write(*,*) err_int_prefix//'unexpected str subscript kind'//color_reset
-			call internal_error()
-		end select
+		end if
 
 	else if (allocated(node%lsubscripts)) then
 
@@ -221,6 +286,12 @@ recursive module subroutine eval_name_expr(node, state, res)
 			else
 				call get_val(node, state%vars%vals(id), state, res, index_ = i8)
 			end if
+
+		else if (size(node%lsubscripts) == 1 .and. &
+		         node%lsubscripts(1)%sub_kind /= arr_sub) then
+
+			! Rank-1 slice fast path: avoids allocating lsubs/ssubs/usubs/asubs.
+			call eval_slice_rank1(node, state, res)
 
 		else
 
@@ -395,6 +466,63 @@ module subroutine promote_i32_i64(val)
 	end if
 
 end subroutine promote_i32_i64
+
+!===============================================================================
+
+module function str_char_slice(s, node, state, isub) result(out)
+
+	! Extract a character or substring from Fortran character string `s` using
+	! subscript index `isub` in `node%lsubscripts` / `node%usubscripts`.
+	!
+	! This factors out the inline logic that was previously duplicated for scalar
+	! strings; it works at any subscript index so the array-char-rank path can
+	! pass isub = nelem + 1 without touching subscript_eval (which loops to rank_).
+	!
+	! Syntran indexing is 0-based, upper bound exclusive; Fortran slicing is
+	! 1-based inclusive — hence the +1 / -1 offsets below.
+
+	character(len = *), intent(in) :: s
+	type(syntax_node_t), intent(in) :: node
+	type(state_t), intent(inout) :: state
+	integer, intent(in) :: isub
+
+	character(len = :), allocatable :: out
+
+	!********
+
+	integer(kind = 8) :: il, iu, i8
+	type(value_t) :: tmp_
+
+	select case (node%lsubscripts(isub)%sub_kind)
+	case (scalar_sub)
+		call syntax_eval(node%lsubscripts(isub), state, tmp_)
+		i8 = tmp_%to_i64()
+		out = s(i8+1 : i8+1)
+
+	case (range_sub)
+		if (node%lsubscripts(isub)%lsub_omit) then
+			il = 1
+		else
+			call syntax_eval(node%lsubscripts(isub), state, tmp_)
+			il = tmp_%to_i64() + 1
+		end if
+
+		if (node%lsubscripts(isub)%usub_omit) then
+			iu = len(s) + 1   ! per-element string length → exclusive upper bound
+		else
+			call syntax_eval(node%usubscripts(isub), state, tmp_)
+			iu = tmp_%to_i64() + 1
+		end if
+
+		out = s(il : iu-1)   ! upper-exclusive in syntran
+
+	case default
+		write(*,*) err_int_prefix//'unexpected str char subscript kind'//color_reset
+		call internal_error()
+
+	end select
+
+end function str_char_slice
 
 !===============================================================================
 
