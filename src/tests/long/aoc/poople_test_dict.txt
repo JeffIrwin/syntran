@@ -5,8 +5,11 @@ abut
 bear
 boar
 boor
+calf
+call
 pace
 pale
+pall
 plop
 plot
 pole

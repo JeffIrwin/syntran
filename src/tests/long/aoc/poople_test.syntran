@@ -53,7 +53,20 @@ let ok_quiz = all(steps_quiz == [
 ]);
 println("quiz steps, ok = ", steps_quiz, ", ", ok_quiz);
 
+//****************
+
+let steps_calf = poople::solve(&dict, "calf");
+let ok_calf = all(steps_calf == [
+	"calf",
+	"call",
+	"pall",
+	"poll",
+	"pool",
+	"poop"
+]);
+println("calf steps, ok = ", steps_calf, ", ", ok_calf);
+
 //----------------------------------------------
 println("Ending poople test");
-return all([ok_tear, ok_pace, ok_quiz]);
+return all([ok_tear, ok_pace, ok_quiz, ok_calf]);
 
