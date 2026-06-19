@@ -4623,6 +4623,7 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-modvar-arrstruct.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-mod.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-mod-qualified.syntran', quiet) == 'true', &
+			interpret_file(path//'test-struct-mod-qualified-annot.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-transitive.syntran', quiet) == 'true', &

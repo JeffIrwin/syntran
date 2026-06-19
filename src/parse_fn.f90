@@ -1135,7 +1135,8 @@ module subroutine parse_type(parser, type_text, type)
 
 	type(struct_t) :: struct
 
-	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy
+	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
+		double_colon
 
 	type(text_span_t) :: span
 
@@ -1145,6 +1146,13 @@ module subroutine parse_type(parser, type_text, type)
 		! Array param
 		lbracket = parser%match(lbracket_token)
 		ident    = parser%match(identifier_token)
+		type_text = ident%text
+		do while (parser%current_kind() == double_colon_token)
+			! Qualified element type, e.g. [mod::Struct; :]
+			double_colon = parser%match(double_colon_token)
+			ident = parser%match(identifier_token)
+			type_text = type_text//"::"//ident%text
+		end do
 		semi     = parser%match(semicolon_token)
 
 		rank  = 0
@@ -1171,11 +1179,16 @@ module subroutine parse_type(parser, type_text, type)
 	else
 		! Scalar param
 		ident = parser%match(identifier_token)
+		type_text = ident%text
+		do while (parser%current_kind() == double_colon_token)
+			! Qualified type, e.g. mod::Struct
+			double_colon = parser%match(double_colon_token)
+			ident = parser%match(identifier_token)
+			type_text = type_text//"::"//ident%text
+		end do
 		rank = -1
 	end if
 	pos2 = parser%current_pos()
-
-	type_text = ident%text
 
 	itype = lookup_type(type_text, parser%structs, struct)
 

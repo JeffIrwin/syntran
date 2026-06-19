@@ -21,7 +21,7 @@
 //
 //==============================================================================
 
-use dict_i64::*;
+use dict_i64;
 use dict_str::*;
 
 let N  =  4;  // 4 letter words
@@ -36,7 +36,7 @@ let BLOCKLIST = [
 	""
 ];
 
-fn solve(dict: &dict_i64, init_word_cased: str): [str; :]
+fn solve(dict: &dict_i64::dict_i64, init_word_cased: str): [str; :]
 {
 	let init_word = to_lower(init_word_cased);
 	if len(init_word) != N
@@ -70,7 +70,7 @@ fn solve(dict: &dict_i64, init_word_cased: str): [str; :]
 			let v = u;
 			v[ii] = char(i32("a") + ia);
 			if (v == u) continue;
-			if (get_dict_i64(&dict, v) != 1'i64) continue;
+			if (dict_i64::get_dict_i64(&dict, v) != 1'i64) continue;
 			if (get_dict_str(&prev, v) != ""   ) continue;
 			set_dict_str(&prev, v, u);
 
@@ -114,10 +114,10 @@ fn log_steps(steps: &[str; :])
 	return;
 }
 
-fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64
+fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64::dict_i64
 {
 	// Load a dictionary of valid words. Only save 4-letter ones
-	let dict = new_dict_i64();
+	let dict = dict_i64::new_dict_i64();
 	let n = 0;
 
 	// sudo apt install wamerican
@@ -128,9 +128,9 @@ fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64
 	//let fdict = open("/usr/share/dict/american-english", "r");
 
 	// Initialize the blocklist dictionary from the given string array
-	let block_dict = new_dict_i64();
+	let block_dict = dict_i64::new_dict_i64();
 	for word in blocklist
-		set_dict_i64(&block_dict, to_lower(word), 1'i64);
+		dict_i64::set_dict_i64(&block_dict, to_lower(word), 1'i64);
 
 	while not eof(fdict)
 	{
@@ -143,14 +143,18 @@ fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64
 			if (not is_lower) break;
 		}
 		if (not is_lower) continue;
-		if (get_dict_i64(&block_dict, line) == 1'i64) continue;
+		if (dict_i64::get_dict_i64(&block_dict, line) == 1'i64) continue;
 
-		set_dict_i64(&dict, line, 1'i64);
+		dict_i64::set_dict_i64(&dict, line, 1'i64);
 		n += 1;
 	}
 	return dict;
 }
 
+//----------------------------------------------
+
+// These could go into a utils module, but utils-2024 has a hyphen so can't be
+// used as a module. Maybe time to fork utils again
 fn is_lower(char_: str): bool
 {
 	return i32("a") <= i32(char_) and i32(char_) <= i32("z");
