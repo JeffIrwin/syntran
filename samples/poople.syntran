@@ -1,3 +1,6 @@
+// Poople is a word game with some similarities to wordle:
+//
+//     https://poople.io/
 
 use ../src/tests/long/aoc/dict_i64::*;
 use ../src/tests/long/aoc/poople as poople;
