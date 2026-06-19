@@ -839,21 +839,24 @@ end subroutine struct_search
 
 !===============================================================================
 
-recursive module subroutine ternary_closest(node, prefix, target_low, min_dist, closest)
+recursive module subroutine ternary_closest(node, prefix, target_low, &
+		target_unqual_low, min_dist, min_qdist, closest)
 
 	! Walk a ternary tree accumulating the key character-by-character and
-	! track the terminal key with the lowest Levenshtein distance from
-	! `target_low` (already lower-cased by the caller).
+	! track the terminal key whose *unqualified* (post "::") form has the
+	! lowest Levenshtein distance from `target_unqual_low`, breaking ties by
+	! the distance of the full qualified key from `target_low` (both already
+	! lower-cased by the caller).
 
 	type(ternary_tree_node_t), intent(in), allocatable :: node
-	character(len = *), intent(in) :: prefix, target_low
-	integer, intent(inout) :: min_dist
+	character(len = *), intent(in) :: prefix, target_low, target_unqual_low
+	integer, intent(inout) :: min_dist, min_qdist
 	character(len = :), allocatable, intent(inout) :: closest
 
 	!********
 
-	character(len = :), allocatable :: key
-	integer :: dist
+	character(len = :), allocatable :: key, key_low, key_unqual
+	integer :: dist, qdist
 
 	if (.not. allocated(node)) return
 
@@ -861,56 +864,75 @@ recursive module subroutine ternary_closest(node, prefix, target_low, min_dist, 
 
 	! Terminal node: a value is stored here
 	if (allocated(node%val)) then
-		dist = levenshtein(target_low, to_lower(key))
-		if (dist > 0 .and. dist < min_dist) then
-			min_dist = dist
-			closest  = key
+		key_low = to_lower(key)
+		if (key_low /= target_low) then
+			key_unqual = unqualified_name(key)
+			dist  = levenshtein(target_unqual_low, to_lower(key_unqual))
+			qdist = levenshtein(target_low, key_low)
+			if (dist < min_dist .or. (dist == min_dist .and. qdist < min_qdist)) then
+				min_dist  = dist
+				min_qdist = qdist
+				closest   = key
+			end if
 		end if
 	end if
 
 	! Explore all three branches
-	call ternary_closest(node%left , prefix, target_low, min_dist, closest)
-	call ternary_closest(node%right, prefix, target_low, min_dist, closest)
-	call ternary_closest(node%mid  , key   , target_low, min_dist, closest)
+	call ternary_closest(node%left , prefix, target_low, target_unqual_low, &
+		min_dist, min_qdist, closest)
+	call ternary_closest(node%right, prefix, target_low, target_unqual_low, &
+		min_dist, min_qdist, closest)
+	call ternary_closest(node%mid  , key   , target_low, target_unqual_low, &
+		min_dist, min_qdist, closest)
 
 end subroutine ternary_closest
 
 !===============================================================================
 
-recursive module subroutine fn_ternary_closest(node, prefix, target_low, min_dist, closest)
+recursive module subroutine fn_ternary_closest(node, prefix, target_low, &
+		target_unqual_low, min_dist, min_qdist, closest)
 
 	! Like ternary_closest but for fn_ternary_tree_node_t.
 
 	type(fn_ternary_tree_node_t), intent(in), allocatable :: node
-	character(len = *), intent(in) :: prefix, target_low
-	integer, intent(inout) :: min_dist
+	character(len = *), intent(in) :: prefix, target_low, target_unqual_low
+	integer, intent(inout) :: min_dist, min_qdist
 	character(len = :), allocatable, intent(inout) :: closest
 
 	!********
 
-	character(len = :), allocatable :: key, display
-	integer :: dist
+	character(len = :), allocatable :: key, key_low, key_unqual, display
+	integer :: dist, qdist
 
 	if (.not. allocated(node)) return
 
 	key = prefix//node%split_char
 
 	if (allocated(node%val)) then
-		! De-mangle internal overload keys (e.g. "0tan_f32" -> "tan") so we
-		! never surface a "0"-prefixed name in a suggestion.
-		display = overload_display_name(key)
-		dist = levenshtein(target_low, to_lower(key))
-		if (display /= key) &
-			dist = min(dist, levenshtein(target_low, to_lower(display)))
-		if (dist > 0 .and. dist < min_dist) then
-			min_dist = dist
-			closest  = display
+		key_low = to_lower(key)
+		if (key_low /= target_low) then
+			! De-mangle internal overload keys (e.g. "0tan_f32" -> "tan") so we
+			! never surface a "0"-prefixed name in a suggestion.
+			key_unqual = unqualified_name(key)
+			display    = overload_display_name(key_unqual)
+			dist = levenshtein(target_unqual_low, to_lower(key_unqual))
+			if (display /= key_unqual) &
+				dist = min(dist, levenshtein(target_unqual_low, to_lower(display)))
+			qdist = levenshtein(target_low, key_low)
+			if (dist < min_dist .or. (dist == min_dist .and. qdist < min_qdist)) then
+				min_dist  = dist
+				min_qdist = qdist
+				closest   = overload_display_name(key)
+			end if
 		end if
 	end if
 
-	call fn_ternary_closest(node%left , prefix, target_low, min_dist, closest)
-	call fn_ternary_closest(node%right, prefix, target_low, min_dist, closest)
-	call fn_ternary_closest(node%mid  , key   , target_low, min_dist, closest)
+	call fn_ternary_closest(node%left , prefix, target_low, target_unqual_low, &
+		min_dist, min_qdist, closest)
+	call fn_ternary_closest(node%right, prefix, target_low, target_unqual_low, &
+		min_dist, min_qdist, closest)
+	call fn_ternary_closest(node%mid  , key   , target_low, target_unqual_low, &
+		min_dist, min_qdist, closest)
 
 end subroutine fn_ternary_closest
 
@@ -920,7 +942,9 @@ module function var_closest(dict, key) result(closest)
 
 	! Return the closest declared variable name to `key` across all current
 	! scopes, or "" when no name is close enough (threshold: edit distance <=
-	! max(2, len(key)/3)).
+	! max(2, len(unqualified key)/3)).  Candidates are ranked by the
+	! Levenshtein distance of their unqualified (post "::") name, with the
+	! full module-qualified distance as a tie-breaker.
 
 	class(vars_t), intent(in) :: dict
 	character(len = *), intent(in) :: key
@@ -928,20 +952,23 @@ module function var_closest(dict, key) result(closest)
 
 	!********
 
-	integer :: i, min_dist, threshold
-	character(len = :), allocatable :: target_low
+	integer :: i, min_dist, min_qdist, threshold
+	character(len = :), allocatable :: target_low, target_unqual_low
 
-	closest    = ""
-	min_dist   = huge(min_dist)
-	target_low = to_lower(key)
+	closest           = ""
+	min_dist          = huge(min_dist)
+	min_qdist         = huge(min_qdist)
+	target_low        = to_lower(key)
+	target_unqual_low = to_lower(unqualified_name(key))
 
 	do i = 1, dict%scope
 		if (.not. allocated(dict%dicts(i)%root)) cycle
-		call ternary_closest(dict%dicts(i)%root, "", target_low, min_dist, closest)
+		call ternary_closest(dict%dicts(i)%root, "", target_low, &
+			target_unqual_low, min_dist, min_qdist, closest)
 	end do
 
 	! Only keep the suggestion when it is close enough
-	threshold = max(2, len(key) / 3)
+	threshold = max(2, len(target_unqual_low) / 3)
 	if (min_dist > threshold) closest = ""
 
 end function var_closest
@@ -951,7 +978,8 @@ end function var_closest
 module function fn_closest(dict, key) result(closest)
 
 	! Return the closest declared function name to `key`, or "" when none is
-	! close enough.
+	! close enough.  See var_closest() for the unqualified-name ranking with
+	! qualified-name tie-breaker.
 
 	class(fns_t), intent(in) :: dict
 	character(len = *), intent(in) :: key
@@ -959,16 +987,19 @@ module function fn_closest(dict, key) result(closest)
 
 	!********
 
-	integer :: min_dist, threshold
-	character(len = :), allocatable :: target_low
+	integer :: min_dist, min_qdist, threshold
+	character(len = :), allocatable :: target_low, target_unqual_low
 
-	closest    = ""
-	min_dist   = huge(min_dist)
-	target_low = to_lower(key)
+	closest           = ""
+	min_dist          = huge(min_dist)
+	min_qdist         = huge(min_qdist)
+	target_low        = to_lower(key)
+	target_unqual_low = to_lower(unqualified_name(key))
 
-	call fn_ternary_closest(dict%dict%root, "", target_low, min_dist, closest)
+	call fn_ternary_closest(dict%dict%root, "", target_low, &
+		target_unqual_low, min_dist, min_qdist, closest)
 
-	threshold = max(2, len(key) / 3)
+	threshold = max(2, len(target_unqual_low) / 3)
 	if (min_dist > threshold) closest = ""
 
 end function fn_closest

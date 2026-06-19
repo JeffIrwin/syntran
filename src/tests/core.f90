@@ -16,7 +16,7 @@ module syntran__test_core_m
 	use syntran__utils_m, only: fg_bright_red, fg_bright_green, line_feed, &
 		findlocl1, console_color, console_color_reset, &
 		string_vector_t, new_string_vector, &
-		levenshtein, overload_display_name
+		levenshtein, overload_display_name, unqualified_name
 
 	implicit none
 

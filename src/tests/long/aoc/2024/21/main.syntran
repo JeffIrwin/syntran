@@ -221,8 +221,11 @@ fn init_counts(str_: str): dict_i64
 	// str_
 	let counts = new_dict_i64();
 	let char0 = "A";
-	let nchunk = len(str_) / CHUNK_LEN;
-	for i in [0: nchunk + 1] // add 1: last chunk is shorter than the others
+	// Ceiling division: the last chunk is shorter than the others unless
+	// len(str_) divides evenly by CHUNK_LEN, in which case there is no
+	// extra (empty) chunk to process
+	let nchunk = (len(str_) + CHUNK_LEN - 1) / CHUNK_LEN;
+	for i in [0: nchunk]
 	{
 		let chunk = str_[CHUNK_LEN * i: min(CHUNK_LEN * (i+1), len(str_))];
 		//println("char0, chunk = """, char0, ", ", chunk, """");
@@ -278,9 +281,11 @@ fn get_dirpad_instrs(dict: &dict_str, counts: &dict_i64): dict_i64
 		}
 
 		let out_key = val;
-		let nchunk = len(out_key) / CHUNK_LEN;
+		// Ceiling division: see init_counts() for why this avoids an
+		// extra empty chunk when len(out_key) divides evenly by CHUNK_LEN
+		let nchunk = (len(out_key) + CHUNK_LEN - 1) / CHUNK_LEN;
 		char0 = "A";
-		for i in [0: nchunk + 1]
+		for i in [0: nchunk]
 		{
 			let chunk = out_key[CHUNK_LEN * i: min(CHUNK_LEN * (i+1), len(out_key))];
 			//println("char0, chunk = """, char0, ", ", chunk, """");

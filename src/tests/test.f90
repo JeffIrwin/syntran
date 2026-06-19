@@ -60,6 +60,27 @@ end subroutine unit_test_overload_display_name
 
 !===============================================================================
 
+subroutine unit_test_unqualified_name(npass, nfail)
+
+	! Test the unqualified_name() helper that strips a module "::" prefix off
+	! a qualified name, used to rank "did you mean?" spellcheck suggestions by
+	! their unqualified form first and their qualified form as a tie-breaker.
+
+	integer, intent(inout) :: npass, nfail
+
+	logical, parameter :: quiet = .true.
+
+	call unit_test_coda( [ &
+		unqualified_name("poople::read_dict") == "read_dict", &
+		unqualified_name("math::vectors::fn") == "fn"       , &
+		unqualified_name("plain"             ) == "plain"    , &
+		unqualified_name(""                  ) == ""          &
+		], "unqualified_name", npass, nfail)
+
+end subroutine unit_test_unqualified_name
+
+!===============================================================================
+
 subroutine unit_test_bin_arith(npass, nfail)
 
 	implicit none
@@ -5067,6 +5088,7 @@ subroutine unit_tests(iostat)
 
 	call unit_test_levenshtein          (npass, nfail)
 	call unit_test_overload_display_name(npass, nfail)
+	call unit_test_unqualified_name     (npass, nfail)
 	call unit_test_bin_arith            (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)

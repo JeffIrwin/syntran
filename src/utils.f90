@@ -1429,6 +1429,31 @@ end function to_lower
 
 !===============================================================================
 
+function unqualified_name(name) result(unqual)
+
+	! Return the portion of `name` after the last "::" module separator, or
+	! the whole name when it contains no "::".  Used so spellcheck suggestions
+	! can rank module-qualified names (e.g. "poople::read_dict") by how close
+	! their unqualified tail is to the typed identifier.
+
+	character(len = *), intent(in) :: name
+	character(len = :), allocatable :: unqual
+
+	!********
+
+	integer :: p
+
+	p = index(name, "::", back = .true.)
+	if (p > 0) then
+		unqual = name(p+2:)
+	else
+		unqual = name
+	end if
+
+end function unqualified_name
+
+!===============================================================================
+
 function overload_display_name(name) result(display)
 
 	! Translate an internal overloaded-intrinsic key (starts with "0") to its

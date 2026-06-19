@@ -496,17 +496,19 @@ module syntran__types_m
 			type(value_t), intent(out) :: val
 		end subroutine ternary_search
 
-		recursive module subroutine ternary_closest(node, prefix, target_low, min_dist, closest)
+		recursive module subroutine ternary_closest(node, prefix, target_low, &
+				target_unqual_low, min_dist, min_qdist, closest)
 			type(ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: prefix, target_low
-			integer, intent(inout) :: min_dist
+			character(len = *), intent(in) :: prefix, target_low, target_unqual_low
+			integer, intent(inout) :: min_dist, min_qdist
 			character(len = :), allocatable, intent(inout) :: closest
 		end subroutine ternary_closest
 
-		recursive module subroutine fn_ternary_closest(node, prefix, target_low, min_dist, closest)
+		recursive module subroutine fn_ternary_closest(node, prefix, target_low, &
+				target_unqual_low, min_dist, min_qdist, closest)
 			type(fn_ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: prefix, target_low
-			integer, intent(inout) :: min_dist
+			character(len = *), intent(in) :: prefix, target_low, target_unqual_low
+			integer, intent(inout) :: min_dist, min_qdist
 			character(len = :), allocatable, intent(inout) :: closest
 		end subroutine fn_ternary_closest
 
