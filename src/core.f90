@@ -26,7 +26,7 @@ module syntran__core_m
 
 	integer, parameter ::   &
 		syntran_major =  1, &
-		syntran_minor =  2, &
+		syntran_minor =  3, &
 		syntran_patch =  0
 
 	! TODO:
