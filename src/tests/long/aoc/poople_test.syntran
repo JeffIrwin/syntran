@@ -1,5 +1,5 @@
 
-use poople::*;
+use poople;
 
 println("Starting poople test");
 
@@ -8,13 +8,13 @@ println("Starting poople test");
 let dict_filename = "./poople_test_dict.txt";
 //let dict_filename = "/usr/share/dict/american-english";
 
-let blocklist = setup_blocklist();
-let dict      = setup_dict(dict_filename, &blocklist);
+let blocklist = poople::BLOCKLIST;
+let dict      = poople::read_dict(dict_filename, &blocklist);
 
 //----------------------------------------------
 
-let steps_tear = poople_solve(&dict, "tear");
-//log_poople_steps(&steps_tear);
+let steps_tear = poople::solve(&dict, "tear");
+//poople::log_steps(&steps_tear);
 let ok_tear = all(steps_tear == [
 	"tear",
 	"bear",
@@ -27,7 +27,7 @@ println("tear steps, ok = ", steps_tear, ", ", ok_tear);
 
 //****************
 
-let steps_pace = poople_solve(&dict, "pace");
+let steps_pace = poople::solve(&dict, "pace");
 let ok_pace = all(steps_pace == [
 	"pace",
 	"pale",
@@ -40,7 +40,7 @@ println("pace steps, ok = ", steps_pace, ", ", ok_pace);
 
 //****************
 
-let steps_quiz = poople_solve(&dict, "quiz");
+let steps_quiz = poople::solve(&dict, "quiz");
 let ok_quiz = all(steps_quiz == [
 	"quiz",
 	"quit",

@@ -36,7 +36,7 @@ let BLOCKLIST = [
 	""
 ];
 
-fn poople_solve(dict: &dict_i64, init_word_cased: str): [str; :]
+fn solve(dict: &dict_i64, init_word_cased: str): [str; :]
 {
 	let init_word = to_lower(init_word_cased);
 	if len(init_word) != N
@@ -105,7 +105,7 @@ fn poople_solve(dict: &dict_i64, init_word_cased: str): [str; :]
 	return q[n-1: -1: -1];
 }
 
-fn log_poople_steps(steps: &[str; :])
+fn log_steps(steps: &[str; :])
 {
 	println("steps = ");
 	for step in steps
@@ -114,7 +114,7 @@ fn log_poople_steps(steps: &[str; :])
 	return;
 }
 
-fn setup_dict(dict_filename: str, blocklist: &dict_i64): dict_i64
+fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64
 {
 	// Load a dictionary of valid words. Only save 4-letter ones
 	let dict = new_dict_i64();
@@ -127,6 +127,11 @@ fn setup_dict(dict_filename: str, blocklist: &dict_i64): dict_i64
 	let fdict = open(dict_filename, "r");
 	//let fdict = open("/usr/share/dict/american-english", "r");
 
+	// Initialize the blocklist dictionary from the given string array
+	let block_dict = new_dict_i64();
+	for word in blocklist
+		set_dict_i64(&block_dict, to_lower(word), 1'i64);
+
 	while not eof(fdict)
 	{
 		let line = readln(fdict);
@@ -138,21 +143,12 @@ fn setup_dict(dict_filename: str, blocklist: &dict_i64): dict_i64
 			if (not is_lower) break;
 		}
 		if (not is_lower) continue;
-		if (get_dict_i64(&blocklist, line) == 1'i64) continue;
+		if (get_dict_i64(&block_dict, line) == 1'i64) continue;
 
 		set_dict_i64(&dict, line, 1'i64);
 		n += 1;
 	}
 	return dict;
-}
-
-fn setup_blocklist(): dict_i64
-{
-	// Initialize a blocklist dictionary from the global BLOCKLIST array
-	let blocklist = new_dict_i64();
-	for word in BLOCKLIST
-		set_dict_i64(&blocklist, to_lower(word), 1'i64);
-	return blocklist;
 }
 
 fn is_lower(char_: str): bool

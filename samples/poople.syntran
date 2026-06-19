@@ -18,13 +18,13 @@ println("Starting poople solver");
 // sudo apt install wamerican
 let dict_filename = "/usr/share/dict/american-english";
 
-let blocklist = poople::setup_blocklist();
-let dict      = poople::setup_dict(dict_filename, &blocklist);
+let blocklist = poople::BLOCKLIST;
+let dict      = poople::read_dict(dict_filename, &blocklist);
 println("Loaded ", len_dict_i64(&dict),
 	" 4-letter words from system dictionary");
 
-let steps = poople::poople_solve(&dict, args[0]);
-poople::log_poople_steps(&steps);
+let steps = poople::solve(&dict, args[0]);
+poople::log_steps(&steps);
 
 println("Ending poople solver");
 
