@@ -1040,7 +1040,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 			! Arrays are homogeneous, so every element shares one struct_name
 			! for efficiency
 			res%struct_name = lbound_%struct_name
-			res%struct_cookie = lbound_%struct_cookie
+			if (allocated(lbound_%struct_cookie)) res%struct_cookie = lbound_%struct_cookie
 
 		case default
 			write(*,*) err_eval_len_array(kind_name(res%array%type))

@@ -1,6 +1,5 @@
 
-//use ../src/tests/long/aoc/dict_i64::*;
-use ../src/tests/long/aoc/dict_i64 as dict_i64;
+use ../src/tests/long/aoc/dict_i64::*;
 use ../src/tests/long/aoc/poople as poople;
 
 let args = std::args();
@@ -21,7 +20,7 @@ let dict_filename = "/usr/share/dict/american-english";
 
 let blocklist = poople::setup_blocklist();
 let dict      = poople::setup_dict(dict_filename, &blocklist);
-println("Loaded ", dict_i64::len_dict_i64(&dict),
+println("Loaded ", len_dict_i64(&dict),
 	" 4-letter words from system dictionary");
 
 let steps = poople::poople_solve(&dict, args[0]);
