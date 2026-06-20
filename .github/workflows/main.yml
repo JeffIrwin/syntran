@@ -593,5 +593,91 @@
 			},
 		]
 	},
+	"test-windows-branch-bin": {
+		# Smoke-test the packaged binary artifact built by this branch's
+		# own run (as opposed to "test-windows-bin", which tests the
+		# latest published release)
+		"name": "Test windows branch bin",
+		"needs": ["test-os"],
+		"runs-on": "windows-latest",
+		"steps": [
+			{
+				# Test the binary artifact that was uploaded by this branch's run
+				"uses": "actions/download-artifact@v7",
+				"with":
+				{
+					"name": "syntran-windows",
+					"path": "artifact-download",
+				},
+			},
+			{
+				"name": "Test windows branch bin",
+				"run":
+				"
+					cd artifact-download \n
+					dir \n
+					.\\syntran.exe -h \n
+					.\\syntran.exe --version \n
+
+					.\\syntran.exe -c \"println(\"\"hello world\"\");\" \n
+					.\\syntran.exe -c \"1 + 2 * 3;\" \n
+					.\\syntran.exe -c \"4 + 5 * [6: 10];\" \n
+					.\\syntran.exe -c \"sum([0: 101]);\" \n
+				"
+			},
+		]
+	},
+	"test-macos-branch-bin": {
+		# Smoke-test the packaged binary artifact built by this branch's
+		# own run (as opposed to "test-macos-bin", which tests the
+		# latest published release)
+		"name": "Test macos branch bin",
+		"needs": ["test-os"],
+		"runs-on": "macOS-latest",
+		"steps": [
+			{
+				"name": "Hide homebrew",
+				"run":
+				"
+					set -exu \n
+
+					# Test this to run syntran without homebrew gcc lib paths \n
+					brew remove gcc@14 || true \n
+
+					mv /opt/homebrew/bin /opt/homebrew/bin-BACKUP || true \n
+					mv /opt/homebrew/opt /opt/homebrew/opt-BACKUP || true \n
+					mv /opt/homebrew/Cellar /opt/homebrew/Cellar-BACKUP || true \n
+				"
+			},
+			{
+				# Test the binary artifact that was uploaded by this branch's run
+				"uses": "actions/download-artifact@v7",
+				"with":
+				{
+					"name": "syntran-macos",
+					"path": "artifact-download",
+				},
+			},
+			{
+				"name": "Test macos branch bin",
+				"run":
+				"
+					set -exu \n
+
+					cd artifact-download \n
+					chmod +x ./syntran \n
+					./syntran -h \n
+					./syntran --version \n
+
+					./syntran -c 'println(\"hello world\");' \n
+					./syntran -c '1 + 2 * 3;' \n
+					./syntran -c '4 + 5 * [6: 10];' \n
+					./syntran -c 'sum([0: 101]);' \n
+
+					otool -L ./syntran \n
+				"
+			},
+		]
+	},
 }
 }

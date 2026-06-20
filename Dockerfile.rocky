@@ -3,6 +3,9 @@ FROM rockylinux:9
 
 WORKDIR /workdir
 
+# Use gcc/gfortran 13 here because it has better glibc compatibility. Version
+# gfortran 14 needs a newer glibc which doesn't pass on all of the distros
+# covered by test-branch.sh
 RUN dnf update -y && dnf install -y \
 	vim \
 	git \
