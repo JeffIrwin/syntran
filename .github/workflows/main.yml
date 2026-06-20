@@ -601,12 +601,28 @@
 		"runs-on": "windows-latest",
 		"steps": [
 			{
+				"name": "Diagnose DLL search path before hiding",
+				"run":
+				"
+					where libwinpthread-1.dll \n
+					where libgcc_s_seh-1.dll \n
+				"
+			},
+			{
 				"name": "Hide system DLLs",
 				"run":
 				"
 					# Test this to run syntran without the runner image's \n
 					# pre-installed mingw64 toolchain DLLs \n
 					move C:\\mingw64 C:\\mingw64-BACKUP \n
+				"
+			},
+			{
+				"name": "Diagnose DLL search path after hiding",
+				"run":
+				"
+					where libwinpthread-1.dll \n
+					where libgcc_s_seh-1.dll \n
 				"
 			},
 			{
