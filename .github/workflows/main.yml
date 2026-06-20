@@ -602,6 +602,15 @@
 		"runs-on": "windows-latest",
 		"steps": [
 			{
+				"name": "Hide system DLLs",
+				"run":
+				"
+					# Test this to run syntran without the runner image's \n
+					# pre-installed mingw64 toolchain DLLs \n
+					move C:\\mingw64 C:\\mingw64-BACKUP \n
+				"
+			},
+			{
 				# Test the binary artifact that was uploaded by this branch's run
 				"uses": "actions/download-artifact@v7",
 				"with":
