@@ -581,6 +581,13 @@ function read_file(file, iostat) result(str_)
 
 	type(char_vector_t) :: sb  ! string builder
 
+	! str_ must be allocated on every return path.  Callers assign the result
+	! directly (e.g. `source_text = read_file(file, iostat)`) and only check
+	! iostat afterward, so an early return with str_ left unallocated would
+	! make that assignment read an undefined allocatable -- harmless under
+	! gfortran, but a segfault under ifort classic's debug runtime
+	str_ = ''
+
 	if (is_dir(file)) then
 		if (present(iostat)) iostat = exit_failure
 		return
