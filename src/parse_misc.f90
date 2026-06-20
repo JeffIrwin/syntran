@@ -203,9 +203,8 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 
 			inc_text = read_file(filename, iostat)
 			if (iostat /= exit_success) then
-				! For example, `#include(".");` exists but cannot be read.
-				! AFAIK there is no portable way to differentiate files from
-				! dirs in fortran
+				! For example, `#include(".");` exists but cannot be read
+				! (read_file() rejects directories portably, see is_dir())
 				span = new_span(tokens_in(i)%pos, len(tokens_in(i)%text))
 				call parser%diagnostics%push( &
 					err_inc_read(contexts%v(unit_0), span, tokens_in(i)%text))

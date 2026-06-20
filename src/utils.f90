@@ -540,6 +540,22 @@ end function exists
 
 !===============================================================================
 
+logical function is_dir(filename)
+
+	! Check if filename is a directory.  There is no standard Fortran
+	! intrinsic for this, but inquire() ultimately resolves to stat() on
+	! POSIX systems, and stat() on "<path>/." only succeeds if <path> is a
+	! directory (regular files fail with ENOTDIR).  This is more portable
+	! than trying to detect directories from open()/read() error codes,
+	! which vary between compiler runtimes (e.g. gfortran vs ifx)
+
+	character(len = *), intent(in) :: filename
+	inquire(file = trim(filename)//'/.', exist = is_dir)
+
+end function is_dir
+
+!===============================================================================
+
 function read_file(file, iostat) result(str_)
 
 	! Read all lines of a file into str_
@@ -557,6 +573,11 @@ function read_file(file, iostat) result(str_)
 	integer :: io, iu
 
 	type(char_vector_t) :: sb  ! string builder
+
+	if (is_dir(file)) then
+		if (present(iostat)) iostat = exit_failure
+		return
+	end if
 
 	open(file = file, newunit = iu, status = 'old', iostat = io)
 	if (io /= exit_success) then
