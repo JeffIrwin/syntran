@@ -613,8 +613,10 @@
 				"run":
 				"
 					# Test this to run syntran without the runner image's \n
-					# pre-installed mingw64 toolchain DLLs \n
+					# pre-installed mingw64/strawberry/git toolchain DLLs \n
 					move C:\\mingw64 C:\\mingw64-BACKUP \n
+					move C:\\Strawberry C:\\Strawberry-BACKUP \n
+					move \"C:\\Program Files\\Git\\mingw64\" \"C:\\Program Files\\Git\\mingw64-BACKUP\" \n
 				"
 			},
 			{
