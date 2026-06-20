@@ -263,7 +263,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'windows-latest'",
 				"with": {
-					"path": "./syntran.exe\n./libwinpthread-1.dll",
+					"path": "./syntran.exe",
 					"name": "syntran-windows"
 				}
 			},
