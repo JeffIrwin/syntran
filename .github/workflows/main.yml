@@ -604,8 +604,8 @@
 				"name": "Diagnose DLL search path before hiding",
 				"run":
 				"
-					where libwinpthread-1.dll \n
-					where libgcc_s_seh-1.dll \n
+					where.exe libwinpthread-1.dll \n
+					where.exe libgcc_s_seh-1.dll \n
 				"
 			},
 			{
@@ -621,8 +621,8 @@
 				"name": "Diagnose DLL search path after hiding",
 				"run":
 				"
-					where libwinpthread-1.dll \n
-					where libgcc_s_seh-1.dll \n
+					where.exe libwinpthread-1.dll \n
+					where.exe libgcc_s_seh-1.dll \n
 				"
 			},
 			{
