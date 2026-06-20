@@ -9,6 +9,80 @@ contains
 
 !===============================================================================
 
+! Shared helpers for unit_test_error_codes(), unit_test_error_locations(), and
+! unit_test_dir_unreadable_errors(), all of which check diagnostics emitted
+! for bad syntran programs against expected error codes and/or locations
+
+function get_diags(str_, src_file) result(diag_)
+	character(len = *), intent(in) :: str_
+	character(len = *), intent(in), optional :: src_file
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	if (present(src_file)) then
+		res_ = eval(str_, .true., src_file = src_file, diags = diag_)
+	else
+		res_ = eval(str_, .true., diags = diag_)
+	end if
+end function get_diags
+
+!===============================================================================
+
+function get_diags_file(filename) result(diag_)
+	character(len = *), intent(in) :: filename
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	res_ = interpret_file(filename, quiet = .true., diags = diag_)
+end function get_diags_file
+
+!===============================================================================
+
+function diag_has_code(diag_, code) result(found)
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: code
+	logical :: found
+	integer :: k
+	found = .false.
+	do k = 1, diag_%len_
+		if (index(diag_%v(k)%s, '['//code//']') > 0) found = .true.
+	end do
+end function diag_has_code
+
+!===============================================================================
+
+function diag_loc_ok(diag_, code, src_file, line, col, ncaret) result(ok)
+
+	! Check that some diagnostic in diag_ carries [code], reports
+	! src_file:line:col, and underlines exactly ncaret characters starting
+	! at column col.  Per underline() in errors.f90, the caret line's
+	! gutter is always exactly "| " followed by (col - 1) spaces and then
+	! the bright-red carets, so reconstructing that substring pins down
+	! both the position and the exact length of the "^^^" span (the
+	! trailing index() check rules out a longer caret run)
+
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: code, src_file
+	integer, intent(in) :: line, col, ncaret
+	logical :: ok
+
+	character(len = :), allocatable :: s, loc, carets
+	integer :: k
+
+	loc    = src_file//':'//str(line)//':'//str(col)
+	carets = '| '//repeat(' ', col - 1)//fg_bright_red//repeat('^', ncaret)
+
+	ok = .false.
+	do k = 1, diag_%len_
+		s = diag_%v(k)%s
+		if (index(s, '['//code//']') > 0 .and. &
+		    index(s, loc) > 0 .and. &
+		    index(s, carets) > 0 .and. &
+		    index(s, carets//'^') == 0) ok = .true.
+	end do
+
+end function diag_loc_ok
+
+!===============================================================================
+
 subroutine unit_test_levenshtein(npass, nfail)
 
 	! Test the Levenshtein edit-distance utility used for "did you mean?"
@@ -5008,6 +5082,14 @@ subroutine unit_test_error_codes(npass, nfail)
 	! EC_BAD_ARG_RANK (E47) is formally retired (see errors.f90) and is
 	! intentionally excluded from section 3 -- its constructor was deleted, so
 	! it can never be reached by any program
+	!
+	! EC_INC_READ (E67) and EC_MOD_READ (E69) are also excluded from section 3
+	! here.  Reaching them end-to-end requires a path that exists but cannot
+	! be read (e.g. a directory passed to #include()/use), but open()/read()
+	! error behavior on such paths varies across compiler runtimes (gfortran
+	! errors immediately; ifx has been observed to silently succeed with empty
+	! content).  They are instead tested end-to-end in
+	! unit_test_dir_unreadable_errors() below, which only runs under gfortran
 
 	implicit none
 
@@ -5017,13 +5099,11 @@ subroutine unit_test_error_codes(npass, nfail)
 
 	character(len = *), parameter :: label = 'error codes'
 
-	! Dummy source paths used only so module/include resolution (which derives
+	! Dummy source path used only so module/include resolution (which derives
 	! a search dir from src_file) and EC_BAD_EXPR (which requires non-REPL
-	! mode) work.  The files themselves need not exist
+	! mode) work.  The file itself need not exist
 	character(len = *), parameter :: MODSRC = &
 		'src/tests/test-src/modules/_diag.syntran'
-	character(len = *), parameter :: ERRSRC = &
-		'src/tests/test-src/errors/_diag.syntran'
 
 	logical, allocatable :: tests(:)
 
@@ -5154,9 +5234,11 @@ subroutine unit_test_error_codes(npass, nfail)
 				'struct S{x:i32} let s=S{x=1.0};'), EC_BAD_MEMBER_TYPE), &
 			diag_has_code(get_diags( &
 				'#include("does_not_exist_xyz.syntran");'), EC_INC_404), &
-			diag_has_code(get_diags('#include(".");'), EC_INC_READ), &
+			! EC_INC_READ (E67) excluded -- see note above, tested in
+			! unit_test_dir_unreadable_errors() instead
 			diag_has_code(get_diags('use no_such_module_xyz;', MODSRC), EC_MOD_404), &
-			diag_has_code(get_diags('use dir_mod;', ERRSRC), EC_MOD_READ), &
+			! EC_MOD_READ (E69) excluded -- see note above, tested in
+			! unit_test_dir_unreadable_errors() instead
 			diag_has_code(get_diags('use circular_a;', MODSRC), EC_CIRCULAR_IMPORT), &
 			diag_has_code(get_diags( &
 				'use mymath; use mymath;', MODSRC), EC_DUPLICATE_IMPORT), &
@@ -5179,38 +5261,6 @@ subroutine unit_test_error_codes(npass, nfail)
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
-
-contains
-
-	function get_diags(str_, src_file) result(diag_)
-		character(len = *), intent(in) :: str_
-		character(len = *), intent(in), optional :: src_file
-		type(string_vector_t) :: diag_
-		character(len = :), allocatable :: res_
-		if (present(src_file)) then
-			res_ = eval(str_, .true., src_file = src_file, diags = diag_)
-		else
-			res_ = eval(str_, .true., diags = diag_)
-		end if
-	end function get_diags
-
-	function get_diags_file(filename) result(diag_)
-		character(len = *), intent(in) :: filename
-		type(string_vector_t) :: diag_
-		character(len = :), allocatable :: res_
-		res_ = interpret_file(filename, quiet = .true., diags = diag_)
-	end function get_diags_file
-
-	function diag_has_code(diag_, code) result(found)
-		type(string_vector_t), intent(in) :: diag_
-		character(len = *), intent(in) :: code
-		logical :: found
-		integer :: k
-		found = .false.
-		do k = 1, diag_%len_
-			if (index(diag_%v(k)%s, '['//code//']') > 0) found = .true.
-		end do
-	end function diag_has_code
 
 end subroutine unit_test_error_codes
 
@@ -5239,6 +5289,12 @@ subroutine unit_test_error_locations(npass, nfail)
 	!
 	! EC_BAD_ARG_RANK (E47, retired) and EC_404 (E81, no source span) are
 	! excluded, same as in unit_test_error_codes()
+	!
+	! EC_INC_READ (E67) and EC_MOD_READ (E69) are also excluded here, same as
+	! in unit_test_error_codes() -- their reproduction files use a directory
+	! in place of a file, and open()/read() error behavior on a directory is
+	! not portable across compiler runtimes.  They are instead tested in
+	! unit_test_dir_unreadable_errors() below, which only runs under gfortran
 
 	implicit none
 
@@ -5388,12 +5444,10 @@ subroutine unit_test_error_locations(npass, nfail)
 				EC_BAD_MEMBER_TYPE, P//'E65-bad-member-type.syntran', 9, 15, 3), &
 			diag_loc_ok(get_diags_file(P//'E66-inc-404.syntran'), &
 				EC_INC_404, P//'E66-inc-404.syntran', 6, 10, 28), &
-			diag_loc_ok(get_diags_file(P//'E67-inc-read.syntran'), &
-				EC_INC_READ, P//'E67-inc-read.syntran', 6, 10, 3), &
+			! EC_INC_READ (E67) excluded -- see note above
 			diag_loc_ok(get_diags_file(P//'E68-mod-404.syntran'), &
 				EC_MOD_404, P//'E68-mod-404.syntran', 4, 5, 22), &
-			diag_loc_ok(get_diags_file(P//'E69-mod-read.syntran'), &
-				EC_MOD_READ, P//'E69-mod-read.syntran', 5, 5, 7), &
+			! EC_MOD_READ (E69) excluded -- see note above
 			! E70: location is in the imported module that closes the cycle
 			diag_loc_ok(get_diags_file(P//'E70-circular-import.syntran'), &
 				EC_CIRCULAR_IMPORT, P//'circular_b.syntran', 1, 5, 10), &
@@ -5421,48 +5475,56 @@ subroutine unit_test_error_locations(npass, nfail)
 
 	call unit_test_coda(tests, label, npass, nfail)
 
-contains
-
-	function get_diags_file(filename) result(diag_)
-		character(len = *), intent(in) :: filename
-		type(string_vector_t) :: diag_
-		character(len = :), allocatable :: res_
-		res_ = interpret_file(filename, quiet = .true., diags = diag_)
-	end function get_diags_file
-
-	function diag_loc_ok(diag_, code, src_file, line, col, ncaret) result(ok)
-
-		! Check that some diagnostic in diag_ carries [code], reports
-		! src_file:line:col, and underlines exactly ncaret characters starting
-		! at column col.  Per underline() in errors.f90, the caret line's
-		! gutter is always exactly "| " followed by (col - 1) spaces and then
-		! the bright-red carets, so reconstructing that substring pins down
-		! both the position and the exact length of the "^^^" span (the
-		! trailing index() check rules out a longer caret run)
-
-		type(string_vector_t), intent(in) :: diag_
-		character(len = *), intent(in) :: code, src_file
-		integer, intent(in) :: line, col, ncaret
-		logical :: ok
-
-		character(len = :), allocatable :: s, loc, carets
-		integer :: k
-
-		loc    = src_file//':'//str(line)//':'//str(col)
-		carets = '| '//repeat(' ', col - 1)//fg_bright_red//repeat('^', ncaret)
-
-		ok = .false.
-		do k = 1, diag_%len_
-			s = diag_%v(k)%s
-			if (index(s, '['//code//']') > 0 .and. &
-			    index(s, loc) > 0 .and. &
-			    index(s, carets) > 0 .and. &
-			    index(s, carets//'^') == 0) ok = .true.
-		end do
-
-	end function diag_loc_ok
-
 end subroutine unit_test_error_locations
+
+!===============================================================================
+
+subroutine unit_test_dir_unreadable_errors(npass, nfail)
+
+	! Companion to unit_test_error_codes() and unit_test_error_locations()
+	! above.  EC_INC_READ (E67) and EC_MOD_READ (E69) fire when #include()/use
+	! references a path that exists but cannot be read -- reproduced here by
+	! pointing at a directory instead of a file.  open()/read() error behavior
+	! on a directory isn't portable across compiler runtimes (gfortran errors
+	! immediately; ifx has been observed to silently succeed with empty
+	! content instead), so this test only runs under gfortran.  See
+	! compiler.f90 for how fort_compiler is detected
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'unreadable dir errors'
+
+	! Dummy source path used only so module resolution (which derives a
+	! search dir from src_file) works.  The file itself need not exist
+	character(len = *), parameter :: ERRSRC = &
+		'src/tests/test-src/errors/_diag.syntran'
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	logical, allocatable :: tests(:)
+
+	if (fort_compiler /= 'gfortran') then
+		write(*,*) 'Skipping '//label//' (gfortran only) ...'
+		return
+	end if
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			diag_has_code(get_diags('#include(".");'), EC_INC_READ), &
+			diag_has_code(get_diags('use dir_mod;', ERRSRC), EC_MOD_READ), &
+			diag_loc_ok(get_diags_file(P//'E67-inc-read.syntran'), &
+				EC_INC_READ, P//'E67-inc-read.syntran', 6, 10, 3), &
+			diag_loc_ok(get_diags_file(P//'E69-mod-read.syntran'), &
+				EC_MOD_READ, P//'E69-mod-read.syntran', 5, 5, 7) &
+		]
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_dir_unreadable_errors
 
 !===============================================================================
 
@@ -5576,6 +5638,7 @@ subroutine unit_tests(iostat)
 	call unit_test_return_paths  (npass, nfail)
 	call unit_test_error_codes   (npass, nfail)
 	call unit_test_error_locations(npass, nfail)
+	call unit_test_dir_unreadable_errors(npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)
