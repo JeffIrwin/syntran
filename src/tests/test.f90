@@ -4990,6 +4990,104 @@ end subroutine unit_test_return_paths
 
 !===============================================================================
 
+subroutine unit_test_error_codes(npass, nfail)
+
+	! Tests for the error-code registry in errors.f90 (rust-`error[E0631]`
+	! style codes).  Checks:
+	!   1. every registered code is unique
+	!   2. every code matches the `[ERIW][0-9]+` format (no zero-padding)
+	!   3. a sample of bad programs surface the expected code via the
+	!      `diags` out-arg of eval()
+	!   4. a sample of runtime/internal/warning constructors that aren't
+	!      reachable from a one-line bad program emit their code directly
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'error codes'
+
+	logical, allocatable :: tests(:)
+
+	type(string_vector_t) :: codes
+
+	character(len = :), allocatable :: c
+
+	integer :: i, j
+
+	logical :: unique, fmt_ok
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! 1. uniqueness
+	!
+	! TODO: might want a hash set instead of O(n^2) loop
+	codes = get_all_error_codes()
+	unique = .true.
+	do i = 1, codes%len_
+		do j = i + 1, codes%len_
+			if (codes%v(i)%s == codes%v(j)%s) unique = .false.
+		end do
+	end do
+
+	! 2. format: one of E/R/I/W followed by 1+ digits, no leading zero
+	fmt_ok = .true.
+	do i = 1, codes%len_
+		c = codes%v(i)%s
+		if (len(c) < 2) then
+			fmt_ok = .false.
+			cycle
+		end if
+		if (.not. any(c(1:1) == ['E', 'R', 'I', 'W'])) fmt_ok = .false.
+		if (verify(c(2:), '0123456789') /= 0) fmt_ok = .false.
+		if (c(2:2) == '0') fmt_ok = .false.  ! no leading zero / zero-padding
+	end do
+
+	tests = &
+		[   &
+			unique, &
+			fmt_ok, &
+
+			! 3. end-to-end emission via diags
+			diag_has_code(get_diags("123456789123456789'i32;"), EC_BAD_I32), &
+			diag_has_code(get_diags('true + 4;'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let a = b;'), EC_UNDECLARE_VAR), &
+
+			! 4. direct constructor / prefix-helper spot checks
+			index(err_404('missing.syntran'), '['//EC_404//']') > 0, &
+			index(err_matmul_dim(2_8, 3_8), '['//RC_MATMUL_DIM//']') > 0, &
+			index(err_eval_node('some_node_kind'), '['//IC_EVAL_NODE//']') > 0, &
+			index(warn_pre(WC_MISSING_RETURN), '['//WC_MISSING_RETURN//']') > 0 &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+contains
+
+	function get_diags(str_) result(diag_)
+		character(len = *), intent(in) :: str_
+		type(string_vector_t) :: diag_
+		character(len = :), allocatable :: res_
+		res_ = eval(str_, .true., diags = diag_)
+	end function get_diags
+
+	function diag_has_code(diag_, code) result(found)
+		type(string_vector_t), intent(in) :: diag_
+		character(len = *), intent(in) :: code
+		logical :: found
+		integer :: k
+		found = .false.
+		do k = 1, diag_%len_
+			if (index(diag_%v(k)%s, '['//code//']') > 0) found = .true.
+		end do
+	end function diag_has_code
+
+end subroutine unit_test_error_codes
+
+!===============================================================================
+
 subroutine unit_test_args(npass, nfail)
 
 	implicit none
@@ -5098,6 +5196,7 @@ subroutine unit_tests(iostat)
 	call unit_test_comp_f64   (npass, nfail)
 	call unit_test_bad_syntax    (npass, nfail)
 	call unit_test_return_paths  (npass, nfail)
+	call unit_test_error_codes   (npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)

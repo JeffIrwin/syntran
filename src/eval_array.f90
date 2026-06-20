@@ -97,7 +97,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
 		! Already caught in parser
-		write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+		write(*,*) err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented")
 		call internal_error()
 	end if
 	!print *, "scalar_sub"
@@ -160,7 +160,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 			if (.not. all(node%lsubscripts%sub_kind == scalar_sub)) then
 				!print *, "slice sub"
-				write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+				write(*,*) err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented")
 				call internal_error()
 			end if
 
@@ -189,7 +189,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
 			!print *, "slice sub"
-			write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+			write(*,*) err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented")
 			call internal_error()
 		end if
 
@@ -247,7 +247,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
 		!print *, "slice sub"
-		write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
+		write(*,*) err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented")
 		call internal_error()
 	end if
 	!print *, "scalar_sub"
@@ -345,8 +345,8 @@ module subroutine allocate_array(val, cap)
 		allocate(val%struct( cap ))
 
 	case default
-		write(*,*) err_int_prefix//'cannot allocate array of type `' &
-			//kind_name(val%array%type)//'`'//color_reset
+		write(*,*) err_int(IC_ALLOC_ARRAY_TYPE, 'cannot allocate array of type `' &
+			//kind_name(val%array%type)//'`')
 		call internal_error()
 	end select
 
@@ -383,7 +383,7 @@ module function new_array(type, cap) result(vector)
 	else if (type == str_type) then
 		allocate(vector%str ( vector%cap ))
 	else
-		write(*,*) err_int_prefix//'array type not implemented'//color_reset
+		write(*,*) err_int(IC_ARRAY_TYPE_NOT_IMPL, 'array type not implemented')
 		call internal_error()
 	end if
 
@@ -452,7 +452,7 @@ module subroutine compound_assign(lhs, rhs, op)
 		call right_shift(tmp, rhs, lhs, op%text)
 
 	case default
-		write(*,*) err_int_prefix//'unexpected assignment operator ', quote(op%text)//color_reset
+		write(*,*) err_int(IC_UNEXPECTED_ASSIGN_OP, 'unexpected assignment operator '//quote(op%text))
 		call internal_error()
 	end select
 
@@ -526,7 +526,7 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 		ssub = ssubval%to_i64()
 
 		if (ssub == 0) then
-			write(*,*) err_int_prefix//'subscript step is 0'//color_reset
+			write(*,*) err_int(IC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0')
 			call internal_error()
 		end if
 
@@ -574,7 +574,7 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 		else if (asubval%array%type == i64_type) then
 			asub%v = asubval%array%i64
 		else
-			write(*,*) err_int_prefix//'bad array subscript type'//color_reset
+			write(*,*) err_int(IC_BAD_ARRAY_SUBSCRIPT_TYPE, 'bad array subscript type')
 			call internal_error()
 		end if
 
@@ -583,7 +583,7 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 		contributes_rank = .true.
 
 	case default
-		write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
+		write(*,*) err_int(IC_EVAL_SUBSCRIPT_KIND, 'cannot evaluate subscript kind')
 		call internal_error()
 
 	end select
@@ -933,7 +933,7 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 		!print *, "val s = ", val%str%s
 
 	case default
-		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
+		write(*,*) err_int(IC_FOR_ARRAY_KIND, 'for loop not implemented for this array kind')
 		call internal_error()
 	end select
 
@@ -973,7 +973,7 @@ module subroutine get_array_val(array, i, val)
 			val%str = array%str(i + 1)
 
 		case default
-			write(*,*) err_int_prefix//"bad type in get_array_val"//color_reset
+			write(*,*) err_int(IC_BAD_ARRAY_VAL_TYPE, "bad type in get_array_val")
 			call internal_error()
 
 	end select

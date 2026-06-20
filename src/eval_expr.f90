@@ -158,7 +158,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 	!print *, "type_ = ", kind_name(type_)
 
 	if (type_ == unknown_type) then
-		write(*,*) err_int_prefix//"unknown name expr type"
+		write(*,*) err_int(IC_UNKNOWN_NAME_EXPR_TYPE, "unknown name expr type")
 		call internal_error()
 	end if
 
@@ -241,8 +241,8 @@ recursive module subroutine eval_name_expr(node, state, res)
 				case (scalar_sub)
 					! noop
 				case default
-					write(*,*) err_rt_prefix//"bad subscript kind `"// &
-						kind_name(sub_kind)//"`"//color_reset
+					write(*,*) err_rt(RC_BAD_SUBSCRIPT_KIND, "bad subscript kind `"// &
+						kind_name(sub_kind)//"`")
 					call internal_error()
 				end select
 			end do
@@ -270,7 +270,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 	else if (allocated(node%lsubscripts)) then
 
 		if (type_ /= array_type) then
-			write(*,*) err_int_prefix//'bad type, expected array'//color_reset
+			write(*,*) err_int(IC_BAD_TYPE_EXPECT_ARRAY, 'bad type, expected array')
 			call internal_error()
 		end if
 
@@ -329,8 +329,8 @@ recursive module subroutine eval_name_expr(node, state, res)
 				case (scalar_sub)
 					! noop
 				case default
-					write(*,*) err_rt_prefix//"bad subscript kind `"// &
-						kind_name(sub_kind)//"`"//color_reset
+					write(*,*) err_rt(RC_BAD_SUBSCRIPT_KIND, "bad subscript kind `"// &
+						kind_name(sub_kind)//"`")
 					call internal_error()
 				end select
 			end do
@@ -517,7 +517,7 @@ module function str_char_slice(s, node, state, isub) result(out)
 		out = s(il : iu-1)   ! upper-exclusive in syntran
 
 	case default
-		write(*,*) err_int_prefix//'unexpected str char subscript kind'//color_reset
+		write(*,*) err_int(IC_STR_CHAR_SUBSCRIPT, 'unexpected str char subscript kind')
 		call internal_error()
 
 	end select

@@ -220,12 +220,15 @@ Return the argument with the largest (most positive) value.  The arguments of
 invocation.  For example, this is a parser error:
 ```rust
 let x = max(1, 2.0);
-// Error: function `max` parameter 1 `a1` requires type `i32` but was given `f64`
+// Error[E42]: function `max` parameter 1 `a1` requires type `i32` but was given `f64`
 //   --> <stdin>:1:8
 //    |
 //  1 | max(1, 2.0);
 //    |        ^^^ wrong argument type
 ```
+Every syntran error, warning, and internal diagnostic carries a unique code
+like `E42` above (in the style of rustc's `error[E0631]`). See
+[errors.md](errors.md) for the full index of codes.
 
 Seperate invocations with different types are fine:
 ```rust

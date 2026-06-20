@@ -784,7 +784,7 @@ recursive module subroutine parse_dot(parser, expr)
 	if (io /= 0) then
 		! Type is already confirmed as struct_type above, so I'm fairly sure
 		! this is unreachable
-		write(*,*) err_int_prefix//"unreachable struct lookup failure"//color_reset
+		write(*,*) err_int(IC_UNREACHABLE_STRUCT_LOOKUP, "unreachable struct lookup failure")
 		call internal_error()
 	end if
 

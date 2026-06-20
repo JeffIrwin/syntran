@@ -902,13 +902,13 @@ module subroutine vm_run(prog, state, res)
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
 				if (.not. iargs_pool(1)%file_%is_open) then
-					write(*,*) err_rt_prefix//'readln() was called for file "' &
-						//iargs_pool(1)%file_%name_//'" which is not open'
+					write(*,*) err_rt(RC_READLN_NOT_OPEN, 'readln() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which is not open')
 					call internal_error()
 				end if
 				if (.not. iargs_pool(1)%file_%mode_read) then
-					write(*,*) err_rt_prefix//'readln() was called for file "' &
-						//iargs_pool(1)%file_%name_//'" which was not opened in read mode "r"'
+					write(*,*) err_rt(RC_READLN_NOT_READ_MODE, 'readln() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which was not opened in read mode "r"')
 					call internal_error()
 				end if
 				val%type = str_type
@@ -921,8 +921,8 @@ module subroutine vm_run(prog, state, res)
 						state%vars%vals(slot_id_)%file_%eof = .true.
 					end if
 				else if (io_ /= 0 .and. io_ /= iostat_eor) then
-					write(*,*) err_rt_prefix//'cannot readln() from file "' &
-						//iargs_pool(1)%file_%name_//'"'
+					write(*,*) err_rt(RC_READLN_FAIL, 'cannot readln() from file "' &
+						//iargs_pool(1)%file_%name_//'"')
 					call internal_error()
 				end if
 				end block
@@ -935,8 +935,8 @@ module subroutine vm_run(prog, state, res)
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
 				if (.not. iargs_pool(1)%file_%is_open) then
-					write(*,*) err_rt_prefix//'close() was called for file "' &
-						//iargs_pool(1)%file_%name_//'" which is not open'
+					write(*,*) err_rt(RC_CLOSE_NOT_OPEN, 'close() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which is not open')
 					call internal_error()
 				end if
 				if (is_loc_) then
@@ -998,7 +998,7 @@ module subroutine vm_run(prog, state, res)
 						for_iters(fi)%itr_type = i32_type
 					end if
 					if (.not. any(for_iters(fi)%itr_type == [i32_type, i64_type])) then
-						write(*,*) err_int_prefix//'unit step array type not implemented'//color_reset
+						write(*,*) err_int(IC_UNIT_STEP_TYPE, 'unit step array type not implemented')
 						call internal_error()
 					end if
 					for_iters(fi)%len8 = for_iters(fi)%ubound_%to_i64() &
@@ -1019,7 +1019,7 @@ module subroutine vm_run(prog, state, res)
 					select case (for_iters(fi)%itr_type)
 					case (i32_type)
 						if (for_iters(fi)%step%sca%i32 == 0) then
-							write(*,*) err_rt_prefix//'for loop step is 0'//color_reset
+							write(*,*) err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0')
 							call internal_error()
 						end if
 						for_iters(fi)%len8 = ( &
@@ -1028,7 +1028,7 @@ module subroutine vm_run(prog, state, res)
 							- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
 					case (i64_type)
 						if (for_iters(fi)%step%sca%i64 == 0) then
-							write(*,*) err_rt_prefix//'for loop step is 0'//color_reset
+							write(*,*) err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0')
 							call internal_error()
 						end if
 						for_iters(fi)%len8 = ( &
@@ -1037,7 +1037,7 @@ module subroutine vm_run(prog, state, res)
 							- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
 					case (f32_type)
 						if (for_iters(fi)%step%sca%f32 == 0.0) then
-							write(*,*) err_rt_prefix//'for loop step is 0.0'//color_reset
+							write(*,*) err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0')
 							call internal_error()
 						end if
 						for_iters(fi)%len8 = ceiling( &
@@ -1045,14 +1045,14 @@ module subroutine vm_run(prog, state, res)
 							/ for_iters(fi)%step%sca%f32)
 					case (f64_type)
 						if (for_iters(fi)%step%sca%f64 == 0.0d0) then
-							write(*,*) err_rt_prefix//'for loop step is 0.0'//color_reset
+							write(*,*) err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0')
 							call internal_error()
 						end if
 						for_iters(fi)%len8 = ceiling( &
 							(for_iters(fi)%ubound_%sca%f64 - for_iters(fi)%lbound_%sca%f64) &
 							/ for_iters(fi)%step%sca%f64)
 					case default
-						write(*,*) err_int_prefix//'step array type not implemented'//color_reset
+						write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type not implemented')
 						call internal_error()
 					end select
 
@@ -1062,7 +1062,7 @@ module subroutine vm_run(prog, state, res)
 					case (f32_type, f64_type)
 						for_iters(fi)%len8 = for_iters(fi)%len_%to_i64()
 					case default
-						write(*,*) err_int_prefix//'bound/len array type not implemented'//color_reset
+						write(*,*) err_int(IC_BOUND_LEN_TYPE, 'bound/len array type not implemented')
 						call internal_error()
 					end select
 
@@ -1086,7 +1086,7 @@ module subroutine vm_run(prog, state, res)
 					end do
 
 				case default
-					write(*,*) err_int_prefix//'for loop: unknown array kind'//color_reset
+					write(*,*) err_int(IC_FOR_ARRAY_KIND, 'for loop: unknown array kind')
 					call internal_error()
 				end select
 

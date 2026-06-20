@@ -445,7 +445,7 @@ end subroutine init_state
 
 !===============================================================================
 
-function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
+function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags) result(res)
 
 	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
 	! for syntran_interpret_file() is boolean
@@ -460,6 +460,11 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 	character(len = *), optional, intent(in) :: src_file
 	character(len = *), optional, intent(in) :: chdir_
 	type(string_vector_t), optional, intent(in) :: script_args
+
+	! Diagnostic messages (one error per element), unset on success.  Lets
+	! callers (e.g. unit tests) inspect error codes/text without parsing
+	! stdout
+	type(string_vector_t), optional, intent(out) :: diags
 
 	!********
 
@@ -503,6 +508,8 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 	!print *, tree%str()  ! `#tree` or `show_tree` equivalent for interpreting a file
 
 	if (.not. state%quiet) call tree%log_diagnostics()
+
+	if (present(diags)) diags = tree%diagnostics
 
 	if (tree%diagnostics%len_ > 0) then
 		! TODO: set io

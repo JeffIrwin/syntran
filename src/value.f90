@@ -520,7 +520,7 @@ subroutine push_array(vector, val)
 		else
 			! FIXME: when adding new types, implement it below too to set the
 			! last val
-			write(*,*) err_int_prefix//'push_array type not implemented'
+			write(*,*) err_int(IC_PUSH_ARRAY_TYPE, 'push_array type not implemented')
 			call internal_error()
 		end if
 
@@ -542,7 +542,7 @@ subroutine push_array(vector, val)
 	case (str_type)
 		vector%str ( vector%len_ ) = val%str
 	case default
-		write(*,*) err_int_prefix//'push_array type not implemented'
+		write(*,*) err_int(IC_PUSH_ARRAY_TYPE, 'push_array type not implemented')
 		call internal_error()
 	end select
 
@@ -577,7 +577,7 @@ subroutine trim_array(vector)
 
 	! TODO: str case, bool case.  File?  Struct?  Other types?
 	case default
-		write(*,*) err_int_prefix//'trim_array() implemented for this type'//color_reset
+		write(*,*) err_int(IC_TRIM_ARRAY_TYPE, 'trim_array() implemented for this type')
 		call internal_error()
 	end select
 
@@ -608,13 +608,13 @@ function value_to_f32(val) result(ans)
 		case (str_type)
 
 			! There is no user-facing `f32()` fn (or `f64()`) yet anyway, unlike `i32()`
-			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to f32.  Use `parse_f32()`'//color_reset
+			write(*,*) err_int(IC_CONVERT_F32, 'cannot convert from type `' &
+				//kind_name(val%type)//'` to f32.  Use `parse_f32()`')
 			call internal_error()
 
 		case default
-			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to f32 '//color_reset
+			write(*,*) err_int(IC_CONVERT_F32, 'cannot convert from type `' &
+				//kind_name(val%type)//'` to f32 ')
 			call internal_error()
 
 	end select
@@ -645,13 +645,13 @@ function value_to_f64(val) result(ans)
 
 		case (str_type)
 
-			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to f64.  Use `parse_f64()`'//color_reset
+			write(*,*) err_int(IC_CONVERT_F64, 'cannot convert from type `' &
+				//kind_name(val%type)//'` to f64.  Use `parse_f64()`')
 			call internal_error()
 
 		case default
-			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to f64 '//color_reset
+			write(*,*) err_int(IC_CONVERT_F64, 'cannot convert from type `' &
+				//kind_name(val%type)//'` to f64 ')
 			call internal_error()
 
 	end select
@@ -685,14 +685,14 @@ function value_to_i32(val) result(ans)
 			if (allocated(val%str) .and. len(val%str%s) == 1) then
 				ans = iachar(val%str%s)
 			else
-				write(*,*) err_int_prefix//'cannot convert from type `' &
-					//kind_name(val%type)//'` to i32.  Use `parse_i32()`'//color_reset
+				write(*,*) err_int(IC_CONVERT_I32, 'cannot convert from type `' &
+					//kind_name(val%type)//'` to i32.  Use `parse_i32()`')
 				call internal_error()
 			end if
 
 		case default
-			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to i32 '//color_reset
+			write(*,*) err_int(IC_CONVERT_I32, 'cannot convert from type `' &
+				//kind_name(val%type)//'` to i32 ')
 			call internal_error()
 
 	end select
@@ -741,8 +741,8 @@ function value_to_i32_array(val) result(ans)
 		!	end if
 
 		case default
-			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to i32 '//color_reset
+			write(*,*) err_int(IC_CONVERT_I32_ARR, 'cannot convert from type `' &
+				//kind_name(val%type)//'` to i32 ')
 			call internal_error()
 
 	end select
@@ -772,8 +772,8 @@ function value_to_i64(val) result(ans)
 			ans = val%sca%i64
 
 		case default
-			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to i64.  Use `parse_i64()`'//color_reset
+			write(*,*) err_int(IC_CONVERT_I64, 'cannot convert from type `' &
+				//kind_name(val%type)//'` to i64.  Use `parse_i64()`')
 			call internal_error()
 
 	end select
@@ -810,8 +810,8 @@ function value_to_i64_array(val) result(ans)
 			ans%i64 = val%array%i64
 
 		case default
-			write(*,*) err_int_prefix//'cannot convert from type `' &
-				//kind_name(val%type)//'` to i64 '//color_reset
+			write(*,*) err_int(IC_CONVERT_I64_ARR, 'cannot convert from type `' &
+				//kind_name(val%type)//'` to i64 ')
 			call internal_error()
 
 	end select

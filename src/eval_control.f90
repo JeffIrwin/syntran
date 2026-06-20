@@ -63,7 +63,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 			end if
 
 			if (.not. any(itr%type == [i32_type, i64_type])) then
-				write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
+				write(*,*) err_int(IC_UNIT_STEP_TYPE, 'unit step array type eval not implemented')
 				call internal_error()
 			end if
 
@@ -85,7 +85,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 			case (i32_type)
 
 				if (step%sca%i32 == 0) then
-					write(*,*) err_int_prefix//'for loop step is 0'//color_reset
+					write(*,*) err_int(IC_FOR_STEP_ZERO, 'for loop step is 0')
 					call internal_error()
 				end if
 				len8 = (ubound_%sca%i32 - lbound_%sca%i32 &
@@ -94,7 +94,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 			case (i64_type)
 
 				if (step%sca%i64 == 0) then
-					write(*,*) err_int_prefix//'for loop step is 0'//color_reset
+					write(*,*) err_int(IC_FOR_STEP_ZERO, 'for loop step is 0')
 					call internal_error()
 				end if
 				len8 = (ubound_%sca%i64 - lbound_%sca%i64 &
@@ -103,7 +103,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 			case (f32_type)
 
 				if (step%sca%f32 == 0.0) then
-					write(*,*) err_int_prefix//'for loop step is 0.0'//color_reset
+					write(*,*) err_int(IC_FOR_STEP_ZERO_F, 'for loop step is 0.0')
 					call internal_error()
 				end if
 				len8 = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
@@ -111,13 +111,13 @@ recursive module subroutine eval_for_statement(node, state, res)
 			case (f64_type)
 
 				if (step%sca%f64 == 0.0) then
-					write(*,*) err_int_prefix//'for loop step is 0.0'//color_reset
+					write(*,*) err_int(IC_FOR_STEP_ZERO_F, 'for loop step is 0.0')
 					call internal_error()
 				end if
 				len8 = ceiling((ubound_%sca%f64 - lbound_%sca%f64) / step%sca%f64)
 
 			case default
-				write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
+				write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type eval not implemented')
 				call internal_error()
 			end select
 
@@ -131,7 +131,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 			case (f64_type)
 				len8 = len_%to_i64()
 			case default
-				write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
+				write(*,*) err_int(IC_BOUND_LEN_TYPE, 'bound/len array type eval not implemented')
 				call internal_error()
 			end select
 
@@ -149,8 +149,8 @@ recursive module subroutine eval_for_statement(node, state, res)
 			end do
 
 			if (size(node%array%elems) /= len8) then
-				write(*,*) err_rt_prefix//"size of explicit array "// &
-					"does not match number of elements"//color_reset
+				write(*,*) err_rt(RC_ARRAY_SIZE_MISMATCH, "size of explicit array "// &
+					"does not match number of elements")
 				call internal_error()
 			end if
 
@@ -166,7 +166,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 			!print *, 'len8 = ', len8
 
 		case default
-			write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
+			write(*,*) err_int(IC_FOR_ARRAY_KIND, 'for loop not implemented for this array kind')
 			call internal_error()
 		end select
 
@@ -686,7 +686,7 @@ contains
 			end if
 
 		case default
-			write(*,*) err_int_prefix//'unexpected str char subscript kind'//color_reset
+			write(*,*) err_int(IC_STR_CHAR_SUBSCRIPT, 'unexpected str char subscript kind')
 			call internal_error()
 
 		end select
@@ -802,7 +802,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 		if (array%type == i32_type) then
 
 			if (step%sca%i32 == 0) then
-				write(*,*) err_int_prefix//'array step is 0'//color_reset
+				write(*,*) err_int(IC_ARRAY_STEP_ZERO, 'array step is 0')
 				call internal_error()
 			end if
 
@@ -828,7 +828,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 		else if (array%type == i64_type) then
 
 			if (step%sca%i64 == 0) then
-				write(*,*) err_int_prefix//'array step is 0'//color_reset
+				write(*,*) err_int(IC_ARRAY_STEP_ZERO, 'array step is 0')
 				call internal_error()
 			end if
 
@@ -858,7 +858,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 			!print *, 'step = ', step%sca%f32
 
 			if (step%sca%f32 == 0.0) then
-				write(*,*) err_int_prefix//'array step is 0.0'//color_reset
+				write(*,*) err_int(IC_ARRAY_STEP_ZERO_F, 'array step is 0.0')
 				call internal_error()
 			end if
 
@@ -893,7 +893,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 			!print *, 'step = ', step%sca%f64
 
 			if (step%sca%f64 == 0.0) then
-				write(*,*) err_int_prefix//'array step is 0.0'//color_reset
+				write(*,*) err_int(IC_ARRAY_STEP_ZERO_F, 'array step is 0.0')
 				call internal_error()
 			end if
 
@@ -923,7 +923,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 			!array%len_ = array%cap
 
 		else
-			write(*,*) err_int_prefix//'step array type eval not implemented'//color_reset
+			write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type eval not implemented')
 			call internal_error()
 		end if
 
@@ -967,7 +967,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 			end do
 
 		else
-			write(*,*) err_int_prefix//'bound/len array type eval not implemented'//color_reset
+			write(*,*) err_int(IC_BOUND_LEN_TYPE, 'bound/len array type eval not implemented')
 			call internal_error()
 		end if
 
@@ -1076,7 +1076,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 		end if
 
 		if (.not. any(res%array%type == [i32_type, i64_type])) then
-			write(*,*) err_int_prefix//'unit step array type eval not implemented'//color_reset
+			write(*,*) err_int(IC_UNIT_STEP_TYPE, 'unit step array type eval not implemented')
 			call internal_error()
 		end if
 
@@ -1127,8 +1127,8 @@ recursive module subroutine eval_array_expr(node, state, res)
 		end do
 
 		if (size(node%elems) /= product(array%size)) then
-			write(*,*) err_rt_prefix//"size of explicit array "// &
-				"does not match number of elements"//color_reset
+			write(*,*) err_rt(RC_ARRAY_SIZE_MISMATCH, "size of explicit array "// &
+				"does not match number of elements")
 			call internal_error()
 		end if
 
@@ -1208,7 +1208,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 		!print *, "struct_name = ", res%struct_name
 
 	else
-		write(*,*) err_int_prefix//'unexpected array kind'//color_reset
+		write(*,*) err_int(IC_UNEXPECTED_ARRAY_KIND, 'unexpected array kind')
 		call internal_error()
 	end if
 
