@@ -1,0 +1,10 @@
+// E42: bad-arg-type
+// A function argument's type does not match the corresponding parameter's
+// declared type
+
+fn f(x: i32): i32
+{
+	return x;
+}
+
+let a = f(1.0);

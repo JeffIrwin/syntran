@@ -1,0 +1,8 @@
+// E7: bad-bin32
+// Binary integer literal that doesn't fit in 32 bits
+
+let a = 1;
+let b = a;
+
+let bn = 0b100000000000000000000000000000000'i32;
+println(b);

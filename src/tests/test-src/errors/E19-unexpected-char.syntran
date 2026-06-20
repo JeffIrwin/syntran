@@ -1,0 +1,7 @@
+// E19: unexpected-char
+// The lexer encountered a character it doesn't recognize
+
+let a = 1;
+let b = 2;
+
+$;

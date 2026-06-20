@@ -1,0 +1,6 @@
+// E37: bad-sub-rank
+// An array used as a subscript index is not rank-1
+
+let a = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+let idx = [0; 2, 2];
+let b = a[idx];

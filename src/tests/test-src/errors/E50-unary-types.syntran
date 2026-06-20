@@ -1,0 +1,5 @@
+// E50: unary-types
+// A unary operator is not defined for the given operand type
+
+let a = true;
+let r = -a;

@@ -1,0 +1,7 @@
+// E25: redeclare-intr-fn
+// A user function's name collides with a built-in (intrinsic) function
+
+fn min(): i32
+{
+	return 1;
+}

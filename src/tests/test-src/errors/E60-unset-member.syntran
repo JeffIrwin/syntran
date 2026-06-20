@@ -1,0 +1,10 @@
+// E60: unset-member
+// A struct instance was constructed without initializing all of its members
+
+struct S
+{
+	x: i32,
+	y: i32,
+}
+
+let s = S{x = 1};

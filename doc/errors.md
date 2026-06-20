@@ -24,185 +24,277 @@ unique and follows the `[ERIW][0-9]+` format.
 
 Integer literal with an explicit `'i32` suffix does not fit in 32 bits.
 
+[Example](../src/tests/test-src/errors/E1-bad-i32.syntran)
+
 ### E2 -- bad-i64
 
 Integer literal with an explicit `'i64` suffix does not fit in 64 bits.
+
+[Example](../src/tests/test-src/errors/E2-bad-i64.syntran)
 
 ### E3 -- bad-hex32
 
 Hexadecimal integer literal does not fit in 32 bits.
 
+[Example](../src/tests/test-src/errors/E3-bad-hex32.syntran)
+
 ### E4 -- bad-hex64
 
 Hexadecimal integer literal does not fit in 64 bits.
+
+[Example](../src/tests/test-src/errors/E4-bad-hex64.syntran)
 
 ### E5 -- bad-oct32
 
 Octal integer literal does not fit in 32 bits.
 
+[Example](../src/tests/test-src/errors/E5-bad-oct32.syntran)
+
 ### E6 -- bad-oct64
 
 Octal integer literal does not fit in 64 bits.
+
+[Example](../src/tests/test-src/errors/E6-bad-oct64.syntran)
 
 ### E7 -- bad-bin32
 
 Binary integer literal does not fit in 32 bits.
 
+[Example](../src/tests/test-src/errors/E7-bad-bin32.syntran)
+
 ### E8 -- bad-bin64
 
 Binary integer literal does not fit in 64 bits.
+
+[Example](../src/tests/test-src/errors/E8-bad-bin64.syntran)
 
 ### E9 -- bad-expr
 
 A bare expression statement was used outside the REPL.  Use `println()` to log its value.
 
+[Example](../src/tests/test-src/errors/E9-bad-expr.syntran)
+
 ### E10 -- unterminated-str
 
 A string literal is missing its closing quote.
+
+[Example](../src/tests/test-src/errors/E10-unterminated-str.syntran)
 
 ### E11 -- unterminated-raw-str
 
 A raw string literal is missing its closing delimiter.
 
+[Example](../src/tests/test-src/errors/E11-unterminated-raw-str.syntran)
+
 ### E12 -- array-struct-slice
 
 Slices are not implemented for arrays of structs.
+
+[Example](../src/tests/test-src/errors/E12-array-struct-slice.syntran)
 
 ### E13 -- struct-array-slice
 
 Slices are not implemented for structs of arrays; only scalar subscripts are allowed there.
 
+[Example](../src/tests/test-src/errors/E13-struct-array-slice.syntran)
+
 ### E14 -- non-int-subscript
 
 An array subscript expression is not an integer.
+
+[Example](../src/tests/test-src/errors/E14-non-int-subscript.syntran)
 
 ### E15 -- bad-f32
 
 Real literal with an explicit `'f32` suffix could not be parsed.
 
+[Example](../src/tests/test-src/errors/E15-bad-f32.syntran)
+
 ### E16 -- bad-f64
 
 Real literal with an explicit `'f64` suffix could not be parsed.
+
+[Example](../src/tests/test-src/errors/E16-bad-f64.syntran)
 
 ### E17 -- bad-type
 
 An unrecognized type name was used in a type annotation.
 
+[Example](../src/tests/test-src/errors/E17-bad-type.syntran)
+
 ### E18 -- bad-type-suffix
 
 An unrecognized literal type suffix (e.g. `'i32`) was used after a number or string literal.
+
+[Example](../src/tests/test-src/errors/E18-bad-type-suffix.syntran)
 
 ### E19 -- unexpected-char
 
 The lexer encountered a character it doesn't recognize.
 
+[Example](../src/tests/test-src/errors/E19-unexpected-char.syntran)
+
 ### E20 -- unexpected-token
 
 The parser encountered a token it didn't expect at this position.
+
+[Example](../src/tests/test-src/errors/E20-unexpected-token.syntran)
 
 ### E21 -- void-assign
 
 A variable was initialized from an expression of void type.
 
+[Example](../src/tests/test-src/errors/E21-void-assign.syntran)
+
 ### E22 -- redeclare-var
 
 A variable was declared twice in the same scope.
+
+[Example](../src/tests/test-src/errors/E22-redeclare-var.syntran)
 
 ### E23 -- redeclare-mem
 
 A struct member was declared twice in the same struct.
 
+[Example](../src/tests/test-src/errors/E23-redeclare-mem.syntran)
+
 ### E24 -- redeclare-fn
 
 A function was declared twice.
+
+[Example](../src/tests/test-src/errors/E24-redeclare-fn.syntran)
 
 ### E25 -- redeclare-intr-fn
 
 A user function's name collides with a built-in (intrinsic) function.
 
+[Example](../src/tests/test-src/errors/E25-redeclare-intr-fn.syntran)
+
 ### E26 -- redeclare-struct
 
 A struct was declared twice.
+
+[Example](../src/tests/test-src/errors/E26-redeclare-struct.syntran)
 
 ### E27 -- redeclare-primitive
 
 A struct was declared with a name reserved for a primitive type (e.g. `i32`).
 
+[Example](../src/tests/test-src/errors/E27-redeclare-primitive.syntran)
+
 ### E28 -- undeclare-var
 
 A variable was referenced before being declared in scope.  May include a "did you mean" suggestion.
+
+[Example](../src/tests/test-src/errors/E28-undeclare-var.syntran)
 
 ### E29 -- undeclare-fn
 
 A function was called before being defined.  May include a "did you mean" suggestion.
 
+[Example](../src/tests/test-src/errors/E29-undeclare-fn.syntran)
+
 ### E30 -- std-only-fn
 
 A standard-library function was called without its required `std::` prefix.
+
+[Example](../src/tests/test-src/errors/E30-std-only-fn.syntran)
 
 ### E31 -- no-return
 
 A non-void function has no `return` statements at all.
 
+[Example](../src/tests/test-src/errors/E31-no-return.syntran)
+
 ### E32 -- missing-return
 
 Not all code paths in a non-void function end in a `return` statement.
+
+[Example](../src/tests/test-src/errors/E32-missing-return.syntran)
 
 ### E33 -- bad-arg-count
 
 A function call was given the wrong number of arguments.
 
+[Example](../src/tests/test-src/errors/E33-bad-arg-count.syntran)
+
 ### E34 -- too-few-args
 
 A variadic function call was given fewer than its minimum number of arguments.
+
+[Example](../src/tests/test-src/errors/E34-too-few-args.syntran)
 
 ### E35 -- too-many-args
 
 A variadic function call was given more than its maximum number of arguments.
 
+[Example](../src/tests/test-src/errors/E35-too-many-args.syntran)
+
 ### E36 -- bad-sub-count
 
 An array was subscripted with the wrong number of indices for its rank.
+
+[Example](../src/tests/test-src/errors/E36-bad-sub-count.syntran)
 
 ### E37 -- bad-sub-rank
 
 An array used as a subscript index is not rank-1.
 
+[Example](../src/tests/test-src/errors/E37-bad-sub-rank.syntran)
+
 ### E38 -- empty-step
 
 A slice step was omitted between two colons (e.g. `a[1::4]`); write it explicitly.
+
+[Example](../src/tests/test-src/errors/E38-empty-step.syntran)
 
 ### E39 -- scalar-subscript
 
 A scalar variable was subscripted as if it were an array.
 
+[Example](../src/tests/test-src/errors/E39-scalar-subscript.syntran)
+
 ### E40 -- bad-cat-rank
 
 A concatenated array operand is not rank-1.
+
+[Example](../src/tests/test-src/errors/E40-bad-cat-rank.syntran)
 
 ### E41 -- bad-ret-type
 
 A function's `return` value does not match its declared scalar return type.
 
+[Example](../src/tests/test-src/errors/E41-bad-ret-type.syntran)
+
 ### E42 -- bad-arg-type
 
 A function argument's type does not match the corresponding parameter's declared type.
+
+[Example](../src/tests/test-src/errors/E42-bad-arg-type.syntran)
 
 ### E43 -- bad-arg-val
 
 A `&` reference parameter was given a plain value argument instead of a reference.
 
+[Example](../src/tests/test-src/errors/E43-bad-arg-val.syntran)
+
 ### E44 -- bad-arg-ref
 
 A by-value parameter was given a `&` reference argument instead of a value.
+
+[Example](../src/tests/test-src/errors/E44-bad-arg-ref.syntran)
 
 ### E45 -- non-name-ref
 
 A `&` reference was taken of an expression that isn't a plain variable name.
 
+[Example](../src/tests/test-src/errors/E45-non-name-ref.syntran)
+
 ### E46 -- sub-ref
 
 A `&` reference was taken of a subscripted expression, which isn't allowed.
+
+[Example](../src/tests/test-src/errors/E46-sub-ref.syntran)
 
 ### E47 -- bad-arg-rank (retired)
 
@@ -213,133 +305,199 @@ kept reserved per the permanence policy above; do not reuse it.
 
 A binary operator (e.g. `+`) is not defined for the given pair of operand types.
 
+[Example](../src/tests/test-src/errors/E48-binary-types.syntran)
+
 ### E49 -- binary-ranks
 
 A binary operator's array operands have mismatched ranks.
+
+[Example](../src/tests/test-src/errors/E49-binary-ranks.syntran)
 
 ### E50 -- unary-types
 
 A unary operator (e.g. unary `-`) is not defined for the given operand type.
 
+[Example](../src/tests/test-src/errors/E50-unary-types.syntran)
+
 ### E51 -- non-array-loop
 
 The range expression of a `for` loop is not an array.
+
+[Example](../src/tests/test-src/errors/E51-non-array-loop.syntran)
 
 ### E52 -- non-bool-condition
 
 The condition of an `if`/`while`/etc. statement is not a `bool`.
 
+[Example](../src/tests/test-src/errors/E52-non-bool-condition.syntran)
+
 ### E53 -- non-float-len-range
 
 A length-based array range bound (`[a; n]`) is not a float.
+
+[Example](../src/tests/test-src/errors/E53-non-float-len-range.syntran)
 
 ### E54 -- non-int-len
 
 An array length expression is not an integer.
 
+[Example](../src/tests/test-src/errors/E54-non-int-len.syntran)
+
 ### E55 -- bound-type-mismatch
 
 The lower and upper bounds of an array range have mismatched types.
+
+[Example](../src/tests/test-src/errors/E55-bound-type-mismatch.syntran)
 
 ### E56 -- non-num-range
 
 An array range bound is not a numeric type.
 
+[Example](../src/tests/test-src/errors/E56-non-num-range.syntran)
+
 ### E57 -- non-sca-val
 
 A value used to fill a uniform array (`[v; n]`) is not a scalar.
+
+[Example](../src/tests/test-src/errors/E57-non-sca-val.syntran)
 
 ### E58 -- non-int-range
 
 An array range bound is not an `i32` integer.
 
+[Example](../src/tests/test-src/errors/E58-non-int-range.syntran)
+
 ### E59 -- het-array
 
 An array literal is heterogeneous: an element's type doesn't match the first element's type.
+
+[Example](../src/tests/test-src/errors/E59-het-array.syntran)
 
 ### E60 -- unset-member
 
 A struct instance was constructed without initializing all of its members.
 
+[Example](../src/tests/test-src/errors/E60-unset-member.syntran)
+
 ### E61 -- reset-member
 
 A struct instance initializer set the same member twice.
+
+[Example](../src/tests/test-src/errors/E61-reset-member.syntran)
 
 ### E62 -- non-struct-dot
 
 Dot member access (`.`) was used on a variable that isn't a struct.
 
+[Example](../src/tests/test-src/errors/E62-non-struct-dot.syntran)
+
 ### E63 -- bad-member-name
 
 A dot expression referenced a member name that doesn't exist on the struct (variable and type both named in the message).
+
+[Example](../src/tests/test-src/errors/E63-bad-member-name.syntran)
 
 ### E64 -- bad-member-name-short
 
 A struct instantiation (`Type{...}`) referenced a member name that doesn't exist on the struct.
 
+[Example](../src/tests/test-src/errors/E64-bad-member-name-short.syntran)
+
 ### E65 -- bad-member-type
 
 A struct member was initialized with a value of the wrong type.
+
+[Example](../src/tests/test-src/errors/E65-bad-member-type.syntran)
 
 ### E66 -- inc-404
 
 An `#include` file could not be found.
 
+[Example](../src/tests/test-src/errors/E66-inc-404.syntran)
+
 ### E67 -- inc-read
 
 An `#include` file was found but could not be read.
+
+[Example](../src/tests/test-src/errors/E67-inc-read.syntran)
 
 ### E68 -- mod-404
 
 A `use`d module file could not be found.
 
+[Example](../src/tests/test-src/errors/E68-mod-404.syntran)
+
 ### E69 -- mod-read
 
 A `use`d module file was found but could not be read.
+
+[Example](../src/tests/test-src/errors/E69-mod-read.syntran)
 
 ### E70 -- circular-import
 
 Two or more modules import each other, forming a circular dependency.
 
+[Example](../src/tests/test-src/errors/E70-circular-import.syntran) (the cycle itself is in the fixture pair [circular_a.syntran](../src/tests/test-src/errors/circular_a.syntran) / [circular_b.syntran](../src/tests/test-src/errors/circular_b.syntran))
+
 ### E71 -- duplicate-import
 
 The same module was imported more than once.
+
+[Example](../src/tests/test-src/errors/E71-duplicate-import.syntran)
 
 ### E72 -- mod-hyphen
 
 A module name contains a hyphen; use underscores instead.
 
+[Example](../src/tests/test-src/errors/E72-mod-hyphen.syntran)
+
 ### E73 -- mod-keyword
 
 A module name is a reserved language keyword.
+
+[Example](../src/tests/test-src/errors/E73-mod-keyword.syntran)
 
 ### E74 -- mod-reserved-std
 
 The module name `std` is reserved for the standard library.
 
+[Example](../src/tests/test-src/errors/E74-mod-reserved-std.syntran)
+
 ### E75 -- mod-space
 
 A module name contains a space.
+
+[Example](../src/tests/test-src/errors/E75-mod-space.syntran)
 
 ### E76 -- alias-keyword
 
 A `use ... as <alias>` alias is a reserved language keyword.
 
+[Example](../src/tests/test-src/errors/E76-alias-keyword.syntran)
+
 ### E77 -- alias-reserved-std
 
 The module alias `std` is reserved and cannot be reused.
+
+[Example](../src/tests/test-src/errors/E77-alias-reserved-std.syntran)
 
 ### E78 -- alias-hyphen
 
 A module alias contains a hyphen.
 
+[Example](../src/tests/test-src/errors/E78-alias-hyphen.syntran)
+
 ### E79 -- alias-space
 
 A module alias contains a space.
 
+[Example](../src/tests/test-src/errors/E79-alias-space.syntran)
+
 ### E80 -- alias-with-doublecolon
 
 A `use module::*` glob import was combined with an alias, which isn't allowed.
+
+[Example](../src/tests/test-src/errors/E80-alias-with-doublecolon.syntran)
 
 ### E81 -- 404
 

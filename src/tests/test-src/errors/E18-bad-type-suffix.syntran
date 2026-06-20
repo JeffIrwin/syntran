@@ -1,0 +1,8 @@
+// E18: bad-type-suffix
+// An unrecognized literal type suffix was used after a number literal
+
+let a = 1;
+let b = 2;
+let c = a + b;
+
+let z = 1'foo;

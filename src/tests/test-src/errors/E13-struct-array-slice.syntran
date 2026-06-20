@@ -1,0 +1,11 @@
+// E13: struct-array-slice
+// Slices are not implemented for structs of arrays; only scalar subscripts
+// are allowed there
+
+struct Container
+{
+	vals: [i32; :],
+}
+
+let c = Container{vals = [1, 2, 3, 4, 5]};
+let some = c.vals[0: 2];

@@ -1,0 +1,6 @@
+// E22: redeclare-var
+// A variable was declared twice in the same scope
+
+let a = 1;
+let b = 2;
+let a = 3;

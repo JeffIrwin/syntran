@@ -1,0 +1,4 @@
+// E77: alias-reserved-std
+// The module alias `std` is reserved and cannot be reused
+
+use foo as std;

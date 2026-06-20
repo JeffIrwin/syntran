@@ -1,0 +1,5 @@
+// E69: mod-read
+// A used module file was found but could not be read (e.g. it's a
+// directory)
+
+use dir_mod;

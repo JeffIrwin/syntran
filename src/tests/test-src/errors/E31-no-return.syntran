@@ -1,0 +1,7 @@
+// E31: no-return
+// A non-void function has no return statements at all
+
+fn f(): i32
+{
+	let x = 1;
+}

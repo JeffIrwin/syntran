@@ -1,0 +1,7 @@
+// E51: non-array-loop
+// The range expression of a for loop is not an array
+
+let n = 5;
+for i in n
+{
+}

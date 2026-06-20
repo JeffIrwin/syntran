@@ -30,6 +30,24 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - unit tests for contents of error messages. need new api to get error
+	!    msg. maybe add error codes too
+	!    * wip on this branch
+	!    * also test line number, column number, filename, and ^^^ underline
+	!      span correctness of diagnostics
+	!      + done
+	!    * Two pre-existing oddities noticed (not fixed, out of scope for this
+	!      task): a handful of errors (E12, E13, E14, E36-E40, E63) get pushed
+	!      as exact duplicate diagnostics (likely an artifact of the two-pass
+	!      parser lacking a de-dup guard), and fn f() { ... } with no
+	!      return-type annotation still triggers EC_NO_RETURN alongside
+	!      EC_VOID_ASSIGN in the E21 example. Neither affects location
+	!      correctness, but they're worth a follow-up if you want diagnostic
+	!      hygiene tightened.
+	!    * also test reachable runtime errors. slightly lower priority than
+	!      parse-time errors
+	!    * internal errors are supposed to be unreachable, so we can't add tests
+	!      for them
 	!  - need an exists() built-in to check files, or some equivalent way to
 	!    check a file post-open. maybe rethink the way syntran immediately
 	!    runtime error aborts if you try to open for reading a file that doesn't
@@ -83,8 +101,6 @@ module syntran__core_m
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
 	!    might be zero perf benefit because the dicts are only used at parse
 	!    time, then mapped to efficient arrays at eval time
-	!  - unit tests for contents of error messages. need new api to get error
-	!    msg. maybe add error codes too
 	!  - claude tasks:
 	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable
 	!      it. duh!

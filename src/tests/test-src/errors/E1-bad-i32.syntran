@@ -1,0 +1,8 @@
+// E1: bad-i32
+// Integer literal with an explicit 'i32 suffix that doesn't fit in 32 bits
+
+let small = 7;
+let medium = small * 2;
+
+let big = 123456789123456789'i32;
+println(medium);

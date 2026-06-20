@@ -1,0 +1,6 @@
+// E29: undeclare-fn
+// A function was called before being defined
+
+let a = 1;
+
+nonexistent_fn();

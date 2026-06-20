@@ -5216,6 +5216,256 @@ end subroutine unit_test_error_codes
 
 !===============================================================================
 
+subroutine unit_test_error_locations(npass, nfail)
+
+	! Companion to unit_test_error_codes() above.  That test only confirms the
+	! right EC_* code surfaces for each reachable parse-time error; this test
+	! confirms the rest of the diagnostic -- the reported filename, line,
+	! column, and "^^^" underline span (caret position AND length) -- is
+	! also correct.
+	!
+	! Each row reproduces one error from its own .syntran file under
+	! src/tests/test-src/errors/ (also linked as an example from
+	! doc/errors.md), placed on a non-trivial line/column so the line/col
+	! arithmetic is actually exercised -- if every example lived on line 1,
+	! this test would not be meaningful.  Expected (line, col, ncaret) values
+	! were captured empirically by running the built interpreter on each file
+	! and reading its rendered diagnostic, then spot-checked by eye.
+	!
+	! Most examples report their own location, but E70 (circular-import) is
+	! detected while parsing the imported module that closes the cycle, so
+	! its location is inside circular_b.syntran instead of the entry file --
+	! see the comment at that row below.
+	!
+	! EC_BAD_ARG_RANK (E47, retired) and EC_404 (E81, no source span) are
+	! excluded, same as in unit_test_error_codes()
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'error locations'
+
+	! Reproduction files live alongside the module/include fixtures already
+	! used by unit_test_error_codes() (dir_mod.syntran/, etc.)
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			diag_loc_ok(get_diags_file(P//'E1-bad-i32.syntran'), &
+				EC_BAD_I32, P//'E1-bad-i32.syntran', 7, 11, 18), &
+			diag_loc_ok(get_diags_file(P//'E2-bad-i64.syntran'), &
+				EC_BAD_I64, P//'E2-bad-i64.syntran', 10, 12, 26), &
+			diag_loc_ok(get_diags_file(P//'E3-bad-hex32.syntran'), &
+				EC_BAD_HEX32, P//'E3-bad-hex32.syntran', 8, 9, 11), &
+			diag_loc_ok(get_diags_file(P//'E4-bad-hex64.syntran'), &
+				EC_BAD_HEX64, P//'E4-bad-hex64.syntran', 9, 9, 19), &
+			diag_loc_ok(get_diags_file(P//'E5-bad-oct32.syntran'), &
+				EC_BAD_OCT32, P//'E5-bad-oct32.syntran', 6, 9, 13), &
+			diag_loc_ok(get_diags_file(P//'E6-bad-oct64.syntran'), &
+				EC_BAD_OCT64, P//'E6-bad-oct64.syntran', 10, 9, 24), &
+			diag_loc_ok(get_diags_file(P//'E7-bad-bin32.syntran'), &
+				EC_BAD_BIN32, P//'E7-bad-bin32.syntran', 7, 10, 35), &
+			diag_loc_ok(get_diags_file(P//'E8-bad-bin64.syntran'), &
+				EC_BAD_BIN64, P//'E8-bad-bin64.syntran', 10, 10, 67), &
+			diag_loc_ok(get_diags_file(P//'E9-bad-expr.syntran'), &
+				EC_BAD_EXPR, P//'E9-bad-expr.syntran', 7, 1, 6), &
+			diag_loc_ok(get_diags_file(P//'E10-unterminated-str.syntran'), &
+				EC_UNTERMINATED_STR, P//'E10-unterminated-str.syntran', 8, 9, 25), &
+			diag_loc_ok(get_diags_file(P//'E11-unterminated-raw-str.syntran'), &
+				EC_UNTERMINATED_RAW_STR, P//'E11-unterminated-raw-str.syntran', 8, 9, 30), &
+			diag_loc_ok(get_diags_file(P//'E12-array-struct-slice.syntran'), &
+				EC_ARRAY_STRUCT_SLICE, P//'E12-array-struct-slice.syntran', 10, 16, 5), &
+			diag_loc_ok(get_diags_file(P//'E13-struct-array-slice.syntran'), &
+				EC_STRUCT_ARRAY_SLICE, P//'E13-struct-array-slice.syntran', 11, 18, 6), &
+			diag_loc_ok(get_diags_file(P//'E14-non-int-subscript.syntran'), &
+				EC_NON_INT_SUBSCRIPT, P//'E14-non-int-subscript.syntran', 5, 11, 3), &
+			diag_loc_ok(get_diags_file(P//'E15-bad-f32.syntran'), &
+				EC_BAD_F32, P//'E15-bad-f32.syntran', 7, 9, 11), &
+			diag_loc_ok(get_diags_file(P//'E16-bad-f64.syntran'), &
+				EC_BAD_F64, P//'E16-bad-f64.syntran', 10, 9, 11), &
+			diag_loc_ok(get_diags_file(P//'E17-bad-type.syntran'), &
+				EC_BAD_TYPE, P//'E17-bad-type.syntran', 4, 9, 4), &
+			diag_loc_ok(get_diags_file(P//'E18-bad-type-suffix.syntran'), &
+				EC_BAD_TYPE_SUFFIX, P//'E18-bad-type-suffix.syntran', 8, 11, 3), &
+			diag_loc_ok(get_diags_file(P//'E19-unexpected-char.syntran'), &
+				EC_UNEXPECTED_CHAR, P//'E19-unexpected-char.syntran', 7, 1, 1), &
+			diag_loc_ok(get_diags_file(P//'E20-unexpected-token.syntran'), &
+				EC_UNEXPECTED_TOKEN, P//'E20-unexpected-token.syntran', 6, 9, 1), &
+			diag_loc_ok(get_diags_file(P//'E21-void-assign.syntran'), &
+				EC_VOID_ASSIGN, P//'E21-void-assign.syntran', 9, 1, 11), &
+			diag_loc_ok(get_diags_file(P//'E22-redeclare-var.syntran'), &
+				EC_REDECLARE_VAR, P//'E22-redeclare-var.syntran', 6, 5, 1), &
+			diag_loc_ok(get_diags_file(P//'E23-redeclare-mem.syntran'), &
+				EC_REDECLARE_MEM, P//'E23-redeclare-mem.syntran', 7, 2, 7), &
+			diag_loc_ok(get_diags_file(P//'E24-redeclare-fn.syntran'), &
+				EC_REDECLARE_FN, P//'E24-redeclare-fn.syntran', 9, 4, 1), &
+			diag_loc_ok(get_diags_file(P//'E25-redeclare-intr-fn.syntran'), &
+				EC_REDECLARE_INTR_FN, P//'E25-redeclare-intr-fn.syntran', 4, 4, 3), &
+			diag_loc_ok(get_diags_file(P//'E26-redeclare-struct.syntran'), &
+				EC_REDECLARE_STRUCT, P//'E26-redeclare-struct.syntran', 9, 8, 1), &
+			diag_loc_ok(get_diags_file(P//'E27-redeclare-primitive.syntran'), &
+				EC_REDECLARE_PRIMITIVE, P//'E27-redeclare-primitive.syntran', 4, 8, 3), &
+			diag_loc_ok(get_diags_file(P//'E28-undeclare-var.syntran'), &
+				EC_UNDECLARE_VAR, P//'E28-undeclare-var.syntran', 6, 9, 15), &
+			diag_loc_ok(get_diags_file(P//'E29-undeclare-fn.syntran'), &
+				EC_UNDECLARE_FN, P//'E29-undeclare-fn.syntran', 6, 1, 14), &
+			diag_loc_ok(get_diags_file(P//'E30-std-only-fn.syntran'), &
+				EC_STD_ONLY_FN, P//'E30-std-only-fn.syntran', 4, 9, 7), &
+			diag_loc_ok(get_diags_file(P//'E31-no-return.syntran'), &
+				EC_NO_RETURN, P//'E31-no-return.syntran', 4, 1, 4), &
+			diag_loc_ok(get_diags_file(P//'E32-missing-return.syntran'), &
+				EC_MISSING_RETURN, P//'E32-missing-return.syntran', 4, 1, 4), &
+			diag_loc_ok(get_diags_file(P//'E33-bad-arg-count.syntran'), &
+				EC_BAD_ARG_COUNT, P//'E33-bad-arg-count.syntran', 5, 12, 6), &
+			diag_loc_ok(get_diags_file(P//'E34-too-few-args.syntran'), &
+				EC_TOO_FEW_ARGS, P//'E34-too-few-args.syntran', 5, 12, 3), &
+			diag_loc_ok(get_diags_file(P//'E35-too-many-args.syntran'), &
+				EC_TOO_MANY_ARGS, P//'E35-too-many-args.syntran', 6, 13, 9), &
+			diag_loc_ok(get_diags_file(P//'E36-bad-sub-count.syntran'), &
+				EC_BAD_SUB_COUNT, P//'E36-bad-sub-count.syntran', 5, 14, 2), &
+			diag_loc_ok(get_diags_file(P//'E37-bad-sub-rank.syntran'), &
+				EC_BAD_SUB_RANK, P//'E37-bad-sub-rank.syntran', 6, 11, 4), &
+			diag_loc_ok(get_diags_file(P//'E38-empty-step.syntran'), &
+				EC_EMPTY_STEP, P//'E38-empty-step.syntran', 5, 12, 1), &
+			diag_loc_ok(get_diags_file(P//'E39-scalar-subscript.syntran'), &
+				EC_SCALAR_SUBSCRIPT, P//'E39-scalar-subscript.syntran', 5, 11, 2), &
+			diag_loc_ok(get_diags_file(P//'E40-bad-cat-rank.syntran'), &
+				EC_BAD_CAT_RANK, P//'E40-bad-cat-rank.syntran', 5, 13, 1), &
+			diag_loc_ok(get_diags_file(P//'E41-bad-ret-type.syntran'), &
+				EC_BAD_RET_TYPE, P//'E41-bad-ret-type.syntran', 6, 9, 3), &
+			diag_loc_ok(get_diags_file(P//'E42-bad-arg-type.syntran'), &
+				EC_BAD_ARG_TYPE, P//'E42-bad-arg-type.syntran', 10, 11, 3), &
+			diag_loc_ok(get_diags_file(P//'E43-bad-arg-val.syntran'), &
+				EC_BAD_ARG_VAL, P//'E43-bad-arg-val.syntran', 9, 3, 1), &
+			diag_loc_ok(get_diags_file(P//'E44-bad-arg-ref.syntran'), &
+				EC_BAD_ARG_REF, P//'E44-bad-arg-ref.syntran', 10, 3, 2), &
+			diag_loc_ok(get_diags_file(P//'E45-non-name-ref.syntran'), &
+				EC_NON_NAME_REF, P//'E45-non-name-ref.syntran', 9, 3, 9), &
+			diag_loc_ok(get_diags_file(P//'E46-sub-ref.syntran'), &
+				EC_SUB_REF, P//'E46-sub-ref.syntran', 10, 3, 6), &
+			diag_loc_ok(get_diags_file(P//'E48-binary-types.syntran'), &
+				EC_BINARY_TYPES, P//'E48-binary-types.syntran', 5, 11, 1), &
+			diag_loc_ok(get_diags_file(P//'E49-binary-ranks.syntran'), &
+				EC_BINARY_RANKS, P//'E49-binary-ranks.syntran', 6, 11, 1), &
+			diag_loc_ok(get_diags_file(P//'E50-unary-types.syntran'), &
+				EC_UNARY_TYPES, P//'E50-unary-types.syntran', 5, 9, 1), &
+			diag_loc_ok(get_diags_file(P//'E51-non-array-loop.syntran'), &
+				EC_NON_ARRAY_LOOP, P//'E51-non-array-loop.syntran', 5, 10, 1), &
+			diag_loc_ok(get_diags_file(P//'E52-non-bool-condition.syntran'), &
+				EC_NON_BOOL_CONDITION, P//'E52-non-bool-condition.syntran', 5, 4, 1), &
+			diag_loc_ok(get_diags_file(P//'E53-non-float-len-range.syntran'), &
+				EC_NON_FLOAT_LEN_RANGE, P//'E53-non-float-len-range.syntran', 4, 10, 1), &
+			diag_loc_ok(get_diags_file(P//'E54-non-int-len.syntran'), &
+				EC_NON_INT_LEN, P//'E54-non-int-len.syntran', 4, 20, 3), &
+			diag_loc_ok(get_diags_file(P//'E55-bound-type-mismatch.syntran'), &
+				EC_BOUND_TYPE_MISMATCH, P//'E55-bound-type-mismatch.syntran', 4, 10, 6), &
+			diag_loc_ok(get_diags_file(P//'E56-non-num-range.syntran'), &
+				EC_NON_NUM_RANGE, P//'E56-non-num-range.syntran', 4, 10, 8), &
+			diag_loc_ok(get_diags_file(P//'E57-non-sca-val.syntran'), &
+				EC_NON_SCA_VAL, P//'E57-non-sca-val.syntran', 5, 10, 1), &
+			diag_loc_ok(get_diags_file(P//'E58-non-int-range.syntran'), &
+				EC_NON_INT_RANGE, P//'E58-non-int-range.syntran', 4, 15, 3), &
+			diag_loc_ok(get_diags_file(P//'E59-het-array.syntran'), &
+				EC_HET_ARRAY, P//'E59-het-array.syntran', 5, 13, 3), &
+			diag_loc_ok(get_diags_file(P//'E60-unset-member.syntran'), &
+				EC_UNSET_MEMBER, P//'E60-unset-member.syntran', 10, 9, 1), &
+			diag_loc_ok(get_diags_file(P//'E61-reset-member.syntran'), &
+				EC_RESET_MEMBER, P//'E61-reset-member.syntran', 10, 18, 1), &
+			diag_loc_ok(get_diags_file(P//'E62-non-struct-dot.syntran'), &
+				EC_NON_STRUCT_DOT, P//'E62-non-struct-dot.syntran', 5, 9, 2), &
+			diag_loc_ok(get_diags_file(P//'E63-bad-member-name.syntran'), &
+				EC_BAD_MEMBER_NAME, P//'E63-bad-member-name.syntran', 11, 11, 1), &
+			diag_loc_ok(get_diags_file(P//'E64-bad-member-name-short.syntran'), &
+				EC_BAD_MEMBER_NAME_SHORT, P//'E64-bad-member-name-short.syntran', 10, 11, 1), &
+			diag_loc_ok(get_diags_file(P//'E65-bad-member-type.syntran'), &
+				EC_BAD_MEMBER_TYPE, P//'E65-bad-member-type.syntran', 9, 15, 3), &
+			diag_loc_ok(get_diags_file(P//'E66-inc-404.syntran'), &
+				EC_INC_404, P//'E66-inc-404.syntran', 6, 10, 28), &
+			diag_loc_ok(get_diags_file(P//'E67-inc-read.syntran'), &
+				EC_INC_READ, P//'E67-inc-read.syntran', 6, 10, 3), &
+			diag_loc_ok(get_diags_file(P//'E68-mod-404.syntran'), &
+				EC_MOD_404, P//'E68-mod-404.syntran', 4, 5, 22), &
+			diag_loc_ok(get_diags_file(P//'E69-mod-read.syntran'), &
+				EC_MOD_READ, P//'E69-mod-read.syntran', 5, 5, 7), &
+			! E70: location is in the imported module that closes the cycle
+			diag_loc_ok(get_diags_file(P//'E70-circular-import.syntran'), &
+				EC_CIRCULAR_IMPORT, P//'circular_b.syntran', 1, 5, 10), &
+			diag_loc_ok(get_diags_file(P//'E71-duplicate-import.syntran'), &
+				EC_DUPLICATE_IMPORT, P//'E71-duplicate-import.syntran', 5, 5, 5), &
+			diag_loc_ok(get_diags_file(P//'E72-mod-hyphen.syntran'), &
+				EC_MOD_HYPHEN, P//'E72-mod-hyphen.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E73-mod-keyword.syntran'), &
+				EC_MOD_KEYWORD, P//'E73-mod-keyword.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E74-mod-reserved-std.syntran'), &
+				EC_MOD_RESERVED_STD, P//'E74-mod-reserved-std.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E75-mod-space.syntran'), &
+				EC_MOD_SPACE, P//'E75-mod-space.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E76-alias-keyword.syntran'), &
+				EC_ALIAS_KEYWORD, P//'E76-alias-keyword.syntran', 4, 12, 3), &
+			diag_loc_ok(get_diags_file(P//'E77-alias-reserved-std.syntran'), &
+				EC_ALIAS_RESERVED_STD, P//'E77-alias-reserved-std.syntran', 4, 12, 3), &
+			diag_loc_ok(get_diags_file(P//'E78-alias-hyphen.syntran'), &
+				EC_ALIAS_HYPHEN, P//'E78-alias-hyphen.syntran', 4, 12, 2), &
+			diag_loc_ok(get_diags_file(P//'E79-alias-space.syntran'), &
+				EC_ALIAS_SPACE, P//'E79-alias-space.syntran', 4, 12, 1), &
+			diag_loc_ok(get_diags_file(P//'E80-alias-with-doublecolon.syntran'), &
+				EC_ALIAS_WITH_DOUBLECOLON, P//'E80-alias-with-doublecolon.syntran', 4, 5, 3) &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+contains
+
+	function get_diags_file(filename) result(diag_)
+		character(len = *), intent(in) :: filename
+		type(string_vector_t) :: diag_
+		character(len = :), allocatable :: res_
+		res_ = interpret_file(filename, quiet = .true., diags = diag_)
+	end function get_diags_file
+
+	function diag_loc_ok(diag_, code, src_file, line, col, ncaret) result(ok)
+
+		! Check that some diagnostic in diag_ carries [code], reports
+		! src_file:line:col, and underlines exactly ncaret characters starting
+		! at column col.  Per underline() in errors.f90, the caret line's
+		! gutter is always exactly "| " followed by (col - 1) spaces and then
+		! the bright-red carets, so reconstructing that substring pins down
+		! both the position and the exact length of the "^^^" span (the
+		! trailing index() check rules out a longer caret run)
+
+		type(string_vector_t), intent(in) :: diag_
+		character(len = *), intent(in) :: code, src_file
+		integer, intent(in) :: line, col, ncaret
+		logical :: ok
+
+		character(len = :), allocatable :: s, loc, carets
+		integer :: k
+
+		loc    = src_file//':'//str(line)//':'//str(col)
+		carets = '| '//repeat(' ', col - 1)//fg_bright_red//repeat('^', ncaret)
+
+		ok = .false.
+		do k = 1, diag_%len_
+			s = diag_%v(k)%s
+			if (index(s, '['//code//']') > 0 .and. &
+			    index(s, loc) > 0 .and. &
+			    index(s, carets) > 0 .and. &
+			    index(s, carets//'^') == 0) ok = .true.
+		end do
+
+	end function diag_loc_ok
+
+end subroutine unit_test_error_locations
+
+!===============================================================================
+
 subroutine unit_test_args(npass, nfail)
 
 	implicit none
@@ -5325,6 +5575,7 @@ subroutine unit_tests(iostat)
 	call unit_test_bad_syntax    (npass, nfail)
 	call unit_test_return_paths  (npass, nfail)
 	call unit_test_error_codes   (npass, nfail)
+	call unit_test_error_locations(npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)

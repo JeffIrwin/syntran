@@ -1,0 +1,5 @@
+// E71: duplicate-import
+// The same module was imported more than once
+
+use mymod;
+use mymod;

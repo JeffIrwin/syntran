@@ -1,0 +1,9 @@
+// E21: void-assign
+// A variable was initialized from an expression of void type
+
+fn f()
+{
+	let x = 1;
+}
+
+let a = f();

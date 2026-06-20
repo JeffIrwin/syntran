@@ -1,0 +1,7 @@
+// E17: bad-type
+// An unrecognized type name was used in a type annotation
+
+fn f(x: nope): i32
+{
+	return 1;
+}

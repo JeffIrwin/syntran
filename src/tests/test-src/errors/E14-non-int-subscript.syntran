@@ -1,0 +1,5 @@
+// E14: non-int-subscript
+// An array subscript expression is not an integer
+
+let a = [1, 2, 3];
+let v = a[1.0];

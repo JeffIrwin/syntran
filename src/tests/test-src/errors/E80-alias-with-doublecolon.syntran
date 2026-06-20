@@ -1,0 +1,4 @@
+// E80: alias-with-doublecolon
+// A `use module::*` glob import was combined with an alias
+
+use foo as bar::*;

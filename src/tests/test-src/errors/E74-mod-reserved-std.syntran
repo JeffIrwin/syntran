@@ -1,0 +1,4 @@
+// E74: mod-reserved-std
+// The module name `std` is reserved for the standard library
+
+use std;

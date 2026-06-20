@@ -1,0 +1,4 @@
+// E53: non-float-len-range
+// A length-based array range bound is not a float
+
+let a = [0: 1; 5];

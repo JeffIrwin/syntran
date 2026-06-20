@@ -1,0 +1,8 @@
+// E15: bad-f32
+// Real literal with an explicit 'f32 suffix that could not be parsed
+
+let a = 1;
+let b = 2;
+
+let x = 1.234e+1e+2'f32;
+println(a + b);

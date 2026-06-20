@@ -1,0 +1,5 @@
+// E40: bad-cat-rank
+// A concatenated array operand is not rank-1
+
+let a = [1, 2; 2, 2];
+let c = [a, a];

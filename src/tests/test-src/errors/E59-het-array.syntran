@@ -1,0 +1,5 @@
+// E59: het-array
+// An array literal is heterogeneous: an element's type doesn't match the
+// first element's type
+
+let a = [1, "a"];

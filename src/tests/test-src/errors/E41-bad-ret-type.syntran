@@ -1,0 +1,7 @@
+// E41: bad-ret-type
+// A function's return value does not match its declared scalar return type
+
+fn f(): i32
+{
+	return 1.0;
+}
