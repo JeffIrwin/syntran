@@ -4996,10 +4996,18 @@ subroutine unit_test_error_codes(npass, nfail)
 	! style codes).  Checks:
 	!   1. every registered code is unique
 	!   2. every code matches the `[ERIW][0-9]+` format (no zero-padding)
-	!   3. a sample of bad programs surface the expected code via the
-	!      `diags` out-arg of eval()
+	!   3. every reachable compile-time EC_* code surfaces via a bad program
+	!      through the `diags` out-arg of eval()/interpret_file()
 	!   4. a sample of runtime/internal/warning constructors that aren't
 	!      reachable from a one-line bad program emit their code directly
+	!
+	! IC_*/RC_*/WC_* (internal, runtime, warning) codes are out of scope for
+	! section 3 -- only a few representative IC_*/RC_*/WC_* spot checks remain
+	! in section 4.
+	!
+	! EC_BAD_ARG_RANK (E47) is formally retired (see errors.f90) and is
+	! intentionally excluded from section 3 -- its constructor was deleted, so
+	! it can never be reached by any program
 
 	implicit none
 
@@ -5008,6 +5016,14 @@ subroutine unit_test_error_codes(npass, nfail)
 	!********
 
 	character(len = *), parameter :: label = 'error codes'
+
+	! Dummy source paths used only so module/include resolution (which derives
+	! a search dir from src_file) and EC_BAD_EXPR (which requires non-REPL
+	! mode) work.  The files themselves need not exist
+	character(len = *), parameter :: MODSRC = &
+		'src/tests/test-src/modules/_diag.syntran'
+	character(len = *), parameter :: ERRSRC = &
+		'src/tests/test-src/errors/_diag.syntran'
 
 	logical, allocatable :: tests(:)
 
@@ -5050,13 +5066,113 @@ subroutine unit_test_error_codes(npass, nfail)
 			unique, &
 			fmt_ok, &
 
-			! 3. end-to-end emission via diags
+			! 3. end-to-end emission via diags.  One snippet per reachable
+			! EC_* code, roughly in EC_* declaration order
 			diag_has_code(get_diags("123456789123456789'i32;"), EC_BAD_I32), &
-			diag_has_code(get_diags('true + 4;'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('99999999999999999999999999;'), EC_BAD_I64), &
+			diag_has_code(get_diags("0xFFFFFFFFF'i32;"), EC_BAD_HEX32), &
+			diag_has_code(get_diags('0xFFFFFFFFFFFFFFFFF;'), EC_BAD_HEX64), &
+			diag_has_code(get_diags("0o77777777777'i32;"), EC_BAD_OCT32), &
+			diag_has_code(get_diags('0o7777777777777777777777;'), EC_BAD_OCT64), &
+			diag_has_code(get_diags( &
+				"0b100000000000000000000000000000000'i32;"), EC_BAD_BIN32), &
+			diag_has_code(get_diags( &
+				'0b10000000000000000000000000000000000000000000000000000000000000001;'), &
+				EC_BAD_BIN64), &
+			diag_has_code(get_diags('1 + 1;', MODSRC), EC_BAD_EXPR), &
+			diag_has_code(get_diags('"abc;'), EC_UNTERMINATED_STR), &
+			diag_has_code(get_diags('r"abc;'), EC_UNTERMINATED_RAW_STR), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let a = [S{x=1}, S{x=2}, S{x=3}]; let b = a[0:2];'), &
+				EC_ARRAY_STRUCT_SLICE), &
+			diag_has_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT), &
+			diag_has_code(get_diags('fn f(x: nope): i32 { return 1; }'), EC_BAD_TYPE), &
+			diag_has_code(get_diags("1'foo;"), EC_BAD_TYPE_SUFFIX), &
+			diag_has_code(get_diags('$;'), EC_UNEXPECTED_CHAR), &
+			diag_has_code(get_diags('let a = ;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags( &
+				'fn f() { let x = 1; } let a = f();'), EC_VOID_ASSIGN), &
+			diag_has_code(get_diags('let a = 1; let a = 2;'), EC_REDECLARE_VAR), &
+			diag_has_code(get_diags('struct S{x:i32, x:i32}'), EC_REDECLARE_MEM), &
+			diag_has_code(get_diags( &
+				'fn f():i32{return 1;} fn f():i32{return 2;}'), EC_REDECLARE_FN), &
+			diag_has_code(get_diags('fn min():i32{return 1;}'), EC_REDECLARE_INTR_FN), &
+			diag_has_code(get_diags('struct S{x:i32} struct S{y:i32}'), EC_REDECLARE_STRUCT), &
+			diag_has_code(get_diags('struct i32{x:i32}'), EC_REDECLARE_PRIMITIVE), &
 			diag_has_code(get_diags('let a = b;'), EC_UNDECLARE_VAR), &
+			diag_has_code(get_diags('nope();'), EC_UNDECLARE_FN), &
+			diag_has_code(get_diags( &
+				'let a = reshape([1,2,3,4], [2,2]);'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('fn f(): i32 { let x = 1; }'), EC_NO_RETURN), &
+			diag_has_code(get_diags( &
+				'fn f(b:bool): i32 { if b {return 1;} }'), EC_MISSING_RETURN), &
+			diag_has_code(get_diags('let a = abs(1, 2);'), EC_BAD_ARG_COUNT), &
+			diag_has_code(get_diags('let a = min(1);'), EC_TOO_FEW_ARGS), &
+			diag_has_code(get_diags( &
+				'let a=[1,2]; let b = size(a, 0, 1);'), EC_TOO_MANY_ARGS), &
+			diag_has_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT), &
+			diag_has_code(get_diags( &
+				'let a=[1,2,3,4,5,6,7,8,9]; let idx=[0;2,2]; let b = a[idx];'), &
+				EC_BAD_SUB_RANK), &
+			diag_has_code(get_diags('let a=[0,1,2,3,4]; let b = a[::1];'), EC_EMPTY_STEP), &
+			diag_has_code(get_diags('let a = 5; let b = a[0];'), EC_SCALAR_SUBSCRIPT), &
+			diag_has_code(get_diags( &
+				'let a = [1,2; 2,2]; let c = [a, a];'), EC_BAD_CAT_RANK), &
+			diag_has_code(get_diags('fn f(): i32 { return 1.0; }'), EC_BAD_RET_TYPE), &
+			diag_has_code(get_diags( &
+				'fn f(x: i32): i32 { return x; } let a = f(1.0);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('fn f(x: &i32) {} f(1);'), EC_BAD_ARG_VAL), &
+			diag_has_code(get_diags( &
+				'fn f(x: i32) {} let a=1; f(&a);'), EC_BAD_ARG_REF), &
+			diag_has_code(get_diags('fn f(x: &i32){} f(&(1+1));'), EC_NON_NAME_REF), &
+			diag_has_code(get_diags( &
+				'fn f(x: &i32){} let a=[1,2]; f(&a[0]);'), EC_SUB_REF), &
+			! EC_BAD_ARG_RANK (E47) excluded -- dead code, see note above
+			diag_has_code(get_diags('true + 4;'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags( &
+				'let a = [1,2; 2,2]; let b = [3,4]; let c = a + b;'), EC_BINARY_RANKS), &
+			diag_has_code(get_diags('-true;'), EC_UNARY_TYPES), &
+			diag_has_code(get_diags('for i in 5 {}'), EC_NON_ARRAY_LOOP), &
+			diag_has_code(get_diags('if 5 {}'), EC_NON_BOOL_CONDITION), &
+			diag_has_code(get_diags('let a = [0: 1.0; 5];'), EC_NON_FLOAT_LEN_RANGE), &
+			diag_has_code(get_diags('let a = [0.0: 1.0; "x"];'), EC_NON_INT_LEN), &
+			diag_has_code(get_diags('let a = [0: 1.0; 5];'), EC_BOUND_TYPE_MISMATCH), &
+			diag_has_code(get_diags('let a = ["a": "z"];'), EC_NON_NUM_RANGE), &
+			diag_has_code(get_diags('let b=[1,2,3]; let a = [b; 5];'), EC_NON_SCA_VAL), &
+			diag_has_code(get_diags('let a = [1.0: 5.0];'), EC_NON_INT_RANGE), &
+			diag_has_code(get_diags('let a = [1, "a"];'), EC_HET_ARRAY), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32, y:i32} let s = S{x=1, x=2};'), EC_UNSET_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32, y:i32} let s = S{x=1, x=2};'), EC_RESET_MEMBER), &
+			diag_has_code(get_diags('let a = 5; let b = a.x;'), EC_NON_STRUCT_DOT), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let s=S{z=1};'), EC_BAD_MEMBER_NAME_SHORT), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let s=S{x=1.0};'), EC_BAD_MEMBER_TYPE), &
+			diag_has_code(get_diags( &
+				'#include("does_not_exist_xyz.syntran");'), EC_INC_404), &
+			diag_has_code(get_diags('#include(".");'), EC_INC_READ), &
+			diag_has_code(get_diags('use no_such_module_xyz;', MODSRC), EC_MOD_404), &
+			diag_has_code(get_diags('use dir_mod;', ERRSRC), EC_MOD_READ), &
+			diag_has_code(get_diags('use circular_a;', MODSRC), EC_CIRCULAR_IMPORT), &
+			diag_has_code(get_diags( &
+				'use mymath; use mymath;', MODSRC), EC_DUPLICATE_IMPORT), &
+			diag_has_code(get_diags('use foo-bar;', MODSRC), EC_MOD_HYPHEN), &
+			diag_has_code(get_diags('use let;', MODSRC), EC_MOD_KEYWORD), &
+			diag_has_code(get_diags('use std;', MODSRC), EC_MOD_RESERVED_STD), &
+			diag_has_code(get_diags('use foo bar;', MODSRC), EC_MOD_SPACE), &
+			diag_has_code(get_diags('use foo as let;', MODSRC), EC_ALIAS_KEYWORD), &
+			diag_has_code(get_diags('use foo as std;', MODSRC), EC_ALIAS_RESERVED_STD), &
+			diag_has_code(get_diags('use foo as ba-r;', MODSRC), EC_ALIAS_HYPHEN), &
+			diag_has_code(get_diags('use foo as a b;', MODSRC), EC_ALIAS_SPACE), &
+			diag_has_code(get_diags( &
+				'use foo as bar::*;', MODSRC), EC_ALIAS_WITH_DOUBLECOLON), &
+			diag_has_code(get_diags_file('does_not_exist_xyz_404.syntran'), EC_404), &
 
 			! 4. direct constructor / prefix-helper spot checks
-			index(err_404('missing.syntran'), '['//EC_404//']') > 0, &
 			index(err_matmul_dim(2_8, 3_8), '['//RC_MATMUL_DIM//']') > 0, &
 			index(err_eval_node('some_node_kind'), '['//IC_EVAL_NODE//']') > 0, &
 			index(warn_pre(WC_MISSING_RETURN), '['//WC_MISSING_RETURN//']') > 0 &
@@ -5066,12 +5182,24 @@ subroutine unit_test_error_codes(npass, nfail)
 
 contains
 
-	function get_diags(str_) result(diag_)
+	function get_diags(str_, src_file) result(diag_)
 		character(len = *), intent(in) :: str_
+		character(len = *), intent(in), optional :: src_file
 		type(string_vector_t) :: diag_
 		character(len = :), allocatable :: res_
-		res_ = eval(str_, .true., diags = diag_)
+		if (present(src_file)) then
+			res_ = eval(str_, .true., src_file = src_file, diags = diag_)
+		else
+			res_ = eval(str_, .true., diags = diag_)
+		end if
 	end function get_diags
+
+	function get_diags_file(filename) result(diag_)
+		character(len = *), intent(in) :: filename
+		type(string_vector_t) :: diag_
+		character(len = :), allocatable :: res_
+		res_ = interpret_file(filename, quiet = .true., diags = diag_)
+	end function get_diags_file
 
 	function diag_has_code(diag_, code) result(found)
 		type(string_vector_t), intent(in) :: diag_

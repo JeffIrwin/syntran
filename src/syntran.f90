@@ -531,7 +531,7 @@ end function syntran_eval
 
 !===============================================================================
 
-function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args) result(res)
+function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags) result(res)
 
 	! TODO:
 	!   - enable input echo for file input (not for stdin)
@@ -558,6 +558,11 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	logical, optional, intent(in) :: chdir_
 
 	type(string_vector_t), optional, intent(in) :: script_args
+
+	! Diagnostic messages (one error per element), unset on success.  Mirrors
+	! the diags out-arg of syntran_eval(), including the EC_404 case below
+	! which happens before any parser/diagnostics object exists
+	type(string_vector_t), optional, intent(out) :: diags
 
 	!********
 
@@ -586,15 +591,20 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 
 	if (iostat /= exit_success) then
 		if (.not. state%quiet) write(*,*) err_404(filename)
+		if (present(diags)) then
+			diags = new_string_vector()
+			call diags%push(err_404(filename))
+		end if
+		res = ''
 		return
 	end if
 
 	if (chdirl) then
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
-			chdir_ = get_dir(filename), script_args = script_args)))
+			chdir_ = get_dir(filename), script_args = script_args, diags = diags)))
 	else
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
-			script_args = script_args)))
+			script_args = script_args, diags = diags)))
 	end if
 
 end function syntran_interpret_file

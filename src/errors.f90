@@ -62,7 +62,7 @@ module syntran__errors_m
 		EC_BAD_ARG_REF = "E44", &
 		EC_NON_NAME_REF = "E45", &
 		EC_SUB_REF = "E46", &
-		EC_BAD_ARG_RANK = "E47", &
+		EC_BAD_ARG_RANK = "E47", &  ! retired: constructor removed, never reuse
 		EC_BINARY_TYPES = "E48", &
 		EC_BINARY_RANKS = "E49", &
 		EC_UNARY_TYPES = "E50", &
@@ -1172,23 +1172,10 @@ end function err_sub_ref
 
 !===============================================================================
 
-function err_bad_arg_rank(context, span, fn, iarg, param, expect, actual) &
-		result(err)
-
-	type(text_context_t) :: context
-	type(text_span_t), intent(in) :: span
-	character(len = :), allocatable :: err
-	integer, intent(in):: iarg, expect, actual
-
-	character(len = *), intent(in) :: fn, param
-
-	err = err_pre(EC_BAD_ARG_RANK) &
-		//'function `'//fn//'` parameter '//str(iarg)//' `'//param &
-		//'` requires rank-'//str(expect)//' array but was given a rank-' &
-		//str(actual)//' array' &
-		//underline(context, span)//" wrong argument rank"//color_reset
-
-end function err_bad_arg_rank
+! EC_BAD_ARG_RANK (E47) is formally retired: its constructor was deleted
+! because it was never wired up to any call site, but the code itself stays
+! registered in get_all_error_codes() forever and must never be reused (see
+! the permanence policy at the top of this file and in doc/errors.md)
 
 !===============================================================================
 

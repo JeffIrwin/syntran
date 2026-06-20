@@ -204,9 +204,10 @@ A `&` reference was taken of an expression that isn't a plain variable name.
 
 A `&` reference was taken of a subscripted expression, which isn't allowed.
 
-### E47 -- bad-arg-rank
+### E47 -- bad-arg-rank (retired)
 
-A function argument array's rank does not match the corresponding parameter's declared rank.
+Never shipped a working constructor and is no longer reachable.  The code is
+kept reserved per the permanence policy above; do not reuse it.
 
 ### E48 -- binary-types
 
