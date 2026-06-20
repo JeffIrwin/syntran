@@ -550,7 +550,14 @@ logical function is_dir(filename)
 	! which vary between compiler runtimes (e.g. gfortran vs ifx)
 
 	character(len = *), intent(in) :: filename
-	inquire(file = trim(filename)//'/.', exist = is_dir)
+
+	character(len = :), allocatable :: probe
+
+	! Older ifort (e.g. classic 2021.10) segfaults if the file= specifier is
+	! a non-trivial character expression (string concatenation) instead of a
+	! plain variable, so build the path first
+	probe = trim(filename)//'/.'
+	inquire(file = probe, exist = is_dir)
 
 end function is_dir
 
