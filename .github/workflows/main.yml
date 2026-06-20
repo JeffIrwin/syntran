@@ -211,7 +211,6 @@
 					#bash ./build.sh debug \n
 
 					copy .\\build\\Release\\syntran.exe .\\ \n
-					copy C:\\mingw64\\bin\\libgcc_s_seh-1.dll .\\ \n
 					copy C:\\mingw64\\bin\\libwinpthread-1.dll .\\ \n
 				"
 			},
@@ -264,7 +263,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'windows-latest'",
 				"with": {
-					"path": "./syntran.exe\n./libgcc_s_seh-1.dll\n./libwinpthread-1.dll",
+					"path": "./syntran.exe\n./libwinpthread-1.dll",
 					"name": "syntran-windows"
 				}
 			},
