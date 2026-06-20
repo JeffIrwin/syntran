@@ -68,7 +68,7 @@ elseif(DEFINED ENV{SYNTRAN_INTEL})
 else()
 	add_link_options(-fopenmp)
 endif()
-add_link_options("-static-libquadmath -static-libgfortran -static-libgcc")
+add_link_options(-static-libquadmath -static-libgfortran -static-libgcc)
 
 set(SRC_DIR "src")
 
