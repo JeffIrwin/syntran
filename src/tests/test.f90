@@ -5712,10 +5712,10 @@ subroutine unit_test_dir_unreadable_errors(npass, nfail)
 
 	logical, allocatable :: tests(:)
 
-	if (fort_compiler /= 'gfortran') then
-		write(*,*) 'Skipping '//label//' (gfortran only) ...'
-		return
-	end if
+	!if (fort_compiler /= 'gfortran') then
+	!	write(*,*) 'Skipping '//label//' (gfortran only) ...'
+	!	return
+	!end if
 
 	write(*,*) 'Unit testing '//label//' ...'
 
