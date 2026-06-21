@@ -654,11 +654,15 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	call parser%parse_statement(body)
 
-	if (.not. parser%returned) then
+	! A void fn has nothing to return, so the lack of any return statement is
+	! not an error for it.  Only non-void fns require at least one return
+	if (.not. parser%returned .and. fn%type%type /= void_type) then
 		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
 		call parser%diagnostics%push( &
 			err_no_return(parser%context(), &
 			span, identifier%text))
+	else if (.not. parser%returned) then
+		! Void fn with no returns: nothing to check
 	else if (.not. all_paths_return(body)) then
 		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
 		if (permissive_return) then

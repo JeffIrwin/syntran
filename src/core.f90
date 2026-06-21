@@ -36,14 +36,6 @@ module syntran__core_m
 	!    * also test line number, column number, filename, and ^^^ underline
 	!      span correctness of diagnostics
 	!      + done
-	!    * Two pre-existing oddities noticed (not fixed, out of scope for this
-	!      task): a handful of errors (E12, E13, E14, E36-E40, E63) get pushed
-	!      as exact duplicate diagnostics (likely an artifact of the two-pass
-	!      parser lacking a de-dup guard), and fn f() { ... } with no
-	!      return-type annotation still triggers EC_NO_RETURN alongside
-	!      EC_VOID_ASSIGN in the E21 example. Neither affects location
-	!      correctness, but they're worth a follow-up if you want diagnostic
-	!      hygiene tightened.
 	!    * also test reachable runtime errors. slightly lower priority than
 	!      parse-time errors
 	!    * internal errors are supposed to be unreachable, so we can't add tests

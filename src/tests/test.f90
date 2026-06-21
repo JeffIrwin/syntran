@@ -49,6 +49,22 @@ end function diag_has_code
 
 !===============================================================================
 
+function diag_count_code(diag_, code) result(count_)
+	! Like diag_has_code(), but returns how many diagnostics carry [code].
+	! Used to catch duplicate-diagnostic regressions that diag_has_code()
+	! can't see (it only checks presence, not count)
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: code
+	integer :: count_
+	integer :: k
+	count_ = 0
+	do k = 1, diag_%len_
+		if (index(diag_%v(k)%s, '['//code//']') > 0) count_ = count_ + 1
+	end do
+end function diag_count_code
+
+!===============================================================================
+
 function diag_loc_ok(diag_, code, src_file, line, col, ncaret) result(ok)
 
 	! Check that some diagnostic in diag_ carries [code], reports
@@ -5165,13 +5181,25 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags( &
 				'struct S{x:i32} let a = [S{x=1}, S{x=2}, S{x=3}]; let b = a[0:2];'), &
 				EC_ARRAY_STRUCT_SLICE), &
+			! These cases are parsed speculatively (e.g. as a possible
+			! assignment LHS) and then rewound/re-parsed as a plain expr if
+			! that guess is wrong.  Check that the diagnostic isn't pushed
+			! twice (once per parse attempt)
+			diag_count_code(get_diags( &
+				'struct S{x:i32} let a = [S{x=1}, S{x=2}, S{x=3}]; let b = a[0:2];'), &
+				EC_ARRAY_STRUCT_SLICE) == 1, &
 			diag_has_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT), &
+			diag_count_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT) == 1, &
 			diag_has_code(get_diags('fn f(x: nope): i32 { return 1; }'), EC_BAD_TYPE), &
 			diag_has_code(get_diags("1'foo;"), EC_BAD_TYPE_SUFFIX), &
 			diag_has_code(get_diags('$;'), EC_UNEXPECTED_CHAR), &
 			diag_has_code(get_diags('let a = ;'), EC_UNEXPECTED_TOKEN), &
 			diag_has_code(get_diags( &
 				'fn f() { let x = 1; } let a = f();'), EC_VOID_ASSIGN), &
+			! Void fns have nothing to return, so they must not also trigger
+			! EC_NO_RETURN alongside EC_VOID_ASSIGN above
+			.not. diag_has_code(get_diags( &
+				'fn f() { let x = 1; } let a = f();'), EC_NO_RETURN), &
 			diag_has_code(get_diags('let a = 1; let a = 2;'), EC_REDECLARE_VAR), &
 			diag_has_code(get_diags('struct S{x:i32, x:i32}'), EC_REDECLARE_MEM), &
 			diag_has_code(get_diags( &
@@ -5191,11 +5219,17 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags( &
 				'let a=[1,2]; let b = size(a, 0, 1);'), EC_TOO_MANY_ARGS), &
 			diag_has_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT), &
+			diag_count_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT) == 1, &
 			diag_has_code(get_diags( &
 				'let a=[1,2,3,4,5,6,7,8,9]; let idx=[0;2,2]; let b = a[idx];'), &
 				EC_BAD_SUB_RANK), &
+			diag_count_code(get_diags( &
+				'let a=[1,2,3,4,5,6,7,8,9]; let idx=[0;2,2]; let b = a[idx];'), &
+				EC_BAD_SUB_RANK) == 1, &
 			diag_has_code(get_diags('let a=[0,1,2,3,4]; let b = a[::1];'), EC_EMPTY_STEP), &
+			diag_count_code(get_diags('let a=[0,1,2,3,4]; let b = a[::1];'), EC_EMPTY_STEP) == 1, &
 			diag_has_code(get_diags('let a = 5; let b = a[0];'), EC_SCALAR_SUBSCRIPT), &
+			diag_count_code(get_diags('let a = 5; let b = a[0];'), EC_SCALAR_SUBSCRIPT) == 1, &
 			diag_has_code(get_diags( &
 				'let a = [1,2; 2,2]; let c = [a, a];'), EC_BAD_CAT_RANK), &
 			diag_has_code(get_diags('fn f(): i32 { return 1.0; }'), EC_BAD_RET_TYPE), &
@@ -5228,6 +5262,8 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('let a = 5; let b = a.x;'), EC_NON_STRUCT_DOT), &
 			diag_has_code(get_diags( &
 				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME), &
+			diag_count_code(get_diags( &
+				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME) == 1, &
 			diag_has_code(get_diags( &
 				'struct S{x:i32} let s=S{z=1};'), EC_BAD_MEMBER_NAME_SHORT), &
 			diag_has_code(get_diags( &
@@ -5338,10 +5374,16 @@ subroutine unit_test_error_locations(npass, nfail)
 				EC_UNTERMINATED_RAW_STR, P//'E11-unterminated-raw-str.syntran', 8, 9, 30), &
 			diag_loc_ok(get_diags_file(P//'E12-array-struct-slice.syntran'), &
 				EC_ARRAY_STRUCT_SLICE, P//'E12-array-struct-slice.syntran', 10, 16, 5), &
+			diag_count_code(get_diags_file(P//'E12-array-struct-slice.syntran'), &
+				EC_ARRAY_STRUCT_SLICE) == 1, &
 			diag_loc_ok(get_diags_file(P//'E13-struct-array-slice.syntran'), &
 				EC_STRUCT_ARRAY_SLICE, P//'E13-struct-array-slice.syntran', 11, 18, 6), &
+			diag_count_code(get_diags_file(P//'E13-struct-array-slice.syntran'), &
+				EC_STRUCT_ARRAY_SLICE) == 1, &
 			diag_loc_ok(get_diags_file(P//'E14-non-int-subscript.syntran'), &
 				EC_NON_INT_SUBSCRIPT, P//'E14-non-int-subscript.syntran', 5, 11, 3), &
+			diag_count_code(get_diags_file(P//'E14-non-int-subscript.syntran'), &
+				EC_NON_INT_SUBSCRIPT) == 1, &
 			diag_loc_ok(get_diags_file(P//'E15-bad-f32.syntran'), &
 				EC_BAD_F32, P//'E15-bad-f32.syntran', 7, 9, 11), &
 			diag_loc_ok(get_diags_file(P//'E16-bad-f64.syntran'), &
@@ -5386,12 +5428,20 @@ subroutine unit_test_error_locations(npass, nfail)
 				EC_TOO_MANY_ARGS, P//'E35-too-many-args.syntran', 6, 13, 9), &
 			diag_loc_ok(get_diags_file(P//'E36-bad-sub-count.syntran'), &
 				EC_BAD_SUB_COUNT, P//'E36-bad-sub-count.syntran', 5, 14, 2), &
+			diag_count_code(get_diags_file(P//'E36-bad-sub-count.syntran'), &
+				EC_BAD_SUB_COUNT) == 1, &
 			diag_loc_ok(get_diags_file(P//'E37-bad-sub-rank.syntran'), &
 				EC_BAD_SUB_RANK, P//'E37-bad-sub-rank.syntran', 6, 11, 4), &
+			diag_count_code(get_diags_file(P//'E37-bad-sub-rank.syntran'), &
+				EC_BAD_SUB_RANK) == 1, &
 			diag_loc_ok(get_diags_file(P//'E38-empty-step.syntran'), &
 				EC_EMPTY_STEP, P//'E38-empty-step.syntran', 5, 12, 1), &
+			diag_count_code(get_diags_file(P//'E38-empty-step.syntran'), &
+				EC_EMPTY_STEP) == 1, &
 			diag_loc_ok(get_diags_file(P//'E39-scalar-subscript.syntran'), &
 				EC_SCALAR_SUBSCRIPT, P//'E39-scalar-subscript.syntran', 5, 11, 2), &
+			diag_count_code(get_diags_file(P//'E39-scalar-subscript.syntran'), &
+				EC_SCALAR_SUBSCRIPT) == 1, &
 			diag_loc_ok(get_diags_file(P//'E40-bad-cat-rank.syntran'), &
 				EC_BAD_CAT_RANK, P//'E40-bad-cat-rank.syntran', 5, 13, 1), &
 			diag_loc_ok(get_diags_file(P//'E41-bad-ret-type.syntran'), &
@@ -5438,6 +5488,8 @@ subroutine unit_test_error_locations(npass, nfail)
 				EC_NON_STRUCT_DOT, P//'E62-non-struct-dot.syntran', 5, 9, 2), &
 			diag_loc_ok(get_diags_file(P//'E63-bad-member-name.syntran'), &
 				EC_BAD_MEMBER_NAME, P//'E63-bad-member-name.syntran', 11, 11, 1), &
+			diag_count_code(get_diags_file(P//'E63-bad-member-name.syntran'), &
+				EC_BAD_MEMBER_NAME) == 1, &
 			diag_loc_ok(get_diags_file(P//'E64-bad-member-name-short.syntran'), &
 				EC_BAD_MEMBER_NAME_SHORT, P//'E64-bad-member-name-short.syntran', 10, 11, 1), &
 			diag_loc_ok(get_diags_file(P//'E65-bad-member-type.syntran'), &
