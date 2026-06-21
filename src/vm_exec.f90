@@ -191,7 +191,7 @@ end subroutine do_compound
 
 !===============================================================================
 
-subroutine do_binop(left, right, op_kind, restype, res)
+subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 
 	! Compute a binary operation on two values, mirroring eval_binary_expr.
 	! restype: pre-computed result type from the compiler (node%val%type).
@@ -204,6 +204,13 @@ subroutine do_binop(left, right, op_kind, restype, res)
 	type(value_t), intent(in) :: left, right
 	integer, intent(in) :: op_kind, restype
 	type(value_t), intent(out) :: res
+
+	! Set (allocated) on a reachable matmul dimension-mismatch runtime error.
+	! See the comment on matmul_value_t() in math_bin_matmul.f90: that module
+	! has no access to state_t, so the caller (vm_run's OP_BINOP handler,
+	! which does have state) is responsible for translating an allocated
+	! rt_err into call rt_throw(state, rt_err)
+	character(len = :), allocatable, intent(out) :: rt_err
 
 	!*******
 
@@ -235,7 +242,7 @@ subroutine do_binop(left, right, op_kind, restype, res)
 	case (star_token)
 		call mul(left, right, res, '*')
 	case (matmul_token)
-		call matmul_(left, right, res, '@')
+		call matmul_(left, right, res, '@', rt_err)
 	case (sstar_token)
 		call pow(left, right, res, '**')
 	case (slash_token)
@@ -435,6 +442,10 @@ module subroutine vm_run(prog, state, res)
 
 	type(value_vector_t) :: stack
 	type(value_t) :: left, right, val
+
+	! Set (allocated) by do_binop() on a reachable matmul dimension-mismatch
+	! runtime error.  See the comment on do_binop()
+	character(len = :), allocatable :: rt_err
 	! params_pool: reusable buffer for fn-call / return parameter passing.
 	! Grows on demand; avoids allocate/deallocate on every OP_CALL / OP_RET.
 	type(value_t), allocatable :: params_pool(:)
@@ -511,7 +522,11 @@ module subroutine vm_run(prog, state, res)
 		case (OP_BINOP)
 			call vm_pop_copy(stack, right)
 			call vm_pop_copy(stack, left)
-			call do_binop(left, right, instr%a, instr%b, val)
+			call do_binop(left, right, instr%a, instr%b, val, rt_err)
+			if (allocated(rt_err)) then
+				call rt_throw(state, rt_err)
+				exit
+			end if
 			call vm_push_move(stack, val)
 
 		! --- unary operation ---
@@ -902,14 +917,14 @@ module subroutine vm_run(prog, state, res)
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
 				if (.not. iargs_pool(1)%file_%is_open) then
-					write(*,*) err_rt(RC_READLN_NOT_OPEN, 'readln() was called for file "' &
-						//iargs_pool(1)%file_%name_//'" which is not open')
-					call internal_error()
+					call rt_throw(state, err_rt(RC_READLN_NOT_OPEN, 'readln() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which is not open'))
+					exit
 				end if
 				if (.not. iargs_pool(1)%file_%mode_read) then
-					write(*,*) err_rt(RC_READLN_NOT_READ_MODE, 'readln() was called for file "' &
-						//iargs_pool(1)%file_%name_//'" which was not opened in read mode "r"')
-					call internal_error()
+					call rt_throw(state, err_rt(RC_READLN_NOT_READ_MODE, 'readln() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which was not opened in read mode "r"'))
+					exit
 				end if
 				val%type = str_type
 				if (.not. allocated(val%str)) allocate(val%str)
@@ -921,9 +936,9 @@ module subroutine vm_run(prog, state, res)
 						state%vars%vals(slot_id_)%file_%eof = .true.
 					end if
 				else if (io_ /= 0 .and. io_ /= iostat_eor) then
-					write(*,*) err_rt(RC_READLN_FAIL, 'cannot readln() from file "' &
-						//iargs_pool(1)%file_%name_//'"')
-					call internal_error()
+					call rt_throw(state, err_rt(RC_READLN_FAIL, 'cannot readln() from file "' &
+						//iargs_pool(1)%file_%name_//'"'))
+					exit
 				end if
 				end block
 
@@ -935,9 +950,9 @@ module subroutine vm_run(prog, state, res)
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
 				if (.not. iargs_pool(1)%file_%is_open) then
-					write(*,*) err_rt(RC_CLOSE_NOT_OPEN, 'close() was called for file "' &
-						//iargs_pool(1)%file_%name_//'" which is not open')
-					call internal_error()
+					call rt_throw(state, err_rt(RC_CLOSE_NOT_OPEN, 'close() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which is not open'))
+					exit
 				end if
 				if (is_loc_) then
 					state%locs%vals(slot_id_)%file_%is_open = .false.
@@ -950,6 +965,7 @@ module subroutine vm_run(prog, state, res)
 
 			else
 				call vm_call_intr(instr%a, nintr, iargs_pool(1:nintr), state, val)
+				if (state%rt_halt) exit
 			end if
 
 			call vm_push_move(stack, val)
@@ -981,6 +997,7 @@ module subroutine vm_run(prog, state, res)
 				call syntax_eval(nd%array%ubound, state, for_iters(fi)%ubound_)
 			if (allocated(nd%array%len_  )) &
 				call syntax_eval(nd%array%len_,   state, for_iters(fi)%len_   )
+			if (state%rt_halt) exit
 
 			select case (nd%array%kind)
 			case (array_expr)
@@ -1019,8 +1036,8 @@ module subroutine vm_run(prog, state, res)
 					select case (for_iters(fi)%itr_type)
 					case (i32_type)
 						if (for_iters(fi)%step%sca%i32 == 0) then
-							write(*,*) err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0')
-							call internal_error()
+							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
+							exit
 						end if
 						for_iters(fi)%len8 = ( &
 							for_iters(fi)%ubound_%sca%i32 - for_iters(fi)%lbound_%sca%i32 &
@@ -1028,8 +1045,8 @@ module subroutine vm_run(prog, state, res)
 							- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
 					case (i64_type)
 						if (for_iters(fi)%step%sca%i64 == 0) then
-							write(*,*) err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0')
-							call internal_error()
+							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
+							exit
 						end if
 						for_iters(fi)%len8 = ( &
 							for_iters(fi)%ubound_%sca%i64 - for_iters(fi)%lbound_%sca%i64 &
@@ -1037,16 +1054,16 @@ module subroutine vm_run(prog, state, res)
 							- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
 					case (f32_type)
 						if (for_iters(fi)%step%sca%f32 == 0.0) then
-							write(*,*) err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0')
-							call internal_error()
+							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
+							exit
 						end if
 						for_iters(fi)%len8 = ceiling( &
 							(for_iters(fi)%ubound_%sca%f32 - for_iters(fi)%lbound_%sca%f32) &
 							/ for_iters(fi)%step%sca%f32)
 					case (f64_type)
 						if (for_iters(fi)%step%sca%f64 == 0.0d0) then
-							write(*,*) err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0')
-							call internal_error()
+							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
+							exit
 						end if
 						for_iters(fi)%len8 = ceiling( &
 							(for_iters(fi)%ubound_%sca%f64 - for_iters(fi)%lbound_%sca%f64) &
@@ -1074,6 +1091,9 @@ module subroutine vm_run(prog, state, res)
 					for_iters(fi)%len8 = 1
 					do i = 1, rk_
 						call syntax_eval(nd%array%size(i), state, tmp_)
+						! Note: state%rt_halt is checked once after this loop
+						! (not inside it), since a bare exit here would only
+						! break this inner do, not the outer VM dispatch loop
 						for_iters(fi)%len8 = for_iters(fi)%len8 * tmp_%to_i64()
 					end do
 
@@ -1105,6 +1125,12 @@ module subroutine vm_run(prog, state, res)
 					for_iters(fi)%len8  = for_iters(fi)%array%len_
 				end if
 			end select
+
+			! Catches rt_halt set anywhere above: the size_array/unif_array
+			! length loops (which can't safely exit the outer dispatch loop
+			! from inside their own inner do), and the non-primary array
+			! expression case just above
+			if (state%rt_halt) exit
 
 			end associate
 			end block

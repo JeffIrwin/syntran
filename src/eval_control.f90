@@ -145,13 +145,14 @@ recursive module subroutine eval_for_statement(node, state, res)
 			len8 = 1
 			do i = 1, rank
 				call syntax_eval(node%array%size(i), state, len_)
+				if (state%rt_halt) return
 				len8 = len8 * len_%to_i64()
 			end do
 
 			if (size(node%array%elems) /= len8) then
-				write(*,*) err_rt(RC_ARRAY_SIZE_MISMATCH, "size of explicit array "// &
-					"does not match number of elements")
-				call internal_error()
+				call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, "size of explicit array "// &
+					"does not match number of elements"))
+				return
 			end if
 
 		case (unif_array)
@@ -161,6 +162,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 			len8 = 1
 			do i = 1, rank
 				call syntax_eval(node%array%size(i), state, len_)
+				if (state%rt_halt) return
 				len8 = len8 * len_%to_i64()
 			end do
 			!print *, 'len8 = ', len8
@@ -235,6 +237,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 
 		call syntax_eval(node%body, state, res)
 
+		if (state%rt_halt ) exit
 		if (state%returned) exit
 		if (state%breaked ) exit
 
@@ -723,6 +726,7 @@ module subroutine eval_translation_unit(node, state, res)
 		!print *, i, ' res = ', res%to_str()
 		!print *, ''
 
+		if (state%rt_halt ) exit
 		if (state%returned) exit
 
 	end do
@@ -1115,6 +1119,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 
 		do i = 1, size(node%elems)
 			call syntax_eval(node%elems(i), state, elem)
+			if (state%rt_halt) return
 			!print *, 'elem['//str(i)//'] = ', elem%str()
 			call array%push(elem)
 		end do
@@ -1123,13 +1128,14 @@ recursive module subroutine eval_array_expr(node, state, res)
 		allocate(array%size( array%rank ))
 		do i = 1, array%rank
 			call syntax_eval(node%size(i), state, len_)
+			if (state%rt_halt) return
 			array%size(i) = len_%to_i64()
 		end do
 
 		if (size(node%elems) /= product(array%size)) then
-			write(*,*) err_rt(RC_ARRAY_SIZE_MISMATCH, "size of explicit array "// &
-				"does not match number of elements")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, "size of explicit array "// &
+				"does not match number of elements"))
+			return
 		end if
 
 		!print *, 'copying array'
@@ -1163,6 +1169,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 
 		do i = 1, size(node%elems)
 			call syntax_eval(node%elems(i), state, elem)
+			if (state%rt_halt) return
 			!print *, 'elem['//str(i)//'] = ', elem%str()
 
 			if (res%array%type == struct_type) then
@@ -1233,8 +1240,10 @@ recursive module subroutine eval_while_statement(node, state, res)
 		state%continued = .false.
 
 		call syntax_eval(node%body, state, res)
+		if (state%rt_halt) exit
 		call syntax_eval(node%condition, state, condition)
 
+		if (state%rt_halt ) exit
 		if (state%returned) exit
 		if (state%breaked ) exit
 
@@ -1329,9 +1338,10 @@ recursive module subroutine eval_block_statement(node, state, res)
 		! In case of no-op if statements and while loops
 		if (tmp%type /= unknown_type) res = tmp
 
-		if (state%returned ) exit
-		if (state%breaked  ) exit
-		if (state%continued) exit  ! exit (break) the block but not the enclosing loop
+		if (state%rt_halt   ) exit
+		if (state%returned  ) exit
+		if (state%breaked   ) exit
+		if (state%continued ) exit  ! exit (break) the block but not the enclosing loop
 
 	end do
 

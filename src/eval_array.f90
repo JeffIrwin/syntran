@@ -97,8 +97,8 @@ recursive module subroutine set_val(node, var, state, val, index_)
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
 		! Already caught in parser
-		write(*,*) err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented")
-		call internal_error()
+		call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+		return
 	end if
 	!print *, "scalar_sub"
 
@@ -160,8 +160,8 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 			if (.not. all(node%lsubscripts%sub_kind == scalar_sub)) then
 				!print *, "slice sub"
-				write(*,*) err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented")
-				call internal_error()
+				call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+				return
 			end if
 
 			i8 = sub_eval(node, var, state)
@@ -189,8 +189,8 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
 			!print *, "slice sub"
-			write(*,*) err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+			return
 		end if
 
 		! Arrays chained by a dot: `a[0].b[0]`
@@ -247,8 +247,8 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
 		!print *, "slice sub"
-		write(*,*) err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented")
-		call internal_error()
+		call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+		return
 	end if
 	!print *, "scalar_sub"
 

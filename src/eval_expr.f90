@@ -23,10 +23,14 @@ recursive module subroutine eval_binary_expr(node, state, res)
 
 	integer :: larrtype, rarrtype
 
+	character(len = :), allocatable :: rt_err
+
 	type(value_t) :: left, right
 
 	call syntax_eval(node%left , state, left )
+	if (state%rt_halt) return
 	call syntax_eval(node%right, state, right)
+	if (state%rt_halt) return
 
 	!print *, 'left  type = ', kind_name(left%type)
 	!print *, 'right type = ', kind_name(right%type)
@@ -64,7 +68,11 @@ recursive module subroutine eval_binary_expr(node, state, res)
 		call mul(left, right, res, node%op%text)
 
 	case (matmul_token)
-		call matmul_(left, right, res, node%op%text)
+		call matmul_(left, right, res, node%op%text, rt_err)
+		if (allocated(rt_err)) then
+			call rt_throw(state, rt_err)
+			return
+		end if
 
 	case (sstar_token)
 		call pow(left, right, res, node%op%text)
@@ -241,9 +249,9 @@ recursive module subroutine eval_name_expr(node, state, res)
 				case (scalar_sub)
 					! noop
 				case default
-					write(*,*) err_rt(RC_BAD_SUBSCRIPT_KIND, "bad subscript kind `"// &
-						kind_name(sub_kind)//"`")
-					call internal_error()
+					call rt_throw(state, err_rt(RC_BAD_SUBSCRIPT_KIND, "bad subscript kind `"// &
+						kind_name(sub_kind)//"`"))
+					return
 				end select
 			end do
 			res%array%len_ = product(res%array%size)
@@ -329,9 +337,9 @@ recursive module subroutine eval_name_expr(node, state, res)
 				case (scalar_sub)
 					! noop
 				case default
-					write(*,*) err_rt(RC_BAD_SUBSCRIPT_KIND, "bad subscript kind `"// &
-						kind_name(sub_kind)//"`")
-					call internal_error()
+					call rt_throw(state, err_rt(RC_BAD_SUBSCRIPT_KIND, "bad subscript kind `"// &
+						kind_name(sub_kind)//"`"))
+					return
 				end select
 			end do
 			res%array%len_ = product(res%array%size)

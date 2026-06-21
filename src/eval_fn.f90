@@ -99,6 +99,7 @@ recursive module subroutine eval_fn_call(node, state, res)
 		if (.not. node%is_ref(i)) then
 			! Pass-by-value
 			call syntax_eval(node%args(i), state, params_tmp(i))
+			if (state%rt_halt) return
 		end if
 	end do
 
@@ -127,6 +128,13 @@ recursive module subroutine eval_fn_call(node, state, res)
 
 	! Finally, evaluate the fn body
 	call syntax_eval(state%fns%fns( node%id_index )%node%body, state, res)
+
+	! A runtime error halted evaluation inside the fn body.  Bail out now:
+	! state%returned is not expected to be set in this case, so the "every fn
+	! must return" stopgap check below would otherwise misreport this as
+	! IC_FN_END_REACHED instead of the real runtime error.  No need to restore
+	! locs0/returned0 since evaluation is unwinding to the top regardless
+	if (state%rt_halt) return
 
 	!print *, "res rank = ", res%array%rank
 	!print *, 'res = ', res%to_str()
@@ -773,21 +781,23 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 	case ("parse_i32")
 
 		call syntax_eval(node%args(1), state, arg)
+		if (state%rt_halt) return
 		read(arg%str%s, *, iostat = io) res%sca%i32
 		if (io /= 0) then
-			write(*,*) err_rt(RC_PARSE_I32, " cannot parse_i32() for argument `"// &
-				arg%str%s//"`")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_PARSE_I32, " cannot parse_i32() for argument `"// &
+				arg%str%s//"`"))
+			return
 		end if
 
 	case ("parse_i64")
 
 		call syntax_eval(node%args(1), state, arg)
+		if (state%rt_halt) return
 		read(arg%str%s, *, iostat = io) res%sca%i64
 		if (io /= 0) then
-			write(*,*) err_rt(RC_PARSE_I64, " cannot parse_i64() for argument `"// &
-				arg%str%s//"`")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_PARSE_I64, " cannot parse_i64() for argument `"// &
+				arg%str%s//"`"))
+			return
 		end if
 
 	case ("parse_f32")
@@ -795,21 +805,23 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		! TODO: trim "f" literal suffix if present
 
 		call syntax_eval(node%args(1), state, arg)
+		if (state%rt_halt) return
 		read(arg%str%s, *, iostat = io) res%sca%f32
 		if (io /= 0) then
-			write(*,*) err_rt(RC_PARSE_F32, " cannot parse_f32() for argument `"// &
-				arg%str%s//"`")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_PARSE_F32, " cannot parse_f32() for argument `"// &
+				arg%str%s//"`"))
+			return
 		end if
 
 	case ("parse_f64")
 
 		call syntax_eval(node%args(1), state, arg)
+		if (state%rt_halt) return
 		read(arg%str%s, *, iostat = io) res%sca%f64
 		if (io /= 0) then
-			write(*,*) err_rt(RC_PARSE_F64, " cannot parse_f64() for argument `"// &
-				arg%str%s//"`")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_PARSE_F64, " cannot parse_f64() for argument `"// &
+				arg%str%s//"`"))
+			return
 		end if
 
 	case ("char")
@@ -846,7 +858,9 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 	case ("open")
 
 		call syntax_eval(node%args(1), state, arg1)
+		if (state%rt_halt) return
 		call syntax_eval(node%args(2), state, arg2)
+		if (state%rt_halt) return
 
 		if (.not. allocated(res%file_)) allocate(res%file_)
 		mode = arg2%str%s
@@ -862,9 +876,9 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 				res%file_%mode_write = .true.
 
 			case default
-				write(*,*) err_rt(RC_BAD_FILE_MODE, "bad file mode character """// &
-					char_//"""")
-				call internal_error()
+				call rt_throw(state, err_rt(RC_BAD_FILE_MODE, "bad file mode character """// &
+					char_//""""))
+				return
 
 			end select
 		end do
@@ -873,9 +887,9 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 			! Maybe "rw" mode could be allowed in the future, but i'm not sure
 			! what a useful application would be.  Perhaps if I exposed a
 			! rewind() or seek() fn
-			write(*,*) err_rt(RC_FILE_RW_MODE, "cannot open file """//arg1%str%s &
-				//""" in combined read/write mode """//mode//"""")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_FILE_RW_MODE, "cannot open file """//arg1%str%s &
+				//""" in combined read/write mode """//mode//""""))
+			return
 		end if
 
 		if (res%file_%mode_read) then
@@ -896,9 +910,9 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 			! Decode fortran iostat codes in message?  I just looked up the docs
 			! and there's not much about open iostat other than 0 is success.
 			! Read iostats are more descriptive
-			write(*,*) err_rt(RC_OPEN_FILE, "cannot open file """//resolved_path//"""")
-			write(*,*) "iostat = ", str(io)
-			call internal_error()
+			call rt_throw(state, err_rt(RC_OPEN_FILE, "cannot open file """//resolved_path// &
+				""" (iostat = "//str(io)//")"))
+			return
 		end if
 
 		!print *, 'opened unit ', res%file_%unit_
@@ -909,16 +923,17 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 	case ("readln")
 
 		call syntax_eval(node%args(1), state, arg1)
+		if (state%rt_halt) return
 
 		if (.not. arg1%file_%is_open) then
-			write(*,*) err_rt(RC_READLN_NOT_OPEN, "readln() was called for file """ &
-				//arg1%file_%name_//""" which is not open")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_READLN_NOT_OPEN, "readln() was called for file """ &
+				//arg1%file_%name_//""" which is not open"))
+			return
 		end if
 		if (.not. arg1%file_%mode_read) then
-			write(*,*) err_rt(RC_READLN_NOT_READ_MODE, "readln() was called for file """ &
-				//arg1%file_%name_//""" which was not opened in read mode ""r""")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_READLN_NOT_READ_MODE, "readln() was called for file """ &
+				//arg1%file_%name_//""" which was not opened in read mode ""r"""))
+			return
 		end if
 
 		!print *, "reading from unit", arg1%file_%unit_
@@ -955,10 +970,9 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		else if (io /= 0) then
 			! This can get thrown if you attempt to read past EOF.  Maybe add a
 			! more specific message ahead of read attempt in this case?
-			write(*,*) err_rt(RC_READLN_FAIL, "cannot readln() from file """ &
-				//arg1%file_%name_//"""")
-			write(*,*) "iostat = ", str(io)
-			call internal_error()
+			call rt_throw(state, err_rt(RC_READLN_FAIL, "cannot readln() from file """ &
+				//arg1%file_%name_//""" (iostat = "//str(io)//")"))
+			return
 
 		end if
 		!print *, 'eof   = ', arg1%file_%eof
@@ -966,21 +980,23 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 	case ("writeln")
 
 		call syntax_eval(node%args(1), state, arg1)
+		if (state%rt_halt) return
 
 		if (.not. arg1%file_%is_open) then
-			write(*,*) err_rt(RC_WRITELN_NOT_OPEN, "writeln() was called for file """ &
-				//arg1%file_%name_//""" which is not open")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_WRITELN_NOT_OPEN, "writeln() was called for file """ &
+				//arg1%file_%name_//""" which is not open"))
+			return
 		end if
 		if (.not. arg1%file_%mode_write) then
-			write(*,*) err_rt(RC_WRITELN_NOT_WRITE_MODE, "writeln() was called for file """ &
-				//arg1%file_%name_//""" which was not opened in write mode ""w""")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_WRITELN_NOT_WRITE_MODE, "writeln() was called for file """ &
+				//arg1%file_%name_//""" which was not opened in write mode ""w"""))
+			return
 		end if
 
 		!print *, 'writing to unit ', arg1%file_%unit_
 		do i = 2, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
+			if (state%rt_halt) return
 			write(arg1%file_%unit_, '(a)', advance = 'no') arg%to_str()
 		end do
 		write(arg1%file_%unit_, *)
@@ -988,16 +1004,17 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 	case ("eof")
 
 		call syntax_eval(node%args(1), state, arg1)
+		if (state%rt_halt) return
 
 		if (.not. arg1%file_%is_open) then
-			write(*,*) err_rt(RC_EOF_NOT_OPEN, "eof() was called for file """ &
-				//arg1%file_%name_//""" which is not open")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_EOF_NOT_OPEN, "eof() was called for file """ &
+				//arg1%file_%name_//""" which is not open"))
+			return
 		end if
 		if (.not. arg1%file_%mode_read) then
-			write(*,*) err_rt(RC_EOF_NOT_READ_MODE, "eof() was called for file """ &
-				//arg1%file_%name_//""" which was not opened in read mode ""r""")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_EOF_NOT_READ_MODE, "eof() was called for file """ &
+				//arg1%file_%name_//""" which was not opened in read mode ""r"""))
+			return
 		end if
 
 		!print *, "checking eof for unit", arg1%file_%unit_
@@ -1007,11 +1024,12 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 
 	case ("close")
 		call syntax_eval(node%args(1), state, arg1)
+		if (state%rt_halt) return
 
 		if (.not. arg1%file_%is_open) then
-			write(*,*) err_rt(RC_CLOSE_NOT_OPEN, "close() was called for file """ &
-				//arg1%file_%name_//""" which is not open")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_CLOSE_NOT_OPEN, "close() was called for file """ &
+				//arg1%file_%name_//""" which is not open"))
+			return
 		end if
 		if (node%args(1)%is_loc) then
 			state%locs%vals(node%args(1)%id_index)%file_%is_open = .false.
@@ -1042,10 +1060,12 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 
 		!print *, "evaluating size fn"
 		call syntax_eval(node%args(1), state, arg1)
+		if (state%rt_halt) return
 
 		! Is the `dim` arg present?
 		if (size(node%args) == 2) then
 			call syntax_eval(node%args(2), state, arg2)
+			if (state%rt_halt) return
 
 			!print *, "arg 1 type = ", kind_name(node%args(1)%kind)
 			!print *, "allocated = ", allocated(arg1%array)
@@ -1055,10 +1075,8 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 			if (arg2%sca%i32 < 0 .or. arg2%sca%i32 >= arg1%array%rank) then
 				! TODO: re-think runtime errors.  Context should be given if
 				! possible like for parser/lexer error diagnostics
-				write(*,*) err_rt(RC_SIZE_RANK_MISMATCH, "rank mismatch in size() call")
-				!print *, "rank     = ", arg1%array%rank
-				!print *, "size arg = ", arg2%sca%i32
-				call internal_error()
+				call rt_throw(state, err_rt(RC_SIZE_RANK_MISMATCH, "rank mismatch in size() call"))
+				return
 			end if
 
 			!print *, "allocated(size) = ", allocated(arg1%array%size)
@@ -1221,11 +1239,12 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		! std::transpose(source) -- transpose a rank-2 array.
 		! Physically permutes the column-major flat buffer; result is C x R.
 		call syntax_eval(node%args(1), state, arg1)  ! source array
+		if (state%rt_halt) return
 
 		! Runtime guard: source must be rank-2
 		if (arg1%array%rank /= 2) then
-			write(*,*) err_rt(RC_TRANSPOSE_RANK, "transpose requires a rank-2 array")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_TRANSPOSE_RANK, "transpose requires a rank-2 array"))
+			return
 		end if
 
 		! Build result metadata without copying any buffers.
@@ -1275,12 +1294,14 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		! std::reshape(source, shape) -- return source with new rank/size.
 		! The flat buffer is copied unchanged; only the shape metadata changes.
 		call syntax_eval(node%args(1), state, arg1)  ! source array
+		if (state%rt_halt) return
 		call syntax_eval(node%args(2), state, arg2)  ! shape (i32, rank-1)
+		if (state%rt_halt) return
 
 		! Runtime guard: product of new shape must equal total element count
 		if (product(int(arg2%array%i32(1:arg2%array%len_), 8)) /= arg1%array%len_) then
-			write(*,*) err_rt(RC_RESHAPE_MISMATCH, "reshape size mismatch")
-			call internal_error()
+			call rt_throw(state, err_rt(RC_RESHAPE_MISMATCH, "reshape size mismatch"))
+			return
 		end if
 
 		! Copy the source value (deep copies flat buffer, type, kind, len_)

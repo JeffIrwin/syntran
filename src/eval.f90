@@ -48,6 +48,14 @@ module syntran__eval_m
 		! default, or set SYNTRAN_BACKEND=ast env var for AST walking
 		logical :: bytecode
 
+		! Runtime-error halt flag and accumulated runtime diagnostics (rt_*
+		! codes).  Set by rt_throw() at a runtime-error call site.  Unlike
+		! parser diagnostics (node%diagnostics), which can accumulate many
+		! errors, evaluation halts after the first runtime error, so rt_diags
+		! will have at most one entry in practice
+		logical :: rt_halt = .false.
+		type(string_vector_t) :: rt_diags
+
 	end type state_t
 
 	!********
@@ -298,6 +306,26 @@ contains
 
 !===============================================================================
 
+subroutine rt_throw(state, msg)
+
+	! Record a runtime error (R*) on state and set the halt flag.  Call sites
+	! that used to do `write(*,*) err_rt(...); call internal_error()` should
+	! instead do `call rt_throw(state, err_rt(...)); return` (or `exit` from a
+	! dispatch loop).  Unwinding is then handled by rt_halt checks up the call
+	! stack; eval_dispatch() is responsible for printing and exiting non-quiet
+	! runs, and syntran_eval() is responsible for surfacing rt_diags through
+	! the `diags` out-arg for quiet/test runs
+
+	type(state_t), intent(inout) :: state
+	character(len = *), intent(in) :: msg
+
+	call state%rt_diags%push(msg)
+	state%rt_halt = .true.
+
+end subroutine rt_throw
+
+!===============================================================================
+
 !function divceil(num, den) result(res)
 elemental function divceil(num, den) result(res)
 
@@ -329,9 +357,6 @@ end function divceil
 
 recursive subroutine syntax_eval(node, state, res)
 
-	! TODO: add diagnostics to state for runtime errors (bounds overflow, rank
-	! mismatch, etc.)
-
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
@@ -350,6 +375,10 @@ recursive subroutine syntax_eval(node, state, res)
 	!print *, "node kind = ", kind_name(node%kind)
 
 	if (node%is_empty) return
+
+	! Backstop: a runtime error was already thrown somewhere below in this
+	! call tree.  Unwind immediately without evaluating any more nodes
+	if (state%rt_halt) return
 
 	!********
 
