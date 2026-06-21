@@ -926,6 +926,16 @@ module subroutine vm_run(prog, state, res)
 						//iargs_pool(1)%file_%name_//'" which was not opened in read mode "r"'))
 					exit
 				end if
+				if (iargs_pool(1)%file_%eof) then
+					! Reading again after the eof flag was already set is
+					! non-portable across compiler runtimes (some return a
+					! generic error iostat, others just return iostat_end
+					! again).  Throw deterministically instead of relying on
+					! the runtime's iostat
+					call rt_throw(state, err_rt(RC_READLN_FAIL, 'cannot readln() from file "' &
+						//iargs_pool(1)%file_%name_//'" past end of file'))
+					exit
+				end if
 				val%type = str_type
 				if (.not. allocated(val%str)) allocate(val%str)
 				val%str%s = read_line(iargs_pool(1)%file_%unit_, io_)

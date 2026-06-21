@@ -935,6 +935,15 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 				//arg1%file_%name_//""" which was not opened in read mode ""r"""))
 			return
 		end if
+		if (arg1%file_%eof) then
+			! Reading again after the eof flag was already set is non-portable
+			! across compiler runtimes (some return a generic error iostat,
+			! others just return iostat_end again).  Throw deterministically
+			! instead of relying on the runtime's iostat
+			call rt_throw(state, err_rt(RC_READLN_FAIL, "cannot readln() from file """ &
+				//arg1%file_%name_//""" past end of file"))
+			return
+		end if
 
 		!print *, "reading from unit", arg1%file_%unit_
 		if (.not. allocated(res%str)) allocate(res%str)
