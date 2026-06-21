@@ -39,10 +39,6 @@ module syntran__core_m
 	!    * also test reachable runtime errors. slightly lower priority than
 	!      parse-time errors
 	!      + done
-	!    * try reverting intel-specific test dodge now that we fixed early
-	!      return for read_file()
-	!      + made test gnu-only: 77aed59f
-	!      + fixed read_file bug: ceabce25
 	!    * internal errors are supposed to be unreachable, so we can't add tests
 	!      for them
 	!  - need an exists() built-in to check files, or some equivalent way to
