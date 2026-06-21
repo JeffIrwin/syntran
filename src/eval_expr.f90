@@ -227,6 +227,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 			! Element range/slice → string array result.  Reuse the standard
 			! slice machinery; get_subscript_range ignores the trailing char sub.
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+			if (state%rt_halt) return
 
 			allocate(res%array)
 			res%type = array_type
@@ -300,10 +301,12 @@ recursive module subroutine eval_name_expr(node, state, res)
 
 			! Rank-1 slice fast path: avoids allocating lsubs/ssubs/usubs/asubs.
 			call eval_slice_rank1(node, state, res)
+			if (state%rt_halt) return
 
 		else
 
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+			if (state%rt_halt) return
 
 			!print *, "type = ", kind_name( node%val%array%type )
 

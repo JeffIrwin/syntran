@@ -104,19 +104,19 @@ module syntran__errors_m
 		IC_EVAL_NODE = "I5", &
 		IC_EVAL_BINARY_OP = "I6", &
 		IC_UNIT_STEP_TYPE = "I7", &
-		IC_FOR_STEP_ZERO = "I8", &
-		IC_FOR_STEP_ZERO_F = "I9", &
+		IC_FOR_STEP_ZERO = "I8", &       ! retired: replaced by RC_FOR_STEP_ZERO, never reuse
+		IC_FOR_STEP_ZERO_F = "I9", &     ! retired: replaced by RC_FOR_STEP_ZERO_F, never reuse
 		IC_STEP_ARRAY_TYPE = "I10", &
 		IC_BOUND_LEN_TYPE = "I11", &
 		IC_FOR_ARRAY_KIND = "I12", &
 		IC_STR_CHAR_SUBSCRIPT = "I13", &
-		IC_ARRAY_STEP_ZERO = "I14", &
-		IC_ARRAY_STEP_ZERO_F = "I15", &
+		IC_ARRAY_STEP_ZERO = "I14", &    ! retired: replaced by RC_ARRAY_STEP_ZERO, never reuse
+		IC_ARRAY_STEP_ZERO_F = "I15", &  ! retired: replaced by RC_ARRAY_STEP_ZERO_F, never reuse
 		IC_UNEXPECTED_ARRAY_KIND = "I16", &
 		IC_ALLOC_ARRAY_TYPE = "I17", &
 		IC_ARRAY_TYPE_NOT_IMPL = "I18", &
 		IC_UNEXPECTED_ASSIGN_OP = "I19", &
-		IC_SUBSCRIPT_STEP_ZERO = "I20", &
+		IC_SUBSCRIPT_STEP_ZERO = "I20", & ! retired: replaced by RC_SUBSCRIPT_STEP_ZERO, never reuse
 		IC_BAD_ARRAY_SUBSCRIPT_TYPE = "I21", &
 		IC_EVAL_SUBSCRIPT_KIND = "I22", &
 		IC_BAD_ARRAY_VAL_TYPE = "I23", &
@@ -159,6 +159,9 @@ module syntran__errors_m
 		RC_STRUCT_ARRAY_SLICE = "R22", &
 		RC_FOR_STEP_ZERO = "R23", &
 		RC_FOR_STEP_ZERO_F = "R24", &
+		RC_ARRAY_STEP_ZERO = "R25", &
+		RC_ARRAY_STEP_ZERO_F = "R26", &
+		RC_SUBSCRIPT_STEP_ZERO = "R27", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -405,6 +408,9 @@ function get_all_error_codes() result(codes)
 	call codes%push(RC_STRUCT_ARRAY_SLICE)
 	call codes%push(RC_FOR_STEP_ZERO)
 	call codes%push(RC_FOR_STEP_ZERO_F)
+	call codes%push(RC_ARRAY_STEP_ZERO)
+	call codes%push(RC_ARRAY_STEP_ZERO_F)
+	call codes%push(RC_SUBSCRIPT_STEP_ZERO)
 	call codes%push(WC_MISSING_RETURN)
 end function get_all_error_codes
 
@@ -1176,6 +1182,14 @@ end function err_sub_ref
 ! because it was never wired up to any call site, but the code itself stays
 ! registered in get_all_error_codes() forever and must never be reused (see
 ! the permanence policy at the top of this file and in doc/errors.md)
+
+! IC_FOR_STEP_ZERO/_F (I8/I9), IC_ARRAY_STEP_ZERO/_F (I14/I15), and
+! IC_SUBSCRIPT_STEP_ZERO (I20) are likewise formally retired.  They were
+! reachable from ordinary syntran code (a runtime-valued step of 0), so their
+! err_int()/internal_error() call sites were replaced with rt_throw()/err_rt()
+! using new runtime codes RC_FOR_STEP_ZERO/_F, RC_ARRAY_STEP_ZERO/_F, and
+! RC_SUBSCRIPT_STEP_ZERO instead.  The five IC_* codes stay registered forever
+! per the permanence policy and must never be reused
 
 !===============================================================================
 

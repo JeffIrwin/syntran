@@ -30,6 +30,8 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - regression in aoc 2017/6 (aoc-syntran repo). part 1 is wrong and part 2
+	!    hangs with bytecode. ast is still correct. 1.3.1 fix or fold into 1.4?
 	!  - unit tests for contents of error messages. need new api to get error
 	!    msg. maybe add error codes too
 	!    * wip on this branch

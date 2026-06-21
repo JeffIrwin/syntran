@@ -5353,6 +5353,14 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	! confirms every R* message goes through the shared err_rt()/err_rt_pre()
 	! prefix helper.
 	!
+	! R23-R27 (step-is-0 family for `for` loops, range/array literals, and
+	! slice subscripts) used to crash the process via internal IC_* codes in
+	! the AST walker, even though a zero step is reachable from ordinary
+	! syntran code whenever the step is a runtime value rather than a parsed
+	! literal.  They are now caught via rt_throw()/err_rt() like every other
+	! R* code; see the retirement note for IC_FOR_STEP_ZERO/_F,
+	! IC_ARRAY_STEP_ZERO/_F, and IC_SUBSCRIPT_STEP_ZERO in errors.f90.
+	!
 	! Excluded from this end-to-end coverage:
 	!   - RC_TRANSPOSE_RANK (R18): std::transpose()'s parameter is statically
 	!     declared rank-2, and every attempt to construct a value that's
@@ -5361,11 +5369,6 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	!     trying std::reshape() (whose result rank is unknown at parse time
 	!     unless the shape argument is a literal) as the source of
 	!     std::transpose()'s argument; unreachable from valid syntran code
-	!   - RC_FOR_STEP_ZERO/_F (R23/R24): reachable in the VM (vm_exec.f90's
-	!     OP_FOR_SETUP), but the AST walker's equivalent check in
-	!     eval_for_statement() uses IC_FOR_STEP_ZERO/_F instead -- a
-	!     pre-existing backend inconsistency that predates this test, not
-	!     something rt_code_both_file() can paper over
 	!   - RC_ARRAY_SIZE_MISMATCH (R21) and RC_BAD_SUBSCRIPT_KIND (R20):
 	!     defensive checks for subscript/size-array shapes that the parser is
 	!     already expected to rule out; no valid-syntax repro found
@@ -5447,7 +5450,18 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			rt_code_both_file(P//'R17-size-rank-mismatch.syntran', RC_SIZE_RANK_MISMATCH), &
 
 			! R19: std::reshape() new shape doesn't match element count
-			rt_code_both_file(P//'R19-reshape-mismatch.syntran', RC_RESHAPE_MISMATCH) &
+			rt_code_both_file(P//'R19-reshape-mismatch.syntran', RC_RESHAPE_MISMATCH), &
+
+			! R23-R27: step-is-0 family (for loop, range/array literal, slice
+			! subscript), each for both an integer and float variant where
+			! applicable
+			rt_code_both_file(P//'R23-for-step-zero.syntran', RC_FOR_STEP_ZERO), &
+			rt_code_both_file(P//'R24-for-step-zero-f.syntran', RC_FOR_STEP_ZERO_F), &
+			rt_code_both_file(P//'R25-array-step-zero.syntran', RC_ARRAY_STEP_ZERO), &
+			rt_code_both_file( &
+				P//'R26-array-step-zero-f.syntran', RC_ARRAY_STEP_ZERO_F), &
+			rt_code_both_file( &
+				P//'R27-subscript-step-zero.syntran', RC_SUBSCRIPT_STEP_ZERO) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

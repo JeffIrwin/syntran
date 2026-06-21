@@ -526,8 +526,8 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 		ssub = ssubval%to_i64()
 
 		if (ssub == 0) then
-			write(*,*) err_int(IC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0')
-			call internal_error()
+			call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
+			return
 		end if
 
 		if (node%lsubscripts(i)%lsub_omit .or. node%lsubscripts(i)%usub_omit) then
@@ -623,6 +623,7 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 	rank_res = 0
 	do i = 1, rank_
 		call eval_subscript_1d(node, state, i, lsubs(i), ssubs(i), usubs(i), asubs(i), cr)
+		if (state%rt_halt) return
 		if (cr) rank_res = rank_res + 1
 	end do
 	!print *, 'lsubs = ', lsubs
@@ -1044,6 +1045,7 @@ module subroutine eval_slice_rank1(node, state, res)
 	id = node%id_index
 
 	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused)
+	if (state%rt_halt) return
 
 	len_ = divceil(usub - lsub, ssub)
 	if (lsub > usub .and. ssub > 0) len_ = 0_8
@@ -1103,6 +1105,7 @@ module subroutine eval_assign_slice_rank1(node, state, id, res)
 	type(value_t) :: rhs_elem, elem_val, result_val
 
 	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused)
+	if (state%rt_halt) return
 
 	len_ = divceil(usub - lsub, ssub)
 	if (lsub > usub .and. ssub > 0) len_ = 0_8

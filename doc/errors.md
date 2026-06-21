@@ -533,13 +533,18 @@ An unexpected/unrecognized binary operator token reached the evaluator.
 
 A `for` loop's unit-step (`a:b`) range has a runtime type other than `i32`/`i64` (AST and VM paths).
 
-### I8 -- for-step-zero
+### I8 -- for-step-zero (retired)
 
-A `for` loop's integer step (`a:step:b`) evaluated to 0 (AST and VM paths).
+Used to fire when a `for` loop's integer step (`a:step:b`) evaluated to 0 in
+the AST walker. Reachable from ordinary syntran code (a runtime-valued step),
+so it was replaced with runtime error R23 below. The code is kept reserved
+per the permanence policy above; do not reuse it.
 
-### I9 -- for-step-zero-f
+### I9 -- for-step-zero-f (retired)
 
-A `for` loop's float step (`a:step:b`) evaluated to 0.0 (AST and VM paths).
+Used to fire when a `for` loop's float step (`a:step:b`) evaluated to 0.0 in
+the AST walker. Replaced with runtime error R24 below for the same reason as
+I8; kept reserved, do not reuse.
 
 ### I10 -- step-array-type
 
@@ -557,13 +562,17 @@ A `for` loop's range array has an unrecognized/unimplemented array kind (AST and
 
 An unexpected subscript kind was used while indexing the characters of a string.
 
-### I14 -- array-step-0
+### I14 -- array-step-0 (retired)
 
-An array range literal's (non-loop) integer step evaluated to 0.
+Used to fire when an array range literal's (non-loop) integer step evaluated
+to 0. Reachable from ordinary syntran code, so it was replaced with runtime
+error R25 below. Kept reserved per the permanence policy above; do not reuse.
 
-### I15 -- array-step-0-f
+### I15 -- array-step-0-f (retired)
 
-An array range literal's (non-loop) float step evaluated to 0.0.
+Used to fire when an array range literal's (non-loop) float step evaluated to
+0.0. Replaced with runtime error R26 below for the same reason as I14; kept
+reserved, do not reuse.
 
 ### I16 -- unexpected-array-kind
 
@@ -581,9 +590,11 @@ An array value has an unrecognized internal `array%kind`.
 
 A compound-assignment operator (e.g. `+=`) token was not recognized.
 
-### I20 -- subscript-step-0
+### I20 -- subscript-step-0 (retired)
 
-An array slice subscript's step (`a[::s]`) evaluated to 0.
+Used to fire when an array slice subscript's step (`a[::s]`) evaluated to 0.
+Reachable from ordinary syntran code, so it was replaced with runtime error
+R27 below. Kept reserved per the permanence policy above; do not reuse.
 
 ### I21 -- bad-array-subscript-type
 
@@ -785,11 +796,33 @@ A slice subscript was used on an array of structs at runtime, which isn't implem
 
 ### R23 -- for-step-zero
 
-A bytecode-VM `for` loop's integer step evaluated to 0.
+A `for` loop's integer step (`a:step:b`) evaluated to 0.
+
+[Example](../src/tests/test-src/errors/R23-for-step-zero.syntran)
 
 ### R24 -- for-step-zero-f
 
-A bytecode-VM `for` loop's float step evaluated to 0.0.
+A `for` loop's float step (`a:step:b`) evaluated to 0.0.
+
+[Example](../src/tests/test-src/errors/R24-for-step-zero-f.syntran)
+
+### R25 -- array-step-zero
+
+An array range literal's (non-loop) integer step (`a:step:b`) evaluated to 0.
+
+[Example](../src/tests/test-src/errors/R25-array-step-zero.syntran)
+
+### R26 -- array-step-zero-f
+
+An array range literal's (non-loop) float step (`a:step:b`) evaluated to 0.0.
+
+[Example](../src/tests/test-src/errors/R26-array-step-zero-f.syntran)
+
+### R27 -- subscript-step-zero
+
+An array slice subscript's step (`a[::s]`) evaluated to 0.
+
+[Example](../src/tests/test-src/errors/R27-subscript-step-zero.syntran)
 
 ## Warnings
 

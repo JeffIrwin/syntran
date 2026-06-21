@@ -85,8 +85,8 @@ recursive module subroutine eval_for_statement(node, state, res)
 			case (i32_type)
 
 				if (step%sca%i32 == 0) then
-					write(*,*) err_int(IC_FOR_STEP_ZERO, 'for loop step is 0')
-					call internal_error()
+					call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
+					return
 				end if
 				len8 = (ubound_%sca%i32 - lbound_%sca%i32 &
 					+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
@@ -94,8 +94,8 @@ recursive module subroutine eval_for_statement(node, state, res)
 			case (i64_type)
 
 				if (step%sca%i64 == 0) then
-					write(*,*) err_int(IC_FOR_STEP_ZERO, 'for loop step is 0')
-					call internal_error()
+					call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
+					return
 				end if
 				len8 = (ubound_%sca%i64 - lbound_%sca%i64 &
 					+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
@@ -103,16 +103,16 @@ recursive module subroutine eval_for_statement(node, state, res)
 			case (f32_type)
 
 				if (step%sca%f32 == 0.0) then
-					write(*,*) err_int(IC_FOR_STEP_ZERO_F, 'for loop step is 0.0')
-					call internal_error()
+					call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
+					return
 				end if
 				len8 = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
 
 			case (f64_type)
 
 				if (step%sca%f64 == 0.0) then
-					write(*,*) err_int(IC_FOR_STEP_ZERO_F, 'for loop step is 0.0')
-					call internal_error()
+					call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
+					return
 				end if
 				len8 = ceiling((ubound_%sca%f64 - lbound_%sca%f64) / step%sca%f64)
 
@@ -417,6 +417,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 
 				! Slice element selection: iterate over selected elements
 				call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+				if (state%rt_halt) return
 				len8 = 1_8
 				do j8 = 1, nelem
 					if (allocated(asubs(j8)%v)) then
@@ -477,9 +478,11 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			    node%lsubscripts(1)%sub_kind /= arr_sub) then
 				! Rank-1 slice fast path: avoids allocating lsubs/ssubs/usubs/asubs.
 				call eval_assign_slice_rank1(node, state, id, res)
+				if (state%rt_halt) return
 			else
 
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+			if (state%rt_halt) return
 			allocate(size_tmp(rank_res))
 
 			!print *, "rank     = ", state%vars%vals(id)%array%rank
@@ -806,8 +809,8 @@ recursive module subroutine eval_array_expr(node, state, res)
 		if (array%type == i32_type) then
 
 			if (step%sca%i32 == 0) then
-				write(*,*) err_int(IC_ARRAY_STEP_ZERO, 'array step is 0')
-				call internal_error()
+				call rt_throw(state, err_rt(RC_ARRAY_STEP_ZERO, 'array step is 0'))
+				return
 			end if
 
 			array%cap = (ubound_%sca%i32 - lbound_%sca%i32 &
@@ -832,8 +835,8 @@ recursive module subroutine eval_array_expr(node, state, res)
 		else if (array%type == i64_type) then
 
 			if (step%sca%i64 == 0) then
-				write(*,*) err_int(IC_ARRAY_STEP_ZERO, 'array step is 0')
-				call internal_error()
+				call rt_throw(state, err_rt(RC_ARRAY_STEP_ZERO, 'array step is 0'))
+				return
 			end if
 
 			array%cap = (ubound_%sca%i64 - lbound_%sca%i64 &
@@ -862,8 +865,8 @@ recursive module subroutine eval_array_expr(node, state, res)
 			!print *, 'step = ', step%sca%f32
 
 			if (step%sca%f32 == 0.0) then
-				write(*,*) err_int(IC_ARRAY_STEP_ZERO_F, 'array step is 0.0')
-				call internal_error()
+				call rt_throw(state, err_rt(RC_ARRAY_STEP_ZERO_F, 'array step is 0.0'))
+				return
 			end if
 
 			array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
@@ -897,8 +900,8 @@ recursive module subroutine eval_array_expr(node, state, res)
 			!print *, 'step = ', step%sca%f64
 
 			if (step%sca%f64 == 0.0) then
-				write(*,*) err_int(IC_ARRAY_STEP_ZERO_F, 'array step is 0.0')
-				call internal_error()
+				call rt_throw(state, err_rt(RC_ARRAY_STEP_ZERO_F, 'array step is 0.0'))
+				return
 			end if
 
 			array%cap = ceiling((ubound_%sca%f64 - lbound_%sca%f64) / step%sca%f64)
