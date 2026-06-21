@@ -1,0 +1,11 @@
+// E16: bad-f64
+// Real literal with an explicit 'f64 suffix (or default float) that could
+// not be parsed
+
+fn half(x: f64): f64
+{
+	return x / 2.0;
+}
+
+let y = 1.234e+1e+2;
+println(half(4.0));

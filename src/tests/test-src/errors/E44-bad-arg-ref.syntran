@@ -1,0 +1,10 @@
+// E44: bad-arg-ref
+// A by-value parameter was given a `&` reference argument instead of a
+// value
+
+fn f(x: i32)
+{
+}
+
+let a = 1;
+f(&a);

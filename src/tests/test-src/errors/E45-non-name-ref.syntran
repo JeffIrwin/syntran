@@ -1,0 +1,9 @@
+// E45: non-name-ref
+// A `&` reference was taken of an expression that isn't a plain variable
+// name
+
+fn f(x: &i32)
+{
+}
+
+f(&(1 + 1));

@@ -1,0 +1,10 @@
+// E61: reset-member
+// A struct instance initializer set the same member twice
+
+struct S
+{
+	x: i32,
+	y: i32,
+}
+
+let s = S{x = 1, x = 2, y = 3};

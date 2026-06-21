@@ -1,0 +1,4 @@
+// E55: bound-type-mismatch
+// The lower and upper bounds of an array range have mismatched types
+
+let a = [0.0: 1; 5];

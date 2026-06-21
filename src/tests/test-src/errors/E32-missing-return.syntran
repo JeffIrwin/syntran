@@ -1,0 +1,10 @@
+// E32: missing-return
+// Not all code paths in a non-void function end in a return statement
+
+fn f(b: bool): i32
+{
+	if b
+	{
+		return 1;
+	}
+}

@@ -1,0 +1,6 @@
+// R16: close-not-open
+// close() was called on a file handle that isn't open
+
+let f = open("build/rt_file_r16.txt", "w");
+close(f);
+close(f);

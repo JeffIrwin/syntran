@@ -1,0 +1,4 @@
+// E73: mod-keyword
+// A module name is a reserved language keyword
+
+use let;

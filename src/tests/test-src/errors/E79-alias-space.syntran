@@ -1,0 +1,4 @@
+// E79: alias-space
+// A module alias contains a space
+
+use foo as a b;

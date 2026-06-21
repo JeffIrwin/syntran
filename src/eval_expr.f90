@@ -23,10 +23,14 @@ recursive module subroutine eval_binary_expr(node, state, res)
 
 	integer :: larrtype, rarrtype
 
+	character(len = :), allocatable :: rt_err
+
 	type(value_t) :: left, right
 
 	call syntax_eval(node%left , state, left )
+	if (state%rt_halt) return
 	call syntax_eval(node%right, state, right)
+	if (state%rt_halt) return
 
 	!print *, 'left  type = ', kind_name(left%type)
 	!print *, 'right type = ', kind_name(right%type)
@@ -64,7 +68,11 @@ recursive module subroutine eval_binary_expr(node, state, res)
 		call mul(left, right, res, node%op%text)
 
 	case (matmul_token)
-		call matmul_(left, right, res, node%op%text)
+		call matmul_(left, right, res, node%op%text, rt_err)
+		if (allocated(rt_err)) then
+			call rt_throw(state, rt_err)
+			return
+		end if
 
 	case (sstar_token)
 		call pow(left, right, res, node%op%text)
@@ -158,7 +166,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 	!print *, "type_ = ", kind_name(type_)
 
 	if (type_ == unknown_type) then
-		write(*,*) err_int_prefix//"unknown name expr type"
+		write(*,*) err_int(IC_UNKNOWN_NAME_EXPR_TYPE, "unknown name expr type")
 		call internal_error()
 	end if
 
@@ -219,6 +227,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 			! Element range/slice → string array result.  Reuse the standard
 			! slice machinery; get_subscript_range ignores the trailing char sub.
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+			if (state%rt_halt) return
 
 			allocate(res%array)
 			res%type = array_type
@@ -241,9 +250,9 @@ recursive module subroutine eval_name_expr(node, state, res)
 				case (scalar_sub)
 					! noop
 				case default
-					write(*,*) err_rt_prefix//"bad subscript kind `"// &
-						kind_name(sub_kind)//"`"//color_reset
-					call internal_error()
+					call rt_throw(state, err_rt(RC_BAD_SUBSCRIPT_KIND, "bad subscript kind `"// &
+						kind_name(sub_kind)//"`"))
+					return
 				end select
 			end do
 			res%array%len_ = product(res%array%size)
@@ -270,7 +279,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 	else if (allocated(node%lsubscripts)) then
 
 		if (type_ /= array_type) then
-			write(*,*) err_int_prefix//'bad type, expected array'//color_reset
+			write(*,*) err_int(IC_BAD_TYPE_EXPECT_ARRAY, 'bad type, expected array')
 			call internal_error()
 		end if
 
@@ -292,10 +301,12 @@ recursive module subroutine eval_name_expr(node, state, res)
 
 			! Rank-1 slice fast path: avoids allocating lsubs/ssubs/usubs/asubs.
 			call eval_slice_rank1(node, state, res)
+			if (state%rt_halt) return
 
 		else
 
 			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+			if (state%rt_halt) return
 
 			!print *, "type = ", kind_name( node%val%array%type )
 
@@ -329,9 +340,9 @@ recursive module subroutine eval_name_expr(node, state, res)
 				case (scalar_sub)
 					! noop
 				case default
-					write(*,*) err_rt_prefix//"bad subscript kind `"// &
-						kind_name(sub_kind)//"`"//color_reset
-					call internal_error()
+					call rt_throw(state, err_rt(RC_BAD_SUBSCRIPT_KIND, "bad subscript kind `"// &
+						kind_name(sub_kind)//"`"))
+					return
 				end select
 			end do
 			res%array%len_ = product(res%array%size)
@@ -517,7 +528,7 @@ module function str_char_slice(s, node, state, isub) result(out)
 		out = s(il : iu-1)   ! upper-exclusive in syntran
 
 	case default
-		write(*,*) err_int_prefix//'unexpected str char subscript kind'//color_reset
+		write(*,*) err_int(IC_STR_CHAR_SUBSCRIPT, 'unexpected str char subscript kind')
 		call internal_error()
 
 	end select

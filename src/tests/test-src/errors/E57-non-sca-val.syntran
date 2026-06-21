@@ -1,0 +1,5 @@
+// E57: non-sca-val
+// A value used to fill a uniform array is not a scalar
+
+let b = [1, 2, 3];
+let a = [b; 5];

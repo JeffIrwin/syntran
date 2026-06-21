@@ -1,0 +1,6 @@
+// E67: inc-read
+// An #include file was found but could not be read (e.g. it's a directory)
+
+let a = 1;
+
+#include(".");

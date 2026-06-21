@@ -368,8 +368,8 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 			! This used to call a different diagnostic fn depending on whether
 			! it was a top-level type mismatch, array mismatch, or rank
 			! mismatch.  types_match() returns an enum so we could make it that
-			! way again if there's a need. Currently err_bad_arg_rank() is
-			! unused
+			! way again if there's a need.  EC_BAD_ARG_RANK (E47) is the
+			! retired code that used to cover the rank-mismatch case
 
 			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
 			call parser%diagnostics%push(err_bad_arg_type( &
@@ -654,11 +654,15 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	call parser%parse_statement(body)
 
-	if (.not. parser%returned) then
+	! A void fn has nothing to return, so the lack of any return statement is
+	! not an error for it.  Only non-void fns require at least one return
+	if (.not. parser%returned .and. fn%type%type /= void_type) then
 		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
 		call parser%diagnostics%push( &
 			err_no_return(parser%context(), &
 			span, identifier%text))
+	else if (.not. parser%returned) then
+		! Void fn with no returns: nothing to check
 	else if (.not. all_paths_return(body)) then
 		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
 		if (permissive_return) then
@@ -928,7 +932,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 	character(len = :), allocatable :: unset_name, exp_type, act_type, lookup_name
 
-	integer :: io, pos0, pos1, struct_id, member_id, id1(1), num_mems
+	integer :: io, pos0, pos1, struct_id, member_id, id1(1)
 
 	logical :: is_ok
 	logical, allocatable :: member_set(:)
@@ -963,8 +967,6 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 	call parser%structs%search(lookup_name, struct_id, io, struct)
 	!print *, "struct io = ", io
-
-	num_mems = 0
 
 	lbrace  = parser%match(lbrace_token)
 
@@ -1064,8 +1066,6 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 		end if
 
-		num_mems = num_mems + 1
-
 		if (parser%current_kind() /= rbrace_token) then
 			comma = parser%match(comma_token)
 		end if
@@ -1100,18 +1100,6 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 			span, &
 			unset_name, &
 			lookup_name))
-	end if
-
-	!print *, "size = ", struct%num_vars
-	!print *, "size = ", num_mems
-	if (num_mems < struct%num_vars) then
-		! I think this is unreachable given the other checks.  TODO: don't do
-		! anything, just let the diag get thrown
-		write(*,*) err_prefix//"struct instance does not have enough members"//color_reset
-		call internal_error()
-	!else if (num_mems > struct%num_vars) then
-	!	write(*,*) err_prefix//"struct instance has too many members"//color_reset
-	!	call internal_error()
 	end if
 
 	!print *, "ending parse_struct_instance()"

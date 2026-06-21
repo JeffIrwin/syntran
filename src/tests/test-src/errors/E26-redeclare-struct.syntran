@@ -1,0 +1,12 @@
+// E26: redeclare-struct
+// A struct was declared twice
+
+struct S
+{
+	x: i32,
+}
+
+struct S
+{
+	y: i32,
+}

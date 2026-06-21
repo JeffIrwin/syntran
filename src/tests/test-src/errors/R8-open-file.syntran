@@ -1,0 +1,4 @@
+// R8: open-file
+// open() failed to open the requested file (see the accompanying iostat)
+
+let f = open("/no/such/file/syntran_rt_test", "r");

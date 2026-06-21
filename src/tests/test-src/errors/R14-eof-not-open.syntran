@@ -1,0 +1,6 @@
+// R14: eof-not-open
+// eof() was called on a file handle that isn't open
+
+let f = open("build/rt_file_r14.txt", "w");
+close(f);
+let done = eof(f);

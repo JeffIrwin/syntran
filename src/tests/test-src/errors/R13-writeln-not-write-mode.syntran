@@ -1,0 +1,9 @@
+// R13: writeln-not-write-mode
+// writeln() was called on a file that wasn't opened in write ("w") mode
+
+let f = open("build/rt_file_r13.txt", "w");
+writeln(f, "x");
+close(f);
+
+let g = open("build/rt_file_r13.txt", "r");
+writeln(g, "x");

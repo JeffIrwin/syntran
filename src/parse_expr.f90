@@ -25,7 +25,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 	logical :: is_op_allowed, overwrite
 
 	integer :: io, ltype, rtype, pos0, lrank, rrank, larrtype, &
-		rarrtype, search_io
+		rarrtype, search_io, ndiag0
 
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: let, identifier, op
@@ -143,6 +143,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 	    parser%peek_kind(1) == double_colon_token) then
 
 		pos0 = parser%pos
+		ndiag0 = parser%diagnostics%len_
 
 		! Parse the qualified name (mod::var or mod1::mod2::var)
 		identifier = parser%match(identifier_token)
@@ -182,8 +183,12 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		end if
 
 		if (.not. is_assignment_op(parser%current_kind())) then
-			! Not an assignment, rewind and let parse_expr handle it
+			! Not an assignment, rewind and let parse_expr handle it.  Also
+			! discard any diagnostics pushed during this speculative parse
+			! (e.g. from parse_subscripts/parse_dot) since parse_expr will
+			! re-parse the same tokens and re-push them, causing duplicates
 			parser%pos = pos0
+			parser%diagnostics%len_ = ndiag0
 		else
 			! It's a qualified assignment
 
@@ -246,6 +251,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		! %pos is the lexer token index, %current_pos() is the character index!
 		pos0 = parser%pos
+		ndiag0 = parser%diagnostics%len_
 
 		!print *, "assign expr"
 
@@ -307,6 +313,11 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			parser%pos = pos0
 			!print *, "rewinding ********"
 			!print *, 'pos0 = ', pos0
+			! Discard diagnostics pushed during this speculative parse (e.g.
+			! from parse_subscripts/parse_dot above): parse_expr below
+			! re-parses the same tokens and would otherwise re-push them,
+			! causing duplicates
+			parser%diagnostics%len_ = ndiag0
 			call parser%parse_expr(expr=expr)
 			return
 		end if
@@ -784,7 +795,7 @@ recursive module subroutine parse_dot(parser, expr)
 	if (io /= 0) then
 		! Type is already confirmed as struct_type above, so I'm fairly sure
 		! this is unreachable
-		write(*,*) err_int_prefix//"unreachable struct lookup failure"//color_reset
+		write(*,*) err_int(IC_UNREACHABLE_STRUCT_LOOKUP, "unreachable struct lookup failure")
 		call internal_error()
 	end if
 

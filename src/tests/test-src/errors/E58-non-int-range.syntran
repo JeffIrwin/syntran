@@ -1,0 +1,4 @@
+// E58: non-int-range
+// An array range bound is not an i32 integer
+
+let a = [1.0: 5.0];

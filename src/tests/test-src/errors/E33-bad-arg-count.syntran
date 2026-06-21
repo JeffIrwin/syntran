@@ -1,0 +1,5 @@
+// E33: bad-arg-count
+// A function call was given the wrong number of arguments
+
+let a = 1;
+let b = abs(1, 2);

@@ -1,0 +1,7 @@
+// E5: bad-oct32
+// Octal integer literal that doesn't fit in 32 bits
+
+let a = 1;
+
+let o = 0o77777777777'i32;
+println(a);

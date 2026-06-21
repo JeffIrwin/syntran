@@ -1,0 +1,7 @@
+// E52: non-bool-condition
+// The condition of an if/while/etc. statement is not a bool
+
+let n = 5;
+if n
+{
+}

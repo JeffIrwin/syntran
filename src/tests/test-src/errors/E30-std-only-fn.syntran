@@ -1,0 +1,4 @@
+// E30: std-only-fn
+// A standard-library function was called without its required std:: prefix
+
+let a = reshape([1, 2, 3, 4], [2, 2]);

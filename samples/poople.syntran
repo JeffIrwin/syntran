@@ -20,6 +20,7 @@ println("Starting poople solver");
 
 // sudo apt install wamerican
 let dict_filename = "/usr/share/dict/american-english";
+//let dict_filename = "/usr/share/dict/british-english";
 
 let blocklist = poople::BLOCKLIST;
 let dict      = poople::read_dict(dict_filename, &blocklist);

@@ -1,0 +1,7 @@
+// E27: redeclare-primitive
+// A struct was declared with a name reserved for a primitive type
+
+struct i32
+{
+	x: i32,
+}

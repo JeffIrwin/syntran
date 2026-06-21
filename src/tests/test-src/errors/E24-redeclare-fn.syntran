@@ -1,0 +1,12 @@
+// E24: redeclare-fn
+// A function was declared twice
+
+fn f(): i32
+{
+	return 1;
+}
+
+fn f(): i32
+{
+	return 2;
+}

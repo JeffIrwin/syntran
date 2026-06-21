@@ -1,0 +1,4 @@
+// R4: parse-f32
+// parse_f32() could not parse its string argument as an f32
+
+let x = parse_f32("abc");

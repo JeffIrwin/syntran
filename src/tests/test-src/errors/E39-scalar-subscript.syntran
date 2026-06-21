@@ -1,0 +1,5 @@
+// E39: scalar-subscript
+// A scalar variable was subscripted as if it were an array
+
+let a = 5;
+let b = a[0];

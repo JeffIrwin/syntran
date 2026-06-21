@@ -30,6 +30,19 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - regression in aoc 2017/6 (aoc-syntran repo). part 1 is wrong and part 2
+	!    hangs with bytecode. ast is still correct. 1.3.1 fix or fold into 1.4?
+	!  - unit tests for contents of error messages. need new api to get error
+	!    msg. maybe add error codes too
+	!    * wip on this branch
+	!    * also test line number, column number, filename, and ^^^ underline
+	!      span correctness of diagnostics
+	!      + done
+	!    * also test reachable runtime errors. slightly lower priority than
+	!      parse-time errors
+	!      + done
+	!    * internal errors are supposed to be unreachable, so we can't add tests
+	!      for them
 	!  - need an exists() built-in to check files, or some equivalent way to
 	!    check a file post-open. maybe rethink the way syntran immediately
 	!    runtime error aborts if you try to open for reading a file that doesn't
@@ -83,8 +96,6 @@ module syntran__core_m
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
 	!    might be zero perf benefit because the dicts are only used at parse
 	!    time, then mapped to efficient arrays at eval time
-	!  - unit tests for contents of error messages. need new api to get error
-	!    msg. maybe add error codes too
 	!  - claude tasks:
 	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable
 	!      it. duh!

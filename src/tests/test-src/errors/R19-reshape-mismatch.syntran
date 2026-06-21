@@ -1,0 +1,5 @@
+// R19: reshape-mismatch
+// std::reshape()'s requested shape doesn't have the same element count as the source array
+
+let a = [1, 2, 3];
+let b = std::reshape(a, [2, 2]);

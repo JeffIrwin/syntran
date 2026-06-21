@@ -1,0 +1,5 @@
+// E38: empty-step
+// A slice step was omitted between two colons
+
+let a = [0, 1, 2, 3, 4];
+let b = a[::1];

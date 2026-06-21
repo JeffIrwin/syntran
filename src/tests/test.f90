@@ -9,6 +9,123 @@ contains
 
 !===============================================================================
 
+! Shared helpers for unit_test_error_codes(), unit_test_error_locations(), and
+! unit_test_dir_unreadable_errors(), all of which check diagnostics emitted
+! for bad syntran programs against expected error codes and/or locations
+
+function get_diags(str_, src_file, bytecode) result(diag_)
+	character(len = *), intent(in) :: str_
+	character(len = *), intent(in), optional :: src_file
+
+	! Explicit backend override.  Lets runtime-error tests (which don't have
+	! a separate diags-emission path per backend, unlike compile-time E*
+	! diags) exercise both the bytecode VM and the AST walker for the same
+	! snippet.  Omit to use the SYNTRAN_BACKEND env var default (VM)
+	logical, intent(in), optional :: bytecode
+
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	if (present(src_file)) then
+		res_ = eval(str_, .true., src_file = src_file, diags = diag_, bytecode = bytecode)
+	else
+		res_ = eval(str_, .true., diags = diag_, bytecode = bytecode)
+	end if
+end function get_diags
+
+!===============================================================================
+
+function get_diags_file(filename, bytecode) result(diag_)
+	character(len = *), intent(in) :: filename
+	logical, intent(in), optional :: bytecode
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	res_ = interpret_file(filename, quiet = .true., diags = diag_, bytecode = bytecode)
+end function get_diags_file
+
+!===============================================================================
+
+function diag_has_code(diag_, code) result(found)
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: code
+	logical :: found
+	integer :: k
+	found = .false.
+	do k = 1, diag_%len_
+		if (index(diag_%v(k)%s, '['//code//']') > 0) found = .true.
+	end do
+end function diag_has_code
+
+!===============================================================================
+
+function diag_count_code(diag_, code) result(count_)
+	! Like diag_has_code(), but returns how many diagnostics carry [code].
+	! Used to catch duplicate-diagnostic regressions that diag_has_code()
+	! can't see (it only checks presence, not count)
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: code
+	integer :: count_
+	integer :: k
+	count_ = 0
+	do k = 1, diag_%len_
+		if (index(diag_%v(k)%s, '['//code//']') > 0) count_ = count_ + 1
+	end do
+end function diag_count_code
+
+!===============================================================================
+
+function diag_loc_ok(diag_, code, src_file, line, col, ncaret) result(ok)
+
+	! Check that some diagnostic in diag_ carries [code], reports
+	! src_file:line:col, and underlines exactly ncaret characters starting
+	! at column col.  Per underline() in errors.f90, the caret line's
+	! gutter is always exactly "| " followed by (col - 1) spaces and then
+	! the bright-red carets, so reconstructing that substring pins down
+	! both the position and the exact length of the "^^^" span (the
+	! trailing index() check rules out a longer caret run)
+
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: code, src_file
+	integer, intent(in) :: line, col, ncaret
+	logical :: ok
+
+	character(len = :), allocatable :: s, loc, carets
+	integer :: k
+
+	loc    = src_file//':'//str(line)//':'//str(col)
+	carets = '| '//repeat(' ', col - 1)//fg_bright_red//repeat('^', ncaret)
+
+	ok = .false.
+	do k = 1, diag_%len_
+		s = diag_%v(k)%s
+		if (index(s, '['//code//']') > 0 .and. &
+		    index(s, loc) > 0 .and. &
+		    index(s, carets) > 0 .and. &
+		    index(s, carets//'^') == 0) ok = .true.
+	end do
+
+end function diag_loc_ok
+
+!===============================================================================
+
+! Helper for unit_test_runtime_errors().  Runtime (R*) diagnostics have no
+! caret/location context (unlike compile-time E* diags), so diag_loc_ok()
+! doesn't apply here.  Instead this checks that a reproduction file raises
+! [code] under BOTH the bytecode VM and the (deprecated) AST walker, since R*
+! call sites are duplicated per-backend (eval_*.f90 vs vm_*.f90) and can drift
+! apart.  Each repro lives under src/tests/test-src/errors/ (also linked as an
+! example from doc/errors.md), mirroring how get_diags_file()/diag_loc_ok()
+! work for compile-time E* errors
+
+function rt_code_both_file(filename, code) result(both)
+	character(len = *), intent(in) :: filename, code
+	logical :: both
+	both = &
+		diag_has_code(get_diags_file(filename, bytecode = .true. ), code) .and. &
+		diag_has_code(get_diags_file(filename, bytecode = .false.), code)
+end function rt_code_both_file
+
+!===============================================================================
+
 subroutine unit_test_levenshtein(npass, nfail)
 
 	! Test the Levenshtein edit-distance utility used for "did you mean?"
@@ -4990,6 +5107,667 @@ end subroutine unit_test_return_paths
 
 !===============================================================================
 
+subroutine unit_test_error_codes(npass, nfail)
+
+	! Tests for the error-code registry in errors.f90 (rust-`error[E0631]`
+	! style codes).  Checks:
+	!   1. every registered code is unique
+	!   2. every code matches the `[ERIW][0-9]+` format (no zero-padding)
+	!   3. every reachable compile-time EC_* code surfaces via a bad program
+	!      through the `diags` out-arg of eval()/interpret_file()
+	!   4. a sample of internal/warning constructors that aren't reachable
+	!      from a one-line bad program emit their code directly
+	!
+	! IC_*/WC_* (internal, warning) codes are out of scope for section 3 --
+	! only a few representative IC_*/WC_* spot checks remain in section 4.
+	!
+	! RC_* (runtime) codes are no longer out of scope: most are reachable
+	! end-to-end and are tested in unit_test_runtime_errors() below, which
+	! checks them under both the bytecode VM and the AST walker since R* call
+	! sites are duplicated per-backend
+	!
+	! EC_BAD_ARG_RANK (E47) is formally retired (see errors.f90) and is
+	! intentionally excluded from section 3 -- its constructor was deleted, so
+	! it can never be reached by any program
+	!
+	! EC_INC_READ (E67) and EC_MOD_READ (E69) are also excluded from section 3
+	! here.  Reaching them end-to-end requires a path that exists but cannot
+	! be read (e.g. a directory passed to #include()/use), but open()/read()
+	! error behavior on such paths varies across compiler runtimes (gfortran
+	! errors immediately; ifx has been observed to silently succeed with empty
+	! content).  They are instead tested end-to-end in
+	! unit_test_dir_unreadable_errors() below, which only runs under gfortran
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'error codes'
+
+	! Dummy source path used only so module/include resolution (which derives
+	! a search dir from src_file) and EC_BAD_EXPR (which requires non-REPL
+	! mode) work.  The file itself need not exist
+	character(len = *), parameter :: MODSRC = &
+		'src/tests/test-src/modules/_diag.syntran'
+
+	logical, allocatable :: tests(:)
+
+	type(string_vector_t) :: codes
+
+	character(len = :), allocatable :: c
+
+	integer :: i, num, bucket, maxnum, io
+
+	logical :: unique, fmt_ok
+
+	logical, allocatable :: seen(:,:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	codes = get_all_error_codes()
+
+	! 2. format: one of E/R/I/W followed by 1+ digits, no leading zero.
+	! Checked before uniqueness (1.) below, since that check depends on
+	! every code matching this shape
+	fmt_ok = .true.
+	do i = 1, codes%len_
+		c = codes%v(i)%s
+		if (len(c) < 2) then
+			fmt_ok = .false.
+			cycle
+		end if
+		if (.not. any(c(1:1) == ['E', 'R', 'I', 'W'])) fmt_ok = .false.
+		if (verify(c(2:), '0123456789') /= 0) fmt_ok = .false.
+		if (c(2:2) == '0') fmt_ok = .false.  ! no leading zero / zero-padding
+	end do
+
+	! 1. uniqueness, O(n): every well-formed code is a unique (letter bucket,
+	! integer) pair, so direct-address a "seen" table instead of comparing
+	! all O(n^2) pairs.  Malformed codes are skipped here; fmt_ok above
+	! already flags those
+	maxnum = 0
+	do i = 1, codes%len_
+		c = codes%v(i)%s
+		if (len(c) < 2) cycle
+		read(c(2:), *, iostat = io) num
+		if (io == 0) maxnum = max(maxnum, num)
+	end do
+
+	allocate(seen(4, 0:maxnum))
+	seen = .false.
+	unique = .true.
+	do i = 1, codes%len_
+		c = codes%v(i)%s
+		if (len(c) < 2) cycle
+		bucket = index('ERIW', c(1:1))  ! 1..4, or 0 if malformed
+		read(c(2:), *, iostat = io) num
+		if (bucket == 0 .or. io /= 0) cycle  ! malformed; fmt_ok already flagged it
+		if (seen(bucket, num)) unique = .false.
+		seen(bucket, num) = .true.
+	end do
+
+	tests = &
+		[   &
+			unique, &
+			fmt_ok, &
+
+			! 3. end-to-end emission via diags.  One snippet per reachable
+			! EC_* code, roughly in EC_* declaration order
+			diag_has_code(get_diags("123456789123456789'i32;"), EC_BAD_I32), &
+			diag_has_code(get_diags('99999999999999999999999999;'), EC_BAD_I64), &
+			diag_has_code(get_diags("0xFFFFFFFFF'i32;"), EC_BAD_HEX32), &
+			diag_has_code(get_diags('0xFFFFFFFFFFFFFFFFF;'), EC_BAD_HEX64), &
+			diag_has_code(get_diags("0o77777777777'i32;"), EC_BAD_OCT32), &
+			diag_has_code(get_diags('0o7777777777777777777777;'), EC_BAD_OCT64), &
+			diag_has_code(get_diags( &
+				"0b100000000000000000000000000000000'i32;"), EC_BAD_BIN32), &
+			diag_has_code(get_diags( &
+				'0b10000000000000000000000000000000000000000000000000000000000000001;'), &
+				EC_BAD_BIN64), &
+			diag_has_code(get_diags('1 + 1;', MODSRC), EC_BAD_EXPR), &
+			diag_has_code(get_diags('"abc;'), EC_UNTERMINATED_STR), &
+			diag_has_code(get_diags('r"abc;'), EC_UNTERMINATED_RAW_STR), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let a = [S{x=1}, S{x=2}, S{x=3}]; let b = a[0:2];'), &
+				EC_ARRAY_STRUCT_SLICE), &
+			! These cases are parsed speculatively (e.g. as a possible
+			! assignment LHS) and then rewound/re-parsed as a plain expr if
+			! that guess is wrong.  Check that the diagnostic isn't pushed
+			! twice (once per parse attempt)
+			diag_count_code(get_diags( &
+				'struct S{x:i32} let a = [S{x=1}, S{x=2}, S{x=3}]; let b = a[0:2];'), &
+				EC_ARRAY_STRUCT_SLICE) == 1, &
+			diag_has_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT), &
+			diag_count_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT) == 1, &
+			diag_has_code(get_diags('fn f(x: nope): i32 { return 1; }'), EC_BAD_TYPE), &
+			diag_has_code(get_diags("1'foo;"), EC_BAD_TYPE_SUFFIX), &
+			diag_has_code(get_diags('$;'), EC_UNEXPECTED_CHAR), &
+			diag_has_code(get_diags('let a = ;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags( &
+				'fn f() { let x = 1; } let a = f();'), EC_VOID_ASSIGN), &
+			! Void fns have nothing to return, so they must not also trigger
+			! EC_NO_RETURN alongside EC_VOID_ASSIGN above
+			.not. diag_has_code(get_diags( &
+				'fn f() { let x = 1; } let a = f();'), EC_NO_RETURN), &
+			diag_has_code(get_diags('let a = 1; let a = 2;'), EC_REDECLARE_VAR), &
+			diag_has_code(get_diags('struct S{x:i32, x:i32}'), EC_REDECLARE_MEM), &
+			diag_has_code(get_diags( &
+				'fn f():i32{return 1;} fn f():i32{return 2;}'), EC_REDECLARE_FN), &
+			diag_has_code(get_diags('fn min():i32{return 1;}'), EC_REDECLARE_INTR_FN), &
+			diag_has_code(get_diags('struct S{x:i32} struct S{y:i32}'), EC_REDECLARE_STRUCT), &
+			diag_has_code(get_diags('struct i32{x:i32}'), EC_REDECLARE_PRIMITIVE), &
+			diag_has_code(get_diags('let a = b;'), EC_UNDECLARE_VAR), &
+			diag_has_code(get_diags('nope();'), EC_UNDECLARE_FN), &
+			diag_has_code(get_diags( &
+				'let a = reshape([1,2,3,4], [2,2]);'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('fn f(): i32 { let x = 1; }'), EC_NO_RETURN), &
+			diag_has_code(get_diags( &
+				'fn f(b:bool): i32 { if b {return 1;} }'), EC_MISSING_RETURN), &
+			diag_has_code(get_diags('let a = abs(1, 2);'), EC_BAD_ARG_COUNT), &
+			diag_has_code(get_diags('let a = min(1);'), EC_TOO_FEW_ARGS), &
+			diag_has_code(get_diags( &
+				'let a=[1,2]; let b = size(a, 0, 1);'), EC_TOO_MANY_ARGS), &
+			diag_has_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT), &
+			diag_count_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT) == 1, &
+			diag_has_code(get_diags( &
+				'let a=[1,2,3,4,5,6,7,8,9]; let idx=[0;2,2]; let b = a[idx];'), &
+				EC_BAD_SUB_RANK), &
+			diag_count_code(get_diags( &
+				'let a=[1,2,3,4,5,6,7,8,9]; let idx=[0;2,2]; let b = a[idx];'), &
+				EC_BAD_SUB_RANK) == 1, &
+			diag_has_code(get_diags('let a=[0,1,2,3,4]; let b = a[::1];'), EC_EMPTY_STEP), &
+			diag_count_code(get_diags('let a=[0,1,2,3,4]; let b = a[::1];'), EC_EMPTY_STEP) == 1, &
+			diag_has_code(get_diags('let a = 5; let b = a[0];'), EC_SCALAR_SUBSCRIPT), &
+			diag_count_code(get_diags('let a = 5; let b = a[0];'), EC_SCALAR_SUBSCRIPT) == 1, &
+			diag_has_code(get_diags( &
+				'let a = [1,2; 2,2]; let c = [a, a];'), EC_BAD_CAT_RANK), &
+			diag_has_code(get_diags('fn f(): i32 { return 1.0; }'), EC_BAD_RET_TYPE), &
+			diag_has_code(get_diags( &
+				'fn f(x: i32): i32 { return x; } let a = f(1.0);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('fn f(x: &i32) {} f(1);'), EC_BAD_ARG_VAL), &
+			diag_has_code(get_diags( &
+				'fn f(x: i32) {} let a=1; f(&a);'), EC_BAD_ARG_REF), &
+			diag_has_code(get_diags('fn f(x: &i32){} f(&(1+1));'), EC_NON_NAME_REF), &
+			diag_has_code(get_diags( &
+				'fn f(x: &i32){} let a=[1,2]; f(&a[0]);'), EC_SUB_REF), &
+			! EC_BAD_ARG_RANK (E47) excluded -- dead code, see note above
+			diag_has_code(get_diags('true + 4;'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags( &
+				'let a = [1,2; 2,2]; let b = [3,4]; let c = a + b;'), EC_BINARY_RANKS), &
+			diag_has_code(get_diags('-true;'), EC_UNARY_TYPES), &
+			diag_has_code(get_diags('for i in 5 {}'), EC_NON_ARRAY_LOOP), &
+			diag_has_code(get_diags('if 5 {}'), EC_NON_BOOL_CONDITION), &
+			diag_has_code(get_diags('let a = [0: 1.0; 5];'), EC_NON_FLOAT_LEN_RANGE), &
+			diag_has_code(get_diags('let a = [0.0: 1.0; "x"];'), EC_NON_INT_LEN), &
+			diag_has_code(get_diags('let a = [0: 1.0; 5];'), EC_BOUND_TYPE_MISMATCH), &
+			diag_has_code(get_diags('let a = ["a": "z"];'), EC_NON_NUM_RANGE), &
+			diag_has_code(get_diags('let b=[1,2,3]; let a = [b; 5];'), EC_NON_SCA_VAL), &
+			diag_has_code(get_diags('let a = [1.0: 5.0];'), EC_NON_INT_RANGE), &
+			diag_has_code(get_diags('let a = [1, "a"];'), EC_HET_ARRAY), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32, y:i32} let s = S{x=1, x=2};'), EC_UNSET_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32, y:i32} let s = S{x=1, x=2};'), EC_RESET_MEMBER), &
+			diag_has_code(get_diags('let a = 5; let b = a.x;'), EC_NON_STRUCT_DOT), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME), &
+			diag_count_code(get_diags( &
+				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME) == 1, &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let s=S{z=1};'), EC_BAD_MEMBER_NAME_SHORT), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let s=S{x=1.0};'), EC_BAD_MEMBER_TYPE), &
+			diag_has_code(get_diags( &
+				'#include("does_not_exist_xyz.syntran");'), EC_INC_404), &
+			! EC_INC_READ (E67) excluded -- see note above, tested in
+			! unit_test_dir_unreadable_errors() instead
+			diag_has_code(get_diags('use no_such_module_xyz;', MODSRC), EC_MOD_404), &
+			! EC_MOD_READ (E69) excluded -- see note above, tested in
+			! unit_test_dir_unreadable_errors() instead
+			diag_has_code(get_diags('use circular_a;', MODSRC), EC_CIRCULAR_IMPORT), &
+			diag_has_code(get_diags( &
+				'use mymath; use mymath;', MODSRC), EC_DUPLICATE_IMPORT), &
+			diag_has_code(get_diags('use foo-bar;', MODSRC), EC_MOD_HYPHEN), &
+			diag_has_code(get_diags('use let;', MODSRC), EC_MOD_KEYWORD), &
+			diag_has_code(get_diags('use std;', MODSRC), EC_MOD_RESERVED_STD), &
+			diag_has_code(get_diags('use foo bar;', MODSRC), EC_MOD_SPACE), &
+			diag_has_code(get_diags('use foo as let;', MODSRC), EC_ALIAS_KEYWORD), &
+			diag_has_code(get_diags('use foo as std;', MODSRC), EC_ALIAS_RESERVED_STD), &
+			diag_has_code(get_diags('use foo as ba-r;', MODSRC), EC_ALIAS_HYPHEN), &
+			diag_has_code(get_diags('use foo as a b;', MODSRC), EC_ALIAS_SPACE), &
+			diag_has_code(get_diags( &
+				'use foo as bar::*;', MODSRC), EC_ALIAS_WITH_DOUBLECOLON), &
+			diag_has_code(get_diags_file('does_not_exist_xyz_404.syntran'), EC_404), &
+
+			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
+			! is no longer spot-checked here since it's tested end-to-end (under
+			! both backends) in unit_test_runtime_errors() below
+			index(err_eval_node('some_node_kind'), '['//IC_EVAL_NODE//']') > 0, &
+			index(warn_pre(WC_MISSING_RETURN), '['//WC_MISSING_RETURN//']') > 0 &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_error_codes
+
+!===============================================================================
+
+subroutine unit_test_runtime_errors(npass, nfail)
+
+	! Tests for reachable runtime (R*) errors, mirroring unit_test_error_codes()
+	! above but for errors raised during evaluation instead of parsing.
+	!
+	! Runtime errors are duplicated per-backend (eval_*.f90 for the AST walker,
+	! vm_*.f90 for the bytecode VM), each halting evaluation via state%rt_halt
+	! instead of exiting the process (see rt_throw() in eval.f90).  Every row
+	! below uses rt_code_both_file(), which checks that a reproduction file
+	! under src/tests/test-src/errors/ (also linked as an example from
+	! doc/errors.md) raises [code] under BOTH backends, since the two
+	! implementations could in principle drift apart.
+	!
+	! Unlike compile-time E* diagnostics, R* diagnostics carry no
+	! caret/location context (err_rt() has no span to underline), so there's
+	! no analogue of diag_loc_ok() here.  Instead, the formatting check below
+	! confirms every R* message goes through the shared err_rt()/err_rt_pre()
+	! prefix helper.
+	!
+	! R23-R27 (step-is-0 family for `for` loops, range/array literals, and
+	! slice subscripts) used to crash the process via internal IC_* codes in
+	! the AST walker, even though a zero step is reachable from ordinary
+	! syntran code whenever the step is a runtime value rather than a parsed
+	! literal.  They are now caught via rt_throw()/err_rt() like every other
+	! R* code; see the retirement note for IC_FOR_STEP_ZERO/_F,
+	! IC_ARRAY_STEP_ZERO/_F, and IC_SUBSCRIPT_STEP_ZERO in errors.f90.
+	!
+	! Excluded from this end-to-end coverage:
+	!   - RC_TRANSPOSE_RANK (R18): std::transpose()'s parameter is statically
+	!     declared rank-2, and every attempt to construct a value that's
+	!     dynamically rank-1 but passes that static check was rejected by the
+	!     parser at compile time instead (e.g. EC_BAD_ARG_TYPE) -- confirmed by
+	!     trying std::reshape() (whose result rank is unknown at parse time
+	!     unless the shape argument is a literal) as the source of
+	!     std::transpose()'s argument; unreachable from valid syntran code
+	!   - RC_ARRAY_SIZE_MISMATCH (R21) and RC_BAD_SUBSCRIPT_KIND (R20):
+	!     defensive checks for subscript/size-array shapes that the parser is
+	!     already expected to rule out; no valid-syntax repro found
+	!   - RC_STRUCT_ARRAY_SLICE (R22): struct array slicing is simply
+	!     unimplemented, not a user-triggerable runtime condition in the
+	!     ordinary sense
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'runtime errors'
+
+	! Reproduction files live alongside the E* fixtures already used by
+	! unit_test_error_codes()/unit_test_error_locations() (dir_mod.syntran/,
+	! etc.)
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Formatting: every err_rt() message carries the shared
+			! "Runtime error[R#]: " prefix from err_rt_pre()
+			index(err_rt(RC_MATMUL_DIM, 'x'), err_rt_pre(RC_MATMUL_DIM)) == 1, &
+
+			! R1: matmul `@` dimension mismatch
+			rt_code_both_file(P//'R1-matmul-dim.syntran', RC_MATMUL_DIM), &
+			! Guard against double-emission (one throw, not one per backend
+			! re-check or speculative re-evaluation)
+			diag_count_code(get_diags_file( &
+				P//'R1-matmul-dim.syntran', bytecode = .true.), &
+				RC_MATMUL_DIM) == 1, &
+			diag_count_code(get_diags_file( &
+				P//'R1-matmul-dim.syntran', bytecode = .false.), &
+				RC_MATMUL_DIM) == 1, &
+
+			! R2-R5: parse_i32/i64/f32/f64 on unparseable text
+			rt_code_both_file(P//'R2-parse-i32.syntran', RC_PARSE_I32), &
+			rt_code_both_file(P//'R3-parse-i64.syntran', RC_PARSE_I64), &
+			rt_code_both_file(P//'R4-parse-f32.syntran', RC_PARSE_F32), &
+			rt_code_both_file(P//'R5-parse-f64.syntran', RC_PARSE_F64), &
+
+			! R6-R7: open() with a bad/conflicting mode string.  These don't
+			! need a real file on disk -- the mode is rejected before the
+			! underlying Fortran open() call
+			rt_code_both_file(P//'R6-bad-file-mode.syntran', RC_BAD_FILE_MODE), &
+			rt_code_both_file(P//'R7-file-rw-mode.syntran', RC_FILE_RW_MODE), &
+
+			! R8: open() on a path that doesn't exist
+			rt_code_both_file(P//'R8-open-file.syntran', RC_OPEN_FILE), &
+
+			! R9-R16: readln()/writeln()/eof()/close() misuse.  Each
+			! reproduction file is self-contained: it opens/writes/closes its
+			! own scratch file under build/ (created by the build system) so
+			! no external test fixture is needed
+			rt_code_both_file( &
+				P//'R9-readln-not-open.syntran', RC_READLN_NOT_OPEN), &
+			rt_code_both_file( &
+				P//'R10-readln-not-read-mode.syntran', RC_READLN_NOT_READ_MODE), &
+			rt_code_both_file( &
+				P//'R11-readln-fail.syntran', RC_READLN_FAIL), &
+			rt_code_both_file( &
+				P//'R12-writeln-not-open.syntran', RC_WRITELN_NOT_OPEN), &
+			rt_code_both_file( &
+				P//'R13-writeln-not-write-mode.syntran', RC_WRITELN_NOT_WRITE_MODE), &
+			rt_code_both_file( &
+				P//'R14-eof-not-open.syntran', RC_EOF_NOT_OPEN), &
+			rt_code_both_file( &
+				P//'R15-eof-not-read-mode.syntran', RC_EOF_NOT_READ_MODE), &
+			rt_code_both_file( &
+				P//'R16-close-not-open.syntran', RC_CLOSE_NOT_OPEN), &
+
+			! R17: size() dim argument out of range
+			rt_code_both_file(P//'R17-size-rank-mismatch.syntran', RC_SIZE_RANK_MISMATCH), &
+
+			! R19: std::reshape() new shape doesn't match element count
+			rt_code_both_file(P//'R19-reshape-mismatch.syntran', RC_RESHAPE_MISMATCH), &
+
+			! R23-R27: step-is-0 family (for loop, range/array literal, slice
+			! subscript), each for both an integer and float variant where
+			! applicable
+			rt_code_both_file(P//'R23-for-step-zero.syntran', RC_FOR_STEP_ZERO), &
+			rt_code_both_file(P//'R24-for-step-zero-f.syntran', RC_FOR_STEP_ZERO_F), &
+			rt_code_both_file(P//'R25-array-step-zero.syntran', RC_ARRAY_STEP_ZERO), &
+			rt_code_both_file( &
+				P//'R26-array-step-zero-f.syntran', RC_ARRAY_STEP_ZERO_F), &
+			rt_code_both_file( &
+				P//'R27-subscript-step-zero.syntran', RC_SUBSCRIPT_STEP_ZERO) &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_runtime_errors
+
+!===============================================================================
+
+subroutine unit_test_error_locations(npass, nfail)
+
+	! Companion to unit_test_error_codes() above.  That test only confirms the
+	! right EC_* code surfaces for each reachable parse-time error; this test
+	! confirms the rest of the diagnostic -- the reported filename, line,
+	! column, and "^^^" underline span (caret position AND length) -- is
+	! also correct.
+	!
+	! Each row reproduces one error from its own .syntran file under
+	! src/tests/test-src/errors/ (also linked as an example from
+	! doc/errors.md), placed on a non-trivial line/column so the line/col
+	! arithmetic is actually exercised -- if every example lived on line 1,
+	! this test would not be meaningful.  Expected (line, col, ncaret) values
+	! were captured empirically by running the built interpreter on each file
+	! and reading its rendered diagnostic, then spot-checked by eye.
+	!
+	! Most examples report their own location, but E70 (circular-import) is
+	! detected while parsing the imported module that closes the cycle, so
+	! its location is inside circular_b.syntran instead of the entry file --
+	! see the comment at that row below.
+	!
+	! EC_BAD_ARG_RANK (E47, retired) and EC_404 (E81, no source span) are
+	! excluded, same as in unit_test_error_codes()
+	!
+	! EC_INC_READ (E67) and EC_MOD_READ (E69) are also excluded here, same as
+	! in unit_test_error_codes() -- their reproduction files use a directory
+	! in place of a file, and open()/read() error behavior on a directory is
+	! not portable across compiler runtimes.  They are instead tested in
+	! unit_test_dir_unreadable_errors() below, which only runs under gfortran
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'error locations'
+
+	! Reproduction files live alongside the module/include fixtures already
+	! used by unit_test_error_codes() (dir_mod.syntran/, etc.)
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			diag_loc_ok(get_diags_file(P//'E1-bad-i32.syntran'), &
+				EC_BAD_I32, P//'E1-bad-i32.syntran', 7, 11, 18), &
+			diag_loc_ok(get_diags_file(P//'E2-bad-i64.syntran'), &
+				EC_BAD_I64, P//'E2-bad-i64.syntran', 10, 12, 26), &
+			diag_loc_ok(get_diags_file(P//'E3-bad-hex32.syntran'), &
+				EC_BAD_HEX32, P//'E3-bad-hex32.syntran', 8, 9, 11), &
+			diag_loc_ok(get_diags_file(P//'E4-bad-hex64.syntran'), &
+				EC_BAD_HEX64, P//'E4-bad-hex64.syntran', 9, 9, 19), &
+			diag_loc_ok(get_diags_file(P//'E5-bad-oct32.syntran'), &
+				EC_BAD_OCT32, P//'E5-bad-oct32.syntran', 6, 9, 13), &
+			diag_loc_ok(get_diags_file(P//'E6-bad-oct64.syntran'), &
+				EC_BAD_OCT64, P//'E6-bad-oct64.syntran', 10, 9, 24), &
+			diag_loc_ok(get_diags_file(P//'E7-bad-bin32.syntran'), &
+				EC_BAD_BIN32, P//'E7-bad-bin32.syntran', 7, 10, 35), &
+			diag_loc_ok(get_diags_file(P//'E8-bad-bin64.syntran'), &
+				EC_BAD_BIN64, P//'E8-bad-bin64.syntran', 10, 10, 67), &
+			diag_loc_ok(get_diags_file(P//'E9-bad-expr.syntran'), &
+				EC_BAD_EXPR, P//'E9-bad-expr.syntran', 7, 1, 6), &
+			diag_loc_ok(get_diags_file(P//'E10-unterminated-str.syntran'), &
+				EC_UNTERMINATED_STR, P//'E10-unterminated-str.syntran', 8, 9, 25), &
+			diag_loc_ok(get_diags_file(P//'E11-unterminated-raw-str.syntran'), &
+				EC_UNTERMINATED_RAW_STR, P//'E11-unterminated-raw-str.syntran', 8, 9, 30), &
+			diag_loc_ok(get_diags_file(P//'E12-array-struct-slice.syntran'), &
+				EC_ARRAY_STRUCT_SLICE, P//'E12-array-struct-slice.syntran', 10, 16, 5), &
+			diag_count_code(get_diags_file(P//'E12-array-struct-slice.syntran'), &
+				EC_ARRAY_STRUCT_SLICE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E13-struct-array-slice.syntran'), &
+				EC_STRUCT_ARRAY_SLICE, P//'E13-struct-array-slice.syntran', 11, 18, 6), &
+			diag_count_code(get_diags_file(P//'E13-struct-array-slice.syntran'), &
+				EC_STRUCT_ARRAY_SLICE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E14-non-int-subscript.syntran'), &
+				EC_NON_INT_SUBSCRIPT, P//'E14-non-int-subscript.syntran', 5, 11, 3), &
+			diag_count_code(get_diags_file(P//'E14-non-int-subscript.syntran'), &
+				EC_NON_INT_SUBSCRIPT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E15-bad-f32.syntran'), &
+				EC_BAD_F32, P//'E15-bad-f32.syntran', 7, 9, 11), &
+			diag_loc_ok(get_diags_file(P//'E16-bad-f64.syntran'), &
+				EC_BAD_F64, P//'E16-bad-f64.syntran', 10, 9, 11), &
+			diag_loc_ok(get_diags_file(P//'E17-bad-type.syntran'), &
+				EC_BAD_TYPE, P//'E17-bad-type.syntran', 4, 9, 4), &
+			diag_loc_ok(get_diags_file(P//'E18-bad-type-suffix.syntran'), &
+				EC_BAD_TYPE_SUFFIX, P//'E18-bad-type-suffix.syntran', 8, 11, 3), &
+			diag_loc_ok(get_diags_file(P//'E19-unexpected-char.syntran'), &
+				EC_UNEXPECTED_CHAR, P//'E19-unexpected-char.syntran', 7, 1, 1), &
+			diag_loc_ok(get_diags_file(P//'E20-unexpected-token.syntran'), &
+				EC_UNEXPECTED_TOKEN, P//'E20-unexpected-token.syntran', 6, 9, 1), &
+			diag_loc_ok(get_diags_file(P//'E21-void-assign.syntran'), &
+				EC_VOID_ASSIGN, P//'E21-void-assign.syntran', 9, 1, 11), &
+			diag_loc_ok(get_diags_file(P//'E22-redeclare-var.syntran'), &
+				EC_REDECLARE_VAR, P//'E22-redeclare-var.syntran', 6, 5, 1), &
+			diag_loc_ok(get_diags_file(P//'E23-redeclare-mem.syntran'), &
+				EC_REDECLARE_MEM, P//'E23-redeclare-mem.syntran', 7, 2, 7), &
+			diag_loc_ok(get_diags_file(P//'E24-redeclare-fn.syntran'), &
+				EC_REDECLARE_FN, P//'E24-redeclare-fn.syntran', 9, 4, 1), &
+			diag_loc_ok(get_diags_file(P//'E25-redeclare-intr-fn.syntran'), &
+				EC_REDECLARE_INTR_FN, P//'E25-redeclare-intr-fn.syntran', 4, 4, 3), &
+			diag_loc_ok(get_diags_file(P//'E26-redeclare-struct.syntran'), &
+				EC_REDECLARE_STRUCT, P//'E26-redeclare-struct.syntran', 9, 8, 1), &
+			diag_loc_ok(get_diags_file(P//'E27-redeclare-primitive.syntran'), &
+				EC_REDECLARE_PRIMITIVE, P//'E27-redeclare-primitive.syntran', 4, 8, 3), &
+			diag_loc_ok(get_diags_file(P//'E28-undeclare-var.syntran'), &
+				EC_UNDECLARE_VAR, P//'E28-undeclare-var.syntran', 6, 9, 15), &
+			diag_loc_ok(get_diags_file(P//'E29-undeclare-fn.syntran'), &
+				EC_UNDECLARE_FN, P//'E29-undeclare-fn.syntran', 6, 1, 14), &
+			diag_loc_ok(get_diags_file(P//'E30-std-only-fn.syntran'), &
+				EC_STD_ONLY_FN, P//'E30-std-only-fn.syntran', 4, 9, 7), &
+			diag_loc_ok(get_diags_file(P//'E31-no-return.syntran'), &
+				EC_NO_RETURN, P//'E31-no-return.syntran', 4, 1, 4), &
+			diag_loc_ok(get_diags_file(P//'E32-missing-return.syntran'), &
+				EC_MISSING_RETURN, P//'E32-missing-return.syntran', 4, 1, 4), &
+			diag_loc_ok(get_diags_file(P//'E33-bad-arg-count.syntran'), &
+				EC_BAD_ARG_COUNT, P//'E33-bad-arg-count.syntran', 5, 12, 6), &
+			diag_loc_ok(get_diags_file(P//'E34-too-few-args.syntran'), &
+				EC_TOO_FEW_ARGS, P//'E34-too-few-args.syntran', 5, 12, 3), &
+			diag_loc_ok(get_diags_file(P//'E35-too-many-args.syntran'), &
+				EC_TOO_MANY_ARGS, P//'E35-too-many-args.syntran', 6, 13, 9), &
+			diag_loc_ok(get_diags_file(P//'E36-bad-sub-count.syntran'), &
+				EC_BAD_SUB_COUNT, P//'E36-bad-sub-count.syntran', 5, 14, 2), &
+			diag_count_code(get_diags_file(P//'E36-bad-sub-count.syntran'), &
+				EC_BAD_SUB_COUNT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E37-bad-sub-rank.syntran'), &
+				EC_BAD_SUB_RANK, P//'E37-bad-sub-rank.syntran', 6, 11, 4), &
+			diag_count_code(get_diags_file(P//'E37-bad-sub-rank.syntran'), &
+				EC_BAD_SUB_RANK) == 1, &
+			diag_loc_ok(get_diags_file(P//'E38-empty-step.syntran'), &
+				EC_EMPTY_STEP, P//'E38-empty-step.syntran', 5, 12, 1), &
+			diag_count_code(get_diags_file(P//'E38-empty-step.syntran'), &
+				EC_EMPTY_STEP) == 1, &
+			diag_loc_ok(get_diags_file(P//'E39-scalar-subscript.syntran'), &
+				EC_SCALAR_SUBSCRIPT, P//'E39-scalar-subscript.syntran', 5, 11, 2), &
+			diag_count_code(get_diags_file(P//'E39-scalar-subscript.syntran'), &
+				EC_SCALAR_SUBSCRIPT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E40-bad-cat-rank.syntran'), &
+				EC_BAD_CAT_RANK, P//'E40-bad-cat-rank.syntran', 5, 13, 1), &
+			diag_loc_ok(get_diags_file(P//'E41-bad-ret-type.syntran'), &
+				EC_BAD_RET_TYPE, P//'E41-bad-ret-type.syntran', 6, 9, 3), &
+			diag_loc_ok(get_diags_file(P//'E42-bad-arg-type.syntran'), &
+				EC_BAD_ARG_TYPE, P//'E42-bad-arg-type.syntran', 10, 11, 3), &
+			diag_loc_ok(get_diags_file(P//'E43-bad-arg-val.syntran'), &
+				EC_BAD_ARG_VAL, P//'E43-bad-arg-val.syntran', 9, 3, 1), &
+			diag_loc_ok(get_diags_file(P//'E44-bad-arg-ref.syntran'), &
+				EC_BAD_ARG_REF, P//'E44-bad-arg-ref.syntran', 10, 3, 2), &
+			diag_loc_ok(get_diags_file(P//'E45-non-name-ref.syntran'), &
+				EC_NON_NAME_REF, P//'E45-non-name-ref.syntran', 9, 3, 9), &
+			diag_loc_ok(get_diags_file(P//'E46-sub-ref.syntran'), &
+				EC_SUB_REF, P//'E46-sub-ref.syntran', 10, 3, 6), &
+			diag_loc_ok(get_diags_file(P//'E48-binary-types.syntran'), &
+				EC_BINARY_TYPES, P//'E48-binary-types.syntran', 5, 11, 1), &
+			diag_loc_ok(get_diags_file(P//'E49-binary-ranks.syntran'), &
+				EC_BINARY_RANKS, P//'E49-binary-ranks.syntran', 6, 11, 1), &
+			diag_loc_ok(get_diags_file(P//'E50-unary-types.syntran'), &
+				EC_UNARY_TYPES, P//'E50-unary-types.syntran', 5, 9, 1), &
+			diag_loc_ok(get_diags_file(P//'E51-non-array-loop.syntran'), &
+				EC_NON_ARRAY_LOOP, P//'E51-non-array-loop.syntran', 5, 10, 1), &
+			diag_loc_ok(get_diags_file(P//'E52-non-bool-condition.syntran'), &
+				EC_NON_BOOL_CONDITION, P//'E52-non-bool-condition.syntran', 5, 4, 1), &
+			diag_loc_ok(get_diags_file(P//'E53-non-float-len-range.syntran'), &
+				EC_NON_FLOAT_LEN_RANGE, P//'E53-non-float-len-range.syntran', 4, 10, 1), &
+			diag_loc_ok(get_diags_file(P//'E54-non-int-len.syntran'), &
+				EC_NON_INT_LEN, P//'E54-non-int-len.syntran', 4, 20, 3), &
+			diag_loc_ok(get_diags_file(P//'E55-bound-type-mismatch.syntran'), &
+				EC_BOUND_TYPE_MISMATCH, P//'E55-bound-type-mismatch.syntran', 4, 10, 6), &
+			diag_loc_ok(get_diags_file(P//'E56-non-num-range.syntran'), &
+				EC_NON_NUM_RANGE, P//'E56-non-num-range.syntran', 4, 10, 8), &
+			diag_loc_ok(get_diags_file(P//'E57-non-sca-val.syntran'), &
+				EC_NON_SCA_VAL, P//'E57-non-sca-val.syntran', 5, 10, 1), &
+			diag_loc_ok(get_diags_file(P//'E58-non-int-range.syntran'), &
+				EC_NON_INT_RANGE, P//'E58-non-int-range.syntran', 4, 15, 3), &
+			diag_loc_ok(get_diags_file(P//'E59-het-array.syntran'), &
+				EC_HET_ARRAY, P//'E59-het-array.syntran', 5, 13, 3), &
+			diag_loc_ok(get_diags_file(P//'E60-unset-member.syntran'), &
+				EC_UNSET_MEMBER, P//'E60-unset-member.syntran', 10, 9, 1), &
+			diag_loc_ok(get_diags_file(P//'E61-reset-member.syntran'), &
+				EC_RESET_MEMBER, P//'E61-reset-member.syntran', 10, 18, 1), &
+			diag_loc_ok(get_diags_file(P//'E62-non-struct-dot.syntran'), &
+				EC_NON_STRUCT_DOT, P//'E62-non-struct-dot.syntran', 5, 9, 2), &
+			diag_loc_ok(get_diags_file(P//'E63-bad-member-name.syntran'), &
+				EC_BAD_MEMBER_NAME, P//'E63-bad-member-name.syntran', 11, 11, 1), &
+			diag_count_code(get_diags_file(P//'E63-bad-member-name.syntran'), &
+				EC_BAD_MEMBER_NAME) == 1, &
+			diag_loc_ok(get_diags_file(P//'E64-bad-member-name-short.syntran'), &
+				EC_BAD_MEMBER_NAME_SHORT, P//'E64-bad-member-name-short.syntran', 10, 11, 1), &
+			diag_loc_ok(get_diags_file(P//'E65-bad-member-type.syntran'), &
+				EC_BAD_MEMBER_TYPE, P//'E65-bad-member-type.syntran', 9, 15, 3), &
+			diag_loc_ok(get_diags_file(P//'E66-inc-404.syntran'), &
+				EC_INC_404, P//'E66-inc-404.syntran', 6, 10, 28), &
+			! EC_INC_READ (E67) excluded -- see note above
+			diag_loc_ok(get_diags_file(P//'E68-mod-404.syntran'), &
+				EC_MOD_404, P//'E68-mod-404.syntran', 4, 5, 22), &
+			! EC_MOD_READ (E69) excluded -- see note above
+			! E70: location is in the imported module that closes the cycle
+			diag_loc_ok(get_diags_file(P//'E70-circular-import.syntran'), &
+				EC_CIRCULAR_IMPORT, P//'circular_b.syntran', 1, 5, 10), &
+			diag_loc_ok(get_diags_file(P//'E71-duplicate-import.syntran'), &
+				EC_DUPLICATE_IMPORT, P//'E71-duplicate-import.syntran', 5, 5, 5), &
+			diag_loc_ok(get_diags_file(P//'E72-mod-hyphen.syntran'), &
+				EC_MOD_HYPHEN, P//'E72-mod-hyphen.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E73-mod-keyword.syntran'), &
+				EC_MOD_KEYWORD, P//'E73-mod-keyword.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E74-mod-reserved-std.syntran'), &
+				EC_MOD_RESERVED_STD, P//'E74-mod-reserved-std.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E75-mod-space.syntran'), &
+				EC_MOD_SPACE, P//'E75-mod-space.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E76-alias-keyword.syntran'), &
+				EC_ALIAS_KEYWORD, P//'E76-alias-keyword.syntran', 4, 12, 3), &
+			diag_loc_ok(get_diags_file(P//'E77-alias-reserved-std.syntran'), &
+				EC_ALIAS_RESERVED_STD, P//'E77-alias-reserved-std.syntran', 4, 12, 3), &
+			diag_loc_ok(get_diags_file(P//'E78-alias-hyphen.syntran'), &
+				EC_ALIAS_HYPHEN, P//'E78-alias-hyphen.syntran', 4, 12, 2), &
+			diag_loc_ok(get_diags_file(P//'E79-alias-space.syntran'), &
+				EC_ALIAS_SPACE, P//'E79-alias-space.syntran', 4, 12, 1), &
+			diag_loc_ok(get_diags_file(P//'E80-alias-with-doublecolon.syntran'), &
+				EC_ALIAS_WITH_DOUBLECOLON, P//'E80-alias-with-doublecolon.syntran', 4, 5, 3) &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_error_locations
+
+!===============================================================================
+
+subroutine unit_test_dir_unreadable_errors(npass, nfail)
+
+	! Companion to unit_test_error_codes() and unit_test_error_locations()
+	! above.  EC_INC_READ (E67) and EC_MOD_READ (E69) fire when #include()/use
+	! references a path that exists but cannot be read -- reproduced here by
+	! pointing at a directory instead of a file.  open()/read() error behavior
+	! on a directory isn't portable across compiler runtimes (gfortran errors
+	! immediately; ifx has been observed to silently succeed with empty
+	! content instead), so this test only runs under gfortran.  See
+	! compiler.f90 for how fort_compiler is detected
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'unreadable dir errors'
+
+	! Dummy source path used only so module resolution (which derives a
+	! search dir from src_file) works.  The file itself need not exist
+	character(len = *), parameter :: ERRSRC = &
+		'src/tests/test-src/errors/_diag.syntran'
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	logical, allocatable :: tests(:)
+
+	if (fort_compiler /= 'gfortran') then
+		write(*,*) 'Skipping '//label//' (gfortran only) ...'
+		return
+	end if
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			diag_has_code(get_diags('#include(".");'), EC_INC_READ), &
+			diag_has_code(get_diags('use dir_mod;', ERRSRC), EC_MOD_READ), &
+			diag_loc_ok(get_diags_file(P//'E67-inc-read.syntran'), &
+				EC_INC_READ, P//'E67-inc-read.syntran', 6, 10, 3), &
+			diag_loc_ok(get_diags_file(P//'E69-mod-read.syntran'), &
+				EC_MOD_READ, P//'E69-mod-read.syntran', 5, 5, 7) &
+		]
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_dir_unreadable_errors
+
+!===============================================================================
+
 subroutine unit_test_args(npass, nfail)
 
 	implicit none
@@ -5098,6 +5876,10 @@ subroutine unit_tests(iostat)
 	call unit_test_comp_f64   (npass, nfail)
 	call unit_test_bad_syntax    (npass, nfail)
 	call unit_test_return_paths  (npass, nfail)
+	call unit_test_error_codes   (npass, nfail)
+	call unit_test_runtime_errors(npass, nfail)
+	call unit_test_error_locations(npass, nfail)
+	call unit_test_dir_unreadable_errors(npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)

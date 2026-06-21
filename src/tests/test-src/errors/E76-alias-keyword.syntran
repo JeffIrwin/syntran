@@ -1,0 +1,4 @@
+// E76: alias-keyword
+// A `use ... as <alias>` alias is a reserved language keyword
+
+use foo as let;

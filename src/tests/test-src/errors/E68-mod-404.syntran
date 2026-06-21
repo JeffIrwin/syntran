@@ -1,0 +1,4 @@
+// E68: mod-404
+// A used module file could not be found
+
+use nonexistent_module_xyz;

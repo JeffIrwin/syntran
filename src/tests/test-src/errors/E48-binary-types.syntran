@@ -1,0 +1,5 @@
+// E48: binary-types
+// A binary operator is not defined for the given pair of operand types
+
+let a = true;
+let r = a + 4;

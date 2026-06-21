@@ -1,0 +1,4 @@
+// R3: parse-i64
+// parse_i64() could not parse its string argument as an i64
+
+let x = parse_i64("abc");

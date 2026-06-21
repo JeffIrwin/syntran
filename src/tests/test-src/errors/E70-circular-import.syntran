@@ -1,0 +1,8 @@
+// E70: circular-import
+// Two or more modules import each other, forming a circular dependency.
+// This entry file is not itself part of the cycle: it imports circular_a,
+// which imports circular_b, which imports circular_a again -- the actual
+// diagnostic location ends up inside circular_b.syntran, at the `use
+// circular_a;` statement that closes the loop
+
+use circular_a;

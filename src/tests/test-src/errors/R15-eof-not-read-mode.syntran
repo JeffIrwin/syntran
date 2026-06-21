@@ -1,0 +1,5 @@
+// R15: eof-not-read-mode
+// eof() was called on a file that wasn't opened in read ("r") mode
+
+let f = open("build/rt_file_r15.txt", "w");
+let done = eof(f);

@@ -1,0 +1,5 @@
+// E34: too-few-args
+// A variadic function call was given fewer than its minimum number of
+// arguments
+
+let a = min(1);

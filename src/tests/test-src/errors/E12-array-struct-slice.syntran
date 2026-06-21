@@ -1,0 +1,10 @@
+// E12: array-struct-slice
+// Slices are not implemented for arrays of structs
+
+struct Point
+{
+	x: i32,
+}
+
+let pts = [Point{x = 1}, Point{x = 2}, Point{x = 3}];
+let some = pts[0: 2];

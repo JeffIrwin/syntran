@@ -1,0 +1,6 @@
+// E66: inc-404
+// An #include file could not be found
+
+let a = 1;
+
+#include("does_not_exist_xyz.syntran");

@@ -1,0 +1,4 @@
+// E54: non-int-len
+// An array length expression is not an integer
+
+let a = [0.0: 1.0; "x"];

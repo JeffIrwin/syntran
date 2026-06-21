@@ -1,0 +1,10 @@
+// E64: bad-member-name-short
+// A struct instantiation referenced a member name that doesn't exist on
+// the struct
+
+struct S
+{
+	x: i32,
+}
+
+let s = S{z = 1};

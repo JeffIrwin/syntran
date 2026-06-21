@@ -1,0 +1,4 @@
+// R2: parse-i32
+// parse_i32() could not parse its string argument as an i32
+
+let x = parse_i32("abc");

@@ -1,0 +1,5 @@
+// E62: non-struct-dot
+// Dot member access was used on a variable that isn't a struct
+
+let a = 5;
+let b = a.x;

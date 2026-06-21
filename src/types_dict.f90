@@ -215,7 +215,7 @@ module subroutine pop_scope(dict)
 
 	! The parser should catch an unexpected `}`
 	if (dict%scope < 1) then
-		write(*,*) err_int_prefix//'scope stack is empty'
+		write(*,*) err_int(IC_SCOPE_STACK_EMPTY, 'scope stack is empty')
 		call internal_error()
 	end if
 

@@ -1,0 +1,9 @@
+// E65: bad-member-type
+// A struct member was initialized with a value of the wrong type
+
+struct S
+{
+	x: i32,
+}
+
+let s = S{x = 1.0};

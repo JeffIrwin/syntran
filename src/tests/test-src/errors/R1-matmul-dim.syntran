@@ -1,0 +1,6 @@
+// R1: matmul-dim
+// The @ matrix-multiplication operator's operands have incompatible inner dimensions
+
+let a = [1, 2, 3];
+let b = [1, 2];
+let c = a @ b;
