@@ -109,20 +109,20 @@ end function diag_loc_ok
 
 ! Helper for unit_test_runtime_errors().  Runtime (R*) diagnostics have no
 ! caret/location context (unlike compile-time E* diags), so diag_loc_ok()
-! doesn't apply here.  Instead this checks that a snippet raises [code] under
-! BOTH the bytecode VM and the (deprecated) AST walker, since R* call sites
-! are duplicated per-backend (eval_*.f90 vs vm_*.f90) and can drift apart.
-! Every runtime-error test snippet is a self-contained one-liner (file I/O
-! cases write/close their own scratch file before tripping the error), so
-! there's no file-based analogue of get_diags_file() needed here
+! doesn't apply here.  Instead this checks that a reproduction file raises
+! [code] under BOTH the bytecode VM and the (deprecated) AST walker, since R*
+! call sites are duplicated per-backend (eval_*.f90 vs vm_*.f90) and can drift
+! apart.  Each repro lives under src/tests/test-src/errors/ (also linked as an
+! example from doc/errors.md), mirroring how get_diags_file()/diag_loc_ok()
+! work for compile-time E* errors
 
-function rt_code_both(str_, code) result(both)
-	character(len = *), intent(in) :: str_, code
+function rt_code_both_file(filename, code) result(both)
+	character(len = *), intent(in) :: filename, code
 	logical :: both
 	both = &
-		diag_has_code(get_diags(str_, bytecode = .true. ), code) .and. &
-		diag_has_code(get_diags(str_, bytecode = .false.), code)
-end function rt_code_both
+		diag_has_code(get_diags_file(filename, bytecode = .true. ), code) .and. &
+		diag_has_code(get_diags_file(filename, bytecode = .false.), code)
+end function rt_code_both_file
 
 !===============================================================================
 
@@ -5342,8 +5342,9 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	! Runtime errors are duplicated per-backend (eval_*.f90 for the AST walker,
 	! vm_*.f90 for the bytecode VM), each halting evaluation via state%rt_halt
 	! instead of exiting the process (see rt_throw() in eval.f90).  Every row
-	! below uses rt_code_both()/rt_code_both_file(), which checks that the
-	! snippet/file raises [code] under BOTH backends, since the two
+	! below uses rt_code_both_file(), which checks that a reproduction file
+	! under src/tests/test-src/errors/ (also linked as an example from
+	! doc/errors.md) raises [code] under BOTH backends, since the two
 	! implementations could in principle drift apart.
 	!
 	! Unlike compile-time E* diagnostics, R* diagnostics carry no
@@ -5356,13 +5357,15 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	!   - RC_TRANSPOSE_RANK (R18): std::transpose()'s parameter is statically
 	!     declared rank-2, and every attempt to construct a value that's
 	!     dynamically rank-1 but passes that static check was rejected by the
-	!     parser at compile time instead (e.g. EC_BAD_ARG_TYPE).  Believed
-	!     unreachable from valid syntran code
+	!     parser at compile time instead (e.g. EC_BAD_ARG_TYPE) -- confirmed by
+	!     trying std::reshape() (whose result rank is unknown at parse time
+	!     unless the shape argument is a literal) as the source of
+	!     std::transpose()'s argument; unreachable from valid syntran code
 	!   - RC_FOR_STEP_ZERO/_F (R23/R24): reachable in the VM (vm_exec.f90's
 	!     OP_FOR_SETUP), but the AST walker's equivalent check in
 	!     eval_for_statement() uses IC_FOR_STEP_ZERO/_F instead -- a
 	!     pre-existing backend inconsistency that predates this test, not
-	!     something rt_code_both() can paper over
+	!     something rt_code_both_file() can paper over
 	!   - RC_ARRAY_SIZE_MISMATCH (R21) and RC_BAD_SUBSCRIPT_KIND (R20):
 	!     defensive checks for subscript/size-array shapes that the parser is
 	!     already expected to rule out; no valid-syntax repro found
@@ -5378,6 +5381,11 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 	character(len = *), parameter :: label = 'runtime errors'
 
+	! Reproduction files live alongside the E* fixtures already used by
+	! unit_test_error_codes()/unit_test_error_locations() (dir_mod.syntran/,
+	! etc.)
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
@@ -5389,67 +5397,57 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			index(err_rt(RC_MATMUL_DIM, 'x'), err_rt_pre(RC_MATMUL_DIM)) == 1, &
 
 			! R1: matmul `@` dimension mismatch
-			rt_code_both('let a=[1,2,3]; let b=[1,2]; a @ b;', RC_MATMUL_DIM), &
+			rt_code_both_file(P//'R1-matmul-dim.syntran', RC_MATMUL_DIM), &
 			! Guard against double-emission (one throw, not one per backend
 			! re-check or speculative re-evaluation)
-			diag_count_code(get_diags( &
-				'let a=[1,2,3]; let b=[1,2]; a @ b;', bytecode = .true.), &
+			diag_count_code(get_diags_file( &
+				P//'R1-matmul-dim.syntran', bytecode = .true.), &
 				RC_MATMUL_DIM) == 1, &
-			diag_count_code(get_diags( &
-				'let a=[1,2,3]; let b=[1,2]; a @ b;', bytecode = .false.), &
+			diag_count_code(get_diags_file( &
+				P//'R1-matmul-dim.syntran', bytecode = .false.), &
 				RC_MATMUL_DIM) == 1, &
 
 			! R2-R5: parse_i32/i64/f32/f64 on unparseable text
-			rt_code_both('parse_i32("abc");', RC_PARSE_I32), &
-			rt_code_both('parse_i64("abc");', RC_PARSE_I64), &
-			rt_code_both('parse_f32("abc");', RC_PARSE_F32), &
-			rt_code_both('parse_f64("abc");', RC_PARSE_F64), &
+			rt_code_both_file(P//'R2-parse-i32.syntran', RC_PARSE_I32), &
+			rt_code_both_file(P//'R3-parse-i64.syntran', RC_PARSE_I64), &
+			rt_code_both_file(P//'R4-parse-f32.syntran', RC_PARSE_F32), &
+			rt_code_both_file(P//'R5-parse-f64.syntran', RC_PARSE_F64), &
 
 			! R6-R7: open() with a bad/conflicting mode string.  These don't
 			! need a real file on disk -- the mode is rejected before the
 			! underlying Fortran open() call
-			rt_code_both('open("build/rt_test_r6.txt", "x");', RC_BAD_FILE_MODE), &
-			rt_code_both('open("build/rt_test_r7.txt", "rw");', RC_FILE_RW_MODE), &
+			rt_code_both_file(P//'R6-bad-file-mode.syntran', RC_BAD_FILE_MODE), &
+			rt_code_both_file(P//'R7-file-rw-mode.syntran', RC_FILE_RW_MODE), &
 
 			! R8: open() on a path that doesn't exist
-			rt_code_both('open("/no/such/file/syntran_rt_test", "r");', RC_OPEN_FILE), &
+			rt_code_both_file(P//'R8-open-file.syntran', RC_OPEN_FILE), &
 
-			! R9-R16: readln()/writeln()/eof()/close() misuse.  Each snippet
-			! is self-contained: it opens/writes/closes its own file under
-			! build/ (created by the build system) so no external test
-			! fixture is needed
-			rt_code_both( &
-				'let f = open("build/rt_test_r9.txt", "w"); close(f); readln(f);', &
-				RC_READLN_NOT_OPEN), &
-			rt_code_both( &
-				'let f = open("build/rt_test_r10.txt", "w"); readln(f);', &
-				RC_READLN_NOT_READ_MODE), &
-			rt_code_both( &
-				'let f=open("build/rt_test_r11.txt","w"); writeln(f,"x"); close(f); '// &
-				'let g=open("build/rt_test_r11.txt","r"); readln(g); readln(g); readln(g);', &
-				RC_READLN_FAIL), &
-			rt_code_both( &
-				'let f = open("build/rt_test_r12.txt", "w"); close(f); writeln(f, "x");', &
-				RC_WRITELN_NOT_OPEN), &
-			rt_code_both( &
-				'let f=open("build/rt_test_r13.txt","w"); writeln(f,"x"); close(f); '// &
-				'let g=open("build/rt_test_r13.txt","r"); writeln(g,"x");', &
-				RC_WRITELN_NOT_WRITE_MODE), &
-			rt_code_both( &
-				'let f = open("build/rt_test_r14.txt", "w"); close(f); eof(f);', &
-				RC_EOF_NOT_OPEN), &
-			rt_code_both( &
-				'let f = open("build/rt_test_r15.txt", "w"); eof(f);', &
-				RC_EOF_NOT_READ_MODE), &
-			rt_code_both( &
-				'let f = open("build/rt_test_r16.txt", "w"); close(f); close(f);', &
-				RC_CLOSE_NOT_OPEN), &
+			! R9-R16: readln()/writeln()/eof()/close() misuse.  Each
+			! reproduction file is self-contained: it opens/writes/closes its
+			! own scratch file under build/ (created by the build system) so
+			! no external test fixture is needed
+			rt_code_both_file( &
+				P//'R9-readln-not-open.syntran', RC_READLN_NOT_OPEN), &
+			rt_code_both_file( &
+				P//'R10-readln-not-read-mode.syntran', RC_READLN_NOT_READ_MODE), &
+			rt_code_both_file( &
+				P//'R11-readln-fail.syntran', RC_READLN_FAIL), &
+			rt_code_both_file( &
+				P//'R12-writeln-not-open.syntran', RC_WRITELN_NOT_OPEN), &
+			rt_code_both_file( &
+				P//'R13-writeln-not-write-mode.syntran', RC_WRITELN_NOT_WRITE_MODE), &
+			rt_code_both_file( &
+				P//'R14-eof-not-open.syntran', RC_EOF_NOT_OPEN), &
+			rt_code_both_file( &
+				P//'R15-eof-not-read-mode.syntran', RC_EOF_NOT_READ_MODE), &
+			rt_code_both_file( &
+				P//'R16-close-not-open.syntran', RC_CLOSE_NOT_OPEN), &
 
 			! R17: size() dim argument out of range
-			rt_code_both('let a=[1,2,3]; size(a,5);', RC_SIZE_RANK_MISMATCH), &
+			rt_code_both_file(P//'R17-size-rank-mismatch.syntran', RC_SIZE_RANK_MISMATCH), &
 
 			! R19: std::reshape() new shape doesn't match element count
-			rt_code_both('std::reshape([1,2,3],[2,2]);', RC_RESHAPE_MISMATCH) &
+			rt_code_both_file(P//'R19-reshape-mismatch.syntran', RC_RESHAPE_MISMATCH) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

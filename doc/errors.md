@@ -663,69 +663,103 @@ A struct lookup by name failed for a value already confirmed to be that struct t
 
 The `@` matrix-multiplication operator's operands have incompatible inner dimensions.
 
+[Example](../src/tests/test-src/errors/R1-matmul-dim.syntran)
+
 ### R2 -- parse-i32
 
 `parse_i32()` could not parse its string argument as an `i32`.
+
+[Example](../src/tests/test-src/errors/R2-parse-i32.syntran)
 
 ### R3 -- parse-i64
 
 `parse_i64()` could not parse its string argument as an `i64`.
 
+[Example](../src/tests/test-src/errors/R3-parse-i64.syntran)
+
 ### R4 -- parse-f32
 
 `parse_f32()` could not parse its string argument as an `f32`.
+
+[Example](../src/tests/test-src/errors/R4-parse-f32.syntran)
 
 ### R5 -- parse-f64
 
 `parse_f64()` could not parse its string argument as an `f64`.
 
+[Example](../src/tests/test-src/errors/R5-parse-f64.syntran)
+
 ### R6 -- bad-file-mode
 
 `open()` was given a file-mode character other than `r` or `w`.
+
+[Example](../src/tests/test-src/errors/R6-bad-file-mode.syntran)
 
 ### R7 -- file-rw-mode
 
 `open()` was given a mode string combining `r` and `w`, which isn't supported.
 
+[Example](../src/tests/test-src/errors/R7-file-rw-mode.syntran)
+
 ### R8 -- open-file
 
 `open()` failed to open the requested file (see the accompanying `iostat`).
+
+[Example](../src/tests/test-src/errors/R8-open-file.syntran)
 
 ### R9 -- readln-not-open
 
 `readln()` was called on a file handle that isn't open.
 
+[Example](../src/tests/test-src/errors/R9-readln-not-open.syntran)
+
 ### R10 -- readln-not-read-mode
 
 `readln()` was called on a file that wasn't opened in read (`"r"`) mode.
+
+[Example](../src/tests/test-src/errors/R10-readln-not-read-mode.syntran)
 
 ### R11 -- readln-fail
 
 `readln()` failed reading from an open file (see the accompanying `iostat`).
 
+[Example](../src/tests/test-src/errors/R11-readln-fail.syntran)
+
 ### R12 -- writeln-not-open
 
 `writeln()` was called on a file handle that isn't open.
+
+[Example](../src/tests/test-src/errors/R12-writeln-not-open.syntran)
 
 ### R13 -- writeln-not-write-mode
 
 `writeln()` was called on a file that wasn't opened in write (`"w"`) mode.
 
+[Example](../src/tests/test-src/errors/R13-writeln-not-write-mode.syntran)
+
 ### R14 -- eof-not-open
 
 `eof()` was called on a file handle that isn't open.
+
+[Example](../src/tests/test-src/errors/R14-eof-not-open.syntran)
 
 ### R15 -- eof-not-read-mode
 
 `eof()` was called on a file that wasn't opened in read (`"r"`) mode.
 
+[Example](../src/tests/test-src/errors/R15-eof-not-read-mode.syntran)
+
 ### R16 -- close-not-open
 
 `close()` was called on a file handle that isn't open.
 
+[Example](../src/tests/test-src/errors/R16-close-not-open.syntran)
+
 ### R17 -- size-rank-mismatch
 
 `size(array, dim)` was given a `dim` outside the array's valid rank range.
+
+[Example](../src/tests/test-src/errors/R17-size-rank-mismatch.syntran)
 
 ### R18 -- transpose-rank
 
@@ -734,6 +768,8 @@ The `@` matrix-multiplication operator's operands have incompatible inner dimens
 ### R19 -- reshape-mismatch
 
 `std::reshape()`'s requested shape doesn't have the same element count as the source array.
+
+[Example](../src/tests/test-src/errors/R19-reshape-mismatch.syntran)
 
 ### R20 -- bad-subscript-kind
 

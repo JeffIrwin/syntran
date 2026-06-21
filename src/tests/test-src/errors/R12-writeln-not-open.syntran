@@ -1,0 +1,6 @@
+// R12: writeln-not-open
+// writeln() was called on a file handle that isn't open
+
+let f = open("build/rt_file_r12.txt", "w");
+close(f);
+writeln(f, "x");

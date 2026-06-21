@@ -38,6 +38,7 @@ module syntran__core_m
 	!      + done
 	!    * also test reachable runtime errors. slightly lower priority than
 	!      parse-time errors
+	!      + done
 	!    * try reverting intel-specific test dodge now that we fixed early
 	!      return for read_file()
 	!      + made test gnu-only: 77aed59f

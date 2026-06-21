@@ -1,0 +1,11 @@
+// R11: readln-fail
+// readln() failed reading from an open file (see the accompanying iostat)
+
+let f = open("build/rt_file_r11.txt", "w");
+writeln(f, "x");
+close(f);
+
+let g = open("build/rt_file_r11.txt", "r");
+let line1 = readln(g);
+let line2 = readln(g);
+let line3 = readln(g);
