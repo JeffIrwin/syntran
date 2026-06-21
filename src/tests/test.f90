@@ -5158,24 +5158,19 @@ subroutine unit_test_error_codes(npass, nfail)
 
 	character(len = :), allocatable :: c
 
-	integer :: i, j
+	integer :: i, num, bucket, maxnum, io
 
 	logical :: unique, fmt_ok
 
+	logical, allocatable :: seen(:,:)
+
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! 1. uniqueness
-	!
-	! TODO: might want a hash set instead of O(n^2) loop
 	codes = get_all_error_codes()
-	unique = .true.
-	do i = 1, codes%len_
-		do j = i + 1, codes%len_
-			if (codes%v(i)%s == codes%v(j)%s) unique = .false.
-		end do
-	end do
 
-	! 2. format: one of E/R/I/W followed by 1+ digits, no leading zero
+	! 2. format: one of E/R/I/W followed by 1+ digits, no leading zero.
+	! Checked before uniqueness (1.) below, since that check depends on
+	! every code matching this shape
 	fmt_ok = .true.
 	do i = 1, codes%len_
 		c = codes%v(i)%s
@@ -5186,6 +5181,31 @@ subroutine unit_test_error_codes(npass, nfail)
 		if (.not. any(c(1:1) == ['E', 'R', 'I', 'W'])) fmt_ok = .false.
 		if (verify(c(2:), '0123456789') /= 0) fmt_ok = .false.
 		if (c(2:2) == '0') fmt_ok = .false.  ! no leading zero / zero-padding
+	end do
+
+	! 1. uniqueness, O(n): every well-formed code is a unique (letter bucket,
+	! integer) pair, so direct-address a "seen" table instead of comparing
+	! all O(n^2) pairs.  Malformed codes are skipped here; fmt_ok above
+	! already flags those
+	maxnum = 0
+	do i = 1, codes%len_
+		c = codes%v(i)%s
+		if (len(c) < 2) cycle
+		read(c(2:), *, iostat = io) num
+		if (io == 0) maxnum = max(maxnum, num)
+	end do
+
+	allocate(seen(4, 0:maxnum))
+	seen = .false.
+	unique = .true.
+	do i = 1, codes%len_
+		c = codes%v(i)%s
+		if (len(c) < 2) cycle
+		bucket = index('ERIW', c(1:1))  ! 1..4, or 0 if malformed
+		read(c(2:), *, iostat = io) num
+		if (bucket == 0 .or. io /= 0) cycle  ! malformed; fmt_ok already flagged it
+		if (seen(bucket, num)) unique = .false.
+		seen(bucket, num) = .true.
 	end do
 
 	tests = &
