@@ -801,6 +801,150 @@ end subroutine unit_test_comp_ass
 
 !===============================================================================
 
+subroutine unit_test_comp_ass_arr(npass, nfail)
+
+	! Regression tests for commit 99ffa35f: whole-array compound assignment
+	! (`v += rhs`, not just `v[i] += rhs`) must preserve the LHS array's
+	! element type instead of silently promoting to the wider operand type.
+	! This was latent in the AST walker but gave wrong results / a hang in
+	! the bytecode VM, which these tests exercise by default (see eval()).
+	!
+	! Element type is checked two ways:
+	!   * f32 arrays print with 6 decimals (es16.6), f64 with 15 (es25.15),
+	!     so a wrongly-promoted f32->f64 array fails the string match
+	!   * i32 vs i64 print identically, so those rely on the numeric value
+	!     alone, matching how the bug actually manifested for ints
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'array compound assignment'
+
+	logical, allocatable :: tests(:)
+	logical, parameter :: quiet = .true.
+
+	real, parameter :: tol = 1.e-9
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! += baseline (same type scalar/array rhs)
+			eval('let v = [10; 3]; v += 5; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = [10; 3]; v += [1, 2, 3]; v;', quiet) == '[11, 12, 13]', &
+			eval('let v = i64([10; 3]); v += i64(5); v;', quiet) == '[15, 15, 15]', &
+			eval('let v = i64([10; 3]); v += i64([1, 2, 3]); v;', quiet) == '[11, 12, 13]', &
+			eval('let v = [10.0f; 3]; v += 5.0f; v;', quiet) == &
+				'[1.500000E+01, 1.500000E+01, 1.500000E+01]', &
+			eval('let v = [10.0f; 3]; v += [1.0f, 2.0f, 3.0f]; v;', quiet) == &
+				'[1.100000E+01, 1.200000E+01, 1.300000E+01]', &
+			eval('let v = [10.0; 3]; v += 5.0; v;', quiet) == &
+				'[1.500000000000000E+01, 1.500000000000000E+01, 1.500000000000000E+01]', &
+			eval('let v = [10.0; 3]; v += [1.0, 2.0, 3.0]; v;', quiet) == &
+				'[1.100000000000000E+01, 1.200000000000000E+01, 1.300000000000000E+01]', &
+
+			! += cross-type rhs must stay at the LHS's element type
+			eval('let v = [10; 3]; v += i64(5); v;', quiet) == '[15, 15, 15]', &
+			eval('let v = [10; 3]; v += 5.9f; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = [10; 3]; v += 5.9; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = [10; 3]; v += i64([1, 2, 3]); v;', quiet) == '[11, 12, 13]', &
+			eval('let v = i64([10; 3]); v += 5; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = i64([10; 3]); v += 5.9f; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = i64([10; 3]); v += 5.9; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = i64([10; 3]); v += [1, 2, 3]; v;', quiet) == '[11, 12, 13]', &
+			eval('let v = [10.0f; 3]; v += 5; v;', quiet) == &
+				'[1.500000E+01, 1.500000E+01, 1.500000E+01]', &
+			eval('let v = [10.0f; 3]; v += i64(5); v;', quiet) == &
+				'[1.500000E+01, 1.500000E+01, 1.500000E+01]', &
+			eval('let v = [10.0f; 3]; v += 5.0; v;', quiet) == &
+				'[1.500000E+01, 1.500000E+01, 1.500000E+01]', &
+			eval('let v = [10.0f; 3]; v += [1.0, 2.0, 3.0]; v;', quiet) == &
+				'[1.100000E+01, 1.200000E+01, 1.300000E+01]', &
+			eval('let v = [10.0; 3]; v += 5; v;', quiet) == &
+				'[1.500000000000000E+01, 1.500000000000000E+01, 1.500000000000000E+01]', &
+			eval('let v = [10.0; 3]; v += i64(5); v;', quiet) == &
+				'[1.500000000000000E+01, 1.500000000000000E+01, 1.500000000000000E+01]', &
+			eval('let v = [10.0; 3]; v += 5.0f; v;', quiet) == &
+				'[1.500000000000000E+01, 1.500000000000000E+01, 1.500000000000000E+01]', &
+			eval('let v = [10.0; 3]; v += [1.0f, 2.0f, 3.0f]; v;', quiet) == &
+				'[1.100000000000000E+01, 1.200000000000000E+01, 1.300000000000000E+01]', &
+			abs(eval_f32('let v = [10.0f; 3]; v += 5.0; sum(v);', quiet) - 45) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v += 5.0f; sum(v);', quiet) - 45.d0) < tol, &
+
+			! -= baseline and cross-type
+			eval('let v = [10; 3]; v -= 4; v;', quiet) == '[6, 6, 6]', &
+			eval('let v = i64([10; 3]); v -= i64(4); v;', quiet) == '[6, 6, 6]', &
+			eval('let v = [10.0f; 3]; v -= 4.0f; v;', quiet) == &
+				'[6.000000E+00, 6.000000E+00, 6.000000E+00]', &
+			eval('let v = [10.0; 3]; v -= 4.0; v;', quiet) == &
+				'[6.000000000000000E+00, 6.000000000000000E+00, 6.000000000000000E+00]', &
+			eval('let v = [10; 3]; v -= i64(3); v;', quiet) == '[7, 7, 7]', &
+			eval('let v = i64([10; 3]); v -= 3.9f; v;', quiet) == '[7, 7, 7]', &
+			eval('let v = [10.0f; 3]; v -= 4.0; v;', quiet) == &
+				'[6.000000E+00, 6.000000E+00, 6.000000E+00]', &
+			eval('let v = [10.0; 3]; v -= 4.0f; v;', quiet) == &
+				'[6.000000000000000E+00, 6.000000000000000E+00, 6.000000000000000E+00]', &
+
+			! *= baseline and cross-type
+			eval('let v = [10; 3]; v *= 3; v;', quiet) == '[30, 30, 30]', &
+			eval('let v = i64([10; 3]); v *= i64(3); v;', quiet) == '[30, 30, 30]', &
+			eval('let v = [10.0f; 3]; v *= 3.0f; v;', quiet) == &
+				'[3.000000E+01, 3.000000E+01, 3.000000E+01]', &
+			eval('let v = [10.0; 3]; v *= 3.0; v;', quiet) == &
+				'[3.000000000000000E+01, 3.000000000000000E+01, 3.000000000000000E+01]', &
+			eval('let v = [10; 3]; v *= 2.5; v;', quiet) == '[20, 20, 20]', &
+			eval('let v = i64([10; 3]); v *= 2.9; v;', quiet) == '[20, 20, 20]', &
+			eval('let v = [10.0f; 3]; v *= 2.0; v;', quiet) == &
+				'[2.000000E+01, 2.000000E+01, 2.000000E+01]', &
+			eval('let v = [10.0; 3]; v *= 2.0f; v;', quiet) == &
+				'[2.000000000000000E+01, 2.000000000000000E+01, 2.000000000000000E+01]', &
+
+			! /= baseline and cross-type
+			eval('let v = [10; 3]; v /= 2; v;', quiet) == '[5, 5, 5]', &
+			eval('let v = i64([10; 3]); v /= i64(2); v;', quiet) == '[5, 5, 5]', &
+			eval('let v = [10.0f; 3]; v /= 2.0f; v;', quiet) == &
+				'[5.000000E+00, 5.000000E+00, 5.000000E+00]', &
+			eval('let v = [10.0; 3]; v /= 2.0; v;', quiet) == &
+				'[5.000000000000000E+00, 5.000000000000000E+00, 5.000000000000000E+00]', &
+			eval('let v = [10; 3]; v /= 3.0; v;', quiet) == '[3, 3, 3]', &
+			eval('let v = [10.0f; 3]; v /= 2.0; v;', quiet) == &
+				'[5.000000E+00, 5.000000E+00, 5.000000E+00]', &
+			eval('let v = [10.0; 3]; v /= 2.0f; v;', quiet) == &
+				'[5.000000000000000E+00, 5.000000000000000E+00, 5.000000000000000E+00]', &
+
+			! **= and %= baseline and cross-type
+			eval('let v = [2; 3]; v **= i64(3); v;', quiet) == '[8, 8, 8]', &
+			eval('let v = i64([2; 3]); v **= 3; v;', quiet) == '[8, 8, 8]', &
+			eval('let v = [7; 3]; v %= i64(4); v;', quiet) == '[3, 3, 3]', &
+			eval('let v = [2.0f; 3]; v **= 3.0f; v;', quiet) == &
+				'[8.000000E+00, 8.000000E+00, 8.000000E+00]', &
+			eval('let v = [2.0f; 3]; v **= 3.0; v;', quiet) == &
+				'[8.000000E+00, 8.000000E+00, 8.000000E+00]', &
+			eval('let v = [2.0; 3]; v **= 3.0f; v;', quiet) == &
+				'[8.000000000000000E+00, 8.000000000000000E+00, 8.000000000000000E+00]', &
+			eval('let v = [7.0f; 3]; v %= 4.0f; v;', quiet) == &
+				'[3.000000E+00, 3.000000E+00, 3.000000E+00]', &
+
+			! &=, |=, ^= (matching int sizes) and <<=, >>= (mixed int sizes ok)
+			eval('let v = [12; 3]; v &= 10; v;', quiet) == '[8, 8, 8]', &
+			eval('let v = [12; 3]; v |= 3; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = [12; 3]; v ^= 10; v;', quiet) == '[6, 6, 6]', &
+			eval('let v = i64([12; 3]); v &= i64(10); v;', quiet) == '[8, 8, 8]', &
+			eval('let v = [1; 3]; v <<= 4; v;', quiet) == '[16, 16, 16]', &
+			eval('let v = [16; 3]; v >>= 2; v;', quiet) == '[4, 4, 4]', &
+			eval('let v = i64([1; 3]); v <<= 4; v;', quiet) == '[16, 16, 16]', &
+			eval('let v = i64([1; 3]); v <<= i64(4); v;', quiet) == '[16, 16, 16]'  &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_comp_ass_arr
+
+!===============================================================================
+
 subroutine unit_test_intr_fns(npass, nfail)
 
 	implicit none
@@ -5905,6 +6049,7 @@ subroutine unit_tests(iostat)
 	call unit_test_fns        (npass, nfail)
 	call unit_test_linalg_fns (npass, nfail)
 	call unit_test_comp_ass   (npass, nfail)
+	call unit_test_comp_ass_arr(npass, nfail)
 	call unit_test_io         (npass, nfail)
 	call unit_test_i64        (npass, nfail)
 	call unit_test_include    (npass, nfail)
