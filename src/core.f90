@@ -30,6 +30,7 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - need a way to read stdin. readln currently always needs a file arg
 	!  - need an exists() built-in to check files, or some equivalent way to
 	!    check a file post-open. maybe rethink the way syntran immediately
 	!    runtime error aborts if you try to open for reading a file that doesn't
