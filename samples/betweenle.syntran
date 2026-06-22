@@ -25,12 +25,10 @@
 // This self-calibrates away any size/word-list mismatch between our
 // dictionary and betweenle's own (the unknown scale factor cancels out of
 // the ratio), and converges in a handful of guesses instead of the
-// ~log2(dictionary size) that plain bisection would need -- a "perfect"
-// betweenle score is 5 guesses or fewer. The confirmed alphabetical
-// bracket (from the real before/after feedback, always exact) is used to
-// clamp the suggestion to a legal guess, to enforce a minimum exploration
-// margin so the estimate can't stall hugging one side (see below), and to
-// list exact candidates once the bracket is small.
+// ~log2(dictionary size) that plain bisection would need. The confirmed
+// alphabetical bracket (from the real before/after feedback, always exact)
+// is still used to clamp the suggestion to a legal guess and to list exact
+// candidates once the bracket is small.
 //
 // State file format: one line per step, whitespace-separated:
 //
@@ -237,33 +235,9 @@ else if pb_known
 else
 	s = (lo + hi) / 2.0;  // no percents known yet (the very first move)
 
-// Don't trust the interpolated estimate all the way to either edge of the
-// confirmed range: if one side's percent keeps shrinking towards 0 while
-// the other side hasn't been re-tested in a while, pure interpolation
-// stalls, crawling forward one word at a time right next to the small
-// side instead of ever re-probing the stale side (the classic
-// false-position/regula-falsi failure mode -- it bit us in testing). A
-// guaranteed exploration margin forces every guess to land at least 10% of
-// the confirmed range away from BOTH bracket words, so the stale side
-// always gets re-tested too. This is a tunable safety net, not a precise
-// estimate: simulations against a deliberately mismatched dictionary
-// showed 10% bounds the worst case at roughly a dozen guesses (vs.
-// unbounded stalling with no margin) while barely costing anything when
-// the percent estimate is accurate.
-let margin = i32(0.10 * ncand + 0.5);
-if (margin < 1) margin = 1;
-let lo2 = lo + margin;
-let hi2 = hi - margin;
-if lo2 > hi2
-{
-	// Range too small for a margin; trust the raw estimate
-	lo2 = lo;
-	hi2 = hi;
-}
-
 let guess = i32(s + 0.5);
-if (guess < lo2) guess = lo2;
-if (guess > hi2) guess = hi2;
+if (guess < lo) guess = lo;
+if (guess > hi) guess = hi;
 
 let top_suffix = "";
 if pt_known top_suffix = str("   (", fmt_pct(pt), "% from top)");
