@@ -409,47 +409,89 @@ module subroutine compound_assign(lhs, rhs, op)
 	!******
 
 	type(value_t) :: tmp  ! necessary for arrays
+	type(value_t) :: rhs_
 
 	if (op%kind /= equals_token) tmp = lhs
+
+	! For compound assignment to an array (e.g. `v += vmax / n`), cast rhs to
+	! match the LHS's existing element type *before* the op, so the result
+	! preserves the LHS's type instead of letting the generic binop promote
+	! it (e.g. i32 array += i64 scalar must stay i32, matching how scalar
+	! compound-assign already truncates back to the LHS's type).  Without
+	! this, the LHS array's element type could silently change at runtime,
+	! which the bytecode compiler's static type info doesn't expect.
+	rhs_ = rhs
+	if (op%kind /= equals_token .and. lhs%type == array_type) then
+		select case (lhs%array%type)
+		case (i32_type)
+			if (rhs%type == array_type) then
+				rhs_%array = rhs%to_i32_array()
+			else
+				rhs_%type     = i32_type
+				rhs_%sca%i32  = rhs%to_i32()
+			end if
+		case (i64_type)
+			if (rhs%type == array_type) then
+				rhs_%array = rhs%to_i64_array()
+			else
+				rhs_%type     = i64_type
+				rhs_%sca%i64  = rhs%to_i64()
+			end if
+		case (f32_type)
+			if (rhs%type == array_type) then
+				rhs_%array = rhs%to_f32_array()
+			else
+				rhs_%type     = f32_type
+				rhs_%sca%f32  = rhs%to_f32()
+			end if
+		case (f64_type)
+			if (rhs%type == array_type) then
+				rhs_%array = rhs%to_f64_array()
+			else
+				rhs_%type     = f64_type
+				rhs_%sca%f64  = rhs%to_f64()
+			end if
+		end select
+	end if
 
 	select case (op%kind)
 	case (equals_token)
 		!print *, 'assign'
 		!lhs = rhs  ! simply overwrite
-		call assign_(lhs, rhs, op%text)
+		call assign_(lhs, rhs_, op%text)
 
 	case (plus_equals_token)
-		call add(tmp, rhs, lhs, op%text)
+		call add(tmp, rhs_, lhs, op%text)
 
 	case (minus_equals_token)
-		call subtract(tmp, rhs, lhs, op%text)
+		call subtract(tmp, rhs_, lhs, op%text)
 
 	case (star_equals_token)
-		call mul(tmp, rhs, lhs, op%text)
+		call mul(tmp, rhs_, lhs, op%text)
 
 	case (slash_equals_token)
-		call div(tmp, rhs, lhs, op%text)
+		call div(tmp, rhs_, lhs, op%text)
 
 	case (sstar_equals_token)
-		call pow(tmp, rhs, lhs, op%text)
+		call pow(tmp, rhs_, lhs, op%text)
 
 	case (percent_equals_token)
-		call mod_(tmp, rhs, lhs, op%text)
+		call mod_(tmp, rhs_, lhs, op%text)
 
 	case (amp_equals_token)
-		call bit_and(tmp, rhs, lhs, op%text)
+		call bit_and(tmp, rhs_, lhs, op%text)
 
 	case (pipe_equals_token)
-		call bit_or(tmp, rhs, lhs, op%text)
+		call bit_or(tmp, rhs_, lhs, op%text)
 
 	case (caret_equals_token)
-		call bit_xor(tmp, rhs, lhs, op%text)
+		call bit_xor(tmp, rhs_, lhs, op%text)
 
 	case (lless_equals_token)
-		call left_shift(tmp, rhs, lhs, op%text)
+		call left_shift(tmp, rhs_, lhs, op%text)
 
 	case (ggreater_equals_token)
-		call right_shift(tmp, rhs, lhs, op%text)
+		call right_shift(tmp, rhs_, lhs, op%text)
 
 	case default
 		write(*,*) err_int(IC_UNEXPECTED_ASSIGN_OP, 'unexpected assignment operator '//quote(op%text))

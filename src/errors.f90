@@ -135,6 +135,8 @@ module syntran__errors_m
 		IC_CONVERT_I64_ARR = "I36", &
 		IC_SCOPE_STACK_EMPTY = "I37", &
 		IC_UNREACHABLE_STRUCT_LOOKUP = "I38", &
+		IC_CONVERT_F32_ARR = "I39", &
+		IC_CONVERT_F64_ARR = "I40", &
 		RC_MATMUL_DIM = "R1", &
 		RC_PARSE_I32 = "R2", &
 		RC_PARSE_I64 = "R3", &
@@ -384,6 +386,8 @@ function get_all_error_codes() result(codes)
 	call codes%push(IC_CONVERT_I64_ARR)
 	call codes%push(IC_SCOPE_STACK_EMPTY)
 	call codes%push(IC_UNREACHABLE_STRUCT_LOOKUP)
+	call codes%push(IC_CONVERT_F32_ARR)
+	call codes%push(IC_CONVERT_F64_ARR)
 	call codes%push(RC_MATMUL_DIM)
 	call codes%push(RC_PARSE_I32)
 	call codes%push(RC_PARSE_I64)

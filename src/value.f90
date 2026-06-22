@@ -133,6 +133,8 @@ module syntran__value_m
 			procedure :: to_i64 => value_to_i64
 			procedure :: to_i32_array => value_to_i32_array  ! for user-facing casting fn
 			procedure :: to_i64_array => value_to_i64_array
+			procedure :: to_f32_array => value_to_f32_array
+			procedure :: to_f64_array => value_to_f64_array
 #ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => value_copy
 			generic, public :: assignment(=) => copy
@@ -817,6 +819,72 @@ function value_to_i64_array(val) result(ans)
 	end select
 
 end function value_to_i64_array
+
+!===============================================================================
+
+function value_to_f32_array(val) result(ans)
+
+	class(value_t) :: val
+
+	type(array_t) :: ans
+
+	ans = mold(val%array, f32_type)
+
+	select case (val%array%type)
+
+		case (f32_type)
+			ans%f32 = val%array%f32
+
+		case (f64_type)
+			ans%f32 = real(val%array%f64, 4)
+
+		case (i32_type)
+			ans%f32 = real(val%array%i32)
+
+		case (i64_type)
+			ans%f32 = real(val%array%i64)
+
+		case default
+			write(*,*) err_int(IC_CONVERT_F32_ARR, 'cannot convert from type `' &
+				//kind_name(val%type)//'` to f32 ')
+			call internal_error()
+
+	end select
+
+end function value_to_f32_array
+
+!===============================================================================
+
+function value_to_f64_array(val) result(ans)
+
+	class(value_t) :: val
+
+	type(array_t) :: ans
+
+	ans = mold(val%array, f64_type)
+
+	select case (val%array%type)
+
+		case (f32_type)
+			ans%f64 = real(val%array%f32, 8)
+
+		case (f64_type)
+			ans%f64 = val%array%f64
+
+		case (i32_type)
+			ans%f64 = real(val%array%i32, 8)
+
+		case (i64_type)
+			ans%f64 = real(val%array%i64, 8)
+
+		case default
+			write(*,*) err_int(IC_CONVERT_F64_ARR, 'cannot convert from type `' &
+				//kind_name(val%type)//'` to f64 ')
+			call internal_error()
+
+	end select
+
+end function value_to_f64_array
 
 !===============================================================================
 
