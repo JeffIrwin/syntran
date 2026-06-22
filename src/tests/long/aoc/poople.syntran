@@ -36,6 +36,12 @@ let BLOCKLIST = [
 	""
 ];
 
+// Add these words to the system dictionary
+let ALLOWLIST = [
+	"POME",
+	""
+];
+
 fn solve(dict: &dict_i64::dict_i64, init_word: str): [str; :]
 {
 	let init = utils::to_lower(init_word);
@@ -122,7 +128,7 @@ fn log_steps(steps: &[str; :])
 	return;
 }
 
-fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64::dict_i64
+fn read_dict(dict_filename: str, blocklist: &[str; :], allowlist: &[str; :]): dict_i64::dict_i64
 {
 	// Load a dictionary of valid words. Only save 4-letter ones
 	let dict = dict_i64::new_dict_i64();
@@ -139,6 +145,9 @@ fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64::dict_i64
 	let block_dict = dict_i64::new_dict_i64();
 	for word in blocklist
 		dict_i64::set_dict_i64(&block_dict, utils::to_lower(word), 1'i64);
+
+	for word in allowlist
+		dict_i64::set_dict_i64(&dict, utils::to_lower(word), 1'i64);
 
 	while not eof(fdict)
 	{

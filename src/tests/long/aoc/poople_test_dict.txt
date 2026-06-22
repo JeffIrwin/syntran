@@ -7,6 +7,9 @@ boar
 boor
 calf
 call
+dice
+dime
+dome
 pace
 pale
 pall
@@ -14,6 +17,8 @@ plop
 plot
 pole
 poll
+pome
+pomp
 pool
 poop
 poor
@@ -23,6 +28,7 @@ slit
 slot
 suit
 tear
+vice
 zits
 zone
 zoom

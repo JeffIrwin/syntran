@@ -30,17 +30,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - unit tests for contents of error messages. need new api to get error
-	!    msg. maybe add error codes too
-	!    * wip on this branch
-	!    * also test line number, column number, filename, and ^^^ underline
-	!      span correctness of diagnostics
-	!      + done
-	!    * also test reachable runtime errors. slightly lower priority than
-	!      parse-time errors
-	!      + done
-	!    * internal errors are supposed to be unreachable, so we can't add tests
-	!      for them
 	!  - need an exists() built-in to check files, or some equivalent way to
 	!    check a file post-open. maybe rethink the way syntran immediately
 	!    runtime error aborts if you try to open for reading a file that doesn't
