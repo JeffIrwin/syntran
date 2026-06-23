@@ -146,10 +146,11 @@ Related functions: [`any`](#any), [`all`](#all)
 
 ## `eof`
 ```rust
+fn eof(): bool
 fn eof(file_handle: file): bool
 ```
 
-Has the end of file (EOF) been reached yet while reading from `file_handle`?  The return value is `false` until and including the last line is read and does not become `true` until reading *past* the EOF is attempted, for which [`readln()`](#readln) will return an empty string
+Has the end of file (EOF) been reached yet while reading from `file_handle`, or from stdin if called with no argument?  The return value is `false` until and including the last line is read and does not become `true` until reading *past* the EOF is attempted, for which [`readln()`](#readln) will return an empty string
 
 Related functions: [`close`](#close), [`readln`](#readln), [`open`](#open)
 
@@ -327,10 +328,11 @@ Related functions: [`str`](#str), [`writeln`](#writeln)
 
 ## `readln`
 ```rust
+fn readln(): str
 fn readln(file_handle: file): str
 ```
 
-Read a single line from `file_handle`
+Read a single line from `file_handle`, or from stdin if called with no argument
 
 Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open)
 

@@ -100,3 +100,8 @@ RUN [[ "$(./bin/syntran -c 'let a = std::args(); size(a);' -- foo bar 'hello wor
 RUN [[ "$(./bin/syntran -c 'let a = std::args(); a[0];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "foo" ]]
 RUN [[ "$(./bin/syntran -c 'let a = std::args(); a[2];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "hello world" ]]
 
+# No-arg readln()/eof() read from stdin
+RUN [[ "$(echo 'hello' | ./bin/syntran -c 'println(readln());' | tr -d '[:space:]')" == "hello" ]]
+RUN [[ "$(printf 'a\nb\nc\n' | ./bin/syntran -c 'let s=""; for i in [0:3] { s += readln(); } println(s);' | tr -d '[:space:]')" == "abc" ]]
+RUN [[ "$(printf 'x\n' | ./bin/syntran -c 'readln(); readln(); println(eof());' | tr -d '[:space:]')" == "true" ]]
+

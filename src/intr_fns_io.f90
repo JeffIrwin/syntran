@@ -228,10 +228,15 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	!********
 
 	readln_fn%type%type = str_type
-	allocate(readln_fn%params(1))
-	allocate(readln_fn%param_names%v(1))
-	readln_fn%params(1)%type = file_type
-	readln_fn%param_names%v(1)%s = "file_handle"
+	allocate(readln_fn%params(0))
+	allocate(readln_fn%param_names%v(0))
+
+	! With no arg, readln() reads a line from stdin.  With a file_handle arg,
+	! it reads a line from that file, same as before
+	readln_fn%variadic_min  = 0
+	readln_fn%variadic_max  = 1
+	readln_fn%variadic_type = file_type
+	readln_fn%variadic_name = "file_handle"
 
 	call fns%insert("readln", readln_fn, id_index)
 
@@ -253,10 +258,15 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	!********
 
 	eof_fn%type%type = bool_type
-	allocate(eof_fn%params(1))
-	allocate(eof_fn%param_names%v(1))
-	eof_fn%params(1)%type = file_type
-	eof_fn%param_names%v(1)%s = "file_handle"
+	allocate(eof_fn%params(0))
+	allocate(eof_fn%param_names%v(0))
+
+	! With no arg, eof() checks the stdin eof flag.  With a file_handle arg,
+	! it checks that file's eof flag, same as before
+	eof_fn%variadic_min  = 0
+	eof_fn%variadic_max  = 1
+	eof_fn%variadic_type = file_type
+	eof_fn%variadic_name = "file_handle"
 
 	call fns%insert("eof", eof_fn, id_index)
 

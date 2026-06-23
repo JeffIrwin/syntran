@@ -83,6 +83,17 @@
 					) \n
 					[[ \"$ans\" != \"[101, 104, 107, 110]\" ]] && exit 1 \n
 
+					# No-arg readln()/eof() should read from stdin \n
+					ans=$(printf 'a\\nb\\nc\\n' | fpm run --profile debug --link-flag \"$lflags\"
+						-- -c 'let n = 0; for i in [0: 3] { let line = readln(); n += 1; } println(n);'
+					) \n
+					[[ \"$(echo $ans)\" != \"3\" ]] && exit 1 \n
+
+					ans=$(printf 'x\\n' | fpm run --profile debug --link-flag \"$lflags\"
+						-- -c 'readln(); readln(); println(eof());'
+					) \n
+					[[ \"$(echo $ans)\" != \"true\" ]] && exit 1 \n
+
 					# Test samples from syntran-explorer \n
 					# TODO: test this in the release binary \n
 					dir_='src/tests/test-src/explorer/' \n

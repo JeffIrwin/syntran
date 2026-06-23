@@ -789,28 +789,35 @@ recursive subroutine compile_node(prog, cs, node)
 			intr_id_ = intr_id_from_name(node%identifier%text)
 			select case (intr_id_)
 			case (INTR_READLN, INTR_CLOSE)
-				! Push the file argument, encode its slot for writeback in c.
-				! Guard: the file arg must be a plain variable (no subscripts, no
-				! member access).  If the grammar ever permits readln(arr[i]) or
-				! a struct-member file, the slot encoding would be wrong; fail
-				! loudly here rather than silently writing to the wrong slot.
-				if (node%args(1)%kind /= name_expr) then
-					write(*,*) 'compile: readln/close: file argument must be a ' // &
-						'plain variable (subscripted/member file not supported)'
-					call internal_error()
+				if (intr_id_ == INTR_READLN .and. &
+					(.not. allocated(node%args) .or. size(node%args) == 0)) then
+					! No-arg readln(): reads stdin, no file slot to write back to.
+					! Use the native dispatch path instead
+					call emit(prog, OP_CALL_INTR, a = intr_id_, b = 0)
+				else
+					! Push the file argument, encode its slot for writeback in c.
+					! Guard: the file arg must be a plain variable (no subscripts, no
+					! member access).  If the grammar ever permits readln(arr[i]) or
+					! a struct-member file, the slot encoding would be wrong; fail
+					! loudly here rather than silently writing to the wrong slot.
+					if (node%args(1)%kind /= name_expr) then
+						write(*,*) 'compile: readln/close: file argument must be a ' // &
+							'plain variable (subscripted/member file not supported)'
+						call internal_error()
+					end if
+					if (allocated(node%args(1)%lsubscripts)) then
+						write(*,*) 'compile: readln/close: subscripted file argument not supported'
+						call internal_error()
+					end if
+					if (allocated(node%args(1)%member)) then
+						write(*,*) 'compile: readln/close: member file argument not supported'
+						call internal_error()
+					end if
+					call compile_node(prog, cs, node%args(1))
+					slot_c = int(node%args(1)%id_index, 8) * 2 + &
+					         merge(1_8, 0_8, node%args(1)%is_loc)
+					call emit(prog, OP_CALL_INTR, a = intr_id_, b = 1, c = slot_c)
 				end if
-				if (allocated(node%args(1)%lsubscripts)) then
-					write(*,*) 'compile: readln/close: subscripted file argument not supported'
-					call internal_error()
-				end if
-				if (allocated(node%args(1)%member)) then
-					write(*,*) 'compile: readln/close: member file argument not supported'
-					call internal_error()
-				end if
-				call compile_node(prog, cs, node%args(1))
-				slot_c = int(node%args(1)%id_index, 8) * 2 + &
-				         merge(1_8, 0_8, node%args(1)%is_loc)
-				call emit(prog, OP_CALL_INTR, a = intr_id_, b = 1, c = slot_c)
 			case default
 				! Native dispatch: push all args, then emit OP_CALL_INTR.
 				nargs_ = 0

@@ -56,6 +56,10 @@ module syntran__eval_m
 		logical :: rt_halt = .false.
 		type(string_vector_t) :: rt_diags
 
+		! Set once a no-arg readln() (stdin) reads past the end of input.
+		! Mirrors file_t%eof, but stdin has no file handle to store it on
+		logical :: stdin_eof = .false.
+
 	end type state_t
 
 	!********

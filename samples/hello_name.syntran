@@ -1,0 +1,7 @@
+
+println("Enter your name:");
+let name = readln();
+println();
+
+println("Hello ", name);
+

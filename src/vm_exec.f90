@@ -909,8 +909,10 @@ module subroutine vm_run(prog, state, res)
 				call vm_pop_copy(stack, iargs_pool(i))
 			end do
 
-			if (instr%a == INTR_READLN) then
-				! readln: read a line from the file; set eof flag on the orig slot.
+			if (instr%a == INTR_READLN .and. nintr >= 1) then
+				! readln(file_handle): read a line from the file; set eof flag on
+				! the orig slot.  (No-arg readln() reads stdin and has no slot to
+				! write back to; it falls through to the native dispatch below)
 				block
 				integer :: slot_id_, io_
 				logical :: is_loc_

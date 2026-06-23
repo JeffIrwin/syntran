@@ -9,8 +9,9 @@ submodule (syntran__vm_m) syntran__vm_intr
 	! (b >= 0).  Args have already been popped from the operand stack in reverse
 	! order and collected into args(1:nargs).
 	!
-	! CALL_INTR_NODE fallback cases (readln, close) are NOT routed here; they are
-	! handled directly in vm_exec by calling eval_fn_call_intr with the stored node.
+	! CALL_INTR_NODE fallback cases (readln(file_handle), close) are NOT routed
+	! here; they are handled inline in vm_exec with slot writeback.  The no-arg
+	! readln() (stdin) has no slot to write back to, so it IS routed here
 
 	implicit none
 
@@ -573,9 +574,35 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		end do
 		write(args(1)%file_%unit_, *)
 
+	case (INTR_READLN)
+		! No-arg readln(): read a line from stdin.  (readln(file_handle) needs
+		! slot writeback for the eof flag, so it is handled inline in vm_exec
+		! instead of here; this case is only reached with nargs == 0)
+		res%type = str_type
+		if (state%stdin_eof) then
+			! Match file readln(): reading again past EOF is an error
+			call rt_throw(state, err_rt(RC_READLN_FAIL, &
+				"cannot readln() from stdin past end of input"))
+			return
+		end if
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = read_line(input_unit, io)
+		if (io == iostat_end) then
+			state%stdin_eof = .true.
+		else if (io /= 0 .and. io /= iostat_eor) then
+			call rt_throw(state, err_rt(RC_READLN_FAIL, &
+				"cannot readln() from stdin (iostat = "//str(io)//")"))
+			return
+		end if
+
 	case (INTR_EOF)
 		! args(1) = file handle (read only — no writeback needed)
 		res%type = bool_type
+		if (nargs == 0) then
+			! No-arg form: check the stdin eof flag
+			res%sca%bool = state%stdin_eof
+			return
+		end if
 		if (.not. args(1)%file_%is_open) then
 			call rt_throw(state, err_rt(RC_EOF_NOT_OPEN, "eof() was called for file """// &
 				args(1)%file_%name_//""" which is not open"))

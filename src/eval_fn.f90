@@ -922,6 +922,30 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 
 	case ("readln")
 
+		if (.not. allocated(node%args) .or. size(node%args) == 0) then
+			! No-arg form: read a line from stdin
+
+			if (state%stdin_eof) then
+				! Match file readln(): reading again past EOF is an error
+				call rt_throw(state, err_rt(RC_READLN_FAIL, &
+					"cannot readln() from stdin past end of input"))
+				return
+			end if
+
+			if (.not. allocated(res%str)) allocate(res%str)
+			res%str%s = read_line(input_unit, io)
+
+			if (io == iostat_end) then
+				state%stdin_eof = .true.
+			else if (io /= 0 .and. io /= iostat_eor) then
+				call rt_throw(state, err_rt(RC_READLN_FAIL, &
+					"cannot readln() from stdin (iostat = "//str(io)//")"))
+				return
+			end if
+
+			return
+		end if
+
 		call syntax_eval(node%args(1), state, arg1)
 		if (state%rt_halt) return
 
@@ -1011,6 +1035,12 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		write(arg1%file_%unit_, *)
 
 	case ("eof")
+
+		if (.not. allocated(node%args) .or. size(node%args) == 0) then
+			! No-arg form: check the stdin eof flag
+			res%sca%bool = state%stdin_eof
+			return
+		end if
 
 		call syntax_eval(node%args(1), state, arg1)
 		if (state%rt_halt) return
