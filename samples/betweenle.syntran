@@ -8,11 +8,10 @@
 //   - a percentage: how far the secret word is from your guess, as a
 //     percent of the whole dictionary
 //
-// This is *not* a standalone implementation of betweenle.  It's a helper:
-// you play the real game, type the state of your current bracket into a
-// state file (see below), run this program, and it suggests your next
-// guess.  You type that suggestion into the real betweenle, update the
-// state file with the new bracket, and re-run.
+// This is *not* a standalone implementation of betweenle.  It's a helper,
+// run interactively: it suggests a guess, you play that guess in the real
+// betweenle, then type the updated bracket (see format below) at the
+// prompt, and it suggests the next guess.  Repeat until solved.
 //
 // The suggestion is computed by *interpolating* the two percents, not by
 // bisecting the bracket.  The percent is the secret's distance as a
@@ -30,7 +29,7 @@
 // is still used to clamp the suggestion to a legal guess and to list exact
 // candidates once the bracket is small.
 //
-// State file format: one line per step, whitespace-separated:
+// Bracket line format, whitespace-separated:
 //
 //     TOP_WORD  BOTTOM_WORD  TOP_PCT  BOTTOM_PCT
 //
@@ -38,12 +37,8 @@
 //                              whole dictionary away from it
 //     BOTTOM_WORD/BOTTOM_PCT - secret is BEFORE this word, BOTTOM_PCT% away
 //
-// The very first line should be "aaaaa zzzzz ? ?" (full dictionary, no
-// guesses yet).  Use "?" for any percent you don't know yet.  Only the last
-// non-comment line is used as the current state; earlier lines are just
-// your running log.  Lines starting with "#" and blank lines are ignored.
-//
-// See samples/betweenle_state.txt for an example.
+// Use "?" for any percent you don't know yet.  An empty line (or EOF, e.g.
+// Ctrl-D) quits.
 
 use ../src/tests/long/aoc/utils_2024 as utils;
 
@@ -114,154 +109,117 @@ fn fmt_pct(p: f64): str
 	return str(whole, ".", frac);
 }
 
-println("Starting betweenle solver");
-
-let args = std::args();
-let nargs = size(args);
-if nargs != 1
+fn solve_step(words: &[str; :], n: i32, state_line: str): bool
 {
-	println("Error: missing cmd arg");
-	println("Usage:");
-	println("    syntran betweenle.syntran STATE_FILE");
-	println();
-	exit(1);
-}
+	// Parse one bracket line, print the bracket / candidates / suggestion,
+	// and return true once the secret word is pinned down to a single
+	// candidate.  A malformed or invalid line just prints an error and
+	// returns false so the caller can re-prompt; each turn re-supplies the
+	// full bracket, so a bad line is harmless
 
-// sudo apt install wamerican
-let dict_filename = "/usr/share/dict/american-english";
+	let tokens = utils::split_(state_line, " ");
+	if (size(tokens, 0) < 4)
+	{
+		println("Error: malformed bracket line: `", state_line, "`");
+		println("Expected format:  TOP_WORD  BOTTOM_WORD  TOP_PCT  BOTTOM_PCT");
+		return false;
+	}
 
-let words = read_dict(dict_filename);
-let n = i32(size(words, 0));
-println("Loaded ", n, " 5-letter words from system dictionary");
+	let top    = utils::to_lower(tokens[0]);
+	let bottom = utils::to_lower(tokens[1]);
 
-// Read the state file and keep only the last non-comment, non-blank line
-let state_filename = args[0];
-let f = open(state_filename, "r");
-let last_line = "";
-while not eof(f)
-{
-	let line = readln(f);
-	if (len(line) == 0) continue;
-	if (line[0] == "#") continue;
-	last_line = line;
-}
-close(f);
+	let pt_known = not (tokens[2] == "?");
+	let pb_known = not (tokens[3] == "?");
 
-if (len(last_line) == 0)
-{
-	println("Error: state file `", state_filename, "` has no valid lines");
-	println("Expected format per line:  TOP_WORD  BOTTOM_WORD  TOP_PCT  BOTTOM_PCT");
-	println("First line should be:      aaaaa zzzzz ? ?");
-	exit(1);
-}
+	let pt = 0.0;
+	let pb = 0.0;
+	if pt_known  pt = parse_f32(tokens[2]);
+	if pb_known  pb = parse_f32(tokens[3]);
 
-let tokens = utils::split_(last_line, " ");
-if (size(tokens, 0) < 4)
-{
-	println("Error: malformed state-file line: `", last_line, "`");
-	println("Expected format:  TOP_WORD  BOTTOM_WORD  TOP_PCT  BOTTOM_PCT");
-	exit(1);
-}
+	let rt = rank_of(&words, n, top);
+	let rb = rank_of(&words, n, bottom);
 
-let top    = utils::to_lower(tokens[0]);
-let bottom = utils::to_lower(tokens[1]);
+	let bad = false;
+	if (rt == NOTFOUND)
+	{
+		println("Error: top word `", utils::to_upper(top), "` not found in dictionary");
+		bad = true;
+	}
+	if (rb == NOTFOUND)
+	{
+		println("Error: bottom word `", utils::to_upper(bottom), "` not found in dictionary");
+		bad = true;
+	}
+	if bad
+	{
+		println("(betweenle's own dictionary may differ slightly from our dictionary)");
+		return false;
+	}
 
-let pt_known = not (tokens[2] == "?");
-let pb_known = not (tokens[3] == "?");
+	// Confirmed candidate range: every word strictly between the bracket
+	// words. This is always exactly correct, since it comes straight from real
+	// before/after feedback, and is used to clamp any guess to a legal one
+	let lo = rt + 1;
+	let hi = rb - 1;
 
-let pt = 0.0;
-let pb = 0.0;
-if pt_known  pt = parse_f32(tokens[2]);
-if pb_known  pb = parse_f32(tokens[3]);
+	if lo > hi
+	{
+		println("Error: no word exists strictly between `", utils::to_upper(top),
+			"` and `", utils::to_upper(bottom), "` in our dictionary");
+		println("(this likely means our dictionary differs from betweenle's;",
+			" double check the words you entered)");
+		return false;
+	}
 
-let rt = rank_of(&words, n, top);
-let rb = rank_of(&words, n, bottom);
+	let ncand = hi - lo + 1;
 
-let bad = false;
-if (rt == NOTFOUND)
-{
-	println("Error: top word `", utils::to_upper(top), "` not found in dictionary");
-	bad = true;
-}
-if (rb == NOTFOUND)
-{
-	println("Error: bottom word `", utils::to_upper(bottom), "` not found in dictionary");
-	bad = true;
-}
-if bad
-{
-	println("(betweenle's own dictionary may differ slightly from ", dict_filename, ")");
-	exit(1);
-}
+	// Positions used for interpolation. These match rt/rb except at the
+	// sentinels, where they collapse to the dictionary's own first/last index
+	// (rt/rb stay at the virtual -1/n so lo/hi above are unaffected)
+	let pos_t = max(rt, 0);
+	let pos_b = min(rb, n-1);
 
-// Confirmed candidate range: every word strictly between the bracket
-// words. This is always exactly correct, since it comes straight from real
-// before/after feedback, and is used to clamp any guess to a legal one
-let lo = rt + 1;
-let hi = rb - 1;
-
-if lo > hi
-{
-	println("Error: no word exists strictly between `", utils::to_upper(top),
-		"` and `", utils::to_upper(bottom), "` in our dictionary");
-	println("(this likely means our dictionary differs from betweenle's;",
-		" double check the words you entered)");
-	exit(1);
-}
-
-let ncand = hi - lo + 1;
-
-// Positions used for interpolation. These match rt/rb except at the
-// sentinels, where they collapse to the dictionary's own first/last index
-// (rt/rb stay at the virtual -1/n so lo/hi above are unaffected)
-let pos_t = rt;
-if (pos_t < 0) pos_t = 0;
-let pos_b = rb;
-if (pos_b > n - 1) pos_b = n - 1;
-
-let s = 0.0;
-if pt_known and pb_known
-{
-	let psum = pt + pb;
-	if psum > 0.0
-		s = pos_t + (pos_b - pos_t) * pt / psum;
+	let s = 0.0;
+	if pt_known and pb_known
+	{
+		let psum = pt + pb;
+		if psum > 0.0
+			s = pos_t + (pos_b - pos_t) * pt / psum;
+		else
+			s = (lo + hi) / 2.0;  // both percents are 0; shouldn't happen, just bisect
+	}
+	else if pt_known
+		s = pos_t + pt / 100.0 * n;
+	else if pb_known
+		s = pos_b - pb / 100.0 * n;
 	else
-		s = (lo + hi) / 2.0;  // both percents are 0; shouldn't happen, just bisect
-}
-else if pt_known
-	s = pos_t + pt / 100.0 * n;
-else if pb_known
-	s = pos_b - pb / 100.0 * n;
-else
-	s = (lo + hi) / 2.0;  // no percents known yet (the very first move)
+		s = (lo + hi) / 2.0;  // no percents known yet (the very first move)
 
-let guess = i32(s + 0.5);
-if (guess < lo) guess = lo;
-if (guess > hi) guess = hi;
+	let guess = min(max(i32(s + 0.5), lo), hi);
 
-let top_suffix = "";
-if pt_known top_suffix = str("   (", fmt_pct(pt), "% from top)");
+	let top_suffix = "";
+	if pt_known top_suffix = str("   (", fmt_pct(pt), "% from top)");
 
-let bot_suffix = "";
-if pb_known bot_suffix = str("   (", fmt_pct(pb), "% from bottom)");
+	let bot_suffix = "";
+	if pb_known bot_suffix = str("   (", fmt_pct(pb), "% from bottom)");
 
-println();
-println("Current bracket:");
-println("    top    = ", utils::to_upper(top), top_suffix);
-println("    bottom = ", utils::to_upper(bottom), bot_suffix);
-
-let cand_word = "candidate";
-if (ncand != 1) cand_word = "candidates";
-println();
-println("Confirmed candidates remaining: ", ncand, " ", cand_word);
-
-if ncand == 1
-{
 	println();
-	println("Solved! The secret word is: ", utils::to_upper(words[lo]));
-}
-else
-{
+	println("Current bracket:");
+	println("    top    = ", utils::to_upper(top), top_suffix);
+	println("    bottom = ", utils::to_upper(bottom), bot_suffix);
+
+	let cand_word = "candidate";
+	if (ncand != 1) cand_word = "candidates";
+	println();
+	println("Confirmed candidates remaining: ", ncand, " ", cand_word);
+
+	if ncand == 1
+	{
+		println();
+		println("Solved! The secret word is: ", utils::to_upper(words[lo]));
+		return true;
+	}
+
 	println();
 	println("Suggested next guess: ", utils::to_upper(words[guess]));
 
@@ -287,6 +245,34 @@ else
 		for i in [alo: ahi + 1]
 			println("    ", utils::to_upper(words[i]));
 	}
+
+	return false;
+}
+
+println("Starting betweenle solver");
+
+// sudo apt install wamerican
+let dict_filename = "/usr/share/dict/american-english";
+
+let words = read_dict(dict_filename);
+let n = i32(size(words, 0));
+println("Loaded ", n, " 5-letter words from system dictionary");
+
+let state = "aaaaa zzzzz ? ?";  // full dictionary, no guesses yet
+let solved = false;
+while not solved
+{
+	solved = solve_step(&words, n, state);
+	if (solved) break;
+
+	println();
+	println("Enter updated bracket:  TOP_WORD  BOTTOM_WORD  TOP_PCT  BOTTOM_PCT");
+	println("  (use ? for an unknown percent; blank line or Ctrl-D to quit)");
+
+	let line = readln();
+	if (eof()) break;
+	if (len(line) == 0) continue;
+	state = line;
 }
 
 println();
