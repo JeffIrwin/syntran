@@ -961,6 +961,11 @@ module subroutine vm_run(prog, state, res)
 				logical :: is_loc_
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
+				if (iargs_pool(1)%file_%is_std) then
+					call rt_throw(state, err_rt(RC_CLOSE_STANDARD, 'close() cannot be called on ' &
+						//'standard file handle "'//iargs_pool(1)%file_%name_//'"'))
+					exit
+				end if
 				if (.not. iargs_pool(1)%file_%is_open) then
 					call rt_throw(state, err_rt(RC_CLOSE_NOT_OPEN, 'close() was called for file "' &
 						//iargs_pool(1)%file_%name_//'" which is not open'))

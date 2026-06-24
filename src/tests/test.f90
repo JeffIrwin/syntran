@@ -1370,6 +1370,13 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('sin(std::PI);')) < tol, &
 			abs(eval_f64('cos(std::PI);') + 1.d0) < tol, &
 
+			! std::IN/OUT/ERR: standard file handle constants
+			interpret('writeln(std::OUT, "hi");') == '', &
+			interpret('writeln(std::ERR, "hi");') == '', &
+			diag_has_code(get_diags('readln(std::OUT);'),  RC_READLN_NOT_READ_MODE), &
+			diag_has_code(get_diags('writeln(std::IN, "x");'), RC_WRITELN_NOT_WRITE_MODE), &
+			diag_has_code(get_diags('std::IN = open("f", "r");'), EC_IMMUTABLE_VAR), &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5633,7 +5640,11 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			rt_code_both_file( &
 				P//'R26-array-step-zero-f.syntran', RC_ARRAY_STEP_ZERO_F), &
 			rt_code_both_file( &
-				P//'R27-subscript-step-zero.syntran', RC_SUBSCRIPT_STEP_ZERO) &
+				P//'R27-subscript-step-zero.syntran', RC_SUBSCRIPT_STEP_ZERO), &
+
+			! R28: close() on std::IN/OUT/ERR is forbidden
+			rt_code_both_file( &
+				P//'R28-close-standard.syntran', RC_CLOSE_STANDARD) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

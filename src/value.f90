@@ -25,6 +25,7 @@ module syntran__value_m
 
 		logical :: is_open = .false.
 		logical :: eof = .false.
+		logical :: is_std = .false.   ! true for std::IN/OUT/ERR — close() is forbidden
 		! Do we need a separate iostat beyond eof?
 
 	end type file_t

@@ -25,6 +25,8 @@ let dict_filename = "/usr/share/dict/american-english";
 let blocklist = poople::BLOCKLIST;
 let allowlist = poople::ALLOWLIST;
 let dict = poople::read_dict(dict_filename, &blocklist, &allowlist);
+//let dict = read_dict(dict_filename, &blocklist, &allowlist); // TODO: bad
+//cascading errors
 println("Loaded ", len_dict_i64(&dict),
 	" 4-letter words from system dictionary");
 

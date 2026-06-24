@@ -72,3 +72,13 @@ RUN [[ "$(syntran -c 'let a = std::args(); size(a);' -- foo bar 'hello world' | 
 RUN [[ "$(syntran -c 'let a = std::args(); a[0];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "foo" ]]
 RUN [[ "$(syntran -c 'let a = std::args(); a[2];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "hello world" ]]
 
+# std::OUT writes to stdout; std::ERR writes to stderr; std::IN reads from stdin
+RUN [[ "$(syntran -c 'writeln(std::OUT, "hello stdout");' | tr -d '[:space:]')" == "hellostdout" ]]
+RUN [[ "$(syntran -c 'writeln(std::ERR, "hello stderr");' 2>&1 >/dev/null | tr -d '[:space:]')" == "hellostderr" ]]
+RUN [[ "$(echo 'hello' | syntran -c 'println(readln(std::IN));' | tr -d '[:space:]')" == "hello" ]]
+
+# close() on any standard handle is a runtime error (R28)
+RUN syntran -c 'close(std::IN);'  2>&1 | grep -q "R28"
+RUN syntran -c 'close(std::OUT);' 2>&1 | grep -q "R28"
+RUN syntran -c 'close(std::ERR);' 2>&1 | grep -q "R28"
+

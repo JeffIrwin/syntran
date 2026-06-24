@@ -1065,6 +1065,12 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		call syntax_eval(node%args(1), state, arg1)
 		if (state%rt_halt) return
 
+		if (arg1%file_%is_std) then
+			call rt_throw(state, err_rt(RC_CLOSE_STANDARD, "close() cannot be called on " &
+				//"standard file handle """//arg1%file_%name_//""""))
+			return
+		end if
+
 		if (.not. arg1%file_%is_open) then
 			call rt_throw(state, err_rt(RC_CLOSE_NOT_OPEN, "close() was called for file """ &
 				//arg1%file_%name_//""" which is not open"))
