@@ -1,0 +1,4 @@
+// E82: immutable-var
+// Assigning to a std:: constant is not allowed
+
+std::PI = 3.0;

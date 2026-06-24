@@ -267,7 +267,7 @@ while not solved
 
 	println();
 	println("Enter updated bracket:  TOP_WORD  BOTTOM_WORD  TOP_PCT  BOTTOM_PCT");
-	println("  (use ? for an unknown percent; blank line or Ctrl-D to quit)");
+	println("  (use ? for an unknown percent; Ctrl-D to quit)");
 
 	let line = readln();
 	if (eof()) break;

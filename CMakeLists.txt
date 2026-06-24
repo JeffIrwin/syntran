@@ -99,6 +99,7 @@ set(LIB_SRC
 	${SRC_DIR}/intr_fns_math.f90
 	${SRC_DIR}/intr_fns_minmax.f90
 	${SRC_DIR}/intr_fns_trig.f90
+	${SRC_DIR}/intr_vars.f90
 	${SRC_DIR}/lex.f90
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/math_bin_add.f90

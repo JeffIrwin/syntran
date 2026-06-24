@@ -4,6 +4,7 @@
 submodule (syntran__parse_m) syntran__parse_control
 
 	use syntran__intr_fns_m
+	use syntran__intr_vars_m
 
 	implicit none
 
@@ -388,6 +389,11 @@ module subroutine parse_use_statement(parser, statement)
 	! to avoid copying previously imported module functions which would cause
 	! redeclaration errors in pass 1.
 	call declare_intr_fns(mod_parser%fns)
+
+	! Pre-seed std:: constants into the module sub-parser's fresh vars dict.
+	! id_index 1 is consistent with the main parser's reserved slot for std::PI.
+	! Do not touch mod_parser%num_vars here; it is inherited from parser below.
+	call declare_intr_vars(mod_parser%vars)
 
 	! Share variable, function, AND struct numbering with parent parser. Module
 	! variables, functions, and structs will get indices continuing from parent's

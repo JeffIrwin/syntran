@@ -192,6 +192,13 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		else
 			! It's a qualified assignment
 
+			if (expr%module_prefix == "std") then
+				span = new_span(identifier%pos, len(identifier%text))
+				call parser%diagnostics%push( &
+					err_immutable_var(parser%context(), span, &
+					expr%module_prefix // "::" // identifier%text))
+			end if
+
 			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &

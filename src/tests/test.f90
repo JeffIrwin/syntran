@@ -1363,6 +1363,13 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('maxval(-[3.0, 2.0, 4.0]);') - (-2.d0)) < tol, &
 			abs(eval_f32("maxval(-[3.0'f32, 2.0'f32, 4.0'f32]);") - (-2.0)) < ftol, &
 			eval_i32('min(1, 2);')  == 1,   &
+
+			! std::PI constant
+			abs(eval_f64('std::PI;') - pi) < tol, &
+			abs(eval_f64('2.0 * std::PI;') - 2.d0 * pi) < tol, &
+			abs(eval_f64('sin(std::PI);')) < tol, &
+			abs(eval_f64('cos(std::PI);') + 1.d0) < tol, &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5484,6 +5491,7 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags( &
 				'use foo as bar::*;', MODSRC), EC_ALIAS_WITH_DOUBLECOLON), &
 			diag_has_code(get_diags_file('does_not_exist_xyz_404.syntran'), EC_404), &
+			diag_has_code(get_diags('std::PI = 3.0;'), EC_IMMUTABLE_VAR), &
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
@@ -5854,7 +5862,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E79-alias-space.syntran'), &
 				EC_ALIAS_SPACE, P//'E79-alias-space.syntran', 4, 12, 1), &
 			diag_loc_ok(get_diags_file(P//'E80-alias-with-doublecolon.syntran'), &
-				EC_ALIAS_WITH_DOUBLECOLON, P//'E80-alias-with-doublecolon.syntran', 4, 5, 3) &
+				EC_ALIAS_WITH_DOUBLECOLON, P//'E80-alias-with-doublecolon.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E82-immutable-var.syntran'), &
+				EC_IMMUTABLE_VAR, P//'E82-immutable-var.syntran', 4, 6, 2) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

@@ -12,6 +12,7 @@ module syntran__core_m
 	use syntran__errors_m
 	use syntran__eval_m
 	use syntran__intr_fns_m
+	use syntran__intr_vars_m
 	use syntran__parse_m
 	use syntran__types_m
 	use syntran__utils_m
@@ -645,6 +646,13 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	!print *, "allocated parser%vars%dicts = ", allocated( parser%vars%dicts )
 	!print *, "size parser%vars%dicts = ", size( parser%vars%dicts )
 
+	! Pre-seed std:: constants into a fresh vars dict.
+	! REPL: dict was moved in above and already contains std:: constants -- skip.
+	if (.not. allocated(parser%vars%dicts(1)%root)) then
+		call declare_intr_vars(parser%vars)
+		parser%num_vars = NUM_INTR_VARS
+	end if
+
 	!*******************************
 	! Parse the tokens
 	call parser%parse_unit(tree)
@@ -733,6 +741,9 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 		!vars%vals = vars0%vals
 		!vars = vars0
 	end if
+
+	! Always set std:: constant runtime values -- idempotent, safe after REPL restore.
+	if (parser%num_vars >= NUM_INTR_VARS) call populate_intr_vars(vars%vals)
 
 	!print *, 'parser%num_fns = ', parser%num_fns
 	if (allocated(fns%fns)) deallocate(fns%fns)
