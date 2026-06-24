@@ -200,6 +200,8 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 			span, display_name, &
 			parser%fns%closest(display_name)))
 
+		fn_call%val%type = unknown_type
+
 		! No more tokens are consumed below, so we can just return
 		! to skip cascading fn arg count/type errors
 		return

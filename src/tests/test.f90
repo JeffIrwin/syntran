@@ -5418,6 +5418,13 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('struct i32{x:i32}'), EC_REDECLARE_PRIMITIVE), &
 			diag_has_code(get_diags('let a = b;'), EC_UNDECLARE_VAR), &
 			diag_has_code(get_diags('nope();'), EC_UNDECLARE_FN), &
+			diag_count_code(get_diags('nope();'), EC_UNDECLARE_FN) == 1, &
+			! Cascading E9 from E29: println() and subsequent calls after an undefined
+			! function should not generate spurious "bad expression" errors
+			diag_count_code(get_diags( &
+				'let x = nope(); println(x);'), EC_BAD_EXPR) == 0, &
+			diag_count_code(get_diags( &
+				'let x = nope(); println(x);'), EC_UNDECLARE_FN) == 1, &
 			diag_has_code(get_diags( &
 				'let a = reshape([1,2,3,4], [2,2]);'), EC_STD_ONLY_FN), &
 			diag_has_code(get_diags('fn f(): i32 { let x = 1; }'), EC_NO_RETURN), &

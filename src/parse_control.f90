@@ -893,29 +893,35 @@ recursive module subroutine parse_statement(parser, statement)
 			! just one statement, and the value is returned implicitly
 			! without an explicit `return`
 
-			select case (statement%kind)
-			case (let_expr, assignment_expr)
-				! Do nothing.  These kinds of expressions are allowed
+			! unknown_type means a prior error already tainted this expression;
+			! skip the expression-statement check to avoid cascading E9 errors
+			if (statement%val%type /= unknown_type) then
 
-			case (fn_call_expr, fn_call_intr_expr)
-				! Only allow void fn call statements.  Don't allow
-				! discarding fn return value
+				select case (statement%kind)
+				case (let_expr, assignment_expr)
+					! Do nothing.  These kinds of expressions are allowed
 
-				!print *, "fn ret type = ", kind_name(statement%val%type)
+				case (fn_call_expr, fn_call_intr_expr)
+					! Only allow void fn call statements.  Don't allow
+					! discarding fn return value
 
-				if (statement%val%type /= void_type) then
+					!print *, "fn ret type = ", kind_name(statement%val%type)
+
+					if (statement%val%type /= void_type) then
+						span = new_span(pos_beg, pos_end - pos_beg + 1)
+						call parser%diagnostics%push( &
+							err_bad_expr(parser%context(), &
+							span))
+					end if
+
+				case default
 					span = new_span(pos_beg, pos_end - pos_beg + 1)
 					call parser%diagnostics%push( &
 						err_bad_expr(parser%context(), &
 						span))
-				end if
+				end select
 
-			case default
-				span = new_span(pos_beg, pos_end - pos_beg + 1)
-				call parser%diagnostics%push( &
-					err_bad_expr(parser%context(), &
-					span))
-			end select
+			end if
 
 		end if
 
