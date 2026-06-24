@@ -22,7 +22,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 	!********
 
-	logical :: is_op_allowed, overwrite
+	logical :: is_op_allowed, overwrite, is_const_var
 
 	integer :: io, ltype, rtype, pos0, lrank, rrank, larrtype, &
 		rarrtype, search_io, ndiag0
@@ -48,6 +48,59 @@ recursive module subroutine parse_expr_statement(parser, expr)
 	!
 	! The above might be hard to do, as it would require checking that the types
 	! of both condition branches match the LHS type
+
+	if (parser%peek_kind(0) == const_keyword     .and. &
+	    parser%peek_kind(1) == identifier_token .and. &
+	    parser%peek_kind(2) == equals_token) then
+
+		let        = parser%next()
+		identifier = parser%next()
+		op         = parser%next()
+
+		call parser%parse_expr_statement(right)
+
+		if (right%val%type ==  void_type) then
+			span = new_span(let%pos, parser%current_pos() - let%pos)
+			call parser%diagnostics%push( &
+				err_void_assign(parser%context(), &
+				span, identifier%text))
+		end if
+
+		call new_declaration_expr(identifier, op, right, expr)
+
+		if (parser%is_loc) then
+			parser%num_locs = parser%num_locs + 1
+			expr%id_index   = parser%num_locs
+			expr%is_loc = .true.
+		else
+			parser%num_vars = parser%num_vars + 1
+			expr%id_index   = parser%num_vars
+			expr%is_loc = .false.
+		end if
+
+		overwrite = .true.
+		if (parser%ipass == 0) overwrite = .false.
+
+		if (parser%is_loc) then
+			call parser%locs%insert(identifier%text, expr%val, &
+				expr%id_index, io, overwrite = overwrite, is_const = .true.)
+		else
+			call parser%vars%insert(identifier%text, expr%val, &
+				expr%id_index, io, overwrite = overwrite, is_const = .true.)
+
+			if (parser%ipass == 0) call parser%var_names%push(identifier%text)
+		end if
+
+		if (io /= exit_success) then
+			span = new_span(identifier%pos, len(identifier%text))
+			call parser%diagnostics%push( &
+				err_redeclare_var(parser%context(), &
+				span, identifier%text))
+		end if
+
+		return
+
+	end if
 
 	if (parser%peek_kind(0) == let_keyword      .and. &
 	    parser%peek_kind(1) == identifier_token .and. &
@@ -162,8 +215,9 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		! Look up the qualified variable
 		expr%identifier = identifier
+		is_const_var = .false.
 		call parser%vars%search(expr%module_prefix // "::" // identifier%text, &
-			expr%id_index, search_io, expr%val)
+			expr%id_index, search_io, expr%val, is_const = is_const_var)
 
 		! Parse subscripts and dot access for qualified names
 		call parser%parse_subscripts(expr)
@@ -196,6 +250,11 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
 					err_immutable_var(parser%context(), span, &
+					expr%module_prefix // "::" // identifier%text))
+			else if (is_const_var .and. search_io == exit_success) then
+				span = new_span(identifier%pos, len(identifier%text))
+				call parser%diagnostics%push( &
+					err_const_assign(parser%context(), span, &
 					expr%module_prefix // "::" // identifier%text))
 			end if
 
@@ -283,14 +342,17 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		!print *, "searching identifier ", identifier%text
 
+		is_const_var = .false.
 		if (parser%is_loc) then
-			call parser%locs%search(identifier%text, expr%id_index, search_io, expr%val)
+			call parser%locs%search(identifier%text, expr%id_index, search_io, expr%val, &
+				is_const = is_const_var)
 		end if
 
 		if (parser%is_loc .and. search_io == 0) then
 			expr%is_loc = .true.
 		else
-			call parser%vars%search(identifier%text, expr%id_index, search_io, expr%val)
+			call parser%vars%search(identifier%text, expr%id_index, search_io, expr%val, &
+				is_const = is_const_var)
 		end if
 
 		call parser%parse_subscripts(expr)
@@ -329,6 +391,14 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			return
 		end if
 		!print *, 'parsing assignment'
+
+		! Block assignment to a const variable (covers plain, compound,
+		! subscript, and member cases — all share this code path)
+		if (is_const_var .and. search_io == exit_success) then
+			span = new_span(identifier%pos, len(identifier%text))
+			call parser%diagnostics%push( &
+				err_const_assign(parser%context(), span, identifier%text))
+		end if
 
 		op    = parser%next()
 		call parser%parse_expr_statement(right)

@@ -47,6 +47,7 @@ let NUM_CODES = 243;
 // a sentinel so the list is never empty
 let ALLOWLIST = [
 	"twixt",
+	"scree",
 	""
 ];
 

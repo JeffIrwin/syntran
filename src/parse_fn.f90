@@ -29,9 +29,10 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	character(len = :), allocatable :: exp_type, act_type, param_name, &
 		lookup_name, display_name
 
-	integer :: i, io, io_std, id_index, pos0, rank, arr_type_result
+	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result
 
-	logical :: has_rank, has_arr_type, param_is_ref, arg_is_ref, is_ok
+	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
+		arg_is_ref, is_ok, is_const_var
 
 	type(fn_t) :: fn
 
@@ -44,7 +45,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	type(text_span_t) :: span
 
-	type(value_t) :: param_val
+	type(value_t) :: param_val, const_check_val
 
 	!print *, ''
 	!print *, 'parse_fn_call'
@@ -328,8 +329,31 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 			param_name = fn%variadic_name
 		end if
 
-		param_is_ref = .false.
-		if (allocated(fn%node)) param_is_ref = fn%node%is_ref(i)
+		param_is_ref       = .false.
+		param_is_const_ref = .false.
+		if (allocated(fn%node)) then
+			param_is_ref = fn%node%is_ref(i)
+			if (allocated(fn%node%is_const_ref)) &
+				param_is_const_ref = fn%node%is_const_ref(i)
+		end if
+
+		! Passing a const variable to a mutable-ref param is an error
+		if (param_is_ref .and. .not. param_is_const_ref .and. &
+				args%v(i)%kind == name_expr) then
+			is_const_var = .false.
+			if (args%v(i)%is_loc) then
+				call parser%locs%search(args%v(i)%identifier%text, &
+					id_index_tmp, io, const_check_val, is_const = is_const_var)
+			else
+				call parser%vars%search(args%v(i)%identifier%text, &
+					id_index_tmp, io, const_check_val, is_const = is_const_var)
+			end if
+			if (is_const_var) then
+				span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
+				call parser%diagnostics%push(err_const_assign( &
+					parser%context(), span, args%v(i)%identifier%text))
+			end if
+		end if
 
 		if (param_is_ref .neqv. is_ref%v(i)) then
 
@@ -491,13 +515,13 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end
 
-	logical :: overwrite
+	logical :: overwrite, const_param
 
 	type(fn_t) :: fn
 
 	type( string_vector_t) :: names
 	type(integer_vector_t) :: pos_args
-	type(logical_vector_t) :: is_ref
+	type(logical_vector_t) :: is_ref, is_const_ref
 
 	type(syntax_node_t) :: body
 	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, &
@@ -538,10 +562,11 @@ module subroutine parse_fn_declaration(parser, decl)
 	lparen = parser%match(lparen_token)
 
 	! Parse parameter names and types.  Save in temp vectors initially
-	names    = new_string_vector()
-	pos_args = new_integer_vector()  ! technically params not args
-	is_ref   = new_logical_vector()
-	types    = new_value_vector()
+	names         = new_string_vector()
+	pos_args      = new_integer_vector()  ! technically params not args
+	is_ref        = new_logical_vector()
+	is_const_ref  = new_logical_vector()
+	types         = new_value_vector()
 
 	! Array params use this syntax:
 	!
@@ -579,8 +604,16 @@ module subroutine parse_fn_declaration(parser, decl)
 		if (parser%current_kind() == amp_token) then
 			amp = parser%match(amp_token)
 			call is_ref%push(.true.)
+			! &const means the callee cannot modify through this reference
+			if (parser%current_kind() == const_keyword) then
+				dummy = parser%next()
+				call is_const_ref%push(.true.)
+			else
+				call is_const_ref%push(.false.)
+			end if
 		else
 			call is_ref%push(.false.)
+			call is_const_ref%push(.false.)
 		end if
 
 		call parser%parse_type(type_text, type)
@@ -605,10 +638,11 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	! Now that we have the number of params, save them
 
-	allocate(fn  %params     ( names%len_ ))
-	allocate(fn%param_names%v( names%len_ ))
-	allocate(decl%params     ( names%len_ ))
-	allocate(decl%is_ref     ( names%len_ ))
+	allocate(fn  %params         ( names%len_ ))
+	allocate(fn%param_names%v   ( names%len_ ))
+	allocate(decl%params        ( names%len_ ))
+	allocate(decl%is_ref        ( names%len_ ))
+	allocate(decl%is_const_ref  ( names%len_ ))
 
 	do i = 1, names%len_
 		!print *, "name, type = ", names%v(i)%s, ", ", types%v(i)%s
@@ -622,10 +656,15 @@ module subroutine parse_fn_declaration(parser, decl)
 		parser%num_locs = parser%num_locs + 1
 
 		! Save parameters by id_index
-		decl%params(i) = parser%num_locs
-		decl%is_ref(i) = is_ref%v(i)
+		decl%params(i)       = parser%num_locs
+		decl%is_ref(i)       = is_ref%v(i)
+		decl%is_const_ref(i) = is_const_ref%v(i)
 
-		call parser%locs%insert(fn%param_names%v(i)%s, fn%params(i), parser%num_locs)
+		! &const params are immutable inside the function body.
+		! Use const_param (default-kind logical) to avoid kind(1) mismatch
+		const_param = is_const_ref%v(i)
+		call parser%locs%insert(fn%param_names%v(i)%s, fn%params(i), parser%num_locs, &
+			is_const = const_param)
 
 	end do
 

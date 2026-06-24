@@ -299,6 +299,12 @@ recursive module subroutine syntax_node_copy(dst, src)
 		deallocate(dst%is_ref)
 	end if
 
+	if (allocated(src%is_const_ref)) then
+		dst%is_const_ref = src%is_const_ref
+	else if (allocated(dst%is_const_ref)) then
+		deallocate(dst%is_const_ref)
+	end if
+
 	if (allocated(src%condition)) then
 		if (.not. allocated(dst%condition)) allocate(dst%condition)
 		dst%condition = src%condition
@@ -592,6 +598,7 @@ recursive module subroutine ternary_tree_copy(dst, src)
 	dst%split_char = src%split_char
 
 	dst%id_index = src%id_index
+	dst%is_const = src%is_const
 
 	if (allocated(src%val)) then
 		if (.not. allocated(dst%val)) allocate(dst%val)

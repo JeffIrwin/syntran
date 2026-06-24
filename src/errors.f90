@@ -98,6 +98,7 @@ module syntran__errors_m
 		EC_ALIAS_WITH_DOUBLECOLON = "E80", &
 		EC_404 = "E81", &
 		EC_IMMUTABLE_VAR = "E82", &
+		EC_CONST_ASSIGN = "E83", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -351,6 +352,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_ALIAS_WITH_DOUBLECOLON)
 	call codes%push(EC_404)
 	call codes%push(EC_IMMUTABLE_VAR)
+	call codes%push(EC_CONST_ASSIGN)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -760,6 +762,20 @@ function err_immutable_var(context, span, var) result(err)
 		//underline(context, span)//" cannot assign to std:: constant"//color_reset
 
 end function err_immutable_var
+
+!===============================================================================
+
+function err_const_assign(context, span, var) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: var
+	err = err_pre(EC_CONST_ASSIGN) &
+		//'`'//var//'` is declared const' &
+		//underline(context, span)//" cannot assign to const variable"//color_reset
+
+end function err_const_assign
 
 !===============================================================================
 

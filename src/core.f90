@@ -31,7 +31,7 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - need a way to read stdin. readln currently always needs a file arg
+	!  - std consts for ANSI color codes, or some other way to color text
 	!  - need an exists() built-in to check files, or some equivalent way to
 	!    check a file post-open. maybe rethink the way syntran immediately
 	!    runtime error aborts if you try to open for reading a file that doesn't
@@ -144,7 +144,6 @@ module syntran__core_m
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - minloc, maxloc, findloc std:: fns
 	!    * useful for aoc
-	!  - const.  e.g. `const N = 5` instead of `let N = 5`. then ban reassigning
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
 	!    compute usage
 	!    * gfortran 15 is now the default for Windows github actions
@@ -234,7 +233,8 @@ module syntran__core_m
 	!    debugging, but I don't want to encourage its use for actual program
 	!    logic
 	!  - complex number type(s)
-	!    * basically required for FFT
+	!    * basically required for FFT, which could be a fun example/test. see:
+	!        https://github.com/JeffIrwin/numerical-analysis/blob/7067e5fe7d331f817c5c9f9cf922b44af7a18aa9/src/interp.F90#L337
 	!  - f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
@@ -314,7 +314,6 @@ module syntran__core_m
 	!    * --fmax-errors arg
 	!    * ifx/ifort pass tests but perform order of magnitude slower
 	!  - #(pragma)once  directive. #let var=val directive?
-	!    * maybe have an `const` qualifier instead of #let or #define
 	!    * for #once include guards, insert filename path as key into a ternary
 	!      tree w/ bool value true.  then when something is included, check if
 	!      it's in the ternary dict first.

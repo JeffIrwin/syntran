@@ -5506,6 +5506,15 @@ subroutine unit_test_error_codes(npass, nfail)
 				'use foo as bar::*;', MODSRC), EC_ALIAS_WITH_DOUBLECOLON), &
 			diag_has_code(get_diags_file('does_not_exist_xyz_404.syntran'), EC_404), &
 			diag_has_code(get_diags('std::PI = 3.0;'), EC_IMMUTABLE_VAR), &
+			diag_has_code(get_diags('const N = 10; N = 20;'), EC_CONST_ASSIGN), &
+			diag_has_code(get_diags('const N = 10; N += 5;'), EC_CONST_ASSIGN), &
+			diag_has_code(get_diags('const A = [1, 2, 3]; A[0] = 5;'), EC_CONST_ASSIGN), &
+			! passing const to mutable ref param
+			diag_has_code(get_diags('fn f(x: &i32) { x = 0; } const N = 10; f(&N);'), EC_CONST_ASSIGN), &
+			! &const param: assigning inside fn body is blocked
+			diag_has_code(get_diags('fn f(x: &const i32) { x = 0; }'), EC_CONST_ASSIGN), &
+			! positive: const read is fine, no E83
+			.not. diag_has_code(get_diags('const N = 10; N + 1;'), EC_CONST_ASSIGN), &
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
@@ -5882,7 +5891,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E80-alias-with-doublecolon.syntran'), &
 				EC_ALIAS_WITH_DOUBLECOLON, P//'E80-alias-with-doublecolon.syntran', 4, 5, 3), &
 			diag_loc_ok(get_diags_file(P//'E82-immutable-var.syntran'), &
-				EC_IMMUTABLE_VAR, P//'E82-immutable-var.syntran', 4, 6, 2) &
+				EC_IMMUTABLE_VAR, P//'E82-immutable-var.syntran', 4, 6, 2), &
+			diag_loc_ok(get_diags_file(P//'E83-const-assign.syntran'), &
+				EC_CONST_ASSIGN, P//'E83-const-assign.syntran', 5, 1, 1) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
