@@ -5515,6 +5515,10 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('fn f(x: &const i32) { x = 0; }'), EC_CONST_ASSIGN), &
 			! positive: const read is fine, no E83
 			.not. diag_has_code(get_diags('const N = 10; N + 1;'), EC_CONST_ASSIGN), &
+			! positive: passing const to &const param is allowed
+			.not. diag_has_code(get_diags('fn f(x: &const i32) {} const N = 10; f(&N);'), EC_CONST_ASSIGN), &
+			! const flag must survive module import
+			diag_has_code(get_diags('use const_mod; const_mod::CVAL = 0;', MODSRC), EC_CONST_ASSIGN), &
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under

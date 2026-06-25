@@ -130,7 +130,7 @@ module subroutine parse_use_statement(parser, statement)
 	type(value_t) :: var_val
 	type(struct_t) :: struct_val
 	integer :: i, io, iostat, mod_unit_, id_index
-	logical :: qualified_import
+	logical :: qualified_import, is_const_var
 	character(len = :), allocatable :: qualified_prefix
 
 	use_token = parser%match(use_keyword)
@@ -469,7 +469,8 @@ module subroutine parse_use_statement(parser, statement)
 		var_name = mod_parser%var_names%v(i)%s
 
 		! Look up the variable in the module parser
-		call mod_parser%vars%search(var_name, id_index, iostat, var_val)
+		is_const_var = .false.
+		call mod_parser%vars%search(var_name, id_index, iostat, var_val, is_const = is_const_var)
 		if (iostat /= exit_success) cycle
 
 		! Determine insert name (qualified or unqualified)
@@ -484,7 +485,7 @@ module subroutine parse_use_statement(parser, statement)
 		end if
 
 		! Insert with same id_index (no remapping needed)
-		call parser%vars%insert(insert_name, var_val, id_index, io)
+		call parser%vars%insert(insert_name, var_val, id_index, io, is_const = is_const_var)
 		if (parser%ipass == 0) call parser%var_names%push(insert_name)
 	end do
 

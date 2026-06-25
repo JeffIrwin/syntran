@@ -142,7 +142,7 @@ recursive module subroutine eval_fn_call(node, state, res)
 	! This is a runtime stopgap check that every fn returns, until (?) i can
 	! figure out parse-time return branch checking.  Checking for unreachable
 	! statements after returns also seems hard
-	if (.not. state%returned) then
+	if (.not. state%returned .and. res%type /= void_type) then
 		write(*,*) err_int(IC_FN_END_REACHED, "reached end of function `"// &
 			node%identifier%text//"` without a return statement")
 		call internal_error()

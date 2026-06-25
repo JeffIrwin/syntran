@@ -96,7 +96,7 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 
 	!*******
 
-	integer :: i, fn_id
+	integer :: i, fn_id, const_idx
 
 	! Recurse into nested use_statements first so that their fns are available
 	! to any bodies compiled below that call them.
@@ -122,6 +122,10 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 		cs%in_fn_body = .true.
 		call compile_node(prog, cs, module_node%members(i)%body)
 		cs%in_fn_body = .false.
+		! Implicit void return for functions with no explicit return statement
+		const_idx = add_const(prog, unknown_val())
+		call emit(prog, OP_LOAD_CONST, a = const_idx)
+		call emit(prog, OP_RET)
 	end do
 
 end subroutine compile_module_fns
@@ -611,6 +615,10 @@ recursive subroutine compile_node(prog, cs, node)
 			cs%in_fn_body = .true.
 			call compile_node(prog, cs, node%members(i)%body)
 			cs%in_fn_body = .false.
+			! Implicit void return for functions with no explicit return statement
+			const_idx = add_const(prog, unknown_val())
+			call emit(prog, OP_LOAD_CONST, a = const_idx)
+			call emit(prog, OP_RET)
 		end do
 
 		! Top-level statements start here.

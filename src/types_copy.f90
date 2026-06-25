@@ -476,8 +476,9 @@ recursive module subroutine syntax_node_move(src, dst)
 	call move_alloc(src%first_expected, dst%first_expected)
 
 	! Allocatable primitive arrays
-	call move_alloc(src%params, dst%params)
-	call move_alloc(src%is_ref, dst%is_ref)
+	call move_alloc(src%params,       dst%params)
+	call move_alloc(src%is_ref,       dst%is_ref)
+	call move_alloc(src%is_const_ref, dst%is_const_ref)
 
 	! Scalar allocatable node children
 	call move_alloc(src%left,        dst%left)
@@ -548,8 +549,9 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	call move_alloc(src%first_expected, dst%first_expected)
 
 	! Allocatable primitive arrays
-	call move_alloc(src%params, dst%params)
-	call move_alloc(src%is_ref, dst%is_ref)
+	call move_alloc(src%params,       dst%params)
+	call move_alloc(src%is_ref,       dst%is_ref)
+	call move_alloc(src%is_const_ref, dst%is_const_ref)
 
 	! Scalar allocatable node children
 	call move_alloc(src%left,        dst%left)
