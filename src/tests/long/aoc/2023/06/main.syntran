@@ -3,14 +3,14 @@ use ../../utils::*;
 
 //==============================================================================
 
-let ifile = 1;
+const ifile = 1;
 
-let filenames =
+const filenames =
 [
 	"test-input.txt",
 	"input.txt"
 ];
-let filename = filenames[ifile];
+const filename = filenames[ifile];
 
 //==============================================================================
 
@@ -69,8 +69,8 @@ fn part1(): i32
 
 	for i in [0: size(times, 0)]
 	{
-		let race_time = times[i];
-		let rec_dist = rec_dists[i];
+		const race_time = times[i];
+		const rec_dist = rec_dists[i];
 
 		//println("race_time, rec_dist = ", race_time, ", ", rec_dist);
 
@@ -88,19 +88,19 @@ fn part1(): i32
 		//
 		//   a = -1;  b = race_time;  c = -rec_dist;
 
-		let a = -1.0f;
-		let b =  1.0f * race_time;
-		let c = -1.0f * rec_dist;
+		const a = -1.0f;
+		const b =  1.0f * race_time;
+		const c = -1.0f * rec_dist;
 
-		let j1 = (-b + (b ** 2 - 4 * a * c) ** 0.5f) / (2 * a);
-		let j2 = (-b - (b ** 2 - 4 * a * c) ** 0.5f) / (2 * a);
+		const j1 = (-b + (b ** 2 - 4 * a * c) ** 0.5f) / (2 * a);
+		const j2 = (-b - (b ** 2 - 4 * a * c) ** 0.5f) / (2 * a);
 
 		//println(" j1,  j2 = ", j1, ", ", j2);
 		//println("fj1, fj2 = ", floor_(j1), ", ", floor_(j2));
 		//println("fj1, fj2 = ", ceil_ (j1), ", ", ceil_ (j2));
 
-		let jmin = ceil_ (minf32(j1, j2));
-		let jmax = floor_(maxf32(j1, j2));
+		const jmin = ceil_ (minf32(j1, j2));
+		const jmax = floor_(maxf32(j1, j2));
 
 		nwin = (jmax - jmin + 1);
 
@@ -141,8 +141,8 @@ fn part2(): i64
 
 	//println("rec_dists = ", rec_dists);
 
-	let race_time = times;
-	let rec_dist = rec_dists;
+	const race_time = times;
+	const rec_dist = rec_dists;
 
 	//println("race_time, rec_dist = ", race_time, ", ", rec_dist);
 
@@ -181,11 +181,11 @@ fn part2(): i64
 	while jlo < jhi - 1
 	{
 		//println("jlo, jhi = ", [jlo, jhi]);
-		let j = (jlo + jhi) / 2;
+		const j = (jlo + jhi) / 2;
 
-		let speed = j * 1;
-		let duration = race_time - j;
-		let dist = i64(speed) * duration;
+		const speed = j * 1;
+		const duration = race_time - j;
+		const dist = i64(speed) * duration;
 		//println("dist = ", dist);
 
 		if dist > rec_dist
@@ -193,7 +193,7 @@ fn part2(): i64
 		else
 			jlo = j;
 	}
-	let jmin = jhi;
+	const jmin = jhi;
 	//println("jmin = ", jmin);
 
 	// Bisection search for maximum button press duration
@@ -202,11 +202,11 @@ fn part2(): i64
 	while jlo < jhi - 1
 	{
 		//println("jlo, jhi = ", [jlo, jhi]);
-		let j = (jlo + jhi) / 2;
+		const j = (jlo + jhi) / 2;
 
-		let speed = j * 1;
-		let duration = race_time - j;
-		let dist = i64(speed) * duration;
+		const speed = j * 1;
+		const duration = race_time - j;
+		const dist = i64(speed) * duration;
 		//println("dist = ", dist);
 
 		if dist > rec_dist
@@ -214,10 +214,10 @@ fn part2(): i64
 		else
 			jhi = j;
 	}
-	let jmax = jlo;
+	const jmax = jlo;
 	//println("jmax = ", jmax);
 
-	let nwin = jmax - jmin + 1;
+	const nwin = jmax - jmin + 1;
 
 	//println("nwin = ", nwin);
 

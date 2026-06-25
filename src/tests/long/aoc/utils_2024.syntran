@@ -9,8 +9,8 @@
 
 //==============================================================================
 
-let digit_chars = "0123456789";
-let hex_chars = digit_chars + "abcdef";
+const digit_chars = "0123456789";
+const hex_chars = digit_chars + "abcdef";
 
 //==============================================================================
 
@@ -139,11 +139,11 @@ fn tok_i32(str_: str): [i64; :]
 	//println("starting tok_i32()");
 	//println("str_ = """, str_, """");
 
-	let nums = "1234567890";
-	let beg_ = scan    (str_, nums);
+	const nums = "1234567890";
+	const beg_ = scan    (str_, nums);
 	//println("beg_ = ", beg_);
 
-	let n = len(str_);
+	const n = len(str_);
 	//println("n = ", n);
 
 	// nasty bug which was just fixed
@@ -180,16 +180,16 @@ fn tok_i32(str_: str): [i64; :]
 
 fn read_i32(str_: str): i32
 {
-	let toks = tok_i32(str_);
+	const toks = tok_i32(str_);
 
 	// multiple return vals are packed into a vec bc i don't have structs :sad:
-	let beg_ = toks[0];
-	let end_ = toks[1];
+	const beg_ = toks[0];
+	const end_ = toks[1];
 	//let len_ = toks[2]; // not needed
 
 	//println("read_i32 substr = ", str_[beg_: end_+1]);
 
-	let ans = parse_i32(str_[beg_: end_+1]);
+	const ans = parse_i32(str_[beg_: end_+1]);
 	//println("read_i32 = ", ans);
 
 	return ans;
@@ -431,7 +431,7 @@ fn index_(str_: str, substr: str): i64
 	//println("str_   = ", str_);
 	//println("substr = ", substr);
 
-	let nsub = len(substr);
+	const nsub = len(substr);
 
 	let i = i64(0);
 	let found = false;
@@ -464,7 +464,7 @@ fn indexback(str_: str, substr: str): i64
 	//println("str_   = ", str_);
 	//println("substr = ", substr);
 
-	let nsub = len(substr);
+	const nsub = len(substr);
 
 	let i = len(str_) - len(substr);
 	let found = false;
@@ -562,9 +562,9 @@ fn parse_i32_hex(str_: str): i32
 	let num = 0;
 	for ii in [0: len(str_)]
 	{
-		let i = len(str_) - ii - 1;
-		let c = str_[i];
-		let val = scan(hex_chars, c);
+		const i = len(str_) - ii - 1;
+		const c = str_[i];
+		const val = scan(hex_chars, c);
 		num += i32(val * 16 ** ii);
 	}
 	return num;
@@ -574,7 +574,7 @@ fn parse_i32_hex(str_: str): i32
 
 fn parse_i32_delim(str_: str, delims: str): [i32; :]
 {
-	let str_vec = split_(str_, delims);
+	const str_vec = split_(str_, delims);
 	//println("str_vec = ", str_vec);
 	let vec = [i32(0); size(str_vec, 0)];
 	for i in [0: size(str_vec, 0)]
@@ -586,7 +586,7 @@ fn parse_i32_delim(str_: str, delims: str): [i32; :]
 
 fn parse_i64_delim(str_: str, delims: str): [i64; :]
 {
-	let str_vec = split_(str_, delims);
+	const str_vec = split_(str_, delims);
 	//println("str_vec = ", str_vec);
 	let vec = [i64(0); size(str_vec, 0)];
 	for i in [0: size(str_vec, 0)]
@@ -621,7 +621,7 @@ fn reverse_str(str_: str): str
 {
 	// Reverse a str
 	let rev = str_;
-	let n = len(str_);
+	const n = len(str_);
 	for i in [0: n]
 		rev[i] = str_[n-i-1];
 	return rev;
@@ -787,7 +787,7 @@ fn sort_index(v: [i32; :]): [i32; :]
 			top -= 1;
 
 			// Median-of-three pivot.  40x faster for AOC day 21!
-			let m = (l + h) / 2;
+			const m = (l + h) / 2;
 			if v[ix[m]] < v[ix[l]]
 			{
 				let tmp = ix[m];
@@ -806,7 +806,7 @@ fn sort_index(v: [i32; :]): [i32; :]
 				ix[m]   = ix[h];
 				ix[h]   = tmp;
 			}
-			let x = v[ix[h]];
+			const x = v[ix[h]];
 
 			let i = (l - 1);
 			for j in [l: h]
@@ -820,7 +820,7 @@ fn sort_index(v: [i32; :]): [i32; :]
 			let tmp = ix[i+1];
 			ix[i+1] = ix[h];
 			ix[h]   = tmp;
-			let p = i + 1;
+			const p = i + 1;
 
 			if p - 1 > l
 			{
@@ -890,7 +890,7 @@ fn sort_inplace(v: [i32; :]): [i32; :]
 			//let x = v[h];
 
 			// Median-of-three pivot.  40x faster for AOC!
-			let m = (l + h) / 2;
+			const m = (l + h) / 2;
 			if v[m] < v[l]
 			{
 				let tmp = v[m];
@@ -909,7 +909,7 @@ fn sort_inplace(v: [i32; :]): [i32; :]
 				v[m]    = v[h];
 				v[h]    = tmp;
 			}
-			let x = v[h];
+			const x = v[h];
 
 			let i = (l - 1);
 			for j in [l: h]
@@ -923,7 +923,7 @@ fn sort_inplace(v: [i32; :]): [i32; :]
 			let tmp = v[i+1];
 			v[i+1] = v[h];
 			v[h] = tmp;
-			let p = i + 1;
+			const p = i + 1;
 
 			if p - 1 > l
 			{
@@ -1020,10 +1020,10 @@ fn print_char_mat(chars: &[str; :,:])
 fn read_char_mat(filename: str): [str; :,:]
 {
 	// Read a matrix of characters from a file
-	let ny = countln_(filename);
+	const ny = countln_(filename);
 	let f = open(filename, "r");
 	let str_ = readln(f);
-	let nx = i32(len(str_));
+	const nx = i32(len(str_));
 	let chars = [""; nx, ny];
 	for y in [0: ny]
 	{
@@ -1043,12 +1043,12 @@ fn read_i32_mat(filename: str): [i32; :,:]
 	// Read a matrix of comma-delimited i32 integers from a file
 	//
 	// TODO: should we take the delimiter(s) as an arg?
-	let delims = ",";
-	let ny = countln_(filename);
+	const delims = ",";
+	const ny = countln_(filename);
 	let f = open(filename, "r");
 	let str_ = readln(f);
-	let row = parse_i32_delim(str_, delims);
-	let nx = size(row, 0);
+	const row = parse_i32_delim(str_, delims);
+	const nx = size(row, 0);
 	let mat = [0; nx, ny];
 	for y in [0: ny]
 	{
@@ -1070,13 +1070,13 @@ fn base_n(a: i64, n: i64): [i32; :]
 
 	// Convert `a` to base n.  Max 64 (base n) digits allowed.  This is ok for
 	// the value of nvmax
-	let DIGITS_CAP = 64;
+	const DIGITS_CAP = 64;
 	let res = [0'i32; DIGITS_CAP];
 	let iout = -1;
 	for i in [0: DIGITS_CAP]
 	{
 		iout = i;
-		let r = a % n;
+		const r = a % n;
 		a /= n;
 		res[i] = r;  // endianness is not important for aoc problem
 		if (a == 0) break;
