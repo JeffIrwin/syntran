@@ -166,7 +166,6 @@ module syntran__types_m
 
 		type(value_t) :: val
 
-		!type(struct_t), allocatable :: struct
 		character(len = :), allocatable :: struct_name
 
 		! Module prefix for qualified names (e.g., "std" in "std::println")
