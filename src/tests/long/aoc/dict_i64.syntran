@@ -104,7 +104,7 @@ fn print_lens_dict_i64(dict: &dict_i64)
 	return;
 }
 
-fn get_dict_i64(dict: &dict_i64, key: str): i64
+fn get_dict_i64(dict: &const dict_i64, key: str): i64
 {
 	let ib = hash_dict_i64(key); // bucket index
 	let len_ = dict.buckets[ib].len;
