@@ -31,6 +31,14 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - method improvements:
+	!    * avoid linear scan? does it exist?
+	!    * allow subscripted methods: `struct[0].method()`
+	!    * other chained permutations like above?
+	!    * lump in other struct improvement unrelated to methods, e.g.: struct
+	!      array slicing, noted below
+	!    * DRY shared code between methods and fns, e.g. argument count and type
+	!      checking at call sites
 	!  - std consts for ANSI color codes, or some other way to color text
 	!  - need an exists() built-in to check files, or some equivalent way to
 	!    check a file post-open. maybe rethink the way syntran immediately

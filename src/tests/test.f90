@@ -4770,6 +4770,84 @@ end subroutine unit_test_struct_long
 
 !===============================================================================
 
+subroutine unit_test_methods(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'methods'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	! Struct with a 0-arg mutable method, a 0-arg const method, and a
+	! 1-arg-by-value method, reused across several tests below.
+	character(len = *), parameter :: CTR = &
+		'struct C{n:i32,' // &
+		'fn inc(){n+=1;}' // &
+		'const fn get():i32{return n;}' // &
+		'fn add(x:i32){n+=x;}' // &
+		'fn add_ref(x:&i32){n+=x; x+=1;}' // &
+		'}'
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+
+			! --- happy path: args by value ---
+			eval(CTR//'let c=C{n=0}; c.add(5); c.get();', quiet) == '5', &   ! 1
+			eval(CTR//'let c=C{n=3}; c.add(7); c.get();', quiet) == '10', &  ! 2
+
+			! --- happy path: arg by ref (x modified inside method) ---
+			eval(CTR//'let c=C{n=0}; let x=2; c.add_ref(&x); x;', quiet) == '3', &  ! 3
+			eval(CTR//'let c=C{n=0}; let x=2; c.add_ref(&x); c.get();', quiet) == '2', &  ! 4
+
+			! --- error: too many args ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.get(1);'), EC_BAD_ARG_COUNT), &    ! 5
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.add(1,2);'), EC_BAD_ARG_COUNT), &  ! 6
+
+			! --- error: too few args ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.add();'), EC_BAD_ARG_COUNT), &     ! 7
+
+			! --- error: wrong arg type ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.add(true);'), EC_BAD_ARG_TYPE), &  ! 8
+
+			! --- error: val where ref expected ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; let x=1; c.add_ref(x);'), EC_BAD_ARG_VAL), &   ! 9
+
+			! --- error: ref where val expected ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; let x=1; c.add(&x);'), EC_BAD_ARG_REF), &     ! 10
+
+			! --- error: const var passed to mutable-ref param ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; const x=1; c.add_ref(&x);'), EC_CONST_ASSIGN), &  ! 11
+
+			! --- error: mutable method called on const instance ---
+			diag_has_code(get_diags(CTR//'const c=C{n=0}; c.inc();'), EC_CONST_ASSIGN), &   ! 12
+			diag_has_code(get_diags(CTR//'const c=C{n=0}; c.add(1);'), EC_CONST_ASSIGN), &  ! 13
+
+			! --- positive: const method on const instance is allowed ---
+			.not. diag_has_code(get_diags(CTR//'const c=C{n=5}; c.get();'), EC_CONST_ASSIGN), &  ! 14
+
+			! --- error: write to field inside const method body ---
+			diag_has_code(get_diags( &
+				'struct S{n:i32, const fn bad(){n=0;}}'), EC_CONST_ASSIGN), &  ! 15
+
+			.false. &
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_methods
+
+!===============================================================================
+
 subroutine unit_test_bitwise_2(npass, nfail)
 
 	implicit none
@@ -6108,6 +6186,7 @@ subroutine unit_tests(iostat)
 	call unit_test_struct_arr3(npass, nfail)
 	call unit_test_struct_str (npass, nfail)
 	call unit_test_struct_long(npass, nfail)
+	call unit_test_methods    (npass, nfail)
 	call unit_test_f64_mix    (npass, nfail)
 	call unit_test_literals   (npass, nfail)
 	call unit_test_bitwise    (npass, nfail)
