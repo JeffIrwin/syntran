@@ -666,7 +666,14 @@ module subroutine vm_run(prog, state, res)
 			! Write by-ref modified values back to caller's variable slots.
 			do i = 1, nparams
 				if (.not. cn%is_ref(i)) cycle
-				if (cn%args(i)%is_loc) then
+				if (allocated(cn%args(i)%lsubscripts)) then
+					! Subscripted receiver: write element back via set_val.
+					if (cn%args(i)%is_loc) then
+						call set_val(cn%args(i), state%locs%vals(cn%args(i)%id_index), state, params_pool(i))
+					else
+						call set_val(cn%args(i), state%vars%vals(cn%args(i)%id_index), state, params_pool(i))
+					end if
+				else if (cn%args(i)%is_loc) then
 					call value_move(params_pool(i), &
 						state%locs%vals(cn%args(i)%id_index))
 				else

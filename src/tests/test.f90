@@ -4836,6 +4836,13 @@ subroutine unit_test_methods(npass, nfail)
 			diag_has_code(get_diags( &
 				'struct S{n:i32, const fn bad(){n=0;}}'), EC_CONST_ASSIGN), &  ! 15
 
+			! --- subscripted receiver: arr[i].method() ---
+			eval(CTR//'let a=[C{n=0},C{n=10}]; a[0].inc(); a[0].get();', quiet) == '1',  &  ! 16
+			eval(CTR//'let a=[C{n=0},C{n=10}]; a[1].inc(); a[1].get();', quiet) == '11', &  ! 17
+			eval(CTR//'let a=[C{n=0},C{n=10}]; a[0].inc(); a[1].get();', quiet) == '10', &  ! 18 (other element unaffected)
+			eval(CTR//'let a=[C{n=5}]; a[0].get();', quiet) == '5', &  ! 19 (const method on subscripted element)
+			diag_has_code(get_diags(CTR//'const a=[C{n=0}]; a[0].inc();'), EC_CONST_ASSIGN), &  ! 20
+
 			.false. &
 		]
 
