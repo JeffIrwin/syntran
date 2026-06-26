@@ -949,20 +949,11 @@ recursive module subroutine parse_dot(parser, expr)
 	end if
 
 	! Check if the identifier is a method name on this struct
-	method_io = 1
-	do method_i = 1, struct%num_methods
-		if (struct%method_names%v(method_i)%s == identifier%text) then
-			method_fn_id = struct%method_fn_ids(method_i)
-			method_io = 0
-			exit
-		end if
-	end do
+	method_fn = parser%fns%search( &
+		"0" // expr%val%struct_name // "::" // identifier%text, &
+		method_fn_id, method_io)
 
 	if (method_io == exit_success) then
-		! Look up the method fn to get return type, params, body
-		method_fn = parser%fns%search( &
-			"0" // expr%val%struct_name // "::" // identifier%text, &
-			method_fn_id, method_io)
 
 		! Const receiver enforcement: mutable methods may not be called on const instances
 		if (.not. method_fn%is_const_method) then
