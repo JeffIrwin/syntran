@@ -177,7 +177,7 @@ recursive subroutine compile_node(prog, cs, node)
 
 	!*******
 
-	integer :: idx, i, const_idx, typed_op
+	integer :: idx, i, j, const_idx, typed_op
 	integer :: jf_ip, j_ip, l_top, l_else, l_end, l_pad
 	integer :: nblock_saved
 	logical :: first, entering_ctx
@@ -591,10 +591,17 @@ recursive subroutine compile_node(prog, cs, node)
 		! before entry_main so that call-site OP_CALL can reference fn_entry.
 		! The VM starts at prog%entry_main.
 
-		! Pass 0: grow fn_entry / fn_num_locs for locally-declared fns.
+		! Pass 0: grow fn_entry / fn_num_locs for locally-declared fns and methods.
 		do i = 1, size(node%members)
-			if (node%members(i)%kind /= fn_declaration) cycle
-			call ensure_fn_entry(prog, node%members(i)%id_index)
+			if (node%members(i)%kind == fn_declaration) then
+				call ensure_fn_entry(prog, node%members(i)%id_index)
+			else if (node%members(i)%kind == struct_declaration) then
+				if (allocated(node%members(i)%members)) then
+					do j = 1, size(node%members(i)%members)
+						call ensure_fn_entry(prog, node%members(i)%members(j)%id_index)
+					end do
+				end if
+			end if
 		end do
 
 		! M7 pre-pass: compile fn bodies from all transitively-imported modules.
@@ -605,20 +612,36 @@ recursive subroutine compile_node(prog, cs, node)
 			call compile_module_fns(prog, cs, node%members(i)%member)
 		end do
 
-		! Pass 1: compile each locally-declared fn body.
+		! Pass 1: compile each locally-declared fn body (including struct methods).
 		do i = 1, size(node%members)
-			if (node%members(i)%kind /= fn_declaration) cycle
-			l_top = node%members(i)%id_index   ! fn_id (reuse l_top as scratch)
-			prog%fn_num_locs(l_top) = node%members(i)%num_locs
-			prog%fn_entry(l_top)    = prog%len_ + 1
+			if (node%members(i)%kind == fn_declaration) then
+				l_top = node%members(i)%id_index   ! fn_id (reuse l_top as scratch)
+				prog%fn_num_locs(l_top) = node%members(i)%num_locs
+				prog%fn_entry(l_top)    = prog%len_ + 1
 
-			cs%in_fn_body = .true.
-			call compile_node(prog, cs, node%members(i)%body)
-			cs%in_fn_body = .false.
-			! Implicit void return for functions with no explicit return statement
-			const_idx = add_const(prog, unknown_val())
-			call emit(prog, OP_LOAD_CONST, a = const_idx)
-			call emit(prog, OP_RET)
+				cs%in_fn_body = .true.
+				call compile_node(prog, cs, node%members(i)%body)
+				cs%in_fn_body = .false.
+				! Implicit void return for functions with no explicit return statement
+				const_idx = add_const(prog, unknown_val())
+				call emit(prog, OP_LOAD_CONST, a = const_idx)
+				call emit(prog, OP_RET)
+			else if (node%members(i)%kind == struct_declaration) then
+				if (allocated(node%members(i)%members)) then
+					do j = 1, size(node%members(i)%members)
+						l_top = node%members(i)%members(j)%id_index
+						prog%fn_num_locs(l_top) = node%members(i)%members(j)%num_locs
+						prog%fn_entry(l_top)    = prog%len_ + 1
+
+						cs%in_fn_body = .true.
+						call compile_node(prog, cs, node%members(i)%members(j)%body)
+						cs%in_fn_body = .false.
+						const_idx = add_const(prog, unknown_val())
+						call emit(prog, OP_LOAD_CONST, a = const_idx)
+						call emit(prog, OP_RET)
+					end do
+				end if
+			end if
 		end do
 
 		! Top-level statements start here.
@@ -742,7 +765,7 @@ recursive subroutine compile_node(prog, cs, node)
 	! this program_t by the translation_unit pre-pass / compile_module_fns (M7).
 	! fn_entry[id] must be registered before execution; a missing registration is
 	! a compiler bug, not a fallback.
-	case (fn_call_expr)
+	case (fn_call_expr, method_call_expr)
 		! Check registration only: fn_entry[id] may be 0 for a forward reference
 		! (the fn is declared after this call site in the source).  That is fine —
 		! fn_entry[id] will be non-zero by the time the VM executes because all

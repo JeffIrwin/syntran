@@ -790,6 +790,15 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	type(struct_t) :: struct, dummy_struct
 
+	type(syntax_node_t) :: method_decl
+
+	type(syntax_node_vector_t) :: method_decls
+
+	logical :: is_const_meth
+
+	integer :: j, num_meth_cap
+	integer, allocatable :: method_fn_ids_tmp(:)
+
 	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
 		colon, name, struct_kw
 
@@ -848,7 +857,10 @@ module subroutine parse_struct_declaration(parser, decl)
 	i = 0
 	do while ( &
 			parser%current_kind() /= rbrace_token .and. &
-			parser%current_kind() /= eof_token)
+			parser%current_kind() /= eof_token .and. &
+			parser%current_kind() /= fn_keyword .and. &
+			.not. (parser%current_kind() == const_keyword .and. &
+			       parser%peek_kind(1) == fn_keyword))
 		i = i + 1
 
 		pos0 = parser%current_pos()
@@ -863,7 +875,10 @@ module subroutine parse_struct_declaration(parser, decl)
 		call types%push(type)
 		call names%push( name%text )
 
-		if (parser%current_kind() /= rbrace_token) then
+		if (parser%current_kind() /= rbrace_token .and. &
+		    parser%current_kind() /= fn_keyword .and. &
+		    .not. (parser%current_kind() == const_keyword .and. &
+		           parser%peek_kind(1) == fn_keyword)) then
 			! Delimiting commas are required; trailing comma is optional
 			comma = parser%match(comma_token)
 		end if
@@ -873,9 +888,8 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	end do
 
-	!print *, 'matching rbrace'
-	rbrace = parser%match(rbrace_token)
-	call pos_mems%push( rbrace%pos )
+	! Sentinel for duplicate-member span: end of the last field (or start of method/rbrace)
+	call pos_mems%push(parser%current_pos())
 
 	! Now that we have the number of members, save them
 
@@ -926,6 +940,58 @@ module subroutine parse_struct_declaration(parser, decl)
 		if (allocated(member%array)) deallocate(member%array)
 	end do
 
+	! Parse method declarations (fn / const fn inside the struct body)
+	struct%num_methods = 0
+	struct%method_names = new_string_vector()
+	num_meth_cap = 4
+	allocate(struct%method_fn_ids(num_meth_cap))
+	method_decls = new_syntax_node_vector()
+
+	do while ( &
+			parser%current_kind() /= rbrace_token .and. &
+			parser%current_kind() /= eof_token)
+
+		pos0 = parser%current_pos()
+
+		is_const_meth = (parser%current_kind() == const_keyword)
+		if (is_const_meth) dummy = parser%next()   ! consume 'const'
+
+		call parser%parse_method_declaration(method_decl, struct, is_const_meth, &
+			identifier%text)
+
+		struct%num_methods = struct%num_methods + 1
+
+		! Grow method_fn_ids if needed
+		if (struct%num_methods > num_meth_cap) then
+			num_meth_cap = num_meth_cap * 2
+			allocate(method_fn_ids_tmp(num_meth_cap))
+			method_fn_ids_tmp(1: struct%num_methods - 1) = &
+				struct%method_fn_ids(1: struct%num_methods - 1)
+			call move_alloc(method_fn_ids_tmp, struct%method_fn_ids)
+		end if
+
+		struct%method_fn_ids(struct%num_methods) = method_decl%id_index
+		call struct%method_names%push(method_decl%identifier%text)
+
+		! Save method decl node for the bytecode compiler pre-pass
+		call method_decls%push(method_decl)
+
+		! Break infinite loop
+		if (parser%current_pos() == pos0) dummy = parser%next()
+
+	end do
+
+	! Store method nodes in decl%members so the bytecode compiler can compile them
+	if (method_decls%len_ > 0) then
+		allocate(decl%members(method_decls%len_))
+		do j = 1, method_decls%len_
+			decl%members(j) = method_decls%v(j)
+		end do
+	end if
+
+	rbrace = parser%match(rbrace_token)
+	call pos_mems%push( rbrace%pos )
+
 	! Insert struct into parser dict
 
 	parser%num_structs = parser%num_structs + 1
@@ -956,6 +1022,222 @@ module subroutine parse_struct_declaration(parser, decl)
 	!print *, "done parsing struct"
 
 end subroutine parse_struct_declaration
+
+!===============================================================================
+
+module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name)
+
+	! Parse a method declared inside a struct body.
+	! The implicit first parameter "0self" is the struct passed by reference.
+	! Field names in the method body are transformed to dot_expr on "0self"
+	! by parse_name_expr and parse_expr_statement (via parser%in_method context).
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(out) :: decl
+	type(struct_t), intent(in) :: struct
+	logical, intent(in) :: is_const
+	character(len = *), intent(in) :: struct_name
+
+	!********
+
+	character(len = :), allocatable :: type_text, mangled_name
+
+	integer :: i, io, pos0, rank, fn_beg, fn_name_end
+
+	logical :: overwrite, const_param
+
+	type(fn_t) :: fn
+
+	type(string_vector_t) :: names
+	type(integer_vector_t) :: pos_args
+	type(logical_vector_t) :: is_ref, is_const_ref
+
+	type(syntax_node_t) :: body
+	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, &
+		name, comma, dummy, amp
+
+	type(text_span_t) :: span
+
+	type(value_t) :: type, self_val
+	type(value_vector_t) :: types
+
+	call parser%vars%push_scope()
+	call parser%locs%push_scope()
+	parser%is_loc = .true.
+	parser%num_locs = 0
+
+	parser%returned = .false.
+	fn_beg = parser%peek_pos(0)
+	fn_kw = parser%match(fn_keyword)
+
+	identifier = parser%match(identifier_token)
+	fn_name_end = parser%peek_pos(0) - 1
+	fn%is_intr = .false.
+	fn%is_method = .true.
+	fn%is_const_method = is_const
+
+	! Insert implicit "0self" as first local (the struct receiver)
+	self_val%type = struct_type
+	self_val%struct_name = struct_name
+	if (allocated(struct%cookie)) self_val%struct_cookie = struct%cookie
+	parser%num_locs = parser%num_locs + 1
+	const_param = is_const
+	call parser%locs%insert("0self", self_val, parser%num_locs, io, &
+		is_const = const_param)
+	parser%self_loc_id = parser%num_locs
+
+	! Set method parsing context so field names resolve to dot_expr("0self", field)
+	parser%in_method = .true.
+	parser%in_const_method = is_const
+	parser%method_struct = struct
+
+	if (parser%current_kind() /= lparen_token) then
+		parser%in_method = .false.
+		parser%in_const_method = .false.
+		call parser%vars%pop_scope()
+		call parser%locs%pop_scope()
+		parser%is_loc = .false.
+		return
+	end if
+
+	lparen = parser%match(lparen_token)
+
+	names        = new_string_vector()
+	pos_args     = new_integer_vector()
+	is_ref       = new_logical_vector()
+	is_const_ref = new_logical_vector()
+	types        = new_value_vector()
+
+	i = 0
+	do while ( &
+			parser%current_kind() /= rparen_token .and. &
+			parser%current_kind() /= eof_token)
+		i = i + 1
+
+		pos0 = parser%current_pos()
+		call pos_args%push(pos0)
+
+		name  = parser%match(identifier_token)
+		colon = parser%match(colon_token)
+
+		if (parser%current_kind() == amp_token) then
+			amp = parser%match(amp_token)
+			call is_ref%push(.true.)
+			if (parser%current_kind() == const_keyword) then
+				dummy = parser%next()
+				call is_const_ref%push(.true.)
+			else
+				call is_const_ref%push(.false.)
+			end if
+		else
+			call is_ref%push(.false.)
+			call is_const_ref%push(.false.)
+		end if
+
+		call parser%parse_type(type_text, type)
+
+		call names%push( name%text )
+		call types%push(type)
+
+		if (parser%current_kind() /= rparen_token) then
+			comma = parser%match(comma_token)
+		end if
+
+		if (parser%current_pos() == pos0) dummy = parser%next()
+
+	end do
+	call pos_args%push(parser%current_pos() + 1)
+
+	rparen = parser%match(rparen_token)
+
+	! params(1) = self slot, params(2..) = explicit params
+	! is_ref(1) = true (self is always by-ref), is_const_ref(1) = is_const
+	allocate(fn%params          ( names%len_ ))
+	allocate(fn%param_names%v   ( names%len_ ))
+	allocate(decl%params        ( 1 + names%len_ ))
+	allocate(decl%is_ref        ( 1 + names%len_ ))
+	allocate(decl%is_const_ref  ( 1 + names%len_ ))
+
+	! Self is slot 1
+	decl%params(1)       = parser%self_loc_id
+	decl%is_ref(1)       = .true.
+	decl%is_const_ref(1) = is_const
+
+	do i = 1, names%len_
+		fn%param_names%v(i)%s = names%v(i)%s
+		fn%params(i) = types%v(i)
+
+		parser%num_locs = parser%num_locs + 1
+		decl%params(1 + i)       = parser%num_locs
+		decl%is_ref(1 + i)       = is_ref%v(i)
+		decl%is_const_ref(1 + i) = is_const_ref%v(i)
+
+		const_param = is_const_ref%v(i)
+		call parser%locs%insert(fn%param_names%v(i)%s, fn%params(i), parser%num_locs, &
+			is_const = const_param)
+	end do
+
+	fn%type%type = void_type
+	rank = 0
+	if (parser%current_kind() == colon_token) then
+		colon = parser%match(colon_token)
+		call parser%parse_type(type_text, type)
+		fn%type = type
+	end if
+
+	parser%fn_name = identifier%text
+	parser%fn_type = fn%type
+
+	call parser%parse_statement(body)
+
+	if (.not. parser%returned .and. fn%type%type /= void_type) then
+		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
+		call parser%diagnostics%push( &
+			err_no_return(parser%context(), &
+			span, identifier%text))
+	else if (parser%returned .and. .not. all_paths_return(body)) then
+		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
+		if (permissive_return) then
+			if (parser%ipass /= 0) write(error_unit, '(a)') warn_missing_return(parser%context(), &
+				span, identifier%text)
+		else
+			call parser%diagnostics%push( &
+				err_missing_return(parser%context(), &
+				span, identifier%text))
+		end if
+	end if
+
+	parser%fn_type%type = any_type
+
+	! Clear method context before registering fn
+	parser%in_method = .false.
+	parser%in_const_method = .false.
+
+	! Register method in global fns with mangled name "0StructName::method_name"
+	parser%num_fns = parser%num_fns + 1
+	decl%id_index  = parser%num_fns
+
+	decl%kind       = fn_declaration
+	decl%identifier = identifier
+	decl%num_locs   = parser%num_locs
+	call syntax_node_move(body, decl%body)
+
+	call parser%vars%pop_scope()
+	call parser%locs%pop_scope()
+	parser%is_loc = .false.
+
+	allocate(fn%node)
+	fn%node = decl
+
+	overwrite = .true.
+	if (parser%ipass == 0) overwrite = .false.
+
+	mangled_name = "0" // struct_name // "::" // identifier%text
+	io = 0
+	call parser%fns%insert(mangled_name, fn, decl%id_index, io, overwrite = overwrite)
+	if (parser%ipass == 0) call parser%fn_names%push(mangled_name)
+
+end subroutine parse_method_declaration
 
 !===============================================================================
 

@@ -456,7 +456,7 @@ recursive subroutine syntax_eval(node, state, res)
 		!	end do
 		!end if
 
-	case (fn_call_expr)  ! user-defined
+	case (fn_call_expr, method_call_expr)  ! user-defined (method_call_expr reuses eval_fn_call)
 		call eval_fn_call(node, state, res)
 
 	case (fn_call_intr_expr)

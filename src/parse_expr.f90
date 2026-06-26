@@ -25,7 +25,9 @@ recursive module subroutine parse_expr_statement(parser, expr)
 	logical :: is_op_allowed, overwrite, is_const_var
 
 	integer :: io, ltype, rtype, pos0, lrank, rrank, larrtype, &
-		rarrtype, search_io, ndiag0
+		rarrtype, search_io, ndiag0, field_id, field_io
+
+	type(value_t) :: field_val, self_val
 
 	type(syntax_node_t) :: right
 	type(syntax_token_t) :: let, identifier, op
@@ -355,12 +357,44 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				is_const = is_const_var)
 		end if
 
+		! Check if this is an implicit field access inside a method body
+		if (parser%in_method .and. search_io /= exit_success) then
+			call parser%method_struct%vars%search(identifier%text, field_id, field_io, field_val)
+			if (field_io == exit_success) then
+				! Transform to dot_expr("0self", field) for assignment LHS
+				call parser%locs%search("0self", expr%id_index, search_io, self_val)
+				expr%is_loc = .true.
+				expr%val    = self_val
+
+				! Reject writes in const fn
+				if (parser%in_const_method) then
+					span = new_span(identifier%pos, len(identifier%text))
+					call parser%diagnostics%push( &
+						err_const_assign(parser%context(), span, identifier%text))
+				end if
+
+				allocate(expr%member)
+				expr%member%id_index   = field_id
+				expr%member%val        = field_val
+				expr%member%identifier = identifier
+				expr%val = field_val
+				call parser%parse_subscripts(expr%member)
+				expr%val = expr%member%val
+				if (parser%current_kind() == dot_token) then
+					expr%member%identifier = identifier
+					call parser%parse_dot(expr%member)
+					expr%val = expr%member%val
+				end if
+				is_const_var = .false.
+			end if
+		end if
+
 		call parser%parse_subscripts(expr)
 
 		if (parser%peek_kind(0) == dot_token) then
 			!print *, "dot token"
 
-			if (search_io /= exit_success) then
+			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
 					err_undeclare_var(parser%context(), &
@@ -368,10 +402,14 @@ recursive module subroutine parse_expr_statement(parser, expr)
 					parser%vars%closest(identifier%text)))
 			end if
 
-			call parser%parse_dot(expr)
 			if (.not. allocated(expr%member)) then
-				!print *, "RETURNING ******"
-				return
+				call parser%parse_dot(expr)
+				! Return early only on actual error (no member, not a method call)
+				if (.not. allocated(expr%member) .and. &
+				    expr%kind /= method_call_expr) then
+					!print *, "RETURNING ******"
+					return
+				end if
 			end if
 
 		end if
@@ -756,12 +794,12 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 	!********
 
-	integer :: io, id_index
+	integer :: io, id_index, field_id, field_io
 
 	type(syntax_token_t) :: identifier
 	type(text_span_t) :: span
 
-	type(value_t) :: var
+	type(value_t) :: var, field_val
 
 	! Variable name expression
 
@@ -788,6 +826,31 @@ recursive module subroutine parse_name_expr(parser, expr)
 		expr%is_loc = .false.
 
 		if (io /= 0) then
+
+			! Check if this is a struct field name in scope via implicit self
+			if (parser%in_method) then
+				call parser%method_struct%vars%search(identifier%text, field_id, field_io, field_val)
+				if (field_io == exit_success) then
+					! Build dot_expr("0self", field) inline
+					expr%kind       = dot_expr
+					expr%id_index   = parser%self_loc_id
+					expr%is_loc     = .true.
+					expr%identifier = identifier
+					allocate(expr%member)
+					expr%member%id_index   = field_id
+					expr%member%val        = field_val
+					expr%member%identifier = identifier
+					expr%val = field_val
+					call parser%parse_subscripts(expr%member)
+					expr%val = expr%member%val
+					if (parser%current_kind() == dot_token) then
+						call parser%parse_dot(expr%member)
+						expr%val = expr%member%val
+					end if
+					return
+				end if
+			end if
+
 			!print *, "undeclared var 3"
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
@@ -821,11 +884,21 @@ recursive module subroutine parse_dot(parser, expr)
 
 	!********
 
-	integer :: io, struct_id, member_id, pos0, pos1
+	integer :: io, struct_id, member_id, pos0, pos1, method_i, method_fn_id, method_io
+
+	logical :: call_arg_is_ref
+
+	type(fn_t) :: method_fn
 
 	type(struct_t) :: struct
 
-	type(syntax_token_t) :: dot, identifier
+	type(syntax_node_t) :: receiver_save, arg_
+
+	type(syntax_node_vector_t) :: call_args
+
+	type(logical_vector_t) :: call_is_ref
+
+	type(syntax_token_t) :: dot, identifier, lparen_, rparen_, comma_, amp_
 
 	type(text_span_t) :: span
 
@@ -858,13 +931,6 @@ recursive module subroutine parse_dot(parser, expr)
 		return
 	end if
 
-	! For RHS dots, this will stick.  For LHS dots, this will be shortly
-	! overwritten as assignment_expr in the caller
-	expr%kind = dot_expr
-
-	! Save dot info in member syntax node
-	allocate(expr%member)
-
 	!print *, "struct_name = """, expr%val%struct_name, """"
 
 	! Is there a better way than looking up every struct by name again?
@@ -875,6 +941,92 @@ recursive module subroutine parse_dot(parser, expr)
 		write(*,*) err_int(IC_UNREACHABLE_STRUCT_LOOKUP, "unreachable struct lookup failure")
 		call internal_error()
 	end if
+
+	! Check if the identifier is a method name on this struct
+	method_io = 1
+	do method_i = 1, struct%num_methods
+		if (struct%method_names%v(method_i)%s == identifier%text) then
+			method_fn_id = struct%method_fn_ids(method_i)
+			method_io = 0
+			exit
+		end if
+	end do
+
+	if (method_io == exit_success) then
+		! Look up the method fn to get return type, params, body
+		method_fn = parser%fns%search( &
+			"0" // expr%val%struct_name // "::" // identifier%text, &
+			method_fn_id, method_io)
+
+		! Save receiver before overwriting expr
+		receiver_save = expr
+
+		! Parse explicit argument list
+		call_args   = new_syntax_node_vector()
+		call_is_ref = new_logical_vector()
+
+		lparen_ = parser%match(lparen_token)
+
+		do while (parser%current_kind() /= rparen_token .and. &
+		          parser%current_kind() /= eof_token)
+			pos0 = parser%pos
+
+			call_arg_is_ref = .false.
+			if (parser%current_kind() == amp_token) then
+				amp_ = parser%match(amp_token)
+				call_arg_is_ref = .true.
+			end if
+			call call_is_ref%push(call_arg_is_ref)
+
+			call parser%parse_expr(expr = arg_)
+			call call_args%push(arg_)
+
+			if (parser%current_kind() /= rparen_token) then
+				comma_ = parser%match(comma_token)
+			end if
+
+			if (parser%pos == pos0) amp_ = parser%next()
+		end do
+
+		rparen_ = parser%match(rparen_token)
+
+		! Build method_call_expr node in expr
+		expr%kind       = method_call_expr
+		expr%identifier = identifier
+		expr%id_index   = method_fn_id
+		expr%val        = method_fn%type
+
+		! args: receiver first, then explicit args
+		allocate(expr%args(1 + call_args%len_))
+		expr%args(1) = receiver_save
+		do method_i = 1, call_args%len_
+			expr%args(1 + method_i) = call_args%v(method_i)
+		end do
+
+		! is_ref: self always by-ref, explicit args by call-site marker
+		allocate(expr%is_ref(1 + call_args%len_))
+		expr%is_ref(1) = .true.
+		do method_i = 1, call_args%len_
+			expr%is_ref(1 + method_i) = call_is_ref%v(method_i)
+		end do
+
+		! Copy fn body and params from the method's fn node
+		if (allocated(method_fn%node)) then
+			allocate(expr%body)
+			expr%body     = method_fn%node%body
+			expr%params   = method_fn%node%params
+			expr%num_locs = method_fn%node%num_locs
+		end if
+
+		return
+	end if
+
+	! For RHS dots, this will stick.  For LHS dots, this will be shortly
+	! overwritten as assignment_expr in the caller
+	expr%kind = dot_expr
+
+	! Save dot info in member syntax node
+	allocate(expr%member)
 
 	call struct%vars%search(identifier%text, member_id, io, member)
 	if (io /= 0) then

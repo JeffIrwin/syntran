@@ -46,6 +46,9 @@ module syntran__types_m
 		! M6: integer dispatch id for intrinsic fns (0 = unassigned / user fn)
 		integer :: intr_id = 0
 
+		logical :: is_method = .false.
+		logical :: is_const_method = .false.
+
 		contains
 #ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => fn_copy
@@ -273,6 +276,10 @@ module syntran__types_m
 		! Canonical, alias-independent identity: "<defining src file>::<local
 		! struct name>", set once at declaration time. c.f. value_t%struct_cookie
 		character(len = :), allocatable :: cookie
+
+		type(string_vector_t) :: method_names
+		integer, allocatable :: method_fn_ids(:)
+		integer :: num_methods = 0
 
 		contains
 			! This is also required unfortunately

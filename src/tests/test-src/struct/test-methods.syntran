@@ -1,0 +1,29 @@
+
+struct Counter
+{
+	n: i32,
+
+	fn inc()
+	{
+		n += 1;
+	}
+
+	const fn get(): i32
+	{
+		return n;
+	}
+}
+
+let c = Counter{n = 0};
+c.inc();
+c.inc();
+let ok1 = c.get() == 2;
+
+let d = Counter{n = 10};
+d.inc();
+let ok2 = d.get() == 11;
+
+// Multiple counters are independent
+let ok3 = c.get() == 2;
+
+return ok1 and ok2 and ok3;

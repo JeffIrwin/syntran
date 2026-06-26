@@ -80,6 +80,16 @@ recursive module subroutine struct_copy(dst, src)
 		deallocate(dst%cookie)
 	end if
 
+	dst%method_names = src%method_names
+	dst%num_methods  = src%num_methods
+	if (allocated(src%method_fn_ids)) then
+		if (allocated(dst%method_fn_ids)) deallocate(dst%method_fn_ids)
+		allocate(dst%method_fn_ids( size(src%method_fn_ids) ))
+		dst%method_fn_ids = src%method_fn_ids
+	else if (allocated(dst%method_fn_ids)) then
+		deallocate(dst%method_fn_ids)
+	end if
+
 	!print *, 'done struct_copy()'
 
 end subroutine struct_copy
@@ -97,12 +107,14 @@ recursive module subroutine fn_copy(dst, src)
 
 	!print *, 'starting fn_copy()'
 
-	dst%type          = src%type
-	dst%variadic_min  = src%variadic_min
-	dst%variadic_max  = src%variadic_max
-	dst%variadic_type = src%variadic_type
-	dst%param_names   = src%param_names
-	dst%is_intr       = src%is_intr
+	dst%type            = src%type
+	dst%variadic_min    = src%variadic_min
+	dst%variadic_max    = src%variadic_max
+	dst%variadic_type   = src%variadic_type
+	dst%param_names     = src%param_names
+	dst%is_intr         = src%is_intr
+	dst%is_method       = src%is_method
+	dst%is_const_method = src%is_const_method
 
 	if (allocated(src%variadic_name)) then
 		if (allocated(dst%variadic_name)) deallocate(dst%variadic_name)

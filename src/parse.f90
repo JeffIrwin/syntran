@@ -56,6 +56,12 @@ module syntran__parse_m
 		character(len = :), allocatable :: fn_name
 		logical :: returned
 
+		! Method parsing context: set while parsing a method body
+		logical :: in_method = .false.
+		logical :: in_const_method = .false.
+		integer :: self_loc_id = 0     ! loc slot index of "0self"
+		type(struct_t) :: method_struct  ! struct whose method is being parsed
+
 		! Pass index.  0 on first pass while getting fn signatures, then 1 on
 		! final (second) pass
 		integer :: ipass
@@ -80,6 +86,7 @@ module syntran__parse_m
 				parse_expr, &
 				parse_expr_statement, &
 				parse_fn_declaration, &
+				parse_method_declaration, &
 				parse_fn_call, &
 				parse_qualified_expr, &
 				parse_struct_declaration, &
@@ -145,6 +152,14 @@ module syntran__parse_m
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: decl
 		end subroutine parse_struct_declaration
+
+		module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: decl
+			type(struct_t), intent(in) :: struct
+			logical, intent(in) :: is_const
+			character(len = *), intent(in) :: struct_name
+		end subroutine parse_method_declaration
 
 		recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 			class(parser_t) :: parser
