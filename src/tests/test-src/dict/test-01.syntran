@@ -1,5 +1,5 @@
 
-use dict_i64::*;
+use ../../long/aoc/dicts/dict_i64::*;
 
 let d = new();
 

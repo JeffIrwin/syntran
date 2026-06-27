@@ -1,5 +1,5 @@
 
-use dict_str::*;
+use ../../long/aoc/dicts/dict_str::*;
 
 let d = new();
 
