@@ -1,0 +1,108 @@
+
+// FNV-1a hash map: str keys → i64 values, linear probing, power-of-2 capacity.
+//
+// API:
+//     new(): dict_i64             // initialize empty dict
+//     d.set(key: str, val: i64)   // insert or update
+//     d.get(key: str): i64        // return val, or -1 if missing
+//     d.contains(key: str): bool
+//     d.len(): i32                // number of keys
+
+const INIT_CAP = 8;
+
+fn fnv1a(s: str): i64
+{
+	let h = 2166136261'i64;
+	for c in s
+	{
+		h = h ^ i64(i32(c));
+		h = h * 16777619'i64 % 4294967296'i64;
+	}
+	return h;
+}
+
+struct dict_i64
+{
+	cap:  i32,
+	n:    i32,
+	keys: [str; :],
+	vals: [i64; :],
+	used: [bool; :],  // needed: syntran can't distinguish "" key from empty slot
+
+	fn set(key: str, val: i64)
+	{
+		if n * 4 >= cap * 3
+		{
+			// Rehash to 2× capacity.  Re-insert inline (keys are unique,
+			// no need for the full set() probe path).
+			let old_cap  = cap;
+			let old_keys = keys;
+			let old_vals = vals;
+			let old_used = used;
+			cap  *= 2;
+			keys  = [""; cap];
+			vals  = [0'i64; cap];
+			used  = [false; cap];
+			n     = 0;
+			for i in [0: old_cap]
+			{
+				if old_used[i]
+				{
+					let s_ = i32(fnv1a(old_keys[i]) % i64(cap));
+					while used[s_]
+						s_ = (s_ + 1) % cap;
+					keys[s_] = old_keys[i];
+					vals[s_] = old_vals[i];
+					used[s_] = true;
+					n += 1;
+				}
+			}
+		}
+		let slot = i32(fnv1a(key) % i64(cap));
+		while used[slot] and keys[slot] != key
+			slot = (slot + 1) % cap;
+		if not used[slot]
+		{
+			used[slot] = true;
+			keys[slot] = key;
+			n += 1;
+		}
+		vals[slot] = val;
+		return;
+	}
+
+	const fn get(key: str): i64
+	{
+		let slot = i32(fnv1a(key) % i64(cap));
+		while used[slot] and keys[slot] != key
+			slot = (slot + 1) % cap;
+		if used[slot]
+			return vals[slot];
+		return -1'i64;
+	}
+
+	const fn contains(key: str): bool
+	{
+		let slot = i32(fnv1a(key) % i64(cap));
+		while used[slot] and keys[slot] != key
+			slot = (slot + 1) % cap;
+		return used[slot];
+	}
+
+	const fn len(): i32
+	{
+		return n;
+	}
+}
+
+fn new(): dict_i64
+{
+	return dict_i64
+	{
+		cap  = INIT_CAP,
+		n    = 0,
+		keys = [""   ; INIT_CAP],
+		vals = [0'i64; INIT_CAP],
+		used = [false; INIT_CAP],
+	};
+}

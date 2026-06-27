@@ -955,9 +955,11 @@ recursive module subroutine parse_dot(parser, expr)
 		call internal_error()
 	end if
 
-	! Check if the identifier is a method name on this struct
+	! Check if the identifier is a method name on this struct.
+	! Strip the module prefix from struct_name (e.g. "mod::Type" → "Type") so
+	! that methods resolve the same way under both glob and qualified imports.
 	method_fn = parser%fns%search( &
-		"0" // expr%val%struct_name // "::" // identifier%text, &
+		"0" // unqualified_name(expr%val%struct_name) // "::" // identifier%text, &
 		method_fn_id, method_io)
 
 	if (method_io == exit_success) then

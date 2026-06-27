@@ -85,7 +85,7 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 	! against diamond-dependency double-compilation.
 	!
 	! Two-sub-pass design so that forward references within the module resolve:
-	!   Sub-pass A: register (ensure_fn_entry) ALL fns in this module first.
+	!   Sub-pass A: register (ensure_fn_entry) ALL fns and methods first.
 	!   Sub-pass B: compile each body; any call to a forward-declared sibling
 	!               finds the id registered (in range) even if fn_entry == 0,
 	!               and OP_CALL is emitted safely (entry will be filled before VM runs).
@@ -96,7 +96,7 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 
 	!*******
 
-	integer :: i, fn_id, const_idx
+	integer :: i, j, fn_id, const_idx
 
 	! Recurse into nested use_statements first so that their fns are available
 	! to any bodies compiled below that call them.
@@ -106,26 +106,49 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 		call compile_module_fns(prog, cs, module_node%members(i)%member)
 	end do
 
-	! Sub-pass A: register all local fn ids before compiling any body.
+	! Sub-pass A: register all local fn and method ids before compiling any body.
 	do i = 1, size(module_node%members)
-		if (module_node%members(i)%kind /= fn_declaration) cycle
-		call ensure_fn_entry(prog, module_node%members(i)%id_index)
+		if (module_node%members(i)%kind == fn_declaration) then
+			call ensure_fn_entry(prog, module_node%members(i)%id_index)
+		else if (module_node%members(i)%kind == struct_declaration) then
+			if (allocated(module_node%members(i)%members)) then
+				do j = 1, size(module_node%members(i)%members)
+					call ensure_fn_entry(prog, module_node%members(i)%members(j)%id_index)
+				end do
+			end if
+		end if
 	end do
 
-	! Sub-pass B: compile each fn_declaration body.
+	! Sub-pass B: compile each fn_declaration body and struct method bodies.
 	do i = 1, size(module_node%members)
-		if (module_node%members(i)%kind /= fn_declaration) cycle
-		fn_id = module_node%members(i)%id_index
-		if (prog%fn_entry(fn_id) /= 0) cycle   ! already compiled (diamond dep)
-		prog%fn_num_locs(fn_id) = module_node%members(i)%num_locs
-		prog%fn_entry(fn_id)    = prog%len_ + 1
-		cs%in_fn_body = .true.
-		call compile_node(prog, cs, module_node%members(i)%body)
-		cs%in_fn_body = .false.
-		! Implicit void return for functions with no explicit return statement
-		const_idx = add_const(prog, unknown_val())
-		call emit(prog, OP_LOAD_CONST, a = const_idx)
-		call emit(prog, OP_RET)
+		if (module_node%members(i)%kind == fn_declaration) then
+			fn_id = module_node%members(i)%id_index
+			if (prog%fn_entry(fn_id) /= 0) cycle   ! already compiled (diamond dep)
+			prog%fn_num_locs(fn_id) = module_node%members(i)%num_locs
+			prog%fn_entry(fn_id)    = prog%len_ + 1
+			cs%in_fn_body = .true.
+			call compile_node(prog, cs, module_node%members(i)%body)
+			cs%in_fn_body = .false.
+			! Implicit void return for functions with no explicit return statement
+			const_idx = add_const(prog, unknown_val())
+			call emit(prog, OP_LOAD_CONST, a = const_idx)
+			call emit(prog, OP_RET)
+		else if (module_node%members(i)%kind == struct_declaration) then
+			if (allocated(module_node%members(i)%members)) then
+				do j = 1, size(module_node%members(i)%members)
+					fn_id = module_node%members(i)%members(j)%id_index
+					if (prog%fn_entry(fn_id) /= 0) cycle   ! already compiled
+					prog%fn_num_locs(fn_id) = module_node%members(i)%members(j)%num_locs
+					prog%fn_entry(fn_id)    = prog%len_ + 1
+					cs%in_fn_body = .true.
+					call compile_node(prog, cs, module_node%members(i)%members(j)%body)
+					cs%in_fn_body = .false.
+					const_idx = add_const(prog, unknown_val())
+					call emit(prog, OP_LOAD_CONST, a = const_idx)
+					call emit(prog, OP_RET)
+				end do
+			end if
+		end if
 	end do
 
 end subroutine compile_module_fns
