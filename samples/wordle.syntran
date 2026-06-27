@@ -188,15 +188,37 @@ fn filter(cands: &[str; :], nc: i32, guess: str, obs_code: i32): i32
 	return m;
 }
 
-fn suggest_exact(cands: &[str; :], nc: i32): str
+fn suggest_exact(cands: &[str; :], nc: i32, all_words: &[str; :], nall: i32): str
 {
-	// Information-optimal pick within the candidate set: choose the word that
-	// minimizes the expected number of candidates remaining after its feedback
-	// (sum of squared bucket sizes; rank-equivalent to maximizing entropy)
+	// Information-optimal pick: choose the word (from the full dictionary, not
+	// just candidates) that minimizes expected candidates remaining after its
+	// feedback (sum of squared bucket sizes; rank-equivalent to maximizing
+	// entropy).  Non-candidates can be pure probes; candidates are preferred
+	// on a tie because they can themselves be the answer
 
 	let best = cands[0];
 	let best_cost = nc * nc + 1;  // larger than any achievable cost
 
+	// Pass 1: find minimum cost across ALL words (including non-candidates)
+	for g in [0: nall]
+	{
+		let hist = [0; NUM_CODES];
+		for c in [0: nc]
+			hist[score_code(all_words[g], cands[c])] += 1;
+
+		let cost = 0;
+		for k in [0: NUM_CODES]
+			cost += hist[k] * hist[k];
+
+		if cost < best_cost
+		{
+			best_cost = cost;
+			best = all_words[g];
+		}
+	}
+
+	// Pass 2: if any candidate achieves the same minimum cost, prefer it
+	// (so the suggestion can itself be the answer, not just a probe)
 	for g in [0: nc]
 	{
 		let hist = [0; NUM_CODES];
@@ -207,14 +229,13 @@ fn suggest_exact(cands: &[str; :], nc: i32): str
 		for k in [0: NUM_CODES]
 			cost += hist[k] * hist[k];
 
-		// Tie-break toward an earlier candidate (so the suggestion can itself
-		// be the answer rather than a pure probe)
-		if cost < best_cost
+		if cost == best_cost
 		{
-			best_cost = cost;
 			best = cands[g];
+			break;
 		}
 	}
+
 	return best;
 }
 
@@ -263,14 +284,14 @@ fn suggest_freq(cands: &[str; :], nc: i32): str
 	return best;
 }
 
-fn suggest(cands: &[str; :], nc: i32): str
+fn suggest(cands: &[str; :], nc: i32, all_words: &[str; :], nall: i32): str
 {
 	if (nc <= EXACT_THRESHOLD)
-		return suggest_exact(&cands, nc);
+		return suggest_exact(&cands, nc, &all_words, nall);
 	return suggest_freq(&cands, nc);
 }
 
-fn report(cands: &[str; :], nc: i32): str
+fn report(cands: &[str; :], nc: i32, all_words: &[str; :], nall: i32): str
 {
 	// Print the candidate count and a suggestion, list candidates if few
 	// remain, and return the suggested word ("" if solved or stuck)
@@ -296,7 +317,7 @@ fn report(cands: &[str; :], nc: i32): str
 		return "";
 	}
 
-	let s = suggest(&cands, nc);
+	let s = suggest(&cands, nc, &all_words, nall);
 
 	println();
 	println("Suggested next guess: ", utils::to_upper(s));
@@ -319,9 +340,11 @@ let dict_filename = "/usr/share/dict/american-english";
 
 let cands = read_dict(dict_filename, &ALLOWLIST);
 let nc = i32(size(cands, 0));
+let all_words = cands;
+let nall = nc;
 println("Loaded ", nc, " 5-letter words from system dictionary");
 
-let last_suggestion = report(&cands, nc);
+let last_suggestion = report(&cands, nc, &all_words, nall);
 
 while nc > 1
 {
@@ -376,7 +399,7 @@ while nc > 1
 	}
 
 	nc = filter(&cands, nc, guess, obs_code);
-	last_suggestion = report(&cands, nc);
+	last_suggestion = report(&cands, nc, &all_words, nall);
 	if (nc <= 1) break;
 }
 
