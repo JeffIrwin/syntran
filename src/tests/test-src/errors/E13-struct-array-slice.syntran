@@ -1,6 +1,6 @@
 // E13: struct-array-slice
-// Slices are not implemented for structs of arrays; only scalar subscripts
-// are allowed there
+// Struct array field slices are now fully supported for both reads and writes.
+// This file is kept as a reference; it no longer triggers an error.
 
 struct Container
 {
@@ -8,4 +8,5 @@ struct Container
 }
 
 let c = Container{vals = [1, 2, 3, 4, 5]};
-let some = c.vals[0: 2];
+let some = c.vals[0: 2];  // read: returns [1, 2]
+c.vals[0: 2] = [10, 20];  // write: updates elements 0 and 1

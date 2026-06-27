@@ -4248,6 +4248,30 @@ subroutine unit_test_struct_arr1(npass, nfail)
 				//'ls[1].s.v[1] = 19;' &
 				//'return ls[1].s.v[1];' &
 				, quiet) == '19', &
+			eval(''                         &                 ! 25
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[1,2,3,4,5]};' &
+				//'s.v[1:3] = [20, 30];' &
+				//'return s.v[1] + s.v[2];' &
+				, quiet) == '50', &
+			eval(''                         &                 ! 26
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[1,2,3,4,5]};' &
+				//'s.v[:] = [9,8,7,6,5];' &
+				//'return s.v[0] + s.v[4];' &
+				, quiet) == '14', &
+			eval(''                         &                 ! 27: step [lower:step:upper]
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[0,0,0,0,0]};' &
+				//'s.v[0:2:5] = [7,8,9];' &
+				//'return s.v[0] + s.v[2] + s.v[4];' &
+				, quiet) == '24', &
+			eval(''                         &                 ! 28: Branch A outer subscript
+				//'struct S{v:[i32;:], s:str,}' &
+				//'let ps = [S{v=[1,2,3], s="a"}, S{v=[4,5,6], s="b"}];' &
+				//'ps[1].v[0:2] = [20, 30];' &
+				//'return ps[1].v[0] + ps[1].v[1];' &
+				, quiet) == '50', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

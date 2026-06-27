@@ -55,6 +55,10 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		!print *, "array dot chain"
 
 		! Arrays chained by a dot: `a[0].b[0]`
+		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+			call set_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, val)
+			return
+		end if
 		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
 		call set_array_val(var%struct(i8+1)%struct(id)%array, j8, val)
 		return
@@ -96,8 +100,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	!print *, "lsubscripts allocated"
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-		! Already caught in parser
-		call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+		call set_field_slice_val(node%member, var%struct(id), state, val)
 		return
 	end if
 	!print *, "scalar_sub"
@@ -1315,6 +1318,100 @@ module subroutine get_field_slice_val(member_node, field_val, state, res)
 	end do
 
 end subroutine get_field_slice_val
+
+!===============================================================================
+
+module subroutine set_field_slice_val(member_node, field_val, state, val)
+
+	! Write val's elements into field_val at the positions described by
+	! member_node%lsubscripts.  Mirrors get_field_slice_val but writes instead
+	! of reading.
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(inout) :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(in)    :: val
+
+	!********
+
+	integer :: i, rank_
+	integer(kind = 8) :: lsub, ssub, usub, sz, i8, index_
+	type(value_t) :: tmp, lsubval, usubval, ssubval
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+	type(i64_vector_t), allocatable :: asubs(:)
+
+	rank_ = field_val%array%rank
+	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_), asubs(rank_))
+
+	do i = 1, rank_
+		lsub = 0
+		ssub = 1
+		usub = 0
+
+		select case (member_node%lsubscripts(i)%sub_kind)
+		case (all_sub)
+			lsub = 0
+			ssub = 1
+			usub = field_val%array%size(i)
+
+		case (range_sub)
+			ssub = 1
+			if (member_node%lsubscripts(i)%lsub_omit) then
+				lsub = 0
+			else
+				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+				lsub = lsubval%to_i64()
+			end if
+			if (member_node%lsubscripts(i)%usub_omit) then
+				usub = field_val%array%size(i)
+			else
+				call syntax_eval(member_node%usubscripts(i), state, usubval)
+				usub = usubval%to_i64()
+			end if
+
+		case (step_sub)
+			call syntax_eval(member_node%ssubscripts(i), state, ssubval)
+			ssub = ssubval%to_i64()
+			if (ssub == 0) then
+				call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
+				return
+			end if
+			sz = field_val%array%size(i)
+			if (member_node%lsubscripts(i)%lsub_omit) then
+				lsub = merge(sz - 1_8, 0_8, ssub < 0)
+			else
+				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+				lsub = lsubval%to_i64()
+			end if
+			if (member_node%lsubscripts(i)%usub_omit) then
+				usub = merge(-1_8, sz, ssub < 0)
+			else
+				call syntax_eval(member_node%usubscripts(i), state, usubval)
+				usub = usubval%to_i64()
+			end if
+
+		case (scalar_sub)
+			call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+			lsub = lsubval%to_i64()
+			usub = lsub + 1
+			ssub = 1
+
+		end select
+
+		lsubs(i) = lsub
+		ssubs(i) = ssub
+		usubs(i) = usub
+	end do
+
+	subs = lsubs
+	do i8 = 0, val%array%len_ - 1
+		index_ = subscript_i32_eval(subs, field_val%array)
+		call get_array_val(val%array, i8, tmp)
+		call set_array_val(field_val%array, index_, tmp)
+		call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+	end do
+
+end subroutine set_field_slice_val
 
 !===============================================================================
 

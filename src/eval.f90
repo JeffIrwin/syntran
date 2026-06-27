@@ -190,6 +190,13 @@ module syntran__eval_m
 			type(value_t),       intent(out)   :: res
 		end subroutine
 
+		module subroutine set_field_slice_val(member_node, field_val, state, val)
+			type(syntax_node_t), intent(in)    :: member_node
+			type(value_t),       intent(inout) :: field_val
+			type(state_t),       intent(inout) :: state
+			type(value_t),       intent(in)    :: val
+		end subroutine
+
 		module function subscript_i32_eval(subs, array) result(index_)
 			integer(kind = 8), intent(in) :: subs(:)
 			type(array_t) :: array
