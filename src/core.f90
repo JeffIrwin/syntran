@@ -40,14 +40,17 @@ module syntran__core_m
 	!      with older syntran behavior, like a fn returning an array cannot be
 	!      subscripted directly -- it needs to go into an intermediate variable
 	!      first. should these features be extended?
-	!      + wip
+	!      + mvp done
+	!      + do we need more tests with chained mixes of slices and method
+	!        calls?
 	!    * struct array slicing: can't do my_struct.arr[1:4], currently have to
 	!      loop with scalar index
-	!      + reading wip, writing tbd
+	!      + done
 	!    * DRY shared code between methods and fns, e.g. argument count and type
 	!      checking at call sites
-	!      + wip
+	!      + done
 	!    * array subscripting directly on fn/method return vals
+	!      + done
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.
 	!      for returning methods, return an array of values of the appropriate
