@@ -1120,6 +1120,9 @@ recursive module subroutine parse_dot(parser, expr)
 
 	! For RHS dots, this will stick.  For LHS dots, this will be shortly
 	! overwritten as assignment_expr in the caller
+	if (expr%kind == fn_call_expr .or. expr%kind == method_call_expr .or. &
+	        expr%kind == fn_call_intr_expr) &
+		expr%root_kind = expr%kind
 	expr%kind = dot_expr
 
 	! Save dot info in member syntax node

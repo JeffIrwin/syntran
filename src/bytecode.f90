@@ -33,6 +33,7 @@ module syntran__bytecode_m
 		OP_MAKE_STRUCT      = 1019, &	! M5: struct instance: a=node_idx (for struct_name+nmembers), members on stack
 		OP_LOAD_MEMBER      = 1020, &	! M5: dot_expr read: a=node_idx; uses get_val
 		OP_STORE_MEMBER     = 1021, &	! M5: dot member write: a=node_idx, b=op_kind; TOS=RHS; uses get_val+set_val
+		OP_LOAD_MEMBER_TOS  = 1139, &	! M5: dot_expr read when root is a fn return: root on TOS, a=member-wrapper node_idx
 		OP_CALL_INTR        = 1022, &	! M6: intrinsic call; native: a=intr_id b=argc (args on stack);
 		                            	!   readln/close: a=intr_id b=1 c=(id_index*2+is_loc) for slot writeback
 		OP_FOR_SETUP        = 1023, &	! M8: for-loop setup: a=node_idx; pushes iter onto for_iter stack

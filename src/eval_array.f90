@@ -1432,7 +1432,14 @@ module subroutine apply_subscripts_to_val(node, val, state, res)
 			i8   = i8 + prod * subscript%to_i64()
 			prod = prod * val%array%size(i)
 		end do
-		call get_array_val(val%array, i8, res)
+		if (val%array%type == struct_type) then
+			res = val%struct(i8+1)
+			res%type       = struct_type
+			res%struct_name = val%struct_name
+			if (allocated(val%struct_cookie)) res%struct_cookie = val%struct_cookie
+		else
+			call get_array_val(val%array, i8, res)
+		end if
 	else
 		call get_field_slice_val(node, val, state, res)
 	end if

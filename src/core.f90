@@ -32,6 +32,11 @@ module syntran__core_m
 
 	! TODO:
 	!  - method improvements:
+	!    * "parse_dot returns immediately after resolving a method call (line
+	!      1118), so anything after a method call is not parsed. This means
+	!      obj.method().field and obj.method1().method2() are not supported and
+	!      need no tests."
+	!      + make those work too
 	!    * allow subscripted methods: `struct[0].method()`
 	!      + done
 	!    * other chained permutations like above?
@@ -41,8 +46,8 @@ module syntran__core_m
 	!      subscripted directly -- it needs to go into an intermediate variable
 	!      first. should these features be extended?
 	!      + mvp done
-	!      + do we need more tests with chained mixes of slices and method
-	!        calls?
+	!      + added tests 39-41 for fn().field, fn()[idx].method(),
+	!        fn().field.method() (also fixed VM/AST bugs for those patterns)
 	!    * struct array slicing: can't do my_struct.arr[1:4], currently have to
 	!      loop with scalar index
 	!      + done

@@ -242,6 +242,7 @@ recursive module subroutine syntax_node_copy(dst, src)
 	dst%id_index   = src%id_index
 	dst%num_locs   = src%num_locs
 	dst%is_loc     = src%is_loc
+	dst%root_kind  = src%root_kind
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
@@ -467,6 +468,7 @@ recursive module subroutine syntax_node_move(src, dst)
 	dst%id_index        = src%id_index
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
+	dst%root_kind       = src%root_kind
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit
 	dst%usub_omit       = src%usub_omit
@@ -540,6 +542,7 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	dst%id_index        = src%id_index
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
+	dst%root_kind       = src%root_kind
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit
 	dst%usub_omit       = src%usub_omit

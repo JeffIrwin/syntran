@@ -756,8 +756,26 @@ recursive subroutine compile_node(prog, cs, node)
 	! M5: Store the dot_expr node in the pool so the VM can call get_val with
 	! full chain information (nested dots, subscripted members, etc.).
 	case (dot_expr)
-		idx = add_node(prog, node)
-		call emit(prog, OP_LOAD_MEMBER, a = idx)
+		if (node%root_kind /= 0) then
+			! Root is a fn_call_expr/method_call_expr (e.g. `fn().field`).
+			! Compile the fn call (incl. any subscripts) to push root value on stack,
+			! then emit OP_LOAD_MEMBER_TOS with a wrapper node holding just the member chain.
+			block
+				type(syntax_node_t) :: root_node, wrapper
+				root_node = node
+				root_node%kind = node%root_kind
+				if (allocated(root_node%member)) deallocate(root_node%member)
+				call compile_node(prog, cs, root_node)
+				wrapper%kind = dot_expr
+				allocate(wrapper%member)
+				wrapper%member = node%member
+				idx = add_node(prog, wrapper)
+			end block
+			call emit(prog, OP_LOAD_MEMBER_TOS, a = idx)
+		else
+			idx = add_node(prog, node)
+			call emit(prog, OP_LOAD_MEMBER, a = idx)
+		end if
 
 	! ---- fn_declaration: bodies are compiled separately in translation_unit -----
 	! Skip silently here; compilation of the body happens in the translation_unit

@@ -405,6 +405,26 @@ module subroutine eval_dot_expr(node, state, res)
 
 	integer :: id
 
+	if (node%root_kind /= 0) then
+		! Root is a fn_call_expr/method_call_expr (e.g. `fn().field`).
+		! Evaluate the fn call (incl. any subscripts) to get the root struct value,
+		! then apply the member chain to it.
+		block
+			type(syntax_node_t) :: root_node, wrapper
+			type(value_t) :: root_val
+			root_node = node
+			root_node%kind = node%root_kind
+			if (allocated(root_node%member)) deallocate(root_node%member)
+			call syntax_eval(root_node, state, root_val)
+			if (state%rt_halt) return
+			wrapper%kind = dot_expr
+			allocate(wrapper%member)
+			wrapper%member = node%member
+			call get_val(wrapper, root_val, state, res)
+		end block
+		return
+	end if
+
 	! This won't work for struct literal member access.  It only works for
 	! `identifier.member`
 
@@ -412,10 +432,6 @@ module subroutine eval_dot_expr(node, state, res)
 	if (node%is_loc) then
 		call get_val(node, state%locs%vals(id), state, res)
 	else
-		!print *, "eval dot_expr"
-		!print *, "id_index = ", id
-		!print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
-
 		call get_val(node, state%vars%vals(id), state, res)
 	end if
 

@@ -4977,6 +4977,21 @@ subroutine unit_test_methods(npass, nfail)
 			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[0:2:5];' &    ! 38
 				, quiet) == '[10, 30, 50]', &
 
+			! --- field access directly on fn return value ---
+			eval('struct S{n:i32} fn make(x:i32):S{return S{n=x};}' &             ! 39
+				//'return make(42).n;' &
+				, quiet) == '42', &
+
+			! --- subscript fn return array of structs, then const method ---
+			eval(CTR//'fn make_arr():[C;:]{return [C{n=5},C{n=42}];}' &            ! 40
+				//'return make_arr()[1].get();' &
+				, quiet) == '42', &
+
+			! --- fn return + field chain + const method ---
+			eval(CTR//'struct W{c:C} fn make_w(x:i32):W{return W{c=C{n=x}};}' &   ! 41
+				//'return make_w(42).c.get();' &
+				, quiet) == '42', &
+
 			.false. &
 		]
 
