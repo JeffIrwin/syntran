@@ -179,6 +179,11 @@ recursive module subroutine eval_fn_call(node, state, res)
 				node%args(i)%kind == fn_call_intr_expr) cycle
 
 		if (allocated(node%args(i)%lsubscripts) .or. node%args(i)%kind == dot_expr) then
+			! dot_expr rooted at a fn/method call is a temporary; skip writeback
+			if (node%args(i)%kind == dot_expr .and. &
+					(node%args(i)%root_kind == fn_call_expr .or. &
+					 node%args(i)%root_kind == method_call_expr .or. &
+					 node%args(i)%root_kind == fn_call_intr_expr)) cycle
 			! Subscripted or dot-chain receiver: write element/struct back via set_val
 			if (node%args(i)%is_loc) then
 				call set_val(node%args(i), state%locs%vals( node%args(i)%id_index ), state, params_tmp(i))
