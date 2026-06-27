@@ -107,7 +107,7 @@
 					fpm test test --profile debug --link-flag \"$lflags\" \n
 
 					# Also test the legacy AST backend so both paths are exercised \n
-					SYNTRAN_BACKEND=ast fpm test test --profile debug --link-flag \"$lflags\" \n
+					SYNTRAN_BACKEND=ast fpm test test --profile debug --link-flag \"$lflags\" -- --no-warn-ast \n
 				"
 			},
 			{

@@ -11,6 +11,8 @@ module syntran__consts_m
 
 	logical :: permissive_return = .false.
 
+	logical :: no_warn = .false.
+
 	! Initial capacity of scope dict pointer arrays.  They are dynamic arrays of
 	! pointers, so they take little memory to begin with, and then grow
 	! dynamically.  Hence, I have no idea what the default should be and it

@@ -6772,12 +6772,21 @@ end module test_m
 program test
 
 	use syntran__app_m
+	use syntran__consts_m
 	use test_m
 	implicit none
 
-	integer :: io
+	integer :: i, argc, io
+	character(len = 256) :: argv
 
 	call set_ansi_colors(.true.)
+
+	argc = command_argument_count()
+	do i = 1, argc
+		call get_command_argument(i, argv)
+		if (trim(argv) == '--no-warn-ast') no_warn = .true.
+	end do
+
 	call unit_tests(io)
 	call exit(io)
 
