@@ -4992,6 +4992,26 @@ subroutine unit_test_methods(npass, nfail)
 				//'return make_w(42).c.get();' &
 				, quiet) == '42', &
 
+			! --- field access on method return value (method().field) ---
+			eval('' &                                                               ! 42
+				//'struct S{n:i32}' &
+				//'struct W{s:S, const fn inner():S{return s;}}' &
+				//'let w=W{s=S{n=42}};' &
+				//'return w.inner().n;' &
+				, quiet) == '42', &
+
+			! --- chained const method calls (method1().method2()) ---
+			eval(CTR//'struct W{c:C, const fn get_c():C{return c;}}' &             ! 43
+				//'let w=W{c=C{n=42}};' &
+				//'return w.get_c().get();' &
+				, quiet) == '42', &
+
+			! --- mutable method on method return is an error ---
+			diag_has_code(get_diags(CTR &                                          ! 44
+				//'struct W{c:C, const fn get_c():C{return c;}}' &
+				//'let w=W{c=C{n=1}};' &
+				//'w.get_c().inc();'), EC_MUTABLE_METHOD_ON_TEMP), &
+
 			.false. &
 		]
 

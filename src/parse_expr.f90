@@ -1115,6 +1115,7 @@ recursive module subroutine parse_dot(parser, expr)
 			expr%num_locs = method_fn%node%num_locs
 		end if
 
+		call parser%parse_dot(expr)
 		return
 	end if
 

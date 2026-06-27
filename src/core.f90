@@ -36,7 +36,7 @@ module syntran__core_m
 	!      1118), so anything after a method call is not parsed. This means
 	!      obj.method().field and obj.method1().method2() are not supported and
 	!      need no tests."
-	!      + make those work too
+	!      + done (tests 42-44)
 	!    * allow subscripted methods: `struct[0].method()`
 	!      + done
 	!    * other chained permutations like above?
