@@ -706,6 +706,10 @@ recursive module subroutine parse_primary_expr(parser, expr)
 				call parser%parse_qualified_expr(expr)
 			else if (parser%peek_kind(1) == lparen_token) then
 				call parser%parse_fn_call(fn_call=expr)
+				if (parser%current_kind() == dot_token .and. &
+						expr%val%type == struct_type) then
+					call parser%parse_dot(expr)
+				end if
 			else if (parser%peek_kind(1) == lbrace_token) then
 
 				! There is an ambiguity here because struct instantiators and
@@ -957,6 +961,23 @@ recursive module subroutine parse_dot(parser, expr)
 
 		! Const receiver enforcement: mutable methods may not be called on const instances
 		if (.not. method_fn%is_const_method) then
+			if (expr%kind == fn_call_expr .or. expr%kind == method_call_expr .or. &
+					expr%kind == fn_call_intr_expr) then
+				! Mutable method on a temporary fn-return value: mutation would be silently lost
+				span = new_span(identifier%pos, len(identifier%text))
+				call parser%diagnostics%push(err_mutable_method_on_temp( &
+					parser%context(), span, identifier%text))
+				! Consume argument list for error recovery
+				lparen_ = parser%match(lparen_token)
+				do while (parser%current_kind() /= rparen_token .and. &
+				          parser%current_kind() /= eof_token)
+					call parser%parse_expr(expr = arg_)
+					if (parser%current_kind() /= rparen_token) comma_ = parser%match(comma_token)
+				end do
+				rparen_ = parser%match(rparen_token)
+				expr%val%type = unknown_type
+				return
+			end if
 			if (expr%kind == name_expr) then
 				is_const_receiver = .false.
 				if (expr%is_loc) then
@@ -1045,47 +1066,10 @@ recursive module subroutine parse_dot(parser, expr)
 				if (allocated(method_fn%node%is_const_ref)) &
 					param_is_const_ref = method_fn%node%is_const_ref(i + 1)
 
-				! Passing a const variable to a mutable-ref param
-				if (param_is_ref .and. .not. param_is_const_ref .and. &
-						call_args%v(i)%kind == name_expr) then
-					is_const_var = .false.
-					if (call_args%v(i)%is_loc) then
-						call parser%locs%search(call_args%v(i)%identifier%text, &
-							id_index_tmp, io_tmp, const_check_val, is_const = is_const_var)
-					else
-						call parser%vars%search(call_args%v(i)%identifier%text, &
-							id_index_tmp, io_tmp, const_check_val, is_const = is_const_var)
-					end if
-					if (is_const_var) then
-						span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-						call parser%diagnostics%push(err_const_assign( &
-							parser%context(), span, call_args%v(i)%identifier%text))
-					end if
-				end if
-
-				! Ref/val mismatch
-				if (param_is_ref .neqv. call_is_ref%v(i)) then
-					span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-					if (param_is_ref) then
-						call parser%diagnostics%push(err_bad_arg_val( &
-							parser%context(), span, identifier%text, i - 1, param_name))
-					else
-						call parser%diagnostics%push(err_bad_arg_ref( &
-							parser%context(), span, identifier%text, i - 1, param_name))
-					end if
-				end if
-
-				! Type mismatch
-				is_ok = types_match(param_val, call_args%v(i)%val) == TYPE_MATCH
-				is_ok = is_ok .or. call_args%v(i)%val%type == unknown_type
-				if (.not. is_ok) then
-					exp_type = type_name(param_val)
-					act_type = type_name(call_args%v(i)%val)
-					span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-					call parser%diagnostics%push(err_bad_arg_type( &
-						parser%context(), span, identifier%text, i - 1, param_name, &
-						exp_type, act_type))
-				end if
+				span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
+				call check_call_arg(parser, call_args%v(i), call_is_ref%v(i), span, &
+					identifier%text, i - 1, param_val, param_name, &
+					param_is_ref, param_is_const_ref)
 			end do
 		end if
 
@@ -1096,6 +1080,9 @@ recursive module subroutine parse_dot(parser, expr)
 		expr%val        = method_fn%type
 
 		! args: receiver first, then explicit args
+		if (allocated(expr%args))   deallocate(expr%args)
+		if (allocated(expr%is_ref)) deallocate(expr%is_ref)
+		if (allocated(expr%body))   deallocate(expr%body)
 		allocate(expr%args(1 + call_args%len_))
 		expr%args(1) = receiver_save
 		do method_i = 1, call_args%len_
@@ -1153,14 +1140,6 @@ recursive module subroutine parse_dot(parser, expr)
 	pos1 = parser%current_pos()
 	if (allocated(expr%member%lsubscripts)) then
 		expr%val = expr%member%val
-
-		if (.not. all(expr%member%lsubscripts%sub_kind == scalar_sub)) then
-			span = new_span(pos0, pos1 - pos0)
-			call parser%diagnostics%push(err_struct_array_slice( &
-				parser%context(), &
-				span))
-		end if
-
 	end if
 
 	! I think this needs a recursive call to `parse_dot()` right here to handle

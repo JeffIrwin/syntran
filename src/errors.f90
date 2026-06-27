@@ -99,6 +99,7 @@ module syntran__errors_m
 		EC_404 = "E81", &
 		EC_IMMUTABLE_VAR = "E82", &
 		EC_CONST_ASSIGN = "E83", &
+		EC_MUTABLE_METHOD_ON_TEMP = "E84", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -353,6 +354,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_404)
 	call codes%push(EC_IMMUTABLE_VAR)
 	call codes%push(EC_CONST_ASSIGN)
+	call codes%push(EC_MUTABLE_METHOD_ON_TEMP)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -776,6 +778,20 @@ function err_const_assign(context, span, var) result(err)
 		//underline(context, span)//" cannot assign to const variable"//color_reset
 
 end function err_const_assign
+
+!===============================================================================
+
+function err_mutable_method_on_temp(context, span, method) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: method
+	err = err_pre(EC_MUTABLE_METHOD_ON_TEMP) &
+		//'cannot call mutable method `'//method//'` on a temporary value' &
+		//underline(context, span)//" add `const` to the method declaration"//color_reset
+
+end function err_mutable_method_on_temp
 
 !===============================================================================
 

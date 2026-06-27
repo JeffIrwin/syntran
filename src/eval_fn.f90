@@ -107,7 +107,12 @@ recursive module subroutine eval_fn_call(node, state, res)
 		if (node%is_ref(i)) then
 
 			! Move arg in for pass-by-reference
-			if (allocated(node%args(i)%lsubscripts)) then
+			if (node%args(i)%kind == fn_call_expr .or. &
+					node%args(i)%kind == method_call_expr .or. &
+					node%args(i)%kind == fn_call_intr_expr) then
+				! Temporary receiver from fn return value: evaluate to local copy
+				call syntax_eval(node%args(i), state, params_tmp(i))
+			else if (allocated(node%args(i)%lsubscripts)) then
 				! Subscripted receiver (e.g. arr[0].method()): copy element out
 				call syntax_eval(node%args(i), state, params_tmp(i))
 			else if (node%args(i)%is_loc) then
@@ -164,6 +169,11 @@ recursive module subroutine eval_fn_call(node, state, res)
 
 	do i = 1, size(node%params)
 		if (.not. node%is_ref(i)) cycle
+
+		! Temporary receiver: no writeback (parse-time error prevents mutable methods here)
+		if (node%args(i)%kind == fn_call_expr .or. &
+				node%args(i)%kind == method_call_expr .or. &
+				node%args(i)%kind == fn_call_intr_expr) cycle
 
 		if (allocated(node%args(i)%lsubscripts)) then
 			! Subscripted receiver: write modified element back

@@ -666,6 +666,10 @@ module subroutine vm_run(prog, state, res)
 			! Write by-ref modified values back to caller's variable slots.
 			do i = 1, nparams
 				if (.not. cn%is_ref(i)) cycle
+				! Temporary receiver (fn-return value): no writeback
+				if (cn%args(i)%kind == fn_call_expr .or. &
+				    cn%args(i)%kind == method_call_expr .or. &
+				    cn%args(i)%kind == fn_call_intr_expr) cycle
 				if (allocated(cn%args(i)%lsubscripts) .or. &
 				    cn%args(i)%kind == dot_expr) then
 					! Subscripted or dot-expr receiver: write element back via set_val.

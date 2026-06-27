@@ -1,0 +1,21 @@
+
+// E84: mutable-method-on-temp
+// Cannot call a mutable (non-const) method on a temporary value returned
+// from a function; mutations would be silently discarded.
+
+struct Counter
+{
+	n: i32,
+
+	fn inc()
+	{
+		n += 1;
+	}
+}
+
+fn make(x: i32): Counter
+{
+	return Counter{n = x};
+}
+
+make(5).inc();

@@ -33,15 +33,21 @@ module syntran__core_m
 	! TODO:
 	!  - method improvements:
 	!    * allow subscripted methods: `struct[0].method()`
+	!      + done
 	!    * other chained permutations like above?
+	!      + done
 	!    * method calls only work at the *end* of a chain. this is consistent
-	!      with older syntran behavior, like a fn return an array cannot be
+	!      with older syntran behavior, like a fn returning an array cannot be
 	!      subscripted directly -- it needs to go into an intermediate variable
 	!      first. should these features be extended?
-	!    * lump in other struct improvement unrelated to methods, e.g.: struct
-	!      array slicing, noted below
+	!      + wip
+	!    * struct array slicing: can't do my_struct.arr[1:4], currently have to
+	!      loop with scalar index
+	!      + reading wip, writing tbd
 	!    * DRY shared code between methods and fns, e.g. argument count and type
 	!      checking at call sites
+	!      + wip
+	!    * array subscripting directly on fn/method return vals
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.
 	!      for returning methods, return an array of values of the appropriate
@@ -232,8 +238,6 @@ module syntran__core_m
 	!    * samples?
 	!    * libsyntran.a and fortran sample?
 	!    * try -static-libgcc etc. on win/mac to ease packaging
-	!  - struct array slicing:
-	!    * can't do my_struct.arr[1:4], currently have to loop with scalar index
 	!  - struct member fns
 	!    * it would be a nicer experience to be able to write
 	!      `dict.set("key", val)` instead of `set_dict_i64(&dict, "key", val)`,

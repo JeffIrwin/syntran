@@ -188,8 +188,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 		!print *, "array dot chain"
 
 		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-			!print *, "slice sub"
-			call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+			call get_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, res)
 			return
 		end if
 
@@ -246,8 +245,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	!print *, "lsubscripts allocated"
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-		!print *, "slice sub"
-		call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+		call get_field_slice_val(node%member, var%struct(id), state, res)
 		return
 	end if
 	!print *, "scalar_sub"
@@ -1198,6 +1196,125 @@ module subroutine eval_assign_slice_rank1(node, state, id, res)
 	res = result_val   ! return the modified slice, as the general path does
 
 end subroutine eval_assign_slice_rank1
+
+!===============================================================================
+
+module subroutine get_field_slice_val(member_node, field_val, state, res)
+
+	! Evaluate a range/step/all subscript on a struct field array.
+	! member_node%lsubscripts holds the subscript spec; field_val is the
+	! field's runtime value.  Mirrors eval_name_expr's multi-rank slice path
+	! but reads array sizes from field_val instead of state%locs/vars.
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(in)    :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(out)   :: res
+
+	!********
+
+	integer :: i, rank_, rank_res, idim_, idim_res
+	integer(kind = 8) :: lsub, ssub, usub, sz, diff, i8, index_
+	type(value_t) :: tmp, lsubval, usubval, ssubval
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+	type(i64_vector_t), allocatable :: asubs(:)
+
+	rank_ = field_val%array%rank
+	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_), asubs(rank_))
+	rank_res = 0
+
+	do i = 1, rank_
+		lsub = 0
+		ssub = 1
+		usub = 0
+
+		select case (member_node%lsubscripts(i)%sub_kind)
+		case (all_sub)
+			lsub = 0
+			ssub = 1
+			usub = field_val%array%size(i)
+			rank_res = rank_res + 1
+
+		case (range_sub)
+			ssub = 1
+			if (member_node%lsubscripts(i)%lsub_omit) then
+				lsub = 0
+			else
+				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+				lsub = lsubval%to_i64()
+			end if
+			if (member_node%lsubscripts(i)%usub_omit) then
+				usub = field_val%array%size(i)
+			else
+				call syntax_eval(member_node%usubscripts(i), state, usubval)
+				usub = usubval%to_i64()
+			end if
+			rank_res = rank_res + 1
+
+		case (step_sub)
+			call syntax_eval(member_node%ssubscripts(i), state, ssubval)
+			ssub = ssubval%to_i64()
+			if (ssub == 0) then
+				call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
+				return
+			end if
+			sz = field_val%array%size(i)
+			if (member_node%lsubscripts(i)%lsub_omit) then
+				lsub = merge(sz - 1_8, 0_8, ssub < 0)
+			else
+				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+				lsub = lsubval%to_i64()
+			end if
+			if (member_node%lsubscripts(i)%usub_omit) then
+				usub = merge(-1_8, sz, ssub < 0)
+			else
+				call syntax_eval(member_node%usubscripts(i), state, usubval)
+				usub = usubval%to_i64()
+			end if
+			rank_res = rank_res + 1
+
+		case (scalar_sub)
+			call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+			lsub = lsubval%to_i64()
+			usub = lsub + 1
+			ssub = 1
+
+		end select
+
+		lsubs(i) = lsub
+		ssubs(i) = ssub
+		usubs(i) = usub
+	end do
+
+	allocate(res%array)
+	res%type = array_type
+	res%array%kind = expl_array
+	res%array%type = field_val%array%type
+	res%array%rank = rank_res
+
+	allocate(res%array%size(rank_res))
+	idim_res = 1
+	do idim_ = 1, rank_
+		select case (member_node%lsubscripts(idim_)%sub_kind)
+		case (step_sub, range_sub, all_sub)
+			diff = usubs(idim_) - lsubs(idim_)
+			res%array%size(idim_res) = divceil(diff, ssubs(idim_))
+			idim_res = idim_res + 1
+		end select
+	end do
+	res%array%len_ = product(res%array%size)
+
+	call allocate_array(res, res%array%len_)
+
+	subs = lsubs
+	do i8 = 0, res%array%len_ - 1
+		index_ = subscript_i32_eval(subs, field_val%array)
+		call get_array_val(field_val%array, index_, tmp)
+		call set_array_val(res%array, i8, tmp)
+		call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+	end do
+
+end subroutine get_field_slice_val
 
 !===============================================================================
 

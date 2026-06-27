@@ -797,8 +797,11 @@ recursive subroutine compile_node(prog, cs, node)
 				do i = 1, size(node%is_ref)
 					if (node%is_ref(i)) then
 						if (allocated(node%args(i)%lsubscripts) .or. &
-						    node%args(i)%kind == dot_expr) then
-							! Subscripted or dot-expr receiver: evaluate to get value.
+						    node%args(i)%kind == dot_expr .or. &
+						    node%args(i)%kind == fn_call_expr .or. &
+						    node%args(i)%kind == method_call_expr .or. &
+						    node%args(i)%kind == fn_call_intr_expr) then
+							! Subscripted, dot-expr, or fn-return receiver: evaluate to get value.
 							call compile_node(prog, cs, node%args(i))
 						else if (node%args(i)%is_loc) then
 							call emit(prog, OP_LOAD_REF_LOCAL,  a = node%args(i)%id_index)

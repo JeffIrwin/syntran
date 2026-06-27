@@ -4893,6 +4893,42 @@ subroutine unit_test_methods(npass, nfail)
 				//'return c.c.b[1].get();' &
 				, quiet) == '42', &
 
+			! --- struct array field slicing (my_struct.arr[lo:hi]) ---
+			eval('' &                                                                    ! 27
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30,40,50]};' &
+				//'return s.a[1:4];' &
+				, quiet) == '[20, 30, 40]', &
+			eval('' &                                                                    ! 28
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30,40,50]};' &
+				//'return s.a[:];' &
+				, quiet) == '[10, 20, 30, 40, 50]', &
+			eval('' &                                                                    ! 29
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30,40,50]};' &
+				//'return s.a[0:2:5];' &
+				, quiet) == '[10, 30, 50]', &
+			eval('' &                                                                    ! 30
+				//'struct S{a:[i32;:]}' &
+				//'let arr=[S{a=[1,2,3,4,5]},S{a=[10,20,30]}];' &
+				//'return arr[0].a[2:5];' &
+				, quiet) == '[3, 4, 5]', &
+
+			! --- const method on fn return value ---
+			eval(CTR//'fn make(x:i32):C{return C{n=x};}' &                         ! 31
+				//'return make(5).get();' &
+				, quiet) == '5', &
+			eval(CTR//'fn make(x:i32):C{return C{n=x};}' &                         ! 32
+				//'return make(41).get() + 1;' &
+				, quiet) == '42', &
+
+			! --- mutable method on fn return value is an error ---
+			diag_has_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&       ! 33
+				//'make(5).inc();'), EC_MUTABLE_METHOD_ON_TEMP), &
+			diag_count_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&     ! 34
+				//'make(5).inc();'), EC_MUTABLE_METHOD_ON_TEMP) == 1, &
+
 			.false. &
 		]
 
@@ -5707,9 +5743,9 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	!   - RC_ARRAY_SIZE_MISMATCH (R21) and RC_BAD_SUBSCRIPT_KIND (R20):
 	!     defensive checks for subscript/size-array shapes that the parser is
 	!     already expected to rule out; no valid-syntax repro found
-	!   - RC_STRUCT_ARRAY_SLICE (R22): struct array slicing is simply
-	!     unimplemented, not a user-triggerable runtime condition in the
-	!     ordinary sense
+	!   - RC_STRUCT_ARRAY_SLICE (R22): struct array slicing now works for
+	!     my_struct.field[lo:hi]; site A (arr_of_structs[lo:hi].field) still
+	!     throws but is not yet covered here
 
 	implicit none
 
@@ -5883,10 +5919,6 @@ subroutine unit_test_error_locations(npass, nfail)
 				EC_ARRAY_STRUCT_SLICE, P//'E12-array-struct-slice.syntran', 10, 16, 5), &
 			diag_count_code(get_diags_file(P//'E12-array-struct-slice.syntran'), &
 				EC_ARRAY_STRUCT_SLICE) == 1, &
-			diag_loc_ok(get_diags_file(P//'E13-struct-array-slice.syntran'), &
-				EC_STRUCT_ARRAY_SLICE, P//'E13-struct-array-slice.syntran', 11, 18, 6), &
-			diag_count_code(get_diags_file(P//'E13-struct-array-slice.syntran'), &
-				EC_STRUCT_ARRAY_SLICE) == 1, &
 			diag_loc_ok(get_diags_file(P//'E14-non-int-subscript.syntran'), &
 				EC_NON_INT_SUBSCRIPT, P//'E14-non-int-subscript.syntran', 5, 11, 3), &
 			diag_count_code(get_diags_file(P//'E14-non-int-subscript.syntran'), &
@@ -6033,7 +6065,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E82-immutable-var.syntran'), &
 				EC_IMMUTABLE_VAR, P//'E82-immutable-var.syntran', 4, 6, 2), &
 			diag_loc_ok(get_diags_file(P//'E83-const-assign.syntran'), &
-				EC_CONST_ASSIGN, P//'E83-const-assign.syntran', 5, 1, 1) &
+				EC_CONST_ASSIGN, P//'E83-const-assign.syntran', 5, 1, 1), &
+			diag_loc_ok(get_diags_file(P//'E84-mutable-method-on-temp.syntran'), &
+				EC_MUTABLE_METHOD_ON_TEMP, P//'E84-mutable-method-on-temp.syntran', 21, 9, 3), &
+			diag_count_code(get_diags_file(P//'E84-mutable-method-on-temp.syntran'), &
+				EC_MUTABLE_METHOD_ON_TEMP) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

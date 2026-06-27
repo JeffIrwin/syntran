@@ -337,77 +337,11 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 				param_is_const_ref = fn%node%is_const_ref(i)
 		end if
 
-		! Passing a const variable to a mutable-ref param is an error
-		if (param_is_ref .and. .not. param_is_const_ref .and. &
-				args%v(i)%kind == name_expr) then
-			is_const_var = .false.
-			if (args%v(i)%is_loc) then
-				call parser%locs%search(args%v(i)%identifier%text, &
-					id_index_tmp, io, const_check_val, is_const = is_const_var)
-			else
-				call parser%vars%search(args%v(i)%identifier%text, &
-					id_index_tmp, io, const_check_val, is_const = is_const_var)
-			end if
-			if (is_const_var) then
-				span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-				call parser%diagnostics%push(err_const_assign( &
-					parser%context(), span, args%v(i)%identifier%text))
-			end if
-		end if
+		span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
+		call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
+			identifier_%text, i - 1, param_val, param_name, &
+			param_is_ref, param_is_const_ref)
 
-		if (param_is_ref .neqv. is_ref%v(i)) then
-
-			! The "param" is in the decl, the "arg" is in the call
-			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-			if (param_is_ref) then
-				call parser%diagnostics%push(err_bad_arg_val( &
-					parser%context(), &
-					span, &
-					identifier_%text, &
-					i - 1, &  ! 0-based index in err msg
-					param_name &
-				))
-			else
-				call parser%diagnostics%push(err_bad_arg_ref( &
-					parser%context(), &
-					span, &
-					identifier_%text, &
-					i - 1, &
-					param_name &
-				))
-			end if
-
-		end if
-
-		is_ok = .true.
-		is_ok = is_ok .and. types_match(param_val, args%v(i)%val) == TYPE_MATCH
-		is_ok = is_ok .or. args%v(i)%val%type == unknown_type
-
-		if (.not. is_ok) then
-
-			exp_type = type_name(param_val)
-			act_type = type_name(args%v(i)%val)
-			!print *, "ipass = ", parser%ipass
-			!print *, "exp type = ", exp_type
-			!print *, "act type = ", act_type
-
-			! This used to call a different diagnostic fn depending on whether
-			! it was a top-level type mismatch, array mismatch, or rank
-			! mismatch.  types_match() returns an enum so we could make it that
-			! way again if there's a need.  EC_BAD_ARG_RANK (E47) is the
-			! retired code that used to cover the rank-mismatch case
-
-			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-			call parser%diagnostics%push(err_bad_arg_type( &
-				parser%context(), &
-				span, &
-				identifier_%text, &
-				i - 1, &  ! 0-based index in err msg
-				param_name, &
-				exp_type, &
-				act_type))
-
-		end if
 	end do
 
 	fn_call%id_index = id_index
@@ -465,6 +399,10 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 	if (parser%current_kind() == lparen_token) then
 		! Qualified function call: std::println(...) or math::vectors::fn(...)
 		call parser%parse_fn_call(module_name, fn_identifier, expr)
+		if (parser%current_kind() == dot_token .and. &
+				expr%val%type == struct_type) then
+			call parser%parse_dot(expr)
+		end if
 
 	else if (parser%current_kind() == lbrace_token) then
 		! Qualified struct instance: mod::Struct{...}
@@ -1586,6 +1524,66 @@ recursive function all_paths_return(node) result(returns)
 	end select
 
 end function all_paths_return
+
+!===============================================================================
+
+module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
+		fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref)
+
+	class(parser_t), intent(inout) :: parser
+	type(syntax_node_t), intent(in) :: arg
+	logical(kind = 1), intent(in) :: call_is_ref_i
+	type(text_span_t), intent(in) :: arg_span
+	character(len = *), intent(in) :: fn_name, param_name
+	integer, intent(in) :: i_0based
+	type(value_t), intent(in) :: param_val
+	logical, intent(in) :: param_is_ref, param_is_const_ref
+
+	!********
+
+	integer :: id_index_tmp, io_tmp
+	logical :: is_const_var, is_ok
+	character(len = :), allocatable :: exp_type, act_type
+	type(value_t) :: const_check_val
+
+	! Passing a const variable to a mutable-ref param is an error
+	if (param_is_ref .and. .not. param_is_const_ref .and. arg%kind == name_expr) then
+		is_const_var = .false.
+		if (arg%is_loc) then
+			call parser%locs%search(arg%identifier%text, &
+				id_index_tmp, io_tmp, const_check_val, is_const = is_const_var)
+		else
+			call parser%vars%search(arg%identifier%text, &
+				id_index_tmp, io_tmp, const_check_val, is_const = is_const_var)
+		end if
+		if (is_const_var) then
+			call parser%diagnostics%push(err_const_assign( &
+				parser%context(), arg_span, arg%identifier%text))
+		end if
+	end if
+
+	! Ref/val mismatch
+	if (param_is_ref .neqv. call_is_ref_i) then
+		if (param_is_ref) then
+			call parser%diagnostics%push(err_bad_arg_val( &
+				parser%context(), arg_span, fn_name, i_0based, param_name))
+		else
+			call parser%diagnostics%push(err_bad_arg_ref( &
+				parser%context(), arg_span, fn_name, i_0based, param_name))
+		end if
+	end if
+
+	! Type mismatch
+	is_ok = types_match(param_val, arg%val) == TYPE_MATCH
+	is_ok = is_ok .or. arg%val%type == unknown_type
+	if (.not. is_ok) then
+		exp_type = type_name(param_val)
+		act_type = type_name(arg%val)
+		call parser%diagnostics%push(err_bad_arg_type( &
+			parser%context(), arg_span, fn_name, i_0based, param_name, exp_type, act_type))
+	end if
+
+end subroutine check_call_arg
 
 !===============================================================================
 

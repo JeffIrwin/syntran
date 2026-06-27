@@ -183,6 +183,13 @@ module syntran__eval_m
 			integer(kind = 8), intent(inout) :: usubs(:), subs(:)
 		end subroutine
 
+		module subroutine get_field_slice_val(member_node, field_val, state, res)
+			type(syntax_node_t), intent(in)    :: member_node
+			type(value_t),       intent(in)    :: field_val
+			type(state_t),       intent(inout) :: state
+			type(value_t),       intent(out)   :: res
+		end subroutine
+
 		module function subscript_i32_eval(subs, array) result(index_)
 			integer(kind = 8), intent(in) :: subs(:)
 			type(array_t) :: array
