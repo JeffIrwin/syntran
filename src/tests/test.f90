@@ -4272,6 +4272,17 @@ subroutine unit_test_struct_arr1(npass, nfail)
 				//'ps[1].v[0:2] = [20, 30];' &
 				//'return ps[1].v[0] + ps[1].v[1];' &
 				, quiet) == '50', &
+			eval(''                         &                 ! 29: vector subscript read on struct field
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[0:10:100]};' &
+				//'return s.v[[3,6,7]];' &
+				, quiet) == '[30, 60, 70]', &
+			eval(''                         &                 ! 30: vector subscript write on struct field
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[1,2,3,4,5]};' &
+				//'s.v[[0,2]] = [99,88];' &
+				//'return s.v[0] + s.v[2];' &
+				, quiet) == '187', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

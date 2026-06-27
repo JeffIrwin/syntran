@@ -32,9 +32,6 @@ module syntran__core_m
 
 	! TODO:
 	!  - method improvements:
-	!    * there's a gap in struct array slicing for sub-array indexing. see
-	!      scratch/test86.syntran. make sure it is fixed for both reads and
-	!      writes
 	!    * allow subscripted methods: `struct[0].method()`
 	!      + done
 	!    * other chained permutations like above?

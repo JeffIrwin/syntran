@@ -1202,7 +1202,7 @@ end subroutine eval_assign_slice_rank1
 
 !===============================================================================
 
-module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs)
+module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
 
 	! Compute subscript bounds (lsubs, ssubs, usubs) and result rank for a
 	! non-scalar slice on a struct field array.  Shared by get_field_slice_val
@@ -1215,15 +1215,16 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_res, ls
 	type(state_t),                  intent(inout) :: state
 	integer,                        intent(out)   :: rank_res
 	integer(kind = 8), allocatable, intent(out)   :: lsubs(:), ssubs(:), usubs(:)
+	type(i64_vector_t), allocatable, intent(out)  :: asubs(:)
 
 	!********
 
 	integer :: i, rank_
 	integer(kind = 8) :: lsub, ssub, usub, sz
-	type(value_t) :: lsubval, usubval, ssubval
+	type(value_t) :: lsubval, usubval, ssubval, asubval
 
 	rank_ = field_val%array%rank
-	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_))
+	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_), asubs(rank_))
 	rank_res = 0
 
 	do i = 1, rank_
@@ -1282,6 +1283,21 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_res, ls
 			usub = lsub + 1
 			ssub = 1
 
+		case (arr_sub)
+			call syntax_eval(member_node%lsubscripts(i), state, asubval)
+			if (asubval%array%type == i32_type) then
+				asubs(i)%v = asubval%array%i32
+			else if (asubval%array%type == i64_type) then
+				asubs(i)%v = asubval%array%i64
+			else
+				write(*,*) err_int(IC_BAD_ARRAY_SUBSCRIPT_TYPE, 'bad array subscript type')
+				call internal_error()
+			end if
+			lsub = asubs(i)%v(1)
+			usub = 1
+			ssub = 1
+			rank_res = rank_res + 1
+
 		end select
 
 		lsubs(i) = lsub
@@ -1310,10 +1326,8 @@ module subroutine get_field_slice_val(member_node, field_val, state, res)
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 	type(i64_vector_t), allocatable :: asubs(:)
 
-	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs)
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
 	if (state%rt_halt) return
-
-	allocate(asubs(field_val%array%rank))
 
 	allocate(res%array)
 	res%type = array_type
@@ -1328,6 +1342,9 @@ module subroutine get_field_slice_val(member_node, field_val, state, res)
 		case (step_sub, range_sub, all_sub)
 			diff = usubs(idim_) - lsubs(idim_)
 			res%array%size(idim_res) = divceil(diff, ssubs(idim_))
+			idim_res = idim_res + 1
+		case (arr_sub)
+			res%array%size(idim_res) = size(asubs(idim_)%v)
 			idim_res = idim_res + 1
 		end select
 	end do
@@ -1365,10 +1382,8 @@ module subroutine set_field_slice_val(member_node, field_val, state, val)
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 	type(i64_vector_t), allocatable :: asubs(:)
 
-	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs)
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
 	if (state%rt_halt) return
-
-	allocate(asubs(field_val%array%rank))
 
 	subs = lsubs
 	do i8 = 0, val%array%len_ - 1
