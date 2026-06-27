@@ -34,6 +34,10 @@ module syntran__core_m
 	!  - method improvements:
 	!    * allow subscripted methods: `struct[0].method()`
 	!    * other chained permutations like above?
+	!    * method calls only work at the *end* of a chain. this is consistent
+	!      with older syntran behavior, like a fn return an array cannot be
+	!      subscripted directly -- it needs to go into an intermediate variable
+	!      first. should these features be extended?
 	!    * lump in other struct improvement unrelated to methods, e.g.: struct
 	!      array slicing, noted below
 	!    * DRY shared code between methods and fns, e.g. argument count and type

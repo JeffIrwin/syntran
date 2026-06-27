@@ -896,7 +896,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 	type(struct_t) :: struct
 
-	type(syntax_node_t) :: receiver_save, arg_
+	type(syntax_node_t) :: receiver_save, arg_, receiver_cand, method_cand
 
 	type(syntax_node_vector_t) :: call_args
 
@@ -1168,8 +1168,27 @@ recursive module subroutine parse_dot(parser, expr)
 	if (parser%peek_kind(0) == dot_token) then
 		expr%member%val = expr%val
 		expr%member%identifier = identifier  ! set for diags in recursed parse_dot()
+
+		! Save the current expr (e.g. y.b) before the recursive call can turn
+		! expr%member into a method_call_expr.  Used to build the proper receiver
+		! if a method is found deeper in the chain.
+		receiver_cand = expr
+
 		call parser%parse_dot(expr%member)
 		expr%val = expr%member%val
+
+		! If the recursive call resolved a method call, restructure so the
+		! full chain (receiver_cand) is the method's receiver rather than just
+		! the innermost sub-node.
+		if (expr%member%kind == method_call_expr) then
+			! receiver_cand is the outer dot_expr (e.g. y.b).  Its member
+			! should be the inner partial chain produced by the recursive fix
+			! (rather than the b-subnode copy from the save above).
+			receiver_cand%member = expr%member%args(1)
+			method_cand          = expr%member        ! deep-copy the method node
+			method_cand%args(1)  = receiver_cand      ! replace receiver with full chain
+			expr                 = method_cand         ! promote to top-level method call
+		end if
 	end if
 
 end subroutine parse_dot

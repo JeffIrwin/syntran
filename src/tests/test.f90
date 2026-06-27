@@ -4843,6 +4843,56 @@ subroutine unit_test_methods(npass, nfail)
 			eval(CTR//'let a=[C{n=5}]; a[0].get();', quiet) == '5', &  ! 19 (const method on subscripted element)
 			diag_has_code(get_diags(CTR//'const a=[C{n=0}]; a[0].inc();'), EC_CONST_ASSIGN), &  ! 20
 
+			! --- method at end of deep struct chain (no arrays) ---
+			eval('' &                                                                    ! 21
+				//'struct A{a:i32, const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:B}' &
+				//'let sa=A{a=42}; let sb=B{b=sa}; let sc=C{c=sb};' &
+				//'return sc.c.b.get();' &
+				, quiet) == '42', &
+			eval('' &                                                                    ! 22
+				//'struct A{a:i32, const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:B} struct D{d:C} struct E{e:D}' &
+				//'let sa=A{a=42}; let sb=B{b=sa}; let sc=C{c=sb};' &
+				//'let sd=D{d=sc}; let se=E{e=sd};' &
+				//'return se.e.d.c.b.get();' &
+				, quiet) == '42', &
+
+			! --- const method at end of chain with alternating subscripts ---
+			eval('' &                                                                    ! 23
+				//'struct A{a:[i32;:], const fn first():i32{return a[0];}}' &
+				//'struct B{b:A} struct C{c:[B;:]} struct D{d:C} struct E{e:[D;:]}' &
+				//'let sa=A{a=[42]}; let sb=B{b=sa}; let sc=C{c=[sb]};' &
+				//'let sd=D{d=sc}; let se=E{e=[sd]};' &
+				//'return se.e[0].d.c[0].b.first();' &
+				, quiet) == '42', &
+
+			! --- mutable method called deep in chain ---
+			eval('' &                                                                    ! 24
+				//'struct A{a:i32, fn inc(){a+=1;} const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:B}' &
+				//'let sa=A{a=41}; let sb=B{b=sa}; let sc=C{c=sb};' &
+				//'sc.c.b.inc();' &
+				//'return sc.c.b.get();' &
+				, quiet) == '42', &
+			eval('' &                                                                    ! 25
+				//'struct A{a:i32, fn inc(){a+=1;} const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:[B;:]} struct D{d:C} struct E{e:[D;:]}' &
+				//'let sa=A{a=41}; let sb=B{b=sa}; let sc=C{c=[sb]};' &
+				//'let sd=D{d=sc}; let se=E{e=[sd]};' &
+				//'se.e[0].d.c[0].b.inc();' &
+				//'return se.e[0].d.c[0].b.get();' &
+				, quiet) == '42', &
+
+			! --- subscripted receiver inside a wrapped struct ---
+			eval('' &                                                                    ! 26
+				//'struct A{a:i32, const fn get():i32{return a;}}' &
+				//'struct B{b:[A;:]} struct C{c:B}' &
+				//'let b=B{b=[A{a=10},A{a=42}]};' &
+				//'let c=C{c=b};' &
+				//'return c.c.b[1].get();' &
+				, quiet) == '42', &
+
 			.false. &
 		]
 

@@ -796,8 +796,9 @@ recursive subroutine compile_node(prog, cs, node)
 				! Pass 2: move by-ref args from their variable slots onto stack.
 				do i = 1, size(node%is_ref)
 					if (node%is_ref(i)) then
-						if (allocated(node%args(i)%lsubscripts)) then
-							! Subscripted receiver: push element value (OP_INDEX).
+						if (allocated(node%args(i)%lsubscripts) .or. &
+						    node%args(i)%kind == dot_expr) then
+							! Subscripted or dot-expr receiver: evaluate to get value.
 							call compile_node(prog, cs, node%args(i))
 						else if (node%args(i)%is_loc) then
 							call emit(prog, OP_LOAD_REF_LOCAL,  a = node%args(i)%id_index)
