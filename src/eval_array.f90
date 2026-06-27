@@ -1202,28 +1202,28 @@ end subroutine eval_assign_slice_rank1
 
 !===============================================================================
 
-module subroutine get_field_slice_val(member_node, field_val, state, res)
+module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs)
 
-	! Evaluate a range/step/all subscript on a struct field array.
-	! member_node%lsubscripts holds the subscript spec; field_val is the
-	! field's runtime value.  Mirrors eval_name_expr's multi-rank slice path
-	! but reads array sizes from field_val instead of state%locs/vars.
+	! Compute subscript bounds (lsubs, ssubs, usubs) and result rank for a
+	! non-scalar slice on a struct field array.  Shared by get_field_slice_val
+	! and set_field_slice_val to avoid code duplication.
+	! On step_sub with ssub==0, rt_throw is called and state%rt_halt is set;
+	! callers must check state%rt_halt on return.
 
-	type(syntax_node_t), intent(in)    :: member_node
-	type(value_t),       intent(in)    :: field_val
-	type(state_t),       intent(inout) :: state
-	type(value_t),       intent(out)   :: res
+	type(syntax_node_t),            intent(in)    :: member_node
+	type(value_t),                  intent(in)    :: field_val
+	type(state_t),                  intent(inout) :: state
+	integer,                        intent(out)   :: rank_res
+	integer(kind = 8), allocatable, intent(out)   :: lsubs(:), ssubs(:), usubs(:)
 
 	!********
 
-	integer :: i, rank_, rank_res, idim_, idim_res
-	integer(kind = 8) :: lsub, ssub, usub, sz, diff, i8, index_
-	type(value_t) :: tmp, lsubval, usubval, ssubval
-	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
-	type(i64_vector_t), allocatable :: asubs(:)
+	integer :: i, rank_
+	integer(kind = 8) :: lsub, ssub, usub, sz
+	type(value_t) :: lsubval, usubval, ssubval
 
 	rank_ = field_val%array%rank
-	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_), asubs(rank_))
+	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_))
 	rank_res = 0
 
 	do i = 1, rank_
@@ -1289,6 +1289,32 @@ module subroutine get_field_slice_val(member_node, field_val, state, res)
 		usubs(i) = usub
 	end do
 
+end subroutine field_slice_bounds
+
+!===============================================================================
+
+module subroutine get_field_slice_val(member_node, field_val, state, res)
+
+	! Evaluate a range/step/all subscript on a struct field array.
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(in)    :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(out)   :: res
+
+	!********
+
+	integer :: rank_res, idim_, idim_res
+	integer(kind = 8) :: diff, i8, index_
+	type(value_t) :: tmp
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+	type(i64_vector_t), allocatable :: asubs(:)
+
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs)
+	if (state%rt_halt) return
+
+	allocate(asubs(field_val%array%rank))
+
 	allocate(res%array)
 	res%type = array_type
 	res%array%kind = expl_array
@@ -1297,7 +1323,7 @@ module subroutine get_field_slice_val(member_node, field_val, state, res)
 
 	allocate(res%array%size(rank_res))
 	idim_res = 1
-	do idim_ = 1, rank_
+	do idim_ = 1, field_val%array%rank
 		select case (member_node%lsubscripts(idim_)%sub_kind)
 		case (step_sub, range_sub, all_sub)
 			diff = usubs(idim_) - lsubs(idim_)
@@ -1324,8 +1350,7 @@ end subroutine get_field_slice_val
 module subroutine set_field_slice_val(member_node, field_val, state, val)
 
 	! Write val's elements into field_val at the positions described by
-	! member_node%lsubscripts.  Mirrors get_field_slice_val but writes instead
-	! of reading.
+	! member_node%lsubscripts.
 
 	type(syntax_node_t), intent(in)    :: member_node
 	type(value_t),       intent(inout) :: field_val
@@ -1334,74 +1359,16 @@ module subroutine set_field_slice_val(member_node, field_val, state, val)
 
 	!********
 
-	integer :: i, rank_
-	integer(kind = 8) :: lsub, ssub, usub, sz, i8, index_
-	type(value_t) :: tmp, lsubval, usubval, ssubval
+	integer :: rank_res
+	integer(kind = 8) :: i8, index_
+	type(value_t) :: tmp
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 	type(i64_vector_t), allocatable :: asubs(:)
 
-	rank_ = field_val%array%rank
-	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_), asubs(rank_))
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs)
+	if (state%rt_halt) return
 
-	do i = 1, rank_
-		lsub = 0
-		ssub = 1
-		usub = 0
-
-		select case (member_node%lsubscripts(i)%sub_kind)
-		case (all_sub)
-			lsub = 0
-			ssub = 1
-			usub = field_val%array%size(i)
-
-		case (range_sub)
-			ssub = 1
-			if (member_node%lsubscripts(i)%lsub_omit) then
-				lsub = 0
-			else
-				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
-				lsub = lsubval%to_i64()
-			end if
-			if (member_node%lsubscripts(i)%usub_omit) then
-				usub = field_val%array%size(i)
-			else
-				call syntax_eval(member_node%usubscripts(i), state, usubval)
-				usub = usubval%to_i64()
-			end if
-
-		case (step_sub)
-			call syntax_eval(member_node%ssubscripts(i), state, ssubval)
-			ssub = ssubval%to_i64()
-			if (ssub == 0) then
-				call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
-				return
-			end if
-			sz = field_val%array%size(i)
-			if (member_node%lsubscripts(i)%lsub_omit) then
-				lsub = merge(sz - 1_8, 0_8, ssub < 0)
-			else
-				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
-				lsub = lsubval%to_i64()
-			end if
-			if (member_node%lsubscripts(i)%usub_omit) then
-				usub = merge(-1_8, sz, ssub < 0)
-			else
-				call syntax_eval(member_node%usubscripts(i), state, usubval)
-				usub = usubval%to_i64()
-			end if
-
-		case (scalar_sub)
-			call syntax_eval(member_node%lsubscripts(i), state, lsubval)
-			lsub = lsubval%to_i64()
-			usub = lsub + 1
-			ssub = 1
-
-		end select
-
-		lsubs(i) = lsub
-		ssubs(i) = ssub
-		usubs(i) = usub
-	end do
+	allocate(asubs(field_val%array%rank))
 
 	subs = lsubs
 	do i8 = 0, val%array%len_ - 1
@@ -1438,6 +1405,8 @@ module subroutine apply_subscripts_to_val(node, val, state, res)
 		res%str%s = str_char_slice(val%str%s, node, state, 1)
 		return
 	end if
+
+	if (val%type /= array_type) call internal_error()
 
 	if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 		! Inline sub_eval logic using val directly (avoids intent mismatch copy).

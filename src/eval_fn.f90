@@ -178,15 +178,8 @@ recursive module subroutine eval_fn_call(node, state, res)
 				node%args(i)%kind == method_call_expr .or. &
 				node%args(i)%kind == fn_call_intr_expr) cycle
 
-		if (allocated(node%args(i)%lsubscripts)) then
-			! Subscripted receiver: write modified element back
-			if (node%args(i)%is_loc) then
-				call set_val(node%args(i), state%locs%vals( node%args(i)%id_index ), state, params_tmp(i))
-			else
-				call set_val(node%args(i), state%vars%vals( node%args(i)%id_index ), state, params_tmp(i))
-			end if
-		else if (node%args(i)%kind == dot_expr) then
-			! Dot-chain receiver: write modified struct back through the chain
+		if (allocated(node%args(i)%lsubscripts) .or. node%args(i)%kind == dot_expr) then
+			! Subscripted or dot-chain receiver: write element/struct back via set_val
 			if (node%args(i)%is_loc) then
 				call set_val(node%args(i), state%locs%vals( node%args(i)%id_index ), state, params_tmp(i))
 			else

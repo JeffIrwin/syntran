@@ -4866,6 +4866,9 @@ subroutine unit_test_methods(npass, nfail)
 			eval(CTR//'let a=[C{n=0},C{n=10}]; a[0].inc(); a[1].get();', quiet) == '10', &  ! 18 (other element unaffected)
 			eval(CTR//'let a=[C{n=5}]; a[0].get();', quiet) == '5', &  ! 19 (const method on subscripted element)
 			diag_has_code(get_diags(CTR//'const a=[C{n=0}]; a[0].inc();'), EC_CONST_ASSIGN), &  ! 20
+			diag_has_code(get_diags( &                                                          ! 20b: const via dot chain
+				'struct I{n:i32,fn inc(){n+=1;}} struct O{i:I} const o=O{i=I{n=0}}; o.i.inc();'), &
+				EC_CONST_ASSIGN), &
 
 			! --- method at end of deep struct chain (no arrays) ---
 			eval('' &                                                                    ! 21

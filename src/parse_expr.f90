@@ -1178,6 +1178,33 @@ recursive module subroutine parse_dot(parser, expr)
 			method_cand          = expr%member        ! deep-copy the method node
 			method_cand%args(1)  = receiver_cand      ! replace receiver with full chain
 			expr                 = method_cand         ! promote to top-level method call
+
+			! Const-receiver check for chained case (e.g. `const s = O{…}; s.field.method()`).
+			! receiver_cand%id_index / is_loc / identifier → root variable (s).
+			! receiver_cand%val%struct_name → the struct type that owns the method.
+			block
+				integer :: fn_id_check, fn_io_check
+				type(fn_t) :: fn_check
+				fn_check = parser%fns%search( &
+					"0" // unqualified_name(receiver_cand%val%struct_name) // &
+					"::" // expr%identifier%text, &
+					fn_id_check, fn_io_check)
+				if (fn_io_check == exit_success .and. .not. fn_check%is_const_method) then
+					is_const_receiver = .false.
+					if (receiver_cand%is_loc) then
+						call parser%locs%search(receiver_cand%identifier%text, &
+							id_index_tmp, io_tmp, const_check_val, is_const = is_const_receiver)
+					else
+						call parser%vars%search(receiver_cand%identifier%text, &
+							id_index_tmp, io_tmp, const_check_val, is_const = is_const_receiver)
+					end if
+					if (is_const_receiver) then
+						span = new_span(expr%identifier%pos, len(expr%identifier%text))
+						call parser%diagnostics%push(err_const_assign( &
+							parser%context(), span, receiver_cand%identifier%text))
+					end if
+				end if
+			end block
 		end if
 	end if
 

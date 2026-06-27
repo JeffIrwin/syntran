@@ -432,9 +432,9 @@ module subroutine parse_use_statement(parser, statement)
 		! For qualified imports, convert path separators to namespace separators
 		! e.g., "math/vectors" -> "math::vectors::fn"
 		if (qualified_import) then
-			! Methods are mangled as "0struct_name::method" and are already
-			! namespaced by struct — adding a module prefix would break lookup.
-			if (fn_name(1:1) == "0") then
+			! Methods are already namespaced by struct — adding a module prefix
+			! would break lookup.
+			if (fn%is_method) then
 				insert_name = fn_name
 			else
 				insert_name = qualified_prefix // "::" // fn_name

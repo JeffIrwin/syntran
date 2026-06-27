@@ -183,6 +183,14 @@ module syntran__eval_m
 			integer(kind = 8), intent(inout) :: usubs(:), subs(:)
 		end subroutine
 
+		module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs)
+			type(syntax_node_t),             intent(in)    :: member_node
+			type(value_t),                   intent(in)    :: field_val
+			type(state_t),                   intent(inout) :: state
+			integer,                         intent(out)   :: rank_res
+			integer(kind = 8), allocatable,  intent(out)   :: lsubs(:), ssubs(:), usubs(:)
+		end subroutine
+
 		module subroutine get_field_slice_val(member_node, field_val, state, res)
 			type(syntax_node_t), intent(in)    :: member_node
 			type(value_t),       intent(in)    :: field_val
