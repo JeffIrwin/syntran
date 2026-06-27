@@ -706,6 +706,9 @@ recursive module subroutine parse_primary_expr(parser, expr)
 				call parser%parse_qualified_expr(expr)
 			else if (parser%peek_kind(1) == lparen_token) then
 				call parser%parse_fn_call(fn_call=expr)
+				if (parser%current_kind() == lbracket_token) then
+					call parser%parse_subscripts(expr)
+				end if
 				if (parser%current_kind() == dot_token .and. &
 						expr%val%type == struct_type) then
 					call parser%parse_dot(expr)
@@ -1080,9 +1083,15 @@ recursive module subroutine parse_dot(parser, expr)
 		expr%val        = method_fn%type
 
 		! args: receiver first, then explicit args
-		if (allocated(expr%args))   deallocate(expr%args)
-		if (allocated(expr%is_ref)) deallocate(expr%is_ref)
-		if (allocated(expr%body))   deallocate(expr%body)
+		if (allocated(expr%args))        deallocate(expr%args)
+		if (allocated(expr%is_ref))      deallocate(expr%is_ref)
+		if (allocated(expr%body))        deallocate(expr%body)
+		! The receiver's subscripts (e.g. a[0]) live in receiver_save / args(1).
+		! Clear them from the method node itself so they are not mistaken for
+		! post-call subscripts on the method's return value.
+		if (allocated(expr%lsubscripts)) deallocate(expr%lsubscripts)
+		if (allocated(expr%usubscripts)) deallocate(expr%usubscripts)
+		if (allocated(expr%ssubscripts)) deallocate(expr%ssubscripts)
 		allocate(expr%args(1 + call_args%len_))
 		expr%args(1) = receiver_save
 		do method_i = 1, call_args%len_

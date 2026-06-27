@@ -4929,6 +4929,16 @@ subroutine unit_test_methods(npass, nfail)
 			diag_count_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&     ! 34
 				//'make(5).inc();'), EC_MUTABLE_METHOD_ON_TEMP) == 1, &
 
+			! --- subscript/slice on fn return value ---
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[2];' &        ! 35
+				, quiet) == '30', &
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[1:4];' &      ! 36
+				, quiet) == '[20, 30, 40]', &
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[:];' &        ! 37
+				, quiet) == '[10, 20, 30, 40, 50]', &
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[0:2:5];' &    ! 38
+				, quiet) == '[10, 30, 50]', &
+
 			.false. &
 		]
 

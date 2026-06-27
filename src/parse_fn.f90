@@ -399,6 +399,9 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 	if (parser%current_kind() == lparen_token) then
 		! Qualified function call: std::println(...) or math::vectors::fn(...)
 		call parser%parse_fn_call(module_name, fn_identifier, expr)
+		if (parser%current_kind() == lbracket_token) then
+			call parser%parse_subscripts(expr)
+		end if
 		if (parser%current_kind() == dot_token .and. &
 				expr%val%type == struct_type) then
 			call parser%parse_dot(expr)

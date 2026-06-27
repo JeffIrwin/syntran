@@ -170,7 +170,8 @@ module syntran__bytecode_m
 	!   (a[i]+=x) fall back to OP_STORE_IDX.
 	integer, parameter :: &
 		OP_INDEX_NAT     = 1136, &
-		OP_STORE_IDX_NAT = 1137
+		OP_STORE_IDX_NAT = 1137, &
+		OP_SUBSCRIPT_TOS = 1138	! pop TOS (fn return val), apply subscripts from nodes(a), push result
 
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 

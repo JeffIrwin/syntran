@@ -813,6 +813,9 @@ recursive subroutine compile_node(prog, cs, node)
 			end if
 
 			call emit(prog, OP_CALL, a = node%id_index, b = idx)
+			if (allocated(node%lsubscripts)) then
+				call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
+			end if
 		end if
 
 	! ---- intrinsic function call -----------------------------------------------
@@ -868,6 +871,10 @@ recursive subroutine compile_node(prog, cs, node)
 				call emit(prog, OP_CALL_INTR, a = intr_id_, b = nargs_)
 			end select
 		end block
+		if (allocated(node%lsubscripts)) then
+			idx = add_node(prog, node)
+			call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
+		end if
 
 	! ---- return statement ------------------------------------------------------
 	! Inside a compiled function body: push return value (or unknown sentinel for

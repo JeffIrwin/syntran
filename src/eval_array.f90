@@ -1318,6 +1318,48 @@ end subroutine get_field_slice_val
 
 !===============================================================================
 
+module subroutine apply_subscripts_to_val(node, val, state, res)
+
+	! Apply lsubscripts from node to a pre-evaluated value_t (e.g. a fn return).
+	! Mirrors the allocated(node%lsubscripts) branch of eval_name_expr but reads
+	! array data from val directly instead of the variable store.
+
+	type(syntax_node_t), intent(in)    :: node
+	type(value_t),       intent(in)    :: val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(out)   :: res
+
+	!********
+
+	integer :: i
+	integer(kind = 8) :: i8, prod
+	type(value_t) :: subscript
+
+	if (val%type == str_type) then
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%type = str_type
+		res%str%s = str_char_slice(val%str%s, node, state, 1)
+		return
+	end if
+
+	if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+		! Inline sub_eval logic using val directly (avoids intent mismatch copy).
+		prod  = 1
+		i8    = 0
+		do i = 1, val%array%rank
+			call syntax_eval(node%lsubscripts(i), state, subscript)
+			i8   = i8 + prod * subscript%to_i64()
+			prod = prod * val%array%size(i)
+		end do
+		call get_array_val(val%array, i8, res)
+	else
+		call get_field_slice_val(node, val, state, res)
+	end if
+
+end subroutine apply_subscripts_to_val
+
+!===============================================================================
+
 end submodule syntran__eval_array
 
 !===============================================================================

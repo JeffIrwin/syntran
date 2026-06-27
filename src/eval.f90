@@ -233,6 +233,13 @@ module syntran__eval_m
 			type(value_t), intent(in) :: val
 		end subroutine
 
+		module subroutine apply_subscripts_to_val(node, val, state, res)
+			type(syntax_node_t), intent(in)    :: node
+			type(value_t),       intent(in)    :: val
+			type(state_t),       intent(inout) :: state
+			type(value_t),       intent(out)   :: res
+		end subroutine
+
 	end interface
 
 	interface
@@ -381,6 +388,7 @@ recursive subroutine syntax_eval(node, state, res)
 	!********
 
 	integer :: id
+	type(value_t) :: tmp
 
 	!print *, "starting syntax_eval()"
 	!print *, "node kind = ", kind_name(node%kind)
@@ -465,9 +473,17 @@ recursive subroutine syntax_eval(node, state, res)
 
 	case (fn_call_expr, method_call_expr)  ! user-defined (method_call_expr reuses eval_fn_call)
 		call eval_fn_call(node, state, res)
+		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
+			call apply_subscripts_to_val(node, res, state, tmp)
+			res = tmp
+		end if
 
 	case (fn_call_intr_expr)
 		call eval_fn_call_intr(node, state, res)
+		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
+			call apply_subscripts_to_val(node, res, state, tmp)
+			res = tmp
+		end if
 
 	case (struct_instance_expr)
 		call eval_struct_instance(node, state, res)

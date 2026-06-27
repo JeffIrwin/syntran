@@ -1846,6 +1846,13 @@ module subroutine vm_run(prog, state, res)
 			state%vars%vals(instr%a)%type    = f64_type
 			state%vars%vals(instr%a)%sca%f64 = stack%v(stack%len_)%sca%f64
 
+		case (OP_SUBSCRIPT_TOS)
+			! Pop the fn return value, apply subscripts from the node pool, push result.
+			call vm_pop_copy(stack, left)
+			call apply_subscripts_to_val(prog%nodes(instr%a), left, state, val)
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
+
 		case default
 			write(*,*) 'VM: unknown opcode ', instr%op
 			call internal_error()
