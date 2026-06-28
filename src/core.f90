@@ -31,6 +31,16 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - switch/match/case
+	!  - callbacks, fn pointers, i.e. passing one function as an argument to
+	!    another function
+	!    * this could be a big change to the type system
+	!  - replace ternary tree dicts with hash maps? might be simpler, but there
+	!    might be zero perf benefit because the dicts are only used at parse
+	!    time, then mapped to efficient arrays at eval time
+	!  - enums
+	!  - recursive data structs
+	!    * recursive fns are available, but not structs
 	!  - method improvements:
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.
@@ -38,7 +48,10 @@ module syntran__core_m
 	!      rank. should a chain of multiple sliced methods be allowed?
 	!      element-wise slices of same shape or cartesian product of all combos
 	!      if that even makes sense?
-	!  - std consts for ANSI color codes, or some other way to color text
+	!  - more std consts:
+	!    * ANSI color codes, or some other way to color text
+	!    * E, I (after complex numbers)
+	!    * done: PI, std::IN/OUT/ERR
 	!  - need an exists() built-in to check files, or some equivalent way to
 	!    check a file post-open. maybe rethink the way syntran immediately
 	!    runtime error aborts if you try to open for reading a file that doesn't
@@ -47,10 +60,12 @@ module syntran__core_m
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
-	!  - switch/match/case
 	!  - matrix inverse? link gfortran to mkl?
 	!  - remove AST-walking interpreter. bytecode is better. wait 2 or 3
 	!    releases
+	!    * will probably remove it in 1.6. if that's the plan at the 1.5
+	!      release, update the depreciation warning to specify the planned
+	!      removal release
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
@@ -89,9 +104,6 @@ module syntran__core_m
 	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet
 	!    * related, update wsl ubuntu version. consider updating gfortran
 	!      versions in some places
-	!  - replace ternary tree dicts with hash maps? might be simpler, but there
-	!    might be zero perf benefit because the dicts are only used at parse
-	!    time, then mapped to efficient arrays at eval time
 	!  - claude tasks:
 	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable
 	!      it. duh!
@@ -185,11 +197,6 @@ module syntran__core_m
 	!    * added a couple basic tests in main.yml
 	!    * fns should also be covered
 	!    * should also cover options like `-i` (startup include file)
-	!  - recursive data structs?
-	!    * recursive fns are available, but not structs
-	!  - callbacks, fn pointers, i.e. passing one function as an argument to
-	!    another function
-	!    * this could be a big change to the type system
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
 	!    * just use `reshape` and call the fortran built-in.  no need for any
@@ -342,10 +349,20 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
+	!      + getenv (name?)
+	!      + trim/split/pad
+	!      + index, scan, verify
+	!      + date/time
 	!      + trig: atan2, (sec, cosecant, hyperbolic, ... ?)
 	!      + bessel_jn
-	!      + gamma, log_gamma?
+	!      + erf, gamma, log_gamma?
+	!      + floor, ceil, fraction, nint
 	!      + system: multiple out args? iostat and stdout
+	!      + rank. might seem unnecessary but reshape() can create arrays of
+	!        unknown rank at parse time
+	!      + pack/spread/unpack
+	!      + ternary operator or merge() ?
+	!      + rng?
 	!    * done:
 	!      + reshape, transpose, shape
 	!      + abs, sqrt
@@ -363,13 +380,13 @@ module syntran__core_m
 	!      + size
 	!      + readln, writeln, println, open, close, str casting
 	!      + len (of str)
+	!      + count, any, all
 	!      + recursive and non-recursive user-defined fns
 	!  - use more submodules
 	!    * types.f90 is long and close to leaves of dependency tree.  value.f90
 	!      is also highly depended upon
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!    * using rust syntrax highlighting in neovim is not bad (except for "\" string)
-	!  - enums
 	!  - casting fns should work with array args
 	!    * f32() doesn't exist (you can mul by 1.0 as a workaround)
 	!    * i32(), i64() done
