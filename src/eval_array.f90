@@ -1376,8 +1376,8 @@ module subroutine set_field_slice_val(member_node, field_val, state, val)
 
 	!********
 
-	integer :: rank_res
-	integer(kind = 8) :: i8, index_
+	integer :: rank_res, idim_
+	integer(kind = 8) :: i8, index_, lhs_len
 	type(value_t) :: tmp
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 	type(i64_vector_t), allocatable :: asubs(:)
@@ -1385,8 +1385,23 @@ module subroutine set_field_slice_val(member_node, field_val, state, val)
 	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
 	if (state%rt_halt) return
 
+	lhs_len = 1
+	do idim_ = 1, field_val%array%rank
+		select case (member_node%lsubscripts(idim_)%sub_kind)
+		case (step_sub, range_sub, all_sub)
+			lhs_len = lhs_len * max(0_8, divceil(usubs(idim_) - lsubs(idim_), ssubs(idim_)))
+		case (arr_sub)
+			lhs_len = lhs_len * size(asubs(idim_)%v, kind = 8)
+		end select
+	end do
+	if (val%array%len_ /= lhs_len) then
+		call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+			"size of RHS does not match size of LHS slice"))
+		return
+	end if
+
 	subs = lsubs
-	do i8 = 0, val%array%len_ - 1
+	do i8 = 0, lhs_len - 1
 		index_ = subscript_i32_eval(subs, field_val%array)
 		call get_array_val(val%array, i8, tmp)
 		call set_array_val(field_val%array, index_, tmp)

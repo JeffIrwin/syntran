@@ -895,6 +895,7 @@ module subroutine vm_run(prog, state, res)
 			associate(n => prog%nodes(instr%a))
 			call get_val(n, left, state, val)
 			end associate
+			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 
 		! --- dot member write -----------------------------------------------------
@@ -913,6 +914,7 @@ module subroutine vm_run(prog, state, res)
 				call do_compound(val, right, instr%b)
 				call set_val(n, state%vars%vals(id), state, val)
 			end if
+			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 			end associate
 

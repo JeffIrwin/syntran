@@ -80,16 +80,6 @@ recursive module subroutine struct_copy(dst, src)
 		deallocate(dst%cookie)
 	end if
 
-	dst%method_names = src%method_names
-	dst%num_methods  = src%num_methods
-	if (allocated(src%method_fn_ids)) then
-		if (allocated(dst%method_fn_ids)) deallocate(dst%method_fn_ids)
-		allocate(dst%method_fn_ids( size(src%method_fn_ids) ))
-		dst%method_fn_ids = src%method_fn_ids
-	else if (allocated(dst%method_fn_ids)) then
-		deallocate(dst%method_fn_ids)
-	end if
-
 	!print *, 'done struct_copy()'
 
 end subroutine struct_copy

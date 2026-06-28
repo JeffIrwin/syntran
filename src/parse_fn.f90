@@ -737,8 +737,7 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	logical :: is_const_meth
 
-	integer :: j, num_meth_cap
-	integer, allocatable :: method_fn_ids_tmp(:)
+	integer :: j
 
 	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
 		colon, name, struct_kw
@@ -882,10 +881,6 @@ module subroutine parse_struct_declaration(parser, decl)
 	end do
 
 	! Parse method declarations (fn / const fn inside the struct body)
-	struct%num_methods = 0
-	struct%method_names = new_string_vector()
-	num_meth_cap = 4
-	allocate(struct%method_fn_ids(num_meth_cap))
 	method_decls = new_syntax_node_vector()
 
 	do while ( &
@@ -899,20 +894,6 @@ module subroutine parse_struct_declaration(parser, decl)
 
 		call parser%parse_method_declaration(method_decl, struct, is_const_meth, &
 			identifier%text)
-
-		struct%num_methods = struct%num_methods + 1
-
-		! Grow method_fn_ids if needed
-		if (struct%num_methods > num_meth_cap) then
-			num_meth_cap = num_meth_cap * 2
-			allocate(method_fn_ids_tmp(num_meth_cap))
-			method_fn_ids_tmp(1: struct%num_methods - 1) = &
-				struct%method_fn_ids(1: struct%num_methods - 1)
-			call move_alloc(method_fn_ids_tmp, struct%method_fn_ids)
-		end if
-
-		struct%method_fn_ids(struct%num_methods) = method_decl%id_index
-		call struct%method_names%push(method_decl%identifier%text)
 
 		! Save method decl node for the bytecode compiler pre-pass
 		call method_decls%push(method_decl)
@@ -931,7 +912,6 @@ module subroutine parse_struct_declaration(parser, decl)
 	end if
 
 	rbrace = parser%match(rbrace_token)
-	call pos_mems%push( rbrace%pos )
 
 	! Insert struct into parser dict
 
