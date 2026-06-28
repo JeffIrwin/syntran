@@ -432,7 +432,13 @@ module subroutine parse_use_statement(parser, statement)
 		! For qualified imports, convert path separators to namespace separators
 		! e.g., "math/vectors" -> "math::vectors::fn"
 		if (qualified_import) then
-			insert_name = qualified_prefix // "::" // fn_name
+			! Methods are already namespaced by struct — adding a module prefix
+			! would break lookup.
+			if (fn%is_method) then
+				insert_name = fn_name
+			else
+				insert_name = qualified_prefix // "::" // fn_name
+			end if
 
 			! Update struct_name references in return type and parameters
 			! to use qualified names
@@ -902,7 +908,7 @@ recursive module subroutine parse_statement(parser, statement)
 				case (let_expr, assignment_expr)
 					! Do nothing.  These kinds of expressions are allowed
 
-				case (fn_call_expr, fn_call_intr_expr)
+				case (fn_call_expr, fn_call_intr_expr, method_call_expr)
 					! Only allow void fn call statements.  Don't allow
 					! discarding fn return value
 

@@ -4248,6 +4248,41 @@ subroutine unit_test_struct_arr1(npass, nfail)
 				//'ls[1].s.v[1] = 19;' &
 				//'return ls[1].s.v[1];' &
 				, quiet) == '19', &
+			eval(''                         &                 ! 25
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[1,2,3,4,5]};' &
+				//'s.v[1:3] = [20, 30];' &
+				//'return s.v[1] + s.v[2];' &
+				, quiet) == '50', &
+			eval(''                         &                 ! 26
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[1,2,3,4,5]};' &
+				//'s.v[:] = [9,8,7,6,5];' &
+				//'return s.v[0] + s.v[4];' &
+				, quiet) == '14', &
+			eval(''                         &                 ! 27: step [lower:step:upper]
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[0,0,0,0,0]};' &
+				//'s.v[0:2:5] = [7,8,9];' &
+				//'return s.v[0] + s.v[2] + s.v[4];' &
+				, quiet) == '24', &
+			eval(''                         &                 ! 28: Branch A outer subscript
+				//'struct S{v:[i32;:], s:str,}' &
+				//'let ps = [S{v=[1,2,3], s="a"}, S{v=[4,5,6], s="b"}];' &
+				//'ps[1].v[0:2] = [20, 30];' &
+				//'return ps[1].v[0] + ps[1].v[1];' &
+				, quiet) == '50', &
+			eval(''                         &                 ! 29: vector subscript read on struct field
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[0:10:100]};' &
+				//'return s.v[[3,6,7]];' &
+				, quiet) == '[30, 60, 70]', &
+			eval(''                         &                 ! 30: vector subscript write on struct field
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[1,2,3,4,5]};' &
+				//'s.v[[0,2]] = [99,88];' &
+				//'return s.v[0] + s.v[2];' &
+				, quiet) == '187', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4757,6 +4792,8 @@ subroutine unit_test_struct_long(npass, nfail)
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
 			interpret_file(path//'test-03.syntran', quiet) == '0'   , &
+			interpret_file(path//'test-04.syntran', quiet) == '0'   , &
+			interpret_file(path//'test-methods.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4766,6 +4803,225 @@ subroutine unit_test_struct_long(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_struct_long
+
+!===============================================================================
+
+subroutine unit_test_methods(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'methods'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	! Struct with a 0-arg mutable method, a 0-arg const method, and a
+	! 1-arg-by-value method, reused across several tests below.
+	character(len = *), parameter :: CTR = &
+		'struct C{n:i32,' // &
+		'fn inc(){n+=1;}' // &
+		'const fn get():i32{return n;}' // &
+		'fn add(x:i32){n+=x;}' // &
+		'fn add_ref(x:&i32){n+=x; x+=1;}' // &
+		'}'
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+
+			! --- happy path: args by value ---
+			eval(CTR//'let c=C{n=0}; c.add(5); c.get();', quiet) == '5', &   ! 1
+			eval(CTR//'let c=C{n=3}; c.add(7); c.get();', quiet) == '10', &  ! 2
+
+			! --- happy path: arg by ref (x modified inside method) ---
+			eval(CTR//'let c=C{n=0}; let x=2; c.add_ref(&x); x;', quiet) == '3', &  ! 3
+			eval(CTR//'let c=C{n=0}; let x=2; c.add_ref(&x); c.get();', quiet) == '2', &  ! 4
+
+			! --- error: too many args ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.get(1);'), EC_BAD_ARG_COUNT), &    ! 5
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.add(1,2);'), EC_BAD_ARG_COUNT), &  ! 6
+
+			! --- error: too few args ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.add();'), EC_BAD_ARG_COUNT), &     ! 7
+
+			! --- error: wrong arg type ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.add(true);'), EC_BAD_ARG_TYPE), &  ! 8
+
+			! --- error: val where ref expected ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; let x=1; c.add_ref(x);'), EC_BAD_ARG_VAL), &   ! 9
+
+			! --- error: ref where val expected ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; let x=1; c.add(&x);'), EC_BAD_ARG_REF), &     ! 10
+
+			! --- error: const var passed to mutable-ref param ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; const x=1; c.add_ref(&x);'), EC_CONST_ASSIGN), &  ! 11
+
+			! --- error: mutable method called on const instance ---
+			diag_has_code(get_diags(CTR//'const c=C{n=0}; c.inc();'), EC_CONST_ASSIGN), &   ! 12
+			diag_has_code(get_diags(CTR//'const c=C{n=0}; c.add(1);'), EC_CONST_ASSIGN), &  ! 13
+
+			! --- positive: const method on const instance is allowed ---
+			.not. diag_has_code(get_diags(CTR//'const c=C{n=5}; c.get();'), EC_CONST_ASSIGN), &  ! 14
+
+			! --- error: write to field inside const method body ---
+			diag_has_code(get_diags( &
+				'struct S{n:i32, const fn bad(){n=0;}}'), EC_CONST_ASSIGN), &  ! 15
+
+			! --- subscripted receiver: arr[i].method() ---
+			eval(CTR//'let a=[C{n=0},C{n=10}]; a[0].inc(); a[0].get();', quiet) == '1',  &  ! 16
+			eval(CTR//'let a=[C{n=0},C{n=10}]; a[1].inc(); a[1].get();', quiet) == '11', &  ! 17
+			eval(CTR//'let a=[C{n=0},C{n=10}]; a[0].inc(); a[1].get();', quiet) == '10', &  ! 18 (other element unaffected)
+			eval(CTR//'let a=[C{n=5}]; a[0].get();', quiet) == '5', &  ! 19 (const method on subscripted element)
+			diag_has_code(get_diags(CTR//'const a=[C{n=0}]; a[0].inc();'), EC_CONST_ASSIGN), &  ! 20
+			diag_has_code(get_diags( &                                                          ! 20b: const via dot chain
+				'struct I{n:i32,fn inc(){n+=1;}} struct O{i:I} const o=O{i=I{n=0}}; o.i.inc();'), &
+				EC_CONST_ASSIGN), &
+
+			! --- method at end of deep struct chain (no arrays) ---
+			eval('' &                                                                    ! 21
+				//'struct A{a:i32, const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:B}' &
+				//'let sa=A{a=42}; let sb=B{b=sa}; let sc=C{c=sb};' &
+				//'return sc.c.b.get();' &
+				, quiet) == '42', &
+			eval('' &                                                                    ! 22
+				//'struct A{a:i32, const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:B} struct D{d:C} struct E{e:D}' &
+				//'let sa=A{a=42}; let sb=B{b=sa}; let sc=C{c=sb};' &
+				//'let sd=D{d=sc}; let se=E{e=sd};' &
+				//'return se.e.d.c.b.get();' &
+				, quiet) == '42', &
+
+			! --- const method at end of chain with alternating subscripts ---
+			eval('' &                                                                    ! 23
+				//'struct A{a:[i32;:], const fn first():i32{return a[0];}}' &
+				//'struct B{b:A} struct C{c:[B;:]} struct D{d:C} struct E{e:[D;:]}' &
+				//'let sa=A{a=[42]}; let sb=B{b=sa}; let sc=C{c=[sb]};' &
+				//'let sd=D{d=sc}; let se=E{e=[sd]};' &
+				//'return se.e[0].d.c[0].b.first();' &
+				, quiet) == '42', &
+
+			! --- mutable method called deep in chain ---
+			eval('' &                                                                    ! 24
+				//'struct A{a:i32, fn inc(){a+=1;} const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:B}' &
+				//'let sa=A{a=41}; let sb=B{b=sa}; let sc=C{c=sb};' &
+				//'sc.c.b.inc();' &
+				//'return sc.c.b.get();' &
+				, quiet) == '42', &
+			eval('' &                                                                    ! 25
+				//'struct A{a:i32, fn inc(){a+=1;} const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:[B;:]} struct D{d:C} struct E{e:[D;:]}' &
+				//'let sa=A{a=41}; let sb=B{b=sa}; let sc=C{c=[sb]};' &
+				//'let sd=D{d=sc}; let se=E{e=[sd]};' &
+				//'se.e[0].d.c[0].b.inc();' &
+				//'return se.e[0].d.c[0].b.get();' &
+				, quiet) == '42', &
+
+			! --- subscripted receiver inside a wrapped struct ---
+			eval('' &                                                                    ! 26
+				//'struct A{a:i32, const fn get():i32{return a;}}' &
+				//'struct B{b:[A;:]} struct C{c:B}' &
+				//'let b=B{b=[A{a=10},A{a=42}]};' &
+				//'let c=C{c=b};' &
+				//'return c.c.b[1].get();' &
+				, quiet) == '42', &
+
+			! --- struct array field slicing (my_struct.arr[lo:hi]) ---
+			eval('' &                                                                    ! 27
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30,40,50]};' &
+				//'return s.a[1:4];' &
+				, quiet) == '[20, 30, 40]', &
+			eval('' &                                                                    ! 28
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30,40,50]};' &
+				//'return s.a[:];' &
+				, quiet) == '[10, 20, 30, 40, 50]', &
+			eval('' &                                                                    ! 29
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30,40,50]};' &
+				//'return s.a[0:2:5];' &
+				, quiet) == '[10, 30, 50]', &
+			eval('' &                                                                    ! 30
+				//'struct S{a:[i32;:]}' &
+				//'let arr=[S{a=[1,2,3,4,5]},S{a=[10,20,30]}];' &
+				//'return arr[0].a[2:5];' &
+				, quiet) == '[3, 4, 5]', &
+
+			! --- const method on fn return value ---
+			eval(CTR//'fn make(x:i32):C{return C{n=x};}' &                         ! 31
+				//'return make(5).get();' &
+				, quiet) == '5', &
+			eval(CTR//'fn make(x:i32):C{return C{n=x};}' &                         ! 32
+				//'return make(41).get() + 1;' &
+				, quiet) == '42', &
+
+			! --- mutable method on fn return value is an error ---
+			diag_has_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&       ! 33
+				//'make(5).inc();'), EC_MUTABLE_METHOD_ON_TEMP), &
+			diag_count_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&     ! 34
+				//'make(5).inc();'), EC_MUTABLE_METHOD_ON_TEMP) == 1, &
+
+			! --- subscript/slice on fn return value ---
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[2];' &        ! 35
+				, quiet) == '30', &
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[1:4];' &      ! 36
+				, quiet) == '[20, 30, 40]', &
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[:];' &        ! 37
+				, quiet) == '[10, 20, 30, 40, 50]', &
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[0:2:5];' &    ! 38
+				, quiet) == '[10, 30, 50]', &
+
+			! --- field access directly on fn return value ---
+			eval('struct S{n:i32} fn make(x:i32):S{return S{n=x};}' &             ! 39
+				//'return make(42).n;' &
+				, quiet) == '42', &
+
+			! --- subscript fn return array of structs, then const method ---
+			eval(CTR//'fn make_arr():[C;:]{return [C{n=5},C{n=42}];}' &            ! 40
+				//'return make_arr()[1].get();' &
+				, quiet) == '42', &
+
+			! --- fn return + field chain + const method ---
+			eval(CTR//'struct W{c:C} fn make_w(x:i32):W{return W{c=C{n=x}};}' &   ! 41
+				//'return make_w(42).c.get();' &
+				, quiet) == '42', &
+
+			! --- field access on method return value (method().field) ---
+			eval('' &                                                               ! 42
+				//'struct S{n:i32}' &
+				//'struct W{s:S, const fn inner():S{return s;}}' &
+				//'let w=W{s=S{n=42}};' &
+				//'return w.inner().n;' &
+				, quiet) == '42', &
+
+			! --- chained const method calls (method1().method2()) ---
+			eval(CTR//'struct W{c:C, const fn get_c():C{return c;}}' &             ! 43
+				//'let w=W{c=C{n=42}};' &
+				//'return w.get_c().get();' &
+				, quiet) == '42', &
+
+			! --- mutable method on method return is an error ---
+			diag_has_code(get_diags(CTR &                                          ! 44
+				//'struct W{c:C, const fn get_c():C{return c;}}' &
+				//'let w=W{c=C{n=1}};' &
+				//'w.get_c().inc();'), EC_MUTABLE_METHOD_ON_TEMP), &
+
+			.false. &
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_methods
 
 !===============================================================================
 
@@ -4950,6 +5206,41 @@ subroutine unit_test_modules(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_modules
+
+!===============================================================================
+
+subroutine unit_test_dict(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'dict scripts'
+
+	character(len = *), parameter :: path = 'src/tests/test-src/dict/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-04.syntran', quiet) == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_dict
 
 !===============================================================================
 
@@ -5571,9 +5862,9 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	!   - RC_ARRAY_SIZE_MISMATCH (R21) and RC_BAD_SUBSCRIPT_KIND (R20):
 	!     defensive checks for subscript/size-array shapes that the parser is
 	!     already expected to rule out; no valid-syntax repro found
-	!   - RC_STRUCT_ARRAY_SLICE (R22): struct array slicing is simply
-	!     unimplemented, not a user-triggerable runtime condition in the
-	!     ordinary sense
+	!   - RC_STRUCT_ARRAY_SLICE (R22): struct array slicing now works for
+	!     my_struct.field[lo:hi]; site A (arr_of_structs[lo:hi].field) still
+	!     throws but is not yet covered here
 
 	implicit none
 
@@ -5747,10 +6038,6 @@ subroutine unit_test_error_locations(npass, nfail)
 				EC_ARRAY_STRUCT_SLICE, P//'E12-array-struct-slice.syntran', 10, 16, 5), &
 			diag_count_code(get_diags_file(P//'E12-array-struct-slice.syntran'), &
 				EC_ARRAY_STRUCT_SLICE) == 1, &
-			diag_loc_ok(get_diags_file(P//'E13-struct-array-slice.syntran'), &
-				EC_STRUCT_ARRAY_SLICE, P//'E13-struct-array-slice.syntran', 11, 18, 6), &
-			diag_count_code(get_diags_file(P//'E13-struct-array-slice.syntran'), &
-				EC_STRUCT_ARRAY_SLICE) == 1, &
 			diag_loc_ok(get_diags_file(P//'E14-non-int-subscript.syntran'), &
 				EC_NON_INT_SUBSCRIPT, P//'E14-non-int-subscript.syntran', 5, 11, 3), &
 			diag_count_code(get_diags_file(P//'E14-non-int-subscript.syntran'), &
@@ -5897,7 +6184,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E82-immutable-var.syntran'), &
 				EC_IMMUTABLE_VAR, P//'E82-immutable-var.syntran', 4, 6, 2), &
 			diag_loc_ok(get_diags_file(P//'E83-const-assign.syntran'), &
-				EC_CONST_ASSIGN, P//'E83-const-assign.syntran', 5, 1, 1) &
+				EC_CONST_ASSIGN, P//'E83-const-assign.syntran', 5, 1, 1), &
+			diag_loc_ok(get_diags_file(P//'E84-mutable-method-on-temp.syntran'), &
+				EC_MUTABLE_METHOD_ON_TEMP, P//'E84-mutable-method-on-temp.syntran', 21, 9, 3), &
+			diag_count_code(get_diags_file(P//'E84-mutable-method-on-temp.syntran'), &
+				EC_MUTABLE_METHOD_ON_TEMP) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -6107,6 +6398,7 @@ subroutine unit_tests(iostat)
 	call unit_test_struct_arr3(npass, nfail)
 	call unit_test_struct_str (npass, nfail)
 	call unit_test_struct_long(npass, nfail)
+	call unit_test_methods    (npass, nfail)
 	call unit_test_f64_mix    (npass, nfail)
 	call unit_test_literals   (npass, nfail)
 	call unit_test_bitwise    (npass, nfail)
@@ -6119,6 +6411,7 @@ subroutine unit_tests(iostat)
 	call unit_test_transpose  (npass, nfail)
 	call unit_test_shape      (npass, nfail)
 	call unit_test_modules    (npass, nfail)
+	call unit_test_dict       (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
@@ -6589,12 +6882,21 @@ end module test_m
 program test
 
 	use syntran__app_m
+	use syntran__consts_m
 	use test_m
 	implicit none
 
-	integer :: io
+	integer :: i, argc, io
+	character(len = 256) :: argv
 
 	call set_ansi_colors(.true.)
+
+	argc = command_argument_count()
+	do i = 1, argc
+		call get_command_argument(i, argv)
+		if (trim(argv) == '--no-warn-ast') no_warn = .true.
+	end do
+
 	call unit_tests(io)
 	call exit(io)
 

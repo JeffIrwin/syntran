@@ -666,7 +666,20 @@ module subroutine vm_run(prog, state, res)
 			! Write by-ref modified values back to caller's variable slots.
 			do i = 1, nparams
 				if (.not. cn%is_ref(i)) cycle
-				if (cn%args(i)%is_loc) then
+				! Temporary receiver (fn-return value or fn-return-with-field): no writeback
+				if (cn%args(i)%kind == fn_call_expr .or. &
+				    cn%args(i)%kind == method_call_expr .or. &
+				    cn%args(i)%kind == fn_call_intr_expr .or. &
+				    cn%args(i)%root_kind /= 0) cycle
+				if (allocated(cn%args(i)%lsubscripts) .or. &
+				    cn%args(i)%kind == dot_expr) then
+					! Subscripted or dot-expr receiver: write element back via set_val.
+					if (cn%args(i)%is_loc) then
+						call set_val(cn%args(i), state%locs%vals(cn%args(i)%id_index), state, params_pool(i))
+					else
+						call set_val(cn%args(i), state%vars%vals(cn%args(i)%id_index), state, params_pool(i))
+					end if
+				else if (cn%args(i)%is_loc) then
 					call value_move(params_pool(i), &
 						state%locs%vals(cn%args(i)%id_index))
 				else
@@ -874,6 +887,17 @@ module subroutine vm_run(prog, state, res)
 			call vm_push_move(stack, val)
 			end associate
 
+		! --- dot member read from fn/method return value (root on TOS) -----------
+		! M5: root struct value already on stack (pushed by compiled fn call).
+		! Pops root, applies member chain from wrapper node via get_val.
+		case (OP_LOAD_MEMBER_TOS)
+			call vm_pop_copy(stack, left)
+			associate(n => prog%nodes(instr%a))
+			call get_val(n, left, state, val)
+			end associate
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
+
 		! --- dot member write -----------------------------------------------------
 		! M5: pops RHS from stack, reads current member via get_val, applies the
 		! compound op, writes back via set_val, and pushes the new member value.
@@ -890,6 +914,7 @@ module subroutine vm_run(prog, state, res)
 				call do_compound(val, right, instr%b)
 				call set_val(n, state%vars%vals(id), state, val)
 			end if
+			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 			end associate
 
@@ -1833,6 +1858,13 @@ module subroutine vm_run(prog, state, res)
 		case (OP_STORE_GLOBAL_F64)
 			state%vars%vals(instr%a)%type    = f64_type
 			state%vars%vals(instr%a)%sca%f64 = stack%v(stack%len_)%sca%f64
+
+		case (OP_SUBSCRIPT_TOS)
+			! Pop the fn return value, apply subscripts from the node pool, push result.
+			call vm_pop_copy(stack, left)
+			call apply_subscripts_to_val(prog%nodes(instr%a), left, state, val)
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
 
 		case default
 			write(*,*) 'VM: unknown opcode ', instr%op

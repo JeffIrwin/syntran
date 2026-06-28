@@ -46,6 +46,9 @@ module syntran__types_m
 		! M6: integer dispatch id for intrinsic fns (0 = unassigned / user fn)
 		integer :: intr_id = 0
 
+		logical :: is_method = .false.
+		logical :: is_const_method = .false.
+
 		contains
 #ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => fn_copy
@@ -159,6 +162,11 @@ module syntran__types_m
 
 		integer :: id_index = 0, num_locs
 		logical :: is_loc = .false.
+
+		! When a dot_expr's root was a fn_call_expr or method_call_expr (e.g.
+		! `fn().field`), root_kind stores the original kind so evaluators can
+		! re-evaluate the root as a function call and then apply the member chain.
+		integer :: root_kind = 0
 
 		integer, allocatable :: params(:)
 		logical, allocatable :: is_ref(:)       ! is param passed by reference?

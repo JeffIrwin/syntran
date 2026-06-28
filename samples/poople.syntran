@@ -25,7 +25,7 @@ let dict_filename = "/usr/share/dict/american-english";
 let blocklist = poople::BLOCKLIST;
 let allowlist = poople::ALLOWLIST;
 let dict = poople::read_dict(dict_filename, &blocklist, &allowlist);
-println("Loaded ", len_dict_i64(&dict),
+println("Loaded ", dict.len(),
 	" 4-letter words from system dictionary");
 
 let steps = poople::solve(&dict, args[0]);

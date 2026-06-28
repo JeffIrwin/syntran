@@ -31,6 +31,13 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - method improvements:
+	!    * stretch, arguably not very useful: slice method calls? e.g.
+	!      `struct[0:3].method()`. for void methods, just iterate and call it.
+	!      for returning methods, return an array of values of the appropriate
+	!      rank. should a chain of multiple sliced methods be allowed?
+	!      element-wise slices of same shape or cartesian product of all combos
+	!      if that even makes sense?
 	!  - std consts for ANSI color codes, or some other way to color text
 	!  - need an exists() built-in to check files, or some equivalent way to
 	!    check a file post-open. maybe rethink the way syntran immediately
@@ -215,14 +222,6 @@ module syntran__core_m
 	!    * samples?
 	!    * libsyntran.a and fortran sample?
 	!    * try -static-libgcc etc. on win/mac to ease packaging
-	!  - struct array slicing:
-	!    * can't do my_struct.arr[1:4], currently have to loop with scalar index
-	!  - struct member fns
-	!    * it would be a nicer experience to be able to write
-	!      `dict.set("key", val)` instead of `set_dict_i64(&dict, "key", val)`,
-	!      effectively using the struct identifier as a namespace
-	!    * inside member fns, you should be allowed to just write `var` instead
-	!      of `this.var`
 	!  - pass by reference for subscripted array name expressions and dot
 	!    expressions
 	!    * done for regular variable name expressions
@@ -361,7 +360,7 @@ module syntran__core_m
 	!      + sum, product
 	!        > these need an optional `dim` arg, and so do any/all
 	!      + min, max
-	!      + size (non-variadic but polymorphic)
+	!      + size
 	!      + readln, writeln, println, open, close, str casting
 	!      + len (of str)
 	!      + recursive and non-recursive user-defined fns

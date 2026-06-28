@@ -1,0 +1,38 @@
+
+use ../../long/aoc/dicts/dict_str::*;
+
+let d = new();
+
+let ok1 = d.len() == 0;
+let ok2 = not d.contains("foo");
+
+d.set("name",  "alice");
+d.set("color", "blue");
+d.set("city",  "paris");
+
+let ok3 = d.get("name")  == "alice";
+let ok4 = d.get("color") == "blue";
+let ok5 = d.get("city")  == "paris";
+let ok6 = d.len() == 3;
+let ok7 = d.contains("name");
+let ok8 = not d.contains("xyz");
+let ok9 = d.get("missing") == "";   // missing key returns ""
+
+// overwrite existing key; length unchanged
+d.set("name", "bob");
+let ok10 = d.get("name") == "bob";
+let ok11 = d.len() == 3;
+
+// add enough entries to trigger resize (cap 8 → 16 at 6 entries)
+d.set("a", "aa");
+d.set("b", "bb");
+d.set("c", "cc");
+d.set("d", "dd");
+d.set("e", "ee");
+let ok12 = d.len() == 8;
+let ok13 = d.get("a") == "aa";
+let ok14 = d.get("name") == "bob";   // old entries survive resize
+let ok15 = d.contains("e") and not d.contains("z");
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8
+	and ok9 and ok10 and ok11 and ok12 and ok13 and ok14 and ok15;

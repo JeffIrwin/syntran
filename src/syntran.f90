@@ -479,7 +479,7 @@ subroutine init_state(state, script_args, src_dir, bytecode)
 		if (backend_status == 0) then
 			if (trim(backend_env) == "ast") then
 				state%bytecode = .false.
-				write(error_unit, '(a)') fg_bold_yellow//'Warning'//color_reset// &
+				if (.not. no_warn) write(error_unit, '(a)') fg_bold_yellow//'Warning'//color_reset// &
 					': SYNTRAN_BACKEND=ast is deprecated. ' // &
 					'The AST walker will be removed in a future release. If you encounter ' // &
 					'bugs, please report them at https://github.com/JeffIrwin/syntran/issues'

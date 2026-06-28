@@ -55,6 +55,10 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		!print *, "array dot chain"
 
 		! Arrays chained by a dot: `a[0].b[0]`
+		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+			call set_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, val)
+			return
+		end if
 		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
 		call set_array_val(var%struct(i8+1)%struct(id)%array, j8, val)
 		return
@@ -96,8 +100,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	!print *, "lsubscripts allocated"
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-		! Already caught in parser
-		call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+		call set_field_slice_val(node%member, var%struct(id), state, val)
 		return
 	end if
 	!print *, "scalar_sub"
@@ -188,8 +191,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 		!print *, "array dot chain"
 
 		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-			!print *, "slice sub"
-			call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+			call get_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, res)
 			return
 		end if
 
@@ -246,8 +248,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	!print *, "lsubscripts allocated"
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-		!print *, "slice sub"
-		call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+		call get_field_slice_val(node%member, var%struct(id), state, res)
 		return
 	end if
 	!print *, "scalar_sub"
@@ -1198,6 +1199,267 @@ module subroutine eval_assign_slice_rank1(node, state, id, res)
 	res = result_val   ! return the modified slice, as the general path does
 
 end subroutine eval_assign_slice_rank1
+
+!===============================================================================
+
+module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+
+	! Compute subscript bounds (lsubs, ssubs, usubs) and result rank for a
+	! non-scalar slice on a struct field array.  Shared by get_field_slice_val
+	! and set_field_slice_val to avoid code duplication.
+	! On step_sub with ssub==0, rt_throw is called and state%rt_halt is set;
+	! callers must check state%rt_halt on return.
+
+	type(syntax_node_t),            intent(in)    :: member_node
+	type(value_t),                  intent(in)    :: field_val
+	type(state_t),                  intent(inout) :: state
+	integer,                        intent(out)   :: rank_res
+	integer(kind = 8), allocatable, intent(out)   :: lsubs(:), ssubs(:), usubs(:)
+	type(i64_vector_t), allocatable, intent(out)  :: asubs(:)
+
+	!********
+
+	integer :: i, rank_
+	integer(kind = 8) :: lsub, ssub, usub, sz
+	type(value_t) :: lsubval, usubval, ssubval, asubval
+
+	rank_ = field_val%array%rank
+	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_), asubs(rank_))
+	rank_res = 0
+
+	do i = 1, rank_
+		lsub = 0
+		ssub = 1
+		usub = 0
+
+		select case (member_node%lsubscripts(i)%sub_kind)
+		case (all_sub)
+			lsub = 0
+			ssub = 1
+			usub = field_val%array%size(i)
+			rank_res = rank_res + 1
+
+		case (range_sub)
+			ssub = 1
+			if (member_node%lsubscripts(i)%lsub_omit) then
+				lsub = 0
+			else
+				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+				lsub = lsubval%to_i64()
+			end if
+			if (member_node%lsubscripts(i)%usub_omit) then
+				usub = field_val%array%size(i)
+			else
+				call syntax_eval(member_node%usubscripts(i), state, usubval)
+				usub = usubval%to_i64()
+			end if
+			rank_res = rank_res + 1
+
+		case (step_sub)
+			call syntax_eval(member_node%ssubscripts(i), state, ssubval)
+			ssub = ssubval%to_i64()
+			if (ssub == 0) then
+				call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
+				return
+			end if
+			sz = field_val%array%size(i)
+			if (member_node%lsubscripts(i)%lsub_omit) then
+				lsub = merge(sz - 1_8, 0_8, ssub < 0)
+			else
+				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+				lsub = lsubval%to_i64()
+			end if
+			if (member_node%lsubscripts(i)%usub_omit) then
+				usub = merge(-1_8, sz, ssub < 0)
+			else
+				call syntax_eval(member_node%usubscripts(i), state, usubval)
+				usub = usubval%to_i64()
+			end if
+			rank_res = rank_res + 1
+
+		case (scalar_sub)
+			call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+			lsub = lsubval%to_i64()
+			usub = lsub + 1
+			ssub = 1
+
+		case (arr_sub)
+			call syntax_eval(member_node%lsubscripts(i), state, asubval)
+			if (asubval%array%type == i32_type) then
+				asubs(i)%v = asubval%array%i32
+			else if (asubval%array%type == i64_type) then
+				asubs(i)%v = asubval%array%i64
+			else
+				write(*,*) err_int(IC_BAD_ARRAY_SUBSCRIPT_TYPE, 'bad array subscript type')
+				call internal_error()
+			end if
+			lsub = asubs(i)%v(1)
+			usub = 1
+			ssub = 1
+			rank_res = rank_res + 1
+
+		end select
+
+		lsubs(i) = lsub
+		ssubs(i) = ssub
+		usubs(i) = usub
+	end do
+
+end subroutine field_slice_bounds
+
+!===============================================================================
+
+module subroutine get_field_slice_val(member_node, field_val, state, res)
+
+	! Evaluate a range/step/all subscript on a struct field array.
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(in)    :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(out)   :: res
+
+	!********
+
+	integer :: rank_res, idim_, idim_res
+	integer(kind = 8) :: diff, i8, index_
+	type(value_t) :: tmp
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+	type(i64_vector_t), allocatable :: asubs(:)
+
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+	if (state%rt_halt) return
+
+	allocate(res%array)
+	res%type = array_type
+	res%array%kind = expl_array
+	res%array%type = field_val%array%type
+	res%array%rank = rank_res
+
+	allocate(res%array%size(rank_res))
+	idim_res = 1
+	do idim_ = 1, field_val%array%rank
+		select case (member_node%lsubscripts(idim_)%sub_kind)
+		case (step_sub, range_sub, all_sub)
+			diff = usubs(idim_) - lsubs(idim_)
+			res%array%size(idim_res) = divceil(diff, ssubs(idim_))
+			idim_res = idim_res + 1
+		case (arr_sub)
+			res%array%size(idim_res) = size(asubs(idim_)%v)
+			idim_res = idim_res + 1
+		end select
+	end do
+	res%array%len_ = product(res%array%size)
+
+	call allocate_array(res, res%array%len_)
+
+	subs = lsubs
+	do i8 = 0, res%array%len_ - 1
+		index_ = subscript_i32_eval(subs, field_val%array)
+		call get_array_val(field_val%array, index_, tmp)
+		call set_array_val(res%array, i8, tmp)
+		call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+	end do
+
+end subroutine get_field_slice_val
+
+!===============================================================================
+
+module subroutine set_field_slice_val(member_node, field_val, state, val)
+
+	! Write val's elements into field_val at the positions described by
+	! member_node%lsubscripts.
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(inout) :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(in)    :: val
+
+	!********
+
+	integer :: rank_res, idim_
+	integer(kind = 8) :: i8, index_, lhs_len
+	type(value_t) :: tmp
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+	type(i64_vector_t), allocatable :: asubs(:)
+
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+	if (state%rt_halt) return
+
+	lhs_len = 1
+	do idim_ = 1, field_val%array%rank
+		select case (member_node%lsubscripts(idim_)%sub_kind)
+		case (step_sub, range_sub, all_sub)
+			lhs_len = lhs_len * max(0_8, divceil(usubs(idim_) - lsubs(idim_), ssubs(idim_)))
+		case (arr_sub)
+			lhs_len = lhs_len * size(asubs(idim_)%v, kind = 8)
+		end select
+	end do
+	if (val%array%len_ /= lhs_len) then
+		call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+			"size of RHS does not match size of LHS slice"))
+		return
+	end if
+
+	subs = lsubs
+	do i8 = 0, lhs_len - 1
+		index_ = subscript_i32_eval(subs, field_val%array)
+		call get_array_val(val%array, i8, tmp)
+		call set_array_val(field_val%array, index_, tmp)
+		call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+	end do
+
+end subroutine set_field_slice_val
+
+!===============================================================================
+
+module subroutine apply_subscripts_to_val(node, val, state, res)
+
+	! Apply lsubscripts from node to a pre-evaluated value_t (e.g. a fn return).
+	! Mirrors the allocated(node%lsubscripts) branch of eval_name_expr but reads
+	! array data from val directly instead of the variable store.
+
+	type(syntax_node_t), intent(in)    :: node
+	type(value_t),       intent(in)    :: val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(out)   :: res
+
+	!********
+
+	integer :: i
+	integer(kind = 8) :: i8, prod
+	type(value_t) :: subscript
+
+	if (val%type == str_type) then
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%type = str_type
+		res%str%s = str_char_slice(val%str%s, node, state, 1)
+		return
+	end if
+
+	if (val%type /= array_type) call internal_error()
+
+	if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+		! Inline sub_eval logic using val directly (avoids intent mismatch copy).
+		prod  = 1
+		i8    = 0
+		do i = 1, val%array%rank
+			call syntax_eval(node%lsubscripts(i), state, subscript)
+			i8   = i8 + prod * subscript%to_i64()
+			prod = prod * val%array%size(i)
+		end do
+		if (val%array%type == struct_type) then
+			res = val%struct(i8+1)
+			res%type       = struct_type
+			res%struct_name = val%struct_name
+			if (allocated(val%struct_cookie)) res%struct_cookie = val%struct_cookie
+		else
+			call get_array_val(val%array, i8, res)
+		end if
+	else
+		call get_field_slice_val(node, val, state, res)
+	end if
+
+end subroutine apply_subscripts_to_val
 
 !===============================================================================
 

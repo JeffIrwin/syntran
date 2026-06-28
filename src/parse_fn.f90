@@ -337,77 +337,11 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 				param_is_const_ref = fn%node%is_const_ref(i)
 		end if
 
-		! Passing a const variable to a mutable-ref param is an error
-		if (param_is_ref .and. .not. param_is_const_ref .and. &
-				args%v(i)%kind == name_expr) then
-			is_const_var = .false.
-			if (args%v(i)%is_loc) then
-				call parser%locs%search(args%v(i)%identifier%text, &
-					id_index_tmp, io, const_check_val, is_const = is_const_var)
-			else
-				call parser%vars%search(args%v(i)%identifier%text, &
-					id_index_tmp, io, const_check_val, is_const = is_const_var)
-			end if
-			if (is_const_var) then
-				span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-				call parser%diagnostics%push(err_const_assign( &
-					parser%context(), span, args%v(i)%identifier%text))
-			end if
-		end if
+		span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
+		call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
+			identifier_%text, i - 1, param_val, param_name, &
+			param_is_ref, param_is_const_ref)
 
-		if (param_is_ref .neqv. is_ref%v(i)) then
-
-			! The "param" is in the decl, the "arg" is in the call
-			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-			if (param_is_ref) then
-				call parser%diagnostics%push(err_bad_arg_val( &
-					parser%context(), &
-					span, &
-					identifier_%text, &
-					i - 1, &  ! 0-based index in err msg
-					param_name &
-				))
-			else
-				call parser%diagnostics%push(err_bad_arg_ref( &
-					parser%context(), &
-					span, &
-					identifier_%text, &
-					i - 1, &
-					param_name &
-				))
-			end if
-
-		end if
-
-		is_ok = .true.
-		is_ok = is_ok .and. types_match(param_val, args%v(i)%val) == TYPE_MATCH
-		is_ok = is_ok .or. args%v(i)%val%type == unknown_type
-
-		if (.not. is_ok) then
-
-			exp_type = type_name(param_val)
-			act_type = type_name(args%v(i)%val)
-			!print *, "ipass = ", parser%ipass
-			!print *, "exp type = ", exp_type
-			!print *, "act type = ", act_type
-
-			! This used to call a different diagnostic fn depending on whether
-			! it was a top-level type mismatch, array mismatch, or rank
-			! mismatch.  types_match() returns an enum so we could make it that
-			! way again if there's a need.  EC_BAD_ARG_RANK (E47) is the
-			! retired code that used to cover the rank-mismatch case
-
-			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-			call parser%diagnostics%push(err_bad_arg_type( &
-				parser%context(), &
-				span, &
-				identifier_%text, &
-				i - 1, &  ! 0-based index in err msg
-				param_name, &
-				exp_type, &
-				act_type))
-
-		end if
 	end do
 
 	fn_call%id_index = id_index
@@ -465,6 +399,13 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 	if (parser%current_kind() == lparen_token) then
 		! Qualified function call: std::println(...) or math::vectors::fn(...)
 		call parser%parse_fn_call(module_name, fn_identifier, expr)
+		if (parser%current_kind() == lbracket_token) then
+			call parser%parse_subscripts(expr)
+		end if
+		if (parser%current_kind() == dot_token .and. &
+				expr%val%type == struct_type) then
+			call parser%parse_dot(expr)
+		end if
 
 	else if (parser%current_kind() == lbrace_token) then
 		! Qualified struct instance: mod::Struct{...}
@@ -790,6 +731,14 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	type(struct_t) :: struct, dummy_struct
 
+	type(syntax_node_t) :: method_decl
+
+	type(syntax_node_vector_t) :: method_decls
+
+	logical :: is_const_meth
+
+	integer :: j
+
 	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
 		colon, name, struct_kw
 
@@ -848,7 +797,10 @@ module subroutine parse_struct_declaration(parser, decl)
 	i = 0
 	do while ( &
 			parser%current_kind() /= rbrace_token .and. &
-			parser%current_kind() /= eof_token)
+			parser%current_kind() /= eof_token .and. &
+			parser%current_kind() /= fn_keyword .and. &
+			.not. (parser%current_kind() == const_keyword .and. &
+			       parser%peek_kind(1) == fn_keyword))
 		i = i + 1
 
 		pos0 = parser%current_pos()
@@ -863,7 +815,10 @@ module subroutine parse_struct_declaration(parser, decl)
 		call types%push(type)
 		call names%push( name%text )
 
-		if (parser%current_kind() /= rbrace_token) then
+		if (parser%current_kind() /= rbrace_token .and. &
+		    parser%current_kind() /= fn_keyword .and. &
+		    .not. (parser%current_kind() == const_keyword .and. &
+		           parser%peek_kind(1) == fn_keyword)) then
 			! Delimiting commas are required; trailing comma is optional
 			comma = parser%match(comma_token)
 		end if
@@ -873,9 +828,8 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	end do
 
-	!print *, 'matching rbrace'
-	rbrace = parser%match(rbrace_token)
-	call pos_mems%push( rbrace%pos )
+	! Sentinel for duplicate-member span: end of the last field (or start of method/rbrace)
+	call pos_mems%push(parser%current_pos())
 
 	! Now that we have the number of members, save them
 
@@ -926,6 +880,39 @@ module subroutine parse_struct_declaration(parser, decl)
 		if (allocated(member%array)) deallocate(member%array)
 	end do
 
+	! Parse method declarations (fn / const fn inside the struct body)
+	method_decls = new_syntax_node_vector()
+
+	do while ( &
+			parser%current_kind() /= rbrace_token .and. &
+			parser%current_kind() /= eof_token)
+
+		pos0 = parser%current_pos()
+
+		is_const_meth = (parser%current_kind() == const_keyword)
+		if (is_const_meth) dummy = parser%next()   ! consume 'const'
+
+		call parser%parse_method_declaration(method_decl, struct, is_const_meth, &
+			identifier%text)
+
+		! Save method decl node for the bytecode compiler pre-pass
+		call method_decls%push(method_decl)
+
+		! Break infinite loop
+		if (parser%current_pos() == pos0) dummy = parser%next()
+
+	end do
+
+	! Store method nodes in decl%members so the bytecode compiler can compile them
+	if (method_decls%len_ > 0) then
+		allocate(decl%members(method_decls%len_))
+		do j = 1, method_decls%len_
+			decl%members(j) = method_decls%v(j)
+		end do
+	end if
+
+	rbrace = parser%match(rbrace_token)
+
 	! Insert struct into parser dict
 
 	parser%num_structs = parser%num_structs + 1
@@ -956,6 +943,222 @@ module subroutine parse_struct_declaration(parser, decl)
 	!print *, "done parsing struct"
 
 end subroutine parse_struct_declaration
+
+!===============================================================================
+
+module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name)
+
+	! Parse a method declared inside a struct body.
+	! The implicit first parameter "0self" is the struct passed by reference.
+	! Field names in the method body are transformed to dot_expr on "0self"
+	! by parse_name_expr and parse_expr_statement (via parser%in_method context).
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(out) :: decl
+	type(struct_t), intent(in) :: struct
+	logical, intent(in) :: is_const
+	character(len = *), intent(in) :: struct_name
+
+	!********
+
+	character(len = :), allocatable :: type_text, mangled_name
+
+	integer :: i, io, pos0, rank, fn_beg, fn_name_end
+
+	logical :: overwrite, const_param
+
+	type(fn_t) :: fn
+
+	type(string_vector_t) :: names
+	type(integer_vector_t) :: pos_args
+	type(logical_vector_t) :: is_ref, is_const_ref
+
+	type(syntax_node_t) :: body
+	type(syntax_token_t) :: fn_kw, identifier, lparen, rparen, colon, &
+		name, comma, dummy, amp
+
+	type(text_span_t) :: span
+
+	type(value_t) :: type, self_val
+	type(value_vector_t) :: types
+
+	call parser%vars%push_scope()
+	call parser%locs%push_scope()
+	parser%is_loc = .true.
+	parser%num_locs = 0
+
+	parser%returned = .false.
+	fn_beg = parser%peek_pos(0)
+	fn_kw = parser%match(fn_keyword)
+
+	identifier = parser%match(identifier_token)
+	fn_name_end = parser%peek_pos(0) - 1
+	fn%is_intr = .false.
+	fn%is_method = .true.
+	fn%is_const_method = is_const
+
+	! Insert implicit "0self" as first local (the struct receiver)
+	self_val%type = struct_type
+	self_val%struct_name = struct_name
+	if (allocated(struct%cookie)) self_val%struct_cookie = struct%cookie
+	parser%num_locs = parser%num_locs + 1
+	const_param = is_const
+	call parser%locs%insert("0self", self_val, parser%num_locs, io, &
+		is_const = const_param)
+	parser%self_loc_id = parser%num_locs
+
+	! Set method parsing context so field names resolve to dot_expr("0self", field)
+	parser%in_method = .true.
+	parser%in_const_method = is_const
+	parser%method_struct = struct
+
+	if (parser%current_kind() /= lparen_token) then
+		parser%in_method = .false.
+		parser%in_const_method = .false.
+		call parser%vars%pop_scope()
+		call parser%locs%pop_scope()
+		parser%is_loc = .false.
+		return
+	end if
+
+	lparen = parser%match(lparen_token)
+
+	names        = new_string_vector()
+	pos_args     = new_integer_vector()
+	is_ref       = new_logical_vector()
+	is_const_ref = new_logical_vector()
+	types        = new_value_vector()
+
+	i = 0
+	do while ( &
+			parser%current_kind() /= rparen_token .and. &
+			parser%current_kind() /= eof_token)
+		i = i + 1
+
+		pos0 = parser%current_pos()
+		call pos_args%push(pos0)
+
+		name  = parser%match(identifier_token)
+		colon = parser%match(colon_token)
+
+		if (parser%current_kind() == amp_token) then
+			amp = parser%match(amp_token)
+			call is_ref%push(.true.)
+			if (parser%current_kind() == const_keyword) then
+				dummy = parser%next()
+				call is_const_ref%push(.true.)
+			else
+				call is_const_ref%push(.false.)
+			end if
+		else
+			call is_ref%push(.false.)
+			call is_const_ref%push(.false.)
+		end if
+
+		call parser%parse_type(type_text, type)
+
+		call names%push( name%text )
+		call types%push(type)
+
+		if (parser%current_kind() /= rparen_token) then
+			comma = parser%match(comma_token)
+		end if
+
+		if (parser%current_pos() == pos0) dummy = parser%next()
+
+	end do
+	call pos_args%push(parser%current_pos() + 1)
+
+	rparen = parser%match(rparen_token)
+
+	! params(1) = self slot, params(2..) = explicit params
+	! is_ref(1) = true (self is always by-ref), is_const_ref(1) = is_const
+	allocate(fn%params          ( names%len_ ))
+	allocate(fn%param_names%v   ( names%len_ ))
+	allocate(decl%params        ( 1 + names%len_ ))
+	allocate(decl%is_ref        ( 1 + names%len_ ))
+	allocate(decl%is_const_ref  ( 1 + names%len_ ))
+
+	! Self is slot 1
+	decl%params(1)       = parser%self_loc_id
+	decl%is_ref(1)       = .true.
+	decl%is_const_ref(1) = is_const
+
+	do i = 1, names%len_
+		fn%param_names%v(i)%s = names%v(i)%s
+		fn%params(i) = types%v(i)
+
+		parser%num_locs = parser%num_locs + 1
+		decl%params(1 + i)       = parser%num_locs
+		decl%is_ref(1 + i)       = is_ref%v(i)
+		decl%is_const_ref(1 + i) = is_const_ref%v(i)
+
+		const_param = is_const_ref%v(i)
+		call parser%locs%insert(fn%param_names%v(i)%s, fn%params(i), parser%num_locs, &
+			is_const = const_param)
+	end do
+
+	fn%type%type = void_type
+	rank = 0
+	if (parser%current_kind() == colon_token) then
+		colon = parser%match(colon_token)
+		call parser%parse_type(type_text, type)
+		fn%type = type
+	end if
+
+	parser%fn_name = identifier%text
+	parser%fn_type = fn%type
+
+	call parser%parse_statement(body)
+
+	if (.not. parser%returned .and. fn%type%type /= void_type) then
+		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
+		call parser%diagnostics%push( &
+			err_no_return(parser%context(), &
+			span, identifier%text))
+	else if (parser%returned .and. .not. all_paths_return(body)) then
+		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
+		if (permissive_return) then
+			if (parser%ipass /= 0) write(error_unit, '(a)') warn_missing_return(parser%context(), &
+				span, identifier%text)
+		else
+			call parser%diagnostics%push( &
+				err_missing_return(parser%context(), &
+				span, identifier%text))
+		end if
+	end if
+
+	parser%fn_type%type = any_type
+
+	! Clear method context before registering fn
+	parser%in_method = .false.
+	parser%in_const_method = .false.
+
+	! Register method in global fns with mangled name "0StructName::method_name"
+	parser%num_fns = parser%num_fns + 1
+	decl%id_index  = parser%num_fns
+
+	decl%kind       = fn_declaration
+	decl%identifier = identifier
+	decl%num_locs   = parser%num_locs
+	call syntax_node_move(body, decl%body)
+
+	call parser%vars%pop_scope()
+	call parser%locs%pop_scope()
+	parser%is_loc = .false.
+
+	allocate(fn%node)
+	fn%node = decl
+
+	overwrite = .true.
+	if (parser%ipass == 0) overwrite = .false.
+
+	mangled_name = "0" // struct_name // "::" // identifier%text
+	io = 0
+	call parser%fns%insert(mangled_name, fn, decl%id_index, io, overwrite = overwrite)
+	if (parser%ipass == 0) call parser%fn_names%push(mangled_name)
+
+end subroutine parse_method_declaration
 
 !===============================================================================
 
@@ -1304,6 +1507,66 @@ recursive function all_paths_return(node) result(returns)
 	end select
 
 end function all_paths_return
+
+!===============================================================================
+
+module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
+		fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref)
+
+	class(parser_t), intent(inout) :: parser
+	type(syntax_node_t), intent(in) :: arg
+	logical(kind = 1), intent(in) :: call_is_ref_i
+	type(text_span_t), intent(in) :: arg_span
+	character(len = *), intent(in) :: fn_name, param_name
+	integer, intent(in) :: i_0based
+	type(value_t), intent(in) :: param_val
+	logical, intent(in) :: param_is_ref, param_is_const_ref
+
+	!********
+
+	integer :: id_index_tmp, io_tmp
+	logical :: is_const_var, is_ok
+	character(len = :), allocatable :: exp_type, act_type
+	type(value_t) :: const_check_val
+
+	! Passing a const variable to a mutable-ref param is an error
+	if (param_is_ref .and. .not. param_is_const_ref .and. arg%kind == name_expr) then
+		is_const_var = .false.
+		if (arg%is_loc) then
+			call parser%locs%search(arg%identifier%text, &
+				id_index_tmp, io_tmp, const_check_val, is_const = is_const_var)
+		else
+			call parser%vars%search(arg%identifier%text, &
+				id_index_tmp, io_tmp, const_check_val, is_const = is_const_var)
+		end if
+		if (is_const_var) then
+			call parser%diagnostics%push(err_const_assign( &
+				parser%context(), arg_span, arg%identifier%text))
+		end if
+	end if
+
+	! Ref/val mismatch
+	if (param_is_ref .neqv. call_is_ref_i) then
+		if (param_is_ref) then
+			call parser%diagnostics%push(err_bad_arg_val( &
+				parser%context(), arg_span, fn_name, i_0based, param_name))
+		else
+			call parser%diagnostics%push(err_bad_arg_ref( &
+				parser%context(), arg_span, fn_name, i_0based, param_name))
+		end if
+	end if
+
+	! Type mismatch
+	is_ok = types_match(param_val, arg%val) == TYPE_MATCH
+	is_ok = is_ok .or. arg%val%type == unknown_type
+	if (.not. is_ok) then
+		exp_type = type_name(param_val)
+		act_type = type_name(arg%val)
+		call parser%diagnostics%push(err_bad_arg_type( &
+			parser%context(), arg_span, fn_name, i_0based, param_name, exp_type, act_type))
+	end if
+
+end subroutine check_call_arg
 
 !===============================================================================
 

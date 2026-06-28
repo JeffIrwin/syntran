@@ -183,6 +183,29 @@ module syntran__eval_m
 			integer(kind = 8), intent(inout) :: usubs(:), subs(:)
 		end subroutine
 
+		module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+			type(syntax_node_t),             intent(in)    :: member_node
+			type(value_t),                   intent(in)    :: field_val
+			type(state_t),                   intent(inout) :: state
+			integer,                         intent(out)   :: rank_res
+			integer(kind = 8), allocatable,  intent(out)   :: lsubs(:), ssubs(:), usubs(:)
+			type(i64_vector_t),  allocatable, intent(out)   :: asubs(:)
+		end subroutine
+
+		module subroutine get_field_slice_val(member_node, field_val, state, res)
+			type(syntax_node_t), intent(in)    :: member_node
+			type(value_t),       intent(in)    :: field_val
+			type(state_t),       intent(inout) :: state
+			type(value_t),       intent(out)   :: res
+		end subroutine
+
+		module subroutine set_field_slice_val(member_node, field_val, state, val)
+			type(syntax_node_t), intent(in)    :: member_node
+			type(value_t),       intent(inout) :: field_val
+			type(state_t),       intent(inout) :: state
+			type(value_t),       intent(in)    :: val
+		end subroutine
+
 		module function subscript_i32_eval(subs, array) result(index_)
 			integer(kind = 8), intent(in) :: subs(:)
 			type(array_t) :: array
@@ -224,6 +247,13 @@ module syntran__eval_m
 			type(array_t), intent(inout) :: array
 			integer(kind = 8), intent(in) :: i
 			type(value_t), intent(in) :: val
+		end subroutine
+
+		module subroutine apply_subscripts_to_val(node, val, state, res)
+			type(syntax_node_t), intent(in)    :: node
+			type(value_t),       intent(in)    :: val
+			type(state_t),       intent(inout) :: state
+			type(value_t),       intent(out)   :: res
 		end subroutine
 
 	end interface
@@ -374,6 +404,7 @@ recursive subroutine syntax_eval(node, state, res)
 	!********
 
 	integer :: id
+	type(value_t) :: tmp
 
 	!print *, "starting syntax_eval()"
 	!print *, "node kind = ", kind_name(node%kind)
@@ -456,11 +487,19 @@ recursive subroutine syntax_eval(node, state, res)
 		!	end do
 		!end if
 
-	case (fn_call_expr)  ! user-defined
+	case (fn_call_expr, method_call_expr)  ! user-defined (method_call_expr reuses eval_fn_call)
 		call eval_fn_call(node, state, res)
+		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
+			call apply_subscripts_to_val(node, res, state, tmp)
+			res = tmp
+		end if
 
 	case (fn_call_intr_expr)
 		call eval_fn_call_intr(node, state, res)
+		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
+			call apply_subscripts_to_val(node, res, state, tmp)
+			res = tmp
+		end if
 
 	case (struct_instance_expr)
 		call eval_struct_instance(node, state, res)
