@@ -32,30 +32,6 @@ module syntran__core_m
 
 	! TODO:
 	!  - method improvements:
-	!    * "parse_dot returns immediately after resolving a method call (line
-	!      1118), so anything after a method call is not parsed. This means
-	!      obj.method().field and obj.method1().method2() are not supported and
-	!      need no tests."
-	!      + done (tests 42-44)
-	!    * allow subscripted methods: `struct[0].method()`
-	!      + done
-	!    * other chained permutations like above?
-	!      + done
-	!    * method calls only work at the *end* of a chain. this is consistent
-	!      with older syntran behavior, like a fn returning an array cannot be
-	!      subscripted directly -- it needs to go into an intermediate variable
-	!      first. should these features be extended?
-	!      + mvp done
-	!      + added tests 39-41 for fn().field, fn()[idx].method(),
-	!        fn().field.method() (also fixed VM/AST bugs for those patterns)
-	!    * struct array slicing: can't do my_struct.arr[1:4], currently have to
-	!      loop with scalar index
-	!      + done
-	!    * DRY shared code between methods and fns, e.g. argument count and type
-	!      checking at call sites
-	!      + done
-	!    * array subscripting directly on fn/method return vals
-	!      + done
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.
 	!      for returning methods, return an array of values of the appropriate
@@ -246,12 +222,6 @@ module syntran__core_m
 	!    * samples?
 	!    * libsyntran.a and fortran sample?
 	!    * try -static-libgcc etc. on win/mac to ease packaging
-	!  - struct member fns
-	!    * it would be a nicer experience to be able to write
-	!      `dict.set("key", val)` instead of `set_dict_i64(&dict, "key", val)`,
-	!      effectively using the struct identifier as a namespace
-	!    * inside member fns, you should be allowed to just write `var` instead
-	!      of `this.var`
 	!  - pass by reference for subscripted array name expressions and dot
 	!    expressions
 	!    * done for regular variable name expressions
