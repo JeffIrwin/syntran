@@ -1,0 +1,122 @@
+// User-defined dynamic vector (resizable array) for i32, using a struct with
+// methods.  Push grows capacity by doubling, like std::vector.
+
+struct Vec_i32
+{
+	len: i32,
+	cap: i32,
+	data: [i32; :],
+
+	fn push(val: i32)
+	{
+		if len >= cap
+		{
+			let new_cap = 1;
+			if cap > 0
+				new_cap = cap * 2;
+
+			let new_data = [0; new_cap];
+			for i in [0: len]
+				new_data[i] = data[i];
+
+			data = new_data;
+			cap = new_cap;
+		}
+		data[len] = val;
+		len += 1;
+		return;
+	}
+
+	fn pop(): i32
+	{
+		len -= 1;
+		return data[len];
+	}
+
+	const fn get(i: i32): i32
+	{
+		return data[i];
+	}
+
+	fn set(i: i32, val: i32)
+	{
+		data[i] = val;
+		return;
+	}
+}
+
+fn new_vec(): Vec_i32
+{
+	return Vec_i32
+	{
+		len = 0,
+		cap = 0,
+		data = [0; 0],
+	};
+}
+
+fn assert_eq(a: i32, b: i32): i32
+{
+	if a == b
+		return 0;
+	return 1;
+}
+
+fn main(): i32
+{
+	let status = 0;
+
+	let v = new_vec();
+	status += assert_eq(v.len, 0);
+	status += assert_eq(v.cap, 0);
+
+	// Push triggers repeated doublings: cap goes 0→1→2→4→8
+	v.push(10);
+	status += assert_eq(v.len, 1);
+	status += assert_eq(v.cap, 1);
+
+	v.push(20);
+	status += assert_eq(v.len, 2);
+	status += assert_eq(v.cap, 2);
+
+	v.push(30);
+	status += assert_eq(v.len, 3);
+	status += assert_eq(v.cap, 4);
+
+	v.push(40);
+	status += assert_eq(v.len, 4);
+	status += assert_eq(v.cap, 4);
+
+	v.push(50);
+	status += assert_eq(v.len, 5);
+	status += assert_eq(v.cap, 8);
+
+	// Elements are correct after multiple reallocations
+	status += assert_eq(v.get(0), 10);
+	status += assert_eq(v.get(1), 20);
+	status += assert_eq(v.get(2), 30);
+	status += assert_eq(v.get(3), 40);
+	status += assert_eq(v.get(4), 50);
+
+	// In-place mutation
+	v.set(2, 999);
+	status += assert_eq(v.get(2), 999);
+
+	// Pop returns values in LIFO order and decrements len
+	status += assert_eq(v.pop(), 50);
+	status += assert_eq(v.len, 4);
+	status += assert_eq(v.pop(), 40);
+	status += assert_eq(v.pop(), 999);
+	status += assert_eq(v.pop(), 20);
+	status += assert_eq(v.pop(), 10);
+	status += assert_eq(v.len, 0);
+
+	// Push after drain reuses existing allocation
+	v.push(77);
+	status += assert_eq(v.len, 1);
+	status += assert_eq(v.get(0), 77);
+
+	return status;
+}
+
+return main();
