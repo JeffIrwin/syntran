@@ -40,6 +40,7 @@ let BLOCKLIST = [
 
 // Add these words to the system dictionary
 let ALLOWLIST = [
+	"BOOP",
 	"MANA",
 	"NANA",
 	"POME",

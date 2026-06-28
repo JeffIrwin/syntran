@@ -360,7 +360,7 @@ module syntran__core_m
 	!      + sum, product
 	!        > these need an optional `dim` arg, and so do any/all
 	!      + min, max
-	!      + size (non-variadic but polymorphic)
+	!      + size
 	!      + readln, writeln, println, open, close, str casting
 	!      + len (of str)
 	!      + recursive and non-recursive user-defined fns
