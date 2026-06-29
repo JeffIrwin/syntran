@@ -1635,9 +1635,12 @@ module subroutine vm_run(prog, state, res)
 			call vm_push_move(stack, left)
 			end block
 
-		! --- M10: native scalar string character read ----------------------------
+		! --- M10: native string subscript read ------------------------------------
+		! Handles two sub-cases at runtime:
+		!   scalar_str[i]  → 1-char read: val%str%s(i+1:i+1)
+		!   str_arr[i]     → full element read from rank-1 array: array%str(i+1)%s
 		! Stack before: [subscript]
-		! Stack after:  [1-char string]
+		! Stack after:  [result string]
 		! a=id_index, c=is_local
 		case (OP_STR_INDEX_NAT)
 			block
@@ -1648,9 +1651,21 @@ module subroutine vm_run(prog, state, res)
 			val%type = str_type
 			if (.not. allocated(val%str)) allocate(val%str)
 			if (instr%c == 1_8) then
-				val%str%s = state%locs%vals(instr%a)%str%s(i8_+1 : i8_+1)
+				associate(v => state%locs%vals(instr%a))
+				if (v%type == str_type) then
+					val%str%s = v%str%s(i8_+1 : i8_+1)
+				else
+					val%str%s = v%array%str(i8_+1)%s
+				end if
+				end associate
 			else
-				val%str%s = state%vars%vals(instr%a)%str%s(i8_+1 : i8_+1)
+				associate(v => state%vars%vals(instr%a))
+				if (v%type == str_type) then
+					val%str%s = v%str%s(i8_+1 : i8_+1)
+				else
+					val%str%s = v%array%str(i8_+1)%s
+				end if
+				end associate
 			end if
 			call vm_push_move(stack, val)
 			end block
@@ -1674,6 +1689,39 @@ module subroutine vm_run(prog, state, res)
 				val%str%s = state%vars%vals(instr%a)%str%s(lb_+1 : ub_)
 			end if
 			call vm_push_move(stack, val)
+			end block
+
+		! OP_SIZE_NAT: read array%size(dim+1) or array%len_ directly from the variable
+		! slot without deep-copying the array.  a=slot_id, b=dim (b<0 → total len_),
+		! c=is_local.  Eliminates O(N) allocation from size(large_arr, dim) in loops.
+		case (OP_SIZE_NAT)
+			block
+			integer :: rank_
+			if (instr%c == 1_8) then
+				rank_ = state%locs%vals(instr%a)%array%rank
+			else
+				rank_ = state%vars%vals(instr%a)%array%rank
+			end if
+			if (instr%b >= 0 .and. instr%b >= rank_) then
+				call rt_throw(state, err_rt(RC_SIZE_RANK_MISMATCH, "rank mismatch in size() call"))
+				exit
+			end if
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type = i64_type
+			if (instr%c == 1_8) then
+				if (instr%b < 0) then
+					stack%v(stack%len_)%sca%i64 = state%locs%vals(instr%a)%array%len_
+				else
+					stack%v(stack%len_)%sca%i64 = state%locs%vals(instr%a)%array%size(instr%b + 1)
+				end if
+			else
+				if (instr%b < 0) then
+					stack%v(stack%len_)%sca%i64 = state%vars%vals(instr%a)%array%len_
+				else
+					stack%v(stack%len_)%sca%i64 = state%vars%vals(instr%a)%array%size(instr%b + 1)
+				end if
+			end if
 			end block
 
 		! Comparisons: result type is bool; TOS-1 type updated to bool_type.
@@ -1810,6 +1858,30 @@ module subroutine vm_run(prog, state, res)
 			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%bool &
 			                             .neqv. stack%v(stack%len_  )%sca%bool
 			stack%len_ = stack%len_ - 1
+
+		! String equality: compare two str_type stack slots directly without
+		! vm_pop_copy (avoids allocatable-string heap copies per comparison).
+		! Uses is_str_eq for length-aware comparison (Fortran's == pads spaces).
+		case (OP_EQ_STR)
+			block
+			logical :: b_
+			b_ = is_str_eq(stack%v(stack%len_-1)%str%s, stack%v(stack%len_)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
+		case (OP_NE_STR)
+			block
+			logical :: b_
+			b_ = .not. is_str_eq(stack%v(stack%len_-1)%str%s, stack%v(stack%len_)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
 
 		! Bool binary
 		case (OP_AND_BOOL)

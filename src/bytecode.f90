@@ -195,13 +195,25 @@ module syntran__bytecode_m
 	!     c = is_local  (0 = global, 1 = local)
 	!   Stack before:  [lbound][ubound]
 	!   Stack after:   [substring]
+	! OP_EQ_STR / OP_NE_STR: string equality comparison without vm_pop_copy overhead.
+	!   left=TOS-1, right=TOS; result bool written to TOS-1%sca%bool, TOS-1%type=bool_type; len_--.
+	!   Both str slots are deallocated before the bool is written so the next pop
+	!   sees a clean bool_type slot with no stale allocatable.
+	!
+	! OP_SIZE_NAT: read array size directly from a variable slot without loading (deep-copying)
+	!   the entire array.  Avoids O(N) allocation for size() calls on large arrays.
+	!   a = slot_id, b = dim (0-based; -1 means total len_), c = is_local (0=global, 1=local).
+	!   Pushes an i64 result.
 	integer, parameter :: &
 		OP_INDEX_NAT        = 1136, &
 		OP_STORE_IDX_NAT    = 1137, &
 		OP_SUBSCRIPT_TOS    = 1138, &	! pop TOS (fn return val), apply subscripts from nodes(a), push result
 		OP_COMPOUND_IDX_NAT = 1140, &
 		OP_STR_INDEX_NAT    = 1141, &
-		OP_STR_SLICE_NAT    = 1142
+		OP_STR_SLICE_NAT    = 1142, &
+		OP_EQ_STR           = 1143, &
+		OP_NE_STR           = 1144, &
+		OP_SIZE_NAT         = 1145
 
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
@@ -812,6 +824,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (f32_type); op = OP_EQ_F32
 			case (f64_type); op = OP_EQ_F64
 			case (bool_type); op = OP_EQ_BOOL
+			case (str_type);  op = OP_EQ_STR
 			end select
 		case (bang_equals_token)
 			select case (ltype)
@@ -820,6 +833,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (f32_type); op = OP_NE_F32
 			case (f64_type); op = OP_NE_F64
 			case (bool_type); op = OP_NE_BOOL
+			case (str_type);  op = OP_NE_STR
 			end select
 		case (and_keyword)
 			if (ltype == bool_type) op = OP_AND_BOOL
@@ -1008,8 +1022,11 @@ end function compound_idx_native_ok
 
 pure logical function str_index_native_ok(node) result(ok)
 
-	! Return .true. when a name_expr node is a single-subscript scalar read from
-	! a scalar string variable, lowerable to OP_STR_INDEX_NAT.
+	! Return .true. when a name_expr node has a single scalar subscript and a
+	! str_type result, lowerable to OP_STR_INDEX_NAT.
+	! Covers two cases handled at VM runtime via a type check on the variable:
+	!   scalar_str[i]  → 1-char read from scalar string
+	!   str_arr[i]     → full element read from a rank-1 string array
 
 	type(syntax_node_t), intent(in) :: node
 
@@ -1018,6 +1035,7 @@ pure logical function str_index_native_ok(node) result(ok)
 	if (size(node%lsubscripts) /= 1) return
 	if (node%lsubscripts(1)%sub_kind /= scalar_sub) return
 	if (node%val%type /= str_type) return
+	ok = .true.
 
 end function str_index_native_ok
 
@@ -1027,6 +1045,10 @@ pure logical function str_slice_native_ok(node) result(ok)
 
 	! Return .true. when a name_expr node is a bound_array (unit-step) range read
 	! from a scalar string variable, lowerable to OP_STR_SLICE_NAT.
+	! String array range subscripts (str_arr[lo:hi]) are safe to exclude via the
+	! val%type check alone: for those, parse_subscripts leaves val%type as
+	! array_type (only all-scalar subscripts collapse to str_type).
+	! Omitted bounds (s[lo:] or s[:hi]) fall back to OP_SLICE.
 
 	type(syntax_node_t), intent(in) :: node
 
@@ -1035,6 +1057,9 @@ pure logical function str_slice_native_ok(node) result(ok)
 	if (size(node%lsubscripts) /= 1) return
 	if (node%lsubscripts(1)%sub_kind /= range_sub) return
 	if (node%val%type /= str_type) return
+	if (node%lsubscripts(1)%lsub_omit) return   ! s[:hi] — lower bound omitted
+	if (node%lsubscripts(1)%usub_omit) return   ! s[lo:] — upper bound omitted
+	ok = .true.
 
 end function str_slice_native_ok
 

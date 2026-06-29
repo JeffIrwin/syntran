@@ -920,6 +920,42 @@ recursive subroutine compile_node(prog, cs, node)
 					         merge(1_8, 0_8, node%args(1)%is_loc)
 					call emit(prog, OP_CALL_INTR, a = intr_id_, b = 1, c = slot_c)
 				end if
+
+			case (INTR_SIZE)
+				! OP_SIZE_NAT: read array size directly from slot without deep-copying.
+				! Only fires when args(1) is a plain variable and (if 2-arg) dim is a
+				! literal i32 constant.  Anything else falls back to generic OP_CALL_INTR.
+				nargs_ = 0
+				if (allocated(node%args)) nargs_ = size(node%args)
+				if (nargs_ >= 1 .and. &
+				    node%args(1)%kind == name_expr .and. &
+				    .not. allocated(node%args(1)%lsubscripts) .and. &
+				    .not. allocated(node%args(1)%member)) then
+					if (nargs_ == 1) then
+						call emit(prog, OP_SIZE_NAT, &
+							a = node%args(1)%id_index, b = -1, &
+							c = merge(1_8, 0_8, node%args(1)%is_loc))
+					else if (node%args(2)%kind == literal_expr .and. &
+					         node%args(2)%val%type == i32_type) then
+						call emit(prog, OP_SIZE_NAT, &
+							a = node%args(1)%id_index, &
+							b = node%args(2)%val%sca%i32, &
+							c = merge(1_8, 0_8, node%args(1)%is_loc))
+					else
+						! Non-constant dim: fall back to generic path.
+						do i = 1, nargs_
+							call compile_node(prog, cs, node%args(i))
+						end do
+						call emit(prog, OP_CALL_INTR, a = INTR_SIZE, b = nargs_)
+					end if
+				else
+					! Complex array arg: fall back to generic path.
+					do i = 1, nargs_
+						call compile_node(prog, cs, node%args(i))
+					end do
+					call emit(prog, OP_CALL_INTR, a = INTR_SIZE, b = nargs_)
+				end if
+
 			case default
 				! Native dispatch: push all args, then emit OP_CALL_INTR.
 				nargs_ = 0

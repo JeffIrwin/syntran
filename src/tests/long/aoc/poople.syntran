@@ -33,6 +33,7 @@ let POOP = "poop";  // goal word. use lowercase internally, uppercase for output
 let BLOCKLIST = [
 	//"ARES",  // not sure if this is valid per poople but i suspect it isn't
 	//"ORCS",
+	"CORP",
 	"MANS",
 	"PONE",
 	""
