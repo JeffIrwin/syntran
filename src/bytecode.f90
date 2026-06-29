@@ -1018,9 +1018,6 @@ pure logical function str_index_native_ok(node) result(ok)
 	if (size(node%lsubscripts) /= 1) return
 	if (node%lsubscripts(1)%sub_kind /= scalar_sub) return
 	if (node%val%type /= str_type) return
-	! Exclude str[] array element reads — for those, val%array stays allocated
-	! (with rank 0) after parse_subscripts changes val%type to str_type.
-	if (allocated(node%val%array)) return
 
 end function str_index_native_ok
 
