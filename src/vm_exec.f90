@@ -1583,6 +1583,99 @@ module subroutine vm_run(prog, state, res)
 			stack%len_ = base_ + 1
 			end block
 
+		! --- M10: compound array element op without subscript_eval ----------------
+		! Stack before: [sub_1]...[sub_nsub][rhs]
+		! Stack after:  [rhs]
+		! a=id_index, b=nsub, c=op_kind*2+is_local
+		case (OP_COMPOUND_IDX_NAT)
+			block
+			integer :: nsub_, k_, base_, op_kind_
+			integer(kind=8) :: lin_, prod_, c_
+
+			c_     = instr%c
+			nsub_  = instr%b
+			op_kind_ = int(c_ / 2_8)
+			base_  = stack%len_ - nsub_ - 1
+
+			lin_  = 0_8
+			prod_ = 1_8
+
+			if (mod(c_, 2_8) == 1_8) then
+				associate(arr => state%locs%vals(instr%a)%array)
+				do k_ = 1, nsub_
+					select case (stack%v(base_+k_)%type)
+					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
+					case (i64_type); lin_ = lin_ + prod_ * stack%v(base_+k_)%sca%i64
+					end select
+					prod_ = prod_ * arr%size(k_)
+				end do
+				! Read current element, apply compound op, write back
+				call get_array_val(arr, lin_, left)
+				call vm_pop_copy(stack, right)
+				stack%len_ = base_
+				call do_compound(left, right, op_kind_)
+				call set_array_val(arr, lin_, left)
+				end associate
+			else
+				associate(arr => state%vars%vals(instr%a)%array)
+				do k_ = 1, nsub_
+					select case (stack%v(base_+k_)%type)
+					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
+					case (i64_type); lin_ = lin_ + prod_ * stack%v(base_+k_)%sca%i64
+					end select
+					prod_ = prod_ * arr%size(k_)
+				end do
+				call get_array_val(arr, lin_, left)
+				call vm_pop_copy(stack, right)
+				stack%len_ = base_
+				call do_compound(left, right, op_kind_)
+				call set_array_val(arr, lin_, left)
+				end associate
+			end if
+			call vm_push_move(stack, left)
+			end block
+
+		! --- M10: native scalar string character read ----------------------------
+		! Stack before: [subscript]
+		! Stack after:  [1-char string]
+		! a=id_index, c=is_local
+		case (OP_STR_INDEX_NAT)
+			block
+			integer(kind=8) :: i8_
+
+			i8_ = stack%v(stack%len_)%to_i64()
+			stack%len_ = stack%len_ - 1
+			val%type = str_type
+			if (.not. allocated(val%str)) allocate(val%str)
+			if (instr%c == 1_8) then
+				val%str%s = state%locs%vals(instr%a)%str%s(i8_+1 : i8_+1)
+			else
+				val%str%s = state%vars%vals(instr%a)%str%s(i8_+1 : i8_+1)
+			end if
+			call vm_push_move(stack, val)
+			end block
+
+		! --- M10: native scalar string substring (bound_array range) read --------
+		! Stack before: [lbound][ubound]
+		! Stack after:  [substring]
+		! a=id_index, c=is_local
+		case (OP_STR_SLICE_NAT)
+			block
+			integer(kind=8) :: lb_, ub_
+
+			ub_ = stack%v(stack%len_  )%to_i64()
+			lb_ = stack%v(stack%len_-1)%to_i64()
+			stack%len_ = stack%len_ - 2
+			val%type = str_type
+			if (.not. allocated(val%str)) allocate(val%str)
+			if (instr%c == 1_8) then
+				val%str%s = state%locs%vals(instr%a)%str%s(lb_+1 : ub_)
+			else
+				val%str%s = state%vars%vals(instr%a)%str%s(lb_+1 : ub_)
+			end if
+			call vm_push_move(stack, val)
+			end block
+
 		! Comparisons: result type is bool; TOS-1 type updated to bool_type.
 		case (OP_LT_I32)
 			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &

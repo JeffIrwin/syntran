@@ -244,9 +244,20 @@ recursive subroutine compile_node(prog, cs, node)
 					a = node%id_index, &
 					b = int(size(node%lsubscripts)), &
 					c = merge(1_8, 0_8, node%is_loc))
+			else if (str_index_native_ok(node)) then
+				call compile_node(prog, cs, node%lsubscripts(1))
+				call emit(prog, OP_STR_INDEX_NAT, &
+					a = node%id_index, &
+					c = merge(1_8, 0_8, node%is_loc))
 			else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 				idx = add_node(prog, node)
 				call emit(prog, OP_INDEX, a = idx)
+			else if (str_slice_native_ok(node)) then
+				call compile_node(prog, cs, node%lsubscripts(1))
+				call compile_node(prog, cs, node%usubscripts(1))
+				call emit(prog, OP_STR_SLICE_NAT, &
+					a = node%id_index, &
+					c = merge(1_8, 0_8, node%is_loc))
 			else
 				idx = add_node(prog, node)
 				call emit(prog, OP_SLICE, a = idx)
@@ -382,9 +393,9 @@ recursive subroutine compile_node(prog, cs, node)
 
 			if (first) then
 				! Scalar subscript write.
-				! Fast path: plain '=' with numeric RHS → OP_STORE_IDX_NAT.
-				!   Compile subscripts then RHS; VM writes element inline.
-				! Fallback: compound ops, str/struct elements → OP_STORE_IDX.
+				! Fast path A: plain '=' with numeric RHS → OP_STORE_IDX_NAT.
+				! Fast path B: compound op with numeric RHS → OP_COMPOUND_IDX_NAT.
+				! Fallback: str/struct elements, casts → OP_STORE_IDX.
 				if (store_idx_native_ok(node)) then
 					do i = 1, size(node%lsubscripts)
 						call compile_node(prog, cs, node%lsubscripts(i))
@@ -394,8 +405,17 @@ recursive subroutine compile_node(prog, cs, node)
 						a = node%id_index, &
 						b = int(size(node%lsubscripts)), &
 						c = merge(1_8, 0_8, node%is_loc))
+				else if (compound_idx_native_ok(node)) then
+					do i = 1, size(node%lsubscripts)
+						call compile_node(prog, cs, node%lsubscripts(i))
+					end do
+					call compile_node(prog, cs, node%right)
+					call emit(prog, OP_COMPOUND_IDX_NAT, &
+						a = node%id_index, &
+						b = int(size(node%lsubscripts)), &
+						c = int(node%op%kind, 8) * 2_8 + merge(1_8, 0_8, node%is_loc))
 				else
-					! Fallback: compound ops, str chars, struct elements, casts
+					! Fallback: str chars, struct elements, casts, bitwise compound
 					call compile_node(prog, cs, node%right)
 					idx = add_node(prog, node)
 					call emit(prog, OP_STORE_IDX, a = idx, b = node%op%kind)

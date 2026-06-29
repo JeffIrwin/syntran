@@ -169,10 +169,39 @@ module syntran__bytecode_m
 	!   Only emitted when rhs is a numeric/bool scalar and op is '='
 	!   (guard in store_idx_native_ok).  String/struct writes and compound ops
 	!   (a[i]+=x) fall back to OP_STORE_IDX.
+	!
+	! OP_COMPOUND_IDX_NAT: compound array element op (a[i] += rhs, etc.) without
+	!   subscript_eval.  Like OP_STORE_IDX_NAT but also reads current element,
+	!   applies op, and writes back.
+	!   Instruction fields:
+	!     a = id_index
+	!     b = nsub
+	!     c = op_kind * 2 + is_local  (op_kind = compound assignment token)
+	!   Stack before:  [sub_1]...[sub_nsub][rhs]
+	!   Stack after:   [rhs]
+	!
+	! OP_STR_INDEX_NAT: scalar string single-character read without subscript_eval.
+	!   Compiler pushes the subscript expression, then emits this opcode.
+	!   Instruction fields:
+	!     a = id_index  (string variable slot)
+	!     c = is_local  (0 = global, 1 = local)
+	!   Stack before:  [subscript]
+	!   Stack after:   [1-char string]
+	!
+	! OP_STR_SLICE_NAT: scalar string substring (bound_array range) without
+	!   eval_name_expr.  Compiler pushes lbound then ubound expressions.
+	!   Instruction fields:
+	!     a = id_index  (string variable slot)
+	!     c = is_local  (0 = global, 1 = local)
+	!   Stack before:  [lbound][ubound]
+	!   Stack after:   [substring]
 	integer, parameter :: &
-		OP_INDEX_NAT     = 1136, &
-		OP_STORE_IDX_NAT = 1137, &
-		OP_SUBSCRIPT_TOS = 1138	! pop TOS (fn return val), apply subscripts from nodes(a), push result
+		OP_INDEX_NAT        = 1136, &
+		OP_STORE_IDX_NAT    = 1137, &
+		OP_SUBSCRIPT_TOS    = 1138, &	! pop TOS (fn return val), apply subscripts from nodes(a), push result
+		OP_COMPOUND_IDX_NAT = 1140, &
+		OP_STR_INDEX_NAT    = 1141, &
+		OP_STR_SLICE_NAT    = 1142
 
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
@@ -949,6 +978,68 @@ pure logical function store_idx_native_ok(node) result(ok)
 	end select
 
 end function store_idx_native_ok
+
+!===============================================================================
+
+pure logical function compound_idx_native_ok(node) result(ok)
+
+	! Return .true. when an assignment_expr node with a compound op (+=, -=, etc.)
+	! and all-scalar subscripts can be lowered to OP_COMPOUND_IDX_NAT.
+	! Requires the same conditions as store_idx_native_ok except op must be
+	! a supported arithmetic compound assignment (not plain '=').
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (.not. all(node%lsubscripts%sub_kind == scalar_sub)) return
+	if (node%op%kind == equals_token) return
+	if (compound_to_arith_token(node%op%kind) == 0) return
+	if (.not. allocated(node%right)) return
+
+	select case (node%right%val%type)
+	case (bool_type, i32_type, i64_type, f32_type, f64_type)
+		ok = .true.
+	end select
+
+end function compound_idx_native_ok
+
+!===============================================================================
+
+pure logical function str_index_native_ok(node) result(ok)
+
+	! Return .true. when a name_expr node is a single-subscript scalar read from
+	! a scalar string variable, lowerable to OP_STR_INDEX_NAT.
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (size(node%lsubscripts) /= 1) return
+	if (node%lsubscripts(1)%sub_kind /= scalar_sub) return
+	if (node%val%type /= str_type) return
+	! Exclude str[] array element reads — for those, val%array stays allocated
+	! (with rank 0) after parse_subscripts changes val%type to str_type.
+	if (allocated(node%val%array)) return
+
+end function str_index_native_ok
+
+!===============================================================================
+
+pure logical function str_slice_native_ok(node) result(ok)
+
+	! Return .true. when a name_expr node is a bound_array (unit-step) range read
+	! from a scalar string variable, lowerable to OP_STR_SLICE_NAT.
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (size(node%lsubscripts) /= 1) return
+	if (node%lsubscripts(1)%sub_kind /= range_sub) return
+	if (node%val%type /= str_type) return
+
+end function str_slice_native_ok
 
 !===============================================================================
 
