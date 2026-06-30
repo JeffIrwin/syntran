@@ -258,6 +258,15 @@ recursive subroutine compile_node(prog, cs, node)
 				call emit(prog, OP_STR_SLICE_NAT, &
 					a = node%id_index, &
 					c = merge(1_8, 0_8, node%is_loc))
+			else if (arr_slice_native_ok(node)) then
+				do i = 1, size(node%lsubscripts)
+					call compile_node(prog, cs, node%lsubscripts(i))
+					call compile_node(prog, cs, node%usubscripts(i))
+				end do
+				call emit(prog, OP_SLICE_NAT, &
+					a = node%id_index, &
+					b = int(size(node%lsubscripts)), &
+					c = merge(1_8, 0_8, node%is_loc))
 			else
 				idx = add_node(prog, node)
 				call emit(prog, OP_SLICE, a = idx)
@@ -420,6 +429,16 @@ recursive subroutine compile_node(prog, cs, node)
 					idx = add_node(prog, node)
 					call emit(prog, OP_STORE_IDX, a = idx, b = node%op%kind)
 				end if
+			else if (store_slice_nat_ok(node)) then
+				do i = 1, size(node%lsubscripts)
+					call compile_node(prog, cs, node%lsubscripts(i))
+					call compile_node(prog, cs, node%usubscripts(i))
+				end do
+				call compile_node(prog, cs, node%right)
+				call emit(prog, OP_STORE_SLICE_NAT, &
+					a = node%id_index, &
+					b = int(size(node%lsubscripts)), &
+					c = merge(1_8, 0_8, node%is_loc))
 			else
 				! Slice LHS or subscript-less compound: delegate to eval_assignment_expr
 				idx = add_node(prog, node)

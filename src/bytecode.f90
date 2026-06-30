@@ -213,7 +213,9 @@ module syntran__bytecode_m
 		OP_STR_SLICE_NAT    = 1142, &
 		OP_EQ_STR           = 1143, &
 		OP_NE_STR           = 1144, &
-		OP_SIZE_NAT         = 1145
+		OP_SIZE_NAT         = 1145, &
+		OP_SLICE_NAT        = 1146, &
+		OP_STORE_SLICE_NAT  = 1147
 
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
@@ -1062,6 +1064,57 @@ pure logical function str_slice_native_ok(node) result(ok)
 	ok = .true.
 
 end function str_slice_native_ok
+
+!===============================================================================
+
+pure logical function arr_slice_native_ok(node) result(ok)
+
+	! Return .true. when a name_expr node with all range_sub subscripts (both
+	! bounds explicit) and an array result can be lowered to OP_SLICE_NAT.
+	! Omitted bounds and non-range subscripts (all_sub, step_sub, arr_sub) fall
+	! back to OP_SLICE.
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (.not. all(node%lsubscripts%sub_kind == range_sub)) return
+	if (any(node%lsubscripts%lsub_omit)) return
+	if (any(node%lsubscripts%usub_omit)) return
+	if (node%val%type /= array_type) return
+	if (.not. allocated(node%val%array)) return
+	! Exclude char-subscript cases: str_arr[lo:hi, j:k] has 2 range_sub entries
+	! but rank 1 — the extra subscript is a substring range, not an array dim.
+	if (size(node%lsubscripts) /= node%val%array%rank) return
+	ok = .true.
+
+end function arr_slice_native_ok
+
+!===============================================================================
+
+pure logical function store_slice_nat_ok(node) result(ok)
+
+	! Return .true. when an assignment_expr with a slice LHS and an array RHS
+	! can be lowered to OP_STORE_SLICE_NAT.
+	! Same subscript conditions as arr_slice_native_ok, plus plain '=' op and
+	! an array-typed RHS.
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (.not. all(node%lsubscripts%sub_kind == range_sub)) return
+	if (any(node%lsubscripts%lsub_omit)) return
+	if (any(node%lsubscripts%usub_omit)) return
+	if (node%op%kind /= equals_token) return
+	if (.not. allocated(node%right)) return
+	if (node%right%val%type /= array_type) return
+	! Exclude char-subscript LHS: same rank-vs-subscript-count guard as arr_slice_native_ok.
+	if (.not. allocated(node%val%array)) return
+	if (size(node%lsubscripts) /= node%val%array%rank) return
+	ok = .true.
+
+end function store_slice_nat_ok
 
 !===============================================================================
 

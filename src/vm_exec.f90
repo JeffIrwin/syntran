@@ -1691,6 +1691,270 @@ module subroutine vm_run(prog, state, res)
 			call vm_push_move(stack, val)
 			end block
 
+		! OP_SLICE_NAT: native array range-slice read.  All subscripts are range_sub
+		! with explicit bounds compiled onto the stack.
+		! Stack before: [lb_1][ub_1][lb_2][ub_2]...[lb_n][ub_n]
+		! Stack after:  [result_array]
+		! a=id_index, b=ndim, c=is_local
+		case (OP_SLICE_NAT)
+			block
+			integer :: ndim_, k_
+			integer(kind=8) :: lb_(4), ub_(4), lens_(4)
+			integer(kind=8) :: len_tot_, outer_count_, outer_i_
+			integer(kind=8) :: src_off_, src_prod_, dst_off_, ci_, tmp_i_
+
+			ndim_ = instr%b
+
+			! Bounds pushed [lb_1,ub_1,...,lb_n,ub_n]; pop in reverse so we get dim 1 first.
+			do k_ = ndim_, 1, -1
+				ub_(k_) = stack%v(stack%len_  )%to_i64()
+				lb_(k_) = stack%v(stack%len_-1)%to_i64()
+				stack%len_ = stack%len_ - 2
+			end do
+
+			do k_ = 1, ndim_
+				lens_(k_) = max(0_8, ub_(k_) - lb_(k_))
+			end do
+			len_tot_ = product(lens_(1:ndim_))
+
+			allocate(val%array)
+			val%type        = array_type
+			val%array%kind  = expl_array
+			val%array%rank  = ndim_
+			val%array%len_  = len_tot_
+			allocate(val%array%size(ndim_))
+			val%array%size(1:ndim_) = lens_(1:ndim_)
+
+			if (instr%c == 1_8) then
+				associate(src => state%locs%vals(instr%a)%array)
+				val%array%type = src%type
+				call allocate_array(val, len_tot_)
+				if (ndim_ == 1) then
+					select case (src%type)
+					case (bool_type); val%array%bool(1:len_tot_) = src%bool(lb_(1)+1 : ub_(1))
+					case (i32_type);  val%array%i32 (1:len_tot_) = src%i32 (lb_(1)+1 : ub_(1))
+					case (i64_type);  val%array%i64 (1:len_tot_) = src%i64 (lb_(1)+1 : ub_(1))
+					case (f32_type);  val%array%f32 (1:len_tot_) = src%f32 (lb_(1)+1 : ub_(1))
+					case (f64_type);  val%array%f64 (1:len_tot_) = src%f64 (lb_(1)+1 : ub_(1))
+					case (str_type);  val%array%str (1:len_tot_) = src%str (lb_(1)+1 : ub_(1))
+					end select
+				else
+					outer_count_ = product(lens_(2:ndim_))
+					do outer_i_ = 0, outer_count_ - 1
+						! Decompose outer_i_ into per-dim coords; compute flat source offset.
+						src_off_  = 0_8
+						src_prod_ = src%size(1)
+						tmp_i_    = outer_i_
+						do k_ = 2, ndim_
+							ci_       = mod(tmp_i_, lens_(k_))
+							tmp_i_    = tmp_i_ / lens_(k_)
+							src_off_  = src_off_ + (lb_(k_) + ci_) * src_prod_
+							src_prod_ = src_prod_ * src%size(k_)
+						end do
+						dst_off_ = outer_i_ * lens_(1)
+						select case (src%type)
+						case (bool_type)
+							val%array%bool(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%bool(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (i32_type)
+							val%array%i32(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%i32(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (i64_type)
+							val%array%i64(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%i64(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (f32_type)
+							val%array%f32(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%f32(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (f64_type)
+							val%array%f64(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%f64(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (str_type)
+							val%array%str(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%str(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						end select
+					end do
+				end if
+				end associate
+			else
+				associate(src => state%vars%vals(instr%a)%array)
+				val%array%type = src%type
+				call allocate_array(val, len_tot_)
+				if (ndim_ == 1) then
+					select case (src%type)
+					case (bool_type); val%array%bool(1:len_tot_) = src%bool(lb_(1)+1 : ub_(1))
+					case (i32_type);  val%array%i32 (1:len_tot_) = src%i32 (lb_(1)+1 : ub_(1))
+					case (i64_type);  val%array%i64 (1:len_tot_) = src%i64 (lb_(1)+1 : ub_(1))
+					case (f32_type);  val%array%f32 (1:len_tot_) = src%f32 (lb_(1)+1 : ub_(1))
+					case (f64_type);  val%array%f64 (1:len_tot_) = src%f64 (lb_(1)+1 : ub_(1))
+					case (str_type);  val%array%str (1:len_tot_) = src%str (lb_(1)+1 : ub_(1))
+					end select
+				else
+					outer_count_ = product(lens_(2:ndim_))
+					do outer_i_ = 0, outer_count_ - 1
+						src_off_  = 0_8
+						src_prod_ = src%size(1)
+						tmp_i_    = outer_i_
+						do k_ = 2, ndim_
+							ci_       = mod(tmp_i_, lens_(k_))
+							tmp_i_    = tmp_i_ / lens_(k_)
+							src_off_  = src_off_ + (lb_(k_) + ci_) * src_prod_
+							src_prod_ = src_prod_ * src%size(k_)
+						end do
+						dst_off_ = outer_i_ * lens_(1)
+						select case (src%type)
+						case (bool_type)
+							val%array%bool(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%bool(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (i32_type)
+							val%array%i32(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%i32(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (i64_type)
+							val%array%i64(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%i64(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (f32_type)
+							val%array%f32(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%f32(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (f64_type)
+							val%array%f64(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%f64(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (str_type)
+							val%array%str(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%str(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						end select
+					end do
+				end if
+				end associate
+			end if
+
+			call vm_push_move(stack, val)
+			end block
+
+		! OP_STORE_SLICE_NAT: native array range-slice write (plain '=' only).
+		! Stack before: [lb_1][ub_1]...[lb_n][ub_n][rhs_array]
+		! Stack after:  [rhs_array]   (RHS left on top, matching OP_STORE_SLICE convention)
+		! a=id_index, b=ndim, c=is_local
+		case (OP_STORE_SLICE_NAT)
+			block
+			integer :: ndim_, k_
+			integer(kind=8) :: lb_(4), ub_(4), lens_(4)
+			integer(kind=8) :: outer_count_, outer_i_
+			integer(kind=8) :: dst_off_, dst_prod_, rhs_off_, ci_, tmp_i_
+
+			ndim_ = instr%b
+
+			! RHS is on top; move it into `right`, then pop bounds.
+			call vm_pop_copy(stack, right)
+
+			do k_ = ndim_, 1, -1
+				ub_(k_) = stack%v(stack%len_  )%to_i64()
+				lb_(k_) = stack%v(stack%len_-1)%to_i64()
+				stack%len_ = stack%len_ - 2
+			end do
+
+			do k_ = 1, ndim_
+				lens_(k_) = max(0_8, ub_(k_) - lb_(k_))
+			end do
+
+			if (instr%c == 1_8) then
+				associate(dst => state%locs%vals(instr%a)%array)
+				if (ndim_ == 1) then
+					select case (dst%type)
+					case (bool_type); dst%bool(lb_(1)+1 : ub_(1)) = right%array%bool(1:lens_(1))
+					case (i32_type);  dst%i32 (lb_(1)+1 : ub_(1)) = right%array%i32 (1:lens_(1))
+					case (i64_type);  dst%i64 (lb_(1)+1 : ub_(1)) = right%array%i64 (1:lens_(1))
+					case (f32_type);  dst%f32 (lb_(1)+1 : ub_(1)) = right%array%f32 (1:lens_(1))
+					case (f64_type);  dst%f64 (lb_(1)+1 : ub_(1)) = right%array%f64 (1:lens_(1))
+					case (str_type);  dst%str (lb_(1)+1 : ub_(1)) = right%array%str (1:lens_(1))
+					end select
+				else
+					outer_count_ = product(lens_(2:ndim_))
+					do outer_i_ = 0, outer_count_ - 1
+						! Destination offset uses dst%size for strides; rhs is packed.
+						dst_off_  = lb_(1)
+						dst_prod_ = dst%size(1)
+						tmp_i_    = outer_i_
+						do k_ = 2, ndim_
+							ci_       = mod(tmp_i_, lens_(k_))
+							tmp_i_    = tmp_i_ / lens_(k_)
+							dst_off_  = dst_off_ + (lb_(k_) + ci_) * dst_prod_
+							dst_prod_ = dst_prod_ * dst%size(k_)
+						end do
+						rhs_off_ = outer_i_ * lens_(1)
+						select case (dst%type)
+						case (bool_type)
+							dst%bool(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%bool(rhs_off_+1 : rhs_off_+lens_(1))
+						case (i32_type)
+							dst%i32(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%i32(rhs_off_+1 : rhs_off_+lens_(1))
+						case (i64_type)
+							dst%i64(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%i64(rhs_off_+1 : rhs_off_+lens_(1))
+						case (f32_type)
+							dst%f32(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%f32(rhs_off_+1 : rhs_off_+lens_(1))
+						case (f64_type)
+							dst%f64(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%f64(rhs_off_+1 : rhs_off_+lens_(1))
+						case (str_type)
+							dst%str(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%str(rhs_off_+1 : rhs_off_+lens_(1))
+						end select
+					end do
+				end if
+				end associate
+			else
+				associate(dst => state%vars%vals(instr%a)%array)
+				if (ndim_ == 1) then
+					select case (dst%type)
+					case (bool_type); dst%bool(lb_(1)+1 : ub_(1)) = right%array%bool(1:lens_(1))
+					case (i32_type);  dst%i32 (lb_(1)+1 : ub_(1)) = right%array%i32 (1:lens_(1))
+					case (i64_type);  dst%i64 (lb_(1)+1 : ub_(1)) = right%array%i64 (1:lens_(1))
+					case (f32_type);  dst%f32 (lb_(1)+1 : ub_(1)) = right%array%f32 (1:lens_(1))
+					case (f64_type);  dst%f64 (lb_(1)+1 : ub_(1)) = right%array%f64 (1:lens_(1))
+					case (str_type);  dst%str (lb_(1)+1 : ub_(1)) = right%array%str (1:lens_(1))
+					end select
+				else
+					outer_count_ = product(lens_(2:ndim_))
+					do outer_i_ = 0, outer_count_ - 1
+						dst_off_  = lb_(1)
+						dst_prod_ = dst%size(1)
+						tmp_i_    = outer_i_
+						do k_ = 2, ndim_
+							ci_       = mod(tmp_i_, lens_(k_))
+							tmp_i_    = tmp_i_ / lens_(k_)
+							dst_off_  = dst_off_ + (lb_(k_) + ci_) * dst_prod_
+							dst_prod_ = dst_prod_ * dst%size(k_)
+						end do
+						rhs_off_ = outer_i_ * lens_(1)
+						select case (dst%type)
+						case (bool_type)
+							dst%bool(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%bool(rhs_off_+1 : rhs_off_+lens_(1))
+						case (i32_type)
+							dst%i32(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%i32(rhs_off_+1 : rhs_off_+lens_(1))
+						case (i64_type)
+							dst%i64(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%i64(rhs_off_+1 : rhs_off_+lens_(1))
+						case (f32_type)
+							dst%f32(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%f32(rhs_off_+1 : rhs_off_+lens_(1))
+						case (f64_type)
+							dst%f64(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%f64(rhs_off_+1 : rhs_off_+lens_(1))
+						case (str_type)
+							dst%str(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%str(rhs_off_+1 : rhs_off_+lens_(1))
+						end select
+					end do
+				end if
+				end associate
+			end if
+
+			call vm_push_move(stack, right)
+			end block
+
 		! OP_SIZE_NAT: read array%size(dim+1) or array%len_ directly from the variable
 		! slot without deep-copying the array.  a=slot_id, b=dim (b<0 → total len_),
 		! c=is_local.  Eliminates O(N) allocation from size(large_arr, dim) in loops.
