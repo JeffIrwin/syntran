@@ -1112,6 +1112,11 @@ pure logical function store_slice_nat_ok(node) result(ok)
 	! Exclude char-subscript LHS: same rank-vs-subscript-count guard as arr_slice_native_ok.
 	if (.not. allocated(node%val%array)) return
 	if (size(node%lsubscripts) /= node%val%array%rank) return
+	! Require matching element types: our handler copies dst%f32 = rhs%f32 directly;
+	! cross-type assignments (e.g. f32 slice ← i32 array) need casting and must fall
+	! back to eval_assignment_expr via OP_STORE_SLICE.
+	if (.not. allocated(node%right%val%array)) return
+	if (node%val%array%type /= node%right%val%array%type) return
 	ok = .true.
 
 end function store_slice_nat_ok

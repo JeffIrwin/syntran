@@ -621,7 +621,10 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 			call internal_error()
 		end if
 
-		lsub = asub%v(1)
+		! lsub is only used in get_next_subscript iteration; when asub%v is empty
+		! (e.g. x[ifree] where ifree=[]) the result has 0 elements and lsub is
+		! never consumed.  Guard the access so empty index arrays don't crash.
+		if (size(asub%v) > 0) lsub = asub%v(1)
 		usub = 1
 		contributes_rank = .true.
 
