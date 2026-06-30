@@ -6417,11 +6417,14 @@ subroutine unit_tests(iostat)
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
 
-	call unit_test_pow_scalar  (npass, nfail)
-	call unit_test_mixed_i32i64(npass, nfail)
-	call unit_test_arr_binop   (npass, nfail)
-	call unit_test_deep_recursion(npass, nfail)
-	call unit_test_matmul      (npass, nfail)
+	call unit_test_pow_scalar       (npass, nfail)
+	call unit_test_mixed_i32i64     (npass, nfail)
+	call unit_test_arr_binop        (npass, nfail)
+	call unit_test_bool_arr_binop   (npass, nfail)
+	call unit_test_native_array_ctor(npass, nfail)
+	call unit_test_mixed_float_int  (npass, nfail)
+	call unit_test_deep_recursion   (npass, nfail)
+	call unit_test_matmul           (npass, nfail)
 
 	call log_test_summary(npass, nfail)
 	iostat = nfail
@@ -6577,6 +6580,186 @@ subroutine unit_test_arr_binop(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_arr_binop
+
+!===============================================================================
+
+subroutine unit_test_bool_arr_binop(npass, nfail)
+
+	! Bool array binop tests (OP_ARR_BINOP with bool element type).
+	! Exercises the bool_type extension in arr_binop_typed_opcode and
+	! do_array_binop_typed (==, !=, and, or for bool arrays).
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'bool array binops (specialized opcodes)'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! ==: element-wise bool equality
+			eval('[true, false, true] == [true, true, false];')  == '[true, false, false]', &
+			eval('[false, false] == [false, true];')             == '[true, false]', &
+			! !=: element-wise bool inequality
+			eval('[true, false, true] != [true, true, false];')  == '[false, true, true]', &
+			! and: element-wise logical and
+			eval('[true, false, true] and [true, true, false];') == '[true, false, false]', &
+			! or: element-wise logical or
+			eval('[true, false, true] or [false, false, true];') == '[true, false, true]', &
+			! all/any over bool array binop result
+			eval('all([true, true] == [true, true]);')           == 'true', &
+			eval('any([false, true] != [true, true]);')          == 'true', &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_bool_arr_binop
+
+!===============================================================================
+
+subroutine unit_test_native_array_ctor(npass, nfail)
+
+	! Tests for OP_UNIF_ARRAY_NAT (uniform-fill arrays) and OP_BOUND_ARRAY_NAT
+	! (integer range arrays), which bypass eval_array_expr.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'native array construction (unif + bound)'
+
+	logical, parameter :: quiet = .true.
+	real(kind = 8), parameter :: tol = 1.d-10
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! unif_array: bool fill
+			eval('let a = [false; 4]; all(a == [false, false, false, false]);') == 'true', &
+			eval('let a = [true; 3];  all(a == [true, true, true]);')           == 'true', &
+			! unif_array: i32 fill
+			eval('let a = [7; 5]; sum(a);')                                     == '35', &
+			eval('let a = [0; 0]; size(a, 0);')                                 == '0', &
+			! unif_array: i64 fill
+			eval('let a = [1''i64; 4]; sum(a);')                              == '4', &
+			! unif_array: f32 fill
+			abs(eval_f32('let a = [0.5f; 4]; sum(a);', quiet) - 2.0) < real(tol, 4), &
+			! unif_array: f64 fill
+			abs(eval_f64('let a = [1.0; 3]; sum(a);', quiet) - 3.d0) < tol, &
+			! unif_array: 2D
+			eval('let a = [9; 2, 3]; size(a, 0);')                             == '2', &
+			eval('let a = [9; 2, 3]; size(a, 1);')                             == '3', &
+			eval('let a = [9; 2, 3]; a[0, 1];')                                == '9', &
+			! bound_array: i32
+			eval('let a = [0:5]; a[0];')                                        == '0', &
+			eval('let a = [0:5]; a[4];')                                        == '4', &
+			eval('let a = [0:5]; size(a, 0);')                                  == '5', &
+			eval('let a = [3:8]; sum(a);')                                       == '25', &
+			eval('let a = [5:5]; size(a, 0);')                                  == '0', &
+			eval('let a = [5:3]; size(a, 0);')                                  == '0', &
+			! bound_array: i64
+			eval('let a = [0''i64 : 5''i64]; a[4];')                       == '4', &
+			eval('let a = [0''i64 : 4''i64]; sum(a);')                     == '6', &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_native_array_ctor
+
+!===============================================================================
+
+subroutine unit_test_mixed_float_int(npass, nfail)
+
+	! Mixed float/integer scalar arithmetic and comparison tests.
+	! Exercises OP_*_F32_I32, OP_*_I32_F32, OP_*_F32_I64, OP_*_I64_F32,
+	! OP_*_F64_I32, OP_*_I32_F64, OP_*_F64_I64, OP_*_I64_F64.
+	! Note: == and != are NOT valid between mixed float/int types in syntran.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'mixed float/int (specialized opcodes)'
+
+	logical, parameter :: quiet = .true.
+	real(kind = 8), parameter :: tol = 1.d-10
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! --- f64 op i32 ---
+			abs(eval_f64('2.0 + 3;',  quiet) - 5.d0)  < tol, &
+			abs(eval_f64('2.0 - 3;',  quiet) + 1.d0)  < tol, &
+			abs(eval_f64('2.0 * 3;',  quiet) - 6.d0)  < tol, &
+			abs(eval_f64('7.0 / 2;',  quiet) - 3.5d0) < tol, &
+			abs(eval_f64('7.0 % 3;',  quiet) - 1.d0)  < tol, &
+			eval('2.0 < 3;',   quiet) == 'true',  &
+			eval('3.0 <= 3;',  quiet) == 'true',  &
+			eval('4.0 > 3;',   quiet) == 'true',  &
+			eval('3.0 >= 4;',  quiet) == 'false', &
+			! --- i32 op f64 ---
+			abs(eval_f64('3 + 2.0;',  quiet) - 5.d0)  < tol, &
+			abs(eval_f64('5 - 2.0;',  quiet) - 3.d0)  < tol, &
+			abs(eval_f64('3 * 2.0;',  quiet) - 6.d0)  < tol, &
+			abs(eval_f64('7 / 2.0;',  quiet) - 3.5d0) < tol, &
+			abs(eval_f64('7 % 3.0;',  quiet) - 1.d0)  < tol, &
+			eval('2 < 3.0;',   quiet) == 'true',  &
+			eval('4 > 3.0;',   quiet) == 'true',  &
+			eval('3 <= 3.0;',  quiet) == 'true',  &
+			eval('3 >= 4.0;',  quiet) == 'false', &
+			! --- f64 op i64 ---
+			abs(eval_f64('2.0 + 3''i64;', quiet) - 5.d0) < tol, &
+			abs(eval_f64('2.0 * 3''i64;', quiet) - 6.d0) < tol, &
+			eval('2.0 < 3''i64;',  quiet) == 'true',  &
+			eval('4.0 > 3''i64;',  quiet) == 'true',  &
+			! --- i64 op f64 ---
+			abs(eval_f64('3''i64 + 2.0;', quiet) - 5.d0) < tol, &
+			abs(eval_f64('3''i64 * 2.0;', quiet) - 6.d0) < tol, &
+			eval('2''i64 < 3.0;',  quiet) == 'true',  &
+			eval('4''i64 > 3.0;',  quiet) == 'true',  &
+			! --- f32 op i32 ---
+			abs(eval_f32('2.0f + 3;', quiet) - 5.0) < real(tol, 4), &
+			abs(eval_f32('2.0f * 3;', quiet) - 6.0) < real(tol, 4), &
+			abs(eval_f32('7.0f / 2;', quiet) - 3.5) < real(tol, 4), &
+			eval('2.0f < 3;',  quiet) == 'true',  &
+			eval('4.0f > 3;',  quiet) == 'true',  &
+			! --- i32 op f32 ---
+			abs(eval_f32('3 + 2.0f;', quiet) - 5.0) < real(tol, 4), &
+			abs(eval_f32('3 * 2.0f;', quiet) - 6.0) < real(tol, 4), &
+			eval('2 < 3.0f;',  quiet) == 'true',  &
+			eval('4 > 3.0f;',  quiet) == 'true',  &
+			! --- f32 op i64 ---
+			abs(eval_f32('2.0f + 3''i64;', quiet) - 5.0) < real(tol, 4), &
+			eval('2.0f < 3''i64;',  quiet) == 'true',  &
+			! --- i64 op f32 ---
+			abs(eval_f32('3''i64 + 2.0f;', quiet) - 5.0) < real(tol, 4), &
+			eval('2''i64 < 3.0f;',  quiet) == 'true',  &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_mixed_float_int
 
 !===============================================================================
 

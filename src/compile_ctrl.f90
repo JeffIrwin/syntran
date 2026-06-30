@@ -774,11 +774,39 @@ recursive subroutine compile_node(prog, cs, node)
 		call emit(prog, OP_LOAD_CONST, a = const_idx)
 
 	! ---- array expression construction ----------------------------------------
-	! M8: Store the array_expr node in the pool and emit OP_NEW_ARRAY.
-	! The VM handler calls eval_array_expr to build the value.
+	! Native paths for unif_array and bound_array compile sub-expressions to
+	! bytecode so the VM avoids syntax_eval calls; other kinds fall back to
+	! OP_NEW_ARRAY which delegates to eval_array_expr.
 	case (array_expr)
-		idx = add_node(prog, node)
-		call emit(prog, OP_NEW_ARRAY, a = idx)
+		select case (node%val%array%kind)
+
+		case (unif_array)
+			! [fill_val; d1, d2, ...] — native when element type is numeric/bool.
+			! Compile size expressions then the fill value onto the stack.
+			select case (node%val%array%type)
+			case (bool_type, i32_type, i64_type, f32_type, f64_type)
+				do i = 1, node%val%array%rank
+					call compile_node(prog, cs, node%size(i))
+				end do
+				call compile_node(prog, cs, node%lbound)
+				call emit(prog, OP_UNIF_ARRAY_NAT, &
+					a = node%val%array%type, b = node%val%array%rank)
+			case default
+				idx = add_node(prog, node)
+				call emit(prog, OP_NEW_ARRAY, a = idx)
+			end select
+
+		case (bound_array)
+			! [lb:ub] integer range — always native (only i32/i64 supported).
+			call compile_node(prog, cs, node%lbound)
+			call compile_node(prog, cs, node%ubound)
+			call emit(prog, OP_BOUND_ARRAY_NAT, a = node%val%array%type)
+
+		case default
+			idx = add_node(prog, node)
+			call emit(prog, OP_NEW_ARRAY, a = idx)
+
+		end select
 
 	! ---- struct instance construction -----------------------------------------
 	! M5: Compile each member-initialiser expression in order, then emit
