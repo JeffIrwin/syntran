@@ -1185,6 +1185,117 @@ module subroutine vm_run(prog, state, res)
 			end associate
 			end block
 
+		! --- P6: native for-loop setup ---------------------------------------------
+		! Bounds are pre-compiled to bytecode; this handler pops them from the
+		! operand stack to populate for_iters(fi), avoiding syntax_eval entirely.
+		! a = node_idx   (OP_FOR_NEXT still needs nd%is_loc, nd%id_index)
+		! b = for_kind   (bound_array / step_array / len_array)
+		! c = itr_type   (static hint; promote logic below may override for int cases)
+		case (OP_FOR_SETUP_NAT)
+			block
+			integer :: fi
+
+			if (nfor + 1 > size(for_iters)) call grow_fors(for_iters)
+			nfor = nfor + 1
+			fi = nfor
+			for_iters(fi)%node_idx = instr%a
+			for_iters(fi)%counter  = 0
+			for_iters(fi)%len8     = 0
+			for_iters(fi)%for_kind = instr%b
+			for_iters(fi)%itr_type = int(instr%c)
+
+			select case (instr%b)
+
+			case (bound_array)
+				! Stack: [lb][ub], ub at TOS
+				call value_move(stack%v(stack%len_  ), for_iters(fi)%ubound_)
+				call value_move(stack%v(stack%len_-1), for_iters(fi)%lbound_)
+				stack%len_ = stack%len_ - 2
+				if (any(i64_type == [for_iters(fi)%lbound_%type, &
+				                      for_iters(fi)%ubound_%type])) then
+					call promote_i32_i64(for_iters(fi)%lbound_)
+					call promote_i32_i64(for_iters(fi)%ubound_)
+					for_iters(fi)%itr_type = i64_type
+				else
+					for_iters(fi)%itr_type = i32_type
+				end if
+				for_iters(fi)%len8 = for_iters(fi)%ubound_%to_i64() &
+				                   - for_iters(fi)%lbound_%to_i64()
+
+			case (step_array)
+				! Stack: [lb][step][ub], ub at TOS
+				call value_move(stack%v(stack%len_  ), for_iters(fi)%ubound_)
+				call value_move(stack%v(stack%len_-1), for_iters(fi)%step  )
+				call value_move(stack%v(stack%len_-2), for_iters(fi)%lbound_)
+				stack%len_ = stack%len_ - 3
+				if (any(i64_type == [for_iters(fi)%lbound_%type, &
+				                      for_iters(fi)%step%type, &
+				                      for_iters(fi)%ubound_%type])) then
+					call promote_i32_i64(for_iters(fi)%lbound_)
+					call promote_i32_i64(for_iters(fi)%step)
+					call promote_i32_i64(for_iters(fi)%ubound_)
+					for_iters(fi)%itr_type = i64_type
+				else
+					for_iters(fi)%itr_type = for_iters(fi)%lbound_%type
+				end if
+				select case (for_iters(fi)%itr_type)
+				case (i32_type)
+					if (for_iters(fi)%step%sca%i32 == 0) then
+						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
+						exit
+					end if
+					for_iters(fi)%len8 = ( &
+						for_iters(fi)%ubound_%sca%i32 - for_iters(fi)%lbound_%sca%i32 &
+						+ for_iters(fi)%step%sca%i32  &
+						- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
+				case (i64_type)
+					if (for_iters(fi)%step%sca%i64 == 0) then
+						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
+						exit
+					end if
+					for_iters(fi)%len8 = ( &
+						for_iters(fi)%ubound_%sca%i64 - for_iters(fi)%lbound_%sca%i64 &
+						+ for_iters(fi)%step%sca%i64  &
+						- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
+				case (f32_type)
+					if (for_iters(fi)%step%sca%f32 == 0.0) then
+						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
+						exit
+					end if
+					for_iters(fi)%len8 = ceiling( &
+						(for_iters(fi)%ubound_%sca%f32 - for_iters(fi)%lbound_%sca%f32) &
+						/ for_iters(fi)%step%sca%f32)
+				case (f64_type)
+					if (for_iters(fi)%step%sca%f64 == 0.0d0) then
+						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
+						exit
+					end if
+					for_iters(fi)%len8 = ceiling( &
+						(for_iters(fi)%ubound_%sca%f64 - for_iters(fi)%lbound_%sca%f64) &
+						/ for_iters(fi)%step%sca%f64)
+				case default
+					write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type not implemented')
+					call internal_error()
+				end select
+
+			case (len_array)
+				! Stack: [lb][ub][len], len at TOS
+				call value_move(stack%v(stack%len_  ), for_iters(fi)%len_  )
+				call value_move(stack%v(stack%len_-1), for_iters(fi)%ubound_)
+				call value_move(stack%v(stack%len_-2), for_iters(fi)%lbound_)
+				stack%len_ = stack%len_ - 3
+				! itr_type comes from instr%c (f32_type or f64_type, set by compiler)
+				select case (for_iters(fi)%itr_type)
+				case (f32_type, f64_type)
+					for_iters(fi)%len8 = for_iters(fi)%len_%to_i64()
+				case default
+					write(*,*) err_int(IC_BOUND_LEN_TYPE, 'bound/len array type not implemented')
+					call internal_error()
+				end select
+
+			end select
+			end block
+
 		! --- M8: for-loop advance --------------------------------------------------
 		! Increments counter; if exhausted: pop iter stack and jump to loop end.
 		! Otherwise: call array_at to produce the next iterator value and write
@@ -2375,6 +2486,56 @@ module subroutine vm_run(prog, state, res)
 					val%array%i64(k8_) = lb_ + k8_ - 1
 				end do
 			end select
+
+			call vm_push_move(stack, val)
+			end block
+
+		! OP_EXPL_ARRAY_NAT: native explicit array literal [e1, e2, ..., en].
+		! a = element type (bool/i32/i64/f32/f64_type)
+		! b = n_elems (compile-time constant)
+		! Stack before: [e1][e2]...[en]  (e1 at stack%len_-n+1, en at TOS)
+		! Stack after:  [result_array]
+		case (OP_EXPL_ARRAY_NAT)
+			block
+			integer :: n_, j_
+			integer(kind=8) :: len_
+
+			n_   = instr%b
+			len_ = int(n_, 8)
+
+			allocate(val%array)
+			val%type          = array_type
+			val%array%type    = instr%a
+			val%array%kind    = expl_array
+			val%array%rank    = 1
+			val%array%len_    = len_
+			allocate(val%array%size(1))
+			val%array%size(1) = len_
+			call allocate_array(val, len_)
+
+			select case (instr%a)
+			case (bool_type)
+				do j_ = 1, n_
+					val%array%bool(j_) = stack%v(stack%len_ - n_ + j_)%sca%bool
+				end do
+			case (i32_type)
+				do j_ = 1, n_
+					val%array%i32(j_) = stack%v(stack%len_ - n_ + j_)%sca%i32
+				end do
+			case (i64_type)
+				do j_ = 1, n_
+					val%array%i64(j_) = stack%v(stack%len_ - n_ + j_)%sca%i64
+				end do
+			case (f32_type)
+				do j_ = 1, n_
+					val%array%f32(j_) = stack%v(stack%len_ - n_ + j_)%sca%f32
+				end do
+			case (f64_type)
+				do j_ = 1, n_
+					val%array%f64(j_) = stack%v(stack%len_ - n_ + j_)%sca%f64
+				end do
+			end select
+			stack%len_ = stack%len_ - n_
 
 			call vm_push_move(stack, val)
 			end block

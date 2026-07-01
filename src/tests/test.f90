@@ -1600,6 +1600,14 @@ subroutine unit_test_for_1(npass, nfail)
 			eval('let sum_ = 0.0f; for x in [42.0f; 5] sum_ += x; [sum_];', quiet)   == '[2.100000E+02]', &
 			eval('let sum_ = 0; for x in [42; 2, 3] sum_ += x; sum_;', quiet)   == '252', &
 			eval('let sum_ = 0; for x in [42; 2, 10, 3] sum_ += x; sum_;', quiet)   == '2520', &
+			! P6: native FOR_SETUP with dynamic bounds (size() as ubound, variable lb/ub)
+			eval('let v=[0:5]; let s=0; for i in [0:size(v,0)] s+=i; s;', quiet) == '10', &
+			eval('let v=[0:5]; let s=0; let n=size(v,0); for i in [0:n] s+=i; s;', quiet) == '10', &
+			eval('let mat=[0;3,3]; for i in [0:size(mat,0)] for j in [0:size(mat,1)] mat[i,j]=i+j; mat[2,2];', quiet) == '4', &
+			eval('let n=5; let s=0; for i in [0:2:n] s+=i; s;', quiet) == '6', &
+			! P5: native expl_array with variable elements
+			eval('let a=1; let b=2; let c=3; let v=[a,b,c]; sum(v);', quiet) == '6', &
+			eval('let a=1'//achar(39)//'i64; let b=2'//achar(39)//'i64; let v=[a,b]; v[0]+v[1];', quiet) == '3', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

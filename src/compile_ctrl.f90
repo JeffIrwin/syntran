@@ -746,7 +746,27 @@ recursive subroutine compile_node(prog, cs, node)
 	! continue -> JUMP L_top (continue_target; FOR_NEXT re-evaluates)
 	case (for_statement)
 		idx = add_node(prog, node)
-		call emit(prog, OP_FOR_SETUP, a = idx)
+		if (for_setup_native_ok(node)) then
+			! Compile bound sub-expressions to bytecode; the VM pops them instead
+			! of calling syntax_eval every time the surrounding loop re-enters.
+			select case (node%array%val%array%kind)
+			case (bound_array)
+				call compile_node(prog, cs, node%array%lbound)
+				call compile_node(prog, cs, node%array%ubound)
+			case (step_array)
+				call compile_node(prog, cs, node%array%lbound)
+				call compile_node(prog, cs, node%array%step)
+				call compile_node(prog, cs, node%array%ubound)
+			case (len_array)
+				call compile_node(prog, cs, node%array%lbound)
+				call compile_node(prog, cs, node%array%ubound)
+				call compile_node(prog, cs, node%array%len_)
+			end select
+			call emit(prog, OP_FOR_SETUP_NAT, a = idx, b = node%array%val%array%kind, &
+				c = int(node%array%val%array%type, 8))
+		else
+			call emit(prog, OP_FOR_SETUP, a = idx)
+		end if
 
 		if (cs%loop_depth + 1 > size(cs%continue_target)) call grow_int(cs%continue_target)
 		cs%loop_depth = cs%loop_depth + 1
@@ -801,6 +821,19 @@ recursive subroutine compile_node(prog, cs, node)
 			call compile_node(prog, cs, node%lbound)
 			call compile_node(prog, cs, node%ubound)
 			call emit(prog, OP_BOUND_ARRAY_NAT, a = node%val%array%type)
+
+		case (expl_array)
+			! [e1, e2, ..., en] — native when element type is scalar numeric/bool.
+			if (expl_array_native_ok(node)) then
+				do i = 1, int(node%val%array%len_)
+					call compile_node(prog, cs, node%elems(i))
+				end do
+				call emit(prog, OP_EXPL_ARRAY_NAT, &
+					a = node%val%array%type, b = int(node%val%array%len_))
+			else
+				idx = add_node(prog, node)
+				call emit(prog, OP_NEW_ARRAY, a = idx)
+			end if
 
 		case default
 			idx = add_node(prog, node)

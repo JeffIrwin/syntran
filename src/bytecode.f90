@@ -294,6 +294,23 @@ module syntran__bytecode_m
 		OP_EQ_F64_I64  = 1234, OP_EQ_I64_F64  = 1235, &
 		OP_NE_F64_I64  = 1236, OP_NE_I64_F64  = 1237
 
+	! P6: native for-loop setup — bounds pre-evaluated to bytecode, no syntax_eval.
+	! a = node pool idx  (OP_FOR_NEXT still needs nd%is_loc, nd%id_index)
+	! b = for_kind       (bound_array=89 / step_array=87 / len_array=88)
+	! c = itr_type       (static element type as i64; int promote logic may override)
+	! Stack before (by for_kind):
+	!   bound_array:  [lb][ub]        (ub at TOS)
+	!   step_array:   [lb][step][ub]  (ub at TOS)
+	!   len_array:    [lb][ub][len]   (len at TOS)
+	integer, parameter :: OP_FOR_SETUP_NAT  = 1238
+
+	! P5: native explicit array literal [e1, e2, ..., en] for scalar numeric/bool elements.
+	! a = element type (bool/i32/i64/f32/f64_type)
+	! b = n_elems (compile-time constant)
+	! Stack before: [e1][e2]...[en]  (en at TOS)
+	! Stack after:  [result_array]
+	integer, parameter :: OP_EXPL_ARRAY_NAT = 1239
+
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
 	! Math
@@ -1365,6 +1382,60 @@ pure logical function store_slice_nat_ok(node) result(ok)
 	ok = .true.
 
 end function store_slice_nat_ok
+
+!===============================================================================
+
+pure logical function for_setup_native_ok(node) result(ok)
+
+	! Return .true. when a for_statement node's iterable is a structured range
+	! (bound_array / step_array / len_array) whose bounds can be compiled to
+	! bytecode, avoiding syntax_eval in OP_FOR_SETUP.
+	! Falls back to OP_FOR_SETUP for string, expl_array, size_array, unif_array,
+	! and non-primary (arbitrary expression) iterables.
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%array)) return
+	if (node%array%kind /= array_expr) return
+	if (.not. allocated(node%array%val%array)) return
+	select case (node%array%val%array%kind)
+	case (bound_array, step_array, len_array)
+		ok = .true.
+	end select
+
+end function for_setup_native_ok
+
+!===============================================================================
+
+pure logical function expl_array_native_ok(node) result(ok)
+
+	! Return .true. when an array_expr node is an explicit array literal
+	! [e1, ..., en] with scalar numeric/bool elements of a single type.
+	! Falls back to OP_NEW_ARRAY for str/struct elements or empty arrays.
+
+	type(syntax_node_t), intent(in) :: node
+
+	integer :: i_
+
+	ok = .false.
+	if (.not. allocated(node%val%array)) return
+	if (node%val%array%kind /= expl_array) return
+	if (.not. allocated(node%elems)) return
+	if (node%val%array%len_ <= 0) return
+	select case (node%val%array%type)
+	case (bool_type, i32_type, i64_type, f32_type, f64_type)
+		! ok so far
+	case default
+		return
+	end select
+	! All elements must be scalar (not arrays like [0:3] in [[0:3], [10:12]]).
+	do i_ = 1, size(node%elems)
+		if (node%elems(i_)%val%type == array_type) return
+	end do
+	ok = .true.
+
+end function expl_array_native_ok
 
 !===============================================================================
 
