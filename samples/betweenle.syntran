@@ -252,7 +252,9 @@ fn solve_step(words: &[str; :], n: i32, state_line: str): bool
 println("Starting betweenle solver");
 
 // sudo apt install wamerican
-let dict_filename = "/usr/share/dict/american-english";
+//let dict_filename = "/usr/share/dict/american-english";
+const dict_filename = "/Users/jeff/.local/share/dict/american-english";
+// TODO: "~"  and $HOME dir is unusable on mac? Need to avoid hard-coding username
 
 let words = read_dict(dict_filename);
 let n = i32(size(words, 0));

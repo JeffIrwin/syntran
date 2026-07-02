@@ -37,10 +37,10 @@
 
 use ../src/tests/long/aoc/utils_2024 as utils;
 
-let WORD_LEN = 5;
+const WORD_LEN = 5;
 
 // Number of distinct feedback patterns: 3 ^ WORD_LEN
-let NUM_CODES = 243;
+const NUM_CODES = 3 ** WORD_LEN;
 
 // Extra 5-letter words to add to the system dictionary (it's missing plenty of
 // valid wordle words, e.g. "twixt").  Case-insensitive; the trailing "" is just
@@ -336,7 +336,10 @@ fn report(cands: &[str; :], nc: i32, all_words: &[str; :], nall: i32): str
 println("Starting wordle solver");
 
 // sudo apt install wamerican
-let dict_filename = "/usr/share/dict/american-english";
+//let dict_filename = "/usr/share/dict/american-english";
+//let dict_filename = "/usr/share/dict/words";
+//const dict_filename = "~/.local/share/dict/american-english";
+const dict_filename = "/Users/jeff/.local/share/dict/american-english";
 
 let cands = read_dict(dict_filename, &ALLOWLIST);
 let nc = i32(size(cands, 0));

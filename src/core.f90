@@ -31,6 +31,8 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - integrate rlwrap as a library dependency
+	!    * as is, it's usually only one-time setup per machine, but it's still friction
 	!  - switch/match/case
 	!  - callbacks, fn pointers, i.e. passing one function as an argument to
 	!    another function
