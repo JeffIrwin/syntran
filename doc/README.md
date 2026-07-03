@@ -174,6 +174,27 @@ fn exp(x: any_float): any_float
 
 Compute the base _e_ exponential of `x`
 
+## `getenv`
+```rust
+fn getenv(name: str): str
+```
+
+Return the value of the environment variable `name`.  It is a runtime error if
+`name` is not set; guard with [`hasenv`](#hasenv) first.  Must be called with
+the `std::` prefix, e.g. `std::getenv("HOME")`.
+
+Related functions: [`hasenv`](#hasenv)
+
+## `hasenv`
+```rust
+fn hasenv(name: str): bool
+```
+
+Return whether the environment variable `name` is set.  Must be called with
+the `std::` prefix, e.g. `std::hasenv("HOME")`.
+
+Related functions: [`getenv`](#getenv)
+
 ## `i32`
 ```rust
 fn i32(a: any_num): i32

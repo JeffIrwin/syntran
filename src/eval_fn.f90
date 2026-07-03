@@ -214,11 +214,13 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 
 	character :: char_
 	character(len = :), allocatable :: color, mode, status_, resolved_path
+	character(len = :), allocatable :: env_val
 
 	double precision, parameter :: LOG_E_2 = log(2.d0)
 	real, parameter :: LOG_E_2F = log(2.0)
 
 	integer :: i, io
+	integer :: env_len, env_stat
 
 	type(char_vector_t) :: str_
 
@@ -862,6 +864,33 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		if (.not. allocated(res%str)) allocate(res%str)
 		!res%str%s = char(arg%sca%i32)
 		res%str%s = achar(arg%sca%i32)
+
+	case ("getenv")
+
+		! std::getenv(name) -- value of env var `name`.  Runtime error if unset
+		call syntax_eval(node%args(1), state, arg)
+		if (state%rt_halt) return
+		if (.not. allocated(res%str)) allocate(res%str)
+
+		call get_environment_variable(arg%str%s, length = env_len, status = env_stat)
+		if (env_stat /= 0) then
+			call rt_throw(state, err_rt(RC_GETENV_UNSET, "getenv() environment variable """// &
+				arg%str%s//""" is not set"))
+			return
+		end if
+		allocate(character(len = env_len) :: env_val)
+		call get_environment_variable(arg%str%s, value = env_val)
+		res%str%s = env_val
+		deallocate(env_val)
+
+	case ("hasenv")
+
+		! std::hasenv(name) -- whether env var `name` is set
+		call syntax_eval(node%args(1), state, arg)
+		if (state%rt_halt) return
+
+		call get_environment_variable(arg%str%s, status = env_stat)
+		res%sca%bool = env_stat == 0
 
 	case ("0i32_sca")
 

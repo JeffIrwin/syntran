@@ -82,3 +82,11 @@ RUN syntran -c 'close(std::IN);'  2>&1 | grep -q "R28"
 RUN syntran -c 'close(std::OUT);' 2>&1 | grep -q "R28"
 RUN syntran -c 'close(std::ERR);' 2>&1 | grep -q "R28"
 
+# std::getenv reads env vars; std::hasenv checks if they are set
+RUN [[ "$(SYNTRAN_TEST_VAR=hello123 syntran -c 'println(std::getenv("SYNTRAN_TEST_VAR"));' | tr -d '[:space:]')" == "hello123" ]]
+RUN [[ "$(SYNTRAN_TEST_VAR=hello123 syntran -c 'println(std::hasenv("SYNTRAN_TEST_VAR"));' | tr -d '[:space:]')" == "true" ]]
+RUN [[ "$(syntran -c 'println(std::hasenv("SYNTRAN_DEFINITELY_UNSET"));' | tr -d '[:space:]')" == "false" ]]
+
+# getenv on an unset var is a runtime error (R29)
+RUN syntran -c 'std::getenv("SYNTRAN_DEFINITELY_UNSET");' 2>&1 | grep -q "R29"
+

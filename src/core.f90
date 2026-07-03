@@ -351,7 +351,6 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
-	!      + getenv (name?)
 	!      + trim/split/pad
 	!      + index, scan, verify
 	!      + date/time
