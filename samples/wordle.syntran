@@ -35,6 +35,9 @@
 // move on the whole dictionary) that is too slow, so it falls back to a cheap
 // letter-frequency heuristic that still favors high-information words.
 
+// TODO: confusing error on `let block_dict = dict_i64::new();` if this dict use is
+// missing
+use ../src/tests/long/aoc/dicts/dict_i64 as dict_i64;
 use ../src/tests/long/aoc/utils_2024 as utils;
 
 const WORD_LEN = 5;
@@ -51,6 +54,11 @@ let ALLOWLIST = [
 	""
 ];
 
+let BLOCKLIST = [
+	"contd",
+	""
+];
+
 // Below this many candidates, use the exact (O(n^2)) optimal scorer; above it,
 // use the cheap letter-frequency heuristic so each turn stays responsive.  The
 // exact scorer costs a few seconds near this bound and grows quadratically, so
@@ -58,7 +66,7 @@ let ALLOWLIST = [
 // after the first guess anyway
 let EXACT_THRESHOLD = 500;
 
-fn read_dict(filename: str, allowlist: &[str; :]): [str; :]
+fn read_dict(filename: str, allowlist: &[str; :], blocklist: &[str; :]): [str; :]
 {
 	// Load the system dictionary, keeping only 5-letter lowercase words, then
 	// merge in any extra words from the allowlist that aren't already present
@@ -66,6 +74,11 @@ fn read_dict(filename: str, allowlist: &[str; :]): [str; :]
 	let CAP = 16000;
 	let words = [""; CAP];
 	let n = 0;
+
+	// Initialize the blocklist dictionary from the given string array
+	let block_dict = dict_i64::new();
+	for word in blocklist
+		block_dict.set(utils::to_lower(word), 1'i64);
 
 	let f = open(filename, "r");
 	while not eof(f)
@@ -80,6 +93,7 @@ fn read_dict(filename: str, allowlist: &[str; :]): [str; :]
 			if (not is_lower) break;
 		}
 		if (not is_lower) continue;
+		if (block_dict.contains(line)) continue;
 
 		words[n] = line;
 		n += 1;
@@ -336,12 +350,14 @@ fn report(cands: &[str; :], nc: i32, all_words: &[str; :], nall: i32): str
 println("Starting wordle solver");
 
 // sudo apt install wamerican
+// mkdir -p ~/.local/share/dict/
+// ln -s /usr/share/dict/american-english ~/.local/share/dict/
+//
+const HOME_DIR = std::getenv("HOME");
+const dict_filename = HOME_DIR + "/.local/share/dict/american-english";
 //let dict_filename = "/usr/share/dict/american-english";
-//let dict_filename = "/usr/share/dict/words";
-//const dict_filename = "~/.local/share/dict/american-english";
-const dict_filename = "/Users/jeff/.local/share/dict/american-english";
 
-let cands = read_dict(dict_filename, &ALLOWLIST);
+let cands = read_dict(dict_filename, &ALLOWLIST, &BLOCKLIST);
 let nc = i32(size(cands, 0));
 let all_words = cands;
 let nall = nc;
