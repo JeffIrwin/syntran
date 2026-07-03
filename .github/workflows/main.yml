@@ -18,7 +18,12 @@
 			}
 		},
 		"steps": [
-			{"uses": "actions/checkout@v1"},
+			{
+				"uses": "actions/checkout@v4",
+				"with": {
+					"submodules": true
+				}
+			},
 			{
 				"uses": "fortran-lang/setup-fpm@v10",
 				"with": {
@@ -319,7 +324,12 @@
 		"name": "Build on rocky linux",
 		"runs-on": "ubuntu-latest",
 		"steps": [
-			{"uses": "actions/checkout@v1"},
+			{
+				"uses": "actions/checkout@v4",
+				"with": {
+					"submodules": true
+				}
+			},
 			{
 				"name": "Build docker",
 				"run":
@@ -385,7 +395,10 @@
 		},
 		"steps": [
 			{
-				"uses": "actions/checkout@v1"
+				"uses": "actions/checkout@v4",
+				"with": {
+					"submodules": true
+				}
 			},
 			{
 				"uses": "fortran-lang/setup-fpm@v10",
@@ -440,8 +453,10 @@
 		},
 		"steps": [
 			{
-				"uses": "actions/checkout@v1"
-
+				"uses": "actions/checkout@v4",
+				"with": {
+					"submodules": true
+				}
 			},
 			{
 				"uses": "fortran-lang/setup-fpm@v10",
@@ -487,7 +502,12 @@
 		"name": "Test alpine docker build",
 		"runs-on": "ubuntu-latest",
 		"steps": [
-			{"uses": "actions/checkout@v1"},
+			{
+				"uses": "actions/checkout@v4",
+				"with": {
+					"submodules": true
+				}
+			},
 			{
 				"name": "Test alpine docker",
 				"run":

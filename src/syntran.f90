@@ -10,6 +10,7 @@ module syntran
 	use syntran__core_m
 	use syntran__compile_m
 	use syntran__vm_m
+	use syntran__line_edit_m
 
 	implicit none
 
@@ -103,7 +104,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io
 
-	logical :: continue_, show_tree
+	logical :: continue_, show_tree, interactive
 	logical, parameter :: allow_cont = .true.
 
 	type(string_view_t) :: sv
@@ -122,6 +123,12 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	src_file = '<stdin>'
 	continue_ = .false.
 	show_tree = .false.
+
+	! Only use interactive line editing (history, arrow keys) when reading a
+	! real terminal.  Piped stdin, `-c` strings, and file interpretation all
+	! keep using the plain read_line() path in utils.f90
+	interactive = .not. present(str_) .and. is_tty()
+	if (interactive) call line_edit_init()
 
 	if (present(str_)) then
 		! Append a trailing line feed in case it does not exist
@@ -198,18 +205,32 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 					!
 					! I hint semicolons because it could be a stumbling block
 					! for users coming from python or similar languages
-					write(ou, '(a)', advance = 'no') prompt_color// &
-						'[Hint `'//compilation%first_expected//'`]> '//color_reset
+
+					if (interactive) then
+						line = line//line_feed//read_line_interactive( &
+							'[Hint `'//compilation%first_expected//'`]> ', io)
+					else
+						write(ou, '(a)', advance = 'no') prompt_color// &
+							'[Hint `'//compilation%first_expected//'`]> '//color_reset
+						line = line//line_feed//read_line(iu, iostat = io)
+					end if
 
 				else
-					write(ou, '(a)', advance = 'no') prompt_color//'> '//color_reset
+					if (interactive) then
+						line = line//line_feed//read_line_interactive('> ', io)
+					else
+						write(ou, '(a)', advance = 'no') prompt_color//'> '//color_reset
+						line = line//line_feed//read_line(iu, iostat = io)
+					end if
 				end if
 
-				line = line//line_feed//read_line(iu, iostat = io)
-
 			else
-				write(ou, '(a)', advance = 'no') prompt
-				line = read_line(iu, iostat = io)
+				if (interactive) then
+					line = read_line_interactive(lang_name//'$ ', io)
+				else
+					write(ou, '(a)', advance = 'no') prompt
+					line = read_line(iu, iostat = io)
+				end if
 			end if
 
 		end if
@@ -250,6 +271,12 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 		if (continue_) cycle
 
 		if (compilation%is_empty) cycle
+
+		! The line is now a complete statement (possibly joined from several
+		! continuation lines).  read_line_interactive() already undid isocline's
+		! own per-call history push, so this is the one place a full logical
+		! statement becomes a single recallable history entry
+		if (interactive) call line_edit_add_history(line)
 
 		! I'm skipping the the binder that Immo implemented at this point in
 		! episode 2.  I guess I'll find out later if that's a stupid decision on

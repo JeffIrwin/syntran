@@ -37,6 +37,7 @@ WORKDIR /workdir/syntran
 # to know the git commit for `--version` output, so we have to install git and
 # clone the whole repo
 ADD src ./src
+ADD external ./external
 ADD .git ./.git
 ADD fpm.toml .
 ADD gen-header.sh .

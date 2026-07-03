@@ -15,6 +15,7 @@ RUN apk add --no-cache \
 # Beware, this does not run gen-header.sh like rocky docker. Maybe that's
 # actually a good test that I have the generated source existing locally
 COPY src src
+COPY external external
 COPY CMakeLists.txt .
 COPY fpm.toml .
 

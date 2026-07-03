@@ -16,7 +16,7 @@ endif()
 
 set(PROJECT syntran)
 
-project(${PROJECT} Fortran)
+project(${PROJECT} Fortran C)
 
 if(WIN32 OR CMAKE_GENERATOR MATCHES "MSYS" OR CMAKE_GENERATOR MATCHES "MinGW")
 	message("defining _WIN32 in cmake")
@@ -77,6 +77,7 @@ set(SRC_DIR "src")
 # Core library, used by main interpreter and unit tests
 set(LIB "${PROJECT}")
 set(LIB_SRC
+	${SRC_DIR}/c/isocline_wrap.c
 	${SRC_DIR}/bool.f90
 	${SRC_DIR}/bytecode.f90
 	${SRC_DIR}/compiler.F90
@@ -101,6 +102,7 @@ set(LIB_SRC
 	${SRC_DIR}/intr_fns_trig.f90
 	${SRC_DIR}/intr_vars.f90
 	${SRC_DIR}/lex.f90
+	${SRC_DIR}/line_edit.f90
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/math_bin_add.f90
 	${SRC_DIR}/math_bin_div.f90

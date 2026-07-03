@@ -11,6 +11,7 @@ RUN apk add rlwrap        # nice to have
 RUN apk add curl
 
 COPY src src
+COPY external external
 COPY CMakeLists.txt .
 COPY fpm.toml .
 
