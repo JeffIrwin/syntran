@@ -7,6 +7,7 @@ WORKDIR /workdir
 
 RUN apk add gfortran musl-dev
 RUN apk add libc6-compat  # syntran needs glibc compatibility, not alpine's musl libc
+RUN apk add linux-headers # provides linux/kd.h, needed by isocline's term.c
 RUN apk add rlwrap        # nice to have
 RUN apk add curl
 
