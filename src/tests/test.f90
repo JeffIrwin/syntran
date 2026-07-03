@@ -1377,6 +1377,14 @@ subroutine unit_test_intr_fns(npass, nfail)
 			diag_has_code(get_diags('writeln(std::IN, "x");'), RC_WRITELN_NOT_WRITE_MODE), &
 			diag_has_code(get_diags('std::IN = open("f", "r");'), EC_IMMUTABLE_VAR), &
 
+			! std::getenv/std::hasenv
+			eval('std::hasenv("SYNTRAN_NONEXISTENT_VAR_XYZ");') == 'false', &
+			eval('std::hasenv("PATH");') == 'true', &
+			eval('len(std::getenv("PATH")) > 0;') == 'true', &
+			diag_has_code(get_diags('std::getenv("SYNTRAN_NONEXISTENT_VAR_XYZ");'), RC_GETENV_UNSET), &
+			diag_has_code(get_diags('getenv("PATH");'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('hasenv("PATH");'), EC_STD_ONLY_FN), &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

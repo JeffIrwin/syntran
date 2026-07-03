@@ -31,10 +31,12 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	!*******
 
 	integer :: i, io
+	integer :: env_len, env_stat
 
 	character :: char_
 
 	character(len = :), allocatable :: mode_, status_, resolved_path_
+	character(len = :), allocatable :: env_val
 
 	type(char_vector_t) :: str_
 
@@ -822,6 +824,27 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		! %array%size is already i64, so direct assignment works.
 		allocate(res%array%i64(res%array%len_))
 		res%array%i64 = args(1)%array%size(1:args(1)%array%rank)
+
+	case (INTR_GETENV)
+		! std::getenv(name) -- value of env var `name`.  Runtime error if unset
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		call get_environment_variable(args(1)%str%s, length = env_len, status = env_stat)
+		if (env_stat /= 0) then
+			call rt_throw(state, err_rt(RC_GETENV_UNSET, "getenv() environment variable """// &
+				args(1)%str%s//""" is not set"))
+			return
+		end if
+		allocate(character(len = env_len) :: env_val)
+		call get_environment_variable(args(1)%str%s, value = env_val)
+		res%str%s = env_val
+		deallocate(env_val)
+
+	case (INTR_HASENV)
+		! std::hasenv(name) -- whether env var `name` is set
+		res%type = bool_type
+		call get_environment_variable(args(1)%str%s, status = env_stat)
+		res%sca%bool = env_stat == 0
 
 	case default
 		write(*,*) 'VM: unknown intr_id in vm_call_intr: ', intr_id

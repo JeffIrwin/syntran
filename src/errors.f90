@@ -168,6 +168,7 @@ module syntran__errors_m
 		RC_ARRAY_STEP_ZERO_F = "R26", &
 		RC_SUBSCRIPT_STEP_ZERO = "R27", &
 		RC_CLOSE_STANDARD = "R28", &
+		RC_GETENV_UNSET = "R29", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
