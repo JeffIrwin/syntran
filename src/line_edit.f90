@@ -43,6 +43,13 @@ module syntran__line_edit_m
 		subroutine ic_history_remove_last_c() bind(c, name = "ic_history_remove_last")
 		end subroutine ic_history_remove_last_c
 
+		subroutine ic_set_prompt_marker_c(marker, cont_marker) &
+			bind(c, name = "ic_set_prompt_marker")
+			import :: c_char
+			character(kind = c_char), intent(in) :: marker(*)
+			character(kind = c_char), intent(in) :: cont_marker(*)
+		end subroutine ic_set_prompt_marker_c
+
 		function syntran_isatty_c() bind(c, name = "syntran_isatty") result(res)
 			import :: c_int
 			integer(c_int) :: res
@@ -84,6 +91,12 @@ subroutine line_edit_init()
 	path_ptr = syntran_history_path_c()
 	call ic_set_history_c(path_ptr, -1_c_long)
 
+	! Isocline appends its own prompt marker ("> " by default) after whatever
+	! prompt text we pass to ic_readline().  Syntran manages its own prompt
+	! text (including continuation prompts), so disable isocline's marker to
+	! avoid a doubled-up "syntran$> "
+	call ic_set_prompt_marker_c(c_null_char, c_null_char)
+
 end subroutine line_edit_init
 
 !===============================================================================
@@ -103,7 +116,10 @@ function read_line_interactive(prompt, iostat) result(str_)
 
 	type(c_ptr) :: res_ptr
 
-	res_ptr = ic_readline_c(trim(prompt)//c_null_char)
+	! prompt is assumed-length, so it already matches the actual argument's
+	! length exactly (no trailing blank padding to strip) -- trim() here would
+	! wrongly strip an intentional trailing space, e.g. "syntran$ "
+	res_ptr = ic_readline_c(prompt//c_null_char)
 
 	if (.not. c_associated(res_ptr)) then
 		! EOF (ctrl-D on an empty line).  Isocline's own internal cleanup
