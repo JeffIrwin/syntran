@@ -1,0 +1,14 @@
+#!/usr/bin/env expect
+
+# Ctrl+D on an empty prompt exits the REPL cleanly (see commit 72d008f,
+# "fix 'hints' (e.g. semicolons) for unfinished REPL lines", and the
+# "Ctrl+D to exit" usage line printed at startup)
+
+set timeout 10
+source [file join [file dirname [info script]] common.tcl]
+
+set bin [lindex $argv 0]
+spawn $bin
+wait_prompt
+
+finish

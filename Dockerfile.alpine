@@ -8,9 +8,11 @@ RUN apk add --no-cache \
 	musl-dev \
 	libc6-compat \
 	rlwrap \
-	curl
+	curl \
+	expect
 # - libc6-compat:  syntran needs glibc compatibility, not alpine's musl libc
 # - rlwrap:  nice to have
+# - expect:  drives the interactive REPL tests below through a real pty
 
 # Beware, this does not run gen-header.sh like rocky docker. Maybe that's
 # actually a good test that I have the generated source existing locally
@@ -90,4 +92,9 @@ RUN [[ "$(syntran -c 'println(std::hasenv("SYNTRAN_DEFINITELY_UNSET"));' | tr -d
 
 # getenv on an unset var is a runtime error (R29)
 RUN syntran -c 'std::getenv("SYNTRAN_DEFINITELY_UNSET");' 2>&1 | grep -q "R29"
+
+# Interactive REPL tests (isocline history, Ctrl+R search, continuation
+# hints, arrow-key editing).  These need a real pty, which none of the
+# piped/`-c` tests above provide -- see src/tests/repl/test-repl.sh
+RUN bash src/tests/repl/test-repl.sh syntran
 

@@ -1,0 +1,30 @@
+#!/usr/bin/env expect
+
+# Ctrl+R starts isocline's reverse history search; typing a substring of an
+# earlier entry finds it.  Isocline follows readline/libedit convention:
+# the first Enter accepts the matched entry into the edit buffer (exiting
+# search mode) without running it, and a second Enter actually submits it
+
+set timeout 10
+source [file join [file dirname [info script]] common.tcl]
+
+set bin [lindex $argv 0]
+spawn $bin
+wait_prompt
+
+send "410+1;\r"
+wait_result "411"
+
+# Filler entry.  Deliberately chosen so neither its source text nor its
+# printed result contains "410" or "411" -- see the note on wait_result in
+# common.tcl about self-matching input echo
+send "500+500;\r"
+wait_result "1000"
+
+send "\022"
+send "410"
+send "\r"
+send "\r"
+wait_result "411"
+
+finish
