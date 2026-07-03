@@ -889,13 +889,13 @@ end function err_undeclare_var
 
 !===============================================================================
 
-function err_undeclare_fn(context, span, fn, suggest) result(err)
+function err_undeclare_fn(context, span, fn, suggest, module_prefix) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: fn
-	character(len = *), intent(in), optional :: suggest
+	character(len = *), intent(in), optional :: suggest, module_prefix
 
 	err = err_pre(EC_UNDECLARE_FN) &
 		//'function `'//fn//'` has not been defined' &
@@ -908,6 +908,12 @@ function err_undeclare_fn(context, span, fn, suggest) result(err)
 				//": did you mean `" &
 				//fg_bright_green//suggest//color_reset//"`?"
 		end if
+	end if
+
+	if (present(module_prefix)) then
+		err = err//line_feed &
+			//fg_bright_green//"help"//color_reset &
+			//": is module `"//fg_bright_green//module_prefix//color_reset//"` imported?"
 	end if
 
 end function err_undeclare_fn

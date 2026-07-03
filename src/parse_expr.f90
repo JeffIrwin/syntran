@@ -941,6 +941,20 @@ recursive module subroutine parse_dot(parser, expr)
 				span, &
 				expr%identifier%text))
 		end if
+
+		! Error recovery: if this was a method-call form `recv.name(...)`,
+		! swallow the argument list so the parser stays in sync and doesn't
+		! emit a cascade of `unexpected token` errors (which would also
+		! suppress pass-2 diagnostics like the real undeclared-fn error)
+		if (parser%current_kind() == lparen_token) then
+			lparen_ = parser%match(lparen_token)
+			do while (parser%current_kind() /= rparen_token .and. &
+			          parser%current_kind() /= eof_token)
+				call parser%parse_expr(expr = arg_)
+				if (parser%current_kind() /= rparen_token) comma_ = parser%match(comma_token)
+			end do
+			rparen_ = parser%match(rparen_token)
+		end if
 		return
 	end if
 

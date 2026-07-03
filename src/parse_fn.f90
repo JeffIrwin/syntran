@@ -196,10 +196,25 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		end if
 
 		span = new_span(identifier_%pos, len(identifier_%text))
-		call parser%diagnostics%push( &
-			err_undeclare_fn(parser%context(), &
-			span, display_name, &
-			parser%fns%closest(display_name)))
+		if (present(module_prefix)) then
+			if (module_prefix /= "std") then
+				call parser%diagnostics%push( &
+					err_undeclare_fn(parser%context(), &
+					span, display_name, &
+					parser%fns%closest(display_name), &
+					module_prefix = module_prefix))
+			else
+				call parser%diagnostics%push( &
+					err_undeclare_fn(parser%context(), &
+					span, display_name, &
+					parser%fns%closest(display_name)))
+			end if
+		else
+			call parser%diagnostics%push( &
+				err_undeclare_fn(parser%context(), &
+				span, display_name, &
+				parser%fns%closest(display_name)))
+		end if
 
 		fn_call%val%type = unknown_type
 

@@ -35,8 +35,6 @@
 // move on the whole dictionary) that is too slow, so it falls back to a cheap
 // letter-frequency heuristic that still favors high-information words.
 
-// TODO: confusing error on `let block_dict = dict_i64::new();` if this dict use is
-// missing
 use ../src/tests/long/aoc/dicts/dict_i64 as dict_i64;
 use ../src/tests/long/aoc/utils_2024 as utils;
 

@@ -57,6 +57,21 @@ end function diag_has_code
 
 !===============================================================================
 
+function diag_has_text(diag_, text) result(found)
+	! Like diag_has_code(), but checks for an arbitrary substring anywhere in
+	! some diagnostic (e.g. a "help: ..." line), not just the error code
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: text
+	logical :: found
+	integer :: k
+	found = .false.
+	do k = 1, diag_%len_
+		if (index(diag_%v(k)%s, text) > 0) found = .true.
+	end do
+end function diag_has_text
+
+!===============================================================================
+
 function diag_count_code(diag_, code) result(count_)
 	! Like diag_has_code(), but returns how many diagnostics carry [code].
 	! Used to catch duplicate-diagnostic regressions that diag_has_code()
@@ -5733,6 +5748,32 @@ subroutine unit_test_error_codes(npass, nfail)
 				'let x = nope(); println(x);'), EC_BAD_EXPR) == 0, &
 			diag_count_code(get_diags( &
 				'let x = nope(); println(x);'), EC_UNDECLARE_FN) == 1, &
+			! Calling a method on the (unknown_type) result of an unresolved
+			! qualified fn call, e.g. a struct-module `new()` from a module
+			! that was never `use`d, must not desync the parser into a
+			! cascade of "unexpected token" errors from the trailing arg
+			! list.  Only the single undeclared-fn error should appear, and
+			! it should hint that the module may not be imported
+			diag_has_code(get_diags( &
+				'let d = nomod::new(); d.set(1);'), EC_UNDECLARE_FN), &
+			diag_count_code(get_diags( &
+				'let d = nomod::new(); d.set(1);'), EC_UNEXPECTED_TOKEN) == 0, &
+			! The module name itself is color-highlighted (ANSI codes sit
+			! between the surrounding backticks), so check the literal parts
+			! on either side rather than the whole phrase as one substring
+			diag_has_text(get_diags( &
+				'let d = nomod::new(); d.set(1);'), &
+				'is module `'), &
+			diag_has_text(get_diags( &
+				'let d = nomod::new(); d.set(1);'), &
+				'` imported?'), &
+			! Same cascade-prevention check for the plain non-struct-dot case
+			! (receiver type is known, not unknown_type, so this hits the
+			! err_non_struct_dot branch instead, but must still swallow the
+			! call's argument list)
+			diag_has_code(get_diags('let x = 3; x.foo(1);'), EC_NON_STRUCT_DOT), &
+			diag_count_code(get_diags( &
+				'let x = 3; x.foo(1);'), EC_UNEXPECTED_TOKEN) == 0, &
 			diag_has_code(get_diags( &
 				'let a = reshape([1,2,3,4], [2,2]);'), EC_STD_ONLY_FN), &
 			diag_has_code(get_diags('fn f(): i32 { let x = 1; }'), EC_NO_RETURN), &
