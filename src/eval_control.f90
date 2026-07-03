@@ -1088,9 +1088,9 @@ recursive module subroutine eval_array_expr(node, state, res)
 		end if
 
 		if (res%array%type == i32_type) then
-			res%array%len_ = ubound_%sca%i32 - lbound_%sca%i32
+			res%array%len_ = max(0_8, int(ubound_%sca%i32 - lbound_%sca%i32, 8))
 		else !if (res%array%type == i64_type) then
-			res%array%len_ = ubound_%sca%i64 - lbound_%sca%i64
+			res%array%len_ = max(0_8, ubound_%sca%i64 - lbound_%sca%i64)
 		end if
 
 		call allocate_array(res, res%array%len_)
