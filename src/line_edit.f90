@@ -119,7 +119,7 @@ function read_line_interactive(prompt, iostat) result(str_)
 	! prompt is assumed-length, so it already matches the actual argument's
 	! length exactly (no trailing blank padding to strip) -- trim() here would
 	! wrongly strip an intentional trailing space, e.g. "syntran$ "
-	res_ptr = ic_readline_c(prompt//c_null_char)
+	res_ptr = ic_readline_c(bbcode_escape(prompt)//c_null_char)
 
 	if (.not. c_associated(res_ptr)) then
 		! EOF (ctrl-D on an empty line).  Isocline's own internal cleanup
@@ -146,6 +146,43 @@ function read_line_interactive(prompt, iostat) result(str_)
 	if (len(str_) > 1) call ic_history_remove_last_c()
 
 end function read_line_interactive
+
+!===============================================================================
+
+function bbcode_escape(s) result(esc)
+
+	! Isocline renders every prompt string it's given through its own bbcode
+	! markup parser (see external/isocline/src/editline.c's edit_write_prompt(),
+	! which calls bbcode_print() on the prompt text).  Bbcode treats "[...]" as
+	! a formatting tag, so a plain prompt like "[Hint `;`]> " gets parsed as an
+	! unrecognized tag and silently dropped instead of printed.
+	!
+	! Escape the chars that are special to bbcode so prompt text always renders
+	! literally.  Per bbcode_append() in external/isocline/src/bbcode.c, only
+	! '[' and '\' are ever treated specially -- a lone ']' is never parsed as
+	! part of a tag unless a preceding unescaped '[' opened one, so escaping
+	! ']' is unnecessary and would actually backfire: "\]" isn't a recognized
+	! escape sequence (only "\[" and "\\" are), so it would render as a stray
+	! literal backslash followed by "]" instead of just "]"
+
+	character(len = *), intent(in) :: s
+	character(len = :), allocatable :: esc
+
+	!********
+
+	integer :: i
+
+	esc = ""
+	do i = 1, len(s)
+		select case (s(i:i))
+			case ("\", "[")
+				esc = esc//"\"//s(i:i)
+			case default
+				esc = esc//s(i:i)
+		end select
+	end do
+
+end function bbcode_escape
 
 !===============================================================================
 

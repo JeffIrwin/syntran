@@ -213,6 +213,30 @@ end subroutine unit_test_unqualified_name
 
 !===============================================================================
 
+subroutine unit_test_bbcode_escape(npass, nfail)
+
+	! Test the bbcode_escape() helper that escapes chars special to isocline's
+	! bbcode prompt markup ('\' and '['; a lone ']' is not special -- see the
+	! comment in bbcode_escape() itself), so REPL prompts like the
+	! missing-semicolon hint "[Hint `;`]> " render literally instead of being
+	! parsed (and silently dropped) as an unrecognized bbcode tag
+
+	integer, intent(inout) :: npass, nfail
+
+	logical, parameter :: quiet = .true.
+
+	call unit_test_coda( [ &
+		bbcode_escape("[Hint `;`]> ") == "\[Hint `;`]> ", &
+		bbcode_escape("syntran$ "   ) == "syntran$ "     , &
+		bbcode_escape("> "         ) == "> "             , &
+		bbcode_escape(""           ) == ""               , &
+		bbcode_escape("a\b"        ) == "a\\b"             &
+		], "bbcode_escape", npass, nfail)
+
+end subroutine unit_test_bbcode_escape
+
+!===============================================================================
+
 subroutine unit_test_bin_arith(npass, nfail)
 
 	implicit none
@@ -6403,6 +6427,7 @@ subroutine unit_tests(iostat)
 	call unit_test_levenshtein          (npass, nfail)
 	call unit_test_overload_display_name(npass, nfail)
 	call unit_test_unqualified_name     (npass, nfail)
+	call unit_test_bbcode_escape        (npass, nfail)
 	call unit_test_bin_arith            (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)
