@@ -60,6 +60,13 @@ module syntran__line_edit_m
 			type(c_ptr) :: res
 		end function syntran_history_path_c
 
+		function ic_enable_brace_insertion_c(enable) &
+			bind(c, name = "ic_enable_brace_insertion") result(was_enabled)
+			import :: c_bool
+			logical(c_bool), value :: enable
+			logical(c_bool) :: was_enabled
+		end function ic_enable_brace_insertion_c
+
 		function c_strlen(s) bind(c, name = "strlen") result(res)
 			import :: c_ptr, c_size_t
 			type(c_ptr), value :: s
@@ -87,6 +94,7 @@ subroutine line_edit_init()
 	! no home dir is set, history is kept in-memory for the session only
 
 	type(c_ptr) :: path_ptr
+	logical(c_bool) :: was_enabled
 
 	path_ptr = syntran_history_path_c()
 	call ic_set_history_c(path_ptr, -1_c_long)
@@ -96,6 +104,11 @@ subroutine line_edit_init()
 	! text (including continuation prompts), so disable isocline's marker to
 	! avoid a doubled-up "syntran$> "
 	call ic_set_prompt_marker_c(c_null_char, c_null_char)
+
+	! Isocline auto-inserts a closing bracket/paren/quote whenever the user
+	! types an opening one (enabled by default).  That's surprising for users
+	! coming from a plain terminal, so turn it off
+	was_enabled = ic_enable_brace_insertion_c(logical(.false., c_bool))
 
 end subroutine line_edit_init
 
