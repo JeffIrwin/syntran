@@ -141,6 +141,14 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
+	if (.not. interactive .and. .not. present(str_) .and. &
+			.not. state%quiet .and. is_mintty()) then
+		write(*,*) 'Note: interactive line editing (history, arrow keys) is'// &
+			' not available in Git Bash / MinTTY.'
+		write(*,*) 'For full REPL editing use: winpty syntran'// &
+			'  (or cmd.exe / PowerShell)'
+	end if
+
 	if (present(startup_file)) then
 		!print *, "startup_file = ", startup_file
 

@@ -55,6 +55,11 @@ module syntran__line_edit_m
 			integer(c_int) :: res
 		end function syntran_isatty_c
 
+		function syntran_is_mintty_c() bind(c, name = "syntran_is_mintty") result(res)
+			import :: c_int
+			integer(c_int) :: res
+		end function syntran_is_mintty_c
+
 		function syntran_history_path_c() bind(c, name = "syntran_history_path") result(res)
 			import :: c_ptr
 			type(c_ptr) :: res
@@ -87,6 +92,15 @@ logical function is_tty()
 	! sequences into a redirected pipe or file
 	is_tty = syntran_isatty_c() /= 0
 end function is_tty
+
+!===============================================================================
+
+logical function is_mintty()
+	! Are we running under MSYS2/Cygwin/Git Bash (MinTTY)?  A native Windows
+	! build cannot use isocline there because stdin is an MSYS pipe rather than
+	! a real Windows console handle; detecting this lets the REPL print a hint
+	is_mintty = syntran_is_mintty_c() /= 0
+end function is_mintty
 
 !===============================================================================
 
