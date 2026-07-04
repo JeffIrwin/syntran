@@ -60,6 +60,9 @@ module syntran__line_edit_m
 			integer(c_int) :: res
 		end function syntran_is_mintty_c
 
+		subroutine syntran_enable_vt_c() bind(c, name = "syntran_enable_vt")
+		end subroutine syntran_enable_vt_c
+
 		function syntran_history_path_c() bind(c, name = "syntran_history_path") result(res)
 			import :: c_ptr
 			type(c_ptr) :: res
@@ -101,6 +104,14 @@ logical function is_mintty()
 	! a real Windows console handle; detecting this lets the REPL print a hint
 	is_mintty = syntran_is_mintty_c() /= 0
 end function is_mintty
+
+!===============================================================================
+
+subroutine enable_vt_processing()
+	! Make the Windows console interpret ANSI escape sequences (needed under
+	! winpty; no-op elsewhere).  See syntran_enable_vt() in the C shim.
+	call syntran_enable_vt_c()
+end subroutine enable_vt_processing
 
 !===============================================================================
 

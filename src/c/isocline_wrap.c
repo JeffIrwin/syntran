@@ -92,6 +92,33 @@ int syntran_is_mintty(void)
 #endif
 }
 
+/* Enable ANSI escape interpretation on the Windows consoles attached to stdout
+ * and stderr, so raw color codes emitted by syntran's banner and error messages
+ * render instead of appearing as literal glyphs.  Without this, cmd renders them
+ * only if VT is already on, and winpty scrapes the un-interpreted escape bytes
+ * and re-emits them literally (garbage like ^[[91m).  No-op on non-Windows and
+ * when the handle is not a console (redirected file / MSYS pipe).
+ */
+void syntran_enable_vt(void)
+{
+#ifdef _WIN32
+	/* Define our own constant: ENABLE_VIRTUAL_TERMINAL_PROCESSING may already be
+	 * #defined to 0 by isocline's term.c fallback on older SDKs, which would make
+	 * the OR below a silent no-op.  0x0004 is the documented value. */
+	const DWORD vt = 0x0004;
+	DWORD mode;
+	HANDLE h;
+
+	h = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (h != INVALID_HANDLE_VALUE && GetConsoleMode(h, &mode))
+		SetConsoleMode(h, mode | vt);
+
+	h = GetStdHandle(STD_ERROR_HANDLE);
+	if (h != INVALID_HANDLE_VALUE && GetConsoleMode(h, &mode))
+		SetConsoleMode(h, mode | vt);
+#endif
+}
+
 /* Platform-correct history file path, or NULL if no home dir is set (in
  * which case history is kept in-memory only for the session).
  *
