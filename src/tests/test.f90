@@ -5787,10 +5787,10 @@ subroutine unit_test_error_codes(npass, nfail)
 			! on either side rather than the whole phrase as one substring
 			diag_has_text(get_diags( &
 				'let d = nomod::new(); d.set(1);'), &
-				'is module `'), &
+				'did you `use` module `'), &
 			diag_has_text(get_diags( &
 				'let d = nomod::new(); d.set(1);'), &
-				'` imported?'), &
+				'`?'), &
 			! Same cascade-prevention check for the plain non-struct-dot case
 			! (receiver type is known, not unknown_type, so this hits the
 			! err_non_struct_dot branch instead, but must still swallow the

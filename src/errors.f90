@@ -913,7 +913,7 @@ function err_undeclare_fn(context, span, fn, suggest, module_prefix) result(err)
 	if (present(module_prefix)) then
 		err = err//line_feed &
 			//fg_bright_green//"help"//color_reset &
-			//": is module `"//fg_bright_green//module_prefix//color_reset//"` imported?"
+			//": did you `use` module `"//fg_bright_green//module_prefix//color_reset//"`?"
 	end if
 
 end function err_undeclare_fn
@@ -1613,9 +1613,9 @@ function err_circular_import(context, span, module_name) result(err)
 	character(len = *), intent(in) :: module_name
 	character(len = :), allocatable :: err
 	err = err_pre(EC_CIRCULAR_IMPORT) &
-		//'circular module dependency on `'//module_name//'`' &
+		//'circular `use` dependency on `'//module_name//'`' &
 		//underline(context, span) &
-		//" circular import"//color_reset
+		//" circular `use`"//color_reset
 end function err_circular_import
 
 !===============================================================================
@@ -1626,9 +1626,9 @@ function err_duplicate_import(context, span, module_name) result(err)
 	character(len = *), intent(in) :: module_name
 	character(len = :), allocatable :: err
 	err = err_pre(EC_DUPLICATE_IMPORT) &
-		//'duplicate import of module `'//module_name//'`' &
+		//'duplicate `use` of module `'//module_name//'`' &
 		//underline(context, span) &
-		//" duplicate import"//color_reset
+		//" duplicate `use`"//color_reset
 end function err_duplicate_import
 
 !===============================================================================
