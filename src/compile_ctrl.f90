@@ -803,14 +803,22 @@ recursive subroutine compile_node(prog, cs, node)
 		case (unif_array)
 			! [fill_val; d1, d2, ...] — native when element type is numeric/bool.
 			! Compile size expressions then the fill value onto the stack.
+			! OP_UNIF_ARRAY_NAT's handler uses a fixed-size local dims_ buffer
+			! sized MAX_NAT_UNIF_RANK; higher-rank arrays fall back to
+			! OP_NEW_ARRAY, which has no rank limit.
 			select case (node%val%array%type)
 			case (bool_type, i32_type, i64_type, f32_type, f64_type)
-				do i = 1, node%val%array%rank
-					call compile_node(prog, cs, node%size(i))
-				end do
-				call compile_node(prog, cs, node%lbound)
-				call emit(prog, OP_UNIF_ARRAY_NAT, &
-					a = node%val%array%type, b = node%val%array%rank)
+				if (node%val%array%rank <= MAX_NAT_UNIF_RANK) then
+					do i = 1, node%val%array%rank
+						call compile_node(prog, cs, node%size(i))
+					end do
+					call compile_node(prog, cs, node%lbound)
+					call emit(prog, OP_UNIF_ARRAY_NAT, &
+						a = node%val%array%type, b = node%val%array%rank)
+				else
+					idx = add_node(prog, node)
+					call emit(prog, OP_NEW_ARRAY, a = idx)
+				end if
 			case default
 				idx = add_node(prog, node)
 				call emit(prog, OP_NEW_ARRAY, a = idx)

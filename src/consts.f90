@@ -19,6 +19,17 @@ module syntran__consts_m
 	! shouldn't really matter
 	integer, parameter :: SCOPE_CAP_INIT = 8
 
+	! Max array rank handled by the native OP_SLICE_NAT/OP_STORE_SLICE_NAT
+	! bytecode handlers' fixed-size local buffers.  Higher-rank slices fall
+	! back to OP_SLICE/OP_STORE_SLICE (eval_array.f90), which use allocatable
+	! subscript arrays and have no rank limit.
+	integer, parameter :: MAX_NAT_SLICE_RANK = 4
+
+	! Max array rank handled by the native OP_UNIF_ARRAY_NAT bytecode handler's
+	! fixed-size dims_ buffer.  Higher-rank uniform arrays fall back to
+	! OP_NEW_ARRAY (eval_array_expr), which has no rank limit.
+	integer, parameter :: MAX_NAT_UNIF_RANK = 8
+
 	! Must be larger than largest token enum below.  TODO: add an init check for
 	! this
 	integer, parameter :: magic = 256

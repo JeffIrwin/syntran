@@ -34,6 +34,7 @@ let BLOCKLIST = [
 	//"ARES",  // not sure if this is valid per poople but i suspect it isn't
 	//"ORCS",
 	"CORP",
+	"HIED",
 	"MANS",
 	"PONE",
 	""

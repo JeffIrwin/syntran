@@ -1296,7 +1296,11 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_res, ls
 				write(*,*) err_int(IC_BAD_ARRAY_SUBSCRIPT_TYPE, 'bad array subscript type')
 				call internal_error()
 			end if
-			lsub = asubs(i)%v(1)
+			! lsub is only used in get_next_subscript iteration; when
+			! asubs(i)%v is empty (e.g. x[ifree] where ifree=[]) the result
+			! has 0 elements and lsub is never consumed.  Guard the access so
+			! empty index arrays don't crash (mirrors eval_subscript_1d).
+			if (size(asubs(i)%v) > 0) lsub = asubs(i)%v(1)
 			usub = 1
 			ssub = 1
 			rank_res = rank_res + 1
@@ -1344,7 +1348,10 @@ module subroutine get_field_slice_val(member_node, field_val, state, res)
 		select case (member_node%lsubscripts(idim_)%sub_kind)
 		case (step_sub, range_sub, all_sub)
 			diff = usubs(idim_) - lsubs(idim_)
-			res%array%size(idim_res) = divceil(diff, ssubs(idim_))
+			! Clamp reversed/empty ranges to 0 (mirrors eval_slice_rank1 and
+			! the sibling set_field_slice_val), otherwise divceil can return
+			! a negative size, leading to a negative-size array allocation.
+			res%array%size(idim_res) = max(0_8, divceil(diff, ssubs(idim_)))
 			idim_res = idim_res + 1
 		case (arr_sub)
 			res%array%size(idim_res) = size(asubs(idim_)%v)

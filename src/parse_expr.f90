@@ -947,13 +947,7 @@ recursive module subroutine parse_dot(parser, expr)
 		! emit a cascade of `unexpected token` errors (which would also
 		! suppress pass-2 diagnostics like the real undeclared-fn error)
 		if (parser%current_kind() == lparen_token) then
-			lparen_ = parser%match(lparen_token)
-			do while (parser%current_kind() /= rparen_token .and. &
-			          parser%current_kind() /= eof_token)
-				call parser%parse_expr(expr = arg_)
-				if (parser%current_kind() /= rparen_token) comma_ = parser%match(comma_token)
-			end do
-			rparen_ = parser%match(rparen_token)
+			call parse_swallow_arg_list(parser)
 		end if
 		return
 	end if
@@ -987,13 +981,7 @@ recursive module subroutine parse_dot(parser, expr)
 				call parser%diagnostics%push(err_mutable_method_on_temp( &
 					parser%context(), span, identifier%text))
 				! Consume argument list for error recovery
-				lparen_ = parser%match(lparen_token)
-				do while (parser%current_kind() /= rparen_token .and. &
-				          parser%current_kind() /= eof_token)
-					call parser%parse_expr(expr = arg_)
-					if (parser%current_kind() /= rparen_token) comma_ = parser%match(comma_token)
-				end do
-				rparen_ = parser%match(rparen_token)
+				call parse_swallow_arg_list(parser)
 				expr%val%type = unknown_type
 				return
 			end if
@@ -1227,6 +1215,42 @@ recursive module subroutine parse_dot(parser, expr)
 	end if
 
 end subroutine parse_dot
+
+!===============================================================================
+
+subroutine parse_swallow_arg_list(parser)
+
+	! Error recovery: consume a parenthesized, comma-separated argument list
+	! without building an AST for it, so the parser stays in sync with a
+	! method call whose receiver or const-ness has already been diagnosed as
+	! invalid (avoids a cascade of "unexpected token" errors).
+	!
+	! Mirrors the real argument-list loop in parse_fn_call_expr (below), which
+	! guards against a stuck parse_expr call (e.g. on an unparseable token
+	! like `}`) by forcing the parser to advance at least one token per
+	! iteration.  Without that guard this loop can spin forever.
+
+	class(parser_t) :: parser
+
+	!********
+
+	integer :: pos0
+
+	type(syntax_node_t) :: arg_
+
+	type(syntax_token_t) :: lparen_, rparen_, comma_, amp_
+
+	lparen_ = parser%match(lparen_token)
+	do while (parser%current_kind() /= rparen_token .and. &
+	          parser%current_kind() /= eof_token)
+		pos0 = parser%pos
+		call parser%parse_expr(expr = arg_)
+		if (parser%current_kind() /= rparen_token) comma_ = parser%match(comma_token)
+		if (parser%pos == pos0) amp_ = parser%next()
+	end do
+	rparen_ = parser%match(rparen_token)
+
+end subroutine parse_swallow_arg_list
 
 !===============================================================================
 

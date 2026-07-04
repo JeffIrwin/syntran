@@ -1818,7 +1818,7 @@ module subroutine vm_run(prog, state, res)
 		case (OP_SLICE_NAT)
 			block
 			integer :: ndim_, k_
-			integer(kind=8) :: lb_(4), ub_(4), lens_(4)
+			integer(kind=8) :: lb_(MAX_NAT_SLICE_RANK), ub_(MAX_NAT_SLICE_RANK), lens_(MAX_NAT_SLICE_RANK)
 			integer(kind=8) :: len_tot_, outer_count_, outer_i_
 			integer(kind=8) :: src_off_, src_prod_, dst_off_, ci_, tmp_i_
 
@@ -1955,7 +1955,7 @@ module subroutine vm_run(prog, state, res)
 		case (OP_STORE_SLICE_NAT)
 			block
 			integer :: ndim_, k_
-			integer(kind=8) :: lb_(4), ub_(4), lens_(4)
+			integer(kind=8) :: lb_(MAX_NAT_SLICE_RANK), ub_(MAX_NAT_SLICE_RANK), lens_(MAX_NAT_SLICE_RANK)
 			integer(kind=8) :: outer_count_, outer_i_
 			integer(kind=8) :: dst_off_, dst_prod_, rhs_off_, ci_, tmp_i_
 
@@ -2421,7 +2421,7 @@ module subroutine vm_run(prog, state, res)
 		case (OP_UNIF_ARRAY_NAT)
 			block
 			integer :: rk_, k_
-			integer(kind=8) :: dims_(8), len_tot_
+			integer(kind=8) :: dims_(MAX_NAT_UNIF_RANK), len_tot_
 			type(value_t) :: fill_
 
 			rk_     = instr%b

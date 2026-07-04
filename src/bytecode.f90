@@ -1351,6 +1351,9 @@ pure logical function arr_slice_native_ok(node) result(ok)
 	! Exclude char-subscript cases: str_arr[lo:hi, j:k] has 2 range_sub entries
 	! but rank 1 — the extra subscript is a substring range, not an array dim.
 	if (size(node%lsubscripts) /= node%val%array%rank) return
+	! OP_SLICE_NAT's handler uses fixed-size local buffers sized
+	! MAX_NAT_SLICE_RANK; higher-rank slices fall back to OP_SLICE.
+	if (node%val%array%rank > MAX_NAT_SLICE_RANK) return
 	ok = .true.
 
 end function arr_slice_native_ok
@@ -1382,6 +1385,9 @@ pure logical function store_slice_nat_ok(node) result(ok)
 	! back to eval_assignment_expr via OP_STORE_SLICE.
 	if (.not. allocated(node%right%val%array)) return
 	if (node%val%array%type /= node%right%val%array%type) return
+	! OP_STORE_SLICE_NAT's handler uses fixed-size local buffers sized
+	! MAX_NAT_SLICE_RANK; higher-rank slices fall back to OP_STORE_SLICE.
+	if (node%val%array%rank > MAX_NAT_SLICE_RANK) return
 	ok = .true.
 
 end function store_slice_nat_ok

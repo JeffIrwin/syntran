@@ -3213,6 +3213,11 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			eval('let s = "hello"; s[:3];',         quiet) == 'hel',                    &
 			! Multi-dim with omitted upper alongside bare colon
 			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; m[0, 1:];', quiet) == '[3, 6]',   &
+			! Rank above OP_SLICE_NAT's native buffer size (MAX_NAT_SLICE_RANK)
+			! must fall back to OP_SLICE instead of overflowing the native
+			! handler's fixed-size local lb_/ub_/lens_ buffers
+			eval('let a = [0; 2,2,2,2,2]; a[0,0,0,0,0] = 42;'// &
+				' sum(a[0:1,0:1,0:1,0:1,0:1]);', quiet) == '42', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -3294,6 +3299,11 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 			! Omitted lower/upper bounds on LHS
 			eval('let v = [0: 5]; v[2:] = 9; v;',       quiet) == '[0, 1, 9, 9, 9]',   &
 			eval('let v = [0: 5]; v[:3] += 10; v;',     quiet) == '[10, 11, 12, 3, 4]', &
+			! Rank above OP_STORE_SLICE_NAT's native buffer size
+			! (MAX_NAT_SLICE_RANK) must fall back to OP_STORE_SLICE instead of
+			! overflowing the native handler's fixed-size local buffers
+			eval('let a = [0; 2,2,2,2,2];'// &
+				' a[0:1,0:1,0:1,0:1,0:1] = [7; 1,1,1,1,1]; a[0,0,0,0,0];', quiet) == '7', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5010,6 +5020,21 @@ subroutine unit_test_methods(npass, nfail)
 				//'return arr[0].a[2:5];' &
 				, quiet) == '[3, 4, 5]', &
 
+			! --- struct field slice, reversed range is empty (not negative size) ---
+			eval('' &                                                             ! 30b
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[1,2,3,4,5]};' &
+				//'return size(s.a[3:1], 0);' &
+				, quiet) == '0', &
+
+			! --- struct field slice, empty index array doesn''t crash ---
+			eval('' &                                                             ! 30c
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30]};' &
+				//'let ifree=[0;0];' &
+				//'return size(s.a[ifree], 0);' &
+				, quiet) == '0', &
+
 			! --- const method on fn return value ---
 			eval(CTR//'fn make(x:i32):C{return C{n=x};}' &                         ! 31
 				//'return make(5).get();' &
@@ -5023,6 +5048,19 @@ subroutine unit_test_methods(npass, nfail)
 				//'make(5).inc();'), EC_MUTABLE_METHOD_ON_TEMP), &
 			diag_count_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&     ! 34
 				//'make(5).inc();'), EC_MUTABLE_METHOD_ON_TEMP) == 1, &
+
+			! --- error recovery: malformed arg list must not hang the parser.
+			! A dot-call on a non-struct receiver or a mutable-method-on-temp
+			! both swallow the arg list for error recovery; an unparseable
+			! token (e.g. an unmatched `}`) inside that list must not stall
+			! the recovery loop forever.  If these regress to an infinite
+			! loop, this test (and the whole suite) hangs rather than fails. ---
+			diag_has_code(get_diags('let x=1; x.foo(});'), EC_NON_STRUCT_DOT), &    ! 34b
+			diag_has_code(get_diags('let x=1; x.foo(});'), EC_UNEXPECTED_TOKEN), &  ! 34c
+			diag_has_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&        ! 34d
+				//'make(5).inc(});'), EC_MUTABLE_METHOD_ON_TEMP), &
+			diag_has_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&        ! 34e
+				//'make(5).inc(});'), EC_UNEXPECTED_TOKEN), &
 
 			! --- subscript/slice on fn return value ---
 			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[2];' &        ! 35
@@ -6745,6 +6783,11 @@ subroutine unit_test_native_array_ctor(npass, nfail)
 			eval('let a = [9; 2, 3]; size(a, 0);')                             == '2', &
 			eval('let a = [9; 2, 3]; size(a, 1);')                             == '3', &
 			eval('let a = [9; 2, 3]; a[0, 1];')                                == '9', &
+			! unif_array: rank above OP_UNIF_ARRAY_NAT's native buffer size
+			! (MAX_NAT_UNIF_RANK) must fall back to OP_NEW_ARRAY instead of
+			! overflowing the native handler's fixed-size local buffer
+			eval('let a = [9; 2,2,2,2,2,2,2,2,2]; a[0,0,0,0,0,0,0,0,0];')       == '9', &
+			eval('let a = [9; 2,2,2,2,2,2,2,2,2]; size(a, 8);')                == '2', &
 			! bound_array: i32
 			eval('let a = [0:5]; a[0];')                                        == '0', &
 			eval('let a = [0:5]; a[4];')                                        == '4', &
