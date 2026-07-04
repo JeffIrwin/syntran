@@ -949,29 +949,9 @@ function lex(lexer) result(token)
 
 	lexer%pos = lexer%pos + 1
 
-	! FIXME: arrow keys create bad tokens in bash on Windows.  Fix that (better
-	! yet, override up arrow to do what it does in bash.  c.f. rubik-js)
-	!
-	! Actually this is somewhat difficult bc I think it requires event
-	! listening.  Currently syntran does not get any stdin until the user hits
-	! <enter>.  So if they type <up-arrow>, syntran doesn't know anything about
-	! that until they subsequently hit <enter>.  I guess we could use some 3p
-	! C(++) lib to do keypress event listening, but there's an easier solution.
-	!
-	! Just use rlwrap:
-	!
-	!     sudo apt install rlwrap
-	!     rlwrap syntran
-	!
-	! Then rlwrap does the listening, handles all arrow keys as expected, and
-	! passes stdin along to syntran.  See run.sh which checks if you have rlwrap
-	! installed.  Windows cmd works good enough without rlwrap.
-	!
-	! You can make a shell alias for that.
-	!
-	! Idris lang also makes the same recommendation:
-	!
-	!     https://github.com/idris-lang/Idris2/issues/54
+	! Note that syntran uses the isocline to read lines. Previously it used
+	! rlwrap in syntran <= 1.3 and there used to be a lengthy comment here about
+	! it
 
 end function lex
 

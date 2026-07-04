@@ -9,7 +9,8 @@ WORKDIR /workdir
 RUN dnf update -y && dnf install -y \
 	vim \
 	git \
-	gcc-toolset-13-gcc-gfortran
+	gcc-toolset-13-gcc-gfortran \
+	expect
 
 ## Static libc.a and libm.a can also be installed, but it does not remove the dependency on libc.so etc. from syntran
 #dnf --enablerepo=crb install glibc-static -y
@@ -37,6 +38,7 @@ WORKDIR /workdir/syntran
 # to know the git commit for `--version` output, so we have to install git and
 # clone the whole repo
 ADD src ./src
+ADD external ./external
 ADD .git ./.git
 ADD fpm.toml .
 ADD gen-header.sh .
@@ -114,4 +116,9 @@ RUN [[ "$(echo 'hello' | ./bin/syntran -c 'println(readln(std::IN));' | tr -d '[
 RUN ./bin/syntran -c 'close(std::IN);'  2>&1 | grep -q "R28"
 RUN ./bin/syntran -c 'close(std::OUT);' 2>&1 | grep -q "R28"
 RUN ./bin/syntran -c 'close(std::ERR);' 2>&1 | grep -q "R28"
+
+# Interactive REPL tests (isocline history, Ctrl+R search, continuation
+# hints, arrow-key editing).  These need a real pty, which none of the
+# piped/`-c` tests above provide -- see src/tests/repl/test-repl.sh
+RUN bash src/tests/repl/test-repl.sh ./bin/syntran
 

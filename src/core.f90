@@ -31,8 +31,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - integrate rlwrap as a library dependency
-	!    * as is, it's usually only one-time setup per machine, but it's still friction
 	!  - switch/match/case
 	!  - callbacks, fn pointers, i.e. passing one function as an argument to
 	!    another function
@@ -254,11 +252,12 @@ module syntran__core_m
 	!      variable with the same name `ans`, at least within the REPL and maybe
 	!      everywhere for compatibility of being able to paste code into the
 	!      REPL
-	!    * it would be very convenient.  you can always rlwrap and up arrow,
-	!      then assign to a var if you need to save the last ans.  but this is
-	!      inconvenient, and state changers are not always idempotent (meaning
-	!      up arrow could give a different answer on 2nd execution).  and if a
-	!      statement is expensive, you may not want to have to run it again
+	!    * it would be very convenient.  you can always isocline/rlwrap and up
+	!      arrow, then assign to a var if you need to save the last ans.  but
+	!      this is inconvenient, and state changers are not always idempotent
+	!      (meaning up arrow could give a different answer on 2nd execution).
+	!      and if a statement is expensive, you may not want to have to run it
+	!      again
 	!  - structs
 	!    * post-merge TODO struct items:
 	!      + update struct sample.  include struct/array combos, nesting, etc.

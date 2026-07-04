@@ -230,44 +230,15 @@ Only single-line `// comments` are supported.  There are _no_ multi-line `/*comm
 
 In many shells such as `bash`, the up and down arrow keys can be used to scroll through the command history.  For example, hit the up arrow key and then ENTER to repeat the previous command, or hit the up arrow key twice to go two commands back.
 
-Arrow keys do _not_ work by default in syntran running within bash, but there is a simple and powerful workaround with `rlwrap`.  If you run `syntran` by itself, it processes text in cooked mode:
+Syntran's REPL supports this out of the box, on Linux, macOS, and Windows alike, using the vendored [isocline](https://github.com/daanx/isocline) line-editing library (see `external/isocline` and `src/line_edit.f90`).  When you run `syntran` interactively:
 
 ```
 ./build/Debug/syntran
 ```
 
-Cooked mode means that `syntran` does not read or process any text until after you press the ENTER key.  Further, when you use an arrow key, you will see escape sequences like this:
+the arrow keys move the cursor and scroll through history, Ctrl+R starts a reverse history search, and command history is saved across separate invocations of `syntran` in `~/.syntran_history` (`%USERPROFILE%\.syntran_history` on Windows).  Hit Ctrl+D on an empty line to exit the REPL.
 
-```
-^[[A
-```
-
-These keypresses may appear like the ANSI escape sequence above or other garbled text.
-
-To overcome this, install and run `rlwrap` with `syntran`:
-
-```
-sudo apt install rlwrap
-rlwrap ./build/Debug/syntran
-```
-
-With `rlwrap`, the arrow keys work as expected within the `syntran` interpreter.  Plus, you get `rlwrap`'s other powerful features, like Ctrl+R for history search and saved history across separate invocations of `syntran`.
-
-Also see [`run.sh`](run.sh), which checks if you have `rlwrap` installed and then starts `syntran` appropriately.  You can make a bash function or alias in your `~/.bashrc` file to help with this:
-
-```
-alias syntran="rlwrap /path/to/bin/syntran"
-```
-
-The basic arrow key history should work in Windows terminal and Windows cmd out of the box, but running `rlwrap` in a Linux environment within Windows can still be advantageous.
-
-### rlwrap workaround
-
-As of rlwrap 0.43, there is a bug where it hides the `syntran$ ` prompt.  To workaround it, add this to your `~/.inputrc`:
-
-```
-set enable-bracketed-paste off
-```
+No extra install or alias is required; this replaces the old `rlwrap`-based workaround.
 
 ## Syntax highlighting
 
@@ -1052,7 +1023,7 @@ let file = open("test.txt");
 writeln(file, "hello world");
 writeln(file, "here's a second line of text with a number ", 42);
 close(file);
-//// Ctrl+C to exit syntran prompt
+//// Ctrl+D to exit syntran prompt
 
 //// shell prompt
 cat test.txt

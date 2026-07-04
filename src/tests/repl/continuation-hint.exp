@@ -1,0 +1,23 @@
+#!/usr/bin/env expect
+
+# A statement missing its semicolon triggers the interactive continuation
+# prompt (src/syntran.f90, the `compilation%first_expected == ";"` branch),
+# which hints the expected token as "[Hint `;`]> ".  That prompt text
+# contains a literal "[", which isocline would otherwise parse as a bbcode
+# formatting tag and silently drop -- bbcode_escape() in src/line_edit.f90
+# exists specifically to keep it rendering as-is
+
+set timeout 10
+source [file join [file dirname [info script]] common.tcl]
+
+set bin [lindex $argv 0]
+spawn $bin
+wait_prompt
+
+send "1+2\r"
+wait_hint
+
+send ";\r"
+wait_result "3"
+
+finish

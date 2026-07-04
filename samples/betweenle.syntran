@@ -256,10 +256,10 @@ println("Starting betweenle solver");
 // ln -s /usr/share/dict/american-english ~/.local/share/dict/
 //
 const HOME_DIR = std::getenv("HOME");
-const dict_filename = HOME_DIR + "/.local/share/dict/american-english";
-//let dict_filename = "/usr/share/dict/american-english";
+const DICT_FILENAME = HOME_DIR + "/.local/share/dict/american-english";
+//let DICT_FILENAME = "/usr/share/dict/american-english";
 
-let words = read_dict(dict_filename);
+let words = read_dict(DICT_FILENAME);
 let n = i32(size(words, 0));
 println("Loaded ", n, " 5-letter words from system dictionary");
 

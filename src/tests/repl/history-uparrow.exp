@@ -1,0 +1,20 @@
+#!/usr/bin/env expect
+
+# Up arrow recalls the last history entry into the edit buffer, and Enter
+# re-submits it.  See line_edit_add_history() in src/line_edit.f90
+
+set timeout 10
+source [file join [file dirname [info script]] common.tcl]
+
+set bin [lindex $argv 0]
+spawn $bin
+wait_prompt
+
+send "1+2;\r"
+wait_result "3"
+
+send "\033\[A"
+send "\r"
+wait_result "3"
+
+finish

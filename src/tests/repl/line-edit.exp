@@ -1,0 +1,22 @@
+#!/usr/bin/env expect
+
+# Exercises mid-line cursor movement and editing, not just history recall:
+# type "1+92", back up over the errant "9" with Left, delete it with
+# Backspace, then move past the "2" again with Right before finishing the
+# statement
+
+set timeout 10
+source [file join [file dirname [info script]] common.tcl]
+
+set bin [lindex $argv 0]
+spawn $bin
+wait_prompt
+
+send "1+92"
+send "\033\[D"
+send "\177"
+send "\033\[C"
+send ";\r"
+wait_result "3"
+
+finish

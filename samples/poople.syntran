@@ -23,12 +23,12 @@ println("Starting poople solver");
 // ln -s /usr/share/dict/american-english ~/.local/share/dict/
 //
 const HOME_DIR = std::getenv("HOME");
-const dict_filename = HOME_DIR + "/.local/share/dict/american-english";
-//let dict_filename = "/usr/share/dict/american-english";
+const DICT_FILENAME = HOME_DIR + "/.local/share/dict/american-english";
+//let DICT_FILENAME = "/usr/share/dict/american-english";
 
 let blocklist = poople::BLOCKLIST;
 let allowlist = poople::ALLOWLIST;
-let dict = poople::read_dict(dict_filename, &blocklist, &allowlist);
+let dict = poople::read_dict(DICT_FILENAME, &blocklist, &allowlist);
 println("Loaded ", dict.len(),
 	" 4-letter words from system dictionary");
 
