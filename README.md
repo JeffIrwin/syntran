@@ -240,27 +240,6 @@ the arrow keys move the cursor and scroll through history, Ctrl+R starts a rever
 
 No extra install or alias is required; this replaces the old `rlwrap`-based workaround.
 
-### Legacy: rlwrap
-
-Before isocline was added, syntran relied on the external [`rlwrap`](https://github.com/hanslub42/rlwrap) tool for this functionality, since running `syntran` by itself processes text in cooked mode (no arrow-key support, and keypresses like the up arrow show up as raw escape sequences such as `^[[A`).  `rlwrap` is no longer needed, but it still works if you prefer it:
-
-```
-sudo apt install rlwrap
-rlwrap ./build/Debug/syntran
-```
-
-Also see [`run.sh`](run.sh), which checks if you have `rlwrap` installed and then starts `syntran` appropriately.  You can make a bash function or alias in your `~/.bashrc` file to help with this:
-
-```
-alias syntran="rlwrap /path/to/bin/syntran"
-```
-
-As of rlwrap 0.43, there is a bug where it hides the `syntran$ ` prompt.  To work around it, add this to your `~/.inputrc`:
-
-```
-set enable-bracketed-paste off
-```
-
 ## Syntax highlighting
 
 I do not plan on writing any syntax highlighting plugins.
