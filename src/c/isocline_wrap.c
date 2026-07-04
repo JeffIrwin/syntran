@@ -11,7 +11,7 @@
  *
  * This file also provides two small platform-specific helpers that syntran's
  * REPL needs and that don't belong in Fortran:
- *   - syntran_isatty():       is stdin a real terminal (vs. a pipe/file)?
+ *   - syntran_isatty():       are stdin AND stdout real terminals?
  *   - syntran_history_path(): where should REPL history persist?
  * Both differ by platform in ways that are simplest to resolve here, where
  * the C compiler predefines _WIN32 automatically (no build-system flag
@@ -30,12 +30,17 @@
 #include <unistd.h>
 #endif
 
+/* Isocline should only take over the terminal when BOTH stdin and stdout are
+ * real terminals.  If stdout is redirected (e.g. `syntran | tee log`),
+ * isocline's cursor-control and redraw escape sequences would otherwise leak
+ * into the pipe even though stdin is still an interactive tty.
+ */
 int syntran_isatty(void)
 {
 #ifdef _WIN32
-	return _isatty(_fileno(stdin));
+	return _isatty(_fileno(stdin)) && _isatty(_fileno(stdout));
 #else
-	return isatty(fileno(stdin));
+	return isatty(fileno(stdin)) && isatty(fileno(stdout));
 #endif
 }
 

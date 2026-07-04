@@ -208,7 +208,8 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 					if (interactive) then
 						line = line//line_feed//read_line_interactive( &
-							'[Hint `'//compilation%first_expected//'`]> ', io)
+							'[Hint `'//compilation%first_expected//'`]> ', io, &
+							use_color = len(prompt_color) > 0)
 					else
 						write(ou, '(a)', advance = 'no') prompt_color// &
 							'[Hint `'//compilation%first_expected//'`]> '//color_reset
@@ -217,7 +218,8 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 				else
 					if (interactive) then
-						line = line//line_feed//read_line_interactive('> ', io)
+						line = line//line_feed//read_line_interactive('> ', io, &
+							use_color = len(prompt_color) > 0)
 					else
 						write(ou, '(a)', advance = 'no') prompt_color//'> '//color_reset
 						line = line//line_feed//read_line(iu, iostat = io)
@@ -226,7 +228,8 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 			else
 				if (interactive) then
-					line = read_line_interactive(lang_name//'$ ', io)
+					line = read_line_interactive(lang_name//'$ ', io, &
+						use_color = len(prompt_color) > 0)
 				else
 					write(ou, '(a)', advance = 'no') prompt
 					line = read_line(iu, iostat = io)

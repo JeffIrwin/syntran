@@ -80,8 +80,11 @@ contains
 !===============================================================================
 
 logical function is_tty()
-	! Is stdin a real terminal (vs. a pipe or redirected file)?  Line editing
-	! only makes sense when it is
+	! Are stdin AND stdout both real terminals (vs. a pipe or redirected
+	! file)?  Line editing only makes sense when both are: isocline needs an
+	! interactive stdin to read keystrokes from, and an interactive stdout to
+	! draw/redraw the prompt and edit buffer onto, without leaking escape
+	! sequences into a redirected pipe or file
 	is_tty = syntran_isatty_c() /= 0
 end function is_tty
 
@@ -114,7 +117,7 @@ end subroutine line_edit_init
 
 !===============================================================================
 
-function read_line_interactive(prompt, iostat) result(str_)
+function read_line_interactive(prompt, iostat, use_color) result(str_)
 
 	! Read one line of input with history + arrow-key editing.  Mirrors
 	! read_line() in utils.f90: returns iostat = iostat_end on EOF (ctrl-D on
@@ -122,17 +125,32 @@ function read_line_interactive(prompt, iostat) result(str_)
 
 	character(len = *), intent(in) :: prompt
 	integer, intent(out) :: iostat
+	logical, intent(in), optional :: use_color
 
 	character(len = :), allocatable :: str_
 
 	!********
 
 	type(c_ptr) :: res_ptr
+	logical :: use_color_
+	character(len = :), allocatable :: prompt_bb
+
+	use_color_ = .true.
+	if (present(use_color)) use_color_ = use_color
 
 	! prompt is assumed-length, so it already matches the actual argument's
 	! length exactly (no trailing blank padding to strip) -- trim() here would
-	! wrongly strip an intentional trailing space, e.g. "syntran$ "
-	res_ptr = ic_readline_c(bbcode_escape(prompt)//c_null_char)
+	! wrongly strip an intentional trailing space, e.g. "syntran$ ".  Escape it
+	! for bbcode regardless of color, then optionally wrap it in isocline's own
+	! "[b green]...[/]" bbcode markup so the prompt keeps the same bold-green
+	! styling as the non-interactive prompt (built from fg_bold//fg_green in
+	! src/syntran.f90).  use_color_ should mirror whether that caller-side
+	! color is actually enabled (e.g. off when stdout color is disabled), so
+	! that isocline's rendering matches the plain path
+	prompt_bb = bbcode_escape(prompt)
+	if (use_color_) prompt_bb = "[b green]"//prompt_bb//"[/]"
+
+	res_ptr = ic_readline_c(prompt_bb//c_null_char)
 
 	if (.not. c_associated(res_ptr)) then
 		! EOF (ctrl-D on an empty line).  Isocline's own internal cleanup
