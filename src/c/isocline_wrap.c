@@ -9,11 +9,12 @@
  * quoted, relative path) so both build systems only need to know about this
  * one shim file rather than isocline's whole file list.
  *
- * This file also provides two small platform-specific helpers that syntran's
- * REPL needs and that don't belong in Fortran:
+ * This file also provides small platform-specific helpers that syntran needs
+ * and that don't belong in Fortran:
  *   - syntran_isatty():       are stdin AND stdout real terminals?
  *   - syntran_history_path(): where should REPL history persist?
- * Both differ by platform in ways that are simplest to resolve here, where
+ *   - syntran_is_dir():       does a path refer to a directory?
+ * These differ by platform in ways that are simplest to resolve here, where
  * the C compiler predefines _WIN32 automatically (no build-system flag
  * needed on either FPM or CMake).
  */
@@ -23,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #ifdef _WIN32
 #include <io.h>
@@ -110,4 +112,29 @@ const char *syntran_history_path(void)
 
 	snprintf(path, sizeof(path), "%s/%s", home, ".syntran_history");
 	return path;
+}
+
+/* Non-zero iff path exists and is a directory.
+ *
+ * Used by read_file() (src/utils.f90) to portably reject directories passed
+ * to #include()/use.  A prior implementation probed inquire(file =
+ * "<path>/.") in Fortran, relying on stat("<path>/.") failing with ENOTDIR
+ * for regular files on POSIX -- but Windows path normalization collapses
+ * "<file>/." to "<file>", so that probe wrongly reported every regular file
+ * as a directory.  A direct stat()/S_IFDIR check is unambiguous on both
+ * platforms.
+ *
+ * Uses the S_IFDIR bit mask rather than the S_ISDIR() macro, since MSVC's
+ * <sys/stat.h> defines the former but not the latter for _stat().
+ */
+int syntran_is_dir(const char *path)
+{
+#ifdef _WIN32
+	struct _stat st;
+	if (_stat(path, &st) != 0) return 0;
+#else
+	struct stat st;
+	if (stat(path, &st) != 0) return 0;
+#endif
+	return (st.st_mode & S_IFDIR) != 0;
 }

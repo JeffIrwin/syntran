@@ -4,6 +4,7 @@
 module syntran__utils_m
 
 	use iso_fortran_env
+	use iso_c_binding
 
 	implicit none
 
@@ -171,6 +172,18 @@ module syntran__utils_m
 !        end function
 !#endif
 !	end interface
+
+!===============================================================================
+
+	! C helper used by is_dir() below.  Implemented in src/c/isocline_wrap.c,
+	! which is linked into every syntran target (FPM and CMake)
+	interface
+		function syntran_is_dir_c(path) bind(c, name = "syntran_is_dir") result(res)
+			import :: c_char, c_int
+			character(kind = c_char), intent(in) :: path(*)
+			integer(c_int) :: res
+		end function syntran_is_dir_c
+	end interface
 
 !===============================================================================
 
@@ -543,21 +556,19 @@ end function exists
 logical function is_dir(filename)
 
 	! Check if filename is a directory.  There is no standard Fortran
-	! intrinsic for this, but inquire() ultimately resolves to stat() on
-	! POSIX systems, and stat() on "<path>/." only succeeds if <path> is a
-	! directory (regular files fail with ENOTDIR).  This is more portable
-	! than trying to detect directories from open()/read() error codes,
-	! which vary between compiler runtimes (e.g. gfortran vs ifx)
+	! intrinsic for this, so delegate to a stat()-based C helper (see
+	! syntran_is_dir() in src/c/isocline_wrap.c).  This is more portable than
+	! trying to detect directories from open()/read() error codes, which vary
+	! between compiler runtimes (e.g. gfortran vs ifx), and more reliable
+	! than an inquire()-based probe: an earlier version of this function
+	! probed inquire(file = "<path>/."), which works on POSIX (stat() on
+	! "<path>/." fails with ENOTDIR for regular files) but not on Windows,
+	! where path normalization collapses "<file>/." to "<file>" and made
+	! every regular file look like a directory
 
 	character(len = *), intent(in) :: filename
 
-	character(len = :), allocatable :: probe
-
-	! Older ifort (e.g. classic 2021.10) segfaults if the file= specifier is
-	! a non-trivial character expression (string concatenation) instead of a
-	! plain variable, so build the path first
-	probe = trim(filename)//'/.'
-	inquire(file = probe, exist = is_dir)
+	is_dir = syntran_is_dir_c(trim(filename)//c_null_char) /= 0
 
 end function is_dir
 
