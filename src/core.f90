@@ -724,7 +724,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	end if
 
 	if (debug > 1) print *, 'matching eof'
-	token  = parser%match(eof_token)
+	call parser%match(eof_token, token)
 
 	tree%diagnostics = parser%diagnostics
 

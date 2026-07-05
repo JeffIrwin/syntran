@@ -41,13 +41,13 @@ end function tokens_str
 
 !===============================================================================
 
-module function match(parser, kind) result(token)
+module subroutine match(parser, kind, token)
 
 	class(parser_t) :: parser
 
 	integer :: kind
 
-	type(syntax_token_t) :: token
+	type(syntax_token_t), intent(out) :: token
 
 	!********
 
@@ -58,10 +58,10 @@ module function match(parser, kind) result(token)
 
 	! If current_text() and current_pos() helper fns are added, this local var
 	! current can be eliminated
-	current = parser%current()
+	call parser%current(current)
 
 	if (parser%current_kind() == kind) then
-		token = parser%next()
+		call parser%next(token)
 		!print *, 'returning parser expecting false'
 		return
 	end if
@@ -109,7 +109,7 @@ module function match(parser, kind) result(token)
 	token%unit_ = current%unit_
 	!print *, 'setting token%unit_ = ', token%unit_
 
-end function match
+end subroutine match
 
 !===============================================================================
 
@@ -407,7 +407,7 @@ module subroutine parse_unit(parser, unit)
 		end select
 
 		! Break infinite loops
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%pos == pos0) call parser%next(dummy)
 
 	end do
 	!print *, "parser pos end = ", parser%pos
@@ -470,7 +470,7 @@ module subroutine parse_unit(parser, unit)
 			end select
 
 			! Break infinite loops
-			if (parser%pos == pos0) dummy = parser%next()
+			if (parser%pos == pos0) call parser%next(dummy)
 
 		end do
 		!print *, "parser pos end = ", parser%pos

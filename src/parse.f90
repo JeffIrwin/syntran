@@ -81,6 +81,7 @@ module syntran__parse_m
 				match, &
 				match_pre, &
 				next => next_token, &
+				peek_index, &
 				parse_array_expr, &
 				parse_block_statement, &
 				parse_expr, &
@@ -298,11 +299,11 @@ module syntran__parse_m
 			character(len = :), allocatable :: str_
 		end function tokens_str
 
-		module function match(parser, kind) result(token)
+		module subroutine match(parser, kind, token)
 			class(parser_t) :: parser
 			integer :: kind
-			type(syntax_token_t) :: token
-		end function match
+			type(syntax_token_t), intent(out) :: token
+		end subroutine match
 
 		recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 			class(parser_t) :: parser
@@ -351,12 +352,30 @@ end function current_kind
 
 !********
 
+integer function peek_index(parser, offset)
+
+	! Clamped token array index for parser%pos + offset.  Factored out of the
+	! peek_* accessors below so they can read a single field directly out of
+	! parser%tokens(:) without deep-copying a whole syntax_token_t (which
+	! contains a value_t with a defined deep-copy assignment)
+
+	class(parser_t) :: parser
+	integer, intent(in) :: offset
+
+	peek_index = parser%pos + offset
+
+	if (debug > 2) print *, 'token pos ', peek_index
+
+	if (peek_index > size(parser%tokens)) peek_index = size(parser%tokens)
+
+end function peek_index
+
+!********
+
 integer function peek_kind(parser, offset)
 	class(parser_t) :: parser
-	type(syntax_token_t) :: peek
 	integer, intent(in) :: offset
-	peek = parser%peek(offset)
-	peek_kind = peek%kind
+	peek_kind = parser%tokens( parser%peek_index(offset) )%kind
 end function peek_kind
 
 !===============================================================================
@@ -372,55 +391,40 @@ end function current_text
 function peek_text(parser, offset)
 	character(len = :), allocatable :: peek_text
 	class(parser_t) :: parser
-	type(syntax_token_t) :: peek
 	integer, intent(in) :: offset
-	peek = parser%peek(offset)
-	peek_text = peek%text
+	peek_text = parser%tokens( parser%peek_index(offset) )%text
 end function peek_text
 
 !===============================================================================
 
-function current_token(parser)
+subroutine current_token(parser, token)
 	class(parser_t) :: parser
-	type(syntax_token_t) :: current_token
-	current_token = parser%peek(0)
-end function current_token
+	type(syntax_token_t), intent(out) :: token
+	call parser%peek(0, token)
+end subroutine current_token
 
 !********
 
-function peek_token(parser, offset) result(token)
+subroutine peek_token(parser, offset, token)
 
 	class(parser_t) :: parser
 
-	type(syntax_token_t) :: token
+	type(syntax_token_t), intent(out) :: token
 
 	integer, intent(in) :: offset
 
-	!********
+	token = parser%tokens( parser%peek_index(offset) )
 
-	integer :: pos
-
-	pos = parser%pos + offset
-
-	if (debug > 2) print *, 'token pos ', pos
-
-	if (pos > size(parser%tokens)) then
-		token = parser%tokens( size(parser%tokens) )
-		return
-	end if
-
-	token = parser%tokens(pos)
-
-end function peek_token
+end subroutine peek_token
 
 !===============================================================================
 
-function next_token(parser) result(next)
+subroutine next_token(parser, next)
 	class(parser_t) :: parser
-	type(syntax_token_t) :: next
-	next = parser%current()
+	type(syntax_token_t), intent(out) :: next
+	call parser%current(next)
 	parser%pos = parser%pos + 1
-end function next_token
+end subroutine next_token
 
 !===============================================================================
 
@@ -439,10 +443,8 @@ end function current_pos
 
 integer function peek_pos(parser, offset)
 	class(parser_t) :: parser
-	type(syntax_token_t) :: peek
 	integer, intent(in) :: offset
-	peek = parser%peek(offset)
-	peek_pos = peek%pos
+	peek_pos = parser%tokens( parser%peek_index(offset) )%pos
 end function peek_pos
 
 !********
@@ -456,10 +458,8 @@ end function current_unit
 
 integer function peek_unit(parser, offset)
 	class(parser_t) :: parser
-	type(syntax_token_t) :: peek
 	integer, intent(in) :: offset
-	peek = parser%peek(offset)
-	peek_unit = peek%unit_
+	peek_unit = parser%tokens( parser%peek_index(offset) )%unit_
 end function peek_unit
 
 !********

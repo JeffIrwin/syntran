@@ -55,9 +55,9 @@ recursive module subroutine parse_expr_statement(parser, expr)
 	    parser%peek_kind(1) == identifier_token .and. &
 	    parser%peek_kind(2) == equals_token) then
 
-		let        = parser%next()
-		identifier = parser%next()
-		op         = parser%next()
+		call parser%next(let)
+		call parser%next(identifier)
+		call parser%next(op)
 
 		call parser%parse_expr_statement(right)
 
@@ -115,11 +115,11 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		! The if-statement above already verifies tokens, so we can use next()
 		! instead of match() here
 
-		let        = parser%next()
-		identifier = parser%next()
+		call parser%next(let)
+		call parser%next(identifier)
 		!print *, 'let ident = ', identifier%text
 
-		op         = parser%next()
+		call parser%next(op)
 
 		call parser%parse_expr_statement(right)
 		!right      = parser%parse_expr()
@@ -135,7 +135,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		!! something like this.  May need to peek current and check if it's
 		!! if_keyword or not
 		!right      = parser%parse_statement()
-		!!semi       = parser%match(semicolon_token)
+		!!call parser%match(semicolon_token, semi)
 
 		call new_declaration_expr(identifier, op, right, expr)
 
@@ -201,18 +201,18 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		ndiag0 = parser%diagnostics%len_
 
 		! Parse the qualified name (mod::var or mod1::mod2::var)
-		identifier = parser%match(identifier_token)
+		call parser%match(identifier_token, identifier)
 		expr%module_prefix = identifier%text
 
-		op = parser%match(double_colon_token)
+		call parser%match(double_colon_token, op)
 
-		identifier = parser%match(identifier_token)
+		call parser%match(identifier_token, identifier)
 
 		! Handle nested namespaces: mod1::mod2::var
 		do while (parser%current_kind() == double_colon_token)
 			expr%module_prefix = expr%module_prefix // "::" // identifier%text
-			op = parser%match(double_colon_token)
-			identifier = parser%match(identifier_token)
+			call parser%match(double_colon_token, op)
+			call parser%match(identifier_token, identifier)
 		end do
 
 		! Look up the qualified variable
@@ -269,7 +269,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 			expr%is_loc = .false.
 
-			op    = parser%next()
+			call parser%next(op)
 			call parser%parse_expr_statement(right)
 
 			expr%kind = assignment_expr
@@ -323,7 +323,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		!print *, "assign expr"
 
-		identifier = parser%match(identifier_token)
+		call parser%match(identifier_token, identifier)
 
 		! this makes `identifier` a redundant copy, although a convenient
 		! shorthand. we need expr%identifier for error handling inside
@@ -438,7 +438,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				err_const_assign(parser%context(), span, identifier%text))
 		end if
 
-		op    = parser%next()
+		call parser%next(op)
 		call parser%parse_expr_statement(right)
 		!print *, "1a right index = ", right%right%id_index
 
@@ -535,7 +535,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 	end if
 
 	call parser%parse_expr(expr=expr)
-	!semi       = parser%match(semicolon_token)
+	!call parser%match(semicolon_token, semi)
 
 end subroutine parse_expr_statement
 
@@ -570,7 +570,7 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 	prec = get_unary_op_prec(parser%current_kind())
 	if (prec /= 0 .and. prec >= parent_precl) then
 
-		op    = parser%next()
+		call parser%next(op)
 		call parser%parse_expr(prec, right)
 		call new_unary_expr(op, right, expr)
 
@@ -594,7 +594,7 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 		prec = get_binary_op_prec(parser%current_kind())
 		if (prec == 0 .or. prec <= parent_precl) exit
 
-		op    = parser%next()
+		call parser%next(op)
 		call parser%parse_expr(prec, right)
 		call new_binary_expr(expr, op, right, bin_tmp)
 		call syntax_node_move_into(bin_tmp, expr)
@@ -671,7 +671,7 @@ recursive module subroutine parse_primary_expr(parser, expr)
 			! Left and right parens are not explicitly included as nodes in the
 			! parse tree, they just change the connectivity of the tree
 
-			left  = parser%next()
+			call parser%next(left)
 
 			! These two lines are the difference between allowing statement
 			! "a = (b = 1)" or not.  Note that "a = b = 1" is allowed either way
@@ -679,7 +679,7 @@ recursive module subroutine parse_primary_expr(parser, expr)
 			!expr  = parser%parse_expr()
 			call parser%parse_expr_statement(expr)
 
-			right = parser%match(rparen_token)
+			call parser%match(rparen_token, right)
 
 		case (lbracket_token)
 
@@ -691,7 +691,7 @@ recursive module subroutine parse_primary_expr(parser, expr)
 
 		case (true_keyword, false_keyword)
 
-			keyword = parser%next()
+			call parser%next(keyword)
 			bool = keyword%kind == true_keyword
 			call new_bool(bool, expr)
 
@@ -763,27 +763,27 @@ recursive module subroutine parse_primary_expr(parser, expr)
 
 		case (f32_token)
 
-			token = parser%match(f32_token)
+			call parser%match(f32_token, token)
 			call new_f32(token%val%sca%f32, expr)
 
 		case (f64_token)
 
-			token = parser%match(f64_token)
+			call parser%match(f64_token, token)
 			call new_f64(token%val%sca%f64, expr)
 
 		case (str_token)
 
-			token = parser%match(str_token)
+			call parser%match(str_token, token)
 			call new_str(token%val%str%s, expr)
 
 		case (i64_token)
 
-			token = parser%match(i64_token)
+			call parser%match(i64_token, token)
 			call new_i64(token%val%sca%i64, expr)
 
 		case default
 
-			token = parser%match(i32_token)
+			call parser%match(i32_token, token)
 			call new_i32(token%val%sca%i32, expr)
 
 			if (debug > 1) print *, 'token = ', expr%val%to_str()
@@ -810,7 +810,7 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 	! Variable name expression
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 
 	!print *, "RHS identifier = ", identifier%text
 	!print *, "parser%is_loc = ", parser%is_loc
@@ -922,9 +922,9 @@ recursive module subroutine parse_dot(parser, expr)
 	!print *, "parsing dot"
 	!print *, "expr type = ", type_name(expr%val)
 
-	dot  = parser%match(dot_token)
+	call parser%match(dot_token, dot)
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 
 	!print *, "dot identifier = ", identifier%text
 	!print *, "type = ", kind_name(expr%val%type)
@@ -1010,7 +1010,7 @@ recursive module subroutine parse_dot(parser, expr)
 		call_is_ref = new_logical_vector()
 		pos_args    = new_integer_vector()
 
-		lparen_ = parser%match(lparen_token)
+		call parser%match(lparen_token, lparen_)
 
 		do while (parser%current_kind() /= rparen_token .and. &
 		          parser%current_kind() /= eof_token)
@@ -1020,7 +1020,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 			call_arg_is_ref = .false.
 			if (parser%current_kind() == amp_token) then
-				amp_ = parser%match(amp_token)
+				call parser%match(amp_token, amp_)
 				call_arg_is_ref = .true.
 			end if
 			call call_is_ref%push(call_arg_is_ref)
@@ -1029,14 +1029,14 @@ recursive module subroutine parse_dot(parser, expr)
 			call call_args%push(arg_)
 
 			if (parser%current_kind() /= rparen_token) then
-				comma_ = parser%match(comma_token)
+				call parser%match(comma_token, comma_)
 			end if
 
-			if (parser%pos == pos0) amp_ = parser%next()
+			if (parser%pos == pos0) call parser%next(amp_)
 		end do
 		call pos_args%push(parser%current_pos() + 1)
 
-		rparen_ = parser%match(rparen_token)
+		call parser%match(rparen_token, rparen_)
 
 		! Validate explicit arg count.
 		! method_fn%params holds only explicit params (self is NOT included there).
@@ -1248,15 +1248,15 @@ subroutine parse_swallow_arg_list(parser)
 
 	type(syntax_token_t) :: lparen_, rparen_, comma_, amp_
 
-	lparen_ = parser%match(lparen_token)
+	call parser%match(lparen_token, lparen_)
 	do while (parser%current_kind() /= rparen_token .and. &
 	          parser%current_kind() /= eof_token)
 		pos0 = parser%pos
 		call parser%parse_expr(expr = arg_)
-		if (parser%current_kind() /= rparen_token) comma_ = parser%match(comma_token)
-		if (parser%pos == pos0) amp_ = parser%next()
+		if (parser%current_kind() /= rparen_token) call parser%match(comma_token, comma_)
+		if (parser%pos == pos0) call parser%next(amp_)
 	end do
-	rparen_ = parser%match(rparen_token)
+	call parser%match(rparen_token, rparen_)
 
 end subroutine parse_swallow_arg_list
 

@@ -54,7 +54,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	if (present(identifier)) then
 		identifier_ = identifier
 	else
-		identifier_ = parser%match(identifier_token)
+		call parser%match(identifier_token, identifier_)
 	end if
 
 	!print *, "identifier_ = ", identifier_%text
@@ -63,7 +63,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	pos_args = new_integer_vector()
 	is_ref   = new_logical_vector()
 
-	lparen  = parser%match(lparen_token)
+	call parser%match(lparen_token, lparen)
 
 	do while ( &
 		parser%current_kind() /= rparen_token .and. &
@@ -74,7 +74,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 		arg_is_ref = .false.
 		if (parser%current_kind() == amp_token) then
-			amp = parser%match(amp_token)
+			call parser%match(amp_token, amp)
 			arg_is_ref = .true.
 		end if
 		call is_ref%push(arg_is_ref)
@@ -103,17 +103,17 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		call args%push(arg)
 
 		if (parser%current_kind() /= rparen_token) then
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
 		! break infinite loop
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%pos == pos0) call parser%next(dummy)
 
 	end do
 	call pos_args%push(parser%current_pos() + 1)
 	!print *, "args%len_ = ", args%len_
 
-	rparen  = parser%match(rparen_token)
+	call parser%match(rparen_token, rparen)
 
 	fn_call%kind = fn_call_expr
 	fn_call%identifier = identifier_
@@ -397,14 +397,14 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 	integer :: id_index, iostat
 
 	! Get first part of module name
-	mod_identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, mod_identifier)
 	module_name = mod_identifier%text
 
 	! Consume ::
-	double_colon = parser%match(double_colon_token)
+	call parser%match(double_colon_token, double_colon)
 
 	! Get the next identifier (could be another namespace or the fn/var name)
-	fn_identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, fn_identifier)
 	fn_name = fn_identifier%text
 
 	! Handle nested namespaces: math::vectors::fn()
@@ -412,8 +412,8 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 	do while (parser%current_kind() == double_colon_token)
 		! The current fn_name is actually part of the module path
 		module_name = module_name // "::" // fn_name
-		double_colon = parser%match(double_colon_token)
-		fn_identifier = parser%match(identifier_token)
+		call parser%match(double_colon_token, double_colon)
+		call parser%match(identifier_token, fn_identifier)
 		fn_name = fn_identifier%text
 	end do
 
@@ -503,9 +503,9 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
-	fn_kw = parser%match(fn_keyword)
+	call parser%match(fn_keyword, fn_kw)
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 	fn_name_end = parser%peek_pos(0) - 1
 	fn%is_intr = .false.
 
@@ -521,7 +521,7 @@ module subroutine parse_fn_declaration(parser, decl)
 	! missing.  Should parens be optional for fns without params?
 	if (parser%current_kind() /= lparen_token) return
 
-	lparen = parser%match(lparen_token)
+	call parser%match(lparen_token, lparen)
 
 	! Parse parameter names and types.  Save in temp vectors initially
 	names         = new_string_vector()
@@ -556,19 +556,19 @@ module subroutine parse_fn_declaration(parser, decl)
 		call pos_args%push(pos0)
 
 		!print *, 'matching name'
-		name  = parser%match(identifier_token)
+		call parser%match(identifier_token, name)
 		!print *, 'matching colon'
-		colon = parser%match(colon_token)
+		call parser%match(colon_token, colon)
 
 		! Should this be part of parse_type()?  I think not, as refs can appear
 		! in fn decls but not struct decls.  Fn calls do not even call
 		! parse_type, they call parse_expr instead
 		if (parser%current_kind() == amp_token) then
-			amp = parser%match(amp_token)
+			call parser%match(amp_token, amp)
 			call is_ref%push(.true.)
 			! &const means the callee cannot modify through this reference
 			if (parser%current_kind() == const_keyword) then
-				dummy = parser%next()
+				call parser%next(dummy)
 				call is_const_ref%push(.true.)
 			else
 				call is_const_ref%push(.false.)
@@ -585,18 +585,18 @@ module subroutine parse_fn_declaration(parser, decl)
 
 		if (parser%current_kind() /= rparen_token) then
 			!print *, 'matching comma'
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
 		! Break infinite loop
-		if (parser%current_pos() == pos0) dummy = parser%next()
+		if (parser%current_pos() == pos0) call parser%next(dummy)
 
 	end do
 	call pos_args%push(parser%current_pos() + 1)
 
 	!print *, "names len = ", names%len_
 	!print *, 'matching rparen'
-	rparen = parser%match(rparen_token)
+	call parser%match(rparen_token, rparen)
 
 	! Now that we have the number of params, save them
 
@@ -642,7 +642,7 @@ module subroutine parse_fn_declaration(parser, decl)
 	fn%type%type = void_type
 	rank = 0
 	if (parser%current_kind() == colon_token) then
-		colon = parser%match(colon_token)
+		call parser%match(colon_token, colon)
 		call parser%parse_type(type_text, type)
 
 		! TODO: ban &references as return types
@@ -772,9 +772,9 @@ module subroutine parse_struct_declaration(parser, decl)
 	type(value_t) :: type
 	type(value_vector_t) :: types
 
-	struct_kw = parser%match(struct_keyword)
+	call parser%match(struct_keyword, struct_kw)
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 	!print *, "parsing struct ", identifier%text
 
 	itype = lookup_type(identifier%text, parser%structs, dummy_struct)
@@ -788,7 +788,7 @@ module subroutine parse_struct_declaration(parser, decl)
 			identifier%text))
 	end if
 
-	lbrace = parser%match(lbrace_token)
+	call parser%match(lbrace_token, lbrace)
 
 	! Structs use this syntax:
 	!
@@ -826,9 +826,9 @@ module subroutine parse_struct_declaration(parser, decl)
 
 		pos0 = parser%current_pos()
 
-		name  = parser%match(identifier_token)
+		call parser%match(identifier_token, name)
 		call pos_mems%push( name%pos )
-		colon = parser%match(colon_token)
+		call parser%match(colon_token, colon)
 
 		call parser%parse_type(type_text, type)
 		!print *, "type = ", type_text
@@ -841,11 +841,11 @@ module subroutine parse_struct_declaration(parser, decl)
 		    .not. (parser%current_kind() == const_keyword .and. &
 		           parser%peek_kind(1) == fn_keyword)) then
 			! Delimiting commas are required; trailing comma is optional
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
 		! Break infinite loop
-		if (parser%current_pos() == pos0) dummy = parser%next()
+		if (parser%current_pos() == pos0) call parser%next(dummy)
 
 	end do
 
@@ -911,7 +911,7 @@ module subroutine parse_struct_declaration(parser, decl)
 		pos0 = parser%current_pos()
 
 		is_const_meth = (parser%current_kind() == const_keyword)
-		if (is_const_meth) dummy = parser%next()   ! consume 'const'
+		if (is_const_meth) call parser%next(dummy)   ! consume 'const'
 
 		call parser%parse_method_declaration(method_decl, struct, is_const_meth, &
 			identifier%text)
@@ -920,7 +920,7 @@ module subroutine parse_struct_declaration(parser, decl)
 		call method_decls%push(method_decl)
 
 		! Break infinite loop
-		if (parser%current_pos() == pos0) dummy = parser%next()
+		if (parser%current_pos() == pos0) call parser%next(dummy)
 
 	end do
 
@@ -932,7 +932,7 @@ module subroutine parse_struct_declaration(parser, decl)
 		end do
 	end if
 
-	rbrace = parser%match(rbrace_token)
+	call parser%match(rbrace_token, rbrace)
 
 	! Insert struct into parser dict
 
@@ -1010,9 +1010,9 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
-	fn_kw = parser%match(fn_keyword)
+	call parser%match(fn_keyword, fn_kw)
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 	fn_name_end = parser%peek_pos(0) - 1
 	fn%is_intr = .false.
 	fn%is_method = .true.
@@ -1042,7 +1042,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 		return
 	end if
 
-	lparen = parser%match(lparen_token)
+	call parser%match(lparen_token, lparen)
 
 	names        = new_string_vector()
 	pos_args     = new_integer_vector()
@@ -1059,14 +1059,14 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 		pos0 = parser%current_pos()
 		call pos_args%push(pos0)
 
-		name  = parser%match(identifier_token)
-		colon = parser%match(colon_token)
+		call parser%match(identifier_token, name)
+		call parser%match(colon_token, colon)
 
 		if (parser%current_kind() == amp_token) then
-			amp = parser%match(amp_token)
+			call parser%match(amp_token, amp)
 			call is_ref%push(.true.)
 			if (parser%current_kind() == const_keyword) then
-				dummy = parser%next()
+				call parser%next(dummy)
 				call is_const_ref%push(.true.)
 			else
 				call is_const_ref%push(.false.)
@@ -1082,15 +1082,15 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 		call types%push(type)
 
 		if (parser%current_kind() /= rparen_token) then
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
-		if (parser%current_pos() == pos0) dummy = parser%next()
+		if (parser%current_pos() == pos0) call parser%next(dummy)
 
 	end do
 	call pos_args%push(parser%current_pos() + 1)
 
-	rparen = parser%match(rparen_token)
+	call parser%match(rparen_token, rparen)
 
 	! params(1) = self slot, params(2..) = explicit params
 	! is_ref(1) = true (self is always by-ref), is_const_ref(1) = is_const
@@ -1122,7 +1122,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	fn%type%type = void_type
 	rank = 0
 	if (parser%current_kind() == colon_token) then
-		colon = parser%match(colon_token)
+		call parser%match(colon_token, colon)
 		call parser%parse_type(type_text, type)
 		fn%type = type
 	end if
@@ -1219,7 +1219,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 		lookup_name = struct_name
 	else
 		! Original path: parse identifier from current position
-		identifier = parser%match(identifier_token)
+		call parser%match(identifier_token, identifier)
 		lookup_name = identifier%text
 	end if
 
@@ -1233,7 +1233,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 	call parser%structs%search(lookup_name, struct_id, io, struct)
 	!print *, "struct io = ", io
 
-	lbrace  = parser%match(lbrace_token)
+	call parser%match(lbrace_token, lbrace)
 
 	inst%kind = struct_instance_expr
 	!inst%identifier = identifier
@@ -1262,8 +1262,8 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 		! change print str conversion is might be nice to allow print output to
 		! be pasted back into syntran source code.  Could be dangerous tho
 
-		name   = parser%match(identifier_token)
-		equals = parser%match(equals_token)
+		call parser%match(identifier_token, name)
+		call parser%match(equals_token, equals)
 		pos1   = parser%current_pos()
 		call parser%parse_expr(expr=mem)
 
@@ -1332,15 +1332,15 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 		end if
 
 		if (parser%current_kind() /= rbrace_token) then
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
 		! break infinite loop
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%pos == pos0) call parser%next(dummy)
 
 	end do
 
-	rbrace  = parser%match(rbrace_token)
+	call parser%match(rbrace_token, rbrace)
 
 	! Use a boolean array to check if all members are set.  You could have the
 	! correct number but with duplicates and other members missing
@@ -1397,16 +1397,16 @@ module subroutine parse_type(parser, type_text, type)
 	if (parser%current_kind() == lbracket_token) then
 
 		! Array param
-		lbracket = parser%match(lbracket_token)
-		ident    = parser%match(identifier_token)
+		call parser%match(lbracket_token, lbracket)
+		call parser%match(identifier_token, ident)
 		type_text = ident%text
 		do while (parser%current_kind() == double_colon_token)
 			! Qualified element type, e.g. [mod::Struct; :]
-			double_colon = parser%match(double_colon_token)
-			ident = parser%match(identifier_token)
+			call parser%match(double_colon_token, double_colon)
+			call parser%match(identifier_token, ident)
 			type_text = type_text//"::"//ident%text
 		end do
-		semi     = parser%match(semicolon_token)
+		call parser%match(semicolon_token, semi)
 
 		rank  = 0
 		do while ( &
@@ -1416,27 +1416,27 @@ module subroutine parse_type(parser, type_text, type)
 			pos0 = parser%pos
 
 			rank = rank + 1
-			colon = parser%match(colon_token)
+			call parser%match(colon_token, colon)
 			if (parser%current_kind() /= rbracket_token) then
-				comma = parser%match(comma_token)
+				call parser%match(comma_token, comma)
 			end if
 
 			! break infinite loop
-			if (parser%pos == pos0) dummy = parser%next()
+			if (parser%pos == pos0) call parser%next(dummy)
 
 		end do
 		!print *, 'rank = ', rank
 
-		rbracket = parser%match(rbracket_token)
+		call parser%match(rbracket_token, rbracket)
 
 	else
 		! Scalar param
-		ident = parser%match(identifier_token)
+		call parser%match(identifier_token, ident)
 		type_text = ident%text
 		do while (parser%current_kind() == double_colon_token)
 			! Qualified type, e.g. mod::Struct
-			double_colon = parser%match(double_colon_token)
-			ident = parser%match(identifier_token)
+			call parser%match(double_colon_token, double_colon)
+			call parser%match(identifier_token, ident)
 			type_text = type_text//"::"//ident%text
 		end do
 		rank = -1
