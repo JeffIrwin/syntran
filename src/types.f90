@@ -612,10 +612,10 @@ module syntran__types_m
 			integer, optional, intent(in) :: ou
 		end subroutine log_diagnostics
 
-		module integer function lookup_type(name, structs, struct) result(type)
+		module integer function lookup_type(name, structs, cookie) result(type)
 			character(len = *), intent(in) :: name
 			type(structs_t), intent(in), target :: structs
-			type(struct_t), intent(out) :: struct
+			character(len = :), allocatable, intent(out), optional :: cookie
 		end function lookup_type
 
 		module integer function get_keyword_kind(text) result(kind)

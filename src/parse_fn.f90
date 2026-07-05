@@ -750,7 +750,7 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	logical :: overwrite
 
-	type(struct_t) :: struct, dummy_struct
+	type(struct_t) :: struct
 
 	type(syntax_node_t) :: method_decl
 
@@ -777,7 +777,7 @@ module subroutine parse_struct_declaration(parser, decl)
 	call parser%match(identifier_token, identifier)
 	!print *, "parsing struct ", identifier%text
 
-	itype = lookup_type(identifier%text, parser%structs, dummy_struct)
+	itype = lookup_type(identifier%text, parser%structs)
 	!print *, "itype = ", itype, kind_name(itype)
 	if (itype /= unknown_type .and. itype /= struct_type) then
 		! Redeclared structs are caught below
@@ -1386,7 +1386,7 @@ module subroutine parse_type(parser, type_text, type)
 	integer :: rank, itype
 	integer :: pos0, pos1, pos2
 
-	type(struct_t) :: struct
+	character(len = :), allocatable :: struct_cookie
 
 	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
 		double_colon
@@ -1443,7 +1443,7 @@ module subroutine parse_type(parser, type_text, type)
 	end if
 	pos2 = parser%current_pos()
 
-	itype = lookup_type(type_text, parser%structs, struct)
+	itype = lookup_type(type_text, parser%structs, struct_cookie)
 
 	if (itype == unknown_type) then
 		span = new_span(pos1, pos2 - pos1)
@@ -1463,7 +1463,7 @@ module subroutine parse_type(parser, type_text, type)
 
 	if (itype == struct_type) then
 		type%struct_name = type_text
-		type%struct_cookie = struct%cookie
+		type%struct_cookie = struct_cookie
 	end if
 
 end subroutine parse_type

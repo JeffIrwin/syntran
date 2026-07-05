@@ -160,13 +160,13 @@ end subroutine log_diagnostics
 
 !===============================================================================
 
-module integer function lookup_type(name, structs, struct) result(type)
+module integer function lookup_type(name, structs, cookie) result(type)
 
 	character(len = *), intent(in) :: name
 
 	type(structs_t), intent(in), target :: structs
 
-	type(struct_t), intent(out) :: struct
+	character(len = :), allocatable, intent(out), optional :: cookie
 
 	!********
 
@@ -201,8 +201,8 @@ module integer function lookup_type(name, structs, struct) result(type)
 
 			if (io == 0) then
 				type = struct_type
-				struct = struct_ptr
-				!print *, "struct num vars = ", struct%num_vars
+				if (present(cookie)) cookie = struct_ptr%cookie
+				!print *, "struct num vars = ", struct_ptr%num_vars
 			else
 				type = unknown_type
 			end if

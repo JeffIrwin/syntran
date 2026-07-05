@@ -46,7 +46,13 @@ module syntran__core_m
 	!    time, then mapped to efficient arrays at eval time
 	!    * claude agrees not worth it. although returning pointers from ternary
 	!      trees instead of copying var/fn/struct by value might perform better.
-	!      wip
+	!    * fns and structs done: search fns/structs return pointers into the
+	!      dict now, and lookup_type() only copies out the small cookie
+	!      string it needs instead of the whole struct_t.
+	!    * vars intentionally left copying: the value from vars%search()
+	!      becomes expr%val, which the syntax node owns and later mutates,
+	!      so a private copy is unavoidable there regardless of pointers or
+	!      move semantics.
 	!  - enums
 	!  - recursive data structs
 	!    * recursive fns are available, but not structs
