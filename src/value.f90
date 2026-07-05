@@ -398,10 +398,14 @@ recursive subroutine value_copy(dst, src)
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
+	else if (allocated(dst%struct_name)) then
+		deallocate(dst%struct_name)
 	end if
 
 	if (allocated(src%struct_cookie)) then
 		dst%struct_cookie = src%struct_cookie
+	else if (allocated(dst%struct_cookie)) then
+		deallocate(dst%struct_cookie)
 	end if
 
 	if (allocated(src%array)) then

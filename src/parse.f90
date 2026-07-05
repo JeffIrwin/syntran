@@ -66,7 +66,7 @@ module syntran__parse_m
 		! final (second) pass
 		integer :: ipass
 
-		logical :: repl
+		logical :: repl = .false.
 
 		type(map_i32_t) :: import_stack
 		type(map_i32_t) :: imported_modules

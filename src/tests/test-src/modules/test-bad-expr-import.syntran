@@ -1,0 +1,4 @@
+// Importing a module containing a banned bare expression statement must
+// always raise the E9 bad-expr diagnostic. See bad_expr_mod.syntran
+
+use bad_expr_mod;
