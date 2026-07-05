@@ -31,6 +31,10 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - kill redundant token deep-copies in the parser hot path
+	!    (peek_kind/peek_text read fields directly; convert
+	!    peek/current/next/match accessors from by-value functions to
+	!    intent(out) subroutines)
 	!  - switch/match/case
 	!  - callbacks, fn pointers, i.e. passing one function as an argument to
 	!    another function
