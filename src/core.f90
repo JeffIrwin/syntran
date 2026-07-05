@@ -31,6 +31,7 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - enable windows unit tests in ci/cd. not sure when/why i disabled it
 	!  - kill redundant token deep-copies in the parser hot path
 	!    (peek_kind/peek_text read fields directly; convert
 	!    peek/current/next/match accessors from by-value functions to

@@ -37,6 +37,7 @@ let BLOCKLIST = [
 	"HIED",
 	"MANS",
 	"PONE",
+	"PRES",
 	""
 ];
 
