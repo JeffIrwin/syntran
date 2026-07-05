@@ -339,6 +339,7 @@ recursive module subroutine ternary_search(node, key, id_index, iostat, val, is_
 	!print *, 'searching key ', quote(key)
 
 	iostat = exit_success
+	if (present(is_const)) is_const = .false.
 
 	if (.not. allocated(node)) then
 		! Search key not found
