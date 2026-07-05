@@ -1,0 +1,9 @@
+// E43: bad-arg-val
+// A `&` reference parameter was given a plain value argument instead of a
+// reference
+
+fn f(x: &i32)
+{
+}
+
+f(1);

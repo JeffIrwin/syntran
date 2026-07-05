@@ -1,0 +1,10 @@
+// E46: sub-ref
+// A `&` reference was taken of a subscripted expression, which isn't
+// allowed
+
+fn f(x: &i32)
+{
+}
+
+let a = [1, 2];
+f(&a[0]);

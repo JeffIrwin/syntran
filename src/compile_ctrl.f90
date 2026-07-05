@@ -85,7 +85,7 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 	! against diamond-dependency double-compilation.
 	!
 	! Two-sub-pass design so that forward references within the module resolve:
-	!   Sub-pass A: register (ensure_fn_entry) ALL fns in this module first.
+	!   Sub-pass A: register (ensure_fn_entry) ALL fns and methods first.
 	!   Sub-pass B: compile each body; any call to a forward-declared sibling
 	!               finds the id registered (in range) even if fn_entry == 0,
 	!               and OP_CALL is emitted safely (entry will be filled before VM runs).
@@ -96,7 +96,7 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 
 	!*******
 
-	integer :: i, fn_id
+	integer :: i, j, fn_id, const_idx
 
 	! Recurse into nested use_statements first so that their fns are available
 	! to any bodies compiled below that call them.
@@ -106,22 +106,49 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 		call compile_module_fns(prog, cs, module_node%members(i)%member)
 	end do
 
-	! Sub-pass A: register all local fn ids before compiling any body.
+	! Sub-pass A: register all local fn and method ids before compiling any body.
 	do i = 1, size(module_node%members)
-		if (module_node%members(i)%kind /= fn_declaration) cycle
-		call ensure_fn_entry(prog, module_node%members(i)%id_index)
+		if (module_node%members(i)%kind == fn_declaration) then
+			call ensure_fn_entry(prog, module_node%members(i)%id_index)
+		else if (module_node%members(i)%kind == struct_declaration) then
+			if (allocated(module_node%members(i)%members)) then
+				do j = 1, size(module_node%members(i)%members)
+					call ensure_fn_entry(prog, module_node%members(i)%members(j)%id_index)
+				end do
+			end if
+		end if
 	end do
 
-	! Sub-pass B: compile each fn_declaration body.
+	! Sub-pass B: compile each fn_declaration body and struct method bodies.
 	do i = 1, size(module_node%members)
-		if (module_node%members(i)%kind /= fn_declaration) cycle
-		fn_id = module_node%members(i)%id_index
-		if (prog%fn_entry(fn_id) /= 0) cycle   ! already compiled (diamond dep)
-		prog%fn_num_locs(fn_id) = module_node%members(i)%num_locs
-		prog%fn_entry(fn_id)    = prog%len_ + 1
-		cs%in_fn_body = .true.
-		call compile_node(prog, cs, module_node%members(i)%body)
-		cs%in_fn_body = .false.
+		if (module_node%members(i)%kind == fn_declaration) then
+			fn_id = module_node%members(i)%id_index
+			if (prog%fn_entry(fn_id) /= 0) cycle   ! already compiled (diamond dep)
+			prog%fn_num_locs(fn_id) = module_node%members(i)%num_locs
+			prog%fn_entry(fn_id)    = prog%len_ + 1
+			cs%in_fn_body = .true.
+			call compile_node(prog, cs, module_node%members(i)%body)
+			cs%in_fn_body = .false.
+			! Implicit void return for functions with no explicit return statement
+			const_idx = add_const(prog, unknown_val())
+			call emit(prog, OP_LOAD_CONST, a = const_idx)
+			call emit(prog, OP_RET)
+		else if (module_node%members(i)%kind == struct_declaration) then
+			if (allocated(module_node%members(i)%members)) then
+				do j = 1, size(module_node%members(i)%members)
+					fn_id = module_node%members(i)%members(j)%id_index
+					if (prog%fn_entry(fn_id) /= 0) cycle   ! already compiled
+					prog%fn_num_locs(fn_id) = module_node%members(i)%members(j)%num_locs
+					prog%fn_entry(fn_id)    = prog%len_ + 1
+					cs%in_fn_body = .true.
+					call compile_node(prog, cs, module_node%members(i)%members(j)%body)
+					cs%in_fn_body = .false.
+					const_idx = add_const(prog, unknown_val())
+					call emit(prog, OP_LOAD_CONST, a = const_idx)
+					call emit(prog, OP_RET)
+				end do
+			end if
+		end if
 	end do
 
 end subroutine compile_module_fns
@@ -173,7 +200,7 @@ recursive subroutine compile_node(prog, cs, node)
 
 	!*******
 
-	integer :: idx, i, const_idx, typed_op
+	integer :: idx, i, j, const_idx, typed_op
 	integer :: jf_ip, j_ip, l_top, l_else, l_end, l_pad
 	integer :: nblock_saved
 	logical :: first, entering_ctx
@@ -217,9 +244,29 @@ recursive subroutine compile_node(prog, cs, node)
 					a = node%id_index, &
 					b = int(size(node%lsubscripts)), &
 					c = merge(1_8, 0_8, node%is_loc))
+			else if (str_index_native_ok(node)) then
+				call compile_node(prog, cs, node%lsubscripts(1))
+				call emit(prog, OP_STR_INDEX_NAT, &
+					a = node%id_index, &
+					c = merge(1_8, 0_8, node%is_loc))
 			else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 				idx = add_node(prog, node)
 				call emit(prog, OP_INDEX, a = idx)
+			else if (str_slice_native_ok(node)) then
+				call compile_node(prog, cs, node%lsubscripts(1))
+				call compile_node(prog, cs, node%usubscripts(1))
+				call emit(prog, OP_STR_SLICE_NAT, &
+					a = node%id_index, &
+					c = merge(1_8, 0_8, node%is_loc))
+			else if (arr_slice_native_ok(node)) then
+				do i = 1, size(node%lsubscripts)
+					call compile_node(prog, cs, node%lsubscripts(i))
+					call compile_node(prog, cs, node%usubscripts(i))
+				end do
+				call emit(prog, OP_SLICE_NAT, &
+					a = node%id_index, &
+					b = int(size(node%lsubscripts)), &
+					c = merge(1_8, 0_8, node%is_loc))
 			else
 				idx = add_node(prog, node)
 				call emit(prog, OP_SLICE, a = idx)
@@ -355,9 +402,9 @@ recursive subroutine compile_node(prog, cs, node)
 
 			if (first) then
 				! Scalar subscript write.
-				! Fast path: plain '=' with numeric RHS → OP_STORE_IDX_NAT.
-				!   Compile subscripts then RHS; VM writes element inline.
-				! Fallback: compound ops, str/struct elements → OP_STORE_IDX.
+				! Fast path A: plain '=' with numeric RHS → OP_STORE_IDX_NAT.
+				! Fast path B: compound op with numeric RHS → OP_COMPOUND_IDX_NAT.
+				! Fallback: str/struct elements, casts → OP_STORE_IDX.
 				if (store_idx_native_ok(node)) then
 					do i = 1, size(node%lsubscripts)
 						call compile_node(prog, cs, node%lsubscripts(i))
@@ -367,12 +414,31 @@ recursive subroutine compile_node(prog, cs, node)
 						a = node%id_index, &
 						b = int(size(node%lsubscripts)), &
 						c = merge(1_8, 0_8, node%is_loc))
+				else if (compound_idx_native_ok(node)) then
+					do i = 1, size(node%lsubscripts)
+						call compile_node(prog, cs, node%lsubscripts(i))
+					end do
+					call compile_node(prog, cs, node%right)
+					call emit(prog, OP_COMPOUND_IDX_NAT, &
+						a = node%id_index, &
+						b = int(size(node%lsubscripts)), &
+						c = int(node%op%kind, 8) * 2_8 + merge(1_8, 0_8, node%is_loc))
 				else
-					! Fallback: compound ops, str chars, struct elements, casts
+					! Fallback: str chars, struct elements, casts, bitwise compound
 					call compile_node(prog, cs, node%right)
 					idx = add_node(prog, node)
 					call emit(prog, OP_STORE_IDX, a = idx, b = node%op%kind)
 				end if
+			else if (store_slice_nat_ok(node)) then
+				do i = 1, size(node%lsubscripts)
+					call compile_node(prog, cs, node%lsubscripts(i))
+					call compile_node(prog, cs, node%usubscripts(i))
+				end do
+				call compile_node(prog, cs, node%right)
+				call emit(prog, OP_STORE_SLICE_NAT, &
+					a = node%id_index, &
+					b = int(size(node%lsubscripts)), &
+					c = merge(1_8, 0_8, node%is_loc))
 			else
 				! Slice LHS or subscript-less compound: delegate to eval_assignment_expr
 				idx = add_node(prog, node)
@@ -587,10 +653,17 @@ recursive subroutine compile_node(prog, cs, node)
 		! before entry_main so that call-site OP_CALL can reference fn_entry.
 		! The VM starts at prog%entry_main.
 
-		! Pass 0: grow fn_entry / fn_num_locs for locally-declared fns.
+		! Pass 0: grow fn_entry / fn_num_locs for locally-declared fns and methods.
 		do i = 1, size(node%members)
-			if (node%members(i)%kind /= fn_declaration) cycle
-			call ensure_fn_entry(prog, node%members(i)%id_index)
+			if (node%members(i)%kind == fn_declaration) then
+				call ensure_fn_entry(prog, node%members(i)%id_index)
+			else if (node%members(i)%kind == struct_declaration) then
+				if (allocated(node%members(i)%members)) then
+					do j = 1, size(node%members(i)%members)
+						call ensure_fn_entry(prog, node%members(i)%members(j)%id_index)
+					end do
+				end if
+			end if
 		end do
 
 		! M7 pre-pass: compile fn bodies from all transitively-imported modules.
@@ -601,16 +674,36 @@ recursive subroutine compile_node(prog, cs, node)
 			call compile_module_fns(prog, cs, node%members(i)%member)
 		end do
 
-		! Pass 1: compile each locally-declared fn body.
+		! Pass 1: compile each locally-declared fn body (including struct methods).
 		do i = 1, size(node%members)
-			if (node%members(i)%kind /= fn_declaration) cycle
-			l_top = node%members(i)%id_index   ! fn_id (reuse l_top as scratch)
-			prog%fn_num_locs(l_top) = node%members(i)%num_locs
-			prog%fn_entry(l_top)    = prog%len_ + 1
+			if (node%members(i)%kind == fn_declaration) then
+				l_top = node%members(i)%id_index   ! fn_id (reuse l_top as scratch)
+				prog%fn_num_locs(l_top) = node%members(i)%num_locs
+				prog%fn_entry(l_top)    = prog%len_ + 1
 
-			cs%in_fn_body = .true.
-			call compile_node(prog, cs, node%members(i)%body)
-			cs%in_fn_body = .false.
+				cs%in_fn_body = .true.
+				call compile_node(prog, cs, node%members(i)%body)
+				cs%in_fn_body = .false.
+				! Implicit void return for functions with no explicit return statement
+				const_idx = add_const(prog, unknown_val())
+				call emit(prog, OP_LOAD_CONST, a = const_idx)
+				call emit(prog, OP_RET)
+			else if (node%members(i)%kind == struct_declaration) then
+				if (allocated(node%members(i)%members)) then
+					do j = 1, size(node%members(i)%members)
+						l_top = node%members(i)%members(j)%id_index
+						prog%fn_num_locs(l_top) = node%members(i)%members(j)%num_locs
+						prog%fn_entry(l_top)    = prog%len_ + 1
+
+						cs%in_fn_body = .true.
+						call compile_node(prog, cs, node%members(i)%members(j)%body)
+						cs%in_fn_body = .false.
+						const_idx = add_const(prog, unknown_val())
+						call emit(prog, OP_LOAD_CONST, a = const_idx)
+						call emit(prog, OP_RET)
+					end do
+				end if
+			end if
 		end do
 
 		! Top-level statements start here.
@@ -653,7 +746,27 @@ recursive subroutine compile_node(prog, cs, node)
 	! continue -> JUMP L_top (continue_target; FOR_NEXT re-evaluates)
 	case (for_statement)
 		idx = add_node(prog, node)
-		call emit(prog, OP_FOR_SETUP, a = idx)
+		if (for_setup_native_ok(node)) then
+			! Compile bound sub-expressions to bytecode; the VM pops them instead
+			! of calling syntax_eval every time the surrounding loop re-enters.
+			select case (node%array%val%array%kind)
+			case (bound_array)
+				call compile_node(prog, cs, node%array%lbound)
+				call compile_node(prog, cs, node%array%ubound)
+			case (step_array)
+				call compile_node(prog, cs, node%array%lbound)
+				call compile_node(prog, cs, node%array%step)
+				call compile_node(prog, cs, node%array%ubound)
+			case (len_array)
+				call compile_node(prog, cs, node%array%lbound)
+				call compile_node(prog, cs, node%array%ubound)
+				call compile_node(prog, cs, node%array%len_)
+			end select
+			call emit(prog, OP_FOR_SETUP_NAT, a = idx, b = node%array%val%array%kind, &
+				c = int(node%array%val%array%type, 8))
+		else
+			call emit(prog, OP_FOR_SETUP, a = idx)
+		end if
 
 		if (cs%loop_depth + 1 > size(cs%continue_target)) call grow_int(cs%continue_target)
 		cs%loop_depth = cs%loop_depth + 1
@@ -681,11 +794,60 @@ recursive subroutine compile_node(prog, cs, node)
 		call emit(prog, OP_LOAD_CONST, a = const_idx)
 
 	! ---- array expression construction ----------------------------------------
-	! M8: Store the array_expr node in the pool and emit OP_NEW_ARRAY.
-	! The VM handler calls eval_array_expr to build the value.
+	! Native paths for unif_array and bound_array compile sub-expressions to
+	! bytecode so the VM avoids syntax_eval calls; other kinds fall back to
+	! OP_NEW_ARRAY which delegates to eval_array_expr.
 	case (array_expr)
-		idx = add_node(prog, node)
-		call emit(prog, OP_NEW_ARRAY, a = idx)
+		select case (node%val%array%kind)
+
+		case (unif_array)
+			! [fill_val; d1, d2, ...] — native when element type is numeric/bool.
+			! Compile size expressions then the fill value onto the stack.
+			! OP_UNIF_ARRAY_NAT's handler uses a fixed-size local dims_ buffer
+			! sized MAX_NAT_UNIF_RANK; higher-rank arrays fall back to
+			! OP_NEW_ARRAY, which has no rank limit.
+			select case (node%val%array%type)
+			case (bool_type, i32_type, i64_type, f32_type, f64_type)
+				if (node%val%array%rank <= MAX_NAT_UNIF_RANK) then
+					do i = 1, node%val%array%rank
+						call compile_node(prog, cs, node%size(i))
+					end do
+					call compile_node(prog, cs, node%lbound)
+					call emit(prog, OP_UNIF_ARRAY_NAT, &
+						a = node%val%array%type, b = node%val%array%rank)
+				else
+					idx = add_node(prog, node)
+					call emit(prog, OP_NEW_ARRAY, a = idx)
+				end if
+			case default
+				idx = add_node(prog, node)
+				call emit(prog, OP_NEW_ARRAY, a = idx)
+			end select
+
+		case (bound_array)
+			! [lb:ub] integer range — always native (only i32/i64 supported).
+			call compile_node(prog, cs, node%lbound)
+			call compile_node(prog, cs, node%ubound)
+			call emit(prog, OP_BOUND_ARRAY_NAT, a = node%val%array%type)
+
+		case (expl_array)
+			! [e1, e2, ..., en] — native when element type is scalar numeric/bool.
+			if (expl_array_native_ok(node)) then
+				do i = 1, int(node%val%array%len_)
+					call compile_node(prog, cs, node%elems(i))
+				end do
+				call emit(prog, OP_EXPL_ARRAY_NAT, &
+					a = node%val%array%type, b = int(node%val%array%len_))
+			else
+				idx = add_node(prog, node)
+				call emit(prog, OP_NEW_ARRAY, a = idx)
+			end if
+
+		case default
+			idx = add_node(prog, node)
+			call emit(prog, OP_NEW_ARRAY, a = idx)
+
+		end select
 
 	! ---- struct instance construction -----------------------------------------
 	! M5: Compile each member-initialiser expression in order, then emit
@@ -702,8 +864,26 @@ recursive subroutine compile_node(prog, cs, node)
 	! M5: Store the dot_expr node in the pool so the VM can call get_val with
 	! full chain information (nested dots, subscripted members, etc.).
 	case (dot_expr)
-		idx = add_node(prog, node)
-		call emit(prog, OP_LOAD_MEMBER, a = idx)
+		if (node%root_kind /= 0) then
+			! Root is a fn_call_expr/method_call_expr (e.g. `fn().field`).
+			! Compile the fn call (incl. any subscripts) to push root value on stack,
+			! then emit OP_LOAD_MEMBER_TOS with a wrapper node holding just the member chain.
+			block
+				type(syntax_node_t) :: root_node, wrapper
+				root_node = node
+				root_node%kind = node%root_kind
+				if (allocated(root_node%member)) deallocate(root_node%member)
+				call compile_node(prog, cs, root_node)
+				wrapper%kind = dot_expr
+				allocate(wrapper%member)
+				wrapper%member = node%member
+				idx = add_node(prog, wrapper)
+			end block
+			call emit(prog, OP_LOAD_MEMBER_TOS, a = idx)
+		else
+			idx = add_node(prog, node)
+			call emit(prog, OP_LOAD_MEMBER, a = idx)
+		end if
 
 	! ---- fn_declaration: bodies are compiled separately in translation_unit -----
 	! Skip silently here; compilation of the body happens in the translation_unit
@@ -734,7 +914,7 @@ recursive subroutine compile_node(prog, cs, node)
 	! this program_t by the translation_unit pre-pass / compile_module_fns (M7).
 	! fn_entry[id] must be registered before execution; a missing registration is
 	! a compiler bug, not a fallback.
-	case (fn_call_expr)
+	case (fn_call_expr, method_call_expr)
 		! Check registration only: fn_entry[id] may be 0 for a forward reference
 		! (the fn is declared after this call site in the source).  That is fine —
 		! fn_entry[id] will be non-zero by the time the VM executes because all
@@ -765,7 +945,14 @@ recursive subroutine compile_node(prog, cs, node)
 				! Pass 2: move by-ref args from their variable slots onto stack.
 				do i = 1, size(node%is_ref)
 					if (node%is_ref(i)) then
-						if (node%args(i)%is_loc) then
+						if (allocated(node%args(i)%lsubscripts) .or. &
+						    node%args(i)%kind == dot_expr .or. &
+						    node%args(i)%kind == fn_call_expr .or. &
+						    node%args(i)%kind == method_call_expr .or. &
+						    node%args(i)%kind == fn_call_intr_expr) then
+							! Subscripted, dot-expr, or fn-return receiver: evaluate to get value.
+							call compile_node(prog, cs, node%args(i))
+						else if (node%args(i)%is_loc) then
 							call emit(prog, OP_LOAD_REF_LOCAL,  a = node%args(i)%id_index)
 						else
 							call emit(prog, OP_LOAD_REF_GLOBAL, a = node%args(i)%id_index)
@@ -775,6 +962,9 @@ recursive subroutine compile_node(prog, cs, node)
 			end if
 
 			call emit(prog, OP_CALL, a = node%id_index, b = idx)
+			if (allocated(node%lsubscripts)) then
+				call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
+			end if
 		end if
 
 	! ---- intrinsic function call -----------------------------------------------
@@ -789,28 +979,71 @@ recursive subroutine compile_node(prog, cs, node)
 			intr_id_ = intr_id_from_name(node%identifier%text)
 			select case (intr_id_)
 			case (INTR_READLN, INTR_CLOSE)
-				! Push the file argument, encode its slot for writeback in c.
-				! Guard: the file arg must be a plain variable (no subscripts, no
-				! member access).  If the grammar ever permits readln(arr[i]) or
-				! a struct-member file, the slot encoding would be wrong; fail
-				! loudly here rather than silently writing to the wrong slot.
-				if (node%args(1)%kind /= name_expr) then
-					write(*,*) 'compile: readln/close: file argument must be a ' // &
-						'plain variable (subscripted/member file not supported)'
-					call internal_error()
+				if (intr_id_ == INTR_READLN .and. &
+					(.not. allocated(node%args) .or. size(node%args) == 0)) then
+					! No-arg readln(): reads stdin, no file slot to write back to.
+					! Use the native dispatch path instead
+					call emit(prog, OP_CALL_INTR, a = intr_id_, b = 0)
+				else
+					! Push the file argument, encode its slot for writeback in c.
+					! Guard: the file arg must be a plain variable (no subscripts, no
+					! member access).  If the grammar ever permits readln(arr[i]) or
+					! a struct-member file, the slot encoding would be wrong; fail
+					! loudly here rather than silently writing to the wrong slot.
+					if (node%args(1)%kind /= name_expr) then
+						write(*,*) 'compile: readln/close: file argument must be a ' // &
+							'plain variable (subscripted/member file not supported)'
+						call internal_error()
+					end if
+					if (allocated(node%args(1)%lsubscripts)) then
+						write(*,*) 'compile: readln/close: subscripted file argument not supported'
+						call internal_error()
+					end if
+					if (allocated(node%args(1)%member)) then
+						write(*,*) 'compile: readln/close: member file argument not supported'
+						call internal_error()
+					end if
+					call compile_node(prog, cs, node%args(1))
+					slot_c = int(node%args(1)%id_index, 8) * 2 + &
+					         merge(1_8, 0_8, node%args(1)%is_loc)
+					call emit(prog, OP_CALL_INTR, a = intr_id_, b = 1, c = slot_c)
 				end if
-				if (allocated(node%args(1)%lsubscripts)) then
-					write(*,*) 'compile: readln/close: subscripted file argument not supported'
-					call internal_error()
+
+			case (INTR_SIZE)
+				! OP_SIZE_NAT: read array size directly from slot without deep-copying.
+				! Only fires when args(1) is a plain variable and (if 2-arg) dim is a
+				! literal i32 constant.  Anything else falls back to generic OP_CALL_INTR.
+				nargs_ = 0
+				if (allocated(node%args)) nargs_ = size(node%args)
+				if (nargs_ >= 1 .and. &
+				    node%args(1)%kind == name_expr .and. &
+				    .not. allocated(node%args(1)%lsubscripts) .and. &
+				    .not. allocated(node%args(1)%member)) then
+					if (nargs_ == 1) then
+						call emit(prog, OP_SIZE_NAT, &
+							a = node%args(1)%id_index, b = -1, &
+							c = merge(1_8, 0_8, node%args(1)%is_loc))
+					else if (node%args(2)%kind == literal_expr .and. &
+					         node%args(2)%val%type == i32_type) then
+						call emit(prog, OP_SIZE_NAT, &
+							a = node%args(1)%id_index, &
+							b = node%args(2)%val%sca%i32, &
+							c = merge(1_8, 0_8, node%args(1)%is_loc))
+					else
+						! Non-constant dim: fall back to generic path.
+						do i = 1, nargs_
+							call compile_node(prog, cs, node%args(i))
+						end do
+						call emit(prog, OP_CALL_INTR, a = INTR_SIZE, b = nargs_)
+					end if
+				else
+					! Complex array arg: fall back to generic path.
+					do i = 1, nargs_
+						call compile_node(prog, cs, node%args(i))
+					end do
+					call emit(prog, OP_CALL_INTR, a = INTR_SIZE, b = nargs_)
 				end if
-				if (allocated(node%args(1)%member)) then
-					write(*,*) 'compile: readln/close: member file argument not supported'
-					call internal_error()
-				end if
-				call compile_node(prog, cs, node%args(1))
-				slot_c = int(node%args(1)%id_index, 8) * 2 + &
-				         merge(1_8, 0_8, node%args(1)%is_loc)
-				call emit(prog, OP_CALL_INTR, a = intr_id_, b = 1, c = slot_c)
+
 			case default
 				! Native dispatch: push all args, then emit OP_CALL_INTR.
 				nargs_ = 0
@@ -823,6 +1056,10 @@ recursive subroutine compile_node(prog, cs, node)
 				call emit(prog, OP_CALL_INTR, a = intr_id_, b = nargs_)
 			end select
 		end block
+		if (allocated(node%lsubscripts)) then
+			idx = add_node(prog, node)
+			call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
+		end if
 
 	! ---- return statement ------------------------------------------------------
 	! Inside a compiled function body: push return value (or unknown sentinel for

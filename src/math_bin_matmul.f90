@@ -17,7 +17,7 @@ contains
 
 !===============================================================================
 
-subroutine matmul_value_t(left, right, res, op_text)
+subroutine matmul_value_t(left, right, res, op_text, rt_err)
 
 	! Evaluate the matmul operator `@` for two array operands.
 	!
@@ -36,6 +36,13 @@ subroutine matmul_value_t(left, right, res, op_text)
 	type(value_t), intent(inout) :: res
 	character(len = *), intent(in) :: op_text
 
+	! Set (allocated) on a reachable runtime error (dimension mismatch) and
+	! returned immediately without finishing the computation.  This module
+	! has no access to state_t (eval_m depends on math_m, so the dependency
+	! can't go the other way), so the caller is responsible for translating
+	! an allocated rt_err into call rt_throw(state, rt_err)
+	character(len = :), allocatable, intent(out) :: rt_err
+
 	!********
 
 	integer :: lrank, rrank
@@ -49,8 +56,8 @@ subroutine matmul_value_t(left, right, res, op_text)
 
 		! Dimension check
 		if (left%array%size(1) /= right%array%size(1)) then
-			write(*,*) err_matmul_dim(left%array%size(1), right%array%size(1))
-			call internal_error()
+			rt_err = err_matmul_dim(left%array%size(1), right%array%size(1))
+			return
 		end if
 
 		select case (magic * left%array%type + right%array%type)
@@ -156,8 +163,8 @@ subroutine matmul_value_t(left, right, res, op_text)
 
 	! Inner dimensions must match
 	if (lc /= rr) then
-		write(*,*) err_matmul_dim(lc, rr)
-		call internal_error()
+		rt_err = err_matmul_dim(lc, rr)
+		return
 	end if
 
 	! Allocate result array

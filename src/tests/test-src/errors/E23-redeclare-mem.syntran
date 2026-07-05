@@ -1,0 +1,8 @@
+// E23: redeclare-mem
+// A struct member was declared twice in the same struct
+
+struct S
+{
+	x: i32,
+	x: i32,
+}

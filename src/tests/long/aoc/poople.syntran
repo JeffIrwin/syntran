@@ -21,8 +21,8 @@
 //
 //==============================================================================
 
-use dict_i64;
-use dict_str;
+use dicts/dict_i64 as dict_i64;
+use dicts/dict_str as dict_str;
 use utils_2024 as utils;
 
 let N  =  4;  // 4 letter words
@@ -33,6 +33,21 @@ let POOP = "poop";  // goal word. use lowercase internally, uppercase for output
 let BLOCKLIST = [
 	//"ARES",  // not sure if this is valid per poople but i suspect it isn't
 	//"ORCS",
+	"CORP",
+	"HIED",
+	"MANS",
+	"PONE",
+	""
+];
+
+// Add these words to the system dictionary
+let ALLOWLIST = [
+	"BOOP",
+	"MANA",
+	"MANO",
+	"MOOK",
+	"NANA",
+	"POME",
 	""
 ];
 
@@ -54,12 +69,7 @@ fn solve(dict: &dict_i64::dict_i64, init_word: str): [str; :]
 	// Push
 	q[qe] = init;  qe += 1;
 
-	// Obviously all of these dict usages look redundantly named now with
-	// modules. I would rename new_dict_str so we could just do
-	// "dict_str::new()" but this is an invasive change in lots of places. Soon
-	// I would like to have struct methods anyway which would also give nicer
-	// syntax. Finally, I eventually want built-in dicts/maps in syntran
-	let prev = dict_str::new_dict_str();
+	let prev = dict_str::new();
 
 	while true
 	{
@@ -82,9 +92,9 @@ fn solve(dict: &dict_i64::dict_i64, init_word: str): [str; :]
 			let v = u;
 			v[ii] = char(i32("a") + ia);
 			if (v == u) continue;
-			if (dict_i64::get_dict_i64(&dict, v) != 1'i64) continue;
-			if (dict_str::get_dict_str(&prev, v) != ""   ) continue;
-			dict_str::set_dict_str(&prev, v, u);
+			if (not dict.contains(v)) continue;
+			if (prev.contains(v)    ) continue;
+			prev.set(v, u);
 
 			// Push
 			q[qe] = v;  qe = (qe+1) % QCAP;
@@ -103,7 +113,7 @@ fn solve(dict: &dict_i64::dict_i64, init_word: str): [str; :]
 	{
 		q[n] = word;
 		n += 1;
-		word = dict_str::get_dict_str(&prev, word);
+		word = prev.get(word);
 		if (word == init) break;
 		if (word == ""  ) break;
 	}
@@ -122,10 +132,10 @@ fn log_steps(steps: &[str; :])
 	return;
 }
 
-fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64::dict_i64
+fn read_dict(dict_filename: str, blocklist: &[str; :], allowlist: &[str; :]): dict_i64::dict_i64
 {
 	// Load a dictionary of valid words. Only save 4-letter ones
-	let dict = dict_i64::new_dict_i64();
+	let dict = dict_i64::new();
 	let n = 0;
 
 	// sudo apt install wamerican
@@ -136,9 +146,12 @@ fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64::dict_i64
 	//let fdict = open("/usr/share/dict/american-english", "r");
 
 	// Initialize the blocklist dictionary from the given string array
-	let block_dict = dict_i64::new_dict_i64();
+	let block_dict = dict_i64::new();
 	for word in blocklist
-		dict_i64::set_dict_i64(&block_dict, utils::to_lower(word), 1'i64);
+		block_dict.set(utils::to_lower(word), 1'i64);
+
+	for word in allowlist
+		dict.set(utils::to_lower(word), 1'i64);
 
 	while not eof(fdict)
 	{
@@ -151,9 +164,9 @@ fn read_dict(dict_filename: str, blocklist: &[str; :]): dict_i64::dict_i64
 			if (not is_lower) break;
 		}
 		if (not is_lower) continue;
-		if (dict_i64::get_dict_i64(&block_dict, line) == 1'i64) continue;
+		if (block_dict.contains(line)) continue;
 
-		dict_i64::set_dict_i64(&dict, line, 1'i64);
+		dict.set(line, 1'i64);
 		n += 1;
 	}
 	return dict;

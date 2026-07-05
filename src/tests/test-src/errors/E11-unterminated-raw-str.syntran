@@ -1,0 +1,8 @@
+// E11: unterminated-raw-str
+// A raw string literal is missing its closing delimiter
+
+let a = 1;
+let b = 2;
+let c = a + b;
+
+let s = r"this raw string never closes

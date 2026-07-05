@@ -10,6 +10,7 @@ module syntran
 	use syntran__core_m
 	use syntran__compile_m
 	use syntran__vm_m
+	use syntran__line_edit_m
 
 	implicit none
 
@@ -22,6 +23,12 @@ contains
 subroutine eval_dispatch(tree, state, res)
 
 	! Dispatch to the bytecode VM or the AST walker based on state%bytecode.
+	!
+	! If evaluation throws a runtime error (state%rt_halt), surface it here:
+	! non-quiet callers (CLI, REPL, file interpretation) get the legacy
+	! print-and-exit behavior, while quiet callers (e.g. unit tests) leave
+	! state%rt_diags for syntran_eval() to copy into its `diags` out-arg
+	! instead of exiting the process
 
 	type(syntax_node_t), intent(in) :: tree
 	type(state_t), intent(inout) :: state
@@ -38,7 +45,30 @@ subroutine eval_dispatch(tree, state, res)
 		call syntax_eval(tree, state, res)
 	end if
 
+	if (state%rt_halt .and. .not. state%quiet) then
+		call log_rt_diags(state%rt_diags)
+		call exit(exit_failure)
+	end if
+
 end subroutine eval_dispatch
+
+!===============================================================================
+
+subroutine log_rt_diags(diags)
+
+	! Print runtime-error diagnostics to stdout.  In practice there's at most
+	! one entry (evaluation halts on the first runtime error), but loop just
+	! in case that ever changes
+
+	type(string_vector_t), intent(in) :: diags
+
+	integer :: i
+
+	do i = 1, diags%len_
+		write(*,*) diags%v(i)%s
+	end do
+
+end subroutine log_rt_diags
 
 !===============================================================================
 
@@ -74,7 +104,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io
 
-	logical :: continue_, show_tree
+	logical :: continue_, show_tree, interactive
 	logical, parameter :: allow_cont = .true.
 
 	type(string_view_t) :: sv
@@ -94,6 +124,12 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	continue_ = .false.
 	show_tree = .false.
 
+	! Only use interactive line editing (history, arrow keys) when reading a
+	! real terminal.  Piped stdin, `-c` strings, and file interpretation all
+	! keep using the plain read_line() path in utils.f90
+	interactive = .not. present(str_) .and. is_tty()
+	if (interactive) call line_edit_init()
+
 	if (present(str_)) then
 		! Append a trailing line feed in case it does not exist
 		sv = new_string_view(str_//line_feed)
@@ -104,6 +140,14 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	call init_state(state, script_args)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
+
+	if (.not. interactive .and. .not. present(str_) .and. &
+			.not. state%quiet .and. is_mintty()) then
+		write(*,*) 'Note: interactive line editing (history, arrow keys) is'// &
+			' not available in Git Bash / MinTTY.'
+		write(*,*) 'For full REPL editing use: winpty syntran'// &
+			'  (or cmd.exe / PowerShell)'
+	end if
 
 	if (present(startup_file)) then
 		!print *, "startup_file = ", startup_file
@@ -125,6 +169,12 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 		! TODO: chdir option?
 		call eval_dispatch(compilation, state, res)
+		if (state%rt_halt) then
+			! eval_dispatch() already printed and exited for non-quiet
+			! callers, so reaching here means quiet was true
+			res_str = ''
+			return
+		end if
 		res_str = res%to_str()
 		write(*,*) '    '//res_str
 
@@ -163,18 +213,35 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 					!
 					! I hint semicolons because it could be a stumbling block
 					! for users coming from python or similar languages
-					write(ou, '(a)', advance = 'no') prompt_color// &
-						'[Hint `'//compilation%first_expected//'`]> '//color_reset
+
+					if (interactive) then
+						line = line//line_feed//read_line_interactive( &
+							'[Hint `'//compilation%first_expected//'`]> ', io, &
+							use_color = len(prompt_color) > 0)
+					else
+						write(ou, '(a)', advance = 'no') prompt_color// &
+							'[Hint `'//compilation%first_expected//'`]> '//color_reset
+						line = line//line_feed//read_line(iu, iostat = io)
+					end if
 
 				else
-					write(ou, '(a)', advance = 'no') prompt_color//'> '//color_reset
+					if (interactive) then
+						line = line//line_feed//read_line_interactive('> ', io, &
+							use_color = len(prompt_color) > 0)
+					else
+						write(ou, '(a)', advance = 'no') prompt_color//'> '//color_reset
+						line = line//line_feed//read_line(iu, iostat = io)
+					end if
 				end if
 
-				line = line//line_feed//read_line(iu, iostat = io)
-
 			else
-				write(ou, '(a)', advance = 'no') prompt
-				line = read_line(iu, iostat = io)
+				if (interactive) then
+					line = read_line_interactive(lang_name//'$ ', io, &
+						use_color = len(prompt_color) > 0)
+				else
+					write(ou, '(a)', advance = 'no') prompt
+					line = read_line(iu, iostat = io)
+				end if
 			end if
 
 		end if
@@ -216,6 +283,12 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 		if (compilation%is_empty) cycle
 
+		! The line is now a complete statement (possibly joined from several
+		! continuation lines).  read_line_interactive() already undid isocline's
+		! own per-call history push, so this is the one place a full logical
+		! statement becomes a single recallable history entry
+		if (interactive) call line_edit_add_history(line)
+
 		! I'm skipping the the binder that Immo implemented at this point in
 		! episode 2.  I guess I'll find out later if that's a stupid decision on
 		! my end.  I think I can just do type checking in the parser
@@ -228,6 +301,13 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 		if (compilation%diagnostics%len_ > 0) cycle
 
 		call eval_dispatch(compilation, state, res)
+
+		if (state%rt_halt) then
+			! eval_dispatch() already printed and exited for non-quiet
+			! callers, so reaching here means quiet was true.  Stop the REPL
+			! loop rather than risk reading a stale/unset res
+			exit
+		end if
 
 		!print *, "res type = ", kind_name(res%type)
 		if (res%type == void_type   ) cycle
@@ -331,6 +411,14 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 
 	call eval_dispatch(tree, state, val)
 
+	if (state%rt_halt) then
+		! eval_dispatch() already printed and exited for non-quiet callers, so
+		! reaching here means quiet was true.  val may not have been fully
+		! populated when evaluation halted
+		eval_f32 = 0
+		return
+	end if
+
 	! TODO: check kind, add optional iostat arg
 	eval_f32 = val%sca%f32
 	!print *, 'eval_f32 = ', eval_f32
@@ -366,6 +454,14 @@ real(kind = 8) function syntran_eval_f64(str_, quiet) result(eval_f64)
 
 	call eval_dispatch(tree, state, val)
 
+	if (state%rt_halt) then
+		! eval_dispatch() already printed and exited for non-quiet callers, so
+		! reaching here means quiet was true.  val may not have been fully
+		! populated when evaluation halted
+		eval_f64 = 0
+		return
+	end if
+
 	! TODO: check kind, add optional iostat arg
 	eval_f64 = val%sca%f64
 	!print *, 'eval_f64 = ', eval_f64
@@ -374,7 +470,7 @@ end function syntran_eval_f64
 
 !===============================================================================
 
-subroutine init_state(state, script_args, src_dir)
+subroutine init_state(state, script_args, src_dir, bytecode)
 
 	! TODO: move to eval.f90
 
@@ -388,6 +484,12 @@ subroutine init_state(state, script_args, src_dir)
 	type(string_vector_t), intent(in), optional :: script_args
 	character(len = *), intent(in), optional :: src_dir
 
+	! Explicit backend override, mainly for tests that need to exercise both
+	! the bytecode VM and the AST walker without mutating SYNTRAN_BACKEND in
+	! the process environment.  Bypasses the env var and its deprecation
+	! warning below
+	logical, intent(in), optional :: bytecode
+
 	!*******
 
 	character(len = 64) :: backend_env
@@ -399,20 +501,27 @@ subroutine init_state(state, script_args, src_dir)
 	state%breaked   = .false.
 	state%continued = .false.
 
-	! Select evaluation backend via SYNTRAN_BACKEND env var.
-	! SYNTRAN_BACKEND=ast  -> use the (deprecated) AST walker
-	! (anything else)      -> use the bytecode VM (default)
-	call get_environment_variable('SYNTRAN_BACKEND', backend_env, &
-		status = backend_status)
+	state%rt_halt  = .false.
+	state%rt_diags = new_string_vector()
 
-	state%bytecode = .true.
-	if (backend_status == 0) then
-		if (trim(backend_env) == "ast") then
-			state%bytecode = .false.
-			write(error_unit, '(a)') fg_bold_yellow//'Warning'//color_reset// &
-				': SYNTRAN_BACKEND=ast is deprecated. ' // &
-				'The AST walker will be removed in a future release. If you encounter ' // &
-				'bugs, please report them at https://github.com/JeffIrwin/syntran/issues'
+	if (present(bytecode)) then
+		state%bytecode = bytecode
+	else
+		! Select evaluation backend via SYNTRAN_BACKEND env var.
+		! SYNTRAN_BACKEND=ast  -> use the (deprecated) AST walker
+		! (anything else)      -> use the bytecode VM (default)
+		call get_environment_variable('SYNTRAN_BACKEND', backend_env, &
+			status = backend_status)
+
+		state%bytecode = .true.
+		if (backend_status == 0) then
+			if (trim(backend_env) == "ast") then
+				state%bytecode = .false.
+				if (.not. no_warn) write(error_unit, '(a)') fg_bold_yellow//'Warning'//color_reset// &
+					': SYNTRAN_BACKEND=ast is deprecated. ' // &
+					'The AST walker will be removed in a future release. If you encounter ' // &
+					'bugs, please report them at https://github.com/JeffIrwin/syntran/issues'
+			end if
 		end if
 	end if
 
@@ -445,7 +554,7 @@ end subroutine init_state
 
 !===============================================================================
 
-function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
+function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecode) result(res)
 
 	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
 	! for syntran_interpret_file() is boolean
@@ -460,6 +569,16 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 	character(len = *), optional, intent(in) :: src_file
 	character(len = *), optional, intent(in) :: chdir_
 	type(string_vector_t), optional, intent(in) :: script_args
+
+	! Diagnostic messages (one error per element), unset on success.  Lets
+	! callers (e.g. unit tests) inspect error codes/text without parsing
+	! stdout
+	type(string_vector_t), optional, intent(out) :: diags
+
+	! Explicit backend override (see init_state()).  Lets callers (e.g. unit
+	! tests) exercise both the bytecode VM and the AST walker for the same
+	! snippet without mutating SYNTRAN_BACKEND in the process environment
+	logical, optional, intent(in) :: bytecode
 
 	!********
 
@@ -480,7 +599,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 		dir = chdir_
 	end if
 
-	call init_state(state, script_args, dir)
+	call init_state(state, script_args, dir, bytecode)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
@@ -504,6 +623,8 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 
 	if (.not. state%quiet) call tree%log_diagnostics()
 
+	if (present(diags)) diags = tree%diagnostics
+
 	if (tree%diagnostics%len_ > 0) then
 		! TODO: set io
 		res = ''
@@ -515,6 +636,19 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args) result(res)
 	!print *, "evaling "
 	call eval_dispatch(tree, state, val)
 	!print *, "done"
+
+	! A runtime error halted evaluation.  eval_dispatch() already printed and
+	! exited for non-quiet callers, so reaching here means state%quiet is
+	! true: append the runtime diagnostic(s) to the diags out-arg (alongside
+	! any parser diagnostics, of which there are none here since we already
+	! returned above if tree%diagnostics were non-empty) and skip val%to_str()
+	! since val may not have been fully populated when evaluation halted
+	if (state%rt_halt) then
+		if (present(diags)) call diags%push_all(state%rt_diags)
+		res = ''
+		return
+	end if
+
 	res = val%to_str()
 	!print *, 'res = ', res
 
@@ -524,7 +658,7 @@ end function syntran_eval
 
 !===============================================================================
 
-function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args) result(res)
+function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags, bytecode) result(res)
 
 	! TODO:
 	!   - enable input echo for file input (not for stdin)
@@ -551,6 +685,14 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	logical, optional, intent(in) :: chdir_
 
 	type(string_vector_t), optional, intent(in) :: script_args
+
+	! Diagnostic messages (one error per element), unset on success.  Mirrors
+	! the diags out-arg of syntran_eval(), including the EC_404 case below
+	! which happens before any parser/diagnostics object exists
+	type(string_vector_t), optional, intent(out) :: diags
+
+	! Explicit backend override.  See syntran_eval()/init_state()
+	logical, optional, intent(in) :: bytecode
 
 	!********
 
@@ -579,15 +721,21 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 
 	if (iostat /= exit_success) then
 		if (.not. state%quiet) write(*,*) err_404(filename)
+		if (present(diags)) then
+			diags = new_string_vector()
+			call diags%push(err_404(filename))
+		end if
+		res = ''
 		return
 	end if
 
 	if (chdirl) then
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
-			chdir_ = get_dir(filename), script_args = script_args)))
+			chdir_ = get_dir(filename), script_args = script_args, diags = diags, &
+			bytecode = bytecode)))
 	else
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
-			script_args = script_args)))
+			script_args = script_args, diags = diags, bytecode = bytecode)))
 	end if
 
 end function syntran_interpret_file

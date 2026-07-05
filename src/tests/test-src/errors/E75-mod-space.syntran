@@ -1,0 +1,4 @@
+// E75: mod-space
+// A module name contains a space
+
+use foo bar;

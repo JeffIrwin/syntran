@@ -17,7 +17,7 @@ module syntran__compiler_m
 #error syntran is not compatible with gfortran <= 9. upgrade to gfortran 10 through 15
 #endif
 
-#if (__GNUC__ >= 16)
+#if (__GNUC__ >= 17)
 #error syntran is not compatible with gfortran >= 16. downgrade to gfortran 10 through 15
 ! gfortran 16 isn't released yet (as of November 2025).  It might work, but it
 ! needs to be tested

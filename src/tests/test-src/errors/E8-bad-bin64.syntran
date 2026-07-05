@@ -1,0 +1,11 @@
+// E8: bad-bin64
+// Binary integer literal that doesn't fit in 64 bits
+
+fn quad(x: i32): i32
+{
+	return x * 4;
+}
+
+let q = quad(2);
+let bn = 0b10000000000000000000000000000000000000000000000000000000000000001;
+println(q);

@@ -7,10 +7,11 @@ WORKDIR /workdir
 
 RUN apk add gfortran musl-dev
 RUN apk add libc6-compat  # syntran needs glibc compatibility, not alpine's musl libc
-RUN apk add rlwrap        # nice to have
+RUN apk add linux-headers # provides linux/kd.h, needed by isocline's term.c
 RUN apk add curl
 
 COPY src src
+COPY external external
 COPY CMakeLists.txt .
 COPY fpm.toml .
 
@@ -49,5 +50,5 @@ RUN fpm test test
 #RUN cp ./build/Release/syntran /usr/bin/
 ##************
 
-ENTRYPOINT ["rlwrap", "syntran"]
+ENTRYPOINT ["syntran"]
 

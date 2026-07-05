@@ -1,0 +1,4 @@
+// R7: file-rw-mode
+// open() was given a mode string combining r and w, which isn't supported
+
+let f = open("build/rt_file_r7.txt", "rw");

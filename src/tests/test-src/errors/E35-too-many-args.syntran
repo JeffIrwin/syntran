@@ -1,0 +1,6 @@
+// E35: too-many-args
+// A variadic function call was given more than its maximum number of
+// arguments
+
+let a = [1, 2];
+let b = size(a, 0, 1);

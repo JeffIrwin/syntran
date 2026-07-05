@@ -1,0 +1,6 @@
+// E49: binary-ranks
+// A binary operator's array operands have mismatched ranks
+
+let a = [1, 2; 2, 2];
+let b = [3, 4];
+let c = a + b;

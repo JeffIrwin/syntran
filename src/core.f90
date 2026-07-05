@@ -12,6 +12,7 @@ module syntran__core_m
 	use syntran__errors_m
 	use syntran__eval_m
 	use syntran__intr_fns_m
+	use syntran__intr_vars_m
 	use syntran__parse_m
 	use syntran__types_m
 	use syntran__utils_m
@@ -26,10 +27,35 @@ module syntran__core_m
 
 	integer, parameter ::   &
 		syntran_major =  1, &
-		syntran_minor =  3, &
+		syntran_minor =  4, &
 		syntran_patch =  0
 
 	! TODO:
+	!  - kill redundant token deep-copies in the parser hot path
+	!    (peek_kind/peek_text read fields directly; convert
+	!    peek/current/next/match accessors from by-value functions to
+	!    intent(out) subroutines)
+	!  - switch/match/case
+	!  - callbacks, fn pointers, i.e. passing one function as an argument to
+	!    another function
+	!    * this could be a big change to the type system
+	!  - replace ternary tree dicts with hash maps? might be simpler, but there
+	!    might be zero perf benefit because the dicts are only used at parse
+	!    time, then mapped to efficient arrays at eval time
+	!  - enums
+	!  - recursive data structs
+	!    * recursive fns are available, but not structs
+	!  - method improvements:
+	!    * stretch, arguably not very useful: slice method calls? e.g.
+	!      `struct[0:3].method()`. for void methods, just iterate and call it.
+	!      for returning methods, return an array of values of the appropriate
+	!      rank. should a chain of multiple sliced methods be allowed?
+	!      element-wise slices of same shape or cartesian product of all combos
+	!      if that even makes sense?
+	!  - more std consts:
+	!    * ANSI color codes, or some other way to color text
+	!    * E, I (after complex numbers)
+	!    * done: PI, std::IN/OUT/ERR
 	!  - need an exists() built-in to check files, or some equivalent way to
 	!    check a file post-open. maybe rethink the way syntran immediately
 	!    runtime error aborts if you try to open for reading a file that doesn't
@@ -38,10 +64,12 @@ module syntran__core_m
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
-	!  - switch/match/case
 	!  - matrix inverse? link gfortran to mkl?
 	!  - remove AST-walking interpreter. bytecode is better. wait 2 or 3
 	!    releases
+	!    * will probably remove it in 1.6. if that's the plan at the 1.5
+	!      release, update the depreciation warning to specify the planned
+	!      removal release
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
@@ -80,11 +108,6 @@ module syntran__core_m
 	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet
 	!    * related, update wsl ubuntu version. consider updating gfortran
 	!      versions in some places
-	!  - replace ternary tree dicts with hash maps? might be simpler, but there
-	!    might be zero perf benefit because the dicts are only used at parse
-	!    time, then mapped to efficient arrays at eval time
-	!  - unit tests for contents of error messages. need new api to get error
-	!    msg. maybe add error codes too
 	!  - claude tasks:
 	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable
 	!      it. duh!
@@ -144,7 +167,6 @@ module syntran__core_m
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - minloc, maxloc, findloc std:: fns
 	!    * useful for aoc
-	!  - const.  e.g. `const N = 5` instead of `let N = 5`. then ban reassigning
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
 	!    compute usage
 	!    * gfortran 15 is now the default for Windows github actions
@@ -179,11 +201,6 @@ module syntran__core_m
 	!    * added a couple basic tests in main.yml
 	!    * fns should also be covered
 	!    * should also cover options like `-i` (startup include file)
-	!  - recursive data structs?
-	!    * recursive fns are available, but not structs
-	!  - callbacks, fn pointers, i.e. passing one function as an argument to
-	!    another function
-	!    * this could be a big change to the type system
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
 	!    * just use `reshape` and call the fortran built-in.  no need for any
@@ -216,14 +233,6 @@ module syntran__core_m
 	!    * samples?
 	!    * libsyntran.a and fortran sample?
 	!    * try -static-libgcc etc. on win/mac to ease packaging
-	!  - struct array slicing:
-	!    * can't do my_struct.arr[1:4], currently have to loop with scalar index
-	!  - struct member fns
-	!    * it would be a nicer experience to be able to write
-	!      `dict.set("key", val)` instead of `set_dict_i64(&dict, "key", val)`,
-	!      effectively using the struct identifier as a namespace
-	!    * inside member fns, you should be allowed to just write `var` instead
-	!      of `this.var`
 	!  - pass by reference for subscripted array name expressions and dot
 	!    expressions
 	!    * done for regular variable name expressions
@@ -234,7 +243,8 @@ module syntran__core_m
 	!    debugging, but I don't want to encourage its use for actual program
 	!    logic
 	!  - complex number type(s)
-	!    * basically required for FFT
+	!    * basically required for FFT, which could be a fun example/test. see:
+	!        https://github.com/JeffIrwin/numerical-analysis/blob/7067e5fe7d331f817c5c9f9cf922b44af7a18aa9/src/interp.F90#L337
 	!  - f64
 	!    * make a fn to cast f64 down to f32
 	!    * casting from f32 up to f64 (or from int to float) is easy, just
@@ -246,11 +256,12 @@ module syntran__core_m
 	!      variable with the same name `ans`, at least within the REPL and maybe
 	!      everywhere for compatibility of being able to paste code into the
 	!      REPL
-	!    * it would be very convenient.  you can always rlwrap and up arrow,
-	!      then assign to a var if you need to save the last ans.  but this is
-	!      inconvenient, and state changers are not always idempotent (meaning
-	!      up arrow could give a different answer on 2nd execution).  and if a
-	!      statement is expensive, you may not want to have to run it again
+	!    * it would be very convenient.  you can always isocline/rlwrap and up
+	!      arrow, then assign to a var if you need to save the last ans.  but
+	!      this is inconvenient, and state changers are not always idempotent
+	!      (meaning up arrow could give a different answer on 2nd execution).
+	!      and if a statement is expensive, you may not want to have to run it
+	!      again
 	!  - structs
 	!    * post-merge TODO struct items:
 	!      + update struct sample.  include struct/array combos, nesting, etc.
@@ -314,7 +325,6 @@ module syntran__core_m
 	!    * --fmax-errors arg
 	!    * ifx/ifort pass tests but perform order of magnitude slower
 	!  - #(pragma)once  directive. #let var=val directive?
-	!    * maybe have an `const` qualifier instead of #let or #define
 	!    * for #once include guards, insert filename path as key into a ternary
 	!      tree w/ bool value true.  then when something is included, check if
 	!      it's in the ternary dict first.
@@ -344,10 +354,19 @@ module syntran__core_m
 	!  - tetration operator ***? ints only? just for fun
 	!  - functions
 	!    * intrinsic
+	!      + trim/split/pad
+	!      + index, scan, verify
+	!      + date/time
 	!      + trig: atan2, (sec, cosecant, hyperbolic, ... ?)
 	!      + bessel_jn
-	!      + gamma, log_gamma?
+	!      + erf, gamma, log_gamma?
+	!      + floor, ceil, fraction, nint
 	!      + system: multiple out args? iostat and stdout
+	!      + rank. might seem unnecessary but reshape() can create arrays of
+	!        unknown rank at parse time
+	!      + pack/spread/unpack
+	!      + ternary operator or merge() ?
+	!      + rng?
 	!    * done:
 	!      + reshape, transpose, shape
 	!      + abs, sqrt
@@ -362,16 +381,16 @@ module syntran__core_m
 	!      + sum, product
 	!        > these need an optional `dim` arg, and so do any/all
 	!      + min, max
-	!      + size (non-variadic but polymorphic)
+	!      + size
 	!      + readln, writeln, println, open, close, str casting
 	!      + len (of str)
+	!      + count, any, all
 	!      + recursive and non-recursive user-defined fns
 	!  - use more submodules
 	!    * types.f90 is long and close to leaves of dependency tree.  value.f90
 	!      is also highly depended upon
 	!  - make syntax highlighting plugins for vim and TextMate (VSCode et al.)
 	!    * using rust syntrax highlighting in neovim is not bad (except for "\" string)
-	!  - enums
 	!  - casting fns should work with array args
 	!    * f32() doesn't exist (you can mul by 1.0 as a workaround)
 	!    * i32(), i64() done
@@ -646,6 +665,13 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	!print *, "allocated parser%vars%dicts = ", allocated( parser%vars%dicts )
 	!print *, "size parser%vars%dicts = ", size( parser%vars%dicts )
 
+	! Pre-seed std:: constants into a fresh vars dict.
+	! REPL: dict was moved in above and already contains std:: constants -- skip.
+	if (.not. allocated(parser%vars%dicts(1)%root)) then
+		call declare_intr_vars(parser%vars)
+		parser%num_vars = NUM_INTR_VARS
+	end if
+
 	!*******************************
 	! Parse the tokens
 	call parser%parse_unit(tree)
@@ -734,6 +760,9 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 		!vars%vals = vars0%vals
 		!vars = vars0
 	end if
+
+	! Always set std:: constant runtime values -- idempotent, safe after REPL restore.
+	if (parser%num_vars >= NUM_INTR_VARS) call populate_intr_vars(vars%vals)
 
 	!print *, 'parser%num_fns = ', parser%num_fns
 	if (allocated(fns%fns)) deallocate(fns%fns)

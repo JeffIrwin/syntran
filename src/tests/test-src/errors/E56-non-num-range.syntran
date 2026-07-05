@@ -1,0 +1,4 @@
+// E56: non-num-range
+// An array range bound is not a numeric type
+
+let a = ["a": "z"];

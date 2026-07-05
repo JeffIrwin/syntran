@@ -1,0 +1,4 @@
+// E72: mod-hyphen
+// A module name contains a hyphen; use underscores instead
+
+use foo-bar;

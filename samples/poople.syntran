@@ -19,11 +19,17 @@ if nargs != 1
 println("Starting poople solver");
 
 // sudo apt install wamerican
-let dict_filename = "/usr/share/dict/american-english";
+// mkdir -p ~/.local/share/dict/
+// ln -s /usr/share/dict/american-english ~/.local/share/dict/
+//
+const HOME_DIR = std::getenv("HOME");
+const DICT_FILENAME = HOME_DIR + "/.local/share/dict/american-english";
+//let DICT_FILENAME = "/usr/share/dict/american-english";
 
 let blocklist = poople::BLOCKLIST;
-let dict      = poople::read_dict(dict_filename, &blocklist);
-println("Loaded ", len_dict_i64(&dict),
+let allowlist = poople::ALLOWLIST;
+let dict = poople::read_dict(DICT_FILENAME, &blocklist, &allowlist);
+println("Loaded ", dict.len(),
 	" 4-letter words from system dictionary");
 
 let steps = poople::solve(&dict, args[0]);

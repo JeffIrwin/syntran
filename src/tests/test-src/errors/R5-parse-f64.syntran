@@ -1,0 +1,4 @@
+// R5: parse-f64
+// parse_f64() could not parse its string argument as an f64
+
+let x = parse_f64("abc");

@@ -1,0 +1,5 @@
+// E36: bad-sub-count
+// An array was subscripted with the wrong number of indices for its rank
+
+let a = [1, 2, 3];
+let b = a[1, 2];

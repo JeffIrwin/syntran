@@ -33,6 +33,7 @@ subroutine unit_test_aoc_2017(npass, nfail)
 	! This one-off is included because it's the first AOC problem where I've used recursion
 	tests = &
 		[   &
+			interpret_file(path//"6/main.syntran" , quiet = .true., chdir_ = .true.) == '6681:2392', &
 			interpret_file(path//"12/main.syntran", quiet = .true., chdir_ = .true.) == '141:171', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]

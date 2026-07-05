@@ -1,0 +1,7 @@
+// E9: bad-expr
+// A bare expression statement was used outside the REPL
+
+let a = 1;
+let b = 2;
+
+a + b;

@@ -1,0 +1,426 @@
+// Wordle is a word game: a secret 5-letter word must be guessed in a handful
+// of tries.  Each guess is scored letter-by-letter:
+//
+//   - green  (g): the letter is correct and in the right position
+//   - yellow (y): the letter is in the word but in the wrong position
+//   - gray   (.): the letter is not in the word (see the duplicate-letter note
+//                 below)
+//
+// This is *not* a standalone implementation of wordle.  It's a helper, run
+// interactively (like samples/betweenle.syntran): it suggests a word, you play
+// that word in the real wordle, then type back the feedback at the prompt, and
+// it suggests the next word.  Repeat until solved.
+//
+// Feedback line format.  Either:
+//
+//     PATTERN              - just the 5-char g/y/. feedback for the word the
+//                            helper just suggested, e.g.   gy..g
+//
+//     WORD  PATTERN        - the word you actually played plus its feedback,
+//                            e.g.   crane  gy..g   (use this if you played a
+//                            word other than the suggested one)
+//
+// An empty line (or EOF, e.g. Ctrl-D) quits.
+//
+// How it narrows the list: rather than hand-coding all the fiddly
+// duplicate-letter rules, it *simulates* the feedback each remaining candidate
+// would produce for your guess (see score_code) and keeps only the candidates
+// whose simulated feedback exactly matches what you observed.  This is exactly
+// correct for all duplicate-letter cases.
+//
+// How it picks the suggestion: when few candidates remain it is information-
+// optimal -- for each candidate it buckets the others by the feedback they'd
+// produce and picks the word that, on average, leaves the fewest candidates
+// (rank-equivalent to maximizing entropy).  When many remain (e.g. the opening
+// move on the whole dictionary) that is too slow, so it falls back to a cheap
+// letter-frequency heuristic that still favors high-information words.
+
+use ../src/tests/long/aoc/dicts/dict_i64 as dict_i64;
+use ../src/tests/long/aoc/utils_2024 as utils;
+
+const WORD_LEN = 5;
+
+// Number of distinct feedback patterns: 3 ^ WORD_LEN
+const NUM_CODES = 3 ** WORD_LEN;
+
+// Extra 5-letter words to add to the system dictionary (it's missing plenty of
+// valid wordle words, e.g. "twixt").  Case-insensitive; the trailing "" is just
+// a sentinel so the list is never empty
+let ALLOWLIST = [
+	"twixt",
+	"scree",
+	""
+];
+
+let BLOCKLIST = [
+	"contd",
+	""
+];
+
+// Below this many candidates, use the exact (O(n^2)) optimal scorer; above it,
+// use the cheap letter-frequency heuristic so each turn stays responsive.  The
+// exact scorer costs a few seconds near this bound and grows quadratically, so
+// keep it modest.  With a strong opener the candidate set drops well under this
+// after the first guess anyway
+let EXACT_THRESHOLD = 500;
+
+fn read_dict(filename: str, allowlist: &[str; :], blocklist: &[str; :]): [str; :]
+{
+	// Load the system dictionary, keeping only 5-letter lowercase words, then
+	// merge in any extra words from the allowlist that aren't already present
+
+	let CAP = 16000;
+	let words = [""; CAP];
+	let n = 0;
+
+	// Initialize the blocklist dictionary from the given string array
+	let block_dict = dict_i64::new();
+	for word in blocklist
+		block_dict.set(utils::to_lower(word), 1'i64);
+
+	let f = open(filename, "r");
+	while not eof(f)
+	{
+		let line = readln(f);
+		if (len(line) != WORD_LEN) continue;
+
+		let is_lower = true;
+		for c in line
+		{
+			is_lower = utils::is_lower(c);
+			if (not is_lower) break;
+		}
+		if (not is_lower) continue;
+		if (block_dict.contains(line)) continue;
+
+		words[n] = line;
+		n += 1;
+	}
+	close(f);
+
+	for w in allowlist
+	{
+		let lw = utils::to_lower(w);
+		if (len(lw) != WORD_LEN) continue;  // skips the "" sentinel too
+
+		let dup = false;
+		for i in [0: n]
+			if words[i] == lw
+			{
+				dup = true;
+				break;
+			}
+		if (dup) continue;
+
+		words[n] = lw;
+		n += 1;
+	}
+
+	return words[0: n];
+}
+
+fn score_code(guess: str, secret: str): i32
+{
+	// Simulate wordle's feedback for `guess` against `secret`, returned as a
+	// base-3 code (one trit per letter: 0 = gray, 1 = yellow, 2 = green).
+	// This is the canonical algorithm and handles duplicate letters correctly
+
+	// Count of each letter (a..z -> 0..25) still available in `secret`
+	let counts = [0; 26];
+	for i in [0: WORD_LEN]
+		counts[i32(secret[i]) - i32("a")] += 1;
+
+	let res = [0; WORD_LEN];
+
+	// First pass: greens, consuming from counts
+	for i in [0: WORD_LEN]
+		if guess[i] == secret[i]
+		{
+			res[i] = 2;
+			counts[i32(guess[i]) - i32("a")] -= 1;
+		}
+
+	// Second pass: yellows from whatever letters remain
+	for i in [0: WORD_LEN]
+		if res[i] != 2
+		{
+			let c = i32(guess[i]) - i32("a");
+			if counts[c] > 0
+			{
+				res[i] = 1;
+				counts[c] -= 1;
+			}
+		}
+
+	// Pack into a base-3 code
+	let code = 0;
+	for i in [0: WORD_LEN]
+		code = code * 3 + res[i];
+	return code;
+}
+
+fn pattern_to_code(pattern: str): i32
+{
+	// Convert a user-typed g/y/. pattern into the same base-3 code as
+	// score_code, so observed and simulated feedback are directly comparable
+
+	let code = 0;
+	for i in [0: WORD_LEN]
+	{
+		let trit = 0;
+		if (pattern[i] == "g") trit = 2;
+		else if (pattern[i] == "y") trit = 1;
+		code = code * 3 + trit;
+	}
+	return code;
+}
+
+fn valid_pattern(pattern: str): bool
+{
+	if (len(pattern) != WORD_LEN) return false;
+	for i in [0: WORD_LEN]
+		if (pattern[i] != "g" and pattern[i] != "y" and pattern[i] != ".")
+			return false;
+	return true;
+}
+
+fn filter(cands: &[str; :], nc: i32, guess: str, obs_code: i32): i32
+{
+	// Keep only candidates whose simulated feedback for `guess` matches
+	// `obs_code`, compacting survivors to the front of `cands`.  Returns the
+	// new candidate count
+
+	let m = 0;
+	for i in [0: nc]
+		if score_code(guess, cands[i]) == obs_code
+		{
+			cands[m] = cands[i];
+			m += 1;
+		}
+	return m;
+}
+
+fn suggest_exact(cands: &[str; :], nc: i32, all_words: &[str; :], nall: i32): str
+{
+	// Information-optimal pick: choose the word (from the full dictionary, not
+	// just candidates) that minimizes expected candidates remaining after its
+	// feedback (sum of squared bucket sizes; rank-equivalent to maximizing
+	// entropy).  Non-candidates can be pure probes; candidates are preferred
+	// on a tie because they can themselves be the answer
+
+	let best = cands[0];
+	let best_cost = nc * nc + 1;  // larger than any achievable cost
+
+	// Pass 1: find minimum cost across ALL words (including non-candidates)
+	for g in [0: nall]
+	{
+		let hist = [0; NUM_CODES];
+		for c in [0: nc]
+			hist[score_code(all_words[g], cands[c])] += 1;
+
+		let cost = 0;
+		for k in [0: NUM_CODES]
+			cost += hist[k] * hist[k];
+
+		if cost < best_cost
+		{
+			best_cost = cost;
+			best = all_words[g];
+		}
+	}
+
+	// Pass 2: if any candidate achieves the same minimum cost, prefer it
+	// (so the suggestion can itself be the answer, not just a probe)
+	for g in [0: nc]
+	{
+		let hist = [0; NUM_CODES];
+		for c in [0: nc]
+			hist[score_code(cands[g], cands[c])] += 1;
+
+		let cost = 0;
+		for k in [0: NUM_CODES]
+			cost += hist[k] * hist[k];
+
+		if cost == best_cost
+		{
+			best = cands[g];
+			break;
+		}
+	}
+
+	return best;
+}
+
+fn suggest_freq(cands: &[str; :], nc: i32): str
+{
+	// Cheap fallback for large candidate sets: score each word by the summed
+	// frequency of its *distinct* letters across all remaining candidates, so
+	// high-coverage words (lots of common, non-repeated letters) win
+
+	let freq = [0; 26];
+	for i in [0: nc]
+	{
+		let seen = [false; 26];
+		for j in [0: WORD_LEN]
+		{
+			let c = i32(cands[i, j]) - i32("a");
+			if not seen[c]
+			{
+				seen[c] = true;
+				freq[c] += 1;
+			}
+		}
+	}
+
+	let best = cands[0];
+	let best_score = -1;
+	for i in [0: nc]
+	{
+		let seen = [false; 26];
+		let s = 0;
+		for j in [0: WORD_LEN]
+		{
+			let c = i32(cands[i, j]) - i32("a");
+			if not seen[c]
+			{
+				seen[c] = true;
+				s += freq[c];
+			}
+		}
+		if s > best_score
+		{
+			best_score = s;
+			best = cands[i];
+		}
+	}
+	return best;
+}
+
+fn suggest(cands: &[str; :], nc: i32, all_words: &[str; :], nall: i32): str
+{
+	if (nc <= EXACT_THRESHOLD)
+		return suggest_exact(&cands, nc, &all_words, nall);
+	return suggest_freq(&cands, nc);
+}
+
+fn report(cands: &[str; :], nc: i32, all_words: &[str; :], nall: i32): str
+{
+	// Print the candidate count and a suggestion, list candidates if few
+	// remain, and return the suggested word ("" if solved or stuck)
+
+	let cand_word = "candidates";
+	if (nc == 1) cand_word = "candidate";
+
+	println();
+	println("Candidates remaining: ", nc, " ", cand_word);
+
+	if nc == 0
+	{
+		println();
+		println("No candidate matches all the feedback.  Likely a typo in a");
+		println("pattern, or the secret word isn't in the system dictionary.");
+		return "";
+	}
+
+	if nc == 1
+	{
+		println();
+		println("Solved!  The secret word is: ", utils::to_upper(cands[0]));
+		return "";
+	}
+
+	let s = suggest(&cands, nc, &all_words, nall);
+
+	println();
+	println("Suggested next guess: ", utils::to_upper(s));
+
+	if nc <= 15
+	{
+		println();
+		println("Remaining candidate words:");
+		for i in [0: nc]
+			println("    ", utils::to_upper(cands[i]));
+	}
+
+	return s;
+}
+
+println("Starting wordle solver");
+
+// sudo apt install wamerican
+// mkdir -p ~/.local/share/dict/
+// ln -s /usr/share/dict/american-english ~/.local/share/dict/
+//
+const HOME_DIR = std::getenv("HOME");
+const DICT_FILENAME = HOME_DIR + "/.local/share/dict/american-english";
+//let DICT_FILENAME = "/usr/share/dict/american-english";
+
+let cands = read_dict(DICT_FILENAME, &ALLOWLIST, &BLOCKLIST);
+let nc = i32(size(cands, 0));
+let all_words = cands;
+let nall = nc;
+println("Loaded ", nc, " 5-letter words from system dictionary");
+
+let last_suggestion = report(&cands, nc, &all_words, nall);
+
+while nc > 1
+{
+	println();
+	println("Enter feedback:  PATTERN   (g=green, y=yellow, .=gray)");
+	println("           or:   WORD PATTERN   (if you played a different word)");
+	println("  (Ctrl-D to quit)");
+
+	let line = readln();
+	if (eof()) break;
+	if (len(line) == 0) continue;
+
+	let tokens = utils::split_(line, " ");
+	let ntok = i32(size(tokens, 0));
+
+	let guess = "";
+	let pattern = "";
+	if ntok >= 2
+	{
+		guess = utils::to_lower(tokens[0]);
+		pattern = utils::to_lower(tokens[1]);
+	}
+	else
+	{
+		guess = last_suggestion;
+		pattern = utils::to_lower(tokens[0]);
+	}
+
+	if len(guess) != WORD_LEN
+	{
+		println();
+		println("Error: guessed word `", utils::to_upper(guess),
+			"` is not ", WORD_LEN, " letters");
+		continue;
+	}
+	if not valid_pattern(pattern)
+	{
+		println();
+		println("Error: pattern `", pattern, "` must be ", WORD_LEN,
+			" characters of only g / y / .");
+		continue;
+	}
+
+	let obs_code = pattern_to_code(pattern);
+
+	// Already-solved feedback (all green) short-circuits to the guessed word
+	if obs_code == pattern_to_code("ggggg")
+	{
+		println();
+		println("Solved!  The secret word is: ", utils::to_upper(guess));
+		break;
+	}
+
+	nc = filter(&cands, nc, guess, obs_code);
+	last_suggestion = report(&cands, nc, &all_words, nall);
+	if (nc <= 1) break;
+}
+
+println();
+println("Ending wordle solver");
+
+return 0;

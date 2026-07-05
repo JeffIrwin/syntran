@@ -3,10 +3,14 @@ FROM rockylinux:9
 
 WORKDIR /workdir
 
+# Use gcc/gfortran 13 here because it has better glibc compatibility. Version
+# gfortran 14 needs a newer glibc which doesn't pass on all of the distros
+# covered by test-branch.sh
 RUN dnf update -y && dnf install -y \
 	vim \
 	git \
-	gcc-toolset-13-gcc-gfortran
+	gcc-toolset-13-gcc-gfortran \
+	expect
 
 ## Static libc.a and libm.a can also be installed, but it does not remove the dependency on libc.so etc. from syntran
 #dnf --enablerepo=crb install glibc-static -y
@@ -34,6 +38,7 @@ WORKDIR /workdir/syntran
 # to know the git commit for `--version` output, so we have to install git and
 # clone the whole repo
 ADD src ./src
+ADD external ./external
 ADD .git ./.git
 ADD fpm.toml .
 ADD gen-header.sh .
@@ -96,4 +101,24 @@ RUN [[ "$(./bin/syntran -c 'let a = std::args(); size(a);' -- foo bar 'hello wor
 # `tr` deletes all spaces, while this `sed` only removes *leading* spaces
 RUN [[ "$(./bin/syntran -c 'let a = std::args(); a[0];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "foo" ]]
 RUN [[ "$(./bin/syntran -c 'let a = std::args(); a[2];' -- foo bar 'hello world' | sed 's/^[[:space:]]*//')" == "hello world" ]]
+
+# No-arg readln()/eof() read from stdin
+RUN [[ "$(echo 'hello' | ./bin/syntran -c 'println(readln());' | tr -d '[:space:]')" == "hello" ]]
+RUN [[ "$(printf 'a\nb\nc\n' | ./bin/syntran -c 'let s=""; for i in [0:3] { s += readln(); } println(s);' | tr -d '[:space:]')" == "abc" ]]
+RUN [[ "$(printf 'x\n' | ./bin/syntran -c 'readln(); readln(); println(eof());' | tr -d '[:space:]')" == "true" ]]
+
+# std::OUT writes to stdout; std::ERR writes to stderr; std::IN reads from stdin
+RUN [[ "$(./bin/syntran -c 'writeln(std::OUT, "hello stdout");' | tr -d '[:space:]')" == "hellostdout" ]]
+RUN [[ "$(./bin/syntran -c 'writeln(std::ERR, "hello stderr");' 2>&1 >/dev/null | tr -d '[:space:]')" == "hellostderr" ]]
+RUN [[ "$(echo 'hello' | ./bin/syntran -c 'println(readln(std::IN));' | tr -d '[:space:]')" == "hello" ]]
+
+# close() on any standard handle is a runtime error (R28)
+RUN ./bin/syntran -c 'close(std::IN);'  2>&1 | grep -q "R28"
+RUN ./bin/syntran -c 'close(std::OUT);' 2>&1 | grep -q "R28"
+RUN ./bin/syntran -c 'close(std::ERR);' 2>&1 | grep -q "R28"
+
+# Interactive REPL tests (isocline history, Ctrl+R search, continuation
+# hints, arrow-key editing).  These need a real pty, which none of the
+# piped/`-c` tests above provide -- see src/tests/repl/test-repl.sh
+RUN bash src/tests/repl/test-repl.sh ./bin/syntran
 

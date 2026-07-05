@@ -1,0 +1,4 @@
+// E78: alias-hyphen
+// A module alias contains a hyphen
+
+use foo as ba-r;

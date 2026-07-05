@@ -146,10 +146,11 @@ Related functions: [`any`](#any), [`all`](#all)
 
 ## `eof`
 ```rust
+fn eof(): bool
 fn eof(file_handle: file): bool
 ```
 
-Has the end of file (EOF) been reached yet while reading from `file_handle`?  The return value is `false` until and including the last line is read and does not become `true` until reading *past* the EOF is attempted, for which [`readln()`](#readln) will return an empty string
+Has the end of file (EOF) been reached yet while reading from `file_handle`, or from stdin if called with no argument?  The return value is `false` until and including the last line is read and does not become `true` until reading *past* the EOF is attempted, for which [`readln()`](#readln) will return an empty string
 
 Related functions: [`close`](#close), [`readln`](#readln), [`open`](#open)
 
@@ -172,6 +173,27 @@ fn exp(x: any_float): any_float
 ```
 
 Compute the base _e_ exponential of `x`
+
+## `getenv`
+```rust
+fn getenv(name: str): str
+```
+
+Return the value of the environment variable `name`.  It is a runtime error if
+`name` is not set; guard with [`hasenv`](#hasenv) first.  Must be called with
+the `std::` prefix, e.g. `std::getenv("HOME")`.
+
+Related functions: [`hasenv`](#hasenv)
+
+## `hasenv`
+```rust
+fn hasenv(name: str): bool
+```
+
+Return whether the environment variable `name` is set.  Must be called with
+the `std::` prefix, e.g. `std::hasenv("HOME")`.
+
+Related functions: [`getenv`](#getenv)
 
 ## `i32`
 ```rust
@@ -220,12 +242,15 @@ Return the argument with the largest (most positive) value.  The arguments of
 invocation.  For example, this is a parser error:
 ```rust
 let x = max(1, 2.0);
-// Error: function `max` parameter 1 `a1` requires type `i32` but was given `f64`
+// Error[E42]: function `max` parameter 1 `a1` requires type `i32` but was given `f64`
 //   --> <stdin>:1:8
 //    |
 //  1 | max(1, 2.0);
 //    |        ^^^ wrong argument type
 ```
+Every syntran error, warning, and internal diagnostic carries a unique code
+like `E42` above (in the style of rustc's `error[E0631]`). See
+[errors.md](errors.md) for the full index of codes.
 
 Seperate invocations with different types are fine:
 ```rust
@@ -324,10 +349,11 @@ Related functions: [`str`](#str), [`writeln`](#writeln)
 
 ## `readln`
 ```rust
+fn readln(): str
 fn readln(file_handle: file): str
 ```
 
-Read a single line from `file_handle`
+Read a single line from `file_handle`, or from stdin if called with no argument
 
 Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open)
 

@@ -97,12 +97,14 @@ recursive module subroutine fn_copy(dst, src)
 
 	!print *, 'starting fn_copy()'
 
-	dst%type          = src%type
-	dst%variadic_min  = src%variadic_min
-	dst%variadic_max  = src%variadic_max
-	dst%variadic_type = src%variadic_type
-	dst%param_names   = src%param_names
-	dst%is_intr       = src%is_intr
+	dst%type            = src%type
+	dst%variadic_min    = src%variadic_min
+	dst%variadic_max    = src%variadic_max
+	dst%variadic_type   = src%variadic_type
+	dst%param_names     = src%param_names
+	dst%is_intr         = src%is_intr
+	dst%is_method       = src%is_method
+	dst%is_const_method = src%is_const_method
 
 	if (allocated(src%variadic_name)) then
 		if (allocated(dst%variadic_name)) deallocate(dst%variadic_name)
@@ -230,6 +232,7 @@ recursive module subroutine syntax_node_copy(dst, src)
 	dst%id_index   = src%id_index
 	dst%num_locs   = src%num_locs
 	dst%is_loc     = src%is_loc
+	dst%root_kind  = src%root_kind
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
@@ -297,6 +300,12 @@ recursive module subroutine syntax_node_copy(dst, src)
 		dst%is_ref = src%is_ref
 	else if (allocated(dst%is_ref)) then
 		deallocate(dst%is_ref)
+	end if
+
+	if (allocated(src%is_const_ref)) then
+		dst%is_const_ref = src%is_const_ref
+	else if (allocated(dst%is_const_ref)) then
+		deallocate(dst%is_const_ref)
 	end if
 
 	if (allocated(src%condition)) then
@@ -449,6 +458,7 @@ recursive module subroutine syntax_node_move(src, dst)
 	dst%id_index        = src%id_index
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
+	dst%root_kind       = src%root_kind
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit
 	dst%usub_omit       = src%usub_omit
@@ -470,8 +480,9 @@ recursive module subroutine syntax_node_move(src, dst)
 	call move_alloc(src%first_expected, dst%first_expected)
 
 	! Allocatable primitive arrays
-	call move_alloc(src%params, dst%params)
-	call move_alloc(src%is_ref, dst%is_ref)
+	call move_alloc(src%params,       dst%params)
+	call move_alloc(src%is_ref,       dst%is_ref)
+	call move_alloc(src%is_const_ref, dst%is_const_ref)
 
 	! Scalar allocatable node children
 	call move_alloc(src%left,        dst%left)
@@ -521,6 +532,7 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	dst%id_index        = src%id_index
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
+	dst%root_kind       = src%root_kind
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit
 	dst%usub_omit       = src%usub_omit
@@ -542,8 +554,9 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	call move_alloc(src%first_expected, dst%first_expected)
 
 	! Allocatable primitive arrays
-	call move_alloc(src%params, dst%params)
-	call move_alloc(src%is_ref, dst%is_ref)
+	call move_alloc(src%params,       dst%params)
+	call move_alloc(src%is_ref,       dst%is_ref)
+	call move_alloc(src%is_const_ref, dst%is_const_ref)
 
 	! Scalar allocatable node children
 	call move_alloc(src%left,        dst%left)
@@ -592,6 +605,7 @@ recursive module subroutine ternary_tree_copy(dst, src)
 	dst%split_char = src%split_char
 
 	dst%id_index = src%id_index
+	dst%is_const = src%is_const
 
 	if (allocated(src%val)) then
 		if (.not. allocated(dst%val)) allocate(dst%val)

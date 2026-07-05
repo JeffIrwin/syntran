@@ -56,11 +56,17 @@ module syntran__parse_m
 		character(len = :), allocatable :: fn_name
 		logical :: returned
 
+		! Method parsing context: set while parsing a method body
+		logical :: in_method = .false.
+		logical :: in_const_method = .false.
+		integer :: self_loc_id = 0     ! loc slot index of "0self"
+		type(struct_t) :: method_struct  ! struct whose method is being parsed
+
 		! Pass index.  0 on first pass while getting fn signatures, then 1 on
 		! final (second) pass
 		integer :: ipass
 
-		logical :: repl
+		logical :: repl = .false.
 
 		type(map_i32_t) :: import_stack
 		type(map_i32_t) :: imported_modules
@@ -80,6 +86,7 @@ module syntran__parse_m
 				parse_expr, &
 				parse_expr_statement, &
 				parse_fn_declaration, &
+				parse_method_declaration, &
 				parse_fn_call, &
 				parse_qualified_expr, &
 				parse_struct_declaration, &
@@ -146,11 +153,31 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: decl
 		end subroutine parse_struct_declaration
 
+		module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: decl
+			type(struct_t), intent(in) :: struct
+			logical, intent(in) :: is_const
+			character(len = *), intent(in) :: struct_name
+		end subroutine parse_method_declaration
+
 		recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: inst
 			character(len = *), intent(in), optional :: struct_name
 		end subroutine parse_struct_instance
+
+		module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
+				fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref)
+			class(parser_t), intent(inout) :: parser
+			type(syntax_node_t), intent(in) :: arg
+			logical(kind = 1), intent(in) :: call_is_ref_i
+			type(text_span_t), intent(in) :: arg_span
+			character(len = *), intent(in) :: fn_name, param_name
+			integer, intent(in) :: i_0based
+			type(value_t), intent(in) :: param_val
+			logical, intent(in) :: param_is_ref, param_is_const_ref
+		end subroutine check_call_arg
 
 	end interface
 

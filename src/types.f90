@@ -46,6 +46,9 @@ module syntran__types_m
 		! M6: integer dispatch id for intrinsic fns (0 = unassigned / user fn)
 		integer :: intr_id = 0
 
+		logical :: is_method = .false.
+		logical :: is_const_method = .false.
+
 		contains
 #ifndef SYNTRAN_INTEL
 			procedure, pass(dst) :: copy => fn_copy
@@ -160,12 +163,17 @@ module syntran__types_m
 		integer :: id_index = 0, num_locs
 		logical :: is_loc = .false.
 
+		! When a dot_expr's root was a fn_call_expr or method_call_expr (e.g.
+		! `fn().field`), root_kind stores the original kind so evaluators can
+		! re-evaluate the root as a function call and then apply the member chain.
+		integer :: root_kind = 0
+
 		integer, allocatable :: params(:)
-		logical, allocatable :: is_ref(:)  ! is param passed by reference?
+		logical, allocatable :: is_ref(:)       ! is param passed by reference?
+		logical, allocatable :: is_const_ref(:) ! is ref param declared &const?
 
 		type(value_t) :: val
 
-		!type(struct_t), allocatable :: struct
 		character(len = :), allocatable :: struct_name
 
 		! Module prefix for qualified names (e.g., "std" in "std::println")
@@ -208,6 +216,7 @@ module syntran__types_m
 
 		type(value_t), allocatable :: val
 		integer :: id_index
+		logical :: is_const = .false.
 
 		contains
 			!procedure :: print => ternary_node_print
@@ -436,21 +445,23 @@ module syntran__types_m
 			logical, intent(in), optional :: overwrite
 		end subroutine fn_insert
 
-		module subroutine var_insert(dict, key, val, id_index, iostat, overwrite)
+		module subroutine var_insert(dict, key, val, id_index, iostat, overwrite, is_const)
 			class(vars_t) :: dict
 			character(len = *), intent(in) :: key
 			type(value_t), intent(in) :: val
 			integer, intent(in) :: id_index
 			integer, intent(out), optional :: iostat
 			logical, intent(in), optional :: overwrite
+			logical, intent(in), optional :: is_const
 		end subroutine var_insert
 
-		module subroutine var_search(dict, key, id_index, iostat, val)
+		module subroutine var_search(dict, key, id_index, iostat, val, is_const)
 			class(vars_t), intent(in) :: dict
 			character(len = *), intent(in) :: key
 			integer, intent(out) :: id_index
 			type(value_t), intent(out) :: val
 			integer, intent(out), optional :: iostat
+			logical, intent(out), optional :: is_const
 		end subroutine var_search
 
 		module function var_closest(dict, key) result(closest)
@@ -488,12 +499,13 @@ module syntran__types_m
 			type(syntax_node_t), intent(inout) :: val
 		end subroutine push_node_move
 
-		recursive module subroutine ternary_search(node, key, id_index, iostat, val)
+		recursive module subroutine ternary_search(node, key, id_index, iostat, val, is_const)
 			type(ternary_tree_node_t), intent(in), allocatable :: node
 			character(len = *), intent(in) :: key
 			integer, intent(out) :: id_index
 			integer, intent(out) :: iostat
 			type(value_t), intent(out) :: val
+			logical, intent(out), optional :: is_const
 		end subroutine ternary_search
 
 		recursive module subroutine ternary_closest(node, prefix, target_low, &
@@ -512,13 +524,14 @@ module syntran__types_m
 			character(len = :), allocatable, intent(inout) :: closest
 		end subroutine fn_ternary_closest
 
-		recursive module subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
+		recursive module subroutine ternary_insert(node, key, val, id_index, iostat, overwrite, is_const)
 			type(ternary_tree_node_t), intent(inout), allocatable :: node
 			character(len = *), intent(in) :: key
 			type(value_t), intent(in) :: val
 			integer, intent(in) :: id_index
 			integer, intent(out) :: iostat
 			logical, intent(in) :: overwrite
+			logical, intent(in), optional :: is_const
 		end subroutine ternary_insert
 
 		recursive module function fn_ternary_search(node, key, id_index, iostat) result(val)

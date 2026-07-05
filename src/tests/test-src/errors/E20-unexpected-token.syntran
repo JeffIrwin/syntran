@@ -1,0 +1,6 @@
+// E20: unexpected-token
+// The parser encountered a token it didn't expect at this position
+
+let a = 1;
+
+let b = ;

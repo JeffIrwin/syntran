@@ -3,14 +3,14 @@ use ../../utils;
 
 //==============================================================================
 
-let ifile = 1;
+const ifile = 1;
 
-let filenames =
+const filenames =
 [
 	"test-input.txt",
 	"input.txt"
 ];
-let filename = filenames[ifile];
+const filename = filenames[ifile];
 
 //==============================================================================
 
@@ -66,7 +66,7 @@ fn part1(): i32
 
 fn part2(): i32
 {
-	let n = utils::countln_(filename);
+	const n = utils::countln_(filename);
 	//println("n = ", n);
 
 	let ncopies = [1; n];

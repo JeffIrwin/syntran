@@ -1,0 +1,33 @@
+
+// Test arr_sub (index-array subscript) with an empty index array.
+//
+// When the index array is empty (e.g. `ifree = []`), reads and writes
+// should produce / consume empty slices without crashing.
+
+fn test_empty_arrsub(): i32
+{
+	let x = [10, 20, 30, 40, 50];
+
+	// Empty index array  (nfree = 0 → ifree = [])
+	let nfree = 0;
+	let ifree = [0; nfree];  // 0-element i32 array
+
+	// Read: x[ifree] should return an empty slice (no crash)
+	let slice = x[ifree];
+	if (size(slice, 0) != 0)
+		return 1;
+
+	// Write: x[ifree] = combos should be a no-op (no crash)
+	let combos = [0; nfree];
+	x[ifree] = combos;
+
+	// x must be unchanged
+	let expect = [10, 20, 30, 40, 50];
+	let norm = sum(abs(x - expect));
+	if (norm != 0)
+		return 2;
+
+	return 0;
+}
+
+return test_empty_arrsub();

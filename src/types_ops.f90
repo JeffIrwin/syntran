@@ -273,6 +273,9 @@ module integer function get_keyword_kind(text) result(kind)
 		case ("use")
 			kind = use_keyword
 
+		case ("const")
+			kind = const_keyword
+
 		case default
 			kind = identifier_token
 

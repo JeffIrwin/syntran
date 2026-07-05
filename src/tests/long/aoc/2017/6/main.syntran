@@ -1,0 +1,145 @@
+
+#include("../../utils.syntran");
+#include("../../dict_i64.syntran");
+
+//==============================================================================
+
+let ifile = 0;
+ifile = 1;
+
+let filenames =
+[
+	"test-input.txt",
+	"input.txt"
+];
+let filename = filenames[ifile];
+
+//==============================================================================
+
+fn part1(): str
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename, "r");
+	let str_ = readln(f);
+	//println("str_ = ", str_);
+	close(f);
+
+	let v = parse_i32_delim(str_, char(9));
+	//println("v = ", v);
+	let n = size(v, 0);
+
+	let k = 0;
+	let seen = new_dict_i64();
+	while true
+	{
+		let key = str(v);
+		if (get_dict_i64(&seen, key) == 1) break;
+		set_dict_i64(&seen, key, 1'i64);
+		k += 1;
+
+		let vmax = -1;
+		let imax = -1;
+		for i in [0: n]
+			if v[i] > vmax
+			{
+				vmax = v[i];
+				imax = i;
+			}
+		//println("vmax, imax = ", [vmax, imax]);
+
+		v[imax] = 0;
+		v += vmax / n;
+
+		//v[[imax+1: imax+n] % n] += 1;
+		v[[imax+1: imax + (vmax)%n + 1] % n] += 1;
+
+		//println("v = ", v);
+	}
+	sum_ = k;
+
+	println("part 1 = ", sum_);
+	return str(sum_);
+}
+
+fn part2(): str
+{
+	let sum_ = 0'i64;
+
+	let f = open(filename, "r");
+	let str_ = readln(f);
+	//println("str_ = ", str_);
+	close(f);
+
+	let v = parse_i32_delim(str_, char(9));
+	//println("v = ", v);
+	let n = size(v, 0);
+
+	let k = 0'i64;
+	let seen = new_dict_i64();
+	while true
+	{
+		let key = str(v);
+
+		let last_seen = get_dict_i64(&seen, key);
+		if (last_seen >= 0)
+		{
+			sum_ = k - last_seen;
+			break;
+		}
+		set_dict_i64(&seen, key, k);
+		k += 1;
+
+		let vmax = -1;
+		let imax = -1;
+		for i in [0: n]
+			if v[i] > vmax
+			{
+				vmax = v[i];
+				imax = i;
+			}
+		//println("vmax, imax = ", [vmax, imax]);
+
+		// Current bank resets to 0
+		v[imax] = 0;
+
+		// Every bank gets at least this many (may divide to 0 though).  Happens
+		// in test input, but maybe not in real input
+		v += vmax / n;
+
+		// These banks (just after imax) get 1 extra
+		v[[imax+1: imax + vmax%n + 1] % n] += 1;
+
+		//println("v = ", v);
+	}
+	//sum_ = k;
+
+	println("part 2 = ", sum_);
+	return str(sum_);
+}
+
+//==============================================================================
+
+fn main(): str
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2017/6");
+
+	let p1 = ""; let p2 = "";
+
+	p1 = part1();
+	p2 = part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return p1 + ":" + p2;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

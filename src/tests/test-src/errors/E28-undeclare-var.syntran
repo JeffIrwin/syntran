@@ -1,0 +1,6 @@
+// E28: undeclare-var
+// A variable was referenced before being declared in scope
+
+let a = 1;
+let b = 2;
+let c = nonexistent_var;

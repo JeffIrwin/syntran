@@ -1,0 +1,10 @@
+// Module with a bare expression statement, which is banned outside the REPL.
+// Regression test for parser_t%repl being read uninitialized when parsing an
+// imported module (mod_parser in parse_use_statement never set %repl before
+// parser_t gave it a default value of .false.). Importing this module must
+// always produce the E9 bad-expr diagnostic, not just intermittently.
+
+let a = 1;
+let b = 2;
+
+a + b;

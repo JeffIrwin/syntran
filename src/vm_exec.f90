@@ -191,7 +191,7 @@ end subroutine do_compound
 
 !===============================================================================
 
-subroutine do_binop(left, right, op_kind, restype, res)
+subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 
 	! Compute a binary operation on two values, mirroring eval_binary_expr.
 	! restype: pre-computed result type from the compiler (node%val%type).
@@ -204,6 +204,13 @@ subroutine do_binop(left, right, op_kind, restype, res)
 	type(value_t), intent(in) :: left, right
 	integer, intent(in) :: op_kind, restype
 	type(value_t), intent(out) :: res
+
+	! Set (allocated) on a reachable matmul dimension-mismatch runtime error.
+	! See the comment on matmul_value_t() in math_bin_matmul.f90: that module
+	! has no access to state_t, so the caller (vm_run's OP_BINOP handler,
+	! which does have state) is responsible for translating an allocated
+	! rt_err into call rt_throw(state, rt_err)
+	character(len = :), allocatable, intent(out) :: rt_err
 
 	!*******
 
@@ -235,7 +242,7 @@ subroutine do_binop(left, right, op_kind, restype, res)
 	case (star_token)
 		call mul(left, right, res, '*')
 	case (matmul_token)
-		call matmul_(left, right, res, '@')
+		call matmul_(left, right, res, '@', rt_err)
 	case (sstar_token)
 		call pow(left, right, res, '**')
 	case (slash_token)
@@ -372,19 +379,27 @@ subroutine do_array_binop_typed(left, right, op_kind, elem_type, res)
 	case (eequals_token)
 		res%array = mold(left%array, bool_type)
 		select case (elem_type)
-		case (i32_type); res%array%bool = left%array%i32 == right%array%i32
-		case (i64_type); res%array%bool = left%array%i64 == right%array%i64
-		case (f32_type); res%array%bool = left%array%f32 == right%array%f32
-		case (f64_type); res%array%bool = left%array%f64 == right%array%f64
+		case (i32_type);  res%array%bool = left%array%i32  == right%array%i32
+		case (i64_type);  res%array%bool = left%array%i64  == right%array%i64
+		case (f32_type);  res%array%bool = left%array%f32  == right%array%f32
+		case (f64_type);  res%array%bool = left%array%f64  == right%array%f64
+		case (bool_type); res%array%bool = left%array%bool .eqv. right%array%bool
 		end select
 	case (bang_equals_token)
 		res%array = mold(left%array, bool_type)
 		select case (elem_type)
-		case (i32_type); res%array%bool = left%array%i32 /= right%array%i32
-		case (i64_type); res%array%bool = left%array%i64 /= right%array%i64
-		case (f32_type); res%array%bool = left%array%f32 /= right%array%f32
-		case (f64_type); res%array%bool = left%array%f64 /= right%array%f64
+		case (i32_type);  res%array%bool = left%array%i32  /= right%array%i32
+		case (i64_type);  res%array%bool = left%array%i64  /= right%array%i64
+		case (f32_type);  res%array%bool = left%array%f32  /= right%array%f32
+		case (f64_type);  res%array%bool = left%array%f64  /= right%array%f64
+		case (bool_type); res%array%bool = left%array%bool .neqv. right%array%bool
 		end select
+	case (and_keyword)
+		res%array = mold(left%array, bool_type)
+		if (elem_type == bool_type) res%array%bool = left%array%bool .and. right%array%bool
+	case (or_keyword)
+		res%array = mold(left%array, bool_type)
+		if (elem_type == bool_type) res%array%bool = left%array%bool .or. right%array%bool
 
 	end select
 
@@ -435,6 +450,10 @@ module subroutine vm_run(prog, state, res)
 
 	type(value_vector_t) :: stack
 	type(value_t) :: left, right, val
+
+	! Set (allocated) by do_binop() on a reachable matmul dimension-mismatch
+	! runtime error.  See the comment on do_binop()
+	character(len = :), allocatable :: rt_err
 	! params_pool: reusable buffer for fn-call / return parameter passing.
 	! Grows on demand; avoids allocate/deallocate on every OP_CALL / OP_RET.
 	type(value_t), allocatable :: params_pool(:)
@@ -511,7 +530,11 @@ module subroutine vm_run(prog, state, res)
 		case (OP_BINOP)
 			call vm_pop_copy(stack, right)
 			call vm_pop_copy(stack, left)
-			call do_binop(left, right, instr%a, instr%b, val)
+			call do_binop(left, right, instr%a, instr%b, val, rt_err)
+			if (allocated(rt_err)) then
+				call rt_throw(state, rt_err)
+				exit
+			end if
 			call vm_push_move(stack, val)
 
 		! --- unary operation ---
@@ -651,7 +674,20 @@ module subroutine vm_run(prog, state, res)
 			! Write by-ref modified values back to caller's variable slots.
 			do i = 1, nparams
 				if (.not. cn%is_ref(i)) cycle
-				if (cn%args(i)%is_loc) then
+				! Temporary receiver (fn-return value or fn-return-with-field): no writeback
+				if (cn%args(i)%kind == fn_call_expr .or. &
+				    cn%args(i)%kind == method_call_expr .or. &
+				    cn%args(i)%kind == fn_call_intr_expr .or. &
+				    cn%args(i)%root_kind /= 0) cycle
+				if (allocated(cn%args(i)%lsubscripts) .or. &
+				    cn%args(i)%kind == dot_expr) then
+					! Subscripted or dot-expr receiver: write element back via set_val.
+					if (cn%args(i)%is_loc) then
+						call set_val(cn%args(i), state%locs%vals(cn%args(i)%id_index), state, params_pool(i))
+					else
+						call set_val(cn%args(i), state%vars%vals(cn%args(i)%id_index), state, params_pool(i))
+					end if
+				else if (cn%args(i)%is_loc) then
 					call value_move(params_pool(i), &
 						state%locs%vals(cn%args(i)%id_index))
 				else
@@ -859,6 +895,17 @@ module subroutine vm_run(prog, state, res)
 			call vm_push_move(stack, val)
 			end associate
 
+		! --- dot member read from fn/method return value (root on TOS) -----------
+		! M5: root struct value already on stack (pushed by compiled fn call).
+		! Pops root, applies member chain from wrapper node via get_val.
+		case (OP_LOAD_MEMBER_TOS)
+			call vm_pop_copy(stack, left)
+			associate(n => prog%nodes(instr%a))
+			call get_val(n, left, state, val)
+			end associate
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
+
 		! --- dot member write -----------------------------------------------------
 		! M5: pops RHS from stack, reads current member via get_val, applies the
 		! compound op, writes back via set_val, and pushes the new member value.
@@ -875,6 +922,7 @@ module subroutine vm_run(prog, state, res)
 				call do_compound(val, right, instr%b)
 				call set_val(n, state%vars%vals(id), state, val)
 			end if
+			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 			end associate
 
@@ -894,22 +942,34 @@ module subroutine vm_run(prog, state, res)
 				call vm_pop_copy(stack, iargs_pool(i))
 			end do
 
-			if (instr%a == INTR_READLN) then
-				! readln: read a line from the file; set eof flag on the orig slot.
+			if (instr%a == INTR_READLN .and. nintr >= 1) then
+				! readln(file_handle): read a line from the file; set eof flag on
+				! the orig slot.  (No-arg readln() reads stdin and has no slot to
+				! write back to; it falls through to the native dispatch below)
 				block
 				integer :: slot_id_, io_
 				logical :: is_loc_
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
 				if (.not. iargs_pool(1)%file_%is_open) then
-					write(*,*) err_rt_prefix//'readln() was called for file "' &
-						//iargs_pool(1)%file_%name_//'" which is not open'
-					call internal_error()
+					call rt_throw(state, err_rt(RC_READLN_NOT_OPEN, 'readln() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which is not open'))
+					exit
 				end if
 				if (.not. iargs_pool(1)%file_%mode_read) then
-					write(*,*) err_rt_prefix//'readln() was called for file "' &
-						//iargs_pool(1)%file_%name_//'" which was not opened in read mode "r"'
-					call internal_error()
+					call rt_throw(state, err_rt(RC_READLN_NOT_READ_MODE, 'readln() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which was not opened in read mode "r"'))
+					exit
+				end if
+				if (iargs_pool(1)%file_%eof) then
+					! Reading again after the eof flag was already set is
+					! non-portable across compiler runtimes (some return a
+					! generic error iostat, others just return iostat_end
+					! again).  Throw deterministically instead of relying on
+					! the runtime's iostat
+					call rt_throw(state, err_rt(RC_READLN_FAIL, 'cannot readln() from file "' &
+						//iargs_pool(1)%file_%name_//'" past end of file'))
+					exit
 				end if
 				val%type = str_type
 				if (.not. allocated(val%str)) allocate(val%str)
@@ -921,9 +981,9 @@ module subroutine vm_run(prog, state, res)
 						state%vars%vals(slot_id_)%file_%eof = .true.
 					end if
 				else if (io_ /= 0 .and. io_ /= iostat_eor) then
-					write(*,*) err_rt_prefix//'cannot readln() from file "' &
-						//iargs_pool(1)%file_%name_//'"'
-					call internal_error()
+					call rt_throw(state, err_rt(RC_READLN_FAIL, 'cannot readln() from file "' &
+						//iargs_pool(1)%file_%name_//'"'))
+					exit
 				end if
 				end block
 
@@ -934,10 +994,15 @@ module subroutine vm_run(prog, state, res)
 				logical :: is_loc_
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
+				if (iargs_pool(1)%file_%is_std) then
+					call rt_throw(state, err_rt(RC_CLOSE_STANDARD, 'close() cannot be called on ' &
+						//'standard file handle "'//iargs_pool(1)%file_%name_//'"'))
+					exit
+				end if
 				if (.not. iargs_pool(1)%file_%is_open) then
-					write(*,*) err_rt_prefix//'close() was called for file "' &
-						//iargs_pool(1)%file_%name_//'" which is not open'
-					call internal_error()
+					call rt_throw(state, err_rt(RC_CLOSE_NOT_OPEN, 'close() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which is not open'))
+					exit
 				end if
 				if (is_loc_) then
 					state%locs%vals(slot_id_)%file_%is_open = .false.
@@ -950,6 +1015,7 @@ module subroutine vm_run(prog, state, res)
 
 			else
 				call vm_call_intr(instr%a, nintr, iargs_pool(1:nintr), state, val)
+				if (state%rt_halt) exit
 			end if
 
 			call vm_push_move(stack, val)
@@ -981,6 +1047,7 @@ module subroutine vm_run(prog, state, res)
 				call syntax_eval(nd%array%ubound, state, for_iters(fi)%ubound_)
 			if (allocated(nd%array%len_  )) &
 				call syntax_eval(nd%array%len_,   state, for_iters(fi)%len_   )
+			if (state%rt_halt) exit
 
 			select case (nd%array%kind)
 			case (array_expr)
@@ -998,7 +1065,7 @@ module subroutine vm_run(prog, state, res)
 						for_iters(fi)%itr_type = i32_type
 					end if
 					if (.not. any(for_iters(fi)%itr_type == [i32_type, i64_type])) then
-						write(*,*) err_int_prefix//'unit step array type not implemented'//color_reset
+						write(*,*) err_int(IC_UNIT_STEP_TYPE, 'unit step array type not implemented')
 						call internal_error()
 					end if
 					for_iters(fi)%len8 = for_iters(fi)%ubound_%to_i64() &
@@ -1019,8 +1086,8 @@ module subroutine vm_run(prog, state, res)
 					select case (for_iters(fi)%itr_type)
 					case (i32_type)
 						if (for_iters(fi)%step%sca%i32 == 0) then
-							write(*,*) err_rt_prefix//'for loop step is 0'//color_reset
-							call internal_error()
+							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
+							exit
 						end if
 						for_iters(fi)%len8 = ( &
 							for_iters(fi)%ubound_%sca%i32 - for_iters(fi)%lbound_%sca%i32 &
@@ -1028,8 +1095,8 @@ module subroutine vm_run(prog, state, res)
 							- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
 					case (i64_type)
 						if (for_iters(fi)%step%sca%i64 == 0) then
-							write(*,*) err_rt_prefix//'for loop step is 0'//color_reset
-							call internal_error()
+							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
+							exit
 						end if
 						for_iters(fi)%len8 = ( &
 							for_iters(fi)%ubound_%sca%i64 - for_iters(fi)%lbound_%sca%i64 &
@@ -1037,22 +1104,22 @@ module subroutine vm_run(prog, state, res)
 							- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
 					case (f32_type)
 						if (for_iters(fi)%step%sca%f32 == 0.0) then
-							write(*,*) err_rt_prefix//'for loop step is 0.0'//color_reset
-							call internal_error()
+							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
+							exit
 						end if
 						for_iters(fi)%len8 = ceiling( &
 							(for_iters(fi)%ubound_%sca%f32 - for_iters(fi)%lbound_%sca%f32) &
 							/ for_iters(fi)%step%sca%f32)
 					case (f64_type)
 						if (for_iters(fi)%step%sca%f64 == 0.0d0) then
-							write(*,*) err_rt_prefix//'for loop step is 0.0'//color_reset
-							call internal_error()
+							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
+							exit
 						end if
 						for_iters(fi)%len8 = ceiling( &
 							(for_iters(fi)%ubound_%sca%f64 - for_iters(fi)%lbound_%sca%f64) &
 							/ for_iters(fi)%step%sca%f64)
 					case default
-						write(*,*) err_int_prefix//'step array type not implemented'//color_reset
+						write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type not implemented')
 						call internal_error()
 					end select
 
@@ -1062,7 +1129,7 @@ module subroutine vm_run(prog, state, res)
 					case (f32_type, f64_type)
 						for_iters(fi)%len8 = for_iters(fi)%len_%to_i64()
 					case default
-						write(*,*) err_int_prefix//'bound/len array type not implemented'//color_reset
+						write(*,*) err_int(IC_BOUND_LEN_TYPE, 'bound/len array type not implemented')
 						call internal_error()
 					end select
 
@@ -1074,6 +1141,9 @@ module subroutine vm_run(prog, state, res)
 					for_iters(fi)%len8 = 1
 					do i = 1, rk_
 						call syntax_eval(nd%array%size(i), state, tmp_)
+						! Note: state%rt_halt is checked once after this loop
+						! (not inside it), since a bare exit here would only
+						! break this inner do, not the outer VM dispatch loop
 						for_iters(fi)%len8 = for_iters(fi)%len8 * tmp_%to_i64()
 					end do
 
@@ -1086,7 +1156,7 @@ module subroutine vm_run(prog, state, res)
 					end do
 
 				case default
-					write(*,*) err_int_prefix//'for loop: unknown array kind'//color_reset
+					write(*,*) err_int(IC_FOR_ARRAY_KIND, 'for loop: unknown array kind')
 					call internal_error()
 				end select
 
@@ -1106,7 +1176,124 @@ module subroutine vm_run(prog, state, res)
 				end if
 			end select
 
+			! Catches rt_halt set anywhere above: the size_array/unif_array
+			! length loops (which can't safely exit the outer dispatch loop
+			! from inside their own inner do), and the non-primary array
+			! expression case just above
+			if (state%rt_halt) exit
+
 			end associate
+			end block
+
+		! --- P6: native for-loop setup ---------------------------------------------
+		! Bounds are pre-compiled to bytecode; this handler pops them from the
+		! operand stack to populate for_iters(fi), avoiding syntax_eval entirely.
+		! a = node_idx   (OP_FOR_NEXT still needs nd%is_loc, nd%id_index)
+		! b = for_kind   (bound_array / step_array / len_array)
+		! c = itr_type   (static hint; promote logic below may override for int cases)
+		case (OP_FOR_SETUP_NAT)
+			block
+			integer :: fi
+
+			if (nfor + 1 > size(for_iters)) call grow_fors(for_iters)
+			nfor = nfor + 1
+			fi = nfor
+			for_iters(fi)%node_idx = instr%a
+			for_iters(fi)%counter  = 0
+			for_iters(fi)%len8     = 0
+			for_iters(fi)%for_kind = instr%b
+			for_iters(fi)%itr_type = int(instr%c)
+
+			select case (instr%b)
+
+			case (bound_array)
+				! Stack: [lb][ub], ub at TOS
+				call value_move(stack%v(stack%len_  ), for_iters(fi)%ubound_)
+				call value_move(stack%v(stack%len_-1), for_iters(fi)%lbound_)
+				stack%len_ = stack%len_ - 2
+				if (any(i64_type == [for_iters(fi)%lbound_%type, &
+				                      for_iters(fi)%ubound_%type])) then
+					call promote_i32_i64(for_iters(fi)%lbound_)
+					call promote_i32_i64(for_iters(fi)%ubound_)
+					for_iters(fi)%itr_type = i64_type
+				else
+					for_iters(fi)%itr_type = i32_type
+				end if
+				for_iters(fi)%len8 = for_iters(fi)%ubound_%to_i64() &
+				                   - for_iters(fi)%lbound_%to_i64()
+
+			case (step_array)
+				! Stack: [lb][step][ub], ub at TOS
+				call value_move(stack%v(stack%len_  ), for_iters(fi)%ubound_)
+				call value_move(stack%v(stack%len_-1), for_iters(fi)%step  )
+				call value_move(stack%v(stack%len_-2), for_iters(fi)%lbound_)
+				stack%len_ = stack%len_ - 3
+				if (any(i64_type == [for_iters(fi)%lbound_%type, &
+				                      for_iters(fi)%step%type, &
+				                      for_iters(fi)%ubound_%type])) then
+					call promote_i32_i64(for_iters(fi)%lbound_)
+					call promote_i32_i64(for_iters(fi)%step)
+					call promote_i32_i64(for_iters(fi)%ubound_)
+					for_iters(fi)%itr_type = i64_type
+				else
+					for_iters(fi)%itr_type = for_iters(fi)%lbound_%type
+				end if
+				select case (for_iters(fi)%itr_type)
+				case (i32_type)
+					if (for_iters(fi)%step%sca%i32 == 0) then
+						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
+						exit
+					end if
+					for_iters(fi)%len8 = ( &
+						for_iters(fi)%ubound_%sca%i32 - for_iters(fi)%lbound_%sca%i32 &
+						+ for_iters(fi)%step%sca%i32  &
+						- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
+				case (i64_type)
+					if (for_iters(fi)%step%sca%i64 == 0) then
+						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
+						exit
+					end if
+					for_iters(fi)%len8 = ( &
+						for_iters(fi)%ubound_%sca%i64 - for_iters(fi)%lbound_%sca%i64 &
+						+ for_iters(fi)%step%sca%i64  &
+						- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
+				case (f32_type)
+					if (for_iters(fi)%step%sca%f32 == 0.0) then
+						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
+						exit
+					end if
+					for_iters(fi)%len8 = ceiling( &
+						(for_iters(fi)%ubound_%sca%f32 - for_iters(fi)%lbound_%sca%f32) &
+						/ for_iters(fi)%step%sca%f32)
+				case (f64_type)
+					if (for_iters(fi)%step%sca%f64 == 0.0d0) then
+						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
+						exit
+					end if
+					for_iters(fi)%len8 = ceiling( &
+						(for_iters(fi)%ubound_%sca%f64 - for_iters(fi)%lbound_%sca%f64) &
+						/ for_iters(fi)%step%sca%f64)
+				case default
+					write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type not implemented')
+					call internal_error()
+				end select
+
+			case (len_array)
+				! Stack: [lb][ub][len], len at TOS
+				call value_move(stack%v(stack%len_  ), for_iters(fi)%len_  )
+				call value_move(stack%v(stack%len_-1), for_iters(fi)%ubound_)
+				call value_move(stack%v(stack%len_-2), for_iters(fi)%lbound_)
+				stack%len_ = stack%len_ - 3
+				! itr_type comes from instr%c (f32_type or f64_type, set by compiler)
+				select case (for_iters(fi)%itr_type)
+				case (f32_type, f64_type)
+					for_iters(fi)%len8 = for_iters(fi)%len_%to_i64()
+				case default
+					write(*,*) err_int(IC_BOUND_LEN_TYPE, 'bound/len array type not implemented')
+					call internal_error()
+				end select
+
+			end select
 			end block
 
 		! --- M8: for-loop advance --------------------------------------------------
@@ -1515,6 +1702,411 @@ module subroutine vm_run(prog, state, res)
 			stack%len_ = base_ + 1
 			end block
 
+		! --- M10: compound array element op without subscript_eval ----------------
+		! Stack before: [sub_1]...[sub_nsub][rhs]
+		! Stack after:  [rhs]
+		! a=id_index, b=nsub, c=op_kind*2+is_local
+		case (OP_COMPOUND_IDX_NAT)
+			block
+			integer :: nsub_, k_, base_, op_kind_
+			integer(kind=8) :: lin_, prod_, c_
+
+			c_     = instr%c
+			nsub_  = instr%b
+			op_kind_ = int(c_ / 2_8)
+			base_  = stack%len_ - nsub_ - 1
+
+			lin_  = 0_8
+			prod_ = 1_8
+
+			if (mod(c_, 2_8) == 1_8) then
+				associate(arr => state%locs%vals(instr%a)%array)
+				do k_ = 1, nsub_
+					select case (stack%v(base_+k_)%type)
+					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
+					case (i64_type); lin_ = lin_ + prod_ * stack%v(base_+k_)%sca%i64
+					end select
+					prod_ = prod_ * arr%size(k_)
+				end do
+				! Read current element, apply compound op, write back
+				call get_array_val(arr, lin_, left)
+				call vm_pop_copy(stack, right)
+				stack%len_ = base_
+				call do_compound(left, right, op_kind_)
+				call set_array_val(arr, lin_, left)
+				end associate
+			else
+				associate(arr => state%vars%vals(instr%a)%array)
+				do k_ = 1, nsub_
+					select case (stack%v(base_+k_)%type)
+					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
+					case (i64_type); lin_ = lin_ + prod_ * stack%v(base_+k_)%sca%i64
+					end select
+					prod_ = prod_ * arr%size(k_)
+				end do
+				call get_array_val(arr, lin_, left)
+				call vm_pop_copy(stack, right)
+				stack%len_ = base_
+				call do_compound(left, right, op_kind_)
+				call set_array_val(arr, lin_, left)
+				end associate
+			end if
+			call vm_push_move(stack, left)
+			end block
+
+		! --- M10: native string subscript read ------------------------------------
+		! Handles two sub-cases at runtime:
+		!   scalar_str[i]  → 1-char read: val%str%s(i+1:i+1)
+		!   str_arr[i]     → full element read from rank-1 array: array%str(i+1)%s
+		! Stack before: [subscript]
+		! Stack after:  [result string]
+		! a=id_index, c=is_local
+		case (OP_STR_INDEX_NAT)
+			block
+			integer(kind=8) :: i8_
+
+			i8_ = stack%v(stack%len_)%to_i64()
+			stack%len_ = stack%len_ - 1
+			val%type = str_type
+			if (.not. allocated(val%str)) allocate(val%str)
+			if (instr%c == 1_8) then
+				associate(v => state%locs%vals(instr%a))
+				if (v%type == str_type) then
+					val%str%s = v%str%s(i8_+1 : i8_+1)
+				else
+					val%str%s = v%array%str(i8_+1)%s
+				end if
+				end associate
+			else
+				associate(v => state%vars%vals(instr%a))
+				if (v%type == str_type) then
+					val%str%s = v%str%s(i8_+1 : i8_+1)
+				else
+					val%str%s = v%array%str(i8_+1)%s
+				end if
+				end associate
+			end if
+			call vm_push_move(stack, val)
+			end block
+
+		! --- M10: native scalar string substring (bound_array range) read --------
+		! Stack before: [lbound][ubound]
+		! Stack after:  [substring]
+		! a=id_index, c=is_local
+		case (OP_STR_SLICE_NAT)
+			block
+			integer(kind=8) :: lb_, ub_
+
+			ub_ = stack%v(stack%len_  )%to_i64()
+			lb_ = stack%v(stack%len_-1)%to_i64()
+			stack%len_ = stack%len_ - 2
+			val%type = str_type
+			if (.not. allocated(val%str)) allocate(val%str)
+			if (instr%c == 1_8) then
+				val%str%s = state%locs%vals(instr%a)%str%s(lb_+1 : ub_)
+			else
+				val%str%s = state%vars%vals(instr%a)%str%s(lb_+1 : ub_)
+			end if
+			call vm_push_move(stack, val)
+			end block
+
+		! OP_SLICE_NAT: native array range-slice read.  All subscripts are range_sub
+		! with explicit bounds compiled onto the stack.
+		! Stack before: [lb_1][ub_1][lb_2][ub_2]...[lb_n][ub_n]
+		! Stack after:  [result_array]
+		! a=id_index, b=ndim, c=is_local
+		case (OP_SLICE_NAT)
+			block
+			integer :: ndim_, k_
+			integer(kind=8) :: lb_(MAX_NAT_SLICE_RANK), ub_(MAX_NAT_SLICE_RANK), lens_(MAX_NAT_SLICE_RANK)
+			integer(kind=8) :: len_tot_, outer_count_, outer_i_
+			integer(kind=8) :: src_off_, src_prod_, dst_off_, ci_, tmp_i_
+
+			ndim_ = instr%b
+
+			! Bounds pushed [lb_1,ub_1,...,lb_n,ub_n]; pop in reverse so we get dim 1 first.
+			do k_ = ndim_, 1, -1
+				ub_(k_) = stack%v(stack%len_  )%to_i64()
+				lb_(k_) = stack%v(stack%len_-1)%to_i64()
+				stack%len_ = stack%len_ - 2
+			end do
+
+			do k_ = 1, ndim_
+				lens_(k_) = max(0_8, ub_(k_) - lb_(k_))
+			end do
+			len_tot_ = product(lens_(1:ndim_))
+
+			allocate(val%array)
+			val%type        = array_type
+			val%array%kind  = expl_array
+			val%array%rank  = ndim_
+			val%array%len_  = len_tot_
+			allocate(val%array%size(ndim_))
+			val%array%size(1:ndim_) = lens_(1:ndim_)
+
+			if (instr%c == 1_8) then
+				associate(src => state%locs%vals(instr%a)%array)
+				val%array%type = src%type
+				call allocate_array(val, len_tot_)
+				if (ndim_ == 1) then
+					select case (src%type)
+					case (bool_type); val%array%bool(1:len_tot_) = src%bool(lb_(1)+1 : ub_(1))
+					case (i32_type);  val%array%i32 (1:len_tot_) = src%i32 (lb_(1)+1 : ub_(1))
+					case (i64_type);  val%array%i64 (1:len_tot_) = src%i64 (lb_(1)+1 : ub_(1))
+					case (f32_type);  val%array%f32 (1:len_tot_) = src%f32 (lb_(1)+1 : ub_(1))
+					case (f64_type);  val%array%f64 (1:len_tot_) = src%f64 (lb_(1)+1 : ub_(1))
+					case (str_type);  val%array%str (1:len_tot_) = src%str (lb_(1)+1 : ub_(1))
+					end select
+				else
+					outer_count_ = product(lens_(2:ndim_))
+					do outer_i_ = 0, outer_count_ - 1
+						! Decompose outer_i_ into per-dim coords; compute flat source offset.
+						src_off_  = 0_8
+						src_prod_ = src%size(1)
+						tmp_i_    = outer_i_
+						do k_ = 2, ndim_
+							ci_       = mod(tmp_i_, lens_(k_))
+							tmp_i_    = tmp_i_ / lens_(k_)
+							src_off_  = src_off_ + (lb_(k_) + ci_) * src_prod_
+							src_prod_ = src_prod_ * src%size(k_)
+						end do
+						dst_off_ = outer_i_ * lens_(1)
+						select case (src%type)
+						case (bool_type)
+							val%array%bool(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%bool(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (i32_type)
+							val%array%i32(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%i32(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (i64_type)
+							val%array%i64(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%i64(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (f32_type)
+							val%array%f32(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%f32(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (f64_type)
+							val%array%f64(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%f64(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (str_type)
+							val%array%str(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%str(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						end select
+					end do
+				end if
+				end associate
+			else
+				associate(src => state%vars%vals(instr%a)%array)
+				val%array%type = src%type
+				call allocate_array(val, len_tot_)
+				if (ndim_ == 1) then
+					select case (src%type)
+					case (bool_type); val%array%bool(1:len_tot_) = src%bool(lb_(1)+1 : ub_(1))
+					case (i32_type);  val%array%i32 (1:len_tot_) = src%i32 (lb_(1)+1 : ub_(1))
+					case (i64_type);  val%array%i64 (1:len_tot_) = src%i64 (lb_(1)+1 : ub_(1))
+					case (f32_type);  val%array%f32 (1:len_tot_) = src%f32 (lb_(1)+1 : ub_(1))
+					case (f64_type);  val%array%f64 (1:len_tot_) = src%f64 (lb_(1)+1 : ub_(1))
+					case (str_type);  val%array%str (1:len_tot_) = src%str (lb_(1)+1 : ub_(1))
+					end select
+				else
+					outer_count_ = product(lens_(2:ndim_))
+					do outer_i_ = 0, outer_count_ - 1
+						src_off_  = 0_8
+						src_prod_ = src%size(1)
+						tmp_i_    = outer_i_
+						do k_ = 2, ndim_
+							ci_       = mod(tmp_i_, lens_(k_))
+							tmp_i_    = tmp_i_ / lens_(k_)
+							src_off_  = src_off_ + (lb_(k_) + ci_) * src_prod_
+							src_prod_ = src_prod_ * src%size(k_)
+						end do
+						dst_off_ = outer_i_ * lens_(1)
+						select case (src%type)
+						case (bool_type)
+							val%array%bool(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%bool(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (i32_type)
+							val%array%i32(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%i32(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (i64_type)
+							val%array%i64(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%i64(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (f32_type)
+							val%array%f32(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%f32(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (f64_type)
+							val%array%f64(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%f64(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						case (str_type)
+							val%array%str(dst_off_+1 : dst_off_+lens_(1)) = &
+								src%str(lb_(1)+src_off_+1 : lb_(1)+src_off_+lens_(1))
+						end select
+					end do
+				end if
+				end associate
+			end if
+
+			call vm_push_move(stack, val)
+			end block
+
+		! OP_STORE_SLICE_NAT: native array range-slice write (plain '=' only).
+		! Stack before: [lb_1][ub_1]...[lb_n][ub_n][rhs_array]
+		! Stack after:  [rhs_array]   (RHS left on top, matching OP_STORE_SLICE convention)
+		! a=id_index, b=ndim, c=is_local
+		case (OP_STORE_SLICE_NAT)
+			block
+			integer :: ndim_, k_
+			integer(kind=8) :: lb_(MAX_NAT_SLICE_RANK), ub_(MAX_NAT_SLICE_RANK), lens_(MAX_NAT_SLICE_RANK)
+			integer(kind=8) :: outer_count_, outer_i_
+			integer(kind=8) :: dst_off_, dst_prod_, rhs_off_, ci_, tmp_i_
+
+			ndim_ = instr%b
+
+			! RHS is on top; move it into `right`, then pop bounds.
+			call vm_pop_copy(stack, right)
+
+			do k_ = ndim_, 1, -1
+				ub_(k_) = stack%v(stack%len_  )%to_i64()
+				lb_(k_) = stack%v(stack%len_-1)%to_i64()
+				stack%len_ = stack%len_ - 2
+			end do
+
+			do k_ = 1, ndim_
+				lens_(k_) = max(0_8, ub_(k_) - lb_(k_))
+			end do
+
+			if (instr%c == 1_8) then
+				associate(dst => state%locs%vals(instr%a)%array)
+				if (ndim_ == 1) then
+					select case (dst%type)
+					case (bool_type); dst%bool(lb_(1)+1 : ub_(1)) = right%array%bool(1:lens_(1))
+					case (i32_type);  dst%i32 (lb_(1)+1 : ub_(1)) = right%array%i32 (1:lens_(1))
+					case (i64_type);  dst%i64 (lb_(1)+1 : ub_(1)) = right%array%i64 (1:lens_(1))
+					case (f32_type);  dst%f32 (lb_(1)+1 : ub_(1)) = right%array%f32 (1:lens_(1))
+					case (f64_type);  dst%f64 (lb_(1)+1 : ub_(1)) = right%array%f64 (1:lens_(1))
+					case (str_type);  dst%str (lb_(1)+1 : ub_(1)) = right%array%str (1:lens_(1))
+					end select
+				else
+					outer_count_ = product(lens_(2:ndim_))
+					do outer_i_ = 0, outer_count_ - 1
+						! Destination offset uses dst%size for strides; rhs is packed.
+						dst_off_  = lb_(1)
+						dst_prod_ = dst%size(1)
+						tmp_i_    = outer_i_
+						do k_ = 2, ndim_
+							ci_       = mod(tmp_i_, lens_(k_))
+							tmp_i_    = tmp_i_ / lens_(k_)
+							dst_off_  = dst_off_ + (lb_(k_) + ci_) * dst_prod_
+							dst_prod_ = dst_prod_ * dst%size(k_)
+						end do
+						rhs_off_ = outer_i_ * lens_(1)
+						select case (dst%type)
+						case (bool_type)
+							dst%bool(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%bool(rhs_off_+1 : rhs_off_+lens_(1))
+						case (i32_type)
+							dst%i32(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%i32(rhs_off_+1 : rhs_off_+lens_(1))
+						case (i64_type)
+							dst%i64(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%i64(rhs_off_+1 : rhs_off_+lens_(1))
+						case (f32_type)
+							dst%f32(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%f32(rhs_off_+1 : rhs_off_+lens_(1))
+						case (f64_type)
+							dst%f64(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%f64(rhs_off_+1 : rhs_off_+lens_(1))
+						case (str_type)
+							dst%str(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%str(rhs_off_+1 : rhs_off_+lens_(1))
+						end select
+					end do
+				end if
+				end associate
+			else
+				associate(dst => state%vars%vals(instr%a)%array)
+				if (ndim_ == 1) then
+					select case (dst%type)
+					case (bool_type); dst%bool(lb_(1)+1 : ub_(1)) = right%array%bool(1:lens_(1))
+					case (i32_type);  dst%i32 (lb_(1)+1 : ub_(1)) = right%array%i32 (1:lens_(1))
+					case (i64_type);  dst%i64 (lb_(1)+1 : ub_(1)) = right%array%i64 (1:lens_(1))
+					case (f32_type);  dst%f32 (lb_(1)+1 : ub_(1)) = right%array%f32 (1:lens_(1))
+					case (f64_type);  dst%f64 (lb_(1)+1 : ub_(1)) = right%array%f64 (1:lens_(1))
+					case (str_type);  dst%str (lb_(1)+1 : ub_(1)) = right%array%str (1:lens_(1))
+					end select
+				else
+					outer_count_ = product(lens_(2:ndim_))
+					do outer_i_ = 0, outer_count_ - 1
+						dst_off_  = lb_(1)
+						dst_prod_ = dst%size(1)
+						tmp_i_    = outer_i_
+						do k_ = 2, ndim_
+							ci_       = mod(tmp_i_, lens_(k_))
+							tmp_i_    = tmp_i_ / lens_(k_)
+							dst_off_  = dst_off_ + (lb_(k_) + ci_) * dst_prod_
+							dst_prod_ = dst_prod_ * dst%size(k_)
+						end do
+						rhs_off_ = outer_i_ * lens_(1)
+						select case (dst%type)
+						case (bool_type)
+							dst%bool(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%bool(rhs_off_+1 : rhs_off_+lens_(1))
+						case (i32_type)
+							dst%i32(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%i32(rhs_off_+1 : rhs_off_+lens_(1))
+						case (i64_type)
+							dst%i64(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%i64(rhs_off_+1 : rhs_off_+lens_(1))
+						case (f32_type)
+							dst%f32(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%f32(rhs_off_+1 : rhs_off_+lens_(1))
+						case (f64_type)
+							dst%f64(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%f64(rhs_off_+1 : rhs_off_+lens_(1))
+						case (str_type)
+							dst%str(dst_off_+1 : dst_off_+lens_(1)) = &
+								right%array%str(rhs_off_+1 : rhs_off_+lens_(1))
+						end select
+					end do
+				end if
+				end associate
+			end if
+
+			call vm_push_move(stack, right)
+			end block
+
+		! OP_SIZE_NAT: read array%size(dim+1) or array%len_ directly from the variable
+		! slot without deep-copying the array.  a=slot_id, b=dim (b<0 → total len_),
+		! c=is_local.  Eliminates O(N) allocation from size(large_arr, dim) in loops.
+		case (OP_SIZE_NAT)
+			block
+			integer :: rank_
+			if (instr%c == 1_8) then
+				rank_ = state%locs%vals(instr%a)%array%rank
+			else
+				rank_ = state%vars%vals(instr%a)%array%rank
+			end if
+			if (instr%b >= 0 .and. instr%b >= rank_) then
+				call rt_throw(state, err_rt(RC_SIZE_RANK_MISMATCH, "rank mismatch in size() call"))
+				exit
+			end if
+			stack%len_ = stack%len_ + 1
+			if (stack%len_ > stack%cap) call vm_stack_grow(stack)
+			stack%v(stack%len_)%type = i64_type
+			if (instr%c == 1_8) then
+				if (instr%b < 0) then
+					stack%v(stack%len_)%sca%i64 = state%locs%vals(instr%a)%array%len_
+				else
+					stack%v(stack%len_)%sca%i64 = state%locs%vals(instr%a)%array%size(instr%b + 1)
+				end if
+			else
+				if (instr%b < 0) then
+					stack%v(stack%len_)%sca%i64 = state%vars%vals(instr%a)%array%len_
+				else
+					stack%v(stack%len_)%sca%i64 = state%vars%vals(instr%a)%array%size(instr%b + 1)
+				end if
+			end if
+			end block
+
 		! Comparisons: result type is bool; TOS-1 type updated to bool_type.
 		case (OP_LT_I32)
 			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 &
@@ -1649,6 +2241,30 @@ module subroutine vm_run(prog, state, res)
 			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%bool &
 			                             .neqv. stack%v(stack%len_  )%sca%bool
 			stack%len_ = stack%len_ - 1
+
+		! String equality: compare two str_type stack slots directly without
+		! vm_pop_copy (avoids allocatable-string heap copies per comparison).
+		! Uses is_str_eq for length-aware comparison (Fortran's == pads spaces).
+		case (OP_EQ_STR)
+			block
+			logical :: b_
+			b_ = is_str_eq(stack%v(stack%len_-1)%str%s, stack%v(stack%len_)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
+		case (OP_NE_STR)
+			block
+			logical :: b_
+			b_ = .not. is_str_eq(stack%v(stack%len_-1)%str%s, stack%v(stack%len_)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
 
 		! Bool binary
 		case (OP_AND_BOOL)
@@ -1790,6 +2406,432 @@ module subroutine vm_run(prog, state, res)
 		case (OP_STORE_GLOBAL_F64)
 			state%vars%vals(instr%a)%type    = f64_type
 			state%vars%vals(instr%a)%sca%f64 = stack%v(stack%len_)%sca%f64
+
+		case (OP_SUBSCRIPT_TOS)
+			! Pop the fn return value, apply subscripts from the node pool, push result.
+			call vm_pop_copy(stack, left)
+			call apply_subscripts_to_val(prog%nodes(instr%a), left, state, val)
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
+
+		! OP_UNIF_ARRAY_NAT: native uniform-fill array construction.
+		! a = element type, b = rank.
+		! Stack before: [size(1)][size(2)]...[size(rank)][fill_val]
+		! Stack after:  [result_array]
+		case (OP_UNIF_ARRAY_NAT)
+			block
+			integer :: rk_, k_
+			integer(kind=8) :: dims_(MAX_NAT_UNIF_RANK), len_tot_
+			type(value_t) :: fill_
+
+			rk_     = instr%b
+			call vm_pop_copy(stack, fill_)
+			len_tot_ = 1
+			do k_ = rk_, 1, -1
+				dims_(k_) = stack%v(stack%len_)%to_i64()
+				stack%len_ = stack%len_ - 1
+				len_tot_   = len_tot_ * dims_(k_)
+			end do
+
+			allocate(val%array)
+			val%type           = array_type
+			val%array%type     = instr%a
+			val%array%rank     = rk_
+			val%array%len_     = len_tot_
+			allocate(val%array%size(rk_))
+			val%array%size(1:rk_) = dims_(1:rk_)
+			call allocate_array(val, len_tot_)
+
+			select case (instr%a)
+			case (bool_type); val%array%bool = fill_%sca%bool
+			case (i32_type);  val%array%i32  = fill_%sca%i32
+			case (i64_type);  val%array%i64  = fill_%sca%i64
+			case (f32_type);  val%array%f32  = fill_%sca%f32
+			case (f64_type);  val%array%f64  = fill_%sca%f64
+			end select
+
+			call vm_push_move(stack, val)
+			end block
+
+		! OP_BOUND_ARRAY_NAT: native integer range array [lb:ub].
+		! a = element type (i32_type or i64_type).
+		! Stack before: [lb][ub]
+		! Stack after:  [result_array]
+		case (OP_BOUND_ARRAY_NAT)
+			block
+			integer(kind=8) :: lb_, ub_, len_, k8_
+
+			ub_ = stack%v(stack%len_  )%to_i64()
+			lb_ = stack%v(stack%len_-1)%to_i64()
+			stack%len_ = stack%len_ - 2
+
+			len_ = max(0_8, ub_ - lb_)
+
+			allocate(val%array)
+			val%type           = array_type
+			val%array%type     = instr%a
+			val%array%rank     = 1
+			val%array%len_     = len_
+			allocate(val%array%size(1))
+			val%array%size(1)  = len_
+			call allocate_array(val, len_)
+
+			select case (instr%a)
+			case (i32_type)
+				do k8_ = 1, len_
+					val%array%i32(k8_) = int(lb_ + k8_ - 1, 4)
+				end do
+			case (i64_type)
+				do k8_ = 1, len_
+					val%array%i64(k8_) = lb_ + k8_ - 1
+				end do
+			end select
+
+			call vm_push_move(stack, val)
+			end block
+
+		! OP_EXPL_ARRAY_NAT: native explicit array literal [e1, e2, ..., en].
+		! a = element type (bool/i32/i64/f32/f64_type)
+		! b = n_elems (compile-time constant)
+		! Stack before: [e1][e2]...[en]  (e1 at stack%len_-n+1, en at TOS)
+		! Stack after:  [result_array]
+		case (OP_EXPL_ARRAY_NAT)
+			block
+			integer :: n_, j_
+			integer(kind=8) :: len_
+
+			n_   = instr%b
+			len_ = int(n_, 8)
+
+			allocate(val%array)
+			val%type          = array_type
+			val%array%type    = instr%a
+			val%array%kind    = expl_array
+			val%array%rank    = 1
+			val%array%len_    = len_
+			allocate(val%array%size(1))
+			val%array%size(1) = len_
+			call allocate_array(val, len_)
+
+			select case (instr%a)
+			case (bool_type)
+				do j_ = 1, n_
+					val%array%bool(j_) = stack%v(stack%len_ - n_ + j_)%sca%bool
+				end do
+			case (i32_type)
+				do j_ = 1, n_
+					val%array%i32(j_) = stack%v(stack%len_ - n_ + j_)%sca%i32
+				end do
+			case (i64_type)
+				do j_ = 1, n_
+					val%array%i64(j_) = stack%v(stack%len_ - n_ + j_)%sca%i64
+				end do
+			case (f32_type)
+				do j_ = 1, n_
+					val%array%f32(j_) = stack%v(stack%len_ - n_ + j_)%sca%f32
+				end do
+			case (f64_type)
+				do j_ = 1, n_
+					val%array%f64(j_) = stack%v(stack%len_ - n_ + j_)%sca%f64
+				end do
+			end select
+			stack%len_ = stack%len_ - n_
+
+			call vm_push_move(stack, val)
+			end block
+
+		! Mixed f32/i32 scalar arithmetic (result f32) and comparisons (result bool).
+		! When float is TOS-1: type unchanged. When int is TOS-1: type updated to f32_type.
+		case (OP_ADD_F32_I32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 + stack%v(stack%len_)%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_ADD_I32_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%i32 + stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = f32_type
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_F32_I32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 - stack%v(stack%len_)%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_I32_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%i32 - stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = f32_type
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_F32_I32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 * stack%v(stack%len_)%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_I32_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%i32 * stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = f32_type
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_F32_I32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 / stack%v(stack%len_)%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_I32_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%i32 / stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = f32_type
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_F32_I32)
+			stack%v(stack%len_-1)%sca%f32 = mod(stack%v(stack%len_-1)%sca%f32, real(stack%v(stack%len_)%sca%i32, 4))
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_I32_F32)
+			stack%v(stack%len_-1)%sca%f32 = mod(real(stack%v(stack%len_-1)%sca%i32, 4), stack%v(stack%len_)%sca%f32)
+			stack%v(stack%len_-1)%type = f32_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LT_F32_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 < stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LT_I32_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 < stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LE_F32_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 <= stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LE_I32_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 <= stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GT_F32_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 > stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GT_I32_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 > stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GE_F32_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 >= stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GE_I32_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 >= stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_EQ_F32_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 == stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_EQ_I32_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 == stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_NE_F32_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 /= stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_NE_I32_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 /= stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+
+		! Mixed f32/i64 scalar arithmetic and comparisons.
+		case (OP_ADD_F32_I64)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 + stack%v(stack%len_)%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_ADD_I64_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%i64 + stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = f32_type
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_F32_I64)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 - stack%v(stack%len_)%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_I64_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%i64 - stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = f32_type
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_F32_I64)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 * stack%v(stack%len_)%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_I64_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%i64 * stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = f32_type
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_F32_I64)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%f32 / stack%v(stack%len_)%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_I64_F32)
+			stack%v(stack%len_-1)%sca%f32 = stack%v(stack%len_-1)%sca%i64 / stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = f32_type
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_F32_I64)
+			stack%v(stack%len_-1)%sca%f32 = mod(stack%v(stack%len_-1)%sca%f32, real(stack%v(stack%len_)%sca%i64, 4))
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_I64_F32)
+			stack%v(stack%len_-1)%sca%f32 = mod(real(stack%v(stack%len_-1)%sca%i64, 4), stack%v(stack%len_)%sca%f32)
+			stack%v(stack%len_-1)%type = f32_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LT_F32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 < stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LT_I64_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 < stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LE_F32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 <= stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LE_I64_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 <= stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GT_F32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 > stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GT_I64_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 > stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GE_F32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 >= stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GE_I64_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 >= stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_EQ_F32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 == stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_EQ_I64_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 == stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_NE_F32_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f32 /= stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_NE_I64_F32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 /= stack%v(stack%len_)%sca%f32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+
+		! Mixed f64/i32 scalar arithmetic and comparisons.
+		case (OP_ADD_F64_I32)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 + stack%v(stack%len_)%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_ADD_I32_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%i32 + stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = f64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_F64_I32)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 - stack%v(stack%len_)%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_I32_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%i32 - stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = f64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_F64_I32)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 * stack%v(stack%len_)%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_I32_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%i32 * stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = f64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_F64_I32)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 / stack%v(stack%len_)%sca%i32
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_I32_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%i32 / stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = f64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_F64_I32)
+			stack%v(stack%len_-1)%sca%f64 = mod(stack%v(stack%len_-1)%sca%f64, real(stack%v(stack%len_)%sca%i32, 8))
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_I32_F64)
+			stack%v(stack%len_-1)%sca%f64 = mod(real(stack%v(stack%len_-1)%sca%i32, 8), stack%v(stack%len_)%sca%f64)
+			stack%v(stack%len_-1)%type = f64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LT_F64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 < stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LT_I32_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 < stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LE_F64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 <= stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LE_I32_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 <= stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GT_F64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 > stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GT_I32_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 > stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GE_F64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 >= stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GE_I32_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 >= stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_EQ_F64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 == stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_EQ_I32_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 == stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_NE_F64_I32)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 /= stack%v(stack%len_)%sca%i32
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_NE_I32_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i32 /= stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+
+		! Mixed f64/i64 scalar arithmetic and comparisons.
+		case (OP_ADD_F64_I64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 + stack%v(stack%len_)%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_ADD_I64_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%i64 + stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = f64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_F64_I64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 - stack%v(stack%len_)%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_SUB_I64_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%i64 - stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = f64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_F64_I64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 * stack%v(stack%len_)%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_MUL_I64_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%i64 * stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = f64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_F64_I64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%f64 / stack%v(stack%len_)%sca%i64
+			stack%len_ = stack%len_ - 1
+		case (OP_DIV_I64_F64)
+			stack%v(stack%len_-1)%sca%f64 = stack%v(stack%len_-1)%sca%i64 / stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = f64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_F64_I64)
+			stack%v(stack%len_-1)%sca%f64 = mod(stack%v(stack%len_-1)%sca%f64, real(stack%v(stack%len_)%sca%i64, 8))
+			stack%len_ = stack%len_ - 1
+		case (OP_MOD_I64_F64)
+			stack%v(stack%len_-1)%sca%f64 = mod(real(stack%v(stack%len_-1)%sca%i64, 8), stack%v(stack%len_)%sca%f64)
+			stack%v(stack%len_-1)%type = f64_type
+			stack%len_ = stack%len_ - 1
+		case (OP_LT_F64_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 < stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LT_I64_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 < stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LE_F64_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 <= stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_LE_I64_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 <= stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GT_F64_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 > stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GT_I64_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 > stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GE_F64_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 >= stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_GE_I64_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 >= stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_EQ_F64_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 == stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_EQ_I64_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 == stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_NE_F64_I64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%f64 /= stack%v(stack%len_)%sca%i64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
+		case (OP_NE_I64_F64)
+			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%i64 /= stack%v(stack%len_)%sca%f64
+			stack%v(stack%len_-1)%type = bool_type; stack%len_ = stack%len_ - 1
 
 		case default
 			write(*,*) 'VM: unknown opcode ', instr%op

@@ -3,15 +3,15 @@
 
 //==============================================================================
 
-let ifile = 1;
+const ifile = 1;
 
-let filenames =
+const filenames =
 [
 	"test-input.txt",
 	"input.txt",
 	"test-input2.txt"  // WARNING: this test input crashes part1
 ];
-let filename = filenames[ifile];
+const filename = filenames[ifile];
 
 //==============================================================================
 
@@ -33,7 +33,7 @@ fn part1(): i32
 		//println("j = ", j);
 		//println("last  = ", str_[j]);
 
-		let digits = str_[i] + str_[j];
+		const digits = str_[i] + str_[j];
 		//println("digits = ", digits);
 
 		sum_ += parse_i32(digits);
@@ -53,7 +53,7 @@ fn part2(): i32
 	//println("starting part2");
 	let sum_ = 0;
 
-	let nums =
+	const nums =
 	[
 		"zero",
 		"one",
@@ -111,7 +111,7 @@ fn part2(): i32
 		}
 		//println("val_last = ", val_last);
 
-		let digits = str(val_first, val_last);
+		const digits = str(val_first, val_last);
 		sum_ += parse_i32(digits);
 
 		str_ = readln(f);

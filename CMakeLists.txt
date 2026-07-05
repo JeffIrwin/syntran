@@ -16,7 +16,7 @@ endif()
 
 set(PROJECT syntran)
 
-project(${PROJECT} Fortran)
+project(${PROJECT} Fortran C)
 
 if(WIN32 OR CMAKE_GENERATOR MATCHES "MSYS" OR CMAKE_GENERATOR MATCHES "MinGW")
 	message("defining _WIN32 in cmake")
@@ -26,24 +26,40 @@ else()
 endif()
 
 if(DEFINED ENV{SYNTRAN_INTEL})
-	add_compile_options(-W1 -qopenmp -qmkl -fPIC -fpp)
+	# ifort-specific flags must NOT reach the C compiler (icx doesn't
+	# understand -fpp/-qmkl/etc), so gate them to Fortran only.
+	add_compile_options(
+		"$<$<COMPILE_LANGUAGE:Fortran>:-W1>"
+		"$<$<COMPILE_LANGUAGE:Fortran>:-qopenmp>"
+		"$<$<COMPILE_LANGUAGE:Fortran>:-qmkl>"
+		"$<$<COMPILE_LANGUAGE:Fortran>:-fPIC>"
+		"$<$<COMPILE_LANGUAGE:Fortran>:-fpp>"
+	)
 	add_compile_definitions(SYNTRAN_INTEL)
 else()
 
-	add_compile_options(-Wall -Wextra -fopenmp -cpp)
+	# gfortran-specific dialect/warning flags must NOT reach the C compiler
+	# (AppleClang rejects -cpp / -fopenmp), so gate them to Fortran only.
+	add_compile_options(
+		"$<$<COMPILE_LANGUAGE:Fortran>:-Wall>"
+		"$<$<COMPILE_LANGUAGE:Fortran>:-Wextra>"
+		"$<$<COMPILE_LANGUAGE:Fortran>:-fopenmp>"
+		"$<$<COMPILE_LANGUAGE:Fortran>:-cpp>"
 
-	# Why would you warn about tabs in free-form Fortran?
-	add_compile_options(-Wno-tabs)
+		# Why would you warn about tabs in free-form Fortran?
+		"$<$<COMPILE_LANGUAGE:Fortran>:-Wno-tabs>"
 
-	# More false alarms than anything
-	add_compile_options(-Wno-maybe-uninitialized)
+		# More false alarms than anything
+		"$<$<COMPILE_LANGUAGE:Fortran>:-Wno-maybe-uninitialized>"
 
-	# I need to compare reals because syntran users need to be able to compare
-	# reals if they want to
-	add_compile_options(-Wno-compare-reals)
+		# I need to compare reals because syntran users need to be able to
+		# compare reals if they want to
+		"$<$<COMPILE_LANGUAGE:Fortran>:-Wno-compare-reals>"
 
-	# Suppress preprocessor warnings about apostrophes in comments (e.g. "There's")
-	add_compile_options(-Wno-cpp "-Wp,-w")
+		# Suppress preprocessor warnings about apostrophes in comments (e.g. "There's")
+		"$<$<COMPILE_LANGUAGE:Fortran>:-Wno-cpp>"
+		"$<$<COMPILE_LANGUAGE:Fortran>:-Wp,-w>"
+	)
 
 endif()
 #add_compile_options("-J ${CMAKE_CURRENT_SOURCE_DIR}/build/")
@@ -51,7 +67,12 @@ endif()
 message("")
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 	message("Debug")
-	add_compile_options(-pedantic -fbounds-check -fbacktrace)
+	# gfortran-specific debug flags must NOT reach the C compiler
+	add_compile_options(
+		"$<$<COMPILE_LANGUAGE:Fortran>:-pedantic>"
+		"$<$<COMPILE_LANGUAGE:Fortran>:-fbounds-check>"
+		"$<$<COMPILE_LANGUAGE:Fortran>:-fbacktrace>"
+	)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	message("Release")
 	add_compile_options(-O3)
@@ -68,6 +89,7 @@ elseif(DEFINED ENV{SYNTRAN_INTEL})
 else()
 	add_link_options(-fopenmp)
 endif()
+add_link_options(-static-libquadmath -static-libgfortran -static-libgcc)
 
 set(SRC_DIR "src")
 
@@ -76,6 +98,7 @@ set(SRC_DIR "src")
 # Core library, used by main interpreter and unit tests
 set(LIB "${PROJECT}")
 set(LIB_SRC
+	${SRC_DIR}/c/isocline_wrap.c
 	${SRC_DIR}/bool.f90
 	${SRC_DIR}/bytecode.f90
 	${SRC_DIR}/compiler.F90
@@ -98,7 +121,9 @@ set(LIB_SRC
 	${SRC_DIR}/intr_fns_math.f90
 	${SRC_DIR}/intr_fns_minmax.f90
 	${SRC_DIR}/intr_fns_trig.f90
+	${SRC_DIR}/intr_vars.f90
 	${SRC_DIR}/lex.f90
+	${SRC_DIR}/line_edit.f90
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/math_bin_add.f90
 	${SRC_DIR}/math_bin_div.f90

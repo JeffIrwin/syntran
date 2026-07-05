@@ -1,6 +1,6 @@
 
 use ../../utils_2024;
-use ../../dict_i64;
+use ../../dicts/dict_i64 as dict_i64;
 
 //==============================================================================
 
@@ -104,7 +104,7 @@ fn part1(): i64
 
 	// Find the LAN parties.  This algo is fast but it may visit a party
 	// multiple times.  Use a dict to equivalence the set of parties
-	let parties = dict_i64::new_dict_i64();
+	let parties = dict_i64::new();
 
 	let NCAP = 32;  // 8 is too small but 16 is safe for me
 	let STACK_CAP = 32;
@@ -178,10 +178,10 @@ fn part1(): i64
 
 			let key = str(utils_2024::sort_inplace([i0, i1, i2]));
 			//println("key = ", key);
-			dict_i64::set_dict_i64(&parties, key, 1'i64);
+			parties.set(key, 1'i64);
 		}
 	}
-	sum_ = dict_i64::len_dict_i64(&parties);
+	sum_ = parties.len();
 
 	println("part 1 = ", sum_);
 	return sum_;

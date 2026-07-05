@@ -1,0 +1,4 @@
+// R28: close-standard
+// close() was called on a standard file handle (std::IN, std::OUT, or std::ERR)
+
+close(std::IN);

@@ -1,0 +1,8 @@
+// E10: unterminated-str
+// A string literal is missing its closing quote
+
+let a = 1;
+let b = 2;
+let c = a + b;
+
+let s = "this string never closes

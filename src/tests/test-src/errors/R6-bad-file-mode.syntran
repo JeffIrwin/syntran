@@ -1,0 +1,4 @@
+// R6: bad-file-mode
+// open() was given a file-mode character other than r or w
+
+let f = open("build/rt_file_r6.txt", "x");

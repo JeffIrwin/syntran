@@ -9,6 +9,138 @@ contains
 
 !===============================================================================
 
+! Shared helpers for unit_test_error_codes(), unit_test_error_locations(), and
+! unit_test_dir_unreadable_errors(), all of which check diagnostics emitted
+! for bad syntran programs against expected error codes and/or locations
+
+function get_diags(str_, src_file, bytecode) result(diag_)
+	character(len = *), intent(in) :: str_
+	character(len = *), intent(in), optional :: src_file
+
+	! Explicit backend override.  Lets runtime-error tests (which don't have
+	! a separate diags-emission path per backend, unlike compile-time E*
+	! diags) exercise both the bytecode VM and the AST walker for the same
+	! snippet.  Omit to use the SYNTRAN_BACKEND env var default (VM)
+	logical, intent(in), optional :: bytecode
+
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	if (present(src_file)) then
+		res_ = eval(str_, .true., src_file = src_file, diags = diag_, bytecode = bytecode)
+	else
+		res_ = eval(str_, .true., diags = diag_, bytecode = bytecode)
+	end if
+end function get_diags
+
+!===============================================================================
+
+function get_diags_file(filename, bytecode) result(diag_)
+	character(len = *), intent(in) :: filename
+	logical, intent(in), optional :: bytecode
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	res_ = interpret_file(filename, quiet = .true., diags = diag_, bytecode = bytecode)
+end function get_diags_file
+
+!===============================================================================
+
+function diag_has_code(diag_, code) result(found)
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: code
+	logical :: found
+	integer :: k
+	found = .false.
+	do k = 1, diag_%len_
+		if (index(diag_%v(k)%s, '['//code//']') > 0) found = .true.
+	end do
+end function diag_has_code
+
+!===============================================================================
+
+function diag_has_text(diag_, text) result(found)
+	! Like diag_has_code(), but checks for an arbitrary substring anywhere in
+	! some diagnostic (e.g. a "help: ..." line), not just the error code
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: text
+	logical :: found
+	integer :: k
+	found = .false.
+	do k = 1, diag_%len_
+		if (index(diag_%v(k)%s, text) > 0) found = .true.
+	end do
+end function diag_has_text
+
+!===============================================================================
+
+function diag_count_code(diag_, code) result(count_)
+	! Like diag_has_code(), but returns how many diagnostics carry [code].
+	! Used to catch duplicate-diagnostic regressions that diag_has_code()
+	! can't see (it only checks presence, not count)
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: code
+	integer :: count_
+	integer :: k
+	count_ = 0
+	do k = 1, diag_%len_
+		if (index(diag_%v(k)%s, '['//code//']') > 0) count_ = count_ + 1
+	end do
+end function diag_count_code
+
+!===============================================================================
+
+function diag_loc_ok(diag_, code, src_file, line, col, ncaret) result(ok)
+
+	! Check that some diagnostic in diag_ carries [code], reports
+	! src_file:line:col, and underlines exactly ncaret characters starting
+	! at column col.  Per underline() in errors.f90, the caret line's
+	! gutter is always exactly "| " followed by (col - 1) spaces and then
+	! the bright-red carets, so reconstructing that substring pins down
+	! both the position and the exact length of the "^^^" span (the
+	! trailing index() check rules out a longer caret run)
+
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: code, src_file
+	integer, intent(in) :: line, col, ncaret
+	logical :: ok
+
+	character(len = :), allocatable :: s, loc, carets
+	integer :: k
+
+	loc    = src_file//':'//str(line)//':'//str(col)
+	carets = '| '//repeat(' ', col - 1)//fg_bright_red//repeat('^', ncaret)
+
+	ok = .false.
+	do k = 1, diag_%len_
+		s = diag_%v(k)%s
+		if (index(s, '['//code//']') > 0 .and. &
+		    index(s, loc) > 0 .and. &
+		    index(s, carets) > 0 .and. &
+		    index(s, carets//'^') == 0) ok = .true.
+	end do
+
+end function diag_loc_ok
+
+!===============================================================================
+
+! Helper for unit_test_runtime_errors().  Runtime (R*) diagnostics have no
+! caret/location context (unlike compile-time E* diags), so diag_loc_ok()
+! doesn't apply here.  Instead this checks that a reproduction file raises
+! [code] under BOTH the bytecode VM and the (deprecated) AST walker, since R*
+! call sites are duplicated per-backend (eval_*.f90 vs vm_*.f90) and can drift
+! apart.  Each repro lives under src/tests/test-src/errors/ (also linked as an
+! example from doc/errors.md), mirroring how get_diags_file()/diag_loc_ok()
+! work for compile-time E* errors
+
+function rt_code_both_file(filename, code) result(both)
+	character(len = *), intent(in) :: filename, code
+	logical :: both
+	both = &
+		diag_has_code(get_diags_file(filename, bytecode = .true. ), code) .and. &
+		diag_has_code(get_diags_file(filename, bytecode = .false.), code)
+end function rt_code_both_file
+
+!===============================================================================
+
 subroutine unit_test_levenshtein(npass, nfail)
 
 	! Test the Levenshtein edit-distance utility used for "did you mean?"
@@ -78,6 +210,30 @@ subroutine unit_test_unqualified_name(npass, nfail)
 		], "unqualified_name", npass, nfail)
 
 end subroutine unit_test_unqualified_name
+
+!===============================================================================
+
+subroutine unit_test_bbcode_escape(npass, nfail)
+
+	! Test the bbcode_escape() helper that escapes chars special to isocline's
+	! bbcode prompt markup ('\' and '['; a lone ']' is not special -- see the
+	! comment in bbcode_escape() itself), so REPL prompts like the
+	! missing-semicolon hint "[Hint `;`]> " render literally instead of being
+	! parsed (and silently dropped) as an unrecognized bbcode tag
+
+	integer, intent(inout) :: npass, nfail
+
+	logical, parameter :: quiet = .true.
+
+	call unit_test_coda( [ &
+		bbcode_escape("[Hint `;`]> ") == "\[Hint `;`]> ", &
+		bbcode_escape("syntran$ "   ) == "syntran$ "     , &
+		bbcode_escape("> "         ) == "> "             , &
+		bbcode_escape(""           ) == ""               , &
+		bbcode_escape("a\b"        ) == "a\\b"             &
+		], "bbcode_escape", npass, nfail)
+
+end subroutine unit_test_bbcode_escape
 
 !===============================================================================
 
@@ -684,6 +840,150 @@ end subroutine unit_test_comp_ass
 
 !===============================================================================
 
+subroutine unit_test_comp_ass_arr(npass, nfail)
+
+	! Regression tests for commit 99ffa35f: whole-array compound assignment
+	! (`v += rhs`, not just `v[i] += rhs`) must preserve the LHS array's
+	! element type instead of silently promoting to the wider operand type.
+	! This was latent in the AST walker but gave wrong results / a hang in
+	! the bytecode VM, which these tests exercise by default (see eval()).
+	!
+	! Element type is checked two ways:
+	!   * f32 arrays print with 6 decimals (es16.6), f64 with 15 (es25.15),
+	!     so a wrongly-promoted f32->f64 array fails the string match
+	!   * i32 vs i64 print identically, so those rely on the numeric value
+	!     alone, matching how the bug actually manifested for ints
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'array compound assignment'
+
+	logical, allocatable :: tests(:)
+	logical, parameter :: quiet = .true.
+
+	real, parameter :: tol = 1.e-9
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! += baseline (same type scalar/array rhs)
+			eval('let v = [10; 3]; v += 5; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = [10; 3]; v += [1, 2, 3]; v;', quiet) == '[11, 12, 13]', &
+			eval('let v = i64([10; 3]); v += i64(5); v;', quiet) == '[15, 15, 15]', &
+			eval('let v = i64([10; 3]); v += i64([1, 2, 3]); v;', quiet) == '[11, 12, 13]', &
+			eval('let v = [10.0f; 3]; v += 5.0f; v;', quiet) == &
+				'[1.500000E+01, 1.500000E+01, 1.500000E+01]', &
+			eval('let v = [10.0f; 3]; v += [1.0f, 2.0f, 3.0f]; v;', quiet) == &
+				'[1.100000E+01, 1.200000E+01, 1.300000E+01]', &
+			eval('let v = [10.0; 3]; v += 5.0; v;', quiet) == &
+				'[1.500000000000000E+01, 1.500000000000000E+01, 1.500000000000000E+01]', &
+			eval('let v = [10.0; 3]; v += [1.0, 2.0, 3.0]; v;', quiet) == &
+				'[1.100000000000000E+01, 1.200000000000000E+01, 1.300000000000000E+01]', &
+
+			! += cross-type rhs must stay at the LHS's element type
+			eval('let v = [10; 3]; v += i64(5); v;', quiet) == '[15, 15, 15]', &
+			eval('let v = [10; 3]; v += 5.9f; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = [10; 3]; v += 5.9; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = [10; 3]; v += i64([1, 2, 3]); v;', quiet) == '[11, 12, 13]', &
+			eval('let v = i64([10; 3]); v += 5; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = i64([10; 3]); v += 5.9f; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = i64([10; 3]); v += 5.9; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = i64([10; 3]); v += [1, 2, 3]; v;', quiet) == '[11, 12, 13]', &
+			eval('let v = [10.0f; 3]; v += 5; v;', quiet) == &
+				'[1.500000E+01, 1.500000E+01, 1.500000E+01]', &
+			eval('let v = [10.0f; 3]; v += i64(5); v;', quiet) == &
+				'[1.500000E+01, 1.500000E+01, 1.500000E+01]', &
+			eval('let v = [10.0f; 3]; v += 5.0; v;', quiet) == &
+				'[1.500000E+01, 1.500000E+01, 1.500000E+01]', &
+			eval('let v = [10.0f; 3]; v += [1.0, 2.0, 3.0]; v;', quiet) == &
+				'[1.100000E+01, 1.200000E+01, 1.300000E+01]', &
+			eval('let v = [10.0; 3]; v += 5; v;', quiet) == &
+				'[1.500000000000000E+01, 1.500000000000000E+01, 1.500000000000000E+01]', &
+			eval('let v = [10.0; 3]; v += i64(5); v;', quiet) == &
+				'[1.500000000000000E+01, 1.500000000000000E+01, 1.500000000000000E+01]', &
+			eval('let v = [10.0; 3]; v += 5.0f; v;', quiet) == &
+				'[1.500000000000000E+01, 1.500000000000000E+01, 1.500000000000000E+01]', &
+			eval('let v = [10.0; 3]; v += [1.0f, 2.0f, 3.0f]; v;', quiet) == &
+				'[1.100000000000000E+01, 1.200000000000000E+01, 1.300000000000000E+01]', &
+			abs(eval_f32('let v = [10.0f; 3]; v += 5.0; sum(v);', quiet) - 45) < tol, &
+			abs(eval_f64('let v = [10.0; 3]; v += 5.0f; sum(v);', quiet) - 45.d0) < tol, &
+
+			! -= baseline and cross-type
+			eval('let v = [10; 3]; v -= 4; v;', quiet) == '[6, 6, 6]', &
+			eval('let v = i64([10; 3]); v -= i64(4); v;', quiet) == '[6, 6, 6]', &
+			eval('let v = [10.0f; 3]; v -= 4.0f; v;', quiet) == &
+				'[6.000000E+00, 6.000000E+00, 6.000000E+00]', &
+			eval('let v = [10.0; 3]; v -= 4.0; v;', quiet) == &
+				'[6.000000000000000E+00, 6.000000000000000E+00, 6.000000000000000E+00]', &
+			eval('let v = [10; 3]; v -= i64(3); v;', quiet) == '[7, 7, 7]', &
+			eval('let v = i64([10; 3]); v -= 3.9f; v;', quiet) == '[7, 7, 7]', &
+			eval('let v = [10.0f; 3]; v -= 4.0; v;', quiet) == &
+				'[6.000000E+00, 6.000000E+00, 6.000000E+00]', &
+			eval('let v = [10.0; 3]; v -= 4.0f; v;', quiet) == &
+				'[6.000000000000000E+00, 6.000000000000000E+00, 6.000000000000000E+00]', &
+
+			! *= baseline and cross-type
+			eval('let v = [10; 3]; v *= 3; v;', quiet) == '[30, 30, 30]', &
+			eval('let v = i64([10; 3]); v *= i64(3); v;', quiet) == '[30, 30, 30]', &
+			eval('let v = [10.0f; 3]; v *= 3.0f; v;', quiet) == &
+				'[3.000000E+01, 3.000000E+01, 3.000000E+01]', &
+			eval('let v = [10.0; 3]; v *= 3.0; v;', quiet) == &
+				'[3.000000000000000E+01, 3.000000000000000E+01, 3.000000000000000E+01]', &
+			eval('let v = [10; 3]; v *= 2.5; v;', quiet) == '[20, 20, 20]', &
+			eval('let v = i64([10; 3]); v *= 2.9; v;', quiet) == '[20, 20, 20]', &
+			eval('let v = [10.0f; 3]; v *= 2.0; v;', quiet) == &
+				'[2.000000E+01, 2.000000E+01, 2.000000E+01]', &
+			eval('let v = [10.0; 3]; v *= 2.0f; v;', quiet) == &
+				'[2.000000000000000E+01, 2.000000000000000E+01, 2.000000000000000E+01]', &
+
+			! /= baseline and cross-type
+			eval('let v = [10; 3]; v /= 2; v;', quiet) == '[5, 5, 5]', &
+			eval('let v = i64([10; 3]); v /= i64(2); v;', quiet) == '[5, 5, 5]', &
+			eval('let v = [10.0f; 3]; v /= 2.0f; v;', quiet) == &
+				'[5.000000E+00, 5.000000E+00, 5.000000E+00]', &
+			eval('let v = [10.0; 3]; v /= 2.0; v;', quiet) == &
+				'[5.000000000000000E+00, 5.000000000000000E+00, 5.000000000000000E+00]', &
+			eval('let v = [10; 3]; v /= 3.0; v;', quiet) == '[3, 3, 3]', &
+			eval('let v = [10.0f; 3]; v /= 2.0; v;', quiet) == &
+				'[5.000000E+00, 5.000000E+00, 5.000000E+00]', &
+			eval('let v = [10.0; 3]; v /= 2.0f; v;', quiet) == &
+				'[5.000000000000000E+00, 5.000000000000000E+00, 5.000000000000000E+00]', &
+
+			! **= and %= baseline and cross-type
+			eval('let v = [2; 3]; v **= i64(3); v;', quiet) == '[8, 8, 8]', &
+			eval('let v = i64([2; 3]); v **= 3; v;', quiet) == '[8, 8, 8]', &
+			eval('let v = [7; 3]; v %= i64(4); v;', quiet) == '[3, 3, 3]', &
+			eval('let v = [2.0f; 3]; v **= 3.0f; v;', quiet) == &
+				'[8.000000E+00, 8.000000E+00, 8.000000E+00]', &
+			eval('let v = [2.0f; 3]; v **= 3.0; v;', quiet) == &
+				'[8.000000E+00, 8.000000E+00, 8.000000E+00]', &
+			eval('let v = [2.0; 3]; v **= 3.0f; v;', quiet) == &
+				'[8.000000000000000E+00, 8.000000000000000E+00, 8.000000000000000E+00]', &
+			eval('let v = [7.0f; 3]; v %= 4.0f; v;', quiet) == &
+				'[3.000000E+00, 3.000000E+00, 3.000000E+00]', &
+
+			! &=, |=, ^= (matching int sizes) and <<=, >>= (mixed int sizes ok)
+			eval('let v = [12; 3]; v &= 10; v;', quiet) == '[8, 8, 8]', &
+			eval('let v = [12; 3]; v |= 3; v;', quiet) == '[15, 15, 15]', &
+			eval('let v = [12; 3]; v ^= 10; v;', quiet) == '[6, 6, 6]', &
+			eval('let v = i64([12; 3]); v &= i64(10); v;', quiet) == '[8, 8, 8]', &
+			eval('let v = [1; 3]; v <<= 4; v;', quiet) == '[16, 16, 16]', &
+			eval('let v = [16; 3]; v >>= 2; v;', quiet) == '[4, 4, 4]', &
+			eval('let v = i64([1; 3]); v <<= 4; v;', quiet) == '[16, 16, 16]', &
+			eval('let v = i64([1; 3]); v <<= i64(4); v;', quiet) == '[16, 16, 16]'  &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_comp_ass_arr
+
+!===============================================================================
+
 subroutine unit_test_intr_fns(npass, nfail)
 
 	implicit none
@@ -1102,6 +1402,28 @@ subroutine unit_test_intr_fns(npass, nfail)
 			abs(eval_f64('maxval(-[3.0, 2.0, 4.0]);') - (-2.d0)) < tol, &
 			abs(eval_f32("maxval(-[3.0'f32, 2.0'f32, 4.0'f32]);") - (-2.0)) < ftol, &
 			eval_i32('min(1, 2);')  == 1,   &
+
+			! std::PI constant
+			abs(eval_f64('std::PI;') - pi) < tol, &
+			abs(eval_f64('2.0 * std::PI;') - 2.d0 * pi) < tol, &
+			abs(eval_f64('sin(std::PI);')) < tol, &
+			abs(eval_f64('cos(std::PI);') + 1.d0) < tol, &
+
+			! std::IN/OUT/ERR: standard file handle constants
+			interpret('writeln(std::OUT, "hi");') == '', &
+			interpret('writeln(std::ERR, "hi");') == '', &
+			diag_has_code(get_diags('readln(std::OUT);'),  RC_READLN_NOT_READ_MODE), &
+			diag_has_code(get_diags('writeln(std::IN, "x");'), RC_WRITELN_NOT_WRITE_MODE), &
+			diag_has_code(get_diags('std::IN = open("f", "r");'), EC_IMMUTABLE_VAR), &
+
+			! std::getenv/std::hasenv
+			eval('std::hasenv("SYNTRAN_NONEXISTENT_VAR_XYZ");') == 'false', &
+			eval('std::hasenv("PATH");') == 'true', &
+			eval('len(std::getenv("PATH")) > 0;') == 'true', &
+			diag_has_code(get_diags('std::getenv("SYNTRAN_NONEXISTENT_VAR_XYZ");'), RC_GETENV_UNSET), &
+			diag_has_code(get_diags('getenv("PATH");'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('hasenv("PATH");'), EC_STD_ONLY_FN), &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -1325,6 +1647,14 @@ subroutine unit_test_for_1(npass, nfail)
 			eval('let sum_ = 0.0f; for x in [42.0f; 5] sum_ += x; [sum_];', quiet)   == '[2.100000E+02]', &
 			eval('let sum_ = 0; for x in [42; 2, 3] sum_ += x; sum_;', quiet)   == '252', &
 			eval('let sum_ = 0; for x in [42; 2, 10, 3] sum_ += x; sum_;', quiet)   == '2520', &
+			! P6: native FOR_SETUP with dynamic bounds (size() as ubound, variable lb/ub)
+			eval('let v=[0:5]; let s=0; for i in [0:size(v,0)] s+=i; s;', quiet) == '10', &
+			eval('let v=[0:5]; let s=0; let n=size(v,0); for i in [0:n] s+=i; s;', quiet) == '10', &
+			eval('let mat=[0;3,3]; for i in [0:size(mat,0)] for j in [0:size(mat,1)] mat[i,j]=i+j; mat[2,2];', quiet) == '4', &
+			eval('let n=5; let s=0; for i in [0:2:n] s+=i; s;', quiet) == '6', &
+			! P5: native expl_array with variable elements
+			eval('let a=1; let b=2; let c=3; let v=[a,b,c]; sum(v);', quiet) == '6', &
+			eval('let a=1'//achar(39)//'i64; let b=2'//achar(39)//'i64; let v=[a,b]; v[0]+v[1];', quiet) == '3', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2883,6 +3213,11 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			eval('let s = "hello"; s[:3];',         quiet) == 'hel',                    &
 			! Multi-dim with omitted upper alongside bare colon
 			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; m[0, 1:];', quiet) == '[3, 6]',   &
+			! Rank above OP_SLICE_NAT's native buffer size (MAX_NAT_SLICE_RANK)
+			! must fall back to OP_SLICE instead of overflowing the native
+			! handler's fixed-size local lb_/ub_/lens_ buffers
+			eval('let a = [0; 2,2,2,2,2]; a[0,0,0,0,0] = 42;'// &
+				' sum(a[0:1,0:1,0:1,0:1,0:1]);', quiet) == '42', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2964,6 +3299,11 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 			! Omitted lower/upper bounds on LHS
 			eval('let v = [0: 5]; v[2:] = 9; v;',       quiet) == '[0, 1, 9, 9, 9]',   &
 			eval('let v = [0: 5]; v[:3] += 10; v;',     quiet) == '[10, 11, 12, 3, 4]', &
+			! Rank above OP_STORE_SLICE_NAT's native buffer size
+			! (MAX_NAT_SLICE_RANK) must fall back to OP_STORE_SLICE instead of
+			! overflowing the native handler's fixed-size local buffers
+			eval('let a = [0; 2,2,2,2,2];'// &
+				' a[0:1,0:1,0:1,0:1,0:1] = [7; 1,1,1,1,1]; a[0,0,0,0,0];', quiet) == '7', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -3164,6 +3504,7 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-19.syntran', quiet) == '0', &
 			interpret_file(path//'test-20.syntran', quiet) == '0', &
 			interpret_file(path//'test-21.syntran', quiet) == '0', &
+			interpret_file(path//'test-22.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -3973,6 +4314,41 @@ subroutine unit_test_struct_arr1(npass, nfail)
 				//'ls[1].s.v[1] = 19;' &
 				//'return ls[1].s.v[1];' &
 				, quiet) == '19', &
+			eval(''                         &                 ! 25
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[1,2,3,4,5]};' &
+				//'s.v[1:3] = [20, 30];' &
+				//'return s.v[1] + s.v[2];' &
+				, quiet) == '50', &
+			eval(''                         &                 ! 26
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[1,2,3,4,5]};' &
+				//'s.v[:] = [9,8,7,6,5];' &
+				//'return s.v[0] + s.v[4];' &
+				, quiet) == '14', &
+			eval(''                         &                 ! 27: step [lower:step:upper]
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[0,0,0,0,0]};' &
+				//'s.v[0:2:5] = [7,8,9];' &
+				//'return s.v[0] + s.v[2] + s.v[4];' &
+				, quiet) == '24', &
+			eval(''                         &                 ! 28: Branch A outer subscript
+				//'struct S{v:[i32;:], s:str,}' &
+				//'let ps = [S{v=[1,2,3], s="a"}, S{v=[4,5,6], s="b"}];' &
+				//'ps[1].v[0:2] = [20, 30];' &
+				//'return ps[1].v[0] + ps[1].v[1];' &
+				, quiet) == '50', &
+			eval(''                         &                 ! 29: vector subscript read on struct field
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[0:10:100]};' &
+				//'return s.v[[3,6,7]];' &
+				, quiet) == '[30, 60, 70]', &
+			eval(''                         &                 ! 30: vector subscript write on struct field
+				//'struct S{v:[i32;:],}' &
+				//'let s = S{v=[1,2,3,4,5]};' &
+				//'s.v[[0,2]] = [99,88];' &
+				//'return s.v[0] + s.v[2];' &
+				, quiet) == '187', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4482,6 +4858,8 @@ subroutine unit_test_struct_long(npass, nfail)
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
 			interpret_file(path//'test-03.syntran', quiet) == '0'   , &
+			interpret_file(path//'test-04.syntran', quiet) == '0'   , &
+			interpret_file(path//'test-methods.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4491,6 +4869,253 @@ subroutine unit_test_struct_long(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_struct_long
+
+!===============================================================================
+
+subroutine unit_test_methods(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'methods'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	! Struct with a 0-arg mutable method, a 0-arg const method, and a
+	! 1-arg-by-value method, reused across several tests below.
+	character(len = *), parameter :: CTR = &
+		'struct C{n:i32,' // &
+		'fn inc(){n+=1;}' // &
+		'const fn get():i32{return n;}' // &
+		'fn add(x:i32){n+=x;}' // &
+		'fn add_ref(x:&i32){n+=x; x+=1;}' // &
+		'}'
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+
+			! --- happy path: args by value ---
+			eval(CTR//'let c=C{n=0}; c.add(5); c.get();', quiet) == '5', &   ! 1
+			eval(CTR//'let c=C{n=3}; c.add(7); c.get();', quiet) == '10', &  ! 2
+
+			! --- happy path: arg by ref (x modified inside method) ---
+			eval(CTR//'let c=C{n=0}; let x=2; c.add_ref(&x); x;', quiet) == '3', &  ! 3
+			eval(CTR//'let c=C{n=0}; let x=2; c.add_ref(&x); c.get();', quiet) == '2', &  ! 4
+
+			! --- error: too many args ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.get(1);'), EC_BAD_ARG_COUNT), &    ! 5
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.add(1,2);'), EC_BAD_ARG_COUNT), &  ! 6
+
+			! --- error: too few args ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.add();'), EC_BAD_ARG_COUNT), &     ! 7
+
+			! --- error: wrong arg type ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; c.add(true);'), EC_BAD_ARG_TYPE), &  ! 8
+
+			! --- error: val where ref expected ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; let x=1; c.add_ref(x);'), EC_BAD_ARG_VAL), &   ! 9
+
+			! --- error: ref where val expected ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; let x=1; c.add(&x);'), EC_BAD_ARG_REF), &     ! 10
+
+			! --- error: const var passed to mutable-ref param ---
+			diag_has_code(get_diags(CTR//'let c=C{n=0}; const x=1; c.add_ref(&x);'), EC_CONST_ASSIGN), &  ! 11
+
+			! --- error: mutable method called on const instance ---
+			diag_has_code(get_diags(CTR//'const c=C{n=0}; c.inc();'), EC_CONST_ASSIGN), &   ! 12
+			diag_has_code(get_diags(CTR//'const c=C{n=0}; c.add(1);'), EC_CONST_ASSIGN), &  ! 13
+
+			! --- positive: const method on const instance is allowed ---
+			.not. diag_has_code(get_diags(CTR//'const c=C{n=5}; c.get();'), EC_CONST_ASSIGN), &  ! 14
+
+			! --- error: write to field inside const method body ---
+			diag_has_code(get_diags( &
+				'struct S{n:i32, const fn bad(){n=0;}}'), EC_CONST_ASSIGN), &  ! 15
+
+			! --- subscripted receiver: arr[i].method() ---
+			eval(CTR//'let a=[C{n=0},C{n=10}]; a[0].inc(); a[0].get();', quiet) == '1',  &  ! 16
+			eval(CTR//'let a=[C{n=0},C{n=10}]; a[1].inc(); a[1].get();', quiet) == '11', &  ! 17
+			eval(CTR//'let a=[C{n=0},C{n=10}]; a[0].inc(); a[1].get();', quiet) == '10', &  ! 18 (other element unaffected)
+			eval(CTR//'let a=[C{n=5}]; a[0].get();', quiet) == '5', &  ! 19 (const method on subscripted element)
+			diag_has_code(get_diags(CTR//'const a=[C{n=0}]; a[0].inc();'), EC_CONST_ASSIGN), &  ! 20
+			diag_has_code(get_diags( &                                                          ! 20b: const via dot chain
+				'struct I{n:i32,fn inc(){n+=1;}} struct O{i:I} const o=O{i=I{n=0}}; o.i.inc();'), &
+				EC_CONST_ASSIGN), &
+
+			! --- method at end of deep struct chain (no arrays) ---
+			eval('' &                                                                    ! 21
+				//'struct A{a:i32, const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:B}' &
+				//'let sa=A{a=42}; let sb=B{b=sa}; let sc=C{c=sb};' &
+				//'return sc.c.b.get();' &
+				, quiet) == '42', &
+			eval('' &                                                                    ! 22
+				//'struct A{a:i32, const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:B} struct D{d:C} struct E{e:D}' &
+				//'let sa=A{a=42}; let sb=B{b=sa}; let sc=C{c=sb};' &
+				//'let sd=D{d=sc}; let se=E{e=sd};' &
+				//'return se.e.d.c.b.get();' &
+				, quiet) == '42', &
+
+			! --- const method at end of chain with alternating subscripts ---
+			eval('' &                                                                    ! 23
+				//'struct A{a:[i32;:], const fn first():i32{return a[0];}}' &
+				//'struct B{b:A} struct C{c:[B;:]} struct D{d:C} struct E{e:[D;:]}' &
+				//'let sa=A{a=[42]}; let sb=B{b=sa}; let sc=C{c=[sb]};' &
+				//'let sd=D{d=sc}; let se=E{e=[sd]};' &
+				//'return se.e[0].d.c[0].b.first();' &
+				, quiet) == '42', &
+
+			! --- mutable method called deep in chain ---
+			eval('' &                                                                    ! 24
+				//'struct A{a:i32, fn inc(){a+=1;} const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:B}' &
+				//'let sa=A{a=41}; let sb=B{b=sa}; let sc=C{c=sb};' &
+				//'sc.c.b.inc();' &
+				//'return sc.c.b.get();' &
+				, quiet) == '42', &
+			eval('' &                                                                    ! 25
+				//'struct A{a:i32, fn inc(){a+=1;} const fn get():i32{return a;}}' &
+				//'struct B{b:A} struct C{c:[B;:]} struct D{d:C} struct E{e:[D;:]}' &
+				//'let sa=A{a=41}; let sb=B{b=sa}; let sc=C{c=[sb]};' &
+				//'let sd=D{d=sc}; let se=E{e=[sd]};' &
+				//'se.e[0].d.c[0].b.inc();' &
+				//'return se.e[0].d.c[0].b.get();' &
+				, quiet) == '42', &
+
+			! --- subscripted receiver inside a wrapped struct ---
+			eval('' &                                                                    ! 26
+				//'struct A{a:i32, const fn get():i32{return a;}}' &
+				//'struct B{b:[A;:]} struct C{c:B}' &
+				//'let b=B{b=[A{a=10},A{a=42}]};' &
+				//'let c=C{c=b};' &
+				//'return c.c.b[1].get();' &
+				, quiet) == '42', &
+
+			! --- struct array field slicing (my_struct.arr[lo:hi]) ---
+			eval('' &                                                                    ! 27
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30,40,50]};' &
+				//'return s.a[1:4];' &
+				, quiet) == '[20, 30, 40]', &
+			eval('' &                                                                    ! 28
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30,40,50]};' &
+				//'return s.a[:];' &
+				, quiet) == '[10, 20, 30, 40, 50]', &
+			eval('' &                                                                    ! 29
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30,40,50]};' &
+				//'return s.a[0:2:5];' &
+				, quiet) == '[10, 30, 50]', &
+			eval('' &                                                                    ! 30
+				//'struct S{a:[i32;:]}' &
+				//'let arr=[S{a=[1,2,3,4,5]},S{a=[10,20,30]}];' &
+				//'return arr[0].a[2:5];' &
+				, quiet) == '[3, 4, 5]', &
+
+			! --- struct field slice, reversed range is empty (not negative size) ---
+			eval('' &                                                             ! 30b
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[1,2,3,4,5]};' &
+				//'return size(s.a[3:1], 0);' &
+				, quiet) == '0', &
+
+			! --- struct field slice, empty index array doesn''t crash ---
+			eval('' &                                                             ! 30c
+				//'struct S{a:[i32;:]}' &
+				//'let s=S{a=[10,20,30]};' &
+				//'let ifree=[0;0];' &
+				//'return size(s.a[ifree], 0);' &
+				, quiet) == '0', &
+
+			! --- const method on fn return value ---
+			eval(CTR//'fn make(x:i32):C{return C{n=x};}' &                         ! 31
+				//'return make(5).get();' &
+				, quiet) == '5', &
+			eval(CTR//'fn make(x:i32):C{return C{n=x};}' &                         ! 32
+				//'return make(41).get() + 1;' &
+				, quiet) == '42', &
+
+			! --- mutable method on fn return value is an error ---
+			diag_has_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&       ! 33
+				//'make(5).inc();'), EC_MUTABLE_METHOD_ON_TEMP), &
+			diag_count_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&     ! 34
+				//'make(5).inc();'), EC_MUTABLE_METHOD_ON_TEMP) == 1, &
+
+			! --- error recovery: malformed arg list must not hang the parser.
+			! A dot-call on a non-struct receiver or a mutable-method-on-temp
+			! both swallow the arg list for error recovery; an unparseable
+			! token (e.g. an unmatched `}`) inside that list must not stall
+			! the recovery loop forever.  If these regress to an infinite
+			! loop, this test (and the whole suite) hangs rather than fails. ---
+			diag_has_code(get_diags('let x=1; x.foo(});'), EC_NON_STRUCT_DOT), &    ! 34b
+			diag_has_code(get_diags('let x=1; x.foo(});'), EC_UNEXPECTED_TOKEN), &  ! 34c
+			diag_has_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&        ! 34d
+				//'make(5).inc(});'), EC_MUTABLE_METHOD_ON_TEMP), &
+			diag_has_code(get_diags(CTR//'fn make(x:i32):C{return C{n=x};}'&        ! 34e
+				//'make(5).inc(});'), EC_UNEXPECTED_TOKEN), &
+
+			! --- subscript/slice on fn return value ---
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[2];' &        ! 35
+				, quiet) == '30', &
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[1:4];' &      ! 36
+				, quiet) == '[20, 30, 40]', &
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[:];' &        ! 37
+				, quiet) == '[10, 20, 30, 40, 50]', &
+			eval('fn f():[i32;:]{return [10,20,30,40,50];} return f()[0:2:5];' &    ! 38
+				, quiet) == '[10, 30, 50]', &
+
+			! --- field access directly on fn return value ---
+			eval('struct S{n:i32} fn make(x:i32):S{return S{n=x};}' &             ! 39
+				//'return make(42).n;' &
+				, quiet) == '42', &
+
+			! --- subscript fn return array of structs, then const method ---
+			eval(CTR//'fn make_arr():[C;:]{return [C{n=5},C{n=42}];}' &            ! 40
+				//'return make_arr()[1].get();' &
+				, quiet) == '42', &
+
+			! --- fn return + field chain + const method ---
+			eval(CTR//'struct W{c:C} fn make_w(x:i32):W{return W{c=C{n=x}};}' &   ! 41
+				//'return make_w(42).c.get();' &
+				, quiet) == '42', &
+
+			! --- field access on method return value (method().field) ---
+			eval('' &                                                               ! 42
+				//'struct S{n:i32}' &
+				//'struct W{s:S, const fn inner():S{return s;}}' &
+				//'let w=W{s=S{n=42}};' &
+				//'return w.inner().n;' &
+				, quiet) == '42', &
+
+			! --- chained const method calls (method1().method2()) ---
+			eval(CTR//'struct W{c:C, const fn get_c():C{return c;}}' &             ! 43
+				//'let w=W{c=C{n=42}};' &
+				//'return w.get_c().get();' &
+				, quiet) == '42', &
+
+			! --- mutable method on method return is an error ---
+			diag_has_code(get_diags(CTR &                                          ! 44
+				//'struct W{c:C, const fn get_c():C{return c;}}' &
+				//'let w=W{c=C{n=1}};' &
+				//'w.get_c().inc();'), EC_MUTABLE_METHOD_ON_TEMP), &
+
+			.false. &
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_methods
 
 !===============================================================================
 
@@ -4666,6 +5291,11 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-alias-std-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-alias-with-glob.syntran', quiet) == '', &
 			interpret_file(path//'test-alias-hyphen.syntran', quiet) == '', &
+			interpret_file(path//'test-bad-expr-import.syntran', quiet) == '', &
+			diag_has_code(get_diags_file(path//'test-bad-expr-import.syntran'), &
+				EC_BAD_EXPR), &
+			diag_loc_ok(get_diags_file(path//'test-bad-expr-import.syntran'), &
+				EC_BAD_EXPR, path//'bad_expr_mod.syntran', 10, 1, 6), &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4675,6 +5305,41 @@ subroutine unit_test_modules(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_modules
+
+!===============================================================================
+
+subroutine unit_test_dict(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'dict scripts'
+
+	character(len = *), parameter :: path = 'src/tests/test-src/dict/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-04.syntran', quiet) == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_dict
 
 !===============================================================================
 
@@ -4990,6 +5655,722 @@ end subroutine unit_test_return_paths
 
 !===============================================================================
 
+subroutine unit_test_error_codes(npass, nfail)
+
+	! Tests for the error-code registry in errors.f90 (rust-`error[E0631]`
+	! style codes).  Checks:
+	!   1. every registered code is unique
+	!   2. every code matches the `[ERIW][0-9]+` format (no zero-padding)
+	!   3. every reachable compile-time EC_* code surfaces via a bad program
+	!      through the `diags` out-arg of eval()/interpret_file()
+	!   4. a sample of internal/warning constructors that aren't reachable
+	!      from a one-line bad program emit their code directly
+	!
+	! IC_*/WC_* (internal, warning) codes are out of scope for section 3 --
+	! only a few representative IC_*/WC_* spot checks remain in section 4.
+	!
+	! RC_* (runtime) codes are no longer out of scope: most are reachable
+	! end-to-end and are tested in unit_test_runtime_errors() below, which
+	! checks them under both the bytecode VM and the AST walker since R* call
+	! sites are duplicated per-backend
+	!
+	! EC_BAD_ARG_RANK (E47) is formally retired (see errors.f90) and is
+	! intentionally excluded from section 3 -- its constructor was deleted, so
+	! it can never be reached by any program
+	!
+	! EC_INC_READ (E67) and EC_MOD_READ (E69) are also excluded from section 3
+	! here.  Reaching them end-to-end requires a path that exists but cannot
+	! be read (e.g. a directory passed to #include()/use), but open()/read()
+	! error behavior on such paths varies across compiler runtimes (gfortran
+	! errors immediately; ifx has been observed to silently succeed with empty
+	! content).  They are instead tested end-to-end in
+	! unit_test_dir_unreadable_errors() below, which only runs under gfortran
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'error codes'
+
+	! Dummy source path used only so module/include resolution (which derives
+	! a search dir from src_file) and EC_BAD_EXPR (which requires non-REPL
+	! mode) work.  The file itself need not exist
+	character(len = *), parameter :: MODSRC = &
+		'src/tests/test-src/modules/_diag.syntran'
+
+	logical, allocatable :: tests(:)
+
+	type(string_vector_t) :: codes
+
+	character(len = :), allocatable :: c
+
+	integer :: i, num, bucket, maxnum, io
+
+	logical :: unique, fmt_ok
+
+	logical, allocatable :: seen(:,:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	codes = get_all_error_codes()
+
+	! 2. format: one of E/R/I/W followed by 1+ digits, no leading zero.
+	! Checked before uniqueness (1.) below, since that check depends on
+	! every code matching this shape
+	fmt_ok = .true.
+	do i = 1, codes%len_
+		c = codes%v(i)%s
+		if (len(c) < 2) then
+			fmt_ok = .false.
+			cycle
+		end if
+		if (.not. any(c(1:1) == ['E', 'R', 'I', 'W'])) fmt_ok = .false.
+		if (verify(c(2:), '0123456789') /= 0) fmt_ok = .false.
+		if (c(2:2) == '0') fmt_ok = .false.  ! no leading zero / zero-padding
+	end do
+
+	! 1. uniqueness, O(n): every well-formed code is a unique (letter bucket,
+	! integer) pair, so direct-address a "seen" table instead of comparing
+	! all O(n^2) pairs.  Malformed codes are skipped here; fmt_ok above
+	! already flags those
+	maxnum = 0
+	do i = 1, codes%len_
+		c = codes%v(i)%s
+		if (len(c) < 2) cycle
+		read(c(2:), *, iostat = io) num
+		if (io == 0) maxnum = max(maxnum, num)
+	end do
+
+	allocate(seen(4, 0:maxnum))
+	seen = .false.
+	unique = .true.
+	do i = 1, codes%len_
+		c = codes%v(i)%s
+		if (len(c) < 2) cycle
+		bucket = index('ERIW', c(1:1))  ! 1..4, or 0 if malformed
+		read(c(2:), *, iostat = io) num
+		if (bucket == 0 .or. io /= 0) cycle  ! malformed; fmt_ok already flagged it
+		if (seen(bucket, num)) unique = .false.
+		seen(bucket, num) = .true.
+	end do
+
+	tests = &
+		[   &
+			unique, &
+			fmt_ok, &
+
+			! 3. end-to-end emission via diags.  One snippet per reachable
+			! EC_* code, roughly in EC_* declaration order
+			diag_has_code(get_diags("123456789123456789'i32;"), EC_BAD_I32), &
+			diag_has_code(get_diags('99999999999999999999999999;'), EC_BAD_I64), &
+			diag_has_code(get_diags("0xFFFFFFFFF'i32;"), EC_BAD_HEX32), &
+			diag_has_code(get_diags('0xFFFFFFFFFFFFFFFFF;'), EC_BAD_HEX64), &
+			diag_has_code(get_diags("0o77777777777'i32;"), EC_BAD_OCT32), &
+			diag_has_code(get_diags('0o7777777777777777777777;'), EC_BAD_OCT64), &
+			diag_has_code(get_diags( &
+				"0b100000000000000000000000000000000'i32;"), EC_BAD_BIN32), &
+			diag_has_code(get_diags( &
+				'0b10000000000000000000000000000000000000000000000000000000000000001;'), &
+				EC_BAD_BIN64), &
+			diag_has_code(get_diags('1 + 1;', MODSRC), EC_BAD_EXPR), &
+			diag_has_code(get_diags('"abc;'), EC_UNTERMINATED_STR), &
+			diag_has_code(get_diags('r"abc;'), EC_UNTERMINATED_RAW_STR), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let a = [S{x=1}, S{x=2}, S{x=3}]; let b = a[0:2];'), &
+				EC_ARRAY_STRUCT_SLICE), &
+			! These cases are parsed speculatively (e.g. as a possible
+			! assignment LHS) and then rewound/re-parsed as a plain expr if
+			! that guess is wrong.  Check that the diagnostic isn't pushed
+			! twice (once per parse attempt)
+			diag_count_code(get_diags( &
+				'struct S{x:i32} let a = [S{x=1}, S{x=2}, S{x=3}]; let b = a[0:2];'), &
+				EC_ARRAY_STRUCT_SLICE) == 1, &
+			diag_has_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT), &
+			diag_count_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT) == 1, &
+			diag_has_code(get_diags('fn f(x: nope): i32 { return 1; }'), EC_BAD_TYPE), &
+			diag_has_code(get_diags("1'foo;"), EC_BAD_TYPE_SUFFIX), &
+			diag_has_code(get_diags('$;'), EC_UNEXPECTED_CHAR), &
+			diag_has_code(get_diags('let a = ;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags( &
+				'fn f() { let x = 1; } let a = f();'), EC_VOID_ASSIGN), &
+			! Void fns have nothing to return, so they must not also trigger
+			! EC_NO_RETURN alongside EC_VOID_ASSIGN above
+			.not. diag_has_code(get_diags( &
+				'fn f() { let x = 1; } let a = f();'), EC_NO_RETURN), &
+			diag_has_code(get_diags('let a = 1; let a = 2;'), EC_REDECLARE_VAR), &
+			diag_has_code(get_diags('struct S{x:i32, x:i32}'), EC_REDECLARE_MEM), &
+			diag_has_code(get_diags( &
+				'fn f():i32{return 1;} fn f():i32{return 2;}'), EC_REDECLARE_FN), &
+			diag_has_code(get_diags('fn min():i32{return 1;}'), EC_REDECLARE_INTR_FN), &
+			diag_has_code(get_diags('struct S{x:i32} struct S{y:i32}'), EC_REDECLARE_STRUCT), &
+			diag_has_code(get_diags('struct i32{x:i32}'), EC_REDECLARE_PRIMITIVE), &
+			diag_has_code(get_diags('let a = b;'), EC_UNDECLARE_VAR), &
+			diag_has_code(get_diags('nope();'), EC_UNDECLARE_FN), &
+			diag_count_code(get_diags('nope();'), EC_UNDECLARE_FN) == 1, &
+			! Cascading E9 from E29: println() and subsequent calls after an undefined
+			! function should not generate spurious "bad expression" errors
+			diag_count_code(get_diags( &
+				'let x = nope(); println(x);'), EC_BAD_EXPR) == 0, &
+			diag_count_code(get_diags( &
+				'let x = nope(); println(x);'), EC_UNDECLARE_FN) == 1, &
+			! Calling a method on the (unknown_type) result of an unresolved
+			! qualified fn call, e.g. a struct-module `new()` from a module
+			! that was never `use`d, must not desync the parser into a
+			! cascade of "unexpected token" errors from the trailing arg
+			! list.  Only the single undeclared-fn error should appear, and
+			! it should hint that the module may not be imported
+			diag_has_code(get_diags( &
+				'let d = nomod::new(); d.set(1);'), EC_UNDECLARE_FN), &
+			diag_count_code(get_diags( &
+				'let d = nomod::new(); d.set(1);'), EC_UNEXPECTED_TOKEN) == 0, &
+			! The module name itself is color-highlighted (ANSI codes sit
+			! between the surrounding backticks), so check the literal parts
+			! on either side rather than the whole phrase as one substring
+			diag_has_text(get_diags( &
+				'let d = nomod::new(); d.set(1);'), &
+				'did you `use` module `'), &
+			diag_has_text(get_diags( &
+				'let d = nomod::new(); d.set(1);'), &
+				'`?'), &
+			! Same cascade-prevention check for the plain non-struct-dot case
+			! (receiver type is known, not unknown_type, so this hits the
+			! err_non_struct_dot branch instead, but must still swallow the
+			! call's argument list)
+			diag_has_code(get_diags('let x = 3; x.foo(1);'), EC_NON_STRUCT_DOT), &
+			diag_count_code(get_diags( &
+				'let x = 3; x.foo(1);'), EC_UNEXPECTED_TOKEN) == 0, &
+			diag_has_code(get_diags( &
+				'let a = reshape([1,2,3,4], [2,2]);'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('fn f(): i32 { let x = 1; }'), EC_NO_RETURN), &
+			diag_has_code(get_diags( &
+				'fn f(b:bool): i32 { if b {return 1;} }'), EC_MISSING_RETURN), &
+			diag_has_code(get_diags('let a = abs(1, 2);'), EC_BAD_ARG_COUNT), &
+			diag_has_code(get_diags('let a = min(1);'), EC_TOO_FEW_ARGS), &
+			diag_has_code(get_diags( &
+				'let a=[1,2]; let b = size(a, 0, 1);'), EC_TOO_MANY_ARGS), &
+			diag_has_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT), &
+			diag_count_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT) == 1, &
+			diag_has_code(get_diags( &
+				'let a=[1,2,3,4,5,6,7,8,9]; let idx=[0;2,2]; let b = a[idx];'), &
+				EC_BAD_SUB_RANK), &
+			diag_count_code(get_diags( &
+				'let a=[1,2,3,4,5,6,7,8,9]; let idx=[0;2,2]; let b = a[idx];'), &
+				EC_BAD_SUB_RANK) == 1, &
+			diag_has_code(get_diags('let a=[0,1,2,3,4]; let b = a[::1];'), EC_EMPTY_STEP), &
+			diag_count_code(get_diags('let a=[0,1,2,3,4]; let b = a[::1];'), EC_EMPTY_STEP) == 1, &
+			diag_has_code(get_diags('let a = 5; let b = a[0];'), EC_SCALAR_SUBSCRIPT), &
+			diag_count_code(get_diags('let a = 5; let b = a[0];'), EC_SCALAR_SUBSCRIPT) == 1, &
+			diag_has_code(get_diags( &
+				'let a = [1,2; 2,2]; let c = [a, a];'), EC_BAD_CAT_RANK), &
+			diag_has_code(get_diags('fn f(): i32 { return 1.0; }'), EC_BAD_RET_TYPE), &
+			diag_has_code(get_diags( &
+				'fn f(x: i32): i32 { return x; } let a = f(1.0);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('fn f(x: &i32) {} f(1);'), EC_BAD_ARG_VAL), &
+			diag_has_code(get_diags( &
+				'fn f(x: i32) {} let a=1; f(&a);'), EC_BAD_ARG_REF), &
+			diag_has_code(get_diags('fn f(x: &i32){} f(&(1+1));'), EC_NON_NAME_REF), &
+			diag_has_code(get_diags( &
+				'fn f(x: &i32){} let a=[1,2]; f(&a[0]);'), EC_SUB_REF), &
+			! EC_BAD_ARG_RANK (E47) excluded -- dead code, see note above
+			diag_has_code(get_diags('true + 4;'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags( &
+				'let a = [1,2; 2,2]; let b = [3,4]; let c = a + b;'), EC_BINARY_RANKS), &
+			diag_has_code(get_diags('-true;'), EC_UNARY_TYPES), &
+			diag_has_code(get_diags('for i in 5 {}'), EC_NON_ARRAY_LOOP), &
+			diag_has_code(get_diags('if 5 {}'), EC_NON_BOOL_CONDITION), &
+			diag_has_code(get_diags('let a = [0: 1.0; 5];'), EC_NON_FLOAT_LEN_RANGE), &
+			diag_has_code(get_diags('let a = [0.0: 1.0; "x"];'), EC_NON_INT_LEN), &
+			diag_has_code(get_diags('let a = [0: 1.0; 5];'), EC_BOUND_TYPE_MISMATCH), &
+			diag_has_code(get_diags('let a = ["a": "z"];'), EC_NON_NUM_RANGE), &
+			diag_has_code(get_diags('let b=[1,2,3]; let a = [b; 5];'), EC_NON_SCA_VAL), &
+			diag_has_code(get_diags('let a = [1.0: 5.0];'), EC_NON_INT_RANGE), &
+			diag_has_code(get_diags('let a = [1, "a"];'), EC_HET_ARRAY), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32, y:i32} let s = S{x=1, x=2};'), EC_UNSET_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32, y:i32} let s = S{x=1, x=2};'), EC_RESET_MEMBER), &
+			diag_has_code(get_diags('let a = 5; let b = a.x;'), EC_NON_STRUCT_DOT), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME), &
+			diag_count_code(get_diags( &
+				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME) == 1, &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let s=S{z=1};'), EC_BAD_MEMBER_NAME_SHORT), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let s=S{x=1.0};'), EC_BAD_MEMBER_TYPE), &
+			diag_has_code(get_diags( &
+				'#include("does_not_exist_xyz.syntran");'), EC_INC_404), &
+			! EC_INC_READ (E67) excluded -- see note above, tested in
+			! unit_test_dir_unreadable_errors() instead
+			diag_has_code(get_diags('use no_such_module_xyz;', MODSRC), EC_MOD_404), &
+			! EC_MOD_READ (E69) excluded -- see note above, tested in
+			! unit_test_dir_unreadable_errors() instead
+			diag_has_code(get_diags('use circular_a;', MODSRC), EC_CIRCULAR_IMPORT), &
+			diag_has_code(get_diags( &
+				'use mymath; use mymath;', MODSRC), EC_DUPLICATE_IMPORT), &
+			diag_has_code(get_diags('use foo-bar;', MODSRC), EC_MOD_HYPHEN), &
+			diag_has_code(get_diags('use let;', MODSRC), EC_MOD_KEYWORD), &
+			diag_has_code(get_diags('use std;', MODSRC), EC_MOD_RESERVED_STD), &
+			diag_has_code(get_diags('use foo bar;', MODSRC), EC_MOD_SPACE), &
+			diag_has_code(get_diags('use foo as let;', MODSRC), EC_ALIAS_KEYWORD), &
+			diag_has_code(get_diags('use foo as std;', MODSRC), EC_ALIAS_RESERVED_STD), &
+			diag_has_code(get_diags('use foo as ba-r;', MODSRC), EC_ALIAS_HYPHEN), &
+			diag_has_code(get_diags('use foo as a b;', MODSRC), EC_ALIAS_SPACE), &
+			diag_has_code(get_diags( &
+				'use foo as bar::*;', MODSRC), EC_ALIAS_WITH_DOUBLECOLON), &
+			diag_has_code(get_diags_file('does_not_exist_xyz_404.syntran'), EC_404), &
+			diag_has_code(get_diags('std::PI = 3.0;'), EC_IMMUTABLE_VAR), &
+			diag_has_code(get_diags('const N = 10; N = 20;'), EC_CONST_ASSIGN), &
+			diag_has_code(get_diags('const N = 10; N += 5;'), EC_CONST_ASSIGN), &
+			diag_has_code(get_diags('const A = [1, 2, 3]; A[0] = 5;'), EC_CONST_ASSIGN), &
+			! passing const to mutable ref param
+			diag_has_code(get_diags('fn f(x: &i32) { x = 0; } const N = 10; f(&N);'), EC_CONST_ASSIGN), &
+			! &const param: assigning inside fn body is blocked
+			diag_has_code(get_diags('fn f(x: &const i32) { x = 0; }'), EC_CONST_ASSIGN), &
+			! positive: const read is fine, no E83
+			.not. diag_has_code(get_diags('const N = 10; N + 1;'), EC_CONST_ASSIGN), &
+			! positive: passing const to &const param is allowed
+			.not. diag_has_code(get_diags('fn f(x: &const i32) {} const N = 10; f(&N);'), EC_CONST_ASSIGN), &
+			! const flag must survive module import
+			diag_has_code(get_diags('use const_mod; const_mod::CVAL = 0;', MODSRC), EC_CONST_ASSIGN), &
+
+			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
+			! is no longer spot-checked here since it's tested end-to-end (under
+			! both backends) in unit_test_runtime_errors() below
+			index(err_eval_node('some_node_kind'), '['//IC_EVAL_NODE//']') > 0, &
+			index(warn_pre(WC_MISSING_RETURN), '['//WC_MISSING_RETURN//']') > 0 &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_error_codes
+
+!===============================================================================
+
+subroutine unit_test_runtime_errors(npass, nfail)
+
+	! Tests for reachable runtime (R*) errors, mirroring unit_test_error_codes()
+	! above but for errors raised during evaluation instead of parsing.
+	!
+	! Runtime errors are duplicated per-backend (eval_*.f90 for the AST walker,
+	! vm_*.f90 for the bytecode VM), each halting evaluation via state%rt_halt
+	! instead of exiting the process (see rt_throw() in eval.f90).  Every row
+	! below uses rt_code_both_file(), which checks that a reproduction file
+	! under src/tests/test-src/errors/ (also linked as an example from
+	! doc/errors.md) raises [code] under BOTH backends, since the two
+	! implementations could in principle drift apart.
+	!
+	! Unlike compile-time E* diagnostics, R* diagnostics carry no
+	! caret/location context (err_rt() has no span to underline), so there's
+	! no analogue of diag_loc_ok() here.  Instead, the formatting check below
+	! confirms every R* message goes through the shared err_rt()/err_rt_pre()
+	! prefix helper.
+	!
+	! R23-R27 (step-is-0 family for `for` loops, range/array literals, and
+	! slice subscripts) used to crash the process via internal IC_* codes in
+	! the AST walker, even though a zero step is reachable from ordinary
+	! syntran code whenever the step is a runtime value rather than a parsed
+	! literal.  They are now caught via rt_throw()/err_rt() like every other
+	! R* code; see the retirement note for IC_FOR_STEP_ZERO/_F,
+	! IC_ARRAY_STEP_ZERO/_F, and IC_SUBSCRIPT_STEP_ZERO in errors.f90.
+	!
+	! Excluded from this end-to-end coverage:
+	!   - RC_TRANSPOSE_RANK (R18): std::transpose()'s parameter is statically
+	!     declared rank-2, and every attempt to construct a value that's
+	!     dynamically rank-1 but passes that static check was rejected by the
+	!     parser at compile time instead (e.g. EC_BAD_ARG_TYPE) -- confirmed by
+	!     trying std::reshape() (whose result rank is unknown at parse time
+	!     unless the shape argument is a literal) as the source of
+	!     std::transpose()'s argument; unreachable from valid syntran code
+	!   - RC_ARRAY_SIZE_MISMATCH (R21) and RC_BAD_SUBSCRIPT_KIND (R20):
+	!     defensive checks for subscript/size-array shapes that the parser is
+	!     already expected to rule out; no valid-syntax repro found
+	!   - RC_STRUCT_ARRAY_SLICE (R22): struct array slicing now works for
+	!     my_struct.field[lo:hi]; site A (arr_of_structs[lo:hi].field) still
+	!     throws but is not yet covered here
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'runtime errors'
+
+	! Reproduction files live alongside the E* fixtures already used by
+	! unit_test_error_codes()/unit_test_error_locations() (dir_mod.syntran/,
+	! etc.)
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Formatting: every err_rt() message carries the shared
+			! "Runtime error[R#]: " prefix from err_rt_pre()
+			index(err_rt(RC_MATMUL_DIM, 'x'), err_rt_pre(RC_MATMUL_DIM)) == 1, &
+
+			! R1: matmul `@` dimension mismatch
+			rt_code_both_file(P//'R1-matmul-dim.syntran', RC_MATMUL_DIM), &
+			! Guard against double-emission (one throw, not one per backend
+			! re-check or speculative re-evaluation)
+			diag_count_code(get_diags_file( &
+				P//'R1-matmul-dim.syntran', bytecode = .true.), &
+				RC_MATMUL_DIM) == 1, &
+			diag_count_code(get_diags_file( &
+				P//'R1-matmul-dim.syntran', bytecode = .false.), &
+				RC_MATMUL_DIM) == 1, &
+
+			! R2-R5: parse_i32/i64/f32/f64 on unparseable text
+			rt_code_both_file(P//'R2-parse-i32.syntran', RC_PARSE_I32), &
+			rt_code_both_file(P//'R3-parse-i64.syntran', RC_PARSE_I64), &
+			rt_code_both_file(P//'R4-parse-f32.syntran', RC_PARSE_F32), &
+			rt_code_both_file(P//'R5-parse-f64.syntran', RC_PARSE_F64), &
+
+			! R6-R7: open() with a bad/conflicting mode string.  These don't
+			! need a real file on disk -- the mode is rejected before the
+			! underlying Fortran open() call
+			rt_code_both_file(P//'R6-bad-file-mode.syntran', RC_BAD_FILE_MODE), &
+			rt_code_both_file(P//'R7-file-rw-mode.syntran', RC_FILE_RW_MODE), &
+
+			! R8: open() on a path that doesn't exist
+			rt_code_both_file(P//'R8-open-file.syntran', RC_OPEN_FILE), &
+
+			! R9-R16: readln()/writeln()/eof()/close() misuse.  Each
+			! reproduction file is self-contained: it opens/writes/closes its
+			! own scratch file under build/ (created by the build system) so
+			! no external test fixture is needed
+			rt_code_both_file( &
+				P//'R9-readln-not-open.syntran', RC_READLN_NOT_OPEN), &
+			rt_code_both_file( &
+				P//'R10-readln-not-read-mode.syntran', RC_READLN_NOT_READ_MODE), &
+			rt_code_both_file( &
+				P//'R11-readln-fail.syntran', RC_READLN_FAIL), &
+			rt_code_both_file( &
+				P//'R12-writeln-not-open.syntran', RC_WRITELN_NOT_OPEN), &
+			rt_code_both_file( &
+				P//'R13-writeln-not-write-mode.syntran', RC_WRITELN_NOT_WRITE_MODE), &
+			rt_code_both_file( &
+				P//'R14-eof-not-open.syntran', RC_EOF_NOT_OPEN), &
+			rt_code_both_file( &
+				P//'R15-eof-not-read-mode.syntran', RC_EOF_NOT_READ_MODE), &
+			rt_code_both_file( &
+				P//'R16-close-not-open.syntran', RC_CLOSE_NOT_OPEN), &
+
+			! R17: size() dim argument out of range
+			rt_code_both_file(P//'R17-size-rank-mismatch.syntran', RC_SIZE_RANK_MISMATCH), &
+
+			! R19: std::reshape() new shape doesn't match element count
+			rt_code_both_file(P//'R19-reshape-mismatch.syntran', RC_RESHAPE_MISMATCH), &
+
+			! R23-R27: step-is-0 family (for loop, range/array literal, slice
+			! subscript), each for both an integer and float variant where
+			! applicable
+			rt_code_both_file(P//'R23-for-step-zero.syntran', RC_FOR_STEP_ZERO), &
+			rt_code_both_file(P//'R24-for-step-zero-f.syntran', RC_FOR_STEP_ZERO_F), &
+			rt_code_both_file(P//'R25-array-step-zero.syntran', RC_ARRAY_STEP_ZERO), &
+			rt_code_both_file( &
+				P//'R26-array-step-zero-f.syntran', RC_ARRAY_STEP_ZERO_F), &
+			rt_code_both_file( &
+				P//'R27-subscript-step-zero.syntran', RC_SUBSCRIPT_STEP_ZERO), &
+
+			! R28: close() on std::IN/OUT/ERR is forbidden
+			rt_code_both_file( &
+				P//'R28-close-standard.syntran', RC_CLOSE_STANDARD) &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_runtime_errors
+
+!===============================================================================
+
+subroutine unit_test_error_locations(npass, nfail)
+
+	! Companion to unit_test_error_codes() above.  That test only confirms the
+	! right EC_* code surfaces for each reachable parse-time error; this test
+	! confirms the rest of the diagnostic -- the reported filename, line,
+	! column, and "^^^" underline span (caret position AND length) -- is
+	! also correct.
+	!
+	! Each row reproduces one error from its own .syntran file under
+	! src/tests/test-src/errors/ (also linked as an example from
+	! doc/errors.md), placed on a non-trivial line/column so the line/col
+	! arithmetic is actually exercised -- if every example lived on line 1,
+	! this test would not be meaningful.  Expected (line, col, ncaret) values
+	! were captured empirically by running the built interpreter on each file
+	! and reading its rendered diagnostic, then spot-checked by eye.
+	!
+	! Most examples report their own location, but E70 (circular-import) is
+	! detected while parsing the imported module that closes the cycle, so
+	! its location is inside circular_b.syntran instead of the entry file --
+	! see the comment at that row below.
+	!
+	! EC_BAD_ARG_RANK (E47, retired) and EC_404 (E81, no source span) are
+	! excluded, same as in unit_test_error_codes()
+	!
+	! EC_INC_READ (E67) and EC_MOD_READ (E69) are also excluded here, same as
+	! in unit_test_error_codes() -- their reproduction files use a directory
+	! in place of a file, and open()/read() error behavior on a directory is
+	! not portable across compiler runtimes.  They are instead tested in
+	! unit_test_dir_unreadable_errors() below, which only runs under gfortran
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'error locations'
+
+	! Reproduction files live alongside the module/include fixtures already
+	! used by unit_test_error_codes() (dir_mod.syntran/, etc.)
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			diag_loc_ok(get_diags_file(P//'E1-bad-i32.syntran'), &
+				EC_BAD_I32, P//'E1-bad-i32.syntran', 7, 11, 18), &
+			diag_loc_ok(get_diags_file(P//'E2-bad-i64.syntran'), &
+				EC_BAD_I64, P//'E2-bad-i64.syntran', 10, 12, 26), &
+			diag_loc_ok(get_diags_file(P//'E3-bad-hex32.syntran'), &
+				EC_BAD_HEX32, P//'E3-bad-hex32.syntran', 8, 9, 11), &
+			diag_loc_ok(get_diags_file(P//'E4-bad-hex64.syntran'), &
+				EC_BAD_HEX64, P//'E4-bad-hex64.syntran', 9, 9, 19), &
+			diag_loc_ok(get_diags_file(P//'E5-bad-oct32.syntran'), &
+				EC_BAD_OCT32, P//'E5-bad-oct32.syntran', 6, 9, 13), &
+			diag_loc_ok(get_diags_file(P//'E6-bad-oct64.syntran'), &
+				EC_BAD_OCT64, P//'E6-bad-oct64.syntran', 10, 9, 24), &
+			diag_loc_ok(get_diags_file(P//'E7-bad-bin32.syntran'), &
+				EC_BAD_BIN32, P//'E7-bad-bin32.syntran', 7, 10, 35), &
+			diag_loc_ok(get_diags_file(P//'E8-bad-bin64.syntran'), &
+				EC_BAD_BIN64, P//'E8-bad-bin64.syntran', 10, 10, 67), &
+			diag_loc_ok(get_diags_file(P//'E9-bad-expr.syntran'), &
+				EC_BAD_EXPR, P//'E9-bad-expr.syntran', 7, 1, 6), &
+			diag_loc_ok(get_diags_file(P//'E10-unterminated-str.syntran'), &
+				EC_UNTERMINATED_STR, P//'E10-unterminated-str.syntran', 8, 9, 25), &
+			diag_loc_ok(get_diags_file(P//'E11-unterminated-raw-str.syntran'), &
+				EC_UNTERMINATED_RAW_STR, P//'E11-unterminated-raw-str.syntran', 8, 9, 30), &
+			diag_loc_ok(get_diags_file(P//'E12-array-struct-slice.syntran'), &
+				EC_ARRAY_STRUCT_SLICE, P//'E12-array-struct-slice.syntran', 10, 16, 5), &
+			diag_count_code(get_diags_file(P//'E12-array-struct-slice.syntran'), &
+				EC_ARRAY_STRUCT_SLICE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E14-non-int-subscript.syntran'), &
+				EC_NON_INT_SUBSCRIPT, P//'E14-non-int-subscript.syntran', 5, 11, 3), &
+			diag_count_code(get_diags_file(P//'E14-non-int-subscript.syntran'), &
+				EC_NON_INT_SUBSCRIPT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E15-bad-f32.syntran'), &
+				EC_BAD_F32, P//'E15-bad-f32.syntran', 7, 9, 11), &
+			diag_loc_ok(get_diags_file(P//'E16-bad-f64.syntran'), &
+				EC_BAD_F64, P//'E16-bad-f64.syntran', 10, 9, 11), &
+			diag_loc_ok(get_diags_file(P//'E17-bad-type.syntran'), &
+				EC_BAD_TYPE, P//'E17-bad-type.syntran', 4, 9, 4), &
+			diag_loc_ok(get_diags_file(P//'E18-bad-type-suffix.syntran'), &
+				EC_BAD_TYPE_SUFFIX, P//'E18-bad-type-suffix.syntran', 8, 11, 3), &
+			diag_loc_ok(get_diags_file(P//'E19-unexpected-char.syntran'), &
+				EC_UNEXPECTED_CHAR, P//'E19-unexpected-char.syntran', 7, 1, 1), &
+			diag_loc_ok(get_diags_file(P//'E20-unexpected-token.syntran'), &
+				EC_UNEXPECTED_TOKEN, P//'E20-unexpected-token.syntran', 6, 9, 1), &
+			diag_loc_ok(get_diags_file(P//'E21-void-assign.syntran'), &
+				EC_VOID_ASSIGN, P//'E21-void-assign.syntran', 9, 1, 11), &
+			diag_loc_ok(get_diags_file(P//'E22-redeclare-var.syntran'), &
+				EC_REDECLARE_VAR, P//'E22-redeclare-var.syntran', 6, 5, 1), &
+			diag_loc_ok(get_diags_file(P//'E23-redeclare-mem.syntran'), &
+				EC_REDECLARE_MEM, P//'E23-redeclare-mem.syntran', 7, 2, 7), &
+			diag_loc_ok(get_diags_file(P//'E24-redeclare-fn.syntran'), &
+				EC_REDECLARE_FN, P//'E24-redeclare-fn.syntran', 9, 4, 1), &
+			diag_loc_ok(get_diags_file(P//'E25-redeclare-intr-fn.syntran'), &
+				EC_REDECLARE_INTR_FN, P//'E25-redeclare-intr-fn.syntran', 4, 4, 3), &
+			diag_loc_ok(get_diags_file(P//'E26-redeclare-struct.syntran'), &
+				EC_REDECLARE_STRUCT, P//'E26-redeclare-struct.syntran', 9, 8, 1), &
+			diag_loc_ok(get_diags_file(P//'E27-redeclare-primitive.syntran'), &
+				EC_REDECLARE_PRIMITIVE, P//'E27-redeclare-primitive.syntran', 4, 8, 3), &
+			diag_loc_ok(get_diags_file(P//'E28-undeclare-var.syntran'), &
+				EC_UNDECLARE_VAR, P//'E28-undeclare-var.syntran', 6, 9, 15), &
+			diag_loc_ok(get_diags_file(P//'E29-undeclare-fn.syntran'), &
+				EC_UNDECLARE_FN, P//'E29-undeclare-fn.syntran', 6, 1, 14), &
+			diag_loc_ok(get_diags_file(P//'E30-std-only-fn.syntran'), &
+				EC_STD_ONLY_FN, P//'E30-std-only-fn.syntran', 4, 9, 7), &
+			diag_loc_ok(get_diags_file(P//'E31-no-return.syntran'), &
+				EC_NO_RETURN, P//'E31-no-return.syntran', 4, 1, 4), &
+			diag_loc_ok(get_diags_file(P//'E32-missing-return.syntran'), &
+				EC_MISSING_RETURN, P//'E32-missing-return.syntran', 4, 1, 4), &
+			diag_loc_ok(get_diags_file(P//'E33-bad-arg-count.syntran'), &
+				EC_BAD_ARG_COUNT, P//'E33-bad-arg-count.syntran', 5, 12, 6), &
+			diag_loc_ok(get_diags_file(P//'E34-too-few-args.syntran'), &
+				EC_TOO_FEW_ARGS, P//'E34-too-few-args.syntran', 5, 12, 3), &
+			diag_loc_ok(get_diags_file(P//'E35-too-many-args.syntran'), &
+				EC_TOO_MANY_ARGS, P//'E35-too-many-args.syntran', 6, 13, 9), &
+			diag_loc_ok(get_diags_file(P//'E36-bad-sub-count.syntran'), &
+				EC_BAD_SUB_COUNT, P//'E36-bad-sub-count.syntran', 5, 14, 2), &
+			diag_count_code(get_diags_file(P//'E36-bad-sub-count.syntran'), &
+				EC_BAD_SUB_COUNT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E37-bad-sub-rank.syntran'), &
+				EC_BAD_SUB_RANK, P//'E37-bad-sub-rank.syntran', 6, 11, 4), &
+			diag_count_code(get_diags_file(P//'E37-bad-sub-rank.syntran'), &
+				EC_BAD_SUB_RANK) == 1, &
+			diag_loc_ok(get_diags_file(P//'E38-empty-step.syntran'), &
+				EC_EMPTY_STEP, P//'E38-empty-step.syntran', 5, 12, 1), &
+			diag_count_code(get_diags_file(P//'E38-empty-step.syntran'), &
+				EC_EMPTY_STEP) == 1, &
+			diag_loc_ok(get_diags_file(P//'E39-scalar-subscript.syntran'), &
+				EC_SCALAR_SUBSCRIPT, P//'E39-scalar-subscript.syntran', 5, 11, 2), &
+			diag_count_code(get_diags_file(P//'E39-scalar-subscript.syntran'), &
+				EC_SCALAR_SUBSCRIPT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E40-bad-cat-rank.syntran'), &
+				EC_BAD_CAT_RANK, P//'E40-bad-cat-rank.syntran', 5, 13, 1), &
+			diag_loc_ok(get_diags_file(P//'E41-bad-ret-type.syntran'), &
+				EC_BAD_RET_TYPE, P//'E41-bad-ret-type.syntran', 6, 9, 3), &
+			diag_loc_ok(get_diags_file(P//'E42-bad-arg-type.syntran'), &
+				EC_BAD_ARG_TYPE, P//'E42-bad-arg-type.syntran', 10, 11, 3), &
+			diag_loc_ok(get_diags_file(P//'E43-bad-arg-val.syntran'), &
+				EC_BAD_ARG_VAL, P//'E43-bad-arg-val.syntran', 9, 3, 1), &
+			diag_loc_ok(get_diags_file(P//'E44-bad-arg-ref.syntran'), &
+				EC_BAD_ARG_REF, P//'E44-bad-arg-ref.syntran', 10, 3, 2), &
+			diag_loc_ok(get_diags_file(P//'E45-non-name-ref.syntran'), &
+				EC_NON_NAME_REF, P//'E45-non-name-ref.syntran', 9, 3, 9), &
+			diag_loc_ok(get_diags_file(P//'E46-sub-ref.syntran'), &
+				EC_SUB_REF, P//'E46-sub-ref.syntran', 10, 3, 6), &
+			diag_loc_ok(get_diags_file(P//'E48-binary-types.syntran'), &
+				EC_BINARY_TYPES, P//'E48-binary-types.syntran', 5, 11, 1), &
+			diag_loc_ok(get_diags_file(P//'E49-binary-ranks.syntran'), &
+				EC_BINARY_RANKS, P//'E49-binary-ranks.syntran', 6, 11, 1), &
+			diag_loc_ok(get_diags_file(P//'E50-unary-types.syntran'), &
+				EC_UNARY_TYPES, P//'E50-unary-types.syntran', 5, 9, 1), &
+			diag_loc_ok(get_diags_file(P//'E51-non-array-loop.syntran'), &
+				EC_NON_ARRAY_LOOP, P//'E51-non-array-loop.syntran', 5, 10, 1), &
+			diag_loc_ok(get_diags_file(P//'E52-non-bool-condition.syntran'), &
+				EC_NON_BOOL_CONDITION, P//'E52-non-bool-condition.syntran', 5, 4, 1), &
+			diag_loc_ok(get_diags_file(P//'E53-non-float-len-range.syntran'), &
+				EC_NON_FLOAT_LEN_RANGE, P//'E53-non-float-len-range.syntran', 4, 10, 1), &
+			diag_loc_ok(get_diags_file(P//'E54-non-int-len.syntran'), &
+				EC_NON_INT_LEN, P//'E54-non-int-len.syntran', 4, 20, 3), &
+			diag_loc_ok(get_diags_file(P//'E55-bound-type-mismatch.syntran'), &
+				EC_BOUND_TYPE_MISMATCH, P//'E55-bound-type-mismatch.syntran', 4, 10, 6), &
+			diag_loc_ok(get_diags_file(P//'E56-non-num-range.syntran'), &
+				EC_NON_NUM_RANGE, P//'E56-non-num-range.syntran', 4, 10, 8), &
+			diag_loc_ok(get_diags_file(P//'E57-non-sca-val.syntran'), &
+				EC_NON_SCA_VAL, P//'E57-non-sca-val.syntran', 5, 10, 1), &
+			diag_loc_ok(get_diags_file(P//'E58-non-int-range.syntran'), &
+				EC_NON_INT_RANGE, P//'E58-non-int-range.syntran', 4, 15, 3), &
+			diag_loc_ok(get_diags_file(P//'E59-het-array.syntran'), &
+				EC_HET_ARRAY, P//'E59-het-array.syntran', 5, 13, 3), &
+			diag_loc_ok(get_diags_file(P//'E60-unset-member.syntran'), &
+				EC_UNSET_MEMBER, P//'E60-unset-member.syntran', 10, 9, 1), &
+			diag_loc_ok(get_diags_file(P//'E61-reset-member.syntran'), &
+				EC_RESET_MEMBER, P//'E61-reset-member.syntran', 10, 18, 1), &
+			diag_loc_ok(get_diags_file(P//'E62-non-struct-dot.syntran'), &
+				EC_NON_STRUCT_DOT, P//'E62-non-struct-dot.syntran', 5, 9, 2), &
+			diag_loc_ok(get_diags_file(P//'E63-bad-member-name.syntran'), &
+				EC_BAD_MEMBER_NAME, P//'E63-bad-member-name.syntran', 11, 11, 1), &
+			diag_count_code(get_diags_file(P//'E63-bad-member-name.syntran'), &
+				EC_BAD_MEMBER_NAME) == 1, &
+			diag_loc_ok(get_diags_file(P//'E64-bad-member-name-short.syntran'), &
+				EC_BAD_MEMBER_NAME_SHORT, P//'E64-bad-member-name-short.syntran', 10, 11, 1), &
+			diag_loc_ok(get_diags_file(P//'E65-bad-member-type.syntran'), &
+				EC_BAD_MEMBER_TYPE, P//'E65-bad-member-type.syntran', 9, 15, 3), &
+			diag_loc_ok(get_diags_file(P//'E66-inc-404.syntran'), &
+				EC_INC_404, P//'E66-inc-404.syntran', 6, 10, 28), &
+			! EC_INC_READ (E67) excluded -- see note above
+			diag_loc_ok(get_diags_file(P//'E68-mod-404.syntran'), &
+				EC_MOD_404, P//'E68-mod-404.syntran', 4, 5, 22), &
+			! EC_MOD_READ (E69) excluded -- see note above
+			! E70: location is in the imported module that closes the cycle
+			diag_loc_ok(get_diags_file(P//'E70-circular-import.syntran'), &
+				EC_CIRCULAR_IMPORT, P//'circular_b.syntran', 1, 5, 10), &
+			diag_loc_ok(get_diags_file(P//'E71-duplicate-import.syntran'), &
+				EC_DUPLICATE_IMPORT, P//'E71-duplicate-import.syntran', 5, 5, 5), &
+			diag_loc_ok(get_diags_file(P//'E72-mod-hyphen.syntran'), &
+				EC_MOD_HYPHEN, P//'E72-mod-hyphen.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E73-mod-keyword.syntran'), &
+				EC_MOD_KEYWORD, P//'E73-mod-keyword.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E74-mod-reserved-std.syntran'), &
+				EC_MOD_RESERVED_STD, P//'E74-mod-reserved-std.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E75-mod-space.syntran'), &
+				EC_MOD_SPACE, P//'E75-mod-space.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E76-alias-keyword.syntran'), &
+				EC_ALIAS_KEYWORD, P//'E76-alias-keyword.syntran', 4, 12, 3), &
+			diag_loc_ok(get_diags_file(P//'E77-alias-reserved-std.syntran'), &
+				EC_ALIAS_RESERVED_STD, P//'E77-alias-reserved-std.syntran', 4, 12, 3), &
+			diag_loc_ok(get_diags_file(P//'E78-alias-hyphen.syntran'), &
+				EC_ALIAS_HYPHEN, P//'E78-alias-hyphen.syntran', 4, 12, 2), &
+			diag_loc_ok(get_diags_file(P//'E79-alias-space.syntran'), &
+				EC_ALIAS_SPACE, P//'E79-alias-space.syntran', 4, 12, 1), &
+			diag_loc_ok(get_diags_file(P//'E80-alias-with-doublecolon.syntran'), &
+				EC_ALIAS_WITH_DOUBLECOLON, P//'E80-alias-with-doublecolon.syntran', 4, 5, 3), &
+			diag_loc_ok(get_diags_file(P//'E82-immutable-var.syntran'), &
+				EC_IMMUTABLE_VAR, P//'E82-immutable-var.syntran', 4, 6, 2), &
+			diag_loc_ok(get_diags_file(P//'E83-const-assign.syntran'), &
+				EC_CONST_ASSIGN, P//'E83-const-assign.syntran', 5, 1, 1), &
+			diag_loc_ok(get_diags_file(P//'E84-mutable-method-on-temp.syntran'), &
+				EC_MUTABLE_METHOD_ON_TEMP, P//'E84-mutable-method-on-temp.syntran', 21, 9, 3), &
+			diag_count_code(get_diags_file(P//'E84-mutable-method-on-temp.syntran'), &
+				EC_MUTABLE_METHOD_ON_TEMP) == 1 &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_error_locations
+
+!===============================================================================
+
+subroutine unit_test_dir_unreadable_errors(npass, nfail)
+
+	! Companion to unit_test_error_codes() and unit_test_error_locations()
+	! above.  EC_INC_READ (E67) and EC_MOD_READ (E69) fire when #include()/use
+	! references a path that exists but cannot be read -- reproduced here by
+	! pointing at a directory instead of a file.  open()/read() error behavior
+	! on a directory isn't portable across compiler runtimes (gfortran errors
+	! immediately; ifx has been observed to silently succeed with empty
+	! content instead), so this test only runs under gfortran.  See
+	! compiler.f90 for how fort_compiler is detected
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'unreadable dir errors'
+
+	! Dummy source path used only so module resolution (which derives a
+	! search dir from src_file) works.  The file itself need not exist
+	character(len = *), parameter :: ERRSRC = &
+		'src/tests/test-src/errors/_diag.syntran'
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	logical, allocatable :: tests(:)
+
+	if (fort_compiler /= 'gfortran') then
+		write(*,*) 'Skipping '//label//' (gfortran only) ...'
+		return
+	end if
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			diag_has_code(get_diags('#include(".");'), EC_INC_READ), &
+			diag_has_code(get_diags('use dir_mod;', ERRSRC), EC_MOD_READ), &
+			diag_loc_ok(get_diags_file(P//'E67-inc-read.syntran'), &
+				EC_INC_READ, P//'E67-inc-read.syntran', 6, 10, 3), &
+			diag_loc_ok(get_diags_file(P//'E69-mod-read.syntran'), &
+				EC_MOD_READ, P//'E69-mod-read.syntran', 5, 5, 7) &
+		]
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_dir_unreadable_errors
+
+!===============================================================================
+
 subroutine unit_test_args(npass, nfail)
 
 	implicit none
@@ -5089,6 +6470,7 @@ subroutine unit_tests(iostat)
 	call unit_test_levenshtein          (npass, nfail)
 	call unit_test_overload_display_name(npass, nfail)
 	call unit_test_unqualified_name     (npass, nfail)
+	call unit_test_bbcode_escape        (npass, nfail)
 	call unit_test_bin_arith            (npass, nfail)
 	call unit_test_paren_arith(npass, nfail)
 	call unit_test_unary_arith(npass, nfail)
@@ -5098,6 +6480,10 @@ subroutine unit_tests(iostat)
 	call unit_test_comp_f64   (npass, nfail)
 	call unit_test_bad_syntax    (npass, nfail)
 	call unit_test_return_paths  (npass, nfail)
+	call unit_test_error_codes   (npass, nfail)
+	call unit_test_runtime_errors(npass, nfail)
+	call unit_test_error_locations(npass, nfail)
+	call unit_test_dir_unreadable_errors(npass, nfail)
 	call unit_test_assignment (npass, nfail)
 	call unit_test_comments   (npass, nfail)
 	call unit_test_blocks     (npass, nfail)
@@ -5123,6 +6509,7 @@ subroutine unit_tests(iostat)
 	call unit_test_fns        (npass, nfail)
 	call unit_test_linalg_fns (npass, nfail)
 	call unit_test_comp_ass   (npass, nfail)
+	call unit_test_comp_ass_arr(npass, nfail)
 	call unit_test_io         (npass, nfail)
 	call unit_test_i64        (npass, nfail)
 	call unit_test_include    (npass, nfail)
@@ -5137,6 +6524,7 @@ subroutine unit_tests(iostat)
 	call unit_test_struct_arr3(npass, nfail)
 	call unit_test_struct_str (npass, nfail)
 	call unit_test_struct_long(npass, nfail)
+	call unit_test_methods    (npass, nfail)
 	call unit_test_f64_mix    (npass, nfail)
 	call unit_test_literals   (npass, nfail)
 	call unit_test_bitwise    (npass, nfail)
@@ -5149,15 +6537,19 @@ subroutine unit_tests(iostat)
 	call unit_test_transpose  (npass, nfail)
 	call unit_test_shape      (npass, nfail)
 	call unit_test_modules    (npass, nfail)
+	call unit_test_dict       (npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
 
-	call unit_test_pow_scalar  (npass, nfail)
-	call unit_test_mixed_i32i64(npass, nfail)
-	call unit_test_arr_binop   (npass, nfail)
-	call unit_test_deep_recursion(npass, nfail)
-	call unit_test_matmul      (npass, nfail)
+	call unit_test_pow_scalar       (npass, nfail)
+	call unit_test_mixed_i32i64     (npass, nfail)
+	call unit_test_arr_binop        (npass, nfail)
+	call unit_test_bool_arr_binop   (npass, nfail)
+	call unit_test_native_array_ctor(npass, nfail)
+	call unit_test_mixed_float_int  (npass, nfail)
+	call unit_test_deep_recursion   (npass, nfail)
+	call unit_test_matmul           (npass, nfail)
 
 	call log_test_summary(npass, nfail)
 	iostat = nfail
@@ -5313,6 +6705,191 @@ subroutine unit_test_arr_binop(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_arr_binop
+
+!===============================================================================
+
+subroutine unit_test_bool_arr_binop(npass, nfail)
+
+	! Bool array binop tests (OP_ARR_BINOP with bool element type).
+	! Exercises the bool_type extension in arr_binop_typed_opcode and
+	! do_array_binop_typed (==, !=, and, or for bool arrays).
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'bool array binops (specialized opcodes)'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! ==: element-wise bool equality
+			eval('[true, false, true] == [true, true, false];')  == '[true, false, false]', &
+			eval('[false, false] == [false, true];')             == '[true, false]', &
+			! !=: element-wise bool inequality
+			eval('[true, false, true] != [true, true, false];')  == '[false, true, true]', &
+			! and: element-wise logical and
+			eval('[true, false, true] and [true, true, false];') == '[true, false, false]', &
+			! or: element-wise logical or
+			eval('[true, false, true] or [false, false, true];') == '[true, false, true]', &
+			! all/any over bool array binop result
+			eval('all([true, true] == [true, true]);')           == 'true', &
+			eval('any([false, true] != [true, true]);')          == 'true', &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_bool_arr_binop
+
+!===============================================================================
+
+subroutine unit_test_native_array_ctor(npass, nfail)
+
+	! Tests for OP_UNIF_ARRAY_NAT (uniform-fill arrays) and OP_BOUND_ARRAY_NAT
+	! (integer range arrays), which bypass eval_array_expr.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'native array construction (unif + bound)'
+
+	logical, parameter :: quiet = .true.
+	real(kind = 8), parameter :: tol = 1.d-10
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! unif_array: bool fill
+			eval('let a = [false; 4]; all(a == [false, false, false, false]);') == 'true', &
+			eval('let a = [true; 3];  all(a == [true, true, true]);')           == 'true', &
+			! unif_array: i32 fill
+			eval('let a = [7; 5]; sum(a);')                                     == '35', &
+			eval('let a = [0; 0]; size(a, 0);')                                 == '0', &
+			! unif_array: i64 fill
+			eval('let a = [1''i64; 4]; sum(a);')                              == '4', &
+			! unif_array: f32 fill
+			abs(eval_f32('let a = [0.5f; 4]; sum(a);', quiet) - 2.0) < real(tol, 4), &
+			! unif_array: f64 fill
+			abs(eval_f64('let a = [1.0; 3]; sum(a);', quiet) - 3.d0) < tol, &
+			! unif_array: 2D
+			eval('let a = [9; 2, 3]; size(a, 0);')                             == '2', &
+			eval('let a = [9; 2, 3]; size(a, 1);')                             == '3', &
+			eval('let a = [9; 2, 3]; a[0, 1];')                                == '9', &
+			! unif_array: rank above OP_UNIF_ARRAY_NAT's native buffer size
+			! (MAX_NAT_UNIF_RANK) must fall back to OP_NEW_ARRAY instead of
+			! overflowing the native handler's fixed-size local buffer
+			eval('let a = [9; 2,2,2,2,2,2,2,2,2]; a[0,0,0,0,0,0,0,0,0];')       == '9', &
+			eval('let a = [9; 2,2,2,2,2,2,2,2,2]; size(a, 8);')                == '2', &
+			! bound_array: i32
+			eval('let a = [0:5]; a[0];')                                        == '0', &
+			eval('let a = [0:5]; a[4];')                                        == '4', &
+			eval('let a = [0:5]; size(a, 0);')                                  == '5', &
+			eval('let a = [3:8]; sum(a);')                                       == '25', &
+			eval('let a = [5:5]; size(a, 0);')                                  == '0', &
+			eval('let a = [5:3]; size(a, 0);')                                  == '0', &
+			! bound_array: i64
+			eval('let a = [0''i64 : 5''i64]; a[4];')                       == '4', &
+			eval('let a = [0''i64 : 4''i64]; sum(a);')                     == '6', &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_native_array_ctor
+
+!===============================================================================
+
+subroutine unit_test_mixed_float_int(npass, nfail)
+
+	! Mixed float/integer scalar arithmetic and comparison tests.
+	! Exercises OP_*_F32_I32, OP_*_I32_F32, OP_*_F32_I64, OP_*_I64_F32,
+	! OP_*_F64_I32, OP_*_I32_F64, OP_*_F64_I64, OP_*_I64_F64.
+	! Note: == and != are NOT valid between mixed float/int types in syntran.
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'mixed float/int (specialized opcodes)'
+
+	logical, parameter :: quiet = .true.
+	real(kind = 8), parameter :: tol = 1.d-10
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! --- f64 op i32 ---
+			abs(eval_f64('2.0 + 3;',  quiet) - 5.d0)  < tol, &
+			abs(eval_f64('2.0 - 3;',  quiet) + 1.d0)  < tol, &
+			abs(eval_f64('2.0 * 3;',  quiet) - 6.d0)  < tol, &
+			abs(eval_f64('7.0 / 2;',  quiet) - 3.5d0) < tol, &
+			abs(eval_f64('7.0 % 3;',  quiet) - 1.d0)  < tol, &
+			eval('2.0 < 3;',   quiet) == 'true',  &
+			eval('3.0 <= 3;',  quiet) == 'true',  &
+			eval('4.0 > 3;',   quiet) == 'true',  &
+			eval('3.0 >= 4;',  quiet) == 'false', &
+			! --- i32 op f64 ---
+			abs(eval_f64('3 + 2.0;',  quiet) - 5.d0)  < tol, &
+			abs(eval_f64('5 - 2.0;',  quiet) - 3.d0)  < tol, &
+			abs(eval_f64('3 * 2.0;',  quiet) - 6.d0)  < tol, &
+			abs(eval_f64('7 / 2.0;',  quiet) - 3.5d0) < tol, &
+			abs(eval_f64('7 % 3.0;',  quiet) - 1.d0)  < tol, &
+			eval('2 < 3.0;',   quiet) == 'true',  &
+			eval('4 > 3.0;',   quiet) == 'true',  &
+			eval('3 <= 3.0;',  quiet) == 'true',  &
+			eval('3 >= 4.0;',  quiet) == 'false', &
+			! --- f64 op i64 ---
+			abs(eval_f64('2.0 + 3''i64;', quiet) - 5.d0) < tol, &
+			abs(eval_f64('2.0 * 3''i64;', quiet) - 6.d0) < tol, &
+			eval('2.0 < 3''i64;',  quiet) == 'true',  &
+			eval('4.0 > 3''i64;',  quiet) == 'true',  &
+			! --- i64 op f64 ---
+			abs(eval_f64('3''i64 + 2.0;', quiet) - 5.d0) < tol, &
+			abs(eval_f64('3''i64 * 2.0;', quiet) - 6.d0) < tol, &
+			eval('2''i64 < 3.0;',  quiet) == 'true',  &
+			eval('4''i64 > 3.0;',  quiet) == 'true',  &
+			! --- f32 op i32 ---
+			abs(eval_f32('2.0f + 3;', quiet) - 5.0) < real(tol, 4), &
+			abs(eval_f32('2.0f * 3;', quiet) - 6.0) < real(tol, 4), &
+			abs(eval_f32('7.0f / 2;', quiet) - 3.5) < real(tol, 4), &
+			eval('2.0f < 3;',  quiet) == 'true',  &
+			eval('4.0f > 3;',  quiet) == 'true',  &
+			! --- i32 op f32 ---
+			abs(eval_f32('3 + 2.0f;', quiet) - 5.0) < real(tol, 4), &
+			abs(eval_f32('3 * 2.0f;', quiet) - 6.0) < real(tol, 4), &
+			eval('2 < 3.0f;',  quiet) == 'true',  &
+			eval('4 > 3.0f;',  quiet) == 'true',  &
+			! --- f32 op i64 ---
+			abs(eval_f32('2.0f + 3''i64;', quiet) - 5.0) < real(tol, 4), &
+			eval('2.0f < 3''i64;',  quiet) == 'true',  &
+			! --- i64 op f32 ---
+			abs(eval_f32('3''i64 + 2.0f;', quiet) - 5.0) < real(tol, 4), &
+			eval('2''i64 < 3.0f;',  quiet) == 'true',  &
+			.false.  &
+		]
+
+	tests = tests(1: size(tests) - 1)
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_mixed_float_int
 
 !===============================================================================
 
@@ -5619,12 +7196,21 @@ end module test_m
 program test
 
 	use syntran__app_m
+	use syntran__consts_m
 	use test_m
 	implicit none
 
-	integer :: io
+	integer :: i, argc, io
+	character(len = 256) :: argv
 
 	call set_ansi_colors(.true.)
+
+	argc = command_argument_count()
+	do i = 1, argc
+		call get_command_argument(i, argv)
+		if (trim(argv) == '--no-warn-ast') no_warn = .true.
+	end do
+
 	call unit_tests(io)
 	call exit(io)
 

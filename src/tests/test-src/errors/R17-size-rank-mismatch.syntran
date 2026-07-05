@@ -1,0 +1,5 @@
+// R17: size-rank-mismatch
+// size(array, dim) was given a dim outside the array's valid rank range
+
+let a = [1, 2, 3];
+let n = size(a, 5);

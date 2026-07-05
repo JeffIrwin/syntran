@@ -55,6 +55,10 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		!print *, "array dot chain"
 
 		! Arrays chained by a dot: `a[0].b[0]`
+		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+			call set_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, val)
+			return
+		end if
 		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
 		call set_array_val(var%struct(i8+1)%struct(id)%array, j8, val)
 		return
@@ -96,9 +100,8 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	!print *, "lsubscripts allocated"
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-		! Already caught in parser
-		write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
-		call internal_error()
+		call set_field_slice_val(node%member, var%struct(id), state, val)
+		return
 	end if
 	!print *, "scalar_sub"
 
@@ -160,8 +163,8 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 			if (.not. all(node%lsubscripts%sub_kind == scalar_sub)) then
 				!print *, "slice sub"
-				write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
-				call internal_error()
+				call rt_throw(state, err_rt(RC_STRUCT_ARRAY_SLICE, "struct array slices are not implemented"))
+				return
 			end if
 
 			i8 = sub_eval(node, var, state)
@@ -188,9 +191,8 @@ recursive module subroutine get_val(node, var, state, res, index_)
 		!print *, "array dot chain"
 
 		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-			!print *, "slice sub"
-			write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
-			call internal_error()
+			call get_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, res)
+			return
 		end if
 
 		! Arrays chained by a dot: `a[0].b[0]`
@@ -246,9 +248,8 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	!print *, "lsubscripts allocated"
 
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-		!print *, "slice sub"
-		write(*,*) err_rt_prefix//"struct array slices are not implemented"//color_reset
-		call internal_error()
+		call get_field_slice_val(node%member, var%struct(id), state, res)
+		return
 	end if
 	!print *, "scalar_sub"
 
@@ -345,8 +346,8 @@ module subroutine allocate_array(val, cap)
 		allocate(val%struct( cap ))
 
 	case default
-		write(*,*) err_int_prefix//'cannot allocate array of type `' &
-			//kind_name(val%array%type)//'`'//color_reset
+		write(*,*) err_int(IC_ALLOC_ARRAY_TYPE, 'cannot allocate array of type `' &
+			//kind_name(val%array%type)//'`')
 		call internal_error()
 	end select
 
@@ -383,7 +384,7 @@ module function new_array(type, cap) result(vector)
 	else if (type == str_type) then
 		allocate(vector%str ( vector%cap ))
 	else
-		write(*,*) err_int_prefix//'array type not implemented'//color_reset
+		write(*,*) err_int(IC_ARRAY_TYPE_NOT_IMPL, 'array type not implemented')
 		call internal_error()
 	end if
 
@@ -409,50 +410,92 @@ module subroutine compound_assign(lhs, rhs, op)
 	!******
 
 	type(value_t) :: tmp  ! necessary for arrays
+	type(value_t) :: rhs_
 
 	if (op%kind /= equals_token) tmp = lhs
+
+	! For compound assignment to an array (e.g. `v += vmax / n`), cast rhs to
+	! match the LHS's existing element type *before* the op, so the result
+	! preserves the LHS's type instead of letting the generic binop promote
+	! it (e.g. i32 array += i64 scalar must stay i32, matching how scalar
+	! compound-assign already truncates back to the LHS's type).  Without
+	! this, the LHS array's element type could silently change at runtime,
+	! which the bytecode compiler's static type info doesn't expect.
+	rhs_ = rhs
+	if (op%kind /= equals_token .and. lhs%type == array_type) then
+		select case (lhs%array%type)
+		case (i32_type)
+			if (rhs%type == array_type) then
+				rhs_%array = rhs%to_i32_array()
+			else
+				rhs_%type     = i32_type
+				rhs_%sca%i32  = rhs%to_i32()
+			end if
+		case (i64_type)
+			if (rhs%type == array_type) then
+				rhs_%array = rhs%to_i64_array()
+			else
+				rhs_%type     = i64_type
+				rhs_%sca%i64  = rhs%to_i64()
+			end if
+		case (f32_type)
+			if (rhs%type == array_type) then
+				rhs_%array = rhs%to_f32_array()
+			else
+				rhs_%type     = f32_type
+				rhs_%sca%f32  = rhs%to_f32()
+			end if
+		case (f64_type)
+			if (rhs%type == array_type) then
+				rhs_%array = rhs%to_f64_array()
+			else
+				rhs_%type     = f64_type
+				rhs_%sca%f64  = rhs%to_f64()
+			end if
+		end select
+	end if
 
 	select case (op%kind)
 	case (equals_token)
 		!print *, 'assign'
 		!lhs = rhs  ! simply overwrite
-		call assign_(lhs, rhs, op%text)
+		call assign_(lhs, rhs_, op%text)
 
 	case (plus_equals_token)
-		call add(tmp, rhs, lhs, op%text)
+		call add(tmp, rhs_, lhs, op%text)
 
 	case (minus_equals_token)
-		call subtract(tmp, rhs, lhs, op%text)
+		call subtract(tmp, rhs_, lhs, op%text)
 
 	case (star_equals_token)
-		call mul(tmp, rhs, lhs, op%text)
+		call mul(tmp, rhs_, lhs, op%text)
 
 	case (slash_equals_token)
-		call div(tmp, rhs, lhs, op%text)
+		call div(tmp, rhs_, lhs, op%text)
 
 	case (sstar_equals_token)
-		call pow(tmp, rhs, lhs, op%text)
+		call pow(tmp, rhs_, lhs, op%text)
 
 	case (percent_equals_token)
-		call mod_(tmp, rhs, lhs, op%text)
+		call mod_(tmp, rhs_, lhs, op%text)
 
 	case (amp_equals_token)
-		call bit_and(tmp, rhs, lhs, op%text)
+		call bit_and(tmp, rhs_, lhs, op%text)
 
 	case (pipe_equals_token)
-		call bit_or(tmp, rhs, lhs, op%text)
+		call bit_or(tmp, rhs_, lhs, op%text)
 
 	case (caret_equals_token)
-		call bit_xor(tmp, rhs, lhs, op%text)
+		call bit_xor(tmp, rhs_, lhs, op%text)
 
 	case (lless_equals_token)
-		call left_shift(tmp, rhs, lhs, op%text)
+		call left_shift(tmp, rhs_, lhs, op%text)
 
 	case (ggreater_equals_token)
-		call right_shift(tmp, rhs, lhs, op%text)
+		call right_shift(tmp, rhs_, lhs, op%text)
 
 	case default
-		write(*,*) err_int_prefix//'unexpected assignment operator ', quote(op%text)//color_reset
+		write(*,*) err_int(IC_UNEXPECTED_ASSIGN_OP, 'unexpected assignment operator '//quote(op%text))
 		call internal_error()
 	end select
 
@@ -526,8 +569,8 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 		ssub = ssubval%to_i64()
 
 		if (ssub == 0) then
-			write(*,*) err_int_prefix//'subscript step is 0'//color_reset
-			call internal_error()
+			call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
+			return
 		end if
 
 		if (node%lsubscripts(i)%lsub_omit .or. node%lsubscripts(i)%usub_omit) then
@@ -574,16 +617,19 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 		else if (asubval%array%type == i64_type) then
 			asub%v = asubval%array%i64
 		else
-			write(*,*) err_int_prefix//'bad array subscript type'//color_reset
+			write(*,*) err_int(IC_BAD_ARRAY_SUBSCRIPT_TYPE, 'bad array subscript type')
 			call internal_error()
 		end if
 
-		lsub = asub%v(1)
+		! lsub is only used in get_next_subscript iteration; when asub%v is empty
+		! (e.g. x[ifree] where ifree=[]) the result has 0 elements and lsub is
+		! never consumed.  Guard the access so empty index arrays don't crash.
+		if (size(asub%v) > 0) lsub = asub%v(1)
 		usub = 1
 		contributes_rank = .true.
 
 	case default
-		write(*,*) err_int_prefix//'cannot evaluate subscript kind'//color_reset
+		write(*,*) err_int(IC_EVAL_SUBSCRIPT_KIND, 'cannot evaluate subscript kind')
 		call internal_error()
 
 	end select
@@ -623,6 +669,7 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 	rank_res = 0
 	do i = 1, rank_
 		call eval_subscript_1d(node, state, i, lsubs(i), ssubs(i), usubs(i), asubs(i), cr)
+		if (state%rt_halt) return
 		if (cr) rank_res = rank_res + 1
 	end do
 	!print *, 'lsubs = ', lsubs
@@ -933,7 +980,7 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 		!print *, "val s = ", val%str%s
 
 	case default
-		write(*,*) err_int_prefix//'for loop not implemented for this array kind'//color_reset
+		write(*,*) err_int(IC_FOR_ARRAY_KIND, 'for loop not implemented for this array kind')
 		call internal_error()
 	end select
 
@@ -973,7 +1020,7 @@ module subroutine get_array_val(array, i, val)
 			val%str = array%str(i + 1)
 
 		case default
-			write(*,*) err_int_prefix//"bad type in get_array_val"//color_reset
+			write(*,*) err_int(IC_BAD_ARRAY_VAL_TYPE, "bad type in get_array_val")
 			call internal_error()
 
 	end select
@@ -1044,6 +1091,7 @@ module subroutine eval_slice_rank1(node, state, res)
 	id = node%id_index
 
 	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused)
+	if (state%rt_halt) return
 
 	len_ = divceil(usub - lsub, ssub)
 	if (lsub > usub .and. ssub > 0) len_ = 0_8
@@ -1103,6 +1151,7 @@ module subroutine eval_assign_slice_rank1(node, state, id, res)
 	type(value_t) :: rhs_elem, elem_val, result_val
 
 	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused)
+	if (state%rt_halt) return
 
 	len_ = divceil(usub - lsub, ssub)
 	if (lsub > usub .and. ssub > 0) len_ = 0_8
@@ -1153,6 +1202,274 @@ module subroutine eval_assign_slice_rank1(node, state, id, res)
 	res = result_val   ! return the modified slice, as the general path does
 
 end subroutine eval_assign_slice_rank1
+
+!===============================================================================
+
+module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+
+	! Compute subscript bounds (lsubs, ssubs, usubs) and result rank for a
+	! non-scalar slice on a struct field array.  Shared by get_field_slice_val
+	! and set_field_slice_val to avoid code duplication.
+	! On step_sub with ssub==0, rt_throw is called and state%rt_halt is set;
+	! callers must check state%rt_halt on return.
+
+	type(syntax_node_t),            intent(in)    :: member_node
+	type(value_t),                  intent(in)    :: field_val
+	type(state_t),                  intent(inout) :: state
+	integer,                        intent(out)   :: rank_res
+	integer(kind = 8), allocatable, intent(out)   :: lsubs(:), ssubs(:), usubs(:)
+	type(i64_vector_t), allocatable, intent(out)  :: asubs(:)
+
+	!********
+
+	integer :: i, rank_
+	integer(kind = 8) :: lsub, ssub, usub, sz
+	type(value_t) :: lsubval, usubval, ssubval, asubval
+
+	rank_ = field_val%array%rank
+	allocate(lsubs(rank_), ssubs(rank_), usubs(rank_), asubs(rank_))
+	rank_res = 0
+
+	do i = 1, rank_
+		lsub = 0
+		ssub = 1
+		usub = 0
+
+		select case (member_node%lsubscripts(i)%sub_kind)
+		case (all_sub)
+			lsub = 0
+			ssub = 1
+			usub = field_val%array%size(i)
+			rank_res = rank_res + 1
+
+		case (range_sub)
+			ssub = 1
+			if (member_node%lsubscripts(i)%lsub_omit) then
+				lsub = 0
+			else
+				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+				lsub = lsubval%to_i64()
+			end if
+			if (member_node%lsubscripts(i)%usub_omit) then
+				usub = field_val%array%size(i)
+			else
+				call syntax_eval(member_node%usubscripts(i), state, usubval)
+				usub = usubval%to_i64()
+			end if
+			rank_res = rank_res + 1
+
+		case (step_sub)
+			call syntax_eval(member_node%ssubscripts(i), state, ssubval)
+			ssub = ssubval%to_i64()
+			if (ssub == 0) then
+				call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
+				return
+			end if
+			sz = field_val%array%size(i)
+			if (member_node%lsubscripts(i)%lsub_omit) then
+				lsub = merge(sz - 1_8, 0_8, ssub < 0)
+			else
+				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+				lsub = lsubval%to_i64()
+			end if
+			if (member_node%lsubscripts(i)%usub_omit) then
+				usub = merge(-1_8, sz, ssub < 0)
+			else
+				call syntax_eval(member_node%usubscripts(i), state, usubval)
+				usub = usubval%to_i64()
+			end if
+			rank_res = rank_res + 1
+
+		case (scalar_sub)
+			call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+			lsub = lsubval%to_i64()
+			usub = lsub + 1
+			ssub = 1
+
+		case (arr_sub)
+			call syntax_eval(member_node%lsubscripts(i), state, asubval)
+			if (asubval%array%type == i32_type) then
+				asubs(i)%v = asubval%array%i32
+			else if (asubval%array%type == i64_type) then
+				asubs(i)%v = asubval%array%i64
+			else
+				write(*,*) err_int(IC_BAD_ARRAY_SUBSCRIPT_TYPE, 'bad array subscript type')
+				call internal_error()
+			end if
+			! lsub is only used in get_next_subscript iteration; when
+			! asubs(i)%v is empty (e.g. x[ifree] where ifree=[]) the result
+			! has 0 elements and lsub is never consumed.  Guard the access so
+			! empty index arrays don't crash (mirrors eval_subscript_1d).
+			if (size(asubs(i)%v) > 0) lsub = asubs(i)%v(1)
+			usub = 1
+			ssub = 1
+			rank_res = rank_res + 1
+
+		end select
+
+		lsubs(i) = lsub
+		ssubs(i) = ssub
+		usubs(i) = usub
+	end do
+
+end subroutine field_slice_bounds
+
+!===============================================================================
+
+module subroutine get_field_slice_val(member_node, field_val, state, res)
+
+	! Evaluate a range/step/all subscript on a struct field array.
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(in)    :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(out)   :: res
+
+	!********
+
+	integer :: rank_res, idim_, idim_res
+	integer(kind = 8) :: diff, i8, index_
+	type(value_t) :: tmp
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+	type(i64_vector_t), allocatable :: asubs(:)
+
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+	if (state%rt_halt) return
+
+	allocate(res%array)
+	res%type = array_type
+	res%array%kind = expl_array
+	res%array%type = field_val%array%type
+	res%array%rank = rank_res
+
+	allocate(res%array%size(rank_res))
+	idim_res = 1
+	do idim_ = 1, field_val%array%rank
+		select case (member_node%lsubscripts(idim_)%sub_kind)
+		case (step_sub, range_sub, all_sub)
+			diff = usubs(idim_) - lsubs(idim_)
+			! Clamp reversed/empty ranges to 0 (mirrors eval_slice_rank1 and
+			! the sibling set_field_slice_val), otherwise divceil can return
+			! a negative size, leading to a negative-size array allocation.
+			res%array%size(idim_res) = max(0_8, divceil(diff, ssubs(idim_)))
+			idim_res = idim_res + 1
+		case (arr_sub)
+			res%array%size(idim_res) = size(asubs(idim_)%v)
+			idim_res = idim_res + 1
+		end select
+	end do
+	res%array%len_ = product(res%array%size)
+
+	call allocate_array(res, res%array%len_)
+
+	subs = lsubs
+	do i8 = 0, res%array%len_ - 1
+		index_ = subscript_i32_eval(subs, field_val%array)
+		call get_array_val(field_val%array, index_, tmp)
+		call set_array_val(res%array, i8, tmp)
+		call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+	end do
+
+end subroutine get_field_slice_val
+
+!===============================================================================
+
+module subroutine set_field_slice_val(member_node, field_val, state, val)
+
+	! Write val's elements into field_val at the positions described by
+	! member_node%lsubscripts.
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(inout) :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(in)    :: val
+
+	!********
+
+	integer :: rank_res, idim_
+	integer(kind = 8) :: i8, index_, lhs_len
+	type(value_t) :: tmp
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+	type(i64_vector_t), allocatable :: asubs(:)
+
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+	if (state%rt_halt) return
+
+	lhs_len = 1
+	do idim_ = 1, field_val%array%rank
+		select case (member_node%lsubscripts(idim_)%sub_kind)
+		case (step_sub, range_sub, all_sub)
+			lhs_len = lhs_len * max(0_8, divceil(usubs(idim_) - lsubs(idim_), ssubs(idim_)))
+		case (arr_sub)
+			lhs_len = lhs_len * size(asubs(idim_)%v, kind = 8)
+		end select
+	end do
+	if (val%array%len_ /= lhs_len) then
+		call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+			"size of RHS does not match size of LHS slice"))
+		return
+	end if
+
+	subs = lsubs
+	do i8 = 0, lhs_len - 1
+		index_ = subscript_i32_eval(subs, field_val%array)
+		call get_array_val(val%array, i8, tmp)
+		call set_array_val(field_val%array, index_, tmp)
+		call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+	end do
+
+end subroutine set_field_slice_val
+
+!===============================================================================
+
+module subroutine apply_subscripts_to_val(node, val, state, res)
+
+	! Apply lsubscripts from node to a pre-evaluated value_t (e.g. a fn return).
+	! Mirrors the allocated(node%lsubscripts) branch of eval_name_expr but reads
+	! array data from val directly instead of the variable store.
+
+	type(syntax_node_t), intent(in)    :: node
+	type(value_t),       intent(in)    :: val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(out)   :: res
+
+	!********
+
+	integer :: i
+	integer(kind = 8) :: i8, prod
+	type(value_t) :: subscript
+
+	if (val%type == str_type) then
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%type = str_type
+		res%str%s = str_char_slice(val%str%s, node, state, 1)
+		return
+	end if
+
+	if (val%type /= array_type) call internal_error()
+
+	if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+		! Inline sub_eval logic using val directly (avoids intent mismatch copy).
+		prod  = 1
+		i8    = 0
+		do i = 1, val%array%rank
+			call syntax_eval(node%lsubscripts(i), state, subscript)
+			i8   = i8 + prod * subscript%to_i64()
+			prod = prod * val%array%size(i)
+		end do
+		if (val%array%type == struct_type) then
+			res = val%struct(i8+1)
+			res%type       = struct_type
+			res%struct_name = val%struct_name
+			if (allocated(val%struct_cookie)) res%struct_cookie = val%struct_cookie
+		else
+			call get_array_val(val%array, i8, res)
+		end if
+	else
+		call get_field_slice_val(node, val, state, res)
+	end if
+
+end subroutine apply_subscripts_to_val
 
 !===============================================================================
 

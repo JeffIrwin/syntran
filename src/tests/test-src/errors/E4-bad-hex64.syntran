@@ -1,0 +1,10 @@
+// E4: bad-hex64
+// Hexadecimal integer literal that doesn't fit in 64 bits
+
+fn double(x: i32): i32
+{
+	return x * 2;
+}
+
+let h = 0xFFFFFFFFFFFFFFFFF;
+println(double(3));

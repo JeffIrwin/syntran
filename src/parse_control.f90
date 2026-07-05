@@ -4,6 +4,7 @@
 submodule (syntran__parse_m) syntran__parse_control
 
 	use syntran__intr_fns_m
+	use syntran__intr_vars_m
 
 	implicit none
 
@@ -129,7 +130,7 @@ module subroutine parse_use_statement(parser, statement)
 	type(value_t) :: var_val
 	type(struct_t) :: struct_val
 	integer :: i, io, iostat, mod_unit_, id_index
-	logical :: qualified_import
+	logical :: qualified_import, is_const_var
 	character(len = :), allocatable :: qualified_prefix
 
 	use_token = parser%match(use_keyword)
@@ -389,6 +390,11 @@ module subroutine parse_use_statement(parser, statement)
 	! redeclaration errors in pass 1.
 	call declare_intr_fns(mod_parser%fns)
 
+	! Pre-seed std:: constants into the module sub-parser's fresh vars dict.
+	! id_index 1 is consistent with the main parser's reserved slot for std::PI.
+	! Do not touch mod_parser%num_vars here; it is inherited from parser below.
+	call declare_intr_vars(mod_parser%vars)
+
 	! Share variable, function, AND struct numbering with parent parser. Module
 	! variables, functions, and structs will get indices continuing from parent's
 	! count, avoiding the need for remapping. This is similar to how #include works.
@@ -426,7 +432,13 @@ module subroutine parse_use_statement(parser, statement)
 		! For qualified imports, convert path separators to namespace separators
 		! e.g., "math/vectors" -> "math::vectors::fn"
 		if (qualified_import) then
-			insert_name = qualified_prefix // "::" // fn_name
+			! Methods are already namespaced by struct — adding a module prefix
+			! would break lookup.
+			if (fn%is_method) then
+				insert_name = fn_name
+			else
+				insert_name = qualified_prefix // "::" // fn_name
+			end if
 
 			! Update struct_name references in return type and parameters
 			! to use qualified names
@@ -463,7 +475,8 @@ module subroutine parse_use_statement(parser, statement)
 		var_name = mod_parser%var_names%v(i)%s
 
 		! Look up the variable in the module parser
-		call mod_parser%vars%search(var_name, id_index, iostat, var_val)
+		is_const_var = .false.
+		call mod_parser%vars%search(var_name, id_index, iostat, var_val, is_const = is_const_var)
 		if (iostat /= exit_success) cycle
 
 		! Determine insert name (qualified or unqualified)
@@ -478,7 +491,7 @@ module subroutine parse_use_statement(parser, statement)
 		end if
 
 		! Insert with same id_index (no remapping needed)
-		call parser%vars%insert(insert_name, var_val, id_index, io)
+		call parser%vars%insert(insert_name, var_val, id_index, io, is_const = is_const_var)
 		if (parser%ipass == 0) call parser%var_names%push(insert_name)
 	end do
 
@@ -887,29 +900,35 @@ recursive module subroutine parse_statement(parser, statement)
 			! just one statement, and the value is returned implicitly
 			! without an explicit `return`
 
-			select case (statement%kind)
-			case (let_expr, assignment_expr)
-				! Do nothing.  These kinds of expressions are allowed
+			! unknown_type means a prior error already tainted this expression;
+			! skip the expression-statement check to avoid cascading E9 errors
+			if (statement%val%type /= unknown_type) then
 
-			case (fn_call_expr, fn_call_intr_expr)
-				! Only allow void fn call statements.  Don't allow
-				! discarding fn return value
+				select case (statement%kind)
+				case (let_expr, assignment_expr)
+					! Do nothing.  These kinds of expressions are allowed
 
-				!print *, "fn ret type = ", kind_name(statement%val%type)
+				case (fn_call_expr, fn_call_intr_expr, method_call_expr)
+					! Only allow void fn call statements.  Don't allow
+					! discarding fn return value
 
-				if (statement%val%type /= void_type) then
+					!print *, "fn ret type = ", kind_name(statement%val%type)
+
+					if (statement%val%type /= void_type) then
+						span = new_span(pos_beg, pos_end - pos_beg + 1)
+						call parser%diagnostics%push( &
+							err_bad_expr(parser%context(), &
+							span))
+					end if
+
+				case default
 					span = new_span(pos_beg, pos_end - pos_beg + 1)
 					call parser%diagnostics%push( &
 						err_bad_expr(parser%context(), &
 						span))
-				end if
+				end select
 
-			case default
-				span = new_span(pos_beg, pos_end - pos_beg + 1)
-				call parser%diagnostics%push( &
-					err_bad_expr(parser%context(), &
-					span))
-			end select
+			end if
 
 		end if
 

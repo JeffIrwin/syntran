@@ -12,10 +12,17 @@
 #     # TODO: incorporate ifx testing into ci/cd.  Try ifort too
 #     fpm build --compiler ifx --flag "-DSYNTRAN_INTEL -fpp"
 #
+#     # Defense-in-depth for release builds: force deterministic (nonzero)
+#     # contents into otherwise-uninitialized stack/derived-type memory, so any
+#     # remaining uninitialized read fails loudly/reproducibly instead of
+#     # depending on incidental stack garbage (this is how the intermittent,
+#     # release-only, Windows-only SIGSEGV from an uninitialized parser_t%repl
+#     # was made to hide under -O0 but crash under -O3 for years)
+#     fpm build --profile release --flag "-finit-local-zero -finit-derived"
+#
 #     # `runner` is a prefix to the syntran cmd.  anything after `-- ` is a cmd
 #     # arg passed after `syntran`, e.g. the syntran filename
 #     fpm run
-#     fpm run --runner rlwrap
 #     fpm run -- samples/primes-3.syntran
 #
 #     fpm test       # all tests

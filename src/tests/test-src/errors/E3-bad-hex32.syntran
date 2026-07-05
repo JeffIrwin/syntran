@@ -1,0 +1,9 @@
+// E3: bad-hex32
+// Hexadecimal integer literal that doesn't fit in 32 bits
+
+let a = 1;
+let b = 2;
+let c = a + b;
+
+let h = 0xFFFFFFFFF'i32;
+println(c);

@@ -18,7 +18,7 @@
 // Be careful about using very large HASH_MAX_DICT_I64 values (>~10k).  Besides the
 // memory footprint, keys_dict_i64() and vals_dict_i64() make a pass over all
 // buckets, so they can become slow
-let HASH_MAX_DICT_I64 = 256;
+const HASH_MAX_DICT_I64 = 256;
 //HASH_MAX_DICT_I64 = 1024 * 8;
 
 //==============================================================================
@@ -104,7 +104,7 @@ fn print_lens_dict_i64(dict: &dict_i64)
 	return;
 }
 
-fn get_dict_i64(dict: &dict_i64, key: str): i64
+fn get_dict_i64(dict: &const dict_i64, key: str): i64
 {
 	let ib = hash_dict_i64(key); // bucket index
 	let len_ = dict.buckets[ib].len;
@@ -165,10 +165,10 @@ fn vals_dict_i64(dict: &dict_i64): [i64; :]
 
 fn set_dict_i64(dict: &dict_i64, key: str, val: i64)
 {
-	let ib = hash_dict_i64(key); // bucket index
+	const ib = hash_dict_i64(key); // bucket index
 	//println("ib = ", ib);
 
-	let len_ = dict.buckets[ib].len;
+	const len_ = dict.buckets[ib].len;
 	//println("len_ = ", len_);
 	for i in [0: len_]
 	{
@@ -192,8 +192,8 @@ fn set_dict_i64(dict: &dict_i64, key: str, val: i64)
 		//println("new cap_ = ", cap_);
 		dict.buckets[ib].cap = cap_;
 		//println("done setting cap");
-		let keys = dict.buckets[ib].keys;
-		let vals = dict.buckets[ib].vals;
+		const keys = dict.buckets[ib].keys;
+		const vals = dict.buckets[ib].vals;
 
 		dict.buckets[ib].keys = [""; cap_];
 

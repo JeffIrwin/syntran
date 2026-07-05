@@ -1,0 +1,287 @@
+// Betweenle is a word game with some similarities to wordle:
+//
+// A secret 5-letter word is hidden somewhere in an alphabetically-sorted
+// dictionary.  Each guess must land (alphabetically) between the current
+// known top and bottom bracket words.  Betweenle then tells you:
+//
+//   - direction: is the secret word *before* or *after* your guess
+//   - a percentage: how far the secret word is from your guess, as a
+//     percent of the whole dictionary
+//
+// This is *not* a standalone implementation of betweenle.  It's a helper,
+// run interactively: it suggests a guess, you play that guess in the real
+// betweenle, then type the updated bracket (see format below) at the
+// prompt, and it suggests the next guess.  Repeat until solved.
+//
+// The suggestion is computed by *interpolating* the two percents, not by
+// bisecting the bracket.  The percent is the secret's distance as a
+// fraction of the whole dictionary, so a known word above the secret (rank
+// rT, percent pT) and a known word below it (rank rB, percent pB) pin the
+// secret's rank directly:
+//
+//     S = rT + (rB - rT) * pT / (pT + pB)
+//
+// This self-calibrates away any size/word-list mismatch between our
+// dictionary and betweenle's own (the unknown scale factor cancels out of
+// the ratio), and converges in a handful of guesses instead of the
+// ~log2(dictionary size) that plain bisection would need. The confirmed
+// alphabetical bracket (from the real before/after feedback, always exact)
+// is still used to clamp the suggestion to a legal guess and to list exact
+// candidates once the bracket is small.
+//
+// Bracket line format, whitespace-separated:
+//
+//     TOP_WORD  BOTTOM_WORD  TOP_PCT  BOTTOM_PCT
+//
+//     TOP_WORD/TOP_PCT       - secret is AFTER this word, TOP_PCT% of the
+//                              whole dictionary away from it
+//     BOTTOM_WORD/BOTTOM_PCT - secret is BEFORE this word, BOTTOM_PCT% away
+//
+// Use "?" for any percent you don't know yet.  An empty line (or EOF, e.g.
+// Ctrl-D) quits.
+
+use ../src/tests/long/aoc/utils_2024 as utils;
+
+let WORD_LEN = 5;
+
+// Sentinels for "no guess yet" on the top/bottom of the bracket
+let TOP_SENTINEL = "aaaaa";
+let BOT_SENTINEL = "zzzzz";
+
+let NOTFOUND = -999;
+
+fn read_dict(filename: str): [str; :]
+{
+	// Load the system dictionary, keeping only 5-letter lowercase words.
+	// This filtered list is already in alphabetical order (it's a
+	// subsequence of an alphabetically-sorted file), so its index doubles
+	// as each word's alphabetical rank
+
+	let CAP = 8000;
+	let words = [""; CAP];
+	let n = 0;
+
+	let f = open(filename, "r");
+	while not eof(f)
+	{
+		let line = readln(f);
+		if (len(line) != WORD_LEN) continue;
+
+		let is_lower = true;
+		for c in line
+		{
+			is_lower = utils::is_lower(c);
+			if (not is_lower) break;
+		}
+		if (not is_lower) continue;
+
+		words[n] = line;
+		n += 1;
+	}
+	close(f);
+
+	return words[0: n];
+}
+
+fn rank_of(words: &[str; :], n: i32, w: str): i32
+{
+	// Return the alphabetical rank (array index) of word `w`, or NOTFOUND
+	// if it's not in our dictionary.  The sentinels map to the virtual
+	// ranks just below the first word (-1) and just above the last (n)
+
+	if (w == TOP_SENTINEL) return -1;
+	if (w == BOT_SENTINEL) return n;
+
+	for i in [0: n]
+		if (words[i] == w) return i;
+
+	return NOTFOUND;
+}
+
+fn fmt_pct(p: f64): str
+{
+	// println()'s default f32 formatting is verbose scientific notation, so
+	// format percents ourselves as a plain one-decimal number, e.g. "2.4"
+
+	let p10 = i32(p * 10.0 + 0.5);  // round to nearest tenth (p is >= 0)
+	let whole = p10 / 10;
+	let frac = p10 - whole * 10;
+	return str(whole, ".", frac);
+}
+
+fn solve_step(words: &[str; :], n: i32, state_line: str): bool
+{
+	// Parse one bracket line, print the bracket / candidates / suggestion,
+	// and return true once the secret word is pinned down to a single
+	// candidate.  A malformed or invalid line just prints an error and
+	// returns false so the caller can re-prompt; each turn re-supplies the
+	// full bracket, so a bad line is harmless
+
+	let tokens = utils::split_(state_line, " ");
+	if (size(tokens, 0) < 4)
+	{
+		println("Error: malformed bracket line: `", state_line, "`");
+		println("Expected format:  TOP_WORD  BOTTOM_WORD  TOP_PCT  BOTTOM_PCT");
+		return false;
+	}
+
+	let top    = utils::to_lower(tokens[0]);
+	let bottom = utils::to_lower(tokens[1]);
+
+	let pt_known = not (tokens[2] == "?");
+	let pb_known = not (tokens[3] == "?");
+
+	let pt = 0.0;
+	let pb = 0.0;
+	if pt_known  pt = parse_f32(tokens[2]);
+	if pb_known  pb = parse_f32(tokens[3]);
+
+	let rt = rank_of(&words, n, top);
+	let rb = rank_of(&words, n, bottom);
+
+	let bad = false;
+	if (rt == NOTFOUND)
+	{
+		println("Error: top word `", utils::to_upper(top), "` not found in dictionary");
+		bad = true;
+	}
+	if (rb == NOTFOUND)
+	{
+		println("Error: bottom word `", utils::to_upper(bottom), "` not found in dictionary");
+		bad = true;
+	}
+	if bad
+	{
+		println("(betweenle's own dictionary may differ slightly from our dictionary)");
+		return false;
+	}
+
+	// Confirmed candidate range: every word strictly between the bracket
+	// words. This is always exactly correct, since it comes straight from real
+	// before/after feedback, and is used to clamp any guess to a legal one
+	let lo = rt + 1;
+	let hi = rb - 1;
+
+	if lo > hi
+	{
+		println("Error: no word exists strictly between `", utils::to_upper(top),
+			"` and `", utils::to_upper(bottom), "` in our dictionary");
+		println("(this likely means our dictionary differs from betweenle's;",
+			" double check the words you entered)");
+		return false;
+	}
+
+	let ncand = hi - lo + 1;
+
+	// Positions used for interpolation. These match rt/rb except at the
+	// sentinels, where they collapse to the dictionary's own first/last index
+	// (rt/rb stay at the virtual -1/n so lo/hi above are unaffected)
+	let pos_t = max(rt, 0);
+	let pos_b = min(rb, n-1);
+
+	let s = 0.0;
+	if pt_known and pb_known
+	{
+		let psum = pt + pb;
+		if psum > 0.0
+			s = pos_t + (pos_b - pos_t) * pt / psum;
+		else
+			s = (lo + hi) / 2.0;  // both percents are 0; shouldn't happen, just bisect
+	}
+	else if pt_known
+		s = pos_t + pt / 100.0 * n;
+	else if pb_known
+		s = pos_b - pb / 100.0 * n;
+	else
+		s = (lo + hi) / 2.0;  // no percents known yet (the very first move)
+
+	let guess = min(max(i32(s + 0.5), lo), hi);
+
+	let top_suffix = "";
+	if pt_known top_suffix = str("   (", fmt_pct(pt), "% from top)");
+
+	let bot_suffix = "";
+	if pb_known bot_suffix = str("   (", fmt_pct(pb), "% from bottom)");
+
+	println();
+	println("Current bracket:");
+	println("    top    = ", utils::to_upper(top), top_suffix);
+	println("    bottom = ", utils::to_upper(bottom), bot_suffix);
+
+	let cand_word = "candidate";
+	if (ncand != 1) cand_word = "candidates";
+	println();
+	println("Confirmed candidates remaining: ", ncand, " ", cand_word);
+
+	if ncand == 1
+	{
+		println();
+		println("Solved! The secret word is: ", utils::to_upper(words[lo]));
+		return true;
+	}
+
+	println();
+	println("Suggested next guess: ", utils::to_upper(words[guess]));
+
+	if ncand <= 15
+	{
+		println();
+		println("Remaining candidate words:");
+		for i in [lo: hi + 1]
+			println("    ", utils::to_upper(words[i]));
+	}
+	else
+	{
+		// The interpolated guess can be a little off if betweenle's own
+		// dictionary differs slightly from ours, so offer some nearby
+		// real-word alternates too
+		let alo = guess - 2;
+		if (alo < lo) alo = lo;
+		let ahi = guess + 2;
+		if (ahi > hi) ahi = hi;
+
+		println();
+		println("Nearby alternates (in case our dictionary is slightly off):");
+		for i in [alo: ahi + 1]
+			println("    ", utils::to_upper(words[i]));
+	}
+
+	return false;
+}
+
+println("Starting betweenle solver");
+
+// sudo apt install wamerican
+// mkdir -p ~/.local/share/dict/
+// ln -s /usr/share/dict/american-english ~/.local/share/dict/
+//
+const HOME_DIR = std::getenv("HOME");
+const DICT_FILENAME = HOME_DIR + "/.local/share/dict/american-english";
+//let DICT_FILENAME = "/usr/share/dict/american-english";
+
+let words = read_dict(DICT_FILENAME);
+let n = i32(size(words, 0));
+println("Loaded ", n, " 5-letter words from system dictionary");
+
+let state = "aaaaa zzzzz ? ?";  // full dictionary, no guesses yet
+let solved = false;
+while not solved
+{
+	solved = solve_step(&words, n, state);
+	if (solved) break;
+
+	println();
+	println("Enter updated bracket:  TOP_WORD  BOTTOM_WORD  TOP_PCT  BOTTOM_PCT");
+	println("  (use ? for an unknown percent; Ctrl-D to quit)");
+
+	let line = readln();
+	if (eof()) break;
+	if (len(line) == 0) continue;
+	state = line;
+}
+
+println();
+println("Ending betweenle solver");
+
+return 0;
+

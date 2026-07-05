@@ -80,7 +80,7 @@ end subroutine fn_insert
 
 !===============================================================================
 
-module subroutine var_insert(dict, key, val, id_index, iostat, overwrite)
+module subroutine var_insert(dict, key, val, id_index, iostat, overwrite, is_const)
 
 	! There are a couple reasons for having this wrapper:
 	!
@@ -101,6 +101,7 @@ module subroutine var_insert(dict, key, val, id_index, iostat, overwrite)
 
 	integer, intent(out), optional :: iostat
 	logical, intent(in), optional :: overwrite
+	logical, intent(in), optional :: is_const
 
 	!********
 
@@ -115,7 +116,7 @@ module subroutine var_insert(dict, key, val, id_index, iostat, overwrite)
 	if (present(overwrite)) overwritel = overwrite
 
 	i = dict%scope
-	call ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwritel)
+	call ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwritel, is_const)
 
 	if (present(iostat)) iostat = io
 
@@ -123,7 +124,7 @@ end subroutine var_insert
 
 !===============================================================================
 
-module subroutine var_search(dict, key, id_index, iostat, val)
+module subroutine var_search(dict, key, id_index, iostat, val, is_const)
 
 	! An id_index is not normally part of dictionary searching, but we use it
 	! here for converting the dictionary into an array after parsing and before
@@ -135,6 +136,7 @@ module subroutine var_search(dict, key, id_index, iostat, val)
 	type(value_t), intent(out) :: val
 
 	integer, intent(out), optional :: iostat
+	logical, intent(out), optional :: is_const
 
 	!********
 
@@ -142,12 +144,12 @@ module subroutine var_search(dict, key, id_index, iostat, val)
 
 	i = dict%scope
 
-	call ternary_search(dict%dicts(i)%root, key, id_index, io, val)
+	call ternary_search(dict%dicts(i)%root, key, id_index, io, val, is_const)
 
 	! If not found in current scope, search parent scopes too
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		call ternary_search(dict%dicts(i)%root, key, id_index, io, val)
+		call ternary_search(dict%dicts(i)%root, key, id_index, io, val, is_const)
 	end do
 
 	if (present(iostat)) iostat = io
@@ -215,7 +217,7 @@ module subroutine pop_scope(dict)
 
 	! The parser should catch an unexpected `}`
 	if (dict%scope < 1) then
-		write(*,*) err_int_prefix//'scope stack is empty'
+		write(*,*) err_int(IC_SCOPE_STACK_EMPTY, 'scope stack is empty')
 		call internal_error()
 	end if
 
@@ -319,7 +321,7 @@ end subroutine push_node_move
 
 !===============================================================================
 
-recursive module subroutine ternary_search(node, key, id_index, iostat, val)
+recursive module subroutine ternary_search(node, key, id_index, iostat, val, is_const)
 
 	type(ternary_tree_node_t), intent(in), allocatable :: node
 	character(len = *), intent(in) :: key
@@ -327,6 +329,7 @@ recursive module subroutine ternary_search(node, key, id_index, iostat, val)
 	integer, intent(out) :: id_index
 	integer, intent(out) :: iostat
 	type(value_t), intent(out) :: val
+	logical, intent(out), optional :: is_const
 
 	!********
 
@@ -336,6 +339,7 @@ recursive module subroutine ternary_search(node, key, id_index, iostat, val)
 	!print *, 'searching key ', quote(key)
 
 	iostat = exit_success
+	if (present(is_const)) is_const = .false.
 
 	if (.not. allocated(node)) then
 		! Search key not found
@@ -348,13 +352,13 @@ recursive module subroutine ternary_search(node, key, id_index, iostat, val)
 	 ey = key(2:)
 
 	if (k < node%split_char) then
-		call ternary_search(node%left , key, id_index, iostat, val)
+		call ternary_search(node%left , key, id_index, iostat, val, is_const)
 		return
 	else if (k > node%split_char) then
-		call ternary_search(node%right, key, id_index, iostat, val)
+		call ternary_search(node%right, key, id_index, iostat, val, is_const)
 		return
 	else if (len(ey) > 0) then
-		call ternary_search(node%mid  , ey, id_index, iostat, val)
+		call ternary_search(node%mid  , ey, id_index, iostat, val, is_const)
 		return
 	end if
 
@@ -367,6 +371,7 @@ recursive module subroutine ternary_search(node, key, id_index, iostat, val)
 
 	val      = node%val
 	id_index = node%id_index
+	if (present(is_const)) is_const = node%is_const
 
 	!print *, 'done ternary_search'
 	!print *, ''
@@ -375,7 +380,7 @@ end subroutine ternary_search
 
 !===============================================================================
 
-recursive module subroutine ternary_insert(node, key, val, id_index, iostat, overwrite)
+recursive module subroutine ternary_insert(node, key, val, id_index, iostat, overwrite, is_const)
 
 	type(ternary_tree_node_t), intent(inout), allocatable :: node
 	character(len = *), intent(in) :: key
@@ -384,6 +389,7 @@ recursive module subroutine ternary_insert(node, key, val, id_index, iostat, ove
 
 	integer, intent(out) :: iostat
 	logical, intent(in) :: overwrite
+	logical, intent(in), optional :: is_const
 
 	!********
 
@@ -412,18 +418,18 @@ recursive module subroutine ternary_insert(node, key, val, id_index, iostat, ove
 		node%split_char = k
 	else if (k < node%split_char) then
 		!print *, 'left'
-		call ternary_insert(node%left , key, val, id_index, iostat, overwrite)
+		call ternary_insert(node%left , key, val, id_index, iostat, overwrite, is_const)
 		return
 	else if (k > node%split_char) then
 		!print *, 'right'
-		call ternary_insert(node%right, key, val, id_index, iostat, overwrite)
+		call ternary_insert(node%right, key, val, id_index, iostat, overwrite, is_const)
 		return
 	end if
 
 	!print *, 'mid'
 
 	if (len(ey) /= 0) then
-		call ternary_insert(node%mid  , ey, val, id_index, iostat, overwrite)
+		call ternary_insert(node%mid  , ey, val, id_index, iostat, overwrite, is_const)
 		return
 	end if
 
@@ -444,6 +450,7 @@ recursive module subroutine ternary_insert(node, key, val, id_index, iostat, ove
 	if (.not. allocated(node%val)) allocate(node%val)
 	node%val      = val
 	node%id_index = id_index
+	if (present(is_const)) node%is_const = is_const
 
 	!print *, 'done inserting'
 	!print *, ''

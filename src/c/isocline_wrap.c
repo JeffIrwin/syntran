@@ -1,0 +1,167 @@
+/* isocline_wrap.c
+ *
+ * Thin C shim gluing the vendored isocline line-editing library (git
+ * submodule at external/isocline) into the syntran build under both FPM and
+ * CMake.
+ *
+ * Isocline builds as a single translation unit: its own src/isocline.c
+ * #includes all of its sibling .c files.  We #include that file here (via a
+ * quoted, relative path) so both build systems only need to know about this
+ * one shim file rather than isocline's whole file list.
+ *
+ * This file also provides small platform-specific helpers that syntran needs
+ * and that don't belong in Fortran:
+ *   - syntran_isatty():       are stdin AND stdout real terminals?
+ *   - syntran_history_path(): where should REPL history persist?
+ *   - syntran_is_dir():       does a path refer to a directory?
+ * These differ by platform in ways that are simplest to resolve here, where
+ * the C compiler predefines _WIN32 automatically (no build-system flag
+ * needed on either FPM or CMake).
+ */
+
+#include "../../external/isocline/src/isocline.c"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
+/* Isocline should only take over the terminal when BOTH stdin and stdout are
+ * real terminals.  If stdout is redirected (e.g. `syntran | tee log`),
+ * isocline's cursor-control and redraw escape sequences would otherwise leak
+ * into the pipe even though stdin is still an interactive tty.
+ */
+int syntran_isatty(void)
+{
+#ifdef _WIN32
+	return _isatty(_fileno(stdin)) && _isatty(_fileno(stdout));
+#else
+	return isatty(fileno(stdin)) && isatty(fileno(stdout));
+#endif
+}
+
+/* Non-zero when stdin is an MSYS2/Cygwin/MinTTY interactive pty pipe.
+ *
+ * A native _WIN32 exe cannot use isocline's POSIX termios path in MinTTY
+ * because stdin is an MSYS named pipe rather than a real Windows console
+ * handle, so _isatty() returns 0 and we fall back to the plain read path.
+ * This helper detects that case so the REPL can print a "use winpty" hint.
+ *
+ * Detection uses the stdin handle's NT object name: MSYS2/Cygwin pty master
+ * pipes have names of the form \msys-<hash>-ptyN-... or \cygwin-<hash>-ptyN-...
+ * That distinguishes an interactive MinTTY session from a regular shell pipe
+ * (echo 'x;' | syntran), which would have an ordinary anonymous pipe name.
+ *
+ * Returns 0 on non-Windows builds.
+ */
+int syntran_is_mintty(void)
+{
+#ifdef _WIN32
+	HANDLE h;
+	DWORD ftype;
+	/* FILE_NAME_INFO: DWORD FileNameLength + WCHAR FileName[] */
+	struct { DWORD len; WCHAR name[512]; } info;
+	char narrow[512];
+	int n;
+
+	h = (HANDLE)_get_osfhandle(_fileno(stdin));
+	if (h == INVALID_HANDLE_VALUE) return 0;
+
+	ftype = GetFileType(h);
+	if (ftype != FILE_TYPE_PIPE) return 0;
+
+	if (!GetFileInformationByHandleEx(h, FileNameInfo, &info, sizeof(info)))
+		return 0;
+
+	n = WideCharToMultiByte(CP_UTF8, 0, info.name,
+	                        info.len / sizeof(WCHAR),
+	                        narrow, (int)sizeof(narrow) - 1, NULL, NULL);
+	if (n <= 0) return 0;
+	narrow[n] = '\0';
+
+	return (strstr(narrow, "msys-") != NULL || strstr(narrow, "cygwin-") != NULL)
+	       && strstr(narrow, "-pty") != NULL;
+#else
+	return 0;
+#endif
+}
+
+/* Enable ANSI escape interpretation on the Windows consoles attached to stdout
+ * and stderr, so raw color codes emitted by syntran's banner and error messages
+ * render instead of appearing as literal glyphs.  Without this, cmd renders them
+ * only if VT is already on, and winpty scrapes the un-interpreted escape bytes
+ * and re-emits them literally (garbage like ^[[91m).  No-op on non-Windows and
+ * when the handle is not a console (redirected file / MSYS pipe).
+ */
+void syntran_enable_vt(void)
+{
+#ifdef _WIN32
+	/* Define our own constant: ENABLE_VIRTUAL_TERMINAL_PROCESSING may already be
+	 * #defined to 0 by isocline's term.c fallback on older SDKs, which would make
+	 * the OR below a silent no-op.  0x0004 is the documented value. */
+	const DWORD vt = 0x0004;
+	DWORD mode;
+	HANDLE h;
+
+	h = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (h != INVALID_HANDLE_VALUE && GetConsoleMode(h, &mode))
+		SetConsoleMode(h, mode | vt);
+
+	h = GetStdHandle(STD_ERROR_HANDLE);
+	if (h != INVALID_HANDLE_VALUE && GetConsoleMode(h, &mode))
+		SetConsoleMode(h, mode | vt);
+#endif
+}
+
+/* Platform-correct history file path, or NULL if no home dir is set (in
+ * which case history is kept in-memory only for the session).
+ *
+ * HOME is normally unset on Windows, so USERPROFILE is used there instead.
+ */
+const char *syntran_history_path(void)
+{
+	static char path[1024];
+
+	const char *home =
+#ifdef _WIN32
+		getenv("USERPROFILE");
+#else
+		getenv("HOME");
+#endif
+
+	if (home == NULL || home[0] == '\0') return NULL;
+
+	snprintf(path, sizeof(path), "%s/%s", home, ".syntran_history");
+	return path;
+}
+
+/* Non-zero iff path exists and is a directory.
+ *
+ * Used by read_file() (src/utils.f90) to portably reject directories passed
+ * to #include()/use.  A prior implementation probed inquire(file =
+ * "<path>/.") in Fortran, relying on stat("<path>/.") failing with ENOTDIR
+ * for regular files on POSIX -- but Windows path normalization collapses
+ * "<file>/." to "<file>", so that probe wrongly reported every regular file
+ * as a directory.  A direct stat()/S_IFDIR check is unambiguous on both
+ * platforms.
+ *
+ * Uses the S_IFDIR bit mask rather than the S_ISDIR() macro, since MSVC's
+ * <sys/stat.h> defines the former but not the latter for _stat().
+ */
+int syntran_is_dir(const char *path)
+{
+#ifdef _WIN32
+	struct _stat st;
+	if (_stat(path, &st) != 0) return 0;
+#else
+	struct stat st;
+	if (stat(path, &st) != 0) return 0;
+#endif
+	return (st.st_mode & S_IFDIR) != 0;
+}

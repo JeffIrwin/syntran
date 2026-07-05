@@ -1,0 +1,64 @@
+
+struct Counter
+{
+	n: i32,
+
+	fn inc()
+	{
+		n += 1;
+	}
+
+	const fn get(): i32
+	{
+		return n;
+	}
+}
+
+let c = Counter{n = 0};
+c.inc();
+c.inc();
+let ok1 = c.get() == 2;
+
+let d = Counter{n = 10};
+d.inc();
+let ok2 = d.get() == 11;
+
+// Multiple counters are independent
+let ok3 = c.get() == 2;
+
+// --- Methods with explicit arguments ---
+
+struct Acc
+{
+	val: i32,
+
+	fn add(x: i32)
+	{
+		val += x;
+	}
+
+	fn add_ref(x: &i32)
+	{
+		val += x;
+		x   += 1;
+	}
+
+	const fn scaled(x: i32): i32
+	{
+		return val * x;
+	}
+}
+
+let a = Acc{val = 0};
+a.add(7);
+let ok4 = a.val == 7;
+
+let x = 3;
+a.add_ref(&x);
+// x is incremented inside the method
+let ok5 = a.val == 10 and x == 4;
+
+// Return value used in a larger expression
+let ok6 = a.scaled(2) == 20;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6;

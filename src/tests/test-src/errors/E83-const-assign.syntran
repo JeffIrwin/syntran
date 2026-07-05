@@ -1,0 +1,5 @@
+// E83: const-assign
+// Assigning to a const variable is not allowed
+
+const N = 10;
+N = 20;

@@ -11,11 +11,24 @@ module syntran__consts_m
 
 	logical :: permissive_return = .false.
 
+	logical :: no_warn = .false.
+
 	! Initial capacity of scope dict pointer arrays.  They are dynamic arrays of
 	! pointers, so they take little memory to begin with, and then grow
 	! dynamically.  Hence, I have no idea what the default should be and it
 	! shouldn't really matter
 	integer, parameter :: SCOPE_CAP_INIT = 8
+
+	! Max array rank handled by the native OP_SLICE_NAT/OP_STORE_SLICE_NAT
+	! bytecode handlers' fixed-size local buffers.  Higher-rank slices fall
+	! back to OP_SLICE/OP_STORE_SLICE (eval_array.f90), which use allocatable
+	! subscript arrays and have no rank limit.
+	integer, parameter :: MAX_NAT_SLICE_RANK = 4
+
+	! Max array rank handled by the native OP_UNIF_ARRAY_NAT bytecode handler's
+	! fixed-size dims_ buffer.  Higher-rank uniform arrays fall back to
+	! OP_NEW_ARRAY (eval_array_expr), which has no rank limit.
+	integer, parameter :: MAX_NAT_UNIF_RANK = 8
 
 	! Must be larger than largest token enum below.  TODO: add an init check for
 	! this
@@ -24,6 +37,8 @@ module syntran__consts_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			method_call_expr      = 124, &
+			const_keyword         = 123, &
 			matmul_token          = 122, &
 			use_statement         = 121, &
 			use_keyword           = 120, &
@@ -282,6 +297,8 @@ function kind_token(kind)
 			"use                  ", & ! 120
 			"use statement        ", & ! 121
 			"@                    ", & ! 122
+			"const                ", & ! 123
+			"method call expr     ", & ! 124
 			"unknown              "  & ! inf
 		]
 
@@ -425,6 +442,8 @@ function kind_name(kind)
 			"use_keyword          ", & ! 120
 			"use_statement        ", & ! 121
 			"matmul_token         ", & ! 122
+			"const_keyword        ", & ! 123
+			"method_call_expr     ", & ! 124
 			"unknown              "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too

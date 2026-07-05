@@ -1,0 +1,11 @@
+// E6: bad-oct64
+// Octal integer literal that doesn't fit in 64 bits
+
+fn triple(x: i32): i32
+{
+	return x * 3;
+}
+
+let t = triple(4);
+let o = 0o7777777777777777777777;
+println(t);

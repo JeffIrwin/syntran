@@ -1,8 +1,8 @@
 
 //==============================================================================
 
-let digit_chars = "0123456789";
-let hex_chars = digit_chars + "abcdef";
+const digit_chars = "0123456789";
+const hex_chars = digit_chars + "abcdef";
 
 //==============================================================================
 
@@ -130,11 +130,11 @@ fn tok_i32(str_: str): [i64; :]
 	//println("starting tok_i32()");
 	//println("str_ = """, str_, """");
 
-	let nums = "1234567890";
-	let beg_ = scan    (str_, nums);
+	const nums = "1234567890";
+	const beg_ = scan    (str_, nums);
 	//println("beg_ = ", beg_);
 
-	let n = len(str_);
+	const n = len(str_);
 	//println("n = ", n);
 
 	// nasty bug which was just fixed
@@ -171,16 +171,16 @@ fn tok_i32(str_: str): [i64; :]
 
 fn read_i32(str_: str): i32
 {
-	let toks = tok_i32(str_);
+	const toks = tok_i32(str_);
 
 	// multiple return vals are packed into a vec bc i don't have structs :sad:
-	let beg_ = toks[0];
-	let end_ = toks[1];
+	const beg_ = toks[0];
+	const end_ = toks[1];
 	//let len_ = toks[2]; // not needed
 
 	//println("read_i32 substr = ", str_[beg_: end_+1]);
 
-	let ans = parse_i32(str_[beg_: end_+1]);
+	const ans = parse_i32(str_[beg_: end_+1]);
 	//println("read_i32 = ", ans);
 
 	return ans;
@@ -420,7 +420,7 @@ fn index_(str_: str, substr: str): i64
 	//println("str_   = ", str_);
 	//println("substr = ", substr);
 
-	let nsub = len(substr);
+	const nsub = len(substr);
 
 	let i = i64(0);
 	let found = false;
@@ -466,7 +466,7 @@ fn indexback(str_: str, substr: str): i64
 	//println("str_   = ", str_);
 	//println("substr = ", substr);
 
-	let nsub = len(substr);
+	const nsub = len(substr);
 
 	let i = len(str_) - len(substr);
 	let found = false;
@@ -574,9 +574,9 @@ fn parse_i32_hex(str_: str): i32
 	let num = 0;
 	for ii in [0: len(str_)]
 	{
-		let i = len(str_) - ii - 1;
-		let c = str_[i];
-		let val = scan(hex_chars, c);
+		const i = len(str_) - ii - 1;
+		const c = str_[i];
+		const val = scan(hex_chars, c);
 		num += i32(val * 16 ** ii);
 	}
 	return num;
@@ -586,7 +586,7 @@ fn parse_i32_hex(str_: str): i32
 
 fn parse_i32_delim(str_: str, delims: str): [i32; :]
 {
-	let str_vec = split_(str_, delims);
+	const str_vec = split_(str_, delims);
 	//println("str_vec = ", str_vec);
 	let vec = [i32(0); size(str_vec, 0)];
 	for i in [0: size(str_vec, 0)]
@@ -598,7 +598,7 @@ fn parse_i32_delim(str_: str, delims: str): [i32; :]
 
 fn parse_i64_delim(str_: str, delims: str): [i64; :]
 {
-	let str_vec = split_(str_, delims);
+	const str_vec = split_(str_, delims);
 	//println("str_vec = ", str_vec);
 	let vec = [i64(0); size(str_vec, 0)];
 	for i in [0: size(str_vec, 0)]
@@ -633,7 +633,7 @@ fn reverse_str(str_: str): str
 {
 	// Reverse a str
 	let rev = str_;
-	let n = len(str_);
+	const n = len(str_);
 	for i in [0: n]
 		rev[i] = str_[n-i-1];
 	return rev;

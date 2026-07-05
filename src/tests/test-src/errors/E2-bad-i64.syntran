@@ -1,0 +1,11 @@
+// E2: bad-i64
+// Integer literal with an explicit 'i64 suffix that doesn't fit in 64 bits
+
+fn identity(x: i32): i32
+{
+	return x;
+}
+
+let y = identity(5);
+let huge = 99999999999999999999999999'i64;
+println(y);

@@ -33,6 +33,7 @@ module syntran__bytecode_m
 		OP_MAKE_STRUCT      = 1019, &	! M5: struct instance: a=node_idx (for struct_name+nmembers), members on stack
 		OP_LOAD_MEMBER      = 1020, &	! M5: dot_expr read: a=node_idx; uses get_val
 		OP_STORE_MEMBER     = 1021, &	! M5: dot member write: a=node_idx, b=op_kind; TOS=RHS; uses get_val+set_val
+		OP_LOAD_MEMBER_TOS  = 1139, &	! M5: dot_expr read when root is a fn return: root on TOS, a=member-wrapper node_idx
 		OP_CALL_INTR        = 1022, &	! M6: intrinsic call; native: a=intr_id b=argc (args on stack);
 		                            	!   readln/close: a=intr_id b=1 c=(id_index*2+is_loc) for slot writeback
 		OP_FOR_SETUP        = 1023, &	! M8: for-loop setup: a=node_idx; pushes iter onto for_iter stack
@@ -168,9 +169,147 @@ module syntran__bytecode_m
 	!   Only emitted when rhs is a numeric/bool scalar and op is '='
 	!   (guard in store_idx_native_ok).  String/struct writes and compound ops
 	!   (a[i]+=x) fall back to OP_STORE_IDX.
+	!
+	! OP_COMPOUND_IDX_NAT: compound array element op (a[i] += rhs, etc.) without
+	!   subscript_eval.  Like OP_STORE_IDX_NAT but also reads current element,
+	!   applies op, and writes back.
+	!   Instruction fields:
+	!     a = id_index
+	!     b = nsub
+	!     c = op_kind * 2 + is_local  (op_kind = compound assignment token)
+	!   Stack before:  [sub_1]...[sub_nsub][rhs]
+	!   Stack after:   [rhs]
+	!
+	! OP_STR_INDEX_NAT: scalar string single-character read without subscript_eval.
+	!   Compiler pushes the subscript expression, then emits this opcode.
+	!   Instruction fields:
+	!     a = id_index  (string variable slot)
+	!     c = is_local  (0 = global, 1 = local)
+	!   Stack before:  [subscript]
+	!   Stack after:   [1-char string]
+	!
+	! OP_STR_SLICE_NAT: scalar string substring (bound_array range) without
+	!   eval_name_expr.  Compiler pushes lbound then ubound expressions.
+	!   Instruction fields:
+	!     a = id_index  (string variable slot)
+	!     c = is_local  (0 = global, 1 = local)
+	!   Stack before:  [lbound][ubound]
+	!   Stack after:   [substring]
+	! OP_EQ_STR / OP_NE_STR: string equality comparison without vm_pop_copy overhead.
+	!   left=TOS-1, right=TOS; result bool written to TOS-1%sca%bool, TOS-1%type=bool_type; len_--.
+	!   Both str slots are deallocated before the bool is written so the next pop
+	!   sees a clean bool_type slot with no stale allocatable.
+	!
+	! OP_SIZE_NAT: read array size directly from a variable slot without loading (deep-copying)
+	!   the entire array.  Avoids O(N) allocation for size() calls on large arrays.
+	!   a = slot_id, b = dim (0-based; -1 means total len_), c = is_local (0=global, 1=local).
+	!   Pushes an i64 result.
 	integer, parameter :: &
-		OP_INDEX_NAT     = 1136, &
-		OP_STORE_IDX_NAT = 1137
+		OP_INDEX_NAT        = 1136, &
+		OP_STORE_IDX_NAT    = 1137, &
+		OP_SUBSCRIPT_TOS    = 1138, &	! pop TOS (fn return val), apply subscripts from nodes(a), push result
+		OP_COMPOUND_IDX_NAT = 1140, &
+		OP_STR_INDEX_NAT    = 1141, &
+		OP_STR_SLICE_NAT    = 1142, &
+		OP_EQ_STR           = 1143, &
+		OP_NE_STR           = 1144, &
+		OP_SIZE_NAT         = 1145, &
+		OP_SLICE_NAT        = 1146, &
+		OP_STORE_SLICE_NAT  = 1147
+
+	! Native array construction opcodes.
+	!
+	! OP_UNIF_ARRAY_NAT: uniform-fill array [val; d1, d2, ...] without eval_array_expr.
+	!   a = element type, b = rank (number of dimensions, known at compile time).
+	!   Stack before: [size(1)][size(2)]...[size(rank)][fill_val]
+	!   Stack after:  [result_array]
+	!   Supports bool/i32/i64/f32/f64 element types; str/struct fall back to OP_NEW_ARRAY.
+	!
+	! OP_BOUND_ARRAY_NAT: integer range array [lb:ub] without eval_array_expr.
+	!   a = element type (i32_type or i64_type).
+	!   Stack before: [lb][ub]
+	!   Stack after:  [result_array]
+	integer, parameter :: &
+		OP_UNIF_ARRAY_NAT  = 1148, &
+		OP_BOUND_ARRAY_NAT = 1149
+
+	! Mixed float/integer scalar opcodes.
+	! Naming: OP_<OP>_<LTYPE>_<RTYPE>.  Result type is the float type.
+	! TOS-1 type is updated when the float is on TOS (right operand).
+	! Comparisons produce bool_type; TOS-1 type is updated to bool_type.
+
+	! Mixed f32/i32
+	integer, parameter :: &
+		OP_ADD_F32_I32 = 1150, OP_ADD_I32_F32 = 1151, &
+		OP_SUB_F32_I32 = 1152, OP_SUB_I32_F32 = 1153, &
+		OP_MUL_F32_I32 = 1154, OP_MUL_I32_F32 = 1155, &
+		OP_DIV_F32_I32 = 1156, OP_DIV_I32_F32 = 1157, &
+		OP_MOD_F32_I32 = 1158, OP_MOD_I32_F32 = 1159, &
+		OP_LT_F32_I32  = 1160, OP_LT_I32_F32  = 1161, &
+		OP_LE_F32_I32  = 1162, OP_LE_I32_F32  = 1163, &
+		OP_GT_F32_I32  = 1164, OP_GT_I32_F32  = 1165, &
+		OP_GE_F32_I32  = 1166, OP_GE_I32_F32  = 1167, &
+		OP_EQ_F32_I32  = 1168, OP_EQ_I32_F32  = 1169, &
+		OP_NE_F32_I32  = 1170, OP_NE_I32_F32  = 1171
+
+	! Mixed f32/i64
+	integer, parameter :: &
+		OP_ADD_F32_I64 = 1172, OP_ADD_I64_F32 = 1173, &
+		OP_SUB_F32_I64 = 1174, OP_SUB_I64_F32 = 1175, &
+		OP_MUL_F32_I64 = 1176, OP_MUL_I64_F32 = 1177, &
+		OP_DIV_F32_I64 = 1178, OP_DIV_I64_F32 = 1179, &
+		OP_MOD_F32_I64 = 1180, OP_MOD_I64_F32 = 1181, &
+		OP_LT_F32_I64  = 1182, OP_LT_I64_F32  = 1183, &
+		OP_LE_F32_I64  = 1184, OP_LE_I64_F32  = 1185, &
+		OP_GT_F32_I64  = 1186, OP_GT_I64_F32  = 1187, &
+		OP_GE_F32_I64  = 1188, OP_GE_I64_F32  = 1189, &
+		OP_EQ_F32_I64  = 1190, OP_EQ_I64_F32  = 1191, &
+		OP_NE_F32_I64  = 1192, OP_NE_I64_F32  = 1193
+
+	! Mixed f64/i32
+	integer, parameter :: &
+		OP_ADD_F64_I32 = 1194, OP_ADD_I32_F64 = 1195, &
+		OP_SUB_F64_I32 = 1196, OP_SUB_I32_F64 = 1197, &
+		OP_MUL_F64_I32 = 1198, OP_MUL_I32_F64 = 1199, &
+		OP_DIV_F64_I32 = 1200, OP_DIV_I32_F64 = 1201, &
+		OP_MOD_F64_I32 = 1202, OP_MOD_I32_F64 = 1203, &
+		OP_LT_F64_I32  = 1204, OP_LT_I32_F64  = 1205, &
+		OP_LE_F64_I32  = 1206, OP_LE_I32_F64  = 1207, &
+		OP_GT_F64_I32  = 1208, OP_GT_I32_F64  = 1209, &
+		OP_GE_F64_I32  = 1210, OP_GE_I32_F64  = 1211, &
+		OP_EQ_F64_I32  = 1212, OP_EQ_I32_F64  = 1213, &
+		OP_NE_F64_I32  = 1214, OP_NE_I32_F64  = 1215
+
+	! Mixed f64/i64
+	integer, parameter :: &
+		OP_ADD_F64_I64 = 1216, OP_ADD_I64_F64 = 1217, &
+		OP_SUB_F64_I64 = 1218, OP_SUB_I64_F64 = 1219, &
+		OP_MUL_F64_I64 = 1220, OP_MUL_I64_F64 = 1221, &
+		OP_DIV_F64_I64 = 1222, OP_DIV_I64_F64 = 1223, &
+		OP_MOD_F64_I64 = 1224, OP_MOD_I64_F64 = 1225, &
+		OP_LT_F64_I64  = 1226, OP_LT_I64_F64  = 1227, &
+		OP_LE_F64_I64  = 1228, OP_LE_I64_F64  = 1229, &
+		OP_GT_F64_I64  = 1230, OP_GT_I64_F64  = 1231, &
+		OP_GE_F64_I64  = 1232, OP_GE_I64_F64  = 1233, &
+		OP_EQ_F64_I64  = 1234, OP_EQ_I64_F64  = 1235, &
+		OP_NE_F64_I64  = 1236, OP_NE_I64_F64  = 1237
+
+	! P6: native for-loop setup — bounds pre-evaluated to bytecode, no syntax_eval.
+	! a = node pool idx  (OP_FOR_NEXT still needs nd%is_loc, nd%id_index)
+	! b = for_kind       (bound_array=89 / step_array=87 / len_array=88)
+	! c = itr_type       (static element type as i64; int promote logic may override)
+	! Stack before (by for_kind):
+	!   bound_array:  [lb][ub]        (ub at TOS)
+	!   step_array:   [lb][step][ub]  (ub at TOS)
+	!   len_array:    [lb][ub][len]   (len at TOS)
+	integer, parameter :: OP_FOR_SETUP_NAT  = 1238
+
+	! P5: native explicit array literal [e1, e2, ..., en] for scalar numeric/bool elements.
+	! a = element type (bool/i32/i64/f32/f64_type)
+	! b = n_elems (compile-time constant)
+	! Stack before: [e1][e2]...[en]  (en at TOS)
+	! Stack after:  [result_array]
+	integer, parameter :: OP_EXPL_ARRAY_NAT = 1239
 
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
@@ -262,7 +401,8 @@ module syntran__bytecode_m
 		INTR_ARGS         = 130, &
 		INTR_RESHAPE      = 131, &
 		INTR_TRANSPOSE    = 132, &
-		INTR_SHAPE        = 133
+		INTR_SHAPE        = 133, &
+		INTR_GETENV       = 134, INTR_HASENV       = 135
 
 	!********
 
@@ -685,6 +825,8 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("reshape");        id = INTR_RESHAPE
 	case ("transpose");      id = INTR_TRANSPOSE
 	case ("shape");          id = INTR_SHAPE
+	case ("getenv");         id = INTR_GETENV
+	case ("hasenv");         id = INTR_HASENV
 	case default;            id = 0
 	end select
 
@@ -781,6 +923,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (f32_type); op = OP_EQ_F32
 			case (f64_type); op = OP_EQ_F64
 			case (bool_type); op = OP_EQ_BOOL
+			case (str_type);  op = OP_EQ_STR
 			end select
 		case (bang_equals_token)
 			select case (ltype)
@@ -789,6 +932,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (f32_type); op = OP_NE_F32
 			case (f64_type); op = OP_NE_F64
 			case (bool_type); op = OP_NE_BOOL
+			case (str_type);  op = OP_NE_STR
 			end select
 		case (and_keyword)
 			if (ltype == bool_type) op = OP_AND_BOOL
@@ -799,44 +943,209 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 	end if
 
 	! --- Mixed i32/i64: result is i64 (arithmetic) or bool (comparisons) ---
-	if (.not. ((ltype == i32_type .and. rtype == i64_type) .or. &
-	           (ltype == i64_type .and. rtype == i32_type))) return
+	if ((ltype == i32_type .and. rtype == i64_type) .or. &
+	    (ltype == i64_type .and. rtype == i32_type)) then
+		select case (op_kind)
+		case (plus_token)
+			if (ltype == i32_type) then; op = OP_ADD_I32_I64
+			else;                         op = OP_ADD_I64_I32; end if
+		case (minus_token)
+			if (ltype == i32_type) then; op = OP_SUB_I32_I64
+			else;                         op = OP_SUB_I64_I32; end if
+		case (star_token)
+			if (ltype == i32_type) then; op = OP_MUL_I32_I64
+			else;                         op = OP_MUL_I64_I32; end if
+		case (slash_token)
+			if (ltype == i32_type) then; op = OP_DIV_I32_I64
+			else;                         op = OP_DIV_I64_I32; end if
+		case (percent_token)
+			if (ltype == i32_type) then; op = OP_MOD_I32_I64
+			else;                         op = OP_MOD_I64_I32; end if
+		case (less_token)
+			if (ltype == i32_type) then; op = OP_LT_I32_I64
+			else;                         op = OP_LT_I64_I32; end if
+		case (less_equals_token)
+			if (ltype == i32_type) then; op = OP_LE_I32_I64
+			else;                         op = OP_LE_I64_I32; end if
+		case (greater_token)
+			if (ltype == i32_type) then; op = OP_GT_I32_I64
+			else;                         op = OP_GT_I64_I32; end if
+		case (greater_equals_token)
+			if (ltype == i32_type) then; op = OP_GE_I32_I64
+			else;                         op = OP_GE_I64_I32; end if
+		case (eequals_token)
+			if (ltype == i32_type) then; op = OP_EQ_I32_I64
+			else;                         op = OP_EQ_I64_I32; end if
+		case (bang_equals_token)
+			if (ltype == i32_type) then; op = OP_NE_I32_I64
+			else;                         op = OP_NE_I64_I32; end if
+		end select
+		return
+	end if
 
-	select case (op_kind)
-	case (plus_token)
-		if (ltype == i32_type) then; op = OP_ADD_I32_I64
-		else;                         op = OP_ADD_I64_I32; end if
-	case (minus_token)
-		if (ltype == i32_type) then; op = OP_SUB_I32_I64
-		else;                         op = OP_SUB_I64_I32; end if
-	case (star_token)
-		if (ltype == i32_type) then; op = OP_MUL_I32_I64
-		else;                         op = OP_MUL_I64_I32; end if
-	case (slash_token)
-		if (ltype == i32_type) then; op = OP_DIV_I32_I64
-		else;                         op = OP_DIV_I64_I32; end if
-	case (percent_token)
-		if (ltype == i32_type) then; op = OP_MOD_I32_I64
-		else;                         op = OP_MOD_I64_I32; end if
-	case (less_token)
-		if (ltype == i32_type) then; op = OP_LT_I32_I64
-		else;                         op = OP_LT_I64_I32; end if
-	case (less_equals_token)
-		if (ltype == i32_type) then; op = OP_LE_I32_I64
-		else;                         op = OP_LE_I64_I32; end if
-	case (greater_token)
-		if (ltype == i32_type) then; op = OP_GT_I32_I64
-		else;                         op = OP_GT_I64_I32; end if
-	case (greater_equals_token)
-		if (ltype == i32_type) then; op = OP_GE_I32_I64
-		else;                         op = OP_GE_I64_I32; end if
-	case (eequals_token)
-		if (ltype == i32_type) then; op = OP_EQ_I32_I64
-		else;                         op = OP_EQ_I64_I32; end if
-	case (bang_equals_token)
-		if (ltype == i32_type) then; op = OP_NE_I32_I64
-		else;                         op = OP_NE_I64_I32; end if
-	end select
+	! --- Mixed f32/i32: result is f32 (arithmetic) or bool (comparisons) ---
+	if ((ltype == f32_type .and. rtype == i32_type) .or. &
+	    (ltype == i32_type .and. rtype == f32_type)) then
+		select case (op_kind)
+		case (plus_token)
+			if (ltype == f32_type) then; op = OP_ADD_F32_I32
+			else;                         op = OP_ADD_I32_F32; end if
+		case (minus_token)
+			if (ltype == f32_type) then; op = OP_SUB_F32_I32
+			else;                         op = OP_SUB_I32_F32; end if
+		case (star_token)
+			if (ltype == f32_type) then; op = OP_MUL_F32_I32
+			else;                         op = OP_MUL_I32_F32; end if
+		case (slash_token)
+			if (ltype == f32_type) then; op = OP_DIV_F32_I32
+			else;                         op = OP_DIV_I32_F32; end if
+		case (percent_token)
+			if (ltype == f32_type) then; op = OP_MOD_F32_I32
+			else;                         op = OP_MOD_I32_F32; end if
+		case (less_token)
+			if (ltype == f32_type) then; op = OP_LT_F32_I32
+			else;                         op = OP_LT_I32_F32; end if
+		case (less_equals_token)
+			if (ltype == f32_type) then; op = OP_LE_F32_I32
+			else;                         op = OP_LE_I32_F32; end if
+		case (greater_token)
+			if (ltype == f32_type) then; op = OP_GT_F32_I32
+			else;                         op = OP_GT_I32_F32; end if
+		case (greater_equals_token)
+			if (ltype == f32_type) then; op = OP_GE_F32_I32
+			else;                         op = OP_GE_I32_F32; end if
+		case (eequals_token)
+			if (ltype == f32_type) then; op = OP_EQ_F32_I32
+			else;                         op = OP_EQ_I32_F32; end if
+		case (bang_equals_token)
+			if (ltype == f32_type) then; op = OP_NE_F32_I32
+			else;                         op = OP_NE_I32_F32; end if
+		end select
+		return
+	end if
+
+	! --- Mixed f32/i64: result is f32 (arithmetic) or bool (comparisons) ---
+	if ((ltype == f32_type .and. rtype == i64_type) .or. &
+	    (ltype == i64_type .and. rtype == f32_type)) then
+		select case (op_kind)
+		case (plus_token)
+			if (ltype == f32_type) then; op = OP_ADD_F32_I64
+			else;                         op = OP_ADD_I64_F32; end if
+		case (minus_token)
+			if (ltype == f32_type) then; op = OP_SUB_F32_I64
+			else;                         op = OP_SUB_I64_F32; end if
+		case (star_token)
+			if (ltype == f32_type) then; op = OP_MUL_F32_I64
+			else;                         op = OP_MUL_I64_F32; end if
+		case (slash_token)
+			if (ltype == f32_type) then; op = OP_DIV_F32_I64
+			else;                         op = OP_DIV_I64_F32; end if
+		case (percent_token)
+			if (ltype == f32_type) then; op = OP_MOD_F32_I64
+			else;                         op = OP_MOD_I64_F32; end if
+		case (less_token)
+			if (ltype == f32_type) then; op = OP_LT_F32_I64
+			else;                         op = OP_LT_I64_F32; end if
+		case (less_equals_token)
+			if (ltype == f32_type) then; op = OP_LE_F32_I64
+			else;                         op = OP_LE_I64_F32; end if
+		case (greater_token)
+			if (ltype == f32_type) then; op = OP_GT_F32_I64
+			else;                         op = OP_GT_I64_F32; end if
+		case (greater_equals_token)
+			if (ltype == f32_type) then; op = OP_GE_F32_I64
+			else;                         op = OP_GE_I64_F32; end if
+		case (eequals_token)
+			if (ltype == f32_type) then; op = OP_EQ_F32_I64
+			else;                         op = OP_EQ_I64_F32; end if
+		case (bang_equals_token)
+			if (ltype == f32_type) then; op = OP_NE_F32_I64
+			else;                         op = OP_NE_I64_F32; end if
+		end select
+		return
+	end if
+
+	! --- Mixed f64/i32: result is f64 (arithmetic) or bool (comparisons) ---
+	if ((ltype == f64_type .and. rtype == i32_type) .or. &
+	    (ltype == i32_type .and. rtype == f64_type)) then
+		select case (op_kind)
+		case (plus_token)
+			if (ltype == f64_type) then; op = OP_ADD_F64_I32
+			else;                         op = OP_ADD_I32_F64; end if
+		case (minus_token)
+			if (ltype == f64_type) then; op = OP_SUB_F64_I32
+			else;                         op = OP_SUB_I32_F64; end if
+		case (star_token)
+			if (ltype == f64_type) then; op = OP_MUL_F64_I32
+			else;                         op = OP_MUL_I32_F64; end if
+		case (slash_token)
+			if (ltype == f64_type) then; op = OP_DIV_F64_I32
+			else;                         op = OP_DIV_I32_F64; end if
+		case (percent_token)
+			if (ltype == f64_type) then; op = OP_MOD_F64_I32
+			else;                         op = OP_MOD_I32_F64; end if
+		case (less_token)
+			if (ltype == f64_type) then; op = OP_LT_F64_I32
+			else;                         op = OP_LT_I32_F64; end if
+		case (less_equals_token)
+			if (ltype == f64_type) then; op = OP_LE_F64_I32
+			else;                         op = OP_LE_I32_F64; end if
+		case (greater_token)
+			if (ltype == f64_type) then; op = OP_GT_F64_I32
+			else;                         op = OP_GT_I32_F64; end if
+		case (greater_equals_token)
+			if (ltype == f64_type) then; op = OP_GE_F64_I32
+			else;                         op = OP_GE_I32_F64; end if
+		case (eequals_token)
+			if (ltype == f64_type) then; op = OP_EQ_F64_I32
+			else;                         op = OP_EQ_I32_F64; end if
+		case (bang_equals_token)
+			if (ltype == f64_type) then; op = OP_NE_F64_I32
+			else;                         op = OP_NE_I32_F64; end if
+		end select
+		return
+	end if
+
+	! --- Mixed f64/i64: result is f64 (arithmetic) or bool (comparisons) ---
+	if ((ltype == f64_type .and. rtype == i64_type) .or. &
+	    (ltype == i64_type .and. rtype == f64_type)) then
+		select case (op_kind)
+		case (plus_token)
+			if (ltype == f64_type) then; op = OP_ADD_F64_I64
+			else;                         op = OP_ADD_I64_F64; end if
+		case (minus_token)
+			if (ltype == f64_type) then; op = OP_SUB_F64_I64
+			else;                         op = OP_SUB_I64_F64; end if
+		case (star_token)
+			if (ltype == f64_type) then; op = OP_MUL_F64_I64
+			else;                         op = OP_MUL_I64_F64; end if
+		case (slash_token)
+			if (ltype == f64_type) then; op = OP_DIV_F64_I64
+			else;                         op = OP_DIV_I64_F64; end if
+		case (percent_token)
+			if (ltype == f64_type) then; op = OP_MOD_F64_I64
+			else;                         op = OP_MOD_I64_F64; end if
+		case (less_token)
+			if (ltype == f64_type) then; op = OP_LT_F64_I64
+			else;                         op = OP_LT_I64_F64; end if
+		case (less_equals_token)
+			if (ltype == f64_type) then; op = OP_LE_F64_I64
+			else;                         op = OP_LE_I64_F64; end if
+		case (greater_token)
+			if (ltype == f64_type) then; op = OP_GT_F64_I64
+			else;                         op = OP_GT_I64_F64; end if
+		case (greater_equals_token)
+			if (ltype == f64_type) then; op = OP_GE_F64_I64
+			else;                         op = OP_GE_I64_F64; end if
+		case (eequals_token)
+			if (ltype == f64_type) then; op = OP_EQ_F64_I64
+			else;                         op = OP_EQ_I64_F64; end if
+		case (bang_equals_token)
+			if (ltype == f64_type) then; op = OP_NE_F64_I64
+			else;                         op = OP_NE_I64_F64; end if
+		end select
+		return
+	end if
 
 end function binop_typed_opcode
 
@@ -882,18 +1191,21 @@ pure integer function arr_binop_typed_opcode(op_kind, elem_type) result(op)
 
 	op = 0
 
-	! Only numeric element types
 	select case (elem_type)
-	case (i32_type, i64_type, f32_type, f64_type); continue
-	case default; return
-	end select
-
-	! Only the operators handled by do_array_binop_typed in the VM
-	select case (op_kind)
-	case (plus_token, minus_token, star_token, slash_token, percent_token, &
-	      less_token, less_equals_token, greater_token, greater_equals_token, &
-	      eequals_token, bang_equals_token)
-		op = OP_ARR_BINOP
+	case (i32_type, i64_type, f32_type, f64_type)
+		! Arithmetic and comparison operators for numeric arrays
+		select case (op_kind)
+		case (plus_token, minus_token, star_token, slash_token, percent_token, &
+		      less_token, less_equals_token, greater_token, greater_equals_token, &
+		      eequals_token, bang_equals_token)
+			op = OP_ARR_BINOP
+		end select
+	case (bool_type)
+		! Logical/equality operators for bool arrays
+		select case (op_kind)
+		case (eequals_token, bang_equals_token, and_keyword, or_keyword)
+			op = OP_ARR_BINOP
+		end select
 	end select
 
 end function arr_binop_typed_opcode
@@ -947,6 +1259,192 @@ pure logical function store_idx_native_ok(node) result(ok)
 	end select
 
 end function store_idx_native_ok
+
+!===============================================================================
+
+pure logical function compound_idx_native_ok(node) result(ok)
+
+	! Return .true. when an assignment_expr node with a compound op (+=, -=, etc.)
+	! and all-scalar subscripts can be lowered to OP_COMPOUND_IDX_NAT.
+	! Requires the same conditions as store_idx_native_ok except op must be
+	! a supported arithmetic compound assignment (not plain '=').
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (.not. all(node%lsubscripts%sub_kind == scalar_sub)) return
+	if (node%op%kind == equals_token) return
+	if (compound_to_arith_token(node%op%kind) == 0) return
+	if (.not. allocated(node%right)) return
+
+	select case (node%right%val%type)
+	case (bool_type, i32_type, i64_type, f32_type, f64_type)
+		ok = .true.
+	end select
+
+end function compound_idx_native_ok
+
+!===============================================================================
+
+pure logical function str_index_native_ok(node) result(ok)
+
+	! Return .true. when a name_expr node has a single scalar subscript and a
+	! str_type result, lowerable to OP_STR_INDEX_NAT.
+	! Covers two cases handled at VM runtime via a type check on the variable:
+	!   scalar_str[i]  → 1-char read from scalar string
+	!   str_arr[i]     → full element read from a rank-1 string array
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (size(node%lsubscripts) /= 1) return
+	if (node%lsubscripts(1)%sub_kind /= scalar_sub) return
+	if (node%val%type /= str_type) return
+	ok = .true.
+
+end function str_index_native_ok
+
+!===============================================================================
+
+pure logical function str_slice_native_ok(node) result(ok)
+
+	! Return .true. when a name_expr node is a bound_array (unit-step) range read
+	! from a scalar string variable, lowerable to OP_STR_SLICE_NAT.
+	! String array range subscripts (str_arr[lo:hi]) are safe to exclude via the
+	! val%type check alone: for those, parse_subscripts leaves val%type as
+	! array_type (only all-scalar subscripts collapse to str_type).
+	! Omitted bounds (s[lo:] or s[:hi]) fall back to OP_SLICE.
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (size(node%lsubscripts) /= 1) return
+	if (node%lsubscripts(1)%sub_kind /= range_sub) return
+	if (node%val%type /= str_type) return
+	if (node%lsubscripts(1)%lsub_omit) return   ! s[:hi] — lower bound omitted
+	if (node%lsubscripts(1)%usub_omit) return   ! s[lo:] — upper bound omitted
+	ok = .true.
+
+end function str_slice_native_ok
+
+!===============================================================================
+
+pure logical function arr_slice_native_ok(node) result(ok)
+
+	! Return .true. when a name_expr node with all range_sub subscripts (both
+	! bounds explicit) and an array result can be lowered to OP_SLICE_NAT.
+	! Omitted bounds and non-range subscripts (all_sub, step_sub, arr_sub) fall
+	! back to OP_SLICE.
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (.not. all(node%lsubscripts%sub_kind == range_sub)) return
+	if (any(node%lsubscripts%lsub_omit)) return
+	if (any(node%lsubscripts%usub_omit)) return
+	if (node%val%type /= array_type) return
+	if (.not. allocated(node%val%array)) return
+	! Exclude char-subscript cases: str_arr[lo:hi, j:k] has 2 range_sub entries
+	! but rank 1 — the extra subscript is a substring range, not an array dim.
+	if (size(node%lsubscripts) /= node%val%array%rank) return
+	! OP_SLICE_NAT's handler uses fixed-size local buffers sized
+	! MAX_NAT_SLICE_RANK; higher-rank slices fall back to OP_SLICE.
+	if (node%val%array%rank > MAX_NAT_SLICE_RANK) return
+	ok = .true.
+
+end function arr_slice_native_ok
+
+!===============================================================================
+
+pure logical function store_slice_nat_ok(node) result(ok)
+
+	! Return .true. when an assignment_expr with a slice LHS and an array RHS
+	! can be lowered to OP_STORE_SLICE_NAT.
+	! Same subscript conditions as arr_slice_native_ok, plus plain '=' op and
+	! an array-typed RHS.
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (.not. all(node%lsubscripts%sub_kind == range_sub)) return
+	if (any(node%lsubscripts%lsub_omit)) return
+	if (any(node%lsubscripts%usub_omit)) return
+	if (node%op%kind /= equals_token) return
+	if (.not. allocated(node%right)) return
+	if (node%right%val%type /= array_type) return
+	! Exclude char-subscript LHS: same rank-vs-subscript-count guard as arr_slice_native_ok.
+	if (.not. allocated(node%val%array)) return
+	if (size(node%lsubscripts) /= node%val%array%rank) return
+	! Require matching element types: our handler copies dst%f32 = rhs%f32 directly;
+	! cross-type assignments (e.g. f32 slice ← i32 array) need casting and must fall
+	! back to eval_assignment_expr via OP_STORE_SLICE.
+	if (.not. allocated(node%right%val%array)) return
+	if (node%val%array%type /= node%right%val%array%type) return
+	! OP_STORE_SLICE_NAT's handler uses fixed-size local buffers sized
+	! MAX_NAT_SLICE_RANK; higher-rank slices fall back to OP_STORE_SLICE.
+	if (node%val%array%rank > MAX_NAT_SLICE_RANK) return
+	ok = .true.
+
+end function store_slice_nat_ok
+
+!===============================================================================
+
+pure logical function for_setup_native_ok(node) result(ok)
+
+	! Return .true. when a for_statement node's iterable is a structured range
+	! (bound_array / step_array / len_array) whose bounds can be compiled to
+	! bytecode, avoiding syntax_eval in OP_FOR_SETUP.
+	! Falls back to OP_FOR_SETUP for string, expl_array, size_array, unif_array,
+	! and non-primary (arbitrary expression) iterables.
+
+	type(syntax_node_t), intent(in) :: node
+
+	ok = .false.
+	if (.not. allocated(node%array)) return
+	if (node%array%kind /= array_expr) return
+	if (.not. allocated(node%array%val%array)) return
+	select case (node%array%val%array%kind)
+	case (bound_array, step_array, len_array)
+		ok = .true.
+	end select
+
+end function for_setup_native_ok
+
+!===============================================================================
+
+pure logical function expl_array_native_ok(node) result(ok)
+
+	! Return .true. when an array_expr node is an explicit array literal
+	! [e1, ..., en] with scalar numeric/bool elements of a single type.
+	! Falls back to OP_NEW_ARRAY for str/struct elements or empty arrays.
+
+	type(syntax_node_t), intent(in) :: node
+
+	integer :: i_
+
+	ok = .false.
+	if (.not. allocated(node%val%array)) return
+	if (node%val%array%kind /= expl_array) return
+	if (.not. allocated(node%elems)) return
+	if (node%val%array%len_ <= 0) return
+	select case (node%val%array%type)
+	case (bool_type, i32_type, i64_type, f32_type, f64_type)
+		! ok so far
+	case default
+		return
+	end select
+	! All elements must be scalar (not arrays like [0:3] in [[0:3], [10:12]]).
+	do i_ = 1, size(node%elems)
+		if (node%elems(i_)%val%type == array_type) return
+	end do
+	ok = .true.
+
+end function expl_array_native_ok
 
 !===============================================================================
 

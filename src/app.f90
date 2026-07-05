@@ -17,6 +17,7 @@ module syntran__app_m
 	use syntran__core_m
 	use syntran__errors_m
 	use syntran__utils_m
+	use syntran__line_edit_m, only: enable_vt_processing
 
 	implicit none
 
@@ -118,6 +119,13 @@ subroutine set_ansi_colors(is_color_in)
 	end if
 
 	if (is_color) then
+		! Under winpty, stdout is a hidden Windows console without ANSI escape
+		! interpretation enabled, so raw color codes would otherwise render as
+		! literal glyphs (e.g. ^[[95m) once winpty scrapes and re-emits them.
+		! Enabling VT processing here, before any colored output is printed,
+		! fixes that; it's a no-op on non-Windows and on non-console handles
+		call enable_vt_processing()
+
 		fg_bold            = FG_BOLD_
 		fg_bright_red      = FG_BRIGHT_RED_
 		fg_bold_bright_red = FG_BOLD_BRIGHT_RED_
@@ -295,7 +303,7 @@ function parse_args() result(args)
 		if (interactive) then
 			write(*,*) 'Usage:'
 			write(*,*) tab//'#tree to toggle tree display'
-			write(*,*) tab//'`exit(0);` or Ctrl+C to exit'
+			write(*,*) tab//'`exit(0);` or Ctrl+D to exit'
 			write(*,*)
 		end if
 

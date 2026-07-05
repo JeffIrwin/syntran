@@ -26,7 +26,8 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	type(fn_t) :: println_fn, str_fn, len_fn, repeat_fn, args_fn, &
 		parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
 		char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
-		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn
+		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
+		getenv_fn, hasenv_fn
 
 	!********
 
@@ -228,10 +229,15 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	!********
 
 	readln_fn%type%type = str_type
-	allocate(readln_fn%params(1))
-	allocate(readln_fn%param_names%v(1))
-	readln_fn%params(1)%type = file_type
-	readln_fn%param_names%v(1)%s = "file_handle"
+	allocate(readln_fn%params(0))
+	allocate(readln_fn%param_names%v(0))
+
+	! With no arg, readln() reads a line from stdin.  With a file_handle arg,
+	! it reads a line from that file, same as before
+	readln_fn%variadic_min  = 0
+	readln_fn%variadic_max  = 1
+	readln_fn%variadic_type = file_type
+	readln_fn%variadic_name = "file_handle"
 
 	call fns%insert("readln", readln_fn, id_index)
 
@@ -253,10 +259,15 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	!********
 
 	eof_fn%type%type = bool_type
-	allocate(eof_fn%params(1))
-	allocate(eof_fn%param_names%v(1))
-	eof_fn%params(1)%type = file_type
-	eof_fn%param_names%v(1)%s = "file_handle"
+	allocate(eof_fn%params(0))
+	allocate(eof_fn%param_names%v(0))
+
+	! With no arg, eof() checks the stdin eof flag.  With a file_handle arg,
+	! it checks that file's eof flag, same as before
+	eof_fn%variadic_min  = 0
+	eof_fn%variadic_max  = 1
+	eof_fn%variadic_type = file_type
+	eof_fn%variadic_name = "file_handle"
 
 	call fns%insert("eof", eof_fn, id_index)
 
@@ -282,13 +293,39 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::getenv(name) returns the value of environment variable `name`.  It
+	! is a runtime error if `name` is not set; guard with std::hasenv() first.
+	! This is an std-only function: it must be called as std::getenv(name)
+	getenv_fn%type%type = str_type
+	allocate(getenv_fn%params(1))
+	allocate(getenv_fn%param_names%v(1))
+	getenv_fn%params(1)%type = str_type
+	getenv_fn%param_names%v(1)%s = "name"
+
+	call fns%insert("std::getenv", getenv_fn, id_index)
+
+	!********
+
+	! std::hasenv(name) returns whether environment variable `name` is set.
+	! This is an std-only function: it must be called as std::hasenv(name)
+	hasenv_fn%type%type = bool_type
+	allocate(hasenv_fn%params(1))
+	allocate(hasenv_fn%param_names%v(1))
+	hasenv_fn%params(1)%type = str_type
+	hasenv_fn%param_names%v(1)%s = "name"
+
+	call fns%insert("std::hasenv", hasenv_fn, id_index)
+
+	!********
+
 	! Return array of all functions declared in this module
 	fn_array = &
 		[ &
 			println_fn, str_fn, len_fn, repeat_fn, args_fn, &
 			parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
 			char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
-			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn &
+			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
+			getenv_fn, hasenv_fn &
 		]
 
 end subroutine declare_io_fns

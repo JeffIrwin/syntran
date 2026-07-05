@@ -9,8 +9,9 @@ submodule (syntran__vm_m) syntran__vm_intr
 	! (b >= 0).  Args have already been popped from the operand stack in reverse
 	! order and collected into args(1:nargs).
 	!
-	! CALL_INTR_NODE fallback cases (readln, close) are NOT routed here; they are
-	! handled directly in vm_exec by calling eval_fn_call_intr with the stored node.
+	! CALL_INTR_NODE fallback cases (readln(file_handle), close) are NOT routed
+	! here; they are handled inline in vm_exec with slot writeback.  The no-arg
+	! readln() (stdin) has no slot to write back to, so it IS routed here
 
 	implicit none
 
@@ -30,10 +31,12 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	!*******
 
 	integer :: i, io
+	integer :: env_len, env_stat
 
 	character :: char_
 
 	character(len = :), allocatable :: mode_, status_, resolved_path_
+	character(len = :), allocatable :: env_val
 
 	type(char_vector_t) :: str_
 
@@ -458,36 +461,36 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		res%type = i32_type
 		read(args(1)%str%s, *, iostat = io) res%sca%i32
 		if (io /= 0) then
-			write(*,*) err_rt_prefix//" cannot parse_i32() for argument `"// &
-				args(1)%str%s//"`"//color_reset
-			call internal_error()
+			call rt_throw(state, err_rt(RC_PARSE_I32, " cannot parse_i32() for argument `"// &
+				args(1)%str%s//"`"))
+			return
 		end if
 
 	case (INTR_PARSE_I64)
 		res%type = i64_type
 		read(args(1)%str%s, *, iostat = io) res%sca%i64
 		if (io /= 0) then
-			write(*,*) err_rt_prefix//" cannot parse_i64() for argument `"// &
-				args(1)%str%s//"`"//color_reset
-			call internal_error()
+			call rt_throw(state, err_rt(RC_PARSE_I64, " cannot parse_i64() for argument `"// &
+				args(1)%str%s//"`"))
+			return
 		end if
 
 	case (INTR_PARSE_F32)
 		res%type = f32_type
 		read(args(1)%str%s, *, iostat = io) res%sca%f32
 		if (io /= 0) then
-			write(*,*) err_rt_prefix//" cannot parse_f32() for argument `"// &
-				args(1)%str%s//"`"//color_reset
-			call internal_error()
+			call rt_throw(state, err_rt(RC_PARSE_F32, " cannot parse_f32() for argument `"// &
+				args(1)%str%s//"`"))
+			return
 		end if
 
 	case (INTR_PARSE_F64)
 		res%type = f64_type
 		read(args(1)%str%s, *, iostat = io) res%sca%f64
 		if (io /= 0) then
-			write(*,*) err_rt_prefix//" cannot parse_f64() for argument `"// &
-				args(1)%str%s//"`"//color_reset
-			call internal_error()
+			call rt_throw(state, err_rt(RC_PARSE_F64, " cannot parse_f64() for argument `"// &
+				args(1)%str%s//"`"))
+			return
 		end if
 
 	case (INTR_CHAR)
@@ -528,15 +531,15 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			case ("w")
 				res%file_%mode_write = .true.
 			case default
-				write(*,*) err_rt_prefix//"bad file mode character """// &
-					char_//""""//color_reset
-				call internal_error()
+				call rt_throw(state, err_rt(RC_BAD_FILE_MODE, "bad file mode character """// &
+					char_//""""))
+				return
 			end select
 		end do
 		if (res%file_%mode_read .and. res%file_%mode_write) then
-			write(*,*) err_rt_prefix//"cannot open file """//args(1)%str%s// &
-				""" in combined read/write mode """//mode_//""""
-			call internal_error()
+			call rt_throw(state, err_rt(RC_FILE_RW_MODE, "cannot open file """//args(1)%str%s// &
+				""" in combined read/write mode """//mode_//""""))
+			return
 		end if
 		if (res%file_%mode_read) then
 			status_ = "old"
@@ -547,9 +550,9 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		open(newunit = res%file_%unit_, file = resolved_path_, &
 			status = status_, iostat = io)
 		if (io /= 0) then
-			write(*,*) err_rt_prefix//"cannot open file """//resolved_path_//""""
-			write(*,*) "iostat = ", str(io)
-			call internal_error()
+			call rt_throw(state, err_rt(RC_OPEN_FILE, "cannot open file """//resolved_path_// &
+				""" (iostat = "//str(io)//")"))
+			return
 		end if
 		res%file_%name_ = args(1)%str%s
 		res%file_%eof   = .false.
@@ -559,32 +562,58 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		! args(1) = file handle, args(2:) = values to write
 		res%type = void_type
 		if (.not. args(1)%file_%is_open) then
-			write(*,*) err_rt_prefix//"writeln() was called for file """// &
-				args(1)%file_%name_//""" which is not open"
-			call internal_error()
+			call rt_throw(state, err_rt(RC_WRITELN_NOT_OPEN, "writeln() was called for file """// &
+				args(1)%file_%name_//""" which is not open"))
+			return
 		end if
 		if (.not. args(1)%file_%mode_write) then
-			write(*,*) err_rt_prefix//"writeln() was called for file """// &
-				args(1)%file_%name_//""" which was not opened in write mode ""w"""
-			call internal_error()
+			call rt_throw(state, err_rt(RC_WRITELN_NOT_WRITE_MODE, "writeln() was called for file """// &
+				args(1)%file_%name_//""" which was not opened in write mode ""w"""))
+			return
 		end if
 		do i = 2, nargs
 			write(args(1)%file_%unit_, '(a)', advance = 'no') args(i)%to_str()
 		end do
 		write(args(1)%file_%unit_, *)
 
+	case (INTR_READLN)
+		! No-arg readln(): read a line from stdin.  (readln(file_handle) needs
+		! slot writeback for the eof flag, so it is handled inline in vm_exec
+		! instead of here; this case is only reached with nargs == 0)
+		res%type = str_type
+		if (state%stdin_eof) then
+			! Match file readln(): reading again past EOF is an error
+			call rt_throw(state, err_rt(RC_READLN_FAIL, &
+				"cannot readln() from stdin past end of input"))
+			return
+		end if
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = read_line(input_unit, io)
+		if (io == iostat_end) then
+			state%stdin_eof = .true.
+		else if (io /= 0 .and. io /= iostat_eor) then
+			call rt_throw(state, err_rt(RC_READLN_FAIL, &
+				"cannot readln() from stdin (iostat = "//str(io)//")"))
+			return
+		end if
+
 	case (INTR_EOF)
 		! args(1) = file handle (read only — no writeback needed)
 		res%type = bool_type
+		if (nargs == 0) then
+			! No-arg form: check the stdin eof flag
+			res%sca%bool = state%stdin_eof
+			return
+		end if
 		if (.not. args(1)%file_%is_open) then
-			write(*,*) err_rt_prefix//"eof() was called for file """// &
-				args(1)%file_%name_//""" which is not open"
-			call internal_error()
+			call rt_throw(state, err_rt(RC_EOF_NOT_OPEN, "eof() was called for file """// &
+				args(1)%file_%name_//""" which is not open"))
+			return
 		end if
 		if (.not. args(1)%file_%mode_read) then
-			write(*,*) err_rt_prefix//"eof() was called for file """// &
-				args(1)%file_%name_//""" which was not opened in read mode ""r"""
-			call internal_error()
+			call rt_throw(state, err_rt(RC_EOF_NOT_READ_MODE, "eof() was called for file """// &
+				args(1)%file_%name_//""" which was not opened in read mode ""r"""))
+			return
 		end if
 		res%sca%bool = args(1)%file_%eof
 
@@ -605,8 +634,8 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		res%type = i64_type
 		if (nargs == 2) then
 			if (args(2)%sca%i32 < 0 .or. args(2)%sca%i32 >= args(1)%array%rank) then
-				write(*,*) err_rt_prefix//"rank mismatch in size() call"//color_reset
-				call internal_error()
+				call rt_throw(state, err_rt(RC_SIZE_RANK_MISMATCH, "rank mismatch in size() call"))
+				return
 			end if
 			res%sca%i64 = int(args(1)%array%size(args(2)%sca%i32 + 1))
 		else
@@ -715,8 +744,8 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 
 		! Runtime guard: source must be rank-2
 		if (args(1)%array%rank /= 2) then
-			write(*,*) err_rt_prefix//"transpose requires a rank-2 array"//color_reset
-			call internal_error()
+			call rt_throw(state, err_rt(RC_TRANSPOSE_RANK, "transpose requires a rank-2 array"))
+			return
 		end if
 
 		! Build result metadata without copying any buffers.
@@ -767,8 +796,8 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 
 		! Runtime guard: product of new shape must equal source element count
 		if (product(int(args(2)%array%i32(1:args(2)%array%len_), 8)) /= args(1)%array%len_) then
-			write(*,*) err_rt_prefix//"reshape size mismatch"//color_reset
-			call internal_error()
+			call rt_throw(state, err_rt(RC_RESHAPE_MISMATCH, "reshape size mismatch"))
+			return
 		end if
 
 		! Copy source (deep copies flat buffer, type, kind, len_)
@@ -795,6 +824,27 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		! %array%size is already i64, so direct assignment works.
 		allocate(res%array%i64(res%array%len_))
 		res%array%i64 = args(1)%array%size(1:args(1)%array%rank)
+
+	case (INTR_GETENV)
+		! std::getenv(name) -- value of env var `name`.  Runtime error if unset
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		call get_environment_variable(args(1)%str%s, length = env_len, status = env_stat)
+		if (env_stat /= 0) then
+			call rt_throw(state, err_rt(RC_GETENV_UNSET, "getenv() environment variable """// &
+				args(1)%str%s//""" is not set"))
+			return
+		end if
+		allocate(character(len = env_len) :: env_val)
+		call get_environment_variable(args(1)%str%s, value = env_val)
+		res%str%s = env_val
+		deallocate(env_val)
+
+	case (INTR_HASENV)
+		! std::hasenv(name) -- whether env var `name` is set
+		res%type = bool_type
+		call get_environment_variable(args(1)%str%s, status = env_stat)
+		res%sca%bool = env_stat == 0
 
 	case default
 		write(*,*) 'VM: unknown intr_id in vm_call_intr: ', intr_id
