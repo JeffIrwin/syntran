@@ -164,13 +164,14 @@ module integer function lookup_type(name, structs, struct) result(type)
 
 	character(len = *), intent(in) :: name
 
-	type(structs_t), intent(in) :: structs
+	type(structs_t), intent(in), target :: structs
 
 	type(struct_t), intent(out) :: struct
 
 	!********
 
 	integer :: io, struct_id
+	type(struct_t), pointer :: struct_ptr
 
 	! Immo also has an "any" type.  Should I allow that?
 
@@ -195,11 +196,12 @@ module integer function lookup_type(name, structs, struct) result(type)
 
 			! TODO: this should be able to use %exists instead of %search,
 			! possible minor perf boost
-			call structs%search(name, struct_id, io, struct)
+			call structs%search(name, struct_id, io, struct_ptr)
 			!print *, "struct search io = ", io
 
 			if (io == 0) then
 				type = struct_type
+				struct = struct_ptr
 				!print *, "struct num vars = ", struct%num_vars
 			else
 				type = unknown_type

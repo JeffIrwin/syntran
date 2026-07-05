@@ -19,7 +19,7 @@ contains
 
 recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_call)
 
-	class(parser_t) :: parser
+	class(parser_t), target :: parser
 	character(len = *), intent(in), optional :: module_prefix
 	type(syntax_token_t), intent(in), optional :: identifier
 	type(syntax_node_t), intent(out) :: fn_call
@@ -34,7 +34,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
 		arg_is_ref, is_ok, is_const_var
 
-	type(fn_t) :: fn
+	type(fn_t), pointer :: fn
 
 	type(integer_vector_t) :: pos_args
 	type(logical_vector_t) :: is_ref
@@ -45,7 +45,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	type(text_span_t) :: span
 
-	type(value_t) :: param_val, const_check_val
+	type(value_t) :: param_val, const_check_val, fn_type_copy
 
 	!print *, ''
 	!print *, 'parse_fn_call'
@@ -146,22 +146,22 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		if (module_prefix == "std") then
 			! For std::, first try std-only functions (registered with "std::" prefix)
 			lookup_name = "std::" // fn_call%identifier%text
-			fn = parser%fns%search(lookup_name, id_index, io)
+			fn => parser%fns%search(lookup_name, id_index, io)
 			if (io /= exit_success) then
 				! Fall back to regular intrinsic lookup without prefix (legacy intrinsics)
 				lookup_name = fn_call%identifier%text
-				fn = parser%fns%search(lookup_name, id_index, io)
+				fn => parser%fns%search(lookup_name, id_index, io)
 			end if
 		else
 			! For user modules, look up with qualified name
 			lookup_name = module_prefix // "::" // fn_call%identifier%text
-			fn = parser%fns%search(lookup_name, id_index, io)
+			fn => parser%fns%search(lookup_name, id_index, io)
 		end if
 		display_name = module_prefix // "::" // identifier_%text
 	else
 		lookup_name = fn_call%identifier%text
 		display_name = identifier_%text
-		fn = parser%fns%search(lookup_name, id_index, io)
+		fn => parser%fns%search(lookup_name, id_index, io)
 	end if
 
 	!print *, "fn id_index = ", id_index
@@ -171,7 +171,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! Do this before the ipass==0 early return so the type is set correctly
 		! in both passes, preventing cascading errors.
 		if (.not. present(module_prefix)) then
-			fn = parser%fns%search("std::" // fn_call%identifier%text, id_index, io_std)
+			fn => parser%fns%search("std::" // fn_call%identifier%text, id_index, io_std)
 			if (io_std == exit_success) then
 				! Set the return type from the found function to prevent
 				! cascading errors from the untyped result
@@ -239,8 +239,14 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 		! Not sure if these 2 lines are required. Maybe not since it should only
 		! apply to intrinsics fns, but it might be safer to copy anyway
-		if (.not. allocated(fn%type%array)) allocate(fn%type%array)
-		fn%type%array%rank = rank
+		!
+		! fn is now a pointer into the shared fn dict (no longer a private deep
+		! copy), so this fix-up must happen on a local copy of fn%type instead
+		! of writing through the pointer, or it would corrupt the stored
+		! prototype for every other call site of this fn
+		fn_type_copy = fn%type
+		if (.not. allocated(fn_type_copy%array)) allocate(fn_type_copy%array)
+		fn_type_copy%array%rank = rank
 
 		! For functions like std::reshape whose element type depends on their
 		! arguments, restore the element type that resolve_overload determined.
@@ -1182,7 +1188,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 	! A struct instantiator initializes all the members of an instance of a
 	! struct
 
-	class(parser_t) :: parser
+	class(parser_t), target :: parser
 
 	type(syntax_node_t), intent(out) :: inst
 	character(len = *), intent(in), optional :: struct_name
@@ -1196,7 +1202,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 	logical :: is_ok
 	logical, allocatable :: member_set(:)
 
-	type(struct_t) :: struct
+	type(struct_t), pointer :: struct
 
 	type(syntax_node_t) :: mem
 

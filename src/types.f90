@@ -429,10 +429,10 @@ module syntran__types_m
 		!***************************************
 
 		module function fn_search(dict, key, id_index, iostat) result(val)
-			class(fns_t), intent(in) :: dict
+			class(fns_t), intent(in), target :: dict
 			character(len = *), intent(in) :: key
 			integer, intent(out) :: id_index
-			type(fn_t) :: val
+			type(fn_t), pointer :: val
 			integer, intent(out), optional :: iostat
 		end function fn_search
 
@@ -535,11 +535,11 @@ module syntran__types_m
 		end subroutine ternary_insert
 
 		recursive module function fn_ternary_search(node, key, id_index, iostat) result(val)
-			type(fn_ternary_tree_node_t), intent(in), allocatable :: node
+			type(fn_ternary_tree_node_t), intent(in), allocatable, target :: node
 			character(len = *), intent(in) :: key
 			integer, intent(out) :: id_index
 			integer, intent(out) :: iostat
-			type(fn_t) :: val
+			type(fn_t), pointer :: val
 		end function fn_ternary_search
 
 		recursive module subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwrite)
@@ -558,11 +558,11 @@ module syntran__types_m
 		end function struct_ternary_exists
 
 		recursive module subroutine struct_ternary_search(node, key, id_index, iostat, val)
-			type(struct_ternary_tree_node_t), intent(in), allocatable :: node
+			type(struct_ternary_tree_node_t), intent(in), allocatable, target :: node
 			character(len = *), intent(in) :: key
 			integer, intent(out) :: id_index
 			integer, intent(out) :: iostat
-			type(struct_t), intent(out) :: val
+			type(struct_t), pointer, intent(out) :: val
 		end subroutine struct_ternary_search
 
 		recursive module subroutine struct_ternary_insert(node, key, val, id_index, iostat, overwrite)
@@ -590,10 +590,10 @@ module syntran__types_m
 		end function struct_exists
 
 		module subroutine struct_search(dict, key, id_index, iostat, val)
-			class(structs_t), intent(in) :: dict
+			class(structs_t), intent(in), target :: dict
 			character(len = *), intent(in) :: key
 			integer, intent(out) :: id_index
-			type(struct_t), intent(out) :: val
+			type(struct_t), pointer, intent(out) :: val
 			integer, intent(out), optional :: iostat
 		end subroutine struct_search
 
@@ -614,7 +614,7 @@ module syntran__types_m
 
 		module integer function lookup_type(name, structs, struct) result(type)
 			character(len = *), intent(in) :: name
-			type(structs_t), intent(in) :: structs
+			type(structs_t), intent(in), target :: structs
 			type(struct_t), intent(out) :: struct
 		end function lookup_type
 

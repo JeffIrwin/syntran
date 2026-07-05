@@ -123,12 +123,12 @@ module subroutine parse_use_statement(parser, statement)
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
-	type(parser_t) :: mod_parser
+	type(parser_t), target :: mod_parser
 	type(syntax_node_t) :: mod_unit
 	type(text_context_vector_t) :: mod_contexts
-	type(fn_t) :: fn
+	type(fn_t), pointer :: fn
 	type(value_t) :: var_val
-	type(struct_t) :: struct_val
+	type(struct_t), pointer :: struct_val
 	integer :: i, io, iostat, mod_unit_, id_index
 	logical :: qualified_import, is_const_var
 	character(len = :), allocatable :: qualified_prefix
@@ -425,7 +425,7 @@ module subroutine parse_use_statement(parser, statement)
 		fn_name = mod_parser%fn_names%v(i)%s
 
 		! Look up the function in the module parser
-		fn = mod_parser%fns%search(fn_name, id_index, iostat)
+		fn => mod_parser%fns%search(fn_name, id_index, iostat)
 		if (iostat /= exit_success) cycle
 
 		! Determine the name to insert: qualified (module::fn) or unqualified (fn)

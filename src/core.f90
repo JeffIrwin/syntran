@@ -31,6 +31,7 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - there's no doc re struct methods in readme
 	!  - enable windows unit tests in ci/cd. not sure when/why i disabled it
 	!  - kill redundant token deep-copies in the parser hot path
 	!    (peek_kind/peek_text read fields directly; convert
@@ -43,6 +44,9 @@ module syntran__core_m
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
 	!    might be zero perf benefit because the dicts are only used at parse
 	!    time, then mapped to efficient arrays at eval time
+	!    * claude agrees not worth it. although returning pointers from ternary
+	!      trees instead of copying var/fn/struct by value might perform better.
+	!      wip
 	!  - enums
 	!  - recursive data structs
 	!    * recursive fns are available, but not structs

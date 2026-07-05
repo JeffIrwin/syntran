@@ -129,7 +129,7 @@ module syntran__parse_m
 		end subroutine parse_fn_declaration
 
 		recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_call)
-			class(parser_t) :: parser
+			class(parser_t), target :: parser
 			character(len = *), intent(in), optional :: module_prefix
 			type(syntax_token_t), intent(in), optional :: identifier
 			type(syntax_node_t), intent(out) :: fn_call
@@ -162,7 +162,7 @@ module syntran__parse_m
 		end subroutine parse_method_declaration
 
 		recursive module subroutine parse_struct_instance(parser, inst, struct_name)
-			class(parser_t) :: parser
+			class(parser_t), target :: parser
 			type(syntax_node_t), intent(out) :: inst
 			character(len = *), intent(in), optional :: struct_name
 		end subroutine parse_struct_instance
@@ -282,7 +282,7 @@ module syntran__parse_m
 		end subroutine parse_name_expr
 
 		recursive module subroutine parse_dot(parser, expr)
-			class(parser_t) :: parser
+			class(parser_t), target :: parser
 			type(syntax_node_t), intent(inout) :: expr
 		end subroutine parse_dot
 

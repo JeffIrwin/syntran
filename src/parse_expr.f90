@@ -885,7 +885,7 @@ end subroutine parse_name_expr
 
 recursive module subroutine parse_dot(parser, expr)
 
-	class(parser_t) :: parser
+	class(parser_t), target :: parser
 
 	type(syntax_node_t), intent(inout) :: expr
 
@@ -899,9 +899,9 @@ recursive module subroutine parse_dot(parser, expr)
 
 	character(len = :), allocatable :: exp_type, act_type, param_name
 
-	type(fn_t) :: method_fn
+	type(fn_t), pointer :: method_fn
 
-	type(struct_t) :: struct
+	type(struct_t), pointer :: struct
 
 	type(syntax_node_t) :: receiver_save, arg_, receiver_cand, method_cand
 
@@ -966,7 +966,7 @@ recursive module subroutine parse_dot(parser, expr)
 	! Check if the identifier is a method name on this struct.
 	! Strip the module prefix from struct_name (e.g. "mod::Type" → "Type") so
 	! that methods resolve the same way under both glob and qualified imports.
-	method_fn = parser%fns%search( &
+	method_fn => parser%fns%search( &
 		"0" // unqualified_name(expr%val%struct_name) // "::" // identifier%text, &
 		method_fn_id, method_io)
 
@@ -1190,12 +1190,19 @@ recursive module subroutine parse_dot(parser, expr)
 			! receiver_cand%val%struct_name → the struct type that owns the method.
 			block
 				integer :: fn_id_check, fn_io_check
-				type(fn_t) :: fn_check
-				fn_check = parser%fns%search( &
+				type(fn_t), pointer :: fn_check
+				fn_check => parser%fns%search( &
 					"0" // unqualified_name(receiver_cand%val%struct_name) // &
 					"::" // expr%identifier%text, &
 					fn_id_check, fn_io_check)
-				if (fn_io_check == exit_success .and. .not. fn_check%is_const_method) then
+				! fn_check is a pointer into the shared fn dict, disassociated
+				! when fn_io_check /= exit_success.  Fortran's .and. does not
+				! guarantee short-circuit evaluation, so the io check must be
+				! a separate outer if rather than combined with
+				! fn_check%is_const_method in one expression, or a failed
+				! lookup could dereference a null pointer
+				if (fn_io_check == exit_success) then
+				if (.not. fn_check%is_const_method) then
 					is_const_receiver = .false.
 					if (receiver_cand%is_loc) then
 						call parser%locs%search(receiver_cand%identifier%text, &
@@ -1209,6 +1216,7 @@ recursive module subroutine parse_dot(parser, expr)
 						call parser%diagnostics%push(err_const_assign( &
 							parser%context(), span, receiver_cand%identifier%text))
 					end if
+				end if
 				end if
 			end block
 		end if

@@ -17,10 +17,10 @@ module function fn_search(dict, key, id_index, iostat) result(val)
 	! here for converting the dictionary into an array after parsing and before
 	! evaluation for better performance
 
-	class(fns_t), intent(in) :: dict
+	class(fns_t), intent(in), target :: dict
 	character(len = *), intent(in) :: key
 	integer, intent(out) :: id_index
-	type(fn_t) :: val
+	type(fn_t), pointer :: val
 
 	integer, intent(out), optional :: iostat
 
@@ -30,12 +30,12 @@ module function fn_search(dict, key, id_index, iostat) result(val)
 
 	i = dict%scope
 
-	val = fn_ternary_search(dict%dict%root, key, id_index, io)
+	val => fn_ternary_search(dict%dict%root, key, id_index, io)
 
 	! If not found in current scope, search parent scopes too
 	do while (io /= exit_success .and. i > 1)
 		i = i - 1
-		val = fn_ternary_search(dict%dict%root, key, id_index, io)
+		val => fn_ternary_search(dict%dict%root, key, id_index, io)
 	end do
 
 	if (present(iostat)) iostat = io
@@ -461,12 +461,12 @@ end subroutine ternary_insert
 
 recursive module function fn_ternary_search(node, key, id_index, iostat) result(val)
 
-	type(fn_ternary_tree_node_t), intent(in), allocatable :: node
+	type(fn_ternary_tree_node_t), intent(in), allocatable, target :: node
 	character(len = *), intent(in) :: key
 
 	integer, intent(out) :: id_index
 	integer, intent(out) :: iostat
-	type(fn_t) :: val
+	type(fn_t), pointer :: val
 
 	!********
 
@@ -480,6 +480,7 @@ recursive module function fn_ternary_search(node, key, id_index, iostat) result(
 	if (.not. allocated(node)) then
 		! Search key not found
 		iostat = exit_failure
+		val => null()
 		return
 	end if
 
@@ -488,13 +489,13 @@ recursive module function fn_ternary_search(node, key, id_index, iostat) result(
 	 ey = key(2:)
 
 	if (k < node%split_char) then
-		val = fn_ternary_search(node%left , key, id_index, iostat)
+		val => fn_ternary_search(node%left , key, id_index, iostat)
 		return
 	else if (k > node%split_char) then
-		val = fn_ternary_search(node%right, key, id_index, iostat)
+		val => fn_ternary_search(node%right, key, id_index, iostat)
 		return
 	else if (len(ey) > 0) then
-		val = fn_ternary_search(node%mid  , ey, id_index, iostat)
+		val => fn_ternary_search(node%mid  , ey, id_index, iostat)
 		return
 	end if
 
@@ -502,11 +503,11 @@ recursive module function fn_ternary_search(node, key, id_index, iostat) result(
 
 	if (.not. allocated(node%val)) then
 		iostat = exit_failure
+		val => null()
 		return
 	end if
 
-	!allocate(val)
-	val      = node%val
+	val      => node%val
 	id_index = node%id_index
 
 	!print *, 'done fn_ternary_search'
@@ -641,12 +642,12 @@ end function struct_ternary_exists
 
 recursive module subroutine struct_ternary_search(node, key, id_index, iostat, val)
 
-	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
+	type(struct_ternary_tree_node_t), intent(in), allocatable, target :: node
 	character(len = *), intent(in) :: key
 
 	integer, intent(out) :: id_index
 	integer, intent(out) :: iostat
-	type(struct_t), intent(out) :: val
+	type(struct_t), pointer, intent(out) :: val
 
 	!********
 
@@ -660,6 +661,7 @@ recursive module subroutine struct_ternary_search(node, key, id_index, iostat, v
 	if (.not. allocated(node)) then
 		! Search key not found
 		iostat = exit_failure
+		val => null()
 		return
 	end if
 
@@ -685,11 +687,12 @@ recursive module subroutine struct_ternary_search(node, key, id_index, iostat, v
 
 	if (.not. allocated(node%val)) then
 		iostat = exit_failure
+		val => null()
 		return
 	end if
 
 	!allocate(val)
-	val      = node%val
+	val      => node%val
 	!val%vars = node%val%vars
 	id_index = node%id_index
 	!val%members = node%val%members
@@ -824,10 +827,10 @@ module subroutine struct_search(dict, key, id_index, iostat, val)
 	! here for converting the dictionary into an array after parsing and before
 	! evaluation for better performance
 
-	class(structs_t), intent(in) :: dict
+	class(structs_t), intent(in), target :: dict
 	character(len = *), intent(in) :: key
 	integer, intent(out) :: id_index
-	type(struct_t), intent(out) :: val
+	type(struct_t), pointer, intent(out) :: val
 
 	integer, intent(out), optional :: iostat
 
