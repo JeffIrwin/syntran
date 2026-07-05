@@ -5292,6 +5292,10 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-alias-with-glob.syntran', quiet) == '', &
 			interpret_file(path//'test-alias-hyphen.syntran', quiet) == '', &
 			interpret_file(path//'test-bad-expr-import.syntran', quiet) == '', &
+			diag_has_code(get_diags_file(path//'test-bad-expr-import.syntran'), &
+				EC_BAD_EXPR), &
+			diag_loc_ok(get_diags_file(path//'test-bad-expr-import.syntran'), &
+				EC_BAD_EXPR, path//'bad_expr_mod.syntran', 10, 1, 6), &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
