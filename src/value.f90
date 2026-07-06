@@ -384,7 +384,14 @@ recursive subroutine value_copy(dst, src)
 	! slot may carry a stale allocatable from a prior value (different type); we
 	! must not propagate it to dst when the current type no longer uses it.
 	if (src%type == str_type .and. allocated(src%str)) then
-		dst%str = src%str   ! intrinsic assignment handles allocatable char
+		! Don't rely on `dst%str = src%str` doing an implicit reallocation of
+		! the outer allocatable AND the nested allocatable %s component in one
+		! shot — gfortran leaks the old %s block when dst%str was already
+		! allocated to a different length.  Deallocate/reallocate explicitly
+		! and copy the (now simple, single-level) character component instead
+		if (allocated(dst%str)) deallocate(dst%str)
+		allocate(dst%str)
+		dst%str%s = src%str%s
 	else if (allocated(dst%str)) then
 		deallocate(dst%str)
 	end if

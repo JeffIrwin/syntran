@@ -11,6 +11,32 @@ contains
 
 !===============================================================================
 
+recursive module subroutine syntax_token_copy(dst, src)
+
+	! Deep copy.  syntax_token_t has no assignment(=) of its own, but its val
+	! component (value_t) does.  Invoking that via `dst%val = src%val` here
+	! would hit a gfortran defined-assignment code-gen bug that leaks val's
+	! nested allocatable components, so value_copy() is called directly
+	! instead of `=`
+
+	class(syntax_token_t), intent(inout) :: dst
+	class(syntax_token_t), intent(in)    :: src
+
+	dst%kind  = src%kind
+	call value_copy(dst%val, src%val)
+	dst%pos   = src%pos
+	dst%unit_ = src%unit_
+
+	if (allocated(src%text)) then
+		dst%text = src%text
+	else if (allocated(dst%text)) then
+		deallocate(dst%text)
+	end if
+
+end subroutine syntax_token_copy
+
+!===============================================================================
+
 recursive module subroutine vars_copy(dst, src)
 
 	! Deep copy.  This overwrites dst with src
@@ -156,7 +182,7 @@ recursive module subroutine fn_ternary_tree_copy(dst, src)
 
 	if (allocated(src%val)) then
 		if (.not. allocated(dst%val)) allocate(dst%val)
-		dst%val = src%val
+		call fn_copy(dst%val, src%val)
 	! TODO: else deallocate?  Other tree copiers too
 	end if
 
@@ -224,7 +250,7 @@ recursive module subroutine syntax_node_copy(dst, src)
 	dst%kind = src%kind
 	dst%op   = src%op
 
-	dst%val  = src%val
+	call value_copy(dst%val, src%val)
 	!dst%val%sca%file_     = src%val%sca%file_
 	!dst%val%sca%file_%eof = src%val%sca%file_%eof
 
@@ -609,7 +635,7 @@ recursive module subroutine ternary_tree_copy(dst, src)
 
 	if (allocated(src%val)) then
 		if (.not. allocated(dst%val)) allocate(dst%val)
-		dst%val = src%val
+		call value_copy(dst%val, src%val)
 	end if
 
 	if (allocated(src%left)) then
@@ -653,7 +679,7 @@ recursive module subroutine struct_ternary_tree_copy(dst, src)
 
 	if (allocated(src%val)) then
 		if (.not. allocated(dst%val)) allocate(dst%val)
-		dst%val = src%val
+		call struct_copy(dst%val, src%val)
 	end if
 
 	if (allocated(src%left)) then

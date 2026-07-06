@@ -121,6 +121,12 @@ module syntran__types_m
 		integer :: unit_   ! translation unit (src file) index for error diagnostic context
 		character(len = :), allocatable :: text
 
+		contains
+#ifndef SYNTRAN_INTEL
+			procedure, pass(dst) :: copy => syntax_token_copy
+			generic, public :: assignment(=) => copy
+#endif
+
 	end type syntax_token_t
 
 	!********
@@ -370,6 +376,11 @@ module syntran__types_m
 		!***************************************
 		! types_copy.f90 procedures
 		!***************************************
+
+		recursive module subroutine syntax_token_copy(dst, src)
+			class(syntax_token_t), intent(inout) :: dst
+			class(syntax_token_t), intent(in)    :: src
+		end subroutine syntax_token_copy
 
 		recursive module subroutine vars_copy(dst, src)
 			class(vars_t), intent(inout) :: dst
