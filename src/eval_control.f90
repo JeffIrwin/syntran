@@ -197,7 +197,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 			for_kind = array_expr
 
 			call syntax_eval(node%array, state, tmp)
-			array = tmp%array  ! TODO: move_alloc() (or value_move) instead of copy?
+			call array_move(tmp%array, array)
 
 			len8 = array%len_
 			!print *, 'len8 = ', len8
@@ -230,9 +230,9 @@ recursive module subroutine eval_for_statement(node, state, res)
 		! Parsing still needs to rely on dictionary lookups because it does
 		! not know the entire list of variable identifiers ahead of time
 		if (node%is_loc) then
-			state%locs%vals(node%id_index) = itr
+			call value_move(itr, state%locs%vals(node%id_index))
 		else
-			state%vars%vals(node%id_index) = itr
+			call value_move(itr, state%vars%vals(node%id_index))
 		end if
 
 		call syntax_eval(node%body, state, res)

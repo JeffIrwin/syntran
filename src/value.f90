@@ -360,6 +360,39 @@ end subroutine value_move
 
 !===============================================================================
 
+subroutine array_move(src, dst)
+
+	! Like value_move(), but for a plain (non-allocatable) array_t variable.
+	! dst cannot be move_alloc'd wholesale since it isn't itself allocatable
+	! (unlike value_t%array), so each of array_t's allocatable components is
+	! moved individually instead
+
+	type(array_t), intent(inout) :: src
+	type(array_t), intent(out)   :: dst
+
+	dst%type = src%type
+	dst%kind = src%kind
+	dst%rank = src%rank
+	dst%len_ = src%len_
+	dst%cap  = src%cap
+
+	call move_alloc(src%lbound, dst%lbound)
+	call move_alloc(src%step,   dst%step)
+	call move_alloc(src%ubound, dst%ubound)
+
+	call move_alloc(src%bool, dst%bool)
+	call move_alloc(src%i32 , dst%i32 )
+	call move_alloc(src%i64 , dst%i64 )
+	call move_alloc(src%f32 , dst%f32 )
+	call move_alloc(src%f64 , dst%f64 )
+	call move_alloc(src%str , dst%str )
+
+	call move_alloc(src%size, dst%size)
+
+end subroutine array_move
+
+!===============================================================================
+
 recursive subroutine value_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion

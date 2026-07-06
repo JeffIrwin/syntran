@@ -45,7 +45,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	type(text_span_t) :: span
 
-	type(value_t) :: param_val, const_check_val, fn_type_copy
+	type(value_t) :: param_val
 
 	!print *, ''
 	!print *, 'parse_fn_call'
@@ -236,17 +236,6 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! unit test
 		if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
 		fn_call%val%array%rank = rank
-
-		! Not sure if these 2 lines are required. Maybe not since it should only
-		! apply to intrinsics fns, but it might be safer to copy anyway
-		!
-		! fn is now a pointer into the shared fn dict (no longer a private deep
-		! copy), so this fix-up must happen on a local copy of fn%type instead
-		! of writing through the pointer, or it would corrupt the stored
-		! prototype for every other call site of this fn
-		fn_type_copy = fn%type
-		if (.not. allocated(fn_type_copy%array)) allocate(fn_type_copy%array)
-		fn_type_copy%array%rank = rank
 
 		! For functions like std::reshape whose element type depends on their
 		! arguments, restore the element type that resolve_overload determined.

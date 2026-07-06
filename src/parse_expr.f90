@@ -364,7 +364,6 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				! Transform to dot_expr("0self", field) for assignment LHS
 				call parser%locs%search("0self", expr%id_index, search_io, self_val)
 				expr%is_loc = .true.
-				expr%val    = self_val
 
 				! Reject writes in const fn
 				if (parser%in_const_method) then
@@ -377,7 +376,6 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				expr%member%id_index   = field_id
 				expr%member%val        = field_val
 				expr%member%identifier = identifier
-				expr%val = field_val
 				call parser%parse_subscripts(expr%member)
 				expr%val = expr%member%val
 				if (parser%current_kind() == dot_token) then
@@ -847,7 +845,6 @@ recursive module subroutine parse_name_expr(parser, expr)
 					expr%member%id_index   = field_id
 					expr%member%val        = field_val
 					expr%member%identifier = identifier
-					expr%val = field_val
 					call parser%parse_subscripts(expr%member)
 					expr%val = expr%member%val
 					if (parser%current_kind() == dot_token) then

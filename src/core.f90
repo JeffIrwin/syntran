@@ -492,7 +492,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	type(vars_t), intent(inout) :: vars
 
-	type(fns_t), intent(inout) :: fns
+	type(fns_t), intent(inout), target :: fns
 
 	type(syntax_node_t) :: tree
 
