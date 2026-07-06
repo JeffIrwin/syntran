@@ -194,17 +194,26 @@ module integer function lookup_type(name, structs, cookie) result(type)
 
 		case default
 
-			! TODO: this should be able to use %exists instead of %search,
-			! possible minor perf boost
-			call structs%search(name, struct_id, io, struct_ptr)
-			!print *, "struct search io = ", io
+			if (present(cookie)) then
+				! Cookie is requested, so we need the actual struct_t pointer
+				call structs%search(name, struct_id, io, struct_ptr)
+				!print *, "struct search io = ", io
 
-			if (io == 0) then
-				type = struct_type
-				if (present(cookie)) cookie = struct_ptr%cookie
-				!print *, "struct num vars = ", struct_ptr%num_vars
+				if (io == 0) then
+					type = struct_type
+					cookie = struct_ptr%cookie
+					!print *, "struct num vars = ", struct_ptr%num_vars
+				else
+					type = unknown_type
+				end if
 			else
-				type = unknown_type
+				! Cheap existence check, without copying/pointing to the
+				! struct_t like search() does
+				if (structs%exists(name)) then
+					type = struct_type
+				else
+					type = unknown_type
+				end if
 			end if
 
 	end select

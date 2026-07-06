@@ -254,9 +254,10 @@ module syntran__types_m
 
 		contains
 			procedure :: &
-				insert  => var_insert, &
-				search  => var_search, &
-				closest => var_closest, &
+				insert    => var_insert, &
+				search    => var_search, &
+				is_const  => var_is_const, &
+				closest   => var_closest, &
 				push_scope, pop_scope
 
 			! This is required unfortunately
@@ -464,6 +465,12 @@ module syntran__types_m
 			logical, intent(out), optional :: is_const
 		end subroutine var_search
 
+		module function var_is_const(dict, key) result(is_const)
+			class(vars_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			logical :: is_const
+		end function var_is_const
+
 		module function var_closest(dict, key) result(closest)
 			class(vars_t), intent(in) :: dict
 			character(len = *), intent(in) :: key
@@ -507,6 +514,12 @@ module syntran__types_m
 			type(value_t), intent(out) :: val
 			logical, intent(out), optional :: is_const
 		end subroutine ternary_search
+
+		recursive module subroutine ternary_is_const(node, key, is_const, found)
+			type(ternary_tree_node_t), intent(in), allocatable :: node
+			character(len = *), intent(in) :: key
+			logical, intent(out) :: is_const, found
+		end subroutine ternary_is_const
 
 		recursive module subroutine ternary_closest(node, prefix, target_low, &
 				target_unqual_low, min_dist, min_qdist, closest)

@@ -891,8 +891,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 	!********
 
-	integer :: io, struct_id, member_id, pos0, pos1, method_i, method_fn_id, method_io, &
-		i, id_index_tmp, io_tmp
+	integer :: io, struct_id, member_id, pos0, pos1, method_i, method_fn_id, method_io, i
 
 	logical :: call_arg_is_ref, is_ok, param_is_ref, param_is_const_ref, &
 		is_const_var, is_const_receiver
@@ -915,7 +914,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 	type(text_span_t) :: span
 
-	type(value_t) :: member, param_val, const_check_val
+	type(value_t) :: member, param_val
 
 	if (parser%current_kind() /= dot_token) return
 
@@ -986,13 +985,10 @@ recursive module subroutine parse_dot(parser, expr)
 				return
 			end if
 			if (expr%kind == name_expr) then
-				is_const_receiver = .false.
 				if (expr%is_loc) then
-					call parser%locs%search(expr%identifier%text, &
-						id_index_tmp, io_tmp, const_check_val, is_const = is_const_receiver)
+					is_const_receiver = parser%locs%is_const(expr%identifier%text)
 				else
-					call parser%vars%search(expr%identifier%text, &
-						id_index_tmp, io_tmp, const_check_val, is_const = is_const_receiver)
+					is_const_receiver = parser%vars%is_const(expr%identifier%text)
 				end if
 				if (is_const_receiver) then
 					span = new_span(identifier%pos, len(identifier%text))
@@ -1203,13 +1199,10 @@ recursive module subroutine parse_dot(parser, expr)
 				! lookup could dereference a null pointer
 				if (fn_io_check == exit_success) then
 				if (.not. fn_check%is_const_method) then
-					is_const_receiver = .false.
 					if (receiver_cand%is_loc) then
-						call parser%locs%search(receiver_cand%identifier%text, &
-							id_index_tmp, io_tmp, const_check_val, is_const = is_const_receiver)
+						is_const_receiver = parser%locs%is_const(receiver_cand%identifier%text)
 					else
-						call parser%vars%search(receiver_cand%identifier%text, &
-							id_index_tmp, io_tmp, const_check_val, is_const = is_const_receiver)
+						is_const_receiver = parser%vars%is_const(receiver_cand%identifier%text)
 					end if
 					if (is_const_receiver) then
 						span = new_span(expr%identifier%pos, len(expr%identifier%text))

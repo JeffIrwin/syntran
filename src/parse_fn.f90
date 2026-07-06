@@ -1545,20 +1545,15 @@ module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 
 	!********
 
-	integer :: id_index_tmp, io_tmp
 	logical :: is_const_var, is_ok
 	character(len = :), allocatable :: exp_type, act_type
-	type(value_t) :: const_check_val
 
 	! Passing a const variable to a mutable-ref param is an error
 	if (param_is_ref .and. .not. param_is_const_ref .and. arg%kind == name_expr) then
-		is_const_var = .false.
 		if (arg%is_loc) then
-			call parser%locs%search(arg%identifier%text, &
-				id_index_tmp, io_tmp, const_check_val, is_const = is_const_var)
+			is_const_var = parser%locs%is_const(arg%identifier%text)
 		else
-			call parser%vars%search(arg%identifier%text, &
-				id_index_tmp, io_tmp, const_check_val, is_const = is_const_var)
+			is_const_var = parser%vars%is_const(arg%identifier%text)
 		end if
 		if (is_const_var) then
 			call parser%diagnostics%push(err_const_assign( &

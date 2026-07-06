@@ -158,6 +158,36 @@ end subroutine var_search
 
 !===============================================================================
 
+module function var_is_const(dict, key) result(is_const)
+
+	! Cheap check for whether a declared variable is const, without copying
+	! its value_t like search() does.  Defaults to .false. if key is not
+	! found in any scope
+
+	class(vars_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+
+	logical :: is_const
+
+	!********
+
+	integer :: i
+	logical :: found
+
+	i = dict%scope
+
+	call ternary_is_const(dict%dicts(i)%root, key, is_const, found)
+
+	! If not found in current scope, search parent scopes too
+	do while (.not. found .and. i > 1)
+		i = i - 1
+		call ternary_is_const(dict%dicts(i)%root, key, is_const, found)
+	end do
+
+end function var_is_const
+
+!===============================================================================
+
 module subroutine push_scope(dict)
 
 	class(vars_t) :: dict
@@ -377,6 +407,52 @@ recursive module subroutine ternary_search(node, key, id_index, iostat, val, is_
 	!print *, ''
 
 end subroutine ternary_search
+
+!===============================================================================
+
+recursive module subroutine ternary_is_const(node, key, is_const, found)
+
+	! Cheap existence + const-flag check, without copying node%val out like
+	! ternary_search() does.  Mirrors struct_ternary_exists()
+
+	type(ternary_tree_node_t), intent(in), allocatable :: node
+	character(len = *), intent(in) :: key
+
+	logical, intent(out) :: is_const, found
+
+	!********
+
+	character :: k
+	character(len = :), allocatable :: ey
+
+	is_const = .false.
+	found    = .false.
+
+	if (.not. allocated(node)) then
+		! Search key not found
+		return
+	end if
+
+	k   = key(1:1)
+	 ey = key(2:)
+
+	if (k < node%split_char) then
+		call ternary_is_const(node%left , key, is_const, found)
+		return
+	else if (k > node%split_char) then
+		call ternary_is_const(node%right, key, is_const, found)
+		return
+	else if (len(ey) > 0) then
+		call ternary_is_const(node%mid  , ey, is_const, found)
+		return
+	end if
+
+	if (.not. allocated(node%val)) return
+
+	found    = .true.
+	is_const = node%is_const
+
+end subroutine ternary_is_const
 
 !===============================================================================
 
