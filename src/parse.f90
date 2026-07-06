@@ -313,26 +313,26 @@ module syntran__parse_m
 			integer, intent(inout) :: unit_
 		end subroutine preprocess
 
-		module function match_pre(parser, kind, tokens, token_index, context) result(token)
+		module subroutine match_pre(parser, kind, tokens, token_index, context, token)
 			class(parser_t) :: parser
 			integer :: kind
 			type(syntax_token_t), intent(in) :: tokens(:)
 			integer, intent(inout) :: token_index
 			type(text_context_t) :: context
-			type(syntax_token_t) :: token
-		end function match_pre
+			type(syntax_token_t), intent(out) :: token
+		end subroutine match_pre
 
 		module subroutine parse_unit(parser, unit)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: unit
 		end subroutine parse_unit
 
-		recursive module function new_parser(str_, src_file, contexts, unit_) result(parser)
+		recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
+			type(parser_t), intent(out) :: parser
 			character(len = *), intent(in) :: str_, src_file
 			type(text_context_vector_t) :: contexts
 			integer, intent(inout) :: unit_
-			type(parser_t) :: parser
-		end function new_parser
+		end subroutine new_parser
 
 	end interface
 

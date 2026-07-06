@@ -715,12 +715,12 @@ module syntran__types_m
 		! types_node.f90 procedures
 		!***************************************
 
-		module function new_token(kind, pos, text, val) result(token)
+		module subroutine new_token(token, kind, pos, text, val)
+			type(syntax_token_t), intent(out) :: token
 			integer :: kind, pos
 			character(len = *) :: text
 			type(value_t), optional :: val
-			type(syntax_token_t) :: token
-		end function new_token
+		end subroutine new_token
 
 		module function new_syntax_node_vector() result(vector)
 			type(syntax_node_vector_t) :: vector

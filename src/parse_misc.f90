@@ -102,7 +102,7 @@ module subroutine match(parser, kind, token)
 		parser%expecting = .true.
 	end if
 
-	token = new_token(kind, current%pos, null_char)
+	call new_token(token, kind, current%pos, null_char)
 	!token = new_token(bad_token, current%pos, null_char)
 	!token = new_token(kind, current%pos, "")
 
@@ -172,7 +172,7 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			! Note that matched tokens are not pushed to tokens_out here.  They
 			! are consumed by the preprocessor, so the later actual parser does
 			! not see them.
-			lparen = parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0))
+			call parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0), lparen)
 
 			! Prepend with path to src_file
 			!
@@ -196,8 +196,8 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 					err_inc_404(contexts%v(unit_0), span, tokens_in(i)%text))
 
 				! Could probably be refactored
-				rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
-				semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
+				call parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0), rparen)
+				call parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0), semicolon)
 				cycle
 			end if
 
@@ -208,8 +208,8 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 				span = new_span(tokens_in(i)%pos, len(tokens_in(i)%text))
 				call parser%diagnostics%push( &
 					err_inc_read(contexts%v(unit_0), span, tokens_in(i)%text))
-				rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
-				semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
+				call parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0), rparen)
+				call parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0), semicolon)
 				cycle
 			end if
 
@@ -218,7 +218,7 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			!print *, inc_text
 
 			! Any nested includes are handled in this new_parser() call
-			inc_parser = new_parser(inc_text, filename, contexts, unit_)
+			call new_parser(inc_parser, inc_text, filename, contexts, unit_)
 
 			! Add includee tokens to includer.  Minus 1 because included eof_token
 			do j = 1, size(inc_parser%tokens) - 1
@@ -231,8 +231,8 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			! here (show includer line number and context)
 			call parser%diagnostics%push_all( inc_parser%diagnostics )
 
-			rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
-			semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
+			call parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0), rparen)
+			call parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0), semicolon)
 
 		!case (tree_keyword)
 		!! TODO: maybe do #tree work at eval time
@@ -257,7 +257,7 @@ end subroutine preprocess
 
 !===============================================================================
 
-module function match_pre(parser, kind, tokens, token_index, context) result(token)
+module subroutine match_pre(parser, kind, tokens, token_index, context, token)
 
 	! This is like match(), but it can run during preprocessing before the
 	! parser is fully constructed, at the cost of having a bunch of arguments.
@@ -270,7 +270,7 @@ module function match_pre(parser, kind, tokens, token_index, context) result(tok
 
 	integer :: kind
 
-	type(syntax_token_t) :: token
+	type(syntax_token_t), intent(out) :: token
 	type(syntax_token_t), intent(in) :: tokens(:)
 
 	integer, intent(inout) :: token_index
@@ -337,11 +337,11 @@ module function match_pre(parser, kind, tokens, token_index, context) result(tok
 		parser%expecting = .true.
 	end if
 
-	token = new_token(kind, current%pos, null_char)
+	call new_token(token, kind, current%pos, null_char)
 	token%unit_ = current%unit_
 	!print *, 'setting token%unit_ = ', token%unit_
 
-end function match_pre
+end subroutine match_pre
 
 !===============================================================================
 
@@ -499,15 +499,15 @@ end subroutine parse_unit
 
 !===============================================================================
 
-recursive module function new_parser(str_, src_file, contexts, unit_) result(parser)
+recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
+
+	type(parser_t), intent(out) :: parser
 
 	character(len = *), intent(in) :: str_, src_file
 
 	type(text_context_vector_t) :: contexts
 
 	integer, intent(inout) :: unit_
-
-	type(parser_t) :: parser
 
 	!********
 
@@ -520,7 +520,7 @@ recursive module function new_parser(str_, src_file, contexts, unit_) result(par
 	tokens = new_syntax_token_vector()
 	lexer = new_lexer(str_, src_file, unit_)
 	do
-		token = lexer%lex()
+		call lexer%lex(token)
 		!print *, 'token%unit_ = ', token%unit_
 
 		if (token%kind /= whitespace_token .and. &
@@ -562,7 +562,7 @@ recursive module function new_parser(str_, src_file, contexts, unit_) result(par
 	!print *, 'tokens%len_ = ', tokens%len_
 	if (debug > 1) print *, parser%tokens_str()
 
-end function new_parser
+end subroutine new_parser
 
 !===============================================================================
 

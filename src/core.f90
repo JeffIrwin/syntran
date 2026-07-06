@@ -548,7 +548,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	contexts = new_context_vector()
 	unit_ = 0
 
-	parser = new_parser(str_, src_filel, contexts, unit_)
+	call new_parser(parser, str_, src_filel, contexts, unit_)
 	!print *, 'units = ', parser%tokens(:)%unit_
 
 	call parser%import_stack%set(src_filel, 0)

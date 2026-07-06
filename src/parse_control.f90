@@ -378,7 +378,7 @@ module subroutine parse_use_statement(parser, statement)
 	! Create a new parser for the module
 	mod_contexts = new_context_vector()
 	mod_unit_ = 0
-	mod_parser = new_parser(mod_text, mod_filename, mod_contexts, mod_unit_)
+	call new_parser(mod_parser, mod_text, mod_filename, mod_contexts, mod_unit_)
 
 	! Propagate import chain into child parser for cycle detection
 	mod_parser%import_stack = parser%import_stack
