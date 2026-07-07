@@ -495,8 +495,8 @@
 					# silently append its own default release flags (-O3 \n
 					# -fp-model precise ...) *after* ours, which otherwise \n
 					# clobbers -Ofast/-xHost/-ipo below (last flag wins) \n
-					fpm test test --profile release-intel --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost -ipo\" \n
-					fpm test long --profile release-intel --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost -ipo\" \n
+					fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost -ipo\" \n
+					fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost -ipo\" \n
 				"
 			}
 		]
