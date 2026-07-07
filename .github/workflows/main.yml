@@ -494,9 +494,9 @@
 					# Use a profile name other than \"release\" so fpm does not \n
 					# silently append its own default release flags (-O3 \n
 					# -fp-model precise ...) *after* ours, which otherwise \n
-					# clobbers -Ofast/-xHost/-ipo below (last flag wins) \n
-					fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost -ipo\" \n
-					fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost -ipo\" \n
+					# clobbers -Ofast/-xHost below (last flag wins) \n
+					fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost \" \n
+					fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost \" \n
 				"
 			}
 		]
