@@ -39,11 +39,6 @@ module syntran__core_m
 	!    * should be able to get full build/link pipeline working in cmake
 	!      instead of fpm with whatever flags and linkers we want
 	!  - there's no doc re struct methods in readme
-	!  - enable windows unit tests in ci/cd. not sure when/why i disabled it
-	!  - kill redundant token deep-copies in the parser hot path
-	!    (peek_kind/peek_text read fields directly; convert
-	!    peek/current/next/match accessors from by-value functions to
-	!    intent(out) subroutines)
 	!  - switch/match/case
 	!  - callbacks, fn pointers, i.e. passing one function as an argument to
 	!    another function
@@ -51,15 +46,13 @@ module syntran__core_m
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
 	!    might be zero perf benefit because the dicts are only used at parse
 	!    time, then mapped to efficient arrays at eval time
-	!    * claude agrees not worth it. although returning pointers from ternary
+	!    * claude claims not worth it. although returning pointers from ternary
 	!      trees instead of copying var/fn/struct by value might perform better.
-	!    * fns and structs done: search fns/structs return pointers into the
-	!      dict now, and lookup_type() only copies out the small cookie
-	!      string it needs instead of the whole struct_t.
-	!    * vars intentionally left copying: the value from vars%search()
-	!      becomes expr%val, which the syntax node owns and later mutates,
-	!      so a private copy is unavoidable there regardless of pointers or
-	!      move semantics.
+	!    * i'm still suspecting hash maps might provide a cleaner api. rather
+	!      than a special-purpose tree traverser just for things like "is_const"
+	!      we could have a core routine that searches and returns an index into
+	!      the hash array, then pull out whatever data we want
+	!    * start small -- just one of fns, vars, or structs, then the remainder
 	!  - enums
 	!  - recursive data structs
 	!    * recursive fns are available, but not structs

@@ -572,9 +572,19 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			return
 		end if
 		do i = 2, nargs
-			write(args(1)%file_%unit_, '(a)', advance = 'no') args(i)%to_str()
+			write(args(1)%file_%unit_, '(a)', advance = 'no', iostat = io) args(i)%to_str()
+			if (io /= 0) then
+				call rt_throw(state, err_rt(RC_WRITELN_FAIL, "cannot writeln() to file """// &
+					args(1)%file_%name_//""" (iostat = "//str(io)//")"))
+				return
+			end if
 		end do
-		write(args(1)%file_%unit_, *)
+		write(args(1)%file_%unit_, *, iostat = io)
+		if (io /= 0) then
+			call rt_throw(state, err_rt(RC_WRITELN_FAIL, "cannot writeln() to file """// &
+				args(1)%file_%name_//""" (iostat = "//str(io)//")"))
+			return
+		end if
 
 	case (INTR_READLN)
 		! No-arg readln(): read a line from stdin.  (readln(file_handle) needs

@@ -6061,6 +6061,24 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			rt_code_both_file( &
 				P//'R16-close-not-open.syntran', RC_CLOSE_NOT_OPEN), &
 
+			! R30 (RC_WRITELN_FAIL) and R31 (RC_CLOSE_FAIL) convert a raw,
+			! uncaught gfortran runtime abort (previously triggered by any
+			! iostat failure on the write()/close() statements backing
+			! writeln()/close(), with zero iostat check beforehand) into a
+			! catchable diagnostic instead of crashing the whole process --
+			! this is what let a transient Windows-only file I/O hiccup
+			! (antivirus/indexer locking a recently-touched file, etc.) take
+			! down the entire test binary with no error message.  No repro
+			! file is included here: unlike every other R* code, forcing a
+			! genuine OS-level write()/close() failure has no portable,
+			! privilege-free, non-racy trigger (verified: /dev/full and
+			! RLIMIT_FSIZE are silently absorbed by gfortran's buffered
+			! formatted I/O with iostat still 0; a FIFO whose reader vanishes
+			! is racy/blocking instead of deterministic). Coverage here is
+			! limited to registering R30/R31 in get_all_error_codes() so the
+			! generic uniqueness/format checks in unit_test_error_codes()
+			! still apply
+
 			! R17: size() dim argument out of range
 			rt_code_both_file(P//'R17-size-rank-mismatch.syntran', RC_SIZE_RANK_MISMATCH), &
 
@@ -6080,7 +6098,11 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 			! R28: close() on std::IN/OUT/ERR is forbidden
 			rt_code_both_file( &
-				P//'R28-close-standard.syntran', RC_CLOSE_STANDARD) &
+				P//'R28-close-standard.syntran', RC_CLOSE_STANDARD), &
+
+			! R29: std::getenv() on an unset environment variable name
+			rt_code_both_file( &
+				P//'R29-getenv-unset.syntran', RC_GETENV_UNSET) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

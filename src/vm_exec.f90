@@ -990,7 +990,7 @@ module subroutine vm_run(prog, state, res)
 			else if (instr%a == INTR_CLOSE) then
 				! close: close the file unit; set is_open=false on the orig slot.
 				block
-				integer :: slot_id_
+				integer :: slot_id_, io_
 				logical :: is_loc_
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
@@ -1009,7 +1009,12 @@ module subroutine vm_run(prog, state, res)
 				else
 					state%vars%vals(slot_id_)%file_%is_open = .false.
 				end if
-				close(iargs_pool(1)%file_%unit_)
+				close(iargs_pool(1)%file_%unit_, iostat = io_)
+				if (io_ /= 0) then
+					call rt_throw(state, err_rt(RC_CLOSE_FAIL, 'cannot close() file "' &
+						//iargs_pool(1)%file_%name_//'" (iostat = '//str(io_)//')'))
+					exit
+				end if
 				val%type = unknown_type
 				end block
 

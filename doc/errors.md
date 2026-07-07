@@ -824,6 +824,26 @@ An array slice subscript's step (`a[::s]`) evaluated to 0.
 
 [Example](../src/tests/test-src/errors/R27-subscript-step-zero.syntran)
 
+### R28 -- close-standard
+
+`close()` was called on a standard file handle (`std::IN`, `std::OUT`, or `std::ERR`), which isn't allowed.
+
+[Example](../src/tests/test-src/errors/R28-close-standard.syntran)
+
+### R29 -- getenv-unset
+
+`std::getenv()` was given a name that isn't set in the environment.
+
+[Example](../src/tests/test-src/errors/R29-getenv-unset.syntran)
+
+### R30 -- writeln-fail
+
+`writeln()` failed writing to an open file (see the accompanying `iostat`).
+
+### R31 -- close-fail
+
+`close()` failed to close an open file (see the accompanying `iostat`).
+
 ## Warnings
 
 ### W1 -- missing-return
