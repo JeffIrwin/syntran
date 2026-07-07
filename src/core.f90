@@ -31,6 +31,13 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - speedup intel aoc tests since it's the ci/cd bottleneck
+	!    * intel is around 14 minutes compared to 6 for gfortran
+	!    * would add -ipo/-Qipo for interprocedural optimization between files,
+	!      but fpm fails at linking because it defaults to ar/ld but it needs
+	!      intel's own xiar/xild linkers. tried this in commit 355efcea3
+	!    * should be able to get full build/link pipeline working in cmake
+	!      instead of fpm with whatever flags and linkers we want
 	!  - there's no doc re struct methods in readme
 	!  - enable windows unit tests in ci/cd. not sure when/why i disabled it
 	!  - kill redundant token deep-copies in the parser hot path

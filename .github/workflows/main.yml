@@ -176,6 +176,15 @@
 				"
 			},
 			{
+				"if": "matrix.os == 'windows-latest'",
+				"name": "Test fpm windows",
+				"run":
+				"
+					fpm test test --profile release \n
+					fpm test long --profile release \n
+				"
+			},
+			{
 				"if": "matrix.os == 'macOS-latest'",
 				"run": "
 					brew install gcc@14 &&
