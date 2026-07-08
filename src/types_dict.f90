@@ -838,8 +838,12 @@ module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 		idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
 
 		if (.not. allocated(dict%table(idx)%key)) then
-			! Empty slot - insert new entry
+			! Empty slot - insert new entry.  struct_t has a defined
+			! assignment(=) (struct_copy), which -- unlike intrinsic
+			! assignment -- does not auto-allocate an unallocated allocatable
+			! target, so val must be explicitly allocated first
 			dict%table(idx)%key = key
+			if (.not. allocated(dict%table(idx)%val)) allocate(dict%table(idx)%val)
 			dict%table(idx)%val = val
 			dict%table(idx)%id_index = id_index
 			dict%count = dict%count + 1
@@ -850,6 +854,7 @@ module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 				io = exit_failure
 				exit
 			end if
+			if (.not. allocated(dict%table(idx)%val)) allocate(dict%table(idx)%val)
 			dict%table(idx)%val = val
 			dict%table(idx)%id_index = id_index
 			exit
