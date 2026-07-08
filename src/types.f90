@@ -300,47 +300,36 @@ module syntran__types_m
 
 	!********
 
-	type struct_ternary_tree_node_t
+	type struct_entry_t
+		! One slot of the structs_t hash table.  An unallocated `key` marks an
+		! empty (never-used) slot
 
-		character :: split_char = ''
-		type(struct_ternary_tree_node_t), allocatable :: left, mid, right
-
+		character(len = :), allocatable :: key
 		type(struct_t), allocatable :: val
-		integer :: id_index
+		integer :: id_index = 0
 
-		contains
-			! This is also required unfortunately too
-#ifndef SYNTRAN_INTEL
-			procedure, pass(dst) :: copy => struct_ternary_tree_copy
-			generic, public :: assignment(=) => copy
-#endif
-			!final :: struct_ternary_tree_final
-
-	end type struct_ternary_tree_node_t
-
-	!********
-
-	type struct_dict_t
-		! This is the struct dictionary of a single scope
-		type(struct_ternary_tree_node_t), allocatable :: root
-	end type struct_dict_t
+	end type struct_entry_t
 
 	!********
 
 	type structs_t
 
-		! A list of struct dictionaries used during parsing
-		!type(struct_dict_t) :: dicts(scope_max)
-		type(struct_dict_t) :: dict
+		! Open-addressing hash table (FNV-1a + linear probing, like
+		! map_i32_t in utils.f90) mapping struct name -> struct_t.  Unlike
+		! map_i32_t, entries carry the struct_t payload directly instead of
+		! indirecting through a parallel array, so there is only one table
 
-		!! Flat array of structs, used for efficient interpreted evaluation
-		!type(struct_t), allocatable :: structs(:)
+		type(struct_entry_t), allocatable :: table(:)
+		integer :: capacity = 0, count = 0
+		real :: load_factor_threshold = 0.75
 
 		contains
 			procedure :: &
 				insert => struct_insert, &
-				exists => struct_exists, &
-				search => struct_search
+				find   => struct_find, &
+				get    => struct_get, &
+				id_at  => struct_id_at, &
+				exists => struct_exists
 
 	end type structs_t
 
@@ -425,11 +414,6 @@ module syntran__types_m
 			class(ternary_tree_node_t), intent(inout) :: dst
 			class(ternary_tree_node_t), intent(in)    :: src
 		end subroutine ternary_tree_copy
-
-		recursive module subroutine struct_ternary_tree_copy(dst, src)
-			class(struct_ternary_tree_node_t), intent(inout) :: dst
-			class(struct_ternary_tree_node_t), intent(in)    :: src
-		end subroutine struct_ternary_tree_copy
 
 		recursive module subroutine syntax_nodes_copy(dst, src)
 			type(syntax_node_t), allocatable, intent(inout) :: dst(:)
@@ -575,29 +559,6 @@ module syntran__types_m
 			logical, intent(in) :: overwrite
 		end subroutine fn_ternary_insert
 
-		recursive module function struct_ternary_exists(node, key) result(exists)
-			type(struct_ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: key
-			logical :: exists
-		end function struct_ternary_exists
-
-		recursive module subroutine struct_ternary_search(node, key, id_index, iostat, val)
-			type(struct_ternary_tree_node_t), intent(in), allocatable, target :: node
-			character(len = *), intent(in) :: key
-			integer, intent(out) :: id_index
-			integer, intent(out) :: iostat
-			type(struct_t), pointer, intent(out) :: val
-		end subroutine struct_ternary_search
-
-		recursive module subroutine struct_ternary_insert(node, key, val, id_index, iostat, overwrite)
-			type(struct_ternary_tree_node_t), intent(inout), allocatable :: node
-			character(len = *), intent(in) :: key
-			type(struct_t), intent(in) :: val
-			integer, intent(in) :: id_index
-			integer, intent(out) :: iostat
-			logical, intent(in) :: overwrite
-		end subroutine struct_ternary_insert
-
 		module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 			class(structs_t) :: dict
 			character(len = *), intent(in) :: key
@@ -607,19 +568,33 @@ module syntran__types_m
 			logical, intent(in), optional :: overwrite
 		end subroutine struct_insert
 
+		module function struct_find(dict, key) result(slot)
+			! Returns the table slot for `key`, or 0 if not present.  The slot
+			! is only valid until the next insert() (a resize rehashes the
+			! table), so callers must read get()/id_at() before any
+			! subsequent insert()
+			class(structs_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			integer :: slot
+		end function struct_find
+
+		module function struct_get(dict, slot) result(val)
+			class(structs_t), intent(in), target :: dict
+			integer, intent(in) :: slot
+			type(struct_t), pointer :: val
+		end function struct_get
+
+		module function struct_id_at(dict, slot) result(id_index)
+			class(structs_t), intent(in) :: dict
+			integer, intent(in) :: slot
+			integer :: id_index
+		end function struct_id_at
+
 		module function struct_exists(dict, key) result(exists)
 			class(structs_t), intent(in) :: dict
 			character(len = *), intent(in) :: key
 			logical :: exists
 		end function struct_exists
-
-		module subroutine struct_search(dict, key, id_index, iostat, val)
-			class(structs_t), intent(in), target :: dict
-			character(len = *), intent(in) :: key
-			integer, intent(out) :: id_index
-			type(struct_t), pointer, intent(out) :: val
-			integer, intent(out), optional :: iostat
-		end subroutine struct_search
 
 		!***************************************
 		! types_ops.f90 procedures

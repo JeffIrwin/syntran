@@ -657,49 +657,12 @@ end subroutine ternary_tree_copy
 
 !===============================================================================
 
-recursive module subroutine struct_ternary_tree_copy(dst, src)
-
-	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-	! source, they will be gone!
-	!
-	! This should be avoided for efficient compilation, but the interactive
-	! interpreter uses it to backup and restore the variable dict for
-	! partially-evaluated continuation lines
-
-	class(struct_ternary_tree_node_t), intent(inout) :: dst
-	class(struct_ternary_tree_node_t), intent(in)    :: src
-
-	!********
-
-	!print *, 'starting struct_ternary_tree_node_t()'
-
-	dst%split_char = src%split_char
-
-	dst%id_index = src%id_index
-
-	if (allocated(src%val)) then
-		if (.not. allocated(dst%val)) allocate(dst%val)
-		call struct_copy(dst%val, src%val)
-	end if
-
-	if (allocated(src%left)) then
-		if (.not. allocated(dst%left)) allocate(dst%left)
-		dst%left = src%left
-	end if
-
-	if (allocated(src%mid)) then
-		if (.not. allocated(dst%mid)) allocate(dst%mid)
-		dst%mid = src%mid
-	end if
-
-	if (allocated(src%right)) then
-		if (.not. allocated(dst%right)) allocate(dst%right)
-		dst%right = src%right
-	end if
-
-	!print *, 'done struct_ternary_tree_node_t()'
-
-end subroutine struct_ternary_tree_copy
+! struct_ternary_tree_copy() was here.  It's no longer needed: structs_t is
+! now a flat hash table (struct_entry_t table(:) in types.f90) instead of a
+! ternary tree, so default (intrinsic) assignment suffices -- it recurses
+! elementwise over table(:), and each struct_entry_t's allocatable val
+! component already uses struct_copy() via struct_t's own defined
+! assignment(=)
 
 !===============================================================================
 

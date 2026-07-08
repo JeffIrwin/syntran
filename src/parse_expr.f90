@@ -951,13 +951,14 @@ recursive module subroutine parse_dot(parser, expr)
 	!print *, "struct_name = """, expr%val%struct_name, """"
 
 	! Is there a better way than looking up every struct by name again?
-	call parser%structs%search(expr%val%struct_name, struct_id, io, struct)
-	if (io /= 0) then
+	struct_id = parser%structs%find(expr%val%struct_name)
+	if (struct_id == 0) then
 		! Type is already confirmed as struct_type above, so I'm fairly sure
 		! this is unreachable
 		write(*,*) err_int(IC_UNREACHABLE_STRUCT_LOOKUP, "unreachable struct lookup failure")
 		call internal_error()
 	end if
+	struct => parser%structs%get(struct_id)
 
 	! Check if the identifier is a method name on this struct.
 	! Strip the module prefix from struct_name (e.g. "mod::Type" → "Type") so

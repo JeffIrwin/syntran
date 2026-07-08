@@ -944,8 +944,6 @@ module subroutine parse_struct_declaration(parser, decl)
 			identifier%text))
 	end if
 
-	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
-	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
 	!call ternary_tree_final(struct%vars%dicts(1)%root)
 
 	decl%kind = struct_declaration
@@ -1214,13 +1212,8 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 	!print *, "parsing struct instance of lookup_name = ", lookup_name
 
-	!print *, ""
-	!print *, "in parse_struct_instance():"
-	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
-	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
-
-	call parser%structs%search(lookup_name, struct_id, io, struct)
-	!print *, "struct io = ", io
+	struct_id = parser%structs%find(lookup_name)
+	struct => parser%structs%get(struct_id)
 
 	call parser%match(lbrace_token, lbrace)
 

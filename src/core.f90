@@ -46,6 +46,7 @@ module syntran__core_m
 	!  - replace ternary tree dicts with hash maps? might be simpler, but there
 	!    might be zero perf benefit because the dicts are only used at parse
 	!    time, then mapped to efficient arrays at eval time
+	!    * existing map_i32_t class could be a template
 	!    * claude claims not worth it. although returning pointers from ternary
 	!      trees instead of copying var/fn/struct by value might perform better.
 	!    * i'm still suspecting hash maps might provide a cleaner api. rather
@@ -53,6 +54,12 @@ module syntran__core_m
 	!      we could have a core routine that searches and returns an index into
 	!      the hash array, then pull out whatever data we want
 	!    * start small -- just one of fns, vars, or structs, then the remainder
+	!    * done for structs (structs_t in types.f90/types_dict.f90): it's now
+	!      a flat open-addressing hash table (find() returns an index, get()/
+	!      id_at() pull fields), reusing fnv_1a() but not map_i32_t itself
+	!      (wrapping map_i32_t would've meant two tables: its own key->int
+	!      table plus a parallel struct_t payload array). fns and vars/locs
+	!      still use ternary trees
 	!  - enums
 	!  - recursive data structs
 	!    * recursive fns are available, but not structs
@@ -202,6 +209,9 @@ module syntran__core_m
 	!      worse than ubuntu.  it would be nice if everything was truly
 	!      statically bundled into one file
 	!    * is appimage the standard tool for this?  how does fpm do it?
+	!  - REPL improvements:
+	!    * allow structs in repl -- currently they don't work
+	!    * any other functionality gaps in repl -- fns?
 	!  - REPL styling
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)
@@ -687,11 +697,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	! Parse the tokens
 	call parser%parse_unit(tree)
 
-	!print *, ""
-	!print *, "in core.f90:"
-	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
-	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
-
 	!*******************************
 
 	tree%expecting       = parser%expecting
@@ -803,17 +808,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	end do
 	!print *, "done looking up fns"
-
-	!if (allocated(parser%structs)) then
-	!	! TODO: manually finalize recursively?
-	!	deallocate(parser%structs)
-	!end if
-	!print *, "size = ", size(parser%structs%structs)
-	!print *, "allocated = ", allocated(parser%structs%structs)
-	!print *, "size = ", size(parser%structs%dicts)
-	!print *, "allocated = ", allocated(parser%structs%dict%root)
-	!deallocate(parser%structs%dict%root)
-	!call struct_ternary_tree_final(parser%structs%dict%root)
 
 	if (debug > 0) print *, 'done syntax_parse'
 

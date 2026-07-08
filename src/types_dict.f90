@@ -413,7 +413,7 @@ end subroutine ternary_search
 recursive module subroutine ternary_is_const(node, key, is_const, found)
 
 	! Cheap existence + const-flag check, without copying node%val out like
-	! ternary_search() does.  Mirrors struct_ternary_exists()
+	! ternary_search() does.  Mirrors struct_exists()
 
 	type(ternary_tree_node_t), intent(in), allocatable :: node
 	character(len = *), intent(in) :: key
@@ -666,188 +666,137 @@ end subroutine fn_ternary_insert
 
 !===============================================================================
 
-recursive module function struct_ternary_exists(node, key) result(exists)
+subroutine struct_grow(dict)
 
-	type(struct_ternary_tree_node_t), intent(in), allocatable :: node
+	! Double dict%table's capacity (or allocate an initial table) and rehash
+	! all existing entries into it.  Mirrors map_i32_resize() in utils.f90.
+	!
+	! This is a submodule-local helper (no "module" prefix, no interface
+	! declaration in types.f90), not part of the structs_t public API
+	!
+	! This does its own probing instead of calling struct_insert(), because
+	! struct_insert() increments id_index on every call -- appropriate for a
+	! genuinely new declaration, but not for relocating an existing entry
+	! during a rehash
+
+	class(structs_t) :: dict
+
+	!********
+
+	type(struct_entry_t), allocatable :: old_table(:)
+	integer :: old_capacity, i, new_capacity
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	old_capacity = dict%capacity
+	new_capacity = max(2 * old_capacity, 8)
+
+	if (old_capacity > 0) call move_alloc(dict%table, old_table)
+
+	dict%capacity = new_capacity
+	allocate(dict%table(new_capacity))
+	! dict%count is unchanged -- rehashing doesn't add or remove entries
+
+	do i = 1, old_capacity
+		if (.not. allocated(old_table(i)%key)) cycle
+
+		hash_val = fnv_1a(old_table(i)%key)
+		hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+		do probe = 0, dict%capacity - 1
+			idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+			if (.not. allocated(dict%table(idx)%key)) then
+				call move_alloc(old_table(i)%key, dict%table(idx)%key)
+				call move_alloc(old_table(i)%val, dict%table(idx)%val)
+				dict%table(idx)%id_index = old_table(i)%id_index
+				exit
+			end if
+		end do
+	end do
+
+end subroutine struct_grow
+
+!===============================================================================
+
+module function struct_find(dict, key) result(slot)
+
+	! Returns the table slot for `key`, or 0 if not present.  The slot is
+	! only valid until the next insert() call: a resize() (triggered by
+	! insert() growing the table) rehashes everything, invalidating
+	! previously-returned slots and pointers from get().  Every current
+	! caller reads get()/id_at() immediately after find(), with no
+	! intervening insert(), so this is safe
+
+	class(structs_t), intent(in) :: dict
 	character(len = *), intent(in) :: key
 
+	integer :: slot
+
+	!********
+
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	slot = 0
+
+	if (dict%capacity <= 0) return
+
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+	do probe = 0, dict%capacity - 1
+		idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+
+		if (.not. allocated(dict%table(idx)%key)) then
+			! Empty slot => key not present
+			return
+		else if (is_str_eq(dict%table(idx)%key, key)) then
+			slot = idx
+			return
+		end if
+	end do
+
+end function struct_find
+
+!===============================================================================
+
+module function struct_get(dict, slot) result(val)
+
+	class(structs_t), intent(in), target :: dict
+	integer, intent(in) :: slot
+
+	type(struct_t), pointer :: val
+
+	val => dict%table(slot)%val
+
+end function struct_get
+
+!===============================================================================
+
+module function struct_id_at(dict, slot) result(id_index)
+
+	class(structs_t), intent(in) :: dict
+	integer, intent(in) :: slot
+
+	integer :: id_index
+
+	id_index = dict%table(slot)%id_index
+
+end function struct_id_at
+
+!===============================================================================
+
+module function struct_exists(dict, key) result(exists)
+
+	! Check if a key exists, without going through get() like other callers do
+
+	class(structs_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
 	logical :: exists
 
-	!********
+	exists = struct_find(dict, key) > 0
 
-	character :: k
-	character(len = :), allocatable :: ey
-
-	!print *, 'searching key ', quote(key)
-
-	exists = .false.
-
-	! Search key not found
-	if (.not. allocated(node)) return
-
-	! :)
-	k   = key(1:1)
-	 ey = key(2:)
-
-	if (k < node%split_char) then
-		exists = struct_ternary_exists(node%left , key)
-		return
-	else if (k > node%split_char) then
-		exists = struct_ternary_exists(node%right, key)
-		return
-	else if (len(ey) > 0) then
-		exists = struct_ternary_exists(node%mid  ,  ey)
-		return
-	end if
-
-	!print *, 'setting val'
-
-	if (.not. allocated(node%val)) then
-		exists = .false.
-		return
-	end if
-
-	exists = .true.
-
-	!print *, 'done struct_ternary_exists'
-	!print *, ''
-
-end function struct_ternary_exists
-
-!===============================================================================
-
-recursive module subroutine struct_ternary_search(node, key, id_index, iostat, val)
-
-	type(struct_ternary_tree_node_t), intent(in), allocatable, target :: node
-	character(len = *), intent(in) :: key
-
-	integer, intent(out) :: id_index
-	integer, intent(out) :: iostat
-	type(struct_t), pointer, intent(out) :: val
-
-	!********
-
-	character :: k
-	character(len = :), allocatable :: ey
-
-	!print *, 'searching key ', quote(key)
-
-	iostat = exit_success
-
-	if (.not. allocated(node)) then
-		! Search key not found
-		iostat = exit_failure
-		val => null()
-		return
-	end if
-
-	! :)
-	k   = key(1:1)
-	 ey = key(2:)
-
-	if (k < node%split_char) then
-		call struct_ternary_search(node%left , key, id_index, iostat, val)
-		!print *, "return left"
-		return
-	else if (k > node%split_char) then
-		call struct_ternary_search(node%right, key, id_index, iostat, val)
-		!print *, "return right"
-		return
-	else if (len(ey) > 0) then
-		call struct_ternary_search(node%mid  , ey, id_index, iostat, val)
-		!print *, "return mid"
-		return
-	end if
-
-	!print *, 'setting val'
-
-	if (.not. allocated(node%val)) then
-		iostat = exit_failure
-		val => null()
-		return
-	end if
-
-	!allocate(val)
-	val      => node%val
-	!val%vars = node%val%vars
-	id_index = node%id_index
-	!val%members = node%val%members
-
-	!print *, 'done struct_ternary_search'
-	!print *, ''
-
-end subroutine struct_ternary_search
-
-!===============================================================================
-
-recursive module subroutine struct_ternary_insert(node, key, val, id_index, iostat, overwrite)
-
-	type(struct_ternary_tree_node_t), intent(inout), allocatable :: node
-	character(len = *), intent(in) :: key
-	type(struct_t), intent(in) :: val
-	integer, intent(in) :: id_index
-
-	integer, intent(out) :: iostat
-	logical, intent(in) :: overwrite
-
-	!********
-
-	character :: k
-	character(len = :), allocatable :: ey
-
-	iostat = exit_success
-
-	!print *, 'inserting key ', quote(key)
-
-	! key == k//ey.  Get it? :)
-	k   = key(1:1)
-	 ey = key(2:)
-
-	if (.not. allocated(node)) then
-		!print *, 'allocate'
-		allocate(node)
-		node%split_char = k
-	else if (k < node%split_char) then
-		!print *, 'left'
-		call struct_ternary_insert(node%left , key, val, id_index, iostat, overwrite)
-		return
-	else if (k > node%split_char) then
-		!print *, 'right'
-		call struct_ternary_insert(node%right, key, val, id_index, iostat, overwrite)
-		return
-	end if
-
-	!print *, 'mid'
-
-	if (len(ey) /= 0) then
-		call struct_ternary_insert(node%mid  , ey, val, id_index, iostat, overwrite)
-		return
-	end if
-
-	! node%val doesn't really need to be declared as allocatable (it's
-	! a scalar anyway), but it's just a convenient way to check if
-	! a duplicate key has already been inserted or not.  We could add
-	! a separate logical member to node for this instead if needed
-
-	! This is not necessarily a failure unless we don't want to overwrite.  In
-	! the evaluator, we will insert values for vars which have already been
-	! declared
-	if (allocated(node%val) .and. .not. overwrite) then
-		!print *, 'key already inserted'
-		iostat = exit_failure
-		return
-	end if
-
-	if (.not. allocated(node%val)) allocate(node%val)
-	node%val      = val
-	!node%val%vars = val%vars
-	node%id_index = id_index
-	!node%val%members = val%members
-
-	!print *, 'done inserting'
-	!print *, ''
-
-end subroutine struct_ternary_insert
+end function struct_exists
 
 !===============================================================================
 
@@ -863,7 +812,8 @@ module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 
 	!********
 
-	integer :: io
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx, io
 	logical :: overwritel
 
 	!print *, 'inserting ', quote(key)
@@ -874,54 +824,41 @@ module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
-	call struct_ternary_insert(dict%dict%root, key, val, id_index, io, overwritel)
+	io = exit_success
+
+	if (dict%capacity <= 0 .or. &
+			real(dict%count) / real(dict%capacity) >= dict%load_factor_threshold) then
+		call struct_grow(dict)
+	end if
+
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+	do probe = 0, dict%capacity - 1
+		idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+
+		if (.not. allocated(dict%table(idx)%key)) then
+			! Empty slot - insert new entry
+			dict%table(idx)%key = key
+			dict%table(idx)%val = val
+			dict%table(idx)%id_index = id_index
+			dict%count = dict%count + 1
+			exit
+		else if (is_str_eq(dict%table(idx)%key, key)) then
+			! Key already inserted
+			if (.not. overwritel) then
+				io = exit_failure
+				exit
+			end if
+			dict%table(idx)%val = val
+			dict%table(idx)%id_index = id_index
+			exit
+		end if
+	end do
 
 	if (present(iostat)) iostat = io
 
 end subroutine struct_insert
-
-!===============================================================================
-
-module function struct_exists(dict, key) result(exists)
-
-	! Check if a key exists, without copying an output val unlike
-	! struct_search()
-
-	class(structs_t), intent(in) :: dict
-	character(len = *), intent(in) :: key
-	logical :: exists
-
-	exists = struct_ternary_exists(dict%dict%root, key)
-
-end function struct_exists
-
-!===============================================================================
-
-module subroutine struct_search(dict, key, id_index, iostat, val)
-
-	! An id_index is not normally part of dictionary searching, but we use it
-	! here for converting the dictionary into an array after parsing and before
-	! evaluation for better performance
-
-	class(structs_t), intent(in), target :: dict
-	character(len = *), intent(in) :: key
-	integer, intent(out) :: id_index
-	type(struct_t), pointer, intent(out) :: val
-
-	integer, intent(out), optional :: iostat
-
-	!********
-
-	integer :: io
-
-	!print *, "starting struct search"
-
-	call struct_ternary_search(dict%dict%root, key, id_index, io, val)
-	!print *, "io = ", io
-
-	if (present(iostat)) iostat = io
-
-end subroutine struct_search
 
 !===============================================================================
 

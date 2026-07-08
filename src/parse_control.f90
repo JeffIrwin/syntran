@@ -129,7 +129,7 @@ module subroutine parse_use_statement(parser, statement)
 	type(fn_t), pointer :: fn
 	type(value_t) :: var_val
 	type(struct_t), pointer :: struct_val
-	integer :: i, io, iostat, mod_unit_, id_index
+	integer :: i, io, iostat, mod_unit_, id_index, struct_slot
 	logical :: qualified_import, is_const_var
 	character(len = :), allocatable :: qualified_prefix
 
@@ -500,8 +500,10 @@ module subroutine parse_use_statement(parser, statement)
 		struct_name = mod_parser%struct_names%v(i)%s
 
 		! Look up the struct in the module parser
-		call mod_parser%structs%search(struct_name, id_index, iostat, struct_val)
-		if (iostat /= exit_success) cycle
+		struct_slot = mod_parser%structs%find(struct_name)
+		if (struct_slot == 0) cycle
+		struct_val => mod_parser%structs%get(struct_slot)
+		id_index    = mod_parser%structs%id_at(struct_slot)
 
 		! Determine insert name (qualified or unqualified)
 		if (qualified_import) then
