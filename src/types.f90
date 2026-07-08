@@ -209,29 +209,26 @@ module syntran__types_m
 	! Dependencies between types could make this module difficult to split into
 	! separate files.  I think I like the monolithic design anyway
 
-	type ternary_tree_node_t
+	type var_entry_t
+		! One slot of a var_dict_t hash table.  An unallocated `key` marks an
+		! empty (never-used) slot
 
-		character :: split_char = ''
-		type(ternary_tree_node_t), allocatable :: left, mid, right
-
+		character(len = :), allocatable :: key
 		type(value_t), allocatable :: val
-		integer :: id_index
+		integer :: id_index = 0
 		logical :: is_const = .false.
 
-		contains
-			!procedure :: print => ternary_node_print
-#ifndef SYNTRAN_INTEL
-			procedure, pass(dst) :: copy => ternary_tree_copy
-			generic, public :: assignment(=) => copy
-#endif
-
-	end type ternary_tree_node_t
+	end type var_entry_t
 
 	!********
 
 	type var_dict_t
-		! This is the variable dictionary of a single scope
-		type(ternary_tree_node_t), allocatable :: root
+		! This is the variable dictionary of a single scope.  Open-addressing
+		! hash table (FNV-1a + linear probing, like structs_t/fns_t)
+
+		type(var_entry_t), allocatable :: table(:)
+		integer :: capacity = 0, count = 0
+		real :: load_factor_threshold = 0.75
 	end type var_dict_t
 
 	!********
@@ -399,10 +396,9 @@ module syntran__types_m
 			type(syntax_node_t), intent(inout) :: src, dst
 		end subroutine syntax_node_move_into
 
-		recursive module subroutine ternary_tree_copy(dst, src)
-			class(ternary_tree_node_t), intent(inout) :: dst
-			class(ternary_tree_node_t), intent(in)    :: src
-		end subroutine ternary_tree_copy
+		! ternary_tree_copy() was here.  It's no longer needed: var_dict_t is
+		! now a flat hash table (var_entry_t table(:) in this module) instead
+		! of a ternary tree, so intrinsic assignment suffices in vars_copy()
 
 		recursive module subroutine syntax_nodes_copy(dst, src)
 			type(syntax_node_t), allocatable, intent(inout) :: dst(:)
@@ -504,38 +500,12 @@ module syntran__types_m
 			type(syntax_node_t), intent(inout) :: val
 		end subroutine push_node_move
 
-		recursive module subroutine ternary_search(node, key, id_index, iostat, val, is_const)
-			type(ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: key
-			integer, intent(out) :: id_index
-			integer, intent(out) :: iostat
-			type(value_t), intent(out) :: val
-			logical, intent(out), optional :: is_const
-		end subroutine ternary_search
-
-		recursive module subroutine ternary_is_const(node, key, is_const, found)
-			type(ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: key
-			logical, intent(out) :: is_const, found
-		end subroutine ternary_is_const
-
-		recursive module subroutine ternary_closest(node, prefix, target_low, &
-				target_unqual_low, min_dist, min_qdist, closest)
-			type(ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: prefix, target_low, target_unqual_low
-			integer, intent(inout) :: min_dist, min_qdist
-			character(len = :), allocatable, intent(inout) :: closest
-		end subroutine ternary_closest
-
-		recursive module subroutine ternary_insert(node, key, val, id_index, iostat, overwrite, is_const)
-			type(ternary_tree_node_t), intent(inout), allocatable :: node
-			character(len = *), intent(in) :: key
-			type(value_t), intent(in) :: val
-			integer, intent(in) :: id_index
-			integer, intent(out) :: iostat
-			logical, intent(in) :: overwrite
-			logical, intent(in), optional :: is_const
-		end subroutine ternary_insert
+		! ternary_search(), ternary_is_const(), ternary_closest(), and
+		! ternary_insert() were here.  var_dict_t is now a flat hash table
+		! (var_entry_t table(:)), so these tree walkers were replaced by
+		! var_grow() (a submodule-local helper in types_dict.f90, not part of
+		! the public API, mirroring struct_grow()/fn_grow()) plus the
+		! var_insert/var_search/var_is_const/var_closest bodies below
 
 		module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 			class(structs_t) :: dict

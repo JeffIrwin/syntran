@@ -131,9 +131,6 @@ end function fn_id_at
 
 !===============================================================================
 
-! TODO: ternary tree insert/search fns for vars could potentially be a
-! separate translation unit
-
 module subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 
 	class(fns_t) :: dict
@@ -202,19 +199,106 @@ end subroutine fn_insert
 
 !===============================================================================
 
+subroutine var_grow(dict)
+
+	! Double dict%table's capacity (or allocate an initial table) and rehash
+	! all existing entries into it.  Mirrors struct_grow()/fn_grow() below in
+	! this same file, but operates on a single scope's var_dict_t directly:
+	! vars_t keeps one hash table per scope, in dicts(:), rather than a
+	! single table
+	!
+	! This is a submodule-local helper (no "module" prefix, no interface
+	! declaration in types.f90), not part of the vars_t public API
+
+	type(var_dict_t), intent(inout) :: dict
+
+	!********
+
+	type(var_entry_t), allocatable :: old_table(:)
+	integer :: old_capacity, i, new_capacity
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	old_capacity = dict%capacity
+	new_capacity = max(2 * old_capacity, 8)
+
+	if (old_capacity > 0) call move_alloc(dict%table, old_table)
+
+	dict%capacity = new_capacity
+	allocate(dict%table(new_capacity))
+	! dict%count is unchanged -- rehashing doesn't add or remove entries
+
+	do i = 1, old_capacity
+		if (.not. allocated(old_table(i)%key)) cycle
+
+		hash_val = fnv_1a(old_table(i)%key)
+		hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+		do probe = 0, dict%capacity - 1
+			idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+			if (.not. allocated(dict%table(idx)%key)) then
+				call move_alloc(old_table(i)%key, dict%table(idx)%key)
+				call move_alloc(old_table(i)%val, dict%table(idx)%val)
+				dict%table(idx)%id_index = old_table(i)%id_index
+				dict%table(idx)%is_const = old_table(i)%is_const
+				exit
+			end if
+		end do
+	end do
+
+end subroutine var_grow
+
+!===============================================================================
+
+function var_dict_find(dict, key) result(slot)
+
+	! Returns dict%table's slot for `key`, or 0 if not present.  Mirrors
+	! struct_find()/fn_find(), but for a single scope's var_dict_t.
+	! var_search()/var_is_const() call this once per scope, walking from the
+	! innermost scope outward until a slot is found or scope 1 is exhausted
+
+	type(var_dict_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+
+	integer :: slot
+
+	!********
+
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	slot = 0
+
+	if (dict%capacity <= 0) return
+
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+	do probe = 0, dict%capacity - 1
+		idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+
+		if (.not. allocated(dict%table(idx)%key)) then
+			! Empty slot => key not present
+			return
+		else if (is_str_eq(dict%table(idx)%key, key)) then
+			slot = idx
+			return
+		end if
+	end do
+
+end function var_dict_find
+
+!===============================================================================
+
 module subroutine var_insert(dict, key, val, id_index, iostat, overwrite, is_const)
 
 	! There are a couple reasons for having this wrapper:
 	!
-	!   - dict is not allocatable, while dict%root is.  type-bound
+	!   - dict is not allocatable, while dict%dicts(i)%table is.  type-bound
 	!     methods are not allowed for allocatable types
-	!   - it's an abstraction away from the dict implementation.
-	!     currently I'm using a ternary tree, but the dict could
-	!     alternatively be implemented using another data structure like a trie
-	!     or a radix tree
-	!   - having an allocatable root is helpful both for the ternary
-	!     insert/delete implementation and for moving the dict without
-	!     copying in syntax_parse()
+	!   - it's an abstraction away from the dict implementation: an
+	!     open-addressing hash table (FNV-1a + linear probing), like
+	!     structs_t/fns_t
 
 	class(vars_t) :: dict
 	character(len = *), intent(in) :: key
@@ -227,7 +311,8 @@ module subroutine var_insert(dict, key, val, id_index, iostat, overwrite, is_con
 
 	!********
 
-	integer :: i, io
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx, i, io
 	logical :: overwritel
 
 	!print *, 'inserting ', quote(key)
@@ -237,8 +322,48 @@ module subroutine var_insert(dict, key, val, id_index, iostat, overwrite, is_con
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
-	i = dict%scope
-	call ternary_insert(dict%dicts(i)%root, key, val, id_index, io, overwritel, is_const)
+	i  = dict%scope
+	io = exit_success
+
+	if (dict%dicts(i)%capacity <= 0 .or. &
+			real(dict%dicts(i)%count) / real(dict%dicts(i)%capacity) >= &
+			dict%dicts(i)%load_factor_threshold) then
+		call var_grow(dict%dicts(i))
+	end if
+
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(dict%dicts(i)%capacity, int64)) + 1)
+
+	do probe = 0, dict%dicts(i)%capacity - 1
+		idx = modulo(hash_idx + probe - 1, dict%dicts(i)%capacity) + 1
+
+		if (.not. allocated(dict%dicts(i)%table(idx)%key)) then
+			! Empty slot - insert new entry.  value_t has a defined
+			! assignment(=), which -- unlike intrinsic assignment -- does not
+			! auto-allocate an unallocated allocatable target, so val must be
+			! explicitly allocated first
+			dict%dicts(i)%table(idx)%key = key
+			if (.not. allocated(dict%dicts(i)%table(idx)%val)) &
+				allocate(dict%dicts(i)%table(idx)%val)
+			dict%dicts(i)%table(idx)%val      = val
+			dict%dicts(i)%table(idx)%id_index = id_index
+			if (present(is_const)) dict%dicts(i)%table(idx)%is_const = is_const
+			dict%dicts(i)%count = dict%dicts(i)%count + 1
+			exit
+		else if (is_str_eq(dict%dicts(i)%table(idx)%key, key)) then
+			! Key already inserted
+			if (.not. overwritel) then
+				io = exit_failure
+				exit
+			end if
+			if (.not. allocated(dict%dicts(i)%table(idx)%val)) &
+				allocate(dict%dicts(i)%table(idx)%val)
+			dict%dicts(i)%table(idx)%val      = val
+			dict%dicts(i)%table(idx)%id_index = id_index
+			if (present(is_const)) dict%dicts(i)%table(idx)%is_const = is_const
+			exit
+		end if
+	end do
 
 	if (present(iostat)) iostat = io
 
@@ -262,17 +387,27 @@ module subroutine var_search(dict, key, id_index, iostat, val, is_const)
 
 	!********
 
-	integer :: i, io
+	integer :: i, io, slot
+
+	if (present(is_const)) is_const = .false.
 
 	i = dict%scope
-
-	call ternary_search(dict%dicts(i)%root, key, id_index, io, val, is_const)
+	slot = var_dict_find(dict%dicts(i), key)
 
 	! If not found in current scope, search parent scopes too
-	do while (io /= exit_success .and. i > 1)
+	do while (slot == 0 .and. i > 1)
 		i = i - 1
-		call ternary_search(dict%dicts(i)%root, key, id_index, io, val, is_const)
+		slot = var_dict_find(dict%dicts(i), key)
 	end do
+
+	if (slot > 0) then
+		io       = exit_success
+		val      = dict%dicts(i)%table(slot)%val
+		id_index = dict%dicts(i)%table(slot)%id_index
+		if (present(is_const)) is_const = dict%dicts(i)%table(slot)%is_const
+	else
+		io = exit_failure
+	end if
 
 	if (present(iostat)) iostat = io
 
@@ -293,18 +428,20 @@ module function var_is_const(dict, key) result(is_const)
 
 	!********
 
-	integer :: i
-	logical :: found
+	integer :: i, slot
+
+	is_const = .false.
 
 	i = dict%scope
-
-	call ternary_is_const(dict%dicts(i)%root, key, is_const, found)
+	slot = var_dict_find(dict%dicts(i), key)
 
 	! If not found in current scope, search parent scopes too
-	do while (.not. found .and. i > 1)
+	do while (slot == 0 .and. i > 1)
 		i = i - 1
-		call ternary_is_const(dict%dicts(i)%root, key, is_const, found)
+		slot = var_dict_find(dict%dicts(i), key)
 	end do
+
+	if (slot > 0) is_const = dict%dicts(i)%table(slot)%is_const
 
 end function var_is_const
 
@@ -331,9 +468,11 @@ module subroutine push_scope(dict)
 		allocate(dict%dicts( dict%scope_cap ))
 
 		do i = 1, dict%scope
-			! The `root` member is also allocatable.  Moving its pointer is
+			! The `table` member is also allocatable.  Moving its pointer is
 			! inexpensive
-			call move_alloc(tmp(i)%root, dict%dicts(i)%root)
+			call move_alloc(tmp(i)%table, dict%dicts(i)%table)
+			dict%dicts(i)%capacity = tmp(i)%capacity
+			dict%dicts(i)%count    = tmp(i)%count
 		end do
 
 		deallocate(tmp)
@@ -355,15 +494,13 @@ module subroutine pop_scope(dict)
 
 	i = dict%scope
 
-	! It's possible that a scope may not have any local vars, so its dict
+	! It's possible that a scope may not have any local vars, so its table
 	! is not allocated
-	if (allocated(dict%dicts(i)%root)) then
-
-		! Does this automatically deallocate children? (mid, left, right)  May
-		! need recursive deep destructor
-		deallocate(dict%dicts(i)%root)
-
+	if (allocated(dict%dicts(i)%table)) then
+		deallocate(dict%dicts(i)%table)
 	end if
+	dict%dicts(i)%capacity = 0
+	dict%dicts(i)%count    = 0
 
 	dict%scope = dict%scope - 1
 
@@ -473,189 +610,11 @@ end subroutine push_node_move
 
 !===============================================================================
 
-recursive module subroutine ternary_search(node, key, id_index, iostat, val, is_const)
-
-	type(ternary_tree_node_t), intent(in), allocatable :: node
-	character(len = *), intent(in) :: key
-
-	integer, intent(out) :: id_index
-	integer, intent(out) :: iostat
-	type(value_t), intent(out) :: val
-	logical, intent(out), optional :: is_const
-
-	!********
-
-	character :: k
-	character(len = :), allocatable :: ey
-
-	!print *, 'searching key ', quote(key)
-
-	iostat = exit_success
-	if (present(is_const)) is_const = .false.
-
-	if (.not. allocated(node)) then
-		! Search key not found
-		iostat = exit_failure
-		return
-	end if
-
-	! :)
-	k   = key(1:1)
-	 ey = key(2:)
-
-	if (k < node%split_char) then
-		call ternary_search(node%left , key, id_index, iostat, val, is_const)
-		return
-	else if (k > node%split_char) then
-		call ternary_search(node%right, key, id_index, iostat, val, is_const)
-		return
-	else if (len(ey) > 0) then
-		call ternary_search(node%mid  , ey, id_index, iostat, val, is_const)
-		return
-	end if
-
-	!print *, 'setting val'
-
-	if (.not. allocated(node%val)) then
-		iostat = exit_failure
-		return
-	end if
-
-	val      = node%val
-	id_index = node%id_index
-	if (present(is_const)) is_const = node%is_const
-
-	!print *, 'done ternary_search'
-	!print *, ''
-
-end subroutine ternary_search
-
-!===============================================================================
-
-recursive module subroutine ternary_is_const(node, key, is_const, found)
-
-	! Cheap existence + const-flag check, without copying node%val out like
-	! ternary_search() does.  Mirrors struct_exists()
-
-	type(ternary_tree_node_t), intent(in), allocatable :: node
-	character(len = *), intent(in) :: key
-
-	logical, intent(out) :: is_const, found
-
-	!********
-
-	character :: k
-	character(len = :), allocatable :: ey
-
-	is_const = .false.
-	found    = .false.
-
-	if (.not. allocated(node)) then
-		! Search key not found
-		return
-	end if
-
-	k   = key(1:1)
-	 ey = key(2:)
-
-	if (k < node%split_char) then
-		call ternary_is_const(node%left , key, is_const, found)
-		return
-	else if (k > node%split_char) then
-		call ternary_is_const(node%right, key, is_const, found)
-		return
-	else if (len(ey) > 0) then
-		call ternary_is_const(node%mid  , ey, is_const, found)
-		return
-	end if
-
-	if (.not. allocated(node%val)) return
-
-	found    = .true.
-	is_const = node%is_const
-
-end subroutine ternary_is_const
-
-!===============================================================================
-
-recursive module subroutine ternary_insert(node, key, val, id_index, iostat, overwrite, is_const)
-
-	type(ternary_tree_node_t), intent(inout), allocatable :: node
-	character(len = *), intent(in) :: key
-	type(value_t), intent(in) :: val
-	integer, intent(in) :: id_index
-
-	integer, intent(out) :: iostat
-	logical, intent(in) :: overwrite
-	logical, intent(in), optional :: is_const
-
-	!********
-
-	character :: k
-	character(len = :), allocatable :: ey
-
-	iostat = exit_success
-
-	!print *, 'inserting key ', quote(key)
-	!print *, 'len(key) = ', len(key)
-	!print *, 'iachar = ', iachar(key(1:1))
-
-	! This should be unreachable
-	if (len(key) <= 0) then
-		!print *, 'len <= 0, return early'
-		return
-	end if
-
-	! key == k//ey.  Get it? :)
-	k   = key(1:1)
-	 ey = key(2:)
-
-	if (.not. allocated(node)) then
-		!print *, 'allocate'
-		allocate(node)
-		node%split_char = k
-	else if (k < node%split_char) then
-		!print *, 'left'
-		call ternary_insert(node%left , key, val, id_index, iostat, overwrite, is_const)
-		return
-	else if (k > node%split_char) then
-		!print *, 'right'
-		call ternary_insert(node%right, key, val, id_index, iostat, overwrite, is_const)
-		return
-	end if
-
-	!print *, 'mid'
-
-	if (len(ey) /= 0) then
-		call ternary_insert(node%mid  , ey, val, id_index, iostat, overwrite, is_const)
-		return
-	end if
-
-	! node%val doesn't really need to be declared as allocatable (it's
-	! a scalar anyway), but it's just a convenient way to check if
-	! a duplicate key has already been inserted or not.  We could add
-	! a separate logical member to node for this instead if needed
-
-	! This is not necessarily a failure unless we don't want to overwrite.  In
-	! the evaluator, we will insert values for vars which have already been
-	! declared
-	if (allocated(node%val) .and. .not. overwrite) then
-		!print *, 'key already inserted'
-		iostat = exit_failure
-		return
-	end if
-
-	if (.not. allocated(node%val)) allocate(node%val)
-	node%val      = val
-	node%id_index = id_index
-	if (present(is_const)) node%is_const = is_const
-
-	!print *, 'done inserting'
-	!print *, ''
-
-end subroutine ternary_insert
-
-!===============================================================================
+! ternary_search(), ternary_is_const(), and ternary_insert() were here.
+! var_dict_t is now a flat hash table (var_entry_t table(:) in types.f90)
+! instead of a recursive ternary tree, so they were replaced by
+! var_dict_find() and var_grow() above, with var_search()/var_is_const()/
+! var_insert() reading/writing dict%dicts(i)%table(:) directly
 
 !===============================================================================
 
@@ -860,53 +819,9 @@ end subroutine struct_insert
 
 !===============================================================================
 
-recursive module subroutine ternary_closest(node, prefix, target_low, &
-		target_unqual_low, min_dist, min_qdist, closest)
-
-	! Walk a ternary tree accumulating the key character-by-character and
-	! track the terminal key whose *unqualified* (post "::") form has the
-	! lowest Levenshtein distance from `target_unqual_low`, breaking ties by
-	! the distance of the full qualified key from `target_low` (both already
-	! lower-cased by the caller).
-
-	type(ternary_tree_node_t), intent(in), allocatable :: node
-	character(len = *), intent(in) :: prefix, target_low, target_unqual_low
-	integer, intent(inout) :: min_dist, min_qdist
-	character(len = :), allocatable, intent(inout) :: closest
-
-	!********
-
-	character(len = :), allocatable :: key, key_low, key_unqual
-	integer :: dist, qdist
-
-	if (.not. allocated(node)) return
-
-	key = prefix//node%split_char
-
-	! Terminal node: a value is stored here
-	if (allocated(node%val)) then
-		key_low = to_lower(key)
-		if (key_low /= target_low) then
-			key_unqual = unqualified_name(key)
-			dist  = levenshtein(target_unqual_low, to_lower(key_unqual))
-			qdist = levenshtein(target_low, key_low)
-			if (dist < min_dist .or. (dist == min_dist .and. qdist < min_qdist)) then
-				min_dist  = dist
-				min_qdist = qdist
-				closest   = key
-			end if
-		end if
-	end if
-
-	! Explore all three branches
-	call ternary_closest(node%left , prefix, target_low, target_unqual_low, &
-		min_dist, min_qdist, closest)
-	call ternary_closest(node%right, prefix, target_low, target_unqual_low, &
-		min_dist, min_qdist, closest)
-	call ternary_closest(node%mid  , key   , target_low, target_unqual_low, &
-		min_dist, min_qdist, closest)
-
-end subroutine ternary_closest
+! ternary_closest() was here.  var_dict_t is now a flat hash table, so
+! var_closest() below scans dict%dicts(i)%table(:) directly, mirroring
+! fn_closest()'s scan of fns_t's single table
 
 !===============================================================================
 
@@ -916,7 +831,8 @@ module function var_closest(dict, key) result(closest)
 	! scopes, or "" when no name is close enough (threshold: edit distance <=
 	! max(2, len(unqualified key)/3)).  Candidates are ranked by the
 	! Levenshtein distance of their unqualified (post "::") name, with the
-	! full module-qualified distance as a tie-breaker.
+	! full module-qualified distance as a tie-breaker.  See fn_closest() for
+	! the same ranking over a single flat table.
 
 	class(vars_t), intent(in) :: dict
 	character(len = *), intent(in) :: key
@@ -924,8 +840,9 @@ module function var_closest(dict, key) result(closest)
 
 	!********
 
-	integer :: i, min_dist, min_qdist, threshold
-	character(len = :), allocatable :: target_low, target_unqual_low
+	integer :: i, j, min_dist, min_qdist, threshold, dist, qdist
+	character(len = :), allocatable :: target_low, target_unqual_low, &
+		key_, key_low, key_unqual
 
 	closest           = ""
 	min_dist          = huge(min_dist)
@@ -934,9 +851,22 @@ module function var_closest(dict, key) result(closest)
 	target_unqual_low = to_lower(unqualified_name(key))
 
 	do i = 1, dict%scope
-		if (.not. allocated(dict%dicts(i)%root)) cycle
-		call ternary_closest(dict%dicts(i)%root, "", target_low, &
-			target_unqual_low, min_dist, min_qdist, closest)
+		do j = 1, dict%dicts(i)%capacity
+			if (.not. allocated(dict%dicts(i)%table(j)%key)) cycle
+
+			key_ = dict%dicts(i)%table(j)%key
+			key_low = to_lower(key_)
+			if (key_low == target_low) cycle
+
+			key_unqual = unqualified_name(key_)
+			dist  = levenshtein(target_unqual_low, to_lower(key_unqual))
+			qdist = levenshtein(target_low, key_low)
+			if (dist < min_dist .or. (dist == min_dist .and. qdist < min_qdist)) then
+				min_dist  = dist
+				min_qdist = qdist
+				closest   = key_
+			end if
+		end do
 	end do
 
 	! Only keep the suggestion when it is close enough
