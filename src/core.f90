@@ -31,6 +31,8 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - do we have/need spellchecking for struct names? apparently fns_t has a
+	!    closest() levenshtein method but structs don't
 	!  - speedup intel aoc tests since it's the ci/cd bottleneck
 	!    * intel is around 14 minutes compared to 6 for gfortran
 	!    * would add -ipo/-Qipo for interprocedural optimization between files,
@@ -514,7 +516,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	character(len = :), allocatable :: src_filel, fn_name, var_name
 
-	integer :: i, io, dummy, unit_
+	integer :: i, slot, unit_
 
 	logical :: allow_continuel, repll
 
@@ -537,12 +539,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	if (debug > 0) print *, 'syntax_parse'
 	if (debug > 1) print *, 'str_ = ', str_
-
-	!! "exp"
-	!print *, 'key = ', &
-	!	fns%dict%root%split_char, &
-	!	fns%dict%root%mid%split_char, &
-	!	fns%dict%root%mid%mid%split_char
 
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
@@ -648,10 +644,11 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	end if
 
 	!print *, 'moving fns'
-	if (allocated(fns%dict%root)) then
+	if (allocated(fns%table)) then
 
-		allocate(fns0%dict%root)
-		fns0%dict%root = fns%dict%root
+		fns0%table          = fns%table
+		fns0%capacity       = fns%capacity
+		fns0%count          = fns%count
 
 		!print *, 'fns%fns = '
 		!do i = 1, size(fns%fns)
@@ -678,7 +675,11 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished
-		call move_alloc(fns%dict%root, parser%fns%dict%root)
+		call move_alloc(fns%table, parser%fns%table)
+		parser%fns%capacity = fns%capacity
+		parser%fns%count    = fns%count
+		fns%capacity = 0
+		fns%count    = 0
 		if (allocated(fns%fns)) call move_alloc(fns%fns          , parser%fns%fns)
 
 	end if
@@ -725,8 +726,10 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 			call move_alloc(vars0%vals         , vars%vals)
 		end if
 
-		if (allocated(fns0%dict%root)) then
-			call move_alloc(fns0%dict%root, fns%dict%root)
+		if (allocated(fns0%table)) then
+			call move_alloc(fns0%table, fns%table)
+			fns%capacity = fns0%capacity
+			fns%count    = fns0%count
 			call move_alloc(fns0%fns          , fns%fns)
 		end if
 
@@ -749,8 +752,10 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	end if
 
 	! TODO: if num_fns instead?
-	if (allocated(parser%fns%dict%root)) then
-		call move_alloc(parser%fns%dict%root, fns%dict%root)
+	if (allocated(parser%fns%table)) then
+		call move_alloc(parser%fns%table, fns%table)
+		fns%capacity = parser%fns%capacity
+		fns%count    = parser%fns%count
 
 		!! I tried adding this while working on recursive fn lookup but it's not
 		!! the way
@@ -803,7 +808,8 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 		! User-defined fns are in the table after all of the intrinsic fns, so
 		! shift its index by num_intr_fns
-		fn = fns%search(fn_name, dummy, io)
+		slot = fns%find(fn_name)
+		fn = fns%get(slot)
 		fns%fns( fns%num_intr_fns + i ) = fn
 
 	end do

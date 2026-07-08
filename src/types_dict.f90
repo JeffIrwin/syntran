@@ -11,40 +11,127 @@ contains
 
 !===============================================================================
 
-module function fn_search(dict, key, id_index, iostat) result(val)
+subroutine fn_grow(dict)
 
-	! An id_index is not normally part of dictionary searching, but we use it
-	! here for converting the dictionary into an array after parsing and before
-	! evaluation for better performance
+	! Double dict%table's capacity (or allocate an initial table) and rehash
+	! all existing entries into it.  Mirrors struct_grow() in this same file.
+	!
+	! This is a submodule-local helper (no "module" prefix, no interface
+	! declaration in types.f90), not part of the fns_t public API
+	!
+	! This does its own probing instead of calling fn_insert(), because
+	! fn_insert() takes id_index as given by the caller -- appropriate for a
+	! genuinely new declaration, but not for relocating an existing entry
+	! during a rehash
 
-	class(fns_t), intent(in), target :: dict
-	character(len = *), intent(in) :: key
-	integer, intent(out) :: id_index
-	type(fn_t), pointer :: val
-
-	integer, intent(out), optional :: iostat
+	class(fns_t) :: dict
 
 	!********
 
-	integer :: i, io
+	type(fn_entry_t), allocatable :: old_table(:)
+	integer :: old_capacity, i, new_capacity
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
 
-	i = dict%scope
+	old_capacity = dict%capacity
+	new_capacity = max(2 * old_capacity, 8)
 
-	val => fn_ternary_search(dict%dict%root, key, id_index, io)
+	if (old_capacity > 0) call move_alloc(dict%table, old_table)
 
-	! If not found in current scope, search parent scopes too
-	do while (io /= exit_success .and. i > 1)
-		i = i - 1
-		val => fn_ternary_search(dict%dict%root, key, id_index, io)
+	dict%capacity = new_capacity
+	allocate(dict%table(new_capacity))
+	! dict%count is unchanged -- rehashing doesn't add or remove entries
+
+	do i = 1, old_capacity
+		if (.not. allocated(old_table(i)%key)) cycle
+
+		hash_val = fnv_1a(old_table(i)%key)
+		hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+		do probe = 0, dict%capacity - 1
+			idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+			if (.not. allocated(dict%table(idx)%key)) then
+				call move_alloc(old_table(i)%key, dict%table(idx)%key)
+				call move_alloc(old_table(i)%val, dict%table(idx)%val)
+				dict%table(idx)%id_index = old_table(i)%id_index
+				exit
+			end if
+		end do
 	end do
 
-	if (present(iostat)) iostat = io
-
-end function fn_search
+end subroutine fn_grow
 
 !===============================================================================
 
-! TODO: ternary tree insert/search fns for vars and fns could potentially be a
+module function fn_find(dict, key) result(slot)
+
+	! Returns the table slot for `key`, or 0 if not present.  The slot is
+	! only valid until the next insert() call: a resize() (triggered by
+	! insert() growing the table) rehashes everything, invalidating
+	! previously-returned slots and pointers from get().  Every current
+	! caller reads get()/id_at() immediately after find(), with no
+	! intervening insert(), so this is safe
+
+	class(fns_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+
+	integer :: slot
+
+	!********
+
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	slot = 0
+
+	if (dict%capacity <= 0) return
+
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+	do probe = 0, dict%capacity - 1
+		idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+
+		if (.not. allocated(dict%table(idx)%key)) then
+			! Empty slot => key not present
+			return
+		else if (is_str_eq(dict%table(idx)%key, key)) then
+			slot = idx
+			return
+		end if
+	end do
+
+end function fn_find
+
+!===============================================================================
+
+module function fn_get(dict, slot) result(val)
+
+	class(fns_t), intent(in), target :: dict
+	integer, intent(in) :: slot
+
+	type(fn_t), pointer :: val
+
+	val => dict%table(slot)%val
+
+end function fn_get
+
+!===============================================================================
+
+module function fn_id_at(dict, slot) result(id_index)
+
+	class(fns_t), intent(in) :: dict
+	integer, intent(in) :: slot
+
+	integer :: id_index
+
+	id_index = dict%table(slot)%id_index
+
+end function fn_id_at
+
+!===============================================================================
+
+! TODO: ternary tree insert/search fns for vars could potentially be a
 ! separate translation unit
 
 module subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
@@ -59,7 +146,8 @@ module subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 
 	!********
 
-	integer :: i, io
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx, io
 	logical :: overwritel
 
 	!print *, 'inserting ', quote(key)
@@ -71,8 +159,42 @@ module subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 	overwritel = .true.
 	if (present(overwrite)) overwritel = overwrite
 
-	i = dict%scope
-	call fn_ternary_insert(dict%dict%root, key, val, id_index, io, overwritel)
+	io = exit_success
+
+	if (dict%capacity <= 0 .or. &
+			real(dict%count) / real(dict%capacity) >= dict%load_factor_threshold) then
+		call fn_grow(dict)
+	end if
+
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+	do probe = 0, dict%capacity - 1
+		idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+
+		if (.not. allocated(dict%table(idx)%key)) then
+			! Empty slot - insert new entry.  fn_t has a defined
+			! assignment(=) (fn_copy), which -- unlike intrinsic
+			! assignment -- does not auto-allocate an unallocated allocatable
+			! target, so val must be explicitly allocated first
+			dict%table(idx)%key = key
+			if (.not. allocated(dict%table(idx)%val)) allocate(dict%table(idx)%val)
+			dict%table(idx)%val = val
+			dict%table(idx)%id_index = id_index
+			dict%count = dict%count + 1
+			exit
+		else if (is_str_eq(dict%table(idx)%key, key)) then
+			! Key already inserted
+			if (.not. overwritel) then
+				io = exit_failure
+				exit
+			end if
+			if (.not. allocated(dict%table(idx)%val)) allocate(dict%table(idx)%val)
+			dict%table(idx)%val = val
+			dict%table(idx)%id_index = id_index
+			exit
+		end if
+	end do
 
 	if (present(iostat)) iostat = io
 
@@ -535,135 +657,6 @@ end subroutine ternary_insert
 
 !===============================================================================
 
-recursive module function fn_ternary_search(node, key, id_index, iostat) result(val)
-
-	type(fn_ternary_tree_node_t), intent(in), allocatable, target :: node
-	character(len = *), intent(in) :: key
-
-	integer, intent(out) :: id_index
-	integer, intent(out) :: iostat
-	type(fn_t), pointer :: val
-
-	!********
-
-	character :: k
-	character(len = :), allocatable :: ey
-
-	!print *, 'searching key ', quote(key)
-
-	iostat = exit_success
-
-	if (.not. allocated(node)) then
-		! Search key not found
-		iostat = exit_failure
-		val => null()
-		return
-	end if
-
-	! :)
-	k   = key(1:1)
-	 ey = key(2:)
-
-	if (k < node%split_char) then
-		val => fn_ternary_search(node%left , key, id_index, iostat)
-		return
-	else if (k > node%split_char) then
-		val => fn_ternary_search(node%right, key, id_index, iostat)
-		return
-	else if (len(ey) > 0) then
-		val => fn_ternary_search(node%mid  , ey, id_index, iostat)
-		return
-	end if
-
-	!print *, 'setting val'
-
-	if (.not. allocated(node%val)) then
-		iostat = exit_failure
-		val => null()
-		return
-	end if
-
-	val      => node%val
-	id_index = node%id_index
-
-	!print *, 'done fn_ternary_search'
-	!print *, ''
-
-end function fn_ternary_search
-
-!===============================================================================
-
-recursive module subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwrite)
-
-	type(fn_ternary_tree_node_t), intent(inout), allocatable :: node
-	character(len = *), intent(in) :: key
-	type(fn_t), intent(in) :: val
-	integer, intent(in) :: id_index
-
-	integer, intent(out) :: iostat
-	logical, intent(in) :: overwrite
-
-	!********
-
-	character :: k
-	character(len = :), allocatable :: ey
-
-	iostat = exit_success
-
-	!print *, 'inserting key ', quote(key)
-
-	! key == k//ey.  Get it? :)
-	k   = key(1:1)
-	 ey = key(2:)
-
-	if (.not. allocated(node)) then
-		!print *, 'allocate'
-		allocate(node)
-		node%split_char = k
-	else if (k < node%split_char) then
-		!print *, 'left'
-		call fn_ternary_insert(node%left , key, val, id_index, iostat, overwrite)
-		return
-	else if (k > node%split_char) then
-		!print *, 'right'
-		call fn_ternary_insert(node%right, key, val, id_index, iostat, overwrite)
-		return
-	end if
-
-	!print *, 'mid'
-
-	if (len(ey) /= 0) then
-		call fn_ternary_insert(node%mid  , ey, val, id_index, iostat, overwrite)
-		return
-	end if
-
-	! node%val doesn't really need to be declared as allocatable (it's
-	! a scalar anyway), but it's just a convenient way to check if
-	! a duplicate key has already been inserted or not.  We could add
-	! a separate logical member to node for this instead if needed
-
-	! This is not necessarily a failure unless we don't want to overwrite.  In
-	! the evaluator, we will insert values for vars which have already been
-	! declared
-	if (allocated(node%val) .and. .not. overwrite) then
-		!print *, 'key already inserted'
-		iostat = exit_failure
-		return
-	end if
-
-	!if (.not. allocated(node%val)) allocate(node%val)
-	if (allocated(node%val)) deallocate(node%val)
-	allocate(node%val)
-
-	node%val      = val
-	node%id_index = id_index
-
-	!print *, "inserted index ", id_index
-	!print *, 'done inserting'
-	!print *, ''
-
-end subroutine fn_ternary_insert
-
 !===============================================================================
 
 subroutine struct_grow(dict)
@@ -917,55 +910,6 @@ end subroutine ternary_closest
 
 !===============================================================================
 
-recursive module subroutine fn_ternary_closest(node, prefix, target_low, &
-		target_unqual_low, min_dist, min_qdist, closest)
-
-	! Like ternary_closest but for fn_ternary_tree_node_t.
-
-	type(fn_ternary_tree_node_t), intent(in), allocatable :: node
-	character(len = *), intent(in) :: prefix, target_low, target_unqual_low
-	integer, intent(inout) :: min_dist, min_qdist
-	character(len = :), allocatable, intent(inout) :: closest
-
-	!********
-
-	character(len = :), allocatable :: key, key_low, key_unqual, display
-	integer :: dist, qdist
-
-	if (.not. allocated(node)) return
-
-	key = prefix//node%split_char
-
-	if (allocated(node%val)) then
-		key_low = to_lower(key)
-		if (key_low /= target_low) then
-			! De-mangle internal overload keys (e.g. "0tan_f32" -> "tan") so we
-			! never surface a "0"-prefixed name in a suggestion.
-			key_unqual = unqualified_name(key)
-			display    = overload_display_name(key_unqual)
-			dist = levenshtein(target_unqual_low, to_lower(key_unqual))
-			if (display /= key_unqual) &
-				dist = min(dist, levenshtein(target_unqual_low, to_lower(display)))
-			qdist = levenshtein(target_low, key_low)
-			if (dist < min_dist .or. (dist == min_dist .and. qdist < min_qdist)) then
-				min_dist  = dist
-				min_qdist = qdist
-				closest   = overload_display_name(key)
-			end if
-		end if
-	end if
-
-	call fn_ternary_closest(node%left , prefix, target_low, target_unqual_low, &
-		min_dist, min_qdist, closest)
-	call fn_ternary_closest(node%right, prefix, target_low, target_unqual_low, &
-		min_dist, min_qdist, closest)
-	call fn_ternary_closest(node%mid  , key   , target_low, target_unqual_low, &
-		min_dist, min_qdist, closest)
-
-end subroutine fn_ternary_closest
-
-!===============================================================================
-
 module function var_closest(dict, key) result(closest)
 
 	! Return the closest declared variable name to `key` across all current
@@ -1015,8 +959,9 @@ module function fn_closest(dict, key) result(closest)
 
 	!********
 
-	integer :: min_dist, min_qdist, threshold
-	character(len = :), allocatable :: target_low, target_unqual_low
+	integer :: i, min_dist, min_qdist, threshold, dist, qdist
+	character(len = :), allocatable :: target_low, target_unqual_low, &
+		key_, key_low, key_unqual, display
 
 	closest           = ""
 	min_dist          = huge(min_dist)
@@ -1024,8 +969,27 @@ module function fn_closest(dict, key) result(closest)
 	target_low        = to_lower(key)
 	target_unqual_low = to_lower(unqualified_name(key))
 
-	call fn_ternary_closest(dict%dict%root, "", target_low, &
-		target_unqual_low, min_dist, min_qdist, closest)
+	do i = 1, dict%capacity
+		if (.not. allocated(dict%table(i)%key)) cycle
+
+		key_ = dict%table(i)%key
+		key_low = to_lower(key_)
+		if (key_low == target_low) cycle
+
+		! De-mangle internal overload keys (e.g. "0tan_f32" -> "tan") so we
+		! never surface a "0"-prefixed name in a suggestion.
+		key_unqual = unqualified_name(key_)
+		display    = overload_display_name(key_unqual)
+		dist = levenshtein(target_unqual_low, to_lower(key_unqual))
+		if (display /= key_unqual) &
+			dist = min(dist, levenshtein(target_unqual_low, to_lower(display)))
+		qdist = levenshtein(target_low, key_low)
+		if (dist < min_dist .or. (dist == min_dist .and. qdist < min_qdist)) then
+			min_dist  = dist
+			min_qdist = qdist
+			closest   = overload_display_name(key_)
+		end if
+	end do
 
 	threshold = max(2, len(target_unqual_low) / 3)
 	if (min_dist > threshold) closest = ""
