@@ -393,6 +393,107 @@ end subroutine array_move
 
 !===============================================================================
 
+subroutine array_copy(dst, src)
+
+	! Deep copy of a plain (non-allocatable) array_t variable.  Like
+	! value_copy(), but for array_t.
+	!
+	! The str(:) component needs special handling: string_t has its own
+	! allocatable %s, so a whole-array `dst%str = src%str` is a
+	! double-nested reallocation-on-assignment in a single implicit
+	! statement, which gfortran doesn't handle correctly (see the identical
+	! str_type fix in value_copy() below).  Every other component here is
+	! single-level (a plain primitive array, or scalar_t which has no
+	! nested allocatables of its own), so plain `=` is safe for those
+
+	type(array_t), intent(inout) :: dst
+	type(array_t), intent(in)    :: src
+
+	!********
+
+	integer(kind = 8) :: i
+
+	dst%type = src%type
+	dst%kind = src%kind
+	dst%rank = src%rank
+	dst%len_ = src%len_
+	dst%cap  = src%cap
+
+	if (allocated(src%lbound)) then
+		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
+		dst%lbound = src%lbound
+	else if (allocated(dst%lbound)) then
+		deallocate(dst%lbound)
+	end if
+
+	if (allocated(src%step)) then
+		if (.not. allocated(dst%step)) allocate(dst%step)
+		dst%step = src%step
+	else if (allocated(dst%step)) then
+		deallocate(dst%step)
+	end if
+
+	if (allocated(src%ubound)) then
+		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
+		dst%ubound = src%ubound
+	else if (allocated(dst%ubound)) then
+		deallocate(dst%ubound)
+	end if
+
+	if (allocated(src%bool)) then
+		dst%bool = src%bool
+	else if (allocated(dst%bool)) then
+		deallocate(dst%bool)
+	end if
+
+	if (allocated(src%i32)) then
+		dst%i32 = src%i32
+	else if (allocated(dst%i32)) then
+		deallocate(dst%i32)
+	end if
+
+	if (allocated(src%i64)) then
+		dst%i64 = src%i64
+	else if (allocated(dst%i64)) then
+		deallocate(dst%i64)
+	end if
+
+	if (allocated(src%f32)) then
+		dst%f32 = src%f32
+	else if (allocated(dst%f32)) then
+		deallocate(dst%f32)
+	end if
+
+	if (allocated(src%f64)) then
+		dst%f64 = src%f64
+	else if (allocated(dst%f64)) then
+		deallocate(dst%f64)
+	end if
+
+	if (allocated(src%str)) then
+		! Double-nested (outer str(:) allocatable + each element's own
+		! allocatable %s) — don't rely on a whole-array `dst%str = src%str`
+		! to reallocate both levels correctly in one shot.  Reallocate the
+		! outer array explicitly, then copy each element's %s individually
+		if (allocated(dst%str)) deallocate(dst%str)
+		allocate(dst%str( size(src%str) ))
+		do i = 1, size(src%str, kind = 8)
+			dst%str(i)%s = src%str(i)%s
+		end do
+	else if (allocated(dst%str)) then
+		deallocate(dst%str)
+	end if
+
+	if (allocated(src%size)) then
+		dst%size = src%size
+	else if (allocated(dst%size)) then
+		deallocate(dst%size)
+	end if
+
+end subroutine array_copy
+
+!===============================================================================
+
 recursive subroutine value_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
@@ -449,8 +550,12 @@ recursive subroutine value_copy(dst, src)
 	end if
 
 	if (allocated(src%array)) then
+		! Don't rely on a whole-object `dst%array = src%array` here either —
+		! array_t's str(:) component has the same double-nested
+		! reallocation-on-assignment problem as value_t%str above.  See
+		! array_copy()
 		if (.not. allocated(dst%array)) allocate(dst%array)
-		dst%array = src%array
+		call array_copy(dst%array, src%array)
 	else if (allocated(dst%array)) then
 		deallocate(dst%array)
 	end if
