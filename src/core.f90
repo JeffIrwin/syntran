@@ -757,7 +757,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	! parser%vars%dicts.  Allocate a flat array for efficient evaluation without
 	! dictionary lookups.  Indices in the array are already saved in each node's
 	! id_index member
-	if (allocated(vars%vals)) deallocate(vars%vals)
+	call value_array_destroy(vars%vals)
 	allocate(vars%vals( parser%num_vars ))
 
 	if (allocated(vars0%vals)) then

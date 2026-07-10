@@ -296,12 +296,15 @@ subroutine value_reset(val)
 		! Scalar: nothing allocated, just clear the type tag.
 		val%type = unknown_type
 	case default
-		if (allocated(val%array     )) deallocate(val%array     )
-		if (allocated(val%str       )) deallocate(val%str       )
-		if (allocated(val%file_     )) deallocate(val%file_     )
-		if (allocated(val%struct    )) deallocate(val%struct    )
-		if (allocated(val%struct_name)) deallocate(val%struct_name)
-		if (allocated(val%struct_cookie)) deallocate(val%struct_cookie)
+		! Don't rely on a bare `deallocate(val%array)` / `deallocate(val%struct)`
+		! here -- both can be arbitrarily deeply nested (array_t containing
+		! str(:) of string_t with its own allocatable %s; struct(:) is a
+		! recursive value_t array), and gfortran's implicit deep
+		! deallocation of that doesn't reliably free every level (same bug
+		! already fixed piecewise in value_copy()/array_copy() and
+		! eval_fn_call()'s locs teardown). value_destroy() clears every
+		! level explicitly, including str/file_/struct_name/struct_cookie
+		call value_destroy(val)
 		val%type = unknown_type
 	end select
 
@@ -571,6 +574,107 @@ recursive subroutine value_copy(dst, src)
 	end if
 
 end subroutine value_copy
+
+!===============================================================================
+
+subroutine array_destroy(arr)
+
+	! Explicitly deallocate arr's allocatable components one level at a
+	! time, mirroring array_copy()'s per-component handling.  Used ahead of
+	! a whole-array deallocation of value_t(:) (e.g. before move_alloc()
+	! implicitly deallocates its "to" argument) so that implicit,
+	! compiler-generated deep deallocation of a value_t array never has to
+	! walk a live, deeply-nested allocatable tree itself -- by the time it
+	! runs, every component here is already empty
+
+	type(array_t), intent(inout) :: arr
+
+	!********
+
+	integer(kind = 8) :: i
+
+	if (allocated(arr%lbound)) deallocate(arr%lbound)
+	if (allocated(arr%step))   deallocate(arr%step)
+	if (allocated(arr%ubound)) deallocate(arr%ubound)
+
+	if (allocated(arr%bool)) deallocate(arr%bool)
+	if (allocated(arr%i32))  deallocate(arr%i32)
+	if (allocated(arr%i64))  deallocate(arr%i64)
+	if (allocated(arr%f32))  deallocate(arr%f32)
+	if (allocated(arr%f64))  deallocate(arr%f64)
+
+	if (allocated(arr%str)) then
+		do i = 1, size(arr%str, kind = 8)
+			if (allocated(arr%str(i)%s)) deallocate(arr%str(i)%s)
+		end do
+		deallocate(arr%str)
+	end if
+
+	if (allocated(arr%size)) deallocate(arr%size)
+
+end subroutine array_destroy
+
+!===============================================================================
+
+recursive subroutine value_destroy(val)
+
+	! Explicitly deallocate val's allocatable components one level at a
+	! time, instead of relying on implicit/compiler-generated deep
+	! deallocation of a value_t (or an array of value_t) to correctly walk
+	! a deeply-nested allocatable tree (struct(:) of struct(:) of array_t
+	! containing str(:) of string_t, etc.) in one shot.  See array_destroy()
+
+	type(value_t), intent(inout) :: val
+
+	!********
+
+	integer :: i
+
+	if (allocated(val%str)) deallocate(val%str)
+	if (allocated(val%file_)) deallocate(val%file_)
+	if (allocated(val%struct_name)) deallocate(val%struct_name)
+	if (allocated(val%struct_cookie)) deallocate(val%struct_cookie)
+
+	if (allocated(val%array)) then
+		call array_destroy(val%array)
+		deallocate(val%array)
+	end if
+
+	if (allocated(val%struct)) then
+		do i = 1, size(val%struct)
+			call value_destroy(val%struct(i))
+		end do
+		deallocate(val%struct)
+	end if
+
+end subroutine value_destroy
+
+!===============================================================================
+
+subroutine value_array_destroy(vals)
+
+	! Safely deallocate an array of value_t: explicitly destroy each
+	! element first (see value_destroy()), then deallocate the array
+	! itself.  Use this instead of a bare `deallocate(vals)` wherever a
+	! growable pool/buffer of value_t needs to be freed or resized --
+	! gfortran's implicit deep deallocation of an array of a type this
+	! deeply nested (str(:) of string_t with its own allocatable %s;
+	! struct(:) is itself a recursive value_t array) is not reliable
+
+	type(value_t), allocatable, intent(inout) :: vals(:)
+
+	!********
+
+	integer :: i
+
+	if (.not. allocated(vals)) return
+
+	do i = 1, size(vals)
+		call value_destroy(vals(i))
+	end do
+	deallocate(vals)
+
+end subroutine value_array_destroy
 
 !===============================================================================
 

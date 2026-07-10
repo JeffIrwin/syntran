@@ -168,6 +168,17 @@ recursive module subroutine eval_fn_call(node, state, res)
 	state%returned = returned0  ! pop
 
 	!print *, "popping runtime state stack"
+	! Explicitly destroy each of this call's locals before move_alloc()
+	! below implicitly deallocates state%locs%vals (its "to" argument) --
+	! see value_destroy().  A discarded by-value struct parameter whose
+	! nested array field was reallocated mid-call is exactly the case this
+	! guards: don't let compiler-generated deep deallocation of a value_t
+	! array be the first thing to walk that structure
+	if (allocated(state%locs%vals)) then
+		do i = 1, size(state%locs%vals)
+			call value_destroy(state%locs%vals(i))
+		end do
+	end if
 	if (allocated(locs0)) call move_alloc(locs0, state%locs%vals)
 
 	do i = 1, size(node%params)
