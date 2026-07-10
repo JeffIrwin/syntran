@@ -888,7 +888,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 	!********
 
-	integer :: io, struct_id, member_id, pos0, pos1, method_i, method_fn_id, method_io, i
+	integer :: io, struct_id, member_id, pos0, pos1, method_i, method_fn_id, method_io, i, method_slot
 
 	logical :: call_arg_is_ref, is_ok, param_is_ref, param_is_const_ref, &
 		is_const_var, is_const_receiver
@@ -951,20 +951,27 @@ recursive module subroutine parse_dot(parser, expr)
 	!print *, "struct_name = """, expr%val%struct_name, """"
 
 	! Is there a better way than looking up every struct by name again?
-	call parser%structs%search(expr%val%struct_name, struct_id, io, struct)
-	if (io /= 0) then
+	struct_id = parser%structs%find(expr%val%struct_name)
+	if (struct_id == 0) then
 		! Type is already confirmed as struct_type above, so I'm fairly sure
 		! this is unreachable
 		write(*,*) err_int(IC_UNREACHABLE_STRUCT_LOOKUP, "unreachable struct lookup failure")
 		call internal_error()
 	end if
+	struct => parser%structs%get(struct_id)
 
 	! Check if the identifier is a method name on this struct.
 	! Strip the module prefix from struct_name (e.g. "mod::Type" → "Type") so
 	! that methods resolve the same way under both glob and qualified imports.
-	method_fn => parser%fns%search( &
-		"0" // unqualified_name(expr%val%struct_name) // "::" // identifier%text, &
-		method_fn_id, method_io)
+	method_slot = parser%fns%find( &
+		"0" // unqualified_name(expr%val%struct_name) // "::" // identifier%text)
+	if (method_slot == 0) then
+		method_io = exit_failure
+	else
+		method_io = exit_success
+		method_fn => parser%fns%get(method_slot)
+		method_fn_id = parser%fns%id_at(method_slot)
+	end if
 
 	if (method_io == exit_success) then
 
@@ -1182,12 +1189,18 @@ recursive module subroutine parse_dot(parser, expr)
 			! receiver_cand%id_index / is_loc / identifier → root variable (s).
 			! receiver_cand%val%struct_name → the struct type that owns the method.
 			block
-				integer :: fn_id_check, fn_io_check
+				integer :: fn_id_check, fn_io_check, fn_slot_check
 				type(fn_t), pointer :: fn_check
-				fn_check => parser%fns%search( &
+				fn_slot_check = parser%fns%find( &
 					"0" // unqualified_name(receiver_cand%val%struct_name) // &
-					"::" // expr%identifier%text, &
-					fn_id_check, fn_io_check)
+					"::" // expr%identifier%text)
+				if (fn_slot_check == 0) then
+					fn_io_check = exit_failure
+				else
+					fn_io_check = exit_success
+					fn_check => parser%fns%get(fn_slot_check)
+					fn_id_check = parser%fns%id_at(fn_slot_check)
+				end if
 				! fn_check is a pointer into the shared fn dict, disassociated
 				! when fn_io_check /= exit_success.  Fortran's .and. does not
 				! guarantee short-circuit evaluation, so the io check must be

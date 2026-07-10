@@ -31,7 +31,12 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - do we have/need spellchecking for struct names? apparently fns_t has a
+	!    closest() levenshtein method but structs don't
 	!  - speedup intel aoc tests since it's the ci/cd bottleneck
+	!    * unrelated, windows pack ci stage seems to rebuild when maybe it
+	!      should re-use a cached build from one of the tests
+	!    * unrelated, long tests do not run on mac ci but they pass locally
 	!    * intel is around 14 minutes compared to 6 for gfortran
 	!    * would add -ipo/-Qipo for interprocedural optimization between files,
 	!      but fpm fails at linking because it defaults to ar/ld but it needs
@@ -43,16 +48,6 @@ module syntran__core_m
 	!  - callbacks, fn pointers, i.e. passing one function as an argument to
 	!    another function
 	!    * this could be a big change to the type system
-	!  - replace ternary tree dicts with hash maps? might be simpler, but there
-	!    might be zero perf benefit because the dicts are only used at parse
-	!    time, then mapped to efficient arrays at eval time
-	!    * claude claims not worth it. although returning pointers from ternary
-	!      trees instead of copying var/fn/struct by value might perform better.
-	!    * i'm still suspecting hash maps might provide a cleaner api. rather
-	!      than a special-purpose tree traverser just for things like "is_const"
-	!      we could have a core routine that searches and returns an index into
-	!      the hash array, then pull out whatever data we want
-	!    * start small -- just one of fns, vars, or structs, then the remainder
 	!  - enums
 	!  - recursive data structs
 	!    * recursive fns are available, but not structs
@@ -202,6 +197,9 @@ module syntran__core_m
 	!      worse than ubuntu.  it would be nice if everything was truly
 	!      statically bundled into one file
 	!    * is appimage the standard tool for this?  how does fpm do it?
+	!  - REPL improvements:
+	!    * allow structs in repl -- currently they don't work
+	!    * any other functionality gaps in repl -- fns?
 	!  - REPL styling
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)
@@ -504,7 +502,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	character(len = :), allocatable :: src_filel, fn_name, var_name
 
-	integer :: i, io, dummy, unit_
+	integer :: i, slot, unit_
 
 	logical :: allow_continuel, repll
 
@@ -515,9 +513,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	type(value_t) :: var_val
 
 	! This no longer seems to make a difference.  Previously, without `save`,
-	! gfortran crashes when this goes out of scope.  Maybe I need to work on a
-	! manual finalizer to deallocate ternary trees, not just for structs but for
-	! the vars_t trees contained within
+	! gfortran crashes when this goes out of scope.
 	type(parser_t) :: parser
 	!type(parser_t), save :: parser
 
@@ -527,12 +523,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	if (debug > 0) print *, 'syntax_parse'
 	if (debug > 1) print *, 'str_ = ', str_
-
-	!! "exp"
-	!print *, 'key = ', &
-	!	fns%dict%root%split_char, &
-	!	fns%dict%root%mid%split_char, &
-	!	fns%dict%root%mid%mid%split_char
 
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
@@ -579,28 +569,29 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	!print *, ''
 	!print *, 'size(vars%vals) = ', size(vars%vals)
 
-	!print *, 'allocated 1 = ', allocated(vars%dicts(1)%root)
-	!print *, 'allocated 2 = ', allocated(vars%dicts(2)%root)
-	!print *, 'allocated 3 = ', allocated(vars%dicts(3)%root)
+	!print *, 'allocated 1 = ', allocated(vars%dicts(1)%table)
+	!print *, 'allocated 2 = ', allocated(vars%dicts(2)%table)
+	!print *, 'allocated 3 = ', allocated(vars%dicts(3)%table)
 
-	if (allocated(vars%dicts(1)%root)) then
-	!if (any(allocated(vars%dicts(:)%root))) then
+	if (allocated(vars%dicts(1)%table)) then
+	!if (any(allocated(vars%dicts(:)%table))) then
 
 		if (allow_continuel) then
 			! Backup existing vars.  Only copy for interactive interpreter.
 			! This logic is slightly redundant as allow_continuel should _only_
 			! be set true for the interactive interpreter with stdin, which is
-			! also the only case where vars%root will be allocated.
+			! also the only case where vars%dicts(1)%table will be allocated.
 			! Calling syntran_interpret() on a multi-line string is deprecated,
 			! since syntran_eval() can parse it all in one syntax_parse() call.
 
-			! The root type has an overloaded assignment op, but the vars
-			! type itself does not (and I don't want to expose or encourage
-			! copying)
+			! var_entry_t's val component has an overloaded assignment op, but
+			! the vars type itself does not (and I don't want to expose or
+			! encourage copying)
 
 			allocate(vars0%dicts(1))
-			allocate(vars0%dicts(1)%root)
-			vars0%dicts(1)%root = vars%dicts(1)%root
+			vars0%dicts(1)%table    = vars%dicts(1)%table
+			vars0%dicts(1)%capacity = vars%dicts(1)%capacity
+			vars0%dicts(1)%count    = vars%dicts(1)%count
 
 			!print *, 'vars%vals = '
 			!do i = 1, size(vars%vals)
@@ -615,7 +606,11 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished
-		call move_alloc(vars%dicts(1)%root, parser%vars%dicts(1)%root)
+		call move_alloc(vars%dicts(1)%table, parser%vars%dicts(1)%table)
+		parser%vars%dicts(1)%capacity = vars%dicts(1)%capacity
+		parser%vars%dicts(1)%count    = vars%dicts(1)%count
+		vars%dicts(1)%capacity = 0
+		vars%dicts(1)%count    = 0
 		call move_alloc(vars%vals         , parser%vars%vals)
 
 	!else if (parser%num_vars > 0) then
@@ -638,10 +633,11 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	end if
 
 	!print *, 'moving fns'
-	if (allocated(fns%dict%root)) then
+	if (allocated(fns%table)) then
 
-		allocate(fns0%dict%root)
-		fns0%dict%root = fns%dict%root
+		fns0%table          = fns%table
+		fns0%capacity       = fns%capacity
+		fns0%count          = fns%count
 
 		!print *, 'fns%fns = '
 		!do i = 1, size(fns%fns)
@@ -668,7 +664,11 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished
-		call move_alloc(fns%dict%root, parser%fns%dict%root)
+		call move_alloc(fns%table, parser%fns%table)
+		parser%fns%capacity = fns%capacity
+		parser%fns%count    = fns%count
+		fns%capacity = 0
+		fns%count    = 0
 		if (allocated(fns%fns)) call move_alloc(fns%fns          , parser%fns%fns)
 
 	end if
@@ -678,7 +678,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	! Pre-seed std:: constants into a fresh vars dict.
 	! REPL: dict was moved in above and already contains std:: constants -- skip.
-	if (.not. allocated(parser%vars%dicts(1)%root)) then
+	if (.not. allocated(parser%vars%dicts(1)%table)) then
 		call declare_intr_vars(parser%vars)
 		parser%num_vars = NUM_INTR_VARS
 	end if
@@ -686,11 +686,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	!*******************************
 	! Parse the tokens
 	call parser%parse_unit(tree)
-
-	!print *, ""
-	!print *, "in core.f90:"
-	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
-	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
 
 	!*******************************
 
@@ -710,8 +705,10 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 		! parsing the current stdin line from its start again.
 
 		if (allocated(vars0%dicts)) then
-			if (allocated(vars0%dicts(1)%root)) then
-				call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
+			if (allocated(vars0%dicts(1)%table)) then
+				call move_alloc(vars0%dicts(1)%table, vars%dicts(1)%table)
+				vars%dicts(1)%capacity = vars0%dicts(1)%capacity
+				vars%dicts(1)%count    = vars0%dicts(1)%count
 			end if
 		end if
 
@@ -720,8 +717,10 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 			call move_alloc(vars0%vals         , vars%vals)
 		end if
 
-		if (allocated(fns0%dict%root)) then
-			call move_alloc(fns0%dict%root, fns%dict%root)
+		if (allocated(fns0%table)) then
+			call move_alloc(fns0%table, fns%table)
+			fns%capacity = fns0%capacity
+			fns%count    = fns0%count
 			call move_alloc(fns0%fns          , fns%fns)
 		end if
 
@@ -738,14 +737,18 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	! Move back.  It's possible that vars were empty before this call but not
 	! anymore
-	if (allocated(parser%vars%dicts(1)%root)) then
+	if (allocated(parser%vars%dicts(1)%table)) then
 	!if (parser%num_vars > 0) then
-		call move_alloc(parser%vars%dicts(1)%root, vars%dicts(1)%root)
+		call move_alloc(parser%vars%dicts(1)%table, vars%dicts(1)%table)
+		vars%dicts(1)%capacity = parser%vars%dicts(1)%capacity
+		vars%dicts(1)%count    = parser%vars%dicts(1)%count
 	end if
 
 	! TODO: if num_fns instead?
-	if (allocated(parser%fns%dict%root)) then
-		call move_alloc(parser%fns%dict%root, fns%dict%root)
+	if (allocated(parser%fns%table)) then
+		call move_alloc(parser%fns%table, fns%table)
+		fns%capacity = parser%fns%capacity
+		fns%count    = parser%fns%count
 
 		!! I tried adding this while working on recursive fn lookup but it's not
 		!! the way
@@ -798,22 +801,12 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 		! User-defined fns are in the table after all of the intrinsic fns, so
 		! shift its index by num_intr_fns
-		fn = fns%search(fn_name, dummy, io)
+		slot = fns%find(fn_name)
+		fn = fns%get(slot)
 		fns%fns( fns%num_intr_fns + i ) = fn
 
 	end do
 	!print *, "done looking up fns"
-
-	!if (allocated(parser%structs)) then
-	!	! TODO: manually finalize recursively?
-	!	deallocate(parser%structs)
-	!end if
-	!print *, "size = ", size(parser%structs%structs)
-	!print *, "allocated = ", allocated(parser%structs%structs)
-	!print *, "size = ", size(parser%structs%dicts)
-	!print *, "allocated = ", allocated(parser%structs%dict%root)
-	!deallocate(parser%structs%dict%root)
-	!call struct_ternary_tree_final(parser%structs%dict%root)
 
 	if (debug > 0) print *, 'done syntax_parse'
 

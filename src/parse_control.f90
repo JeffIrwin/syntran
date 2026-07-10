@@ -129,7 +129,7 @@ module subroutine parse_use_statement(parser, statement)
 	type(fn_t), pointer :: fn
 	type(value_t) :: var_val
 	type(struct_t), pointer :: struct_val
-	integer :: i, io, iostat, mod_unit_, id_index
+	integer :: i, io, iostat, mod_unit_, id_index, struct_slot, fn_slot
 	logical :: qualified_import, is_const_var
 	character(len = :), allocatable :: qualified_prefix
 
@@ -425,8 +425,10 @@ module subroutine parse_use_statement(parser, statement)
 		fn_name = mod_parser%fn_names%v(i)%s
 
 		! Look up the function in the module parser
-		fn => mod_parser%fns%search(fn_name, id_index, iostat)
-		if (iostat /= exit_success) cycle
+		fn_slot = mod_parser%fns%find(fn_name)
+		if (fn_slot == 0) cycle
+		fn => mod_parser%fns%get(fn_slot)
+		id_index = mod_parser%fns%id_at(fn_slot)
 
 		! Determine the name to insert: qualified (module::fn) or unqualified (fn)
 		! For qualified imports, convert path separators to namespace separators
@@ -500,8 +502,10 @@ module subroutine parse_use_statement(parser, statement)
 		struct_name = mod_parser%struct_names%v(i)%s
 
 		! Look up the struct in the module parser
-		call mod_parser%structs%search(struct_name, id_index, iostat, struct_val)
-		if (iostat /= exit_success) cycle
+		struct_slot = mod_parser%structs%find(struct_name)
+		if (struct_slot == 0) cycle
+		struct_val => mod_parser%structs%get(struct_slot)
+		id_index    = mod_parser%structs%id_at(struct_slot)
 
 		! Determine insert name (qualified or unqualified)
 		if (qualified_import) then

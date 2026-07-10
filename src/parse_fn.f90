@@ -29,7 +29,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	character(len = :), allocatable :: exp_type, act_type, param_name, &
 		lookup_name, display_name
 
-	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result
+	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, slot
 
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
 		arg_is_ref, is_ok, is_const_var
@@ -146,22 +146,30 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		if (module_prefix == "std") then
 			! For std::, first try std-only functions (registered with "std::" prefix)
 			lookup_name = "std::" // fn_call%identifier%text
-			fn => parser%fns%search(lookup_name, id_index, io)
-			if (io /= exit_success) then
+			slot = parser%fns%find(lookup_name)
+			if (slot == 0) then
 				! Fall back to regular intrinsic lookup without prefix (legacy intrinsics)
 				lookup_name = fn_call%identifier%text
-				fn => parser%fns%search(lookup_name, id_index, io)
+				slot = parser%fns%find(lookup_name)
 			end if
 		else
 			! For user modules, look up with qualified name
 			lookup_name = module_prefix // "::" // fn_call%identifier%text
-			fn => parser%fns%search(lookup_name, id_index, io)
+			slot = parser%fns%find(lookup_name)
 		end if
 		display_name = module_prefix // "::" // identifier_%text
 	else
 		lookup_name = fn_call%identifier%text
 		display_name = identifier_%text
-		fn => parser%fns%search(lookup_name, id_index, io)
+		slot = parser%fns%find(lookup_name)
+	end if
+
+	if (slot == 0) then
+		io = exit_failure
+	else
+		io = exit_success
+		fn => parser%fns%get(slot)
+		id_index = parser%fns%id_at(slot)
 	end if
 
 	!print *, "fn id_index = ", id_index
@@ -171,7 +179,14 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! Do this before the ipass==0 early return so the type is set correctly
 		! in both passes, preventing cascading errors.
 		if (.not. present(module_prefix)) then
-			fn => parser%fns%search("std::" // fn_call%identifier%text, id_index, io_std)
+			slot = parser%fns%find("std::" // fn_call%identifier%text)
+			if (slot == 0) then
+				io_std = exit_failure
+			else
+				io_std = exit_success
+				fn => parser%fns%get(slot)
+				id_index = parser%fns%id_at(slot)
+			end if
 			if (io_std == exit_success) then
 				! Set the return type from the found function to prevent
 				! cascading errors from the untyped result
@@ -944,8 +959,6 @@ module subroutine parse_struct_declaration(parser, decl)
 			identifier%text))
 	end if
 
-	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
-	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
 	!call ternary_tree_final(struct%vars%dicts(1)%root)
 
 	decl%kind = struct_declaration
@@ -1214,13 +1227,8 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 	!print *, "parsing struct instance of lookup_name = ", lookup_name
 
-	!print *, ""
-	!print *, "in parse_struct_instance():"
-	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
-	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
-
-	call parser%structs%search(lookup_name, struct_id, io, struct)
-	!print *, "struct io = ", io
+	struct_id = parser%structs%find(lookup_name)
+	struct => parser%structs%get(struct_id)
 
 	call parser%match(lbrace_token, lbrace)
 

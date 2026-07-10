@@ -170,7 +170,7 @@ module integer function lookup_type(name, structs, cookie) result(type)
 
 	!********
 
-	integer :: io, struct_id
+	integer :: struct_id
 	type(struct_t), pointer :: struct_ptr
 
 	! Immo also has an "any" type.  Should I allow that?
@@ -196,11 +196,11 @@ module integer function lookup_type(name, structs, cookie) result(type)
 
 			if (present(cookie)) then
 				! Cookie is requested, so we need the actual struct_t pointer
-				call structs%search(name, struct_id, io, struct_ptr)
-				!print *, "struct search io = ", io
+				struct_id = structs%find(name)
 
-				if (io == 0) then
+				if (struct_id > 0) then
 					type = struct_type
+					struct_ptr => structs%get(struct_id)
 					cookie = struct_ptr%cookie
 					!print *, "struct num vars = ", struct_ptr%num_vars
 				else
