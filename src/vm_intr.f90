@@ -33,8 +33,6 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	integer :: i, io
 	integer :: env_len, env_stat
 
-	integer(kind = 8) :: p8_, q8_, dst8_, src8_, rdim8_, cdim8_
-
 	character :: char_
 
 	character(len = :), allocatable :: mode_, status_, resolved_path_
@@ -746,9 +744,7 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		res%array%size(1) = res%array%len_
 		allocate(res%array%str(res%array%len_))
 		do i = 1, state%script_args%len_
-			! Not `res%array%str(i) = state%script_args%v(i)` -- see the
-			! note on the str_type case in INTR_TRANSPOSE below
-			res%array%str(i)%s = state%script_args%v(i)%s
+			res%array%str(i) = state%script_args%v(i)
 		end do
 
 	case (INTR_TRANSPOSE)
@@ -798,20 +794,10 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 				[int(args(1)%array%size(1)), int(args(1)%array%size(2))])), &
 				[int(res%array%len_)])
 		case (str_type)
-			! Not `res%array%str = reshape(transpose(reshape(...)))` --
-			! string_t has its own allocatable %s component, so assigning
-			! (with implicit allocation) an array of string_t hits the same
-			! gfortran/mingw bug documented on set_array_val() in
-			! eval_array.f90.  Do the row/col transpose manually instead
-			rdim8_ = args(1)%array%size(1)
-			cdim8_ = args(1)%array%size(2)
-			allocate(res%array%str(res%array%len_))
-			do dst8_ = 1, res%array%len_
-				p8_ = (dst8_ - 1) / cdim8_ + 1
-				q8_ = mod(dst8_ - 1, cdim8_) + 1
-				src8_ = p8_ + (q8_ - 1) * rdim8_
-				res%array%str(dst8_)%s = args(1)%array%str(src8_)%s
-			end do
+			res%array%str = reshape(transpose(reshape( &
+				args(1)%array%str(1:args(1)%array%len_), &
+				[int(args(1)%array%size(1)), int(args(1)%array%size(2))])), &
+				[int(res%array%len_)])
 		end select
 
 	case (INTR_RESHAPE)
@@ -824,10 +810,8 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			return
 		end if
 
-		! Copy source (deep copies flat buffer, type, kind, len_).  Not
-		! `res = args(1)` -- same class of gfortran/mingw defined-assignment
-		! bug as push_value() in value.f90
-		call value_copy(res, args(1))
+		! Copy source (deep copies flat buffer, type, kind, len_)
+		res = args(1)
 
 		! Overwrite shape metadata
 		res%array%rank = int(args(2)%array%len_)

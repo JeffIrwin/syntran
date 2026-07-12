@@ -419,7 +419,7 @@ subroutine do_unop(right, op_kind, res)
 
 	select case (op_kind)
 	case (plus_token)
-		call value_copy(res, right)  ! not `res = right` -- see push_value() in value.f90
+		res = right
 	case (minus_token)
 		call negate(right, res, '-')
 	case (not_keyword)
@@ -514,19 +514,14 @@ module subroutine vm_run(prog, state, res)
 		! (slot starts as unknown_type).
 		case (OP_STORE_GLOBAL)
 			if (state%vars%vals(instr%a)%type == unknown_type) then
-				! Not `state%vars%vals(instr%a) = stack%v(stack%len_)` --
-				! same class of gfortran/mingw defined-assignment bug as
-				! push_value() in value.f90
-				call value_copy(state%vars%vals(instr%a), stack%v(stack%len_))
+				state%vars%vals(instr%a) = stack%v(stack%len_)
 			else
 				call assign_(state%vars%vals(instr%a), stack%v(stack%len_), '=')
 			end if
 
 		case (OP_STORE_LOCAL)
 			if (state%locs%vals(instr%a)%type == unknown_type) then
-				! Not `state%locs%vals(instr%a) = stack%v(stack%len_)` --
-				! see OP_STORE_GLOBAL above
-				call value_copy(state%locs%vals(instr%a), stack%v(stack%len_))
+				state%locs%vals(instr%a) = stack%v(stack%len_)
 			else
 				call assign_(state%locs%vals(instr%a), stack%v(stack%len_), '=')
 			end if

@@ -25,9 +25,7 @@ module subroutine new_token(token, kind, pos, text, val)
 	token%pos  = pos
 	token%text = text
 
-	! Not `token%val = val` -- same class of gfortran/mingw defined-
-	! assignment bug as push_value() in value.f90
-	if (present(val)) call value_copy(token%val, val)
+	if (present(val)) token%val  = val
 
 end subroutine new_token
 
@@ -107,15 +105,13 @@ module subroutine new_declaration_expr(identifier, op, right, expr)
 
 	allocate(expr%right)
 
-	! Not `expr%X = Y` below for identifier/op (syntax_token_t), right
-	! (syntax_node_t), or val (value_t) -- same class of gfortran/mingw
-	! defined-assignment bug as push_value() in value.f90
-	call syntax_token_copy(expr%identifier, identifier)
-	call syntax_token_copy(expr%op, op)
-	call syntax_node_copy(expr%right, right)
+	expr%identifier = identifier
+
+	expr%op    = op
+	expr%right = right
 
 	! Pass the result value type up the tree for type checking in parent
-	call value_copy(expr%val, right%val)
+	expr%val = right%val
 
 end subroutine new_declaration_expr
 
@@ -128,10 +124,8 @@ module subroutine new_name_expr(identifier, val, expr)
 	type(syntax_node_t), intent(out)  :: expr
 
 	expr%kind = name_expr
-	! Not `expr%X = Y` -- same class of gfortran/mingw defined-assignment
-	! bug as push_value() in value.f90
-	call syntax_token_copy(expr%identifier, identifier)
-	call value_copy(expr%val, val)
+	expr%identifier = identifier
+	expr%val = val
 
 end subroutine new_name_expr
 
@@ -169,9 +163,7 @@ module subroutine new_binary_expr(left, op, right, expr)
 	rtype = right%val%type
 
 	expr%kind = binary_expr
-	! Not `expr%op = op` -- same class of gfortran/mingw defined-assignment
-	! bug as push_value() in value.f90
-	call syntax_token_copy(expr%op, op)
+	expr%op   = op
 
 	call syntax_node_move(left,  expr%left)
 	call syntax_node_move(right, expr%right)
@@ -249,9 +241,7 @@ module subroutine new_unary_expr(op, right, expr)
 	if (debug > 1) print *, 'new_unary_expr'
 
 	expr%kind = unary_expr
-	! Not `expr%op = op` / `expr%val = expr%right%val` -- same class of
-	! gfortran/mingw defined-assignment bug as push_value() in value.f90
-	call syntax_token_copy(expr%op, op)
+	expr%op   = op
 
 	call syntax_node_move(right, expr%right)
 
@@ -259,7 +249,7 @@ module subroutine new_unary_expr(op, right, expr)
 	! all unary operators result in the same type as their operand, hence there
 	! is a get_binary_op_kind() fn but no get_unary_op_kind() fn
 
-	call value_copy(expr%val, expr%right%val)
+	expr%val = expr%right%val
 
 	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
 	if (debug > 1) print *, 'done new_unary_expr'
@@ -274,9 +264,7 @@ module subroutine new_bool(bool, expr)
 	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
-	! Not `expr%val = new_literal_value(...)` -- same class of gfortran/
-	! mingw defined-assignment bug as push_value() in value.f90
-	call value_copy(expr%val, new_literal_value(bool_type, bool = bool))
+	expr%val = new_literal_value(bool_type, bool = bool)
 
 end subroutine new_bool
 
@@ -288,8 +276,7 @@ module subroutine new_f32(f32, expr)
 	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
-	! Not `expr%val = new_literal_value(...)` -- see new_bool()
-	call value_copy(expr%val, new_literal_value(f32_type, f32 = f32))
+	expr%val  = new_literal_value(f32_type, f32 = f32)
 
 end subroutine new_f32
 
@@ -301,8 +288,7 @@ module subroutine new_f64(f64, expr)
 	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
-	! Not `expr%val = new_literal_value(...)` -- see new_bool()
-	call value_copy(expr%val, new_literal_value(f64_type, f64 = f64))
+	expr%val  = new_literal_value(f64_type, f64 = f64)
 
 end subroutine new_f64
 
@@ -314,8 +300,7 @@ module subroutine new_i32(i32, expr)
 	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
-	! Not `expr%val = new_literal_value(...)` -- see new_bool()
-	call value_copy(expr%val, new_literal_value(i32_type, i32 = i32))
+	expr%val  = new_literal_value(i32_type, i32 = i32)
 
 end subroutine new_i32
 
@@ -327,8 +312,7 @@ module subroutine new_i64(i64, expr)
 	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
-	! Not `expr%val = new_literal_value(...)` -- see new_bool()
-	call value_copy(expr%val, new_literal_value(i64_type, i64 = i64))
+	expr%val  = new_literal_value(i64_type, i64 = i64)
 
 end subroutine new_i64
 
@@ -340,10 +324,7 @@ module subroutine new_str(str_, expr)
 	type(syntax_node_t), intent(out) :: expr
 
 	expr%kind = literal_expr
-	! Not `expr%val = new_literal_value(...)` -- see new_bool().  str_type
-	! literals are especially likely to hit this: new_literal_value()
-	! allocates val%str internally, a populated nested allocatable
-	call value_copy(expr%val, new_literal_value(str_type, str_ = str_))
+	expr%val  = new_literal_value(str_type, str_ = str_)
 
 end subroutine new_str
 

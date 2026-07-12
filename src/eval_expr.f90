@@ -379,13 +379,10 @@ recursive module subroutine eval_name_expr(node, state, res)
 		!print *, "id = ", id
 		!print *, "size(vals) = ", size(state%vars%vals)
 
-		! Not `res = state%locs%vals(id)` / `res = state%vars%vals(id)` --
-		! same class of gfortran/mingw defined-assignment bug as
-		! push_value() in value.f90
 		if (node%is_loc) then
-			call value_copy(res, state%locs%vals(id))
+			res = state%locs%vals(id)
 		else
-			call value_copy(res, state%vars%vals(id))
+			res = state%vars%vals(id)
 		end if
 
 	end if
@@ -415,17 +412,14 @@ module subroutine eval_dot_expr(node, state, res)
 		block
 			type(syntax_node_t) :: root_node, wrapper
 			type(value_t) :: root_val
-			! Not `root_node = node` / `wrapper%member = node%member` --
-			! same class of gfortran/mingw defined-assignment bug as
-			! push_value() in value.f90; call syntax_node_copy() directly
-			call syntax_node_copy(root_node, node)
+			root_node = node
 			root_node%kind = node%root_kind
 			if (allocated(root_node%member)) deallocate(root_node%member)
 			call syntax_eval(root_node, state, root_val)
 			if (state%rt_halt) return
 			wrapper%kind = dot_expr
 			allocate(wrapper%member)
-			call syntax_node_copy(wrapper%member, node%member)
+			wrapper%member = node%member
 			call get_val(wrapper, root_val, state, res)
 		end block
 		return
@@ -463,7 +457,7 @@ recursive module subroutine eval_unary_expr(node, state, res)
 
 	select case (node%op%kind)
 	case (plus_token)
-		call value_copy(res, right)  ! not `res = right` -- see eval_name_expr
+		res = right
 
 	case (minus_token)
 		call negate(right, res, node%op%text)

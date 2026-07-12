@@ -470,13 +470,10 @@ recursive subroutine syntax_eval(node, state, res)
 		!print *, "is_loc = ", node%is_loc
 
 		id = node%id_index
-		! Not `state%locs%vals(id) = res` / `state%vars%vals(id) = res` --
-		! same class of gfortran/mingw defined-assignment bug as
-		! push_value() in value.f90
 		if (node%is_loc) then
-			call value_copy(state%locs%vals(id), res)
+			state%locs%vals(id) = res
 		else
-			call value_copy(state%vars%vals(id), res)
+			state%vars%vals(id) = res
 		end if
 
 		!print *, "res type = ", kind_name(res%type)

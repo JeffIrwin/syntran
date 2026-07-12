@@ -870,17 +870,13 @@ recursive subroutine compile_node(prog, cs, node)
 			! then emit OP_LOAD_MEMBER_TOS with a wrapper node holding just the member chain.
 			block
 				type(syntax_node_t) :: root_node, wrapper
-				! Not `root_node = node` / `wrapper%member = node%member` --
-				! same class of gfortran/mingw defined-assignment bug as
-				! push_value() in value.f90; call syntax_node_copy()
-				! directly
-				call syntax_node_copy(root_node, node)
+				root_node = node
 				root_node%kind = node%root_kind
 				if (allocated(root_node%member)) deallocate(root_node%member)
 				call compile_node(prog, cs, root_node)
 				wrapper%kind = dot_expr
 				allocate(wrapper%member)
-				call syntax_node_copy(wrapper%member, node%member)
+				wrapper%member = node%member
 				idx = add_node(prog, wrapper)
 			end block
 			call emit(prog, OP_LOAD_MEMBER_TOS, a = idx)

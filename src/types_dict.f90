@@ -63,75 +63,6 @@ end subroutine fn_grow
 
 !===============================================================================
 
-module subroutine var_dict_copy(dst, src)
-
-	! Deep copy.  See the interface comment in types.f90 for why this can't
-	! be `dst%table = src%table`
-
-	type(var_dict_t), intent(inout) :: dst
-	type(var_dict_t), intent(in)    :: src
-
-	!********
-
-	integer :: i
-
-	dst%capacity = src%capacity
-	dst%count = src%count
-	dst%load_factor_threshold = src%load_factor_threshold
-
-	if (allocated(dst%table)) deallocate(dst%table)
-	if (.not. allocated(src%table)) return
-
-	allocate(dst%table( size(src%table) ))
-	do i = 1, size(src%table)
-
-		if (allocated(src%table(i)%key)) dst%table(i)%key = src%table(i)%key
-
-		if (allocated(src%table(i)%val)) then
-			allocate(dst%table(i)%val)
-			call value_copy(dst%table(i)%val, src%table(i)%val)
-		end if
-
-		dst%table(i)%id_index = src%table(i)%id_index
-		dst%table(i)%is_const = src%table(i)%is_const
-
-	end do
-
-end subroutine var_dict_copy
-
-!===============================================================================
-
-module subroutine fn_entry_table_copy(dst, src)
-
-	! Deep copy.  See var_dict_copy() and the interface comment in types.f90
-
-	type(fn_entry_t), allocatable, intent(inout) :: dst(:)
-	type(fn_entry_t), intent(in) :: src(:)
-
-	!********
-
-	integer :: i
-
-	if (allocated(dst)) deallocate(dst)
-	allocate(dst( size(src) ))
-
-	do i = 1, size(src)
-
-		if (allocated(src(i)%key)) dst(i)%key = src(i)%key
-
-		if (allocated(src(i)%val)) then
-			allocate(dst(i)%val)
-			call fn_copy(dst(i)%val, src(i)%val)
-		end if
-
-		dst(i)%id_index = src(i)%id_index
-
-	end do
-
-end subroutine fn_entry_table_copy
-
-!===============================================================================
-
 module function fn_find(dict, key) result(slot)
 
 	! Returns the table slot for `key`, or 0 if not present.  The slot is
@@ -242,13 +173,10 @@ module subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 			! Empty slot - insert new entry.  fn_t has a defined
 			! assignment(=) (fn_copy), which -- unlike intrinsic
 			! assignment -- does not auto-allocate an unallocated allocatable
-			! target, so val must be explicitly allocated first.  Not
-			! `dict%table(idx)%val = val` though -- `=` on an fn_t hits the
-			! same gfortran/mingw defined-assignment code-gen bug documented
-			! throughout types_copy.f90/value.f90; call fn_copy() directly
+			! target, so val must be explicitly allocated first
 			dict%table(idx)%key = key
 			if (.not. allocated(dict%table(idx)%val)) allocate(dict%table(idx)%val)
-			call fn_copy(dict%table(idx)%val, val)
+			dict%table(idx)%val = val
 			dict%table(idx)%id_index = id_index
 			dict%count = dict%count + 1
 			exit
@@ -259,7 +187,7 @@ module subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 				exit
 			end if
 			if (.not. allocated(dict%table(idx)%val)) allocate(dict%table(idx)%val)
-			call fn_copy(dict%table(idx)%val, val)
+			dict%table(idx)%val = val
 			dict%table(idx)%id_index = id_index
 			exit
 		end if
@@ -417,7 +345,7 @@ module subroutine var_insert(dict, key, val, id_index, iostat, overwrite, is_con
 			dict%dicts(i)%table(idx)%key = key
 			if (.not. allocated(dict%dicts(i)%table(idx)%val)) &
 				allocate(dict%dicts(i)%table(idx)%val)
-			call value_copy(dict%dicts(i)%table(idx)%val, val)
+			dict%dicts(i)%table(idx)%val      = val
 			dict%dicts(i)%table(idx)%id_index = id_index
 			if (present(is_const)) dict%dicts(i)%table(idx)%is_const = is_const
 			dict%dicts(i)%count = dict%dicts(i)%count + 1
@@ -430,7 +358,7 @@ module subroutine var_insert(dict, key, val, id_index, iostat, overwrite, is_con
 			end if
 			if (.not. allocated(dict%dicts(i)%table(idx)%val)) &
 				allocate(dict%dicts(i)%table(idx)%val)
-			call value_copy(dict%dicts(i)%table(idx)%val, val)
+			dict%dicts(i)%table(idx)%val      = val
 			dict%dicts(i)%table(idx)%id_index = id_index
 			if (present(is_const)) dict%dicts(i)%table(idx)%is_const = is_const
 			exit
@@ -474,10 +402,7 @@ module subroutine var_search(dict, key, id_index, iostat, val, is_const)
 
 	if (slot > 0) then
 		io       = exit_success
-		! Not `val = dict%dicts(i)%table(slot)%val` -- same class of
-		! gfortran/mingw defined-assignment bug as push_value() in
-		! value.f90; call value_copy() directly
-		call value_copy(val, dict%dicts(i)%table(slot)%val)
+		val      = dict%dicts(i)%table(slot)%val
 		id_index = dict%dicts(i)%table(slot)%id_index
 		if (present(is_const)) is_const = dict%dicts(i)%table(slot)%is_const
 	else
@@ -601,7 +526,7 @@ module subroutine push_token(vector, val)
 
 	type(syntax_token_t), allocatable :: tmp(:)
 
-	integer :: tmp_cap, i
+	integer :: tmp_cap
 
 	vector%len_ = vector%len_ + 1
 
@@ -610,26 +535,14 @@ module subroutine push_token(vector, val)
 
 		tmp_cap = 2 * vector%len_
 		allocate(tmp( tmp_cap ))
-
-		! Not `tmp(1:vector%cap) = vector%v` -- syntax_token_t wraps a
-		! value_t (nested allocatables), so whole-array assignment hits the
-		! same gfortran/mingw defined-assignment code-gen bug documented
-		! throughout types_copy.f90/value.f90.  Copy element-wise instead
-		do i = 1, vector%cap
-			! Not `tmp(i) = vector%v(i)` -- `=` (even defined assignment)
-			! into a syntax_token_t array element with a nested-allocatable
-			! value_t hits the gfortran/mingw code-gen bug; call the copy
-			! subroutine directly.  This is the token-lexing hot path.
-			call syntax_token_copy(tmp(i), vector%v(i))
-		end do
+		if (vector%cap > 0) tmp(1: vector%cap) = vector%v
 
 		call move_alloc(tmp, vector%v)
 		vector%cap = tmp_cap
 
 	end if
 
-	! Not `vector%v( vector%len_ ) = val` -- see above
-	call syntax_token_copy(vector%v( vector%len_ ), val)
+	vector%v( vector%len_ ) = val
 
 end subroutine push_token
 
@@ -652,21 +565,17 @@ module subroutine push_node(vector, val)
 		tmp_cap = 2 * vector%len_
 		allocate(tmp(tmp_cap))
 		do i = 1, vector%cap
-			! Not `tmp(i) = vector%v(i)` -- `=` (defined assignment) into a
-			! syntax_node_t array element with nested allocatables hits the
-			! gfortran/mingw code-gen bug; call the copy subroutine directly
-			call syntax_node_copy(tmp(i), vector%v(i))
+			tmp(i) = vector%v(i)
 		end do
 		deallocate(vector%v)
 		allocate(vector%v(tmp_cap))
 		do i = 1, vector%cap
-			call syntax_node_copy(vector%v(i), tmp(i))
+			vector%v(i) = tmp(i)
 		end do
 		vector%cap = tmp_cap
 	end if
 
-	! Not `vector%v(vector%len_) = val` -- see above
-	call syntax_node_copy(vector%v(vector%len_), val)
+	vector%v(vector%len_) = val
 
 end subroutine push_node
 
@@ -884,14 +793,10 @@ module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 			! Empty slot - insert new entry.  struct_t has a defined
 			! assignment(=) (struct_copy), which -- unlike intrinsic
 			! assignment -- does not auto-allocate an unallocated allocatable
-			! target, so val must be explicitly allocated first.  Not
-			! `dict%table(idx)%val = val` though -- `=` on a struct_t hits
-			! the same gfortran/mingw defined-assignment code-gen bug
-			! documented throughout types_copy.f90/value.f90; call
-			! struct_copy() directly
+			! target, so val must be explicitly allocated first
 			dict%table(idx)%key = key
 			if (.not. allocated(dict%table(idx)%val)) allocate(dict%table(idx)%val)
-			call struct_copy(dict%table(idx)%val, val)
+			dict%table(idx)%val = val
 			dict%table(idx)%id_index = id_index
 			dict%count = dict%count + 1
 			exit
@@ -902,7 +807,7 @@ module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 				exit
 			end if
 			if (.not. allocated(dict%table(idx)%val)) allocate(dict%table(idx)%val)
-			call struct_copy(dict%table(idx)%val, val)
+			dict%table(idx)%val = val
 			dict%table(idx)%id_index = id_index
 			exit
 		end if

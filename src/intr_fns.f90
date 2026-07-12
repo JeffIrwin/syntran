@@ -24,7 +24,7 @@ subroutine declare_intr_fns(fns)
 
 	!********
 
-	integer :: id_index, num_fns, i, j
+	integer :: id_index, num_fns
 
 	type(fn_t), allocatable :: math_fns(:), trig_fns(:), minmax_fns(:), array_fns(:), io_fns(:)
 
@@ -41,38 +41,10 @@ subroutine declare_intr_fns(fns)
 	call declare_array_fns(fns, id_index, array_fns)
 	call declare_io_fns(fns, id_index, io_fns)
 
-	! Concatenate all function arrays together.  Not
-	! `fns%fns = [math_fns, trig_fns, minmax_fns, array_fns, io_fns]` --
-	! an array constructor assigned to an allocatable array of fn_t (nested
-	! allocatables) hits the same gfortran/mingw defined-assignment code-gen
-	! bug documented throughout types_copy.f90/value.f90.  Copy element-wise
-	! instead
-	num_fns = size(math_fns) + size(trig_fns) + size(minmax_fns) + &
-		size(array_fns) + size(io_fns)
-	if (allocated(fns%fns)) deallocate(fns%fns)
-	allocate(fns%fns(num_fns))
+	! Concatenate all function arrays together
+	fns%fns = [math_fns, trig_fns, minmax_fns, array_fns, io_fns]
 
-	j = 0
-	do i = 1, size(math_fns)
-		j = j + 1
-		call fn_copy(fns%fns(j), math_fns(i))
-	end do
-	do i = 1, size(trig_fns)
-		j = j + 1
-		call fn_copy(fns%fns(j), trig_fns(i))
-	end do
-	do i = 1, size(minmax_fns)
-		j = j + 1
-		call fn_copy(fns%fns(j), minmax_fns(i))
-	end do
-	do i = 1, size(array_fns)
-		j = j + 1
-		call fn_copy(fns%fns(j), array_fns(i))
-	end do
-	do i = 1, size(io_fns)
-		j = j + 1
-		call fn_copy(fns%fns(j), io_fns(i))
-	end do
+	num_fns = size(fns%fns)
 	fns%num_intr_fns = num_fns
 	!print *, "setting num_intr_fns = ", fns%num_intr_fns
 

@@ -534,10 +534,9 @@ subroutine init_state(state, script_args, src_dir, bytecode)
 	state%locs%scope_cap = SCOPE_CAP_INIT
 	allocate(state%locs%dicts( state%locs%scope_cap) )
 
-	! Script arguments passed after `--`.  Not `state%script_args =
-	! script_args` -- see string_vector_copy()'s comment in utils.f90
+	! Script arguments passed after `--`
 	if (present(script_args)) then
-		call string_vector_copy(state%script_args, script_args)
+		state%script_args = script_args
 	else
 		state%script_args = new_string_vector()
 	end if

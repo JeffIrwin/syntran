@@ -58,11 +58,12 @@ recursive module subroutine vars_copy(dst, src)
 		if (allocated(dst%dicts)) deallocate(dst%dicts)
 		allocate(dst%dicts( size(src%dicts) ))
 
-		! var_dict_t's table(:) has a nested allocatable value_t component,
-		! so this can't be plain intrinsic assignment (`dst%dicts(i) =
-		! src%dicts(i)`) -- see var_dict_copy()'s comment in types.f90
+		! var_dict_t is a flat hash table (var_entry_t table(:)), so
+		! intrinsic assignment suffices here -- it recurses elementwise over
+		! table(:), and each var_entry_t's allocatable val component already
+		! uses value_t's own defined assignment(=)
 		do i = 1, size(src%dicts)
-			call var_dict_copy(dst%dicts(i), src%dicts(i))
+			dst%dicts(i) = src%dicts(i)
 		end do
 
 	else if (allocated(dst%dicts)) then
@@ -72,13 +73,7 @@ recursive module subroutine vars_copy(dst, src)
 	if (allocated(src%vals)) then
 		if (allocated(dst%vals)) deallocate(dst%vals)
 		allocate(dst%vals( size(src%vals) ))
-
-		! Not `dst%vals = src%vals` -- see value_copy()'s note on this same
-		! class of gfortran/mingw bug
-		do i = 1, size(src%vals)
-			call value_copy(dst%vals(i), src%vals(i))
-		end do
-
+		dst%vals = src%vals
 	else if (allocated(dst%vals)) then
 		deallocate(dst%vals)
 	end if
@@ -100,15 +95,9 @@ recursive module subroutine struct_copy(dst, src)
 
 	!print *, 'starting struct_copy()'
 
-	! Not `dst%member_names = src%member_names` -- see
-	! string_vector_copy()'s comment in utils.f90
-	call string_vector_copy(dst%member_names, src%member_names)
+	dst%member_names = src%member_names
 	dst%num_vars = src%num_vars
-
-	! Not `dst%vars = src%vars` -- see syntax_token_copy()'s note on calling
-	! the copy subroutine directly instead of via `=` for the same class of
-	! gfortran/mingw defined-assignment bug
-	call vars_copy(dst%vars, src%vars)
+	dst%vars = src%vars
 
 	if (allocated(src%cookie)) then
 		dst%cookie = src%cookie
@@ -131,22 +120,13 @@ recursive module subroutine fn_copy(dst, src)
 
 	!********
 
-	integer :: i
-
 	!print *, 'starting fn_copy()'
 
-	! Not `dst%type = src%type` -- type is a value_t, same class of bug as
-	! syntax_token_copy()'s note on dst%val = src%val
-	call value_copy(dst%type, src%type)
-
+	dst%type            = src%type
 	dst%variadic_min    = src%variadic_min
 	dst%variadic_max    = src%variadic_max
 	dst%variadic_type   = src%variadic_type
-
-	! Not `dst%param_names = src%param_names` -- see string_vector_copy()'s
-	! comment in utils.f90
-	call string_vector_copy(dst%param_names, src%param_names)
-
+	dst%param_names     = src%param_names
 	dst%is_intr         = src%is_intr
 	dst%is_method       = src%is_method
 	dst%is_const_method = src%is_const_method
@@ -161,23 +141,14 @@ recursive module subroutine fn_copy(dst, src)
 	if (allocated(src%params)) then
 		if (allocated(dst%params)) deallocate(dst%params)
 		allocate(dst%params( size(src%params) ))
-
-		! Not `dst%params = src%params` -- params is a value_t array, same
-		! class of bug as vars_copy()'s dst%vals note
-		do i = 1, size(src%params)
-			call value_copy(dst%params(i), src%params(i))
-		end do
-
+		dst%params = src%params
 	else if (allocated(dst%params)) then
 		deallocate(dst%params)
 	end if
 
 	if (allocated(src%node)) then
 		if (.not. allocated(dst%node)) allocate(dst%node)
-		! Not `dst%node = src%node` -- see syntax_token_copy()'s note on
-		! calling the copy subroutine directly instead of via `=` for the
-		! same class of gfortran/mingw defined-assignment bug
-		call syntax_node_copy(dst%node, src%node)
+		dst%node = src%node
 	else if (allocated(dst%node)) then
 		deallocate(dst%node)
 	end if
@@ -189,12 +160,10 @@ end subroutine fn_copy
 !===============================================================================
 
 ! fn_ternary_tree_copy() was here.  It's no longer needed: fns_t is now a flat
-! hash table (fn_entry_t table(:) in types.f90) instead of a ternary tree.
-! fns_t itself has no defined assignment(=) (unlike vars_t/struct_t/fn_t) --
-! callers that need to copy an fn_entry_t table(:) (e.g. core.f90's REPL
-! backup of fns%table) must call fn_entry_table_copy() explicitly.  Whole-
-! array intrinsic assignment of table(:) is NOT safe: see var_dict_copy()'s
-! comment in types.f90
+! hash table (fn_entry_t table(:) in types.f90) instead of a ternary tree, so
+! default (intrinsic) assignment suffices -- it recurses elementwise over
+! table(:), and each fn_entry_t's allocatable val component already uses
+! fn_copy() via fn_t's own defined assignment(=)
 
 !===============================================================================
 
@@ -239,16 +208,13 @@ recursive module subroutine syntax_node_copy(dst, src)
 	!print *, 'dst%kind = ', dst%kind
 
 	dst%kind = src%kind
-	! Not `dst%op = src%op` / `dst%identifier = src%identifier` -- same
-	! class of gfortran/mingw defined-assignment bug as push_value() in
-	! value.f90; call syntax_token_copy() directly
-	call syntax_token_copy(dst%op, src%op)
+	dst%op   = src%op
 
 	call value_copy(dst%val, src%val)
 	!dst%val%sca%file_     = src%val%sca%file_
 	!dst%val%sca%file_%eof = src%val%sca%file_%eof
 
-	call syntax_token_copy(dst%identifier, src%identifier)
+	dst%identifier = src%identifier
 	dst%id_index   = src%id_index
 	dst%num_locs   = src%num_locs
 	dst%is_loc     = src%is_loc
@@ -276,9 +242,7 @@ recursive module subroutine syntax_node_copy(dst, src)
 		deallocate(dst%first_expected)
 	end if
 
-	! Not `dst%diagnostics = src%diagnostics` -- see string_vector_copy()'s
-	! comment in utils.f90
-	call string_vector_copy(dst%diagnostics, src%diagnostics)
+	dst%diagnostics    = src%diagnostics
 
 	dst%is_empty    = src%is_empty
 
@@ -291,23 +255,22 @@ recursive module subroutine syntax_node_copy(dst, src)
 	!	dst%val = src%val
 	!end if
 
-	! Not `dst%X = src%X` for any syntax_node_t-allocatable component below
-	! -- see syntax_token_copy()'s note on calling the copy subroutine
-	! directly instead of via `=` for the same class of gfortran/mingw
-	! defined-assignment bug.  (Recursive `=` here was long believed safe
-	! since syntax_node_copy is syntax_node_t's own defined assignment, but
-	! it isn't: fn_copy()'s `dst%node = src%node` hit this same bug.)
-
 	if (allocated(src%left)) then
+		!if (debug > 1) print *, 'copy() left'
 		if (.not. allocated(dst%left)) allocate(dst%left)
-		call syntax_node_copy(dst%left, src%left)
+		!print *, 'allocated(dst%left) = ', allocated(dst%left)
+		dst%left = src%left
+		!call syntax_node_copy(dst%left, src%left)
 	else if (allocated(dst%left)) then
 		deallocate(dst%left)
 	end if
 
 	if (allocated(src%right)) then
+		!if (debug > 1) print *, 'copy() right'
 		if (.not. allocated(dst%right)) allocate(dst%right)
-		call syntax_node_copy(dst%right, src%right)
+		!print *, 'allocated(dst%right) = ', allocated(dst%right)
+		dst%right = src%right
+		!call syntax_node_copy(dst%right, src%right)
 	else if (allocated(dst%right)) then
 		deallocate(dst%right)
 	end if
@@ -333,56 +296,56 @@ recursive module subroutine syntax_node_copy(dst, src)
 
 	if (allocated(src%condition)) then
 		if (.not. allocated(dst%condition)) allocate(dst%condition)
-		call syntax_node_copy(dst%condition, src%condition)
+		dst%condition = src%condition
 	else if (allocated(dst%condition)) then
 		deallocate(dst%condition)
 	end if
 
 	if (allocated(src%body)) then
 		if (.not. allocated(dst%body)) allocate(dst%body)
-		call syntax_node_copy(dst%body, src%body)
+		dst%body = src%body
 	else if (allocated(dst%body)) then
 		deallocate(dst%body)
 	end if
 
 	if (allocated(src%array)) then
 		if (.not. allocated(dst%array)) allocate(dst%array)
-		call syntax_node_copy(dst%array, src%array)
+		dst%array = src%array
 	else if (allocated(dst%array)) then
 		deallocate(dst%array)
 	end if
 
 	if (allocated(src%lbound)) then
 		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
-		call syntax_node_copy(dst%lbound, src%lbound)
+		dst%lbound = src%lbound
 	else if (allocated(dst%lbound)) then
 		deallocate(dst%lbound)
 	end if
 
 	if (allocated(src%ubound)) then
 		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
-		call syntax_node_copy(dst%ubound, src%ubound)
+		dst%ubound = src%ubound
 	else if (allocated(dst%ubound)) then
 		deallocate(dst%ubound)
 	end if
 
 	if (allocated(src%step)) then
 		if (.not. allocated(dst%step)) allocate(dst%step)
-		call syntax_node_copy(dst%step, src%step)
+		dst%step = src%step
 	else if (allocated(dst%step)) then
 		deallocate(dst%step)
 	end if
 
 	if (allocated(src%len_)) then
 		if (.not. allocated(dst%len_)) allocate(dst%len_)
-		call syntax_node_copy(dst%len_, src%len_)
+		dst%len_ = src%len_
 	else if (allocated(dst%len_)) then
 		deallocate(dst%len_)
 	end if
 
 	if (allocated(src%rank)) then
 		if (.not. allocated(dst%rank)) allocate(dst%rank)
-		call syntax_node_copy(dst%rank, src%rank)
+		dst%rank = src%rank
 	else if (allocated(dst%rank)) then
 		deallocate(dst%rank)
 	end if
@@ -425,14 +388,14 @@ recursive module subroutine syntax_node_copy(dst, src)
 
 	if (allocated(src%if_clause)) then
 		if (.not. allocated(dst%if_clause)) allocate(dst%if_clause)
-		call syntax_node_copy(dst%if_clause, src%if_clause)
+		dst%if_clause = src%if_clause
 	else if (allocated(dst%if_clause)) then
 		deallocate(dst%if_clause)
 	end if
 
 	if (allocated(src%else_clause)) then
 		if (.not. allocated(dst%else_clause)) allocate(dst%else_clause)
-		call syntax_node_copy(dst%else_clause, src%else_clause)
+		dst%else_clause = src%else_clause
 	else if (allocated(dst%else_clause)) then
 		deallocate(dst%else_clause)
 	end if
@@ -446,7 +409,7 @@ recursive module subroutine syntax_node_copy(dst, src)
 
 	if (allocated(src%member)) then
 		if (.not. allocated(dst%member)) allocate(dst%member)
-		call syntax_node_copy(dst%member, src%member)
+		dst%member = src%member
 	else if (allocated(dst%member)) then
 		deallocate(dst%member)
 	end if
@@ -474,12 +437,10 @@ recursive module subroutine syntax_node_move(src, dst)
 
 	allocate(dst)
 
-	! POD scalars.  Not `dst%op = src%op` / `dst%identifier =
-	! src%identifier` -- same class of gfortran/mingw defined-assignment
-	! bug as push_value() in value.f90
+	! POD scalars
 	dst%kind            = src%kind
-	call syntax_token_copy(dst%op, src%op)
-	call syntax_token_copy(dst%identifier, src%identifier)
+	dst%op              = src%op
+	dst%identifier      = src%identifier
 	dst%id_index        = src%id_index
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
@@ -550,12 +511,10 @@ recursive module subroutine syntax_node_move_into(src, dst)
 
 	!********
 
-	! POD scalars.  Not `dst%op = src%op` / `dst%identifier =
-	! src%identifier` -- same class of gfortran/mingw defined-assignment
-	! bug as push_value() in value.f90
+	! POD scalars
 	dst%kind            = src%kind
-	call syntax_token_copy(dst%op, src%op)
-	call syntax_token_copy(dst%identifier, src%identifier)
+	dst%op              = src%op
+	dst%identifier      = src%identifier
 	dst%id_index        = src%id_index
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
@@ -615,19 +574,18 @@ end subroutine syntax_node_move_into
 
 ! ternary_tree_copy() was here.  It's no longer needed: var_dict_t is now a
 ! flat hash table (var_entry_t table(:) in types.f90) instead of a ternary
-! tree.  See var_dict_copy() in types_dict.f90 for the deep-copy replacement
-! -- whole-array intrinsic assignment of table(:) is NOT safe on gfortran/
-! mingw (see its comment in types.f90)
+! tree, so default (intrinsic) assignment suffices -- it recurses elementwise
+! over table(:), and each var_entry_t's allocatable val component already
+! uses value_t's own defined assignment(=).  See vars_copy() above
 
 !===============================================================================
 
 ! struct_ternary_tree_copy() was here.  It's no longer needed: structs_t is
 ! now a flat hash table (struct_entry_t table(:) in types.f90) instead of a
-! ternary tree.  Unlike var_dict_t/fns_t, no caller currently copies a
-! structs_t table(:) wholesale (structs_t lives once per parser_t, it's never
-! backed up/restored like vars%dicts or fns%table in core.f90's REPL logic),
-! so no struct_dict_copy() helper exists yet -- if one becomes needed, follow
-! var_dict_copy()'s pattern, NOT whole-array intrinsic assignment
+! ternary tree, so default (intrinsic) assignment suffices -- it recurses
+! elementwise over table(:), and each struct_entry_t's allocatable val
+! component already uses struct_copy() via struct_t's own defined
+! assignment(=)
 
 !===============================================================================
 

@@ -102,7 +102,7 @@ end subroutine parse_continue_statement
 
 !===============================================================================
 
-recursive module subroutine parse_use_statement(parser, statement)
+module subroutine parse_use_statement(parser, statement)
 
 	use syntran__errors_m
 
@@ -741,9 +741,7 @@ recursive module subroutine parse_for_statement(parser, statement)
 	call parser%parse_statement(body)
 
 	statement%kind       = for_statement
-	! Not `statement%identifier = identifier` -- same class of gfortran/
-	! mingw defined-assignment bug as push_value() in value.f90
-	call syntax_token_copy(statement%identifier, identifier)
+	statement%identifier = identifier
 	call syntax_node_move(array, statement%array)
 	call syntax_node_move(body,  statement%body)
 

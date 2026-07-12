@@ -116,9 +116,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	call parser%match(rparen_token, rparen)
 
 	fn_call%kind = fn_call_expr
-	! Not `fn_call%identifier = identifier_` -- same class of gfortran/
-	! mingw defined-assignment bug as push_value() in value.f90
-	call syntax_token_copy(fn_call%identifier, identifier_)
+	fn_call%identifier = identifier_
 
 	! Set module prefix if provided (for qualified calls like std::println)
 	if (present(module_prefix)) then
@@ -282,10 +280,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! both body and params into a wrapped type (fn_t?)
 
 		allocate(fn_call%body)
-		! Not `fn_call%body = fn%node%body` -- same class of gfortran/mingw
-		! defined-assignment bug as push_value() in value.f90; call
-		! syntax_node_copy() directly
-		call syntax_node_copy(fn_call%body, fn%node%body)
+		fn_call%body = fn%node%body
 		fn_call%params = fn%node%params
 
 		fn_call%num_locs = fn%node%num_locs
@@ -696,9 +691,7 @@ module subroutine parse_fn_declaration(parser, decl)
 	decl%id_index  = parser%num_fns
 
 	decl%kind       = fn_declaration
-	! Not `decl%identifier = identifier` -- same class of gfortran/mingw
-	! defined-assignment bug as push_value() in value.f90
-	call syntax_token_copy(decl%identifier, identifier)
+	decl%identifier = identifier
 	decl%num_locs   = parser%num_locs
 	call syntax_node_move(body, decl%body)
 	!print *, "decl num_locs = ", decl%num_locs
@@ -713,10 +706,7 @@ module subroutine parse_fn_declaration(parser, decl)
 	parser%is_loc = .false.  ! no nested fn declarations
 
 	allocate(fn%node)
-	! Not `fn%node = decl` -- same class of gfortran/mingw defined-
-	! assignment bug as push_value() in value.f90; call syntax_node_copy()
-	! directly
-	call syntax_node_copy(fn%node, decl)
+	fn%node = decl
 
 	overwrite = .true.
 	if (parser%ipass == 0) overwrite = .false.
@@ -1172,9 +1162,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	decl%id_index  = parser%num_fns
 
 	decl%kind       = fn_declaration
-	! Not `decl%identifier = identifier` -- same class of gfortran/mingw
-	! defined-assignment bug as push_value() in value.f90
-	call syntax_token_copy(decl%identifier, identifier)
+	decl%identifier = identifier
 	decl%num_locs   = parser%num_locs
 	call syntax_node_move(body, decl%body)
 
@@ -1183,10 +1171,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	parser%is_loc = .false.
 
 	allocate(fn%node)
-	! Not `fn%node = decl` -- same class of gfortran/mingw defined-
-	! assignment bug as push_value() in value.f90; call syntax_node_copy()
-	! directly
-	call syntax_node_copy(fn%node, decl)
+	fn%node = decl
 
 	overwrite = .true.
 	if (parser%ipass == 0) overwrite = .false.

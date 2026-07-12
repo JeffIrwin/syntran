@@ -49,10 +49,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		end if
 
 		if (.not. allocated(node%member%lsubscripts)) then
-			! Not `var%struct(i8+1)%struct(id) = val` -- same class of
-			! gfortran/mingw defined-assignment bug as push_value() in
-			! value.f90
-			call value_copy(var%struct(i8+1)%struct(id), val)
+			var%struct(i8+1)%struct(id) = val
 			return
 		end if
 		!print *, "array dot chain"
@@ -78,8 +75,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 			return
 		end if
 
-		! Not `var%struct(i8+1) = val` -- see above
-		call value_copy(var%struct(i8+1), val)
+		var%struct(i8+1) = val
 		return
 
 	end if
@@ -98,9 +94,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	! Base case
 
 	if (.not. allocated(node%member%lsubscripts)) then
-		! Not `var%struct(id) = val` -- same class of gfortran/mingw
-		! defined-assignment bug as push_value() in value.f90
-		call value_copy(var%struct(id), val)
+		var%struct(id) = val
 		return
 	end if
 	!print *, "lsubscripts allocated"
@@ -248,9 +242,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 	if (.not. allocated(node%member%lsubscripts)) then
 		!print *, "base"
-		! Not `res = var%struct(id)` -- same class of gfortran/mingw
-		! defined-assignment bug as push_value() in value.f90
-		call value_copy(res, var%struct(id))
+		res = var%struct(id)
 		return
 	end if
 	!print *, "lsubscripts allocated"
@@ -420,9 +412,7 @@ module subroutine compound_assign(lhs, rhs, op)
 	type(value_t) :: tmp  ! necessary for arrays
 	type(value_t) :: rhs_
 
-	! Not `tmp = lhs` / `rhs_ = rhs` below -- same class of gfortran/mingw
-	! defined-assignment bug as push_value() in value.f90
-	if (op%kind /= equals_token) call value_copy(tmp, lhs)
+	if (op%kind /= equals_token) tmp = lhs
 
 	! For compound assignment to an array (e.g. `v += vmax / n`), cast rhs to
 	! match the LHS's existing element type *before* the op, so the result
@@ -431,7 +421,7 @@ module subroutine compound_assign(lhs, rhs, op)
 	! compound-assign already truncates back to the LHS's type).  Without
 	! this, the LHS array's element type could silently change at runtime,
 	! which the bytecode compiler's static type info doesn't expect.
-	call value_copy(rhs_, rhs)
+	rhs_ = rhs
 	if (op%kind /= equals_token .and. lhs%type == array_type) then
 		select case (lhs%array%type)
 		case (i32_type)
@@ -1027,10 +1017,7 @@ module subroutine get_array_val(array, i, val)
 			val%sca%f64 = array%f64(i + 1)
 
 		case (str_type)
-			! Not `val%str = array%str(i + 1)` -- see set_array_val()'s note
-			if (allocated(val%str)) deallocate(val%str)
-			allocate(val%str)
-			val%str%s = array%str(i + 1)%s
+			val%str = array%str(i + 1)
 
 		case default
 			write(*,*) err_int(IC_BAD_ARRAY_VAL_TYPE, "bad type in get_array_val")
@@ -1072,14 +1059,7 @@ module subroutine set_array_val(array, i, val)
 			array%f64(i + 1) = val%to_f64()
 
 		case (str_type)
-			! Not `array%str(i + 1) = val%str` -- string_t has its own
-			! allocatable %s component, so this implicit assignment needs to
-			! reallocate both the outer allocatable and the nested %s in one
-			! shot, which gfortran doesn't handle correctly (same bug as
-			! documented in assign_value_t() in math.f90 and value_copy() in
-			! value.f90).  Deallocate/reallocate explicitly instead
-			if (allocated(array%str(i + 1)%s)) deallocate(array%str(i + 1)%s)
-			array%str(i + 1)%s = val%str%s
+			array%str(i + 1) = val%str
 
 	end select
 

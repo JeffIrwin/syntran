@@ -229,7 +229,7 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: statement
 		end subroutine parse_continue_statement
 
-		recursive module subroutine parse_use_statement(parser, statement)
+		module subroutine parse_use_statement(parser, statement)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: statement
 		end subroutine parse_use_statement
@@ -322,7 +322,7 @@ module syntran__parse_m
 			type(syntax_token_t), intent(out) :: token
 		end subroutine match_pre
 
-		recursive module subroutine parse_unit(parser, unit)
+		module subroutine parse_unit(parser, unit)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: unit
 		end subroutine parse_unit
