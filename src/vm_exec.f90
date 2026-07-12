@@ -582,7 +582,7 @@ module subroutine vm_run(prog, state, res)
 			if (allocated(cn%params)) nparams = size(cn%params)
 			! Grow params_pool if needed (amortised; avoids alloc/dealloc per call).
 			if (nparams > params_pool_cap) then
-				if (allocated(params_pool)) deallocate(params_pool)
+				call value_array_destroy(params_pool)
 				allocate(params_pool(nparams))
 				params_pool_cap = nparams
 			end if
@@ -619,7 +619,7 @@ module subroutine vm_run(prog, state, res)
 					call move_alloc(frames(nframes)%locs_buf, state%locs%vals)
 				else
 					! Buffer too small (function changed num_locs? shouldn't happen).
-					deallocate(frames(nframes)%locs_buf)
+					call value_array_destroy(frames(nframes)%locs_buf)
 					allocate(state%locs%vals(cn%num_locs))
 				end if
 			else
@@ -648,7 +648,7 @@ module subroutine vm_run(prog, state, res)
 			if (allocated(cn%params)) nparams = size(cn%params)
 			! Grow params_pool if needed (amortised; avoids alloc/dealloc per return).
 			if (nparams > params_pool_cap) then
-				if (allocated(params_pool)) deallocate(params_pool)
+				call value_array_destroy(params_pool)
 				allocate(params_pool(nparams))
 				params_pool_cap = nparams
 			end if
@@ -934,7 +934,7 @@ module subroutine vm_run(prog, state, res)
 			! Grow the reusable iargs pool if needed (amortised; avoids
 			! allocate/deallocate on every intrinsic call).
 			if (nintr > iargs_pool_cap) then
-				if (allocated(iargs_pool)) deallocate(iargs_pool)
+				call value_array_destroy(iargs_pool)
 				allocate(iargs_pool(nintr))
 				iargs_pool_cap = nintr
 			end if
@@ -990,7 +990,7 @@ module subroutine vm_run(prog, state, res)
 			else if (instr%a == INTR_CLOSE) then
 				! close: close the file unit; set is_open=false on the orig slot.
 				block
-				integer :: slot_id_
+				integer :: slot_id_, io_
 				logical :: is_loc_
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
@@ -1009,7 +1009,12 @@ module subroutine vm_run(prog, state, res)
 				else
 					state%vars%vals(slot_id_)%file_%is_open = .false.
 				end if
-				close(iargs_pool(1)%file_%unit_)
+				close(iargs_pool(1)%file_%unit_, iostat = io_)
+				if (io_ /= 0) then
+					call rt_throw(state, err_rt(RC_CLOSE_FAIL, 'cannot close() file "' &
+						//iargs_pool(1)%file_%name_//'" (iostat = '//str(io_)//')'))
+					exit
+				end if
 				val%type = unknown_type
 				end block
 

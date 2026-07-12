@@ -79,7 +79,15 @@ subroutine assign_value_t(left, right, op_text)
 			left%sca%i64 = right%to_i64()
 
 		case (str_type)
-			left%str = right%str
+			! Don't rely on `left%str = right%str` here — string_t has its
+			! own allocatable %s component, so this implicit assignment
+			! needs to reallocate both the outer allocatable and the nested
+			! %s in one shot, which gfortran doesn't handle correctly (same
+			! bug already fixed in value_copy() in value.f90). Deallocate
+			! /reallocate explicitly and copy the single-level component
+			if (allocated(left%str)) deallocate(left%str)
+			allocate(left%str)
+			left%str%s = right%str%s
 
 		case (struct_type)
 			left = right

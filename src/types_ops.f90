@@ -160,17 +160,18 @@ end subroutine log_diagnostics
 
 !===============================================================================
 
-module integer function lookup_type(name, structs, struct) result(type)
+module integer function lookup_type(name, structs, cookie) result(type)
 
 	character(len = *), intent(in) :: name
 
-	type(structs_t), intent(in) :: structs
+	type(structs_t), intent(in), target :: structs
 
-	type(struct_t), intent(out) :: struct
+	character(len = :), allocatable, intent(out), optional :: cookie
 
 	!********
 
-	integer :: io, struct_id
+	integer :: struct_id
+	type(struct_t), pointer :: struct_ptr
 
 	! Immo also has an "any" type.  Should I allow that?
 
@@ -193,16 +194,26 @@ module integer function lookup_type(name, structs, struct) result(type)
 
 		case default
 
-			! TODO: this should be able to use %exists instead of %search,
-			! possible minor perf boost
-			call structs%search(name, struct_id, io, struct)
-			!print *, "struct search io = ", io
+			if (present(cookie)) then
+				! Cookie is requested, so we need the actual struct_t pointer
+				struct_id = structs%find(name)
 
-			if (io == 0) then
-				type = struct_type
-				!print *, "struct num vars = ", struct%num_vars
+				if (struct_id > 0) then
+					type = struct_type
+					struct_ptr => structs%get(struct_id)
+					cookie = struct_ptr%cookie
+					!print *, "struct num vars = ", struct_ptr%num_vars
+				else
+					type = unknown_type
+				end if
 			else
-				type = unknown_type
+				! Cheap existence check, without copying/pointing to the
+				! struct_t like search() does
+				if (structs%exists(name)) then
+					type = struct_type
+				else
+					type = unknown_type
+				end if
 			end if
 
 	end select

@@ -73,7 +73,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 	! NumPy uses the same convention for "rank-1" as us.  In fact, NumPy has
 	! something below a vector called a "rank-0" array :exploding-head:
 
-	lbracket = parser%match(lbracket_token)
+	call parser%match(lbracket_token, lbracket)
 
 	span_beg = parser%peek_pos(0)
 	lb_beg   = span_beg
@@ -105,7 +105,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 		! Implicit constant-value array form [lbound; len]
 
-		semicolon    = parser%match(semicolon_token)
+		call parser%match(semicolon_token, semicolon)
 
 		! rank-2+ arrays:
 		!
@@ -114,7 +114,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 		call parser%parse_size(size_)
 
-		rbracket = parser%match(rbracket_token)
+		call parser%match(rbracket_token, rbracket)
 
 		allocate(expr%val%array)
 
@@ -148,7 +148,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 	if (parser%current_kind() == colon_token) then
 
 		! Implicit array form unit step [lbound: ubound] or [lbound: step: ubound]
-		colon    = parser%match(colon_token)
+		call parser%match(colon_token, colon)
 
 		span_beg = parser%peek_pos(0)
 		ub_beg   = span_beg
@@ -176,7 +176,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 			! Step has just been parsed as ubound above
 			step = ubound_
 
-			colon    = parser%match(colon_token)
+			call parser%match(colon_token, colon)
 
 			span_beg = parser%peek_pos(0)
 			call parser%parse_expr(expr=ubound_)
@@ -192,7 +192,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 			! If [lbound_: step: ubound] are all specified, then specifying the
 			! len would be overconstrained!  Next token must be rbracket
 
-			rbracket = parser%match(rbracket_token)
+			call parser%match(rbracket_token, rbracket)
 
 			allocate(expr%val%array)
 
@@ -239,7 +239,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 			! Implicit form [lbound: ubound_; len]
 
-			semicolon    = parser%match(semicolon_token)
+			call parser%match(semicolon_token, semicolon)
 
 			span_beg = parser%peek_pos(0)
 			call parser%parse_expr(expr=len_)
@@ -271,7 +271,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 					parser%text(lb_beg, lb_end)))
 			end if
 
-			rbracket = parser%match(rbracket_token)
+			call parser%match(rbracket_token, rbracket)
 
 			allocate(expr%val%array)
 
@@ -291,7 +291,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 		! Implicit array form unit step [lbound: ubound]
 
-		rbracket = parser%match(rbracket_token)
+		call parser%match(rbracket_token, rbracket)
 
 		!print *, 'lbound_ = ', lbound_%str()
 		!print *, 'ubound_ = ', ubound_%str()
@@ -362,7 +362,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 		parser%current_kind() /= eof_token)
 
 		pos0 = parser%pos
-		comma    = parser%match(comma_token)
+		call parser%match(comma_token, comma)
 
 		span_beg = parser%peek_pos(0)
 		call parser%parse_expr(expr=elem)
@@ -391,14 +391,14 @@ recursive module subroutine parse_array_expr(parser, expr)
 		call elems%push(elem)
 
 		! break infinite loop
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%pos == pos0) call parser%next(dummy)
 
 	end do
 
 	if (parser%current_kind() == semicolon_token) then
 
 		! Explicit rank-2+ size_array: [elem_0, elem_1, elem_2, ... ; size_0, size_1, ... ];
-		semicolon = parser%match(semicolon_token)
+		call parser%match(semicolon_token, semicolon)
 
 		if (lbound_%val%type == array_type) then
 			! TODO: this error msg shouldn't say "uniform" array here
@@ -409,7 +409,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 		call parser%parse_size(size_)
 
-		rbracket = parser%match(rbracket_token)
+		call parser%match(rbracket_token, rbracket)
 
 		allocate(expr%val%array)
 
@@ -434,7 +434,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 	! Explicit rank-1 array (size is implicitly defined by number of elements)
 
-	rbracket = parser%match(rbracket_token)
+	call parser%match(rbracket_token, rbracket)
 
 	allocate(expr%val%array)
 	expr%kind            = array_expr
@@ -491,7 +491,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 	usubscripts_vec = new_syntax_node_vector()  ! upper-bounds
 	ssubscripts_vec = new_syntax_node_vector()  ! steps
 
-	lbracket  = parser%match(lbracket_token)
+	call parser%match(lbracket_token, lbracket)
 
 	do while ( &
 		parser%current_kind() /= rbracket_token .and. &
@@ -510,7 +510,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 			span = new_span(span0, parser%current_pos() - span0)
 			call parser%diagnostics%push( &
 				err_empty_step(parser%context(), span))
-			dcolon = parser%match(double_colon_token)  ! consume :: for recovery
+			call parser%match(double_colon_token, dcolon)  ! consume :: for recovery
 			lsubscript%sub_kind = range_sub
 			lsubscript%lsub_omit = .true.
 			if (parser%current_kind() == rbracket_token .or. &
@@ -525,7 +525,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 		else if (parser%current_kind() == colon_token) then
 			! Lower bound is absent (or bare all_sub)
-			colon = parser%match(colon_token)
+			call parser%match(colon_token, colon)
 			lsubscript%lsub_omit = .true.
 
 			if (parser%current_kind() == rbracket_token .or. &
@@ -552,7 +552,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 				if (parser%current_kind() == colon_token) then
 					! Two colons: step_sub.  The expr we parsed was the step.
-					colon = parser%match(colon_token)
+					call parser%match(colon_token, colon)
 					lsubscript%sub_kind = step_sub
 					ssubscript = usubscript
 
@@ -614,7 +614,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 				end if
 
 				if (parser%current_kind() == colon_token) then
-					colon = parser%match(colon_token)
+					call parser%match(colon_token, colon)
 					lsubscript%sub_kind = range_sub
 
 					if (parser%current_kind() == colon_token) then
@@ -643,7 +643,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 						end if
 
 						if (parser%current_kind() == colon_token) then
-							colon = parser%match(colon_token)
+							call parser%match(colon_token, colon)
 							lsubscript%sub_kind = step_sub
 
 							! The last expr was step, not upper (same swap as before)
@@ -673,7 +673,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 					span = new_span(span0, parser%current_pos() - span0)
 					call parser%diagnostics%push( &
 						err_empty_step(parser%context(), span))
-					dcolon = parser%match(double_colon_token)  ! consume :: for recovery
+					call parser%match(double_colon_token, dcolon)  ! consume :: for recovery
 					lsubscript%sub_kind = range_sub
 					if (parser%current_kind() == rbracket_token .or. &
 						parser%current_kind() == comma_token .or. &
@@ -700,16 +700,16 @@ recursive module subroutine parse_subscripts(parser, expr)
 		call usubscripts_vec%push(usubscript)
 
 		! Break infinite loop
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%pos == pos0) call parser%next(dummy)
 
 		if (parser%current_kind() /= rbracket_token) then
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
 	end do
 
 	!print *, 'parsing rbracket'
-	rbracket  = parser%match(rbracket_token)
+	call parser%match(rbracket_token, rbracket)
 	!print *, 'done'
 
 	call syntax_nodes_copy(expr%lsubscripts, &
@@ -823,10 +823,10 @@ module subroutine parse_size(parser, size)
 		call size%push(len)
 
 		! break infinite loop?
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%pos == pos0) call parser%next(dummy)
 
 		if (parser%current_kind() /= rbracket_token) then
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
 	end do

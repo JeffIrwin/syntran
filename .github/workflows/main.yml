@@ -176,6 +176,21 @@
 				"
 			},
 			{
+				"if": "matrix.os == 'windows-latest'",
+				"name": "Test fpm windows",
+				"run":
+				"
+					# `--flag \"-static\"` is REQUIRED on Windows: the dynamically \n
+					# linked MinGW runtime triggers an intermittent heap-corruption \n
+					# SIGSEGV (~1-3% of runs) in nested-allocatable parse paths.  A \n
+					# full static link eliminates it (0 in 1500+ runs).  Passed via \n
+					# `--flag` (not `--link-flag`, which fpm 0.12-alpha silently \n
+					# ignores) so it actually reaches the linker. \n
+					fpm test test --profile release --flag \"-static\" \n
+					fpm test long --profile release --flag \"-static\" \n
+				"
+			},
+			{
 				"if": "matrix.os == 'macOS-latest'",
 				"run": "
 					brew install gcc@14 &&
@@ -491,8 +506,12 @@
 						fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
 					fi \n
 
-					fpm test test --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast\" \n
-					fpm test long --profile release --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast\" \n
+					# Use a profile name other than \"release\" so fpm does not \n
+					# silently append its own default release flags (-O3 \n
+					# -fp-model precise ...) *after* ours, which otherwise \n
+					# clobbers -Ofast/-xHost below (last flag wins) \n
+					fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost \" \n
+					fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost \" \n
 				"
 			}
 		]

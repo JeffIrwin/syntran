@@ -169,6 +169,8 @@ module syntran__errors_m
 		RC_SUBSCRIPT_STEP_ZERO = "R27", &
 		RC_CLOSE_STANDARD = "R28", &
 		RC_GETENV_UNSET = "R29", &
+		RC_WRITELN_FAIL = "R30", &
+		RC_CLOSE_FAIL   = "R31", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -424,6 +426,8 @@ function get_all_error_codes() result(codes)
 	call codes%push(RC_ARRAY_STEP_ZERO_F)
 	call codes%push(RC_SUBSCRIPT_STEP_ZERO)
 	call codes%push(RC_CLOSE_STANDARD)
+	call codes%push(RC_WRITELN_FAIL)
+	call codes%push(RC_CLOSE_FAIL)
 	call codes%push(WC_MISSING_RETURN)
 end function get_all_error_codes
 

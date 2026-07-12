@@ -1,0 +1,54 @@
+
+// Stress test for structs_t hash-table resizing (added while reviewing PR
+// #44, which replaced the ternary-tree struct dict with an open-addressing
+// hash table).  Declaring enough struct types forces several `struct_grow()`
+// rehashes (capacity starts at 8 and doubles at a 0.75 load factor: 8 -> 16
+// -> 32 for 20 struct types), exercising collision probing and verifying
+// every struct type is still found and instantiable after each resize.
+
+struct S0 { val: i32 }
+struct S1 { val: i32 }
+struct S2 { val: i32 }
+struct S3 { val: i32 }
+struct S4 { val: i32 }
+struct S5 { val: i32 }
+struct S6 { val: i32 }
+struct S7 { val: i32 }
+struct S8 { val: i32 }
+struct S9 { val: i32 }
+struct S10 { val: i32 }
+struct S11 { val: i32 }
+struct S12 { val: i32 }
+struct S13 { val: i32 }
+struct S14 { val: i32 }
+struct S15 { val: i32 }
+struct S16 { val: i32 }
+struct S17 { val: i32 }
+struct S18 { val: i32 }
+struct S19 { val: i32 }
+
+let s0 = S0{val = 0};
+let s1 = S1{val = 1};
+let s2 = S2{val = 2};
+let s3 = S3{val = 3};
+let s4 = S4{val = 4};
+let s5 = S5{val = 5};
+let s6 = S6{val = 6};
+let s7 = S7{val = 7};
+let s8 = S8{val = 8};
+let s9 = S9{val = 9};
+let s10 = S10{val = 10};
+let s11 = S11{val = 11};
+let s12 = S12{val = 12};
+let s13 = S13{val = 13};
+let s14 = S14{val = 14};
+let s15 = S15{val = 15};
+let s16 = S16{val = 16};
+let s17 = S17{val = 17};
+let s18 = S18{val = 18};
+let s19 = S19{val = 19};
+
+let sum = s0.val + s1.val + s2.val + s3.val + s4.val + s5.val + s6.val + s7.val + s8.val + s9.val + s10.val + s11.val + s12.val + s13.val + s14.val + s15.val + s16.val + s17.val + s18.val + s19.val;
+// sum of 0..19 = 19 * 20 / 2 = 190
+
+return sum == 190 and s0.val == 0 and s10.val == 10 and s19.val == 19;

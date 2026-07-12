@@ -168,6 +168,17 @@ recursive module subroutine eval_fn_call(node, state, res)
 	state%returned = returned0  ! pop
 
 	!print *, "popping runtime state stack"
+	! Explicitly destroy each of this call's locals before move_alloc()
+	! below implicitly deallocates state%locs%vals (its "to" argument) --
+	! see value_destroy().  A discarded by-value struct parameter whose
+	! nested array field was reallocated mid-call is exactly the case this
+	! guards: don't let compiler-generated deep deallocation of a value_t
+	! array be the first thing to walk that structure
+	if (allocated(state%locs%vals)) then
+		do i = 1, size(state%locs%vals)
+			call value_destroy(state%locs%vals(i))
+		end do
+	end if
 	if (allocated(locs0)) call move_alloc(locs0, state%locs%vals)
 
 	do i = 1, size(node%params)
@@ -1087,9 +1098,19 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		do i = 2, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
 			if (state%rt_halt) return
-			write(arg1%file_%unit_, '(a)', advance = 'no') arg%to_str()
+			write(arg1%file_%unit_, '(a)', advance = 'no', iostat = io) arg%to_str()
+			if (io /= 0) then
+				call rt_throw(state, err_rt(RC_WRITELN_FAIL, "cannot writeln() to file """ &
+					//arg1%file_%name_//""" (iostat = "//str(io)//")"))
+				return
+			end if
 		end do
-		write(arg1%file_%unit_, *)
+		write(arg1%file_%unit_, *, iostat = io)
+		if (io /= 0) then
+			call rt_throw(state, err_rt(RC_WRITELN_FAIL, "cannot writeln() to file """ &
+				//arg1%file_%name_//""" (iostat = "//str(io)//")"))
+			return
+		end if
 
 	case ("eof")
 
@@ -1140,7 +1161,12 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		end if
 
 		!print *, 'closing unit ', arg1%file_%unit_
-		close(arg1%file_%unit_)
+		close(arg1%file_%unit_, iostat = io)
+		if (io /= 0) then
+			call rt_throw(state, err_rt(RC_CLOSE_FAIL, "cannot close() file """ &
+				//arg1%file_%name_//""" (iostat = "//str(io)//")"))
+			return
+		end if
 
 	case ("exit")
 

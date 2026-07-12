@@ -55,9 +55,9 @@ recursive module subroutine parse_expr_statement(parser, expr)
 	    parser%peek_kind(1) == identifier_token .and. &
 	    parser%peek_kind(2) == equals_token) then
 
-		let        = parser%next()
-		identifier = parser%next()
-		op         = parser%next()
+		call parser%next(let)
+		call parser%next(identifier)
+		call parser%next(op)
 
 		call parser%parse_expr_statement(right)
 
@@ -115,11 +115,11 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		! The if-statement above already verifies tokens, so we can use next()
 		! instead of match() here
 
-		let        = parser%next()
-		identifier = parser%next()
+		call parser%next(let)
+		call parser%next(identifier)
 		!print *, 'let ident = ', identifier%text
 
-		op         = parser%next()
+		call parser%next(op)
 
 		call parser%parse_expr_statement(right)
 		!right      = parser%parse_expr()
@@ -135,7 +135,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		!! something like this.  May need to peek current and check if it's
 		!! if_keyword or not
 		!right      = parser%parse_statement()
-		!!semi       = parser%match(semicolon_token)
+		!!call parser%match(semicolon_token, semi)
 
 		call new_declaration_expr(identifier, op, right, expr)
 
@@ -201,18 +201,18 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		ndiag0 = parser%diagnostics%len_
 
 		! Parse the qualified name (mod::var or mod1::mod2::var)
-		identifier = parser%match(identifier_token)
+		call parser%match(identifier_token, identifier)
 		expr%module_prefix = identifier%text
 
-		op = parser%match(double_colon_token)
+		call parser%match(double_colon_token, op)
 
-		identifier = parser%match(identifier_token)
+		call parser%match(identifier_token, identifier)
 
 		! Handle nested namespaces: mod1::mod2::var
 		do while (parser%current_kind() == double_colon_token)
 			expr%module_prefix = expr%module_prefix // "::" // identifier%text
-			op = parser%match(double_colon_token)
-			identifier = parser%match(identifier_token)
+			call parser%match(double_colon_token, op)
+			call parser%match(identifier_token, identifier)
 		end do
 
 		! Look up the qualified variable
@@ -269,7 +269,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 			expr%is_loc = .false.
 
-			op    = parser%next()
+			call parser%next(op)
 			call parser%parse_expr_statement(right)
 
 			expr%kind = assignment_expr
@@ -323,7 +323,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		!print *, "assign expr"
 
-		identifier = parser%match(identifier_token)
+		call parser%match(identifier_token, identifier)
 
 		! this makes `identifier` a redundant copy, although a convenient
 		! shorthand. we need expr%identifier for error handling inside
@@ -364,7 +364,6 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				! Transform to dot_expr("0self", field) for assignment LHS
 				call parser%locs%search("0self", expr%id_index, search_io, self_val)
 				expr%is_loc = .true.
-				expr%val    = self_val
 
 				! Reject writes in const fn
 				if (parser%in_const_method) then
@@ -377,7 +376,6 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				expr%member%id_index   = field_id
 				expr%member%val        = field_val
 				expr%member%identifier = identifier
-				expr%val = field_val
 				call parser%parse_subscripts(expr%member)
 				expr%val = expr%member%val
 				if (parser%current_kind() == dot_token) then
@@ -438,7 +436,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				err_const_assign(parser%context(), span, identifier%text))
 		end if
 
-		op    = parser%next()
+		call parser%next(op)
 		call parser%parse_expr_statement(right)
 		!print *, "1a right index = ", right%right%id_index
 
@@ -535,7 +533,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 	end if
 
 	call parser%parse_expr(expr=expr)
-	!semi       = parser%match(semicolon_token)
+	!call parser%match(semicolon_token, semi)
 
 end subroutine parse_expr_statement
 
@@ -570,7 +568,7 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 	prec = get_unary_op_prec(parser%current_kind())
 	if (prec /= 0 .and. prec >= parent_precl) then
 
-		op    = parser%next()
+		call parser%next(op)
 		call parser%parse_expr(prec, right)
 		call new_unary_expr(op, right, expr)
 
@@ -594,7 +592,7 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 		prec = get_binary_op_prec(parser%current_kind())
 		if (prec == 0 .or. prec <= parent_precl) exit
 
-		op    = parser%next()
+		call parser%next(op)
 		call parser%parse_expr(prec, right)
 		call new_binary_expr(expr, op, right, bin_tmp)
 		call syntax_node_move_into(bin_tmp, expr)
@@ -671,7 +669,7 @@ recursive module subroutine parse_primary_expr(parser, expr)
 			! Left and right parens are not explicitly included as nodes in the
 			! parse tree, they just change the connectivity of the tree
 
-			left  = parser%next()
+			call parser%next(left)
 
 			! These two lines are the difference between allowing statement
 			! "a = (b = 1)" or not.  Note that "a = b = 1" is allowed either way
@@ -679,7 +677,7 @@ recursive module subroutine parse_primary_expr(parser, expr)
 			!expr  = parser%parse_expr()
 			call parser%parse_expr_statement(expr)
 
-			right = parser%match(rparen_token)
+			call parser%match(rparen_token, right)
 
 		case (lbracket_token)
 
@@ -691,7 +689,7 @@ recursive module subroutine parse_primary_expr(parser, expr)
 
 		case (true_keyword, false_keyword)
 
-			keyword = parser%next()
+			call parser%next(keyword)
 			bool = keyword%kind == true_keyword
 			call new_bool(bool, expr)
 
@@ -763,27 +761,27 @@ recursive module subroutine parse_primary_expr(parser, expr)
 
 		case (f32_token)
 
-			token = parser%match(f32_token)
+			call parser%match(f32_token, token)
 			call new_f32(token%val%sca%f32, expr)
 
 		case (f64_token)
 
-			token = parser%match(f64_token)
+			call parser%match(f64_token, token)
 			call new_f64(token%val%sca%f64, expr)
 
 		case (str_token)
 
-			token = parser%match(str_token)
+			call parser%match(str_token, token)
 			call new_str(token%val%str%s, expr)
 
 		case (i64_token)
 
-			token = parser%match(i64_token)
+			call parser%match(i64_token, token)
 			call new_i64(token%val%sca%i64, expr)
 
 		case default
 
-			token = parser%match(i32_token)
+			call parser%match(i32_token, token)
 			call new_i32(token%val%sca%i32, expr)
 
 			if (debug > 1) print *, 'token = ', expr%val%to_str()
@@ -810,7 +808,7 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 	! Variable name expression
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 
 	!print *, "RHS identifier = ", identifier%text
 	!print *, "parser%is_loc = ", parser%is_loc
@@ -847,7 +845,6 @@ recursive module subroutine parse_name_expr(parser, expr)
 					expr%member%id_index   = field_id
 					expr%member%val        = field_val
 					expr%member%identifier = identifier
-					expr%val = field_val
 					call parser%parse_subscripts(expr%member)
 					expr%val = expr%member%val
 					if (parser%current_kind() == dot_token) then
@@ -885,23 +882,22 @@ end subroutine parse_name_expr
 
 recursive module subroutine parse_dot(parser, expr)
 
-	class(parser_t) :: parser
+	class(parser_t), target :: parser
 
 	type(syntax_node_t), intent(inout) :: expr
 
 	!********
 
-	integer :: io, struct_id, member_id, pos0, pos1, method_i, method_fn_id, method_io, &
-		i, id_index_tmp, io_tmp
+	integer :: io, struct_id, member_id, pos0, pos1, method_i, method_fn_id, method_io, i, method_slot
 
 	logical :: call_arg_is_ref, is_ok, param_is_ref, param_is_const_ref, &
 		is_const_var, is_const_receiver
 
 	character(len = :), allocatable :: exp_type, act_type, param_name
 
-	type(fn_t) :: method_fn
+	type(fn_t), pointer :: method_fn
 
-	type(struct_t) :: struct
+	type(struct_t), pointer :: struct
 
 	type(syntax_node_t) :: receiver_save, arg_, receiver_cand, method_cand
 
@@ -915,16 +911,16 @@ recursive module subroutine parse_dot(parser, expr)
 
 	type(text_span_t) :: span
 
-	type(value_t) :: member, param_val, const_check_val
+	type(value_t) :: member, param_val
 
 	if (parser%current_kind() /= dot_token) return
 
 	!print *, "parsing dot"
 	!print *, "expr type = ", type_name(expr%val)
 
-	dot  = parser%match(dot_token)
+	call parser%match(dot_token, dot)
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 
 	!print *, "dot identifier = ", identifier%text
 	!print *, "type = ", kind_name(expr%val%type)
@@ -955,20 +951,27 @@ recursive module subroutine parse_dot(parser, expr)
 	!print *, "struct_name = """, expr%val%struct_name, """"
 
 	! Is there a better way than looking up every struct by name again?
-	call parser%structs%search(expr%val%struct_name, struct_id, io, struct)
-	if (io /= 0) then
+	struct_id = parser%structs%find(expr%val%struct_name)
+	if (struct_id == 0) then
 		! Type is already confirmed as struct_type above, so I'm fairly sure
 		! this is unreachable
 		write(*,*) err_int(IC_UNREACHABLE_STRUCT_LOOKUP, "unreachable struct lookup failure")
 		call internal_error()
 	end if
+	struct => parser%structs%get(struct_id)
 
 	! Check if the identifier is a method name on this struct.
 	! Strip the module prefix from struct_name (e.g. "mod::Type" → "Type") so
 	! that methods resolve the same way under both glob and qualified imports.
-	method_fn = parser%fns%search( &
-		"0" // unqualified_name(expr%val%struct_name) // "::" // identifier%text, &
-		method_fn_id, method_io)
+	method_slot = parser%fns%find( &
+		"0" // unqualified_name(expr%val%struct_name) // "::" // identifier%text)
+	if (method_slot == 0) then
+		method_io = exit_failure
+	else
+		method_io = exit_success
+		method_fn => parser%fns%get(method_slot)
+		method_fn_id = parser%fns%id_at(method_slot)
+	end if
 
 	if (method_io == exit_success) then
 
@@ -986,13 +989,10 @@ recursive module subroutine parse_dot(parser, expr)
 				return
 			end if
 			if (expr%kind == name_expr) then
-				is_const_receiver = .false.
 				if (expr%is_loc) then
-					call parser%locs%search(expr%identifier%text, &
-						id_index_tmp, io_tmp, const_check_val, is_const = is_const_receiver)
+					is_const_receiver = parser%locs%is_const(expr%identifier%text)
 				else
-					call parser%vars%search(expr%identifier%text, &
-						id_index_tmp, io_tmp, const_check_val, is_const = is_const_receiver)
+					is_const_receiver = parser%vars%is_const(expr%identifier%text)
 				end if
 				if (is_const_receiver) then
 					span = new_span(identifier%pos, len(identifier%text))
@@ -1010,7 +1010,7 @@ recursive module subroutine parse_dot(parser, expr)
 		call_is_ref = new_logical_vector()
 		pos_args    = new_integer_vector()
 
-		lparen_ = parser%match(lparen_token)
+		call parser%match(lparen_token, lparen_)
 
 		do while (parser%current_kind() /= rparen_token .and. &
 		          parser%current_kind() /= eof_token)
@@ -1020,7 +1020,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 			call_arg_is_ref = .false.
 			if (parser%current_kind() == amp_token) then
-				amp_ = parser%match(amp_token)
+				call parser%match(amp_token, amp_)
 				call_arg_is_ref = .true.
 			end if
 			call call_is_ref%push(call_arg_is_ref)
@@ -1029,14 +1029,14 @@ recursive module subroutine parse_dot(parser, expr)
 			call call_args%push(arg_)
 
 			if (parser%current_kind() /= rparen_token) then
-				comma_ = parser%match(comma_token)
+				call parser%match(comma_token, comma_)
 			end if
 
-			if (parser%pos == pos0) amp_ = parser%next()
+			if (parser%pos == pos0) call parser%next(amp_)
 		end do
 		call pos_args%push(parser%current_pos() + 1)
 
-		rparen_ = parser%match(rparen_token)
+		call parser%match(rparen_token, rparen_)
 
 		! Validate explicit arg count.
 		! method_fn%params holds only explicit params (self is NOT included there).
@@ -1189,26 +1189,37 @@ recursive module subroutine parse_dot(parser, expr)
 			! receiver_cand%id_index / is_loc / identifier → root variable (s).
 			! receiver_cand%val%struct_name → the struct type that owns the method.
 			block
-				integer :: fn_id_check, fn_io_check
-				type(fn_t) :: fn_check
-				fn_check = parser%fns%search( &
+				integer :: fn_id_check, fn_io_check, fn_slot_check
+				type(fn_t), pointer :: fn_check
+				fn_slot_check = parser%fns%find( &
 					"0" // unqualified_name(receiver_cand%val%struct_name) // &
-					"::" // expr%identifier%text, &
-					fn_id_check, fn_io_check)
-				if (fn_io_check == exit_success .and. .not. fn_check%is_const_method) then
-					is_const_receiver = .false.
+					"::" // expr%identifier%text)
+				if (fn_slot_check == 0) then
+					fn_io_check = exit_failure
+				else
+					fn_io_check = exit_success
+					fn_check => parser%fns%get(fn_slot_check)
+					fn_id_check = parser%fns%id_at(fn_slot_check)
+				end if
+				! fn_check is a pointer into the shared fn dict, disassociated
+				! when fn_io_check /= exit_success.  Fortran's .and. does not
+				! guarantee short-circuit evaluation, so the io check must be
+				! a separate outer if rather than combined with
+				! fn_check%is_const_method in one expression, or a failed
+				! lookup could dereference a null pointer
+				if (fn_io_check == exit_success) then
+				if (.not. fn_check%is_const_method) then
 					if (receiver_cand%is_loc) then
-						call parser%locs%search(receiver_cand%identifier%text, &
-							id_index_tmp, io_tmp, const_check_val, is_const = is_const_receiver)
+						is_const_receiver = parser%locs%is_const(receiver_cand%identifier%text)
 					else
-						call parser%vars%search(receiver_cand%identifier%text, &
-							id_index_tmp, io_tmp, const_check_val, is_const = is_const_receiver)
+						is_const_receiver = parser%vars%is_const(receiver_cand%identifier%text)
 					end if
 					if (is_const_receiver) then
 						span = new_span(expr%identifier%pos, len(expr%identifier%text))
 						call parser%diagnostics%push(err_const_assign( &
 							parser%context(), span, receiver_cand%identifier%text))
 					end if
+				end if
 				end if
 			end block
 		end if
@@ -1240,15 +1251,15 @@ subroutine parse_swallow_arg_list(parser)
 
 	type(syntax_token_t) :: lparen_, rparen_, comma_, amp_
 
-	lparen_ = parser%match(lparen_token)
+	call parser%match(lparen_token, lparen_)
 	do while (parser%current_kind() /= rparen_token .and. &
 	          parser%current_kind() /= eof_token)
 		pos0 = parser%pos
 		call parser%parse_expr(expr = arg_)
-		if (parser%current_kind() /= rparen_token) comma_ = parser%match(comma_token)
-		if (parser%pos == pos0) amp_ = parser%next()
+		if (parser%current_kind() /= rparen_token) call parser%match(comma_token, comma_)
+		if (parser%pos == pos0) call parser%next(amp_)
 	end do
-	rparen_ = parser%match(rparen_token)
+	call parser%match(rparen_token, rparen_)
 
 end subroutine parse_swallow_arg_list
 

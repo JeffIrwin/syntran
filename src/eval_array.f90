@@ -1199,7 +1199,7 @@ module subroutine eval_assign_slice_rank1(node, state, id, res)
 		end do
 	end if
 
-	res = result_val   ! return the modified slice, as the general path does
+	call value_move(result_val, res)   ! return the modified slice, as the general path does
 
 end subroutine eval_assign_slice_rank1
 

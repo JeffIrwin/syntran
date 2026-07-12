@@ -1,0 +1,53 @@
+
+// Stress test for fns_t hash-table resizing (added while reviewing PR #44,
+// which replaced the ternary-tree fn dict with an open-addressing hash
+// table).  Declaring enough functions forces several `fn_grow()` rehashes
+// (capacity starts at 8 and doubles at a 0.75 load factor), exercising
+// collision probing and verifying every function is still found and called
+// correctly after each resize.
+
+fn f0(x: i32): i32 { return x + 0; }
+fn f1(x: i32): i32 { return x + 1; }
+fn f2(x: i32): i32 { return x + 2; }
+fn f3(x: i32): i32 { return x + 3; }
+fn f4(x: i32): i32 { return x + 4; }
+fn f5(x: i32): i32 { return x + 5; }
+fn f6(x: i32): i32 { return x + 6; }
+fn f7(x: i32): i32 { return x + 7; }
+fn f8(x: i32): i32 { return x + 8; }
+fn f9(x: i32): i32 { return x + 9; }
+fn f10(x: i32): i32 { return x + 10; }
+fn f11(x: i32): i32 { return x + 11; }
+fn f12(x: i32): i32 { return x + 12; }
+fn f13(x: i32): i32 { return x + 13; }
+fn f14(x: i32): i32 { return x + 14; }
+fn f15(x: i32): i32 { return x + 15; }
+fn f16(x: i32): i32 { return x + 16; }
+fn f17(x: i32): i32 { return x + 17; }
+fn f18(x: i32): i32 { return x + 18; }
+fn f19(x: i32): i32 { return x + 19; }
+fn f20(x: i32): i32 { return x + 20; }
+fn f21(x: i32): i32 { return x + 21; }
+fn f22(x: i32): i32 { return x + 22; }
+fn f23(x: i32): i32 { return x + 23; }
+fn f24(x: i32): i32 { return x + 24; }
+fn f25(x: i32): i32 { return x + 25; }
+fn f26(x: i32): i32 { return x + 26; }
+fn f27(x: i32): i32 { return x + 27; }
+fn f28(x: i32): i32 { return x + 28; }
+fn f29(x: i32): i32 { return x + 29; }
+fn f30(x: i32): i32 { return x + 30; }
+fn f31(x: i32): i32 { return x + 31; }
+fn f32(x: i32): i32 { return x + 32; }
+fn f33(x: i32): i32 { return x + 33; }
+fn f34(x: i32): i32 { return x + 34; }
+fn f35(x: i32): i32 { return x + 35; }
+fn f36(x: i32): i32 { return x + 36; }
+fn f37(x: i32): i32 { return x + 37; }
+fn f38(x: i32): i32 { return x + 38; }
+fn f39(x: i32): i32 { return x + 39; }
+
+let sum = f0(0) + f1(0) + f2(0) + f3(0) + f4(0) + f5(0) + f6(0) + f7(0) + f8(0) + f9(0) + f10(0) + f11(0) + f12(0) + f13(0) + f14(0) + f15(0) + f16(0) + f17(0) + f18(0) + f19(0) + f20(0) + f21(0) + f22(0) + f23(0) + f24(0) + f25(0) + f26(0) + f27(0) + f28(0) + f29(0) + f30(0) + f31(0) + f32(0) + f33(0) + f34(0) + f35(0) + f36(0) + f37(0) + f38(0) + f39(0);
+// sum of 0..39 = 39 * 40 / 2 = 780
+
+return sum == 780 and f0(10) == 10 and f20(10) == 30 and f39(10) == 49;

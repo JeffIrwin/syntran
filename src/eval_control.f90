@@ -197,7 +197,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 			for_kind = array_expr
 
 			call syntax_eval(node%array, state, tmp)
-			array = tmp%array  ! TODO: move_alloc() (or value_move) instead of copy?
+			call array_move(tmp%array, array)
 
 			len8 = array%len_
 			!print *, 'len8 = ', len8
@@ -230,9 +230,9 @@ recursive module subroutine eval_for_statement(node, state, res)
 		! Parsing still needs to rely on dictionary lookups because it does
 		! not know the entire list of variable identifiers ahead of time
 		if (node%is_loc) then
-			state%locs%vals(node%id_index) = itr
+			call value_move(itr, state%locs%vals(node%id_index))
 		else
-			state%vars%vals(node%id_index) = itr
+			call value_move(itr, state%vars%vals(node%id_index))
 		end if
 
 		call syntax_eval(node%body, state, res)
@@ -1034,14 +1034,36 @@ recursive module subroutine eval_array_expr(node, state, res)
 			res%array%bool = lbound_%sca%bool
 
 		case (str_type)
-			res%array%str = lbound_%str
+			! Don't rely on a scalar-to-array broadcast `res%array%str =
+			! lbound_%str` here — string_t has its own allocatable %s
+			! component, and gfortran's broadcast-assignment codegen for a
+			! derived type with a nested allocatable does not give each
+			! broadcast-target element its own independent deep copy (see
+			! the identical str_type fix in value_copy() in value.f90).
+			! Assign each element's %s individually instead
+			do i8 = 1, res%array%len_
+				res%array%str(i8)%s = lbound_%str%s
+			end do
 
 		case (struct_type)
 
 			!print *, "lbound_ size = ", size(lbound_%struct)
 
+			! Don't rely on a whole-array `res%struct(i8)%struct =
+			! lbound_%struct` here — value_t's assignment(=) binding
+			! (value_copy) is a plain (non-elemental) scalar subroutine, so
+			! it cannot be dispatched for this array-to-array assignment;
+			! gfortran silently falls back to raw intrinsic array
+			! assignment instead, which doesn't deep-copy struct's nested
+			! allocatable fields correctly.  Copy each field individually
+			! via value_copy(), matching the pattern value_copy() itself
+			! uses for its own struct(:) component
 			do i8 = 1, res%array%len_
-				res%struct(i8)%struct = lbound_%struct
+				if (allocated(res%struct(i8)%struct)) deallocate(res%struct(i8)%struct)
+				allocate(res%struct(i8)%struct( size(lbound_%struct) ))
+				do j = 1, size(lbound_%struct)
+					call value_copy(res%struct(i8)%struct(j), lbound_%struct(j))
+				end do
 			end do
 
 			! Arrays are homogeneous, so every element shares one struct_name

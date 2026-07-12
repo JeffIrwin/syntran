@@ -34,7 +34,7 @@ module subroutine parse_return_statement(parser, statement)
 	!print *, "starting parse_return_statement()"
 
 	right_beg = parser%peek_pos(0)
-	return_token = parser%match(return_keyword)
+	call parser%match(return_keyword, return_token)
 	parser%returned = .true.
 
 	statement%kind = return_statement
@@ -50,7 +50,7 @@ module subroutine parse_return_statement(parser, statement)
 		call syntax_node_move(right_tmp, statement%right)
 		right_end = parser%peek_pos(0) - 1
 	end if
-	semi = parser%match(semicolon_token)
+	call parser%match(semicolon_token, semi)
 
 	! Check return type (unless we're at global level ifn == 1, in which case
 	! %fn_type is any_type).  That's half the point of return statements
@@ -79,9 +79,9 @@ module subroutine parse_break_statement(parser, statement)
 	!********
 	type(syntax_token_t) :: break_token, semi
 
-	break_token = parser%match(break_keyword)
+	call parser%match(break_keyword, break_token)
 	statement%kind = break_statement
-	semi = parser%match(semicolon_token)
+	call parser%match(semicolon_token, semi)
 
 end subroutine parse_break_statement
 
@@ -94,9 +94,9 @@ module subroutine parse_continue_statement(parser, statement)
 	!********
 	type(syntax_token_t) :: continue_token, semi
 
-	continue_token = parser%match(continue_keyword)
+	call parser%match(continue_keyword, continue_token)
 	statement%kind = continue_statement
-	semi = parser%match(semicolon_token)
+	call parser%match(semicolon_token, semi)
 
 end subroutine parse_continue_statement
 
@@ -123,17 +123,17 @@ module subroutine parse_use_statement(parser, statement)
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
-	type(parser_t) :: mod_parser
+	type(parser_t), target :: mod_parser
 	type(syntax_node_t) :: mod_unit
 	type(text_context_vector_t) :: mod_contexts
-	type(fn_t) :: fn
+	type(fn_t), pointer :: fn
 	type(value_t) :: var_val
-	type(struct_t) :: struct_val
-	integer :: i, io, iostat, mod_unit_, id_index
+	type(struct_t), pointer :: struct_val
+	integer :: i, io, iostat, mod_unit_, id_index, struct_slot, fn_slot
 	logical :: qualified_import, is_const_var
 	character(len = :), allocatable :: qualified_prefix
 
-	use_token = parser%match(use_keyword)
+	call parser%match(use_keyword, use_token)
 
 	! Handle parent directory references (e.g., `use ../module;` or `use ../../module;`)
 	! module_path includes "../" for file resolution, module_name is for namespacing
@@ -142,26 +142,26 @@ module subroutine parse_use_statement(parser, statement)
 	          parser%peek_kind(1) == dot_token .and. &
 	          parser%peek_kind(2) == slash_token)
 		! Match ".." and "/"
-		dummy = parser%match(dot_token)
-		dummy = parser%match(dot_token)
-		dummy = parser%match(slash_token)
+		call parser%match(dot_token, dummy)
+		call parser%match(dot_token, dummy)
+		call parser%match(slash_token, dummy)
 		module_path = module_path // "../"
 	end do
 
 	! Handle current directory reference (e.g., `use ./module;`)
 	if (parser%current_kind() == dot_token .and. &
 	    parser%peek_kind(1) == slash_token) then
-		dummy = parser%match(dot_token)
-		dummy = parser%match(slash_token)
+		call parser%match(dot_token, dummy)
+		call parser%match(slash_token, dummy)
 		module_path = module_path // "./"
 	end if
 
 	! Match identifier or keyword as module name. Keywords like `struct` can
 	! appear as module names (e.g., `use struct;`)
 	if (is_identifier_or_keyword(parser%current_kind())) then
-		mod_identifier = parser%next()
+		call parser%next(mod_identifier)
 	else
-		mod_identifier = parser%match(identifier_token)
+		call parser%match(identifier_token, mod_identifier)
 	end if
 	module_name = mod_identifier%text
 	module_path = module_path // module_name
@@ -193,7 +193,7 @@ module subroutine parse_use_statement(parser, statement)
 	! Spaces are not allowed in module names (detected by unexpected identifier)
 	! Exception: "as" is allowed for aliasing (checked later)
 	if (parser%current_kind() == identifier_token) then
-		as_identifier = parser%peek(0)
+		call parser%peek(0, as_identifier)
 		if (as_identifier%text /= "as") then
 			span = new_span(mod_identifier%pos, len(mod_identifier%text))
 			call parser%diagnostics%push( &
@@ -204,11 +204,11 @@ module subroutine parse_use_statement(parser, statement)
 
 	! Handle module paths with slashes (e.g., `use math/vectors::*;`)
 	do while (parser%current_kind() == slash_token)
-		dummy = parser%match(slash_token)
+		call parser%match(slash_token, dummy)
 		if (is_identifier_or_keyword(parser%current_kind())) then
-			name_identifier = parser%next()
+			call parser%next(name_identifier)
 		else
-			name_identifier = parser%match(identifier_token)
+			call parser%match(identifier_token, name_identifier)
 		end if
 
 		! Ban keywords in path segments
@@ -229,16 +229,16 @@ module subroutine parse_use_statement(parser, statement)
 	! Check for "as alias" syntax (contextual keyword)
 	if (parser%current_kind() == identifier_token) then
 		! Peek at the token to check if it's "as"
-		as_identifier = parser%peek(0)
+		call parser%peek(0, as_identifier)
 		if (as_identifier%text == "as") then
 			! Consume "as" token
-			as_identifier = parser%match(identifier_token)
+			call parser%match(identifier_token, as_identifier)
 
 			! Parse alias identifier
 			if (is_identifier_or_keyword(parser%current_kind())) then
-				alias_identifier = parser%next()
+				call parser%next(alias_identifier)
 			else
-				alias_identifier = parser%match(identifier_token)
+				call parser%match(identifier_token, alias_identifier)
 			end if
 
 			alias_name = alias_identifier%text
@@ -288,14 +288,14 @@ module subroutine parse_use_statement(parser, statement)
 			return
 		end if
 
-		double_colon = parser%match(double_colon_token)
+		call parser%match(double_colon_token, double_colon)
 
 		! Check for glob import (use module::*)
 		if (parser%current_kind() == star_token) then
-			star = parser%match(star_token)
+			call parser%match(star_token, star)
 			import_name = "*"
 		else
-			name_identifier = parser%match(identifier_token)
+			call parser%match(identifier_token, name_identifier)
 			import_name = name_identifier%text
 		end if
 		qualified_import = .false.
@@ -305,7 +305,7 @@ module subroutine parse_use_statement(parser, statement)
 		qualified_import = .true.
 	end if
 
-	semi = parser%match(semicolon_token)
+	call parser%match(semicolon_token, semi)
 
 	! Compute qualified_prefix once for qualified imports
 	! Use alias if provided, otherwise convert module_name (with "/" -> "::")
@@ -378,7 +378,7 @@ module subroutine parse_use_statement(parser, statement)
 	! Create a new parser for the module
 	mod_contexts = new_context_vector()
 	mod_unit_ = 0
-	mod_parser = new_parser(mod_text, mod_filename, mod_contexts, mod_unit_)
+	call new_parser(mod_parser, mod_text, mod_filename, mod_contexts, mod_unit_)
 
 	! Propagate import chain into child parser for cycle detection
 	mod_parser%import_stack = parser%import_stack
@@ -425,8 +425,10 @@ module subroutine parse_use_statement(parser, statement)
 		fn_name = mod_parser%fn_names%v(i)%s
 
 		! Look up the function in the module parser
-		fn = mod_parser%fns%search(fn_name, id_index, iostat)
-		if (iostat /= exit_success) cycle
+		fn_slot = mod_parser%fns%find(fn_name)
+		if (fn_slot == 0) cycle
+		fn => mod_parser%fns%get(fn_slot)
+		id_index = mod_parser%fns%id_at(fn_slot)
 
 		! Determine the name to insert: qualified (module::fn) or unqualified (fn)
 		! For qualified imports, convert path separators to namespace separators
@@ -500,8 +502,10 @@ module subroutine parse_use_statement(parser, statement)
 		struct_name = mod_parser%struct_names%v(i)%s
 
 		! Look up the struct in the module parser
-		call mod_parser%structs%search(struct_name, id_index, iostat, struct_val)
-		if (iostat /= exit_success) cycle
+		struct_slot = mod_parser%structs%find(struct_name)
+		if (struct_slot == 0) cycle
+		struct_val => mod_parser%structs%get(struct_slot)
+		id_index    = mod_parser%structs%id_at(struct_slot)
 
 		! Determine insert name (qualified or unqualified)
 		if (qualified_import) then
@@ -593,7 +597,7 @@ recursive module subroutine parse_if_statement(parser, statement)
 
 	!print *, 'parse_if_statement'
 
-	if_token  = parser%match(if_keyword)
+	call parser%match(if_keyword, if_token)
 
 	cond_beg  = parser%peek_pos(0)
 	call parser%parse_expr(expr=condition)
@@ -616,7 +620,7 @@ recursive module subroutine parse_if_statement(parser, statement)
 	call syntax_node_move(if_clause, statement%if_clause)
 
 	if (parser%current_kind() == else_keyword) then
-		else_token = parser%match(else_keyword)
+		call parser%match(else_keyword, else_token)
 		call parser%parse_statement(else_clause)
 		call syntax_node_move(else_clause, statement%else_clause)
 	end if
@@ -661,14 +665,14 @@ recursive module subroutine parse_for_statement(parser, statement)
 	!
 	!  * For steps, rust has `for x in (1..10).step_by(2) {}`, which I hate
 
-	for_token  = parser%match(for_keyword)
+	call parser%match(for_keyword, for_token)
 
 	call parser%vars%push_scope()
 	call parser%locs%push_scope()
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 
-	in_token   = parser%match(in_keyword)
+	call parser%match(in_keyword, in_token)
 
 	arr_beg  = parser%peek_pos(0)
 	!array      = parser%parse_array_expr()
@@ -761,7 +765,7 @@ recursive module subroutine parse_while_statement(parser, statement)
 	type(syntax_token_t) :: while_token
 	type(text_span_t) :: span
 
-	while_token  = parser%match(while_keyword)
+	call parser%match(while_keyword, while_token)
 
 	cond_beg  = parser%peek_pos(0)
 	call parser%parse_expr(expr=condition)
@@ -802,7 +806,7 @@ recursive module subroutine parse_block_statement(parser, block)
 	members = new_syntax_node_vector()
 	i = 0
 
-	left  = parser%match(lbrace_token)
+	call parser%match(lbrace_token, left)
 
 	call parser%vars%push_scope()
 	call parser%locs%push_scope()
@@ -818,14 +822,14 @@ recursive module subroutine parse_block_statement(parser, block)
 		call members%push_move(stmt_tmp)
 
 		! Avoid infinite loops on malformed blocks
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%pos == pos0) call parser%next(dummy)
 
 	end do
 
 	call parser%vars%pop_scope()
 	call parser%locs%pop_scope()
 
-	right = parser%match(rbrace_token)
+	call parser%match(rbrace_token, right)
 
 	block%kind = block_statement
 
@@ -883,7 +887,7 @@ recursive module subroutine parse_statement(parser, statement)
 		pos_beg   = parser%peek_pos(0)
 		call parser%parse_expr_statement(statement)
 		pos_end   = parser%peek_pos(0)
-		semi      = parser%match(semicolon_token)
+		call parser%match(semicolon_token, semi)
 
 		if (.not. parser%repl .and. parser%ipass > 0) then
 			!print *, "statement kind = ", kind_name(statement%kind)

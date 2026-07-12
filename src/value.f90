@@ -296,12 +296,15 @@ subroutine value_reset(val)
 		! Scalar: nothing allocated, just clear the type tag.
 		val%type = unknown_type
 	case default
-		if (allocated(val%array     )) deallocate(val%array     )
-		if (allocated(val%str       )) deallocate(val%str       )
-		if (allocated(val%file_     )) deallocate(val%file_     )
-		if (allocated(val%struct    )) deallocate(val%struct    )
-		if (allocated(val%struct_name)) deallocate(val%struct_name)
-		if (allocated(val%struct_cookie)) deallocate(val%struct_cookie)
+		! Don't rely on a bare `deallocate(val%array)` / `deallocate(val%struct)`
+		! here -- both can be arbitrarily deeply nested (array_t containing
+		! str(:) of string_t with its own allocatable %s; struct(:) is a
+		! recursive value_t array), and gfortran's implicit deep
+		! deallocation of that doesn't reliably free every level (same bug
+		! already fixed piecewise in value_copy()/array_copy() and
+		! eval_fn_call()'s locs teardown). value_destroy() clears every
+		! level explicitly, including str/file_/struct_name/struct_cookie
+		call value_destroy(val)
 		val%type = unknown_type
 	end select
 
@@ -360,6 +363,140 @@ end subroutine value_move
 
 !===============================================================================
 
+subroutine array_move(src, dst)
+
+	! Like value_move(), but for a plain (non-allocatable) array_t variable.
+	! dst cannot be move_alloc'd wholesale since it isn't itself allocatable
+	! (unlike value_t%array), so each of array_t's allocatable components is
+	! moved individually instead
+
+	type(array_t), intent(inout) :: src
+	type(array_t), intent(out)   :: dst
+
+	dst%type = src%type
+	dst%kind = src%kind
+	dst%rank = src%rank
+	dst%len_ = src%len_
+	dst%cap  = src%cap
+
+	call move_alloc(src%lbound, dst%lbound)
+	call move_alloc(src%step,   dst%step)
+	call move_alloc(src%ubound, dst%ubound)
+
+	call move_alloc(src%bool, dst%bool)
+	call move_alloc(src%i32 , dst%i32 )
+	call move_alloc(src%i64 , dst%i64 )
+	call move_alloc(src%f32 , dst%f32 )
+	call move_alloc(src%f64 , dst%f64 )
+	call move_alloc(src%str , dst%str )
+
+	call move_alloc(src%size, dst%size)
+
+end subroutine array_move
+
+!===============================================================================
+
+subroutine array_copy(dst, src)
+
+	! Deep copy of a plain (non-allocatable) array_t variable.  Like
+	! value_copy(), but for array_t.
+	!
+	! The str(:) component needs special handling: string_t has its own
+	! allocatable %s, so a whole-array `dst%str = src%str` is a
+	! double-nested reallocation-on-assignment in a single implicit
+	! statement, which gfortran doesn't handle correctly (see the identical
+	! str_type fix in value_copy() below).  Every other component here is
+	! single-level (a plain primitive array, or scalar_t which has no
+	! nested allocatables of its own), so plain `=` is safe for those
+
+	type(array_t), intent(inout) :: dst
+	type(array_t), intent(in)    :: src
+
+	!********
+
+	integer(kind = 8) :: i
+
+	dst%type = src%type
+	dst%kind = src%kind
+	dst%rank = src%rank
+	dst%len_ = src%len_
+	dst%cap  = src%cap
+
+	if (allocated(src%lbound)) then
+		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
+		dst%lbound = src%lbound
+	else if (allocated(dst%lbound)) then
+		deallocate(dst%lbound)
+	end if
+
+	if (allocated(src%step)) then
+		if (.not. allocated(dst%step)) allocate(dst%step)
+		dst%step = src%step
+	else if (allocated(dst%step)) then
+		deallocate(dst%step)
+	end if
+
+	if (allocated(src%ubound)) then
+		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
+		dst%ubound = src%ubound
+	else if (allocated(dst%ubound)) then
+		deallocate(dst%ubound)
+	end if
+
+	if (allocated(src%bool)) then
+		dst%bool = src%bool
+	else if (allocated(dst%bool)) then
+		deallocate(dst%bool)
+	end if
+
+	if (allocated(src%i32)) then
+		dst%i32 = src%i32
+	else if (allocated(dst%i32)) then
+		deallocate(dst%i32)
+	end if
+
+	if (allocated(src%i64)) then
+		dst%i64 = src%i64
+	else if (allocated(dst%i64)) then
+		deallocate(dst%i64)
+	end if
+
+	if (allocated(src%f32)) then
+		dst%f32 = src%f32
+	else if (allocated(dst%f32)) then
+		deallocate(dst%f32)
+	end if
+
+	if (allocated(src%f64)) then
+		dst%f64 = src%f64
+	else if (allocated(dst%f64)) then
+		deallocate(dst%f64)
+	end if
+
+	if (allocated(src%str)) then
+		! Double-nested (outer str(:) allocatable + each element's own
+		! allocatable %s) — don't rely on a whole-array `dst%str = src%str`
+		! to reallocate both levels correctly in one shot.  Reallocate the
+		! outer array explicitly, then copy each element's %s individually
+		if (allocated(dst%str)) deallocate(dst%str)
+		allocate(dst%str( size(src%str) ))
+		do i = 1, size(src%str, kind = 8)
+			dst%str(i)%s = src%str(i)%s
+		end do
+	else if (allocated(dst%str)) then
+		deallocate(dst%str)
+	end if
+
+	if (allocated(src%size)) then
+		dst%size = src%size
+	else if (allocated(dst%size)) then
+		deallocate(dst%size)
+	end if
+
+end subroutine array_copy
+
+!===============================================================================
+
 recursive subroutine value_copy(dst, src)
 
 	! Deep copy.  Default Fortran assignment operator doesn't handle recursion
@@ -384,7 +521,14 @@ recursive subroutine value_copy(dst, src)
 	! slot may carry a stale allocatable from a prior value (different type); we
 	! must not propagate it to dst when the current type no longer uses it.
 	if (src%type == str_type .and. allocated(src%str)) then
-		dst%str = src%str   ! intrinsic assignment handles allocatable char
+		! Don't rely on `dst%str = src%str` doing an implicit reallocation of
+		! the outer allocatable AND the nested allocatable %s component in one
+		! shot — gfortran leaks the old %s block when dst%str was already
+		! allocated to a different length.  Deallocate/reallocate explicitly
+		! and copy the (now simple, single-level) character component instead
+		if (allocated(dst%str)) deallocate(dst%str)
+		allocate(dst%str)
+		dst%str%s = src%str%s
 	else if (allocated(dst%str)) then
 		deallocate(dst%str)
 	end if
@@ -409,8 +553,12 @@ recursive subroutine value_copy(dst, src)
 	end if
 
 	if (allocated(src%array)) then
+		! Don't rely on a whole-object `dst%array = src%array` here either —
+		! array_t's str(:) component has the same double-nested
+		! reallocation-on-assignment problem as value_t%str above.  See
+		! array_copy()
 		if (.not. allocated(dst%array)) allocate(dst%array)
-		dst%array = src%array
+		call array_copy(dst%array, src%array)
 	else if (allocated(dst%array)) then
 		deallocate(dst%array)
 	end if
@@ -426,6 +574,107 @@ recursive subroutine value_copy(dst, src)
 	end if
 
 end subroutine value_copy
+
+!===============================================================================
+
+subroutine array_destroy(arr)
+
+	! Explicitly deallocate arr's allocatable components one level at a
+	! time, mirroring array_copy()'s per-component handling.  Used ahead of
+	! a whole-array deallocation of value_t(:) (e.g. before move_alloc()
+	! implicitly deallocates its "to" argument) so that implicit,
+	! compiler-generated deep deallocation of a value_t array never has to
+	! walk a live, deeply-nested allocatable tree itself -- by the time it
+	! runs, every component here is already empty
+
+	type(array_t), intent(inout) :: arr
+
+	!********
+
+	integer(kind = 8) :: i
+
+	if (allocated(arr%lbound)) deallocate(arr%lbound)
+	if (allocated(arr%step))   deallocate(arr%step)
+	if (allocated(arr%ubound)) deallocate(arr%ubound)
+
+	if (allocated(arr%bool)) deallocate(arr%bool)
+	if (allocated(arr%i32))  deallocate(arr%i32)
+	if (allocated(arr%i64))  deallocate(arr%i64)
+	if (allocated(arr%f32))  deallocate(arr%f32)
+	if (allocated(arr%f64))  deallocate(arr%f64)
+
+	if (allocated(arr%str)) then
+		do i = 1, size(arr%str, kind = 8)
+			if (allocated(arr%str(i)%s)) deallocate(arr%str(i)%s)
+		end do
+		deallocate(arr%str)
+	end if
+
+	if (allocated(arr%size)) deallocate(arr%size)
+
+end subroutine array_destroy
+
+!===============================================================================
+
+recursive subroutine value_destroy(val)
+
+	! Explicitly deallocate val's allocatable components one level at a
+	! time, instead of relying on implicit/compiler-generated deep
+	! deallocation of a value_t (or an array of value_t) to correctly walk
+	! a deeply-nested allocatable tree (struct(:) of struct(:) of array_t
+	! containing str(:) of string_t, etc.) in one shot.  See array_destroy()
+
+	type(value_t), intent(inout) :: val
+
+	!********
+
+	integer :: i
+
+	if (allocated(val%str)) deallocate(val%str)
+	if (allocated(val%file_)) deallocate(val%file_)
+	if (allocated(val%struct_name)) deallocate(val%struct_name)
+	if (allocated(val%struct_cookie)) deallocate(val%struct_cookie)
+
+	if (allocated(val%array)) then
+		call array_destroy(val%array)
+		deallocate(val%array)
+	end if
+
+	if (allocated(val%struct)) then
+		do i = 1, size(val%struct)
+			call value_destroy(val%struct(i))
+		end do
+		deallocate(val%struct)
+	end if
+
+end subroutine value_destroy
+
+!===============================================================================
+
+subroutine value_array_destroy(vals)
+
+	! Safely deallocate an array of value_t: explicitly destroy each
+	! element first (see value_destroy()), then deallocate the array
+	! itself.  Use this instead of a bare `deallocate(vals)` wherever a
+	! growable pool/buffer of value_t needs to be freed or resized --
+	! gfortran's implicit deep deallocation of an array of a type this
+	! deeply nested (str(:) of string_t with its own allocatable %s;
+	! struct(:) is itself a recursive value_t array) is not reliable
+
+	type(value_t), allocatable, intent(inout) :: vals(:)
+
+	!********
+
+	integer :: i
+
+	if (.not. allocated(vals)) return
+
+	do i = 1, size(vals)
+		call value_destroy(vals(i))
+	end do
+	deallocate(vals)
+
+end subroutine value_array_destroy
 
 !===============================================================================
 
