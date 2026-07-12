@@ -158,8 +158,14 @@ module subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 
 	io = exit_success
 
-	if (dict%capacity <= 0 .or. &
-			real(dict%count) / real(dict%capacity) >= dict%load_factor_threshold) then
+	! Grow if the table is unallocated, or once it crosses the load-factor
+	! threshold.  These are two separate `if`s rather than one `.or.`
+	! expression: Fortran doesn't guarantee short-circuit evaluation, so a
+	! combined condition could evaluate real(0)/real(0) (NaN) whenever
+	! capacity is 0 -- harmless today, but a landmine under -ffpe-trap=invalid
+	if (dict%capacity <= 0) then
+		call fn_grow(dict)
+	else if (real(dict%count) / real(dict%capacity) >= dict%load_factor_threshold) then
 		call fn_grow(dict)
 	end if
 
@@ -325,8 +331,11 @@ module subroutine var_insert(dict, key, val, id_index, iostat, overwrite, is_con
 	i  = dict%scope
 	io = exit_success
 
-	if (dict%dicts(i)%capacity <= 0 .or. &
-			real(dict%dicts(i)%count) / real(dict%dicts(i)%capacity) >= &
+	! Two separate `if`s rather than one `.or.` expression -- see the
+	! identical comment in fn_insert() above for why
+	if (dict%dicts(i)%capacity <= 0) then
+		call var_grow(dict%dicts(i))
+	else if (real(dict%dicts(i)%count) / real(dict%dicts(i)%capacity) >= &
 			dict%dicts(i)%load_factor_threshold) then
 		call var_grow(dict%dicts(i))
 	end if
@@ -778,8 +787,11 @@ module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 
 	io = exit_success
 
-	if (dict%capacity <= 0 .or. &
-			real(dict%count) / real(dict%capacity) >= dict%load_factor_threshold) then
+	! Two separate `if`s rather than one `.or.` expression -- see the
+	! identical comment in fn_insert() above for why
+	if (dict%capacity <= 0) then
+		call struct_grow(dict)
+	else if (real(dict%count) / real(dict%capacity) >= dict%load_factor_threshold) then
 		call struct_grow(dict)
 	end if
 

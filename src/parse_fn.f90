@@ -1228,6 +1228,16 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 	!print *, "parsing struct instance of lookup_name = ", lookup_name
 
 	struct_id = parser%structs%find(lookup_name)
+	if (struct_id == 0) then
+		! Both callers of parse_struct_instance() (parse_expr.f90 and
+		! parse_qualified_expr() in this file) already gate the call on
+		! parser%structs%exists(lookup_name), so this should be unreachable.
+		! Guard anyway -- struct_id == 0 would otherwise be passed straight
+		! into get(), which indexes table(0) (out of bounds) -- matching the
+		! same defensive check in parse_dot() (parse_expr.f90)
+		write(*,*) err_int(IC_UNREACHABLE_STRUCT_LOOKUP, "unreachable struct lookup failure")
+		call internal_error()
+	end if
 	struct => parser%structs%get(struct_id)
 
 	call parser%match(lbrace_token, lbrace)

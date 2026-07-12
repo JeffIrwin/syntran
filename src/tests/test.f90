@@ -1770,6 +1770,7 @@ subroutine unit_test_var_scopes(npass, nfail)
 		[   &
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-03.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -3505,6 +3506,7 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-20.syntran', quiet) == '0', &
 			interpret_file(path//'test-21.syntran', quiet) == '0', &
 			interpret_file(path//'test-22.syntran', quiet) == '0', &
+			interpret_file(path//'test-23.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4860,6 +4862,7 @@ subroutine unit_test_struct_long(npass, nfail)
 			interpret_file(path//'test-03.syntran', quiet) == '0'   , &
 			interpret_file(path//'test-04.syntran', quiet) == '0'   , &
 			interpret_file(path//'test-methods.syntran', quiet) == 'true', &
+			interpret_file(path//'test-05.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
