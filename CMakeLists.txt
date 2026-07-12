@@ -89,15 +89,22 @@ elseif(DEFINED ENV{SYNTRAN_INTEL})
 else()
 	add_link_options(-fopenmp)
 endif()
-# Fully static link (libgfortran, libgcc/SEH-unwind, libwinpthread, libquadmath).
-# This is REQUIRED on Windows/MinGW: the dynamically-linked runtime triggers an
-# intermittent heap-corruption SIGSEGV (~1-3% of runs) in syntran's nested-
-# allocatable parse paths; a full `-static` link reliably eliminates it (0 in
-# 1500+ runs vs ~1-3% dynamic).  It also makes the binary self-contained (no
-# libgfortran-5/libgcc_s_seh/libwinpthread/libquadmath DLLs to ship).  Note the
-# old `-static-libquadmath -static-libgfortran -static-libgcc` also failed to
-# link at all under MinGW gfortran 12.2 (`-static-libquadmath` unrecognized).
-add_link_options(-static)
+if(WIN32)
+	# On Windows/MinGW a FULL `-static` link is REQUIRED: the dynamically-linked
+	# runtime triggers an intermittent heap-corruption SIGSEGV (~1-3% of runs) in
+	# syntran's nested-allocatable parse paths, and only a full static link
+	# (libgfortran + libgcc/SEH-unwind + libwinpthread + libquadmath) reliably
+	# eliminates it (0 crashes in ~975 runs vs ~1-3% dynamic; -static-libgfortran
+	# alone still crashes).  It also makes the binary self-contained.  (The old
+	# `-static-libquadmath -static-libgfortran -static-libgcc` also failed to link
+	# at all under MinGW gfortran 12.2 -- `-static-libquadmath` is unrecognized.)
+	add_link_options(-static)
+else()
+	# macOS/Linux do NOT have the crash and do NOT support a full `-static` link
+	# (Apple ld has no crt0.o for static linking).  Keep the partial static
+	# runtime link for a more self-contained binary, as before.
+	add_link_options(-static-libquadmath -static-libgfortran -static-libgcc)
+endif()
 
 set(SRC_DIR "src")
 
