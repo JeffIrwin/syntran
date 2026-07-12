@@ -31,6 +31,13 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - weird errors if you have a member (variable) and a method (function) in
+	!    a struct with the same name. works internally if the importer only uses
+	!    one of them, but they clash if importer tries to use both. see dict
+	!    with keys vs get_keys. should probably be allowed
+	!  - using a module with a global return statement makes the module act like
+	!    a main program. maybe undesirable but maybe ok? how does python handle
+	!    this?
 	!  - do we have/need spellchecking for struct names? apparently fns_t has a
 	!    closest() levenshtein method but structs don't
 	!  - speedup intel aoc tests since it's the ci/cd bottleneck
