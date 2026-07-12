@@ -335,16 +335,19 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 
 		!print *, "compound_assign is_loc = ", node%is_loc
+		! Not `res = state%locs%vals(id)` / `res = state%vars%vals(id)` --
+		! same class of gfortran/mingw defined-assignment bug as
+		! push_value() in value.f90
 		if (node%is_loc) then
 			!print *, "val type = ", kind_name( state%locs%vals(id)%type )
 			call compound_assign(state%locs%vals(id), res, node%op)
-			res = state%locs%vals(id)
+			call value_copy(res, state%locs%vals(id))
 		else
 			call compound_assign(state%vars%vals(id), res, node%op)
 
 			! For compound assignment, ensure that the LHS is returned
 			!print *, 'setting res again'
-			res = state%vars%vals(id)
+			call value_copy(res, state%vars%vals(id))
 			!print *, 'done'
 		end if
 
@@ -468,7 +471,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 				call set_val(node, state%vars%vals(id), state, array_val, index_ = i8)
 			end if
 
-			res = array_val
+			call value_copy(res, array_val)  ! not `res = array_val` -- see above
 
 		else
 

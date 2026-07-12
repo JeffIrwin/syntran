@@ -339,6 +339,36 @@ end function new_string_vector
 
 !===============================================================================
 
+subroutine string_vector_copy(dst, src)
+
+	! Deep copy.  Not `dst = src` -- string_vector_t has no defined
+	! assignment(=), and its v(:) is an array of string_t (nested
+	! allocatable %s), so intrinsic whole-array assignment hits the same
+	! gfortran/mingw defined-assignment code-gen bug documented throughout
+	! types_copy.f90/value.f90.  Copy element-wise instead
+
+	type(string_vector_t), intent(inout) :: dst
+	type(string_vector_t), intent(in)    :: src
+
+	!********
+
+	integer :: i
+
+	dst%len_ = src%len_
+	dst%cap  = src%cap
+
+	if (allocated(dst%v)) deallocate(dst%v)
+	if (.not. allocated(src%v)) return
+
+	allocate(dst%v( size(src%v) ))
+	do i = 1, size(src%v)
+		dst%v(i)%s = src%v(i)%s
+	end do
+
+end subroutine string_vector_copy
+
+!===============================================================================
+
 subroutine push_string(vector, val)
 
 	class(string_vector_t) :: vector
@@ -347,10 +377,9 @@ subroutine push_string(vector, val)
 
 	!********
 
-	type(string_t) :: val_str
 	type(string_t), allocatable :: tmp(:)
 
-	integer :: tmp_cap
+	integer :: tmp_cap, i
 
 	vector%len_ = vector%len_ + 1
 
@@ -359,15 +388,24 @@ subroutine push_string(vector, val)
 
 		tmp_cap = 2 * vector%len_
 		allocate(tmp( tmp_cap ))
-		tmp(1: vector%cap) = vector%v
+
+		! Not `tmp(1:vector%cap) = vector%v` -- string_t has its own
+		! allocatable %s component, so whole-array assignment hits the same
+		! gfortran/mingw defined-assignment code-gen bug documented on
+		! set_array_val() in eval_array.f90 and push_array() in value.f90.
+		! Copy element-wise instead
+		do i = 1, vector%cap
+			tmp(i)%s = vector%v(i)%s
+		end do
 
 		call move_alloc(tmp, vector%v)
 		vector%cap = tmp_cap
 
 	end if
 
-	val_str%s = val
-	vector%v( vector%len_ ) = val_str
+	! Not `vector%v(vector%len_) = val_str` -- same class of bug
+	if (allocated(vector%v(vector%len_)%s)) deallocate(vector%v(vector%len_)%s)
+	vector%v(vector%len_)%s = val
 
 end subroutine push_string
 

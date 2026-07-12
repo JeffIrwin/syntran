@@ -233,6 +233,8 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 	integer :: i, io
 	integer :: env_len, env_stat
 
+	integer(kind = 8) :: p8_, q8_, dst8_, src8_, rdim8_, cdim8_
+
 	type(char_vector_t) :: str_
 
 	type(value_t) :: arg, arg1, arg2
@@ -1341,7 +1343,9 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 
 		allocate(res%array%str(res%array%len_))
 		do i = 1, state%script_args%len_
-			res%array%str(i) = state%script_args%v(i)
+			! Not `res%array%str(i) = state%script_args%v(i)` -- see the
+			! note on the str_type case in the "transpose" branch below
+			res%array%str(i)%s = state%script_args%v(i)%s
 		end do
 
 	case ("shape")
@@ -1411,10 +1415,20 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 				[int(arg1%array%size(1)), int(arg1%array%size(2))])), &
 				[int(res%array%len_)])
 		case (str_type)
-			res%array%str = reshape(transpose(reshape( &
-				arg1%array%str(1:arg1%array%len_), &
-				[int(arg1%array%size(1)), int(arg1%array%size(2))])), &
-				[int(res%array%len_)])
+			! Not `res%array%str = reshape(transpose(reshape(...)))` --
+			! string_t has its own allocatable %s component, so assigning
+			! (with implicit allocation) an array of string_t hits the same
+			! gfortran/mingw bug documented on set_array_val() in
+			! eval_array.f90.  Do the row/col transpose manually instead
+			rdim8_ = arg1%array%size(1)
+			cdim8_ = arg1%array%size(2)
+			allocate(res%array%str(res%array%len_))
+			do dst8_ = 1, res%array%len_
+				p8_ = (dst8_ - 1) / cdim8_ + 1
+				q8_ = mod(dst8_ - 1, cdim8_) + 1
+				src8_ = p8_ + (q8_ - 1) * rdim8_
+				res%array%str(dst8_)%s = arg1%array%str(src8_)%s
+			end do
 		end select
 
 	case ("reshape")
@@ -1432,8 +1446,10 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 			return
 		end if
 
-		! Copy the source value (deep copies flat buffer, type, kind, len_)
-		res = arg1
+		! Copy the source value (deep copies flat buffer, type, kind, len_).
+		! Not `res = arg1` -- same class of gfortran/mingw defined-
+		! assignment bug as push_value() in value.f90
+		call value_copy(res, arg1)
 
 		! Overwrite shape metadata with the requested shape
 		res%array%rank = int(arg2%array%len_)

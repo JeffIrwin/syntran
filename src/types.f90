@@ -409,6 +409,27 @@ module syntran__types_m
 		! types_dict.f90 procedures
 		!***************************************
 
+		module subroutine var_dict_copy(dst, src)
+			! Deep copy of a single var_dict_t scope dict (table(:) is an
+			! array of var_entry_t, each with a nested allocatable value_t
+			! val).  Whole-array intrinsic assignment of such a table -- or
+			! even scalar `=` on one nested allocatable component -- hits a
+			! gfortran/mingw defined-assignment code-gen bug that corrupts
+			! the heap on Windows only (see value_copy()'s and
+			! syntax_token_copy()'s notes on the same class of bug), so this
+			! copies each slot explicitly instead
+			type(var_dict_t), intent(inout) :: dst
+			type(var_dict_t), intent(in)    :: src
+		end subroutine var_dict_copy
+
+		module subroutine fn_entry_table_copy(dst, src)
+			! Deep copy of an fn_entry_t table(:) array.  See
+			! var_dict_copy() for why whole-array intrinsic assignment is
+			! unsafe here
+			type(fn_entry_t), allocatable, intent(inout) :: dst(:)
+			type(fn_entry_t), intent(in) :: src(:)
+		end subroutine fn_entry_table_copy
+
 		module function fn_find(dict, key) result(slot)
 			! Returns the table slot for `key`, or 0 if not present.  The slot
 			! is only valid until the next insert() (a resize rehashes the

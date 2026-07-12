@@ -199,7 +199,15 @@ subroutine push_value(vector, val)
 		vector%cap = tmp_cap
 	end if
 
-	vector%v( vector%len_ ) = val   ! deep copy: source (val) must stay live
+	! Not `vector%v(vector%len_) = val` -- this is the hottest value_t
+	! assignment in the whole interpreter (every LOAD_CONST/LOAD_GLOBAL/
+	! LOAD_LOCAL goes through here), and `=` on a value_t hits the same
+	! gfortran/mingw defined-assignment code-gen bug documented on
+	! syntax_token_copy() and vars_copy() in types_copy.f90.  Call
+	! value_copy() directly instead; it's also the one that already knows
+	! how to overwrite a reused (possibly stale-allocated) stack slot -- see
+	! its "reused stack slot" comment below
+	call value_copy(vector%v( vector%len_ ), val)   ! deep copy: source (val) must stay live
 
 end subroutine push_value
 
@@ -728,7 +736,7 @@ subroutine push_array(vector, val)
 
 	type(string_t   ), allocatable :: tmp_str (:)
 
-	integer(kind = 8) :: tmp_cap
+	integer(kind = 8) :: tmp_cap, i
 
 	vector%len_ = vector%len_ + 1
 
@@ -769,8 +777,14 @@ subroutine push_array(vector, val)
 
 		else if (vector%type == str_type) then
 
+			! Not `tmp_str(1:vector%cap) = vector%str` -- string_t has its
+			! own allocatable %s component, so whole-array assignment hits
+			! the same gfortran/mingw bug documented on set_array_val() in
+			! eval_array.f90.  Copy element-wise instead
 			allocate(tmp_str ( tmp_cap ))
-			tmp_str (1: vector%cap) = vector%str
+			do i = 1, vector%cap
+				tmp_str(i)%s = vector%str(i)%s
+			end do
 			call move_alloc(tmp_str, vector%str)
 
 		else
@@ -796,7 +810,9 @@ subroutine push_array(vector, val)
 	case (bool_type)
 		vector%bool( vector%len_ ) = val%sca%bool
 	case (str_type)
-		vector%str ( vector%len_ ) = val%str
+		! Not `vector%str(vector%len_) = val%str` -- see the note above
+		if (allocated(vector%str(vector%len_)%s)) deallocate(vector%str(vector%len_)%s)
+		vector%str(vector%len_)%s = val%str%s
 	case default
 		write(*,*) err_int(IC_PUSH_ARRAY_TYPE, 'push_array type not implemented')
 		call internal_error()
@@ -811,6 +827,9 @@ subroutine trim_array(vector)
 	class(array_t) :: vector
 
 	!********
+
+	type(string_t), allocatable :: tmp_str(:)
+	integer(kind = 8) :: i
 
 	select case (vector%type)
 	case (i32_type)
@@ -829,7 +848,14 @@ subroutine trim_array(vector)
 		vector%bool = vector%bool(1: vector%len_)
 
 	case (str_type)
-		vector%str = vector%str(1: vector%len_)
+		! Not `vector%str = vector%str(1:vector%len_)` -- same class of
+		! gfortran/mingw bug as push_array() above; copy element-wise
+		! through a temp array instead
+		allocate(tmp_str(vector%len_))
+		do i = 1, vector%len_
+			tmp_str(i)%s = vector%str(i)%s
+		end do
+		call move_alloc(tmp_str, vector%str)
 
 	! TODO: str case, bool case.  File?  Struct?  Other types?
 	case default

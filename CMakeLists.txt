@@ -89,7 +89,15 @@ elseif(DEFINED ENV{SYNTRAN_INTEL})
 else()
 	add_link_options(-fopenmp)
 endif()
-add_link_options(-static-libquadmath -static-libgfortran -static-libgcc)
+# Fully static link (libgfortran, libgcc/SEH-unwind, libwinpthread, libquadmath).
+# This is REQUIRED on Windows/MinGW: the dynamically-linked runtime triggers an
+# intermittent heap-corruption SIGSEGV (~1-3% of runs) in syntran's nested-
+# allocatable parse paths; a full `-static` link reliably eliminates it (0 in
+# 1500+ runs vs ~1-3% dynamic).  It also makes the binary self-contained (no
+# libgfortran-5/libgcc_s_seh/libwinpthread/libquadmath DLLs to ship).  Note the
+# old `-static-libquadmath -static-libgfortran -static-libgcc` also failed to
+# link at all under MinGW gfortran 12.2 (`-static-libquadmath` unrecognized).
+add_link_options(-static)
 
 set(SRC_DIR "src")
 

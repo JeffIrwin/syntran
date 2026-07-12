@@ -215,8 +215,10 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			call parser%match(identifier_token, identifier)
 		end do
 
-		! Look up the qualified variable
-		expr%identifier = identifier
+		! Look up the qualified variable.  Not `expr%identifier =
+		! identifier` -- same class of gfortran/mingw defined-assignment
+		! bug as push_value() in value.f90
+		call syntax_token_copy(expr%identifier, identifier)
 		is_const_var = .false.
 		call parser%vars%search(expr%module_prefix // "::" // identifier%text, &
 			expr%id_index, search_io, expr%val, is_const = is_const_var)
@@ -273,7 +275,9 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			call parser%parse_expr_statement(right)
 
 			expr%kind = assignment_expr
-			expr%op   = op
+			! Not `expr%op = op` -- same class of gfortran/mingw defined-
+			! assignment bug as push_value() in value.f90
+			call syntax_token_copy(expr%op, op)
 			call syntax_node_move(right, expr%right)
 
 			ltype = expr%val%type
@@ -327,8 +331,10 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		! this makes `identifier` a redundant copy, although a convenient
 		! shorthand. we need expr%identifier for error handling inside
-		! parse_subscripts()
-		expr%identifier = identifier;
+		! parse_subscripts().  Not `expr%identifier = identifier` -- same
+		! class of gfortran/mingw defined-assignment bug as push_value() in
+		! value.f90
+		call syntax_token_copy(expr%identifier, identifier)
 
 		!print *, "ident = ", identifier%text
 
@@ -374,14 +380,18 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 				allocate(expr%member)
 				expr%member%id_index   = field_id
-				expr%member%val        = field_val
-				expr%member%identifier = identifier
+				! Not `expr%member%val = field_val` / `%identifier =
+				! identifier` / `expr%val = expr%member%val` -- same class
+				! of gfortran/mingw defined-assignment bug as push_value()
+				! in value.f90
+				call value_copy(expr%member%val, field_val)
+				call syntax_token_copy(expr%member%identifier, identifier)
 				call parser%parse_subscripts(expr%member)
-				expr%val = expr%member%val
+				call value_copy(expr%val, expr%member%val)
 				if (parser%current_kind() == dot_token) then
-					expr%member%identifier = identifier
+					call syntax_token_copy(expr%member%identifier, identifier)
 					call parser%parse_dot(expr%member)
-					expr%val = expr%member%val
+					call value_copy(expr%val, expr%member%val)
 				end if
 				is_const_var = .false.
 			end if
@@ -444,8 +454,10 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		! them are the same kind
 		expr%kind = assignment_expr
 
-		expr%identifier = identifier
-		expr%op         = op
+		! Not `expr%identifier = identifier` -- same class of gfortran/
+		! mingw defined-assignment bug as push_value() in value.f90
+		call syntax_token_copy(expr%identifier, identifier)
+		call syntax_token_copy(expr%op, op)
 		call syntax_node_move(right, expr%right)
 
 		!print *, 'expr ident text = ', expr%identifier%text
@@ -840,16 +852,21 @@ recursive module subroutine parse_name_expr(parser, expr)
 					expr%kind       = dot_expr
 					expr%id_index   = parser%self_loc_id
 					expr%is_loc     = .true.
-					expr%identifier = identifier
+					! Not `expr%identifier = identifier` / `expr%member%val
+					! = field_val` / `%identifier = identifier` /
+					! `expr%val = expr%member%val` -- same class of
+					! gfortran/mingw defined-assignment bug as push_value()
+					! in value.f90
+					call syntax_token_copy(expr%identifier, identifier)
 					allocate(expr%member)
 					expr%member%id_index   = field_id
-					expr%member%val        = field_val
-					expr%member%identifier = identifier
+					call value_copy(expr%member%val, field_val)
+					call syntax_token_copy(expr%member%identifier, identifier)
 					call parser%parse_subscripts(expr%member)
-					expr%val = expr%member%val
+					call value_copy(expr%val, expr%member%val)
 					if (parser%current_kind() == dot_token) then
 						call parser%parse_dot(expr%member)
-						expr%val = expr%member%val
+						call value_copy(expr%val, expr%member%val)
 					end if
 					return
 				end if
@@ -1080,11 +1097,14 @@ recursive module subroutine parse_dot(parser, expr)
 			end do
 		end if
 
-		! Build method_call_expr node in expr
+		! Build method_call_expr node in expr.  Not `expr%identifier =
+		! identifier` / `expr%val = method_fn%type` -- same class of
+		! gfortran/mingw defined-assignment bug as push_value() in
+		! value.f90
 		expr%kind       = method_call_expr
-		expr%identifier = identifier
+		call syntax_token_copy(expr%identifier, identifier)
 		expr%id_index   = method_fn_id
-		expr%val        = method_fn%type
+		call value_copy(expr%val, method_fn%type)
 
 		! args: receiver first, then explicit args
 		if (allocated(expr%args))        deallocate(expr%args)
@@ -1112,7 +1132,10 @@ recursive module subroutine parse_dot(parser, expr)
 		! Copy fn body and params from the method's fn node
 		if (allocated(method_fn%node)) then
 			allocate(expr%body)
-			expr%body     = method_fn%node%body
+			! Not `expr%body = method_fn%node%body` -- same class of
+			! gfortran/mingw defined-assignment bug as push_value() in
+			! value.f90; call syntax_node_copy() directly
+			call syntax_node_copy(expr%body, method_fn%node%body)
 			expr%params   = method_fn%node%params
 			expr%num_locs = method_fn%node%num_locs
 		end if
@@ -1156,14 +1179,16 @@ recursive module subroutine parse_dot(parser, expr)
 	call parser%parse_subscripts(expr%member)
 	pos1 = parser%current_pos()
 	if (allocated(expr%member%lsubscripts)) then
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 	end if
 
 	! I think this needs a recursive call to `parse_dot()` right here to handle
-	! things like `a.b.c`
+	! things like `a.b.c`.  Not `expr%member%val = expr%val` /
+	! `expr%member%identifier = identifier` -- same class of gfortran/mingw
+	! defined-assignment bug as push_value() in value.f90
 	if (parser%peek_kind(0) == dot_token) then
-		expr%member%val = expr%val
-		expr%member%identifier = identifier  ! set for diags in recursed parse_dot()
+		call value_copy(expr%member%val, expr%val)
+		call syntax_token_copy(expr%member%identifier, identifier)  ! set for diags in recursed parse_dot()
 
 		! Save the current expr (e.g. y.b) before the recursive call can turn
 		! expr%member into a method_call_expr.  Used to build the proper receiver
@@ -1180,10 +1205,14 @@ recursive module subroutine parse_dot(parser, expr)
 			! receiver_cand is the outer dot_expr (e.g. y.b).  Its member
 			! should be the inner partial chain produced by the recursive fix
 			! (rather than the b-subnode copy from the save above).
-			receiver_cand%member = expr%member%args(1)
-			method_cand          = expr%member        ! deep-copy the method node
-			method_cand%args(1)  = receiver_cand      ! replace receiver with full chain
-			expr                 = method_cand         ! promote to top-level method call
+			! Not `dst = src` for any syntax_node_t below -- same class of
+			! gfortran/mingw defined-assignment bug as push_value() in
+			! value.f90; call syntax_node_copy() directly
+			if (.not. allocated(receiver_cand%member)) allocate(receiver_cand%member)
+			call syntax_node_copy(receiver_cand%member, expr%member%args(1))
+			call syntax_node_copy(method_cand, expr%member)        ! deep-copy the method node
+			call syntax_node_copy(method_cand%args(1), receiver_cand) ! replace receiver with full chain
+			call syntax_node_copy(expr, method_cand)                ! promote to top-level method call
 
 			! Const-receiver check for chained case (e.g. `const s = O{…}; s.field.method()`).
 			! receiver_cand%id_index / is_loc / identifier → root variable (s).

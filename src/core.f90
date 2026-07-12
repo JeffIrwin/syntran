@@ -555,7 +555,9 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
 		tree%is_empty = .true.
-		tree%diagnostics = parser%diagnostics
+		! Not `tree%diagnostics = parser%diagnostics` -- see
+		! string_vector_copy()'s comment in utils.f90
+		call string_vector_copy(tree%diagnostics, parser%diagnostics)
 		return
 	end if
 
@@ -586,20 +588,26 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 			! var_entry_t's val component has an overloaded assignment op, but
 			! the vars type itself does not (and I don't want to expose or
-			! encourage copying)
+			! encourage copying).  Not `vars0%dicts(1)%table =
+			! vars%dicts(1)%table` either way -- see var_dict_copy()'s
+			! comment in types.f90 for why that intrinsic array assignment
+			! is unsafe on gfortran/mingw
 
 			allocate(vars0%dicts(1))
-			vars0%dicts(1)%table    = vars%dicts(1)%table
-			vars0%dicts(1)%capacity = vars%dicts(1)%capacity
-			vars0%dicts(1)%count    = vars%dicts(1)%count
+			call var_dict_copy(vars0%dicts(1), vars%dicts(1))
 
 			!print *, 'vars%vals = '
 			!do i = 1, size(vars%vals)
 			!	print *, vars%vals(i)%to_str()
 			!end do
 
-			! Backup vals array and set num_vars in parser object
-			vars0%vals = vars%vals
+			! Backup vals array and set num_vars in parser object.  Not
+			! `vars0%vals = vars%vals` -- same class of bug as above
+			if (allocated(vars0%vals)) deallocate(vars0%vals)
+			allocate(vars0%vals( size(vars%vals) ))
+			do i = 1, size(vars%vals)
+				call value_copy(vars0%vals(i), vars%vals(i))
+			end do
 			parser%num_vars = size(vars%vals)
 
 		end if
@@ -623,7 +631,12 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 		! through and test enough permutations in interactive interpreter
 
 		!print *, 'backing up vars%vals to vars0%vals'
-		vars0%vals = vars%vals
+		! Not `vars0%vals = vars%vals` -- see the other branch above for why
+		if (allocated(vars0%vals)) deallocate(vars0%vals)
+		allocate(vars0%vals( size(vars%vals) ))
+		do i = 1, size(vars%vals)
+			call value_copy(vars0%vals(i), vars%vals(i))
+		end do
 		parser%num_vars = size(vars%vals)
 		!print *, '1'
 		call move_alloc(vars%vals         , parser%vars%vals)
@@ -635,7 +648,10 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	!print *, 'moving fns'
 	if (allocated(fns%table)) then
 
-		fns0%table          = fns%table
+		! Not `fns0%table = fns%table` -- see fn_entry_table_copy()'s
+		! comment in types.f90 for why that intrinsic array assignment is
+		! unsafe on gfortran/mingw
+		call fn_entry_table_copy(fns0%table, fns%table)
 		fns0%capacity       = fns%capacity
 		fns0%count          = fns%count
 
@@ -731,7 +747,9 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	if (debug > 1) print *, 'matching eof'
 	call parser%match(eof_token, token)
 
-	tree%diagnostics = parser%diagnostics
+	! Not `tree%diagnostics = parser%diagnostics` -- see
+	! string_vector_copy()'s comment in utils.f90
+	call string_vector_copy(tree%diagnostics, parser%diagnostics)
 
 	!print *, 'size(parser%vars%vals) = ', size(parser%vars%vals)
 
@@ -767,8 +785,11 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 		!print *, 'restoring vars%vals'
 
 		!vars%vals( 1: size(vars0%vals) ) = vars0%vals
+		! Not `vars%vals(i) = vars0%vals(i)` -- per-element `=` on a value_t
+		! hits the same gfortran/mingw defined-assignment bug as
+		! push_value() in value.f90; call value_copy() directly
 		do i = 1, size(vars0%vals)
-			vars%vals(i) = vars0%vals(i)
+			call value_copy(vars%vals(i), vars0%vals(i))
 		end do
 
 		!vars%vals = vars0%vals
@@ -785,8 +806,10 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	if (allocated(fns0%fns)) then
 
 		!fns%fns( 1: size(fns0%fns) ) = fns0%fns
+		! Not `fns%fns(i) = fns0%fns(i)` -- per-element `=` on an fn_t hits
+		! the same class of bug; call fn_copy() directly
 		do i = 1, size(fns0%fns)
-			fns%fns(i) = fns0%fns(i)
+			call fn_copy(fns%fns(i), fns0%fns(i))
 		end do
 
 	end if
@@ -802,8 +825,12 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 		! User-defined fns are in the table after all of the intrinsic fns, so
 		! shift its index by num_intr_fns
 		slot = fns%find(fn_name)
-		fn = fns%get(slot)
-		fns%fns( fns%num_intr_fns + i ) = fn
+
+		! Not `fn = fns%get(slot)` / `fns%fns(...) = fn` -- see
+		! fn_entry_table_copy()'s comment in types.f90 for why `=` on an
+		! fn_t is unsafe here
+		call fn_copy(fn, fns%get(slot))
+		call fn_copy(fns%fns( fns%num_intr_fns + i ), fn)
 
 	end do
 	!print *, "done looking up fns"

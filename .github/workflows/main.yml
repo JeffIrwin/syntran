@@ -180,8 +180,14 @@
 				"name": "Test fpm windows",
 				"run":
 				"
-					fpm test test --profile release \n
-					fpm test long --profile release \n
+					# `--flag \"-static\"` is REQUIRED on Windows: the dynamically \n
+					# linked MinGW runtime triggers an intermittent heap-corruption \n
+					# SIGSEGV (~1-3% of runs) in nested-allocatable parse paths.  A \n
+					# full static link eliminates it (0 in 1500+ runs).  Passed via \n
+					# `--flag` (not `--link-flag`, which fpm 0.12-alpha silently \n
+					# ignores) so it actually reaches the linker. \n
+					fpm test test --profile release --flag \"-static\" \n
+					fpm test long --profile release --flag \"-static\" \n
 				"
 			},
 			{

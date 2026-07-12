@@ -45,6 +45,8 @@ subroutine assign_value_t(left, right, op_text)
 
 	!********
 
+	integer :: i
+
 	!print *, 'starting assign_value_t()'
 	!print *, 'left %type = ', kind_name(left%type)
 	!print *, 'right%type = ', kind_name(right%type)
@@ -52,7 +54,11 @@ subroutine assign_value_t(left, right, op_text)
 	if (right%type == array_type) then
 		! TODO: check for subtle bugs where this might cast an f32 array to an
 		! f64 array (or i32 to/from i64)
-		left = right  ! simply overwrite, for any type
+		!
+		! Not `left = right` -- same class of gfortran/mingw defined-
+		! assignment bug documented on the str_type case below and on
+		! push_value() in value.f90; call value_copy() directly instead
+		call value_copy(left, right)  ! simply overwrite, for any type
 		return
 	end if
 
@@ -71,7 +77,7 @@ subroutine assign_value_t(left, right, op_text)
 			left%sca%f64 = right%to_f64()
 
 		case (file_type)
-			left = right
+			call value_copy(left, right)  ! not `left = right` -- see above
 
 		case (i32_type)
 			left%sca%i32 = right%to_i32()
@@ -90,7 +96,7 @@ subroutine assign_value_t(left, right, op_text)
 			left%str%s = right%str%s
 
 		case (struct_type)
-			left = right
+			call value_copy(left, right)  ! not `left = right` -- see above
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -113,7 +119,13 @@ subroutine assign_value_t(left, right, op_text)
 	case (i64_type)
 		left%array%i64 = right%sca%i64
 	case (str_type)
-		left%array%str = right%str
+		! Not `left%array%str = right%str` (broadcast scalar into array) --
+		! str_t(:) has a nested allocatable %s, same class of bug as the
+		! scalar str_type case above.  Broadcast element-wise instead
+		do i = 1, size(left%array%str)
+			if (allocated(left%array%str(i)%s)) deallocate(left%array%str(i)%s)
+			left%array%str(i)%s = right%str%s
+		end do
 	case default
 		write(*,*) err_eval_binary_types(op_text)
 		call internal_error()
