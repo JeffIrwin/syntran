@@ -2355,6 +2355,13 @@ subroutine unit_test_i64(npass, nfail)
 				//'2147483648, 2147483649, 2147483650, 2147483651, ' &
 				//'2147483652, 2147483653, 2147483654, 2147483655, ' &
 				//'2147483656, 2147483657, 2147483658, 2147483659]', &
+			! Regression: array `=` assignment must preserve the LHS's
+			! element type (i32 here) instead of adopting the RHS's (i64),
+			! otherwise the value is later read through the wrong (zeroed)
+			! type slot.  Was `[0, 0, 0]`
+			eval("let aa = [0, 0]; aa = [9'i64, 1'i64]; [[0], aa];") == '[0, 9, 1]', &
+			eval("let a = [1.0f, 2.0f]; a = [3.0, 4.0]; a;") == &
+				'[3.000000E+00, 4.000000E+00]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

@@ -50,9 +50,26 @@ subroutine assign_value_t(left, right, op_text)
 	!print *, 'right%type = ', kind_name(right%type)
 
 	if (right%type == array_type) then
-		! TODO: check for subtle bugs where this might cast an f32 array to an
-		! f64 array (or i32 to/from i64)
-		left = right  ! simply overwrite, for any type
+		! Preserve the LHS array's declared element type and cast the RHS to
+		! match, rather than overwriting wholesale (which used to silently
+		! change the LHS's type, e.g. i32 -> i64, leaving the bytecode
+		! compiler's static type info stale).  Mirrors the scalar branch below
+		if (left%type == array_type) then
+			select case (left%array%type)
+			case (i32_type)
+				left%array = right%to_i32_array()
+			case (i64_type)
+				left%array = right%to_i64_array()
+			case (f32_type)
+				left%array = right%to_f32_array()
+			case (f64_type)
+				left%array = right%to_f64_array()
+			case default
+				left = right  ! bool / str / struct arrays: no numeric cast
+			end select
+		else
+			left = right
+		end if
 		return
 	end if
 
