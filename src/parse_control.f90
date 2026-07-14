@@ -26,6 +26,7 @@ module subroutine parse_return_statement(parser, statement)
 	!********
 
 	integer :: right_beg, right_end
+	logical :: right_unknown
 
 	type(syntax_node_t)  :: right_tmp
 	type(syntax_token_t) :: return_token, semi
@@ -57,8 +58,23 @@ module subroutine parse_return_statement(parser, statement)
 	!
 	! There should also be a check that every branch of a fn has a return
 	! statement, but that seems more difficult
+
+	! A recursive call to the enclosing fn is unresolved during parser pass 0
+	! (the fn isn't inserted into parser%fns until after its body is parsed),
+	! so its result type defaults to unknown_type.  For an array-typed return
+	! value, that unknown-ness shows up in the *element* type (%array%type)
+	! rather than the top-level %type (which is array_type).  Treat that case
+	! like a bare unknown too, so pass 0 doesn't cascade a bogus E41 and abort
+	! before pass 1 can resolve the recursion correctly
+	right_unknown = statement%right%val%type == unknown_type
+	if (statement%right%val%type == array_type) then
+		if (allocated(statement%right%val%array)) &
+			right_unknown = right_unknown .or. &
+			statement%right%val%array%type == unknown_type
+	end if
+
 	if (types_match(parser%fn_type, statement%right%val) /= TYPE_MATCH) then
-	if (statement%right%val%type /= unknown_type) then  ! don't cascade
+	if (.not. right_unknown) then  ! don't cascade
 		span = new_span(right_beg, right_end - right_beg + 1)
 		call parser%diagnostics%push( &
 			err_bad_ret_type(parser%context(), &
