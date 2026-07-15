@@ -100,6 +100,7 @@ module syntran__errors_m
 		EC_IMMUTABLE_VAR = "E82", &
 		EC_CONST_ASSIGN = "E83", &
 		EC_MUTABLE_METHOD_ON_TEMP = "E84", &
+		EC_MEMBER_METHOD_CLASH = "E85", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -358,6 +359,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_IMMUTABLE_VAR)
 	call codes%push(EC_CONST_ASSIGN)
 	call codes%push(EC_MUTABLE_METHOD_ON_TEMP)
+	call codes%push(EC_MEMBER_METHOD_CLASH)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -797,6 +799,21 @@ function err_mutable_method_on_temp(context, span, method) result(err)
 		//underline(context, span)//" add `const` to the method declaration"//color_reset
 
 end function err_mutable_method_on_temp
+
+!===============================================================================
+
+function err_member_method_clash(context, span, name, struct_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: name, struct_name
+	err = err_pre(EC_MEMBER_METHOD_CLASH) &
+		//'method `'//name//'` conflicts with a member of the same name in struct `' &
+		//struct_name//'`' &
+		//underline(context, span)//" name already used by a member"//color_reset
+
+end function err_member_method_clash
 
 !===============================================================================
 

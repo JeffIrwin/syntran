@@ -503,6 +503,30 @@ A `use module::*` glob import was combined with an alias, which isn't allowed.
 
 The top-level source file given to the interpreter could not be found.
 
+### E82 -- immutable-var
+
+Assignment to a `std::` constant (e.g. `std::PI`), which is not allowed.
+
+[Example](../src/tests/test-src/errors/E82-immutable-var.syntran)
+
+### E83 -- const-assign
+
+Assignment to a variable declared `const`.
+
+[Example](../src/tests/test-src/errors/E83-const-assign.syntran)
+
+### E84 -- mutable-method-on-temp
+
+A mutable (non-`const`) method was called on a temporary struct value (e.g. a function's return value), so any mutation would be silently discarded.
+
+[Example](../src/tests/test-src/errors/E84-mutable-method-on-temp.syntran)
+
+### E85 -- member-method-clash
+
+A struct method has the same name as one of the struct's members. Names must be unique across a struct's fields and methods so that `s.foo` is unambiguous.
+
+[Example](../src/tests/test-src/errors/E85-member-method-clash.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

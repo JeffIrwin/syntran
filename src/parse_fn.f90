@@ -986,7 +986,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	character(len = :), allocatable :: type_text, mangled_name
 
-	integer :: i, io, pos0, rank, fn_beg, fn_name_end
+	integer :: i, io, pos0, rank, fn_beg, fn_name_end, mem_id
 
 	logical :: overwrite, const_param
 
@@ -1002,7 +1002,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	type(text_span_t) :: span
 
-	type(value_t) :: type, self_val
+	type(value_t) :: type, self_val, mem_val
 	type(value_vector_t) :: types
 
 	call parser%vars%push_scope()
@@ -1019,6 +1019,15 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	fn%is_intr = .false.
 	fn%is_method = .true.
 	fn%is_const_method = is_const
+
+	! A method may not share a name with a member of the same struct -- that
+	! would make `s.foo` ambiguous between a field read and a method call
+	call struct%vars%search(identifier%text, mem_id, io, mem_val)
+	if (io == exit_success) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_member_method_clash( &
+			parser%context(), span, identifier%text, struct_name))
+	end if
 
 	! Insert implicit "0self" as first local (the struct receiver)
 	self_val%type = struct_type

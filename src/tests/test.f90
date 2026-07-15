@@ -5812,6 +5812,9 @@ subroutine unit_test_error_codes(npass, nfail)
 				'fn f() { let x = 1; } let a = f();'), EC_NO_RETURN), &
 			diag_has_code(get_diags('let a = 1; let a = 2;'), EC_REDECLARE_VAR), &
 			diag_has_code(get_diags('struct S{x:i32, x:i32}'), EC_REDECLARE_MEM), &
+			diag_has_code(get_diags('struct S{x:i32, fn x(){}}'), EC_MEMBER_METHOD_CLASH), &
+			diag_count_code(get_diags('struct S{x:i32, fn x(){}}'), EC_MEMBER_METHOD_CLASH) == 1, &
+			.not. diag_has_code(get_diags('struct S{x:i32, fn y(){}}'), EC_MEMBER_METHOD_CLASH), &
 			diag_has_code(get_diags( &
 				'fn f():i32{return 1;} fn f():i32{return 2;}'), EC_REDECLARE_FN), &
 			diag_has_code(get_diags('fn min():i32{return 1;}'), EC_REDECLARE_INTR_FN), &
@@ -6346,7 +6349,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E84-mutable-method-on-temp.syntran'), &
 				EC_MUTABLE_METHOD_ON_TEMP, P//'E84-mutable-method-on-temp.syntran', 21, 9, 3), &
 			diag_count_code(get_diags_file(P//'E84-mutable-method-on-temp.syntran'), &
-				EC_MUTABLE_METHOD_ON_TEMP) == 1 &
+				EC_MUTABLE_METHOD_ON_TEMP) == 1, &
+			diag_loc_ok(get_diags_file(P//'E85-member-method-clash.syntran'), &
+				EC_MEMBER_METHOD_CLASH, P//'E85-member-method-clash.syntran', 8, 5, 3), &
+			diag_count_code(get_diags_file(P//'E85-member-method-clash.syntran'), &
+				EC_MEMBER_METHOD_CLASH) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

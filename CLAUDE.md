@@ -128,3 +128,28 @@ Module paths in `use` statements are resolved relative to the current source fil
 New features and bug fixes should have unit tests.
 Short syntran program strings can be evaluated directly in `test.f90`.
 Anything longer than a few lines can go in a `*.syntran` file under `test-src`, but it needs to be called using `interpret_file()` in `test.f90`.
+
+## Adding a New Error Code
+
+Every diagnostic (`EC_*`/`RC_*`/`IC_*`/`WC_*` in `src/errors.f90`) needs all of
+the following — skipping the doc/example steps is an easy mistake since the
+build and tests pass without them:
+
+1. Add the `E##`/`R##`/`I##`/`W##` constant (next unused number in that
+   letter's series; never renumber or reuse a retired code) and its
+   `codes%push(...)` registration in `src/errors.f90`.
+2. Add the `err_*()` constructor function alongside the other `err_*`
+   functions in `src/errors.f90`.
+3. Emit it from the relevant parse/eval site.
+4. Add a reproduction file at
+   `src/tests/test-src/errors/E##-kebab-name.syntran` (mirror the existing
+   files there), placed on a non-trivial line/column if possible so location
+   tests actually exercise line/col arithmetic.
+5. Document it in `doc/errors.md`: a `### E## -- kebab-name` heading, a
+   one-line description, and an `[Example](../src/tests/test-src/errors/E##-kebab-name.syntran)`
+   link to the file from step 4.
+6. Add coverage in `src/tests/test.f90`: a `diag_has_code(...)` (and usually
+   `diag_count_code(...) == 1`) row in `unit_test_error_codes`, plus a
+   `diag_loc_ok(...)` row in `unit_test_error_locations` for the reproduction
+   file's exact line/col/caret-width (run the file through the built
+   interpreter to read the real caret before writing the assertion).
