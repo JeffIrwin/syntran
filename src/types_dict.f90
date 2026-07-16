@@ -831,6 +831,54 @@ end subroutine struct_insert
 
 !===============================================================================
 
+module function struct_closest(dict, key) result(closest)
+
+	! Return the closest declared struct name to `key`, or "" when none is
+	! close enough.  Mirrors fn_closest()'s scan of a single flat table, minus
+	! the overload de-mangling step (struct names are never overload-mangled).
+	! See var_closest() for the unqualified-name ranking with qualified-name
+	! tie-breaker.
+
+	class(structs_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+	character(len = :), allocatable :: closest
+
+	!********
+
+	integer :: i, min_dist, min_qdist, threshold, dist, qdist
+	character(len = :), allocatable :: target_low, target_unqual_low, &
+		key_, key_low, key_unqual
+
+	closest           = ""
+	min_dist          = huge(min_dist)
+	min_qdist         = huge(min_qdist)
+	target_low        = to_lower(key)
+	target_unqual_low = to_lower(unqualified_name(key))
+
+	do i = 1, dict%capacity
+		if (.not. allocated(dict%table(i)%key)) cycle
+
+		key_ = dict%table(i)%key
+		key_low = to_lower(key_)
+		if (key_low == target_low) cycle
+
+		key_unqual = unqualified_name(key_)
+		dist  = levenshtein(target_unqual_low, to_lower(key_unqual))
+		qdist = levenshtein(target_low, key_low)
+		if (dist < min_dist .or. (dist == min_dist .and. qdist < min_qdist)) then
+			min_dist  = dist
+			min_qdist = qdist
+			closest   = key_
+		end if
+	end do
+
+	threshold = max(2, len(target_unqual_low) / 3)
+	if (min_dist > threshold) closest = ""
+
+end function struct_closest
+
+!===============================================================================
+
 ! ternary_closest() was here.  var_dict_t is now a flat hash table, so
 ! var_closest() below scans dict%dicts(i)%table(:) directly, mirroring
 ! fn_closest()'s scan of fns_t's single table

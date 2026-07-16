@@ -1307,7 +1307,8 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 				parser%context(), &
 				span, &
 				name%text, &
-				lookup_name))
+				lookup_name, &
+				struct%vars%closest(name%text)))
 			!return
 		end if
 
@@ -1472,7 +1473,8 @@ module subroutine parse_type(parser, type_text, type)
 	if (itype == unknown_type) then
 		span = new_span(pos1, pos2 - pos1)
 		call parser%diagnostics%push(err_bad_type( &
-			parser%context(), span, type_text))
+			parser%context(), span, type_text, &
+			parser%structs%closest(type_text)))
 	end if
 
 	if (rank >= 0) then

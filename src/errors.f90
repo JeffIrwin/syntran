@@ -676,15 +676,26 @@ end function err_bad_f64
 
 !===============================================================================
 
-function err_bad_type(context, span, type) result(err)
+function err_bad_type(context, span, type, suggest) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: type
+	character(len = *), intent(in), optional :: suggest
+
 	err = err_pre(EC_BAD_TYPE)//'bad type annotation `'//type//'`' &
 		//underline(context, span) &
 		//' bad type'//color_reset
+
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
 
 end function err_bad_type
 
@@ -1527,7 +1538,7 @@ end function err_non_struct_dot
 
 !===============================================================================
 
-function err_bad_member_name(context, span, mem_name, struct_var_name, struct_name) result(err)
+function err_bad_member_name(context, span, mem_name, struct_var_name, struct_name, suggest) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
@@ -1536,17 +1547,28 @@ function err_bad_member_name(context, span, mem_name, struct_var_name, struct_na
 	! "class" `struct_name`.  Its useful for dot expressions `var.mem`
 
 	character(len = *), intent(in) :: mem_name, struct_var_name, struct_name
+	character(len = *), intent(in), optional :: suggest
+
 	err = err_pre(EC_BAD_MEMBER_NAME) &
 		//'member `'//mem_name//'` does not exist in struct `'//struct_var_name//'`' &
 		//' of type `'//struct_name//'`' &
 		//underline(context, span) &
 		//" bad member name"//color_reset
 
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
+
 end function err_bad_member_name
 
 !===============================================================================
 
-function err_bad_member_name_short(context, span, mem_name, struct_name) result(err)
+function err_bad_member_name_short(context, span, mem_name, struct_name, suggest) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
@@ -1556,10 +1578,21 @@ function err_bad_member_name_short(context, span, mem_name, struct_name) result(
 	! be a variable identifier like in the longer fn above
 
 	character(len = *), intent(in) :: mem_name, struct_name
+	character(len = *), intent(in), optional :: suggest
+
 	err = err_pre(EC_BAD_MEMBER_NAME_SHORT) &
 		//'member `'//mem_name//'` does not exist in struct `'//struct_name//'`' &
 		//underline(context, span) &
 		//" bad member name"//color_reset
+
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
 
 end function err_bad_member_name_short
 

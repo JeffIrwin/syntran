@@ -31,8 +31,8 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - do we have/need spellchecking for struct names? apparently fns_t has a
-	!    closest() levenshtein method but structs don't
+	!  - port aoc 2019/20 as a long test -- it covers good usage of multiple
+	!    structs with methods (dicts, queues, and minheaps)
 	!  - speedup intel aoc tests since it's the ci/cd bottleneck
 	!    * unrelated, windows pack ci stage seems to rebuild when maybe it
 	!      should re-use a cached build from one of the tests

@@ -72,6 +72,34 @@ end function diag_has_text
 
 !===============================================================================
 
+function diag_suggests(diag_, suggest) result(found)
+
+	! Like diag_has_text(), but for the "did you mean `<suggest>`?" spellcheck
+	! help line specifically.  Per err_undeclare_var()/err_undeclare_fn()/
+	! err_bad_type()/err_bad_member_name*() in errors.f90, the suggested name
+	! itself is color-highlighted (ANSI codes sit between it and the
+	! surrounding backticks), so a plain diag_has_text() for the whole phrase
+	! would never match -- reconstruct the exact colored substring instead,
+	! mirroring how diag_loc_ok() reconstructs the colored caret run
+
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: suggest
+	logical :: found
+
+	character(len = :), allocatable :: expect
+	integer :: k
+
+	expect = 'did you mean `'//fg_bright_green//suggest//color_reset//'`?'
+
+	found = .false.
+	do k = 1, diag_%len_
+		if (index(diag_%v(k)%s, expect) > 0) found = .true.
+	end do
+
+end function diag_suggests
+
+!===============================================================================
+
 function diag_count_code(diag_, code) result(count_)
 	! Like diag_has_code(), but returns how many diagnostics carry [code].
 	! Used to catch duplicate-diagnostic regressions that diag_has_code()
@@ -5801,6 +5829,14 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT), &
 			diag_count_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT) == 1, &
 			diag_has_code(get_diags('fn f(x: nope): i32 { return 1; }'), EC_BAD_TYPE), &
+			! A misspelled struct name in a type annotation should suggest the
+			! closest declared struct name
+			diag_suggests(get_diags( &
+				'struct P{x:i32} fn f(a: Pp): i32 { return 0; }'), 'P'), &
+			! A typo'd primitive type has no struct to suggest, so no help
+			! line should be emitted at all
+			.not. diag_has_text(get_diags( &
+				'fn f(x: i34): i32 { return 1; }'), 'did you mean'), &
 			diag_has_code(get_diags("1'foo;"), EC_BAD_TYPE_SUFFIX), &
 			diag_has_code(get_diags('$;'), EC_UNEXPECTED_CHAR), &
 			diag_has_code(get_diags('let a = ;'), EC_UNEXPECTED_TOKEN), &
@@ -5821,6 +5857,22 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('struct S{x:i32} struct S{y:i32}'), EC_REDECLARE_STRUCT), &
 			diag_has_code(get_diags('struct i32{x:i32}'), EC_REDECLARE_PRIMITIVE), &
 			diag_has_code(get_diags('let a = b;'), EC_UNDECLARE_VAR), &
+			! A misspelled struct instantiator `Poimt{...}` is ambiguous with
+			! a plain identifier (c.f. `if my_bool {...}`), so it falls back
+			! to the undeclared-variable path.  With no close variable name in
+			! scope, that path should fall back further to a struct-name
+			! suggestion
+			diag_suggests(get_diags( &
+				'struct Point{x:i32} let a=Poimt{x=1};'), 'Point'), &
+			! But a close variable name must still win over any struct name,
+			! e.g. a misspelled boolean in `if my_bewl {...}` should suggest
+			! the variable `my_bool`, not any struct
+			diag_suggests(get_diags( &
+				'struct Point{x:i32} let my_bool=true; if my_bewl {}'), &
+				'my_bool'), &
+			.not. diag_suggests(get_diags( &
+				'struct Point{x:i32} let my_bool=true; if my_bewl {}'), &
+				'Point'), &
 			diag_has_code(get_diags('nope();'), EC_UNDECLARE_FN), &
 			diag_count_code(get_diags('nope();'), EC_UNDECLARE_FN) == 1, &
 			! Cascading E9 from E29: println() and subsequent calls after an undefined
@@ -5910,8 +5962,14 @@ subroutine unit_test_error_codes(npass, nfail)
 				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME), &
 			diag_count_code(get_diags( &
 				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME) == 1, &
+			! A misspelled member access should suggest the closest member
+			diag_suggests(get_diags( &
+				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), 'x'), &
 			diag_has_code(get_diags( &
 				'struct S{x:i32} let s=S{z=1};'), EC_BAD_MEMBER_NAME_SHORT), &
+			! Same suggestion for a misspelled member in an instantiator
+			diag_suggests(get_diags( &
+				'struct S{x:i32} let s=S{z=1};'), 'x'), &
 			diag_has_code(get_diags( &
 				'struct S{x:i32} let s=S{x=1.0};'), EC_BAD_MEMBER_TYPE), &
 			diag_has_code(get_diags( &

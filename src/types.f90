@@ -316,11 +316,12 @@ module syntran__types_m
 
 		contains
 			procedure :: &
-				insert => struct_insert, &
-				find   => struct_find, &
-				get    => struct_get, &
-				id_at  => struct_id_at, &
-				exists => struct_exists
+				insert  => struct_insert, &
+				find    => struct_find, &
+				get     => struct_get, &
+				id_at   => struct_id_at, &
+				exists  => struct_exists, &
+				closest => struct_closest
 
 	end type structs_t
 
@@ -543,6 +544,12 @@ module syntran__types_m
 			character(len = *), intent(in) :: key
 			logical :: exists
 		end function struct_exists
+
+		module function struct_closest(dict, key) result(closest)
+			class(structs_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			character(len = :), allocatable :: closest
+		end function struct_closest
 
 		!***************************************
 		! types_ops.f90 procedures

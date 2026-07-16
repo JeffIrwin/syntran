@@ -805,6 +805,7 @@ recursive module subroutine parse_name_expr(parser, expr)
 	type(text_span_t) :: span
 
 	type(value_t) :: var, field_val
+	character(len = :), allocatable :: suggest
 
 	! Variable name expression
 
@@ -856,11 +857,17 @@ recursive module subroutine parse_name_expr(parser, expr)
 			end if
 
 			!print *, "undeclared var 3"
+			! A close variable name wins (e.g. a misspelled boolean in
+			! `if my_bewl { ... }`); only fall back to a struct-name
+			! suggestion (e.g. a misspelled instantiator `Poimt{...}`) when no
+			! variable is close enough
+			suggest = parser%vars%closest(identifier%text)
+			if (len(suggest) == 0) suggest = parser%structs%closest(identifier%text)
+
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
 				err_undeclare_var(parser%context(), &
-				span, identifier%text, &
-				parser%vars%closest(identifier%text)))
+				span, identifier%text, suggest))
 		end if
 	end if
 
@@ -1139,7 +1146,8 @@ recursive module subroutine parse_dot(parser, expr)
 			span, &
 			identifier%text, &
 			expr%identifier%text, &
-			expr%val%struct_name))
+			expr%val%struct_name, &
+			struct%vars%closest(identifier%text)))
 		expr%val%type = unknown_type  ! this prevents cascades later
 		return
 	end if
