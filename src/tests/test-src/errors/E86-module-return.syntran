@@ -1,0 +1,7 @@
+// Importing a module containing a top-level `return` statement must raise the
+// E86 diagnostic instead of silently halting this program at the `use`
+// statement.  See e86_mod_return.syntran
+
+use e86_mod_return;
+
+println("unreachable: E86 is a parse-time error");

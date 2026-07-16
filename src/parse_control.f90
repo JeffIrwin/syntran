@@ -53,6 +53,15 @@ module subroutine parse_return_statement(parser, statement)
 	end if
 	call parser%match(semicolon_token, semi)
 
+	! Ban `return` at the top level of an imported module (E86).  A top-level
+	! `return` in a *main program* still sets the program's result value and
+	! remains legal; this only fires for modules pulled in via `use`
+	if (parser%is_module .and. .not. parser%in_fn_body) then
+		span = new_span(return_token%pos, len(return_token%text))
+		call parser%diagnostics%push( &
+			err_module_return(parser%context(), span))
+	end if
+
 	! Check return type (unless we're at global level ifn == 1, in which case
 	! %fn_type is any_type).  That's half the point of return statements
 	!
@@ -396,6 +405,14 @@ module subroutine parse_use_statement(parser, statement)
 	mod_unit_ = 0
 	call new_parser(mod_parser, mod_text, mod_filename, mod_contexts, mod_unit_)
 
+	! The module's global scope can return any type, same as the main
+	! program's global scope (see syntax_parse() in core.f90).  Otherwise
+	! fn_type defaults to unknown_type and a top-level `return <value>;`
+	! would spuriously cascade an E41 bad-return-type diagnostic on top of
+	! the E86 ban below
+	mod_parser%fn_type%type = any_type
+	allocate(mod_parser%fn_type%array)
+
 	! Propagate import chain into child parser for cycle detection
 	mod_parser%import_stack = parser%import_stack
 	call mod_parser%import_stack%set(mod_filename, 0)
@@ -419,6 +436,7 @@ module subroutine parse_use_statement(parser, statement)
 	mod_parser%num_structs = parser%num_structs
 
 	! Parse the module
+	mod_parser%is_module = .true.
 	call mod_parser%parse_unit(mod_unit)
 
 	! Update parent's variable, function, and struct counts to include module definitions

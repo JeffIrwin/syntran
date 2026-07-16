@@ -31,9 +31,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - using a module with a global return statement makes the module act like
-	!    a main program. maybe undesirable but maybe ok? how does python handle
-	!    this?
 	!  - do we have/need spellchecking for struct names? apparently fns_t has a
 	!    closest() levenshtein method but structs don't
 	!  - speedup intel aoc tests since it's the ci/cd bottleneck
@@ -52,6 +49,9 @@ module syntran__core_m
 	!    another function
 	!    * this could be a big change to the type system
 	!  - enums
+	!  - something like python's "if name == main" feature. it could be nice to
+	!    run a module like a program, e.g. to unit test itself, but ignore when
+	!    imported
 	!  - recursive data structs
 	!    * recursive fns are available, but not structs
 	!  - method improvements:

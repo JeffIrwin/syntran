@@ -5949,6 +5949,13 @@ subroutine unit_test_error_codes(npass, nfail)
 			.not. diag_has_code(get_diags('fn f(x: &const i32) {} const N = 10; f(&N);'), EC_CONST_ASSIGN), &
 			! const flag must survive module import
 			diag_has_code(get_diags('use const_mod; const_mod::CVAL = 0;', MODSRC), EC_CONST_ASSIGN), &
+			! a top-level `return` in an imported module is banned (E86), but
+			! a top-level `return` in a main-program script is still legal
+			diag_has_code(get_diags_file( &
+				'src/tests/test-src/errors/E86-module-return.syntran'), EC_MODULE_RETURN), &
+			diag_count_code(get_diags_file( &
+				'src/tests/test-src/errors/E86-module-return.syntran'), EC_MODULE_RETURN) == 1, &
+			.not. diag_has_code(get_diags('return 1 + 2;'), EC_MODULE_RETURN), &
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
@@ -6353,7 +6360,14 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E85-member-method-clash.syntran'), &
 				EC_MEMBER_METHOD_CLASH, P//'E85-member-method-clash.syntran', 8, 5, 3), &
 			diag_count_code(get_diags_file(P//'E85-member-method-clash.syntran'), &
-				EC_MEMBER_METHOD_CLASH) == 1 &
+				EC_MEMBER_METHOD_CLASH) == 1, &
+			! E86 is detected while parsing the imported module, so its
+			! location is inside e86_mod_return.syntran instead of the
+			! E86-module-return.syntran entry file (same pattern as E70 above)
+			diag_loc_ok(get_diags_file(P//'E86-module-return.syntran'), &
+				EC_MODULE_RETURN, P//'e86_mod_return.syntran', 8, 2, 6), &
+			diag_count_code(get_diags_file(P//'E86-module-return.syntran'), &
+				EC_MODULE_RETURN) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

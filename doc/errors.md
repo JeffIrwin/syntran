@@ -527,6 +527,12 @@ A struct method has the same name as one of the struct's members. Names must be 
 
 [Example](../src/tests/test-src/errors/E85-member-method-clash.syntran)
 
+### E86 -- module-return
+
+`return` is not allowed at the top level of an imported module. A top-level `return` in a main-program script is still allowed and sets the program's result value.
+
+[Example](../src/tests/test-src/errors/E86-module-return.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

@@ -56,6 +56,16 @@ module syntran__parse_m
 		character(len = :), allocatable :: fn_name
 		logical :: returned
 
+		! True while parsing a function/method body.  Used together with
+		! is_module to ban top-level `return` statements in imported modules
+		! (E86) without disturbing `return` at true global (main program)
+		! scope.
+		logical :: in_fn_body = .false.
+
+		! True while parsing an imported module's translation unit (as
+		! opposed to the main program).  See in_fn_body above.
+		logical :: is_module = .false.
+
 		! Method parsing context: set while parsing a method body
 		logical :: in_method = .false.
 		logical :: in_const_method = .false.

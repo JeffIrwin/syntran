@@ -101,6 +101,7 @@ module syntran__errors_m
 		EC_CONST_ASSIGN = "E83", &
 		EC_MUTABLE_METHOD_ON_TEMP = "E84", &
 		EC_MEMBER_METHOD_CLASH = "E85", &
+		EC_MODULE_RETURN = "E86", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -360,6 +361,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_CONST_ASSIGN)
 	call codes%push(EC_MUTABLE_METHOD_ON_TEMP)
 	call codes%push(EC_MEMBER_METHOD_CLASH)
+	call codes%push(EC_MODULE_RETURN)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -966,6 +968,17 @@ function err_no_return(context, span, fn) result(err)
 		//underline(context, span)//" function without returns"//color_reset
 
 end function err_no_return
+
+function err_module_return(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_pre(EC_MODULE_RETURN) &
+		//'`return` is not allowed at the top level of an imported module' &
+		//underline(context, span)//" move it into a function"//color_reset
+
+end function err_module_return
 
 !===============================================================================
 

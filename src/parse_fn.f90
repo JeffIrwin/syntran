@@ -481,7 +481,7 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end
 
-	logical :: overwrite, const_param
+	logical :: overwrite, const_param, in_fn_body0
 
 	type(fn_t) :: fn
 
@@ -659,7 +659,12 @@ module subroutine parse_fn_declaration(parser, decl)
 	parser%fn_name = identifier%text
 	parser%fn_type = fn%type
 
+	! A `return` inside this body is a fn-scope return, not a module-scope one
+	! (nested fns aren't allowed, but save/restore defensively anyway)
+	in_fn_body0 = parser%in_fn_body
+	parser%in_fn_body = .true.
 	call parser%parse_statement(body)
+	parser%in_fn_body = in_fn_body0
 
 	! A void fn has nothing to return, so the lack of any return statement is
 	! not an error for it.  Only non-void fns require at least one return
@@ -988,7 +993,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end, mem_id
 
-	logical :: overwrite, const_param
+	logical :: overwrite, const_param, in_fn_body0
 
 	type(fn_t) :: fn
 
@@ -1141,7 +1146,10 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	parser%fn_name = identifier%text
 	parser%fn_type = fn%type
 
+	in_fn_body0 = parser%in_fn_body
+	parser%in_fn_body = .true.
 	call parser%parse_statement(body)
+	parser%in_fn_body = in_fn_body0
 
 	if (.not. parser%returned .and. fn%type%type /= void_type) then
 		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
