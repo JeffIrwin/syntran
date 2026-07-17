@@ -1289,6 +1289,90 @@ println("unit area = ", area(get_unit_rect()));
 // unit area = 1
 ```
 
+### Methods
+
+Instead of writing a free function that takes a struct argument, you can
+attach behavior directly to a struct by declaring a method.  Methods use the
+same `fn` syntax as free functions, but they are declared *inside* the struct
+body, after the data members.  There is no explicit `self` or receiver
+parameter -- a method's body refers to the struct's own members directly by
+name.  Methods are called using dot syntax on an instance, just like accessing
+a member:
+```rust
+struct Counter
+{
+    n: i32,
+
+    fn inc()
+    {
+        n += 1;
+    }
+
+    const fn get(): i32
+    {
+        return n;
+    }
+}
+
+let c = Counter{n = 0};
+c.inc();
+c.inc();
+println(c.get());
+// 2
+```
+Note that instantiation still uses the members-only initializer syntax
+`Counter{n = 0}` -- methods are not listed there, only data members.
+
+A method that does not modify any of the struct's members, like `get` above,
+is declared `const fn`.  A method that mutates a member, like `inc`, is
+declared as a plain `fn`.  Just like free functions, a method with no return
+value omits the `: type` return annotation, while a method that returns a
+value declares one with `fn name(args): type`.
+
+Methods can take arguments just like free functions, including by-reference
+arguments marked with `&`:
+```rust
+struct Acc
+{
+    val: i32,
+
+    fn add(x: i32)
+    {
+        val += x;
+    }
+
+    fn add_ref(x: &i32)
+    {
+        val += x;
+        x   += 1;
+    }
+
+    const fn scaled(x: i32): i32
+    {
+        return val * x;
+    }
+}
+
+let a = Acc{val = 0};
+a.add(7);
+
+let x = 3;
+a.add_ref(&x);
+// x is incremented inside the method, just like a normal by-ref argument
+println(a.val, " ", x);
+// 10 4
+
+// Return values can be used in a larger expression
+println(a.scaled(2));
+// 20
+```
+
+There are a couple of restrictions on methods.  A mutating (non-`const`)
+method cannot be called on a temporary struct returned directly from a
+function call, e.g. `make_acc(5).add(1);`, since the mutation would have
+nowhere to persist and be silently discarded.  Also, a method cannot share
+its name with one of the struct's data members.
+
 Structs can be nested arbitrarily.  You can make structs of arrays and arrays of
 structs.  One noteable missing feature currently is that structs of arrays (and
 arrays of structs) cannot be sliced, only scalar subscripts are supported.

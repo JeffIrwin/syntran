@@ -31,8 +31,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - port aoc 2019/20 as a long test -- it covers good usage of multiple
-	!    structs with methods (dicts, queues, and minheaps)
 	!  - speedup intel aoc tests since it's the ci/cd bottleneck
 	!    * unrelated, windows pack ci stage seems to rebuild when maybe it
 	!      should re-use a cached build from one of the tests
@@ -43,8 +41,9 @@ module syntran__core_m
 	!      intel's own xiar/xild linkers. tried this in commit 355efcea3
 	!    * should be able to get full build/link pipeline working in cmake
 	!      instead of fpm with whatever flags and linkers we want
-	!  - there's no doc re struct methods in readme
-	!  - switch/match/case
+	!  - switch/match/case. needs to work with strings. would be nice to work
+	!    with arrays. basic switch/case is fine but also consider "pattern
+	!    matching" or whatever rust has
 	!  - callbacks, fn pointers, i.e. passing one function as an argument to
 	!    another function
 	!    * this could be a big change to the type system
