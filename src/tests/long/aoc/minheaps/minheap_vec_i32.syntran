@@ -1,0 +1,146 @@
+// This file contains a struct and methods for a minheap of i32 vectors,
+// implemented using an array as an implicit binary tree.  The "distance"
+// which the heap minimizes is the first element of each pushed/popped
+// vector, with other attributes in the rest of the vector.
+//
+// API:
+//     new(): minheap_vec_i32   // initialize an empty heap
+//     q.push(val: [i32; :])    // push or insert a new value
+//     q.pop(): [i32; :]        // remove and return the min value
+//     q.print()                // print all vals in tree-level order
+//
+// See also the free-function version in ../minheap_vec_i32.syntran
+
+struct minheap_vec_i32
+{
+	len: i64,
+	cap: i64,
+	vals: [i32; :,:],
+
+	fn push(val: [i32; :])
+	{
+		let nval = size(val, 0);
+		if len >= 0 and nval != size(vals, 0)
+		{
+			println("Error: in push_minheap_vec_i32(): size of pushed value does not match the heap's size");
+			exit(-2);
+		}
+
+		// This indicates a new minheap
+		if (len < 0) len = 0;
+
+		if len >= cap
+		{
+			// Grow array
+			if cap == 0
+				cap = 1;
+			else
+				cap *= 2;
+			let tmp = vals;
+			vals = [0'i32; nval, cap];
+			for i in [0: len]
+			for j in [0: nval]
+				vals[j, i] = tmp[j, i];
+		}
+
+		for j in [0: nval]
+			vals[j, len] = val[j];
+		len += 1;
+
+		// Trickle up
+		let i = len - 1;
+		while true
+		{
+			if (i == 0) break;
+			let ip = (i-1) / 2;  // index of parent of index i
+
+			// Minheap order is based on element 0 of each vec
+			if (vals[0, ip] <= vals[0, i]) break;
+
+			// Swap parent and child such that parent <= child
+			for j in [0: nval]
+			{
+				let tmp = vals[j, ip];
+				vals[j, ip] = vals[j, i];
+				vals[j, i] = tmp;
+			}
+
+			i = ip;
+		}
+		return;
+	}
+
+	fn pop(): [i32; :]
+	{
+		if len <= 0
+		{
+			println("Error: in pop_minheap_vec_i32(): heap is already empty.  There is nothing to pop!");
+			exit(-1);
+		}
+		let nval = size(vals, 0);
+		let val = [0; nval];
+		for j in [0: nval]
+			val[j] = vals[j, 0];
+
+		// Cap grows while pushing but never shrinks while popping
+
+		// Replace the root of the heap with the last element
+		len -= 1;
+		for j in [0: nval]
+			vals[j, 0] = vals[j, len];
+
+		// Trickle down
+		let i = 0'i64;
+		while true
+		{
+			let il = 2 * i + 1; // left and right child indices
+			let ir = 2 * i + 2;
+			if (il >= len) break;
+
+			let ic = il; // child index to be swapped.  default left
+
+			if ir < len
+			{
+				// Both children exist
+				if (vals[0, i ] <= vals[0, il] and vals[0, i] <= vals[0, ir]) break;
+				if (vals[0, ir] <  vals[0, il]) ic = ir; // swap with right child
+			}
+			else
+			{
+				// Only left child exists
+				if (vals[0, i] <= vals[0, il]) break;
+			}
+
+			// Swap parent and child such that parent <= child
+			for j in [0: nval]
+			{
+				let tmp = vals[j, i];
+				vals[j, i] = vals[j, ic];
+				vals[j, ic] = tmp;
+			}
+
+			i = ic;
+		}
+		return val;
+	}
+
+	fn print()
+	{
+		let vals = vals;
+		println("minheap = ", vals[:, 0: len]);
+		return;
+	}
+}
+
+fn new(): minheap_vec_i32
+{
+	// Initial size of dimension 0 doesn't matter.  It will be reallocated on
+	// first push
+	let cap = 0'i64;
+	return minheap_vec_i32
+	{
+		len = -1'i64,
+		cap = cap,
+		vals = [0; 0, cap],
+	};
+}

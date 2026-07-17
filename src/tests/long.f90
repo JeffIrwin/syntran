@@ -47,6 +47,42 @@ end subroutine unit_test_aoc_2017
 
 !===============================================================================
 
+subroutine unit_test_aoc_2019(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'aoc 2019'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: &
+		path = 'src/tests/long/aoc/2019/'
+
+	character(len = :), allocatable :: cwd
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//"20/main.syntran", quiet = .true., chdir_ = .true.) == '514:6208', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_aoc_2019
+
+!===============================================================================
+
 subroutine unit_test_aoc_2023(npass, nfail)
 
 	implicit none
@@ -222,6 +258,7 @@ subroutine unit_tests_long(iostat)
 	nfail = 0
 
 	call unit_test_aoc_2017(npass, nfail)
+	call unit_test_aoc_2019(npass, nfail)
 	call unit_test_aoc_2023(npass, nfail)
 	call unit_test_aoc_2024(npass, nfail)
 	call unit_test_misc    (npass, nfail)
