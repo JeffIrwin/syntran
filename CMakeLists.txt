@@ -103,12 +103,6 @@ elseif(DEFINED ENV{SYNTRAN_INTEL})
 	# provide the MKL libraries -- linking it just fails with "cannot find
 	# -lmkl_intel_lp64" et al.
 	add_link_options(-fopenmp)
-	if(CMAKE_BUILD_TYPE STREQUAL "Release")
-		# Drives whole-program IPO at link time (invokes xild internally);
-		# matches the -ipo compile flags added above and the xiar archiver
-		# set for the static lib.
-		add_link_options(-ipo)
-	endif()
 else()
 	add_link_options(-fopenmp)
 endif()
@@ -212,18 +206,17 @@ if(NOT DEFINED ENV{SYNTRAN_INTEL})
 endif()
 
 if(DEFINED ENV{SYNTRAN_INTEL})
-	# -ipo (added to Release flags below) emits LLVM-IR objects instead of
-	# native object code.  Archiving those into a STATIC lib needs a symbol
-	# index built by an LTO-aware archiver; xiar (set as CMAKE_AR/RANLIB) is
-	# supposed to handle that, but in practice its gold-plugin bridge fails
-	# on Intel 2025.2's bitcode ("LLVM gold plugin has failed to create LTO
-	# module: Unknown attribute kind"), silently producing an archive with a
-	# broken symbol index -- the final link then can't find symbols that are
-	# genuinely present in it (mass "undefined reference" errors).  An OBJECT
-	# library sidesteps archiving entirely: the final link gets the raw .o
-	# files directly, which need no symbol index at all.  (This is also why
-	# `-ipo` doesn't work under fpm at all -- see commit 355efcea3 -- fpm
-	# always archives with the default ar/ld.)
+	# This build previously used -ipo, which emits LLVM-IR objects instead of
+	# native object code; archiving those into a STATIC lib needs a symbol
+	# index built by an LTO-aware archiver, and Intel's xiar was found to
+	# silently produce a broken one, causing mass "undefined reference"
+	# errors at final link.  An OBJECT library sidesteps archiving entirely:
+	# the final link gets the raw .o files directly, which need no symbol
+	# index at all.  -ipo has since been dropped (it didn't help), so a plain
+	# STATIC lib would likely work again too, but OBJECT is kept here since it
+	# already builds cleanly and there's no need to re-validate the Intel
+	# link path.  (Note fpm can't do any of this anyway -- see commit
+	# 355efcea3 -- it always archives with the default ar/ld.)
 	add_library(${LIB} OBJECT ${LIB_SRC})
 else()
 	#add_library(${LIB} SHARED ${LIB_SRC}) # dll

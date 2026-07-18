@@ -510,12 +510,10 @@
 						fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
 					fi \n
 
-					# fpm can't link -ipo (it archives/links with the default \n
-					# ar/ld, not Intel's xiar/xild -- see commit 355efcea3), so \n
-					# the optimized -Ofast/-xHost/-ipo build goes through cmake \n
-					# instead, which wires up xiar/xild (see CMakeLists.txt). \n
-					# This also builds the core lib once for both the test and \n
-					# long exes, instead of fpm's separate rebuild per target. \n
+					# The optimized -Ofast build goes through cmake instead of \n
+					# fpm (see CMakeLists.txt), which also builds the core lib \n
+					# once for both the test and long exes, instead of fpm's \n
+					# separate rebuild per target. \n
 					SYNTRAN_INTEL=1 bash ./build.sh release \n
 					./build/Release/test \n
 

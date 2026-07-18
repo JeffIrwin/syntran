@@ -338,6 +338,13 @@ program long
 		call exit(0)
 	end if
 
+	if (g_target >= 0 .and. g_target >= g_itest) then
+		write(*, '(a,i0,a,i0)') &
+			'Error: --test index ', g_target, ' is out of range, expected 0 to ', &
+			g_itest - 1
+		call exit(1)
+	end if
+
 	call exit(io)
 
 end program long
