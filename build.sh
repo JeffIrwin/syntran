@@ -33,7 +33,9 @@ echo "machine = ${machine}"
 generator=""
 if [[ "$machine" == "MinGw" ]]; then
 	generator=(-G 'MSYS Makefiles')
-	export FC=gfortran
+	if [[ -z "${SYNTRAN_INTEL:-}" ]]; then
+		export FC=gfortran
+	fi
 	echo "FC = $FC"
 fi
 
@@ -42,7 +44,13 @@ if [[ "$machine" == "Linux" ]]; then
 	## ninja works, similar performance as gnu make
 	#generator=(-G 'Ninja')
 
-	export FC=$(which gfortran-14)
+	if [[ -z "${SYNTRAN_INTEL:-}" ]]; then
+		export FC=$(which gfortran-14)
+	elif [[ -z "${FC:-}" ]]; then
+		# Caller wants Intel but hasn't already exported FC (e.g. via
+		# setup-fortran in CI) -- default to ifx.
+		export FC=ifx
+	fi
 	echo "FC = $FC"
 fi
 
