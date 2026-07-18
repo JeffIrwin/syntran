@@ -142,14 +142,8 @@ set(SRC_DIR "src")
 set(LIB "${PROJECT}")
 set(LIB_SRC
 	${SRC_DIR}/c/isocline_wrap.c
-	# app.f90 is compiled here (once) rather than duplicated into each of
-	# EXE_SRC/TEST_SRC/LONG_SRC below: under Intel, its `module ifport` block
-	# is preprocessed out (real IFPORT is a compiler-provided module there),
-	# but cmake's Fortran dependency scanner isn't preprocessor-aware and
-	# still believes app.f90 "provides" ifport in all three executables --
-	# with per-target Fortran_MODULE_DIRECTORY, that made cmake try to copy a
-	# module file across targets that none of them actually produced.
-	# Compiling it once here removes the cross-target ambiguity.
+	# Compiled here (once), instead of duplicated into each of
+	# EXE_SRC/TEST_SRC/LONG_SRC below, to avoid recompiling it 3x per config.
 	${SRC_DIR}/app.f90
 	${SRC_DIR}/bool.f90
 	${SRC_DIR}/bytecode.f90
@@ -204,6 +198,23 @@ set(LIB_SRC
 	${SRC_DIR}/utils.f90
 	${SRC_DIR}/value.f90
 )
+
+if(NOT DEFINED ENV{SYNTRAN_INTEL})
+	# app.f90's `use ifport` (for isatty()) is Intel-only; under Intel it
+	# resolves to the compiler's own built-in IFPORT module and produces no
+	# local .mod.  ifport_shim.f90 provides an empty local module of the same
+	# name so fpm's (and, without this exclusion, cmake's) source-text-based
+	# Fortran module scanner -- which isn't preprocessor-aware and can't tell
+	# the `use` is inactive here -- has a real producer to satisfy.  Under
+	# Intel, cmake must NOT compile this file at all: if it did, the scanner
+	# would expect a real "ifport.mod" build artifact that Intel never
+	# actually writes (it comes from the compiler's own module path instead),
+	# and cmake's copy-module-between-targets step would fail trying to find
+	# it.  fpm has no per-compiler source exclusion, so it always compiles
+	# this file; ifport_shim.f90's own internal `#if defined(__GFORTRAN__)`
+	# guard keeps that safe under fpm+Intel too.
+	list(APPEND LIB_SRC ${SRC_DIR}/ifport_shim.f90)
+endif()
 
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# -ipo (added to Release flags below) emits LLVM-IR objects instead of
