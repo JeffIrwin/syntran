@@ -34,11 +34,10 @@ endif()
 
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# ifort-specific flags must NOT reach the C compiler (icx doesn't
-	# understand -fpp/-qmkl/etc), so gate them to Fortran only.
+	# understand -fpp/etc), so gate them to Fortran only.
 	add_compile_options(
 		"$<$<COMPILE_LANGUAGE:Fortran>:-W1>"
 		"$<$<COMPILE_LANGUAGE:Fortran>:-qopenmp>"
-		"$<$<COMPILE_LANGUAGE:Fortran>:-qmkl>"
 		"$<$<COMPILE_LANGUAGE:Fortran>:-fPIC>"
 		"$<$<COMPILE_LANGUAGE:Fortran>:-fpp>"
 	)
@@ -107,7 +106,11 @@ message("")
 if(APPLE)
 	add_link_options(-openmp)
 elseif(DEFINED ENV{SYNTRAN_INTEL})
-	add_link_options(-fopenmp -qmkl)
+	# No -qmkl: nothing in this codebase calls into BLAS/LAPACK (grep finds
+	# only a speculative TODO comment), and CI's Intel install doesn't
+	# provide the MKL libraries -- linking it just fails with "cannot find
+	# -lmkl_intel_lp64" et al.
+	add_link_options(-fopenmp)
 	if(CMAKE_BUILD_TYPE STREQUAL "Release")
 		# Drives whole-program IPO at link time (invokes xild internally);
 		# matches the -ipo compile flags added above and the xiar archiver
