@@ -142,6 +142,15 @@ set(SRC_DIR "src")
 set(LIB "${PROJECT}")
 set(LIB_SRC
 	${SRC_DIR}/c/isocline_wrap.c
+	# app.f90 is compiled here (once) rather than duplicated into each of
+	# EXE_SRC/TEST_SRC/LONG_SRC below: under Intel, its `module ifport` block
+	# is preprocessed out (real IFPORT is a compiler-provided module there),
+	# but cmake's Fortran dependency scanner isn't preprocessor-aware and
+	# still believes app.f90 "provides" ifport in all three executables --
+	# with per-target Fortran_MODULE_DIRECTORY, that made cmake try to copy a
+	# module file across targets that none of them actually produced.
+	# Compiling it once here removes the cross-target ambiguity.
+	${SRC_DIR}/app.f90
 	${SRC_DIR}/bool.f90
 	${SRC_DIR}/bytecode.f90
 	${SRC_DIR}/compiler.F90
@@ -222,7 +231,6 @@ set(LINK_LIBS "${LIB}")
 set(EXE "${PROJECT}")
 set(EXE_BIN "${EXE}-bin")
 set(EXE_SRC
-	${SRC_DIR}/app.f90
 	${SRC_DIR}/main.f90
 )
 
@@ -251,7 +259,6 @@ set_target_properties("${EXE_BIN}" PROPERTIES OUTPUT_NAME "${EXE}")
 # Unit test exe
 set(TEST_EXE "test")
 set(TEST_SRC
-	${SRC_DIR}/app.f90
 	${SRC_DIR}/tests/core.f90
 	${SRC_DIR}/tests/test.f90
 )
@@ -273,7 +280,6 @@ target_compile_options(${TEST_EXE} PRIVATE "-Wno-integer-division")
 # Long test exe
 set(LONG_EXE "long")
 set(LONG_SRC
-	${SRC_DIR}/app.f90
 	${SRC_DIR}/tests/core.f90
 	${SRC_DIR}/tests/long.f90
 )
