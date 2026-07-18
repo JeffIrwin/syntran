@@ -4,9 +4,10 @@
 // cases, a recursive refinement).
 //
 // Ported from simpson_38_integrator() / newton_cotes_integrator() /
-// simpson_adaptive_integrator() / gk15_adaptive_integrator() in
-// numerical-analysis's src/integrate.F90, and the corresponding tests in
-// test/chapter_3.F90 (chapter_3_newton_cotes, chapter_3_adaptive)
+// simpson_adaptive_integrator() / gk15_adaptive_integrator() /
+// gk15_integrator_params() in numerical-analysis's src/integrate.F90, and the
+// corresponding tests in test/chapter_3.F90 (chapter_3_newton_cotes,
+// chapter_3_adaptive)
 //
 //     https://github.com/JeffIrwin/numerical-analysis/blob/main/src/integrate.F90
 
@@ -27,6 +28,14 @@ fn sqrt_fn(x: f64): f64
 fn log_fn(x: f64): f64
 {
 	return log(x);
+}
+
+fn bessel_3(tau: f64, params: [f64; :]): f64
+{
+	// Integral representation of the Bessel function of the first kind,
+	// order n = 3.  `params[0]` is x in J_3(x); `params` lets one callback
+	// cover the whole family of x values instead of a fn per x
+	return 1.0 / std::PI * cos(3 * tau - params[0] * sin(tau));
 }
 
 fn assert_close(a: f64, b: f64, tol: f64): i32
@@ -76,6 +85,16 @@ fn main(): i32
 	let area8 = integrate::gk15_adaptive(log_fn, 0.0, 1.0, 1.0e-10);
 	//println("area8 = ", area8);
 	status += assert_close(area8, -9.999999741718582E-01, 1.0e-9);
+
+	// J_3(2.5) and J_3(2.8), the Bessel function of the first kind, computed
+	// via its integral representation with a runtime params array
+	let area9 = integrate::gk15_integrator_params(bessel_3, [2.5], 0.0, std::PI, 1.0e-10);
+	//println("area9 = ", area9);
+	status += assert_close(area9, 0.21660039103911352, 1.0e-10);
+
+	let area10 = integrate::gk15_integrator_params(bessel_3, [2.8], 0.0, std::PI, 1.0e-10);
+	//println("area10 = ", area10);
+	status += assert_close(area10, 0.2726986037216204, 1.0e-10);
 
 	return status;
 }

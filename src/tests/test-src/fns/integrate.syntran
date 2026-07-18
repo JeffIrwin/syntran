@@ -197,3 +197,54 @@ fn gk15_adaptive(f: fn(f64): f64, xmin: f64, xmax: f64, tol: f64): f64
 
 	return gk15_aux(f, xmin, xmax, tol, 0.0, MAX_LEVELS);
 }
+
+fn gk15_auxp(f: fn(f64, [f64; :]): f64, params: [f64; :], xmin: f64, xmax: f64,
+	tol: f64, whole: f64, rec: i32): f64
+{
+	// Recursive core of the adaptive Gauss-Kronrod integrator with params.
+	// Not for end users -- see gk15_integrator_params() below
+
+	let dx2 = 0.5 * (xmax - xmin);
+	let mid = 0.5 * (xmin + xmax);
+
+	// Floating-point tolerance or interval underflow: accept current estimate
+	if tol / 2 == tol or xmin == mid
+		return whole;
+
+	let areag = 0.0;
+	let areak = 0.0;
+	for i in [0: NG_GK15]
+	{
+		let fx = f(mid + XK_GK15[i] * dx2, params);
+		areag = areag + WG_GK15[i] * fx;
+		areak = areak + WK_GK15[i] * fx;
+	}
+	for i in [NG_GK15: NK_GK15]
+	{
+		let fx = f(mid + XK_GK15[i] * dx2, params);
+		areak = areak + WK_GK15[i] * fx;
+	}
+	areag = areag * dx2;
+	areak = areak * dx2;
+
+	let diff = abs(areak - areag);
+	if diff < tol or rec <= 0
+		return areak;
+
+	return
+		gk15_auxp(f, params, xmin, mid, tol / 2, areak / 2, rec - 1) +
+		gk15_auxp(f, params, mid, xmax, tol / 2, areak / 2, rec - 1);
+}
+
+fn gk15_integrator_params(f: fn(f64, [f64; :]): f64, params: [f64; :], xmin: f64,
+	xmax: f64, tol: f64): f64
+{
+	// Integrate fn `f` from xmin to xmax using the adaptive Gauss-Kronrod
+	// (7-point Gauss, 15-point Kronrod) method, like gk15_adaptive() above,
+	// but `f` also takes a `params` array.  This lets one callback represent
+	// a whole family of integrands parametrized by e.g. a runtime constant,
+	// instead of writing a new fn for each parameter value.  Recursion depth
+	// is capped at MAX_LEVELS
+
+	return gk15_auxp(f, params, xmin, xmax, tol, 0.0, MAX_LEVELS);
+}
