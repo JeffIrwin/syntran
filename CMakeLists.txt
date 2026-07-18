@@ -5,7 +5,14 @@ cmake_minimum_required(VERSION 3.13)
 # platforms
 if(DEFINED ENV{SYNTRAN_INTEL})
 
-	set(CMAKE_Fortran_COMPILER "ifort")
+	# Honor whatever Intel compiler the caller has already selected (e.g. via
+	# setup-fortran in CI, which exports FC=ifx or FC=ifort), falling back to
+	# ifx if unset.
+	if(DEFINED ENV{FC})
+		set(CMAKE_Fortran_COMPILER "$ENV{FC}")
+	else()
+		set(CMAKE_Fortran_COMPILER "ifx")
+	endif()
 
 #elseif(NOT APPLE)
 elseif(NOT DEFINED CMAKE_Fortran_COMPILER)
@@ -75,7 +82,22 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 	)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	message("Release")
-	add_compile_options(-O3)
+	if(DEFINED ENV{SYNTRAN_INTEL})
+		# Match the -Ofast/-xHost already used for the Intel fpm CI build, plus
+		# -ipo for interprocedural (whole-program) optimization -- fpm can't do
+		# -ipo since it links with the default ar/ld, so this Intel-optimized
+		# path is only available via cmake.  Gate to Fortran only: icx (the C
+		# driver used for isocline_wrap.c) doesn't need these and doesn't
+		# necessarily accept them.
+		add_compile_options(
+			"$<$<COMPILE_LANGUAGE:Fortran>:-Ofast>"
+			"$<$<COMPILE_LANGUAGE:Fortran>:-xHost>"
+			"$<$<COMPILE_LANGUAGE:Fortran>:-ipo>"
+		)
+		add_compile_options("$<$<COMPILE_LANGUAGE:C>:-O2>")
+	else()
+		add_compile_options(-O3)
+	endif()
 else()
 	message("Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
@@ -86,6 +108,12 @@ if(APPLE)
 	add_link_options(-openmp)
 elseif(DEFINED ENV{SYNTRAN_INTEL})
 	add_link_options(-fopenmp -qmkl)
+	if(CMAKE_BUILD_TYPE STREQUAL "Release")
+		# Drives whole-program IPO at link time (invokes xild internally);
+		# matches the -ipo compile flags added above and the xiar archiver
+		# set for the static lib.
+		add_link_options(-ipo)
+	endif()
 else()
 	add_link_options(-fopenmp)
 endif()
@@ -167,6 +195,21 @@ set(LIB_SRC
 	${SRC_DIR}/utils.f90
 	${SRC_DIR}/value.f90
 )
+
+if(DEFINED ENV{SYNTRAN_INTEL})
+	# -ipo (added to Release flags below) emits LLVM-IR objects instead of
+	# native object code.  The default `ar`/`ranlib` can still archive them
+	# (xiar just shells out to `ar` when it doesn't see IR), but Intel's own
+	# xiar/xild are the supported way to preserve the IR through the archive
+	# so the final link can still do whole-program IPO.  This is also the
+	# reason `-ipo` doesn't work under fpm (see commit 355efcea3): fpm always
+	# links with the default ar/ld.
+	find_program(XIAR_EXECUTABLE xiar)
+	if(XIAR_EXECUTABLE)
+		set(CMAKE_AR "${XIAR_EXECUTABLE}")
+		set(CMAKE_RANLIB "${XIAR_EXECUTABLE}")
+	endif()
+endif()
 
 #add_library(${LIB} SHARED ${LIB_SRC}) # dll
 add_library(${LIB} STATIC ${LIB_SRC}) # static lib

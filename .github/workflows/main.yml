@@ -506,12 +506,15 @@
 						fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
 					fi \n
 
-					# Use a profile name other than \"release\" so fpm does not \n
-					# silently append its own default release flags (-O3 \n
-					# -fp-model precise ...) *after* ours, which otherwise \n
-					# clobbers -Ofast/-xHost below (last flag wins) \n
-					fpm test test --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost \" \n
-					fpm test long --verbose --flag \"-DSYNTRAN_INTEL -fpp -Ofast -xHost \" \n
+					# fpm can't link -ipo (it archives/links with the default \n
+					# ar/ld, not Intel's xiar/xild -- see commit 355efcea3), so \n
+					# the optimized -Ofast/-xHost/-ipo build goes through cmake \n
+					# instead, which wires up xiar/xild (see CMakeLists.txt). \n
+					# This also builds the core lib once for both the test and \n
+					# long exes, instead of fpm's separate rebuild per target. \n
+					SYNTRAN_INTEL=1 bash ./build.sh release \n
+					./build/Release/test \n
+					./build/Release/long \n
 				"
 			}
 		]
