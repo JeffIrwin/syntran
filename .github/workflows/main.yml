@@ -514,7 +514,21 @@
 					# long exes, instead of fpm's separate rebuild per target. \n
 					SYNTRAN_INTEL=1 bash ./build.sh release \n
 					./build/Release/test \n
-					./build/Release/long \n
+
+					# Long/AOC suite is the CI bottleneck and runs single-threaded \n
+					# per process (syntran's interpreter has no internal \n
+					# parallelism), so fan out N shards across the runner's cores \n
+					# instead of running them serially in one process. \n
+					n=$(nproc) \n
+					pids=() \n
+					for i in $(seq 0 $((n-1))) ; do \n
+						./build/Release/long --shard $i/$n > long.$i.log 2>&1 & \n
+						pids+=($!) \n
+					done \n
+					rc=0 \n
+					for p in \"${pids[@]}\" ; do wait \"$p\" || rc=1 ; done \n
+					cat long.*.log \n
+					exit $rc \n
 				"
 			}
 		]
