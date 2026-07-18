@@ -31,6 +31,9 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - cleanup misc files from top level of repo folder
+	!    * keep 1 or 2 Dockerfiles, move others
+	!    * move most *.sh scripts
 	!  - speedup intel aoc tests since it's the ci/cd bottleneck
 	!    * unrelated, windows pack ci stage seems to rebuild when maybe it
 	!      should re-use a cached build from one of the tests

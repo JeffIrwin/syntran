@@ -5,15 +5,24 @@ module long_m
 
 	implicit none
 
-	! Shard selector for splitting the long/AOC suite across parallel
-	! processes in CI (see `program long` below for `--shard I/N` parsing).
-	! Defaults run everything in a single process, same as before sharding
-	! was added.
-	integer :: g_shard_i = 0, g_shard_n = 1
+	! Single-test selector for running one long/AOC test at a time from CI
+	! (see `program long` below for `--test I` / `--count` parsing).  -1 (the
+	! default) means run every test in this process, same as before this
+	! selection mode existed
+	integer :: g_target = -1
+
+	! Counting mode: walk every test's index without running it, so `--count`
+	! can report how many tests exist without paying to run them
+	logical :: g_dry_run = .false.
+
+	! Suppress section banners and the final summary.  Used by --count and
+	! --test so a CI work queue running many single-test processes in
+	! parallel doesn't spam per-process banners into the shared log
+	logical :: g_quiet = .false.
 
 	! Global test counter, advanced for every candidate test regardless of
-	! whether this shard runs it, so indices stay stable across shards run in
-	! different processes
+	! whether it's the one selected by g_target, so indices stay stable
+	! across single-test invocations run in different processes
 	integer :: g_itest = 0
 
 contains
@@ -22,10 +31,12 @@ contains
 
 subroutine chk(path, expected, npass, nfail)
 
-	! Run one long/AOC test if it belongs to this shard (round-robin by
-	! global test index) and tally pass/fail.  Path is relative to the repo
-	! root; chdir_ = .true. lets the syntran program's relative input.txt
-	! reads resolve inside its own day directory
+	! Run one long/AOC test if it's selected (either g_target is unset and
+	! every test runs, or this is the g_target'th test) and tally pass/fail.
+	! In g_dry_run mode, just advance the counter without running anything, so
+	! --count can report the total.  Path is relative to the repo root;
+	! chdir_ = .true. lets the syntran program's relative input.txt reads
+	! resolve inside its own day directory
 
 	implicit none
 
@@ -37,7 +48,8 @@ subroutine chk(path, expected, npass, nfail)
 	logical :: ok
 
 	g_itest = g_itest + 1
-	if (mod(g_itest - 1, g_shard_n) /= g_shard_i) return
+	if (g_dry_run) return
+	if (g_target >= 0 .and. g_itest - 1 /= g_target) return
 
 	ok = interpret_file(path, quiet = .true., chdir_ = .true.) == expected
 
@@ -51,48 +63,6 @@ subroutine chk(path, expected, npass, nfail)
 	end if
 
 end subroutine chk
-
-!===============================================================================
-
-subroutine parse_shard(str_, i, n)
-
-	! Parse a "I/N" shard spec like "0/4" into i (0-based shard index) and n
-	! (total shard count).  Exits the process with a nonzero status on any
-	! malformed input
-
-	implicit none
-
-	character(len = *), intent(in) :: str_
-	integer, intent(out) :: i, n
-
-	!********
-
-	integer :: islash, ios
-
-	islash = index(str_, '/')
-	if (islash < 2 .or. islash == len(str_)) then
-		write(*,*) 'Error: malformed --shard arg "'//str_//'", expected "I/N"'
-		call exit(1)
-	end if
-
-	read(str_(1: islash - 1), *, iostat = ios) i
-	if (ios /= 0) then
-		write(*,*) 'Error: malformed --shard index in "'//str_//'"'
-		call exit(1)
-	end if
-
-	read(str_(islash + 1:), *, iostat = ios) n
-	if (ios /= 0) then
-		write(*,*) 'Error: malformed --shard count in "'//str_//'"'
-		call exit(1)
-	end if
-
-	if (n < 1 .or. i < 0 .or. i >= n) then
-		write(*,*) 'Error: --shard I/N must satisfy 0 <= I < N and N >= 1, got "'//str_//'"'
-		call exit(1)
-	end if
-
-end subroutine parse_shard
 
 !===============================================================================
 
@@ -110,7 +80,7 @@ subroutine unit_test_aoc_2017(npass, nfail)
 	character(len = *), parameter :: &
 		path = 'src/tests/long/aoc/2017/'
 
-	write(*,*) 'Unit testing '//label//' ...'
+	if (.not. g_quiet) write(*,*) 'Unit testing '//label//' ...'
 
 	! This one-off is included because it's the first AOC problem where I've used recursion
 	call chk(path//"6/main.syntran" , '6681:2392', npass, nfail)
@@ -134,7 +104,7 @@ subroutine unit_test_aoc_2019(npass, nfail)
 	character(len = *), parameter :: &
 		path = 'src/tests/long/aoc/2019/'
 
-	write(*,*) 'Unit testing '//label//' ...'
+	if (.not. g_quiet) write(*,*) 'Unit testing '//label//' ...'
 
 	call chk(path//"20/main.syntran", '514:6208', npass, nfail)
 
@@ -156,7 +126,7 @@ subroutine unit_test_aoc_2023(npass, nfail)
 	character(len = *), parameter :: &
 		path = 'src/tests/long/aoc/2023/'
 
-	write(*,*) 'Unit testing '//label//' ...'
+	if (.not. g_quiet) write(*,*) 'Unit testing '//label//' ...'
 
 	call chk(path//"01/main.syntran",        '107443',             npass, nfail)
 	call chk(path//"02/main.syntran",        '76485',              npass, nfail)
@@ -203,7 +173,7 @@ subroutine unit_test_aoc_2024(npass, nfail)
 	character(len = *), parameter :: &
 		path = 'src/tests/long/aoc/2024/'
 
-	write(*,*) 'Unit testing '//label//' ...'
+	if (.not. g_quiet) write(*,*) 'Unit testing '//label//' ...'
 
 	call chk(path//"1/main.syntran" , '32625824',        npass, nfail)
 	call chk(path//"2/main.syntran" , '920',              npass, nfail)
@@ -249,7 +219,7 @@ subroutine unit_test_misc(npass, nfail)
 	character(len = *), parameter :: &
 		path = 'src/tests/long/aoc/'
 
-	write(*,*) 'Unit testing '//label//' ...'
+	if (.not. g_quiet) write(*,*) 'Unit testing '//label//' ...'
 
 	call chk(path//"poople_test.syntran", 'true', npass, nfail)
 
@@ -267,12 +237,11 @@ subroutine unit_tests_long(iostat)
 
 	integer :: npass, nfail
 
-	write(*,*) repeat('=', 60)
-	write(*,*) 'Running long syntran unit tests ...'
-	if (g_shard_n > 1) then
-		write(*, '(a,i0,a,i0,a)') ' Running shard ', g_shard_i, ' of ', g_shard_n, ' ...'
+	if (.not. g_quiet) then
+		write(*,*) repeat('=', 60)
+		write(*,*) 'Running long syntran unit tests ...'
+		write(*,*)
 	end if
-	write(*,*)
 
 	npass = 0
 	nfail = 0
@@ -283,7 +252,7 @@ subroutine unit_tests_long(iostat)
 	call unit_test_aoc_2024(npass, nfail)
 	call unit_test_misc    (npass, nfail)
 
-	call log_test_summary(npass, nfail)
+	if (.not. g_quiet) call log_test_summary(npass, nfail)
 
 	iostat = nfail
 
@@ -297,20 +266,26 @@ end module long_m
 
 program long
 
-	! Run with `fpm test long`, or pass `--shard I/N` (0-based I, e.g.
-	! `--shard 0/4`) to run only every Nth test starting at I, splitting the
-	! suite across N parallel processes for faster CI wall-time.  Omitting
-	! the flag runs the full suite in one process, as before sharding existed.
+	! Run with `fpm test long` to run the whole suite, `--count` to print the
+	! number of tests without running them, or `--test I` (0-based) to run
+	! only test I.  A CI work queue combines these: query `--count` once,
+	! then dispatch one `--test I` process per index across as many parallel
+	! workers as there are cores (e.g. `xargs -P`), which dynamically hands
+	! each worker the next index as soon as it finishes, so slow AOC problems
+	! don't bottleneck a fixed shard the way a static split would.
 
 	use syntran__app_m
 	use long_m
 	implicit none
 
 	integer :: io
-	integer :: nargs, iarg, arglen
+	integer :: nargs, iarg, arglen, ios
+	logical :: count_mode
 	character(len = :), allocatable :: arg
 
 	call set_ansi_colors(.true.)
+
+	count_mode = .false.
 
 	nargs = command_argument_count()
 	iarg = 1
@@ -320,10 +295,16 @@ program long
 		allocate(character(len = arglen) :: arg)
 		call get_command_argument(iarg, arg)
 
-		if (arg == '--shard') then
+		if (arg == '--count') then
+
+			count_mode = .true.
+			g_dry_run  = .true.
+			g_quiet    = .true.
+
+		else if (arg == '--test') then
 
 			if (iarg == nargs) then
-				write(*,*) 'Error: --shard requires an I/N argument'
+				write(*,*) 'Error: --test requires an I argument'
 				call exit(1)
 			end if
 
@@ -333,7 +314,12 @@ program long
 			allocate(character(len = arglen) :: arg)
 			call get_command_argument(iarg, arg)
 
-			call parse_shard(arg, g_shard_i, g_shard_n)
+			read(arg, *, iostat = ios) g_target
+			if (ios /= 0 .or. g_target < 0) then
+				write(*,*) 'Error: malformed --test index "'//arg//'", expected a non-negative integer'
+				call exit(1)
+			end if
+			g_quiet = .true.
 
 		else
 			write(*,*) 'Error: unrecognized arg "'//arg//'"'
@@ -346,6 +332,12 @@ program long
 	end do
 
 	call unit_tests_long(io)
+
+	if (count_mode) then
+		write(*, '(i0)') g_itest
+		call exit(0)
+	end if
+
 	call exit(io)
 
 end program long

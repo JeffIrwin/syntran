@@ -517,16 +517,19 @@
 
 					# Long/AOC suite is the CI bottleneck and runs single-threaded \n
 					# per process (syntran's interpreter has no internal \n
-					# parallelism), so fan out N shards across the runner's cores \n
-					# instead of running them serially in one process. \n
+					# parallelism). A static per-process shard split leaves \n
+					# cores idle once their shard's tests finish, so instead \n
+					# use a dynamic work queue: xargs keeps N processes busy, \n
+					# handing each one the next test index as soon as it's \n
+					# free, so slow AOC problems don't bottleneck one shard. \n
 					n=$(nproc) \n
-					pids=() \n
-					for i in $(seq 0 $((n-1))) ; do \n
-						./build/Release/long --shard $i/$n > long.$i.log 2>&1 & \n
-						pids+=($!) \n
-					done \n
-					rc=0 \n
-					for p in \"${pids[@]}\" ; do wait \"$p\" || rc=1 ; done \n
+					count=$(./build/Release/long --count) \n
+					if seq 0 $((count-1)) | xargs -P \"$n\" -I{}
+						sh -c './build/Release/long --test {} > long.{}.log 2>&1' ; then \n
+						rc=0 \n
+					else \n
+						rc=$? \n
+					fi \n
 					cat long.*.log \n
 					exit $rc \n
 				"
