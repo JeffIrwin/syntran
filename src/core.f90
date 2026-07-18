@@ -31,16 +31,9 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - speedup intel aoc tests since it's the ci/cd bottleneck
-	!    * unrelated, windows pack ci stage seems to rebuild when maybe it
-	!      should re-use a cached build from one of the tests
-	!    * unrelated, long tests do not run on mac ci but they pass locally
-	!    * intel is around 14 minutes compared to 6 for gfortran
-	!    * would add -ipo/-Qipo for interprocedural optimization between files,
-	!      but fpm fails at linking because it defaults to ar/ld but it needs
-	!      intel's own xiar/xild linkers. tried this in commit 355efcea3
-	!    * should be able to get full build/link pipeline working in cmake
-	!      instead of fpm with whatever flags and linkers we want
+	!  - cleanup misc files from top level of repo folder
+	!    * keep 1 or 2 Dockerfiles, move others
+	!    * move most *.sh scripts
 	!  - switch/match/case. needs to work with strings. would be nice to work
 	!    with arrays. basic switch/case is fine but also consider "pattern
 	!    matching" or whatever rust has
@@ -109,8 +102,7 @@ module syntran__core_m
 	!    threads within one syntran exe, maybe add cmd args to specify which
 	!    sets of tests to run, then have a bash script spawning independent
 	!    syntran test runners in parallel as separate exe's
-	!    * not really a need for this currently with bytecode and other
-	!      optimizations. ci/cd takes ~14 minutes
+	!    * done
 	!  - migrate ci from ubuntu 24 to 26. rocky should stay on version 9 for the
 	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
 	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet

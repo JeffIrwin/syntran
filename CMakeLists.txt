@@ -5,7 +5,14 @@ cmake_minimum_required(VERSION 3.13)
 # platforms
 if(DEFINED ENV{SYNTRAN_INTEL})
 
-	set(CMAKE_Fortran_COMPILER "ifort")
+	# Honor whatever Intel compiler the caller has already selected (e.g. via
+	# setup-fortran in CI, which exports FC=ifx or FC=ifort), falling back to
+	# ifx if unset.
+	if(DEFINED ENV{FC})
+		set(CMAKE_Fortran_COMPILER "$ENV{FC}")
+	else()
+		set(CMAKE_Fortran_COMPILER "ifx")
+	endif()
 
 #elseif(NOT APPLE)
 elseif(NOT DEFINED CMAKE_Fortran_COMPILER)
@@ -27,11 +34,10 @@ endif()
 
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# ifort-specific flags must NOT reach the C compiler (icx doesn't
-	# understand -fpp/-qmkl/etc), so gate them to Fortran only.
+	# understand -fpp/etc), so gate them to Fortran only.
 	add_compile_options(
 		"$<$<COMPILE_LANGUAGE:Fortran>:-W1>"
 		"$<$<COMPILE_LANGUAGE:Fortran>:-qopenmp>"
-		"$<$<COMPILE_LANGUAGE:Fortran>:-qmkl>"
 		"$<$<COMPILE_LANGUAGE:Fortran>:-fPIC>"
 		"$<$<COMPILE_LANGUAGE:Fortran>:-fpp>"
 	)
@@ -75,7 +81,14 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 	)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	message("Release")
-	add_compile_options(-O3)
+	if(DEFINED ENV{SYNTRAN_INTEL})
+		add_compile_options(
+			"$<$<COMPILE_LANGUAGE:Fortran>:-Ofast>"
+		)
+		add_compile_options("$<$<COMPILE_LANGUAGE:C>:-O2>")
+	else()
+		add_compile_options(-O3)
+	endif()
 else()
 	message("Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
@@ -85,7 +98,11 @@ message("")
 if(APPLE)
 	add_link_options(-openmp)
 elseif(DEFINED ENV{SYNTRAN_INTEL})
-	add_link_options(-fopenmp -qmkl)
+	# No -qmkl: nothing in this codebase calls into BLAS/LAPACK (grep finds
+	# only a speculative TODO comment), and CI's Intel install doesn't
+	# provide the MKL libraries -- linking it just fails with "cannot find
+	# -lmkl_intel_lp64" et al.
+	add_link_options(-fopenmp)
 else()
 	add_link_options(-fopenmp)
 endif()
@@ -114,6 +131,9 @@ set(SRC_DIR "src")
 set(LIB "${PROJECT}")
 set(LIB_SRC
 	${SRC_DIR}/c/isocline_wrap.c
+	# Compiled here (once), instead of duplicated into each of
+	# EXE_SRC/TEST_SRC/LONG_SRC below, to avoid recompiling it 3x per config.
+	${SRC_DIR}/app.f90
 	${SRC_DIR}/bool.f90
 	${SRC_DIR}/bytecode.f90
 	${SRC_DIR}/compiler.F90
@@ -168,8 +188,40 @@ set(LIB_SRC
 	${SRC_DIR}/value.f90
 )
 
-#add_library(${LIB} SHARED ${LIB_SRC}) # dll
-add_library(${LIB} STATIC ${LIB_SRC}) # static lib
+if(NOT DEFINED ENV{SYNTRAN_INTEL})
+	# app.f90's `use ifport` (for isatty()) is Intel-only; under Intel it
+	# resolves to the compiler's own built-in IFPORT module and produces no
+	# local .mod.  ifport_shim.f90 provides an empty local module of the same
+	# name so fpm's (and, without this exclusion, cmake's) source-text-based
+	# Fortran module scanner -- which isn't preprocessor-aware and can't tell
+	# the `use` is inactive here -- has a real producer to satisfy.  Under
+	# Intel, cmake must NOT compile this file at all: if it did, the scanner
+	# would expect a real "ifport.mod" build artifact that Intel never
+	# actually writes (it comes from the compiler's own module path instead),
+	# and cmake's copy-module-between-targets step would fail trying to find
+	# it.  fpm has no per-compiler source exclusion, so it always compiles
+	# this file; ifport_shim.f90's own internal `#if defined(__GFORTRAN__)`
+	# guard keeps that safe under fpm+Intel too.
+	list(APPEND LIB_SRC ${SRC_DIR}/ifport_shim.f90)
+endif()
+
+if(DEFINED ENV{SYNTRAN_INTEL})
+	# This build previously used -ipo, which emits LLVM-IR objects instead of
+	# native object code; archiving those into a STATIC lib needs a symbol
+	# index built by an LTO-aware archiver, and Intel's xiar was found to
+	# silently produce a broken one, causing mass "undefined reference"
+	# errors at final link.  An OBJECT library sidesteps archiving entirely:
+	# the final link gets the raw .o files directly, which need no symbol
+	# index at all.  -ipo has since been dropped (it didn't help), so a plain
+	# STATIC lib would likely work again too, but OBJECT is kept here since it
+	# already builds cleanly and there's no need to re-validate the Intel
+	# link path.  (Note fpm can't do any of this anyway -- see commit
+	# 355efcea3 -- it always archives with the default ar/ld.)
+	add_library(${LIB} OBJECT ${LIB_SRC})
+else()
+	#add_library(${LIB} SHARED ${LIB_SRC}) # dll
+	add_library(${LIB} STATIC ${LIB_SRC}) # static lib
+endif()
 
 set(LINK_LIBS "${LIB}")
 
@@ -179,7 +231,6 @@ set(LINK_LIBS "${LIB}")
 set(EXE "${PROJECT}")
 set(EXE_BIN "${EXE}-bin")
 set(EXE_SRC
-	${SRC_DIR}/app.f90
 	${SRC_DIR}/main.f90
 )
 
@@ -208,7 +259,6 @@ set_target_properties("${EXE_BIN}" PROPERTIES OUTPUT_NAME "${EXE}")
 # Unit test exe
 set(TEST_EXE "test")
 set(TEST_SRC
-	${SRC_DIR}/app.f90
 	${SRC_DIR}/tests/core.f90
 	${SRC_DIR}/tests/test.f90
 )
@@ -230,7 +280,6 @@ target_compile_options(${TEST_EXE} PRIVATE "-Wno-integer-division")
 # Long test exe
 set(LONG_EXE "long")
 set(LONG_SRC
-	${SRC_DIR}/app.f90
 	${SRC_DIR}/tests/core.f90
 	${SRC_DIR}/tests/long.f90
 )
