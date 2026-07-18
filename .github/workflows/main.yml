@@ -225,6 +225,14 @@
 				"
 			},
 			{
+				"if": "matrix.os == 'macOS-latest'",
+				"name": "Test long macOS",
+				"run":
+				"
+					time ./build/Release/long \n
+				"
+			},
+			{
 				"if": "matrix.os == 'windows-latest'",
 				"name": "Pack Windows",
 				"run":
