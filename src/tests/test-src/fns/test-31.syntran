@@ -1,9 +1,11 @@
-// Simpson's 3/8 rule numerical integrator, taking the integrand as a fn
-// callback and forwarding it through a generic Newton-Cotes engine.
+// Simpson's 3/8 rule and adaptive Simpson numerical integrators, taking the
+// integrand as a fn callback and forwarding it through a generic Newton-Cotes
+// engine (or, for the adaptive case, a recursive refinement).
 //
-// Ported from simpson_38_integrator() / newton_cotes_integrator() in
-// numerical-analysis's src/integrate.F90, and the corresponding tests in
-// test/chapter_3.F90 (chapter_3_newton_cotes)
+// Ported from simpson_38_integrator() / newton_cotes_integrator() /
+// simpson_adaptive_integrator() in numerical-analysis's src/integrate.F90,
+// and the corresponding tests in test/chapter_3.F90 (chapter_3_newton_cotes,
+// chapter_3_adaptive)
 //
 //     https://github.com/JeffIrwin/numerical-analysis/blob/main/src/integrate.F90
 
@@ -14,6 +16,16 @@ fn sin_fn(x: f64): f64
 	// The intrinsic `sin` can't be pointed to directly (E87), so it needs a
 	// user-defined wrapper to be used as a callback
 	return sin(x);
+}
+
+fn sqrt_fn(x: f64): f64
+{
+	return sqrt(x);
+}
+
+fn log_fn(x: f64): f64
+{
+	return log(x);
 }
 
 fn assert_close(a: f64, b: f64, tol: f64): i32
@@ -34,6 +46,20 @@ fn main(): i32
 	let area2 = integrate::simpson_38(sin_fn, 0.0, std::PI, 0.1);
 	//println("area2 = ", area2);
 	status += assert_close(area2, 2.0000000325630984, 1.0e-12);
+
+	let area3 = integrate::simpson_adaptive(sin_fn, 0.0, std::PI, 1.0e-10);
+	//println("area3 = ", area3);
+	status += assert_close(area3, 1.999999999999999, 1.0e-9);
+
+	let area4 = integrate::simpson_adaptive(sqrt_fn, 0.0, 1.0, 1.0e-10);
+	//println("area4 = ", area4);
+	status += assert_close(area4, 6.666666661354972E-01, 1.e-9);
+
+	// log() is singular at x = 0, so xmin is offset slightly and tol is
+	// relaxed, mirroring the upstream test
+	let area5 = integrate::simpson_adaptive(log_fn, 1.0e-10, 1.0, 1.0e-2);
+	//println("area5 = ", area5);
+	status += assert_close(area5, -1.000015864472923E+00, 1.e-9);
 
 	return status;
 }

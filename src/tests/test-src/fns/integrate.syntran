@@ -45,3 +45,50 @@ fn simpson_38(f: fn(f64): f64, xmin: f64, xmax: f64, dx: f64): f64
 	let coefs = [1.0, 3.0, 3.0, 1.0];
 	return newton_cotes(f, xmin, xmax, dx, coefs);
 }
+
+// Maximum recursion depth for the adaptive Simpson integrator
+const MAX_LEVELS = 16;
+
+fn simpson_adapt_aux(f: fn(f64): f64, a: f64, b: f64, eps: f64, whole: f64,
+	fa: f64, fb: f64, fm: f64, rec: i32): f64
+{
+	// Recursive core of the adaptive Simpson integrator.  Not for end users --
+	// see simpson_adaptive() below
+	//
+	// Source: https://en.wikipedia.org/wiki/Adaptive_Simpson%27s_method
+
+	let m  = 0.5 * (a + b);
+	let h  = 0.5 * (b - a);
+	let lm = 0.5 * (a + m);
+	let rm = 0.5 * (m + b);
+
+	// Floating-point tolerance or interval underflow: accept current estimate
+	if eps / 2 == eps or a == lm
+		return whole;
+
+	let flm = f(lm);
+	let frm = f(rm);
+	let left  = h / 6 * (fa + 4 * flm + fm);
+	let right = h / 6 * (fm + 4 * frm + fb);
+	let delta = left + right - whole;
+
+	if rec <= 0 or abs(delta) <= 15 * eps
+		return left + right + delta / 15.0;
+
+	return
+		simpson_adapt_aux(f, a, m, eps / 2, left,  fa, fm, flm, rec - 1) +
+		simpson_adapt_aux(f, m, b, eps / 2, right, fm, fb, frm, rec - 1);
+}
+
+fn simpson_adaptive(f: fn(f64): f64, xmin: f64, xmax: f64, tol: f64): f64
+{
+	// Integrate fn `f` from xmin to xmax using the adaptive Simpson method.
+	// `tol` is the target error.  Recursion depth is capped at MAX_LEVELS
+	let h  = xmax - xmin;
+	let fa = f(xmin);
+	let fm = f(0.5 * (xmin + xmax));
+	let fb = f(xmax);
+	let whole = h / 6 * (fa + 4 * fm + fb);
+
+	return simpson_adapt_aux(f, xmin, xmax, tol, whole, fa, fb, fm, MAX_LEVELS);
+}
