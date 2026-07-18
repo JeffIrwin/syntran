@@ -82,16 +82,8 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	message("Release")
 	if(DEFINED ENV{SYNTRAN_INTEL})
-		# Match the -Ofast/-xHost already used for the Intel fpm CI build, plus
-		# -ipo for interprocedural (whole-program) optimization -- fpm can't do
-		# -ipo since it links with the default ar/ld, so this Intel-optimized
-		# path is only available via cmake.  Gate to Fortran only: icx (the C
-		# driver used for isocline_wrap.c) doesn't need these and doesn't
-		# necessarily accept them.
 		add_compile_options(
 			"$<$<COMPILE_LANGUAGE:Fortran>:-Ofast>"
-			"$<$<COMPILE_LANGUAGE:Fortran>:-xHost>"
-			"$<$<COMPILE_LANGUAGE:Fortran>:-ipo>"
 		)
 		add_compile_options("$<$<COMPILE_LANGUAGE:C>:-O2>")
 	else()
