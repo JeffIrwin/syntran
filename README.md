@@ -919,6 +919,65 @@ Only variable identifiers can be used as a reference.  Literals cannot be
 referenced, and array elements and struct members cannot currently be
 referenced.
 
+### Function pointers (callbacks)
+
+A function's name, used without a trailing `(...)`, evaluates to a **function
+pointer** value.  Its type is written `fn(paramtypes): rettype`, mirroring the
+`fn` declaration syntax itself.  Function pointers can be passed as arguments,
+stored in variables, and called just like any other value:
+
+```rust
+fn dbl(n: i32): i32
+{
+    return 2 * n;
+}
+
+fn apply(f: fn(i32): i32, x: i32): i32
+{
+    return f(x);
+}
+
+println(apply(dbl, 21));
+// 42
+
+let g = dbl;
+println(g(10));
+// 20
+```
+
+Omit the `: rettype` suffix for a `void`-returning function pointer, same as
+for an ordinary `fn` declaration with no return type:
+
+```rust
+fn hello()
+{
+    println("hi");
+}
+
+fn call_it(f: fn())
+{
+    f();
+}
+
+call_it(hello);
+// hi
+```
+
+A function pointer's signature is checked like any other argument type: the
+number and types of parameters, and the return type, must match exactly
+(no implicit numeric casting, same as elsewhere in syntran).
+
+Limitations of the current implementation:
+- Only user-defined functions can be pointed to.  Intrinsic functions
+  (`abs`, `size`, `println`, ...) and struct methods cannot.
+- A function with any `&`-reference parameter cannot be pointed to, since a
+  function-pointer signature has no way to express reference-ness.
+- Function-pointer parameters are always passed by value.
+- The callee in an indirect call (`f(...)`) must be a plain variable name,
+  not a more general expression like `arr[i](...)`.
+- There are no closures or anonymous (lambda) functions; only a named,
+  already-declared `fn` can be pointed to.
+
 ## Strings, printing, and file output
 
 <!-- TODO: file input -->

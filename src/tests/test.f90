@@ -3542,6 +3542,14 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-21.syntran', quiet) == '0', &
 			interpret_file(path//'test-22.syntran', quiet) == '0', &
 			interpret_file(path//'test-23.syntran', quiet) == 'true', &
+			! fn pointers / callbacks
+			interpret_file(path//'test-24.syntran', quiet) == '42', &
+			interpret_file(path//'test-25.syntran', quiet) == '85', &
+			interpret_file(path//'test-26.syntran', quiet) == '50', &
+			interpret_file(path//'test-27.syntran', quiet) == '3', &
+			interpret_file(path//'test-28.syntran', quiet) == '15', &
+			interpret_file(path//'test-29.syntran', quiet) == '720', &
+			interpret_file(path//'test-30.syntran', quiet) == '36', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5933,6 +5941,16 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('fn f(): i32 { return 1.0; }'), EC_BAD_RET_TYPE), &
 			diag_has_code(get_diags( &
 				'fn f(x: i32): i32 { return x; } let a = f(1.0);'), EC_BAD_ARG_TYPE), &
+			! calling through a fn pointer reuses the same arg-count/type
+			! checks as a direct call (check_call_arg), just against the
+			! pointer's stored signature instead of a fn_t's params
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2*n; } ' // &
+				'fn apply(f: fn(f32): f32, x: f32): f32 { return f(x); } ' // &
+				'apply(dbl, 1.0);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2*n; } let f = dbl; f(1, 2);'), &
+				EC_BAD_ARG_COUNT), &
 			diag_has_code(get_diags('fn f(x: &i32) {} f(1);'), EC_BAD_ARG_VAL), &
 			diag_has_code(get_diags( &
 				'fn f(x: i32) {} let a=1; f(&a);'), EC_BAD_ARG_REF), &
@@ -6014,6 +6032,26 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_count_code(get_diags_file( &
 				'src/tests/test-src/errors/E86-module-return.syntran'), EC_MODULE_RETURN) == 1, &
 			.not. diag_has_code(get_diags('return 1 + 2;'), EC_MODULE_RETURN), &
+
+			! E87: cannot take a function pointer to an intrinsic or to a fn
+			! with any &ref param (a fn-pointer signature has no way to
+			! express ref-ness, so silently allowing this would drop
+			! reference semantics on an indirect call)
+			diag_has_code(get_diags('let f = println;'), EC_FN_PTR_UNSUPPORTED), &
+			diag_has_code(get_diags( &
+				'fn foo(&x: i32): i32 { return x; } let f = foo;'), &
+				EC_FN_PTR_UNSUPPORTED), &
+			! positive: a plain by-value user fn is pointer-able, no E87
+			.not. diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let f = dbl;'), &
+				EC_FN_PTR_UNSUPPORTED), &
+
+			! E88: calling a variable that isn't a fn pointer
+			diag_has_code(get_diags('let x = 3; x(1);'), EC_NOT_CALLABLE), &
+			! positive: calling through an actual fn pointer is fine, no E88
+			.not. diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let f = dbl; f(1);'), &
+				EC_NOT_CALLABLE), &
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
@@ -6425,7 +6463,15 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E86-module-return.syntran'), &
 				EC_MODULE_RETURN, P//'e86_mod_return.syntran', 8, 2, 6), &
 			diag_count_code(get_diags_file(P//'E86-module-return.syntran'), &
-				EC_MODULE_RETURN) == 1 &
+				EC_MODULE_RETURN) == 1, &
+			diag_loc_ok(get_diags_file(P//'E87-fn-ptr-unsupported.syntran'), &
+				EC_FN_PTR_UNSUPPORTED, P//'E87-fn-ptr-unsupported.syntran', 4, 9, 7), &
+			diag_count_code(get_diags_file(P//'E87-fn-ptr-unsupported.syntran'), &
+				EC_FN_PTR_UNSUPPORTED) == 1, &
+			diag_loc_ok(get_diags_file(P//'E88-not-callable.syntran'), &
+				EC_NOT_CALLABLE, P//'E88-not-callable.syntran', 5, 1, 1), &
+			diag_count_code(get_diags_file(P//'E88-not-callable.syntran'), &
+				EC_NOT_CALLABLE) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

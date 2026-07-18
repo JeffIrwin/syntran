@@ -227,6 +227,15 @@ recursive subroutine compile_node(prog, cs, node)
 			call emit(prog, OP_LOAD_CONST, a = const_idx)
 		end select
 
+	! ---- fn-pointer reference ---------------------------------------------------
+	! A bare fn name: behaves like a literal.  node%val is the fully-built
+	! fn_type value (fn_index/fn_params/fn_ret); it has allocatable components
+	! so it always goes through the const pool, like the literal_expr non-scalar
+	! case above
+	case (fn_ref_expr)
+		const_idx = add_const(prog, node%val)
+		call emit(prog, OP_LOAD_CONST, a = const_idx)
+
 	! ---- variable reads --------------------------------------------------------
 	case (name_expr)
 		if (allocated(node%lsubscripts)) then
@@ -965,6 +974,33 @@ recursive subroutine compile_node(prog, cs, node)
 			if (allocated(node%lsubscripts)) then
 				call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
 			end if
+		end if
+
+	! ---- indirect call through a fn-pointer value ------------------------------
+	! Unlike fn_call_expr, the target fn is not known until compile time either:
+	! it is resolved at runtime from the callee's fn_type value.  All args are
+	! by-value in v1 (node%is_ref is allocated all-.false.), so this is just a
+	! flat arg push followed by loading the callee value on top
+	case (fn_call_ptr_expr)
+		idx = add_node(prog, node)
+
+		if (allocated(node%args)) then
+			do i = 1, size(node%args)
+				call compile_node(prog, cs, node%args(i))
+			end do
+		end if
+
+		! Load the callee fn-pointer value (node%id_index/is_loc identify the
+		! *variable* holding it, not a fn id -- c.f. eval_fn_call_ptr)
+		if (node%is_loc) then
+			call emit(prog, OP_LOAD_LOCAL, a = node%id_index)
+		else
+			call emit(prog, OP_LOAD_GLOBAL, a = node%id_index)
+		end if
+
+		call emit(prog, OP_CALL_PTR, b = idx)
+		if (allocated(node%lsubscripts)) then
+			call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
 		end if
 
 	! ---- intrinsic function call -----------------------------------------------

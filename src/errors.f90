@@ -102,6 +102,8 @@ module syntran__errors_m
 		EC_MUTABLE_METHOD_ON_TEMP = "E84", &
 		EC_MEMBER_METHOD_CLASH = "E85", &
 		EC_MODULE_RETURN = "E86", &
+		EC_FN_PTR_UNSUPPORTED = "E87", &
+		EC_NOT_CALLABLE = "E88", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -362,6 +364,8 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_MUTABLE_METHOD_ON_TEMP)
 	call codes%push(EC_MEMBER_METHOD_CLASH)
 	call codes%push(EC_MODULE_RETURN)
+	call codes%push(EC_FN_PTR_UNSUPPORTED)
+	call codes%push(EC_NOT_CALLABLE)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -990,6 +994,34 @@ function err_module_return(context, span) result(err)
 		//underline(context, span)//" move it into a function"//color_reset
 
 end function err_module_return
+
+!===============================================================================
+
+function err_fn_ptr_unsupported(context, span, fn, reason) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn, reason
+	err = err_pre(EC_FN_PTR_UNSUPPORTED) &
+		//'cannot take a function pointer to `'//fn//'`: '//reason &
+		//underline(context, span)//" not fn-pointer-able"//color_reset
+
+end function err_fn_ptr_unsupported
+
+!===============================================================================
+
+function err_not_callable(context, span, var, type) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: var, type
+	err = err_pre(EC_NOT_CALLABLE) &
+		//'variable `'//var//'` of type `'//type//'` is not callable' &
+		//underline(context, span)//" not a fn pointer"//color_reset
+
+end function err_not_callable
 
 !===============================================================================
 

@@ -636,6 +636,81 @@ module subroutine vm_run(prog, state, res)
 
 			next_ip = prog%fn_entry(fn_id)
 
+		! --- indirect call through a fn-pointer value --------------------------
+		! Stack layout on entry (bottom to top): [by-value args][callee_fn_value]
+		! (callee at TOS).  Unlike OP_CALL, the target fn is not known until this
+		! instruction executes: pop the callee value first and read its fn_index
+		! to resolve the entry point/num_locs, mirroring eval_fn_call_ptr.  v1 fn
+		! pointers are by-value only, so cn%params/cn%is_ref are not used here
+		! (cn%params is left unallocated on this node kind, which also makes
+		! OP_RET's by-ref writeback loop below a no-op for this call kind, since
+		! it sizes nparams from cn%params)
+		case (OP_CALL_PTR)
+			node_idx_call = instr%b
+			associate(cn => prog%nodes(node_idx_call))
+			nparams = 0
+			if (allocated(cn%args)) nparams = size(cn%args)
+
+			! Pop the callee fn-pointer value (pushed last, on top of the args).
+			call vm_pop_copy(stack, val)
+			fn_id = val%sca%fn_index
+
+			! Grow params_pool if needed (amortised; avoids alloc/dealloc per call).
+			if (nparams > params_pool_cap) then
+				call value_array_destroy(params_pool)
+				allocate(params_pool(nparams))
+				params_pool_cap = nparams
+			end if
+
+			! All args are by-value in v1: pop in reverse order.
+			do i = nparams, 1, -1
+				call vm_pop_copy(stack, params_pool(i))
+			end do
+
+			! Push a new call frame; save caller's local vars and for-iter depth.
+			if (nframes + 1 > size(frames)) call grow_frames(frames)
+			nframes = nframes + 1
+			frames(nframes)%return_ip  = ip + 1
+			frames(nframes)%nfor_saved = nfor
+			frames(nframes)%node_idx  = node_idx_call
+			if (allocated(state%locs%vals)) then
+				call move_alloc(state%locs%vals, frames(nframes)%caller_locs)
+			end if
+
+			! Locals-pool: reuse the saved buffer from the previous call at this
+			! frame depth if it is large enough; otherwise allocate fresh.  Unlike
+			! OP_CALL, num_locs comes from prog%fn_num_locs(fn_id) (looked up by
+			! the runtime-resolved target), not from a parse-time-fixed cn%num_locs,
+			! since different calls through the same call site can target
+			! differently-sized fns.
+			if (allocated(frames(nframes)%locs_buf)) then
+				if (size(frames(nframes)%locs_buf) >= prog%fn_num_locs(fn_id)) then
+					! Reuse: reset all used slots to unknown_type.
+					do i = 1, prog%fn_num_locs(fn_id)
+						call value_reset(frames(nframes)%locs_buf(i))
+					end do
+					call move_alloc(frames(nframes)%locs_buf, state%locs%vals)
+				else
+					! Buffer too small for this target: reallocate.
+					call value_array_destroy(frames(nframes)%locs_buf)
+					allocate(state%locs%vals(prog%fn_num_locs(fn_id)))
+				end if
+			else
+				! First call at this depth: allocate fresh (default-init = unknown_type).
+				allocate(state%locs%vals(prog%fn_num_locs(fn_id)))
+			end if
+
+			! Params occupy local slots 1..nparams (guaranteed by
+			! parse_fn_declaration: params are always declared before any other
+			! local, so they always get slots 1..nparams in order).
+			do i = 1, nparams
+				call value_move(params_pool(i), state%locs%vals(i))
+			end do
+
+			end associate
+
+			next_ip = prog%fn_entry(fn_id)
+
 		! --- return from user function ----------------------------------------
 		! TOS is the return value (or an unknown sentinel for void functions).
 		! Write back by-ref params, restore caller locs, jump to return_ip.

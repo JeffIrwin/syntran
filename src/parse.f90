@@ -151,7 +151,7 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: expr
 		end subroutine parse_qualified_expr
 
-		module subroutine parse_type(parser, type_text, type)
+		recursive module subroutine parse_type(parser, type_text, type)
 			class(parser_t) :: parser
 			character(len = :), intent(out), allocatable :: type_text
 			type(value_t), intent(out) :: type

@@ -30,9 +30,10 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		lookup_name, display_name
 
 	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, slot
+	integer :: var_io, var_id_index
 
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
-		arg_is_ref, is_ok, is_const_var
+		arg_is_ref, is_ok, is_const_var, var_is_loc
 
 	type(fn_t), pointer :: fn
 
@@ -45,7 +46,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	type(text_span_t) :: span
 
-	type(value_t) :: param_val
+	type(value_t) :: param_val, var_val
 
 	!print *, ''
 	!print *, 'parse_fn_call'
@@ -208,6 +209,73 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 			fn_call%id_index = 0
 			fn_call%kind = fn_call_expr
 			return
+		end if
+
+		! Not a known fn (this is the final pass, so no forward-reference
+		! concern remains): check if this identifier is instead a local/global
+		! variable of fn_type -- an indirect call through a fn pointer, e.g.
+		! `let f = dbl; f(21);`.  Restricted to plain (unqualified) names in v1
+		if (.not. present(module_prefix)) then
+
+			var_io = exit_failure
+			if (parser%is_loc) then
+				call parser%locs%search(identifier_%text, var_id_index, var_io, var_val)
+				var_is_loc = var_io == exit_success
+			end if
+			if (var_io /= exit_success) then
+				call parser%vars%search(identifier_%text, var_id_index, var_io, var_val)
+				var_is_loc = .false.
+			end if
+
+			if (var_io == exit_success) then
+
+				if (var_val%type /= fn_type) then
+					span = new_span(identifier_%pos, len(identifier_%text))
+					call parser%diagnostics%push( &
+						err_not_callable(parser%context(), &
+						span, identifier_%text, type_name(var_val)))
+					fn_call%val%type = unknown_type
+					return
+				end if
+
+				! Indirect call: dispatch target is resolved at runtime from the
+				! callee variable value (fn_index), not from a parse-time id_index
+				! into a specific fn.  id_index/is_loc here identify the callee
+				! *variable* slot instead -- eval/compile distinguish this via
+				! node%kind == fn_call_ptr_expr
+				fn_call%kind = fn_call_ptr_expr
+				fn_call%id_index = var_id_index
+				fn_call%is_loc = var_is_loc
+
+				allocate(fn_call%is_ref(args%len_))
+				fn_call%is_ref = .false.   ! by-value only in v1
+
+				if (size(var_val%fn_params) /= args%len_) then
+					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+					call parser%diagnostics%push(err_bad_arg_count( &
+						parser%context(), span, identifier_%text, &
+						size(var_val%fn_params), args%len_))
+				else
+					do i = 1, args%len_
+						span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
+						call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
+							identifier_%text, i - 1, var_val%fn_params(i), "", &
+							.false., .false.)
+					end do
+				end if
+
+				fn_call%val = var_val%fn_ret
+
+				! Move args from vector (avoids deep copy)
+				allocate(fn_call%args(args%len_))
+				do i = 1, args%len_
+					call syntax_node_move_into(args%v(i), fn_call%args(i))
+				end do
+
+				return
+
+			end if
+
 		end if
 
 		span = new_span(identifier_%pos, len(identifier_%text))
@@ -1398,7 +1466,7 @@ end subroutine parse_struct_instance
 
 !===============================================================================
 
-module subroutine parse_type(parser, type_text, type)
+recursive module subroutine parse_type(parser, type_text, type)
 
 	class(parser_t) :: parser
 
@@ -1408,17 +1476,68 @@ module subroutine parse_type(parser, type_text, type)
 
 	!********
 
-	integer :: rank, itype
+	integer :: rank, itype, i
 	integer :: pos0, pos1, pos2
 
-	character(len = :), allocatable :: struct_cookie
+	character(len = :), allocatable :: struct_cookie, param_type_text, ret_type_text
 
 	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
-		double_colon
+		double_colon, fn_kw, lparen, rparen
 
 	type(text_span_t) :: span
 
+	type(value_t) :: param_type, ret_type
+	type(value_vector_t) :: param_types
+
 	pos1 = parser%current_pos()
+
+	if (parser%current_kind() == fn_keyword) then
+
+		! Fn-pointer type: fn(paramtype, paramtype, ...): rettype
+		! Return type defaults to void if the ": rettype" suffix is omitted
+		call parser%match(fn_keyword, fn_kw)
+		type_text = "fn"
+
+		call parser%match(lparen_token, lparen)
+
+		param_types = new_value_vector()
+		do while ( &
+			parser%current_kind() /= rparen_token .and. &
+			parser%current_kind() /= eof_token)
+
+			pos0 = parser%pos
+
+			call parser%parse_type(param_type_text, param_type)
+			call param_types%push(param_type)
+
+			if (parser%current_kind() /= rparen_token) then
+				call parser%match(comma_token, comma)
+			end if
+
+			! Break infinite loop
+			if (parser%pos == pos0) call parser%next(dummy)
+
+		end do
+		call parser%match(rparen_token, rparen)
+
+		type%type = fn_type
+		allocate(type%fn_params( param_types%len_ ))
+		do i = 1, param_types%len_
+			type%fn_params(i) = param_types%v(i)
+		end do
+
+		allocate(type%fn_ret)
+		type%fn_ret%type = void_type
+		if (parser%current_kind() == colon_token) then
+			call parser%match(colon_token, colon)
+			call parser%parse_type(ret_type_text, ret_type)
+			type%fn_ret = ret_type
+		end if
+
+		return
+
+	end if
+
 	if (parser%current_kind() == lbracket_token) then
 
 		! Array param

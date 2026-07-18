@@ -213,6 +213,95 @@ end subroutine eval_fn_call
 
 !===============================================================================
 
+recursive module subroutine eval_fn_call_ptr(node, state, res)
+
+	! Indirect call through a fn-pointer value (v1: by-value params only, no
+	! writeback needed).  Unlike eval_fn_call, the target fn is not known
+	! until runtime: node%id_index/node%is_loc here identify the *callee
+	! variable* holding the fn_type value (not a fn id_index directly).  The
+	! variable's value_t%sca%fn_index is the runtime dispatch key into
+	! state%fns%fns(:), c.f. how eval_fn_call dereferences node%id_index
+	! there directly for a direct call
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	integer :: i, fn_index
+
+	logical :: returned0
+
+	type(value_t), allocatable :: params_tmp(:), locs0(:)
+
+	if (node%is_loc) then
+		fn_index = state%locs%vals( node%id_index )%sca%fn_index
+	else
+		fn_index = state%vars%vals( node%id_index )%sca%fn_index
+	end if
+
+	returned0 = state%returned  ! push
+	state%returned = .false.
+
+	res%type = node%val%type
+
+	associate(target => state%fns%fns( fn_index )%node)
+
+	if (.not. allocated(target%params)) then
+		write(*,*) err_int(IC_UNEXPECTED_USER_FN, 'unexpected user fn')
+		call internal_error()
+	end if
+
+	allocate(params_tmp( size(target%params) ))
+
+	! All fn-pointer params are by-value in v1 -- no ref binding pass needed
+	do i = 1, size(target%params)
+		call syntax_eval(node%args(i), state, params_tmp(i))
+		if (state%rt_halt) return
+	end do
+
+	! Push/pop a stack of local vars, similar to eval_fn_call
+	if (allocated(state%locs%vals)) call move_alloc(state%locs%vals, locs0)
+
+	allocate(state%locs%vals( target%num_locs ))
+	do i = 1, size(target%params)
+		call value_move(params_tmp(i), state%locs%vals( target%params(i) ))
+	end do
+
+	! Finally, evaluate the fn body
+	call syntax_eval(target%body, state, res)
+
+	! A runtime error halted evaluation inside the fn body.  Bail out now,
+	! mirroring eval_fn_call's identical early return
+	if (state%rt_halt) return
+
+	if (.not. state%returned .and. node%val%type /= void_type) then
+		write(*,*) err_int(IC_FN_END_REACHED, &
+			"reached end of function called through a fn pointer without a return statement")
+		call internal_error()
+	end if
+
+	state%returned = returned0  ! pop
+
+	! Explicitly destroy each of this call's locals before move_alloc() below
+	! implicitly deallocates state%locs%vals -- see value_destroy() and the
+	! matching comment in eval_fn_call
+	if (allocated(state%locs%vals)) then
+		do i = 1, size(state%locs%vals)
+			call value_destroy(state%locs%vals(i))
+		end do
+	end if
+	if (allocated(locs0)) call move_alloc(locs0, state%locs%vals)
+
+	end associate
+
+end subroutine eval_fn_call_ptr
+
+!===============================================================================
+
 recursive module subroutine eval_fn_call_intr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node

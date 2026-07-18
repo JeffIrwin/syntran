@@ -45,6 +45,13 @@ module syntran__value_m
 		real   (kind = 4) :: f32
 		real   (kind = 8) :: f64
 
+		! Fn pointer runtime dispatch key: id_index into fns%fns()/prog%fn_entry()
+		! for the target user-defined fn.  Only meaningful when value_t%type ==
+		! fn_type.  Lives in this POD scalar_t so value_t%sca copies (both
+		! value_copy's `dst%sca = src%sca` and value_move's default-case scalar
+		! copy) carry it for free
+		integer           :: fn_index = 0
+
 		contains
 			procedure :: to_str => scalar_to_str
 
@@ -125,6 +132,15 @@ module syntran__value_m
 		! struct_name above remains the display name and may be re-qualified per
 		! import path
 		character(len = :), allocatable :: struct_cookie
+
+		! Fn pointer signature, used when value%type == fn_type.  fn_params(i)
+		! and fn_ret carry only the *type* of each param/return (like fn_t%params
+		! /fn_t%type in types.f90), not runtime values -- used for type-checking
+		! calls through a fn pointer and for rendering the signature in
+		! type_name().  Self-referential value_t is fine (c.f. struct(:) above);
+		! only two types containing *each other* breaks gfortran
+		type(value_t), allocatable :: fn_params(:)
+		type(value_t), allocatable :: fn_ret
 
 		contains
 			procedure :: to_str => value_to_str
@@ -353,6 +369,11 @@ recursive subroutine value_move(src, dst)
 	case (file_type)
 		call move_alloc(src%file_, dst%file_)
 
+	case (fn_type)
+		dst%sca = src%sca   ! fn_index rides along here
+		if (allocated(src%fn_params)) call move_alloc(src%fn_params, dst%fn_params)
+		if (allocated(src%fn_ret))    call move_alloc(src%fn_ret,    dst%fn_ret)
+
 	case default
 		! POD copy: scalar_t now contains only bool/i32/i64/f32/f64 — cheap.
 		dst%sca = src%sca
@@ -573,6 +594,23 @@ recursive subroutine value_copy(dst, src)
 		deallocate(dst%struct)
 	end if
 
+	if (allocated(src%fn_params)) then
+		if (allocated(dst%fn_params)) deallocate(dst%fn_params)
+		allocate(dst%fn_params( size(src%fn_params) ))
+		do i = 1, size(src%fn_params)
+			call value_copy(dst%fn_params(i), src%fn_params(i))
+		end do
+	else if (allocated(dst%fn_params)) then
+		deallocate(dst%fn_params)
+	end if
+
+	if (allocated(src%fn_ret)) then
+		if (.not. allocated(dst%fn_ret)) allocate(dst%fn_ret)
+		call value_copy(dst%fn_ret, src%fn_ret)
+	else if (allocated(dst%fn_ret)) then
+		deallocate(dst%fn_ret)
+	end if
+
 end subroutine value_copy
 
 !===============================================================================
@@ -645,6 +683,18 @@ recursive subroutine value_destroy(val)
 			call value_destroy(val%struct(i))
 		end do
 		deallocate(val%struct)
+	end if
+
+	if (allocated(val%fn_params)) then
+		do i = 1, size(val%fn_params)
+			call value_destroy(val%fn_params(i))
+		end do
+		deallocate(val%fn_params)
+	end if
+
+	if (allocated(val%fn_ret)) then
+		call value_destroy(val%fn_ret)
+		deallocate(val%fn_ret)
 	end if
 
 end subroutine value_destroy
@@ -1376,12 +1426,111 @@ recursive function value_to_str(val) result(ans)
 				ans = "{file_unit: <unset>}"
 			end if
 
+		case (fn_type)
+			ans = fn_sig_to_str(val)
+
 		case default
 			ans = val%sca%to_str(val%type)
 
 	end select
 
 end function value_to_str
+
+!===============================================================================
+
+recursive function fn_sig_to_str(val) result(ans)
+
+	! Render a fn-pointer's signature for printing, e.g. "fn(i32): i32".
+	!
+	! This duplicates a small slice of type_name()/type_name_primitive()
+	! (types_ops.f90) rather than calling them: syntran__types_m depends on
+	! syntran__value_m, so value.f90 cannot call back into types_ops without
+	! introducing a circular module dependency
+
+	type(value_t), intent(in) :: val
+
+	character(len = :), allocatable :: ans
+
+	!********
+
+	integer :: i
+
+	ans = "fn("
+	if (allocated(val%fn_params)) then
+		do i = 1, size(val%fn_params)
+			ans = ans//fn_type_name(val%fn_params(i))
+			if (i < size(val%fn_params)) ans = ans//", "
+		end do
+	end if
+	ans = ans//")"
+
+	if (allocated(val%fn_ret)) then
+		if (val%fn_ret%type /= void_type) ans = ans//": "//fn_type_name(val%fn_ret)
+	end if
+
+end function fn_sig_to_str
+
+!===============================================================================
+
+recursive function fn_type_name(val) result(ans)
+
+	! Minimal type-name renderer for fn-pointer param/return types.  c.f.
+	! fn_sig_to_str() above for why this can't just call type_name()
+
+	type(value_t), intent(in) :: val
+
+	character(len = :), allocatable :: ans
+
+	select case (val%type)
+		case (i32_type);    ans = "i32"
+		case (i64_type);    ans = "i64"
+		case (f32_type);    ans = "f32"
+		case (f64_type);    ans = "f64"
+		case (str_type);    ans = "str"
+		case (bool_type);   ans = "bool"
+		case (any_type);    ans = "any"
+		case (void_type);   ans = "void"
+		case (fn_type);     ans = fn_sig_to_str(val)
+		case (struct_type)
+			if (allocated(val%struct_name)) then
+				ans = val%struct_name
+			else
+				ans = "struct"
+			end if
+		case (array_type)
+			if (allocated(val%array)) then
+				ans = "["//fn_array_elem_name(val%array%type)//"; "// &
+					repeat(":, ", max(val%array%rank - 1, 0))//":]"
+			else
+				ans = "[array]"
+			end if
+		case default
+			ans = "unknown"
+	end select
+
+end function fn_type_name
+
+!===============================================================================
+
+function fn_array_elem_name(itype) result(ans)
+
+	! Element-type-name helper for fn_type_name()'s array_type case
+
+	integer, intent(in) :: itype
+
+	character(len = :), allocatable :: ans
+
+	select case (itype)
+		case (i32_type);  ans = "i32"
+		case (i64_type);  ans = "i64"
+		case (f32_type);  ans = "f32"
+		case (f64_type);  ans = "f64"
+		case (str_type);  ans = "str"
+		case (bool_type); ans = "bool"
+		case default;     ans = "unknown"
+	end select
+
+end function fn_array_elem_name
 
 !===============================================================================
 

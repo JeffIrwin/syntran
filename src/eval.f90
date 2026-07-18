@@ -273,6 +273,12 @@ module syntran__eval_m
 			type(value_t), intent(out) :: res
 		end subroutine
 
+		recursive module subroutine eval_fn_call_ptr(node, state, res)
+			type(syntax_node_t), intent(in) :: node
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: res
+		end subroutine
+
 	end interface
 
 	interface
@@ -496,6 +502,18 @@ recursive subroutine syntax_eval(node, state, res)
 
 	case (fn_call_intr_expr)
 		call eval_fn_call_intr(node, state, res)
+		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
+			call apply_subscripts_to_val(node, res, state, tmp)
+			res = tmp
+		end if
+
+	case (fn_ref_expr)
+		! A bare fn name: behaves like a literal.  node%val is the fully-built
+		! fn_type value (fn_index/fn_params/fn_ret) constructed at parse time
+		res = node%val
+
+	case (fn_call_ptr_expr)
+		call eval_fn_call_ptr(node, state, res)
 		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
 			call apply_subscripts_to_val(node, res, state, tmp)
 			res = tmp

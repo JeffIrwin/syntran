@@ -946,7 +946,7 @@ recursive module subroutine parse_statement(parser, statement)
 				case (let_expr, assignment_expr)
 					! Do nothing.  These kinds of expressions are allowed
 
-				case (fn_call_expr, fn_call_intr_expr, method_call_expr)
+				case (fn_call_expr, fn_call_intr_expr, method_call_expr, fn_call_ptr_expr)
 					! Only allow void fn call statements.  Don't allow
 					! discarding fn return value
 

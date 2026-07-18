@@ -799,13 +799,15 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 	!********
 
-	integer :: io, id_index, field_id, field_io
+	integer :: io, id_index, field_id, field_io, slot, i
 
 	type(syntax_token_t) :: identifier
 	type(text_span_t) :: span
 
 	type(value_t) :: var, field_val
 	character(len = :), allocatable :: suggest
+
+	type(fn_t), pointer :: fn
 
 	! Variable name expression
 
@@ -854,6 +856,54 @@ recursive module subroutine parse_name_expr(parser, expr)
 					end if
 					return
 				end if
+			end if
+
+			! A bare fn name (not followed by "(") is a fn-pointer reference:
+			! it evaluates to a fn_type value carrying the target's id_index,
+			! param types, and return type.  Only user-defined fns with
+			! by-value-only params are pointer-able in v1 -- intrinsics,
+			! methods, and fns with any &ref param get E87 (a fn-pointer
+			! signature has no way to express ref-ness, so silently allowing
+			! this would drop reference semantics on an indirect call)
+			slot = parser%fns%find(identifier%text)
+			if (slot /= 0) then
+				fn => parser%fns%get(slot)
+				span = new_span(identifier%pos, len(identifier%text))
+
+				if (fn%is_intr) then
+					call parser%diagnostics%push( &
+						err_fn_ptr_unsupported(parser%context(), &
+						span, identifier%text, &
+						"intrinsic functions are not fn-pointer-able"))
+				else if (fn%is_method) then
+					call parser%diagnostics%push( &
+						err_fn_ptr_unsupported(parser%context(), &
+						span, identifier%text, &
+						"struct methods are not fn-pointer-able"))
+				else if (allocated(fn%node%is_ref) .and. any(fn%node%is_ref)) then
+					call parser%diagnostics%push( &
+						err_fn_ptr_unsupported(parser%context(), &
+						span, identifier%text, &
+						"functions with &ref parameters are not fn-pointer-able"))
+				else
+					expr%kind = fn_ref_expr
+					expr%identifier = identifier
+					expr%id_index = parser%fns%id_at(slot)
+					expr%is_loc = .false.
+					expr%val%type = fn_type
+					expr%val%sca%fn_index = expr%id_index
+					if (allocated(fn%params)) then
+						allocate(expr%val%fn_params( size(fn%params) ))
+						do i = 1, size(fn%params)
+							expr%val%fn_params(i) = fn%params(i)
+						end do
+					else
+						allocate(expr%val%fn_params(0))
+					end if
+					allocate(expr%val%fn_ret)
+					expr%val%fn_ret = fn%type
+				end if
+				return
 			end if
 
 			!print *, "undeclared var 3"

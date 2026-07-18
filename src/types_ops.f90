@@ -902,10 +902,14 @@ end function array_to_scalar_type
 
 !===============================================================================
 
-module function type_name(a) result(str_)
+recursive module function type_name(a) result(str_)
 	! c.f. lookup_type() which is mostly the inverse of this
 	type(value_t), intent(in) :: a
 	character(len = :), allocatable :: str_, array_name
+
+	!********
+
+	integer :: i
 
 	if (a%type == struct_type) then
 		str_ = a%struct_name
@@ -922,6 +926,21 @@ module function type_name(a) result(str_)
 		! Repeat ":, " appropriately
 		str_ = str_//repeat(":, ", max(a%array%rank - 1, 0))
 		str_ = str_//":]"
+
+	else if (a%type == fn_type) then
+
+		str_ = "fn("
+		if (allocated(a%fn_params)) then
+			do i = 1, size(a%fn_params)
+				str_ = str_//type_name(a%fn_params(i))
+				if (i < size(a%fn_params)) str_ = str_//", "
+			end do
+		end if
+		str_ = str_//")"
+
+		if (allocated(a%fn_ret)) then
+			if (a%fn_ret%type /= void_type) str_ = str_//": "//type_name(a%fn_ret)
+		end if
 
 	else
 		str_ = type_name_primitive(a%type)
@@ -953,6 +972,8 @@ module function type_name_primitive(itype) result(str_)
 		str_ = "any"
 	case (void_type)
 		str_ = "void"
+	case (fn_type)
+		str_ = "fn"
 	case default
 		str_ = "unknown"
 	end select
@@ -961,7 +982,7 @@ end function type_name_primitive
 
 !===============================================================================
 
-module integer function types_match(a, b) result(io)
+recursive module integer function types_match(a, b) result(io)
 
 	! Check if the type of value `a` matches value `b`. Arguments are not
 	! transitive!  If `a` is of value any_type, enforcement is less strict.
@@ -972,6 +993,8 @@ module integer function types_match(a, b) result(io)
 	type(value_t), intent(in) :: a, b
 
 	!****************
+
+	integer :: i, na, nb
 
 	io = TYPE_MATCH
 
@@ -1015,6 +1038,38 @@ module integer function types_match(a, b) result(io)
 			end if
 		end if
 
+	end if
+
+	if (a%type == fn_type) then
+		! Fn-pointer signature match: same param count, each param type
+		! matching, and matching return type.  No implicit any_type looseness
+		! here beyond what the top-level check above already allows
+		na = 0
+		nb = 0
+		if (allocated(a%fn_params)) na = size(a%fn_params)
+		if (allocated(b%fn_params)) nb = size(b%fn_params)
+
+		if (na /= nb) then
+			io = TYPE_MISMATCH
+			return
+		end if
+
+		do i = 1, na
+			if (types_match(a%fn_params(i), b%fn_params(i)) /= TYPE_MATCH) then
+				io = TYPE_MISMATCH
+				return
+			end if
+		end do
+
+		if (allocated(a%fn_ret) .and. allocated(b%fn_ret)) then
+			if (types_match(a%fn_ret, b%fn_ret) /= TYPE_MATCH) then
+				io = TYPE_MISMATCH
+				return
+			end if
+		else if (allocated(a%fn_ret) .neqv. allocated(b%fn_ret)) then
+			io = TYPE_MISMATCH
+			return
+		end if
 	end if
 
 end function types_match
