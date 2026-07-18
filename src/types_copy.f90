@@ -120,6 +120,8 @@ recursive module subroutine fn_copy(dst, src)
 
 	!********
 
+	integer :: i
+
 	!print *, 'starting fn_copy()'
 
 	dst%type            = src%type
@@ -141,7 +143,19 @@ recursive module subroutine fn_copy(dst, src)
 	if (allocated(src%params)) then
 		if (allocated(dst%params)) deallocate(dst%params)
 		allocate(dst%params( size(src%params) ))
-		dst%params = src%params
+		! Element-wise value_copy, NOT a whole-array assignment: value_t's
+		! defined assignment(=) is scalar (non-elemental), so `dst%params =
+		! src%params` would silently fall back to the compiler's default
+		! intrinsic structure copy instead of the hand-written value_copy --
+		! exactly the "dangling refs" failure mode documented on value_copy()
+		! itself.  This was latent while params only ever carried primitive/
+		! struct-tag types (no real nested allocatable content to corrupt);
+		! fn-pointer param/return types are the first value_t here with
+		! actual nested allocatables (fn_params/fn_ret), which is what
+		! exposed it as a double-free/segfault on deallocation
+		do i = 1, size(src%params)
+			call value_copy(dst%params(i), src%params(i))
+		end do
 	else if (allocated(dst%params)) then
 		deallocate(dst%params)
 	end if
