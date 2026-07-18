@@ -92,3 +92,108 @@ fn simpson_adaptive(f: fn(f64): f64, xmin: f64, xmax: f64, tol: f64): f64
 
 	return simpson_adapt_aux(f, xmin, xmax, tol, whole, fa, fb, fm, MAX_LEVELS);
 }
+
+// Gauss-Kronrod 7-15 abscissas and weights, taken from Jacob Williams'
+// quadpack (BSD-3 license):
+//
+//     https://github.com/jacobwilliams/quadpack/blob/702abfd5f0acbdb51439695334347a4b3c0dc87a/src/quadpack_generic.F90#L5209
+//
+// The first NG_GK15 entries are the shared Gauss/Kronrod abscissas; XK_GK15
+// holds all NK_GK15 Kronrod abscissas, and WG_GK15 only has weights for the
+// first NG_GK15 (Gauss) abscissas
+const NG_GK15 = 7;
+const NK_GK15 = 15;
+
+const XK_GK15 = [
+	 0.949107912342758524526189684047851262401,
+	-0.949107912342758524526189684047851262401,
+	 0.741531185599394439863864773280788407074,
+	-0.741531185599394439863864773280788407074,
+	 0.405845151377397166906606412076961463347,
+	-0.405845151377397166906606412076961463347,
+	 0.0,
+	 0.991455371120812639206854697526328516642,
+	-0.991455371120812639206854697526328516642,
+	 0.864864423359769072789712788640926201211,
+	-0.864864423359769072789712788640926201211,
+	 0.586087235467691130294144838258729598437,
+	-0.586087235467691130294144838258729598437,
+	 0.207784955007898467600689403773244913480,
+	-0.207784955007898467600689403773244913480
+];
+
+const WG_GK15 = [
+	0.129484966168869693270611432679082018329,
+	0.129484966168869693270611432679082018329,
+	0.279705391489276667901467771423779582487,
+	0.279705391489276667901467771423779582487,
+	0.381830050505118944950369775488975133878,
+	0.381830050505118944950369775488975133878,
+	0.417959183673469387755102040816326530612
+];
+
+const WK_GK15 = [
+	0.0630920926299785532907006631892042866651,
+	0.0630920926299785532907006631892042866651,
+	0.140653259715525918745189590510237920400,
+	0.140653259715525918745189590510237920400,
+	0.190350578064785409913256402421013682826,
+	0.190350578064785409913256402421013682826,
+	0.209482141084727828012999174891714263698,
+	0.0229353220105292249637320080589695919936,
+	0.0229353220105292249637320080589695919936,
+	0.104790010322250183839876322541518017444,
+	0.104790010322250183839876322541518017444,
+	0.169004726639267902826583426598550284106,
+	0.169004726639267902826583426598550284106,
+	0.204432940075298892414161999234649084717,
+	0.204432940075298892414161999234649084717
+];
+
+fn gk15_aux(f: fn(f64): f64, xmin: f64, xmax: f64, tol: f64, whole: f64, rec: i32): f64
+{
+	// Recursive core of the adaptive Gauss-Kronrod integrator.  Not for end
+	// users -- see gk15_adaptive() below
+
+	let dx2 = 0.5 * (xmax - xmin);
+	let mid = 0.5 * (xmin + xmax);
+
+	// Floating-point tolerance or interval underflow: accept current estimate
+	if tol / 2 == tol or xmin == mid
+		return whole;
+
+	let areag = 0.0;
+	let areak = 0.0;
+	for i in [0: NG_GK15]
+	{
+		let fx = f(mid + XK_GK15[i] * dx2);
+		areag = areag + WG_GK15[i] * fx;
+		areak = areak + WK_GK15[i] * fx;
+	}
+	for i in [NG_GK15: NK_GK15]
+	{
+		let fx = f(mid + XK_GK15[i] * dx2);
+		areak = areak + WK_GK15[i] * fx;
+	}
+	areag = areag * dx2;
+	areak = areak * dx2;
+
+	let diff = abs(areak - areag);
+	if diff < tol or rec <= 0
+		return areak;
+
+	return
+		gk15_aux(f, xmin, mid, tol / 2, areak / 2, rec - 1) +
+		gk15_aux(f, mid, xmax, tol / 2, areak / 2, rec - 1);
+}
+
+fn gk15_adaptive(f: fn(f64): f64, xmin: f64, xmax: f64, tol: f64): f64
+{
+	// Integrate fn `f` from xmin to xmax using the adaptive Gauss-Kronrod
+	// (7-point Gauss, 15-point Kronrod) method.  Unlike simpson_adaptive(),
+	// Gauss/Kronrod abscissas are always interior, so `f` is never evaluated
+	// at xmin or xmax -- useful for integrable singularities at the endpoints.
+	// Recursion depth is capped at MAX_LEVELS
+
+	return gk15_aux(f, xmin, xmax, tol, 0.0, MAX_LEVELS);
+}

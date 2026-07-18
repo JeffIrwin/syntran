@@ -1,11 +1,12 @@
-// Simpson's 3/8 rule and adaptive Simpson numerical integrators, taking the
-// integrand as a fn callback and forwarding it through a generic Newton-Cotes
-// engine (or, for the adaptive case, a recursive refinement).
+// Simpson's 3/8 rule, adaptive Simpson, and adaptive Gauss-Kronrod (7-15)
+// numerical integrators, taking the integrand as a fn callback and
+// forwarding it through a generic Newton-Cotes engine (or, for the adaptive
+// cases, a recursive refinement).
 //
 // Ported from simpson_38_integrator() / newton_cotes_integrator() /
-// simpson_adaptive_integrator() in numerical-analysis's src/integrate.F90,
-// and the corresponding tests in test/chapter_3.F90 (chapter_3_newton_cotes,
-// chapter_3_adaptive)
+// simpson_adaptive_integrator() / gk15_adaptive_integrator() in
+// numerical-analysis's src/integrate.F90, and the corresponding tests in
+// test/chapter_3.F90 (chapter_3_newton_cotes, chapter_3_adaptive)
 //
 //     https://github.com/JeffIrwin/numerical-analysis/blob/main/src/integrate.F90
 
@@ -60,6 +61,21 @@ fn main(): i32
 	let area5 = integrate::simpson_adaptive(log_fn, 1.0e-10, 1.0, 1.0e-2);
 	//println("area5 = ", area5);
 	status += assert_close(area5, -1.000015864472923E+00, 1.e-9);
+
+	let area6 = integrate::gk15_adaptive(sin_fn, 0.0, std::PI, 1.0e-10);
+	//println("area6 = ", area6);
+	status += assert_close(area6, 2.0, 1.0e-9);
+
+	let area7 = integrate::gk15_adaptive(sqrt_fn, 0.0, 1.0, 1.0e-10);
+	//println("area7 = ", area7);
+	status += assert_close(area7, 6.666666666674688E-01, 1.0e-9);
+
+	// Gauss-Kronrod abscissas are always interior, so unlike
+	// simpson_adaptive() this can integrate log() starting right at the
+	// singularity at xmin = 0
+	let area8 = integrate::gk15_adaptive(log_fn, 0.0, 1.0, 1.0e-10);
+	//println("area8 = ", area8);
+	status += assert_close(area8, -9.999999741718582E-01, 1.0e-9);
 
 	return status;
 }
