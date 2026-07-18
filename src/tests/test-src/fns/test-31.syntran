@@ -1,0 +1,82 @@
+// Simpson's 3/8 rule numerical integrator, taking the integrand as a fn
+// callback and forwarding it through a generic Newton-Cotes engine.
+//
+// Ported from simpson_38_integrator() / newton_cotes_integrator() in
+// numerical-analysis's src/integrate.F90, and the corresponding tests in
+// test/chapter_3.F90 (chapter_3_newton_cotes)
+//
+//     https://github.com/JeffIrwin/numerical-analysis/blob/main/src/integrate.F90
+
+fn sin_fn(x: f64): f64
+{
+	// The intrinsic `sin` can't be pointed to directly (E87), so it needs a
+	// user-defined wrapper to be used as a callback
+	return sin(x);
+}
+
+fn newton_cotes(f: fn(f64): f64, xmin: f64, xmax: f64, dx: f64, coefs: [f64; :]): f64
+{
+	// Integrate fn `f` from xmin to xmax with step size dx using given
+	// Newton-Cotes coefficients `coefs`
+
+	let nc = i32(size(coefs, 0));
+	let n  = max(1, i32((xmax - xmin) / dx));
+	let dxl = (xmax - xmin) / n;
+
+	let area = 0.0;
+	let j0 = 0;
+	let f0 = 0.0;
+	for i in [0: n]
+	{
+		let darea = 0.0;
+		if j0 > 0
+			darea = coefs[nc - 1] * f0;
+		for j in [j0: nc]
+		{
+			let x = xmin + i * (xmax - xmin) / n + j * dxl / (nc - 1);
+			f0 = f(x);
+			darea = darea + coefs[j] * f0;
+		}
+		area = area + darea;
+
+		// Start point of next subinterval is the end point of this one
+		j0 = 1;
+	}
+
+	area = area * dxl / sum(coefs);
+	return area;
+}
+
+fn simpson_38(f: fn(f64): f64, xmin: f64, xmax: f64, dx: f64): f64
+{
+	// Integrate fn `f` from xmin to xmax with step size dx using Simpson's
+	// 3/8 rule.  The callback `f` is forwarded through to newton_cotes()
+
+	let coefs = [1.0, 3.0, 3.0, 1.0];
+	return newton_cotes(f, xmin, xmax, dx, coefs);
+}
+
+fn assert_close(a: f64, b: f64, tol: f64): i32
+{
+	if abs(a - b) < tol
+		return 0;
+	return 1;
+}
+
+fn main(): i32
+{
+	let status = 0;
+
+	let area1 = simpson_38(sin_fn, 0.0, std::PI, std::PI);
+	//println("area1 = ", area1);
+	status += assert_close(area1, 2.04052428, 1.0e-6);
+
+	let area2 = simpson_38(sin_fn, 0.0, std::PI, 0.1);
+	//println("area2 = ", area2);
+	status += assert_close(area2, 2.0000000325630984, 1.0e-12);
+
+	return status;
+}
+
+return main();
+
