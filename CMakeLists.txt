@@ -221,21 +221,22 @@ endif()
 
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# -ipo (added to Release flags below) emits LLVM-IR objects instead of
-	# native object code.  The default `ar`/`ranlib` can still archive them
-	# (xiar just shells out to `ar` when it doesn't see IR), but Intel's own
-	# xiar/xild are the supported way to preserve the IR through the archive
-	# so the final link can still do whole-program IPO.  This is also the
-	# reason `-ipo` doesn't work under fpm (see commit 355efcea3): fpm always
-	# links with the default ar/ld.
-	find_program(XIAR_EXECUTABLE xiar)
-	if(XIAR_EXECUTABLE)
-		set(CMAKE_AR "${XIAR_EXECUTABLE}")
-		set(CMAKE_RANLIB "${XIAR_EXECUTABLE}")
-	endif()
+	# native object code.  Archiving those into a STATIC lib needs a symbol
+	# index built by an LTO-aware archiver; xiar (set as CMAKE_AR/RANLIB) is
+	# supposed to handle that, but in practice its gold-plugin bridge fails
+	# on Intel 2025.2's bitcode ("LLVM gold plugin has failed to create LTO
+	# module: Unknown attribute kind"), silently producing an archive with a
+	# broken symbol index -- the final link then can't find symbols that are
+	# genuinely present in it (mass "undefined reference" errors).  An OBJECT
+	# library sidesteps archiving entirely: the final link gets the raw .o
+	# files directly, which need no symbol index at all.  (This is also why
+	# `-ipo` doesn't work under fpm at all -- see commit 355efcea3 -- fpm
+	# always archives with the default ar/ld.)
+	add_library(${LIB} OBJECT ${LIB_SRC})
+else()
+	#add_library(${LIB} SHARED ${LIB_SRC}) # dll
+	add_library(${LIB} STATIC ${LIB_SRC}) # static lib
 endif()
-
-#add_library(${LIB} SHARED ${LIB_SRC}) # dll
-add_library(${LIB} STATIC ${LIB_SRC}) # static lib
 
 set(LINK_LIBS "${LIB}")
 
