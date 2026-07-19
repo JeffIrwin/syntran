@@ -3551,6 +3551,9 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-29.syntran', quiet) == '720', &
 			interpret_file(path//'test-30.syntran', quiet) == '36', &
 			interpret_file(path//'test-31.syntran', quiet) == '0', &
+			interpret_file(path//'test-32.syntran', quiet) == '10', &
+			interpret_file(path//'test-33.syntran', quiet) == &
+				'fn(i32): i32|fn()|fn([i32; :]): i32', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -6054,6 +6057,21 @@ subroutine unit_test_error_codes(npass, nfail)
 				'fn dbl(n: i32): i32 { return 2 * n; } let f = dbl; f(1);'), &
 				EC_NOT_CALLABLE), &
 
+			! E89: arrays of fn pointers are not supported (eval_array.f90 has
+			! no fn_type case in its per-type storage/copy paths; letting this
+			! through crashes instead of erroring)
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let a = [dbl, dbl];'), &
+				EC_FN_PTR_ARRAY), &
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let a = [dbl; 3];'), &
+				EC_FN_PTR_ARRAY), &
+			! positive: a fn pointer stored in a struct member is fine, no E89
+			.not. diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } ' // &
+				'struct S { f: fn(i32): i32 } let s = S{f = dbl};'), &
+				EC_FN_PTR_ARRAY), &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -6472,7 +6490,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E88-not-callable.syntran'), &
 				EC_NOT_CALLABLE, P//'E88-not-callable.syntran', 5, 1, 1), &
 			diag_count_code(get_diags_file(P//'E88-not-callable.syntran'), &
-				EC_NOT_CALLABLE) == 1 &
+				EC_NOT_CALLABLE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E89-fn-ptr-array.syntran'), &
+				EC_FN_PTR_ARRAY, P//'E89-fn-ptr-array.syntran', 9, 10, 3), &
+			diag_count_code(get_diags_file(P//'E89-fn-ptr-array.syntran'), &
+				EC_FN_PTR_ARRAY) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

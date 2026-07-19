@@ -104,6 +104,7 @@ module syntran__errors_m
 		EC_MODULE_RETURN = "E86", &
 		EC_FN_PTR_UNSUPPORTED = "E87", &
 		EC_NOT_CALLABLE = "E88", &
+		EC_FN_PTR_ARRAY = "E89", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -366,6 +367,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_MODULE_RETURN)
 	call codes%push(EC_FN_PTR_UNSUPPORTED)
 	call codes%push(EC_NOT_CALLABLE)
+	call codes%push(EC_FN_PTR_ARRAY)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1022,6 +1024,21 @@ function err_not_callable(context, span, var, type) result(err)
 		//underline(context, span)//" not a fn pointer"//color_reset
 
 end function err_not_callable
+
+!===============================================================================
+
+function err_fn_ptr_array(context, span, elem) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: elem
+	err = err_pre(EC_FN_PTR_ARRAY) &
+		//'array element `'//elem//'` is a fn pointer.  ' &
+		//'Arrays of fn pointers are not supported' &
+		//underline(context, span)//" fn pointer in array literal"//color_reset
+
+end function err_fn_ptr_array
 
 !===============================================================================
 

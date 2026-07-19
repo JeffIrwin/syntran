@@ -101,6 +101,19 @@ recursive module subroutine parse_array_expr(parser, expr)
 	!		parser%context, span, parser%text(span_beg, span_end)))
 	!end if
 
+	! Arrays of fn pointers are not supported (v1): eval_array.f90's per-type
+	! storage/copy paths have no fn_type case, so letting this through would
+	! either hit the IC_ALLOC_ARRAY_TYPE internal error (uniform-value form) or
+	! segfault outright (explicit-list form, since a het-array check alone
+	! can't catch same-signature fn-pointer elements).  Caught here for
+	! lbound_, which every array-literal form is seeded from, so this single
+	! check covers all of them
+	if (lbound_%val%type == fn_type) then
+		span = new_span(lb_beg, lb_end - lb_beg + 1)
+		call parser%diagnostics%push(err_fn_ptr_array( &
+			parser%context(), span, parser%text(lb_beg, lb_end)))
+	end if
+
 	if (parser%current_kind() == semicolon_token) then
 
 		! Implicit constant-value array form [lbound; len]

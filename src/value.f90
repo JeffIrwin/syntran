@@ -1427,7 +1427,7 @@ recursive function value_to_str(val) result(ans)
 			end if
 
 		case (fn_type)
-			ans = fn_sig_to_str(val)
+			ans = value_type_name(val)
 
 		case default
 			ans = val%sca%to_str(val%type)
@@ -1438,99 +1438,101 @@ end function value_to_str
 
 !===============================================================================
 
-recursive function fn_sig_to_str(val) result(ans)
+recursive function value_type_name(a) result(str_)
 
-	! Render a fn-pointer's signature for printing, e.g. "fn(i32): i32".
+	! Single source of truth for rendering a value_t's type as user-facing
+	! text, e.g. "i32", "[f64; :]", "MyStruct", "fn(i32): i32".  Used both for
+	! printing a fn-pointer value (value_to_str's fn_type case, below) and --
+	! via types_ops.f90's type_name(), which just delegates here -- for
+	! diagnostic messages (bad-arg-type, etc.).  c.f. lookup_type() which is
+	! mostly the inverse of this
 	!
-	! This duplicates a small slice of type_name()/type_name_primitive()
-	! (types_ops.f90) rather than calling them: syntran__types_m depends on
-	! syntran__value_m, so value.f90 cannot call back into types_ops without
-	! introducing a circular module dependency
+	! This lives in value.f90, not types_ops.f90, so that fn_type's signature
+	! rendering (which needs this same logic for its param/return types) can
+	! call it directly: syntran__types_m depends on syntran__value_m, not the
+	! other way around, so only this direction avoids a circular dependency
 
-	type(value_t), intent(in) :: val
+	type(value_t), intent(in) :: a
 
-	character(len = :), allocatable :: ans
+	character(len = :), allocatable :: str_
 
 	!********
 
+	character(len = :), allocatable :: array_name
+
 	integer :: i
 
-	ans = "fn("
-	if (allocated(val%fn_params)) then
-		do i = 1, size(val%fn_params)
-			ans = ans//fn_type_name(val%fn_params(i))
-			if (i < size(val%fn_params)) ans = ans//", "
-		end do
-	end if
-	ans = ans//")"
+	if (a%type == struct_type) then
+		str_ = a%struct_name
+	else if (a%type == array_type) then
 
-	if (allocated(val%fn_ret)) then
-		if (val%fn_ret%type /= void_type) ans = ans//": "//fn_type_name(val%fn_ret)
+		if (a%array%type == struct_type) then
+			array_name = a%struct_name
+		else
+			array_name = value_type_name_primitive(a%array%type)
+		end if
+
+		str_ = "["//array_name//"; "
+
+		! Repeat ":, " appropriately
+		str_ = str_//repeat(":, ", max(a%array%rank - 1, 0))
+		str_ = str_//":]"
+
+	else if (a%type == fn_type) then
+
+		str_ = "fn("
+		if (allocated(a%fn_params)) then
+			do i = 1, size(a%fn_params)
+				str_ = str_//value_type_name(a%fn_params(i))
+				if (i < size(a%fn_params)) str_ = str_//", "
+			end do
+		end if
+		str_ = str_//")"
+
+		if (allocated(a%fn_ret)) then
+			if (a%fn_ret%type /= void_type) str_ = str_//": "//value_type_name(a%fn_ret)
+		end if
+
+	else
+		str_ = value_type_name_primitive(a%type)
 	end if
 
-end function fn_sig_to_str
+end function value_type_name
 
 !===============================================================================
 
-recursive function fn_type_name(val) result(ans)
-
-	! Minimal type-name renderer for fn-pointer param/return types.  c.f.
-	! fn_sig_to_str() above for why this can't just call type_name()
-
-	type(value_t), intent(in) :: val
-
-	character(len = :), allocatable :: ans
-
-	select case (val%type)
-		case (i32_type);    ans = "i32"
-		case (i64_type);    ans = "i64"
-		case (f32_type);    ans = "f32"
-		case (f64_type);    ans = "f64"
-		case (str_type);    ans = "str"
-		case (bool_type);   ans = "bool"
-		case (any_type);    ans = "any"
-		case (void_type);   ans = "void"
-		case (fn_type);     ans = fn_sig_to_str(val)
-		case (struct_type)
-			if (allocated(val%struct_name)) then
-				ans = val%struct_name
-			else
-				ans = "struct"
-			end if
-		case (array_type)
-			if (allocated(val%array)) then
-				ans = "["//fn_array_elem_name(val%array%type)//"; "// &
-					repeat(":, ", max(val%array%rank - 1, 0))//":]"
-			else
-				ans = "[array]"
-			end if
-		case default
-			ans = "unknown"
-	end select
-
-end function fn_type_name
-
-!===============================================================================
-
-function fn_array_elem_name(itype) result(ans)
-
-	! Element-type-name helper for fn_type_name()'s array_type case
+function value_type_name_primitive(itype) result(str_)
+	! Primitive (non-struct/array/fn) type-name mapping.  c.f. lookup_type()
+	! which is mostly the inverse of this
 
 	integer, intent(in) :: itype
 
-	character(len = :), allocatable :: ans
+	character(len = :), allocatable :: str_
 
 	select case (itype)
-		case (i32_type);  ans = "i32"
-		case (i64_type);  ans = "i64"
-		case (f32_type);  ans = "f32"
-		case (f64_type);  ans = "f64"
-		case (str_type);  ans = "str"
-		case (bool_type); ans = "bool"
-		case default;     ans = "unknown"
+	case (i32_type)
+		str_ = "i32"
+	case (i64_type)
+		str_ = "i64"
+	case (f32_type)
+		str_ = "f32"
+	case (f64_type)
+		str_ = "f64"
+	case (str_type)
+		str_ = "str"
+	case (bool_type)
+		str_ = "bool"
+	case (any_type)
+		str_ = "any"
+	case (void_type)
+		str_ = "void"
+	case (fn_type)
+		str_ = "fn"
+	case default
+		str_ = "unknown"
 	end select
 
-end function fn_array_elem_name
+end function value_type_name_primitive
 
 !===============================================================================
 

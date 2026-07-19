@@ -545,6 +545,12 @@ A variable that is not a fn-pointer value (`fn(...)` type) was called like a fun
 
 [Example](../src/tests/test-src/errors/E88-not-callable.syntran)
 
+### E89 -- fn-ptr-array
+
+Arrays of fn pointers (e.g. `[dbl, dbl]` where `dbl` is a fn pointer) are not supported. A fn pointer can still be stored in a struct member.
+
+[Example](../src/tests/test-src/errors/E89-fn-ptr-array.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

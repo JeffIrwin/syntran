@@ -903,80 +903,28 @@ end function array_to_scalar_type
 !===============================================================================
 
 recursive module function type_name(a) result(str_)
-	! c.f. lookup_type() which is mostly the inverse of this
+	! c.f. lookup_type() which is mostly the inverse of this.
+	!
+	! Delegates to value.f90's value_type_name(): that's the single source of
+	! truth for value-type-name rendering (it also needs this same logic to
+	! render a fn-pointer's param/return types), and syntran__types_m already
+	! depends on syntran__value_m, so this call direction is free
 	type(value_t), intent(in) :: a
-	character(len = :), allocatable :: str_, array_name
+	character(len = :), allocatable :: str_
 
-	!********
-
-	integer :: i
-
-	if (a%type == struct_type) then
-		str_ = a%struct_name
-	else if (a%type == array_type) then
-
-		if (a%array%type == struct_type) then
-			array_name = a%struct_name
-		else
-			array_name = type_name_primitive(a%array%type)
-		end if
-
-		str_ = "["//array_name//"; "
-
-		! Repeat ":, " appropriately
-		str_ = str_//repeat(":, ", max(a%array%rank - 1, 0))
-		str_ = str_//":]"
-
-	else if (a%type == fn_type) then
-
-		str_ = "fn("
-		if (allocated(a%fn_params)) then
-			do i = 1, size(a%fn_params)
-				str_ = str_//type_name(a%fn_params(i))
-				if (i < size(a%fn_params)) str_ = str_//", "
-			end do
-		end if
-		str_ = str_//")"
-
-		if (allocated(a%fn_ret)) then
-			if (a%fn_ret%type /= void_type) str_ = str_//": "//type_name(a%fn_ret)
-		end if
-
-	else
-		str_ = type_name_primitive(a%type)
-	end if
+	str_ = value_type_name(a)
 
 end function type_name
 
 !===============================================================================
 
 module function type_name_primitive(itype) result(str_)
-	! c.f. lookup_type() which is mostly the inverse of this
+	! c.f. lookup_type() which is mostly the inverse of this.  Delegates to
+	! value.f90's value_type_name_primitive() -- c.f. type_name() above
 	integer, intent(in) :: itype
 	character(len = :), allocatable :: str_
 
-	select case (itype)
-	case (i32_type)
-		str_ = "i32"
-	case (i64_type)
-		str_ = "i64"
-	case (f32_type)
-		str_ = "f32"
-	case (f64_type)
-		str_ = "f64"
-	case (str_type)
-		str_ = "str"
-	case (bool_type)
-		str_ = "bool"
-	case (any_type)
-		str_ = "any"
-	case (void_type)
-		str_ = "void"
-	case (fn_type)
-		str_ = "fn"
-	case default
-		str_ = "unknown"
-	end select
+	str_ = value_type_name_primitive(itype)
 
 end function type_name_primitive
 

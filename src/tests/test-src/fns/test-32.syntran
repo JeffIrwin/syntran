@@ -1,0 +1,27 @@
+// A fn pointer stored in a struct member: instantiation, extraction via a
+// dot-chain, and copy/reassignment all exercise value_copy()/value_move() for
+// the struct's fn_type-carrying field (fn_params/fn_ret allocatables).
+// Arrays of fn pointers are unsupported (E89); struct members are fine
+
+fn dbl(n: i32): i32
+{
+	return 2 * n;
+}
+
+fn sq(n: i32): i32
+{
+	return n * n;
+}
+
+struct Callback
+{
+	f: fn(i32): i32
+}
+
+let s1 = Callback{f = dbl};
+let s2 = s1;             // struct copy carries the fn-pointer field along
+let s3 = Callback{f = sq};
+s3 = s2;                 // reassignment: same fn_type-field copy path
+
+let g = s3.f;             // extract the fn pointer via a dot-chain
+return g(5);              // dbl(5) = 10

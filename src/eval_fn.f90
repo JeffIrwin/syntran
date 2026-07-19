@@ -13,6 +13,13 @@ contains
 
 recursive module subroutine eval_fn_call(node, state, res)
 
+	! TODO: this shares most of its structure with eval_fn_call_ptr() below
+	! (returned0 push/pop, params_tmp eval loop, locs0 save/restore, rt_halt
+	! bail, IC_FN_END_REACHED stopgap) -- eval_fn_call_ptr is essentially the
+	! by-value-only subset of this, minus the two by-ref passes at the end.
+	! Consider factoring the shared frame push/eval/pop into a common helper,
+	! with by-ref arg binding/writeback layered on top only for direct calls
+
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
@@ -222,6 +229,11 @@ recursive module subroutine eval_fn_call_ptr(node, state, res)
 	! variable's value_t%sca%fn_index is the runtime dispatch key into
 	! state%fns%fns(:), c.f. how eval_fn_call dereferences node%id_index
 	! there directly for a direct call
+	!
+	! TODO: this duplicates most of eval_fn_call() above (returned0 push/pop,
+	! params_tmp eval loop, locs0 save/restore, rt_halt bail, IC_FN_END_REACHED
+	! stopgap) -- it's essentially that routine's by-value-only subset.  See
+	! the TODO on eval_fn_call() for a possible shared-helper factoring
 
 	type(syntax_node_t), intent(in) :: node
 
