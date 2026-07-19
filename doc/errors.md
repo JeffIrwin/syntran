@@ -551,6 +551,12 @@ Arrays of fn pointers (e.g. `[dbl, dbl]` where `dbl` is a fn pointer) are not su
 
 [Example](../src/tests/test-src/errors/E89-fn-ptr-array.syntran)
 
+### E90 -- fn-ptr-struct-member
+
+Fn pointers cannot be struct members.
+
+[Example](../src/tests/test-src/errors/E90-fn-ptr-struct-member.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

@@ -105,6 +105,7 @@ module syntran__errors_m
 		EC_FN_PTR_UNSUPPORTED = "E87", &
 		EC_NOT_CALLABLE = "E88", &
 		EC_FN_PTR_ARRAY = "E89", &
+		EC_FN_PTR_STRUCT_MEMBER = "E90", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -368,6 +369,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_FN_PTR_UNSUPPORTED)
 	call codes%push(EC_NOT_CALLABLE)
 	call codes%push(EC_FN_PTR_ARRAY)
+	call codes%push(EC_FN_PTR_STRUCT_MEMBER)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1039,6 +1041,21 @@ function err_fn_ptr_array(context, span, elem) result(err)
 		//underline(context, span)//" fn pointer in array literal"//color_reset
 
 end function err_fn_ptr_array
+
+!===============================================================================
+
+function err_fn_ptr_struct_member(context, span, mem_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name
+	err = err_pre(EC_FN_PTR_STRUCT_MEMBER) &
+		//'struct member `'//mem_name//'` is a fn pointer.  ' &
+		//'Fn pointers cannot be struct members' &
+		//underline(context, span)//" fn pointer in struct member"//color_reset
+
+end function err_fn_ptr_struct_member
 
 !===============================================================================
 

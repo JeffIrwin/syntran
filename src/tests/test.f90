@@ -3551,7 +3551,6 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-29.syntran', quiet) == '720', &
 			interpret_file(path//'test-30.syntran', quiet) == '36', &
 			interpret_file(path//'test-31.syntran', quiet) == '0', &
-			interpret_file(path//'test-32.syntran', quiet) == '10', &
 			interpret_file(path//'test-33.syntran', quiet) == &
 				'fn(i32): i32|fn()|fn([i32; :]): i32', &
 			.false.  & ! so I don't have to bother w/ trailing commas
@@ -6066,11 +6065,22 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags( &
 				'fn dbl(n: i32): i32 { return 2 * n; } let a = [dbl; 3];'), &
 				EC_FN_PTR_ARRAY), &
-			! positive: a fn pointer stored in a struct member is fine, no E89
-			.not. diag_has_code(get_diags( &
+
+			! E90: fn pointers cannot be struct members either (the member
+			! dict's overwrite path on struct redeclaration -- every struct is
+			! redeclared on the parser's 2nd pass -- deep-copies/destroys the
+			! member's value_t, and for a fn-pointer member that value_t has
+			! real nested fn_params(:)/fn_ret content, which segfaults via
+			! gfortran's auto-generated deep deallocation on some platforms,
+			! e.g. musl/alpine; caught here instead of crashing)
+			diag_has_code(get_diags( &
 				'fn dbl(n: i32): i32 { return 2 * n; } ' // &
-				'struct S { f: fn(i32): i32 } let s = S{f = dbl};'), &
-				EC_FN_PTR_ARRAY), &
+				'struct S { f: fn(i32): i32 }'), &
+				EC_FN_PTR_STRUCT_MEMBER), &
+			! positive: a plain (non-fn-pointer) struct member is unaffected
+			.not. diag_has_code(get_diags( &
+				'struct S { x: i32 }'), &
+				EC_FN_PTR_STRUCT_MEMBER), &
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
@@ -6494,7 +6504,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E89-fn-ptr-array.syntran'), &
 				EC_FN_PTR_ARRAY, P//'E89-fn-ptr-array.syntran', 9, 10, 3), &
 			diag_count_code(get_diags_file(P//'E89-fn-ptr-array.syntran'), &
-				EC_FN_PTR_ARRAY) == 1 &
+				EC_FN_PTR_ARRAY) == 1, &
+			diag_loc_ok(get_diags_file(P//'E90-fn-ptr-struct-member.syntran'), &
+				EC_FN_PTR_STRUCT_MEMBER, P//'E90-fn-ptr-struct-member.syntran', 11, 5, 12), &
+			diag_count_code(get_diags_file(P//'E90-fn-ptr-struct-member.syntran'), &
+				EC_FN_PTR_STRUCT_MEMBER) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

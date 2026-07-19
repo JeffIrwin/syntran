@@ -977,7 +977,7 @@ Limitations of the current implementation:
   not a more general expression like `arr[i](...)`.
 - There are no closures or anonymous (lambda) functions; only a named,
   already-declared `fn` can be pointed to.
-- Fn pointers cannot be stored in an array (`E89`).  A struct member is fine.
+- Fn pointers cannot be stored in an array (`E89`) or a struct member (`E90`).
 
 ## Strings, printing, and file output
 
