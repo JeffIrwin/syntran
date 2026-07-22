@@ -5156,6 +5156,49 @@ subroutine unit_test_methods(npass, nfail)
 				//'let w=W{c=C{n=1}};' &
 				//'w.get_c().inc();'), EC_MUTABLE_METHOD_ON_TEMP), &
 
+			! --- self-method calls: a bare name inside a method body that
+			! isn't a free fn resolves to a call on the implicit self, e.g.
+			! `inc()` -> `self.inc()` ---
+
+			! sibling mutating method called from another method
+			eval('struct C{n:i32, fn inc(){n+=1;} fn inc2(){inc();inc();}}' &        ! 45
+				//'let c=C{n=0}; c.inc2(); return c.n;' &
+				, quiet) == '2', &
+
+			! field read + sibling method call in the same method body
+			eval('struct C{n:i32,step:i32, fn inc(){n+=step;}' &                     ! 46
+				//'fn inc_twice():i32{inc();inc();return n;}}' &
+				//'let c=C{n=0,step=3}; return c.inc_twice();' &
+				, quiet) == '6', &
+
+			! direct recursion: a method calling itself
+			eval('struct C{n:i32, fn dec_to_zero(){if n>0{n-=1;dec_to_zero();}}}' &   ! 47
+				//'let c=C{n=5}; c.dec_to_zero(); return c.n;' &
+				, quiet) == '0', &
+
+			! forward reference: method `a` (declared first) calls method `b`
+			! (declared later in the same struct)
+			eval('struct C{n:i32, fn a(){b();} fn b(){n+=10;}}' &                     ! 48
+				//'let c=C{n=0}; c.a(); return c.n;' &
+				, quiet) == '10', &
+
+			! a free fn takes precedence over a same-named sibling method
+			eval('fn foo():i32{return 100;}' &                                       ! 49
+				//'struct C{n:i32, fn foo(){n+=1;} fn caller():i32{return foo();}}' &
+				//'let c=C{n=0}; return c.caller();' &
+				, quiet) == '100', &
+
+			! const method calling a const sibling method is allowed
+			eval('struct C{n:i32, const fn get():i32{return n;}' &                    ! 50
+				//'const fn get2():i32{return get();}}' &
+				//'let c=C{n=7}; return c.get2();' &
+				, quiet) == '7', &
+
+			! error: const method calling a mutable sibling method
+			diag_has_code(get_diags( &                                               ! 51
+				'struct C{n:i32, fn inc(){n+=1;} const fn bad():i32{inc();return n;}}'), &
+				EC_CONST_ASSIGN), &
+
 			.false. &
 		]
 

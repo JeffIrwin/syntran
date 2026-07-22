@@ -30,23 +30,23 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		lookup_name, display_name
 
 	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, slot
-	integer :: var_io, var_id_index
+	integer :: var_io, var_id_index, method_slot, method_fn_id
 
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
 		arg_is_ref, is_ok, is_const_var, var_is_loc
 
-	type(fn_t), pointer :: fn
+	type(fn_t), pointer :: fn, method_fn
 
 	type(integer_vector_t) :: pos_args
 	type(logical_vector_t) :: is_ref
 
-	type(syntax_node_t) :: arg
+	type(syntax_node_t) :: arg, self_receiver
 	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp
+	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp, self_token
 
 	type(text_span_t) :: span
 
-	type(value_t) :: param_val, var_val
+	type(value_t) :: param_val, var_val, self_val
 
 	!print *, ''
 	!print *, 'parse_fn_call'
@@ -274,6 +274,51 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 				return
 
+			end if
+
+		end if
+
+		! Bare-name self-method fallback: inside a method body, a bare call
+		! `foo(args)` that isn't a free fn or fn-pointer var may still be a
+		! sibling method of the struct whose method is being parsed, called
+		! implicitly on self, e.g. `push(x)` from inside another method
+		! resolves to `self.push(x)`.  Free fns/fn-pointer vars take
+		! precedence (checked above); this is only a fallback.  Mirrors the
+		! mangled-name lookup in parse_dot's method-call branch
+		! (parse_expr.f90): methods are registered under "0StructName::method"
+		if (.not. present(module_prefix) .and. parser%in_method) then
+
+			method_slot = parser%fns%find( &
+				"0" // unqualified_name(parser%method_struct_name) // "::" // identifier_%text)
+
+			if (method_slot /= 0) then
+				method_fn    => parser%fns%get(method_slot)
+				method_fn_id = parser%fns%id_at(method_slot)
+
+				! Const receiver enforcement: a const method may not call a
+				! mutable sibling method.  Self is always a bound local (never
+				! a temporary fn-return value), so only this check -- not the
+				! mutable-method-on-temp check in parse_dot -- applies here
+				if (.not. method_fn%is_const_method .and. parser%in_const_method) then
+					span = new_span(identifier_%pos, len(identifier_%text))
+					call parser%diagnostics%push(err_const_assign( &
+						parser%context(), span, "self"))
+				end if
+
+				! Synthesize the implicit self receiver: a name_expr bound to
+				! the "0self" local inserted in parse_method_declaration
+				self_token         = identifier_
+				self_token%text    = "0self"
+				self_val%type      = struct_type
+				self_val%struct_name = parser%method_struct_name
+				call new_name_expr(self_token, self_val, self_receiver)
+				self_receiver%id_index = parser%self_loc_id
+				self_receiver%is_loc   = .true.
+
+				call build_method_call_node(parser, fn_call, self_receiver, &
+					method_fn, method_fn_id, identifier_, args, is_ref, &
+					pos_args, lparen%pos, rparen%pos)
+				return
 			end if
 
 		end if
@@ -1138,9 +1183,11 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	parser%self_loc_id = parser%num_locs
 
 	! Set method parsing context so field names resolve to dot_expr("0self", field)
+	! (and bare calls resolve to sibling self-method calls, c.f. parse_fn_call)
 	parser%in_method = .true.
 	parser%in_const_method = is_const
 	parser%method_struct = struct
+	parser%method_struct_name = struct_name
 
 	if (parser%current_kind() /= lparen_token) then
 		parser%in_method = .false.

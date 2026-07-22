@@ -937,6 +937,113 @@ end subroutine parse_name_expr
 
 !===============================================================================
 
+module subroutine build_method_call_node(parser, node, receiver, &
+		method_fn, method_fn_id, identifier, call_args, call_is_ref, &
+		pos_args, lparen_pos, rparen_pos)
+
+	! Validate explicit args against method_fn's signature and build the
+	! method_call_expr `node`, with `receiver` inserted as the implicit
+	! by-ref self arg.  Shared by parse_dot (`recv.method()`) and
+	! parse_fn_call's self-method fallback (bare `method()` inside another
+	! method of the same struct)
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(out) :: node
+	type(syntax_node_t), intent(in) :: receiver
+	type(fn_t), pointer, intent(in) :: method_fn
+	integer, intent(in) :: method_fn_id
+	type(syntax_token_t), intent(in) :: identifier
+	type(syntax_node_vector_t), intent(in) :: call_args
+	type(logical_vector_t), intent(in) :: call_is_ref
+	type(integer_vector_t), intent(in) :: pos_args
+	integer, intent(in) :: lparen_pos, rparen_pos
+
+	!********
+
+	integer :: i, method_i
+
+	character(len = :), allocatable :: param_name
+
+	logical :: param_is_ref, param_is_const_ref
+
+	type(text_span_t) :: span
+
+	type(value_t) :: param_val
+
+	! Validate explicit arg count.
+	! method_fn%params holds only explicit params (self is NOT included there).
+	! method_fn%node%params / is_ref / is_const_ref include self at index 1.
+	if (allocated(method_fn%node)) then
+		if (allocated(method_fn%params)) then
+			if (size(method_fn%params) /= call_args%len_) then
+				span = new_span(lparen_pos, rparen_pos - lparen_pos + 1)
+				call parser%diagnostics%push( &
+					err_bad_arg_count(parser%context(), &
+					span, identifier%text, size(method_fn%params), call_args%len_))
+				node%val%type = unknown_type
+				return
+			end if
+		else if (call_args%len_ /= 0) then
+			span = new_span(lparen_pos, rparen_pos - lparen_pos + 1)
+			call parser%diagnostics%push( &
+				err_bad_arg_count(parser%context(), &
+				span, identifier%text, 0, call_args%len_))
+			node%val%type = unknown_type
+			return
+		end if
+
+		! Validate each explicit arg.
+		! node%is_ref/is_const_ref index i+1 because self is at index 1.
+		! fn%params and fn%param_names index i (only explicit params).
+		do i = 1, call_args%len_
+			param_val  = method_fn%params(i)
+			param_name = method_fn%param_names%v(i)%s
+
+			param_is_ref       = .false.
+			param_is_const_ref = .false.
+			param_is_ref = method_fn%node%is_ref(i + 1)
+			if (allocated(method_fn%node%is_const_ref)) &
+				param_is_const_ref = method_fn%node%is_const_ref(i + 1)
+
+			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
+			call check_call_arg(parser, call_args%v(i), call_is_ref%v(i), span, &
+				identifier%text, i - 1, param_val, param_name, &
+				param_is_ref, param_is_const_ref)
+		end do
+	end if
+
+	! Build method_call_expr node
+	node%kind       = method_call_expr
+	node%identifier = identifier
+	node%id_index   = method_fn_id
+	node%val        = method_fn%type
+
+	! args: receiver first, then explicit args
+	allocate(node%args(1 + call_args%len_))
+	node%args(1) = receiver
+	do method_i = 1, call_args%len_
+		node%args(1 + method_i) = call_args%v(method_i)
+	end do
+
+	! is_ref: self always by-ref, explicit args by call-site marker
+	allocate(node%is_ref(1 + call_args%len_))
+	node%is_ref(1) = .true.
+	do method_i = 1, call_args%len_
+		node%is_ref(1 + method_i) = call_is_ref%v(method_i)
+	end do
+
+	! Copy fn body and params from the method's fn node
+	if (allocated(method_fn%node)) then
+		allocate(node%body)
+		node%body     = method_fn%node%body
+		node%params   = method_fn%node%params
+		node%num_locs = method_fn%node%num_locs
+	end if
+
+end subroutine build_method_call_node
+
+!===============================================================================
+
 recursive module subroutine parse_dot(parser, expr)
 
 	class(parser_t), target :: parser
@@ -945,12 +1052,11 @@ recursive module subroutine parse_dot(parser, expr)
 
 	!********
 
-	integer :: io, struct_id, member_id, pos0, pos1, method_i, method_fn_id, method_io, i, method_slot
+	integer :: io, struct_id, member_id, pos0, pos1, method_fn_id, method_io, method_slot
 
-	logical :: call_arg_is_ref, is_ok, param_is_ref, param_is_const_ref, &
-		is_const_var, is_const_receiver
+	logical :: call_arg_is_ref, is_ok, is_const_var, is_const_receiver
 
-	character(len = :), allocatable :: exp_type, act_type, param_name
+	character(len = :), allocatable :: exp_type, act_type
 
 	type(fn_t), pointer :: method_fn
 
@@ -968,7 +1074,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 	type(text_span_t) :: span
 
-	type(value_t) :: member, param_val
+	type(value_t) :: member
 
 	if (parser%current_kind() /= dot_token) return
 
@@ -1095,84 +1201,15 @@ recursive module subroutine parse_dot(parser, expr)
 
 		call parser%match(rparen_token, rparen_)
 
-		! Validate explicit arg count.
-		! method_fn%params holds only explicit params (self is NOT included there).
-		! method_fn%node%params / is_ref / is_const_ref include self at index 1.
-		if (allocated(method_fn%node)) then
-			if (allocated(method_fn%params)) then
-				if (size(method_fn%params) /= call_args%len_) then
-					span = new_span(lparen_%pos, rparen_%pos - lparen_%pos + 1)
-					call parser%diagnostics%push( &
-						err_bad_arg_count(parser%context(), &
-						span, identifier%text, size(method_fn%params), call_args%len_))
-					expr%val%type = unknown_type
-					return
-				end if
-			else if (call_args%len_ /= 0) then
-				span = new_span(lparen_%pos, rparen_%pos - lparen_%pos + 1)
-				call parser%diagnostics%push( &
-					err_bad_arg_count(parser%context(), &
-					span, identifier%text, 0, call_args%len_))
-				expr%val%type = unknown_type
-				return
-			end if
-
-			! Validate each explicit arg.
-			! node%is_ref/is_const_ref index i+1 because self is at index 1.
-			! fn%params and fn%param_names index i (only explicit params).
-			do i = 1, call_args%len_
-				param_val  = method_fn%params(i)
-				param_name = method_fn%param_names%v(i)%s
-
-				param_is_ref       = .false.
-				param_is_const_ref = .false.
-				param_is_ref = method_fn%node%is_ref(i + 1)
-				if (allocated(method_fn%node%is_const_ref)) &
-					param_is_const_ref = method_fn%node%is_const_ref(i + 1)
-
-				span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-				call check_call_arg(parser, call_args%v(i), call_is_ref%v(i), span, &
-					identifier%text, i - 1, param_val, param_name, &
-					param_is_ref, param_is_const_ref)
-			end do
-		end if
-
-		! Build method_call_expr node in expr
-		expr%kind       = method_call_expr
-		expr%identifier = identifier
-		expr%id_index   = method_fn_id
-		expr%val        = method_fn%type
-
-		! args: receiver first, then explicit args
-		if (allocated(expr%args))        deallocate(expr%args)
-		if (allocated(expr%is_ref))      deallocate(expr%is_ref)
-		if (allocated(expr%body))        deallocate(expr%body)
-		! The receiver's subscripts (e.g. a[0]) live in receiver_save / args(1).
-		! Clear them from the method node itself so they are not mistaken for
-		! post-call subscripts on the method's return value.
-		if (allocated(expr%lsubscripts)) deallocate(expr%lsubscripts)
-		if (allocated(expr%usubscripts)) deallocate(expr%usubscripts)
-		if (allocated(expr%ssubscripts)) deallocate(expr%ssubscripts)
-		allocate(expr%args(1 + call_args%len_))
-		expr%args(1) = receiver_save
-		do method_i = 1, call_args%len_
-			expr%args(1 + method_i) = call_args%v(method_i)
-		end do
-
-		! is_ref: self always by-ref, explicit args by call-site marker
-		allocate(expr%is_ref(1 + call_args%len_))
-		expr%is_ref(1) = .true.
-		do method_i = 1, call_args%len_
-			expr%is_ref(1 + method_i) = call_is_ref%v(method_i)
-		end do
-
-		! Copy fn body and params from the method's fn node
-		if (allocated(method_fn%node)) then
-			allocate(expr%body)
-			expr%body     = method_fn%node%body
-			expr%params   = method_fn%node%params
-			expr%num_locs = method_fn%node%num_locs
-		end if
+		! Validate args and build the method_call_expr node in expr.  expr is
+		! passed as the intent(out) `node` arg here, so its old (receiver)
+		! contents -- including any subscripts on the receiver, now saved in
+		! receiver_save -- are cleared automatically rather than needing
+		! explicit deallocation.
+		call build_method_call_node(parser, expr, receiver_save, method_fn, &
+			method_fn_id, identifier, call_args, call_is_ref, pos_args, &
+			lparen_%pos, rparen_%pos)
+		if (expr%val%type == unknown_type) return
 
 		call parser%parse_dot(expr)
 		return

@@ -71,6 +71,7 @@ module syntran__parse_m
 		logical :: in_const_method = .false.
 		integer :: self_loc_id = 0     ! loc slot index of "0self"
 		type(struct_t) :: method_struct  ! struct whose method is being parsed
+		character(len = :), allocatable :: method_struct_name  ! name of method_struct
 
 		! Pass index.  0 on first pass while getting fn signatures, then 1 on
 		! final (second) pass
@@ -189,6 +190,28 @@ module syntran__parse_m
 			type(value_t), intent(in) :: param_val
 			logical, intent(in) :: param_is_ref, param_is_const_ref
 		end subroutine check_call_arg
+
+		! Shared by parse_dot (explicit `recv.method()`) and parse_fn_call's
+		! self-method fallback (bare `method()` inside another method of the
+		! same struct): validates explicit args against method_fn's signature
+		! and builds the method_call_expr node w/ `receiver` as the implicit
+		! by-ref self arg.  Sets node%val%type = unknown_type on a validation
+		! error (arg count/type mismatch); callers must check for that and
+		! return without further processing (e.g. skip a trailing parse_dot)
+		module subroutine build_method_call_node(parser, node, receiver, &
+				method_fn, method_fn_id, identifier, call_args, call_is_ref, &
+				pos_args, lparen_pos, rparen_pos)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: node
+			type(syntax_node_t), intent(in) :: receiver
+			type(fn_t), pointer, intent(in) :: method_fn
+			integer, intent(in) :: method_fn_id
+			type(syntax_token_t), intent(in) :: identifier
+			type(syntax_node_vector_t), intent(in) :: call_args
+			type(logical_vector_t), intent(in) :: call_is_ref
+			type(integer_vector_t), intent(in) :: pos_args
+			integer, intent(in) :: lparen_pos, rparen_pos
+		end subroutine build_method_call_node
 
 	end interface
 
