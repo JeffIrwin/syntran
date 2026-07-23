@@ -520,7 +520,7 @@ module function str_char_slice(s, node, state, isub) result(out)
 
 	!********
 
-	integer(kind = 8) :: il, iu, step, i8
+	integer(kind = 8) :: il, iu, step, i8, j8, n_out
 
 	! str_slice_bounds() handles scalar/range/step/all subscript kinds
 	! uniformly (0-based, upper-exclusive in the direction of step), so a
@@ -532,11 +532,24 @@ module function str_char_slice(s, node, state, isub) result(out)
 		return
 	end if
 
-	out = ""
+	! Allocate `out` once at its final length and fill by index.  Growing it
+	! one character at a time with `out = out // s(i8+1:i8+1)` reallocates and
+	! copies the whole string on every iteration, making a length-L slice
+	! O(L^2) -- disastrous for string-heavy hot loops (e.g. repeated slicing
+	! in a tight loop over a long string).
+	if (step > 0) then
+		n_out = max(0_8, (iu - il + step - 1) / step)
+	else
+		n_out = max(0_8, (il - iu - step - 1) / (-step))
+	end if
+	allocate(character(len = n_out) :: out)
+
 	i8 = il
+	j8 = 1
 	do while ((step > 0 .and. i8 < iu) .or. (step < 0 .and. i8 > iu))
-		out = out // s(i8+1 : i8+1)
+		out(j8:j8) = s(i8+1 : i8+1)
 		i8 = i8 + step
+		j8 = j8 + 1
 	end do
 
 end function str_char_slice
