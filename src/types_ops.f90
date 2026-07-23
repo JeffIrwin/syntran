@@ -902,66 +902,35 @@ end function array_to_scalar_type
 
 !===============================================================================
 
-module function type_name(a) result(str_)
-	! c.f. lookup_type() which is mostly the inverse of this
+recursive module function type_name(a) result(str_)
+	! c.f. lookup_type() which is mostly the inverse of this.
+	!
+	! Delegates to value.f90's value_type_name(): that's the single source of
+	! truth for value-type-name rendering (it also needs this same logic to
+	! render a fn-pointer's param/return types), and syntran__types_m already
+	! depends on syntran__value_m, so this call direction is free
 	type(value_t), intent(in) :: a
-	character(len = :), allocatable :: str_, array_name
+	character(len = :), allocatable :: str_
 
-	if (a%type == struct_type) then
-		str_ = a%struct_name
-	else if (a%type == array_type) then
-
-		if (a%array%type == struct_type) then
-			array_name = a%struct_name
-		else
-			array_name = type_name_primitive(a%array%type)
-		end if
-
-		str_ = "["//array_name//"; "
-
-		! Repeat ":, " appropriately
-		str_ = str_//repeat(":, ", max(a%array%rank - 1, 0))
-		str_ = str_//":]"
-
-	else
-		str_ = type_name_primitive(a%type)
-	end if
+	str_ = value_type_name(a)
 
 end function type_name
 
 !===============================================================================
 
 module function type_name_primitive(itype) result(str_)
-	! c.f. lookup_type() which is mostly the inverse of this
+	! c.f. lookup_type() which is mostly the inverse of this.  Delegates to
+	! value.f90's value_type_name_primitive() -- c.f. type_name() above
 	integer, intent(in) :: itype
 	character(len = :), allocatable :: str_
 
-	select case (itype)
-	case (i32_type)
-		str_ = "i32"
-	case (i64_type)
-		str_ = "i64"
-	case (f32_type)
-		str_ = "f32"
-	case (f64_type)
-		str_ = "f64"
-	case (str_type)
-		str_ = "str"
-	case (bool_type)
-		str_ = "bool"
-	case (any_type)
-		str_ = "any"
-	case (void_type)
-		str_ = "void"
-	case default
-		str_ = "unknown"
-	end select
+	str_ = value_type_name_primitive(itype)
 
 end function type_name_primitive
 
 !===============================================================================
 
-module integer function types_match(a, b) result(io)
+recursive module integer function types_match(a, b) result(io)
 
 	! Check if the type of value `a` matches value `b`. Arguments are not
 	! transitive!  If `a` is of value any_type, enforcement is less strict.
@@ -972,6 +941,8 @@ module integer function types_match(a, b) result(io)
 	type(value_t), intent(in) :: a, b
 
 	!****************
+
+	integer :: i, na, nb
 
 	io = TYPE_MATCH
 
@@ -1015,6 +986,38 @@ module integer function types_match(a, b) result(io)
 			end if
 		end if
 
+	end if
+
+	if (a%type == fn_type) then
+		! Fn-pointer signature match: same param count, each param type
+		! matching, and matching return type.  No implicit any_type looseness
+		! here beyond what the top-level check above already allows
+		na = 0
+		nb = 0
+		if (allocated(a%fn_params)) na = size(a%fn_params)
+		if (allocated(b%fn_params)) nb = size(b%fn_params)
+
+		if (na /= nb) then
+			io = TYPE_MISMATCH
+			return
+		end if
+
+		do i = 1, na
+			if (types_match(a%fn_params(i), b%fn_params(i)) /= TYPE_MATCH) then
+				io = TYPE_MISMATCH
+				return
+			end if
+		end do
+
+		if (allocated(a%fn_ret) .and. allocated(b%fn_ret)) then
+			if (types_match(a%fn_ret, b%fn_ret) /= TYPE_MATCH) then
+				io = TYPE_MISMATCH
+				return
+			end if
+		else if (allocated(a%fn_ret) .neqv. allocated(b%fn_ret)) then
+			io = TYPE_MISMATCH
+			return
+		end if
 	end if
 
 end function types_match

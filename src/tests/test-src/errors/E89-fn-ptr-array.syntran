@@ -1,0 +1,9 @@
+// E89: fn-ptr-array
+// Arrays of fn pointers are not supported
+
+fn dbl(n: i32): i32
+{
+	return 2 * n;
+}
+
+let a = [dbl, dbl];

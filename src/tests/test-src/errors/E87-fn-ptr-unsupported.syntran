@@ -1,0 +1,4 @@
+// E87: fn-ptr-unsupported
+// Cannot take a function pointer to an intrinsic function
+
+let f = println;

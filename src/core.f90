@@ -31,6 +31,20 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - add sample script for fn pointer. integrator would be good
+	!  - fn pointer (callback) improvements:
+	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
+	!      intrinsic function, a struct method, or a user-defined function with
+	!      any `&`-reference parameter (E87)
+	!      + no reason to ban these afaik except it's more work to implement
+	!      + overloaded intrinsics might be tricky
+	!    * test callbacks taking a struct arg and/or struct return val
+	!    * can a fn return a fn?
+	!    * can arrays/structs contain a fn? these points are less about
+	!      callbacks specifically and more generally about fns as values, which
+	!      is the can of worms opened by callbacks
+	!      + structs of fns work, arrays do not
+	!    * closures and anonymous (lambda) fns?
 	!  - cleanup misc files from top level of repo folder
 	!    * keep 1 or 2 Dockerfiles, move others
 	!    * move most *.sh scripts

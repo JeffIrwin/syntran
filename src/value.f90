@@ -45,6 +45,13 @@ module syntran__value_m
 		real   (kind = 4) :: f32
 		real   (kind = 8) :: f64
 
+		! Fn pointer runtime dispatch key: id_index into fns%fns()/prog%fn_entry()
+		! for the target user-defined fn.  Only meaningful when value_t%type ==
+		! fn_type.  Lives in this POD scalar_t so value_t%sca copies (both
+		! value_copy's `dst%sca = src%sca` and value_move's default-case scalar
+		! copy) carry it for free
+		integer           :: fn_index = 0
+
 		contains
 			procedure :: to_str => scalar_to_str
 
@@ -125,6 +132,15 @@ module syntran__value_m
 		! struct_name above remains the display name and may be re-qualified per
 		! import path
 		character(len = :), allocatable :: struct_cookie
+
+		! Fn pointer signature, used when value%type == fn_type.  fn_params(i)
+		! and fn_ret carry only the *type* of each param/return (like fn_t%params
+		! /fn_t%type in types.f90), not runtime values -- used for type-checking
+		! calls through a fn pointer and for rendering the signature in
+		! type_name().  Self-referential value_t is fine (c.f. struct(:) above);
+		! only two types containing *each other* breaks gfortran
+		type(value_t), allocatable :: fn_params(:)
+		type(value_t), allocatable :: fn_ret
 
 		contains
 			procedure :: to_str => value_to_str
@@ -353,6 +369,11 @@ recursive subroutine value_move(src, dst)
 	case (file_type)
 		call move_alloc(src%file_, dst%file_)
 
+	case (fn_type)
+		dst%sca = src%sca   ! fn_index rides along here
+		if (allocated(src%fn_params)) call move_alloc(src%fn_params, dst%fn_params)
+		if (allocated(src%fn_ret))    call move_alloc(src%fn_ret,    dst%fn_ret)
+
 	case default
 		! POD copy: scalar_t now contains only bool/i32/i64/f32/f64 — cheap.
 		dst%sca = src%sca
@@ -573,6 +594,23 @@ recursive subroutine value_copy(dst, src)
 		deallocate(dst%struct)
 	end if
 
+	if (allocated(src%fn_params)) then
+		if (allocated(dst%fn_params)) deallocate(dst%fn_params)
+		allocate(dst%fn_params( size(src%fn_params) ))
+		do i = 1, size(src%fn_params)
+			call value_copy(dst%fn_params(i), src%fn_params(i))
+		end do
+	else if (allocated(dst%fn_params)) then
+		deallocate(dst%fn_params)
+	end if
+
+	if (allocated(src%fn_ret)) then
+		if (.not. allocated(dst%fn_ret)) allocate(dst%fn_ret)
+		call value_copy(dst%fn_ret, src%fn_ret)
+	else if (allocated(dst%fn_ret)) then
+		deallocate(dst%fn_ret)
+	end if
+
 end subroutine value_copy
 
 !===============================================================================
@@ -645,6 +683,18 @@ recursive subroutine value_destroy(val)
 			call value_destroy(val%struct(i))
 		end do
 		deallocate(val%struct)
+	end if
+
+	if (allocated(val%fn_params)) then
+		do i = 1, size(val%fn_params)
+			call value_destroy(val%fn_params(i))
+		end do
+		deallocate(val%fn_params)
+	end if
+
+	if (allocated(val%fn_ret)) then
+		call value_destroy(val%fn_ret)
+		deallocate(val%fn_ret)
 	end if
 
 end subroutine value_destroy
@@ -1376,12 +1426,113 @@ recursive function value_to_str(val) result(ans)
 				ans = "{file_unit: <unset>}"
 			end if
 
+		case (fn_type)
+			ans = value_type_name(val)
+
 		case default
 			ans = val%sca%to_str(val%type)
 
 	end select
 
 end function value_to_str
+
+!===============================================================================
+
+recursive function value_type_name(a) result(str_)
+
+	! Single source of truth for rendering a value_t's type as user-facing
+	! text, e.g. "i32", "[f64; :]", "MyStruct", "fn(i32): i32".  Used both for
+	! printing a fn-pointer value (value_to_str's fn_type case, below) and --
+	! via types_ops.f90's type_name(), which just delegates here -- for
+	! diagnostic messages (bad-arg-type, etc.).  c.f. lookup_type() which is
+	! mostly the inverse of this
+	!
+	! This lives in value.f90, not types_ops.f90, so that fn_type's signature
+	! rendering (which needs this same logic for its param/return types) can
+	! call it directly: syntran__types_m depends on syntran__value_m, not the
+	! other way around, so only this direction avoids a circular dependency
+
+	type(value_t), intent(in) :: a
+
+	character(len = :), allocatable :: str_
+
+	!********
+
+	character(len = :), allocatable :: array_name
+
+	integer :: i
+
+	if (a%type == struct_type) then
+		str_ = a%struct_name
+	else if (a%type == array_type) then
+
+		if (a%array%type == struct_type) then
+			array_name = a%struct_name
+		else
+			array_name = value_type_name_primitive(a%array%type)
+		end if
+
+		str_ = "["//array_name//"; "
+
+		! Repeat ":, " appropriately
+		str_ = str_//repeat(":, ", max(a%array%rank - 1, 0))
+		str_ = str_//":]"
+
+	else if (a%type == fn_type) then
+
+		str_ = "fn("
+		if (allocated(a%fn_params)) then
+			do i = 1, size(a%fn_params)
+				str_ = str_//value_type_name(a%fn_params(i))
+				if (i < size(a%fn_params)) str_ = str_//", "
+			end do
+		end if
+		str_ = str_//")"
+
+		if (allocated(a%fn_ret)) then
+			if (a%fn_ret%type /= void_type) str_ = str_//": "//value_type_name(a%fn_ret)
+		end if
+
+	else
+		str_ = value_type_name_primitive(a%type)
+	end if
+
+end function value_type_name
+
+!===============================================================================
+
+function value_type_name_primitive(itype) result(str_)
+	! Primitive (non-struct/array/fn) type-name mapping.  c.f. lookup_type()
+	! which is mostly the inverse of this
+
+	integer, intent(in) :: itype
+
+	character(len = :), allocatable :: str_
+
+	select case (itype)
+	case (i32_type)
+		str_ = "i32"
+	case (i64_type)
+		str_ = "i64"
+	case (f32_type)
+		str_ = "f32"
+	case (f64_type)
+		str_ = "f64"
+	case (str_type)
+		str_ = "str"
+	case (bool_type)
+		str_ = "bool"
+	case (any_type)
+		str_ = "any"
+	case (void_type)
+		str_ = "void"
+	case (fn_type)
+		str_ = "fn"
+	case default
+		str_ = "unknown"
+	end select
+
+end function value_type_name_primitive
 
 !===============================================================================
 

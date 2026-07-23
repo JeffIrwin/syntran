@@ -1,0 +1,16 @@
+// Array-typed parameter in a fn-pointer signature
+
+fn sum_arr(v: [i32; :]): i32
+{
+	let s = 0;
+	for i in [0: size(v, 0)]
+		s = s + v[i];
+	return s;
+}
+
+fn apply(f: fn([i32; :]): i32, v: [i32; :]): i32
+{
+	return f(v);
+}
+
+return apply(sum_arr, [1, 2, 3, 4, 5]);  // 15

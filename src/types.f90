@@ -634,7 +634,7 @@ module syntran__types_m
 			integer :: scalar_type_
 		end function array_to_scalar_type
 
-		module function type_name(a) result(str_)
+		recursive module function type_name(a) result(str_)
 			type(value_t), intent(in) :: a
 			character(len = :), allocatable :: str_
 		end function type_name
@@ -644,7 +644,7 @@ module syntran__types_m
 			character(len = :), allocatable :: str_
 		end function type_name_primitive
 
-		module integer function types_match(a, b) result(io)
+		recursive module integer function types_match(a, b) result(io)
 			type(value_t), intent(in) :: a, b
 		end function types_match
 

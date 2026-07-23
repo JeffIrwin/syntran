@@ -30,22 +30,23 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		lookup_name, display_name
 
 	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, slot
+	integer :: var_io, var_id_index, method_slot, method_fn_id
 
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
-		arg_is_ref, is_ok, is_const_var
+		arg_is_ref, is_ok, is_const_var, var_is_loc
 
-	type(fn_t), pointer :: fn
+	type(fn_t), pointer :: fn, method_fn
 
 	type(integer_vector_t) :: pos_args
 	type(logical_vector_t) :: is_ref
 
-	type(syntax_node_t) :: arg
+	type(syntax_node_t) :: arg, self_receiver
 	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp
+	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp, self_token
 
 	type(text_span_t) :: span
 
-	type(value_t) :: param_val
+	type(value_t) :: param_val, var_val, self_val
 
 	!print *, ''
 	!print *, 'parse_fn_call'
@@ -208,6 +209,118 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 			fn_call%id_index = 0
 			fn_call%kind = fn_call_expr
 			return
+		end if
+
+		! Not a known fn (this is the final pass, so no forward-reference
+		! concern remains): check if this identifier is instead a local/global
+		! variable of fn_type -- an indirect call through a fn pointer, e.g.
+		! `let f = dbl; f(21);`.  Restricted to plain (unqualified) names in v1
+		if (.not. present(module_prefix)) then
+
+			var_io = exit_failure
+			if (parser%is_loc) then
+				call parser%locs%search(identifier_%text, var_id_index, var_io, var_val)
+				var_is_loc = var_io == exit_success
+			end if
+			if (var_io /= exit_success) then
+				call parser%vars%search(identifier_%text, var_id_index, var_io, var_val)
+				var_is_loc = .false.
+			end if
+
+			if (var_io == exit_success) then
+
+				if (var_val%type /= fn_type) then
+					span = new_span(identifier_%pos, len(identifier_%text))
+					call parser%diagnostics%push( &
+						err_not_callable(parser%context(), &
+						span, identifier_%text, type_name(var_val)))
+					fn_call%val%type = unknown_type
+					return
+				end if
+
+				! Indirect call: dispatch target is resolved at runtime from the
+				! callee variable value (fn_index), not from a parse-time id_index
+				! into a specific fn.  id_index/is_loc here identify the callee
+				! *variable* slot instead -- eval/compile distinguish this via
+				! node%kind == fn_call_ptr_expr
+				fn_call%kind = fn_call_ptr_expr
+				fn_call%id_index = var_id_index
+				fn_call%is_loc = var_is_loc
+
+				allocate(fn_call%is_ref(args%len_))
+				fn_call%is_ref = .false.   ! by-value only in v1
+
+				if (size(var_val%fn_params) /= args%len_) then
+					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+					call parser%diagnostics%push(err_bad_arg_count( &
+						parser%context(), span, identifier_%text, &
+						size(var_val%fn_params), args%len_))
+				else
+					do i = 1, args%len_
+						span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
+						call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
+							identifier_%text, i - 1, var_val%fn_params(i), "", &
+							.false., .false.)
+					end do
+				end if
+
+				fn_call%val = var_val%fn_ret
+
+				! Move args from vector (avoids deep copy)
+				allocate(fn_call%args(args%len_))
+				do i = 1, args%len_
+					call syntax_node_move_into(args%v(i), fn_call%args(i))
+				end do
+
+				return
+
+			end if
+
+		end if
+
+		! Bare-name self-method fallback: inside a method body, a bare call
+		! `foo(args)` that isn't a free fn or fn-pointer var may still be a
+		! sibling method of the struct whose method is being parsed, called
+		! implicitly on self, e.g. `push(x)` from inside another method
+		! resolves to `self.push(x)`.  Free fns/fn-pointer vars take
+		! precedence (checked above); this is only a fallback.  Mirrors the
+		! mangled-name lookup in parse_dot's method-call branch
+		! (parse_expr.f90): methods are registered under "0StructName::method"
+		if (.not. present(module_prefix) .and. parser%in_method) then
+
+			method_slot = parser%fns%find( &
+				"0" // unqualified_name(parser%method_struct_name) // "::" // identifier_%text)
+
+			if (method_slot /= 0) then
+				method_fn    => parser%fns%get(method_slot)
+				method_fn_id = parser%fns%id_at(method_slot)
+
+				! Const receiver enforcement: a const method may not call a
+				! mutable sibling method.  Self is always a bound local (never
+				! a temporary fn-return value), so only this check -- not the
+				! mutable-method-on-temp check in parse_dot -- applies here
+				if (.not. method_fn%is_const_method .and. parser%in_const_method) then
+					span = new_span(identifier_%pos, len(identifier_%text))
+					call parser%diagnostics%push(err_const_assign( &
+						parser%context(), span, "self"))
+				end if
+
+				! Synthesize the implicit self receiver: a name_expr bound to
+				! the "0self" local inserted in parse_method_declaration
+				self_token         = identifier_
+				self_token%text    = "0self"
+				self_val%type      = struct_type
+				self_val%struct_name = parser%method_struct_name
+				call new_name_expr(self_token, self_val, self_receiver)
+				self_receiver%id_index = parser%self_loc_id
+				self_receiver%is_loc   = .true.
+
+				call build_method_call_node(parser, fn_call, self_receiver, &
+					method_fn, method_fn_id, identifier_, args, is_ref, &
+					pos_args, lparen%pos, rparen%pos)
+				return
+			end if
+
 		end if
 
 		span = new_span(identifier_%pos, len(identifier_%text))
@@ -755,7 +868,7 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: itype, i, io, pos0
+	integer :: itype, i, io, pos0, pos_type_beg, pos_type_end
 
 	logical :: overwrite
 
@@ -839,8 +952,33 @@ module subroutine parse_struct_declaration(parser, decl)
 		call pos_mems%push( name%pos )
 		call parser%match(colon_token, colon)
 
+		pos_type_beg = parser%current_pos()
 		call parser%parse_type(type_text, type)
+		pos_type_end = parser%current_pos() - 1
 		!print *, "type = ", type_text
+
+		! Fn-pointer-typed struct members are not supported: a fn-pointer
+		! value's fn_params(:)/fn_ret is a real, self-referential nested
+		! value_t (unlike other member types' plain type-metadata), and
+		! deep-copying/destroying that through the struct member-dict's
+		! overwrite path (2nd parser pass redeclares every struct) segfaults
+		! on some platforms/compilers (e.g. musl/gfortran).  c.f. E89, the
+		! analogous restriction for fn pointers in array literals.
+		!
+		! Pushing the diagnostic alone is NOT enough to avoid the crash:
+		! parsing continues regardless (to collect further diagnostics), so
+		! `type` -- if left as a real fn_type value -- would still flow into
+		! types%push()/struct%vars%insert() below and hit the same crashing
+		! redeclare path when this struct is (as always) reprocessed on the
+		! parser's 2nd pass.  Sanitize it to a harmless placeholder instead;
+		! evaluation is halted regardless once any diagnostic exists
+		if (type%type == fn_type) then
+			span = new_span(pos_type_beg, pos_type_end - pos_type_beg + 1)
+			call parser%diagnostics%push(err_fn_ptr_struct_member( &
+				parser%context(), span, name%text))
+			call value_destroy(type)
+			type%type = unknown_type
+		end if
 
 		call types%push(type)
 		call names%push( name%text )
@@ -1045,9 +1183,11 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	parser%self_loc_id = parser%num_locs
 
 	! Set method parsing context so field names resolve to dot_expr("0self", field)
+	! (and bare calls resolve to sibling self-method calls, c.f. parse_fn_call)
 	parser%in_method = .true.
 	parser%in_const_method = is_const
 	parser%method_struct = struct
+	parser%method_struct_name = struct_name
 
 	if (parser%current_kind() /= lparen_token) then
 		parser%in_method = .false.
@@ -1398,7 +1538,7 @@ end subroutine parse_struct_instance
 
 !===============================================================================
 
-module subroutine parse_type(parser, type_text, type)
+recursive module subroutine parse_type(parser, type_text, type)
 
 	class(parser_t) :: parser
 
@@ -1408,17 +1548,68 @@ module subroutine parse_type(parser, type_text, type)
 
 	!********
 
-	integer :: rank, itype
+	integer :: rank, itype, i
 	integer :: pos0, pos1, pos2
 
-	character(len = :), allocatable :: struct_cookie
+	character(len = :), allocatable :: struct_cookie, param_type_text, ret_type_text
 
 	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
-		double_colon
+		double_colon, fn_kw, lparen, rparen
 
 	type(text_span_t) :: span
 
+	type(value_t) :: param_type, ret_type
+	type(value_vector_t) :: param_types
+
 	pos1 = parser%current_pos()
+
+	if (parser%current_kind() == fn_keyword) then
+
+		! Fn-pointer type: fn(paramtype, paramtype, ...): rettype
+		! Return type defaults to void if the ": rettype" suffix is omitted
+		call parser%match(fn_keyword, fn_kw)
+		type_text = "fn"
+
+		call parser%match(lparen_token, lparen)
+
+		param_types = new_value_vector()
+		do while ( &
+			parser%current_kind() /= rparen_token .and. &
+			parser%current_kind() /= eof_token)
+
+			pos0 = parser%pos
+
+			call parser%parse_type(param_type_text, param_type)
+			call param_types%push(param_type)
+
+			if (parser%current_kind() /= rparen_token) then
+				call parser%match(comma_token, comma)
+			end if
+
+			! Break infinite loop
+			if (parser%pos == pos0) call parser%next(dummy)
+
+		end do
+		call parser%match(rparen_token, rparen)
+
+		type%type = fn_type
+		allocate(type%fn_params( param_types%len_ ))
+		do i = 1, param_types%len_
+			type%fn_params(i) = param_types%v(i)
+		end do
+
+		allocate(type%fn_ret)
+		type%fn_ret%type = void_type
+		if (parser%current_kind() == colon_token) then
+			call parser%match(colon_token, colon)
+			call parser%parse_type(ret_type_text, ret_type)
+			type%fn_ret = ret_type
+		end if
+
+		return
+
+	end if
+
 	if (parser%current_kind() == lbracket_token) then
 
 		! Array param

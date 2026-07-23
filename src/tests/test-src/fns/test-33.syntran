@@ -1,0 +1,25 @@
+// Rendering a fn-pointer value's signature (via str()/println(), which both
+// route through value_to_str()'s fn_type case -> fn_sig_to_str()).  Covers a
+// normal signature, a void/no-param signature, and an array-param signature
+
+fn dbl(n: i32): i32
+{
+	return 2 * n;
+}
+
+fn hello()
+{
+	// Never actually called here -- only its pointer's signature is rendered
+	println("hi");
+}
+
+fn sum_arr(v: [i32; :]): i32
+{
+	return 0;
+}
+
+let f1 = dbl;
+let f2 = hello;
+let f3 = sum_arr;
+
+return str(f1) + "|" + str(f2) + "|" + str(f3);

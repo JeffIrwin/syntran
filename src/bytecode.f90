@@ -311,6 +311,15 @@ module syntran__bytecode_m
 	! Stack after:  [result_array]
 	integer, parameter :: OP_EXPL_ARRAY_NAT = 1239
 
+	! Indirect call through a fn-pointer value.  b = node_pool_idx (fn_call_ptr_expr
+	! node, for nparams via its args(:); is_ref(:) is always all-false in v1).
+	! Unlike OP_CALL, the target fn is not known until runtime: it is resolved
+	! from the fn_index carried by the callee's fn_type value, which is pushed
+	! on top of the (by-value-only) args right before this opcode executes.
+	! Stack before: [arg1]...[argN][callee_fn_value]  (callee at TOS)
+	! Stack after:  [result]
+	integer, parameter :: OP_CALL_PTR = 1240
+
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
 	! Math

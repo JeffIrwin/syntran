@@ -533,6 +533,30 @@ A struct method has the same name as one of the struct's members. Names must be 
 
 [Example](../src/tests/test-src/errors/E86-module-return.syntran)
 
+### E87 -- fn-ptr-unsupported
+
+A function pointer (`fn(...)`-typed value) cannot be taken to an intrinsic function, a struct method, or a user-defined function with any `&`-reference parameter. A fn-pointer signature has no way to express reference-ness, so allowing this would silently drop reference semantics on an indirect call.
+
+[Example](../src/tests/test-src/errors/E87-fn-ptr-unsupported.syntran)
+
+### E88 -- not-callable
+
+A variable that is not a fn-pointer value (`fn(...)` type) was called like a function, e.g. `x(1)` where `x` is an `i32`.
+
+[Example](../src/tests/test-src/errors/E88-not-callable.syntran)
+
+### E89 -- fn-ptr-array
+
+Arrays of fn pointers (e.g. `[dbl, dbl]` where `dbl` is a fn pointer) are not supported. A fn pointer can still be stored in a struct member.
+
+[Example](../src/tests/test-src/errors/E89-fn-ptr-array.syntran)
+
+### E90 -- fn-ptr-struct-member
+
+Fn pointers cannot be struct members.
+
+[Example](../src/tests/test-src/errors/E90-fn-ptr-struct-member.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

@@ -3542,6 +3542,17 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-21.syntran', quiet) == '0', &
 			interpret_file(path//'test-22.syntran', quiet) == '0', &
 			interpret_file(path//'test-23.syntran', quiet) == 'true', &
+			! fn pointers / callbacks
+			interpret_file(path//'test-24.syntran', quiet) == '42', &
+			interpret_file(path//'test-25.syntran', quiet) == '85', &
+			interpret_file(path//'test-26.syntran', quiet) == '50', &
+			interpret_file(path//'test-27.syntran', quiet) == '3', &
+			interpret_file(path//'test-28.syntran', quiet) == '15', &
+			interpret_file(path//'test-29.syntran', quiet) == '720', &
+			interpret_file(path//'test-30.syntran', quiet) == '36', &
+			interpret_file(path//'test-31.syntran', quiet) == '0', &
+			interpret_file(path//'test-33.syntran', quiet) == &
+				'fn(i32): i32|fn()|fn([i32; :]): i32', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5145,6 +5156,49 @@ subroutine unit_test_methods(npass, nfail)
 				//'let w=W{c=C{n=1}};' &
 				//'w.get_c().inc();'), EC_MUTABLE_METHOD_ON_TEMP), &
 
+			! --- self-method calls: a bare name inside a method body that
+			! isn't a free fn resolves to a call on the implicit self, e.g.
+			! `inc()` -> `self.inc()` ---
+
+			! sibling mutating method called from another method
+			eval('struct C{n:i32, fn inc(){n+=1;} fn inc2(){inc();inc();}}' &        ! 45
+				//'let c=C{n=0}; c.inc2(); return c.n;' &
+				, quiet) == '2', &
+
+			! field read + sibling method call in the same method body
+			eval('struct C{n:i32,step:i32, fn inc(){n+=step;}' &                     ! 46
+				//'fn inc_twice():i32{inc();inc();return n;}}' &
+				//'let c=C{n=0,step=3}; return c.inc_twice();' &
+				, quiet) == '6', &
+
+			! direct recursion: a method calling itself
+			eval('struct C{n:i32, fn dec_to_zero(){if n>0{n-=1;dec_to_zero();}}}' &   ! 47
+				//'let c=C{n=5}; c.dec_to_zero(); return c.n;' &
+				, quiet) == '0', &
+
+			! forward reference: method `a` (declared first) calls method `b`
+			! (declared later in the same struct)
+			eval('struct C{n:i32, fn a(){b();} fn b(){n+=10;}}' &                     ! 48
+				//'let c=C{n=0}; c.a(); return c.n;' &
+				, quiet) == '10', &
+
+			! a free fn takes precedence over a same-named sibling method
+			eval('fn foo():i32{return 100;}' &                                       ! 49
+				//'struct C{n:i32, fn foo(){n+=1;} fn caller():i32{return foo();}}' &
+				//'let c=C{n=0}; return c.caller();' &
+				, quiet) == '100', &
+
+			! const method calling a const sibling method is allowed
+			eval('struct C{n:i32, const fn get():i32{return n;}' &                    ! 50
+				//'const fn get2():i32{return get();}}' &
+				//'let c=C{n=7}; return c.get2();' &
+				, quiet) == '7', &
+
+			! error: const method calling a mutable sibling method
+			diag_has_code(get_diags( &                                               ! 51
+				'struct C{n:i32, fn inc(){n+=1;} const fn bad():i32{inc();return n;}}'), &
+				EC_CONST_ASSIGN), &
+
 			.false. &
 		]
 
@@ -5933,6 +5987,16 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('fn f(): i32 { return 1.0; }'), EC_BAD_RET_TYPE), &
 			diag_has_code(get_diags( &
 				'fn f(x: i32): i32 { return x; } let a = f(1.0);'), EC_BAD_ARG_TYPE), &
+			! calling through a fn pointer reuses the same arg-count/type
+			! checks as a direct call (check_call_arg), just against the
+			! pointer's stored signature instead of a fn_t's params
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2*n; } ' // &
+				'fn apply(f: fn(f32): f32, x: f32): f32 { return f(x); } ' // &
+				'apply(dbl, 1.0);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2*n; } let f = dbl; f(1, 2);'), &
+				EC_BAD_ARG_COUNT), &
 			diag_has_code(get_diags('fn f(x: &i32) {} f(1);'), EC_BAD_ARG_VAL), &
 			diag_has_code(get_diags( &
 				'fn f(x: i32) {} let a=1; f(&a);'), EC_BAD_ARG_REF), &
@@ -6014,6 +6078,52 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_count_code(get_diags_file( &
 				'src/tests/test-src/errors/E86-module-return.syntran'), EC_MODULE_RETURN) == 1, &
 			.not. diag_has_code(get_diags('return 1 + 2;'), EC_MODULE_RETURN), &
+
+			! E87: cannot take a function pointer to an intrinsic or to a fn
+			! with any &ref param (a fn-pointer signature has no way to
+			! express ref-ness, so silently allowing this would drop
+			! reference semantics on an indirect call)
+			diag_has_code(get_diags('let f = println;'), EC_FN_PTR_UNSUPPORTED), &
+			diag_has_code(get_diags( &
+				'fn foo(&x: i32): i32 { return x; } let f = foo;'), &
+				EC_FN_PTR_UNSUPPORTED), &
+			! positive: a plain by-value user fn is pointer-able, no E87
+			.not. diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let f = dbl;'), &
+				EC_FN_PTR_UNSUPPORTED), &
+
+			! E88: calling a variable that isn't a fn pointer
+			diag_has_code(get_diags('let x = 3; x(1);'), EC_NOT_CALLABLE), &
+			! positive: calling through an actual fn pointer is fine, no E88
+			.not. diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let f = dbl; f(1);'), &
+				EC_NOT_CALLABLE), &
+
+			! E89: arrays of fn pointers are not supported (eval_array.f90 has
+			! no fn_type case in its per-type storage/copy paths; letting this
+			! through crashes instead of erroring)
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let a = [dbl, dbl];'), &
+				EC_FN_PTR_ARRAY), &
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let a = [dbl; 3];'), &
+				EC_FN_PTR_ARRAY), &
+
+			! E90: fn pointers cannot be struct members either (the member
+			! dict's overwrite path on struct redeclaration -- every struct is
+			! redeclared on the parser's 2nd pass -- deep-copies/destroys the
+			! member's value_t, and for a fn-pointer member that value_t has
+			! real nested fn_params(:)/fn_ret content, which segfaults via
+			! gfortran's auto-generated deep deallocation on some platforms,
+			! e.g. musl/alpine; caught here instead of crashing)
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } ' // &
+				'struct S { f: fn(i32): i32 }'), &
+				EC_FN_PTR_STRUCT_MEMBER), &
+			! positive: a plain (non-fn-pointer) struct member is unaffected
+			.not. diag_has_code(get_diags( &
+				'struct S { x: i32 }'), &
+				EC_FN_PTR_STRUCT_MEMBER), &
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
@@ -6425,7 +6535,23 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E86-module-return.syntran'), &
 				EC_MODULE_RETURN, P//'e86_mod_return.syntran', 8, 2, 6), &
 			diag_count_code(get_diags_file(P//'E86-module-return.syntran'), &
-				EC_MODULE_RETURN) == 1 &
+				EC_MODULE_RETURN) == 1, &
+			diag_loc_ok(get_diags_file(P//'E87-fn-ptr-unsupported.syntran'), &
+				EC_FN_PTR_UNSUPPORTED, P//'E87-fn-ptr-unsupported.syntran', 4, 9, 7), &
+			diag_count_code(get_diags_file(P//'E87-fn-ptr-unsupported.syntran'), &
+				EC_FN_PTR_UNSUPPORTED) == 1, &
+			diag_loc_ok(get_diags_file(P//'E88-not-callable.syntran'), &
+				EC_NOT_CALLABLE, P//'E88-not-callable.syntran', 5, 1, 1), &
+			diag_count_code(get_diags_file(P//'E88-not-callable.syntran'), &
+				EC_NOT_CALLABLE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E89-fn-ptr-array.syntran'), &
+				EC_FN_PTR_ARRAY, P//'E89-fn-ptr-array.syntran', 9, 10, 3), &
+			diag_count_code(get_diags_file(P//'E89-fn-ptr-array.syntran'), &
+				EC_FN_PTR_ARRAY) == 1, &
+			diag_loc_ok(get_diags_file(P//'E90-fn-ptr-struct-member.syntran'), &
+				EC_FN_PTR_STRUCT_MEMBER, P//'E90-fn-ptr-struct-member.syntran', 11, 5, 12), &
+			diag_count_code(get_diags_file(P//'E90-fn-ptr-struct-member.syntran'), &
+				EC_FN_PTR_STRUCT_MEMBER) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
