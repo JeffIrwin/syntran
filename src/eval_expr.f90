@@ -201,6 +201,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 		else
 			res%str%s = str_char_slice(state%vars%vals(id)%str%s, node, state, 1)
 		end if
+		if (state%rt_halt) return
 
 	else if (has_char_sub) then
 
@@ -221,6 +222,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 				res%str%s = str_char_slice( &
 					state%vars%vals(id)%array%str(i8+1)%s, node, state, nelem+1)
 			end if
+			if (state%rt_halt) return
 
 		else
 
@@ -271,6 +273,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 					res%array%str(i8+1)%s = str_char_slice( &
 						state%vars%vals(id)%array%str(index_+1)%s, node, state, nelem+1)
 				end if
+				if (state%rt_halt) return
 				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 			end do
 
@@ -517,37 +520,24 @@ module function str_char_slice(s, node, state, isub) result(out)
 
 	!********
 
-	integer(kind = 8) :: il, iu, i8
-	type(value_t) :: tmp_
+	integer(kind = 8) :: il, iu, step, i8
 
-	select case (node%lsubscripts(isub)%sub_kind)
-	case (scalar_sub)
-		call syntax_eval(node%lsubscripts(isub), state, tmp_)
-		i8 = tmp_%to_i64()
-		out = s(i8+1 : i8+1)
+	! str_slice_bounds() handles scalar/range/step/all subscript kinds
+	! uniformly (0-based, upper-exclusive in the direction of step), so a
+	! stepped/reversed slice like s[:-1:] works the same as it does for
+	! arrays.
+	call str_slice_bounds(node, isub, int(len(s), 8), state, il, iu, step)
+	if (state%rt_halt) then
+		out = ""
+		return
+	end if
 
-	case (range_sub)
-		if (node%lsubscripts(isub)%lsub_omit) then
-			il = 1
-		else
-			call syntax_eval(node%lsubscripts(isub), state, tmp_)
-			il = tmp_%to_i64() + 1
-		end if
-
-		if (node%lsubscripts(isub)%usub_omit) then
-			iu = len(s) + 1   ! per-element string length → exclusive upper bound
-		else
-			call syntax_eval(node%usubscripts(isub), state, tmp_)
-			iu = tmp_%to_i64() + 1
-		end if
-
-		out = s(il : iu-1)   ! upper-exclusive in syntran
-
-	case default
-		write(*,*) err_int(IC_STR_CHAR_SUBSCRIPT, 'unexpected str char subscript kind')
-		call internal_error()
-
-	end select
+	out = ""
+	i8 = il
+	do while ((step > 0 .and. i8 < iu) .or. (step < 0 .and. i8 > iu))
+		out = out // s(i8+1 : i8+1)
+		i8 = i8 + step
+	end do
 
 end function str_char_slice
 

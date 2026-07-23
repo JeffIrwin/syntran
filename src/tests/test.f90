@@ -3247,6 +3247,21 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			! Omitted bounds: string (range form)
 			eval('let s = "hello"; s[3:];',         quiet) == 'lo',                     &
 			eval('let s = "hello"; s[:3];',         quiet) == 'hel',                    &
+			! String step/reverse slices (read).  Same [lower:step:upper] forms
+			! as arrays, e.g. s[:-1:] reverses a string
+			eval('let s = "hello"; s[:-1:];',       quiet) == 'olleh',                  &
+			eval('let s = "hello"; s[:];',          quiet) == 'hello',                  &
+			eval('let s = "hello"; s[3:-1:];',      quiet) == 'lleh',                   &
+			eval('let s = "hello world"; s[:2:];',  quiet) == 'hlowrd',                 &
+			eval('let s = "hello world"; s[1:2:];', quiet) == 'el ol',                  &
+			! String step/reverse slices (write)
+			eval('let s = "hello"; s[:-1:] = "olleh"; s;',       quiet) == 'hello',     &
+			eval('let s = "hello"; s[1:3] = "XY"; s;',           quiet) == 'hXYlo',     &
+			eval('let s = "hello world"; s[:2:] = "HLOWRD"; s;', quiet) == 'HeLlO WoRlD', &
+			! String-array element char step/reverse slices (read/write)
+			eval('let v = ["hello", "world", "wassup"]; v[0, :-1:];', quiet) == 'olleh', &
+			eval('let v = ["hello", "world", "wassup"]; v[1, :2:] = "WRD"; v[1];', &
+				quiet) == 'WoRlD', &
 			! Multi-dim with omitted upper alongside bare colon
 			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; m[0, 1:];', quiet) == '[3, 6]',   &
 			! Rank above OP_SLICE_NAT's native buffer size (MAX_NAT_SLICE_RANK)

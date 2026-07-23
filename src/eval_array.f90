@@ -1316,6 +1316,91 @@ end subroutine field_slice_bounds
 
 !===============================================================================
 
+module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step)
+
+	! Compute 0-based (il, iu, step) bounds for a character-string subscript
+	! at node%lsubscripts(isub) (paired w/ usubscripts(isub)/ssubscripts(isub)),
+	! given the string length sz.  Mirrors field_slice_bounds()'s step_sub
+	! handling so strings support the same [lower:step:upper] slice forms as
+	! arrays, including reversal (e.g. s[:-1:]).
+	!
+	! Iteration convention: characters at il, il+step, il+2*step, ... up to
+	! (but not including) iu, same as field_slice_bounds().
+	!
+	! On step == 0, rt_throw() is called and state%rt_halt is set; callers
+	! must check state%rt_halt on return.
+
+	type(syntax_node_t), intent(in)    :: node
+	integer,              intent(in)    :: isub
+	integer(kind = 8),    intent(in)    :: sz
+	type(state_t),        intent(inout) :: state
+	integer(kind = 8),    intent(out)   :: il, iu, step
+
+	!********
+
+	type(value_t) :: lval, uval, sval
+
+	il   = 0
+	step = 1
+	iu   = sz
+
+	select case (node%lsubscripts(isub)%sub_kind)
+	case (all_sub)
+		il   = 0
+		step = 1
+		iu   = sz
+
+	case (scalar_sub)
+		call syntax_eval(node%lsubscripts(isub), state, lval)
+		il   = lval%to_i64()
+		iu   = il + 1
+		step = 1
+
+	case (range_sub)
+		step = 1
+		if (node%lsubscripts(isub)%lsub_omit) then
+			il = 0
+		else
+			call syntax_eval(node%lsubscripts(isub), state, lval)
+			il = lval%to_i64()
+		end if
+		if (node%lsubscripts(isub)%usub_omit) then
+			iu = sz
+		else
+			call syntax_eval(node%usubscripts(isub), state, uval)
+			iu = uval%to_i64()
+		end if
+
+	case (step_sub)
+		call syntax_eval(node%ssubscripts(isub), state, sval)
+		step = sval%to_i64()
+		if (step == 0) then
+			call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
+			return
+		end if
+		if (node%lsubscripts(isub)%lsub_omit) then
+			il = merge(sz - 1_8, 0_8, step < 0)
+		else
+			call syntax_eval(node%lsubscripts(isub), state, lval)
+			il = lval%to_i64()
+		end if
+		if (node%lsubscripts(isub)%usub_omit) then
+			iu = merge(-1_8, sz, step < 0)
+		else
+			call syntax_eval(node%usubscripts(isub), state, uval)
+			iu = uval%to_i64()
+		end if
+
+	case default
+		write(*,*) err_int(IC_STR_CHAR_SUBSCRIPT, 'unexpected str char subscript kind')
+		call internal_error()
+
+	end select
+
+end subroutine str_slice_bounds
+
+!===============================================================================
+
 module subroutine get_field_slice_val(member_node, field_val, state, res)
 
 	! Evaluate a range/step/all subscript on a struct field array.

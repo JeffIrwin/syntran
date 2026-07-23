@@ -192,6 +192,14 @@ module syntran__eval_m
 			type(i64_vector_t),  allocatable, intent(out)   :: asubs(:)
 		end subroutine
 
+		module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step)
+			type(syntax_node_t), intent(in)    :: node
+			integer,             intent(in)    :: isub
+			integer(kind = 8),   intent(in)    :: sz
+			type(state_t),       intent(inout) :: state
+			integer(kind = 8),   intent(out)   :: il, iu, step
+		end subroutine
+
 		module subroutine get_field_slice_val(member_node, field_val, state, res)
 			type(syntax_node_t), intent(in)    :: member_node
 			type(value_t),       intent(in)    :: field_val

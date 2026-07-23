@@ -265,7 +265,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 	!********
 
 	integer :: rank_res, id, type_, nelem
-	integer(kind = 8) :: i8, j8, index_, len8, size_i
+	integer(kind = 8) :: i8, j8, index_, len8, size_i, il, iu, sstep
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:), &
 		size_tmp(:)
 
@@ -396,12 +396,30 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			!print *, 'str_type'
 
 			! TODO: ban compound character substring assignment
-			i8 = subscript_eval(node, state)
+
+			! str_slice_bounds() handles scalar_sub/range_sub/step_sub/all_sub
+			! uniformly, so stepped/reversed slice assignment (e.g.
+			! s[:-1:] = "olleh") works the same as it does for arrays.
 			if (node%is_loc) then
-				state%locs%vals(id)%str%s(i8+1: i8+1) = res%str%s
+				call str_slice_bounds(node, 1, int(len(state%locs%vals(id)%str%s), 8), &
+					state, il, iu, sstep)
 			else
-				state%vars%vals(id)%str%s(i8+1: i8+1) = res%str%s
+				call str_slice_bounds(node, 1, int(len(state%vars%vals(id)%str%s), 8), &
+					state, il, iu, sstep)
 			end if
+			if (state%rt_halt) return
+
+			i8 = il
+			j8 = 1
+			do while ((sstep > 0 .and. i8 < iu) .or. (sstep < 0 .and. i8 > iu))
+				if (node%is_loc) then
+					state%locs%vals(id)%str%s(i8+1: i8+1) = res%str%s(j8:j8)
+				else
+					state%vars%vals(id)%str%s(i8+1: i8+1) = res%str%s(j8:j8)
+				end if
+				i8 = i8 + sstep
+				j8 = j8 + 1
+			end do
 
 		else if (has_char_sub) then
 
@@ -412,6 +430,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 				! All element subs scalar: single element
 				i8 = subscript_eval(node, state)   ! element flat index
 				call str_arr_char_assign(node, state, res, id, i8, nelem)
+				if (state%rt_halt) return
 
 			else
 
@@ -438,6 +457,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 						index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
 					end if
 					call str_arr_char_assign(node, state, res, id, index_, nelem)
+					if (state%rt_halt) return
 					call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 				end do
 
@@ -640,7 +660,11 @@ contains
 
 		! Apply the char-rank subscript at lsubscripts(nelem_+1) to the
 		! element string at state%{locs|vars}%vals(id)%array%str(elem_idx+1)%s.
-		! Handles both scalar_sub (single char) and range_sub (substring).
+		!
+		! str_slice_bounds() handles scalar_sub/range_sub/step_sub/all_sub
+		! uniformly, so stepped/reversed slice assignment works the same as it
+		! does for arrays.  On step == 0, state%rt_halt is set; callers must
+		! check it on return.
 
 		type(syntax_node_t), intent(in)    :: node
 		type(state_t),       intent(inout) :: state
@@ -651,51 +675,32 @@ contains
 		!********
 
 		integer :: isub
-		integer(kind = 8) :: il, iu, char_pos
-		type(value_t) :: tmp_
+		integer(kind = 8) :: il, iu, step, i8, j8
 
 		isub = nelem_ + 1
 
-		select case (node%lsubscripts(isub)%sub_kind)
-		case (scalar_sub)
-			call syntax_eval(node%lsubscripts(isub), state, tmp_)
-			char_pos = tmp_%to_i64()
+		if (node%is_loc) then
+			call str_slice_bounds(node, isub, &
+				int(len(state%locs%vals(id)%array%str(elem_idx+1)%s), 8), &
+				state, il, iu, step)
+		else
+			call str_slice_bounds(node, isub, &
+				int(len(state%vars%vals(id)%array%str(elem_idx+1)%s), 8), &
+				state, il, iu, step)
+		end if
+		if (state%rt_halt) return
+
+		i8 = il
+		j8 = 1
+		do while ((step > 0 .and. i8 < iu) .or. (step < 0 .and. i8 > iu))
 			if (node%is_loc) then
-				state%locs%vals(id)%array%str(elem_idx+1)%s( &
-					char_pos+1 : char_pos+1) = rhs%str%s
+				state%locs%vals(id)%array%str(elem_idx+1)%s(i8+1 : i8+1) = rhs%str%s(j8:j8)
 			else
-				state%vars%vals(id)%array%str(elem_idx+1)%s( &
-					char_pos+1 : char_pos+1) = rhs%str%s
+				state%vars%vals(id)%array%str(elem_idx+1)%s(i8+1 : i8+1) = rhs%str%s(j8:j8)
 			end if
-
-		case (range_sub)
-			if (node%lsubscripts(isub)%lsub_omit) then
-				il = 1
-			else
-				call syntax_eval(node%lsubscripts(isub), state, tmp_)
-				il = tmp_%to_i64() + 1
-			end if
-			if (node%lsubscripts(isub)%usub_omit) then
-				if (node%is_loc) then
-					iu = len(state%locs%vals(id)%array%str(elem_idx+1)%s) + 1
-				else
-					iu = len(state%vars%vals(id)%array%str(elem_idx+1)%s) + 1
-				end if
-			else
-				call syntax_eval(node%usubscripts(isub), state, tmp_)
-				iu = tmp_%to_i64() + 1
-			end if
-			if (node%is_loc) then
-				state%locs%vals(id)%array%str(elem_idx+1)%s(il : iu-1) = rhs%str%s
-			else
-				state%vars%vals(id)%array%str(elem_idx+1)%s(il : iu-1) = rhs%str%s
-			end if
-
-		case default
-			write(*,*) err_int(IC_STR_CHAR_SUBSCRIPT, 'unexpected str char subscript kind')
-			call internal_error()
-
-		end select
+			i8 = i8 + step
+			j8 = j8 + 1
+		end do
 
 	end subroutine str_arr_char_assign
 
