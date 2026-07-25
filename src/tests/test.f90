@@ -3568,6 +3568,10 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-31.syntran', quiet) == '0', &
 			interpret_file(path//'test-33.syntran', quiet) == &
 				'fn(i32): i32|fn()|fn([i32; :]): i32', &
+			! Regression: fwd-referenced fn result feeding an array-range
+			! bound used to falsely trip E56/E58 in parse pass 0
+			interpret_file(path//'test-34.syntran', quiet) == '3', &
+			interpret_file(path//'test-35.syntran', quiet) == '3', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

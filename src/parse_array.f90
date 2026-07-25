@@ -138,9 +138,15 @@ recursive module subroutine parse_array_expr(parser, expr)
 		end if
 
 		if (lbound_%val%type == array_type) then
-			span = new_span(lb_beg, lb_end - lb_beg + 1)
-			call parser%diagnostics%push(err_non_sca_val( &
-				parser%context(), span, parser%text(lb_beg, lb_end)))
+			! Only push in the final pass: in pass 0, a forward-referenced fn
+			! call's type may still be unresolved, which would falsely trip
+			! this check and (by making pass 0 non-empty) skip the pass that
+			! would resolve it correctly
+			if (parser%ipass /= 0) then
+				span = new_span(lb_beg, lb_end - lb_beg + 1)
+				call parser%diagnostics%push(err_non_sca_val( &
+					parser%context(), span, parser%text(lb_beg, lb_end)))
+			end if
 		end if
 
 		expr%val%array%type = lbound_%val%type
@@ -176,9 +182,13 @@ recursive module subroutine parse_array_expr(parser, expr)
 			is_num_type(lbound_%val%type), &
 			is_num_type(ubound_%val%type)])) then
 
-			span = new_span(lb_beg, ub_end - lb_beg + 1)
-			call parser%diagnostics%push(err_non_num_range( &
-				parser%context(), span, parser%text(lb_beg, ub_end)))
+			! Only push in the final pass: a forward-referenced fn call's type
+			! may still be unresolved in pass 0 (see err_non_sca_val above)
+			if (parser%ipass /= 0) then
+				span = new_span(lb_beg, ub_end - lb_beg + 1)
+				call parser%diagnostics%push(err_non_num_range( &
+					parser%context(), span, parser%text(lb_beg, ub_end)))
+			end if
 
 		end if
 
@@ -196,10 +206,13 @@ recursive module subroutine parse_array_expr(parser, expr)
 			span_end = parser%peek_pos(0) - 1
 
 			if (.not. is_num_type(ubound_%val%type)) then
-				span = new_span(span_beg, span_end - span_beg + 1)
-				call parser%diagnostics%push(err_non_num_range( &
-					parser%context(), span, &
-					parser%text(span_beg, span_end)))
+				! Only push in the final pass (see err_non_sca_val above)
+				if (parser%ipass /= 0) then
+					span = new_span(span_beg, span_end - span_beg + 1)
+					call parser%diagnostics%push(err_non_num_range( &
+						parser%context(), span, &
+						parser%text(span_beg, span_end)))
+				end if
 			end if
 
 			! If [lbound_: step: ubound] are all specified, then specifying the
@@ -231,10 +244,19 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 			else
 				! TODO: different message
-				span = new_span(span_beg, span_end - span_beg + 1)
-				call parser%diagnostics%push(err_non_int_range( &
-					parser%context(), span, &
-					parser%text(span_beg, span_end)))
+				! Only push in the final pass (see err_non_sca_val above).
+				! Explicitly set unknown_type (instead of leaving the
+				! just-allocated array%type uninitialized) so downstream
+				! consumers (e.g. is_binary_op_allowed()) hit their existing
+				! unknown_type cascade-suppression instead of comparing
+				! against garbage
+				expr%val%array%type = unknown_type
+				if (parser%ipass /= 0) then
+					span = new_span(span_beg, span_end - span_beg + 1)
+					call parser%diagnostics%push(err_non_int_range( &
+						parser%context(), span, &
+						parser%text(span_beg, span_end)))
+				end if
 			end if
 
 			expr%val%array%kind = step_array
@@ -262,26 +284,35 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 			if (.not. any(len_%val%type == [i32_type, i64_type])) then
 				! Length is not an integer type
-				span = new_span(span_beg, span_end - span_beg + 1)
-				! TODO: different diag for each (or at least some) case
-				call parser%diagnostics%push(err_non_int_len( &
-					parser%context(), span, &
-					parser%text(span_beg, span_end)))
+				! Only push in the final pass (see err_non_sca_val above)
+				if (parser%ipass /= 0) then
+					span = new_span(span_beg, span_end - span_beg + 1)
+					! TODO: different diag for each (or at least some) case
+					call parser%diagnostics%push(err_non_int_len( &
+						parser%context(), span, &
+						parser%text(span_beg, span_end)))
+				end if
 			end if
 
 			! This used to be checked further up before i64 arrays
 			if (ubound_%val%type /= lbound_%val%type) then
 				! lbound_ type and ubound_ type do not match for length-based array
-				span = new_span(lb_beg, ub_end - lb_beg + 1)
-				call parser%diagnostics%push(err_bound_type_mismatch( &
-					parser%context(), span))
+				! Only push in the final pass (see err_non_sca_val above)
+				if (parser%ipass /= 0) then
+					span = new_span(lb_beg, ub_end - lb_beg + 1)
+					call parser%diagnostics%push(err_bound_type_mismatch( &
+						parser%context(), span))
+				end if
 			end if
 
 			if (.not. any(lbound_%val%type == [f32_type, f64_type])) then
-				span = new_span(lb_beg, lb_end - lb_beg + 1)
-				call parser%diagnostics%push(err_non_float_len_range( &
-					parser%context(), span, &
-					parser%text(lb_beg, lb_end)))
+				! Only push in the final pass (see err_non_sca_val above)
+				if (parser%ipass /= 0) then
+					span = new_span(lb_beg, lb_end - lb_beg + 1)
+					call parser%diagnostics%push(err_non_float_len_range( &
+						parser%context(), span, &
+						parser%text(lb_beg, lb_end)))
+				end if
 			end if
 
 			call parser%match(rbracket_token, rbracket)
@@ -335,10 +366,19 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 		else
 			! TODO: different message
-			span = new_span(span_beg, span_end - span_beg + 1)
-			call parser%diagnostics%push(err_non_int_range( &
-				parser%context(), span, &
-				parser%text(span_beg, span_end)))
+			! Only push in the final pass (see err_non_sca_val above).
+			! Explicitly set unknown_type (instead of leaving the
+			! just-allocated array%type uninitialized) so downstream
+			! consumers (e.g. is_binary_op_allowed()) hit their existing
+			! unknown_type cascade-suppression instead of comparing against
+			! garbage
+			expr%val%array%type = unknown_type
+			if (parser%ipass /= 0) then
+				span = new_span(span_beg, span_end - span_beg + 1)
+				call parser%diagnostics%push(err_non_int_range( &
+					parser%context(), span, &
+					parser%text(span_beg, span_end)))
+			end if
 		end if
 
 		return
