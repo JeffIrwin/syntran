@@ -35,6 +35,8 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
 		arg_is_ref, is_ok, is_const_var, var_is_loc
 
+	logical(kind = 1) :: eff_is_ref
+
 	type(fn_t), pointer :: fn, method_fn
 
 	type(integer_vector_t) :: pos_args
@@ -260,7 +262,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 						span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
 						call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
 							identifier_%text, i - 1, var_val%fn_params(i), "", &
-							.false., .false.)
+							.false., .false., eff_is_ref)
 					end do
 				end if
 
@@ -478,7 +480,8 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
 		call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
 			identifier_%text, i - 1, param_val, param_name, &
-			param_is_ref, param_is_const_ref)
+			param_is_ref, param_is_const_ref, eff_is_ref)
+		fn_call%is_ref(i) = eff_is_ref
 
 	end do
 
@@ -1749,7 +1752,8 @@ end function all_paths_return
 !===============================================================================
 
 module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
-		fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref)
+		fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref, &
+		eff_is_ref)
 
 	class(parser_t), intent(inout) :: parser
 	type(syntax_node_t), intent(in) :: arg
@@ -1759,6 +1763,7 @@ module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 	integer, intent(in) :: i_0based
 	type(value_t), intent(in) :: param_val
 	logical, intent(in) :: param_is_ref, param_is_const_ref
+	logical(kind = 1), intent(out) :: eff_is_ref
 
 	!********
 
@@ -1778,15 +1783,27 @@ module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 		end if
 	end if
 
-	! Ref/val mismatch
-	if (param_is_ref .neqv. call_is_ref_i) then
-		if (param_is_ref) then
-			call parser%diagnostics%push(err_bad_arg_val( &
-				parser%context(), arg_span, fn_name, i_0based, param_name))
-		else
-			call parser%diagnostics%push(err_bad_arg_ref( &
-				parser%context(), arg_span, fn_name, i_0based, param_name))
-		end if
+	! Effective ref-ness of this argument.  Normally this is just whatever the
+	! caller wrote (`&arg` or not).  But a `&const` param is a read-only
+	! borrow: the callee never writes back through it (see eval_fn_call), so a
+	! bare-name argument can transparently auto-borrow (no copy) even without
+	! an explicit `&` at the call site.  Non-name args (literals, temporaries,
+	! subscripts, etc.) stay by-value -- there is no caller slot to borrow.
+	eff_is_ref = call_is_ref_i
+	if (param_is_ref .and. param_is_const_ref .and. .not. call_is_ref_i .and. &
+			arg%kind == name_expr .and. .not. allocated(arg%lsubscripts)) then
+		eff_is_ref = .true.
+	end if
+
+	! Ref/val mismatch.  Only mutable `&` params require the caller to write
+	! `&arg` explicitly; `&const` params accept plain value syntax (handled by
+	! the auto-borrow above, so no mismatch here).
+	if (param_is_ref .and. .not. param_is_const_ref .and. .not. call_is_ref_i) then
+		call parser%diagnostics%push(err_bad_arg_val( &
+			parser%context(), arg_span, fn_name, i_0based, param_name))
+	else if (.not. param_is_ref .and. call_is_ref_i) then
+		call parser%diagnostics%push(err_bad_arg_ref( &
+			parser%context(), arg_span, fn_name, i_0based, param_name))
 	end if
 
 	! Void argument (no return value) -- reject before generic type-mismatch

@@ -274,7 +274,7 @@ A function argument's type does not match the corresponding parameter's declared
 
 ### E43 -- bad-arg-val
 
-A `&` reference parameter was given a plain value argument instead of a reference.
+A mutable `&` reference parameter was given a plain value argument instead of a reference. This does not apply to `&const` parameters: a const reference is read-only, so it accepts plain value syntax (a literal, a temporary, or a bare variable name, which auto-borrows without a copy).
 
 [Example](../src/tests/test-src/errors/E43-bad-arg-val.syntran)
 

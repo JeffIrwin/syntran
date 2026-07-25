@@ -5016,6 +5016,20 @@ subroutine unit_test_methods(npass, nfail)
 				'struct I{n:i32,fn inc(){n+=1;}} struct O{i:I} const o=O{i=I{n=0}}; o.i.inc();'), &
 				EC_CONST_ASSIGN), &
 
+			! --- &const method param: accepts plain value syntax (literal,
+			! temporary, or auto-borrowed bare name), no explicit `&` needed ---
+			eval('struct D{n:i32,fn echo(x:&const str):str{return x;}}' // &
+				'let d=D{n=0}; d.echo("hi");', quiet) == 'hi', &  ! 21
+			eval('struct D{n:i32,fn echo(x:&const str):str{return x;}}' // &
+				'let d=D{n=0}; d.echo("a"+"b");', quiet) == 'ab', &  ! 22
+			eval('struct D{n:i32,fn echo(x:&const str):str{return x;}}' // &
+				'let d=D{n=0}; let v="hi"; d.echo(v);', quiet) == 'hi', &  ! 23 (auto-borrow)
+			eval('struct D{n:i32,fn echo(x:&const str):str{return x;}}' // &
+				'let d=D{n=0}; let v="hi"; d.echo(v); v;', quiet) == 'hi', &  ! 24 (v unchanged)
+			.not. diag_has_code(get_diags( &
+				'struct D{n:i32,fn echo(x:&const str):str{return x;}}' // &
+				'let d=D{n=0}; d.echo("hi");'), EC_BAD_ARG_VAL), &  ! 25
+
 			! --- method at end of deep struct chain (no arrays) ---
 			eval('' &                                                                    ! 21
 				//'struct A{a:i32, const fn get():i32{return a;}}' &
@@ -5311,6 +5325,7 @@ subroutine unit_test_ref(npass, nfail)
 			interpret_file(path//'test-05.syntran', quiet) == '0', &
 			interpret_file(path//'test-06.syntran', quiet) == '0', &
 			interpret_file(path//'test-07.syntran', quiet) == '0', &
+			interpret_file(path//'test-08.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -6106,6 +6121,20 @@ subroutine unit_test_error_codes(npass, nfail)
 			.not. diag_has_code(get_diags('const N = 10; N + 1;'), EC_CONST_ASSIGN), &
 			! positive: passing const to &const param is allowed
 			.not. diag_has_code(get_diags('fn f(x: &const i32) {} const N = 10; f(&N);'), EC_CONST_ASSIGN), &
+			! positive: &const params accept plain value syntax (literal,
+			! temporary, or bare name) -- no E43 required, unlike mutable &
+			.not. diag_has_code(get_diags( &
+				'fn f(x: &const str) {} f("hi");'), EC_BAD_ARG_VAL), &
+			.not. diag_has_code(get_diags( &
+				'fn f(x: &const str) {} f("a" + "b");'), EC_BAD_ARG_VAL), &
+			.not. diag_has_code(get_diags( &
+				'fn f(x: &const str) {} let v = "hi"; f(v);'), EC_BAD_ARG_VAL), &
+			! explicit & is still accepted for a &const param
+			.not. diag_has_code(get_diags( &
+				'fn f(x: &const str) {} let v = "hi"; f(&v);'), EC_BAD_ARG_VAL), &
+			! mutable & is unaffected: a value arg still requires E43
+			diag_has_code(get_diags( &
+				'fn f(x: &str) {} f("hi");'), EC_BAD_ARG_VAL), &
 			! const flag must survive module import
 			diag_has_code(get_diags('use const_mod; const_mod::CVAL = 0;', MODSRC), EC_CONST_ASSIGN), &
 			! a top-level `return` in an imported module is banned (E86), but

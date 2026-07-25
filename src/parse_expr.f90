@@ -966,9 +966,17 @@ module subroutine build_method_call_node(parser, node, receiver, &
 
 	logical :: param_is_ref, param_is_const_ref
 
+	logical(kind = 1), allocatable :: eff_is_ref(:)
+	logical(kind = 1) :: eff_is_ref_i
+
 	type(text_span_t) :: span
 
 	type(value_t) :: param_val
+
+	! Default: caller's literal `&` marker.  Overwritten below per-arg when the
+	! method's signature is known, to allow `&const` params to auto-borrow a
+	! bare-name arg without requiring an explicit `&` at the call site.
+	if (call_args%len_ > 0) eff_is_ref = call_is_ref%v(1: call_args%len_)
 
 	! Validate explicit arg count.
 	! method_fn%params holds only explicit params (self is NOT included there).
@@ -1008,7 +1016,8 @@ module subroutine build_method_call_node(parser, node, receiver, &
 			span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
 			call check_call_arg(parser, call_args%v(i), call_is_ref%v(i), span, &
 				identifier%text, i - 1, param_val, param_name, &
-				param_is_ref, param_is_const_ref)
+				param_is_ref, param_is_const_ref, eff_is_ref_i)
+			eff_is_ref(i) = eff_is_ref_i
 		end do
 	end if
 
@@ -1025,11 +1034,12 @@ module subroutine build_method_call_node(parser, node, receiver, &
 		node%args(1 + method_i) = call_args%v(method_i)
 	end do
 
-	! is_ref: self always by-ref, explicit args by call-site marker
+	! is_ref: self always by-ref, explicit args by effective ref-ness (auto-
+	! borrowed for &const params, see eff_is_ref above)
 	allocate(node%is_ref(1 + call_args%len_))
 	node%is_ref(1) = .true.
 	do method_i = 1, call_args%len_
-		node%is_ref(1 + method_i) = call_is_ref%v(method_i)
+		node%is_ref(1 + method_i) = eff_is_ref(method_i)
 	end do
 
 	! Copy fn body and params from the method's fn node

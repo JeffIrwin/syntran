@@ -180,7 +180,8 @@ module syntran__parse_m
 		end subroutine parse_struct_instance
 
 		module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
-				fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref)
+				fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref, &
+				eff_is_ref)
 			class(parser_t), intent(inout) :: parser
 			type(syntax_node_t), intent(in) :: arg
 			logical(kind = 1), intent(in) :: call_is_ref_i
@@ -189,6 +190,7 @@ module syntran__parse_m
 			integer, intent(in) :: i_0based
 			type(value_t), intent(in) :: param_val
 			logical, intent(in) :: param_is_ref, param_is_const_ref
+			logical(kind = 1), intent(out) :: eff_is_ref
 		end subroutine check_call_arg
 
 		! Shared by parse_dot (explicit `recv.method()`) and parse_fn_call's

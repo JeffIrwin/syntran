@@ -31,20 +31,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - should &const args be able to take a temp or a literal? it would be
-	!  nice to not require either making an explicit temp or changing the
-	!  signature to dodge const ref efficiency
-	!      jeff@air 21 % time sy ./main.syntran -- -t
-	!      
-	!       syntran 1.4.0
-	!       https://github.com/JeffIrwin/syntran
-	!      
-	!       Interpreting file "./main.syntran"
-	!      Error[E43]: function `join_` parameter 1 `delim` requires a `&` reference but was given a value argument
-	!         --> ./main.syntran:21:63
-	!          |
-	!       21 |   let allergens = join_(split_(contains_allergens, " ,")[1:], " ");
-	!          |                                                               ^^^ missing `&` ref
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
 	!      intrinsic function, a struct method, or a user-defined function with

@@ -1,0 +1,52 @@
+
+// &const params accept plain value syntax at the call site: literals,
+// temporaries (e.g. slices/concatenation), and bare variable names all work
+// without an explicit `&`.  A bare-name arg auto-borrows (no copy, no
+// write-back); non-name args are evaluated into a local copy.  Explicit
+// `&name` still works too.
+
+fn join_(parts: [str; :], delim: &const str): str
+{
+	let s = "";
+	for i in [0: size(parts, 0)]
+	{
+		if i > 0
+			s += delim;
+		s += parts[i];
+	}
+	return s;
+}
+
+fn assert_eq_str(a: str, b: str): i32
+{
+	if a == b
+		return 0;
+	return 1;
+}
+
+fn main(): i32
+{
+	let status = 0;
+
+	let parts = ["a", "b", "c"];
+
+	// literal
+	status += assert_eq_str(join_(parts, " "), "a b c");
+
+	// temporary expression
+	status += assert_eq_str(join_(parts, "-" + "-"), "a--b--c");
+
+	// bare named var (auto-borrow, no `&`)
+	let delim = ", ";
+	status += assert_eq_str(join_(parts, delim), "a, b, c");
+
+	// named var unchanged after the call (no write-back through a const ref)
+	status += assert_eq_str(delim, ", ");
+
+	// explicit `&name` still works identically
+	status += assert_eq_str(join_(parts, &delim), "a, b, c");
+
+	return status;
+}
+
+return main();
