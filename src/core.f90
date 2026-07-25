@@ -31,9 +31,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - can't immediatley subscript an array returned from a method:
-	!        	id = parse_i32(tiles.get_keys()[0]);
-	!           // unexpected token `[`
 	!  - calling println(void_ret_fn()) says "Error: <invalid_value>". should
 	!    this be a parse error? there may be similar bugs in str() and similar
 	!    fns

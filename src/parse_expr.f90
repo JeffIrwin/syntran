@@ -1211,6 +1211,9 @@ recursive module subroutine parse_dot(parser, expr)
 			lparen_%pos, rparen_%pos)
 		if (expr%val%type == unknown_type) return
 
+		if (parser%current_kind() == lbracket_token) then
+			call parser%parse_subscripts(expr)
+		end if
 		call parser%parse_dot(expr)
 		return
 	end if

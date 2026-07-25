@@ -5218,6 +5218,24 @@ subroutine unit_test_methods(npass, nfail)
 				'struct C{n:i32, fn inc(){n+=1;} const fn bad():i32{inc();return n;}}'), &
 				EC_CONST_ASSIGN), &
 
+			! --- subscript on method return value (x.method()[i]) ---
+			eval('struct S{d:[i32;:], fn g():[i32;:]{return d;}}' &                   ! 52
+				//'let s=S{d=[10,20,30]};' &
+				//'return s.g()[1];' &
+				, quiet) == '20', &
+
+			! --- slice on method return value (x.method()[a:b]) ---
+			eval('struct S{d:[i32;:], fn g():[i32;:]{return d;}}' &                   ! 53
+				//'let s=S{d=[10,20,30]};' &
+				//'return s.g()[1:3];' &
+				, quiet) == '[20, 30]', &
+
+			! --- string-array element index on method return value ---
+			eval('struct S{w:[str;:], fn g():[str;:]{return w;}}' &                   ! 54
+				//'let s=S{w=["ab","cd"]};' &
+				//'return s.g()[1];' &
+				, quiet) == 'cd', &
+
 			.false. &
 		]
 
