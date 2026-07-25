@@ -1,0 +1,144 @@
+// User-defined dynamic circular queue (resizable array) for i32, using a struct
+// with methods.  Push grows capacity by doubling
+//
+// Based on samples/vec_i32.syntran
+//
+// The difference between vec and queue is that queues pop from the start, not
+// the end, and circular queues can push to the start of the array after values
+// have been popped to reduce resize amortization
+
+struct Queue_i32
+{
+	beg: i32,
+	end: i32,
+	cap: i32,
+	is_empty: bool,
+	data: [i32; :],
+
+	fn push(val: i32)
+	{
+		//println("pushing val = ", val);
+		//println("beg, end, is_empty = ", beg, end, is_empty);
+		if beg == end //and not is_empty
+		//if is_empty or (beg == end and not is_empty)
+		{
+			//println("resizing");
+			//println("data = ", data);
+			let new_cap = 1;
+			if cap > 0
+				new_cap = cap * 2;
+
+			// Note syntran cannot move yet, so we need two copies here where
+			// other languages could optimally do only one copy
+			//let new_data = [0; new_cap];
+
+			//let new_data = [data[beg: cap], data[:end], [0; new_cap-cap]];
+			//data = new_data;
+			data = [data[beg: cap], data[:end], [0; new_cap-cap]];
+
+			//println("new_cap, size = ", new_cap, size(data));
+			beg = 0;
+			end = cap;
+			cap = new_cap;
+		}
+		data[end] = val;
+		//println("data = ", data);
+		//end += 1;
+		end = (end+1) % cap;
+		is_empty = false;
+		return;
+	}
+
+	fn pop(): i32
+	{
+		if is_empty
+		{
+			println("Error: cannot pop empty queue");
+			exit(1);
+		}
+		let beg0 = beg;
+		//beg += 1;
+		beg = (beg+1) % cap;
+		is_empty = beg == end;
+		return data[beg0];
+	}
+}
+
+fn new(): Queue_i32
+{
+	return Queue_i32
+	{
+		beg = 0,
+		end = 0,
+		cap = 0,
+		is_empty = true,
+		data = [0; 0],
+	};
+}
+
+fn assert_eq(a: i32, b: i32): i32
+{
+	if a == b
+		return 0;
+	return 1;
+}
+
+fn main(): i32
+{
+	let status = 0;
+
+	let q = new();
+	status += assert_eq(q.beg, 0);
+	status += assert_eq(q.end, 0);
+	status += assert_eq(q.cap, 0);
+
+	// Push triggers repeated doublings: cap goes 0→1→2→4→8
+	q.push(10);
+	//println("cap = ", q.cap);
+	status += assert_eq(q.cap, 1);
+
+	q.push(20);
+	//println("cap = ", q.cap);
+	status += assert_eq(q.cap, 2);
+
+	q.push(30);
+	//println("cap = ", q.cap);
+	status += assert_eq(q.cap, 4);
+
+	q.push(40);
+	//println("cap = ", q.cap);
+	status += assert_eq(q.cap, 4);
+
+	q.push(50);
+	//println("cap = ", q.cap);
+	status += assert_eq(q.cap, 8);
+
+	// Elements are correct after multiple reallocations
+	status += assert_eq(q.pop(), 10);
+	status += assert_eq(q.pop(), 20);
+	status += assert_eq(q.pop(), 30);
+
+	q.push(60);
+	q.push(70);
+
+	status += assert_eq(q.pop(), 40);
+
+	q.push(80);
+	q.push(90);
+
+	//println("status = ", status);
+	status += assert_eq(q.pop(), 50);
+
+	status += assert_eq(q.pop(), 60);
+	status += assert_eq(q.pop(), 70);
+	status += assert_eq(q.pop(), 80);
+	status += assert_eq(q.pop(), 90);
+
+	//// Error: empty
+	//let junk = q.pop();
+
+	return status;
+}
+
+return main();
+

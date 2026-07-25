@@ -1,0 +1,201 @@
+// User-defined dynamic circular queue (resizable array) for i32 vectors
+//
+// See also the scalar queue version samples/queue_i32.syntran
+
+struct Queue_vec_i32
+{
+	beg: i32,
+	end: i32,
+	cap: i32,
+	is_empty: bool,
+	is_init : bool, // vec size is set on first push
+	data: [i32; :,:],
+
+	fn push(val: [i32; :])
+	{
+		//println("pushing val = ", val);
+		if is_init
+		{
+			if size(val) != size(data,0)
+			{
+				println("Error: cannot push vector value with inconsistent size");
+				exit(2);
+			}
+		}
+		is_init = true;
+
+		// TODO: port this back to syntran samples and scalar version
+
+		//println("beg, end, is_empty = ", beg, end, is_empty);
+		// beg == end is ambiguous between empty and full, so resize only on
+		// the initial allocation (cap == 0) or when genuinely full
+		if cap == 0 or (beg == end and not is_empty)
+		{
+			//println("resizing");
+			//println("data = ", data);
+			let new_cap = 1;
+			if cap > 0
+				new_cap = cap * 2;
+
+			// Note syntran cannot move yet, so we need two copies here where
+			// other languages could optimally do only one copy
+
+			////let new_data = [0; new_cap];
+			////let new_data = [data[beg: cap], data[:end], [0; new_cap-cap]];
+			////data = new_data;
+			//data = [data[:, beg: cap], data[:, :end], [0; new_cap-cap]];
+			let new_data = [0; size(val), new_cap];
+			for i in [beg: cap]
+				new_data[:, i-beg] = data[:, i];
+			// The first loop above fills new_data[0 : cap-beg), so the
+			// wrapped-around portion below must continue from cap-beg, not
+			// from the (unrelated) old beg index
+			for i in [0: end]
+				new_data[:, cap-beg+i] = data[:, i];
+			data = new_data;
+
+			//println("new_cap, size = ", new_cap, size(data));
+			beg = 0;
+			end = cap;
+			cap = new_cap;
+		}
+		data[:,end] = val;
+		//println("data = ", data);
+		//end += 1;
+		end = (end+1) % cap;
+		is_empty = false;
+		return;
+	}
+
+	fn pop(): [i32; :]
+	{
+		//println("popping val = ", data[:, beg]);
+		if is_empty
+		{
+			println("Error: cannot pop empty queue");
+			exit(1);
+		}
+		let beg0 = beg;
+		//beg += 1;
+		beg = (beg+1) % cap;
+		is_empty = beg == end;
+		return data[:, beg0];
+	}
+}
+
+fn new(): Queue_vec_i32
+{
+	return Queue_vec_i32
+	{
+		beg = 0,
+		end = 0,
+		cap = 0,
+		is_empty = true,
+		is_init  = false,
+		data = [0; 0,0],
+	};
+}
+
+fn assert_eq(a: i32, b: i32): i32
+{
+	if a == b
+		return 0;
+	return 1;
+}
+
+fn assert_eq_vec(a: [i32;:], b: [i32;:]): i32
+{
+	if all(a == b)
+		return 0;
+	return 1;
+}
+
+fn main(): i32
+{
+	let status = 0;
+
+	let q = new();
+	status += assert_eq(q.beg, 0);
+	status += assert_eq(q.end, 0);
+	status += assert_eq(q.cap, 0);
+
+	// Push triggers repeated doublings: cap goes 0→1→2→4→8
+	q.push([10, 100]);
+	//println("cap = ", q.cap);
+	status += assert_eq(q.cap, 1);
+
+	q.push([20, 200]);
+	//println("cap = ", q.cap);
+	status += assert_eq(q.cap, 2);
+
+	q.push([30, 300]);
+	//println("cap = ", q.cap);
+	status += assert_eq(q.cap, 4);
+
+	q.push([40, 400]);
+	//q.push([40]); // Error: inconsistent size
+	//println("cap = ", q.cap);
+	status += assert_eq(q.cap, 4);
+
+	q.push([50, 500]);
+	//println("cap = ", q.cap);
+	status += assert_eq(q.cap, 8);
+
+	// Elements are correct after multiple reallocations
+	status += assert_eq_vec(q.pop(), [10, 100]);
+	status += assert_eq_vec(q.pop(), [20, 200]);
+	status += assert_eq_vec(q.pop(), [30, 300]);
+
+	q.push([60, 600]);
+	q.push([70, 700]);
+
+	status += assert_eq_vec(q.pop(), [40, 400]);
+
+	q.push([80, 800]);
+	q.push([90, 900]);
+
+	//println("status = ", status);
+	status += assert_eq_vec(q.pop(), [50, 500]);
+
+	status += assert_eq_vec(q.pop(), [60, 600]);
+	status += assert_eq_vec(q.pop(), [70, 700]);
+	status += assert_eq_vec(q.pop(), [80, 800]);
+	status += assert_eq_vec(q.pop(), [90, 900]);
+
+	//// Error: empty
+	//let junk = q.pop();
+
+	// Regression test: draining the queue fully (beg == end with
+	// is_empty == true, at a non-zero index) and then pushing again must
+	// not spuriously trigger a resize that copies garbage into the buffer
+	let q2 = new();
+	q2.push([1, 11]);
+	q2.push([2, 22]);
+	status += assert_eq_vec(q2.pop(), [1, 11]);
+	status += assert_eq_vec(q2.pop(), [2, 22]);  // queue now empty, beg == end == 1, cap == 2
+	q2.push([3, 33]);
+	status += assert_eq_vec(q2.pop(), [3, 33]);  // would be garbage before the fix
+
+	// Regression test: resize while beg != cap - beg (asymmetric wraparound).
+	// The wrapped-around copy loop must place old_data[0:end] right after
+	// old_data[beg:cap] in new_data, i.e. at offset (cap - beg), not at
+	// offset beg -- those two only coincide when beg == cap/2, which is why
+	// this went unnoticed until a real (non-power-of-2-aligned) usage hit it
+	let q3 = new();
+	q3.push([1]); q3.push([2]); q3.push([3]); q3.push([4]);  // cap 0->1->2->4, full
+	status += assert_eq_vec(q3.pop(), [1]);
+	status += assert_eq_vec(q3.pop(), [2]);
+	status += assert_eq_vec(q3.pop(), [3]);  // beg=3, end=0, cap=4, 1 elem (4) left
+	q3.push([5]); q3.push([6]); q3.push([7]);  // beg=3, end=3, cap=4, full again
+	q3.push([8]);  // triggers resize 4->8 with beg=3 (asymmetric: cap-beg=1 != beg=3)
+	status += assert_eq_vec(q3.pop(), [4]);
+	status += assert_eq_vec(q3.pop(), [5]);  // would be garbage/zero before the fix
+	status += assert_eq_vec(q3.pop(), [6]);
+	status += assert_eq_vec(q3.pop(), [7]);
+	status += assert_eq_vec(q3.pop(), [8]);
+
+	return status;
+}
+
+return main();
+
