@@ -31,6 +31,12 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - can't immediatley subscript an array returned from a method:
+	!        	id = parse_i32(tiles.get_keys()[0]);
+	!           // unexpected token `[`
+	!  - calling println(void_ret_fn()) says "Error: <invalid_value>". should
+	!    this be a parse error? there may be similar bugs in str() and similar
+	!    fns
 	!  - add sample script for fn pointer. integrator would be good
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
@@ -51,9 +57,6 @@ module syntran__core_m
 	!  - switch/match/case. needs to work with strings. would be nice to work
 	!    with arrays. basic switch/case is fine but also consider "pattern
 	!    matching" or whatever rust has
-	!  - callbacks, fn pointers, i.e. passing one function as an argument to
-	!    another function
-	!    * this could be a big change to the type system
 	!  - enums
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
@@ -174,9 +177,6 @@ module syntran__core_m
 	!          generated/templated code for multiple type combinations.
 	!
 	!    * docs -- see several notes below
-	!    * git(hub) cleanup. no need to delete branches, but rename existing
-	!      branches (except for main and dev) to start with feature/ or
-	!      jeffirwin/, e.g. vec-slice -> feature/vec-slice
 	!  - i like claude's "double_colon_token" name. i should change things like
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - minloc, maxloc, findloc std:: fns
