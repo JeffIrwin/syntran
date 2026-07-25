@@ -6162,6 +6162,22 @@ subroutine unit_test_error_codes(npass, nfail)
 				'struct S { x: i32 }'), &
 				EC_FN_PTR_STRUCT_MEMBER), &
 
+			! E91: a void (no return value) fn call cannot be passed as an
+			! argument to another function call, even to a variadic any_type
+			! param like println()/str() (previously this slipped through
+			! types_match()'s any_type shortcut and printed "<invalid_value>"
+			! at runtime instead of erroring at parse time)
+			diag_has_code(get_diags( &
+				'fn f() { let x = 1; } println(f());'), &
+				EC_VOID_ARG), &
+			diag_count_code(get_diags( &
+				'fn f() { let x = 1; } println(f());'), &
+				EC_VOID_ARG) == 1, &
+			! also applies to a typed (non-any_type) param
+			diag_has_code(get_diags( &
+				'fn g(x: i32): i32 { return x; } fn f() { let y = 1; } g(f());'), &
+				EC_VOID_ARG), &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -6588,7 +6604,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E90-fn-ptr-struct-member.syntran'), &
 				EC_FN_PTR_STRUCT_MEMBER, P//'E90-fn-ptr-struct-member.syntran', 11, 5, 12), &
 			diag_count_code(get_diags_file(P//'E90-fn-ptr-struct-member.syntran'), &
-				EC_FN_PTR_STRUCT_MEMBER) == 1 &
+				EC_FN_PTR_STRUCT_MEMBER) == 1, &
+			diag_loc_ok(get_diags_file(P//'E91-void-arg.syntran'), &
+				EC_VOID_ARG, P//'E91-void-arg.syntran', 9, 9, 3), &
+			diag_count_code(get_diags_file(P//'E91-void-arg.syntran'), &
+				EC_VOID_ARG) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

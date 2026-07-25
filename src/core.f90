@@ -31,10 +31,20 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - calling println(void_ret_fn()) says "Error: <invalid_value>". should
-	!    this be a parse error? there may be similar bugs in str() and similar
-	!    fns
-	!  - add sample script for fn pointer. integrator would be good
+	!  - should &const args be able to take a temp or a literal? it would be
+	!  nice to not require either making an explicit temp or changing the
+	!  signature to dodge const ref efficiency
+	!      jeff@air 21 % time sy ./main.syntran -- -t
+	!      
+	!       syntran 1.4.0
+	!       https://github.com/JeffIrwin/syntran
+	!      
+	!       Interpreting file "./main.syntran"
+	!      Error[E43]: function `join_` parameter 1 `delim` requires a `&` reference but was given a value argument
+	!         --> ./main.syntran:21:63
+	!          |
+	!       21 |   let allergens = join_(split_(contains_allergens, " ,")[1:], " ");
+	!          |                                                               ^^^ missing `&` ref
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
 	!      intrinsic function, a struct method, or a user-defined function with
@@ -255,7 +265,8 @@ module syntran__core_m
 	!      tests though.  if anything, add tests, but don't remove coverage
 	!  - type() or typeof() fn to get type name as str?  could be useful for
 	!    debugging, but I don't want to encourage its use for actual program
-	!    logic
+	!    logic. also nameof() to return a variable (or fn or struct) name. c#
+	!    has this
 	!  - complex number type(s)
 	!    * basically required for FFT, which could be a fun example/test. see:
 	!        https://github.com/JeffIrwin/numerical-analysis/blob/7067e5fe7d331f817c5c9f9cf922b44af7a18aa9/src/interp.F90#L337

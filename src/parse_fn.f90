@@ -1789,6 +1789,14 @@ module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 		end if
 	end if
 
+	! Void argument (no return value) -- reject before generic type-mismatch
+	! check so it takes precedence and gives a clearer message
+	if (arg%val%type == void_type) then
+		call parser%diagnostics%push(err_void_arg( &
+			parser%context(), arg_span, fn_name, i_0based, param_name))
+		return
+	end if
+
 	! Type mismatch
 	is_ok = types_match(param_val, arg%val) == TYPE_MATCH
 	is_ok = is_ok .or. arg%val%type == unknown_type

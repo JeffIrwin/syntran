@@ -106,6 +106,7 @@ module syntran__errors_m
 		EC_NOT_CALLABLE = "E88", &
 		EC_FN_PTR_ARRAY = "E89", &
 		EC_FN_PTR_STRUCT_MEMBER = "E90", &
+		EC_VOID_ARG = "E91", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -370,6 +371,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_NOT_CALLABLE)
 	call codes%push(EC_FN_PTR_ARRAY)
 	call codes%push(EC_FN_PTR_STRUCT_MEMBER)
+	call codes%push(EC_VOID_ARG)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1279,6 +1281,24 @@ function err_bad_arg_type(context, span, fn, iarg, param, expect, actual) &
 		//underline(context, span)//" wrong argument type"//color_reset
 
 end function err_bad_arg_type
+
+!===============================================================================
+
+function err_void_arg(context, span, fn, iarg, param) result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	integer, intent(in):: iarg
+
+	character(len = *), intent(in) :: fn, param
+
+	err = err_pre(EC_VOID_ARG) &
+		//'function `'//fn//'` parameter '//str(iarg)//' `'//param &
+		//'` was given a void (no return value) argument' &
+		//underline(context, span)//" void argument"//color_reset
+
+end function err_void_arg
 
 !===============================================================================
 

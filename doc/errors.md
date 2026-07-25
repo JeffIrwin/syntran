@@ -557,6 +557,12 @@ Fn pointers cannot be struct members.
 
 [Example](../src/tests/test-src/errors/E90-fn-ptr-struct-member.syntran)
 
+### E91 -- void-arg
+
+A function call that returns void (no return value) was passed as an argument to another function call, e.g. `println(f())` where `f` has no return value.
+
+[Example](../src/tests/test-src/errors/E91-void-arg.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
