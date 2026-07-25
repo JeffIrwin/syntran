@@ -181,7 +181,7 @@ module syntran__core_m
 	!      in github ubuntu runners as of 2026-06-06
 	!  - built-in syntran update:
 	!    * add checksum verification
-	!    * currently ./syup.sh can do it
+	!    * currently ./utils/syup.sh can do it
 	!    * make this built-in to syntran binary, maybe invoke like
 	!      `syntran --update`.  think carefully. don't want to break this by
 	!      changing the name of the script or arg
@@ -238,7 +238,7 @@ module syntran__core_m
 	!      build date)
 	!    * list sha256 checksums of binaries somewhere
 	!    * doc. autogenerate pdf and/or html from markdown via pandoc or similar
-	!      + see build-doc.sh
+	!      + see utils/build-doc.sh
 	!    * readme?
 	!    * samples?
 	!    * libsyntran.a and fortran sample?

@@ -7,7 +7,7 @@
 #     fpm build
 #     fpm build --profile release
 #     fpm build --verbose --flag -Wno-tabs
-#     fpm @build  # use options defined in file `build.rsp`
+#     fpm @utils/build  # use options defined in file `utils/build.rsp`
 #
 #     # TODO: incorporate ifx testing into ci/cd.  Try ifort too
 #     fpm build --compiler ifx --flag "-DSYNTRAN_INTEL -fpp"

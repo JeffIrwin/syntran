@@ -43,7 +43,7 @@ The binary asset `syntran-linux.zip` works on most distros:  alma, arch, debian,
 // libgfortran.a and thus cannot statically link to it like ubuntu can, but we also
 // have the libquadmath.so too.  Could possibly get around this by building
 // gfortran from source on rocky, but I'm not going to spend the ci/cd on that (it
-// takes a couple hours locally, see Dockerfile.gcc)
+// takes a couple hours locally, see docker/Dockerfile.gcc)
 //
 // The ubuntu binary is still built and uploaded, but I probably won't bother
 // documenting it or copying it to the release assets

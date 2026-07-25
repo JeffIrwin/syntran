@@ -36,7 +36,7 @@
 				"run": "brew install gnu-sed && sudo cp $(which gsed) /usr/local/bin/sed"
 			},
 			{
-			  "run": "bash gen-header.sh"
+			  "run": "bash utils/gen-header.sh"
 			},
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
@@ -395,7 +395,7 @@
 				# Test the binary artifact that was uploaded by this branch's run
 				"run":
 				"
-					bash ./test-branch.sh \n
+					bash ./utils/test-branch.sh \n
 				"
 			},
 		]
@@ -568,7 +568,7 @@
 						exit 1 \n
 					fi \n
 
-					docker build . --file Dockerfile.alpine -t sy \n
+					docker build . --file docker/Dockerfile.alpine -t sy \n
 					docker run --entrypoint syntran sy --version \n
 					docker run sy --version # syntran is already the default entrypoint \n
 					docker run sy -c \"1 + 2;\" \n
@@ -596,7 +596,7 @@
 				"name": "Test linux release bin",
 				"run":
 				"
-					bash ./test-bin.sh \n
+					bash ./utils/test-bin.sh \n
 				"
 			},
 		]
