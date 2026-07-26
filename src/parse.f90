@@ -109,6 +109,7 @@ module syntran__parse_m
 				parse_struct_instance, &
 				parse_enum_declaration, &
 				parse_enum_access, &
+				parse_enum_cast, &
 				parse_for_statement, &
 				parse_if_statement, &
 				parse_return_statement, &
@@ -190,10 +191,17 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: decl
 		end subroutine parse_enum_declaration
 
-		module subroutine parse_enum_access(parser, expr)
+		module subroutine parse_enum_access(parser, expr, enum_name)
 			class(parser_t), target :: parser
 			type(syntax_node_t), intent(out) :: expr
+			character(len = *), intent(in), optional :: enum_name
 		end subroutine parse_enum_access
+
+		module subroutine parse_enum_cast(parser, expr, enum_name)
+			class(parser_t), target :: parser
+			type(syntax_node_t), intent(out) :: expr
+			character(len = *), intent(in), optional :: enum_name
+		end subroutine parse_enum_cast
 
 		module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 				fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref, &

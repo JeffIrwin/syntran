@@ -8,6 +8,7 @@ module syntran__types_m
 	implicit none
 
 	integer, parameter :: &
+		TYPE_ARRAY_ENUM_MISMATCH = 6, &
 		TYPE_ARRAY_STRUCT_MISMATCH = 5, &
 		TYPE_RANK_MISMATCH = 4, &
 		TYPE_ARRAY_MISMATCH = 3, &

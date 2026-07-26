@@ -33,6 +33,8 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end, rank_, i
 
+	logical :: enum_mismatch
+
 	type(syntax_node_t)  :: lbound_, step, ubound_, len_, elem
 	type(syntax_node_vector_t) :: elems, size_
 	type(syntax_token_t) :: lbracket, rbracket, colon, semicolon, comma, dummy
@@ -135,6 +137,10 @@ recursive module subroutine parse_array_expr(parser, expr)
 		expr%val%type        = array_type
 		if (allocated(lbound_%val%struct_name)) then
 			expr%val%struct_name = lbound_%val%struct_name
+		else if (allocated(lbound_%val%enum_name)) then
+			expr%val%enum_name = lbound_%val%enum_name
+			if (allocated(lbound_%val%enum_cookie)) &
+				expr%val%enum_cookie = lbound_%val%enum_cookie
 		end if
 
 		if (lbound_%val%type == array_type) then
@@ -427,6 +433,21 @@ recursive module subroutine parse_array_expr(parser, expr)
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
 				parser%context(), span, parser%text(span_beg, span_end)))
+		else if (elem%val%type == enum_type) then
+			! Matching `type == enum_type` isn't enough -- two different
+			! enums (e.g. Suit vs Card) must not be mixed in one array
+			! literal.  Mirrors the cross-enum operand check for binary ops
+			if (allocated(elem%val%enum_cookie) .and. &
+				allocated(lbound_%val%enum_cookie)) then
+				enum_mismatch = elem%val%enum_cookie /= lbound_%val%enum_cookie
+			else
+				enum_mismatch = elem%val%enum_name /= lbound_%val%enum_name
+			end if
+			if (enum_mismatch) then
+				span = new_span(span_beg, span_end - span_beg + 1)
+				call parser%diagnostics%push(err_het_array( &
+					parser%context(), span, parser%text(span_beg, span_end)))
+			end if
 		end if
 
 		if (elem%val%type == array_type) then
@@ -494,6 +515,10 @@ recursive module subroutine parse_array_expr(parser, expr)
 	expr%val%type        = array_type
 	if (allocated(lbound_%val%struct_name)) then
 		expr%val%struct_name = lbound_%val%struct_name
+	else if (allocated(lbound_%val%enum_name)) then
+		expr%val%enum_name = lbound_%val%enum_name
+		if (allocated(lbound_%val%enum_cookie)) &
+			expr%val%enum_cookie = lbound_%val%enum_cookie
 	end if
 
 	expr%val%array%type = lbound_%val%type

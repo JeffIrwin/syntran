@@ -587,6 +587,12 @@ Two variants in the same enum share a backing value, and at least one of them go
 
 [Example](../src/tests/test-src/errors/E95-duplicate-enum-value.syntran)
 
+### E96 -- enum-cast-range
+
+A reverse cast `EnumName(ordinal)` was given a constant int literal `ordinal` that doesn't match any of the enum's variant values.  A non-constant ordinal that turns out to be out of range at runtime is R32 instead.
+
+[Example](../src/tests/test-src/errors/E96-enum-cast-range.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -927,6 +933,10 @@ An array slice subscript's step (`a[::s]`) evaluated to 0.
 ### R31 -- close-fail
 
 `close()` failed to close an open file (see the accompanying `iostat`).
+
+### R32 -- enum-cast-range
+
+A reverse cast `EnumName(ordinal)` was given an ordinal (not a constant literal, so not caught at parse time as E96) that doesn't match any of the enum's variant values.
 
 ## Warnings
 

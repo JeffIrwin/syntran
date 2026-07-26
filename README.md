@@ -1234,6 +1234,35 @@ println(p.x);  // 3
 println(p.y);  // 4
 ```
 
+### Exported enums
+
+Enums defined in a module are exported the same way, and can be accessed
+either unqualified (via a glob import) or qualified with the module name:
+
+```rust
+// suit_mod.syntran
+
+enum Suit
+{
+    Hearts,
+    Diamonds,
+    Clubs,
+    Spades,
+}
+```
+
+```rust
+// unqualified (glob import)
+use suit_mod::*;
+println(Suit.Clubs);  // Suit.Clubs
+```
+
+```rust
+// qualified
+use suit_mod;
+println(suit_mod::Suit.Spades);  // suit_mod::Suit.Spades
+```
+
 ### Valid module names
 
 Module names follow the same rules as identifiers: they may contain letters,
@@ -1516,6 +1545,17 @@ println(a[i32(Suit.Clubs)]);
 // 30
 ```
 
+The reverse cast, from an integer ordinal back to an enum variant, uses the
+enum's type name as a call: `EnumName(ordinal)`.  It's an error if no variant
+has that value -- at parse time (`E96`) for a constant literal argument, or
+at runtime (`R32`) otherwise:
+```rust
+println(Suit(2));
+// Suit.Clubs
+
+// Suit(99);  // error: no variant with value 99 in enum `Suit`
+```
+
 Printing an enum value shows its qualified name, `EnumType.Variant`:
 ```rust
 println(Suit.Diamonds);
@@ -1539,6 +1579,16 @@ fn describe(s: Suit): str
 let p = Player{name = "Alice", suit = Suit.Spades};
 println(describe(p.suit));
 // Suit.Spades
+```
+
+Arrays of enums work like arrays of any other type, including indexing,
+assignment, `[value; n]` uniform arrays, and iterating a literal array with
+`for`:
+```rust
+let hand = [Suit.Hearts, Suit.Clubs, Suit.Spades];
+hand[0] = Suit.Diamonds;
+println(hand);
+// [Suit.Diamonds, Suit.Clubs, Suit.Spades]
 ```
 
 ## Samples

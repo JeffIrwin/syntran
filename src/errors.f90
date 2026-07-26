@@ -111,6 +111,7 @@ module syntran__errors_m
 		EC_REDECLARE_VARIANT = "E93", &
 		EC_UNKNOWN_VARIANT = "E94", &
 		EC_DUPLICATE_ENUM_VALUE = "E95", &
+		EC_ENUM_CAST_RANGE = "E96", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -182,6 +183,7 @@ module syntran__errors_m
 		RC_GETENV_UNSET = "R29", &
 		RC_WRITELN_FAIL = "R30", &
 		RC_CLOSE_FAIL   = "R31", &
+		RC_ENUM_CAST_RANGE = "R32", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -380,6 +382,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_REDECLARE_VARIANT)
 	call codes%push(EC_UNKNOWN_VARIANT)
 	call codes%push(EC_DUPLICATE_ENUM_VALUE)
+	call codes%push(EC_ENUM_CAST_RANGE)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -450,6 +453,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(RC_CLOSE_STANDARD)
 	call codes%push(RC_WRITELN_FAIL)
 	call codes%push(RC_CLOSE_FAIL)
+	call codes%push(RC_ENUM_CAST_RANGE)
 	call codes%push(WC_MISSING_RETURN)
 end function get_all_error_codes
 
@@ -975,6 +979,23 @@ function err_unknown_variant(context, span, variant, enum, suggest) result(err)
 	end if
 
 end function err_unknown_variant
+
+!===============================================================================
+
+function err_enum_cast_range(context, span, enum, value) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: enum
+	integer, intent(in) :: value
+
+	err = err_pre(EC_ENUM_CAST_RANGE) &
+		//'no variant with value '//str(value)//' in enum `'//enum//'`' &
+		//underline(context, span) &
+		//" out-of-range enum cast"//color_reset
+
+end function err_enum_cast_range
 
 !===============================================================================
 

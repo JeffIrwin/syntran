@@ -109,6 +109,9 @@ subroutine assign_value_t(left, right, op_text)
 		case (struct_type)
 			left = right
 
+		case (enum_type)
+			left = right
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()

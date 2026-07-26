@@ -1009,6 +1009,14 @@ recursive module integer function types_match(a, b) result(io)
 			end if
 		end if
 
+		if (a%array%type == enum_type) then
+			if (enum_kind_mismatch(a, b)) then
+				! Both are arrays of enums but different kinds of enums
+				io = TYPE_ARRAY_ENUM_MISMATCH
+				return
+			end if
+		end if
+
 	end if
 
 	if (a%type == fn_type) then

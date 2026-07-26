@@ -38,10 +38,6 @@ module syntran__core_m
 	!  - cover utils/run-samples.sh in ci
 	!    * need a blocklist probably to avoid running interactive samples like
 	!      betweenle et al
-	!  - enum improvements:
-	!    * arrays of enums
-	!    * exported enums across modules
-	!    * reverse cast from i32 to enum
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
 	!      intrinsic function, a struct method, or a user-defined function with

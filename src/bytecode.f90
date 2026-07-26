@@ -320,6 +320,14 @@ module syntran__bytecode_m
 	! Stack after:  [result]
 	integer, parameter :: OP_CALL_PTR = 1240
 
+	! Enum reverse cast, e.g. `Suit(2)`: a = node_pool_idx (enum_cast_expr
+	! node, carrying node%right for the ordinal sub-expr and node%val%struct(:)
+	! with one baked enum value_t per variant to match against). Mirrors
+	! OP_NEW_ARRAY's delegation to eval_array_expr.
+	! Stack before: []
+	! Stack after:  [result]
+	integer, parameter :: OP_ENUM_CAST = 1241
+
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
 	! Math

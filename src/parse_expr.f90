@@ -215,6 +215,18 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			call parser%match(identifier_token, identifier)
 		end do
 
+		! `mod::EnumName.Variant` can never be an assignment target (enum
+		! variants aren't assignable), same rationale as the unqualified
+		! EnumName.Variant check below.  Rewind and let parse_expr dispatch to
+		! parse_qualified_expr -> parse_enum_access instead of misreading this
+		! as an undeclared qualified variable
+		if (parser%current_kind() == dot_token .and. &
+			parser%enums%exists(expr%module_prefix // "::" // identifier%text)) then
+			parser%pos = pos0
+			call parser%parse_expr(expr=expr)
+			return
+		end if
+
 		! Look up the qualified variable
 		expr%identifier = identifier
 		is_const_var = .false.
@@ -743,6 +755,12 @@ recursive module subroutine parse_primary_expr(parser, expr)
 			if (parser%peek_kind(1) == double_colon_token) then
 				! Qualified name like `std::println()` or `mod::fn()`
 				call parser%parse_qualified_expr(expr)
+			else if (parser%peek_kind(1) == lparen_token .and. &
+					parser%enums%exists(parser%current_text())) then
+				! Reverse cast, e.g. `Suit(2)`.  Checked against the enums
+				! dict so a same-named fn is never shadowed by this -- enum
+				! type names and fn names live in separate namespaces
+				call parser%parse_enum_cast(expr)
 			else if (parser%peek_kind(1) == lparen_token) then
 				call parser%parse_fn_call(fn_call=expr)
 				if (parser%current_kind() == lbracket_token) then

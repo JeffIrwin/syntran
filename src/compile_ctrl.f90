@@ -868,6 +868,14 @@ recursive subroutine compile_node(prog, cs, node)
 
 		end select
 
+	! ---- enum reverse cast -----------------------------------------------------
+	! `EnumName(ordinal)`: node%right (the ordinal sub-expr) and node%val%struct(:)
+	! (baked variants to match against) are both carried via the node pool, so a
+	! single generic opcode delegates to eval_enum_cast_expr, mirroring OP_NEW_ARRAY.
+	case (enum_cast_expr)
+		idx = add_node(prog, node)
+		call emit(prog, OP_ENUM_CAST, a = idx)
+
 	! ---- struct instance construction -----------------------------------------
 	! M5: Compile each member-initialiser expression in order, then emit
 	! OP_MAKE_STRUCT.  The node is stored in the pool so the VM can recover

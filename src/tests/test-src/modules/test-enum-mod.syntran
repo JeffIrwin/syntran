@@ -1,0 +1,18 @@
+// Test unqualified enum export from module: values, arrays, fn params/
+// returns, and the reverse cast, all via the imported (unqualified) name
+
+use enum_mod::*;
+
+let s1 = Suit.Hearts;
+let ok1 = is_red(s1);
+
+let s2 = Suit(2);
+let ok2 = s2 == Suit.Clubs and not is_red(s2);
+
+let deck = full_deck();
+let ok3 = deck[3] == Suit.Spades;
+
+let hand = [Suit.Hearts, Suit(2)];
+let ok4 = hand[1] == Suit.Clubs;
+
+return ok1 and ok2 and ok3 and ok4;

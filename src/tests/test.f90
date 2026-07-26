@@ -5374,6 +5374,40 @@ subroutine unit_test_enum(npass, nfail)
 				'enum E{A,B=Zz} i32(E.B);'), &
 				EC_UNKNOWN_VARIANT), &
 
+			! Reverse cast from i32 to enum
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'Suit(2) == Suit.Clubs;', quiet) == 'true', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'Suit(i32(Suit.Spades)) == Suit.Spades;', quiet) == 'true', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'str(Suit(1));', quiet) == 'Suit.Diamonds', &
+
+			! Reverse cast picks the variant by explicit value, not position
+			eval( 'enum Card{Two,Three,Jack=10,Queen,King}' &
+				//'Card(11) == Card.Queen;', quiet) == 'true', &
+
+			! Reverse cast with a non-i32 argument is a parse-time type error
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} Suit("x");'), &
+				EC_BAD_ARG_TYPE), &
+
+			! Reverse cast with an out-of-range constant literal is a
+			! parse-time error (E96)
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Diamonds,Clubs,Spades} Suit(99);'), &
+				EC_ENUM_CAST_RANGE), &
+
+			! Reverse cast with an out-of-range non-literal ordinal is a
+			! runtime error (R32), on both backends
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'let x = 99; Suit(x);', bytecode = .true.), &
+				RC_ENUM_CAST_RANGE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'let x = 99; Suit(x);', bytecode = .false.), &
+				RC_ENUM_CAST_RANGE), &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5409,6 +5443,8 @@ subroutine unit_test_enum_long(npass, nfail)
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
 			interpret_file(path//'test-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-04.syntran', quiet) == 'true', &
+			interpret_file(path//'test-05.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5577,6 +5613,8 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-struct-collision.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-transitive.syntran', quiet) == 'true', &
+			interpret_file(path//'test-enum-mod.syntran', quiet) == 'true', &
+			interpret_file(path//'test-enum-mod-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'test-circular.syntran', quiet) == '', &
 			interpret_file(path//'test-duplicate-import.syntran', quiet) == '', &
 			interpret_file(path//'test-duplicate-alias.syntran', quiet) == '', &
@@ -6410,6 +6448,19 @@ subroutine unit_test_error_codes(npass, nfail)
 				'enum Card{Jack=10,King=10}'), &
 				EC_DUPLICATE_ENUM_VALUE), &
 
+			! E96: reverse cast EnumName(ordinal) with a constant literal
+			! ordinal that doesn't match any variant
+			diag_has_code(get_diags( &
+				'enum Dir{North,South} Dir(99);'), &
+				EC_ENUM_CAST_RANGE), &
+			diag_count_code(get_diags( &
+				'enum Dir{North,South} Dir(99);'), &
+				EC_ENUM_CAST_RANGE) == 1, &
+			! positive: a valid ordinal is unaffected
+			.not. diag_has_code(get_diags( &
+				'enum Dir{North,South} Dir(1);'), &
+				EC_ENUM_CAST_RANGE), &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -6856,7 +6907,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E95-duplicate-enum-value.syntran'), &
 				EC_DUPLICATE_ENUM_VALUE, P//'E95-duplicate-enum-value.syntran', 14, 2, 4), &
 			diag_count_code(get_diags_file(P//'E95-duplicate-enum-value.syntran'), &
-				EC_DUPLICATE_ENUM_VALUE) == 1 &
+				EC_DUPLICATE_ENUM_VALUE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E96-enum-cast-range.syntran'), &
+				EC_ENUM_CAST_RANGE, P//'E96-enum-cast-range.syntran', 11, 13, 2), &
+			diag_count_code(get_diags_file(P//'E96-enum-cast-range.syntran'), &
+				EC_ENUM_CAST_RANGE) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

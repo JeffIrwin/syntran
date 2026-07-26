@@ -144,6 +144,7 @@ module subroutine parse_use_statement(parser, statement)
 	character(len = :), allocatable :: module_name, import_name, module_path
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
 	character(len = :), allocatable :: insert_name, var_name, struct_name
+	character(len = :), allocatable :: enum_name
 	character(len = :), allocatable :: alias_name
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy, as_identifier, alias_identifier
@@ -154,7 +155,8 @@ module subroutine parse_use_statement(parser, statement)
 	type(fn_t), pointer :: fn
 	type(value_t) :: var_val
 	type(struct_t), pointer :: struct_val
-	integer :: i, io, iostat, mod_unit_, id_index, struct_slot, fn_slot
+	type(enum_t), pointer :: enum_val
+	integer :: i, io, iostat, mod_unit_, id_index, struct_slot, fn_slot, enum_slot
 	logical :: qualified_import, is_const_var
 	character(len = :), allocatable :: qualified_prefix
 
@@ -428,21 +430,25 @@ module subroutine parse_use_statement(parser, statement)
 	! Do not touch mod_parser%num_vars here; it is inherited from parser below.
 	call declare_intr_vars(mod_parser%vars)
 
-	! Share variable, function, AND struct numbering with parent parser. Module
-	! variables, functions, and structs will get indices continuing from parent's
-	! count, avoiding the need for remapping. This is similar to how #include works.
+	! Share variable, function, struct, AND enum numbering with parent parser.
+	! Module variables, functions, structs, and enums will get indices
+	! continuing from parent's count, avoiding the need for remapping. This is
+	! similar to how #include works.
 	mod_parser%num_vars = parser%num_vars
 	mod_parser%num_fns = parser%num_fns
 	mod_parser%num_structs = parser%num_structs
+	mod_parser%num_enums = parser%num_enums
 
 	! Parse the module
 	mod_parser%is_module = .true.
 	call mod_parser%parse_unit(mod_unit)
 
-	! Update parent's variable, function, and struct counts to include module definitions
+	! Update parent's variable, function, struct, and enum counts to include
+	! module definitions
 	parser%num_vars = mod_parser%num_vars
 	parser%num_fns = mod_parser%num_fns
 	parser%num_structs = mod_parser%num_structs
+	parser%num_enums = mod_parser%num_enums
 
 	! Check for parsing errors in the module (only in first pass)
 	if (parser%ipass == 0 .and. mod_parser%diagnostics%len_ > 0) then
@@ -555,6 +561,30 @@ module subroutine parse_use_statement(parser, statement)
 		if (parser%ipass == 0) call parser%struct_names%push(insert_name)
 	end do
 
+	! Copy parsed module enums to current parser.
+	do i = 1, mod_parser%enum_names%len_
+		enum_name = mod_parser%enum_names%v(i)%s
+
+		! Look up the enum in the module parser
+		enum_slot = mod_parser%enums%find(enum_name)
+		if (enum_slot == 0) cycle
+		enum_val => mod_parser%enums%get(enum_slot)
+		id_index  = mod_parser%enums%id_at(enum_slot)
+
+		! Determine insert name (qualified or unqualified)
+		if (qualified_import) then
+			insert_name = qualified_prefix // "::" // enum_name
+		else
+			insert_name = enum_name
+		end if
+
+		! Insert into current parser with the SAME id_index from module parser.
+		! This is critical: since we shared num_enums before parsing, indices
+		! already match - no remapping needed (same pattern as structs).
+		call parser%enums%insert(insert_name, enum_val, id_index, io)
+		if (parser%ipass == 0) call parser%enum_names%push(insert_name)
+	end do
+
 	! Store the module's translation unit for later evaluation. This ensures
 	! that module-level statements (like `let a = [0: 10];`) are evaluated,
 	! not just parsed.
@@ -592,7 +622,7 @@ end subroutine qualify_fn_struct_names
 
 subroutine qualify_value_struct_name(val, prefix)
 
-	! Update struct_name in a value_t to use qualified name
+	! Update struct_name/enum_name in a value_t to use qualified name
 
 	type(value_t), intent(inout) :: val
 	character(len = *), intent(in) :: prefix
@@ -601,12 +631,20 @@ subroutine qualify_value_struct_name(val, prefix)
 		if (allocated(val%struct_name)) then
 			val%struct_name = prefix // "::" // val%struct_name
 		end if
+	else if (val%type == enum_type) then
+		if (allocated(val%enum_name)) then
+			val%enum_name = prefix // "::" // val%enum_name
+		end if
 	else if (val%type == array_type) then
 		! Handle arrays of structs
 		if (allocated(val%array)) then
 			if (val%array%type == struct_type) then
 				if (allocated(val%struct_name)) then
 					val%struct_name = prefix // "::" // val%struct_name
+				end if
+			else if (val%array%type == enum_type) then
+				if (allocated(val%enum_name)) then
+					val%enum_name = prefix // "::" // val%enum_name
 				end if
 			end if
 		end if
@@ -746,6 +784,13 @@ recursive module subroutine parse_for_statement(parser, statement)
 		! Array iterator type could be i32 or i64, and lbound type might not
 		! match ubound type!
 		dummy%type = array%val%array%type
+		if (dummy%type == enum_type) then
+			! Propagate the enum identity so uses of the loop var (e.g. `s ==
+			! Suit.Clubs` inside the body) don't misfire the cross-enum
+			! mismatch check, which requires enum_name/enum_cookie to be set
+			if (allocated(array%val%enum_name)) dummy%enum_name = array%val%enum_name
+			if (allocated(array%val%enum_cookie)) dummy%enum_cookie = array%val%enum_cookie
+		end if
 		if (parser%is_loc) then
 			call parser%locs%insert(identifier%text, dummy, statement%id_index)
 		else
