@@ -1138,7 +1138,7 @@ module subroutine parse_enum_declaration(parser, decl)
 	!********
 
 	integer :: itype, i, j, k, io, pos0
-	integer :: next_value, this_value, this_explicit
+	integer :: next_value, this_value, this_explicit, sgn
 
 	logical :: overwrite, found_alias
 
@@ -1239,8 +1239,19 @@ module subroutine parse_enum_declaration(parser, decl)
 				! exempt from the duplicate-value check below
 				this_explicit = 2
 			else
+				! Optional leading sign: `-1` (and `+1`) lex as a separate
+				! unary minus/plus token before the i32 literal -- enum
+				! values are plain int literals, not full expressions, so
+				! only a single leading sign is handled here
+				sgn = 1
+				if (parser%current_kind() == minus_token) then
+					call parser%next(dummy)
+					sgn = -1
+				else if (parser%current_kind() == plus_token) then
+					call parser%next(dummy)
+				end if
 				call parser%match(i32_token, intlit)
-				this_value = intlit%val%sca%i32
+				this_value = sgn * intlit%val%sca%i32
 				this_explicit = 1
 			end if
 		end if

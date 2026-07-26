@@ -1524,6 +1524,17 @@ enum Card
 }
 ```
 
+The explicit value may be negative, e.g. `Below = -1`, and auto-increment
+continues from it normally:
+```rust
+enum Temp
+{
+    Below = -1,  // -1
+    Freezing,    //  0
+    Above,       //  1
+}
+```
+
 Each enum is a distinct type: two enums are never interchangeable, even if
 they happen to declare the same variant names.  Comparing or passing a
 mismatched enum type is a compile-time error, just like any other type

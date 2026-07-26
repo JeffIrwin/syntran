@@ -5408,6 +5408,34 @@ subroutine unit_test_enum(npass, nfail)
 				//'let x = 99; Suit(x);', bytecode = .false.), &
 				RC_ENUM_CAST_RANGE), &
 
+			! Explicit negative values, and auto-increment resuming from a
+			! negative value
+			eval( 'enum E{A=-1,B}' &
+				//'i32(E.A);', quiet) == '-1', &
+			eval( 'enum E{A=-1,B}' &
+				//'i32(E.B);', quiet) == '0', &
+			eval( 'enum E{A=-5,B,C}' &
+				//'i32(E.C);', quiet) == '-3', &
+
+			! Two variants both pinned explicitly to the same negative
+			! value are an intentional alias, not a duplicate-value error
+			.not. diag_has_code(get_diags( &
+				'enum E{A=-1,B=-1} E.A;'), &
+				EC_DUPLICATE_ENUM_VALUE), &
+			eval( 'enum E{A=-1,B=-1}' &
+				//'E.A == E.B;', quiet) == 'true', &
+
+			! str() formats by variant name regardless of a negative
+			! backing value
+			eval( 'enum E{A=-1,B}' &
+				//'str(E.A);', quiet) == 'E.A', &
+
+			! Reverse cast round-trips through a negative ordinal (runtime
+			! R32 path, since a negated literal isn't a literal_expr at
+			! parse time)
+			eval( 'enum E{A=-1,B}' &
+				//'E(-1) == E.A;', quiet) == 'true', &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5445,6 +5473,7 @@ subroutine unit_test_enum_long(npass, nfail)
 			interpret_file(path//'test-03.syntran', quiet) == 'true', &
 			interpret_file(path//'test-04.syntran', quiet) == 'true', &
 			interpret_file(path//'test-05.syntran', quiet) == 'true', &
+			interpret_file(path//'test-06.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
