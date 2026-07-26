@@ -335,7 +335,8 @@ subroutine value_reset(val)
 		! deallocation of that doesn't reliably free every level (same bug
 		! already fixed piecewise in value_copy()/array_copy() and
 		! eval_fn_call()'s locs teardown). value_destroy() clears every
-		! level explicitly, including str/file_/struct_name/struct_cookie
+		! level explicitly, including str/file_/struct_name/struct_cookie/
+		! enum_name/enum_variant/enum_cookie
 		call value_destroy(val)
 		val%type = unknown_type
 	end select
@@ -718,6 +719,9 @@ recursive subroutine value_destroy(val)
 	if (allocated(val%file_)) deallocate(val%file_)
 	if (allocated(val%struct_name)) deallocate(val%struct_name)
 	if (allocated(val%struct_cookie)) deallocate(val%struct_cookie)
+	if (allocated(val%enum_name)) deallocate(val%enum_name)
+	if (allocated(val%enum_variant)) deallocate(val%enum_variant)
+	if (allocated(val%enum_cookie)) deallocate(val%enum_cookie)
 
 	if (allocated(val%array)) then
 		call array_destroy(val%array)
