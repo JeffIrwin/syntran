@@ -1300,6 +1300,9 @@ recursive module subroutine eval_enum_cast_expr(node, state, res)
 
 	ord = arg%to_i32()
 
+	! Linear scan, not an array/hash lookup: variant values are arbitrary i32
+	! (explicit, sparse, negative, or aliased), so no direct-index table
+	! exists in general, and enums are small enough that this is cheap
 	do i = 1, size(node%val%struct)
 		if (node%val%struct(i)%sca%i32 == ord) then
 			res = node%val%struct(i)
