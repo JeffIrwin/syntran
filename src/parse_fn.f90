@@ -1122,15 +1122,15 @@ module subroutine parse_enum_declaration(parser, decl)
 
 	!********
 
-	integer :: itype, i, j, io, pos0
+	integer :: itype, i, j, k, io, pos0
 	integer :: next_value, this_value, this_explicit
 
-	logical :: overwrite
+	logical :: overwrite, found_alias
 
 	type(enum_t) :: enum
 
 	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
-		equals, name, enum_kw, intlit
+		equals, name, enum_kw, intlit, alias
 
 	type(text_span_t) :: span
 
@@ -1146,14 +1146,18 @@ module subroutine parse_enum_declaration(parser, decl)
 	!     	Three,      // 1
 	!     	Jack = 10,  // 10
 	!     	Queen,      // 11
+	!     	King = Jack,// 10 (alias)
 	!     }
 	!
 	!     // access
 	!     let c = Card.Jack;
 	!
 	! Variants are compile-time constants -- unlike struct members there is
-	! no type annotation, just an optional `= <intlit>` to pin the backing
-	! value.  Subsequent variants continue the auto-increment from there
+	! no type annotation, just an optional `= <intlit>` or `= <prior variant
+	! name>` to pin the backing value.  A name reference must refer to a
+	! variant already declared above it (like C's enumerator constants) and
+	! makes this variant an intentional alias.  Subsequent variants continue
+	! the auto-increment from there
 
 	call parser%match(enum_keyword, enum_kw)
 
@@ -1190,9 +1194,40 @@ module subroutine parse_enum_declaration(parser, decl)
 		this_explicit = 0
 		if (parser%current_kind() == equals_token) then
 			call parser%next(equals)
-			call parser%match(i32_token, intlit)
-			this_value = intlit%val%sca%i32
-			this_explicit = 1
+
+			if (parser%current_kind() == identifier_token) then
+				! Named alias, e.g. `King = Jack`.  Only variants already
+				! declared above this one are in scope, exactly like C
+				! enumerator constants -- forward references are an error
+				call parser%match(identifier_token, alias)
+
+				found_alias = .false.
+				do k = 1, names%len_
+					if (names%v(k)%s == alias%text) then
+						this_value = values%v(k)
+						found_alias = .true.
+						exit
+					end if
+				end do
+
+				if (.not. found_alias) then
+					span = new_span(alias%pos, len(alias%text))
+					call parser%diagnostics%push(err_unknown_variant( &
+						parser%context(), &
+						span, &
+						alias%text, &
+						identifier%text))
+				end if
+
+				! Whether resolved or not, this is an intentional alias --
+				! not an accidental auto-increment collision -- so it's
+				! exempt from the duplicate-value check below
+				this_explicit = 2
+			else
+				call parser%match(i32_token, intlit)
+				this_value = intlit%val%sca%i32
+				this_explicit = 1
+			end if
 		end if
 
 		call values%push(this_value)
@@ -1239,14 +1274,17 @@ module subroutine parse_enum_declaration(parser, decl)
 			end if
 		end do
 
-		! Duplicate values are only allowed when both variants are pinned
-		! explicitly (an intentional alias, e.g. `King = 10` next to
-		! `Jack = 10`).  Any collision that involves an auto-incremented
-		! value is always accidental, since auto-increment has no way to
-		! express aliasing intent -- so it's a hard error
+		! Duplicate values are only allowed when the collision is
+		! intentional: either a named alias (`King = Jack`, explicits == 2)
+		! on either side, or both variants pinned explicitly to the same
+		! int literal (e.g. `King = 10` next to `Jack = 10`).  Any
+		! collision that involves an auto-incremented value is always
+		! accidental, since auto-increment has no way to express aliasing
+		! intent -- so it's a hard error
 		do j = 1, i - 1
 			if (values%v(j) == values%v(i) .and. &
 					names%v(j)%s /= names%v(i)%s .and. &
+					explicits%v(i) /= 2 .and. explicits%v(j) /= 2 .and. &
 					.not. (explicits%v(i) == 1 .and. explicits%v(j) == 1)) then
 				span = new_span(pos_mems%v(i), pos_mems%v(i+1) - pos_mems%v(i))
 				call parser%diagnostics%push(err_duplicate_enum_value( &

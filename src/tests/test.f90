@@ -5342,6 +5342,38 @@ subroutine unit_test_enum(npass, nfail)
 			eval( 'enum Card{Jack=10,King=10}' &
 				//'Card.King == Card.Jack;', quiet) == 'true', &
 
+			! Named alias, `King = Jack`, referencing a prior auto-
+			! incremented variant.  Also not a duplicate-value error
+			.not. diag_has_code(get_diags( &
+				'enum Card{Two,Three,Jack,Queen,King=Jack} Card.King;'), &
+				EC_DUPLICATE_ENUM_VALUE), &
+			eval( 'enum Card{Two,Three,Jack,Queen,King=Jack}' &
+				//'Card.King == Card.Jack;', quiet) == 'true', &
+			eval( 'enum Card{Two,Three,Jack,Queen,King=Jack}' &
+				//'i32(Card.King);', quiet) == '2', &
+
+			! Auto-increment resumes from an aliased value, not from
+			! where it would have been without the alias
+			eval( 'enum E{A,B=10,C=A,D}' &
+				//'i32(E.C);', quiet) == '0', &
+			eval( 'enum E{A,B=10,C=A,D}' &
+				//'i32(E.D);', quiet) == '1', &
+
+			! Named alias to an explicitly-pinned variant
+			eval( 'enum E{A=5,B=A}' &
+				//'i32(E.B);', quiet) == '5', &
+
+			! Forward reference (alias to a variant declared below it) is
+			! an unknown-variant error, not resolved
+			diag_has_code(get_diags( &
+				'enum E{A=B,B} i32(E.A);'), &
+				EC_UNKNOWN_VARIANT), &
+
+			! Alias to a name that doesn't exist in the enum at all
+			diag_has_code(get_diags( &
+				'enum E{A,B=Zz} i32(E.B);'), &
+				EC_UNKNOWN_VARIANT), &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5376,6 +5408,7 @@ subroutine unit_test_enum_long(npass, nfail)
 		[   &
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-03.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
