@@ -5333,6 +5333,15 @@ subroutine unit_test_enum(npass, nfail)
 				'enum Dir{N,S} enum Sig{N,S} fn f(x: Dir): void {} f(Sig.N);'), &
 				EC_BAD_ARG_TYPE), &
 
+			! Two variants that are both pinned explicitly to the same
+			! value are an intentional alias (not a duplicate-value
+			! error), and compare equal at runtime
+			.not. diag_has_code(get_diags( &
+				'enum Card{Jack=10,King=10} Card.King == Card.Jack;'), &
+				EC_DUPLICATE_ENUM_VALUE), &
+			eval( 'enum Card{Jack=10,King=10}' &
+				//'Card.King == Card.Jack;', quiet) == 'true', &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -6352,6 +6361,22 @@ subroutine unit_test_error_codes(npass, nfail)
 				'enum Dir{North,South} let d = Dir.North;'), &
 				EC_UNKNOWN_VARIANT), &
 
+			! E95: duplicate enum values are a hard error unless both
+			! variants sharing the value are pinned explicitly (an
+			! intentional alias) -- any collision involving an
+			! auto-incremented value is always accidental
+			diag_has_code(get_diags( &
+				'enum Card{Jack=10,Queen,King=10,Ace}'), &
+				EC_DUPLICATE_ENUM_VALUE), &
+			diag_count_code(get_diags( &
+				'enum Card{Jack=10,Queen,King=10,Ace}'), &
+				EC_DUPLICATE_ENUM_VALUE) == 1, &
+			! positive: two variants both pinned explicitly to the same
+			! value is an intentional alias, not an error
+			.not. diag_has_code(get_diags( &
+				'enum Card{Jack=10,King=10}'), &
+				EC_DUPLICATE_ENUM_VALUE), &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -6794,7 +6819,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E94-unknown-variant.syntran'), &
 				EC_UNKNOWN_VARIANT, P//'E94-unknown-variant.syntran', 10, 13, 4), &
 			diag_count_code(get_diags_file(P//'E94-unknown-variant.syntran'), &
-				EC_UNKNOWN_VARIANT) == 1 &
+				EC_UNKNOWN_VARIANT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E95-duplicate-enum-value.syntran'), &
+				EC_DUPLICATE_ENUM_VALUE, P//'E95-duplicate-enum-value.syntran', 14, 2, 4), &
+			diag_count_code(get_diags_file(P//'E95-duplicate-enum-value.syntran'), &
+				EC_DUPLICATE_ENUM_VALUE) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

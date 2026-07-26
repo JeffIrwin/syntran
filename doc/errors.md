@@ -581,6 +581,12 @@ A dot expression (`EnumName.Variant`) referenced a variant name that doesn't exi
 
 [Example](../src/tests/test-src/errors/E94-unknown-variant.syntran)
 
+### E95 -- duplicate-enum-value
+
+Two variants in the same enum share a backing value, and at least one of them got it from auto-increment rather than an explicit `= <intlit>`.  Explicit-explicit aliases (e.g. two variants both written as `= 10`) are allowed; any collision involving an auto-incremented value is always accidental and is a hard error.
+
+[Example](../src/tests/test-src/errors/E95-duplicate-enum-value.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

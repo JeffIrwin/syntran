@@ -110,6 +110,7 @@ module syntran__errors_m
 		EC_REDECLARE_ENUM = "E92", &
 		EC_REDECLARE_VARIANT = "E93", &
 		EC_UNKNOWN_VARIANT = "E94", &
+		EC_DUPLICATE_ENUM_VALUE = "E95", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -378,6 +379,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_REDECLARE_ENUM)
 	call codes%push(EC_REDECLARE_VARIANT)
 	call codes%push(EC_UNKNOWN_VARIANT)
+	call codes%push(EC_DUPLICATE_ENUM_VALUE)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -925,6 +927,28 @@ function err_redeclare_variant(context, span, variant) result(err)
 		//underline(context, span)//" variant already declared"//color_reset
 
 end function err_redeclare_variant
+
+!===============================================================================
+
+function err_duplicate_enum_value(context, span, variant, other, value) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: variant, other
+	integer, intent(in) :: value
+
+	err = err_pre(EC_DUPLICATE_ENUM_VALUE) &
+		//'variant `'//variant//'` reuses value '//str(value) &
+		//', already assigned to `'//other//'`' &
+		//underline(context, span)//" duplicate enum value" &
+		//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": only explicitly-valued variants may share a value; " &
+		//"assign `"//variant//"` an explicit value to alias `"//other//"`"
+
+end function err_duplicate_enum_value
 
 !===============================================================================
 

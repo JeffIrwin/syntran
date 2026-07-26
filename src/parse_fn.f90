@@ -1123,7 +1123,7 @@ module subroutine parse_enum_declaration(parser, decl)
 	!********
 
 	integer :: itype, i, j, io, pos0
-	integer :: next_value, this_value
+	integer :: next_value, this_value, this_explicit
 
 	logical :: overwrite
 
@@ -1135,7 +1135,7 @@ module subroutine parse_enum_declaration(parser, decl)
 	type(text_span_t) :: span
 
 	type(string_vector_t) :: names
-	type(integer_vector_t) :: values, pos_mems
+	type(integer_vector_t) :: values, pos_mems, explicits
 
 	! Enums use this syntax:
 	!
@@ -1174,6 +1174,7 @@ module subroutine parse_enum_declaration(parser, decl)
 	names  = new_string_vector()
 	values = new_integer_vector()
 	pos_mems = new_integer_vector()
+	explicits = new_integer_vector()
 
 	next_value = 0
 	do while ( &
@@ -1186,14 +1187,17 @@ module subroutine parse_enum_declaration(parser, decl)
 		call pos_mems%push( name%pos )
 
 		this_value = next_value
+		this_explicit = 0
 		if (parser%current_kind() == equals_token) then
 			call parser%next(equals)
 			call parser%match(i32_token, intlit)
 			this_value = intlit%val%sca%i32
+			this_explicit = 1
 		end if
 
 		call values%push(this_value)
 		call names%push( name%text )
+		call explicits%push(this_explicit)
 		next_value = this_value + 1
 
 		if (parser%current_kind() /= rbrace_token) then
@@ -1231,6 +1235,26 @@ module subroutine parse_enum_declaration(parser, decl)
 					parser%context(), &
 					span, &
 					names%v(i)%s))
+				exit
+			end if
+		end do
+
+		! Duplicate values are only allowed when both variants are pinned
+		! explicitly (an intentional alias, e.g. `King = 10` next to
+		! `Jack = 10`).  Any collision that involves an auto-incremented
+		! value is always accidental, since auto-increment has no way to
+		! express aliasing intent -- so it's a hard error
+		do j = 1, i - 1
+			if (values%v(j) == values%v(i) .and. &
+					names%v(j)%s /= names%v(i)%s .and. &
+					.not. (explicits%v(i) == 1 .and. explicits%v(j) == 1)) then
+				span = new_span(pos_mems%v(i), pos_mems%v(i+1) - pos_mems%v(i))
+				call parser%diagnostics%push(err_duplicate_enum_value( &
+					parser%context(), &
+					span, &
+					names%v(i)%s, &
+					names%v(j)%s, &
+					values%v(i)))
 				exit
 			end if
 		end do
