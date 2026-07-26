@@ -563,6 +563,36 @@ A function call that returns void (no return value) was passed as an argument to
 
 [Example](../src/tests/test-src/errors/E91-void-arg.syntran)
 
+### E92 -- redeclare-enum
+
+An enum was declared twice.
+
+[Example](../src/tests/test-src/errors/E92-redeclare-enum.syntran)
+
+### E93 -- redeclare-variant
+
+A variant was declared twice in the same enum.
+
+[Example](../src/tests/test-src/errors/E93-redeclare-variant.syntran)
+
+### E94 -- unknown-variant
+
+A dot expression (`EnumName.Variant`) referenced a variant name that doesn't exist on the enum.  May include a "did you mean" suggestion.
+
+[Example](../src/tests/test-src/errors/E94-unknown-variant.syntran)
+
+### E95 -- duplicate-enum-value
+
+Two variants in the same enum share a backing value, and at least one of them got it from auto-increment rather than an explicit `= <intlit>`.  Explicit-explicit aliases (e.g. two variants both written as `= 10`) are allowed; any collision involving an auto-incremented value is always accidental and is a hard error.
+
+[Example](../src/tests/test-src/errors/E95-duplicate-enum-value.syntran)
+
+### E96 -- enum-cast-range
+
+A reverse cast `EnumName(ordinal)` was given a constant int literal `ordinal` that doesn't match any of the enum's variant values.  A non-constant ordinal that turns out to be out of range at runtime is R32 instead.
+
+[Example](../src/tests/test-src/errors/E96-enum-cast-range.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -903,6 +933,10 @@ An array slice subscript's step (`a[::s]`) evaluated to 0.
 ### R31 -- close-fail
 
 `close()` failed to close an open file (see the accompanying `iostat`).
+
+### R32 -- enum-cast-range
+
+A reverse cast `EnumName(ordinal)` was given an ordinal (not a constant literal, so not caught at parse time as E96) that doesn't match any of the enum's variant values.
 
 ## Warnings
 

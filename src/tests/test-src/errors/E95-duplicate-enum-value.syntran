@@ -1,0 +1,15 @@
+// E95: duplicate-enum-value
+// Two variants share a backing value, and at least one of them got that
+// value from auto-increment rather than an explicit `= <intlit>`.
+//
+// `King = 10` explicitly aliases `Jack = 10` -- that's allowed, no error.
+// `Ace` auto-increments to 11, silently colliding with `Queen = 11` -- that
+// collision is always accidental, so it's a hard error.
+
+enum Card
+{
+	Jack = 10,
+	Queen,
+	King = 10,
+	Ace,
+}

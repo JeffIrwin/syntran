@@ -1,0 +1,10 @@
+// E94: unknown-variant
+// A dot expression referenced a variant name that doesn't exist on the enum
+
+enum Dir
+{
+	North,
+	South,
+}
+
+let d = Dir.Nrth;

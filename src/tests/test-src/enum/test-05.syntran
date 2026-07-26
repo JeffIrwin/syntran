@@ -1,0 +1,46 @@
+// Reverse cast from i32 to enum: `Suit(2) -> Suit.Clubs`
+
+enum Suit
+{
+	Hearts,
+	Diamonds,
+	Clubs,
+	Spades,
+}
+
+let ok1 = Suit(2) == Suit.Clubs;
+let ok2 = Suit(0) == Suit.Hearts;
+
+// Round trip through the forward cast
+let ok3 = Suit(i32(Suit.Spades)) == Suit.Spades;
+
+// str() of a cast result
+let ok4 = str(Suit(1)) == "Suit.Diamonds";
+
+// Cast with a non-literal (runtime-only) argument
+let x = 3;
+let ok5 = Suit(x) == Suit.Spades;
+
+// Cast inside an array literal
+let hand = [Suit(0), Suit(2)];
+let ok6 = hand[1] == Suit.Clubs;
+
+// Cast as a fn call argument
+fn describe(s: Suit): str
+{
+	return str(s);
+}
+let ok7 = describe(Suit(3)) == "Suit.Spades";
+
+// Explicit-value enum: cast picks the right variant by value, not position
+enum Card
+{
+	Two,
+	Three,
+	Jack = 10,
+	Queen,
+	King,
+}
+let ok8 = Card(11) == Card.Queen;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8;

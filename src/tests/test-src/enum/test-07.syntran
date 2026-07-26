@@ -1,0 +1,84 @@
+// Regression test for reused-slot / bulk-free teardown of enum values.
+//
+// value_destroy() (value.f90) is responsible for explicitly freeing every
+// allocatable component of a value_t before gfortran's implicit deep
+// deallocation of a nested value_t (or value_t array) has to run -- the
+// implicit path is unreliable and has historically crashed on Windows.  A
+// past bug left enum_name/enum_variant/enum_cookie out of that teardown, so
+// this exercises the two hot paths that rely on it: the VM's reused
+// call-frame locals slots (value_reset), and repeated construction/discard of
+// enum arrays and structs holding an enum member (value_array_destroy).
+
+enum Suit
+{
+	Hearts,
+	Diamonds,
+	Clubs,
+	Spades,
+}
+
+struct Card
+{
+	suit: Suit,
+	rank: i32,
+}
+
+fn make_card(s: Suit, r: i32): Card
+{
+	// Local enum + struct-with-enum values are created and discarded every
+	// call, forcing the VM to reset the same locals slots many times
+	let c = Card{suit = s, rank = r};
+	return c;
+}
+
+fn suit_name(s: Suit): str
+{
+	// Local var slot reused across calls, always holding an enum value
+	let local_s = s;
+	return str(local_s);
+}
+
+let suits = [Suit.Hearts, Suit.Diamonds, Suit.Clubs, Suit.Spades];
+
+let count = 0;
+for i in [0: 200]
+{
+	// Rebuild an enum array and a struct-with-enum-member every iteration,
+	// re-using the same loop-local variable slots each time
+	let hand = [suits[i % 4], suits[(i + 1) % 4], suits[(i + 2) % 4]];
+	let c = make_card(suits[i % 4], i);
+
+	if c.suit == hand[0]
+		count = count + 1;
+}
+let ok1 = count == 200;
+
+// Alternate the same local variable slot between an enum value and a
+// non-enum (i32) value across iterations, to exercise the stale-slot type
+// transition in value_reset()
+let total = 0;
+for i in [0: 100]
+{
+	if i % 2 == 0
+	{
+		let x = suits[i % 4];
+		total = total + i32(x);
+	}
+	else
+	{
+		let x = i;
+		total = total + x;
+	}
+}
+let ok2 = total > 0;
+
+// Repeated str() calls on enum values force repeated bake/discard of
+// enum_variant-bearing temporaries
+let names = "";
+for i in [0: 4]
+{
+	names = names + suit_name(suits[i]);
+}
+let ok3 = names == "Suit.HeartsSuit.DiamondsSuit.ClubsSuit.Spades";
+
+return ok1 and ok2 and ok3;

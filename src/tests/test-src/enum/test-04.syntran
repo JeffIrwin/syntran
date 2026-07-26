@@ -1,0 +1,57 @@
+// Arrays of enums: literal arrays, indexing, assignment, str() formatting,
+// the uniform [x; n] form, enums as struct-array members, fn params/returns
+// of enum arrays, and iterating a literal enum array with a for loop
+
+enum Suit
+{
+	Hearts,
+	Diamonds,
+	Clubs,
+	Spades,
+}
+
+let hand = [Suit.Hearts, Suit.Clubs, Suit.Spades];
+let ok1 = hand[1] == Suit.Clubs;
+
+hand[0] = Suit.Diamonds;
+let ok2 = hand[0] == Suit.Diamonds;
+
+let ok3 = str(hand) == "[Suit.Diamonds, Suit.Clubs, Suit.Spades]";
+
+// Uniform [x; n] form
+let deck = [Suit.Hearts; 3];
+let ok4 = deck[0] == Suit.Hearts and deck[1] == Suit.Hearts and deck[2] == Suit.Hearts;
+
+// Enum array as a struct member
+struct Player
+{
+	name: str,
+	cards: [Suit; :],
+}
+let p = Player{name = "Alice", cards = [Suit.Hearts, Suit.Spades]};
+let ok5 = p.cards[1] == Suit.Spades;
+p.cards[0] = Suit.Clubs;
+let ok6 = p.cards[0] == Suit.Clubs;
+
+// Enum array as fn param/return
+fn describe_hand(h: [Suit; :]): str
+{
+	return str(h);
+}
+let ok7 = describe_hand(hand) == "[Suit.Diamonds, Suit.Clubs, Suit.Spades]";
+
+fn make_hand(): [Suit; :]
+{
+	return [Suit.Clubs, Suit.Hearts];
+}
+let ok8 = make_hand()[0] == Suit.Clubs;
+
+// Iterate a literal enum array with a for loop
+let count = 0;
+for s in [Suit.Hearts, Suit.Clubs, Suit.Spades]
+{
+	if s == Suit.Clubs { count = count + 1; }
+}
+let ok9 = count == 1;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8 and ok9;

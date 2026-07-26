@@ -1,0 +1,32 @@
+// Named aliases: a variant can pin its value to a previously-declared
+// variant by bare name, e.g. `King = Jack`, instead of an int literal.
+// Auto-increment resumes from the aliased value, and aliased variants
+// compare equal to the variant they reference
+
+enum Card
+{
+	Two,
+	Three,
+	Jack,
+	Queen,
+	King = Jack,
+}
+
+let ok1 = Card.King == Card.Jack;
+let ok2 = i32(Card.King) == i32(Card.Jack);
+let ok3 = i32(Card.King) == 2;
+
+// Alias to an explicitly-pinned variant, and auto-increment continuing
+// after an alias (not after the value it would have taken without one)
+enum Suit
+{
+	Hearts,
+	Diamonds = 10,
+	Clubs = Diamonds,
+	Spades,
+}
+
+let ok4 = i32(Suit.Clubs) == 10;
+let ok5 = i32(Suit.Spades) == 11;
+
+return ok1 and ok2 and ok3 and ok4 and ok5;

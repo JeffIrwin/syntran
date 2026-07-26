@@ -236,6 +236,15 @@ recursive subroutine compile_node(prog, cs, node)
 		const_idx = add_const(prog, node%val)
 		call emit(prog, OP_LOAD_CONST, a = const_idx)
 
+	! ---- enum variant access ----------------------------------------------------
+	! An enum variant, e.g. `Dir.North`: like fn_ref_expr, node%val was fully
+	! baked at parse time (parse_enum_access) and carries allocatable
+	! components (enum_name/enum_variant/enum_cookie), so it goes through the
+	! const pool rather than the scalar-immediate literal_expr cases above
+	case (enum_access_expr)
+		const_idx = add_const(prog, node%val)
+		call emit(prog, OP_LOAD_CONST, a = const_idx)
+
 	! ---- variable reads --------------------------------------------------------
 	case (name_expr)
 		if (allocated(node%lsubscripts)) then
@@ -725,6 +734,7 @@ recursive subroutine compile_node(prog, cs, node)
 		do i = 1, size(node%members)
 			if (node%members(i)%kind == fn_declaration    ) cycle
 			if (node%members(i)%kind == struct_declaration) cycle
+			if (node%members(i)%kind == enum_declaration   ) cycle
 			if (.not. first) call emit(prog, OP_POP)
 			first = .false.
 			call compile_node(prog, cs, node%members(i))
@@ -858,6 +868,14 @@ recursive subroutine compile_node(prog, cs, node)
 
 		end select
 
+	! ---- enum reverse cast -----------------------------------------------------
+	! `EnumName(ordinal)`: node%right (the ordinal sub-expr) and node%val%struct(:)
+	! (baked variants to match against) are both carried via the node pool, so a
+	! single generic opcode delegates to eval_enum_cast_expr, mirroring OP_NEW_ARRAY.
+	case (enum_cast_expr)
+		idx = add_node(prog, node)
+		call emit(prog, OP_ENUM_CAST, a = idx)
+
 	! ---- struct instance construction -----------------------------------------
 	! M5: Compile each member-initialiser expression in order, then emit
 	! OP_MAKE_STRUCT.  The node is stored in the pool so the VM can recover
@@ -911,6 +929,7 @@ recursive subroutine compile_node(prog, cs, node)
 			do i = 1, size(node%member%members)
 				if (node%member%members(i)%kind == fn_declaration    ) cycle
 				if (node%member%members(i)%kind == struct_declaration) cycle
+				if (node%member%members(i)%kind == enum_declaration   ) cycle
 				call compile_node(prog, cs, node%member%members(i))
 				call emit(prog, OP_POP)
 			end do

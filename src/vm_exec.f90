@@ -1419,6 +1419,15 @@ module subroutine vm_run(prog, state, res)
 			call eval_array_expr(prog%nodes(instr%a), state, val)
 			call vm_push_move(stack, val)
 
+		! --- enum reverse cast, e.g. `Suit(2)` -------------------------------------
+		! Delegates to eval_enum_cast_expr, which matches the runtime ordinal
+		! against the node's baked variant list and can rt_throw (R32) if none
+		! match, so check rt_halt before pushing a possibly-unset result.
+		case (OP_ENUM_CAST)
+			call eval_enum_cast_expr(prog%nodes(instr%a), state, val)
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
+
 		! --- M8: slice/complex LHS assignment ------------------------------------
 		! Handles slice-range LHS (a[1:3] = x) and subscript-less compound
 		! assignments by delegating to eval_assignment_expr.

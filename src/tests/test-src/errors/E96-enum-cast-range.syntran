@@ -1,0 +1,11 @@
+// E96: enum-cast-range
+// A reverse cast EnumName(ordinal) with a constant int literal argument
+// that doesn't match any variant's backing value
+
+enum Dir
+{
+	North,
+	South,
+}
+
+let d = Dir(99);

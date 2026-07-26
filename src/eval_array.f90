@@ -70,7 +70,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		else
 			i8 = sub_eval(node, var, state)
 		end if
-		if (var%array%type /= struct_type) then
+		if (.not. any(var%array%type == [struct_type, enum_type])) then
 			call set_array_val(var%array, i8, val)
 			return
 		end if
@@ -116,7 +116,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		return
 	end if
 
-	if (var%struct(id)%array%type /= struct_type) then
+	if (.not. any(var%struct(id)%array%type == [struct_type, enum_type])) then
 		call set_array_val(var%struct(id)%array, i8, val)
 		return
 	end if
@@ -211,16 +211,21 @@ recursive module subroutine get_val(node, var, state, res, index_)
 			i8 = sub_eval(node, var, state)
 		end if
 
-		if (var%array%type /= struct_type) then
+		if (.not. any(var%array%type == [struct_type, enum_type])) then
 			!print *, "get_array_val 2"
 			call get_array_val(var%array, i8, res)
 			return
 		end if
 
 		res = var%struct(i8+1)
-		res%type = struct_type
-		res%struct_name = var%struct_name
-		if (allocated(var%struct_cookie)) res%struct_cookie = var%struct_cookie
+		if (var%array%type == struct_type) then
+			res%type = struct_type
+			res%struct_name = var%struct_name
+			if (allocated(var%struct_cookie)) res%struct_cookie = var%struct_cookie
+		end if
+		! For enum_type, each stored element is already a fully baked enum
+		! value_t (type/enum_name/enum_variant/enum_cookie all set), so no
+		! extra tagging is needed here
 		return
 
 	end if
@@ -266,7 +271,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 		return
 	end if
 
-	if (var%struct(id)%array%type /= struct_type) then
+	if (.not. any(var%struct(id)%array%type == [struct_type, enum_type])) then
 		!print *, "get_array_val 3"
 		call get_array_val(var%struct(id)%array, i8, res)
 		return
@@ -342,7 +347,7 @@ module subroutine allocate_array(val, cap)
 	case (str_type)
 		allocate(val%array%str( cap ))
 
-	case (struct_type)
+	case (struct_type, enum_type)
 		allocate(val%struct( cap ))
 
 	case default
@@ -1547,6 +1552,10 @@ module subroutine apply_subscripts_to_val(node, val, state, res)
 			res%type       = struct_type
 			res%struct_name = val%struct_name
 			if (allocated(val%struct_cookie)) res%struct_cookie = val%struct_cookie
+		else if (val%array%type == enum_type) then
+			! Each stored element is already a fully baked enum value_t, so
+			! no extra tagging is needed here (c.f. get_val above)
+			res = val%struct(i8+1)
 		else
 			call get_array_val(val%array, i8, res)
 		end if

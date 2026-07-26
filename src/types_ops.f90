@@ -160,18 +160,20 @@ end subroutine log_diagnostics
 
 !===============================================================================
 
-module integer function lookup_type(name, structs, cookie) result(type)
+module integer function lookup_type(name, structs, enums, cookie) result(type)
 
 	character(len = *), intent(in) :: name
 
 	type(structs_t), intent(in), target :: structs
+	type(enums_t), intent(in), target :: enums
 
 	character(len = :), allocatable, intent(out), optional :: cookie
 
 	!********
 
-	integer :: struct_id
+	integer :: struct_id, enum_id
 	type(struct_t), pointer :: struct_ptr
+	type(enum_t), pointer :: enum_ptr
 
 	! Immo also has an "any" type.  Should I allow that?
 
@@ -195,7 +197,8 @@ module integer function lookup_type(name, structs, cookie) result(type)
 		case default
 
 			if (present(cookie)) then
-				! Cookie is requested, so we need the actual struct_t pointer
+				! Cookie is requested, so we need the actual struct_t/enum_t
+				! pointer
 				struct_id = structs%find(name)
 
 				if (struct_id > 0) then
@@ -204,13 +207,22 @@ module integer function lookup_type(name, structs, cookie) result(type)
 					cookie = struct_ptr%cookie
 					!print *, "struct num vars = ", struct_ptr%num_vars
 				else
-					type = unknown_type
+					enum_id = enums%find(name)
+					if (enum_id > 0) then
+						type = enum_type
+						enum_ptr => enums%get(enum_id)
+						cookie = enum_ptr%cookie
+					else
+						type = unknown_type
+					end if
 				end if
 			else
 				! Cheap existence check, without copying/pointing to the
-				! struct_t like search() does
+				! struct_t/enum_t like search() does
 				if (structs%exists(name)) then
 					type = struct_type
+				else if (enums%exists(name)) then
+					type = enum_type
 				else
 					type = unknown_type
 				end if
@@ -269,6 +281,9 @@ module integer function get_keyword_kind(text) result(kind)
 		case ("struct")
 			kind = struct_keyword
 
+		case ("enum")
+			kind = enum_keyword
+
 		case ("include")
 			kind = include_keyword
 
@@ -324,7 +339,7 @@ module logical function is_identifier_or_keyword(kind)
 	is_identifier_or_keyword = kind == identifier_token .or. any(kind == [ &
 		true_keyword, false_keyword, not_keyword, and_keyword, or_keyword, &
 		let_keyword, if_keyword, else_keyword, for_keyword, in_keyword, &
-		while_keyword, fn_keyword, struct_keyword, include_keyword, &
+		while_keyword, fn_keyword, struct_keyword, enum_keyword, include_keyword, &
 		return_keyword, break_keyword, continue_keyword, use_keyword &
 	])
 
@@ -964,6 +979,14 @@ recursive module integer function types_match(a, b) result(io)
 		end if
 	end if
 
+	if (a%type == enum_type) then
+		if (enum_kind_mismatch(a, b)) then
+			! Both are enums but different kinds of enums
+			io = TYPE_MISMATCH
+			return
+		end if
+	end if
+
 	if (a%type == array_type) then
 
 		if (.not. (a%array%type == any_type .or. a%array%type == b%array%type)) then
@@ -982,6 +1005,14 @@ recursive module integer function types_match(a, b) result(io)
 			if (struct_kind_mismatch(a, b)) then
 				! Both are arrays of structs but different kinds of structs
 				io = TYPE_ARRAY_STRUCT_MISMATCH
+				return
+			end if
+		end if
+
+		if (a%array%type == enum_type) then
+			if (enum_kind_mismatch(a, b)) then
+				! Both are arrays of enums but different kinds of enums
+				io = TYPE_ARRAY_ENUM_MISMATCH
 				return
 			end if
 		end if
@@ -1043,6 +1074,24 @@ logical function struct_kind_mismatch(a, b) result(mismatch)
 	end if
 
 end function struct_kind_mismatch
+
+!===============================================================================
+
+logical function enum_kind_mismatch(a, b) result(mismatch)
+
+	! Check whether two enum values are different kinds of enums.  Mirrors
+	! struct_kind_mismatch() -- prefer the alias-independent enum_cookie,
+	! falling back to enum_name if either side lacks a cookie
+
+	type(value_t), intent(in) :: a, b
+
+	if (allocated(a%enum_cookie) .and. allocated(b%enum_cookie)) then
+		mismatch = a%enum_cookie /= b%enum_cookie
+	else
+		mismatch = a%enum_name /= b%enum_name
+	end if
+
+end function enum_kind_mismatch
 
 !===============================================================================
 

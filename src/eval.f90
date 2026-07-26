@@ -346,6 +346,12 @@ module syntran__eval_m
 			type(value_t), intent(out) :: res
 		end subroutine
 
+		recursive module subroutine eval_enum_cast_expr(node, state, res)
+			type(syntax_node_t), intent(in) :: node
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: res
+		end subroutine
+
 	end interface
 
 !===============================================================================
@@ -438,6 +444,18 @@ recursive subroutine syntax_eval(node, state, res)
 
 	case (literal_expr)
 		res = node%val  ! this handles ints, bools, etc.
+
+	case (enum_access_expr)
+		! An enum variant, e.g. `Dir.North`: like literal_expr, node%val was
+		! fully baked at parse time (parse_enum_access), so there's nothing
+		! left to resolve at runtime
+		res = node%val
+
+	case (enum_cast_expr)
+		! Reverse cast, e.g. `Dir(2)`: node%right is the ordinal expression,
+		! and node%val%struct(:) holds one fully-baked enum value_t per
+		! variant (set at parse time by parse_enum_cast) to match against
+		call eval_enum_cast_expr(node, state, res)
 
 	case (array_expr)
 		call eval_array_expr(node, state, res)

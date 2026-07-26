@@ -724,9 +724,10 @@ module subroutine eval_translation_unit(node, state, res)
 	! members only change the (vars) state or define fns
 	do i = 1, size(node%members)
 
-		! Only eval statements, not fn or struct declarations
+		! Only eval statements, not fn, struct, or enum declarations
 		if (node%members(i)%kind == fn_declaration    ) cycle
 		if (node%members(i)%kind == struct_declaration) cycle
+		if (node%members(i)%kind == enum_declaration   ) cycle
 
 		call syntax_eval(node%members(i), state, res)
 
@@ -1076,6 +1077,20 @@ recursive module subroutine eval_array_expr(node, state, res)
 			res%struct_name = lbound_%struct_name
 			if (allocated(lbound_%struct_cookie)) res%struct_cookie = lbound_%struct_cookie
 
+		case (enum_type)
+
+			! Unlike struct_type, an enum variant has no nested allocatable
+			! members of its own, so a plain value_copy() per element is
+			! enough (no need to deep-copy a struct(:) sub-array)
+			do i8 = 1, res%array%len_
+				call value_copy(res%struct(i8), lbound_)
+			end do
+
+			! Arrays are homogeneous, so every element shares one enum_name
+			! for efficiency
+			res%enum_name = lbound_%enum_name
+			if (allocated(lbound_%enum_cookie)) res%enum_cookie = lbound_%enum_cookie
+
 		case default
 			write(*,*) err_eval_len_array(kind_name(res%array%type))
 			call internal_error()
@@ -1202,7 +1217,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 			if (state%rt_halt) return
 			!print *, 'elem['//str(i)//'] = ', elem%str()
 
-			if (res%array%type == struct_type) then
+			if (any(res%array%type == [struct_type, enum_type])) then
 				res%struct(i) = elem
 
 			else if (elem%type == array_type) then
@@ -1225,7 +1240,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 			call res%array%trim()
 		end if
 
-		if (res%array%type == struct_type) then
+		if (any(res%array%type == [struct_type, enum_type])) then
 			res%array%len_ = size(node%elems)
 		end if
 
@@ -1241,6 +1256,12 @@ recursive module subroutine eval_array_expr(node, state, res)
 		if (allocated(node%val%struct_cookie)) then
 			res%struct_cookie = node%val%struct_cookie
 		end if
+		if (allocated(node%val%enum_name)) then
+			res%enum_name = node%val%enum_name
+		end if
+		if (allocated(node%val%enum_cookie)) then
+			res%enum_cookie = node%val%enum_cookie
+		end if
 
 		!print *, "struct_name = ", res%struct_name
 
@@ -1250,6 +1271,49 @@ recursive module subroutine eval_array_expr(node, state, res)
 	end if
 
 end subroutine eval_array_expr
+
+!===============================================================================
+
+recursive module subroutine eval_enum_cast_expr(node, state, res)
+
+	! Evaluate `EnumName(ordinal)`.  node%val%struct(:) holds one fully-baked
+	! enum value_t per variant (set at parse time by parse_enum_cast()), so
+	! this just evaluates the ordinal expression and scans that baked list
+	! for a match -- no runtime enum registry is needed.  R32 if none matches
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	type(value_t) :: arg
+
+	integer(kind = 4) :: ord
+
+	integer :: i
+
+	call syntax_eval(node%right, state, arg)
+	if (state%rt_halt) return
+
+	ord = arg%to_i32()
+
+	! Linear scan, not an array/hash lookup: variant values are arbitrary i32
+	! (explicit, sparse, negative, or aliased), so no direct-index table
+	! exists in general, and enums are small enough that this is cheap
+	do i = 1, size(node%val%struct)
+		if (node%val%struct(i)%sca%i32 == ord) then
+			res = node%val%struct(i)
+			return
+		end if
+	end do
+
+	call rt_throw(state, err_rt(RC_ENUM_CAST_RANGE, &
+		"no variant with value "//str(ord)//" in enum `"//node%val%enum_name//"`"))
+
+end subroutine eval_enum_cast_expr
 
 !===============================================================================
 

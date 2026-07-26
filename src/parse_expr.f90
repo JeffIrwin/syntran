@@ -215,6 +215,18 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			call parser%match(identifier_token, identifier)
 		end do
 
+		! `mod::EnumName.Variant` can never be an assignment target (enum
+		! variants aren't assignable), same rationale as the unqualified
+		! EnumName.Variant check below.  Rewind and let parse_expr dispatch to
+		! parse_qualified_expr -> parse_enum_access instead of misreading this
+		! as an undeclared qualified variable
+		if (parser%current_kind() == dot_token .and. &
+			parser%enums%exists(expr%module_prefix // "::" // identifier%text)) then
+			parser%pos = pos0
+			call parser%parse_expr(expr=expr)
+			return
+		end if
+
 		! Look up the qualified variable
 		expr%identifier = identifier
 		is_const_var = .false.
@@ -309,6 +321,22 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 			return
 		end if
+	end if
+
+	if (parser%peek_kind(0) == identifier_token .and. &
+	    parser%peek_kind(1) == dot_token .and. &
+	    parser%enums%exists(parser%current_text())) then
+
+		! `EnumName.Variant` can never be an assignment target (enum variants
+		! aren't assignable), so route straight to the general expression
+		! parser (parse_primary_expr -> parse_enum_access handles it from
+		! here).  This skips the speculative assignment-parse logic below,
+		! which would otherwise treat the leading identifier as an undeclared
+		! struct-instance variable and error out before ever checking whether
+		! this is actually an assignment
+		call parser%parse_expr(expr=expr)
+		return
+
 	end if
 
 	if (parser%peek_kind(0) == identifier_token) then
@@ -499,6 +527,15 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				! args, instead of a bunch of int args as-is
 				is_op_allowed = .false.
 			end if
+		else if (ltype == enum_type .and. is_op_allowed) then
+			! Mirrors the struct_type cookie check above, for the same reason
+			if (allocated(expr%val%enum_cookie) .and. &
+				allocated(expr%right%val%enum_cookie)) then
+				if (expr%val%enum_cookie /= expr%right%val%enum_cookie) &
+					is_op_allowed = .false.
+			else if (expr%val%enum_name /= expr%right%val%enum_name) then
+				is_op_allowed = .false.
+			end if
 		end if
 
 		! This check could be moved inside of is_binary_op_allowed, but we would
@@ -555,6 +592,8 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 	integer :: parent_precl, prec, ltype, rtype, larrtype, rarrtype, &
 		lrank, rrank
 
+	logical :: is_op_allowed
+
 	type(syntax_node_t) :: right, bin_tmp
 	type(syntax_token_t) :: op
 	type(text_span_t) :: span
@@ -610,7 +649,21 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 		!print *, 'ltype = ', kind_name(ltype)
 		!print *, 'rtype = ', kind_name(rtype)
 
-		if (.not. is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)) then
+		is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
+		if (ltype == enum_type .and. is_op_allowed) then
+			! Mirrors the enum_cookie check in parse_expr_statement, for
+			! comparisons (e.g. `==`) that don't go through that
+			! assignment-only path
+			if (allocated(expr%left%val%enum_cookie) .and. &
+				allocated(expr%right%val%enum_cookie)) then
+				if (expr%left%val%enum_cookie /= expr%right%val%enum_cookie) &
+					is_op_allowed = .false.
+			else if (expr%left%val%enum_name /= expr%right%val%enum_name) then
+				is_op_allowed = .false.
+			end if
+		end if
+
+		if (.not. is_op_allowed) then
 
 			!print *, 'bin not allowed in parse_expr'
 
@@ -702,6 +755,12 @@ recursive module subroutine parse_primary_expr(parser, expr)
 			if (parser%peek_kind(1) == double_colon_token) then
 				! Qualified name like `std::println()` or `mod::fn()`
 				call parser%parse_qualified_expr(expr)
+			else if (parser%peek_kind(1) == lparen_token .and. &
+					parser%enums%exists(parser%current_text())) then
+				! Reverse cast, e.g. `Suit(2)`.  Checked against the enums
+				! dict so a same-named fn is never shadowed by this -- enum
+				! type names and fn names live in separate namespaces
+				call parser%parse_enum_cast(expr)
 			else if (parser%peek_kind(1) == lparen_token) then
 				call parser%parse_fn_call(fn_call=expr)
 				if (parser%current_kind() == lbracket_token) then
@@ -754,6 +813,15 @@ recursive module subroutine parse_primary_expr(parser, expr)
 					! Same as default case below
 					call parser%parse_name_expr(expr)
 				end if
+
+			else if (parser%peek_kind(1) == dot_token .and. &
+					parser%enums%exists(parser%current_text())) then
+				! Enum variant access, e.g. `Dir.North`.  Checked against the
+				! enums dict so a same-named local variable followed by `.`
+				! (a struct-instance dot, handled elsewhere) is never
+				! shadowed by this -- enum type names and variable names
+				! live in separate namespaces, so no ambiguity here
+				call parser%parse_enum_access(expr)
 
 			else
 				call parser%parse_name_expr(expr)

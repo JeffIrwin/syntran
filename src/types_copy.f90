@@ -111,6 +111,32 @@ end subroutine struct_copy
 
 !===============================================================================
 
+recursive module subroutine enum_copy(dst, src)
+
+	! Deep copy.  This overwrites dst with src
+
+	class(enum_t), intent(inout) :: dst
+	class(enum_t), intent(in)    :: src
+
+	dst%variant_names = src%variant_names
+	dst%num_vars      = src%num_vars
+
+	if (allocated(src%variant_values)) then
+		dst%variant_values = src%variant_values
+	else if (allocated(dst%variant_values)) then
+		deallocate(dst%variant_values)
+	end if
+
+	if (allocated(src%cookie)) then
+		dst%cookie = src%cookie
+	else if (allocated(dst%cookie)) then
+		deallocate(dst%cookie)
+	end if
+
+end subroutine enum_copy
+
+!===============================================================================
+
 recursive module subroutine fn_copy(dst, src)
 
 	! Deep copy.  This overwrites dst with src

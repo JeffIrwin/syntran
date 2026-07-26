@@ -107,6 +107,11 @@ module syntran__errors_m
 		EC_FN_PTR_ARRAY = "E89", &
 		EC_FN_PTR_STRUCT_MEMBER = "E90", &
 		EC_VOID_ARG = "E91", &
+		EC_REDECLARE_ENUM = "E92", &
+		EC_REDECLARE_VARIANT = "E93", &
+		EC_UNKNOWN_VARIANT = "E94", &
+		EC_DUPLICATE_ENUM_VALUE = "E95", &
+		EC_ENUM_CAST_RANGE = "E96", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -178,6 +183,7 @@ module syntran__errors_m
 		RC_GETENV_UNSET = "R29", &
 		RC_WRITELN_FAIL = "R30", &
 		RC_CLOSE_FAIL   = "R31", &
+		RC_ENUM_CAST_RANGE = "R32", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -372,6 +378,11 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_FN_PTR_ARRAY)
 	call codes%push(EC_FN_PTR_STRUCT_MEMBER)
 	call codes%push(EC_VOID_ARG)
+	call codes%push(EC_REDECLARE_ENUM)
+	call codes%push(EC_REDECLARE_VARIANT)
+	call codes%push(EC_UNKNOWN_VARIANT)
+	call codes%push(EC_DUPLICATE_ENUM_VALUE)
+	call codes%push(EC_ENUM_CAST_RANGE)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -442,6 +453,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(RC_CLOSE_STANDARD)
 	call codes%push(RC_WRITELN_FAIL)
 	call codes%push(RC_CLOSE_FAIL)
+	call codes%push(RC_ENUM_CAST_RANGE)
 	call codes%push(WC_MISSING_RETURN)
 end function get_all_error_codes
 
@@ -891,6 +903,99 @@ function err_redeclare_struct(context, span, struct) result(err)
 		//underline(context, span)//" struct already declared"//color_reset
 
 end function err_redeclare_struct
+
+!===============================================================================
+
+function err_redeclare_enum(context, span, enum) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: enum
+	err = err_pre(EC_REDECLARE_ENUM) &
+		//'enum `'//enum//'` has already been declared' &
+		//underline(context, span)//" enum already declared"//color_reset
+
+end function err_redeclare_enum
+
+!===============================================================================
+
+function err_redeclare_variant(context, span, variant) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: variant
+	err = err_pre(EC_REDECLARE_VARIANT) &
+		//'variant `'//variant//'` has already been declared in this enum' &
+		//underline(context, span)//" variant already declared"//color_reset
+
+end function err_redeclare_variant
+
+!===============================================================================
+
+function err_duplicate_enum_value(context, span, variant, other, value) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: variant, other
+	integer, intent(in) :: value
+
+	err = err_pre(EC_DUPLICATE_ENUM_VALUE) &
+		//'variant `'//variant//'` reuses value '//str(value) &
+		//', already assigned to `'//other//'`' &
+		//underline(context, span)//" duplicate enum value" &
+		//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": only explicitly-valued variants may share a value; " &
+		//"assign `"//variant//"` an explicit value to alias `"//other//"`"
+
+end function err_duplicate_enum_value
+
+!===============================================================================
+
+function err_unknown_variant(context, span, variant, enum, suggest) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: variant, enum
+	character(len = *), intent(in), optional :: suggest
+
+	err = err_pre(EC_UNKNOWN_VARIANT) &
+		//'variant `'//variant//'` does not exist in enum `'//enum//'`' &
+		//underline(context, span) &
+		//" unknown variant"//color_reset
+
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
+
+end function err_unknown_variant
+
+!===============================================================================
+
+function err_enum_cast_range(context, span, enum, value) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: enum
+	integer, intent(in) :: value
+
+	err = err_pre(EC_ENUM_CAST_RANGE) &
+		//'no variant with value '//str(value)//' in enum `'//enum//'`' &
+		//underline(context, span) &
+		//" out-of-range enum cast"//color_reset
+
+end function err_enum_cast_range
 
 !===============================================================================
 

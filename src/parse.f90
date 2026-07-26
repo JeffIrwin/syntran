@@ -42,9 +42,13 @@ module syntran__parse_m
 		type(string_vector_t) :: fn_names
 		type(string_vector_t) :: var_names    ! track module-level variable names
 		type(string_vector_t) :: struct_names ! track module-level struct names
+		type(string_vector_t) :: enum_names   ! track module-level enum names
 
 		type(structs_t) :: structs
 		integer :: num_structs = 0
+
+		type(enums_t) :: enums
+		integer :: num_enums = 0
 
 		! Set this to (the current) fn's return type.  Check that each return
 		! statement matches while parsing.  This is redundant since the fn
@@ -103,6 +107,9 @@ module syntran__parse_m
 				parse_qualified_expr, &
 				parse_struct_declaration, &
 				parse_struct_instance, &
+				parse_enum_declaration, &
+				parse_enum_access, &
+				parse_enum_cast, &
 				parse_for_statement, &
 				parse_if_statement, &
 				parse_return_statement, &
@@ -178,6 +185,23 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: inst
 			character(len = *), intent(in), optional :: struct_name
 		end subroutine parse_struct_instance
+
+		module subroutine parse_enum_declaration(parser, decl)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: decl
+		end subroutine parse_enum_declaration
+
+		module subroutine parse_enum_access(parser, expr, enum_name)
+			class(parser_t), target :: parser
+			type(syntax_node_t), intent(out) :: expr
+			character(len = *), intent(in), optional :: enum_name
+		end subroutine parse_enum_access
+
+		module subroutine parse_enum_cast(parser, expr, enum_name)
+			class(parser_t), target :: parser
+			type(syntax_node_t), intent(out) :: expr
+			character(len = *), intent(in), optional :: enum_name
+		end subroutine parse_enum_cast
 
 		module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 				fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref, &
