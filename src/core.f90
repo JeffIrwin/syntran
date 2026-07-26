@@ -31,6 +31,17 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - maybe cover README codeblocks in ci
+	!    * add markup in markdown (html) comments denoting begin/end of each
+	!      block. could also have asserts of expected results in comments. then
+	!      a ci script could extract blocks, pre-process, and verify results
+	!  - cover utils/run-samples.sh in ci
+	!    * need a blocklist probably to avoid running interactive samples like
+	!      betweenle et al
+	!  - enum improvements:
+	!    * arrays of enums
+	!    * exported enums across modules
+	!    * reverse cast from i32 to enum
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
 	!      intrinsic function, a struct method, or a user-defined function with
@@ -44,13 +55,9 @@ module syntran__core_m
 	!      is the can of worms opened by callbacks
 	!      + structs of fns work, arrays do not
 	!    * closures and anonymous (lambda) fns?
-	!  - cleanup misc files from top level of repo folder
-	!    * keep 1 or 2 Dockerfiles, move others
-	!    * move most *.sh scripts
 	!  - switch/match/case. needs to work with strings. would be nice to work
 	!    with arrays. basic switch/case is fine but also consider "pattern
 	!    matching" or whatever rust has
-	!  - enums
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
 	!    imported

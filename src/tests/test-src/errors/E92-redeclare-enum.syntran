@@ -1,0 +1,14 @@
+// E92: redeclare-enum
+// An enum was declared twice
+
+enum Dir
+{
+	North,
+	South,
+}
+
+enum Dir
+{
+	East,
+	West,
+}

@@ -327,6 +327,65 @@ module syntran__types_m
 
 	!********
 
+	type enum_t
+		! User-defined enumeration: a named integer constant ("variant") per
+		! entry.  Variants are compile-time constants, so unlike struct_t
+		! there is no vars_t of member types -- just parallel arrays of
+		! variant names and their backing i32 values
+
+		type(string_vector_t) :: variant_names
+		integer, allocatable :: variant_values(:)  ! parallel to variant_names
+		integer :: num_vars = 0
+
+		! Canonical, alias-independent identity: "<defining src file>::<local
+		! enum name>", set once at declaration time. c.f. value_t%enum_cookie
+		character(len = :), allocatable :: cookie
+
+		contains
+			! This is also required unfortunately
+#ifndef SYNTRAN_INTEL
+			procedure, pass(dst) :: copy => enum_copy
+			generic, public :: assignment(=) => copy
+#endif
+
+	end type enum_t
+
+	!********
+
+	type enum_entry_t
+		! One slot of the enums_t hash table.  An unallocated `key` marks an
+		! empty (never-used) slot
+
+		character(len = :), allocatable :: key
+		type(enum_t), allocatable :: val
+		integer :: id_index = 0
+
+	end type enum_entry_t
+
+	!********
+
+	type enums_t
+
+		! Open-addressing hash table (FNV-1a + linear probing), mirroring
+		! structs_t, mapping enum name -> enum_t
+
+		type(enum_entry_t), allocatable :: table(:)
+		integer :: capacity = 0, count = 0
+		real :: load_factor_threshold = 0.75
+
+		contains
+			procedure :: &
+				insert  => enum_insert, &
+				find    => enum_find, &
+				get     => enum_get, &
+				id_at   => enum_id_at, &
+				exists  => enum_exists, &
+				closest => enum_closest
+
+	end type enums_t
+
+	!********
+
 	type syntax_token_vector_t
 		type(syntax_token_t), allocatable :: v(:)
 		integer :: len_, cap
@@ -372,6 +431,11 @@ module syntran__types_m
 			class(struct_t), intent(inout) :: dst
 			class(struct_t), intent(in)    :: src
 		end subroutine struct_copy
+
+		recursive module subroutine enum_copy(dst, src)
+			class(enum_t), intent(inout) :: dst
+			class(enum_t), intent(in)    :: src
+		end subroutine enum_copy
 
 		recursive module subroutine fn_copy(dst, src)
 			class(fn_t), intent(inout) :: dst
@@ -551,6 +615,47 @@ module syntran__types_m
 			character(len = :), allocatable :: closest
 		end function struct_closest
 
+		module subroutine enum_insert(dict, key, val, id_index, iostat, overwrite)
+			class(enums_t) :: dict
+			character(len = *), intent(in) :: key
+			type(enum_t), intent(in) :: val
+			integer, intent(inout) :: id_index
+			integer, intent(out), optional :: iostat
+			logical, intent(in), optional :: overwrite
+		end subroutine enum_insert
+
+		module function enum_find(dict, key) result(slot)
+			! Returns the table slot for `key`, or 0 if not present.  Mirrors
+			! struct_find() -- see its comment for slot validity caveats
+			class(enums_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			integer :: slot
+		end function enum_find
+
+		module function enum_get(dict, slot) result(val)
+			class(enums_t), intent(in), target :: dict
+			integer, intent(in) :: slot
+			type(enum_t), pointer :: val
+		end function enum_get
+
+		module function enum_id_at(dict, slot) result(id_index)
+			class(enums_t), intent(in) :: dict
+			integer, intent(in) :: slot
+			integer :: id_index
+		end function enum_id_at
+
+		module function enum_exists(dict, key) result(exists)
+			class(enums_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			logical :: exists
+		end function enum_exists
+
+		module function enum_closest(dict, key) result(closest)
+			class(enums_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			character(len = :), allocatable :: closest
+		end function enum_closest
+
 		!***************************************
 		! types_ops.f90 procedures
 		!***************************************
@@ -566,9 +671,10 @@ module syntran__types_m
 			integer, optional, intent(in) :: ou
 		end subroutine log_diagnostics
 
-		module integer function lookup_type(name, structs, cookie) result(type)
+		module integer function lookup_type(name, structs, enums, cookie) result(type)
 			character(len = *), intent(in) :: name
 			type(structs_t), intent(in), target :: structs
+			type(enums_t), intent(in), target :: enums
 			character(len = :), allocatable, intent(out), optional :: cookie
 		end function lookup_type
 

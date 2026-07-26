@@ -357,7 +357,7 @@ module subroutine parse_unit(parser, unit)
 	type(syntax_node_t)  :: stmt_tmp
 	type(syntax_token_t) :: dummy
 
-	integer :: i, pos0, num_vars0, num_fns0, num_structs0
+	integer :: i, pos0, num_vars0, num_fns0, num_structs0, num_enums0
 
 	!print *, 'starting parse_unit()'
 
@@ -382,9 +382,11 @@ module subroutine parse_unit(parser, unit)
 	num_vars0 = parser%num_vars  ! not necessarily 0 for the REPL
 	num_fns0 = parser%num_fns    ! includes intrinsic fns
 	num_structs0 = parser%num_structs
+	num_enums0 = parser%num_enums
 	parser%fn_names = new_string_vector()
 	parser%var_names = new_string_vector()
 	parser%struct_names = new_string_vector()
+	parser%enum_names = new_string_vector()
 
 	do while (parser%current_kind() /= eof_token)
 
@@ -400,6 +402,9 @@ module subroutine parse_unit(parser, unit)
 			call members%push_move(stmt_tmp)
 		case (struct_keyword)
 			call parser%parse_struct_declaration(stmt_tmp)
+			call members%push_move(stmt_tmp)
+		case (enum_keyword)
+			call parser%parse_enum_declaration(stmt_tmp)
 			call members%push_move(stmt_tmp)
 		case default
 			call parser%parse_statement(stmt_tmp)
@@ -434,6 +439,7 @@ module subroutine parse_unit(parser, unit)
 		parser%num_vars = num_vars0
 		parser%num_fns = num_fns0
 		parser%num_structs = num_structs0
+		parser%num_enums = num_enums0
 
 		! TODO: Double check struct resetting.  Does anything else need to be reset?
 
@@ -463,6 +469,9 @@ module subroutine parse_unit(parser, unit)
 				call members%push_move(stmt_tmp)
 			case (struct_keyword)
 				call parser%parse_struct_declaration(stmt_tmp)
+				call members%push_move(stmt_tmp)
+			case (enum_keyword)
+				call parser%parse_enum_declaration(stmt_tmp)
 				call members%push_move(stmt_tmp)
 			case default
 				call parser%parse_statement(stmt_tmp)

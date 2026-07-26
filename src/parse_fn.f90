@@ -902,7 +902,7 @@ module subroutine parse_struct_declaration(parser, decl)
 	call parser%match(identifier_token, identifier)
 	!print *, "parsing struct ", identifier%text
 
-	itype = lookup_type(identifier%text, parser%structs)
+	itype = lookup_type(identifier%text, parser%structs, parser%enums)
 	!print *, "itype = ", itype, kind_name(itype)
 	if (itype /= unknown_type .and. itype /= struct_type) then
 		! Redeclared structs are caught below
@@ -1112,6 +1112,256 @@ module subroutine parse_struct_declaration(parser, decl)
 	!print *, "done parsing struct"
 
 end subroutine parse_struct_declaration
+
+!===============================================================================
+
+module subroutine parse_enum_declaration(parser, decl)
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(out) :: decl
+
+	!********
+
+	integer :: itype, i, j, io, pos0
+	integer :: next_value, this_value
+
+	logical :: overwrite
+
+	type(enum_t) :: enum
+
+	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
+		equals, name, enum_kw, intlit
+
+	type(text_span_t) :: span
+
+	type(string_vector_t) :: names
+	type(integer_vector_t) :: values, pos_mems
+
+	! Enums use this syntax:
+	!
+	!     // declaration
+	!     enum Card
+	!     {
+	!     	Two,        // 0
+	!     	Three,      // 1
+	!     	Jack = 10,  // 10
+	!     	Queen,      // 11
+	!     }
+	!
+	!     // access
+	!     let c = Card.Jack;
+	!
+	! Variants are compile-time constants -- unlike struct members there is
+	! no type annotation, just an optional `= <intlit>` to pin the backing
+	! value.  Subsequent variants continue the auto-increment from there
+
+	call parser%match(enum_keyword, enum_kw)
+
+	call parser%match(identifier_token, identifier)
+
+	itype = lookup_type(identifier%text, parser%structs, parser%enums)
+	if (itype /= unknown_type .and. itype /= enum_type) then
+		! Redeclared enums are caught below
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_redeclare_primitive( &
+			parser%context(), &
+			span, &
+			identifier%text))
+	end if
+
+	call parser%match(lbrace_token, lbrace)
+
+	names  = new_string_vector()
+	values = new_integer_vector()
+	pos_mems = new_integer_vector()
+
+	next_value = 0
+	do while ( &
+			parser%current_kind() /= rbrace_token .and. &
+			parser%current_kind() /= eof_token)
+
+		pos0 = parser%current_pos()
+
+		call parser%match(identifier_token, name)
+		call pos_mems%push( name%pos )
+
+		this_value = next_value
+		if (parser%current_kind() == equals_token) then
+			call parser%next(equals)
+			call parser%match(i32_token, intlit)
+			this_value = intlit%val%sca%i32
+		end if
+
+		call values%push(this_value)
+		call names%push( name%text )
+		next_value = this_value + 1
+
+		if (parser%current_kind() /= rbrace_token) then
+			! Delimiting commas are required; trailing comma is optional
+			call parser%match(comma_token, comma)
+		end if
+
+		! Break infinite loop
+		if (parser%current_pos() == pos0) call parser%next(dummy)
+
+	end do
+
+	! Sentinel for duplicate-variant span: end of the last variant (or rbrace)
+	call pos_mems%push(parser%current_pos())
+
+	enum%num_vars = 0
+	allocate(enum%variant_names%v( names%len_ ))
+	allocate(enum%variant_values ( names%len_ ))
+
+	! Canonical alias-independent identity, set once at declaration time,
+	! mirroring struct%cookie above
+	enum%cookie = parser%contexts%v(parser%current_unit())%src_file &
+		// "::" // identifier%text
+
+	do i = 1, names%len_
+
+		enum%variant_names%v(i)%s = names%v(i)%s
+		enum%variant_values(i)    = values%v(i)
+		enum%num_vars = enum%num_vars + 1
+
+		do j = 1, i - 1
+			if (enum%variant_names%v(j)%s == names%v(i)%s) then
+				span = new_span(pos_mems%v(i), pos_mems%v(i+1) - pos_mems%v(i))
+				call parser%diagnostics%push(err_redeclare_variant( &
+					parser%context(), &
+					span, &
+					names%v(i)%s))
+				exit
+			end if
+		end do
+
+	end do
+
+	call parser%match(rbrace_token, rbrace)
+
+	! Insert enum into parser dict
+
+	parser%num_enums = parser%num_enums + 1
+	decl%id_index  = parser%num_enums
+
+	overwrite = .false.
+	if (parser%ipass > 0) overwrite = .true.
+
+	call parser%enums%insert( &
+		identifier%text, enum, decl%id_index, io, overwrite = overwrite)
+	if (parser%ipass == 0) call parser%enum_names%push(identifier%text)
+	if (io /= 0) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_redeclare_enum( &
+			parser%context(), &
+			span, &
+			identifier%text))
+	end if
+
+	decl%kind = enum_declaration
+
+end subroutine parse_enum_declaration
+
+!===============================================================================
+
+module subroutine parse_enum_access(parser, expr)
+
+	! Parse `EnumName.Variant`, called from parse_primary_expr() when the
+	! current identifier is a registered enum name.  Bakes a fully-resolved
+	! enum value_t into expr%val at parse time -- enum values are
+	! compile-time constants, so there is no runtime lookup
+
+	class(parser_t), target :: parser
+	type(syntax_node_t), intent(out) :: expr
+
+	!********
+
+	integer :: enum_id, i, variant_id
+
+	character(len = :), allocatable :: enum_name_text
+
+	type(enum_t), pointer :: enum
+
+	type(syntax_token_t) :: enum_tok, dot, variant_tok
+
+	type(text_span_t) :: span
+
+	call parser%match(identifier_token, enum_tok)
+	enum_name_text = enum_tok%text
+
+	call parser%match(dot_token, dot)
+	call parser%match(identifier_token, variant_tok)
+
+	enum_id = parser%enums%find(enum_name_text)
+	enum => parser%enums%get(enum_id)
+
+	variant_id = 0
+	do i = 1, enum%num_vars
+		if (enum%variant_names%v(i)%s == variant_tok%text) then
+			variant_id = i
+			exit
+		end if
+	end do
+
+	expr%kind = enum_access_expr
+	expr%identifier = variant_tok
+
+	if (variant_id == 0) then
+		span = new_span(variant_tok%pos, len(variant_tok%text))
+		call parser%diagnostics%push(err_unknown_variant( &
+			parser%context(), span, variant_tok%text, enum_name_text, &
+			enum_closest_variant(enum, variant_tok%text)))
+
+		! Error recovery: sanitize to unknown_type so this doesn't cascade
+		! into a fn-ptr-struct-member-style crash downstream
+		expr%val%type = unknown_type
+		return
+	end if
+
+	expr%val%type = enum_type
+	expr%val%sca%i32 = enum%variant_values(variant_id)
+	expr%val%enum_name = enum_name_text
+	expr%val%enum_variant = variant_tok%text
+	expr%val%enum_cookie = enum%cookie
+
+end subroutine parse_enum_access
+
+!===============================================================================
+
+function enum_closest_variant(enum, key) result(closest)
+
+	! Return the closest variant name in `enum` to `key`, or "" when none is
+	! close enough.  Mirrors structs_t%closest()/enums_t%closest(), but scans
+	! an enum_t's variant_names instead of a whole hash table of enum_t's
+
+	type(enum_t), intent(in) :: enum
+	character(len = *), intent(in) :: key
+	character(len = :), allocatable :: closest
+
+	!********
+
+	integer :: i, min_dist, dist, threshold
+	character(len = :), allocatable :: key_low, target_low
+
+	closest  = ""
+	min_dist = huge(min_dist)
+	target_low = to_lower(key)
+
+	do i = 1, enum%num_vars
+		key_low = to_lower(enum%variant_names%v(i)%s)
+		if (key_low == target_low) cycle
+
+		dist = levenshtein(target_low, key_low)
+		if (dist < min_dist) then
+			min_dist = dist
+			closest  = enum%variant_names%v(i)%s
+		end if
+	end do
+
+	threshold = max(2, len(target_low) / 3)
+	if (min_dist > threshold) closest = ""
+
+end function enum_closest_variant
 
 !===============================================================================
 
@@ -1554,7 +1804,7 @@ recursive module subroutine parse_type(parser, type_text, type)
 	integer :: rank, itype, i
 	integer :: pos0, pos1, pos2
 
-	character(len = :), allocatable :: struct_cookie, param_type_text, ret_type_text
+	character(len = :), allocatable :: cookie, suggest, param_type_text, ret_type_text
 
 	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
 		double_colon, fn_kw, lparen, rparen
@@ -1662,13 +1912,14 @@ recursive module subroutine parse_type(parser, type_text, type)
 	end if
 	pos2 = parser%current_pos()
 
-	itype = lookup_type(type_text, parser%structs, struct_cookie)
+	itype = lookup_type(type_text, parser%structs, parser%enums, cookie)
 
 	if (itype == unknown_type) then
 		span = new_span(pos1, pos2 - pos1)
+		suggest = parser%structs%closest(type_text)
+		if (len(suggest) == 0) suggest = parser%enums%closest(type_text)
 		call parser%diagnostics%push(err_bad_type( &
-			parser%context(), span, type_text, &
-			parser%structs%closest(type_text)))
+			parser%context(), span, type_text, suggest))
 	end if
 
 	if (rank >= 0) then
@@ -1683,7 +1934,10 @@ recursive module subroutine parse_type(parser, type_text, type)
 
 	if (itype == struct_type) then
 		type%struct_name = type_text
-		type%struct_cookie = struct_cookie
+		type%struct_cookie = cookie
+	else if (itype == enum_type) then
+		type%enum_name = type_text
+		type%enum_cookie = cookie
 	end if
 
 end subroutine parse_type

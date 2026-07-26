@@ -133,6 +133,22 @@ module syntran__value_m
 		! import path
 		character(len = :), allocatable :: struct_cookie
 
+		! Enum type name, e.g. "Dir", used when value%type == enum_type.
+		! Mirrors struct_name's role for type-descriptor rendering (fn param/
+		! return types, etc.)
+		character(len = :), allocatable :: enum_name
+
+		! Enum variant name, e.g. "North", for an actual enum value (as
+		! opposed to a bare enum type descriptor, which leaves this
+		! unallocated).  Printed as "<enum_name>.<enum_variant>".  The
+		! backing i32 ordinal is stored in sca%i32
+		character(len = :), allocatable :: enum_variant
+
+		! Canonical, alias-independent enum identity: "<defining src
+		! file>::<local enum name>".  Used for type matching, mirroring
+		! struct_cookie above
+		character(len = :), allocatable :: enum_cookie
+
 		! Fn pointer signature, used when value%type == fn_type.  fn_params(i)
 		! and fn_ret carry only the *type* of each param/return (like fn_t%params
 		! /fn_t%type in types.f90), not runtime values -- used for type-checking
@@ -363,6 +379,12 @@ recursive subroutine value_move(src, dst)
 		if (allocated(src%struct_cookie)) call move_alloc(src%struct_cookie, dst%struct_cookie)
 		call move_alloc(src%struct, dst%struct)
 
+	case (enum_type)
+		dst%sca = src%sca   ! the backing i32 ordinal rides along here
+		call move_alloc(src%enum_name, dst%enum_name)
+		if (allocated(src%enum_variant)) call move_alloc(src%enum_variant, dst%enum_variant)
+		if (allocated(src%enum_cookie)) call move_alloc(src%enum_cookie, dst%enum_cookie)
+
 	case (str_type)
 		call move_alloc(src%str, dst%str)
 
@@ -571,6 +593,24 @@ recursive subroutine value_copy(dst, src)
 		dst%struct_cookie = src%struct_cookie
 	else if (allocated(dst%struct_cookie)) then
 		deallocate(dst%struct_cookie)
+	end if
+
+	if (allocated(src%enum_name)) then
+		dst%enum_name = src%enum_name
+	else if (allocated(dst%enum_name)) then
+		deallocate(dst%enum_name)
+	end if
+
+	if (allocated(src%enum_variant)) then
+		dst%enum_variant = src%enum_variant
+	else if (allocated(dst%enum_variant)) then
+		deallocate(dst%enum_variant)
+	end if
+
+	if (allocated(src%enum_cookie)) then
+		dst%enum_cookie = src%enum_cookie
+	else if (allocated(dst%enum_cookie)) then
+		deallocate(dst%enum_cookie)
 	end if
 
 	if (allocated(src%array)) then
@@ -986,6 +1026,10 @@ function value_to_i32(val) result(ans)
 		case (i64_type)
 			ans = int(val%sca%i64, 4)
 
+		case (enum_type)
+			! The backing ordinal, e.g. i32(Card.Queen) -> 11
+			ans = val%sca%i32
+
 		case (str_type)
 
 			if (allocated(val%str) .and. len(val%str%s) == 1) then
@@ -1229,6 +1273,9 @@ recursive function value_to_str(val) result(ans)
 			call str_vec%push("}")
 			ans = str_vec%trim()
 
+		case (enum_type)
+			ans = val%enum_name//"."//val%enum_variant
+
 		case (array_type)
 
 			! This whole case could be an array_to_str() fn
@@ -1464,6 +1511,8 @@ recursive function value_type_name(a) result(str_)
 
 	if (a%type == struct_type) then
 		str_ = a%struct_name
+	else if (a%type == enum_type) then
+		str_ = a%enum_name
 	else if (a%type == array_type) then
 
 		if (a%array%type == struct_type) then

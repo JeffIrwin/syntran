@@ -563,6 +563,24 @@ A function call that returns void (no return value) was passed as an argument to
 
 [Example](../src/tests/test-src/errors/E91-void-arg.syntran)
 
+### E92 -- redeclare-enum
+
+An enum was declared twice.
+
+[Example](../src/tests/test-src/errors/E92-redeclare-enum.syntran)
+
+### E93 -- redeclare-variant
+
+A variant was declared twice in the same enum.
+
+[Example](../src/tests/test-src/errors/E93-redeclare-variant.syntran)
+
+### E94 -- unknown-variant
+
+A dot expression (`EnumName.Variant`) referenced a variant name that doesn't exist on the enum.  May include a "did you mean" suggestion.
+
+[Example](../src/tests/test-src/errors/E94-unknown-variant.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

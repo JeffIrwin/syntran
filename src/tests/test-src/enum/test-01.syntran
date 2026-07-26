@@ -1,0 +1,44 @@
+enum Suit
+{
+	Hearts,
+	Diamonds,
+	Clubs,
+	Spades,
+}
+
+enum Card
+{
+	Two,
+	Three,
+	Jack = 10,
+	Queen,
+	King,
+}
+
+let s = Suit.Clubs;
+let ok1 = i32(s) == 2;
+
+let c = Card.Queen;
+let ok2 = i32(c) == 11;
+
+let ok3 = Suit.Hearts == Suit.Hearts;
+let ok4 = Suit.Hearts != Suit.Spades;
+
+let deck = [10, 20, 30, 40];
+let ok5 = deck[i32(Suit.Clubs)] == 30;
+
+fn describe(x: Suit): str
+{
+	return str(x);
+}
+let ok6 = describe(Suit.Diamonds) == "Suit.Diamonds";
+
+struct Player
+{
+	name: str,
+	suit: Suit,
+}
+let p = Player{name = "Alice", suit = Suit.Spades};
+let ok7 = p.suit == Suit.Spades;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7;

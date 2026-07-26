@@ -1457,6 +1457,90 @@ println(e[0].d.c[0].b.a[0]._);
 // 42
 ```
 
+## Enums
+
+Enums declare a named type with a fixed set of integer-valued variants:
+```rust
+enum Suit
+{
+    Hearts,
+    Diamonds,
+    Clubs,
+    Spades,
+}
+```
+
+Just like struct members, variants are delimited by a comma `,` and the
+trailing comma after the last variant is optional.  There is no semicolon
+after the closing `}`.
+
+Variants are accessed with dot syntax on the enum's type name, not on an
+instance:
+```rust
+let s = Suit.Clubs;
+```
+
+By default, variants are assigned consecutive integer values starting at `0`
+in declaration order (`Hearts` is `0`, `Diamonds` is `1`, etc.).  A variant can
+pin an explicit value with `= <intlit>`; later variants without an explicit
+value continue counting up from there:
+```rust
+enum Card
+{
+    Two,        // 0
+    Three,      // 1
+    Jack = 10,  // 10
+    Queen,      // 11
+    King,       // 12
+}
+```
+
+Each enum is a distinct type: two enums are never interchangeable, even if
+they happen to declare the same variant names.  Comparing or passing a
+mismatched enum type is a compile-time error, just like any other type
+mismatch:
+```rust
+enum Dir{North, South}
+enum Signal{North, South}
+
+let d = Dir.North;
+// d == Signal.North;  // error: mismatched types
+```
+
+Enum values only support equality comparison, `==` and `!=`.  To use a
+variant as an integer -- e.g. for ordering, arithmetic, or array indexing --
+convert it explicitly with `i32()`:
+```rust
+let a = [10, 20, 30, 40];
+println(a[i32(Suit.Clubs)]);
+// 30
+```
+
+Printing an enum value shows its qualified name, `EnumType.Variant`:
+```rust
+println(Suit.Diamonds);
+// Suit.Diamonds
+```
+
+Enums can be used anywhere a type is expected: as function parameters and
+return types, and as struct members:
+```rust
+struct Player
+{
+    name: str,
+    suit: Suit,
+}
+
+fn describe(s: Suit): str
+{
+    return str(s);
+}
+
+let p = Player{name = "Alice", suit = Suit.Spades};
+println(describe(p.suit));
+// Suit.Spades
+```
+
 ## Samples
 
 Many syntran samples are provided in this repository and elsewhere:

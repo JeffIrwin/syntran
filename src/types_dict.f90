@@ -879,6 +879,242 @@ end function struct_closest
 
 !===============================================================================
 
+subroutine enum_grow(dict)
+
+	! Double dict%table's capacity (or allocate an initial table) and rehash
+	! all existing entries into it.  Mirrors struct_grow()
+
+	class(enums_t) :: dict
+
+	!********
+
+	type(enum_entry_t), allocatable :: old_table(:)
+	integer :: old_capacity, i, new_capacity
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	old_capacity = dict%capacity
+	new_capacity = max(2 * old_capacity, 8)
+
+	if (old_capacity > 0) call move_alloc(dict%table, old_table)
+
+	dict%capacity = new_capacity
+	allocate(dict%table(new_capacity))
+	! dict%count is unchanged -- rehashing doesn't add or remove entries
+
+	do i = 1, old_capacity
+		if (.not. allocated(old_table(i)%key)) cycle
+
+		hash_val = fnv_1a(old_table(i)%key)
+		hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+		do probe = 0, dict%capacity - 1
+			idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+			if (.not. allocated(dict%table(idx)%key)) then
+				call move_alloc(old_table(i)%key, dict%table(idx)%key)
+				call move_alloc(old_table(i)%val, dict%table(idx)%val)
+				dict%table(idx)%id_index = old_table(i)%id_index
+				exit
+			end if
+		end do
+	end do
+
+end subroutine enum_grow
+
+!===============================================================================
+
+module function enum_find(dict, key) result(slot)
+
+	! Returns the table slot for `key`, or 0 if not present.  Mirrors
+	! struct_find() -- see its comment for slot validity caveats
+
+	class(enums_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+
+	integer :: slot
+
+	!********
+
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	slot = 0
+
+	if (dict%capacity <= 0) return
+
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+	do probe = 0, dict%capacity - 1
+		idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+
+		if (.not. allocated(dict%table(idx)%key)) then
+			! Empty slot => key not present
+			return
+		else if (is_str_eq(dict%table(idx)%key, key)) then
+			slot = idx
+			return
+		end if
+	end do
+
+end function enum_find
+
+!===============================================================================
+
+module function enum_get(dict, slot) result(val)
+
+	class(enums_t), intent(in), target :: dict
+	integer, intent(in) :: slot
+
+	type(enum_t), pointer :: val
+
+	val => dict%table(slot)%val
+
+end function enum_get
+
+!===============================================================================
+
+module function enum_id_at(dict, slot) result(id_index)
+
+	class(enums_t), intent(in) :: dict
+	integer, intent(in) :: slot
+
+	integer :: id_index
+
+	id_index = dict%table(slot)%id_index
+
+end function enum_id_at
+
+!===============================================================================
+
+module function enum_exists(dict, key) result(exists)
+
+	! Check if a key exists, without going through get() like other callers do
+
+	class(enums_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+	logical :: exists
+
+	exists = enum_find(dict, key) > 0
+
+end function enum_exists
+
+!===============================================================================
+
+module subroutine enum_insert(dict, key, val, id_index, iostat, overwrite)
+
+	class(enums_t) :: dict
+	character(len = *), intent(in) :: key
+	type(enum_t), intent(in) :: val
+	integer, intent(inout) :: id_index
+
+	integer, intent(out), optional :: iostat
+	logical, intent(in), optional :: overwrite
+
+	!********
+
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx, io
+	logical :: overwritel
+
+	id_index = id_index + 1
+
+	! Note that this is different than the fn insert default.  Re-declared
+	! enums are caught in the caller (in parse_enum_declaration())
+	overwritel = .true.
+	if (present(overwrite)) overwritel = overwrite
+
+	io = exit_success
+
+	! Two separate `if`s rather than one `.or.` expression -- see the
+	! identical comment in fn_insert() above for why
+	if (dict%capacity <= 0) then
+		call enum_grow(dict)
+	else if (real(dict%count) / real(dict%capacity) >= dict%load_factor_threshold) then
+		call enum_grow(dict)
+	end if
+
+	hash_val = fnv_1a(key)
+	hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+	do probe = 0, dict%capacity - 1
+		idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+
+		if (.not. allocated(dict%table(idx)%key)) then
+			! Empty slot - insert new entry.  enum_t has a defined
+			! assignment(=) (enum_copy), which -- unlike intrinsic
+			! assignment -- does not auto-allocate an unallocated allocatable
+			! target, so val must be explicitly allocated first
+			dict%table(idx)%key = key
+			if (.not. allocated(dict%table(idx)%val)) allocate(dict%table(idx)%val)
+			dict%table(idx)%val = val
+			dict%table(idx)%id_index = id_index
+			dict%count = dict%count + 1
+			exit
+		else if (is_str_eq(dict%table(idx)%key, key)) then
+			! Key already inserted
+			if (.not. overwritel) then
+				io = exit_failure
+				exit
+			end if
+			if (.not. allocated(dict%table(idx)%val)) allocate(dict%table(idx)%val)
+			dict%table(idx)%val = val
+			dict%table(idx)%id_index = id_index
+			exit
+		end if
+	end do
+
+	if (present(iostat)) iostat = io
+
+end subroutine enum_insert
+
+!===============================================================================
+
+module function enum_closest(dict, key) result(closest)
+
+	! Return the closest declared enum name to `key`, or "" when none is
+	! close enough.  Mirrors struct_closest()
+
+	class(enums_t), intent(in) :: dict
+	character(len = *), intent(in) :: key
+	character(len = :), allocatable :: closest
+
+	!********
+
+	integer :: i, min_dist, min_qdist, threshold, dist, qdist
+	character(len = :), allocatable :: target_low, target_unqual_low, &
+		key_, key_low, key_unqual
+
+	closest           = ""
+	min_dist          = huge(min_dist)
+	min_qdist         = huge(min_qdist)
+	target_low        = to_lower(key)
+	target_unqual_low = to_lower(unqualified_name(key))
+
+	do i = 1, dict%capacity
+		if (.not. allocated(dict%table(i)%key)) cycle
+
+		key_ = dict%table(i)%key
+		key_low = to_lower(key_)
+		if (key_low == target_low) cycle
+
+		key_unqual = unqualified_name(key_)
+		dist  = levenshtein(target_unqual_low, to_lower(key_unqual))
+		qdist = levenshtein(target_low, key_low)
+		if (dist < min_dist .or. (dist == min_dist .and. qdist < min_qdist)) then
+			min_dist  = dist
+			min_qdist = qdist
+			closest   = key_
+		end if
+	end do
+
+	threshold = max(2, len(target_unqual_low) / 3)
+	if (min_dist > threshold) closest = ""
+
+end function enum_closest
+
+!===============================================================================
+
 ! ternary_closest() was here.  var_dict_t is now a flat hash table, so
 ! var_closest() below scans dict%dicts(i)%table(:) directly, mirroring
 ! fn_closest()'s scan of fns_t's single table

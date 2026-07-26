@@ -5262,6 +5262,123 @@ end subroutine unit_test_methods
 
 !===============================================================================
 
+subroutine unit_test_enum(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'enums'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Auto-increment from 0
+			eval( 'enum Dir{North,South,East,West}' &                    ! 1
+				//'i32(Dir.North);', quiet) == '0', &
+			eval( 'enum Dir{North,South,East,West}' &                    ! 2
+				//'i32(Dir.West);', quiet) == '3', &
+
+			! Explicit value + continuation
+			eval( 'enum Card{Two,Three,Jack=10,Queen,King}' &            ! 3
+				//'i32(Card.Jack);', quiet) == '10', &
+			eval( 'enum Card{Two,Three,Jack=10,Queen,King}' &            ! 4
+				//'i32(Card.Queen);', quiet) == '11', &
+			eval( 'enum Card{Two,Three,Jack=10,Queen,King}' &            ! 5
+				//'i32(Card.King);', quiet) == '12', &
+
+			! Printing (qualified name)
+			eval( 'enum Dir{North,South}' &                              ! 6
+				//'Dir.North;', quiet) == 'Dir.North', &
+			eval( 'enum Dir{North,South}' &                              ! 7
+				//'str(Dir.South);', quiet) == 'Dir.South', &
+
+			! Equality/inequality
+			eval( 'enum Dir{North,South}' &                              ! 8
+				//'Dir.North == Dir.North;', quiet) == 'true', &
+			eval( 'enum Dir{North,South}' &                              ! 9
+				//'Dir.North == Dir.South;', quiet) == 'false', &
+			eval( 'enum Dir{North,South}' &                              ! 10
+				//'Dir.North != Dir.South;', quiet) == 'true', &
+
+			! Array indexing via i32() cast
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &            ! 11
+				//'let a = [10,20,30,40];' &
+				//'a[i32(Suit.Clubs)];', quiet) == '30', &
+
+			! let-bound variable retains type across statements
+			eval( 'enum Dir{North,South}' &                              ! 12
+				//'let d = Dir.North;' &
+				//'d == Dir.North;', quiet) == 'true', &
+
+			! fn param/return
+			eval( 'enum Dir{North,South}' &                              ! 13
+				//'fn other(d: Dir): Dir {' &
+				//'    if d == Dir.North { return Dir.South; }' &
+				//'    return Dir.North;' &
+				//'}' &
+				//'other(Dir.North) == Dir.South;', quiet) == 'true', &
+
+			! Two different enums are not interchangeable
+			diag_has_code(get_diags( &
+				'enum Dir{N,S} enum Sig{N,S} Dir.N == Sig.N;'), &
+				EC_BINARY_TYPES), &
+			diag_has_code(get_diags( &
+				'enum Dir{N,S} enum Sig{N,S} fn f(x: Dir): void {} f(Sig.N);'), &
+				EC_BAD_ARG_TYPE), &
+
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_enum
+
+!===============================================================================
+
+subroutine unit_test_enum_long(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'enum scripts'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/enum/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_enum_long
+
+!===============================================================================
+
 subroutine unit_test_bitwise_2(npass, nfail)
 
 	implicit none
@@ -6207,6 +6324,34 @@ subroutine unit_test_error_codes(npass, nfail)
 				'fn g(x: i32): i32 { return x; } fn f() { let y = 1; } g(f());'), &
 				EC_VOID_ARG), &
 
+			! E92: an enum was declared twice
+			diag_has_code(get_diags( &
+				'enum Dir{North,South} enum Dir{East,West}'), &
+				EC_REDECLARE_ENUM), &
+			diag_count_code(get_diags( &
+				'enum Dir{North,South} enum Dir{East,West}'), &
+				EC_REDECLARE_ENUM) == 1, &
+
+			! E93: a variant was declared twice in the same enum
+			diag_has_code(get_diags( &
+				'enum Dir{North,North}'), &
+				EC_REDECLARE_VARIANT), &
+			diag_count_code(get_diags( &
+				'enum Dir{North,North}'), &
+				EC_REDECLARE_VARIANT) == 1, &
+
+			! E94: a dot expression referenced a variant that doesn't exist
+			diag_has_code(get_diags( &
+				'enum Dir{North,South} let d = Dir.Nrth;'), &
+				EC_UNKNOWN_VARIANT), &
+			diag_count_code(get_diags( &
+				'enum Dir{North,South} let d = Dir.Nrth;'), &
+				EC_UNKNOWN_VARIANT) == 1, &
+			! positive: a valid variant is unaffected
+			.not. diag_has_code(get_diags( &
+				'enum Dir{North,South} let d = Dir.North;'), &
+				EC_UNKNOWN_VARIANT), &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -6637,7 +6782,19 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E91-void-arg.syntran'), &
 				EC_VOID_ARG, P//'E91-void-arg.syntran', 9, 9, 3), &
 			diag_count_code(get_diags_file(P//'E91-void-arg.syntran'), &
-				EC_VOID_ARG) == 1 &
+				EC_VOID_ARG) == 1, &
+			diag_loc_ok(get_diags_file(P//'E92-redeclare-enum.syntran'), &
+				EC_REDECLARE_ENUM, P//'E92-redeclare-enum.syntran', 10, 6, 3), &
+			diag_count_code(get_diags_file(P//'E92-redeclare-enum.syntran'), &
+				EC_REDECLARE_ENUM) == 1, &
+			diag_loc_ok(get_diags_file(P//'E93-redeclare-variant.syntran'), &
+				EC_REDECLARE_VARIANT, P//'E93-redeclare-variant.syntran', 7, 2, 6), &
+			diag_count_code(get_diags_file(P//'E93-redeclare-variant.syntran'), &
+				EC_REDECLARE_VARIANT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E94-unknown-variant.syntran'), &
+				EC_UNKNOWN_VARIANT, P//'E94-unknown-variant.syntran', 10, 13, 4), &
+			diag_count_code(get_diags_file(P//'E94-unknown-variant.syntran'), &
+				EC_UNKNOWN_VARIANT) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -6849,6 +7006,8 @@ subroutine unit_tests(iostat)
 	call unit_test_struct_str (npass, nfail)
 	call unit_test_struct_long(npass, nfail)
 	call unit_test_methods    (npass, nfail)
+	call unit_test_enum       (npass, nfail)
+	call unit_test_enum_long  (npass, nfail)
 	call unit_test_f64_mix    (npass, nfail)
 	call unit_test_literals   (npass, nfail)
 	call unit_test_bitwise    (npass, nfail)

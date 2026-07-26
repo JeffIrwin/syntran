@@ -439,6 +439,12 @@ recursive subroutine syntax_eval(node, state, res)
 	case (literal_expr)
 		res = node%val  ! this handles ints, bools, etc.
 
+	case (enum_access_expr)
+		! An enum variant, e.g. `Dir.North`: like literal_expr, node%val was
+		! fully baked at parse time (parse_enum_access), so there's nothing
+		! left to resolve at runtime
+		res = node%val
+
 	case (array_expr)
 		call eval_array_expr(node, state, res)
 

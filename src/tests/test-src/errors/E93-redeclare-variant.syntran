@@ -1,0 +1,8 @@
+// E93: redeclare-variant
+// A variant was declared twice in the same enum
+
+enum Dir
+{
+	North,
+	North,
+}

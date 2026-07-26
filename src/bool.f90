@@ -120,6 +120,12 @@ subroutine is_eq_value_t(left, right, res, op_text)
 	case        (magic * str_type + str_type)
 		res%sca%bool = is_str_eq(left%str%s, right%str%s)
 
+	case        (magic * enum_type + enum_type)
+		! Cross-enum-type comparisons are already rejected at parse time
+		! (parse_expr.f90's enum_cookie check), so both operands are
+		! guaranteed to be the same enum here -- just compare ordinals
+		res%sca%bool = left%sca%i32 == right%sca%i32
+
 	case        (magic * array_type + i32_type)
 
 		!print *, 'left%type       = ', kind_name(left%type)

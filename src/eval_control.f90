@@ -724,9 +724,10 @@ module subroutine eval_translation_unit(node, state, res)
 	! members only change the (vars) state or define fns
 	do i = 1, size(node%members)
 
-		! Only eval statements, not fn or struct declarations
+		! Only eval statements, not fn, struct, or enum declarations
 		if (node%members(i)%kind == fn_declaration    ) cycle
 		if (node%members(i)%kind == struct_declaration) cycle
+		if (node%members(i)%kind == enum_declaration   ) cycle
 
 		call syntax_eval(node%members(i), state, res)
 
