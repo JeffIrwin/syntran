@@ -1128,6 +1128,38 @@ end function is_str_eq
 
 !===============================================================================
 
+logical function is_str_lt(a, b)
+	! Length-aware, lexicographic string less-than.  Fortran's `<` blank-pads
+	! the shorter operand to the longer operand's length before comparing, so
+	! e.g. `"a" < "a "` is `.false.` in raw Fortran even though the shorter
+	! string should sort first.  Comparing one character at a time sidesteps
+	! that (single-char slices have no padding to apply), and a common prefix
+	! is broken by length, with the shorter string sorting first
+	!
+	! `a <= b`, `a > b`, and `a >= b` are all derived from this one fn:
+	!
+	!     a <  b  =        is_str_lt(a, b)
+	!     a <= b  = .not.  is_str_lt(b, a)
+	!     a >  b  =        is_str_lt(b, a)
+	!     a >= b  = .not.  is_str_lt(a, b)
+
+	character(len = *), intent(in) :: a, b
+
+	integer :: i, n
+
+	n = min(len(a), len(b))
+	do i = 1, n
+		if (a(i:i) /= b(i:i)) then
+			is_str_lt = a(i:i) < b(i:i)
+			return
+		end if
+	end do
+	is_str_lt = len(a) < len(b)
+
+end function is_str_lt
+
+!===============================================================================
+
 function findlocl1(arr, val) result(loc)
 
 	! findloc() is standard in Fortran 2008, but gfortran 8.1.0 doesn't have it

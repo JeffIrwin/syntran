@@ -62,6 +62,13 @@ s[3:]   // "lo"
 s[:3]   // "hel"
 ```
 
+Strings support `==`, `!=`, `<`, `<=`, `>`, and `>=`.  Ordering is
+lexicographic (dictionary order) and length-aware: two strings of different
+length are never padded before comparing, so a string that is a strict
+prefix of another always sorts before it, e.g. `"a" < "a "` and
+`"ab" < "abc"` are both `true`.  All six comparisons also work elementwise on
+string arrays, e.g. `["a", "b"] < ["b", "b"]` is `[true, false]`.
+
 <!-- # Variadic and polymorphic functions -->
 # Special functions
 

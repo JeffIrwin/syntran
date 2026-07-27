@@ -2355,6 +2355,50 @@ module subroutine vm_run(prog, state, res)
 			stack%len_ = stack%len_ - 1
 			end block
 
+		! String ordering: same shape as OP_EQ_STR / OP_NE_STR above, but using
+		! is_str_lt() for lexicographic, length-aware comparison (see its
+		! comment in utils.f90 for why raw Fortran `<` is unsafe for strings).
+		case (OP_LT_STR)
+			block
+			logical :: b_
+			b_ = is_str_lt(stack%v(stack%len_-1)%str%s, stack%v(stack%len_)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
+		case (OP_LE_STR)
+			block
+			logical :: b_
+			b_ = .not. is_str_lt(stack%v(stack%len_)%str%s, stack%v(stack%len_-1)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
+		case (OP_GT_STR)
+			block
+			logical :: b_
+			b_ = is_str_lt(stack%v(stack%len_)%str%s, stack%v(stack%len_-1)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
+		case (OP_GE_STR)
+			block
+			logical :: b_
+			b_ = .not. is_str_lt(stack%v(stack%len_-1)%str%s, stack%v(stack%len_)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
+
 		! Bool binary
 		case (OP_AND_BOOL)
 			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%bool &

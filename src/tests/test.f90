@@ -2462,6 +2462,33 @@ subroutine unit_test_str(npass, nfail)
 			eval('" " == ["", " ", "  "];')  == '[false, true, false]', &
 			eval('["", " ", "  "] == " ";')  == '[false, true, false]', &
 			eval('["", " ", "  "] == [" ", " ", " "];')  == '[false, true, false]', &
+
+			! String ordering (<, <=, >, >=): lexicographic and length-aware,
+			! unlike raw Fortran `<` which blank-pads the shorter operand
+			eval('"abc" < "abd";')  == 'true', &
+			eval('"abd" < "abc";')  == 'false', &
+			eval('"abc" < "abc";')  == 'false', &
+			eval('"abc" <= "abc";') == 'true', &
+			eval('"abd" > "abc";')  == 'true', &
+			eval('"abc" > "abd";')  == 'false', &
+			eval('"abc" >= "abc";') == 'true', &
+			eval('"ab" < "abc";')   == 'true', &
+			eval('"abc" > "ab";')   == 'true', &
+
+			! Padding edge case: shorter string sorts first, unlike raw
+			! Fortran `<` which blank-pads and would treat these as equal
+			eval('"a" < "a ";')  == 'true', &
+			eval('"a " > "a";')  == 'true', &
+			eval('"a" <= "a ";') == 'true', &
+			eval('"a " >= "a";') == 'true', &
+			eval('"a" == "a ";') == 'false', &
+
+			! String array ordering, both directions and array-array
+			eval('["a", "b", "c"] < ["b", "b", "a"];') == '[true, false, false]', &
+			eval('["a", "b", "c"] < "b";') == '[true, false, false]', &
+			eval('"b" > ["a", "b", "c"];') == '[true, false, false]', &
+			eval('["a", "b", "c"] <= ["a", "a", "d"];') == '[true, false, true]', &
+
 			eval('"hello world";') == 'hello world', &
 
 			! Raw string literals: r"...", r#"..."#, r##"..."##, etc.

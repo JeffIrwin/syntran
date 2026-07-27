@@ -200,6 +200,10 @@ module syntran__bytecode_m
 	!   Both str slots are deallocated before the bool is written so the next pop
 	!   sees a clean bool_type slot with no stale allocatable.
 	!
+	! OP_LT_STR / OP_LE_STR / OP_GT_STR / OP_GE_STR: same shape as OP_EQ_STR /
+	!   OP_NE_STR, but lexicographic ordering via is_str_lt() instead of
+	!   is_str_eq().
+	!
 	! OP_SIZE_NAT: read array size directly from a variable slot without loading (deep-copying)
 	!   the entire array.  Avoids O(N) allocation for size() calls on large arrays.
 	!   a = slot_id, b = dim (0-based; -1 means total len_), c = is_local (0=global, 1=local).
@@ -215,7 +219,11 @@ module syntran__bytecode_m
 		OP_NE_STR           = 1144, &
 		OP_SIZE_NAT         = 1145, &
 		OP_SLICE_NAT        = 1146, &
-		OP_STORE_SLICE_NAT  = 1147
+		OP_STORE_SLICE_NAT  = 1147, &
+		OP_LT_STR           = 1242, &
+		OP_LE_STR           = 1243, &
+		OP_GT_STR           = 1244, &
+		OP_GE_STR           = 1245
 
 	! Native array construction opcodes.
 	!
@@ -911,6 +919,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (i64_type); op = OP_LT_I64
 			case (f32_type); op = OP_LT_F32
 			case (f64_type); op = OP_LT_F64
+			case (str_type); op = OP_LT_STR
 			end select
 		case (less_equals_token)
 			select case (ltype)
@@ -918,6 +927,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (i64_type); op = OP_LE_I64
 			case (f32_type); op = OP_LE_F32
 			case (f64_type); op = OP_LE_F64
+			case (str_type); op = OP_LE_STR
 			end select
 		case (greater_token)
 			select case (ltype)
@@ -925,6 +935,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (i64_type); op = OP_GT_I64
 			case (f32_type); op = OP_GT_F32
 			case (f64_type); op = OP_GT_F64
+			case (str_type); op = OP_GT_STR
 			end select
 		case (greater_equals_token)
 			select case (ltype)
@@ -932,6 +943,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (i64_type); op = OP_GE_I64
 			case (f32_type); op = OP_GE_F32
 			case (f64_type); op = OP_GE_F64
+			case (str_type); op = OP_GE_STR
 			end select
 		case (eequals_token)
 			select case (ltype)

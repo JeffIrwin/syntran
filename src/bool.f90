@@ -489,6 +489,8 @@ subroutine is_lt_value_t(left, right, res, op_text)
 
 	!****
 
+	integer(kind = 8) :: i8
+
 	select case (magic * left%type + right%type)
 	case        (magic * i32_type + i32_type)
 		res%sca%bool = left%sca%i32 < right%sca%i32
@@ -537,6 +539,9 @@ subroutine is_lt_value_t(left, right, res, op_text)
 
 	case        (magic * i64_type + f64_type)
 		res%sca%bool = real(left%sca%i64) < right%sca%f64
+
+	case        (magic * str_type + str_type)
+		res%sca%bool = is_str_lt(left%str%s, right%str%s)
 
 	case        (magic * array_type + i32_type)
 
@@ -628,6 +633,25 @@ subroutine is_lt_value_t(left, right, res, op_text)
 		case (i64_type)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = real(left%array%i64) < right%sca%f64
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic * array_type + str_type)
+
+		select case (left%array%type)
+		case (str_type)
+			res%array = mold(left%array, bool_type)
+
+			allocate(res%array%bool( res%array%len_ ))
+			do i8 = 1, res%array%len_
+				res%array%bool(i8) = is_str_lt( &
+					left%array%str(i8)%s, &
+					right%str%s &
+				)
+			end do
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -730,6 +754,25 @@ subroutine is_lt_value_t(left, right, res, op_text)
 			call internal_error()
 		end select
 
+	case        (magic * str_type + array_type)
+
+		select case (right%array%type)
+		case (str_type)
+			res%array = mold(right%array, bool_type)
+
+			allocate(res%array%bool( res%array%len_ ))
+			do i8 = 1, res%array%len_
+				res%array%bool(i8) = is_str_lt( &
+					left%str%s, &
+					right%array%str(i8)%s &
+				)
+			end do
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
 	case        (magic * array_type + array_type)
 
 		select case (magic * left%array%type + right%array%type)
@@ -797,6 +840,17 @@ subroutine is_lt_value_t(left, right, res, op_text)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%array%f64 < real(right%array%i64)
 
+		case (magic * str_type + str_type)
+			res%array = mold(right%array, bool_type)
+
+			allocate(res%array%bool( res%array%len_ ))
+			do i8 = 1, res%array%len_
+				res%array%bool(i8) = is_str_lt( &
+					left%array%str(i8)%s, &
+					right%array%str(i8)%s &
+				)
+			end do
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -848,6 +902,8 @@ subroutine is_le_value_t(left, right, res, op_text)
 
 	!****
 
+	integer(kind = 8) :: i8
+
 	select case (magic * left%type + right%type)
 	case        (magic * i32_type + i32_type)
 		res%sca%bool = left%sca%i32 <= right%sca%i32
@@ -896,6 +952,9 @@ subroutine is_le_value_t(left, right, res, op_text)
 
 	case        (magic * i64_type + f64_type)
 		res%sca%bool = real(left%sca%i64) <= right%sca%f64
+
+	case        (magic * str_type + str_type)
+		res%sca%bool = .not. is_str_lt(right%str%s, left%str%s)
 
 	case        (magic * array_type + i32_type)
 
@@ -987,6 +1046,25 @@ subroutine is_le_value_t(left, right, res, op_text)
 		case (i64_type)
 			res%array = mold(left%array, bool_type)
 			res%array%bool = real(left%array%i64) <= right%sca%f64
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic * array_type + str_type)
+
+		select case (left%array%type)
+		case (str_type)
+			res%array = mold(left%array, bool_type)
+
+			allocate(res%array%bool( res%array%len_ ))
+			do i8 = 1, res%array%len_
+				res%array%bool(i8) = .not. is_str_lt( &
+					right%str%s, &
+					left%array%str(i8)%s &
+				)
+			end do
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
@@ -1089,6 +1167,25 @@ subroutine is_le_value_t(left, right, res, op_text)
 			call internal_error()
 		end select
 
+	case        (magic * str_type + array_type)
+
+		select case (right%array%type)
+		case (str_type)
+			res%array = mold(right%array, bool_type)
+
+			allocate(res%array%bool( res%array%len_ ))
+			do i8 = 1, res%array%len_
+				res%array%bool(i8) = .not. is_str_lt( &
+					right%array%str(i8)%s, &
+					left%str%s &
+				)
+			end do
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
 	case        (magic * array_type + array_type)
 
 		select case (magic * left%array%type + right%array%type)
@@ -1155,6 +1252,17 @@ subroutine is_le_value_t(left, right, res, op_text)
 		case (magic * f64_type + i64_type)
 			res%array = mold(right%array, bool_type)
 			res%array%bool = left%array%f64 <= real(right%array%i64)
+
+		case (magic * str_type + str_type)
+			res%array = mold(right%array, bool_type)
+
+			allocate(res%array%bool( res%array%len_ ))
+			do i8 = 1, res%array%len_
+				res%array%bool(i8) = .not. is_str_lt( &
+					right%array%str(i8)%s, &
+					left%array%str(i8)%s &
+				)
+			end do
 
 		case default
 			write(*,*) err_eval_binary_types(op_text)
