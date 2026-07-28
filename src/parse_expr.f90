@@ -709,7 +709,11 @@ recursive module subroutine parse_primary_expr(parser, expr)
 
 	!********
 
-	logical :: bool, exists
+	logical :: bool, exists, is_var
+
+	integer :: dummy_id, dummy_io
+
+	type(value_t) :: dummy_val
 
 	type(syntax_token_t) :: left, right, keyword, token
 
@@ -755,12 +759,66 @@ recursive module subroutine parse_primary_expr(parser, expr)
 			if (parser%peek_kind(1) == double_colon_token) then
 				! Qualified name like `std::println()` or `mod::fn()`
 				call parser%parse_qualified_expr(expr)
-			else if (parser%peek_kind(1) == lparen_token .and. &
-					parser%enums%exists(parser%current_text())) then
-				! Reverse cast, e.g. `Suit(2)`.  Checked against the enums
-				! dict so a same-named fn is never shadowed by this -- enum
-				! type names and fn names live in separate namespaces
-				call parser%parse_enum_cast(expr)
+
+			else if (parser%enums%exists(parser%current_text())) then
+				! The current identifier is a registered enum type name.
+				! Checked first and unconditionally (rather than folded into
+				! the peek_kind(1)-driven branches below) so that a bare enum
+				! name is recognized no matter what token follows it -- e.g.
+				! `for s in Suit { ... }` has `{` right after `Suit`, which
+				! would otherwise be caught by the struct-instance-vs-block
+				! ambiguity branch below and misread as an undeclared
+				! variable.  Enum type names and fn/struct names live in
+				! separate namespaces, so this never shadows a fn call or
+				! struct instantiator of the same name
+				if (parser%peek_kind(1) == lparen_token) then
+					! Reverse cast, e.g. `Suit(2)`
+					call parser%parse_enum_cast(expr)
+				else if (parser%peek_kind(1) == dot_token) then
+					! Enum variant access, e.g. `Dir.North`
+					call parser%parse_enum_access(expr)
+				else
+					! Bare enum type name, e.g. `Suit` used as an array-of-
+					! all-variants value (for `size(Suit)`, `for s in Suit`,
+					! etc).  Unlike `.`/`(` above, a bare name *can* collide
+					! with a variable of the same name, so a live variable
+					! always wins here -- e.g. `let Suit = 5;` keeps `Suit`
+					! meaning the variable, matching every program that
+					! compiled before this branch existed
+					is_var = .false.
+					if (parser%is_loc) then
+						call parser%locs%search( &
+							parser%current_text(), dummy_id, dummy_io, dummy_val)
+						is_var = dummy_io == 0
+					end if
+					if (.not. is_var) then
+						call parser%vars%search( &
+							parser%current_text(), dummy_id, dummy_io, dummy_val)
+						is_var = dummy_io == 0
+					end if
+
+					if (is_var) then
+						call parser%parse_name_expr(expr)
+					else
+						call parser%parse_enum_name_expr(expr)
+						if (parser%current_kind() == lbracket_token) then
+							call parser%diagnostics%push(err_enum_index( &
+								parser%context(), &
+								new_span(expr%identifier%pos, len(expr%identifier%text)), &
+								expr%val%enum_name))
+							! Error recovery: consume the subscripts so
+							! parsing doesn't cascade, but don't attach them
+							! to expr -- an enum-array literal has no
+							! subscript support
+							block
+								type(syntax_node_t) :: dummy_expr
+								dummy_expr%val%type = unknown_type
+								call parser%parse_subscripts(dummy_expr)
+							end block
+						end if
+					end if
+				end if
+
 			else if (parser%peek_kind(1) == lparen_token) then
 				call parser%parse_fn_call(fn_call=expr)
 				if (parser%current_kind() == lbracket_token) then
@@ -813,15 +871,6 @@ recursive module subroutine parse_primary_expr(parser, expr)
 					! Same as default case below
 					call parser%parse_name_expr(expr)
 				end if
-
-			else if (parser%peek_kind(1) == dot_token .and. &
-					parser%enums%exists(parser%current_text())) then
-				! Enum variant access, e.g. `Dir.North`.  Checked against the
-				! enums dict so a same-named local variable followed by `.`
-				! (a struct-instance dot, handled elsewhere) is never
-				! shadowed by this -- enum type names and variable names
-				! live in separate namespaces, so no ambiguity here
-				call parser%parse_enum_access(expr)
 
 			else
 				call parser%parse_name_expr(expr)

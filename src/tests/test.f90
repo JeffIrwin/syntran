@@ -5470,6 +5470,29 @@ subroutine unit_test_enum(npass, nfail)
 			eval( 'enum E{A=-1,B}' &
 				//'E(-1) == E.A;', quiet) == 'true', &
 
+			! A bare enum type name is an array of all its variants, in
+			! declaration order.  size() and `for` fall out of the existing
+			! array machinery with no changes to either
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'size(Suit);', quiet) == '4', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'let sum = 0;' &
+				//'for s in Suit { sum = sum + i32(s); }' &
+				//'sum;', quiet) == '6', &
+
+			! A live variable of the same name always wins over the enum
+			! type name for a bare reference
+			eval( 'enum Suit{Hearts,Clubs}' &
+				//'let Suit = 5;' &
+				//'Suit;', quiet) == '5', &
+
+			! A bare enum name cannot be subscripted (E97): Suit[0] would
+			! disagree with the by-value reverse cast Suit(0) whenever
+			! explicit variant values are used
+			diag_has_code(get_diags( &
+				'enum Dir{North,South} Dir[0];'), &
+				EC_ENUM_INDEX), &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5509,6 +5532,7 @@ subroutine unit_test_enum_long(npass, nfail)
 			interpret_file(path//'test-05.syntran', quiet) == 'true', &
 			interpret_file(path//'test-06.syntran', quiet) == 'true', &
 			interpret_file(path//'test-07.syntran', quiet) == 'true', &
+			interpret_file(path//'test-08.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -6525,6 +6549,20 @@ subroutine unit_test_error_codes(npass, nfail)
 				'enum Dir{North,South} Dir(1);'), &
 				EC_ENUM_CAST_RANGE), &
 
+			! E97: a bare enum type name (an array of all its variants)
+			! cannot be subscripted
+			diag_has_code(get_diags( &
+				'enum Dir{North,South} Dir[0];'), &
+				EC_ENUM_INDEX), &
+			diag_count_code(get_diags( &
+				'enum Dir{North,South} Dir[0];'), &
+				EC_ENUM_INDEX) == 1, &
+			! positive: subscripting a real array (not a bare enum name) is
+			! unaffected
+			.not. diag_has_code(get_diags( &
+				'let a = [1,2,3]; a[0];'), &
+				EC_ENUM_INDEX), &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -6975,7 +7013,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E96-enum-cast-range.syntran'), &
 				EC_ENUM_CAST_RANGE, P//'E96-enum-cast-range.syntran', 11, 13, 2), &
 			diag_count_code(get_diags_file(P//'E96-enum-cast-range.syntran'), &
-				EC_ENUM_CAST_RANGE) == 1 &
+				EC_ENUM_CAST_RANGE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E97-enum-index.syntran'), &
+				EC_ENUM_INDEX, P//'E97-enum-index.syntran', 13, 2, 3), &
+			diag_count_code(get_diags_file(P//'E97-enum-index.syntran'), &
+				EC_ENUM_INDEX) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

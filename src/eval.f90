@@ -234,7 +234,7 @@ module syntran__eval_m
 		end function
 
 		module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
-				elems, str_, state)
+				elems, str_, state, struct)
 			type(value_t), intent(inout) :: val
 			integer, intent(in) :: kind_
 			integer(kind = 8), intent(in) :: i
@@ -243,6 +243,7 @@ module syntran__eval_m
 			type(syntax_node_t), allocatable :: elems(:)
 			type(value_t), intent(in) :: str_
 			type(state_t), intent(inout) :: state
+			type(value_t), intent(in), optional :: struct(:)
 		end subroutine
 
 		module subroutine get_array_val(array, i, val)

@@ -593,6 +593,12 @@ A reverse cast `EnumName(ordinal)` was given a constant int literal `ordinal` th
 
 [Example](../src/tests/test-src/errors/E96-enum-cast-range.syntran)
 
+### E97 -- enum-index
+
+A bare enum type name (which evaluates to an array of all its variants) was subscripted, e.g. `Suit[0]`.  This is rejected because it would disagree with the by-value reverse cast `Suit(0)` whenever any variant has an explicit value -- use `EnumName(ordinal)` instead.
+
+[Example](../src/tests/test-src/errors/E97-enum-index.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

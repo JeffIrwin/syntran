@@ -50,6 +50,10 @@ submodule (syntran__vm_m) syntran__vm_exec
 		type(value_t) :: len_             ! loop length (len_array kind)
 		type(array_t) :: array            ! materialized array (non-primary array exprs)
 		type(value_t) :: str_             ! string to iterate over (str_type)
+		! Enum/struct elements of `array` (array_t has no value_t component of
+		! its own), set only when array%type is enum_type/struct_type.
+		! c.f. array_at()'s optional `struct` arg in eval_array.f90
+		type(value_t), allocatable :: struct(:)
 	end type for_iter_t
 
 !===============================================================================
@@ -87,10 +91,12 @@ end subroutine grow_frames
 !===============================================================================
 
 subroutine grow_fors(for_iters)
-	! Double the for-iterator stack.  for_iter_t has no allocatable components
-	! at the top level (its value_t/array_t members have allocatables inside),
-	! so assignment is used for each element.  Copies into the doubled buffer
-	! directly to avoid the extra round-trip through a same-sized tmp.
+	! Double the for-iterator stack.  for_iter_t's members are either plain
+	! derived types with allocatables inside (value_t/array_t) or an
+	! allocatable array directly (struct(:)); either way plain assignment
+	! handles (re)allocation of each element correctly, so assignment is used
+	! for each element.  Copies into the doubled buffer directly to avoid the
+	! extra round-trip through a same-sized tmp.
 	type(for_iter_t), allocatable, intent(inout) :: for_iters(:)
 	type(for_iter_t), allocatable :: tmp(:)
 	integer :: i, n
@@ -1252,6 +1258,21 @@ module subroutine vm_run(prog, state, res)
 					for_iters(fi)%for_kind = array_expr
 					call syntax_eval(nd%array, state, tmp_)
 					for_iters(fi)%array = tmp_%array
+
+					! Enum/struct elements live in %struct(:), not in
+					! array_t (which has no value_t component) -- thread it
+					! through separately.  array_at() falls back to its
+					! array_t path when this isn't allocated (mirrors
+					! eval_for_statement's case default in eval_control.f90).
+					! for_iters(fi) is a reused slot on a stack, not a fresh
+					! variable, so a stale allocation from a prior for-loop
+					! that used this same slot must be cleared first --
+					! otherwise a plain (non-enum) array iterated afterward
+					! would inherit stale enum/struct elements
+					if (allocated(for_iters(fi)%struct)) deallocate(for_iters(fi)%struct)
+					if (allocated(tmp_%struct)) &
+						call move_alloc(tmp_%struct, for_iters(fi)%struct)
+
 					for_iters(fi)%len8  = for_iters(fi)%array%len_
 				end if
 			end select
@@ -1395,7 +1416,7 @@ module subroutine vm_run(prog, state, res)
 					for_iters(fi)%lbound_, for_iters(fi)%step, for_iters(fi)%ubound_, &
 					for_iters(fi)%len_, for_iters(fi)%array, &
 					prog%nodes(for_iters(fi)%node_idx)%array%elems, for_iters(fi)%str_, &
-					state)
+					state, for_iters(fi)%struct)
 				associate(nd => prog%nodes(for_iters(fi)%node_idx))
 				if (nd%is_loc) then
 					call value_move(val, state%locs%vals(nd%id_index))

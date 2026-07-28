@@ -899,7 +899,7 @@ end function subscript_eval
 !===============================================================================
 
 module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
-		elems, str_, state)
+		elems, str_, state, struct)
 
 	! This lazily gets an array value at an index i without expanding the whole
 	! implicit array in memory.  Used for for loops
@@ -926,6 +926,12 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 	type(value_t), intent(in) :: str_
 
 	type(state_t), intent(inout) :: state
+
+	! Enum/struct elements of a materialized (non-primary) array_t live here
+	! instead of in `array` (array_t has no value_t component) -- set only
+	! when the iterated array's element type is enum_type/struct_type.
+	! c.f. eval_for_statement's case default and OP_FOR_SETUP in vm_exec.f90
+	type(value_t), intent(in), optional :: struct(:)
 
 	!*********
 
@@ -976,7 +982,14 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	case (array_expr)
 		! Non-primary array expr
-		call get_array_val(array, i - 1, val)
+		if (present(struct)) then
+			! Enum/struct elements: array_t has no value_t component, so
+			! they were threaded through separately (1-based, unlike
+			! get_array_val's 0-based `array`)
+			val = struct(i)
+		else
+			call get_array_val(array, i - 1, val)
+		end if
 
 	case (str_type)
 		!val%type = str_type

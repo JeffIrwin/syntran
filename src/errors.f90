@@ -112,6 +112,7 @@ module syntran__errors_m
 		EC_UNKNOWN_VARIANT = "E94", &
 		EC_DUPLICATE_ENUM_VALUE = "E95", &
 		EC_ENUM_CAST_RANGE = "E96", &
+		EC_ENUM_INDEX = "E97", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -383,6 +384,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_UNKNOWN_VARIANT)
 	call codes%push(EC_DUPLICATE_ENUM_VALUE)
 	call codes%push(EC_ENUM_CAST_RANGE)
+	call codes%push(EC_ENUM_INDEX)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -996,6 +998,25 @@ function err_enum_cast_range(context, span, enum, value) result(err)
 		//" out-of-range enum cast"//color_reset
 
 end function err_enum_cast_range
+
+!===============================================================================
+
+function err_enum_index(context, span, enum) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: enum
+
+	err = err_pre(EC_ENUM_INDEX) &
+		//'cannot index enum type `'//enum//'`' &
+		//underline(context, span) &
+		//" enum type is not subscriptable"//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": use `"//enum//"(ordinal)` to cast an integer ordinal to a variant"
+
+end function err_enum_index
 
 !===============================================================================
 

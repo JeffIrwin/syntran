@@ -1602,6 +1602,45 @@ println(hand);
 // [Suit.Diamonds, Suit.Clubs, Suit.Spades]
 ```
 
+A bare enum type name is itself an array of all its variants, in declaration
+order (aliases included).  This makes the enum's variant count and iteration
+fall out of the same array machinery as above -- there's no separate syntax
+to learn:
+```rust
+println(size(Suit));
+// 4
+
+for s in Suit
+{
+    println(s);
+}
+// Suit.Hearts
+// Suit.Diamonds
+// Suit.Clubs
+// Suit.Spades
+
+let all = Suit;   // an ordinary [Suit; 4] array value: assignable, passable,
+                   // indexable, iterable
+```
+
+Note that `len()` is not overloaded for enums (or arrays in general) -- it's
+reserved for `str`.  Use `size()` for a container's length, same as for any
+other array.
+
+A bare enum name can't be subscripted, though -- `Suit[0]` is a compile-time
+error (`E97`), since it would disagree with the by-value reverse cast
+`Suit(0)` whenever any variant has an explicit value.  Use `Suit(ordinal)` to
+go from an integer ordinal to a variant.
+
+If a variable happens to share an enum's name, the variable wins for a bare
+reference:
+```rust
+enum Suit{Hearts, Clubs}
+let Suit = 5;
+println(Suit);
+// 5
+```
+
 ## Samples
 
 Many syntran samples are provided in this repository and elsewhere:

@@ -26,6 +26,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 
 	type(array_t) :: array
 	type(value_t) :: lbound_, ubound_, itr, step, len_, tmp, str_
+	type(value_t), allocatable :: struct(:)
 
 	! Evaluate all of these ahead of loop, but only if they are allocated!
 	if (allocated(node%array%lbound)) call syntax_eval(node%array%lbound, state, lbound_)
@@ -199,6 +200,14 @@ recursive module subroutine eval_for_statement(node, state, res)
 			call syntax_eval(node%array, state, tmp)
 			call array_move(tmp%array, array)
 
+			! Enum/struct elements live in %struct(:), not in array_t (which
+			! has no value_t component) -- array_move only moves array_t's
+			! own components, so thread %struct(:) through separately.
+			! array_at() falls back to get_array_val() when this isn't
+			! allocated (Fortran treats an unallocated allocatable actual
+			! argument as absent for a non-allocatable optional dummy)
+			if (allocated(tmp%struct)) call move_alloc(tmp%struct, struct)
+
 			len8 = array%len_
 			!print *, 'len8 = ', len8
 
@@ -220,7 +229,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 		state%continued = .false.
 
 		call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
-			len_, array, node%array%elems, str_, state)
+			len_, array, node%array%elems, str_, state, struct)
 
 		!print *, 'itr = ', itr%to_str()
 
