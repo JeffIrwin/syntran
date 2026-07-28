@@ -423,6 +423,10 @@ recursive module subroutine parse_array_expr(parser, expr)
 		pos0 = parser%pos
 		call parser%match(comma_token, comma)
 
+		! Allow a trailing comma before `]` or `;`, e.g. [10, 20, 30, ]
+		if (parser%current_kind() == rbracket_token .or. &
+			parser%current_kind() == semicolon_token) exit
+
 		span_beg = parser%peek_pos(0)
 		call parser%parse_expr(expr=elem)
 		span_end = parser%peek_pos(0) - 1
