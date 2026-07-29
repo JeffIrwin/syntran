@@ -97,6 +97,8 @@ module syntran__parse_m
 				match_pre, &
 				next => next_token, &
 				peek_index, &
+				check_type_clash, &
+				check_var_clash, &
 				parse_array_expr, &
 				parse_block_statement, &
 				parse_expr, &
@@ -364,6 +366,24 @@ module syntran__parse_m
 			class(parser_t) :: parser
 			character(len = :), allocatable :: str_
 		end function tokens_str
+
+		! At a variable-binding site (let/const/for-iterator/fn-param), check
+		! whether `name` clashes with an already-declared enum or struct type
+		! name and push EC_VAR_TYPE_CLASH if so
+		module subroutine check_type_clash(parser, name, pos)
+			class(parser_t) :: parser
+			character(len = *), intent(in) :: name
+			integer, intent(in) :: pos
+		end subroutine check_type_clash
+
+		! At a struct/enum declaration site, check whether `name` clashes with
+		! an already-declared variable and push EC_VAR_TYPE_CLASH if so
+		module subroutine check_var_clash(parser, name, pos, type_kind)
+			class(parser_t) :: parser
+			character(len = *), intent(in) :: name
+			integer, intent(in) :: pos
+			character(len = *), intent(in) :: type_kind
+		end subroutine check_var_clash
 
 		module subroutine match(parser, kind, token)
 			class(parser_t) :: parser

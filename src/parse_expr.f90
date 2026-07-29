@@ -57,6 +57,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		call parser%next(let)
 		call parser%next(identifier)
+		call parser%check_type_clash(identifier%text, identifier%pos)
 		call parser%next(op)
 
 		call parser%parse_expr_statement(right)
@@ -118,6 +119,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		call parser%next(let)
 		call parser%next(identifier)
 		!print *, 'let ident = ', identifier%text
+		call parser%check_type_clash(identifier%text, identifier%pos)
 
 		call parser%next(op)
 
@@ -781,10 +783,12 @@ recursive module subroutine parse_primary_expr(parser, expr)
 					! Bare enum type name, e.g. `Suit` used as an array-of-
 					! all-variants value (for `size(Suit)`, `for s in Suit`,
 					! etc).  Unlike `.`/`(` above, a bare name *can* collide
-					! with a variable of the same name, so a live variable
-					! always wins here -- e.g. `let Suit = 5;` keeps `Suit`
-					! meaning the variable, matching every program that
-					! compiled before this branch existed
+					! with a variable of the same name -- check_type_clash()
+					! (called at every variable-binding site) now makes that
+					! collision a hard error (EC_VAR_TYPE_CLASH), so in valid
+					! programs `is_var` is always false here.  The live-variable
+					! tiebreak below still runs anyway, purely as error recovery
+					! so parsing doesn't cascade after that diagnostic fires
 					is_var = .false.
 					if (parser%is_loc) then
 						call parser%locs%search( &

@@ -59,6 +59,8 @@ module syntran__core_m
 	!    imported
 	!  - recursive data structs
 	!    * recursive fns are available, but not structs
+	!    * would we need allocation, pointer, or null features for this?
+	!      otherwise one recursive struct just immediately uses infinite memory
 	!  - method improvements:
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.

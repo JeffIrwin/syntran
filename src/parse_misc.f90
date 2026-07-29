@@ -41,6 +41,64 @@ end function tokens_str
 
 !===============================================================================
 
+module subroutine check_type_clash(parser, name, pos)
+
+	! At a variable-binding site (let/const/for-iterator/fn-param), check
+	! whether `name` clashes with an already-declared enum or struct type
+	! name.  A name can't be both (E26/E27/E92 already forbid that), so enum
+	! vs struct here is just "which message to print", not an ambiguity
+
+	class(parser_t) :: parser
+	character(len = *), intent(in) :: name
+	integer, intent(in) :: pos
+
+	!********
+
+	type(text_span_t) :: span
+
+	if (parser%enums%exists(name)) then
+		span = new_span(pos, len(name))
+		call parser%diagnostics%push(err_var_type_clash( &
+			parser%context(), span, name, "enum"))
+	else if (parser%structs%exists(name)) then
+		span = new_span(pos, len(name))
+		call parser%diagnostics%push(err_var_type_clash( &
+			parser%context(), span, name, "struct"))
+	end if
+
+end subroutine check_type_clash
+
+!===============================================================================
+
+module subroutine check_var_clash(parser, name, pos, type_kind)
+
+	! At a struct/enum declaration site, check whether `name` clashes with an
+	! already-declared module-level variable.  Only `vars` is checked, not
+	! `locs`: struct/enum declarations are top-level, and `locs` may still
+	! hold stale entries from a previously parsed fn body
+
+	class(parser_t) :: parser
+	character(len = *), intent(in) :: name
+	integer, intent(in) :: pos
+	character(len = *), intent(in) :: type_kind
+
+	!********
+
+	integer :: id_index, io
+	type(value_t) :: val
+	type(text_span_t) :: span
+
+	call parser%vars%search(name, id_index, io, val)
+	if (io == 0) then
+		span = new_span(pos, len(name))
+		call parser%diagnostics%push(err_var_type_clash( &
+			parser%context(), span, name, type_kind))
+	end if
+
+end subroutine check_var_clash
+
+!===============================================================================
+
 module subroutine match(parser, kind, token)
 
 	class(parser_t) :: parser

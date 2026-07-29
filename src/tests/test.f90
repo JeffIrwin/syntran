@@ -5480,11 +5480,11 @@ subroutine unit_test_enum(npass, nfail)
 				//'for s in Suit { sum = sum + i32(s); }' &
 				//'sum;', quiet) == '6', &
 
-			! A live variable of the same name always wins over the enum
-			! type name for a bare reference
-			eval( 'enum Suit{Hearts,Clubs}' &
-				//'let Suit = 5;' &
-				//'Suit;', quiet) == '5', &
+			! A variable can no longer share a name with an enum type (E98):
+			! a bare reference to either would be ambiguous
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let Suit = 5;'), &
+				EC_VAR_TYPE_CLASH), &
 
 			! A bare enum name cannot be subscripted (E97): Suit[0] would
 			! disagree with the by-value reverse cast Suit(0) whenever
@@ -6563,6 +6563,47 @@ subroutine unit_test_error_codes(npass, nfail)
 				'let a = [1,2,3]; a[0];'), &
 				EC_ENUM_INDEX), &
 
+			! E98: a variable name clashes with an already-declared enum or
+			! struct type name.  Checked in both source orders, and at every
+			! variable-binding site (let/const/for-iterator/fn-param), plus
+			! both type kinds (enum/struct)
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let Suit = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_count_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let Suit = 5;'), &
+				EC_VAR_TYPE_CLASH) == 1, &
+			diag_has_code(get_diags( &
+				'let Suit = 5; enum Suit{Hearts,Clubs}'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_count_code(get_diags( &
+				'let Suit = 5; enum Suit{Hearts,Clubs}'), &
+				EC_VAR_TYPE_CLASH) == 1, &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} const Suit = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} for Suit in [0,1] {}'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} '// &
+				'fn f(Suit: i32): i32 {return Suit;}'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let S = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_count_code(get_diags( &
+				'struct S{x:i32} let S = 5;'), &
+				EC_VAR_TYPE_CLASH) == 1, &
+			! positive: a primitive type name is unaffected (existing
+			! behavior, unrelated to enum/struct clashes)
+			.not. diag_has_code(get_diags('let i32 = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+			! positive: a variable with an unrelated name is unaffected
+			.not. diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let s = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -7017,7 +7058,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E97-enum-index.syntran'), &
 				EC_ENUM_INDEX, P//'E97-enum-index.syntran', 13, 2, 3), &
 			diag_count_code(get_diags_file(P//'E97-enum-index.syntran'), &
-				EC_ENUM_INDEX) == 1 &
+				EC_ENUM_INDEX) == 1, &
+			diag_loc_ok(get_diags_file(P//'E98-var-type-clash.syntran'), &
+				EC_VAR_TYPE_CLASH, P//'E98-var-type-clash.syntran', 15, 2, 4), &
+			diag_count_code(get_diags_file(P//'E98-var-type-clash.syntran'), &
+				EC_VAR_TYPE_CLASH) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

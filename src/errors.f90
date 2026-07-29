@@ -113,6 +113,7 @@ module syntran__errors_m
 		EC_DUPLICATE_ENUM_VALUE = "E95", &
 		EC_ENUM_CAST_RANGE = "E96", &
 		EC_ENUM_INDEX = "E97", &
+		EC_VAR_TYPE_CLASH = "E98", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -385,6 +386,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_DUPLICATE_ENUM_VALUE)
 	call codes%push(EC_ENUM_CAST_RANGE)
 	call codes%push(EC_ENUM_INDEX)
+	call codes%push(EC_VAR_TYPE_CLASH)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1031,6 +1033,28 @@ function err_redeclare_primitive(context, span, struct) result(err)
 		//underline(context, span)//" cannot redeclare primitives"//color_reset
 
 end function err_redeclare_primitive
+
+!===============================================================================
+
+function err_var_type_clash(context, span, var, type_kind) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: var, type_kind
+	character(len = :), allocatable :: article
+
+	article = "a"
+	if (type_kind == "enum") article = "an"
+
+	err = err_pre(EC_VAR_TYPE_CLASH) &
+		//'variable `'//var//'` conflicts with the '//type_kind &
+		//' of the same name' &
+		//underline(context, span)//" name already used by "//article &
+		//" "//type_kind &
+		//color_reset
+
+end function err_var_type_clash
 
 !===============================================================================
 

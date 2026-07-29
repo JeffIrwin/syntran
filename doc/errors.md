@@ -599,6 +599,12 @@ A bare enum type name (which evaluates to an array of all its variants) was subs
 
 [Example](../src/tests/test-src/errors/E97-enum-index.syntran)
 
+### E98 -- var-type-clash
+
+A variable's name clashes with an already-declared enum or struct type name.  A bare enum name resolves to a value (an array of its variants), and a bare struct name followed by `{` is ambiguous with a block, so a variable can never share a name with a type -- either declaration order triggers this error, and it is checked at every variable-binding site (`let`, `const`, `for` iterators, and fn/method parameters).
+
+[Example](../src/tests/test-src/errors/E98-var-type-clash.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

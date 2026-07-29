@@ -743,6 +743,7 @@ recursive module subroutine parse_for_statement(parser, statement)
 	call parser%locs%push_scope()
 
 	call parser%match(identifier_token, identifier)
+	call parser%check_type_clash(identifier%text, identifier%pos)
 
 	call parser%match(in_keyword, in_token)
 

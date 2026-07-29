@@ -722,6 +722,7 @@ module subroutine parse_fn_declaration(parser, decl)
 
 		!print *, 'matching name'
 		call parser%match(identifier_token, name)
+		call parser%check_type_clash(name%text, name%pos)
 		!print *, 'matching colon'
 		call parser%match(colon_token, colon)
 
@@ -957,6 +958,7 @@ module subroutine parse_struct_declaration(parser, decl)
 			span, &
 			identifier%text))
 	end if
+	call parser%check_var_clash(identifier%text, identifier%pos, "struct")
 
 	call parser%match(lbrace_token, lbrace)
 
@@ -1217,6 +1219,7 @@ module subroutine parse_enum_declaration(parser, decl)
 			span, &
 			identifier%text))
 	end if
+	call parser%check_var_clash(identifier%text, identifier%pos, "enum")
 
 	call parser%match(lbrace_token, lbrace)
 
@@ -1782,6 +1785,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 		call pos_args%push(pos0)
 
 		call parser%match(identifier_token, name)
+		call parser%check_type_clash(name%text, name%pos)
 		call parser%match(colon_token, colon)
 
 		if (parser%current_kind() == amp_token) then
