@@ -8007,6 +8007,55 @@ subroutine unit_test_transpose(npass, nfail)
 			! User can still define their own transpose() without std::
 			eval('fn transpose(): i32 { return 7; } transpose();', quiet) == '7', &
 
+			! Struct elements: transpose permutes %struct(:) by hand since
+			! composite elements don't live in an array_t buffer (previously
+			! SIGSEGV -- see src/core.f90 TODO history).  Same 2x3 source/
+			! indices as the i32 case above.  Both backends are covered by CI
+			! running this whole suite twice (default VM, then again with
+			! SYNTRAN_BACKEND=ast), same as every other row in this file.
+			eval('struct S{x:i32,}' &
+				//'let a = [S{x=0},S{x=1},S{x=2},S{x=3},S{x=4},S{x=5}];' &
+				//'let t = std::transpose(std::reshape(a,[2,3])); t[0,1].x;', &
+				quiet) == '1', &
+			eval('struct S{x:i32,}' &
+				//'let a = [S{x=0},S{x=1},S{x=2},S{x=3},S{x=4},S{x=5}];' &
+				//'let t = std::transpose(std::reshape(a,[2,3])); t[1,0].x;', &
+				quiet) == '2', &
+			eval('struct S{x:i32,}' &
+				//'let a = [S{x=0},S{x=1},S{x=2},S{x=3},S{x=4},S{x=5}];' &
+				//'let t = std::transpose(std::reshape(a,[2,3])); t[2,1].x;', &
+				quiet) == '5', &
+
+			! Printing/stringifying a transposed struct array must not crash
+			! (was an unallocated %struct dereferenced in value_to_str())
+			eval('struct S{x:i32,}' &
+				//'let a = [S{x=0},S{x=1},S{x=2},S{x=3}];' &
+				//'let t = std::transpose(std::reshape(a,[2,2])); len(str(t)) > 0;', &
+				quiet) == 'true', &
+
+			! Enum elements: same permutation, plus the result must still
+			! compare equal to an enum literal (exercises struct/enum identity
+			! propagation through resolve_overload, not just the runtime fix)
+			eval('enum E{A,B,X}' &
+				//'let a = [E.A,E.B,E.X,E.A,E.B,E.X];' &
+				//'let t = std::transpose(std::reshape(a,[2,3])); t[0,1] == E.B;', &
+				quiet) == 'true', &
+
+			! The exact repro from the src/core.f90 TODO history: printing a
+			! transposed enum array must not crash
+			eval('enum C{A,B}' &
+				//'let a = [C.A, C.B]; let m = std::reshape(a,[2,1]);' &
+				//'len(str(std::transpose(m))) > 0;', quiet) == 'true', &
+
+			! Regression: std::reshape() alone also lost struct/enum identity
+			! (member access hit a fatal I38, enum == failed to type-check)
+			eval('struct S{x:i32,}' &
+				//'let a = [S{x=1},S{x=2}]; let m = std::reshape(a,[2,1]); m[0,0].x;', &
+				quiet) == '1', &
+			eval('enum C{A,B}' &
+				//'let a = [C.A,C.B]; let m = std::reshape(a,[2,1]); m[0,0] == C.A;', &
+				quiet) == 'true', &
+
 			.false.  &  ! no trailing comma needed
 		]
 

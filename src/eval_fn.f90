@@ -333,6 +333,7 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 
 	integer :: i, io
 	integer :: env_len, env_stat
+	integer(kind = 8) :: ir, ic
 
 	type(char_vector_t) :: str_
 
@@ -1480,6 +1481,11 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		res%type  = array_type
 		res%array = mold(arg1%array, arg1%array%type)
 
+		! mold() doesn't carry struct/enum identity (struct_name/struct_cookie/
+		! enum_name/enum_cookie); copy it explicitly so member access and
+		! type-equality checks on the result still work
+		call copy_composite_id(res, arg1)
+
 		! Swap extents: R x C -> C x R (mold copied them as-is)
 		res%array%size(1) = arg1%array%size(2)
 		res%array%size(2) = arg1%array%size(1)
@@ -1516,6 +1522,22 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 				arg1%array%str(1:arg1%array%len_), &
 				[int(arg1%array%size(1)), int(arg1%array%size(2))])), &
 				[int(res%array%len_)])
+		case (struct_type, enum_type)
+			! Composite elements live in %struct(:), not in an array_t buffer,
+			! so permute the column-major flat index by hand.  Source is R x C
+			! with element (r,c) at r + (c-1)*R; result is C x R with (c,r) at
+			! c + (r-1)*C.
+			allocate(res%struct( res%array%len_ ))
+			do ic = 1, arg1%array%size(2)
+			do ir = 1, arg1%array%size(1)
+				res%struct(ic + (ir-1)*arg1%array%size(2)) = &
+					arg1%struct(ir + (ic-1)*arg1%array%size(1))
+			end do
+			end do
+		case default
+			write(*,*) err_int(IC_TRANSPOSE_ARRAY_TYPE, 'cannot transpose array of type `' &
+				//kind_name(arg1%array%type)//'`')
+			call internal_error()
 		end select
 
 	case ("reshape")

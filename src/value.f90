@@ -808,6 +808,32 @@ end function mold
 
 !===============================================================================
 
+subroutine copy_composite_id(dst, src)
+
+	! Copy the components that describe a struct or enum type beyond
+	! %array%type: struct_name/struct_cookie and enum_name/enum_cookie.
+	! mold() doesn't carry these, so anything that builds a struct- or
+	! enum-typed array result from a mold has to copy them explicitly, or
+	! else member access and type-equality checks on the result break (the
+	! former needs struct_name to look up the struct, the latter needs
+	! struct_cookie/enum_cookie).
+	!
+	! %enum_variant is deliberately not copied: it names one particular
+	! variant, so it belongs to a scalar enum value, not to an array of
+	! them.
+
+	type(value_t), intent(inout) :: dst
+	type(value_t), intent(in)    :: src
+
+	if (allocated(src%struct_name)) dst%struct_name = src%struct_name
+	if (allocated(src%struct_cookie)) dst%struct_cookie = src%struct_cookie
+	if (allocated(src%enum_name)) dst%enum_name = src%enum_name
+	if (allocated(src%enum_cookie)) dst%enum_cookie = src%enum_cookie
+
+end subroutine copy_composite_id
+
+!===============================================================================
+
 subroutine push_array(vector, val)
 
 	! Is there a way to have a generic unlimited polymorphic vector?  I couldn't

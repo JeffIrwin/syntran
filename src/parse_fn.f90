@@ -29,7 +29,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	character(len = :), allocatable :: exp_type, act_type, param_name, &
 		lookup_name, display_name
 
-	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, slot
+	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, arr_type_src, slot
 	integer :: var_io, var_id_index, method_slot, method_fn_id
 
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
@@ -126,7 +126,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		fn_call%module_prefix = module_prefix
 	end if
 
-	call resolve_overload(args, fn_call, has_rank, has_arr_type, arr_type_result)
+	call resolve_overload(args, fn_call, has_rank, has_arr_type, arr_type_result, arr_type_src)
 	if (has_rank) rank = fn_call%val%array%rank
 
 	! If any argument has unknown_type, return early to prevent cascading errors.
@@ -377,6 +377,14 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! fn_call%val = fn%type above would otherwise overwrite it with any_type.
 		if (has_arr_type) then
 			fn_call%val%array%type = arr_type_result
+
+			! %array%type alone doesn't fully describe a struct/enum element
+			! type: member access needs struct_name to look the struct up, and
+			! type-equality checks need struct_cookie/enum_cookie. Copy those
+			! from whichever argument the element type came from.
+			if (arr_type_src > 0) then
+				call copy_composite_id(fn_call%val, args%v(arr_type_src)%val)
+			end if
 		end if
 
 	end if

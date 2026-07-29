@@ -776,6 +776,18 @@ A scope was popped when the variable-dictionary scope stack was already empty (u
 
 A struct lookup by name failed for a value already confirmed to be that struct type.
 
+### I39 -- convert-f32-arr
+
+`to_f32_array()` was asked to convert an array with an unsupported element type to f32.
+
+### I40 -- convert-f64-arr
+
+`to_f64_array()` was asked to convert an array with an unsupported element type to f64.
+
+### I41 -- transpose-array-type
+
+`std::transpose()` hit an array element type with no permutation implemented.
+
 ## Runtime errors
 
 ### R1 -- matmul-dim
