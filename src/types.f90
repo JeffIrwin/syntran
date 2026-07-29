@@ -164,6 +164,14 @@ module syntran__types_m
 		integer :: id_index = 0, num_locs
 		logical :: is_loc = .false.
 
+		! Set only on the array_expr synthesized by parse_enum_name_expr() for
+		! a bare enum type name (e.g. `Suit`).  Structurally identical to a
+		! literal enum array (both carry val%enum_name), so this flag is the
+		! only way to tell "the special form" apart from "a real array value"
+		! at the sites that ban binding/passing a bare enum name as a value
+		! (see check_enum_name_value())
+		logical :: is_enum_name = .false.
+
 		! When a dot_expr's root was a fn_call_expr or method_call_expr (e.g.
 		! `fn().field`), root_kind stores the original kind so evaluators can
 		! re-evaluate the root as a function call and then apply the member chain.

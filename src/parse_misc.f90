@@ -70,6 +70,33 @@ end subroutine check_type_clash
 
 !===============================================================================
 
+module subroutine check_enum_name_value(parser, expr)
+
+	! Push EC_ENUM_NAME_VALUE if `expr` is the special bare-enum-name form
+	! (see parse_enum_name_expr()).  A bare enum name is only valid as a
+	! `for` loop's iterable or as an argument to size()/str()/println()/
+	! writeln() -- everywhere else that would bind or pass it as an ordinary
+	! value, call this to reject it.  Called at every such site: let/const
+	! init, assignment RHS, return, fn/method call args, struct member init,
+	! and array literal elements
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(in) :: expr
+
+	!********
+
+	type(text_span_t) :: span
+
+	if (.not. expr%is_enum_name) return
+
+	span = new_span(expr%identifier%pos, len(expr%identifier%text))
+	call parser%diagnostics%push(err_enum_name_value( &
+		parser%context(), span, expr%val%enum_name))
+
+end subroutine check_enum_name_value
+
+!===============================================================================
+
 module subroutine check_var_clash(parser, name, pos, type_kind)
 
 	! At a struct/enum declaration site, check whether `name` clashes with an

@@ -1602,10 +1602,10 @@ println(hand);
 // [Suit.Diamonds, Suit.Clubs, Suit.Spades]
 ```
 
-A bare enum type name is itself an array of all its variants, in declaration
-order (aliases included).  This makes the enum's variant count and iteration
-fall out of the same array machinery as above -- there's no separate syntax
-to learn:
+A bare enum type name acts as an array of all its variants, in declaration
+order (aliases included), but only in the handful of places that consume it
+directly -- there's no separate syntax to learn for the enum's variant count
+or iteration, they fall out of the same array machinery as above:
 ```rust
 println(size(Suit));
 // 4
@@ -1618,27 +1618,36 @@ for s in Suit
 // Suit.Diamonds
 // Suit.Clubs
 // Suit.Spades
-
-let all = Suit;   // an ordinary [Suit; 4] array value: assignable, passable,
-                   // indexable, iterable
 ```
 
 Note that `len()` is not overloaded for enums (or arrays in general) -- it's
 reserved for `str`.  Use `size()` for a container's length, same as for any
 other array.
 
-A bare enum name can't be subscripted, though -- `Suit[0]` is a compile-time
+Outside of `for`'s iterable and an argument to `size()`/`str()`/`println()`/
+`writeln()`, a bare enum name is *not* a value: it can't be bound with
+`let`/`const`, assigned, returned, passed to a user function, or stored in an
+array or struct literal (`E99`).  Write out the variants explicitly wherever
+an actual array value is needed:
+```rust
+let all = [Suit.Hearts, Suit.Diamonds, Suit.Clubs, Suit.Spades];
+                  // an ordinary [Suit; 4] array value: assignable, passable,
+                  // indexable, iterable -- `let all = Suit;` is E99
+```
+
+A bare enum name can't be subscripted, either -- `Suit[0]` is a compile-time
 error (`E97`), since it would disagree with the by-value reverse cast
 `Suit(0)` whenever any variant has an explicit value.  Use `Suit(ordinal)` to
 go from an integer ordinal to a variant.
 
-If a variable happens to share an enum's name, the variable wins for a bare
-reference:
+A variable can never share a name with an enum or struct type -- both a bare
+enum reference and a struct instantiator depend on resolving a bare name
+against the type namespaces, so declaring either in either order is a
+compile-time error (`E98`):
 ```rust
 enum Suit{Hearts, Clubs}
 let Suit = 5;
-println(Suit);
-// 5
+// Error[E98]: variable `Suit` conflicts with the enum of the same name
 ```
 
 ## Samples

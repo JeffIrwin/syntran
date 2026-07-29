@@ -595,15 +595,21 @@ A reverse cast `EnumName(ordinal)` was given a constant int literal `ordinal` th
 
 ### E97 -- enum-index
 
-A bare enum type name (which evaluates to an array of all its variants) was subscripted, e.g. `Suit[0]`.  This is rejected because it would disagree with the by-value reverse cast `Suit(0)` whenever any variant has an explicit value -- use `EnumName(ordinal)` instead.
+A bare enum type name (which acts as an array of all its variants in a `for` loop or as an argument to `size()`/`str()`/`println()`) was subscripted, e.g. `Suit[0]`.  This is rejected because positional indexing would disagree with the by-value reverse cast `Suit(0)` whenever any variant has an explicit value -- use `EnumName(ordinal)` instead.
 
 [Example](../src/tests/test-src/errors/E97-enum-index.syntran)
 
 ### E98 -- var-type-clash
 
-A variable's name clashes with an already-declared enum or struct type name.  A bare enum name resolves to a value (an array of its variants), and a bare struct name followed by `{` is ambiguous with a block, so a variable can never share a name with a type -- either declaration order triggers this error, and it is checked at every variable-binding site (`let`, `const`, `for` iterators, and fn/method parameters).
+A variable's name clashes with an already-declared enum or struct type name.  A bare enum name is a special form (see E99) and a bare struct name followed by `{` is ambiguous with a block, so a variable can never share a name with a type -- either declaration order triggers this error, and it is checked at every variable-binding site (`let`, `const`, `for` iterators, and fn/method parameters).
 
 [Example](../src/tests/test-src/errors/E98-var-type-clash.syntran)
+
+### E99 -- enum-name-value
+
+A bare enum type name (e.g. `Suit`) was used as a value -- bound with `let`/`const`, assigned, returned, passed to a user fn or non-allowlisted intrinsic, or stored in an array/struct literal.  A bare enum name is a special form, not a value: it is only valid as a `for` loop's iterable or as an argument to `size()`, `str()`, `println()`, or `writeln()`.  Write out the variants explicitly (e.g. `[Suit.Hearts, Suit.Diamonds, ...]`) wherever an actual array value is needed.
+
+[Example](../src/tests/test-src/errors/E99-enum-name-value.syntran)
 
 ## Internal errors
 

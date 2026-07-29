@@ -5493,6 +5493,80 @@ subroutine unit_test_enum(npass, nfail)
 				'enum Dir{North,South} Dir[0];'), &
 				EC_ENUM_INDEX), &
 
+			! A bare enum name is a special form, not a value (E99): binding
+			! it with let/const, assigning, returning, or passing it to a
+			! user fn or a non-allowlisted intrinsic all reject it, since any
+			! of those would leak the variant array back out as an ordinary,
+			! positionally-indexable value.  `for`/size()/str()/println()/
+			! writeln() are unaffected -- they consume the array directly
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let x = Suit;'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let x = Suit; x = Suit;'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'fn f(): [Suit;:] { return Suit; } f();'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'fn g(h: [Suit;:]): i32 { return 0; } g(Suit);'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let y = [Suit, Suit];'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'struct P{s: [Suit;:],} let p = P{s = Suit};'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let r = std::reshape(Suit, [2]);'), &
+				EC_ENUM_NAME_VALUE), &
+
+			! ... but the allowed forms are untouched
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'size(Suit);', quiet) == '4', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'str(Suit);', quiet) == &
+				'[Suit.Hearts, Suit.Diamonds, Suit.Clubs, Suit.Spades]', &
+
+			! Elementwise `==`/`!=` for arrays of enum values, and broadcast
+			! against a scalar enum on either side.  This used to crash with
+			! an internal I2 error (is_eq_value_t() had no enum_type arm) --
+			! found as a pre-existing bug while auditing the enum-array
+			! escape routes above
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D]; let b=[C.A,C.B,C.D];' &
+				//'a == b;', quiet) == '[true, true, true]', &
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D]; let b=[C.A,C.D,C.D];' &
+				//'a == b;', quiet) == '[true, false, true]', &
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D]; let b=[C.A,C.D,C.D];' &
+				//'a != b;', quiet) == '[false, true, false]', &
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D]; a == C.B;', quiet) == &
+				'[false, true, false]', &
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D]; C.B == a;', quiet) == &
+				'[false, true, false]', &
+			! positive: cross-enum-type array comparisons remain a parse
+			! error (E48), same as the pre-existing scalar enum_cookie check
+			diag_has_code(get_diags( &
+				'enum C{A} enum D{X} let a=[C.A]; let b=[D.X]; a == b;'), &
+				EC_BINARY_TYPES), &
+
+			! Struct equality (scalar or array) isn't implemented -- this was
+			! also an internal I2 crash before, now a clean parse-time error
+			diag_has_code(get_diags( &
+				'struct P{n:i32,} let a=P{n=1}; let b=P{n=1}; a == b;'), &
+				EC_BINARY_TYPES), &
+			diag_has_code(get_diags( &
+				'struct P{n:i32,}' &
+				//'let a=[P{n=1}]; let b=[P{n=1}]; a == b;'), &
+				EC_BINARY_TYPES), &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5533,6 +5607,7 @@ subroutine unit_test_enum_long(npass, nfail)
 			interpret_file(path//'test-06.syntran', quiet) == 'true', &
 			interpret_file(path//'test-07.syntran', quiet) == 'true', &
 			interpret_file(path//'test-08.syntran', quiet) == 'true', &
+			interpret_file(path//'test-09.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -6604,6 +6679,54 @@ subroutine unit_test_error_codes(npass, nfail)
 				'enum Suit{Hearts,Clubs} let s = 5;'), &
 				EC_VAR_TYPE_CLASH), &
 
+			! E99: a bare enum type name is a special form, not a value.  It
+			! cannot be bound, assigned, returned, or passed to a user fn or
+			! non-allowlisted intrinsic -- checked at each such site
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let x = Suit;'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_count_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let x = Suit;'), &
+				EC_ENUM_NAME_VALUE) == 1, &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let x = [0]; x = Suit;'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'fn f(): [Suit;:] { return Suit; } f();'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'fn g(h: [Suit;:]): i32 { return 0; } g(Suit);'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let y = [Suit, Suit];'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'struct P{s: [Suit;:],} let p = P{s = Suit};'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let r = std::reshape(Suit, [2]);'), &
+				EC_ENUM_NAME_VALUE), &
+			! struct methods are never intrinsics: an enum name arg is always
+			! rejected, even though the method name happens to shadow an
+			! allowlisted intrinsic like str()
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'struct P{n: i32,}' &
+				//'fn P.str(self, h: [Suit;:]): i32 {return 0;}' &
+				//'let p = P{n = 1}; p.str(Suit);'), &
+				EC_ENUM_NAME_VALUE), &
+			! positive: the allowlisted forms are unaffected
+			.not. diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'for s in Suit { println(s); }'), &
+				EC_ENUM_NAME_VALUE), &
+			.not. diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} size(Suit); str(Suit); println(Suit);'), &
+				EC_ENUM_NAME_VALUE), &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -7062,7 +7185,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E98-var-type-clash.syntran'), &
 				EC_VAR_TYPE_CLASH, P//'E98-var-type-clash.syntran', 15, 2, 4), &
 			diag_count_code(get_diags_file(P//'E98-var-type-clash.syntran'), &
-				EC_VAR_TYPE_CLASH) == 1 &
+				EC_VAR_TYPE_CLASH) == 1, &
+			diag_loc_ok(get_diags_file(P//'E99-enum-name-value.syntran'), &
+				EC_ENUM_NAME_VALUE, P//'E99-enum-name-value.syntran', 15, 2, 3), &
+			diag_count_code(get_diags_file(P//'E99-enum-name-value.syntran'), &
+				EC_ENUM_NAME_VALUE) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

@@ -31,6 +31,12 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - enum improvements
+	!      * std::transpose segfaults on genuine enum arrays, unrelated to bare
+	!        enum names: enum C{A,B} let a=[C.A,C.B]; let
+	!        m=std::reshape(a,[2,1]); std::transpose(m); -> SIGSEGV
+	!      * std::reshape on struct arrays works fine, so this is specific to
+	!        transpose. Not touched here.
 	!  - maybe cover README codeblocks in ci
 	!    * add markup in markdown (html) comments denoting begin/end of each
 	!      block. could also have asserts of expected results in comments. then

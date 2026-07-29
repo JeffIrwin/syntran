@@ -114,6 +114,7 @@ module syntran__errors_m
 		EC_ENUM_CAST_RANGE = "E96", &
 		EC_ENUM_INDEX = "E97", &
 		EC_VAR_TYPE_CLASH = "E98", &
+		EC_ENUM_NAME_VALUE = "E99", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -387,6 +388,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_ENUM_CAST_RANGE)
 	call codes%push(EC_ENUM_INDEX)
 	call codes%push(EC_VAR_TYPE_CLASH)
+	call codes%push(EC_ENUM_NAME_VALUE)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1019,6 +1021,26 @@ function err_enum_index(context, span, enum) result(err)
 		//": use `"//enum//"(ordinal)` to cast an integer ordinal to a variant"
 
 end function err_enum_index
+
+!===============================================================================
+
+function err_enum_name_value(context, span, enum) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: enum
+
+	err = err_pre(EC_ENUM_NAME_VALUE) &
+		//'enum type `'//enum//'` cannot be used as a value' &
+		//underline(context, span) &
+		//" enum type is not a value"//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": a bare enum name is only valid as a `for` iterable or an " &
+		//"argument to size()/str()/println()"
+
+end function err_enum_name_value
 
 !===============================================================================
 

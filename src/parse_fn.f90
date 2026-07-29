@@ -263,6 +263,11 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 						call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
 							identifier_%text, i - 1, var_val%fn_params(i), "", &
 							.false., .false., eff_is_ref)
+
+						! Indirect calls through a fn-pointer variable are
+						! never intrinsics, so a bare enum name argument is
+						! never allowed here
+						call parser%check_enum_name_value(args%v(i))
 					end do
 				end if
 
@@ -483,6 +488,22 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 			param_is_ref, param_is_const_ref, eff_is_ref)
 		fn_call%is_ref(i) = eff_is_ref
 
+		! A bare enum name is a special form, only allowed as a value to a
+		! small allowlist of intrinsics that consume the array and return a
+		! non-array (size/str/println/writeln) -- everywhere else, including
+		! user fns and any other intrinsic (e.g. std::reshape, which would
+		! just hand the variant array back out), reject it as E99
+		if (args%v(i)%is_enum_name) then
+			if (.not. (fn%is_intr .and. ( &
+				identifier_%text == "size"    .or. &
+				identifier_%text == "str"     .or. &
+				identifier_%text == "println" .or. &
+				identifier_%text == "writeln"))) then
+
+				call parser%check_enum_name_value(args%v(i))
+			end if
+		end if
+
 	end do
 
 	fn_call%id_index = id_index
@@ -568,6 +589,11 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 				call parser%parse_dot(expr)
 			else
 				call parser%parse_enum_name_expr(expr, lookup_name)
+				! parse_enum_name_expr() doesn't set expr%identifier when
+				! enum_name is present (the bare name token was already
+				! consumed by the caller here), so set it ourselves -- it's
+				! needed as the span anchor for check_enum_name_value()
+				expr%identifier = fn_identifier
 				if (parser%current_kind() == lbracket_token) then
 					call parser%diagnostics%push(err_enum_index( &
 						parser%context(), &
@@ -1602,6 +1628,7 @@ module subroutine parse_enum_name_expr(parser, expr, enum_name)
 
 	expr%kind             = array_expr
 	if (.not. present(enum_name)) expr%identifier = enum_tok
+	expr%is_enum_name     = .true.
 	expr%val%type         = array_type
 	expr%val%enum_name    = enum_name_text
 	expr%val%enum_cookie  = enum%cookie
@@ -2000,6 +2027,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 		call parser%match(equals_token, equals)
 		pos1   = parser%current_pos()
 		call parser%parse_expr(expr=mem)
+		call parser%check_enum_name_value(mem)
 
 		!print *, "name%text = ", name%text
 

@@ -1,0 +1,71 @@
+// A bare enum type name is a special form, not a value (E99).  It's only
+// legal in four places: as a `for` loop's iterable, and as an argument to
+// size(), str(), println(), or writeln() -- each of those consumes the
+// variant array directly and returns a non-array, so none of them can leak
+// it back out as a bindable value.  Everywhere else (let/const, assignment,
+// return, user fn args, non-allowlisted intrinsics like std::reshape,
+// struct member init, array literal elements) is a parse error, covered by
+// diag_has_code() checks in test.f90 rather than here, since a rejected
+// form can't be part of a program that runs to completion
+
+enum Suit
+{
+	Hearts,
+	Diamonds,
+	Clubs,
+	Spades,
+}
+
+enum Card
+{
+	Two,
+	Jack = 10,
+	Queen,
+	King = Jack,
+}
+
+// size(): both the 1-arg and 2-arg (explicit dim) overloads
+let ok1 = size(Suit) == 4 and size(Suit, 0) == 4;
+let ok2 = size(Card) == 4; // aliases (King == Jack) still count once each
+
+// str(): declaration order, not value order
+let ok3 = str(Suit) == "[Suit.Hearts, Suit.Diamonds, Suit.Clubs, Suit.Spades]";
+let ok4 = str(Card) == "[Card.Two, Card.Jack, Card.Queen, Card.King]";
+
+// for: iterate two different bare enum names in the same program, including
+// one with aliases and explicit values
+let sum1 = 0;
+for s in Suit
+{
+	sum1 = sum1 + i32(s);
+}
+let ok5 = sum1 == 0 + 1 + 2 + 3;
+
+let last = Card.Two;
+for c in Card
+{
+	last = c;
+}
+let ok6 = last == Card.King and i32(last) == 10;
+
+// println()/writeln(): both consume a bare enum name as one of possibly
+// several variadic args without erroring.  writeln's file_handle is a
+// required leading param; the enum name is a later variadic arg
+println(Suit);
+println("multiple args: ", Suit, " and ", Card);
+
+let filename = "build/test-enum-09.txt";
+let fo = open(filename, "w");
+writeln(fo, Suit);
+writeln(fo, "label: ", Card);
+close(fo);
+
+let fi = open(filename, "r");
+let line1 = readln(fi);
+let line2 = readln(fi);
+close(fi);
+
+let ok7 = line1 == str(Suit);
+let ok8 = line2 == "label: " + str(Card);
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8;

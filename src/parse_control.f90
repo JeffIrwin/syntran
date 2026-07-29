@@ -48,6 +48,7 @@ module subroutine parse_return_statement(parser, statement)
 	else
 		right_beg = parser%peek_pos(0)
 		call parser%parse_expr(expr=right_tmp)
+		call parser%check_enum_name_value(right_tmp)
 		call syntax_node_move(right_tmp, statement%right)
 		right_end = parser%peek_pos(0) - 1
 	end if

@@ -61,6 +61,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		call parser%next(op)
 
 		call parser%parse_expr_statement(right)
+		call parser%check_enum_name_value(right)
 
 		if (right%val%type ==  void_type) then
 			span = new_span(let%pos, parser%current_pos() - let%pos)
@@ -125,6 +126,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		call parser%parse_expr_statement(right)
 		!right      = parser%parse_expr()
+		call parser%check_enum_name_value(right)
 
 		if (right%val%type ==  void_type) then
 			span = new_span(let%pos, parser%current_pos() - let%pos)
@@ -468,6 +470,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		call parser%next(op)
 		call parser%parse_expr_statement(right)
+		call parser%check_enum_name_value(right)
 		!print *, "1a right index = ", right%right%id_index
 
 		! regular vs compound assignment exprs are denoted by the op.  all of
@@ -652,10 +655,13 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 		!print *, 'rtype = ', kind_name(rtype)
 
 		is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
-		if (ltype == enum_type .and. is_op_allowed) then
+		if ((ltype == enum_type .or. larrtype == enum_type) .and. is_op_allowed) then
 			! Mirrors the enum_cookie check in parse_expr_statement, for
 			! comparisons (e.g. `==`) that don't go through that
-			! assignment-only path
+			! assignment-only path.  Also covers arrays of enum values (e.g.
+			! `[C.A] == [D.X]`): expr%left/right%val%enum_name/enum_cookie
+			! are set at the array level too (c.f. parse_array_expr), so the
+			! same check works unchanged for either scalar or array operands
 			if (allocated(expr%left%val%enum_cookie) .and. &
 				allocated(expr%right%val%enum_cookie)) then
 				if (expr%left%val%enum_cookie /= expr%right%val%enum_cookie) &
@@ -1139,6 +1145,11 @@ module subroutine build_method_call_node(parser, node, receiver, &
 				identifier%text, i - 1, param_val, param_name, &
 				param_is_ref, param_is_const_ref, eff_is_ref_i)
 			eff_is_ref(i) = eff_is_ref_i
+
+			! Methods are never intrinsics, so a bare enum name argument is
+			! never allowed here (c.f. the size/str/println/writeln allowlist
+			! in parse_fn_call)
+			call parser%check_enum_name_value(call_args%v(i))
 		end do
 	end if
 

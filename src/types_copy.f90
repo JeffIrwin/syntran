@@ -254,11 +254,12 @@ recursive module subroutine syntax_node_copy(dst, src)
 	!dst%val%sca%file_     = src%val%sca%file_
 	!dst%val%sca%file_%eof = src%val%sca%file_%eof
 
-	dst%identifier = src%identifier
-	dst%id_index   = src%id_index
-	dst%num_locs   = src%num_locs
-	dst%is_loc     = src%is_loc
-	dst%root_kind  = src%root_kind
+	dst%identifier    = src%identifier
+	dst%id_index      = src%id_index
+	dst%num_locs      = src%num_locs
+	dst%is_loc        = src%is_loc
+	dst%root_kind     = src%root_kind
+	dst%is_enum_name  = src%is_enum_name
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
@@ -485,6 +486,7 @@ recursive module subroutine syntax_node_move(src, dst)
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
 	dst%root_kind       = src%root_kind
+	dst%is_enum_name    = src%is_enum_name
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit
 	dst%usub_omit       = src%usub_omit
@@ -559,6 +561,7 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
 	dst%root_kind       = src%root_kind
+	dst%is_enum_name    = src%is_enum_name
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit
 	dst%usub_omit       = src%usub_omit

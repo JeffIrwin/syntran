@@ -248,6 +248,28 @@ subroutine is_eq_value_t(left, right, res, op_text)
 			call internal_error()
 		end select
 
+	case        (magic * array_type + enum_type)
+
+		! Broadcast an array of enum values against a scalar enum value.
+		! Cross-enum-type comparisons are already rejected at parse time
+		! (parse_expr.f90's enum_cookie check), so both operands are
+		! guaranteed to be the same enum here.  Elements of an enum array
+		! live in %struct(:), not %array%i32 -- c.f. the str_type loop above
+		select case (left%array%type)
+		case (enum_type)
+			res%array = mold(left%array, bool_type)
+
+			allocate(res%array%bool( res%array%len_ ))
+			do i8 = 1, res%array%len_
+				res%array%bool(i8) = &
+					left%struct(i8)%sca%i32 == right%sca%i32
+			end do
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
 	case        (magic * i32_type + array_type)
 
 		select case (right%array%type)
@@ -367,6 +389,25 @@ subroutine is_eq_value_t(left, right, res, op_text)
 			call internal_error()
 		end select
 
+	case        (magic * enum_type + array_type)
+
+		! Broadcast a scalar enum value against an array of enum values.
+		! Mirrors the array_type + enum_type case above
+		select case (right%array%type)
+		case (enum_type)
+			res%array = mold(right%array, bool_type)
+
+			allocate(res%array%bool( res%array%len_ ))
+			do i8 = 1, res%array%len_
+				res%array%bool(i8) = &
+					left%sca%i32 == right%struct(i8)%sca%i32
+			end do
+
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
 	case        (magic * array_type + array_type)
 
 		!print *, 'array == array'
@@ -442,6 +483,18 @@ subroutine is_eq_value_t(left, right, res, op_text)
 					left%array%str(i8)%s, &
 					right%array%str(i8)%s &
 				)
+			end do
+
+		case (magic * enum_type + enum_type)
+			! Cross-enum-type comparisons are already rejected at parse time
+			! (parse_expr.f90's enum_cookie check).  Elements live in
+			! %struct(:), not %array%i32 -- c.f. the str_type case above
+			res%array = mold(right%array, bool_type)
+
+			allocate(res%array%bool( res%array%len_ ))
+			do i8 = 1, res%array%len_
+				res%array%bool(i8) = &
+					left%struct(i8)%sca%i32 == right%struct(i8)%sca%i32
 			end do
 
 		case default

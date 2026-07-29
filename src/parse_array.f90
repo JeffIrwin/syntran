@@ -80,6 +80,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 	span_beg = parser%peek_pos(0)
 	lb_beg   = span_beg
 	call parser%parse_expr(expr=lbound_)
+	call parser%check_enum_name_value(lbound_)
 	span_end = parser%peek_pos(0) - 1
 	lb_end   = span_end
 
@@ -429,6 +430,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 		span_beg = parser%peek_pos(0)
 		call parser%parse_expr(expr=elem)
+		call parser%check_enum_name_value(elem)
 		span_end = parser%peek_pos(0) - 1
 
 		!print *, 'elem ', elem%val%str()

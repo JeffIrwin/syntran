@@ -1,8 +1,9 @@
-// A bare enum type name (e.g. `Suit`) is an array of all its variants, in
-// declaration order.  This covers size() and `for` iteration over it,
-// aliases and negative explicit values, fn param/return of a bare enum
-// name, and the array_move()/array_at() fix that lets an enum (or struct)
-// array stored in a variable be iterated with `for` without crashing
+// A bare enum type name (e.g. `Suit`) is a special form, not a value: it's
+// only valid as a `for` loop's iterable or as an argument to size()/str()/
+// println()/writeln() (see E99).  This covers size() and `for` iteration
+// over it directly, aliases and negative explicit values, and the
+// array_move()/array_at() fix that lets an enum (or struct) array stored in
+// a variable be iterated with `for` without crashing
 
 enum Suit
 {
@@ -23,10 +24,11 @@ for s in Suit
 }
 let ok3 = sum1 == 0 + 1 + 2 + 3;
 
-// Bare enum name as an array value: assignable, indexable, and iterable
-// once stored in a variable (this last part used to internal-error --
-// array_move()/get_array_val() didn't know about enum elements)
-let all = Suit;
+// A *literal* enum array (not a bare enum name -- binding `Suit` itself with
+// `let` is E99) is assignable, indexable, and iterable once stored in a
+// variable (this last part used to internal-error -- array_move()/
+// get_array_val() didn't know about enum elements)
+let all = [Suit.Hearts, Suit.Diamonds, Suit.Clubs, Suit.Spades];
 let ok4 = size(all) == 4;
 let ok5 = all[1] == Suit.Diamonds;
 
@@ -74,34 +76,15 @@ for t in Temp
 }
 let ok11 = first == Temp.Below;
 
-// Enum array fn params/returns
-fn describe_all(h: [Suit; :]): str
-{
-	return str(h);
-}
-let ok12 = describe_all(Suit) == str(Suit);
-
-fn make_all(): [Suit; :]
-{
-	return Suit;
-}
-let ok13 = size(make_all()) == 4;
-let sum3 = 0;
-for s in make_all()
-{
-	sum3 = sum3 + i32(s);
-}
-let ok14 = sum3 == sum1;
-
 // Empty enum: size 0, zero-trip for loop
 enum Nothing {}
-let ok15 = size(Nothing) == 0;
+let ok12 = size(Nothing) == 0;
 let ran = false;
 for n in Nothing
 {
 	ran = true;
 }
-let ok16 = not ran;
+let ok13 = not ran;
 
 // Regression: iterating a struct array stored in a variable shares the same
 // array_move()/array_at() fix as enum arrays above (struct elements live in
@@ -111,11 +94,11 @@ struct P
 	n: i32,
 }
 let ps = [P{n = 1}, P{n = 2}, P{n = 3}];
-let ok17 = true;
+let ok14 = true;
 for p in ps
 {
-	ok17 = ok17 and str(p) != "";
+	ok14 = ok14 and str(p) != "";
 }
 
 return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8 and ok9 and
-	ok10 and ok11 and ok12 and ok13 and ok14 and ok15 and ok16 and ok17;
+	ok10 and ok11 and ok12 and ok13 and ok14;

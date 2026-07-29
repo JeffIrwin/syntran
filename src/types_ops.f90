@@ -533,6 +533,17 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 				return
 			end if
 
+			! Struct equality (scalar or array) isn't implemented -- neither
+			! recursive member-wise comparison nor a decision on nested/
+			! array-typed members exists yet.  Reject at parse time instead
+			! of falling through to eval and hitting the internal I2 crash
+			! in is_eq_value_t()/is_ne_value_t()
+			if (left == struct_type .or. right == struct_type .or. &
+				left_arr == struct_type .or. right_arr == struct_type) then
+				allowed = .false.
+				return
+			end if
+
 			! Allow and then implement comparisons on mixed float types? Might
 			! be a bad idea like float to int equality, noted below
 

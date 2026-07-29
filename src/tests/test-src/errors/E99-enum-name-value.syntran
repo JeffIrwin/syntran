@@ -1,0 +1,15 @@
+// E99: enum-name-value
+// A bare enum type name (an array of all its variants) is a special form,
+// not a value.  It's only valid as a `for` loop's iterable or as an
+// argument to size()/str()/println()/writeln() -- binding it with `let`
+// disagrees with that, since the array would then leak out as an ordinary,
+// positionally-indexable value (c.f. E97)
+
+enum Dir
+{
+	North,
+	South,
+}
+
+let d =
+	Dir;

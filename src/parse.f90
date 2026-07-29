@@ -98,6 +98,7 @@ module syntran__parse_m
 				next => next_token, &
 				peek_index, &
 				check_type_clash, &
+				check_enum_name_value, &
 				check_var_clash, &
 				parse_array_expr, &
 				parse_block_statement, &
@@ -375,6 +376,15 @@ module syntran__parse_m
 			character(len = *), intent(in) :: name
 			integer, intent(in) :: pos
 		end subroutine check_type_clash
+
+		! At a site where a value is consumed (let/const init, assignment
+		! RHS, return, fn/method call args, struct member init, array literal
+		! elements), check whether `expr` is the special bare-enum-name form
+		! (expr%is_enum_name) and push EC_ENUM_NAME_VALUE if so
+		module subroutine check_enum_name_value(parser, expr)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(in) :: expr
+		end subroutine check_enum_name_value
 
 		! At a struct/enum declaration site, check whether `name` clashes with
 		! an already-declared variable and push EC_VAR_TYPE_CLASH if so
