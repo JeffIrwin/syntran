@@ -31,10 +31,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - maybe cover README codeblocks in ci
-	!    * add markup in markdown (html) comments denoting begin/end of each
-	!      block. could also have asserts of expected results in comments. then
-	!      a ci script could extract blocks, pre-process, and verify results
 	!  - cover utils/run-samples.sh in ci
 	!    * need a blocklist probably to avoid running interactive samples like
 	!      betweenle et al

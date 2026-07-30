@@ -519,8 +519,9 @@ subroutine init_state(state, script_args, src_dir, bytecode)
 				state%bytecode = .false.
 				if (.not. no_warn) write(error_unit, '(a)') fg_bold_yellow//'Warning'//color_reset// &
 					': SYNTRAN_BACKEND=ast is deprecated. ' // &
-					'The AST walker will be removed in a future release. If you encounter ' // &
-					'bugs, please report them at https://github.com/JeffIrwin/syntran/issues'
+					'The AST walker is currently planned for removal in syntran 1.6.0. ' // &
+					'If you rely on it, or if you encounter bugs in the default bytecode ' // &
+					'backend, please comment at https://github.com/JeffIrwin/syntran/issues'
 			end if
 		end if
 	end if
