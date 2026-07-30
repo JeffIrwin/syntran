@@ -3372,6 +3372,14 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 			eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[11, 12, 13]', &  ! this option makes the most sense
 			eval('let v = [0: 5]; return (v[1: 4] += [10; 3]);', quiet) == '[11, 12, 13]', &  ! this option makes the most sense
 
+			! Documented in README.md "LHS and RHS slicing": a subscripted
+			! assignment expression evaluates to just the assigned portion,
+			! not the whole array, whether or not it's nested in another `let`
+			eval('let v = [0: 5]; let w = v[1: 4] = 7; w;', quiet) == '[7, 7, 7]', &
+			eval('let v = [0: 5]; let w = v[1: 4] = 7; v;', quiet) == '[0, 7, 7, 7, 4]', &
+			eval('let v = [0: 5]; v[2] = 9;', quiet) == '9', &
+			eval('let m = [0; 3, 3]; m[:, 1] = 99;', quiet) == '[99, 99, 99]', &
+
 			eval('let v = [0: 4]; v[0:2:4]   = 9; v;', quiet) == '[9, 1, 9, 3]', &
 			eval('let v = [0: 4]; v[1:2:4]   = 9; v;', quiet) == '[0, 9, 2, 9]', &
 			eval('let v = [0: 4]; v[3:-1:1]  = 9; v;', quiet) == '[0, 1, 9, 9]', &

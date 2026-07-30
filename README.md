@@ -972,46 +972,61 @@ Assigning to an LHS slice changes only the sliced part of the array:
 let v2 = [0: 5];
 // [0, 1, 2, 3, 4]
 v2[1: 4] = 7;
+// [7, 7, 7]
+v2;
 // [0, 7, 7, 7, 4]
 ```
 <!-- syntran-expect
 [0, 1, 2, 3, 4]
 [7, 7, 7]
+[0, 7, 7, 7, 4]
 -->
 <!-- syntran-end -->
-The value returned by the entire assignment expression above is the
-whole v2 array, not just the assigned slice.  This distinction is important when
-such an assignment expression is the return value of a function, or if an
-assignment is nested on the RHS of another assignment:
+The value returned by the entire assignment expression above is just the
+assigned slice `[7, 7, 7]`, not the whole `v2` array and not the scalar `7`.
+This distinction is important when such an assignment expression is the
+return value of a function (note that a subscripted assignment must be
+parenthesized to appear directly after `return`, e.g. `return (v[1: 4] = 7);`),
+or if an assignment is nested on the RHS of another assignment:
 <!-- syntran-begin mode=repl group=array-lhs-rhs-2 -->
 ```rust
 let v3 = [0: 5];
 let v4 = v3[1: 4] = 7;
+// [7, 7, 7]
 v4;
+// [7, 7, 7]
+v3;
 // [0, 7, 7, 7, 4]
 ```
 <!-- syntran-expect
 [0, 1, 2, 3, 4]
 [7, 7, 7]
 [7, 7, 7]
+[0, 7, 7, 7, 4]
 -->
 <!-- syntran-end -->
-Note that `v4` is *neither* just the scalar `7` nor the slice `[7, 7, 7]`,
-rather it is the whole `v3` array.  Nested subscripted assignments such as this
-are [illegal in python](https://stackoverflow.com/a/60909096/4347028).
+Note that `v4` is the slice `[7, 7, 7]`, not the whole `v3` array (`v3` is
+still updated in place, as shown above).  Nested subscripted assignments such
+as this are [illegal in python](https://stackoverflow.com/a/60909096/4347028).
 
-This behaviour is in contrast to non-nested assignment:
+This behaviour is consistent with non-nested assignment: a subscripted
+assignment expression evaluates to the same thing that the same subscript
+would return on the RHS, whether that's a slice or, as shown below, a scalar:
 <!-- syntran-begin mode=repl group=array-lhs-rhs-3 -->
 ```rust
 let v5 = [0: 5];
 let v6 = v5[1: 4];
+// [1, 2, 3]
 v6;
 // [1, 2, 3]
+v5[2] = 9;
+// 9
 ```
 <!-- syntran-expect
 [0, 1, 2, 3, 4]
 [1, 2, 3]
 [1, 2, 3]
+9
 -->
 <!-- syntran-end -->
 

@@ -627,12 +627,11 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 				!	!
 				!	! I believe it is illegal in python because of the
 				!	! ambiguity of what should `b` be if it is assigned.
-				!	! Should `b` be the whole `a` array as in syntran, or
-				!	! just the slice `a[1:4]`, or just the scalar `3`?
+				!	! Should `b` be the whole `a` array, or just the slice
+				!	! `a[1:4]`, or just the scalar `3`?
 				!	!
 				!	! I think there's a good case to be made that it should
-				!	! be the slice `a[1:4]`, although the implementation was more
-				!	! simple by setting `b` to the whole array `a`.
+				!	! be the slice `a[1:4]`, which is what syntran does.
 				!end if
 
 				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
@@ -652,9 +651,6 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			!   complex, requiring the tmp_array and getting all the size/rank
 			!   array meta-data
 
-
-			!! TODO: update readme for this change.  Search "contrast" or "This
-			!! behaviour is in contrast to non-nested assignment:"
 			!res = state%vars%vals(id)  ! big copy for returing the whole array
 			res = tmp_array  ! only return the modified slice
 
