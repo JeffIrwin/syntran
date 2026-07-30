@@ -206,6 +206,14 @@
 				"
 			},
 			{
+				"name": "Test README code blocks",
+				"shell": "bash",
+				"run":
+				"
+					bash ./utils/test-readme.sh \n
+				"
+			},
+			{
 				"if": "matrix.os != 'windows-latest'",
 				"name": "Test debug",
 				"run":

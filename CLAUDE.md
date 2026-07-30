@@ -46,6 +46,15 @@ Syntran script tests are in `src/tests/test-src/` organized by category. To run 
 fpm run --profile debug -- src/tests/test-src/modules/test-01.syntran
 ```
 
+### Testing README.md code blocks
+`README.md`'s code blocks are annotated with hidden `<!-- syntran-begin -->`
+markers and run in CI to catch doc drift. Requires a build at
+`build/Debug/syntran` (or pass a path explicitly):
+```bash
+bash utils/test-readme.sh              # check all blocks against their hidden expected output
+bash utils/test-readme.sh --update     # regenerate the hidden expected output from actual behavior
+```
+
 ### Evaluating a script as a command-line string
 To run a syntran script without saving it as a file:
 ```bash
