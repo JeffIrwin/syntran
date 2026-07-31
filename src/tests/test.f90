@@ -3645,6 +3645,8 @@ subroutine unit_test_repl_fns(npass, nfail)
 
 	character(len = *), parameter :: label = 'REPL user-defined functions'
 
+	logical, parameter :: quiet = .true.
+
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
@@ -3653,34 +3655,34 @@ subroutine unit_test_repl_fns(npass, nfail)
 		[   &
 			! Declare then call on a later line
 			interpret('fn f(): i32 { return 42; }'//line_feed// &
-				'f();') == '42', &
+				'f();', quiet) == '42', &
 			! Two fns declared on separate lines: the 2nd declaration must not
 			! clobber the 1st's slot in the flat fn array
 			interpret('fn f(): i32 { return 42; }'//line_feed// &
 				'fn g(): i32 { return 7; }'//line_feed// &
-				'f();') == '42', &
+				'f();', quiet) == '42', &
 			interpret('fn f(): i32 { return 42; }'//line_feed// &
 				'fn g(): i32 { return 7; }'//line_feed// &
 				'f();'//line_feed// &
-				'g();') == '7', &
+				'g();', quiet) == '7', &
 			! Declare then several unrelated statements that touch no fn --
 			! this used to segfault on both backends
 			interpret('fn f(): i32 { return 42; }'//line_feed// &
 				'1;'//line_feed// &
-				'2;') == '2', &
+				'2;', quiet) == '2', &
 			! Multi-line fn declaration via REPL continuation, then call
 			interpret('fn f(): i32'//line_feed// &
 				'{'//line_feed// &
 				'return 42;'//line_feed// &
 				'}'//line_feed// &
-				'f();') == '42', &
+				'f();', quiet) == '42', &
 			! Fn with params
 			interpret('fn add(a: i32, b: i32): i32 { return a + b; }'//line_feed// &
-				'add(3, 4);') == '7', &
+				'add(3, 4);', quiet) == '7', &
 			! A fn calling another fn declared on an earlier REPL line
 			interpret('fn sq(x: i32): i32 { return x * x; }'//line_feed// &
 				'fn sum_sq(a: i32, b: i32): i32 { return sq(a) + sq(b); }'//line_feed// &
-				'sum_sq(3, 4);') == '25', &
+				'sum_sq(3, 4);', quiet) == '25', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -3715,6 +3717,8 @@ subroutine unit_test_repl_structs(npass, nfail)
 
 	character(len = *), parameter :: label = 'REPL structs and enums'
 
+	logical, parameter :: quiet = .true.
+
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
@@ -3725,17 +3729,17 @@ subroutine unit_test_repl_structs(npass, nfail)
 			! member on later lines
 			interpret('struct S { i: i32 }'//line_feed// &
 				'let s = S{i = 42};'//line_feed// &
-				's.i;') == '42', &
+				's.i;', quiet) == '42', &
 			! Dot access on a line later than the `let`
 			interpret('struct S { i: i32 }'//line_feed// &
 				'let s = S{i = 1};'//line_feed// &
 				'1;'//line_feed// &
-				's.i;') == '1', &
+				's.i;', quiet) == '1', &
 			! Member write on a later line
 			interpret('struct S { i: i32 }'//line_feed// &
 				'let s = S{i = 1};'//line_feed// &
 				's.i = 7;'//line_feed// &
-				's.i;') == '7', &
+				's.i;', quiet) == '7', &
 			! Multi-line struct declaration via REPL continuation, then use.
 			! This is the case that requires structs_rollback(): a partial
 			! `struct S` / `{` reaches parser%structs%insert() before the
@@ -3746,33 +3750,36 @@ subroutine unit_test_repl_structs(npass, nfail)
 				'i: i32'//line_feed// &
 				'}'//line_feed// &
 				'let s = S{i = 7};'//line_feed// &
-				's.i;') == '7', &
+				's.i;', quiet) == '7', &
 			! Struct with a method declared on line 1, instantiated and
 			! called on a later line (exercises the a5afc18 fns backfill
 			! through a struct receiver, once the struct type itself
 			! resolves)
 			interpret('struct S { i: i32, fn get(): i32 { return i; } }'//line_feed// &
 				'let s = S{i = 9};'//line_feed// &
-				's.get();') == '9', &
+				's.get();', quiet) == '9', &
 			! Nested struct across lines
 			interpret('struct Inner { j: i32 }'//line_feed// &
 				'struct Outer { inn: Inner }'//line_feed// &
 				'let o = Outer{inn = Inner{j = 3}};'//line_feed// &
-				'o.inn.j;') == '3', &
+				'o.inn.j;', quiet) == '3', &
 			! Array of structs
 			interpret('struct P { x: i32 }'//line_feed// &
 				'let a = [P{x = 1}, P{x = 2}];'//line_feed// &
-				'a[1].x;') == '2', &
+				'a[1].x;', quiet) == '2', &
 			! Enum declared on one line, used on a later line
 			interpret('enum Color { red, green, blue }'//line_feed// &
 				'let c = Color.green;'//line_feed// &
-				'str(c);') == 'Color.green', &
+				'str(c);', quiet) == 'Color.green', &
 			! Redeclaring the same struct on a later line still errors (a
 			! diagnostic is logged and no result is printed, c.f. how
 			! unit_test_repl_fns has no equivalent -- fn redeclaration
-			! across REPL lines already worked this way post-a5afc18)
+			! across REPL lines already worked this way post-a5afc18).
+			! quiet suppresses the E26 diagnostic here; its exact text is
+			! asserted separately in unit_test_error_codes via
+			! test-src/errors/E26-redeclare-struct.syntran
 			interpret('struct S { i: i32 }'//line_feed// &
-				'struct S { j: i32 }') == '', &
+				'struct S { j: i32 }', quiet) == '', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
