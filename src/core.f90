@@ -201,7 +201,7 @@ module syntran__core_m
 	!    * is appimage the standard tool for this?  how does fpm do it?
 	!  - REPL improvements:
 	!    * allow structs in repl -- currently they don't work
-	!    * any other functionality gaps in repl -- fns?
+	!    * any other functionality gaps in repl?
 	!  - REPL styling
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)
@@ -505,14 +505,12 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	character(len = :), allocatable :: src_filel, fn_name, var_name
 
-	integer :: i, slot, unit_
+	integer :: i, slot, unit_, num_fns0
 
 	logical :: allow_continuel, repll
 
 	type(text_context_vector_t) :: contexts
 
-	type(fn_t) :: fn
-	type(fns_t) :: fns0
 	type(value_t) :: var_val
 
 	! This no longer seems to make a difference.  Previously, without `save`,
@@ -636,43 +634,23 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	end if
 
 	!print *, 'moving fns'
+	num_fns0 = 0
+	if (allocated(fns%fns)) num_fns0 = size(fns%fns)
+
 	if (allocated(fns%table)) then
 
-		fns0%table          = fns%table
-		fns0%capacity       = fns%capacity
-		fns0%count          = fns%count
-
-		!print *, 'fns%fns = '
-		!do i = 1, size(fns%fns)
-		!	print *, fns%fns(i)%to_str()
-		!end do
-
-		!! With intrinsic fns, this is always allocated
-
-		!if (allocated(fns%fns)) then
-			!print *, 'copy fns'
-
-			!fns0%fns = fns%fns
-			allocate(fns0%fns( size(fns%fns) ))
-			do i = 1, size(fns%fns)
-				fns0%fns(i) = fns%fns(i)
-			end do
-
-			parser%num_fns = size(fns%fns)
-		!else
-		!	parser%num_fns = 0
-		!end if
-
-		!print *, 'parser%num_fns = ', parser%num_fns
+		parser%num_fns = num_fns0
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
-		! evaluate until the block is finished
+		! evaluate until the block is finished.  Note fns%fns is left alone
+		! here -- the parser never reads or writes the flat array, only the
+		! hash table (c.f. eval_fn.f90, the only reader of fns%fns), so there
+		! is no need to move it in and deep-copy it back out again
 		call move_alloc(fns%table, parser%fns%table)
 		parser%fns%capacity = fns%capacity
 		parser%fns%count    = fns%count
 		fns%capacity = 0
 		fns%count    = 0
-		if (allocated(fns%fns)) call move_alloc(fns%fns          , parser%fns%fns)
 
 	end if
 
@@ -720,11 +698,11 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 			call move_alloc(vars0%vals         , vars%vals)
 		end if
 
-		if (allocated(fns0%table)) then
-			call move_alloc(fns0%table, fns%table)
-			fns%capacity = fns0%capacity
-			fns%count    = fns0%count
-			call move_alloc(fns0%fns          , fns%fns)
+		if (allocated(parser%fns%table)) then
+			call move_alloc(parser%fns%table, fns%table)
+			fns%capacity = parser%fns%capacity
+			fns%count    = parser%fns%count
+			call fns%rollback(num_fns0)
 		end if
 
 		return
@@ -752,11 +730,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 		call move_alloc(parser%fns%table, fns%table)
 		fns%capacity = parser%fns%capacity
 		fns%count    = parser%fns%count
-
-		!! I tried adding this while working on recursive fn lookup but it's not
-		!! the way
-		!call move_alloc(parser%fns%fns          , fns%fns)
-
 	end if
 
 	! When parsing is finished, we are done with the variable dictionary
@@ -782,31 +755,21 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	if (parser%num_vars >= NUM_INTR_VARS) call populate_intr_vars(vars%vals)
 
 	!print *, 'parser%num_fns = ', parser%num_fns
-	if (allocated(fns%fns)) deallocate(fns%fns)
-	allocate(fns%fns( parser%num_fns ))
 
-	if (allocated(fns0%fns)) then
+	! Grow (not rebuild) the flat fn array in place -- fns%fns was never
+	! touched above, so any previously-declared fns are already there
+	call fns%grow_flat(parser%num_fns)
 
-		!fns%fns( 1: size(fns0%fns) ) = fns0%fns
-		do i = 1, size(fns0%fns)
-			fns%fns(i) = fns0%fns(i)
-		end do
-
-	end if
-
-	! Save flat fn array `fns%fns` with a one-time dict lookup.  There's not any
-	! actual fns%fns%node info in what is set above
-
-	!print *, "num intr fns = ", fns%num_intr_fns
+	! Save each newly-declared fn into the flat array at its real id_index
+	! (assigned when it was parsed, c.f. parse_fn.f90) with a one-time dict
+	! lookup.  There's not any actual fns%fns%node info in what is set above
 	do i = 1, parser%fn_names%len_
 		fn_name = parser%fn_names%v(i)%s
 		!print *, "fn name = ", fn_name
 
-		! User-defined fns are in the table after all of the intrinsic fns, so
-		! shift its index by num_intr_fns
 		slot = fns%find(fn_name)
-		fn = fns%get(slot)
-		fns%fns( fns%num_intr_fns + i ) = fn
+		if (slot == 0) cycle
+		fns%fns( fns%id_at(slot) ) = fns%get(slot)
 
 	end do
 	!print *, "done looking up fns"

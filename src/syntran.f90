@@ -39,7 +39,7 @@ subroutine eval_dispatch(tree, state, res)
 	type(program_t) :: prog
 
 	if (state%bytecode) then
-		call compile_tree(tree, prog)
+		call compile_tree(tree, prog, state%fns)
 		call vm_run(prog, state, res)
 	else
 		call syntax_eval(tree, state, res)
@@ -188,7 +188,15 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 			! Interpret multi-line strings one line at a time to mock the
 			! interpreter getting continued stdin lines.  If you know your whole
 			! string ahead of time, just use syntran_eval() instead
-			line = sv%get_line(iostat = io)
+			if (continue_) then
+				! Mirror the stdin branch below: if the previous line left a
+				! statement unfinished (e.g. a multi-line fn declaration),
+				! keep accumulating instead of restarting from just the next
+				! line
+				line = line//line_feed//sv%get_line(iostat = io)
+			else
+				line = sv%get_line(iostat = io)
+			end if
 
 		else
 

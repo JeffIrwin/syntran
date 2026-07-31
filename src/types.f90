@@ -96,11 +96,13 @@ module syntran__types_m
 		! TODO: scoping for nested fns?
 		contains
 			procedure :: &
-				insert  => fn_insert, &
-				find    => fn_find, &
-				get     => fn_get, &
-				id_at   => fn_id_at, &
-				closest => fn_closest
+				insert    => fn_insert, &
+				find      => fn_find, &
+				get       => fn_get, &
+				id_at     => fn_id_at, &
+				closest   => fn_closest, &
+				grow_flat => fns_grow_flat, &
+				rollback  => fns_rollback
 		!		push_scope, pop_scope
 
 	end type fns_t
@@ -451,6 +453,11 @@ module syntran__types_m
 			class(fn_t), intent(in)    :: src
 		end subroutine fn_copy
 
+		recursive module subroutine fn_move(src, dst)
+			type(fn_t), intent(inout) :: src
+			type(fn_t), intent(out)   :: dst
+		end subroutine fn_move
+
 		recursive module subroutine syntax_node_vector_copy(dst, src)
 			class(syntax_node_vector_t), intent(inout) :: dst
 			class(syntax_node_vector_t), intent(in)    :: src
@@ -513,6 +520,16 @@ module syntran__types_m
 			integer, intent(out), optional :: iostat
 			logical, intent(in), optional :: overwrite
 		end subroutine fn_insert
+
+		module subroutine fns_grow_flat(dict, n)
+			class(fns_t), intent(inout) :: dict
+			integer, intent(in) :: n
+		end subroutine fns_grow_flat
+
+		module subroutine fns_rollback(dict, num_fns0)
+			class(fns_t), intent(inout) :: dict
+			integer, intent(in) :: num_fns0
+		end subroutine fns_rollback
 
 		module subroutine var_insert(dict, key, val, id_index, iostat, overwrite, is_const)
 			class(vars_t) :: dict

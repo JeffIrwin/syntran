@@ -156,6 +156,7 @@ recursive module subroutine fn_copy(dst, src)
 	dst%variadic_type   = src%variadic_type
 	dst%param_names     = src%param_names
 	dst%is_intr         = src%is_intr
+	dst%intr_id         = src%intr_id
 	dst%is_method       = src%is_method
 	dst%is_const_method = src%is_const_method
 
@@ -196,6 +197,43 @@ recursive module subroutine fn_copy(dst, src)
 	!print *, 'done fn_copy()'
 
 end subroutine fn_copy
+
+!===============================================================================
+
+recursive module subroutine fn_move(src, dst)
+
+	! Move src into dst.  O(1): transfers all allocatable components via
+	! move_alloc instead of a deep copy, mirroring syntax_node_move() and
+	! value_move() (value.f90).  dst is intent(out), so entering this
+	! subroutine already resets it to a default-initialized fn_t (deallocating
+	! any prior contents)
+
+	type(fn_t), intent(inout) :: src
+	type(fn_t), intent(out)   :: dst
+
+	!********
+
+	call value_move(src%type, dst%type)
+
+	call move_alloc(src%params, dst%params)
+
+	call move_alloc(src%param_names%v, dst%param_names%v)
+	dst%param_names%len_ = src%param_names%len_
+	dst%param_names%cap  = src%param_names%cap
+
+	dst%variadic_min  = src%variadic_min
+	dst%variadic_max  = src%variadic_max
+	dst%variadic_type = src%variadic_type
+	call move_alloc(src%variadic_name, dst%variadic_name)
+
+	call move_alloc(src%node, dst%node)
+
+	dst%is_intr         = src%is_intr
+	dst%intr_id         = src%intr_id
+	dst%is_method       = src%is_method
+	dst%is_const_method = src%is_const_method
+
+end subroutine fn_move
 
 !===============================================================================
 

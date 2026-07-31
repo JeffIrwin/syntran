@@ -63,6 +63,90 @@ end subroutine fn_grow
 
 !===============================================================================
 
+module subroutine fns_grow_flat(dict, n)
+
+	! Grow dict%fns (the flat array used for efficient interpreted
+	! evaluation) to at least size n, preserving existing entries by move
+	! (not copy) via fn_move() -- c.f. fn_grow() above for the same
+	! move-based-rehash pattern applied to the hash table.  No-op if dict%fns
+	! is already large enough
+
+	class(fns_t), intent(inout) :: dict
+	integer, intent(in) :: n
+
+	!********
+
+	type(fn_t), allocatable :: old_fns(:)
+	integer :: i, old_size
+
+	old_size = 0
+	if (allocated(dict%fns)) old_size = size(dict%fns)
+
+	if (n <= old_size) return
+
+	if (old_size > 0) call move_alloc(dict%fns, old_fns)
+
+	allocate(dict%fns(n))
+
+	do i = 1, old_size
+		call fn_move(old_fns(i), dict%fns(i))
+	end do
+
+end subroutine fns_grow_flat
+
+!===============================================================================
+
+module subroutine fns_rollback(dict, num_fns0)
+
+	! Undo any fn declarations parsed since num_fns0 (the id_index count
+	! before this REPL line's parse began) by rebuilding dict%table with only
+	! entries whose id_index <= num_fns0.  Used to discard partial
+	! declarations when a REPL line needs more input (continuation) and is
+	! about to be fully re-parsed from scratch.  Replaces a table deep-copy
+	! backup/restore with a move-based rebuild, c.f. fn_grow() above.  Does
+	! not touch dict%fns, which the parser never reads or writes
+
+	class(fns_t), intent(inout) :: dict
+	integer, intent(in) :: num_fns0
+
+	!********
+
+	type(fn_entry_t), allocatable :: old_table(:)
+	integer :: i, new_count
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	if (.not. allocated(dict%table)) return
+
+	call move_alloc(dict%table, old_table)
+	allocate(dict%table( dict%capacity ))
+	new_count = 0
+
+	do i = 1, size(old_table)
+		if (.not. allocated(old_table(i)%key)) cycle
+		if (old_table(i)%id_index > num_fns0) cycle
+
+		hash_val = fnv_1a(old_table(i)%key)
+		hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+		do probe = 0, dict%capacity - 1
+			idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+			if (.not. allocated(dict%table(idx)%key)) then
+				call move_alloc(old_table(i)%key, dict%table(idx)%key)
+				call move_alloc(old_table(i)%val, dict%table(idx)%val)
+				dict%table(idx)%id_index = old_table(i)%id_index
+				new_count = new_count + 1
+				exit
+			end if
+		end do
+	end do
+
+	dict%count = new_count
+
+end subroutine fns_rollback
+
+!===============================================================================
+
 module function fn_find(dict, key) result(slot)
 
 	! Returns the table slot for `key`, or 0 if not present.  The slot is

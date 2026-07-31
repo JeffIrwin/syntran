@@ -3626,6 +3626,73 @@ end subroutine unit_test_fns
 
 !===============================================================================
 
+subroutine unit_test_repl_fns(npass, nfail)
+
+	! User-defined fns declared interactively, one REPL line at a time via
+	! interpret() (c.f. unit_test_var_scopes/unit_test_assignment above for
+	! the same interpret() idiom).  Unlike unit_test_fns, which parses whole
+	! files/strings in one shot via interpret_file(), interpret() drives the
+	! real REPL loop in syntran.f90 one line at a time, so this is the only
+	! place that exercises the REPL's cross-line fn state (parser%fns
+	! round-tripping in core.f90's syntax_parse, and the bytecode backend's
+	! per-line program_t backfill in compile_ctrl.f90)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'REPL user-defined functions'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Declare then call on a later line
+			interpret('fn f(): i32 { return 42; }'//line_feed// &
+				'f();') == '42', &
+			! Two fns declared on separate lines: the 2nd declaration must not
+			! clobber the 1st's slot in the flat fn array
+			interpret('fn f(): i32 { return 42; }'//line_feed// &
+				'fn g(): i32 { return 7; }'//line_feed// &
+				'f();') == '42', &
+			interpret('fn f(): i32 { return 42; }'//line_feed// &
+				'fn g(): i32 { return 7; }'//line_feed// &
+				'f();'//line_feed// &
+				'g();') == '7', &
+			! Declare then several unrelated statements that touch no fn --
+			! this used to segfault on both backends
+			interpret('fn f(): i32 { return 42; }'//line_feed// &
+				'1;'//line_feed// &
+				'2;') == '2', &
+			! Multi-line fn declaration via REPL continuation, then call
+			interpret('fn f(): i32'//line_feed// &
+				'{'//line_feed// &
+				'return 42;'//line_feed// &
+				'}'//line_feed// &
+				'f();') == '42', &
+			! Fn with params
+			interpret('fn add(a: i32, b: i32): i32 { return a + b; }'//line_feed// &
+				'add(3, 4);') == '7', &
+			! A fn calling another fn declared on an earlier REPL line
+			interpret('fn sq(x: i32): i32 { return x * x; }'//line_feed// &
+				'fn sum_sq(a: i32, b: i32): i32 { return sq(a) + sq(b); }'//line_feed// &
+				'sum_sq(3, 4);') == '25', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_repl_fns
+
+!===============================================================================
+
 subroutine unit_test_linalg_fns(npass, nfail)
 
 	! More advanced tests on longer scripts
@@ -7391,6 +7458,7 @@ subroutine unit_tests(iostat)
 	call unit_test_nd_i32     (npass, nfail)
 	call unit_test_intr_fns   (npass, nfail)
 	call unit_test_fns        (npass, nfail)
+	call unit_test_repl_fns   (npass, nfail)
 	call unit_test_linalg_fns (npass, nfail)
 	call unit_test_comp_ass   (npass, nfail)
 	call unit_test_comp_ass_arr(npass, nfail)

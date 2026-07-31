@@ -519,6 +519,16 @@ module syntran__bytecode_m
 		! (emit OP_HALT).
 		logical :: in_fn_body = .false.
 
+		! REPL support: fns declared on an earlier REPL line have no
+		! fn_declaration node in the tree being compiled now (each REPL line
+		! gets its own fresh program_t), so their AST only survives in
+		! state%fns%fns(:).  Optionally set by compile_tree() so the
+		! translation_unit case can compile any such fn that isn't in
+		! prog%fn_entry yet, c.f. eval_fn.f90 which resolves the same way for
+		! the AST walker.  Null when compiling a whole file/string in one shot
+		! (nothing to backfill: every fn already has a fn_declaration node).
+		type(fns_t), pointer :: fns => null()
+
 	end type compiler_state_t
 
 !===============================================================================

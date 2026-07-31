@@ -724,6 +724,35 @@ recursive subroutine compile_node(prog, cs, node)
 			end if
 		end do
 
+		! REPL pass: compile any fn declared on an earlier REPL line.  Each
+		! REPL statement gets its own fresh program_t (c.f. eval_dispatch()
+		! in syntran.f90), so such a fn has no fn_declaration node in *this*
+		! tree -- its AST only survives in cs%fns%fns(:), which is exactly
+		! how the AST walker resolves the same case (state%fns%fns(id_index)
+		! %node%body in eval_fn.f90).  Skip ids already compiled above (this
+		! line's own fns) and intrinsics (unallocated %node).  No-op outside
+		! the REPL, where compile_tree() is called without the fns arg
+		if (associated(cs%fns)) then
+			do i = cs%fns%num_intr_fns + 1, size(cs%fns%fns)
+				if (.not. allocated(cs%fns%fns(i)%node)) cycle
+
+				call ensure_fn_entry(prog, i)
+				if (prog%fn_entry(i) /= 0) cycle   ! already compiled above
+
+				l_top = i   ! fn_id (reuse l_top as scratch)
+				prog%fn_num_locs(l_top) = cs%fns%fns(i)%node%num_locs
+				prog%fn_entry(l_top)    = prog%len_ + 1
+
+				cs%in_fn_body = .true.
+				call compile_node(prog, cs, cs%fns%fns(i)%node%body)
+				cs%in_fn_body = .false.
+				! Implicit void return for functions with no explicit return statement
+				const_idx = add_const(prog, unknown_val())
+				call emit(prog, OP_LOAD_CONST, a = const_idx)
+				call emit(prog, OP_RET)
+			end do
+		end if
+
 		! Top-level statements start here.
 		prog%entry_main = prog%len_ + 1
 
@@ -1153,10 +1182,11 @@ end function unknown_val
 
 !===============================================================================
 
-module subroutine compile_tree(tree, prog)
+module subroutine compile_tree(tree, prog, fns)
 
 	type(syntax_node_t), intent(in) :: tree
 	type(program_t), intent(out) :: prog
+	type(fns_t), intent(in), target, optional :: fns
 
 	!*******
 
@@ -1165,6 +1195,7 @@ module subroutine compile_tree(tree, prog)
 	!print *, 'starting compile_tree()'
 
 	cs = new_compiler_state()
+	if (present(fns)) cs%fns => fns
 	prog = new_program()
 	call compile_node(prog, cs, tree)
 
