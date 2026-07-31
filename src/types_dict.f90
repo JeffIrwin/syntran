@@ -763,6 +763,58 @@ end subroutine struct_grow
 
 !===============================================================================
 
+module subroutine structs_rollback(dict, num_structs0)
+
+	! Undo any struct declarations parsed since num_structs0 (the id_index
+	! count before this REPL line's parse began) by rebuilding dict%table
+	! with only entries whose id_index <= num_structs0.  Used to discard
+	! partial declarations when a REPL line needs more input (continuation)
+	! and is about to be fully re-parsed from scratch.  Mirrors
+	! fns_rollback() above -- see its comment for the general rationale --
+	! and reuses the same move-based rehash pattern as struct_grow() above
+
+	class(structs_t), intent(inout) :: dict
+	integer, intent(in) :: num_structs0
+
+	!********
+
+	type(struct_entry_t), allocatable :: old_table(:)
+	integer :: i, new_count
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	if (.not. allocated(dict%table)) return
+
+	call move_alloc(dict%table, old_table)
+	allocate(dict%table( dict%capacity ))
+	new_count = 0
+
+	do i = 1, size(old_table)
+		if (.not. allocated(old_table(i)%key)) cycle
+		if (old_table(i)%id_index > num_structs0) cycle
+
+		hash_val = fnv_1a(old_table(i)%key)
+		hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+		do probe = 0, dict%capacity - 1
+			idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+			if (.not. allocated(dict%table(idx)%key)) then
+				call move_alloc(old_table(i)%key, dict%table(idx)%key)
+				call move_alloc(old_table(i)%val, dict%table(idx)%val)
+				dict%table(idx)%id_index = old_table(i)%id_index
+				new_count = new_count + 1
+				exit
+			end if
+		end do
+	end do
+
+	dict%count = new_count
+	dict%num_structs = num_structs0
+
+end subroutine structs_rollback
+
+!===============================================================================
+
 module function struct_find(dict, key) result(slot)
 
 	! Returns the table slot for `key`, or 0 if not present.  The slot is
@@ -862,7 +914,11 @@ module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 	logical :: overwritel
 
 	!print *, 'inserting ', quote(key)
-	id_index = id_index + 1
+
+	! num_structs is already incremented by caller *except* with module
+	! imports, which re-insert with an id_index already assigned by the
+	! module sub-parser (c.f. the identical comment in fn_insert() above)
+	!id_index = id_index + 1
 
 	! Note that this is different than the fn insert default.  Re-declared
 	! structs are caught in the caller (in parse_struct_declaration())
@@ -1007,6 +1063,53 @@ end subroutine enum_grow
 
 !===============================================================================
 
+module subroutine enums_rollback(dict, num_enums0)
+
+	! Undo any enum declarations parsed since num_enums0.  Mirrors
+	! structs_rollback() above
+
+	class(enums_t), intent(inout) :: dict
+	integer, intent(in) :: num_enums0
+
+	!********
+
+	type(enum_entry_t), allocatable :: old_table(:)
+	integer :: i, new_count
+	integer(int64) :: hash_val
+	integer :: hash_idx, probe, idx
+
+	if (.not. allocated(dict%table)) return
+
+	call move_alloc(dict%table, old_table)
+	allocate(dict%table( dict%capacity ))
+	new_count = 0
+
+	do i = 1, size(old_table)
+		if (.not. allocated(old_table(i)%key)) cycle
+		if (old_table(i)%id_index > num_enums0) cycle
+
+		hash_val = fnv_1a(old_table(i)%key)
+		hash_idx = int(modulo(hash_val, int(dict%capacity, int64)) + 1)
+
+		do probe = 0, dict%capacity - 1
+			idx = modulo(hash_idx + probe - 1, dict%capacity) + 1
+			if (.not. allocated(dict%table(idx)%key)) then
+				call move_alloc(old_table(i)%key, dict%table(idx)%key)
+				call move_alloc(old_table(i)%val, dict%table(idx)%val)
+				dict%table(idx)%id_index = old_table(i)%id_index
+				new_count = new_count + 1
+				exit
+			end if
+		end do
+	end do
+
+	dict%count = new_count
+	dict%num_enums = num_enums0
+
+end subroutine enums_rollback
+
+!===============================================================================
+
 module function enum_find(dict, key) result(slot)
 
 	! Returns the table slot for `key`, or 0 if not present.  Mirrors
@@ -1101,7 +1204,10 @@ module subroutine enum_insert(dict, key, val, id_index, iostat, overwrite)
 	integer :: hash_idx, probe, idx, io
 	logical :: overwritel
 
-	id_index = id_index + 1
+	! num_enums is already incremented by caller *except* with module
+	! imports, which re-insert with an id_index already assigned by the
+	! module sub-parser (c.f. the identical comment in fn_insert() above)
+	!id_index = id_index + 1
 
 	! Note that this is different than the fn insert default.  Re-declared
 	! enums are caught in the caller (in parse_enum_declaration())

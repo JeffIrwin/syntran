@@ -159,7 +159,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 			return
 		end if
 
-		compilation = syntax_parse(source_text, state%vars, state%fns, startup_file)
+		compilation = syntax_parse(source_text, state, startup_file)
 		if (.not. state%quiet) call compilation%log_diagnostics()
 
 		if (compilation%diagnostics%len_ > 0) then
@@ -275,7 +275,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 		end if
 
 		res_str = ' '
-		compilation = syntax_parse(line, state%vars, state%fns, src_file, allow_cont)
+		compilation = syntax_parse(line, state, src_file, allow_cont)
 		!print *, 'in interpreter'
 
 		!print *, 'compilation%expecting = ', compilation%expecting
@@ -343,7 +343,7 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 	call init_state(state)
 	state%quiet = .false.
 
-	tree = syntax_parse(str_, state%vars, state%fns)
+	tree = syntax_parse(str_, state)
 	call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -374,7 +374,7 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 	call init_state(state)
 	state%quiet = .false.
 
-	tree = syntax_parse(str_, state%vars, state%fns)
+	tree = syntax_parse(str_, state)
 	call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -408,7 +408,7 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
-	tree = syntax_parse(str_, state%vars, state%fns)
+	tree = syntax_parse(str_, state)
 	if (.not. state%quiet) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -451,7 +451,7 @@ real(kind = 8) function syntran_eval_f64(str_, quiet) result(eval_f64)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
-	tree = syntax_parse(str_, state%vars, state%fns)
+	tree = syntax_parse(str_, state)
 	if (.not. state%quiet) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -624,7 +624,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	! TODO: make a helper fn that all the eval_* fns use
 
 	!print *, "parsing"
-	tree = syntax_parse(str_, state%vars, state%fns, src_filel, repl = repl)
+	tree = syntax_parse(str_, state, src_filel, repl = repl)
 	!print *, "done"
 	!print *, "size fns = ", size(state%fns%fns)
 

@@ -325,14 +325,22 @@ module syntran__types_m
 		integer :: capacity = 0, count = 0
 		real :: load_factor_threshold = 0.75
 
+		! Number of structs ever declared (== the highest id_index in the
+		! table).  Persisted across REPL lines in state_t (c.f. fns_t%fns,
+		! whose size serves the same purpose for fns) and used by
+		! syntax_parse() (core.f90) as the "declared before this REPL line"
+		! threshold for rollback()
+		integer :: num_structs = 0
+
 		contains
 			procedure :: &
-				insert  => struct_insert, &
-				find    => struct_find, &
-				get     => struct_get, &
-				id_at   => struct_id_at, &
-				exists  => struct_exists, &
-				closest => struct_closest
+				insert   => struct_insert, &
+				find     => struct_find, &
+				get      => struct_get, &
+				id_at    => struct_id_at, &
+				exists   => struct_exists, &
+				closest  => struct_closest, &
+				rollback => structs_rollback
 
 	end type structs_t
 
@@ -384,14 +392,19 @@ module syntran__types_m
 		integer :: capacity = 0, count = 0
 		real :: load_factor_threshold = 0.75
 
+		! Number of enums ever declared (== the highest id_index in the
+		! table).  Mirrors structs_t%num_structs
+		integer :: num_enums = 0
+
 		contains
 			procedure :: &
-				insert  => enum_insert, &
-				find    => enum_find, &
-				get     => enum_get, &
-				id_at   => enum_id_at, &
-				exists  => enum_exists, &
-				closest => enum_closest
+				insert   => enum_insert, &
+				find     => enum_find, &
+				get      => enum_get, &
+				id_at    => enum_id_at, &
+				exists   => enum_exists, &
+				closest  => enum_closest, &
+				rollback => enums_rollback
 
 	end type enums_t
 
@@ -641,6 +654,11 @@ module syntran__types_m
 			character(len = :), allocatable :: closest
 		end function struct_closest
 
+		module subroutine structs_rollback(dict, num_structs0)
+			class(structs_t), intent(inout) :: dict
+			integer, intent(in) :: num_structs0
+		end subroutine structs_rollback
+
 		module subroutine enum_insert(dict, key, val, id_index, iostat, overwrite)
 			class(enums_t) :: dict
 			character(len = *), intent(in) :: key
@@ -681,6 +699,11 @@ module syntran__types_m
 			character(len = *), intent(in) :: key
 			character(len = :), allocatable :: closest
 		end function enum_closest
+
+		module subroutine enums_rollback(dict, num_enums0)
+			class(enums_t), intent(inout) :: dict
+			integer, intent(in) :: num_enums0
+		end subroutine enums_rollback
 
 		!***************************************
 		! types_ops.f90 procedures

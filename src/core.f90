@@ -200,7 +200,6 @@ module syntran__core_m
 	!      statically bundled into one file
 	!    * is appimage the standard tool for this?  how does fpm do it?
 	!  - REPL improvements:
-	!    * allow structs in repl -- currently they don't work
 	!    * any other functionality gaps in repl?
 	!  - REPL styling
 	!    * any other ideas from julia?  got their green prompt
@@ -483,17 +482,20 @@ contains
 
 !===============================================================================
 
-function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tree)
-
-	! TODO: take state struct instead of separate vars and fns members
-
-	! TODO: take structs arg (like existing fns arg)
+function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	character(len = *) :: str_
 
-	type(vars_t), intent(inout) :: vars
-
-	type(fns_t), intent(inout), target :: fns
+	! state%vars, state%fns, state%structs, and state%enums are round-tripped
+	! through the local parser below so they survive from one REPL line to
+	! the next (c.f. eval_dispatch()/syntran_interpret() in syntran.f90).
+	! Struct and enum declarations are otherwise parse-time only -- both
+	! backends skip struct_declaration/enum_declaration nodes (c.f.
+	! eval_control.f90, compile_ctrl.f90) -- so unlike fns there is no flat
+	! array counterpart to rebuild for them.  target is required: fns%get()
+	! and structs%get() return pointers into the dict, and a subobject of a
+	! target dummy is itself a target
+	type(state_t), intent(inout), target :: state
 
 	type(syntax_node_t) :: tree
 
@@ -505,7 +507,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	character(len = :), allocatable :: src_filel, fn_name, var_name
 
-	integer :: i, slot, unit_, num_fns0
+	integer :: i, slot, unit_, num_fns0, num_structs0, num_enums0
 
 	logical :: allow_continuel, repll
 
@@ -568,20 +570,20 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	!print *, 'moving vars'
 
 	!print *, ''
-	!print *, 'size(vars%vals) = ', size(vars%vals)
+	!print *, 'size(state%vars%vals) = ', size(state%vars%vals)
 
-	!print *, 'allocated 1 = ', allocated(vars%dicts(1)%table)
-	!print *, 'allocated 2 = ', allocated(vars%dicts(2)%table)
-	!print *, 'allocated 3 = ', allocated(vars%dicts(3)%table)
+	!print *, 'allocated 1 = ', allocated(state%vars%dicts(1)%table)
+	!print *, 'allocated 2 = ', allocated(state%vars%dicts(2)%table)
+	!print *, 'allocated 3 = ', allocated(state%vars%dicts(3)%table)
 
-	if (allocated(vars%dicts(1)%table)) then
-	!if (any(allocated(vars%dicts(:)%table))) then
+	if (allocated(state%vars%dicts(1)%table)) then
+	!if (any(allocated(state%vars%dicts(:)%table))) then
 
 		if (allow_continuel) then
 			! Backup existing vars.  Only copy for interactive interpreter.
 			! This logic is slightly redundant as allow_continuel should _only_
 			! be set true for the interactive interpreter with stdin, which is
-			! also the only case where vars%dicts(1)%table will be allocated.
+			! also the only case where state%vars%dicts(1)%table will be allocated.
 			! Calling syntran_interpret() on a multi-line string is deprecated,
 			! since syntran_eval() can parse it all in one syntax_parse() call.
 
@@ -590,44 +592,44 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 			! encourage copying)
 
 			allocate(vars0%dicts(1))
-			vars0%dicts(1)%table    = vars%dicts(1)%table
-			vars0%dicts(1)%capacity = vars%dicts(1)%capacity
-			vars0%dicts(1)%count    = vars%dicts(1)%count
+			vars0%dicts(1)%table    = state%vars%dicts(1)%table
+			vars0%dicts(1)%capacity = state%vars%dicts(1)%capacity
+			vars0%dicts(1)%count    = state%vars%dicts(1)%count
 
-			!print *, 'vars%vals = '
-			!do i = 1, size(vars%vals)
-			!	print *, vars%vals(i)%to_str()
+			!print *, 'state%vars%vals = '
+			!do i = 1, size(state%vars%vals)
+			!	print *, state%vars%vals(i)%to_str()
 			!end do
 
 			! Backup vals array and set num_vars in parser object
-			vars0%vals = vars%vals
-			parser%num_vars = size(vars%vals)
+			vars0%vals = state%vars%vals
+			parser%num_vars = size(state%vars%vals)
 
 		end if
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished
-		call move_alloc(vars%dicts(1)%table, parser%vars%dicts(1)%table)
-		parser%vars%dicts(1)%capacity = vars%dicts(1)%capacity
-		parser%vars%dicts(1)%count    = vars%dicts(1)%count
-		vars%dicts(1)%capacity = 0
-		vars%dicts(1)%count    = 0
-		call move_alloc(vars%vals         , parser%vars%vals)
+		call move_alloc(state%vars%dicts(1)%table, parser%vars%dicts(1)%table)
+		parser%vars%dicts(1)%capacity = state%vars%dicts(1)%capacity
+		parser%vars%dicts(1)%count    = state%vars%dicts(1)%count
+		state%vars%dicts(1)%capacity = 0
+		state%vars%dicts(1)%count    = 0
+		call move_alloc(state%vars%vals   , parser%vars%vals)
 
 	!else if (parser%num_vars > 0) then
-	!else if (size(vars%vals) > 0) then
-	!else if (size(vars%vals) > 0 .and. allow_continuel) then
-	else if (allocated(vars%vals) .and. allow_continuel) then
-		if (size(vars%vals) > 0) then
+	!else if (size(state%vars%vals) > 0) then
+	!else if (size(state%vars%vals) > 0 .and. allow_continuel) then
+	else if (allocated(state%vars%vals) .and. allow_continuel) then
+		if (size(state%vars%vals) > 0) then
 
 		! This could probably be refactored but it breaks my brain to think this
 		! through and test enough permutations in interactive interpreter
 
-		!print *, 'backing up vars%vals to vars0%vals'
-		vars0%vals = vars%vals
-		parser%num_vars = size(vars%vals)
+		!print *, 'backing up state%vars%vals to vars0%vals'
+		vars0%vals = state%vars%vals
+		parser%num_vars = size(state%vars%vals)
 		!print *, '1'
-		call move_alloc(vars%vals         , parser%vars%vals)
+		call move_alloc(state%vars%vals   , parser%vars%vals)
 		!print *, '2'
 
 		end if
@@ -635,23 +637,51 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	!print *, 'moving fns'
 	num_fns0 = 0
-	if (allocated(fns%fns)) num_fns0 = size(fns%fns)
+	if (allocated(state%fns%fns)) num_fns0 = size(state%fns%fns)
 
-	if (allocated(fns%table)) then
+	if (allocated(state%fns%table)) then
 
 		parser%num_fns = num_fns0
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
-		! evaluate until the block is finished.  Note fns%fns is left alone
-		! here -- the parser never reads or writes the flat array, only the
-		! hash table (c.f. eval_fn.f90, the only reader of fns%fns), so there
-		! is no need to move it in and deep-copy it back out again
-		call move_alloc(fns%table, parser%fns%table)
-		parser%fns%capacity = fns%capacity
-		parser%fns%count    = fns%count
-		fns%capacity = 0
-		fns%count    = 0
+		! evaluate until the block is finished.  Note state%fns%fns is left
+		! alone here -- the parser never reads or writes the flat array, only
+		! the hash table (c.f. eval_fn.f90, the only reader of fns%fns), so
+		! there is no need to move it in and deep-copy it back out again
+		call move_alloc(state%fns%table, parser%fns%table)
+		parser%fns%capacity = state%fns%capacity
+		parser%fns%count    = state%fns%count
+		state%fns%capacity = 0
+		state%fns%count    = 0
 
+	end if
+
+	! Structs and enums are parse-time-only -- both backends skip
+	! struct_declaration/enum_declaration nodes (c.f. eval_control.f90 and
+	! compile_ctrl.f90) -- but the REPL needs them to survive from one line
+	! to the next, so move the tables in and back out just like fns above.
+	! Unlike fns there is no flat array counterpart, so there is nothing
+	! equivalent to state%fns%fns to leave alone
+	num_structs0 = state%structs%num_structs
+	num_enums0   = state%enums%num_enums
+
+	parser%num_structs = num_structs0
+	parser%num_enums   = num_enums0
+
+	if (allocated(state%structs%table)) then
+		call move_alloc(state%structs%table, parser%structs%table)
+		parser%structs%capacity = state%structs%capacity
+		parser%structs%count    = state%structs%count
+		state%structs%capacity = 0
+		state%structs%count    = 0
+	end if
+
+	if (allocated(state%enums%table)) then
+		call move_alloc(state%enums%table, parser%enums%table)
+		parser%enums%capacity = state%enums%capacity
+		parser%enums%count    = state%enums%count
+		state%enums%capacity = 0
+		state%enums%count    = 0
 	end if
 
 	!print *, "allocated parser%vars%dicts = ", allocated( parser%vars%dicts )
@@ -687,22 +717,39 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 		if (allocated(vars0%dicts)) then
 			if (allocated(vars0%dicts(1)%table)) then
-				call move_alloc(vars0%dicts(1)%table, vars%dicts(1)%table)
-				vars%dicts(1)%capacity = vars0%dicts(1)%capacity
-				vars%dicts(1)%count    = vars0%dicts(1)%count
+				call move_alloc(vars0%dicts(1)%table, state%vars%dicts(1)%table)
+				state%vars%dicts(1)%capacity = vars0%dicts(1)%capacity
+				state%vars%dicts(1)%count    = vars0%dicts(1)%count
 			end if
 		end if
 
 		if (allocated(vars0%vals)) then
-			!print *, 'restoring vars%vals from vars0%vals'
-			call move_alloc(vars0%vals         , vars%vals)
+			!print *, 'restoring state%vars%vals from vars0%vals'
+			call move_alloc(vars0%vals         , state%vars%vals)
 		end if
 
 		if (allocated(parser%fns%table)) then
-			call move_alloc(parser%fns%table, fns%table)
-			fns%capacity = parser%fns%capacity
-			fns%count    = parser%fns%count
-			call fns%rollback(num_fns0)
+			call move_alloc(parser%fns%table, state%fns%table)
+			state%fns%capacity = parser%fns%capacity
+			state%fns%count    = parser%fns%count
+			call state%fns%rollback(num_fns0)
+		end if
+
+		! Undo any struct/enum declarations parsed from this partial line --
+		! they will be re-declared (or corrected) when the accumulated line
+		! is re-parsed from scratch next time, c.f. the fns rollback above
+		if (allocated(parser%structs%table)) then
+			call move_alloc(parser%structs%table, state%structs%table)
+			state%structs%capacity = parser%structs%capacity
+			state%structs%count    = parser%structs%count
+			call state%structs%rollback(num_structs0)
+		end if
+
+		if (allocated(parser%enums%table)) then
+			call move_alloc(parser%enums%table, state%enums%table)
+			state%enums%capacity = parser%enums%capacity
+			state%enums%count    = parser%enums%count
+			call state%enums%rollback(num_enums0)
 		end if
 
 		return
@@ -720,45 +767,59 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	! anymore
 	if (allocated(parser%vars%dicts(1)%table)) then
 	!if (parser%num_vars > 0) then
-		call move_alloc(parser%vars%dicts(1)%table, vars%dicts(1)%table)
-		vars%dicts(1)%capacity = parser%vars%dicts(1)%capacity
-		vars%dicts(1)%count    = parser%vars%dicts(1)%count
+		call move_alloc(parser%vars%dicts(1)%table, state%vars%dicts(1)%table)
+		state%vars%dicts(1)%capacity = parser%vars%dicts(1)%capacity
+		state%vars%dicts(1)%count    = parser%vars%dicts(1)%count
 	end if
 
 	! TODO: if num_fns instead?
 	if (allocated(parser%fns%table)) then
-		call move_alloc(parser%fns%table, fns%table)
-		fns%capacity = parser%fns%capacity
-		fns%count    = parser%fns%count
+		call move_alloc(parser%fns%table, state%fns%table)
+		state%fns%capacity = parser%fns%capacity
+		state%fns%count    = parser%fns%count
 	end if
+
+	if (allocated(parser%structs%table)) then
+		call move_alloc(parser%structs%table, state%structs%table)
+		state%structs%capacity = parser%structs%capacity
+		state%structs%count    = parser%structs%count
+	end if
+	state%structs%num_structs = parser%num_structs
+
+	if (allocated(parser%enums%table)) then
+		call move_alloc(parser%enums%table, state%enums%table)
+		state%enums%capacity = parser%enums%capacity
+		state%enums%count    = parser%enums%count
+	end if
+	state%enums%num_enums = parser%num_enums
 
 	! When parsing is finished, we are done with the variable dictionary
 	! parser%vars%dicts.  Allocate a flat array for efficient evaluation without
 	! dictionary lookups.  Indices in the array are already saved in each node's
 	! id_index member
-	call value_array_destroy(vars%vals)
-	allocate(vars%vals( parser%num_vars ))
+	call value_array_destroy(state%vars%vals)
+	allocate(state%vars%vals( parser%num_vars ))
 
 	if (allocated(vars0%vals)) then
-		!print *, 'restoring vars%vals'
+		!print *, 'restoring state%vars%vals'
 
-		!vars%vals( 1: size(vars0%vals) ) = vars0%vals
+		!state%vars%vals( 1: size(vars0%vals) ) = vars0%vals
 		do i = 1, size(vars0%vals)
-			vars%vals(i) = vars0%vals(i)
+			state%vars%vals(i) = vars0%vals(i)
 		end do
 
-		!vars%vals = vars0%vals
-		!vars = vars0
+		!state%vars%vals = vars0%vals
+		!state%vars = vars0
 	end if
 
 	! Always set std:: constant runtime values -- idempotent, safe after REPL restore.
-	if (parser%num_vars >= NUM_INTR_VARS) call populate_intr_vars(vars%vals)
+	if (parser%num_vars >= NUM_INTR_VARS) call populate_intr_vars(state%vars%vals)
 
 	!print *, 'parser%num_fns = ', parser%num_fns
 
 	! Grow (not rebuild) the flat fn array in place -- fns%fns was never
 	! touched above, so any previously-declared fns are already there
-	call fns%grow_flat(parser%num_fns)
+	call state%fns%grow_flat(parser%num_fns)
 
 	! Save each newly-declared fn into the flat array at its real id_index
 	! (assigned when it was parsed, c.f. parse_fn.f90) with a one-time dict
@@ -767,9 +828,9 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 		fn_name = parser%fn_names%v(i)%s
 		!print *, "fn name = ", fn_name
 
-		slot = fns%find(fn_name)
+		slot = state%fns%find(fn_name)
 		if (slot == 0) cycle
-		fns%fns( fns%id_at(slot) ) = fns%get(slot)
+		state%fns%fns( state%fns%id_at(slot) ) = state%fns%get(slot)
 
 	end do
 	!print *, "done looking up fns"

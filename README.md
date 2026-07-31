@@ -1135,8 +1135,6 @@ let c = add(a + 1, b + 2);
 ```
 <!-- syntran-end -->
 
-⚠ Functions currently do not work in the interactive REPL -- save them in a `.syntran` file instead.
-
 Functions must be defined before they are called.  That means that recursive functions are not possible currently, neither with a function directly calling itself, nor with two functions which both call each other.
 
 Here's a function that performs matrix-vector multiplication:
@@ -1758,9 +1756,6 @@ For the older `#include` preprocessing directive (still supported but
 superseded by modules), see [doc/include-files.md](doc/include-files.md).
 
 ## Structs
-
-**Disclaimer**: structs currently do not work in the interactive interpretter
-shell.  To use structs, you must save your syntran script in a file.
 
 Structs, also known as user-defined types or derived types, can be used in
 syntran.  The declaration or definition of a struct in syntran uses similar

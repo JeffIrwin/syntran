@@ -526,7 +526,11 @@ module subroutine parse_unit(parser, unit)
 		parser%num_structs = num_structs0
 		parser%num_enums = num_enums0
 
-		! TODO: Double check struct resetting.  Does anything else need to be reset?
+		! Resetting the counters (not the tables) is enough: pass 2 re-inserts
+		! every struct/enum from num_structs0/num_enums0 with overwrite = .true.
+		! (parser%ipass > 0, c.f. parse_struct_declaration()/
+		! parse_enum_declaration() in parse_fn.f90), landing on the exact same
+		! id_index as pass 1 assigned it
 
 		members = new_syntax_node_vector()
 		i = 0

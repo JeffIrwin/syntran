@@ -29,7 +29,17 @@ module syntran__eval_m
 
 		type(fns_t) :: fns
 
-		!type(structs_t) :: structs
+		! Parser state that must survive across REPL lines.  Unlike the rest
+		! of state_t (which is genuinely eval-time state), struct and enum
+		! declarations are a no-op at eval time -- eval_control.f90 and
+		! compile_ctrl.f90 both `cycle` past struct_declaration and
+		! enum_declaration nodes, and neither structs_t nor enums_t is
+		! referenced anywhere outside the parser.  They live here only
+		! because state_t is the REPL's one long-lived object, c.f.
+		! syntax_parse() (core.f90), which round-trips them through a
+		! per-line parser_t
+		type(structs_t) :: structs
+		type(enums_t) :: enums
 
 		type(vars_t) :: vars, locs
 

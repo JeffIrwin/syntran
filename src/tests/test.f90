@@ -3693,6 +3693,98 @@ end subroutine unit_test_repl_fns
 
 !===============================================================================
 
+subroutine unit_test_repl_structs(npass, nfail)
+
+	! User-defined structs and enums declared interactively, one REPL line at
+	! a time via interpret(), c.f. unit_test_repl_fns above.  Structs and
+	! enums have never worked in the REPL: parser%structs/parser%enums
+	! (parse.f90) were parser-local and discarded at the end of every
+	! syntax_parse() call (core.f90), so a struct declared on one REPL line
+	! was invisible (or worse, hit internal_error() via a dangling
+	! struct_type variable) on the next.  This is the only place that
+	! exercises the REPL's cross-line struct/enum state, including the
+	! continuation rollback (structs_rollback/enums_rollback in
+	! types_dict.f90) that must undo a partial declaration left behind by a
+	! multi-line struct/enum entered across several REPL lines
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'REPL structs and enums'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Single-line struct declaration, then instantiate and read a
+			! member on later lines
+			interpret('struct S { i: i32 }'//line_feed// &
+				'let s = S{i = 42};'//line_feed// &
+				's.i;') == '42', &
+			! Dot access on a line later than the `let`
+			interpret('struct S { i: i32 }'//line_feed// &
+				'let s = S{i = 1};'//line_feed// &
+				'1;'//line_feed// &
+				's.i;') == '1', &
+			! Member write on a later line
+			interpret('struct S { i: i32 }'//line_feed// &
+				'let s = S{i = 1};'//line_feed// &
+				's.i = 7;'//line_feed// &
+				's.i;') == '7', &
+			! Multi-line struct declaration via REPL continuation, then use.
+			! This is the case that requires structs_rollback(): a partial
+			! `struct S` / `{` reaches parser%structs%insert() before the
+			! continuation is detected, and without rollback the re-parse of
+			! the completed line would trip err_redeclare_struct
+			interpret('struct S'//line_feed// &
+				'{'//line_feed// &
+				'i: i32'//line_feed// &
+				'}'//line_feed// &
+				'let s = S{i = 7};'//line_feed// &
+				's.i;') == '7', &
+			! Struct with a method declared on line 1, instantiated and
+			! called on a later line (exercises the a5afc18 fns backfill
+			! through a struct receiver, once the struct type itself
+			! resolves)
+			interpret('struct S { i: i32, fn get(): i32 { return i; } }'//line_feed// &
+				'let s = S{i = 9};'//line_feed// &
+				's.get();') == '9', &
+			! Nested struct across lines
+			interpret('struct Inner { j: i32 }'//line_feed// &
+				'struct Outer { inn: Inner }'//line_feed// &
+				'let o = Outer{inn = Inner{j = 3}};'//line_feed// &
+				'o.inn.j;') == '3', &
+			! Array of structs
+			interpret('struct P { x: i32 }'//line_feed// &
+				'let a = [P{x = 1}, P{x = 2}];'//line_feed// &
+				'a[1].x;') == '2', &
+			! Enum declared on one line, used on a later line
+			interpret('enum Color { red, green, blue }'//line_feed// &
+				'let c = Color.green;'//line_feed// &
+				'str(c);') == 'Color.green', &
+			! Redeclaring the same struct on a later line still errors (a
+			! diagnostic is logged and no result is printed, c.f. how
+			! unit_test_repl_fns has no equivalent -- fn redeclaration
+			! across REPL lines already worked this way post-a5afc18)
+			interpret('struct S { i: i32 }'//line_feed// &
+				'struct S { j: i32 }') == '', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_repl_structs
+
+!===============================================================================
+
 subroutine unit_test_linalg_fns(npass, nfail)
 
 	! More advanced tests on longer scripts
@@ -7459,6 +7551,7 @@ subroutine unit_tests(iostat)
 	call unit_test_intr_fns   (npass, nfail)
 	call unit_test_fns        (npass, nfail)
 	call unit_test_repl_fns   (npass, nfail)
+	call unit_test_repl_structs(npass, nfail)
 	call unit_test_linalg_fns (npass, nfail)
 	call unit_test_comp_ass   (npass, nfail)
 	call unit_test_comp_ass_arr(npass, nfail)
