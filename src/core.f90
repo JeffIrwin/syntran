@@ -587,14 +587,21 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 			! Calling syntran_interpret() on a multi-line string is deprecated,
 			! since syntran_eval() can parse it all in one syntax_parse() call.
 
-			! var_entry_t's val component has an overloaded assignment op, but
-			! the vars type itself does not (and I don't want to expose or
-			! encourage copying)
+			! var_entry_t's val component has an overloaded assignment op,
+			! and so does vars_t itself -- but neither is used here.  A
+			! whole-array `dst = src` of state%vars%dicts(1)%table (or
+			! %vals) hits a gfortran defined-assignment code-gen bug on
+			! older compilers: it shallow-copies the nested value_t%struct(:)
+			! block instead of invoking value_copy() elementwise, so vars0
+			! and parser%vars%dicts(1) (which takes ownership of the
+			! original below via move_alloc) end up sharing -- and later
+			! double-freeing -- the same block.  var_dict_copy()/
+			! value_array_copy() force elementwise scalar assignment instead
+			! (c.f. the identical bug already documented at
+			! syntax_token_copy() in types_copy.f90)
 
 			allocate(vars0%dicts(1))
-			vars0%dicts(1)%table    = state%vars%dicts(1)%table
-			vars0%dicts(1)%capacity = state%vars%dicts(1)%capacity
-			vars0%dicts(1)%count    = state%vars%dicts(1)%count
+			call var_dict_copy(vars0%dicts(1), state%vars%dicts(1))
 
 			!print *, 'state%vars%vals = '
 			!do i = 1, size(state%vars%vals)
@@ -602,7 +609,7 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 			!end do
 
 			! Backup vals array and set num_vars in parser object
-			vars0%vals = state%vars%vals
+			call value_array_copy(vars0%vals, state%vars%vals)
 			parser%num_vars = size(state%vars%vals)
 
 		end if
@@ -626,7 +633,7 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 		! through and test enough permutations in interactive interpreter
 
 		!print *, 'backing up state%vars%vals to vars0%vals'
-		vars0%vals = state%vars%vals
+		call value_array_copy(vars0%vals, state%vars%vals)
 		parser%num_vars = size(state%vars%vals)
 		!print *, '1'
 		call move_alloc(state%vars%vals   , parser%vars%vals)
@@ -803,6 +810,15 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 	if (allocated(vars0%vals)) then
 		!print *, 'restoring state%vars%vals'
 
+		! Can't use value_array_copy() here: state%vars%vals was just
+		! allocated above to parser%num_vars (>= size(vars0%vals), since new
+		! vars may have been declared this line), and value_array_copy()
+		! would reallocate+truncate it to size(vars0%vals).  Element-by-
+		! element scalar assignment into the existing array is exactly what
+		! is needed, and (being scalar) already goes through value_copy()
+		! safely -- unlike the whole-array `state%vars%vals = vars0%vals`
+		! commented out below, which hits the same gfortran bug documented
+		! at the vars0 backup above
 		!state%vars%vals( 1: size(vars0%vals) ) = vars0%vals
 		do i = 1, size(vars0%vals)
 			state%vars%vals(i) = vars0%vals(i)

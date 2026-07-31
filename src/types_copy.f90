@@ -58,12 +58,16 @@ recursive module subroutine vars_copy(dst, src)
 		if (allocated(dst%dicts)) deallocate(dst%dicts)
 		allocate(dst%dicts( size(src%dicts) ))
 
-		! var_dict_t is a flat hash table (var_entry_t table(:)), so
-		! intrinsic assignment suffices here -- it recurses elementwise over
-		! table(:), and each var_entry_t's allocatable val component already
-		! uses value_t's own defined assignment(=)
+		! var_dict_t's table(:) is an array of var_entry_t, whose val
+		! component is an allocatable value_t -- and value_t can itself hold
+		! a recursive struct(:) array.  Intrinsic assignment of such a deeply
+		! nested allocatable array hits the same gfortran defined-assignment
+		! code-gen bug documented at syntax_token_copy() above (it
+		! shallow-copies the nested block instead of invoking value_copy()),
+		! so use var_dict_copy() to force elementwise scalar assignment
+		! instead
 		do i = 1, size(src%dicts)
-			dst%dicts(i) = src%dicts(i)
+			call var_dict_copy(dst%dicts(i), src%dicts(i))
 		end do
 
 	else if (allocated(dst%dicts)) then
@@ -71,9 +75,7 @@ recursive module subroutine vars_copy(dst, src)
 	end if
 
 	if (allocated(src%vals)) then
-		if (allocated(dst%vals)) deallocate(dst%vals)
-		allocate(dst%vals( size(src%vals) ))
-		dst%vals = src%vals
+		call value_array_copy(dst%vals, src%vals)
 	else if (allocated(dst%vals)) then
 		deallocate(dst%vals)
 	end if
@@ -81,6 +83,47 @@ recursive module subroutine vars_copy(dst, src)
 	!print *, 'done vars_copy()'
 
 end subroutine vars_copy
+
+!===============================================================================
+
+module subroutine var_dict_copy(dst, src)
+
+	! Deep copy one var_dict_t (a single scope level's hash table).  See the
+	! comment in vars_copy() above for why this can't be `dst = src`
+
+	type(var_dict_t), intent(inout) :: dst
+	type(var_dict_t), intent(in)    :: src
+
+	!********
+
+	integer :: i
+
+	dst%capacity = src%capacity
+	dst%count    = src%count
+	dst%load_factor_threshold = src%load_factor_threshold
+
+	if (allocated(dst%table)) deallocate(dst%table)
+
+	if (.not. allocated(src%table)) return
+	allocate(dst%table( size(src%table) ))
+
+	do i = 1, size(src%table)
+
+		if (allocated(src%table(i)%key)) then
+			dst%table(i)%key = src%table(i)%key
+		end if
+
+		if (allocated(src%table(i)%val)) then
+			if (.not. allocated(dst%table(i)%val)) allocate(dst%table(i)%val)
+			dst%table(i)%val = src%table(i)%val  ! scalar -> value_copy()
+		end if
+
+		dst%table(i)%id_index = src%table(i)%id_index
+		dst%table(i)%is_const = src%table(i)%is_const
+
+	end do
+
+end subroutine var_dict_copy
 
 !===============================================================================
 

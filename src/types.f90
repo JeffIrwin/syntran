@@ -451,6 +451,11 @@ module syntran__types_m
 			class(vars_t), intent(in)    :: src
 		end subroutine vars_copy
 
+		module subroutine var_dict_copy(dst, src)
+			type(var_dict_t), intent(inout) :: dst
+			type(var_dict_t), intent(in)    :: src
+		end subroutine var_dict_copy
+
 		recursive module subroutine struct_copy(dst, src)
 			class(struct_t), intent(inout) :: dst
 			class(struct_t), intent(in)    :: src

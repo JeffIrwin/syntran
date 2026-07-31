@@ -778,6 +778,37 @@ end subroutine value_array_destroy
 
 !===============================================================================
 
+subroutine value_array_copy(dst, src)
+
+	! Deep copy an array of value_t.  Use this instead of a whole-array
+	! `dst = src` assignment wherever dst starts out unallocated (or a
+	! different size than src): older gfortran mis-generates the
+	! allocate-on-assignment for an allocatable array of a type with
+	! recursive allocatable components (value_t%struct(:)) and a defined
+	! assignment(=) -- it allocates dst but shallow-copies the nested
+	! struct(:) block instead of invoking value_copy elementwise, so src and
+	! dst end up sharing (and later double-freeing) the same block.  c.f.
+	! value_array_destroy() above for the same distrust of compiler-
+	! generated deep (de)allocation of this type
+
+	type(value_t), allocatable, intent(inout) :: dst(:)
+	type(value_t), intent(in) :: src(:)
+
+	!********
+
+	integer :: i
+
+	call value_array_destroy(dst)
+	allocate(dst( size(src) ))
+
+	do i = 1, size(src)
+		dst(i) = src(i)  ! scalar assignment -> value_copy() defined assignment
+	end do
+
+end subroutine value_array_copy
+
+!===============================================================================
+
 function mold(mold_, type_) result(array)
 
 	! Construct array meta-data, such as type, rank, and size, based on a given
