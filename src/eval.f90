@@ -371,6 +371,28 @@ contains
 
 !===============================================================================
 
+subroutine state_destroy(state)
+
+	! Explicitly tear down state_t's nested-allocatable-value_t containers
+	! (%vars, %locs, %structs, %enums, %fns) before state goes out of scope,
+	! instead of trusting the compiler's implicit deep deallocation of them
+	! -- see value_array_destroy() (value.f90) and the *_destroy family in
+	! types_copy.f90.  Call this at every exit of syntran_interpret()/
+	! syntran_eval() (syntran.f90), which own state_t's only instance per
+	! interpret/eval call
+
+	type(state_t), intent(inout) :: state
+
+	call vars_destroy(state%vars)
+	call vars_destroy(state%locs)
+	call structs_destroy(state%structs)
+	call enums_destroy(state%enums)
+	call fns_destroy(state%fns)
+
+end subroutine state_destroy
+
+!===============================================================================
+
 subroutine rt_throw(state, msg)
 
 	! Record a runtime error (R*) on state and set the halt flag.  Call sites

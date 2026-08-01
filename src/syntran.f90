@@ -156,6 +156,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 		if (io /= exit_success) then
 			if (.not. state%quiet) write(*,*) err_404(startup_file)
+			call state_destroy(state)
 			return
 		end if
 
@@ -164,6 +165,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 		if (compilation%diagnostics%len_ > 0) then
 			res_str = ''
+			call state_destroy(state)
 			return
 		end if
 
@@ -173,6 +175,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 			! eval_dispatch() already printed and exited for non-quiet
 			! callers, so reaching here means quiet was true
 			res_str = ''
+			call state_destroy(state)
 			return
 		end if
 		res_str = res%to_str()
@@ -327,6 +330,8 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	end do
 
 	!print *, 'done syntran_interpret()'
+
+	call state_destroy(state)
 
 end function syntran_interpret
 
@@ -637,6 +642,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	if (tree%diagnostics%len_ > 0) then
 		! TODO: set io
 		res = ''
+		call state_destroy(state)
 		return
 	end if
 
@@ -655,6 +661,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	if (state%rt_halt) then
 		if (present(diags)) call diags%push_all(state%rt_diags)
 		res = ''
+		call state_destroy(state)
 		return
 	end if
 
@@ -662,6 +669,8 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	!print *, 'res = ', res
 
 	!print *, "done syntran_eval()"
+
+	call state_destroy(state)
 
 end function syntran_eval
 

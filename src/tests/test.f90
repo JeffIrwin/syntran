@@ -3794,6 +3794,54 @@ subroutine unit_test_repl_structs(npass, nfail)
 			interpret('enum Color { red, green, blue }'//line_feed// &
 				'let c = Color.green;'//line_feed// &
 				'str(c);', quiet) == 'Color.green', &
+			! Repeated declare-and-discard: several structs, each declared,
+			! instantiated, and dropped on its own REPL line.  This stresses
+			! the per-line vars0 backup/teardown in syntax_parse()
+			! (core.f90), which runs on every single line -- not just ones
+			! with a struct redeclaration or continuation -- and is the
+			! hottest of the REPL struct/enum teardown paths
+			interpret('struct A { i: i32 }'//line_feed// &
+				'let a = A{i = 1};'//line_feed// &
+				'struct B { i: i32 }'//line_feed// &
+				'let b = B{i = 2};'//line_feed// &
+				'struct C { i: i32 }'//line_feed// &
+				'let c = C{i = 3};'//line_feed// &
+				'a.i + b.i + c.i;', quiet) == '6', &
+			! Struct with a str member, so the double-nested str(:)/string_t
+			! teardown (c.f. value_destroy()) is exercised across REPL lines,
+			! not just within a single parse/eval
+			interpret('struct S { name: str }'//line_feed// &
+				'let s = S{name = "hello"};'//line_feed// &
+				's.name;', quiet) == 'hello', &
+			! Struct with an array member, so array_t's own nested
+			! allocatables (c.f. array_destroy()) get the same cross-line
+			! exercise
+			interpret('struct S { x: [i32; :] }'//line_feed// &
+				'let s = S{x = [1, 2, 3]};'//line_feed// &
+				's.x[1];', quiet) == '2', &
+			! Multi-line enum declaration via REPL continuation.  Mirrors the
+			! multi-line struct test above, but exercises enums_rollback()
+			! instead of structs_rollback() -- no other test covers that path
+			interpret('enum Color'//line_feed// &
+				'{'//line_feed// &
+				'red, green, blue'//line_feed// &
+				'}'//line_feed// &
+				'let c = Color.blue;'//line_feed// &
+				'str(c);', quiet) == 'Color.blue', &
+			! Two multi-line struct continuations back to back, so the
+			! second structs_rollback() call runs against a table that
+			! already has a surviving entry (struct A) from the first
+			interpret('struct A'//line_feed// &
+				'{'//line_feed// &
+				'i: i32'//line_feed// &
+				'}'//line_feed// &
+				'struct B'//line_feed// &
+				'{'//line_feed// &
+				'j: i32'//line_feed// &
+				'}'//line_feed// &
+				'let a = A{i = 1};'//line_feed// &
+				'let b = B{j = 2};'//line_feed// &
+				'a.i + b.j;', quiet) == '3', &
 			! Redeclaring the same struct on a later line still errors (a
 			! diagnostic is logged and no result is printed, c.f. how
 			! unit_test_repl_fns has no equivalent -- fn redeclaration

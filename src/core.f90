@@ -759,6 +759,13 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 			call state%enums%rollback(num_enums0)
 		end if
 
+		! vars0/parser were move_alloc'd from above, so this is normally a
+		! cheap no-op -- but don't trust that to always be true and leave
+		! whatever's left to implicit deep deallocation.  c.f. the identical
+		! (and load-bearing) call at the bottom of this function
+		call vars_destroy(vars0)
+		call parser_destroy(parser)
+
 		return
 
 	end if
@@ -828,6 +835,17 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 		!state%vars = vars0
 	end if
 
+	! vars0 was only ever a read-from backup (the loop above copies out of
+	! it, never moves), so it still holds a full deep copy of the pre-line
+	! vars -- including any struct-typed values -- right up to here.  This is
+	! the single hottest site in this function: it runs on every REPL line
+	! (any allow_continue caller) whether or not a struct is even involved.
+	! Explicitly tear it down rather than let it fall out of scope and rely
+	! on the compiler's implicit deep deallocation of a vars_t holding
+	! nested-allocatable value_t content -- see vars_destroy() and the
+	! doctrine documented on value_array_destroy() (value.f90)
+	call vars_destroy(vars0)
+
 	! Always set std:: constant runtime values -- idempotent, safe after REPL restore.
 	if (parser%num_vars >= NUM_INTR_VARS) call populate_intr_vars(state%vars%vals)
 
@@ -850,6 +868,12 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	end do
 	!print *, "done looking up fns"
+
+	! Whatever parser still owns at this point (deeper var scopes, parser%locs,
+	! and any struct/enum/fn table content not already move_alloc'd out to
+	! state above) is about to fall out of scope with parser itself -- tear
+	! it down explicitly first.  See parser_destroy()
+	call parser_destroy(parser)
 
 	if (debug > 0) print *, 'done syntax_parse'
 

@@ -476,6 +476,55 @@ module syntran__types_m
 			type(fn_t), intent(out)   :: dst
 		end subroutine fn_move
 
+		!***************************************
+		! Explicit teardown ("destroy") family, mirroring the "copy" family
+		! above.  Never rely on a bare deallocate() of these nested-
+		! allocatable-value_t containers -- see value_array_destroy() and
+		! value_destroy() (value.f90) for the rationale, which applies
+		! equally here since var_dict_t/structs_t/enums_t/fns_t all store
+		! value_t (or a type containing it) in their table slots
+		!***************************************
+
+		recursive module subroutine var_dict_destroy(dict)
+			type(var_dict_t), intent(inout) :: dict
+		end subroutine var_dict_destroy
+
+		recursive module subroutine vars_destroy(vars)
+			type(vars_t), intent(inout) :: vars
+		end subroutine vars_destroy
+
+		recursive module subroutine struct_destroy(struct)
+			type(struct_t), intent(inout) :: struct
+		end subroutine struct_destroy
+
+		recursive module subroutine struct_table_destroy(table)
+			type(struct_entry_t), intent(inout) :: table(:)
+		end subroutine struct_table_destroy
+
+		recursive module subroutine structs_destroy(dict)
+			type(structs_t), intent(inout) :: dict
+		end subroutine structs_destroy
+
+		module subroutine enum_destroy(enum)
+			type(enum_t), intent(inout) :: enum
+		end subroutine enum_destroy
+
+		module subroutine enum_table_destroy(table)
+			type(enum_entry_t), intent(inout) :: table(:)
+		end subroutine enum_table_destroy
+
+		module subroutine enums_destroy(dict)
+			type(enums_t), intent(inout) :: dict
+		end subroutine enums_destroy
+
+		recursive module subroutine fn_destroy(fn)
+			type(fn_t), intent(inout) :: fn
+		end subroutine fn_destroy
+
+		recursive module subroutine fns_destroy(dict)
+			type(fns_t), intent(inout) :: dict
+		end subroutine fns_destroy
+
 		recursive module subroutine syntax_node_vector_copy(dst, src)
 			class(syntax_node_vector_t), intent(inout) :: dst
 			class(syntax_node_vector_t), intent(in)    :: src

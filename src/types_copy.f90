@@ -55,7 +55,17 @@ recursive module subroutine vars_copy(dst, src)
 
 	if (allocated(src%dicts)) then
 
-		if (allocated(dst%dicts)) deallocate(dst%dicts)
+		! Explicitly tear down dst%dicts first instead of a bare
+		! deallocate(): each var_dict_t's table(:) holds allocatable value_t
+		! payloads (which can themselves hold a recursive struct(:) array),
+		! and this codebase does not trust the compiler's implicit deep
+		! deallocation of that shape -- see var_dict_destroy()
+		if (allocated(dst%dicts)) then
+			do i = 1, size(dst%dicts)
+				call var_dict_destroy(dst%dicts(i))
+			end do
+			deallocate(dst%dicts)
+		end if
 		allocate(dst%dicts( size(src%dicts) ))
 
 		! var_dict_t's table(:) is an array of var_entry_t, whose val
@@ -71,13 +81,16 @@ recursive module subroutine vars_copy(dst, src)
 		end do
 
 	else if (allocated(dst%dicts)) then
+		do i = 1, size(dst%dicts)
+			call var_dict_destroy(dst%dicts(i))
+		end do
 		deallocate(dst%dicts)
 	end if
 
 	if (allocated(src%vals)) then
 		call value_array_copy(dst%vals, src%vals)
 	else if (allocated(dst%vals)) then
-		deallocate(dst%vals)
+		call value_array_destroy(dst%vals)
 	end if
 
 	!print *, 'done vars_copy()'
@@ -98,11 +111,14 @@ module subroutine var_dict_copy(dst, src)
 
 	integer :: i
 
+	! Tear down dst%table before src's fields overwrite dst%capacity/count
+	! below -- var_dict_destroy() also resets those to 0, so it must run
+	! first.  See var_dict_destroy() for why this isn't a bare deallocate()
+	call var_dict_destroy(dst)
+
 	dst%capacity = src%capacity
 	dst%count    = src%count
 	dst%load_factor_threshold = src%load_factor_threshold
-
-	if (allocated(dst%table)) deallocate(dst%table)
 
 	if (.not. allocated(src%table)) return
 	allocate(dst%table( size(src%table) ))
@@ -277,6 +293,228 @@ recursive module subroutine fn_move(src, dst)
 	dst%is_const_method = src%is_const_method
 
 end subroutine fn_move
+
+!===============================================================================
+
+recursive module subroutine var_dict_destroy(dict)
+
+	! Explicitly tear down one var_dict_t's hash table (a single scope
+	! level).  Mirrors value_array_destroy() in value.f90: never rely on a
+	! bare `deallocate(dict%table)` to walk the nested value_t tree hiding
+	! in each slot's %val -- free every element's %val via value_destroy()
+	! first
+
+	type(var_dict_t), intent(inout) :: dict
+
+	!********
+
+	integer :: i
+
+	if (.not. allocated(dict%table)) return
+
+	do i = 1, size(dict%table)
+		if (allocated(dict%table(i)%val)) then
+			call value_destroy(dict%table(i)%val)
+			deallocate(dict%table(i)%val)
+		end if
+		if (allocated(dict%table(i)%key)) deallocate(dict%table(i)%key)
+	end do
+
+	deallocate(dict%table)
+	dict%capacity = 0
+	dict%count    = 0
+
+end subroutine var_dict_destroy
+
+!===============================================================================
+
+recursive module subroutine vars_destroy(vars)
+
+	! Explicitly tear down a vars_t: every scope's dict, plus the flat vals
+	! array used at eval time.  See var_dict_destroy() above
+
+	type(vars_t), intent(inout) :: vars
+
+	!********
+
+	integer :: i
+
+	if (allocated(vars%dicts)) then
+		do i = 1, size(vars%dicts)
+			call var_dict_destroy(vars%dicts(i))
+		end do
+		deallocate(vars%dicts)
+	end if
+
+	call value_array_destroy(vars%vals)
+
+end subroutine vars_destroy
+
+!===============================================================================
+
+recursive module subroutine struct_destroy(struct)
+
+	! Explicitly tear down a struct_t (a struct *declaration* -- its
+	! member-type vars_t -- not a struct instance; instances are plain
+	! value_t and go through value_destroy())
+
+	type(struct_t), intent(inout) :: struct
+
+	call vars_destroy(struct%vars)
+	if (allocated(struct%cookie)) deallocate(struct%cookie)
+
+end subroutine struct_destroy
+
+!===============================================================================
+
+recursive module subroutine struct_table_destroy(table)
+
+	! Explicitly tear down a bare structs_t hash-table array.  Used both by
+	! structs_destroy() below and directly on the old_table local left
+	! behind by structs_rollback()/struct_grow() (types_dict.f90): entries
+	! above the rollback threshold, or a slot that lost a rehash race, are
+	! dropped rather than move_alloc'd out, and would otherwise fall back to
+	! the same distrusted implicit deep deallocation
+
+	type(struct_entry_t), intent(inout) :: table(:)
+
+	!********
+
+	integer :: i
+
+	do i = 1, size(table)
+		if (allocated(table(i)%val)) then
+			call struct_destroy(table(i)%val)
+			deallocate(table(i)%val)
+		end if
+		if (allocated(table(i)%key)) deallocate(table(i)%key)
+	end do
+
+end subroutine struct_table_destroy
+
+!===============================================================================
+
+recursive module subroutine structs_destroy(dict)
+
+	type(structs_t), intent(inout) :: dict
+
+	if (allocated(dict%table)) then
+		call struct_table_destroy(dict%table)
+		deallocate(dict%table)
+	end if
+
+	dict%capacity = 0
+	dict%count    = 0
+
+end subroutine structs_destroy
+
+!===============================================================================
+
+module subroutine enum_destroy(enum)
+
+	! %variant_values is a plain integer array (no allocatable elements), so
+	! ordinary deallocate() is fine there -- only the allocatable character
+	! %cookie needs explicit handling
+
+	type(enum_t), intent(inout) :: enum
+
+	if (allocated(enum%variant_values)) deallocate(enum%variant_values)
+	if (allocated(enum%cookie)) deallocate(enum%cookie)
+
+end subroutine enum_destroy
+
+!===============================================================================
+
+module subroutine enum_table_destroy(table)
+
+	! Mirrors struct_table_destroy() above
+
+	type(enum_entry_t), intent(inout) :: table(:)
+
+	!********
+
+	integer :: i
+
+	do i = 1, size(table)
+		if (allocated(table(i)%val)) then
+			call enum_destroy(table(i)%val)
+			deallocate(table(i)%val)
+		end if
+		if (allocated(table(i)%key)) deallocate(table(i)%key)
+	end do
+
+end subroutine enum_table_destroy
+
+!===============================================================================
+
+module subroutine enums_destroy(dict)
+
+	type(enums_t), intent(inout) :: dict
+
+	if (allocated(dict%table)) then
+		call enum_table_destroy(dict%table)
+		deallocate(dict%table)
+	end if
+
+	dict%capacity = 0
+	dict%count    = 0
+
+end subroutine enums_destroy
+
+!===============================================================================
+
+recursive module subroutine fn_destroy(fn)
+
+	! fn_t%params is an array of value_t -- the same nested-allocatable
+	! shape distrusted throughout this codebase (c.f. value_array_destroy()
+	! in value.f90) -- so it gets the same explicit teardown.  %node (the fn
+	! body's syntax_node_t tree), %param_names, and %variadic_name are left
+	! to ordinary deallocation: that part of fn_t predates this fix, is
+	! exercised continuously by the REPL fn tests (c.f. a5afc18), and has
+	! never been implicated in a crash
+
+	type(fn_t), intent(inout) :: fn
+
+	call value_array_destroy(fn%params)
+
+end subroutine fn_destroy
+
+!===============================================================================
+
+recursive module subroutine fns_destroy(dict)
+
+	! Explicitly tear down an fns_t: the hash table's fn_t payloads (whose
+	! %params is the component of concern, c.f. fn_destroy() above) plus the
+	! flat %fns array used at eval time
+
+	type(fns_t), intent(inout) :: dict
+
+	!********
+
+	integer :: i
+
+	if (allocated(dict%table)) then
+		do i = 1, size(dict%table)
+			if (allocated(dict%table(i)%val)) then
+				call fn_destroy(dict%table(i)%val)
+				deallocate(dict%table(i)%val)
+			end if
+			if (allocated(dict%table(i)%key)) deallocate(dict%table(i)%key)
+		end do
+		deallocate(dict%table)
+	end if
+
+	if (allocated(dict%fns)) then
+		do i = 1, size(dict%fns)
+			call fn_destroy(dict%fns(i))
+		end do
+		deallocate(dict%fns)
+	end if
+
+	dict%capacity = 0
+	dict%count    = 0
+
+end subroutine fns_destroy
 
 !===============================================================================
 

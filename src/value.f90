@@ -628,33 +628,39 @@ recursive subroutine value_copy(dst, src)
 		if (.not. allocated(dst%array)) allocate(dst%array)
 		call array_copy(dst%array, src%array)
 	else if (allocated(dst%array)) then
+		! Explicitly tear down array_t's own nested allocatables (str(:) of
+		! string_t, each with its own allocatable %s) before freeing the
+		! outer allocatable -- same distrust of bare deallocate() as
+		! value_array_destroy() below, applied one level in
+		call array_destroy(dst%array)
 		deallocate(dst%array)
 	end if
 
 	if (allocated(src%struct)) then
-		if (allocated(dst%struct)) deallocate(dst%struct)
+		if (allocated(dst%struct)) call value_array_destroy(dst%struct)
 		allocate(dst%struct( size(src%struct) ))
 		do i = 1, size(src%struct)
 			call value_copy(dst%struct(i), src%struct(i))
 		end do
 	else if (allocated(dst%struct)) then
-		deallocate(dst%struct)
+		call value_array_destroy(dst%struct)
 	end if
 
 	if (allocated(src%fn_params)) then
-		if (allocated(dst%fn_params)) deallocate(dst%fn_params)
+		if (allocated(dst%fn_params)) call value_array_destroy(dst%fn_params)
 		allocate(dst%fn_params( size(src%fn_params) ))
 		do i = 1, size(src%fn_params)
 			call value_copy(dst%fn_params(i), src%fn_params(i))
 		end do
 	else if (allocated(dst%fn_params)) then
-		deallocate(dst%fn_params)
+		call value_array_destroy(dst%fn_params)
 	end if
 
 	if (allocated(src%fn_ret)) then
 		if (.not. allocated(dst%fn_ret)) allocate(dst%fn_ret)
 		call value_copy(dst%fn_ret, src%fn_ret)
 	else if (allocated(dst%fn_ret)) then
+		call value_destroy(dst%fn_ret)
 		deallocate(dst%fn_ret)
 	end if
 

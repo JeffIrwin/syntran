@@ -143,6 +143,20 @@ module subroutine fns_rollback(dict, num_fns0)
 
 	dict%count = new_count
 
+	! Entries above num_fns0 were deliberately skipped (cycled past) above --
+	! this rollback discards them -- so old_table(i)%key/%val are still
+	! allocated for those slots.  Explicitly tear them down before old_table
+	! goes out of scope: fn_t%val holds a nested value_t(:) params array, the
+	! same shape this codebase never trusts to a bare implicit deep
+	! deallocation (c.f. value_array_destroy() in value.f90, fn_destroy() in
+	! types_copy.f90)
+	do i = 1, size(old_table)
+		if (.not. allocated(old_table(i)%val)) cycle
+		call fn_destroy(old_table(i)%val)
+		deallocate(old_table(i)%val)
+		if (allocated(old_table(i)%key)) deallocate(old_table(i)%key)
+	end do
+
 end subroutine fns_rollback
 
 !===============================================================================
@@ -588,12 +602,14 @@ module subroutine pop_scope(dict)
 	i = dict%scope
 
 	! It's possible that a scope may not have any local vars, so its table
-	! is not allocated
-	if (allocated(dict%dicts(i)%table)) then
-		deallocate(dict%dicts(i)%table)
-	end if
-	dict%dicts(i)%capacity = 0
-	dict%dicts(i)%count    = 0
+	! is not allocated.  var_dict_destroy() (not a bare deallocate()) is
+	! required here: dict%dicts(i)%table's slots hold allocatable value_t
+	! payloads, which can themselves hold a recursive struct(:) array (e.g.
+	! a struct-typed fn param or local popped off parser%locs at the end of
+	! every fn/method body) -- the same nested-allocatable shape this
+	! codebase never trusts to implicit deep deallocation elsewhere (c.f.
+	! value_array_destroy() in value.f90)
+	call var_dict_destroy(dict%dicts(i))
 
 	dict%scope = dict%scope - 1
 
@@ -810,6 +826,19 @@ module subroutine structs_rollback(dict, num_structs0)
 
 	dict%count = new_count
 	dict%num_structs = num_structs0
+
+	! Entries above num_structs0 were deliberately skipped above -- this
+	! rollback discards them -- so old_table(i)%key/%val are still allocated
+	! for those slots.  Explicitly tear them down rather than trust old_table's
+	! implicit deep deallocation on scope exit: struct_t%val holds a nested
+	! vars_t (of value_t), the same shape distrusted throughout this codebase.
+	! c.f. the identical comment in fns_rollback() above
+	do i = 1, size(old_table)
+		if (.not. allocated(old_table(i)%val)) cycle
+		call struct_destroy(old_table(i)%val)
+		deallocate(old_table(i)%val)
+		if (allocated(old_table(i)%key)) deallocate(old_table(i)%key)
+	end do
 
 end subroutine structs_rollback
 
@@ -1105,6 +1134,18 @@ module subroutine enums_rollback(dict, num_enums0)
 
 	dict%count = new_count
 	dict%num_enums = num_enums0
+
+	! Entries above num_enums0 were deliberately skipped above -- this
+	! rollback discards them -- so old_table(i)%key/%val are still allocated
+	! for those slots.  Explicitly tear them down rather than trust
+	! old_table's implicit deep deallocation on scope exit.  c.f. the
+	! identical comment in structs_rollback() above
+	do i = 1, size(old_table)
+		if (.not. allocated(old_table(i)%val)) cycle
+		call enum_destroy(old_table(i)%val)
+		deallocate(old_table(i)%val)
+		if (allocated(old_table(i)%key)) deallocate(old_table(i)%key)
+	end do
 
 end subroutine enums_rollback
 

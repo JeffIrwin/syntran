@@ -585,6 +585,34 @@ end function parser_text
 
 !===============================================================================
 
+subroutine parser_destroy(parser)
+
+	! Explicitly tear down whatever parser%vars/%locs/%structs/%enums/%fns
+	! still hold before parser (a per-syntax_parse()-call local, c.f.
+	! syntax_parse() in core.f90) goes out of scope.  Much of this is
+	! already empty by the time this runs -- syntax_parse() move_alloc's the
+	! surviving state back out to state_t before returning -- but nested
+	! scopes deeper than 1 (parser%vars%dicts(2:), populated while parsing a
+	! multi-statement block on a single REPL line) and parser%locs (fn/
+	! method param and local bindings, pushed/popped during parsing) are
+	! parser-local and are never moved anywhere.  Trusting the compiler's
+	! implicit deep deallocation of these nested-allocatable-value_t
+	! containers is exactly what this codebase avoids everywhere else --
+	! see value_array_destroy() (value.f90) and the *_destroy family in
+	! types_copy.f90
+
+	class(parser_t), intent(inout) :: parser
+
+	call vars_destroy(parser%vars)
+	call vars_destroy(parser%locs)
+	call structs_destroy(parser%structs)
+	call enums_destroy(parser%enums)
+	call fns_destroy(parser%fns)
+
+end subroutine parser_destroy
+
+!===============================================================================
+
 end module syntran__parse_m
 
 !===============================================================================
