@@ -391,6 +391,88 @@ end subroutine rt_throw
 
 !===============================================================================
 
+subroutine open_file_impl(state, filename, mode, must_open, file_)
+
+	! Shared implementation behind open() and std::try_open(), and behind both
+	! the AST walker (eval_fn.f90) and the bytecode VM (vm_intr.f90).
+	!
+	! Mode-string errors (R6/R7) always throw -- a malformed mode literal is a
+	! program bug, not an I/O condition.  A failure of the underlying Fortran
+	! open() throws R8 only when must_open is true; otherwise it returns a
+	! closed handle for the caller to inspect via f.is_open
+
+	type(state_t), intent(inout) :: state
+	character(len = *), intent(in) :: filename, mode
+	logical, intent(in) :: must_open
+	type(file_t), intent(out) :: file_
+
+	!********
+
+	character :: char_
+	character(len = :), allocatable :: status_, resolved_path
+	integer :: i, io
+
+	file_%name_ = filename   ! Keep original name for error messages
+	file_%unit_ = -1         ! newunit= is undefined if open() fails
+
+	do i = 1, len(mode)
+		char_ = mode(i: i)
+		select case (char_)
+		case ("r")
+			file_%mode_read = .true.
+
+		case ("w")
+			file_%mode_write = .true.
+
+		case default
+			call rt_throw(state, err_rt(RC_BAD_FILE_MODE, "bad file mode character """// &
+				char_//""""))
+			return
+
+		end select
+	end do
+
+	if (file_%mode_read .and. file_%mode_write) then
+		! Maybe "rw" mode could be allowed in the future, but i'm not sure
+		! what a useful application would be.  Perhaps if I exposed a
+		! rewind() or seek() fn
+		call rt_throw(state, err_rt(RC_FILE_RW_MODE, "cannot open file """//filename &
+			//""" in combined read/write mode """//mode//""""))
+		return
+	end if
+
+	if (file_%mode_read) then
+		status_ = "old"
+	else
+		status_ = "unknown"
+	end if
+
+	! Resolve relative paths using src_dir from state
+	! This is the key change for thread-safety
+	resolved_path = resolve_path(state%src_dir, filename)
+
+	open(newunit = file_%unit_, file = resolved_path, &
+		status = status_, iostat = io)
+
+	if (io /= 0) then
+		! Decode fortran iostat codes in message?  I just looked up the docs
+		! and there's not much about open iostat other than 0 is success.
+		! Read iostats are more descriptive
+		file_%unit_ = -1
+		if (must_open) then
+			call rt_throw(state, err_rt(RC_OPEN_FILE, "cannot open file """//resolved_path// &
+				""" (iostat = "//str(io)//")"))
+		end if
+		return
+	end if
+
+	file_%eof = .false.
+	file_%is_open = .true.
+
+end subroutine open_file_impl
+
+!===============================================================================
+
 !function divceil(num, den) result(res)
 elemental function divceil(num, den) result(res)
 

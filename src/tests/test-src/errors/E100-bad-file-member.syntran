@@ -1,0 +1,6 @@
+// E100: bad-file-member
+// A dot member access on a file handle named something other than is_open,
+// eof, or name
+
+let f = std::try_open("no/such/xyz", "r");
+let x = f.bogus;

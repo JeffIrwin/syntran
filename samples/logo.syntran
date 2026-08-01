@@ -280,7 +280,7 @@ fn draw_logo()
 fn write_ppm(filename: str)
 {
 	println("writing ppm `" + filename + "` ...");
-	let f = open(filename);
+	let f = open(filename, "w");
 
 	writeln(f, "P3");
 	writeln(f, NX_CANVAS, " ", NY_CANVAS);

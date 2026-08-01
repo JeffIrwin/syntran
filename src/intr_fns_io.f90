@@ -27,7 +27,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 		parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
 		char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
-		getenv_fn, hasenv_fn
+		getenv_fn, hasenv_fn, exists_fn, try_open_fn
 
 	!********
 
@@ -318,6 +318,37 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::exists(path) returns whether a file exists at `path`.  Relative
+	! paths are resolved the same way open() resolves them (against the
+	! script dir under --cd).  Note that a `true` result is not a guarantee
+	! that a subsequent open() will succeed -- use std::try_open() if you
+	! need to recover from that.  This is an std-only function
+	exists_fn%type%type = bool_type
+	allocate(exists_fn%params(1))
+	allocate(exists_fn%param_names%v(1))
+	exists_fn%params(1)%type = str_type
+	exists_fn%param_names%v(1)%s = "path"
+
+	call fns%insert("std::exists", exists_fn, id_index)
+
+	!********
+
+	! std::try_open(filename, mode) is a non-throwing open().  On failure it
+	! returns a closed handle instead of a runtime error; check f.is_open
+	! before using it.  A malformed `mode` is still a runtime error (R6/R7).
+	! This is an std-only function
+	try_open_fn%type%type = file_type
+	allocate(try_open_fn%params(2))
+	allocate(try_open_fn%param_names%v(2))
+	try_open_fn%params(1)%type = str_type
+	try_open_fn%param_names%v(1)%s = "filename"
+	try_open_fn%params(2)%type = str_type
+	try_open_fn%param_names%v(2)%s = "mode"
+
+	call fns%insert("std::try_open", try_open_fn, id_index)
+
+	!********
+
 	! Return array of all functions declared in this module
 	fn_array = &
 		[ &
@@ -325,7 +356,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 			parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
 			char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
-			getenv_fn, hasenv_fn &
+			getenv_fn, hasenv_fn, exists_fn, try_open_fn &
 		]
 
 end subroutine declare_io_fns

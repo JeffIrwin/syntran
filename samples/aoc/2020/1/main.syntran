@@ -16,7 +16,7 @@ else
 
 fn countlines(filename: str): i32
 {
-	let fi = open(filename);
+	let fi = open(filename, "r");
 	//println("fi = " + str(fi));
 
 	let nlines = 0;
@@ -44,7 +44,7 @@ fn part1(): i32
 
 	let vec_ = [0; n];
 
-	let f = open(input_file);
+	let f = open(input_file, "r");
 	for i in [0: n]
 	{
 		let s = readln(f);
@@ -77,7 +77,7 @@ fn part2(): i32
 
 	let vec_ = [0; n];
 
-	let f = open(input_file);
+	let f = open(input_file, "r");
 	for i in [0: n]
 	{
 		let s = readln(f);

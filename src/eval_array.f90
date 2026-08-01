@@ -28,6 +28,15 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	integer :: id
 	integer(kind = 8) :: i8, j8
 
+	if (var%type == file_type) then
+		! Unreachable: file handle members are rejected as assignment
+		! targets at parse time (EC_READONLY_FILE_MEMBER).  Without this
+		! guard, the struct base case below would index an unallocated
+		! var%struct(:)
+		write(*,*) err_int(IC_FILE_MEMBER, "assignment to a file handle member")
+		call internal_error()
+	end if
+
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
 		if (present(index_)) then
@@ -155,6 +164,23 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 	!print *, "get_val()"
 
+	if (var%type == file_type) then
+		! File handles have a fixed set of read-only members.  Both backends
+		! funnel through get_val() (eval_dot_expr and OP_LOAD_MEMBER), so this
+		! one branch covers the AST walker and the VM.  A file value has no
+		! %struct(:), so this must intercept before every other branch below
+		block
+			type(value_t) :: member_val
+			call get_file_member(node%member, var, state, member_val)
+			if (allocated(node%member%lsubscripts)) then
+				call apply_subscripts_to_val(node%member, member_val, state, res)
+			else
+				res = member_val
+			end if
+		end block
+		return
+	end if
+
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
 		if (present(index_)) then
@@ -280,6 +306,52 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	res = var%struct(id)%struct(i8+1)
 
 end subroutine get_val
+
+!===============================================================================
+
+subroutine get_file_member(member_node, var, state, res)
+
+	! Read one of a file handle's fixed read-only members (c.f. FILE_MEM_*
+	! in consts.f90 and parse_file_member() in parse_expr.f90)
+
+	type(syntax_node_t), intent(in) :: member_node
+	type(value_t), intent(in) :: var
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: res
+
+	if (.not. allocated(var%file_)) then
+		! Defensive: every file_type value allocates %file_ (open(),
+		! std::try_open(), populate_intr_vars())
+		write(*,*) err_int(IC_FILE_MEMBER, "file member read on an unallocated file handle")
+		call internal_error()
+	end if
+
+	select case (member_node%id_index)
+	case (FILE_MEM_IS_OPEN)
+		res%type = bool_type
+		res%sca%bool = var%file_%is_open
+
+	case (FILE_MEM_EOF)
+		res%type = bool_type
+		if (var%file_%unit_ == input_unit) then
+			! stdin's eof lives on state%stdin_eof, kept in sync with the
+			! no-arg eof()/readln() forms, not on the handle itself
+			res%sca%bool = state%stdin_eof
+		else
+			res%sca%bool = var%file_%eof
+		end if
+
+	case (FILE_MEM_NAME)
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = var%file_%name_
+
+	case default
+		write(*,*) err_int(IC_FILE_MEMBER, "unknown file member id")
+		call internal_error()
+	end select
+
+end subroutine get_file_member
 
 !===============================================================================
 

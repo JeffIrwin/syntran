@@ -1452,6 +1452,29 @@ subroutine unit_test_intr_fns(npass, nfail)
 			diag_has_code(get_diags('getenv("PATH");'), EC_STD_ONLY_FN), &
 			diag_has_code(get_diags('hasenv("PATH");'), EC_STD_ONLY_FN), &
 
+			! std::exists / std::try_open / file handle members
+			eval('std::exists("src/tests/test-src/io/test-01.syntran");') == 'true', &
+			eval('std::exists("no/such/path/syntran_xyz");') == 'false', &
+			eval('std::exists("");') == 'false', &
+			diag_has_code(get_diags('exists("x");'), EC_STD_ONLY_FN), &
+
+			eval('let f = std::try_open("no/such/path/xyz", "r"); f.is_open;') == 'false', &
+			eval('let f = std::try_open("no/such/path/xyz", "r"); f.name;') == 'no/such/path/xyz', &
+			diag_has_code(get_diags('std::try_open("x", "q");'), RC_BAD_FILE_MODE), &
+			diag_has_code(get_diags('std::try_open("x", "rw");'), RC_FILE_RW_MODE), &
+			diag_has_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); readln(f);'), RC_READLN_NOT_OPEN), &
+			diag_has_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); close(f);'), RC_CLOSE_NOT_OPEN), &
+			diag_has_code(get_diags('try_open("x","r");'), EC_STD_ONLY_FN), &
+
+			eval('std::IN.is_open;')  == 'true', &
+			eval('std::IN.name;')     == 'stdin', &
+			eval('std::IN.eof;')      == 'false', &
+			eval('std::OUT.name;')    == 'stdout', &
+			eval('std::ERR.is_open;') == 'true', &
+			eval('std::IN.name[0];')  == 's', &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -3960,6 +3983,8 @@ subroutine unit_test_io(npass, nfail)
 			interpret_file(path//'test-08.syntran', quiet) == 'true', &
 			interpret_file(path//'test-09.syntran', quiet) == '[1337, 42, 16384]', &
 			interpret_file(path//'test-10.syntran', quiet) == '0', &
+			interpret_file(path//'test-11.syntran', quiet) == 'true', &
+			interpret_file(path//'test-12.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -6901,6 +6926,25 @@ subroutine unit_test_error_codes(npass, nfail)
 				'enum Suit{Hearts,Clubs} size(Suit); str(Suit); println(Suit);'), &
 				EC_ENUM_NAME_VALUE), &
 
+			! file handle member access: bad member name / read-only enforcement
+			diag_has_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); f.bogus;'), &
+				EC_BAD_FILE_MEMBER), &
+			diag_count_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); f.bogus;'), &
+				EC_BAD_FILE_MEMBER) == 1, &
+			diag_has_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); f.eof = true;'), &
+				EC_READONLY_FILE_MEMBER), &
+			diag_count_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); f.eof = true;'), &
+				EC_READONLY_FILE_MEMBER) == 1, &
+			! std:: immutability wins over the file read-only check -- exactly
+			! one diagnostic
+			diag_has_code(get_diags('std::IN.eof = true;'), EC_IMMUTABLE_VAR), &
+			diag_count_code(get_diags('std::IN.eof = true;'), &
+				EC_READONLY_FILE_MEMBER) == 0, &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -7363,7 +7407,15 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E99-enum-name-value.syntran'), &
 				EC_ENUM_NAME_VALUE, P//'E99-enum-name-value.syntran', 15, 2, 3), &
 			diag_count_code(get_diags_file(P//'E99-enum-name-value.syntran'), &
-				EC_ENUM_NAME_VALUE) == 1 &
+				EC_ENUM_NAME_VALUE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E100-bad-file-member.syntran'), &
+				EC_BAD_FILE_MEMBER, P//'E100-bad-file-member.syntran', 6, 11, 5), &
+			diag_count_code(get_diags_file(P//'E100-bad-file-member.syntran'), &
+				EC_BAD_FILE_MEMBER) == 1, &
+			diag_loc_ok(get_diags_file(P//'E101-readonly-file-member.syntran'), &
+				EC_READONLY_FILE_MEMBER, P//'E101-readonly-file-member.syntran', 6, 3, 3), &
+			diag_count_code(get_diags_file(P//'E101-readonly-file-member.syntran'), &
+				EC_READONLY_FILE_MEMBER) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

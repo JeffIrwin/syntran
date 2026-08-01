@@ -1,0 +1,6 @@
+// E101: readonly-file-member
+// A file handle's members are read-only; they can't be used as an
+// assignment target
+
+let f = std::try_open("no/such/xyz", "r");
+f.eof = true;

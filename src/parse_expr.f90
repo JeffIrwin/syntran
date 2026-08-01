@@ -25,7 +25,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 	logical :: is_op_allowed, overwrite, is_const_var
 
 	integer :: io, ltype, rtype, pos0, lrank, rrank, larrtype, &
-		rarrtype, search_io, ndiag0, field_id, field_io
+		rarrtype, search_io, ndiag0, field_id, field_io, root_val_type
 
 	type(value_t) :: field_val, self_val
 
@@ -236,6 +236,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		is_const_var = .false.
 		call parser%vars%search(expr%module_prefix // "::" // identifier%text, &
 			expr%id_index, search_io, expr%val, is_const = is_const_var)
+		root_val_type = expr%val%type
 
 		! Parse subscripts and dot access for qualified names
 		call parser%parse_subscripts(expr)
@@ -268,6 +269,12 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
 					err_immutable_var(parser%context(), span, &
+					expr%module_prefix // "::" // identifier%text))
+			else if (root_val_type == file_type .and. allocated(expr%member)) then
+				span = new_span(expr%member%identifier%pos, len(expr%member%identifier%text))
+				call parser%diagnostics%push( &
+					err_readonly_file_member(parser%context(), span, &
+					expr%member%identifier%text, &
 					expr%module_prefix // "::" // identifier%text))
 			else if (is_const_var .and. search_io == exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
@@ -388,6 +395,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			call parser%vars%search(identifier%text, expr%id_index, search_io, expr%val, &
 				is_const = is_const_var)
 		end if
+		root_val_type = expr%val%type
 
 		! Check if this is an implicit field access inside a method body
 		if (parser%in_method .and. search_io /= exit_success) then
@@ -462,7 +470,12 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		! Block assignment to a const variable (covers plain, compound,
 		! subscript, and member cases — all share this code path)
-		if (is_const_var .and. search_io == exit_success) then
+		if (root_val_type == file_type .and. allocated(expr%member)) then
+			span = new_span(expr%member%identifier%pos, len(expr%member%identifier%text))
+			call parser%diagnostics%push( &
+				err_readonly_file_member(parser%context(), span, &
+				expr%member%identifier%text, identifier%text))
+		else if (is_const_var .and. search_io == exit_success) then
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
 				err_const_assign(parser%context(), span, identifier%text))
@@ -1230,6 +1243,11 @@ recursive module subroutine parse_dot(parser, expr)
 	!print *, "dot identifier = ", identifier%text
 	!print *, "type = ", kind_name(expr%val%type)
 
+	if (expr%val%type == file_type) then
+		call parse_file_member(parser, expr, identifier)
+		return
+	end if
+
 	if (expr%val%type /= struct_type) then
 		! Don't cascade errors for undeclared vars
 		if (expr%val%type /= unknown_type) then
@@ -1502,6 +1520,79 @@ subroutine parse_swallow_arg_list(parser)
 	call parser%match(rparen_token, rparen_)
 
 end subroutine parse_swallow_arg_list
+
+!===============================================================================
+
+subroutine parse_file_member(parser, expr, identifier)
+
+	! Read-only dot member access on a file handle: f.is_open, f.eof, f.name.
+	! Unlike struct members these are baked from a fixed table rather than
+	! looked up in a struct_t, but the resulting node has the same shape
+	! (dot_expr + %member%id_index + %member%val) so that get_val() -- and
+	! therefore both backends -- handle it with one branch
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(inout) :: expr
+	type(syntax_token_t), intent(in) :: identifier
+
+	!********
+
+	integer :: member_id
+
+	type(text_span_t) :: span
+
+	type(value_t) :: member
+
+	member_id = 0
+	member%type = unknown_type
+	select case (identifier%text)
+	case ("is_open"); member_id = FILE_MEM_IS_OPEN; member%type = bool_type
+	case ("eof");     member_id = FILE_MEM_EOF;     member%type = bool_type
+	case ("name");    member_id = FILE_MEM_NAME;    member%type = str_type
+	end select
+
+	if (member_id == 0) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_bad_file_member( &
+			parser%context(), span, identifier%text, expr%identifier%text))
+		expr%val%type = unknown_type   ! prevent cascades later
+
+		! Error recovery for `f.foo(...)`: file handles have no methods
+		if (parser%current_kind() == lparen_token) then
+			call parse_swallow_arg_list(parser)
+		end if
+		return
+	end if
+
+	! For RHS dots, this will stick.  For LHS dots, this will be shortly
+	! overwritten as assignment_expr in the caller
+	if (expr%kind == fn_call_expr .or. expr%kind == method_call_expr .or. &
+	        expr%kind == fn_call_intr_expr) &
+		expr%root_kind = expr%kind
+	expr%kind = dot_expr
+
+	allocate(expr%member)
+	expr%member%id_index   = member_id
+	expr%member%val        = member
+	expr%member%identifier = identifier  ! caret anchor for the read-only check
+	expr%val               = member
+
+	! f.name[0] / f.name[0:2]: let the generic subscript machinery type-check
+	! it (a bool member gets the standard E39 "scalar cannot have subscripts")
+	call parser%parse_subscripts(expr%member)
+	if (allocated(expr%member%lsubscripts)) then
+		expr%val = expr%member%val
+	end if
+
+	! f.name.foo -- keep the parser in sync; the recursive parse_dot() call
+	! will report E62 (dot on a non-struct str/bool value)
+	if (parser%peek_kind(0) == dot_token) then
+		expr%member%val = expr%val
+		call parser%parse_dot(expr%member)
+		expr%val = expr%member%val
+	end if
+
+end subroutine parse_file_member
 
 !===============================================================================
 

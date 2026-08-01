@@ -24,7 +24,7 @@ else
 
 fn countlines(filename: str): i32
 {
-	let fi = open(filename);
+	let fi = open(filename, "r");
 	//println("fi = " + str(fi));
 
 	let nlines = 0;
@@ -204,7 +204,7 @@ fn part1(): i32
 {
 	let sum_ = 0;
 
-	let f = open(input_file);
+	let f = open(input_file, "r");
 	let s = readln(f);
 	while not eof(f)
 	{
@@ -266,7 +266,7 @@ fn part2(): i32
 {
 	let sum_ = 0;
 
-	let f = open(input_file);
+	let f = open(input_file, "r");
 	let s = readln(f);
 	while not eof(f)
 	{

@@ -427,7 +427,8 @@ module syntran__bytecode_m
 		INTR_RESHAPE      = 131, &
 		INTR_TRANSPOSE    = 132, &
 		INTR_SHAPE        = 133, &
-		INTR_GETENV       = 134, INTR_HASENV       = 135
+		INTR_GETENV       = 134, INTR_HASENV       = 135, &
+		INTR_EXISTS       = 136, INTR_TRY_OPEN     = 137
 
 	!********
 
@@ -862,6 +863,8 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("shape");          id = INTR_SHAPE
 	case ("getenv");         id = INTR_GETENV
 	case ("hasenv");         id = INTR_HASENV
+	case ("exists");         id = INTR_EXISTS
+	case ("try_open");       id = INTR_TRY_OPEN
 	case default;            id = 0
 	end select
 

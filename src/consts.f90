@@ -170,6 +170,15 @@ module syntran__consts_m
 			i32_token             =   2, &
 			eof_token             =   1
 
+	! Read-only member indices for dot access on a file handle (c.f.
+	! parse_dot() and get_val()).  These occupy the same node%member%id_index
+	! slot that a struct field index would, but are an independent local
+	! namespace, not part of the token/syntax-node-kind enum above
+	integer, parameter :: &
+		FILE_MEM_IS_OPEN = 1, &
+		FILE_MEM_EOF     = 2, &
+		FILE_MEM_NAME    = 3
+
 !===============================================================================
 
 contains

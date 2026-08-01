@@ -1061,6 +1061,10 @@ module subroutine vm_run(prog, state, res)
 					else
 						state%vars%vals(slot_id_)%file_%eof = .true.
 					end if
+					! Keep the no-arg readln()/eof() stdin state in sync with
+					! the std::IN-argument forms, so mixing the two doesn't
+					! desync
+					if (iargs_pool(1)%file_%is_std) state%stdin_eof = .true.
 				else if (io_ /= 0 .and. io_ /= iostat_eor) then
 					call rt_throw(state, err_rt(RC_READLN_FAIL, 'cannot readln() from file "' &
 						//iargs_pool(1)%file_%name_//'"'))

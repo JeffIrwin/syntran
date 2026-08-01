@@ -324,8 +324,7 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 
 	!********
 
-	character :: char_
-	character(len = :), allocatable :: color, mode, status_, resolved_path
+	character(len = :), allocatable :: color
 	character(len = :), allocatable :: env_val
 
 	double precision, parameter :: LOG_E_2 = log(2.d0)
@@ -334,6 +333,8 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 	integer :: i, io
 	integer :: env_len, env_stat
 	integer(kind = 8) :: ir, ic
+
+	logical :: exists_
 
 	type(char_vector_t) :: str_
 
@@ -1005,6 +1006,20 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		call get_environment_variable(arg%str%s, status = env_stat)
 		res%sca%bool = env_stat == 0
 
+	case ("exists")
+
+		! std::exists(path) -- whether a file exists at `path`
+		call syntax_eval(node%args(1), state, arg)
+		if (state%rt_halt) return
+
+		if (len(arg%str%s) == 0) then
+			! inquire(file = "") is not standard-conforming
+			res%sca%bool = .false.
+		else
+			inquire(file = resolve_path(state%src_dir, arg%str%s), exist = exists_)
+			res%sca%bool = exists_
+		end if
+
 	case ("0i32_sca")
 
 		call syntax_eval(node%args(1), state, arg)
@@ -1033,62 +1048,23 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		if (state%rt_halt) return
 
 		if (.not. allocated(res%file_)) allocate(res%file_)
-		mode = arg2%str%s
-		!print *, "mode = ", mode
+		call open_file_impl(state, arg1%str%s, arg2%str%s, .true., res%file_)
+		if (state%rt_halt) return
 
-		do i = 1, len(mode)
-			char_ = mode(i: i)
-			select case (char_)
-			case ("r")
-				res%file_%mode_read = .true.
+	case ("try_open")
 
-			case ("w")
-				res%file_%mode_write = .true.
+		! std::try_open(filename, mode) -- non-throwing open().  Returns a
+		! closed handle (f.is_open == false) instead of raising R8 if the
+		! underlying open() fails.  A malformed mode is still a runtime
+		! error (R6/R7)
+		call syntax_eval(node%args(1), state, arg1)
+		if (state%rt_halt) return
+		call syntax_eval(node%args(2), state, arg2)
+		if (state%rt_halt) return
 
-			case default
-				call rt_throw(state, err_rt(RC_BAD_FILE_MODE, "bad file mode character """// &
-					char_//""""))
-				return
-
-			end select
-		end do
-
-		if (res%file_%mode_read .and. res%file_%mode_write) then
-			! Maybe "rw" mode could be allowed in the future, but i'm not sure
-			! what a useful application would be.  Perhaps if I exposed a
-			! rewind() or seek() fn
-			call rt_throw(state, err_rt(RC_FILE_RW_MODE, "cannot open file """//arg1%str%s &
-				//""" in combined read/write mode """//mode//""""))
-			return
-		end if
-
-		if (res%file_%mode_read) then
-			status_ = "old"
-		else
-			status_ = "unknown"
-		end if
-
-		! Resolve relative paths using src_dir from state
-		! This is the key change for thread-safety
-		resolved_path = resolve_path(state%src_dir, arg1%str%s)
-
-		open(newunit = res%file_%unit_, file = resolved_path, &
-			status = status_, iostat = io)
-		!print *, "io = ", io
-
-		if (io /= 0) then
-			! Decode fortran iostat codes in message?  I just looked up the docs
-			! and there's not much about open iostat other than 0 is success.
-			! Read iostats are more descriptive
-			call rt_throw(state, err_rt(RC_OPEN_FILE, "cannot open file """//resolved_path// &
-				""" (iostat = "//str(io)//")"))
-			return
-		end if
-
-		!print *, 'opened unit ', res%file_%unit_
-		res%file_%name_ = arg1%str%s  ! Keep original name for error messages
-		res%file_%eof = .false.
-		res%file_%is_open = .true.
+		if (.not. allocated(res%file_)) allocate(res%file_)
+		call open_file_impl(state, arg1%str%s, arg2%str%s, .false., res%file_)
+		if (state%rt_halt) return
 
 	case ("readln")
 
@@ -1167,6 +1143,10 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 				state%vars%vals(node%args(1)%id_index)%file_%eof = .true.
 			end if
 
+			! Keep the no-arg readln()/eof() stdin state in sync with the
+			! std::IN-argument forms, so mixing the two doesn't desync
+			if (arg1%file_%is_std) state%stdin_eof = .true.
+
 		else if (io == iostat_eor) then
 			! Do nothing
 
@@ -1237,7 +1217,13 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		end if
 
 		!print *, "checking eof for unit", arg1%file_%unit_
-		res%sca%bool = arg1%file_%eof
+		if (arg1%file_%is_std) then
+			! stdin's eof lives on state%stdin_eof, kept in sync with the
+			! no-arg eof()/readln() forms, not on the (never-set) file handle
+			res%sca%bool = state%stdin_eof
+		else
+			res%sca%bool = arg1%file_%eof
+		end if
 
 		!print *, 'eof fn = ', arg1%file_%eof
 

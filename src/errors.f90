@@ -115,6 +115,8 @@ module syntran__errors_m
 		EC_ENUM_INDEX = "E97", &
 		EC_VAR_TYPE_CLASH = "E98", &
 		EC_ENUM_NAME_VALUE = "E99", &
+		EC_BAD_FILE_MEMBER = "E100", &
+		EC_READONLY_FILE_MEMBER = "E101", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -156,6 +158,7 @@ module syntran__errors_m
 		IC_CONVERT_F32_ARR = "I39", &
 		IC_CONVERT_F64_ARR = "I40", &
 		IC_TRANSPOSE_ARRAY_TYPE = "I41", &
+		IC_FILE_MEMBER = "I42", &
 		RC_MATMUL_DIM = "R1", &
 		RC_PARSE_I32 = "R2", &
 		RC_PARSE_I64 = "R3", &
@@ -390,6 +393,8 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_ENUM_INDEX)
 	call codes%push(EC_VAR_TYPE_CLASH)
 	call codes%push(EC_ENUM_NAME_VALUE)
+	call codes%push(EC_BAD_FILE_MEMBER)
+	call codes%push(EC_READONLY_FILE_MEMBER)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -431,6 +436,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(IC_CONVERT_F32_ARR)
 	call codes%push(IC_CONVERT_F64_ARR)
 	call codes%push(IC_TRANSPOSE_ARRAY_TYPE)
+	call codes%push(IC_FILE_MEMBER)
 	call codes%push(RC_MATMUL_DIM)
 	call codes%push(RC_PARSE_I32)
 	call codes%push(RC_PARSE_I64)
@@ -1855,6 +1861,39 @@ function err_bad_member_name_short(context, span, mem_name, struct_name, suggest
 	end if
 
 end function err_bad_member_name_short
+
+!===============================================================================
+
+function err_bad_file_member(context, span, mem_name, file_var_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, file_var_name
+	err = err_pre(EC_BAD_FILE_MEMBER) &
+		//'member `'//mem_name//'` does not exist on file handle `'//file_var_name//'`' &
+		//underline(context, span) &
+		//" bad file member"//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": file handles have members `is_open`, `eof`, and `name`"
+
+end function err_bad_file_member
+
+!===============================================================================
+
+function err_readonly_file_member(context, span, mem_name, file_var_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, file_var_name
+	err = err_pre(EC_READONLY_FILE_MEMBER) &
+		//'file handle member `'//file_var_name//'.'//mem_name//'` is read-only' &
+		//underline(context, span) &
+		//" cannot assign to a file member"//color_reset
+
+end function err_readonly_file_member
 
 !===============================================================================
 

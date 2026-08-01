@@ -1492,20 +1492,22 @@ hello world
 
 Use [`open()`](doc/README.md#open), [`writeln()`](doc/README.md#writeln), and [`close()`](doc/README.md#close) to write to a file:
 
-<!-- syntran-begin mode=skip reason="mixes syntran REPL input with a shell `cat` command; not a single runnable unit" -->
+<!-- syntran-begin mode=file group=file-io -->
 ```rust
-//// syntran prompt
-let file = open("test.txt");
+let file = open("test.txt", "w");
 writeln(file, "hello world");
 writeln(file, "here's a second line of text with a number ", 42);
 close(file);
-//// Ctrl+D to exit syntran prompt
 
-//// shell prompt
-cat test.txt
-// hello world
-// here's a second line of text with a number 42
+let fi = open("test.txt", "r");
+println(readln(fi));
+println(readln(fi));
+close(fi);
 ```
+<!-- syntran-expect
+hello world
+here's a second line of text with a number 42
+-->
 <!-- syntran-end -->
 
 Only ASCII strings are supported because syntran is interpretted in Fortran.  Unicode strings cannot be indexed properly:

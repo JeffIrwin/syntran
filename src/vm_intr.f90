@@ -34,9 +34,8 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	integer :: env_len, env_stat
 	integer(kind = 8) :: ir, ic
 
-	character :: char_
+	logical :: exists_
 
-	character(len = :), allocatable :: mode_, status_, resolved_path_
 	character(len = :), allocatable :: env_val
 
 	type(char_vector_t) :: str_
@@ -521,43 +520,16 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		! args(1) = filename (str), args(2) = mode (str)
 		res%type = file_type
 		if (.not. allocated(res%file_)) allocate(res%file_)
-		res%file_%mode_read  = .false.
-		res%file_%mode_write = .false.
-		mode_ = args(2)%str%s
-		do i = 1, len(mode_)
-			char_ = mode_(i: i)
-			select case (char_)
-			case ("r")
-				res%file_%mode_read = .true.
-			case ("w")
-				res%file_%mode_write = .true.
-			case default
-				call rt_throw(state, err_rt(RC_BAD_FILE_MODE, "bad file mode character """// &
-					char_//""""))
-				return
-			end select
-		end do
-		if (res%file_%mode_read .and. res%file_%mode_write) then
-			call rt_throw(state, err_rt(RC_FILE_RW_MODE, "cannot open file """//args(1)%str%s// &
-				""" in combined read/write mode """//mode_//""""))
-			return
-		end if
-		if (res%file_%mode_read) then
-			status_ = "old"
-		else
-			status_ = "unknown"
-		end if
-		resolved_path_ = resolve_path(state%src_dir, args(1)%str%s)
-		open(newunit = res%file_%unit_, file = resolved_path_, &
-			status = status_, iostat = io)
-		if (io /= 0) then
-			call rt_throw(state, err_rt(RC_OPEN_FILE, "cannot open file """//resolved_path_// &
-				""" (iostat = "//str(io)//")"))
-			return
-		end if
-		res%file_%name_ = args(1)%str%s
-		res%file_%eof   = .false.
-		res%file_%is_open = .true.
+		call open_file_impl(state, args(1)%str%s, args(2)%str%s, .true., res%file_)
+
+	case (INTR_TRY_OPEN)
+		! std::try_open(filename, mode) -- non-throwing open().  Returns a
+		! closed handle (f.is_open == false) instead of raising R8 if the
+		! underlying open() fails.  A malformed mode is still a runtime
+		! error (R6/R7)
+		res%type = file_type
+		if (.not. allocated(res%file_)) allocate(res%file_)
+		call open_file_impl(state, args(1)%str%s, args(2)%str%s, .false., res%file_)
 
 	case (INTR_WRITELN)
 		! args(1) = file handle, args(2:) = values to write
@@ -626,7 +598,13 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 				args(1)%file_%name_//""" which was not opened in read mode ""r"""))
 			return
 		end if
-		res%sca%bool = args(1)%file_%eof
+		if (args(1)%file_%is_std) then
+			! stdin's eof lives on state%stdin_eof, kept in sync with the
+			! no-arg eof()/readln() forms, not on the (never-set) file handle
+			res%sca%bool = state%stdin_eof
+		else
+			res%sca%bool = args(1)%file_%eof
+		end if
 
 	!==== Misc ==================================================================
 
@@ -877,6 +855,17 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		res%type = bool_type
 		call get_environment_variable(args(1)%str%s, status = env_stat)
 		res%sca%bool = env_stat == 0
+
+	case (INTR_EXISTS)
+		! std::exists(path) -- whether a file exists at `path`
+		res%type = bool_type
+		if (len(args(1)%str%s) == 0) then
+			! inquire(file = "") is not standard-conforming
+			res%sca%bool = .false.
+		else
+			inquire(file = resolve_path(state%src_dir, args(1)%str%s), exist = exists_)
+			res%sca%bool = exists_
+		end if
 
 	case default
 		write(*,*) 'VM: unknown intr_id in vm_call_intr: ', intr_id

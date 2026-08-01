@@ -611,6 +611,18 @@ A bare enum type name (e.g. `Suit`) was used as a value -- bound with `let`/`con
 
 [Example](../src/tests/test-src/errors/E99-enum-name-value.syntran)
 
+### E100 -- bad-file-member
+
+A dot member access on a `file` handle named something other than `is_open`, `eof`, or `name`.
+
+[Example](../src/tests/test-src/errors/E100-bad-file-member.syntran)
+
+### E101 -- readonly-file-member
+
+A `file` handle's members are read-only; they can't be used as an assignment target.
+
+[Example](../src/tests/test-src/errors/E101-readonly-file-member.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -787,6 +799,10 @@ A struct lookup by name failed for a value already confirmed to be that struct t
 ### I41 -- transpose-array-type
 
 `std::transpose()` hit an array element type with no permutation implemented.
+
+### I42 -- file-member
+
+A file handle member read or write reached the struct-array code path.  Unreachable: file handle members are read-only (see E100/E101) and never allocate `%struct(:)`.
 
 ## Runtime errors
 

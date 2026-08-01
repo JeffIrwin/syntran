@@ -136,8 +136,8 @@ fn write_dot(g: [i32; :, :], num_adj: [i32; :]): i32
 	//     `dot graph-dummy.gv -Tpng > dummy.png`
 	//
 
-	//let f = open("graph-" + filename_glbl + ".gv");
-	let f = open("graph-dummy.gv");
+	//let f = open("graph-" + filename_glbl + ".gv", "w");
+	let f = open("graph-dummy.gv", "w");
 
 	//writeln(f, "graph " + filename_glbl);
 	writeln(f, "graph dummy");
@@ -171,7 +171,7 @@ fn read_aoc_graph(filename: str)
 	// First pass: save list of unique names
 	println("Reading graph from file """ + filename + """ ...");
 	println("1st pass ...");
-	let f = open(filename);
+	let f = open(filename, "r");
 	let str_ = readln(f);
 	while not eof(f)
 	{
@@ -194,7 +194,7 @@ fn read_aoc_graph(filename: str)
 	let num_adjdir = [0; num_nodes];
 	close(f);
 	println("2nd pass ...");
-	f = open(filename);
+	f = open(filename, "r");
 	str_ = readln(f);
 	while not eof(f)
 	{
