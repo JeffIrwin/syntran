@@ -340,6 +340,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      -q --quiet          Don't print the banner, only errors and println calls
      --permissive-return Downgrade missing-return errors to warnings
      --cd                Resolve the script's relative file paths against its own directory
+     -s --syntax-only    Parse and type check without running the program
      -- <args>...        Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
@@ -361,6 +362,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      -q --quiet          Don't print the banner, only errors and println calls
      --permissive-return Downgrade missing-return errors to warnings
      --cd                Resolve the script's relative file paths against its own directory
+     -s --syntax-only    Parse and type check without running the program
      -- <args>...        Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->

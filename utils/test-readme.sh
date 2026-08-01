@@ -271,7 +271,10 @@ while IFS=$'\t' read -r group mode dir readme_line ; do
 
 	case "$mode" in
 		help)
-			actual_raw="$(run_syntran help "$gdir")"
+			# `|| true`: syntran now exits nonzero on parse/type errors (some
+			# `file` doc examples are intentionally invalid), which would
+			# otherwise abort this whole script under `set -e`
+			actual_raw="$(run_syntran help "$gdir" || true)"
 			;;
 		repl)
 			actual_raw="$( ( cd "$gdir" && "$syntran_bin" -q --color off < "$infile" ) 2>&1 )"
@@ -279,7 +282,7 @@ while IFS=$'\t' read -r group mode dir readme_line ; do
 		file)
 			mainfile="main_$group.syntran"
 			cp "$infile" "$gdir/$mainfile"
-			actual_raw="$(run_syntran file "$gdir" "$mainfile")"
+			actual_raw="$(run_syntran file "$gdir" "$mainfile" || true)"
 			;;
 		*)
 			echo "unknown mode '$mode' for group $group" >&2

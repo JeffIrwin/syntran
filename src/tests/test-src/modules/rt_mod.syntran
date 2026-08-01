@@ -1,0 +1,6 @@
+// Module whose top-level statement raises a runtime error (R2) when the
+// module is evaluated.  Used by unit_test_syntax_only() in test.f90 to prove
+// that syntax_only really does skip evaluation of module-level statements
+// pulled in by `use`
+
+let bad = parse_i32("abc");

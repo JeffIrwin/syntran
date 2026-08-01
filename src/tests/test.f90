@@ -7120,6 +7120,104 @@ end subroutine unit_test_runtime_errors
 
 !===============================================================================
 
+subroutine unit_test_syntax_only(npass, nfail)
+
+	! Tests for the `--syntax-only`/`-s` CLI option's library seam: the
+	! `syntax_only` and `io` optional args on syntran_eval() and
+	! syntran_interpret_file().
+	!
+	! Three things are asserted: (a) evaluation is really skipped -- snippets
+	! that parse cleanly but fail (or produce a value) at run time produce
+	! neither diagnostics nor a result under syntax_only; (b) parse/type
+	! errors are still reported; (c) the `io` out-arg is exit_failure exactly
+	! when the program did not run to completion.
+	!
+	! Note the CLI's exit code is just `io` plumbed to call exit() in
+	! main.f90
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'syntax only'
+
+	! Dummy source path so module resolution derives the right search dir for
+	! the inline `use` snippet below (same trick as unit_test_error_codes())
+	character(len = *), parameter :: MODSRC = &
+		'src/tests/test-src/modules/_diag.syntran'
+
+	! Runtime-error fixture shared with unit_test_runtime_errors()
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	character(len = :), allocatable :: res_rt, res_val, res_mod, res_bad, &
+		res_type, res_file, res_404
+
+	integer :: io_rt, io_val, io_mod, io_bad, io_type, io_file, io_404
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	type(string_vector_t) :: d_rt, d_val, d_mod, d_bad, d_type, d_file, d_404
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! (a) Parses clean, throws R2 at run time -- but only if it actually runs
+	res_rt = eval('let x = parse_i32("abc");', quiet, &
+		syntax_only = .true., diags = d_rt, io = io_rt)
+
+	! (a) Parses clean and yields a value when evaluated
+	res_val = eval('1 + 2;', quiet, syntax_only = .true., diags = d_val, io = io_val)
+
+	! (a) A `use` import leaves an evaluatable node behind: rt_mod.syntran's
+	! top-level statement must not run under syntax_only
+	res_mod = eval('use rt_mod;', quiet, src_file = MODSRC, &
+		syntax_only = .true., diags = d_mod, io = io_mod)
+
+	! (b) Parse error and type error, both still reported under syntax_only
+	res_bad = eval('let a = ;', quiet, syntax_only = .true., diags = d_bad, io = io_bad)
+	res_type = eval('true + 4;', quiet, syntax_only = .true., diags = d_type, io = io_type)
+
+	! (c) File mode: clean parse, and the missing-file (err_404) path
+	res_file = interpret_file(P//'R2-parse-i32.syntran', quiet, &
+		syntax_only = .true., diags = d_file, io = io_file)
+	res_404 = interpret_file(P//'no-such-file-xyz.syntran', quiet, &
+		diags = d_404, io = io_404)
+
+	tests = &
+		[   &
+			! (a) syntax_only skips evaluation: no runtime diagnostic, no result
+			d_rt%len_ == 0, io_rt == exit_success, res_rt == '', &
+			! ... and the same snippet really does throw when it is evaluated
+			diag_has_code(get_diags('let x = parse_i32("abc");'), RC_PARSE_I32), &
+
+			! (a) no value is produced under syntax_only, unlike a real eval
+			res_val == '', io_val == exit_success, d_val%len_ == 0, &
+			eval('1 + 2;', quiet) == '3', &
+
+			! (a) module-level statements from `use` do not run under
+			! syntax_only, but do run otherwise
+			d_mod%len_ == 0, io_mod == exit_success, res_mod == '', &
+			diag_has_code(get_diags('use rt_mod;', MODSRC), RC_PARSE_I32), &
+
+			! (b) parse errors are still reported, and (c) io is failure
+			diag_has_code(d_bad, EC_UNEXPECTED_TOKEN), io_bad == exit_failure, &
+			! (b) type checking still happens too -- this parses fine
+			diag_has_code(d_type, EC_BINARY_TYPES), io_type == exit_failure, &
+
+			! (c) file mode: R2 fixture parses clean, so success and silence
+			d_file%len_ == 0, io_file == exit_success, &
+			! (c) io is failure on a missing file, before any parse happens
+			io_404 == exit_failure, d_404%len_ == 1 &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_syntax_only
+
+!===============================================================================
+
 subroutine unit_test_error_locations(npass, nfail)
 
 	! Companion to unit_test_error_codes() above.  That test only confirms the
@@ -7584,6 +7682,7 @@ subroutine unit_tests(iostat)
 	call unit_test_return_paths  (npass, nfail)
 	call unit_test_error_codes   (npass, nfail)
 	call unit_test_runtime_errors(npass, nfail)
+	call unit_test_syntax_only   (npass, nfail)
 	call unit_test_error_locations(npass, nfail)
 	call unit_test_dir_unreadable_errors(npass, nfail)
 	call unit_test_assignment (npass, nfail)
