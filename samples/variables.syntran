@@ -7,13 +7,13 @@ let baz = 4;
 
 baz = 3;
 
-foo + bar * baz;
+println(foo + bar * baz);
 
 let p = true;
 let q = false;
 
-p or q;
-not q and foo + bar == baz;
+println(p or q);
+println(not q and foo + bar == baz);
 
 }
 

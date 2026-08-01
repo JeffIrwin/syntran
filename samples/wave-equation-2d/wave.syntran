@@ -139,7 +139,7 @@
 		t = t + dt;
 
 		// Print
-		u;
+		println(u);
 	}
 }
 

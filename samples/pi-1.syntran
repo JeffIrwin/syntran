@@ -12,6 +12,6 @@
 	}
 	pi *= 4;
 
-	pi;
+	println(pi);
 }
 

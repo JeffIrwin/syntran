@@ -355,8 +355,9 @@ fn part2(): i64
 fn main(): i32
 {
 	println("Reading input file """, input_file, """");
-	part1();
-	part2();
+	let sum_ = 0;
+	sum_ += part1();
+	sum_ += part2();
 	return 0;
 }
 
