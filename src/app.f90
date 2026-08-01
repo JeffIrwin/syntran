@@ -28,6 +28,7 @@ module syntran__app_m
 			interactive        = .false., &
 			permissive_return  = .false., &
 			quiet              = .false., &
+			syntax_only        = .false., &
 			syntran_file_arg   = .false., &
 			version            = .false., &
 			help               = .false.
@@ -230,6 +231,9 @@ function parse_args() result(args)
 		case ("--cd")
 			args%chdir = .true.
 
+		case ("-s", "--syntax-only")
+			args%syntax_only = .true.
+
 		case ("--version")
 			args%version = .true.
 
@@ -260,6 +264,15 @@ function parse_args() result(args)
 
 	end do
 
+	! --syntax-only has nothing to check without a file or a `-c` command.
+	! Don't complain if the user just wants help or the version
+	if (args%syntax_only .and. .not. args%help .and. .not. args%version .and. &
+		.not. (args%syntran_file_arg .or. args%command_arg)) then
+		write(*,*) err_prefix//"--syntax-only requires a <file.syntran> "// &
+			"or -c <cmd> argument"
+		error = .true.
+	end if
+
 	url = 'https://github.com/JeffIrwin/syntran'
 
 	version = &
@@ -272,12 +285,13 @@ function parse_args() result(args)
 		interactive = .not. &
 			( &
 				args%command_arg      .or. &
+				args%syntax_only      .or. &
 				args%version          .or. &
 				args%syntran_file_arg .or. &
 				args%help                  &
 			)
 
-		if (.not. args%command_arg) then
+		if (.not. args%command_arg .and. .not. args%syntax_only) then
 			write(*,*)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
@@ -321,6 +335,7 @@ function parse_args() result(args)
 		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
 		write(*,*) "    --permissive-return Downgrade missing-return errors to warnings"
 		write(*,*) "    --cd                Resolve the script's relative file paths against its own directory"
+		write(*,*) "    -s --syntax-only    Parse and type check without running the program"
 		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 

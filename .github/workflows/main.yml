@@ -214,6 +214,14 @@
 				"
 			},
 			{
+				"name": "Test samples",
+				"shell": "bash",
+				"run":
+				"
+					bash ./utils/test-samples.sh \n
+				"
+			},
+			{
 				"if": "matrix.os != 'windows-latest'",
 				"name": "Test debug",
 				"run":

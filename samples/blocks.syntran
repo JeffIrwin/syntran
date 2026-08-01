@@ -17,7 +17,7 @@
 		bar = 2;
 	}
 
-	foo + bar * baz;
+	println(foo + bar * baz);
 
 	let p = true;
 	{
@@ -35,9 +35,9 @@
 	//// 31 |  let q = true;
 	////    |      ^ variable already declared
 
-	p or q;
+	println(p or q);
 
-	p and not q and foo + bar == baz;
+	println(p and not q and foo + bar == baz);
 	// true
 }
 

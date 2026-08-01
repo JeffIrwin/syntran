@@ -22,7 +22,7 @@
 			);
 	}
 
-	pi;
+	println(pi);
 	// 3.141593E+00
 
 	//// Infinity!  Fortran also does this w/o warning, the issue is

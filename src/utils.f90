@@ -8,7 +8,7 @@ module syntran__utils_m
 
 	implicit none
 
-	integer, parameter :: exit_success = 0, exit_failure = -1
+	integer, parameter :: exit_success = 0, exit_failure = 1
 
 	character, parameter :: &
 			null_char       = char( 0), &

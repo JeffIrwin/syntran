@@ -31,9 +31,15 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - windows memory crashes require constant maintanence or they pop up
+	!    again whenever a big enough user-defined type change in the interpreter
+	!    is made. maybe try a different compiler just for windows? intel?
+	!  - stack trace for runtime errors
 	!  - cover utils/run-samples.sh in ci
 	!    * need a blocklist probably to avoid running interactive samples like
 	!      betweenle et al
+	!    * some may be too slow to execute, but at least cover them with
+	!    --syntax-only
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
 	!      intrinsic function, a struct method, or a user-defined function with
@@ -68,11 +74,6 @@ module syntran__core_m
 	!    * ANSI color codes, or some other way to color text
 	!    * E, I (after complex numbers)
 	!    * done: PI, std::IN/OUT/ERR
-	!  - need an exists() built-in to check files, or some equivalent way to
-	!    check a file post-open. maybe rethink the way syntran immediately
-	!    runtime error aborts if you try to open for reading a file that doesn't
-	!    exist. check other immediate runtime errors too. there's also an idea
-	!    about "file_stat" below
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
@@ -109,11 +110,6 @@ module syntran__core_m
 	!                  at ././src/eval_expr.f90:219
 	!          #6  0xed7311 in __syntran__eval_m_MOD_syntax_eval
 	!
-	!  - maybe add unit test threading at a higher level. i.e. if we can't have
-	!    threads within one syntran exe, maybe add cmd args to specify which
-	!    sets of tests to run, then have a bash script spawning independent
-	!    syntran test runners in parallel as separate exe's
-	!    * done
 	!  - migrate ci from ubuntu 24 to 26. rocky should stay on version 9 for the
 	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
 	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet
@@ -189,18 +185,15 @@ module syntran__core_m
 	!    * this would only work on linux, since windows can't overwrite a
 	!      running exe
 	!    * apparently it's possible on windows too.  til:  https://stackoverflow.com/a/459860/4347028
-	!  - enable plugging in to nvim linting.  doesn't seem hard from the way
-	!    that gfortran nvim linting works.  just need to add a cmd arg like
-	!    `--syntax-only` and print errors in 1 line per error, with filename,
-	!    line, and column indices
+	!  - enable plugging in to nvim linting.  `--syntax-only`/`-s` now exists,
+	!    but diagnostics still need a 1-line-per-error format with filename,
+	!    line, and column indices to work with gfortran-style nvim linting
 	!  - appimage?  some kind of binary packaging improvement
 	!    * the current dependence on libquadmath.so (and sometimes
 	!      libgfortran.so) is not ideal, especially considering that rocky is
 	!      worse than ubuntu.  it would be nice if everything was truly
 	!      statically bundled into one file
 	!    * is appimage the standard tool for this?  how does fpm do it?
-	!  - REPL improvements:
-	!    * any other functionality gaps in repl?
 	!  - REPL styling
 	!    * any other ideas from julia?  got their green prompt
 	!    * could later extend with hint levels (off, semicolon-only, or fully on)
@@ -208,8 +201,10 @@ module syntran__core_m
 	!    * "Exiting syntran" is a different shade of green than "syntran$"
 	!       prompt
 	!  - add tests that cover interactive interpreter REPL
+	!    * fn and struct tests added
+	!    * interpret() as opposed to eval() actually loops by tokenized
+	!      newlines, just like the real interactive repl
 	!    * added a couple basic tests in main.yml
-	!    * fns should also be covered
 	!    * should also cover options like `-i` (startup include file)
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
