@@ -174,6 +174,11 @@ const char *syntran_history_path(void)
  * used immediately by libgfortran and needs no stable storage.  syntran is
  * single-threaded, so plain statics are fine.
  */
+#ifdef _WIN32
+/* Only Windows links with -Wl,--wrap=setlocale (see CMakeLists.txt / fpm
+ * --flag above); on other platforms the linker never synthesizes
+ * __real_setlocale, so this must not be compiled there.
+ */
 char *__real_setlocale(int category, const char *locale);
 
 char *__wrap_setlocale(int category, const char *locale)
@@ -195,6 +200,7 @@ char *__wrap_setlocale(int category, const char *locale)
 
 	return ret;
 }
+#endif
 
 /* Non-zero iff path exists and is a directory.
  *
