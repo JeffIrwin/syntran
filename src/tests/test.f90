@@ -5,7 +5,49 @@ module test_m
 
 	implicit none
 
+	! Test-group filters, set from --only/--skip by `program test` below and
+	! read by run_group().  Unallocated means "no filter"
+	character(len = :), allocatable :: test_only, test_skip
+
+	! Anchor for symbolizing -fbacktrace output, printed by --anchor.  The exe
+	! is relocated by ASLR on every run, so the raw addresses gfortran prints
+	! on a crash mean nothing on their own.  This is an ordinary saved symbol;
+	! the whole image relocates by one delta, so
+	!
+	!     link_time_addr_of_crash = crash_addr - loc(aslr_anchor) + L
+	!
+	! where L is this variable's link-time address from `nm test.exe`.  Feed
+	! that to addr2line.  See utils/symbolize-backtrace.sh
+	integer, save :: aslr_anchor = 0
+
 contains
+
+!===============================================================================
+
+logical function run_group(name)
+
+	! Should the test group `name` run?  Every call in unit_tests() is guarded
+	! by this.  --only and --skip both match a substring of the group name (the
+	! part after `unit_test_`), so `--only repl` selects repl_fns and
+	! repl_structs both.
+	!
+	! This exists to make flaky-failure hunts cheap: a crash that only shows up
+	! in one group once every few hundred full-suite runs can be isolated with
+	!
+	!     test.exe --only repl_fns --repeat 5000
+	!
+	! or excluded, to see whether it disappears or just relocates, with
+	!
+	!     test.exe --skip repl_fns
+
+	character(len = *), intent(in) :: name
+
+	run_group = .true.
+	if (allocated(test_only)) run_group = index(name, test_only) > 0
+	if (.not. run_group) return
+	if (allocated(test_skip)) run_group = index(name, test_skip) == 0
+
+end function run_group
 
 !===============================================================================
 
@@ -3706,6 +3748,38 @@ subroutine unit_test_repl_fns(npass, nfail)
 			interpret('fn sq(x: i32): i32 { return x * x; }'//line_feed// &
 				'fn sum_sq(a: i32, b: i32): i32 { return sq(a) + sq(b); }'//line_feed// &
 				'sum_sq(3, 4);', quiet) == '25', &
+			! str params and return.  The all-i32 cases above leave fn%params
+			! full of value_t with nothing allocated inside them; str is the
+			! cheapest param type that makes fn%params carry real nested
+			! allocatables (value_t%str) through the cross-line copy/teardown
+			! that fn_copy()/fn_destroy() (types_copy.f90) perform
+			interpret('fn greet(name: str): str { return "hi " + name; }'//line_feed// &
+				'greet("bob");', quiet) == 'hi bob', &
+			! Same, one level deeper: an array param/return puts an array_t
+			! (with its own nested allocatables) inside fn%params
+			interpret('fn first(a: [i32; :]): i32 { return a[0]; }'//line_feed// &
+				'first([5, 6, 7]);', quiet) == '5', &
+			interpret('fn dbl(a: [i32; :]): [i32; :] { return 2 * a; }'//line_feed// &
+				'dbl([1, 2, 3]);', quiet) == '[2, 4, 6]', &
+			! Two heap-owning fns declared on *separate* REPL lines, then
+			! composed.  Declaring the second one is what drives
+			! fns_grow_flat() (types_dict.f90) down its old_size > 0 path,
+			! fn_move()-ing the first fn -- params, body AST and all -- into a
+			! newly allocated flat array.  That only ever happens in the REPL,
+			! and only when the earlier fn's params actually own heap is it
+			! moving anything but empty value_t
+			interpret('fn greet(name: str): str { return "hi " + name; }'//line_feed// &
+				'fn shout(s: str): str { return s + "!"; }'//line_feed// &
+				'shout(greet("bob"));', quiet) == 'hi bob!', &
+			interpret('fn first(a: [i32; :]): i32 { return a[0]; }'//line_feed// &
+				'fn dbl(a: [i32; :]): [i32; :] { return 2 * a; }'//line_feed// &
+				'first(dbl([1, 2, 3]));', quiet) == '2', &
+			! Redeclaring a fn on a later REPL line is an error, and stays one
+			! (c.f. the equivalent struct case in unit_test_repl_structs).
+			! quiet suppresses the diagnostic; this pins the behavior so the
+			! cross-line fns table can't silently start allowing overwrites
+			interpret('fn f(): i32 { return 42; }'//line_feed// &
+				'fn f(): i32 { return 7; }', quiet) == '', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7715,94 +7789,94 @@ subroutine unit_tests(iostat)
 	npass = 0
 	nfail = 0
 
-	call unit_test_levenshtein          (npass, nfail)
-	call unit_test_overload_display_name(npass, nfail)
-	call unit_test_unqualified_name     (npass, nfail)
-	call unit_test_bbcode_escape        (npass, nfail)
-	call unit_test_bin_arith            (npass, nfail)
-	call unit_test_paren_arith(npass, nfail)
-	call unit_test_unary_arith(npass, nfail)
-	call unit_test_bool       (npass, nfail)
-	call unit_test_comparisons(npass, nfail)
-	call unit_test_comp_f32   (npass, nfail)
-	call unit_test_comp_f64   (npass, nfail)
-	call unit_test_bad_syntax    (npass, nfail)
-	call unit_test_return_paths  (npass, nfail)
-	call unit_test_error_codes   (npass, nfail)
-	call unit_test_runtime_errors(npass, nfail)
-	call unit_test_syntax_only   (npass, nfail)
-	call unit_test_error_locations(npass, nfail)
-	call unit_test_dir_unreadable_errors(npass, nfail)
-	call unit_test_assignment (npass, nfail)
-	call unit_test_comments   (npass, nfail)
-	call unit_test_blocks     (npass, nfail)
-	call unit_test_f32_1      (npass, nfail)
-	call unit_test_f64_1      (npass, nfail)
-	call unit_test_str        (npass, nfail)
-	call unit_test_raw_str    (npass, nfail)
-	call unit_test_substr     (npass, nfail)
-	call unit_test_if_else    (npass, nfail)
-	call unit_test_for_1      (npass, nfail)
-	call unit_test_for        (npass, nfail)
-	call unit_test_while      (npass, nfail)
-	call unit_test_var_scopes (npass, nfail)
-	call unit_test_f32_2      (npass, nfail)
-	call unit_test_array_i32_1(npass, nfail)
-	call unit_test_array_i32_2(npass, nfail)
-	call unit_test_array_f32_1(npass, nfail)
-	call unit_test_array_f32_2(npass, nfail)
-	call unit_test_array_str  (npass, nfail)
-	call unit_test_array_bool (npass, nfail)
-	call unit_test_nd_i32     (npass, nfail)
-	call unit_test_intr_fns   (npass, nfail)
-	call unit_test_fns        (npass, nfail)
-	call unit_test_repl_fns   (npass, nfail)
-	call unit_test_repl_structs(npass, nfail)
-	call unit_test_linalg_fns (npass, nfail)
-	call unit_test_comp_ass   (npass, nfail)
-	call unit_test_comp_ass_arr(npass, nfail)
-	call unit_test_io         (npass, nfail)
-	call unit_test_i64        (npass, nfail)
-	call unit_test_include    (npass, nfail)
-	call unit_test_rhs_slc_1  (npass, nfail)
-	call unit_test_arr_comp   (npass, nfail)
-	call unit_test_arr_op     (npass, nfail)
-	call unit_test_lhs_slc_1  (npass, nfail)
-	call unit_test_control    (npass, nfail)
-	call unit_test_struct     (npass, nfail)
-	call unit_test_struct_arr1(npass, nfail)
-	call unit_test_struct_arr2(npass, nfail)
-	call unit_test_struct_arr3(npass, nfail)
-	call unit_test_struct_str (npass, nfail)
-	call unit_test_struct_long(npass, nfail)
-	call unit_test_methods    (npass, nfail)
-	call unit_test_enum       (npass, nfail)
-	call unit_test_enum_long  (npass, nfail)
-	call unit_test_f64_mix    (npass, nfail)
-	call unit_test_literals   (npass, nfail)
-	call unit_test_bitwise    (npass, nfail)
-	call unit_test_bit_ass    (npass, nfail)
-	call unit_test_bitwise_2  (npass, nfail)
-	call unit_test_ref        (npass, nfail)
-	call unit_test_recursion  (npass, nfail)
-	call unit_test_args       (npass, nfail)
-	call unit_test_reshape    (npass, nfail)
-	call unit_test_transpose  (npass, nfail)
-	call unit_test_shape      (npass, nfail)
-	call unit_test_modules    (npass, nfail)
-	call unit_test_dict       (npass, nfail)
+	if (run_group('levenshtein')) call unit_test_levenshtein(npass, nfail)
+	if (run_group('overload_display_name')) call unit_test_overload_display_name(npass, nfail)
+	if (run_group('unqualified_name')) call unit_test_unqualified_name(npass, nfail)
+	if (run_group('bbcode_escape')) call unit_test_bbcode_escape(npass, nfail)
+	if (run_group('bin_arith')) call unit_test_bin_arith(npass, nfail)
+	if (run_group('paren_arith')) call unit_test_paren_arith(npass, nfail)
+	if (run_group('unary_arith')) call unit_test_unary_arith(npass, nfail)
+	if (run_group('bool')) call unit_test_bool(npass, nfail)
+	if (run_group('comparisons')) call unit_test_comparisons(npass, nfail)
+	if (run_group('comp_f32')) call unit_test_comp_f32(npass, nfail)
+	if (run_group('comp_f64')) call unit_test_comp_f64(npass, nfail)
+	if (run_group('bad_syntax')) call unit_test_bad_syntax(npass, nfail)
+	if (run_group('return_paths')) call unit_test_return_paths(npass, nfail)
+	if (run_group('error_codes')) call unit_test_error_codes(npass, nfail)
+	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
+	if (run_group('syntax_only')) call unit_test_syntax_only(npass, nfail)
+	if (run_group('error_locations')) call unit_test_error_locations(npass, nfail)
+	if (run_group('dir_unreadable_errors')) call unit_test_dir_unreadable_errors(npass, nfail)
+	if (run_group('assignment')) call unit_test_assignment(npass, nfail)
+	if (run_group('comments')) call unit_test_comments(npass, nfail)
+	if (run_group('blocks')) call unit_test_blocks(npass, nfail)
+	if (run_group('f32_1')) call unit_test_f32_1(npass, nfail)
+	if (run_group('f64_1')) call unit_test_f64_1(npass, nfail)
+	if (run_group('str')) call unit_test_str(npass, nfail)
+	if (run_group('raw_str')) call unit_test_raw_str(npass, nfail)
+	if (run_group('substr')) call unit_test_substr(npass, nfail)
+	if (run_group('if_else')) call unit_test_if_else(npass, nfail)
+	if (run_group('for_1')) call unit_test_for_1(npass, nfail)
+	if (run_group('for')) call unit_test_for(npass, nfail)
+	if (run_group('while')) call unit_test_while(npass, nfail)
+	if (run_group('var_scopes')) call unit_test_var_scopes(npass, nfail)
+	if (run_group('f32_2')) call unit_test_f32_2(npass, nfail)
+	if (run_group('array_i32_1')) call unit_test_array_i32_1(npass, nfail)
+	if (run_group('array_i32_2')) call unit_test_array_i32_2(npass, nfail)
+	if (run_group('array_f32_1')) call unit_test_array_f32_1(npass, nfail)
+	if (run_group('array_f32_2')) call unit_test_array_f32_2(npass, nfail)
+	if (run_group('array_str')) call unit_test_array_str(npass, nfail)
+	if (run_group('array_bool')) call unit_test_array_bool(npass, nfail)
+	if (run_group('nd_i32')) call unit_test_nd_i32(npass, nfail)
+	if (run_group('intr_fns')) call unit_test_intr_fns(npass, nfail)
+	if (run_group('fns')) call unit_test_fns(npass, nfail)
+	if (run_group('repl_fns')) call unit_test_repl_fns(npass, nfail)
+	if (run_group('repl_structs')) call unit_test_repl_structs(npass, nfail)
+	if (run_group('linalg_fns')) call unit_test_linalg_fns(npass, nfail)
+	if (run_group('comp_ass')) call unit_test_comp_ass(npass, nfail)
+	if (run_group('comp_ass_arr')) call unit_test_comp_ass_arr(npass, nfail)
+	if (run_group('io')) call unit_test_io(npass, nfail)
+	if (run_group('i64')) call unit_test_i64(npass, nfail)
+	if (run_group('include')) call unit_test_include(npass, nfail)
+	if (run_group('rhs_slc_1')) call unit_test_rhs_slc_1(npass, nfail)
+	if (run_group('arr_comp')) call unit_test_arr_comp(npass, nfail)
+	if (run_group('arr_op')) call unit_test_arr_op(npass, nfail)
+	if (run_group('lhs_slc_1')) call unit_test_lhs_slc_1(npass, nfail)
+	if (run_group('control')) call unit_test_control(npass, nfail)
+	if (run_group('struct')) call unit_test_struct(npass, nfail)
+	if (run_group('struct_arr1')) call unit_test_struct_arr1(npass, nfail)
+	if (run_group('struct_arr2')) call unit_test_struct_arr2(npass, nfail)
+	if (run_group('struct_arr3')) call unit_test_struct_arr3(npass, nfail)
+	if (run_group('struct_str')) call unit_test_struct_str(npass, nfail)
+	if (run_group('struct_long')) call unit_test_struct_long(npass, nfail)
+	if (run_group('methods')) call unit_test_methods(npass, nfail)
+	if (run_group('enum')) call unit_test_enum(npass, nfail)
+	if (run_group('enum_long')) call unit_test_enum_long(npass, nfail)
+	if (run_group('f64_mix')) call unit_test_f64_mix(npass, nfail)
+	if (run_group('literals')) call unit_test_literals(npass, nfail)
+	if (run_group('bitwise')) call unit_test_bitwise(npass, nfail)
+	if (run_group('bit_ass')) call unit_test_bit_ass(npass, nfail)
+	if (run_group('bitwise_2')) call unit_test_bitwise_2(npass, nfail)
+	if (run_group('ref')) call unit_test_ref(npass, nfail)
+	if (run_group('recursion')) call unit_test_recursion(npass, nfail)
+	if (run_group('args')) call unit_test_args(npass, nfail)
+	if (run_group('reshape')) call unit_test_reshape(npass, nfail)
+	if (run_group('transpose')) call unit_test_transpose(npass, nfail)
+	if (run_group('shape')) call unit_test_shape(npass, nfail)
+	if (run_group('modules')) call unit_test_modules(npass, nfail)
+	if (run_group('dict')) call unit_test_dict(npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
 
-	call unit_test_pow_scalar       (npass, nfail)
-	call unit_test_mixed_i32i64     (npass, nfail)
-	call unit_test_arr_binop        (npass, nfail)
-	call unit_test_bool_arr_binop   (npass, nfail)
-	call unit_test_native_array_ctor(npass, nfail)
-	call unit_test_mixed_float_int  (npass, nfail)
-	call unit_test_deep_recursion   (npass, nfail)
-	call unit_test_matmul           (npass, nfail)
+	if (run_group('pow_scalar')) call unit_test_pow_scalar(npass, nfail)
+	if (run_group('mixed_i32i64')) call unit_test_mixed_i32i64(npass, nfail)
+	if (run_group('arr_binop')) call unit_test_arr_binop(npass, nfail)
+	if (run_group('bool_arr_binop')) call unit_test_bool_arr_binop(npass, nfail)
+	if (run_group('native_array_ctor')) call unit_test_native_array_ctor(npass, nfail)
+	if (run_group('mixed_float_int')) call unit_test_mixed_float_int(npass, nfail)
+	if (run_group('deep_recursion')) call unit_test_deep_recursion(npass, nfail)
+	if (run_group('matmul')) call unit_test_matmul(npass, nfail)
 
 	call log_test_summary(npass, nfail)
 	iostat = nfail
@@ -8502,18 +8576,60 @@ program test
 	use test_m
 	implicit none
 
-	integer :: i, argc, io
+	integer :: i, argc, io, io_rep, irep, nrep
+	integer(kind = 8) :: anchor
+	logical :: print_anchor
 	character(len = 256) :: argv
 
 	call set_ansi_colors(.true.)
 
+	! --only/--skip select test groups by substring (c.f. run_group() in
+	! test_m), and --repeat runs the selected set n times in one process.
+	! Together they turn a rare flaky failure into something you can loop on
+	! directly instead of looping the whole 3000-test suite
+	nrep = 1
+	print_anchor = .false.
 	argc = command_argument_count()
-	do i = 1, argc
+	i = 0
+	do while (i < argc)
+		i = i + 1
 		call get_command_argument(i, argv)
-		if (trim(argv) == '--no-warn-ast') no_warn = .true.
+		select case (trim(argv))
+		case ('--no-warn-ast')
+			no_warn = .true.
+		case ('--anchor')
+			print_anchor = .true.
+		case ('--only')
+			i = i + 1
+			call get_command_argument(i, argv)
+			test_only = trim(argv)
+		case ('--skip')
+			i = i + 1
+			call get_command_argument(i, argv)
+			test_skip = trim(argv)
+		case ('--repeat')
+			i = i + 1
+			call get_command_argument(i, argv)
+			read(argv, *) nrep
+		end select
 	end do
 
-	call unit_tests(io)
+	if (print_anchor) then
+		anchor = loc(aslr_anchor)
+		write(*, '(a,z16)') ' ASLR_ANCHOR=0x', anchor
+	end if
+
+	! Keep repeating even after a failing rep, and report the failure at the
+	! end.  --repeat exists for stress/crash hunting, where the point is to
+	! keep hammering the same code; bailing on the first failed assertion
+	! would also make it useless for narrowing a crash by deliberately
+	! disabling tests.  With the default nrep = 1 this is identical to a
+	! plain run.
+	io = 0
+	do irep = 1, nrep
+		call unit_tests(io_rep)
+		if (io_rep /= 0) io = io_rep
+	end do
 	call exit(io)
 
 end program test
