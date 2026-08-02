@@ -107,14 +107,48 @@ else()
 	add_link_options(-fopenmp)
 endif()
 if(WIN32)
-	# On Windows/MinGW a FULL `-static` link is REQUIRED: the dynamically-linked
-	# runtime triggers an intermittent heap-corruption SIGSEGV (~1-3% of runs) in
-	# syntran's nested-allocatable parse paths, and only a full static link
-	# (libgfortran + libgcc/SEH-unwind + libwinpthread + libquadmath) reliably
-	# eliminates it (0 crashes in ~975 runs vs ~1-3% dynamic; -static-libgfortran
-	# alone still crashes).  It also makes the binary self-contained.  (The old
-	# `-static-libquadmath -static-libgfortran -static-libgcc` also failed to link
-	# at all under MinGW gfortran 12.2 -- `-static-libquadmath` is unrecognized.)
+	# THE fix for the long-standing intermittent Windows-only SIGSEGV
+	# (~0.7-2% of test-suite runs).  It is a libgfortran bug, not a syntran
+	# one, worked around here by interposing setlocale at link time.
+	#
+	# mingw has no uselocale(), so libgfortran save/restores the global locale
+	# around every formatted READ/WRITE, retaining the pointer returned by
+	# `setlocale(LC_NUMERIC, NULL)` across a later setlocale() call.  C99
+	# 7.11.1.1p8 only guarantees that string until the next setlocale(), and on
+	# UCRT it aims into an internal buffer that gets rewritten -- so the restore
+	# passes a stale pointer whose internal mbstowcs() scans for a NUL through
+	# freed memory.  It usually finds one harmlessly, which is exactly why this
+	# failed in only ~1% of runs despite the test suite being deterministic.
+	#
+	# __wrap_setlocale() (src/c/isocline_wrap.c) copies query results into
+	# storage we own so the retained pointer stays valid.
+	#
+	# Measured: 0 crashes in 1600 full-suite runs and 6000 reproducer reps,
+	# against a ~0.7-2% baseline.
+	add_link_options(-Wl,--wrap=setlocale)
+
+	# Raise the stack reserve.  Robustness only, NOT a fix for the above.
+	#
+	# A PE reserves only 2 MB of stack by default, where Linux gives 8 MB and
+	# grows on demand.  syntran recurses deeply (recursive-descent parser,
+	# recursive deep-copy of syntax_node_t with ~20 self-referential
+	# allocatable components, recursive evaluator), so deeply nested input can
+	# genuinely exhaust 2 MB.  Reserve is address space only -- pages commit
+	# lazily -- so raising it is effectively free on 64-bit.
+	#
+	# It does NOT fix the long-standing intermittent SIGSEGV: with a 64 MB
+	# reserve the full suite still crashed 5 times in 250 runs, in the same
+	# place.  A fixed stack limit would also fail deterministically, not in
+	# ~1% of runs, since the suite's inputs are identical every time.
+	add_link_options(-Wl,--stack,67108864)
+
+	# A full `-static` link is also kept: it makes the binary self-contained,
+	# and it was the previous (partial, coincidental) mitigation for the above
+	# -- static linking changes frame layout and stack consumption enough to
+	# move the threshold, which is why it reduced the rate without ever
+	# eliminating it.  (The old `-static-libquadmath -static-libgfortran
+	# -static-libgcc` also failed to link at all under MinGW gfortran 12.2 --
+	# `-static-libquadmath` is unrecognized.)
 	add_link_options(-static)
 else()
 	# macOS/Linux do NOT have the crash and do NOT support a full `-static` link

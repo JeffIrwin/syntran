@@ -30,6 +30,44 @@ fpm run --profile debug -- file.syntran     # Run a syntran file
 yes | fpm clean             # Clean build artifacts
 ```
 
+#### Getting a stable path to a built binary
+
+fpm puts its output in `build/gfortran_<HASH>/`, where the hash changes with
+the **flag set** — `-static`, `-g`, `-fcheck=all` and a sanitizer build each
+land in a different directory. Never hardcode one of those paths: it silently
+runs a binary built with the wrong flags, or one that no longer exists. Use
+`fpm install --prefix` instead, with a separate prefix per flag variant:
+
+```bash
+fpm install --test --profile release --flag "-static -Wl,--wrap=setlocale -Wl,--stack,67108864" --prefix ./build/v1/
+./build/v1/bin/syntran.exe
+./build/v1/test/test.exe     # --test also installs the test binaries
+```
+
+#### Windows link flags: always pass `-Wl,--wrap=setlocale`
+
+On Windows, builds **must** link with `-Wl,--wrap=setlocale`. Without it the
+test suite hits an intermittent SIGSEGV in ~0.7–2% of runs.
+
+It's a libgfortran bug, not a syntran one. mingw has no `uselocale()`, so
+libgfortran save/restores the *global* locale around every formatted
+READ/WRITE, retaining the pointer from `setlocale(LC_NUMERIC, NULL)` across a
+later `setlocale()` call. C99 7.11.1.1p8 only guarantees that string until the
+next `setlocale()`, and on UCRT it points into an internal buffer that gets
+rewritten — so the restore passes a stale pointer and UCRT's `mbstowcs()` scans
+for a NUL through freed memory. It usually finds one harmlessly, which is why
+a fully deterministic test suite failed only ~1% of the time, always inside
+ucrtbase and never near syntran's own code. `__wrap_setlocale()` in
+`src/c/isocline_wrap.c` copies query results into storage we own.
+
+Also pass `-Wl,--stack,67108864`: a PE reserves only 2 MB of stack (Linux gives
+8 MB and grows), and syntran's recursive parser/deep-copy/evaluator can exhaust
+that on deeply nested input. Robustness only — it does *not* fix the SIGSEGV.
+
+CMake sets both automatically (see `CMakeLists.txt`); for fpm you must pass
+them yourself. Note fpm 0.12-alpha **silently ignores `--link-flag`** — use
+`--flag`.
+
 ## Running Tests
 
 ### Short tests (quick)
@@ -39,6 +77,16 @@ fpm test test --profile debug      # FPM: run short tests only
 
 Commands like `fpm test` and `fpm run` automatically invoke `fpm build`, so
 there's no need to manually build first.
+
+### Running a subset of test groups
+The test driver takes `--only <substr>` / `--skip <substr>` to filter groups by
+name (the part after `unit_test_`), and `--repeat <n>` to run the selected set
+`n` times in one process. Useful for isolating a rare/flaky failure without
+looping the whole suite:
+```bash
+./build/v1/test/test.exe --only repl_fns --repeat 5000
+./build/v1/test/test.exe --skip repl_fns
+```
 
 ### Running a single test file
 Syntran script tests are in `src/tests/test-src/` organized by category. To run one:

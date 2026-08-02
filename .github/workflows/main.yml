@@ -180,14 +180,24 @@
 				"name": "Test fpm windows",
 				"run":
 				"
-					# `--flag \"-static\"` is REQUIRED on Windows: the dynamically \n
-					# linked MinGW runtime triggers an intermittent heap-corruption \n
-					# SIGSEGV (~1-3% of runs) in nested-allocatable parse paths.  A \n
-					# full static link eliminates it (0 in 1500+ runs).  Passed via \n
-					# `--flag` (not `--link-flag`, which fpm 0.12-alpha silently \n
-					# ignores) so it actually reaches the linker. \n
-					fpm test test --profile release --flag \"-static\" \n
-					fpm test long --profile release --flag \"-static\" \n
+					# `-Wl,--wrap=setlocale` is THE fix for the intermittent \n
+					# Windows SIGSEGV (~0.7-2% of runs).  libgfortran on mingw \n
+					# (no uselocale) retains the pointer from setlocale(...,NULL) \n
+					# across a later setlocale() call, which C99 7.11.1.1p8 does \n
+					# not allow; the stale pointer makes UCRT's mbstowcs() scan \n
+					# freed memory.  It usually finds a NUL harmlessly, hence the \n
+					# ~1% rate from an otherwise deterministic suite.  See \n
+					# __wrap_setlocale() in src/c/isocline_wrap.c.  Measured 0 \n
+					# crashes in 1600 suite runs + 6000 reproducer reps. \n
+					# \n
+					# `-Wl,--stack,...` raises the 2 MB default PE stack reserve \n
+					# so deeply nested input cannot exhaust it.  Robustness only. \n
+					# `-static` is kept for a self-contained binary. \n
+					# \n
+					# All go through `--flag`, not `--link-flag`, which fpm \n
+					# 0.12-alpha silently ignores. \n
+					fpm test test --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
+					fpm test long --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
 				"
 			},
 			{
@@ -257,7 +267,7 @@
 					# release binary from the \"Test fpm windows\" step instead \n
 					# of rebuilding from scratch with cmake.  --prefix places \n
 					# it in a predictable location for packaging \n
-					fpm install --profile release --flag \"-static\" --prefix ./build/ \n
+					fpm install --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" --prefix ./build/ \n
 
 					copy .\\build\\bin\\syntran.exe .\\ \n
 				"
