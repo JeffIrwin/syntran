@@ -169,6 +169,30 @@ subroutine vm_stack_grow(stack)
 	do i = 1, stack%len_ - 1
 		call value_move(stack%v(i), tmp(i))
 	end do
+
+	! Slots from len_ up are DEAD BUT NOT EMPTY.  vm_pop_discard() leaves a
+	! popped array/struct/str allocated in its slot rather than freeing it, and
+	! the typed-load fast paths retag a recycled slot as a scalar (`%type =
+	! i32_type` etc) without freeing what it still owns -- which also hides
+	! them from value_reset(), whose scalar fast path assumes a scalar tag
+	! means nothing is allocated.
+	!
+	! move_alloc() below deallocates the old stack%v, and letting that walk a
+	! live, deeply-nested value_t tree is exactly the implicit deep
+	! deallocation this codebase never relies on (see value_array_destroy() in
+	! value.f90).  Free them explicitly first.
+	!
+	! Every slot, not just those from len_ up: value_move() above transfers
+	! only the component matching %type, so a slot that was retagged as a
+	! scalar while still owning an array keeps that array even after being
+	! moved out.
+	!
+	! Note: size(stack%v), not stack%cap -- cap was already overwritten with
+	! the NEW capacity above.
+	do i = 1, size(stack%v)
+		call value_destroy(stack%v(i))
+	end do
+
 	call move_alloc(tmp, stack%v)
 end subroutine vm_stack_grow
 
@@ -3006,6 +3030,33 @@ module subroutine vm_run(prog, state, res)
 	! The final result is whatever is left on top of the stack.
 	! Move rather than copy — the stack is local and discarded immediately.
 	if (stack%len_ > 0) call value_move(stack%v(stack%len_), res)
+
+	! Everything below is local to vm_run and about to fall out of scope:
+	! the operand stack, the call frames (each holding two value_t pools), and
+	! the two reusable arg pools.  All are arrays of value_t, and all of them
+	! routinely hold live arrays/structs/strings in "dead" slots -- popped
+	! values are not freed (vm_pop_discard) and recycled slots get retagged as
+	! scalars without being freed (the typed-load fast paths).
+	!
+	! Letting them fall out of scope hands that whole nested tree to gfortran's
+	! implicit deep deallocation, which this codebase does not rely on (see
+	! value_array_destroy() in value.f90).  This runs on every vm_run() call --
+	! i.e. every evaluated statement -- so it is the hottest instance of that
+	! pattern in the interpreter.  Tear it all down explicitly.
+	call value_array_destroy(stack%v)
+	stack%len_ = 0
+	stack%cap  = 0
+
+	if (allocated(frames)) then
+		do i = 1, size(frames)
+			call value_array_destroy(frames(i)%caller_locs)
+			call value_array_destroy(frames(i)%locs_buf)
+		end do
+		deallocate(frames)
+	end if
+
+	call value_array_destroy(params_pool)
+	call value_array_destroy(iargs_pool)
 
 end subroutine vm_run
 

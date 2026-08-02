@@ -517,6 +517,10 @@ module syntran__types_m
 			type(enums_t), intent(inout) :: dict
 		end subroutine enums_destroy
 
+		recursive module subroutine syntax_node_destroy(node)
+			type(syntax_node_t), intent(inout) :: node
+		end subroutine syntax_node_destroy
+
 		recursive module subroutine fn_destroy(fn)
 			type(fn_t), intent(inout) :: fn
 		end subroutine fn_destroy

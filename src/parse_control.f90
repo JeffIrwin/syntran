@@ -128,7 +128,7 @@ end subroutine parse_continue_statement
 
 !===============================================================================
 
-module subroutine parse_use_statement(parser, statement)
+recursive module subroutine parse_use_statement(parser, statement)
 
 	use syntran__errors_m
 

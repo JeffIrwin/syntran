@@ -298,7 +298,10 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: statement
 		end subroutine parse_continue_statement
 
-		module subroutine parse_use_statement(parser, statement)
+		! Recursive for the same reason as parse_unit() below: this is the
+		! routine that spins up the module's parser and calls parse_unit() on
+		! it, so it sits on the same cycle
+		recursive module subroutine parse_use_statement(parser, statement)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: statement
 		end subroutine parse_use_statement
@@ -418,7 +421,14 @@ module syntran__parse_m
 			type(syntax_token_t), intent(out) :: token
 		end subroutine match_pre
 
-		module subroutine parse_unit(parser, unit)
+		! Recursive: a `use` statement parses the imported module with its own
+		! parser, via parse_statement -> parse_use_statement -> parse_unit
+		! (parse_control.f90), and modules may import modules.  Without the
+		! attribute this is undefined behaviour -- gfortran is free to give
+		! locals static storage, so a nested parse would clobber the outer
+		! one's locals, including allocatable descriptors.  Caught by
+		! `-fcheck=all`: "Recursive call to nonrecursive procedure 'parse_unit'"
+		recursive module subroutine parse_unit(parser, unit)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: unit
 		end subroutine parse_unit

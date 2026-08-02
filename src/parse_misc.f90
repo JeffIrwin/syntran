@@ -430,7 +430,7 @@ end subroutine match_pre
 
 !===============================================================================
 
-module subroutine parse_unit(parser, unit)
+recursive module subroutine parse_unit(parser, unit)
 
 	class(parser_t) :: parser
 

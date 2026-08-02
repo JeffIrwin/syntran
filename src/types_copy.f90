@@ -227,7 +227,15 @@ recursive module subroutine fn_copy(dst, src)
 	end if
 
 	if (allocated(src%params)) then
-		if (allocated(dst%params)) deallocate(dst%params)
+		! Not a bare `deallocate(dst%params)`: this is an array of value_t, the
+		! nested-allocatable shape this codebase never trusts to gfortran's
+		! implicit deep deallocation (c.f. value_array_destroy() in value.f90,
+		! and value_copy()'s own %struct/%fn_params handling right beside it).
+		! fn_copy() overwrites a *live* dst on every fn declaration: parse_unit()
+		! runs two passes, and pass 2 re-inserts every fn with overwrite = .true.
+		! (c.f. fn_insert() in types_dict.f90), so dst%params here is normally
+		! pass 1's array, fully populated
+		call value_array_destroy(dst%params)
 		allocate(dst%params( size(src%params) ))
 		! Element-wise value_copy, NOT a whole-array assignment: value_t's
 		! defined assignment(=) is scalar (non-elemental), so `dst%params =
@@ -243,13 +251,24 @@ recursive module subroutine fn_copy(dst, src)
 			call value_copy(dst%params(i), src%params(i))
 		end do
 	else if (allocated(dst%params)) then
-		deallocate(dst%params)
+		call value_array_destroy(dst%params)
 	end if
 
 	if (allocated(src%node)) then
-		if (.not. allocated(dst%node)) allocate(dst%node)
+		! Copy into a *cleared* node rather than letting syntax_node_copy()
+		! overwrite a live AST in place: its per-component `else if
+		! (allocated(dst%x)) deallocate(dst%x)` branches are bare recursive
+		! deallocations of syntax_node_t subtrees.  This is the common case,
+		! not the rare one -- parse_unit()'s second pass re-inserts every fn
+		! with overwrite = .true., so dst%node here is normally pass 1's AST
+		if (allocated(dst%node)) then
+			call syntax_node_destroy(dst%node)
+		else
+			allocate(dst%node)
+		end if
 		dst%node = src%node
 	else if (allocated(dst%node)) then
+		call syntax_node_destroy(dst%node)
 		deallocate(dst%node)
 	end if
 
@@ -463,19 +482,148 @@ end subroutine enums_destroy
 
 !===============================================================================
 
+subroutine syntax_token_destroy(token)
+
+	! Tear down a syntax_token_t's two allocatable-bearing components.  Its
+	! %val is a full value_t (number/string literals carry their value here),
+	! so it gets value_destroy() like any other.
+	!
+	! Submodule-local helper for syntax_node_destroy() below -- no `module`
+	! prefix and no interface in types.f90, c.f. fn_grow()/var_grow() in
+	! types_dict.f90
+
+	type(syntax_token_t), intent(inout) :: token
+
+	call value_destroy(token%val)
+	if (allocated(token%text)) deallocate(token%text)
+
+end subroutine syntax_token_destroy
+
+!===============================================================================
+
+recursive subroutine syntax_node_free(node)
+
+	! Destroy and deallocate one optional child node.  Submodule-local helper,
+	! c.f. syntax_token_destroy() above
+
+	type(syntax_node_t), allocatable, intent(inout) :: node
+
+	if (.not. allocated(node)) return
+	call syntax_node_destroy(node)
+	deallocate(node)
+
+end subroutine syntax_node_free
+
+!===============================================================================
+
+recursive subroutine syntax_nodes_free(nodes)
+
+	! Array counterpart of syntax_node_free().  This is to syntax_node_t what
+	! value_array_destroy() (value.f90) is to value_t: destroy every element
+	! before freeing the array itself, so the implicit deep deallocation never
+	! has a live nested tree to walk
+
+	type(syntax_node_t), allocatable, intent(inout) :: nodes(:)
+
+	!********
+
+	integer :: i
+
+	if (.not. allocated(nodes)) return
+	do i = 1, size(nodes)
+		call syntax_node_destroy(nodes(i))
+	end do
+	deallocate(nodes)
+
+end subroutine syntax_nodes_free
+
+!===============================================================================
+
+recursive module subroutine syntax_node_destroy(node)
+
+	! Explicitly tear down a syntax_node_t's allocatable components, deepest
+	! first, instead of trusting gfortran's implicit deep deallocation to walk
+	! a whole AST in one shot.  Same doctrine as value_destroy()
+	! (value.f90), applied to the other deeply-nested type in this codebase:
+	! syntax_node_t has 20 allocatable components of its own type (5 of them
+	! arrays), plus a value_t and two syntax_token_t -- each of which wraps a
+	! value_t of its own.
+	!
+	! The component list here must stay in sync with syntax_node_copy() below,
+	! c.f. the FIXME on syntax_node_t itself (types.f90).  Every component
+	! syntax_node_copy() handles is handled here, in the same order.
+
+	type(syntax_node_t), intent(inout) :: node
+
+	call value_destroy(node%val)
+
+	call syntax_token_destroy(node%op)
+	call syntax_token_destroy(node%identifier)
+
+	if (allocated(node%struct_name))    deallocate(node%struct_name)
+	if (allocated(node%module_prefix))  deallocate(node%module_prefix)
+	if (allocated(node%first_expected)) deallocate(node%first_expected)
+
+	! Plain intrinsic-type arrays: nothing nested to walk
+	if (allocated(node%params))       deallocate(node%params)
+	if (allocated(node%is_ref))       deallocate(node%is_ref)
+	if (allocated(node%is_const_ref)) deallocate(node%is_const_ref)
+
+	! Reset cap along with len_, not just len_: push_string() (utils.f90)
+	! copies `v(1: cap)` when it grows, so a non-zero cap over a deallocated v
+	! would read unallocated memory if a destroyed node were ever pushed to
+	if (allocated(node%diagnostics%v)) deallocate(node%diagnostics%v)
+	node%diagnostics%len_ = 0
+	node%diagnostics%cap  = 0
+
+	call syntax_node_free(node%left)
+	call syntax_node_free(node%right)
+	call syntax_node_free(node%condition)
+	call syntax_node_free(node%body)
+	call syntax_node_free(node%array)
+	call syntax_node_free(node%lbound)
+	call syntax_node_free(node%ubound)
+	call syntax_node_free(node%step)
+	call syntax_node_free(node%len_)
+	call syntax_node_free(node%rank)
+	call syntax_node_free(node%if_clause)
+	call syntax_node_free(node%else_clause)
+	call syntax_node_free(node%member)
+
+	call syntax_nodes_free(node%elems)
+	call syntax_nodes_free(node%lsubscripts)
+	call syntax_nodes_free(node%usubscripts)
+	call syntax_nodes_free(node%ssubscripts)
+	call syntax_nodes_free(node%args)
+	call syntax_nodes_free(node%size)
+	call syntax_nodes_free(node%members)
+
+end subroutine syntax_node_destroy
+
+!===============================================================================
+
 recursive module subroutine fn_destroy(fn)
 
-	! fn_t%params is an array of value_t -- the same nested-allocatable
-	! shape distrusted throughout this codebase (c.f. value_array_destroy()
-	! in value.f90) -- so it gets the same explicit teardown.  %node (the fn
-	! body's syntax_node_t tree), %param_names, and %variadic_name are left
-	! to ordinary deallocation: that part of fn_t predates this fix, is
-	! exercised continuously by the REPL fn tests (c.f. a5afc18), and has
-	! never been implicated in a crash
+	! fn_t's two nested-allocatable components -- %params (an array of
+	! value_t) and %node (the fn body's whole syntax_node_t AST) -- are the
+	! shape distrusted throughout this codebase, so both get an explicit
+	! teardown rather than a bare deallocate.  c.f. value_array_destroy()
+	! (value.f90) and syntax_node_destroy() above.
+	!
+	! %node matters most on the REPL fn path: fns_destroy(), fns_rollback()
+	! and state_destroy() all funnel through here, so every fn AST declared at
+	! the REPL is freed by this routine.  %param_names and %variadic_name are
+	! left to ordinary deallocation -- a string_vector_t and a scalar
+	! character are shallow enough to trust
 
 	type(fn_t), intent(inout) :: fn
 
 	call value_array_destroy(fn%params)
+
+	if (allocated(fn%node)) then
+		call syntax_node_destroy(fn%node)
+		deallocate(fn%node)
+	end if
 
 end subroutine fn_destroy
 

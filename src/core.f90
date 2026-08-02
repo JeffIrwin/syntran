@@ -502,7 +502,7 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	character(len = :), allocatable :: src_filel, fn_name, var_name
 
-	integer :: i, slot, unit_, num_fns0, num_structs0, num_enums0
+	integer :: i, id, slot, unit_, num_fns0, num_structs0, num_enums0
 
 	logical :: allow_continuel, repll
 
@@ -859,7 +859,18 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 		slot = state%fns%find(fn_name)
 		if (slot == 0) cycle
-		state%fns%fns( state%fns%id_at(slot) ) = state%fns%get(slot)
+
+		! grow_flat(parser%num_fns) above is expected to cover every id_index
+		! reachable here, but don't let that assumption become an out-of-bounds
+		! heap write if it ever stops holding (say a parse path that assigns an
+		! id without bumping parser%num_fns).  grow_flat() is a no-op when the
+		! array is already large enough, and it only touches %fns, so the
+		! pointer returned by get() -- which aims into %table -- stays valid
+		id = state%fns%id_at(slot)
+		if (id < 1) cycle
+		if (id > size(state%fns%fns)) call state%fns%grow_flat(id)
+
+		state%fns%fns(id) = state%fns%get(slot)
 
 	end do
 	!print *, "done looking up fns"
