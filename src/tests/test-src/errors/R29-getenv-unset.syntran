@@ -1,0 +1,4 @@
+// R29: getenv-unset
+// std::getenv() was given a name that isn't set in the environment
+
+let v = std::getenv("SYNTRAN_NONEXISTENT_VAR_XYZ");

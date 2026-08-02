@@ -1,0 +1,12 @@
+// E85: member-method-clash
+// A struct method has the same name as one of the struct's members
+
+struct S
+{
+	foo: i32,
+
+	fn foo(): i32
+	{
+		return 0;
+	}
+}

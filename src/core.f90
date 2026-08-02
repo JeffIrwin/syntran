@@ -27,24 +27,37 @@ module syntran__core_m
 
 	integer, parameter ::   &
 		syntran_major =  1, &
-		syntran_minor =  4, &
+		syntran_minor =  5, &
 		syntran_patch =  0
 
 	! TODO:
-	!  - kill redundant token deep-copies in the parser hot path
-	!    (peek_kind/peek_text read fields directly; convert
-	!    peek/current/next/match accessors from by-value functions to
-	!    intent(out) subroutines)
-	!  - switch/match/case
-	!  - callbacks, fn pointers, i.e. passing one function as an argument to
-	!    another function
-	!    * this could be a big change to the type system
-	!  - replace ternary tree dicts with hash maps? might be simpler, but there
-	!    might be zero perf benefit because the dicts are only used at parse
-	!    time, then mapped to efficient arrays at eval time
-	!  - enums
+	!  - windows memory crashes require constant maintanence or they pop up
+	!    again whenever a big enough user-defined type change in the interpreter
+	!    is made. maybe try a different compiler just for windows? intel?
+	!  - stack trace for runtime errors
+	!  - fn pointer (callback) improvements:
+	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
+	!      intrinsic function, a struct method, or a user-defined function with
+	!      any `&`-reference parameter (E87)
+	!      + no reason to ban these afaik except it's more work to implement
+	!      + overloaded intrinsics might be tricky
+	!    * test callbacks taking a struct arg and/or struct return val
+	!    * can a fn return a fn?
+	!    * can arrays/structs contain a fn? these points are less about
+	!      callbacks specifically and more generally about fns as values, which
+	!      is the can of worms opened by callbacks
+	!      + structs of fns work, arrays do not
+	!    * closures and anonymous (lambda) fns?
+	!  - switch/match/case. needs to work with strings. would be nice to work
+	!    with arrays. basic switch/case is fine but also consider "pattern
+	!    matching" or whatever rust has
+	!  - something like python's "if name == main" feature. it could be nice to
+	!    run a module like a program, e.g. to unit test itself, but ignore when
+	!    imported
 	!  - recursive data structs
 	!    * recursive fns are available, but not structs
+	!    * would we need allocation, pointer, or null features for this?
+	!      otherwise one recursive struct just immediately uses infinite memory
 	!  - method improvements:
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.
@@ -56,20 +69,13 @@ module syntran__core_m
 	!    * ANSI color codes, or some other way to color text
 	!    * E, I (after complex numbers)
 	!    * done: PI, std::IN/OUT/ERR
-	!  - need an exists() built-in to check files, or some equivalent way to
-	!    check a file post-open. maybe rethink the way syntran immediately
-	!    runtime error aborts if you try to open for reading a file that doesn't
-	!    exist. check other immediate runtime errors too. there's also an idea
-	!    about "file_stat" below
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
 	!  - matrix inverse? link gfortran to mkl?
 	!  - remove AST-walking interpreter. bytecode is better. wait 2 or 3
 	!    releases
-	!    * will probably remove it in 1.6. if that's the plan at the 1.5
-	!      release, update the depreciation warning to specify the planned
-	!      removal release
+	!    * will probably remove it in 1.6
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
@@ -97,12 +103,6 @@ module syntran__core_m
 	!                  at ././src/eval_expr.f90:219
 	!          #6  0xed7311 in __syntran__eval_m_MOD_syntax_eval
 	!
-	!  - maybe add unit test threading at a higher level. i.e. if we can't have
-	!    threads within one syntran exe, maybe add cmd args to specify which
-	!    sets of tests to run, then have a bash script spawning independent
-	!    syntran test runners in parallel as separate exe's
-	!    * not really a need for this currently with bytecode and other
-	!      optimizations. ci/cd takes ~14 minutes
 	!  - migrate ci from ubuntu 24 to 26. rocky should stay on version 9 for the
 	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
 	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet
@@ -160,9 +160,6 @@ module syntran__core_m
 	!          generated/templated code for multiple type combinations.
 	!
 	!    * docs -- see several notes below
-	!    * git(hub) cleanup. no need to delete branches, but rename existing
-	!      branches (except for main and dev) to start with feature/ or
-	!      jeffirwin/, e.g. vec-slice -> feature/vec-slice
 	!  - i like claude's "double_colon_token" name. i should change things like
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - minloc, maxloc, findloc std:: fns
@@ -174,17 +171,16 @@ module syntran__core_m
 	!      in github ubuntu runners as of 2026-06-06
 	!  - built-in syntran update:
 	!    * add checksum verification
-	!    * currently ./syup.sh can do it
+	!    * currently ./utils/syup.sh can do it
 	!    * make this built-in to syntran binary, maybe invoke like
 	!      `syntran --update`.  think carefully. don't want to break this by
 	!      changing the name of the script or arg
 	!    * this would only work on linux, since windows can't overwrite a
 	!      running exe
 	!    * apparently it's possible on windows too.  til:  https://stackoverflow.com/a/459860/4347028
-	!  - enable plugging in to nvim linting.  doesn't seem hard from the way
-	!    that gfortran nvim linting works.  just need to add a cmd arg like
-	!    `--syntax-only` and print errors in 1 line per error, with filename,
-	!    line, and column indices
+	!  - enable plugging in to nvim linting.  `--syntax-only`/`-s` now exists,
+	!    but diagnostics still need a 1-line-per-error format with filename,
+	!    line, and column indices to work with gfortran-style nvim linting
 	!  - appimage?  some kind of binary packaging improvement
 	!    * the current dependence on libquadmath.so (and sometimes
 	!      libgfortran.so) is not ideal, especially considering that rocky is
@@ -198,8 +194,10 @@ module syntran__core_m
 	!    * "Exiting syntran" is a different shade of green than "syntran$"
 	!       prompt
 	!  - add tests that cover interactive interpreter REPL
+	!    * fn and struct tests added
+	!    * interpret() as opposed to eval() actually loops by tokenized
+	!      newlines, just like the real interactive repl
 	!    * added a couple basic tests in main.yml
-	!    * fns should also be covered
 	!    * should also cover options like `-i` (startup include file)
 	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
 	!    etc.
@@ -210,8 +208,6 @@ module syntran__core_m
 	!       size, and then set the result data along with size/rank meta-data
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!    * when? check blame for this comment. can't repro in 1.0.1
-	!  - mention syntran explorer in readme
-	!    * note it may not exist in ~6 months
 	!  - print improvements:
 	!    * hex format printing
 	!    * formatted printf?
@@ -228,7 +224,7 @@ module syntran__core_m
 	!      build date)
 	!    * list sha256 checksums of binaries somewhere
 	!    * doc. autogenerate pdf and/or html from markdown via pandoc or similar
-	!      + see build-doc.sh
+	!      + see utils/build-doc.sh
 	!    * readme?
 	!    * samples?
 	!    * libsyntran.a and fortran sample?
@@ -241,7 +237,8 @@ module syntran__core_m
 	!      tests though.  if anything, add tests, but don't remove coverage
 	!  - type() or typeof() fn to get type name as str?  could be useful for
 	!    debugging, but I don't want to encourage its use for actual program
-	!    logic
+	!    logic. also nameof() to return a variable (or fn or struct) name. c#
+	!    has this
 	!  - complex number type(s)
 	!    * basically required for FFT, which could be a fun example/test. see:
 	!        https://github.com/JeffIrwin/numerical-analysis/blob/7067e5fe7d331f817c5c9f9cf922b44af7a18aa9/src/interp.F90#L337
@@ -471,17 +468,20 @@ contains
 
 !===============================================================================
 
-function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tree)
-
-	! TODO: take state struct instead of separate vars and fns members
-
-	! TODO: take structs arg (like existing fns arg)
+function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	character(len = *) :: str_
 
-	type(vars_t), intent(inout) :: vars
-
-	type(fns_t), intent(inout) :: fns
+	! state%vars, state%fns, state%structs, and state%enums are round-tripped
+	! through the local parser below so they survive from one REPL line to
+	! the next (c.f. eval_dispatch()/syntran_interpret() in syntran.f90).
+	! Struct and enum declarations are otherwise parse-time only -- both
+	! backends skip struct_declaration/enum_declaration nodes (c.f.
+	! eval_control.f90, compile_ctrl.f90) -- so unlike fns there is no flat
+	! array counterpart to rebuild for them.  target is required: fns%get()
+	! and structs%get() return pointers into the dict, and a subobject of a
+	! target dummy is itself a target
+	type(state_t), intent(inout), target :: state
 
 	type(syntax_node_t) :: tree
 
@@ -493,20 +493,16 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	character(len = :), allocatable :: src_filel, fn_name, var_name
 
-	integer :: i, io, dummy, unit_
+	integer :: i, id, slot, unit_, num_fns0, num_structs0, num_enums0
 
 	logical :: allow_continuel, repll
 
 	type(text_context_vector_t) :: contexts
 
-	type(fn_t) :: fn
-	type(fns_t) :: fns0
 	type(value_t) :: var_val
 
 	! This no longer seems to make a difference.  Previously, without `save`,
-	! gfortran crashes when this goes out of scope.  Maybe I need to work on a
-	! manual finalizer to deallocate ternary trees, not just for structs but for
-	! the vars_t trees contained within
+	! gfortran crashes when this goes out of scope.
 	type(parser_t) :: parser
 	!type(parser_t), save :: parser
 
@@ -516,12 +512,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	if (debug > 0) print *, 'syntax_parse'
 	if (debug > 1) print *, 'str_ = ', str_
-
-	!! "exp"
-	!print *, 'key = ', &
-	!	fns%dict%root%split_char, &
-	!	fns%dict%root%mid%split_char, &
-	!	fns%dict%root%mid%mid%split_char
 
 	src_filel = '<stdin>'
 	if (present(src_file)) src_filel = src_file
@@ -537,7 +527,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	contexts = new_context_vector()
 	unit_ = 0
 
-	parser = new_parser(str_, src_filel, contexts, unit_)
+	call new_parser(parser, str_, src_filel, contexts, unit_)
 	!print *, 'units = ', parser%tokens(:)%unit_
 
 	call parser%import_stack%set(src_filel, 0)
@@ -566,100 +556,125 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	!print *, 'moving vars'
 
 	!print *, ''
-	!print *, 'size(vars%vals) = ', size(vars%vals)
+	!print *, 'size(state%vars%vals) = ', size(state%vars%vals)
 
-	!print *, 'allocated 1 = ', allocated(vars%dicts(1)%root)
-	!print *, 'allocated 2 = ', allocated(vars%dicts(2)%root)
-	!print *, 'allocated 3 = ', allocated(vars%dicts(3)%root)
+	!print *, 'allocated 1 = ', allocated(state%vars%dicts(1)%table)
+	!print *, 'allocated 2 = ', allocated(state%vars%dicts(2)%table)
+	!print *, 'allocated 3 = ', allocated(state%vars%dicts(3)%table)
 
-	if (allocated(vars%dicts(1)%root)) then
-	!if (any(allocated(vars%dicts(:)%root))) then
+	if (allocated(state%vars%dicts(1)%table)) then
+	!if (any(allocated(state%vars%dicts(:)%table))) then
 
 		if (allow_continuel) then
 			! Backup existing vars.  Only copy for interactive interpreter.
 			! This logic is slightly redundant as allow_continuel should _only_
 			! be set true for the interactive interpreter with stdin, which is
-			! also the only case where vars%root will be allocated.
+			! also the only case where state%vars%dicts(1)%table will be allocated.
 			! Calling syntran_interpret() on a multi-line string is deprecated,
 			! since syntran_eval() can parse it all in one syntax_parse() call.
 
-			! The root type has an overloaded assignment op, but the vars
-			! type itself does not (and I don't want to expose or encourage
-			! copying)
+			! var_entry_t's val component has an overloaded assignment op,
+			! and so does vars_t itself -- but neither is used here.  A
+			! whole-array `dst = src` of state%vars%dicts(1)%table (or
+			! %vals) hits a gfortran defined-assignment code-gen bug on
+			! older compilers: it shallow-copies the nested value_t%struct(:)
+			! block instead of invoking value_copy() elementwise, so vars0
+			! and parser%vars%dicts(1) (which takes ownership of the
+			! original below via move_alloc) end up sharing -- and later
+			! double-freeing -- the same block.  var_dict_copy()/
+			! value_array_copy() force elementwise scalar assignment instead
+			! (c.f. the identical bug already documented at
+			! syntax_token_copy() in types_copy.f90)
 
 			allocate(vars0%dicts(1))
-			allocate(vars0%dicts(1)%root)
-			vars0%dicts(1)%root = vars%dicts(1)%root
+			call var_dict_copy(vars0%dicts(1), state%vars%dicts(1))
 
-			!print *, 'vars%vals = '
-			!do i = 1, size(vars%vals)
-			!	print *, vars%vals(i)%to_str()
+			!print *, 'state%vars%vals = '
+			!do i = 1, size(state%vars%vals)
+			!	print *, state%vars%vals(i)%to_str()
 			!end do
 
 			! Backup vals array and set num_vars in parser object
-			vars0%vals = vars%vals
-			parser%num_vars = size(vars%vals)
+			call value_array_copy(vars0%vals, state%vars%vals)
+			parser%num_vars = size(state%vars%vals)
 
 		end if
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished
-		call move_alloc(vars%dicts(1)%root, parser%vars%dicts(1)%root)
-		call move_alloc(vars%vals         , parser%vars%vals)
+		call move_alloc(state%vars%dicts(1)%table, parser%vars%dicts(1)%table)
+		parser%vars%dicts(1)%capacity = state%vars%dicts(1)%capacity
+		parser%vars%dicts(1)%count    = state%vars%dicts(1)%count
+		state%vars%dicts(1)%capacity = 0
+		state%vars%dicts(1)%count    = 0
+		call move_alloc(state%vars%vals   , parser%vars%vals)
 
 	!else if (parser%num_vars > 0) then
-	!else if (size(vars%vals) > 0) then
-	!else if (size(vars%vals) > 0 .and. allow_continuel) then
-	else if (allocated(vars%vals) .and. allow_continuel) then
-		if (size(vars%vals) > 0) then
+	!else if (size(state%vars%vals) > 0) then
+	!else if (size(state%vars%vals) > 0 .and. allow_continuel) then
+	else if (allocated(state%vars%vals) .and. allow_continuel) then
+		if (size(state%vars%vals) > 0) then
 
 		! This could probably be refactored but it breaks my brain to think this
 		! through and test enough permutations in interactive interpreter
 
-		!print *, 'backing up vars%vals to vars0%vals'
-		vars0%vals = vars%vals
-		parser%num_vars = size(vars%vals)
+		!print *, 'backing up state%vars%vals to vars0%vals'
+		call value_array_copy(vars0%vals, state%vars%vals)
+		parser%num_vars = size(state%vars%vals)
 		!print *, '1'
-		call move_alloc(vars%vals         , parser%vars%vals)
+		call move_alloc(state%vars%vals   , parser%vars%vals)
 		!print *, '2'
 
 		end if
 	end if
 
 	!print *, 'moving fns'
-	if (allocated(fns%dict%root)) then
+	num_fns0 = 0
+	if (allocated(state%fns%fns)) num_fns0 = size(state%fns%fns)
 
-		allocate(fns0%dict%root)
-		fns0%dict%root = fns%dict%root
+	if (allocated(state%fns%table)) then
 
-		!print *, 'fns%fns = '
-		!do i = 1, size(fns%fns)
-		!	print *, fns%fns(i)%to_str()
-		!end do
-
-		!! With intrinsic fns, this is always allocated
-
-		!if (allocated(fns%fns)) then
-			!print *, 'copy fns'
-
-			!fns0%fns = fns%fns
-			allocate(fns0%fns( size(fns%fns) ))
-			do i = 1, size(fns%fns)
-				fns0%fns(i) = fns%fns(i)
-			end do
-
-			parser%num_fns = size(fns%fns)
-		!else
-		!	parser%num_fns = 0
-		!end if
-
-		!print *, 'parser%num_fns = ', parser%num_fns
+		parser%num_fns = num_fns0
 
 		! Only the 1st scope level matters from interpreter.  It doesn't
-		! evaluate until the block is finished
-		call move_alloc(fns%dict%root, parser%fns%dict%root)
-		if (allocated(fns%fns)) call move_alloc(fns%fns          , parser%fns%fns)
+		! evaluate until the block is finished.  Note state%fns%fns is left
+		! alone here -- the parser never reads or writes the flat array, only
+		! the hash table (c.f. eval_fn.f90, the only reader of fns%fns), so
+		! there is no need to move it in and deep-copy it back out again
+		call move_alloc(state%fns%table, parser%fns%table)
+		parser%fns%capacity = state%fns%capacity
+		parser%fns%count    = state%fns%count
+		state%fns%capacity = 0
+		state%fns%count    = 0
 
+	end if
+
+	! Structs and enums are parse-time-only -- both backends skip
+	! struct_declaration/enum_declaration nodes (c.f. eval_control.f90 and
+	! compile_ctrl.f90) -- but the REPL needs them to survive from one line
+	! to the next, so move the tables in and back out just like fns above.
+	! Unlike fns there is no flat array counterpart, so there is nothing
+	! equivalent to state%fns%fns to leave alone
+	num_structs0 = state%structs%num_structs
+	num_enums0   = state%enums%num_enums
+
+	parser%num_structs = num_structs0
+	parser%num_enums   = num_enums0
+
+	if (allocated(state%structs%table)) then
+		call move_alloc(state%structs%table, parser%structs%table)
+		parser%structs%capacity = state%structs%capacity
+		parser%structs%count    = state%structs%count
+		state%structs%capacity = 0
+		state%structs%count    = 0
+	end if
+
+	if (allocated(state%enums%table)) then
+		call move_alloc(state%enums%table, parser%enums%table)
+		parser%enums%capacity = state%enums%capacity
+		parser%enums%count    = state%enums%count
+		state%enums%capacity = 0
+		state%enums%count    = 0
 	end if
 
 	!print *, "allocated parser%vars%dicts = ", allocated( parser%vars%dicts )
@@ -667,7 +682,7 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	! Pre-seed std:: constants into a fresh vars dict.
 	! REPL: dict was moved in above and already contains std:: constants -- skip.
-	if (.not. allocated(parser%vars%dicts(1)%root)) then
+	if (.not. allocated(parser%vars%dicts(1)%table)) then
 		call declare_intr_vars(parser%vars)
 		parser%num_vars = NUM_INTR_VARS
 	end if
@@ -675,11 +690,6 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 	!*******************************
 	! Parse the tokens
 	call parser%parse_unit(tree)
-
-	!print *, ""
-	!print *, "in core.f90:"
-	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
-	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
 
 	!*******************************
 
@@ -699,27 +709,55 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 		! parsing the current stdin line from its start again.
 
 		if (allocated(vars0%dicts)) then
-			if (allocated(vars0%dicts(1)%root)) then
-				call move_alloc(vars0%dicts(1)%root, vars%dicts(1)%root)
+			if (allocated(vars0%dicts(1)%table)) then
+				call move_alloc(vars0%dicts(1)%table, state%vars%dicts(1)%table)
+				state%vars%dicts(1)%capacity = vars0%dicts(1)%capacity
+				state%vars%dicts(1)%count    = vars0%dicts(1)%count
 			end if
 		end if
 
 		if (allocated(vars0%vals)) then
-			!print *, 'restoring vars%vals from vars0%vals'
-			call move_alloc(vars0%vals         , vars%vals)
+			!print *, 'restoring state%vars%vals from vars0%vals'
+			call move_alloc(vars0%vals         , state%vars%vals)
 		end if
 
-		if (allocated(fns0%dict%root)) then
-			call move_alloc(fns0%dict%root, fns%dict%root)
-			call move_alloc(fns0%fns          , fns%fns)
+		if (allocated(parser%fns%table)) then
+			call move_alloc(parser%fns%table, state%fns%table)
+			state%fns%capacity = parser%fns%capacity
+			state%fns%count    = parser%fns%count
+			call state%fns%rollback(num_fns0)
 		end if
+
+		! Undo any struct/enum declarations parsed from this partial line --
+		! they will be re-declared (or corrected) when the accumulated line
+		! is re-parsed from scratch next time, c.f. the fns rollback above
+		if (allocated(parser%structs%table)) then
+			call move_alloc(parser%structs%table, state%structs%table)
+			state%structs%capacity = parser%structs%capacity
+			state%structs%count    = parser%structs%count
+			call state%structs%rollback(num_structs0)
+		end if
+
+		if (allocated(parser%enums%table)) then
+			call move_alloc(parser%enums%table, state%enums%table)
+			state%enums%capacity = parser%enums%capacity
+			state%enums%count    = parser%enums%count
+			call state%enums%rollback(num_enums0)
+		end if
+
+		! vars0/parser were move_alloc'd from above, so this is normally a
+		! cheap no-op -- but don't trust that to always be true and leave
+		! whatever's left to implicit deep deallocation.  c.f. the identical
+		! (and load-bearing) call at the bottom of this function
+		call vars_destroy(vars0)
+		call parser_destroy(parser)
 
 		return
 
 	end if
 
 	if (debug > 1) print *, 'matching eof'
-	token  = parser%match(eof_token)
+	call parser%match(eof_token, token)
 
 	tree%diagnostics = parser%diagnostics
 
@@ -727,82 +765,112 @@ function syntax_parse(str_, vars, fns, src_file, allow_continue, repl) result(tr
 
 	! Move back.  It's possible that vars were empty before this call but not
 	! anymore
-	if (allocated(parser%vars%dicts(1)%root)) then
+	if (allocated(parser%vars%dicts(1)%table)) then
 	!if (parser%num_vars > 0) then
-		call move_alloc(parser%vars%dicts(1)%root, vars%dicts(1)%root)
+		call move_alloc(parser%vars%dicts(1)%table, state%vars%dicts(1)%table)
+		state%vars%dicts(1)%capacity = parser%vars%dicts(1)%capacity
+		state%vars%dicts(1)%count    = parser%vars%dicts(1)%count
 	end if
 
 	! TODO: if num_fns instead?
-	if (allocated(parser%fns%dict%root)) then
-		call move_alloc(parser%fns%dict%root, fns%dict%root)
-
-		!! I tried adding this while working on recursive fn lookup but it's not
-		!! the way
-		!call move_alloc(parser%fns%fns          , fns%fns)
-
+	if (allocated(parser%fns%table)) then
+		call move_alloc(parser%fns%table, state%fns%table)
+		state%fns%capacity = parser%fns%capacity
+		state%fns%count    = parser%fns%count
 	end if
+
+	if (allocated(parser%structs%table)) then
+		call move_alloc(parser%structs%table, state%structs%table)
+		state%structs%capacity = parser%structs%capacity
+		state%structs%count    = parser%structs%count
+	end if
+	state%structs%num_structs = parser%num_structs
+
+	if (allocated(parser%enums%table)) then
+		call move_alloc(parser%enums%table, state%enums%table)
+		state%enums%capacity = parser%enums%capacity
+		state%enums%count    = parser%enums%count
+	end if
+	state%enums%num_enums = parser%num_enums
 
 	! When parsing is finished, we are done with the variable dictionary
 	! parser%vars%dicts.  Allocate a flat array for efficient evaluation without
 	! dictionary lookups.  Indices in the array are already saved in each node's
 	! id_index member
-	if (allocated(vars%vals)) deallocate(vars%vals)
-	allocate(vars%vals( parser%num_vars ))
+	call value_array_destroy(state%vars%vals)
+	allocate(state%vars%vals( parser%num_vars ))
 
 	if (allocated(vars0%vals)) then
-		!print *, 'restoring vars%vals'
+		!print *, 'restoring state%vars%vals'
 
-		!vars%vals( 1: size(vars0%vals) ) = vars0%vals
+		! Can't use value_array_copy() here: state%vars%vals was just
+		! allocated above to parser%num_vars (>= size(vars0%vals), since new
+		! vars may have been declared this line), and value_array_copy()
+		! would reallocate+truncate it to size(vars0%vals).  Element-by-
+		! element scalar assignment into the existing array is exactly what
+		! is needed, and (being scalar) already goes through value_copy()
+		! safely -- unlike the whole-array `state%vars%vals = vars0%vals`
+		! commented out below, which hits the same gfortran bug documented
+		! at the vars0 backup above
+		!state%vars%vals( 1: size(vars0%vals) ) = vars0%vals
 		do i = 1, size(vars0%vals)
-			vars%vals(i) = vars0%vals(i)
+			state%vars%vals(i) = vars0%vals(i)
 		end do
 
-		!vars%vals = vars0%vals
-		!vars = vars0
+		!state%vars%vals = vars0%vals
+		!state%vars = vars0
 	end if
+
+	! vars0 was only ever a read-from backup (the loop above copies out of
+	! it, never moves), so it still holds a full deep copy of the pre-line
+	! vars -- including any struct-typed values -- right up to here.  This is
+	! the single hottest site in this function: it runs on every REPL line
+	! (any allow_continue caller) whether or not a struct is even involved.
+	! Explicitly tear it down rather than let it fall out of scope and rely
+	! on the compiler's implicit deep deallocation of a vars_t holding
+	! nested-allocatable value_t content -- see vars_destroy() and the
+	! doctrine documented on value_array_destroy() (value.f90)
+	call vars_destroy(vars0)
 
 	! Always set std:: constant runtime values -- idempotent, safe after REPL restore.
-	if (parser%num_vars >= NUM_INTR_VARS) call populate_intr_vars(vars%vals)
+	if (parser%num_vars >= NUM_INTR_VARS) call populate_intr_vars(state%vars%vals)
 
 	!print *, 'parser%num_fns = ', parser%num_fns
-	if (allocated(fns%fns)) deallocate(fns%fns)
-	allocate(fns%fns( parser%num_fns ))
 
-	if (allocated(fns0%fns)) then
+	! Grow (not rebuild) the flat fn array in place -- fns%fns was never
+	! touched above, so any previously-declared fns are already there
+	call state%fns%grow_flat(parser%num_fns)
 
-		!fns%fns( 1: size(fns0%fns) ) = fns0%fns
-		do i = 1, size(fns0%fns)
-			fns%fns(i) = fns0%fns(i)
-		end do
-
-	end if
-
-	! Save flat fn array `fns%fns` with a one-time dict lookup.  There's not any
-	! actual fns%fns%node info in what is set above
-
-	!print *, "num intr fns = ", fns%num_intr_fns
+	! Save each newly-declared fn into the flat array at its real id_index
+	! (assigned when it was parsed, c.f. parse_fn.f90) with a one-time dict
+	! lookup.  There's not any actual fns%fns%node info in what is set above
 	do i = 1, parser%fn_names%len_
 		fn_name = parser%fn_names%v(i)%s
 		!print *, "fn name = ", fn_name
 
-		! User-defined fns are in the table after all of the intrinsic fns, so
-		! shift its index by num_intr_fns
-		fn = fns%search(fn_name, dummy, io)
-		fns%fns( fns%num_intr_fns + i ) = fn
+		slot = state%fns%find(fn_name)
+		if (slot == 0) cycle
+
+		! grow_flat(parser%num_fns) above is expected to cover every id_index
+		! reachable here, but don't let that assumption become an out-of-bounds
+		! heap write if it ever stops holding (say a parse path that assigns an
+		! id without bumping parser%num_fns).  grow_flat() is a no-op when the
+		! array is already large enough, and it only touches %fns, so the
+		! pointer returned by get() -- which aims into %table -- stays valid
+		id = state%fns%id_at(slot)
+		if (id < 1) cycle
+		if (id > size(state%fns%fns)) call state%fns%grow_flat(id)
+
+		state%fns%fns(id) = state%fns%get(slot)
 
 	end do
 	!print *, "done looking up fns"
 
-	!if (allocated(parser%structs)) then
-	!	! TODO: manually finalize recursively?
-	!	deallocate(parser%structs)
-	!end if
-	!print *, "size = ", size(parser%structs%structs)
-	!print *, "allocated = ", allocated(parser%structs%structs)
-	!print *, "size = ", size(parser%structs%dicts)
-	!print *, "allocated = ", allocated(parser%structs%dict%root)
-	!deallocate(parser%structs%dict%root)
-	!call struct_ternary_tree_final(parser%structs%dict%root)
+	! Whatever parser still owns at this point (deeper var scopes, parser%locs,
+	! and any struct/enum/fn table content not already move_alloc'd out to
+	! state above) is about to fall out of scope with parser itself -- tear
+	! it down explicitly first.  See parser_destroy()
+	call parser_destroy(parser)
 
 	if (debug > 0) print *, 'done syntax_parse'
 

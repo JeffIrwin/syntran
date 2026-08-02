@@ -1,0 +1,11 @@
+// Storing a fn in a `let` and calling through it
+
+fn square(n: i32): i32
+{
+	return n * n;
+}
+
+let f = square;
+let g = f;  // fn pointers can be copied around like any other value
+
+return f(6) + g(7);  // 36 + 49

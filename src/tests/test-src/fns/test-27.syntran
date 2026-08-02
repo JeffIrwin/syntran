@@ -1,0 +1,20 @@
+// Fn pointer with no params and a void return (omit the ": rettype" suffix
+// entirely for a void-returning fn-pointer type, same as for a plain fn decl)
+
+let global = 0;
+
+fn bump()
+{
+	global = global + 1;
+}
+
+fn call_it(f: fn())
+{
+	f();
+}
+
+call_it(bump);
+call_it(bump);
+call_it(bump);
+
+return global;

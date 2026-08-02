@@ -1,0 +1,12 @@
+// E90: fn-ptr-struct-member
+// Fn pointers cannot be struct members
+
+fn dbl(n: i32): i32
+{
+	return 2 * n;
+}
+
+struct S
+{
+	f: fn(i32): i32
+}

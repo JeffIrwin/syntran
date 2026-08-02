@@ -1,0 +1,57 @@
+fn countlines(filename: str): i32
+{
+	let fi = open(filename, "r");
+	let nlines = 0;
+	while not eof(fi)
+	{
+		let str = readln(fi);
+		nlines += 1;
+	}
+	nlines -= 1;
+	close(fi);
+	return nlines;
+}
+
+fn main(): bool
+{
+	// The motivating guard-before-open / guard-after-open program: write a
+	// few lines, then read them back through std::try_open() and file
+	// handle members instead of open()/eof()
+
+	let filename = "build/test-12.txt";
+
+	let fo = open(filename, "w");
+	writeln(fo, "line a");
+	writeln(fo, "line b");
+	writeln(fo, "line c");
+	close(fo);
+
+	let n = countlines(filename);
+	let lines = [""; n];
+
+	let f = std::try_open(filename, "r");
+
+	let ok = false;
+	if f.is_open
+	{
+		let i = 0;
+		while not f.eof
+		{
+			let l = readln(f);
+			if (i < n) lines[i] = l;
+			i += 1;
+		}
+		close(f);
+		ok = true;
+	}
+
+	let name_ok = f.name == filename;
+	let closed_ok = not f.is_open;
+
+	return ok and closed_ok and name_ok and n == 3 and
+		lines[0] == "line a" and
+		lines[1] == "line b" and
+		lines[2] == "line c";
+}
+
+return main();

@@ -62,6 +62,13 @@ s[3:]   // "lo"
 s[:3]   // "hel"
 ```
 
+Strings support `==`, `!=`, `<`, `<=`, `>`, and `>=`.  Ordering is
+lexicographic (dictionary order) and length-aware: two strings of different
+length are never padded before comparing, so a string that is a strict
+prefix of another always sorts before it, e.g. `"a" < "a "` and
+`"ab" < "abc"` are both `true`.  All six comparisons also work elementwise on
+string arrays, e.g. `["a", "b"] < ["b", "b"]` is `[true, false]`.
+
 <!-- # Variadic and polymorphic functions -->
 # Special functions
 
@@ -153,6 +160,22 @@ fn eof(file_handle: file): bool
 Has the end of file (EOF) been reached yet while reading from `file_handle`, or from stdin if called with no argument?  The return value is `false` until and including the last line is read and does not become `true` until reading *past* the EOF is attempted, for which [`readln()`](#readln) will return an empty string
 
 Related functions: [`close`](#close), [`readln`](#readln), [`open`](#open)
+
+## `exists`
+```rust
+fn exists(path: str): bool
+```
+
+Return whether a file exists at `path`.  Relative paths are resolved the same
+way [`open`](#open) resolves them.  Must be called with the `std::` prefix,
+e.g. `std::exists("data.txt")`.
+
+Whether a *directory* counts as existing is compiler-dependent and should not
+be relied on.  A `true` result is also not a guarantee that a subsequent
+`open()` will succeed -- the file could be removed or become unreadable in
+the interim -- use [`try_open`](#try_open) if you need to recover from that.
+
+Related functions: [`open`](#open), [`try_open`](#try_open)
 
 ## `exit`
 ```rust
@@ -272,12 +295,30 @@ Related functions: [`max`](#max)
 
 ## `open`
 ```rust
-fn open(filename: str): file
+fn open(filename: str, mode: str): file
 ```
 
-Open a `file` handle named `filename`
+Open a `file` handle named `filename`.  The `mode` string must be either `"r"`
+(read) or `"w"` (write), never both.  It is a runtime error if `filename`
+cannot be opened, e.g. if it does not exist in read mode -- guard with
+[`exists`](#exists) first, or use [`try_open`](#try_open) to get a closed
+handle back instead of a runtime error.
 
-Related functions: [`close`](#close), [`writeln`](#writeln)
+Related functions: [`close`](#close), [`writeln`](#writeln), [`exists`](#exists), [`try_open`](#try_open)
+
+## File handle members
+
+A `file` handle returned by [`open`](#open) or [`try_open`](#try_open) has a
+fixed set of read-only members, accessed with `.`:
+
+| Member | Type | Meaning |
+|--------|------|---------|
+| `f.is_open` | `bool` | Whether the handle is currently open. `false` for a handle returned by a failed `try_open()`, or after [`close`](#close). |
+| `f.eof` | `bool` | Same value [`eof(f)`](#eof) would return. For `std::IN`, this tracks the same underlying state as no-arg `eof()`/`readln()`, so mixing the two forms stays consistent. |
+| `f.name` | `str` | The filename exactly as passed to `open()`/`try_open()` -- *not* resolved against the script directory, so it may differ from the path in a runtime error message under `--cd`. |
+
+These members cannot be assigned to (`f.eof = true;` is a compile-time
+error); they only reflect the handle's current state.
 
 ## `parse_f32`
 ```rust
@@ -380,6 +421,36 @@ fn sum(array: [any_num; any_rank]): any_num
 ```
 
 Return the sum of all elements in an array.
+
+## `try_open`
+```rust
+fn try_open(filename: str, mode: str): file
+```
+
+A non-throwing [`open`](#open).  On failure it returns a closed handle
+(`f.is_open == false`) instead of raising a runtime error, so it's the tool
+for recovering from an open failure rather than just guarding against one
+with [`exists`](#exists) beforehand.  A malformed `mode` string is still a
+runtime error, since that's a program bug rather than an I/O failure.  Must
+be called with the `std::` prefix, e.g. `std::try_open("data.txt", "r")`.
+
+```rust
+let f = std::try_open("data.txt", "r");
+if f.is_open
+{
+    while not f.eof { println(readln(f)); }
+    close(f);
+}
+else
+{
+    println("could not open data.txt");
+}
+```
+
+See also [File handle members](#file-handle-members) for `f.is_open`,
+`f.eof`, and `f.name`.
+
+Related functions: [`open`](#open), [`exists`](#exists), [`close`](#close)
 
 ## `writeln`
 ```rust

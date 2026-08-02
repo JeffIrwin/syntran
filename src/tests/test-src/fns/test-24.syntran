@@ -1,0 +1,13 @@
+// Passing a fn to a fn and calling it (basic callback)
+
+fn dbl(n: i32): i32
+{
+	return 2 * n;
+}
+
+fn apply(f: fn(i32): i32, x: i32): i32
+{
+	return f(x);
+}
+
+return apply(dbl, 21);

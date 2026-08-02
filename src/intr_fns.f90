@@ -78,7 +78,7 @@ end function is_overloaded_intr
 
 !===============================================================================
 
-recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr_type_result)
+recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr_type_result, arr_type_src)
 
 	! Resolve special overloaded intrinsic fns
 
@@ -97,12 +97,19 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 	logical, intent(out), optional :: has_arr_type
 	integer, intent(out), optional :: arr_type_result
 
+	! Index (1-based) into args of the argument whose element type the result
+	! adopts, so parse_fn_call can also copy that argument's struct/enum
+	! identity (struct_name/struct_cookie/enum_name/enum_cookie), which
+	! %array%type alone doesn't capture. 0 if the result has no such source.
+	integer, intent(out), optional :: arr_type_src
+
 	!********
 
 	integer :: type_, arr_type
 
 	has_rank = .false.
 	if (present(has_arr_type)) has_arr_type = .false.
+	if (present(arr_type_src)) arr_type_src = 0
 	select case (fn_call%identifier%text)
 	case ("exp")
 
@@ -911,6 +918,7 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 					if (args%len_ >= 1 .and. args%v(1)%val%type == array_type) then
 						has_arr_type = .true.
 						arr_type_result = args%v(1)%val%array%type
+						if (present(arr_type_src)) arr_type_src = 1
 					end if
 				end if
 			end if
@@ -933,6 +941,7 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 					if (args%len_ >= 1 .and. args%v(1)%val%type == array_type) then
 						has_arr_type = .true.
 						arr_type_result = args%v(1)%val%array%type
+						if (present(arr_type_src)) arr_type_src = 1
 					end if
 				end if
 			end if

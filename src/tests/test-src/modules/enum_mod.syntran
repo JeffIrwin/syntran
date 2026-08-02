@@ -1,0 +1,19 @@
+// Module that exports an enum definition
+
+enum Suit
+{
+	Hearts,
+	Diamonds,
+	Clubs,
+	Spades,
+}
+
+fn is_red(s: Suit): bool
+{
+	return s == Suit.Hearts or s == Suit.Diamonds;
+}
+
+fn full_deck(): [Suit; :]
+{
+	return [Suit.Hearts, Suit.Diamonds, Suit.Clubs, Suit.Spades];
+}

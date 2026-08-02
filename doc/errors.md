@@ -274,7 +274,7 @@ A function argument's type does not match the corresponding parameter's declared
 
 ### E43 -- bad-arg-val
 
-A `&` reference parameter was given a plain value argument instead of a reference.
+A mutable `&` reference parameter was given a plain value argument instead of a reference. This does not apply to `&const` parameters: a const reference is read-only, so it accepts plain value syntax (a literal, a temporary, or a bare variable name, which auto-borrows without a copy).
 
 [Example](../src/tests/test-src/errors/E43-bad-arg-val.syntran)
 
@@ -503,6 +503,126 @@ A `use module::*` glob import was combined with an alias, which isn't allowed.
 
 The top-level source file given to the interpreter could not be found.
 
+### E82 -- immutable-var
+
+Assignment to a `std::` constant (e.g. `std::PI`), which is not allowed.
+
+[Example](../src/tests/test-src/errors/E82-immutable-var.syntran)
+
+### E83 -- const-assign
+
+Assignment to a variable declared `const`.
+
+[Example](../src/tests/test-src/errors/E83-const-assign.syntran)
+
+### E84 -- mutable-method-on-temp
+
+A mutable (non-`const`) method was called on a temporary struct value (e.g. a function's return value), so any mutation would be silently discarded.
+
+[Example](../src/tests/test-src/errors/E84-mutable-method-on-temp.syntran)
+
+### E85 -- member-method-clash
+
+A struct method has the same name as one of the struct's members. Names must be unique across a struct's fields and methods so that `s.foo` is unambiguous.
+
+[Example](../src/tests/test-src/errors/E85-member-method-clash.syntran)
+
+### E86 -- module-return
+
+`return` is not allowed at the top level of an imported module. A top-level `return` in a main-program script is still allowed and sets the program's result value.
+
+[Example](../src/tests/test-src/errors/E86-module-return.syntran)
+
+### E87 -- fn-ptr-unsupported
+
+A function pointer (`fn(...)`-typed value) cannot be taken to an intrinsic function, a struct method, or a user-defined function with any `&`-reference parameter. A fn-pointer signature has no way to express reference-ness, so allowing this would silently drop reference semantics on an indirect call.
+
+[Example](../src/tests/test-src/errors/E87-fn-ptr-unsupported.syntran)
+
+### E88 -- not-callable
+
+A variable that is not a fn-pointer value (`fn(...)` type) was called like a function, e.g. `x(1)` where `x` is an `i32`.
+
+[Example](../src/tests/test-src/errors/E88-not-callable.syntran)
+
+### E89 -- fn-ptr-array
+
+Arrays of fn pointers (e.g. `[dbl, dbl]` where `dbl` is a fn pointer) are not supported. A fn pointer can still be stored in a struct member.
+
+[Example](../src/tests/test-src/errors/E89-fn-ptr-array.syntran)
+
+### E90 -- fn-ptr-struct-member
+
+Fn pointers cannot be struct members.
+
+[Example](../src/tests/test-src/errors/E90-fn-ptr-struct-member.syntran)
+
+### E91 -- void-arg
+
+A function call that returns void (no return value) was passed as an argument to another function call, e.g. `println(f())` where `f` has no return value.
+
+[Example](../src/tests/test-src/errors/E91-void-arg.syntran)
+
+### E92 -- redeclare-enum
+
+An enum was declared twice.
+
+[Example](../src/tests/test-src/errors/E92-redeclare-enum.syntran)
+
+### E93 -- redeclare-variant
+
+A variant was declared twice in the same enum.
+
+[Example](../src/tests/test-src/errors/E93-redeclare-variant.syntran)
+
+### E94 -- unknown-variant
+
+A dot expression (`EnumName.Variant`) referenced a variant name that doesn't exist on the enum.  May include a "did you mean" suggestion.
+
+[Example](../src/tests/test-src/errors/E94-unknown-variant.syntran)
+
+### E95 -- duplicate-enum-value
+
+Two variants in the same enum share a backing value, and at least one of them got it from auto-increment rather than an explicit `= <intlit>`.  Explicit-explicit aliases (e.g. two variants both written as `= 10`) are allowed; any collision involving an auto-incremented value is always accidental and is a hard error.
+
+[Example](../src/tests/test-src/errors/E95-duplicate-enum-value.syntran)
+
+### E96 -- enum-cast-range
+
+A reverse cast `EnumName(ordinal)` was given a constant int literal `ordinal` that doesn't match any of the enum's variant values.  A non-constant ordinal that turns out to be out of range at runtime is R32 instead.
+
+[Example](../src/tests/test-src/errors/E96-enum-cast-range.syntran)
+
+### E97 -- enum-index
+
+A bare enum type name (which acts as an array of all its variants in a `for` loop or as an argument to `size()`/`str()`/`println()`) was subscripted, e.g. `Suit[0]`.  This is rejected because positional indexing would disagree with the by-value reverse cast `Suit(0)` whenever any variant has an explicit value -- use `EnumName(ordinal)` instead.
+
+[Example](../src/tests/test-src/errors/E97-enum-index.syntran)
+
+### E98 -- var-type-clash
+
+A variable's name clashes with an already-declared enum or struct type name.  A bare enum name is a special form (see E99) and a bare struct name followed by `{` is ambiguous with a block, so a variable can never share a name with a type -- either declaration order triggers this error, and it is checked at every variable-binding site (`let`, `const`, `for` iterators, and fn/method parameters).
+
+[Example](../src/tests/test-src/errors/E98-var-type-clash.syntran)
+
+### E99 -- enum-name-value
+
+A bare enum type name (e.g. `Suit`) was used as a value -- bound with `let`/`const`, assigned, returned, passed to a user fn or non-allowlisted intrinsic, or stored in an array/struct literal.  A bare enum name is a special form, not a value: it is only valid as a `for` loop's iterable or as an argument to `size()`, `str()`, `println()`, or `writeln()`.  Write out the variants explicitly (e.g. `[Suit.Hearts, Suit.Diamonds, ...]`) wherever an actual array value is needed.
+
+[Example](../src/tests/test-src/errors/E99-enum-name-value.syntran)
+
+### E100 -- bad-file-member
+
+A dot member access on a `file` handle named something other than `is_open`, `eof`, or `name`.
+
+[Example](../src/tests/test-src/errors/E100-bad-file-member.syntran)
+
+### E101 -- readonly-file-member
+
+A `file` handle's members are read-only; they can't be used as an assignment target.
+
+[Example](../src/tests/test-src/errors/E101-readonly-file-member.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -668,6 +788,22 @@ A scope was popped when the variable-dictionary scope stack was already empty (u
 
 A struct lookup by name failed for a value already confirmed to be that struct type.
 
+### I39 -- convert-f32-arr
+
+`to_f32_array()` was asked to convert an array with an unsupported element type to f32.
+
+### I40 -- convert-f64-arr
+
+`to_f64_array()` was asked to convert an array with an unsupported element type to f64.
+
+### I41 -- transpose-array-type
+
+`std::transpose()` hit an array element type with no permutation implemented.
+
+### I42 -- file-member
+
+A file handle member read or write reached the struct-array code path.  Unreachable: file handle members are read-only (see E100/E101) and never allocate `%struct(:)`.
+
 ## Runtime errors
 
 ### R1 -- matmul-dim
@@ -823,6 +959,30 @@ An array range literal's (non-loop) float step (`a:step:b`) evaluated to 0.0.
 An array slice subscript's step (`a[::s]`) evaluated to 0.
 
 [Example](../src/tests/test-src/errors/R27-subscript-step-zero.syntran)
+
+### R28 -- close-standard
+
+`close()` was called on a standard file handle (`std::IN`, `std::OUT`, or `std::ERR`), which isn't allowed.
+
+[Example](../src/tests/test-src/errors/R28-close-standard.syntran)
+
+### R29 -- getenv-unset
+
+`std::getenv()` was given a name that isn't set in the environment.
+
+[Example](../src/tests/test-src/errors/R29-getenv-unset.syntran)
+
+### R30 -- writeln-fail
+
+`writeln()` failed writing to an open file (see the accompanying `iostat`).
+
+### R31 -- close-fail
+
+`close()` failed to close an open file (see the accompanying `iostat`).
+
+### R32 -- enum-cast-range
+
+A reverse cast `EnumName(ordinal)` was given an ordinal (not a constant literal, so not caught at parse time as E96) that doesn't match any of the enum's variant values.
 
 ## Warnings
 

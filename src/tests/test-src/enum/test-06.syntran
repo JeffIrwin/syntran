@@ -1,0 +1,48 @@
+// Negative explicit enum values: `A = -1`, auto-increment continuing from a
+// negative value, equality/aliasing on negative values, arrays, and the
+// reverse cast with a negative ordinal
+
+enum Temp
+{
+	Below = -1,
+	Freezing,
+	Above,
+}
+
+let ok1 = i32(Temp.Below) == -1;
+let ok2 = i32(Temp.Freezing) == 0;
+let ok3 = i32(Temp.Above) == 1;
+
+// Auto-increment resumes from a negative value across multiple variants
+enum E
+{
+	A = -5,
+	B,
+	C,
+}
+let ok4 = i32(E.C) == -3;
+
+// Two variants explicitly pinned to the same negative value are an
+// intentional alias, not a duplicate-value error
+enum F
+{
+	X = -1,
+	Y = -1,
+}
+let ok5 = F.X == F.Y;
+
+// str() formats by variant name, independent of the backing value
+let ok6 = str(Temp.Below) == "Temp.Below";
+
+// Array of enums with negative values
+let temps = [Temp.Below, Temp.Freezing, Temp.Above];
+let ok7 = i32(temps[0]) == -1;
+
+// Reverse cast with a negative ordinal (runtime path, since a negated
+// literal isn't a constant literal_expr at parse time)
+let ok8 = Temp(-1) == Temp.Below;
+
+let x = -1;
+let ok9 = Temp(x) == Temp.Below;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8 and ok9;

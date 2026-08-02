@@ -1,0 +1,9 @@
+// E91: void-arg
+// Passing a void (no return value) function call as a function argument
+
+fn f()
+{
+	let x = 1;
+}
+
+println(f());

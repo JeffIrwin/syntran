@@ -11,7 +11,9 @@ contains
 
 !===============================================================================
 
-module function new_token(kind, pos, text, val) result(token)
+module subroutine new_token(token, kind, pos, text, val)
+
+	type(syntax_token_t), intent(out) :: token
 
 	integer :: kind, pos
 
@@ -19,15 +21,13 @@ module function new_token(kind, pos, text, val) result(token)
 
 	type(value_t), optional :: val
 
-	type(syntax_token_t) :: token
-
 	token%kind = kind
 	token%pos  = pos
 	token%text = text
 
 	if (present(val)) token%val  = val
 
-end function new_token
+end subroutine new_token
 
 !===============================================================================
 

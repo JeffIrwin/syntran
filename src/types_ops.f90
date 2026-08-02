@@ -160,17 +160,20 @@ end subroutine log_diagnostics
 
 !===============================================================================
 
-module integer function lookup_type(name, structs, struct) result(type)
+module integer function lookup_type(name, structs, enums, cookie) result(type)
 
 	character(len = *), intent(in) :: name
 
-	type(structs_t), intent(in) :: structs
+	type(structs_t), intent(in), target :: structs
+	type(enums_t), intent(in), target :: enums
 
-	type(struct_t), intent(out) :: struct
+	character(len = :), allocatable, intent(out), optional :: cookie
 
 	!********
 
-	integer :: io, struct_id
+	integer :: struct_id, enum_id
+	type(struct_t), pointer :: struct_ptr
+	type(enum_t), pointer :: enum_ptr
 
 	! Immo also has an "any" type.  Should I allow that?
 
@@ -193,16 +196,36 @@ module integer function lookup_type(name, structs, struct) result(type)
 
 		case default
 
-			! TODO: this should be able to use %exists instead of %search,
-			! possible minor perf boost
-			call structs%search(name, struct_id, io, struct)
-			!print *, "struct search io = ", io
+			if (present(cookie)) then
+				! Cookie is requested, so we need the actual struct_t/enum_t
+				! pointer
+				struct_id = structs%find(name)
 
-			if (io == 0) then
-				type = struct_type
-				!print *, "struct num vars = ", struct%num_vars
+				if (struct_id > 0) then
+					type = struct_type
+					struct_ptr => structs%get(struct_id)
+					cookie = struct_ptr%cookie
+					!print *, "struct num vars = ", struct_ptr%num_vars
+				else
+					enum_id = enums%find(name)
+					if (enum_id > 0) then
+						type = enum_type
+						enum_ptr => enums%get(enum_id)
+						cookie = enum_ptr%cookie
+					else
+						type = unknown_type
+					end if
+				end if
 			else
-				type = unknown_type
+				! Cheap existence check, without copying/pointing to the
+				! struct_t/enum_t like search() does
+				if (structs%exists(name)) then
+					type = struct_type
+				else if (enums%exists(name)) then
+					type = enum_type
+				else
+					type = unknown_type
+				end if
 			end if
 
 	end select
@@ -257,6 +280,9 @@ module integer function get_keyword_kind(text) result(kind)
 
 		case ("struct")
 			kind = struct_keyword
+
+		case ("enum")
+			kind = enum_keyword
 
 		case ("include")
 			kind = include_keyword
@@ -313,7 +339,7 @@ module logical function is_identifier_or_keyword(kind)
 	is_identifier_or_keyword = kind == identifier_token .or. any(kind == [ &
 		true_keyword, false_keyword, not_keyword, and_keyword, or_keyword, &
 		let_keyword, if_keyword, else_keyword, for_keyword, in_keyword, &
-		while_keyword, fn_keyword, struct_keyword, include_keyword, &
+		while_keyword, fn_keyword, struct_keyword, enum_keyword, include_keyword, &
 		return_keyword, break_keyword, continue_keyword, use_keyword &
 	])
 
@@ -393,9 +419,7 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 
 		case (minus_token, star_token, sstar_token, slash_token, &
 			minus_equals_token, star_equals_token, slash_equals_token, &
-			sstar_equals_token, percent_token, percent_equals_token, &
-			greater_token, less_token, greater_equals_token, &
-			less_equals_token)
+			sstar_equals_token, percent_token, percent_equals_token)
 			! these operators work on numbers but not strings
 
 			if (left == array_type .and. right == array_type) then
@@ -406,6 +430,33 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 				allowed = is_num_type(left) .and. is_num_type(right_arr)
 			else
 				allowed = is_num_type(left) .and. is_num_type(right)
+			end if
+
+		case (greater_token, less_token, greater_equals_token, &
+			less_equals_token)
+			! these ordering operators work on numbers and strings
+			! (lexicographically), but not other types
+
+			if (left == array_type .and. right == array_type) then
+				allowed = &
+					(is_num_type(left_arr) .and. is_num_type(right_arr)) .or. &
+					(left_arr == str_type  .and. right_arr == str_type)
+
+			else if (left  == array_type) then
+				allowed = &
+					(is_num_type(left_arr) .and. is_num_type(right)) .or. &
+					(left_arr == str_type  .and. right == str_type)
+
+			else if (right == array_type) then
+				allowed = &
+					(is_num_type(left) .and. is_num_type(right_arr)) .or. &
+					(left == str_type  .and. right_arr == str_type)
+
+			else
+				allowed = &
+					(is_num_type(left) .and. is_num_type(right)) .or. &
+					(left == str_type  .and. right == str_type)
+
 			end if
 
 		case ( &
@@ -478,6 +529,17 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 		case (eequals_token, bang_equals_token)
 
 			if (left == file_type .or. right == file_type) then
+				allowed = .false.
+				return
+			end if
+
+			! Struct equality (scalar or array) isn't implemented -- neither
+			! recursive member-wise comparison nor a decision on nested/
+			! array-typed members exists yet.  Reject at parse time instead
+			! of falling through to eval and hitting the internal I2 crash
+			! in is_eq_value_t()/is_ne_value_t()
+			if (left == struct_type .or. right == struct_type .or. &
+				left_arr == struct_type .or. right_arr == struct_type) then
 				allowed = .false.
 				return
 			end if
@@ -891,66 +953,35 @@ end function array_to_scalar_type
 
 !===============================================================================
 
-module function type_name(a) result(str_)
-	! c.f. lookup_type() which is mostly the inverse of this
+recursive module function type_name(a) result(str_)
+	! c.f. lookup_type() which is mostly the inverse of this.
+	!
+	! Delegates to value.f90's value_type_name(): that's the single source of
+	! truth for value-type-name rendering (it also needs this same logic to
+	! render a fn-pointer's param/return types), and syntran__types_m already
+	! depends on syntran__value_m, so this call direction is free
 	type(value_t), intent(in) :: a
-	character(len = :), allocatable :: str_, array_name
+	character(len = :), allocatable :: str_
 
-	if (a%type == struct_type) then
-		str_ = a%struct_name
-	else if (a%type == array_type) then
-
-		if (a%array%type == struct_type) then
-			array_name = a%struct_name
-		else
-			array_name = type_name_primitive(a%array%type)
-		end if
-
-		str_ = "["//array_name//"; "
-
-		! Repeat ":, " appropriately
-		str_ = str_//repeat(":, ", max(a%array%rank - 1, 0))
-		str_ = str_//":]"
-
-	else
-		str_ = type_name_primitive(a%type)
-	end if
+	str_ = value_type_name(a)
 
 end function type_name
 
 !===============================================================================
 
 module function type_name_primitive(itype) result(str_)
-	! c.f. lookup_type() which is mostly the inverse of this
+	! c.f. lookup_type() which is mostly the inverse of this.  Delegates to
+	! value.f90's value_type_name_primitive() -- c.f. type_name() above
 	integer, intent(in) :: itype
 	character(len = :), allocatable :: str_
 
-	select case (itype)
-	case (i32_type)
-		str_ = "i32"
-	case (i64_type)
-		str_ = "i64"
-	case (f32_type)
-		str_ = "f32"
-	case (f64_type)
-		str_ = "f64"
-	case (str_type)
-		str_ = "str"
-	case (bool_type)
-		str_ = "bool"
-	case (any_type)
-		str_ = "any"
-	case (void_type)
-		str_ = "void"
-	case default
-		str_ = "unknown"
-	end select
+	str_ = value_type_name_primitive(itype)
 
 end function type_name_primitive
 
 !===============================================================================
 
-module integer function types_match(a, b) result(io)
+recursive module integer function types_match(a, b) result(io)
 
 	! Check if the type of value `a` matches value `b`. Arguments are not
 	! transitive!  If `a` is of value any_type, enforcement is less strict.
@@ -961,6 +992,8 @@ module integer function types_match(a, b) result(io)
 	type(value_t), intent(in) :: a, b
 
 	!****************
+
+	integer :: i, na, nb
 
 	io = TYPE_MATCH
 
@@ -978,6 +1011,14 @@ module integer function types_match(a, b) result(io)
 		if (struct_kind_mismatch(a, b)) then
 			! Both are structs but different kinds of structs
 			io = TYPE_STRUCT_MISMATCH
+			return
+		end if
+	end if
+
+	if (a%type == enum_type) then
+		if (enum_kind_mismatch(a, b)) then
+			! Both are enums but different kinds of enums
+			io = TYPE_MISMATCH
 			return
 		end if
 	end if
@@ -1004,6 +1045,46 @@ module integer function types_match(a, b) result(io)
 			end if
 		end if
 
+		if (a%array%type == enum_type) then
+			if (enum_kind_mismatch(a, b)) then
+				! Both are arrays of enums but different kinds of enums
+				io = TYPE_ARRAY_ENUM_MISMATCH
+				return
+			end if
+		end if
+
+	end if
+
+	if (a%type == fn_type) then
+		! Fn-pointer signature match: same param count, each param type
+		! matching, and matching return type.  No implicit any_type looseness
+		! here beyond what the top-level check above already allows
+		na = 0
+		nb = 0
+		if (allocated(a%fn_params)) na = size(a%fn_params)
+		if (allocated(b%fn_params)) nb = size(b%fn_params)
+
+		if (na /= nb) then
+			io = TYPE_MISMATCH
+			return
+		end if
+
+		do i = 1, na
+			if (types_match(a%fn_params(i), b%fn_params(i)) /= TYPE_MATCH) then
+				io = TYPE_MISMATCH
+				return
+			end if
+		end do
+
+		if (allocated(a%fn_ret) .and. allocated(b%fn_ret)) then
+			if (types_match(a%fn_ret, b%fn_ret) /= TYPE_MATCH) then
+				io = TYPE_MISMATCH
+				return
+			end if
+		else if (allocated(a%fn_ret) .neqv. allocated(b%fn_ret)) then
+			io = TYPE_MISMATCH
+			return
+		end if
 	end if
 
 end function types_match
@@ -1029,6 +1110,24 @@ logical function struct_kind_mismatch(a, b) result(mismatch)
 	end if
 
 end function struct_kind_mismatch
+
+!===============================================================================
+
+logical function enum_kind_mismatch(a, b) result(mismatch)
+
+	! Check whether two enum values are different kinds of enums.  Mirrors
+	! struct_kind_mismatch() -- prefer the alias-independent enum_cookie,
+	! falling back to enum_name if either side lacks a cookie
+
+	type(value_t), intent(in) :: a, b
+
+	if (allocated(a%enum_cookie) .and. allocated(b%enum_cookie)) then
+		mismatch = a%enum_cookie /= b%enum_cookie
+	else
+		mismatch = a%enum_name /= b%enum_name
+	end if
+
+end function enum_kind_mismatch
 
 !===============================================================================
 

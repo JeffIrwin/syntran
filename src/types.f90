@@ -8,6 +8,7 @@ module syntran__types_m
 	implicit none
 
 	integer, parameter :: &
+		TYPE_ARRAY_ENUM_MISMATCH = 6, &
 		TYPE_ARRAY_STRUCT_MISMATCH = 5, &
 		TYPE_RANK_MISMATCH = 4, &
 		TYPE_ARRAY_MISMATCH = 3, &
@@ -59,36 +60,28 @@ module syntran__types_m
 
 	!********
 
-	type fn_ternary_tree_node_t
+	type fn_entry_t
+		! One slot of the fns_t hash table.  An unallocated `key` marks an
+		! empty (never-used) slot
 
-		character :: split_char = ''
-		type(fn_ternary_tree_node_t), allocatable :: left, mid, right
-
+		character(len = :), allocatable :: key
 		type(fn_t), allocatable :: val
-		integer :: id_index
+		integer :: id_index = 0
 
-		contains
-#ifndef SYNTRAN_INTEL
-			procedure, pass(dst) :: copy => fn_ternary_tree_copy
-			generic, public :: assignment(=) => copy
-#endif
-
-	end type fn_ternary_tree_node_t
-
-	!********
-
-	type fn_dict_t
-		! This is the fn dictionary of a single scope
-		type(fn_ternary_tree_node_t), allocatable :: root
-	end type fn_dict_t
+	end type fn_entry_t
 
 	!********
 
 	type fns_t
 
-		! A list of function dictionaries for each scope level used during
-		! parsing
-		type(fn_dict_t) :: dict
+		! Open-addressing hash table (FNV-1a + linear probing, like
+		! structs_t in this same module) mapping fn name -> fn_t.  Entries
+		! carry the fn_t payload directly instead of indirecting through a
+		! parallel array, so there is only one table
+
+		type(fn_entry_t), allocatable :: table(:)
+		integer :: capacity = 0, count = 0
+		real :: load_factor_threshold = 0.75
 
 		! Flat array of fns from all scopes, used for efficient interpreted
 		! evaluation
@@ -103,9 +96,13 @@ module syntran__types_m
 		! TODO: scoping for nested fns?
 		contains
 			procedure :: &
-				insert  => fn_insert, &
-				search  => fn_search, &
-				closest => fn_closest
+				insert    => fn_insert, &
+				find      => fn_find, &
+				get       => fn_get, &
+				id_at     => fn_id_at, &
+				closest   => fn_closest, &
+				grow_flat => fns_grow_flat, &
+				rollback  => fns_rollback
 		!		push_scope, pop_scope
 
 	end type fns_t
@@ -120,6 +117,12 @@ module syntran__types_m
 		!integer :: unit_ = 0  ! translation unit (src file) index for error diagnostic context
 		integer :: unit_   ! translation unit (src file) index for error diagnostic context
 		character(len = :), allocatable :: text
+
+		contains
+#ifndef SYNTRAN_INTEL
+			procedure, pass(dst) :: copy => syntax_token_copy
+			generic, public :: assignment(=) => copy
+#endif
 
 	end type syntax_token_t
 
@@ -162,6 +165,14 @@ module syntran__types_m
 
 		integer :: id_index = 0, num_locs
 		logical :: is_loc = .false.
+
+		! Set only on the array_expr synthesized by parse_enum_name_expr() for
+		! a bare enum type name (e.g. `Suit`).  Structurally identical to a
+		! literal enum array (both carry val%enum_name), so this flag is the
+		! only way to tell "the special form" apart from "a real array value"
+		! at the sites that ban binding/passing a bare enum name as a value
+		! (see check_enum_name_value())
+		logical :: is_enum_name = .false.
 
 		! When a dot_expr's root was a fn_call_expr or method_call_expr (e.g.
 		! `fn().field`), root_kind stores the original kind so evaluators can
@@ -209,29 +220,26 @@ module syntran__types_m
 	! Dependencies between types could make this module difficult to split into
 	! separate files.  I think I like the monolithic design anyway
 
-	type ternary_tree_node_t
+	type var_entry_t
+		! One slot of a var_dict_t hash table.  An unallocated `key` marks an
+		! empty (never-used) slot
 
-		character :: split_char = ''
-		type(ternary_tree_node_t), allocatable :: left, mid, right
-
+		character(len = :), allocatable :: key
 		type(value_t), allocatable :: val
-		integer :: id_index
+		integer :: id_index = 0
 		logical :: is_const = .false.
 
-		contains
-			!procedure :: print => ternary_node_print
-#ifndef SYNTRAN_INTEL
-			procedure, pass(dst) :: copy => ternary_tree_copy
-			generic, public :: assignment(=) => copy
-#endif
-
-	end type ternary_tree_node_t
+	end type var_entry_t
 
 	!********
 
 	type var_dict_t
-		! This is the variable dictionary of a single scope
-		type(ternary_tree_node_t), allocatable :: root
+		! This is the variable dictionary of a single scope.  Open-addressing
+		! hash table (FNV-1a + linear probing, like structs_t/fns_t)
+
+		type(var_entry_t), allocatable :: table(:)
+		integer :: capacity = 0, count = 0
+		real :: load_factor_threshold = 0.75
 	end type var_dict_t
 
 	!********
@@ -254,9 +262,10 @@ module syntran__types_m
 
 		contains
 			procedure :: &
-				insert  => var_insert, &
-				search  => var_search, &
-				closest => var_closest, &
+				insert    => var_insert, &
+				search    => var_search, &
+				is_const  => var_is_const, &
+				closest   => var_closest, &
 				push_scope, pop_scope
 
 			! This is required unfortunately
@@ -293,49 +302,111 @@ module syntran__types_m
 
 	!********
 
-	type struct_ternary_tree_node_t
+	type struct_entry_t
+		! One slot of the structs_t hash table.  An unallocated `key` marks an
+		! empty (never-used) slot
 
-		character :: split_char = ''
-		type(struct_ternary_tree_node_t), allocatable :: left, mid, right
-
+		character(len = :), allocatable :: key
 		type(struct_t), allocatable :: val
-		integer :: id_index
+		integer :: id_index = 0
 
-		contains
-			! This is also required unfortunately too
-#ifndef SYNTRAN_INTEL
-			procedure, pass(dst) :: copy => struct_ternary_tree_copy
-			generic, public :: assignment(=) => copy
-#endif
-			!final :: struct_ternary_tree_final
-
-	end type struct_ternary_tree_node_t
-
-	!********
-
-	type struct_dict_t
-		! This is the struct dictionary of a single scope
-		type(struct_ternary_tree_node_t), allocatable :: root
-	end type struct_dict_t
+	end type struct_entry_t
 
 	!********
 
 	type structs_t
 
-		! A list of struct dictionaries used during parsing
-		!type(struct_dict_t) :: dicts(scope_max)
-		type(struct_dict_t) :: dict
+		! Open-addressing hash table (FNV-1a + linear probing, like
+		! map_i32_t in utils.f90) mapping struct name -> struct_t.  Unlike
+		! map_i32_t, entries carry the struct_t payload directly instead of
+		! indirecting through a parallel array, so there is only one table
 
-		!! Flat array of structs, used for efficient interpreted evaluation
-		!type(struct_t), allocatable :: structs(:)
+		type(struct_entry_t), allocatable :: table(:)
+		integer :: capacity = 0, count = 0
+		real :: load_factor_threshold = 0.75
+
+		! Number of structs ever declared (== the highest id_index in the
+		! table).  Persisted across REPL lines in state_t (c.f. fns_t%fns,
+		! whose size serves the same purpose for fns) and used by
+		! syntax_parse() (core.f90) as the "declared before this REPL line"
+		! threshold for rollback()
+		integer :: num_structs = 0
 
 		contains
 			procedure :: &
-				insert => struct_insert, &
-				exists => struct_exists, &
-				search => struct_search
+				insert   => struct_insert, &
+				find     => struct_find, &
+				get      => struct_get, &
+				id_at    => struct_id_at, &
+				exists   => struct_exists, &
+				closest  => struct_closest, &
+				rollback => structs_rollback
 
 	end type structs_t
+
+	!********
+
+	type enum_t
+		! User-defined enumeration: a named integer constant ("variant") per
+		! entry.  Variants are compile-time constants, so unlike struct_t
+		! there is no vars_t of member types -- just parallel arrays of
+		! variant names and their backing i32 values
+
+		type(string_vector_t) :: variant_names
+		integer, allocatable :: variant_values(:)  ! parallel to variant_names
+		integer :: num_vars = 0
+
+		! Canonical, alias-independent identity: "<defining src file>::<local
+		! enum name>", set once at declaration time. c.f. value_t%enum_cookie
+		character(len = :), allocatable :: cookie
+
+		contains
+			! This is also required unfortunately
+#ifndef SYNTRAN_INTEL
+			procedure, pass(dst) :: copy => enum_copy
+			generic, public :: assignment(=) => copy
+#endif
+
+	end type enum_t
+
+	!********
+
+	type enum_entry_t
+		! One slot of the enums_t hash table.  An unallocated `key` marks an
+		! empty (never-used) slot
+
+		character(len = :), allocatable :: key
+		type(enum_t), allocatable :: val
+		integer :: id_index = 0
+
+	end type enum_entry_t
+
+	!********
+
+	type enums_t
+
+		! Open-addressing hash table (FNV-1a + linear probing), mirroring
+		! structs_t, mapping enum name -> enum_t
+
+		type(enum_entry_t), allocatable :: table(:)
+		integer :: capacity = 0, count = 0
+		real :: load_factor_threshold = 0.75
+
+		! Number of enums ever declared (== the highest id_index in the
+		! table).  Mirrors structs_t%num_structs
+		integer :: num_enums = 0
+
+		contains
+			procedure :: &
+				insert   => enum_insert, &
+				find     => enum_find, &
+				get      => enum_get, &
+				id_at    => enum_id_at, &
+				exists   => enum_exists, &
+				closest  => enum_closest, &
+				rollback => enums_rollback
+
+	end type enums_t
 
 	!********
 
@@ -370,25 +441,93 @@ module syntran__types_m
 		! types_copy.f90 procedures
 		!***************************************
 
+		recursive module subroutine syntax_token_copy(dst, src)
+			class(syntax_token_t), intent(inout) :: dst
+			class(syntax_token_t), intent(in)    :: src
+		end subroutine syntax_token_copy
+
 		recursive module subroutine vars_copy(dst, src)
 			class(vars_t), intent(inout) :: dst
 			class(vars_t), intent(in)    :: src
 		end subroutine vars_copy
+
+		module subroutine var_dict_copy(dst, src)
+			type(var_dict_t), intent(inout) :: dst
+			type(var_dict_t), intent(in)    :: src
+		end subroutine var_dict_copy
 
 		recursive module subroutine struct_copy(dst, src)
 			class(struct_t), intent(inout) :: dst
 			class(struct_t), intent(in)    :: src
 		end subroutine struct_copy
 
+		recursive module subroutine enum_copy(dst, src)
+			class(enum_t), intent(inout) :: dst
+			class(enum_t), intent(in)    :: src
+		end subroutine enum_copy
+
 		recursive module subroutine fn_copy(dst, src)
 			class(fn_t), intent(inout) :: dst
 			class(fn_t), intent(in)    :: src
 		end subroutine fn_copy
 
-		recursive module subroutine fn_ternary_tree_copy(dst, src)
-			class(fn_ternary_tree_node_t), intent(inout) :: dst
-			class(fn_ternary_tree_node_t), intent(in)    :: src
-		end subroutine fn_ternary_tree_copy
+		recursive module subroutine fn_move(src, dst)
+			type(fn_t), intent(inout) :: src
+			type(fn_t), intent(out)   :: dst
+		end subroutine fn_move
+
+		!***************************************
+		! Explicit teardown ("destroy") family, mirroring the "copy" family
+		! above.  Never rely on a bare deallocate() of these nested-
+		! allocatable-value_t containers -- see value_array_destroy() and
+		! value_destroy() (value.f90) for the rationale, which applies
+		! equally here since var_dict_t/structs_t/enums_t/fns_t all store
+		! value_t (or a type containing it) in their table slots
+		!***************************************
+
+		recursive module subroutine var_dict_destroy(dict)
+			type(var_dict_t), intent(inout) :: dict
+		end subroutine var_dict_destroy
+
+		recursive module subroutine vars_destroy(vars)
+			type(vars_t), intent(inout) :: vars
+		end subroutine vars_destroy
+
+		recursive module subroutine struct_destroy(struct)
+			type(struct_t), intent(inout) :: struct
+		end subroutine struct_destroy
+
+		recursive module subroutine struct_table_destroy(table)
+			type(struct_entry_t), intent(inout) :: table(:)
+		end subroutine struct_table_destroy
+
+		recursive module subroutine structs_destroy(dict)
+			type(structs_t), intent(inout) :: dict
+		end subroutine structs_destroy
+
+		module subroutine enum_destroy(enum)
+			type(enum_t), intent(inout) :: enum
+		end subroutine enum_destroy
+
+		module subroutine enum_table_destroy(table)
+			type(enum_entry_t), intent(inout) :: table(:)
+		end subroutine enum_table_destroy
+
+		module subroutine enums_destroy(dict)
+			type(enums_t), intent(inout) :: dict
+		end subroutine enums_destroy
+
+		recursive module subroutine syntax_node_destroy(node)
+			type(syntax_node_t), intent(inout) :: node
+		end subroutine syntax_node_destroy
+
+		recursive module subroutine fn_destroy(fn)
+			type(fn_t), intent(inout) :: fn
+		end subroutine fn_destroy
+
+		recursive module subroutine fns_destroy(dict)
+			type(fns_t), intent(inout) :: dict
+		end subroutine fns_destroy
 
 		recursive module subroutine syntax_node_vector_copy(dst, src)
 			class(syntax_node_vector_t), intent(inout) :: dst
@@ -409,15 +548,9 @@ module syntran__types_m
 			type(syntax_node_t), intent(inout) :: src, dst
 		end subroutine syntax_node_move_into
 
-		recursive module subroutine ternary_tree_copy(dst, src)
-			class(ternary_tree_node_t), intent(inout) :: dst
-			class(ternary_tree_node_t), intent(in)    :: src
-		end subroutine ternary_tree_copy
-
-		recursive module subroutine struct_ternary_tree_copy(dst, src)
-			class(struct_ternary_tree_node_t), intent(inout) :: dst
-			class(struct_ternary_tree_node_t), intent(in)    :: src
-		end subroutine struct_ternary_tree_copy
+		! ternary_tree_copy() was here.  It's no longer needed: var_dict_t is
+		! now a flat hash table (var_entry_t table(:) in this module) instead
+		! of a ternary tree, so intrinsic assignment suffices in vars_copy()
 
 		recursive module subroutine syntax_nodes_copy(dst, src)
 			type(syntax_node_t), allocatable, intent(inout) :: dst(:)
@@ -428,13 +561,27 @@ module syntran__types_m
 		! types_dict.f90 procedures
 		!***************************************
 
-		module function fn_search(dict, key, id_index, iostat) result(val)
+		module function fn_find(dict, key) result(slot)
+			! Returns the table slot for `key`, or 0 if not present.  The slot
+			! is only valid until the next insert() (a resize rehashes the
+			! table), so callers must read get()/id_at() before any
+			! subsequent insert()
 			class(fns_t), intent(in) :: dict
 			character(len = *), intent(in) :: key
-			integer, intent(out) :: id_index
-			type(fn_t) :: val
-			integer, intent(out), optional :: iostat
-		end function fn_search
+			integer :: slot
+		end function fn_find
+
+		module function fn_get(dict, slot) result(val)
+			class(fns_t), intent(in), target :: dict
+			integer, intent(in) :: slot
+			type(fn_t), pointer :: val
+		end function fn_get
+
+		module function fn_id_at(dict, slot) result(id_index)
+			class(fns_t), intent(in) :: dict
+			integer, intent(in) :: slot
+			integer :: id_index
+		end function fn_id_at
 
 		module subroutine fn_insert(dict, key, val, id_index, iostat, overwrite)
 			class(fns_t) :: dict
@@ -444,6 +591,16 @@ module syntran__types_m
 			integer, intent(out), optional :: iostat
 			logical, intent(in), optional :: overwrite
 		end subroutine fn_insert
+
+		module subroutine fns_grow_flat(dict, n)
+			class(fns_t), intent(inout) :: dict
+			integer, intent(in) :: n
+		end subroutine fns_grow_flat
+
+		module subroutine fns_rollback(dict, num_fns0)
+			class(fns_t), intent(inout) :: dict
+			integer, intent(in) :: num_fns0
+		end subroutine fns_rollback
 
 		module subroutine var_insert(dict, key, val, id_index, iostat, overwrite, is_const)
 			class(vars_t) :: dict
@@ -463,6 +620,12 @@ module syntran__types_m
 			integer, intent(out), optional :: iostat
 			logical, intent(out), optional :: is_const
 		end subroutine var_search
+
+		module function var_is_const(dict, key) result(is_const)
+			class(vars_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			logical :: is_const
+		end function var_is_const
 
 		module function var_closest(dict, key) result(closest)
 			class(vars_t), intent(in) :: dict
@@ -499,80 +662,12 @@ module syntran__types_m
 			type(syntax_node_t), intent(inout) :: val
 		end subroutine push_node_move
 
-		recursive module subroutine ternary_search(node, key, id_index, iostat, val, is_const)
-			type(ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: key
-			integer, intent(out) :: id_index
-			integer, intent(out) :: iostat
-			type(value_t), intent(out) :: val
-			logical, intent(out), optional :: is_const
-		end subroutine ternary_search
-
-		recursive module subroutine ternary_closest(node, prefix, target_low, &
-				target_unqual_low, min_dist, min_qdist, closest)
-			type(ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: prefix, target_low, target_unqual_low
-			integer, intent(inout) :: min_dist, min_qdist
-			character(len = :), allocatable, intent(inout) :: closest
-		end subroutine ternary_closest
-
-		recursive module subroutine fn_ternary_closest(node, prefix, target_low, &
-				target_unqual_low, min_dist, min_qdist, closest)
-			type(fn_ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: prefix, target_low, target_unqual_low
-			integer, intent(inout) :: min_dist, min_qdist
-			character(len = :), allocatable, intent(inout) :: closest
-		end subroutine fn_ternary_closest
-
-		recursive module subroutine ternary_insert(node, key, val, id_index, iostat, overwrite, is_const)
-			type(ternary_tree_node_t), intent(inout), allocatable :: node
-			character(len = *), intent(in) :: key
-			type(value_t), intent(in) :: val
-			integer, intent(in) :: id_index
-			integer, intent(out) :: iostat
-			logical, intent(in) :: overwrite
-			logical, intent(in), optional :: is_const
-		end subroutine ternary_insert
-
-		recursive module function fn_ternary_search(node, key, id_index, iostat) result(val)
-			type(fn_ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: key
-			integer, intent(out) :: id_index
-			integer, intent(out) :: iostat
-			type(fn_t) :: val
-		end function fn_ternary_search
-
-		recursive module subroutine fn_ternary_insert(node, key, val, id_index, iostat, overwrite)
-			type(fn_ternary_tree_node_t), intent(inout), allocatable :: node
-			character(len = *), intent(in) :: key
-			type(fn_t), intent(in) :: val
-			integer, intent(in) :: id_index
-			integer, intent(out) :: iostat
-			logical, intent(in) :: overwrite
-		end subroutine fn_ternary_insert
-
-		recursive module function struct_ternary_exists(node, key) result(exists)
-			type(struct_ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: key
-			logical :: exists
-		end function struct_ternary_exists
-
-		recursive module subroutine struct_ternary_search(node, key, id_index, iostat, val)
-			type(struct_ternary_tree_node_t), intent(in), allocatable :: node
-			character(len = *), intent(in) :: key
-			integer, intent(out) :: id_index
-			integer, intent(out) :: iostat
-			type(struct_t), intent(out) :: val
-		end subroutine struct_ternary_search
-
-		recursive module subroutine struct_ternary_insert(node, key, val, id_index, iostat, overwrite)
-			type(struct_ternary_tree_node_t), intent(inout), allocatable :: node
-			character(len = *), intent(in) :: key
-			type(struct_t), intent(in) :: val
-			integer, intent(in) :: id_index
-			integer, intent(out) :: iostat
-			logical, intent(in) :: overwrite
-		end subroutine struct_ternary_insert
+		! ternary_search(), ternary_is_const(), ternary_closest(), and
+		! ternary_insert() were here.  var_dict_t is now a flat hash table
+		! (var_entry_t table(:)), so these tree walkers were replaced by
+		! var_grow() (a submodule-local helper in types_dict.f90, not part of
+		! the public API, mirroring struct_grow()/fn_grow()) plus the
+		! var_insert/var_search/var_is_const/var_closest bodies below
 
 		module subroutine struct_insert(dict, key, val, id_index, iostat, overwrite)
 			class(structs_t) :: dict
@@ -583,19 +678,90 @@ module syntran__types_m
 			logical, intent(in), optional :: overwrite
 		end subroutine struct_insert
 
+		module function struct_find(dict, key) result(slot)
+			! Returns the table slot for `key`, or 0 if not present.  The slot
+			! is only valid until the next insert() (a resize rehashes the
+			! table), so callers must read get()/id_at() before any
+			! subsequent insert()
+			class(structs_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			integer :: slot
+		end function struct_find
+
+		module function struct_get(dict, slot) result(val)
+			class(structs_t), intent(in), target :: dict
+			integer, intent(in) :: slot
+			type(struct_t), pointer :: val
+		end function struct_get
+
+		module function struct_id_at(dict, slot) result(id_index)
+			class(structs_t), intent(in) :: dict
+			integer, intent(in) :: slot
+			integer :: id_index
+		end function struct_id_at
+
 		module function struct_exists(dict, key) result(exists)
 			class(structs_t), intent(in) :: dict
 			character(len = *), intent(in) :: key
 			logical :: exists
 		end function struct_exists
 
-		module subroutine struct_search(dict, key, id_index, iostat, val)
+		module function struct_closest(dict, key) result(closest)
 			class(structs_t), intent(in) :: dict
 			character(len = *), intent(in) :: key
-			integer, intent(out) :: id_index
-			type(struct_t), intent(out) :: val
+			character(len = :), allocatable :: closest
+		end function struct_closest
+
+		module subroutine structs_rollback(dict, num_structs0)
+			class(structs_t), intent(inout) :: dict
+			integer, intent(in) :: num_structs0
+		end subroutine structs_rollback
+
+		module subroutine enum_insert(dict, key, val, id_index, iostat, overwrite)
+			class(enums_t) :: dict
+			character(len = *), intent(in) :: key
+			type(enum_t), intent(in) :: val
+			integer, intent(inout) :: id_index
 			integer, intent(out), optional :: iostat
-		end subroutine struct_search
+			logical, intent(in), optional :: overwrite
+		end subroutine enum_insert
+
+		module function enum_find(dict, key) result(slot)
+			! Returns the table slot for `key`, or 0 if not present.  Mirrors
+			! struct_find() -- see its comment for slot validity caveats
+			class(enums_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			integer :: slot
+		end function enum_find
+
+		module function enum_get(dict, slot) result(val)
+			class(enums_t), intent(in), target :: dict
+			integer, intent(in) :: slot
+			type(enum_t), pointer :: val
+		end function enum_get
+
+		module function enum_id_at(dict, slot) result(id_index)
+			class(enums_t), intent(in) :: dict
+			integer, intent(in) :: slot
+			integer :: id_index
+		end function enum_id_at
+
+		module function enum_exists(dict, key) result(exists)
+			class(enums_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			logical :: exists
+		end function enum_exists
+
+		module function enum_closest(dict, key) result(closest)
+			class(enums_t), intent(in) :: dict
+			character(len = *), intent(in) :: key
+			character(len = :), allocatable :: closest
+		end function enum_closest
+
+		module subroutine enums_rollback(dict, num_enums0)
+			class(enums_t), intent(inout) :: dict
+			integer, intent(in) :: num_enums0
+		end subroutine enums_rollback
 
 		!***************************************
 		! types_ops.f90 procedures
@@ -612,10 +778,11 @@ module syntran__types_m
 			integer, optional, intent(in) :: ou
 		end subroutine log_diagnostics
 
-		module integer function lookup_type(name, structs, struct) result(type)
+		module integer function lookup_type(name, structs, enums, cookie) result(type)
 			character(len = *), intent(in) :: name
-			type(structs_t), intent(in) :: structs
-			type(struct_t), intent(out) :: struct
+			type(structs_t), intent(in), target :: structs
+			type(enums_t), intent(in), target :: enums
+			character(len = :), allocatable, intent(out), optional :: cookie
 		end function lookup_type
 
 		module integer function get_keyword_kind(text) result(kind)
@@ -680,7 +847,7 @@ module syntran__types_m
 			integer :: scalar_type_
 		end function array_to_scalar_type
 
-		module function type_name(a) result(str_)
+		recursive module function type_name(a) result(str_)
 			type(value_t), intent(in) :: a
 			character(len = :), allocatable :: str_
 		end function type_name
@@ -690,7 +857,7 @@ module syntran__types_m
 			character(len = :), allocatable :: str_
 		end function type_name_primitive
 
-		module integer function types_match(a, b) result(io)
+		recursive module integer function types_match(a, b) result(io)
 			type(value_t), intent(in) :: a, b
 		end function types_match
 
@@ -702,12 +869,12 @@ module syntran__types_m
 		! types_node.f90 procedures
 		!***************************************
 
-		module function new_token(kind, pos, text, val) result(token)
+		module subroutine new_token(token, kind, pos, text, val)
+			type(syntax_token_t), intent(out) :: token
 			integer :: kind, pos
 			character(len = *) :: text
 			type(value_t), optional :: val
-			type(syntax_token_t) :: token
-		end function new_token
+		end subroutine new_token
 
 		module function new_syntax_node_vector() result(vector)
 			type(syntax_node_vector_t) :: vector

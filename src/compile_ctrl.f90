@@ -227,6 +227,24 @@ recursive subroutine compile_node(prog, cs, node)
 			call emit(prog, OP_LOAD_CONST, a = const_idx)
 		end select
 
+	! ---- fn-pointer reference ---------------------------------------------------
+	! A bare fn name: behaves like a literal.  node%val is the fully-built
+	! fn_type value (fn_index/fn_params/fn_ret); it has allocatable components
+	! so it always goes through the const pool, like the literal_expr non-scalar
+	! case above
+	case (fn_ref_expr)
+		const_idx = add_const(prog, node%val)
+		call emit(prog, OP_LOAD_CONST, a = const_idx)
+
+	! ---- enum variant access ----------------------------------------------------
+	! An enum variant, e.g. `Dir.North`: like fn_ref_expr, node%val was fully
+	! baked at parse time (parse_enum_access) and carries allocatable
+	! components (enum_name/enum_variant/enum_cookie), so it goes through the
+	! const pool rather than the scalar-immediate literal_expr cases above
+	case (enum_access_expr)
+		const_idx = add_const(prog, node%val)
+		call emit(prog, OP_LOAD_CONST, a = const_idx)
+
 	! ---- variable reads --------------------------------------------------------
 	case (name_expr)
 		if (allocated(node%lsubscripts)) then
@@ -706,6 +724,35 @@ recursive subroutine compile_node(prog, cs, node)
 			end if
 		end do
 
+		! REPL pass: compile any fn declared on an earlier REPL line.  Each
+		! REPL statement gets its own fresh program_t (c.f. eval_dispatch()
+		! in syntran.f90), so such a fn has no fn_declaration node in *this*
+		! tree -- its AST only survives in cs%fns%fns(:), which is exactly
+		! how the AST walker resolves the same case (state%fns%fns(id_index)
+		! %node%body in eval_fn.f90).  Skip ids already compiled above (this
+		! line's own fns) and intrinsics (unallocated %node).  No-op outside
+		! the REPL, where compile_tree() is called without the fns arg
+		if (associated(cs%fns)) then
+			do i = cs%fns%num_intr_fns + 1, size(cs%fns%fns)
+				if (.not. allocated(cs%fns%fns(i)%node)) cycle
+
+				call ensure_fn_entry(prog, i)
+				if (prog%fn_entry(i) /= 0) cycle   ! already compiled above
+
+				l_top = i   ! fn_id (reuse l_top as scratch)
+				prog%fn_num_locs(l_top) = cs%fns%fns(i)%node%num_locs
+				prog%fn_entry(l_top)    = prog%len_ + 1
+
+				cs%in_fn_body = .true.
+				call compile_node(prog, cs, cs%fns%fns(i)%node%body)
+				cs%in_fn_body = .false.
+				! Implicit void return for functions with no explicit return statement
+				const_idx = add_const(prog, unknown_val())
+				call emit(prog, OP_LOAD_CONST, a = const_idx)
+				call emit(prog, OP_RET)
+			end do
+		end if
+
 		! Top-level statements start here.
 		prog%entry_main = prog%len_ + 1
 
@@ -716,6 +763,7 @@ recursive subroutine compile_node(prog, cs, node)
 		do i = 1, size(node%members)
 			if (node%members(i)%kind == fn_declaration    ) cycle
 			if (node%members(i)%kind == struct_declaration) cycle
+			if (node%members(i)%kind == enum_declaration   ) cycle
 			if (.not. first) call emit(prog, OP_POP)
 			first = .false.
 			call compile_node(prog, cs, node%members(i))
@@ -849,6 +897,14 @@ recursive subroutine compile_node(prog, cs, node)
 
 		end select
 
+	! ---- enum reverse cast -----------------------------------------------------
+	! `EnumName(ordinal)`: node%right (the ordinal sub-expr) and node%val%struct(:)
+	! (baked variants to match against) are both carried via the node pool, so a
+	! single generic opcode delegates to eval_enum_cast_expr, mirroring OP_NEW_ARRAY.
+	case (enum_cast_expr)
+		idx = add_node(prog, node)
+		call emit(prog, OP_ENUM_CAST, a = idx)
+
 	! ---- struct instance construction -----------------------------------------
 	! M5: Compile each member-initialiser expression in order, then emit
 	! OP_MAKE_STRUCT.  The node is stored in the pool so the VM can recover
@@ -902,6 +958,7 @@ recursive subroutine compile_node(prog, cs, node)
 			do i = 1, size(node%member%members)
 				if (node%member%members(i)%kind == fn_declaration    ) cycle
 				if (node%member%members(i)%kind == struct_declaration) cycle
+				if (node%member%members(i)%kind == enum_declaration   ) cycle
 				call compile_node(prog, cs, node%member%members(i))
 				call emit(prog, OP_POP)
 			end do
@@ -965,6 +1022,33 @@ recursive subroutine compile_node(prog, cs, node)
 			if (allocated(node%lsubscripts)) then
 				call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
 			end if
+		end if
+
+	! ---- indirect call through a fn-pointer value ------------------------------
+	! Unlike fn_call_expr, the target fn is not known until compile time either:
+	! it is resolved at runtime from the callee's fn_type value.  All args are
+	! by-value in v1 (node%is_ref is allocated all-.false.), so this is just a
+	! flat arg push followed by loading the callee value on top
+	case (fn_call_ptr_expr)
+		idx = add_node(prog, node)
+
+		if (allocated(node%args)) then
+			do i = 1, size(node%args)
+				call compile_node(prog, cs, node%args(i))
+			end do
+		end if
+
+		! Load the callee fn-pointer value (node%id_index/is_loc identify the
+		! *variable* holding it, not a fn id -- c.f. eval_fn_call_ptr)
+		if (node%is_loc) then
+			call emit(prog, OP_LOAD_LOCAL, a = node%id_index)
+		else
+			call emit(prog, OP_LOAD_GLOBAL, a = node%id_index)
+		end if
+
+		call emit(prog, OP_CALL_PTR, b = idx)
+		if (allocated(node%lsubscripts)) then
+			call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
 		end if
 
 	! ---- intrinsic function call -----------------------------------------------
@@ -1098,10 +1182,11 @@ end function unknown_val
 
 !===============================================================================
 
-module subroutine compile_tree(tree, prog)
+module subroutine compile_tree(tree, prog, fns)
 
 	type(syntax_node_t), intent(in) :: tree
 	type(program_t), intent(out) :: prog
+	type(fns_t), intent(in), target, optional :: fns
 
 	!*******
 
@@ -1110,6 +1195,7 @@ module subroutine compile_tree(tree, prog)
 	!print *, 'starting compile_tree()'
 
 	cs = new_compiler_state()
+	if (present(fns)) cs%fns => fns
 	prog = new_program()
 	call compile_node(prog, cs, tree)
 

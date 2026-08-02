@@ -1,0 +1,22 @@
+
+// Regression test: a fn called before its definition (forward reference)
+// whose scalar i32 result feeds an array-range bound used to wrongly trip
+// E56/E58 during parse pass 0, which then skipped parse pass 1 (the pass
+// that would have resolved the forward reference correctly)
+
+fn use_it(): i32
+{
+	let acc = 0;
+	let lo = 5;
+	let hi = get2();      // forward reference
+	for i in [0: lo - hi] // [0: 3] -> 0, 1, 2
+		acc += i;
+	return acc;
+}
+
+fn get2(): i32
+{
+	return 2;
+}
+
+return use_it();

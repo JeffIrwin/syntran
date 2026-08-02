@@ -15,8 +15,8 @@ module syntran__test_core_m
 
 	use syntran__line_edit_m, only: bbcode_escape
 
-	use syntran__utils_m, only: fg_bright_red, fg_bright_green, line_feed, &
-		findlocl1, console_color, console_color_reset, &
+	use syntran__utils_m, only: fg_bright_red, fg_bright_green, color_reset, &
+		line_feed, findlocl1, console_color, console_color_reset, &
 		string_vector_t, new_string_vector, &
 		levenshtein, overload_display_name, unqualified_name
 

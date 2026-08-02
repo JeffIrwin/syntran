@@ -1,0 +1,5 @@
+// E88: not-callable
+// Calling a variable that is not a function pointer
+
+let x = 3;
+x(1);

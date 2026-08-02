@@ -11,6 +11,32 @@ contains
 
 !===============================================================================
 
+recursive module subroutine syntax_token_copy(dst, src)
+
+	! Deep copy.  syntax_token_t has no assignment(=) of its own, but its val
+	! component (value_t) does.  Invoking that via `dst%val = src%val` here
+	! would hit a gfortran defined-assignment code-gen bug that leaks val's
+	! nested allocatable components, so value_copy() is called directly
+	! instead of `=`
+
+	class(syntax_token_t), intent(inout) :: dst
+	class(syntax_token_t), intent(in)    :: src
+
+	dst%kind  = src%kind
+	call value_copy(dst%val, src%val)
+	dst%pos   = src%pos
+	dst%unit_ = src%unit_
+
+	if (allocated(src%text)) then
+		dst%text = src%text
+	else if (allocated(dst%text)) then
+		deallocate(dst%text)
+	end if
+
+end subroutine syntax_token_copy
+
+!===============================================================================
+
 recursive module subroutine vars_copy(dst, src)
 
 	! Deep copy.  This overwrites dst with src
@@ -29,33 +55,91 @@ recursive module subroutine vars_copy(dst, src)
 
 	if (allocated(src%dicts)) then
 
-		if (allocated(dst%dicts)) deallocate(dst%dicts)
+		! Explicitly tear down dst%dicts first instead of a bare
+		! deallocate(): each var_dict_t's table(:) holds allocatable value_t
+		! payloads (which can themselves hold a recursive struct(:) array),
+		! and this codebase does not trust the compiler's implicit deep
+		! deallocation of that shape -- see var_dict_destroy()
+		if (allocated(dst%dicts)) then
+			do i = 1, size(dst%dicts)
+				call var_dict_destroy(dst%dicts(i))
+			end do
+			deallocate(dst%dicts)
+		end if
 		allocate(dst%dicts( size(src%dicts) ))
 
+		! var_dict_t's table(:) is an array of var_entry_t, whose val
+		! component is an allocatable value_t -- and value_t can itself hold
+		! a recursive struct(:) array.  Intrinsic assignment of such a deeply
+		! nested allocatable array hits the same gfortran defined-assignment
+		! code-gen bug documented at syntax_token_copy() above (it
+		! shallow-copies the nested block instead of invoking value_copy()),
+		! so use var_dict_copy() to force elementwise scalar assignment
+		! instead
 		do i = 1, size(src%dicts)
-			if (allocated(src%dicts(i)%root)) then
-				if (.not. allocated(dst%dicts(i)%root)) allocate(dst%dicts(i)%root)
-				dst%dicts(i)%root = src%dicts(i)%root
-			else if (allocated(dst%dicts(i)%root)) then
-				deallocate(dst%dicts(i)%root)
-			end if
+			call var_dict_copy(dst%dicts(i), src%dicts(i))
 		end do
 
 	else if (allocated(dst%dicts)) then
+		do i = 1, size(dst%dicts)
+			call var_dict_destroy(dst%dicts(i))
+		end do
 		deallocate(dst%dicts)
 	end if
 
 	if (allocated(src%vals)) then
-		if (allocated(dst%vals)) deallocate(dst%vals)
-		allocate(dst%vals( size(src%vals) ))
-		dst%vals = src%vals
+		call value_array_copy(dst%vals, src%vals)
 	else if (allocated(dst%vals)) then
-		deallocate(dst%vals)
+		call value_array_destroy(dst%vals)
 	end if
 
 	!print *, 'done vars_copy()'
 
 end subroutine vars_copy
+
+!===============================================================================
+
+module subroutine var_dict_copy(dst, src)
+
+	! Deep copy one var_dict_t (a single scope level's hash table).  See the
+	! comment in vars_copy() above for why this can't be `dst = src`
+
+	type(var_dict_t), intent(inout) :: dst
+	type(var_dict_t), intent(in)    :: src
+
+	!********
+
+	integer :: i
+
+	! Tear down dst%table before src's fields overwrite dst%capacity/count
+	! below -- var_dict_destroy() also resets those to 0, so it must run
+	! first.  See var_dict_destroy() for why this isn't a bare deallocate()
+	call var_dict_destroy(dst)
+
+	dst%capacity = src%capacity
+	dst%count    = src%count
+	dst%load_factor_threshold = src%load_factor_threshold
+
+	if (.not. allocated(src%table)) return
+	allocate(dst%table( size(src%table) ))
+
+	do i = 1, size(src%table)
+
+		if (allocated(src%table(i)%key)) then
+			dst%table(i)%key = src%table(i)%key
+		end if
+
+		if (allocated(src%table(i)%val)) then
+			if (.not. allocated(dst%table(i)%val)) allocate(dst%table(i)%val)
+			dst%table(i)%val = src%table(i)%val  ! scalar -> value_copy()
+		end if
+
+		dst%table(i)%id_index = src%table(i)%id_index
+		dst%table(i)%is_const = src%table(i)%is_const
+
+	end do
+
+end subroutine var_dict_copy
 
 !===============================================================================
 
@@ -86,6 +170,32 @@ end subroutine struct_copy
 
 !===============================================================================
 
+recursive module subroutine enum_copy(dst, src)
+
+	! Deep copy.  This overwrites dst with src
+
+	class(enum_t), intent(inout) :: dst
+	class(enum_t), intent(in)    :: src
+
+	dst%variant_names = src%variant_names
+	dst%num_vars      = src%num_vars
+
+	if (allocated(src%variant_values)) then
+		dst%variant_values = src%variant_values
+	else if (allocated(dst%variant_values)) then
+		deallocate(dst%variant_values)
+	end if
+
+	if (allocated(src%cookie)) then
+		dst%cookie = src%cookie
+	else if (allocated(dst%cookie)) then
+		deallocate(dst%cookie)
+	end if
+
+end subroutine enum_copy
+
+!===============================================================================
+
 recursive module subroutine fn_copy(dst, src)
 
 	! Deep copy.  This overwrites dst with src
@@ -95,6 +205,8 @@ recursive module subroutine fn_copy(dst, src)
 
 	!********
 
+	integer :: i
+
 	!print *, 'starting fn_copy()'
 
 	dst%type            = src%type
@@ -103,6 +215,7 @@ recursive module subroutine fn_copy(dst, src)
 	dst%variadic_type   = src%variadic_type
 	dst%param_names     = src%param_names
 	dst%is_intr         = src%is_intr
+	dst%intr_id         = src%intr_id
 	dst%is_method       = src%is_method
 	dst%is_const_method = src%is_const_method
 
@@ -114,17 +227,48 @@ recursive module subroutine fn_copy(dst, src)
 	end if
 
 	if (allocated(src%params)) then
-		if (allocated(dst%params)) deallocate(dst%params)
+		! Not a bare `deallocate(dst%params)`: this is an array of value_t, the
+		! nested-allocatable shape this codebase never trusts to gfortran's
+		! implicit deep deallocation (c.f. value_array_destroy() in value.f90,
+		! and value_copy()'s own %struct/%fn_params handling right beside it).
+		! fn_copy() overwrites a *live* dst on every fn declaration: parse_unit()
+		! runs two passes, and pass 2 re-inserts every fn with overwrite = .true.
+		! (c.f. fn_insert() in types_dict.f90), so dst%params here is normally
+		! pass 1's array, fully populated
+		call value_array_destroy(dst%params)
 		allocate(dst%params( size(src%params) ))
-		dst%params = src%params
+		! Element-wise value_copy, NOT a whole-array assignment: value_t's
+		! defined assignment(=) is scalar (non-elemental), so `dst%params =
+		! src%params` would silently fall back to the compiler's default
+		! intrinsic structure copy instead of the hand-written value_copy --
+		! exactly the "dangling refs" failure mode documented on value_copy()
+		! itself.  This was latent while params only ever carried primitive/
+		! struct-tag types (no real nested allocatable content to corrupt);
+		! fn-pointer param/return types are the first value_t here with
+		! actual nested allocatables (fn_params/fn_ret), which is what
+		! exposed it as a double-free/segfault on deallocation
+		do i = 1, size(src%params)
+			call value_copy(dst%params(i), src%params(i))
+		end do
 	else if (allocated(dst%params)) then
-		deallocate(dst%params)
+		call value_array_destroy(dst%params)
 	end if
 
 	if (allocated(src%node)) then
-		if (.not. allocated(dst%node)) allocate(dst%node)
+		! Copy into a *cleared* node rather than letting syntax_node_copy()
+		! overwrite a live AST in place: its per-component `else if
+		! (allocated(dst%x)) deallocate(dst%x)` branches are bare recursive
+		! deallocations of syntax_node_t subtrees.  This is the common case,
+		! not the rare one -- parse_unit()'s second pass re-inserts every fn
+		! with overwrite = .true., so dst%node here is normally pass 1's AST
+		if (allocated(dst%node)) then
+			call syntax_node_destroy(dst%node)
+		else
+			allocate(dst%node)
+		end if
 		dst%node = src%node
 	else if (allocated(dst%node)) then
+		call syntax_node_destroy(dst%node)
 		deallocate(dst%node)
 	end if
 
@@ -134,50 +278,399 @@ end subroutine fn_copy
 
 !===============================================================================
 
-recursive module subroutine fn_ternary_tree_copy(dst, src)
+recursive module subroutine fn_move(src, dst)
 
-	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-	! source, they will be gone!
-	!
-	! This should be avoided for efficient compilation, but the interactive
-	! interpreter uses it to backup and restore the variable dict for
-	! partially-evaluated continuation lines
+	! Move src into dst.  O(1): transfers all allocatable components via
+	! move_alloc instead of a deep copy, mirroring syntax_node_move() and
+	! value_move() (value.f90).  dst is intent(out), so entering this
+	! subroutine already resets it to a default-initialized fn_t (deallocating
+	! any prior contents)
 
-	class(fn_ternary_tree_node_t), intent(inout) :: dst
-	class(fn_ternary_tree_node_t), intent(in)    :: src
+	type(fn_t), intent(inout) :: src
+	type(fn_t), intent(out)   :: dst
 
 	!********
 
-	!print *, 'starting fn_ternary_tree_node_t()'
+	call value_move(src%type, dst%type)
 
-	dst%split_char = src%split_char
+	call move_alloc(src%params, dst%params)
 
-	dst%id_index = src%id_index
+	call move_alloc(src%param_names%v, dst%param_names%v)
+	dst%param_names%len_ = src%param_names%len_
+	dst%param_names%cap  = src%param_names%cap
 
-	if (allocated(src%val)) then
-		if (.not. allocated(dst%val)) allocate(dst%val)
-		dst%val = src%val
-	! TODO: else deallocate?  Other tree copiers too
+	dst%variadic_min  = src%variadic_min
+	dst%variadic_max  = src%variadic_max
+	dst%variadic_type = src%variadic_type
+	call move_alloc(src%variadic_name, dst%variadic_name)
+
+	call move_alloc(src%node, dst%node)
+
+	dst%is_intr         = src%is_intr
+	dst%intr_id         = src%intr_id
+	dst%is_method       = src%is_method
+	dst%is_const_method = src%is_const_method
+
+end subroutine fn_move
+
+!===============================================================================
+
+recursive module subroutine var_dict_destroy(dict)
+
+	! Explicitly tear down one var_dict_t's hash table (a single scope
+	! level).  Mirrors value_array_destroy() in value.f90: never rely on a
+	! bare `deallocate(dict%table)` to walk the nested value_t tree hiding
+	! in each slot's %val -- free every element's %val via value_destroy()
+	! first
+
+	type(var_dict_t), intent(inout) :: dict
+
+	!********
+
+	integer :: i
+
+	if (.not. allocated(dict%table)) return
+
+	do i = 1, size(dict%table)
+		if (allocated(dict%table(i)%val)) then
+			call value_destroy(dict%table(i)%val)
+			deallocate(dict%table(i)%val)
+		end if
+		if (allocated(dict%table(i)%key)) deallocate(dict%table(i)%key)
+	end do
+
+	deallocate(dict%table)
+	dict%capacity = 0
+	dict%count    = 0
+
+end subroutine var_dict_destroy
+
+!===============================================================================
+
+recursive module subroutine vars_destroy(vars)
+
+	! Explicitly tear down a vars_t: every scope's dict, plus the flat vals
+	! array used at eval time.  See var_dict_destroy() above
+
+	type(vars_t), intent(inout) :: vars
+
+	!********
+
+	integer :: i
+
+	if (allocated(vars%dicts)) then
+		do i = 1, size(vars%dicts)
+			call var_dict_destroy(vars%dicts(i))
+		end do
+		deallocate(vars%dicts)
 	end if
 
-	if (allocated(src%left)) then
-		if (.not. allocated(dst%left)) allocate(dst%left)
-		dst%left = src%left
+	call value_array_destroy(vars%vals)
+
+end subroutine vars_destroy
+
+!===============================================================================
+
+recursive module subroutine struct_destroy(struct)
+
+	! Explicitly tear down a struct_t (a struct *declaration* -- its
+	! member-type vars_t -- not a struct instance; instances are plain
+	! value_t and go through value_destroy())
+
+	type(struct_t), intent(inout) :: struct
+
+	call vars_destroy(struct%vars)
+	if (allocated(struct%cookie)) deallocate(struct%cookie)
+
+end subroutine struct_destroy
+
+!===============================================================================
+
+recursive module subroutine struct_table_destroy(table)
+
+	! Explicitly tear down a bare structs_t hash-table array.  Used both by
+	! structs_destroy() below and directly on the old_table local left
+	! behind by structs_rollback()/struct_grow() (types_dict.f90): entries
+	! above the rollback threshold, or a slot that lost a rehash race, are
+	! dropped rather than move_alloc'd out, and would otherwise fall back to
+	! the same distrusted implicit deep deallocation
+
+	type(struct_entry_t), intent(inout) :: table(:)
+
+	!********
+
+	integer :: i
+
+	do i = 1, size(table)
+		if (allocated(table(i)%val)) then
+			call struct_destroy(table(i)%val)
+			deallocate(table(i)%val)
+		end if
+		if (allocated(table(i)%key)) deallocate(table(i)%key)
+	end do
+
+end subroutine struct_table_destroy
+
+!===============================================================================
+
+recursive module subroutine structs_destroy(dict)
+
+	type(structs_t), intent(inout) :: dict
+
+	if (allocated(dict%table)) then
+		call struct_table_destroy(dict%table)
+		deallocate(dict%table)
 	end if
 
-	if (allocated(src%mid)) then
-		if (.not. allocated(dst%mid)) allocate(dst%mid)
-		dst%mid = src%mid
+	dict%capacity = 0
+	dict%count    = 0
+
+end subroutine structs_destroy
+
+!===============================================================================
+
+module subroutine enum_destroy(enum)
+
+	! %variant_values is a plain integer array (no allocatable elements), so
+	! ordinary deallocate() is fine there -- only the allocatable character
+	! %cookie needs explicit handling
+
+	type(enum_t), intent(inout) :: enum
+
+	if (allocated(enum%variant_values)) deallocate(enum%variant_values)
+	if (allocated(enum%cookie)) deallocate(enum%cookie)
+
+end subroutine enum_destroy
+
+!===============================================================================
+
+module subroutine enum_table_destroy(table)
+
+	! Mirrors struct_table_destroy() above
+
+	type(enum_entry_t), intent(inout) :: table(:)
+
+	!********
+
+	integer :: i
+
+	do i = 1, size(table)
+		if (allocated(table(i)%val)) then
+			call enum_destroy(table(i)%val)
+			deallocate(table(i)%val)
+		end if
+		if (allocated(table(i)%key)) deallocate(table(i)%key)
+	end do
+
+end subroutine enum_table_destroy
+
+!===============================================================================
+
+module subroutine enums_destroy(dict)
+
+	type(enums_t), intent(inout) :: dict
+
+	if (allocated(dict%table)) then
+		call enum_table_destroy(dict%table)
+		deallocate(dict%table)
 	end if
 
-	if (allocated(src%right)) then
-		if (.not. allocated(dst%right)) allocate(dst%right)
-		dst%right = src%right
+	dict%capacity = 0
+	dict%count    = 0
+
+end subroutine enums_destroy
+
+!===============================================================================
+
+subroutine syntax_token_destroy(token)
+
+	! Tear down a syntax_token_t's two allocatable-bearing components.  Its
+	! %val is a full value_t (number/string literals carry their value here),
+	! so it gets value_destroy() like any other.
+	!
+	! Submodule-local helper for syntax_node_destroy() below -- no `module`
+	! prefix and no interface in types.f90, c.f. fn_grow()/var_grow() in
+	! types_dict.f90
+
+	type(syntax_token_t), intent(inout) :: token
+
+	call value_destroy(token%val)
+	if (allocated(token%text)) deallocate(token%text)
+
+end subroutine syntax_token_destroy
+
+!===============================================================================
+
+recursive subroutine syntax_node_free(node)
+
+	! Destroy and deallocate one optional child node.  Submodule-local helper,
+	! c.f. syntax_token_destroy() above
+
+	type(syntax_node_t), allocatable, intent(inout) :: node
+
+	if (.not. allocated(node)) return
+	call syntax_node_destroy(node)
+	deallocate(node)
+
+end subroutine syntax_node_free
+
+!===============================================================================
+
+recursive subroutine syntax_nodes_free(nodes)
+
+	! Array counterpart of syntax_node_free().  This is to syntax_node_t what
+	! value_array_destroy() (value.f90) is to value_t: destroy every element
+	! before freeing the array itself, so the implicit deep deallocation never
+	! has a live nested tree to walk
+
+	type(syntax_node_t), allocatable, intent(inout) :: nodes(:)
+
+	!********
+
+	integer :: i
+
+	if (.not. allocated(nodes)) return
+	do i = 1, size(nodes)
+		call syntax_node_destroy(nodes(i))
+	end do
+	deallocate(nodes)
+
+end subroutine syntax_nodes_free
+
+!===============================================================================
+
+recursive module subroutine syntax_node_destroy(node)
+
+	! Explicitly tear down a syntax_node_t's allocatable components, deepest
+	! first, instead of trusting gfortran's implicit deep deallocation to walk
+	! a whole AST in one shot.  Same doctrine as value_destroy()
+	! (value.f90), applied to the other deeply-nested type in this codebase:
+	! syntax_node_t has 20 allocatable components of its own type (5 of them
+	! arrays), plus a value_t and two syntax_token_t -- each of which wraps a
+	! value_t of its own.
+	!
+	! The component list here must stay in sync with syntax_node_copy() below,
+	! c.f. the FIXME on syntax_node_t itself (types.f90).  Every component
+	! syntax_node_copy() handles is handled here, in the same order.
+
+	type(syntax_node_t), intent(inout) :: node
+
+	call value_destroy(node%val)
+
+	call syntax_token_destroy(node%op)
+	call syntax_token_destroy(node%identifier)
+
+	if (allocated(node%struct_name))    deallocate(node%struct_name)
+	if (allocated(node%module_prefix))  deallocate(node%module_prefix)
+	if (allocated(node%first_expected)) deallocate(node%first_expected)
+
+	! Plain intrinsic-type arrays: nothing nested to walk
+	if (allocated(node%params))       deallocate(node%params)
+	if (allocated(node%is_ref))       deallocate(node%is_ref)
+	if (allocated(node%is_const_ref)) deallocate(node%is_const_ref)
+
+	! Reset cap along with len_, not just len_: push_string() (utils.f90)
+	! copies `v(1: cap)` when it grows, so a non-zero cap over a deallocated v
+	! would read unallocated memory if a destroyed node were ever pushed to
+	if (allocated(node%diagnostics%v)) deallocate(node%diagnostics%v)
+	node%diagnostics%len_ = 0
+	node%diagnostics%cap  = 0
+
+	call syntax_node_free(node%left)
+	call syntax_node_free(node%right)
+	call syntax_node_free(node%condition)
+	call syntax_node_free(node%body)
+	call syntax_node_free(node%array)
+	call syntax_node_free(node%lbound)
+	call syntax_node_free(node%ubound)
+	call syntax_node_free(node%step)
+	call syntax_node_free(node%len_)
+	call syntax_node_free(node%rank)
+	call syntax_node_free(node%if_clause)
+	call syntax_node_free(node%else_clause)
+	call syntax_node_free(node%member)
+
+	call syntax_nodes_free(node%elems)
+	call syntax_nodes_free(node%lsubscripts)
+	call syntax_nodes_free(node%usubscripts)
+	call syntax_nodes_free(node%ssubscripts)
+	call syntax_nodes_free(node%args)
+	call syntax_nodes_free(node%size)
+	call syntax_nodes_free(node%members)
+
+end subroutine syntax_node_destroy
+
+!===============================================================================
+
+recursive module subroutine fn_destroy(fn)
+
+	! fn_t's two nested-allocatable components -- %params (an array of
+	! value_t) and %node (the fn body's whole syntax_node_t AST) -- are the
+	! shape distrusted throughout this codebase, so both get an explicit
+	! teardown rather than a bare deallocate.  c.f. value_array_destroy()
+	! (value.f90) and syntax_node_destroy() above.
+	!
+	! %node matters most on the REPL fn path: fns_destroy(), fns_rollback()
+	! and state_destroy() all funnel through here, so every fn AST declared at
+	! the REPL is freed by this routine.  %param_names and %variadic_name are
+	! left to ordinary deallocation -- a string_vector_t and a scalar
+	! character are shallow enough to trust
+
+	type(fn_t), intent(inout) :: fn
+
+	call value_array_destroy(fn%params)
+
+	if (allocated(fn%node)) then
+		call syntax_node_destroy(fn%node)
+		deallocate(fn%node)
 	end if
 
-	!print *, 'done fn_ternary_tree_node_t()'
+end subroutine fn_destroy
 
-end subroutine fn_ternary_tree_copy
+!===============================================================================
+
+recursive module subroutine fns_destroy(dict)
+
+	! Explicitly tear down an fns_t: the hash table's fn_t payloads (whose
+	! %params is the component of concern, c.f. fn_destroy() above) plus the
+	! flat %fns array used at eval time
+
+	type(fns_t), intent(inout) :: dict
+
+	!********
+
+	integer :: i
+
+	if (allocated(dict%table)) then
+		do i = 1, size(dict%table)
+			if (allocated(dict%table(i)%val)) then
+				call fn_destroy(dict%table(i)%val)
+				deallocate(dict%table(i)%val)
+			end if
+			if (allocated(dict%table(i)%key)) deallocate(dict%table(i)%key)
+		end do
+		deallocate(dict%table)
+	end if
+
+	if (allocated(dict%fns)) then
+		do i = 1, size(dict%fns)
+			call fn_destroy(dict%fns(i))
+		end do
+		deallocate(dict%fns)
+	end if
+
+	dict%capacity = 0
+	dict%count    = 0
+
+end subroutine fns_destroy
+
+!===============================================================================
+
+! fn_ternary_tree_copy() was here.  It's no longer needed: fns_t is now a flat
+! hash table (fn_entry_t table(:) in types.f90) instead of a ternary tree, so
+! default (intrinsic) assignment suffices -- it recurses elementwise over
+! table(:), and each fn_entry_t's allocatable val component already uses
+! fn_copy() via fn_t's own defined assignment(=)
 
 !===============================================================================
 
@@ -224,15 +717,16 @@ recursive module subroutine syntax_node_copy(dst, src)
 	dst%kind = src%kind
 	dst%op   = src%op
 
-	dst%val  = src%val
+	call value_copy(dst%val, src%val)
 	!dst%val%sca%file_     = src%val%sca%file_
 	!dst%val%sca%file_%eof = src%val%sca%file_%eof
 
-	dst%identifier = src%identifier
-	dst%id_index   = src%id_index
-	dst%num_locs   = src%num_locs
-	dst%is_loc     = src%is_loc
-	dst%root_kind  = src%root_kind
+	dst%identifier    = src%identifier
+	dst%id_index      = src%id_index
+	dst%num_locs      = src%num_locs
+	dst%is_loc        = src%is_loc
+	dst%root_kind     = src%root_kind
+	dst%is_enum_name  = src%is_enum_name
 
 	if (allocated(src%struct_name)) then
 		dst%struct_name = src%struct_name
@@ -459,6 +953,7 @@ recursive module subroutine syntax_node_move(src, dst)
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
 	dst%root_kind       = src%root_kind
+	dst%is_enum_name    = src%is_enum_name
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit
 	dst%usub_omit       = src%usub_omit
@@ -533,6 +1028,7 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
 	dst%root_kind       = src%root_kind
+	dst%is_enum_name    = src%is_enum_name
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit
 	dst%usub_omit       = src%usub_omit
@@ -586,94 +1082,20 @@ end subroutine syntax_node_move_into
 
 !===============================================================================
 
-recursive module subroutine ternary_tree_copy(dst, src)
-
-	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-	! source, they will be gone!
-	!
-	! This should be avoided for efficient compilation, but the interactive
-	! interpreter uses it to backup and restore the variable dict for
-	! partially-evaluated continuation lines
-
-	class(ternary_tree_node_t), intent(inout) :: dst
-	class(ternary_tree_node_t), intent(in)    :: src
-
-	!********
-
-	!if (.not. allocated(dst)) allocate(dst)
-
-	dst%split_char = src%split_char
-
-	dst%id_index = src%id_index
-	dst%is_const = src%is_const
-
-	if (allocated(src%val)) then
-		if (.not. allocated(dst%val)) allocate(dst%val)
-		dst%val = src%val
-	end if
-
-	if (allocated(src%left)) then
-		if (.not. allocated(dst%left)) allocate(dst%left)
-		dst%left = src%left
-	end if
-
-	if (allocated(src%mid)) then
-		if (.not. allocated(dst%mid)) allocate(dst%mid)
-		dst%mid = src%mid
-	end if
-
-	if (allocated(src%right)) then
-		if (.not. allocated(dst%right)) allocate(dst%right)
-		dst%right = src%right
-	end if
-
-end subroutine ternary_tree_copy
+! ternary_tree_copy() was here.  It's no longer needed: var_dict_t is now a
+! flat hash table (var_entry_t table(:) in types.f90) instead of a ternary
+! tree, so default (intrinsic) assignment suffices -- it recurses elementwise
+! over table(:), and each var_entry_t's allocatable val component already
+! uses value_t's own defined assignment(=).  See vars_copy() above
 
 !===============================================================================
 
-recursive module subroutine struct_ternary_tree_copy(dst, src)
-
-	! Deep copy.  This overwrites dst with src.  If dst had keys that weren't in
-	! source, they will be gone!
-	!
-	! This should be avoided for efficient compilation, but the interactive
-	! interpreter uses it to backup and restore the variable dict for
-	! partially-evaluated continuation lines
-
-	class(struct_ternary_tree_node_t), intent(inout) :: dst
-	class(struct_ternary_tree_node_t), intent(in)    :: src
-
-	!********
-
-	!print *, 'starting struct_ternary_tree_node_t()'
-
-	dst%split_char = src%split_char
-
-	dst%id_index = src%id_index
-
-	if (allocated(src%val)) then
-		if (.not. allocated(dst%val)) allocate(dst%val)
-		dst%val = src%val
-	end if
-
-	if (allocated(src%left)) then
-		if (.not. allocated(dst%left)) allocate(dst%left)
-		dst%left = src%left
-	end if
-
-	if (allocated(src%mid)) then
-		if (.not. allocated(dst%mid)) allocate(dst%mid)
-		dst%mid = src%mid
-	end if
-
-	if (allocated(src%right)) then
-		if (.not. allocated(dst%right)) allocate(dst%right)
-		dst%right = src%right
-	end if
-
-	!print *, 'done struct_ternary_tree_node_t()'
-
-end subroutine struct_ternary_tree_copy
+! struct_ternary_tree_copy() was here.  It's no longer needed: structs_t is
+! now a flat hash table (struct_entry_t table(:) in types.f90) instead of a
+! ternary tree, so default (intrinsic) assignment suffices -- it recurses
+! elementwise over table(:), and each struct_entry_t's allocatable val
+! component already uses struct_copy() via struct_t's own defined
+! assignment(=)
 
 !===============================================================================
 

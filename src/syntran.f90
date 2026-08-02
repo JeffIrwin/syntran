@@ -39,7 +39,7 @@ subroutine eval_dispatch(tree, state, res)
 	type(program_t) :: prog
 
 	if (state%bytecode) then
-		call compile_tree(tree, prog)
+		call compile_tree(tree, prog, state%fns)
 		call vm_run(prog, state, res)
 	else
 		call syntax_eval(tree, state, res)
@@ -156,14 +156,16 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 		if (io /= exit_success) then
 			if (.not. state%quiet) write(*,*) err_404(startup_file)
+			call state_destroy(state)
 			return
 		end if
 
-		compilation = syntax_parse(source_text, state%vars, state%fns, startup_file)
+		compilation = syntax_parse(source_text, state, startup_file)
 		if (.not. state%quiet) call compilation%log_diagnostics()
 
 		if (compilation%diagnostics%len_ > 0) then
 			res_str = ''
+			call state_destroy(state)
 			return
 		end if
 
@@ -173,6 +175,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 			! eval_dispatch() already printed and exited for non-quiet
 			! callers, so reaching here means quiet was true
 			res_str = ''
+			call state_destroy(state)
 			return
 		end if
 		res_str = res%to_str()
@@ -188,7 +191,15 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 			! Interpret multi-line strings one line at a time to mock the
 			! interpreter getting continued stdin lines.  If you know your whole
 			! string ahead of time, just use syntran_eval() instead
-			line = sv%get_line(iostat = io)
+			if (continue_) then
+				! Mirror the stdin branch below: if the previous line left a
+				! statement unfinished (e.g. a multi-line fn declaration),
+				! keep accumulating instead of restarting from just the next
+				! line
+				line = line//line_feed//sv%get_line(iostat = io)
+			else
+				line = sv%get_line(iostat = io)
+			end if
 
 		else
 
@@ -267,7 +278,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 		end if
 
 		res_str = ' '
-		compilation = syntax_parse(line, state%vars, state%fns, src_file, allow_cont)
+		compilation = syntax_parse(line, state, src_file, allow_cont)
 		!print *, 'in interpreter'
 
 		!print *, 'compilation%expecting = ', compilation%expecting
@@ -320,6 +331,8 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 	!print *, 'done syntran_interpret()'
 
+	call state_destroy(state)
+
 end function syntran_interpret
 
 !===============================================================================
@@ -335,7 +348,7 @@ integer function syntran_eval_i32(str_) result(eval_i32)
 	call init_state(state)
 	state%quiet = .false.
 
-	tree = syntax_parse(str_, state%vars, state%fns)
+	tree = syntax_parse(str_, state)
 	call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -366,7 +379,7 @@ integer(kind = 8) function syntran_eval_i64(str_) result(val_)
 	call init_state(state)
 	state%quiet = .false.
 
-	tree = syntax_parse(str_, state%vars, state%fns)
+	tree = syntax_parse(str_, state)
 	call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -400,7 +413,7 @@ real(kind = 4) function syntran_eval_f32(str_, quiet) result(eval_f32)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
-	tree = syntax_parse(str_, state%vars, state%fns)
+	tree = syntax_parse(str_, state)
 	if (.not. state%quiet) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -443,7 +456,7 @@ real(kind = 8) function syntran_eval_f64(str_, quiet) result(eval_f64)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
-	tree = syntax_parse(str_, state%vars, state%fns)
+	tree = syntax_parse(str_, state)
 	if (.not. state%quiet) call tree%log_diagnostics()
 
 	if (tree%diagnostics%len_ > 0) then
@@ -519,8 +532,9 @@ subroutine init_state(state, script_args, src_dir, bytecode)
 				state%bytecode = .false.
 				if (.not. no_warn) write(error_unit, '(a)') fg_bold_yellow//'Warning'//color_reset// &
 					': SYNTRAN_BACKEND=ast is deprecated. ' // &
-					'The AST walker will be removed in a future release. If you encounter ' // &
-					'bugs, please report them at https://github.com/JeffIrwin/syntran/issues'
+					'The AST walker is currently planned for removal in syntran 1.6.0. ' // &
+					'If you rely on it, or if you encounter bugs in the default bytecode ' // &
+					'backend, please comment at https://github.com/JeffIrwin/syntran/issues'
 			end if
 		end if
 	end if
@@ -554,13 +568,11 @@ end subroutine init_state
 
 !===============================================================================
 
-function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecode) result(res)
+function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecode, &
+		syntax_only, io) result(res)
 
 	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
 	! for syntran_interpret_file() is boolean
-	!
-	! TODO: add optional io arg in case of errors.  Especially for "-c" cmd arg.
-	! See note below
 
 	character(len = *), intent(in)  :: str_
 	character(len = :), allocatable :: res
@@ -580,11 +592,23 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	! snippet without mutating SYNTRAN_BACKEND in the process environment
 	logical, optional, intent(in) :: bytecode
 
+	! Parse and type-check only, without evaluating.  Diagnostics are still
+	! logged and copied to `diags`, but nothing runs: `use` module-level
+	! statements, file I/O, and even bytecode compilation are all skipped.
+	! Backs the `--syntax-only` CLI option
+	logical, optional, intent(in) :: syntax_only
+
+	! exit_success/exit_failure status for non-interactive callers (the CLI in
+	! file or `-c` mode).  Failure means the program did not run to
+	! completion: parser diagnostics, or a runtime halt for quiet callers
+	! (non-quiet callers exit the process from eval_dispatch() instead)
+	integer, optional, intent(out) :: io
+
 	!********
 
 	character(len = :), allocatable :: src_filel, dir
 
-	logical :: repl
+	logical :: repl, syntax_onlyl
 
 	type(state_t) :: state
 	type(syntax_node_t) :: tree
@@ -603,6 +627,11 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
+	syntax_onlyl = .false.
+	if (present(syntax_only)) syntax_onlyl = syntax_only
+
+	if (present(io)) io = exit_success
+
 	src_filel = '<stdin>'
 	repl = .true.
 	if (present(src_file)) then
@@ -615,7 +644,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	! TODO: make a helper fn that all the eval_* fns use
 
 	!print *, "parsing"
-	tree = syntax_parse(str_, state%vars, state%fns, src_filel, repl = repl)
+	tree = syntax_parse(str_, state, src_filel, repl = repl)
 	!print *, "done"
 	!print *, "size fns = ", size(state%fns%fns)
 
@@ -626,12 +655,21 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	if (present(diags)) diags = tree%diagnostics
 
 	if (tree%diagnostics%len_ > 0) then
-		! TODO: set io
+		if (present(io)) io = exit_failure
 		res = ''
+		call state_destroy(state)
 		return
 	end if
 
 	! No chdir() needed - src_dir is now in state and will be used by open()
+
+	if (syntax_onlyl) then
+		! Parse and type check succeeded.  Stop before eval_dispatch() so that
+		! nothing is compiled or executed -- in particular, module-level
+		! statements pulled in by `use` (see parse_use_statement()) must not run
+		res = ''
+		return
+	end if
 
 	!print *, "evaling "
 	call eval_dispatch(tree, state, val)
@@ -645,7 +683,9 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	! since val may not have been fully populated when evaluation halted
 	if (state%rt_halt) then
 		if (present(diags)) call diags%push_all(state%rt_diags)
+		if (present(io)) io = exit_failure
 		res = ''
+		call state_destroy(state)
 		return
 	end if
 
@@ -654,11 +694,14 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 
 	!print *, "done syntran_eval()"
 
+	call state_destroy(state)
+
 end function syntran_eval
 
 !===============================================================================
 
-function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags, bytecode) result(res)
+function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags, bytecode, &
+		syntax_only, io) result(res)
 
 	! TODO:
 	!   - enable input echo for file input (not for stdin)
@@ -694,13 +737,19 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	! Explicit backend override.  See syntran_eval()/init_state()
 	logical, optional, intent(in) :: bytecode
 
+	! Parse and type-check only, without evaluating.  See syntran_eval()
+	logical, optional, intent(in) :: syntax_only
+
+	! exit_success/exit_failure status.  See syntran_eval()
+	integer, optional, intent(out) :: io
+
 	!********
 
 	character(len = :), allocatable :: source_text
 
 	integer :: iostat
 
-	logical :: chdirl, quiet_infol
+	logical :: chdirl, quiet_infol, syntax_onlyl
 
 	type(state_t) :: state
 
@@ -711,6 +760,14 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 
 	chdirl = .false.
 	if (present(chdir_)) chdirl = chdir_
+
+	syntax_onlyl = .false.
+	if (present(syntax_only)) syntax_onlyl = syntax_only
+
+	! Syntax checking is silent on success, so suppress the info line too
+	if (syntax_onlyl) quiet_infol = .true.
+
+	if (present(io)) io = exit_success
 
 	if (.not. state%quiet .and. .not. quiet_infol) then
 		write(*,*) 'Interpreting file "'//filename//'"'
@@ -725,6 +782,7 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 			diags = new_string_vector()
 			call diags%push(err_404(filename))
 		end if
+		if (present(io)) io = exit_failure
 		res = ''
 		return
 	end if
@@ -732,10 +790,11 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	if (chdirl) then
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
 			chdir_ = get_dir(filename), script_args = script_args, diags = diags, &
-			bytecode = bytecode)))
+			bytecode = bytecode, syntax_only = syntax_only, io = io)))
 	else
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
-			script_args = script_args, diags = diags, bytecode = bytecode)))
+			script_args = script_args, diags = diags, bytecode = bytecode, &
+			syntax_only = syntax_only, io = io)))
 	end if
 
 end function syntran_interpret_file

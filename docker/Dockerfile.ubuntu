@@ -26,7 +26,7 @@ RUN $FC --version
 
 ## Caller can set the branch as a cmd arg like this:
 ##
-##     docker build . --file Dockerfile.ubuntu -t sy --build-arg BRANCH=dev
+##     docker build . --file docker/Dockerfile.ubuntu -t sy --build-arg BRANCH=dev
 ##
 #ARG BRANCH="dev"
 ARG BRANCH="main"

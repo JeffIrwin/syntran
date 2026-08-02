@@ -1,0 +1,13 @@
+// E97: enum-index
+// A bare enum type name (an array of all its variants) cannot be
+// subscripted, because positional Dir[n] would disagree with the
+// by-value reverse cast Dir(n) whenever explicit variant values are used
+
+enum Dir
+{
+	North,
+	South,
+}
+
+let d =
+	Dir[0];

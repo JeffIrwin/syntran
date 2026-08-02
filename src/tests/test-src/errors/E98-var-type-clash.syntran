@@ -1,0 +1,15 @@
+// E98: var-type-clash
+// A variable name clashes with an already-declared enum or struct type
+// name.  Both a bare enum reference (e.g. `Suit` as an array of all its
+// variants) and a struct instantiator ambiguous with a block (e.g.
+// `if S { }`) depend on resolving a bare name against the type
+// namespaces, so a variable can never share a name with a type
+
+enum Suit
+{
+	Hearts,
+	Clubs,
+}
+
+let
+	Suit = 5;

@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <locale.h>
 #include <sys/stat.h>
 
 #ifdef _WIN32
@@ -140,6 +141,66 @@ const char *syntran_history_path(void)
 	snprintf(path, sizeof(path), "%s/%s", home, ".syntran_history");
 	return path;
 }
+
+/* Work around a libgfortran bug on Windows: setlocale() query results are not
+ * stable, but libgfortran stores one across other setlocale() calls.
+ *
+ * mingw has no uselocale(), so libgfortran falls back to save/restore around
+ * every formatted READ/WRITE (see _gfortrani_old_locale / _old_locale_ctr in
+ * the linked libgfortran):
+ *
+ *     if (old_locale_ctr++ == 0) {
+ *         old_locale = setlocale (LC_NUMERIC, NULL);   // borrowed pointer
+ *         setlocale (LC_NUMERIC, "C");                 // may invalidate it
+ *     }
+ *     ...
+ *     if (--old_locale_ctr == 0)
+ *         setlocale (LC_NUMERIC, old_locale);          // may be dangling
+ *
+ * C99 7.11.1.1p8 says the returned string is only valid until the next
+ * setlocale() call, so holding it is invalid.  On UCRT it aims into a
+ * refcounted internal locale buffer that later calls can free or rewrite, so
+ * the restore hands setlocale() a stale pointer and its internal mbstowcs()
+ * scans for a NUL through freed memory.  That usually finds one harmlessly --
+ * which is why this surfaced as a SIGSEGV in only ~1% of runs, always inside
+ * ucrtbase and never anywhere near syntran's own code.
+ *
+ * Fix: copy every query result into storage we own, so the pointer
+ * libgfortran keeps stays valid no matter what happens to the CRT's buffer.
+ * Enabled by linking with `-Wl,--wrap=setlocale`; without that flag this
+ * function is simply never referenced.
+ *
+ * Only query calls (locale == NULL) are copied -- a setting call's result is
+ * used immediately by libgfortran and needs no stable storage.  syntran is
+ * single-threaded, so plain statics are fine.
+ */
+#ifdef _WIN32
+/* Only Windows links with -Wl,--wrap=setlocale (see CMakeLists.txt / fpm
+ * --flag above); on other platforms the linker never synthesizes
+ * __real_setlocale, so this must not be compiled there.
+ */
+char *__real_setlocale(int category, const char *locale);
+
+char *__wrap_setlocale(int category, const char *locale)
+{
+	/* LC_ALL..LC_MAX is 0..5 in UCRT; size defensively and bounds-check. */
+	enum { NCAT = 8, CATLEN = 256 };
+	static char stable[NCAT][CATLEN];
+
+	char *ret = __real_setlocale(category, locale);
+
+	if (locale == NULL && ret != NULL && category >= 0 && category < NCAT)
+	{
+		size_t n = strlen(ret);
+		if (n >= CATLEN) n = CATLEN - 1;
+		memcpy(stable[category], ret, n);
+		stable[category][n] = '\0';
+		return stable[category];
+	}
+
+	return ret;
+}
+#endif
 
 /* Non-zero iff path exists and is a directory.
  *

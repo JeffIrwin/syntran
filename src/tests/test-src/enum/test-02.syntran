@@ -1,0 +1,33 @@
+// Auto-increment continues from an explicit value across multiple enums
+// declared in the same file, and enums can be used as fn params/returns
+// without any struct in the mix
+
+enum Direction
+{
+	North,
+	East,
+	South,
+	West,
+}
+
+fn turn_right(d: Direction): Direction
+{
+	if d == Direction.North { return Direction.East; }
+	if d == Direction.East  { return Direction.South; }
+	if d == Direction.South { return Direction.West; }
+	return Direction.North;
+}
+
+let d0 = Direction.North;
+let d1 = turn_right(d0);
+let d2 = turn_right(d1);
+let d3 = turn_right(d2);
+let d4 = turn_right(d3);
+
+let ok1 = d1 == Direction.East;
+let ok2 = d2 == Direction.South;
+let ok3 = d3 == Direction.West;
+let ok4 = d4 == Direction.North;
+let ok5 = i32(Direction.West) == 3;
+
+return ok1 and ok2 and ok3 and ok4 and ok5;

@@ -1,0 +1,30 @@
+// Test qualified enum export from module (mod::EnumName.Variant and
+// mod::EnumName(ordinal) syntax), including qualified fn calls returning/
+// taking the enum and enum arrays
+
+use enum_mod;
+
+let s1 = enum_mod::Suit.Hearts;
+let ok1 = enum_mod::is_red(s1);
+
+let s2 = enum_mod::Suit(2);
+let ok2 = s2 == enum_mod::Suit.Clubs and not enum_mod::is_red(s2);
+
+let deck = enum_mod::full_deck();
+let ok3 = deck[3] == enum_mod::Suit.Spades;
+
+let hand = [enum_mod::Suit.Hearts, enum_mod::Suit(2)];
+let ok4 = hand[1] == enum_mod::Suit.Clubs;
+
+// A bare qualified enum name (mod::EnumName) is an array of all its
+// variants, same as the unqualified form
+let ok5 = size(enum_mod::Suit) == 4;
+
+let sum = 0;
+for s in enum_mod::Suit
+{
+	sum = sum + i32(s);
+}
+let ok6 = sum == 0 + 1 + 2 + 3;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6;

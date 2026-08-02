@@ -5,7 +5,49 @@ module test_m
 
 	implicit none
 
+	! Test-group filters, set from --only/--skip by `program test` below and
+	! read by run_group().  Unallocated means "no filter"
+	character(len = :), allocatable :: test_only, test_skip
+
+	! Anchor for symbolizing -fbacktrace output, printed by --anchor.  The exe
+	! is relocated by ASLR on every run, so the raw addresses gfortran prints
+	! on a crash mean nothing on their own.  This is an ordinary saved symbol;
+	! the whole image relocates by one delta, so
+	!
+	!     link_time_addr_of_crash = crash_addr - loc(aslr_anchor) + L
+	!
+	! where L is this variable's link-time address from `nm test.exe`.  Feed
+	! that to addr2line.  See utils/symbolize-backtrace.sh
+	integer, save :: aslr_anchor = 0
+
 contains
+
+!===============================================================================
+
+logical function run_group(name)
+
+	! Should the test group `name` run?  Every call in unit_tests() is guarded
+	! by this.  --only and --skip both match a substring of the group name (the
+	! part after `unit_test_`), so `--only repl` selects repl_fns and
+	! repl_structs both.
+	!
+	! This exists to make flaky-failure hunts cheap: a crash that only shows up
+	! in one group once every few hundred full-suite runs can be isolated with
+	!
+	!     test.exe --only repl_fns --repeat 5000
+	!
+	! or excluded, to see whether it disappears or just relocates, with
+	!
+	!     test.exe --skip repl_fns
+
+	character(len = *), intent(in) :: name
+
+	run_group = .true.
+	if (allocated(test_only)) run_group = index(name, test_only) > 0
+	if (.not. run_group) return
+	if (allocated(test_skip)) run_group = index(name, test_skip) == 0
+
+end function run_group
 
 !===============================================================================
 
@@ -69,6 +111,34 @@ function diag_has_text(diag_, text) result(found)
 		if (index(diag_%v(k)%s, text) > 0) found = .true.
 	end do
 end function diag_has_text
+
+!===============================================================================
+
+function diag_suggests(diag_, suggest) result(found)
+
+	! Like diag_has_text(), but for the "did you mean `<suggest>`?" spellcheck
+	! help line specifically.  Per err_undeclare_var()/err_undeclare_fn()/
+	! err_bad_type()/err_bad_member_name*() in errors.f90, the suggested name
+	! itself is color-highlighted (ANSI codes sit between it and the
+	! surrounding backticks), so a plain diag_has_text() for the whole phrase
+	! would never match -- reconstruct the exact colored substring instead,
+	! mirroring how diag_loc_ok() reconstructs the colored caret run
+
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: suggest
+	logical :: found
+
+	character(len = :), allocatable :: expect
+	integer :: k
+
+	expect = 'did you mean `'//fg_bright_green//suggest//color_reset//'`?'
+
+	found = .false.
+	do k = 1, diag_%len_
+		if (index(diag_%v(k)%s, expect) > 0) found = .true.
+	end do
+
+end function diag_suggests
 
 !===============================================================================
 
@@ -1424,6 +1494,29 @@ subroutine unit_test_intr_fns(npass, nfail)
 			diag_has_code(get_diags('getenv("PATH");'), EC_STD_ONLY_FN), &
 			diag_has_code(get_diags('hasenv("PATH");'), EC_STD_ONLY_FN), &
 
+			! std::exists / std::try_open / file handle members
+			eval('std::exists("src/tests/test-src/io/test-01.syntran");') == 'true', &
+			eval('std::exists("no/such/path/syntran_xyz");') == 'false', &
+			eval('std::exists("");') == 'false', &
+			diag_has_code(get_diags('exists("x");'), EC_STD_ONLY_FN), &
+
+			eval('let f = std::try_open("no/such/path/xyz", "r"); f.is_open;') == 'false', &
+			eval('let f = std::try_open("no/such/path/xyz", "r"); f.name;') == 'no/such/path/xyz', &
+			diag_has_code(get_diags('std::try_open("x", "q");'), RC_BAD_FILE_MODE), &
+			diag_has_code(get_diags('std::try_open("x", "rw");'), RC_FILE_RW_MODE), &
+			diag_has_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); readln(f);'), RC_READLN_NOT_OPEN), &
+			diag_has_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); close(f);'), RC_CLOSE_NOT_OPEN), &
+			diag_has_code(get_diags('try_open("x","r");'), EC_STD_ONLY_FN), &
+
+			eval('std::IN.is_open;')  == 'true', &
+			eval('std::IN.name;')     == 'stdin', &
+			eval('std::IN.eof;')      == 'false', &
+			eval('std::OUT.name;')    == 'stdout', &
+			eval('std::ERR.is_open;') == 'true', &
+			eval('std::IN.name[0];')  == 's', &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -1770,6 +1863,7 @@ subroutine unit_test_var_scopes(npass, nfail)
 		[   &
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-03.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2354,6 +2448,13 @@ subroutine unit_test_i64(npass, nfail)
 				//'2147483648, 2147483649, 2147483650, 2147483651, ' &
 				//'2147483652, 2147483653, 2147483654, 2147483655, ' &
 				//'2147483656, 2147483657, 2147483658, 2147483659]', &
+			! Regression: array `=` assignment must preserve the LHS's
+			! element type (i32 here) instead of adopting the RHS's (i64),
+			! otherwise the value is later read through the wrong (zeroed)
+			! type slot.  Was `[0, 0, 0]`
+			eval("let aa = [0, 0]; aa = [9'i64, 1'i64]; [[0], aa];") == '[0, 9, 1]', &
+			eval("let a = [1.0f, 2.0f]; a = [3.0, 4.0]; a;") == &
+				'[3.000000E+00, 4.000000E+00]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2426,6 +2527,33 @@ subroutine unit_test_str(npass, nfail)
 			eval('" " == ["", " ", "  "];')  == '[false, true, false]', &
 			eval('["", " ", "  "] == " ";')  == '[false, true, false]', &
 			eval('["", " ", "  "] == [" ", " ", " "];')  == '[false, true, false]', &
+
+			! String ordering (<, <=, >, >=): lexicographic and length-aware,
+			! unlike raw Fortran `<` which blank-pads the shorter operand
+			eval('"abc" < "abd";')  == 'true', &
+			eval('"abd" < "abc";')  == 'false', &
+			eval('"abc" < "abc";')  == 'false', &
+			eval('"abc" <= "abc";') == 'true', &
+			eval('"abd" > "abc";')  == 'true', &
+			eval('"abc" > "abd";')  == 'false', &
+			eval('"abc" >= "abc";') == 'true', &
+			eval('"ab" < "abc";')   == 'true', &
+			eval('"abc" > "ab";')   == 'true', &
+
+			! Padding edge case: shorter string sorts first, unlike raw
+			! Fortran `<` which blank-pads and would treat these as equal
+			eval('"a" < "a ";')  == 'true', &
+			eval('"a " > "a";')  == 'true', &
+			eval('"a" <= "a ";') == 'true', &
+			eval('"a " >= "a";') == 'true', &
+			eval('"a" == "a ";') == 'false', &
+
+			! String array ordering, both directions and array-array
+			eval('["a", "b", "c"] < ["b", "b", "a"];') == '[true, false, false]', &
+			eval('["a", "b", "c"] < "b";') == '[true, false, false]', &
+			eval('"b" > ["a", "b", "c"];') == '[true, false, false]', &
+			eval('["a", "b", "c"] <= ["a", "a", "d"];') == '[true, false, true]', &
+
 			eval('"hello world";') == 'hello world', &
 
 			! Raw string literals: r"...", r#"..."#, r##"..."##, etc.
@@ -2572,7 +2700,14 @@ subroutine unit_test_array_i32_1(npass, nfail)
 			eval('[[0:3], [10]];') == '[0, 1, 2, 10]', &
 			eval('[[5; 2], [0:3], [10]];') == '[5, 5, 0, 1, 2, 10]', &
 			eval('[[5; 2], [0:2:6], [10]];') == '[5, 5, 0, 2, 4, 10]', &
-			eval('[48-6, 13*100 + 37];') == '[42, 1337]'  &
+			eval('[48-6, 13*100 + 37];') == '[42, 1337]', &
+
+			! Trailing commas in explicit array literals
+			eval('[3, 2, 1, ];') == '[3, 2, 1]', &
+			eval('[42, ];') == '[42]', &
+			eval('[48-6, 13*100 + 37, ];') == '[42, 1337]', &
+			eval('sum([1, 2, 3, 4, ; 2, 2]);') == '10', &
+			eval('[42; 3, ];') == '[42, 42, 42]'  &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -3211,6 +3346,21 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			! Omitted bounds: string (range form)
 			eval('let s = "hello"; s[3:];',         quiet) == 'lo',                     &
 			eval('let s = "hello"; s[:3];',         quiet) == 'hel',                    &
+			! String step/reverse slices (read).  Same [lower:step:upper] forms
+			! as arrays, e.g. s[:-1:] reverses a string
+			eval('let s = "hello"; s[:-1:];',       quiet) == 'olleh',                  &
+			eval('let s = "hello"; s[:];',          quiet) == 'hello',                  &
+			eval('let s = "hello"; s[3:-1:];',      quiet) == 'lleh',                   &
+			eval('let s = "hello world"; s[:2:];',  quiet) == 'hlowrd',                 &
+			eval('let s = "hello world"; s[1:2:];', quiet) == 'el ol',                  &
+			! String step/reverse slices (write)
+			eval('let s = "hello"; s[:-1:] = "olleh"; s;',       quiet) == 'hello',     &
+			eval('let s = "hello"; s[1:3] = "XY"; s;',           quiet) == 'hXYlo',     &
+			eval('let s = "hello world"; s[:2:] = "HLOWRD"; s;', quiet) == 'HeLlO WoRlD', &
+			! String-array element char step/reverse slices (read/write)
+			eval('let v = ["hello", "world", "wassup"]; v[0, :-1:];', quiet) == 'olleh', &
+			eval('let v = ["hello", "world", "wassup"]; v[1, :2:] = "WRD"; v[1];', &
+				quiet) == 'WoRlD', &
 			! Multi-dim with omitted upper alongside bare colon
 			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; m[0, 1:];', quiet) == '[3, 6]',   &
 			! Rank above OP_SLICE_NAT's native buffer size (MAX_NAT_SLICE_RANK)
@@ -3286,6 +3436,14 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 			!eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[10, 10, 10]', &
 			eval('let v = [0: 5]; v[1: 4] += [10; 3];', quiet) == '[11, 12, 13]', &  ! this option makes the most sense
 			eval('let v = [0: 5]; return (v[1: 4] += [10; 3]);', quiet) == '[11, 12, 13]', &  ! this option makes the most sense
+
+			! Documented in README.md "LHS and RHS slicing": a subscripted
+			! assignment expression evaluates to just the assigned portion,
+			! not the whole array, whether or not it's nested in another `let`
+			eval('let v = [0: 5]; let w = v[1: 4] = 7; w;', quiet) == '[7, 7, 7]', &
+			eval('let v = [0: 5]; let w = v[1: 4] = 7; v;', quiet) == '[0, 7, 7, 7, 4]', &
+			eval('let v = [0: 5]; v[2] = 9;', quiet) == '9', &
+			eval('let m = [0; 3, 3]; m[:, 1] = 99;', quiet) == '[99, 99, 99]', &
 
 			eval('let v = [0: 4]; v[0:2:4]   = 9; v;', quiet) == '[9, 1, 9, 3]', &
 			eval('let v = [0: 4]; v[1:2:4]   = 9; v;', quiet) == '[0, 9, 2, 9]', &
@@ -3505,6 +3663,22 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-20.syntran', quiet) == '0', &
 			interpret_file(path//'test-21.syntran', quiet) == '0', &
 			interpret_file(path//'test-22.syntran', quiet) == '0', &
+			interpret_file(path//'test-23.syntran', quiet) == 'true', &
+			! fn pointers / callbacks
+			interpret_file(path//'test-24.syntran', quiet) == '42', &
+			interpret_file(path//'test-25.syntran', quiet) == '85', &
+			interpret_file(path//'test-26.syntran', quiet) == '50', &
+			interpret_file(path//'test-27.syntran', quiet) == '3', &
+			interpret_file(path//'test-28.syntran', quiet) == '15', &
+			interpret_file(path//'test-29.syntran', quiet) == '720', &
+			interpret_file(path//'test-30.syntran', quiet) == '36', &
+			interpret_file(path//'test-31.syntran', quiet) == '0', &
+			interpret_file(path//'test-33.syntran', quiet) == &
+				'fn(i32): i32|fn()|fn([i32; :]): i32', &
+			! Regression: fwd-referenced fn result feeding an array-range
+			! bound used to falsely trip E56/E58 in parse pass 0
+			interpret_file(path//'test-34.syntran', quiet) == '3', &
+			interpret_file(path//'test-35.syntran', quiet) == '3', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -3514,6 +3688,252 @@ subroutine unit_test_fns(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_fns
+
+!===============================================================================
+
+subroutine unit_test_repl_fns(npass, nfail)
+
+	! User-defined fns declared interactively, one REPL line at a time via
+	! interpret() (c.f. unit_test_var_scopes/unit_test_assignment above for
+	! the same interpret() idiom).  Unlike unit_test_fns, which parses whole
+	! files/strings in one shot via interpret_file(), interpret() drives the
+	! real REPL loop in syntran.f90 one line at a time, so this is the only
+	! place that exercises the REPL's cross-line fn state (parser%fns
+	! round-tripping in core.f90's syntax_parse, and the bytecode backend's
+	! per-line program_t backfill in compile_ctrl.f90)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'REPL user-defined functions'
+
+	logical, parameter :: quiet = .true.
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Declare then call on a later line
+			interpret('fn f(): i32 { return 42; }'//line_feed// &
+				'f();', quiet) == '42', &
+			! Two fns declared on separate lines: the 2nd declaration must not
+			! clobber the 1st's slot in the flat fn array
+			interpret('fn f(): i32 { return 42; }'//line_feed// &
+				'fn g(): i32 { return 7; }'//line_feed// &
+				'f();', quiet) == '42', &
+			interpret('fn f(): i32 { return 42; }'//line_feed// &
+				'fn g(): i32 { return 7; }'//line_feed// &
+				'f();'//line_feed// &
+				'g();', quiet) == '7', &
+			! Declare then several unrelated statements that touch no fn --
+			! this used to segfault on both backends
+			interpret('fn f(): i32 { return 42; }'//line_feed// &
+				'1;'//line_feed// &
+				'2;', quiet) == '2', &
+			! Multi-line fn declaration via REPL continuation, then call
+			interpret('fn f(): i32'//line_feed// &
+				'{'//line_feed// &
+				'return 42;'//line_feed// &
+				'}'//line_feed// &
+				'f();', quiet) == '42', &
+			! Fn with params
+			interpret('fn add(a: i32, b: i32): i32 { return a + b; }'//line_feed// &
+				'add(3, 4);', quiet) == '7', &
+			! A fn calling another fn declared on an earlier REPL line
+			interpret('fn sq(x: i32): i32 { return x * x; }'//line_feed// &
+				'fn sum_sq(a: i32, b: i32): i32 { return sq(a) + sq(b); }'//line_feed// &
+				'sum_sq(3, 4);', quiet) == '25', &
+			! str params and return.  The all-i32 cases above leave fn%params
+			! full of value_t with nothing allocated inside them; str is the
+			! cheapest param type that makes fn%params carry real nested
+			! allocatables (value_t%str) through the cross-line copy/teardown
+			! that fn_copy()/fn_destroy() (types_copy.f90) perform
+			interpret('fn greet(name: str): str { return "hi " + name; }'//line_feed// &
+				'greet("bob");', quiet) == 'hi bob', &
+			! Same, one level deeper: an array param/return puts an array_t
+			! (with its own nested allocatables) inside fn%params
+			interpret('fn first(a: [i32; :]): i32 { return a[0]; }'//line_feed// &
+				'first([5, 6, 7]);', quiet) == '5', &
+			interpret('fn dbl(a: [i32; :]): [i32; :] { return 2 * a; }'//line_feed// &
+				'dbl([1, 2, 3]);', quiet) == '[2, 4, 6]', &
+			! Two heap-owning fns declared on *separate* REPL lines, then
+			! composed.  Declaring the second one is what drives
+			! fns_grow_flat() (types_dict.f90) down its old_size > 0 path,
+			! fn_move()-ing the first fn -- params, body AST and all -- into a
+			! newly allocated flat array.  That only ever happens in the REPL,
+			! and only when the earlier fn's params actually own heap is it
+			! moving anything but empty value_t
+			interpret('fn greet(name: str): str { return "hi " + name; }'//line_feed// &
+				'fn shout(s: str): str { return s + "!"; }'//line_feed// &
+				'shout(greet("bob"));', quiet) == 'hi bob!', &
+			interpret('fn first(a: [i32; :]): i32 { return a[0]; }'//line_feed// &
+				'fn dbl(a: [i32; :]): [i32; :] { return 2 * a; }'//line_feed// &
+				'first(dbl([1, 2, 3]));', quiet) == '2', &
+			! Redeclaring a fn on a later REPL line is an error, and stays one
+			! (c.f. the equivalent struct case in unit_test_repl_structs).
+			! quiet suppresses the diagnostic; this pins the behavior so the
+			! cross-line fns table can't silently start allowing overwrites
+			interpret('fn f(): i32 { return 42; }'//line_feed// &
+				'fn f(): i32 { return 7; }', quiet) == '', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_repl_fns
+
+!===============================================================================
+
+subroutine unit_test_repl_structs(npass, nfail)
+
+	! User-defined structs and enums declared interactively, one REPL line at
+	! a time via interpret(), c.f. unit_test_repl_fns above.  Structs and
+	! enums have never worked in the REPL: parser%structs/parser%enums
+	! (parse.f90) were parser-local and discarded at the end of every
+	! syntax_parse() call (core.f90), so a struct declared on one REPL line
+	! was invisible (or worse, hit internal_error() via a dangling
+	! struct_type variable) on the next.  This is the only place that
+	! exercises the REPL's cross-line struct/enum state, including the
+	! continuation rollback (structs_rollback/enums_rollback in
+	! types_dict.f90) that must undo a partial declaration left behind by a
+	! multi-line struct/enum entered across several REPL lines
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'REPL structs and enums'
+
+	logical, parameter :: quiet = .true.
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Single-line struct declaration, then instantiate and read a
+			! member on later lines
+			interpret('struct S { i: i32 }'//line_feed// &
+				'let s = S{i = 42};'//line_feed// &
+				's.i;', quiet) == '42', &
+			! Dot access on a line later than the `let`
+			interpret('struct S { i: i32 }'//line_feed// &
+				'let s = S{i = 1};'//line_feed// &
+				'1;'//line_feed// &
+				's.i;', quiet) == '1', &
+			! Member write on a later line
+			interpret('struct S { i: i32 }'//line_feed// &
+				'let s = S{i = 1};'//line_feed// &
+				's.i = 7;'//line_feed// &
+				's.i;', quiet) == '7', &
+			! Multi-line struct declaration via REPL continuation, then use.
+			! This is the case that requires structs_rollback(): a partial
+			! `struct S` / `{` reaches parser%structs%insert() before the
+			! continuation is detected, and without rollback the re-parse of
+			! the completed line would trip err_redeclare_struct
+			interpret('struct S'//line_feed// &
+				'{'//line_feed// &
+				'i: i32'//line_feed// &
+				'}'//line_feed// &
+				'let s = S{i = 7};'//line_feed// &
+				's.i;', quiet) == '7', &
+			! Struct with a method declared on line 1, instantiated and
+			! called on a later line (exercises the a5afc18 fns backfill
+			! through a struct receiver, once the struct type itself
+			! resolves)
+			interpret('struct S { i: i32, fn get(): i32 { return i; } }'//line_feed// &
+				'let s = S{i = 9};'//line_feed// &
+				's.get();', quiet) == '9', &
+			! Nested struct across lines
+			interpret('struct Inner { j: i32 }'//line_feed// &
+				'struct Outer { inn: Inner }'//line_feed// &
+				'let o = Outer{inn = Inner{j = 3}};'//line_feed// &
+				'o.inn.j;', quiet) == '3', &
+			! Array of structs
+			interpret('struct P { x: i32 }'//line_feed// &
+				'let a = [P{x = 1}, P{x = 2}];'//line_feed// &
+				'a[1].x;', quiet) == '2', &
+			! Enum declared on one line, used on a later line
+			interpret('enum Color { red, green, blue }'//line_feed// &
+				'let c = Color.green;'//line_feed// &
+				'str(c);', quiet) == 'Color.green', &
+			! Repeated declare-and-discard: several structs, each declared,
+			! instantiated, and dropped on its own REPL line.  This stresses
+			! the per-line vars0 backup/teardown in syntax_parse()
+			! (core.f90), which runs on every single line -- not just ones
+			! with a struct redeclaration or continuation -- and is the
+			! hottest of the REPL struct/enum teardown paths
+			interpret('struct A { i: i32 }'//line_feed// &
+				'let a = A{i = 1};'//line_feed// &
+				'struct B { i: i32 }'//line_feed// &
+				'let b = B{i = 2};'//line_feed// &
+				'struct C { i: i32 }'//line_feed// &
+				'let c = C{i = 3};'//line_feed// &
+				'a.i + b.i + c.i;', quiet) == '6', &
+			! Struct with a str member, so the double-nested str(:)/string_t
+			! teardown (c.f. value_destroy()) is exercised across REPL lines,
+			! not just within a single parse/eval
+			interpret('struct S { name: str }'//line_feed// &
+				'let s = S{name = "hello"};'//line_feed// &
+				's.name;', quiet) == 'hello', &
+			! Struct with an array member, so array_t's own nested
+			! allocatables (c.f. array_destroy()) get the same cross-line
+			! exercise
+			interpret('struct S { x: [i32; :] }'//line_feed// &
+				'let s = S{x = [1, 2, 3]};'//line_feed// &
+				's.x[1];', quiet) == '2', &
+			! Multi-line enum declaration via REPL continuation.  Mirrors the
+			! multi-line struct test above, but exercises enums_rollback()
+			! instead of structs_rollback() -- no other test covers that path
+			interpret('enum Color'//line_feed// &
+				'{'//line_feed// &
+				'red, green, blue'//line_feed// &
+				'}'//line_feed// &
+				'let c = Color.blue;'//line_feed// &
+				'str(c);', quiet) == 'Color.blue', &
+			! Two multi-line struct continuations back to back, so the
+			! second structs_rollback() call runs against a table that
+			! already has a surviving entry (struct A) from the first
+			interpret('struct A'//line_feed// &
+				'{'//line_feed// &
+				'i: i32'//line_feed// &
+				'}'//line_feed// &
+				'struct B'//line_feed// &
+				'{'//line_feed// &
+				'j: i32'//line_feed// &
+				'}'//line_feed// &
+				'let a = A{i = 1};'//line_feed// &
+				'let b = B{j = 2};'//line_feed// &
+				'a.i + b.j;', quiet) == '3', &
+			! Redeclaring the same struct on a later line still errors (a
+			! diagnostic is logged and no result is printed, c.f. how
+			! unit_test_repl_fns has no equivalent -- fn redeclaration
+			! across REPL lines already worked this way post-a5afc18).
+			! quiet suppresses the E26 diagnostic here; its exact text is
+			! asserted separately in unit_test_error_codes via
+			! test-src/errors/E26-redeclare-struct.syntran
+			interpret('struct S { i: i32 }'//line_feed// &
+				'struct S { j: i32 }', quiet) == '', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_repl_structs
 
 !===============================================================================
 
@@ -3685,6 +4105,8 @@ subroutine unit_test_io(npass, nfail)
 			interpret_file(path//'test-08.syntran', quiet) == 'true', &
 			interpret_file(path//'test-09.syntran', quiet) == '[1337, 42, 16384]', &
 			interpret_file(path//'test-10.syntran', quiet) == '0', &
+			interpret_file(path//'test-11.syntran', quiet) == 'true', &
+			interpret_file(path//'test-12.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4860,6 +5282,7 @@ subroutine unit_test_struct_long(npass, nfail)
 			interpret_file(path//'test-03.syntran', quiet) == '0'   , &
 			interpret_file(path//'test-04.syntran', quiet) == '0'   , &
 			interpret_file(path//'test-methods.syntran', quiet) == 'true', &
+			interpret_file(path//'test-05.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4947,6 +5370,20 @@ subroutine unit_test_methods(npass, nfail)
 			diag_has_code(get_diags( &                                                          ! 20b: const via dot chain
 				'struct I{n:i32,fn inc(){n+=1;}} struct O{i:I} const o=O{i=I{n=0}}; o.i.inc();'), &
 				EC_CONST_ASSIGN), &
+
+			! --- &const method param: accepts plain value syntax (literal,
+			! temporary, or auto-borrowed bare name), no explicit `&` needed ---
+			eval('struct D{n:i32,fn echo(x:&const str):str{return x;}}' // &
+				'let d=D{n=0}; d.echo("hi");', quiet) == 'hi', &  ! 21
+			eval('struct D{n:i32,fn echo(x:&const str):str{return x;}}' // &
+				'let d=D{n=0}; d.echo("a"+"b");', quiet) == 'ab', &  ! 22
+			eval('struct D{n:i32,fn echo(x:&const str):str{return x;}}' // &
+				'let d=D{n=0}; let v="hi"; d.echo(v);', quiet) == 'hi', &  ! 23 (auto-borrow)
+			eval('struct D{n:i32,fn echo(x:&const str):str{return x;}}' // &
+				'let d=D{n=0}; let v="hi"; d.echo(v); v;', quiet) == 'hi', &  ! 24 (v unchanged)
+			.not. diag_has_code(get_diags( &
+				'struct D{n:i32,fn echo(x:&const str):str{return x;}}' // &
+				'let d=D{n=0}; d.echo("hi");'), EC_BAD_ARG_VAL), &  ! 25
 
 			! --- method at end of deep struct chain (no arrays) ---
 			eval('' &                                                                    ! 21
@@ -5107,6 +5544,67 @@ subroutine unit_test_methods(npass, nfail)
 				//'let w=W{c=C{n=1}};' &
 				//'w.get_c().inc();'), EC_MUTABLE_METHOD_ON_TEMP), &
 
+			! --- self-method calls: a bare name inside a method body that
+			! isn't a free fn resolves to a call on the implicit self, e.g.
+			! `inc()` -> `self.inc()` ---
+
+			! sibling mutating method called from another method
+			eval('struct C{n:i32, fn inc(){n+=1;} fn inc2(){inc();inc();}}' &        ! 45
+				//'let c=C{n=0}; c.inc2(); return c.n;' &
+				, quiet) == '2', &
+
+			! field read + sibling method call in the same method body
+			eval('struct C{n:i32,step:i32, fn inc(){n+=step;}' &                     ! 46
+				//'fn inc_twice():i32{inc();inc();return n;}}' &
+				//'let c=C{n=0,step=3}; return c.inc_twice();' &
+				, quiet) == '6', &
+
+			! direct recursion: a method calling itself
+			eval('struct C{n:i32, fn dec_to_zero(){if n>0{n-=1;dec_to_zero();}}}' &   ! 47
+				//'let c=C{n=5}; c.dec_to_zero(); return c.n;' &
+				, quiet) == '0', &
+
+			! forward reference: method `a` (declared first) calls method `b`
+			! (declared later in the same struct)
+			eval('struct C{n:i32, fn a(){b();} fn b(){n+=10;}}' &                     ! 48
+				//'let c=C{n=0}; c.a(); return c.n;' &
+				, quiet) == '10', &
+
+			! a free fn takes precedence over a same-named sibling method
+			eval('fn foo():i32{return 100;}' &                                       ! 49
+				//'struct C{n:i32, fn foo(){n+=1;} fn caller():i32{return foo();}}' &
+				//'let c=C{n=0}; return c.caller();' &
+				, quiet) == '100', &
+
+			! const method calling a const sibling method is allowed
+			eval('struct C{n:i32, const fn get():i32{return n;}' &                    ! 50
+				//'const fn get2():i32{return get();}}' &
+				//'let c=C{n=7}; return c.get2();' &
+				, quiet) == '7', &
+
+			! error: const method calling a mutable sibling method
+			diag_has_code(get_diags( &                                               ! 51
+				'struct C{n:i32, fn inc(){n+=1;} const fn bad():i32{inc();return n;}}'), &
+				EC_CONST_ASSIGN), &
+
+			! --- subscript on method return value (x.method()[i]) ---
+			eval('struct S{d:[i32;:], fn g():[i32;:]{return d;}}' &                   ! 52
+				//'let s=S{d=[10,20,30]};' &
+				//'return s.g()[1];' &
+				, quiet) == '20', &
+
+			! --- slice on method return value (x.method()[a:b]) ---
+			eval('struct S{d:[i32;:], fn g():[i32;:]{return d;}}' &                   ! 53
+				//'let s=S{d=[10,20,30]};' &
+				//'return s.g()[1:3];' &
+				, quiet) == '[20, 30]', &
+
+			! --- string-array element index on method return value ---
+			eval('struct S{w:[str;:], fn g():[str;:]{return w;}}' &                   ! 54
+				//'let s=S{w=["ab","cd"]};' &
+				//'return s.g()[1];' &
+				, quiet) == 'cd', &
+
 			.false. &
 		]
 
@@ -5116,6 +5614,330 @@ subroutine unit_test_methods(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_methods
+
+!===============================================================================
+
+subroutine unit_test_enum(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'enums'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Auto-increment from 0
+			eval( 'enum Dir{North,South,East,West}' &                    ! 1
+				//'i32(Dir.North);', quiet) == '0', &
+			eval( 'enum Dir{North,South,East,West}' &                    ! 2
+				//'i32(Dir.West);', quiet) == '3', &
+
+			! Explicit value + continuation
+			eval( 'enum Card{Two,Three,Jack=10,Queen,King}' &            ! 3
+				//'i32(Card.Jack);', quiet) == '10', &
+			eval( 'enum Card{Two,Three,Jack=10,Queen,King}' &            ! 4
+				//'i32(Card.Queen);', quiet) == '11', &
+			eval( 'enum Card{Two,Three,Jack=10,Queen,King}' &            ! 5
+				//'i32(Card.King);', quiet) == '12', &
+
+			! Printing (qualified name)
+			eval( 'enum Dir{North,South}' &                              ! 6
+				//'Dir.North;', quiet) == 'Dir.North', &
+			eval( 'enum Dir{North,South}' &                              ! 7
+				//'str(Dir.South);', quiet) == 'Dir.South', &
+
+			! Equality/inequality
+			eval( 'enum Dir{North,South}' &                              ! 8
+				//'Dir.North == Dir.North;', quiet) == 'true', &
+			eval( 'enum Dir{North,South}' &                              ! 9
+				//'Dir.North == Dir.South;', quiet) == 'false', &
+			eval( 'enum Dir{North,South}' &                              ! 10
+				//'Dir.North != Dir.South;', quiet) == 'true', &
+
+			! Array indexing via i32() cast
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &            ! 11
+				//'let a = [10,20,30,40];' &
+				//'a[i32(Suit.Clubs)];', quiet) == '30', &
+
+			! let-bound variable retains type across statements
+			eval( 'enum Dir{North,South}' &                              ! 12
+				//'let d = Dir.North;' &
+				//'d == Dir.North;', quiet) == 'true', &
+
+			! fn param/return
+			eval( 'enum Dir{North,South}' &                              ! 13
+				//'fn other(d: Dir): Dir {' &
+				//'    if d == Dir.North { return Dir.South; }' &
+				//'    return Dir.North;' &
+				//'}' &
+				//'other(Dir.North) == Dir.South;', quiet) == 'true', &
+
+			! Two different enums are not interchangeable
+			diag_has_code(get_diags( &
+				'enum Dir{N,S} enum Sig{N,S} Dir.N == Sig.N;'), &
+				EC_BINARY_TYPES), &
+			diag_has_code(get_diags( &
+				'enum Dir{N,S} enum Sig{N,S} fn f(x: Dir): void {} f(Sig.N);'), &
+				EC_BAD_ARG_TYPE), &
+
+			! Two variants that are both pinned explicitly to the same
+			! value are an intentional alias (not a duplicate-value
+			! error), and compare equal at runtime
+			.not. diag_has_code(get_diags( &
+				'enum Card{Jack=10,King=10} Card.King == Card.Jack;'), &
+				EC_DUPLICATE_ENUM_VALUE), &
+			eval( 'enum Card{Jack=10,King=10}' &
+				//'Card.King == Card.Jack;', quiet) == 'true', &
+
+			! Named alias, `King = Jack`, referencing a prior auto-
+			! incremented variant.  Also not a duplicate-value error
+			.not. diag_has_code(get_diags( &
+				'enum Card{Two,Three,Jack,Queen,King=Jack} Card.King;'), &
+				EC_DUPLICATE_ENUM_VALUE), &
+			eval( 'enum Card{Two,Three,Jack,Queen,King=Jack}' &
+				//'Card.King == Card.Jack;', quiet) == 'true', &
+			eval( 'enum Card{Two,Three,Jack,Queen,King=Jack}' &
+				//'i32(Card.King);', quiet) == '2', &
+
+			! Auto-increment resumes from an aliased value, not from
+			! where it would have been without the alias
+			eval( 'enum E{A,B=10,C=A,D}' &
+				//'i32(E.C);', quiet) == '0', &
+			eval( 'enum E{A,B=10,C=A,D}' &
+				//'i32(E.D);', quiet) == '1', &
+
+			! Named alias to an explicitly-pinned variant
+			eval( 'enum E{A=5,B=A}' &
+				//'i32(E.B);', quiet) == '5', &
+
+			! Forward reference (alias to a variant declared below it) is
+			! an unknown-variant error, not resolved
+			diag_has_code(get_diags( &
+				'enum E{A=B,B} i32(E.A);'), &
+				EC_UNKNOWN_VARIANT), &
+
+			! Alias to a name that doesn't exist in the enum at all
+			diag_has_code(get_diags( &
+				'enum E{A,B=Zz} i32(E.B);'), &
+				EC_UNKNOWN_VARIANT), &
+
+			! Reverse cast from i32 to enum
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'Suit(2) == Suit.Clubs;', quiet) == 'true', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'Suit(i32(Suit.Spades)) == Suit.Spades;', quiet) == 'true', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'str(Suit(1));', quiet) == 'Suit.Diamonds', &
+
+			! Reverse cast picks the variant by explicit value, not position
+			eval( 'enum Card{Two,Three,Jack=10,Queen,King}' &
+				//'Card(11) == Card.Queen;', quiet) == 'true', &
+
+			! Reverse cast with a non-i32 argument is a parse-time type error
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} Suit("x");'), &
+				EC_BAD_ARG_TYPE), &
+
+			! Reverse cast with an out-of-range constant literal is a
+			! parse-time error (E96)
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Diamonds,Clubs,Spades} Suit(99);'), &
+				EC_ENUM_CAST_RANGE), &
+
+			! Reverse cast with an out-of-range non-literal ordinal is a
+			! runtime error (R32), on both backends
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'let x = 99; Suit(x);', bytecode = .true.), &
+				RC_ENUM_CAST_RANGE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'let x = 99; Suit(x);', bytecode = .false.), &
+				RC_ENUM_CAST_RANGE), &
+
+			! Explicit negative values, and auto-increment resuming from a
+			! negative value
+			eval( 'enum E{A=-1,B}' &
+				//'i32(E.A);', quiet) == '-1', &
+			eval( 'enum E{A=-1,B}' &
+				//'i32(E.B);', quiet) == '0', &
+			eval( 'enum E{A=-5,B,C}' &
+				//'i32(E.C);', quiet) == '-3', &
+
+			! Two variants both pinned explicitly to the same negative
+			! value are an intentional alias, not a duplicate-value error
+			.not. diag_has_code(get_diags( &
+				'enum E{A=-1,B=-1} E.A;'), &
+				EC_DUPLICATE_ENUM_VALUE), &
+			eval( 'enum E{A=-1,B=-1}' &
+				//'E.A == E.B;', quiet) == 'true', &
+
+			! str() formats by variant name regardless of a negative
+			! backing value
+			eval( 'enum E{A=-1,B}' &
+				//'str(E.A);', quiet) == 'E.A', &
+
+			! Reverse cast round-trips through a negative ordinal (runtime
+			! R32 path, since a negated literal isn't a literal_expr at
+			! parse time)
+			eval( 'enum E{A=-1,B}' &
+				//'E(-1) == E.A;', quiet) == 'true', &
+
+			! A bare enum type name is an array of all its variants, in
+			! declaration order.  size() and `for` fall out of the existing
+			! array machinery with no changes to either
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'size(Suit);', quiet) == '4', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'let sum = 0;' &
+				//'for s in Suit { sum = sum + i32(s); }' &
+				//'sum;', quiet) == '6', &
+
+			! A variable can no longer share a name with an enum type (E98):
+			! a bare reference to either would be ambiguous
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let Suit = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+
+			! A bare enum name cannot be subscripted (E97): Suit[0] would
+			! disagree with the by-value reverse cast Suit(0) whenever
+			! explicit variant values are used
+			diag_has_code(get_diags( &
+				'enum Dir{North,South} Dir[0];'), &
+				EC_ENUM_INDEX), &
+
+			! A bare enum name is a special form, not a value (E99): binding
+			! it with let/const, assigning, returning, or passing it to a
+			! user fn or a non-allowlisted intrinsic all reject it, since any
+			! of those would leak the variant array back out as an ordinary,
+			! positionally-indexable value.  `for`/size()/str()/println()/
+			! writeln() are unaffected -- they consume the array directly
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let x = Suit;'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let x = Suit; x = Suit;'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'fn f(): [Suit;:] { return Suit; } f();'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'fn g(h: [Suit;:]): i32 { return 0; } g(Suit);'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let y = [Suit, Suit];'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'struct P{s: [Suit;:],} let p = P{s = Suit};'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let r = std::reshape(Suit, [2]);'), &
+				EC_ENUM_NAME_VALUE), &
+
+			! ... but the allowed forms are untouched
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'size(Suit);', quiet) == '4', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'str(Suit);', quiet) == &
+				'[Suit.Hearts, Suit.Diamonds, Suit.Clubs, Suit.Spades]', &
+
+			! Elementwise `==`/`!=` for arrays of enum values, and broadcast
+			! against a scalar enum on either side.  This used to crash with
+			! an internal I2 error (is_eq_value_t() had no enum_type arm) --
+			! found as a pre-existing bug while auditing the enum-array
+			! escape routes above
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D]; let b=[C.A,C.B,C.D];' &
+				//'a == b;', quiet) == '[true, true, true]', &
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D]; let b=[C.A,C.D,C.D];' &
+				//'a == b;', quiet) == '[true, false, true]', &
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D]; let b=[C.A,C.D,C.D];' &
+				//'a != b;', quiet) == '[false, true, false]', &
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D]; a == C.B;', quiet) == &
+				'[false, true, false]', &
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D]; C.B == a;', quiet) == &
+				'[false, true, false]', &
+			! positive: cross-enum-type array comparisons remain a parse
+			! error (E48), same as the pre-existing scalar enum_cookie check
+			diag_has_code(get_diags( &
+				'enum C{A} enum D{X} let a=[C.A]; let b=[D.X]; a == b;'), &
+				EC_BINARY_TYPES), &
+
+			! Struct equality (scalar or array) isn't implemented -- this was
+			! also an internal I2 crash before, now a clean parse-time error
+			diag_has_code(get_diags( &
+				'struct P{n:i32,} let a=P{n=1}; let b=P{n=1}; a == b;'), &
+				EC_BINARY_TYPES), &
+			diag_has_code(get_diags( &
+				'struct P{n:i32,}' &
+				//'let a=[P{n=1}]; let b=[P{n=1}]; a == b;'), &
+				EC_BINARY_TYPES), &
+
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_enum
+
+!===============================================================================
+
+subroutine unit_test_enum_long(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'enum scripts'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/enum/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-04.syntran', quiet) == 'true', &
+			interpret_file(path//'test-05.syntran', quiet) == 'true', &
+			interpret_file(path//'test-06.syntran', quiet) == 'true', &
+			interpret_file(path//'test-07.syntran', quiet) == 'true', &
+			interpret_file(path//'test-08.syntran', quiet) == 'true', &
+			interpret_file(path//'test-09.syntran', quiet) == 'true', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_enum_long
 
 !===============================================================================
 
@@ -5182,6 +6004,7 @@ subroutine unit_test_ref(npass, nfail)
 			interpret_file(path//'test-05.syntran', quiet) == '0', &
 			interpret_file(path//'test-06.syntran', quiet) == '0', &
 			interpret_file(path//'test-07.syntran', quiet) == '0', &
+			interpret_file(path//'test-08.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5219,6 +6042,7 @@ subroutine unit_test_recursion(npass, nfail)
 			interpret_file(path//'test-03.syntran', quiet) == '0', &
 			interpret_file(path//'test-04.syntran', quiet) == '0', &
 			interpret_file(path//'test-05.syntran', quiet) == '0', &
+			interpret_file(path//'test-06.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5273,6 +6097,8 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-struct-collision.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-transitive.syntran', quiet) == 'true', &
+			interpret_file(path//'test-enum-mod.syntran', quiet) == 'true', &
+			interpret_file(path//'test-enum-mod-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'test-circular.syntran', quiet) == '', &
 			interpret_file(path//'test-duplicate-import.syntran', quiet) == '', &
 			interpret_file(path//'test-duplicate-alias.syntran', quiet) == '', &
@@ -5790,6 +6616,14 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT), &
 			diag_count_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT) == 1, &
 			diag_has_code(get_diags('fn f(x: nope): i32 { return 1; }'), EC_BAD_TYPE), &
+			! A misspelled struct name in a type annotation should suggest the
+			! closest declared struct name
+			diag_suggests(get_diags( &
+				'struct P{x:i32} fn f(a: Pp): i32 { return 0; }'), 'P'), &
+			! A typo'd primitive type has no struct to suggest, so no help
+			! line should be emitted at all
+			.not. diag_has_text(get_diags( &
+				'fn f(x: i34): i32 { return 1; }'), 'did you mean'), &
 			diag_has_code(get_diags("1'foo;"), EC_BAD_TYPE_SUFFIX), &
 			diag_has_code(get_diags('$;'), EC_UNEXPECTED_CHAR), &
 			diag_has_code(get_diags('let a = ;'), EC_UNEXPECTED_TOKEN), &
@@ -5801,12 +6635,31 @@ subroutine unit_test_error_codes(npass, nfail)
 				'fn f() { let x = 1; } let a = f();'), EC_NO_RETURN), &
 			diag_has_code(get_diags('let a = 1; let a = 2;'), EC_REDECLARE_VAR), &
 			diag_has_code(get_diags('struct S{x:i32, x:i32}'), EC_REDECLARE_MEM), &
+			diag_has_code(get_diags('struct S{x:i32, fn x(){}}'), EC_MEMBER_METHOD_CLASH), &
+			diag_count_code(get_diags('struct S{x:i32, fn x(){}}'), EC_MEMBER_METHOD_CLASH) == 1, &
+			.not. diag_has_code(get_diags('struct S{x:i32, fn y(){}}'), EC_MEMBER_METHOD_CLASH), &
 			diag_has_code(get_diags( &
 				'fn f():i32{return 1;} fn f():i32{return 2;}'), EC_REDECLARE_FN), &
 			diag_has_code(get_diags('fn min():i32{return 1;}'), EC_REDECLARE_INTR_FN), &
 			diag_has_code(get_diags('struct S{x:i32} struct S{y:i32}'), EC_REDECLARE_STRUCT), &
 			diag_has_code(get_diags('struct i32{x:i32}'), EC_REDECLARE_PRIMITIVE), &
 			diag_has_code(get_diags('let a = b;'), EC_UNDECLARE_VAR), &
+			! A misspelled struct instantiator `Poimt{...}` is ambiguous with
+			! a plain identifier (c.f. `if my_bool {...}`), so it falls back
+			! to the undeclared-variable path.  With no close variable name in
+			! scope, that path should fall back further to a struct-name
+			! suggestion
+			diag_suggests(get_diags( &
+				'struct Point{x:i32} let a=Poimt{x=1};'), 'Point'), &
+			! But a close variable name must still win over any struct name,
+			! e.g. a misspelled boolean in `if my_bewl {...}` should suggest
+			! the variable `my_bool`, not any struct
+			diag_suggests(get_diags( &
+				'struct Point{x:i32} let my_bool=true; if my_bewl {}'), &
+				'my_bool'), &
+			.not. diag_suggests(get_diags( &
+				'struct Point{x:i32} let my_bool=true; if my_bewl {}'), &
+				'Point'), &
 			diag_has_code(get_diags('nope();'), EC_UNDECLARE_FN), &
 			diag_count_code(get_diags('nope();'), EC_UNDECLARE_FN) == 1, &
 			! Cascading E9 from E29: println() and subsequent calls after an undefined
@@ -5867,6 +6720,16 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('fn f(): i32 { return 1.0; }'), EC_BAD_RET_TYPE), &
 			diag_has_code(get_diags( &
 				'fn f(x: i32): i32 { return x; } let a = f(1.0);'), EC_BAD_ARG_TYPE), &
+			! calling through a fn pointer reuses the same arg-count/type
+			! checks as a direct call (check_call_arg), just against the
+			! pointer's stored signature instead of a fn_t's params
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2*n; } ' // &
+				'fn apply(f: fn(f32): f32, x: f32): f32 { return f(x); } ' // &
+				'apply(dbl, 1.0);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2*n; } let f = dbl; f(1, 2);'), &
+				EC_BAD_ARG_COUNT), &
 			diag_has_code(get_diags('fn f(x: &i32) {} f(1);'), EC_BAD_ARG_VAL), &
 			diag_has_code(get_diags( &
 				'fn f(x: i32) {} let a=1; f(&a);'), EC_BAD_ARG_REF), &
@@ -5896,8 +6759,14 @@ subroutine unit_test_error_codes(npass, nfail)
 				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME), &
 			diag_count_code(get_diags( &
 				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), EC_BAD_MEMBER_NAME) == 1, &
+			! A misspelled member access should suggest the closest member
+			diag_suggests(get_diags( &
+				'struct S{x:i32} let s=S{x=1}; let b = s.y;'), 'x'), &
 			diag_has_code(get_diags( &
 				'struct S{x:i32} let s=S{z=1};'), EC_BAD_MEMBER_NAME_SHORT), &
+			! Same suggestion for a misspelled member in an instantiator
+			diag_suggests(get_diags( &
+				'struct S{x:i32} let s=S{z=1};'), 'x'), &
 			diag_has_code(get_diags( &
 				'struct S{x:i32} let s=S{x=1.0};'), EC_BAD_MEMBER_TYPE), &
 			diag_has_code(get_diags( &
@@ -5933,8 +6802,270 @@ subroutine unit_test_error_codes(npass, nfail)
 			.not. diag_has_code(get_diags('const N = 10; N + 1;'), EC_CONST_ASSIGN), &
 			! positive: passing const to &const param is allowed
 			.not. diag_has_code(get_diags('fn f(x: &const i32) {} const N = 10; f(&N);'), EC_CONST_ASSIGN), &
+			! positive: &const params accept plain value syntax (literal,
+			! temporary, or bare name) -- no E43 required, unlike mutable &
+			.not. diag_has_code(get_diags( &
+				'fn f(x: &const str) {} f("hi");'), EC_BAD_ARG_VAL), &
+			.not. diag_has_code(get_diags( &
+				'fn f(x: &const str) {} f("a" + "b");'), EC_BAD_ARG_VAL), &
+			.not. diag_has_code(get_diags( &
+				'fn f(x: &const str) {} let v = "hi"; f(v);'), EC_BAD_ARG_VAL), &
+			! explicit & is still accepted for a &const param
+			.not. diag_has_code(get_diags( &
+				'fn f(x: &const str) {} let v = "hi"; f(&v);'), EC_BAD_ARG_VAL), &
+			! mutable & is unaffected: a value arg still requires E43
+			diag_has_code(get_diags( &
+				'fn f(x: &str) {} f("hi");'), EC_BAD_ARG_VAL), &
 			! const flag must survive module import
 			diag_has_code(get_diags('use const_mod; const_mod::CVAL = 0;', MODSRC), EC_CONST_ASSIGN), &
+			! a top-level `return` in an imported module is banned (E86), but
+			! a top-level `return` in a main-program script is still legal
+			diag_has_code(get_diags_file( &
+				'src/tests/test-src/errors/E86-module-return.syntran'), EC_MODULE_RETURN), &
+			diag_count_code(get_diags_file( &
+				'src/tests/test-src/errors/E86-module-return.syntran'), EC_MODULE_RETURN) == 1, &
+			.not. diag_has_code(get_diags('return 1 + 2;'), EC_MODULE_RETURN), &
+
+			! E87: cannot take a function pointer to an intrinsic or to a fn
+			! with any &ref param (a fn-pointer signature has no way to
+			! express ref-ness, so silently allowing this would drop
+			! reference semantics on an indirect call)
+			diag_has_code(get_diags('let f = println;'), EC_FN_PTR_UNSUPPORTED), &
+			diag_has_code(get_diags( &
+				'fn foo(&x: i32): i32 { return x; } let f = foo;'), &
+				EC_FN_PTR_UNSUPPORTED), &
+			! positive: a plain by-value user fn is pointer-able, no E87
+			.not. diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let f = dbl;'), &
+				EC_FN_PTR_UNSUPPORTED), &
+
+			! E88: calling a variable that isn't a fn pointer
+			diag_has_code(get_diags('let x = 3; x(1);'), EC_NOT_CALLABLE), &
+			! positive: calling through an actual fn pointer is fine, no E88
+			.not. diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let f = dbl; f(1);'), &
+				EC_NOT_CALLABLE), &
+
+			! E89: arrays of fn pointers are not supported (eval_array.f90 has
+			! no fn_type case in its per-type storage/copy paths; letting this
+			! through crashes instead of erroring)
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let a = [dbl, dbl];'), &
+				EC_FN_PTR_ARRAY), &
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } let a = [dbl; 3];'), &
+				EC_FN_PTR_ARRAY), &
+
+			! E90: fn pointers cannot be struct members either (the member
+			! dict's overwrite path on struct redeclaration -- every struct is
+			! redeclared on the parser's 2nd pass -- deep-copies/destroys the
+			! member's value_t, and for a fn-pointer member that value_t has
+			! real nested fn_params(:)/fn_ret content, which segfaults via
+			! gfortran's auto-generated deep deallocation on some platforms,
+			! e.g. musl/alpine; caught here instead of crashing)
+			diag_has_code(get_diags( &
+				'fn dbl(n: i32): i32 { return 2 * n; } ' // &
+				'struct S { f: fn(i32): i32 }'), &
+				EC_FN_PTR_STRUCT_MEMBER), &
+			! positive: a plain (non-fn-pointer) struct member is unaffected
+			.not. diag_has_code(get_diags( &
+				'struct S { x: i32 }'), &
+				EC_FN_PTR_STRUCT_MEMBER), &
+
+			! E91: a void (no return value) fn call cannot be passed as an
+			! argument to another function call, even to a variadic any_type
+			! param like println()/str() (previously this slipped through
+			! types_match()'s any_type shortcut and printed "<invalid_value>"
+			! at runtime instead of erroring at parse time)
+			diag_has_code(get_diags( &
+				'fn f() { let x = 1; } println(f());'), &
+				EC_VOID_ARG), &
+			diag_count_code(get_diags( &
+				'fn f() { let x = 1; } println(f());'), &
+				EC_VOID_ARG) == 1, &
+			! also applies to a typed (non-any_type) param
+			diag_has_code(get_diags( &
+				'fn g(x: i32): i32 { return x; } fn f() { let y = 1; } g(f());'), &
+				EC_VOID_ARG), &
+
+			! E92: an enum was declared twice
+			diag_has_code(get_diags( &
+				'enum Dir{North,South} enum Dir{East,West}'), &
+				EC_REDECLARE_ENUM), &
+			diag_count_code(get_diags( &
+				'enum Dir{North,South} enum Dir{East,West}'), &
+				EC_REDECLARE_ENUM) == 1, &
+
+			! E93: a variant was declared twice in the same enum
+			diag_has_code(get_diags( &
+				'enum Dir{North,North}'), &
+				EC_REDECLARE_VARIANT), &
+			diag_count_code(get_diags( &
+				'enum Dir{North,North}'), &
+				EC_REDECLARE_VARIANT) == 1, &
+
+			! E94: a dot expression referenced a variant that doesn't exist
+			diag_has_code(get_diags( &
+				'enum Dir{North,South} let d = Dir.Nrth;'), &
+				EC_UNKNOWN_VARIANT), &
+			diag_count_code(get_diags( &
+				'enum Dir{North,South} let d = Dir.Nrth;'), &
+				EC_UNKNOWN_VARIANT) == 1, &
+			! positive: a valid variant is unaffected
+			.not. diag_has_code(get_diags( &
+				'enum Dir{North,South} let d = Dir.North;'), &
+				EC_UNKNOWN_VARIANT), &
+
+			! E95: duplicate enum values are a hard error unless both
+			! variants sharing the value are pinned explicitly (an
+			! intentional alias) -- any collision involving an
+			! auto-incremented value is always accidental
+			diag_has_code(get_diags( &
+				'enum Card{Jack=10,Queen,King=10,Ace}'), &
+				EC_DUPLICATE_ENUM_VALUE), &
+			diag_count_code(get_diags( &
+				'enum Card{Jack=10,Queen,King=10,Ace}'), &
+				EC_DUPLICATE_ENUM_VALUE) == 1, &
+			! positive: two variants both pinned explicitly to the same
+			! value is an intentional alias, not an error
+			.not. diag_has_code(get_diags( &
+				'enum Card{Jack=10,King=10}'), &
+				EC_DUPLICATE_ENUM_VALUE), &
+
+			! E96: reverse cast EnumName(ordinal) with a constant literal
+			! ordinal that doesn't match any variant
+			diag_has_code(get_diags( &
+				'enum Dir{North,South} Dir(99);'), &
+				EC_ENUM_CAST_RANGE), &
+			diag_count_code(get_diags( &
+				'enum Dir{North,South} Dir(99);'), &
+				EC_ENUM_CAST_RANGE) == 1, &
+			! positive: a valid ordinal is unaffected
+			.not. diag_has_code(get_diags( &
+				'enum Dir{North,South} Dir(1);'), &
+				EC_ENUM_CAST_RANGE), &
+
+			! E97: a bare enum type name (an array of all its variants)
+			! cannot be subscripted
+			diag_has_code(get_diags( &
+				'enum Dir{North,South} Dir[0];'), &
+				EC_ENUM_INDEX), &
+			diag_count_code(get_diags( &
+				'enum Dir{North,South} Dir[0];'), &
+				EC_ENUM_INDEX) == 1, &
+			! positive: subscripting a real array (not a bare enum name) is
+			! unaffected
+			.not. diag_has_code(get_diags( &
+				'let a = [1,2,3]; a[0];'), &
+				EC_ENUM_INDEX), &
+
+			! E98: a variable name clashes with an already-declared enum or
+			! struct type name.  Checked in both source orders, and at every
+			! variable-binding site (let/const/for-iterator/fn-param), plus
+			! both type kinds (enum/struct)
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let Suit = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_count_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let Suit = 5;'), &
+				EC_VAR_TYPE_CLASH) == 1, &
+			diag_has_code(get_diags( &
+				'let Suit = 5; enum Suit{Hearts,Clubs}'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_count_code(get_diags( &
+				'let Suit = 5; enum Suit{Hearts,Clubs}'), &
+				EC_VAR_TYPE_CLASH) == 1, &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} const Suit = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} for Suit in [0,1] {}'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} '// &
+				'fn f(Suit: i32): i32 {return Suit;}'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_has_code(get_diags( &
+				'struct S{x:i32} let S = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+			diag_count_code(get_diags( &
+				'struct S{x:i32} let S = 5;'), &
+				EC_VAR_TYPE_CLASH) == 1, &
+			! positive: a primitive type name is unaffected (existing
+			! behavior, unrelated to enum/struct clashes)
+			.not. diag_has_code(get_diags('let i32 = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+			! positive: a variable with an unrelated name is unaffected
+			.not. diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let s = 5;'), &
+				EC_VAR_TYPE_CLASH), &
+
+			! E99: a bare enum type name is a special form, not a value.  It
+			! cannot be bound, assigned, returned, or passed to a user fn or
+			! non-allowlisted intrinsic -- checked at each such site
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let x = Suit;'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_count_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let x = Suit;'), &
+				EC_ENUM_NAME_VALUE) == 1, &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let x = [0]; x = Suit;'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'fn f(): [Suit;:] { return Suit; } f();'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'fn g(h: [Suit;:]): i32 { return 0; } g(Suit);'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let y = [Suit, Suit];'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'struct P{s: [Suit;:],} let p = P{s = Suit};'), &
+				EC_ENUM_NAME_VALUE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} let r = std::reshape(Suit, [2]);'), &
+				EC_ENUM_NAME_VALUE), &
+			! struct methods are never intrinsics: an enum name arg is always
+			! rejected, even though the method name happens to shadow an
+			! allowlisted intrinsic like str()
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'struct P{n: i32,}' &
+				//'fn P.str(self, h: [Suit;:]): i32 {return 0;}' &
+				//'let p = P{n = 1}; p.str(Suit);'), &
+				EC_ENUM_NAME_VALUE), &
+			! positive: the allowlisted forms are unaffected
+			.not. diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs}' &
+				//'for s in Suit { println(s); }'), &
+				EC_ENUM_NAME_VALUE), &
+			.not. diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} size(Suit); str(Suit); println(Suit);'), &
+				EC_ENUM_NAME_VALUE), &
+
+			! file handle member access: bad member name / read-only enforcement
+			diag_has_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); f.bogus;'), &
+				EC_BAD_FILE_MEMBER), &
+			diag_count_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); f.bogus;'), &
+				EC_BAD_FILE_MEMBER) == 1, &
+			diag_has_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); f.eof = true;'), &
+				EC_READONLY_FILE_MEMBER), &
+			diag_count_code(get_diags( &
+				'let f = std::try_open("no/such/xyz","r"); f.eof = true;'), &
+				EC_READONLY_FILE_MEMBER) == 1, &
+			! std:: immutability wins over the file read-only check -- exactly
+			! one diagnostic
+			diag_has_code(get_diags('std::IN.eof = true;'), EC_IMMUTABLE_VAR), &
+			diag_count_code(get_diags('std::IN.eof = true;'), &
+				EC_READONLY_FILE_MEMBER) == 0, &
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
@@ -6061,6 +7192,24 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			rt_code_both_file( &
 				P//'R16-close-not-open.syntran', RC_CLOSE_NOT_OPEN), &
 
+			! R30 (RC_WRITELN_FAIL) and R31 (RC_CLOSE_FAIL) convert a raw,
+			! uncaught gfortran runtime abort (previously triggered by any
+			! iostat failure on the write()/close() statements backing
+			! writeln()/close(), with zero iostat check beforehand) into a
+			! catchable diagnostic instead of crashing the whole process --
+			! this is what let a transient Windows-only file I/O hiccup
+			! (antivirus/indexer locking a recently-touched file, etc.) take
+			! down the entire test binary with no error message.  No repro
+			! file is included here: unlike every other R* code, forcing a
+			! genuine OS-level write()/close() failure has no portable,
+			! privilege-free, non-racy trigger (verified: /dev/full and
+			! RLIMIT_FSIZE are silently absorbed by gfortran's buffered
+			! formatted I/O with iostat still 0; a FIFO whose reader vanishes
+			! is racy/blocking instead of deterministic). Coverage here is
+			! limited to registering R30/R31 in get_all_error_codes() so the
+			! generic uniqueness/format checks in unit_test_error_codes()
+			! still apply
+
 			! R17: size() dim argument out of range
 			rt_code_both_file(P//'R17-size-rank-mismatch.syntran', RC_SIZE_RANK_MISMATCH), &
 
@@ -6080,12 +7229,114 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 			! R28: close() on std::IN/OUT/ERR is forbidden
 			rt_code_both_file( &
-				P//'R28-close-standard.syntran', RC_CLOSE_STANDARD) &
+				P//'R28-close-standard.syntran', RC_CLOSE_STANDARD), &
+
+			! R29: std::getenv() on an unset environment variable name
+			rt_code_both_file( &
+				P//'R29-getenv-unset.syntran', RC_GETENV_UNSET) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_runtime_errors
+
+!===============================================================================
+
+subroutine unit_test_syntax_only(npass, nfail)
+
+	! Tests for the `--syntax-only`/`-s` CLI option's library seam: the
+	! `syntax_only` and `io` optional args on syntran_eval() and
+	! syntran_interpret_file().
+	!
+	! Three things are asserted: (a) evaluation is really skipped -- snippets
+	! that parse cleanly but fail (or produce a value) at run time produce
+	! neither diagnostics nor a result under syntax_only; (b) parse/type
+	! errors are still reported; (c) the `io` out-arg is exit_failure exactly
+	! when the program did not run to completion.
+	!
+	! Note the CLI's exit code is just `io` plumbed to call exit() in
+	! main.f90
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'syntax only'
+
+	! Dummy source path so module resolution derives the right search dir for
+	! the inline `use` snippet below (same trick as unit_test_error_codes())
+	character(len = *), parameter :: MODSRC = &
+		'src/tests/test-src/modules/_diag.syntran'
+
+	! Runtime-error fixture shared with unit_test_runtime_errors()
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	character(len = :), allocatable :: res_rt, res_val, res_mod, res_bad, &
+		res_type, res_file, res_404
+
+	integer :: io_rt, io_val, io_mod, io_bad, io_type, io_file, io_404
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	type(string_vector_t) :: d_rt, d_val, d_mod, d_bad, d_type, d_file, d_404
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! (a) Parses clean, throws R2 at run time -- but only if it actually runs
+	res_rt = eval('let x = parse_i32("abc");', quiet, &
+		syntax_only = .true., diags = d_rt, io = io_rt)
+
+	! (a) Parses clean and yields a value when evaluated
+	res_val = eval('1 + 2;', quiet, syntax_only = .true., diags = d_val, io = io_val)
+
+	! (a) A `use` import leaves an evaluatable node behind: rt_mod.syntran's
+	! top-level statement must not run under syntax_only
+	res_mod = eval('use rt_mod;', quiet, src_file = MODSRC, &
+		syntax_only = .true., diags = d_mod, io = io_mod)
+
+	! (b) Parse error and type error, both still reported under syntax_only
+	res_bad = eval('let a = ;', quiet, syntax_only = .true., diags = d_bad, io = io_bad)
+	res_type = eval('true + 4;', quiet, syntax_only = .true., diags = d_type, io = io_type)
+
+	! (c) File mode: clean parse, and the missing-file (err_404) path
+	res_file = interpret_file(P//'R2-parse-i32.syntran', quiet, &
+		syntax_only = .true., diags = d_file, io = io_file)
+	res_404 = interpret_file(P//'no-such-file-xyz.syntran', quiet, &
+		diags = d_404, io = io_404)
+
+	tests = &
+		[   &
+			! (a) syntax_only skips evaluation: no runtime diagnostic, no result
+			d_rt%len_ == 0, io_rt == exit_success, res_rt == '', &
+			! ... and the same snippet really does throw when it is evaluated
+			diag_has_code(get_diags('let x = parse_i32("abc");'), RC_PARSE_I32), &
+
+			! (a) no value is produced under syntax_only, unlike a real eval
+			res_val == '', io_val == exit_success, d_val%len_ == 0, &
+			eval('1 + 2;', quiet) == '3', &
+
+			! (a) module-level statements from `use` do not run under
+			! syntax_only, but do run otherwise
+			d_mod%len_ == 0, io_mod == exit_success, res_mod == '', &
+			diag_has_code(get_diags('use rt_mod;', MODSRC), RC_PARSE_I32), &
+
+			! (b) parse errors are still reported, and (c) io is failure
+			diag_has_code(d_bad, EC_UNEXPECTED_TOKEN), io_bad == exit_failure, &
+			! (b) type checking still happens too -- this parses fine
+			diag_has_code(d_type, EC_BINARY_TYPES), io_type == exit_failure, &
+
+			! (c) file mode: R2 fixture parses clean, so success and silence
+			d_file%len_ == 0, io_file == exit_success, &
+			! (c) io is failure on a missing file, before any parse happens
+			io_404 == exit_failure, d_404%len_ == 1 &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_syntax_only
 
 !===============================================================================
 
@@ -6313,7 +7564,78 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E84-mutable-method-on-temp.syntran'), &
 				EC_MUTABLE_METHOD_ON_TEMP, P//'E84-mutable-method-on-temp.syntran', 21, 9, 3), &
 			diag_count_code(get_diags_file(P//'E84-mutable-method-on-temp.syntran'), &
-				EC_MUTABLE_METHOD_ON_TEMP) == 1 &
+				EC_MUTABLE_METHOD_ON_TEMP) == 1, &
+			diag_loc_ok(get_diags_file(P//'E85-member-method-clash.syntran'), &
+				EC_MEMBER_METHOD_CLASH, P//'E85-member-method-clash.syntran', 8, 5, 3), &
+			diag_count_code(get_diags_file(P//'E85-member-method-clash.syntran'), &
+				EC_MEMBER_METHOD_CLASH) == 1, &
+			! E86 is detected while parsing the imported module, so its
+			! location is inside e86_mod_return.syntran instead of the
+			! E86-module-return.syntran entry file (same pattern as E70 above)
+			diag_loc_ok(get_diags_file(P//'E86-module-return.syntran'), &
+				EC_MODULE_RETURN, P//'e86_mod_return.syntran', 8, 2, 6), &
+			diag_count_code(get_diags_file(P//'E86-module-return.syntran'), &
+				EC_MODULE_RETURN) == 1, &
+			diag_loc_ok(get_diags_file(P//'E87-fn-ptr-unsupported.syntran'), &
+				EC_FN_PTR_UNSUPPORTED, P//'E87-fn-ptr-unsupported.syntran', 4, 9, 7), &
+			diag_count_code(get_diags_file(P//'E87-fn-ptr-unsupported.syntran'), &
+				EC_FN_PTR_UNSUPPORTED) == 1, &
+			diag_loc_ok(get_diags_file(P//'E88-not-callable.syntran'), &
+				EC_NOT_CALLABLE, P//'E88-not-callable.syntran', 5, 1, 1), &
+			diag_count_code(get_diags_file(P//'E88-not-callable.syntran'), &
+				EC_NOT_CALLABLE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E89-fn-ptr-array.syntran'), &
+				EC_FN_PTR_ARRAY, P//'E89-fn-ptr-array.syntran', 9, 10, 3), &
+			diag_count_code(get_diags_file(P//'E89-fn-ptr-array.syntran'), &
+				EC_FN_PTR_ARRAY) == 1, &
+			diag_loc_ok(get_diags_file(P//'E90-fn-ptr-struct-member.syntran'), &
+				EC_FN_PTR_STRUCT_MEMBER, P//'E90-fn-ptr-struct-member.syntran', 11, 5, 12), &
+			diag_count_code(get_diags_file(P//'E90-fn-ptr-struct-member.syntran'), &
+				EC_FN_PTR_STRUCT_MEMBER) == 1, &
+			diag_loc_ok(get_diags_file(P//'E91-void-arg.syntran'), &
+				EC_VOID_ARG, P//'E91-void-arg.syntran', 9, 9, 3), &
+			diag_count_code(get_diags_file(P//'E91-void-arg.syntran'), &
+				EC_VOID_ARG) == 1, &
+			diag_loc_ok(get_diags_file(P//'E92-redeclare-enum.syntran'), &
+				EC_REDECLARE_ENUM, P//'E92-redeclare-enum.syntran', 10, 6, 3), &
+			diag_count_code(get_diags_file(P//'E92-redeclare-enum.syntran'), &
+				EC_REDECLARE_ENUM) == 1, &
+			diag_loc_ok(get_diags_file(P//'E93-redeclare-variant.syntran'), &
+				EC_REDECLARE_VARIANT, P//'E93-redeclare-variant.syntran', 7, 2, 6), &
+			diag_count_code(get_diags_file(P//'E93-redeclare-variant.syntran'), &
+				EC_REDECLARE_VARIANT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E94-unknown-variant.syntran'), &
+				EC_UNKNOWN_VARIANT, P//'E94-unknown-variant.syntran', 10, 13, 4), &
+			diag_count_code(get_diags_file(P//'E94-unknown-variant.syntran'), &
+				EC_UNKNOWN_VARIANT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E95-duplicate-enum-value.syntran'), &
+				EC_DUPLICATE_ENUM_VALUE, P//'E95-duplicate-enum-value.syntran', 14, 2, 4), &
+			diag_count_code(get_diags_file(P//'E95-duplicate-enum-value.syntran'), &
+				EC_DUPLICATE_ENUM_VALUE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E96-enum-cast-range.syntran'), &
+				EC_ENUM_CAST_RANGE, P//'E96-enum-cast-range.syntran', 11, 13, 2), &
+			diag_count_code(get_diags_file(P//'E96-enum-cast-range.syntran'), &
+				EC_ENUM_CAST_RANGE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E97-enum-index.syntran'), &
+				EC_ENUM_INDEX, P//'E97-enum-index.syntran', 13, 2, 3), &
+			diag_count_code(get_diags_file(P//'E97-enum-index.syntran'), &
+				EC_ENUM_INDEX) == 1, &
+			diag_loc_ok(get_diags_file(P//'E98-var-type-clash.syntran'), &
+				EC_VAR_TYPE_CLASH, P//'E98-var-type-clash.syntran', 15, 2, 4), &
+			diag_count_code(get_diags_file(P//'E98-var-type-clash.syntran'), &
+				EC_VAR_TYPE_CLASH) == 1, &
+			diag_loc_ok(get_diags_file(P//'E99-enum-name-value.syntran'), &
+				EC_ENUM_NAME_VALUE, P//'E99-enum-name-value.syntran', 15, 2, 3), &
+			diag_count_code(get_diags_file(P//'E99-enum-name-value.syntran'), &
+				EC_ENUM_NAME_VALUE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E100-bad-file-member.syntran'), &
+				EC_BAD_FILE_MEMBER, P//'E100-bad-file-member.syntran', 6, 11, 5), &
+			diag_count_code(get_diags_file(P//'E100-bad-file-member.syntran'), &
+				EC_BAD_FILE_MEMBER) == 1, &
+			diag_loc_ok(get_diags_file(P//'E101-readonly-file-member.syntran'), &
+				EC_READONLY_FILE_MEMBER, P//'E101-readonly-file-member.syntran', 6, 3, 3), &
+			diag_count_code(get_diags_file(P//'E101-readonly-file-member.syntran'), &
+				EC_READONLY_FILE_MEMBER) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -6467,89 +7789,94 @@ subroutine unit_tests(iostat)
 	npass = 0
 	nfail = 0
 
-	call unit_test_levenshtein          (npass, nfail)
-	call unit_test_overload_display_name(npass, nfail)
-	call unit_test_unqualified_name     (npass, nfail)
-	call unit_test_bbcode_escape        (npass, nfail)
-	call unit_test_bin_arith            (npass, nfail)
-	call unit_test_paren_arith(npass, nfail)
-	call unit_test_unary_arith(npass, nfail)
-	call unit_test_bool       (npass, nfail)
-	call unit_test_comparisons(npass, nfail)
-	call unit_test_comp_f32   (npass, nfail)
-	call unit_test_comp_f64   (npass, nfail)
-	call unit_test_bad_syntax    (npass, nfail)
-	call unit_test_return_paths  (npass, nfail)
-	call unit_test_error_codes   (npass, nfail)
-	call unit_test_runtime_errors(npass, nfail)
-	call unit_test_error_locations(npass, nfail)
-	call unit_test_dir_unreadable_errors(npass, nfail)
-	call unit_test_assignment (npass, nfail)
-	call unit_test_comments   (npass, nfail)
-	call unit_test_blocks     (npass, nfail)
-	call unit_test_f32_1      (npass, nfail)
-	call unit_test_f64_1      (npass, nfail)
-	call unit_test_str        (npass, nfail)
-	call unit_test_raw_str    (npass, nfail)
-	call unit_test_substr     (npass, nfail)
-	call unit_test_if_else    (npass, nfail)
-	call unit_test_for_1      (npass, nfail)
-	call unit_test_for        (npass, nfail)
-	call unit_test_while      (npass, nfail)
-	call unit_test_var_scopes (npass, nfail)
-	call unit_test_f32_2      (npass, nfail)
-	call unit_test_array_i32_1(npass, nfail)
-	call unit_test_array_i32_2(npass, nfail)
-	call unit_test_array_f32_1(npass, nfail)
-	call unit_test_array_f32_2(npass, nfail)
-	call unit_test_array_str  (npass, nfail)
-	call unit_test_array_bool (npass, nfail)
-	call unit_test_nd_i32     (npass, nfail)
-	call unit_test_intr_fns   (npass, nfail)
-	call unit_test_fns        (npass, nfail)
-	call unit_test_linalg_fns (npass, nfail)
-	call unit_test_comp_ass   (npass, nfail)
-	call unit_test_comp_ass_arr(npass, nfail)
-	call unit_test_io         (npass, nfail)
-	call unit_test_i64        (npass, nfail)
-	call unit_test_include    (npass, nfail)
-	call unit_test_rhs_slc_1  (npass, nfail)
-	call unit_test_arr_comp   (npass, nfail)
-	call unit_test_arr_op     (npass, nfail)
-	call unit_test_lhs_slc_1  (npass, nfail)
-	call unit_test_control    (npass, nfail)
-	call unit_test_struct     (npass, nfail)
-	call unit_test_struct_arr1(npass, nfail)
-	call unit_test_struct_arr2(npass, nfail)
-	call unit_test_struct_arr3(npass, nfail)
-	call unit_test_struct_str (npass, nfail)
-	call unit_test_struct_long(npass, nfail)
-	call unit_test_methods    (npass, nfail)
-	call unit_test_f64_mix    (npass, nfail)
-	call unit_test_literals   (npass, nfail)
-	call unit_test_bitwise    (npass, nfail)
-	call unit_test_bit_ass    (npass, nfail)
-	call unit_test_bitwise_2  (npass, nfail)
-	call unit_test_ref        (npass, nfail)
-	call unit_test_recursion  (npass, nfail)
-	call unit_test_args       (npass, nfail)
-	call unit_test_reshape    (npass, nfail)
-	call unit_test_transpose  (npass, nfail)
-	call unit_test_shape      (npass, nfail)
-	call unit_test_modules    (npass, nfail)
-	call unit_test_dict       (npass, nfail)
+	if (run_group('levenshtein')) call unit_test_levenshtein(npass, nfail)
+	if (run_group('overload_display_name')) call unit_test_overload_display_name(npass, nfail)
+	if (run_group('unqualified_name')) call unit_test_unqualified_name(npass, nfail)
+	if (run_group('bbcode_escape')) call unit_test_bbcode_escape(npass, nfail)
+	if (run_group('bin_arith')) call unit_test_bin_arith(npass, nfail)
+	if (run_group('paren_arith')) call unit_test_paren_arith(npass, nfail)
+	if (run_group('unary_arith')) call unit_test_unary_arith(npass, nfail)
+	if (run_group('bool')) call unit_test_bool(npass, nfail)
+	if (run_group('comparisons')) call unit_test_comparisons(npass, nfail)
+	if (run_group('comp_f32')) call unit_test_comp_f32(npass, nfail)
+	if (run_group('comp_f64')) call unit_test_comp_f64(npass, nfail)
+	if (run_group('bad_syntax')) call unit_test_bad_syntax(npass, nfail)
+	if (run_group('return_paths')) call unit_test_return_paths(npass, nfail)
+	if (run_group('error_codes')) call unit_test_error_codes(npass, nfail)
+	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
+	if (run_group('syntax_only')) call unit_test_syntax_only(npass, nfail)
+	if (run_group('error_locations')) call unit_test_error_locations(npass, nfail)
+	if (run_group('dir_unreadable_errors')) call unit_test_dir_unreadable_errors(npass, nfail)
+	if (run_group('assignment')) call unit_test_assignment(npass, nfail)
+	if (run_group('comments')) call unit_test_comments(npass, nfail)
+	if (run_group('blocks')) call unit_test_blocks(npass, nfail)
+	if (run_group('f32_1')) call unit_test_f32_1(npass, nfail)
+	if (run_group('f64_1')) call unit_test_f64_1(npass, nfail)
+	if (run_group('str')) call unit_test_str(npass, nfail)
+	if (run_group('raw_str')) call unit_test_raw_str(npass, nfail)
+	if (run_group('substr')) call unit_test_substr(npass, nfail)
+	if (run_group('if_else')) call unit_test_if_else(npass, nfail)
+	if (run_group('for_1')) call unit_test_for_1(npass, nfail)
+	if (run_group('for')) call unit_test_for(npass, nfail)
+	if (run_group('while')) call unit_test_while(npass, nfail)
+	if (run_group('var_scopes')) call unit_test_var_scopes(npass, nfail)
+	if (run_group('f32_2')) call unit_test_f32_2(npass, nfail)
+	if (run_group('array_i32_1')) call unit_test_array_i32_1(npass, nfail)
+	if (run_group('array_i32_2')) call unit_test_array_i32_2(npass, nfail)
+	if (run_group('array_f32_1')) call unit_test_array_f32_1(npass, nfail)
+	if (run_group('array_f32_2')) call unit_test_array_f32_2(npass, nfail)
+	if (run_group('array_str')) call unit_test_array_str(npass, nfail)
+	if (run_group('array_bool')) call unit_test_array_bool(npass, nfail)
+	if (run_group('nd_i32')) call unit_test_nd_i32(npass, nfail)
+	if (run_group('intr_fns')) call unit_test_intr_fns(npass, nfail)
+	if (run_group('fns')) call unit_test_fns(npass, nfail)
+	if (run_group('repl_fns')) call unit_test_repl_fns(npass, nfail)
+	if (run_group('repl_structs')) call unit_test_repl_structs(npass, nfail)
+	if (run_group('linalg_fns')) call unit_test_linalg_fns(npass, nfail)
+	if (run_group('comp_ass')) call unit_test_comp_ass(npass, nfail)
+	if (run_group('comp_ass_arr')) call unit_test_comp_ass_arr(npass, nfail)
+	if (run_group('io')) call unit_test_io(npass, nfail)
+	if (run_group('i64')) call unit_test_i64(npass, nfail)
+	if (run_group('include')) call unit_test_include(npass, nfail)
+	if (run_group('rhs_slc_1')) call unit_test_rhs_slc_1(npass, nfail)
+	if (run_group('arr_comp')) call unit_test_arr_comp(npass, nfail)
+	if (run_group('arr_op')) call unit_test_arr_op(npass, nfail)
+	if (run_group('lhs_slc_1')) call unit_test_lhs_slc_1(npass, nfail)
+	if (run_group('control')) call unit_test_control(npass, nfail)
+	if (run_group('struct')) call unit_test_struct(npass, nfail)
+	if (run_group('struct_arr1')) call unit_test_struct_arr1(npass, nfail)
+	if (run_group('struct_arr2')) call unit_test_struct_arr2(npass, nfail)
+	if (run_group('struct_arr3')) call unit_test_struct_arr3(npass, nfail)
+	if (run_group('struct_str')) call unit_test_struct_str(npass, nfail)
+	if (run_group('struct_long')) call unit_test_struct_long(npass, nfail)
+	if (run_group('methods')) call unit_test_methods(npass, nfail)
+	if (run_group('enum')) call unit_test_enum(npass, nfail)
+	if (run_group('enum_long')) call unit_test_enum_long(npass, nfail)
+	if (run_group('f64_mix')) call unit_test_f64_mix(npass, nfail)
+	if (run_group('literals')) call unit_test_literals(npass, nfail)
+	if (run_group('bitwise')) call unit_test_bitwise(npass, nfail)
+	if (run_group('bit_ass')) call unit_test_bit_ass(npass, nfail)
+	if (run_group('bitwise_2')) call unit_test_bitwise_2(npass, nfail)
+	if (run_group('ref')) call unit_test_ref(npass, nfail)
+	if (run_group('recursion')) call unit_test_recursion(npass, nfail)
+	if (run_group('args')) call unit_test_args(npass, nfail)
+	if (run_group('reshape')) call unit_test_reshape(npass, nfail)
+	if (run_group('transpose')) call unit_test_transpose(npass, nfail)
+	if (run_group('shape')) call unit_test_shape(npass, nfail)
+	if (run_group('modules')) call unit_test_modules(npass, nfail)
+	if (run_group('dict')) call unit_test_dict(npass, nfail)
 
 	! TODO: add tests that mock interpreting one line at a time (as opposed to
 	! whole files)
 
-	call unit_test_pow_scalar       (npass, nfail)
-	call unit_test_mixed_i32i64     (npass, nfail)
-	call unit_test_arr_binop        (npass, nfail)
-	call unit_test_bool_arr_binop   (npass, nfail)
-	call unit_test_native_array_ctor(npass, nfail)
-	call unit_test_mixed_float_int  (npass, nfail)
-	call unit_test_deep_recursion   (npass, nfail)
-	call unit_test_matmul           (npass, nfail)
+	if (run_group('pow_scalar')) call unit_test_pow_scalar(npass, nfail)
+	if (run_group('mixed_i32i64')) call unit_test_mixed_i32i64(npass, nfail)
+	if (run_group('arr_binop')) call unit_test_arr_binop(npass, nfail)
+	if (run_group('bool_arr_binop')) call unit_test_bool_arr_binop(npass, nfail)
+	if (run_group('native_array_ctor')) call unit_test_native_array_ctor(npass, nfail)
+	if (run_group('mixed_float_int')) call unit_test_mixed_float_int(npass, nfail)
+	if (run_group('deep_recursion')) call unit_test_deep_recursion(npass, nfail)
+	if (run_group('matmul')) call unit_test_matmul(npass, nfail)
 
 	call log_test_summary(npass, nfail)
 	iostat = nfail
@@ -7129,6 +8456,55 @@ subroutine unit_test_transpose(npass, nfail)
 			! User can still define their own transpose() without std::
 			eval('fn transpose(): i32 { return 7; } transpose();', quiet) == '7', &
 
+			! Struct elements: transpose permutes %struct(:) by hand since
+			! composite elements don't live in an array_t buffer (previously
+			! SIGSEGV -- see src/core.f90 TODO history).  Same 2x3 source/
+			! indices as the i32 case above.  Both backends are covered by CI
+			! running this whole suite twice (default VM, then again with
+			! SYNTRAN_BACKEND=ast), same as every other row in this file.
+			eval('struct S{x:i32,}' &
+				//'let a = [S{x=0},S{x=1},S{x=2},S{x=3},S{x=4},S{x=5}];' &
+				//'let t = std::transpose(std::reshape(a,[2,3])); t[0,1].x;', &
+				quiet) == '1', &
+			eval('struct S{x:i32,}' &
+				//'let a = [S{x=0},S{x=1},S{x=2},S{x=3},S{x=4},S{x=5}];' &
+				//'let t = std::transpose(std::reshape(a,[2,3])); t[1,0].x;', &
+				quiet) == '2', &
+			eval('struct S{x:i32,}' &
+				//'let a = [S{x=0},S{x=1},S{x=2},S{x=3},S{x=4},S{x=5}];' &
+				//'let t = std::transpose(std::reshape(a,[2,3])); t[2,1].x;', &
+				quiet) == '5', &
+
+			! Printing/stringifying a transposed struct array must not crash
+			! (was an unallocated %struct dereferenced in value_to_str())
+			eval('struct S{x:i32,}' &
+				//'let a = [S{x=0},S{x=1},S{x=2},S{x=3}];' &
+				//'let t = std::transpose(std::reshape(a,[2,2])); len(str(t)) > 0;', &
+				quiet) == 'true', &
+
+			! Enum elements: same permutation, plus the result must still
+			! compare equal to an enum literal (exercises struct/enum identity
+			! propagation through resolve_overload, not just the runtime fix)
+			eval('enum E{A,B,X}' &
+				//'let a = [E.A,E.B,E.X,E.A,E.B,E.X];' &
+				//'let t = std::transpose(std::reshape(a,[2,3])); t[0,1] == E.B;', &
+				quiet) == 'true', &
+
+			! The exact repro from the src/core.f90 TODO history: printing a
+			! transposed enum array must not crash
+			eval('enum C{A,B}' &
+				//'let a = [C.A, C.B]; let m = std::reshape(a,[2,1]);' &
+				//'len(str(std::transpose(m))) > 0;', quiet) == 'true', &
+
+			! Regression: std::reshape() alone also lost struct/enum identity
+			! (member access hit a fatal I38, enum == failed to type-check)
+			eval('struct S{x:i32,}' &
+				//'let a = [S{x=1},S{x=2}]; let m = std::reshape(a,[2,1]); m[0,0].x;', &
+				quiet) == '1', &
+			eval('enum C{A,B}' &
+				//'let a = [C.A,C.B]; let m = std::reshape(a,[2,1]); m[0,0] == C.A;', &
+				quiet) == 'true', &
+
 			.false.  &  ! no trailing comma needed
 		]
 
@@ -7200,18 +8576,60 @@ program test
 	use test_m
 	implicit none
 
-	integer :: i, argc, io
+	integer :: i, argc, io, io_rep, irep, nrep
+	integer(kind = 8) :: anchor
+	logical :: print_anchor
 	character(len = 256) :: argv
 
 	call set_ansi_colors(.true.)
 
+	! --only/--skip select test groups by substring (c.f. run_group() in
+	! test_m), and --repeat runs the selected set n times in one process.
+	! Together they turn a rare flaky failure into something you can loop on
+	! directly instead of looping the whole 3000-test suite
+	nrep = 1
+	print_anchor = .false.
 	argc = command_argument_count()
-	do i = 1, argc
+	i = 0
+	do while (i < argc)
+		i = i + 1
 		call get_command_argument(i, argv)
-		if (trim(argv) == '--no-warn-ast') no_warn = .true.
+		select case (trim(argv))
+		case ('--no-warn-ast')
+			no_warn = .true.
+		case ('--anchor')
+			print_anchor = .true.
+		case ('--only')
+			i = i + 1
+			call get_command_argument(i, argv)
+			test_only = trim(argv)
+		case ('--skip')
+			i = i + 1
+			call get_command_argument(i, argv)
+			test_skip = trim(argv)
+		case ('--repeat')
+			i = i + 1
+			call get_command_argument(i, argv)
+			read(argv, *) nrep
+		end select
 	end do
 
-	call unit_tests(io)
+	if (print_anchor) then
+		anchor = loc(aslr_anchor)
+		write(*, '(a,z16)') ' ASLR_ANCHOR=0x', anchor
+	end if
+
+	! Keep repeating even after a failing rep, and report the failure at the
+	! end.  --repeat exists for stress/crash hunting, where the point is to
+	! keep hammering the same code; bailing on the first failed assertion
+	! would also make it useless for narrowing a crash by deliberately
+	! disabling tests.  With the default nrep = 1 this is identical to a
+	! plain run.
+	io = 0
+	do irep = 1, nrep
+		call unit_tests(io_rep)
+		if (io_rep /= 0) io = io_rep
+	end do
 	call exit(io)
 
 end program test

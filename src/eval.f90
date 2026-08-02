@@ -29,7 +29,17 @@ module syntran__eval_m
 
 		type(fns_t) :: fns
 
-		!type(structs_t) :: structs
+		! Parser state that must survive across REPL lines.  Unlike the rest
+		! of state_t (which is genuinely eval-time state), struct and enum
+		! declarations are a no-op at eval time -- eval_control.f90 and
+		! compile_ctrl.f90 both `cycle` past struct_declaration and
+		! enum_declaration nodes, and neither structs_t nor enums_t is
+		! referenced anywhere outside the parser.  They live here only
+		! because state_t is the REPL's one long-lived object, c.f.
+		! syntax_parse() (core.f90), which round-trips them through a
+		! per-line parser_t
+		type(structs_t) :: structs
+		type(enums_t) :: enums
 
 		type(vars_t) :: vars, locs
 
@@ -192,6 +202,14 @@ module syntran__eval_m
 			type(i64_vector_t),  allocatable, intent(out)   :: asubs(:)
 		end subroutine
 
+		module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step)
+			type(syntax_node_t), intent(in)    :: node
+			integer,             intent(in)    :: isub
+			integer(kind = 8),   intent(in)    :: sz
+			type(state_t),       intent(inout) :: state
+			integer(kind = 8),   intent(out)   :: il, iu, step
+		end subroutine
+
 		module subroutine get_field_slice_val(member_node, field_val, state, res)
 			type(syntax_node_t), intent(in)    :: member_node
 			type(value_t),       intent(in)    :: field_val
@@ -226,7 +244,7 @@ module syntran__eval_m
 		end function
 
 		module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
-				elems, str_, state)
+				elems, str_, state, struct)
 			type(value_t), intent(inout) :: val
 			integer, intent(in) :: kind_
 			integer(kind = 8), intent(in) :: i
@@ -235,6 +253,7 @@ module syntran__eval_m
 			type(syntax_node_t), allocatable :: elems(:)
 			type(value_t), intent(in) :: str_
 			type(state_t), intent(inout) :: state
+			type(value_t), intent(in), optional :: struct(:)
 		end subroutine
 
 		module subroutine get_array_val(array, i, val)
@@ -268,6 +287,12 @@ module syntran__eval_m
 		end subroutine
 
 		recursive module subroutine eval_fn_call_intr(node, state, res)
+			type(syntax_node_t), intent(in) :: node
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: res
+		end subroutine
+
+		recursive module subroutine eval_fn_call_ptr(node, state, res)
 			type(syntax_node_t), intent(in) :: node
 			type(state_t), intent(inout) :: state
 			type(value_t), intent(out) :: res
@@ -332,11 +357,39 @@ module syntran__eval_m
 			type(value_t), intent(out) :: res
 		end subroutine
 
+		recursive module subroutine eval_enum_cast_expr(node, state, res)
+			type(syntax_node_t), intent(in) :: node
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: res
+		end subroutine
+
 	end interface
 
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+subroutine state_destroy(state)
+
+	! Explicitly tear down state_t's nested-allocatable-value_t containers
+	! (%vars, %locs, %structs, %enums, %fns) before state goes out of scope,
+	! instead of trusting the compiler's implicit deep deallocation of them
+	! -- see value_array_destroy() (value.f90) and the *_destroy family in
+	! types_copy.f90.  Call this at every exit of syntran_interpret()/
+	! syntran_eval() (syntran.f90), which own state_t's only instance per
+	! interpret/eval call
+
+	type(state_t), intent(inout) :: state
+
+	call vars_destroy(state%vars)
+	call vars_destroy(state%locs)
+	call structs_destroy(state%structs)
+	call enums_destroy(state%enums)
+	call fns_destroy(state%fns)
+
+end subroutine state_destroy
 
 !===============================================================================
 
@@ -357,6 +410,88 @@ subroutine rt_throw(state, msg)
 	state%rt_halt = .true.
 
 end subroutine rt_throw
+
+!===============================================================================
+
+subroutine open_file_impl(state, filename, mode, must_open, file_)
+
+	! Shared implementation behind open() and std::try_open(), and behind both
+	! the AST walker (eval_fn.f90) and the bytecode VM (vm_intr.f90).
+	!
+	! Mode-string errors (R6/R7) always throw -- a malformed mode literal is a
+	! program bug, not an I/O condition.  A failure of the underlying Fortran
+	! open() throws R8 only when must_open is true; otherwise it returns a
+	! closed handle for the caller to inspect via f.is_open
+
+	type(state_t), intent(inout) :: state
+	character(len = *), intent(in) :: filename, mode
+	logical, intent(in) :: must_open
+	type(file_t), intent(out) :: file_
+
+	!********
+
+	character :: char_
+	character(len = :), allocatable :: status_, resolved_path
+	integer :: i, io
+
+	file_%name_ = filename   ! Keep original name for error messages
+	file_%unit_ = -1         ! newunit= is undefined if open() fails
+
+	do i = 1, len(mode)
+		char_ = mode(i: i)
+		select case (char_)
+		case ("r")
+			file_%mode_read = .true.
+
+		case ("w")
+			file_%mode_write = .true.
+
+		case default
+			call rt_throw(state, err_rt(RC_BAD_FILE_MODE, "bad file mode character """// &
+				char_//""""))
+			return
+
+		end select
+	end do
+
+	if (file_%mode_read .and. file_%mode_write) then
+		! Maybe "rw" mode could be allowed in the future, but i'm not sure
+		! what a useful application would be.  Perhaps if I exposed a
+		! rewind() or seek() fn
+		call rt_throw(state, err_rt(RC_FILE_RW_MODE, "cannot open file """//filename &
+			//""" in combined read/write mode """//mode//""""))
+		return
+	end if
+
+	if (file_%mode_read) then
+		status_ = "old"
+	else
+		status_ = "unknown"
+	end if
+
+	! Resolve relative paths using src_dir from state
+	! This is the key change for thread-safety
+	resolved_path = resolve_path(state%src_dir, filename)
+
+	open(newunit = file_%unit_, file = resolved_path, &
+		status = status_, iostat = io)
+
+	if (io /= 0) then
+		! Decode fortran iostat codes in message?  I just looked up the docs
+		! and there's not much about open iostat other than 0 is success.
+		! Read iostats are more descriptive
+		file_%unit_ = -1
+		if (must_open) then
+			call rt_throw(state, err_rt(RC_OPEN_FILE, "cannot open file """//resolved_path// &
+				""" (iostat = "//str(io)//")"))
+		end if
+		return
+	end if
+
+	file_%eof = .false.
+	file_%is_open = .true.
+
+end subroutine open_file_impl
 
 !===============================================================================
 
@@ -424,6 +559,18 @@ recursive subroutine syntax_eval(node, state, res)
 
 	case (literal_expr)
 		res = node%val  ! this handles ints, bools, etc.
+
+	case (enum_access_expr)
+		! An enum variant, e.g. `Dir.North`: like literal_expr, node%val was
+		! fully baked at parse time (parse_enum_access), so there's nothing
+		! left to resolve at runtime
+		res = node%val
+
+	case (enum_cast_expr)
+		! Reverse cast, e.g. `Dir(2)`: node%right is the ordinal expression,
+		! and node%val%struct(:) holds one fully-baked enum value_t per
+		! variant (set at parse time by parse_enum_cast) to match against
+		call eval_enum_cast_expr(node, state, res)
 
 	case (array_expr)
 		call eval_array_expr(node, state, res)
@@ -496,6 +643,18 @@ recursive subroutine syntax_eval(node, state, res)
 
 	case (fn_call_intr_expr)
 		call eval_fn_call_intr(node, state, res)
+		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
+			call apply_subscripts_to_val(node, res, state, tmp)
+			res = tmp
+		end if
+
+	case (fn_ref_expr)
+		! A bare fn name: behaves like a literal.  node%val is the fully-built
+		! fn_type value (fn_index/fn_params/fn_ret) constructed at parse time
+		res = node%val
+
+	case (fn_call_ptr_expr)
+		call eval_fn_call_ptr(node, state, res)
 		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
 			call apply_subscripts_to_val(node, res, state, tmp)
 			res = tmp

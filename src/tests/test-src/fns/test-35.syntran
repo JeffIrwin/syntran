@@ -1,0 +1,22 @@
+
+// Regression test: same forward-reference bug as test-34, but for a
+// forward-referenced fn that returns an array, whose size() feeds an
+// array-range bound.  This mirrors the original bug report shape (AoC
+// 2020 day 20), where `bool_to_str()` was defined below its call site
+
+fn use_it(): i32
+{
+	let acc = 0;
+	let m = mk_arr();       // forward reference, returns an array
+	let n = i32(size(m, 0));
+	for i in [0: n]
+		acc += i;
+	return acc;
+}
+
+fn mk_arr(): [i32; :]
+{
+	return [10, 20, 30];
+}
+
+return use_it();

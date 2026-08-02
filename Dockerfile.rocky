@@ -5,7 +5,7 @@ WORKDIR /workdir
 
 # Use gcc/gfortran 13 here because it has better glibc compatibility. Version
 # gfortran 14 needs a newer glibc which doesn't pass on all of the distros
-# covered by test-branch.sh
+# covered by utils/test-branch.sh
 RUN dnf update -y && dnf install -y \
 	vim \
 	git \
@@ -34,18 +34,18 @@ RUN echo "BRANCH = $BRANCH"
 #RUN git clone https://github.com/jeffirwin/syntran --branch "$BRANCH"
 WORKDIR /workdir/syntran
 
-# Copying just the src dir would usually be sufficient, but gen-header.sh needs
+# Copying just the src dir would usually be sufficient, but utils/gen-header.sh needs
 # to know the git commit for `--version` output, so we have to install git and
 # clone the whole repo
 ADD src ./src
 ADD external ./external
 ADD .git ./.git
 ADD fpm.toml .
-ADD gen-header.sh .
+ADD utils/gen-header.sh .
 
 #COPY src ./src
 #COPY fpm.toml .
-#COPY gen-header.sh .
+#COPY utils/gen-header.sh .
 
 RUN yes | fpm clean
 

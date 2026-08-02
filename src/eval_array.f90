@@ -28,6 +28,15 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	integer :: id
 	integer(kind = 8) :: i8, j8
 
+	if (var%type == file_type) then
+		! Unreachable: file handle members are rejected as assignment
+		! targets at parse time (EC_READONLY_FILE_MEMBER).  Without this
+		! guard, the struct base case below would index an unallocated
+		! var%struct(:)
+		write(*,*) err_int(IC_FILE_MEMBER, "assignment to a file handle member")
+		call internal_error()
+	end if
+
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
 		if (present(index_)) then
@@ -70,7 +79,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		else
 			i8 = sub_eval(node, var, state)
 		end if
-		if (var%array%type /= struct_type) then
+		if (.not. any(var%array%type == [struct_type, enum_type])) then
 			call set_array_val(var%array, i8, val)
 			return
 		end if
@@ -116,7 +125,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		return
 	end if
 
-	if (var%struct(id)%array%type /= struct_type) then
+	if (.not. any(var%struct(id)%array%type == [struct_type, enum_type])) then
 		call set_array_val(var%struct(id)%array, i8, val)
 		return
 	end if
@@ -154,6 +163,23 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	integer(kind = 8) :: i8, j8
 
 	!print *, "get_val()"
+
+	if (var%type == file_type) then
+		! File handles have a fixed set of read-only members.  Both backends
+		! funnel through get_val() (eval_dot_expr and OP_LOAD_MEMBER), so this
+		! one branch covers the AST walker and the VM.  A file value has no
+		! %struct(:), so this must intercept before every other branch below
+		block
+			type(value_t) :: member_val
+			call get_file_member(node%member, var, state, member_val)
+			if (allocated(node%member%lsubscripts)) then
+				call apply_subscripts_to_val(node%member, member_val, state, res)
+			else
+				res = member_val
+			end if
+		end block
+		return
+	end if
 
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
@@ -211,16 +237,21 @@ recursive module subroutine get_val(node, var, state, res, index_)
 			i8 = sub_eval(node, var, state)
 		end if
 
-		if (var%array%type /= struct_type) then
+		if (.not. any(var%array%type == [struct_type, enum_type])) then
 			!print *, "get_array_val 2"
 			call get_array_val(var%array, i8, res)
 			return
 		end if
 
 		res = var%struct(i8+1)
-		res%type = struct_type
-		res%struct_name = var%struct_name
-		if (allocated(var%struct_cookie)) res%struct_cookie = var%struct_cookie
+		if (var%array%type == struct_type) then
+			res%type = struct_type
+			res%struct_name = var%struct_name
+			if (allocated(var%struct_cookie)) res%struct_cookie = var%struct_cookie
+		end if
+		! For enum_type, each stored element is already a fully baked enum
+		! value_t (type/enum_name/enum_variant/enum_cookie all set), so no
+		! extra tagging is needed here
 		return
 
 	end if
@@ -266,7 +297,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 		return
 	end if
 
-	if (var%struct(id)%array%type /= struct_type) then
+	if (.not. any(var%struct(id)%array%type == [struct_type, enum_type])) then
 		!print *, "get_array_val 3"
 		call get_array_val(var%struct(id)%array, i8, res)
 		return
@@ -275,6 +306,52 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	res = var%struct(id)%struct(i8+1)
 
 end subroutine get_val
+
+!===============================================================================
+
+subroutine get_file_member(member_node, var, state, res)
+
+	! Read one of a file handle's fixed read-only members (c.f. FILE_MEM_*
+	! in consts.f90 and parse_file_member() in parse_expr.f90)
+
+	type(syntax_node_t), intent(in) :: member_node
+	type(value_t), intent(in) :: var
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: res
+
+	if (.not. allocated(var%file_)) then
+		! Defensive: every file_type value allocates %file_ (open(),
+		! std::try_open(), populate_intr_vars())
+		write(*,*) err_int(IC_FILE_MEMBER, "file member read on an unallocated file handle")
+		call internal_error()
+	end if
+
+	select case (member_node%id_index)
+	case (FILE_MEM_IS_OPEN)
+		res%type = bool_type
+		res%sca%bool = var%file_%is_open
+
+	case (FILE_MEM_EOF)
+		res%type = bool_type
+		if (var%file_%unit_ == input_unit) then
+			! stdin's eof lives on state%stdin_eof, kept in sync with the
+			! no-arg eof()/readln() forms, not on the handle itself
+			res%sca%bool = state%stdin_eof
+		else
+			res%sca%bool = var%file_%eof
+		end if
+
+	case (FILE_MEM_NAME)
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = var%file_%name_
+
+	case default
+		write(*,*) err_int(IC_FILE_MEMBER, "unknown file member id")
+		call internal_error()
+	end select
+
+end subroutine get_file_member
 
 !===============================================================================
 
@@ -342,7 +419,7 @@ module subroutine allocate_array(val, cap)
 	case (str_type)
 		allocate(val%array%str( cap ))
 
-	case (struct_type)
+	case (struct_type, enum_type)
 		allocate(val%struct( cap ))
 
 	case default
@@ -894,7 +971,7 @@ end function subscript_eval
 !===============================================================================
 
 module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
-		elems, str_, state)
+		elems, str_, state, struct)
 
 	! This lazily gets an array value at an index i without expanding the whole
 	! implicit array in memory.  Used for for loops
@@ -921,6 +998,12 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 	type(value_t), intent(in) :: str_
 
 	type(state_t), intent(inout) :: state
+
+	! Enum/struct elements of a materialized (non-primary) array_t live here
+	! instead of in `array` (array_t has no value_t component) -- set only
+	! when the iterated array's element type is enum_type/struct_type.
+	! c.f. eval_for_statement's case default and OP_FOR_SETUP in vm_exec.f90
+	type(value_t), intent(in), optional :: struct(:)
 
 	!*********
 
@@ -971,7 +1054,14 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	case (array_expr)
 		! Non-primary array expr
-		call get_array_val(array, i - 1, val)
+		if (present(struct)) then
+			! Enum/struct elements: array_t has no value_t component, so
+			! they were threaded through separately (1-based, unlike
+			! get_array_val's 0-based `array`)
+			val = struct(i)
+		else
+			call get_array_val(array, i - 1, val)
+		end if
 
 	case (str_type)
 		!val%type = str_type
@@ -1199,7 +1289,7 @@ module subroutine eval_assign_slice_rank1(node, state, id, res)
 		end do
 	end if
 
-	res = result_val   ! return the modified slice, as the general path does
+	call value_move(result_val, res)   ! return the modified slice, as the general path does
 
 end subroutine eval_assign_slice_rank1
 
@@ -1313,6 +1403,91 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_res, ls
 	end do
 
 end subroutine field_slice_bounds
+
+!===============================================================================
+
+module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step)
+
+	! Compute 0-based (il, iu, step) bounds for a character-string subscript
+	! at node%lsubscripts(isub) (paired w/ usubscripts(isub)/ssubscripts(isub)),
+	! given the string length sz.  Mirrors field_slice_bounds()'s step_sub
+	! handling so strings support the same [lower:step:upper] slice forms as
+	! arrays, including reversal (e.g. s[:-1:]).
+	!
+	! Iteration convention: characters at il, il+step, il+2*step, ... up to
+	! (but not including) iu, same as field_slice_bounds().
+	!
+	! On step == 0, rt_throw() is called and state%rt_halt is set; callers
+	! must check state%rt_halt on return.
+
+	type(syntax_node_t), intent(in)    :: node
+	integer,              intent(in)    :: isub
+	integer(kind = 8),    intent(in)    :: sz
+	type(state_t),        intent(inout) :: state
+	integer(kind = 8),    intent(out)   :: il, iu, step
+
+	!********
+
+	type(value_t) :: lval, uval, sval
+
+	il   = 0
+	step = 1
+	iu   = sz
+
+	select case (node%lsubscripts(isub)%sub_kind)
+	case (all_sub)
+		il   = 0
+		step = 1
+		iu   = sz
+
+	case (scalar_sub)
+		call syntax_eval(node%lsubscripts(isub), state, lval)
+		il   = lval%to_i64()
+		iu   = il + 1
+		step = 1
+
+	case (range_sub)
+		step = 1
+		if (node%lsubscripts(isub)%lsub_omit) then
+			il = 0
+		else
+			call syntax_eval(node%lsubscripts(isub), state, lval)
+			il = lval%to_i64()
+		end if
+		if (node%lsubscripts(isub)%usub_omit) then
+			iu = sz
+		else
+			call syntax_eval(node%usubscripts(isub), state, uval)
+			iu = uval%to_i64()
+		end if
+
+	case (step_sub)
+		call syntax_eval(node%ssubscripts(isub), state, sval)
+		step = sval%to_i64()
+		if (step == 0) then
+			call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
+			return
+		end if
+		if (node%lsubscripts(isub)%lsub_omit) then
+			il = merge(sz - 1_8, 0_8, step < 0)
+		else
+			call syntax_eval(node%lsubscripts(isub), state, lval)
+			il = lval%to_i64()
+		end if
+		if (node%lsubscripts(isub)%usub_omit) then
+			iu = merge(-1_8, sz, step < 0)
+		else
+			call syntax_eval(node%usubscripts(isub), state, uval)
+			iu = uval%to_i64()
+		end if
+
+	case default
+		write(*,*) err_int(IC_STR_CHAR_SUBSCRIPT, 'unexpected str char subscript kind')
+		call internal_error()
+
+	end select
+
+end subroutine str_slice_bounds
 
 !===============================================================================
 
@@ -1462,6 +1637,10 @@ module subroutine apply_subscripts_to_val(node, val, state, res)
 			res%type       = struct_type
 			res%struct_name = val%struct_name
 			if (allocated(val%struct_cookie)) res%struct_cookie = val%struct_cookie
+		else if (val%array%type == enum_type) then
+			! Each stored element is already a fully baked enum value_t, so
+			! no extra tagging is needed here (c.f. get_val above)
+			res = val%struct(i8+1)
 		else
 			call get_array_val(val%array, i8, res)
 		end if

@@ -1,0 +1,86 @@
+// User-defined dynamic circular queue (resizable array) for i32 vectors, using
+// a struct with methods.  Push grows capacity by doubling
+//
+// API:
+//     new(): Queue_vec_i32       // initialize an empty queue
+//     q.push(val: [i32; :])      // push a vector value onto the back
+//     q.pop(): [i32; :]          // pop and return the front vector value
+//     q.is_empty: bool           // field, true iff the queue has no elements
+
+struct Queue_vec_i32
+{
+	beg: i32,
+	end: i32,
+	cap: i32,
+	is_empty: bool,
+	is_init : bool, // vec size is set on first push
+	data: [i32; :,:],
+
+	fn push(val: [i32; :])
+	{
+		if is_init
+		{
+			if size(val) != size(data,0)
+			{
+				println("Error: cannot push vector value with inconsistent size");
+				exit(2);
+			}
+		}
+		is_init = true;
+
+		// beg == end is ambiguous between empty and full, so resize only on
+		// the initial allocation (cap == 0) or when genuinely full
+		if cap == 0 or (beg == end and not is_empty)
+		{
+			let new_cap = 1;
+			if cap > 0
+				new_cap = cap * 2;
+
+			// Note syntran cannot move yet, so we need two copies here where
+			// other languages could optimally do only one copy
+			let new_data = [0; size(val), new_cap];
+			for i in [beg: cap]
+				new_data[:, i-beg] = data[:, i];
+			// The first loop above fills new_data[0 : cap-beg), so the
+			// wrapped-around portion below must continue from cap-beg, not
+			// from the (unrelated) old beg index
+			for i in [0: end]
+				new_data[:, cap-beg+i] = data[:, i];
+			data = new_data;
+
+			beg = 0;
+			end = cap;
+			cap = new_cap;
+		}
+		data[:,end] = val;
+		end = (end+1) % cap;
+		is_empty = false;
+		return;
+	}
+
+	fn pop(): [i32; :]
+	{
+		if is_empty
+		{
+			println("Error: cannot pop empty queue");
+			exit(1);
+		}
+		let beg0 = beg;
+		beg = (beg+1) % cap;
+		is_empty = beg == end;
+		return data[:, beg0];
+	}
+}
+
+fn new(): Queue_vec_i32
+{
+	return Queue_vec_i32
+	{
+		beg = 0,
+		end = 0,
+		cap = 0,
+		is_empty = true,
+		is_init  = false,
+		data = [0; 0,0],
+	};
+}

@@ -1,0 +1,8 @@
+// Module used by E86-module-return.syntran.  A top-level `return` here is
+// banned: it must not be able to halt the importing program at the `use`
+// site.  See E86-module-return.syntran
+
+let a = 1;
+let b = 2;
+
+	return a + b;

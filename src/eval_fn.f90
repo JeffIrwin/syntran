@@ -13,6 +13,13 @@ contains
 
 recursive module subroutine eval_fn_call(node, state, res)
 
+	! TODO: this shares most of its structure with eval_fn_call_ptr() below
+	! (returned0 push/pop, params_tmp eval loop, locs0 save/restore, rt_halt
+	! bail, IC_FN_END_REACHED stopgap) -- eval_fn_call_ptr is essentially the
+	! by-value-only subset of this, minus the two by-ref passes at the end.
+	! Consider factoring the shared frame push/eval/pop into a common helper,
+	! with by-ref arg binding/writeback layered on top only for direct calls
+
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
@@ -168,6 +175,17 @@ recursive module subroutine eval_fn_call(node, state, res)
 	state%returned = returned0  ! pop
 
 	!print *, "popping runtime state stack"
+	! Explicitly destroy each of this call's locals before move_alloc()
+	! below implicitly deallocates state%locs%vals (its "to" argument) --
+	! see value_destroy().  A discarded by-value struct parameter whose
+	! nested array field was reallocated mid-call is exactly the case this
+	! guards: don't let compiler-generated deep deallocation of a value_t
+	! array be the first thing to walk that structure
+	if (allocated(state%locs%vals)) then
+		do i = 1, size(state%locs%vals)
+			call value_destroy(state%locs%vals(i))
+		end do
+	end if
 	if (allocated(locs0)) call move_alloc(locs0, state%locs%vals)
 
 	do i = 1, size(node%params)
@@ -202,6 +220,100 @@ end subroutine eval_fn_call
 
 !===============================================================================
 
+recursive module subroutine eval_fn_call_ptr(node, state, res)
+
+	! Indirect call through a fn-pointer value (v1: by-value params only, no
+	! writeback needed).  Unlike eval_fn_call, the target fn is not known
+	! until runtime: node%id_index/node%is_loc here identify the *callee
+	! variable* holding the fn_type value (not a fn id_index directly).  The
+	! variable's value_t%sca%fn_index is the runtime dispatch key into
+	! state%fns%fns(:), c.f. how eval_fn_call dereferences node%id_index
+	! there directly for a direct call
+	!
+	! TODO: this duplicates most of eval_fn_call() above (returned0 push/pop,
+	! params_tmp eval loop, locs0 save/restore, rt_halt bail, IC_FN_END_REACHED
+	! stopgap) -- it's essentially that routine's by-value-only subset.  See
+	! the TODO on eval_fn_call() for a possible shared-helper factoring
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	integer :: i, fn_index
+
+	logical :: returned0
+
+	type(value_t), allocatable :: params_tmp(:), locs0(:)
+
+	if (node%is_loc) then
+		fn_index = state%locs%vals( node%id_index )%sca%fn_index
+	else
+		fn_index = state%vars%vals( node%id_index )%sca%fn_index
+	end if
+
+	returned0 = state%returned  ! push
+	state%returned = .false.
+
+	res%type = node%val%type
+
+	associate(target => state%fns%fns( fn_index )%node)
+
+	if (.not. allocated(target%params)) then
+		write(*,*) err_int(IC_UNEXPECTED_USER_FN, 'unexpected user fn')
+		call internal_error()
+	end if
+
+	allocate(params_tmp( size(target%params) ))
+
+	! All fn-pointer params are by-value in v1 -- no ref binding pass needed
+	do i = 1, size(target%params)
+		call syntax_eval(node%args(i), state, params_tmp(i))
+		if (state%rt_halt) return
+	end do
+
+	! Push/pop a stack of local vars, similar to eval_fn_call
+	if (allocated(state%locs%vals)) call move_alloc(state%locs%vals, locs0)
+
+	allocate(state%locs%vals( target%num_locs ))
+	do i = 1, size(target%params)
+		call value_move(params_tmp(i), state%locs%vals( target%params(i) ))
+	end do
+
+	! Finally, evaluate the fn body
+	call syntax_eval(target%body, state, res)
+
+	! A runtime error halted evaluation inside the fn body.  Bail out now,
+	! mirroring eval_fn_call's identical early return
+	if (state%rt_halt) return
+
+	if (.not. state%returned .and. node%val%type /= void_type) then
+		write(*,*) err_int(IC_FN_END_REACHED, &
+			"reached end of function called through a fn pointer without a return statement")
+		call internal_error()
+	end if
+
+	state%returned = returned0  ! pop
+
+	! Explicitly destroy each of this call's locals before move_alloc() below
+	! implicitly deallocates state%locs%vals -- see value_destroy() and the
+	! matching comment in eval_fn_call
+	if (allocated(state%locs%vals)) then
+		do i = 1, size(state%locs%vals)
+			call value_destroy(state%locs%vals(i))
+		end do
+	end if
+	if (allocated(locs0)) call move_alloc(locs0, state%locs%vals)
+
+	end associate
+
+end subroutine eval_fn_call_ptr
+
+!===============================================================================
+
 recursive module subroutine eval_fn_call_intr(node, state, res)
 
 	type(syntax_node_t), intent(in) :: node
@@ -212,8 +324,7 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 
 	!********
 
-	character :: char_
-	character(len = :), allocatable :: color, mode, status_, resolved_path
+	character(len = :), allocatable :: color
 	character(len = :), allocatable :: env_val
 
 	double precision, parameter :: LOG_E_2 = log(2.d0)
@@ -221,6 +332,9 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 
 	integer :: i, io
 	integer :: env_len, env_stat
+	integer(kind = 8) :: ir, ic
+
+	logical :: exists_
 
 	type(char_vector_t) :: str_
 
@@ -892,6 +1006,20 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		call get_environment_variable(arg%str%s, status = env_stat)
 		res%sca%bool = env_stat == 0
 
+	case ("exists")
+
+		! std::exists(path) -- whether a file exists at `path`
+		call syntax_eval(node%args(1), state, arg)
+		if (state%rt_halt) return
+
+		if (len(arg%str%s) == 0) then
+			! inquire(file = "") is not standard-conforming
+			res%sca%bool = .false.
+		else
+			inquire(file = resolve_path(state%src_dir, arg%str%s), exist = exists_)
+			res%sca%bool = exists_
+		end if
+
 	case ("0i32_sca")
 
 		call syntax_eval(node%args(1), state, arg)
@@ -920,62 +1048,23 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		if (state%rt_halt) return
 
 		if (.not. allocated(res%file_)) allocate(res%file_)
-		mode = arg2%str%s
-		!print *, "mode = ", mode
+		call open_file_impl(state, arg1%str%s, arg2%str%s, .true., res%file_)
+		if (state%rt_halt) return
 
-		do i = 1, len(mode)
-			char_ = mode(i: i)
-			select case (char_)
-			case ("r")
-				res%file_%mode_read = .true.
+	case ("try_open")
 
-			case ("w")
-				res%file_%mode_write = .true.
+		! std::try_open(filename, mode) -- non-throwing open().  Returns a
+		! closed handle (f.is_open == false) instead of raising R8 if the
+		! underlying open() fails.  A malformed mode is still a runtime
+		! error (R6/R7)
+		call syntax_eval(node%args(1), state, arg1)
+		if (state%rt_halt) return
+		call syntax_eval(node%args(2), state, arg2)
+		if (state%rt_halt) return
 
-			case default
-				call rt_throw(state, err_rt(RC_BAD_FILE_MODE, "bad file mode character """// &
-					char_//""""))
-				return
-
-			end select
-		end do
-
-		if (res%file_%mode_read .and. res%file_%mode_write) then
-			! Maybe "rw" mode could be allowed in the future, but i'm not sure
-			! what a useful application would be.  Perhaps if I exposed a
-			! rewind() or seek() fn
-			call rt_throw(state, err_rt(RC_FILE_RW_MODE, "cannot open file """//arg1%str%s &
-				//""" in combined read/write mode """//mode//""""))
-			return
-		end if
-
-		if (res%file_%mode_read) then
-			status_ = "old"
-		else
-			status_ = "unknown"
-		end if
-
-		! Resolve relative paths using src_dir from state
-		! This is the key change for thread-safety
-		resolved_path = resolve_path(state%src_dir, arg1%str%s)
-
-		open(newunit = res%file_%unit_, file = resolved_path, &
-			status = status_, iostat = io)
-		!print *, "io = ", io
-
-		if (io /= 0) then
-			! Decode fortran iostat codes in message?  I just looked up the docs
-			! and there's not much about open iostat other than 0 is success.
-			! Read iostats are more descriptive
-			call rt_throw(state, err_rt(RC_OPEN_FILE, "cannot open file """//resolved_path// &
-				""" (iostat = "//str(io)//")"))
-			return
-		end if
-
-		!print *, 'opened unit ', res%file_%unit_
-		res%file_%name_ = arg1%str%s  ! Keep original name for error messages
-		res%file_%eof = .false.
-		res%file_%is_open = .true.
+		if (.not. allocated(res%file_)) allocate(res%file_)
+		call open_file_impl(state, arg1%str%s, arg2%str%s, .false., res%file_)
+		if (state%rt_halt) return
 
 	case ("readln")
 
@@ -1054,6 +1143,10 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 				state%vars%vals(node%args(1)%id_index)%file_%eof = .true.
 			end if
 
+			! Keep the no-arg readln()/eof() stdin state in sync with the
+			! std::IN-argument forms, so mixing the two doesn't desync
+			if (arg1%file_%is_std) state%stdin_eof = .true.
+
 		else if (io == iostat_eor) then
 			! Do nothing
 
@@ -1087,9 +1180,19 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		do i = 2, size(node%args)
 			call syntax_eval(node%args(i), state, arg)
 			if (state%rt_halt) return
-			write(arg1%file_%unit_, '(a)', advance = 'no') arg%to_str()
+			write(arg1%file_%unit_, '(a)', advance = 'no', iostat = io) arg%to_str()
+			if (io /= 0) then
+				call rt_throw(state, err_rt(RC_WRITELN_FAIL, "cannot writeln() to file """ &
+					//arg1%file_%name_//""" (iostat = "//str(io)//")"))
+				return
+			end if
 		end do
-		write(arg1%file_%unit_, *)
+		write(arg1%file_%unit_, *, iostat = io)
+		if (io /= 0) then
+			call rt_throw(state, err_rt(RC_WRITELN_FAIL, "cannot writeln() to file """ &
+				//arg1%file_%name_//""" (iostat = "//str(io)//")"))
+			return
+		end if
 
 	case ("eof")
 
@@ -1114,7 +1217,13 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		end if
 
 		!print *, "checking eof for unit", arg1%file_%unit_
-		res%sca%bool = arg1%file_%eof
+		if (arg1%file_%is_std) then
+			! stdin's eof lives on state%stdin_eof, kept in sync with the
+			! no-arg eof()/readln() forms, not on the (never-set) file handle
+			res%sca%bool = state%stdin_eof
+		else
+			res%sca%bool = arg1%file_%eof
+		end if
 
 		!print *, 'eof fn = ', arg1%file_%eof
 
@@ -1140,7 +1249,12 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		end if
 
 		!print *, 'closing unit ', arg1%file_%unit_
-		close(arg1%file_%unit_)
+		close(arg1%file_%unit_, iostat = io)
+		if (io /= 0) then
+			call rt_throw(state, err_rt(RC_CLOSE_FAIL, "cannot close() file """ &
+				//arg1%file_%name_//""" (iostat = "//str(io)//")"))
+			return
+		end if
 
 	case ("exit")
 
@@ -1353,6 +1467,11 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 		res%type  = array_type
 		res%array = mold(arg1%array, arg1%array%type)
 
+		! mold() doesn't carry struct/enum identity (struct_name/struct_cookie/
+		! enum_name/enum_cookie); copy it explicitly so member access and
+		! type-equality checks on the result still work
+		call copy_composite_id(res, arg1)
+
 		! Swap extents: R x C -> C x R (mold copied them as-is)
 		res%array%size(1) = arg1%array%size(2)
 		res%array%size(2) = arg1%array%size(1)
@@ -1389,6 +1508,22 @@ recursive module subroutine eval_fn_call_intr(node, state, res)
 				arg1%array%str(1:arg1%array%len_), &
 				[int(arg1%array%size(1)), int(arg1%array%size(2))])), &
 				[int(res%array%len_)])
+		case (struct_type, enum_type)
+			! Composite elements live in %struct(:), not in an array_t buffer,
+			! so permute the column-major flat index by hand.  Source is R x C
+			! with element (r,c) at r + (c-1)*R; result is C x R with (c,r) at
+			! c + (r-1)*C.
+			allocate(res%struct( res%array%len_ ))
+			do ic = 1, arg1%array%size(2)
+			do ir = 1, arg1%array%size(1)
+				res%struct(ic + (ir-1)*arg1%array%size(2)) = &
+					arg1%struct(ir + (ic-1)*arg1%array%size(1))
+			end do
+			end do
+		case default
+			write(*,*) err_int(IC_TRANSPOSE_ARRAY_TYPE, 'cannot transpose array of type `' &
+				//kind_name(arg1%array%type)//'`')
+			call internal_error()
 		end select
 
 	case ("reshape")

@@ -1,0 +1,23 @@
+// Multiple functions sharing a signature, called through the same call site
+
+fn inc(n: i32): i32
+{
+	return n + 1;
+}
+
+fn dec(n: i32): i32
+{
+	return n - 1;
+}
+
+fn triple(n: i32): i32
+{
+	return 3 * n;
+}
+
+fn apply(f: fn(i32): i32, x: i32): i32
+{
+	return f(x);
+}
+
+return apply(inc, 10) + apply(dec, 10) + apply(triple, 10);  // 11 + 9 + 30

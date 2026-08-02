@@ -20,7 +20,7 @@ fn write_vtk(filename: str, u: [f32; :,:])
 {
 	// Ref:  http://www.princeton.edu/~efeibush/viscourse/vtk.pdf
 
-	let file = open(filename);
+	let file = open(filename, "w");
 
 	writeln(file, "# vtk DataFile Version 2.0");
 	writeln(file, "wave.syntran output from " +

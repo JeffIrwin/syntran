@@ -42,9 +42,13 @@ module syntran__parse_m
 		type(string_vector_t) :: fn_names
 		type(string_vector_t) :: var_names    ! track module-level variable names
 		type(string_vector_t) :: struct_names ! track module-level struct names
+		type(string_vector_t) :: enum_names   ! track module-level enum names
 
 		type(structs_t) :: structs
 		integer :: num_structs = 0
+
+		type(enums_t) :: enums
+		integer :: num_enums = 0
 
 		! Set this to (the current) fn's return type.  Check that each return
 		! statement matches while parsing.  This is redundant since the fn
@@ -56,11 +60,22 @@ module syntran__parse_m
 		character(len = :), allocatable :: fn_name
 		logical :: returned
 
+		! True while parsing a function/method body.  Used together with
+		! is_module to ban top-level `return` statements in imported modules
+		! (E86) without disturbing `return` at true global (main program)
+		! scope.
+		logical :: in_fn_body = .false.
+
+		! True while parsing an imported module's translation unit (as
+		! opposed to the main program).  See in_fn_body above.
+		logical :: is_module = .false.
+
 		! Method parsing context: set while parsing a method body
 		logical :: in_method = .false.
 		logical :: in_const_method = .false.
 		integer :: self_loc_id = 0     ! loc slot index of "0self"
 		type(struct_t) :: method_struct  ! struct whose method is being parsed
+		character(len = :), allocatable :: method_struct_name  ! name of method_struct
 
 		! Pass index.  0 on first pass while getting fn signatures, then 1 on
 		! final (second) pass
@@ -81,6 +96,10 @@ module syntran__parse_m
 				match, &
 				match_pre, &
 				next => next_token, &
+				peek_index, &
+				check_type_clash, &
+				check_enum_name_value, &
+				check_var_clash, &
 				parse_array_expr, &
 				parse_block_statement, &
 				parse_expr, &
@@ -91,6 +110,10 @@ module syntran__parse_m
 				parse_qualified_expr, &
 				parse_struct_declaration, &
 				parse_struct_instance, &
+				parse_enum_declaration, &
+				parse_enum_access, &
+				parse_enum_cast, &
+				parse_enum_name_expr, &
 				parse_for_statement, &
 				parse_if_statement, &
 				parse_return_statement, &
@@ -129,7 +152,7 @@ module syntran__parse_m
 		end subroutine parse_fn_declaration
 
 		recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_call)
-			class(parser_t) :: parser
+			class(parser_t), target :: parser
 			character(len = *), intent(in), optional :: module_prefix
 			type(syntax_token_t), intent(in), optional :: identifier
 			type(syntax_node_t), intent(out) :: fn_call
@@ -140,7 +163,7 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: expr
 		end subroutine parse_qualified_expr
 
-		module subroutine parse_type(parser, type_text, type)
+		recursive module subroutine parse_type(parser, type_text, type)
 			class(parser_t) :: parser
 			character(len = :), intent(out), allocatable :: type_text
 			type(value_t), intent(out) :: type
@@ -162,13 +185,37 @@ module syntran__parse_m
 		end subroutine parse_method_declaration
 
 		recursive module subroutine parse_struct_instance(parser, inst, struct_name)
-			class(parser_t) :: parser
+			class(parser_t), target :: parser
 			type(syntax_node_t), intent(out) :: inst
 			character(len = *), intent(in), optional :: struct_name
 		end subroutine parse_struct_instance
 
+		module subroutine parse_enum_declaration(parser, decl)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: decl
+		end subroutine parse_enum_declaration
+
+		module subroutine parse_enum_access(parser, expr, enum_name)
+			class(parser_t), target :: parser
+			type(syntax_node_t), intent(out) :: expr
+			character(len = *), intent(in), optional :: enum_name
+		end subroutine parse_enum_access
+
+		module subroutine parse_enum_cast(parser, expr, enum_name)
+			class(parser_t), target :: parser
+			type(syntax_node_t), intent(out) :: expr
+			character(len = *), intent(in), optional :: enum_name
+		end subroutine parse_enum_cast
+
+		module subroutine parse_enum_name_expr(parser, expr, enum_name)
+			class(parser_t), target :: parser
+			type(syntax_node_t), intent(out) :: expr
+			character(len = *), intent(in), optional :: enum_name
+		end subroutine parse_enum_name_expr
+
 		module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
-				fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref)
+				fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref, &
+				eff_is_ref)
 			class(parser_t), intent(inout) :: parser
 			type(syntax_node_t), intent(in) :: arg
 			logical(kind = 1), intent(in) :: call_is_ref_i
@@ -177,7 +224,30 @@ module syntran__parse_m
 			integer, intent(in) :: i_0based
 			type(value_t), intent(in) :: param_val
 			logical, intent(in) :: param_is_ref, param_is_const_ref
+			logical(kind = 1), intent(out) :: eff_is_ref
 		end subroutine check_call_arg
+
+		! Shared by parse_dot (explicit `recv.method()`) and parse_fn_call's
+		! self-method fallback (bare `method()` inside another method of the
+		! same struct): validates explicit args against method_fn's signature
+		! and builds the method_call_expr node w/ `receiver` as the implicit
+		! by-ref self arg.  Sets node%val%type = unknown_type on a validation
+		! error (arg count/type mismatch); callers must check for that and
+		! return without further processing (e.g. skip a trailing parse_dot)
+		module subroutine build_method_call_node(parser, node, receiver, &
+				method_fn, method_fn_id, identifier, call_args, call_is_ref, &
+				pos_args, lparen_pos, rparen_pos)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: node
+			type(syntax_node_t), intent(in) :: receiver
+			type(fn_t), pointer, intent(in) :: method_fn
+			integer, intent(in) :: method_fn_id
+			type(syntax_token_t), intent(in) :: identifier
+			type(syntax_node_vector_t), intent(in) :: call_args
+			type(logical_vector_t), intent(in) :: call_is_ref
+			type(integer_vector_t), intent(in) :: pos_args
+			integer, intent(in) :: lparen_pos, rparen_pos
+		end subroutine build_method_call_node
 
 	end interface
 
@@ -228,7 +298,10 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: statement
 		end subroutine parse_continue_statement
 
-		module subroutine parse_use_statement(parser, statement)
+		! Recursive for the same reason as parse_unit() below: this is the
+		! routine that spins up the module's parser and calls parse_unit() on
+		! it, so it sits on the same cycle
+		recursive module subroutine parse_use_statement(parser, statement)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: statement
 		end subroutine parse_use_statement
@@ -282,7 +355,7 @@ module syntran__parse_m
 		end subroutine parse_name_expr
 
 		recursive module subroutine parse_dot(parser, expr)
-			class(parser_t) :: parser
+			class(parser_t), target :: parser
 			type(syntax_node_t), intent(inout) :: expr
 		end subroutine parse_dot
 
@@ -298,11 +371,38 @@ module syntran__parse_m
 			character(len = :), allocatable :: str_
 		end function tokens_str
 
-		module function match(parser, kind) result(token)
+		! At a variable-binding site (let/const/for-iterator/fn-param), check
+		! whether `name` clashes with an already-declared enum or struct type
+		! name and push EC_VAR_TYPE_CLASH if so
+		module subroutine check_type_clash(parser, name, pos)
+			class(parser_t) :: parser
+			character(len = *), intent(in) :: name
+			integer, intent(in) :: pos
+		end subroutine check_type_clash
+
+		! At a site where a value is consumed (let/const init, assignment
+		! RHS, return, fn/method call args, struct member init, array literal
+		! elements), check whether `expr` is the special bare-enum-name form
+		! (expr%is_enum_name) and push EC_ENUM_NAME_VALUE if so
+		module subroutine check_enum_name_value(parser, expr)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(in) :: expr
+		end subroutine check_enum_name_value
+
+		! At a struct/enum declaration site, check whether `name` clashes with
+		! an already-declared variable and push EC_VAR_TYPE_CLASH if so
+		module subroutine check_var_clash(parser, name, pos, type_kind)
+			class(parser_t) :: parser
+			character(len = *), intent(in) :: name
+			integer, intent(in) :: pos
+			character(len = *), intent(in) :: type_kind
+		end subroutine check_var_clash
+
+		module subroutine match(parser, kind, token)
 			class(parser_t) :: parser
 			integer :: kind
-			type(syntax_token_t) :: token
-		end function match
+			type(syntax_token_t), intent(out) :: token
+		end subroutine match
 
 		recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
 			class(parser_t) :: parser
@@ -312,26 +412,33 @@ module syntran__parse_m
 			integer, intent(inout) :: unit_
 		end subroutine preprocess
 
-		module function match_pre(parser, kind, tokens, token_index, context) result(token)
+		module subroutine match_pre(parser, kind, tokens, token_index, context, token)
 			class(parser_t) :: parser
 			integer :: kind
 			type(syntax_token_t), intent(in) :: tokens(:)
 			integer, intent(inout) :: token_index
 			type(text_context_t) :: context
-			type(syntax_token_t) :: token
-		end function match_pre
+			type(syntax_token_t), intent(out) :: token
+		end subroutine match_pre
 
-		module subroutine parse_unit(parser, unit)
+		! Recursive: a `use` statement parses the imported module with its own
+		! parser, via parse_statement -> parse_use_statement -> parse_unit
+		! (parse_control.f90), and modules may import modules.  Without the
+		! attribute this is undefined behaviour -- gfortran is free to give
+		! locals static storage, so a nested parse would clobber the outer
+		! one's locals, including allocatable descriptors.  Caught by
+		! `-fcheck=all`: "Recursive call to nonrecursive procedure 'parse_unit'"
+		recursive module subroutine parse_unit(parser, unit)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: unit
 		end subroutine parse_unit
 
-		recursive module function new_parser(str_, src_file, contexts, unit_) result(parser)
+		recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
+			type(parser_t), intent(out) :: parser
 			character(len = *), intent(in) :: str_, src_file
 			type(text_context_vector_t) :: contexts
 			integer, intent(inout) :: unit_
-			type(parser_t) :: parser
-		end function new_parser
+		end subroutine new_parser
 
 	end interface
 
@@ -351,12 +458,30 @@ end function current_kind
 
 !********
 
+integer function peek_index(parser, offset)
+
+	! Clamped token array index for parser%pos + offset.  Factored out of the
+	! peek_* accessors below so they can read a single field directly out of
+	! parser%tokens(:) without deep-copying a whole syntax_token_t (which
+	! contains a value_t with a defined deep-copy assignment)
+
+	class(parser_t) :: parser
+	integer, intent(in) :: offset
+
+	peek_index = parser%pos + offset
+
+	if (debug > 2) print *, 'token pos ', peek_index
+
+	if (peek_index > size(parser%tokens)) peek_index = size(parser%tokens)
+
+end function peek_index
+
+!********
+
 integer function peek_kind(parser, offset)
 	class(parser_t) :: parser
-	type(syntax_token_t) :: peek
 	integer, intent(in) :: offset
-	peek = parser%peek(offset)
-	peek_kind = peek%kind
+	peek_kind = parser%tokens( parser%peek_index(offset) )%kind
 end function peek_kind
 
 !===============================================================================
@@ -372,55 +497,40 @@ end function current_text
 function peek_text(parser, offset)
 	character(len = :), allocatable :: peek_text
 	class(parser_t) :: parser
-	type(syntax_token_t) :: peek
 	integer, intent(in) :: offset
-	peek = parser%peek(offset)
-	peek_text = peek%text
+	peek_text = parser%tokens( parser%peek_index(offset) )%text
 end function peek_text
 
 !===============================================================================
 
-function current_token(parser)
+subroutine current_token(parser, token)
 	class(parser_t) :: parser
-	type(syntax_token_t) :: current_token
-	current_token = parser%peek(0)
-end function current_token
+	type(syntax_token_t), intent(out) :: token
+	call parser%peek(0, token)
+end subroutine current_token
 
 !********
 
-function peek_token(parser, offset) result(token)
+subroutine peek_token(parser, offset, token)
 
 	class(parser_t) :: parser
 
-	type(syntax_token_t) :: token
+	type(syntax_token_t), intent(out) :: token
 
 	integer, intent(in) :: offset
 
-	!********
+	token = parser%tokens( parser%peek_index(offset) )
 
-	integer :: pos
-
-	pos = parser%pos + offset
-
-	if (debug > 2) print *, 'token pos ', pos
-
-	if (pos > size(parser%tokens)) then
-		token = parser%tokens( size(parser%tokens) )
-		return
-	end if
-
-	token = parser%tokens(pos)
-
-end function peek_token
+end subroutine peek_token
 
 !===============================================================================
 
-function next_token(parser) result(next)
+subroutine next_token(parser, next)
 	class(parser_t) :: parser
-	type(syntax_token_t) :: next
-	next = parser%current()
+	type(syntax_token_t), intent(out) :: next
+	call parser%current(next)
 	parser%pos = parser%pos + 1
-end function next_token
+end subroutine next_token
 
 !===============================================================================
 
@@ -439,10 +549,8 @@ end function current_pos
 
 integer function peek_pos(parser, offset)
 	class(parser_t) :: parser
-	type(syntax_token_t) :: peek
 	integer, intent(in) :: offset
-	peek = parser%peek(offset)
-	peek_pos = peek%pos
+	peek_pos = parser%tokens( parser%peek_index(offset) )%pos
 end function peek_pos
 
 !********
@@ -456,10 +564,8 @@ end function current_unit
 
 integer function peek_unit(parser, offset)
 	class(parser_t) :: parser
-	type(syntax_token_t) :: peek
 	integer, intent(in) :: offset
-	peek = parser%peek(offset)
-	peek_unit = peek%unit_
+	peek_unit = parser%tokens( parser%peek_index(offset) )%unit_
 end function peek_unit
 
 !********
@@ -486,6 +592,34 @@ function parser_text(parser, beg_, end_) result(text)
 	text = context%text(beg_: end_)
 
 end function parser_text
+
+!===============================================================================
+
+subroutine parser_destroy(parser)
+
+	! Explicitly tear down whatever parser%vars/%locs/%structs/%enums/%fns
+	! still hold before parser (a per-syntax_parse()-call local, c.f.
+	! syntax_parse() in core.f90) goes out of scope.  Much of this is
+	! already empty by the time this runs -- syntax_parse() move_alloc's the
+	! surviving state back out to state_t before returning -- but nested
+	! scopes deeper than 1 (parser%vars%dicts(2:), populated while parsing a
+	! multi-statement block on a single REPL line) and parser%locs (fn/
+	! method param and local bindings, pushed/popped during parsing) are
+	! parser-local and are never moved anywhere.  Trusting the compiler's
+	! implicit deep deallocation of these nested-allocatable-value_t
+	! containers is exactly what this codebase avoids everywhere else --
+	! see value_array_destroy() (value.f90) and the *_destroy family in
+	! types_copy.f90
+
+	class(parser_t), intent(inout) :: parser
+
+	call vars_destroy(parser%vars)
+	call vars_destroy(parser%locs)
+	call structs_destroy(parser%structs)
+	call enums_destroy(parser%enums)
+	call fns_destroy(parser%fns)
+
+end subroutine parser_destroy
 
 !===============================================================================
 

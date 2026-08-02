@@ -41,13 +41,98 @@ end function tokens_str
 
 !===============================================================================
 
-module function match(parser, kind) result(token)
+module subroutine check_type_clash(parser, name, pos)
+
+	! At a variable-binding site (let/const/for-iterator/fn-param), check
+	! whether `name` clashes with an already-declared enum or struct type
+	! name.  A name can't be both (E26/E27/E92 already forbid that), so enum
+	! vs struct here is just "which message to print", not an ambiguity
+
+	class(parser_t) :: parser
+	character(len = *), intent(in) :: name
+	integer, intent(in) :: pos
+
+	!********
+
+	type(text_span_t) :: span
+
+	if (parser%enums%exists(name)) then
+		span = new_span(pos, len(name))
+		call parser%diagnostics%push(err_var_type_clash( &
+			parser%context(), span, name, "enum"))
+	else if (parser%structs%exists(name)) then
+		span = new_span(pos, len(name))
+		call parser%diagnostics%push(err_var_type_clash( &
+			parser%context(), span, name, "struct"))
+	end if
+
+end subroutine check_type_clash
+
+!===============================================================================
+
+module subroutine check_enum_name_value(parser, expr)
+
+	! Push EC_ENUM_NAME_VALUE if `expr` is the special bare-enum-name form
+	! (see parse_enum_name_expr()).  A bare enum name is only valid as a
+	! `for` loop's iterable or as an argument to size()/str()/println()/
+	! writeln() -- everywhere else that would bind or pass it as an ordinary
+	! value, call this to reject it.  Called at every such site: let/const
+	! init, assignment RHS, return, fn/method call args, struct member init,
+	! and array literal elements
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(in) :: expr
+
+	!********
+
+	type(text_span_t) :: span
+
+	if (.not. expr%is_enum_name) return
+
+	span = new_span(expr%identifier%pos, len(expr%identifier%text))
+	call parser%diagnostics%push(err_enum_name_value( &
+		parser%context(), span, expr%val%enum_name))
+
+end subroutine check_enum_name_value
+
+!===============================================================================
+
+module subroutine check_var_clash(parser, name, pos, type_kind)
+
+	! At a struct/enum declaration site, check whether `name` clashes with an
+	! already-declared module-level variable.  Only `vars` is checked, not
+	! `locs`: struct/enum declarations are top-level, and `locs` may still
+	! hold stale entries from a previously parsed fn body
+
+	class(parser_t) :: parser
+	character(len = *), intent(in) :: name
+	integer, intent(in) :: pos
+	character(len = *), intent(in) :: type_kind
+
+	!********
+
+	integer :: id_index, io
+	type(value_t) :: val
+	type(text_span_t) :: span
+
+	call parser%vars%search(name, id_index, io, val)
+	if (io == 0) then
+		span = new_span(pos, len(name))
+		call parser%diagnostics%push(err_var_type_clash( &
+			parser%context(), span, name, type_kind))
+	end if
+
+end subroutine check_var_clash
+
+!===============================================================================
+
+module subroutine match(parser, kind, token)
 
 	class(parser_t) :: parser
 
 	integer :: kind
 
-	type(syntax_token_t) :: token
+	type(syntax_token_t), intent(out) :: token
 
 	!********
 
@@ -58,10 +143,10 @@ module function match(parser, kind) result(token)
 
 	! If current_text() and current_pos() helper fns are added, this local var
 	! current can be eliminated
-	current = parser%current()
+	call parser%current(current)
 
 	if (parser%current_kind() == kind) then
-		token = parser%next()
+		call parser%next(token)
 		!print *, 'returning parser expecting false'
 		return
 	end if
@@ -102,14 +187,14 @@ module function match(parser, kind) result(token)
 		parser%expecting = .true.
 	end if
 
-	token = new_token(kind, current%pos, null_char)
+	call new_token(token, kind, current%pos, null_char)
 	!token = new_token(bad_token, current%pos, null_char)
 	!token = new_token(kind, current%pos, "")
 
 	token%unit_ = current%unit_
 	!print *, 'setting token%unit_ = ', token%unit_
 
-end function match
+end subroutine match
 
 !===============================================================================
 
@@ -172,7 +257,7 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			! Note that matched tokens are not pushed to tokens_out here.  They
 			! are consumed by the preprocessor, so the later actual parser does
 			! not see them.
-			lparen = parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0))
+			call parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0), lparen)
 
 			! Prepend with path to src_file
 			!
@@ -196,8 +281,8 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 					err_inc_404(contexts%v(unit_0), span, tokens_in(i)%text))
 
 				! Could probably be refactored
-				rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
-				semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
+				call parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0), rparen)
+				call parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0), semicolon)
 				cycle
 			end if
 
@@ -208,8 +293,8 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 				span = new_span(tokens_in(i)%pos, len(tokens_in(i)%text))
 				call parser%diagnostics%push( &
 					err_inc_read(contexts%v(unit_0), span, tokens_in(i)%text))
-				rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
-				semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
+				call parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0), rparen)
+				call parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0), semicolon)
 				cycle
 			end if
 
@@ -218,7 +303,7 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			!print *, inc_text
 
 			! Any nested includes are handled in this new_parser() call
-			inc_parser = new_parser(inc_text, filename, contexts, unit_)
+			call new_parser(inc_parser, inc_text, filename, contexts, unit_)
 
 			! Add includee tokens to includer.  Minus 1 because included eof_token
 			do j = 1, size(inc_parser%tokens) - 1
@@ -231,8 +316,8 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			! here (show includer line number and context)
 			call parser%diagnostics%push_all( inc_parser%diagnostics )
 
-			rparen    = parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0))
-			semicolon = parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0))
+			call parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0), rparen)
+			call parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0), semicolon)
 
 		!case (tree_keyword)
 		!! TODO: maybe do #tree work at eval time
@@ -257,7 +342,7 @@ end subroutine preprocess
 
 !===============================================================================
 
-module function match_pre(parser, kind, tokens, token_index, context) result(token)
+module subroutine match_pre(parser, kind, tokens, token_index, context, token)
 
 	! This is like match(), but it can run during preprocessing before the
 	! parser is fully constructed, at the cost of having a bunch of arguments.
@@ -270,7 +355,7 @@ module function match_pre(parser, kind, tokens, token_index, context) result(tok
 
 	integer :: kind
 
-	type(syntax_token_t) :: token
+	type(syntax_token_t), intent(out) :: token
 	type(syntax_token_t), intent(in) :: tokens(:)
 
 	integer, intent(inout) :: token_index
@@ -337,15 +422,15 @@ module function match_pre(parser, kind, tokens, token_index, context) result(tok
 		parser%expecting = .true.
 	end if
 
-	token = new_token(kind, current%pos, null_char)
+	call new_token(token, kind, current%pos, null_char)
 	token%unit_ = current%unit_
 	!print *, 'setting token%unit_ = ', token%unit_
 
-end function match_pre
+end subroutine match_pre
 
 !===============================================================================
 
-module subroutine parse_unit(parser, unit)
+recursive module subroutine parse_unit(parser, unit)
 
 	class(parser_t) :: parser
 
@@ -357,7 +442,7 @@ module subroutine parse_unit(parser, unit)
 	type(syntax_node_t)  :: stmt_tmp
 	type(syntax_token_t) :: dummy
 
-	integer :: i, pos0, num_vars0, num_fns0, num_structs0
+	integer :: i, pos0, num_vars0, num_fns0, num_structs0, num_enums0
 
 	!print *, 'starting parse_unit()'
 
@@ -382,9 +467,11 @@ module subroutine parse_unit(parser, unit)
 	num_vars0 = parser%num_vars  ! not necessarily 0 for the REPL
 	num_fns0 = parser%num_fns    ! includes intrinsic fns
 	num_structs0 = parser%num_structs
+	num_enums0 = parser%num_enums
 	parser%fn_names = new_string_vector()
 	parser%var_names = new_string_vector()
 	parser%struct_names = new_string_vector()
+	parser%enum_names = new_string_vector()
 
 	do while (parser%current_kind() /= eof_token)
 
@@ -401,13 +488,16 @@ module subroutine parse_unit(parser, unit)
 		case (struct_keyword)
 			call parser%parse_struct_declaration(stmt_tmp)
 			call members%push_move(stmt_tmp)
+		case (enum_keyword)
+			call parser%parse_enum_declaration(stmt_tmp)
+			call members%push_move(stmt_tmp)
 		case default
 			call parser%parse_statement(stmt_tmp)
 			call members%push_move(stmt_tmp)
 		end select
 
 		! Break infinite loops
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%pos == pos0) call parser%next(dummy)
 
 	end do
 	!print *, "parser pos end = ", parser%pos
@@ -434,8 +524,13 @@ module subroutine parse_unit(parser, unit)
 		parser%num_vars = num_vars0
 		parser%num_fns = num_fns0
 		parser%num_structs = num_structs0
+		parser%num_enums = num_enums0
 
-		! TODO: Double check struct resetting.  Does anything else need to be reset?
+		! Resetting the counters (not the tables) is enough: pass 2 re-inserts
+		! every struct/enum from num_structs0/num_enums0 with overwrite = .true.
+		! (parser%ipass > 0, c.f. parse_struct_declaration()/
+		! parse_enum_declaration() in parse_fn.f90), landing on the exact same
+		! id_index as pass 1 assigned it
 
 		members = new_syntax_node_vector()
 		i = 0
@@ -464,13 +559,16 @@ module subroutine parse_unit(parser, unit)
 			case (struct_keyword)
 				call parser%parse_struct_declaration(stmt_tmp)
 				call members%push_move(stmt_tmp)
+			case (enum_keyword)
+				call parser%parse_enum_declaration(stmt_tmp)
+				call members%push_move(stmt_tmp)
 			case default
 				call parser%parse_statement(stmt_tmp)
 				call members%push_move(stmt_tmp)
 			end select
 
 			! Break infinite loops
-			if (parser%pos == pos0) dummy = parser%next()
+			if (parser%pos == pos0) call parser%next(dummy)
 
 		end do
 		!print *, "parser pos end = ", parser%pos
@@ -499,15 +597,15 @@ end subroutine parse_unit
 
 !===============================================================================
 
-recursive module function new_parser(str_, src_file, contexts, unit_) result(parser)
+recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
+
+	type(parser_t), intent(out) :: parser
 
 	character(len = *), intent(in) :: str_, src_file
 
 	type(text_context_vector_t) :: contexts
 
 	integer, intent(inout) :: unit_
-
-	type(parser_t) :: parser
 
 	!********
 
@@ -520,7 +618,7 @@ recursive module function new_parser(str_, src_file, contexts, unit_) result(par
 	tokens = new_syntax_token_vector()
 	lexer = new_lexer(str_, src_file, unit_)
 	do
-		token = lexer%lex()
+		call lexer%lex(token)
 		!print *, 'token%unit_ = ', token%unit_
 
 		if (token%kind /= whitespace_token .and. &
@@ -562,7 +660,7 @@ recursive module function new_parser(str_, src_file, contexts, unit_) result(par
 	!print *, 'tokens%len_ = ', tokens%len_
 	if (debug > 1) print *, parser%tokens_str()
 
-end function new_parser
+end subroutine new_parser
 
 !===============================================================================
 

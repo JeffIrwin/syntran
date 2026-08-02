@@ -200,6 +200,10 @@ module syntran__bytecode_m
 	!   Both str slots are deallocated before the bool is written so the next pop
 	!   sees a clean bool_type slot with no stale allocatable.
 	!
+	! OP_LT_STR / OP_LE_STR / OP_GT_STR / OP_GE_STR: same shape as OP_EQ_STR /
+	!   OP_NE_STR, but lexicographic ordering via is_str_lt() instead of
+	!   is_str_eq().
+	!
 	! OP_SIZE_NAT: read array size directly from a variable slot without loading (deep-copying)
 	!   the entire array.  Avoids O(N) allocation for size() calls on large arrays.
 	!   a = slot_id, b = dim (0-based; -1 means total len_), c = is_local (0=global, 1=local).
@@ -215,7 +219,11 @@ module syntran__bytecode_m
 		OP_NE_STR           = 1144, &
 		OP_SIZE_NAT         = 1145, &
 		OP_SLICE_NAT        = 1146, &
-		OP_STORE_SLICE_NAT  = 1147
+		OP_STORE_SLICE_NAT  = 1147, &
+		OP_LT_STR           = 1242, &
+		OP_LE_STR           = 1243, &
+		OP_GT_STR           = 1244, &
+		OP_GE_STR           = 1245
 
 	! Native array construction opcodes.
 	!
@@ -311,6 +319,23 @@ module syntran__bytecode_m
 	! Stack after:  [result_array]
 	integer, parameter :: OP_EXPL_ARRAY_NAT = 1239
 
+	! Indirect call through a fn-pointer value.  b = node_pool_idx (fn_call_ptr_expr
+	! node, for nparams via its args(:); is_ref(:) is always all-false in v1).
+	! Unlike OP_CALL, the target fn is not known until runtime: it is resolved
+	! from the fn_index carried by the callee's fn_type value, which is pushed
+	! on top of the (by-value-only) args right before this opcode executes.
+	! Stack before: [arg1]...[argN][callee_fn_value]  (callee at TOS)
+	! Stack after:  [result]
+	integer, parameter :: OP_CALL_PTR = 1240
+
+	! Enum reverse cast, e.g. `Suit(2)`: a = node_pool_idx (enum_cast_expr
+	! node, carrying node%right for the ordinal sub-expr and node%val%struct(:)
+	! with one baked enum value_t per variant to match against). Mirrors
+	! OP_NEW_ARRAY's delegation to eval_array_expr.
+	! Stack before: []
+	! Stack after:  [result]
+	integer, parameter :: OP_ENUM_CAST = 1241
+
 	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
 
 	! Math
@@ -402,7 +427,8 @@ module syntran__bytecode_m
 		INTR_RESHAPE      = 131, &
 		INTR_TRANSPOSE    = 132, &
 		INTR_SHAPE        = 133, &
-		INTR_GETENV       = 134, INTR_HASENV       = 135
+		INTR_GETENV       = 134, INTR_HASENV       = 135, &
+		INTR_EXISTS       = 136, INTR_TRY_OPEN     = 137
 
 	!********
 
@@ -493,6 +519,16 @@ module syntran__bytecode_m
 		! a function-level return_statement (emit OP_RET) from a top-level one
 		! (emit OP_HALT).
 		logical :: in_fn_body = .false.
+
+		! REPL support: fns declared on an earlier REPL line have no
+		! fn_declaration node in the tree being compiled now (each REPL line
+		! gets its own fresh program_t), so their AST only survives in
+		! state%fns%fns(:).  Optionally set by compile_tree() so the
+		! translation_unit case can compile any such fn that isn't in
+		! prog%fn_entry yet, c.f. eval_fn.f90 which resolves the same way for
+		! the AST walker.  Null when compiling a whole file/string in one shot
+		! (nothing to backfill: every fn already has a fn_declaration node).
+		type(fns_t), pointer :: fns => null()
 
 	end type compiler_state_t
 
@@ -827,6 +863,8 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("shape");          id = INTR_SHAPE
 	case ("getenv");         id = INTR_GETENV
 	case ("hasenv");         id = INTR_HASENV
+	case ("exists");         id = INTR_EXISTS
+	case ("try_open");       id = INTR_TRY_OPEN
 	case default;            id = 0
 	end select
 
@@ -894,6 +932,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (i64_type); op = OP_LT_I64
 			case (f32_type); op = OP_LT_F32
 			case (f64_type); op = OP_LT_F64
+			case (str_type); op = OP_LT_STR
 			end select
 		case (less_equals_token)
 			select case (ltype)
@@ -901,6 +940,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (i64_type); op = OP_LE_I64
 			case (f32_type); op = OP_LE_F32
 			case (f64_type); op = OP_LE_F64
+			case (str_type); op = OP_LE_STR
 			end select
 		case (greater_token)
 			select case (ltype)
@@ -908,6 +948,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (i64_type); op = OP_GT_I64
 			case (f32_type); op = OP_GT_F32
 			case (f64_type); op = OP_GT_F64
+			case (str_type); op = OP_GT_STR
 			end select
 		case (greater_equals_token)
 			select case (ltype)
@@ -915,6 +956,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (i64_type); op = OP_GE_I64
 			case (f32_type); op = OP_GE_F32
 			case (f64_type); op = OP_GE_F64
+			case (str_type); op = OP_GE_STR
 			end select
 		case (eequals_token)
 			select case (ltype)

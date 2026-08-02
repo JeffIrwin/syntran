@@ -36,7 +36,7 @@
 	}
 
 	// Final result
-	prime;
+	println(prime);
 	// 999983
 }
 

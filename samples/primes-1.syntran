@@ -32,6 +32,6 @@
 	}
 
 	// Final result
-	prime;
+	println(prime);
 }
 

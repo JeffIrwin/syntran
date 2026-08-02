@@ -19,7 +19,7 @@ contains
 
 recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_call)
 
-	class(parser_t) :: parser
+	class(parser_t), target :: parser
 	character(len = *), intent(in), optional :: module_prefix
 	type(syntax_token_t), intent(in), optional :: identifier
 	type(syntax_node_t), intent(out) :: fn_call
@@ -29,23 +29,26 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	character(len = :), allocatable :: exp_type, act_type, param_name, &
 		lookup_name, display_name
 
-	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result
+	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, arr_type_src, slot
+	integer :: var_io, var_id_index, method_slot, method_fn_id
 
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
-		arg_is_ref, is_ok, is_const_var
+		arg_is_ref, is_ok, is_const_var, var_is_loc
 
-	type(fn_t) :: fn
+	logical(kind = 1) :: eff_is_ref
+
+	type(fn_t), pointer :: fn, method_fn
 
 	type(integer_vector_t) :: pos_args
 	type(logical_vector_t) :: is_ref
 
-	type(syntax_node_t) :: arg
+	type(syntax_node_t) :: arg, self_receiver
 	type(syntax_node_vector_t) :: args
-	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp
+	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp, self_token
 
 	type(text_span_t) :: span
 
-	type(value_t) :: param_val, const_check_val
+	type(value_t) :: param_val, var_val, self_val
 
 	!print *, ''
 	!print *, 'parse_fn_call'
@@ -54,7 +57,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	if (present(identifier)) then
 		identifier_ = identifier
 	else
-		identifier_ = parser%match(identifier_token)
+		call parser%match(identifier_token, identifier_)
 	end if
 
 	!print *, "identifier_ = ", identifier_%text
@@ -63,7 +66,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	pos_args = new_integer_vector()
 	is_ref   = new_logical_vector()
 
-	lparen  = parser%match(lparen_token)
+	call parser%match(lparen_token, lparen)
 
 	do while ( &
 		parser%current_kind() /= rparen_token .and. &
@@ -74,7 +77,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 		arg_is_ref = .false.
 		if (parser%current_kind() == amp_token) then
-			amp = parser%match(amp_token)
+			call parser%match(amp_token, amp)
 			arg_is_ref = .true.
 		end if
 		call is_ref%push(arg_is_ref)
@@ -103,17 +106,17 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		call args%push(arg)
 
 		if (parser%current_kind() /= rparen_token) then
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
 		! break infinite loop
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%pos == pos0) call parser%next(dummy)
 
 	end do
 	call pos_args%push(parser%current_pos() + 1)
 	!print *, "args%len_ = ", args%len_
 
-	rparen  = parser%match(rparen_token)
+	call parser%match(rparen_token, rparen)
 
 	fn_call%kind = fn_call_expr
 	fn_call%identifier = identifier_
@@ -123,7 +126,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		fn_call%module_prefix = module_prefix
 	end if
 
-	call resolve_overload(args, fn_call, has_rank, has_arr_type, arr_type_result)
+	call resolve_overload(args, fn_call, has_rank, has_arr_type, arr_type_result, arr_type_src)
 	if (has_rank) rank = fn_call%val%array%rank
 
 	! If any argument has unknown_type, return early to prevent cascading errors.
@@ -146,22 +149,30 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		if (module_prefix == "std") then
 			! For std::, first try std-only functions (registered with "std::" prefix)
 			lookup_name = "std::" // fn_call%identifier%text
-			fn = parser%fns%search(lookup_name, id_index, io)
-			if (io /= exit_success) then
+			slot = parser%fns%find(lookup_name)
+			if (slot == 0) then
 				! Fall back to regular intrinsic lookup without prefix (legacy intrinsics)
 				lookup_name = fn_call%identifier%text
-				fn = parser%fns%search(lookup_name, id_index, io)
+				slot = parser%fns%find(lookup_name)
 			end if
 		else
 			! For user modules, look up with qualified name
 			lookup_name = module_prefix // "::" // fn_call%identifier%text
-			fn = parser%fns%search(lookup_name, id_index, io)
+			slot = parser%fns%find(lookup_name)
 		end if
 		display_name = module_prefix // "::" // identifier_%text
 	else
 		lookup_name = fn_call%identifier%text
 		display_name = identifier_%text
-		fn = parser%fns%search(lookup_name, id_index, io)
+		slot = parser%fns%find(lookup_name)
+	end if
+
+	if (slot == 0) then
+		io = exit_failure
+	else
+		io = exit_success
+		fn => parser%fns%get(slot)
+		id_index = parser%fns%id_at(slot)
 	end if
 
 	!print *, "fn id_index = ", id_index
@@ -171,7 +182,14 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! Do this before the ipass==0 early return so the type is set correctly
 		! in both passes, preventing cascading errors.
 		if (.not. present(module_prefix)) then
-			fn = parser%fns%search("std::" // fn_call%identifier%text, id_index, io_std)
+			slot = parser%fns%find("std::" // fn_call%identifier%text)
+			if (slot == 0) then
+				io_std = exit_failure
+			else
+				io_std = exit_success
+				fn => parser%fns%get(slot)
+				id_index = parser%fns%id_at(slot)
+			end if
 			if (io_std == exit_success) then
 				! Set the return type from the found function to prevent
 				! cascading errors from the untyped result
@@ -193,6 +211,123 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 			fn_call%id_index = 0
 			fn_call%kind = fn_call_expr
 			return
+		end if
+
+		! Not a known fn (this is the final pass, so no forward-reference
+		! concern remains): check if this identifier is instead a local/global
+		! variable of fn_type -- an indirect call through a fn pointer, e.g.
+		! `let f = dbl; f(21);`.  Restricted to plain (unqualified) names in v1
+		if (.not. present(module_prefix)) then
+
+			var_io = exit_failure
+			if (parser%is_loc) then
+				call parser%locs%search(identifier_%text, var_id_index, var_io, var_val)
+				var_is_loc = var_io == exit_success
+			end if
+			if (var_io /= exit_success) then
+				call parser%vars%search(identifier_%text, var_id_index, var_io, var_val)
+				var_is_loc = .false.
+			end if
+
+			if (var_io == exit_success) then
+
+				if (var_val%type /= fn_type) then
+					span = new_span(identifier_%pos, len(identifier_%text))
+					call parser%diagnostics%push( &
+						err_not_callable(parser%context(), &
+						span, identifier_%text, type_name(var_val)))
+					fn_call%val%type = unknown_type
+					return
+				end if
+
+				! Indirect call: dispatch target is resolved at runtime from the
+				! callee variable value (fn_index), not from a parse-time id_index
+				! into a specific fn.  id_index/is_loc here identify the callee
+				! *variable* slot instead -- eval/compile distinguish this via
+				! node%kind == fn_call_ptr_expr
+				fn_call%kind = fn_call_ptr_expr
+				fn_call%id_index = var_id_index
+				fn_call%is_loc = var_is_loc
+
+				allocate(fn_call%is_ref(args%len_))
+				fn_call%is_ref = .false.   ! by-value only in v1
+
+				if (size(var_val%fn_params) /= args%len_) then
+					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+					call parser%diagnostics%push(err_bad_arg_count( &
+						parser%context(), span, identifier_%text, &
+						size(var_val%fn_params), args%len_))
+				else
+					do i = 1, args%len_
+						span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
+						call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
+							identifier_%text, i - 1, var_val%fn_params(i), "", &
+							.false., .false., eff_is_ref)
+
+						! Indirect calls through a fn-pointer variable are
+						! never intrinsics, so a bare enum name argument is
+						! never allowed here
+						call parser%check_enum_name_value(args%v(i))
+					end do
+				end if
+
+				fn_call%val = var_val%fn_ret
+
+				! Move args from vector (avoids deep copy)
+				allocate(fn_call%args(args%len_))
+				do i = 1, args%len_
+					call syntax_node_move_into(args%v(i), fn_call%args(i))
+				end do
+
+				return
+
+			end if
+
+		end if
+
+		! Bare-name self-method fallback: inside a method body, a bare call
+		! `foo(args)` that isn't a free fn or fn-pointer var may still be a
+		! sibling method of the struct whose method is being parsed, called
+		! implicitly on self, e.g. `push(x)` from inside another method
+		! resolves to `self.push(x)`.  Free fns/fn-pointer vars take
+		! precedence (checked above); this is only a fallback.  Mirrors the
+		! mangled-name lookup in parse_dot's method-call branch
+		! (parse_expr.f90): methods are registered under "0StructName::method"
+		if (.not. present(module_prefix) .and. parser%in_method) then
+
+			method_slot = parser%fns%find( &
+				"0" // unqualified_name(parser%method_struct_name) // "::" // identifier_%text)
+
+			if (method_slot /= 0) then
+				method_fn    => parser%fns%get(method_slot)
+				method_fn_id = parser%fns%id_at(method_slot)
+
+				! Const receiver enforcement: a const method may not call a
+				! mutable sibling method.  Self is always a bound local (never
+				! a temporary fn-return value), so only this check -- not the
+				! mutable-method-on-temp check in parse_dot -- applies here
+				if (.not. method_fn%is_const_method .and. parser%in_const_method) then
+					span = new_span(identifier_%pos, len(identifier_%text))
+					call parser%diagnostics%push(err_const_assign( &
+						parser%context(), span, "self"))
+				end if
+
+				! Synthesize the implicit self receiver: a name_expr bound to
+				! the "0self" local inserted in parse_method_declaration
+				self_token         = identifier_
+				self_token%text    = "0self"
+				self_val%type      = struct_type
+				self_val%struct_name = parser%method_struct_name
+				call new_name_expr(self_token, self_val, self_receiver)
+				self_receiver%id_index = parser%self_loc_id
+				self_receiver%is_loc   = .true.
+
+				call build_method_call_node(parser, fn_call, self_receiver, &
+					method_fn, method_fn_id, identifier_, args, is_ref, &
+					pos_args, lparen%pos, rparen%pos)
+				return
+			end if
+
 		end if
 
 		span = new_span(identifier_%pos, len(identifier_%text))
@@ -237,16 +372,19 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
 		fn_call%val%array%rank = rank
 
-		! Not sure if these 2 lines are required. Maybe not since it should only
-		! apply to intrinsics fns, but it might be safer to copy anyway
-		if (.not. allocated(fn%type%array)) allocate(fn%type%array)
-		fn%type%array%rank = rank
-
 		! For functions like std::reshape whose element type depends on their
 		! arguments, restore the element type that resolve_overload determined.
 		! fn_call%val = fn%type above would otherwise overwrite it with any_type.
 		if (has_arr_type) then
 			fn_call%val%array%type = arr_type_result
+
+			! %array%type alone doesn't fully describe a struct/enum element
+			! type: member access needs struct_name to look the struct up, and
+			! type-equality checks need struct_cookie/enum_cookie. Copy those
+			! from whichever argument the element type came from.
+			if (arr_type_src > 0) then
+				call copy_composite_id(fn_call%val, args%v(arr_type_src)%val)
+			end if
 		end if
 
 	end if
@@ -355,7 +493,24 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
 		call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
 			identifier_%text, i - 1, param_val, param_name, &
-			param_is_ref, param_is_const_ref)
+			param_is_ref, param_is_const_ref, eff_is_ref)
+		fn_call%is_ref(i) = eff_is_ref
+
+		! A bare enum name is a special form, only allowed as a value to a
+		! small allowlist of intrinsics that consume the array and return a
+		! non-array (size/str/println/writeln) -- everywhere else, including
+		! user fns and any other intrinsic (e.g. std::reshape, which would
+		! just hand the variant array back out), reject it as E99
+		if (args%v(i)%is_enum_name) then
+			if (.not. (fn%is_intr .and. ( &
+				identifier_%text == "size"    .or. &
+				identifier_%text == "str"     .or. &
+				identifier_%text == "println" .or. &
+				identifier_%text == "writeln"))) then
+
+				call parser%check_enum_name_value(args%v(i))
+			end if
+		end if
 
 	end do
 
@@ -391,14 +546,14 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 	integer :: id_index, iostat
 
 	! Get first part of module name
-	mod_identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, mod_identifier)
 	module_name = mod_identifier%text
 
 	! Consume ::
-	double_colon = parser%match(double_colon_token)
+	call parser%match(double_colon_token, double_colon)
 
 	! Get the next identifier (could be another namespace or the fn/var name)
-	fn_identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, fn_identifier)
 	fn_name = fn_identifier%text
 
 	! Handle nested namespaces: math::vectors::fn()
@@ -406,12 +561,64 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 	do while (parser%current_kind() == double_colon_token)
 		! The current fn_name is actually part of the module path
 		module_name = module_name // "::" // fn_name
-		double_colon = parser%match(double_colon_token)
-		fn_identifier = parser%match(identifier_token)
+		call parser%match(double_colon_token, double_colon)
+		call parser%match(identifier_token, fn_identifier)
 		fn_name = fn_identifier%text
 	end do
 
-	if (parser%current_kind() == lparen_token) then
+	lookup_name = module_name // "::" // fn_name
+
+	if (parser%enums%exists(lookup_name)) then
+		! The qualified name is a registered enum type name.  Checked first
+		! and unconditionally (rather than folded into the current_kind()-
+		! driven branches below), mirroring the restructured unqualified
+		! dispatch in parse_primary_expr() -- e.g. `for s in mod::Suit {
+		! ... }` has `{` right after `Suit`, which would otherwise be caught
+		! by the struct-instance branch below and misread as an undeclared
+		! variable
+		if (parser%current_kind() == lparen_token) then
+			! Qualified reverse cast: mod::Suit(2)
+			call parser%parse_enum_cast(expr, lookup_name)
+
+		else if (parser%current_kind() == dot_token) then
+			! Qualified enum variant access: mod::EnumName.Variant
+			call parser%parse_enum_access(expr, lookup_name)
+
+		else
+			! Qualified bare enum name: mod::Suit (array of all variants).
+			! A live variable of the same qualified name always wins,
+			! mirroring the unqualified dispatch in parse_primary_expr()
+			call parser%vars%search(lookup_name, id_index, iostat, var_val)
+			if (iostat == exit_success) then
+				call new_name_expr(fn_identifier, var_val, expr)
+				expr%id_index = id_index
+				expr%module_prefix = module_name
+				call parser%parse_subscripts(expr)
+				call parser%parse_dot(expr)
+			else
+				call parser%parse_enum_name_expr(expr, lookup_name)
+				! parse_enum_name_expr() doesn't set expr%identifier when
+				! enum_name is present (the bare name token was already
+				! consumed by the caller here), so set it ourselves -- it's
+				! needed as the span anchor for check_enum_name_value()
+				expr%identifier = fn_identifier
+				if (parser%current_kind() == lbracket_token) then
+					call parser%diagnostics%push(err_enum_index( &
+						parser%context(), &
+						new_span(fn_identifier%pos, len(fn_identifier%text)), &
+						expr%val%enum_name))
+					! Error recovery: consume the subscripts so parsing
+					! doesn't cascade, but don't attach them to expr
+					block
+						type(syntax_node_t) :: dummy_expr
+						dummy_expr%val%type = unknown_type
+						call parser%parse_subscripts(dummy_expr)
+					end block
+				end if
+			end if
+		end if
+
+	else if (parser%current_kind() == lparen_token) then
 		! Qualified function call: std::println(...) or math::vectors::fn(...)
 		call parser%parse_fn_call(module_name, fn_identifier, expr)
 		if (parser%current_kind() == lbracket_token) then
@@ -424,7 +631,6 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 
 	else if (parser%current_kind() == lbrace_token) then
 		! Qualified struct instance: mod::Struct{...}
-		lookup_name = module_name // "::" // fn_name
 		if (parser%structs%exists(lookup_name)) then
 			call parser%parse_struct_instance(expr, lookup_name)
 		else
@@ -437,7 +643,6 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 
 	else
 		! Qualified variable access: mod::var
-		lookup_name = module_name // "::" // fn_name
 		call parser%vars%search(lookup_name, id_index, iostat, var_val)
 
 		if (iostat /= exit_success) then
@@ -471,7 +676,7 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end
 
-	logical :: overwrite, const_param
+	logical :: overwrite, const_param, in_fn_body0
 
 	type(fn_t) :: fn
 
@@ -497,9 +702,9 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
-	fn_kw = parser%match(fn_keyword)
+	call parser%match(fn_keyword, fn_kw)
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 	fn_name_end = parser%peek_pos(0) - 1
 	fn%is_intr = .false.
 
@@ -515,7 +720,7 @@ module subroutine parse_fn_declaration(parser, decl)
 	! missing.  Should parens be optional for fns without params?
 	if (parser%current_kind() /= lparen_token) return
 
-	lparen = parser%match(lparen_token)
+	call parser%match(lparen_token, lparen)
 
 	! Parse parameter names and types.  Save in temp vectors initially
 	names         = new_string_vector()
@@ -550,19 +755,20 @@ module subroutine parse_fn_declaration(parser, decl)
 		call pos_args%push(pos0)
 
 		!print *, 'matching name'
-		name  = parser%match(identifier_token)
+		call parser%match(identifier_token, name)
+		call parser%check_type_clash(name%text, name%pos)
 		!print *, 'matching colon'
-		colon = parser%match(colon_token)
+		call parser%match(colon_token, colon)
 
 		! Should this be part of parse_type()?  I think not, as refs can appear
 		! in fn decls but not struct decls.  Fn calls do not even call
 		! parse_type, they call parse_expr instead
 		if (parser%current_kind() == amp_token) then
-			amp = parser%match(amp_token)
+			call parser%match(amp_token, amp)
 			call is_ref%push(.true.)
 			! &const means the callee cannot modify through this reference
 			if (parser%current_kind() == const_keyword) then
-				dummy = parser%next()
+				call parser%next(dummy)
 				call is_const_ref%push(.true.)
 			else
 				call is_const_ref%push(.false.)
@@ -579,18 +785,18 @@ module subroutine parse_fn_declaration(parser, decl)
 
 		if (parser%current_kind() /= rparen_token) then
 			!print *, 'matching comma'
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
 		! Break infinite loop
-		if (parser%current_pos() == pos0) dummy = parser%next()
+		if (parser%current_pos() == pos0) call parser%next(dummy)
 
 	end do
 	call pos_args%push(parser%current_pos() + 1)
 
 	!print *, "names len = ", names%len_
 	!print *, 'matching rparen'
-	rparen = parser%match(rparen_token)
+	call parser%match(rparen_token, rparen)
 
 	! Now that we have the number of params, save them
 
@@ -636,7 +842,7 @@ module subroutine parse_fn_declaration(parser, decl)
 	fn%type%type = void_type
 	rank = 0
 	if (parser%current_kind() == colon_token) then
-		colon = parser%match(colon_token)
+		call parser%match(colon_token, colon)
 		call parser%parse_type(type_text, type)
 
 		! TODO: ban &references as return types
@@ -649,7 +855,12 @@ module subroutine parse_fn_declaration(parser, decl)
 	parser%fn_name = identifier%text
 	parser%fn_type = fn%type
 
+	! A `return` inside this body is a fn-scope return, not a module-scope one
+	! (nested fns aren't allowed, but save/restore defensively anyway)
+	in_fn_body0 = parser%in_fn_body
+	parser%in_fn_body = .true.
 	call parser%parse_statement(body)
+	parser%in_fn_body = in_fn_body0
 
 	! A void fn has nothing to return, so the lack of any return statement is
 	! not an error for it.  Only non-void fns require at least one return
@@ -740,11 +951,11 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: itype, i, io, pos0
+	integer :: itype, i, io, pos0, pos_type_beg, pos_type_end
 
 	logical :: overwrite
 
-	type(struct_t) :: struct, dummy_struct
+	type(struct_t) :: struct
 
 	type(syntax_node_t) :: method_decl
 
@@ -766,12 +977,12 @@ module subroutine parse_struct_declaration(parser, decl)
 	type(value_t) :: type
 	type(value_vector_t) :: types
 
-	struct_kw = parser%match(struct_keyword)
+	call parser%match(struct_keyword, struct_kw)
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 	!print *, "parsing struct ", identifier%text
 
-	itype = lookup_type(identifier%text, parser%structs, dummy_struct)
+	itype = lookup_type(identifier%text, parser%structs, parser%enums)
 	!print *, "itype = ", itype, kind_name(itype)
 	if (itype /= unknown_type .and. itype /= struct_type) then
 		! Redeclared structs are caught below
@@ -781,8 +992,9 @@ module subroutine parse_struct_declaration(parser, decl)
 			span, &
 			identifier%text))
 	end if
+	call parser%check_var_clash(identifier%text, identifier%pos, "struct")
 
-	lbrace = parser%match(lbrace_token)
+	call parser%match(lbrace_token, lbrace)
 
 	! Structs use this syntax:
 	!
@@ -820,12 +1032,37 @@ module subroutine parse_struct_declaration(parser, decl)
 
 		pos0 = parser%current_pos()
 
-		name  = parser%match(identifier_token)
+		call parser%match(identifier_token, name)
 		call pos_mems%push( name%pos )
-		colon = parser%match(colon_token)
+		call parser%match(colon_token, colon)
 
+		pos_type_beg = parser%current_pos()
 		call parser%parse_type(type_text, type)
+		pos_type_end = parser%current_pos() - 1
 		!print *, "type = ", type_text
+
+		! Fn-pointer-typed struct members are not supported: a fn-pointer
+		! value's fn_params(:)/fn_ret is a real, self-referential nested
+		! value_t (unlike other member types' plain type-metadata), and
+		! deep-copying/destroying that through the struct member-dict's
+		! overwrite path (2nd parser pass redeclares every struct) segfaults
+		! on some platforms/compilers (e.g. musl/gfortran).  c.f. E89, the
+		! analogous restriction for fn pointers in array literals.
+		!
+		! Pushing the diagnostic alone is NOT enough to avoid the crash:
+		! parsing continues regardless (to collect further diagnostics), so
+		! `type` -- if left as a real fn_type value -- would still flow into
+		! types%push()/struct%vars%insert() below and hit the same crashing
+		! redeclare path when this struct is (as always) reprocessed on the
+		! parser's 2nd pass.  Sanitize it to a harmless placeholder instead;
+		! evaluation is halted regardless once any diagnostic exists
+		if (type%type == fn_type) then
+			span = new_span(pos_type_beg, pos_type_end - pos_type_beg + 1)
+			call parser%diagnostics%push(err_fn_ptr_struct_member( &
+				parser%context(), span, name%text))
+			call value_destroy(type)
+			type%type = unknown_type
+		end if
 
 		call types%push(type)
 		call names%push( name%text )
@@ -835,11 +1072,11 @@ module subroutine parse_struct_declaration(parser, decl)
 		    .not. (parser%current_kind() == const_keyword .and. &
 		           parser%peek_kind(1) == fn_keyword)) then
 			! Delimiting commas are required; trailing comma is optional
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
 		! Break infinite loop
-		if (parser%current_pos() == pos0) dummy = parser%next()
+		if (parser%current_pos() == pos0) call parser%next(dummy)
 
 	end do
 
@@ -905,7 +1142,7 @@ module subroutine parse_struct_declaration(parser, decl)
 		pos0 = parser%current_pos()
 
 		is_const_meth = (parser%current_kind() == const_keyword)
-		if (is_const_meth) dummy = parser%next()   ! consume 'const'
+		if (is_const_meth) call parser%next(dummy)   ! consume 'const'
 
 		call parser%parse_method_declaration(method_decl, struct, is_const_meth, &
 			identifier%text)
@@ -914,7 +1151,7 @@ module subroutine parse_struct_declaration(parser, decl)
 		call method_decls%push(method_decl)
 
 		! Break infinite loop
-		if (parser%current_pos() == pos0) dummy = parser%next()
+		if (parser%current_pos() == pos0) call parser%next(dummy)
 
 	end do
 
@@ -926,7 +1163,7 @@ module subroutine parse_struct_declaration(parser, decl)
 		end do
 	end if
 
-	rbrace = parser%match(rbrace_token)
+	call parser%match(rbrace_token, rbrace)
 
 	! Insert struct into parser dict
 
@@ -949,8 +1186,6 @@ module subroutine parse_struct_declaration(parser, decl)
 			identifier%text))
 	end if
 
-	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
-	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
 	!call ternary_tree_final(struct%vars%dicts(1)%root)
 
 	decl%kind = struct_declaration
@@ -958,6 +1193,526 @@ module subroutine parse_struct_declaration(parser, decl)
 	!print *, "done parsing struct"
 
 end subroutine parse_struct_declaration
+
+!===============================================================================
+
+module subroutine parse_enum_declaration(parser, decl)
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(out) :: decl
+
+	!********
+
+	integer :: itype, i, j, k, io, pos0
+	integer :: next_value, this_value, this_explicit, sgn
+
+	logical :: overwrite, found_alias
+
+	type(enum_t) :: enum
+
+	type(syntax_token_t) :: identifier, comma, lbrace, rbrace, dummy, &
+		equals, name, enum_kw, intlit, alias
+
+	type(text_span_t) :: span
+
+	type(string_vector_t) :: names
+	type(integer_vector_t) :: values, pos_mems, explicits
+
+	! Enums use this syntax:
+	!
+	!     // declaration
+	!     enum Card
+	!     {
+	!     	Two,        // 0
+	!     	Three,      // 1
+	!     	Jack = 10,  // 10
+	!     	Queen,      // 11
+	!     	King = Jack,// 10 (alias)
+	!     }
+	!
+	!     // access
+	!     let c = Card.Jack;
+	!
+	! Variants are compile-time constants -- unlike struct members there is
+	! no type annotation, just an optional `= <intlit>` or `= <prior variant
+	! name>` to pin the backing value.  A name reference must refer to a
+	! variant already declared above it (like C's enumerator constants) and
+	! makes this variant an intentional alias.  Subsequent variants continue
+	! the auto-increment from there
+
+	call parser%match(enum_keyword, enum_kw)
+
+	call parser%match(identifier_token, identifier)
+
+	itype = lookup_type(identifier%text, parser%structs, parser%enums)
+	if (itype /= unknown_type .and. itype /= enum_type) then
+		! Redeclared enums are caught below
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_redeclare_primitive( &
+			parser%context(), &
+			span, &
+			identifier%text))
+	end if
+	call parser%check_var_clash(identifier%text, identifier%pos, "enum")
+
+	call parser%match(lbrace_token, lbrace)
+
+	names  = new_string_vector()
+	values = new_integer_vector()
+	pos_mems = new_integer_vector()
+	explicits = new_integer_vector()
+
+	next_value = 0
+	do while ( &
+			parser%current_kind() /= rbrace_token .and. &
+			parser%current_kind() /= eof_token)
+
+		pos0 = parser%current_pos()
+
+		call parser%match(identifier_token, name)
+		call pos_mems%push( name%pos )
+
+		this_value = next_value
+		this_explicit = 0
+		if (parser%current_kind() == equals_token) then
+			call parser%next(equals)
+
+			if (parser%current_kind() == identifier_token) then
+				! Named alias, e.g. `King = Jack`.  Only variants already
+				! declared above this one are in scope, exactly like C
+				! enumerator constants -- forward references are an error
+				call parser%match(identifier_token, alias)
+
+				found_alias = .false.
+				do k = 1, names%len_
+					if (names%v(k)%s == alias%text) then
+						this_value = values%v(k)
+						found_alias = .true.
+						exit
+					end if
+				end do
+
+				if (.not. found_alias) then
+					span = new_span(alias%pos, len(alias%text))
+					call parser%diagnostics%push(err_unknown_variant( &
+						parser%context(), &
+						span, &
+						alias%text, &
+						identifier%text))
+				end if
+
+				! Whether resolved or not, this is an intentional alias --
+				! not an accidental auto-increment collision -- so it's
+				! exempt from the duplicate-value check below
+				this_explicit = 2
+			else
+				! Optional leading sign: `-1` (and `+1`) lex as a separate
+				! unary minus/plus token before the i32 literal -- enum
+				! values are plain int literals, not full expressions, so
+				! only a single leading sign is handled here
+				sgn = 1
+				if (parser%current_kind() == minus_token) then
+					call parser%next(dummy)
+					sgn = -1
+				else if (parser%current_kind() == plus_token) then
+					call parser%next(dummy)
+				end if
+				call parser%match(i32_token, intlit)
+				this_value = sgn * intlit%val%sca%i32
+				this_explicit = 1
+			end if
+		end if
+
+		call values%push(this_value)
+		call names%push( name%text )
+		call explicits%push(this_explicit)
+		next_value = this_value + 1
+
+		if (parser%current_kind() /= rbrace_token) then
+			! Delimiting commas are required; trailing comma is optional
+			call parser%match(comma_token, comma)
+		end if
+
+		! Break infinite loop
+		if (parser%current_pos() == pos0) call parser%next(dummy)
+
+	end do
+
+	! Sentinel for duplicate-variant span: end of the last variant (or rbrace)
+	call pos_mems%push(parser%current_pos())
+
+	enum%num_vars = 0
+	allocate(enum%variant_names%v( names%len_ ))
+	allocate(enum%variant_values ( names%len_ ))
+
+	! Canonical alias-independent identity, set once at declaration time,
+	! mirroring struct%cookie above
+	enum%cookie = parser%contexts%v(parser%current_unit())%src_file &
+		// "::" // identifier%text
+
+	do i = 1, names%len_
+
+		enum%variant_names%v(i)%s = names%v(i)%s
+		enum%variant_values(i)    = values%v(i)
+		enum%num_vars = enum%num_vars + 1
+
+		do j = 1, i - 1
+			if (enum%variant_names%v(j)%s == names%v(i)%s) then
+				span = new_span(pos_mems%v(i), pos_mems%v(i+1) - pos_mems%v(i))
+				call parser%diagnostics%push(err_redeclare_variant( &
+					parser%context(), &
+					span, &
+					names%v(i)%s))
+				exit
+			end if
+		end do
+
+		! Duplicate values are only allowed when the collision is
+		! intentional: either a named alias (`King = Jack`, explicits == 2)
+		! on either side, or both variants pinned explicitly to the same
+		! int literal (e.g. `King = 10` next to `Jack = 10`).  Any
+		! collision that involves an auto-incremented value is always
+		! accidental, since auto-increment has no way to express aliasing
+		! intent -- so it's a hard error
+		do j = 1, i - 1
+			if (values%v(j) == values%v(i) .and. &
+					names%v(j)%s /= names%v(i)%s .and. &
+					explicits%v(i) /= 2 .and. explicits%v(j) /= 2 .and. &
+					.not. (explicits%v(i) == 1 .and. explicits%v(j) == 1)) then
+				span = new_span(pos_mems%v(i), pos_mems%v(i+1) - pos_mems%v(i))
+				call parser%diagnostics%push(err_duplicate_enum_value( &
+					parser%context(), &
+					span, &
+					names%v(i)%s, &
+					names%v(j)%s, &
+					values%v(i)))
+				exit
+			end if
+		end do
+
+	end do
+
+	call parser%match(rbrace_token, rbrace)
+
+	! Insert enum into parser dict
+
+	parser%num_enums = parser%num_enums + 1
+	decl%id_index  = parser%num_enums
+
+	overwrite = .false.
+	if (parser%ipass > 0) overwrite = .true.
+
+	call parser%enums%insert( &
+		identifier%text, enum, decl%id_index, io, overwrite = overwrite)
+	if (parser%ipass == 0) call parser%enum_names%push(identifier%text)
+	if (io /= 0) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_redeclare_enum( &
+			parser%context(), &
+			span, &
+			identifier%text))
+	end if
+
+	decl%kind = enum_declaration
+
+end subroutine parse_enum_declaration
+
+!===============================================================================
+
+module subroutine parse_enum_access(parser, expr, enum_name)
+
+	! Parse `EnumName.Variant`, called from parse_primary_expr() when the
+	! current identifier is a registered enum name.  Bakes a fully-resolved
+	! enum value_t into expr%val at parse time -- enum values are
+	! compile-time constants, so there is no runtime lookup
+	!
+	! When `enum_name` is present, it is the already-parsed, alias-qualified
+	! lookup name (e.g. "mod::Suit") from parse_qualified_expr(), and only the
+	! trailing `.Variant` remains to be consumed here -- mirrors
+	! parse_struct_instance()'s optional `struct_name` argument
+
+	class(parser_t), target :: parser
+	type(syntax_node_t), intent(out) :: expr
+	character(len = *), intent(in), optional :: enum_name
+
+	!********
+
+	integer :: enum_id, i, variant_id
+
+	character(len = :), allocatable :: enum_name_text
+
+	type(enum_t), pointer :: enum
+
+	type(syntax_token_t) :: enum_tok, dot, variant_tok
+
+	type(text_span_t) :: span
+
+	if (present(enum_name)) then
+		enum_name_text = enum_name
+	else
+		call parser%match(identifier_token, enum_tok)
+		enum_name_text = enum_tok%text
+	end if
+
+	call parser%match(dot_token, dot)
+	call parser%match(identifier_token, variant_tok)
+
+	enum_id = parser%enums%find(enum_name_text)
+	enum => parser%enums%get(enum_id)
+
+	variant_id = 0
+	do i = 1, enum%num_vars
+		if (enum%variant_names%v(i)%s == variant_tok%text) then
+			variant_id = i
+			exit
+		end if
+	end do
+
+	expr%kind = enum_access_expr
+	expr%identifier = variant_tok
+
+	if (variant_id == 0) then
+		span = new_span(variant_tok%pos, len(variant_tok%text))
+		call parser%diagnostics%push(err_unknown_variant( &
+			parser%context(), span, variant_tok%text, enum_name_text, &
+			enum_closest_variant(enum, variant_tok%text)))
+
+		! Error recovery: sanitize to unknown_type so this doesn't cascade
+		! into a fn-ptr-struct-member-style crash downstream
+		expr%val%type = unknown_type
+		return
+	end if
+
+	call bake_enum_variant(enum, variant_id, enum_name_text, expr%val)
+
+end subroutine parse_enum_access
+
+!===============================================================================
+
+module subroutine parse_enum_cast(parser, expr, enum_name)
+
+	! Parse `EnumName(ordinal)`, the reverse cast from an integer ordinal back
+	! to an enum variant, e.g. `Suit(2) -> Suit.Clubs`.  Called from
+	! parse_primary_expr() when the current identifier is a registered enum
+	! name followed by `(`
+	!
+	! When `enum_name` is present, it is the already-parsed, alias-qualified
+	! lookup name (e.g. "mod::Suit") from parse_qualified_expr(), and only the
+	! trailing `(ordinal)` remains to be consumed here -- mirrors
+	! parse_enum_access()'s optional `enum_name` argument
+	!
+	! Bakes every one of the enum's variants into expr%val%struct(:) at parse
+	! time -- the same representation used for enum-array elements (c.f.
+	! parse_array_expr) -- so the ordinal->variant lookup at eval time needs
+	! no runtime enum registry; it just scans this baked list.  When the
+	! argument is a constant int literal, the ordinal is checked against the
+	! baked variants right here at parse time (E96); otherwise the check is
+	! deferred to runtime (R32)
+
+	class(parser_t), target :: parser
+	type(syntax_node_t), intent(out) :: expr
+	character(len = *), intent(in), optional :: enum_name
+
+	!********
+
+	integer :: enum_id, i
+	integer :: span_beg, span_end
+
+	character(len = :), allocatable :: enum_name_text
+
+	type(enum_t), pointer :: enum
+
+	type(syntax_node_t) :: arg
+
+	type(syntax_token_t) :: enum_tok, lparen, rparen
+
+	type(text_span_t) :: span
+
+	logical :: found
+
+	if (present(enum_name)) then
+		enum_name_text = enum_name
+	else
+		call parser%match(identifier_token, enum_tok)
+		enum_name_text = enum_tok%text
+	end if
+
+	call parser%match(lparen_token, lparen)
+
+	span_beg = parser%peek_pos(0)
+	call parser%parse_expr(expr=arg)
+	span_end = parser%peek_pos(0) - 1
+
+	call parser%match(rparen_token, rparen)
+
+	enum_id = parser%enums%find(enum_name_text)
+	enum => parser%enums%get(enum_id)
+
+	if (.not. is_int_type(arg%val%type)) then
+		span = new_span(span_beg, span_end - span_beg + 1)
+		call parser%diagnostics%push(err_bad_arg_type( &
+			parser%context(), span, enum_name_text, 1, "ordinal", "i32", &
+			type_name(arg%val)))
+
+	else if (arg%kind == literal_expr .and. arg%val%type == i32_type) then
+		! Parse-time check: a constant i32 literal argument can be validated
+		! right now instead of waiting for a runtime error
+		found = .false.
+		do i = 1, enum%num_vars
+			if (enum%variant_values(i) == arg%val%sca%i32) then
+				found = .true.
+				exit
+			end if
+		end do
+		if (.not. found) then
+			span = new_span(span_beg, span_end - span_beg + 1)
+			call parser%diagnostics%push(err_enum_cast_range( &
+				parser%context(), span, enum_name_text, arg%val%sca%i32))
+		end if
+	end if
+
+	expr%kind = enum_cast_expr
+	if (.not. present(enum_name)) expr%identifier = enum_tok
+	call syntax_node_move(arg, expr%right)
+
+	! Bake every variant into expr%val%struct(:), mirroring how an
+	! enum-array literal tags its elements (c.f. parse_array_expr)
+	expr%val%type = enum_type
+	expr%val%enum_name = enum_name_text
+	expr%val%enum_cookie = enum%cookie
+	allocate(expr%val%struct( enum%num_vars ))
+	do i = 1, enum%num_vars
+		call bake_enum_variant(enum, i, enum_name_text, expr%val%struct(i))
+	end do
+
+end subroutine parse_enum_cast
+
+!===============================================================================
+
+module subroutine parse_enum_name_expr(parser, expr, enum_name)
+
+	! Parse a bare enum type name, e.g. `Suit`, used as an expression rather
+	! than in `Suit.Variant` or `Suit(ordinal)` position.  Called from
+	! parse_primary_expr() when the current identifier is a registered enum
+	! name and not shadowed by a live variable of the same name
+	!
+	! Following Python's model, a bare enum name is an array of all its
+	! variants in declaration order (aliases included).  This is synthesized
+	! here as an ordinary explicit array literal (expl_array), so it rides
+	! the existing array machinery in both backends -- AST eval via
+	! eval_array_expr, bytecode via OP_NEW_ARRAY -- and iterating it with
+	! `for` takes the same expl_array path already exercised by a literal
+	! enum array (c.f. parse_array_expr).  No new node kind, no runtime enum
+	! registry
+	!
+	! When `enum_name` is present, it is the already-parsed, alias-qualified
+	! lookup name (e.g. "mod::Suit") from parse_qualified_expr(), and the
+	! bare name has already been fully consumed -- mirrors
+	! parse_enum_access()'s and parse_enum_cast()'s optional `enum_name` arg
+
+	class(parser_t), target :: parser
+	type(syntax_node_t), intent(out) :: expr
+	character(len = *), intent(in), optional :: enum_name
+
+	!********
+
+	integer :: enum_id, i
+
+	character(len = :), allocatable :: enum_name_text
+
+	type(enum_t), pointer :: enum
+
+	type(syntax_token_t) :: enum_tok
+
+	if (present(enum_name)) then
+		enum_name_text = enum_name
+	else
+		call parser%match(identifier_token, enum_tok)
+		enum_name_text = enum_tok%text
+	end if
+
+	enum_id = parser%enums%find(enum_name_text)
+	enum => parser%enums%get(enum_id)
+
+	expr%kind             = array_expr
+	if (.not. present(enum_name)) expr%identifier = enum_tok
+	expr%is_enum_name     = .true.
+	expr%val%type         = array_type
+	expr%val%enum_name    = enum_name_text
+	expr%val%enum_cookie  = enum%cookie
+
+	allocate(expr%val%array)
+	expr%val%array%type = enum_type
+	expr%val%array%kind = expl_array
+	expr%val%array%rank = 1
+	expr%val%array%len_ = enum%num_vars
+
+	allocate(expr%elems( enum%num_vars ))
+	do i = 1, enum%num_vars
+		expr%elems(i)%kind = enum_access_expr
+		call bake_enum_variant(enum, i, enum_name_text, expr%elems(i)%val)
+	end do
+
+end subroutine parse_enum_name_expr
+
+!===============================================================================
+
+subroutine bake_enum_variant(enum, i, enum_name_text, val)
+
+	! Bake variant i of `enum` into `val` as a fully-resolved enum value_t --
+	! enum values are compile-time constants, so there is no runtime lookup.
+	! Shared by parse_enum_access(), parse_enum_cast(), and
+	! parse_enum_name_expr()
+
+	type(enum_t), intent(in) :: enum
+	integer, intent(in) :: i
+	character(len = *), intent(in) :: enum_name_text
+	type(value_t), intent(out) :: val
+
+	val%type = enum_type
+	val%sca%i32 = enum%variant_values(i)
+	val%enum_name = enum_name_text
+	val%enum_variant = enum%variant_names%v(i)%s
+	val%enum_cookie = enum%cookie
+
+end subroutine bake_enum_variant
+
+!===============================================================================
+
+function enum_closest_variant(enum, key) result(closest)
+
+	! Return the closest variant name in `enum` to `key`, or "" when none is
+	! close enough.  Mirrors structs_t%closest()/enums_t%closest(), but scans
+	! an enum_t's variant_names instead of a whole hash table of enum_t's
+
+	type(enum_t), intent(in) :: enum
+	character(len = *), intent(in) :: key
+	character(len = :), allocatable :: closest
+
+	!********
+
+	integer :: i, min_dist, dist, threshold
+	character(len = :), allocatable :: key_low, target_low
+
+	closest  = ""
+	min_dist = huge(min_dist)
+	target_low = to_lower(key)
+
+	do i = 1, enum%num_vars
+		key_low = to_lower(enum%variant_names%v(i)%s)
+		if (key_low == target_low) cycle
+
+		dist = levenshtein(target_low, key_low)
+		if (dist < min_dist) then
+			min_dist = dist
+			closest  = enum%variant_names%v(i)%s
+		end if
+	end do
+
+	threshold = max(2, len(target_low) / 3)
+	if (min_dist > threshold) closest = ""
+
+end function enum_closest_variant
 
 !===============================================================================
 
@@ -978,9 +1733,9 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	character(len = :), allocatable :: type_text, mangled_name
 
-	integer :: i, io, pos0, rank, fn_beg, fn_name_end
+	integer :: i, io, pos0, rank, fn_beg, fn_name_end, mem_id
 
-	logical :: overwrite, const_param
+	logical :: overwrite, const_param, in_fn_body0
 
 	type(fn_t) :: fn
 
@@ -994,7 +1749,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	type(text_span_t) :: span
 
-	type(value_t) :: type, self_val
+	type(value_t) :: type, self_val, mem_val
 	type(value_vector_t) :: types
 
 	call parser%vars%push_scope()
@@ -1004,13 +1759,22 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
-	fn_kw = parser%match(fn_keyword)
+	call parser%match(fn_keyword, fn_kw)
 
-	identifier = parser%match(identifier_token)
+	call parser%match(identifier_token, identifier)
 	fn_name_end = parser%peek_pos(0) - 1
 	fn%is_intr = .false.
 	fn%is_method = .true.
 	fn%is_const_method = is_const
+
+	! A method may not share a name with a member of the same struct -- that
+	! would make `s.foo` ambiguous between a field read and a method call
+	call struct%vars%search(identifier%text, mem_id, io, mem_val)
+	if (io == exit_success) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push(err_member_method_clash( &
+			parser%context(), span, identifier%text, struct_name))
+	end if
 
 	! Insert implicit "0self" as first local (the struct receiver)
 	self_val%type = struct_type
@@ -1023,9 +1787,11 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	parser%self_loc_id = parser%num_locs
 
 	! Set method parsing context so field names resolve to dot_expr("0self", field)
+	! (and bare calls resolve to sibling self-method calls, c.f. parse_fn_call)
 	parser%in_method = .true.
 	parser%in_const_method = is_const
 	parser%method_struct = struct
+	parser%method_struct_name = struct_name
 
 	if (parser%current_kind() /= lparen_token) then
 		parser%in_method = .false.
@@ -1036,7 +1802,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 		return
 	end if
 
-	lparen = parser%match(lparen_token)
+	call parser%match(lparen_token, lparen)
 
 	names        = new_string_vector()
 	pos_args     = new_integer_vector()
@@ -1053,14 +1819,15 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 		pos0 = parser%current_pos()
 		call pos_args%push(pos0)
 
-		name  = parser%match(identifier_token)
-		colon = parser%match(colon_token)
+		call parser%match(identifier_token, name)
+		call parser%check_type_clash(name%text, name%pos)
+		call parser%match(colon_token, colon)
 
 		if (parser%current_kind() == amp_token) then
-			amp = parser%match(amp_token)
+			call parser%match(amp_token, amp)
 			call is_ref%push(.true.)
 			if (parser%current_kind() == const_keyword) then
-				dummy = parser%next()
+				call parser%next(dummy)
 				call is_const_ref%push(.true.)
 			else
 				call is_const_ref%push(.false.)
@@ -1076,15 +1843,15 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 		call types%push(type)
 
 		if (parser%current_kind() /= rparen_token) then
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
-		if (parser%current_pos() == pos0) dummy = parser%next()
+		if (parser%current_pos() == pos0) call parser%next(dummy)
 
 	end do
 	call pos_args%push(parser%current_pos() + 1)
 
-	rparen = parser%match(rparen_token)
+	call parser%match(rparen_token, rparen)
 
 	! params(1) = self slot, params(2..) = explicit params
 	! is_ref(1) = true (self is always by-ref), is_const_ref(1) = is_const
@@ -1116,7 +1883,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	fn%type%type = void_type
 	rank = 0
 	if (parser%current_kind() == colon_token) then
-		colon = parser%match(colon_token)
+		call parser%match(colon_token, colon)
 		call parser%parse_type(type_text, type)
 		fn%type = type
 	end if
@@ -1124,7 +1891,10 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	parser%fn_name = identifier%text
 	parser%fn_type = fn%type
 
+	in_fn_body0 = parser%in_fn_body
+	parser%in_fn_body = .true.
 	call parser%parse_statement(body)
+	parser%in_fn_body = in_fn_body0
 
 	if (.not. parser%returned .and. fn%type%type /= void_type) then
 		span = new_span(fn_beg, fn_name_end - fn_beg + 1)
@@ -1182,7 +1952,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 	! A struct instantiator initializes all the members of an instance of a
 	! struct
 
-	class(parser_t) :: parser
+	class(parser_t), target :: parser
 
 	type(syntax_node_t), intent(out) :: inst
 	character(len = *), intent(in), optional :: struct_name
@@ -1196,7 +1966,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 	logical :: is_ok
 	logical, allocatable :: member_set(:)
 
-	type(struct_t) :: struct
+	type(struct_t), pointer :: struct
 
 	type(syntax_node_t) :: mem
 
@@ -1213,21 +1983,26 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 		lookup_name = struct_name
 	else
 		! Original path: parse identifier from current position
-		identifier = parser%match(identifier_token)
+		call parser%match(identifier_token, identifier)
 		lookup_name = identifier%text
 	end if
 
 	!print *, "parsing struct instance of lookup_name = ", lookup_name
 
-	!print *, ""
-	!print *, "in parse_struct_instance():"
-	!print *, "parser structs root     = ", parser%structs%dict%root%split_char
-	!print *, "parser structs root mid = ", parser%structs%dict%root%mid%split_char
+	struct_id = parser%structs%find(lookup_name)
+	if (struct_id == 0) then
+		! Both callers of parse_struct_instance() (parse_expr.f90 and
+		! parse_qualified_expr() in this file) already gate the call on
+		! parser%structs%exists(lookup_name), so this should be unreachable.
+		! Guard anyway -- struct_id == 0 would otherwise be passed straight
+		! into get(), which indexes table(0) (out of bounds) -- matching the
+		! same defensive check in parse_dot() (parse_expr.f90)
+		write(*,*) err_int(IC_UNREACHABLE_STRUCT_LOOKUP, "unreachable struct lookup failure")
+		call internal_error()
+	end if
+	struct => parser%structs%get(struct_id)
 
-	call parser%structs%search(lookup_name, struct_id, io, struct)
-	!print *, "struct io = ", io
-
-	lbrace  = parser%match(lbrace_token)
+	call parser%match(lbrace_token, lbrace)
 
 	inst%kind = struct_instance_expr
 	!inst%identifier = identifier
@@ -1256,10 +2031,11 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 		! change print str conversion is might be nice to allow print output to
 		! be pasted back into syntran source code.  Could be dangerous tho
 
-		name   = parser%match(identifier_token)
-		equals = parser%match(equals_token)
+		call parser%match(identifier_token, name)
+		call parser%match(equals_token, equals)
 		pos1   = parser%current_pos()
 		call parser%parse_expr(expr=mem)
+		call parser%check_enum_name_value(mem)
 
 		!print *, "name%text = ", name%text
 
@@ -1277,7 +2053,8 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 				parser%context(), &
 				span, &
 				name%text, &
-				lookup_name))
+				lookup_name, &
+				struct%vars%closest(name%text)))
 			!return
 		end if
 
@@ -1326,15 +2103,15 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 		end if
 
 		if (parser%current_kind() /= rbrace_token) then
-			comma = parser%match(comma_token)
+			call parser%match(comma_token, comma)
 		end if
 
 		! break infinite loop
-		if (parser%pos == pos0) dummy = parser%next()
+		if (parser%pos == pos0) call parser%next(dummy)
 
 	end do
 
-	rbrace  = parser%match(rbrace_token)
+	call parser%match(rbrace_token, rbrace)
 
 	! Use a boolean array to check if all members are set.  You could have the
 	! correct number but with duplicates and other members missing
@@ -1367,7 +2144,7 @@ end subroutine parse_struct_instance
 
 !===============================================================================
 
-module subroutine parse_type(parser, type_text, type)
+recursive module subroutine parse_type(parser, type_text, type)
 
 	class(parser_t) :: parser
 
@@ -1377,30 +2154,81 @@ module subroutine parse_type(parser, type_text, type)
 
 	!********
 
-	integer :: rank, itype
+	integer :: rank, itype, i
 	integer :: pos0, pos1, pos2
 
-	type(struct_t) :: struct
+	character(len = :), allocatable :: cookie, suggest, param_type_text, ret_type_text
 
 	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
-		double_colon
+		double_colon, fn_kw, lparen, rparen
 
 	type(text_span_t) :: span
 
+	type(value_t) :: param_type, ret_type
+	type(value_vector_t) :: param_types
+
 	pos1 = parser%current_pos()
+
+	if (parser%current_kind() == fn_keyword) then
+
+		! Fn-pointer type: fn(paramtype, paramtype, ...): rettype
+		! Return type defaults to void if the ": rettype" suffix is omitted
+		call parser%match(fn_keyword, fn_kw)
+		type_text = "fn"
+
+		call parser%match(lparen_token, lparen)
+
+		param_types = new_value_vector()
+		do while ( &
+			parser%current_kind() /= rparen_token .and. &
+			parser%current_kind() /= eof_token)
+
+			pos0 = parser%pos
+
+			call parser%parse_type(param_type_text, param_type)
+			call param_types%push(param_type)
+
+			if (parser%current_kind() /= rparen_token) then
+				call parser%match(comma_token, comma)
+			end if
+
+			! Break infinite loop
+			if (parser%pos == pos0) call parser%next(dummy)
+
+		end do
+		call parser%match(rparen_token, rparen)
+
+		type%type = fn_type
+		allocate(type%fn_params( param_types%len_ ))
+		do i = 1, param_types%len_
+			type%fn_params(i) = param_types%v(i)
+		end do
+
+		allocate(type%fn_ret)
+		type%fn_ret%type = void_type
+		if (parser%current_kind() == colon_token) then
+			call parser%match(colon_token, colon)
+			call parser%parse_type(ret_type_text, ret_type)
+			type%fn_ret = ret_type
+		end if
+
+		return
+
+	end if
+
 	if (parser%current_kind() == lbracket_token) then
 
 		! Array param
-		lbracket = parser%match(lbracket_token)
-		ident    = parser%match(identifier_token)
+		call parser%match(lbracket_token, lbracket)
+		call parser%match(identifier_token, ident)
 		type_text = ident%text
 		do while (parser%current_kind() == double_colon_token)
 			! Qualified element type, e.g. [mod::Struct; :]
-			double_colon = parser%match(double_colon_token)
-			ident = parser%match(identifier_token)
+			call parser%match(double_colon_token, double_colon)
+			call parser%match(identifier_token, ident)
 			type_text = type_text//"::"//ident%text
 		end do
-		semi     = parser%match(semicolon_token)
+		call parser%match(semicolon_token, semi)
 
 		rank  = 0
 		do while ( &
@@ -1410,39 +2238,41 @@ module subroutine parse_type(parser, type_text, type)
 			pos0 = parser%pos
 
 			rank = rank + 1
-			colon = parser%match(colon_token)
+			call parser%match(colon_token, colon)
 			if (parser%current_kind() /= rbracket_token) then
-				comma = parser%match(comma_token)
+				call parser%match(comma_token, comma)
 			end if
 
 			! break infinite loop
-			if (parser%pos == pos0) dummy = parser%next()
+			if (parser%pos == pos0) call parser%next(dummy)
 
 		end do
 		!print *, 'rank = ', rank
 
-		rbracket = parser%match(rbracket_token)
+		call parser%match(rbracket_token, rbracket)
 
 	else
 		! Scalar param
-		ident = parser%match(identifier_token)
+		call parser%match(identifier_token, ident)
 		type_text = ident%text
 		do while (parser%current_kind() == double_colon_token)
 			! Qualified type, e.g. mod::Struct
-			double_colon = parser%match(double_colon_token)
-			ident = parser%match(identifier_token)
+			call parser%match(double_colon_token, double_colon)
+			call parser%match(identifier_token, ident)
 			type_text = type_text//"::"//ident%text
 		end do
 		rank = -1
 	end if
 	pos2 = parser%current_pos()
 
-	itype = lookup_type(type_text, parser%structs, struct)
+	itype = lookup_type(type_text, parser%structs, parser%enums, cookie)
 
 	if (itype == unknown_type) then
 		span = new_span(pos1, pos2 - pos1)
+		suggest = parser%structs%closest(type_text)
+		if (len(suggest) == 0) suggest = parser%enums%closest(type_text)
 		call parser%diagnostics%push(err_bad_type( &
-			parser%context(), span, type_text))
+			parser%context(), span, type_text, suggest))
 	end if
 
 	if (rank >= 0) then
@@ -1457,7 +2287,10 @@ module subroutine parse_type(parser, type_text, type)
 
 	if (itype == struct_type) then
 		type%struct_name = type_text
-		type%struct_cookie = struct%cookie
+		type%struct_cookie = cookie
+	else if (itype == enum_type) then
+		type%enum_name = type_text
+		type%enum_cookie = cookie
 	end if
 
 end subroutine parse_type
@@ -1526,7 +2359,8 @@ end function all_paths_return
 !===============================================================================
 
 module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
-		fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref)
+		fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref, &
+		eff_is_ref)
 
 	class(parser_t), intent(inout) :: parser
 	type(syntax_node_t), intent(in) :: arg
@@ -1536,23 +2370,19 @@ module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 	integer, intent(in) :: i_0based
 	type(value_t), intent(in) :: param_val
 	logical, intent(in) :: param_is_ref, param_is_const_ref
+	logical(kind = 1), intent(out) :: eff_is_ref
 
 	!********
 
-	integer :: id_index_tmp, io_tmp
 	logical :: is_const_var, is_ok
 	character(len = :), allocatable :: exp_type, act_type
-	type(value_t) :: const_check_val
 
 	! Passing a const variable to a mutable-ref param is an error
 	if (param_is_ref .and. .not. param_is_const_ref .and. arg%kind == name_expr) then
-		is_const_var = .false.
 		if (arg%is_loc) then
-			call parser%locs%search(arg%identifier%text, &
-				id_index_tmp, io_tmp, const_check_val, is_const = is_const_var)
+			is_const_var = parser%locs%is_const(arg%identifier%text)
 		else
-			call parser%vars%search(arg%identifier%text, &
-				id_index_tmp, io_tmp, const_check_val, is_const = is_const_var)
+			is_const_var = parser%vars%is_const(arg%identifier%text)
 		end if
 		if (is_const_var) then
 			call parser%diagnostics%push(err_const_assign( &
@@ -1560,15 +2390,35 @@ module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 		end if
 	end if
 
-	! Ref/val mismatch
-	if (param_is_ref .neqv. call_is_ref_i) then
-		if (param_is_ref) then
-			call parser%diagnostics%push(err_bad_arg_val( &
-				parser%context(), arg_span, fn_name, i_0based, param_name))
-		else
-			call parser%diagnostics%push(err_bad_arg_ref( &
-				parser%context(), arg_span, fn_name, i_0based, param_name))
-		end if
+	! Effective ref-ness of this argument.  Normally this is just whatever the
+	! caller wrote (`&arg` or not).  But a `&const` param is a read-only
+	! borrow: the callee never writes back through it (see eval_fn_call), so a
+	! bare-name argument can transparently auto-borrow (no copy) even without
+	! an explicit `&` at the call site.  Non-name args (literals, temporaries,
+	! subscripts, etc.) stay by-value -- there is no caller slot to borrow.
+	eff_is_ref = call_is_ref_i
+	if (param_is_ref .and. param_is_const_ref .and. .not. call_is_ref_i .and. &
+			arg%kind == name_expr .and. .not. allocated(arg%lsubscripts)) then
+		eff_is_ref = .true.
+	end if
+
+	! Ref/val mismatch.  Only mutable `&` params require the caller to write
+	! `&arg` explicitly; `&const` params accept plain value syntax (handled by
+	! the auto-borrow above, so no mismatch here).
+	if (param_is_ref .and. .not. param_is_const_ref .and. .not. call_is_ref_i) then
+		call parser%diagnostics%push(err_bad_arg_val( &
+			parser%context(), arg_span, fn_name, i_0based, param_name))
+	else if (.not. param_is_ref .and. call_is_ref_i) then
+		call parser%diagnostics%push(err_bad_arg_ref( &
+			parser%context(), arg_span, fn_name, i_0based, param_name))
+	end if
+
+	! Void argument (no return value) -- reject before generic type-mismatch
+	! check so it takes precedence and gives a clearer message
+	if (arg%val%type == void_type) then
+		call parser%diagnostics%push(err_void_arg( &
+			parser%context(), arg_span, fn_name, i_0based, param_name))
+		return
 	end if
 
 	! Type mismatch

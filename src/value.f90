@@ -45,6 +45,13 @@ module syntran__value_m
 		real   (kind = 4) :: f32
 		real   (kind = 8) :: f64
 
+		! Fn pointer runtime dispatch key: id_index into fns%fns()/prog%fn_entry()
+		! for the target user-defined fn.  Only meaningful when value_t%type ==
+		! fn_type.  Lives in this POD scalar_t so value_t%sca copies (both
+		! value_copy's `dst%sca = src%sca` and value_move's default-case scalar
+		! copy) carry it for free
+		integer           :: fn_index = 0
+
 		contains
 			procedure :: to_str => scalar_to_str
 
@@ -125,6 +132,31 @@ module syntran__value_m
 		! struct_name above remains the display name and may be re-qualified per
 		! import path
 		character(len = :), allocatable :: struct_cookie
+
+		! Enum type name, e.g. "Dir", used when value%type == enum_type.
+		! Mirrors struct_name's role for type-descriptor rendering (fn param/
+		! return types, etc.)
+		character(len = :), allocatable :: enum_name
+
+		! Enum variant name, e.g. "North", for an actual enum value (as
+		! opposed to a bare enum type descriptor, which leaves this
+		! unallocated).  Printed as "<enum_name>.<enum_variant>".  The
+		! backing i32 ordinal is stored in sca%i32
+		character(len = :), allocatable :: enum_variant
+
+		! Canonical, alias-independent enum identity: "<defining src
+		! file>::<local enum name>".  Used for type matching, mirroring
+		! struct_cookie above
+		character(len = :), allocatable :: enum_cookie
+
+		! Fn pointer signature, used when value%type == fn_type.  fn_params(i)
+		! and fn_ret carry only the *type* of each param/return (like fn_t%params
+		! /fn_t%type in types.f90), not runtime values -- used for type-checking
+		! calls through a fn pointer and for rendering the signature in
+		! type_name().  Self-referential value_t is fine (c.f. struct(:) above);
+		! only two types containing *each other* breaks gfortran
+		type(value_t), allocatable :: fn_params(:)
+		type(value_t), allocatable :: fn_ret
 
 		contains
 			procedure :: to_str => value_to_str
@@ -296,12 +328,16 @@ subroutine value_reset(val)
 		! Scalar: nothing allocated, just clear the type tag.
 		val%type = unknown_type
 	case default
-		if (allocated(val%array     )) deallocate(val%array     )
-		if (allocated(val%str       )) deallocate(val%str       )
-		if (allocated(val%file_     )) deallocate(val%file_     )
-		if (allocated(val%struct    )) deallocate(val%struct    )
-		if (allocated(val%struct_name)) deallocate(val%struct_name)
-		if (allocated(val%struct_cookie)) deallocate(val%struct_cookie)
+		! Don't rely on a bare `deallocate(val%array)` / `deallocate(val%struct)`
+		! here -- both can be arbitrarily deeply nested (array_t containing
+		! str(:) of string_t with its own allocatable %s; struct(:) is a
+		! recursive value_t array), and gfortran's implicit deep
+		! deallocation of that doesn't reliably free every level (same bug
+		! already fixed piecewise in value_copy()/array_copy() and
+		! eval_fn_call()'s locs teardown). value_destroy() clears every
+		! level explicitly, including str/file_/struct_name/struct_cookie/
+		! enum_name/enum_variant/enum_cookie
+		call value_destroy(val)
 		val%type = unknown_type
 	end select
 
@@ -338,17 +374,34 @@ recursive subroutine value_move(src, dst)
 		if (allocated(src%struct)) call move_alloc(src%struct, dst%struct)
 		if (allocated(src%struct_name)) call move_alloc(src%struct_name, dst%struct_name)
 		if (allocated(src%struct_cookie)) call move_alloc(src%struct_cookie, dst%struct_cookie)
+		! Enum arrays likewise use struct(:) for elements and enum_name for type tag.
+		if (allocated(src%enum_name)) call move_alloc(src%enum_name, dst%enum_name)
+		if (allocated(src%enum_cookie)) call move_alloc(src%enum_cookie, dst%enum_cookie)
 
 	case (struct_type)
 		call move_alloc(src%struct_name, dst%struct_name)
 		if (allocated(src%struct_cookie)) call move_alloc(src%struct_cookie, dst%struct_cookie)
 		call move_alloc(src%struct, dst%struct)
 
+	case (enum_type)
+		dst%sca = src%sca   ! the backing i32 ordinal rides along here
+		call move_alloc(src%enum_name, dst%enum_name)
+		if (allocated(src%enum_variant)) call move_alloc(src%enum_variant, dst%enum_variant)
+		if (allocated(src%enum_cookie)) call move_alloc(src%enum_cookie, dst%enum_cookie)
+		! An enum_cast_expr node's %val is enum_type but also carries a baked
+		! struct(:) of candidate variants (c.f. parse_enum_cast); move it too
+		if (allocated(src%struct)) call move_alloc(src%struct, dst%struct)
+
 	case (str_type)
 		call move_alloc(src%str, dst%str)
 
 	case (file_type)
 		call move_alloc(src%file_, dst%file_)
+
+	case (fn_type)
+		dst%sca = src%sca   ! fn_index rides along here
+		if (allocated(src%fn_params)) call move_alloc(src%fn_params, dst%fn_params)
+		if (allocated(src%fn_ret))    call move_alloc(src%fn_ret,    dst%fn_ret)
 
 	case default
 		! POD copy: scalar_t now contains only bool/i32/i64/f32/f64 — cheap.
@@ -357,6 +410,140 @@ recursive subroutine value_move(src, dst)
 	end select
 
 end subroutine value_move
+
+!===============================================================================
+
+subroutine array_move(src, dst)
+
+	! Like value_move(), but for a plain (non-allocatable) array_t variable.
+	! dst cannot be move_alloc'd wholesale since it isn't itself allocatable
+	! (unlike value_t%array), so each of array_t's allocatable components is
+	! moved individually instead
+
+	type(array_t), intent(inout) :: src
+	type(array_t), intent(out)   :: dst
+
+	dst%type = src%type
+	dst%kind = src%kind
+	dst%rank = src%rank
+	dst%len_ = src%len_
+	dst%cap  = src%cap
+
+	call move_alloc(src%lbound, dst%lbound)
+	call move_alloc(src%step,   dst%step)
+	call move_alloc(src%ubound, dst%ubound)
+
+	call move_alloc(src%bool, dst%bool)
+	call move_alloc(src%i32 , dst%i32 )
+	call move_alloc(src%i64 , dst%i64 )
+	call move_alloc(src%f32 , dst%f32 )
+	call move_alloc(src%f64 , dst%f64 )
+	call move_alloc(src%str , dst%str )
+
+	call move_alloc(src%size, dst%size)
+
+end subroutine array_move
+
+!===============================================================================
+
+subroutine array_copy(dst, src)
+
+	! Deep copy of a plain (non-allocatable) array_t variable.  Like
+	! value_copy(), but for array_t.
+	!
+	! The str(:) component needs special handling: string_t has its own
+	! allocatable %s, so a whole-array `dst%str = src%str` is a
+	! double-nested reallocation-on-assignment in a single implicit
+	! statement, which gfortran doesn't handle correctly (see the identical
+	! str_type fix in value_copy() below).  Every other component here is
+	! single-level (a plain primitive array, or scalar_t which has no
+	! nested allocatables of its own), so plain `=` is safe for those
+
+	type(array_t), intent(inout) :: dst
+	type(array_t), intent(in)    :: src
+
+	!********
+
+	integer(kind = 8) :: i
+
+	dst%type = src%type
+	dst%kind = src%kind
+	dst%rank = src%rank
+	dst%len_ = src%len_
+	dst%cap  = src%cap
+
+	if (allocated(src%lbound)) then
+		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
+		dst%lbound = src%lbound
+	else if (allocated(dst%lbound)) then
+		deallocate(dst%lbound)
+	end if
+
+	if (allocated(src%step)) then
+		if (.not. allocated(dst%step)) allocate(dst%step)
+		dst%step = src%step
+	else if (allocated(dst%step)) then
+		deallocate(dst%step)
+	end if
+
+	if (allocated(src%ubound)) then
+		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
+		dst%ubound = src%ubound
+	else if (allocated(dst%ubound)) then
+		deallocate(dst%ubound)
+	end if
+
+	if (allocated(src%bool)) then
+		dst%bool = src%bool
+	else if (allocated(dst%bool)) then
+		deallocate(dst%bool)
+	end if
+
+	if (allocated(src%i32)) then
+		dst%i32 = src%i32
+	else if (allocated(dst%i32)) then
+		deallocate(dst%i32)
+	end if
+
+	if (allocated(src%i64)) then
+		dst%i64 = src%i64
+	else if (allocated(dst%i64)) then
+		deallocate(dst%i64)
+	end if
+
+	if (allocated(src%f32)) then
+		dst%f32 = src%f32
+	else if (allocated(dst%f32)) then
+		deallocate(dst%f32)
+	end if
+
+	if (allocated(src%f64)) then
+		dst%f64 = src%f64
+	else if (allocated(dst%f64)) then
+		deallocate(dst%f64)
+	end if
+
+	if (allocated(src%str)) then
+		! Double-nested (outer str(:) allocatable + each element's own
+		! allocatable %s) — don't rely on a whole-array `dst%str = src%str`
+		! to reallocate both levels correctly in one shot.  Reallocate the
+		! outer array explicitly, then copy each element's %s individually
+		if (allocated(dst%str)) deallocate(dst%str)
+		allocate(dst%str( size(src%str) ))
+		do i = 1, size(src%str, kind = 8)
+			dst%str(i)%s = src%str(i)%s
+		end do
+	else if (allocated(dst%str)) then
+		deallocate(dst%str)
+	end if
+
+	if (allocated(src%size)) then
+		dst%size = src%size
+	else if (allocated(dst%size)) then
+		deallocate(dst%size)
+	end if
+
+end subroutine array_copy
 
 !===============================================================================
 
@@ -384,7 +571,14 @@ recursive subroutine value_copy(dst, src)
 	! slot may carry a stale allocatable from a prior value (different type); we
 	! must not propagate it to dst when the current type no longer uses it.
 	if (src%type == str_type .and. allocated(src%str)) then
-		dst%str = src%str   ! intrinsic assignment handles allocatable char
+		! Don't rely on `dst%str = src%str` doing an implicit reallocation of
+		! the outer allocatable AND the nested allocatable %s component in one
+		! shot — gfortran leaks the old %s block when dst%str was already
+		! allocated to a different length.  Deallocate/reallocate explicitly
+		! and copy the (now simple, single-level) character component instead
+		if (allocated(dst%str)) deallocate(dst%str)
+		allocate(dst%str)
+		dst%str%s = src%str%s
 	else if (allocated(dst%str)) then
 		deallocate(dst%str)
 	end if
@@ -408,24 +602,216 @@ recursive subroutine value_copy(dst, src)
 		deallocate(dst%struct_cookie)
 	end if
 
+	if (allocated(src%enum_name)) then
+		dst%enum_name = src%enum_name
+	else if (allocated(dst%enum_name)) then
+		deallocate(dst%enum_name)
+	end if
+
+	if (allocated(src%enum_variant)) then
+		dst%enum_variant = src%enum_variant
+	else if (allocated(dst%enum_variant)) then
+		deallocate(dst%enum_variant)
+	end if
+
+	if (allocated(src%enum_cookie)) then
+		dst%enum_cookie = src%enum_cookie
+	else if (allocated(dst%enum_cookie)) then
+		deallocate(dst%enum_cookie)
+	end if
+
 	if (allocated(src%array)) then
+		! Don't rely on a whole-object `dst%array = src%array` here either —
+		! array_t's str(:) component has the same double-nested
+		! reallocation-on-assignment problem as value_t%str above.  See
+		! array_copy()
 		if (.not. allocated(dst%array)) allocate(dst%array)
-		dst%array = src%array
+		call array_copy(dst%array, src%array)
 	else if (allocated(dst%array)) then
+		! Explicitly tear down array_t's own nested allocatables (str(:) of
+		! string_t, each with its own allocatable %s) before freeing the
+		! outer allocatable -- same distrust of bare deallocate() as
+		! value_array_destroy() below, applied one level in
+		call array_destroy(dst%array)
 		deallocate(dst%array)
 	end if
 
 	if (allocated(src%struct)) then
-		if (allocated(dst%struct)) deallocate(dst%struct)
+		if (allocated(dst%struct)) call value_array_destroy(dst%struct)
 		allocate(dst%struct( size(src%struct) ))
 		do i = 1, size(src%struct)
 			call value_copy(dst%struct(i), src%struct(i))
 		end do
 	else if (allocated(dst%struct)) then
-		deallocate(dst%struct)
+		call value_array_destroy(dst%struct)
+	end if
+
+	if (allocated(src%fn_params)) then
+		if (allocated(dst%fn_params)) call value_array_destroy(dst%fn_params)
+		allocate(dst%fn_params( size(src%fn_params) ))
+		do i = 1, size(src%fn_params)
+			call value_copy(dst%fn_params(i), src%fn_params(i))
+		end do
+	else if (allocated(dst%fn_params)) then
+		call value_array_destroy(dst%fn_params)
+	end if
+
+	if (allocated(src%fn_ret)) then
+		if (.not. allocated(dst%fn_ret)) allocate(dst%fn_ret)
+		call value_copy(dst%fn_ret, src%fn_ret)
+	else if (allocated(dst%fn_ret)) then
+		call value_destroy(dst%fn_ret)
+		deallocate(dst%fn_ret)
 	end if
 
 end subroutine value_copy
+
+!===============================================================================
+
+subroutine array_destroy(arr)
+
+	! Explicitly deallocate arr's allocatable components one level at a
+	! time, mirroring array_copy()'s per-component handling.  Used ahead of
+	! a whole-array deallocation of value_t(:) (e.g. before move_alloc()
+	! implicitly deallocates its "to" argument) so that implicit,
+	! compiler-generated deep deallocation of a value_t array never has to
+	! walk a live, deeply-nested allocatable tree itself -- by the time it
+	! runs, every component here is already empty
+
+	type(array_t), intent(inout) :: arr
+
+	!********
+
+	integer(kind = 8) :: i
+
+	if (allocated(arr%lbound)) deallocate(arr%lbound)
+	if (allocated(arr%step))   deallocate(arr%step)
+	if (allocated(arr%ubound)) deallocate(arr%ubound)
+
+	if (allocated(arr%bool)) deallocate(arr%bool)
+	if (allocated(arr%i32))  deallocate(arr%i32)
+	if (allocated(arr%i64))  deallocate(arr%i64)
+	if (allocated(arr%f32))  deallocate(arr%f32)
+	if (allocated(arr%f64))  deallocate(arr%f64)
+
+	if (allocated(arr%str)) then
+		do i = 1, size(arr%str, kind = 8)
+			if (allocated(arr%str(i)%s)) deallocate(arr%str(i)%s)
+		end do
+		deallocate(arr%str)
+	end if
+
+	if (allocated(arr%size)) deallocate(arr%size)
+
+end subroutine array_destroy
+
+!===============================================================================
+
+recursive subroutine value_destroy(val)
+
+	! Explicitly deallocate val's allocatable components one level at a
+	! time, instead of relying on implicit/compiler-generated deep
+	! deallocation of a value_t (or an array of value_t) to correctly walk
+	! a deeply-nested allocatable tree (struct(:) of struct(:) of array_t
+	! containing str(:) of string_t, etc.) in one shot.  See array_destroy()
+
+	type(value_t), intent(inout) :: val
+
+	!********
+
+	integer :: i
+
+	if (allocated(val%str)) deallocate(val%str)
+	if (allocated(val%file_)) deallocate(val%file_)
+	if (allocated(val%struct_name)) deallocate(val%struct_name)
+	if (allocated(val%struct_cookie)) deallocate(val%struct_cookie)
+	if (allocated(val%enum_name)) deallocate(val%enum_name)
+	if (allocated(val%enum_variant)) deallocate(val%enum_variant)
+	if (allocated(val%enum_cookie)) deallocate(val%enum_cookie)
+
+	if (allocated(val%array)) then
+		call array_destroy(val%array)
+		deallocate(val%array)
+	end if
+
+	if (allocated(val%struct)) then
+		do i = 1, size(val%struct)
+			call value_destroy(val%struct(i))
+		end do
+		deallocate(val%struct)
+	end if
+
+	if (allocated(val%fn_params)) then
+		do i = 1, size(val%fn_params)
+			call value_destroy(val%fn_params(i))
+		end do
+		deallocate(val%fn_params)
+	end if
+
+	if (allocated(val%fn_ret)) then
+		call value_destroy(val%fn_ret)
+		deallocate(val%fn_ret)
+	end if
+
+end subroutine value_destroy
+
+!===============================================================================
+
+subroutine value_array_destroy(vals)
+
+	! Safely deallocate an array of value_t: explicitly destroy each
+	! element first (see value_destroy()), then deallocate the array
+	! itself.  Use this instead of a bare `deallocate(vals)` wherever a
+	! growable pool/buffer of value_t needs to be freed or resized --
+	! gfortran's implicit deep deallocation of an array of a type this
+	! deeply nested (str(:) of string_t with its own allocatable %s;
+	! struct(:) is itself a recursive value_t array) is not reliable
+
+	type(value_t), allocatable, intent(inout) :: vals(:)
+
+	!********
+
+	integer :: i
+
+	if (.not. allocated(vals)) return
+
+	do i = 1, size(vals)
+		call value_destroy(vals(i))
+	end do
+	deallocate(vals)
+
+end subroutine value_array_destroy
+
+!===============================================================================
+
+subroutine value_array_copy(dst, src)
+
+	! Deep copy an array of value_t.  Use this instead of a whole-array
+	! `dst = src` assignment wherever dst starts out unallocated (or a
+	! different size than src): older gfortran mis-generates the
+	! allocate-on-assignment for an allocatable array of a type with
+	! recursive allocatable components (value_t%struct(:)) and a defined
+	! assignment(=) -- it allocates dst but shallow-copies the nested
+	! struct(:) block instead of invoking value_copy elementwise, so src and
+	! dst end up sharing (and later double-freeing) the same block.  c.f.
+	! value_array_destroy() above for the same distrust of compiler-
+	! generated deep (de)allocation of this type
+
+	type(value_t), allocatable, intent(inout) :: dst(:)
+	type(value_t), intent(in) :: src(:)
+
+	!********
+
+	integer :: i
+
+	call value_array_destroy(dst)
+	allocate(dst( size(src) ))
+
+	do i = 1, size(src)
+		dst(i) = src(i)  ! scalar assignment -> value_copy() defined assignment
+	end do
+
+end subroutine value_array_copy
 
 !===============================================================================
 
@@ -456,6 +842,32 @@ function mold(mold_, type_) result(array)
 	array%size = mold_%size
 
 end function mold
+
+!===============================================================================
+
+subroutine copy_composite_id(dst, src)
+
+	! Copy the components that describe a struct or enum type beyond
+	! %array%type: struct_name/struct_cookie and enum_name/enum_cookie.
+	! mold() doesn't carry these, so anything that builds a struct- or
+	! enum-typed array result from a mold has to copy them explicitly, or
+	! else member access and type-equality checks on the result break (the
+	! former needs struct_name to look up the struct, the latter needs
+	! struct_cookie/enum_cookie).
+	!
+	! %enum_variant is deliberately not copied: it names one particular
+	! variant, so it belongs to a scalar enum value, not to an array of
+	! them.
+
+	type(value_t), intent(inout) :: dst
+	type(value_t), intent(in)    :: src
+
+	if (allocated(src%struct_name)) dst%struct_name = src%struct_name
+	if (allocated(src%struct_cookie)) dst%struct_cookie = src%struct_cookie
+	if (allocated(src%enum_name)) dst%enum_name = src%enum_name
+	if (allocated(src%enum_cookie)) dst%enum_cookie = src%enum_cookie
+
+end subroutine copy_composite_id
 
 !===============================================================================
 
@@ -686,6 +1098,10 @@ function value_to_i32(val) result(ans)
 
 		case (i64_type)
 			ans = int(val%sca%i64, 4)
+
+		case (enum_type)
+			! The backing ordinal, e.g. i32(Card.Queen) -> 11
+			ans = val%sca%i32
 
 		case (str_type)
 
@@ -930,6 +1346,9 @@ recursive function value_to_str(val) result(ans)
 			call str_vec%push("}")
 			ans = str_vec%trim()
 
+		case (enum_type)
+			ans = val%enum_name//"."//val%enum_variant
+
 		case (array_type)
 
 			! This whole case could be an array_to_str() fn
@@ -1089,8 +1508,8 @@ recursive function value_to_str(val) result(ans)
 
 				end do
 
-			else if (val%array%type == struct_type) then
-	
+			else if (any(val%array%type == [struct_type, enum_type])) then
+
 				n = size(val%struct)
 				do i8 = 1, n
 					! Just recurse instead of nesting a loop
@@ -1127,12 +1546,117 @@ recursive function value_to_str(val) result(ans)
 				ans = "{file_unit: <unset>}"
 			end if
 
+		case (fn_type)
+			ans = value_type_name(val)
+
 		case default
 			ans = val%sca%to_str(val%type)
 
 	end select
 
 end function value_to_str
+
+!===============================================================================
+
+recursive function value_type_name(a) result(str_)
+
+	! Single source of truth for rendering a value_t's type as user-facing
+	! text, e.g. "i32", "[f64; :]", "MyStruct", "fn(i32): i32".  Used both for
+	! printing a fn-pointer value (value_to_str's fn_type case, below) and --
+	! via types_ops.f90's type_name(), which just delegates here -- for
+	! diagnostic messages (bad-arg-type, etc.).  c.f. lookup_type() which is
+	! mostly the inverse of this
+	!
+	! This lives in value.f90, not types_ops.f90, so that fn_type's signature
+	! rendering (which needs this same logic for its param/return types) can
+	! call it directly: syntran__types_m depends on syntran__value_m, not the
+	! other way around, so only this direction avoids a circular dependency
+
+	type(value_t), intent(in) :: a
+
+	character(len = :), allocatable :: str_
+
+	!********
+
+	character(len = :), allocatable :: array_name
+
+	integer :: i
+
+	if (a%type == struct_type) then
+		str_ = a%struct_name
+	else if (a%type == enum_type) then
+		str_ = a%enum_name
+	else if (a%type == array_type) then
+
+		if (a%array%type == struct_type) then
+			array_name = a%struct_name
+		else if (a%array%type == enum_type) then
+			array_name = a%enum_name
+		else
+			array_name = value_type_name_primitive(a%array%type)
+		end if
+
+		str_ = "["//array_name//"; "
+
+		! Repeat ":, " appropriately
+		str_ = str_//repeat(":, ", max(a%array%rank - 1, 0))
+		str_ = str_//":]"
+
+	else if (a%type == fn_type) then
+
+		str_ = "fn("
+		if (allocated(a%fn_params)) then
+			do i = 1, size(a%fn_params)
+				str_ = str_//value_type_name(a%fn_params(i))
+				if (i < size(a%fn_params)) str_ = str_//", "
+			end do
+		end if
+		str_ = str_//")"
+
+		if (allocated(a%fn_ret)) then
+			if (a%fn_ret%type /= void_type) str_ = str_//": "//value_type_name(a%fn_ret)
+		end if
+
+	else
+		str_ = value_type_name_primitive(a%type)
+	end if
+
+end function value_type_name
+
+!===============================================================================
+
+function value_type_name_primitive(itype) result(str_)
+	! Primitive (non-struct/array/fn) type-name mapping.  c.f. lookup_type()
+	! which is mostly the inverse of this
+
+	integer, intent(in) :: itype
+
+	character(len = :), allocatable :: str_
+
+	select case (itype)
+	case (i32_type)
+		str_ = "i32"
+	case (i64_type)
+		str_ = "i64"
+	case (f32_type)
+		str_ = "f32"
+	case (f64_type)
+		str_ = "f64"
+	case (str_type)
+		str_ = "str"
+	case (bool_type)
+		str_ = "bool"
+	case (any_type)
+		str_ = "any"
+	case (void_type)
+		str_ = "void"
+	case (fn_type)
+		str_ = "fn"
+	case default
+		str_ = "unknown"
+	end select
+
+end function value_type_name_primitive
 
 !===============================================================================
 

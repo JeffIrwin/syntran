@@ -50,6 +50,10 @@ submodule (syntran__vm_m) syntran__vm_exec
 		type(value_t) :: len_             ! loop length (len_array kind)
 		type(array_t) :: array            ! materialized array (non-primary array exprs)
 		type(value_t) :: str_             ! string to iterate over (str_type)
+		! Enum/struct elements of `array` (array_t has no value_t component of
+		! its own), set only when array%type is enum_type/struct_type.
+		! c.f. array_at()'s optional `struct` arg in eval_array.f90
+		type(value_t), allocatable :: struct(:)
 	end type for_iter_t
 
 !===============================================================================
@@ -87,10 +91,12 @@ end subroutine grow_frames
 !===============================================================================
 
 subroutine grow_fors(for_iters)
-	! Double the for-iterator stack.  for_iter_t has no allocatable components
-	! at the top level (its value_t/array_t members have allocatables inside),
-	! so assignment is used for each element.  Copies into the doubled buffer
-	! directly to avoid the extra round-trip through a same-sized tmp.
+	! Double the for-iterator stack.  for_iter_t's members are either plain
+	! derived types with allocatables inside (value_t/array_t) or an
+	! allocatable array directly (struct(:)); either way plain assignment
+	! handles (re)allocation of each element correctly, so assignment is used
+	! for each element.  Copies into the doubled buffer directly to avoid the
+	! extra round-trip through a same-sized tmp.
 	type(for_iter_t), allocatable, intent(inout) :: for_iters(:)
 	type(for_iter_t), allocatable :: tmp(:)
 	integer :: i, n
@@ -163,6 +169,30 @@ subroutine vm_stack_grow(stack)
 	do i = 1, stack%len_ - 1
 		call value_move(stack%v(i), tmp(i))
 	end do
+
+	! Slots from len_ up are DEAD BUT NOT EMPTY.  vm_pop_discard() leaves a
+	! popped array/struct/str allocated in its slot rather than freeing it, and
+	! the typed-load fast paths retag a recycled slot as a scalar (`%type =
+	! i32_type` etc) without freeing what it still owns -- which also hides
+	! them from value_reset(), whose scalar fast path assumes a scalar tag
+	! means nothing is allocated.
+	!
+	! move_alloc() below deallocates the old stack%v, and letting that walk a
+	! live, deeply-nested value_t tree is exactly the implicit deep
+	! deallocation this codebase never relies on (see value_array_destroy() in
+	! value.f90).  Free them explicitly first.
+	!
+	! Every slot, not just those from len_ up: value_move() above transfers
+	! only the component matching %type, so a slot that was retagged as a
+	! scalar while still owning an array keeps that array even after being
+	! moved out.
+	!
+	! Note: size(stack%v), not stack%cap -- cap was already overwritten with
+	! the NEW capacity above.
+	do i = 1, size(stack%v)
+		call value_destroy(stack%v(i))
+	end do
+
 	call move_alloc(tmp, stack%v)
 end subroutine vm_stack_grow
 
@@ -582,7 +612,7 @@ module subroutine vm_run(prog, state, res)
 			if (allocated(cn%params)) nparams = size(cn%params)
 			! Grow params_pool if needed (amortised; avoids alloc/dealloc per call).
 			if (nparams > params_pool_cap) then
-				if (allocated(params_pool)) deallocate(params_pool)
+				call value_array_destroy(params_pool)
 				allocate(params_pool(nparams))
 				params_pool_cap = nparams
 			end if
@@ -619,7 +649,7 @@ module subroutine vm_run(prog, state, res)
 					call move_alloc(frames(nframes)%locs_buf, state%locs%vals)
 				else
 					! Buffer too small (function changed num_locs? shouldn't happen).
-					deallocate(frames(nframes)%locs_buf)
+					call value_array_destroy(frames(nframes)%locs_buf)
 					allocate(state%locs%vals(cn%num_locs))
 				end if
 			else
@@ -630,6 +660,81 @@ module subroutine vm_run(prog, state, res)
 			! Move params into the callee's local slots.
 			do i = 1, nparams
 				call value_move(params_pool(i), state%locs%vals(cn%params(i)))
+			end do
+
+			end associate
+
+			next_ip = prog%fn_entry(fn_id)
+
+		! --- indirect call through a fn-pointer value --------------------------
+		! Stack layout on entry (bottom to top): [by-value args][callee_fn_value]
+		! (callee at TOS).  Unlike OP_CALL, the target fn is not known until this
+		! instruction executes: pop the callee value first and read its fn_index
+		! to resolve the entry point/num_locs, mirroring eval_fn_call_ptr.  v1 fn
+		! pointers are by-value only, so cn%params/cn%is_ref are not used here
+		! (cn%params is left unallocated on this node kind, which also makes
+		! OP_RET's by-ref writeback loop below a no-op for this call kind, since
+		! it sizes nparams from cn%params)
+		case (OP_CALL_PTR)
+			node_idx_call = instr%b
+			associate(cn => prog%nodes(node_idx_call))
+			nparams = 0
+			if (allocated(cn%args)) nparams = size(cn%args)
+
+			! Pop the callee fn-pointer value (pushed last, on top of the args).
+			call vm_pop_copy(stack, val)
+			fn_id = val%sca%fn_index
+
+			! Grow params_pool if needed (amortised; avoids alloc/dealloc per call).
+			if (nparams > params_pool_cap) then
+				call value_array_destroy(params_pool)
+				allocate(params_pool(nparams))
+				params_pool_cap = nparams
+			end if
+
+			! All args are by-value in v1: pop in reverse order.
+			do i = nparams, 1, -1
+				call vm_pop_copy(stack, params_pool(i))
+			end do
+
+			! Push a new call frame; save caller's local vars and for-iter depth.
+			if (nframes + 1 > size(frames)) call grow_frames(frames)
+			nframes = nframes + 1
+			frames(nframes)%return_ip  = ip + 1
+			frames(nframes)%nfor_saved = nfor
+			frames(nframes)%node_idx  = node_idx_call
+			if (allocated(state%locs%vals)) then
+				call move_alloc(state%locs%vals, frames(nframes)%caller_locs)
+			end if
+
+			! Locals-pool: reuse the saved buffer from the previous call at this
+			! frame depth if it is large enough; otherwise allocate fresh.  Unlike
+			! OP_CALL, num_locs comes from prog%fn_num_locs(fn_id) (looked up by
+			! the runtime-resolved target), not from a parse-time-fixed cn%num_locs,
+			! since different calls through the same call site can target
+			! differently-sized fns.
+			if (allocated(frames(nframes)%locs_buf)) then
+				if (size(frames(nframes)%locs_buf) >= prog%fn_num_locs(fn_id)) then
+					! Reuse: reset all used slots to unknown_type.
+					do i = 1, prog%fn_num_locs(fn_id)
+						call value_reset(frames(nframes)%locs_buf(i))
+					end do
+					call move_alloc(frames(nframes)%locs_buf, state%locs%vals)
+				else
+					! Buffer too small for this target: reallocate.
+					call value_array_destroy(frames(nframes)%locs_buf)
+					allocate(state%locs%vals(prog%fn_num_locs(fn_id)))
+				end if
+			else
+				! First call at this depth: allocate fresh (default-init = unknown_type).
+				allocate(state%locs%vals(prog%fn_num_locs(fn_id)))
+			end if
+
+			! Params occupy local slots 1..nparams (guaranteed by
+			! parse_fn_declaration: params are always declared before any other
+			! local, so they always get slots 1..nparams in order).
+			do i = 1, nparams
+				call value_move(params_pool(i), state%locs%vals(i))
 			end do
 
 			end associate
@@ -648,7 +753,7 @@ module subroutine vm_run(prog, state, res)
 			if (allocated(cn%params)) nparams = size(cn%params)
 			! Grow params_pool if needed (amortised; avoids alloc/dealloc per return).
 			if (nparams > params_pool_cap) then
-				if (allocated(params_pool)) deallocate(params_pool)
+				call value_array_destroy(params_pool)
 				allocate(params_pool(nparams))
 				params_pool_cap = nparams
 			end if
@@ -934,7 +1039,7 @@ module subroutine vm_run(prog, state, res)
 			! Grow the reusable iargs pool if needed (amortised; avoids
 			! allocate/deallocate on every intrinsic call).
 			if (nintr > iargs_pool_cap) then
-				if (allocated(iargs_pool)) deallocate(iargs_pool)
+				call value_array_destroy(iargs_pool)
 				allocate(iargs_pool(nintr))
 				iargs_pool_cap = nintr
 			end if
@@ -980,6 +1085,10 @@ module subroutine vm_run(prog, state, res)
 					else
 						state%vars%vals(slot_id_)%file_%eof = .true.
 					end if
+					! Keep the no-arg readln()/eof() stdin state in sync with
+					! the std::IN-argument forms, so mixing the two doesn't
+					! desync
+					if (iargs_pool(1)%file_%is_std) state%stdin_eof = .true.
 				else if (io_ /= 0 .and. io_ /= iostat_eor) then
 					call rt_throw(state, err_rt(RC_READLN_FAIL, 'cannot readln() from file "' &
 						//iargs_pool(1)%file_%name_//'"'))
@@ -990,7 +1099,7 @@ module subroutine vm_run(prog, state, res)
 			else if (instr%a == INTR_CLOSE) then
 				! close: close the file unit; set is_open=false on the orig slot.
 				block
-				integer :: slot_id_
+				integer :: slot_id_, io_
 				logical :: is_loc_
 				slot_id_ = int(instr%c / 2)
 				is_loc_  = (mod(instr%c, 2_8) == 1_8)
@@ -1009,7 +1118,12 @@ module subroutine vm_run(prog, state, res)
 				else
 					state%vars%vals(slot_id_)%file_%is_open = .false.
 				end if
-				close(iargs_pool(1)%file_%unit_)
+				close(iargs_pool(1)%file_%unit_, iostat = io_)
+				if (io_ /= 0) then
+					call rt_throw(state, err_rt(RC_CLOSE_FAIL, 'cannot close() file "' &
+						//iargs_pool(1)%file_%name_//'" (iostat = '//str(io_)//')'))
+					exit
+				end if
 				val%type = unknown_type
 				end block
 
@@ -1172,6 +1286,21 @@ module subroutine vm_run(prog, state, res)
 					for_iters(fi)%for_kind = array_expr
 					call syntax_eval(nd%array, state, tmp_)
 					for_iters(fi)%array = tmp_%array
+
+					! Enum/struct elements live in %struct(:), not in
+					! array_t (which has no value_t component) -- thread it
+					! through separately.  array_at() falls back to its
+					! array_t path when this isn't allocated (mirrors
+					! eval_for_statement's case default in eval_control.f90).
+					! for_iters(fi) is a reused slot on a stack, not a fresh
+					! variable, so a stale allocation from a prior for-loop
+					! that used this same slot must be cleared first --
+					! otherwise a plain (non-enum) array iterated afterward
+					! would inherit stale enum/struct elements
+					if (allocated(for_iters(fi)%struct)) deallocate(for_iters(fi)%struct)
+					if (allocated(tmp_%struct)) &
+						call move_alloc(tmp_%struct, for_iters(fi)%struct)
+
 					for_iters(fi)%len8  = for_iters(fi)%array%len_
 				end if
 			end select
@@ -1315,7 +1444,7 @@ module subroutine vm_run(prog, state, res)
 					for_iters(fi)%lbound_, for_iters(fi)%step, for_iters(fi)%ubound_, &
 					for_iters(fi)%len_, for_iters(fi)%array, &
 					prog%nodes(for_iters(fi)%node_idx)%array%elems, for_iters(fi)%str_, &
-					state)
+					state, for_iters(fi)%struct)
 				associate(nd => prog%nodes(for_iters(fi)%node_idx))
 				if (nd%is_loc) then
 					call value_move(val, state%locs%vals(nd%id_index))
@@ -1337,6 +1466,15 @@ module subroutine vm_run(prog, state, res)
 		! expl, size, unif).  Rank-1 native specialization is a future perf pass.
 		case (OP_NEW_ARRAY)
 			call eval_array_expr(prog%nodes(instr%a), state, val)
+			call vm_push_move(stack, val)
+
+		! --- enum reverse cast, e.g. `Suit(2)` -------------------------------------
+		! Delegates to eval_enum_cast_expr, which matches the runtime ordinal
+		! against the node's baked variant list and can rt_throw (R32) if none
+		! match, so check rt_halt before pushing a possibly-unset result.
+		case (OP_ENUM_CAST)
+			call eval_enum_cast_expr(prog%nodes(instr%a), state, val)
+			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 
 		! --- M8: slice/complex LHS assignment ------------------------------------
@@ -2266,6 +2404,50 @@ module subroutine vm_run(prog, state, res)
 			stack%len_ = stack%len_ - 1
 			end block
 
+		! String ordering: same shape as OP_EQ_STR / OP_NE_STR above, but using
+		! is_str_lt() for lexicographic, length-aware comparison (see its
+		! comment in utils.f90 for why raw Fortran `<` is unsafe for strings).
+		case (OP_LT_STR)
+			block
+			logical :: b_
+			b_ = is_str_lt(stack%v(stack%len_-1)%str%s, stack%v(stack%len_)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
+		case (OP_LE_STR)
+			block
+			logical :: b_
+			b_ = .not. is_str_lt(stack%v(stack%len_)%str%s, stack%v(stack%len_-1)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
+		case (OP_GT_STR)
+			block
+			logical :: b_
+			b_ = is_str_lt(stack%v(stack%len_)%str%s, stack%v(stack%len_-1)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
+		case (OP_GE_STR)
+			block
+			logical :: b_
+			b_ = .not. is_str_lt(stack%v(stack%len_-1)%str%s, stack%v(stack%len_)%str%s)
+			deallocate(stack%v(stack%len_-1)%str)
+			deallocate(stack%v(stack%len_  )%str)
+			stack%v(stack%len_-1)%sca%bool = b_
+			stack%v(stack%len_-1)%type = bool_type
+			stack%len_ = stack%len_ - 1
+			end block
+
 		! Bool binary
 		case (OP_AND_BOOL)
 			stack%v(stack%len_-1)%sca%bool = stack%v(stack%len_-1)%sca%bool &
@@ -2848,6 +3030,33 @@ module subroutine vm_run(prog, state, res)
 	! The final result is whatever is left on top of the stack.
 	! Move rather than copy — the stack is local and discarded immediately.
 	if (stack%len_ > 0) call value_move(stack%v(stack%len_), res)
+
+	! Everything below is local to vm_run and about to fall out of scope:
+	! the operand stack, the call frames (each holding two value_t pools), and
+	! the two reusable arg pools.  All are arrays of value_t, and all of them
+	! routinely hold live arrays/structs/strings in "dead" slots -- popped
+	! values are not freed (vm_pop_discard) and recycled slots get retagged as
+	! scalars without being freed (the typed-load fast paths).
+	!
+	! Letting them fall out of scope hands that whole nested tree to gfortran's
+	! implicit deep deallocation, which this codebase does not rely on (see
+	! value_array_destroy() in value.f90).  This runs on every vm_run() call --
+	! i.e. every evaluated statement -- so it is the hottest instance of that
+	! pattern in the interpreter.  Tear it all down explicitly.
+	call value_array_destroy(stack%v)
+	stack%len_ = 0
+	stack%cap  = 0
+
+	if (allocated(frames)) then
+		do i = 1, size(frames)
+			call value_array_destroy(frames(i)%caller_locs)
+			call value_array_destroy(frames(i)%locs_buf)
+		end do
+		deallocate(frames)
+	end if
+
+	call value_array_destroy(params_pool)
+	call value_array_destroy(iargs_pool)
 
 end subroutine vm_run
 

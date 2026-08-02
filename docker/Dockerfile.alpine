@@ -16,7 +16,7 @@ RUN apk add --no-cache \
 # - expect:  drives the interactive REPL tests below through a real pty
 # - bash:  test-repl.sh uses bash-only features (BASH_SOURCE)
 
-# Beware, this does not run gen-header.sh like rocky docker. Maybe that's
+# Beware, this does not run utils/gen-header.sh like rocky docker. Maybe that's
 # actually a good test that I have the generated source existing locally
 COPY src src
 COPY external external

@@ -1,0 +1,28 @@
+fn main(): bool
+{
+	// std::exists() and std::try_open() basics
+
+	let filename = "build/test-11.txt";
+	let missing  = "build/test-11-nope.txt";
+
+	// write a real file so std::exists() has something to find
+	let fo = open(filename, "w");
+	writeln(fo, "hi");
+	close(fo);
+
+	let exists_real = std::exists(filename);
+	let exists_fake = std::exists(missing);
+
+	// std::try_open() on a missing file returns a closed handle instead of
+	// throwing R8
+	let fbad = std::try_open(missing, "r");
+
+	// std::try_open() on a real file behaves like open()
+	let fgood = std::try_open(filename, "r");
+	let is_open_good = fgood.is_open;
+	close(fgood);
+
+	return exists_real and not exists_fake and not fbad.is_open and is_open_good;
+}
+
+return main();

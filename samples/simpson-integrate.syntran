@@ -1,0 +1,81 @@
+// Fn pointers, demonstrated by Simpson's 3/8 rule numerical integration.
+//
+// simpson_38() takes an integrand `f: fn(f64): f64` and forwards it through
+// to a generic Newton-Cotes engine, which calls back into `f` at each
+// quadrature point.  Any fn with a matching signature can be passed in, so
+// the same integrator below is reused for both sin(x) and x^2.
+//
+// Copied from src/tests/test-src/fns/integrate.syntran and
+// src/tests/test-src/fns/test-31.syntran
+
+fn newton_cotes(f: fn(f64): f64, xmin: f64, xmax: f64, dx: f64, coefs: [f64; :]): f64
+{
+	// Integrate fn `f` from xmin to xmax with step size dx using given
+	// Newton-Cotes coefficients `coefs`
+
+	let nc = i32(size(coefs, 0));
+	let n  = max(1, i32((xmax - xmin) / dx));
+	let dxl = (xmax - xmin) / n;
+
+	let area = 0.0;
+	let j0 = 0;
+	let f0 = 0.0;
+	for i in [0: n]
+	{
+		let darea = 0.0;
+		if j0 > 0
+			darea = coefs[nc - 1] * f0;
+		for j in [j0: nc]
+		{
+			let x = xmin + i * (xmax - xmin) / n + j * dxl / (nc - 1);
+			f0 = f(x);
+			darea = darea + coefs[j] * f0;
+		}
+		area = area + darea;
+
+		// Start point of next subinterval is the end point of this one
+		j0 = 1;
+	}
+
+	area = area * dxl / sum(coefs);
+	return area;
+}
+
+fn simpson_38(f: fn(f64): f64, xmin: f64, xmax: f64, dx: f64): f64
+{
+	// Integrate fn `f` from xmin to xmax with step size dx using Simpson's
+	// 3/8 rule.  The callback `f` is forwarded through to newton_cotes()
+
+	let coefs = [1.0, 3.0, 3.0, 1.0];
+	return newton_cotes(f, xmin, xmax, dx, coefs);
+}
+
+fn sin_fn(x: f64): f64
+{
+	// The intrinsic `sin` can't be pointed to directly (E87), so it needs a
+	// user-defined wrapper to be used as a callback
+	return sin(x);
+}
+
+fn sqr_fn(x: f64): f64
+{
+	return x * x;
+}
+
+fn main(): i32
+{
+	let pi = 3.14159265358979;
+
+	// integral of sin(x) from 0 to pi is exactly 2
+	let area1 = simpson_38(sin_fn, 0.0, pi, 0.1);
+	println("integral of sin(x) from 0 to pi   = ", area1, " (exact = 2.0)");
+
+	// integral of x^2 from 0 to 1 is exactly 1/3
+	let area2 = simpson_38(sqr_fn, 0.0, 1.0, 0.01);
+	println("integral of x^2   from 0 to 1     = ", area2, " (exact = 0.3333...)");
+
+	return 0;
+}
+
+return main();
+

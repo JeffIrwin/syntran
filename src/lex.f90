@@ -39,11 +39,11 @@ contains
 
 !===============================================================================
 
-function lex(lexer) result(token)
+subroutine lex(lexer, token)
 
 	class(lexer_t) :: lexer
 
-	type(syntax_token_t) :: token
+	type(syntax_token_t), intent(out) :: token
 
 	!********
 
@@ -68,7 +68,7 @@ function lex(lexer) result(token)
 
 	if (lexer%pos > len(lexer%text)) then
 
-		token = new_token(eof_token, lexer%pos, null_char)
+		call new_token(token, eof_token, lexer%pos, null_char)
 
 		! TODO: it's kind of annoying to have to set unit_ before every return.
 		! It might be better to modify all the new_*_token() fns
@@ -133,9 +133,9 @@ function lex(lexer) result(token)
 			read(text_strip, "(z12)", iostat = io) i32
 			if (io == exit_success) then
 				val   = new_literal_value(i32_type, i32 = i32)
-				token = new_token(i32_token, start, text, val)
+				call new_token(token, i32_token, start, text, val)
 			else
-				token = new_token(bad_token, lexer%pos, text)
+				call new_token(token, bad_token, lexer%pos, text)
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_hex32( &
 					lexer%context, span, text))
@@ -146,9 +146,9 @@ function lex(lexer) result(token)
 			read(text_strip, "(z20)", iostat = io) i64
 			if (io == exit_success) then
 				val   = new_literal_value(i64_type, i64 = i64)
-				token = new_token(i64_token, start, text, val)
+				call new_token(token, i64_token, start, text, val)
 			else
-				token = new_token(bad_token, lexer%pos, text)
+				call new_token(token, bad_token, lexer%pos, text)
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_hex64( &
 					lexer%context, span, text))
@@ -161,7 +161,7 @@ function lex(lexer) result(token)
 			if (io == exit_success) then
 
 				val   = new_literal_value(i32_type, i32 = i32)
-				token = new_token(i32_token, start, text, val)
+				call new_token(token, i32_token, start, text, val)
 
 			else
 
@@ -170,10 +170,10 @@ function lex(lexer) result(token)
 
 					!print *, "i64 = ", i64
 					val   = new_literal_value(i64_type, i64 = i64)
-					token = new_token(i64_token, start, text, val)
+					call new_token(token, i64_token, start, text, val)
 
 				else
-					token = new_token(bad_token, lexer%pos, text)
+					call new_token(token, bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
 					call lexer%diagnostics%push(err_bad_hex64( &
 						lexer%context, span, text))
@@ -239,9 +239,9 @@ function lex(lexer) result(token)
 			read(text_strip, "(o20)", iostat = io) i32
 			if (io == exit_success) then
 				val   = new_literal_value(i32_type, i32 = i32)
-				token = new_token(i32_token, start, text, val)
+				call new_token(token, i32_token, start, text, val)
 			else
-				token = new_token(bad_token, lexer%pos, text)
+				call new_token(token, bad_token, lexer%pos, text)
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_oct32( &
 					lexer%context, span, text))
@@ -252,9 +252,9 @@ function lex(lexer) result(token)
 			read(text_strip, "(o36)", iostat = io) i64
 			if (io == exit_success) then
 				val   = new_literal_value(i64_type, i64 = i64)
-				token = new_token(i64_token, start, text, val)
+				call new_token(token, i64_token, start, text, val)
 			else
-				token = new_token(bad_token, lexer%pos, text)
+				call new_token(token, bad_token, lexer%pos, text)
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_oct64( &
 					lexer%context, span, text))
@@ -272,7 +272,7 @@ function lex(lexer) result(token)
 			if (io == exit_success) then
 
 				val   = new_literal_value(i32_type, i32 = i32)
-				token = new_token(i32_token, start, text, val)
+				call new_token(token, i32_token, start, text, val)
 
 			else
 
@@ -280,10 +280,10 @@ function lex(lexer) result(token)
 				if (io == exit_success) then
 
 					val   = new_literal_value(i64_type, i64 = i64)
-					token = new_token(i64_token, start, text, val)
+					call new_token(token, i64_token, start, text, val)
 
 				else
-					token = new_token(bad_token, lexer%pos, text)
+					call new_token(token, bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
 					call lexer%diagnostics%push(err_bad_oct64( &
 						lexer%context, span, text))
@@ -349,9 +349,9 @@ function lex(lexer) result(token)
 			read(text_strip, "(b36)", iostat = io) i32
 			if (io == exit_success) then
 				val   = new_literal_value(i32_type, i32 = i32)
-				token = new_token(i32_token, start, text, val)
+				call new_token(token, i32_token, start, text, val)
 			else
-				token = new_token(bad_token, lexer%pos, text)
+				call new_token(token, bad_token, lexer%pos, text)
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_bin32( &
 					lexer%context, span, text))
@@ -362,9 +362,9 @@ function lex(lexer) result(token)
 			read(text_strip, "(b68)", iostat = io) i64
 			if (io == exit_success) then
 				val   = new_literal_value(i64_type, i64 = i64)
-				token = new_token(i64_token, start, text, val)
+				call new_token(token, i64_token, start, text, val)
 			else
-				token = new_token(bad_token, lexer%pos, text)
+				call new_token(token, bad_token, lexer%pos, text)
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push(err_bad_bin64( &
 					lexer%context, span, text))
@@ -377,7 +377,7 @@ function lex(lexer) result(token)
 			if (io == exit_success) then
 
 				val   = new_literal_value(i32_type, i32 = i32)
-				token = new_token(i32_token, start, text, val)
+				call new_token(token, i32_token, start, text, val)
 
 			else
 
@@ -385,10 +385,10 @@ function lex(lexer) result(token)
 				if (io == exit_success) then
 
 					val   = new_literal_value(i64_type, i64 = i64)
-					token = new_token(i64_token, start, text, val)
+					call new_token(token, i64_token, start, text, val)
 
 				else
-					token = new_token(bad_token, lexer%pos, text)
+					call new_token(token, bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
 					call lexer%diagnostics%push(err_bad_bin64( &
 						lexer%context, span, text))
@@ -476,9 +476,9 @@ function lex(lexer) result(token)
 				read(text_strip, *, iostat = io) f32
 				if (io == exit_success) then
 					val   = new_literal_value(f32_type, f32 = f32)
-					token = new_token(f32_token, start, text, val)
+					call new_token(token, f32_token, start, text, val)
 				else
-					token = new_token(bad_token, lexer%pos, text)
+					call new_token(token, bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
 					call lexer%diagnostics%push(err_bad_f32( &
 						lexer%context, span, text))
@@ -489,9 +489,9 @@ function lex(lexer) result(token)
 				read(text_strip, *, iostat = io) f64
 				if (io == exit_success) then
 					val   = new_literal_value(f64_type, f64 = f64)
-					token = new_token(f64_token, start, text, val)
+					call new_token(token, f64_token, start, text, val)
 				else
-					token = new_token(bad_token, lexer%pos, text)
+					call new_token(token, bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
 					call lexer%diagnostics%push(err_bad_f64( &
 						lexer%context, span, text))
@@ -502,9 +502,9 @@ function lex(lexer) result(token)
 				read(text_strip, *, iostat = io) i32
 				if (io == exit_success) then
 					val   = new_literal_value(i32_type, i32 = i32)
-					token = new_token(i32_token, start, text, val)
+					call new_token(token, i32_token, start, text, val)
 				else
-					token = new_token(bad_token, lexer%pos, text)
+					call new_token(token, bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
 					! TODO: specific i32/i64 diags
 					call lexer%diagnostics%push(err_bad_i32( &
@@ -516,9 +516,9 @@ function lex(lexer) result(token)
 				read(text_strip, *, iostat = io) i64
 				if (io == exit_success) then
 					val   = new_literal_value(i64_type, i64 = i64)
-					token = new_token(i64_token, start, text, val)
+					call new_token(token, i64_token, start, text, val)
 				else
-					token = new_token(bad_token, lexer%pos, text)
+					call new_token(token, bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
 					call lexer%diagnostics%push(err_bad_i64( &
 						lexer%context, span, text))
@@ -546,7 +546,7 @@ function lex(lexer) result(token)
 			end if
 
 			val   = new_literal_value(f32_type, f32 = f32)
-			token = new_token(f32_token, start, text, val)
+			call new_token(token, f32_token, start, text, val)
 
 		else if (float64) then
 
@@ -560,7 +560,7 @@ function lex(lexer) result(token)
 			end if
 
 			val   = new_literal_value(f64_type, f64 = f64)
-			token = new_token(f64_token, start, text, val)
+			call new_token(token, f64_token, start, text, val)
 
 		else
 
@@ -569,7 +569,7 @@ function lex(lexer) result(token)
 			if (io == exit_success) then
 
 				val   = new_literal_value(i32_type, i32 = i32)
-				token = new_token(i32_token, start, text, val)
+				call new_token(token, i32_token, start, text, val)
 
 			else
 
@@ -578,10 +578,10 @@ function lex(lexer) result(token)
 				if (io == exit_success) then
 
 					val   = new_literal_value(i64_type, i64 = i64)
-					token = new_token(i64_token, start, text, val)
+					call new_token(token, i64_token, start, text, val)
 
 				else
-					token = new_token(bad_token, lexer%pos, text)
+					call new_token(token, bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
 					call lexer%diagnostics%push(err_bad_i64( &
 						lexer%context, span, text))
@@ -640,7 +640,7 @@ function lex(lexer) result(token)
 			text = lexer%text(start: lexer%pos-1)
 
 			if (.not. terminated) then
-				token = new_token(bad_token, lexer%pos, text)
+				call new_token(token, bad_token, lexer%pos, text)
 				span = new_span(start, len(text))
 				call lexer%diagnostics%push( &
 					err_unterminated_raw_str(lexer%context, &
@@ -650,7 +650,7 @@ function lex(lexer) result(token)
 			end if
 
 			val   = new_literal_value(str_type, str_ = char_vec%v( 1: char_vec%len_ ))
-			token = new_token(str_token, start, text, val)
+			call new_token(token, str_token, start, text, val)
 
 			token%unit_ = lexer%unit_
 			return
@@ -685,7 +685,7 @@ function lex(lexer) result(token)
 		text  = lexer%text(start: lexer%pos-1)
 
 		if (lexer%pos > len(lexer%text)) then
-			token = new_token(bad_token, lexer%pos, text)
+			call new_token(token, bad_token, lexer%pos, text)
 			span = new_span(start, len(text))
 			call lexer%diagnostics%push( &
 				err_unterminated_str(lexer%context, &
@@ -695,7 +695,7 @@ function lex(lexer) result(token)
 		end if
 
 		val   = new_literal_value(str_type, str_ = char_vec%v( 1: char_vec%len_ ))
-		token = new_token(str_token, start, text, val)
+		call new_token(token, str_token, start, text, val)
 
 		token%unit_ = lexer%unit_
 		return
@@ -709,7 +709,7 @@ function lex(lexer) result(token)
 		end do
 		text = lexer%text(start: lexer%pos-1)
 
-		token = new_token(whitespace_token, start, text)
+		call new_token(token, whitespace_token, start, text)
 		token%unit_ = lexer%unit_
 		return
 
@@ -727,7 +727,7 @@ function lex(lexer) result(token)
 		! above.  The boolean value is not set until parse_primary_expr().
 
 		kind = get_keyword_kind(text)
-		token = new_token(kind, start, text)
+		call new_token(token, kind, start, text)
 		token%unit_ = lexer%unit_
 		return
 
@@ -741,7 +741,7 @@ function lex(lexer) result(token)
 		call lexer%read_single_line_comment()
 
 		text = lexer%text(start: lexer%pos-1)
-		token = new_token(whitespace_token, start, text)
+		call new_token(token, whitespace_token, start, text)
 		token%unit_ = lexer%unit_
 		return
 
@@ -752,9 +752,9 @@ function lex(lexer) result(token)
 		case ("+")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(plus_equals_token, lexer%pos, "+=")
+				call new_token(token, plus_equals_token, lexer%pos, "+=")
 			else
-				token = new_token(plus_token, lexer%pos, lexer%current())
+				call new_token(token, plus_token, lexer%pos, lexer%current())
 			end if
 
 			! FIXME: prefix/postfix inc/dec operators (++, --)
@@ -762,9 +762,9 @@ function lex(lexer) result(token)
 		case ("-")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(minus_equals_token, lexer%pos, "-=");
+				call new_token(token, minus_equals_token, lexer%pos, "-=");
 			else
-				token = new_token(minus_token, lexer%pos, lexer%current())
+				call new_token(token, minus_token, lexer%pos, lexer%current())
 			end if
 
 		case ("*")
@@ -774,20 +774,20 @@ function lex(lexer) result(token)
 				if (lexer%peek(2) == "=") then
 					!print *, '**='
 					lexer%pos = lexer%pos + 2
-					token = new_token(sstar_equals_token, lexer%pos, "**=")
+					call new_token(token, sstar_equals_token, lexer%pos, "**=")
 
 				else
 					lexer%pos = lexer%pos + 1
-					token = new_token(sstar_token, lexer%pos, "**")
+					call new_token(token, sstar_token, lexer%pos, "**")
 
 				end if
 
 			else if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(star_equals_token, lexer%pos, "*=")
+				call new_token(token, star_equals_token, lexer%pos, "*=")
 
 			else
-				token = new_token(star_token, lexer%pos, lexer%current())
+				call new_token(token, star_token, lexer%pos, lexer%current())
 
 			end if
 
@@ -799,146 +799,146 @@ function lex(lexer) result(token)
 				! FIXME: make "trivia" token types instead of overloading
 				! whitespace_token for comments.  This is what Immo did
 				text = lexer%text(start: lexer%pos-1)
-				token = new_token(whitespace_token, start, text)
+				call new_token(token, whitespace_token, start, text)
 
 			else if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(slash_equals_token, lexer%pos, "/=")
+				call new_token(token, slash_equals_token, lexer%pos, "/=")
 
 			else
-				token = new_token(slash_token, lexer%pos, lexer%current())
+				call new_token(token, slash_token, lexer%pos, lexer%current())
 			end if
 
 		case ("%")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(percent_equals_token, lexer%pos, "%=");
+				call new_token(token, percent_equals_token, lexer%pos, "%=");
 			else
-				token = new_token(percent_token, lexer%pos, lexer%current())
+				call new_token(token, percent_token, lexer%pos, lexer%current())
 			end if
 
 		case ("@")
-			token = new_token(matmul_token, lexer%pos, lexer%current())
+			call new_token(token, matmul_token, lexer%pos, lexer%current())
 
 		case ("(")
-			token = new_token(lparen_token, lexer%pos, lexer%current())
+			call new_token(token, lparen_token, lexer%pos, lexer%current())
 
 		case (")")
-			token = new_token(rparen_token, lexer%pos, lexer%current())
+			call new_token(token, rparen_token, lexer%pos, lexer%current())
 
 		case ("{")
-			token = new_token(lbrace_token, lexer%pos, lexer%current())
+			call new_token(token, lbrace_token, lexer%pos, lexer%current())
 
 		case ("}")
-			token = new_token(rbrace_token, lexer%pos, lexer%current())
+			call new_token(token, rbrace_token, lexer%pos, lexer%current())
 
 		case ("[")
-			token = new_token(lbracket_token, lexer%pos, lexer%current())
+			call new_token(token, lbracket_token, lexer%pos, lexer%current())
 
 		case ("]")
-			token = new_token(rbracket_token, lexer%pos, lexer%current())
+			call new_token(token, rbracket_token, lexer%pos, lexer%current())
 
 		case (":")
 			if (lexer%lookahead() == ":") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(double_colon_token, lexer%pos, "::")
+				call new_token(token, double_colon_token, lexer%pos, "::")
 			else
-				token = new_token(colon_token, lexer%pos, lexer%current())
+				call new_token(token, colon_token, lexer%pos, lexer%current())
 			end if
 
 		case (";")
-			token = new_token(semicolon_token, lexer%pos, lexer%current())
+			call new_token(token, semicolon_token, lexer%pos, lexer%current())
 
 		case (",")
-			token = new_token(comma_token, lexer%pos, lexer%current())
+			call new_token(token, comma_token, lexer%pos, lexer%current())
 
 		case (".")
-			token = new_token(dot_token, lexer%pos, lexer%current())
+			call new_token(token, dot_token, lexer%pos, lexer%current())
 
 		case ("#")
-			token = new_token(hash_token, lexer%pos, lexer%current())
+			call new_token(token, hash_token, lexer%pos, lexer%current())
 
 		case ("=")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(eequals_token, lexer%pos, "==")
+				call new_token(token, eequals_token, lexer%pos, "==")
 			else
-				token = new_token(equals_token, lexer%pos, lexer%current())
+				call new_token(token, equals_token, lexer%pos, lexer%current())
 			end if
 
 		case ("!")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(bang_equals_token, lexer%pos, "!=")
+				call new_token(token, bang_equals_token, lexer%pos, "!=")
 			else
-				token = new_token(bang_token, lexer%pos, lexer%current())
+				call new_token(token, bang_token, lexer%pos, lexer%current())
 			end if
 
 		case ("<")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(less_equals_token, lexer%pos, "<=")
+				call new_token(token, less_equals_token, lexer%pos, "<=")
 			else if (lexer%lookahead() == "<") then
 
 				if (lexer%peek(2) == "=") then
 					lexer%pos = lexer%pos + 2
-					token = new_token(lless_equals_token, lexer%pos, "<<=")
+					call new_token(token, lless_equals_token, lexer%pos, "<<=")
 				else
 					lexer%pos = lexer%pos + 1
-					token = new_token(lless_token, lexer%pos, "<<")
+					call new_token(token, lless_token, lexer%pos, "<<")
 				end if
 
 			else
-				token = new_token(less_token, lexer%pos, lexer%current())
+				call new_token(token, less_token, lexer%pos, lexer%current())
 			end if
 
 		case (">")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(greater_equals_token, lexer%pos, ">=")
+				call new_token(token, greater_equals_token, lexer%pos, ">=")
 			else if (lexer%lookahead() == ">") then
 
 				if (lexer%peek(2) == "=") then
 					lexer%pos = lexer%pos + 2
-					token = new_token(ggreater_equals_token, lexer%pos, ">>=")
+					call new_token(token, ggreater_equals_token, lexer%pos, ">>=")
 				else
 					lexer%pos = lexer%pos + 1
-					token = new_token(ggreater_token, lexer%pos, ">>")
+					call new_token(token, ggreater_token, lexer%pos, ">>")
 				end if
 
 			else
-				token = new_token(greater_token, lexer%pos, lexer%current())
+				call new_token(token, greater_token, lexer%pos, lexer%current())
 			end if
 
 		case ("^")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(caret_equals_token, lexer%pos, "^=")
+				call new_token(token, caret_equals_token, lexer%pos, "^=")
 			else
-				token = new_token(caret_token, lexer%pos, lexer%current())
+				call new_token(token, caret_token, lexer%pos, lexer%current())
 			end if
 
 		case ("|")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(pipe_equals_token, lexer%pos, "|=")
+				call new_token(token, pipe_equals_token, lexer%pos, "|=")
 			else
-				token = new_token(pipe_token, lexer%pos, lexer%current())
+				call new_token(token, pipe_token, lexer%pos, lexer%current())
 			end if
 
 		case ("&")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				token = new_token(amp_equals_token, lexer%pos, "&=")
+				call new_token(token, amp_equals_token, lexer%pos, "&=")
 			else
-				token = new_token(amp_token, lexer%pos, lexer%current())
+				call new_token(token, amp_token, lexer%pos, lexer%current())
 			end if
 
 		case default
 
 			!print *, 'bad token text = ', quote(lexer%current())
 
-			token = new_token(bad_token, lexer%pos, lexer%current())
+			call new_token(token, bad_token, lexer%pos, lexer%current())
 			span = new_span(lexer%pos, len(lexer%current()))
 			call lexer%diagnostics%push( &
 				err_unexpected_char(lexer%context, &
@@ -953,7 +953,7 @@ function lex(lexer) result(token)
 	! rlwrap in syntran <= 1.3 and there used to be a lengthy comment here about
 	! it
 
-end function lex
+end subroutine lex
 
 !===============================================================================
 

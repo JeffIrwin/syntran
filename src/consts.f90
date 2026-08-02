@@ -37,6 +37,14 @@ module syntran__consts_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			enum_cast_expr        = 132, &
+			enum_access_expr      = 131, &
+			enum_type             = 130, &
+			enum_declaration      = 129, &
+			enum_keyword          = 128, &
+			fn_call_ptr_expr      = 127, &
+			fn_ref_expr           = 126, &
+			fn_type               = 125, &
 			method_call_expr      = 124, &
 			const_keyword         = 123, &
 			matmul_token          = 122, &
@@ -161,6 +169,15 @@ module syntran__consts_m
 			whitespace_token      =   3, &
 			i32_token             =   2, &
 			eof_token             =   1
+
+	! Read-only member indices for dot access on a file handle (c.f.
+	! parse_dot() and get_val()).  These occupy the same node%member%id_index
+	! slot that a struct field index would, but are an independent local
+	! namespace, not part of the token/syntax-node-kind enum above
+	integer, parameter :: &
+		FILE_MEM_IS_OPEN = 1, &
+		FILE_MEM_EOF     = 2, &
+		FILE_MEM_NAME    = 3
 
 !===============================================================================
 
@@ -299,6 +316,9 @@ function kind_token(kind)
 			"@                    ", & ! 122
 			"const                ", & ! 123
 			"method call expr     ", & ! 124
+			"fn type              ", & ! 125
+			"fn ref expr          ", & ! 126
+			"fn call ptr expr     ", & ! 127
 			"unknown              "  & ! inf
 		]
 
@@ -444,6 +464,14 @@ function kind_name(kind)
 			"matmul_token         ", & ! 122
 			"const_keyword        ", & ! 123
 			"method_call_expr     ", & ! 124
+			"fn_type              ", & ! 125
+			"fn_ref_expr          ", & ! 126
+			"fn_call_ptr_expr     ", & ! 127
+			"enum_keyword         ", & ! 128
+			"enum_declaration     ", & ! 129
+			"enum_type            ", & ! 130
+			"enum_access_expr     ", & ! 131
+			"enum_cast_expr       ", & ! 132
 			"unknown              "  & ! inf (trailing comma hack)
 		]
 			! FIXME: update kind_tokens array too

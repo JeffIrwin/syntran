@@ -100,6 +100,23 @@ module syntran__errors_m
 		EC_IMMUTABLE_VAR = "E82", &
 		EC_CONST_ASSIGN = "E83", &
 		EC_MUTABLE_METHOD_ON_TEMP = "E84", &
+		EC_MEMBER_METHOD_CLASH = "E85", &
+		EC_MODULE_RETURN = "E86", &
+		EC_FN_PTR_UNSUPPORTED = "E87", &
+		EC_NOT_CALLABLE = "E88", &
+		EC_FN_PTR_ARRAY = "E89", &
+		EC_FN_PTR_STRUCT_MEMBER = "E90", &
+		EC_VOID_ARG = "E91", &
+		EC_REDECLARE_ENUM = "E92", &
+		EC_REDECLARE_VARIANT = "E93", &
+		EC_UNKNOWN_VARIANT = "E94", &
+		EC_DUPLICATE_ENUM_VALUE = "E95", &
+		EC_ENUM_CAST_RANGE = "E96", &
+		EC_ENUM_INDEX = "E97", &
+		EC_VAR_TYPE_CLASH = "E98", &
+		EC_ENUM_NAME_VALUE = "E99", &
+		EC_BAD_FILE_MEMBER = "E100", &
+		EC_READONLY_FILE_MEMBER = "E101", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -140,6 +157,8 @@ module syntran__errors_m
 		IC_UNREACHABLE_STRUCT_LOOKUP = "I38", &
 		IC_CONVERT_F32_ARR = "I39", &
 		IC_CONVERT_F64_ARR = "I40", &
+		IC_TRANSPOSE_ARRAY_TYPE = "I41", &
+		IC_FILE_MEMBER = "I42", &
 		RC_MATMUL_DIM = "R1", &
 		RC_PARSE_I32 = "R2", &
 		RC_PARSE_I64 = "R3", &
@@ -169,6 +188,9 @@ module syntran__errors_m
 		RC_SUBSCRIPT_STEP_ZERO = "R27", &
 		RC_CLOSE_STANDARD = "R28", &
 		RC_GETENV_UNSET = "R29", &
+		RC_WRITELN_FAIL = "R30", &
+		RC_CLOSE_FAIL   = "R31", &
+		RC_ENUM_CAST_RANGE = "R32", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -356,6 +378,23 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_IMMUTABLE_VAR)
 	call codes%push(EC_CONST_ASSIGN)
 	call codes%push(EC_MUTABLE_METHOD_ON_TEMP)
+	call codes%push(EC_MEMBER_METHOD_CLASH)
+	call codes%push(EC_MODULE_RETURN)
+	call codes%push(EC_FN_PTR_UNSUPPORTED)
+	call codes%push(EC_NOT_CALLABLE)
+	call codes%push(EC_FN_PTR_ARRAY)
+	call codes%push(EC_FN_PTR_STRUCT_MEMBER)
+	call codes%push(EC_VOID_ARG)
+	call codes%push(EC_REDECLARE_ENUM)
+	call codes%push(EC_REDECLARE_VARIANT)
+	call codes%push(EC_UNKNOWN_VARIANT)
+	call codes%push(EC_DUPLICATE_ENUM_VALUE)
+	call codes%push(EC_ENUM_CAST_RANGE)
+	call codes%push(EC_ENUM_INDEX)
+	call codes%push(EC_VAR_TYPE_CLASH)
+	call codes%push(EC_ENUM_NAME_VALUE)
+	call codes%push(EC_BAD_FILE_MEMBER)
+	call codes%push(EC_READONLY_FILE_MEMBER)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -396,6 +435,8 @@ function get_all_error_codes() result(codes)
 	call codes%push(IC_UNREACHABLE_STRUCT_LOOKUP)
 	call codes%push(IC_CONVERT_F32_ARR)
 	call codes%push(IC_CONVERT_F64_ARR)
+	call codes%push(IC_TRANSPOSE_ARRAY_TYPE)
+	call codes%push(IC_FILE_MEMBER)
 	call codes%push(RC_MATMUL_DIM)
 	call codes%push(RC_PARSE_I32)
 	call codes%push(RC_PARSE_I64)
@@ -424,6 +465,9 @@ function get_all_error_codes() result(codes)
 	call codes%push(RC_ARRAY_STEP_ZERO_F)
 	call codes%push(RC_SUBSCRIPT_STEP_ZERO)
 	call codes%push(RC_CLOSE_STANDARD)
+	call codes%push(RC_WRITELN_FAIL)
+	call codes%push(RC_CLOSE_FAIL)
+	call codes%push(RC_ENUM_CAST_RANGE)
 	call codes%push(WC_MISSING_RETURN)
 end function get_all_error_codes
 
@@ -668,15 +712,26 @@ end function err_bad_f64
 
 !===============================================================================
 
-function err_bad_type(context, span, type) result(err)
+function err_bad_type(context, span, type, suggest) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: type
+	character(len = *), intent(in), optional :: suggest
+
 	err = err_pre(EC_BAD_TYPE)//'bad type annotation `'//type//'`' &
 		//underline(context, span) &
 		//' bad type'//color_reset
+
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
 
 end function err_bad_type
 
@@ -796,6 +851,21 @@ end function err_mutable_method_on_temp
 
 !===============================================================================
 
+function err_member_method_clash(context, span, name, struct_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: name, struct_name
+	err = err_pre(EC_MEMBER_METHOD_CLASH) &
+		//'method `'//name//'` conflicts with a member of the same name in struct `' &
+		//struct_name//'`' &
+		//underline(context, span)//" name already used by a member"//color_reset
+
+end function err_member_method_clash
+
+!===============================================================================
+
 function err_redeclare_mem(context, span, var) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
@@ -850,6 +920,138 @@ end function err_redeclare_struct
 
 !===============================================================================
 
+function err_redeclare_enum(context, span, enum) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: enum
+	err = err_pre(EC_REDECLARE_ENUM) &
+		//'enum `'//enum//'` has already been declared' &
+		//underline(context, span)//" enum already declared"//color_reset
+
+end function err_redeclare_enum
+
+!===============================================================================
+
+function err_redeclare_variant(context, span, variant) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: variant
+	err = err_pre(EC_REDECLARE_VARIANT) &
+		//'variant `'//variant//'` has already been declared in this enum' &
+		//underline(context, span)//" variant already declared"//color_reset
+
+end function err_redeclare_variant
+
+!===============================================================================
+
+function err_duplicate_enum_value(context, span, variant, other, value) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: variant, other
+	integer, intent(in) :: value
+
+	err = err_pre(EC_DUPLICATE_ENUM_VALUE) &
+		//'variant `'//variant//'` reuses value '//str(value) &
+		//', already assigned to `'//other//'`' &
+		//underline(context, span)//" duplicate enum value" &
+		//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": only explicitly-valued variants may share a value; " &
+		//"assign `"//variant//"` an explicit value to alias `"//other//"`"
+
+end function err_duplicate_enum_value
+
+!===============================================================================
+
+function err_unknown_variant(context, span, variant, enum, suggest) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: variant, enum
+	character(len = *), intent(in), optional :: suggest
+
+	err = err_pre(EC_UNKNOWN_VARIANT) &
+		//'variant `'//variant//'` does not exist in enum `'//enum//'`' &
+		//underline(context, span) &
+		//" unknown variant"//color_reset
+
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
+
+end function err_unknown_variant
+
+!===============================================================================
+
+function err_enum_cast_range(context, span, enum, value) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: enum
+	integer, intent(in) :: value
+
+	err = err_pre(EC_ENUM_CAST_RANGE) &
+		//'no variant with value '//str(value)//' in enum `'//enum//'`' &
+		//underline(context, span) &
+		//" out-of-range enum cast"//color_reset
+
+end function err_enum_cast_range
+
+!===============================================================================
+
+function err_enum_index(context, span, enum) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: enum
+
+	err = err_pre(EC_ENUM_INDEX) &
+		//'cannot index enum type `'//enum//'`' &
+		//underline(context, span) &
+		//" enum type is not subscriptable"//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": use `"//enum//"(ordinal)` to cast an integer ordinal to a variant"
+
+end function err_enum_index
+
+!===============================================================================
+
+function err_enum_name_value(context, span, enum) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: enum
+
+	err = err_pre(EC_ENUM_NAME_VALUE) &
+		//'enum type `'//enum//'` cannot be used as a value' &
+		//underline(context, span) &
+		//" enum type is not a value"//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": a bare enum name is only valid as a `for` iterable or an " &
+		//"argument to size()/str()/println()"
+
+end function err_enum_name_value
+
+!===============================================================================
+
 function err_redeclare_primitive(context, span, struct) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
@@ -861,6 +1063,28 @@ function err_redeclare_primitive(context, span, struct) result(err)
 		//underline(context, span)//" cannot redeclare primitives"//color_reset
 
 end function err_redeclare_primitive
+
+!===============================================================================
+
+function err_var_type_clash(context, span, var, type_kind) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: var, type_kind
+	character(len = :), allocatable :: article
+
+	article = "a"
+	if (type_kind == "enum") article = "an"
+
+	err = err_pre(EC_VAR_TYPE_CLASH) &
+		//'variable `'//var//'` conflicts with the '//type_kind &
+		//' of the same name' &
+		//underline(context, span)//" name already used by "//article &
+		//" "//type_kind &
+		//color_reset
+
+end function err_var_type_clash
 
 !===============================================================================
 
@@ -945,6 +1169,75 @@ function err_no_return(context, span, fn) result(err)
 		//underline(context, span)//" function without returns"//color_reset
 
 end function err_no_return
+
+function err_module_return(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_pre(EC_MODULE_RETURN) &
+		//'`return` is not allowed at the top level of an imported module' &
+		//underline(context, span)//" move it into a function"//color_reset
+
+end function err_module_return
+
+!===============================================================================
+
+function err_fn_ptr_unsupported(context, span, fn, reason) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: fn, reason
+	err = err_pre(EC_FN_PTR_UNSUPPORTED) &
+		//'cannot take a function pointer to `'//fn//'`: '//reason &
+		//underline(context, span)//" not fn-pointer-able"//color_reset
+
+end function err_fn_ptr_unsupported
+
+!===============================================================================
+
+function err_not_callable(context, span, var, type) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: var, type
+	err = err_pre(EC_NOT_CALLABLE) &
+		//'variable `'//var//'` of type `'//type//'` is not callable' &
+		//underline(context, span)//" not a fn pointer"//color_reset
+
+end function err_not_callable
+
+!===============================================================================
+
+function err_fn_ptr_array(context, span, elem) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: elem
+	err = err_pre(EC_FN_PTR_ARRAY) &
+		//'array element `'//elem//'` is a fn pointer.  ' &
+		//'Arrays of fn pointers are not supported' &
+		//underline(context, span)//" fn pointer in array literal"//color_reset
+
+end function err_fn_ptr_array
+
+!===============================================================================
+
+function err_fn_ptr_struct_member(context, span, mem_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name
+	err = err_pre(EC_FN_PTR_STRUCT_MEMBER) &
+		//'struct member `'//mem_name//'` is a fn pointer.  ' &
+		//'Fn pointers cannot be struct members' &
+		//underline(context, span)//" fn pointer in struct member"//color_reset
+
+end function err_fn_ptr_struct_member
 
 !===============================================================================
 
@@ -1168,6 +1461,24 @@ function err_bad_arg_type(context, span, fn, iarg, param, expect, actual) &
 		//underline(context, span)//" wrong argument type"//color_reset
 
 end function err_bad_arg_type
+
+!===============================================================================
+
+function err_void_arg(context, span, fn, iarg, param) result(err)
+
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+	integer, intent(in):: iarg
+
+	character(len = *), intent(in) :: fn, param
+
+	err = err_pre(EC_VOID_ARG) &
+		//'function `'//fn//'` parameter '//str(iarg)//' `'//param &
+		//'` was given a void (no return value) argument' &
+		//underline(context, span)//" void argument"//color_reset
+
+end function err_void_arg
 
 !===============================================================================
 
@@ -1493,7 +1804,7 @@ end function err_non_struct_dot
 
 !===============================================================================
 
-function err_bad_member_name(context, span, mem_name, struct_var_name, struct_name) result(err)
+function err_bad_member_name(context, span, mem_name, struct_var_name, struct_name, suggest) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
@@ -1502,17 +1813,28 @@ function err_bad_member_name(context, span, mem_name, struct_var_name, struct_na
 	! "class" `struct_name`.  Its useful for dot expressions `var.mem`
 
 	character(len = *), intent(in) :: mem_name, struct_var_name, struct_name
+	character(len = *), intent(in), optional :: suggest
+
 	err = err_pre(EC_BAD_MEMBER_NAME) &
 		//'member `'//mem_name//'` does not exist in struct `'//struct_var_name//'`' &
 		//' of type `'//struct_name//'`' &
 		//underline(context, span) &
 		//" bad member name"//color_reset
 
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
+
 end function err_bad_member_name
 
 !===============================================================================
 
-function err_bad_member_name_short(context, span, mem_name, struct_name) result(err)
+function err_bad_member_name_short(context, span, mem_name, struct_name, suggest) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
@@ -1522,12 +1844,56 @@ function err_bad_member_name_short(context, span, mem_name, struct_name) result(
 	! be a variable identifier like in the longer fn above
 
 	character(len = *), intent(in) :: mem_name, struct_name
+	character(len = *), intent(in), optional :: suggest
+
 	err = err_pre(EC_BAD_MEMBER_NAME_SHORT) &
 		//'member `'//mem_name//'` does not exist in struct `'//struct_name//'`' &
 		//underline(context, span) &
 		//" bad member name"//color_reset
 
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
+
 end function err_bad_member_name_short
+
+!===============================================================================
+
+function err_bad_file_member(context, span, mem_name, file_var_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, file_var_name
+	err = err_pre(EC_BAD_FILE_MEMBER) &
+		//'member `'//mem_name//'` does not exist on file handle `'//file_var_name//'`' &
+		//underline(context, span) &
+		//" bad file member"//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": file handles have members `is_open`, `eof`, and `name`"
+
+end function err_bad_file_member
+
+!===============================================================================
+
+function err_readonly_file_member(context, span, mem_name, file_var_name) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: mem_name, file_var_name
+	err = err_pre(EC_READONLY_FILE_MEMBER) &
+		//'file handle member `'//file_var_name//'.'//mem_name//'` is read-only' &
+		//underline(context, span) &
+		//" cannot assign to a file member"//color_reset
+
+end function err_readonly_file_member
 
 !===============================================================================
 

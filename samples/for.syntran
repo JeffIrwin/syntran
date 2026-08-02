@@ -8,6 +8,6 @@
 	for i in [1: 101]
 		sum = sum + i;
 
-	sum;
+	println(sum);
 }
 

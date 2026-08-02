@@ -1,0 +1,17 @@
+// Recursive target called indirectly through a fn pointer
+
+fn fact(n: i32): i32
+{
+	if n <= 1
+	{
+		return 1;
+	}
+	return n * fact(n - 1);
+}
+
+fn apply(f: fn(i32): i32, x: i32): i32
+{
+	return f(x);
+}
+
+return apply(fact, 6);  // 720

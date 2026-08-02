@@ -26,6 +26,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 
 	type(array_t) :: array
 	type(value_t) :: lbound_, ubound_, itr, step, len_, tmp, str_
+	type(value_t), allocatable :: struct(:)
 
 	! Evaluate all of these ahead of loop, but only if they are allocated!
 	if (allocated(node%array%lbound)) call syntax_eval(node%array%lbound, state, lbound_)
@@ -197,7 +198,15 @@ recursive module subroutine eval_for_statement(node, state, res)
 			for_kind = array_expr
 
 			call syntax_eval(node%array, state, tmp)
-			array = tmp%array  ! TODO: move_alloc() (or value_move) instead of copy?
+			call array_move(tmp%array, array)
+
+			! Enum/struct elements live in %struct(:), not in array_t (which
+			! has no value_t component) -- array_move only moves array_t's
+			! own components, so thread %struct(:) through separately.
+			! array_at() falls back to get_array_val() when this isn't
+			! allocated (Fortran treats an unallocated allocatable actual
+			! argument as absent for a non-allocatable optional dummy)
+			if (allocated(tmp%struct)) call move_alloc(tmp%struct, struct)
 
 			len8 = array%len_
 			!print *, 'len8 = ', len8
@@ -220,7 +229,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 		state%continued = .false.
 
 		call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
-			len_, array, node%array%elems, str_, state)
+			len_, array, node%array%elems, str_, state, struct)
 
 		!print *, 'itr = ', itr%to_str()
 
@@ -230,9 +239,9 @@ recursive module subroutine eval_for_statement(node, state, res)
 		! Parsing still needs to rely on dictionary lookups because it does
 		! not know the entire list of variable identifiers ahead of time
 		if (node%is_loc) then
-			state%locs%vals(node%id_index) = itr
+			call value_move(itr, state%locs%vals(node%id_index))
 		else
-			state%vars%vals(node%id_index) = itr
+			call value_move(itr, state%vars%vals(node%id_index))
 		end if
 
 		call syntax_eval(node%body, state, res)
@@ -265,7 +274,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 	!********
 
 	integer :: rank_res, id, type_, nelem
-	integer(kind = 8) :: i8, j8, index_, len8, size_i
+	integer(kind = 8) :: i8, j8, index_, len8, size_i, il, iu, sstep
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:), &
 		size_tmp(:)
 
@@ -396,12 +405,30 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			!print *, 'str_type'
 
 			! TODO: ban compound character substring assignment
-			i8 = subscript_eval(node, state)
+
+			! str_slice_bounds() handles scalar_sub/range_sub/step_sub/all_sub
+			! uniformly, so stepped/reversed slice assignment (e.g.
+			! s[:-1:] = "olleh") works the same as it does for arrays.
 			if (node%is_loc) then
-				state%locs%vals(id)%str%s(i8+1: i8+1) = res%str%s
+				call str_slice_bounds(node, 1, int(len(state%locs%vals(id)%str%s), 8), &
+					state, il, iu, sstep)
 			else
-				state%vars%vals(id)%str%s(i8+1: i8+1) = res%str%s
+				call str_slice_bounds(node, 1, int(len(state%vars%vals(id)%str%s), 8), &
+					state, il, iu, sstep)
 			end if
+			if (state%rt_halt) return
+
+			i8 = il
+			j8 = 1
+			do while ((sstep > 0 .and. i8 < iu) .or. (sstep < 0 .and. i8 > iu))
+				if (node%is_loc) then
+					state%locs%vals(id)%str%s(i8+1: i8+1) = res%str%s(j8:j8)
+				else
+					state%vars%vals(id)%str%s(i8+1: i8+1) = res%str%s(j8:j8)
+				end if
+				i8 = i8 + sstep
+				j8 = j8 + 1
+			end do
 
 		else if (has_char_sub) then
 
@@ -412,6 +439,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 				! All element subs scalar: single element
 				i8 = subscript_eval(node, state)   ! element flat index
 				call str_arr_char_assign(node, state, res, id, i8, nelem)
+				if (state%rt_halt) return
 
 			else
 
@@ -438,6 +466,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 						index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
 					end if
 					call str_arr_char_assign(node, state, res, id, index_, nelem)
+					if (state%rt_halt) return
 					call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 				end do
 
@@ -598,12 +627,11 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 				!	!
 				!	! I believe it is illegal in python because of the
 				!	! ambiguity of what should `b` be if it is assigned.
-				!	! Should `b` be the whole `a` array as in syntran, or
-				!	! just the slice `a[1:4]`, or just the scalar `3`?
+				!	! Should `b` be the whole `a` array, or just the slice
+				!	! `a[1:4]`, or just the scalar `3`?
 				!	!
 				!	! I think there's a good case to be made that it should
-				!	! be the slice `a[1:4]`, although the implementation was more
-				!	! simple by setting `b` to the whole array `a`.
+				!	! be the slice `a[1:4]`, which is what syntran does.
 				!end if
 
 				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
@@ -623,9 +651,6 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			!   complex, requiring the tmp_array and getting all the size/rank
 			!   array meta-data
 
-
-			!! TODO: update readme for this change.  Search "contrast" or "This
-			!! behaviour is in contrast to non-nested assignment:"
 			!res = state%vars%vals(id)  ! big copy for returing the whole array
 			res = tmp_array  ! only return the modified slice
 
@@ -640,7 +665,11 @@ contains
 
 		! Apply the char-rank subscript at lsubscripts(nelem_+1) to the
 		! element string at state%{locs|vars}%vals(id)%array%str(elem_idx+1)%s.
-		! Handles both scalar_sub (single char) and range_sub (substring).
+		!
+		! str_slice_bounds() handles scalar_sub/range_sub/step_sub/all_sub
+		! uniformly, so stepped/reversed slice assignment works the same as it
+		! does for arrays.  On step == 0, state%rt_halt is set; callers must
+		! check it on return.
 
 		type(syntax_node_t), intent(in)    :: node
 		type(state_t),       intent(inout) :: state
@@ -651,51 +680,32 @@ contains
 		!********
 
 		integer :: isub
-		integer(kind = 8) :: il, iu, char_pos
-		type(value_t) :: tmp_
+		integer(kind = 8) :: il, iu, step, i8, j8
 
 		isub = nelem_ + 1
 
-		select case (node%lsubscripts(isub)%sub_kind)
-		case (scalar_sub)
-			call syntax_eval(node%lsubscripts(isub), state, tmp_)
-			char_pos = tmp_%to_i64()
+		if (node%is_loc) then
+			call str_slice_bounds(node, isub, &
+				int(len(state%locs%vals(id)%array%str(elem_idx+1)%s), 8), &
+				state, il, iu, step)
+		else
+			call str_slice_bounds(node, isub, &
+				int(len(state%vars%vals(id)%array%str(elem_idx+1)%s), 8), &
+				state, il, iu, step)
+		end if
+		if (state%rt_halt) return
+
+		i8 = il
+		j8 = 1
+		do while ((step > 0 .and. i8 < iu) .or. (step < 0 .and. i8 > iu))
 			if (node%is_loc) then
-				state%locs%vals(id)%array%str(elem_idx+1)%s( &
-					char_pos+1 : char_pos+1) = rhs%str%s
+				state%locs%vals(id)%array%str(elem_idx+1)%s(i8+1 : i8+1) = rhs%str%s(j8:j8)
 			else
-				state%vars%vals(id)%array%str(elem_idx+1)%s( &
-					char_pos+1 : char_pos+1) = rhs%str%s
+				state%vars%vals(id)%array%str(elem_idx+1)%s(i8+1 : i8+1) = rhs%str%s(j8:j8)
 			end if
-
-		case (range_sub)
-			if (node%lsubscripts(isub)%lsub_omit) then
-				il = 1
-			else
-				call syntax_eval(node%lsubscripts(isub), state, tmp_)
-				il = tmp_%to_i64() + 1
-			end if
-			if (node%lsubscripts(isub)%usub_omit) then
-				if (node%is_loc) then
-					iu = len(state%locs%vals(id)%array%str(elem_idx+1)%s) + 1
-				else
-					iu = len(state%vars%vals(id)%array%str(elem_idx+1)%s) + 1
-				end if
-			else
-				call syntax_eval(node%usubscripts(isub), state, tmp_)
-				iu = tmp_%to_i64() + 1
-			end if
-			if (node%is_loc) then
-				state%locs%vals(id)%array%str(elem_idx+1)%s(il : iu-1) = rhs%str%s
-			else
-				state%vars%vals(id)%array%str(elem_idx+1)%s(il : iu-1) = rhs%str%s
-			end if
-
-		case default
-			write(*,*) err_int(IC_STR_CHAR_SUBSCRIPT, 'unexpected str char subscript kind')
-			call internal_error()
-
-		end select
+			i8 = i8 + step
+			j8 = j8 + 1
+		end do
 
 	end subroutine str_arr_char_assign
 
@@ -719,9 +729,10 @@ module subroutine eval_translation_unit(node, state, res)
 	! members only change the (vars) state or define fns
 	do i = 1, size(node%members)
 
-		! Only eval statements, not fn or struct declarations
+		! Only eval statements, not fn, struct, or enum declarations
 		if (node%members(i)%kind == fn_declaration    ) cycle
 		if (node%members(i)%kind == struct_declaration) cycle
+		if (node%members(i)%kind == enum_declaration   ) cycle
 
 		call syntax_eval(node%members(i), state, res)
 
@@ -1034,20 +1045,56 @@ recursive module subroutine eval_array_expr(node, state, res)
 			res%array%bool = lbound_%sca%bool
 
 		case (str_type)
-			res%array%str = lbound_%str
+			! Don't rely on a scalar-to-array broadcast `res%array%str =
+			! lbound_%str` here — string_t has its own allocatable %s
+			! component, and gfortran's broadcast-assignment codegen for a
+			! derived type with a nested allocatable does not give each
+			! broadcast-target element its own independent deep copy (see
+			! the identical str_type fix in value_copy() in value.f90).
+			! Assign each element's %s individually instead
+			do i8 = 1, res%array%len_
+				res%array%str(i8)%s = lbound_%str%s
+			end do
 
 		case (struct_type)
 
 			!print *, "lbound_ size = ", size(lbound_%struct)
 
+			! Don't rely on a whole-array `res%struct(i8)%struct =
+			! lbound_%struct` here — value_t's assignment(=) binding
+			! (value_copy) is a plain (non-elemental) scalar subroutine, so
+			! it cannot be dispatched for this array-to-array assignment;
+			! gfortran silently falls back to raw intrinsic array
+			! assignment instead, which doesn't deep-copy struct's nested
+			! allocatable fields correctly.  Copy each field individually
+			! via value_copy(), matching the pattern value_copy() itself
+			! uses for its own struct(:) component
 			do i8 = 1, res%array%len_
-				res%struct(i8)%struct = lbound_%struct
+				if (allocated(res%struct(i8)%struct)) deallocate(res%struct(i8)%struct)
+				allocate(res%struct(i8)%struct( size(lbound_%struct) ))
+				do j = 1, size(lbound_%struct)
+					call value_copy(res%struct(i8)%struct(j), lbound_%struct(j))
+				end do
 			end do
 
 			! Arrays are homogeneous, so every element shares one struct_name
 			! for efficiency
 			res%struct_name = lbound_%struct_name
 			if (allocated(lbound_%struct_cookie)) res%struct_cookie = lbound_%struct_cookie
+
+		case (enum_type)
+
+			! Unlike struct_type, an enum variant has no nested allocatable
+			! members of its own, so a plain value_copy() per element is
+			! enough (no need to deep-copy a struct(:) sub-array)
+			do i8 = 1, res%array%len_
+				call value_copy(res%struct(i8), lbound_)
+			end do
+
+			! Arrays are homogeneous, so every element shares one enum_name
+			! for efficiency
+			res%enum_name = lbound_%enum_name
+			if (allocated(lbound_%enum_cookie)) res%enum_cookie = lbound_%enum_cookie
 
 		case default
 			write(*,*) err_eval_len_array(kind_name(res%array%type))
@@ -1175,7 +1222,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 			if (state%rt_halt) return
 			!print *, 'elem['//str(i)//'] = ', elem%str()
 
-			if (res%array%type == struct_type) then
+			if (any(res%array%type == [struct_type, enum_type])) then
 				res%struct(i) = elem
 
 			else if (elem%type == array_type) then
@@ -1198,7 +1245,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 			call res%array%trim()
 		end if
 
-		if (res%array%type == struct_type) then
+		if (any(res%array%type == [struct_type, enum_type])) then
 			res%array%len_ = size(node%elems)
 		end if
 
@@ -1214,6 +1261,12 @@ recursive module subroutine eval_array_expr(node, state, res)
 		if (allocated(node%val%struct_cookie)) then
 			res%struct_cookie = node%val%struct_cookie
 		end if
+		if (allocated(node%val%enum_name)) then
+			res%enum_name = node%val%enum_name
+		end if
+		if (allocated(node%val%enum_cookie)) then
+			res%enum_cookie = node%val%enum_cookie
+		end if
 
 		!print *, "struct_name = ", res%struct_name
 
@@ -1223,6 +1276,49 @@ recursive module subroutine eval_array_expr(node, state, res)
 	end if
 
 end subroutine eval_array_expr
+
+!===============================================================================
+
+recursive module subroutine eval_enum_cast_expr(node, state, res)
+
+	! Evaluate `EnumName(ordinal)`.  node%val%struct(:) holds one fully-baked
+	! enum value_t per variant (set at parse time by parse_enum_cast()), so
+	! this just evaluates the ordinal expression and scans that baked list
+	! for a match -- no runtime enum registry is needed.  R32 if none matches
+
+	type(syntax_node_t), intent(in) :: node
+
+	type(state_t), intent(inout) :: state
+
+	type(value_t), intent(out) :: res
+
+	!********
+
+	type(value_t) :: arg
+
+	integer(kind = 4) :: ord
+
+	integer :: i
+
+	call syntax_eval(node%right, state, arg)
+	if (state%rt_halt) return
+
+	ord = arg%to_i32()
+
+	! Linear scan, not an array/hash lookup: variant values are arbitrary i32
+	! (explicit, sparse, negative, or aliased), so no direct-index table
+	! exists in general, and enums are small enough that this is cheap
+	do i = 1, size(node%val%struct)
+		if (node%val%struct(i)%sca%i32 == ord) then
+			res = node%val%struct(i)
+			return
+		end if
+	end do
+
+	call rt_throw(state, err_rt(RC_ENUM_CAST_RANGE, &
+		"no variant with value "//str(ord)//" in enum `"//node%val%enum_name//"`"))
+
+end subroutine eval_enum_cast_expr
 
 !===============================================================================
 

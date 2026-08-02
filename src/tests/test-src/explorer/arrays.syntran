@@ -15,6 +15,12 @@ println("y_slice = ", y_slice);
 let mat_slice = matrix[0: 2, 1: 4];
 println("mat_slice = ", mat_slice);
 
+let mat_prod = matrix[:, 0:3] @ matrix[:, 1:4];
+println("mat_prod = ", mat_prod);
+
+let elm_prod = matrix[:, 0:3] * matrix[:, 1:4];
+println("elm_prod = ", elm_prod);
+
 matrix[1,:] += 100;
 y_slice = matrix[1,:];
 println("y_slice = ", y_slice);

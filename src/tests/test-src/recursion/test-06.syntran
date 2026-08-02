@@ -1,0 +1,27 @@
+
+// Regression test for a type-checking bug where a recursive fn returning an
+// array would spuriously fail with E41 "wrong return type".  During parser
+// pass 0, a self-recursive call is unresolved and its result type defaults to
+// unknown; that unknown-ness leaked from the array *element* type into the
+// return-type check's cascade guard, which only looked at the outer type.
+//
+// This mirrors the shape of `polypow()` from AOC 2019 day 22: a subscript of
+// the recursive result feeds into a new array literal that gets returned
+
+fn poly2(m: i64): [i64; :]
+{
+	if (m == 0)
+		return [1'i64, 0'i64];
+
+	let cd = poly2(m - 1'i64);
+	let c = cd[0];
+	let d = cd[1];
+
+	let ans = [2'i64 * c, d + 1'i64];
+	return ans;
+}
+
+let res = poly2(4'i64);
+
+return i32(abs(res[0] - 16'i64) + abs(res[1] - 4'i64));
+
