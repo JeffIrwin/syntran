@@ -20,6 +20,17 @@ An interpreter written in Fortran, I guess
 
 This began as a sandbox for me to play in as I followed along with [Immo Landwerth's _building a compiler_ series](https://www.youtube.com/playlist?list=PLRAdsfhKI4OWNOSfS7EUu5GRAVmze1t2y), but it has since diverged.  Syntran has morphed into an interpretted, array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
 
+## Try it online
+
+You can run syntran in your browser at
+**[syntran.jeffirwin.xyz](https://syntran.jeffirwin.xyz/)** -- no install
+required.  It's like a basic [Compiler
+Explorer](https://godbolt.org/) for syntran:  pick one of several samples from
+the dropdown, edit it, or write your own code in the web editor and run it.
+
+To run syntran locally instead, install a binary or build from source as
+described below.
+
 ## Install binary
 
 To run syntran, you can either install a binary or build it from the Fortran source code.  To build it from source, [see the next section](#build-the-interpreter-from-source).

@@ -208,8 +208,6 @@ module syntran__core_m
 	!       size, and then set the result data along with size/rank meta-data
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!    * when? check blame for this comment. can't repro in 1.0.1
-	!  - mention syntran explorer in readme
-	!    * note it may not exist in ~6 months
 	!  - print improvements:
 	!    * hex format printing
 	!    * formatted printf?
