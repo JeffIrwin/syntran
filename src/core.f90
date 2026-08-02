@@ -35,11 +35,6 @@ module syntran__core_m
 	!    again whenever a big enough user-defined type change in the interpreter
 	!    is made. maybe try a different compiler just for windows? intel?
 	!  - stack trace for runtime errors
-	!  - cover utils/run-samples.sh in ci
-	!    * need a blocklist probably to avoid running interactive samples like
-	!      betweenle et al
-	!    * some may be too slow to execute, but at least cover them with
-	!    --syntax-only
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
 	!      intrinsic function, a struct method, or a user-defined function with
@@ -80,9 +75,7 @@ module syntran__core_m
 	!  - matrix inverse? link gfortran to mkl?
 	!  - remove AST-walking interpreter. bytecode is better. wait 2 or 3
 	!    releases
-	!    * will probably remove it in 1.6. if that's the plan at the 1.5
-	!      release, update the depreciation warning to specify the planned
-	!      removal release
+	!    * will probably remove it in 1.6
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
