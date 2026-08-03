@@ -117,6 +117,7 @@ module syntran__errors_m
 		EC_ENUM_NAME_VALUE = "E99", &
 		EC_BAD_FILE_MEMBER = "E100", &
 		EC_READONLY_FILE_MEMBER = "E101", &
+		EC_EXPL_ARRAY_SIZE = "E102", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -395,6 +396,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_ENUM_NAME_VALUE)
 	call codes%push(EC_BAD_FILE_MEMBER)
 	call codes%push(EC_READONLY_FILE_MEMBER)
+	call codes%push(EC_EXPL_ARRAY_SIZE)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1894,6 +1896,27 @@ function err_readonly_file_member(context, span, mem_name, file_var_name) result
 		//" cannot assign to a file member"//color_reset
 
 end function err_readonly_file_member
+
+!===============================================================================
+
+function err_expl_array_size(context, span, nelems, dims, total) result(err)
+	! A rank-2+ array literal `[e0, e1, ... ; d0, d1, ...]` whose size list is
+	! all literal constants doesn't have to wait for runtime (R21) to catch a
+	! mismatched element count -- it's caught here at parse time instead
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	integer, intent(in) :: nelems
+	character(len = *), intent(in) :: dims
+	integer(kind = 8), intent(in) :: total
+
+	err = err_pre(EC_EXPL_ARRAY_SIZE) &
+		//'explicit array has '//str(nelems)//' elements but declared size is ' &
+		//dims//' = '//str(total) &
+		//underline(context, span)//" element count does not match size"//color_reset
+
+end function err_expl_array_size
 
 !===============================================================================
 

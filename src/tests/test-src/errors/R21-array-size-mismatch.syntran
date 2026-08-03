@@ -1,0 +1,12 @@
+// R21: array-size-mismatch
+// An explicit rank-2+ array literal's element count doesn't match its
+// declared size.  The size here is runtime-valued (`n`), so this can't be
+// caught at parse time like E102 -- it only surfaces at runtime.  The
+// trailing slice also regression-tests a bytecode-VM bug where OP_NEW_ARRAY
+// pushed an unset result onto the stack after this throw instead of halting
+// immediately, corrupting `mat` and crashing later with an unrelated
+// internal error (I24) when it was subscripted
+
+let n = 3;
+let mat = [1, 2, 3, 4, 5; n, 2];
+let slice = mat[:, 0];

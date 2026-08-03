@@ -883,9 +883,12 @@ module subroutine vm_run(prog, state, res)
 
 		! --- slice / non-scalar subscript read: a[i:j], a[:], a[[0,2,4]] ---------
 		! Delegates to eval_name_expr which handles all slice kinds, array
-		! subscripts, step subscripts, and multi-rank combinations.
+		! subscripts, step subscripts, and multi-rank combinations, and which
+		! can rt_throw() (R20, R22, R27), so check rt_halt before pushing a
+		! possibly-unset result.
 		case (OP_SLICE)
 			call eval_name_expr(prog%nodes(instr%a), state, val)
+			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 
 		! --- scalar subscript write: a[i] = x  or  a[i] += x -------------------
@@ -1464,8 +1467,11 @@ module subroutine vm_run(prog, state, res)
 		! --- M8: array construction -----------------------------------------------
 		! Delegates to eval_array_expr for all array kinds (bound, step, len,
 		! expl, size, unif).  Rank-1 native specialization is a future perf pass.
+		! Can rt_throw (R21 size mismatch, R25/R26 step-zero), so check rt_halt
+		! before pushing a possibly-unset result.
 		case (OP_NEW_ARRAY)
 			call eval_array_expr(prog%nodes(instr%a), state, val)
+			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 
 		! --- enum reverse cast, e.g. `Suit(2)` -------------------------------------
@@ -1479,9 +1485,12 @@ module subroutine vm_run(prog, state, res)
 
 		! --- M8: slice/complex LHS assignment ------------------------------------
 		! Handles slice-range LHS (a[1:3] = x) and subscript-less compound
-		! assignments by delegating to eval_assignment_expr.
+		! assignments by delegating to eval_assignment_expr, which can rt_throw
+		! (R27 subscript-step-zero), so check rt_halt before pushing a
+		! possibly-unset result.
 		case (OP_STORE_SLICE)
 			call eval_assignment_expr(prog%nodes(instr%a), state, val)
+			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 
 		! --- M8: top-level return (halt) ------------------------------------------

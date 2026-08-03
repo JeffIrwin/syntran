@@ -623,6 +623,12 @@ A `file` handle's members are read-only; they can't be used as an assignment tar
 
 [Example](../src/tests/test-src/errors/E101-readonly-file-member.syntran)
 
+### E102 -- expl-array-size
+
+An explicitly-shaped array literal `[e0, e1, ... ; d0, d1, ...]` whose size list is all literal constants has an element count that doesn't match the declared size.  A non-literal (runtime-computed) size still falls through to R21 instead.
+
+[Example](../src/tests/test-src/errors/E102-expl-array-size.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

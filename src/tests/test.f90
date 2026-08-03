@@ -7067,6 +7067,19 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_count_code(get_diags('std::IN.eof = true;'), &
 				EC_READONLY_FILE_MEMBER) == 0, &
 
+			! rank-2+ explicit array literal: a literal-constant size
+			! mismatch is caught here at parse time (E102) instead of
+			! waiting for the runtime check (R21)
+			diag_has_code(get_diags('let m = [1,2,3,4,5; 3,2];'), &
+				EC_EXPL_ARRAY_SIZE), &
+			diag_count_code(get_diags('let m = [1,2,3,4,5; 3,2];'), &
+				EC_EXPL_ARRAY_SIZE) == 1, &
+			! positive: a non-literal (runtime-valued) size does not trip
+			! E102 -- it's still caught, but only at runtime as R21 (see
+			! unit_test_runtime_errors below)
+			.not. diag_has_code(get_diags('let n = 3; let m = [1,2,3,4,5; n,2];'), &
+				EC_EXPL_ARRAY_SIZE), &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -7107,6 +7120,15 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	! R* code; see the retirement note for IC_FOR_STEP_ZERO/_F,
 	! IC_ARRAY_STEP_ZERO/_F, and IC_SUBSCRIPT_STEP_ZERO in errors.f90.
 	!
+	! RC_ARRAY_SIZE_MISMATCH (R21): reachable whenever a rank-2+ array
+	! literal's size list is not all literal constants (e.g. a variable), so
+	! the parser can't rule it out ahead of time the way it does for E102
+	! (see err_expl_array_size() in errors.f90).  R21-array-size-mismatch.syntran
+	! also regression-tests a bytecode-VM-only bug where OP_NEW_ARRAY pushed
+	! an unset result after this exact throw instead of halting immediately
+	! -- the corrupted value then crashed with an unrelated internal error
+	! (I24) the moment it was subscripted, before rt_diags was ever printed.
+	!
 	! Excluded from this end-to-end coverage:
 	!   - RC_TRANSPOSE_RANK (R18): std::transpose()'s parameter is statically
 	!     declared rank-2, and every attempt to construct a value that's
@@ -7115,9 +7137,9 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	!     trying std::reshape() (whose result rank is unknown at parse time
 	!     unless the shape argument is a literal) as the source of
 	!     std::transpose()'s argument; unreachable from valid syntran code
-	!   - RC_ARRAY_SIZE_MISMATCH (R21) and RC_BAD_SUBSCRIPT_KIND (R20):
-	!     defensive checks for subscript/size-array shapes that the parser is
-	!     already expected to rule out; no valid-syntax repro found
+	!   - RC_BAD_SUBSCRIPT_KIND (R20): a defensive check for subscript shapes
+	!     that the parser is already expected to rule out; no valid-syntax
+	!     repro found
 	!   - RC_STRUCT_ARRAY_SLICE (R22): struct array slicing now works for
 	!     my_struct.field[lo:hi]; site A (arr_of_structs[lo:hi].field) still
 	!     throws but is not yet covered here
@@ -7215,6 +7237,17 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 			! R19: std::reshape() new shape doesn't match element count
 			rt_code_both_file(P//'R19-reshape-mismatch.syntran', RC_RESHAPE_MISMATCH), &
+
+			! R21: rank-2+ array literal's element count doesn't match a
+			! runtime-valued declared size
+			rt_code_both_file( &
+				P//'R21-array-size-mismatch.syntran', RC_ARRAY_SIZE_MISMATCH), &
+			diag_count_code(get_diags_file( &
+				P//'R21-array-size-mismatch.syntran', bytecode = .true.), &
+				RC_ARRAY_SIZE_MISMATCH) == 1, &
+			diag_count_code(get_diags_file( &
+				P//'R21-array-size-mismatch.syntran', bytecode = .false.), &
+				RC_ARRAY_SIZE_MISMATCH) == 1, &
 
 			! R23-R27: step-is-0 family (for loop, range/array literal, slice
 			! subscript), each for both an integer and float variant where
@@ -7635,7 +7668,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E101-readonly-file-member.syntran'), &
 				EC_READONLY_FILE_MEMBER, P//'E101-readonly-file-member.syntran', 6, 3, 3), &
 			diag_count_code(get_diags_file(P//'E101-readonly-file-member.syntran'), &
-				EC_READONLY_FILE_MEMBER) == 1 &
+				EC_READONLY_FILE_MEMBER) == 1, &
+			diag_loc_ok(get_diags_file(P//'E102-expl-array-size.syntran'), &
+				EC_EXPL_ARRAY_SIZE, P//'E102-expl-array-size.syntran', 9, 2, 4), &
+			diag_count_code(get_diags_file(P//'E102-expl-array-size.syntran'), &
+				EC_EXPL_ARRAY_SIZE) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

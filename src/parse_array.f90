@@ -487,9 +487,43 @@ recursive module subroutine parse_array_expr(parser, expr)
 				parser%context(), span, parser%text(lb_beg, lb_end)))
 		end if
 
+		span_beg = parser%peek_pos(0)
 		call parser%parse_size(size_)
+		span_end = parser%peek_pos(0) - 1
 
 		call parser%match(rbracket_token, rbracket)
+
+		! If every declared size is a literal constant, the element count can
+		! be validated right now (E102) instead of waiting for the runtime
+		! check (R21) in eval_array_expr()/vm_exec.f90.  A non-literal size
+		! (e.g. from a variable) still falls through to R21
+		if (parser%ipass /= 0) then
+			block
+				logical :: all_lit
+				integer(kind = 8) :: total
+				character(len = :), allocatable :: dims
+
+				all_lit = .true.
+				total   = 1
+				dims    = ''
+				do i = 1, size_%len_
+					if (size_%v(i)%kind /= literal_expr .or. &
+						.not. is_int_type(size_%v(i)%val%type)) then
+						all_lit = .false.
+						exit
+					end if
+					total = total * size_%v(i)%val%to_i64()
+					if (i > 1) dims = dims//' x '
+					dims = dims//str(size_%v(i)%val%to_i64())
+				end do
+
+				if (all_lit .and. int(elems%len_, 8) /= total) then
+					span = new_span(span_beg, span_end - span_beg + 1)
+					call parser%diagnostics%push(err_expl_array_size( &
+						parser%context(), span, elems%len_, dims, total))
+				end if
+			end block
+		end if
 
 		allocate(expr%val%array)
 

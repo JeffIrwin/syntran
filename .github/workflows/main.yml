@@ -350,18 +350,6 @@
 					docker build ./docker/ --file ./docker/Dockerfile.branch-ubuntu \n
 				"
 			},
-			#{
-			#	# TODO: just remove conditional from other test stage.  This
-			#	# never used to work on Windows bc gfortran-compiled bins
-			#	# just wouldn't run on the github win runners. Maybe go back
-			#	# to debug.  Release has intermittent issues
-			#	"if": "matrix.os == 'windows-latest'",
-			#	"name": "Test Windows",
-			#	"run":
-			#	"
-			#		bash ./test.sh \n
-			#	"
-			#},
 		]
 	},
 	"build-rocky": {
@@ -531,10 +519,7 @@
 
 					ulimit -s unlimited \n
 
-					# TODO: re-disable debug on ifort classic once the 2021.10 debug segfault is root-caused \n
-					if [[ \"${{ matrix.toolchain.version }}\" != \"2023.1\" ]] ; then \n
-						fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
-					fi \n
+					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
 
 					# The optimized -Ofast build goes through cmake instead of \n
 					# fpm (see CMakeLists.txt), which also builds the core lib \n

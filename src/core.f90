@@ -31,9 +31,11 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - windows memory crashes require constant maintanence or they pop up
-	!    again whenever a big enough user-defined type change in the interpreter
-	!    is made. maybe try a different compiler just for windows? intel?
+	!  - remove AST-walking interpreter. bytecode is better
+	!    * will probably remove it in 1.6
+	!  - switch/match/case. needs to work with strings. would be nice to work
+	!    with arrays. basic switch/case is fine but also consider "pattern
+	!    matching" or whatever rust has
 	!  - stack trace for runtime errors
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
@@ -48,9 +50,6 @@ module syntran__core_m
 	!      is the can of worms opened by callbacks
 	!      + structs of fns work, arrays do not
 	!    * closures and anonymous (lambda) fns?
-	!  - switch/match/case. needs to work with strings. would be nice to work
-	!    with arrays. basic switch/case is fine but also consider "pattern
-	!    matching" or whatever rust has
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
 	!    imported
@@ -73,9 +72,6 @@ module syntran__core_m
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
 	!  - matrix inverse? link gfortran to mkl?
-	!  - remove AST-walking interpreter. bytecode is better. wait 2 or 3
-	!    releases
-	!    * will probably remove it in 1.6
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
@@ -265,6 +261,10 @@ module syntran__core_m
 	!        maybe make separate simple and compound struct samples
 	!    * tbd:
 	!      + improved to_str() conversion with labels of struct name and member names
+	!  - windows memory crashes require constant maintanence or they pop up
+	!    again whenever a big enough user-defined type change in the interpreter
+	!    is made. maybe try a different compiler just for windows? intel?
+	!    * maybe fixed in 1.5? not sure it's not revenant
 	!  - jumping control flow:
 	!    * break and continue need documentation
 	!    * goto: useful to break nested loops? or add break with loop label or
