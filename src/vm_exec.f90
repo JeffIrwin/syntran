@@ -1143,6 +1143,7 @@ module subroutine vm_run(prog, state, res)
 		case (OP_FOR_SETUP)
 			block
 			integer :: fi, rk_
+			integer(kind = 8), allocatable :: sizes_(:)
 			type(value_t) :: tmp_
 
 			! Grow the for-iterator stack if needed (no hard loop-nesting limit).
@@ -1255,14 +1256,27 @@ module subroutine vm_run(prog, state, res)
 
 				case (size_array)
 					rk_ = size(nd%array%size)
+					allocate(sizes_(rk_))
 					for_iters(fi)%len8 = 1
 					do i = 1, rk_
 						call syntax_eval(nd%array%size(i), state, tmp_)
 						! Note: state%rt_halt is checked once after this loop
 						! (not inside it), since a bare exit here would only
 						! break this inner do, not the outer VM dispatch loop
-						for_iters(fi)%len8 = for_iters(fi)%len8 * tmp_%to_i64()
+						sizes_(i) = tmp_%to_i64()
+						for_iters(fi)%len8 = for_iters(fi)%len8 * sizes_(i)
 					end do
+
+					! Mirrors eval_for_statement's size_array check
+					! (eval_control.f90) -- without it, OP_FOR_NEXT's array_at()
+					! reads past the end of nd%array%elems for a mismatched
+					! runtime-valued size (crashing with a raw Fortran bounds
+					! abort instead of R21, since the parser can only catch
+					! this ahead of time when every size is a literal (E102))
+					if (.not. state%rt_halt .and. size(nd%array%elems) /= for_iters(fi)%len8) then
+						call rt_throw(state, err_rt_expl_array_size( &
+							size(nd%array%elems), sizes_))
+					end if
 
 				case (unif_array)
 					rk_ = size(nd%array%size)

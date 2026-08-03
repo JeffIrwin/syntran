@@ -7079,6 +7079,12 @@ subroutine unit_test_error_codes(npass, nfail)
 			! unit_test_runtime_errors below)
 			.not. diag_has_code(get_diags('let n = 3; let m = [1,2,3,4,5; n,2];'), &
 				EC_EXPL_ARRAY_SIZE), &
+			! same literal-size check for a `for` loop iterating the array
+			! literal directly, instead of binding it with `let` first
+			diag_has_code(get_diags('for i in [1,2,3,4,5; 3,2] {}'), &
+				EC_EXPL_ARRAY_SIZE), &
+			diag_count_code(get_diags('for i in [1,2,3,4,5; 3,2] {}'), &
+				EC_EXPL_ARRAY_SIZE) == 1, &
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
@@ -7128,6 +7134,13 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	! an unset result after this exact throw instead of halting immediately
 	! -- the corrupted value then crashed with an unrelated internal error
 	! (I24) the moment it was subscripted, before rt_diags was ever printed.
+	! R21-for-array-size-mismatch.syntran covers the same mismatch iterated
+	! directly by a `for` loop instead of bound with `let` first -- a
+	! separate code path (OP_FOR_SETUP's size_array case in vm_exec.f90 /
+	! eval_for_statement's size_array case in eval_control.f90) that used to
+	! skip the check entirely under the bytecode VM, letting OP_FOR_NEXT read
+	! past the end of the array literal's elements and crash with a raw
+	! Fortran bounds-check abort instead of ever raising R21.
 	!
 	! Excluded from this end-to-end coverage:
 	!   - RC_TRANSPOSE_RANK (R18): std::transpose()'s parameter is statically
@@ -7248,6 +7261,27 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			diag_count_code(get_diags_file( &
 				P//'R21-array-size-mismatch.syntran', bytecode = .false.), &
 				RC_ARRAY_SIZE_MISMATCH) == 1, &
+
+			! R21, `for`-loop iterable form: same mismatch, but iterated
+			! directly instead of bound with `let` first (regression test for
+			! a bytecode-VM-only crash -- see doc comment above)
+			rt_code_both_file( &
+				P//'R21-for-array-size-mismatch.syntran', RC_ARRAY_SIZE_MISMATCH), &
+			diag_count_code(get_diags_file( &
+				P//'R21-for-array-size-mismatch.syntran', bytecode = .true.), &
+				RC_ARRAY_SIZE_MISMATCH) == 1, &
+			diag_count_code(get_diags_file( &
+				P//'R21-for-array-size-mismatch.syntran', bytecode = .false.), &
+				RC_ARRAY_SIZE_MISMATCH) == 1, &
+			! opposite direction (too many elements for the declared size),
+			! as an inline snippet under both backends since a file halts at
+			! its first runtime error
+			diag_has_code(get_diags( &
+				'let n = 3; for i in [1,2,3,4,5; n,1] {}', bytecode = .true.), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'let n = 3; for i in [1,2,3,4,5; n,1] {}', bytecode = .false.), &
+				RC_ARRAY_SIZE_MISMATCH), &
 
 			! R23-R27: step-is-0 family (for loop, range/array literal, slice
 			! subscript), each for both an integer and float variant where

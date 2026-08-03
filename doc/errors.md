@@ -930,7 +930,7 @@ An unrecognized subscript kind was encountered while evaluating a name expressio
 
 ### R21 -- array-size-mismatch
 
-An explicitly-shaped array literal's element count doesn't match its declared size.
+An explicitly-shaped array literal's element count doesn't match its declared size. This also applies when a `for` loop iterates such a literal directly, without binding it to a variable first.
 
 ### R22 -- struct-array-slice
 

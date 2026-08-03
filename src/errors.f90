@@ -1920,6 +1920,34 @@ end function err_expl_array_size
 
 !===============================================================================
 
+function err_rt_expl_array_size(nelems, sizes) result(err)
+	! Runtime (R21) counterpart to err_expl_array_size()'s parse-time E102.
+	! Shared by eval_array_expr(), eval_for_statement(), and the bytecode
+	! VM's OP_FOR_SETUP (size_array case) so their messages can't drift apart
+	integer, intent(in) :: nelems
+	integer(kind = 8), intent(in) :: sizes(:)
+	character(len = :), allocatable :: err
+
+	integer :: i
+	integer(kind = 8) :: total
+	character(len = :), allocatable :: dims
+
+	dims  = ''
+	total = 1
+	do i = 1, size(sizes)
+		total = total * sizes(i)
+		if (i > 1) dims = dims//' x '
+		dims = dims//str(sizes(i))
+	end do
+
+	err = err_rt(RC_ARRAY_SIZE_MISMATCH, &
+		"explicit array has "//str(nelems)// &
+		" elements but declared size is "//dims//" = "//str(total))
+
+end function err_rt_expl_array_size
+
+!===============================================================================
+
 function err_bad_member_type(context, span, mem_name, struct_name, act_type, exp_type) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span

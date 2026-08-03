@@ -23,8 +23,7 @@ recursive module subroutine eval_for_statement(node, state, res)
 
 	integer :: i, rank, for_kind
 	integer(kind = 8) :: i8, len8
-
-	character(len = :), allocatable :: dims
+	integer(kind = 8), allocatable :: sizes(:)
 
 	type(array_t) :: array
 	type(value_t) :: lbound_, ubound_, itr, step, len_, tmp, str_
@@ -145,20 +144,17 @@ recursive module subroutine eval_for_statement(node, state, res)
 		case (size_array)
 
 			rank = size( node%array%size )
+			allocate(sizes(rank))
 			len8 = 1
-			dims = ''
 			do i = 1, rank
 				call syntax_eval(node%array%size(i), state, len_)
 				if (state%rt_halt) return
-				len8 = len8 * len_%to_i64()
-				if (i > 1) dims = dims//' x '
-				dims = dims//str(len_%to_i64())
+				sizes(i) = len_%to_i64()
+				len8 = len8 * sizes(i)
 			end do
 
 			if (size(node%array%elems) /= len8) then
-				call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
-					"explicit array has "//str(size(node%array%elems))// &
-					" elements but declared size is "//dims//" = "//str(len8)))
+				call rt_throw(state, err_rt_expl_array_size(size(node%array%elems), sizes))
 				return
 			end if
 
@@ -792,8 +788,6 @@ recursive module subroutine eval_array_expr(node, state, res)
 	real(kind = 4) :: f, fstep
 	real(kind = 8) :: f64, fstep64
 
-	character(len = :), allocatable :: dims
-
 	type(array_t) :: array
 	type(value_t) :: lbound_, ubound_, elem, &
 		step, len_, tmp
@@ -1191,15 +1185,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 		end do
 
 		if (size(node%elems) /= product(array%size)) then
-			dims = ''
-			do i = 1, array%rank
-				if (i > 1) dims = dims//' x '
-				dims = dims//str(array%size(i))
-			end do
-			call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
-				"explicit array has "//str(size(node%elems))// &
-				" elements but declared size is "//dims// &
-				" = "//str(product(array%size))))
+			call rt_throw(state, err_rt_expl_array_size(size(node%elems), array%size))
 			return
 		end if
 

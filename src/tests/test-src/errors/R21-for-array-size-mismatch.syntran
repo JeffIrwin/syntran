@@ -1,0 +1,15 @@
+// R21: array-size-mismatch (for-loop iterable form)
+// Same mismatch as R21-array-size-mismatch.syntran, but iterated directly by
+// a `for` loop instead of bound with `let` first.  This exercises a
+// different code path (OP_FOR_SETUP's size_array case in vm_exec.f90 /
+// eval_for_statement's size_array case in eval_control.f90) that used to
+// skip the element-count check entirely under the bytecode VM -- OP_FOR_NEXT
+// would then read past the end of the array literal's elements and crash
+// with a raw Fortran bounds-check abort instead of ever reaching this
+// diagnostic
+
+let n = 3;
+for i in [1, 2, 3, 4, 5; n, 2]
+{
+	println(i);
+}
