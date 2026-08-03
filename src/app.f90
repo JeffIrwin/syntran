@@ -306,7 +306,6 @@ function parse_args() result(args)
 
 		if (interactive) then
 			write(*,*) 'Usage:'
-			write(*,*) tab//'#tree to toggle tree display'
 			write(*,*) tab//'`exit(0);` or Ctrl+D to exit'
 			write(*,*)
 		end if
