@@ -212,6 +212,7 @@ set(LIB_SRC
 	${SRC_DIR}/parse_expr.f90
 	${SRC_DIR}/parse_fn.f90
 	${SRC_DIR}/parse_misc.f90
+	${SRC_DIR}/repl.f90
 	${SRC_DIR}/syntran.f90
 	${SRC_DIR}/types.f90
 	${SRC_DIR}/types_copy.f90

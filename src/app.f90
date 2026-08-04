@@ -306,12 +306,10 @@ function parse_args() result(args)
 
 		if (interactive) then
 			write(*,*) 'Usage:'
+			write(*,*) tab//'`#help` for interactive help'
 			write(*,*) tab//'`exit(0);` or Ctrl+D to exit'
 			write(*,*)
 		end if
-
-		! TODO: add an interactive #help directive for more in depth info.  -h help
-		! cmd arg already exists
 	end if
 
 	if (error .or. args%help) then

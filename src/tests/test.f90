@@ -3792,6 +3792,112 @@ end subroutine unit_test_repl_fns
 
 !===============================================================================
 
+subroutine unit_test_repl_directives(npass, nfail)
+
+	! The REPL-only `#`-directives added in src/repl.f90: #clear and #cancel
+	! semantics driven through the real REPL loop via interpret() (c.f.
+	! unit_test_repl_fns above for the same idiom), plus a direct check that
+	! intr_fn_names() (src/intr_fns.f90), which backs `#help fns`, actually
+	! sees the fn registry instead of some stale/empty copy of it.
+	!
+	! #tree, #hint and `#help` itself aren't pinned here: they only affect
+	! printed text (tree dump / hint prompt / help text), not interpret()'s
+	! return value, so they're covered by the pty test instead
+	! (src/tests/repl/help.exp)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'REPL directives'
+
+	logical, parameter :: quiet = .true.
+
+	logical, allocatable :: tests(:)
+
+	type(fns_t) :: fns
+	type(string_vector_t) :: fn_names
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	call declare_intr_fns(fns)
+	fn_names = intr_fn_names(fns)
+
+	tests = &
+		[   &
+			! #clear undeclares a previously-declared variable
+			interpret('let x = 5;'//line_feed// &
+				'#clear'//line_feed// &
+				'x;', quiet) == '', &
+			! #clear undeclares a previously-declared fn too
+			interpret('fn f(): i32 { return 1; }'//line_feed// &
+				'#clear'//line_feed// &
+				'f();', quiet) == '', &
+			! #clear doesn't wedge the REPL: a fresh declare-then-use after
+			! it works normally
+			interpret('let x = 5;'//line_feed// &
+				'#clear'//line_feed// &
+				'let y = 9;'//line_feed// &
+				'y;', quiet) == '9', &
+			! #cancel abandons a stuck multi-line statement (missing the fn
+			! body/closing brace) instead of requiring Ctrl+D.  The next
+			! statement parses as if the abandoned one was never typed
+			interpret('fn f(): i32 {'//line_feed// &
+				'#cancel'//line_feed// &
+				'42;', quiet) == '42', &
+			! #cancel doesn't corrupt the parser's fn-continuation state: a
+			! *different*, complete multi-line fn declared right after still
+			! works
+			interpret('fn f(): i32 {'//line_feed// &
+				'#cancel'//line_feed// &
+				'fn g(): i32'//line_feed// &
+				'{'//line_feed// &
+				'return 5;'//line_feed// &
+				'}'//line_feed// &
+				'g();', quiet) == '5', &
+			! intr_fn_names() sees the real registry (not empty, and not
+			! silently missing a plain name or an overloaded one)
+			fn_names%len_ > 0, &
+			has_name(fn_names, 'println'), &
+			has_name(fn_names, 'abs'), &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+contains
+
+	logical function has_name(vec, s) result(found)
+
+		! any(vec%v(1:n)%s == s) doesn't compile: an array section through
+		! an allocatable character component ("part reference with nonzero
+		! rank" and an ALLOCATABLE component to its right) isn't allowed, so
+		! this just loops instead
+
+		type(string_vector_t), intent(in) :: vec
+		character(len = *), intent(in) :: s
+
+		integer :: i
+
+		found = .false.
+		do i = 1, vec%len_
+			if (vec%v(i)%s == s) then
+				found = .true.
+				return
+			end if
+		end do
+
+	end function has_name
+
+end subroutine unit_test_repl_directives
+
+!===============================================================================
+
 subroutine unit_test_repl_structs(npass, nfail)
 
 	! User-defined structs and enums declared interactively, one REPL line at
@@ -7902,6 +8008,7 @@ subroutine unit_tests(iostat)
 	if (run_group('intr_fns')) call unit_test_intr_fns(npass, nfail)
 	if (run_group('fns')) call unit_test_fns(npass, nfail)
 	if (run_group('repl_fns')) call unit_test_repl_fns(npass, nfail)
+	if (run_group('repl_directives')) call unit_test_repl_directives(npass, nfail)
 	if (run_group('repl_structs')) call unit_test_repl_structs(npass, nfail)
 	if (run_group('linalg_fns')) call unit_test_linalg_fns(npass, nfail)
 	if (run_group('comp_ass')) call unit_test_comp_ass(npass, nfail)

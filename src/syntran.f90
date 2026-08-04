@@ -11,6 +11,7 @@ module syntran
 	use syntran__compile_m
 	use syntran__vm_m
 	use syntran__line_edit_m
+	use syntran__repl_m
 
 	implicit none
 
@@ -98,13 +99,14 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 	!********
 
-	character(len = :), allocatable :: line, src_file, source_text, prompt, &
-		prompt_color
+	character(len = :), allocatable :: line, chunk, src_file, source_text, &
+		prompt, prompt_color
 
 	integer, parameter :: iu = input_unit, ou = output_unit
-	integer :: io
+	integer :: io, dir_action
 
-	logical :: continue_, show_tree, interactive
+	logical :: continue_, show_tree, show_hint, interactive, saved_bytecode, &
+		saved_quiet
 	logical, parameter :: allow_cont = .true.
 
 	type(string_view_t) :: sv
@@ -123,6 +125,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	src_file = '<stdin>'
 	continue_ = .false.
 	show_tree = .false.
+	show_hint = .true.
 
 	! Only use interactive line editing (history, arrow keys) when reading a
 	! real terminal.  Piped stdin, `-c` strings, and file interpretation all
@@ -191,15 +194,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 			! Interpret multi-line strings one line at a time to mock the
 			! interpreter getting continued stdin lines.  If you know your whole
 			! string ahead of time, just use syntran_eval() instead
-			if (continue_) then
-				! Mirror the stdin branch below: if the previous line left a
-				! statement unfinished (e.g. a multi-line fn declaration),
-				! keep accumulating instead of restarting from just the next
-				! line
-				line = line//line_feed//sv%get_line(iostat = io)
-			else
-				line = sv%get_line(iostat = io)
-			end if
+			chunk = sv%get_line(iostat = io)
 
 		else
 
@@ -211,12 +206,10 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 				! compilation tree to append to the tree instead of appending
 				! characters.  This way seemed easier :shrug:
 
-				! TODO: add a directive option to hide expected char hint
-
 				! Bash uses `$` for the inital prompt and `>` for continued
 				! prompts.  So do we
 
-				if (compilation%first_expected == ";") then
+				if (show_hint .and. compilation%first_expected == ";") then
 
 					! Other chars could be hinted, e.g. unmatched parens, but it
 					! is generally noisy, less helpful, and should be more
@@ -226,55 +219,78 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 					! for users coming from python or similar languages
 
 					if (interactive) then
-						line = line//line_feed//read_line_interactive( &
+						chunk = read_line_interactive( &
 							'[Hint `'//compilation%first_expected//'`]> ', io, &
 							use_color = len(prompt_color) > 0)
 					else
 						write(ou, '(a)', advance = 'no') prompt_color// &
 							'[Hint `'//compilation%first_expected//'`]> '//color_reset
-						line = line//line_feed//read_line(iu, iostat = io)
+						chunk = read_line(iu, iostat = io)
 					end if
 
 				else
 					if (interactive) then
-						line = line//line_feed//read_line_interactive('> ', io, &
+						chunk = read_line_interactive('> ', io, &
 							use_color = len(prompt_color) > 0)
 					else
 						write(ou, '(a)', advance = 'no') prompt_color//'> '//color_reset
-						line = line//line_feed//read_line(iu, iostat = io)
+						chunk = read_line(iu, iostat = io)
 					end if
 				end if
 
 			else
 				if (interactive) then
-					line = read_line_interactive(lang_name//'$ ', io, &
+					chunk = read_line_interactive(lang_name//'$ ', io, &
 						use_color = len(prompt_color) > 0)
 				else
 					write(ou, '(a)', advance = 'no') prompt
-					line = read_line(iu, iostat = io)
+					chunk = read_line(iu, iostat = io)
 				end if
 			end if
 
 		end if
 
-		!print *, 'line = <', line, '>'
+		!print *, 'chunk = <', chunk, '>'
 		!print *, 'io = ', io
 
 		!! Echo input?
-		!write(ou, '(a)') line
+		!write(ou, '(a)') chunk
 
 		if (io == iostat_end) exit
 
-		! TODO:
-		!
-		! More directives:
-		!   - #help
-		!   - #reset or #clear to clear vars
-		!   - #hint to toggle hint
+		! Directives are matched against `chunk` (just what was read at this
+		! prompt), not the accumulated `line`, so they work both at a fresh
+		! `syntran$` prompt and mid-continuation -- e.g. `#cancel` can only
+		! abandon a stuck multi-line statement because of this
+		dir_action = repl_directive(chunk, state, show_tree, show_hint, ou)
 
-		if (line == '#tree') then
-			show_tree = .not. show_tree
+		if (dir_action == DIR_CANCEL) then
+			continue_ = .false.
 			cycle
+		end if
+
+		if (dir_action == DIR_CLEAR) then
+			! Tear down and reinitialize state_t, preserving what the REPL
+			! was started with.  Passing bytecode= explicitly avoids
+			! init_state() re-reading SYNTRAN_BACKEND and re-emitting its
+			! deprecation warning on every #clear
+			saved_bytecode = state%bytecode
+			saved_quiet    = state%quiet
+			call state_destroy(state)
+			call init_state(state, script_args, bytecode = saved_bytecode)
+			state%quiet = saved_quiet
+			continue_ = .false.
+			cycle
+		end if
+
+		if (dir_action == DIR_HANDLED) cycle
+
+		if (continue_) then
+			! Mirror the previous per-branch behavior: keep accumulating
+			! onto whatever the statement had so far
+			line = line//line_feed//chunk
+		else
+			line = chunk
 		end if
 
 		res_str = ' '

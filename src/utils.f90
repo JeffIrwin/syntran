@@ -490,7 +490,13 @@ function string_view_get_line(sv, iostat) result(line)
 	!print *, 'string_view_get_line'
 	!print *, 'pos, len = ', sv%pos, length
 
-	line = sv%s( sv%pos: sv%pos + length  - 1 )
+	! `length` is the 1-based position of the line_feed/carriage_return
+	! delimiter within sv%s(sv%pos:), so the line's content (excluding the
+	! delimiter, to match read_line()'s contract in this same module) ends
+	! one character before it, at sv%pos + length - 2.  sv%pos itself still
+	! advances by the full `length` so the next call starts just past the
+	! delimiter
+	line = sv%s( sv%pos: sv%pos + length  - 2 )
 	sv%pos = sv%pos + length
 
 	if (present(iostat)) iostat = io

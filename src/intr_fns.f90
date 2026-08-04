@@ -12,6 +12,22 @@ module syntran__intr_fns_m
 
 	implicit none
 
+	! Overloaded intrinsic fn base names, e.g. "dot" resolving to one of
+	! "0dot_i32", "0dot_f32", etc. per call-site arg types.  These base names
+	! are never themselves inserted as fns_t table keys (only their "0"-
+	! mangled variants are; c.f. resolve_overload() below and its call site
+	! at parse_fn.f90:932), so is_overloaded_intr() and intr_fn_names() below
+	! are the two places that need this list.  Kept as one parameter array so
+	! there is only one place to update when a new overload is added, instead
+	! of the select case this replaced needing to stay in sync by hand
+	character(len = 8), parameter :: OVERLOAD_NAMES(28) = &
+		[character(len = 8) :: &
+			"exp", "log", "log10", "log2", "sqrt", "abs", &
+			"cos", "sin", "tan", "cosd", "sind", "tand", &
+			"acos", "asin", "atan", "acosd", "asind", "atand", &
+			"min", "max", "i32", "i64", &
+			"sum", "minval", "maxval", "product", "norm2", "dot"]
+
 !===============================================================================
 
 contains
@@ -63,18 +79,63 @@ logical function is_overloaded_intr(fn_name)
 
 	character(len = *), intent(in) :: fn_name
 
-	select case (fn_name)
-	case ("exp", "log", "log10", "log2", "sqrt", "abs", &
-		"cos", "sin", "tan", "cosd", "sind", "tand", &
-		"acos", "asin", "atan", "acosd", "asind", "atand", &
-		"min", "max", "i32", "i64", &
-		"sum", "minval", "maxval", "product", "norm2", "dot")
-		is_overloaded_intr = .true.
-	case default
-		is_overloaded_intr = .false.
-	end select
+	is_overloaded_intr = any(OVERLOAD_NAMES == fn_name)
 
 end function is_overloaded_intr
+
+!===============================================================================
+
+function intr_fn_names(fns) result(names)
+
+	! Sorted, user-visible list of intrinsic fn names: the plain (unmangled)
+	! table keys plus the overloaded base names in OVERLOAD_NAMES above.  The
+	! overloaded base names are never table keys themselves (only their "0"-
+	! mangled per-type variants are), so they have to be added back in by
+	! hand instead of just filtering the table.  Used by the REPL's
+	! `#help fns` directive (src/repl.f90) so the list can't silently drift
+	! from the actual registry
+	!
+	! Mangled keys (e.g. "0abs_f32", "0abs_f32_arr", "0i32_sca") are dropped
+	! by the leading-"0" check.  Do not try to derive a user-facing name by
+	! stripping a type suffix off a mangled key instead -- the suffix shapes
+	! are inconsistent (trailing "_arr", "_sca", or nothing) and would have
+	! to duplicate OVERLOAD_NAMES's job anyway
+
+	type(fns_t), intent(in) :: fns
+	type(string_vector_t) :: names
+
+	!********
+
+	integer :: i, j
+	character(len = :), allocatable :: key, tmp
+
+	names = new_string_vector()
+
+	do i = 1, fns%capacity
+		if (.not. allocated(fns%table(i)%key)) cycle
+		key = fns%table(i)%key
+		if (key(1:1) == "0") cycle
+		call names%push(key)
+	end do
+
+	do i = 1, size(OVERLOAD_NAMES)
+		call names%push(trim(OVERLOAD_NAMES(i)))
+	end do
+
+	! Simple insertion sort.  names%len_ is at most ~55, so O(n^2) is fine
+	! and not worth pulling in a general-purpose sort for
+	do i = 2, names%len_
+		tmp = names%v(i)%s
+		j = i - 1
+		do while (j >= 1)
+			if (names%v(j)%s <= tmp) exit
+			names%v(j + 1)%s = names%v(j)%s
+			j = j - 1
+		end do
+		names%v(j + 1)%s = tmp
+	end do
+
+end function intr_fn_names
 
 !===============================================================================
 
