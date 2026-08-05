@@ -11,7 +11,10 @@ module syntran__test_core_m
 		eval_i32  => syntran_eval_i32, &
 		eval_i64  => syntran_eval_i64, &
 		eval_f32  => syntran_eval_f32, &
-		eval_f64  => syntran_eval_f64
+		eval_f64  => syntran_eval_f64, &
+		eval_bool => syntran_eval_bool, &
+		eval_str  => syntran_eval_str, &
+		eval_value => syntran_eval_value
 
 	use syntran__line_edit_m, only: bbcode_escape
 

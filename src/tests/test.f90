@@ -7513,6 +7513,87 @@ end subroutine unit_test_syntax_only
 
 !===============================================================================
 
+subroutine unit_test_eval_api(npass, nfail)
+
+	! Tests for the typed syntran_eval_*() wrappers (syntran.f90) and their
+	! shared front end syntran_eval_value(): the new eval_bool()/eval_str(),
+	! the uniform (quiet, io) tail now on every typed wrapper (previously
+	! only eval_f32()/eval_f64() had it), and the want_type mismatch check
+	! that replaces the old "read val%sca%<kind> without checking val%type"
+	! TODO
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'eval api'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	integer :: i32_mis, i64_mis, f32_mis, f64_mis, bool_mis, str_mis, bad_parse, &
+		i32_ok, arr_ok
+
+	type(value_t) :: val_i32, val_arr
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! New bool/str typed wrappers
+	!
+	! Type mismatches on every typed wrapper, plus a parse error and a
+	! success case, all reported through the new `io` out-arg
+	i32_mis = -1
+	i64_mis = -1
+	f32_mis = -1
+	f64_mis = -1
+	bool_mis = -1
+	str_mis  = -1
+	bad_parse = -1
+	i32_ok = -1
+	arr_ok = -1
+
+	call eval_value('42;', val_i32, quiet, io = i32_ok)
+	call eval_value('[1, 2, 3];', val_arr, quiet, io = arr_ok)
+
+	tests = &
+		[   &
+			! New bool/str typed wrappers
+			eval_bool('true;', quiet) .eqv. .true., &
+			eval_bool('false;', quiet) .eqv. .false., &
+			eval_bool('1 < 2;', quiet) .eqv. .true., &
+			eval_str('"hello";', quiet) == 'hello', &
+			eval_str('str(42);', quiet) == '42', &
+
+			! Type mismatches: `io` is exit_failure and the result defaults
+			! to 0/''/.false. rather than reading a garbage/unset sca field
+			eval_i32('1.5;', quiet, io = i32_mis) == 0, i32_mis == exit_failure, &
+			eval_i64('1.5;', quiet, io = i64_mis) == 0, i64_mis == exit_failure, &
+			eval_f32('1;', quiet, io = f32_mis) == 0, f32_mis == exit_failure, &
+			eval_f64('1;', quiet, io = f64_mis) == 0, f64_mis == exit_failure, &
+			eval_bool('1;', quiet, io = bool_mis) .eqv. .false., bool_mis == exit_failure, &
+			eval_str('42;', quiet, io = str_mis) == '', str_mis == exit_failure, &
+
+			! Parse error: io is exit_failure, same as syntran_eval()'s io
+			eval_i32('1 +;', quiet, io = bad_parse) == 0, bad_parse == exit_failure, &
+
+			! Success sets io == exit_success
+			eval_i32('42;', quiet, io = i32_ok) == 42, i32_ok == exit_success, &
+
+			! syntran_eval_value() escape hatch: raw value_t access for
+			! result types with no typed wrapper (here, an array)
+			i32_ok == exit_success, val_i32%type == i32_type, val_i32%sca%i32 == 42, &
+			arr_ok == exit_success, val_arr%type == array_type, &
+			val_arr%array%type == i32_type, val_arr%array%len_ == 3_8 &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_eval_api
+
+!===============================================================================
+
 subroutine unit_test_error_locations(npass, nfail)
 
 	! Companion to unit_test_error_codes() above.  That test only confirms the
@@ -7982,6 +8063,7 @@ subroutine unit_tests(iostat)
 	if (run_group('error_codes')) call unit_test_error_codes(npass, nfail)
 	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
 	if (run_group('syntax_only')) call unit_test_syntax_only(npass, nfail)
+	if (run_group('eval_api')) call unit_test_eval_api(npass, nfail)
 	if (run_group('error_locations')) call unit_test_error_locations(npass, nfail)
 	if (run_group('dir_unreadable_errors')) call unit_test_dir_unreadable_errors(npass, nfail)
 	if (run_group('assignment')) call unit_test_assignment(npass, nfail)
