@@ -6822,7 +6822,13 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('let a = 5; let b = a[0];'), EC_SCALAR_SUBSCRIPT), &
 			diag_count_code(get_diags('let a = 5; let b = a[0];'), EC_SCALAR_SUBSCRIPT) == 1, &
 			diag_has_code(get_diags( &
-				'let a = [1,2; 2,2]; let c = [a, a];'), EC_BAD_CAT_RANK), &
+				'let a = [0; 2,2]; let b = [1,2]; let c = [b, a];'), EC_BAD_CAT_RANK), &
+			diag_count_code(get_diags( &
+				'let a = [0; 2,2]; let b = [1,2]; let c = [b, a];'), EC_BAD_CAT_RANK) == 1, &
+			! first-operand site (parse_array.f90, before the comma loop) --
+			! separate code from the per-element check the row above hits
+			diag_count_code(get_diags( &
+				'let a = [0; 2,2]; let b = [1,2]; let c = [a, b];'), EC_BAD_CAT_RANK) == 1, &
 			diag_has_code(get_diags('fn f(): i32 { return 1.0; }'), EC_BAD_RET_TYPE), &
 			diag_has_code(get_diags( &
 				'fn f(x: i32): i32 { return x; } let a = f(1.0);'), EC_BAD_ARG_TYPE), &
@@ -7743,7 +7749,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_count_code(get_diags_file(P//'E39-scalar-subscript.syntran'), &
 				EC_SCALAR_SUBSCRIPT) == 1, &
 			diag_loc_ok(get_diags_file(P//'E40-bad-cat-rank.syntran'), &
-				EC_BAD_CAT_RANK, P//'E40-bad-cat-rank.syntran', 5, 13, 1), &
+				EC_BAD_CAT_RANK, P//'E40-bad-cat-rank.syntran', 6, 13, 1), &
+			diag_count_code(get_diags_file(P//'E40-bad-cat-rank.syntran'), &
+				EC_BAD_CAT_RANK) == 1, &
 			diag_loc_ok(get_diags_file(P//'E41-bad-ret-type.syntran'), &
 				EC_BAD_RET_TYPE, P//'E41-bad-ret-type.syntran', 6, 9, 3), &
 			diag_loc_ok(get_diags_file(P//'E42-bad-arg-type.syntran'), &
