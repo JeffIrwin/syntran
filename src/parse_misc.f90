@@ -47,6 +47,16 @@ module subroutine check_type_clash(parser, name, pos)
 	! whether `name` clashes with an already-declared enum or struct type
 	! name.  A name can't be both (E26/E27/E92 already forbid that), so enum
 	! vs struct here is just "which message to print", not an ambiguity
+	!
+	! Only push in pass 0.  parser%enums/%structs (unlike the *_names
+	! bookkeeping vectors) are never cleared between passes, so by pass 1 they
+	! already hold every type declared anywhere in the file -- including ones
+	! that, in this pass's own source-order traversal, appear later than
+	! `name`.  Pushing unconditionally would make this fire at both
+	! declaration sites regardless of which one is textually first, instead
+	! of just the second one.  parse_unit() (parse_misc.f90) falls back to
+	! pass 0's diagnostics when pass 1 comes back clean, so gating here still
+	! reports the single correct diagnostic
 
 	class(parser_t) :: parser
 	character(len = *), intent(in) :: name
@@ -55,6 +65,8 @@ module subroutine check_type_clash(parser, name, pos)
 	!********
 
 	type(text_span_t) :: span
+
+	if (parser%ipass /= 0) return
 
 	if (parser%enums%exists(name)) then
 		span = new_span(pos, len(name))
@@ -103,6 +115,9 @@ module subroutine check_var_clash(parser, name, pos, type_kind)
 	! already-declared module-level variable.  Only `vars` is checked, not
 	! `locs`: struct/enum declarations are top-level, and `locs` may still
 	! hold stale entries from a previously parsed fn body
+	!
+	! Only push in pass 0 -- see the comment in check_type_clash() above;
+	! `parser%vars` has the same cross-pass leakage problem
 
 	class(parser_t) :: parser
 	character(len = *), intent(in) :: name
@@ -114,6 +129,8 @@ module subroutine check_var_clash(parser, name, pos, type_kind)
 	integer :: id_index, io
 	type(value_t) :: val
 	type(text_span_t) :: span
+
+	if (parser%ipass /= 0) return
 
 	call parser%vars%search(name, id_index, io, val)
 	if (io == 0) then
@@ -443,6 +460,11 @@ recursive module subroutine parse_unit(parser, unit)
 	type(syntax_token_t) :: dummy
 
 	integer :: i, pos0, num_vars0, num_fns0, num_structs0, num_enums0
+	integer :: ndiag_pre
+
+	! Pass-0 diagnostics, saved so they can be restored if pass 1 emits none
+	! (see the comment at the pass-1 fallback below)
+	type(string_vector_t) :: diags0
 
 	!print *, 'starting parse_unit()'
 
@@ -450,6 +472,11 @@ recursive module subroutine parse_unit(parser, unit)
 
 	! First pass
 	parser%ipass = 0
+
+	! Diagnostics that exist before either pass: lexer errors and #include
+	! preprocessor errors, both pushed by new_parser().  Pass 0's own output
+	! is everything above this index, and gets discarded before pass 1
+	ndiag_pre = parser%diagnostics%len_
 
 	members = new_syntax_node_vector()
 	i = 0
@@ -505,11 +532,28 @@ recursive module subroutine parse_unit(parser, unit)
 
 	!****************
 
-	! If any errors, skip second pass.  Although be careful to still do stuff at
-	! end of routine.  Otherwise users will get the same error message twice
-	! from the second pass, at least for simple errors.  Things like undefined
-	! fns won't be an error until the 2nd pass
-	if (parser%diagnostics%len_ == 0) then
+	! Pass 0 exists only to collect signatures, so its diagnostics are
+	! throwaway: pass 1 re-parses the same tokens and re-pushes anything that
+	! is still wrong, this time with fully resolved types.  Keeping both
+	! copies would print every simple error twice, which is why this used to
+	! skip pass 1 outright whenever pass 0 was non-empty -- but that let an
+	! error late in the file pre-empt an earlier one that only pass 1 can
+	! detect (e.g. E102 was invisible in a file with two ungated E40s later
+	! on, because the E40s aborted the pass that finds the E102).
+	!
+	! So: always run pass 1, and report pass 1's diagnostics instead.  A few
+	! diagnostic families (redeclaration, use-before-declaration) can only
+	! ever be raised in pass 0 -- see the fallback after the second loop
+	! below.
+	!
+	! Skip pass 1 only for an incomplete interactive line (a match() failure
+	! at eof).  syntax_parse() rolls that parse back and re-parses from
+	! scratch once the user types the rest, so a second pass buys nothing and
+	! pass 1 has never run on partial input before
+	diags0 = parser%diagnostics
+	parser%diagnostics%len_ = ndiag_pre
+
+	if (.not. parser%expecting) then
 
 		!print *, ""
 		!print *, ""
@@ -531,6 +575,12 @@ recursive module subroutine parse_unit(parser, unit)
 		! (parser%ipass > 0, c.f. parse_struct_declaration()/
 		! parse_enum_declaration() in parse_fn.f90), landing on the exact same
 		! id_index as pass 1 assigned it
+
+		! Pass 2 re-parses every `use` statement, so the duplicate-import
+		! record has to start empty again or every import would look like a
+		! duplicate (c.f. parse_use_statement() in parse_control.f90)
+		call parser%imported_modules%destroy()
+		call parser%imported_modules%init(16)
 
 		members = new_syntax_node_vector()
 		i = 0
@@ -578,7 +628,24 @@ recursive module subroutine parse_unit(parser, unit)
 
 		!right = parser%match(rbrace_token)
 
-	end if  ! no diagnostics from 1st pass
+	end if  ! not expecting more input
+
+	! A few diagnostics are structurally pass-0-only and pass 1 physically
+	! cannot re-emit them:
+	!
+	!   - the redeclaration family (E22/E24/E26/E92).  It is raised from the
+	!     iostat of a dict insert, and `overwrite` is .false. only in pass 0
+	!     -- pass 1 must overwrite, since the tables (unlike the counters)
+	!     still hold everything pass 0 inserted
+	!   - use-before-declaration, for the same reason: pass 0 already put the
+	!     later `let` in the vars dict, so pass 1 resolves it happily
+	!
+	! Restoring pass 0's list when pass 1 came back clean keeps the old
+	! behavior exactly for those, and guarantees a program pass 0 rejected is
+	! never silently accepted and evaluated
+	if (parser%diagnostics%len_ == ndiag_pre .and. diags0%len_ > ndiag_pre) then
+		parser%diagnostics = diags0
+	end if
 
 	!****************
 

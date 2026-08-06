@@ -129,8 +129,11 @@ recursive module subroutine parse_array_expr(parser, expr)
 		if (lbound_%val%type == array_type) then
 			! Only push in the final pass: in pass 0, a forward-referenced fn
 			! call's type may still be unresolved, which would falsely trip
-			! this check and (by making pass 0 non-empty) skip the pass that
-			! would resolve it correctly
+			! this check.  parse_unit() (parse_misc.f90) reports pass 1's
+			! diagnostics but falls back to pass 0's list when pass 1 comes
+			! back clean -- an ungated push here would leave a bogus pass-0
+			! diagnostic for that fallback to wrongly resurrect, rejecting a
+			! valid program
 			if (parser%ipass /= 0) then
 				span = new_span(lb_beg, lb_end - lb_beg + 1)
 				call parser%diagnostics%push(err_non_sca_val( &

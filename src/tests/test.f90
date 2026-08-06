@@ -6740,16 +6740,28 @@ subroutine unit_test_error_codes(npass, nfail)
 			.not. diag_has_code(get_diags( &
 				'fn f() { let x = 1; } let a = f();'), EC_NO_RETURN), &
 			diag_has_code(get_diags('let a = 1; let a = 2;'), EC_REDECLARE_VAR), &
+			! Detected only in the signature pass -- the dict insert there uses
+			! overwrite = .false.  parse_unit() (parse_misc.f90) restores that
+			! pass's diagnostics when the final pass comes back clean, since
+			! the final pass must overwrite and so never sees the collision
+			diag_count_code(get_diags('let a = 1; let a = 2;'), EC_REDECLARE_VAR) == 1, &
 			diag_has_code(get_diags('struct S{x:i32, x:i32}'), EC_REDECLARE_MEM), &
 			diag_has_code(get_diags('struct S{x:i32, fn x(){}}'), EC_MEMBER_METHOD_CLASH), &
 			diag_count_code(get_diags('struct S{x:i32, fn x(){}}'), EC_MEMBER_METHOD_CLASH) == 1, &
 			.not. diag_has_code(get_diags('struct S{x:i32, fn y(){}}'), EC_MEMBER_METHOD_CLASH), &
 			diag_has_code(get_diags( &
 				'fn f():i32{return 1;} fn f():i32{return 2;}'), EC_REDECLARE_FN), &
+			! same signature-pass-only reasoning as EC_REDECLARE_VAR above
+			diag_count_code(get_diags( &
+				'fn f():i32{return 1;} fn f():i32{return 2;}'), EC_REDECLARE_FN) == 1, &
 			diag_has_code(get_diags('fn min():i32{return 1;}'), EC_REDECLARE_INTR_FN), &
 			diag_has_code(get_diags('struct S{x:i32} struct S{y:i32}'), EC_REDECLARE_STRUCT), &
 			diag_has_code(get_diags('struct i32{x:i32}'), EC_REDECLARE_PRIMITIVE), &
 			diag_has_code(get_diags('let a = b;'), EC_UNDECLARE_VAR), &
+			! Use-before-declaration is also signature-pass-only: pass 0
+			! already inserted the later `let x` into the vars dict, so the
+			! final pass resolves `x` happily and never re-detects it
+			diag_has_code(get_diags('let y = x; let x = 1;'), EC_UNDECLARE_VAR), &
 			! A misspelled struct instantiator `Poimt{...}` is ambiguous with
 			! a plain identifier (c.f. `if my_bool {...}`), so it falls back
 			! to the undeclared-variable path.  With no close variable name in

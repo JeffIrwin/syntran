@@ -372,8 +372,9 @@ recursive module subroutine parse_use_statement(parser, statement)
 		return
 	end if
 
-	! Check for duplicate import (only in first pass to avoid flagging the same
-	! import twice when parse_unit does two passes)
+	! Check for duplicate import.  parser%imported_modules is reset at the
+	! start of each pass (parse_unit() in parse_misc.f90), so this check and
+	! the marking below behave identically in pass 0 and pass 1
 	!
 	! Ban importing the same module file multiple times regardless of alias or
 	! import style. This prevents confusing code and redundant parsing.
@@ -382,17 +383,15 @@ recursive module subroutine parse_use_statement(parser, statement)
 	!   - `use mymath; use mymath;`
 	!   - `use mymath as mm; use mymath as m;`
 	!   - `use mymath; use mymath::*;`
-	if (parser%ipass == 0) then
-		if (parser%imported_modules%contains(mod_filename)) then
-			span = new_span(mod_identifier%pos, len(mod_identifier%text))
-			call parser%diagnostics%push( &
-				err_duplicate_import(parser%context(), span, module_name))
-			return
-		end if
-
-		! Mark module file as imported
-		call parser%imported_modules%set(mod_filename, 1)
+	if (parser%imported_modules%contains(mod_filename)) then
+		span = new_span(mod_identifier%pos, len(mod_identifier%text))
+		call parser%diagnostics%push( &
+			err_duplicate_import(parser%context(), span, module_name))
+		return
 	end if
+
+	! Mark module file as imported
+	call parser%imported_modules%set(mod_filename, 1)
 
 	! Read the module file
 	mod_text = read_file(mod_filename, iostat)
@@ -451,8 +450,11 @@ recursive module subroutine parse_use_statement(parser, statement)
 	parser%num_structs = mod_parser%num_structs
 	parser%num_enums = mod_parser%num_enums
 
-	! Check for parsing errors in the module (only in first pass)
-	if (parser%ipass == 0 .and. mod_parser%diagnostics%len_ > 0) then
+	! Check for parsing errors in the module.  mod_parser runs its own
+	! independent pass-0/pass-1 pair (with its own pass-1 fallback), so
+	! mod_parser%diagnostics%len_ > 0 means the same thing on both of the
+	! parent's passes
+	if (mod_parser%diagnostics%len_ > 0) then
 		call parser%diagnostics%push( &
 			err_prefix // "failed to parse module `" // module_name // "`:" // color_reset)
 		do i = 1, mod_parser%diagnostics%len_
