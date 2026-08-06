@@ -345,7 +345,7 @@ An array length expression is not an integer.
 
 ### E55 -- bound-type-mismatch
 
-The lower and upper bounds of an array range have mismatched types.
+The bounds (and step, if given) of an array range have mismatched types, e.g. `[1: 2.0: 5]` or `[1: 2.0]`.
 
 [Example](../src/tests/test-src/errors/E55-bound-type-mismatch.syntran)
 
@@ -357,13 +357,13 @@ An array range bound is not a numeric type.
 
 ### E57 -- non-sca-val
 
-A value used to fill a uniform array (`[v; n]`) is not a scalar.
+A value used to fill a uniform (`[v; n]`) or explicitly-sized (`[e0, e1, ... ; n]`) array is not a scalar.
 
 [Example](../src/tests/test-src/errors/E57-non-sca-val.syntran)
 
 ### E58 -- non-int-range
 
-An array range bound is not an `i32` integer.
+An implicit unit-step range's bounds (`[lo: hi]`) are of a uniform but non-integer type.
 
 [Example](../src/tests/test-src/errors/E58-non-int-range.syntran)
 
@@ -628,6 +628,12 @@ A `file` handle's members are read-only; they can't be used as an assignment tar
 An explicitly-shaped array literal `[e0, e1, ... ; d0, d1, ...]` whose size list is all literal constants has an element count that doesn't match the declared size.  A non-literal (runtime-computed) size still falls through to R21 instead.
 
 [Example](../src/tests/test-src/errors/E102-expl-array-size.syntran)
+
+### E103 -- non-int-size
+
+A declared array-literal dimension size (`[v; d0, d1, ...]` or `[e0, e1, ... ; d0, d1, ...]`) is not an integer.
+
+[Example](../src/tests/test-src/errors/E103-non-int-size.syntran)
 
 ## Internal errors
 

@@ -734,7 +734,7 @@ end function get_binary_op_prec
 
 !===============================================================================
 
-module logical function is_num_type(type)
+elemental module logical function is_num_type(type)
 
 	integer, intent(in) :: type
 
@@ -744,7 +744,7 @@ end function is_num_type
 
 !===============================================================================
 
-module logical function is_int_type(type)
+elemental module logical function is_int_type(type)
 
 	integer, intent(in) :: type
 
@@ -754,7 +754,7 @@ end function is_int_type
 
 !===============================================================================
 
-module logical function is_float_type(type)
+elemental module logical function is_float_type(type)
 
 	integer, intent(in) :: type
 

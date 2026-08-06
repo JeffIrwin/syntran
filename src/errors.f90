@@ -118,6 +118,7 @@ module syntran__errors_m
 		EC_BAD_FILE_MEMBER = "E100", &
 		EC_READONLY_FILE_MEMBER = "E101", &
 		EC_EXPL_ARRAY_SIZE = "E102", &
+		EC_NON_INT_SIZE = "E103", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -397,6 +398,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_BAD_FILE_MEMBER)
 	call codes%push(EC_READONLY_FILE_MEMBER)
 	call codes%push(EC_EXPL_ARRAY_SIZE)
+	call codes%push(EC_NON_INT_SIZE)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1410,7 +1412,7 @@ end function err_scalar_subscript
 
 !===============================================================================
 
-function err_bad_cat_rank(context, span, rank_) &
+function err_bad_cat_rank(context, span, rank_, arr) &
 		result(err)
 
 	type(text_context_t) :: context
@@ -1419,8 +1421,10 @@ function err_bad_cat_rank(context, span, rank_) &
 
 	integer, intent(in) :: rank_
 
+	character(len = *), intent(in) :: arr
+
 	err = err_pre(EC_BAD_CAT_RANK) &
-		//"concatenated array of rank-"//str(rank_)//" is not rank-1" &
+		//"concatenated array `"//arr//"` of rank-"//str(rank_)//" is not rank-1" &
 		//underline(context, span)//" non-vector concatenation"//color_reset
 
 end function err_bad_cat_rank
@@ -1679,13 +1683,28 @@ end function err_non_int_len
 
 !===============================================================================
 
+function err_non_int_size(context, span, size) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: size
+	err = err_pre(EC_NON_INT_SIZE) &
+		//'size `'//size//'` of array dimension is not an integer' &
+		//underline(context, span) &
+		//" non-int size"//color_reset
+
+end function err_non_int_size
+
+!===============================================================================
+
 function err_bound_type_mismatch(context, span) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	err = err_pre(EC_BOUND_TYPE_MISMATCH) &
-		//'types of lower and upper range bounds do not match' &
+		//'types of array range bounds do not match' &
 		//underline(context, span) &
 		//" mismatched types"//color_reset
 
@@ -1712,15 +1731,15 @@ end function err_non_num_range
 
 !===============================================================================
 
-function err_non_sca_val(context, span, val) result(err)
+function err_non_sca_val(context, span, val, descriptor) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
-	character(len = *), intent(in) :: val
+	character(len = *), intent(in) :: val, descriptor
 
 	err = err_pre(EC_NON_SCA_VAL) &
-		//'value `'//val//'` of uniform array is not a scalar' &
+		//'value `'//val//'` of '//descriptor//' array is not a scalar' &
 		//underline(context, span) &
 		//" non-scalar array value"//color_reset
 
@@ -1735,9 +1754,9 @@ function err_non_int_range(context, span, range) result(err)
 
 	character(len = *), intent(in) :: range
 	err = err_pre(EC_NON_INT_RANGE) &
-		//'bound `'//range//'` of array range is not an i32 integer' &
+		//'bound `'//range//'` of array range is not an integer' &
 		//underline(context, span) &
-		//" non-i32 range"//color_reset
+		//" non-integer range"//color_reset
 
 end function err_non_int_range
 

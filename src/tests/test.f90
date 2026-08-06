@@ -6851,7 +6851,10 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('if 5 {}'), EC_NON_BOOL_CONDITION), &
 			diag_has_code(get_diags('let a = [0: 1.0; 5];'), EC_NON_FLOAT_LEN_RANGE), &
 			diag_has_code(get_diags('let a = [0.0: 1.0; "x"];'), EC_NON_INT_LEN), &
+			diag_has_code(get_diags('let a = [0; 2, 2.5];'), EC_NON_INT_SIZE), &
 			diag_has_code(get_diags('let a = [0: 1.0; 5];'), EC_BOUND_TYPE_MISMATCH), &
+			diag_has_code(get_diags('let a = [1: 2.0: 5];'), EC_BOUND_TYPE_MISMATCH), &
+			diag_has_code(get_diags('let a = [1: 2.0];'), EC_BOUND_TYPE_MISMATCH), &
 			diag_has_code(get_diags('let a = ["a": "z"];'), EC_NON_NUM_RANGE), &
 			diag_has_code(get_diags('let b=[1,2,3]; let a = [b; 5];'), EC_NON_SCA_VAL), &
 			diag_has_code(get_diags('let a = [1.0: 5.0];'), EC_NON_INT_RANGE), &
@@ -7191,6 +7194,15 @@ subroutine unit_test_error_codes(npass, nfail)
 				EC_EXPL_ARRAY_SIZE), &
 			diag_count_code(get_diags('for i in [1,2,3,4,5; 3,2] {}'), &
 				EC_EXPL_ARRAY_SIZE) == 1, &
+
+				! a non-integer array-literal dimension size (E103) is
+				! distinct from a non-integer range length (E54)
+				diag_count_code(get_diags('let a = [0; 2, 2.5];'), &
+					EC_NON_INT_SIZE) == 1, &
+				! non-numeric range bounds (E56) shouldn't also cascade into
+				! a redundant "not an integer" (E58) diagnostic
+				diag_count_code(get_diags('let a = ["a": "b"];'), &
+					EC_NON_INT_RANGE) == 0, &
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
@@ -7893,7 +7905,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E102-expl-array-size.syntran'), &
 				EC_EXPL_ARRAY_SIZE, P//'E102-expl-array-size.syntran', 9, 2, 4), &
 			diag_count_code(get_diags_file(P//'E102-expl-array-size.syntran'), &
-				EC_EXPL_ARRAY_SIZE) == 1 &
+				EC_EXPL_ARRAY_SIZE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E103-non-int-size.syntran'), &
+				EC_NON_INT_SIZE, P//'E103-non-int-size.syntran', 5, 8, 3), &
+			diag_count_code(get_diags_file(P//'E103-non-int-size.syntran'), &
+				EC_NON_INT_SIZE) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

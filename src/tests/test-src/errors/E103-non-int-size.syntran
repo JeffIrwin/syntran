@@ -1,0 +1,5 @@
+// E103: non-int-size
+// A declared array dimension size is not an integer
+
+let a = [
+	0; 2, 2.5];
