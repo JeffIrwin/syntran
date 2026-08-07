@@ -247,7 +247,6 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 	i = 0
 	do while (i < size(tokens_in))
 
-		! TODO: make a variation of parser%next() instead of manually increment i/pos?
 		i = i + 1
 		token = tokens_in(i)
 
@@ -276,19 +275,12 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			! not see them.
 			call parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0), lparen)
 
-			! Prepend with path to src_file
-			!
-			! TODO: maybe later add `-I` arg for include dirs, or an env var, or
-			! a global installed syntran "std" lib dir?  See also the
-			! fullpath/realpath fns in utils.f90
-
-			! TODO: if filename is already absolute, do not prepend with path
+			! Prepend with path to src_file, unless already absolute
 
 			!print *, 'get_dir(src_file) = ', get_dir(src_file)
 
 			i = i + 1
-			filename = get_dir(src_file)//tokens_in(i)%val%str%s  ! relative to src file
-			!filename = tokens_in(i)%val%str%s                    ! relative to runtime pwd
+			filename = resolve_path(get_dir(src_file), tokens_in(i)%val%str%s)
 
 			!print *, 'include filename = ', quote(filename)
 
@@ -328,18 +320,10 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			end do
 
 			! Push included diagnostics (from lexing) into parent parser
-			!
-			! TODO: append errors with extra context, like "in file included
-			! here (show includer line number and context)
 			call parser%diagnostics%push_all( inc_parser%diagnostics )
 
 			call parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0), rparen)
 			call parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0), semicolon)
-
-		!case (tree_keyword)
-		!! TODO: maybe do #tree work at eval time
-
-		! TODO: #pragma once or at least #ifndef/#def-style include guards
 
 		case default
 
@@ -456,10 +440,8 @@ recursive module subroutine parse_unit(parser, unit)
 	!********
 
 	type(syntax_node_vector_t) :: members
-	type(syntax_node_t)  :: stmt_tmp
-	type(syntax_token_t) :: dummy
 
-	integer :: i, pos0, num_vars0, num_fns0, num_structs0, num_enums0
+	integer :: i, num_vars0, num_fns0, num_structs0, num_enums0
 	integer :: ndiag_pre
 
 	! Pass-0 diagnostics, saved so they can be restored if pass 1 emits none
@@ -477,9 +459,6 @@ recursive module subroutine parse_unit(parser, unit)
 	! preprocessor errors, both pushed by new_parser().  Pass 0's own output
 	! is everything above this index, and gets discarded before pass 1
 	ndiag_pre = parser%diagnostics%len_
-
-	members = new_syntax_node_vector()
-	i = 0
 
 	!! Pushing scope breaks interactive interpretation, but we may want it later
 	!! for interpetting multiple files.  Another alternative would be chaining
@@ -500,33 +479,7 @@ recursive module subroutine parse_unit(parser, unit)
 	parser%struct_names = new_string_vector()
 	parser%enum_names = new_string_vector()
 
-	do while (parser%current_kind() /= eof_token)
-
-		!print *, "    parser pos = ", parser%pos
-
-		pos0 = parser%pos
-		i = i + 1
-		!print *, '    statement ', i
-
-		select case (parser%current_kind())
-		case (fn_keyword)
-			call parser%parse_fn_declaration(stmt_tmp)
-			call members%push_move(stmt_tmp)
-		case (struct_keyword)
-			call parser%parse_struct_declaration(stmt_tmp)
-			call members%push_move(stmt_tmp)
-		case (enum_keyword)
-			call parser%parse_enum_declaration(stmt_tmp)
-			call members%push_move(stmt_tmp)
-		case default
-			call parser%parse_statement(stmt_tmp)
-			call members%push_move(stmt_tmp)
-		end select
-
-		! Break infinite loops
-		if (parser%pos == pos0) call parser%next(dummy)
-
-	end do
+	call parse_unit_pass(parser, members)
 	!print *, "parser pos end = ", parser%pos
 	!print *, "num fns = ", parser%num_fns
 
@@ -582,45 +535,13 @@ recursive module subroutine parse_unit(parser, unit)
 		call parser%imported_modules%destroy()
 		call parser%imported_modules%init(16)
 
-		members = new_syntax_node_vector()
-		i = 0
-
 		!left  = parser%match(lbrace_token)
 
 		!call parser%vars%push_scope()
 		!call parser%locs%push_scope()
 
-		! TODO: dry?  Two passes are almost the same, but also there are only two of
-		! them
-
 		!print *, "parser pos beg = ", parser%pos
-		do while (parser%current_kind() /= eof_token)
-
-			!print *, "    parser pos = ", parser%pos
-
-			pos0 = parser%pos
-			i = i + 1
-			!print *, '    statement ', i
-
-			select case (parser%current_kind())
-			case (fn_keyword)
-				call parser%parse_fn_declaration(stmt_tmp)
-				call members%push_move(stmt_tmp)
-			case (struct_keyword)
-				call parser%parse_struct_declaration(stmt_tmp)
-				call members%push_move(stmt_tmp)
-			case (enum_keyword)
-				call parser%parse_enum_declaration(stmt_tmp)
-				call members%push_move(stmt_tmp)
-			case default
-				call parser%parse_statement(stmt_tmp)
-				call members%push_move(stmt_tmp)
-			end select
-
-			! Break infinite loops
-			if (parser%pos == pos0) call parser%next(dummy)
-
-		end do
+		call parse_unit_pass(parser, members)
 		!print *, "parser pos end = ", parser%pos
 
 		!call parser%vars%pop_scope()
@@ -661,6 +582,55 @@ recursive module subroutine parse_unit(parser, unit)
 	! lines with interactive interpretation
 
 end subroutine parse_unit
+
+!===============================================================================
+
+recursive subroutine parse_unit_pass(parser, members)
+
+	! The statement-parsing loop shared by both passes of parse_unit().  Not
+	! type-bound (no `module` prefix, no parse.f90 interface), since it is a
+	! private implementation detail of parse_unit() alone
+
+	class(parser_t) :: parser
+
+	type(syntax_node_vector_t), intent(out) :: members
+
+	!********
+
+	type(syntax_node_t)  :: stmt_tmp
+	type(syntax_token_t) :: dummy
+
+	integer :: pos0
+
+	members = new_syntax_node_vector()
+
+	do while (parser%current_kind() /= eof_token)
+
+		!print *, "    parser pos = ", parser%pos
+
+		pos0 = parser%pos
+
+		select case (parser%current_kind())
+		case (fn_keyword)
+			call parser%parse_fn_declaration(stmt_tmp)
+			call members%push_move(stmt_tmp)
+		case (struct_keyword)
+			call parser%parse_struct_declaration(stmt_tmp)
+			call members%push_move(stmt_tmp)
+		case (enum_keyword)
+			call parser%parse_enum_declaration(stmt_tmp)
+			call members%push_move(stmt_tmp)
+		case default
+			call parser%parse_statement(stmt_tmp)
+			call members%push_move(stmt_tmp)
+		end select
+
+		! Break infinite loops
+		if (parser%pos == pos0) call parser%next(dummy)
+
+	end do
+
+end subroutine parse_unit_pass
 
 !===============================================================================
 

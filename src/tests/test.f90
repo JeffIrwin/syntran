@@ -4245,10 +4245,30 @@ subroutine unit_test_include(npass, nfail)
 	! Path to syntran test files from root of repo
 	character(len = *), parameter :: path = 'src/tests/test-src/include/'
 
+	! Generated at runtime below, since a literal absolute path can't live in
+	! a repo-relative fixture
+	character(len = *), parameter :: gen_file = path//'test-05-abs-gen.syntran'
+
 	logical, parameter :: quiet = .true.
+	logical :: abs_ok
 	logical, allocatable :: tests(:)
 
+	integer :: iu
+
 	write(*,*) 'Unit testing '//label//' ...'
+
+	! Regression test for resolve_path() in preprocess() (src/parse_misc.f90):
+	! an absolute #include() target used to get the includer's directory
+	! wrongly prepended, since the includer here is not itself in the cwd
+	open(newunit = iu, file = gen_file, action = 'write', status = 'replace')
+	write(iu, '(a)') '#include("'//get_cwd()//'/'//path//'test-01-inc.syntran");'
+	write(iu, '(a)') 'return fn_inc();'
+	close(iu)
+
+	abs_ok = interpret_file(gen_file, quiet) == '2'
+
+	open(newunit = iu, file = gen_file, status = 'old')
+	close(iu, status = 'delete')
 
 	tests = &
 		[   &
@@ -4256,6 +4276,7 @@ subroutine unit_test_include(npass, nfail)
 			interpret_file(path//'test-02.syntran', quiet) == '0', &
 			interpret_file(path//'test-03.syntran', quiet) == '7', &
 			interpret_file(path//'test-04.syntran', quiet) == '7', &
+			abs_ok, &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

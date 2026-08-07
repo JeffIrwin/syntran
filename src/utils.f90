@@ -148,41 +148,22 @@ module syntran__utils_m
 
 	!********
 
-!	! I don't understand the magic of how these work, or if they work at all
-!	! for executables in the PATH env var or for shell aliases.  If so, it may
-!	! be useful if/when we want to have system standard include files loaded
-!	! relative to the syntran exe
-!
-!	interface
-!		! Ref: https://fortran-lang.discourse.group/t/getting-a-full-path-name/4137/12
-!#if defined _WIN32
-!        function fullpath_c(resolved_path, path, maxLength) result(ptr) bind(C, name="_fullpath")
-!           import :: c_ptr, c_char, c_int
-!           character(kind=c_char, len=1), intent(out) :: resolved_path(*)
-!           character(kind=c_char, len=1), intent(in) :: path(*)
-!           integer(c_int), value, intent(in) :: maxLength
-!           type(c_ptr) :: ptr
-!        end function
-!#else
-!        function realpath_c(path, resolved_path) result(ptr) bind(C, name="realpath")
-!           import :: c_ptr, c_char
-!           character(kind=c_char, len=1), intent(in) :: path(*)
-!           character(kind=c_char, len=1), intent(out) :: resolved_path(*)
-!           type(c_ptr) :: ptr
-!        end function
-!#endif
-!	end interface
-
-!===============================================================================
-
-	! C helper used by is_dir() below.  Implemented in src/c/isocline_wrap.c,
-	! which is linked into every syntran target (FPM and CMake)
+	! C helpers used by is_dir()/get_cwd() below.  Implemented in
+	! src/c/isocline_wrap.c, which is linked into every syntran target (FPM
+	! and CMake)
 	interface
 		function syntran_is_dir_c(path) bind(c, name = "syntran_is_dir") result(res)
 			import :: c_char, c_int
 			character(kind = c_char), intent(in) :: path(*)
 			integer(c_int) :: res
 		end function syntran_is_dir_c
+
+		function syntran_getcwd_c(buf, n) bind(c, name = "syntran_getcwd") result(res)
+			import :: c_char, c_int
+			character(kind = c_char), intent(out) :: buf(*)
+			integer(c_int), value, intent(in) :: n
+			integer(c_int) :: res
+		end function syntran_getcwd_c
 	end interface
 
 !===============================================================================
@@ -723,9 +704,6 @@ function get_dir(filename) result(dir)
 	character(len = :), allocatable :: path
 	integer :: beg_, end_, i
 
-	!! Return the absolute path dir
-	!path = fullpath(filename)
-
 	! Return relative path or absolute, whichever way input filename is given
 	path = filename
 
@@ -742,6 +720,39 @@ function get_dir(filename) result(dir)
 	!print *, 'beg_, end_ = ', beg_, end_
 
 end function get_dir
+
+!===============================================================================
+
+function get_cwd() result(cwd)
+
+	! Get the current working directory.  There is no standard Fortran
+	! intrinsic for this, so delegate to a getcwd()-based C helper (see
+	! syntran_getcwd() in src/c/isocline_wrap.c)
+
+	character(len = :), allocatable :: cwd
+
+	!********
+
+	character(kind = c_char, len = 1) :: buf(4096)
+
+	integer :: i, n
+
+	cwd = ''
+	if (syntran_getcwd_c(buf, size(buf)) /= 0) return
+
+	n = 0
+	do i = 1, size(buf)
+		if (buf(i) == c_null_char) exit
+		n = n + 1
+	end do
+
+	deallocate(cwd)
+	allocate(character(len = n) :: cwd)
+	do i = 1, n
+		cwd(i:i) = buf(i)
+	end do
+
+end function get_cwd
 
 !===============================================================================
 
