@@ -635,6 +635,12 @@ A declared array-literal dimension size (`[v; d0, d1, ...]` or `[e0, e1, ... ; d
 
 [Example](../src/tests/test-src/errors/E103-non-int-size.syntran)
 
+### E104 -- float-int-suffix
+
+An `'i32` or `'i64` type suffix was used on a numeric literal that's already shaped like a float (it has a decimal point or exponent), e.g. `4.0'i32`.
+
+[Example](../src/tests/test-src/errors/E104-float-int-suffix.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

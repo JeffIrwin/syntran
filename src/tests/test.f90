@@ -2135,6 +2135,13 @@ subroutine unit_test_literals(npass, nfail)
 			eval_i32("0x1__0000;") == 65536, &
 			eval_i32("0x1___0000;") == 65536, &
 			eval_i32("0x1____0_0__0___0;") == 65536, &
+			! Leading zeros beyond a fixed-width Z/O/B edit descriptor's
+			! field used to truncate the value to 0 silently.  c.f.
+			! rm_leading_zeros() in utils.f90
+			eval_i32("0x0000_0000_0000_0001;") == 1, &
+			eval_i32("0o0000_0000_0000_0000_0000_1;") == 1, &
+			eval_i32("0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0001;") == 1, &
+			eval_i64("0x0000_0000_ffff_ffff'i64;") == int(2, 8) ** 32 - 1, &
 			eval_i32("1_000_000;") == 1000000, &
 			eval_i32("1_234_567;") == 1234567, &
 			abs(eval_f64("1.234_567;") - 1.234567d0) < tol, &
@@ -6731,6 +6738,8 @@ subroutine unit_test_error_codes(npass, nfail)
 			.not. diag_has_text(get_diags( &
 				'fn f(x: i34): i32 { return 1; }'), 'did you mean'), &
 			diag_has_code(get_diags("1'foo;"), EC_BAD_TYPE_SUFFIX), &
+			diag_has_code(get_diags("4.0'i32;"), EC_FLOAT_INT_SUFFIX), &
+			diag_count_code(get_diags("4.0'i32;"), EC_FLOAT_INT_SUFFIX) == 1, &
 			diag_has_code(get_diags('$;'), EC_UNEXPECTED_CHAR), &
 			diag_has_code(get_diags('let a = ;'), EC_UNEXPECTED_TOKEN), &
 			diag_has_code(get_diags( &
@@ -7929,7 +7938,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E103-non-int-size.syntran'), &
 				EC_NON_INT_SIZE, P//'E103-non-int-size.syntran', 5, 8, 3), &
 			diag_count_code(get_diags_file(P//'E103-non-int-size.syntran'), &
-				EC_NON_INT_SIZE) == 1 &
+				EC_NON_INT_SIZE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E104-float-int-suffix.syntran'), &
+				EC_FLOAT_INT_SUFFIX, P//'E104-float-int-suffix.syntran', 8, 11, 7), &
+			diag_count_code(get_diags_file(P//'E104-float-int-suffix.syntran'), &
+				EC_FLOAT_INT_SUFFIX) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

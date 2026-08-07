@@ -119,6 +119,7 @@ module syntran__errors_m
 		EC_READONLY_FILE_MEMBER = "E101", &
 		EC_EXPL_ARRAY_SIZE = "E102", &
 		EC_NON_INT_SIZE = "E103", &
+		EC_FLOAT_INT_SUFFIX = "E104", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -399,6 +400,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_READONLY_FILE_MEMBER)
 	call codes%push(EC_EXPL_ARRAY_SIZE)
 	call codes%push(EC_NON_INT_SIZE)
+	call codes%push(EC_FLOAT_INT_SUFFIX)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -741,18 +743,42 @@ end function err_bad_type
 
 !===============================================================================
 
-function err_bad_type_suffix(context, span, type, literal_kind) result(err)
+function err_bad_type_suffix(context, span, type, literal_kind, allowed) result(err)
 	type(text_context_t) :: context
 	type(text_span_t), intent(in) :: span
 	character(len = :), allocatable :: err
 
 	character(len = *), intent(in) :: type, literal_kind
+	character(len = *), intent(in), optional :: allowed
+
 	err = err_pre(EC_BAD_TYPE_SUFFIX)//'bad literal type suffix `'//type//'` after ' &
 		//literal_kind//' literal' &
 		//underline(context, span) &
 		//' bad type suffix'//color_reset
 
+	if (present(allowed)) then
+		err = err//line_feed &
+			//fg_bright_green//"help"//color_reset &
+			//": valid suffixes after a "//literal_kind//" literal are " &
+			//allowed
+	end if
+
 end function err_bad_type_suffix
+
+!===============================================================================
+
+function err_float_int_suffix(context, span, type, num) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	character(len = *), intent(in) :: type, num
+	err = err_pre(EC_FLOAT_INT_SUFFIX)//'integer type suffix `'//type &
+		//'` on float literal `'//num//'`' &
+		//underline(context, span) &
+		//' float literal with int suffix'//color_reset
+
+end function err_float_int_suffix
 
 !===============================================================================
 

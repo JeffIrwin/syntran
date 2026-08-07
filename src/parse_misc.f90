@@ -689,6 +689,7 @@ recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
 		!print *, 'token%unit_ = ', token%unit_
 
 		if (token%kind /= whitespace_token .and. &
+		    token%kind /= comment_token   .and. &
 		    token%kind /= bad_token) then
 			call tokens%push(token)
 		end if

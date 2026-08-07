@@ -22,14 +22,13 @@ module syntran__lex_m
 
 		integer :: unit_  ! translation unit (src file) index for error diagnostic context
 
-		character(len = :), allocatable :: text
-
 		! Both the lexer and the parser have current() and lex()/next() member
 		! fns.  current_char() returns a char, while the others return syntax
 		! tokens
 		contains
-			procedure :: lex, peek => peek_char, current => current_char, &
-				lookahead => lookahead_char, read_single_line_comment, get_text
+			procedure :: lex => lex_wrap, peek => peek_char, &
+				current => current_char, lookahead => lookahead_char, &
+				read_single_line_comment, get_text
 
 	end type lexer_t
 
@@ -39,7 +38,7 @@ contains
 
 !===============================================================================
 
-subroutine lex(lexer, token)
+subroutine lex_impl(lexer, token)
 
 	class(lexer_t) :: lexer
 
@@ -66,13 +65,10 @@ subroutine lex(lexer, token)
 
 	!print *, 'lexer%unit_ = ', lexer%unit_
 
-	if (lexer%pos > len(lexer%text)) then
+	if (lexer%pos > len(lexer%context%text)) then
 
 		call new_token(token, eof_token, lexer%pos, null_char)
 
-		! TODO: it's kind of annoying to have to set unit_ before every return.
-		! It might be better to modify all the new_*_token() fns
-		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -91,42 +87,11 @@ subroutine lex(lexer, token)
 		end do
 		end_ = lexer%pos
 
-		type = unknown_type
-		if (lexer%current() == "'") then
-			lexer%pos = lexer%pos + 1
-			!print *, "suffix"
+		call lex_type_suffix(lexer, "hex", .false., type, suffix, &
+			suffix_start, suffix_end)
 
-			! Lex literal type suffix
-			suffix_start = lexer%pos
-			do while (is_alphanum_under(lexer%current()))
-				lexer%pos = lexer%pos + 1
-			end do
-			suffix_end = lexer%pos
-
-			suffix = lexer%text(suffix_start: suffix_end-1)
-
-			! TODO: call lookup_type() on suffix? It would eliminate the magic
-			! strings like "i32" which are duplicated here, but we would still
-			! need a select/case here to block bad types (e.g. "f32")
-			select case (suffix)
-			case ("i32")
-				!print *, "i32"
-				type = i32_type
-			case ("i64")
-				type = i64_type
-			case default
-				! TODO: maybe hint in diag about which suffixes *are* allowed?
-				! Might want entirely different diag fns for hex vs dec instead
-				! of passing "hex" str arg
-				span = new_span(suffix_start, suffix_end - suffix_start)
-				call lexer%diagnostics%push(err_bad_type_suffix( &
-					lexer%context, span, suffix, "hex"))
-			end select
-
-		end if
-
-		text = lexer%text(start: end_ - 1)
-		text_strip = rm_char(text(3:), "_")
+		text = lexer%context%text(start: end_ - 1)
+		text_strip = rm_leading_zeros(rm_char(text(3:), "_"))
 
 		if (type == i32_type) then
 
@@ -181,7 +146,6 @@ subroutine lex(lexer, token)
 			end if
 		end if
 
-		token%unit_ = lexer%unit_
 		return
 	end if  ! "0x"
 
@@ -197,46 +161,15 @@ subroutine lex(lexer, token)
 		end do
 		end_ = lexer%pos
 
-		type = unknown_type
-		if (lexer%current() == "'") then
-			lexer%pos = lexer%pos + 1
-			!print *, "suffix"
+		call lex_type_suffix(lexer, "octal", .false., type, suffix, &
+			suffix_start, suffix_end)
 
-			! Lex literal type suffix
-			suffix_start = lexer%pos
-			do while (is_alphanum_under(lexer%current()))
-				lexer%pos = lexer%pos + 1
-			end do
-			suffix_end = lexer%pos
-
-			suffix = lexer%text(suffix_start: suffix_end-1)
-
-			! TODO: call lookup_type() on suffix? It would eliminate the magic
-			! strings like "i32" which are duplicated here, but we would still
-			! need a select/case here to block bad types (e.g. "f32")
-			select case (suffix)
-			case ("i32")
-				!print *, "i32"
-				type = i32_type
-			case ("i64")
-				type = i64_type
-			case default
-				! TODO: maybe hint in diag about which suffixes *are* allowed?
-				! Might want entirely different diag fns for oct vs dec instead
-				! of passing "oct" str arg
-				span = new_span(suffix_start, suffix_end - suffix_start)
-				call lexer%diagnostics%push(err_bad_type_suffix( &
-					lexer%context, span, suffix, "octal"))
-			end select
-
-		end if
-
-		text = lexer%text(start: end_ - 1)
-		text_strip = rm_char(text(3:), "_")
+		text = lexer%context%text(start: end_ - 1)
+		text_strip = rm_leading_zeros(rm_char(text(3:), "_"))
 
 		if (type == i32_type) then
 
-			read(text_strip, "(o20)", iostat = io) i32
+			read(text_strip, "(o15)", iostat = io) i32
 			if (io == exit_success) then
 				val   = new_literal_value(i32_type, i32 = i32)
 				call new_token(token, i32_token, start, text, val)
@@ -249,7 +182,7 @@ subroutine lex(lexer, token)
 
 		else if (type == i64_type) then
 
-			read(text_strip, "(o36)", iostat = io) i64
+			read(text_strip, "(o26)", iostat = io) i64
 			if (io == exit_success) then
 				val   = new_literal_value(i64_type, i64 = i64)
 				call new_token(token, i64_token, start, text, val)
@@ -262,13 +195,8 @@ subroutine lex(lexer, token)
 
 		else
 
-			! 16 chars should be sufficient. pad by an extra 4 for safety
-			!
-			! TODO: these octal text widths are padded too generously.
-			! "(z8)" is the max for hex, but it's actually less then double that
-			! width for octal.  See the test on 0o377_7777_7777 which is -1 in
-			! octal, which is only 11 chars
-			read(text_strip, "(o20)", iostat = io) i32
+			! An i32 has at most 11 octal digits (0o37777777777 == -1); pad by 4
+			read(text_strip, "(o15)", iostat = io) i32
 			if (io == exit_success) then
 
 				val   = new_literal_value(i32_type, i32 = i32)
@@ -276,7 +204,8 @@ subroutine lex(lexer, token)
 
 			else
 
-				read(text_strip, "(o36)", iostat = io) i64  ! 32 chars should suffice
+				! An i64 has at most 22 octal digits; pad by 4
+				read(text_strip, "(o26)", iostat = io) i64
 				if (io == exit_success) then
 
 					val   = new_literal_value(i64_type, i64 = i64)
@@ -291,7 +220,6 @@ subroutine lex(lexer, token)
 			end if
 		end if
 
-		token%unit_ = lexer%unit_
 		return
 	end if  ! "0o"
 
@@ -307,42 +235,11 @@ subroutine lex(lexer, token)
 		end do
 		end_ = lexer%pos
 
-		type = unknown_type
-		if (lexer%current() == "'") then
-			lexer%pos = lexer%pos + 1
-			!print *, "suffix"
+		call lex_type_suffix(lexer, "binary", .false., type, suffix, &
+			suffix_start, suffix_end)
 
-			! Lex literal type suffix
-			suffix_start = lexer%pos
-			do while (is_alphanum_under(lexer%current()))
-				lexer%pos = lexer%pos + 1
-			end do
-			suffix_end = lexer%pos
-
-			suffix = lexer%text(suffix_start: suffix_end-1)
-
-			! TODO: call lookup_type() on suffix? It would eliminate the magic
-			! strings like "i32" which are duplicated here, but we would still
-			! need a select/case here to block bad types (e.g. "f32")
-			select case (suffix)
-			case ("i32")
-				!print *, "i32"
-				type = i32_type
-			case ("i64")
-				type = i64_type
-			case default
-				! TODO: maybe hint in diag about which suffixes *are* allowed?
-				! Might want entirely different diag fns for bin vs dec instead
-				! of passing "bin" str arg
-				span = new_span(suffix_start, suffix_end - suffix_start)
-				call lexer%diagnostics%push(err_bad_type_suffix( &
-					lexer%context, span, suffix, "binary"))
-			end select
-
-		end if
-
-		text = lexer%text(start: end_ - 1)
-		text_strip = rm_char(text(3:), "_")
+		text = lexer%context%text(start: end_ - 1)
+		text_strip = rm_leading_zeros(rm_char(text(3:), "_"))
 
 		if (type == i32_type) then
 
@@ -396,7 +293,6 @@ subroutine lex(lexer, token)
 			end if
 		end if
 
-		token%unit_ = lexer%unit_
 		return
 	end if  ! "0b"
 
@@ -429,40 +325,23 @@ subroutine lex(lexer, token)
 		end if
 
 		! Preferred apostrophe type suffix
-		type = unknown_type
-		if (lexer%current() == "'") then
-			lexer%pos = lexer%pos + 1
-			!print *, "suffix"
+		call lex_type_suffix(lexer, "decimal", .true., type, suffix, &
+			suffix_start, suffix_end)
 
-			! Lex literal type suffix
-			suffix_start = lexer%pos
-			do while (is_alphanum_under(lexer%current()))
-				lexer%pos = lexer%pos + 1
-			end do
-			suffix_end = lexer%pos
-
-			suffix = lexer%text(suffix_start: suffix_end-1)
-			select case (suffix)
-			case ("f32")
-				type = f32_type
-			case ("f64")
-				type = f64_type
-			case ("i32")
-				type = i32_type
-			case ("i64")
-				type = i64_type
-			case default
-				span = new_span(suffix_start, suffix_end - suffix_start)
-				call lexer%diagnostics%push(err_bad_type_suffix( &
-					lexer%context, span, suffix, "decimal"))
-			end select
-
-			! TODO: throw new diag if float and i32 or i64? Currently, `4.0'i32`
-			! throws err_bad_i32() which isn't exactly the right message
-
+		if (float .and. (type == i32_type .or. type == i64_type)) then
+			! An integer suffix on a literal that's already shaped like a float
+			! (has a `.` or exponent) is a different mistake than an out-of-range
+			! integer, so it gets its own diagnostic instead of falling through
+			! to err_bad_i32()/err_bad_i64() below
+			text = lexer%context%text(start: suffix_end - 1)
+			call new_token(token, bad_token, lexer%pos, text)
+			span = new_span(start, len(text))
+			call lexer%diagnostics%push(err_float_int_suffix( &
+				lexer%context, span, suffix, lexer%context%text(start: end_ - 1)))
+			return
 		end if
 
-		text = lexer%text(start: end_ - 1)
+		text = lexer%context%text(start: end_ - 1)
 		text_strip = rm_char(text, "_")
 
 		!print *, 'float text = ', quote(text)
@@ -506,7 +385,6 @@ subroutine lex(lexer, token)
 				else
 					call new_token(token, bad_token, lexer%pos, text)
 					span = new_span(start, len(text))
-					! TODO: specific i32/i64 diags
 					call lexer%diagnostics%push(err_bad_i32( &
 						lexer%context, span, text))
 				end if
@@ -526,7 +404,6 @@ subroutine lex(lexer, token)
 
 			end select
 
-			token%unit_ = lexer%unit_
 			return
 		end if
 
@@ -590,7 +467,6 @@ subroutine lex(lexer, token)
 			end if
 		end if
 
-		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -614,7 +490,7 @@ subroutine lex(lexer, token)
 			terminated = .false.
 			do
 
-				if (lexer%pos > len(lexer%text)) exit
+				if (lexer%pos > len(lexer%context%text)) exit
 
 				if (lexer%current() == '"') then
 					! Check whether the next n_hashes chars are all '#'
@@ -637,7 +513,7 @@ subroutine lex(lexer, token)
 
 			end do
 
-			text = lexer%text(start: lexer%pos-1)
+			text = lexer%context%text(start: lexer%pos-1)
 
 			if (.not. terminated) then
 				call new_token(token, bad_token, lexer%pos, text)
@@ -645,14 +521,12 @@ subroutine lex(lexer, token)
 				call lexer%diagnostics%push( &
 					err_unterminated_raw_str(lexer%context, &
 					span, text))
-				token%unit_ = lexer%unit_
 				return
 			end if
 
 			val   = new_literal_value(str_type, str_ = char_vec%v( 1: char_vec%len_ ))
 			call new_token(token, str_token, start, text, val)
 
-			token%unit_ = lexer%unit_
 			return
 
 		end if
@@ -678,26 +552,24 @@ subroutine lex(lexer, token)
 			call char_vec%push(lexer%current())
 			lexer%pos = lexer%pos + 1
 
-			if (lexer%pos > len(lexer%text)) exit
+			if (lexer%pos > len(lexer%context%text)) exit
 
 		end do
 
-		text  = lexer%text(start: lexer%pos-1)
+		text  = lexer%context%text(start: lexer%pos-1)
 
-		if (lexer%pos > len(lexer%text)) then
+		if (lexer%pos > len(lexer%context%text)) then
 			call new_token(token, bad_token, lexer%pos, text)
 			span = new_span(start, len(text))
 			call lexer%diagnostics%push( &
 				err_unterminated_str(lexer%context, &
 				span, text))
-			token%unit_ = lexer%unit_
 			return
 		end if
 
 		val   = new_literal_value(str_type, str_ = char_vec%v( 1: char_vec%len_ ))
 		call new_token(token, str_token, start, text, val)
 
-		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -707,10 +579,9 @@ subroutine lex(lexer, token)
 		do while (is_whitespace(lexer%current()))
 			lexer%pos = lexer%pos + 1
 		end do
-		text = lexer%text(start: lexer%pos-1)
+		text = lexer%context%text(start: lexer%pos-1)
 
 		call new_token(token, whitespace_token, start, text)
-		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -720,7 +591,7 @@ subroutine lex(lexer, token)
 		do while (is_alphanum(lexer%current()) .or. lexer%current() == '_')
 			lexer%pos = lexer%pos + 1
 		end do
-		text = lexer%text(start: lexer%pos-1)
+		text = lexer%context%text(start: lexer%pos-1)
 
 		! This block handles booleans as well as identifiers, but note that it
 		! does not set the value here like the is_digit_under() case for numbers
@@ -728,7 +599,6 @@ subroutine lex(lexer, token)
 
 		kind = get_keyword_kind(text)
 		call new_token(token, kind, start, text)
-		token%unit_ = lexer%unit_
 		return
 
 	end if
@@ -740,9 +610,8 @@ subroutine lex(lexer, token)
 		! ignore the rest of the first line
 		call lexer%read_single_line_comment()
 
-		text = lexer%text(start: lexer%pos-1)
-		call new_token(token, whitespace_token, start, text)
-		token%unit_ = lexer%unit_
+		text = lexer%context%text(start: lexer%pos-1)
+		call new_token(token, comment_token, start, text)
 		return
 
 	end if
@@ -756,8 +625,6 @@ subroutine lex(lexer, token)
 			else
 				call new_token(token, plus_token, lexer%pos, lexer%current())
 			end if
-
-			! FIXME: prefix/postfix inc/dec operators (++, --)
 
 		case ("-")
 			if (lexer%lookahead() == "=") then
@@ -796,10 +663,8 @@ subroutine lex(lexer, token)
 
 				call lexer%read_single_line_comment()
 
-				! FIXME: make "trivia" token types instead of overloading
-				! whitespace_token for comments.  This is what Immo did
-				text = lexer%text(start: lexer%pos-1)
-				call new_token(token, whitespace_token, start, text)
+				text = lexer%context%text(start: lexer%pos-1)
+				call new_token(token, comment_token, start, text)
 
 			else if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
@@ -945,7 +810,6 @@ subroutine lex(lexer, token)
 				span, lexer%current()))
 
 	end select
-	token%unit_ = lexer%unit_
 
 	lexer%pos = lexer%pos + 1
 
@@ -953,7 +817,88 @@ subroutine lex(lexer, token)
 	! rlwrap in syntran <= 1.3 and there used to be a lengthy comment here about
 	! it
 
-end subroutine lex
+end subroutine lex_impl
+
+!===============================================================================
+
+subroutine lex_wrap(lexer, token)
+
+	! Thin wrapper so every return path inside lex_impl() doesn't need its own
+	! `token%unit_ = lexer%unit_` assignment
+
+	class(lexer_t) :: lexer
+	type(syntax_token_t), intent(out) :: token
+
+	call lex_impl(lexer, token)
+	token%unit_ = lexer%unit_
+
+end subroutine lex_wrap
+
+!===============================================================================
+
+subroutine lex_type_suffix(lexer, radix_name, allow_float, type, suffix, &
+		suffix_start, suffix_end)
+
+	! Lex an optional apostrophe type-ascription suffix, e.g. `'i32` in
+	! `0x1'i32` or `1.0'f64`.  Pushes err_bad_type_suffix() if the suffix
+	! text isn't a recognized type, or isn't one of the types allowed for
+	! this literal's radix (allow_float is .false. for hex/octal/binary,
+	! which only accept `i32`/`i64`)
+
+	class(lexer_t) :: lexer
+
+	character(len = *), intent(in) :: radix_name
+	logical, intent(in) :: allow_float
+
+	integer, intent(out) :: type, suffix_start, suffix_end
+	character(len = :), allocatable, intent(out) :: suffix
+
+	!********
+
+	character(len = :), allocatable :: allowed
+	type(text_span_t) :: span
+
+	type = unknown_type
+	suffix = ""
+
+	if (lexer%current() /= "'") then
+		suffix_start = lexer%pos
+		suffix_end   = lexer%pos
+		return
+	end if
+	lexer%pos = lexer%pos + 1
+
+	suffix_start = lexer%pos
+	do while (is_alphanum_under(lexer%current()))
+		lexer%pos = lexer%pos + 1
+	end do
+	suffix_end = lexer%pos
+
+	suffix = lexer%context%text(suffix_start: suffix_end-1)
+
+	select case (suffix)
+	case ("i32")
+		type = i32_type
+	case ("i64")
+		type = i64_type
+	case ("f32")
+		if (allow_float) type = f32_type
+	case ("f64")
+		if (allow_float) type = f64_type
+	end select
+
+	if (type == unknown_type) then
+		if (allow_float) then
+			allowed = "`f32`, `f64`, `i32`, `i64`"
+		else
+			allowed = "`i32`, `i64`"
+		end if
+		span = new_span(suffix_start, suffix_end - suffix_start)
+		call lexer%diagnostics%push(err_bad_type_suffix( &
+			lexer%context, span, suffix, radix_name, allowed))
+	end if
+
+end subroutine lex_type_suffix
 
 !===============================================================================
 
@@ -969,12 +914,12 @@ character function peek_char(lexer, offset)
 
 	pos = lexer%pos + offset
 
-	if (pos < 1 .or. pos > len(lexer%text)) then
+	if (pos < 1 .or. pos > len(lexer%context%text)) then
 		peek_char = null_char
 		return
 	end if
 
-	peek_char = lexer%text(pos: pos)
+	peek_char = lexer%context%text(pos: pos)
 
 end function peek_char
 
@@ -988,9 +933,9 @@ function get_text(lexer, start, end_) result(text)
 	integer, intent(in) :: start, end_
 	character(len = :), allocatable :: text
 
-	text = lexer%text( &
+	text = lexer%context%text( &
 		max(lexer%pos + start   , 1) : &
-		min(lexer%pos + end_ - 1, len(lexer%text)) &
+		min(lexer%pos + end_ - 1, len(lexer%context%text)) &
 	)
 
 	!print *, "text = """, text, """"
@@ -1058,7 +1003,6 @@ function new_lexer(text, src_file, unit_) result(lexer)
 
 	!print *, 'lexer%unit_ = ', lexer%unit_
 
-	lexer%text     = text
 	lexer%pos      = 1
 
 	lexer%diagnostics = new_string_vector()
@@ -1123,8 +1067,6 @@ function new_lexer(text, src_file, unit_) result(lexer)
 		end do
 	end if
 
-	! TODO: delete lexer%text in favor of lexer%context%text.  It appears in
-	! a lot of places
 	lexer%context = new_context(text, src_file, lines)
 
 end function new_lexer

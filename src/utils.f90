@@ -1006,6 +1006,33 @@ end function rm_char
 
 !===============================================================================
 
+function rm_leading_zeros(str_) result(str_out)
+
+	! Strip leading '0' characters from str_.  Used on BOZ literal digit
+	! strings (after underscores have already been removed by rm_char())
+	! so a fixed-width Z/O/B edit descriptor isn't fed more digits than it
+	! can hold by zeros that don't affect the value.  Returns "0" rather
+	! than "" if str_ is empty or all zeros, so there's still a digit for
+	! the edit descriptor to read
+
+	character(len = *), intent(in) :: str_
+
+	character(len = :), allocatable :: str_out
+
+	!********
+
+	integer :: i
+
+	i = 1
+	do while (i < len(str_) .and. str_(i:i) == "0")
+		i = i + 1
+	end do
+	str_out = str_(i:)
+
+end function rm_leading_zeros
+
+!===============================================================================
+
 function replace_all(str_, old, new) result(str_out)
 
 	! Replace all occurrences of substring `old` with `new` in `str_`
