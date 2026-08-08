@@ -367,8 +367,9 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	fn_call%val = fn%type
 	if (has_rank) then
 		! The line above overwrites the rank for overloaded intrinsics like
-		! i32() and i64().  TODO: cover a low-res version of logo.syntran in a
-		! unit test
+		! i32() and i64().  Covered by nd-i32/logo-lowres.syntran (a low-res
+		! port of samples/logo.syntran), which assigns a 2-D array slice from
+		! i32() applied to an f32/f64 array expression
 		if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
 		fn_call%val%array%rank = rank
 
@@ -398,17 +399,12 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 		!print *, 'assigning fn node'
 
-		! If I understand my own code, this is inlining:  every fn
-		! call gets its own copy of the fn body.  This expansion
-		! happens at parse time, not eval time, so fn calls in
-		! a loop will all share one body
-
-		! TODO: could we do this with a pointer instead? I think
-		! copying is a waste of memory.  Also try to encapsulate
-		! both body and params into a wrapped type (fn_t?)
-
-		allocate(fn_call%body)
-		fn_call%body = fn%node%body
+		! fn_call%body is *not* set here.  The body is not copied per call
+		! site: fn_call carries id_index, and eval_fn_call()/compile_node()
+		! look the body up via state%fns%fns(id_index)%node%body /
+		! cs%fns%fns(id_index)%node%body instead.  Params and num_locs are
+		! still needed directly on fn_call, since eval_fn_call() reads them
+		! before it has a state to index into
 		fn_call%params = fn%node%params
 
 		fn_call%num_locs = fn%node%num_locs
@@ -417,11 +413,6 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		!print *, 'fn call params size = ', size(fn_call%params)
 
 	end if
-
-	! TODO: does fn need to be a syntax node member?  I think we can
-	! just look it up later by identifier/id_index like we do for
-	! variable value
-	!fn_call%fn = fn
 
 	!print *, 'fn params size = ', size(fn%params)
 	!print *, 'fn param names size = ', size(fn%param_names%v)
@@ -463,13 +454,11 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	allocate(param_val%array)
 	do i = 1, args%len_
 
-		! For variadic fns, check the argument type against the type
-		! of the last required parameter.  This may need to change,
-		! e.g. writeln(file) should write a blank line to a file,
-		! but writeln(file, string1, string2), where string* is not
-		! the same type as file?
-
-		! TODO: re-test min/max arg count/type checking
+		! For variadic fns, check each variadic argument's type against
+		! variadic_type.  writeln(file) writes a blank line, and
+		! writeln(file, string1, 1, 2.0, ...) is fine too since writeln's
+		! variadic_type is any_type; min/max instead set variadic_type to
+		! their own numeric type, so e.g. min(1, 2, "a") is rejected
 
 		! Construct a param val just for type checking.  I think this is the
 		! only way to do it for intrinsic fns, which don't actually have a val
@@ -710,9 +699,10 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	!print *, "parsing fn ", identifier%text
 
-	! TODO: be careful with parser%pos (token index) vs parser%current_pos()
-	! (character index) when constructing a span.  I probably have similar bugs
-	! throughout to the one that I just fixed here
+	! c.f. the parser%pos (token index) vs current_pos()/peek_pos() (char
+	! index) convention documented at their definitions in parse.f90 --
+	! audited the new_span() call sites in src/*.f90 and none of them build a
+	! span from parser%pos
 
 	!print *, 'matching lparen'
 
@@ -845,7 +835,7 @@ module subroutine parse_fn_declaration(parser, decl)
 		call parser%match(colon_token, colon)
 		call parser%parse_type(type_text, type)
 
-		! TODO: ban &references as return types
+		! `&` as a return type is rejected inside parse_type() (E105)
 
 		fn%type = type
 	end if
@@ -2026,10 +2016,11 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 		pos0 = parser%pos
 
-		! TODO: allow "anonymous" members where the name (and type) is implied
-		! by the order?  This is the way that structs are printed, so unless I
-		! change print str conversion is might be nice to allow print output to
-		! be pasted back into syntran source code.  Could be dangerous tho
+		! Members must be named (`x = expr`).  Positional init was considered
+		! and rejected: it silently breaks when a struct's member order
+		! changes, and print output still would not round-trip since str
+		! values print unquoted (c.f. the "print structs with member
+		! variable name labels" note in core.f90)
 
 		call parser%match(identifier_token, name)
 		call parser%match(equals_token, equals)
@@ -2160,7 +2151,7 @@ recursive module subroutine parse_type(parser, type_text, type)
 	character(len = :), allocatable :: cookie, suggest, param_type_text, ret_type_text
 
 	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
-		double_colon, fn_kw, lparen, rparen
+		double_colon, fn_kw, lparen, rparen, amp
 
 	type(text_span_t) :: span
 
@@ -2168,6 +2159,25 @@ recursive module subroutine parse_type(parser, type_text, type)
 	type(value_vector_t) :: param_types
 
 	pos1 = parser%current_pos()
+
+	if (parser%current_kind() == amp_token) then
+
+		! References are only valid on fn parameters, which consume their
+		! own leading `&` before calling parse_type() (c.f. parse_fn_call
+		! and parse_method_declaration above).  Any `&` reaching here is in
+		! a position that doesn't support references: return types, struct
+		! member types, fn-pointer param/return types
+		call parser%match(amp_token, amp)
+		if (parser%current_kind() == const_keyword) call parser%next(dummy)
+
+		span = new_span(amp%pos, parser%current_pos() - amp%pos)
+		call parser%diagnostics%push(err_ref_type(parser%context(), span))
+
+		! Fall through and parse the type normally so this doesn't cascade
+		! into further bogus diagnostics
+		pos1 = parser%current_pos()
+
+	end if
 
 	if (parser%current_kind() == fn_keyword) then
 

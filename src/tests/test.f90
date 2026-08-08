@@ -3614,6 +3614,11 @@ subroutine unit_test_nd_i32(npass, nfail)
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
 			interpret_file(path//'test-03.syntran', quiet) == 'true', &
+			! Low-res port of samples/logo.syntran: exercises the
+			! rank-preserving overload path (has_rank in parse_fn.f90) for
+			! i32() applied to a 2-D array-slice assignment, which the
+			! smaller test-0*.syntran files above don't cover
+			interpret_file(path//'logo-lowres.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7252,6 +7257,30 @@ subroutine unit_test_error_codes(npass, nfail)
 				diag_count_code(get_diags('let a = ["a": "b"];'), &
 					EC_NON_INT_RANGE) == 0, &
 
+				! variadic arg type checking (c.f. EC_TOO_FEW_ARGS/
+				! EC_TOO_MANY_ARGS spot checks above, which only cover count):
+				! min()'s trailing args are checked against its own numeric
+				! variadic_type, unlike e.g. writeln()'s any_type
+				diag_has_code(get_diags('let a = min(1, 2, "a");'), &
+					EC_BAD_ARG_TYPE), &
+
+				! `&` reference not allowed outside of a fn parameter: return
+				! type, struct member type, and fn-pointer param/return type
+				! all funnel through the same check in parse_type()
+				diag_has_code(get_diags( &
+					'fn f(x: i32): &i32 { return x; }'), EC_REF_TYPE), &
+				diag_count_code(get_diags( &
+					'fn f(x: i32): &i32 { return x; }'), EC_REF_TYPE) == 1, &
+				diag_has_code(get_diags('struct P{x: &i32}'), EC_REF_TYPE), &
+				diag_count_code(get_diags('struct P{x: &i32}'), &
+					EC_REF_TYPE) == 1, &
+				diag_has_code(get_diags( &
+					'fn caller(cb: fn(): &i32): i32 { return 0; }'), &
+					EC_REF_TYPE), &
+				diag_count_code(get_diags( &
+					'fn caller(cb: fn(): &i32): i32 { return 0; }'), &
+					EC_REF_TYPE) == 1, &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below
@@ -7963,7 +7992,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E104-float-int-suffix.syntran'), &
 				EC_FLOAT_INT_SUFFIX, P//'E104-float-int-suffix.syntran', 8, 11, 7), &
 			diag_count_code(get_diags_file(P//'E104-float-int-suffix.syntran'), &
-				EC_FLOAT_INT_SUFFIX) == 1 &
+				EC_FLOAT_INT_SUFFIX) == 1, &
+			diag_loc_ok(get_diags_file(P//'E105-ref-type.syntran'), &
+				EC_REF_TYPE, P//'E105-ref-type.syntran', 5, 15, 1), &
+			diag_count_code(get_diags_file(P//'E105-ref-type.syntran'), &
+				EC_REF_TYPE) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

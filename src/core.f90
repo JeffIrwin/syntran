@@ -31,6 +31,10 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - cleanup TODO notes throughout the codebase
+	!    * took a big chunk out already
+	!    * continue one file at a time
+	!    * postponing eval*.f90 until after ast backend is imminently purged
 	!  - remove AST-walking interpreter. bytecode is better
 	!    * will probably remove it in 1.6
 	!  - switch/match/case. needs to work with strings. would be nice to work
@@ -212,6 +216,10 @@ module syntran__core_m
 	!      + can be worked around with str() to build a line and then println
 	!    * maybe strhex() as a stopgap?
 	!    * bin/oct too
+	!    * print structs with member variable name labels. currently just member
+	!      values are printed, but this means print output cannot be pasted back
+	!      in as valid syntran code. would also need to quote wrap and escape
+	!      strs. see also the struct "to_str" note below
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
 	!    * add build os to `--version` output, to distinguish between rocky vs

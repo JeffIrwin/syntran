@@ -1,0 +1,9 @@
+// E105: ref-type
+// A `&` reference appeared in a type annotation where references are not
+// allowed (only fn parameters may be references)
+
+fn f(x: i32): &i32
+{
+	return x;
+}
+println(f(1));

@@ -538,6 +538,10 @@ integer function current_pos(parser)
 
 	! Get the current character index.  If you want the token index, use
 	! parser%pos instead
+	!
+	! new_span() takes a character index, not a token index -- always build
+	! spans from current_pos()/peek_pos() or a token's %pos, never from
+	! parser%pos directly
 
 	class(parser_t) :: parser
 

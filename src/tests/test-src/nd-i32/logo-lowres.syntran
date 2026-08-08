@@ -1,0 +1,291 @@
+// Low-res port of samples/logo.syntran ("cool S" syntran logo), trimmed to a
+// regression test instead of a ppm-writing demo.  Kept in sync with the
+// samples/ version by hand -- this only needs to preserve the parts that
+// exercise the rank-preserving overload path in resolve_overload():
+// `colors[:, i] = i32(<f32/f64 array expr>)` assigns through a 2-D slice
+// from an overloaded i32() call whose result rank is patched in at parse
+// time (c.f. has_rank in parse_fn.f90 and the TODO it used to carry)
+
+//==============================================================================
+
+// Global constants and variables
+
+let NX_CANVAS = 16;
+let NY_CANVAS = NX_CANVAS;
+
+let THEME_RB = 0;
+let THEME_GB = 1;
+let THEME = THEME_RB;
+
+let NDIM = 2;
+let NRGB = 3;
+let NTRI = 3;
+
+let canvas = [0; NRGB, NX_CANVAS, NY_CANVAS];
+
+// Expected checksum of the rendered canvas.  Computed by running this file
+// with `checksum()` printed instead of compared; verified identical under
+// both debug and release builds
+let EXPECTED_CHECKSUM = i64(67338);
+
+//==============================================================================
+
+fn draw_tri(v0: [i32; :], v1: [i32; :], v2: [i32; :],
+            c0: [i32; :], c1: [i32; :], c2: [i32; :])
+{
+	// Output a triangle onto the global canvas
+
+	// Buffer by 1 in case of rounding errors
+	let xmin = min(v0[0], v1[0], v2[0]) - 1;
+	let ymin = min(v0[1], v1[1], v2[1]) - 1;
+
+	let xmax = max(v0[0], v1[0], v2[0]) + 2;
+	let ymax = max(v0[1], v1[1], v2[1]) + 2;
+
+	// Clamp to canvas bounds
+	xmin = max(0, xmin);
+	ymin = max(0, ymin);
+	xmax = min(NX_CANVAS, xmax);
+	ymax = min(NY_CANVAS, ymax);
+
+	// Triangle determinant
+	let det_ = (v0[0] - v2[0]) * (v1[1] - v2[1])
+	         - (v1[0] - v2[0]) * (v0[1] - v2[1]);
+
+	let tol = 0.001;
+
+	// Iterate over pixels in triangle's bounding box
+	for y in [ymin: ymax]
+	for x in [xmin: xmax]
+	{
+		// Get barycentric coordinates
+		let bary = [0.0; NTRI];
+
+		// Note similar form as determinant, but v0 is replaced with [x,y]
+		bary[0] = ((x     - v2[0]) * (v1[1] - v2[1])
+		        -  (v1[0] - v2[0]) * (y     - v2[1])) * 1.0
+		        / det_;
+
+		// v1 is replaced with [x,y]
+		bary[1] = ((v0[0] - v2[0]) * (y     - v2[1])
+		        -  (x     - v2[0]) * (v0[1] - v2[1])) * 1.0
+		        / det_;
+
+		bary[2] = 1.0 - bary[0] - bary[1];
+
+		if all(-tol <= bary) and all(bary <= 1+tol)
+		{
+			let c = bary[0] * c0 + bary[1] * c1 + bary[2] * c2;
+			canvas[0,x,y] = i32(c[0]);
+			canvas[1,x,y] = i32(c[1]);
+			canvas[2,x,y] = i32(c[2]);
+		}
+	}
+	return;
+}
+
+//==============================================================================
+
+fn draw_logo()
+{
+	// Set background diagonal gradient
+
+	let color_up_left    = [10,  20, 110];
+	let color_down_right = [10, 110,  20];
+	let color_mid        = [10,  65,  65];
+
+	if THEME == THEME_RB
+	{
+		color_up_left    = [ 20, 10, 110];
+		color_down_right = [110, 10,  20];
+		color_mid        = [ 65, 10,  20];
+	}
+
+	draw_tri(
+		[0, 0],
+		[NX_CANVAS, NY_CANVAS],
+		[NX_CANVAS, 0],
+		color_up_left,
+		color_down_right,
+		color_mid);
+	draw_tri(
+		[0, 0],
+		[0, NY_CANVAS],
+		[NX_CANVAS, NY_CANVAS],
+		color_up_left,
+		color_mid,
+		color_down_right);
+
+	// One-sided margin dimensions
+	let xmargin = i32(0.175 * NX_CANVAS);
+	let ymargin = i32(0.025 * NY_CANVAS);
+
+	// Dimensions of each part of cool S logo
+
+	// Heights
+
+	let h1 = i32((NY_CANVAS - 2 * ymargin) / 5.0);
+	let h5 = h1;
+
+	let h2 = i32((NY_CANVAS - 2 * ymargin - h1 - h5) / 3.0);
+	let h4 = h2;
+
+	let h3 = (NY_CANVAS - 2 * ymargin - h1 - h2 - h4 - h5);
+
+	// Widths
+	let w1 = i32((NX_CANVAS - 2 * xmargin) / 2.0);
+	let w2 = w1;
+
+	// Helper dimensions (sums of others)
+
+	let w12 = w1 + w2;
+
+	let w1h = w1/2;
+	let w2h = w1  + w2/2;
+
+	let h12 = h1  + h2;
+	let h13 = h12 + h3;
+	let h14 = h13 + h4;
+	let h15 = h14 + h5;
+
+	let h2h = h1 + h2 + h3/2;
+
+	// Numbers of vertices and triangles
+	let nvrt = 16;
+	let ntri = 16;
+
+	// Vertices
+	let vrt =
+		[
+			xmargin + w1 , ymargin      , // point 0
+			xmargin      , ymargin + h1 , // point 1
+			xmargin + w1 , ymargin + h1 , // .     2
+			xmargin + w12, ymargin + h1 , // .     3
+			xmargin      , ymargin + h12, // .     4
+			xmargin + w1 , ymargin + h12, //       5
+			xmargin + w12, ymargin + h12, //       6
+			xmargin + w1h, ymargin + h2h, //       7
+			xmargin + w2h, ymargin + h2h, //       8
+			xmargin      , ymargin + h13, //       9
+			xmargin + w1 , ymargin + h13, //      10
+			xmargin + w12, ymargin + h13, //      11
+			xmargin      , ymargin + h14, //      12
+			xmargin + w1 , ymargin + h14, //      13
+			xmargin + w12, ymargin + h14, //      14
+			xmargin + w1 , ymargin + h15  //      15
+			;
+			NDIM, nvrt
+		];
+
+	// Triangle vertex indices
+	let tri =
+		[
+			 0,   1,   2, // tri 1
+			 0,   2,   3, // tri 2
+			 1,   4,   5, // .   3
+			 1,   5,   2, // .   4
+			 2,   5,   6, // .   5
+			 2,   6,   3, //     6
+			 4,  10,   5, //     7
+			 5,   8,   6, //     8
+			 5,  10,  11, //     9
+			 7,   9,  10, //    10
+			 9,  12,  13, //    11
+			 9,  13,  10, //    12
+			10,  13,  14, //    13
+			10,  14,  11, //    14
+			12,  15,  13, //    15
+			13,  15,  14  //    16
+			;
+			NTRI, ntri
+		];
+
+	// Control colors, to be interpolated
+	let c0  = [200, 200, 200];
+
+	let c3  = [ 40, 220,  40];
+	if THEME == THEME_RB
+		c3  = [220,  40,  40];
+
+	let c8  = [ 40,  40, 220];
+	let c11 = c0;
+
+	let ncolor = 12;
+	let colors = [0; NRGB, ncolor];
+
+	// Interpolate colors with floats
+	colors[:,  0] = c0;
+	colors[:,  1] = i32(2.0 / 3.0 * c0 + 1.0 / 3.0 * c3);
+	colors[:,  2] = i32(1.0 / 3.0 * c0 + 2.0 / 3.0 * c3);
+
+	colors[:,  3] = c3;
+	colors[:,  4] = i32(4.0 / 5.0 * c3 + 1.0 / 5.0 * c8);
+	colors[:,  5] = i32(3.0 / 5.0 * c3 + 2.0 / 5.0 * c8);
+	colors[:,  6] = i32(2.0 / 5.0 * c3 + 3.0 / 5.0 * c8);
+	colors[:,  7] = i32(1.0 / 5.0 * c3 + 4.0 / 5.0 * c8);
+
+	colors[:,  8] = c8;
+	colors[:,  9] = i32(2.0 / 3.0 * c8 + 1.0 / 3.0 * c11);
+	colors[:, 10] = i32(1.0 / 3.0 * c8 + 2.0 / 3.0 * c11);
+
+	colors[:, 11] = c11;
+
+	// Triangle vertex colors, as an index of `colors` array
+	let tri_colors =
+		[
+			 3,  4,  3, // tri 1
+			 3,  3,  2, // tri 2
+			 4,  5,  5, // .   3
+			 4,  5,  3, // .   4
+			 3,  1,  1, // .   5
+			 3,  1,  2, //     6
+			 5,  6,  5, //     7
+			 1,  0,  1, //     8
+			 5,  6,  6, //     9
+			11, 10, 10, //    10
+			10,  9,  8, //    11
+			10,  8, 10, //    12
+			 6,  8,  7, //    13
+			 6,  7,  6, //    14
+			 9,  8,  8, //    15
+			 8,  8,  7  //    16
+			;
+			NTRI, ntri
+		];
+
+	for i in [0: ntri]
+	{
+		draw_tri(
+			vrt[:, tri[0,i]],
+			vrt[:, tri[1,i]],
+			vrt[:, tri[2,i]],
+			colors[:, tri_colors[0,i]],
+			colors[:, tri_colors[1,i]],
+			colors[:, tri_colors[2,i]]);
+	}
+	return;
+}
+
+//==============================================================================
+
+fn checksum(): i64
+{
+	let sum = i64(0);
+	for y in [0: NY_CANVAS]
+	for x in [0: NX_CANVAS]
+	for c in [0: NRGB]
+		sum += i64(canvas[c,x,y]);
+	return sum;
+}
+
+//==============================================================================
+
+fn main(): bool
+{
+	draw_logo();
+	return checksum() == EXPECTED_CHECKSUM;
+}
+
+//==============================================================================
+
+return main();

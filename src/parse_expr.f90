@@ -1187,10 +1187,11 @@ module subroutine build_method_call_node(parser, node, receiver, &
 		node%is_ref(1 + method_i) = eff_is_ref(method_i)
 	end do
 
-	! Copy fn body and params from the method's fn node
+	! node%body is *not* set here -- same reasoning as parse_fn_call() in
+	! parse_fn.f90: the body is looked up via id_index at eval/compile time,
+	! not copied per call site.  Params and num_locs are still needed
+	! directly on the node
 	if (allocated(method_fn%node)) then
-		allocate(node%body)
-		node%body     = method_fn%node%body
 		node%params   = method_fn%node%params
 		node%num_locs = method_fn%node%num_locs
 	end if

@@ -641,6 +641,12 @@ An `'i32` or `'i64` type suffix was used on a numeric literal that's already sha
 
 [Example](../src/tests/test-src/errors/E104-float-int-suffix.syntran)
 
+### E105 -- ref-type
+
+A `&` reference appeared in a type annotation where references are not allowed. References are only supported on fn parameters, not on fn return types, struct member types, or fn-pointer param/return types.
+
+[Example](../src/tests/test-src/errors/E105-ref-type.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

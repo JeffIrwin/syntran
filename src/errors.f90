@@ -120,6 +120,7 @@ module syntran__errors_m
 		EC_EXPL_ARRAY_SIZE = "E102", &
 		EC_NON_INT_SIZE = "E103", &
 		EC_FLOAT_INT_SUFFIX = "E104", &
+		EC_REF_TYPE = "E105", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -401,6 +402,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(EC_EXPL_ARRAY_SIZE)
 	call codes%push(EC_NON_INT_SIZE)
 	call codes%push(EC_FLOAT_INT_SUFFIX)
+	call codes%push(EC_REF_TYPE)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -779,6 +781,22 @@ function err_float_int_suffix(context, span, type, num) result(err)
 		//' float literal with int suffix'//color_reset
 
 end function err_float_int_suffix
+
+!===============================================================================
+
+function err_ref_type(context, span) result(err)
+	type(text_context_t) :: context
+	type(text_span_t), intent(in) :: span
+	character(len = :), allocatable :: err
+
+	err = err_pre(EC_REF_TYPE)//'`&` reference not allowed in this type annotation' &
+		//underline(context, span) &
+		//' reference type'//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": references are only allowed on fn parameters"
+
+end function err_ref_type
 
 !===============================================================================
 
