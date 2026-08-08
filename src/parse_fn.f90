@@ -701,8 +701,8 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	! c.f. the parser%pos (token index) vs current_pos()/peek_pos() (char
 	! index) convention documented at their definitions in parse.f90 --
-	! audited the new_span() call sites in src/*.f90 and none of them build a
-	! span from parser%pos
+	! audited the new_span() call sites throughout src and none of them
+	! build a span from parser%pos
 
 	!print *, 'matching lparen'
 
