@@ -1122,6 +1122,13 @@ module subroutine parse_struct_declaration(parser, decl)
 		if (allocated(member%array)) deallocate(member%array)
 	end do
 
+	! Register member names under this struct's cookie, so value_to_str()
+	! can print them with `name = value` labels.  The returned slot index is
+	! stashed on struct%reg_idx and copied onto every value_t built from
+	! this struct, so printing indexes the registry directly instead of
+	! hashing struct_cookie on every call (c.f. struct_reg_set() in value.f90)
+	struct%reg_idx = struct_reg_set(struct%cookie, struct%member_names%v( 1: names%len_ ))
+
 	! Parse method declarations (fn / const fn inside the struct body)
 	method_decls = new_syntax_node_vector()
 
@@ -1770,6 +1777,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	self_val%type = struct_type
 	self_val%struct_name = struct_name
 	if (allocated(struct%cookie)) self_val%struct_cookie = struct%cookie
+	self_val%struct_reg_idx = struct%reg_idx
 	parser%num_locs = parser%num_locs + 1
 	const_param = is_const
 	call parser%locs%insert("0self", self_val, parser%num_locs, io, &
@@ -2007,6 +2015,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 	inst%struct_name = lookup_name
 	inst%val%struct_name = lookup_name
 	inst%val%struct_cookie = struct%cookie
+	inst%val%struct_reg_idx = struct%reg_idx
 
 	!print *, "struct name = ", inst%struct_name
 
@@ -2018,9 +2027,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 		! Members must be named (`x = expr`).  Positional init was considered
 		! and rejected: it silently breaks when a struct's member order
-		! changes, and print output still would not round-trip since str
-		! values print unquoted (c.f. the "print structs with member
-		! variable name labels" note in core.f90)
+		! changes
 
 		call parser%match(identifier_token, name)
 		call parser%match(equals_token, equals)

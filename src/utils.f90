@@ -1150,6 +1150,35 @@ end function quote
 
 !===============================================================================
 
+function quote_escape(str_) result(wrapped)
+
+	! Wrap a str_ in "double quotes" and escape any quotes already contained,
+	! so the result is a valid syntran string literal that lexes back to
+	! str_.  Syntran has no backslash escapes -- a literal quote inside a
+	! string is written by *doubling* it (c.f. lex.f90's string lexer), so
+	! that's the only substitution needed here
+
+	character(len = *), intent(in)  :: str_
+	character(len = :), allocatable :: wrapped
+
+	integer :: i
+
+	type(char_vector_t) :: vec
+
+	vec = new_char_vector()
+	call vec%push('"')
+	do i = 1, len(str_)
+		if (str_(i:i) == '"') call vec%push('"')
+		call vec%push(str_(i:i))
+	end do
+	call vec%push('"')
+
+	wrapped = vec%trim()
+
+end function quote_escape
+
+!===============================================================================
+
 logical function is_str_eq(a, b)
 	! Fortran considers spaces as insignificant in str comparisons, but no sane
 	! language would allow that

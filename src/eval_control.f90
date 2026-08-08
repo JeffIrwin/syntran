@@ -1077,12 +1077,25 @@ recursive module subroutine eval_array_expr(node, state, res)
 				do j = 1, size(lbound_%struct)
 					call value_copy(res%struct(i8)%struct(j), lbound_%struct(j))
 				end do
+
+				! Each element needs its own type/name/cookie set too (not
+				! just the outer array value), or value_to_str() falls
+				! through to the scalar default arm and prints
+				! "<invalid_value>" when the whole array is printed --
+				! indexing (a[0]) still worked before this fix because that
+				! path reads type from the outer value instead
+				res%struct(i8)%type = struct_type
+				res%struct(i8)%struct_name = lbound_%struct_name
+				if (allocated(lbound_%struct_cookie)) &
+					res%struct(i8)%struct_cookie = lbound_%struct_cookie
+				res%struct(i8)%struct_reg_idx = lbound_%struct_reg_idx
 			end do
 
 			! Arrays are homogeneous, so every element shares one struct_name
 			! for efficiency
 			res%struct_name = lbound_%struct_name
 			if (allocated(lbound_%struct_cookie)) res%struct_cookie = lbound_%struct_cookie
+			res%struct_reg_idx = lbound_%struct_reg_idx
 
 		case (enum_type)
 
@@ -1262,6 +1275,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 		if (allocated(node%val%struct_cookie)) then
 			res%struct_cookie = node%val%struct_cookie
 		end if
+		res%struct_reg_idx = node%val%struct_reg_idx
 		if (allocated(node%val%enum_name)) then
 			res%enum_name = node%val%enum_name
 		end if

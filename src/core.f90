@@ -216,10 +216,6 @@ module syntran__core_m
 	!      + can be worked around with str() to build a line and then println
 	!    * maybe strhex() as a stopgap?
 	!    * bin/oct too
-	!    * print structs with member variable name labels. currently just member
-	!      values are printed, but this means print output cannot be pasted back
-	!      in as valid syntran code. would also need to quote wrap and escape
-	!      strs. see also the struct "to_str" note below
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
 	!    * add build os to `--version` output, to distinguish between rocky vs
@@ -267,8 +263,6 @@ module syntran__core_m
 	!    * post-merge TODO struct items:
 	!      + update struct sample.  include struct/array combos, nesting, etc.
 	!        maybe make separate simple and compound struct samples
-	!    * tbd:
-	!      + improved to_str() conversion with labels of struct name and member names
 	!  - windows memory crashes require constant maintanence or they pop up
 	!    again whenever a big enough user-defined type change in the interpreter
 	!    is made. maybe try a different compiler just for windows? intel?

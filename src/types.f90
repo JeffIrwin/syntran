@@ -291,6 +291,11 @@ module syntran__types_m
 		! struct name>", set once at declaration time. c.f. value_t%struct_cookie
 		character(len = :), allocatable :: cookie
 
+		! struct_reg_set()'s returned registry slot for this struct's member
+		! names, stashed here so every instantiation site can copy it onto
+		! value_t%struct_reg_idx without a second registry lookup
+		integer :: reg_idx = 0
+
 		contains
 			! This is also required unfortunately
 #ifndef SYNTRAN_INTEL

@@ -248,6 +248,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 			res%type = struct_type
 			res%struct_name = var%struct_name
 			if (allocated(var%struct_cookie)) res%struct_cookie = var%struct_cookie
+			if (var%struct_reg_idx >= 1) res%struct_reg_idx = var%struct_reg_idx
 		end if
 		! For enum_type, each stored element is already a fully baked enum
 		! value_t (type/enum_name/enum_variant/enum_cookie all set), so no
@@ -374,6 +375,7 @@ recursive module subroutine eval_struct_instance(node, state, res)
 	res%type = node%val%type
 	res%struct_name = node%struct_name
 	if (allocated(node%val%struct_cookie)) res%struct_cookie = node%val%struct_cookie
+	res%struct_reg_idx = node%val%struct_reg_idx
 
 	if (allocated(res%struct)) deallocate(res%struct)
 	allocate(res%struct( size(node%members) ))
@@ -1637,6 +1639,7 @@ module subroutine apply_subscripts_to_val(node, val, state, res)
 			res%type       = struct_type
 			res%struct_name = val%struct_name
 			if (allocated(val%struct_cookie)) res%struct_cookie = val%struct_cookie
+			if (val%struct_reg_idx >= 1) res%struct_reg_idx = val%struct_reg_idx
 		else if (val%array%type == enum_type) then
 			! Each stored element is already a fully baked enum value_t, so
 			! no extra tagging is needed here (c.f. get_val above)

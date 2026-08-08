@@ -157,6 +157,7 @@ recursive module subroutine struct_copy(dst, src)
 	dst%member_names = src%member_names
 	dst%num_vars = src%num_vars
 	dst%vars = src%vars
+	dst%reg_idx = src%reg_idx
 
 	if (allocated(src%cookie)) then
 		dst%cookie = src%cookie

@@ -5354,35 +5354,105 @@ subroutine unit_test_struct_str(npass, nfail)
 
 	character(len = *), parameter :: label = 'struct str formatting'
 
+	character(len = :), allocatable :: decl, printed1, printed2
+
 	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:)
 
 	write(*,*) 'Unit testing '//label//' ...'
 
-	! This is a separate test from other struct stuff because struct to string
-	! conversion is subject to change, especially if I figure out how to label
-	! each member with its name
-	!
-	! TODO: update documentation to reflect any struct-to-str changes here
+	! Struct to str conversion labels each member by name (`x = 6`), and,
+	! inside a struct, quotes/escapes str members and suffixes f32/i64
+	! scalars (`'f32`/`'i64`) -- so that print output can be pasted back in
+	! as valid syntran source.  This is only a separate test group from other
+	! struct tests for historical reasons (it used to be flagged as subject
+	! to change); see doc/README.md's struct printing section
 
 	tests = &
 		[   &
 			eval( 'struct P{x:i32, y:i32,}' &                 ! 1
 			    //'let p1 = P{x=6, y=13};' &
-			    //'p1;', quiet) == 'P{6, 13}', &
+			    //'p1;', quiet) == 'P{x = 6, y = 13}', &
 			eval(''                         &                 ! 2
 				//'struct P{x:i32, y:i32,}' &  ! point
 				//'let p1 = P{x=6, y=13,};' &
 				//'let ps = [p1; 2];' &        ! ps is an array of 2 copies of p1
 				//'return ps[0];' &
-				, quiet) == 'P{6, 13}', &
+				, quiet) == 'P{x = 6, y = 13}', &
 			eval(''                         &                 ! 3
 				//'struct P{x:i32, y:i32,}' &
 				//'let p1 = P{x=6, y=13,};' &
 				//'let p2 = P{x=4, y=15,};' &
 				//'let ps = [p1, p2];' &
 				//'return ps;' &
-				, quiet) == '[P{6, 13}, P{4, 15}]', &
+				, quiet) == '[P{x = 6, y = 13}, P{x = 4, y = 15}]', &
+
+			! Uniform struct array (bug found alongside this feature: element
+			! type/name/cookie weren't set, so whole-array printing crashed
+			! to "<invalid_value>" even though indexing worked)
+			eval(''                          &                ! 4
+				//'struct Q{n:i32}' &
+				//'let a = [Q{n=2}; 3];' &
+				//'return a;' &
+				, quiet) == '[Q{n = 2}, Q{n = 2}, Q{n = 2}]', &
+
+			! str member is quoted, with an embedded quote doubled
+			eval(''                          &                ! 5
+				//'struct S{s:str}' &
+				//'let s1 = S{s="he said ""hi"""};' &
+				//'return s1;' &
+				, quiet) == 'S{s = "he said ""hi"""}', &
+
+			! Negative control: a bare (non-member) str is still unquoted
+			eval('"hello";', quiet) == 'hello', &             ! 6
+
+			! Negative control: reading a str member back out is unquoted --
+			! quoting is contextual (struct printing), not a sticky property
+			! of the value
+			eval(''                          &                ! 7
+				//'struct S{s:str}' &
+				//'let s1 = S{s="he said ""hi"""};' &
+				//'return s1.s;' &
+				, quiet) == 'he said "hi"', &
+
+			! [str; :] member
+			eval(''                          &                ! 8
+				//'struct P{v:[str;:]}' &
+				//'let p = P{v=["a","b"]};' &
+				//'return p;' &
+				, quiet) == 'P{v = ["a", "b"]}', &
+
+			! f32/i64 scalar members get a round-trip type suffix
+			eval(''                          &                ! 9
+				//'struct P{a:f32, c:i64}' &
+				//'let p = P{a=1.5f, c=7''i64};' &
+				//'return p;' &
+				, quiet) == 'P{a = 1.500000E+00''f32, c = 7''i64}', &
+
+			! [f32; :] / [i64; :] members also get the suffix, per element
+			eval(''                          &                ! 10
+				//'struct P{fs:[f32;:], is:[i64;:]}' &
+				//'let p = P{fs=[1.5f,2.5f], is=[1''i64,2''i64]};' &
+				//'return p;' &
+				, quiet) == 'P{fs = [1.500000E+00''f32, 2.500000E+00''f32], ' &
+				         // 'is = [1''i64, 2''i64]}', &
+
+			! Nested struct member
+			eval(''                          &                ! 11
+				//'struct Q{n:i32}' &
+				//'struct P{q:Q, s:str}' &
+				//'let p = P{q=Q{n=1}, s="a"};' &
+				//'return p;' &
+				, quiet) == 'P{q = Q{n = 1}, s = "a"}', &
+
+			! Enum member (already valid syntax; no quoting/suffix needed)
+			eval(''                          &                ! 12
+				//'enum Color{red, green}' &
+				//'struct P{c:Color}' &
+				//'let p = P{c=Color.green};' &
+				//'return p;' &
+				, quiet) == 'P{c = Color.green}', &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5391,6 +5461,33 @@ subroutine unit_test_struct_str(npass, nfail)
 	!print *, "number of "//label//" tests = ", size(tests)
 
 	call unit_test_coda(tests, label, npass, nfail)
+
+	!****************************
+
+	! Actual round-trip assertions: print a struct, paste the printed text
+	! back in as source, and confirm it re-prints identically.  This is the
+	! point of the whole feature -- the assertions above only pin the exact
+	! format
+
+	write(*,*) 'Unit testing '//label//' (round-trip) ...'
+
+	decl = 'struct P{x:i32, a:f32, c:i64, d:bool, s:str} '
+	printed1 = eval(decl &
+		//'let p1 = P{x=1, a=1.5f, c=7''i64, d=true, s="he said ""hi"""};' &
+		//'return p1;', quiet)
+	printed2 = eval(decl//'let p2 = '//printed1//'; return p2;', quiet)
+
+	tests = [logical :: printed1 == printed2, len(printed1) > 0]
+	call unit_test_coda(tests, label//' (round-trip, scalars)', npass, nfail)
+
+	decl = 'struct S{s:str} '
+	printed1 = eval(decl &
+		//'let s1 = S{s="a ""quoted"" word"};' &
+		//'return s1;', quiet)
+	printed2 = eval(decl//'let s2 = '//printed1//'; return s2;', quiet)
+
+	tests = [logical :: printed1 == printed2, len(printed1) > 0]
+	call unit_test_coda(tests, label//' (round-trip, str)', npass, nfail)
 
 end subroutine unit_test_struct_str
 

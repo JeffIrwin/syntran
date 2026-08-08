@@ -5,6 +5,7 @@ module syntran__value_m
 
 	use syntran__consts_m
 	use syntran__errors_m
+	use syntran__utils_m
 
 	implicit none
 
@@ -133,6 +134,13 @@ module syntran__value_m
 		! import path
 		character(len = :), allocatable :: struct_cookie
 
+		! Index into value_to_str()'s struct_reg_names registry (0 = unset),
+		! resolved once at parse time (c.f. struct_reg_set()) and copied
+		! alongside struct_cookie ever since.  Plain non-allocatable integer,
+		! so it's a cheap array index at print time instead of a per-print
+		! hash lookup by struct_cookie
+		integer :: struct_reg_idx = 0
+
 		! Enum type name, e.g. "Dir", used when value%type == enum_type.
 		! Mirrors struct_name's role for type-descriptor rendering (fn param/
 		! return types, etc.)
@@ -182,6 +190,20 @@ module syntran__value_m
 			procedure :: push      => push_value
 			procedure :: push_move => push_value_move
 	end type value_vector_t
+
+	!********
+
+	! Struct member-name registry, keyed by struct_cookie ("<src file>::
+	! <StructName>"), used so value_to_str() can label a struct's members by
+	! name.  This lives here rather than being passed in as an argument
+	! because struct_t/structs_t (types.f90) are declared in syntran__types_m,
+	! which itself `use`s syntran__value_m -- passing them down would be a
+	! circular module dependency (c.f. value_type_name()'s note above on the
+	! same constraint).  Populated once per struct declaration by
+	! parse_struct_declaration() (parse_fn.f90), read at print time
+	type(map_i32_t), save :: struct_reg_map
+	type(string_vector_t), allocatable, save :: struct_reg_names(:)
+	integer, save :: struct_reg_len = 0
 
 !===============================================================================
 
@@ -366,6 +388,10 @@ recursive subroutine value_move(src, dst)
 	if (debug > 3) print *, 'starting value_move()'
 
 	dst%type = src%type
+
+	! Plain integer, not allocatable -- always cheap to copy regardless of
+	! type, same as %sca in value_copy()
+	dst%struct_reg_idx = src%struct_reg_idx
 
 	select case (src%type)
 	case (array_type)
@@ -566,6 +592,10 @@ recursive subroutine value_copy(dst, src)
 
 	dst%type = src%type
 	dst%sca  = src%sca   ! POD copy: bool/i32/i64/f32/f64 only — cheap
+
+	! Plain integer, not allocatable -- always cheap to copy regardless of
+	! type, same as %sca above
+	dst%struct_reg_idx = src%struct_reg_idx
 
 	! Guard str/file_ copies on type, not just on allocated().  A reused stack
 	! slot may carry a stale allocatable from a prior value (different type); we
@@ -1309,9 +1339,76 @@ end function value_to_f64_array
 
 !===============================================================================
 
-recursive function value_to_str(val) result(ans)
+function struct_reg_set(cookie, names) result(idx)
+
+	! Register (or overwrite, e.g. on REPL struct redeclaration) a struct's
+	! member names under its canonical cookie, and return the slot index.
+	! Called once per struct declaration by parse_struct_declaration()
+	! (parse_fn.f90), which stashes the returned idx on every value_t built
+	! from that struct (c.f. value_t%struct_reg_idx) so that
+	! value_to_str()'s round-trip struct branch below can look member names
+	! up with a plain array index -- this hash-by-cookie lookup only runs
+	! at parse time (once per declaration), never per print call
+
+	character(len = *), intent(in) :: cookie
+	type(string_t), intent(in) :: names(:)
+	integer :: idx
+
+	!********
+
+	integer :: i, new_cap
+	logical :: found
+
+	type(string_vector_t), allocatable :: tmp(:)
+
+	if (struct_reg_map%capacity <= 0) call struct_reg_map%init(64)
+
+	found = struct_reg_map%get(cookie, idx)
+	if (.not. found) then
+
+		struct_reg_len = struct_reg_len + 1
+		idx = struct_reg_len
+		call struct_reg_map%set(cookie, idx)
+
+		if (.not. allocated(struct_reg_names)) then
+			allocate(struct_reg_names(64))
+
+		else if (idx > size(struct_reg_names)) then
+
+			! Grow by moving ownership of each entry's name vector into the
+			! bigger array, instead of a whole-array assignment of a type
+			! with a nested allocatable
+			new_cap = 2 * size(struct_reg_names)
+			allocate(tmp(new_cap))
+			do i = 1, struct_reg_len - 1
+				call move_alloc(struct_reg_names(i)%v, tmp(i)%v)
+			end do
+			call move_alloc(tmp, struct_reg_names)
+
+		end if
+	end if
+
+	if (allocated(struct_reg_names(idx)%v)) deallocate(struct_reg_names(idx)%v)
+	allocate(struct_reg_names(idx)%v( size(names) ))
+	do i = 1, size(names)
+		struct_reg_names(idx)%v(i)%s = names(i)%s
+	end do
+
+end function struct_reg_set
+
+!===============================================================================
+
+recursive function value_to_str(val, roundtrip) result(ans)
 
 	class(value_t) :: val
+
+	! When .true., render str members quoted/escaped and give f32/i64
+	! scalars an explicit `'f32`/`'i64` type suffix, so the result lexes back
+	! to an equivalent syntran literal.  Only meant to be set by the
+	! struct_type case below (labeling members also implies round-trip mode
+	! for their values) -- top-level println()/str() calls never pass this,
+	! so plain `println("hi")` and `println(1.5f)` are unaffected
+	logical, intent(in), optional :: roundtrip
 
 	character(len = :), allocatable :: ans
 
@@ -1320,9 +1417,14 @@ recursive function value_to_str(val) result(ans)
 	integer :: j
 	integer(kind = 8) :: i8, prod, n
 
+	logical :: rt, has_names
+
 	type(char_vector_t) :: str_vec
 
 	!print *, "val type = ", kind_name(val%type)
+
+	rt = .false.
+	if (present(roundtrip)) rt = roundtrip
 
 	select case (val%type)
 
@@ -1332,13 +1434,29 @@ recursive function value_to_str(val) result(ans)
 			call str_vec%push(val%struct_name//"{")
 
 			n = size(val%struct)
+
+			! Member names are looked up by a plain array index into the
+			! module-level struct_reg_names registry, resolved once at parse
+			! time (c.f. struct_reg_set()) and carried on every struct value
+			! as %struct_reg_idx -- no hashing/lookup-by-cookie here, since
+			! this runs on every print call.  Fall back to unlabeled
+			! values-only output if the index is unset/out of range or stale
+			! (member count mismatch) rather than mislabeling
+			has_names = .false.
+			if (val%struct_reg_idx >= 1 .and. val%struct_reg_idx <= struct_reg_len) then
+				if (allocated(struct_reg_names(val%struct_reg_idx)%v)) then
+					has_names = size(struct_reg_names(val%struct_reg_idx)%v) == n
+				end if
+			end if
+
 			do i8 = 1, n
 
-				! It would be nice to label each member with its name
+				if (has_names) then
+					call str_vec%push( struct_reg_names(val%struct_reg_idx)%v(i8)%s//" = " )
+				end if
 
-				!call str_vec%push( val%struct(i8)%struct_name//" = " )
-
-				call str_vec%push( trimw(val%struct(i8)%to_str()) )
+				! Once inside a struct, member values must round-trip too
+				call str_vec%push( trimw(val%struct(i8)%to_str(roundtrip = .true.)) )
 
 				if (i8 < n) call str_vec%push(", ")
 
@@ -1409,6 +1527,7 @@ recursive function value_to_str(val) result(ans)
 				do i8 = 1, val%array%len_
 
 					call str_vec%push(str(val%array%i64(i8)))
+					if (rt) call str_vec%push("'i64")
 					if (i8 >= val%array%len_) cycle
 
 					call str_vec%push(', ')
@@ -1432,6 +1551,7 @@ recursive function value_to_str(val) result(ans)
 
 					! Trimmed string (not aligned)
 					call str_vec%push(str(val%array%f32(i8)))
+					if (rt) call str_vec%push("'f32")
 
 					if (i8 >= val%array%len_) cycle
 
@@ -1493,7 +1613,11 @@ recursive function value_to_str(val) result(ans)
 
 				do i8 = 1, val%array%len_
 
-					call str_vec%push(val%array%str(i8)%s)
+					if (rt) then
+						call str_vec%push(quote_escape(val%array%str(i8)%s))
+					else
+						call str_vec%push(val%array%str(i8)%s)
+					end if
 
 					if (i8 >= val%array%len_) cycle
 
@@ -1513,7 +1637,7 @@ recursive function value_to_str(val) result(ans)
 				n = size(val%struct)
 				do i8 = 1, n
 					! Just recurse instead of nesting a loop
-					call str_vec%push( val%struct(i8)%to_str() )
+					call str_vec%push( val%struct(i8)%to_str(roundtrip = rt) )
 					if (i8 < n) call str_vec%push(", ")
 				end do
 
@@ -1531,9 +1655,16 @@ recursive function value_to_str(val) result(ans)
 			ans = str_vec%v( 1: str_vec%len_ )
 
 		case (str_type)
-			! TODO: wrap in quotes for clarity?  Would be a breaking change.
+			! Bare (non-member) strings print raw, unquoted -- that's the
+			! ordinary, expected behavior for most languages.  Quoting only
+			! kicks in when this is a struct member (rt = .true.), so that
+			! struct print output can be pasted back in as valid syntran
 			if (allocated(val%str)) then
-				ans = val%str%s
+				if (rt) then
+					ans = quote_escape(val%str%s)
+				else
+					ans = val%str%s
+				end if
 			else
 				ans = ''
 			end if
@@ -1551,6 +1682,16 @@ recursive function value_to_str(val) result(ans)
 
 		case default
 			ans = val%sca%to_str(val%type)
+
+			! f32/i64 scalars need an explicit type suffix to round-trip:
+			! without it, a bare literal like `1.500000E+00` or `7` re-lexes
+			! as f64/i32 respectively, and pasting it back into a struct
+			! member of type f32/i64 is an E65 type mismatch
+			if (rt .and. val%type == f32_type) then
+				ans = trimw(ans)//"'f32"
+			else if (rt .and. val%type == i64_type) then
+				ans = trimw(ans)//"'i64"
+			end if
 
 	end select
 

@@ -981,6 +981,20 @@ module subroutine vm_run(prog, state, res)
 			n_mem = size(sn%members)
 			val%type = struct_type
 			if (allocated(sn%struct_name)) val%struct_name = sn%struct_name
+
+			! Needed so value_to_str() can look up member names by
+			! %struct_reg_idx (c.f. struct_reg_set() in value.f90).  Without
+			! this, structs built through the (default) bytecode VM print
+			! unlabeled even though the AST-walker path (eval_struct_instance)
+			! already sets it.  Deallocate/reset on the else branch so a
+			! reused `val` can't carry stale identity from a prior struct type
+			if (allocated(sn%val%struct_cookie)) then
+				val%struct_cookie = sn%val%struct_cookie
+			else if (allocated(val%struct_cookie)) then
+				deallocate(val%struct_cookie)
+			end if
+			val%struct_reg_idx = sn%val%struct_reg_idx
+
 			if (allocated(val%struct)) deallocate(val%struct)
 			allocate(val%struct(n_mem))
 			do i = n_mem, 1, -1
