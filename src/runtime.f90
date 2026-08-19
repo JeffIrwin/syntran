@@ -1,9 +1,28 @@
 
 !===============================================================================
 
-module syntran__eval_m
+module syntran__runtime_m
 
-	use iso_fortran_env
+	! Evaluation-time runtime state and helper procedures for the bytecode
+	! VM (vm_exec.f90, vm_intr.f90).  Formerly split across eval.f90 and its
+	! submodules (eval_array.f90/eval_control.f90/eval_expr.f90/eval_fn.f90),
+	! which implemented an AST-walking evaluator (SYNTRAN_BACKEND=ast) as an
+	! alternative to the VM.  That walker is gone; what remains here is the
+	! subset the VM itself still calls for constructs its native opcodes
+	! delegate to a fallback path for (struct/dot-chain member access,
+	! general array-slice subscripting, array-literal construction, and
+	! for-loop lazy iteration) -- see runtime_array.f90/runtime_expr.f90/
+	! runtime_control.f90's module docstrings for the split
+	!
+	! Even the fallback paths no longer AST-walk: compile_ctrl.f90 compiles
+	! every sub-expression these procedures would otherwise have evaluated
+	! to bytecode ahead of time (compile_subscript_slots/
+	! compile_member_chain_slots/compile_array_expr_slots), and the VM pops
+	! the results into an operand-stack slot window passed in via each
+	! procedure's optional `slots` (and, for chains, `pos` cursor) argument.
+	! syntax_node_t is still consulted here, but only for its static shape
+	! (subscript kind/omit flags, member-chain structure, param lists,
+	! array-literal element/dimension counts) -- never evaluated
 
 	use syntran__bool_m
 	use syntran__math_m
@@ -18,6 +37,13 @@ module syntran__eval_m
 
 	use syntran__types_m
 
+	! subscript_dim_nslots/subscript_slot_start/subscript_total_nslots/
+	! chain_total_nslots/array_expr_nslots: the slot-layout helpers used
+	! throughout this module (and by compile_ctrl.f90's compile_*_slots
+	! emitters) to agree on where each pre-evaluated bound/element value
+	! lands in a `slots` window
+	use syntran__bytecode_m
+
 	implicit none
 
 	!********
@@ -29,23 +55,17 @@ module syntran__eval_m
 
 		type(fns_t) :: fns
 
-		! Parser state that must survive across REPL lines.  Unlike the rest
-		! of state_t (which is genuinely eval-time state), struct and enum
-		! declarations are a no-op at eval time -- eval_control.f90 and
-		! compile_ctrl.f90 both `cycle` past struct_declaration and
-		! enum_declaration nodes, and neither structs_t nor enums_t is
-		! referenced anywhere outside the parser.  They live here only
-		! because state_t is the REPL's one long-lived object, c.f.
-		! syntax_parse() (core.f90), which round-trips them through a
-		! per-line parser_t
+		! Parser state that must survive across REPL lines.  Structs and
+		! enum declarations are a no-op at eval time -- compile_ctrl.f90
+		! `cycle`s past struct_declaration and enum_declaration nodes, and
+		! neither structs_t nor enums_t is referenced anywhere outside the
+		! parser.  They live here only because state_t is the REPL's one
+		! long-lived object, c.f. syntax_parse() (core.f90), which
+		! round-trips them through a per-line parser_t
 		type(structs_t) :: structs
 		type(enums_t) :: enums
 
 		type(vars_t) :: vars, locs
-
-		! Grammatically, "breaked" should be "broke", but it's going to be a
-		! nightmare if you grep for "break" and don't find "broke"
-		logical :: returned, breaked, continued
 
 		! Script arguments passed after `--` on the command line
 		type(string_vector_t) :: script_args
@@ -53,10 +73,6 @@ module syntran__eval_m
 		! Source directory for resolving relative file paths in open()
 		! This is the directory containing the main script being evaluated
 		character(len = :), allocatable :: src_dir
-
-		! Use the bytecode VM backend instead of the AST walker. True by
-		! default, or set SYNTRAN_BACKEND=ast env var for AST walking
-		logical :: bytecode
 
 		! Runtime-error halt flag and accumulated runtime diagnostics (rt_*
 		! codes).  Set by rt_throw() at a runtime-error call site.  Unlike
@@ -75,69 +91,59 @@ module syntran__eval_m
 	!********
 
 	interface
-		! Implemented in eval_expr.f90
+		! Implemented in runtime_expr.f90
 
-		recursive module subroutine eval_binary_expr(node, state, res)
+		recursive module subroutine eval_name_expr(node, state, res, slots)
 			type(syntax_node_t), intent(in) :: node
 			type(state_t), intent(inout) :: state
 			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_name_expr(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		module subroutine eval_dot_expr(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_unary_expr(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
+			! node%lsubscripts(:)'s bound sub-expressions were already
+			! compiled to bytecode and popped by the VM's OP_SLICE handler --
+			! see subscript_dim_nslots (bytecode.f90)
+			type(value_t), intent(in) :: slots(:)
 		end subroutine
 
 		module subroutine promote_i32_i64(val)
 			type(value_t), intent(inout) :: val
 		end subroutine
 
-		module function str_char_slice(s, node, state, isub) result(out)
+		module function str_char_slice(s, node, state, isub, slots) result(out)
 			character(len = *), intent(in) :: s
 			type(syntax_node_t), intent(in) :: node
 			type(state_t), intent(inout) :: state
 			integer, intent(in) :: isub
+			type(value_t), intent(in) :: slots(:)
 			character(len = :), allocatable :: out
 		end function
 
 	end interface
 
 	interface
-		! Implemented in eval_array.f90
+		! Implemented in runtime_array.f90
 
-		recursive module subroutine set_val(node, var, state, val, index_)
+		recursive module subroutine set_val(node, var, state, val, index_, slots, pos)
 			type(syntax_node_t), intent(in) :: node
 			type(value_t), intent(inout) :: var
 			type(state_t), intent(inout) :: state
 			type(value_t), intent(in) :: val
 			integer(kind = 8), optional, intent(in) :: index_
+			! `slots`/`pos`: pre-evaluated subscript bound values for the
+			! whole member chain (compile_member_chain_slots,
+			! compile_ctrl.f90) plus a running consumption cursor, used
+			! instead of AST-walking via sub_eval/field_slice_bounds when
+			! present -- see chain_total_nslots' docstring (bytecode.f90)
+			type(value_t), intent(in), optional :: slots(:)
+			integer, intent(inout), optional :: pos
 		end subroutine
 
-		recursive module subroutine get_val(node, var, state, res, index_)
+		recursive module subroutine get_val(node, var, state, res, index_, slots, pos)
 			type(syntax_node_t), intent(in) :: node
 			type(value_t), intent(in) :: var
 			type(state_t), intent(inout) :: state
 			integer(kind = 8), optional, intent(in) :: index_
 			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_struct_instance(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
+			type(value_t), intent(in), optional :: slots(:)
+			integer, intent(inout), optional :: pos
 		end subroutine
 
 		module subroutine allocate_array(val, cap)
@@ -157,34 +163,38 @@ module syntran__eval_m
 			type(syntax_token_t), intent(in) :: op
 		end subroutine
 
-		module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, contributes_rank)
+		module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, contributes_rank, slots)
 			type(syntax_node_t), intent(in)    :: node
 			type(state_t),       intent(inout) :: state
 			integer,             intent(in)    :: i
 			integer(kind = 8),   intent(out)   :: lsub, ssub, usub
 			type(i64_vector_t),  intent(inout) :: asub
 			logical,             intent(out)   :: contributes_rank
+			type(value_t),       intent(in)    :: slots(:)
 		end subroutine
 
-		module subroutine eval_slice_rank1(node, state, res)
+		module subroutine eval_slice_rank1(node, state, res, slots)
 			type(syntax_node_t), intent(in)    :: node
 			type(state_t),       intent(inout) :: state
 			type(value_t),       intent(out)   :: res
+			type(value_t),       intent(in)    :: slots(:)
 		end subroutine
 
-		module subroutine eval_assign_slice_rank1(node, state, id, res)
+		module subroutine eval_assign_slice_rank1(node, state, id, res, slots)
 			type(syntax_node_t), intent(in)    :: node
 			type(state_t),       intent(inout) :: state
 			integer,             intent(in)    :: id
 			type(value_t),       intent(inout) :: res
+			type(value_t),       intent(in)    :: slots(:)
 		end subroutine
 
-		module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+		module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res, slots)
 			type(syntax_node_t), intent(in) :: node
 			type(state_t), intent(inout) :: state
 			type(i64_vector_t), allocatable, intent(out) :: asubs(:)
 			integer(kind = 8), allocatable, intent(out) :: lsubs(:), ssubs(:), usubs(:)
 			integer, intent(out) :: rank_res
+			type(value_t), intent(in) :: slots(:)
 		end subroutine
 
 		module subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
@@ -193,35 +203,39 @@ module syntran__eval_m
 			integer(kind = 8), intent(inout) :: usubs(:), subs(:)
 		end subroutine
 
-		module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+		module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs, slots)
 			type(syntax_node_t),             intent(in)    :: member_node
 			type(value_t),                   intent(in)    :: field_val
 			type(state_t),                   intent(inout) :: state
 			integer,                         intent(out)   :: rank_res
 			integer(kind = 8), allocatable,  intent(out)   :: lsubs(:), ssubs(:), usubs(:)
 			type(i64_vector_t),  allocatable, intent(out)   :: asubs(:)
+			type(value_t),                   intent(in)    :: slots(:)
 		end subroutine
 
-		module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step)
+		module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step, slots)
 			type(syntax_node_t), intent(in)    :: node
 			integer,             intent(in)    :: isub
 			integer(kind = 8),   intent(in)    :: sz
 			type(state_t),       intent(inout) :: state
 			integer(kind = 8),   intent(out)   :: il, iu, step
+			type(value_t),       intent(in)    :: slots(:)
 		end subroutine
 
-		module subroutine get_field_slice_val(member_node, field_val, state, res)
+		module subroutine get_field_slice_val(member_node, field_val, state, res, slots)
 			type(syntax_node_t), intent(in)    :: member_node
 			type(value_t),       intent(in)    :: field_val
 			type(state_t),       intent(inout) :: state
 			type(value_t),       intent(out)   :: res
+			type(value_t),       intent(in)    :: slots(:)
 		end subroutine
 
-		module subroutine set_field_slice_val(member_node, field_val, state, val)
+		module subroutine set_field_slice_val(member_node, field_val, state, val, slots)
 			type(syntax_node_t), intent(in)    :: member_node
 			type(value_t),       intent(inout) :: field_val
 			type(state_t),       intent(inout) :: state
 			type(value_t),       intent(in)    :: val
+			type(value_t),       intent(in)    :: slots(:)
 		end subroutine
 
 		module function subscript_i32_eval(subs, array) result(index_)
@@ -230,30 +244,36 @@ module syntran__eval_m
 			integer(kind = 8) :: index_
 		end function
 
-		module function sub_eval(node, var, state) result(index_)
+		module function sub_eval(node, var, state, slots) result(index_)
 			type(syntax_node_t) :: node
 			type(value_t) :: var
 			type(state_t), intent(inout) :: state
+			! Every node%lsubscripts(i) is scalar_sub here (callers guarantee
+			! this), so like subscript_eval, slots(i) is dimension i's value
+			! directly
+			type(value_t), intent(in) :: slots(:)
 			integer(kind = 8) :: index_
 		end function
 
-		recursive module function subscript_eval(node, state) result(index_)
+		recursive module function subscript_eval(node, state, slots) result(index_)
 			type(syntax_node_t) :: node
 			type(state_t), intent(inout) :: state
+			type(value_t), intent(in) :: slots(:)
 			integer(kind = 8) :: index_
 		end function
 
 		module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
-				elems, str_, state, struct)
+				str_, struct, elem_vals)
 			type(value_t), intent(inout) :: val
 			integer, intent(in) :: kind_
 			integer(kind = 8), intent(in) :: i
 			type(value_t), intent(in) :: lbound_, step, ubound_, len_
 			type(array_t), intent(in) :: array
-			type(syntax_node_t), allocatable :: elems(:)
 			type(value_t), intent(in) :: str_
-			type(state_t), intent(inout) :: state
 			type(value_t), intent(in), optional :: struct(:)
+			! expl_array/size_array elements pre-evaluated at OP_FOR_SETUP
+			! time (compile_array_expr_slots); 1-based
+			type(value_t), intent(in), optional :: elem_vals(:)
 		end subroutine
 
 		module subroutine get_array_val(array, i, val)
@@ -268,104 +288,46 @@ module syntran__eval_m
 			type(value_t), intent(in) :: val
 		end subroutine
 
-		module subroutine apply_subscripts_to_val(node, val, state, res)
+		module subroutine apply_subscripts_to_val(node, val, state, res, slots)
 			type(syntax_node_t), intent(in)    :: node
 			type(value_t),       intent(in)    :: val
 			type(state_t),       intent(inout) :: state
 			type(value_t),       intent(out)   :: res
+			type(value_t),       intent(in)    :: slots(:)
 		end subroutine
 
 	end interface
 
 	interface
-		! Implemented in eval_fn.f90
+		! Implemented in runtime_control.f90
 
-		recursive module subroutine eval_fn_call(node, state, res)
+		recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots)
+			! Only called by the VM's OP_STORE_SLICE handler (vm_exec.f90),
+			! which always compiles+pushes node%right and, when
+			! node%lsubscripts is allocated, node%lsubscripts(:)'s bound
+			! sub-expressions -- so both args are always supplied (slots may
+			! be a zero-length window)
 			type(syntax_node_t), intent(in) :: node
 			type(state_t), intent(inout) :: state
 			type(value_t), intent(out) :: res
+			type(value_t), intent(in) :: rhs_in
+			type(value_t), intent(in) :: slots(:)
 		end subroutine
 
-		recursive module subroutine eval_fn_call_intr(node, state, res)
+		recursive module subroutine eval_array_expr(node, state, res, slots)
+			! Only called by the VM's OP_NEW_ARRAY handler (vm_exec.f90),
+			! which always compiles+pushes node's sub-expressions first
+			! (compile_array_expr_slots) -- so slots is always supplied
+			! (array_expr_nslots(node)-sized); consumed via a monotonic
+			! cursor in the same order -- see array_expr_nslots' docstring
+			! (bytecode.f90) for the per-kind consumption order
 			type(syntax_node_t), intent(in) :: node
 			type(state_t), intent(inout) :: state
 			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_fn_call_ptr(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-	end interface
-
-	interface
-		! Implemented in eval_control.f90
-
-		recursive module subroutine eval_for_statement(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_assignment_expr(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		module subroutine eval_translation_unit(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_array_expr(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_while_statement(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_if_statement(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_return_statement(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_block_statement(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		module subroutine eval_use_statement(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
-		end subroutine
-
-		recursive module subroutine eval_enum_cast_expr(node, state, res)
-			type(syntax_node_t), intent(in) :: node
-			type(state_t), intent(inout) :: state
-			type(value_t), intent(out) :: res
+			type(value_t), intent(in) :: slots(:)
 		end subroutine
 
 	end interface
-
-!===============================================================================
 
 contains
 
@@ -415,8 +377,8 @@ end subroutine rt_throw
 
 subroutine open_file_impl(state, filename, mode, must_open, file_)
 
-	! Shared implementation behind open() and std::try_open(), and behind both
-	! the AST walker (eval_fn.f90) and the bytecode VM (vm_intr.f90).
+	! Shared implementation behind open() and std::try_open(), called from
+	! the bytecode VM (vm_intr.f90).
 	!
 	! Mode-string errors (R6/R7) always throw -- a malformed mode literal is a
 	! program bug, not an I/O condition.  A failure of the underlying Fortran
@@ -503,8 +465,6 @@ elemental function divceil(num, den) result(res)
 	! I initially made this elemental so I could call product() on a vector
 	! result, but I need to loop and select case for index arr_sub anyway so
 	! just a scalar fn would've sufficed
-	!
-	! TODO: move to utils?
 
 	integer(kind = 8), intent(in) :: num, den
 	integer(kind = 8) :: res
@@ -524,168 +484,6 @@ end function divceil
 
 !===============================================================================
 
-recursive subroutine syntax_eval(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-
-	type(state_t), intent(inout) :: state
-
-	! I experimented with making res intent(inout) in commit 993345ad, but it
-	! had a negative imact on perf, making gfortran about twice as slow on aoc
-	! tests, likely due to the extra work of checking `if allocated(...)
-	! deallocate` in lots of places
-	type(value_t), intent(out) :: res
-
-	!********
-
-	integer :: id
-	type(value_t) :: tmp
-
-	!print *, "starting syntax_eval()"
-	!print *, "node kind = ", kind_name(node%kind)
-
-	if (node%is_empty) return
-
-	! Backstop: a runtime error was already thrown somewhere below in this
-	! call tree.  Unwind immediately without evaluating any more nodes
-	if (state%rt_halt) return
-
-	!********
-
-	! I'm being a bit loose with consistency on select case indentation but
-	! I don't want a gigantic diff
-
-	select case (node%kind)
-
-	case (literal_expr)
-		res = node%val  ! this handles ints, bools, etc.
-
-	case (enum_access_expr)
-		! An enum variant, e.g. `Dir.North`: like literal_expr, node%val was
-		! fully baked at parse time (parse_enum_access), so there's nothing
-		! left to resolve at runtime
-		res = node%val
-
-	case (enum_cast_expr)
-		! Reverse cast, e.g. `Dir(2)`: node%right is the ordinal expression,
-		! and node%val%struct(:) holds one fully-baked enum value_t per
-		! variant (set at parse time by parse_enum_cast) to match against
-		call eval_enum_cast_expr(node, state, res)
-
-	case (array_expr)
-		call eval_array_expr(node, state, res)
-
-	case (for_statement)
-		call eval_for_statement(node, state, res)
-
-	case (while_statement)
-		call eval_while_statement(node, state, res)
-
-	case (if_statement)
-		call eval_if_statement(node, state, res)
-
-	case (return_statement)
-		call eval_return_statement(node, state, res)
-
-	case (break_statement)
-		state%breaked = .true.
-		!call eval_break_statement(node, state, res)
-
-	case (continue_statement)
-		! No need for a subroutine (with 2 unused args) for 1 line
-		state%continued = .true.
-		!call eval_continue_statement(node, state, res)
-
-	case (translation_unit)
-		call eval_translation_unit(node, state, res)
-
-	case (use_statement)
-		call eval_use_statement(node, state, res)
-
-	case (block_statement)
-		call eval_block_statement(node, state, res)
-
-	case (assignment_expr)
-		call eval_assignment_expr(node, state, res)
-
-	case (let_expr)
-
-		! Assign return value
-		call syntax_eval(node%right, state, res)
-
-		!print *, 'assigning identifier ', quote(node%identifier%text)
-		!print *, "is_loc = ", node%is_loc
-
-		id = node%id_index
-		if (node%is_loc) then
-			state%locs%vals(id) = res
-		else
-			state%vars%vals(id) = res
-		end if
-
-		!print *, "res type = ", kind_name(res%type)
-		!print *, "allocated(struct) = ", allocated(res%struct)
-		!if (res%type == struct_type) then
-		!	print *, "size struct = ", size(res%struct)
-		!	print *, "size struct = ", size( state%vars%vals(id)%struct )
-		!	do i = 1, size(res%struct)
-		!		print *, "struct[", str(i), "] = ", res%struct(i)%to_str()
-		!		print *, "struct[", str(i), "] = ", state%vars%vals(id)%struct(i)%to_str()
-		!	end do
-		!end if
-
-	case (fn_call_expr, method_call_expr)  ! user-defined (method_call_expr reuses eval_fn_call)
-		call eval_fn_call(node, state, res)
-		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
-			call apply_subscripts_to_val(node, res, state, tmp)
-			res = tmp
-		end if
-
-	case (fn_call_intr_expr)
-		call eval_fn_call_intr(node, state, res)
-		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
-			call apply_subscripts_to_val(node, res, state, tmp)
-			res = tmp
-		end if
-
-	case (fn_ref_expr)
-		! A bare fn name: behaves like a literal.  node%val is the fully-built
-		! fn_type value (fn_index/fn_params/fn_ret) constructed at parse time
-		res = node%val
-
-	case (fn_call_ptr_expr)
-		call eval_fn_call_ptr(node, state, res)
-		if (allocated(node%lsubscripts) .and. .not. state%rt_halt) then
-			call apply_subscripts_to_val(node, res, state, tmp)
-			res = tmp
-		end if
-
-	case (struct_instance_expr)
-		call eval_struct_instance(node, state, res)
-
-	case (name_expr)
-		!print *, "name_expr"
-		call eval_name_expr(node, state, res)
-
-	case (dot_expr)
-		call eval_dot_expr(node, state, res)
-
-	case (unary_expr)
-		call eval_unary_expr(node, state, res)
-
-	case (binary_expr)
-		call eval_binary_expr(node, state, res)
-
-	case default
-		write(*,*) err_eval_node(kind_name(node%kind))
-		call internal_error()
-
-	end select
-
-end subroutine syntax_eval
-
-!===============================================================================
-
-end module syntran__eval_m
+end module syntran__runtime_m
 
 !===============================================================================

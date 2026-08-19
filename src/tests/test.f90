@@ -55,33 +55,26 @@ end function run_group
 ! unit_test_dir_unreadable_errors(), all of which check diagnostics emitted
 ! for bad syntran programs against expected error codes and/or locations
 
-function get_diags(str_, src_file, bytecode) result(diag_)
+function get_diags(str_, src_file) result(diag_)
 	character(len = *), intent(in) :: str_
 	character(len = *), intent(in), optional :: src_file
-
-	! Explicit backend override.  Lets runtime-error tests (which don't have
-	! a separate diags-emission path per backend, unlike compile-time E*
-	! diags) exercise both the bytecode VM and the AST walker for the same
-	! snippet.  Omit to use the SYNTRAN_BACKEND env var default (VM)
-	logical, intent(in), optional :: bytecode
 
 	type(string_vector_t) :: diag_
 	character(len = :), allocatable :: res_
 	if (present(src_file)) then
-		res_ = eval(str_, .true., src_file = src_file, diags = diag_, bytecode = bytecode)
+		res_ = eval(str_, .true., src_file = src_file, diags = diag_)
 	else
-		res_ = eval(str_, .true., diags = diag_, bytecode = bytecode)
+		res_ = eval(str_, .true., diags = diag_)
 	end if
 end function get_diags
 
 !===============================================================================
 
-function get_diags_file(filename, bytecode) result(diag_)
+function get_diags_file(filename) result(diag_)
 	character(len = *), intent(in) :: filename
-	logical, intent(in), optional :: bytecode
 	type(string_vector_t) :: diag_
 	character(len = :), allocatable :: res_
-	res_ = interpret_file(filename, quiet = .true., diags = diag_, bytecode = bytecode)
+	res_ = interpret_file(filename, quiet = .true., diags = diag_)
 end function get_diags_file
 
 !===============================================================================
@@ -195,18 +188,18 @@ end function diag_loc_ok
 ! Helper for unit_test_runtime_errors().  Runtime (R*) diagnostics have no
 ! caret/location context (unlike compile-time E* diags), so diag_loc_ok()
 ! doesn't apply here.  Instead this checks that a reproduction file raises
-! [code] under BOTH the bytecode VM and the (deprecated) AST walker, since R*
-! call sites are duplicated per-backend (eval_*.f90 vs vm_*.f90) and can drift
-! apart.  Each repro lives under src/tests/test-src/errors/ (also linked as an
-! example from doc/errors.md), mirroring how get_diags_file()/diag_loc_ok()
-! work for compile-time E* errors
+! [code].  Each repro lives under src/tests/test-src/errors/ (also linked as
+! an example from doc/errors.md), mirroring how get_diags_file()/diag_loc_ok()
+! work for compile-time E* errors.
+!
+! The "_both_" in the name is a holdover from when this also checked the AST
+! walker; only the VM remains, but the name was left alone to avoid touching
+! its ~25 call sites below
 
 function rt_code_both_file(filename, code) result(both)
 	character(len = *), intent(in) :: filename, code
 	logical :: both
-	both = &
-		diag_has_code(get_diags_file(filename, bytecode = .true. ), code) .and. &
-		diag_has_code(get_diags_file(filename, bytecode = .false.), code)
+	both = diag_has_code(get_diags_file(filename), code)
 end function rt_code_both_file
 
 !===============================================================================
@@ -1531,6 +1524,59 @@ subroutine unit_test_intr_fns(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_intr_fns
+
+!===============================================================================
+
+subroutine unit_test_intr_id_coverage(npass, nfail)
+
+	! Guards against a mangled intrinsic name being registered by
+	! declare_intr_fns (intr_fns.f90) without a matching case in
+	! intr_id_from_name (bytecode.f90).  A miss there compiles fine and only
+	! fails at runtime as `OP_CALL_INTR a=0` (vm_intr.f90's case default);
+	! this walks every registered name so the gap shows up as a test
+	! failure instead.  This replaces the coverage the AST walker's
+	! name-keyed `select case` in eval_fn_call_intr used to provide
+	! implicitly, before the walker was removed
+
+	use syntran__types_m,    only: fns_t
+	use syntran__intr_fns_m, only: declare_intr_fns
+	use syntran__bytecode_m, only: intr_id_from_name
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'intrinsic fn id coverage'
+
+	integer :: i
+	type(fns_t) :: fns
+	logical, allocatable :: tests(:)
+	character(len = :), allocatable :: key
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	call declare_intr_fns(fns)
+
+	allocate(tests(0))
+	do i = 1, fns%capacity
+		if (.not. allocated(fns%table(i)%key)) cycle
+		key = fns%table(i)%key
+		! "std::"-only fns (e.g. "std::args") are registered with the
+		! prefix as part of the hash-table key (parse_fn.f90's std::-first
+		! lookup), but node%identifier%text -- what intr_id_from_name is
+		! actually called with at compile_ctrl.f90:1296 -- never carries
+		! the prefix, so strip it here too to match real dispatch
+		if (len(key) > 5) then
+			if (key(1:5) == "std::") key = key(6:)
+		end if
+		tests = [tests, intr_id_from_name(key) /= 0]
+	end do
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_intr_id_coverage
 
 !===============================================================================
 
@@ -5989,14 +6035,10 @@ subroutine unit_test_enum(npass, nfail)
 				EC_ENUM_CAST_RANGE), &
 
 			! Reverse cast with an out-of-range non-literal ordinal is a
-			! runtime error (R32), on both backends
+			! runtime error (R32)
 			diag_has_code(get_diags( &
 				'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
-				//'let x = 99; Suit(x);', bytecode = .true.), &
-				RC_ENUM_CAST_RANGE), &
-			diag_has_code(get_diags( &
-				'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
-				//'let x = 99; Suit(x);', bytecode = .false.), &
+				//'let x = 99; Suit(x);'), &
 				RC_ENUM_CAST_RANGE), &
 
 			! Explicit negative values, and auto-increment resuming from a
@@ -6732,9 +6774,7 @@ subroutine unit_test_error_codes(npass, nfail)
 	! only a few representative IC_*/WC_* spot checks remain in section 4.
 	!
 	! RC_* (runtime) codes are no longer out of scope: most are reachable
-	! end-to-end and are tested in unit_test_runtime_errors() below, which
-	! checks them under both the bytecode VM and the AST walker since R* call
-	! sites are duplicated per-backend
+	! end-to-end and are tested in unit_test_runtime_errors() below
 	!
 	! EC_BAD_ARG_RANK (E47) is formally retired (see errors.f90) and is
 	! intentionally excluded from section 3 -- its constructor was deleted, so
@@ -7396,13 +7436,11 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	! Tests for reachable runtime (R*) errors, mirroring unit_test_error_codes()
 	! above but for errors raised during evaluation instead of parsing.
 	!
-	! Runtime errors are duplicated per-backend (eval_*.f90 for the AST walker,
-	! vm_*.f90 for the bytecode VM), each halting evaluation via state%rt_halt
-	! instead of exiting the process (see rt_throw() in eval.f90).  Every row
-	! below uses rt_code_both_file(), which checks that a reproduction file
-	! under src/tests/test-src/errors/ (also linked as an example from
-	! doc/errors.md) raises [code] under BOTH backends, since the two
-	! implementations could in principle drift apart.
+	! Runtime errors halt evaluation via state%rt_halt instead of exiting the
+	! process (see rt_throw() in runtime.f90).  Every row below uses
+	! rt_code_both_file(), which checks that a reproduction file under
+	! src/tests/test-src/errors/ (also linked as an example from
+	! doc/errors.md) raises [code].
 	!
 	! Unlike compile-time E* diagnostics, R* diagnostics carry no
 	! caret/location context (err_rt() has no span to underline), so there's
@@ -7474,13 +7512,10 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 			! R1: matmul `@` dimension mismatch
 			rt_code_both_file(P//'R1-matmul-dim.syntran', RC_MATMUL_DIM), &
-			! Guard against double-emission (one throw, not one per backend
-			! re-check or speculative re-evaluation)
+			! Guard against double-emission (one throw, not one per
+			! speculative re-evaluation)
 			diag_count_code(get_diags_file( &
-				P//'R1-matmul-dim.syntran', bytecode = .true.), &
-				RC_MATMUL_DIM) == 1, &
-			diag_count_code(get_diags_file( &
-				P//'R1-matmul-dim.syntran', bytecode = .false.), &
+				P//'R1-matmul-dim.syntran'), &
 				RC_MATMUL_DIM) == 1, &
 
 			! R2-R5: parse_i32/i64/f32/f64 on unparseable text
@@ -7548,10 +7583,7 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			rt_code_both_file( &
 				P//'R21-array-size-mismatch.syntran', RC_ARRAY_SIZE_MISMATCH), &
 			diag_count_code(get_diags_file( &
-				P//'R21-array-size-mismatch.syntran', bytecode = .true.), &
-				RC_ARRAY_SIZE_MISMATCH) == 1, &
-			diag_count_code(get_diags_file( &
-				P//'R21-array-size-mismatch.syntran', bytecode = .false.), &
+				P//'R21-array-size-mismatch.syntran'), &
 				RC_ARRAY_SIZE_MISMATCH) == 1, &
 
 			! R21, `for`-loop iterable form: same mismatch, but iterated
@@ -7560,19 +7592,13 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			rt_code_both_file( &
 				P//'R21-for-array-size-mismatch.syntran', RC_ARRAY_SIZE_MISMATCH), &
 			diag_count_code(get_diags_file( &
-				P//'R21-for-array-size-mismatch.syntran', bytecode = .true.), &
-				RC_ARRAY_SIZE_MISMATCH) == 1, &
-			diag_count_code(get_diags_file( &
-				P//'R21-for-array-size-mismatch.syntran', bytecode = .false.), &
+				P//'R21-for-array-size-mismatch.syntran'), &
 				RC_ARRAY_SIZE_MISMATCH) == 1, &
 			! opposite direction (too many elements for the declared size),
-			! as an inline snippet under both backends since a file halts at
-			! its first runtime error
+			! as an inline snippet since a file halts at its first runtime
+			! error
 			diag_has_code(get_diags( &
-				'let n = 3; for i in [1,2,3,4,5; n,1] {}', bytecode = .true.), &
-				RC_ARRAY_SIZE_MISMATCH), &
-			diag_has_code(get_diags( &
-				'let n = 3; for i in [1,2,3,4,5; n,1] {}', bytecode = .false.), &
+				'let n = 3; for i in [1,2,3,4,5; n,1] {}'), &
 				RC_ARRAY_SIZE_MISMATCH), &
 
 			! R23-R27: step-is-0 family (for loop, range/array literal, slice
@@ -8288,6 +8314,7 @@ subroutine unit_tests(iostat)
 	if (run_group('array_bool')) call unit_test_array_bool(npass, nfail)
 	if (run_group('nd_i32')) call unit_test_nd_i32(npass, nfail)
 	if (run_group('intr_fns')) call unit_test_intr_fns(npass, nfail)
+	if (run_group('intr_id_coverage')) call unit_test_intr_id_coverage(npass, nfail)
 	if (run_group('fns')) call unit_test_fns(npass, nfail)
 	if (run_group('repl_fns')) call unit_test_repl_fns(npass, nfail)
 	if (run_group('repl_directives')) call unit_test_repl_directives(npass, nfail)
@@ -8919,9 +8946,7 @@ subroutine unit_test_transpose(npass, nfail)
 			! Struct elements: transpose permutes %struct(:) by hand since
 			! composite elements don't live in an array_t buffer (previously
 			! SIGSEGV -- see src/core.f90 TODO history).  Same 2x3 source/
-			! indices as the i32 case above.  Both backends are covered by CI
-			! running this whole suite twice (default VM, then again with
-			! SYNTRAN_BACKEND=ast), same as every other row in this file.
+			! indices as the i32 case above.
 			eval('struct S{x:i32,}' &
 				//'let a = [S{x=0},S{x=1},S{x=2},S{x=3},S{x=4},S{x=5}];' &
 				//'let t = std::transpose(std::reshape(a,[2,3])); t[0,1].x;', &
@@ -9055,8 +9080,6 @@ program test
 		i = i + 1
 		call get_command_argument(i, argv)
 		select case (trim(argv))
-		case ('--no-warn-ast')
-			no_warn = .true.
 		case ('--anchor')
 			print_anchor = .true.
 		case ('--only')

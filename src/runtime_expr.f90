@@ -1,7 +1,14 @@
 
 !===============================================================================
 
-submodule (syntran__eval_m) syntran__eval_expr
+submodule (syntran__runtime_m) syntran__runtime_expr
+
+	! Name-expression subscripting (a[i], a[i:j], a[[0,2,4]], string slicing)
+	! and the small scalar helpers it and runtime_array.f90 share.  Formerly
+	! part of the AST walker (eval_expr.f90); eval_binary_expr/eval_dot_expr/
+	! eval_unary_expr were dropped here since the VM has its own native
+	! OP_BINOP/OP_UNOP and calls get_val directly for dot-chain reads
+	! (runtime_m's module docstring has the full picture)
 
 	implicit none
 
@@ -11,7 +18,7 @@ contains
 
 !===============================================================================
 
-recursive module subroutine eval_binary_expr(node, state, res)
+recursive module subroutine eval_name_expr(node, state, res, slots)
 
 	type(syntax_node_t), intent(in) :: node
 
@@ -19,126 +26,12 @@ recursive module subroutine eval_binary_expr(node, state, res)
 
 	type(value_t), intent(out) :: res
 
-	!********
-
-	integer :: larrtype, rarrtype
-
-	character(len = :), allocatable :: rt_err
-
-	type(value_t) :: left, right
-
-	call syntax_eval(node%left , state, left )
-	if (state%rt_halt) return
-	call syntax_eval(node%right, state, right)
-	if (state%rt_halt) return
-
-	!print *, 'left  type = ', kind_name(left%type)
-	!print *, 'right type = ', kind_name(right%type)
-	!print *, "op kind    = ", kind_name(node%op%kind)
-
-	larrtype = unknown_type
-	rarrtype = unknown_type
-	if (left %type == array_type) larrtype = left %array%type
-	if (right%type == array_type) rarrtype = right%array%type
-
-	res%type = get_binary_op_kind(left%type, node%op%kind, right%type, &
-		larrtype, rarrtype)
-	select case (res%type)
-	case (bool_array_type, f32_array_type, f64_array_type, &
-		i32_array_type, i64_array_type, str_array_type)
-
-		res%type = array_type
-	end select
-
-	if (res%type == unknown_type) then
-		write(*,*) err_eval_binary_types(node%op%text)
-		call internal_error()
-	end if
-
-	!print *, 'op = ', node%op%text
-
-	select case (node%op%kind)
-	case (plus_token)
-		call add(left, right, res, node%op%text)
-
-	case (minus_token)
-		call subtract(left, right, res, node%op%text)
-
-	case (star_token)
-		call mul(left, right, res, node%op%text)
-
-	case (matmul_token)
-		call matmul_(left, right, res, node%op%text, rt_err)
-		if (allocated(rt_err)) then
-			call rt_throw(state, rt_err)
-			return
-		end if
-
-	case (sstar_token)
-		call pow(left, right, res, node%op%text)
-
-	case (slash_token)
-		call div(left, right, res, node%op%text)
-
-	case (percent_token)
-		call mod_(left, right, res, node%op%text)
-
-	case (and_keyword)
-		call and_(left, right, res, node%op%text)
-
-	case (or_keyword)
-		call or_(left, right, res, node%op%text)
-
-	case (eequals_token)
-		call is_eq(left, right, res, node%op%text)
-
-	case (bang_equals_token)
-		call is_ne(left, right, res, node%op%text)
-
-	case (less_token)
-		call is_lt(left, right, res, node%op%text)
-
-	case (less_equals_token)
-		call is_le(left, right, res, node%op%text)
-
-	case (greater_token)
-		call is_gt(left, right, res, node%op%text)
-
-	case (greater_equals_token)
-		call is_ge(left, right, res, node%op%text)
-
-	case (lless_token)
-		call left_shift(left, right, res, node%op%text)
-
-	case (ggreater_token)
-		call right_shift(left, right, res, node%op%text)
-
-	case (caret_token)
-		call bit_xor(left, right, res, node%op%text)
-
-	case (pipe_token)
-		call bit_or(left, right, res, node%op%text)
-
-	case (amp_token)
-		call bit_and(left, right, res, node%op%text)
-
-	case default
-		write(*,*) err_eval_binary_op(node%op%text)
-		call internal_error()
-
-	end select
-
-end subroutine eval_binary_expr
-
-!===============================================================================
-
-recursive module subroutine eval_name_expr(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
+	! node%lsubscripts(:)'s bound sub-expressions were already compiled to
+	! bytecode (compile_subscript_slots, compile_ctrl.f90) and popped by the
+	! VM's OP_SLICE handler; forwarded to
+	! subscript_eval/str_char_slice/eval_slice_rank1/get_subscript_range --
+	! see subscript_dim_nslots' docstring (bytecode.f90) for the slot layout
+	type(value_t), intent(in) :: slots(:)
 
 	!********
 
@@ -197,9 +90,9 @@ recursive module subroutine eval_name_expr(node, state, res)
 		res%type = str_type
 		if (.not. allocated(res%str)) allocate(res%str)
 		if (node%is_loc) then
-			res%str%s = str_char_slice(state%locs%vals(id)%str%s, node, state, 1)
+			res%str%s = str_char_slice(state%locs%vals(id)%str%s, node, state, 1, slots)
 		else
-			res%str%s = str_char_slice(state%vars%vals(id)%str%s, node, state, 1)
+			res%str%s = str_char_slice(state%vars%vals(id)%str%s, node, state, 1, slots)
 		end if
 		if (state%rt_halt) return
 
@@ -212,15 +105,15 @@ recursive module subroutine eval_name_expr(node, state, res)
 		if (all(node%lsubscripts(1:nelem)%sub_kind == scalar_sub)) then
 
 			! All element subscripts scalar → scalar string result
-			i8 = subscript_eval(node, state)   ! element flat index (char sub ignored)
+			i8 = subscript_eval(node, state, slots)   ! element flat index (char sub ignored)
 			res%type = str_type
 			if (.not. allocated(res%str)) allocate(res%str)
 			if (node%is_loc) then
 				res%str%s = str_char_slice( &
-					state%locs%vals(id)%array%str(i8+1)%s, node, state, nelem+1)
+					state%locs%vals(id)%array%str(i8+1)%s, node, state, nelem+1, slots)
 			else
 				res%str%s = str_char_slice( &
-					state%vars%vals(id)%array%str(i8+1)%s, node, state, nelem+1)
+					state%vars%vals(id)%array%str(i8+1)%s, node, state, nelem+1, slots)
 			end if
 			if (state%rt_halt) return
 
@@ -228,7 +121,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 
 			! Element range/slice → string array result.  Reuse the standard
 			! slice machinery; get_subscript_range ignores the trailing char sub.
-			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res, slots)
 			if (state%rt_halt) return
 
 			allocate(res%array)
@@ -267,11 +160,11 @@ recursive module subroutine eval_name_expr(node, state, res)
 				if (node%is_loc) then
 					index_ = subscript_i32_eval(subs, state%locs%vals(id)%array)
 					res%array%str(i8+1)%s = str_char_slice( &
-						state%locs%vals(id)%array%str(index_+1)%s, node, state, nelem+1)
+						state%locs%vals(id)%array%str(index_+1)%s, node, state, nelem+1, slots)
 				else
 					index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
 					res%array%str(i8+1)%s = str_char_slice( &
-						state%vars%vals(id)%array%str(index_+1)%s, node, state, nelem+1)
+						state%vars%vals(id)%array%str(index_+1)%s, node, state, nelem+1, slots)
 				end if
 				if (state%rt_halt) return
 				call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
@@ -291,7 +184,7 @@ recursive module subroutine eval_name_expr(node, state, res)
 		!print *, "rank = ", node%val%array%rank
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
-			i8 = subscript_eval(node, state)
+			i8 = subscript_eval(node, state, slots)
 
 			if (node%is_loc) then
 				call get_val(node, state%locs%vals(id), state, res, index_ = i8)
@@ -303,12 +196,12 @@ recursive module subroutine eval_name_expr(node, state, res)
 		         node%lsubscripts(1)%sub_kind /= arr_sub) then
 
 			! Rank-1 slice fast path: avoids allocating lsubs/ssubs/usubs/asubs.
-			call eval_slice_rank1(node, state, res)
+			call eval_slice_rank1(node, state, res, slots)
 			if (state%rt_halt) return
 
 		else
 
-			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res, slots)
 			if (state%rt_halt) return
 
 			!print *, "type = ", kind_name( node%val%array%type )
@@ -394,92 +287,6 @@ end subroutine eval_name_expr
 
 !===============================================================================
 
-module subroutine eval_dot_expr(node, state, res)
-
-	! This is an RHS dot expr.  LHS dots are handled in eval_assignment_expr().
-
-	type(syntax_node_t), intent(in) :: node
-
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	integer :: id
-
-	if (node%root_kind /= 0) then
-		! Root is a fn_call_expr/method_call_expr (e.g. `fn().field`).
-		! Evaluate the fn call (incl. any subscripts) to get the root struct value,
-		! then apply the member chain to it.
-		block
-			type(syntax_node_t) :: root_node, wrapper
-			type(value_t) :: root_val
-			root_node = node
-			root_node%kind = node%root_kind
-			if (allocated(root_node%member)) deallocate(root_node%member)
-			call syntax_eval(root_node, state, root_val)
-			if (state%rt_halt) return
-			wrapper%kind = dot_expr
-			allocate(wrapper%member)
-			wrapper%member = node%member
-			call get_val(wrapper, root_val, state, res)
-		end block
-		return
-	end if
-
-	! This won't work for struct literal member access.  It only works for
-	! `identifier.member`
-
-	id = node%id_index
-	if (node%is_loc) then
-		call get_val(node, state%locs%vals(id), state, res)
-	else
-		call get_val(node, state%vars%vals(id), state, res)
-	end if
-
-end subroutine eval_dot_expr
-
-!===============================================================================
-
-recursive module subroutine eval_unary_expr(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	type(value_t) :: right
-
-	call syntax_eval(node%right, state, right)
-	!print *, 'right = ', right
-
-	res%type = right%type
-
-	select case (node%op%kind)
-	case (plus_token)
-		res = right
-
-	case (minus_token)
-		call negate(right, res, node%op%text)
-
-	case (not_keyword)
-		call not_(right, res, node%op%text)
-
-	case (bang_token)
-		call bit_not(right, res, node%op%text)
-
-	case default
-		write(*,*) err_eval_unary_op(node%op%text)
-		call internal_error()
-	end select
-
-end subroutine eval_unary_expr
-
-!===============================================================================
-
 module subroutine promote_i32_i64(val)
 
 	! If val is i32 type, change it to i64 and copy the values
@@ -499,7 +306,7 @@ end subroutine promote_i32_i64
 
 !===============================================================================
 
-module function str_char_slice(s, node, state, isub) result(out)
+module function str_char_slice(s, node, state, isub, slots) result(out)
 
 	! Extract a character or substring from Fortran character string `s` using
 	! subscript index `isub` in `node%lsubscripts` / `node%usubscripts`.
@@ -510,11 +317,14 @@ module function str_char_slice(s, node, state, isub) result(out)
 	!
 	! Syntran indexing is 0-based, upper bound exclusive; Fortran slicing is
 	! 1-based inclusive — hence the +1 / -1 offsets below.
+	!
+	! `slots` is forwarded to str_slice_bounds -- see its docstring
 
 	character(len = *), intent(in) :: s
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
 	integer, intent(in) :: isub
+	type(value_t), intent(in) :: slots(:)
 
 	character(len = :), allocatable :: out
 
@@ -526,7 +336,7 @@ module function str_char_slice(s, node, state, isub) result(out)
 	! uniformly (0-based, upper-exclusive in the direction of step), so a
 	! stepped/reversed slice like s[:-1:] works the same as it does for
 	! arrays.
-	call str_slice_bounds(node, isub, int(len(s), 8), state, il, iu, step)
+	call str_slice_bounds(node, isub, int(len(s), 8), state, il, iu, step, slots)
 	if (state%rt_halt) then
 		out = ""
 		return
@@ -556,6 +366,6 @@ end function str_char_slice
 
 !===============================================================================
 
-end submodule syntran__eval_expr
+end submodule syntran__runtime_expr
 
 !===============================================================================

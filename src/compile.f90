@@ -10,7 +10,7 @@ module syntran__compile_m
 	!   compile_ctrl.f90  - compile_tree entry point and control flow
 
 	use syntran__bytecode_m
-	use syntran__eval_m
+	use syntran__runtime_m
 
 	implicit none
 

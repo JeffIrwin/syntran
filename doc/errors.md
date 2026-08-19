@@ -675,7 +675,7 @@ An unexpected/unrecognized binary operator token reached the evaluator.
 
 ### I7 -- unit-step-array-type
 
-A `for` loop's unit-step (`a:b`) range has a runtime type other than `i32`/`i64` (AST and VM paths).
+A `for` loop's unit-step (`a:b`) range has a runtime type other than `i32`/`i64` (VM path).
 
 ### I8 -- for-step-zero (retired)
 
@@ -692,15 +692,15 @@ I8; kept reserved, do not reuse.
 
 ### I10 -- step-array-type
 
-A `for` loop's step-range has an unsupported runtime type (AST and VM paths).
+A `for` loop's step-range has an unsupported runtime type (VM path).
 
 ### I11 -- bound-len-array-type
 
-A `for` loop's length-based range has an unsupported runtime type (AST and VM paths).
+A `for` loop's length-based range has an unsupported runtime type (VM path).
 
 ### I12 -- for-array-kind
 
-A `for` loop's range array has an unrecognized/unimplemented array kind (AST and VM paths).
+A `for` loop's range array has an unrecognized/unimplemented array kind (VM path).
 
 ### I13 -- str-char-subscript
 

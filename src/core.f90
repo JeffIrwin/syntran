@@ -10,7 +10,7 @@ module syntran__core_m
 	use syntran__compiler_m
 	use syntran__consts_m
 	use syntran__errors_m
-	use syntran__eval_m
+	use syntran__runtime_m
 	use syntran__intr_fns_m
 	use syntran__intr_vars_m
 	use syntran__parse_m
@@ -34,9 +34,6 @@ module syntran__core_m
 	!  - cleanup TODO notes throughout the codebase
 	!    * took a big chunk out already
 	!    * continue one file at a time
-	!    * postponing eval*.f90 until after ast backend is imminently purged
-	!  - remove AST-walking interpreter. bytecode is better
-	!    * will probably remove it in 1.6
 	!  - switch/match/case. needs to work with strings. would be nice to work
 	!    with arrays. basic switch/case is fine but also consider "pattern
 	!    matching" or whatever rust has
@@ -83,14 +80,19 @@ module syntran__core_m
 	!      str-to-num and num-to-str conversion, even tried gfortran 13 in
 	!      rocky, but there are still issues:
 	!
+	!    * trace below predates the eval*.f90 -> runtime*.f90 split (the AST
+	!      walker was removed in 1.6.0); file/line refs are stale but the
+	!      underlying threadsafety bug is presumably still there somewhere
+	!      in the runtime_*.f90 successors
+	!
 	!          Starting AOC syntran main-struct 2023/02
 	!          part 2 = 54249
 	!          Ending AOC syntran main
-	!          
+	!
 	!          part 1 = 540212
 	!          At line 918 of file ././src/eval_array.f90
 	!          Fortran runtime error: Index '2' of dimension 1 of array 'array%str' above upper bound of 1
-	!          
+	!
 	!          Error termination. Backtrace:
 	!          #0  0x7f02914288a0 in ???
 	!          #1  0x7f02914293f9 in ???
@@ -113,7 +115,7 @@ module syntran__core_m
 	!      it. duh!
 	!    * fortran compile time optimization -- see if pain points like
 	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
-	!      + intr_fns.f90, eval.f90, types.f90 now broken up
+	!      + intr_fns.f90, eval.f90 (now runtime.f90), types.f90 broken up
 	!      + anything else?
 	!      + build.sh (cmake) uses parallel gnu make builds. fpm still builds
 	!        serially

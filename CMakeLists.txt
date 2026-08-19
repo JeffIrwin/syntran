@@ -176,11 +176,6 @@ set(LIB_SRC
 	${SRC_DIR}/consts.f90
 	${SRC_DIR}/core.f90
 	${SRC_DIR}/errors.f90
-	${SRC_DIR}/eval.f90
-	${SRC_DIR}/eval_array.f90
-	${SRC_DIR}/eval_control.f90
-	${SRC_DIR}/eval_expr.f90
-	${SRC_DIR}/eval_fn.f90
 	${SRC_DIR}/vm.f90
 	${SRC_DIR}/vm_exec.f90
 	${SRC_DIR}/vm_intr.f90
@@ -213,6 +208,10 @@ set(LIB_SRC
 	${SRC_DIR}/parse_fn.f90
 	${SRC_DIR}/parse_misc.f90
 	${SRC_DIR}/repl.f90
+	${SRC_DIR}/runtime.f90
+	${SRC_DIR}/runtime_array.f90
+	${SRC_DIR}/runtime_control.f90
+	${SRC_DIR}/runtime_expr.f90
 	${SRC_DIR}/syntran.f90
 	${SRC_DIR}/types.f90
 	${SRC_DIR}/types_copy.f90

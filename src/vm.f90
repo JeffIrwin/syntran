@@ -10,7 +10,7 @@ module syntran__vm_m
 	!   vm_exec.f90  - main dispatch loop (vm_run)
 
 	use syntran__bytecode_m
-	use syntran__eval_m
+	use syntran__runtime_m
 
 	implicit none
 
