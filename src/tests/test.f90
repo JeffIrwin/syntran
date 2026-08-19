@@ -1835,6 +1835,28 @@ subroutine unit_test_for(npass, nfail)
 			interpret_file(path//'test-07.syntran', quiet) == '1836311903', &
 			interpret_file(path//'test-08.syntran', quiet) == '0', &
 			interpret_file(path//'test-09.syntran', quiet) == 'true', &
+
+			! Regression test for a double-free crash: two sequential
+			! top-level `for` loops directly over array literals with
+			! allocatable-component elements (str here) both land on
+			! for_iters(1) in vm_exec.f90's OP_FOR_SETUP (nfor returns to 0
+			! between the loops), so the second loop's setup must deep-copy
+			! its elem_vals(:) instead of shallow-copying stack slots the
+			! first loop's (still-live, dead-but-not-empty) elem_vals
+			! aliased -- see value_array_copy() call sites in vm_exec.f90.
+			! expl_array kind (plain `[...]` literal):
+			eval('let t="";' &
+				//'for s in ["ab","cd"] {t=t+s;}' &
+				//'for s in ["ef","gh"] {t=t+s;}' &
+				//'return t;' &
+				, quiet) == 'abcdefgh', &
+			! size_array kind (`[..., ...; size]` literal):
+			eval('let t="";' &
+				//'for s in ["ab","cd"; 2] {t=t+s;}' &
+				//'for s in ["ef","gh"; 2] {t=t+s;}' &
+				//'return t;' &
+				, quiet) == 'abcdefgh', &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

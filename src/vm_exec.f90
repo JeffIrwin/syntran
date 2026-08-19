@@ -102,19 +102,36 @@ end subroutine grow_frames
 !===============================================================================
 
 subroutine grow_fors(for_iters)
-	! Double the for-iterator stack.  for_iter_t's members are either plain
-	! derived types with allocatables inside (value_t/array_t) or an
-	! allocatable array directly (struct(:)); either way plain assignment
-	! handles (re)allocation of each element correctly, so assignment is used
-	! for each element.  Copies into the doubled buffer directly to avoid the
-	! extra round-trip through a same-sized tmp.
+	! Double the for-iterator stack.  Like grow_frames() above: a whole-object
+	! `tmp(i) = for_iters(i)` is NOT safe here despite for_iter_t having a
+	! value_t/array_t-based assignment(=) available on its components --
+	! plain (non-elemental) type assignment doesn't dispatch value_copy's
+	! defined assignment(=) for an array-to-array assignment of value_t
+	! (struct(:), elem_vals(:)), so it would shallow-copy their nested
+	! struct(:) descriptors instead of deep-copying them, aliasing tmp and
+	! the original (about to be freed by move_alloc below).  Move each
+	! allocatable component individually instead; scalar fields are plain
+	! assigned, value_t members are value_move'd, and the array_t member is
+	! array_move'd (mirrors value_move()/array_move() in value.f90).
 	type(for_iter_t), allocatable, intent(inout) :: for_iters(:)
 	type(for_iter_t), allocatable :: tmp(:)
 	integer :: i, n
 	n = size(for_iters)
 	allocate(tmp(2 * n))
 	do i = 1, n
-		tmp(i) = for_iters(i)
+		tmp(i)%for_kind = for_iters(i)%for_kind
+		tmp(i)%itr_type = for_iters(i)%itr_type
+		tmp(i)%len8     = for_iters(i)%len8
+		tmp(i)%counter  = for_iters(i)%counter
+		tmp(i)%node_idx = for_iters(i)%node_idx
+		call value_move(for_iters(i)%lbound_, tmp(i)%lbound_)
+		call value_move(for_iters(i)%step,    tmp(i)%step)
+		call value_move(for_iters(i)%ubound_, tmp(i)%ubound_)
+		call value_move(for_iters(i)%len_,    tmp(i)%len_)
+		call array_move(for_iters(i)%array,   tmp(i)%array)
+		call value_move(for_iters(i)%str_,    tmp(i)%str_)
+		if (allocated(for_iters(i)%struct))    call move_alloc(for_iters(i)%struct,    tmp(i)%struct)
+		if (allocated(for_iters(i)%elem_vals)) call move_alloc(for_iters(i)%elem_vals, tmp(i)%elem_vals)
 	end do
 	call move_alloc(tmp, for_iters)
 end subroutine grow_fors
@@ -639,8 +656,15 @@ module subroutine vm_run(prog, state, res)
 			nrecv_ = call_recv_total_nslots(cn)
 			if (nrecv_ > 0) then
 				recv_base_ = stack%len_ - nrecv_
-				allocate(recv_tmp_(nrecv_))
-				recv_tmp_ = stack%v(recv_base_+1 : recv_base_+nrecv_)
+				! value_array_copy(), not a bare array assignment: gfortran
+				! doesn't dispatch value_copy's defined assignment(=) for an
+				! array-to-array assignment of value_t, so `recv_tmp_ =
+				! stack%v(...)` shallow-copies the nested struct(:)
+				! descriptor instead of deep-copying it -- recv_tmp_ and the
+				! (still-live, dead-but-not-empty) stack slots then share one
+				! block, and freeing either one later double-frees it. See
+				! value_array_copy()'s own docstring in value.f90
+				call value_array_copy(recv_tmp_, stack%v(recv_base_+1 : recv_base_+nrecv_))
 				stack%len_ = recv_base_
 			end if
 
@@ -661,7 +685,11 @@ module subroutine vm_run(prog, state, res)
 			frames(nframes)%return_ip  = ip + 1
 			frames(nframes)%nfor_saved = nfor
 			frames(nframes)%node_idx  = node_idx_call
-			if (allocated(frames(nframes)%recv_slots)) deallocate(frames(nframes)%recv_slots)
+			! Never a bare deallocate() of a value_t array -- a reused frame
+			! slot's recv_slots may still own nested struct(:)/array_t
+			! allocatables from a prior call at this depth; value_array_destroy()
+			! walks and frees them explicitly first (see its docstring)
+			call value_array_destroy(frames(nframes)%recv_slots)
 			if (nrecv_ > 0) call move_alloc(recv_tmp_, frames(nframes)%recv_slots)
 			if (allocated(state%locs%vals)) then
 				call move_alloc(state%locs%vals, frames(nframes)%caller_locs)
@@ -1412,10 +1440,13 @@ module subroutine vm_run(prog, state, res)
 					! pushed them) instead of AST-walking elems(i) per
 					! iteration in array_at.  for_iters(fi) is a reused
 					! stack slot, so a stale allocation from a prior
-					! for-loop at this depth must be cleared first
-					if (allocated(for_iters(fi)%elem_vals)) deallocate(for_iters(fi)%elem_vals)
-					allocate(for_iters(fi)%elem_vals(nslots_))
-					for_iters(fi)%elem_vals = stack%v(base_+1 : base_+nslots_)
+					! for-loop at this depth must be cleared first.
+					! value_array_copy(), not a bare array assignment or
+					! deallocate/allocate/assign -- see the identical note at
+					! OP_CALL's recv_tmp_ above (and value_array_copy's own
+					! docstring): a plain `elem_vals = stack%v(...)` would
+					! shallow-copy struct(:) and alias the live stack slots
+					call value_array_copy(for_iters(fi)%elem_vals, stack%v(base_+1 : base_+nslots_))
 
 				case (size_array)
 					rk_ = size(nd%array%size)
@@ -1423,10 +1454,9 @@ module subroutine vm_run(prog, state, res)
 
 					! Slot window order (compile_array_expr_slots): elems(:)
 					! first, then size(:).  Materialize elements the same
-					! way expl_array does above.
-					if (allocated(for_iters(fi)%elem_vals)) deallocate(for_iters(fi)%elem_vals)
-					allocate(for_iters(fi)%elem_vals(size(nd%array%elems)))
-					for_iters(fi)%elem_vals = stack%v(base_+1 : base_+size(nd%array%elems))
+					! way expl_array does above (value_array_copy(), not a
+					! bare assignment -- see the note there).
+					call value_array_copy(for_iters(fi)%elem_vals, stack%v(base_+1 : base_+size(nd%array%elems)))
 					k_ = base_ + size(nd%array%elems)
 
 					for_iters(fi)%len8 = 1
@@ -3319,8 +3349,27 @@ module subroutine vm_run(prog, state, res)
 		do i = 1, size(frames)
 			call value_array_destroy(frames(i)%caller_locs)
 			call value_array_destroy(frames(i)%locs_buf)
+			call value_array_destroy(frames(i)%recv_slots)
 		end do
 		deallocate(frames)
+	end if
+
+	! for_iters(:) holds the same kind of nested value_t/array_t trees as the
+	! pools above (lbound_/step/ubound_/len_/str_ are value_t; struct(:) and
+	! elem_vals(:) are value_t arrays; array is an array_t) -- same distrust
+	! of implicit deep deallocation applies
+	if (allocated(for_iters)) then
+		do i = 1, size(for_iters)
+			call value_destroy(for_iters(i)%lbound_)
+			call value_destroy(for_iters(i)%step)
+			call value_destroy(for_iters(i)%ubound_)
+			call value_destroy(for_iters(i)%len_)
+			call value_destroy(for_iters(i)%str_)
+			call array_destroy(for_iters(i)%array)
+			call value_array_destroy(for_iters(i)%struct)
+			call value_array_destroy(for_iters(i)%elem_vals)
+		end do
+		deallocate(for_iters)
 	end if
 
 	call value_array_destroy(params_pool)
