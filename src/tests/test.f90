@@ -7466,10 +7466,9 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	! (I24) the moment it was subscripted, before rt_diags was ever printed.
 	! R21-for-array-size-mismatch.syntran covers the same mismatch iterated
 	! directly by a `for` loop instead of bound with `let` first -- a
-	! separate code path (OP_FOR_SETUP's size_array case in vm_exec.f90 /
-	! eval_for_statement's size_array case in eval_control.f90) that used to
-	! skip the check entirely under the bytecode VM, letting OP_FOR_NEXT read
-	! past the end of the array literal's elements and crash with a raw
+	! separate code path (OP_FOR_SETUP's size_array case in vm_exec.f90)
+	! that used to skip the check entirely, letting OP_FOR_NEXT read past
+	! the end of the array literal's elements and crash with a raw
 	! Fortran bounds-check abort instead of ever raising R21.
 	!
 	! Excluded from this end-to-end coverage:

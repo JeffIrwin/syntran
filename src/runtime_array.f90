@@ -1028,12 +1028,11 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 	! Enum/struct elements of a materialized (non-primary) array_t live here
 	! instead of in `array` (array_t has no value_t component) -- set only
 	! when the iterated array's element type is enum_type/struct_type.
-	! c.f. eval_for_statement's case default and OP_FOR_SETUP in vm_exec.f90
+	! c.f. OP_FOR_SETUP in vm_exec.f90
 	type(value_t), intent(in), optional :: struct(:)
 
 	! expl_array/size_array elements pre-evaluated at OP_FOR_SETUP time
-	! (compile_array_expr_slots) instead of AST-walking elems(i) here on
-	! every iteration; 1-based, same indexing as elems
+	! (compile_array_expr_slots); 1-based
 	type(value_t), intent(in), optional :: elem_vals(:)
 
 	!*********

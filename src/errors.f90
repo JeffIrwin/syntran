@@ -1985,8 +1985,8 @@ end function err_expl_array_size
 
 function err_rt_expl_array_size(nelems, sizes) result(err)
 	! Runtime (R21) counterpart to err_expl_array_size()'s parse-time E102.
-	! Shared by eval_array_expr(), eval_for_statement(), and the bytecode
-	! VM's OP_FOR_SETUP (size_array case) so their messages can't drift apart
+	! Shared by eval_array_expr() and the bytecode VM's OP_FOR_SETUP
+	! (size_array case) so their messages can't drift apart
 	integer, intent(in) :: nelems
 	integer(kind = 8), intent(in) :: sizes(:)
 	character(len = :), allocatable :: err

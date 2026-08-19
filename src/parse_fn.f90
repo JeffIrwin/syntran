@@ -400,11 +400,10 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		!print *, 'assigning fn node'
 
 		! fn_call%body is *not* set here.  The body is not copied per call
-		! site: fn_call carries id_index, and eval_fn_call()/compile_node()
-		! look the body up via state%fns%fns(id_index)%node%body /
-		! cs%fns%fns(id_index)%node%body instead.  Params and num_locs are
-		! still needed directly on fn_call, since eval_fn_call() reads them
-		! before it has a state to index into
+		! site: fn_call carries id_index, and compile_node() looks the body
+		! up via cs%fns%fns(id_index)%node%body instead.  Params and
+		! num_locs are still needed directly on fn_call, since compile_node()
+		! reads them before it has a state to index into
 		fn_call%params = fn%node%params
 
 		fn_call%num_locs = fn%node%num_locs
@@ -2409,10 +2408,12 @@ module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 
 	! Effective ref-ness of this argument.  Normally this is just whatever the
 	! caller wrote (`&arg` or not).  But a `&const` param is a read-only
-	! borrow: the callee never writes back through it (see eval_fn_call), so a
-	! bare-name argument can transparently auto-borrow (no copy) even without
-	! an explicit `&` at the call site.  Non-name args (literals, temporaries,
-	! subscripts, etc.) stay by-value -- there is no caller slot to borrow.
+	! borrow: assigning to it inside the fn body is itself a parse error
+	! (const_param, checked where params are declared), so the callee can
+	! never write back through it, which lets a bare-name argument
+	! transparently auto-borrow (no copy) even without an explicit `&` at
+	! the call site.  Non-name args (literals, temporaries, subscripts,
+	! etc.) stay by-value -- there is no caller slot to borrow.
 	eff_is_ref = call_is_ref_i
 	if (param_is_ref .and. param_is_const_ref .and. .not. call_is_ref_i .and. &
 			arg%kind == name_expr .and. .not. allocated(arg%lsubscripts)) then

@@ -16,7 +16,7 @@ submodule (syntran__vm_m) syntran__vm_exec
 	!------------------------------------------------------------------------
 	! Call frame: one entry per active function invocation.
 	! caller_locs holds state%locs%vals saved via move_alloc at CALL time,
-	! restored via move_alloc at RET time — mirrors eval_fn_call's locs0 pattern.
+	! restored via move_alloc at RET time.
 	!------------------------------------------------------------------------
 
 	type :: frame_t
@@ -39,10 +39,9 @@ submodule (syntran__vm_m) syntran__vm_exec
 
 	!------------------------------------------------------------------------
 	! For-loop iterator frame: one entry per active native for loop.
-	! Mirrors the local variables in eval_for_statement (eval_control.f90:14).
-	! for_kind uses the same constants as eval_for_statement: bound_array,
-	! step_array, len_array, expl_array, size_array, unif_array, array_expr,
-	! or str_type for string iteration.
+	! for_kind uses array_t's kind constants: bound_array, step_array,
+	! len_array, expl_array, size_array, unif_array, array_expr, or
+	! str_type for string iteration.
 	!------------------------------------------------------------------------
 
 	type :: for_iter_t
@@ -235,12 +234,12 @@ end subroutine do_compound
 
 subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 
-	! Compute a binary operation on two values, mirroring eval_binary_expr.
+	! Compute a binary operation on two values.
 	! restype: pre-computed result type from the compiler (node%val%type).
 	!   When restype /= unknown_type the expensive get_binary_op_kind call is
 	!   skipped.  The compiler always supplies this for OP_BINOP (instr%b).
 	! The math routines (add, subtract, etc.) are available because
-	! syntran__vm_m uses syntran__eval_m which uses syntran__math_m and
+	! syntran__vm_m uses syntran__runtime_m which uses syntran__math_m and
 	! syntran__bool_m.
 
 	type(value_t), intent(in) :: left, right
@@ -451,7 +450,7 @@ end subroutine do_array_binop_typed
 
 subroutine do_unop(right, op_kind, res)
 
-	! Compute a unary operation, mirroring eval_unary_expr.
+	! Compute a unary operation.
 
 	type(value_t), intent(in) :: right
 	integer, intent(in) :: op_kind
@@ -701,7 +700,7 @@ module subroutine vm_run(prog, state, res)
 		! Stack layout on entry (bottom to top): [by-value args][callee_fn_value]
 		! (callee at TOS).  Unlike OP_CALL, the target fn is not known until this
 		! instruction executes: pop the callee value first and read its fn_index
-		! to resolve the entry point/num_locs, mirroring eval_fn_call_ptr.  v1 fn
+		! to resolve the entry point/num_locs.  v1 fn
 		! pointers are by-value only, so cn%params/cn%is_ref are not used here
 		! (cn%params is left unallocated on this node kind, which also makes
 		! OP_RET's by-ref writeback loop below a no-op for this call kind, since
@@ -1078,11 +1077,10 @@ module subroutine vm_run(prog, state, res)
 			if (allocated(cv%struct_name)) val%struct_name = cv%struct_name
 
 			! Needed so value_to_str() can look up member names by
-			! %struct_reg_idx (c.f. struct_reg_set() in value.f90).  Without
-			! this, structs built through the (default) bytecode VM print
-			! unlabeled even though the AST-walker path (eval_struct_instance)
-			! already sets it.  Deallocate/reset on the else branch so a
-			! reused `val` can't carry stale identity from a prior struct type
+			! %struct_reg_idx (c.f. struct_reg_set() in value.f90) -- without
+			! it, structs built through OP_MAKE_STRUCT print unlabeled.
+			! Deallocate/reset on the else branch so a reused `val` can't
+			! carry stale identity from a prior struct type
 			if (allocated(cv%struct_cookie)) then
 				val%struct_cookie = cv%struct_cookie
 			else if (allocated(val%struct_cookie)) then
@@ -1286,7 +1284,7 @@ module subroutine vm_run(prog, state, res)
 
 		! --- M8: for-loop setup ---------------------------------------------------
 		! Evaluates loop bounds / computes len8; pushes a for_iter_t onto the
-		! for-iterator stack.  Mirrors eval_for_statement setup (eval_control.f90:31-205).
+		! for-iterator stack.
 		case (OP_FOR_SETUP)
 			block
 			integer :: fi, rk_
@@ -1441,9 +1439,9 @@ module subroutine vm_run(prog, state, res)
 						for_iters(fi)%len8 = for_iters(fi)%len8 * sizes_(i)
 					end do
 
-					! Mirrors eval_for_statement's size_array check
-					! (eval_control.f90) -- without it, OP_FOR_NEXT's array_at()
-					! reads past the end of for_iters(fi)%elem_vals for a
+					! Guards against a runtime-valued size mismatch -- without
+					! it, OP_FOR_NEXT's array_at() reads past the end of
+					! for_iters(fi)%elem_vals for a
 					! mismatched runtime-valued size (crashing with a raw
 					! Fortran bounds abort instead of R21, since the parser
 					! can only catch this ahead of time when every size is a
@@ -1493,8 +1491,7 @@ module subroutine vm_run(prog, state, res)
 					! Enum/struct elements live in %struct(:), not in
 					! array_t (which has no value_t component) -- thread it
 					! through separately.  array_at() falls back to its
-					! array_t path when this isn't allocated (mirrors
-					! eval_for_statement's case default in eval_control.f90).
+					! array_t path when this isn't allocated.
 					! for_iters(fi) is a reused slot on a stack, not a fresh
 					! variable, so a stale allocation from a prior for-loop
 					! that used this same slot must be cleared first --

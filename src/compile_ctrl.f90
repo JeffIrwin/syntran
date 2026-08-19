@@ -1271,7 +1271,7 @@ recursive subroutine compile_node(prog, cs, node)
 		end if
 
 		! Load the callee fn-pointer value (node%id_index/is_loc identify the
-		! *variable* holding it, not a fn id -- c.f. eval_fn_call_ptr)
+		! *variable* holding it, not a fn id)
 		if (node%is_loc) then
 			call emit(prog, OP_LOAD_LOCAL, a = node%id_index)
 		else

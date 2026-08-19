@@ -355,10 +355,9 @@ subroutine value_reset(val)
 		! str(:) of string_t with its own allocatable %s; struct(:) is a
 		! recursive value_t array), and gfortran's implicit deep
 		! deallocation of that doesn't reliably free every level (same bug
-		! already fixed piecewise in value_copy()/array_copy() and
-		! eval_fn_call()'s locs teardown). value_destroy() clears every
-		! level explicitly, including str/file_/struct_name/struct_cookie/
-		! enum_name/enum_variant/enum_cookie
+		! already fixed piecewise in value_copy()/array_copy()).
+		! value_destroy() clears every level explicitly, including
+		! str/file_/struct_name/struct_cookie/enum_name/enum_variant/enum_cookie
 		call value_destroy(val)
 		val%type = unknown_type
 	end select
