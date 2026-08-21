@@ -479,9 +479,9 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 	! state%vars, state%fns, state%structs, and state%enums are round-tripped
 	! through the local parser below so they survive from one REPL line to
 	! the next (c.f. eval_dispatch()/syntran_interpret() in syntran.f90).
-	! Struct and enum declarations are otherwise parse-time only -- both
-	! backends skip struct_declaration/enum_declaration nodes (c.f.
-	! eval_control.f90, compile_ctrl.f90) -- so unlike fns there is no flat
+	! Struct and enum declarations are otherwise parse-time only -- the
+	! compiler skips struct_declaration/enum_declaration nodes (c.f.
+	! compile_ctrl.f90) -- so unlike fns there is no flat
 	! array counterpart to rebuild for them.  target is required: fns%get()
 	! and structs%get() return pointers into the dict, and a subobject of a
 	! target dummy is itself a target
@@ -643,8 +643,9 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished.  Note state%fns%fns is left
 		! alone here -- the parser never reads or writes the flat array, only
-		! the hash table (c.f. eval_fn.f90, the only reader of fns%fns), so
-		! there is no need to move it in and deep-copy it back out again
+		! the hash table (c.f. compile_ctrl.f90's REPL pass, the only reader
+		! of fns%fns), so there is no need to move it in and deep-copy it
+		! back out again
 		call move_alloc(state%fns%table, parser%fns%table)
 		parser%fns%capacity = state%fns%capacity
 		parser%fns%count    = state%fns%count
@@ -653,9 +654,9 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	end if
 
-	! Structs and enums are parse-time-only -- both backends skip
-	! struct_declaration/enum_declaration nodes (c.f. eval_control.f90 and
-	! compile_ctrl.f90) -- but the REPL needs them to survive from one line
+	! Structs and enums are parse-time-only -- the compiler skips
+	! struct_declaration/enum_declaration nodes (c.f. compile_ctrl.f90) --
+	! but the REPL needs them to survive from one line
 	! to the next, so move the tables in and back out just like fns above.
 	! Unlike fns there is no flat array counterpart, so there is nothing
 	! equivalent to state%fns%fns to leave alone

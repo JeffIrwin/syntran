@@ -58,7 +58,7 @@ submodule (syntran__vm_m) syntran__vm_exec
 		type(value_t) :: str_             ! string to iterate over (str_type)
 		! Enum/struct elements of `array` (array_t has no value_t component of
 		! its own), set only when array%type is enum_type/struct_type.
-		! c.f. array_at()'s optional `struct` arg in eval_array.f90
+		! c.f. array_at()'s optional `struct` arg in runtime_array.f90
 		type(value_t), allocatable :: struct(:)
 		! expl_array/size_array elements, pre-evaluated at OP_FOR_SETUP time
 		! (compile_array_expr_slots) instead of AST-walked per-iteration by
@@ -81,7 +81,8 @@ contains
 
 subroutine grow_frames(frames)
 	! Double the call-frame stack.  Allocatable components (caller_locs,
-	! locs_buf) are moved cheaply; scalar fields are plain assigned.
+	! locs_buf, recv_slots) are moved cheaply; scalar fields are plain
+	! assigned.
 	type(frame_t), allocatable, intent(inout) :: frames(:)
 	type(frame_t), allocatable :: tmp(:)
 	integer :: i, n
@@ -95,6 +96,8 @@ subroutine grow_frames(frames)
 			call move_alloc(frames(i)%caller_locs, tmp(i)%caller_locs)
 		if (allocated(frames(i)%locs_buf)) &
 			call move_alloc(frames(i)%locs_buf, tmp(i)%locs_buf)
+		if (allocated(frames(i)%recv_slots)) &
+			call move_alloc(frames(i)%recv_slots, tmp(i)%recv_slots)
 	end do
 	call move_alloc(tmp, frames)
 end subroutine grow_frames
@@ -334,7 +337,7 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 	case (amp_token)
 		call bit_and(left, right, res, '&')
 	case default
-		write(*,*) 'VM: unknown binary op ', op_kind
+		write(*,*) err_eval_binary_op(kind_name(op_kind))
 		call internal_error()
 	end select
 
@@ -485,7 +488,7 @@ subroutine do_unop(right, op_kind, res)
 	case (bang_token)
 		call bit_not(right, res, '~')
 	case default
-		write(*,*) 'VM: unknown unary op ', op_kind
+		write(*,*) err_eval_unary_op(kind_name(op_kind))
 		call internal_error()
 	end select
 
@@ -761,6 +764,14 @@ module subroutine vm_run(prog, state, res)
 			frames(nframes)%return_ip  = ip + 1
 			frames(nframes)%nfor_saved = nfor
 			frames(nframes)%node_idx  = node_idx_call
+			! v1 fn pointers are by-value only (see the docstring above), so
+			! this frame slot never gets a recv_slots writeback window of its
+			! own -- but a *previous* call at this depth (e.g. a method call
+			! through a subscripted receiver) may have left one allocated.
+			! Clear it the same way OP_CALL does, so it doesn't linger for
+			! the rest of the run and isn't mistaken for this call's window
+			! if by-ref fn-pointer params are ever added.
+			call value_array_destroy(frames(nframes)%recv_slots)
 			if (allocated(state%locs%vals)) then
 				call move_alloc(state%locs%vals, frames(nframes)%caller_locs)
 			end if
@@ -848,16 +859,25 @@ module subroutine vm_run(prog, state, res)
 					! set_val, using this param's own window of the
 					! call-time-compiled receiver-chain slots
 					! (compile_ctrl.f90's Pass 3) instead of AST-walking the
-					! receiver again.  fr%recv_slots is unallocated only when
-					! NO by-ref receiver anywhere in this call has any
+					! receiver again.  fr%recv_slots should be unallocated only
+					! when NO by-ref receiver anywhere in this call has any
 					! subscript to evaluate (call_recv_total_nslots(cn) == 0),
 					! in which case this receiver's own chain_total_nslots is
 					! also 0 and set_val never reaches a slots consumption
-					! point -- safe to call without slots in that case.
+					! point -- safe to call without slots in that case.  The
+					! recv_n_ > 0 guard below turns a violation of that
+					! invariant (e.g. grow_frames() dropping recv_slots) into
+					! an internal_error() instead of an absent-optional
+					! dereference inside set_val.
 					block
 						integer :: recv_pos_, recv_n_
 						recv_n_ = chain_total_nslots(cn%args(i))
 						recv_pos_ = 0
+						if (recv_n_ > 0 .and. .not. allocated(fr%recv_slots)) then
+							write(*,*) err_int(IC_MISSING_RECV_SLOTS, &
+								'OP_RET by-ref writeback: recv_n_ > 0 but recv_slots is unallocated')
+							call internal_error()
+						end if
 						if (allocated(fr%recv_slots)) then
 							if (cn%args(i)%is_loc) then
 								call set_val(cn%args(i), state%locs%vals(cn%args(i)%id_index), &
@@ -1332,12 +1352,14 @@ module subroutine vm_run(prog, state, res)
 
 			! bound_array/step_array/len_array are always intercepted by
 			! for_setup_native_ok before OP_FOR_SETUP is ever emitted for
-			! them (see compile_ctrl.f90's for_statement case), so the
-			! case(bound_array)/case(step_array)/case(len_array) arms below
-			! are unreachable; only unif_array/size_array/expl_array
-			! sub-expressions are ever compiled to bytecode here
-			! (compile_array_expr_slots), hence the nslots_ guard below only
-			! pops for those three.
+			! them (see compile_ctrl.f90's for_statement case) -- OP_FOR_SETUP_NAT
+			! below is their only live implementation.  The case(bound_array)/
+			! case(step_array)/case(len_array) arms below exist only to turn
+			! that invariant into a diagnostic if it's ever violated: their
+			! populating syntax_eval prologue was deleted along with the AST
+			! walker, so silently falling through here would compute len8
+			! from a previous for-loop's stale for_iters(fi) fields (a reused
+			! stack slot) instead of crashing.
 			select case (nd%array%kind)
 			case (array_expr)
 				for_iters(fi)%for_kind = nd%array%val%array%kind
@@ -1354,84 +1376,11 @@ module subroutine vm_run(prog, state, res)
 				k_ = base_
 
 				select case (nd%array%val%array%kind)
-				case (bound_array)
-					! Promote bounds to i64 if either is i64
-					if (any(i64_type == [for_iters(fi)%lbound_%type, &
-					                      for_iters(fi)%ubound_%type])) then
-						call promote_i32_i64(for_iters(fi)%lbound_)
-						call promote_i32_i64(for_iters(fi)%ubound_)
-						for_iters(fi)%itr_type = i64_type
-					else
-						for_iters(fi)%itr_type = i32_type
-					end if
-					if (.not. any(for_iters(fi)%itr_type == [i32_type, i64_type])) then
-						write(*,*) err_int(IC_UNIT_STEP_TYPE, 'unit step array type not implemented')
-						call internal_error()
-					end if
-					for_iters(fi)%len8 = for_iters(fi)%ubound_%to_i64() &
-					                   - for_iters(fi)%lbound_%to_i64()
-
-				case (step_array)
-					! Promote all to i64 if any is i64
-					if (any(i64_type == [for_iters(fi)%lbound_%type, &
-					                      for_iters(fi)%step%type, &
-					                      for_iters(fi)%ubound_%type])) then
-						call promote_i32_i64(for_iters(fi)%lbound_)
-						call promote_i32_i64(for_iters(fi)%step)
-						call promote_i32_i64(for_iters(fi)%ubound_)
-						for_iters(fi)%itr_type = i64_type
-					else
-						for_iters(fi)%itr_type = for_iters(fi)%lbound_%type
-					end if
-					select case (for_iters(fi)%itr_type)
-					case (i32_type)
-						if (for_iters(fi)%step%sca%i32 == 0) then
-							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
-							exit
-						end if
-						for_iters(fi)%len8 = ( &
-							for_iters(fi)%ubound_%sca%i32 - for_iters(fi)%lbound_%sca%i32 &
-							+ for_iters(fi)%step%sca%i32  &
-							- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
-					case (i64_type)
-						if (for_iters(fi)%step%sca%i64 == 0) then
-							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
-							exit
-						end if
-						for_iters(fi)%len8 = ( &
-							for_iters(fi)%ubound_%sca%i64 - for_iters(fi)%lbound_%sca%i64 &
-							+ for_iters(fi)%step%sca%i64  &
-							- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
-					case (f32_type)
-						if (for_iters(fi)%step%sca%f32 == 0.0) then
-							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
-							exit
-						end if
-						for_iters(fi)%len8 = ceiling( &
-							(for_iters(fi)%ubound_%sca%f32 - for_iters(fi)%lbound_%sca%f32) &
-							/ for_iters(fi)%step%sca%f32)
-					case (f64_type)
-						if (for_iters(fi)%step%sca%f64 == 0.0d0) then
-							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
-							exit
-						end if
-						for_iters(fi)%len8 = ceiling( &
-							(for_iters(fi)%ubound_%sca%f64 - for_iters(fi)%lbound_%sca%f64) &
-							/ for_iters(fi)%step%sca%f64)
-					case default
-						write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type not implemented')
-						call internal_error()
-					end select
-
-				case (len_array)
-					for_iters(fi)%itr_type = nd%array%val%array%type
-					select case (for_iters(fi)%itr_type)
-					case (f32_type, f64_type)
-						for_iters(fi)%len8 = for_iters(fi)%len_%to_i64()
-					case default
-						write(*,*) err_int(IC_BOUND_LEN_TYPE, 'bound/len array type not implemented')
-						call internal_error()
-					end select
+				case (bound_array, step_array, len_array)
+					write(*,*) err_int(IC_FOR_ARRAY_KIND, &
+						'for loop: bound_array/step_array/len_array must be ' // &
+						'compiled to OP_FOR_SETUP_NAT, never OP_FOR_SETUP')
+					call internal_error()
 
 				case (expl_array)
 					for_iters(fi)%len8 = nd%array%val%array%len_

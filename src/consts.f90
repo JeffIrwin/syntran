@@ -19,7 +19,7 @@ module syntran__consts_m
 
 	! Max array rank handled by the native OP_SLICE_NAT/OP_STORE_SLICE_NAT
 	! bytecode handlers' fixed-size local buffers.  Higher-rank slices fall
-	! back to OP_SLICE/OP_STORE_SLICE (eval_array.f90), which use allocatable
+	! back to OP_SLICE/OP_STORE_SLICE (runtime_array.f90), which use allocatable
 	! subscript arrays and have no rank limit.
 	integer, parameter :: MAX_NAT_SLICE_RANK = 4
 

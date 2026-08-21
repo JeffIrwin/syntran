@@ -663,15 +663,18 @@ A binary operator could not be evaluated for its operands' runtime types (math/b
 
 ### I4 -- eval-unary-op
 
-An unexpected/unrecognized unary operator token reached the evaluator.
+An unexpected/unrecognized unary operator token reached `do_unop` (VM path).
 
-### I5 -- eval-node
+### I5 -- eval-node (retired)
 
-An unexpected AST node kind reached the evaluator.
+Used to fire when an unexpected AST node kind reached the AST walker's
+dispatcher (`eval.f90`). That dispatcher was deleted along with the rest of
+the AST walker, and the VM has no equivalent single dispatch point to guard.
+The code is kept reserved per the permanence policy above; do not reuse it.
 
 ### I6 -- eval-binary-op
 
-An unexpected/unrecognized binary operator token reached the evaluator.
+An unexpected/unrecognized binary operator token reached `do_binop` (VM path).
 
 ### I7 -- unit-step-array-type
 
@@ -827,6 +830,10 @@ A struct lookup by name failed for a value already confirmed to be that struct t
 ### I42 -- file-member
 
 A file handle member read or write reached the struct-array code path.  Unreachable: file handle members are read-only (see E100/E101) and never allocate `%struct(:)`.
+
+### I43 -- missing-recv-slots
+
+`OP_RET`'s by-ref writeback found a subscripted/dot-expr receiver with a non-zero slot count but no receiver-chain slots on the call frame.  Unreachable in valid syntran code: `frame_t%recv_slots` is populated by `OP_CALL` from `call_recv_total_nslots(cn)` slots and preserved across call-frame-stack growth by `grow_frames()`; this guards against those staying in sync.
 
 ## Runtime errors
 

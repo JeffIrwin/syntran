@@ -1502,8 +1502,8 @@ pure function subscript_dim_nslots(node, i) result(n)
 	! fallback opcodes pre-compile node%lsubscripts(:) to bytecode instead of
 	! AST-walking them at eval time (compile_subscript_slots in
 	! compile_ctrl.f90 emits the matching compile_node() calls; the VM pops
-	! the pushed values and eval_subscript_1d_v/str_slice_bounds_v/
-	! field_slice_bounds_v in eval_array.f90 consume them).
+	! the pushed values and eval_subscript_1d/str_slice_bounds/
+	! field_slice_bounds in runtime_array.f90 consume them).
 	!
 	! Fixed per-dimension evaluation order: step (step_sub only), then lower
 	! (unless omitted; not for all_sub), then upper (unless omitted;
@@ -1582,7 +1582,7 @@ recursive pure function chain_total_nslots(node) result(n)
 
 	! Total operand-stack slots a member-access chain (node, and its
 	! node%member/node%member%member/... recursion) consumes.  Mirrors the
-	! exact recursive order get_val/set_val (eval_array.f90) walk the chain:
+	! exact recursive order get_val/set_val (runtime_array.f90) walk the chain:
 	! node's own lsubscripts (if any) are consumed first, then either the
 	! walk recurses into node%member (when it is itself a further dot_expr,
 	! meaning node%member's subscripts are consumed as its OWN

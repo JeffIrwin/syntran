@@ -5,7 +5,7 @@ module syntran__vm_m
 
 	! Stack-based bytecode virtual machine.
 	!
-	! Module + submodule layout mirrors eval.f90 + eval_*.f90.
+	! Module + submodule layout mirrors runtime.f90 + runtime_*.f90.
 	! Submodules:
 	!   vm_exec.f90  - main dispatch loop (vm_run)
 

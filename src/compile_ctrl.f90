@@ -93,7 +93,7 @@ end subroutine compile_subscript_slots
 
 recursive subroutine compile_member_chain_slots(prog, cs, node)
 
-	! Mirrors get_val/set_val's (eval_array.f90) recursive member-chain
+	! Mirrors get_val/set_val's (runtime_array.f90) recursive member-chain
 	! walk: compiles node's own subscript bound sub-expressions (if any) via
 	! compile_subscript_slots, then either recurses into node%member (when
 	! it is itself a further dot_expr) or compiles node%member's
@@ -266,7 +266,13 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 			cs%in_fn_body = .true.
 			call compile_node(prog, cs, module_node%members(i)%body)
 			cs%in_fn_body = .false.
-			! Implicit void return for functions with no explicit return statement
+			! Implicit void return for functions with no explicit return
+			! statement.  Pop the body block's own result (block_statement
+			! compilation always leaves exactly one value on the stack, even
+			! for an empty body -- see the block_statement case above) before
+			! pushing the unknown_type sentinel, so OP_RET pops the sentinel
+			! and not the body's stranded result.
+			call emit(prog, OP_POP)
 			const_idx = add_const(prog, unknown_val())
 			call emit(prog, OP_LOAD_CONST, a = const_idx)
 			call emit(prog, OP_RET)
@@ -280,6 +286,7 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 					cs%in_fn_body = .true.
 					call compile_node(prog, cs, module_node%members(i)%members(j)%body)
 					cs%in_fn_body = .false.
+					call emit(prog, OP_POP)
 					const_idx = add_const(prog, unknown_val())
 					call emit(prog, OP_LOAD_CONST, a = const_idx)
 					call emit(prog, OP_RET)
@@ -876,7 +883,13 @@ recursive subroutine compile_node(prog, cs, node)
 				cs%in_fn_body = .true.
 				call compile_node(prog, cs, node%members(i)%body)
 				cs%in_fn_body = .false.
-				! Implicit void return for functions with no explicit return statement
+				! Implicit void return for functions with no explicit return
+				! statement.  Pop the body block's own result (block_statement
+				! compilation always leaves exactly one value on the stack,
+				! even for an empty body) before pushing the unknown_type
+				! sentinel, so OP_RET pops the sentinel and not the body's
+				! stranded result.
+				call emit(prog, OP_POP)
 				const_idx = add_const(prog, unknown_val())
 				call emit(prog, OP_LOAD_CONST, a = const_idx)
 				call emit(prog, OP_RET)
@@ -890,6 +903,7 @@ recursive subroutine compile_node(prog, cs, node)
 						cs%in_fn_body = .true.
 						call compile_node(prog, cs, node%members(i)%members(j)%body)
 						cs%in_fn_body = .false.
+						call emit(prog, OP_POP)
 						const_idx = add_const(prog, unknown_val())
 						call emit(prog, OP_LOAD_CONST, a = const_idx)
 						call emit(prog, OP_RET)
@@ -920,7 +934,13 @@ recursive subroutine compile_node(prog, cs, node)
 				cs%in_fn_body = .true.
 				call compile_node(prog, cs, cs%fns%fns(i)%node%body)
 				cs%in_fn_body = .false.
-				! Implicit void return for functions with no explicit return statement
+				! Implicit void return for functions with no explicit return
+				! statement.  Pop the body block's own result (block_statement
+				! compilation always leaves exactly one value on the stack,
+				! even for an empty body) before pushing the unknown_type
+				! sentinel, so OP_RET pops the sentinel and not the body's
+				! stranded result.
+				call emit(prog, OP_POP)
 				const_idx = add_const(prog, unknown_val())
 				call emit(prog, OP_LOAD_CONST, a = const_idx)
 				call emit(prog, OP_RET)

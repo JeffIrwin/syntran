@@ -5,7 +5,7 @@ module syntran__compile_m
 
 	! Bytecode compiler: lowers an AST (syntax_node_t) into a program_t.
 	!
-	! Module + submodule layout mirrors eval.f90 + eval_*.f90.
+	! Module + submodule layout mirrors runtime.f90 + runtime_*.f90.
 	! Submodules:
 	!   compile_ctrl.f90  - compile_tree entry point and control flow
 

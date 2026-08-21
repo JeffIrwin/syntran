@@ -1529,8 +1529,8 @@ subroutine parse_file_member(parser, expr, identifier)
 	! Read-only dot member access on a file handle: f.is_open, f.eof, f.name.
 	! Unlike struct members these are baked from a fixed table rather than
 	! looked up in a struct_t, but the resulting node has the same shape
-	! (dot_expr + %member%id_index + %member%val) so that get_val() -- and
-	! therefore both backends -- handle it with one branch
+	! (dot_expr + %member%id_index + %member%val) so that get_val() handles
+	! it with one branch
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(inout) :: expr

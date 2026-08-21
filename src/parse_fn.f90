@@ -1595,8 +1595,9 @@ module subroutine parse_enum_name_expr(parser, expr, enum_name)
 	! Following Python's model, a bare enum name is an array of all its
 	! variants in declaration order (aliases included).  This is synthesized
 	! here as an ordinary explicit array literal (expl_array), so it rides
-	! the existing array machinery in both backends -- AST eval via
-	! eval_array_expr, bytecode via OP_NEW_ARRAY -- and iterating it with
+	! the existing array machinery -- native OP_NEW_ARRAY when the elements
+	! qualify, eval_array_expr's slot-consuming fallback otherwise -- and
+	! iterating it with
 	! `for` takes the same expl_array path already exercised by a literal
 	! enum array (c.f. parse_array_expr).  No new node kind, no runtime enum
 	! registry

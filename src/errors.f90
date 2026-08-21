@@ -125,7 +125,7 @@ module syntran__errors_m
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
 		IC_EVAL_UNARY_OP = "I4", &
-		IC_EVAL_NODE = "I5", &
+		IC_EVAL_NODE = "I5", &            ! retired: only emission site was the deleted AST-walker dispatcher (eval.f90), never reuse
 		IC_EVAL_BINARY_OP = "I6", &
 		IC_UNIT_STEP_TYPE = "I7", &
 		IC_FOR_STEP_ZERO = "I8", &       ! retired: replaced by RC_FOR_STEP_ZERO, never reuse
@@ -163,6 +163,7 @@ module syntran__errors_m
 		IC_CONVERT_F64_ARR = "I40", &
 		IC_TRANSPOSE_ARRAY_TYPE = "I41", &
 		IC_FILE_MEMBER = "I42", &
+		IC_MISSING_RECV_SLOTS = "I43", &
 		RC_MATMUL_DIM = "R1", &
 		RC_PARSE_I32 = "R2", &
 		RC_PARSE_I64 = "R3", &
@@ -445,6 +446,7 @@ function get_all_error_codes() result(codes)
 	call codes%push(IC_CONVERT_F64_ARR)
 	call codes%push(IC_TRANSPOSE_ARRAY_TYPE)
 	call codes%push(IC_FILE_MEMBER)
+	call codes%push(IC_MISSING_RECV_SLOTS)
 	call codes%push(RC_MATMUL_DIM)
 	call codes%push(RC_PARSE_I32)
 	call codes%push(RC_PARSE_I64)
@@ -2288,17 +2290,6 @@ function err_eval_unary_op(op) result(err)
 		//'unexpected unary operator `'//op//'`'//color_reset
 
 end function err_eval_unary_op
-
-!===============================================================================
-
-function err_eval_node(node_kind) result(err)
-	character(len = *), intent(in) :: node_kind
-	character(len = :), allocatable :: err
-
-	err = err_int_pre(IC_EVAL_NODE) &
-		//'unexpected node `'//node_kind//'`'//color_reset
-
-end function err_eval_node
 
 !===============================================================================
 

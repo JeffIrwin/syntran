@@ -747,7 +747,36 @@ subroutine unit_test_assignment(npass, nfail)
 			interpret('{'// &
 				'let b = (let a = 5) * a;'// &
 				'let d = (let c = b - a) + c;}') == '40', &
-			eval('let myVariable = 1337;')  == '1337'   &
+			eval('let myVariable = 1337;')  == '1337' ,  &
+
+			! Pin intentional semantics: `a[f()].b = g()` now compiles the
+			! LHS subscript before the RHS (compile_subscript_slots emitted
+			! ahead of compile_node(node%right) in compile_ctrl.f90), so f()
+			! runs before g().  This also fixes a pre-existing double
+			! evaluation of the LHS subscript, since the old AST-walking
+			! fallback re-walked it after evaluating the RHS.
+			eval('let ord="";' &
+				//'struct S{b:i32}' &
+				//'fn f():i32 { ord=ord+"L"; return 0; }' &
+				//'fn g():i32 { ord=ord+"R"; return 7; }' &
+				//'let a=[S{b=1},S{b=2}];' &
+				//'a[f()].b = g();' &
+				//'return ord;' &
+				, .true.) == 'LR', &
+			! Pin intentional semantics: a compound assignment through a
+			! subscripted dot-chain (`s.v[nxt()] += 5`) now evaluates the
+			! subscript once (get_val and set_val replay the SAME
+			! pre-compiled slot window, OP_STORE_MEMBER resets pos to 0
+			! between them) instead of twice like the deleted AST walker,
+			! which re-walked the subscript expression for each of the
+			! get/set halves.
+			eval('let calls=0;' &
+				//'fn nxt():i32 { calls += 1; return 0; }' &
+				//'struct S{v:[i32; :]}' &
+				//'let s=S{v=[1,2,3]};' &
+				//'s.v[nxt()] += 5;' &
+				//'return calls;' &
+				, .true.) == '1'   &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -1856,6 +1885,23 @@ subroutine unit_test_for(npass, nfail)
 				//'for s in ["ef","gh"; 2] {t=t+s;}' &
 				//'return t;' &
 				, quiet) == 'abcdefgh', &
+
+			! Pin intentional semantics: array-literal `for` headers now
+			! evaluate every element eagerly at loop setup (OP_FOR_SETUP
+			! pre-compiles compile_array_expr_slots), not lazily per
+			! iteration like the deleted AST walker.  x is read for BOTH
+			! elements before the loop body ever runs, so mutating x inside
+			! the body no longer affects element 2's value.
+			eval('let x=0; let t="";' &
+				//'for i in [x, x] { t = t + str(i); x = 9; }' &
+				//'return t;' &
+				, quiet) == '00', &
+			! Corollary: a later element with a side effect is evaluated even
+			! if the loop body breaks before reaching that iteration.
+			eval('let n=0; fn f():i32 { n += 1; return 1; }' &
+				//'for i in [0, f()] { break; }' &
+				//'return n;' &
+				, quiet) == '1', &
 
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
@@ -3759,6 +3805,24 @@ subroutine unit_test_fns(npass, nfail)
 			! bound used to falsely trip E56/E58 in parse pass 0
 			interpret_file(path//'test-34.syntran', quiet) == '3', &
 			interpret_file(path//'test-35.syntran', quiet) == '3', &
+			! Regression: a void fn with no explicit `return` used to leave
+			! its implicit-void-return sentinel on top of the fn body's own
+			! stranded block result (block_statement compilation always
+			! leaves exactly one value on the stack), so the *caller* read
+			! the wrong operand-stack slot after the call returned.
+			eval('fn h() { }  fn g(): i32 { h(); return 5; }  1 + g();', &
+				quiet) == '6', &
+			! Same bug via a struct method with no explicit return, called
+			! from a recursive fn -- confirms the fix holds across OP_CALL's
+			! by-ref-receiver bookkeeping too.
+			eval('struct C{n:i32, fn nop(){}}' // &
+			     'fn f(d:i32):i32 { let c=C{n=0}; c.nop(); let t=d;' // &
+			     'if (d>0) { t += f(d-1); } return t; } f(3);', quiet) == '6', &
+			! A void fn WITH an explicit `return;` already worked (OP_RET's
+			! early jump skips the epilogue entirely) -- pin it so the fix
+			! above doesn't regress the already-correct path.
+			eval('fn h() { return; }  fn g(): i32 { h(); return 5; }  1 + g();', &
+				quiet) == '6', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7442,8 +7506,14 @@ subroutine unit_test_error_codes(npass, nfail)
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
-			! both backends) in unit_test_runtime_errors() below
-			index(err_eval_node('some_node_kind'), '['//IC_EVAL_NODE//']') > 0, &
+			! both backends) in unit_test_runtime_errors() below.  IC_EVAL_NODE
+			! (I5, err_eval_node) was retired and removed: its only emission
+			! site was the deleted AST-walker's node dispatcher, which has no
+			! VM counterpart -- see errors.f90's retirement comment.
+			! IC_EVAL_UNARY_OP/IC_EVAL_BINARY_OP (I4/I6) are live again, now
+			! emitted from do_unop/do_binop's case default in vm_exec.f90.
+			index(err_eval_unary_op('?'), '['//IC_EVAL_UNARY_OP//']') > 0, &
+			index(err_eval_binary_op('?'), '['//IC_EVAL_BINARY_OP//']') > 0, &
 			index(warn_pre(WC_MISSING_RETURN), '['//WC_MISSING_RETURN//']') > 0 &
 		]
 
@@ -8763,6 +8833,16 @@ subroutine unit_test_deep_recursion(npass, nfail)
 			     'for i16 in [0:1] { for i17 in [0:1] { for i18 in [0:1] { for i19 in [0:1] {' // &
 			     's = s + 1; }}}}}}}}}}}}}}}}}}}}' // &
 			     's;') == '1', &
+			! Regression test: recursion past INIT_FRAMES_CAP (64) through a
+			! by-ref method call whose receiver is subscripted (a[1]).  Each
+			! live frame at depths > 64 carries frame_t%recv_slots, which
+			! grow_frames() must move into the doubled frame array instead of
+			! dropping -- otherwise OP_RET's by-ref writeback dereferences an
+			! absent slots/pos optional in set_val (runtime_array.f90) once
+			! the frame stack grows past its initial capacity.
+			eval('struct C{n:i32, fn go(d:i32){ n += rec(d); }}' // &
+			     'fn rec(d:i32):i32 { if (d <= 0) { return 0; } return rec(d-1); }' // &
+			     'let a = [C{n=1}, C{n=2}]; a[1].go(200); a[1].n;') == '2', &
 			.false.  &
 		]
 
