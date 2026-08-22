@@ -16,7 +16,7 @@ submodule (syntran__vm_m) syntran__vm_exec
 	!------------------------------------------------------------------------
 	! Call frame: one entry per active function invocation.
 	! caller_locs holds state%locs%vals saved via move_alloc at CALL time,
-	! restored via move_alloc at RET time — mirrors eval_fn_call's locs0 pattern.
+	! restored via move_alloc at RET time.
 	!------------------------------------------------------------------------
 
 	type :: frame_t
@@ -28,14 +28,20 @@ submodule (syntran__vm_m) syntran__vm_exec
 		! frame depth can reuse the allocation.  Avoids allocate/deallocate on
 		! every recursive call.  Reset with value_reset() before reuse.
 		type(value_t), allocatable :: locs_buf(:)
+		! By-ref args' receiver-chain subscript slots (compile_ctrl.f90's Pass
+		! 3, popped off the operand stack at OP_CALL), read back at OP_RET
+		! for set_val's writeback instead of AST-walking the receiver again.
+		! Indexed via call_recv_slot_start(cn, i)+1 .. (bytecode.f90); sized
+		! call_recv_total_nslots(cn), so unallocated/zero-length when no
+		! by-ref arg has a subscripted/dot-expr receiver
+		type(value_t), allocatable :: recv_slots(:)
 	end type frame_t
 
 	!------------------------------------------------------------------------
 	! For-loop iterator frame: one entry per active native for loop.
-	! Mirrors the local variables in eval_for_statement (eval_control.f90:14).
-	! for_kind uses the same constants as eval_for_statement: bound_array,
-	! step_array, len_array, expl_array, size_array, unif_array, array_expr,
-	! or str_type for string iteration.
+	! for_kind uses array_t's kind constants: bound_array, step_array,
+	! len_array, expl_array, size_array, unif_array, array_expr, or
+	! str_type for string iteration.
 	!------------------------------------------------------------------------
 
 	type :: for_iter_t
@@ -52,8 +58,13 @@ submodule (syntran__vm_m) syntran__vm_exec
 		type(value_t) :: str_             ! string to iterate over (str_type)
 		! Enum/struct elements of `array` (array_t has no value_t component of
 		! its own), set only when array%type is enum_type/struct_type.
-		! c.f. array_at()'s optional `struct` arg in eval_array.f90
+		! c.f. array_at()'s optional `struct` arg in runtime_array.f90
 		type(value_t), allocatable :: struct(:)
+		! expl_array/size_array elements, pre-evaluated at OP_FOR_SETUP time
+		! (compile_array_expr_slots) instead of AST-walked per-iteration by
+		! array_at.  1-based, same indexing as prog%nodes(node_idx)%array%elems.
+		! Unallocated for every other for_kind
+		type(value_t), allocatable :: elem_vals(:)
 	end type for_iter_t
 
 !===============================================================================
@@ -65,12 +76,13 @@ contains
 ! --- call-frame and for-iterator grow helpers ---------------------------------
 !
 ! Both frames(:) and for_iters(:) start at a small initial capacity and double
-! on demand (move-on-grow).  This gives the VM unbounded recursion / loop depth,
-! matching the AST walker which is bounded only by OS stack / memory.
+! on demand (move-on-grow).  This gives the VM unbounded recursion / loop
+! depth, bounded only by OS stack / memory like ordinary Fortran recursion.
 
 subroutine grow_frames(frames)
 	! Double the call-frame stack.  Allocatable components (caller_locs,
-	! locs_buf) are moved cheaply; scalar fields are plain assigned.
+	! locs_buf, recv_slots) are moved cheaply; scalar fields are plain
+	! assigned.
 	type(frame_t), allocatable, intent(inout) :: frames(:)
 	type(frame_t), allocatable :: tmp(:)
 	integer :: i, n
@@ -84,6 +96,8 @@ subroutine grow_frames(frames)
 			call move_alloc(frames(i)%caller_locs, tmp(i)%caller_locs)
 		if (allocated(frames(i)%locs_buf)) &
 			call move_alloc(frames(i)%locs_buf, tmp(i)%locs_buf)
+		if (allocated(frames(i)%recv_slots)) &
+			call move_alloc(frames(i)%recv_slots, tmp(i)%recv_slots)
 	end do
 	call move_alloc(tmp, frames)
 end subroutine grow_frames
@@ -91,19 +105,36 @@ end subroutine grow_frames
 !===============================================================================
 
 subroutine grow_fors(for_iters)
-	! Double the for-iterator stack.  for_iter_t's members are either plain
-	! derived types with allocatables inside (value_t/array_t) or an
-	! allocatable array directly (struct(:)); either way plain assignment
-	! handles (re)allocation of each element correctly, so assignment is used
-	! for each element.  Copies into the doubled buffer directly to avoid the
-	! extra round-trip through a same-sized tmp.
+	! Double the for-iterator stack.  Like grow_frames() above: a whole-object
+	! `tmp(i) = for_iters(i)` is NOT safe here despite for_iter_t having a
+	! value_t/array_t-based assignment(=) available on its components --
+	! plain (non-elemental) type assignment doesn't dispatch value_copy's
+	! defined assignment(=) for an array-to-array assignment of value_t
+	! (struct(:), elem_vals(:)), so it would shallow-copy their nested
+	! struct(:) descriptors instead of deep-copying them, aliasing tmp and
+	! the original (about to be freed by move_alloc below).  Move each
+	! allocatable component individually instead; scalar fields are plain
+	! assigned, value_t members are value_move'd, and the array_t member is
+	! array_move'd (mirrors value_move()/array_move() in value.f90).
 	type(for_iter_t), allocatable, intent(inout) :: for_iters(:)
 	type(for_iter_t), allocatable :: tmp(:)
 	integer :: i, n
 	n = size(for_iters)
 	allocate(tmp(2 * n))
 	do i = 1, n
-		tmp(i) = for_iters(i)
+		tmp(i)%for_kind = for_iters(i)%for_kind
+		tmp(i)%itr_type = for_iters(i)%itr_type
+		tmp(i)%len8     = for_iters(i)%len8
+		tmp(i)%counter  = for_iters(i)%counter
+		tmp(i)%node_idx = for_iters(i)%node_idx
+		call value_move(for_iters(i)%lbound_, tmp(i)%lbound_)
+		call value_move(for_iters(i)%step,    tmp(i)%step)
+		call value_move(for_iters(i)%ubound_, tmp(i)%ubound_)
+		call value_move(for_iters(i)%len_,    tmp(i)%len_)
+		call array_move(for_iters(i)%array,   tmp(i)%array)
+		call value_move(for_iters(i)%str_,    tmp(i)%str_)
+		if (allocated(for_iters(i)%struct))    call move_alloc(for_iters(i)%struct,    tmp(i)%struct)
+		if (allocated(for_iters(i)%elem_vals)) call move_alloc(for_iters(i)%elem_vals, tmp(i)%elem_vals)
 	end do
 	call move_alloc(tmp, for_iters)
 end subroutine grow_fors
@@ -223,12 +254,12 @@ end subroutine do_compound
 
 subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 
-	! Compute a binary operation on two values, mirroring eval_binary_expr.
+	! Compute a binary operation on two values.
 	! restype: pre-computed result type from the compiler (node%val%type).
 	!   When restype /= unknown_type the expensive get_binary_op_kind call is
 	!   skipped.  The compiler always supplies this for OP_BINOP (instr%b).
 	! The math routines (add, subtract, etc.) are available because
-	! syntran__vm_m uses syntran__eval_m which uses syntran__math_m and
+	! syntran__vm_m uses syntran__runtime_m which uses syntran__math_m and
 	! syntran__bool_m.
 
 	type(value_t), intent(in) :: left, right
@@ -306,7 +337,7 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 	case (amp_token)
 		call bit_and(left, right, res, '&')
 	case default
-		write(*,*) 'VM: unknown binary op ', op_kind
+		write(*,*) err_eval_binary_op(kind_name(op_kind))
 		call internal_error()
 	end select
 
@@ -439,7 +470,7 @@ end subroutine do_array_binop_typed
 
 subroutine do_unop(right, op_kind, res)
 
-	! Compute a unary operation, mirroring eval_unary_expr.
+	! Compute a unary operation.
 
 	type(value_t), intent(in) :: right
 	integer, intent(in) :: op_kind
@@ -457,7 +488,7 @@ subroutine do_unop(right, op_kind, res)
 	case (bang_token)
 		call bit_not(right, res, '~')
 	case default
-		write(*,*) 'VM: unknown unary op ', op_kind
+		write(*,*) err_eval_unary_op(kind_name(op_kind))
 		call internal_error()
 	end select
 
@@ -474,7 +505,7 @@ module subroutine vm_run(prog, state, res)
 	!*******
 
 	! Initial capacities for the growable stacks.  Both double on demand so
-	! there is no hard recursion or loop-nesting limit (parity with AST walker).
+	! there is no hard recursion or loop-nesting limit.
 	integer, parameter :: INIT_FRAMES_CAP = 64
 	integer, parameter :: INIT_FORS_CAP   = 16
 
@@ -601,9 +632,10 @@ module subroutine vm_run(prog, state, res)
 
 		! --- user function call -----------------------------------------------
 		! Stack layout on entry (bottom to top):
-		!   [by-value args in param index order] [by-ref args in param index order]
-		! Both groups in ascending param-index order.
-		! We pop by-ref first (they're on top) in reverse index order, then by-val.
+		!   [by-value args][by-ref args][by-ref receiver-chain slots]
+		! All three groups in ascending param-index order.  We pop the
+		! receiver-chain slots first (they're on top), then by-ref (reverse
+		! index order), then by-val.
 		case (OP_CALL)
 			fn_id        = instr%a
 			node_idx_call = instr%b
@@ -615,6 +647,28 @@ module subroutine vm_run(prog, state, res)
 				call value_array_destroy(params_pool)
 				allocate(params_pool(nparams))
 				params_pool_cap = nparams
+			end if
+
+			! Pop by-ref receiver-chain slots (compile_ctrl.f90's Pass 3),
+			! stashed in a local buffer until the frame is pushed below --
+			! they must outlive the callee's entire execution for OP_RET's
+			! writeback, so they can't stay on the shared operand stack.
+			block
+			integer :: nrecv_, recv_base_
+			type(value_t), allocatable :: recv_tmp_(:)
+			nrecv_ = call_recv_total_nslots(cn)
+			if (nrecv_ > 0) then
+				recv_base_ = stack%len_ - nrecv_
+				! value_array_copy(), not a bare array assignment: gfortran
+				! doesn't dispatch value_copy's defined assignment(=) for an
+				! array-to-array assignment of value_t, so `recv_tmp_ =
+				! stack%v(...)` shallow-copies the nested struct(:)
+				! descriptor instead of deep-copying it -- recv_tmp_ and the
+				! (still-live, dead-but-not-empty) stack slots then share one
+				! block, and freeing either one later double-frees it. See
+				! value_array_copy()'s own docstring in value.f90
+				call value_array_copy(recv_tmp_, stack%v(recv_base_+1 : recv_base_+nrecv_))
+				stack%len_ = recv_base_
 			end if
 
 			! Pop by-ref args in reverse param-index order.
@@ -634,6 +688,12 @@ module subroutine vm_run(prog, state, res)
 			frames(nframes)%return_ip  = ip + 1
 			frames(nframes)%nfor_saved = nfor
 			frames(nframes)%node_idx  = node_idx_call
+			! Never a bare deallocate() of a value_t array -- a reused frame
+			! slot's recv_slots may still own nested struct(:)/array_t
+			! allocatables from a prior call at this depth; value_array_destroy()
+			! walks and frees them explicitly first (see its docstring)
+			call value_array_destroy(frames(nframes)%recv_slots)
+			if (nrecv_ > 0) call move_alloc(recv_tmp_, frames(nframes)%recv_slots)
 			if (allocated(state%locs%vals)) then
 				call move_alloc(state%locs%vals, frames(nframes)%caller_locs)
 			end if
@@ -662,6 +722,7 @@ module subroutine vm_run(prog, state, res)
 				call value_move(params_pool(i), state%locs%vals(cn%params(i)))
 			end do
 
+			end block
 			end associate
 
 			next_ip = prog%fn_entry(fn_id)
@@ -670,7 +731,7 @@ module subroutine vm_run(prog, state, res)
 		! Stack layout on entry (bottom to top): [by-value args][callee_fn_value]
 		! (callee at TOS).  Unlike OP_CALL, the target fn is not known until this
 		! instruction executes: pop the callee value first and read its fn_index
-		! to resolve the entry point/num_locs, mirroring eval_fn_call_ptr.  v1 fn
+		! to resolve the entry point/num_locs.  v1 fn
 		! pointers are by-value only, so cn%params/cn%is_ref are not used here
 		! (cn%params is left unallocated on this node kind, which also makes
 		! OP_RET's by-ref writeback loop below a no-op for this call kind, since
@@ -703,6 +764,14 @@ module subroutine vm_run(prog, state, res)
 			frames(nframes)%return_ip  = ip + 1
 			frames(nframes)%nfor_saved = nfor
 			frames(nframes)%node_idx  = node_idx_call
+			! v1 fn pointers are by-value only (see the docstring above), so
+			! this frame slot never gets a recv_slots writeback window of its
+			! own -- but a *previous* call at this depth (e.g. a method call
+			! through a subscripted receiver) may have left one allocated.
+			! Clear it the same way OP_CALL does, so it doesn't linger for
+			! the rest of the run and isn't mistaken for this call's window
+			! if by-ref fn-pointer params are ever added.
+			call value_array_destroy(frames(nframes)%recv_slots)
 			if (allocated(state%locs%vals)) then
 				call move_alloc(state%locs%vals, frames(nframes)%caller_locs)
 			end if
@@ -786,12 +855,49 @@ module subroutine vm_run(prog, state, res)
 				    cn%args(i)%root_kind /= 0) cycle
 				if (allocated(cn%args(i)%lsubscripts) .or. &
 				    cn%args(i)%kind == dot_expr) then
-					! Subscripted or dot-expr receiver: write element back via set_val.
-					if (cn%args(i)%is_loc) then
-						call set_val(cn%args(i), state%locs%vals(cn%args(i)%id_index), state, params_pool(i))
-					else
-						call set_val(cn%args(i), state%vars%vals(cn%args(i)%id_index), state, params_pool(i))
-					end if
+					! Subscripted or dot-expr receiver: write element back via
+					! set_val, using this param's own window of the
+					! call-time-compiled receiver-chain slots
+					! (compile_ctrl.f90's Pass 3) instead of AST-walking the
+					! receiver again.  fr%recv_slots should be unallocated only
+					! when NO by-ref receiver anywhere in this call has any
+					! subscript to evaluate (call_recv_total_nslots(cn) == 0),
+					! in which case this receiver's own chain_total_nslots is
+					! also 0 and set_val never reaches a slots consumption
+					! point -- safe to call without slots in that case.  The
+					! recv_n_ > 0 guard below turns a violation of that
+					! invariant (e.g. grow_frames() dropping recv_slots) into
+					! an internal_error() instead of an absent-optional
+					! dereference inside set_val.
+					block
+						integer :: recv_pos_, recv_n_
+						recv_n_ = chain_total_nslots(cn%args(i))
+						recv_pos_ = 0
+						if (recv_n_ > 0 .and. .not. allocated(fr%recv_slots)) then
+							write(*,*) err_int(IC_MISSING_RECV_SLOTS, &
+								'OP_RET by-ref writeback: recv_n_ > 0 but recv_slots is unallocated')
+							call internal_error()
+						end if
+						if (allocated(fr%recv_slots)) then
+							if (cn%args(i)%is_loc) then
+								call set_val(cn%args(i), state%locs%vals(cn%args(i)%id_index), &
+									state, params_pool(i), &
+									slots = fr%recv_slots( &
+										call_recv_slot_start(cn, i)+1 : call_recv_slot_start(cn, i)+recv_n_), &
+									pos = recv_pos_)
+							else
+								call set_val(cn%args(i), state%vars%vals(cn%args(i)%id_index), &
+									state, params_pool(i), &
+									slots = fr%recv_slots( &
+										call_recv_slot_start(cn, i)+1 : call_recv_slot_start(cn, i)+recv_n_), &
+									pos = recv_pos_)
+							end if
+						else if (cn%args(i)%is_loc) then
+							call set_val(cn%args(i), state%locs%vals(cn%args(i)%id_index), state, params_pool(i))
+						else
+							call set_val(cn%args(i), state%vars%vals(cn%args(i)%id_index), state, params_pool(i))
+						end if
+					end block
 				else if (cn%args(i)%is_loc) then
 					call value_move(params_pool(i), &
 						state%locs%vals(cn%args(i)%id_index))
@@ -810,11 +916,18 @@ module subroutine vm_run(prog, state, res)
 			call vm_push_move(stack, val)
 
 		! --- scalar subscript read: a[i] or s[i] -----------------------------------
-		! Evaluates subscript indices via subscript_eval (which calls syntax_eval
-		! on each index expression), then reads the element with get_val.
-		! For strings: extracts a single character.
+		! Every n%lsubscripts(:) is scalar_sub (compile-time guarantee); their
+		! values were compiled to bytecode (compile_subscript_slots) and are on
+		! TOS.  Pop them as a slot window and pass to subscript_eval/
+		! str_char_slice instead of AST-walking, then read the element with
+		! get_val.  For strings: extracts a single character.
 		case (OP_INDEX)
 			associate(n => prog%nodes(instr%a))
+			block
+			integer :: nslots_, base_
+			nslots_ = subscript_total_nslots(n)
+			base_ = stack%len_ - nslots_
+
 			id = n%id_index
 			if (n%is_loc) then
 				type_ = state%locs%vals(id)%type
@@ -825,16 +938,18 @@ module subroutine vm_run(prog, state, res)
 			! subscript_eval loops to the variable's element rank_, so a trailing
 			! char subscript (index rank+1) is naturally ignored — it gives the
 			! flat element index for both scalar-string and string-array cases.
-			i8 = subscript_eval(n, state)
+			i8 = subscript_eval(n, state, stack%v(base_+1:base_+nslots_))
 
 			if (type_ == str_type) then
 				! Scalar string: use str_char_slice helper (handles scalar/range).
 				val%type = str_type
 				if (.not. allocated(val%str)) allocate(val%str)
 				if (n%is_loc) then
-					val%str%s = str_char_slice(state%locs%vals(id)%str%s, n, state, 1)
+					val%str%s = str_char_slice(state%locs%vals(id)%str%s, n, state, 1, &
+						stack%v(base_+1:base_+nslots_))
 				else
-					val%str%s = str_char_slice(state%vars%vals(id)%str%s, n, state, 1)
+					val%str%s = str_char_slice(state%vars%vals(id)%str%s, n, state, 1, &
+						stack%v(base_+1:base_+nslots_))
 				end if
 			else if (type_ == array_type) then
 				! Check for string array with optional char subscript.
@@ -858,10 +973,12 @@ module subroutine vm_run(prog, state, res)
 					if (.not. allocated(val%str)) allocate(val%str)
 					if (n%is_loc) then
 						val%str%s = str_char_slice( &
-							state%locs%vals(id)%array%str(i8+1)%s, n, state, nelem+1)
+							state%locs%vals(id)%array%str(i8+1)%s, n, state, nelem+1, &
+							stack%v(base_+1:base_+nslots_))
 					else
 						val%str%s = str_char_slice( &
-							state%vars%vals(id)%array%str(i8+1)%s, n, state, nelem+1)
+							state%vars%vals(id)%array%str(i8+1)%s, n, state, nelem+1, &
+							stack%v(base_+1:base_+nslots_))
 					end if
 				else
 					if (n%is_loc) then
@@ -878,26 +995,43 @@ module subroutine vm_run(prog, state, res)
 				end if
 			end if
 
+			stack%len_ = base_
 			call vm_push_move(stack, val)
+			end block
 			end associate
 
 		! --- slice / non-scalar subscript read: a[i:j], a[:], a[[0,2,4]] ---------
 		! Delegates to eval_name_expr which handles all slice kinds, array
-		! subscripts, step subscripts, and multi-rank combinations, and which
-		! can rt_throw() (R20, R22, R27), so check rt_halt before pushing a
+		! subscripts, step subscripts, and multi-rank combinations.  Bound
+		! sub-expressions were compiled to bytecode (compile_subscript_slots)
+		! and are on TOS; pop them as a slot window instead of AST-walking.
+		! Can rt_throw() (R20, R22, R27), so check rt_halt before pushing a
 		! possibly-unset result.
 		case (OP_SLICE)
-			call eval_name_expr(prog%nodes(instr%a), state, val)
+			block
+			integer :: nslots_, base_
+			nslots_ = subscript_total_nslots(prog%nodes(instr%a))
+			base_ = stack%len_ - nslots_
+			call eval_name_expr(prog%nodes(instr%a), state, val, stack%v(base_+1:base_+nslots_))
+			stack%len_ = base_
+			end block
 			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 
 		! --- scalar subscript write: a[i] = x  or  a[i] += x -------------------
-		! TOS holds the already-evaluated RHS.  Uses subscript_eval to find the
-		! linear index, reads the current element, applies the compound op, stores
-		! back.  For strings: direct character replacement (only plain = is valid).
+		! TOS holds the already-evaluated RHS; below it, n%lsubscripts(:)'s
+		! (all scalar_sub) pre-evaluated values (compile_subscript_slots).
+		! Uses subscript_eval to find the linear index, reads the current
+		! element, applies the compound op, stores back.  For strings: direct
+		! character replacement (only plain = is valid).
 		case (OP_STORE_IDX)
 			call vm_pop_copy(stack, right)   ! RHS (already evaluated by compiler)
 			associate(n => prog%nodes(instr%a))
+			block
+			integer :: nslots_, base_
+			nslots_ = subscript_total_nslots(n)
+			base_ = stack%len_ - nslots_
+
 			id = n%id_index
 			if (n%is_loc) then
 				type_ = state%locs%vals(id)%type
@@ -905,7 +1039,7 @@ module subroutine vm_run(prog, state, res)
 				type_ = state%vars%vals(id)%type
 			end if
 
-			i8 = subscript_eval(n, state)
+			i8 = subscript_eval(n, state, stack%v(base_+1:base_+nslots_))
 
 			if (type_ == str_type) then
 				! Scalar string character assignment: s[i] = char_expr
@@ -914,6 +1048,7 @@ module subroutine vm_run(prog, state, res)
 				else
 					state%vars%vals(id)%str%s(i8+1: i8+1) = right%str%s
 				end if
+				stack%len_ = base_
 				call vm_push_move(stack, right)
 			else if (type_ == array_type) then
 				! Check for string array with trailing char subscript.
@@ -931,11 +1066,13 @@ module subroutine vm_run(prog, state, res)
 
 				if (nelem > 0 .and. size(n%lsubscripts) == nelem + 1) then
 					! String array single-element char assignment: v[i,j] = char_expr
-					! i8 is the flat element index; evaluate char sub at lsubscripts(nelem+1).
+					! i8 is the flat element index; the char sub at lsubscripts(nelem+1)
+					! is scalar_sub like every other dimension here, so its
+					! pre-evaluated value is slot nelem+1 directly (subscript_slot_start
+					! is i-1 uniformly when every dimension is scalar_sub)
 					block
 						integer(kind=8) :: char_pos
-						call syntax_eval(n%lsubscripts(nelem+1), state, val)
-						char_pos = val%to_i64()
+						char_pos = stack%v(base_+nelem+1)%to_i64()
 						if (n%is_loc) then
 							state%locs%vals(id)%array%str(i8+1)%s( &
 								char_pos+1 : char_pos+1) = right%str%s
@@ -944,6 +1081,7 @@ module subroutine vm_run(prog, state, res)
 								char_pos+1 : char_pos+1) = right%str%s
 						end if
 					end block
+					stack%len_ = base_
 					call vm_push_move(stack, right)
 				else
 					! Array element assignment (including compound ops)
@@ -956,6 +1094,7 @@ module subroutine vm_run(prog, state, res)
 						call do_compound(val, right, instr%b)
 						call set_val(n, state%vars%vals(id), state, val, index_ = i8)
 					end if
+					stack%len_ = base_
 					call vm_push_move(stack, val)
 				end if
 			else
@@ -969,31 +1108,33 @@ module subroutine vm_run(prog, state, res)
 					call do_compound(val, right, instr%b)
 					call set_val(n, state%vars%vals(id), state, val, index_ = i8)
 				end if
+				stack%len_ = base_
 				call vm_push_move(stack, val)
 			end if
+			end block
 			end associate
 
 		! --- struct instance construction -----------------------------------------
-		! M5: pops nmembers values from stack in reverse order, builds a struct
-		! value_t (struct_name from the stored node), and pushes the result.
+		! M5: pops nmembers (instr%b) values from stack in reverse order, builds
+		! a struct value_t (identity from the const-pooled prototype), and
+		! pushes the result.
 		case (OP_MAKE_STRUCT)
-			associate(sn => prog%nodes(instr%a))
-			n_mem = size(sn%members)
+			associate(cv => prog%consts(instr%a))
+			n_mem = instr%b
 			val%type = struct_type
-			if (allocated(sn%struct_name)) val%struct_name = sn%struct_name
+			if (allocated(cv%struct_name)) val%struct_name = cv%struct_name
 
 			! Needed so value_to_str() can look up member names by
-			! %struct_reg_idx (c.f. struct_reg_set() in value.f90).  Without
-			! this, structs built through the (default) bytecode VM print
-			! unlabeled even though the AST-walker path (eval_struct_instance)
-			! already sets it.  Deallocate/reset on the else branch so a
-			! reused `val` can't carry stale identity from a prior struct type
-			if (allocated(sn%val%struct_cookie)) then
-				val%struct_cookie = sn%val%struct_cookie
+			! %struct_reg_idx (c.f. struct_reg_set() in value.f90) -- without
+			! it, structs built through OP_MAKE_STRUCT print unlabeled.
+			! Deallocate/reset on the else branch so a reused `val` can't
+			! carry stale identity from a prior struct type
+			if (allocated(cv%struct_cookie)) then
+				val%struct_cookie = cv%struct_cookie
 			else if (allocated(val%struct_cookie)) then
 				deallocate(val%struct_cookie)
 			end if
-			val%struct_reg_idx = sn%val%struct_reg_idx
+			val%struct_reg_idx = cv%struct_reg_idx
 
 			if (allocated(val%struct)) deallocate(val%struct)
 			allocate(val%struct(n_mem))
@@ -1005,25 +1146,45 @@ module subroutine vm_run(prog, state, res)
 
 		! --- dot member read ------------------------------------------------------
 		! M5: calls get_val with the stored dot_expr node to handle simple,
-		! nested, and subscripted member access chains.
+		! nested, and subscripted member access chains.  Chain subscript
+		! slots (compile_member_chain_slots) are on TOS; pop them as a slot
+		! window with a fresh consumption cursor instead of AST-walking.
 		case (OP_LOAD_MEMBER)
 			associate(n => prog%nodes(instr%a))
+			block
+			integer :: nslots_, base_, pos_
+			nslots_ = chain_total_nslots(n)
+			base_ = stack%len_ - nslots_
+			pos_ = 0
 			id = n%id_index
 			if (n%is_loc) then
-				call get_val(n, state%locs%vals(id), state, val)
+				call get_val(n, state%locs%vals(id), state, val, &
+					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
 			else
-				call get_val(n, state%vars%vals(id), state, val)
+				call get_val(n, state%vars%vals(id), state, val, &
+					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
 			end if
+			stack%len_ = base_
 			call vm_push_move(stack, val)
+			end block
 			end associate
 
 		! --- dot member read from fn/method return value (root on TOS) -----------
-		! M5: root struct value already on stack (pushed by compiled fn call).
-		! Pops root, applies member chain from wrapper node via get_val.
+		! M5: root struct value already on stack (pushed by compiled fn call),
+		! with the wrapper's own chain subscript slots on top of it. Pop both
+		! regions, applies member chain from wrapper node via get_val.
 		case (OP_LOAD_MEMBER_TOS)
-			call vm_pop_copy(stack, left)
 			associate(n => prog%nodes(instr%a))
-			call get_val(n, left, state, val)
+			block
+			integer :: nslots_, value_idx_, pos_
+			nslots_ = chain_total_nslots(n)
+			value_idx_ = stack%len_ - nslots_
+			pos_ = 0
+			call value_move(stack%v(value_idx_), left)
+			call get_val(n, left, state, val, &
+				slots = stack%v(value_idx_+1:value_idx_+nslots_), pos = pos_)
+			stack%len_ = value_idx_ - 1
+			end block
 			end associate
 			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
@@ -1031,21 +1192,39 @@ module subroutine vm_run(prog, state, res)
 		! --- dot member write -----------------------------------------------------
 		! M5: pops RHS from stack, reads current member via get_val, applies the
 		! compound op, writes back via set_val, and pushes the new member value.
+		! Below the RHS: chain subscript slots (compile_member_chain_slots),
+		! popped as a slot window with a fresh cursor instead of AST-walking --
+		! get_val and set_val each get their own cursor since they walk the
+		! chain independently (get_val's read happens before do_compound, then
+		! set_val re-walks the same chain for the write).
 		case (OP_STORE_MEMBER)
 			call vm_pop_copy(stack, right)
 			associate(n => prog%nodes(instr%a))
+			block
+			integer :: nslots_, base_, pos_
+			nslots_ = chain_total_nslots(n)
+			base_ = stack%len_ - nslots_
 			id = n%id_index
+			pos_ = 0
 			if (n%is_loc) then
-				call get_val(n, state%locs%vals(id), state, val)
+				call get_val(n, state%locs%vals(id), state, val, &
+					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
 				call do_compound(val, right, instr%b)
-				call set_val(n, state%locs%vals(id), state, val)
+				pos_ = 0
+				call set_val(n, state%locs%vals(id), state, val, &
+					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
 			else
-				call get_val(n, state%vars%vals(id), state, val)
+				call get_val(n, state%vars%vals(id), state, val, &
+					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
 				call do_compound(val, right, instr%b)
-				call set_val(n, state%vars%vals(id), state, val)
+				pos_ = 0
+				call set_val(n, state%vars%vals(id), state, val, &
+					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
 			end if
+			stack%len_ = base_
 			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
+			end block
 			end associate
 
 		! --- M6: intrinsic function call -----------------------------------------
@@ -1153,7 +1332,7 @@ module subroutine vm_run(prog, state, res)
 
 		! --- M8: for-loop setup ---------------------------------------------------
 		! Evaluates loop bounds / computes len8; pushes a for_iter_t onto the
-		! for-iterator stack.  Mirrors eval_for_statement setup (eval_control.f90:31-205).
+		! for-iterator stack.
 		case (OP_FOR_SETUP)
 			block
 			integer :: fi, rk_
@@ -1171,158 +1350,127 @@ module subroutine vm_run(prog, state, res)
 
 			associate(nd => prog%nodes(instr%a))
 
-			if (allocated(nd%array%lbound)) &
-				call syntax_eval(nd%array%lbound, state, for_iters(fi)%lbound_)
-			if (allocated(nd%array%step  )) &
-				call syntax_eval(nd%array%step,   state, for_iters(fi)%step   )
-			if (allocated(nd%array%ubound)) &
-				call syntax_eval(nd%array%ubound, state, for_iters(fi)%ubound_)
-			if (allocated(nd%array%len_  )) &
-				call syntax_eval(nd%array%len_,   state, for_iters(fi)%len_   )
-			if (state%rt_halt) exit
-
+			! bound_array/step_array/len_array are always intercepted by
+			! for_setup_native_ok before OP_FOR_SETUP is ever emitted for
+			! them (see compile_ctrl.f90's for_statement case) -- OP_FOR_SETUP_NAT
+			! below is their only live implementation.  The case(bound_array)/
+			! case(step_array)/case(len_array) arms below exist only to turn
+			! that invariant into a diagnostic if it's ever violated: their
+			! populating syntax_eval prologue was deleted along with the AST
+			! walker, so silently falling through here would compute len8
+			! from a previous for-loop's stale for_iters(fi) fields (a reused
+			! stack slot) instead of crashing.
 			select case (nd%array%kind)
 			case (array_expr)
 				for_iters(fi)%for_kind = nd%array%val%array%kind
 
+				block
+				integer :: nslots_, base_, k_
 				select case (nd%array%val%array%kind)
-				case (bound_array)
-					! Promote bounds to i64 if either is i64
-					if (any(i64_type == [for_iters(fi)%lbound_%type, &
-					                      for_iters(fi)%ubound_%type])) then
-						call promote_i32_i64(for_iters(fi)%lbound_)
-						call promote_i32_i64(for_iters(fi)%ubound_)
-						for_iters(fi)%itr_type = i64_type
-					else
-						for_iters(fi)%itr_type = i32_type
-					end if
-					if (.not. any(for_iters(fi)%itr_type == [i32_type, i64_type])) then
-						write(*,*) err_int(IC_UNIT_STEP_TYPE, 'unit step array type not implemented')
-						call internal_error()
-					end if
-					for_iters(fi)%len8 = for_iters(fi)%ubound_%to_i64() &
-					                   - for_iters(fi)%lbound_%to_i64()
+				case (unif_array, size_array, expl_array)
+					nslots_ = array_expr_nslots(nd%array)
+				case default
+					nslots_ = 0
+				end select
+				base_ = stack%len_ - nslots_
+				k_ = base_
 
-				case (step_array)
-					! Promote all to i64 if any is i64
-					if (any(i64_type == [for_iters(fi)%lbound_%type, &
-					                      for_iters(fi)%step%type, &
-					                      for_iters(fi)%ubound_%type])) then
-						call promote_i32_i64(for_iters(fi)%lbound_)
-						call promote_i32_i64(for_iters(fi)%step)
-						call promote_i32_i64(for_iters(fi)%ubound_)
-						for_iters(fi)%itr_type = i64_type
-					else
-						for_iters(fi)%itr_type = for_iters(fi)%lbound_%type
-					end if
-					select case (for_iters(fi)%itr_type)
-					case (i32_type)
-						if (for_iters(fi)%step%sca%i32 == 0) then
-							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
-							exit
-						end if
-						for_iters(fi)%len8 = ( &
-							for_iters(fi)%ubound_%sca%i32 - for_iters(fi)%lbound_%sca%i32 &
-							+ for_iters(fi)%step%sca%i32  &
-							- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
-					case (i64_type)
-						if (for_iters(fi)%step%sca%i64 == 0) then
-							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
-							exit
-						end if
-						for_iters(fi)%len8 = ( &
-							for_iters(fi)%ubound_%sca%i64 - for_iters(fi)%lbound_%sca%i64 &
-							+ for_iters(fi)%step%sca%i64  &
-							- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
-					case (f32_type)
-						if (for_iters(fi)%step%sca%f32 == 0.0) then
-							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
-							exit
-						end if
-						for_iters(fi)%len8 = ceiling( &
-							(for_iters(fi)%ubound_%sca%f32 - for_iters(fi)%lbound_%sca%f32) &
-							/ for_iters(fi)%step%sca%f32)
-					case (f64_type)
-						if (for_iters(fi)%step%sca%f64 == 0.0d0) then
-							call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
-							exit
-						end if
-						for_iters(fi)%len8 = ceiling( &
-							(for_iters(fi)%ubound_%sca%f64 - for_iters(fi)%lbound_%sca%f64) &
-							/ for_iters(fi)%step%sca%f64)
-					case default
-						write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type not implemented')
-						call internal_error()
-					end select
-
-				case (len_array)
-					for_iters(fi)%itr_type = nd%array%val%array%type
-					select case (for_iters(fi)%itr_type)
-					case (f32_type, f64_type)
-						for_iters(fi)%len8 = for_iters(fi)%len_%to_i64()
-					case default
-						write(*,*) err_int(IC_BOUND_LEN_TYPE, 'bound/len array type not implemented')
-						call internal_error()
-					end select
+				select case (nd%array%val%array%kind)
+				case (bound_array, step_array, len_array)
+					write(*,*) err_int(IC_FOR_ARRAY_KIND, &
+						'for loop: bound_array/step_array/len_array must be ' // &
+						'compiled to OP_FOR_SETUP_NAT, never OP_FOR_SETUP')
+					call internal_error()
 
 				case (expl_array)
 					for_iters(fi)%len8 = nd%array%val%array%len_
 
+					! Materialize elements now (compile_array_expr_slots
+					! pushed them) instead of AST-walking elems(i) per
+					! iteration in array_at.  for_iters(fi) is a reused
+					! stack slot, so a stale allocation from a prior
+					! for-loop at this depth must be cleared first.
+					! value_array_copy(), not a bare array assignment or
+					! deallocate/allocate/assign -- see the identical note at
+					! OP_CALL's recv_tmp_ above (and value_array_copy's own
+					! docstring): a plain `elem_vals = stack%v(...)` would
+					! shallow-copy struct(:) and alias the live stack slots
+					call value_array_copy(for_iters(fi)%elem_vals, stack%v(base_+1 : base_+nslots_))
+
 				case (size_array)
 					rk_ = size(nd%array%size)
 					allocate(sizes_(rk_))
+
+					! Slot window order (compile_array_expr_slots): elems(:)
+					! first, then size(:).  Materialize elements the same
+					! way expl_array does above (value_array_copy(), not a
+					! bare assignment -- see the note there).
+					call value_array_copy(for_iters(fi)%elem_vals, stack%v(base_+1 : base_+size(nd%array%elems)))
+					k_ = base_ + size(nd%array%elems)
+
 					for_iters(fi)%len8 = 1
 					do i = 1, rk_
-						call syntax_eval(nd%array%size(i), state, tmp_)
 						! Note: state%rt_halt is checked once after this loop
 						! (not inside it), since a bare exit here would only
 						! break this inner do, not the outer VM dispatch loop
-						sizes_(i) = tmp_%to_i64()
+						k_ = k_ + 1
+						sizes_(i) = stack%v(k_)%to_i64()
 						for_iters(fi)%len8 = for_iters(fi)%len8 * sizes_(i)
 					end do
 
-					! Mirrors eval_for_statement's size_array check
-					! (eval_control.f90) -- without it, OP_FOR_NEXT's array_at()
-					! reads past the end of nd%array%elems for a mismatched
-					! runtime-valued size (crashing with a raw Fortran bounds
-					! abort instead of R21, since the parser can only catch
-					! this ahead of time when every size is a literal (E102))
+					! Guards against a runtime-valued size mismatch -- without
+					! it, OP_FOR_NEXT's array_at() reads past the end of
+					! for_iters(fi)%elem_vals for a
+					! mismatched runtime-valued size (crashing with a raw
+					! Fortran bounds abort instead of R21, since the parser
+					! can only catch this ahead of time when every size is a
+					! literal (E102))
 					if (.not. state%rt_halt .and. size(nd%array%elems) /= for_iters(fi)%len8) then
 						call rt_throw(state, err_rt_expl_array_size( &
 							size(nd%array%elems), sizes_))
 					end if
 
 				case (unif_array)
+					! Slot window order (compile_array_expr_slots): size(:)
+					! first, then lbound (fill value, consumed by array_at's
+					! unif_array case).
 					rk_ = size(nd%array%size)
 					for_iters(fi)%len8 = 1
 					do i = 1, rk_
-						call syntax_eval(nd%array%size(i), state, tmp_)
-						for_iters(fi)%len8 = for_iters(fi)%len8 * tmp_%to_i64()
+						k_ = k_ + 1
+						for_iters(fi)%len8 = for_iters(fi)%len8 * stack%v(k_)%to_i64()
 					end do
+					k_ = k_ + 1
+					for_iters(fi)%lbound_ = stack%v(k_)
 
 				case default
 					write(*,*) err_int(IC_FOR_ARRAY_KIND, 'for loop: unknown array kind')
 					call internal_error()
 				end select
 
+				stack%len_ = base_
+				end block
+
 			case default
-				! Non-primary array expression
+				! Non-primary array expression: node%array%kind /= array_expr,
+				! so the compiler already compiled it to bytecode
+				! (compile_ctrl.f90's for_statement case) and its value is on
+				! TOS -- pop it instead of AST-walking it here
 				if (nd%array%val%type == str_type) then
 					for_iters(fi)%for_kind = str_type
 					for_iters(fi)%itr_type = str_type
-					call syntax_eval(nd%array, state, tmp_)
+					call vm_pop_copy(stack, tmp_)
 					call value_move(tmp_, for_iters(fi)%str_)
 					for_iters(fi)%len8 = len(for_iters(fi)%str_%str%s, 8)
 				else
 					for_iters(fi)%for_kind = array_expr
-					call syntax_eval(nd%array, state, tmp_)
+					call vm_pop_copy(stack, tmp_)
 					for_iters(fi)%array = tmp_%array
 
 					! Enum/struct elements live in %struct(:), not in
 					! array_t (which has no value_t component) -- thread it
 					! through separately.  array_at() falls back to its
-					! array_t path when this isn't allocated (mirrors
-					! eval_for_statement's case default in eval_control.f90).
+					! array_t path when this isn't allocated.
 					! for_iters(fi) is a reused slot on a stack, not a fresh
 					! variable, so a stale allocation from a prior for-loop
 					! that used this same slot must be cleared first --
@@ -1471,11 +1619,15 @@ module subroutine vm_run(prog, state, res)
 				next_ip = instr%a   ! jump to FOR_POP; no nfor decrement here
 			else
 				val%type = for_iters(fi)%itr_type
+				! for_iters(fi)%elem_vals is unallocated except for
+				! expl_array/size_array (populated at OP_FOR_SETUP by
+				! compile_array_expr_slots' pre-evaluation); an unallocated
+				! allocatable actual argument is treated as not-present for
+				! array_at's optional elem_vals dummy, same as %struct below
 				call array_at(val, for_iters(fi)%for_kind, for_iters(fi)%counter, &
 					for_iters(fi)%lbound_, for_iters(fi)%step, for_iters(fi)%ubound_, &
 					for_iters(fi)%len_, for_iters(fi)%array, &
-					prog%nodes(for_iters(fi)%node_idx)%array%elems, for_iters(fi)%str_, &
-					state, for_iters(fi)%struct)
+					for_iters(fi)%str_, for_iters(fi)%struct, for_iters(fi)%elem_vals)
 				associate(nd => prog%nodes(for_iters(fi)%node_idx))
 				if (nd%is_loc) then
 					call value_move(val, state%locs%vals(nd%id_index))
@@ -1495,29 +1647,76 @@ module subroutine vm_run(prog, state, res)
 		! --- M8: array construction -----------------------------------------------
 		! Delegates to eval_array_expr for all array kinds (bound, step, len,
 		! expl, size, unif).  Rank-1 native specialization is a future perf pass.
+		! Sub-expressions were compiled to bytecode (compile_array_expr_slots)
+		! and are on TOS; pop them as a slot window instead of AST-walking.
 		! Can rt_throw (R21 size mismatch, R25/R26 step-zero), so check rt_halt
 		! before pushing a possibly-unset result.
 		case (OP_NEW_ARRAY)
-			call eval_array_expr(prog%nodes(instr%a), state, val)
+			block
+			integer :: nslots_, base_
+			nslots_ = array_expr_nslots(prog%nodes(instr%a))
+			base_ = stack%len_ - nslots_
+			call eval_array_expr(prog%nodes(instr%a), state, val, stack%v(base_+1:base_+nslots_))
+			stack%len_ = base_
+			end block
 			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 
 		! --- enum reverse cast, e.g. `Suit(2)` -------------------------------------
-		! Delegates to eval_enum_cast_expr, which matches the runtime ordinal
-		! against the node's baked variant list and can rt_throw (R32) if none
-		! match, so check rt_halt before pushing a possibly-unset result.
+		! The ordinal sub-expression was compiled to bytecode (compile_ctrl.f90);
+		! pop it and linear-scan the const-pooled %struct(:) variant list built
+		! at parse time by parse_enum_cast().  No runtime enum registry is
+		! needed.  rt_throw's R32 on no match.
 		case (OP_ENUM_CAST)
-			call eval_enum_cast_expr(prog%nodes(instr%a), state, val)
-			if (state%rt_halt) exit
+			call vm_pop_copy(stack, right)
+			associate(cv => prog%consts(instr%a))
+			block
+				integer(kind = 4) :: ord
+				integer :: j
+				logical :: found
+				ord = right%to_i32()
+				found = .false.
+				do j = 1, size(cv%struct)
+					if (cv%struct(j)%sca%i32 == ord) then
+						val = cv%struct(j)
+						found = .true.
+						exit
+					end if
+				end do
+				if (.not. found) then
+					call rt_throw(state, err_rt(RC_ENUM_CAST_RANGE, &
+						"no variant with value "//str(ord)//" in enum `"// &
+						cv%enum_name//"`"))
+					exit
+				end if
+			end block
+			end associate
 			call vm_push_move(stack, val)
 
 		! --- M8: slice/complex LHS assignment ------------------------------------
 		! Handles slice-range LHS (a[1:3] = x) and subscript-less compound
-		! assignments by delegating to eval_assignment_expr, which can rt_throw
-		! (R27 subscript-step-zero), so check rt_halt before pushing a
+		! assignments by delegating to eval_assignment_expr.  The RHS was
+		! compiled to bytecode (compile_ctrl.f90) and is on TOS -- pop it and
+		! pass it in rather than letting eval_assignment_expr AST-walk
+		! node%right itself.  Below the RHS: the LHS subscript bound
+		! sub-expressions (compile_subscript_slots), only present when
+		! n%lsubscripts is allocated (the slice-LHS case; the subscript-less
+		! compound-assign case has none).  Can rt_throw (R27
+		! subscript-step-zero), so check rt_halt before pushing a
 		! possibly-unset result.
 		case (OP_STORE_SLICE)
-			call eval_assignment_expr(prog%nodes(instr%a), state, val)
+			call vm_pop_copy(stack, right)
+			associate(n => prog%nodes(instr%a))
+			block
+			integer :: nslots_, base_
+			nslots_ = 0
+			if (allocated(n%lsubscripts)) nslots_ = subscript_total_nslots(n)
+			base_ = stack%len_ - nslots_
+			call eval_assignment_expr(n, state, val, rhs_in = right, &
+				slots = stack%v(base_+1:base_+nslots_))
+			stack%len_ = base_
+			end block
+			end associate
 			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 
@@ -2627,9 +2826,20 @@ module subroutine vm_run(prog, state, res)
 			state%vars%vals(instr%a)%sca%f64 = stack%v(stack%len_)%sca%f64
 
 		case (OP_SUBSCRIPT_TOS)
-			! Pop the fn return value, apply subscripts from the node pool, push result.
-			call vm_pop_copy(stack, left)
-			call apply_subscripts_to_val(prog%nodes(instr%a), left, state, val)
+			! Stack layout: [fn_return_value][slot_1]...[slot_N], N =
+			! subscript_total_nslots -- the return value is pushed by
+			! OP_CALL/OP_CALL_PTR/OP_CALL_INTR, then compile_subscript_slots
+			! pushes the (possibly zero) pre-evaluated subscript bound values
+			! on top of it.  Pop both regions, apply subscripts, push result.
+			block
+			integer :: nslots_, value_idx_
+			nslots_ = subscript_total_nslots(prog%nodes(instr%a))
+			value_idx_ = stack%len_ - nslots_
+			call value_move(stack%v(value_idx_), left)
+			call apply_subscripts_to_val(prog%nodes(instr%a), left, state, val, &
+				stack%v(value_idx_+1 : value_idx_+nslots_))
+			stack%len_ = value_idx_ - 1
+			end block
 			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 
@@ -3088,8 +3298,27 @@ module subroutine vm_run(prog, state, res)
 		do i = 1, size(frames)
 			call value_array_destroy(frames(i)%caller_locs)
 			call value_array_destroy(frames(i)%locs_buf)
+			call value_array_destroy(frames(i)%recv_slots)
 		end do
 		deallocate(frames)
+	end if
+
+	! for_iters(:) holds the same kind of nested value_t/array_t trees as the
+	! pools above (lbound_/step/ubound_/len_/str_ are value_t; struct(:) and
+	! elem_vals(:) are value_t arrays; array is an array_t) -- same distrust
+	! of implicit deep deallocation applies
+	if (allocated(for_iters)) then
+		do i = 1, size(for_iters)
+			call value_destroy(for_iters(i)%lbound_)
+			call value_destroy(for_iters(i)%step)
+			call value_destroy(for_iters(i)%ubound_)
+			call value_destroy(for_iters(i)%len_)
+			call value_destroy(for_iters(i)%str_)
+			call array_destroy(for_iters(i)%array)
+			call value_array_destroy(for_iters(i)%struct)
+			call value_array_destroy(for_iters(i)%elem_vals)
+		end do
+		deallocate(for_iters)
 	end if
 
 	call value_array_destroy(params_pool)

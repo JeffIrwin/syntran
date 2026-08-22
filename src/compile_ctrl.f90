@@ -44,6 +44,143 @@ end subroutine grow_int
 
 !===============================================================================
 
+recursive subroutine compile_subscript_slots(prog, cs, node)
+
+	! Compile node%lsubscripts(:)'s bound sub-expressions (paired with
+	! usubscripts(:)/ssubscripts(:)) to bytecode, in the fixed per-dimension
+	! order subscript_dim_nslots/subscript_slot_start (bytecode.f90) assume:
+	! step first (step_sub only), then lower (unless omitted), then upper
+	! (unless omitted; range_sub/step_sub only).  Used by the
+	! OP_INDEX/OP_SLICE/OP_STORE_IDX/OP_SUBSCRIPT_TOS fallback paths so the
+	! VM pops pre-evaluated values instead of AST-walking node%lsubscripts(i)
+	! via eval_subscript_1d/str_slice_bounds/field_slice_bounds at eval time.
+
+	type(program_t),        intent(inout) :: prog
+	type(compiler_state_t), intent(inout) :: cs
+	type(syntax_node_t),    intent(in)    :: node
+
+	!*******
+
+	integer :: i
+
+	do i = 1, size(node%lsubscripts)
+		select case (node%lsubscripts(i)%sub_kind)
+		case (all_sub)
+			! nothing to compile
+
+		case (scalar_sub, arr_sub)
+			call compile_node(prog, cs, node%lsubscripts(i))
+
+		case (range_sub)
+			if (.not. node%lsubscripts(i)%lsub_omit) &
+				call compile_node(prog, cs, node%lsubscripts(i))
+			if (.not. node%lsubscripts(i)%usub_omit) &
+				call compile_node(prog, cs, node%usubscripts(i))
+
+		case (step_sub)
+			call compile_node(prog, cs, node%ssubscripts(i))
+			if (.not. node%lsubscripts(i)%lsub_omit) &
+				call compile_node(prog, cs, node%lsubscripts(i))
+			if (.not. node%lsubscripts(i)%usub_omit) &
+				call compile_node(prog, cs, node%usubscripts(i))
+
+		end select
+	end do
+
+end subroutine compile_subscript_slots
+
+!===============================================================================
+
+recursive subroutine compile_member_chain_slots(prog, cs, node)
+
+	! Mirrors get_val/set_val's (runtime_array.f90) recursive member-chain
+	! walk: compiles node's own subscript bound sub-expressions (if any) via
+	! compile_subscript_slots, then either recurses into node%member (when
+	! it is itself a further dot_expr) or compiles node%member's
+	! subscripts directly (when node%member is the chain's leaf segment).
+	! Order and structure must match chain_total_nslots (bytecode.f90)
+	! exactly, and get_val/set_val's own `pos` cursor consumption order.
+	! Used by OP_LOAD_MEMBER/OP_LOAD_MEMBER_TOS/OP_STORE_MEMBER and the
+	! OP_RET by-ref receiver writeback.
+
+	type(program_t),        intent(inout) :: prog
+	type(compiler_state_t), intent(inout) :: cs
+	type(syntax_node_t),    intent(in)    :: node
+
+	if (allocated(node%lsubscripts)) call compile_subscript_slots(prog, cs, node)
+
+	if (allocated(node%member)) then
+		if (node%member%kind == dot_expr) then
+			call compile_member_chain_slots(prog, cs, node%member)
+		else if (allocated(node%member%lsubscripts)) then
+			call compile_subscript_slots(prog, cs, node%member)
+		end if
+	end if
+
+end subroutine compile_member_chain_slots
+
+!===============================================================================
+
+recursive subroutine compile_array_expr_slots(prog, cs, node)
+
+	! Compile an array_expr node's sub-expressions to bytecode, in the fixed
+	! order array_expr_nslots (bytecode.f90) assumes -- see its docstring.
+	! Used by OP_NEW_ARRAY's fallback sites (unif_array/expl_array not
+	! covered by their native paths, plus step_array/len_array/size_array,
+	! which have no native path at all) and by the for_statement fallback
+	! (node%array%kind == array_expr but not for_setup_native_ok, i.e.
+	! unif_array/size_array/expl_array) so the VM pops pre-evaluated values
+	! instead of AST-walking via eval_array_expr / OP_FOR_SETUP's inline
+	! handling at eval time.
+
+	type(program_t),        intent(inout) :: prog
+	type(compiler_state_t), intent(inout) :: cs
+	type(syntax_node_t),    intent(in)    :: node
+
+	!*******
+
+	integer :: i
+
+	select case (node%val%array%kind)
+	case (step_array)
+		call compile_node(prog, cs, node%lbound)
+		call compile_node(prog, cs, node%step)
+		call compile_node(prog, cs, node%ubound)
+
+	case (len_array)
+		call compile_node(prog, cs, node%lbound)
+		call compile_node(prog, cs, node%ubound)
+		call compile_node(prog, cs, node%len_)
+
+	case (unif_array)
+		do i = 1, size(node%size)
+			call compile_node(prog, cs, node%size(i))
+		end do
+		call compile_node(prog, cs, node%lbound)
+
+	case (bound_array)
+		call compile_node(prog, cs, node%lbound)
+		call compile_node(prog, cs, node%ubound)
+
+	case (size_array)
+		do i = 1, size(node%elems)
+			call compile_node(prog, cs, node%elems(i))
+		end do
+		do i = 1, size(node%size)
+			call compile_node(prog, cs, node%size(i))
+		end do
+
+	case (expl_array)
+		do i = 1, size(node%elems)
+			call compile_node(prog, cs, node%elems(i))
+		end do
+
+	end select
+
+end subroutine compile_array_expr_slots
+
+!===============================================================================
+
 subroutine ensure_fn_entry(prog, fn_id)
 
 	! Grow prog%fn_entry / prog%fn_num_locs so that index fn_id is valid.
@@ -129,7 +266,13 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 			cs%in_fn_body = .true.
 			call compile_node(prog, cs, module_node%members(i)%body)
 			cs%in_fn_body = .false.
-			! Implicit void return for functions with no explicit return statement
+			! Implicit void return for functions with no explicit return
+			! statement.  Pop the body block's own result (block_statement
+			! compilation always leaves exactly one value on the stack, even
+			! for an empty body -- see the block_statement case above) before
+			! pushing the unknown_type sentinel, so OP_RET pops the sentinel
+			! and not the body's stranded result.
+			call emit(prog, OP_POP)
 			const_idx = add_const(prog, unknown_val())
 			call emit(prog, OP_LOAD_CONST, a = const_idx)
 			call emit(prog, OP_RET)
@@ -143,6 +286,7 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 					cs%in_fn_body = .true.
 					call compile_node(prog, cs, module_node%members(i)%members(j)%body)
 					cs%in_fn_body = .false.
+					call emit(prog, OP_POP)
 					const_idx = add_const(prog, unknown_val())
 					call emit(prog, OP_LOAD_CONST, a = const_idx)
 					call emit(prog, OP_RET)
@@ -268,6 +412,12 @@ recursive subroutine compile_node(prog, cs, node)
 					a = node%id_index, &
 					c = merge(1_8, 0_8, node%is_loc))
 			else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
+				! Fallback: str char or struct-element scalar index.  Every
+				! subscript is scalar_sub (1 slot each, see
+				! subscript_dim_nslots), so this just pushes them in order --
+				! the VM computes the linear index itself instead of calling
+				! subscript_eval, which would otherwise AST-walk them.
+				call compile_subscript_slots(prog, cs, node)
 				idx = add_node(prog, node)
 				call emit(prog, OP_INDEX, a = idx)
 			else if (str_slice_native_ok(node)) then
@@ -286,6 +436,11 @@ recursive subroutine compile_node(prog, cs, node)
 					b = int(size(node%lsubscripts)), &
 					c = merge(1_8, 0_8, node%is_loc))
 			else
+				! Fallback: any range/step/all/arr subscript combination not
+				! covered by the native paths above.  Pre-compile the bound
+				! sub-expressions so the VM pops them instead of AST-walking
+				! node%lsubscripts(:) via eval_subscript_1d/str_slice_bounds.
+				call compile_subscript_slots(prog, cs, node)
 				idx = add_node(prog, node)
 				call emit(prog, OP_SLICE, a = idx)
 			end if
@@ -359,7 +514,11 @@ recursive subroutine compile_node(prog, cs, node)
 	! ---- assignment: dot member, scalar subscript, simple, or compound -------
 	case (assignment_expr)
 		if (allocated(node%member)) then
-			! M5: dot member assignment: a.b = expr  or  a.b += expr
+			! M5: dot member assignment: a.b = expr  or  a.b += expr.
+			! Chain subscript slots first so RHS ends up on TOS, matching
+			! OP_STORE_IDX's [subscripts...][rhs] layout -- the VM's
+			! vm_pop_copy grabs the RHS, leaving the slot window below it.
+			call compile_member_chain_slots(prog, cs, node)
 			call compile_node(prog, cs, node%right)
 			idx = add_node(prog, node)
 			call emit(prog, OP_STORE_MEMBER, a = idx, b = node%op%kind)
@@ -404,7 +563,10 @@ recursive subroutine compile_node(prog, cs, node)
 				typed_op = typed_store_op(node%val%type, node%is_loc)
 				call emit(prog, typed_op, a = node%id_index)
 			else
-				! Fallback: AST-walker handles mixed types, bitwise ops, etc.
+				! Fallback: mixed types, bitwise ops, etc.  eval_assignment_expr
+				! handles these but no longer walks the RHS itself -- compile it
+				! to bytecode so the VM pops the value instead of AST-walking it.
+				call compile_node(prog, cs, node%right)
 				idx = add_node(prog, node)
 				call emit(prog, OP_STORE_SLICE, a = idx)
 			end if
@@ -442,7 +604,13 @@ recursive subroutine compile_node(prog, cs, node)
 						b = int(size(node%lsubscripts)), &
 						c = int(node%op%kind, 8) * 2_8 + merge(1_8, 0_8, node%is_loc))
 				else
-					! Fallback: str chars, struct elements, casts, bitwise compound
+					! Fallback: str chars, struct elements, casts, bitwise compound.
+					! Every subscript is scalar_sub here (guard above), so
+					! compile_subscript_slots just pushes them in order (1 slot
+					! each); RHS is pushed last so it stays on TOS for the VM's
+					! vm_pop_copy, matching OP_STORE_IDX_NAT/OP_COMPOUND_IDX_NAT's
+					! [subscripts...][rhs] stack layout.
+					call compile_subscript_slots(prog, cs, node)
 					call compile_node(prog, cs, node%right)
 					idx = add_node(prog, node)
 					call emit(prog, OP_STORE_IDX, a = idx, b = node%op%kind)
@@ -458,7 +626,20 @@ recursive subroutine compile_node(prog, cs, node)
 					b = int(size(node%lsubscripts)), &
 					c = merge(1_8, 0_8, node%is_loc))
 			else
-				! Slice LHS or subscript-less compound: delegate to eval_assignment_expr
+				! Slice LHS, OR a subscript-less whole-array/whole-struct
+				! compound assign that isn't a plain arithmetic op (e.g. a
+				! bitwise v &= x; compound_to_arith_token doesn't cover
+				! bitwise tokens, so that case skips the dedicated
+				! subscript-less branch above and lands here too, with
+				! node%lsubscripts left unallocated).  Delegate to
+				! eval_assignment_expr.  Compile the subscript bound
+				! sub-expressions (compile_subscript_slots), when there are
+				! any, then the RHS, so the VM pops both instead of
+				! AST-walking node%lsubscripts(:)/node%right itself --
+				! [subscripts...][rhs] layout, matching OP_STORE_IDX's
+				! fallback above.
+				if (allocated(node%lsubscripts)) call compile_subscript_slots(prog, cs, node)
+				call compile_node(prog, cs, node%right)
 				idx = add_node(prog, node)
 				call emit(prog, OP_STORE_SLICE, a = idx)
 			end if
@@ -702,7 +883,13 @@ recursive subroutine compile_node(prog, cs, node)
 				cs%in_fn_body = .true.
 				call compile_node(prog, cs, node%members(i)%body)
 				cs%in_fn_body = .false.
-				! Implicit void return for functions with no explicit return statement
+				! Implicit void return for functions with no explicit return
+				! statement.  Pop the body block's own result (block_statement
+				! compilation always leaves exactly one value on the stack,
+				! even for an empty body) before pushing the unknown_type
+				! sentinel, so OP_RET pops the sentinel and not the body's
+				! stranded result.
+				call emit(prog, OP_POP)
 				const_idx = add_const(prog, unknown_val())
 				call emit(prog, OP_LOAD_CONST, a = const_idx)
 				call emit(prog, OP_RET)
@@ -716,6 +903,7 @@ recursive subroutine compile_node(prog, cs, node)
 						cs%in_fn_body = .true.
 						call compile_node(prog, cs, node%members(i)%members(j)%body)
 						cs%in_fn_body = .false.
+						call emit(prog, OP_POP)
 						const_idx = add_const(prog, unknown_val())
 						call emit(prog, OP_LOAD_CONST, a = const_idx)
 						call emit(prog, OP_RET)
@@ -727,11 +915,11 @@ recursive subroutine compile_node(prog, cs, node)
 		! REPL pass: compile any fn declared on an earlier REPL line.  Each
 		! REPL statement gets its own fresh program_t (c.f. eval_dispatch()
 		! in syntran.f90), so such a fn has no fn_declaration node in *this*
-		! tree -- its AST only survives in cs%fns%fns(:), which is exactly
-		! how the AST walker resolves the same case (state%fns%fns(id_index)
-		! %node%body in eval_fn.f90).  Skip ids already compiled above (this
-		! line's own fns) and intrinsics (unallocated %node).  No-op outside
-		! the REPL, where compile_tree() is called without the fns arg
+		! tree -- its AST only survives in cs%fns%fns(:) (state%fns%fns(:)
+		! at REPL time), carried forward from the line that declared it.
+		! Skip ids already compiled above (this line's own fns) and
+		! intrinsics (unallocated %node).  No-op outside the REPL, where
+		! compile_tree() is called without the fns arg
 		if (associated(cs%fns)) then
 			do i = cs%fns%num_intr_fns + 1, size(cs%fns%fns)
 				if (.not. allocated(cs%fns%fns(i)%node)) cycle
@@ -746,7 +934,13 @@ recursive subroutine compile_node(prog, cs, node)
 				cs%in_fn_body = .true.
 				call compile_node(prog, cs, cs%fns%fns(i)%node%body)
 				cs%in_fn_body = .false.
-				! Implicit void return for functions with no explicit return statement
+				! Implicit void return for functions with no explicit return
+				! statement.  Pop the body block's own result (block_statement
+				! compilation always leaves exactly one value on the stack,
+				! even for an empty body) before pushing the unknown_type
+				! sentinel, so OP_RET pops the sentinel and not the body's
+				! stranded result.
+				call emit(prog, OP_POP)
 				const_idx = add_const(prog, unknown_val())
 				call emit(prog, OP_LOAD_CONST, a = const_idx)
 				call emit(prog, OP_RET)
@@ -812,7 +1006,24 @@ recursive subroutine compile_node(prog, cs, node)
 			end select
 			call emit(prog, OP_FOR_SETUP_NAT, a = idx, b = node%array%val%array%kind, &
 				c = int(node%array%val%array%type, 8))
+		else if (node%array%kind /= array_expr) then
+			! Non-primary iterable: an arbitrary expression (string or array-
+			! valued), not literal array syntax.  Compile it to bytecode so the
+			! VM pops the value instead of calling syntax_eval on every loop
+			! entry (OP_FOR_SETUP only runs once per for-statement, but this
+			! keeps the fallback AST-free like the other for_statement paths).
+			call compile_node(prog, cs, node%array)
+			call emit(prog, OP_FOR_SETUP, a = idx)
 		else
+			! Literal array syntax whose kind isn't covered by
+			! for_setup_native_ok above: unif_array, size_array, or
+			! expl_array (bound_array/step_array/len_array are always
+			! native, so never reach here).  Compile the sub-expressions
+			! (compile_array_expr_slots -- the same helper OP_NEW_ARRAY's
+			! fallback uses) so the VM pops them instead of AST-walking via
+			! OP_FOR_SETUP's inline unif_array/size_array/expl_array
+			! handling / array_at at eval time.
+			call compile_array_expr_slots(prog, cs, node%array)
 			call emit(prog, OP_FOR_SETUP, a = idx)
 		end if
 
@@ -864,10 +1075,12 @@ recursive subroutine compile_node(prog, cs, node)
 					call emit(prog, OP_UNIF_ARRAY_NAT, &
 						a = node%val%array%type, b = node%val%array%rank)
 				else
+					call compile_array_expr_slots(prog, cs, node)
 					idx = add_node(prog, node)
 					call emit(prog, OP_NEW_ARRAY, a = idx)
 				end if
 			case default
+				call compile_array_expr_slots(prog, cs, node)
 				idx = add_node(prog, node)
 				call emit(prog, OP_NEW_ARRAY, a = idx)
 			end select
@@ -887,34 +1100,48 @@ recursive subroutine compile_node(prog, cs, node)
 				call emit(prog, OP_EXPL_ARRAY_NAT, &
 					a = node%val%array%type, b = int(node%val%array%len_))
 			else
+				call compile_array_expr_slots(prog, cs, node)
 				idx = add_node(prog, node)
 				call emit(prog, OP_NEW_ARRAY, a = idx)
 			end if
 
 		case default
+			call compile_array_expr_slots(prog, cs, node)
 			idx = add_node(prog, node)
 			call emit(prog, OP_NEW_ARRAY, a = idx)
 
 		end select
 
 	! ---- enum reverse cast -----------------------------------------------------
-	! `EnumName(ordinal)`: node%right (the ordinal sub-expr) and node%val%struct(:)
-	! (baked variants to match against) are both carried via the node pool, so a
-	! single generic opcode delegates to eval_enum_cast_expr, mirroring OP_NEW_ARRAY.
+	! `EnumName(ordinal)`: compile the ordinal sub-expr to bytecode (the VM pops
+	! it), and const-pool node%val, which already carries the baked %struct(:)
+	! variant list to match against (set at parse time by parse_enum_cast) plus
+	! %enum_name for the R32 diagnostic
 	case (enum_cast_expr)
-		idx = add_node(prog, node)
-		call emit(prog, OP_ENUM_CAST, a = idx)
+		call compile_node(prog, cs, node%right)
+		const_idx = add_const(prog, node%val)
+		call emit(prog, OP_ENUM_CAST, a = const_idx)
 
 	! ---- struct instance construction -----------------------------------------
 	! M5: Compile each member-initialiser expression in order, then emit
-	! OP_MAKE_STRUCT.  The node is stored in the pool so the VM can recover
-	! struct_name and nmembers; the member expressions themselves are bytecode.
+	! OP_MAKE_STRUCT.  Only struct_name/struct_cookie/struct_reg_idx are needed
+	! at runtime (to build the result's identity), so const-pool a prototype
+	! value_t carrying just those instead of storing the whole node; nmembers
+	! travels in instr%b since the member expressions are already bytecode.
 	case (struct_instance_expr)
 		do i = 1, size(node%members)
 			call compile_node(prog, cs, node%members(i))
 		end do
-		idx = add_node(prog, node)
-		call emit(prog, OP_MAKE_STRUCT, a = idx)
+		block
+			type(value_t) :: struct_proto
+			struct_proto%type = struct_type
+			if (allocated(node%struct_name)) struct_proto%struct_name = node%struct_name
+			if (allocated(node%val%struct_cookie)) &
+				struct_proto%struct_cookie = node%val%struct_cookie
+			struct_proto%struct_reg_idx = node%val%struct_reg_idx
+			const_idx = add_const(prog, struct_proto)
+		end block
+		call emit(prog, OP_MAKE_STRUCT, a = const_idx, b = int(size(node%members)))
 
 	! ---- dot-expression (struct member read) -----------------------------------
 	! M5: Store the dot_expr node in the pool so the VM can call get_val with
@@ -923,7 +1150,10 @@ recursive subroutine compile_node(prog, cs, node)
 		if (node%root_kind /= 0) then
 			! Root is a fn_call_expr/method_call_expr (e.g. `fn().field`).
 			! Compile the fn call (incl. any subscripts) to push root value on stack,
-			! then emit OP_LOAD_MEMBER_TOS with a wrapper node holding just the member chain.
+			! then compile the member chain's own subscript slots on top of it
+			! (matching OP_SUBSCRIPT_TOS's [value][slot_1]...[slot_N] layout),
+			! then emit OP_LOAD_MEMBER_TOS with a wrapper node holding just the
+			! member chain.
 			block
 				type(syntax_node_t) :: root_node, wrapper
 				root_node = node
@@ -933,10 +1163,12 @@ recursive subroutine compile_node(prog, cs, node)
 				wrapper%kind = dot_expr
 				allocate(wrapper%member)
 				wrapper%member = node%member
+				call compile_member_chain_slots(prog, cs, wrapper)
 				idx = add_node(prog, wrapper)
 			end block
 			call emit(prog, OP_LOAD_MEMBER_TOS, a = idx)
 		else
+			call compile_member_chain_slots(prog, cs, node)
 			idx = add_node(prog, node)
 			call emit(prog, OP_LOAD_MEMBER, a = idx)
 		end if
@@ -1016,10 +1248,30 @@ recursive subroutine compile_node(prog, cs, node)
 						end if
 					end if
 				end do
+
+				! Pass 3: for by-ref args with a subscripted or dot-expr
+				! receiver (call_recv_eligible, bytecode.f90), compile the
+				! receiver chain's OWN subscript bound sub-expressions -- a
+				! second, separate compilation from Pass 2's value-push
+				! above -- so OP_RET's writeback pops pre-evaluated values
+				! (frame_t%recv_slots) instead of re-walking the receiver's
+				! subscripts via set_val at return time.  Preserves today's
+				! double-evaluation of a receiver subscript expression
+				! (once here for the value, once for the index) rather than
+				! fixing it; both now happen at call time instead of split
+				! across call/return.  Order must match call_recv_slot_start.
+				do i = 1, size(node%is_ref)
+					if (call_recv_eligible(node, i)) &
+						call compile_member_chain_slots(prog, cs, node%args(i))
+				end do
 			end if
 
 			call emit(prog, OP_CALL, a = node%id_index, b = idx)
 			if (allocated(node%lsubscripts)) then
+				! Subscript bound sub-expressions pushed on top of the
+				! already-on-stack return value; the VM reads them as a slot
+				! window above it instead of AST-walking node%lsubscripts(:).
+				call compile_subscript_slots(prog, cs, node)
 				call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
 			end if
 		end if
@@ -1039,7 +1291,7 @@ recursive subroutine compile_node(prog, cs, node)
 		end if
 
 		! Load the callee fn-pointer value (node%id_index/is_loc identify the
-		! *variable* holding it, not a fn id -- c.f. eval_fn_call_ptr)
+		! *variable* holding it, not a fn id)
 		if (node%is_loc) then
 			call emit(prog, OP_LOAD_LOCAL, a = node%id_index)
 		else
@@ -1048,6 +1300,7 @@ recursive subroutine compile_node(prog, cs, node)
 
 		call emit(prog, OP_CALL_PTR, b = idx)
 		if (allocated(node%lsubscripts)) then
+			call compile_subscript_slots(prog, cs, node)
 			call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
 		end if
 
@@ -1142,6 +1395,7 @@ recursive subroutine compile_node(prog, cs, node)
 		end block
 		if (allocated(node%lsubscripts)) then
 			idx = add_node(prog, node)
+			call compile_subscript_slots(prog, cs, node)
 			call emit(prog, OP_SUBSCRIPT_TOS, a = idx)
 		end if
 

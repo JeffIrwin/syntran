@@ -55,33 +55,26 @@ end function run_group
 ! unit_test_dir_unreadable_errors(), all of which check diagnostics emitted
 ! for bad syntran programs against expected error codes and/or locations
 
-function get_diags(str_, src_file, bytecode) result(diag_)
+function get_diags(str_, src_file) result(diag_)
 	character(len = *), intent(in) :: str_
 	character(len = *), intent(in), optional :: src_file
-
-	! Explicit backend override.  Lets runtime-error tests (which don't have
-	! a separate diags-emission path per backend, unlike compile-time E*
-	! diags) exercise both the bytecode VM and the AST walker for the same
-	! snippet.  Omit to use the SYNTRAN_BACKEND env var default (VM)
-	logical, intent(in), optional :: bytecode
 
 	type(string_vector_t) :: diag_
 	character(len = :), allocatable :: res_
 	if (present(src_file)) then
-		res_ = eval(str_, .true., src_file = src_file, diags = diag_, bytecode = bytecode)
+		res_ = eval(str_, .true., src_file = src_file, diags = diag_)
 	else
-		res_ = eval(str_, .true., diags = diag_, bytecode = bytecode)
+		res_ = eval(str_, .true., diags = diag_)
 	end if
 end function get_diags
 
 !===============================================================================
 
-function get_diags_file(filename, bytecode) result(diag_)
+function get_diags_file(filename) result(diag_)
 	character(len = *), intent(in) :: filename
-	logical, intent(in), optional :: bytecode
 	type(string_vector_t) :: diag_
 	character(len = :), allocatable :: res_
-	res_ = interpret_file(filename, quiet = .true., diags = diag_, bytecode = bytecode)
+	res_ = interpret_file(filename, quiet = .true., diags = diag_)
 end function get_diags_file
 
 !===============================================================================
@@ -195,18 +188,18 @@ end function diag_loc_ok
 ! Helper for unit_test_runtime_errors().  Runtime (R*) diagnostics have no
 ! caret/location context (unlike compile-time E* diags), so diag_loc_ok()
 ! doesn't apply here.  Instead this checks that a reproduction file raises
-! [code] under BOTH the bytecode VM and the (deprecated) AST walker, since R*
-! call sites are duplicated per-backend (eval_*.f90 vs vm_*.f90) and can drift
-! apart.  Each repro lives under src/tests/test-src/errors/ (also linked as an
-! example from doc/errors.md), mirroring how get_diags_file()/diag_loc_ok()
-! work for compile-time E* errors
+! [code].  Each repro lives under src/tests/test-src/errors/ (also linked as
+! an example from doc/errors.md), mirroring how get_diags_file()/diag_loc_ok()
+! work for compile-time E* errors.
+!
+! The "_both_" in the name is a holdover from when this also checked the AST
+! walker; only the VM remains, but the name was left alone to avoid touching
+! its ~25 call sites below
 
 function rt_code_both_file(filename, code) result(both)
 	character(len = *), intent(in) :: filename, code
 	logical :: both
-	both = &
-		diag_has_code(get_diags_file(filename, bytecode = .true. ), code) .and. &
-		diag_has_code(get_diags_file(filename, bytecode = .false.), code)
+	both = diag_has_code(get_diags_file(filename), code)
 end function rt_code_both_file
 
 !===============================================================================
@@ -754,7 +747,36 @@ subroutine unit_test_assignment(npass, nfail)
 			interpret('{'// &
 				'let b = (let a = 5) * a;'// &
 				'let d = (let c = b - a) + c;}') == '40', &
-			eval('let myVariable = 1337;')  == '1337'   &
+			eval('let myVariable = 1337;')  == '1337' ,  &
+
+			! Pin intentional semantics: `a[f()].b = g()` now compiles the
+			! LHS subscript before the RHS (compile_subscript_slots emitted
+			! ahead of compile_node(node%right) in compile_ctrl.f90), so f()
+			! runs before g().  This also fixes a pre-existing double
+			! evaluation of the LHS subscript, since the old AST-walking
+			! fallback re-walked it after evaluating the RHS.
+			eval('let ord="";' &
+				//'struct S{b:i32}' &
+				//'fn f():i32 { ord=ord+"L"; return 0; }' &
+				//'fn g():i32 { ord=ord+"R"; return 7; }' &
+				//'let a=[S{b=1},S{b=2}];' &
+				//'a[f()].b = g();' &
+				//'return ord;' &
+				, .true.) == 'LR', &
+			! Pin intentional semantics: a compound assignment through a
+			! subscripted dot-chain (`s.v[nxt()] += 5`) now evaluates the
+			! subscript once (get_val and set_val replay the SAME
+			! pre-compiled slot window, OP_STORE_MEMBER resets pos to 0
+			! between them) instead of twice like the deleted AST walker,
+			! which re-walked the subscript expression for each of the
+			! get/set halves.
+			eval('let calls=0;' &
+				//'fn nxt():i32 { calls += 1; return 0; }' &
+				//'struct S{v:[i32; :]}' &
+				//'let s=S{v=[1,2,3]};' &
+				//'s.v[nxt()] += 5;' &
+				//'return calls;' &
+				, .true.) == '1'   &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -1534,6 +1556,59 @@ end subroutine unit_test_intr_fns
 
 !===============================================================================
 
+subroutine unit_test_intr_id_coverage(npass, nfail)
+
+	! Guards against a mangled intrinsic name being registered by
+	! declare_intr_fns (intr_fns.f90) without a matching case in
+	! intr_id_from_name (bytecode.f90).  A miss there compiles fine and only
+	! fails at runtime as `OP_CALL_INTR a=0` (vm_intr.f90's case default);
+	! this walks every registered name so the gap shows up as a test
+	! failure instead.  This replaces the coverage the AST walker's
+	! name-keyed `select case` in eval_fn_call_intr used to provide
+	! implicitly, before the walker was removed
+
+	use syntran__types_m,    only: fns_t
+	use syntran__intr_fns_m, only: declare_intr_fns
+	use syntran__bytecode_m, only: intr_id_from_name
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'intrinsic fn id coverage'
+
+	integer :: i
+	type(fns_t) :: fns
+	logical, allocatable :: tests(:)
+	character(len = :), allocatable :: key
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	call declare_intr_fns(fns)
+
+	allocate(tests(0))
+	do i = 1, fns%capacity
+		if (.not. allocated(fns%table(i)%key)) cycle
+		key = fns%table(i)%key
+		! "std::"-only fns (e.g. "std::args") are registered with the
+		! prefix as part of the hash-table key (parse_fn.f90's std::-first
+		! lookup), but node%identifier%text -- what intr_id_from_name is
+		! actually called with at compile_ctrl.f90:1296 -- never carries
+		! the prefix, so strip it here too to match real dispatch
+		if (len(key) > 5) then
+			if (key(1:5) == "std::") key = key(6:)
+		end if
+		tests = [tests, intr_id_from_name(key) /= 0]
+	end do
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_intr_id_coverage
+
+!===============================================================================
+
 subroutine unit_test_comments(npass, nfail)
 
 	implicit none
@@ -1789,6 +1864,45 @@ subroutine unit_test_for(npass, nfail)
 			interpret_file(path//'test-07.syntran', quiet) == '1836311903', &
 			interpret_file(path//'test-08.syntran', quiet) == '0', &
 			interpret_file(path//'test-09.syntran', quiet) == 'true', &
+
+			! Regression test for a double-free crash: two sequential
+			! top-level `for` loops directly over array literals with
+			! allocatable-component elements (str here) both land on
+			! for_iters(1) in vm_exec.f90's OP_FOR_SETUP (nfor returns to 0
+			! between the loops), so the second loop's setup must deep-copy
+			! its elem_vals(:) instead of shallow-copying stack slots the
+			! first loop's (still-live, dead-but-not-empty) elem_vals
+			! aliased -- see value_array_copy() call sites in vm_exec.f90.
+			! expl_array kind (plain `[...]` literal):
+			eval('let t="";' &
+				//'for s in ["ab","cd"] {t=t+s;}' &
+				//'for s in ["ef","gh"] {t=t+s;}' &
+				//'return t;' &
+				, quiet) == 'abcdefgh', &
+			! size_array kind (`[..., ...; size]` literal):
+			eval('let t="";' &
+				//'for s in ["ab","cd"; 2] {t=t+s;}' &
+				//'for s in ["ef","gh"; 2] {t=t+s;}' &
+				//'return t;' &
+				, quiet) == 'abcdefgh', &
+
+			! Pin intentional semantics: array-literal `for` headers now
+			! evaluate every element eagerly at loop setup (OP_FOR_SETUP
+			! pre-compiles compile_array_expr_slots), not lazily per
+			! iteration like the deleted AST walker.  x is read for BOTH
+			! elements before the loop body ever runs, so mutating x inside
+			! the body no longer affects element 2's value.
+			eval('let x=0; let t="";' &
+				//'for i in [x, x] { t = t + str(i); x = 9; }' &
+				//'return t;' &
+				, quiet) == '00', &
+			! Corollary: a later element with a side effect is evaluated even
+			! if the loop body breaks before reaching that iteration.
+			eval('let n=0; fn f():i32 { n += 1; return 1; }' &
+				//'for i in [0, f()] { break; }' &
+				//'return n;' &
+				, quiet) == '1', &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -3691,6 +3805,24 @@ subroutine unit_test_fns(npass, nfail)
 			! bound used to falsely trip E56/E58 in parse pass 0
 			interpret_file(path//'test-34.syntran', quiet) == '3', &
 			interpret_file(path//'test-35.syntran', quiet) == '3', &
+			! Regression: a void fn with no explicit `return` used to leave
+			! its implicit-void-return sentinel on top of the fn body's own
+			! stranded block result (block_statement compilation always
+			! leaves exactly one value on the stack), so the *caller* read
+			! the wrong operand-stack slot after the call returned.
+			eval('fn h() { }  fn g(): i32 { h(); return 5; }  1 + g();', &
+				quiet) == '6', &
+			! Same bug via a struct method with no explicit return, called
+			! from a recursive fn -- confirms the fix holds across OP_CALL's
+			! by-ref-receiver bookkeeping too.
+			eval('struct C{n:i32, fn nop(){}}' // &
+			     'fn f(d:i32):i32 { let c=C{n=0}; c.nop(); let t=d;' // &
+			     'if (d>0) { t += f(d-1); } return t; } f(3);', quiet) == '6', &
+			! A void fn WITH an explicit `return;` already worked (OP_RET's
+			! early jump skips the epilogue entirely) -- pin it so the fix
+			! above doesn't regress the already-correct path.
+			eval('fn h() { return; }  fn g(): i32 { h(); return 5; }  1 + g();', &
+				quiet) == '6', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5493,6 +5625,185 @@ end subroutine unit_test_struct_str
 
 !===============================================================================
 
+subroutine unit_test_struct_str_sub(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'struct str member subscripts'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! Character subscripting/slicing a str-typed struct member used to
+	! segfault: get_val/set_val (runtime_array.f90) routed non-scalar str
+	! member subscripts into get_field_slice_val/set_field_slice_val, which
+	! read field_val%array%size -- but a str member has no %array.  A char
+	! subscript on a [str;:] member (`s.n[0,1]`) also silently returned/wrote
+	! the whole element instead of one character, since the member-chain path
+	! never implemented has_char_sub the way eval_name_expr does.  Every case
+	! below is paired with its plain-variable equivalent (already covered by
+	! unit_test_str/unit_test_substr/unit_test_array_str) as a parity check.
+
+	tests = &
+		[   &
+			! Read, scalar str member
+			eval(''                          &                ! 1
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'return s.name[1];' &
+				) == 'e', &
+			eval(''                          &                ! 2
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'return s.name[1:3];' &
+				) == 'el', &
+			eval(''                          &                ! 3
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'return s.name[:];' &
+				) == 'hello', &
+			eval(''                          &                ! 4
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'return s.name[4:-1:-1];' &
+				) == 'olleh', &
+
+			! Nested struct member
+			eval(''                          &                ! 5
+				//'struct T{name:str}' &
+				//'struct S{t:T}' &
+				//'let s = S{t=T{name="hello"}};' &
+				//'return s.t.name[1:3];' &
+				) == 'el', &
+
+			! Array-of-struct dot chain (also exercised the scalar path,
+			! which had no str guard at all on the chain branch)
+			eval(''                          &                ! 6
+				//'struct S{name:str}' &
+				//'let a = [S{name="hello"}; 2];' &
+				//'return a[0].name[1];' &
+				) == 'e', &
+			eval(''                          &                ! 7
+				//'struct S{name:str}' &
+				//'let a = [S{name="hello"}; 2];' &
+				//'return a[0].name[1:3];' &
+				) == 'el', &
+
+			! Write, scalar str member
+			eval(''                          &                ! 8
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'s.name[1] = "E";' &
+				//'return s.name;' &
+				) == 'hEllo', &
+			eval(''                          &                ! 9
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'s.name[1:3] = "EL";' &
+				//'return s.name;' &
+				) == 'hELlo', &
+			eval(''                          &                ! 10
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'s.name[:] = "world";' &
+				//'return s.name;' &
+				) == 'world', &
+			eval(''                          &                ! 11
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'s.name[4:-1:-1] = "olleh";' &
+				//'return s.name;' &
+				) == 'hello', &
+
+			! Nested and chain forms of write
+			eval(''                          &                ! 12
+				//'struct T{name:str}' &
+				//'struct S{t:T}' &
+				//'let s = S{t=T{name="hello"}};' &
+				//'s.t.name[1:3] = "EL";' &
+				//'return s.t.name;' &
+				) == 'hELlo', &
+			eval(''                          &                ! 13
+				//'struct S{name:str}' &
+				//'let a = [S{name="hello"}; 2];' &
+				//'a[0].name[1] = "E";' &
+				//'return a[0].name;' &
+				) == 'hEllo', &
+			eval(''                          &                ! 14
+				//'struct S{name:str}' &
+				//'let a = [S{name="hello"}; 2];' &
+				//'a[0].name[1:3] = "EL";' &
+				//'return a[0].name;' &
+				) == 'hELlo', &
+
+			! Char-rank sub on a [str;:] member
+			eval(''                          &                ! 15
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'return s.n[0,1];' &
+				) == 'b', &
+			eval(''                          &                ! 16
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'return s.n[0,1:3];' &
+				) == 'bc', &
+			eval(''                          &                ! 17
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'return s.n[:,1];' &
+				) == '[b, e]', &
+			eval(''                          &                ! 18
+				//'struct S{n:[str;:]}' &
+				//'let a = [S{n=["abc","def"]}; 2];' &
+				//'return a[0].n[0,1];' &
+				) == 'b', &
+
+			! Char-rank sub write on a [str;:] member
+			eval(''                          &                ! 19
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'s.n[0,1] = "X";' &
+				//'return s.n;' &
+				) == '[aXc, def]', &
+			eval(''                          &                ! 20
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'s.n[0,1:3] = "XY";' &
+				//'return s.n;' &
+				) == '[aXY, def]', &
+			eval(''                          &                ! 21
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'s.n[:,1] = "X";' &
+				//'return s.n;' &
+				) == '[aXc, dXf]', &
+			eval(''                          &                ! 22
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'s.n[:,1] = ["X","Y"];' &
+				//'return s.n;' &
+				) == '[aXc, dYf]', &
+
+			! Control: whole-element slice (no char sub) is unaffected
+			eval(''                          &                ! 23
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'return s.n[0:2];' &
+				) == '[abc, def]'  &
+
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_str_sub
+
+!===============================================================================
+
 subroutine unit_test_struct_long(npass, nfail)
 
 	implicit none
@@ -5989,14 +6300,10 @@ subroutine unit_test_enum(npass, nfail)
 				EC_ENUM_CAST_RANGE), &
 
 			! Reverse cast with an out-of-range non-literal ordinal is a
-			! runtime error (R32), on both backends
+			! runtime error (R32)
 			diag_has_code(get_diags( &
 				'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
-				//'let x = 99; Suit(x);', bytecode = .true.), &
-				RC_ENUM_CAST_RANGE), &
-			diag_has_code(get_diags( &
-				'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
-				//'let x = 99; Suit(x);', bytecode = .false.), &
+				//'let x = 99; Suit(x);'), &
 				RC_ENUM_CAST_RANGE), &
 
 			! Explicit negative values, and auto-increment resuming from a
@@ -6732,9 +7039,7 @@ subroutine unit_test_error_codes(npass, nfail)
 	! only a few representative IC_*/WC_* spot checks remain in section 4.
 	!
 	! RC_* (runtime) codes are no longer out of scope: most are reachable
-	! end-to-end and are tested in unit_test_runtime_errors() below, which
-	! checks them under both the bytecode VM and the AST walker since R* call
-	! sites are duplicated per-backend
+	! end-to-end and are tested in unit_test_runtime_errors() below
 	!
 	! EC_BAD_ARG_RANK (E47) is formally retired (see errors.f90) and is
 	! intentionally excluded from section 3 -- its constructor was deleted, so
@@ -7380,8 +7685,14 @@ subroutine unit_test_error_codes(npass, nfail)
 
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
-			! both backends) in unit_test_runtime_errors() below
-			index(err_eval_node('some_node_kind'), '['//IC_EVAL_NODE//']') > 0, &
+			! both backends) in unit_test_runtime_errors() below.  IC_EVAL_NODE
+			! (I5, err_eval_node) was retired and removed: its only emission
+			! site was the deleted AST-walker's node dispatcher, which has no
+			! VM counterpart -- see errors.f90's retirement comment.
+			! IC_EVAL_UNARY_OP/IC_EVAL_BINARY_OP (I4/I6) are live again, now
+			! emitted from do_unop/do_binop's case default in vm_exec.f90.
+			index(err_eval_unary_op('?'), '['//IC_EVAL_UNARY_OP//']') > 0, &
+			index(err_eval_binary_op('?'), '['//IC_EVAL_BINARY_OP//']') > 0, &
 			index(warn_pre(WC_MISSING_RETURN), '['//WC_MISSING_RETURN//']') > 0 &
 		]
 
@@ -7396,13 +7707,11 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	! Tests for reachable runtime (R*) errors, mirroring unit_test_error_codes()
 	! above but for errors raised during evaluation instead of parsing.
 	!
-	! Runtime errors are duplicated per-backend (eval_*.f90 for the AST walker,
-	! vm_*.f90 for the bytecode VM), each halting evaluation via state%rt_halt
-	! instead of exiting the process (see rt_throw() in eval.f90).  Every row
-	! below uses rt_code_both_file(), which checks that a reproduction file
-	! under src/tests/test-src/errors/ (also linked as an example from
-	! doc/errors.md) raises [code] under BOTH backends, since the two
-	! implementations could in principle drift apart.
+	! Runtime errors halt evaluation via state%rt_halt instead of exiting the
+	! process (see rt_throw() in runtime.f90).  Every row below uses
+	! rt_code_both_file(), which checks that a reproduction file under
+	! src/tests/test-src/errors/ (also linked as an example from
+	! doc/errors.md) raises [code].
 	!
 	! Unlike compile-time E* diagnostics, R* diagnostics carry no
 	! caret/location context (err_rt() has no span to underline), so there's
@@ -7428,10 +7737,9 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	! (I24) the moment it was subscripted, before rt_diags was ever printed.
 	! R21-for-array-size-mismatch.syntran covers the same mismatch iterated
 	! directly by a `for` loop instead of bound with `let` first -- a
-	! separate code path (OP_FOR_SETUP's size_array case in vm_exec.f90 /
-	! eval_for_statement's size_array case in eval_control.f90) that used to
-	! skip the check entirely under the bytecode VM, letting OP_FOR_NEXT read
-	! past the end of the array literal's elements and crash with a raw
+	! separate code path (OP_FOR_SETUP's size_array case in vm_exec.f90)
+	! that used to skip the check entirely, letting OP_FOR_NEXT read past
+	! the end of the array literal's elements and crash with a raw
 	! Fortran bounds-check abort instead of ever raising R21.
 	!
 	! Excluded from this end-to-end coverage:
@@ -7474,13 +7782,10 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 			! R1: matmul `@` dimension mismatch
 			rt_code_both_file(P//'R1-matmul-dim.syntran', RC_MATMUL_DIM), &
-			! Guard against double-emission (one throw, not one per backend
-			! re-check or speculative re-evaluation)
+			! Guard against double-emission (one throw, not one per
+			! speculative re-evaluation)
 			diag_count_code(get_diags_file( &
-				P//'R1-matmul-dim.syntran', bytecode = .true.), &
-				RC_MATMUL_DIM) == 1, &
-			diag_count_code(get_diags_file( &
-				P//'R1-matmul-dim.syntran', bytecode = .false.), &
+				P//'R1-matmul-dim.syntran'), &
 				RC_MATMUL_DIM) == 1, &
 
 			! R2-R5: parse_i32/i64/f32/f64 on unparseable text
@@ -7548,10 +7853,7 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			rt_code_both_file( &
 				P//'R21-array-size-mismatch.syntran', RC_ARRAY_SIZE_MISMATCH), &
 			diag_count_code(get_diags_file( &
-				P//'R21-array-size-mismatch.syntran', bytecode = .true.), &
-				RC_ARRAY_SIZE_MISMATCH) == 1, &
-			diag_count_code(get_diags_file( &
-				P//'R21-array-size-mismatch.syntran', bytecode = .false.), &
+				P//'R21-array-size-mismatch.syntran'), &
 				RC_ARRAY_SIZE_MISMATCH) == 1, &
 
 			! R21, `for`-loop iterable form: same mismatch, but iterated
@@ -7560,19 +7862,13 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			rt_code_both_file( &
 				P//'R21-for-array-size-mismatch.syntran', RC_ARRAY_SIZE_MISMATCH), &
 			diag_count_code(get_diags_file( &
-				P//'R21-for-array-size-mismatch.syntran', bytecode = .true.), &
-				RC_ARRAY_SIZE_MISMATCH) == 1, &
-			diag_count_code(get_diags_file( &
-				P//'R21-for-array-size-mismatch.syntran', bytecode = .false.), &
+				P//'R21-for-array-size-mismatch.syntran'), &
 				RC_ARRAY_SIZE_MISMATCH) == 1, &
 			! opposite direction (too many elements for the declared size),
-			! as an inline snippet under both backends since a file halts at
-			! its first runtime error
+			! as an inline snippet since a file halts at its first runtime
+			! error
 			diag_has_code(get_diags( &
-				'let n = 3; for i in [1,2,3,4,5; n,1] {}', bytecode = .true.), &
-				RC_ARRAY_SIZE_MISMATCH), &
-			diag_has_code(get_diags( &
-				'let n = 3; for i in [1,2,3,4,5; n,1] {}', bytecode = .false.), &
+				'let n = 3; for i in [1,2,3,4,5; n,1] {}'), &
 				RC_ARRAY_SIZE_MISMATCH), &
 
 			! R23-R27: step-is-0 family (for loop, range/array literal, slice
@@ -8288,6 +8584,7 @@ subroutine unit_tests(iostat)
 	if (run_group('array_bool')) call unit_test_array_bool(npass, nfail)
 	if (run_group('nd_i32')) call unit_test_nd_i32(npass, nfail)
 	if (run_group('intr_fns')) call unit_test_intr_fns(npass, nfail)
+	if (run_group('intr_id_coverage')) call unit_test_intr_id_coverage(npass, nfail)
 	if (run_group('fns')) call unit_test_fns(npass, nfail)
 	if (run_group('repl_fns')) call unit_test_repl_fns(npass, nfail)
 	if (run_group('repl_directives')) call unit_test_repl_directives(npass, nfail)
@@ -8308,6 +8605,7 @@ subroutine unit_tests(iostat)
 	if (run_group('struct_arr2')) call unit_test_struct_arr2(npass, nfail)
 	if (run_group('struct_arr3')) call unit_test_struct_arr3(npass, nfail)
 	if (run_group('struct_str')) call unit_test_struct_str(npass, nfail)
+	if (run_group('struct_str_sub')) call unit_test_struct_str_sub(npass, nfail)
 	if (run_group('struct_long')) call unit_test_struct_long(npass, nfail)
 	if (run_group('methods')) call unit_test_methods(npass, nfail)
 	if (run_group('enum')) call unit_test_enum(npass, nfail)
@@ -8715,6 +9013,16 @@ subroutine unit_test_deep_recursion(npass, nfail)
 			     'for i16 in [0:1] { for i17 in [0:1] { for i18 in [0:1] { for i19 in [0:1] {' // &
 			     's = s + 1; }}}}}}}}}}}}}}}}}}}}' // &
 			     's;') == '1', &
+			! Regression test: recursion past INIT_FRAMES_CAP (64) through a
+			! by-ref method call whose receiver is subscripted (a[1]).  Each
+			! live frame at depths > 64 carries frame_t%recv_slots, which
+			! grow_frames() must move into the doubled frame array instead of
+			! dropping -- otherwise OP_RET's by-ref writeback dereferences an
+			! absent slots/pos optional in set_val (runtime_array.f90) once
+			! the frame stack grows past its initial capacity.
+			eval('struct C{n:i32, fn go(d:i32){ n += rec(d); }}' // &
+			     'fn rec(d:i32):i32 { if (d <= 0) { return 0; } return rec(d-1); }' // &
+			     'let a = [C{n=1}, C{n=2}]; a[1].go(200); a[1].n;') == '2', &
 			.false.  &
 		]
 
@@ -8919,9 +9227,7 @@ subroutine unit_test_transpose(npass, nfail)
 			! Struct elements: transpose permutes %struct(:) by hand since
 			! composite elements don't live in an array_t buffer (previously
 			! SIGSEGV -- see src/core.f90 TODO history).  Same 2x3 source/
-			! indices as the i32 case above.  Both backends are covered by CI
-			! running this whole suite twice (default VM, then again with
-			! SYNTRAN_BACKEND=ast), same as every other row in this file.
+			! indices as the i32 case above.
 			eval('struct S{x:i32,}' &
 				//'let a = [S{x=0},S{x=1},S{x=2},S{x=3},S{x=4},S{x=5}];' &
 				//'let t = std::transpose(std::reshape(a,[2,3])); t[0,1].x;', &
@@ -9055,8 +9361,6 @@ program test
 		i = i + 1
 		call get_command_argument(i, argv)
 		select case (trim(argv))
-		case ('--no-warn-ast')
-			no_warn = .true.
 		case ('--anchor')
 			print_anchor = .true.
 		case ('--only')

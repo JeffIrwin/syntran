@@ -10,7 +10,7 @@ module syntran__core_m
 	use syntran__compiler_m
 	use syntran__consts_m
 	use syntran__errors_m
-	use syntran__eval_m
+	use syntran__runtime_m
 	use syntran__intr_fns_m
 	use syntran__intr_vars_m
 	use syntran__parse_m
@@ -31,12 +31,11 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - source split for better incremental build times
+	!    * started plan in ~/.claude/plans/why-are-some-src-encapsulated-wand.md
 	!  - cleanup TODO notes throughout the codebase
 	!    * took a big chunk out already
 	!    * continue one file at a time
-	!    * postponing eval*.f90 until after ast backend is imminently purged
-	!  - remove AST-walking interpreter. bytecode is better
-	!    * will probably remove it in 1.6
 	!  - switch/match/case. needs to work with strings. would be nice to work
 	!    with arrays. basic switch/case is fine but also consider "pattern
 	!    matching" or whatever rust has
@@ -83,14 +82,19 @@ module syntran__core_m
 	!      str-to-num and num-to-str conversion, even tried gfortran 13 in
 	!      rocky, but there are still issues:
 	!
+	!    * trace below predates the eval*.f90 -> runtime*.f90 split (the AST
+	!      walker was removed in 1.6.0); file/line refs are stale but the
+	!      underlying threadsafety bug is presumably still there somewhere
+	!      in the runtime_*.f90 successors
+	!
 	!          Starting AOC syntran main-struct 2023/02
 	!          part 2 = 54249
 	!          Ending AOC syntran main
-	!          
+	!
 	!          part 1 = 540212
 	!          At line 918 of file ././src/eval_array.f90
 	!          Fortran runtime error: Index '2' of dimension 1 of array 'array%str' above upper bound of 1
-	!          
+	!
 	!          Error termination. Backtrace:
 	!          #0  0x7f02914288a0 in ???
 	!          #1  0x7f02914293f9 in ???
@@ -113,7 +117,7 @@ module syntran__core_m
 	!      it. duh!
 	!    * fortran compile time optimization -- see if pain points like
 	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
-	!      + intr_fns.f90, eval.f90, types.f90 now broken up
+	!      + intr_fns.f90, eval.f90 (now runtime.f90), types.f90 broken up
 	!      + anything else?
 	!      + build.sh (cmake) uses parallel gnu make builds. fpm still builds
 	!        serially
@@ -477,9 +481,9 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 	! state%vars, state%fns, state%structs, and state%enums are round-tripped
 	! through the local parser below so they survive from one REPL line to
 	! the next (c.f. eval_dispatch()/syntran_interpret() in syntran.f90).
-	! Struct and enum declarations are otherwise parse-time only -- both
-	! backends skip struct_declaration/enum_declaration nodes (c.f.
-	! eval_control.f90, compile_ctrl.f90) -- so unlike fns there is no flat
+	! Struct and enum declarations are otherwise parse-time only -- the
+	! compiler skips struct_declaration/enum_declaration nodes (c.f.
+	! compile_ctrl.f90) -- so unlike fns there is no flat
 	! array counterpart to rebuild for them.  target is required: fns%get()
 	! and structs%get() return pointers into the dict, and a subobject of a
 	! target dummy is itself a target
@@ -641,8 +645,9 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 		! Only the 1st scope level matters from interpreter.  It doesn't
 		! evaluate until the block is finished.  Note state%fns%fns is left
 		! alone here -- the parser never reads or writes the flat array, only
-		! the hash table (c.f. eval_fn.f90, the only reader of fns%fns), so
-		! there is no need to move it in and deep-copy it back out again
+		! the hash table (c.f. compile_ctrl.f90's REPL pass, the only reader
+		! of fns%fns), so there is no need to move it in and deep-copy it
+		! back out again
 		call move_alloc(state%fns%table, parser%fns%table)
 		parser%fns%capacity = state%fns%capacity
 		parser%fns%count    = state%fns%count
@@ -651,9 +656,9 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	end if
 
-	! Structs and enums are parse-time-only -- both backends skip
-	! struct_declaration/enum_declaration nodes (c.f. eval_control.f90 and
-	! compile_ctrl.f90) -- but the REPL needs them to survive from one line
+	! Structs and enums are parse-time-only -- the compiler skips
+	! struct_declaration/enum_declaration nodes (c.f. compile_ctrl.f90) --
+	! but the REPL needs them to survive from one line
 	! to the next, so move the tables in and back out just like fns above.
 	! Unlike fns there is no flat array counterpart, so there is nothing
 	! equivalent to state%fns%fns to leave alone

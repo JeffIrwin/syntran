@@ -112,7 +112,7 @@ FPM requires escaping quotes within command arguments.
 
 ## Architecture Overview
 
-The interpreter follows a classic lexer → parser → evaluator pipeline, implemented in Fortran modules:
+The interpreter follows a lexer → parser → bytecode compiler → VM pipeline, implemented in Fortran modules:
 
 ### Core Pipeline
 - `src/lex.f90` - Lexical analysis (tokenization)
@@ -123,12 +123,19 @@ The interpreter follows a classic lexer → parser → evaluator pipeline, imple
   - `parse_fn.f90` - Function declarations
   - `parse_array.f90` - Array syntax
   - `parse_misc.f90` - Preprocessing (`#include`) and other misc parsing
-- `src/eval.f90` - AST evaluation/interpretation
-- `src/eval_*.f90` - Evaluator submodules:
-  - `eval_array.f90` - Array evaluation
-  - `eval_control.f90` - Control flow evaluation
-  - `eval_expr.f90` - Expression evaluation
-  - `eval_fn.f90` - Function evaluation
+- `src/compile.f90` - Bytecode compiler orchestration
+- `src/compile_ctrl.f90` - Bytecode emission for control flow, assignment, and calls
+- `src/bytecode.f90` - Bytecode program/instruction representation
+- `src/vm.f90` - Bytecode VM orchestration
+- `src/vm_exec.f90` - VM instruction dispatch loop
+- `src/vm_intr.f90` - VM intrinsic function dispatch
+- `src/runtime.f90` - Evaluation-time runtime state (`state_t`) shared by the VM
+- `src/runtime_*.f90` - Runtime submodules for VM fallback paths (struct/dot-chain
+  member access, array-slice subscripting, array-literal construction, for-loop
+  iteration):
+  - `runtime_array.f90` - Array/member subscripting and slicing
+  - `runtime_control.f90` - Slice-LHS/compound assignment and array-literal construction
+  - `runtime_expr.f90` - Name-expression subscripting
 - `src/types.f90` - Fortran type definitions
 - `src/types_*.f90` - Types submodules:
   - `types_copy.f90` - Deep copy procedures for types

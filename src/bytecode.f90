@@ -336,7 +336,10 @@ module syntran__bytecode_m
 	! Stack after:  [result]
 	integer, parameter :: OP_ENUM_CAST = 1241
 
-	!**** M6: intrinsic function ids (match order in eval_fn_call_intr / declare_intr_fns)
+	!**** M6: intrinsic function ids.  No ordering contract with
+	! declare_intr_fns (intr_fns.f90) -- dispatch is name-keyed via
+	! intr_id_from_name() below, not by numeric id order.  Coverage between
+	! the two is guarded by unit_test_intr_id_coverage (test.f90)
 
 	! Math
 	integer, parameter :: &
@@ -494,9 +497,10 @@ module syntran__bytecode_m
 		! index to jump to for a `continue` inside loop depth d.  break fixups
 		! inside loops are collected and backpatched after the loop body.
 		!
-		! All arrays are growable (no hard limit) for parity with the AST walker.
-		! INIT_LOOP_DEPTH / INIT_BREAK_FIXUPS are starting capacities only;
-		! arrays double on demand.
+		! All arrays are growable (no hard limit -- matches Fortran's own
+		! recursion, which is bounded only by stack/memory, not by a fixed
+		! nesting cap).  INIT_LOOP_DEPTH / INIT_BREAK_FIXUPS are starting
+		! capacities only; arrays double on demand.
 
 		integer :: loop_depth = 0
 		integer, allocatable :: continue_target(:)
@@ -525,9 +529,9 @@ module syntran__bytecode_m
 		! gets its own fresh program_t), so their AST only survives in
 		! state%fns%fns(:).  Optionally set by compile_tree() so the
 		! translation_unit case can compile any such fn that isn't in
-		! prog%fn_entry yet, c.f. eval_fn.f90 which resolves the same way for
-		! the AST walker.  Null when compiling a whole file/string in one shot
-		! (nothing to backfill: every fn already has a fn_declaration node).
+		! prog%fn_entry yet.  Null when compiling a whole file/string in one
+		! shot (nothing to backfill: every fn already has a fn_declaration
+		! node).
 		type(fns_t), pointer :: fns => null()
 
 	end type compiler_state_t
@@ -1487,6 +1491,232 @@ pure logical function expl_array_native_ok(node) result(ok)
 	ok = .true.
 
 end function expl_array_native_ok
+
+!===============================================================================
+
+pure function subscript_dim_nslots(node, i) result(n)
+
+	! Number of operand-stack slots dimension i of a subscripted node
+	! (node%lsubscripts(i), paired with usubscripts(i)/ssubscripts(i))
+	! consumes when the OP_INDEX/OP_SLICE/OP_STORE_IDX/OP_SUBSCRIPT_TOS
+	! fallback opcodes pre-compile node%lsubscripts(:) to bytecode instead of
+	! AST-walking them at eval time (compile_subscript_slots in
+	! compile_ctrl.f90 emits the matching compile_node() calls; the VM pops
+	! the pushed values and eval_subscript_1d/str_slice_bounds/
+	! field_slice_bounds in runtime_array.f90 consume them).
+	!
+	! Fixed per-dimension evaluation order: step (step_sub only), then lower
+	! (unless omitted; not for all_sub), then upper (unless omitted;
+	! range_sub/step_sub only) -- mirrors the order eval_subscript_1d/
+	! str_slice_bounds/field_slice_bounds already walk
+	! lsubscripts/usubscripts/ssubscripts in, so this is the single source
+	! of truth both the compiler and the eval-time consumers key off of.
+
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: i
+	integer :: n
+
+	select case (node%lsubscripts(i)%sub_kind)
+	case (all_sub)
+		n = 0
+	case (scalar_sub, arr_sub)
+		n = 1
+	case (range_sub)
+		n = 0
+		if (.not. node%lsubscripts(i)%lsub_omit) n = n + 1
+		if (.not. node%lsubscripts(i)%usub_omit) n = n + 1
+	case (step_sub)
+		n = 1   ! step is always evaluated
+		if (.not. node%lsubscripts(i)%lsub_omit) n = n + 1
+		if (.not. node%lsubscripts(i)%usub_omit) n = n + 1
+	case default
+		n = 0
+	end select
+
+end function subscript_dim_nslots
+
+!===============================================================================
+
+pure function subscript_slot_start(node, i) result(s0)
+
+	! 0-based offset into the flat per-node slots(:) array (see
+	! subscript_dim_nslots above) where dimension i's pre-evaluated bound(s)
+	! begin.  slots(subscript_slot_start(node,i)+1 : ...) is dimension i's
+	! share.
+
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: i
+	integer :: s0, k
+
+	s0 = 0
+	do k = 1, i - 1
+		s0 = s0 + subscript_dim_nslots(node, k)
+	end do
+
+end function subscript_slot_start
+
+!===============================================================================
+
+pure function subscript_total_nslots(node) result(n)
+
+	! Total operand-stack slots node%lsubscripts(:) consumes across all
+	! dimensions -- see subscript_dim_nslots above.  The VM's
+	! OP_INDEX/OP_SLICE/OP_STORE_IDX/OP_SUBSCRIPT_TOS handlers pop exactly
+	! this many values before dispatching to the value-consuming eval-time
+	! helpers.
+
+	type(syntax_node_t), intent(in) :: node
+	integer :: n
+	integer :: i
+
+	n = 0
+	do i = 1, size(node%lsubscripts)
+		n = n + subscript_dim_nslots(node, i)
+	end do
+
+end function subscript_total_nslots
+
+!===============================================================================
+
+recursive pure function chain_total_nslots(node) result(n)
+
+	! Total operand-stack slots a member-access chain (node, and its
+	! node%member/node%member%member/... recursion) consumes.  Mirrors the
+	! exact recursive order get_val/set_val (runtime_array.f90) walk the chain:
+	! node's own lsubscripts (if any) are consumed first, then either the
+	! walk recurses into node%member (when it is itself a further dot_expr,
+	! meaning node%member's subscripts are consumed as its OWN
+	! node%lsubscripts on the next recursion level), or -- when node%member
+	! is the chain's leaf segment -- node%member%lsubscripts is consumed
+	! directly at this level.  Used by
+	! OP_LOAD_MEMBER/OP_LOAD_MEMBER_TOS/OP_STORE_MEMBER and the OP_RET
+	! by-ref receiver writeback to know how many pre-evaluated values to pop.
+
+	type(syntax_node_t), intent(in) :: node
+	integer :: n
+
+	n = 0
+
+	if (allocated(node%lsubscripts)) n = n + subscript_total_nslots(node)
+
+	if (allocated(node%member)) then
+		if (node%member%kind == dot_expr) then
+			n = n + chain_total_nslots(node%member)
+		else if (allocated(node%member%lsubscripts)) then
+			n = n + subscript_total_nslots(node%member)
+		end if
+	end if
+
+end function chain_total_nslots
+
+!===============================================================================
+
+pure function call_recv_eligible(cn, i) result(ok)
+
+	! Whether by-ref param i's receiver arg (cn%args(i)) is a subscripted or
+	! dot-expr expression that OP_RET's writeback resolves via
+	! set_val/chain_total_nslots, as opposed to a temporary (fn-return value
+	! or fn()-field) that gets no writeback, or a plain variable (writeback
+	! via value_move, no chain to walk).  Mirrors the guard at the top of
+	! OP_RET's by-ref writeback loop (vm_exec.f90) exactly; shared by
+	! call_recv_total_nslots/call_recv_slot_start below and by
+	! compile_ctrl.f90's Pass 3 receiver-chain-slot compilation.
+
+	type(syntax_node_t), intent(in) :: cn
+	integer, intent(in) :: i
+	logical :: ok
+
+	ok = .false.
+	if (.not. cn%is_ref(i)) return
+	if (cn%args(i)%kind == fn_call_expr .or. &
+	    cn%args(i)%kind == method_call_expr .or. &
+	    cn%args(i)%kind == fn_call_intr_expr .or. &
+	    cn%args(i)%root_kind /= 0) return
+	ok = allocated(cn%args(i)%lsubscripts) .or. cn%args(i)%kind == dot_expr
+
+end function call_recv_eligible
+
+!===============================================================================
+
+pure function call_recv_total_nslots(cn) result(n)
+
+	! Total operand-stack slots the by-ref args' receiver chains
+	! (compile_ctrl.f90's Pass 3 arg compilation) consume ahead of OP_CALL,
+	! for a fn_call_expr/method_call_expr node cn.  The VM pops this many
+	! values into frames(nframes)%recv_slots at OP_CALL and reads them back
+	! at OP_RET instead of AST-walking the receiver via set_val.
+
+	type(syntax_node_t), intent(in) :: cn
+	integer :: n
+	integer :: i
+
+	n = 0
+	if (.not. allocated(cn%is_ref)) return
+	do i = 1, size(cn%is_ref)
+		if (call_recv_eligible(cn, i)) n = n + chain_total_nslots(cn%args(i))
+	end do
+
+end function call_recv_total_nslots
+
+!===============================================================================
+
+pure function call_recv_slot_start(cn, i) result(s0)
+
+	! 0-based offset into frame_t%recv_slots(:) where by-ref param i's
+	! receiver chain slots begin.  Only meaningful when call_recv_eligible
+	! (cn, i) is true.
+
+	type(syntax_node_t), intent(in) :: cn
+	integer, intent(in) :: i
+	integer :: s0, k
+
+	s0 = 0
+	do k = 1, i - 1
+		if (call_recv_eligible(cn, k)) s0 = s0 + chain_total_nslots(cn%args(k))
+	end do
+
+end function call_recv_slot_start
+
+!===============================================================================
+
+pure function array_expr_nslots(node) result(n)
+
+	! Total operand-stack slots an array_expr node's sub-expressions consume
+	! when OP_NEW_ARRAY / OP_FOR_SETUP's fallback (node%array%kind ==
+	! array_expr but not for_setup_native_ok) pre-compile them to bytecode
+	! instead of AST-walking via eval_array_expr / OP_FOR_SETUP's inline
+	! unif_array/size_array/expl_array handling at eval time.  Order must
+	! match compile_array_expr_slots (compile_ctrl.f90) and the consumption
+	! order in eval_array_expr / vm_exec.f90's OP_FOR_SETUP handler:
+	!   step_array:  lbound, step, ubound                  (3)
+	!   len_array:   lbound, ubound, len_                  (3)
+	!   unif_array:  size(1..rank), lbound                 (rank + 1)
+	!   bound_array: lbound, ubound                        (2; native in
+	!                practice -- OP_NEW_ARRAY never emits this kind, and
+	!                for_setup_native_ok always intercepts it before
+	!                OP_FOR_SETUP -- included for completeness)
+	!   size_array:  elems(1..n), size(1..rank)             (n + rank)
+	!   expl_array:  elems(1..n)                            (n)
+
+	type(syntax_node_t), intent(in) :: node
+	integer :: n
+
+	select case (node%val%array%kind)
+	case (step_array, len_array)
+		n = 3
+	case (unif_array)
+		n = size(node%size) + 1
+	case (bound_array)
+		n = 2
+	case (size_array)
+		n = size(node%elems) + size(node%size)
+	case (expl_array)
+		n = size(node%elems)
+	case default
+		n = 0
+	end select
+
+end function array_expr_nslots
 
 !===============================================================================
 

@@ -1,7 +1,14 @@
 
 !===============================================================================
 
-submodule (syntran__eval_m) syntran__eval_array
+submodule (syntran__runtime_m) syntran__runtime_array
+
+	! Struct/array element get/set, subscript-bound evaluation, and array
+	! iteration primitives.  Formerly part of the AST walker
+	! (eval_array.f90); eval_struct_instance was dropped here since
+	! OP_MAKE_STRUCT builds struct values directly from a const-pooled
+	! prototype instead (compile_ctrl.f90) -- runtime_m's module docstring
+	! has the full picture
 
 	implicit none
 
@@ -11,9 +18,11 @@ contains
 
 !===============================================================================
 
-recursive module subroutine set_val(node, var, state, val, index_)
+recursive module subroutine set_val(node, var, state, val, index_, slots, pos)
 
 	! Assign var.mem = val, or recurse if mem is also a dot expr
+	!
+	! `slots`/`pos`, when present, mirror get_val's -- see its docstring
 
 	type(syntax_node_t), intent(in) :: node
 	type(value_t), intent(inout) :: var
@@ -22,6 +31,8 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	type(value_t), intent(in) :: val
 
 	integer(kind = 8), optional, intent(in) :: index_
+	type(value_t), intent(in), optional :: slots(:)
+	integer, intent(inout), optional :: pos
 
 	!********
 
@@ -42,7 +53,8 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		if (present(index_)) then
 			i8 = index_
 		else
-			i8 = sub_eval(node, var, state)
+			i8 = sub_eval(node, var, state, slots(pos+1 : pos+subscript_total_nslots(node)))
+			pos = pos + subscript_total_nslots(node)
 		end if
 		id = node%member%id_index
 
@@ -53,7 +65,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 
 		if (node%member%kind == dot_expr) then
 			! Recurse
-			call set_val(node%member, var%struct(i8+1)%struct(id), state, val)
+			call set_val(node%member, var%struct(i8+1)%struct(id), state, val, slots=slots, pos=pos)
 			return
 		end if
 
@@ -63,12 +75,28 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		end if
 		!print *, "array dot chain"
 
-		! Arrays chained by a dot: `a[0].b[0]`
-		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-			call set_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, val)
+		! A str member stores characters in %str, not %array, so neither
+		! set_field_slice_val (reads field_val%array%size) nor set_array_val
+		! below applies -- str_char_assign handles scalar/range/step/all
+		! subscript kinds uniformly (also covers the [str;:] + trailing
+		! char-sub case).
+		if (member_str_sub(node%member, var%struct(i8+1)%struct(id))) then
+			call set_str_member_val(node%member, var%struct(i8+1)%struct(id), state, val, &
+				slots(pos+1 : pos+subscript_total_nslots(node%member)))
+			pos = pos + subscript_total_nslots(node%member)
 			return
 		end if
-		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
+
+		! Arrays chained by a dot: `a[0].b[0]`
+		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
+			call set_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, val, &
+				slots(pos+1 : pos+subscript_total_nslots(node%member)))
+			pos = pos + subscript_total_nslots(node%member)
+			return
+		end if
+		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state, &
+			slots(pos+1 : pos+subscript_total_nslots(node%member)))
+		pos = pos + subscript_total_nslots(node%member)
 		call set_array_val(var%struct(i8+1)%struct(id)%array, j8, val)
 		return
 
@@ -77,7 +105,8 @@ recursive module subroutine set_val(node, var, state, val, index_)
 		if (present(index_)) then
 			i8 = index_
 		else
-			i8 = sub_eval(node, var, state)
+			i8 = sub_eval(node, var, state, slots(pos+1 : pos+subscript_total_nslots(node)))
+			pos = pos + subscript_total_nslots(node)
 		end if
 		if (.not. any(var%array%type == [struct_type, enum_type])) then
 			call set_array_val(var%array, i8, val)
@@ -96,7 +125,7 @@ recursive module subroutine set_val(node, var, state, val, index_)
 
 	if (node%member%kind == dot_expr) then
 		! Recurse
-		call set_val(node%member, var%struct(id), state, val)
+		call set_val(node%member, var%struct(id), state, val, slots=slots, pos=pos)
 		return
 	end if
 
@@ -108,8 +137,20 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	end if
 	!print *, "lsubscripts allocated"
 
+	! A str member stores characters in %str, not %array -- str_char_assign
+	! handles scalar/range/step/all subscript kinds uniformly (also covers
+	! the [str;:] + trailing char-sub case).  See member_str_sub's docstring.
+	if (member_str_sub(node%member, var%struct(id))) then
+		call set_str_member_val(node%member, var%struct(id), state, val, &
+			slots(pos+1 : pos+subscript_total_nslots(node%member)))
+		pos = pos + subscript_total_nslots(node%member)
+		return
+	end if
+
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-		call set_field_slice_val(node%member, var%struct(id), state, val)
+		call set_field_slice_val(node%member, var%struct(id), state, val, &
+			slots(pos+1 : pos+subscript_total_nslots(node%member)))
+		pos = pos + subscript_total_nslots(node%member)
 		return
 	end if
 	!print *, "scalar_sub"
@@ -117,12 +158,9 @@ recursive module subroutine set_val(node, var, state, val, index_)
 	if (present(index_)) then
 		i8 = index_
 	else
-		i8 = sub_eval(node%member, var%struct(id), state)
-	end if
-
-	if (var%struct(id)%type == str_type) then
-		var%struct(id)%str%s(i8+1: i8+1) = val%str%s
-		return
+		i8 = sub_eval(node%member, var%struct(id), state, &
+			slots(pos+1 : pos+subscript_total_nslots(node%member)))
+		pos = pos + subscript_total_nslots(node%member)
 	end if
 
 	if (.not. any(var%struct(id)%array%type == [struct_type, enum_type])) then
@@ -136,7 +174,7 @@ end subroutine set_val
 
 !===============================================================================
 
-recursive module subroutine get_val(node, var, state, res, index_)
+recursive module subroutine get_val(node, var, state, res, index_, slots, pos)
 
 	! In nested expressions, like `a.b.c.d`, var begins as the top-most
 	! (left-most, outer-most) value `a`
@@ -148,6 +186,14 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	! FIXME: if you change something in the getter, change it in the setter too
 	!
 	! Should I rename this eval_*() for consistency?
+	!
+	! `slots`/`pos`, when present, hold the whole chain's pre-evaluated
+	! subscript bound values (compile_member_chain_slots, compile_ctrl.f90)
+	! and a running consumption cursor; every consumption point below reads
+	! its own subscript_total_nslots(...)-sized window and advances `pos` by
+	! that amount instead of AST-walking via sub_eval/get_field_slice_val/
+	! apply_subscripts_to_val -- see chain_total_nslots' docstring
+	! (bytecode.f90) for why this exactly mirrors this routine's recursion
 
 	type(syntax_node_t), intent(in) :: node
 	type(value_t), intent(in) :: var
@@ -157,6 +203,9 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 	type(value_t), intent(out) :: res
 
+	type(value_t), intent(in), optional :: slots(:)
+	integer, intent(inout), optional :: pos
+
 	!********
 
 	integer :: id
@@ -165,15 +214,19 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	!print *, "get_val()"
 
 	if (var%type == file_type) then
-		! File handles have a fixed set of read-only members.  Both backends
-		! funnel through get_val() (eval_dot_expr and OP_LOAD_MEMBER), so this
-		! one branch covers the AST walker and the VM.  A file value has no
-		! %struct(:), so this must intercept before every other branch below
+		! File handles have a fixed set of read-only members, reached only
+		! via a member chain (OP_LOAD_MEMBER et al: a file variable can
+		! never be reached through the index_ path, since files aren't
+		! subscriptable), so slots is always present here.  A file value
+		! has no %struct(:), so this must intercept before every other
+		! branch below
 		block
 			type(value_t) :: member_val
 			call get_file_member(node%member, var, state, member_val)
 			if (allocated(node%member%lsubscripts)) then
-				call apply_subscripts_to_val(node%member, member_val, state, res)
+				call apply_subscripts_to_val(node%member, member_val, state, res, &
+					slots(pos+1 : pos+subscript_total_nslots(node%member)))
+				pos = pos + subscript_total_nslots(node%member)
 			else
 				res = member_val
 			end if
@@ -193,7 +246,8 @@ recursive module subroutine get_val(node, var, state, res, index_)
 				return
 			end if
 
-			i8 = sub_eval(node, var, state)
+			i8 = sub_eval(node, var, state, slots(pos+1 : pos+subscript_total_nslots(node)))
+			pos = pos + subscript_total_nslots(node)
 		end if
 
 		!print *, "i8 = ", i8
@@ -206,7 +260,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 
 		if (node%member%kind == dot_expr) then
 			! Recurse
-			call get_val(node%member, var%struct(i8+1)%struct(id), state, res)
+			call get_val(node%member, var%struct(i8+1)%struct(id), state, res, slots=slots, pos=pos)
 			return
 		end if
 
@@ -216,13 +270,29 @@ recursive module subroutine get_val(node, var, state, res, index_)
 		end if
 		!print *, "array dot chain"
 
+		! A str member stores characters in %str, not %array, so neither
+		! get_field_slice_val (reads field_val%array%size) nor get_array_val
+		! below applies -- str_char_slice handles scalar/range/step/all
+		! subscript kinds uniformly (also covers the [str;:] + trailing
+		! char-sub case).
+		if (member_str_sub(node%member, var%struct(i8+1)%struct(id))) then
+			call get_str_member_val(node%member, var%struct(i8+1)%struct(id), state, res, &
+				slots(pos+1 : pos+subscript_total_nslots(node%member)))
+			pos = pos + subscript_total_nslots(node%member)
+			return
+		end if
+
 		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-			call get_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, res)
+			call get_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, res, &
+				slots(pos+1 : pos+subscript_total_nslots(node%member)))
+			pos = pos + subscript_total_nslots(node%member)
 			return
 		end if
 
 		! Arrays chained by a dot: `a[0].b[0]`
-		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state)
+		j8 = sub_eval(node%member, var%struct(i8+1)%struct(id), state, &
+			slots(pos+1 : pos+subscript_total_nslots(node%member)))
+		pos = pos + subscript_total_nslots(node%member)
 		!print *, "get_array_val 1"
 		call get_array_val(var%struct(i8+1)%struct(id)%array, j8, res)
 		return
@@ -234,7 +304,8 @@ recursive module subroutine get_val(node, var, state, res, index_)
 		if (present(index_)) then
 			i8 = index_
 		else
-			i8 = sub_eval(node, var, state)
+			i8 = sub_eval(node, var, state, slots(pos+1 : pos+subscript_total_nslots(node)))
+			pos = pos + subscript_total_nslots(node)
 		end if
 
 		if (.not. any(var%array%type == [struct_type, enum_type])) then
@@ -266,7 +337,7 @@ recursive module subroutine get_val(node, var, state, res, index_)
 		! Recurse.  This branch was incorrectly entering sometimes because
 		! `kind` was uninitialized, only on Windows in release build
 		!print *, "recursing"
-		call get_val(node%member, var%struct(id), state, res)
+		call get_val(node%member, var%struct(id), state, res, slots=slots, pos=pos)
 		return
 	end if
 
@@ -279,8 +350,20 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	end if
 	!print *, "lsubscripts allocated"
 
+	! A str member stores characters in %str, not %array -- str_char_slice
+	! handles scalar/range/step/all subscript kinds uniformly (also covers
+	! the [str;:] + trailing char-sub case).  See member_str_sub's docstring.
+	if (member_str_sub(node%member, var%struct(id))) then
+		call get_str_member_val(node%member, var%struct(id), state, res, &
+			slots(pos+1 : pos+subscript_total_nslots(node%member)))
+		pos = pos + subscript_total_nslots(node%member)
+		return
+	end if
+
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
-		call get_field_slice_val(node%member, var%struct(id), state, res)
+		call get_field_slice_val(node%member, var%struct(id), state, res, &
+			slots(pos+1 : pos+subscript_total_nslots(node%member)))
+		pos = pos + subscript_total_nslots(node%member)
 		return
 	end if
 	!print *, "scalar_sub"
@@ -288,14 +371,9 @@ recursive module subroutine get_val(node, var, state, res, index_)
 	if (present(index_)) then
 		i8 = index_
 	else
-		i8 = sub_eval(node%member, var%struct(id), state)
-	end if
-
-	if (var%struct(id)%type == str_type) then
-		if (.not. allocated(res%str)) allocate(res%str)
-		res%str%s = var%struct(id)%str%s(i8+1: i8+1)
-		res%type = str_type
-		return
+		i8 = sub_eval(node%member, var%struct(id), state, &
+			slots(pos+1 : pos+subscript_total_nslots(node%member)))
+		pos = pos + subscript_total_nslots(node%member)
 	end if
 
 	if (.not. any(var%struct(id)%array%type == [struct_type, enum_type])) then
@@ -353,42 +431,6 @@ subroutine get_file_member(member_node, var, state, res)
 	end select
 
 end subroutine get_file_member
-
-!===============================================================================
-
-recursive module subroutine eval_struct_instance(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	integer :: i
-
-	!print *, 'eval struct_instance_expr'
-	!print *, 'struct identifier = ', node%identifier%text
-	!print *, 'struct id_index   = ', node%id_index
-
-	res%type = node%val%type
-	res%struct_name = node%struct_name
-	if (allocated(node%val%struct_cookie)) res%struct_cookie = node%val%struct_cookie
-	res%struct_reg_idx = node%val%struct_reg_idx
-
-	if (allocated(res%struct)) deallocate(res%struct)
-	allocate(res%struct( size(node%members) ))
-
-	!print *, 'res type = ', kind_name(res%type)
-	!print *, "num members = ", size(node%members)
-	!print *, "num members = ", size(res%struct)
-
-	do i = 1, size(node%members)
-		call syntax_eval(node%members(i), state, res%struct(i))
-	end do
-
-end subroutine eval_struct_instance
 
 !===============================================================================
 
@@ -582,12 +624,19 @@ end subroutine compound_assign
 
 !===============================================================================
 
-module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, contributes_rank)
+module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, contributes_rank, slots)
 
 	! Evaluate the lower bound, step, and upper bound for one dimension of a
 	! subscripted array slice.  Extracted from get_subscript_range so that the
 	! rank-1 fast paths (eval_slice_rank1 / eval_assign_slice_rank1) can obtain
 	! scalar bounds without allocating the full lsubs/ssubs/usubs arrays.
+	!
+	! node%lsubscripts(i)'s bound sub-expressions were already compiled to
+	! bytecode (compile_subscript_slots, compile_ctrl.f90) and popped off
+	! the operand stack by the VM; read the pre-evaluated values from
+	! slots(subscript_slot_start(node,i)+1 : ...).  subscript_dim_nslots /
+	! subscript_slot_start (bytecode.f90) are the single source of truth for
+	! this layout, shared with the compiler
 
 	type(syntax_node_t), intent(in)    :: node
 	type(state_t),       intent(inout) :: state
@@ -595,10 +644,11 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 	integer(kind = 8),   intent(out)   :: lsub, ssub, usub
 	type(i64_vector_t),  intent(inout) :: asub         ! populated for arr_sub only
 	logical,             intent(out)   :: contributes_rank
+	type(value_t),       intent(in)    :: slots(:)
 
 	!********
 
-	integer :: id
+	integer :: id, k
 	integer(kind = 8) :: sz
 	type(value_t) :: asubval, lsubval, usubval, ssubval
 
@@ -607,6 +657,11 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 	lsub = 0
 	ssub = 1
 	usub = 0
+
+	! Running cursor into slots(), starting at dimension i's own window and
+	! advanced below in the same step/lower/upper order the bounds are
+	! listed in node%[l|u|s]subscripts(i)
+	k = subscript_slot_start(node, i)
 
 	select case (node%lsubscripts(i)%sub_kind)
 	case (all_sub)
@@ -625,7 +680,7 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 		if (node%lsubscripts(i)%lsub_omit) then
 			lsub = 0
 		else
-			call syntax_eval(node%lsubscripts(i), state, lsubval)
+			k = k + 1; lsubval = slots(k)
 			lsub = lsubval%to_i64()
 		end if
 
@@ -636,7 +691,7 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 				usub = state%vars%vals(id)%array%size(i)
 			end if
 		else
-			call syntax_eval(node%usubscripts(i), state, usubval)
+			k = k + 1; usubval = slots(k)
 			usub = usubval%to_i64()
 		end if
 
@@ -644,7 +699,7 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 
 	case (step_sub)
 		! Evaluate step FIRST so its sign determines default bounds
-		call syntax_eval(node%ssubscripts(i), state, ssubval)
+		k = k + 1; ssubval = slots(k)
 		ssub = ssubval%to_i64()
 
 		if (ssub == 0) then
@@ -663,14 +718,14 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 		if (node%lsubscripts(i)%lsub_omit) then
 			lsub = merge(sz - 1_8, 0_8, ssub < 0)
 		else
-			call syntax_eval(node%lsubscripts(i), state, lsubval)
+			k = k + 1; lsubval = slots(k)
 			lsub = lsubval%to_i64()
 		end if
 
 		if (node%lsubscripts(i)%usub_omit) then
 			usub = merge(-1_8, sz, ssub < 0)
 		else
-			call syntax_eval(node%usubscripts(i), state, usubval)
+			k = k + 1; usubval = slots(k)
 			usub = usubval%to_i64()
 		end if
 
@@ -679,14 +734,14 @@ module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, cont
 	case (scalar_sub)
 		! Scalar subs are converted to a range-1 sub so we can
 		! iterate later without further case logic
-		call syntax_eval(node%lsubscripts(i), state, lsubval)
+		k = k + 1; lsubval = slots(k)
 		lsub = lsubval%to_i64()
 		usub = lsub + 1
 		ssub = 1
 		! contributes_rank stays .false.
 
 	case (arr_sub)
-		call syntax_eval(node%lsubscripts(i), state, asubval)
+		k = k + 1; asubval = slots(k)
 
 		! TODO: refactor `if` to select/case. There is a fn
 		! value_to_i64_array() but it returns an array_t
@@ -717,13 +772,15 @@ end subroutine eval_subscript_1d
 
 !===============================================================================
 
-module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res, slots)
 
 	! Evaluate the lower- and upper-bounds of each range of a subscripted array
 	! slice
 	!
 	! TODO: `rank_res` is a misnomer.  For LHS slicing it's the rank of the LHS
 	! *after* being sliced
+	!
+	! `slots` is forwarded to eval_subscript_1d -- see its docstring
 
 	type(syntax_node_t), intent(in) :: node
 	type(state_t), intent(inout) :: state
@@ -731,6 +788,7 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 	type(i64_vector_t), allocatable, intent(out) :: asubs(:)
 	integer(kind = 8), allocatable, intent(out) :: lsubs(:), ssubs(:), usubs(:)
 	integer, intent(out) :: rank_res
+	type(value_t), intent(in) :: slots(:)
 
 	!********
 
@@ -747,7 +805,7 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 	allocate(asubs(rank_), lsubs(rank_), ssubs(rank_), usubs(rank_))
 	rank_res = 0
 	do i = 1, rank_
-		call eval_subscript_1d(node, state, i, lsubs(i), ssubs(i), usubs(i), asubs(i), cr)
+		call eval_subscript_1d(node, state, i, lsubs(i), ssubs(i), usubs(i), asubs(i), cr, slots)
 		if (state%rt_halt) return
 		if (cr) rank_res = rank_res + 1
 	end do
@@ -848,7 +906,7 @@ end function subscript_i32_eval
 
 !===============================================================================
 
-module function sub_eval(node, var, state) result(index_)
+module function sub_eval(node, var, state, slots) result(index_)
 
 	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
 	! subscript index_
@@ -858,6 +916,7 @@ module function sub_eval(node, var, state) result(index_)
 	type(syntax_node_t) :: node
 	type(value_t) :: var
 	type(state_t), intent(inout) :: state
+	type(value_t), intent(in) :: slots(:)
 
 	integer(kind = 8) :: index_
 
@@ -870,7 +929,7 @@ module function sub_eval(node, var, state) result(index_)
 	!print *, 'starting sub_eval()'
 
 	if (var%type == str_type) then
-		call syntax_eval(node%lsubscripts(1), state, subscript)
+		subscript = slots(1)
 		index_ = subscript%to_i64()
 		return
 	end if
@@ -880,7 +939,7 @@ module function sub_eval(node, var, state) result(index_)
 	do i = 1, var%array%rank
 		!print *, 'i = ', i
 
-		call syntax_eval(node%lsubscripts(i), state, subscript)
+		subscript = slots(i)
 
 		! TODO: bound checking? by default or enabled with cmd line flag?
 		!
@@ -898,13 +957,18 @@ end function sub_eval
 
 !===============================================================================
 
-recursive module function subscript_eval(node, state) result(index_)
+recursive module function subscript_eval(node, state, slots) result(index_)
 
 	! Evaluate subscript indices and convert a multi-rank subscript to a rank-1
 	! subscript index_
+	!
+	! Only called where every node%lsubscripts(i) is scalar_sub (callers
+	! guarantee this), so subscript_dim_nslots gives exactly 1 slot per
+	! dimension: slots(i) is dimension i's value directly
 
 	type(syntax_node_t) :: node
 	type(state_t), intent(inout) :: state
+	type(value_t), intent(in) :: slots(:)
 
 	integer(kind = 8) :: index_
 
@@ -926,7 +990,7 @@ recursive module function subscript_eval(node, state) result(index_)
 
 	! str scalar with single char subscript
 	if (type_ == str_type) then
-		call syntax_eval(node%lsubscripts(1), state, subscript)
+		subscript = slots(1)
 		index_ = subscript%to_i64()
 		return
 	end if
@@ -941,16 +1005,12 @@ recursive module function subscript_eval(node, state) result(index_)
 		rank_ = state%vars%vals(id)%array%rank
 	end if
 
-	! This could be refactored to run syntax_eval() on each subscript first, and
-	! then call subscript_i32_eval() after the loop.  There would be a small
-	! memory overhead to save i32 sub array but probably no significant time or
-	! space perf difference
 	prod  = 1
 	index_ = 0
 	do i = 1, rank_
 		!print *, 'i = ', i
 
-		call syntax_eval(node%lsubscripts(i), state, subscript)
+		subscript = slots(i)
 
 		! TODO: bound checking? by default or enabled with cmd line flag?
 		!
@@ -973,13 +1033,13 @@ end function subscript_eval
 !===============================================================================
 
 module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
-		elems, str_, state, struct)
+		str_, struct, elem_vals)
 
 	! This lazily gets an array value at an index i without expanding the whole
 	! implicit array in memory.  Used for for loops
 	!
-	! TODO: way too many args.  Bundle lbound_, step, ubound_, len_, array, and
-	! elems into a new struct named `array_parts`.
+	! TODO: way too many args.  Bundle lbound_, step, ubound_, len_, and array
+	! into a new struct named `array_parts`.
 	!
 	! It's also worth considering whether the existence of an array_at() fn is
 	! the right abstraction at all.  It only gets called in one place.  Is the
@@ -995,17 +1055,17 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 
 	type(array_t), intent(in) :: array
 
-	type(syntax_node_t), allocatable :: elems(:)
-
 	type(value_t), intent(in) :: str_
-
-	type(state_t), intent(inout) :: state
 
 	! Enum/struct elements of a materialized (non-primary) array_t live here
 	! instead of in `array` (array_t has no value_t component) -- set only
 	! when the iterated array's element type is enum_type/struct_type.
-	! c.f. eval_for_statement's case default and OP_FOR_SETUP in vm_exec.f90
+	! c.f. OP_FOR_SETUP in vm_exec.f90
 	type(value_t), intent(in), optional :: struct(:)
+
+	! expl_array/size_array elements pre-evaluated at OP_FOR_SETUP time
+	! (compile_array_expr_slots); 1-based
+	type(value_t), intent(in), optional :: elem_vals(:)
 
 	!*********
 
@@ -1049,7 +1109,10 @@ module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
 		end select
 
 	case (expl_array, size_array)
-		call syntax_eval(elems(i), state, val)
+		! Pre-evaluated at OP_FOR_SETUP time (compile_array_expr_slots'
+		! elem_vals) -- vm_exec.f90's only caller always supplies it for
+		! these two kinds
+		val = elem_vals(i)
 
 	case (unif_array)
 		val = lbound_
@@ -1159,7 +1222,7 @@ end subroutine set_array_val
 
 !===============================================================================
 
-module subroutine eval_slice_rank1(node, state, res)
+module subroutine eval_slice_rank1(node, state, res, slots)
 
 	! Allocation-free fast path for rank-1 array read slices:
 	!   a[i:j], a[:j], a[i:], a[i:j:k], a[:k:], a[:]
@@ -1167,10 +1230,13 @@ module subroutine eval_slice_rank1(node, state, res)
 	!
 	! Uses scalar lsub/ssub/usub on the stack instead of allocating
 	! lsubs/ssubs/usubs/asubs/subs arrays as get_subscript_range does.
+	!
+	! `slots` is forwarded to eval_subscript_1d -- see its docstring
 
 	type(syntax_node_t), intent(in)  :: node
 	type(state_t),       intent(inout) :: state
 	type(value_t),       intent(out) :: res
+	type(value_t),       intent(in) :: slots(:)
 
 	!********
 
@@ -1182,7 +1248,7 @@ module subroutine eval_slice_rank1(node, state, res)
 
 	id = node%id_index
 
-	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused)
+	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused, slots)
 	if (state%rt_halt) return
 
 	len_ = divceil(usub - lsub, ssub)
@@ -1223,16 +1289,19 @@ end subroutine eval_slice_rank1
 
 !===============================================================================
 
-module subroutine eval_assign_slice_rank1(node, state, id, res)
+module subroutine eval_assign_slice_rank1(node, state, id, res, slots)
 
 	! Fast path for rank-1 array write slices: a[i:j] = rhs, a[i:j] += rhs, etc.
 	! On entry res holds the already-evaluated RHS.
 	! On return res holds the modified slice (matching the old tmp_array return).
+	!
+	! `slots` is forwarded to eval_subscript_1d -- see its docstring
 
 	type(syntax_node_t), intent(in)    :: node
 	type(state_t),       intent(inout) :: state
 	integer,             intent(in)    :: id    ! node%id_index, already extracted
 	type(value_t),       intent(inout) :: res   ! RHS in, modified slice out
+	type(value_t),       intent(in)    :: slots(:)
 
 	!********
 
@@ -1242,7 +1311,7 @@ module subroutine eval_assign_slice_rank1(node, state, id, res)
 	logical :: cr_unused
 	type(value_t) :: rhs_elem, elem_val, result_val
 
-	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused)
+	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused, slots)
 	if (state%rt_halt) return
 
 	len_ = divceil(usub - lsub, ssub)
@@ -1297,13 +1366,17 @@ end subroutine eval_assign_slice_rank1
 
 !===============================================================================
 
-module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs, slots)
 
 	! Compute subscript bounds (lsubs, ssubs, usubs) and result rank for a
 	! non-scalar slice on a struct field array.  Shared by get_field_slice_val
 	! and set_field_slice_val to avoid code duplication.
 	! On step_sub with ssub==0, rt_throw is called and state%rt_halt is set;
 	! callers must check state%rt_halt on return.
+	!
+	! member_node%lsubscripts(:)'s bound sub-expressions were already
+	! compiled to bytecode and popped by the VM -- same convention as
+	! eval_subscript_1d's `slots` argument
 
 	type(syntax_node_t),            intent(in)    :: member_node
 	type(value_t),                  intent(in)    :: field_val
@@ -1311,10 +1384,11 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_res, ls
 	integer,                        intent(out)   :: rank_res
 	integer(kind = 8), allocatable, intent(out)   :: lsubs(:), ssubs(:), usubs(:)
 	type(i64_vector_t), allocatable, intent(out)  :: asubs(:)
+	type(value_t),                  intent(in)    :: slots(:)
 
 	!********
 
-	integer :: i, rank_
+	integer :: i, rank_, k
 	integer(kind = 8) :: lsub, ssub, usub, sz
 	type(value_t) :: lsubval, usubval, ssubval, asubval
 
@@ -1326,6 +1400,8 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_res, ls
 		lsub = 0
 		ssub = 1
 		usub = 0
+
+		k = subscript_slot_start(member_node, i)
 
 		select case (member_node%lsubscripts(i)%sub_kind)
 		case (all_sub)
@@ -1339,19 +1415,19 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_res, ls
 			if (member_node%lsubscripts(i)%lsub_omit) then
 				lsub = 0
 			else
-				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+				k = k + 1; lsubval = slots(k)
 				lsub = lsubval%to_i64()
 			end if
 			if (member_node%lsubscripts(i)%usub_omit) then
 				usub = field_val%array%size(i)
 			else
-				call syntax_eval(member_node%usubscripts(i), state, usubval)
+				k = k + 1; usubval = slots(k)
 				usub = usubval%to_i64()
 			end if
 			rank_res = rank_res + 1
 
 		case (step_sub)
-			call syntax_eval(member_node%ssubscripts(i), state, ssubval)
+			k = k + 1; ssubval = slots(k)
 			ssub = ssubval%to_i64()
 			if (ssub == 0) then
 				call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
@@ -1361,25 +1437,25 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_res, ls
 			if (member_node%lsubscripts(i)%lsub_omit) then
 				lsub = merge(sz - 1_8, 0_8, ssub < 0)
 			else
-				call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+				k = k + 1; lsubval = slots(k)
 				lsub = lsubval%to_i64()
 			end if
 			if (member_node%lsubscripts(i)%usub_omit) then
 				usub = merge(-1_8, sz, ssub < 0)
 			else
-				call syntax_eval(member_node%usubscripts(i), state, usubval)
+				k = k + 1; usubval = slots(k)
 				usub = usubval%to_i64()
 			end if
 			rank_res = rank_res + 1
 
 		case (scalar_sub)
-			call syntax_eval(member_node%lsubscripts(i), state, lsubval)
+			k = k + 1; lsubval = slots(k)
 			lsub = lsubval%to_i64()
 			usub = lsub + 1
 			ssub = 1
 
 		case (arr_sub)
-			call syntax_eval(member_node%lsubscripts(i), state, asubval)
+			k = k + 1; asubval = slots(k)
 			if (asubval%array%type == i32_type) then
 				asubs(i)%v = asubval%array%i32
 			else if (asubval%array%type == i64_type) then
@@ -1408,7 +1484,7 @@ end subroutine field_slice_bounds
 
 !===============================================================================
 
-module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step)
+module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step, slots)
 
 	! Compute 0-based (il, iu, step) bounds for a character-string subscript
 	! at node%lsubscripts(isub) (paired w/ usubscripts(isub)/ssubscripts(isub)),
@@ -1421,20 +1497,29 @@ module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step)
 	!
 	! On step == 0, rt_throw() is called and state%rt_halt is set; callers
 	! must check state%rt_halt on return.
+	!
+	! Dimension isub's bound sub-expressions were already compiled to
+	! bytecode (compile_subscript_slots) and popped by the VM; read them
+	! from slots(subscript_slot_start(node,isub)+1 : ...) -- same convention
+	! as eval_subscript_1d's `slots` argument
 
 	type(syntax_node_t), intent(in)    :: node
 	integer,              intent(in)    :: isub
 	integer(kind = 8),    intent(in)    :: sz
 	type(state_t),        intent(inout) :: state
 	integer(kind = 8),    intent(out)   :: il, iu, step
+	type(value_t),        intent(in)    :: slots(:)
 
 	!********
 
+	integer :: k
 	type(value_t) :: lval, uval, sval
 
 	il   = 0
 	step = 1
 	iu   = sz
+
+	k = subscript_slot_start(node, isub)
 
 	select case (node%lsubscripts(isub)%sub_kind)
 	case (all_sub)
@@ -1443,7 +1528,7 @@ module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step)
 		iu   = sz
 
 	case (scalar_sub)
-		call syntax_eval(node%lsubscripts(isub), state, lval)
+		k = k + 1; lval = slots(k)
 		il   = lval%to_i64()
 		iu   = il + 1
 		step = 1
@@ -1453,18 +1538,18 @@ module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step)
 		if (node%lsubscripts(isub)%lsub_omit) then
 			il = 0
 		else
-			call syntax_eval(node%lsubscripts(isub), state, lval)
+			k = k + 1; lval = slots(k)
 			il = lval%to_i64()
 		end if
 		if (node%lsubscripts(isub)%usub_omit) then
 			iu = sz
 		else
-			call syntax_eval(node%usubscripts(isub), state, uval)
+			k = k + 1; uval = slots(k)
 			iu = uval%to_i64()
 		end if
 
 	case (step_sub)
-		call syntax_eval(node%ssubscripts(isub), state, sval)
+		k = k + 1; sval = slots(k)
 		step = sval%to_i64()
 		if (step == 0) then
 			call rt_throw(state, err_rt(RC_SUBSCRIPT_STEP_ZERO, 'subscript step is 0'))
@@ -1473,13 +1558,13 @@ module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step)
 		if (node%lsubscripts(isub)%lsub_omit) then
 			il = merge(sz - 1_8, 0_8, step < 0)
 		else
-			call syntax_eval(node%lsubscripts(isub), state, lval)
+			k = k + 1; lval = slots(k)
 			il = lval%to_i64()
 		end if
 		if (node%lsubscripts(isub)%usub_omit) then
 			iu = merge(-1_8, sz, step < 0)
 		else
-			call syntax_eval(node%usubscripts(isub), state, uval)
+			k = k + 1; uval = slots(k)
 			iu = uval%to_i64()
 		end if
 
@@ -1493,14 +1578,17 @@ end subroutine str_slice_bounds
 
 !===============================================================================
 
-module subroutine get_field_slice_val(member_node, field_val, state, res)
+module subroutine get_field_slice_val(member_node, field_val, state, res, slots)
 
 	! Evaluate a range/step/all subscript on a struct field array.
+	!
+	! `slots` is forwarded to field_slice_bounds -- see its docstring
 
 	type(syntax_node_t), intent(in)    :: member_node
 	type(value_t),       intent(in)    :: field_val
 	type(state_t),       intent(inout) :: state
 	type(value_t),       intent(out)   :: res
+	type(value_t),       intent(in)    :: slots(:)
 
 	!********
 
@@ -1510,7 +1598,7 @@ module subroutine get_field_slice_val(member_node, field_val, state, res)
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 	type(i64_vector_t), allocatable :: asubs(:)
 
-	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs, slots)
 	if (state%rt_halt) return
 
 	allocate(res%array)
@@ -1551,15 +1639,18 @@ end subroutine get_field_slice_val
 
 !===============================================================================
 
-module subroutine set_field_slice_val(member_node, field_val, state, val)
+module subroutine set_field_slice_val(member_node, field_val, state, val, slots)
 
 	! Write val's elements into field_val at the positions described by
 	! member_node%lsubscripts.
+	!
+	! `slots` is forwarded to field_slice_bounds -- see its docstring
 
 	type(syntax_node_t), intent(in)    :: member_node
 	type(value_t),       intent(inout) :: field_val
 	type(state_t),       intent(inout) :: state
 	type(value_t),       intent(in)    :: val
+	type(value_t),       intent(in)    :: slots(:)
 
 	!********
 
@@ -1569,7 +1660,7 @@ module subroutine set_field_slice_val(member_node, field_val, state, val)
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 	type(i64_vector_t), allocatable :: asubs(:)
 
-	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs)
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs, slots)
 	if (state%rt_halt) return
 
 	lhs_len = 1
@@ -1599,16 +1690,192 @@ end subroutine set_field_slice_val
 
 !===============================================================================
 
-module subroutine apply_subscripts_to_val(node, val, state, res)
+function member_str_sub(member_node, field_val) result(is_str_sub)
+
+	! True when member_node's subscripts index characters of field_val rather
+	! than array elements: either field_val is a scalar str, or it's a
+	! [str; :] array with a trailing char-rank subscript (has_char_sub, c.f.
+	! parse_subscripts in parse_array.f90 and eval_name_expr in
+	! runtime_expr.f90).  get_val/set_val route to get_str_member_val/
+	! set_str_member_val instead of get_field_slice_val/set_field_slice_val
+	! when this is true, since a str-typed value has no %array to slice.
+
+	type(syntax_node_t), intent(in) :: member_node
+	type(value_t),       intent(in) :: field_val
+	logical :: is_str_sub
+
+	is_str_sub = .false.
+
+	if (field_val%type == str_type) then
+		is_str_sub = .true.
+		return
+	end if
+
+	! Guard %array%type access with a nested if -- Fortran doesn't guarantee
+	! short-circuit evaluation of .and. chains (c.f. vm_exec.f90's OP_INDEX
+	! handler)
+	if (field_val%type == array_type) then
+		if (field_val%array%type == str_type) then
+			is_str_sub = size(member_node%lsubscripts) == field_val%array%rank + 1
+		end if
+	end if
+
+end function member_str_sub
+
+!===============================================================================
+
+subroutine get_str_member_val(member_node, field_val, state, res, slots)
+
+	! Read a character subscript off a str-typed struct member, or a
+	! [str; :] member with a trailing char-rank subscript.  Counterpart of
+	! get_field_slice_val for str-holding fields (member_str_sub() decides
+	! which one applies).
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(in)    :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(out)   :: res
+	type(value_t),       intent(in)    :: slots(:)
+
+	!********
+
+	integer :: nelem
+	integer(kind = 8) :: i8
+	character(len = :), allocatable :: tmp_s
+
+	if (field_val%type == str_type) then
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = str_char_slice(field_val%str%s, member_node, state, 1, slots)
+		return
+	end if
+
+	! [str; :] with a trailing char-rank subscript
+	nelem = field_val%array%rank
+
+	if (all(member_node%lsubscripts(1:nelem)%sub_kind == scalar_sub)) then
+		! Scalar element selection -> scalar string result
+		i8 = sub_eval(member_node, field_val, state, slots)
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = str_char_slice( &
+			field_val%array%str(i8+1)%s, member_node, state, nelem+1, slots)
+		return
+	end if
+
+	! Element range/slice -> string array result.  get_field_slice_val loops
+	! to field_val%array%rank, so the trailing char sub is naturally ignored
+	! by it (same property sub_eval/subscript_eval rely on); apply the char
+	! sub to each selected element afterward.
+	call get_field_slice_val(member_node, field_val, state, res, slots)
+	if (state%rt_halt) return
+
+	do i8 = 1, res%array%len_
+		tmp_s = str_char_slice( &
+			res%array%str(i8)%s, member_node, state, nelem+1, slots)
+		if (state%rt_halt) return
+		res%array%str(i8)%s = tmp_s
+	end do
+
+end subroutine get_str_member_val
+
+!===============================================================================
+
+subroutine set_str_member_val(member_node, field_val, state, val, slots)
+
+	! Write a character subscript on a str-typed struct member, or a
+	! [str; :] member with a trailing char-rank subscript.  Counterpart of
+	! set_field_slice_val for str-holding fields (member_str_sub() decides
+	! which one applies).
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(inout) :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(in)    :: val
+	type(value_t),       intent(in)    :: slots(:)
+
+	!********
+
+	integer :: nelem, idim_
+	integer(kind = 8) :: i8, index_, len8
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+	type(i64_vector_t), allocatable :: asubs(:)
+	integer :: rank_res
+
+	if (field_val%type == str_type) then
+		call str_char_assign(field_val%str%s, member_node, state, 1, val%str%s, slots)
+		return
+	end if
+
+	! [str; :] with a trailing char-rank subscript
+	nelem = field_val%array%rank
+
+	if (all(member_node%lsubscripts(1:nelem)%sub_kind == scalar_sub)) then
+		! Scalar element selection: one element's chars are assigned
+		i8 = sub_eval(member_node, field_val, state, slots)
+		call str_char_assign( &
+			field_val%array%str(i8+1)%s, member_node, state, nelem+1, val%str%s, slots)
+		return
+	end if
+
+	! Element range/slice: val is the array-shaped result get_str_member_val
+	! would have returned for this same node (element k's chars come from
+	! val%array%str(k)), NOT a scalar string -- OP_STORE_MEMBER's generic
+	! get_val/do_compound/set_val flow (vm_exec.f90) runs the RHS through
+	! do_compound() against get_val's result before reaching here, and
+	! assign_value_t (math.f90) broadcasts/conforms a scalar or array RHS to
+	! left's array shape, so a scalar RHS like `s.n[:,1] = "X"` already
+	! becomes an array of "X"s by this point.  field_slice_bounds loops to
+	! field_val%array%rank, so the trailing char sub is naturally ignored by
+	! it.
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs, slots)
+	if (state%rt_halt) return
+
+	! Total number of selected elements (mirrors set_field_slice_val's
+	! lhs_len computation)
+	len8 = 1
+	do idim_ = 1, nelem
+		select case (member_node%lsubscripts(idim_)%sub_kind)
+		case (step_sub, range_sub, all_sub)
+			len8 = len8 * max(0_8, divceil(usubs(idim_) - lsubs(idim_), ssubs(idim_)))
+		case (arr_sub)
+			len8 = len8 * size(asubs(idim_)%v, kind = 8)
+		end select
+	end do
+
+	subs = lsubs
+	do i8 = 0, len8 - 1
+		index_ = subscript_i32_eval(subs, field_val%array)
+		call str_char_assign( &
+			field_val%array%str(index_+1)%s, member_node, state, nelem+1, &
+			val%array%str(i8+1)%s, slots)
+		if (state%rt_halt) return
+		call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+	end do
+
+end subroutine set_str_member_val
+
+!===============================================================================
+
+module subroutine apply_subscripts_to_val(node, val, state, res, slots)
 
 	! Apply lsubscripts from node to a pre-evaluated value_t (e.g. a fn return).
 	! Mirrors the allocated(node%lsubscripts) branch of eval_name_expr but reads
 	! array data from val directly instead of the variable store.
+	!
+	! node%lsubscripts(:)'s bound sub-expressions were already compiled to
+	! bytecode (compile_subscript_slots) and popped by the VM's
+	! OP_SUBSCRIPT_TOS handler.  In the all-scalar branch every dimension
+	! consumes exactly 1 slot (subscript_dim_nslots), so slots(i) is
+	! dimension i's value directly; the slice branch forwards `slots` to
+	! get_field_slice_val/field_slice_bounds, which use the general
+	! subscript_slot_start offset lookup.
 
 	type(syntax_node_t), intent(in)    :: node
 	type(value_t),       intent(in)    :: val
 	type(state_t),       intent(inout) :: state
 	type(value_t),       intent(out)   :: res
+	type(value_t),       intent(in)    :: slots(:)
 
 	!********
 
@@ -1619,7 +1886,7 @@ module subroutine apply_subscripts_to_val(node, val, state, res)
 	if (val%type == str_type) then
 		if (.not. allocated(res%str)) allocate(res%str)
 		res%type = str_type
-		res%str%s = str_char_slice(val%str%s, node, state, 1)
+		res%str%s = str_char_slice(val%str%s, node, state, 1, slots)
 		return
 	end if
 
@@ -1630,7 +1897,7 @@ module subroutine apply_subscripts_to_val(node, val, state, res)
 		prod  = 1
 		i8    = 0
 		do i = 1, val%array%rank
-			call syntax_eval(node%lsubscripts(i), state, subscript)
+			subscript = slots(i)
 			i8   = i8 + prod * subscript%to_i64()
 			prod = prod * val%array%size(i)
 		end do
@@ -1648,13 +1915,13 @@ module subroutine apply_subscripts_to_val(node, val, state, res)
 			call get_array_val(val%array, i8, res)
 		end if
 	else
-		call get_field_slice_val(node, val, state, res)
+		call get_field_slice_val(node, val, state, res, slots)
 	end if
 
 end subroutine apply_subscripts_to_val
 
 !===============================================================================
 
-end submodule syntran__eval_array
+end submodule syntran__runtime_array
 
 !===============================================================================

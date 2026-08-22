@@ -1426,7 +1426,7 @@ end subroutine map_i32_init
 
 !===============================================================================
 
-subroutine map_i32_set(self, key, value)
+recursive subroutine map_i32_set(self, key, value)
 	class(map_i32_t), intent(inout) :: self
 	character(len=*), intent(in) :: key
 	integer, intent(in) :: value
@@ -1529,7 +1529,7 @@ end subroutine map_i32_destroy
 
 !===============================================================================
 
-subroutine map_i32_resize(self)
+recursive subroutine map_i32_resize(self)
 	class(map_i32_t), intent(inout) :: self
 	type(map_i32_entry_t), allocatable :: old_table(:)
 	integer :: old_capacity, i, new_capacity

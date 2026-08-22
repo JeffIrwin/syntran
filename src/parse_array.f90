@@ -86,7 +86,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 	!print *, 'lbound_ = ', parser%text(span_beg, span_end)
 
-	! Arrays of fn pointers are not supported (v1): eval_array.f90's per-type
+	! Arrays of fn pointers are not supported (v1): runtime_array.f90's per-type
 	! storage/copy paths have no fn_type case, so letting this through would
 	! either hit the IC_ALLOC_ARRAY_TYPE internal error (uniform-value form) or
 	! segfault outright (explicit-list form, since a het-array check alone

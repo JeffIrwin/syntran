@@ -23,7 +23,7 @@ contains
 
 subroutine eval_dispatch(tree, state, res)
 
-	! Dispatch to the bytecode VM or the AST walker based on state%bytecode.
+	! Compile to bytecode and run it on the VM.
 	!
 	! If evaluation throws a runtime error (state%rt_halt), surface it here:
 	! non-quiet callers (CLI, REPL, file interpretation) get the legacy
@@ -39,12 +39,8 @@ subroutine eval_dispatch(tree, state, res)
 
 	type(program_t) :: prog
 
-	if (state%bytecode) then
-		call compile_tree(tree, prog, state%fns)
-		call vm_run(prog, state, res)
-	else
-		call syntax_eval(tree, state, res)
-	end if
+	call compile_tree(tree, prog, state%fns)
+	call vm_run(prog, state, res)
 
 	if (state%rt_halt .and. .not. state%quiet) then
 		call log_rt_diags(state%rt_diags)
@@ -105,8 +101,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io, dir_action
 
-	logical :: continue_, show_tree, show_hint, interactive, saved_bytecode, &
-		saved_quiet
+	logical :: continue_, show_tree, show_hint, interactive, saved_quiet
 	logical, parameter :: allow_cont = .true.
 
 	type(string_view_t) :: sv
@@ -271,13 +266,10 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 		if (dir_action == DIR_CLEAR) then
 			! Tear down and reinitialize state_t, preserving what the REPL
-			! was started with.  Passing bytecode= explicitly avoids
-			! init_state() re-reading SYNTRAN_BACKEND and re-emitting its
-			! deprecation warning on every #clear
-			saved_bytecode = state%bytecode
+			! was started with
 			saved_quiet    = state%quiet
 			call state_destroy(state)
-			call init_state(state, script_args, bytecode = saved_bytecode)
+			call init_state(state, script_args)
 			state%quiet = saved_quiet
 			continue_ = .false.
 			cycle
@@ -354,7 +346,7 @@ end function syntran_interpret
 !===============================================================================
 
 subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
-		script_args, diags, bytecode, syntax_only, io)
+		script_args, diags, syntax_only, io)
 
 	! Shared front end for syntran_eval() and the typed syntran_eval_i32() /
 	! _i64() / _f32() / _f64() / _bool() / _str() wrappers below.  Parses and
@@ -385,11 +377,6 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	! stdout
 	type(string_vector_t), optional, intent(out) :: diags
 
-	! Explicit backend override (see init_state()).  Lets callers (e.g. unit
-	! tests) exercise both the bytecode VM and the AST walker for the same
-	! snippet without mutating SYNTRAN_BACKEND in the process environment
-	logical, optional, intent(in) :: bytecode
-
 	! Parse and type-check only, without evaluating.  Diagnostics are still
 	! logged and copied to `diags`, but nothing runs: `use` module-level
 	! statements, file I/O, and even bytecode compilation are all skipped.
@@ -418,7 +405,7 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 		dir = chdir_
 	end if
 
-	call init_state(state, script_args, dir, bytecode)
+	call init_state(state, script_args, dir)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
@@ -624,61 +611,21 @@ end function syntran_eval_str
 
 !===============================================================================
 
-subroutine init_state(state, script_args, src_dir, bytecode)
-
-	! TODO: move to eval.f90
+subroutine init_state(state, script_args, src_dir)
 
 	! This sets everything but state%quiet, since some routines have that as an
 	! optional argument
-	!
-	! Maybe the state_t definition should be moved to types.f90, and then this
-	! could be a class-bound procedure
 
 	type(state_t), intent(inout) :: state
 	type(string_vector_t), intent(in), optional :: script_args
 	character(len = *), intent(in), optional :: src_dir
 
-	! Explicit backend override, mainly for tests that need to exercise both
-	! the bytecode VM and the AST walker without mutating SYNTRAN_BACKEND in
-	! the process environment.  Bypasses the env var and its deprecation
-	! warning below
-	logical, intent(in), optional :: bytecode
-
 	!*******
-
-	character(len = 64) :: backend_env
-	integer :: backend_status
 
 	call declare_intr_fns(state%fns)
 
-	state%returned  = .false.
-	state%breaked   = .false.
-	state%continued = .false.
-
 	state%rt_halt  = .false.
 	state%rt_diags = new_string_vector()
-
-	if (present(bytecode)) then
-		state%bytecode = bytecode
-	else
-		! Select evaluation backend via SYNTRAN_BACKEND env var.
-		! SYNTRAN_BACKEND=ast  -> use the (deprecated) AST walker
-		! (anything else)      -> use the bytecode VM (default)
-		call get_environment_variable('SYNTRAN_BACKEND', backend_env, &
-			status = backend_status)
-
-		state%bytecode = .true.
-		if (backend_status == 0) then
-			if (trim(backend_env) == "ast") then
-				state%bytecode = .false.
-				if (.not. no_warn) write(error_unit, '(a)') fg_bold_yellow//'Warning'//color_reset// &
-					': SYNTRAN_BACKEND=ast is deprecated. ' // &
-					'The AST walker is currently planned for removal in syntran 1.6.0. ' // &
-					'If you rely on it, or if you encounter bugs in the default bytecode ' // &
-					'backend, please comment at https://github.com/JeffIrwin/syntran/issues'
-			end if
-		end if
-	end if
 
 	! Is it safe to initialize these arrays both here and in new_parser?  Test
 	! interactive interp
@@ -709,7 +656,7 @@ end subroutine init_state
 
 !===============================================================================
 
-function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecode, &
+function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
 		syntax_only, io) result(res)
 
 	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
@@ -727,11 +674,6 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	! callers (e.g. unit tests) inspect error codes/text without parsing
 	! stdout
 	type(string_vector_t), optional, intent(out) :: diags
-
-	! Explicit backend override (see init_state()).  Lets callers (e.g. unit
-	! tests) exercise both the bytecode VM and the AST walker for the same
-	! snippet without mutating SYNTRAN_BACKEND in the process environment
-	logical, optional, intent(in) :: bytecode
 
 	! Parse and type-check only, without evaluating.  Diagnostics are still
 	! logged and copied to `diags`, but nothing runs: `use` module-level
@@ -752,7 +694,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, bytecod
 	type(value_t) :: val
 
 	call syntran_eval_value(str_, val, quiet, src_file = src_file, chdir_ = chdir_, &
-		script_args = script_args, diags = diags, bytecode = bytecode, &
+		script_args = script_args, diags = diags, &
 		syntax_only = syntax_only, io = iol)
 
 	if (present(io)) io = iol
@@ -773,7 +715,7 @@ end function syntran_eval
 
 !===============================================================================
 
-function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags, bytecode, &
+function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags, &
 		syntax_only, io) result(res)
 
 	! TODO:
@@ -806,9 +748,6 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	! the diags out-arg of syntran_eval(), including the EC_404 case below
 	! which happens before any parser/diagnostics object exists
 	type(string_vector_t), optional, intent(out) :: diags
-
-	! Explicit backend override.  See syntran_eval()/init_state()
-	logical, optional, intent(in) :: bytecode
 
 	! Parse and type-check only, without evaluating.  See syntran_eval()
 	logical, optional, intent(in) :: syntax_only
@@ -863,10 +802,10 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	if (chdirl) then
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
 			chdir_ = get_dir(filename), script_args = script_args, diags = diags, &
-			bytecode = bytecode, syntax_only = syntax_only, io = io)))
+			syntax_only = syntax_only, io = io)))
 	else
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
-			script_args = script_args, diags = diags, bytecode = bytecode, &
+			script_args = script_args, diags = diags, &
 			syntax_only = syntax_only, io = io)))
 	end if
 
