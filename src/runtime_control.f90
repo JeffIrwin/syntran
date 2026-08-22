@@ -39,7 +39,7 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 
 	!********
 
-	integer :: rank_res, id, type_, nelem
+	integer :: rank_slice, id, type_, nelem
 	integer(kind = 8) :: i8, j8, index_, len8, size_i, il, iu, sstep
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:), &
 		size_tmp(:)
@@ -81,7 +81,7 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 		!end if
 		!end if
 
-		!print *, 'scalar compound_assign'
+		!print *, 'scalar apply_assign_op'
 
 		! Eval the RHS
 		res = rhs_in
@@ -91,13 +91,13 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 
 		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 
-		!print *, "compound_assign is_loc = ", node%is_loc
+		!print *, "apply_assign_op is_loc = ", node%is_loc
 		if (node%is_loc) then
 			!print *, "val type = ", kind_name( state%locs%vals(id)%type )
-			call compound_assign(state%locs%vals(id), res, node%op)
+			call apply_assign_op(state%locs%vals(id), res, node%op)
 			res = state%locs%vals(id)
 		else
-			call compound_assign(state%vars%vals(id), res, node%op)
+			call apply_assign_op(state%vars%vals(id), res, node%op)
 
 			! For compound assignment, ensure that the LHS is returned
 			!print *, 'setting res again'
@@ -186,13 +186,14 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 
 				! All element subs scalar: single element
 				i8 = subscript_eval(node, state, slots)   ! element flat index
+				if (state%rt_halt) return
 				call str_arr_char_assign(node, state, res, id, i8, nelem, slots)
 				if (state%rt_halt) return
 
 			else
 
 				! Slice element selection: iterate over selected elements
-				call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res, slots)
+				call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_slice, slots)
 				if (state%rt_halt) return
 				len8 = 1_8
 				do j8 = 1, nelem
@@ -242,12 +243,12 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 				if (state%rt_halt) return
 			else
 
-			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res, slots)
+			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_slice, slots)
 			if (state%rt_halt) return
-			allocate(size_tmp(rank_res))
+			allocate(size_tmp(rank_slice))
 
 			!print *, "rank     = ", state%vars%vals(id)%array%rank
-			!print *, "rank_res = ", rank_res
+			!print *, "rank_slice = ", rank_slice
 
 			len8 = 1
 			j8 = 1
@@ -285,7 +286,7 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 			allocate(tmp_array%array)
 			tmp_array%type = array_type
 			tmp_array%array%len_ = len8
-			tmp_array%array%rank = rank_res
+			tmp_array%array%rank = rank_slice
 			tmp_array%array%kind = expl_array
 			tmp_array%array%size = size_tmp
 			if (node%is_loc) then
@@ -316,12 +317,12 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 				if (node%is_loc) then
 					index_ = subscript_i32_eval(subs, state%locs%vals(id)%array)
 					call get_array_val(state%locs%vals(id)%array, index_, tmp)
-					call compound_assign(tmp, array_val, node%op)
+					call apply_assign_op(tmp, array_val, node%op)
 					call set_array_val(state%locs%vals(id)%array, index_, tmp)
 				else
 					index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
 					call get_array_val(state%vars%vals(id)%array, index_, tmp)
-					call compound_assign(tmp, array_val, node%op)
+					call apply_assign_op(tmp, array_val, node%op)
 					call set_array_val(state%vars%vals(id)%array, index_, tmp)
 				end if
 
@@ -822,8 +823,6 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 
 		k = k + 1; lbound_ = slots(k)
 		k = k + 1; ubound_ = slots(k)
-
-		!array = new_array(node%val%array%type)
 
 		allocate(res%array)
 		res%array%type = node%val%array%type

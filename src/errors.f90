@@ -196,6 +196,7 @@ module syntran__errors_m
 		RC_WRITELN_FAIL = "R30", &
 		RC_CLOSE_FAIL   = "R31", &
 		RC_ENUM_CAST_RANGE = "R32", &
+		RC_SUBSCRIPT_OOB = "R33", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -905,6 +906,21 @@ module syntran__errors_m
 			integer(kind = 8), intent(in) :: sizes(:)
 			character(len = :), allocatable :: err
 		end function err_rt_expl_array_size
+
+		! RC_SUBSCRIPT_OOB (R33) pair: only raised in builds compiled with
+		! -DSYNTRAN_BOUNDS_CHECK (bounds_check, compiler.F90) -- see its
+		! call sites in vm_exec.f90 (native opcodes) and runtime_array.f90/
+		! runtime.f90 (struct/slice fallback paths)
+		module function err_rt_subscript_oob(sub, idim, rank, sz) result(err)
+			integer(kind = 8), intent(in) :: sub, sz
+			integer, intent(in) :: idim, rank
+			character(len = :), allocatable :: err
+		end function err_rt_subscript_oob
+
+		module function err_rt_str_index_oob(sub, len_) result(err)
+			integer(kind = 8), intent(in) :: sub, len_
+			character(len = :), allocatable :: err
+		end function err_rt_str_index_oob
 
 		module function err_bad_member_type(context, span, mem_name, struct_name, act_type, exp_type) result(err)
 			type(text_context_t) :: context

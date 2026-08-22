@@ -25,6 +25,7 @@ module syntran__runtime_m
 	! array-literal element/dimension counts) -- never evaluated
 
 	use syntran__bool_m
+	use syntran__compiler_m, only: bounds_check
 	use syntran__math_m
 
 	! consider grouping/encapsulating in a math bitwise module?
@@ -87,6 +88,40 @@ module syntran__runtime_m
 		logical :: stdin_eof = .false.
 
 	end type state_t
+
+	!********
+
+	! For-loop iterator frame: one entry per active native for loop (vm_exec.f90's
+	! for_iters(:) stack).  for_kind uses array_t's kind constants: bound_array,
+	! step_array, len_array, expl_array, size_array, unif_array, array_expr, or
+	! str_type for string iteration.
+	!
+	! Declared here (rather than in vm_exec.f90) so array_at() below can take a
+	! single for_iter_t instead of the 8 separate fields it used to unpack --
+	! those 8 fields are exactly this type's contents plus the loop counter,
+	! which the caller sets before calling.
+	type :: for_iter_t
+		integer :: for_kind = 0           ! array kind or str_type
+		integer :: itr_type = 0           ! element type (i32/i64/f32/f64/str)
+		integer(kind = 8) :: len8  = 0    ! total iteration count
+		integer(kind = 8) :: counter = 0  ! current 1-based counter (0 = before first)
+		integer :: node_idx = 0           ! prog%nodes index of the for_statement node
+		type(value_t) :: lbound_          ! loop lower bound / uniform value
+		type(value_t) :: step             ! loop step
+		type(value_t) :: ubound_          ! loop upper bound
+		type(value_t) :: len_             ! loop length (len_array kind)
+		type(array_t) :: array            ! materialized array (non-primary array exprs)
+		type(value_t) :: str_             ! string to iterate over (str_type)
+		! Enum/struct elements of `array` (array_t has no value_t component of
+		! its own), set only when array%type is enum_type/struct_type.
+		! c.f. array_at()'s allocated(iter%struct) check below
+		type(value_t), allocatable :: struct(:)
+		! expl_array/size_array elements, pre-evaluated at OP_FOR_SETUP time
+		! (compile_array_expr_slots) instead of AST-walked per-iteration by
+		! array_at.  1-based, same indexing as prog%nodes(node_idx)%array%elems.
+		! Unallocated for every other for_kind
+		type(value_t), allocatable :: elem_vals(:)
+	end type for_iter_t
 
 	!********
 
@@ -166,7 +201,7 @@ module syntran__runtime_m
 			type(array_t) :: vector
 		end function
 
-		module subroutine compound_assign(lhs, rhs, op)
+		module subroutine apply_assign_op(lhs, rhs, op)
 			type(value_t), intent(inout) :: lhs
 			type(value_t), intent(in) :: rhs
 			type(syntax_token_t), intent(in) :: op
@@ -197,12 +232,12 @@ module syntran__runtime_m
 			type(value_t),       intent(in)    :: slots(:)
 		end subroutine
 
-		module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res, slots)
+		module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_slice, slots)
 			type(syntax_node_t), intent(in) :: node
 			type(state_t), intent(inout) :: state
 			type(i64_vector_t), allocatable, intent(out) :: asubs(:)
 			integer(kind = 8), allocatable, intent(out) :: lsubs(:), ssubs(:), usubs(:)
-			integer, intent(out) :: rank_res
+			integer, intent(out) :: rank_slice
 			type(value_t), intent(in) :: slots(:)
 		end subroutine
 
@@ -212,11 +247,11 @@ module syntran__runtime_m
 			integer(kind = 8), intent(inout) :: usubs(:), subs(:)
 		end subroutine
 
-		module subroutine field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs, slots)
+		module subroutine field_slice_bounds(member_node, field_val, state, rank_slice, lsubs, ssubs, usubs, asubs, slots)
 			type(syntax_node_t),             intent(in)    :: member_node
 			type(value_t),                   intent(in)    :: field_val
 			type(state_t),                   intent(inout) :: state
-			integer,                         intent(out)   :: rank_res
+			integer,                         intent(out)   :: rank_slice
 			integer(kind = 8), allocatable,  intent(out)   :: lsubs(:), ssubs(:), usubs(:)
 			type(i64_vector_t),  allocatable, intent(out)   :: asubs(:)
 			type(value_t),                   intent(in)    :: slots(:)
@@ -271,18 +306,9 @@ module syntran__runtime_m
 			integer(kind = 8) :: index_
 		end function
 
-		module subroutine array_at(val, kind_, i, lbound_, step, ubound_, len_, array, &
-				str_, struct, elem_vals)
+		module subroutine array_at(val, iter)
 			type(value_t), intent(inout) :: val
-			integer, intent(in) :: kind_
-			integer(kind = 8), intent(in) :: i
-			type(value_t), intent(in) :: lbound_, step, ubound_, len_
-			type(array_t), intent(in) :: array
-			type(value_t), intent(in) :: str_
-			type(value_t), intent(in), optional :: struct(:)
-			! expl_array/size_array elements pre-evaluated at OP_FOR_SETUP
-			! time (compile_array_expr_slots); 1-based
-			type(value_t), intent(in), optional :: elem_vals(:)
+			type(for_iter_t), intent(in) :: iter
 		end subroutine
 
 		module subroutine get_array_val(array, i, val)

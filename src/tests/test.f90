@@ -2,6 +2,7 @@
 module test_m
 
 	use syntran__test_core_m
+	use syntran__compiler_m, only: bounds_check
 
 	implicit none
 
@@ -7891,9 +7892,90 @@ subroutine unit_test_runtime_errors(npass, nfail)
 				P//'R29-getenv-unset.syntran', RC_GETENV_UNSET) &
 		]
 
+	! R33: out-of-bounds subscript.  Only reachable in builds compiled with
+	! -DSYNTRAN_BOUNDS_CHECK (bounds_check, compiler.F90) -- without it, the
+	! repro file's `a[i]` falls straight through to a raw Fortran
+	! bounds-check abort under fpm's debug profile (-fcheck=bounds), so this
+	! row is appended (rather than unconditionally included in `tests` above)
+	! to keep it a no-op instead of crashing the whole test process
+	if (bounds_check) then
+		tests = [tests, &
+			rt_code_both_file(P//'R33-subscript-oob.syntran', RC_SUBSCRIPT_OOB) &
+		]
+	end if
+
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_runtime_errors
+
+!===============================================================================
+
+subroutine unit_test_bounds_check(npass, nfail)
+
+	! Tests for RC_SUBSCRIPT_OOB (R33), the runtime subscript/string-index
+	! bounds check gated behind -DSYNTRAN_BOUNDS_CHECK (bounds_check,
+	! compiler.F90; see CLAUDE.md's "Runtime bounds checking" section).
+	!
+	! Every case below is a genuine out-of-bounds access, which -- without
+	! the flag -- is undefined behavior that faults straight through to a
+	! raw Fortran bounds-check abort under fpm's debug profile
+	! (-fcheck=bounds) instead of ever reaching a diagnostic.  So unlike
+	! run_group()'s usual all-or-nothing group filtering, this bails out of
+	! the whole subroutine up front when the flag is off, rather than
+	! skipping individual cases -- there is no way to run any of these
+	! without the flag.
+	!
+	! Cases cover both the VM's native opcodes (OP_INDEX_NAT/
+	! OP_STORE_IDX_NAT/OP_COMPOUND_IDX_NAT/OP_SLICE_NAT/OP_STR_INDEX_NAT,
+	! vm_exec.f90) and the runtime_array.f90 fallback paths (rank-2+
+	! subscripting, struct field arrays) that the native opcodes don't cover.
+
+	integer, intent(inout) :: npass, nfail
+
+	character(len = *), parameter :: label = 'bounds check'
+
+	if (.not. bounds_check) return
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	call unit_test_coda( [ &
+		! Scalar read out of bounds (OP_INDEX_NAT)
+		diag_has_code(get_diags('let a = [1, 2, 3]; println(a[5]);'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! Negative index (OP_INDEX_NAT)
+		diag_has_code(get_diags('let a = [1, 2, 3]; println(a[-1]);'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! Scalar write out of bounds (OP_STORE_IDX_NAT)
+		diag_has_code(get_diags('let a = [1, 2, 3]; a[5] = 1;'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! Compound assignment out of bounds (OP_COMPOUND_IDX_NAT)
+		diag_has_code(get_diags('let a = [1, 2, 3]; a[5] += 1;'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! Rank-2: 2nd dimension out of bounds (OP_INDEX_NAT)
+		diag_has_code(get_diags( &
+			'let a = [1, 2, 3, 4, 5, 6; 2, 3]; println(a[0, 5]);'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! Range slice with an out-of-bounds upper bound (OP_SLICE_NAT)
+		diag_has_code(get_diags('let a = [1, 2, 3, 4, 5]; println(a[0:9]);'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! Scalar string char index (OP_STR_INDEX_NAT)
+		diag_has_code(get_diags('let s = "abc"; println(s[9]);'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! Struct field array element, out of bounds (get_val fallback path,
+		! runtime_array.f90 -- not covered by any native opcode)
+		diag_has_code(get_diags( &
+			'struct P{v: [i32; :],} let p = P{v = [1, 2, 3]}; println(p.v[9]);'), &
+			RC_SUBSCRIPT_OOB) &
+		], label, npass, nfail)
+
+end subroutine unit_test_bounds_check
 
 !===============================================================================
 
@@ -8558,6 +8640,7 @@ subroutine unit_tests(iostat)
 	if (run_group('return_paths')) call unit_test_return_paths(npass, nfail)
 	if (run_group('error_codes')) call unit_test_error_codes(npass, nfail)
 	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
+	if (run_group('bounds_check')) call unit_test_bounds_check(npass, nfail)
 	if (run_group('syntax_only')) call unit_test_syntax_only(npass, nfail)
 	if (run_group('eval_api')) call unit_test_eval_api(npass, nfail)
 	if (run_group('error_locations')) call unit_test_error_locations(npass, nfail)

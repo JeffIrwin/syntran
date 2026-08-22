@@ -300,6 +300,8 @@ function parse_args() result(args)
 				write(*,*) fg_bright_magenta//"build date = "//build_date//color_reset
 				write(*,*) fg_bright_magenta//"fortran compiler = "//fort_compiler//" "// &
 					str(fort_vers)//color_reset
+				write(*,*) fg_bright_magenta//"bounds check = "// &
+					merge("on ", "off", bounds_check)//color_reset
 			end if
 			write(*,*)
 		end if

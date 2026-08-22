@@ -30,6 +30,22 @@ fpm run --profile debug -- file.syntran     # Run a syntran file
 yes | fpm clean             # Clean build artifacts
 ```
 
+#### Runtime bounds checking
+
+`-DSYNTRAN_BOUNDS_CHECK` turns an out-of-bounds `a[i]`/`s[i]`/slice/etc. into
+a normal syntran runtime error (`RC_SUBSCRIPT_OOB`, R33) instead of a raw
+Fortran bounds-check abort. CMake's `Debug` build type defines it
+automatically; fpm needs it passed explicitly since it's off by default
+(including in `fpm build --profile debug`):
+
+```bash
+fpm build --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK"
+fpm test test --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK"
+```
+
+See `src/compiler.F90`'s `bounds_check` docstring for why the flag lives in
+that one uppercase `.F90` file instead of a `#ifdef` at each check site.
+
 #### Getting a stable path to a built binary
 
 fpm puts its output in `build/gfortran_<HASH>/`, where the hash changes with

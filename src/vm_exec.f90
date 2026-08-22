@@ -37,35 +37,10 @@ submodule (syntran__vm_m) syntran__vm_exec
 		type(value_t), allocatable :: recv_slots(:)
 	end type frame_t
 
-	!------------------------------------------------------------------------
-	! For-loop iterator frame: one entry per active native for loop.
-	! for_kind uses array_t's kind constants: bound_array, step_array,
-	! len_array, expl_array, size_array, unif_array, array_expr, or
-	! str_type for string iteration.
-	!------------------------------------------------------------------------
-
-	type :: for_iter_t
-		integer :: for_kind = 0           ! array kind or str_type
-		integer :: itr_type = 0           ! element type (i32/i64/f32/f64/str)
-		integer(kind = 8) :: len8  = 0    ! total iteration count
-		integer(kind = 8) :: counter = 0  ! current 1-based counter (0 = before first)
-		integer :: node_idx = 0           ! prog%nodes index of the for_statement node
-		type(value_t) :: lbound_          ! loop lower bound / uniform value
-		type(value_t) :: step             ! loop step
-		type(value_t) :: ubound_          ! loop upper bound
-		type(value_t) :: len_             ! loop length (len_array kind)
-		type(array_t) :: array            ! materialized array (non-primary array exprs)
-		type(value_t) :: str_             ! string to iterate over (str_type)
-		! Enum/struct elements of `array` (array_t has no value_t component of
-		! its own), set only when array%type is enum_type/struct_type.
-		! c.f. array_at()'s optional `struct` arg in runtime_array.f90
-		type(value_t), allocatable :: struct(:)
-		! expl_array/size_array elements, pre-evaluated at OP_FOR_SETUP time
-		! (compile_array_expr_slots) instead of AST-walked per-iteration by
-		! array_at.  1-based, same indexing as prog%nodes(node_idx)%array%elems.
-		! Unallocated for every other for_kind
-		type(value_t), allocatable :: elem_vals(:)
-	end type for_iter_t
+	! for_iter_t (one entry per active native for loop, used by for_iters(:)
+	! below) is declared in runtime.f90 -- see its docstring there -- so that
+	! array_at() (runtime_array.f90) can take the whole bundle as one arg
+	! instead of unpacking it into 9 separate parameters at every call.
 
 !===============================================================================
 
@@ -229,9 +204,117 @@ end subroutine vm_stack_grow
 
 !===============================================================================
 
+! --- native-opcode bounds-check helpers ----------------------------------------
+!
+! Only called from OP_INDEX_NAT/OP_STORE_IDX_NAT/OP_COMPOUND_IDX_NAT/
+! OP_STR_INDEX_NAT/OP_STR_SLICE_NAT/OP_SLICE_NAT/OP_STORE_SLICE_NAT below, each
+! wrapped in `if (bounds_check) then ... end if` so the check (and these
+! helpers) compile away entirely when the build wasn't configured with
+! -DSYNTRAN_BOUNDS_CHECK (bounds_check, compiler.F90).  Every call site must
+! check state%rt_halt immediately after, same convention as rt_throw()
+! everywhere else.
+!
+! Mirrors runtime_array.f90's check_bound()/check_range_bound(), duplicated
+! (rather than shared) since these operate directly on VM stack slots/scalar
+! lb_/ub_ locals instead of a slots(:) window -- submodule-private procedures
+! aren't visible across submodules, and the checks are one-liners, so sharing
+! them isn't worth a new module-interface entry in runtime.f90.
+
+subroutine check_subs_nat(state, stack, base_, nsub_, arr)
+	! Bounds-check the nsub_ subscripts already sitting on the stack at
+	! base_+1..base_+nsub_ against arr's per-dimension sizes.  Runs just
+	! ahead of OP_INDEX_NAT/OP_STORE_IDX_NAT/OP_COMPOUND_IDX_NAT's shared
+	! index-linearization loop.
+	type(state_t), intent(inout) :: state
+	type(value_vector_t), intent(in) :: stack
+	integer, intent(in) :: base_, nsub_
+	type(array_t), intent(in) :: arr
+
+	integer :: k_
+	integer(kind = 8) :: sub_
+
+	do k_ = 1, nsub_
+		select case (stack%v(base_+k_)%type)
+		case (i32_type); sub_ = int(stack%v(base_+k_)%sca%i32, 8)
+		case default;    sub_ = stack%v(base_+k_)%sca%i64
+		end select
+		if (sub_ < 0 .or. sub_ >= arr%size(k_)) then
+			call rt_throw(state, err_rt_subscript_oob(sub_, k_, nsub_, arr%size(k_)))
+			return
+		end if
+	end do
+end subroutine check_subs_nat
+
+!===============================================================================
+
+subroutine check_index_nat(state, sub_, sz)
+	! Bounds-check a single already-evaluated rank-1 array-element subscript
+	! (OP_STR_INDEX_NAT's str_arr[i] case, indexing v%array%str directly
+	! rather than through check_subs_nat's multi-dim stack window)
+	type(state_t), intent(inout) :: state
+	integer(kind = 8), intent(in) :: sub_, sz
+
+	if (sub_ < 0 .or. sub_ >= sz) call rt_throw(state, err_rt_subscript_oob(sub_, 1, 1, sz))
+end subroutine check_index_nat
+
+!===============================================================================
+
+subroutine check_slice_nat_bound(state, lb_, ub_, idim, ndim, sz)
+	! Bounds-check one dimension of an OP_SLICE_NAT/OP_STORE_SLICE_NAT range
+	! (always unit-step -- see arr_slice_native_ok/store_slice_nat_ok,
+	! bytecode.f90).  A reversed/empty range (ub_ <= lb_) is always valid and
+	! skips the check, matching the fallback path's check_range_bound(): the
+	! copy this guards clamps lens_(k_) = max(0, ub_-lb_) to 0 and touches no
+	! elements, so out-of-range lb_/ub_ on an empty selection isn't an error.
+	type(state_t), intent(inout) :: state
+	integer(kind = 8), intent(in) :: lb_, ub_, sz
+	integer, intent(in) :: idim, ndim
+
+	if (ub_ <= lb_) return
+
+	if (lb_ < 0 .or. lb_ >= sz) then
+		call rt_throw(state, err_rt_subscript_oob(lb_, idim, ndim, sz))
+		return
+	end if
+	if (ub_ - 1_8 < 0 .or. ub_ - 1_8 >= sz) then
+		call rt_throw(state, err_rt_subscript_oob(ub_ - 1_8, idim, ndim, sz))
+	end if
+end subroutine check_slice_nat_bound
+
+!===============================================================================
+
+subroutine check_str_index_nat(state, sub_, len_)
+	! Bounds-check a single character subscript (OP_STR_INDEX_NAT)
+	type(state_t), intent(inout) :: state
+	integer(kind = 8), intent(in) :: sub_, len_
+
+	if (sub_ < 0 .or. sub_ >= len_) call rt_throw(state, err_rt_str_index_oob(sub_, len_))
+end subroutine check_str_index_nat
+
+!===============================================================================
+
+subroutine check_str_slice_nat(state, lb_, ub_, len_)
+	! Bounds-check a scalar-string substring range (OP_STR_SLICE_NAT), same
+	! empty-range exemption as check_slice_nat_bound() above
+	type(state_t), intent(inout) :: state
+	integer(kind = 8), intent(in) :: lb_, ub_, len_
+
+	if (ub_ <= lb_) return
+
+	if (lb_ < 0 .or. lb_ >= len_) then
+		call rt_throw(state, err_rt_str_index_oob(lb_, len_))
+		return
+	end if
+	if (ub_ - 1_8 < 0 .or. ub_ - 1_8 >= len_) then
+		call rt_throw(state, err_rt_str_index_oob(ub_ - 1_8, len_))
+	end if
+end subroutine check_str_slice_nat
+
+!===============================================================================
+
 subroutine do_compound(lhs, rhs, op_kind)
 
-	! Call compound_assign with just an integer op_kind (no full token needed).
+	! Call apply_assign_op with just an integer op_kind (no full token needed).
 	! op%text is only used for error messages, so an empty string is fine.
 	! Note: the VM dispatch loop is single-threaded; module-level compiler state
 	! in compile_ctrl.f90 is similarly non-reentrant by design.
@@ -246,7 +329,7 @@ subroutine do_compound(lhs, rhs, op_kind)
 
 	op_tok%text = ''
 	op_tok%kind = op_kind
-	call compound_assign(lhs, rhs, op_tok)
+	call apply_assign_op(lhs, rhs, op_tok)
 
 end subroutine do_compound
 
@@ -898,6 +981,12 @@ module subroutine vm_run(prog, state, res)
 							call set_val(cn%args(i), state%vars%vals(cn%args(i)%id_index), state, params_pool(i))
 						end if
 					end block
+					! A subscripted by-ref receiver's index is re-evaluated here
+					! (set_val's sub_eval, above) rather than reused verbatim from
+					! call time, so a bounds check can newly fail if the backing
+					! array shrank during the call.  Stop writing back further
+					! by-ref params and fall through to the rt_halt exit below.
+					if (state%rt_halt) exit
 				else if (cn%args(i)%is_loc) then
 					call value_move(params_pool(i), &
 						state%locs%vals(cn%args(i)%id_index))
@@ -906,6 +995,7 @@ module subroutine vm_run(prog, state, res)
 						state%vars%vals(cn%args(i)%id_index))
 				end if
 			end do
+			if (state%rt_halt) exit
 
 			next_ip = fr%return_ip
 			nfor    = fr%nfor_saved   ! clean up any for-iters the callee leaked (e.g. via return)
@@ -939,6 +1029,7 @@ module subroutine vm_run(prog, state, res)
 			! char subscript (index rank+1) is naturally ignored — it gives the
 			! flat element index for both scalar-string and string-array cases.
 			i8 = subscript_eval(n, state, stack%v(base_+1:base_+nslots_))
+			if (state%rt_halt) exit
 
 			if (type_ == str_type) then
 				! Scalar string: use str_char_slice helper (handles scalar/range).
@@ -1040,6 +1131,7 @@ module subroutine vm_run(prog, state, res)
 			end if
 
 			i8 = subscript_eval(n, state, stack%v(base_+1:base_+nslots_))
+			if (state%rt_halt) exit
 
 			if (type_ == str_type) then
 				! Scalar string character assignment: s[i] = char_expr
@@ -1165,9 +1257,10 @@ module subroutine vm_run(prog, state, res)
 					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
 			end if
 			stack%len_ = base_
-			call vm_push_move(stack, val)
 			end block
 			end associate
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
 
 		! --- dot member read from fn/method return value (root on TOS) -----------
 		! M5: root struct value already on stack (pushed by compiled fn call),
@@ -1209,6 +1302,7 @@ module subroutine vm_run(prog, state, res)
 			if (n%is_loc) then
 				call get_val(n, state%locs%vals(id), state, val, &
 					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
+				if (state%rt_halt) exit
 				call do_compound(val, right, instr%b)
 				pos_ = 0
 				call set_val(n, state%locs%vals(id), state, val, &
@@ -1216,6 +1310,7 @@ module subroutine vm_run(prog, state, res)
 			else
 				call get_val(n, state%vars%vals(id), state, val, &
 					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
+				if (state%rt_halt) exit
 				call do_compound(val, right, instr%b)
 				pos_ = 0
 				call set_val(n, state%vars%vals(id), state, val, &
@@ -1619,15 +1714,7 @@ module subroutine vm_run(prog, state, res)
 				next_ip = instr%a   ! jump to FOR_POP; no nfor decrement here
 			else
 				val%type = for_iters(fi)%itr_type
-				! for_iters(fi)%elem_vals is unallocated except for
-				! expl_array/size_array (populated at OP_FOR_SETUP by
-				! compile_array_expr_slots' pre-evaluation); an unallocated
-				! allocatable actual argument is treated as not-present for
-				! array_at's optional elem_vals dummy, same as %struct below
-				call array_at(val, for_iters(fi)%for_kind, for_iters(fi)%counter, &
-					for_iters(fi)%lbound_, for_iters(fi)%step, for_iters(fi)%ubound_, &
-					for_iters(fi)%len_, for_iters(fi)%array, &
-					for_iters(fi)%str_, for_iters(fi)%struct, for_iters(fi)%elem_vals)
+				call array_at(val, for_iters(fi))
 				associate(nd => prog%nodes(for_iters(fi)%node_idx))
 				if (nd%is_loc) then
 					call value_move(val, state%locs%vals(nd%id_index))
@@ -1971,6 +2058,10 @@ module subroutine vm_run(prog, state, res)
 
 			if (instr%c == 1_8) then
 				associate(arr => state%locs%vals(instr%a)%array)
+				if (bounds_check) then
+					call check_subs_nat(state, stack, base_, nsub_, arr)
+					if (state%rt_halt) exit
+				end if
 				do k_ = 1, nsub_
 					select case (stack%v(base_+k_)%type)
 					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
@@ -1989,6 +2080,10 @@ module subroutine vm_run(prog, state, res)
 				end associate
 			else
 				associate(arr => state%vars%vals(instr%a)%array)
+				if (bounds_check) then
+					call check_subs_nat(state, stack, base_, nsub_, arr)
+					if (state%rt_halt) exit
+				end if
 				do k_ = 1, nsub_
 					select case (stack%v(base_+k_)%type)
 					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
@@ -2027,6 +2122,10 @@ module subroutine vm_run(prog, state, res)
 			prod_ = 1_8
 
 			if (instr%c == 1_8) then
+				if (bounds_check) then
+					call check_subs_nat(state, stack, base_, nsub_, state%locs%vals(instr%a)%array)
+					if (state%rt_halt) exit
+				end if
 				do k_ = 1, nsub_
 					select case (stack%v(base_+k_)%type)
 					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
@@ -2049,6 +2148,10 @@ module subroutine vm_run(prog, state, res)
 					state%locs%vals(instr%a)%array%f64(lin_+1) = stack%v(base_+nsub_+1)%to_f64()
 				end select
 			else
+				if (bounds_check) then
+					call check_subs_nat(state, stack, base_, nsub_, state%vars%vals(instr%a)%array)
+					if (state%rt_halt) exit
+				end if
 				do k_ = 1, nsub_
 					select case (stack%v(base_+k_)%type)
 					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
@@ -2095,6 +2198,10 @@ module subroutine vm_run(prog, state, res)
 
 			if (mod(c_, 2_8) == 1_8) then
 				associate(arr => state%locs%vals(instr%a)%array)
+				if (bounds_check) then
+					call check_subs_nat(state, stack, base_, nsub_, arr)
+					if (state%rt_halt) exit
+				end if
 				do k_ = 1, nsub_
 					select case (stack%v(base_+k_)%type)
 					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
@@ -2111,6 +2218,10 @@ module subroutine vm_run(prog, state, res)
 				end associate
 			else
 				associate(arr => state%vars%vals(instr%a)%array)
+				if (bounds_check) then
+					call check_subs_nat(state, stack, base_, nsub_, arr)
+					if (state%rt_halt) exit
+				end if
 				do k_ = 1, nsub_
 					select case (stack%v(base_+k_)%type)
 					case (i32_type); lin_ = lin_ + prod_ * int(stack%v(base_+k_)%sca%i32, 8)
@@ -2146,16 +2257,32 @@ module subroutine vm_run(prog, state, res)
 			if (instr%c == 1_8) then
 				associate(v => state%locs%vals(instr%a))
 				if (v%type == str_type) then
+					if (bounds_check) then
+						call check_str_index_nat(state, i8_, len(v%str%s, 8))
+						if (state%rt_halt) exit
+					end if
 					val%str%s = v%str%s(i8_+1 : i8_+1)
 				else
+					if (bounds_check) then
+						call check_index_nat(state, i8_, v%array%size(1))
+						if (state%rt_halt) exit
+					end if
 					val%str%s = v%array%str(i8_+1)%s
 				end if
 				end associate
 			else
 				associate(v => state%vars%vals(instr%a))
 				if (v%type == str_type) then
+					if (bounds_check) then
+						call check_str_index_nat(state, i8_, len(v%str%s, 8))
+						if (state%rt_halt) exit
+					end if
 					val%str%s = v%str%s(i8_+1 : i8_+1)
 				else
+					if (bounds_check) then
+						call check_index_nat(state, i8_, v%array%size(1))
+						if (state%rt_halt) exit
+					end if
 					val%str%s = v%array%str(i8_+1)%s
 				end if
 				end associate
@@ -2177,8 +2304,16 @@ module subroutine vm_run(prog, state, res)
 			val%type = str_type
 			if (.not. allocated(val%str)) allocate(val%str)
 			if (instr%c == 1_8) then
+				if (bounds_check) then
+					call check_str_slice_nat(state, lb_, ub_, len(state%locs%vals(instr%a)%str%s, 8))
+					if (state%rt_halt) exit
+				end if
 				val%str%s = state%locs%vals(instr%a)%str%s(lb_+1 : ub_)
 			else
+				if (bounds_check) then
+					call check_str_slice_nat(state, lb_, ub_, len(state%vars%vals(instr%a)%str%s, 8))
+					if (state%rt_halt) exit
+				end if
 				val%str%s = state%vars%vals(instr%a)%str%s(lb_+1 : ub_)
 			end if
 			call vm_push_move(stack, val)
@@ -2204,6 +2339,18 @@ module subroutine vm_run(prog, state, res)
 				lb_(k_) = stack%v(stack%len_-1)%to_i64()
 				stack%len_ = stack%len_ - 2
 			end do
+
+			if (bounds_check) then
+				do k_ = 1, ndim_
+					if (instr%c == 1_8) then
+						call check_slice_nat_bound(state, lb_(k_), ub_(k_), k_, ndim_, state%locs%vals(instr%a)%array%size(k_))
+					else
+						call check_slice_nat_bound(state, lb_(k_), ub_(k_), k_, ndim_, state%vars%vals(instr%a)%array%size(k_))
+					end if
+					if (state%rt_halt) exit
+				end do
+				if (state%rt_halt) exit
+			end if
 
 			do k_ = 1, ndim_
 				lens_(k_) = max(0_8, ub_(k_) - lb_(k_))
@@ -2343,6 +2490,18 @@ module subroutine vm_run(prog, state, res)
 				lb_(k_) = stack%v(stack%len_-1)%to_i64()
 				stack%len_ = stack%len_ - 2
 			end do
+
+			if (bounds_check) then
+				do k_ = 1, ndim_
+					if (instr%c == 1_8) then
+						call check_slice_nat_bound(state, lb_(k_), ub_(k_), k_, ndim_, state%locs%vals(instr%a)%array%size(k_))
+					else
+						call check_slice_nat_bound(state, lb_(k_), ub_(k_), k_, ndim_, state%vars%vals(instr%a)%array%size(k_))
+					end if
+					if (state%rt_halt) exit
+				end do
+				if (state%rt_halt) exit
+			end if
 
 			do k_ = 1, ndim_
 				lens_(k_) = max(0_8, ub_(k_) - lb_(k_))

@@ -110,6 +110,11 @@
 
 					# Short tests only.  Long tests are only done in release \n
 					fpm test test --profile debug --link-flag \"$lflags\" \n
+
+					# Same short tests again, with runtime subscript/string-index \n
+					# bounds checking (RC_SUBSCRIPT_OOB, R33) turned on -- exercises \n
+					# unit_test_bounds_check, which is a no-op without this flag \n
+					fpm test test --profile debug --link-flag \"$lflags\" --flag \"-DSYNTRAN_BOUNDS_CHECK\" \n
 				"
 			},
 			{
@@ -517,6 +522,11 @@
 					ulimit -s unlimited \n
 
 					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+
+					# Same short tests again, with runtime subscript/string-index \n
+					# bounds checking (RC_SUBSCRIPT_OOB, R33) turned on -- exercises \n
+					# unit_test_bounds_check, which is a no-op without this flag \n
+					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -DSYNTRAN_BOUNDS_CHECK -fpp\" \n
 
 					# The optimized -Ofast build goes through cmake instead of \n
 					# fpm (see CMakeLists.txt), which also builds the core lib \n

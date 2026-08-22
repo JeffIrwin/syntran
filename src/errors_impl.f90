@@ -246,6 +246,7 @@ module procedure get_all_error_codes
 	call codes%push(RC_WRITELN_FAIL)
 	call codes%push(RC_CLOSE_FAIL)
 	call codes%push(RC_ENUM_CAST_RANGE)
+	call codes%push(RC_SUBSCRIPT_OOB)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -1497,6 +1498,30 @@ module procedure err_rt_expl_array_size
 		" elements but declared size is "//dims//" = "//str(total))
 
 end procedure err_rt_expl_array_size
+
+
+!===============================================================================
+
+module procedure err_rt_subscript_oob
+	! idim/rank are both 1-based; rank == 1 omits the "of N" clause since it's
+	! redundant for the common scalar/rank-1 case
+	if (rank == 1) then
+		err = err_rt(RC_SUBSCRIPT_OOB, &
+			"subscript "//str(sub)//" is out of bounds for size "//str(sz))
+	else
+		err = err_rt(RC_SUBSCRIPT_OOB, &
+			"subscript "//str(sub)//" is out of bounds for dimension "// &
+			str(idim)//" of "//str(rank)//" (size "//str(sz)//")")
+	end if
+end procedure err_rt_subscript_oob
+
+
+!===============================================================================
+
+module procedure err_rt_str_index_oob
+	err = err_rt(RC_SUBSCRIPT_OOB, &
+		"string index "//str(sub)//" is out of bounds for length "//str(len_))
+end procedure err_rt_str_index_oob
 
 
 !===============================================================================

@@ -41,6 +41,28 @@ module syntran__compiler_m
 	character(len = *), parameter :: git_commit = "DEV_COMMIT"
 	character(len = *), parameter :: build_date = __DATE__
 
+	! Runtime subscript/string-index bounds checking (RC_SUBSCRIPT_OOB, R33).
+	! Set by -DSYNTRAN_BOUNDS_CHECK (CMake's Debug build defines it
+	! automatically; fpm needs `--flag -DSYNTRAN_BOUNDS_CHECK`).  Every check
+	! site is a plain `if (bounds_check) then ... end if` in ordinary Fortran
+	! -- not further #ifdef'd -- so both configurations always type-check, and
+	! the check is dead-code-eliminated when this is .false. (the default,
+	! e.g. release builds) instead of costing anything at run time.
+	!
+	! This can't be an ordinary `#ifdef SYNTRAN_BOUNDS_CHECK`/`#endif` block
+	! wrapped around each check site directly: fpm doesn't pass -cpp to
+	! gfortran for plain lowercase .f90 sources, so an #ifdef there is just an
+	! illegal-directive warning and BOTH branches get compiled, while CMake
+	! does pass -cpp/-fpp -- the two build systems would silently disagree on
+	! which branch survives. This file's uppercase .F90 extension is the one
+	! extension both gfortran and ifx always preprocess regardless of flags,
+	! which is why the #ifdef lives here and nowhere else.
+#ifdef SYNTRAN_BOUNDS_CHECK
+	logical, parameter :: bounds_check = .true.
+#else
+	logical, parameter :: bounds_check = .false.
+#endif
+
 end module syntran__compiler_m
 
 !===============================================================================

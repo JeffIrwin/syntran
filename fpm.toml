@@ -12,6 +12,14 @@
 #     # TODO: incorporate ifx testing into ci/cd.  Try ifort too
 #     fpm build --compiler ifx --flag "-DSYNTRAN_INTEL -fpp"
 #
+#     # Turn on runtime subscript/string-index bounds checking
+#     # (RC_SUBSCRIPT_OOB, R33): an out-of-bounds a[i]/s[i]/etc. becomes a
+#     # normal syntran runtime error instead of a raw Fortran bounds-check
+#     # abort.  CMake's Debug build type defines this automatically; fpm needs
+#     # it spelled out explicitly.  See compiler.F90's `bounds_check` docstring
+#     fpm build --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK"
+#     fpm test test --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK"
+#
 #     # Defense-in-depth for release builds: force deterministic (nonzero)
 #     # contents into otherwise-uninitialized stack/derived-type memory, so any
 #     # remaining uninitialized read fails loudly/reproducibly instead of

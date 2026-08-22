@@ -31,9 +31,17 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - split or streamline ci/cd:
+	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
+	!      changed after ast removal. previously, windows and intel-compiler
+	!      builds were about as equally slow, while ubuntu is the bottleneck now
+	!    * ubuntu is 9.5 minutes, while windows and intel classic are 7.5 min
+	!    * split into multiple (parallel) stages, or possible remove any stages
+	!      that are redundant
 	!  - cleanup TODO notes throughout the codebase
 	!    * took a big chunk out already
 	!    * continue one file at a time
+	!    * '''grep -c  'TODO' src/* | sort -t: -k2 -n'''
 	!  - switch/match/case. needs to work with strings. would be nice to work
 	!    with arrays. basic switch/case is fine but also consider "pattern
 	!    matching" or whatever rust has

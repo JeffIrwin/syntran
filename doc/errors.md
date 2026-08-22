@@ -1015,6 +1015,12 @@ An array slice subscript's step (`a[::s]`) evaluated to 0.
 
 A reverse cast `EnumName(ordinal)` was given an ordinal (not a constant literal, so not caught at parse time as E96) that doesn't match any of the enum's variant values.
 
+### R33 -- subscript-oob
+
+An array subscript, slice bound, or string character index is out of bounds. Only raised in builds compiled with `-DSYNTRAN_BOUNDS_CHECK` (on by default in CMake's `Debug` build type; off by default with fpm, including `fpm build --profile debug` -- see `CLAUDE.md`'s "Runtime bounds checking" section); without it, an out-of-bounds subscript is undefined behavior instead of a diagnostic.
+
+[Example](../src/tests/test-src/errors/R33-subscript-oob.syntran)
+
 ## Warnings
 
 ### W1 -- missing-return

@@ -79,6 +79,11 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 		"$<$<COMPILE_LANGUAGE:Fortran>:-fbounds-check>"
 		"$<$<COMPILE_LANGUAGE:Fortran>:-fbacktrace>"
 	)
+	# Turn subscript/string-index bound checks (RC_SUBSCRIPT_OOB, R33) into a
+	# syntran-level runtime error instead of a raw Fortran bounds-check abort.
+	# See compiler.F90's `bounds_check` docstring; fpm builds need
+	# `--flag -DSYNTRAN_BOUNDS_CHECK` for the same effect.
+	add_compile_definitions(SYNTRAN_BOUNDS_CHECK)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	message("Release")
 	if(DEFINED ENV{SYNTRAN_INTEL})

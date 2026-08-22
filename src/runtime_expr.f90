@@ -35,7 +35,7 @@ recursive module subroutine eval_name_expr(node, state, res, slots)
 
 	!********
 
-	integer :: id, rank_res, idim_, idim_res, sub_kind, type_, nelem
+	integer :: id, rank_slice, idim_, idim_res, sub_kind, type_, nelem
 	integer(kind = 8) :: i8, index_, diff
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 
@@ -106,6 +106,7 @@ recursive module subroutine eval_name_expr(node, state, res, slots)
 
 			! All element subscripts scalar → scalar string result
 			i8 = subscript_eval(node, state, slots)   ! element flat index (char sub ignored)
+			if (state%rt_halt) return
 			res%type = str_type
 			if (.not. allocated(res%str)) allocate(res%str)
 			if (node%is_loc) then
@@ -121,16 +122,16 @@ recursive module subroutine eval_name_expr(node, state, res, slots)
 
 			! Element range/slice → string array result.  Reuse the standard
 			! slice machinery; get_subscript_range ignores the trailing char sub.
-			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res, slots)
+			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_slice, slots)
 			if (state%rt_halt) return
 
 			allocate(res%array)
 			res%type = array_type
 			res%array%kind = expl_array
 			res%array%type = str_type
-			res%array%rank = rank_res
+			res%array%rank = rank_slice
 
-			allocate(res%array%size(rank_res))
+			allocate(res%array%size(rank_slice))
 			idim_res = 1
 			do idim_ = 1, nelem
 				sub_kind = node%lsubscripts(idim_)%sub_kind
@@ -185,6 +186,7 @@ recursive module subroutine eval_name_expr(node, state, res, slots)
 
 		if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 			i8 = subscript_eval(node, state, slots)
+			if (state%rt_halt) return
 
 			if (node%is_loc) then
 				call get_val(node, state%locs%vals(id), state, res, index_ = i8)
@@ -201,7 +203,7 @@ recursive module subroutine eval_name_expr(node, state, res, slots)
 
 		else
 
-			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res, slots)
+			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_slice, slots)
 			if (state%rt_halt) return
 
 			!print *, "type = ", kind_name( node%val%array%type )
@@ -216,9 +218,9 @@ recursive module subroutine eval_name_expr(node, state, res, slots)
 			res%type = array_type
 			res%array%kind = expl_array
 			res%array%type = node%val%array%type
-			res%array%rank = rank_res
+			res%array%rank = rank_slice
 
-			allocate(res%array%size( rank_res ))
+			allocate(res%array%size( rank_slice ))
 			idim_res = 1
 			do idim_ = 1, size(lsubs)
 				sub_kind = node%lsubscripts(idim_)%sub_kind
