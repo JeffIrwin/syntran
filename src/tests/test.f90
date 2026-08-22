@@ -4312,6 +4312,13 @@ subroutine unit_test_array_str(npass, nfail)
 			eval('let v=["hello","world","wassup"]; v[:,1:3]="EL"; v;', quiet) == '[hELlo, wELld, wELsup]', &
 			eval('let v=["hello","world","wassup"]; v[0,1:3]="EL"; v[0];', quiet) == 'hELlo', &
 			eval('let v=["hello","world","wassup"]; v[1];', quiet) == 'world', &  ! Inline: regression - whole element still works
+			eval('let v = ["a","b"] + "c"; v;', quiet) == '[ac, bc]', &  ! str array + str scalar
+			eval('let v = "x" + ["a","b"]; v;', quiet) == '[xa, xb]', &  ! str scalar + str array
+			eval('let v = ["a","b"] + ["c","d"]; v;', quiet) == '[ac, bd]', &  ! str array + str array
+			eval('let v = [""] + "x"; v;', quiet) == '[x]', &  ! empty-element operand
+			eval('let v = ["a","b"]; v += "!"; v;', quiet) == '[a!, b!]', &  ! compound assignment
+			diag_has_code(get_diags('let v = ["a","b"] - ["c","d"];'), &
+				EC_BINARY_TYPES), &  ! str arrays still reject non-`+` ops
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

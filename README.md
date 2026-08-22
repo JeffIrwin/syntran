@@ -1439,6 +1439,18 @@ hello planet earth
 -->
 <!-- syntran-end -->
 
+`+` also concatenates elementwise on `str` arrays, in any combination of array and scalar operands:
+
+<!-- syntran-begin mode=repl group=str-array-concat -->
+```rust
+let names = ["Alice", "Bob"] + "!";
+// [Alice!, Bob!]
+```
+<!-- syntran-expect
+[Alice!, Bob!]
+-->
+<!-- syntran-end -->
+
 There is no separate character type, only strings of length 1.  Characters of a string are indexed in the same way as arrays:
 
 <!-- syntran-begin mode=repl group=str-index -->

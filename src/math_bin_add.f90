@@ -281,6 +281,19 @@ subroutine add_value_t(left, right, res, op_text)
 			res%array = mold(right%array, i64_type)
 			res%array%i64 = left%array%i64 + right%array%i32
 
+
+		case (magic * str_type + str_type)
+			! str array + str array (elementwise concat).  Array shape/size
+			! is not validated here, matching the numeric cases above
+			res%array = mold(left%array, str_type)
+			block
+				integer(kind = 8) :: i_
+				allocate(res%array%str( size(left%array%str) ))
+				do i_ = 1, size(left%array%str, kind = 8)
+					res%array%str(i_)%s = left%array%str(i_)%s // right%array%str(i_)%s
+				end do
+			end block
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()
@@ -373,6 +386,41 @@ subroutine add_value_t(left, right, res, op_text)
 
 	!****
 
+
+	case        (magic**2 * array_type + magic * array_type + str_type)
+		! str array + str scalar (elementwise concat).  Array shape/size is
+		! not validated here, matching the numeric array+array case below
+		select case (left%array%type)
+		case (str_type)
+			res%array = mold(left%array, str_type)
+			block
+				integer(kind = 8) :: i_
+				allocate(res%array%str( size(left%array%str) ))
+				do i_ = 1, size(left%array%str, kind = 8)
+					res%array%str(i_)%s = left%array%str(i_)%s // right%str%s
+				end do
+			end block
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
+
+	case        (magic**2 * array_type + magic * str_type + array_type)
+		! str scalar + str array (elementwise concat)
+		select case (right%array%type)
+		case (str_type)
+			res%array = mold(right%array, str_type)
+			block
+				integer(kind = 8) :: i_
+				allocate(res%array%str( size(right%array%str) ))
+				do i_ = 1, size(right%array%str, kind = 8)
+					res%array%str(i_)%s = left%str%s // right%array%str(i_)%s
+				end do
+			end block
+		case default
+			write(*,*) err_eval_binary_types(op_text)
+			call internal_error()
+		end select
 
 	case        (magic**2 * str_type + magic * str_type + str_type)
 		if (.not. allocated(res%str)) allocate(res%str)

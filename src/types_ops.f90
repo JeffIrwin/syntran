@@ -435,18 +435,19 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 				! Would recursion help for arrays here?  It seems like it
 				! wouldn't reduce very many LOC
 
-				! TODO: should vec str + scalar str be allowed?
-
 				allowed = &
-					(is_num_type(left_arr) .and. is_num_type(right_arr))
+					(is_num_type(left_arr) .and. is_num_type(right_arr)) .or. &
+					(left_arr == str_type  .and. right_arr == str_type)
 
 			else if (left == array_type) then
 				allowed = &
-					(is_num_type(left_arr) .and. is_num_type(right))
+					(is_num_type(left_arr) .and. is_num_type(right)) .or. &
+					(left_arr == str_type  .and. right == str_type)
 
 			else if (right == array_type) then
 				allowed = &
-					(is_num_type(left) .and. is_num_type(right_arr))
+					(is_num_type(left) .and. is_num_type(right_arr)) .or. &
+					(left == str_type  .and. right_arr == str_type)
 
 			else
 				allowed = &
