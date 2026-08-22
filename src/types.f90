@@ -131,8 +131,11 @@ module syntran__types_m
 
 	type syntax_node_t
 
-		! FIXME: when adding new members here, make sure to explicitly copy them
-		! in syntax_node_copy, or else assignment will yield bugs
+		! NOTE: when adding/removing a member here, four parallel component
+		! lists in types_copy.f90 must be kept in sync by hand: syntax_node_copy,
+		! syntax_node_destroy, syntax_node_move, and syntax_node_move_into.
+		! Skipping one silently corrupts assignment, leaks memory, or drops
+		! data on a move.  utils/check-node-sync.sh enforces this in CI
 
 		integer :: kind = 0
 

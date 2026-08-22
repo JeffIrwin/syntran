@@ -546,13 +546,15 @@ recursive module subroutine syntax_node_destroy(node)
 	! first, instead of trusting gfortran's implicit deep deallocation to walk
 	! a whole AST in one shot.  Same doctrine as value_destroy()
 	! (value.f90), applied to the other deeply-nested type in this codebase:
-	! syntax_node_t has 20 allocatable components of its own type (5 of them
+	! syntax_node_t has 20 allocatable components of its own type (7 of them
 	! arrays), plus a value_t and two syntax_token_t -- each of which wraps a
 	! value_t of its own.
 	!
-	! The component list here must stay in sync with syntax_node_copy() below,
-	! c.f. the FIXME on syntax_node_t itself (types.f90).  Every component
-	! syntax_node_copy() handles is handled here, in the same order.
+	! The component list here must stay in sync with syntax_node_copy(),
+	! syntax_node_move(), and syntax_node_move_into() below -- c.f. the NOTE
+	! on syntax_node_t itself (types.f90) and utils/check-node-sync.sh, which
+	! enforces this.  Every component syntax_node_copy() handles is handled
+	! here, in the same order.
 
 	type(syntax_node_t), intent(inout) :: node
 

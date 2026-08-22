@@ -40,6 +40,11 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Check syntax_node_t copy/destroy/move sync",
+				"run": "bash utils/check-node-sync.sh"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Set ubuntu PATH",
 				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 			},
