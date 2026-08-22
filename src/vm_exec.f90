@@ -1493,7 +1493,7 @@ module subroutine vm_run(prog, state, res)
 					call value_array_copy(for_iters(fi)%elem_vals, stack%v(base_+1 : base_+nslots_))
 
 				case (size_array)
-					rk_ = size(nd%array%size)
+					rk_ = size(nd%array%size_)
 					allocate(sizes_(rk_))
 
 					! Slot window order (compile_array_expr_slots): elems(:)
@@ -1529,7 +1529,7 @@ module subroutine vm_run(prog, state, res)
 					! Slot window order (compile_array_expr_slots): size(:)
 					! first, then lbound (fill value, consumed by array_at's
 					! unif_array case).
-					rk_ = size(nd%array%size)
+					rk_ = size(nd%array%size_)
 					for_iters(fi)%len8 = 1
 					do i = 1, rk_
 						k_ = k_ + 1

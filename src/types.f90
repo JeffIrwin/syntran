@@ -144,13 +144,13 @@ module syntran__types_m
 		type(syntax_node_t), allocatable :: left, right, members(:), &
 			condition, if_clause, else_clause, body, array, member
 
-		! Array expression syntax nodes.  TODO: rename lbound, ubound to avoid
-		! conflicts w/ Fortran keywords
-		type(syntax_node_t), allocatable :: lbound, step, ubound, len_, &
+		! Array expression syntax nodes.  Trailing underscore on lbound_,
+		! ubound_, size_ (like len_ below) to avoid conflicts w/ Fortran
+		! intrinsics of the same name
+		type(syntax_node_t), allocatable :: lbound_, step, ubound_, len_, &
 			elems(:), rank
 
-		! TODO: rename `size`
-		type(syntax_node_t), allocatable :: lsubscripts(:), size(:), args(:), &
+		type(syntax_node_t), allocatable :: lsubscripts(:), size_(:), args(:), &
 			usubscripts(:), ssubscripts(:)
 
 		! Either scalar_sub, range_sub (unit step [0:2]), all_sub ([:]), or
@@ -202,8 +202,7 @@ module syntran__types_m
 
 		contains
 
-			! TODO: rename to to_str() for consistency with value_t
-			procedure :: str => syntax_node_str, log_diagnostics
+			procedure :: to_str => syntax_node_str, log_diagnostics
 
 			! For gfortran, use a hand-written copy constructor.  For ifx, use
 			! the intrinsic copy constructor.  If you try anything else, both

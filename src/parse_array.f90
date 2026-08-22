@@ -147,10 +147,10 @@ recursive module subroutine parse_array_expr(parser, expr)
 		expr%val%array%rank = size_%len_
 
 		! Move children (avoids deep copies)
-		call syntax_node_move(lbound_, expr%lbound)
-		allocate(expr%size(size_%len_))
+		call syntax_node_move(lbound_, expr%lbound_)
+		allocate(expr%size_(size_%len_))
 		do i = 1, size_%len_
-			call syntax_node_move_into(size_%v(i), expr%size(i))
+			call syntax_node_move_into(size_%v(i), expr%size_(i))
 		end do
 
 		return
@@ -256,9 +256,9 @@ recursive module subroutine parse_array_expr(parser, expr)
 			expr%val%array%kind = step_array
 			expr%val%array%rank = 1
 
-			call syntax_node_move(lbound_, expr%lbound)
+			call syntax_node_move(lbound_, expr%lbound_)
 			call syntax_node_move(step,    expr%step)
-			call syntax_node_move(ubound_, expr%ubound)
+			call syntax_node_move(ubound_, expr%ubound_)
 
 			return
 
@@ -318,8 +318,8 @@ recursive module subroutine parse_array_expr(parser, expr)
 			expr%val%array%kind = len_array
 			expr%val%array%rank = 1
 
-			call syntax_node_move(lbound_, expr%lbound)
-			call syntax_node_move(ubound_, expr%ubound)
+			call syntax_node_move(lbound_, expr%lbound_)
+			call syntax_node_move(ubound_, expr%ubound_)
 			call syntax_node_move(len_,    expr%len_)
 
 			return
@@ -330,8 +330,8 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 		call parser%match(rbracket_token, rbracket)
 
-		!print *, 'lbound_ = ', lbound_%str()
-		!print *, 'ubound_ = ', ubound_%str()
+		!print *, 'lbound_ = ', lbound_%to_str()
+		!print *, 'ubound_ = ', ubound_%to_str()
 
 		allocate(expr%val%array)
 
@@ -340,17 +340,17 @@ recursive module subroutine parse_array_expr(parser, expr)
 		expr%val%array%kind = bound_array
 		expr%val%array%rank = 1
 
-		call syntax_node_move(lbound_, expr%lbound)
-		call syntax_node_move(ubound_, expr%ubound)
+		call syntax_node_move(lbound_, expr%lbound_)
+		call syntax_node_move(ubound_, expr%ubound_)
 
 		! Read type info from moved children (not from consumed locals)
 		if (all(i32_type == &
-			[expr%lbound%val%type, expr%ubound%val%type])) then
+			[expr%lbound_%val%type, expr%ubound_%val%type])) then
 
-			expr%val%array%type = expr%lbound%val%type
+			expr%val%array%type = expr%lbound_%val%type
 
 		else if (all(is_int_type( &
-			[expr%lbound%val%type, expr%ubound%val%type]))) then
+			[expr%lbound_%val%type, expr%ubound_%val%type]))) then
 
 			expr%val%array%type = i64_type
 
@@ -365,7 +365,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 			! only if a non-numeric operand hasn't already been reported
 			! above (avoid a redundant cascade)
 			if (parser%ipass /= 0 .and. .not. range_non_num) then
-				if (expr%lbound%val%type == expr%ubound%val%type) then
+				if (expr%lbound_%val%type == expr%ubound_%val%type) then
 					! Same (numeric) type on both sides, e.g. [1.0: 5.0] --
 					! an implicit unit-step range specifically needs integer
 					! bounds
@@ -389,7 +389,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 	! Explicit array form [elem_0, elem_1, elem_2, ... ].  elem_0 has already been
 	! parsed as lbound above
 
-	!print *, 'elem ', lbound_%val%str()
+	!print *, 'elem ', lbound_%val%to_str()
 	if (lbound_%val%type == array_type) then
 
 		! Fortran actually allows concatenating multi-rank arrays.  It just
@@ -426,7 +426,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 		call parser%check_enum_name_value(elem)
 		span_end = parser%peek_pos(0) - 1
 
-		!print *, 'elem ', elem%val%str()
+		!print *, 'elem ', elem%val%to_str()
 
 		if (elem%val%type /= lbound_%val%type) then
 			span = new_span(span_beg, span_end - span_beg + 1)
@@ -527,9 +527,9 @@ recursive module subroutine parse_array_expr(parser, expr)
 		expr%val%array%kind = size_array
 		expr%val%array%rank = size_%len_
 
-		allocate(expr%size(size_%len_))
+		allocate(expr%size_(size_%len_))
 		do i = 1, size_%len_
-			call syntax_node_move_into(size_%v(i), expr%size(i))
+			call syntax_node_move_into(size_%v(i), expr%size_(i))
 		end do
 		allocate(expr%elems(elems%len_))
 		do i = 1, elems%len_
@@ -695,7 +695,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 			call parser%parse_expr(expr=lsubscript)
 			ls_end = parser%current_pos()
 
-			!print *, 'lsubscript = ', lsubscript%str()
+			!print *, 'lsubscript = ', lsubscript%to_str()
 			!print *, 'lsubscript = ', parser%text(span0, parser%current_pos()-1)
 			!print *, "sub type = ", kind_name(lsubscript%val%type)
 

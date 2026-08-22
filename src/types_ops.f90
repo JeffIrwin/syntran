@@ -49,27 +49,27 @@ recursive module function syntax_node_str(node, indent) result(str_)
 
 	if      (node%kind == binary_expr) then
 
-		left  = indentl//'    left  = '//node%left %str(indentl//'    ') &
+		left  = indentl//'    left  = '//node%left %to_str(indentl//'    ') &
 				//line_feed
 
 		op    = indentl//'    op    = '//node%op%text//line_feed
 
-		right = indentl//'    right = '//node%right%str(indentl//'    ') &
+		right = indentl//'    right = '//node%right%to_str(indentl//'    ') &
 				//line_feed
 
 	else if (node%kind == fn_declaration) then
-		val = indentl//'    body = '//node%body%str(indentl//'    ')//line_feed
+		val = indentl//'    body = '//node%body%to_str(indentl//'    ')//line_feed
 
 	else if (node%kind == fn_call_expr) then
 		val = indentl//'    id_index = '//str(node%id_index)//line_feed
 
 	else if (node%kind == return_statement) then
-		val = indentl//'    expr = '//node%right%str(indentl//'    ')//line_feed
+		val = indentl//'    expr = '//node%right%to_str(indentl//'    ')//line_feed
 
 	else if (node%kind == block_statement) then
 
 		do i = 1, size(node%members)
-			block = block // node%members(i)%str(indentl//'    ')
+			block = block // node%members(i)%to_str(indentl//'    ')
 		end do
 		block = block // line_feed
 
@@ -77,7 +77,7 @@ recursive module function syntax_node_str(node, indent) result(str_)
 
 		type = ''
 		do i = 1, size(node%members)
-			block = block // node%members(i)%str(indentl//'    ')
+			block = block // node%members(i)%to_str(indentl//'    ')
 		end do
 		block = block // line_feed
 
@@ -88,13 +88,13 @@ recursive module function syntax_node_str(node, indent) result(str_)
 
 		op    = indentl//'    op    = '//node%op%text//line_feed
 
-		right = indentl//'    right = '//node%right%str(indentl//'    ') &
+		right = indentl//'    right = '//node%right%to_str(indentl//'    ') &
 				//line_feed
 
 	else if (node%kind == unary_expr) then
 
 		op    = indentl//'    op    = '//node%op%text//line_feed
-		right = indentl//'    right = '//node%right%str(indentl//'    ') &
+		right = indentl//'    right = '//node%right%to_str(indentl//'    ') &
 				//line_feed
 
 	else if (node%kind == literal_expr) then

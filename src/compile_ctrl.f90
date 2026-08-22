@@ -143,31 +143,31 @@ recursive subroutine compile_array_expr_slots(prog, cs, node)
 
 	select case (node%val%array%kind)
 	case (step_array)
-		call compile_node(prog, cs, node%lbound)
+		call compile_node(prog, cs, node%lbound_)
 		call compile_node(prog, cs, node%step)
-		call compile_node(prog, cs, node%ubound)
+		call compile_node(prog, cs, node%ubound_)
 
 	case (len_array)
-		call compile_node(prog, cs, node%lbound)
-		call compile_node(prog, cs, node%ubound)
+		call compile_node(prog, cs, node%lbound_)
+		call compile_node(prog, cs, node%ubound_)
 		call compile_node(prog, cs, node%len_)
 
 	case (unif_array)
-		do i = 1, size(node%size)
-			call compile_node(prog, cs, node%size(i))
+		do i = 1, size(node%size_)
+			call compile_node(prog, cs, node%size_(i))
 		end do
-		call compile_node(prog, cs, node%lbound)
+		call compile_node(prog, cs, node%lbound_)
 
 	case (bound_array)
-		call compile_node(prog, cs, node%lbound)
-		call compile_node(prog, cs, node%ubound)
+		call compile_node(prog, cs, node%lbound_)
+		call compile_node(prog, cs, node%ubound_)
 
 	case (size_array)
 		do i = 1, size(node%elems)
 			call compile_node(prog, cs, node%elems(i))
 		end do
-		do i = 1, size(node%size)
-			call compile_node(prog, cs, node%size(i))
+		do i = 1, size(node%size_)
+			call compile_node(prog, cs, node%size_(i))
 		end do
 
 	case (expl_array)
@@ -993,15 +993,15 @@ recursive subroutine compile_node(prog, cs, node)
 			! of calling syntax_eval every time the surrounding loop re-enters.
 			select case (node%array%val%array%kind)
 			case (bound_array)
-				call compile_node(prog, cs, node%array%lbound)
-				call compile_node(prog, cs, node%array%ubound)
+				call compile_node(prog, cs, node%array%lbound_)
+				call compile_node(prog, cs, node%array%ubound_)
 			case (step_array)
-				call compile_node(prog, cs, node%array%lbound)
+				call compile_node(prog, cs, node%array%lbound_)
 				call compile_node(prog, cs, node%array%step)
-				call compile_node(prog, cs, node%array%ubound)
+				call compile_node(prog, cs, node%array%ubound_)
 			case (len_array)
-				call compile_node(prog, cs, node%array%lbound)
-				call compile_node(prog, cs, node%array%ubound)
+				call compile_node(prog, cs, node%array%lbound_)
+				call compile_node(prog, cs, node%array%ubound_)
 				call compile_node(prog, cs, node%array%len_)
 			end select
 			call emit(prog, OP_FOR_SETUP_NAT, a = idx, b = node%array%val%array%kind, &
@@ -1069,9 +1069,9 @@ recursive subroutine compile_node(prog, cs, node)
 			case (bool_type, i32_type, i64_type, f32_type, f64_type)
 				if (node%val%array%rank <= MAX_NAT_UNIF_RANK) then
 					do i = 1, node%val%array%rank
-						call compile_node(prog, cs, node%size(i))
+						call compile_node(prog, cs, node%size_(i))
 					end do
-					call compile_node(prog, cs, node%lbound)
+					call compile_node(prog, cs, node%lbound_)
 					call emit(prog, OP_UNIF_ARRAY_NAT, &
 						a = node%val%array%type, b = node%val%array%rank)
 				else
@@ -1087,8 +1087,8 @@ recursive subroutine compile_node(prog, cs, node)
 
 		case (bound_array)
 			! [lb:ub] integer range — always native (only i32/i64 supported).
-			call compile_node(prog, cs, node%lbound)
-			call compile_node(prog, cs, node%ubound)
+			call compile_node(prog, cs, node%lbound_)
+			call compile_node(prog, cs, node%ubound_)
 			call emit(prog, OP_BOUND_ARRAY_NAT, a = node%val%array%type)
 
 		case (expl_array)

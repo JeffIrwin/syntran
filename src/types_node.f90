@@ -142,9 +142,9 @@ module subroutine new_binary_expr(left, op, right, expr)
 	integer :: larrtype, rarrtype, type_, ltype, rtype, lrank, rrank, out_rank, elem_type
 
 	if (debug > 1) print *, 'new_binary_expr'
-	if (debug > 1) print *, 'left  = ', left %str()
+	if (debug > 1) print *, 'left  = ', left %to_str()
 	if (debug > 1) print *, 'op    = ', op%text
-	if (debug > 1) print *, 'right = ', right%str()
+	if (debug > 1) print *, 'right = ', right%to_str()
 
 	! Read type info before moves (left/right val%array may be moved)
 	larrtype = unknown_type
@@ -187,7 +187,7 @@ module subroutine new_binary_expr(left, op, right, expr)
 			expr%val%type = array_type
 		end if
 
-		if (debug > 1) print *, 'new_binary_expr = ', expr%str()
+		if (debug > 1) print *, 'new_binary_expr = ', expr%to_str()
 		if (debug > 1) print *, 'done new_binary_expr'
 		return
 
@@ -223,7 +223,7 @@ module subroutine new_binary_expr(left, op, right, expr)
 	! TODO: array subtype if subscripted?  I think parse_primary_expr should
 	! already set the subtype when subscripts are present
 
-	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
+	if (debug > 1) print *, 'new_binary_expr = ', expr%to_str()
 	if (debug > 1) print *, 'done new_binary_expr'
 
 end subroutine new_binary_expr
@@ -251,7 +251,7 @@ module subroutine new_unary_expr(op, right, expr)
 
 	expr%val = expr%right%val
 
-	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
+	if (debug > 1) print *, 'new_unary_expr = ', expr%to_str()
 	if (debug > 1) print *, 'done new_unary_expr'
 
 end subroutine new_unary_expr

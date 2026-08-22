@@ -713,7 +713,7 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 		tree%first_expected = parser%first_expected
 	end if
 
-	if (debug > 1) print *, 'tree = ', tree%str()
+	if (debug > 1) print *, 'tree = ', tree%to_str()
 
 	if (tree%expecting .and. allow_continuel) then
 

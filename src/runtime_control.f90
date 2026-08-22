@@ -693,7 +693,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 	else if (node%val%array%kind == unif_array) then
 
 		allocate(res%array)
-		res%array%rank = size( node%size )
+		res%array%rank = size( node%size_ )
 		!print *, "rank = ", res%array%rank
 		allocate(res%array%size( res%array%rank ))
 
@@ -845,7 +845,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 
 		call allocate_array(res, res%array%len_)
 
-		!print *, 'bounds in [', lbound_%str(), ': ', ubound_%str(), ']'
+		!print *, 'bounds in [', lbound_%to_str(), ': ', ubound_%to_str(), ']'
 		!print *, 'node%val%array%type = ', node%val%array%type
 
 		if (res%array%type == i32_type) then
@@ -873,11 +873,11 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 		do i = 1, size(node%elems)
 			k = k + 1; elem = slots(k)
 			if (state%rt_halt) return
-			!print *, 'elem['//str(i)//'] = ', elem%str()
+			!print *, 'elem['//str(i)//'] = ', elem%to_str()
 			call array%push(elem)
 		end do
 
-		array%rank = size( node%size )
+		array%rank = size( node%size_ )
 		allocate(array%size( array%rank ))
 		do i = 1, array%rank
 			k = k + 1; len_ = slots(k)
@@ -922,7 +922,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 		do i = 1, size(node%elems)
 			k = k + 1; elem = slots(k)
 			if (state%rt_halt) return
-			!print *, 'elem['//str(i)//'] = ', elem%str()
+			!print *, 'elem['//str(i)//'] = ', elem%to_str()
 
 			if (any(res%array%type == [struct_type, enum_type])) then
 				res%struct(i) = elem

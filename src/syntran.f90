@@ -312,7 +312,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 		! episode 2.  I guess I'll find out later if that's a stupid decision on
 		! my end.  I think I can just do type checking in the parser
 
-		if (debug > 0 .or. show_tree) print *, 'tree = ', compilation%str()
+		if (debug > 0 .or. show_tree) print *, 'tree = ', compilation%to_str()
 
 		if (.not. state%quiet) call compilation%log_diagnostics(ou)
 

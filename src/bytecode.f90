@@ -1705,11 +1705,11 @@ pure function array_expr_nslots(node) result(n)
 	case (step_array, len_array)
 		n = 3
 	case (unif_array)
-		n = size(node%size) + 1
+		n = size(node%size_) + 1
 	case (bound_array)
 		n = 2
 	case (size_array)
-		n = size(node%elems) + size(node%size)
+		n = size(node%elems) + size(node%size_)
 	case (expl_array)
 		n = size(node%elems)
 	case default
