@@ -174,8 +174,10 @@ set(LIB_SRC
 	${SRC_DIR}/compile.f90
 	${SRC_DIR}/compile_ctrl.f90
 	${SRC_DIR}/consts.f90
+	${SRC_DIR}/consts_impl.f90
 	${SRC_DIR}/core.f90
 	${SRC_DIR}/errors.f90
+	${SRC_DIR}/errors_impl.f90
 	${SRC_DIR}/vm.f90
 	${SRC_DIR}/vm_exec.f90
 	${SRC_DIR}/vm_intr.f90
@@ -219,7 +221,9 @@ set(LIB_SRC
 	${SRC_DIR}/types_node.f90
 	${SRC_DIR}/types_ops.f90
 	${SRC_DIR}/utils.f90
+	${SRC_DIR}/utils_impl.f90
 	${SRC_DIR}/value.f90
+	${SRC_DIR}/value_impl.f90
 )
 
 if(NOT DEFINED ENV{SYNTRAN_INTEL})

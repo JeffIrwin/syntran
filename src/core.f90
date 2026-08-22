@@ -31,8 +31,15 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - source split for better incremental build times
-	!    * started plan in ~/.claude/plans/why-are-some-src-encapsulated-wand.md
+	!  - source split for build times: done for consts/errors/value/utils.f90
+	!    (each split into a *_impl.f90 submodule so body-only edits don't
+	!    invalidate the parent .mod and cascade-rebuild the tree under fpm).
+	!    runtime_array.f90/vm_exec.f90 were considered and rejected: they're
+	!    already leaf submodules with no dependents, so splitting them further
+	!    saves nothing. types.f90 was also considered and rejected: it has no
+	!    procedure bodies left to move, already fully split across
+	!    types_copy/dict/node/ops.f90. See the plan this came from for
+	!    measurements: ~/.claude/plans/source-split-luminous-quokka.md
 	!  - cleanup TODO notes throughout the codebase
 	!    * took a big chunk out already
 	!    * continue one file at a time
