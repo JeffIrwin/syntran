@@ -24,9 +24,12 @@ module syntran__types_m
 		! Return type.  "A type is a value!"
 		type(value_t) :: type
 
-		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
-		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
-		! Maybe add an matrix of types(:,:) for each allowable type of a param?
+		! Polymorphic intrinsic fns (e.g. i32 min(1, 2) vs f32 min(1.0, 2.0),
+		! but not bool min(true, false)) don't need a types(:,:) matrix here:
+		! resolve_overload() (intr_fns.f90) rewrites the call's identifier to
+		! a type-specific mangled name (e.g. "min" -> "0min_i32"/"0min_f64")
+		! from the first arg's type at parse time, before this fn_t's single
+		! `type`/`params` are ever consulted
 
 		! Arguments/parameters.  Technically, "arguments" in most languages are
 		! what Fortran calls "actual arguments" and "parameters" are Fortran
@@ -88,12 +91,11 @@ module syntran__types_m
 		type(fn_t), allocatable :: fns(:)
 		integer :: num_intr_fns
 
-		! This is the scope level.  Each nested block statement that is entered
-		! pushes 1 to scope.  Popping out of a block decrements the scope.
-		! Each scope level has its own fn dict in dicts(:)
-		integer :: scope = 1
-
-		! TODO: scoping for nested fns?
+		! Unlike vars_t/structs_t/enums_t, fns_t has no scope level: fn
+		! declarations are only ever dispatched at translation-unit level
+		! (see parse_misc.f90's `case (fn_keyword)`), and parse_fn.f90
+		! explicitly resets `is_loc` after a fn body to keep it that way, so
+		! there is exactly one (global) fn namespace to scope
 		contains
 			procedure :: &
 				insert    => fn_insert, &
@@ -103,7 +105,6 @@ module syntran__types_m
 				closest   => fn_closest, &
 				grow_flat => fns_grow_flat, &
 				rollback  => fns_rollback
-		!		push_scope, pop_scope
 
 	end type fns_t
 

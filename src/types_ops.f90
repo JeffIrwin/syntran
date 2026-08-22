@@ -44,9 +44,6 @@ recursive module function syntax_node_str(node, indent) result(str_)
 
 	type  = indentl//'    type  = '//kind_name(node%val%type)//line_feed
 
-	! FIXME: add str conversions for more recent kinds: condition, if_clause,
-	! etc.
-
 	if      (node%kind == binary_expr) then
 
 		left  = indentl//'    left  = '//node%left %to_str(indentl//'    ') &
@@ -99,6 +96,47 @@ recursive module function syntax_node_str(node, indent) result(str_)
 
 	else if (node%kind == literal_expr) then
 		val   = indentl//'    val   = '//node%val%to_str()//line_feed
+
+	else
+		! Generic fallback for kinds without a dedicated branch above: print
+		! whichever child nodes happen to be allocated, so this never goes
+		! stale as new node kinds/members are added
+		if (allocated(node%condition)) val = val// &
+			indentl//'    condition = '//node%condition%to_str(indentl//'    ')//line_feed
+		if (allocated(node%if_clause)) val = val// &
+			indentl//'    if_clause = '//node%if_clause%to_str(indentl//'    ')//line_feed
+		if (allocated(node%else_clause)) val = val// &
+			indentl//'    else_clause = '//node%else_clause%to_str(indentl//'    ')//line_feed
+		if (allocated(node%body)) val = val// &
+			indentl//'    body = '//node%body%to_str(indentl//'    ')//line_feed
+		if (allocated(node%array)) val = val// &
+			indentl//'    array = '//node%array%to_str(indentl//'    ')//line_feed
+		if (allocated(node%lbound_)) val = val// &
+			indentl//'    lbound_ = '//node%lbound_%to_str(indentl//'    ')//line_feed
+		if (allocated(node%ubound_)) val = val// &
+			indentl//'    ubound_ = '//node%ubound_%to_str(indentl//'    ')//line_feed
+		if (allocated(node%step)) val = val// &
+			indentl//'    step = '//node%step%to_str(indentl//'    ')//line_feed
+		if (allocated(node%len_)) val = val// &
+			indentl//'    len_ = '//node%len_%to_str(indentl//'    ')//line_feed
+		if (allocated(node%rank)) val = val// &
+			indentl//'    rank = '//node%rank%to_str(indentl//'    ')//line_feed
+
+		if (allocated(node%members)) then
+			do i = 1, size(node%members)
+				block = block//node%members(i)%to_str(indentl//'    ')
+			end do
+		end if
+		if (allocated(node%elems)) then
+			do i = 1, size(node%elems)
+				block = block//node%elems(i)%to_str(indentl//'    ')
+			end do
+		end if
+		if (allocated(node%args)) then
+			do i = 1, size(node%args)
+				block = block//node%args(i)%to_str(indentl//'    ')
+			end do
+		end if
 	end if
 
 	str_ = line_feed// &
@@ -641,6 +679,10 @@ module integer function get_unary_op_prec(kind) result(prec)
 
 		case (plus_token, minus_token, not_keyword, bang_token)
 			! arithmetic +, arithmetic -, logical not, bitwise not
+			!
+			! NOTE: this must stay above the max binary precedence
+			! (get_binary_op_prec below, currently 11 for `**`), or unary
+			! `-x**2` would parse as `-(x**2)` instead of `(-x)**2`
 			prec = 12
 
 		case default
@@ -688,8 +730,8 @@ module integer function get_binary_op_prec(kind) result(prec)
 
 		!********
 
-		! FIXME: increment the unary operator precedence in the fn above after
-		! increasing the max binary precedence
+		! NOTE: `**` is the highest-precedence binary op; see the matching
+		! note on get_unary_op_prec above -- unary must stay above this
 		case (sstar_token)
 			prec = 11
 
@@ -830,9 +872,7 @@ recursive module integer function get_binary_op_kind( &
 
 		! Other operations return the same type as their operands if they match,
 		! or cast "up" to the type of the operand with the greatest range or
-		! precision
-		!
-		! FIXME: i64, f64, etc.
+		! precision (see the f64/f32/i64 promotion rules below)
 
 		kind_ = unknown_type
 
@@ -905,7 +945,8 @@ module function scalar_to_array_type(scalar_type_) result(array_type_)
 	case (str_type)
 		array_type_ = str_array_type
 
-	! TODO: file_type?
+	! No file_array_type: there is no way to construct an array of open file
+	! handles, so file_type has no array counterpart here
 
 	case default
 		array_type_ = unknown_type
@@ -942,7 +983,7 @@ module function array_to_scalar_type(array_type_) result(scalar_type_)
 	case (str_array_type)
 		scalar_type_ = str_type
 
-	! TODO: file_type?
+	! No file_array_type: c.f. the note in scalar_to_array_type() above
 
 	case default
 		scalar_type_ = unknown_type
