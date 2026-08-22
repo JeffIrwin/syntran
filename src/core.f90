@@ -31,6 +31,8 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - source split for better incremental build times
+	!    * started plan in ~/.claude/plans/why-are-some-src-encapsulated-wand.md
 	!  - cleanup TODO notes throughout the codebase
 	!    * took a big chunk out already
 	!    * continue one file at a time

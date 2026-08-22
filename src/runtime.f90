@@ -116,6 +116,15 @@ module syntran__runtime_m
 			character(len = :), allocatable :: out
 		end function
 
+		module subroutine str_char_assign(s, node, state, isub, rhs, slots)
+			character(len = *), intent(inout) :: s
+			type(syntax_node_t), intent(in) :: node
+			type(state_t), intent(inout) :: state
+			integer, intent(in) :: isub
+			character(len = *), intent(in) :: rhs
+			type(value_t), intent(in) :: slots(:)
+		end subroutine
+
 	end interface
 
 	interface

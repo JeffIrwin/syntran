@@ -75,6 +75,18 @@ recursive module subroutine set_val(node, var, state, val, index_, slots, pos)
 		end if
 		!print *, "array dot chain"
 
+		! A str member stores characters in %str, not %array, so neither
+		! set_field_slice_val (reads field_val%array%size) nor set_array_val
+		! below applies -- str_char_assign handles scalar/range/step/all
+		! subscript kinds uniformly (also covers the [str;:] + trailing
+		! char-sub case).
+		if (member_str_sub(node%member, var%struct(i8+1)%struct(id))) then
+			call set_str_member_val(node%member, var%struct(i8+1)%struct(id), state, val, &
+				slots(pos+1 : pos+subscript_total_nslots(node%member)))
+			pos = pos + subscript_total_nslots(node%member)
+			return
+		end if
+
 		! Arrays chained by a dot: `a[0].b[0]`
 		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
 			call set_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, val, &
@@ -125,6 +137,16 @@ recursive module subroutine set_val(node, var, state, val, index_, slots, pos)
 	end if
 	!print *, "lsubscripts allocated"
 
+	! A str member stores characters in %str, not %array -- str_char_assign
+	! handles scalar/range/step/all subscript kinds uniformly (also covers
+	! the [str;:] + trailing char-sub case).  See member_str_sub's docstring.
+	if (member_str_sub(node%member, var%struct(id))) then
+		call set_str_member_val(node%member, var%struct(id), state, val, &
+			slots(pos+1 : pos+subscript_total_nslots(node%member)))
+		pos = pos + subscript_total_nslots(node%member)
+		return
+	end if
+
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
 		call set_field_slice_val(node%member, var%struct(id), state, val, &
 			slots(pos+1 : pos+subscript_total_nslots(node%member)))
@@ -139,11 +161,6 @@ recursive module subroutine set_val(node, var, state, val, index_, slots, pos)
 		i8 = sub_eval(node%member, var%struct(id), state, &
 			slots(pos+1 : pos+subscript_total_nslots(node%member)))
 		pos = pos + subscript_total_nslots(node%member)
-	end if
-
-	if (var%struct(id)%type == str_type) then
-		var%struct(id)%str%s(i8+1: i8+1) = val%str%s
-		return
 	end if
 
 	if (.not. any(var%struct(id)%array%type == [struct_type, enum_type])) then
@@ -253,6 +270,18 @@ recursive module subroutine get_val(node, var, state, res, index_, slots, pos)
 		end if
 		!print *, "array dot chain"
 
+		! A str member stores characters in %str, not %array, so neither
+		! get_field_slice_val (reads field_val%array%size) nor get_array_val
+		! below applies -- str_char_slice handles scalar/range/step/all
+		! subscript kinds uniformly (also covers the [str;:] + trailing
+		! char-sub case).
+		if (member_str_sub(node%member, var%struct(i8+1)%struct(id))) then
+			call get_str_member_val(node%member, var%struct(i8+1)%struct(id), state, res, &
+				slots(pos+1 : pos+subscript_total_nslots(node%member)))
+			pos = pos + subscript_total_nslots(node%member)
+			return
+		end if
+
 		if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
 			call get_field_slice_val(node%member, var%struct(i8+1)%struct(id), state, res, &
 				slots(pos+1 : pos+subscript_total_nslots(node%member)))
@@ -321,6 +350,16 @@ recursive module subroutine get_val(node, var, state, res, index_, slots, pos)
 	end if
 	!print *, "lsubscripts allocated"
 
+	! A str member stores characters in %str, not %array -- str_char_slice
+	! handles scalar/range/step/all subscript kinds uniformly (also covers
+	! the [str;:] + trailing char-sub case).  See member_str_sub's docstring.
+	if (member_str_sub(node%member, var%struct(id))) then
+		call get_str_member_val(node%member, var%struct(id), state, res, &
+			slots(pos+1 : pos+subscript_total_nslots(node%member)))
+		pos = pos + subscript_total_nslots(node%member)
+		return
+	end if
+
 	if (.not. all(node%member%lsubscripts%sub_kind == scalar_sub)) then
 		call get_field_slice_val(node%member, var%struct(id), state, res, &
 			slots(pos+1 : pos+subscript_total_nslots(node%member)))
@@ -335,13 +374,6 @@ recursive module subroutine get_val(node, var, state, res, index_, slots, pos)
 		i8 = sub_eval(node%member, var%struct(id), state, &
 			slots(pos+1 : pos+subscript_total_nslots(node%member)))
 		pos = pos + subscript_total_nslots(node%member)
-	end if
-
-	if (var%struct(id)%type == str_type) then
-		if (.not. allocated(res%str)) allocate(res%str)
-		res%str%s = var%struct(id)%str%s(i8+1: i8+1)
-		res%type = str_type
-		return
 	end if
 
 	if (.not. any(var%struct(id)%array%type == [struct_type, enum_type])) then
@@ -1655,6 +1687,173 @@ module subroutine set_field_slice_val(member_node, field_val, state, val, slots)
 	end do
 
 end subroutine set_field_slice_val
+
+!===============================================================================
+
+function member_str_sub(member_node, field_val) result(is_str_sub)
+
+	! True when member_node's subscripts index characters of field_val rather
+	! than array elements: either field_val is a scalar str, or it's a
+	! [str; :] array with a trailing char-rank subscript (has_char_sub, c.f.
+	! parse_subscripts in parse_array.f90 and eval_name_expr in
+	! runtime_expr.f90).  get_val/set_val route to get_str_member_val/
+	! set_str_member_val instead of get_field_slice_val/set_field_slice_val
+	! when this is true, since a str-typed value has no %array to slice.
+
+	type(syntax_node_t), intent(in) :: member_node
+	type(value_t),       intent(in) :: field_val
+	logical :: is_str_sub
+
+	is_str_sub = .false.
+
+	if (field_val%type == str_type) then
+		is_str_sub = .true.
+		return
+	end if
+
+	! Guard %array%type access with a nested if -- Fortran doesn't guarantee
+	! short-circuit evaluation of .and. chains (c.f. vm_exec.f90's OP_INDEX
+	! handler)
+	if (field_val%type == array_type) then
+		if (field_val%array%type == str_type) then
+			is_str_sub = size(member_node%lsubscripts) == field_val%array%rank + 1
+		end if
+	end if
+
+end function member_str_sub
+
+!===============================================================================
+
+subroutine get_str_member_val(member_node, field_val, state, res, slots)
+
+	! Read a character subscript off a str-typed struct member, or a
+	! [str; :] member with a trailing char-rank subscript.  Counterpart of
+	! get_field_slice_val for str-holding fields (member_str_sub() decides
+	! which one applies).
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(in)    :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(out)   :: res
+	type(value_t),       intent(in)    :: slots(:)
+
+	!********
+
+	integer :: nelem
+	integer(kind = 8) :: i8
+	character(len = :), allocatable :: tmp_s
+
+	if (field_val%type == str_type) then
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = str_char_slice(field_val%str%s, member_node, state, 1, slots)
+		return
+	end if
+
+	! [str; :] with a trailing char-rank subscript
+	nelem = field_val%array%rank
+
+	if (all(member_node%lsubscripts(1:nelem)%sub_kind == scalar_sub)) then
+		! Scalar element selection -> scalar string result
+		i8 = sub_eval(member_node, field_val, state, slots)
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = str_char_slice( &
+			field_val%array%str(i8+1)%s, member_node, state, nelem+1, slots)
+		return
+	end if
+
+	! Element range/slice -> string array result.  get_field_slice_val loops
+	! to field_val%array%rank, so the trailing char sub is naturally ignored
+	! by it (same property sub_eval/subscript_eval rely on); apply the char
+	! sub to each selected element afterward.
+	call get_field_slice_val(member_node, field_val, state, res, slots)
+	if (state%rt_halt) return
+
+	do i8 = 1, res%array%len_
+		tmp_s = str_char_slice( &
+			res%array%str(i8)%s, member_node, state, nelem+1, slots)
+		if (state%rt_halt) return
+		res%array%str(i8)%s = tmp_s
+	end do
+
+end subroutine get_str_member_val
+
+!===============================================================================
+
+subroutine set_str_member_val(member_node, field_val, state, val, slots)
+
+	! Write a character subscript on a str-typed struct member, or a
+	! [str; :] member with a trailing char-rank subscript.  Counterpart of
+	! set_field_slice_val for str-holding fields (member_str_sub() decides
+	! which one applies).
+
+	type(syntax_node_t), intent(in)    :: member_node
+	type(value_t),       intent(inout) :: field_val
+	type(state_t),       intent(inout) :: state
+	type(value_t),       intent(in)    :: val
+	type(value_t),       intent(in)    :: slots(:)
+
+	!********
+
+	integer :: nelem, idim_
+	integer(kind = 8) :: i8, index_, len8
+	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
+	type(i64_vector_t), allocatable :: asubs(:)
+	integer :: rank_res
+
+	if (field_val%type == str_type) then
+		call str_char_assign(field_val%str%s, member_node, state, 1, val%str%s, slots)
+		return
+	end if
+
+	! [str; :] with a trailing char-rank subscript
+	nelem = field_val%array%rank
+
+	if (all(member_node%lsubscripts(1:nelem)%sub_kind == scalar_sub)) then
+		! Scalar element selection: one element's chars are assigned
+		i8 = sub_eval(member_node, field_val, state, slots)
+		call str_char_assign( &
+			field_val%array%str(i8+1)%s, member_node, state, nelem+1, val%str%s, slots)
+		return
+	end if
+
+	! Element range/slice: val is the array-shaped result get_str_member_val
+	! would have returned for this same node (element k's chars come from
+	! val%array%str(k)), NOT a scalar string -- OP_STORE_MEMBER's generic
+	! get_val/do_compound/set_val flow (vm_exec.f90) runs the RHS through
+	! do_compound() against get_val's result before reaching here, and
+	! assign_value_t (math.f90) broadcasts/conforms a scalar or array RHS to
+	! left's array shape, so a scalar RHS like `s.n[:,1] = "X"` already
+	! becomes an array of "X"s by this point.  field_slice_bounds loops to
+	! field_val%array%rank, so the trailing char sub is naturally ignored by
+	! it.
+	call field_slice_bounds(member_node, field_val, state, rank_res, lsubs, ssubs, usubs, asubs, slots)
+	if (state%rt_halt) return
+
+	! Total number of selected elements (mirrors set_field_slice_val's
+	! lhs_len computation)
+	len8 = 1
+	do idim_ = 1, nelem
+		select case (member_node%lsubscripts(idim_)%sub_kind)
+		case (step_sub, range_sub, all_sub)
+			len8 = len8 * max(0_8, divceil(usubs(idim_) - lsubs(idim_), ssubs(idim_)))
+		case (arr_sub)
+			len8 = len8 * size(asubs(idim_)%v, kind = 8)
+		end select
+	end do
+
+	subs = lsubs
+	do i8 = 0, len8 - 1
+		index_ = subscript_i32_eval(subs, field_val%array)
+		call str_char_assign( &
+			field_val%array%str(index_+1)%s, member_node, state, nelem+1, &
+			val%array%str(i8+1)%s, slots)
+		if (state%rt_halt) return
+		call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
+	end do
+
+end subroutine set_str_member_val
 
 !===============================================================================
 

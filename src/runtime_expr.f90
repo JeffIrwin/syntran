@@ -366,6 +366,44 @@ end function str_char_slice
 
 !===============================================================================
 
+module subroutine str_char_assign(s, node, state, isub, rhs, slots)
+
+	! Write `rhs` into character(s) of `s` selected by subscript index `isub`
+	! in `node%lsubscripts` / `node%usubscripts` -- the write-side counterpart
+	! of str_char_slice() above (same bounds computation via
+	! str_slice_bounds(), same isub convention).
+	!
+	! Character replacement never changes the length of `s`, so `s` is
+	! modified in place rather than reallocated.
+	!
+	! `slots` is forwarded to str_slice_bounds -- see its docstring
+
+	character(len = *), intent(inout) :: s
+	type(syntax_node_t), intent(in) :: node
+	type(state_t), intent(inout) :: state
+	integer, intent(in) :: isub
+	character(len = *), intent(in) :: rhs
+	type(value_t), intent(in) :: slots(:)
+
+	!********
+
+	integer(kind = 8) :: il, iu, step, i8, j8
+
+	call str_slice_bounds(node, isub, int(len(s), 8), state, il, iu, step, slots)
+	if (state%rt_halt) return
+
+	i8 = il
+	j8 = 1
+	do while ((step > 0 .and. i8 < iu) .or. (step < 0 .and. i8 > iu))
+		s(i8+1 : i8+1) = rhs(j8:j8)
+		i8 = i8 + step
+		j8 = j8 + 1
+	end do
+
+end subroutine str_char_assign
+
+!===============================================================================
+
 end submodule syntran__runtime_expr
 
 !===============================================================================

@@ -5625,6 +5625,185 @@ end subroutine unit_test_struct_str
 
 !===============================================================================
 
+subroutine unit_test_struct_str_sub(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'struct str member subscripts'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! Character subscripting/slicing a str-typed struct member used to
+	! segfault: get_val/set_val (runtime_array.f90) routed non-scalar str
+	! member subscripts into get_field_slice_val/set_field_slice_val, which
+	! read field_val%array%size -- but a str member has no %array.  A char
+	! subscript on a [str;:] member (`s.n[0,1]`) also silently returned/wrote
+	! the whole element instead of one character, since the member-chain path
+	! never implemented has_char_sub the way eval_name_expr does.  Every case
+	! below is paired with its plain-variable equivalent (already covered by
+	! unit_test_str/unit_test_substr/unit_test_array_str) as a parity check.
+
+	tests = &
+		[   &
+			! Read, scalar str member
+			eval(''                          &                ! 1
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'return s.name[1];' &
+				) == 'e', &
+			eval(''                          &                ! 2
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'return s.name[1:3];' &
+				) == 'el', &
+			eval(''                          &                ! 3
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'return s.name[:];' &
+				) == 'hello', &
+			eval(''                          &                ! 4
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'return s.name[4:-1:-1];' &
+				) == 'olleh', &
+
+			! Nested struct member
+			eval(''                          &                ! 5
+				//'struct T{name:str}' &
+				//'struct S{t:T}' &
+				//'let s = S{t=T{name="hello"}};' &
+				//'return s.t.name[1:3];' &
+				) == 'el', &
+
+			! Array-of-struct dot chain (also exercised the scalar path,
+			! which had no str guard at all on the chain branch)
+			eval(''                          &                ! 6
+				//'struct S{name:str}' &
+				//'let a = [S{name="hello"}; 2];' &
+				//'return a[0].name[1];' &
+				) == 'e', &
+			eval(''                          &                ! 7
+				//'struct S{name:str}' &
+				//'let a = [S{name="hello"}; 2];' &
+				//'return a[0].name[1:3];' &
+				) == 'el', &
+
+			! Write, scalar str member
+			eval(''                          &                ! 8
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'s.name[1] = "E";' &
+				//'return s.name;' &
+				) == 'hEllo', &
+			eval(''                          &                ! 9
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'s.name[1:3] = "EL";' &
+				//'return s.name;' &
+				) == 'hELlo', &
+			eval(''                          &                ! 10
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'s.name[:] = "world";' &
+				//'return s.name;' &
+				) == 'world', &
+			eval(''                          &                ! 11
+				//'struct S{name:str}' &
+				//'let s = S{name="hello"};' &
+				//'s.name[4:-1:-1] = "olleh";' &
+				//'return s.name;' &
+				) == 'hello', &
+
+			! Nested and chain forms of write
+			eval(''                          &                ! 12
+				//'struct T{name:str}' &
+				//'struct S{t:T}' &
+				//'let s = S{t=T{name="hello"}};' &
+				//'s.t.name[1:3] = "EL";' &
+				//'return s.t.name;' &
+				) == 'hELlo', &
+			eval(''                          &                ! 13
+				//'struct S{name:str}' &
+				//'let a = [S{name="hello"}; 2];' &
+				//'a[0].name[1] = "E";' &
+				//'return a[0].name;' &
+				) == 'hEllo', &
+			eval(''                          &                ! 14
+				//'struct S{name:str}' &
+				//'let a = [S{name="hello"}; 2];' &
+				//'a[0].name[1:3] = "EL";' &
+				//'return a[0].name;' &
+				) == 'hELlo', &
+
+			! Char-rank sub on a [str;:] member
+			eval(''                          &                ! 15
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'return s.n[0,1];' &
+				) == 'b', &
+			eval(''                          &                ! 16
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'return s.n[0,1:3];' &
+				) == 'bc', &
+			eval(''                          &                ! 17
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'return s.n[:,1];' &
+				) == '[b, e]', &
+			eval(''                          &                ! 18
+				//'struct S{n:[str;:]}' &
+				//'let a = [S{n=["abc","def"]}; 2];' &
+				//'return a[0].n[0,1];' &
+				) == 'b', &
+
+			! Char-rank sub write on a [str;:] member
+			eval(''                          &                ! 19
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'s.n[0,1] = "X";' &
+				//'return s.n;' &
+				) == '[aXc, def]', &
+			eval(''                          &                ! 20
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'s.n[0,1:3] = "XY";' &
+				//'return s.n;' &
+				) == '[aXY, def]', &
+			eval(''                          &                ! 21
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'s.n[:,1] = "X";' &
+				//'return s.n;' &
+				) == '[aXc, dXf]', &
+			eval(''                          &                ! 22
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'s.n[:,1] = ["X","Y"];' &
+				//'return s.n;' &
+				) == '[aXc, dYf]', &
+
+			! Control: whole-element slice (no char sub) is unaffected
+			eval(''                          &                ! 23
+				//'struct S{n:[str;:]}' &
+				//'let s = S{n=["abc","def"]};' &
+				//'return s.n[0:2];' &
+				) == '[abc, def]'  &
+
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_struct_str_sub
+
+!===============================================================================
+
 subroutine unit_test_struct_long(npass, nfail)
 
 	implicit none
@@ -8426,6 +8605,7 @@ subroutine unit_tests(iostat)
 	if (run_group('struct_arr2')) call unit_test_struct_arr2(npass, nfail)
 	if (run_group('struct_arr3')) call unit_test_struct_arr3(npass, nfail)
 	if (run_group('struct_str')) call unit_test_struct_str(npass, nfail)
+	if (run_group('struct_str_sub')) call unit_test_struct_str_sub(npass, nfail)
 	if (run_group('struct_long')) call unit_test_struct_long(npass, nfail)
 	if (run_group('methods')) call unit_test_methods(npass, nfail)
 	if (run_group('enum')) call unit_test_enum(npass, nfail)
