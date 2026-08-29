@@ -54,9 +54,10 @@ module subroutine check_type_clash(parser, name, pos)
 	! that, in this pass's own source-order traversal, appear later than
 	! `name`.  Pushing unconditionally would make this fire at both
 	! declaration sites regardless of which one is textually first, instead
-	! of just the second one.  parse_unit() (parse_misc.f90) falls back to
-	! pass 0's diagnostics when pass 1 comes back clean, so gating here still
-	! reports the single correct diagnostic
+	! of just the second one.  parse_unit() (parse_misc.f90) merges this
+	! diagnostic (EC_VAR_TYPE_CLASH, via is_pass0_only_diag()) back in from
+	! pass 0's list, so gating here still reports the single correct
+	! diagnostic
 
 	class(parser_t) :: parser
 	character(len = *), intent(in) :: name
@@ -431,6 +432,77 @@ end subroutine match_pre
 
 !===============================================================================
 
+function is_pass0_only_diag(diag) result(only0)
+
+	! True for the diagnostic families that only parse pass 0 can raise --
+	! see the comment at parse_unit()'s pass-0/pass-1 merge below for why
+	! each of these is structurally invisible to pass 1.  A new pass-0-only
+	! diagnostic must be added here or it will silently vanish whenever pass
+	! 1 comes back clean (or gets deduped away if pass 1 also raises
+	! something on the same line)
+
+	character(len = *), intent(in) :: diag
+	logical :: only0
+
+	only0 = &
+		index(diag, '['//EC_REDECLARE_VAR   //']') > 0 .or. &
+		index(diag, '['//EC_REDECLARE_FN    //']') > 0 .or. &
+		index(diag, '['//EC_REDECLARE_STRUCT//']') > 0 .or. &
+		index(diag, '['//EC_REDECLARE_ENUM  //']') > 0 .or. &
+		index(diag, '['//EC_UNDECLARE_VAR   //']') > 0 .or. &
+		index(diag, '['//EC_VAR_TYPE_CLASH  //']') > 0
+
+end function is_pass0_only_diag
+
+!===============================================================================
+
+function diag_key(diag) result(key)
+
+	! Reduce a rendered diagnostic to the part that is stable across passes,
+	! for use as a dedup key in parse_unit()'s pass-0/pass-1 merge below.
+	!
+	! Every err_*() constructor builds its message as
+	! err_pre(code) // description // underline(context, span) // caret_text
+	! // color_reset, with no embedded line_feed outside of underline() --
+	! and underline() itself always emits exactly 4 (the "--> file:line:col"
+	! line, the blank "|" line, the source line, and the caret line, with no
+	! trailing line_feed after the carets). So a message with no "help: ..."
+	! suffix has exactly 4 line_feed characters.
+	!
+	! Only err_undeclare_var()/err_undeclare_fn() append anything past that:
+	! an optional "help: did you mean ...?" line (a 5th line_feed) and,
+	! for err_undeclare_fn() with a module_prefix, a second help line (a
+	! 6th). That suggestion text is span/context-dependent lookup state that
+	! can differ between pass 0 and pass 1 even for the textually identical
+	! error (e.g. pass 1's `vars` dict already contains names pass 0 hadn't
+	! reached yet in source order), so it must be excluded from the key --
+	! otherwise two renderings of the same undeclared-name error look like
+	! different diagnostics and both survive the merge as duplicates.
+	!
+	! Truncating at the 5th line_feed (if any) strips every help line while
+	! keeping the code/location/description part, which is identical
+	! whenever two diagnostics are really the same underlying error
+
+	character(len = *), intent(in) :: diag
+	character(len = :), allocatable :: key
+
+	integer :: i, nlf
+
+	nlf = 0
+	do i = 1, len(diag)
+		if (diag(i:i) /= line_feed) cycle
+		nlf = nlf + 1
+		if (nlf == 5) then
+			key = diag(1: i-1)
+			return
+		end if
+	end do
+	key = diag
+
+end function diag_key
+
+!===============================================================================
+
 recursive module subroutine parse_unit(parser, unit)
 
 	class(parser_t) :: parser
@@ -441,11 +513,11 @@ recursive module subroutine parse_unit(parser, unit)
 
 	type(syntax_node_vector_t) :: members
 
-	integer :: i, num_vars0, num_fns0, num_structs0, num_enums0
+	integer :: i, j, num_vars0, num_fns0, num_structs0, num_enums0
 	integer :: ndiag_pre
 
-	! Pass-0 diagnostics, saved so they can be restored if pass 1 emits none
-	! (see the comment at the pass-1 fallback below)
+	! Pass-0 diagnostics, saved so the pass-0-only families among them can be
+	! merged back in after pass 1 (see the comment at the merge below)
 	type(string_vector_t) :: diags0
 
 	!print *, 'starting parse_unit()'
@@ -496,8 +568,8 @@ recursive module subroutine parse_unit(parser, unit)
 	!
 	! So: always run pass 1, and report pass 1's diagnostics instead.  A few
 	! diagnostic families (redeclaration, use-before-declaration) can only
-	! ever be raised in pass 0 -- see the fallback after the second loop
-	! below.
+	! ever be raised in pass 0 -- see is_pass0_only_diag() and the merge
+	! after the second loop below.
 	!
 	! Skip pass 1 only for an incomplete interactive line (a match() failure
 	! at eof).  syntax_parse() rolls that parse back and re-parses from
@@ -552,20 +624,44 @@ recursive module subroutine parse_unit(parser, unit)
 	end if  ! not expecting more input
 
 	! A few diagnostics are structurally pass-0-only and pass 1 physically
-	! cannot re-emit them:
+	! cannot re-emit them (see is_pass0_only_diag() above for the exact
+	! list):
 	!
 	!   - the redeclaration family (E22/E24/E26/E92).  It is raised from the
 	!     iostat of a dict insert, and `overwrite` is .false. only in pass 0
 	!     -- pass 1 must overwrite, since the tables (unlike the counters)
 	!     still hold everything pass 0 inserted
-	!   - use-before-declaration, for the same reason: pass 0 already put the
-	!     later `let` in the vars dict, so pass 1 resolves it happily
+	!   - use-before-declaration (E28), for the same reason: pass 0 already
+	!     put the later `let` in the vars dict, so pass 1 resolves it happily
+	!   - var/type-name clash (E98): check_type_clash()/check_var_clash()
+	!     above only push in pass 0, for the same table-leakage reason
 	!
-	! Restoring pass 0's list when pass 1 came back clean keeps the old
-	! behavior exactly for those, and guarantees a program pass 0 rejected is
-	! never silently accepted and evaluated
-	if (parser%diagnostics%len_ == ndiag_pre .and. diags0%len_ > ndiag_pre) then
+	! Everything else pass 0 pushes is a byproduct of incomplete type info
+	! (e.g. a forward-referenced fn's return type/rank still being unknown)
+	! and must NOT be resurrected once pass 1 -- which has full type info --
+	! disagrees. So merge, rather than wholesale-restore: append only the
+	! pass-0-only diagnostics, and only those pass 1 didn't already raise
+	! itself (dedup via diag_key(), which ignores any suggestion-text
+	! suffix; E28 is the one code both passes can emit, for a genuinely
+	! undeclared name in both passes' view). This merge (rather than
+	! restoring only when pass 1 came back clean) also
+	! means a real redeclaration is no longer masked by an unrelated pass-1
+	! error elsewhere in the file
+	!
+	! Skip all of this when pass 1 never ran (an incomplete interactive
+	! line): there is nothing to merge against, so keep pass 0's list as-is,
+	! same as before
+	if (parser%expecting) then
 		parser%diagnostics = diags0
+	else
+		outer: do i = ndiag_pre + 1, diags0%len_
+			if (.not. is_pass0_only_diag(diags0%v(i)%s)) cycle outer
+			do j = 1, parser%diagnostics%len_
+				if (diag_key(parser%diagnostics%v(j)%s) == diag_key(diags0%v(i)%s)) &
+					cycle outer
+			end do
+			call parser%diagnostics%push(diags0%v(i)%s)
+		end do outer
 	end if
 
 	!****************

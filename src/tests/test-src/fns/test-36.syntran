@@ -1,0 +1,23 @@
+
+// Regression test: a fwd-referenced fn's array result used to get a bogus
+// rank in parse pass 0 (matmul_out_rank() saw an unresolved-type operand
+// and guessed rank 1), which then wrongly tripped E36 ("wrong subscript
+// count") and E48 on the *valid* rank-2 result below.  Worse, since pass 1
+// (which has the correct rank) came back clean, parse_unit()'s old
+// pass-0-fallback resurrected those bogus pass-0 diagnostics and rejected
+// the program outright.
+
+fn use_it(): i32
+{
+	let b = [1, 0, 0, 1; 2, 2]; // 2x2 identity
+	let a = get_r()[:,:,0] @ b; // forward reference through a slice and matmul
+	return a[0,0] + a[1,1];
+}
+
+fn get_r(): [i32; :,:,:]
+{
+	let r = [3, 5, 7, 9; 2, 2, 1];
+	return r;
+}
+
+return use_it();

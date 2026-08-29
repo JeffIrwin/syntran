@@ -3806,6 +3806,11 @@ subroutine unit_test_fns(npass, nfail)
 			! bound used to falsely trip E56/E58 in parse pass 0
 			interpret_file(path//'test-34.syntran', quiet) == '3', &
 			interpret_file(path//'test-35.syntran', quiet) == '3', &
+			! Regression: a fwd-referenced fn's array result got a bogus rank
+			! in parse pass 0, wrongly tripping E36/E48 that the old
+			! pass-0-fallback then resurrected even though pass 1 (with the
+			! correct rank) was clean
+			interpret_file(path//'test-36.syntran', quiet) == '12', &
 			! Regression: a void fn with no explicit `return` used to leave
 			! its implicit-void-return sentinel on top of the fn body's own
 			! stranded block result (block_statement compilation always
@@ -7186,10 +7191,17 @@ subroutine unit_test_error_codes(npass, nfail)
 				'fn f() { let x = 1; } let a = f();'), EC_NO_RETURN), &
 			diag_has_code(get_diags('let a = 1; let a = 2;'), EC_REDECLARE_VAR), &
 			! Detected only in the signature pass -- the dict insert there uses
-			! overwrite = .false.  parse_unit() (parse_misc.f90) restores that
-			! pass's diagnostics when the final pass comes back clean, since
-			! the final pass must overwrite and so never sees the collision
+			! overwrite = .false.  parse_unit() (parse_misc.f90) merges that
+			! pass's diagnostics back in via is_pass0_only_diag(), since the
+			! final pass must overwrite and so never sees the collision
 			diag_count_code(get_diags('let a = 1; let a = 2;'), EC_REDECLARE_VAR) == 1, &
+			! The merge is unconditional (not just when the final pass comes
+			! back clean), so a real redeclaration is no longer masked by an
+			! unrelated error elsewhere in the file
+			diag_has_code(get_diags( &
+				'let a = 1; let a = 2; let zz = true + 1;'), EC_REDECLARE_VAR), &
+			diag_has_code(get_diags( &
+				'let a = 1; let a = 2; let zz = true + 1;'), EC_BINARY_TYPES), &
 			diag_has_code(get_diags('struct S{x:i32, x:i32}'), EC_REDECLARE_MEM), &
 			diag_has_code(get_diags('struct S{x:i32, fn x(){}}'), EC_MEMBER_METHOD_CLASH), &
 			diag_count_code(get_diags('struct S{x:i32, fn x(){}}'), EC_MEMBER_METHOD_CLASH) == 1, &
@@ -7203,10 +7215,21 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('struct S{x:i32} struct S{y:i32}'), EC_REDECLARE_STRUCT), &
 			diag_has_code(get_diags('struct i32{x:i32}'), EC_REDECLARE_PRIMITIVE), &
 			diag_has_code(get_diags('let a = b;'), EC_UNDECLARE_VAR), &
+			! A genuinely undeclared name is caught by both passes, and their
+			! "did you mean ...?" suggestions can differ (pass 1's `vars`
+			! dict already contains names pass 0 hadn't reached yet in source
+			! order) -- diag_key()'s help-suffix stripping must still dedup
+			! this down to a single diagnostic, not two
+			diag_count_code(get_diags('let a = b;'), EC_UNDECLARE_VAR) == 1, &
 			! Use-before-declaration is also signature-pass-only: pass 0
 			! already inserted the later `let x` into the vars dict, so the
 			! final pass resolves `x` happily and never re-detects it
 			diag_has_code(get_diags('let y = x; let x = 1;'), EC_UNDECLARE_VAR), &
+			! A genuinely undeclared name elsewhere in the same file must not
+			! be dropped just because a use-before-declaration also occurs
+			! there: the merge's dedup is per-diagnostic, not per-code
+			diag_count_code(get_diags( &
+				'let y = x; let x = 1; let q = b;'), EC_UNDECLARE_VAR) == 2, &
 			! A misspelled struct instantiator `Poimt{...}` is ambiguous with
 			! a plain identifier (c.f. `if my_bool {...}`), so it falls back
 			! to the undeclared-variable path.  With no close variable name in
@@ -7268,6 +7291,15 @@ subroutine unit_test_error_codes(npass, nfail)
 				'let a=[1,2]; let b = size(a, 0, 1);'), EC_TOO_MANY_ARGS), &
 			diag_has_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT), &
 			diag_count_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT) == 1, &
+			! Regression: a fwd-referenced fn's rank-2 array result, fed
+			! through matmul and sliced, used to get a bogus rank in parse
+			! pass 0 (matmul_out_rank() on an unresolved-type operand), which
+			! wrongly tripped EC_BAD_SUB_COUNT here on a valid 2-subscript
+			! access
+			.not. diag_has_code(get_diags( &
+				'fn f():i32{let b=[1;2,2]; let a=h()@b; return a[1,1];} ' // &
+				'fn h():[i32;:,:]{let q=[7;2,2]; return q;} f();'), &
+				EC_BAD_SUB_COUNT), &
 			diag_has_code(get_diags( &
 				'let a=[1,2,3,4,5,6,7,8,9]; let idx=[0;2,2]; let b = a[idx];'), &
 				EC_BAD_SUB_RANK), &
@@ -7311,6 +7343,14 @@ subroutine unit_test_error_codes(npass, nfail)
 				'let a = [1,2; 2,2]; let b = [3,4]; let c = a + b;'), EC_BINARY_RANKS), &
 			diag_has_code(get_diags('-true;'), EC_UNARY_TYPES), &
 			diag_has_code(get_diags('for i in 5 {}'), EC_NON_ARRAY_LOOP), &
+			! Regression: a fwd-referenced fn's array-typed result used to be
+			! seen as scalar/unknown in parse pass 0 (its real type isn't
+			! known until pass 1), wrongly tripping EC_NON_ARRAY_LOOP here on
+			! a valid `for` over that result
+			.not. diag_has_code(get_diags( &
+				'fn f():i32{let a=h(); for i in a {} return 1;} ' // &
+				'fn h():[i32;:]{return [1,2];} f();'), &
+				EC_NON_ARRAY_LOOP), &
 			diag_has_code(get_diags('if 5 {}'), EC_NON_BOOL_CONDITION), &
 			diag_has_code(get_diags('let a = [0: 1.0; 5];'), EC_NON_FLOAT_LEN_RANGE), &
 			diag_has_code(get_diags('let a = [0.0: 1.0; "x"];'), EC_NON_INT_LEN), &
