@@ -31,6 +31,12 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - poor error message experience if you try do declare a fn but forget to
+	!    use the "fn" keyword, i.e. just the name, params, and body but missing
+	!    "fn"
+	!    * ask me how i know
+	!    * can we provide a better error (suggest adding 'fn') or is this a
+	!      genuinely ambiguous syntax?
 	!  - split or streamline ci/cd:
 	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
 	!      changed after ast removal. previously, windows and intel-compiler
@@ -46,6 +52,12 @@ module syntran__core_m
 	!    with arrays. basic switch/case is fine but also consider "pattern
 	!    matching" or whatever rust has
 	!  - stack trace for runtime errors
+	!  - short circuit logic?
+	!    * useful e.g. for scanning a string, or anything where you need a
+	!      bounds check plus some condition on an array element in the same if
+	!      statement
+	!    * small compatibility break when evaluation of part a bool expression
+	!      calls a fn with side effects
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
 	!      intrinsic function, a struct method, or a user-defined function with
@@ -57,7 +69,9 @@ module syntran__core_m
 	!    * can arrays/structs contain a fn? these points are less about
 	!      callbacks specifically and more generally about fns as values, which
 	!      is the can of worms opened by callbacks
-	!      + structs of fns work, arrays do not
+	!      + update numa.syntran in aoc-syntran after this feature. the
+	!        newton_raphson solver could benefit from storing fn pointers in its
+	!        args struct
 	!    * closures and anonymous (lambda) fns?
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
@@ -370,6 +384,8 @@ module syntran__core_m
 	!      + bessel_jn
 	!      + erf, gamma, log_gamma?
 	!      + floor, ceil, fraction, nint
+	!        * nint is not useless. i32 casting truncates (?), it does not round
+	!          like nint!
 	!      + system: multiple out args? iostat and stdout
 	!      + rank. might seem unnecessary but reshape() can create arrays of
 	!        unknown rank at parse time
