@@ -681,6 +681,81 @@ end subroutine parse_unit
 
 !===============================================================================
 
+function looks_like_fn_decl(parser) result(looks)
+
+	! Detects a fn declaration whose leading `fn` keyword was omitted, e.g.
+	! `add(a: i32, b: i32): i32 { ... }`.  Not type-bound (same rationale as
+	! parse_unit_pass() below): a private implementation detail used only
+	! from its case-default branch
+	!
+	! The scan is unambiguous by construction: a bare `:` can never appear at
+	! the top level of a call's argument list (syntran has no named-argument
+	! syntax), and a call expression can never be followed by `:` -- both are
+	! exclusive to fn declarations (param types and the return type). The
+	! bracket_depth tracking exists so that a slice inside a call argument,
+	! e.g. `println(v[i: j]);`, is not mistaken for a param-type colon
+
+	class(parser_t) :: parser
+
+	logical :: looks
+
+	!********
+
+	integer :: k, kind_, prev_kind, paren_depth, bracket_depth
+
+	looks = .false.
+
+	if (parser%current_kind() /= identifier_token) return
+	if (parser%peek_kind(1)   /= lparen_token)     return
+
+	paren_depth   = 0
+	bracket_depth = 0
+	prev_kind     = eof_token
+
+	k = 1
+	do
+		kind_ = parser%peek_kind(k)
+
+		if (kind_ == eof_token) return
+
+		if (kind_ == lparen_token) then
+			paren_depth = paren_depth + 1
+
+		else if (kind_ == rparen_token) then
+			paren_depth = paren_depth - 1
+			if (paren_depth == 0) then
+				! End of the outer param list.  A `:` right after it is a return
+				! type, e.g. `main(): i32`
+				looks = parser%peek_kind(k + 1) == colon_token
+				return
+			end if
+
+		else if (kind_ == lbracket_token) then
+			bracket_depth = bracket_depth + 1
+
+		else if (kind_ == rbracket_token) then
+			bracket_depth = bracket_depth - 1
+
+		else if (kind_ == identifier_token .and. paren_depth == 1 .and. &
+				bracket_depth == 0 .and. &
+				(prev_kind == lparen_token .or. prev_kind == comma_token) .and. &
+				parser%peek_kind(k + 1) == colon_token) then
+			! A param name immediately followed by `:`, directly inside the
+			! outer parens (not inside a nested `[...]` slice), e.g. the `a:` in
+			! `add(a: i32, ...)`
+			looks = .true.
+			return
+
+		end if
+
+		prev_kind = kind_
+		k = k + 1
+	end do
+
+end function looks_like_fn_decl
+
+!===============================================================================
+
 recursive subroutine parse_unit_pass(parser, members)
 
 	! The statement-parsing loop shared by both passes of parse_unit().  Not
@@ -695,6 +770,8 @@ recursive subroutine parse_unit_pass(parser, members)
 
 	type(syntax_node_t)  :: stmt_tmp
 	type(syntax_token_t) :: dummy
+
+	type(text_span_t) :: span
 
 	integer :: pos0
 
@@ -717,7 +794,19 @@ recursive subroutine parse_unit_pass(parser, members)
 			call parser%parse_enum_declaration(stmt_tmp)
 			call members%push_move(stmt_tmp)
 		case default
-			call parser%parse_statement(stmt_tmp)
+			if (looks_like_fn_decl(parser)) then
+				! Missing `fn` keyword: E106.  The lookahead above only fires on an
+				! unambiguous fn-declaration shape (a `:` inside the outer parens or
+				! right after them), so recover by synthesizing the keyword and
+				! parsing the rest as a normal fn declaration -- otherwise every call
+				! site below would cascade into its own E29
+				span = new_span(parser%current_pos(), len(parser%current_text()))
+				call parser%diagnostics%push(err_missing_fn_kw( &
+					parser%context(), span, parser%current_text()))
+				call parser%parse_fn_declaration(stmt_tmp, no_fn_kw = .true.)
+			else
+				call parser%parse_statement(stmt_tmp)
+			end if
 			call members%push_move(stmt_tmp)
 		end select
 

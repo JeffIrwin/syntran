@@ -1,0 +1,10 @@
+// E106: missing-fn-kw
+// A function declaration omitted the leading `fn` keyword
+
+let one = 1;
+
+add(a: i32, b: i32): i32
+{
+	return a + b;
+}
+println(add(one, 2));

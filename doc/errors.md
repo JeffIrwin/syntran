@@ -645,6 +645,12 @@ A `&` reference appeared in a type annotation where references are not allowed. 
 
 [Example](../src/tests/test-src/errors/E105-ref-type.syntran)
 
+### E106 -- missing-fn-kw
+
+A function (or struct method) declaration omitted the leading `fn` keyword, e.g. `add(a: i32, b: i32): i32 { ... }` instead of `fn add(a: i32, b: i32): i32 { ... }`.
+
+[Example](../src/tests/test-src/errors/E106-missing-fn-kw.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

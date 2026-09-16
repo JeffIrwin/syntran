@@ -653,10 +653,11 @@ end subroutine parse_qualified_expr
 
 !===============================================================================
 
-module subroutine parse_fn_declaration(parser, decl)
+module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(out) :: decl
+	logical, intent(in), optional :: no_fn_kw
 
 	!********
 
@@ -664,7 +665,7 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end
 
-	logical :: overwrite, const_param, in_fn_body0
+	logical :: overwrite, const_param, in_fn_body0, no_fn_kw0
 
 	type(fn_t) :: fn
 
@@ -681,6 +682,9 @@ module subroutine parse_fn_declaration(parser, decl)
 	type(value_t) :: type
 	type(value_vector_t) :: types
 
+	no_fn_kw0 = .false.
+	if (present(no_fn_kw)) no_fn_kw0 = no_fn_kw
+
 	! Like a for statement, a fn declaration has its own scope (for its
 	! parameters).  Its block body will have yet another scope
 	call parser%vars%push_scope()
@@ -690,7 +694,14 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
-	call parser%match(fn_keyword, fn_kw)
+	if (.not. no_fn_kw0) then
+		call parser%match(fn_keyword, fn_kw)
+	end if
+	! When no_fn_kw0, the caller (parse_unit_pass() in parse_misc.f90) has
+	! already pushed E106 for the missing `fn` and confirmed via
+	! looks_like_fn_decl() that the token stream is unambiguously a fn
+	! declaration -- so just carry on parsing from the name, without
+	! consuming a `fn` token that isn't there
 
 	call parser%match(identifier_token, identifier)
 	fn_name_end = parser%peek_pos(0) - 1
@@ -931,6 +942,37 @@ end subroutine parse_fn_declaration
 
 !===============================================================================
 
+function at_method_start(parser) result(at_start)
+
+	! True when the parser is sitting at the start of a struct method decl:
+	! `fn name(...)`, `const fn name(...)`, or (E106) a method missing its
+	! `fn` keyword -- `name(...)` / `const name(...)`.  Not type-bound (same
+	! rationale as looks_like_fn_decl() in parse_misc.f90): a private
+	! implementation detail used only from parse_struct_declaration() below.
+	!
+	! Unlike looks_like_fn_decl(), no token-stream scan is needed here: inside
+	! a struct body a member is always `name: type`, so `name(` can only be a
+	! method
+
+	class(parser_t) :: parser
+
+	logical :: at_start
+
+	!********
+
+	integer :: offset
+
+	offset = 0
+	if (parser%current_kind() == const_keyword) offset = 1
+
+	at_start = parser%peek_kind(offset) == fn_keyword .or. &
+		(parser%peek_kind(offset)     == identifier_token .and. &
+		 parser%peek_kind(offset + 1) == lparen_token)
+
+end function at_method_start
+
+!===============================================================================
+
 module subroutine parse_struct_declaration(parser, decl)
 
 	class(parser_t) :: parser
@@ -950,7 +992,7 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	type(syntax_node_vector_t) :: method_decls
 
-	logical :: is_const_meth
+	logical :: is_const_meth, no_fn_kw
 
 	integer :: j
 
@@ -1014,9 +1056,7 @@ module subroutine parse_struct_declaration(parser, decl)
 	do while ( &
 			parser%current_kind() /= rbrace_token .and. &
 			parser%current_kind() /= eof_token .and. &
-			parser%current_kind() /= fn_keyword .and. &
-			.not. (parser%current_kind() == const_keyword .and. &
-			       parser%peek_kind(1) == fn_keyword))
+			.not. at_method_start(parser))
 		i = i + 1
 
 		pos0 = parser%current_pos()
@@ -1044,9 +1084,7 @@ module subroutine parse_struct_declaration(parser, decl)
 		call names%push( name%text )
 
 		if (parser%current_kind() /= rbrace_token .and. &
-		    parser%current_kind() /= fn_keyword .and. &
-		    .not. (parser%current_kind() == const_keyword .and. &
-		           parser%peek_kind(1) == fn_keyword)) then
+		    .not. at_method_start(parser)) then
 			! Delimiting commas are required; trailing comma is optional
 			call parser%match(comma_token, comma)
 		end if
@@ -1127,8 +1165,19 @@ module subroutine parse_struct_declaration(parser, decl)
 		is_const_meth = (parser%current_kind() == const_keyword)
 		if (is_const_meth) call parser%next(dummy)   ! consume 'const'
 
+		! E106: a method missing its `fn` keyword.  at_method_start() (used by
+		! the member loop above) already confirmed `identifier (` is
+		! unambiguously a method start in this position, not a member
+		no_fn_kw = parser%current_kind() == identifier_token .and. &
+			parser%peek_kind(1) == lparen_token
+		if (no_fn_kw) then
+			span = new_span(parser%current_pos(), len(parser%current_text()))
+			call parser%diagnostics%push(err_missing_fn_kw( &
+				parser%context(), span, parser%current_text()))
+		end if
+
 		call parser%parse_method_declaration(method_decl, struct, is_const_meth, &
-			identifier%text)
+			identifier%text, no_fn_kw)
 
 		! Save method decl node for the bytecode compiler pre-pass
 		call method_decls%push(method_decl)
@@ -1700,7 +1749,7 @@ end function enum_closest_variant
 
 !===============================================================================
 
-module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name)
+module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name, no_fn_kw)
 
 	! Parse a method declared inside a struct body.
 	! The implicit first parameter "0self" is the struct passed by reference.
@@ -1712,6 +1761,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	type(struct_t), intent(in) :: struct
 	logical, intent(in) :: is_const
 	character(len = *), intent(in) :: struct_name
+	logical, intent(in), optional :: no_fn_kw
 
 	!********
 
@@ -1719,7 +1769,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end, mem_id
 
-	logical :: overwrite, const_param, in_fn_body0
+	logical :: overwrite, const_param, in_fn_body0, no_fn_kw0
 
 	type(fn_t) :: fn
 
@@ -1736,6 +1786,9 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	type(value_t) :: type, self_val, mem_val
 	type(value_vector_t) :: types
 
+	no_fn_kw0 = .false.
+	if (present(no_fn_kw)) no_fn_kw0 = no_fn_kw
+
 	call parser%vars%push_scope()
 	call parser%locs%push_scope()
 	parser%is_loc = .true.
@@ -1743,7 +1796,12 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
-	call parser%match(fn_keyword, fn_kw)
+	if (.not. no_fn_kw0) then
+		call parser%match(fn_keyword, fn_kw)
+	end if
+	! When no_fn_kw0, the caller (the method loop in parse_struct_declaration()
+	! above) has already pushed E106 for the missing `fn`, so just carry on
+	! parsing from the name
 
 	call parser%match(identifier_token, identifier)
 	fn_name_end = parser%peek_pos(0) - 1

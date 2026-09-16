@@ -7722,8 +7722,7 @@ subroutine unit_test_error_codes(npass, nfail)
 			! allowlisted intrinsic like str()
 			diag_has_code(get_diags( &
 				'enum Suit{Hearts,Clubs}' &
-				//'struct P{n: i32,}' &
-				//'fn P.str(self, h: [Suit;:]): i32 {return 0;}' &
+				//'struct P{n: i32, fn str(h: [Suit;:]): i32 {return 0;}}' &
 				//'let p = P{n = 1}; p.str(Suit);'), &
 				EC_ENUM_NAME_VALUE), &
 			! positive: the allowlisted forms are unaffected
@@ -7802,6 +7801,44 @@ subroutine unit_test_error_codes(npass, nfail)
 				diag_has_code(get_diags( &
 					'fn caller(cb: fn(): &i32): i32 { return 0; }'), &
 					EC_REF_TYPE), &
+
+				! E106: a fn declaration missing its leading `fn` keyword.  The
+				! detector is unambiguous (no named-argument syntax exists in
+				! syntran, so a top-level `:` inside/after the parens can only be a
+				! fn declaration), and recovers by parsing the rest as a normal fn
+				! decl -- so exactly one E106 fires, with no E20/E28 cascade and no
+				! E29 at any call site below it
+				diag_has_code(get_diags( &
+					'add(a: i32, b: i32): i32 { return a+b; } println(add(1, 2));'), &
+					EC_MISSING_FN_KW), &
+				diag_count_code(get_diags( &
+					'add(a: i32, b: i32): i32 { return a+b; } println(add(1, 2));'), &
+					EC_MISSING_FN_KW) == 1, &
+				diag_has_code(get_diags('greet(n: str) { println(n); }'), &
+					EC_MISSING_FN_KW), &
+				diag_has_code(get_diags('main(): i32 { return 0; }'), &
+					EC_MISSING_FN_KW), &
+				diag_has_code(get_diags( &
+					'struct P{x: i32, sum(): i32 {return x;}}'), &
+					EC_MISSING_FN_KW), &
+
+				! No stray E20/E28 cascade once E106 recovers
+				diag_count_code(get_diags( &
+					'add(a: i32): i32 { return a; } println(add(1));'), &
+					EC_UNEXPECTED_TOKEN) == 0, &
+				diag_count_code(get_diags( &
+					'add(a: i32): i32 { return a; } println(add(1));'), &
+					EC_UNDECLARE_VAR) == 0, &
+
+				! Valid code must not trip the detector: a `:` inside a `[...]`
+				! slice passed as a call argument, and an ordinary fn decl
+				diag_count_code(get_diags( &
+					'let v = [10,20,30,40]; println(v[1: 3]);'), &
+					EC_MISSING_FN_KW) == 0, &
+				diag_count_code(get_diags( &
+					'fn add(a: i32): i32 { return a; } println(add(1));'), &
+					EC_MISSING_FN_KW) == 0, &
+
 				diag_count_code(get_diags( &
 					'fn caller(cb: fn(): &i32): i32 { return 0; }'), &
 					EC_REF_TYPE) == 1, &
@@ -8590,7 +8627,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E105-ref-type.syntran'), &
 				EC_REF_TYPE, P//'E105-ref-type.syntran', 5, 15, 1), &
 			diag_count_code(get_diags_file(P//'E105-ref-type.syntran'), &
-				EC_REF_TYPE) == 1 &
+				EC_REF_TYPE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E106-missing-fn-kw.syntran'), &
+				EC_MISSING_FN_KW, P//'E106-missing-fn-kw.syntran', 6, 1, 3), &
+			diag_count_code(get_diags_file(P//'E106-missing-fn-kw.syntran'), &
+				EC_MISSING_FN_KW) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

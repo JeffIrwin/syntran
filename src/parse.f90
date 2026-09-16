@@ -146,9 +146,10 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_fn.f90
 
-		module subroutine parse_fn_declaration(parser, decl)
+		module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: decl
+			logical, intent(in), optional :: no_fn_kw
 		end subroutine parse_fn_declaration
 
 		recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_call)
@@ -176,12 +177,13 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: decl
 		end subroutine parse_struct_declaration
 
-		module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name)
+		module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name, no_fn_kw)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: decl
 			type(struct_t), intent(in) :: struct
 			logical, intent(in) :: is_const
 			character(len = *), intent(in) :: struct_name
+			logical, intent(in), optional :: no_fn_kw
 		end subroutine parse_method_declaration
 
 		recursive module subroutine parse_struct_instance(parser, inst, struct_name)

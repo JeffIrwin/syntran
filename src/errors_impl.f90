@@ -172,6 +172,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_NON_INT_SIZE)
 	call codes%push(EC_FLOAT_INT_SUFFIX)
 	call codes%push(EC_REF_TYPE)
+	call codes%push(EC_MISSING_FN_KW)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -509,6 +510,20 @@ module procedure err_ref_type
 		//": references are only allowed on fn parameters"
 
 end procedure err_ref_type
+
+
+!===============================================================================
+
+module procedure err_missing_fn_kw
+
+	err = err_pre(EC_MISSING_FN_KW)//'function declaration is missing the `fn` keyword' &
+		//underline(context, span) &
+		//' expected `fn` before this function name'//color_reset &
+		//line_feed &
+		//fg_bright_green//"help"//color_reset &
+		//": declarations must start with `fn`, e.g. `fn "//name//"(...)`"
+
+end procedure err_missing_fn_kw
 
 
 !===============================================================================

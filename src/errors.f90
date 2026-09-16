@@ -121,6 +121,7 @@ module syntran__errors_m
 		EC_NON_INT_SIZE = "E103", &
 		EC_FLOAT_INT_SUFFIX = "E104", &
 		EC_REF_TYPE = "E105", &
+		EC_MISSING_FN_KW = "E106", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -410,6 +411,13 @@ module syntran__errors_m
 			type(text_span_t), intent(in) :: span
 			character(len = :), allocatable :: err
 		end function err_ref_type
+
+		module function err_missing_fn_kw(context, span, name) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: name
+		end function err_missing_fn_kw
 
 		module function err_unexpected_char(context, span, c) result(err)
 			type(text_context_t) :: context
