@@ -940,7 +940,7 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: itype, i, io, pos0, pos_type_beg, pos_type_end
+	integer :: itype, i, io, pos0
 
 	logical :: overwrite
 
@@ -1025,33 +1025,20 @@ module subroutine parse_struct_declaration(parser, decl)
 		call pos_mems%push( name%pos )
 		call parser%match(colon_token, colon)
 
-		pos_type_beg = parser%current_pos()
 		call parser%parse_type(type_text, type)
-		pos_type_end = parser%current_pos() - 1
 		!print *, "type = ", type_text
 
-		! Fn-pointer-typed struct members are not supported: a fn-pointer
-		! value's fn_params(:)/fn_ret is a real, self-referential nested
-		! value_t (unlike other member types' plain type-metadata), and
-		! deep-copying/destroying that through the struct member-dict's
-		! overwrite path (2nd parser pass redeclares every struct) segfaults
-		! on some platforms/compilers (e.g. musl/gfortran).  c.f. E89, the
-		! analogous restriction for fn pointers in array literals.
-		!
-		! Pushing the diagnostic alone is NOT enough to avoid the crash:
-		! parsing continues regardless (to collect further diagnostics), so
-		! `type` -- if left as a real fn_type value -- would still flow into
-		! types%push()/struct%vars%insert() below and hit the same crashing
-		! redeclare path when this struct is (as always) reprocessed on the
-		! parser's 2nd pass.  Sanitize it to a harmless placeholder instead;
-		! evaluation is halted regardless once any diagnostic exists
-		if (type%type == fn_type) then
-			span = new_span(pos_type_beg, pos_type_end - pos_type_beg + 1)
-			call parser%diagnostics%push(err_fn_ptr_struct_member( &
-				parser%context(), span, name%text))
-			call value_destroy(type)
-			type%type = unknown_type
-		end if
+		! Fn-pointer-typed struct members: value_copy()/value_destroy()
+		! already handle fn_type's nested fn_params(:)/fn_ret correctly
+		! (c.f. fn_copy() in types_copy.f90, which fixed the identical
+		! element-wise-copy requirement for fn param types), and
+		! var_dict_destroy() (types_copy.f90) now explicitly tears down
+		! each slot's %val via value_destroy() before the struct
+		! member-dict's overwrite path (2nd parser pass redeclares every
+		! struct) can reach it -- so nothing here needs to special-case
+		! fn_type any more. This used to be rejected as E90 (fn-ptr-struct-
+		! member, now retired) because of a musl/gfortran segfault in that
+		! exact deep-copy/destroy path; c.f. errors.f90's retirement note.
 
 		call types%push(type)
 		call names%push( name%text )

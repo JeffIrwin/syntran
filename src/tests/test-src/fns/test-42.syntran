@@ -1,0 +1,62 @@
+// Acceptance test for the E90 lift: a Newton-Raphson solver holding the
+// function whose root is being found (and its derivative) as fn-pointer
+// members of an args struct, the shape core.f90's TODO named as the
+// motivating use case for numa.syntran's newton_raphson solver.
+//
+// Calling a fn-typed struct member directly (args.f(x)) is still a syntax
+// error -- parse_dot() has no fn-typed-member call branch, and the indirect
+// -call path is restricted to plain unqualified names -- so the solver binds
+// each member to a local once, outside the iteration loop, before calling
+// through it
+
+struct SolverArgs
+{
+	f: fn(f64): f64,
+	fprime: fn(f64): f64,
+	tol: f64,
+	max_iter: i32
+}
+
+fn square_minus_two(x: f64): f64
+{
+	// root at sqrt(2)
+	return x * x - 2.0;
+}
+
+fn dsquare_minus_two(x: f64): f64
+{
+	return 2.0 * x;
+}
+
+fn newton_raphson(args: SolverArgs, x0: f64): f64
+{
+	let f  = args.f;
+	let fp = args.fprime;
+
+	let x = x0;
+	let i = 0;
+	while i < args.max_iter
+	{
+		let fx = f(x);
+		if abs(fx) < args.tol
+		{
+			i = args.max_iter;
+		}
+		else
+		{
+			x = x - fx / fp(x);
+			i = i + 1;
+		}
+	}
+	return x;
+}
+
+let args = SolverArgs{
+	f = square_minus_two,
+	fprime = dsquare_minus_two,
+	tol = 1.0e-10,
+	max_iter = 50
+};
+
+let root = newton_raphson(args, 1.0);
+return abs(root - sqrt(2.0)) < 1.0e-9;

@@ -1,0 +1,35 @@
+// A fn pointer stored in a struct member: instantiation, extraction via a
+// dot-chain, and copy/reassignment all exercise value_copy()/value_move() for
+// the struct's fn_type-carrying field (fn_params/fn_ret allocatables).
+//
+// This is a restored version of a deleted test (originally test-32.syntran,
+// commit 566c176). It was pulled and replaced with an E90 error-code test
+// (commit c5267fb) because gfortran's auto-generated deep deallocation of a
+// fn-pointer member's nested fn_params(:)/fn_ret segfaulted on musl when the
+// struct's member dict was overwritten on the parser's 2nd pass. That path
+// is now explicitly torn down by var_dict_destroy() (types_copy.f90), which
+// fixed the root cause -- E90 was retired and this positive test restored.
+// Arrays of fn pointers are still unsupported (E89); struct members are fine
+
+fn dbl(n: i32): i32
+{
+	return 2 * n;
+}
+
+fn sq(n: i32): i32
+{
+	return n * n;
+}
+
+struct Callback
+{
+	f: fn(i32): i32
+}
+
+let s1 = Callback{f = dbl};
+let s2 = s1;             // struct copy carries the fn-pointer field along
+let s3 = Callback{f = sq};
+s3 = s2;                 // reassignment: same fn_type-field copy path
+
+let g = s3.f;             // extract the fn pointer via a dot-chain
+return g(5);              // dbl(5) = 10

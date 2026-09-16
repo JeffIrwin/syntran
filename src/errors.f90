@@ -105,7 +105,7 @@ module syntran__errors_m
 		EC_FN_PTR_UNSUPPORTED = "E87", &
 		EC_NOT_CALLABLE = "E88", &
 		EC_FN_PTR_ARRAY = "E89", &
-		EC_FN_PTR_STRUCT_MEMBER = "E90", &
+		EC_FN_PTR_STRUCT_MEMBER = "E90", &  ! retired: constructor removed, never reuse
 		EC_VOID_ARG = "E91", &
 		EC_REDECLARE_ENUM = "E92", &
 		EC_REDECLARE_VARIANT = "E93", &
@@ -617,13 +617,6 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: elem
 		end function err_fn_ptr_array
-
-		module function err_fn_ptr_struct_member(context, span, mem_name) result(err)
-			type(text_context_t) :: context
-			type(text_span_t), intent(in) :: span
-			character(len = :), allocatable :: err
-			character(len = *), intent(in) :: mem_name
-		end function err_fn_ptr_struct_member
 
 		module function err_missing_return(context, span, fn) result(err)
 			type(text_context_t) :: context

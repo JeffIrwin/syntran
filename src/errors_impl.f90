@@ -896,18 +896,6 @@ end procedure err_fn_ptr_array
 
 !===============================================================================
 
-module procedure err_fn_ptr_struct_member
-
-	err = err_pre(EC_FN_PTR_STRUCT_MEMBER) &
-		//'struct member `'//mem_name//'` is a fn pointer.  ' &
-		//'Fn pointers cannot be struct members' &
-		//underline(context, span)//" fn pointer in struct member"//color_reset
-
-end procedure err_fn_ptr_struct_member
-
-
-!===============================================================================
-
 module procedure err_missing_return
 
 	err = err_pre(EC_MISSING_RETURN) &
@@ -1164,6 +1152,14 @@ end procedure err_sub_ref
 ! because it was never wired up to any call site, but the code itself stays
 ! registered in get_all_error_codes() forever and must never be reused (see
 ! the permanence policy at the top of this file and in doc/errors.md)
+
+! EC_FN_PTR_STRUCT_MEMBER (E90) is likewise formally retired: its ban on
+! fn-pointer-typed struct members was lifted once var_dict_destroy()
+! (types_copy.f90) started explicitly tearing down each dict slot's %val via
+! value_destroy() before the struct member-dict's overwrite path (2nd parser
+! pass redeclares every struct) could reach it -- the musl/gfortran segfault
+! in that path was the sole reason E90 existed. Its constructor was deleted;
+! the code stays registered forever per the permanence policy
 
 ! IC_FOR_STEP_ZERO/_F (I8/I9), IC_ARRAY_STEP_ZERO/_F (I14/I15), and
 ! IC_SUBSCRIPT_STEP_ZERO (I20) are likewise formally retired.  They were

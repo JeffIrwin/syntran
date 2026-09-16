@@ -1,0 +1,49 @@
+// A fn returning a fn pointer, including a doubly-nested "fn returning a fn
+// returning a fn" and a higher-order param whose type is itself a fn(...)
+// type.  parse_type() is recursive and handles fn(...) before every other
+// branch, so this already works throughout the parser/compiler/VM; it was
+// simply untested
+
+fn dbl(n: i32): i32
+{
+	return 2 * n;
+}
+
+fn get(): fn(i32): i32
+{
+	return dbl;
+}
+
+fn get_get(): fn(): fn(i32): i32
+{
+	return get;
+}
+
+fn apply_twice(f: fn(i32): i32, x: i32): i32
+{
+	return f(f(x));
+}
+
+fn compose(f: fn(i32): i32, x: i32): i32
+{
+	// Higher-order-typed param: f's own type is fn(i32): i32, but the
+	// function *taking* f is itself passed indirectly below
+	return f(x);
+}
+
+fn call_via(g: fn(fn(i32): i32, i32): i32, f: fn(i32): i32, x: i32): i32
+{
+	return g(f, x);
+}
+
+let h = get();          // h = dbl
+let a = h(21);          // 42
+
+let hh = get_get();     // hh = get
+let h2 = hh();          // h2 = dbl
+let b = h2(5);          // 10
+
+let c = apply_twice(get(), 3);          // dbl(dbl(3)) = 12
+let d = call_via(compose, dbl, 4);      // compose(dbl, 4) = 8
+
+return a + b + c + d;

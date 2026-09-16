@@ -547,15 +547,13 @@ A variable that is not a fn-pointer value (`fn(...)` type) was called like a fun
 
 ### E89 -- fn-ptr-array
 
-Arrays of fn pointers (e.g. `[dbl, dbl]` where `dbl` is a fn pointer) are not supported. A fn pointer can still be stored in a struct member.
+Arrays of fn pointers (e.g. `[dbl, dbl]` where `dbl` is a fn pointer) are not supported: the array-element storage path has no case for `fn(...)`-typed values.
 
 [Example](../src/tests/test-src/errors/E89-fn-ptr-array.syntran)
 
-### E90 -- fn-ptr-struct-member
+### E90 -- fn-ptr-struct-member (retired)
 
-Fn pointers cannot be struct members.
-
-[Example](../src/tests/test-src/errors/E90-fn-ptr-struct-member.syntran)
+Formerly rejected fn-pointer-typed struct members due to a musl/gfortran segfault in the struct member-dict's deep-copy/destroy path. That path was fixed (see `var_dict_destroy()` in `src/types_copy.f90`), so fn pointers can now be stored in struct members, e.g. `struct S { f: fn(i32): i32 }`. The code is kept reserved per the permanence policy above; do not reuse it.
 
 ### E91 -- void-arg
 

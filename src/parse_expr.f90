@@ -308,6 +308,18 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (rtype == array_type) rarrtype = expr%right%val%array%type
 
 			is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
+			if (ltype == fn_type .and. is_op_allowed) then
+				! Fn-pointer assignment must match the full signature, not
+				! just fn_type == fn_type: the call site's arity is frozen at
+				! parse time from the LHS signature (parse_fn.f90's
+				! fn_call_ptr_expr), so a mismatched RHS would desync
+				! OP_CALL_PTR's arg pops.  c.f. the struct_cookie/enum_cookie
+				! checks in the unqualified assignment branch below -- this
+				! qualified (`mod::f = g`) branch has no such override for
+				! struct/enum either, only for fn
+				if (types_match(expr%val, expr%right%val) /= TYPE_MATCH) &
+					is_op_allowed = .false.
+			end if
 
 			if (.not. is_op_allowed) then
 				span = new_span(op%pos, len(op%text))
@@ -554,6 +566,14 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			else if (expr%val%enum_name /= expr%right%val%enum_name) then
 				is_op_allowed = .false.
 			end if
+		else if (ltype == fn_type .and. is_op_allowed) then
+			! Fn-pointer assignment must match the full signature, not just
+			! fn_type == fn_type: the call site's arity is frozen at parse
+			! time from the LHS signature (parse_fn.f90's fn_call_ptr_expr),
+			! so a mismatched RHS would desync OP_CALL_PTR's arg pops.
+			! c.f. the struct_cookie/enum_cookie checks above
+			if (types_match(expr%val, expr%right%val) /= TYPE_MATCH) &
+				is_op_allowed = .false.
 		end if
 
 		! This check could be moved inside of is_binary_op_allowed, but we would
@@ -682,6 +702,15 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 			else if (expr%left%val%enum_name /= expr%right%val%enum_name) then
 				is_op_allowed = .false.
 			end if
+		end if
+
+		if (ltype == fn_type .and. is_op_allowed) then
+			! Fn-pointer (in)equality is only implemented for same-signature
+			! operands -- c.f. the fn_type arm added to is_eq_value_t
+			! (bool.f90), which compares dispatch keys.  Mirrors the
+			! enum_cookie check above
+			if (types_match(expr%left%val, expr%right%val) /= TYPE_MATCH) &
+				is_op_allowed = .false.
 		end if
 
 		if (.not. is_op_allowed) then
@@ -1016,6 +1045,16 @@ recursive module subroutine parse_name_expr(parser, expr)
 						span, identifier%text, &
 						"intrinsic functions are not fn-pointer-able"))
 				else if (fn%is_method) then
+					! Believed unreachable: parser%fns%find(identifier%text)
+					! above looks up the *unmangled* name, but every method
+					! is registered under a mangled "0Struct::name" key (c.f.
+					! parse_method_declaration), so a bare method name never
+					! matches here. Kept as defence-in-depth in case that
+					! registration convention ever changes. The two paths
+					! that actually reach E87 for methods today are the dot
+					! form `c.get` (this subroutine's caller, parse_dot) and
+					! the bare-sibling-method-name fallback further below in
+					! this subroutine
 					call parser%diagnostics%push( &
 						err_fn_ptr_unsupported(parser%context(), &
 						span, identifier%text, &
@@ -1044,6 +1083,30 @@ recursive module subroutine parse_name_expr(parser, expr)
 					expr%val%fn_ret = fn%type
 				end if
 				return
+			end if
+
+			! A bare sibling-method name inside a method body (e.g. `get` in
+			! `let f = get;` from inside another method of the same struct)
+			! is also an attempt to take a fn pointer to a method -- E87,
+			! same as the dot form `c.get` above.  `parser%fns%find()`
+			! above never matches here since methods are only registered
+			! under the mangled "0Struct::name" key; without this check the
+			! name falls through to a bogus "undeclared variable" below
+			! (with an unrelated closest-match suggestion), just like the
+			! bare-name self-method *call* fallback in parse_fn_call
+			! (parse_fn.f90) that this mirrors
+			if (parser%in_method) then
+				slot = parser%fns%find( &
+					"0" // unqualified_name(parser%method_struct_name) // "::" // identifier%text)
+				if (slot /= 0) then
+					span = new_span(identifier%pos, len(identifier%text))
+					call parser%diagnostics%push( &
+						err_fn_ptr_unsupported(parser%context(), &
+						span, identifier%text, &
+						"struct methods are not fn-pointer-able"))
+					expr%val%type = unknown_type
+					return
+				end if
 			end if
 
 			!print *, "undeclared var 3"
@@ -1298,6 +1361,22 @@ recursive module subroutine parse_dot(parser, expr)
 	end if
 
 	if (method_io == exit_success) then
+
+		! A method name used without a trailing "(...)" (e.g. `c.get`) is an
+		! attempt to take a fn pointer to a method -- not supported (E87: a
+		! method's mangled fn_t has no receiver-capture mechanism, and would
+		! need one to be called back later). Without this check, falling
+		! through to the unconditional `parser%match(lparen_token, ...)`
+		! below produces a confusing E20 token-cascade instead
+		if (parser%current_kind() /= lparen_token) then
+			span = new_span(identifier%pos, len(identifier%text))
+			call parser%diagnostics%push( &
+				err_fn_ptr_unsupported(parser%context(), &
+				span, identifier%text, &
+				"struct methods are not fn-pointer-able"))
+			expr%val%type = unknown_type
+			return
+		end if
 
 		! Const receiver enforcement: mutable methods may not be called on const instances
 		if (.not. method_fn%is_const_method) then

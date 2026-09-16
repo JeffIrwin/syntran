@@ -3802,6 +3802,38 @@ subroutine unit_test_fns(npass, nfail)
 			interpret_file(path//'test-31.syntran', quiet) == '0', &
 			interpret_file(path//'test-33.syntran', quiet) == &
 				'fn(i32): i32|fn()|fn([i32; :]): i32', &
+			! Callbacks taking a struct arg and/or returning a struct: already
+			! worked, just untested (no special-case for struct types in
+			! parse_type()'s fn(...) branch)
+			interpret_file(path//'test-37.syntran', quiet) == '27', &
+			! A fn returning a fn pointer, including doubly-nested and
+			! higher-order-typed forms: already worked, just untested
+			! (parse_type() is recursive and handles fn(...) before every
+			! other branch)
+			interpret_file(path//'test-38.syntran', quiet) == '72', &
+			! Fn-pointer reassignment (plain var, param, global) used to abort
+			! fatally with I2 -- assign_value_t() (math.f90) had no fn_type
+			! case, and only let-initialization bypassed that path
+			interpret_file(path//'test-39.syntran', quiet) == '40', &
+			! == / != on fn pointers used to abort fatally with I2 --
+			! is_eq_value_t() (bool.f90) had no fn_type case
+			interpret_file(path//'test-40.syntran', quiet) == &
+				'true,false,false,true,true,false', &
+			! E90 lift: a fn pointer stored in a struct member, including
+			! struct copy/reassignment carrying the field and dot-chain
+			! extraction (restored from the deleted test-32.syntran)
+			interpret_file(path//'test-41.syntran', quiet) == '10', &
+			! Acceptance test for the E90 lift: a Newton-Raphson solver
+			! holding its target fn and derivative as fn-pointer struct
+			! members (the numa.syntran use case core.f90's TODO named)
+			interpret_file(path//'test-42.syntran', quiet) == 'true', &
+			! Printing a struct with a fn-pointer member renders the
+			! member's signature via value_to_str()'s fn_type case, same as
+			! a bare fn-pointer value (test-33 above)
+			eval('fn dbl(n: i32): i32 { return 2 * n; } ' // &
+			     'struct S { f: fn(i32): i32 } ' // &
+			     'let s = S{f = dbl}; str(s);', quiet) == &
+				'S{f = fn(i32): i32}', &
 			! Regression: fwd-referenced fn result feeding an array-range
 			! bound used to falsely trip E56/E58 in parse pass 0
 			interpret_file(path//'test-34.syntran', quiet) == '3', &
@@ -7054,9 +7086,10 @@ subroutine unit_test_error_codes(npass, nfail)
 	! RC_* (runtime) codes are no longer out of scope: most are reachable
 	! end-to-end and are tested in unit_test_runtime_errors() below
 	!
-	! EC_BAD_ARG_RANK (E47) is formally retired (see errors.f90) and is
-	! intentionally excluded from section 3 -- its constructor was deleted, so
-	! it can never be reached by any program
+	! EC_BAD_ARG_RANK (E47) and EC_FN_PTR_STRUCT_MEMBER (E90) are formally
+	! retired (see errors.f90) and are intentionally excluded from section 3
+	! -- their constructors were deleted, so neither can ever be reached by
+	! any program
 	!
 	! EC_INC_READ (E67) and EC_MOD_READ (E69) are also excluded from section 3
 	! here.  Reaching them end-to-end requires a path that exists but cannot
@@ -7468,21 +7501,63 @@ subroutine unit_test_error_codes(npass, nfail)
 				'fn dbl(n: i32): i32 { return 2 * n; } let a = [dbl; 3];'), &
 				EC_FN_PTR_ARRAY), &
 
-			! E90: fn pointers cannot be struct members either (the member
-			! dict's overwrite path on struct redeclaration -- every struct is
-			! redeclared on the parser's 2nd pass -- deep-copies/destroys the
-			! member's value_t, and for a fn-pointer member that value_t has
-			! real nested fn_params(:)/fn_ret content, which segfaults via
-			! gfortran's auto-generated deep deallocation on some platforms,
-			! e.g. musl/alpine; caught here instead of crashing)
-			diag_has_code(get_diags( &
+			! E90 (retired): fn-pointer-typed struct members used to be
+			! rejected here (musl/gfortran segfault in the member dict's
+			! deep-copy/destroy path on struct redeclaration -- every struct
+			! is redeclared on the parser's 2nd pass). var_dict_destroy()
+			! (types_copy.f90) now explicitly tears down each slot's %val
+			! before that path is reached, so this is a positive control
+			! pinning the lift instead
+			.not. diag_has_code(get_diags( &
 				'fn dbl(n: i32): i32 { return 2 * n; } ' // &
 				'struct S { f: fn(i32): i32 }'), &
 				EC_FN_PTR_STRUCT_MEMBER), &
-			! positive: a plain (non-fn-pointer) struct member is unaffected
+
+			! E87: a struct method (dot form, no argument list) still cannot
+			! be taken as a fn pointer -- this used to fall through to a
+			! confusing E20 token cascade ("unexpected token ';', expected
+			! '('") instead of the honest E87
+			diag_has_code(get_diags( &
+				'struct C{n:i32, const fn get():i32{return n;}} ' // &
+				'let c=C{n=5}; let f=c.get;'), &
+				EC_FN_PTR_UNSUPPORTED), &
 			.not. diag_has_code(get_diags( &
-				'struct S { x: i32 }'), &
-				EC_FN_PTR_STRUCT_MEMBER), &
+				'struct C{n:i32, const fn get():i32{return n;}} ' // &
+				'let c=C{n=5}; let f=c.get;'), &
+				EC_UNEXPECTED_TOKEN), &
+			! E87: a bare sibling-method name used as a value inside a method
+			! body -- this used to fall through to a bogus E28 "undeclared
+			! variable" (with an unrelated `did you mean std::OUT?` suggestion)
+			diag_has_code(get_diags( &
+				'struct C{n:i32, const fn get():i32{return n;}, ' // &
+				'const fn other():i32{let f=get; return f();}}'), &
+				EC_FN_PTR_UNSUPPORTED), &
+			.not. diag_has_code(get_diags( &
+				'struct C{n:i32, const fn get():i32{return n;}, ' // &
+				'const fn other():i32{let f=get; return f();}}'), &
+				EC_UNDECLARE_VAR), &
+
+			! Fn-pointer assignment/equality must match the full signature,
+			! not just fn_type == fn_type (c.f. math.f90's new fn_type arm in
+			! assign_value_t, and bool.f90's new fn_type arm in
+			! is_eq_value_t): a mismatched RHS would desync OP_CALL_PTR's
+			! parse-time-frozen arg count
+			diag_has_code(get_diags( &
+				'fn a(n:i32):i32{return n;} fn b(x:i32,y:i32):i32{return x+y;} ' // &
+				'let f=a; f=b;'), &
+				EC_BINARY_TYPES), &
+			.not. diag_has_code(get_diags( &
+				'fn a(n:i32):i32{return n;} fn b(n:i32):i32{return 2*n;} ' // &
+				'let f=a; f=b;'), &
+				EC_BINARY_TYPES), &
+			diag_has_code(get_diags( &
+				'fn a(n:i32):i32{return n;} fn b(x:i32,y:i32):i32{return x+y;} ' // &
+				'let f=a; let h=b; println(f==h);'), &
+				EC_BINARY_TYPES), &
+			.not. diag_has_code(get_diags( &
+				'fn a(n:i32):i32{return n;} fn b(n:i32):i32{return 2*n;} ' // &
+				'let f=a; let h=b; println(f==h);'), &
+				EC_BINARY_TYPES), &
 
 			! E91: a void (no return value) fn call cannot be passed as an
 			! argument to another function call, even to a variadic any_type
@@ -8226,8 +8301,9 @@ subroutine unit_test_error_locations(npass, nfail)
 	! its location is inside circular_b.syntran instead of the entry file --
 	! see the comment at that row below.
 	!
-	! EC_BAD_ARG_RANK (E47, retired) and EC_404 (E81, no source span) are
-	! excluded, same as in unit_test_error_codes()
+	! EC_BAD_ARG_RANK (E47, retired), EC_FN_PTR_STRUCT_MEMBER (E90, retired),
+	! and EC_404 (E81, no source span) are excluded, same as in
+	! unit_test_error_codes()
 	!
 	! EC_INC_READ (E67) and EC_MOD_READ (E69) are also excluded here, same as
 	! in unit_test_error_codes() -- their reproduction files use a directory
@@ -8455,10 +8531,6 @@ subroutine unit_test_error_locations(npass, nfail)
 				EC_FN_PTR_ARRAY, P//'E89-fn-ptr-array.syntran', 9, 10, 3), &
 			diag_count_code(get_diags_file(P//'E89-fn-ptr-array.syntran'), &
 				EC_FN_PTR_ARRAY) == 1, &
-			diag_loc_ok(get_diags_file(P//'E90-fn-ptr-struct-member.syntran'), &
-				EC_FN_PTR_STRUCT_MEMBER, P//'E90-fn-ptr-struct-member.syntran', 11, 5, 12), &
-			diag_count_code(get_diags_file(P//'E90-fn-ptr-struct-member.syntran'), &
-				EC_FN_PTR_STRUCT_MEMBER) == 1, &
 			diag_loc_ok(get_diags_file(P//'E91-void-arg.syntran'), &
 				EC_VOID_ARG, P//'E91-void-arg.syntran', 9, 9, 3), &
 			diag_count_code(get_diags_file(P//'E91-void-arg.syntran'), &

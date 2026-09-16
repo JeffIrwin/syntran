@@ -126,6 +126,13 @@ subroutine is_eq_value_t(left, right, res, op_text)
 		! guaranteed to be the same enum here -- just compare ordinals
 		res%sca%bool = left%sca%i32 == right%sca%i32
 
+	case        (magic * fn_type + fn_type)
+		! Signature compatibility is enforced at parse time (c.f. the
+		! fn_type branch in parse_expr's binary-op check), so both
+		! operands point at same-signature fns here -- compare dispatch
+		! keys, just like the enum case above compares ordinals
+		res%sca%bool = left%sca%fn_index == right%sca%fn_index
+
 	case        (magic * array_type + i32_type)
 
 		!print *, 'left%type       = ', kind_name(left%type)

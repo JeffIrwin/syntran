@@ -1,0 +1,45 @@
+// Callbacks that take a struct arg and/or return a struct.  Neither is
+// actually restricted by anything (parse_type() places no special case on
+// struct types inside a fn(...) signature); this was simply untested
+
+struct P
+{
+	x: i32,
+	y: i32
+}
+
+fn area(p: P): i32
+{
+	return p.x * p.y;
+}
+
+fn mk(n: i32): P
+{
+	return P{x = n, y = n};
+}
+
+fn incr(p: P): P
+{
+	return P{x = p.x + 1, y = p.y + 1};
+}
+
+fn apply_area(f: fn(P): i32, p: P): i32
+{
+	return f(p);
+}
+
+fn apply_mk(f: fn(i32): P, n: i32): P
+{
+	return f(n);
+}
+
+fn apply_incr(f: fn(P): P, p: P): P
+{
+	return f(p);
+}
+
+let a = apply_area(area, P{x = 3, y = 4});     // 12
+let m = apply_mk(mk, 5);                       // P{x=5, y=5}
+let i = apply_incr(incr, P{x = 1, y = 2});     // P{x=2, y=3}
+
+return a + m.x + m.y + i.x + i.y;

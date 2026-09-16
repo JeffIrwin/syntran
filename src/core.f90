@@ -64,14 +64,20 @@ module syntran__core_m
 	!      any `&`-reference parameter (E87)
 	!      + no reason to ban these afaik except it's more work to implement
 	!      + overloaded intrinsics might be tricky
-	!    * test callbacks taking a struct arg and/or struct return val
-	!    * can a fn return a fn?
-	!    * can arrays/structs contain a fn? these points are less about
-	!      callbacks specifically and more generally about fns as values, which
-	!      is the can of worms opened by callbacks
-	!      + update numa.syntran in aoc-syntran after this feature. the
-	!        newton_raphson solver could benefit from storing fn pointers in its
-	!        args struct
+	!    * done: callbacks taking a struct arg and/or struct return val,
+	!      returning a fn from a fn (including nested `fn(): fn(...): ...`),
+	!      and fn pointers stored in struct members (E90, retired) all work
+	!      now -- see src/tests/test-src/fns/test-37..42.syntran
+	!      + update numa.syntran in aoc-syntran to use a fn-pointer struct
+	!        member in its newton_raphson solver's args struct now that this
+	!        works (test-42.syntran has a small worked example)
+	!    * can arrays contain a fn? (E89) same "fns as values" can of worms as
+	!      the struct-member case above, minus the identified/fixed root cause
+	!      -- the array-element storage path genuinely has no fn_type case
+	!    * a fn-typed struct member can't be called directly (`args.f(x)` is
+	!      a syntax error) -- parse_dot() has no fn-typed-member call branch,
+	!      and the indirect-call path is restricted to plain unqualified
+	!      names. Workaround: `let g = args.f; g(x);`
 	!    * closures and anonymous (lambda) fns?
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when

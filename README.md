@@ -1334,6 +1334,115 @@ A function pointer's signature is checked like any other argument type: the
 number and types of parameters, and the return type, must match exactly
 (no implicit numeric casting, same as elsewhere in syntran).
 
+A callback may take a struct argument and/or return a struct, just like any
+other function:
+
+<!-- syntran-begin mode=file group=fn-ptr-struct -->
+```rust
+struct Point
+{
+    x: i32,
+    y: i32
+}
+
+fn area(p: Point): i32
+{
+    return p.x * p.y;
+}
+
+fn make_point(n: i32): Point
+{
+    return Point{x = n, y = n};
+}
+
+fn apply_area(f: fn(Point): i32, p: Point): i32
+{
+    return f(p);
+}
+
+fn apply_make(f: fn(i32): Point, n: i32): Point
+{
+    return f(n);
+}
+
+println(apply_area(area, Point{x = 3, y = 4}));
+// 12
+
+let p = apply_make(make_point, 5);
+println(p.x);
+// 5
+```
+<!-- syntran-expect
+12
+5
+-->
+<!-- syntran-end -->
+
+A function pointer's type can also appear as a return type, so a function can
+return a function pointer.  Bind the result to a variable before calling it --
+the callee in an indirect call must be a plain variable name (see the
+limitations below), so `get_dbl()(21)` is a syntax error:
+
+<!-- syntran-begin mode=file group=fn-ptr-return -->
+```rust
+fn dbl(n: i32): i32
+{
+    return 2 * n;
+}
+
+fn get_dbl(): fn(i32): i32
+{
+    return dbl;
+}
+
+let f = get_dbl();
+println(f(21));
+// 42
+```
+<!-- syntran-expect
+42
+-->
+<!-- syntran-end -->
+
+A struct member can also be a fn pointer -- useful for e.g. passing a
+function whose root is being found (and its derivative) into a solver.
+Calling a fn-typed member directly (`args.f(x)`) is a syntax error for the
+same reason as above; bind it to a local first:
+
+<!-- syntran-begin mode=file group=fn-ptr-struct-member -->
+```rust
+struct SolverArgs
+{
+    f: fn(f64): f64,
+    fprime: fn(f64): f64
+}
+
+fn square_minus_two(x: f64): f64
+{
+    return x * x - 2.0;
+}
+
+fn dsquare_minus_two(x: f64): f64
+{
+    return 2.0 * x;
+}
+
+fn newton_step(args: SolverArgs, x: f64): f64
+{
+    let f  = args.f;      // bind first -- args.f(x) is a syntax error
+    let fp = args.fprime;
+    return x - f(x) / fp(x);
+}
+
+let args = SolverArgs{f = square_minus_two, fprime = dsquare_minus_two};
+println(newton_step(args, 1.0));
+// 1.500000000000000E+00
+```
+<!-- syntran-expect
+    1.500000000000000E+00
+-->
+<!-- syntran-end -->
+
 Limitations of the current implementation:
 - Only user-defined functions can be pointed to.  Intrinsic functions
   (`abs`, `size`, `println`, ...) and struct methods cannot.
@@ -1341,10 +1450,11 @@ Limitations of the current implementation:
   function-pointer signature has no way to express reference-ness.
 - Function-pointer parameters are always passed by value.
 - The callee in an indirect call (`f(...)`) must be a plain variable name,
-  not a more general expression like `arr[i](...)`.
+  not a more general expression like `arr[i](...)` or `args.f(...)`.  Bind
+  such a fn-pointer value to a plain variable first, then call through that.
 - There are no closures or anonymous (lambda) functions; only a named,
   already-declared `fn` can be pointed to.
-- Fn pointers cannot be stored in an array (`E89`) or a struct member (`E90`).
+- Fn pointers cannot be stored in an array (`E89`).
 
 ## Strings, printing, and file output
 
