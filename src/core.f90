@@ -31,12 +31,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - poor error message experience if you try do declare a fn but forget to
-	!    use the "fn" keyword, i.e. just the name, params, and body but missing
-	!    "fn"
-	!    * ask me how i know
-	!    * can we provide a better error (suggest adding 'fn') or is this a
-	!      genuinely ambiguous syntax?
 	!  - split or streamline ci/cd:
 	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
 	!      changed after ast removal. previously, windows and intel-compiler
@@ -64,15 +58,8 @@ module syntran__core_m
 	!      any `&`-reference parameter (E87)
 	!      + no reason to ban these afaik except it's more work to implement
 	!      + overloaded intrinsics might be tricky
-	!    * done: callbacks taking a struct arg and/or struct return val,
-	!      returning a fn from a fn (including nested `fn(): fn(...): ...`),
-	!      fn pointers stored in struct members (E90, retired), and calling a
-	!      fn-typed struct member directly (`args.f(x)`, no longer requiring
-	!      the `let g = args.f; g(x);` workaround) all work now -- see
-	!      src/tests/test-src/fns/test-37..43.syntran
-	!    * can arrays contain a fn? (E89) same "fns as values" can of worms as
-	!      the struct-member case above, minus the identified/fixed root cause
-	!      -- the array-element storage path genuinely has no fn_type case
+	!    * can arrays contain a fn? (E89) -- the array-element storage path
+	!      genuinely has no fn_type case
 	!    * closures and anonymous (lambda) fns?
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
