@@ -250,7 +250,12 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			end if
 
 			call parser%parse_dot(expr)
-			if (.not. allocated(expr%member)) then
+			! Return early only on actual error (no member, not a method
+			! call or fn-typed-member call -- c.f. the same exception in
+			! the unqualified branch below)
+			if (.not. allocated(expr%member) .and. &
+			    expr%kind /= method_call_expr .and. &
+			    expr%kind /= fn_call_ptr_expr) then
 				return
 			end if
 		end if
@@ -454,9 +459,11 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 			if (.not. allocated(expr%member)) then
 				call parser%parse_dot(expr)
-				! Return early only on actual error (no member, not a method call)
+				! Return early only on actual error (no member, not a method
+				! call or fn-typed-member call, e.g. `s.f(x);`)
 				if (.not. allocated(expr%member) .and. &
-				    expr%kind /= method_call_expr) then
+				    expr%kind /= method_call_expr .and. &
+				    expr%kind /= fn_call_ptr_expr) then
 					!print *, "RETURNING ******"
 					return
 				end if
@@ -1263,6 +1270,83 @@ end subroutine build_method_call_node
 
 !===============================================================================
 
+module subroutine build_fn_ptr_call_node(parser, node, callee_val, callee_name, &
+		call_args, call_is_ref, pos_args, lparen_pos, rparen_pos)
+
+	! Validate explicit args against callee_val's fn-pointer signature and
+	! build the fn_call_ptr_expr `node`.  Shared by parse_fn_call's
+	! fn-pointer-variable branch (bare `f(x)`, callee identified by
+	! node%id_index/is_loc, set by the caller after this returns) and
+	! parse_dot's fn-typed-struct-member branch (`s.f(x)`, callee identified
+	! by node%left, likewise set by the caller).  Sets node%val%type =
+	! unknown_type on a validation error (arg count/type mismatch); callers
+	! must check for that and return without further processing (e.g. skip
+	! a trailing parse_dot), mirroring build_method_call_node above
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(out) :: node
+	type(value_t), intent(in) :: callee_val
+	character(len = *), intent(in) :: callee_name
+	type(syntax_node_vector_t), intent(in) :: call_args
+	type(logical_vector_t), intent(in) :: call_is_ref
+	type(integer_vector_t), intent(in) :: pos_args
+	integer, intent(in) :: lparen_pos, rparen_pos
+
+	!********
+
+	integer :: i
+
+	logical(kind = 1) :: eff_is_ref
+
+	type(text_span_t) :: span
+
+	! An unallocated fn_params means the callee's signature is unknown (e.g.
+	! pulled out of an array of fn pointers, which isn't really supported --
+	! E89 -- rather than something with a real signature to check against).
+	! Treat as already diagnosed and don't cascade a bogus arg-count error
+	if (.not. allocated(callee_val%fn_params)) then
+		node%val%type = unknown_type
+		return
+	end if
+
+	if (size(callee_val%fn_params) /= call_args%len_) then
+		span = new_span(lparen_pos, rparen_pos - lparen_pos + 1)
+		call parser%diagnostics%push(err_bad_arg_count( &
+			parser%context(), span, callee_name, &
+			size(callee_val%fn_params), call_args%len_))
+		node%val%type = unknown_type
+		return
+	end if
+
+	do i = 1, call_args%len_
+		span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
+		call check_call_arg(parser, call_args%v(i), call_is_ref%v(i), span, &
+			callee_name, i - 1, callee_val%fn_params(i), "", &
+			.false., .false., eff_is_ref)
+
+		! Indirect calls through a fn pointer are never intrinsics, so a
+		! bare enum name argument is never allowed here
+		call parser%check_enum_name_value(call_args%v(i))
+	end do
+
+	! Indirect call: dispatch target is resolved at runtime from the callee
+	! value (fn_index), not from a parse-time id_index into a specific fn.
+	! All args are by-value in v1
+	node%kind = fn_call_ptr_expr
+	node%val  = callee_val%fn_ret
+
+	allocate(node%is_ref(call_args%len_))
+	node%is_ref = .false.
+
+	allocate(node%args(call_args%len_))
+	do i = 1, call_args%len_
+		node%args(i) = call_args%v(i)
+	end do
+
+end subroutine build_fn_ptr_call_node
+
+!===============================================================================
+
 recursive module subroutine parse_dot(parser, expr)
 
 	class(parser_t), target :: parser
@@ -1273,7 +1357,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 	integer :: io, struct_id, member_id, pos0, pos1, method_fn_id, method_io, method_slot
 
-	logical :: call_arg_is_ref, is_ok, is_const_var, is_const_receiver
+	logical :: is_ok, is_const_var, is_const_receiver
 
 	character(len = :), allocatable :: exp_type, act_type
 
@@ -1281,7 +1365,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 	type(struct_t), pointer :: struct
 
-	type(syntax_node_t) :: receiver_save, arg_, receiver_cand, method_cand
+	type(syntax_node_t) :: receiver_save, receiver_cand, method_cand, call_cand
 
 	type(syntax_node_vector_t) :: call_args
 
@@ -1289,7 +1373,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 	type(integer_vector_t) :: pos_args
 
-	type(syntax_token_t) :: dot, identifier, lparen_, rparen_, comma_, amp_
+	type(syntax_token_t) :: dot, identifier, lparen_, rparen_
 
 	type(text_span_t) :: span
 
@@ -1381,7 +1465,7 @@ recursive module subroutine parse_dot(parser, expr)
 		! Const receiver enforcement: mutable methods may not be called on const instances
 		if (.not. method_fn%is_const_method) then
 			if (expr%kind == fn_call_expr .or. expr%kind == method_call_expr .or. &
-					expr%kind == fn_call_intr_expr) then
+					expr%kind == fn_call_intr_expr .or. expr%kind == fn_call_ptr_expr) then
 				! Mutable method on a temporary fn-return value: mutation would be silently lost
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push(err_mutable_method_on_temp( &
@@ -1409,37 +1493,8 @@ recursive module subroutine parse_dot(parser, expr)
 		receiver_save = expr
 
 		! Parse explicit argument list
-		call_args   = new_syntax_node_vector()
-		call_is_ref = new_logical_vector()
-		pos_args    = new_integer_vector()
-
-		call parser%match(lparen_token, lparen_)
-
-		do while (parser%current_kind() /= rparen_token .and. &
-		          parser%current_kind() /= eof_token)
-			pos0 = parser%pos
-
-			call pos_args%push(parser%current_pos())
-
-			call_arg_is_ref = .false.
-			if (parser%current_kind() == amp_token) then
-				call parser%match(amp_token, amp_)
-				call_arg_is_ref = .true.
-			end if
-			call call_is_ref%push(call_arg_is_ref)
-
-			call parser%parse_expr(expr = arg_)
-			call call_args%push(arg_)
-
-			if (parser%current_kind() /= rparen_token) then
-				call parser%match(comma_token, comma_)
-			end if
-
-			if (parser%pos == pos0) call parser%next(amp_)
-		end do
-		call pos_args%push(parser%current_pos() + 1)
-
-		call parser%match(rparen_token, rparen_)
+		call parse_call_arg_list(parser, call_args, call_is_ref, pos_args, &
+			lparen_, rparen_)
 
 		! Validate args and build the method_call_expr node in expr.  expr is
 		! passed as the intent(out) `node` arg here, so its old (receiver)
@@ -1461,7 +1516,7 @@ recursive module subroutine parse_dot(parser, expr)
 	! For RHS dots, this will stick.  For LHS dots, this will be shortly
 	! overwritten as assignment_expr in the caller
 	if (expr%kind == fn_call_expr .or. expr%kind == method_call_expr .or. &
-	        expr%kind == fn_call_intr_expr) &
+	        expr%kind == fn_call_intr_expr .or. expr%kind == fn_call_ptr_expr) &
 		expr%root_kind = expr%kind
 	expr%kind = dot_expr
 
@@ -1495,6 +1550,55 @@ recursive module subroutine parse_dot(parser, expr)
 	pos1 = parser%current_pos()
 	if (allocated(expr%member%lsubscripts)) then
 		expr%val = expr%member%val
+	end if
+
+	if (parser%current_kind() == lparen_token) then
+
+		if (expr%val%type /= fn_type) then
+			! `s.n(...)` where `n` isn't a fn -- same diagnostic as calling a
+			! non-fn variable (parse_fn_call's E88), rather than falling
+			! through to the unconditional dot-chain/return path below,
+			! which would leave this "(" unconsumed and produce an E20
+			! token cascade at the statement level
+			span = new_span(identifier%pos, len(identifier%text))
+			call parser%diagnostics%push( &
+				err_not_callable(parser%context(), &
+				span, identifier%text, type_name(expr%val)))
+			call parse_swallow_arg_list(parser)
+			expr%val%type = unknown_type
+			return
+		end if
+
+		! Calling a fn-typed struct member directly, e.g. `args.f(x)`.  expr
+		! currently holds the read of the member itself -- either the whole
+		! chain (root variable included, for a single-level `s.f(x)`) or,
+		! when this is one level of a longer chain like `o.i.f(x)`, just the
+		! partial fragment from this recursion frame down (missing the root
+		! variable, restored by the expr%member%kind == fn_call_ptr_expr
+		! splice below once the recursion that got us here unwinds).  Either
+		! way, save it as the indirect call's callee
+		receiver_save = expr
+
+		! Parse explicit argument list
+		call parse_call_arg_list(parser, call_args, call_is_ref, pos_args, &
+			lparen_, rparen_)
+
+		! Validate args and build the fn_call_ptr_expr node in expr.  expr is
+		! passed as the intent(out) `node` arg here, so its old (receiver)
+		! contents are cleared automatically rather than needing explicit
+		! deallocation -- receiver_save above already has its own copy
+		call build_fn_ptr_call_node(parser, expr, receiver_save%val, &
+			identifier%text, call_args, call_is_ref, pos_args, &
+			lparen_%pos, rparen_%pos)
+		if (expr%val%type == unknown_type) return
+		call syntax_node_move(receiver_save, expr%left)
+
+		if (parser%current_kind() == lbracket_token) then
+			call parser%parse_subscripts(expr)
+		end if
+		call parser%parse_dot(expr)
+		return
+
 	end if
 
 	! I think this needs a recursive call to `parse_dot()` right here to handle
@@ -1560,10 +1664,85 @@ recursive module subroutine parse_dot(parser, expr)
 				end if
 				end if
 			end block
+		else if (expr%member%kind == fn_call_ptr_expr) then
+			! Mirror the method_call_expr restructuring above: a fn-typed
+			! member call resolved deeper in the chain (e.g. `f` in
+			! `o.i.f(x)`) was built at the inner recursion frame, whose
+			! %left only holds the partial fragment from that frame down
+			! (missing the root variable "o", since the recursive
+			! parse_dot() call above was passed expr%member, not expr) --
+			! splice in the full chain the same way, via receiver_cand
+			receiver_cand%member = expr%member%left
+			call_cand            = expr%member   ! deep-copy the call node
+			call_cand%left       = receiver_cand ! full chain becomes the callee
+			expr                 = call_cand      ! promote to top-level call
 		end if
 	end if
 
 end subroutine parse_dot
+
+!===============================================================================
+
+subroutine parse_call_arg_list(parser, call_args, call_is_ref, pos_args, &
+		lparen_, rparen_)
+
+	! Parse a parenthesized, comma-separated argument list into `call_args`
+	! (with by-ref markers in `call_is_ref` and each arg's source-position
+	! boundaries in `pos_args`, used to build per-arg diagnostic spans).
+	! Shared by parse_dot's method-call and fn-typed-struct-member-call
+	! branches; mirrors the near-identical inline loop in parse_fn_call
+	! (parse_fn.f90), which builds its fn_call_expr/fn_call_ptr_expr node
+	! directly rather than routing through here
+
+	class(parser_t) :: parser
+	type(syntax_node_vector_t), intent(out) :: call_args
+	type(logical_vector_t), intent(out) :: call_is_ref
+	type(integer_vector_t), intent(out) :: pos_args
+	type(syntax_token_t), intent(out) :: lparen_, rparen_
+
+	!********
+
+	integer :: pos0
+
+	logical :: call_arg_is_ref
+
+	type(syntax_node_t) :: arg_
+
+	type(syntax_token_t) :: comma_, amp_
+
+	call_args   = new_syntax_node_vector()
+	call_is_ref = new_logical_vector()
+	pos_args    = new_integer_vector()
+
+	call parser%match(lparen_token, lparen_)
+
+	do while (parser%current_kind() /= rparen_token .and. &
+	          parser%current_kind() /= eof_token)
+		pos0 = parser%pos
+
+		call pos_args%push(parser%current_pos())
+
+		call_arg_is_ref = .false.
+		if (parser%current_kind() == amp_token) then
+			call parser%match(amp_token, amp_)
+			call_arg_is_ref = .true.
+		end if
+		call call_is_ref%push(call_arg_is_ref)
+
+		call parser%parse_expr(expr = arg_)
+		call call_args%push(arg_)
+
+		if (parser%current_kind() /= rparen_token) then
+			call parser%match(comma_token, comma_)
+		end if
+
+		if (parser%pos == pos0) call parser%next(amp_)
+	end do
+	call pos_args%push(parser%current_pos() + 1)
+
+	call parser%match(rparen_token, rparen_)
+
+end subroutine parse_call_arg_list
 
 !===============================================================================
 
@@ -1647,7 +1826,7 @@ subroutine parse_file_member(parser, expr, identifier)
 	! For RHS dots, this will stick.  For LHS dots, this will be shortly
 	! overwritten as assignment_expr in the caller
 	if (expr%kind == fn_call_expr .or. expr%kind == method_call_expr .or. &
-	        expr%kind == fn_call_intr_expr) &
+	        expr%kind == fn_call_intr_expr .or. expr%kind == fn_call_ptr_expr) &
 		expr%root_kind = expr%kind
 	expr%kind = dot_expr
 

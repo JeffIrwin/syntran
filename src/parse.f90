@@ -251,6 +251,26 @@ module syntran__parse_m
 			integer, intent(in) :: lparen_pos, rparen_pos
 		end subroutine build_method_call_node
 
+		! Shared by parse_fn_call's fn-pointer-variable branch (bare `f(x)`)
+		! and parse_dot's fn-typed-struct-member branch (`s.f(x)`): validates
+		! explicit args against callee_val's fn-pointer signature and builds
+		! the fn_call_ptr_expr node.  The caller identifies the callee
+		! itself afterwards (node%id_index/is_loc for a plain variable,
+		! node%left for a member-access chain).  Sets node%val%type =
+		! unknown_type on a validation error, same contract as
+		! build_method_call_node above
+		module subroutine build_fn_ptr_call_node(parser, node, callee_val, callee_name, &
+				call_args, call_is_ref, pos_args, lparen_pos, rparen_pos)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: node
+			type(value_t), intent(in) :: callee_val
+			character(len = *), intent(in) :: callee_name
+			type(syntax_node_vector_t), intent(in) :: call_args
+			type(logical_vector_t), intent(in) :: call_is_ref
+			type(integer_vector_t), intent(in) :: pos_args
+			integer, intent(in) :: lparen_pos, rparen_pos
+		end subroutine build_fn_ptr_call_node
+
 	end interface
 
 	!********

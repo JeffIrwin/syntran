@@ -1290,9 +1290,14 @@ recursive subroutine compile_node(prog, cs, node)
 			end do
 		end if
 
-		! Load the callee fn-pointer value (node%id_index/is_loc identify the
-		! *variable* holding it, not a fn id)
-		if (node%is_loc) then
+		! Load the callee fn-pointer value.  A plain fn-pointer variable
+		! (node%id_index/is_loc identify the *variable* holding it, not a fn
+		! id) loads directly; a fn-typed struct member (e.g. `args.f(x)`,
+		! built by parse_dot) instead carries the member-access chain in
+		! node%left, compiled the same way any other dot_expr read is
+		if (allocated(node%left)) then
+			call compile_node(prog, cs, node%left)
+		else if (node%is_loc) then
 			call emit(prog, OP_LOAD_LOCAL, a = node%id_index)
 		else
 			call emit(prog, OP_LOAD_GLOBAL, a = node%id_index)

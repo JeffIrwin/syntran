@@ -244,40 +244,15 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 				! callee variable value (fn_index), not from a parse-time id_index
 				! into a specific fn.  id_index/is_loc here identify the callee
 				! *variable* slot instead -- eval/compile distinguish this via
-				! node%kind == fn_call_ptr_expr
-				fn_call%kind = fn_call_ptr_expr
+				! node%kind == fn_call_ptr_expr.  build_fn_ptr_call_node
+				! (parse_expr.f90, shared with parse_dot's `s.f(x)` fn-typed-
+				! struct-member branch) validates args and builds everything
+				! else on fn_call
+				call build_fn_ptr_call_node(parser, fn_call, var_val, &
+					identifier_%text, args, is_ref, pos_args, &
+					lparen%pos, rparen%pos)
 				fn_call%id_index = var_id_index
 				fn_call%is_loc = var_is_loc
-
-				allocate(fn_call%is_ref(args%len_))
-				fn_call%is_ref = .false.   ! by-value only in v1
-
-				if (size(var_val%fn_params) /= args%len_) then
-					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-					call parser%diagnostics%push(err_bad_arg_count( &
-						parser%context(), span, identifier_%text, &
-						size(var_val%fn_params), args%len_))
-				else
-					do i = 1, args%len_
-						span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-						call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
-							identifier_%text, i - 1, var_val%fn_params(i), "", &
-							.false., .false., eff_is_ref)
-
-						! Indirect calls through a fn-pointer variable are
-						! never intrinsics, so a bare enum name argument is
-						! never allowed here
-						call parser%check_enum_name_value(args%v(i))
-					end do
-				end if
-
-				fn_call%val = var_val%fn_ret
-
-				! Move args from vector (avoids deep copy)
-				allocate(fn_call%args(args%len_))
-				do i = 1, args%len_
-					call syntax_node_move_into(args%v(i), fn_call%args(i))
-				end do
 
 				return
 

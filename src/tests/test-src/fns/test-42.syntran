@@ -3,11 +3,9 @@
 // members of an args struct, the shape core.f90's TODO named as the
 // motivating use case for numa.syntran's newton_raphson solver.
 //
-// Calling a fn-typed struct member directly (args.f(x)) is still a syntax
-// error -- parse_dot() has no fn-typed-member call branch, and the indirect
-// -call path is restricted to plain unqualified names -- so the solver binds
-// each member to a local once, outside the iteration loop, before calling
-// through it
+// Binds each member to a local once, outside the iteration loop, before
+// calling through it -- a style choice here, not a requirement: calling a
+// fn-typed struct member directly (args.f(x)) also works (test-43.syntran)
 
 struct SolverArgs
 {

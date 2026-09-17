@@ -3827,6 +3827,14 @@ subroutine unit_test_fns(npass, nfail)
 			! holding its target fn and derivative as fn-pointer struct
 			! members (the numa.syntran use case core.f90's TODO named)
 			interpret_file(path//'test-42.syntran', quiet) == 'true', &
+			! Calling a fn-typed struct member directly (`args.f(x)`),
+			! without first binding it to a local (test-42's workaround) --
+			! parse_dot() previously had no fn-typed-member call branch, so
+			! this was a syntax error.  Covers single/nested/subscripted
+			! receivers, reassigned members, chained/nested call results,
+			! and a by-ref array-valued member called in a loop (the
+			! numa.syntran shape)
+			interpret_file(path//'test-43.syntran', quiet) == 'true', &
 			! Printing a struct with a fn-pointer member renders the
 			! member's signature via value_to_str()'s fn_type case, same as
 			! a bare fn-pointer value (test-33 above)
@@ -7490,6 +7498,34 @@ subroutine unit_test_error_codes(npass, nfail)
 			.not. diag_has_code(get_diags( &
 				'fn dbl(n: i32): i32 { return 2 * n; } let f = dbl; f(1);'), &
 				EC_NOT_CALLABLE), &
+
+			! Calling a fn-typed struct member directly, e.g. `args.f(x)`:
+			! parse_dot() previously had no fn-typed-member call branch, so
+			! this was a syntax error (E20 token cascade).  E88 still fires
+			! (once) for a non-fn member, and the usual arg-count/type
+			! checks still run against the member's declared signature
+			diag_has_code(get_diags('struct S{n:i32} let s=S{n=1}; s.n(1);'), &
+				EC_NOT_CALLABLE), &
+			diag_count_code(get_diags('struct S{n:i32} let s=S{n=1}; s.n(1);'), &
+				EC_NOT_CALLABLE) == 1, &
+			diag_has_code(get_diags( &
+				'fn dbl(n:i32):i32{return 2*n;} struct S{f:fn(i32):i32} ' // &
+				'let s=S{f=dbl}; s.f(1,2);'), &
+				EC_BAD_ARG_COUNT), &
+			diag_has_code(get_diags( &
+				'fn dbl(n:i32):i32{return 2*n;} struct S{f:fn(i32):i32} ' // &
+				'let s=S{f=dbl}; s.f(true);'), &
+				EC_BAD_ARG_TYPE), &
+			! positive: calling through an actual fn-typed member is fine,
+			! no E88/E20 cascade
+			.not. diag_has_code(get_diags( &
+				'fn dbl(n:i32):i32{return 2*n;} struct S{f:fn(i32):i32} ' // &
+				'let s=S{f=dbl}; s.f(1);'), &
+				EC_NOT_CALLABLE), &
+			.not. diag_has_code(get_diags( &
+				'fn dbl(n:i32):i32{return 2*n;} struct S{f:fn(i32):i32} ' // &
+				'let s=S{f=dbl}; s.f(1);'), &
+				EC_UNEXPECTED_TOKEN), &
 
 			! E89: arrays of fn pointers are not supported (eval_array.f90 has
 			! no fn_type case in its per-type storage/copy paths; letting this

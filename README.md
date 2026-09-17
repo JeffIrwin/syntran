@@ -1406,8 +1406,8 @@ println(f(21));
 
 A struct member can also be a fn pointer -- useful for e.g. passing a
 function whose root is being found (and its derivative) into a solver.
-Calling a fn-typed member directly (`args.f(x)`) is a syntax error for the
-same reason as above; bind it to a local first:
+Calling a fn-typed member directly (`args.f(x)`) works just like calling a
+plain fn-pointer variable:
 
 <!-- syntran-begin mode=file group=fn-ptr-struct-member -->
 ```rust
@@ -1429,9 +1429,7 @@ fn dsquare_minus_two(x: f64): f64
 
 fn newton_step(args: SolverArgs, x: f64): f64
 {
-    let f  = args.f;      // bind first -- args.f(x) is a syntax error
-    let fp = args.fprime;
-    return x - f(x) / fp(x);
+    return x - args.f(x) / args.fprime(x);
 }
 
 let args = SolverArgs{f = square_minus_two, fprime = dsquare_minus_two};
@@ -1449,8 +1447,9 @@ Limitations of the current implementation:
 - A function with any `&`-reference parameter cannot be pointed to, since a
   function-pointer signature has no way to express reference-ness.
 - Function-pointer parameters are always passed by value.
-- The callee in an indirect call (`f(...)`) must be a plain variable name,
-  not a more general expression like `arr[i](...)` or `args.f(...)`.  Bind
+- The callee in an indirect call (`f(...)`) must be a plain variable name or
+  a dot-chain ending in a fn-typed struct member (`s.f(...)`, `o.i.f(...)`),
+  not a more general expression like `arr[i](...)` or `get_dbl()(...)`.  Bind
   such a fn-pointer value to a plain variable first, then call through that.
 - There are no closures or anonymous (lambda) functions; only a named,
   already-declared `fn` can be pointed to.
