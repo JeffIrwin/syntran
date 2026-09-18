@@ -1,0 +1,31 @@
+// i32 subject: multi-value case, first-match-wins, default taken and not taken
+
+fn classify(x: i32): str
+{
+	let result = "unset";
+	switch x
+	{
+		case 1
+		{
+			result = "one";
+		}
+		case 2, 3
+		{
+			result = "two-or-three";
+		}
+		case 3
+		{
+			// unreachable: the `2, 3` arm above already matches 3 first
+			result = "unreachable";
+		}
+		default
+		{
+			result = "other";
+		}
+	}
+	return result;
+}
+
+let ans = [classify(1), classify(2), classify(3), classify(4), classify(99)];
+let exp = ["one", "two-or-three", "two-or-three", "other", "other"];
+return all(ans == exp);

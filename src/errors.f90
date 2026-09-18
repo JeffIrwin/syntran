@@ -122,6 +122,9 @@ module syntran__errors_m
 		EC_FLOAT_INT_SUFFIX = "E104", &
 		EC_REF_TYPE = "E105", &
 		EC_MISSING_FN_KW = "E106", &
+		EC_BAD_SWITCH_TYPE = "E107", &
+		EC_BAD_CASE_TYPE = "E108", &
+		EC_DUP_DEFAULT = "E109", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -418,6 +421,26 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: name
 		end function err_missing_fn_kw
+
+		module function err_bad_switch_type(context, span, subject, type) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: subject, type
+		end function err_bad_switch_type
+
+		module function err_bad_case_type(context, span, value, case_type, switch_type) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: value, case_type, switch_type
+		end function err_bad_case_type
+
+		module function err_dup_default(context, span) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+		end function err_dup_default
 
 		module function err_unexpected_char(context, span, c) result(err)
 			type(text_context_t) :: context

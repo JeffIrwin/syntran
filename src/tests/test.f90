@@ -4530,6 +4530,61 @@ end subroutine unit_test_control
 
 !===============================================================================
 
+subroutine unit_test_switch(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'switch statements'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/switch/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-04.syntran', quiet) == 'true', &
+			interpret_file(path//'test-05.syntran', quiet) == 'true', &
+			interpret_file(path//'test-06.syntran', quiet) == 'true', &
+			interpret_file(path//'test-07.syntran', quiet) == 'true', &
+			interpret_file(path//'test-08.syntran', quiet) == 'true', &
+			interpret_file(path//'test-09.syntran', quiet) == 'true', &
+			interpret_file(path//'test-10.syntran', quiet) == 'true', &
+			interpret_file(path//'test-11.syntran', quiet) == 'true', &
+			interpret_file(path//'test-12.syntran', quiet) == 'true', &
+
+			! Short inline scripts, not worth their own test-src file
+			eval_i32('let x = 2; let y = 0; ' &
+				//'switch x { case 2 { y = 7; } } y;', quiet) == 7, &
+			eval_i32('let x = 9; let y = 0; ' &
+				//'switch x { case 2 { y = 7; } default { y = -1; } } y;', &
+				quiet) == -1, &
+			eval_str('let x = "b"; let y = ""; ' &
+				//'switch x { case "a" { y = "A"; } case "b" { y = "B"; } } y;', &
+				quiet) == 'B', &
+
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_switch
+
+!===============================================================================
+
 subroutine unit_test_struct(npass, nfail)
 
 	implicit none
@@ -7858,6 +7913,35 @@ subroutine unit_test_error_codes(npass, nfail)
 					'struct P{x: i32, sum(): i32 {return x;}}'), &
 					EC_MISSING_FN_KW), &
 
+				! E107: switch-statement subject type can't be matched by equality
+				diag_has_code(get_diags( &
+					'let a = [1,2,3]; switch a { case 1 {} }'), &
+					EC_BAD_SWITCH_TYPE), &
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case 1 {} }'), &
+					EC_BAD_SWITCH_TYPE) == 1, &
+				! No cascading E108 once E107 fires (subject treated as
+				! unknown_type for the rest of the switch)
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case 1 {} }'), &
+					EC_BAD_CASE_TYPE) == 0, &
+
+				! E108: case value type can't be compared to the switch subject
+				diag_has_code(get_diags( &
+					'let x = 5; switch x { case "foo" {} }'), &
+					EC_BAD_CASE_TYPE), &
+				diag_count_code(get_diags( &
+					'let x = 5; switch x { case "foo" {} }'), &
+					EC_BAD_CASE_TYPE) == 1, &
+
+				! E109: more than one `default` arm
+				diag_has_code(get_diags( &
+					'let x = 5; switch x { default {} default {} }'), &
+					EC_DUP_DEFAULT), &
+				diag_count_code(get_diags( &
+					'let x = 5; switch x { default {} default {} }'), &
+					EC_DUP_DEFAULT) == 1, &
+
 				! No stray E20/E28 cascade once E106 recovers
 				diag_count_code(get_diags( &
 					'add(a: i32): i32 { return a; } println(add(1));'), &
@@ -8667,7 +8751,19 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E106-missing-fn-kw.syntran'), &
 				EC_MISSING_FN_KW, P//'E106-missing-fn-kw.syntran', 6, 1, 3), &
 			diag_count_code(get_diags_file(P//'E106-missing-fn-kw.syntran'), &
-				EC_MISSING_FN_KW) == 1 &
+				EC_MISSING_FN_KW) == 1, &
+			diag_loc_ok(get_diags_file(P//'E107-bad-switch-type.syntran'), &
+				EC_BAD_SWITCH_TYPE, P//'E107-bad-switch-type.syntran', 6, 8, 3), &
+			diag_count_code(get_diags_file(P//'E107-bad-switch-type.syntran'), &
+				EC_BAD_SWITCH_TYPE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E108-bad-case-type.syntran'), &
+				EC_BAD_CASE_TYPE, P//'E108-bad-case-type.syntran', 8, 7, 5), &
+			diag_count_code(get_diags_file(P//'E108-bad-case-type.syntran'), &
+				EC_BAD_CASE_TYPE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E109-dup-default.syntran'), &
+				EC_DUP_DEFAULT, P//'E109-dup-default.syntran', 12, 2, 7), &
+			diag_count_code(get_diags_file(P//'E109-dup-default.syntran'), &
+				EC_DUP_DEFAULT) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -8879,6 +8975,7 @@ subroutine unit_tests(iostat)
 	if (run_group('arr_op')) call unit_test_arr_op(npass, nfail)
 	if (run_group('lhs_slc_1')) call unit_test_lhs_slc_1(npass, nfail)
 	if (run_group('control')) call unit_test_control(npass, nfail)
+	if (run_group('switch')) call unit_test_switch(npass, nfail)
 	if (run_group('struct')) call unit_test_struct(npass, nfail)
 	if (run_group('struct_arr1')) call unit_test_struct_arr1(npass, nfail)
 	if (run_group('struct_arr2')) call unit_test_struct_arr2(npass, nfail)

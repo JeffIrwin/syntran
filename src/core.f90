@@ -42,9 +42,24 @@ module syntran__core_m
 	!    * took a big chunk out already
 	!    * continue one file at a time
 	!    * '''grep -c  'TODO' src/* | sort -t: -k2 -n'''
-	!  - switch/match/case. needs to work with strings. would be nice to work
-	!    with arrays. basic switch/case is fine but also consider "pattern
-	!    matching" or whatever rust has
+	!  - switch/match/case follow-ups (basic switch/case, working with strings,
+	!    done -- see README.md "Switch statements"):
+	!    * array subjects: `==` on arrays yields bool_array_type, which can't
+	!      drive a conditional jump.  Would need an all(...) wrapper or a
+	!      dedicated whole-array-equality opcode
+	!    * switch as an expression (like rust's match): the bytecode already
+	!      leaves one value on the stack, so the backend is ready; missing is
+	!      arm-type unification and an exhaustiveness rule
+	!    * pattern matching: ranges (case 1:10), guards (case x if cond),
+	!      or-patterns, and binding the matched value to a name
+	!    * duplicate-case-value detection: not possible in general since
+	!      values are arbitrary expressions; a constant-folded subset could
+	!      be diagnosed later
+	!    * a dense jump table for integer subjects: prog%fn_entry(:) (used by
+	!      OP_CALL_PTR) is a working precedent for an indirect jump through an
+	!      integer table.  Pure optimization, gated behind a
+	!      switch_table_ok(node) predicate a la index_native_ok/
+	!      for_setup_native_ok; only ever helps i32/i64 subjects
 	!  - stack trace for runtime errors
 	!  - short circuit logic?
 	!    * useful e.g. for scanning a string, or anything where you need a
@@ -52,15 +67,6 @@ module syntran__core_m
 	!      statement
 	!    * small compatibility break when evaluation of part a bool expression
 	!      calls a fn with side effects
-	!  - fn pointer (callback) improvements:
-	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
-	!      intrinsic function, a struct method, or a user-defined function with
-	!      any `&`-reference parameter (E87)
-	!      + no reason to ban these afaik except it's more work to implement
-	!      + overloaded intrinsics might be tricky
-	!    * can arrays contain a fn? (E89) -- the array-element storage path
-	!      genuinely has no fn_type case
-	!    * closures and anonymous (lambda) fns?
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
 	!    imported
@@ -172,6 +178,18 @@ module syntran__core_m
 	!          generated/templated code for multiple type combinations.
 	!
 	!    * docs -- see several notes below
+	!  - fn pointer (callback) improvements:
+	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
+	!      intrinsic function, a struct method, or a user-defined function with
+	!      any `&`-reference parameter (E87)
+	!      + no reason to ban most of these afaik except it's more work to
+	!        implement
+	!      + pointer to struct method might not have many use cases as far as i
+	!        can think
+	!      + overloaded intrinsics might be tricky
+	!    * can arrays contain a fn? (E89) -- the array-element storage path
+	!      genuinely has no fn_type case
+	!    * closures and anonymous (lambda) fns?
 	!  - i like claude's "double_colon_token" name. i should change things like
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - minloc, maxloc, findloc std:: fns

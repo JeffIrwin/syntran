@@ -702,6 +702,11 @@ module subroutine vm_run(prog, state, res)
 			if (.not. stack%v(stack%len_)%sca%bool) next_ip = instr%a
 			stack%len_ = stack%len_ - 1
 
+		! --- control flow: conditional jump (mirror of OP_JUMP_IF_FALSE) ---
+		case (OP_JUMP_IF_TRUE)
+			if (stack%v(stack%len_)%sca%bool) next_ip = instr%a
+			stack%len_ = stack%len_ - 1
+
 		! --- by-ref arg loading: move value from variable slot onto stack -----
 		! The original slot is left in a valid-but-empty state; the value is
 		! written back from the callee's frame at OP_RET time.

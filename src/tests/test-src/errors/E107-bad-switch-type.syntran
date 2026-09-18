@@ -1,0 +1,12 @@
+// E107: bad-switch-type
+// The subject of a switch-statement has a type that can't be matched by equality
+
+let arr = [1, 2, 3];
+
+switch arr
+{
+	case 1
+	{
+		println("one");
+	}
+}

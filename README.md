@@ -679,6 +679,88 @@ Similarly, the pi term `4.0 / (8*k + 1)` has a float numerator and int denominat
 
 Syntran is not a [nanny language](https://retrocomputing.stackexchange.com/a/15379/26435), but it allows you to do numeric work without constantly manually casting things [`as f64` like in Rust](https://doc.rust-lang.org/rust-by-example/types/cast.html).
 
+## Switch statements
+
+A `switch` statement compares one subject expression against a series of `case` arms and runs the body of the first arm that matches, in source order.  There is no fallthrough between arms (no `break` is needed to prevent one), and a `case` may list several comma-separated values that all lead to the same body:
+
+<!-- syntran-begin mode=repl group=switch-basic -->
+```rust
+fn greet(name: str): str
+{
+    switch name
+    {
+        case "foo"
+        {
+            return "got foo";
+        }
+        case "bar", "baz"
+        {
+            return "bar-ish";
+        }
+        default
+        {
+            return "other";
+        }
+    }
+}
+
+println(greet("foo"));
+println(greet("baz"));
+println(greet("qux"));
+```
+<!-- syntran-expect
+got foo
+bar-ish
+other
+-->
+<!-- syntran-end -->
+
+The `default` arm is optional and its position among the other arms doesn't matter.  If no arm matches and there's no `default`, the `switch` is simply a no-op and execution continues with whatever comes after it.
+
+`case` values can be any expression, not just literals -- variables, function calls, and (as below) enum variants are all fine, and are compared to the subject with `==`:
+
+<!-- syntran-begin mode=repl group=switch-enum -->
+```rust
+enum Suit
+{
+    Hearts,
+    Diamonds,
+    Clubs,
+    Spades,
+}
+
+fn color(s: Suit): str
+{
+    switch s
+    {
+        case Suit.Hearts, Suit.Diamonds
+        {
+            return "red";
+        }
+        case Suit.Clubs, Suit.Spades
+        {
+            return "black";
+        }
+        default
+        {
+            return "unknown";
+        }
+    }
+}
+
+println(color(Suit.Hearts));
+println(color(Suit.Spades));
+```
+<!-- syntran-expect
+red
+black
+-->
+<!-- syntran-end -->
+
+The subject expression is evaluated exactly once, no matter how many `case` arms it's tested against, so it's safe to switch on a function call that has side effects.  A `switch` is a statement (not an expression, unlike Rust's `match`), and `break`/`continue` inside an arm's body refer to the nearest enclosing loop, exactly as they would inside an `if`-clause.
+
+`switch` can compare `bool`, `i32`, `i64`, `f32`, `f64`, `str`, and `enum` subjects.  Arrays and structs can't be `switch` subjects, since equality on them isn't a single true/false result that a `switch` can branch on.
+
 ## Arrays
 
 Recall the syntax for a for-loop:

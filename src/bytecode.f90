@@ -23,6 +23,8 @@ module syntran__bytecode_m
 		OP_POP              = 1009, &	! discard TOS
 		OP_JUMP             = 1010, &	! unconditional jump: ip = a
 		OP_JUMP_IF_FALSE    = 1011, &	! pop bool TOS; if false: ip = a, else continue
+		OP_JUMP_IF_TRUE     = 1246, &	! pop bool TOS; if true: ip = a, else continue.  Mirror of
+		                            	!   OP_JUMP_IF_FALSE; used by switch-statement case tests
 		OP_CALL             = 1012, &	! call user fn: a=fn_id, b=node_pool_idx (fn_call node)
 		OP_RET              = 1013, &	! return from fn: TOS is return value
 		OP_LOAD_REF_GLOBAL  = 1014, &	! move state%vars%vals(a) to stack (by-ref arg, pass 2)

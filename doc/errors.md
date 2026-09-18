@@ -651,6 +651,24 @@ A function (or struct method) declaration omitted the leading `fn` keyword, e.g.
 
 [Example](../src/tests/test-src/errors/E106-missing-fn-kw.syntran)
 
+### E107 -- bad-switch-type
+
+The subject of a `switch`-statement has a type that can't be matched by equality (e.g. an array or a struct).
+
+[Example](../src/tests/test-src/errors/E107-bad-switch-type.syntran)
+
+### E108 -- bad-case-type
+
+A `case` value's type can't be compared to its `switch`-statement's subject type.
+
+[Example](../src/tests/test-src/errors/E108-bad-case-type.syntran)
+
+### E109 -- dup-default
+
+A `switch`-statement has more than one `default` arm.
+
+[Example](../src/tests/test-src/errors/E109-dup-default.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

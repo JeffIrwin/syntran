@@ -873,6 +873,225 @@ end subroutine parse_while_statement
 
 !===============================================================================
 
+recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
+
+	! Parse one `case <val>, <val>, ... <body>` arm.  Not a parser_t
+	! type-bound procedure -- purely a local helper for
+	! parse_switch_statement(), following the backpatch_breaks precedent in
+	! compile_ctrl.f90.
+	!
+	! AST shape:
+	!
+	!   case_clause   %elems(:) = this arm's match-value expressions
+	!                 %body     = this arm's body statement
+
+	class(parser_t) :: parser
+	integer, intent(in) :: subj_type
+	type(value_t), intent(in) :: subj_val
+	type(syntax_node_t), intent(out) :: clause
+
+	!********
+
+	integer :: i, val_beg, val_end, val_type
+	logical :: is_op_allowed
+
+	type(syntax_node_t)  :: val_tmp, body
+	type(syntax_node_vector_t) :: vals
+	type(syntax_token_t) :: case_token, comma
+	type(text_span_t) :: span
+
+	call parser%match(case_keyword, case_token)
+
+	vals = new_syntax_node_vector()
+
+	do
+		val_beg = parser%peek_pos(0)
+		call parser%parse_expr(expr = val_tmp)
+		val_end = parser%peek_pos(0) - 1
+
+		val_type = val_tmp%val%type
+
+		if (subj_type == unknown_type .or. val_type == unknown_type) then
+			! Stop cascading errors.  May happen on pass 0 when the subject
+			! or a case value depends on a fn declared later in the file
+			is_op_allowed = .true.
+		else
+			! left_arr/right_arr must always be passed explicitly (as
+			! unknown_type when the operand isn't an array): the eequals_token
+			! branch of is_binary_op_allowed() dereferences them unconditionally,
+			! c.f. the larrtype/rarrtype locals in parse_expr.f90's binary_expr loop
+			is_op_allowed = val_type /= array_type .and. &
+				is_binary_op_allowed(subj_type, eequals_token, val_type, &
+				unknown_type, unknown_type)
+
+			if (is_op_allowed .and. subj_type == enum_type) then
+				! Mirrors the enum_cookie identity check in parse_expr.f90:
+				! is_binary_op_allowed() alone doesn't know that two
+				! same-kind enum_type values can still belong to different
+				! enums (e.g. `Suit.Hearts == Card.Jack`)
+				if (allocated(subj_val%enum_cookie) .and. &
+					allocated(val_tmp%val%enum_cookie)) then
+					if (subj_val%enum_cookie /= val_tmp%val%enum_cookie) &
+						is_op_allowed = .false.
+				else if (subj_val%enum_name /= val_tmp%val%enum_name) then
+					is_op_allowed = .false.
+				end if
+			end if
+		end if
+
+		if (.not. is_op_allowed) then
+			span = new_span(val_beg, val_end - val_beg + 1)
+			call parser%diagnostics%push(err_bad_case_type( &
+				parser%context(), span, parser%text(val_beg, val_end), &
+				kind_name(val_type), kind_name(subj_type)))
+		end if
+
+		call vals%push_move(val_tmp)
+
+		if (parser%current_kind() /= comma_token) exit
+		call parser%match(comma_token, comma)
+	end do
+
+	call parser%parse_statement(body)
+
+	clause%kind = case_clause
+	call syntax_node_move(body, clause%body)
+
+	allocate(clause%elems(vals%len_))
+	do i = 1, vals%len_
+		call syntax_node_move_into(vals%v(i), clause%elems(i))
+	end do
+
+end subroutine parse_case_clause
+
+!===============================================================================
+
+recursive module subroutine parse_switch_statement(parser, statement)
+
+	! switch-statement syntax:
+	!
+	!   switch <subject>
+	!   {
+	!       case <val1>, <val2>, ... { <body> }
+	!       ...
+	!       default { <body> }
+	!   }
+	!
+	! The subject is evaluated exactly once (compile_ctrl.f90 caches it in a
+	! hidden slot), arms are tested top-to-bottom, and the first match wins;
+	! there is no fallthrough.  `default` is optional and its position among
+	! the arms doesn't matter.
+	!
+	! AST shape (no new syntax_node_t members -- see parse_case_clause() above
+	! for case_clause's shape):
+	!
+	!   switch_statement   %condition   = subject expression
+	!                      %members(:)  = case_clause nodes, in source order
+	!                      %else_clause = the `default` arm body (optional)
+	!                      %id_index /
+	!                      %is_loc      = the hidden subject slot
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(out) :: statement
+
+	!********
+
+	integer :: i, subj_beg, subj_end, subj_type, pos0
+	logical :: has_default
+
+	type(syntax_node_t)  :: subject, def_body, clause
+	type(syntax_node_vector_t) :: arms
+	type(syntax_token_t) :: switch_token, lbrace, rbrace, dummy, default_token
+	type(text_span_t) :: span
+
+	call parser%match(switch_keyword, switch_token)
+
+	subj_beg  = parser%peek_pos(0)
+	call parser%parse_expr(expr = subject)
+	subj_end  = parser%peek_pos(0) - 1
+
+	! Whitelist rather than is_binary_op_allowed(): that helper permits
+	! void == void, and an array_type subject would make `==` yield
+	! bool_array_type, which can't drive a scalar conditional jump
+	subj_type = subject%val%type
+	if (.not. any(subj_type == [bool_type, i32_type, i64_type, f32_type, &
+			f64_type, str_type, enum_type, unknown_type])) then
+		span = new_span(subj_beg, subj_end - subj_beg + 1)
+		call parser%diagnostics%push(err_bad_switch_type( &
+			parser%context(), span, parser%text(subj_beg, subj_end), &
+			kind_name(subj_type)))
+		! Stop cascading errors: treat the subject as unknown_type so
+		! parse_case_clause() doesn't also flag every case value as
+		! incomparable to it
+		subj_type = unknown_type
+	end if
+
+	! Hidden subject slot, mirroring the for-loop iterator idiom in
+	! parse_for_statement() above.  Not inserted into any symbol table (it
+	! has no name), so no scope needs to be pushed for it
+	if (parser%is_loc) then
+		parser%num_locs = parser%num_locs + 1
+		statement%id_index = parser%num_locs
+		statement%is_loc = .true.
+	else
+		parser%num_vars = parser%num_vars + 1
+		statement%id_index = parser%num_vars
+		statement%is_loc = .false.
+	end if
+
+	call parser%match(lbrace_token, lbrace)
+
+	arms = new_syntax_node_vector()
+	has_default = .false.
+
+	do while ( &
+		parser%current_kind() /= eof_token .and. &
+		parser%current_kind() /= rbrace_token)
+
+		pos0 = parser%pos
+
+		if (parser%current_kind() == default_keyword) then
+
+			call parser%match(default_keyword, default_token)
+
+			if (has_default) then
+				span = new_span(default_token%pos, len(default_token%text))
+				call parser%diagnostics%push(err_dup_default( &
+					parser%context(), span))
+			end if
+
+			call parser%parse_statement(def_body)
+
+			if (.not. has_default) &
+				call syntax_node_move(def_body, statement%else_clause)
+			has_default = .true.
+
+		else
+
+			call parse_case_clause(parser, subj_type, subject%val, clause)
+			call arms%push_move(clause)
+
+		end if
+
+		! Avoid infinite loops on malformed input
+		if (parser%pos == pos0) call parser%next(dummy)
+
+	end do
+
+	call parser%match(rbrace_token, rbrace)
+
+	statement%kind = switch_statement
+	call syntax_node_move(subject, statement%condition)
+
+	allocate(statement%members(arms%len_))
+	do i = 1, arms%len_
+		call syntax_node_move_into(arms%v(i), statement%members(i))
+	end do
+
+end subroutine parse_switch_statement
+
+!===============================================================================
+
 recursive module subroutine parse_block_statement(parser, block)
 
 	class(parser_t) :: parser
@@ -953,6 +1172,9 @@ recursive module subroutine parse_statement(parser, statement)
 
 	case (while_keyword)
 		call parser%parse_while_statement(statement)
+
+	case (switch_keyword)
+		call parser%parse_switch_statement(statement)
 
 	case (return_keyword)
 		call parser%parse_return_statement(statement)

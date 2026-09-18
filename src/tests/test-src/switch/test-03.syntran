@@ -1,0 +1,53 @@
+// i64, f32, f64, and bool subjects
+
+fn classify_i64(x: i64): str
+{
+	switch x
+	{
+		case 10'i64      { return "ten"; }
+		case 20'i64      { return "twenty"; }
+		default          { return "other"; }
+	}
+	return "unreachable";
+}
+
+fn classify_f32(x: f32): str
+{
+	switch x
+	{
+		case 1.5'f32     { return "one-half"; }
+		default          { return "other"; }
+	}
+	return "unreachable";
+}
+
+fn classify_f64(x: f64): str
+{
+	switch x
+	{
+		case 1.5'f64     { return "one-half"; }
+		default          { return "other"; }
+	}
+	return "unreachable";
+}
+
+fn classify_bool(x: bool): str
+{
+	switch x
+	{
+		case true        { return "T"; }
+		case false       { return "F"; }
+	}
+	return "unreachable";
+}
+
+let ok1 = classify_i64(10'i64) == "ten";
+let ok2 = classify_i64(99'i64) == "other";
+let ok3 = classify_f32(1.5'f32) == "one-half";
+let ok4 = classify_f32(2.5'f32) == "other";
+let ok5 = classify_f64(1.5'f64) == "one-half";
+let ok6 = classify_f64(2.5'f64) == "other";
+let ok7 = classify_bool(true) == "T";
+let ok8 = classify_bool(false) == "F";
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8;

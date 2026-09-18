@@ -173,6 +173,9 @@ module procedure get_all_error_codes
 	call codes%push(EC_FLOAT_INT_SUFFIX)
 	call codes%push(EC_REF_TYPE)
 	call codes%push(EC_MISSING_FN_KW)
+	call codes%push(EC_BAD_SWITCH_TYPE)
+	call codes%push(EC_BAD_CASE_TYPE)
+	call codes%push(EC_DUP_DEFAULT)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -524,6 +527,44 @@ module procedure err_missing_fn_kw
 		//": declarations must start with `fn`, e.g. `fn "//name//"(...)`"
 
 end procedure err_missing_fn_kw
+
+
+!===============================================================================
+
+module procedure err_bad_switch_type
+
+	err = err_pre(EC_BAD_SWITCH_TYPE) &
+		//'subject `'//trimw(subject)//'` of switch-statement has type ' &
+		//type//', which cannot be matched by equality' &
+		//underline(context, span) &
+		//" bad switch subject type"//color_reset
+
+end procedure err_bad_switch_type
+
+
+!===============================================================================
+
+module procedure err_bad_case_type
+
+	err = err_pre(EC_BAD_CASE_TYPE) &
+		//'case value `'//trimw(value)//'` has type '//case_type &
+		//', which cannot be compared to the switch subject''s type ' &
+		//switch_type &
+		//underline(context, span) &
+		//" bad case value type"//color_reset
+
+end procedure err_bad_case_type
+
+
+!===============================================================================
+
+module procedure err_dup_default
+
+	err = err_pre(EC_DUP_DEFAULT)//'switch-statement has more than one `default` arm' &
+		//underline(context, span) &
+		//" duplicate default arm"//color_reset
+
+end procedure err_dup_default
 
 
 !===============================================================================

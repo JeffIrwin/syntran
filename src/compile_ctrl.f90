@@ -328,6 +328,142 @@ end subroutine backpatch_breaks
 
 !===============================================================================
 
+recursive subroutine compile_switch_statement(prog, cs, node)
+
+	! Bytecode pattern for a switch-statement.  The subject is compiled once
+	! and cached in a hidden slot (node%id_index/node%is_loc, allocated by
+	! parse_switch_statement); each arm's case values are then tested by
+	! reloading the cached subject, rather than recomputing the subject
+	! expression per arm or duplicating it on the stack (OP_EQ_STR frees both
+	! of its operand stack slots, so a persistent copy has to live in a slot,
+	! not on the stack):
+	!
+	!   [subject]
+	!   STORE_<typed|GLOBAL|LOCAL> subj_slot   ; stores keep TOS
+	!   POP
+	!
+	!   ; tests, arm order then value order
+	!   LOAD subj ; [v1_1] ; EQ ; JUMP_IF_TRUE B1
+	!   LOAD subj ; [v1_2] ; EQ ; JUMP_IF_TRUE B1
+	!   LOAD subj ; [v2_1] ; EQ ; JUMP_IF_TRUE B2
+	!   JUMP L_DEF                             ; nothing matched
+	!
+	!   B1: [body1] ; JUMP L_END               ; each body leaves one value
+	!   B2: [body2] ; JUMP L_END
+	!
+	!   L_DEF: [default body]  -- or, when absent, LOAD_CONST unknown_type
+	!   L_END:                                 ; every path converges here
+	!
+	! break/continue inside an arm body are untouched by any of this (no
+	! cs%loop_depth / cs%in_block_break_ctx bookkeeping happens here), so they
+	! resolve to the enclosing loop or block exactly as they would inside an
+	! if-clause.
+
+	type(program_t),        intent(inout) :: prog
+	type(compiler_state_t), intent(inout) :: cs
+	type(syntax_node_t),    intent(in)    :: node
+
+	!*******
+
+	integer :: i, j, subj_type, val_type, typed_op, const_idx
+	integer :: l_body, l_end, def_jump_ip, narms, ntests
+	integer, allocatable :: test_ips(:), test_arm(:), body_jump_ips(:)
+
+	subj_type = node%condition%val%type
+
+	! Cache the subject in a hidden slot, exactly once
+	call compile_node(prog, cs, node%condition)
+	typed_op = typed_store_op(subj_type, node%is_loc)
+	if (typed_op /= 0) then
+		call emit(prog, typed_op, a = node%id_index)
+	else if (node%is_loc) then
+		call emit(prog, OP_STORE_LOCAL,  a = node%id_index)
+	else
+		call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
+	end if
+	call emit(prog, OP_POP)
+
+	narms = 0
+	if (allocated(node%members)) narms = size(node%members)
+
+	ntests = 0
+	do i = 1, narms
+		ntests = ntests + size(node%members(i)%elems)
+	end do
+
+	allocate(test_ips(ntests), test_arm(ntests), body_jump_ips(narms))
+
+	! Emit all tests first, recording each JUMP_IF_TRUE fixup and which arm
+	! it targets
+	ntests = 0
+	do i = 1, narms
+		do j = 1, size(node%members(i)%elems)
+
+			! LOAD subj
+			typed_op = typed_load_op(subj_type, .false., node%is_loc)
+			if (typed_op /= 0) then
+				call emit(prog, typed_op, a = node%id_index)
+			else if (node%is_loc) then
+				call emit(prog, OP_LOAD_LOCAL,  a = node%id_index)
+			else
+				call emit(prog, OP_LOAD_GLOBAL, a = node%id_index)
+			end if
+
+			! [value]
+			call compile_node(prog, cs, node%members(i)%elems(j))
+
+			! EQ
+			val_type = node%members(i)%elems(j)%val%type
+			typed_op = binop_typed_opcode(eequals_token, subj_type, val_type)
+			if (typed_op /= 0) then
+				call emit(prog, typed_op)
+			else
+				call emit(prog, OP_BINOP, a = eequals_token, b = bool_type)
+			end if
+
+			ntests = ntests + 1
+			test_ips(ntests) = prog%len_ + 1
+			test_arm(ntests) = i
+			call emit(prog, OP_JUMP_IF_TRUE, a = 0)
+
+		end do
+	end do
+
+	! Nothing matched: jump to the default arm (or its unknown_type pad)
+	def_jump_ip = prog%len_ + 1
+	call emit(prog, OP_JUMP, a = 0)
+
+	! Emit arm bodies, in source order, each followed by a jump to L_END
+	do i = 1, narms
+		l_body = prog%len_ + 1
+		do j = 1, ntests
+			if (test_arm(j) == i) call patch_jump(prog, test_ips(j), l_body)
+		end do
+
+		call compile_node(prog, cs, node%members(i)%body)
+		body_jump_ips(i) = prog%len_ + 1
+		call emit(prog, OP_JUMP, a = 0)
+	end do
+
+	! Default arm (or its unknown_type pad)
+	l_body = prog%len_ + 1
+	call patch_jump(prog, def_jump_ip, l_body)
+	if (allocated(node%else_clause)) then
+		call compile_node(prog, cs, node%else_clause)
+	else
+		const_idx = add_const(prog, unknown_val())
+		call emit(prog, OP_LOAD_CONST, a = const_idx)
+	end if
+
+	l_end = prog%len_ + 1
+	do i = 1, narms
+		call patch_jump(prog, body_jump_ips(i), l_end)
+	end do
+
+end subroutine compile_switch_statement
+
+!===============================================================================
+
 recursive subroutine compile_node(prog, cs, node)
 
 	! Lower one AST node to opcodes.  The contract is that this subroutine
@@ -807,6 +943,11 @@ recursive subroutine compile_node(prog, cs, node)
 		! Push unknown_type as the while-statement's result value
 		const_idx = add_const(prog, unknown_val())
 		call emit(prog, OP_LOAD_CONST, a = const_idx)
+
+	! ---- switch statement -------------------------------------------------------
+	! See compile_switch_statement() above for the full bytecode pattern.
+	case (switch_statement)
+		call compile_switch_statement(prog, cs, node)
 
 	! ---- break -----------------------------------------------------------------
 	case (break_statement)
