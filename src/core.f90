@@ -49,12 +49,27 @@ module syntran__core_m
 	!      dedicated whole-array-equality opcode
 	!    * switch as an expression (like rust's match): the bytecode already
 	!      leaves one value on the stack, so the backend is ready; missing is
-	!      arm-type unification and an exhaustiveness rule
-	!    * pattern matching: ranges (case 1:10), guards (case x if cond),
-	!      or-patterns, and binding the matched value to a name
+	!      arm-type unification and an exhaustiveness rule.  `switch` in
+	!      expression position is a clean E20 parse error today, so this is
+	!      purely additive and the statement form must keep working as-is
+	!    * pattern matching: ranges (case 1:10) and a wildcard (case _) are
+	!      both free to add -- `:` and `_` are parse errors in that
+	!      position today.  But some spellings are already claimed:
+	!      + guards must be spelled `case v when cond` (or `where`), NOT
+	!        `if`: `case 1 if c { ... }` already parses, with `1` as the
+	!        case value and the if-statement as the arm's body, so `if`
+	!        would silently change the meaning of existing code
+	!      + or-patterns must stay comma-separated, not `|`: `case 1 | 2`
+	!        already parses as the bitwise-or expression `3`
+	!      + a bare identifier in a case value compares against it, it
+	!        never binds, so binding the matched value to a name needs
+	!        its own syntax, e.g. a `let`-prefixed pattern
 	!    * duplicate-case-value detection: not possible in general since
 	!      values are arbitrary expressions; a constant-folded subset could
-	!      be diagnosed later
+	!      be diagnosed later.  Likewise, enum-subject exhaustiveness
+	!      checking must arrive as a warning (or only in a future
+	!      expression form): existing default-less switches are legal and
+	!      must stay legal
 	!    * a dense jump table for integer subjects: prog%fn_entry(:) (used by
 	!      OP_CALL_PTR) is a working precedent for an indirect jump through an
 	!      integer table.  Pure optimization, gated behind a

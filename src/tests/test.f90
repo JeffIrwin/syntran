@@ -4573,6 +4573,20 @@ subroutine unit_test_switch(npass, nfail)
 				//'switch x { case "a" { y = "A"; } case "b" { y = "B"; } } y;', &
 				quiet) == 'B', &
 
+			! Trailing comma after the last case value is allowed, mirroring
+			! enum declarations and array literals
+			eval_i32('let x = 2; let y = 0; ' &
+				//'switch x { case 1, 2, { y = 7; } } y;', quiet) == 7, &
+
+			! Case values are tested in source order and testing stops at the
+			! first match: mark()'s side effect proves the "b" arm's value
+			! expression is never evaluated once "a" already matched
+			eval_str('let log = ""; ' &
+				//'fn mark(tag: str, x: i32): i32 { log = log + tag; return x; } ' &
+				//'let y = 0; switch 1 ' &
+				//'{ case mark("a", 1) { y = 1; } case mark("b", 2) { y = 2; } ' &
+				//'default { y = 3; } } log;', quiet) == 'a', &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

@@ -9,8 +9,9 @@ fn classify(x: i32): str
 		{
 			result = "one";
 		}
-		case 2, 3
+		case 2, 3,
 		{
+			// trailing comma after the last case value is allowed
 			result = "two-or-three";
 		}
 		case 3

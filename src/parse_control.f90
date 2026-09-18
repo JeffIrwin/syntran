@@ -873,6 +873,25 @@ end subroutine parse_while_statement
 
 !===============================================================================
 
+logical function at_case_body_start(parser) result(at_body)
+
+	! True when the parser is sitting at the start of a `case` arm's body
+	! statement rather than another match-value expression.  Used to allow a
+	! trailing comma in the value list, e.g. `case 1, 2, { ... }`, consistent
+	! with enum declarations (parse_fn.f90's at_method_start() neighbor) and
+	! array literals (parse_array.f90's trailing-comma check).  Kind list
+	! mirrors parse_statement()'s select-case dispatch above
+
+	class(parser_t) :: parser
+
+	at_body = any(parser%current_kind() == [lbrace_token, return_keyword, &
+		if_keyword, for_keyword, while_keyword, switch_keyword, &
+		break_keyword, continue_keyword, let_keyword, use_keyword])
+
+end function at_case_body_start
+
+!===============================================================================
+
 recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 	! Parse one `case <val>, <val>, ... <body>` arm.  Not a parser_t
@@ -950,6 +969,9 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 		if (parser%current_kind() /= comma_token) exit
 		call parser%match(comma_token, comma)
+
+		! Allow a trailing comma before the body, e.g. `case 1, 2, { ... }`
+		if (at_case_body_start(parser)) exit
 	end do
 
 	call parser%parse_statement(body)

@@ -761,6 +761,8 @@ The subject expression is evaluated exactly once, no matter how many `case` arms
 
 `switch` can compare `bool`, `i32`, `i64`, `f32`, `f64`, `str`, and `enum` subjects.  Arrays and structs can't be `switch` subjects, since equality on them isn't a single true/false result that a `switch` can branch on.
 
+Case values are tested in source order and testing stops at the first match, so a later arm's value expression is never evaluated once an earlier one matches -- safe to rely on if a value expression is a function call with side effects.  Several values on one `case` are separated by commas (a trailing comma is allowed, e.g. `case 1, 2,`); `case 1 | 2` is the bitwise-or expression `3`, not an or-pattern matching either value.
+
 ## Arrays
 
 Recall the syntax for a for-loop:
