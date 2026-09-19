@@ -23,6 +23,8 @@ module syntran__bytecode_m
 		OP_POP              = 1009, &	! discard TOS
 		OP_JUMP             = 1010, &	! unconditional jump: ip = a
 		OP_JUMP_IF_FALSE    = 1011, &	! pop bool TOS; if false: ip = a, else continue
+		OP_JUMP_IF_TRUE     = 1246, &	! pop bool TOS; if true: ip = a, else continue.  Mirror of
+		                            	!   OP_JUMP_IF_FALSE; used by switch-statement case tests
 		OP_CALL             = 1012, &	! call user fn: a=fn_id, b=node_pool_idx (fn_call node)
 		OP_RET              = 1013, &	! return from fn: TOS is return value
 		OP_LOAD_REF_GLOBAL  = 1014, &	! move state%vars%vals(a) to stack (by-ref arg, pass 2)
@@ -223,7 +225,22 @@ module syntran__bytecode_m
 		OP_LT_STR           = 1242, &
 		OP_LE_STR           = 1243, &
 		OP_GT_STR           = 1244, &
-		OP_GE_STR           = 1245
+		OP_GE_STR           = 1245, &
+		OP_EQ_ARRAY         = 1247
+
+	! OP_EQ_ARRAY: whole-array equality for switch-statement case tests.
+	!   Pushes a SCALAR bool.  True iff the subject and the case value have
+	!   the same rank, the same extents, and all elements are equal.  A shape mismatch is simply .false., never an error -- a `case`
+	!   value of a different length has to fall through to the next arm, so
+	!   this can't reuse the elementwise `==` in is_eq_value_t(), which has no
+	!   shape check at all (c.f. its array_type x array_type branch).
+	!   a = subject slot_id, c = is_local (0 = global, 1 = local).  Like
+	!   OP_SIZE_NAT, the subject is read straight out of its slot rather than
+	!   loaded, so a switch with N array `case` values doesn't deep-copy it N
+	!   times.  Only the case value is on the stack; it's reset before the
+	!   bool is written, so the next pop sees a clean bool_type slot.
+	!   Stack before:  [case_value]
+	!   Stack after:   [bool]       (len_ unchanged; TOS rewritten in place)
 
 	! Native array construction opcodes.
 	!
@@ -707,7 +724,7 @@ end function add_node
 subroutine patch_jump(prog, ip, tgt)
 
 	! Backpatch the jump target (field `a`) of a previously emitted
-	! OP_JUMP or OP_JUMP_IF_FALSE instruction at position ip.
+	! OP_JUMP, OP_JUMP_IF_FALSE, or OP_JUMP_IF_TRUE instruction at position ip.
 
 	type(program_t), intent(inout) :: prog
 	integer, intent(in) :: ip, tgt

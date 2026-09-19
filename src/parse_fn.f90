@@ -2350,6 +2350,9 @@ recursive function all_paths_return(node) result(returns)
 	!   if_statement      -> returns iff else_clause is present AND both
 	!                        if_clause and else_clause return on all paths.
 	!                        else-if chains recurse through else_clause.
+	!   switch_statement  -> returns iff else_clause (the `default` arm) is
+	!                        present AND it returns AND every case_clause
+	!                        member's body returns on all paths.
 	!   while/for         -> never guaranteed (loop may execute zero times).
 	!   everything else   -> does not return.
 
@@ -2384,6 +2387,23 @@ recursive function all_paths_return(node) result(returns)
 		if (allocated(node%else_clause) .and. allocated(node%if_clause)) then
 			returns = all_paths_return(node%if_clause) .and. &
 			          all_paths_return(node%else_clause)
+		end if
+
+	case (switch_statement)
+		! Requires a `default` arm (else_clause) that returns, AND every
+		! case_clause arm's body (members(i)%body) to return on all paths.
+		! A switch with no default is never guaranteed to return, since no
+		! arm may match
+		if (allocated(node%else_clause)) then
+			returns = all_paths_return(node%else_clause)
+			if (returns .and. allocated(node%members)) then
+				do i = 1, size(node%members)
+					if (.not. all_paths_return(node%members(i)%body)) then
+						returns = .false.
+						exit
+					end if
+				end do
+			end if
 		end if
 
 	! while_statement / for_statement: body may run zero times -> no guarantee.

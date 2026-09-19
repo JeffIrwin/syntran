@@ -124,6 +124,7 @@ module syntran__parse_m
 				parse_primary_expr, &
 				parse_size, &
 				parse_statement, &
+				parse_switch_statement, &
 				parse_subscripts, &
 				parse_dot, &
 				parse_type, &
@@ -337,6 +338,11 @@ module syntran__parse_m
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: statement
 		end subroutine parse_while_statement
+
+		recursive module subroutine parse_switch_statement(parser, statement)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: statement
+		end subroutine parse_switch_statement
 
 		recursive module subroutine parse_block_statement(parser, block)
 			class(parser_t) :: parser

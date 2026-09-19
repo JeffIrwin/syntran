@@ -1,0 +1,12 @@
+// E108: bad-case-type
+// A case value's type can't be compared to the switch subject's type
+
+let x = 5;
+
+switch x
+{
+	case "foo"
+	{
+		println("foo");
+	}
+}

@@ -1,0 +1,25 @@
+// str subject
+
+fn greet(name: str): str
+{
+	switch name
+	{
+		case "foo"
+		{
+			return "got foo";
+		}
+		case "bar", "baz"
+		{
+			return "bar-ish";
+		}
+		default
+		{
+			return "other";
+		}
+	}
+	return "unreachable";
+}
+
+let ans = [greet("foo"), greet("bar"), greet("baz"), greet("qux")];
+let exp = ["got foo", "bar-ish", "bar-ish", "other"];
+return all(ans == exp);

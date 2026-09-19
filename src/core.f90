@@ -42,9 +42,6 @@ module syntran__core_m
 	!    * took a big chunk out already
 	!    * continue one file at a time
 	!    * '''grep -c  'TODO' src/* | sort -t: -k2 -n'''
-	!  - switch/match/case. needs to work with strings. would be nice to work
-	!    with arrays. basic switch/case is fine but also consider "pattern
-	!    matching" or whatever rust has
 	!  - stack trace for runtime errors
 	!  - short circuit logic?
 	!    * useful e.g. for scanning a string, or anything where you need a
@@ -52,15 +49,6 @@ module syntran__core_m
 	!      statement
 	!    * small compatibility break when evaluation of part a bool expression
 	!      calls a fn with side effects
-	!  - fn pointer (callback) improvements:
-	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
-	!      intrinsic function, a struct method, or a user-defined function with
-	!      any `&`-reference parameter (E87)
-	!      + no reason to ban these afaik except it's more work to implement
-	!      + overloaded intrinsics might be tricky
-	!    * can arrays contain a fn? (E89) -- the array-element storage path
-	!      genuinely has no fn_type case
-	!    * closures and anonymous (lambda) fns?
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
 	!    imported
@@ -172,6 +160,18 @@ module syntran__core_m
 	!          generated/templated code for multiple type combinations.
 	!
 	!    * docs -- see several notes below
+	!  - fn pointer (callback) improvements:
+	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
+	!      intrinsic function, a struct method, or a user-defined function with
+	!      any `&`-reference parameter (E87)
+	!      + no reason to ban most of these afaik except it's more work to
+	!        implement
+	!      + pointer to struct method might not have many use cases as far as i
+	!        can think
+	!      + overloaded intrinsics might be tricky
+	!    * can arrays contain a fn? (E89) -- the array-element storage path
+	!      genuinely has no fn_type case
+	!    * closures and anonymous (lambda) fns?
 	!  - i like claude's "double_colon_token" name. i should change things like
 	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - minloc, maxloc, findloc std:: fns
@@ -433,6 +433,15 @@ module syntran__core_m
 	!    include quick-start and links in top-level README?
 	!    * github automatically includes a Table of Contents in a menu, so maybe
 	!      it's better as-is
+	!  - switch/case follow-ups (mvp done):
+	!    * switch as an expression (like rust's match)
+	!    * beyond simple ranges:
+	!      + omitted range bounds (case :10, case 5:) and stepped ranges
+	!        (case 1:2:10) are still parse errors, free to add later
+	!      + inverted or empty range (case 10:1) is legal but silently
+	!        matches nothing
+	!    * duplicate-case-value detection: not possible in general
+	!    * a dense jump table for integer subjects
 	!  - minval, maxval fns
 	!    * done
 	!    * until now, i had delayed these over confusion about whether

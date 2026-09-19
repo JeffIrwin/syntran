@@ -328,6 +328,246 @@ end subroutine backpatch_breaks
 
 !===============================================================================
 
+subroutine emit_switch_load_subj(prog, node, subj_type)
+
+	! LOAD the switch subject from its cached hidden slot.  Shared by every
+	! value/range test in compile_switch_statement(), which reloads the
+	! subject once per test rather than duplicating it on the stack (OP_EQ_STR
+	! frees both of its operand stack slots, so a persistent copy has to live
+	! in a slot, not on the stack).
+	!
+	! Not used for array subjects: OP_EQ_ARRAY takes the subject slot as an
+	! operand instead, since reloading an array is a deep copy
+
+	type(program_t),     intent(inout) :: prog
+	type(syntax_node_t), intent(in)    :: node
+	integer,             intent(in)    :: subj_type
+
+	!*******
+
+	integer :: typed_op
+
+	typed_op = typed_load_op(subj_type, .false., node%is_loc)
+	if (typed_op /= 0) then
+		call emit(prog, typed_op, a = node%id_index)
+	else if (node%is_loc) then
+		call emit(prog, OP_LOAD_LOCAL,  a = node%id_index)
+	else
+		call emit(prog, OP_LOAD_GLOBAL, a = node%id_index)
+	end if
+
+end subroutine emit_switch_load_subj
+
+!===============================================================================
+
+subroutine emit_case_cmp(prog, op, subj_type, val_type)
+
+	! Emit one switch case comparison: the typed opcode when there is one for
+	! this operand pair, else the generic OP_BINOP.  Shared by the `==` value
+	! test and both `<` bounds of a `case lo:hi` range in
+	! compile_switch_statement(), so the three sites can't drift apart
+
+	type(program_t), intent(inout) :: prog
+	integer,         intent(in)    :: op, subj_type, val_type
+
+	!*******
+
+	integer :: typed_op
+
+	typed_op = binop_typed_opcode(op, subj_type, val_type)
+	if (typed_op /= 0) then
+		call emit(prog, typed_op)
+	else
+		call emit(prog, OP_BINOP, a = op, b = bool_type)
+	end if
+
+end subroutine emit_case_cmp
+
+!===============================================================================
+
+recursive subroutine compile_switch_statement(prog, cs, node)
+
+	! Bytecode pattern for a switch-statement.  The subject is compiled once
+	! and cached in a hidden slot (node%id_index/node%is_loc, allocated by
+	! parse_switch_statement).  Arms are compiled one at a time, in source
+	! order, each ending with a jump to the next arm's tests (or to the
+	! default arm, for the last one) when nothing in it matches -- that's
+	! what makes a guard's fall-through-to-the-next-arm behavior a plain
+	! forward jump rather than any cross-arm bookkeeping:
+	!
+	!   [subject]
+	!   STORE_<typed|GLOBAL|LOCAL> subj_slot   ; stores keep TOS
+	!   POP
+	!
+	!   ; arm i, in source order
+	!   LOAD subj ; [v_i1]  ; EQ ; JUMP_IF_TRUE T_i    ; plain value
+	!   [v_i1]  ; EQ_ARRAY subj ; JUMP_IF_TRUE T_i      ; array subject: no LOAD subj,
+	!                                                   ; the slot is an operand
+	!   LOAD subj ; [lo_i2] ; LT ; JUMP_IF_TRUE S_i2    ; range: subj < lo, no match
+	!   LOAD subj ; [hi_i2] ; LT ; JUMP_IF_TRUE T_i     ; range: subj < hi, match
+	!   S_i2:                                           ; next value/range in arm i
+	!   ...
+	!   JUMP A_(i+1)                             ; nothing in arm i matched
+	!   T_i: [guard]  ; JUMP_IF_FALSE A_(i+1)     ; guard, if present; false -> next arm
+	!        [body_i] ; JUMP L_END                ; leaves one value on the stack
+	!   A_(i+1): ...                              ; next arm, or L_DEF after the last one
+	!
+	! A guard-only arm (`case when c`) has no value tests and no "nothing
+	! matched" jump; it starts directly at T_i:
+	!
+	!   [guard] ; JUMP_IF_FALSE A_(i+1)
+	!   [body_i] ; JUMP L_END
+	!
+	!   L_DEF: [default body]  -- or, when absent, LOAD_CONST unknown_type
+	!   L_END:                                    ; every path converges here
+	!
+	! A range's hi bound is compiled lazily -- it's never reached when
+	! subj < lo -- matching the stop-at-first-match guarantee that plain
+	! values already have.  A guard is compiled once per arm, only after one
+	! of the arm's values/ranges has matched, and its failure falls through
+	! to the next arm (A_(i+1)), not to default, so a later arm can still
+	! catch what a guarded earlier arm rejected.
+	!
+	! break/continue inside an arm body are untouched by any of this (no
+	! cs%loop_depth / cs%in_block_break_ctx bookkeeping happens here), so they
+	! resolve to the enclosing loop or block exactly as they would inside an
+	! if-clause.
+
+	type(program_t),        intent(inout) :: prog
+	type(compiler_state_t), intent(inout) :: cs
+	type(syntax_node_t),    intent(in)    :: node
+
+	!*******
+
+	integer :: i, j, subj_type, val_type, typed_op, const_idx
+	integer :: l_body, l_end, narms, nelems
+	integer :: next_arm_ip, skip_ip, guard_jf_ip
+	logical :: has_guard
+	integer, allocatable :: match_ips(:), body_jump_ips(:)
+
+	subj_type = node%condition%val%type
+
+	! Cache the subject in a hidden slot, exactly once
+	call compile_node(prog, cs, node%condition)
+	typed_op = typed_store_op(subj_type, node%is_loc)
+	if (typed_op /= 0) then
+		call emit(prog, typed_op, a = node%id_index)
+	else if (node%is_loc) then
+		call emit(prog, OP_STORE_LOCAL,  a = node%id_index)
+	else
+		call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
+	end if
+	call emit(prog, OP_POP)
+
+	narms = 0
+	if (allocated(node%members)) narms = size(node%members)
+
+	allocate(body_jump_ips(narms))
+
+	do i = 1, narms
+
+		nelems = size(node%members(i)%elems)
+		allocate(match_ips(nelems))
+
+		do j = 1, nelems
+
+			if (node%members(i)%elems(j)%kind == case_range) then
+
+				! LOAD subj ; [lo] ; LT ; JUMP_IF_TRUE skip (subj < lo -> no match)
+				call emit_switch_load_subj(prog, node, subj_type)
+				call compile_node(prog, cs, node%members(i)%elems(j)%lbound_)
+				val_type = node%members(i)%elems(j)%lbound_%val%type
+				call emit_case_cmp(prog, less_token, subj_type, val_type)
+				skip_ip = prog%len_ + 1
+				call emit(prog, OP_JUMP_IF_TRUE, a = 0)
+
+				! LOAD subj ; [hi] ; LT ; JUMP_IF_TRUE match (subj < hi -> match)
+				call emit_switch_load_subj(prog, node, subj_type)
+				call compile_node(prog, cs, node%members(i)%elems(j)%ubound_)
+				val_type = node%members(i)%elems(j)%ubound_%val%type
+				call emit_case_cmp(prog, less_token, subj_type, val_type)
+				match_ips(j) = prog%len_ + 1
+				call emit(prog, OP_JUMP_IF_TRUE, a = 0)
+
+				call patch_jump(prog, skip_ip, prog%len_ + 1)
+
+			else
+
+				if (subj_type == array_type) then
+					! [value] ; EQ_ARRAY subj ; JUMP_IF_TRUE match
+					!
+					! Whole-array equality, not the elementwise `==` that
+					! OP_BINOP would do: OP_JUMP_IF_TRUE needs a scalar bool.
+					! No emit_switch_load_subj(): OP_EQ_ARRAY reads the subject
+					! out of its slot itself, so it's never deep-copied per test
+					call compile_node(prog, cs, node%members(i)%elems(j))
+					call emit(prog, OP_EQ_ARRAY, a = node%id_index, &
+						c = merge(1_8, 0_8, node%is_loc))
+				else
+					! LOAD subj ; [value] ; EQ ; JUMP_IF_TRUE match
+					call emit_switch_load_subj(prog, node, subj_type)
+					call compile_node(prog, cs, node%members(i)%elems(j))
+					val_type = node%members(i)%elems(j)%val%type
+					call emit_case_cmp(prog, eequals_token, subj_type, val_type)
+				end if
+				match_ips(j) = prog%len_ + 1
+				call emit(prog, OP_JUMP_IF_TRUE, a = 0)
+
+			end if
+
+		end do
+
+		! Nothing in this arm matched: skip its guard and body, straight to
+		! the next arm (or the default arm, for the last one).  A guard-only arm
+		! (nelems == 0) has no values that can fail to match, so it gets no such
+		! jump -- control falls straight into the guard below, whose
+		! JUMP_IF_FALSE alone handles the fall-through to the next arm
+		if (nelems > 0) then
+			next_arm_ip = prog%len_ + 1
+			call emit(prog, OP_JUMP, a = 0)
+		end if
+
+		! A match jumps here: the guard (if any), then the body
+		l_body = prog%len_ + 1
+		do j = 1, nelems
+			call patch_jump(prog, match_ips(j), l_body)
+		end do
+		deallocate(match_ips)
+
+		has_guard = allocated(node%members(i)%condition)
+		if (has_guard) then
+			call compile_node(prog, cs, node%members(i)%condition)
+			guard_jf_ip = prog%len_ + 1
+			call emit(prog, OP_JUMP_IF_FALSE, a = 0)
+		end if
+
+		call compile_node(prog, cs, node%members(i)%body)
+		body_jump_ips(i) = prog%len_ + 1
+		call emit(prog, OP_JUMP, a = 0)
+
+		! Both "nothing matched" and "guard false" land at the next arm
+		if (nelems > 0) call patch_jump(prog, next_arm_ip, prog%len_ + 1)
+		if (has_guard) call patch_jump(prog, guard_jf_ip, prog%len_ + 1)
+
+	end do
+
+	! Default arm (or its unknown_type pad)
+	if (allocated(node%else_clause)) then
+		call compile_node(prog, cs, node%else_clause)
+	else
+		const_idx = add_const(prog, unknown_val())
+		call emit(prog, OP_LOAD_CONST, a = const_idx)
+	end if
+
+	l_end = prog%len_ + 1
+	do i = 1, narms
+		call patch_jump(prog, body_jump_ips(i), l_end)
+	end do
+
+end subroutine compile_switch_statement
+
+!===============================================================================
+
 recursive subroutine compile_node(prog, cs, node)
 
 	! Lower one AST node to opcodes.  The contract is that this subroutine
@@ -807,6 +1047,11 @@ recursive subroutine compile_node(prog, cs, node)
 		! Push unknown_type as the while-statement's result value
 		const_idx = add_const(prog, unknown_val())
 		call emit(prog, OP_LOAD_CONST, a = const_idx)
+
+	! ---- switch statement -------------------------------------------------------
+	! See compile_switch_statement() above for the full bytecode pattern.
+	case (switch_statement)
+		call compile_switch_statement(prog, cs, node)
 
 	! ---- break -----------------------------------------------------------------
 	case (break_statement)

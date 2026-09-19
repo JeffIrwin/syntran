@@ -4530,6 +4530,123 @@ end subroutine unit_test_control
 
 !===============================================================================
 
+subroutine unit_test_switch(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'switch statements'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/switch/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
+			interpret_file(path//'test-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-04.syntran', quiet) == 'true', &
+			interpret_file(path//'test-05.syntran', quiet) == 'true', &
+			interpret_file(path//'test-06.syntran', quiet) == 'true', &
+			interpret_file(path//'test-07.syntran', quiet) == 'true', &
+			interpret_file(path//'test-08.syntran', quiet) == 'true', &
+			interpret_file(path//'test-09.syntran', quiet) == 'true', &
+			interpret_file(path//'test-10.syntran', quiet) == 'true', &
+			interpret_file(path//'test-11.syntran', quiet) == 'true', &
+			interpret_file(path//'test-12.syntran', quiet) == 'true', &
+			interpret_file(path//'test-13.syntran', quiet) == 'true', &
+			interpret_file(path//'test-14.syntran', quiet) == 'true', &
+			interpret_file(path//'test-15.syntran', quiet) == 'true', &
+			interpret_file(path//'test-16.syntran', quiet) == 'true', &
+			interpret_file(path//'test-17.syntran', quiet) == 'true', &
+
+			! Short inline scripts, not worth their own test-src file
+			eval_i32('let x = 2; let y = 0; ' &
+				//'switch x { case 2 { y = 7; } } y;', quiet) == 7, &
+			eval_i32('let x = 9; let y = 0; ' &
+				//'switch x { case 2 { y = 7; } default { y = -1; } } y;', &
+				quiet) == -1, &
+			eval_str('let x = "b"; let y = ""; ' &
+				//'switch x { case "a" { y = "A"; } case "b" { y = "B"; } } y;', &
+				quiet) == 'B', &
+
+			! Trailing comma after the last case value is allowed, mirroring
+			! enum declarations and array literals
+			eval_i32('let x = 2; let y = 0; ' &
+				//'switch x { case 1, 2, { y = 7; } } y;', quiet) == 7, &
+
+			! Case values are tested in source order and testing stops at the
+			! first match: mark()'s side effect proves the "b" arm's value
+			! expression is never evaluated once "a" already matched
+			eval_str('let log = ""; ' &
+				//'fn mark(tag: str, x: i32): i32 { log = log + tag; return x; } ' &
+				//'let y = 0; switch 1 ' &
+				//'{ case mark("a", 1) { y = 1; } case mark("b", 2) { y = 2; } ' &
+				//'default { y = 3; } } log;', quiet) == 'a', &
+
+			! A range's hi bound is evaluated lazily: it's never reached when
+			! subj < lo, so mark("hi", ...) never fires here
+			eval_str('let log = ""; ' &
+				//'fn mark(tag: str, x: i32): i32 { log = log + tag; return x; } ' &
+				//'switch mark("s", 5) ' &
+				//'{ case mark("lo", 10): mark("hi", 20) { } default { } } log;', &
+				quiet) == 'slo', &
+
+			! A guard is evaluated only after one of the arm's values already
+			! matched: guard()'s side effect proves it never fires when the
+			! arm's only value doesn't match the subject
+			eval_str('let log = ""; ' &
+				//'fn guard(tag: str, b: bool): bool { log = log + tag; return b; } ' &
+				//'switch 1 { case 2 when guard("g", true) { } default { } } log;', &
+				quiet) == '', &
+
+			! A guard-only arm never evaluates any case value, but the subject is
+			! still evaluated exactly once: mark()'s side effect fires once
+			eval_str('let log = ""; ' &
+				//'fn mark(tag: str, x: i32): i32 { log = log + tag; return x; } ' &
+				//'switch mark("s", 1) { case when false { } case when true { } ' &
+				//'default { } } log;', quiet) == 's', &
+
+			! A false guard-only guard falls to `default`
+			eval_i32('let y = 0; switch 1 { case when false { y = 1; } ' &
+				//'default { y = 2; } } y;', quiet) == 2, &
+
+			! Array subjects are matched whole, so a different-length case value
+			! simply doesn't match instead of aborting on a shape mismatch the
+			! way `all(subj == val)` would
+			eval_str('let a = [1,2,3]; let y = "none"; switch a ' &
+				//'{ case [1,2,3] { y = "got it"; } case [4,5] { y = "other"; } ' &
+				//'default { y = "none"; } } y;', quiet) == 'got it', &
+			eval_str('let a = [1,2,3]; let y = "none"; switch a ' &
+				//'{ case [4,5] { y = "other"; } default { y = "dflt"; } } y;', &
+				quiet) == 'dflt', &
+
+			! Stop at first match applies to array values too
+			eval_str('let log = ""; ' &
+				//'fn mark(tag: str, x: i32): [i32; :] { log = log + tag; return [x]; } ' &
+				//'switch [1] { case mark("a", 1) { } case mark("b", 1) { } ' &
+				//'default { } } log;', quiet) == 'a', &
+
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_switch
+
+!===============================================================================
+
 subroutine unit_test_struct(npass, nfail)
 
 	implicit none
@@ -7858,6 +7975,88 @@ subroutine unit_test_error_codes(npass, nfail)
 					'struct P{x: i32, sum(): i32 {return x;}}'), &
 					EC_MISSING_FN_KW), &
 
+				! E107: switch-statement subject type can't be matched by equality
+				diag_has_code(get_diags( &
+					'struct P{x: i32} let p = P{x=1}; switch p { case 1 {} }'), &
+					EC_BAD_SWITCH_TYPE), &
+				diag_count_code(get_diags( &
+					'struct P{x: i32} let p = P{x=1}; switch p { case 1 {} }'), &
+					EC_BAD_SWITCH_TYPE) == 1, &
+				! No cascading E108 once E107 fires (subject treated as
+				! unknown_type for the rest of the switch)
+				diag_count_code(get_diags( &
+					'struct P{x: i32} let p = P{x=1}; switch p { case 1 {} }'), &
+					EC_BAD_CASE_TYPE) == 0, &
+				! An array subject is legal (whole-array equality), but only if
+				! its element type supports equality
+				diag_count_code(get_diags( &
+					'struct P{x: i32} let p = P{x=1}; let a = [p, p]; ' &
+					//'switch a { default {} }'), &
+					EC_BAD_SWITCH_TYPE) == 1, &
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case [1,2,3] {} default {} }'), &
+					EC_BAD_SWITCH_TYPE) == 0, &
+
+				! E108: case value type can't be compared to the switch subject
+				diag_has_code(get_diags( &
+					'let x = 5; switch x { case "foo" {} }'), &
+					EC_BAD_CASE_TYPE), &
+				diag_count_code(get_diags( &
+					'let x = 5; switch x { case "foo" {} }'), &
+					EC_BAD_CASE_TYPE) == 1, &
+				! Whole-array equality is all-or-nothing: an array subject needs
+				! array case values and vice versa, and element types must match
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case 1 {} }'), &
+					EC_BAD_CASE_TYPE) == 1, &
+				diag_count_code(get_diags( &
+					'let x = 5; switch x { case [1,2] {} }'), &
+					EC_BAD_CASE_TYPE) == 1, &
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case ["x"] {} }'), &
+					EC_BAD_CASE_TYPE) == 1, &
+				! Arrays of different enums
+				diag_count_code(get_diags( &
+					'enum A {X} enum B {Y} switch [A.X] { case [B.Y] {} }'), &
+					EC_BAD_CASE_TYPE) == 1, &
+				! Rank mismatch reuses E49, same as `subj == val`
+				diag_has_code(get_diags( &
+					'let a = [1,2,3]; switch a { case [1,2,3,4; 2,2] {} }'), &
+					EC_BINARY_RANKS), &
+
+				! E109: more than one `default` arm
+				diag_has_code(get_diags( &
+					'let x = 5; switch x { default {} default {} }'), &
+					EC_DUP_DEFAULT), &
+				diag_count_code(get_diags( &
+					'let x = 5; switch x { default {} default {} }'), &
+					EC_DUP_DEFAULT) == 1, &
+
+				! E110: case-range bound type can't be ordered against the
+				! switch subject
+				diag_has_code(get_diags( &
+					'let x = 5; switch x { case 1:"z" {} }'), &
+					EC_BAD_CASE_RANGE_TYPE), &
+				diag_count_code(get_diags( &
+					'let x = 5; switch x { case 1:"z" {} }'), &
+					EC_BAD_CASE_RANGE_TYPE) == 1, &
+				! No cascading E110 once E107 fires (subject treated as
+				! unknown_type for the rest of the switch)
+				diag_count_code(get_diags( &
+					'struct P{x: i32} let p = P{x=1}; switch p { case 1:2 {} }'), &
+					EC_BAD_CASE_RANGE_TYPE) == 0, &
+				! An array subject can't take a range either (`<` on arrays is
+				! elementwise), reported once for the range, not once per bound
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case 1:2 {} }'), &
+					EC_BAD_CASE_RANGE_TYPE) == 1, &
+
+				! `when` guard must be bool, reusing E52 (non-bool condition)
+				! rather than a dedicated code
+				diag_has_code(get_diags( &
+					'switch 1 { case 1 when 7 {} }'), &
+					EC_NON_BOOL_CONDITION), &
+
 				! No stray E20/E28 cascade once E106 recovers
 				diag_count_code(get_diags( &
 					'add(a: i32): i32 { return a; } println(add(1));'), &
@@ -8667,7 +8866,23 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E106-missing-fn-kw.syntran'), &
 				EC_MISSING_FN_KW, P//'E106-missing-fn-kw.syntran', 6, 1, 3), &
 			diag_count_code(get_diags_file(P//'E106-missing-fn-kw.syntran'), &
-				EC_MISSING_FN_KW) == 1 &
+				EC_MISSING_FN_KW) == 1, &
+			diag_loc_ok(get_diags_file(P//'E107-bad-switch-type.syntran'), &
+				EC_BAD_SWITCH_TYPE, P//'E107-bad-switch-type.syntran', 21, 8, 6), &
+			diag_count_code(get_diags_file(P//'E107-bad-switch-type.syntran'), &
+				EC_BAD_SWITCH_TYPE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E108-bad-case-type.syntran'), &
+				EC_BAD_CASE_TYPE, P//'E108-bad-case-type.syntran', 8, 7, 5), &
+			diag_count_code(get_diags_file(P//'E108-bad-case-type.syntran'), &
+				EC_BAD_CASE_TYPE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E109-dup-default.syntran'), &
+				EC_DUP_DEFAULT, P//'E109-dup-default.syntran', 12, 2, 7), &
+			diag_count_code(get_diags_file(P//'E109-dup-default.syntran'), &
+				EC_DUP_DEFAULT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E110-bad-case-range-type.syntran'), &
+				EC_BAD_CASE_RANGE_TYPE, P//'E110-bad-case-range-type.syntran', 8, 9, 3), &
+			diag_count_code(get_diags_file(P//'E110-bad-case-range-type.syntran'), &
+				EC_BAD_CASE_RANGE_TYPE) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -8879,6 +9094,7 @@ subroutine unit_tests(iostat)
 	if (run_group('arr_op')) call unit_test_arr_op(npass, nfail)
 	if (run_group('lhs_slc_1')) call unit_test_lhs_slc_1(npass, nfail)
 	if (run_group('control')) call unit_test_control(npass, nfail)
+	if (run_group('switch')) call unit_test_switch(npass, nfail)
 	if (run_group('struct')) call unit_test_struct(npass, nfail)
 	if (run_group('struct_arr1')) call unit_test_struct_arr1(npass, nfail)
 	if (run_group('struct_arr2')) call unit_test_struct_arr2(npass, nfail)

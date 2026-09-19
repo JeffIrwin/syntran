@@ -1,0 +1,7 @@
+// switch statement inside an imported module's fn
+
+use switch_helper::*;
+
+let ans = [classify(1), classify(3), classify(9)];
+let exp = ["one", "two-or-three", "other"];
+return all(ans == exp);

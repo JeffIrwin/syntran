@@ -139,6 +139,19 @@ module procedure kind_token
 			"fn type              ", & ! 125
 			"fn ref expr          ", & ! 126
 			"fn call ptr expr     ", & ! 127
+			"enum                 ", & ! 128
+			"enum declaration     ", & ! 129
+			"enum type            ", & ! 130
+			"enum access expr     ", & ! 131
+			"enum cast expr       ", & ! 132
+			"//                   ", & ! 133
+			"switch               ", & ! 134
+			"case                 ", & ! 135
+			"default              ", & ! 136
+			"switch statement     ", & ! 137
+			"case clause          ", & ! 138
+			"case range           ", & ! 139
+			"when                 ", & ! 140
 			"unknown              "  & ! inf
 		]
 
@@ -289,9 +302,15 @@ module procedure kind_name
 			"enum_access_expr     ", & ! 131
 			"enum_cast_expr       ", & ! 132
 			"comment_token        ", & ! 133
+			"switch_keyword       ", & ! 134
+			"case_keyword         ", & ! 135
+			"default_keyword      ", & ! 136
+			"switch_statement     ", & ! 137
+			"case_clause          ", & ! 138
+			"case_range           ", & ! 139
+			"when_keyword         ", & ! 140
 			"unknown              "  & ! inf (trailing comma hack)
 		]
-			! FIXME: update kind_tokens array too
 
 	if (.not. (1 <= kind .and. kind <= size(names))) then
 		kind_name = "unknown"

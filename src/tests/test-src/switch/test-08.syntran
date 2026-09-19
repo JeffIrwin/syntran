@@ -1,0 +1,26 @@
+// A switch whose arms all return, as the entire body of a function: pins
+// all_paths_return() treating an exhaustive (has-default) switch as
+// guaranteed to return, so no W1/E32 missing-return diagnostic fires
+
+fn classify(x: i32): str
+{
+	switch x
+	{
+		case 1
+		{
+			return "one";
+		}
+		case 2, 3
+		{
+			return "two-or-three";
+		}
+		default
+		{
+			return "other";
+		}
+	}
+}
+
+let ans = [classify(1), classify(3), classify(9)];
+let exp = ["one", "two-or-three", "other"];
+return all(ans == exp);

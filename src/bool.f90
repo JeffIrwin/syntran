@@ -518,6 +518,103 @@ end subroutine is_eq_value_t
 
 !===============================================================================
 
+logical function is_array_eq(left, right) result(eq)
+
+	! Whole-array equality for OP_EQ_ARRAY (switch-statement case tests): a
+	! scalar bool, true iff left and right have the same rank, the same
+	! extents, and equal elements.  Unlike the elementwise array x array branch
+	! of is_eq_value_t(), a shape mismatch is just .false. rather than a
+	! Fortran bounds abort.  It's also stricter for rank > 1: is_eq_value_t()
+	! compares flat buffers, so it calls a 2x2 equal to a 4x1 with the same
+	! elements.  Element type combinations mirror what is_binary_op_allowed()
+	! permits for array `==`
+
+	type(value_t), intent(in) :: left, right
+
+	!****
+
+	integer(kind = 8) :: i8, n
+
+	eq = .false.
+
+	if (.not. allocated(left %array)) return
+	if (.not. allocated(right%array)) return
+
+	if (left%array%rank /= right%array%rank) return
+	if (left%array%len_ /= right%array%len_) return
+
+	if (allocated(left%array%size) .and. allocated(right%array%size)) then
+		if (any(left%array%size(1: left%array%rank) /= &
+			right%array%size(1: right%array%rank))) return
+	else if (left%array%rank > 1) then
+		! No %size to compare, and len_ alone can't tell a 2x3 from a 3x2, so
+		! don't claim a match.  Not reachable today -- rank > 1 arrays always
+		! carry %size -- but a wrong .true. here would be a silently wrong `case`
+		return
+	end if
+
+	n = left%array%len_
+
+	! Same shape and nothing to compare.  Buffers may be unallocated
+	if (n == 0) then
+		eq = .true.
+		return
+	end if
+
+	! Explicit (1: n) slices: an array built by push_array() can have
+	! cap > len_, so comparing whole buffers could hit a bound mismatch
+	select case (magic * left%array%type + right%array%type)
+	case (magic * i32_type + i32_type)
+		eq = all(left%array%i32(1: n) == right%array%i32(1: n))
+
+	case (magic * i64_type + i64_type)
+		eq = all(left%array%i64(1: n) == right%array%i64(1: n))
+
+	case (magic * i32_type + i64_type)
+		eq = all(left%array%i32(1: n) == right%array%i64(1: n))
+
+	case (magic * i64_type + i32_type)
+		eq = all(left%array%i64(1: n) == right%array%i32(1: n))
+
+	case (magic * f32_type + f32_type)
+		eq = all(left%array%f32(1: n) == right%array%f32(1: n))
+
+	case (magic * f64_type + f64_type)
+		eq = all(left%array%f64(1: n) == right%array%f64(1: n))
+
+	case (magic * bool_type + bool_type)
+		eq = all(left%array%bool(1: n) .eqv. right%array%bool(1: n))
+
+	case (magic * str_type + str_type)
+		! Fortran is weird about string arrays
+		eq = .true.
+		do i8 = 1, n
+			if (.not. is_str_eq(left%array%str(i8)%s, right%array%str(i8)%s)) then
+				eq = .false.
+				return
+			end if
+		end do
+
+	case (magic * enum_type + enum_type)
+		! Elements live in %struct(:), not %array%i32 -- c.f. is_eq_value_t()
+		eq = .true.
+		do i8 = 1, n
+			if (left%struct(i8)%sca%i32 /= right%struct(i8)%sca%i32) then
+				eq = .false.
+				return
+			end if
+		end do
+
+	case default
+		! Unreachable: is_binary_op_allowed() rejects the rest at parse time
+		write(*,*) err_eval_binary_types('==')
+		call internal_error()
+	end select
+
+end function is_array_eq
+
+!===============================================================================
+
 subroutine is_ne_value_t(left, right, res, op_text)
 
 	type(value_t), intent(in)  :: left, right
